@@ -22,8 +22,6 @@ Both `.bnix` and `.nix` are committed because the flake reads from the git tree.
 
 **beagle lives in a sibling repo**: `../beagle` — the compiler, validator, schema extractor, and emitters. firn-build / firn-validate / firn-extract-schema expect beagle cloned at `../beagle` by default — override with `BEAGLE_PATH`.
 
-The flake itself is `flake.bnix` (`#lang beagle/nix`), hand-authored rather than machine-imported because `beagle-import-nix` deliberately refuses `flake-file` forms. There is no `#lang nisp` source left in this repo — everything is beagle/nix.
-
 **Always run `./scripts/firn-build` before `nix build` / `nixos-rebuild` if any `.bnix` source changed.** Otherwise the rebuild uses stale `.nix`. Editing `.nix` directly is wrong — the next firn-build overwrites it.
 
 Reference: the [beagle repo](https://github.com/tompassarelli/beagle) — DSL forms, the build/validate pipeline, and the schema toolchain. macOS works via nix-darwin (`lib.mkDarwinSystem`, `darwinConfigurations`); `firn rebuild` detects Darwin and dispatches to `darwin-rebuild`.
@@ -36,7 +34,7 @@ When adding a new file to this repo, always `git add` it before rebuilding. Nix 
 
 One namespace: `myConfig.modules.*` (atoms — one package or service per module). Modules use `(module [config lib pkgs] {:options... :config...})` to emit the standard `{ config, lib, pkgs, ... }: { options...; config = mkIf cfg.enable {...}; }` wrapper.
 
-**Composition is tag-driven**, not bundle-driven. Each module declares the tags it belongs to in its `.bnix` source; each host enables a set of tags. The active module set is computed by union-then-subtract: for every enabled tag, take the modules that declare it; then remove anything the host explicitly disabled. The legacy `myConfig.bundles.*` namespace (per-bundle option-proxying with `mkDefault`) is being replaced by this model — see the "Tags" section below.
+**Composition is tag-driven**, not bundle-driven. Each module declares the tags it belongs to in its `.bnix` source; each host enables a set of tags. The active module set is computed by union-then-subtract: for every enabled tag, take the modules that declare it; then remove anything the host explicitly disabled. The legacy `myConfig.bundles.*` namespace (per-bundle option-proxying with `mkDefault`) has been **fully removed** — the `bundles/` directory no longer exists and nothing references `myConfig.bundles`. See the "Tags" section below for the model that replaced it.
 
 Multi-file modules (chrome, firefox, glide, kanata, nyxt, stylix, system, users) split `default.bnix` (option declarations) and `<name>.bnix` (mkIf config).
 
@@ -63,7 +61,7 @@ Custom command scripts live in `dotfiles/bin/` as plain executable shell scripts
 
 **When telling the user what to run, prefer the bare daily shortcut.** Say `firn rebuild`, not `firn host rebuild`, unless there's a specific reason to scope (e.g. rebuilding `thinkpad-x1e` from `whiterabbit`).
 
-Run `firn` with no args for the full grid; `firn <node>` for one entity's edges. The CLI should only contain subcommands that operate on the nixos-config repo itself — general-purpose tools like `sandbox`, `vpn`, `gif` etc. stay as standalone fish functions.
+Run `firn` with no args for the full grid; `firn <node>` for one entity's edges. The CLI should only contain subcommands that operate on the nixos-config repo itself — general-purpose tools like `sandbox`, `vpn`, `gif` etc. stay as standalone scripts in `dotfiles/bin/` (fish has been removed from this repo).
 
 ## Schema introspection (use these instead of grepping schema.json)
 
@@ -159,9 +157,9 @@ Output: type, declarations (links to upstream NixOS module sources), and every `
 
 ## Tags (composition model)
 
-Tags are the **only** way modules get composed. Each module declares which tags it belongs to; each host enables a list of tags; the resolver unions the memberships and subtracts a per-host disabled list. The legacy `myConfig.bundles.*` pattern (per-bundle sub-options + `mkDefault` proxies) is being retired in favour of this.
+Tags are the **only** way modules get composed. Each module declares which tags it belongs to; each host enables a list of tags; the resolver unions the memberships and subtracts a per-host disabled list. This replaced the legacy `myConfig.bundles.*` pattern (per-bundle sub-options + `mkDefault` proxies), which has been fully removed — there is no `bundles/` directory.
 
-Locked schema (per the bundle audit — 132 enable-wiring hits collapse into tag membership; 9 value-override hits, all in `browsers` and `theming`, are preserved via `:tag-overrides`):
+Schema (locked during the bundle→tags audit — 132 enable-wiring hits collapsed into tag membership; 9 value-override hits, all in `browsers` and `theming`, are preserved via `:tag-overrides`):
 
 ### Module-side: `modules/<name>/default.bnix`
 

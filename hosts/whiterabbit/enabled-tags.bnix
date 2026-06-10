@@ -23,4 +23,5 @@
    communication
    [productivity -libreoffice -pomodoro -todoist]
    [vpn -protonvpn-cli]]
+ :disabled [glide]
 }

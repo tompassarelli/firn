@@ -23,8 +23,7 @@ ZO="$SHARE_DIR/$CURRENT_RACKET_HASH/firn.zo"
 
 if [ ! -f "$ZO" ]; then
   CURRENT_RACKET_VERSION="$(racket --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo unknown)"
-  echo "firn: first run under racket $CURRENT_RACKET_VERSION ($CURRENT_RACKET_BIN); building cache (~20s)..." >&2
-  echo "firn: subsequent runs will be instant — you'll only see this again when racket upgrades." >&2
+  echo "firn: first run under racket $CURRENT_RACKET_VERSION ($CURRENT_RACKET_BIN); building cache (~20s, one-time per racket)..." >&2
   if [ ! -x "$BUILD_SCRIPT" ]; then
     echo "firn: build script missing at $BUILD_SCRIPT — cannot self-build." >&2
     exit 1
