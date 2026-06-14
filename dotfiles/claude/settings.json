@@ -22,5 +22,18 @@
   "effortLevel": "xhigh",
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
-  "skipAutoPermissionPrompt": true
+  "skipAutoPermissionPrompt": true,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/beagle-session-start.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
 }
