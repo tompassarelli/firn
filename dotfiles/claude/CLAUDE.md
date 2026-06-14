@@ -25,6 +25,11 @@ life-os threads are backed by the Chelonia claim graph (engine `~/code/chelonia`
 canonical log `~/code/life-os/chelonia-data/claims.log`). Assume **other agents
 may be editing concurrently**:
 
+**Session-start handshake (before coordinating life-os, mirrors beagle-doctor):**
+run `~/code/life-os/bin/chelonia doctor`. If it reports DOWN/DEGRADED, run
+`~/code/life-os/bin/chelonia up` to start the coordinator on the canonical log.
+(Optional heartbeat: `/loop 10m ~/code/life-os/bin/chelonia up` keeps it alive.)
+
 - Creating/editing a thread `.md` is fine — distinct files don't collide. After
   editing, run `~/code/life-os/bin/chelonia import` to fold edits into the claim
   log (idempotent; safe to run anytime).
