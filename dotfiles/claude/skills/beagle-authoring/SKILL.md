@@ -20,18 +20,18 @@ writing Beagle blind. So the loop comes first.
 ## 0. Handshake — run this BEFORE writing any Beagle
 
 ```
-beagle-doctor --deep
+beagle doctor --deep
 ```
 
 - **"Repair loop: ok"** → proceed.
 - **"Repair loop: DEGRADED" (exit 1)** → the feedback you'd rely on is not
   trustworthy. Do **not** start coding on silent green. Fix it:
-  - daemon down → `beagle-doctor --revive`  (or `beagle-daemon start --watch .`)
+  - daemon down → `beagle doctor --revive`  (or `beagle daemon start --watch .`)
   - no per-edit hook in this project → `beagle-init --hooks` to scaffold the
     portable PostToolUse syntax/type-check hook, then re-run the doctor.
-  - re-run `beagle-doctor --deep` until green.
+  - re-run `beagle doctor --deep` until green.
 
-`beagle-doctor` is a **functional** check, not a liveness check: it round-trips
+`beagle doctor` is a **functional** check, not a liveness check: it round-trips
 known-bad **and** known-good inputs through syntax / type-check / suggestion→patch,
 so it catches a checker stuck "always-pass" or "always-fail" — exactly the silent
 degradation a process-exists check misses.
@@ -41,10 +41,10 @@ degradation a process-exists check misses.
 - The **PostToolUse hook** (installed by `beagle-init --hooks`) is the only
   *harness-enforced* feedback — it fires on every Edit/Write. **Trust its
   output.** Fix syntax errors before type errors. Never hand-count parens —
-  `beagle-syntax` already counted them.
+  `beagle syntax` already counted them.
 - If feedback ever goes **silent** mid-session, the loop degraded — re-run
-  `beagle-doctor --revive --quiet`.
-- Optional background watchdog (this session): `/loop 10m beagle-doctor --revive --quiet`
+  `beagle doctor --revive --quiet`.
+- Optional background watchdog (this session): `/loop 10m beagle doctor --revive --quiet`
   — silent while healthy, loud + self-revives on degradation.
 
 > Reliability note: a skill (this file) and CLAUDE.md are *model-discretion* —
@@ -59,18 +59,18 @@ the *current* surface, **query the compiler**:
 
 | question | tool |
 |---|---|
-| does this file parse? where? | `beagle-syntax FILE` (`--ledger`, `--repair --emit-patch`) |
-| does this file type-check? | `beagle-check --agent FILE` |
-| signature of X? | `beagle-sig X FILE...` |
-| fields of record R? | `beagle-fields R FILE...` |
-| who calls X? | `beagle-callers X FILE...` |
-| what does FILE export? | `beagle-provides FILE` |
-| change-impact of X? | `beagle-impact X FILE...` |
-| macro expansion? | `beagle-expand FILE` |
-| run tests | `beagle-test` (active tier; `BEAGLE_ALL_TARGETS=1` for dormant) |
-| compile | `beagle-build FILE [OUT]` |
-| is the repair loop healthy? | `beagle-doctor [--deep]` |
-| auto-repair | `beagle-repair --emit-patch` (also `beagle-trace`, `beagle-blame`, `beagle-cascade`, `beagle-specfix`) |
+| does this file parse? where? | `beagle syntax FILE` (`--ledger`, `--repair --emit-patch`) |
+| does this file type-check? | `beagle check --agent FILE` |
+| signature of X? | `beagle sig X FILE...` |
+| fields of record R? | `beagle fields R FILE...` |
+| who calls X? | `beagle callers X FILE...` |
+| what does FILE export? | `beagle provides FILE` |
+| change-impact of X? | `beagle impact X FILE...` |
+| macro expansion? | `beagle expand FILE` |
+| run tests | `beagle test` (active tier; `BEAGLE_ALL_TARGETS=1` for dormant) |
+| compile | `beagle build FILE [OUT]` |
+| is the repair loop healthy? | `beagle doctor [--deep]` |
+| auto-repair | `beagle repair --emit-patch` (also `beagle-trace`, `beagle-blame`, `beagle-cascade`, `beagle-specfix`) |
 
 For forms/types/stdlib themselves, **read the source** — never restate it:
 `parse.rkt` (forms), `types.rkt` (types), `stdlib-*.rkt` (externs),

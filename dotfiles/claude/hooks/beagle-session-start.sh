@@ -33,19 +33,19 @@ is_beagle() {
 }
 is_beagle || exit 0
 
-# Resolve beagle-doctor robustly — beagle tools are NOT on the global PATH;
+# Resolve the `beagle` CLI robustly — beagle tools are NOT on the global PATH;
 # they live in the checkout (direnv-activated) or are reached via $BEAGLE_PATH.
 # Try, in order: $BEAGLE_PATH/bin, the canonical ~/code/beagle checkout, PATH.
-# (The canonical checkout's beagle-doctor self-resolves racket via its own
-# .direnv, so it runs from any cwd.)
-doctor=""
-[ -n "${BEAGLE_PATH:-}" ] && [ -x "$BEAGLE_PATH/bin/beagle-doctor" ] && doctor="$BEAGLE_PATH/bin/beagle-doctor"
-[ -z "$doctor" ] && [ -x "$HOME/code/beagle/bin/beagle-doctor" ] && doctor="$HOME/code/beagle/bin/beagle-doctor"
-[ -z "$doctor" ] && command -v beagle-doctor >/dev/null 2>&1 && doctor="$(command -v beagle-doctor)"
-[ -n "$doctor" ] || exit 0
+# (The canonical checkout's beagle self-resolves racket via its own .direnv,
+# so it runs from any cwd.) We invoke `beagle doctor`, the unified CLI.
+beagle=""
+[ -n "${BEAGLE_PATH:-}" ] && [ -x "$BEAGLE_PATH/bin/beagle" ] && beagle="$BEAGLE_PATH/bin/beagle"
+[ -z "$beagle" ] && [ -x "$HOME/code/beagle/bin/beagle" ] && beagle="$HOME/code/beagle/bin/beagle"
+[ -z "$beagle" ] && command -v beagle >/dev/null 2>&1 && beagle="$(command -v beagle)"
+[ -n "$beagle" ] || exit 0
 
 # --- functional handshake + self-heal (fast path: daemon + canaries) --------
-verdict="$("$doctor" --revive --quiet "$dir" 2>&1)"; rc=$?
+verdict="$("$beagle" doctor --revive --quiet "$dir" 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ]; then
   line="Repair loop verified healthy (daemon up + functional canaries green)."
 else
