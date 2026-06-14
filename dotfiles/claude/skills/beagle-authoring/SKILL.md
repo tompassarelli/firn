@@ -27,7 +27,7 @@ beagle doctor --deep
 - **"Repair loop: DEGRADED" (exit 1)** → the feedback you'd rely on is not
   trustworthy. Do **not** start coding on silent green. Fix it:
   - daemon down → `beagle doctor --revive`  (or `beagle daemon start --watch .`)
-  - no per-edit hook in this project → `beagle-init --hooks` to scaffold the
+  - no per-edit hook in this project → `beagle init --hooks` to scaffold the
     portable PostToolUse syntax/type-check hook, then re-run the doctor.
   - re-run `beagle doctor --deep` until green.
 
@@ -38,7 +38,7 @@ degradation a process-exists check misses.
 
 ## 1. Heartbeat — keep it alive while coding
 
-- The **PostToolUse hook** (installed by `beagle-init --hooks`) is the only
+- The **PostToolUse hook** (installed by `beagle init --hooks`) is the only
   *harness-enforced* feedback — it fires on every Edit/Write. **Trust its
   output.** Fix syntax errors before type errors. Never hand-count parens —
   `beagle syntax` already counted them.
