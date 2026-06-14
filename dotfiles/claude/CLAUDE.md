@@ -31,12 +31,12 @@ may be editing concurrently**:
 - **Do not run `chelonia export` during concurrent work** — it regenerates
   `threads/` from the log and would clobber another agent's un-imported edits.
   (The engine refuses if files diverge, but don't rely on it.)
-- **Serialized claim writes go through the coordinator, not `chelonia set`** —
-  `set` appends to the log directly and races other writers; the coordinator
-  daemon is the sole safe writer (optimistic `base_version` + obligation rules,
-  proven under concurrent load). A write-through-coordinator CLI is still TODO —
-  until it lands, for whole threads prefer file-edit + `import`, and never run
-  two `set`s concurrently.
+- **Serialized claim writes go through the coordinator** via `chelonia tell <id>
+  <pred> <value>` / `untell <id> <pred> <value>` — these route to the running
+  daemon (serialized, rule-checked, retries on conflict). Do NOT use `chelonia
+  set`, which appends the log directly and races. For creating whole new threads,
+  file-edit + `import` is fine (distinct files don't collide); for field changes
+  on existing threads under concurrency, prefer `tell`.
 - Reads are instant off the warm daemon (`chelonia serve`): ready / blocked /
   leverage / validate in ~1ms.
 
