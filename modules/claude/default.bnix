@@ -23,4 +23,9 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/claude/commands"))}}})}})}))
+                        "/code/nixos-config/dotfiles/claude/commands"))}
+                 ".claude/skills"
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/claude/skills"))}}})}})}))
