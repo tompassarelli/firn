@@ -4,7 +4,6 @@ let
   username = config.myConfig.modules.users.username;
 in
 {
-  tags = [ development ];
   options.myConfig.modules.claude.enable = lib.mkEnableOption "Claude Code CLI configuration";
   config = lib.mkIf config.myConfig.modules.claude.enable {
     environment.systemPackages = [ pkgs.master.claude-code ];

@@ -4,6 +4,7 @@
   myConfig.modules.atuin.enable = lib.mkDefault true;
   myConfig.modules.bash.enable = lib.mkDefault true;
   myConfig.modules.btop.enable = lib.mkDefault true;
+  myConfig.modules.chelonia.enable = lib.mkDefault true;
   myConfig.modules.claude.enable = lib.mkDefault true;
   myConfig.modules.containers.enable = lib.mkDefault true;
   myConfig.modules.curl.enable = lib.mkDefault true;

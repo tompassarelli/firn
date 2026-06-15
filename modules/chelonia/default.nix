@@ -1,0 +1,19 @@
+{ config, lib, pkgs, ... }:
+
+let
+  chelonia = pkgs.writeShellScriptBin "chelonia" ''
+    #!/usr/bin/env bash
+    # `chelonia` on PATH = the life-os consumer wrapper (aims the engine at
+    # private life-os data), mirroring how `los` is the daily driver. The
+    # wrapper in ~/code/life-os/bin stays the single source of truth; this
+    # only puts it on PATH declaratively. To hack the engine itself, run
+    # ./bin/chelonia from inside ~/code/chelonia.
+    exec "$HOME/code/life-os/bin/chelonia" "$@"
+  '';
+in
+{
+  options.myConfig.modules.chelonia.enable = lib.mkEnableOption "Chelonia CLI (claim-native coordination) on PATH";
+  config = lib.mkIf config.myConfig.modules.chelonia.enable {
+    environment.systemPackages = [ chelonia ];
+  };
+}
