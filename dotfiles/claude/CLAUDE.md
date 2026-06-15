@@ -19,9 +19,9 @@ from facts: `committed` (accepted/in-play), `outcome` (done), `abandoned`
 (canceled), `driver` (active now), `depends_on` (blocked). A fresh capture is
 **`committed`** by default. Relatedness is `relates_to @<thread>` (no string
 tags — former tags are `@topic-*` threads). ids are `2026-06-15-150040`.
-**There is ONE CLI/engine: `chelonia`** — `los thread`/`los validate` are
-**retired** (use chelonia); `los time` still works pending its port to
-`chelonia time`. Full spec: `~/code/life-os/chelonia-docs/claim-native-redesign.md`.
+**There is ONE CLI/engine: `chelonia`** — `los` is **gone entirely**: thread ops
+are `chelonia`, and `los time` was ported to **`chelonia time`**. Full spec:
+`~/code/life-os/chelonia-docs/claim-native-redesign.md`.
 
 
 ## life-os is claim-backed — write safely under concurrent agents
