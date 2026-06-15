@@ -12,11 +12,16 @@ tree contradicts it, the threads manual wins.
 Trivial actions — one-shell-command lookups, reading a single file,
 quick clarifications — don't need the full manual loaded.
 
-**Thread default state is `ready`** (not `draft`). When creating a
-new thread, fresh captures go to `ready` — meaning "accepted;
-executable; not yet in motion." Use `state: draft` explicitly only
-for speculative captures that need triage before commitment. Full
-rules in `~/code/life-os/threads/CLAUDE.md` (States section). 
+**Threads are claim-native (as of 2026-06-15 — the big cutover).** A thread file
+is `@<id>` + `predicate  object` triple lines + `---` + prose body; refs are
+`@id`, literals are EDN. There is **no `state` enum** — lifecycle is *derived*
+from facts: `committed` (accepted/in-play), `outcome` (done), `abandoned`
+(canceled), `driver` (active now), `depends_on` (blocked). A fresh capture is
+**`committed`** by default. Relatedness is `relates_to @<thread>` (no string
+tags — former tags are `@topic-*` threads). ids are `2026-06-15-150040`.
+**There is ONE CLI/engine: `chelonia`** — `los thread`/`los validate` are
+**retired** (use chelonia); `los time` still works pending its port to
+`chelonia time`. Full spec: `~/code/life-os/chelonia-docs/claim-native-redesign.md`.
 
 
 ## life-os is claim-backed — write safely under concurrent agents
@@ -40,8 +45,9 @@ run `~/code/life-os/bin/chelonia doctor`. If it reports DOWN/DEGRADED, run
   <pred> <value>` / `untell <id> <pred> <value>` — these route to the running
   daemon (serialized, rule-checked, retries on conflict). Do NOT use `chelonia
   set`, which appends the log directly and races. For creating whole new threads,
-  file-edit + `import` is fine (distinct files don't collide); for field changes
-  on existing threads under concurrency, prefer `tell`.
+  `chelonia capture "<title>"` (claim-first) or file-edit + `import` is fine
+  (distinct files don't collide); for field changes on existing threads under
+  concurrency, prefer `tell`.
 - Reads are instant off the warm daemon (`chelonia serve`): ready / blocked /
   leverage / validate in ~1ms.
 
