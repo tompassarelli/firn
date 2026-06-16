@@ -20,7 +20,9 @@ from facts: `committed` (accepted/in-play), `outcome` (done), `abandoned`
 **`committed`** by default. Relatedness is `relates_to @<thread>` (no string
 tags — former tags are `@topic-*` threads). ids are `2026-06-15-150040`.
 **There is ONE CLI/engine: `chelonia`** — `los` is **gone entirely**: thread ops
-are `chelonia`, and `los time` was ported to **`chelonia time`**. Full spec:
+are `chelonia`, and time tracking is **`chelonia clock`** (claim-native sessions
+— `session_of`/`start_time`/`end_time` rolling up to a thread for estimate-vs-
+actual; Clockify is an on-demand sync projection via `clock sync`). Full spec:
 `~/code/life-os/chelonia-docs/claim-native-redesign.md`.
 
 
