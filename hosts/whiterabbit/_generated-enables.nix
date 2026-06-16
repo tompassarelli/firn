@@ -7,7 +7,6 @@
   myConfig.modules.brightnessctl.enable = lib.mkDefault true;
   myConfig.modules.btop.enable = lib.mkDefault true;
   myConfig.modules.cargo.enable = lib.mkDefault true;
-  myConfig.modules.chelonia.enable = lib.mkDefault true;
   myConfig.modules.chrome.enable = lib.mkDefault true;
   myConfig.modules.clang.enable = lib.mkDefault true;
   myConfig.modules.claude.enable = lib.mkDefault true;
@@ -52,6 +51,7 @@
   myConfig.modules.lem.enable = lib.mkDefault true;
   myConfig.modules.libnotify.enable = lib.mkDefault true;
   myConfig.modules.libtool.enable = lib.mkDefault true;
+  myConfig.modules.lodestar.enable = lib.mkDefault true;
   myConfig.modules.lutris.enable = lib.mkDefault true;
   myConfig.modules.mail.enable = lib.mkDefault true;
   myConfig.modules.mpv.enable = lib.mkDefault true;

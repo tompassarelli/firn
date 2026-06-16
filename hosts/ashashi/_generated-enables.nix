@@ -4,7 +4,6 @@
   myConfig.modules.atuin.enable = lib.mkDefault true;
   myConfig.modules.bash.enable = lib.mkDefault true;
   myConfig.modules.btop.enable = lib.mkDefault true;
-  myConfig.modules.chelonia.enable = lib.mkDefault true;
   myConfig.modules.claude.enable = lib.mkDefault true;
   myConfig.modules.containers.enable = lib.mkDefault true;
   myConfig.modules.curl.enable = lib.mkDefault true;
@@ -20,6 +19,7 @@
   myConfig.modules.ghostty.enable = lib.mkDefault true;
   myConfig.modules.git.enable = lib.mkDefault true;
   myConfig.modules.imagemagick.enable = lib.mkDefault true;
+  myConfig.modules.lodestar.enable = lib.mkDefault true;
   myConfig.modules.opencode.enable = lib.mkDefault true;
   myConfig.modules.procs.enable = lib.mkDefault true;
   myConfig.modules.promptfoo.enable = lib.mkDefault true;

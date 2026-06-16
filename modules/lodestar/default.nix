@@ -9,15 +9,10 @@ let
     # Engine: ~/code/fram · data: ~/code/lodestar-data (XDG ~/.local/state/lodestar).
     exec "$HOME/code/lodestar/bin/lodestar" "$@"
   '';
-  chelonia = pkgs.writeShellScriptBin "chelonia" ''
-    #!/usr/bin/env bash
-    # transitional alias: `chelonia` -> `lodestar` (muscle memory through the rename).
-    exec "$HOME/code/lodestar/bin/lodestar" "$@"
-  '';
 in
 {
-  options.myConfig.modules.chelonia.enable = lib.mkEnableOption "Lodestar (life app) CLI on PATH (+ transitional chelonia alias)";
-  config = lib.mkIf config.myConfig.modules.chelonia.enable {
-    environment.systemPackages = [ lodestar chelonia ];
+  options.myConfig.modules.lodestar.enable = lib.mkEnableOption "Lodestar (life app) CLI on PATH";
+  config = lib.mkIf config.myConfig.modules.lodestar.enable {
+    environment.systemPackages = [ lodestar ];
   };
 }
