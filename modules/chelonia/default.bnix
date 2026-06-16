@@ -4,20 +4,26 @@
 
 (nix/module [config lib pkgs ...]
   (let
-    [chelonia
+    [lodestar
+      (pkgs.writeShellScriptBin "lodestar"
+        ~''
+          #!/usr/bin/env bash
+          # `lodestar` on PATH = the life-app wrapper (aims the domain-neutral Fram
+          # engine at your private claim data). The wrapper in ~/code/lodestar/bin is
+          # the source of truth; this only puts it on PATH declaratively.
+          # Engine: ~/code/fram · data: ~/code/lodestar-data (XDG ~/.local/state/lodestar).
+          exec "$HOME/code/lodestar/bin/lodestar" "$@"
+        '')
+     chelonia
       (pkgs.writeShellScriptBin "chelonia"
         ~''
           #!/usr/bin/env bash
-          # `chelonia` on PATH = the life-os consumer wrapper (aims the engine at
-          # private life-os data), mirroring how `los` is the daily driver. The
-          # wrapper in ~/code/life-os/bin stays the single source of truth; this
-          # only puts it on PATH declaratively. To hack the engine itself, run
-          # ./bin/chelonia from inside ~/code/chelonia.
-          exec "$HOME/code/life-os/bin/chelonia" "$@"
+          # transitional alias: `chelonia` -> `lodestar` (muscle memory through the rename).
+          exec "$HOME/code/lodestar/bin/lodestar" "$@"
         '')]
     {:tags [cli-tools]
      :options.myConfig.modules.chelonia.enable
-      (lib.mkEnableOption "Chelonia CLI (claim-native coordination) on PATH")
+      (lib.mkEnableOption "Lodestar (life app) CLI on PATH (+ transitional chelonia alias)")
      :config
       (lib.mkIf config.myConfig.modules.chelonia.enable
-        {:environment.systemPackages [chelonia]})}))
+        {:environment.systemPackages [lodestar chelonia]})}))
