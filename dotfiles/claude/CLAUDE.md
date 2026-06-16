@@ -5,9 +5,9 @@ These rules apply to every session, regardless of working directory.
 # lodestar
 
 When starting work on anything nontrivial, read
-`./threads/CLAUDE.md` first. It's the operating manual for plans,
-time tracking, and session behavior. If anything elsewhere in this
-tree contradicts it, the threads manual wins.
+`~/code/lodestar/docs/operating-manual.md` first. It's the operating manual for
+plans, time tracking, and session behavior. If anything elsewhere contradicts
+it, the manual wins.
 
 Trivial actions — one-shell-command lookups, reading a single file,
 quick clarifications — don't need the full manual loaded.
