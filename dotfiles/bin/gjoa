@@ -49,6 +49,12 @@ case "${1:-}" in
       echo "    after that, daily rebuilds:  gjoa build faster  (~30 sec, omni.ja re-zip)" >&2
       exit 1
     fi
+    # Borrow the nix wrapper's runtime library paths (audio, GL, GTK, etc).
+    # The mach binary is unwrapped so NixOS can't find these otherwise.
+    if [ -r "$nix_bin" ]; then
+      nix_libs=$(grep -oP "'/nix/store/[^']*'" "$nix_bin" | tr -d "'" | sort -u | tr '\n' ':')
+      export LD_LIBRARY_PATH="${nix_libs%:}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
     if [ "${2:-}" = "-f" ]; then
       shift 2
       exec "$mach_bin" "$@"

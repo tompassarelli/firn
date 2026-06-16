@@ -61,11 +61,13 @@
   myConfig.modules.nodejs.enable = lib.mkDefault true;
   myConfig.modules.obs-studio.enable = lib.mkDefault true;
   myConfig.modules.obsidian.enable = lib.mkDefault true;
+  myConfig.modules.opencode.enable = lib.mkDefault true;
   myConfig.modules.pandoc.enable = lib.mkDefault true;
   myConfig.modules.pavucontrol.enable = lib.mkDefault true;
   myConfig.modules.pkg-config.enable = lib.mkDefault true;
   myConfig.modules.polkit.enable = lib.mkDefault true;
   myConfig.modules.procs.enable = lib.mkDefault true;
+  myConfig.modules.promptfoo.enable = lib.mkDefault true;
   myConfig.modules.protonvpn-gui.enable = lib.mkDefault true;
   myConfig.modules.python.enable = lib.mkDefault true;
   myConfig.modules.quickshell.enable = lib.mkDefault true;

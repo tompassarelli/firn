@@ -1,0 +1,20 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "huggingface/zai-org/GLM-5.1",
+  "provider": {
+    "huggingface": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Hugging Face (open-weight, BYO key)",
+      "options": {
+        "baseURL": "https://router.huggingface.co/v1",
+        "apiKey": "{env:HF_TOKEN}"
+      },
+      "models": {
+        "zai-org/GLM-5.1": { "name": "GLM-5.1 — agentic coding default (MIT)" },
+        "Qwen/Qwen3-Coder-480B-A35B-Instruct": { "name": "Qwen3-Coder (Apache-2.0)" },
+        "moonshotai/Kimi-K2-Instruct": { "name": "Kimi K2 (Modified MIT)" },
+        "deepseek-ai/DeepSeek-V3.1": { "name": "DeepSeek V3.1/V4 (MIT)" }
+      }
+    }
+  }
+}
