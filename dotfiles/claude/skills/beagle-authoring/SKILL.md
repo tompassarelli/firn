@@ -78,6 +78,12 @@ For forms/types/stdlib themselves, **read the source** — never restate it:
 **`~/code/beagle/CLAUDE.md`** — read it when you start Beagle work in a session;
 if the surface looks different than you expect, `git log` it.
 
+> To *query* a Beagle codebase relationally (scope-correct callers, transitive
+> blast radius / leverage, the call graph) rather than write it, see the
+> **code-as-claims** skill — it projects the source into a Fram claim graph
+> (Chartroom) and answers with Datalog, which beats grep/bare-symbol on exactly
+> the relational questions text search can't compute.
+
 ## 3. Stable operating model (this does not churn)
 
 - **Beagle is Clojure + types, nothing else.** Every divergence from Clojure
@@ -106,3 +112,33 @@ if the surface looks different than you expect, `git log` it.
 
 (Dormant: `.bsql`/`.bpy`/`.bzig`; `.bodin` → odin. `extensions.rkt` is
 authoritative.)
+
+## 4. `Any` is opting OUT of the type system — don't reach for it (POLICY)
+
+`Any` tells the checker *don't look*. A value typed `:- Any` is checked exactly as
+much as untyped Clojure — **none.** So reaching for `Any` the moment data gets
+dynamic defeats the entire point of authoring in Beagle: you pay the compile +
+repair-loop cost and get zero type safety in return. The payoff was never
+Beagle-vs-Clojure — it's **`Any`-vs-a-real-type.** Porting `Any`-typed logic into a
+`.bclj` file gains nothing; it relocates the risk and only *feels* like progress.
+
+**Policy — whenever you write or edit Beagle:**
+- **Express the real type first.** Define the record/shape — what a `Claim`, a
+  `Tenant`, a `Request`, a node is. A typed `(defrecord …)` or a concrete
+  `(Vec String)` / `(Map …)` / `[A -> B]` is the line where the checker catches a
+  wrong value. `Any` is not that line.
+- **`Any` is a justified exception, never a default.** If you write `:- Any`, you
+  must be able to say *why* this value is genuinely un-typeable here. "It was
+  faster" / "the data's a bit dynamic" is not a why.
+- **The smell test:** if your `.bclj` is `Any`-heavy, you've gained nothing over
+  Clojure. Stop. Either write the real type, or leave the code in `.clj` honestly
+  (don't ship `Any`-Beagle that masquerades as a typed core).
+- **When Beagle genuinely can't express the shape without `Any`, that's a GAP-LIST
+  finding** — write it down ("Beagle can't express X") so it feeds the language's
+  growth, instead of silently absorbing it as `Any`. The gap list is a deliverable.
+
+**The falsifiable probe** when you hit dynamic data and want to type it: try to
+replace the `Any` with a real type and run `beagle check`. It compiles → safety
+gained. Beagle fights you → you've found a real, recordable gap. Either outcome
+beats shipping `Any`. ("Does interop compile?" is the *wrong* probe — that passes
+trivially. "Can I even *say* this type, or am I forced back to `Any`?" is the real one.)

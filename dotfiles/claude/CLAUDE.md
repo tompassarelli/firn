@@ -77,6 +77,26 @@ instead of recommending the bare `nix develop` workflow.
 Same rule for `devenv` / `flake.nix devShells` — surface the direnv
 trigger, not the underlying command.
 
+## System / global config changes go through `~/code/nixos-config` — ALWAYS
+
+Any change to the machine's configuration **or** to Claude's global setup is made
+**idiomatically through `~/code/nixos-config`**, never ad-hoc in the live system.
+This covers: Claude global config (`skills/`, `CLAUDE.md`, `commands/`,
+`settings.json`), system packages, services, dotfiles, and any host / home-manager
+setting. The whole point is **reproducibility** — a fresh rebuild on any machine
+must reproduce the change.
+
+- `~/.claude/{skills,CLAUDE.md,commands,settings.json}` are `mkOutOfStoreSymlink`s
+  into `nixos-config/dotfiles/claude/` (see `modules/claude/default.nix`). Editing
+  them edits the repo *directly* and is live immediately (no rebuild) — **but you
+  MUST commit it to `nixos-config`**, or it isn't reproducible.
+- For anything NOT already wired (a new package, service, dotfile, or symlink), add
+  it to the appropriate nix module (+ `home.file` / `mkOutOfStoreSymlink`), then
+  rebuild. Do not drop untracked files into the live system.
+- After any such change: `git -C ~/code/nixos-config status` should have no stray
+  untracked state, and the change must survive a fresh rebuild. When you make a
+  global/system edit, say so and commit it — don't leave it dangling in `~`.
+
 ## GitHub releases: version only in title
 
 Use just the version tag as the release title (e.g. `v0.5.0`). No
