@@ -49,8 +49,8 @@ does not recompile, writes no tree.
 | Add a new top-level def | `mcp__fram__add-def` | `upsert-form` with a new name; appends a wrapper `fN` edge |
 | Replace a def by name | `mcp__fram__add-def` | `upsert-form` with an existing name; supersedes its `fN` edge |
 | Replace a defn's body | `mcp__fram__set-body` | supersedes the post-params `fN` edges |
-| Rename a def | `mcp__fram__rename` | O(1), scope-correct via `refers_to`, shadow-safe |
-| Delete a def | `mcp__fram__delete` | fail-closed on orphaned references |
+| Rename a def | `mcp__fram__rename-def` | O(1), scope-correct via `refers_to`, shadow-safe |
+| Delete a def | _(engine verb `delete` exists; MCP tool not yet exposed)_ | fail-closed on orphaned references |
 
 The new form/body is **structured data you emit** (an EDN datum, the structured
 edit spec — e.g. `(defn add-two [x :- Int] :- Int (base (+ x 2)))`), not a text

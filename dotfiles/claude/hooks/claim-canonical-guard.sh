@@ -52,7 +52,7 @@ text. A text Edit/Write would desync the graph and is refused. Author it as a GR
 EDIT via the fram MCP tools instead:
   - mcp__fram__add-def     — add a new top-level def (upsert-form, new name)
   - mcp__fram__set-body    — replace a defn's body
-  - mcp__fram__rename      — rename a def (O(1), scope-correct via refers_to)
+  - mcp__fram__rename-def  — rename a def (O(1), scope-correct via refers_to)
 Each is recompile-gated and fail-closed; the regenerated text is a downstream view.
 See the claim-canonical-authoring skill. (To edit as text anyway you must first
 de-adopt the file from the claim-canonical registry — a deliberate workflow change.)
@@ -80,6 +80,12 @@ def fail_open():
 try:
     data = json.load(sys.stdin)
 except Exception:
+    fail_open()
+
+# Only guard the text-mutation tools. A Read/Bash/Grep carrying this file_path must
+# never be denied (it can't desync the graph). settings.json scopes the matcher too,
+# but gate here as well so the script is correct when driven directly.
+if data.get("tool_name") not in ("Edit", "Write", "MultiEdit"):
     fail_open()
 
 tool_input = data.get("tool_input", {}) or {}

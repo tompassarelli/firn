@@ -17,6 +17,18 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/claim-canonical-guard.sh",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
