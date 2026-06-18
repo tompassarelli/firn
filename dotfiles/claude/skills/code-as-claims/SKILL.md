@@ -43,7 +43,7 @@ up for "find the string `foo`" or a single-file read — grep wins on cost there
 
 ```sh
 # 1. project a source tree → claim triples  (chartroom uses beagle's bin/beagle-claims)
-cd ~/code/chartroom
+cd ~/code/fram/chartroom          # chartroom folded INTO fram (ADR 0001); was ~/code/chartroom
 bin/emit-corpus  ~/code/<proj>/src ~/code/<proj>/tools  build/<proj>.claims
 # 2. fold into Fram + derive the namespace-correct call graph / leverage
 bb -cp ~/code/fram/out  src/chartroom.clj  build/<proj>.claims
@@ -60,9 +60,10 @@ queries rather than running them.
 - **Beagle source only.** `beagle-claims` reflects `.bjs`/`.bclj`/`.bnix` ASTs
   (ignoring each file's `#lang`). It is NOT a general multi-language indexer.
 - **It's validated glue, not a turnkey IDE.** Headline gates hold (1100/1100
-  forms, 97/97 files; leverage axis validated on gjoa). But it needs the sibling
-  repos checked out side-by-side under `~/code` (**fram** — build `fram/out`;
-  **beagle** — provides `bin/beagle-claims`; **chartroom** itself) and `bb` on PATH.
+  forms, 97/97 files; leverage axis validated on gjoa). But it needs **fram**
+  checked out (build `fram/out`; **chartroom now lives at `fram/chartroom`**, folded
+  per ADR 0001 — no longer a standalone repo) and **beagle** (provides
+  `bin/beagle-claims`), plus `bb` on PATH.
 - **Two projections, two jobs:** the *query* projection (`beagle-claims`, ~18
   triples/form) is compact + great for leverage but lossy (drops types/params);
   the *truth* projection (`beagle-roundtrip`, ~238/form) round-trips the program
@@ -72,4 +73,7 @@ queries rather than running them.
 
 The bet (shared with Lodestar): a flat text-and-grep view rots and can't compute
 relational questions; the graph is always current and answers them for free.
-For *writing* Beagle, see the **beagle-authoring** skill.
+For *writing* Beagle, see the **beagle-authoring** skill. For *authoring against the
+Fram claim/Datalog primitives directly* (`claim!`, supersession-as-update, `by-lp`,
+the `reaches` closure, stratified negation), see the **claim-authoring** skill — or
+run `~/code/fram/bin/fram-primer` for the live, generated cheatsheet.
