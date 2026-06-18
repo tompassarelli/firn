@@ -33,8 +33,13 @@
   },
   "alwaysThinkingEnabled": true,
   "effortLevel": "xhigh",
+  "voice": {
+    "enabled": false,
+    "mode": "hold"
+  },
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "theme": "dark",
-  "skipAutoPermissionPrompt": true
+  "skipAutoPermissionPrompt": true,
+  "voiceEnabled": false
 }
