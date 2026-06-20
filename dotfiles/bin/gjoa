@@ -55,6 +55,11 @@ case "${1:-}" in
       nix_libs=$(grep -oP "'/nix/store/[^']*'" "$nix_bin" | tr -d "'" | sort -u | tr '\n' ':')
       export LD_LIBRARY_PATH="${nix_libs%:}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     fi
+    # Dev mode = load edited chrome from <install_root>/gjoa-dev/ (the symlink to
+    # dist/chrome that `gjoa sync` / chrome:ensure maintains). GjoaLoader's F4
+    # gate only sources it when GJOA_DEV_LOADER=1; without this, `gjoa dev` runs
+    # the STALE chrome baked into omni.ja and every chrome edit is invisible.
+    export GJOA_DEV_LOADER=1
     if [ "${2:-}" = "-f" ]; then
       shift 2
       exec "$mach_bin" "$@"
