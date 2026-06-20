@@ -16,7 +16,7 @@ jobs:
       - name: Checkout beagle (sibling clone — firn-build expects ../beagle)
         uses: actions/checkout@v4
         with:
-          repository: tompassarelli/beagle
+          repository: Autonymy/beagle
           path: beagle
 
       - uses: cachix/install-nix-action@v27

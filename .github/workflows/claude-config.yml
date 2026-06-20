@@ -1,0 +1,28 @@
+name: Claude config
+# Anti-rot gate for the Claude global config surface (settings.json + hooks +
+# skills + CLAUDE.md). The Drift check (tests.yml) only governs .bnix<->.nix; this
+# validates the dotfile CONTENT — the part that actually injects behavior into
+# every agent session. See scripts/claude-config-check.sh.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dotfiles/claude/**'
+      - 'scripts/claude-config-check.sh'
+      - '.github/workflows/claude-config.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'dotfiles/claude/**'
+      - 'scripts/claude-config-check.sh'
+      - '.github/workflows/claude-config.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Ensure shellcheck
+        run: command -v shellcheck >/dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y shellcheck)
+      - name: Validate Claude config
+        run: ./scripts/claude-config-check.sh

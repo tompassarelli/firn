@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # PreToolUse guard — the DETERMINISTIC half of "the graph is the editing surface".
 # ============================================================================
-# THIS IS A PROPOSED ARTIFACT. It is NOT wired into settings.json. Activate it
-# DELIBERATELY (see proposed/README in this directory) once a module has actually
-# been ADOPTED as claim-canonical. Until then it must NOT exist in the live hooks
-# block, because there is currently NO adopted module and it would have nothing to
-# guard (and a bug here would block ALL edits).
+# STATUS: LIVE. Wired into settings.json (PreToolUse, Edit|Write|MultiEdit) and
+# ACTIVE as of 2026-06-20. Adopted claim-canonical modules are guarded right now:
+# fram/src/fram/schema.bclj is the first adopted module (in the registry below).
+# To run a clean-room/experiment session WITHOUT this guard, set
+# CLAUDE_NO_AUTHORING_HOOKS=1 (the kill-switch below) — do NOT un-wire it.
+# (History: this began as a proposed/un-wired artifact; it was armed in
+# nixos-config b1bd624 once schema.bclj was adopted.)
 #
 # WHAT IT DOES
 #   On Edit | Write | MultiEdit it reads tool_input.file_path from the hook's stdin
@@ -41,6 +43,12 @@
 #   about the guard is implicit.
 # ============================================================================
 set -uo pipefail
+
+# Clean-room / experiment kill-switch (opt-OUT). When CLAUDE_NO_AUTHORING_HOOKS is
+# set, this guard no-ops (exit 0 = allow the edit), letting a controlled run — e.g.
+# the concurrent-authoring experiment — pin a hook-free, confound-free session
+# surface WITHOUT editing settings.json. Unset (the default) = guard active.
+[ -n "${CLAUDE_NO_AUTHORING_HOOKS:-}" ] && exit 0
 
 REGISTRY="${CLAIM_CANONICAL_REGISTRY:-$HOME/.config/fram/claim-canonical-files}"
 

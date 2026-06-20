@@ -33,4 +33,9 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/claude/CLAUDE.md"))}}})}})}))
+                        "/code/nixos-config/dotfiles/claude/CLAUDE.md"))}
+                 ".claude/hooks"
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/claude/hooks"))}}})}})}))

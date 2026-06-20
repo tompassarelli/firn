@@ -86,10 +86,23 @@ This covers: Claude global config (`skills/`, `CLAUDE.md`, `commands/`,
 setting. The whole point is **reproducibility** — a fresh rebuild on any machine
 must reproduce the change.
 
-- `~/.claude/{skills,CLAUDE.md,commands,settings.json}` are `mkOutOfStoreSymlink`s
-  into `nixos-config/dotfiles/claude/` (see `modules/claude/default.nix`). Editing
-  them edits the repo *directly* and is live immediately (no rebuild) — **but you
-  MUST commit it to `nixos-config`**, or it isn't reproducible.
+- `~/.claude/{skills,CLAUDE.md,commands,settings.json,hooks}` are
+  `mkOutOfStoreSymlink`s into `nixos-config/dotfiles/claude/` (see
+  `modules/claude/default.nix`). Editing them edits the repo *directly* and is
+  live immediately (no rebuild) — **but you MUST commit it to `nixos-config`**,
+  or it isn't reproducible. (`hooks/` was nix-wired 2026-06-20; until the next
+  rebuild creates the symlink, `settings.json` still reaches them by absolute
+  repo path, which also works.)
+- **The Claude config is CI-validated** — `.github/workflows/claude-config.yml`
+  runs `scripts/claude-config-check.sh`: shellchecks the hooks, JSON-validates
+  `settings.json`, and asserts every wired hook path exists + is executable. Run
+  `scripts/claude-config-check.sh --local` on the machine to ALSO `command -v`
+  the CLIs this file names (so a removed/renamed tool fails loudly instead of
+  rotting silently). This is the anti-rot gate; keep it green.
+- **Behavior-injecting hooks have an opt-out kill-switch:**
+  `CLAUDE_NO_AUTHORING_HOOKS=1` makes the SessionStart beagle handshake and the
+  PreToolUse claim-canonical guard no-op — used to pin a neutral, confound-free
+  session (e.g. for experiments). Unset = normal behavior.
 - For anything NOT already wired (a new package, service, dotfile, or symlink), add
   it to the appropriate nix module (+ `home.file` / `mkOutOfStoreSymlink`), then
   rebuild. Do not drop untracked files into the live system.

@@ -9,6 +9,12 @@
 # Outside a Beagle project it is a fast no-op (a few globs, no heavy work).
 set -uo pipefail
 
+# Clean-room / experiment kill-switch (opt-OUT; see claim-canonical-guard.sh).
+# When CLAUDE_NO_AUTHORING_HOOKS is set, this hook no-ops — no daemon revive, no
+# authoring context injected — so a controlled run keeps an identical neutral
+# session surface across all arms. Unset (the default) = normal behavior.
+[ -n "${CLAUDE_NO_AUTHORING_HOOKS:-}" ] && exit 0
+
 # Project dir: Claude Code sets CLAUDE_PROJECT_DIR; fall back to cwd.
 dir="${CLAUDE_PROJECT_DIR:-$PWD}"
 cd "$dir" 2>/dev/null || exit 0
