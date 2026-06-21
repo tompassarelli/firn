@@ -25,6 +25,7 @@ in
           devices = cfg.devices;
           port = lib.mkIf (cfg.port != null) cfg.port;
           extraDefCfg = "process-unmapped-keys yes";
+          extraArgs = cfg.extraArgs;
           config = builtins.readFile cfg.configFile;
         };
       };

@@ -19,4 +19,10 @@
       {:type        (lib.types.nullOr lib.types.port)
        :default     nil
        :description "TCP port for kanata server (e.g. for glide integration)"})
+   :options.myConfig.modules.kanata.extraArgs
+    (lib.mkOption
+      {:type        (lib.types.listOf lib.types.str)
+       :default     []
+       :description
+        "Extra command-line args for kanata (e.g. --debug, --log-layer-changes for diagnosing layer/spacebar seizures)"})
    :imports [(p "./kanata.nix")]})

@@ -22,6 +22,7 @@
                 {:devices     cfg.devices
                  :port        (lib.mkIf (!= cfg.port nil) cfg.port)
                  :extraDefCfg "process-unmapped-keys yes"
+                 :extraArgs   cfg.extraArgs
                  :config      (builtins.readFile cfg.configFile)}})}
          :systemd.services.kanata-main.serviceConfig
           (lib.mkIf (!= cfg.devices [])

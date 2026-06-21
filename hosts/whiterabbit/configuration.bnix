@@ -27,11 +27,12 @@
     {:enable     true
      :configFile (p "../../dotfiles/kanata/kanata.kbd")
      :port       7070
+     :extraArgs  ["--debug" "--log-layer-changes"]
      :devices
       ["/dev/input/event0"
        "/dev/input/by-id/usb-Kingsis_Peripherals_ZOWIE_Gaming_mouse-event-mouse"
        "/dev/input/by-id/usb-Logitech_G102_LIGHTSYNC_Gaming_Mouse_2072387E5847-event-mouse"]}
-   :myConfig.modules.glide.enable true
+   :myConfig.modules.glide.enable false
    :myConfig.modules.guix.enable false
    :myConfig.modules.neovim.enable true
    :myConfig.modules.password.enable true
