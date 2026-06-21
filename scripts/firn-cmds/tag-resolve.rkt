@@ -34,6 +34,7 @@
          racket/port
          racket/string
          racket/format
+         beagle/private/parse        ; #29: the real beagle reader (read-beagle-syntax)
          "util.rkt")
 
 (provide node-edges
@@ -52,39 +53,28 @@
 
 ;; ---------- bnix reader ----------
 ;;
-;; Racket's reader handles beagle/nix syntax surprisingly well:
-;;   {:k v ...}      → (:k v ...)            — flat alternating list
-;;   [a b c]         → (a b c)               — vector becomes list
-;;   :foo.bar.baz    → ':foo.bar.baz         — keyword as a symbol
-;;   -x / +x         → '-x / '+x             — symbols with sign prefix
-;;
-;; All we need is to skip the `#lang beagle/nix` header (which Racket's
-;; reader refuses to evaluate from inside another #lang) and consume
-;; the rest as datums.
+;; #29: use the REAL beagle reader (read-beagle-syntax) — not Racket's reader.
+;; The old Racket-reader hack couldn't parse beagle-only surface (`~''…''`,
+;; `${…}`, `#…`, `|…|`) and FELL BACK to a regex `:tags` scan that FALSE-MATCHED
+;; coincidental `:tags` nested in nix builder calls (niri's writePython3Bin, lem's
+;; overrideLispAttrs were enabled by that accident — see #25). The beagle reader
+;; reads ALL beagle/nix surface, so there is one parse path, no regex fallback,
+;; no false-match class. `debeagle` normalizes the reader's tagged containers
+;; (`(#%map …)`/`(#%brackets …)`/`(#%set …)`) to the SAME flat-list shape the
+;; downstream extraction already expects (`{:k v}`→`(:k v)`, `[a b]`→`(a b)`).
 
-(define (count-char c s)
-  (for/sum ([ch (in-string s)] #:when (char=? ch c)) 1))
+(define (debeagle d)
+  (cond
+    [(and (pair? d) (memq (car d) '(#%map #%brackets #%set))) (map debeagle (cdr d))]
+    [(pair? d) (cons (debeagle (car d)) (debeagle (cdr d)))]
+    [else d]))
 
 (define (read-bnix-forms path)
-  ;; Returns a list of top-level datums in the .bnix file, with the
-  ;; `#lang …\n` line stripped. Tolerates read errors by raising — we
-  ;; want loud failure on malformed sources, not silent empty results.
-  (define raw (file->string path))
-  (define-values (lang-prefix rest)
-    (let ([m (regexp-match-positions #rx"^#lang [^\n]*\n" raw)])
-      (cond [m (values (substring raw 0 (cdr (car m)))
-                       (substring raw (cdr (car m))))]
-            [else (values "" raw)])))
-  ;; Preserve line numbers so error messages from sub-tools line up.
-  (define padded
-    (string-append (make-string (count-char #\newline lang-prefix) #\newline)
-                   rest))
-  (define port (open-input-string padded))
-  (port-count-lines! port)
-  (let loop ([acc '()])
-    (define d (read port))
-    (cond [(eof-object? d) (reverse acc)]
-          [else (loop (cons d acc))])))
+  ;; Top-level datums via the beagle reader, container-tags normalized away.
+  ;; Raises loudly on a malformed source (no silent empty/regex fallback).
+  ;; (A leading `#lang beagle/X` reads as a `(define-target X)` form, which the
+  ;; module-body / host-map searches skip — harmless.)
+  (map (lambda (s) (debeagle (syntax->datum s))) (read-beagle-syntax path)))
 
 ;; ---------- keyword utilities ----------
 
@@ -201,70 +191,9 @@
   (with-handlers ([exn:fail? (λ (_) #f)])
     (regexp-match? TAG-CLAUSE-RE (file->string path))))
 
-(define VERBOSE-READ-ERRORS? (and (getenv "FIRN_TAG_DEBUG") #t))
-
-(define (if-bytes->string x)
-  ;; regexp-match returns either bytes? or string? depending on input type.
-  ;; Coerce uniformly to string.
-  (cond [(bytes? x) (bytes->string/utf-8 x)]
-        [(string? x) x]
-        [else ""]))
-
-(define (extract-tags-regex path)
-  ;; Fallback extractor for files whose body contains bnix-only syntax
-  ;; (~''heredoc''/${interpolation}/#$ etc.) that defeats Racket's reader.
-  ;; The :tags / :tags-opt-in / :tag-overrides clauses themselves are
-  ;; structurally simple — bare symbols inside `[...]`, and a small map
-  ;; for overrides — so a regex extractor is sufficient and resilient.
-  (define text (file->string path))
-  (define tags-m
-    (regexp-match #px":tags\\s*\\[([^\\]]*)\\]" text))
-  (define opt-in-m
-    (regexp-match #px":tags-opt-in\\s*\\[([^\\]]*)\\]" text))
-  (define overrides-m
-    (regexp-match #px":tag-overrides\\s*\\{([^}]*(?:\\{[^}]*\\}[^}]*)*)\\}" text))
-  (define (split-syms s)
-    (filter (λ (x) (positive? (string-length x)))
-            (regexp-split #px"\\s+" (string-trim s))))
-  (define tags
-    (cond [tags-m (split-syms (if-bytes->string (cadr tags-m)))]
-          [else '()]))
-  (define opt-in
-    (cond [opt-in-m (split-syms (if-bytes->string (cadr opt-in-m)))]
-          [else '()]))
-  ;; Parse overrides {tag {:k v :k v ...} tag2 {...}}
-  (define overrides
-    (cond
-      [(not overrides-m) (hash)]
-      [else
-       (define body (if-bytes->string (cadr overrides-m)))
-       (define h (make-hash))
-       ;; Match: <tag-symbol> {body}
-       (for ([m (in-list (regexp-match* #px"([a-zA-Z0-9_-]+)\\s*\\{([^}]*)\\}" body
-                                         #:match-select cdr))])
-         (define tag (car m))
-         (define inner (cadr m))
-         ;; Inner shape: :path val :path val ...
-         (define pairs '())
-         (define i (regexp-match*
-                    #px":([a-zA-Z0-9_.-]+)\\s+(\"[^\"]*\"|true|false|-?\\d+(?:\\.\\d+)?)"
-                    inner
-                    #:match-select cdr))
-         (for ([pm (in-list i)])
-           (define p (car pm))
-           (define v (cadr pm))
-           (define val
-             (cond
-               [(string=? v "true") #t]
-               [(string=? v "false") #f]
-               [(and (positive? (string-length v))
-                     (char=? (string-ref v 0) #\"))
-                (substring v 1 (- (string-length v) 1))]
-               [else (string->number v)]))
-           (set! pairs (cons (cons p val) pairs)))
-         (hash-set! h tag (reverse pairs)))
-       h]))
-  (values tags opt-in overrides))
+;; (#29 removed extract-tags-regex + its helpers — the regex fallback that
+;;  false-matched coincidental builder `:tags`. The beagle reader now parses
+;;  every module, so `:tags` is always extracted structurally.)
 
 (define (extract-module-tags name)
   ;; Reads modules/<name>/default.bnix and returns a module-tags struct.
@@ -274,25 +203,17 @@
     [(not (file-exists? path)) (module-tags name '() '() (hash))]
     [(not (file-has-tag-clause? path)) (module-tags name '() '() (hash))]
     [else
-     ;; Try the Racket-reader path first (handles overrides cleanly when
-     ;; the surrounding file is plain s-expr). On failure, fall back to
-     ;; regex extraction — most modules with tags also have bnix-only
-     ;; constructs in their :config bodies that defeat the reader.
-     (with-handlers ([exn:fail?
-                      (λ (e)
-                        (when VERBOSE-READ-ERRORS?
-                          (eprintf "tag-resolve: ~a: reader failed (~a); using regex fallback\n"
-                                   (relative-to-repo path) (exn-message e)))
-                        (define-values (tags opt-in overrides)
-                          (extract-tags-regex path))
-                        (module-tags name tags opt-in overrides))])
-       (define forms (read-bnix-forms path))
-       (define body (find-module-body forms))
-       (define h (map-datum->pairs (or body '())))
-       (module-tags name
-                    (parse-symbol-list (hash-ref h "tags" '()))
-                    (parse-symbol-list (hash-ref h "tags-opt-in" '()))
-                    (parse-tag-overrides (hash-ref h "tag-overrides" '()))))]))
+     ;; #29: single parse path — the beagle reader reads ALL beagle/nix surface,
+     ;; so :tags is extracted STRUCTURALLY from the nix/module body map. No
+     ;; regex fallback (that's what false-matched coincidental builder `:tags`).
+     ;; A genuine read/parse error surfaces loudly (read-bnix-forms raises).
+     (define forms (read-bnix-forms path))
+     (define body (find-module-body forms))
+     (define h (map-datum->pairs (or body '())))
+     (module-tags name
+                  (parse-symbol-list (hash-ref h "tags" '()))
+                  (parse-symbol-list (hash-ref h "tags-opt-in" '()))
+                  (parse-tag-overrides (hash-ref h "tag-overrides" '())))]))
 
 ;; ---------- host-side extraction ----------
 
