@@ -13,8 +13,4 @@
           {username
             {:xdg.configFile
               {"autostart/remmina-applet.desktop"
-                {:text ~''
-                         [Desktop Entry]
-                         Hidden=true
-
-                       ''}}}}})}))
+                {:text (ms "[Desktop Entry]" "Hidden=true" "")}}}}})}))

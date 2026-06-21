@@ -46,43 +46,4 @@
                    "cdspell"
                    "dirspell"]
                  :bashrcExtra
-                  ~''
-
-                    # Ensure ~/.local/bin (where dotfiles/bin is symlinked) is on PATH.
-                    case ":$PATH:" in
-                      *":$HOME/.local/bin:"*) ;;
-                      *) export PATH="$HOME/.local/bin:$PATH" ;;
-                    esac
-
-                    # Readline-dependent setup. Skip cleanly on bash builds without
-                    # readline (pkgs.bash in nix dev shells) — `set -o vi`, `bind`,
-                    # `complete`, and the fzf bindings all need readline. The cd-to-home
-                    # block below is intentionally outside this gate.
-                    if [[ $- == *i* ]] && type bind >/dev/null 2>&1; then
-                      # vi-mode (use 'set -o emacs' to switch back temporarily)
-                      set -o vi
-
-                      # Ctrl+L → clear screen, in every keymap. vi-mode doesn't
-                      # bind this by default (it's an emacs-mode default), so
-                      # set it explicitly in both vi-insert and vi-command.
-                      bind -m emacs       '"\C-l": clear-screen'
-                      bind -m vi-insert   '"\C-l": clear-screen'
-                      bind -m vi-command  '"\C-l": clear-screen'
-
-                      # fzf integration (Ctrl-R for fuzzy history, Alt-C for cd)
-                      if command -v fzf-share >/dev/null 2>&1; then
-                        source "$(fzf-share)/key-bindings.bash"
-                        source "$(fzf-share)/completion.bash"
-                      fi
-                    fi
-
-                    # Change to home dir on interactive start (skip in Emacs vterm).
-                    # No readline dep, runs even in stripped bash.
-                    if [ -z "$INSIDE_EMACS" ] && [ -t 0 ]; then
-                      case "$PWD" in
-                        "$HOME"*) ;;
-                        *) cd "$HOME" ;;
-                      esac
-                    fi
-
-                  ''}})}})}))
+                  (ms "" "# Ensure ~/.local/bin (where dotfiles/bin is symlinked) is on PATH." "case \":$PATH:\" in" "  *\":$HOME/.local/bin:\"*) ;;" "  *) export PATH=\"$HOME/.local/bin:$PATH\" ;;" "esac" "" "# Readline-dependent setup. Skip cleanly on bash builds without" "# readline (pkgs.bash in nix dev shells) — `set -o vi`, `bind`," "# `complete`, and the fzf bindings all need readline. The cd-to-home" "# block below is intentionally outside this gate." "if [[ $- == *i* ]] && type bind >/dev/null 2>&1; then" "  # vi-mode (use 'set -o emacs' to switch back temporarily)" "  set -o vi" "" "  # Ctrl+L → clear screen, in every keymap. vi-mode doesn't" "  # bind this by default (it's an emacs-mode default), so" "  # set it explicitly in both vi-insert and vi-command." "  bind -m emacs       '\"\\C-l\": clear-screen'" "  bind -m vi-insert   '\"\\C-l\": clear-screen'" "  bind -m vi-command  '\"\\C-l\": clear-screen'" "" "  # fzf integration (Ctrl-R for fuzzy history, Alt-C for cd)" "  if command -v fzf-share >/dev/null 2>&1; then" "    source \"$(fzf-share)/key-bindings.bash\"" "    source \"$(fzf-share)/completion.bash\"" "  fi" "fi" "" "# Change to home dir on interactive start (skip in Emacs vterm)." "# No readline dep, runs even in stripped bash." "if [ -z \"$INSIDE_EMACS\" ] && [ -t 0 ]; then" "  case \"$PWD\" in" "    \"$HOME\"*) ;;" "    *) cd \"$HOME\" ;;" "  esac" "fi" "")}})}})}))

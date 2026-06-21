@@ -32,19 +32,7 @@
            :path          (nix/with pkgs [alsa-utils gnugrep gnused coreutils])
            :serviceConfig {:Type "oneshot" :RemainAfterExit true}
            :script
-            ~''
-              set -eu
-              # Find the card index of the ALC285 codec (stable across reboots).
-              card=$(grep -l 'Realtek ALC285' /proc/asound/card*/codec* 2>/dev/null \
-                      | sed -nE 's|.*/card([0-9]+)/.*|\1|p' | head -1)
-              if [ -z "$card" ]; then
-                echo "firn-mic-alsa-init: ALC285 codec not found, skipping" >&2
-                exit 0
-              fi
-              amixer -c "$card" set 'Internal Mic Boost' 0 >/dev/null
-              echo "firn-mic-alsa-init: card$card 'Internal Mic Boost' = 0 dB"
-
-            ''}
+            (ms "set -eu" "# Find the card index of the ALC285 codec (stable across reboots)." "card=$(grep -l 'Realtek ALC285' /proc/asound/card*/codec* 2>/dev/null \\" "        | sed -nE 's|.*/card([0-9]+)/.*|\\1|p' | head -1)" "if [ -z \"$card\" ]; then" "  echo \"firn-mic-alsa-init: ALC285 codec not found, skipping\" >&2" "  exit 0" "fi" "amixer -c \"$card\" set 'Internal Mic Boost' 0 >/dev/null" "echo \"firn-mic-alsa-init: card$card 'Internal Mic Boost' = 0 dB\"" "")}
          :home-manager.users
           {username
             (nix/module [config ...]

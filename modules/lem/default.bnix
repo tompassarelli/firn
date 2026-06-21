@@ -11,11 +11,9 @@
           {:tags [lisp]
            :postPatch
             (s (get-or o postPatch "")
-              ~''
-                sed -i 's/#-os-windows "lem-terminal"//' lem.asd
-
-              '')}))]
-    {:options.myConfig.modules.lem.enable
+              (ms "sed -i 's/#-os-windows \"lem-terminal\"//' lem.asd" ""))}))]
+    {:tags [lisp]
+     :options.myConfig.modules.lem.enable
       (lib.mkEnableOption "Lem Common Lisp editor")
      :config
       (lib.mkIf config.myConfig.modules.lem.enable

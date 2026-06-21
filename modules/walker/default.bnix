@@ -10,11 +10,7 @@
       (lib.mkIf config.myConfig.modules.walker.enable
         {:environment.systemPackages
           [(pkgs.writeShellScriptBin "walker-rename-workspace"
-             ~''
-               name=$(echo "" | walker --dmenu)
-               [ -n "$name" ] && niri msg action set-workspace-name "$name"
-
-             '')]
+             (ms "name=$(echo \"\" | walker --dmenu)" "[ -n \"$name\" ] && niri msg action set-workspace-name \"$name\"" ""))]
          :home-manager.users
           {username
             (nix/module [config ...]
@@ -22,11 +18,7 @@
                :home.file
                 {".config/elephant/desktopapplications.toml"
                   {:text
-                    ~''
-                      # Force proper Wayland env vars when launching apps (fixes Steam on niri)
-                      launch_prefix = "env WAYLAND_DISPLAY=wayland-1 DISPLAY=:0"
-
-                    ''}}
+                    (ms "# Force proper Wayland env vars when launching apps (fixes Steam on niri)" "launch_prefix = \"env WAYLAND_DISPLAY=wayland-1 DISPLAY=:0\"" "")}}
                :programs.walker
                 {:enable       true
                  :runAsService true
