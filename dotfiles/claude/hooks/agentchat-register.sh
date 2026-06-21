@@ -149,7 +149,12 @@ ctx = (
     "ALL agents' files, not yours; the build-window freeze primitive is a scoped COMMIT, "
     "never stash. Before any build / preflight / whole-tree import drop "
     "claims/BUILD-LOCK-{h}.md + wait for all agents clean (see the Shared-working-tree "
-    "section of the protocol). Prefer a per-agent `git worktree` when launched in one."
+    "section of the protocol). Prefer a per-agent `git worktree` when launched in one. "
+    "(5) CROSS-PROJECT PIN: if you build against a SIBLING repo at a pinned ref (e.g. "
+    "gjoa compiles ../beagle at configs/beagle.ref), build from a DEDICATED WORKTREE "
+    "(`git -C ../B worktree add ../B-pin <ref>`) - NEVER `cd ../B && git checkout <pin>` "
+    "the sibling's shared tree: it detaches an actively-developing agent's HEAD + stashes "
+    "their in-flight work (check ../B presence/ + claims/ first; active = off-limits)."
 ).format(h=handle, tok=token, b=base)
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": ctx}}))
 PYEOF
