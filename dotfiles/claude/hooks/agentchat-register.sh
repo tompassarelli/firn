@@ -144,11 +144,12 @@ ctx = (
     "another agent might touch (esp. a Beagle subsystem): add a narrow claim in "
     "~/code/agentchat/claims/ (e.g. beagle-cljs-emit-{h}.md) after checking claims/ for a "
     "conflict. (4) SHARED TREE: if another agent shares this working tree, git is shared "
-    "too - commit ONLY files you changed (`git add <files>`, never -A, it sweeps others' "
-    "uncommitted work), and before any build / preflight / whole-tree import drop "
-    "claims/BUILD-LOCK-{h}.md + wait for all agents to reach a clean `git status` (see the "
-    "Shared-working-tree section of the protocol). Prefer a per-agent `git worktree` when "
-    "the launcher places you in one."
+    "too - commit ONLY files you changed (`git add <files>`, never -A). NEVER run a "
+    "tree-wide op (git stash / reset / clean / checkout-branch / restore) - each hits "
+    "ALL agents' files, not yours; the build-window freeze primitive is a scoped COMMIT, "
+    "never stash. Before any build / preflight / whole-tree import drop "
+    "claims/BUILD-LOCK-{h}.md + wait for all agents clean (see the Shared-working-tree "
+    "section of the protocol). Prefer a per-agent `git worktree` when launched in one."
 ).format(h=handle, tok=token, b=base)
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": ctx}}))
 PYEOF
