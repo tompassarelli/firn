@@ -143,7 +143,12 @@ ctx = (
     "presence/{h}.md to what you are actually doing. (3) CLAIM before editing shared code "
     "another agent might touch (esp. a Beagle subsystem): add a narrow claim in "
     "~/code/agentchat/claims/ (e.g. beagle-cljs-emit-{h}.md) after checking claims/ for a "
-    "conflict."
+    "conflict. (4) SHARED TREE: if another agent shares this working tree, git is shared "
+    "too - commit ONLY files you changed (`git add <files>`, never -A, it sweeps others' "
+    "uncommitted work), and before any build / preflight / whole-tree import drop "
+    "claims/BUILD-LOCK-{h}.md + wait for all agents to reach a clean `git status` (see the "
+    "Shared-working-tree section of the protocol). Prefer a per-agent `git worktree` when "
+    "the launcher places you in one."
 ).format(h=handle, tok=token, b=base)
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": ctx}}))
 PYEOF
