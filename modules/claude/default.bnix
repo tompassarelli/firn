@@ -38,4 +38,24 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/claude/hooks"))}}})}})}))
+                        "/code/nixos-config/dotfiles/claude/hooks"))}
+                 ;; ~/code root routing instruction — reproducible symlink.
+                 "code/CLAUDE.md"
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/code/CLAUDE.md"))}
+                 ;; caveman defaultMode — static config the plugin reads.
+                 ".config/caveman/config.json"
+                  {:text (builtins.toJSON {:defaultMode "lite"})}}
+               ;; caveman plugin install: enablement lives in settings.json, but the
+               ;; on-disk cache (~/.claude/plugins/cache) is runtime state. Best-effort,
+               ;; timeout-bounded, || true so it never fails the rebuild.
+               ;; config.lib.dag = inner home-manager lib — NOT lib.hm: the 2026-05 HM
+               ;; bump stopped extending the outer NixOS lib with .hm (attribute 'hm' missing).
+               :home.activation.installCaveman
+                (config.lib.dag.entryAfter ["writeBoundary"]
+                  (s "if [ ! -e $HOME/.claude/plugins/cache/caveman ]; then\n"
+                     "  run timeout 90 " pkgs.master.claude-code "/bin/claude plugin marketplace add JuliusBrussee/caveman || true\n"
+                     "  run timeout 90 " pkgs.master.claude-code "/bin/claude plugin install caveman@caveman || true\n"
+                     "fi\n"))})}})}))
