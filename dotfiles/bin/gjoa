@@ -6,6 +6,29 @@ root="$HOME/code/gjoa"
 nix_bin="$root/result/bin/gjoa"
 mach_bin="$root/engine/obj-x86_64-pc-linux-gnu/dist/bin/gjoa"
 
+# ── auto-sync: keep the mach (dev) binary's loose chrome + toolkit overlays
+# current without ceremony. `gjoa sync` bundles chrome AND mirrors the loose
+# toolkit overlays (dark-mode actor + fixes) into engine/ (chrome-bundle/
+# install.bjs). A stamp tracks the last sync; if anything under src/gjoa/
+# changed since, re-sync before launch. Fresh = an instant find(1) check, no
+# sync. This is why "youtube went light again" kept recurring: the dark-mode
+# files only synced on a heavy `gjoa import`, never on a normal launch.
+sync_stamp="$root/.gjoa-sync-stamp"
+sync_dev() {
+  direnv exec "$root" sh -c 'cd "$1" && bun run chrome:dist && bun run chrome:install' _ "$root"
+}
+sync_if_stale() {
+  if [ ! -f "$sync_stamp" ] || \
+     [ -n "$(find "$root/src/gjoa" -type f -newer "$sync_stamp" -print -quit 2>/dev/null)" ]; then
+    echo "gjoa: src changed since last sync — syncing chrome + dark-mode…" >&2
+    if sync_dev; then
+      touch "$sync_stamp"
+    else
+      echo "gjoa: sync FAILED — launching with the last-synced build" >&2
+    fi
+  fi
+}
+
 # ── TEMPORARY: in-process security gate suppression ──────────────────────
 # REMOVE AFTER 2026-06-02 REBUILD.
 #
@@ -49,6 +72,7 @@ case "${1:-}" in
       echo "    after that, daily rebuilds:  gjoa build faster  (~30 sec, omni.ja re-zip)" >&2
       exit 1
     fi
+    sync_if_stale
     # Borrow the nix wrapper's runtime library paths (audio, GL, GTK, etc).
     # The mach binary is unwrapped so NixOS can't find these otherwise.
     if [ -r "$nix_bin" ]; then
@@ -77,8 +101,8 @@ gjoa — launcher + dev CLI
 Launch:
   gjoa                     nix build, detached (closes terminal)
   gjoa -f                  nix build, foreground (shows logs)
-  gjoa dev                 mach build, detached
-  gjoa dev -f              mach build, foreground
+  gjoa dev                 mach build, detached (auto-syncs if src changed)
+  gjoa dev -f              mach build, foreground (auto-syncs if src changed)
 
 Status:
   gjoa status              operational dashboard (versions, CVEs, budget)
@@ -86,7 +110,7 @@ Status:
 Dev loop:
   gjoa import              sync src/gjoa/ → engine/ (run before mach build)
   gjoa build [faster|…]    mach build in engine/
-  gjoa sync                bundle chrome TS → symlink into mach install
+  gjoa sync                bundle chrome + mirror dark-mode overlays into engine
   gjoa watch               auto-rebundle chrome TS on save
 
 Tests:
@@ -114,7 +138,7 @@ EOF
   # ── dev-loop verbs ──────────────────────────────────────────────────────
   build) shift; direnv exec "$root" env -C "$root/engine" ./mach build "$@" ;;
   import) direnv exec "$root" env -C "$root" bun run import ;;
-  sync) direnv exec "$root" sh -c 'cd "$1" && bun run chrome:dist && bun run chrome:install' _ "$root" ;;
+  sync) sync_dev && touch "$sync_stamp" ;;
   watch) direnv exec "$root" env -C "$root" bun run chrome:watch ;;
 
   # ── tests + misc ────────────────────────────────────────────────────────
