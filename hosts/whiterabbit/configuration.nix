@@ -48,6 +48,7 @@
   myConfig.modules.windows-vm.enable = true;
   myConfig.modules.nh.enable = true;
   myConfig.modules.babashka.enable = true;
+  myConfig.modules.fleet-coord.enable = true;
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
   imports = [ ./_generated-enables.nix ];
 }
