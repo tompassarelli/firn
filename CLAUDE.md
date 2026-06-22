@@ -56,7 +56,7 @@ Custom command scripts live in `dotfiles/bin/` as plain executable shell scripts
 
 `firn` is the CLI for managing this NixOS config (modules, tags, secrets, rebuilds). It has two surfaces:
 
-- **Daily shortcuts** (what to suggest to the user). Single bare commands with auto-detected defaults: `firn rebuild`, `firn validate`, `firn build`, `firn status`, `firn doctor`, `firn impact`, `firn enable <tag>`, `firn disable <tag>`, `firn diff`. These are first-class, not deprecated — `scripts/firn.rkt` lists them in the help output as "Common shortcuts (default host is auto-detected)". `maybe-legacy-rewrite` rewrites them silently to the entity-first form; no deprecation pointer is ever printed. `firn enable <name>` / `firn disable <name>` target **tags** by default (mutating the current host's `enabled-tags.bnix`); when the name matches a known module, they route to `firn module enable/disable` instead (un-blacklisting / appending to `:disabled`).
+- **Daily shortcuts** (what to suggest to the user). Single bare commands with auto-detected defaults: `firn rebuild`, `firn update`, `firn validate`, `firn build`, `firn status`, `firn doctor`, `firn impact`, `firn enable <tag>`, `firn disable <tag>`, `firn diff`. These are first-class, not deprecated — `scripts/firn.rkt` lists them in the help output as "Common shortcuts (default host is auto-detected)". `maybe-legacy-rewrite` rewrites them silently to the entity-first form; no deprecation pointer is ever printed. `firn enable <name>` / `firn disable <name>` target **tags** by default (mutating the current host's `enabled-tags.bnix`); when the name matches a known module, they route to `firn module enable/disable` instead (un-blacklisting / appending to `:disabled`).
 - **Underlying graph**. Every command is ultimately a `<node> <edge> [<leaf>]` triple (`firn host rebuild`, `firn tag enable terminal`, `firn tag opt-in browsers qutebrowser`, `firn tag status`, `firn module enable swap`, `firn module disable piper`, `firn schema explain X`). Useful when you need to disambiguate or scope to a non-default host. Leaves default to `all` for aggregate views and current-hostname for host-scoped commands. **The `bundle` node was removed** — composition is tag-driven now; `firn bundle …` prints a pointed error directing you to the equivalent `firn tag …` form.
 
 **When telling the user what to run, prefer the bare daily shortcut.** Say `firn rebuild`, not `firn host rebuild`, unless there's a specific reason to scope (e.g. rebuilding `thinkpad-x1e` from `whiterabbit`).
@@ -250,11 +250,16 @@ Pre-req: `./scripts/firn-extract-schema` and `./scripts/firn-extract-schema --da
 To bump nixpkgs and surface deprecations the schema-driven way:
 
 ```bash
-firn repo upgrade dry-run  # show what would change without touching flake.lock
-firn repo upgrade now      # snapshot schema, nix flake update, re-extract, diff, validate
+firn update                # headline verb: bump every input THEN rebuild (chains `repo upgrade now` + `host rebuild`)
+firn update --no-rebuild   # fetch only: advance flake.lock + schema, install nothing
+firn update --dry-run      # preview the bump; mutate nothing
+firn repo upgrade now      # underlying-graph form of `firn update --no-rebuild`: snapshot, nix flake update, re-extract, diff, validate
+firn repo upgrade dry-run  # underlying-graph form of `firn update --dry-run`
 ```
 
 The diff phase highlights any **removed** or **type-changed** option paths that this repo references — those are the actual breakage candidates, not the thousands of unrelated changes you'd see in a raw `nix flake update` log.
+
+**`firn update` moves the lock forward then applies it; `firn rebuild` applies the lock you already have.** That's the whole distinction — `update` mutates flake.lock (new nixpkgs/inputs) then switches; `rebuild` builds + switches against flake.lock unchanged. After a local-only edit (enabled a module, flipped a tag) you want `firn rebuild` — `firn update` would drag in surprise upstream drift. Reach for `firn update` only when you deliberately want newer package versions; `--no-rebuild` is the middle ground (advance the lock now, defer the install). The bump is a **gate, not a prelude**: a failed fetch / schema-extract / validate `exit 1`s before the rebuild is reached, so a known-broken config is never switched. (`firn` for exact flags.)
 
 ## Auto-fixing typos
 
