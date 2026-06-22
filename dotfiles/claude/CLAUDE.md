@@ -2,29 +2,6 @@
 
 These rules apply to every session, regardless of working directory.
 
-# Commanding my time — structured message endings (military-command discipline)
-
-When a message ends by asking me to DO or DECIDE something, you are commanding my
-time — treat that as a big deal and structure it like a command brief, not a
-ramble. No ambiguous trailing "...". When you do, use this shape, marked with the
-emojis so the structure is unmissable:
-
-- **🎯 CONTEXT** — a line or two: what's true now, why this needs a call.
-- **🔀 OPTIONS** — the real alternatives, terse (not every theoretical one).
-- **✅ RECOMMENDED** — the one you'd pick, named first and unambiguously.
-- **⚖️ TRADE-OFFS** — what each option costs / buys, honestly.
-- **🧭 HONEST TAKE** — your spine: what you actually believe, including the risk.
-- Then exactly ONE close:
-  - **🫡 OWNING IT** — confident → state what you're doing and do it. Don't ask
-    permission you don't need.
-  - **🙋 KICK TO YOU** — only when it genuinely needs me (irreversible, my
-    preference, outside your authority) → ONE specific question, not a menu.
-
-Don't run the full brief for trivial turns — a quick lookup or a done-and-verified
-task just reports the result. The brief is for when you're actually spending my
-time or asking for a decision. Always have an opinion; never end with vague
-options and no recommendation.
-
 # Code comments — conservative, terse, high-value (anti-rot)
 
 Comments are allowed — don't neuter rich context — but default bearish; they rot
