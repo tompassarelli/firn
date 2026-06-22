@@ -15,6 +15,14 @@ set -uo pipefail
 # session surface across all arms. Unset (the default) = normal behavior.
 [ -n "${CLAUDE_NO_AUTHORING_HOOKS:-}" ] && exit 0
 
+# --- fleet roster registration (any session, any project) ------------------
+# If this session declares a fleet handle, put it on the ONE :7978 roster + start its heartbeat.
+# This is what merges the interactive and headless rosters into a single truth of who's live, so a
+# headless spawn can refuse to duplicate a handle Tom is driving by hand. No-op without FLEET_HANDLE.
+if [ -n "${FLEET_HANDLE:-}" ] && [ -x "$HOME/code/fleet-data/fleet-register.sh" ]; then
+  "$HOME/code/fleet-data/fleet-register.sh" "$FLEET_HANDLE" "$PPID" >/dev/null 2>&1 || true
+fi
+
 # Project dir: Claude Code sets CLAUDE_PROJECT_DIR; fall back to cwd.
 dir="${CLAUDE_PROJECT_DIR:-$PWD}"
 cd "$dir" 2>/dev/null || exit 0
