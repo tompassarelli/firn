@@ -32,23 +32,41 @@
   (define h (make-hash))
   (when (file-exists? path)
     (for ([e (in-list (call-with-input-file path read-json))])
-      (hash-set! h (hash-ref e 'p) e)))
+      (hash-set! h (hash-ref e 'name) e)))
   h)
+
+;; Skip these dirs during descent — re-walking .git/.direnv (full of
+;; /nix/store symlinks) is the slow part, and none hold .bnix sources.
+(define (prune-dir? d)
+  (define s (path->string d))
+  (or (regexp-match? #rx"/\\.git($|/)" s)
+      (regexp-match? #rx"/\\.direnv($|/)" s)
+      (regexp-match? #rx"/\\.beagle-cache($|/)" s)
+      (regexp-match? #rx"/\\.firn-build($|/)" s)
+      (regexp-match? #rx"/result($|/)" s)))
+
+;; Read every .bnix source ONCE — the diff checks 100s of removed paths,
+;; so the old per-path tree walk was O(paths × repo). Now O(repo) once +
+;; O(paths × files) in-memory. Cached for the whole upgrade run.
+(define repo-bnix-cache #f)
+(define (repo-bnix-files)
+  (or repo-bnix-cache
+      (begin
+        (set! repo-bnix-cache
+              (for/list ([f (in-directory ROOT (λ (d) (not (prune-dir? d))))]
+                         #:when (let ([s (path->string f)])
+                                  (and (regexp-match? #rx"\\.bnix$" s)
+                                       (not (regexp-match? #rx"/scripts/" s))
+                                       (not (regexp-match? #rx"/tests/" s)))))
+                (cons (relative-to-repo f) (file->string f))))
+        repo-bnix-cache)))
 
 (define (find-references-in-repo path)
   (define re (regexp (regexp-quote path)))
   (sort
-   (for/list ([f (in-directory ROOT)]
-              #:when (let ([s (path->string f)])
-                       (and (regexp-match? #rx"\\.rkt$" s)
-                            (not (regexp-match? #rx"/scripts/" s))
-                            (not (regexp-match? #rx"/tests/" s))
-                            (not (regexp-match? #rx"/\\.firn-build/" s))
-                            (not (regexp-match? #rx"/\\.beagle-cache/" s))
-                            (not (regexp-match? #rx"/\\.git/" s))
-                            (not (regexp-match? #rx"/\\.direnv/" s))
-                            (regexp-match? re (file->string f)))))
-     (relative-to-repo f))
+   (for/list ([entry (in-list (repo-bnix-files))]
+              #:when (regexp-match? re (cdr entry)))
+     (car entry))
    string<?))
 
 (define (handle-repo-upgrade leaf)

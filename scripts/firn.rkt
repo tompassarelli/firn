@@ -226,6 +226,19 @@
                       (list "repo" "diff" target)))
     (cons "upgrade" (λ (args) (cond [(member "--dry-run" args) (list "repo" "upgrade" "dry-run")]
                                     [else                      (list "repo" "upgrade" "now")])))
+    ;; firn update [host] [--no-rebuild|--dry-run] — the headline "update
+    ;; my whole OS" verb: bump every flake input, then install. Chains the
+    ;; existing `repo upgrade now` + `host rebuild` edges; `repo upgrade`
+    ;; exits 1 on flake-update/validate failure, so a broken bump never
+    ;; reaches the rebuild. --no-rebuild = fetch only; --dry-run = preview.
+    (cons "update"
+          (λ (args)
+            (define positional (filter (λ (a) (not (regexp-match? #rx"^--" a))) args))
+            (define host (if (pair? positional) (car positional) "current"))
+            (cond
+              [(member "--dry-run" args)    (list "repo" "upgrade" "dry-run")]
+              [(member "--no-rebuild" args) (list "repo" "upgrade" "now")]
+              [else (list "repo" "upgrade" "now" "host" "rebuild" host)])))
     (cons "watch"   (λ (_) (list "repo" "watch")))
     (cons "list"    (λ (args)
                       (cond
@@ -311,6 +324,7 @@
   (printf "firn — FirnOS config management\n\n")
   (printf "Usage:\n  firn <node> <edge> [<leaf>]  [<node> <edge> [<leaf>] ...]\n\n")
   (printf "Common shortcuts (default host is auto-detected):\n")
+  (printf "  firn update           bump all flake inputs + rebuild (--no-rebuild = fetch only)\n")
   (printf "  firn rebuild          build + validate + switch (current host)\n")
   (printf "  firn build            regenerate .nix from .bnix\n")
   (printf "  firn validate         lint + type/package/path check\n")
