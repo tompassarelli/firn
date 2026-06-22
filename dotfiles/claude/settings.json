@@ -14,11 +14,6 @@
             "type": "command",
             "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/beagle-session-start.sh",
             "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/agentchat-register.sh",
-            "timeout": 15
           }
         ]
       }

@@ -100,11 +100,9 @@ must reproduce the change.
   the CLIs this file names (so a removed/renamed tool fails loudly instead of
   rotting silently). This is the anti-rot gate; keep it green.
 - **Behavior-injecting hooks have an opt-out kill-switch:**
-  `CLAUDE_NO_AUTHORING_HOOKS=1` makes the SessionStart beagle handshake, the
-  SessionStart agentchat auto-register (`agentchat-register.sh`, which registers the
-  session into `~/code/agentchat` per its protocol), and the PreToolUse claim-canonical
-  guard no-op — used to pin a neutral, confound-free session (e.g. for experiments).
-  Unset = normal behavior.
+  `CLAUDE_NO_AUTHORING_HOOKS=1` makes the SessionStart beagle handshake and the
+  PreToolUse claim-canonical guard no-op — used to pin a neutral, confound-free
+  session (e.g. for experiments). Unset = normal behavior.
 - For anything NOT already wired (a new package, service, dotfile, or symlink), add
   it to the appropriate nix module (+ `home.file` / `mkOutOfStoreSymlink`), then
   rebuild. Do not drop untracked files into the live system.
