@@ -4,7 +4,14 @@
     "pr": ""
   },
   "permissions": {
-    "defaultMode": "auto"
+    "defaultMode": "auto",
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(nix:*)",
+      "WebSearch",
+      "Bash(./scripts/firn-build)",
+      "Bash(./scripts/firn-validate)"
+    ]
   },
   "hooks": {
     "SessionStart": [
@@ -33,7 +40,8 @@
   },
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": true
+    "typescript-lsp@claude-plugins-official": true,
+    "caveman@caveman": true
   },
   "extraKnownMarketplaces": {
     "claude-code-plugins": {
@@ -41,17 +49,23 @@
         "source": "github",
         "repo": "anthropics/claude-code"
       }
+    },
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman"
+      }
     }
   },
   "alwaysThinkingEnabled": true,
   "effortLevel": "xhigh",
   "voice": {
-    "enabled": false,
+    "enabled": true,
     "mode": "hold"
   },
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "theme": "dark",
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": false
+  "voiceEnabled": true
 }
