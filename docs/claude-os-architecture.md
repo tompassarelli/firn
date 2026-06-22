@@ -138,3 +138,108 @@ Non-gaps (reproducible today): the five nix-wired entries (`CLAUDE.md`,
 `settings.json`, `commands/`, `skills/`, `hooks/`), every per-project CLAUDE.md
 that lives in its own tracked repo, and the caveman *enablement* declaration in
 `settings.json`.
+
+---
+
+# Runtime view — what actually reaches the model's context
+
+Added 2026-06-23. Sections (a)–(d) above map config **provenance** (nix-managed
+vs ephemeral). This half maps the **context-assembly pipeline**: the non-speech
+material that flows into the token window each session/turn, in load order, and
+the exact knob that controls each. Verified against the live session config
+(`settings.json` hooks/plugins, `skills/`, the deferred-tool registry, the
+SessionStart/UserPromptSubmit hook injections observed in-session).
+
+## (e) Context-assembly pipeline (load order)
+
+```
+  ┌─ ONCE PER SESSION ────────────────────────────────────────────────────────┐
+  │  ① BASE SYSTEM PROMPT     baked in binary    ✗ CLI can't edit; ✓ SDK replace,
+  │                                                ✓ `claude -p --append-system-prompt`
+  │  ② TOOL DEFINITIONS       built-in + DEFERRED ✓ permissions.deny ["Bash"] removes;
+  │                           (lazy via ToolSearch) deferred MCP/Cron/Web ≈ free until fetched
+  │  ③ ENVIRONMENT BLOCK      cwd/git/OS/model/date  ✓ --exclude-dynamic-…-sections
+  │  ④ CLAUDE.md HIERARCHY    managed → ~/.claude → ~/code → <repo> → <subdir>
+  │                                                ✓ edit the files (broad→narrow refine)
+  │  ⑤ AUTO-MEMORY            ~/.claude/projects/<slug>/memory/MEMORY.md + recalled facts
+  │  ⑥ MCP INSTRUCTIONS       better-auth/fram/lodestar prose + tool NAMES (schemas deferred)
+  │  ⑦ SKILL DESCRIPTIONS     name+description only; BODY deferred until Skill() invoked
+  │  ⑧ AGENT TYPES            subagent roster (caveman:*, Explore, Plan, …)
+  │  ⑨ SLASH COMMANDS         commands/*.md  (live: screenshot.md)
+  │  ⑩ SessionStart HOOK OUT  ← injected as system msg  (beagle-session-start.sh + caveman banner)
+  └────────────────────────────────────────────────────────────────────────────┘
+  ┌─ EVERY TURN ──────────────────────────────────────────────────────────────┐
+  │  ⑪ USER PROMPT
+  │  ⑫ UserPromptSubmit HOOK  ← inject text / block prompt (caveman re-injects each turn)
+  │  ⑬ TOOL CALLS → results   PreToolUse: block / rewrite input / auto-allow
+  │                           PostToolUse: rewrite output / inject context
+  │                           (live: claim-canonical-guard.sh on Edit|Write|MultiEdit)
+  │  ⑭ COMPACTION             old tool output → summary    ✓ PreCompact hook; autoCompact toggle
+  └────────────────────────────────────────────────────────────────────────────┘
+```
+
+Key property: injected banners (caveman, beagle handshake) are **hook output**
+(⑩/⑫), not model identity. Hooks are the surface to alter bias/inject context
+without touching the binary.
+
+## (f) Control surfaces — every knob
+
+| # | Source | Live location | Control / debloat |
+|---|---|---|---|
+| ① | base system prompt | binary | CLI: append-only (`-p --append-system-prompt`); full replace = SDK / output-style |
+| ② | built-in tools | binary | `permissions.deny:["Bash"]` (bare name) removes from context; SDK `disallowedTools` |
+| ② | deferred/MCP tools | ToolSearch registry | lazy — near-zero until fetched; remove server = gone |
+| ③ | env block | generated | `--exclude-dynamic-system-prompt-sections` |
+| ④ | CLAUDE.md | `dotfiles/claude/CLAUDE.md` (nix) + `~/code/CLAUDE.md` (⚠ untracked, gap (d)#2) + per-repo | edit files; primary bias lever |
+| ⑤ | auto-memory | `~/.claude/projects/*/memory/` | edit/delete `.md`; `autoMemoryEnabled` |
+| ⑥ | MCP | `.mcp.json` / `~/.claude.json` | remove server (instruction block loads eagerly; tools deferred) |
+| ⑦ | skills | `~/.claude/skills/` (nix) + plugins | delete dir / disable plugin; `disable-model-invocation` frontmatter |
+| ⑧ | agents | agent dirs + plugins | delete files / disable plugin |
+| ⑩⑫⑬ | hooks | `settings.json hooks` → `dotfiles/claude/hooks/` | add/remove scripts; `disableAllHooks:true`; kill-switch `CLAUDE_NO_AUTHORING_HOOKS=1` |
+| — | plugins | `enabledPlugins` | flip `false` → drops that plugin's skills+agents+hooks+statusline |
+| — | model/effort | `settings.json` `model`,`effortLevel` | `/model`, `/config` |
+
+### Tool interception — the three swap paths
+
+A built-in tool's implementation is baked (CLI can't replace `Read`/`Bash`
+directly). Three ways to swap behavior:
+
+1. **Hook rewrite** — `PreToolUse` rewrites input args before exec; `PostToolUse`
+   rewrites the output the model sees (`updatedToolOutput`). Intercept-and-fake
+   is possible. (This repo already does the block half: `claim-canonical-guard.sh`.)
+2. **Shadow via MCP** — add `mcp__myfs__read`, `deny` built-in `Read`; model
+   routes through your impl.
+3. **SDK in-process tools** — define the tool as a TS/Python function. True
+   implementation swap.
+
+Hook events (mid-2026, CLI-confirmed): `SessionStart`, `SessionEnd`,
+`UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `SubagentStop`,
+`PreCompact`, `Notification`.
+
+## (g) CLI vs Agent SDK vs raw API — and billing
+
+Same engine underneath CLI and the Agent SDK; the SDK is Claude Code as a
+library. Escalate only at a specific ceiling.
+
+| Want | CLI | SDK | API |
+|---|---|---|---|
+| strip context / remove tools / inject bias | ✅ perms+hooks+CLAUDE.md | ✅ | build it |
+| intercept & rewrite tool calls | ✅ Pre/PostToolUse | ✅ callbacks | n/a |
+| **replace base system prompt** | ✗ (append only) | ✅ | ✅ you own it |
+| custom tool as real code | ~ via MCP | ✅ in-proc fn | ✅ |
+| **programmatic per-call permission logic** | ✗ static rules | ✅ `canUseTool` | n/a |
+| unattended / CI / service | awkward | ✅ | ✅ |
+
+**Billing.** CLI here auths via OAuth subscription (`~/.claude/.credentials.json`)
+→ counts against Pro/Max, not API credits. The Agent SDK run locally inherits
+that same CLI auth, so it *can* run on the subscription — but Anthropic's
+official stance is OAuth tokens are for the CLI + claude.ai; programmatic SDK use
+is a gray/disallowed zone for production, where the sanctioned path is
+`ANTHROPIC_API_KEY` (pay-per-token). Raw API is credits only. (Billing specifics
+move; confirm at docs.claude.com before building production on subscription auth.)
+
+**Verdict.** Stay on CLI for interactive work — debloat/bias-shift is fully
+covered by what this repo already manages (CLAUDE.md, hooks, permissions, plugin
+toggles). Reach for the SDK only at the three ✗ ceilings: replacing the base
+system prompt, real-code custom tools, or programmatic permission logic. Raw API
+only if dropping the agent loop entirely (you don't — the SDK gives it for free).
