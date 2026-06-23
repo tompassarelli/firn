@@ -1,29 +1,41 @@
 #!/usr/bin/env bash
-# firn — wrapper for compiled bytecode.
-#
-# Per-racket cache key: the .zo lives at SHARE_DIR/<racket-store-hash>/firn.zo.
-# If the current racket's store hash matches what this wrapper was built
-# against, exec the cached .zo. Otherwise rebuild (one-time per racket).
-
+# firn — wrapper for compiled bytecode. Pinned to BEAGLE's racket, not system
+# racket (see scripts/firn-build-bin for why). A system racket bump must never
+# break or silently rebuild firn.
 set -euo pipefail
 
 SHARE_DIR="/home/tom/.local/share/firn"
-BUILT_RACKET_HASH="5d6dfd9cc066"
+BUILT_RACKET_BIN="/nix/store/67ixm62090fzccg1w9qy7wdlh3kk05r9-racket-9.1/bin/racket"
+BUILT_RACKET_HASH="a819fcdd72d0"
 BUILT_RACKET_VERSION="9.1"
 REPO="${FIRN_REPO:-$HOME/code/nixos-config}"
+BEAGLE_PATH="${BEAGLE_PATH:-$REPO/../beagle}"
 BUILD_SCRIPT="$REPO/scripts/firn-build-bin"
 
-if ! command -v racket >/dev/null 2>&1; then
-  echo "firn: racket not on PATH" >&2
+# Fast path: the beagle racket firn was built against still exists + its .zo is
+# present → exec it directly. No direnv, no resolution cost on the hot path.
+if [ -x "$BUILT_RACKET_BIN" ] && [ -f "$SHARE_DIR/$BUILT_RACKET_HASH/firn.zo" ]; then
+  exec "$BUILT_RACKET_BIN" "$SHARE_DIR/$BUILT_RACKET_HASH/firn.zo" "$@"
+fi
+
+# Slow path: beagle's racket moved store paths (a beagle flake bump) or this is
+# a fresh machine. Re-resolve beagle's pinned racket and rebuild once.
+RACKET="racket"; RACO="raco"
+if [ -f "$BEAGLE_PATH/bin/_beagle-racket" ]; then
+  # shellcheck disable=SC1091
+  source "$BEAGLE_PATH/bin/_beagle-racket"
+fi
+if ! command -v "$RACKET" >/dev/null 2>&1; then
+  echo "firn: racket not found ($RACKET)" >&2
   exit 1
 fi
-CURRENT_RACKET_BIN="$(readlink -f "$(command -v racket)")"
+CURRENT_RACKET_BIN="$(readlink -f "$(command -v "$RACKET")")"
 CURRENT_RACKET_HASH="$(printf '%s' "$CURRENT_RACKET_BIN" | sha1sum | cut -c1-12)"
 ZO="$SHARE_DIR/$CURRENT_RACKET_HASH/firn.zo"
 
 if [ ! -f "$ZO" ]; then
-  CURRENT_RACKET_VERSION="$(racket --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo unknown)"
-  echo "firn: first run under racket $CURRENT_RACKET_VERSION ($CURRENT_RACKET_BIN); building cache (~20s, one-time per racket)..." >&2
+  CURRENT_RACKET_VERSION="$("$RACKET" --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo unknown)"
+  echo "firn: first run under beagle racket $CURRENT_RACKET_VERSION ($CURRENT_RACKET_BIN); building cache (~20s, one-time)..." >&2
   if [ ! -x "$BUILD_SCRIPT" ]; then
     echo "firn: build script missing at $BUILD_SCRIPT — cannot self-build." >&2
     exit 1
@@ -31,4 +43,4 @@ if [ ! -f "$ZO" ]; then
   "$BUILD_SCRIPT" >&2
 fi
 
-exec racket "$ZO" "$@"
+exec "$RACKET" "$ZO" "$@"

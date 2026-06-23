@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
 # firn-build-bin — compile scripts/firn.rkt to a small fast binary.
 #
-# Per-racket cache: the .zo gets stored at
-#   ~/.local/share/firn/<racket-store-hash>/firn.zo
-# keyed by a hash of the racket binary's resolved store path. Two
-# rackets coexisting (e.g. system racket-8.18 + beagle dev-shell
-# racket-9.1) each get their own .zo and never thrash each other.
-# Switching contexts never triggers a rebuild after the first build
-# per racket.
+# RACKET PINNING (the load-bearing decision): firn depends on beagle —
+# beagle-lib at build time, the beagle CLIs (beagle-validate, ...) at run
+# time — so it MUST share beagle's racket: the flake-pinned dev-shell racket
+# resolved by beagle's bin/_beagle-racket, NOT the system racket.
 #
-# Uses `raco demod` (whole-program optimizer + dead-code elimination)
-# to produce a ~1.3 MB bytecode file that loads in ~80 ms.
+# Why it matters: when a nixpkgs bump moves *system* racket ahead of beagle's
+# pin (e.g. 9.1 -> 9.2), building firn under system racket recompiles beagle-lib
+# IN-PLACE into beagle's shared, gitignored compiled/ tree with the new version
+# stamp — and every beagle CLI (still on the pinned racket) then dies with
+# "version mismatch: expected 9.1 found 9.2". Pinning firn to beagle's racket
+# keeps the two on one version, immune to system racket bumps. (Learned the
+# hard way during the 9.1->9.2 bump; see git log.)
+#
+# Per-racket cache: ~/.local/share/firn/<racket-store-hash>/firn.zo, keyed by
+# beagle's racket store path — a beagle racket bump rebuilds once, silently.
+# `raco demod` (whole-program optimizer + DCE) yields a ~2 MB standalone .zo
+# (no runtime collection deps) that loads in ~80ms.
 
 set -euo pipefail
 
@@ -21,93 +28,98 @@ BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
 SHARE_DIR="${SHARE_DIR:-$HOME/.local/share/firn}"
 mkdir -p "$BIN_DIR" "$SHARE_DIR"
 
-# ---- per-racket cache key ----
-# Resolve the racket binary all the way through the nix store, so two
-# rackets at different store paths are distinguishable even if they
-# share a version string. Use first 12 chars of sha1 as the dir name.
-if ! command -v racket >/dev/null 2>&1; then
-  echo "firn-build-bin: racket not found on PATH" >&2
+# ---- resolve beagle's pinned racket (decoupled from system racket) ----
+RACKET="racket"; RACO="raco"
+if [ -f "$BEAGLE_PATH/bin/_beagle-racket" ]; then
+  # shellcheck disable=SC1091
+  source "$BEAGLE_PATH/bin/_beagle-racket"   # sets RACKET / RACO to beagle's dev-shell racket
+fi
+if ! command -v "$RACKET" >/dev/null 2>&1; then
+  echo "firn-build-bin: racket not found ($RACKET)" >&2
   exit 1
 fi
-RACKET_BIN="$(readlink -f "$(command -v racket)")"
+
+# ---- per-racket cache key (resolved beagle racket store path) ----
+RACKET_BIN="$(readlink -f "$(command -v "$RACKET")")"
 RACKET_HASH="$(printf '%s' "$RACKET_BIN" | sha1sum | cut -c1-12)"
-RACKET_VERSION="$(racket --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo unknown)"
+RACKET_VERSION="$("$RACKET" --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo unknown)"
 
 ZO_DIR="$SHARE_DIR/$RACKET_HASH"
 ZO="$ZO_DIR/firn.zo"
 WRAPPER="$BIN_DIR/firn"
 mkdir -p "$ZO_DIR"
 
-echo "firn-build-bin: racket $RACKET_VERSION at $RACKET_BIN"
+echo "firn-build-bin: beagle racket $RACKET_VERSION at $RACKET_BIN"
 echo "firn-build-bin: cache key $RACKET_HASH"
 
-# ---- ensure beagle libs compiled for THIS racket ----
-# `raco demod` reads source first but follows .zo references in the
-# beagle source tree. Stale .zos from another racket version cause it
-# to error. raco setup recompiles into compiled/<version>/, which is
-# racket-version-keyed natively, so multiple rackets coexist there.
-#
-# Only the packages firn actually needs: beagle-lib (the runtime
-# library scripts/firn.rkt imports) and beagle (the CLI scripts).
-# beagle-test and beagle-doc are intentionally excluded — they pull
-# in collections firn doesn't use and have failed unrelated to
-# anything firn cares about.
-if [ -d "$BEAGLE_PATH" ]; then
-  echo "firn-build-bin: ensuring beagle libs compiled for racket $RACKET_VERSION"
-  raco setup --pkgs beagle-lib beagle 2>&1 \
-    | grep -E "error|warning|--- summary" \
-    | head -10 \
-    || true
+# ---- ensure beagle-lib resolves for THIS racket ----
+# demod follows `(require beagle-lib/...)` in firn.rkt, so beagle must be on
+# this racket's collection path. Link it into beagle-racket's OWN pkg db
+# (idempotent; --no-setup so we never recompile beagle's bytecode — that is
+# beagle's job, under the same racket, so no version skew is ever introduced).
+if [ -d "$BEAGLE_PATH" ] && ! "$RACO" pkg show --all 2>/dev/null | grep -q '^ beagle '; then
+  echo "firn-build-bin: linking beagle into racket $RACKET_VERSION pkg db (first run)"
+  "$RACO" pkg install --link --batch --no-setup --skip-installed \
+    "$BEAGLE_PATH/beagle-lib" "$BEAGLE_PATH/beagle" "$BEAGLE_PATH/beagle-test" \
+    2>&1 | tail -3 || true
 fi
 
-# Sanity-check that this racket actually has `raco demod`. racket-minimal
-# doesn't ship it. If missing, fail loudly with the recovery path.
-if ! raco help demod >/dev/null 2>&1; then
+# Sanity: this racket must ship `raco demod` (racket-minimal doesn't).
+if ! "$RACO" help demod >/dev/null 2>&1; then
   echo "" >&2
-  echo "firn-build-bin: ERROR — \`raco demod\` not available in this racket." >&2
-  echo "  This racket is missing the compiler-lib package (likely racket-minimal)." >&2
-  echo "  firn needs full racket: install pkgs.racket (not pkgs.racket-minimal)" >&2
-  echo "  in modules/racket/default.bnix and rebuild." >&2
-  echo "" >&2
-  echo "  Bypass for now (skip firn entirely):" >&2
-  echo "    cd ~/code/nixos-config && sudo nixos-rebuild switch --flake .#whiterabbit" >&2
+  echo "firn-build-bin: ERROR — \`raco demod\` not available in this racket ($RACKET)." >&2
+  echo "  Missing compiler-lib (likely racket-minimal). firn needs full racket;" >&2
+  echo "  ensure beagle's dev shell provides pkgs.racket (not racket-minimal)." >&2
   exit 1
 fi
 
 echo "firn-build-bin: compiling scripts/firn.rkt → $ZO"
-raco demod -o "$ZO" scripts/firn.rkt
+"$RACO" demod -o "$ZO" scripts/firn.rkt
 
 # ---- wrapper ----
-# Embeds the cache key + path so the wrapper finds its own .zo. If
-# the racket on PATH at runtime resolves to a different store hash,
-# the wrapper rebuilds (one-time, in the new cache dir).
+# Embeds the resolved beagle racket + cache key. Fast path: if that exact
+# racket store path still exists and its .zo is built, exec directly (no
+# direnv/per-call resolution). Slow path (beagle racket moved, or first run
+# on a new machine): re-resolve via _beagle-racket and rebuild once.
 cat > "$WRAPPER" <<EOF
 #!/usr/bin/env bash
-# firn — wrapper for compiled bytecode.
-#
-# Per-racket cache key: the .zo lives at SHARE_DIR/<racket-store-hash>/firn.zo.
-# If the current racket's store hash matches what this wrapper was built
-# against, exec the cached .zo. Otherwise rebuild (one-time per racket).
-
+# firn — wrapper for compiled bytecode. Pinned to BEAGLE's racket, not system
+# racket (see scripts/firn-build-bin for why). A system racket bump must never
+# break or silently rebuild firn.
 set -euo pipefail
 
 SHARE_DIR="$SHARE_DIR"
+BUILT_RACKET_BIN="$RACKET_BIN"
 BUILT_RACKET_HASH="$RACKET_HASH"
 BUILT_RACKET_VERSION="$RACKET_VERSION"
 REPO="\${FIRN_REPO:-\$HOME/code/nixos-config}"
+BEAGLE_PATH="\${BEAGLE_PATH:-\$REPO/../beagle}"
 BUILD_SCRIPT="\$REPO/scripts/firn-build-bin"
 
-if ! command -v racket >/dev/null 2>&1; then
-  echo "firn: racket not on PATH" >&2
+# Fast path: the beagle racket firn was built against still exists + its .zo is
+# present → exec it directly. No direnv, no resolution cost on the hot path.
+if [ -x "\$BUILT_RACKET_BIN" ] && [ -f "\$SHARE_DIR/\$BUILT_RACKET_HASH/firn.zo" ]; then
+  exec "\$BUILT_RACKET_BIN" "\$SHARE_DIR/\$BUILT_RACKET_HASH/firn.zo" "\$@"
+fi
+
+# Slow path: beagle's racket moved store paths (a beagle flake bump) or this is
+# a fresh machine. Re-resolve beagle's pinned racket and rebuild once.
+RACKET="racket"; RACO="raco"
+if [ -f "\$BEAGLE_PATH/bin/_beagle-racket" ]; then
+  # shellcheck disable=SC1091
+  source "\$BEAGLE_PATH/bin/_beagle-racket"
+fi
+if ! command -v "\$RACKET" >/dev/null 2>&1; then
+  echo "firn: racket not found (\$RACKET)" >&2
   exit 1
 fi
-CURRENT_RACKET_BIN="\$(readlink -f "\$(command -v racket)")"
+CURRENT_RACKET_BIN="\$(readlink -f "\$(command -v "\$RACKET")")"
 CURRENT_RACKET_HASH="\$(printf '%s' "\$CURRENT_RACKET_BIN" | sha1sum | cut -c1-12)"
 ZO="\$SHARE_DIR/\$CURRENT_RACKET_HASH/firn.zo"
 
 if [ ! -f "\$ZO" ]; then
-  CURRENT_RACKET_VERSION="\$(racket --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo unknown)"
-  echo "firn: first run under racket \$CURRENT_RACKET_VERSION (\$CURRENT_RACKET_BIN); building cache (~20s, one-time per racket)..." >&2
+  CURRENT_RACKET_VERSION="\$("\$RACKET" --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo unknown)"
+  echo "firn: first run under beagle racket \$CURRENT_RACKET_VERSION (\$CURRENT_RACKET_BIN); building cache (~20s, one-time)..." >&2
   if [ ! -x "\$BUILD_SCRIPT" ]; then
     echo "firn: build script missing at \$BUILD_SCRIPT — cannot self-build." >&2
     exit 1
@@ -115,11 +127,11 @@ if [ ! -f "\$ZO" ]; then
   "\$BUILD_SCRIPT" >&2
 fi
 
-exec racket "\$ZO" "\$@"
+exec "\$RACKET" "\$ZO" "\$@"
 EOF
 chmod +x "$WRAPPER"
 
-# ---- one-time cleanup: drop the legacy single-marker file if present ----
+# one-time cleanup: drop the legacy single-marker file if present
 rm -f "$SHARE_DIR/racket-version"
 
 ls -lh "$ZO" "$WRAPPER" | awk '{print "  ", $5, $9}'
