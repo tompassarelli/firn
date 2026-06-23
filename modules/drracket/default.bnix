@@ -15,4 +15,4 @@
       (lib.mkIf config.myConfig.modules.drracket.enable
         {:environment.systemPackages [pkgs.unstable.racket]
          :system.activationScripts.racoPackages.text
-          (ms (s "sudo -u " config.myConfig.modules.users.username " " racoEnsure " || true") "")})}))
+          (ms (s "/run/wrappers/bin/sudo -u " config.myConfig.modules.users.username " " racoEnsure " || true") "")})}))

@@ -16,7 +16,7 @@ in
   config = lib.mkIf config.myConfig.modules.drracket.enable {
     environment.systemPackages = [ pkgs.unstable.racket ];
     system.activationScripts.racoPackages.text = ''
-      sudo -u ${config.myConfig.modules.users.username} ${racoEnsure} || true
+      /run/wrappers/bin/sudo -u ${config.myConfig.modules.users.username} ${racoEnsure} || true
 
     '';
   };
