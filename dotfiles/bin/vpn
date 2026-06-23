@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # WireGuard VPN with kill switch.
-# Usage: vpn on | vpn off                 (default: tokyo)
-#        vpn <iface> on | vpn <iface> off
+# Usage: vpn <iface> on | vpn <iface> off
+#        vpn on | vpn off                 (default iface: tokyo)
+#
+# NOTE (2026-06-23): no live VPNs configured. Both wg-tokyo (HostHatch, dead)
+# and wg0 (old DO Singapore, unused) were archived to ~/archive/vpn/. `vpn on`
+# will error until a config is restored to /etc/wireguard/.
 set -u
 
 # Helper: clear all kill-switch iptables rules (delete in reverse so
@@ -30,6 +34,11 @@ fi
 
 case "$action" in
   on)
+    if [ ! -f "/etc/wireguard/${conf}.conf" ]; then
+      echo "vpn: no config /etc/wireguard/${conf}.conf — no live VPN configured." >&2
+      echo "     Archived in ~/archive/vpn/ (wg-tokyo=HostHatch dead, wg0=old DO-SG)." >&2
+      exit 1
+    fi
     endpoint=$(grep -oP 'Endpoint\s*=\s*\K[\d.]+' "/etc/wireguard/${conf}.conf")
     killswitch_clear
     sudo iptables -I OUTPUT -m comment --comment "wgon-killswitch" -d "$endpoint" -j ACCEPT
