@@ -33,6 +33,11 @@
             "type": "command",
             "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/claim-canonical-guard.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/firnos-guard.sh",
+            "timeout": 10
           }
         ]
       },
@@ -43,6 +48,16 @@
             "type": "command",
             "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/fleet-protocol-guard.sh",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/firnos-guard.sh",
+            "timeout": 10
           }
         ]
       }
