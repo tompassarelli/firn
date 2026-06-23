@@ -4,4 +4,8 @@
 
 (nix/module [config lib pkgs ...]
   {:myConfig.modules.users.username "ashashi"
+   ;; ashashi runs as Tom's git identity (his macOS box) — explicit now, not
+   ;; silently inherited from the framework default. Change if it becomes someone else's.
+   :myConfig.modules.users.email "tom.passarelli@protonmail.com"
+   :myConfig.modules.users.fullName "tompassarelli"
    :imports [(p "./_generated-enables.nix")]})

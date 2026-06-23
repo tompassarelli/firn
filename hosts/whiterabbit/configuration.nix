@@ -4,11 +4,14 @@
   myConfig.modules.system.stateVersion = "25.05";
   myConfig.modules.users.enable = true;
   myConfig.modules.users.username = "tom";
+  myConfig.modules.users.email = "tom.passarelli@protonmail.com";
+  myConfig.modules.users.fullName = "tompassarelli";
   myConfig.modules.nix-settings.enable = true;
   myConfig.modules.boot.enable = true;
   myConfig.modules.networking.enable = true;
   myConfig.modules.remmina.enable = true;
   myConfig.modules.timezone.enable = true;
+  myConfig.modules.timezone.zone = "Asia/Bangkok";
   myConfig.modules.ssh.enable = true;
   myConfig.modules.swap.enable = true;
   myConfig.modules.auto-upgrade.enable = true;

@@ -8,17 +8,17 @@ in
   options.myConfig.modules.users.enable = lib.mkEnableOption "Enable user configuration";
   options.myConfig.modules.users.username = lib.mkOption {
     type = lib.types.str;
-    default = "tom";
-    description = "Primary system username";
+    default = "user";
+    description = "Primary system username (instance binds the real one)";
   };
   options.myConfig.modules.users.email = lib.mkOption {
     type = lib.types.str;
-    default = "tom.passarelli@protonmail.com";
+    default = "";
     description = "Primary git/commit email";
   };
   options.myConfig.modules.users.fullName = lib.mkOption {
     type = lib.types.str;
-    default = "tompassarelli";
+    default = "";
     description = "Git author / display name (git user.name)";
   };
   options.myConfig.modules.users.homeDir = lib.mkOption {

@@ -4,7 +4,7 @@
   options.myConfig.modules.timezone.enable = lib.mkEnableOption "timezone configuration";
   options.myConfig.modules.timezone.zone = lib.mkOption {
     type = lib.types.str;
-    default = "Asia/Bangkok";
+    default = "UTC";
     description = "IANA timezone — instance overrides per-host";
   };
   config = lib.mkIf config.myConfig.modules.timezone.enable {
