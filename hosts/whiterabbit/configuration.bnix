@@ -41,6 +41,7 @@
    :myConfig.modules.password.enable true
    :myConfig.modules.mini-serve.enable true
    :myConfig.modules.awscli.enable true
+   :myConfig.modules.azure-cli.enable true
    :myConfig.modules.clockify.enable true
    :myConfig.modules.parted.enable true
    :myConfig.modules.unixodbc.enable true
