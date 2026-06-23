@@ -8,11 +8,7 @@
       {:environment.systemPackages
         [(pkgs.google-chrome.override
            {:commandLineArgs
-            (nix/str
-              "--disable-gpu-compositing "
-              "--disable-gpu-shader-disk-cache "
-              "--use-gl=angle "
-              "--use-angle=vulkan")})]
+            "--disable-gpu-compositing --disable-gpu-shader-disk-cache --use-gl=angle --use-angle=vulkan"})]
        :xdg.mime.defaultApplications
         (lib.mkIf config.myConfig.modules.chrome.default
           {"text/html" "google-chrome.desktop"
