@@ -1,9 +1,11 @@
 # Claude Code "Operating System" — Architecture Map
 
-Inspected live on 2026-06-22. A MAP of every CLAUDE.md and every `~/.claude`
-config surface, each classified **NIXOS-CONFIG-MANAGED** (reproducible via a
-fresh `nixos-rebuild`) vs **NOT** (ephemeral — lives only in `~`, lost on a
-fresh machine). Filesystem-verified; not guessed.
+Inspected live on 2026-06-22 (revised 2026-06-23 — MCP servers + closed gaps in
+**§(h)**, which supersedes stale claims below where they conflict). A MAP of every
+CLAUDE.md and every `~/.claude` config surface, each classified
+**NIXOS-CONFIG-MANAGED** (reproducible via a fresh `nixos-rebuild`) vs **NOT**
+(ephemeral — lives only in `~`, lost on a fresh machine). Filesystem-verified;
+not guessed.
 
 ## (a) How the config is wired
 
@@ -20,7 +22,9 @@ caveman install, `settings.local.json`) is real, unmanaged state that a fresh
 machine would not reproduce. The anti-rot gate is
 `~/code/nixos-config/scripts/claude-config-check.sh` (run by
 `.github/workflows/claude-config.yml`): shellchecks the hooks, JSON-validates
-`settings.json`, and asserts every wired hook path exists + is executable.
+`settings.json`, asserts every wired hook path exists + is executable, and (as of
+2026-06-23) enforces `autoMemoryEnabled === false` plus, under `--local`, the
+home-manager symlink chain and the MCP registration (§(h)).
 
 ## (b) Classification table — `~/.claude` surface
 
@@ -33,7 +37,7 @@ store to `~/code/nixos-config/dotfiles/claude/…` (abbrev. `dotfiles/claude/`).
 | `settings.json` | symlink | ✅ | `dotfiles/claude/settings.json` | hooks, enabledPlugins, effort/theme/voice; CI-validated |
 | `commands/` | symlink | ✅ | `dotfiles/claude/commands/` | contains `screenshot.md` only |
 | `skills/` | symlink | ✅ | `dotfiles/claude/skills/` | beagle-authoring, claim-authoring, claim-canonical-authoring, code-as-claims |
-| `hooks/` | symlink | ✅ | `dotfiles/claude/hooks/` | `beagle-session-start.sh`, `claim-canonical-guard.sh` |
+| `hooks/` | symlink | ✅ | `dotfiles/claude/hooks/` | `beagle-session-start.sh`, `claim-canonical-guard.sh`, `fleet-protocol-guard.sh` |
 | `settings.local.json` | file | ❌ | — (lives only in `~`) | per-machine permission allowlist; not referenced by any nix module |
 | `plugins/` | dir | ❌ | — | plugin installs + marketplaces; see caveman gap below |
 | `plugins/cache/caveman/caveman/25d22f864ad6/` | dir | ❌ | github JuliusBrussee/caveman | actual caveman git checkout — installed via `claude plugin install`, NOT nix → **task #41** |
@@ -243,3 +247,68 @@ covered by what this repo already manages (CLAUDE.md, hooks, permissions, plugin
 toggles). Reach for the SDK only at the three ✗ ceilings: replacing the base
 system prompt, real-code custom tools, or programmatic permission logic. Raw API
 only if dropping the agent loop entirely (you don't — the SDK gives it for free).
+
+---
+
+## (h) MCP servers + closed gaps (2026-06-23 revision)
+
+Added 2026-06-23. **Supersedes stale claims above where they conflict.**
+
+### MCP servers — `fram` + `lodestar` (linear removed)
+
+Two stdio MCP servers, USER scope, registered in `~/.claude.json`:
+
+| server | command | corpus it reads | role |
+|---|---|---|---|
+| `lodestar` | `~/code/lodestar/bin/lodestar-mcp` | live store (`~/.local/state/lodestar/`, via the engine's own XDG default) | curated life verbs (ready/next/plate/tell/capture/…) |
+| `fram` | `~/code/fram/bin/fram-mcp` | live store — **only because `FRAM_LOG`/`FRAM_THREADS` env point it there** | generic claim engine: raw triple tools + Datalog `query` escape hatch |
+
+Note: `~/.local/state/lodestar` → symlink → `~/code/lodestar-data` (a git repo).
+One physical store; engine reads the XDG path, bytes are version-controlled.
+
+**The corpus footgun (fixed 2026-06-23).** `fram` is the *generic* engine; with
+no env it defaults to its **repo demo corpus** (`~/code/fram/claims.log`), so an
+unconfigured fram MCP silently serves example data, blind to the real board. The
+fix selects the corpus at **deployment** (env on the registration) — never by
+hardcoding life paths into the engine. `lodestar` avoids the trap because its
+wrapper sets the XDG default itself.
+
+**Reproducible registration.** `modules/claude/default.bnix` now ships
+`home.activation.registerMcpServers`: a best-effort, idempotent activation that
+(re)registers `fram` with the live-corpus env and ensures `lodestar` is present,
+so a fresh `firn rebuild` wires both instead of relying on loose `claude mcp add`
+state. **Set-once (activation) + verify-always (gate, below).**
+
+**`linear` removed** (2026-06-23) — was registered but unauthenticated/unused, in
+both user scope and the nixos-config project-local scope. Other project-scoped
+servers (`better-auth` in `~`, `clerk` in `msa/kea`, `gdai` in `godot-test`) are
+intentional per-repo and left in place.
+
+**Token note.** fram's tool catalog is GENERATED from the claim vocabulary — one
+tool per predicate (`set-/add-/-of/-from`), hundreds on a live corpus. Free here
+under MCP **tool-search / deferred loading** (a schema is fetched only when used)
+but would blow the context budget in any client without it — a hard portability
+constraint when fram is packaged.
+
+### Gate now covers MCP + symlink + memory invariants
+
+`scripts/claude-config-check.sh` (extended 2026-06-23) adds, beyond shellcheck +
+JSON + wired-hook checks: `autoMemoryEnabled === false` (reproducibility
+invariant, repo content); and under `--local` — every nix-managed `~/.claude/<x>`
+resolves to the dotfile SoT (catches a stale/broken home-manager generation), the
+USER-scope MCP set is exactly `{fram,lodestar}`, and `fram` targets the live store
+not the demo. Project-scoped servers are reported, not failed.
+
+### Earlier gaps now closed
+
+- **gap (d)#2 — `~/code/CLAUDE.md` untracked:** CLOSED. The module manages
+  `home.file."code/CLAUDE.md"` → `dotfiles/code/CLAUDE.md` (mkOutOfStoreSymlink).
+- **task #41 — caveman install:** LARGELY CLOSED. `home.activation.installCaveman`
+  reproduces the marketplace-add + install (best-effort, timeout-bounded), and
+  `~/.config/caveman/config.json` is nix-written `{"defaultMode":"full"}` (no
+  longer the ad-hoc `lite`). Remaining rot vector: the install is **not
+  version-pinned** (the `claude plugin` CLI exposes no `--ref`); true pinning needs
+  nix-vendoring caveman (fetchFromGitHub + rev/hash) — tracked in lodestar.
+- The mkOutOfStoreSymlink set is now **six** entries (`settings.json`, `commands`,
+  `skills`, `CLAUDE.md`, `hooks`, `code/CLAUDE.md`) plus one nix-written file
+  (`.config/caveman/config.json`) — not the "exactly five" stated in §(a).
