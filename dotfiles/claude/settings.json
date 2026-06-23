@@ -67,6 +67,7 @@
       }
     }
   },
+  "autoMemoryEnabled": false,
   "alwaysThinkingEnabled": true,
   "effortLevel": "xhigh",
   "voice": {
