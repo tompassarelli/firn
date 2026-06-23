@@ -9,6 +9,7 @@ in
     home-manager.users.${username} = ({ config, ... }: {
       programs.yazi = {
         enable = true;
+        shellWrapperName = "yy";
         settings = {
           opener = {
             edit = [

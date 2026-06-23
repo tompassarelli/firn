@@ -6,7 +6,7 @@ in
 {
   options.myConfig.modules.unixodbc.enable = lib.mkEnableOption "unixODBC with MSSQL driver";
   config = lib.mkIf config.myConfig.modules.unixodbc.enable {
-    environment.systemPackages = [ pkgs.unixODBC msodbcsql18 ];
+    environment.systemPackages = [ pkgs.unixodbc msodbcsql18 ];
     environment.variables = {
       ODBCSYSINI = "/etc";
       ODBCINI = "/etc/odbc.ini";
