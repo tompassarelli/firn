@@ -5,7 +5,7 @@
   config = lib.mkIf config.myConfig.modules.auto-upgrade.enable {
     system.autoUpgrade = {
       enable = true;
-      flake = "/home/tom/code/nixos-config";
+      flake = "${config.myConfig.modules.users.codeDir}/nixos-config";
       flags = [
         "--update-input"
         "nixpkgs"

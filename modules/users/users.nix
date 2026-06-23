@@ -2,6 +2,7 @@
 
 let
   username = config.myConfig.modules.users.username;
+  homeDir = config.myConfig.modules.users.homeDir;
 in
 {
   options.myConfig.modules.users.enable = lib.mkEnableOption "Enable user configuration";
@@ -10,11 +11,31 @@ in
     default = "tom";
     description = "Primary system username";
   };
+  options.myConfig.modules.users.email = lib.mkOption {
+    type = lib.types.str;
+    default = "tom.passarelli@protonmail.com";
+    description = "Primary git/commit email";
+  };
+  options.myConfig.modules.users.fullName = lib.mkOption {
+    type = lib.types.str;
+    default = "tompassarelli";
+    description = "Git author / display name (git user.name)";
+  };
+  options.myConfig.modules.users.homeDir = lib.mkOption {
+    type = lib.types.str;
+    default = "/home/${username}";
+    description = "User home directory";
+  };
+  options.myConfig.modules.users.codeDir = lib.mkOption {
+    type = lib.types.str;
+    default = "${homeDir}/code";
+    description = "Root of source checkouts (the ~/code convention)";
+  };
   config = lib.mkIf config.myConfig.modules.users.enable {
     users.users.${username} = {
       shell = pkgs.bashInteractive;
       isNormalUser = true;
-      home = "/home/${username}";
+      home = homeDir;
       extraGroups = [ "wheel" "networkmanager" "plugdev" ];
     };
     security.sudo.extraConfig = ''
@@ -23,10 +44,10 @@ in
 
     '';
     systemd.tmpfiles.rules = [
-      "d /home/${username}/Documents 0755 ${username} users -"
-      "d /home/${username}/Pictures/Screenshots 0755 ${username} users -"
-      "d /home/${username}/code 0755 ${username} users -"
-      "d /home/${username}/src 0755 ${username} users -"
+      "d ${homeDir}/Documents 0755 ${username} users -"
+      "d ${homeDir}/Pictures/Screenshots 0755 ${username} users -"
+      "d ${homeDir}/code 0755 ${username} users -"
+      "d ${homeDir}/src 0755 ${username} users -"
     ];
   };
 }

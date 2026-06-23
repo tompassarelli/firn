@@ -3,7 +3,8 @@
 (ns users)
 
 (nix/module [config lib pkgs ...]
-  (let [username config.myConfig.modules.users.username]
+  (let [username config.myConfig.modules.users.username
+        homeDir  config.myConfig.modules.users.homeDir]
     {:options.myConfig.modules.users.enable
       (lib.mkEnableOption "Enable user configuration")
      :options.myConfig.modules.users.username
@@ -11,22 +12,45 @@
         {:type        lib.types.str
          :default     "tom"
          :description "Primary system username"})
+
+     ;; --- identity surface ---
+     ;; One home for the per-user facts that were scattered across modules
+     ;; (git email/name, ~/code paths). Defaults preserve current behavior;
+     ;; the INSTANCE (each host) overrides these — a fork sets them once here
+     ;; instead of editing git/, auto-upgrade/, timezone/, fleet-coord/.
+     :options.myConfig.modules.users.email
+      (lib.mkOption
+        {:type        lib.types.str
+         :default     "tom.passarelli@protonmail.com"
+         :description "Primary git/commit email"})
+     :options.myConfig.modules.users.fullName
+      (lib.mkOption
+        {:type        lib.types.str
+         :default     "tompassarelli"
+         :description "Git author / display name (git user.name)"})
+     :options.myConfig.modules.users.homeDir
+      (lib.mkOption
+        {:type        lib.types.str
+         :default     (s "/home/" username)
+         :description "User home directory"})
+     :options.myConfig.modules.users.codeDir
+      (lib.mkOption
+        {:type        lib.types.str
+         :default     (s homeDir "/code")
+         :description "Root of source checkouts (the ~/code convention)"})
+
      :config
       (lib.mkIf config.myConfig.modules.users.enable
         {:users.users
           {username
             {:shell        pkgs.bashInteractive
              :isNormalUser true
-             :home         (s "/home/" username)
+             :home         homeDir
              :extraGroups  ["wheel" "networkmanager" "plugdev"]}}
          :security.sudo.extraConfig
           (ms "Defaults timestamp_timeout=30" "Defaults timestamp_type=global" "")
          :systemd.tmpfiles.rules
-          [(s "d /home/" username "/Documents 0755 " username " users -")
-           (s "d /home/"
-             username
-             "/Pictures/Screenshots 0755 "
-             username
-             " users -")
-           (s "d /home/" username "/code 0755 " username " users -")
-           (s "d /home/" username "/src 0755 " username " users -")]})}))
+          [(s "d " homeDir "/Documents 0755 " username " users -")
+           (s "d " homeDir "/Pictures/Screenshots 0755 " username " users -")
+           (s "d " homeDir "/code 0755 " username " users -")
+           (s "d " homeDir "/src 0755 " username " users -")]})}))
