@@ -100,14 +100,11 @@
   myConfig.modules.vim.enable = lib.mkDefault true;
   myConfig.modules.wf-recorder.enable = lib.mkDefault true;
   myConfig.modules.wget.enable = lib.mkDefault true;
-  myConfig.modules.wine.enable = lib.mkDefault true;
   myConfig.modules.wireguard.enable = lib.mkDefault true;
   myConfig.modules.wl-clipboard.enable = lib.mkDefault true;
   myConfig.modules.wl-gammarelay.enable = lib.mkDefault true;
-  myConfig.modules.wowup.enable = lib.mkDefault true;
   myConfig.modules.yazi.enable = lib.mkDefault true;
   myConfig.modules.zathura.enable = lib.mkDefault true;
   myConfig.modules.zen-browser.enable = lib.mkDefault true;
-  myConfig.modules.zoom.enable = lib.mkDefault true;
   myConfig.modules.zoxide.enable = lib.mkDefault true;
 }

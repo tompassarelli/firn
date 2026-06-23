@@ -23,5 +23,5 @@
    communication
    [productivity -libreoffice -pomodoro -todoist]
    [vpn -protonvpn-cli]]
- :disabled [glide]
+ :disabled [glide wine wowup zoom]
 }
