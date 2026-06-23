@@ -64,6 +64,32 @@ run `lodestar doctor`. If it reports DOWN/DEGRADED, run
   leverage / validate in ~1ms.
 
 
+## Driving an agent fleet — via the lodestar/fram PROTOCOL, never raw Agent/Workflow
+
+When work means multiple agents, do NOT default to the host's generic `Agent` /
+`Workflow` / ultracode spawning. lodestar/fram front a real, running, *better* substrate:
+persistent, role-based, lease-gated agents that are observable + steerable + durably
+coordinated through the claim graph (raw Agent/Workflow are ephemeral, unobservable
+mid-flight, un-steerable). Default to the protocol:
+
+- **Work queue** = lodestar threads on `:7977` (`ready`/`next`/`leverage`; claim with
+  `driver @agent`). **Fleet jurisdiction** = a SEPARATE `:7978` coordinator (presence /
+  roles / leases).
+- **Spawn**: `~/code/fleet-data/spawn-agent.sh <role[,role]>` — lease-gated roles
+  (exclusive → a 2nd holder self-aborts), dormant-until-pinged (~0 idle tokens).
+- **Assign/steer by ROLE** (not uuid): `msg-cli.clj <port> send <from> <role> "<task>"`;
+  a message IS the steer. **Observe/steer** live via framescope (`:8088`).
+- **Concurrency is the engine's job** — fram owns write-serialization + OCC + the `lease`
+  primitive (`acquire`/`release`/`fence`); apps express coordination as claims, never
+  self-rolled locks. (`driver` = app intent; `lease` = DB mutual-exclusion — never conflate.)
+- Recursive teams coordinate peer-to-peer — ALWAYS through the protocol, NEVER
+  ultracode/Workflow.
+
+Org brain: FLEET PLAYBOOK = lodestar thread `2026-06-22-232740` (consult first; append
+learnings via `lodestar tell 2026-06-22-232740 learning "…"`). How-to:
+`~/code/fleet-data/RUNBOOK.md`. Per-repo surface: `~/code/lodestar/CLAUDE.md`.
+
+
 ## When editing/advising, you need to resolve the CLAUDE.md files relevant to the work
 
 Let's see the user alludes to something inside
