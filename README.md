@@ -9,7 +9,7 @@
 **FirnOS is a source-aware authoring layer for NixOS and nix-darwin.**
 
 Keeps the standard NixOS module model, swaps in a small Racket DSL
-([beagle/nix](https://github.com/tompassarelli/beagle)) for authoring,
+([beagle/nix](https://github.com/Autonymy/beagle)) for authoring,
 adds pre-eval diagnostics that catch option typos and type errors at
 the source line — typically cutting edit/validate loops from
 ~30 seconds to ~5 seconds.
@@ -26,7 +26,7 @@ hosts/laptop/configuration.bnix:11:47: type mismatch at boot.loader.systemd-boot
 
 `file:line:col` precision on the value, with did-you-mean suggestions,
 before `nixos-rebuild` runs. That's the whole pitch — the validator
-lives in [beagle](https://github.com/tompassarelli/beagle).
+lives in [beagle](https://github.com/Autonymy/beagle).
 
 ## Who is this for?
 
@@ -40,7 +40,7 @@ reference, not as something to fork wholesale.
 
 ```bash
 nix flake init -t github:tompassarelli/firnos     # drops template/ in cwd
-git clone https://github.com/tompassarelli/beagle ../beagle    # compiler + validator
+git clone https://github.com/Autonymy/beagle ../beagle    # compiler + validator
 cp /etc/nixos/hardware-configuration.nix .
 # edit hosts/my-machine/configuration.bnix and hosts/my-machine/enabled-tags.bnix
 ./scripts/firn-build && nixos-rebuild switch --flake .#my-machine
@@ -104,7 +104,7 @@ edits.
 
 - [docs/TAGS.md](docs/TAGS.md) — tag-driven composition model,
   resolution algorithm, worked examples
-- [tompassarelli/beagle](https://github.com/tompassarelli/beagle) —
+- [Autonymy/beagle](https://github.com/Autonymy/beagle) —
   the DSL itself: compiler, validator, schema extractor, migration tool
 - The `firn` CLI is self-documenting: `firn` (full grid),
   `firn <node>` (one entity), `firn schema explain <path>` (schema
