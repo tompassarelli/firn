@@ -7,26 +7,31 @@
 ;; personal Lodestar on :7977. Replaces ~/code/fleet-data/supervisor.sh (a bash
 ;; restart-loop stopgap that died with its shell) with proper systemd supervision:
 ;; Restart=always with NO start-limit (infinite restart, matching the supervisor),
-;; journald logging, runs as `tom` for ~/code access, survives reboot.
-;; Pinned code: ~/code/fleet-coord · durable log: ~/code/fleet-data/claims.log.
+;; journald logging, runs as the primary user for ~/code access, survives reboot.
+;; Pinned code: <codeDir>/fleet-coord · durable log: <codeDir>/fleet-data/claims.log.
+;; NOTE: still a personal daemon — slated to move out of the module library into an
+;; instance/personal overlay (decouple cut 5); de-literalized here in the interim.
 
 (nix/module [config lib pkgs ...]
-  {:options.myConfig.modules.fleet-coord.enable
-    (lib.mkEnableOption "Fleet coordinator daemon (:7978) — durable claim-graph coordination substrate for the AI agent fleet")
-   :config
-    (lib.mkIf config.myConfig.modules.fleet-coord.enable
-      {:systemd.services.fleet-coord
-        {:description           "Fleet coordinator — durable claim-graph daemon (:7978) for the AI agent fleet"
-         :wantedBy              ["multi-user.target"]
-         :after                 ["network.target"]
-         :startLimitIntervalSec 0
-         :environment           {:HOME "/home/tom"}
-         :serviceConfig
-          {:Type             "simple"
-           :User             "tom"
-           :WorkingDirectory "/home/tom/code/fleet-coord"
-           :ExecStart
-            (s pkgs.babashka
-              "/bin/bb -cp out cnf_coord_daemon.clj serve 7978 /home/tom/code/fleet-data/claims.log")
-           :Restart          "always"
-           :RestartSec       2}}})})
+  (let [username config.myConfig.modules.users.username
+        homeDir  config.myConfig.modules.users.homeDir
+        codeDir  config.myConfig.modules.users.codeDir]
+    {:options.myConfig.modules.fleet-coord.enable
+      (lib.mkEnableOption "Fleet coordinator daemon (:7978) — durable claim-graph coordination substrate for the AI agent fleet")
+     :config
+      (lib.mkIf config.myConfig.modules.fleet-coord.enable
+        {:systemd.services.fleet-coord
+          {:description           "Fleet coordinator — durable claim-graph daemon (:7978) for the AI agent fleet"
+           :wantedBy              ["multi-user.target"]
+           :after                 ["network.target"]
+           :startLimitIntervalSec 0
+           :environment           {:HOME homeDir}
+           :serviceConfig
+            {:Type             "simple"
+             :User             username
+             :WorkingDirectory (s codeDir "/fleet-coord")
+             :ExecStart
+              (s pkgs.babashka
+                "/bin/bb -cp out cnf_coord_daemon.clj serve 7978 " codeDir "/fleet-data/claims.log")
+             :Restart          "always"
+             :RestartSec       2}}})}))
