@@ -1,10 +1,10 @@
 { config, lib, pkgs, ... }:
 
 let
-  racoPackages = [ "drracket-vim-tool" "db" ];
+  racoPackages = [ "drracket-vim-tool" ];
   racoEnsure = pkgs.writeShellScript "raco-ensure-packages" ''
     for pkg in ${lib.concatStringsSep " " racoPackages}; do
-      if ! ${pkgs.unstable.racket}/bin/raco pkg show "$pkg" 2>/dev/null | grep -q "Package name:"; then
+      if ! ${pkgs.unstable.racket}/bin/raco pkg show "$pkg" 2>/dev/null | grep -qE "^[[:space:]]+$pkg[*[:space:]]"; then
         ${pkgs.unstable.racket}/bin/raco pkg install --auto --skip-installed "$pkg"
       fi
     done

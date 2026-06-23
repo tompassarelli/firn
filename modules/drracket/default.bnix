@@ -4,10 +4,19 @@
 
 (nix/module [config lib pkgs ...]
   (let
-    [racoPackages ["drracket-vim-tool" "db"]
+    ;; Only genuinely-external packages belong here. `db` is a racket
+    ;; main-distribution built-in (always Installation-wide) — listing it forced
+    ;; a user-scope install that hard-errors "installed in a wider scope".
+    [racoPackages ["drracket-vim-tool"]
+     ;; Skip a package already present in ANY scope. `raco pkg show` prints a row
+     ;; per scope (Installation-wide / User-specific); match the pkg-name row so
+     ;; an installation-scope built-in is detected and not re-installed at user
+     ;; scope. The old guard grep'd "Package name:" — a string raco never emits —
+     ;; so it ALWAYS tried to install (the db conflict surfaced once sudo began
+     ;; resolving in the activation, 965fa97).
      racoEnsure
       (pkgs.writeShellScript "raco-ensure-packages"
-        (ms (s "for pkg in " (lib.concatStringsSep " " racoPackages) "; do") (s "  if ! " pkgs.unstable.racket "/bin/raco pkg show \"$pkg\" 2>/dev/null | grep -q \"Package name:\"; then") (s "    " pkgs.unstable.racket "/bin/raco pkg install --auto --skip-installed \"$pkg\"") "  fi" "done" ""))]
+        (ms (s "for pkg in " (lib.concatStringsSep " " racoPackages) "; do") (s "  if ! " pkgs.unstable.racket "/bin/raco pkg show \"$pkg\" 2>/dev/null | grep -qE \"^[[:space:]]+$pkg[*[:space:]]\"; then") (s "    " pkgs.unstable.racket "/bin/raco pkg install --auto --skip-installed \"$pkg\"") "  fi" "done" ""))]
     {:tags [racket]
      :options.myConfig.modules.drracket.enable
       (lib.mkEnableOption "DrRacket IDE")
