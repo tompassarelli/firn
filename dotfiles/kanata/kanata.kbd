@@ -1,10 +1,9 @@
 ;; Tom's kanata config — ISO layout with custom layers
 ;; Caps Lock = Ctrl (pure remap)
-;; Spacebar = Tap Space, Hold Super
+;; Spacebar = plain Space (Super lives on the dedicated lmet key, bottom row)
 ;; Semicolon = Tap ;, Hold Symbols layer
 
 ;; Aliases (tap-hold-order: pure event-driven, no timers)
-(defalias spacesym (tap-hold-order 200 50 spc lmet))
 (defalias lshiftcaps (tap-dance-eager 200 (lsft caps)))
 (defalias slashshift (tap-hold-order 0 0 / lsft))
 (defalias enteralt (tap-hold-order 0 0 ret ralt))
@@ -33,7 +32,7 @@
   tab  q    w    e    r    t    [    y    u    i    o    p    \
   lctl a    s    d    f    g    ]    h    j    k    l    @semicolonsym '    ret
   @lshiftcaps @slashshift z x    c    v    b    /    n    m    ,    .    rsft
-  lctl lalt lmet      @spacesym           @enteralt ralt cmp  rctl
+  lctl lalt lmet      spc                 @enteralt ralt cmp  rctl
   @m4shift @m5ctrl XX
 )
 
