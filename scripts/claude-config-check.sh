@@ -112,6 +112,22 @@ sys.exit(1)
 PY
 then :; else fail=1; fi
 
+# 5b. caveman marketplace must point at the pinned fork, not upstream ---------
+#     The fork's marketplace.json pins the plugin source to an exact commit sha;
+#     drifting the source back to JuliusBrussee/caveman (upstream) silently
+#     un-pins it. (Marketplace source can't carry a sha — the fork IS the pin.)
+if python3 - "$SETTINGS" <<'PY'
+import json, sys
+cfg = json.load(open(sys.argv[1]))
+src = ((cfg.get("extraKnownMarketplaces") or {}).get("caveman") or {}).get("source") or {}
+repo = src.get("repo", "")
+if repo == "tompassarelli/caveman":
+    print("ok:   caveman marketplace pinned to the fork (tompassarelli/caveman)"); sys.exit(0)
+print(f"FAIL: caveman marketplace must be the pinned fork tompassarelli/caveman, got {repo!r} (un-pinned drift)", file=sys.stderr)
+sys.exit(1)
+PY
+then :; else fail=1; fi
+
 # 6. --local: the CLIs CLAUDE.md names exist; removed ones stay removed ------
 if [ "$LOCAL" -eq 1 ]; then
   for c in lodestar direnv nix; do

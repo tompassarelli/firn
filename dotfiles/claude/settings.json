@@ -63,7 +63,8 @@
     "caveman": {
       "source": {
         "source": "github",
-        "repo": "JuliusBrussee/caveman"
+        "repo": "tompassarelli/caveman",
+        "ref": "main"
       }
     }
   },

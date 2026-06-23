@@ -303,12 +303,17 @@ not the demo. Project-scoped servers are reported, not failed.
 
 - **gap (d)#2 — `~/code/CLAUDE.md` untracked:** CLOSED. The module manages
   `home.file."code/CLAUDE.md"` → `dotfiles/code/CLAUDE.md` (mkOutOfStoreSymlink).
-- **task #41 — caveman install:** LARGELY CLOSED. `home.activation.installCaveman`
-  reproduces the marketplace-add + install (best-effort, timeout-bounded), and
-  `~/.config/caveman/config.json` is nix-written `{"defaultMode":"full"}` (no
-  longer the ad-hoc `lite`). Remaining rot vector: the install is **not
-  version-pinned** (the `claude plugin` CLI exposes no `--ref`); true pinning needs
-  nix-vendoring caveman (fetchFromGitHub + rev/hash) — tracked in lodestar.
+- **task #41 — caveman install:** CLOSED. `home.activation.installCaveman`
+  reproduces the marketplace-add + install (best-effort, timeout-bounded);
+  `~/.config/caveman/config.json` is nix-written `{"defaultMode":"full"}`; and the
+  plugin is now **version-pinned via a fork** (2026-06-23). caveman's plugin source
+  ships as `"./"` (relative → unpinnable) and a *marketplace* source can't carry a
+  sha, so the native sha-pin requires owning `marketplace.json`: forked
+  `JuliusBrussee/caveman` → `tompassarelli/caveman` (`~/code/caveman`), set the
+  plugin `source` to `github {repo, sha=25d22f864ad6}` (fork commit `cf0c679`),
+  repointed `settings.json` + the activation at the fork. Gate check `5b` asserts
+  the marketplace stays on the fork. Bytes are now exact-pinned, patchable, and
+  insulated from upstream `main`.
 - The mkOutOfStoreSymlink set is now **six** entries (`settings.json`, `commands`,
   `skills`, `CLAUDE.md`, `hooks`, `code/CLAUDE.md`) plus one nix-written file
   (`.config/caveman/config.json`) — not the "exactly five" stated in §(a).

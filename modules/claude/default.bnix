@@ -56,7 +56,7 @@
                :home.activation.installCaveman
                 (config.lib.dag.entryAfter ["writeBoundary"]
                   (s "if [ ! -e $HOME/.claude/plugins/cache/caveman ]; then\n"
-                     "  run timeout 90 " pkgs.master.claude-code "/bin/claude plugin marketplace add JuliusBrussee/caveman || true\n"
+                     "  run timeout 90 " pkgs.master.claude-code "/bin/claude plugin marketplace add tompassarelli/caveman || true\n"
                      "  run timeout 90 " pkgs.master.claude-code "/bin/claude plugin install caveman@caveman || true\n"
                      "fi\n"))
                ;; MCP server registration — reproducible, so a fresh rebuild wires the
