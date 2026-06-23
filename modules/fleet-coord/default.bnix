@@ -8,7 +8,8 @@
 ;; restart-loop stopgap that died with its shell) with proper systemd supervision:
 ;; Restart=always with NO start-limit (infinite restart, matching the supervisor),
 ;; journald logging, runs as the primary user for ~/code access, survives reboot.
-;; Pinned code: <codeDir>/fleet-coord · durable log: <codeDir>/fleet-data/claims.log.
+;; Pinned code: <codeDir>/fram (canonical engine, has lease primitive as of 74898fc).
+;; Durable log: <codeDir>/fleet-data/claims.log.
 ;; NOTE: still a personal daemon — slated to move out of the module library into an
 ;; instance/personal overlay (decouple cut 5); de-literalized here in the interim.
 
@@ -29,7 +30,7 @@
            :serviceConfig
             {:Type             "simple"
              :User             username
-             :WorkingDirectory (s codeDir "/fleet-coord")
+             :WorkingDirectory (s codeDir "/fram")
              :ExecStart
               (s pkgs.babashka
                 "/bin/bb -cp out cnf_coord_daemon.clj serve 7978 " codeDir "/fleet-data/claims.log")
