@@ -3,10 +3,18 @@
 (ns default)
 
 (nix/module [config lib flakeRoot ...]
-  (let [username config.myConfig.modules.users.username]
+  (let [username config.myConfig.modules.users.username
+        sopsFile config.myConfig.modules.clockify.sopsFile]
     {:options.myConfig.modules.clockify.enable (lib.mkEnableOption "clockify")
+     ;; Instance points this at its OWN sops-encrypted file (default: this repo's
+     ;; secrets/clockify.yaml). See secrets/clockify.yaml.example for the structure.
+     :options.myConfig.modules.clockify.sopsFile
+      (lib.mkOption
+        {:type        lib.types.str
+         :default     (s flakeRoot "/secrets/clockify.yaml")
+         :description "sops file holding the Clockify API key (msa-clockify-api-key)"})
      :config
       (lib.mkIf config.myConfig.modules.clockify.enable
         {:sops.secrets
           {"msa-clockify-api-key"
-            {:sopsFile (s flakeRoot "/secrets/clockify.yaml") :owner username}}})}))
+            {:sopsFile sopsFile :owner username}}})}))
