@@ -16,7 +16,7 @@ in
         ".claude/hooks".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/claude/hooks";
         "code/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/code/CLAUDE.md";
         ".config/caveman/config.json".text = builtins.toJSON {
-          defaultMode = "lite";
+          defaultMode = "full";
         };
       };
       home.activation.installCaveman = config.lib.dag.entryAfter [ "writeBoundary" ] "if [ ! -e $HOME/.claude/plugins/cache/caveman ]; then\n  run timeout 90 ${pkgs.master.claude-code}/bin/claude plugin marketplace add JuliusBrussee/caveman || true\n  run timeout 90 ${pkgs.master.claude-code}/bin/claude plugin install caveman@caveman || true\nfi\n";
