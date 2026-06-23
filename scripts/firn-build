@@ -17,6 +17,17 @@ set -euo pipefail
 cd "${FIRN_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 BEAGLE_PATH="${BEAGLE_PATH:-$(cd .. && pwd)/beagle}"
+
+# Use beagle's pinned racket, not system racket: firn.rkt requires beagle-lib
+# and the firn-cmds compiled/*.zo are built under beagle's racket. Riding system
+# racket breaks the instant a nixpkgs bump moves it ahead of beagle's pin
+# ("version mismatch" / unresolved beagle-lib). See scripts/firn-build-bin.
+RACKET="racket"
+if [ -f "$BEAGLE_PATH/bin/_beagle-racket" ]; then
+  # shellcheck disable=SC1091
+  source "$BEAGLE_PATH/bin/_beagle-racket"   # sets RACKET to beagle's dev-shell racket
+fi
+
 BEAGLE_BUILD_ALL="$BEAGLE_PATH/bin/beagle-build-all"
 if [ ! -x "$BEAGLE_BUILD_ALL" ]; then
   echo "firn-build: beagle-build-all not found at $BEAGLE_BUILD_ALL" >&2
@@ -45,7 +56,7 @@ if [ "${FIRN_SKIP_TAG_RESOLVE:-}" != "1" ]; then
     # The ~500ms overhead vs the compiled binary is a one-shot cost
     # per firn-build invocation and stays below the beagle-build-all
     # cold-start anyway.
-    racket ./scripts/firn.rkt tag resolve all+emit || {
+    "$RACKET" ./scripts/firn.rkt tag resolve all+emit || {
       echo "firn-build: tag resolution failed; aborting before .nix regeneration" >&2
       exit 1
     }
