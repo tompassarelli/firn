@@ -19,7 +19,7 @@ in
       serviceConfig = {
         Type = "simple";
         User = username;
-        WorkingDirectory = "${codeDir}/fleet-coord";
+        WorkingDirectory = "${codeDir}/fram";
         ExecStart = "${pkgs.babashka}/bin/bb -cp out cnf_coord_daemon.clj serve 7978 ${codeDir}/fleet-data/claims.log";
         Restart = "always";
         RestartSec = 2;
