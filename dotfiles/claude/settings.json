@@ -35,6 +35,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Agent|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/fleet-protocol-guard.sh",
+            "timeout": 5
+          }
+        ]
       }
     ]
   },
