@@ -92,6 +92,10 @@
   },
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
+  "statusLine": {
+    "type": "command",
+    "command": "f=$(ls -dt \"$HOME\"/.claude/plugins/cache/caveman/caveman/*/src/hooks/caveman-statusline.sh 2>/dev/null | head -1); [ -n \"$f\" ] && bash \"$f\""
+  },
   "theme": "dark",
   "skipAutoPermissionPrompt": true,
   "voiceEnabled": true
