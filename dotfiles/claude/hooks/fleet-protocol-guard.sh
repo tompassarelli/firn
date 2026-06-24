@@ -16,6 +16,12 @@ set -uo pipefail
 
 [ -n "${CLAUDE_NO_AUTHORING_HOOKS:-}" ] && exit 0
 
+# Personal per-session toggle (see the /fleet-guard command). A sentinel file
+# bypasses this guard so you can use raw Agent/Workflow (e.g. ultracode Workflow
+# orchestration) without unsetting the global kill-switch. `/fleet-guard off`
+# creates it; `/fleet-guard on` removes it.
+[ -f "$HOME/.claude/fleet-guard.off" ] && exit 0
+
 read -r -d '' PY <<'PYEOF' || true
 import sys, json
 
