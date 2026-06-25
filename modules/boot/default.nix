@@ -6,6 +6,5 @@
     boot.loader.systemd-boot.enable = true;
     boot.loader.efi.canTouchEfiVariables = true;
     boot.kernelModules = [ "uinput" ];
-    boot.kernelParams = [ "amdgpu.vpe_enable=0" ];
   };
 }
