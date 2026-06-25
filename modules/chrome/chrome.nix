@@ -2,11 +2,7 @@
 
 {
   config = lib.mkIf config.myConfig.modules.chrome.enable {
-    environment.systemPackages = [
-      (pkgs.google-chrome.override {
-        commandLineArgs = "--disable-gpu-compositing --disable-gpu-shader-disk-cache --use-gl=angle --use-angle=vulkan";
-      })
-    ];
+    environment.systemPackages = with pkgs; [ google-chrome ];
     xdg.mime.defaultApplications = lib.mkIf config.myConfig.modules.chrome.default {
       "text/html" = "google-chrome.desktop";
       "x-scheme-handler/http" = "google-chrome.desktop";
