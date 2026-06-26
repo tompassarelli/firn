@@ -110,8 +110,15 @@
     (error 'replace-between-markers
            "markers not found in flake.bnix: ~a ... ~a" begin-marker end-marker))
   (define before (substring text 0 (+ begin-pos (string-length begin-marker))))
+  ;; Preserve the end marker's original indentation by finding the
+  ;; whitespace between the preceding newline and the marker itself.
+  (define pre-end (substring text 0 end-pos))
+  (define last-nl (for/last ([i (in-range (string-length pre-end))]
+                             #:when (char=? (string-ref pre-end i) #\newline))
+                    i))
+  (define indent (if last-nl (substring pre-end (+ last-nl 1)) ""))
   (define after (substring text end-pos))
-  (string-append before "\n" new-content "   " after))
+  (string-append before "\n" new-content indent after))
 
 (define (format-input-decl name spec)
   (define pairs

@@ -9,4 +9,8 @@
     (lib.mkIf config.myConfig.modules.boot.enable
       {:boot.loader.systemd-boot.enable true
        :boot.loader.efi.canTouchEfiVariables true
-       :boot.kernelModules ["uinput"]})})
+       :boot.kernelModules ["uinput"]
+       ;; gpu_recovery=1: force amdgpu to reset+log a hung GPU instead of freezing
+       ;; the box silently. Turns no-trace crashes into journal'd ring timeouts so
+       ;; the next crash leaves evidence. Diagnostic; remove once root cause found.
+       :boot.kernelParams ["amdgpu.gpu_recovery=1"]})})

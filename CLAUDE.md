@@ -229,6 +229,54 @@ firn tag index stdout               # jsonl to stdout (pipe into jq/fzf)
 
 **Full reference**: [`docs/TAGS.md`](docs/TAGS.md) — worked examples (kitchen-sink, edited tag, opt-in plus, hard disable) and the fixture used by the validator.
 
+## Flake inputs (codegen)
+
+Modules that need a flake input declare it **co-located** in their `default.bnix` via `:flake-inputs`. `firn build` collects all `:flake-inputs` from every module and splices them into `flake.bnix` between markers. **Never hand-edit the generated sections in `flake.bnix`** — the next `firn build` overwrites them.
+
+Adding a module with a flake input = add the `:flake-inputs` clause. Removing = delete it. No flake.bnix edits needed.
+
+### Module-side
+
+```clojure
+(nix/module [config lib pkgs inputs ...]
+  {:flake-inputs
+    {:walker {:url "github:abenz1267/walker"
+              :inputs.elephant.follows "elephant"}
+     :elephant {:url "github:abenz1267/elephant/..."}}
+   :tags [desktop]
+   :options...
+   :config...})
+```
+
+Each key in `:flake-inputs` is an input name; the value is a map of flake input attributes (`:url`, `:inputs.X.follows`, `:flake`). A module may declare multiple inputs. Inputs with dependencies between them (walker → elephant) are co-declared in the owning module.
+
+### What gets generated
+
+`firn build` splices into 6 marker-delimited sections of `flake.bnix`:
+1. `:inputs` map — the input declarations
+2. Outputs arg list — binding names
+3. NixOS `specialArgs` — `:inputs` map entries
+4. HM `extraSpecialArgs` — same entries
+5. Darwin `specialArgs` — same entries
+6. Darwin HM `extraSpecialArgs` — same entries
+
+Markers look like: `;; --- GENERATED MODULE INPUTS (do not edit) ---`
+
+### Conflict detection
+
+Two modules declaring the same input name with different URLs → hard error. Same name + same URL → silently merged (the first module wins for bookkeeping).
+
+### Debugging
+
+```bash
+firn flake-input resolve show    # list collected inputs + source modules
+firn flake-input resolve emit    # splice into flake.bnix
+```
+
+### What stays hand-authored
+
+Infrastructure inputs (nixpkgs, home-manager, nix-darwin, stylix, sops-nix) and overlay-consumed inputs (kanata-git, glide) remain hand-authored in `flake.bnix` above the markers.
+
 ## Discovering platform compatibility
 
 `firn platform list` answers "which modules work on darwin?" by cross-referencing each module's referenced option paths against both the NixOS and darwin schema caches:
@@ -311,3 +359,64 @@ This catches things the validator can't: input mismatches, evaluation errors in 
 **Don't** run `nh` directly either; same reason — it switches the system. `firn host rebuild` wraps `nh` already; it's the user's command.
 
 Only verify whiterabbit. Skip thinkpad-x1e.
+
+## Crash recovery (whiterabbit — silent reboots)
+
+whiterabbit has a history of **hard crashes that leave no trace**: the journal
+for the dying boot is severed mid-line, no shutdown sequence, `/sys/fs/pstore`
+empty. That signature = either an instant hardware power-cut (thermal trip / PSU)
+or a GPU hard-hang that froze the CPU before anything flushed to disk. A clean
+reboot always leaves `Reached target Shutdown` + `systemd-shutdown`; a crash does
+not. This is the tell.
+
+**Diagnose — classify each recent boot as clean vs crash:**
+
+```bash
+for b in -1 -2 -3 -4 -5; do
+  end=$(journalctl -b $b 2>/dev/null | grep -m1 -iE "Reached target (Shutdown|Reboot|Power-Off)|systemd-shutdown")
+  kern=$(journalctl -b $b -o short 2>/dev/null | grep -m1 -oE "6\.[0-9]+\.[0-9]+")
+  [ -n "$end" ] && v=CLEAN || v="*** CRASH (no shutdown seq) ***"
+  printf "boot %s  kernel %-9s  %s\n" "$b" "${kern:-?}" "$v"
+done
+journalctl -b -1 -p err            # errors in the boot that died
+journalctl -b -1 | tail -40        # exact moment of death
+```
+
+**Hardware context — do NOT re-add `amdgpu.sg_display=0`.** This GPU is a Strix
+Point **APU** (Radeon 890M, RADV STRIX1), not a discrete Navi 31. On an APU the
+GPU runs off system RAM via GTT, so scatter-gather display is the *normal* path —
+disabling it is mis-targeted (that flag was a copy-paste from an RX 7900 page-fault
+fix; dropped in 7a5e18d). Crashes predate the flag (stable 9-day runs happened
+*without* it), so it was never the cause. The BIOS UMA buffer is the legit
+"give the iGPU dedicated VRAM" knob; `sg_display` is unrelated.
+
+**Capture config in place** (`modules/boot/default.bnix`):
+
+- `amdgpu.gpu_recovery=1` — forces amdgpu to reset+log a hung GPU instead of
+  freezing silently. A GPU-induced hang now lands a ring-timeout dump in the
+  journal (flushes after the reset). This is the primary catch for the suspected
+  failure mode. **Diagnostic — remove once root cause is found.**
+- `efi_pstore` (firmware default) — catches kernel **panics** only; survives reboot
+  in UEFI vars, archived to `/var/lib/systemd/pstore/`. Won't catch a no-panic hang.
+- journald `Storage=persistent` — already on; `journalctl -b -1` reads the dead boot.
+
+**After the next crash — checklist:**
+
+```bash
+journalctl -b -1 | tail -60                                  # did gpu_recovery log a reset?
+journalctl -b -1 | grep -iE "ring.*timeout|GPU reset|amdgpu.*(hang|fault|reset)"
+ls /sys/fs/pstore/ /var/lib/systemd/pstore/                  # any panic captured?
+journalctl -b -1 | grep -iE "thermal|throttl|mce|hardware error|critical temp"
+```
+
+- **GPU ring-timeout / reset logged** → confirmed amdgpu hang. Fix is an amdgpu/mesa
+  lever (kernel version, `amdgpu.lockup_timeout`, RADV/mesa bump, IOMMU), NOT sg_display.
+- **Still zero trace + recurs under load/heat** → likely hardware power-cut. Check
+  `sensors` under load, fans/vents, BIOS thermal limits, charger/PSU.
+
+**Escalation if `gpu_recovery=1` still catches nothing** (a true freeze that never
+flushes): add **ramoops** (pstore-ram mirrors dmesg to a reserved RAM region in
+real time, survives a *warm* reboot — the only thing that recovers a no-panic
+hang) or **netconsole** (streams kmsg to another LAN box). ramoops on x86 needs a
+`memmap=`-reserved physical address — set it carefully, it's boot-affecting.
+
