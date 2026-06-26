@@ -65,7 +65,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "f=$(ls -dt \"$HOME\"/.claude/plugins/cache/caveman/caveman/*/src/hooks/caveman-statusline.sh 2>/dev/null | head -1); [ -n \"$f\" ] && bash \"$f\""
+    "command": "bash \"$HOME/code/nixos-config/dotfiles/claude/statusline.sh\""
   },
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true,
