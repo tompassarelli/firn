@@ -19,7 +19,7 @@ in
     users.groups.kanata = { };
     services.kanata = {
       enable = true;
-      package = pkgs.unstable.kanata;
+      package = pkgs.kanata-git;
       keyboards = lib.mkIf (cfg.devices != [ ]) {
         main = {
           devices = cfg.devices;

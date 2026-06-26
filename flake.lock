@@ -274,6 +274,22 @@
         "type": "github"
       }
     },
+    "kanata-git": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1781619970,
+        "narHash": "sha256-d6SXuafxGzmaUZR1fDYWJaAXQlmnKlrMSgRh43S3l3k=",
+        "owner": "jtroo",
+        "repo": "kanata",
+        "rev": "40a8b17ce990a31a8e4956480102bcf6415cacf4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "jtroo",
+        "repo": "kanata",
+        "type": "github"
+      }
+    },
     "nix-darwin": {
       "inputs": {
         "nixpkgs": [
@@ -527,6 +543,7 @@
         "gjoa": "gjoa",
         "glide": "glide",
         "home-manager": "home-manager",
+        "kanata-git": "kanata-git",
         "nix-darwin": "nix-darwin",
         "nixpkgs": "nixpkgs_3",
         "nixpkgs-master": "nixpkgs-master",

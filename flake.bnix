@@ -15,6 +15,7 @@
      :inputs.nixpkgs.follows "nixpkgs"}
    :stylix {:url "github:danth/stylix/release-26.05"}
    :sops-nix {:url "github:Mic92/sops-nix" :inputs.nixpkgs.follows "nixpkgs"}
+   :kanata-git {:url "github:jtroo/kanata" :flake false}
    :glide {:url "github:tompassarelli/glide" :flake false}
    ;; --- GENERATED MODULE INPUTS (do not edit) ---
    :elephant {:url "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73"}
@@ -36,6 +37,7 @@
      nix-darwin
      stylix
      sops-nix
+     kanata-git
      glide
      ;; --- GENERATED MODULE ARGS (do not edit) ---
      elephant
@@ -138,6 +140,16 @@
                            :master
                             (import nixpkgs-master
                               {:system system :config.allowUnfree true})
+                           :kanata-git
+                            (final.unstable.kanata.overrideAttrs
+                              (fn [old]
+                                {:src            kanata-git
+                                 :version        "git"
+                                 :cargoDeps
+                                  (final.unstable.rustPlatform.importCargoLock
+                                    {:lockFile (s kanata-git "/Cargo.lock")})
+                                 :doCheck        false
+                                 :doInstallCheck false}))
                            :glide
                             (final.unstable.rustPlatform.buildRustPackage
                               {:pname "glide"

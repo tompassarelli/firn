@@ -3,14 +3,14 @@
 ;; Spacebar = plain Space (Super lives on the dedicated lmet key, bottom row)
 ;; Semicolon = Tap ;, Hold Symbols layer
 
-;; Aliases (tap-hold-press: activate hold on next key press)
+;; Aliases (tap-hold-order: pure event-driven, no timers)
 (defalias lshiftcaps (tap-dance-eager 200 (lsft caps)))
-(defalias slashshift (tap-hold-press 1 1 / lsft))
-(defalias enteralt (tap-hold-press 1 1 ret ralt))
-(defalias apostrophenum (tap-hold-press 1 1 ' (layer-while-held numbers)))
-(defalias m4shift (tap-hold-press 1 1 mbck lsft))
-(defalias m5ctrl (tap-hold-press 1 1 mfwd lctl))
-(defalias semicolonsym (tap-hold-press 200 50 ; (layer-while-held symbols)))
+(defalias slashshift (tap-hold-order 0 0 / lsft))
+(defalias enteralt (tap-hold-order 0 0 ret ralt))
+(defalias apostrophenum (tap-hold-order 0 0 ' (layer-while-held numbers)))
+(defalias m4shift (tap-hold-order 0 0 mbck lsft))
+(defalias m5ctrl (tap-hold-order 0 0 mfwd lctl))
+(defalias semicolonsym (tap-hold-order 200 50 ; (layer-while-held symbols)))
 (defalias bracketpair (macro [ ] left))
 
 ;; Touchpad contact virtual key (for glide daemon)

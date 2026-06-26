@@ -25,6 +25,10 @@
       url = "github:Mic92/sops-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    kanata-git = {
+      url = "github:jtroo/kanata";
+      flake = false;
+    };
     glide = {
       url = "github:tompassarelli/glide";
       flake = false;
@@ -54,7 +58,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, glide, elephant, gjoa, nur, palefox, quickshell, walker, zen-browser, ... }: let
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, gjoa, nur, palefox, quickshell, walker, zen-browser, ... }: let
     firnModules = ./modules;
   in
   {
@@ -119,6 +123,15 @@
                 system = system;
                 config.allowUnfree = true;
               };
+              kanata-git = final.unstable.kanata.overrideAttrs (old: {
+                src = kanata-git;
+                version = "git";
+                cargoDeps = final.unstable.rustPlatform.importCargoLock {
+                  lockFile = "${kanata-git}/Cargo.lock";
+                };
+                doCheck = false;
+                doInstallCheck = false;
+              });
               glide = final.unstable.rustPlatform.buildRustPackage {
                 pname = "glide";
                 version = "git";
