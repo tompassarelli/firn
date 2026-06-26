@@ -28,9 +28,6 @@
     nur = {
       url = "github:nix-community/NUR";
     };
-    lem = {
-      url = "github:lem-project/lem";
-    };
     kanata-git = {
       url = "github:jtroo/kanata";
       flake = false;
@@ -61,7 +58,7 @@
       url = "github:tompassarelli/gjoa";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, nur, lem, elephant, walker, kanata-git, glide, quickshell, zen-browser, palefox, gjoa, ... }: let
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, nur, elephant, walker, kanata-git, glide, quickshell, zen-browser, palefox, gjoa, ... }: let
     firnModules = ./modules;
   in
   {
@@ -72,7 +69,6 @@
           nur = nur;
           walker = walker;
           elephant = elephant;
-          lem = lem;
           quickshell = quickshell;
           zen-browser = zen-browser;
           palefox = palefox;
@@ -105,7 +101,6 @@
               nur = nur;
               walker = walker;
               elephant = elephant;
-              lem = lem;
               quickshell = quickshell;
               zen-browser = zen-browser;
               palefox = palefox;

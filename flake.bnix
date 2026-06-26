@@ -16,7 +16,6 @@
    :stylix {:url "github:danth/stylix/release-26.05"}
    :sops-nix {:url "github:Mic92/sops-nix" :inputs.nixpkgs.follows "nixpkgs"}
    :nur {:url "github:nix-community/NUR"}
-   :lem {:url "github:lem-project/lem"}
    :kanata-git {:url "github:jtroo/kanata" :flake false}
    :glide {:url "github:tompassarelli/glide" :flake false}
    :quickshell
@@ -42,7 +41,6 @@
      stylix
      sops-nix
      nur
-     lem
      elephant
      walker
      kanata-git
@@ -72,7 +70,6 @@
                   {:nur         nur
                    :walker      walker
                    :elephant    elephant
-                   :lem         lem
                    :quickshell  quickshell
                    :zen-browser zen-browser
                    :palefox     palefox
@@ -118,7 +115,6 @@
                          {:nur         nur
                           :walker      walker
                           :elephant    elephant
-                          :lem         lem
                           :quickshell  quickshell
                           :zen-browser zen-browser
                           :palefox     palefox
