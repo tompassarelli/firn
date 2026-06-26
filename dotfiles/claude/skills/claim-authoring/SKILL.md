@@ -57,9 +57,9 @@ claim-authoring task instead of guessing the API.
 
 ## 2. Ground-truth examples (read these, don't reinvent)
 
-- **App data as claims (CRUD + history + reasoning):** `~/code/eddy/web/spike/eddy-on-claims/store.clj`
+- **App data as claims (CRUD + history + reasoning):** `~/code/wake/web/spike/wake-on-claims/store.clj`
   — the gen-store CRUD seam, every op a claim op; the canonical add / update-as-supersede / tombstone / reaches gate.
-- **App-level blast radius (scope-correct closure):** `~/code/eddy/web/spike/app-blast-radius/cascade.clj`.
+- **App-level blast radius (scope-correct closure):** `~/code/wake/web/spike/app-blast-radius/cascade.clj`.
 - **Stratified lifecycle (ready/blocked as rules) + the tax it can be:** `~/code/lodestar/cnf_lifecycle_test.clj`.
 - **Reason/repair over code:** `~/code/fram/chartroom/src/resolve.clj` (refers_to, rename/delete/callgraph) — and the **code-as-claims** skill for querying.
 
