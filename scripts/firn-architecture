@@ -263,22 +263,28 @@ def render():
 
     # ---- lifecycle control-flow (mermaid) ----
     def edge_label(ev):
-        entries = H.get(ev, [])
-        return " · ".join(n for n, _ in entries) or "—"
+        # unique hook names in order; ALWAYS quoted by the caller — labels carry
+        # dots/colons/middots that break mermaid's lexer unquoted (GitHub render).
+        seen, names = set(), []
+        for n, _ in H.get(ev, []):
+            if n not in seen:
+                seen.add(n)
+                names.append(n)
+        return " · ".join(names) or "—"
     w("### Control flow (lifecycle spine)")
     w("")
     w("```mermaid")
     w("flowchart TD")
-    w("  A[session start] --> B{SessionStart}")
-    w(f"  B --> |{edge_label('SessionStart')}| C[turn loop]")
-    w("  C --> D{UserPromptSubmit}")
-    w(f"  D --> |{edge_label('UserPromptSubmit')}| E[model responds + tools]")
+    w('  A[session start] --> B{SessionStart}')
+    w(f'  B -->|"{edge_label("SessionStart")}"| C[turn loop]')
+    w('  C --> D{UserPromptSubmit}')
+    w(f'  D -->|"{edge_label("UserPromptSubmit")}"| E["model responds + tools"]')
     pre = edge_label('PreToolUse')
     if pre != "—":
-        w(f"  E -. PreToolUse: {pre} .-> E")
-    w("  E --> F{Stop}")
-    w(f"  F --> |{edge_label('Stop')}| C")
-    w("  G[statusLine] -. every render .-> Hs[(.caveman-active + suffix)]")
+        w(f'  E -.->|"PreToolUse: {pre}"| E')
+    w('  E --> F{Stop}')
+    w(f'  F -->|"{edge_label("Stop")}"| C')
+    w('  G[statusLine] -.->|"every render"| Hs[(".caveman-active + suffix")]')
     w("```")
     w("")
 

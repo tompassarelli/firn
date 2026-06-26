@@ -46,13 +46,13 @@ What the `modules/claude` module materializes into `~/.claude`. `runtime-writabl
 ```mermaid
 flowchart TD
   A[session start] --> B{SessionStart}
-  B --> |beagle-session-start.sh · caveman-activate.js| C[turn loop]
+  B -->|"beagle-session-start.sh · caveman-activate.js"| C[turn loop]
   C --> D{UserPromptSubmit}
-  D --> |caveman-mode-tracker.js| E[model responds + tools]
-  E -. PreToolUse: claim-canonical-guard.sh · firnos-guard.sh · fleet-protocol-guard.sh · firnos-guard.sh .-> E
+  D -->|"caveman-mode-tracker.js"| E["model responds + tools"]
+  E -.->|"PreToolUse: claim-canonical-guard.sh · firnos-guard.sh · fleet-protocol-guard.sh"| E
   E --> F{Stop}
-  F --> |caveman-session-stats.js| C
-  G[statusLine] -. every render .-> Hs[(.caveman-active + suffix)]
+  F -->|"caveman-session-stats.js"| C
+  G[statusLine] -.->|"every render"| Hs[(".caveman-active + suffix")]
 ```
 
 ## Layer 2 — SUBSTRATE: what the config points at
