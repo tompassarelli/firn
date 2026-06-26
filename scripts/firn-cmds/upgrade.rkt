@@ -86,7 +86,9 @@
      (printf ">> [dry-run] would run: nix flake update\n")]
     [else
      (printf ">> nix flake update\n")
-     (unless (sh "nix" "flake" "update")
+     ;; anchor to ROOT — `nix flake update` reads cwd's flake; lets `firn
+     ;; update` run from anywhere (helpers self-anchor, schema paths absolute).
+     (unless (parameterize ([current-directory ROOT]) (sh "nix" "flake" "update"))
        (eprintf "firn upgrade: nix flake update failed\n") (exit 1))])
 
   ;; 3. Re-extract schema

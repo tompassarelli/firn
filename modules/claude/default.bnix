@@ -14,12 +14,7 @@
           {username
             (nix/module [config ...]
               {:home.file
-                {".claude/settings.json"
-                  {:source
-                    (config.lib.file.mkOutOfStoreSymlink
-                      (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/claude/settings.json"))}
-                 ".claude/commands"
+                {".claude/commands"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
@@ -53,6 +48,14 @@
                ;; timeout-bounded, || true so it never fails the rebuild.
                ;; config.lib.dag = inner home-manager lib — NOT lib.hm: the 2026-05 HM
                ;; bump stopped extending the outer NixOS lib with .hm (attribute 'hm' missing).
+               ;; Direct symlink — bypasses nix store intermediary so
+               ;; Claude Code can atomic-write (settings.json.tmp) next to the target.
+               :home.activation.linkClaudeSettings
+                (config.lib.dag.entryAfter ["writeBoundary"]
+                  (s "run ln -sfn "
+                     config.home.homeDirectory
+                     "/code/nixos-config/dotfiles/claude/settings.json"
+                     " $HOME/.claude/settings.json\n"))
                :home.activation.installCaveman
                 (config.lib.dag.entryAfter ["writeBoundary"]
                   (s "if [ ! -e $HOME/.claude/plugins/cache/caveman ]; then\n"
