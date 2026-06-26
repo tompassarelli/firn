@@ -58,15 +58,18 @@ beagle=""
 [ -z "$beagle" ] && command -v beagle >/dev/null 2>&1 && beagle="$(command -v beagle)"
 [ -n "$beagle" ] || exit 0
 
-# --- functional handshake + self-heal (fast path: daemon + canaries) --------
-verdict="$("$beagle" doctor --revive --quiet "$dir" 2>&1)"; rc=$?
-if [ "$rc" -eq 0 ]; then
-  line="Repair loop verified healthy (daemon up + functional canaries green)."
-else
-  line="Repair loop DEGRADED — fix before trusting feedback. Detail: $(printf '%s' "$verdict" | tr '\n' ' ' | cut -c1-400)"
-fi
+# --- functional handshake + self-heal (NON-BLOCKING revive) -----------------
+# The revive cold-starts the racket daemon (~20s). Run synchronously it stalls
+# the FIRST user turn — Claude blocks that turn on this hook's exit (SessionStart
+# additionalContext channel). So detach it: `setsid … &` runs the revive in its
+# own session (immune to this hook's process-group teardown) and the hook returns
+# instantly. No synchronous boot-time verdict — health is the AGENT's job to
+# confirm on demand (and the PostToolUse repair hook self-heals per edit). Output
+# goes to a debug log NOBODY is asked to watch.
+setsid "$beagle" doctor --revive --quiet "$dir" >"${TMPDIR:-/tmp}/beagle-revive.log" 2>&1 </dev/null &
+line="The repair daemon is warming in the background (non-blocking)."
 
-ctx="Beagle project detected. ${line} Before editing Beagle, follow the beagle-authoring skill: run \`beagle-doctor --deep\` (functional handshake), treat the compiler as the source of truth (query beagle-* tools; never trust a static form/type/stdlib list), and trust the PostToolUse repair hook's per-edit feedback. If this project has no repair hook yet, scaffold it with \`beagle-init --hooks\`."
+ctx="Beagle project detected. ${line} YOU (the agent) own repair-loop health, not the user — never ask them to check a log or babysit the daemon. Before your first Beagle edit, confirm the daemon is live yourself with \`beagle-doctor --deep\` (functional handshake) and self-heal if degraded. Treat the compiler as source of truth (query beagle-* tools; never trust a static form/type/stdlib list), and trust the PostToolUse repair hook's per-edit feedback. If this project has no repair hook yet, scaffold it with \`beagle-init --hooks\`."
 
 # Inject into session context via the SessionStart additionalContext channel.
 python3 -c 'import json,sys; print(json.dumps({"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":sys.argv[1]}}))' "$ctx"
