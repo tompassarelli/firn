@@ -4,14 +4,14 @@
     "pr": ""
   },
   "permissions": {
-    "defaultMode": "auto",
     "allow": [
       "Bash(cd:*)",
       "Bash(nix:*)",
       "WebSearch",
       "Bash(./scripts/firn-build)",
       "Bash(./scripts/firn-validate)"
-    ]
+    ],
+    "defaultMode": "auto"
   },
   "hooks": {
     "SessionStart": [
@@ -63,6 +63,10 @@
       }
     ]
   },
+  "statusLine": {
+    "type": "command",
+    "command": "f=$(ls -dt \"$HOME\"/.claude/plugins/cache/caveman/caveman/*/src/hooks/caveman-statusline.sh 2>/dev/null | head -1); [ -n \"$f\" ] && bash \"$f\""
+  },
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
@@ -83,19 +87,15 @@
       }
     }
   },
-  "autoMemoryEnabled": false,
   "alwaysThinkingEnabled": true,
   "effortLevel": "xhigh",
   "voice": {
     "enabled": true,
     "mode": "hold"
   },
+  "autoMemoryEnabled": false,
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
-  "statusLine": {
-    "type": "command",
-    "command": "f=$(ls -dt \"$HOME\"/.claude/plugins/cache/caveman/caveman/*/src/hooks/caveman-statusline.sh 2>/dev/null | head -1); [ -n \"$f\" ] && bash \"$f\""
-  },
   "theme": "dark",
   "skipAutoPermissionPrompt": true,
   "voiceEnabled": true
