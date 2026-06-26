@@ -34,16 +34,28 @@ binary — that is the whole game.
 
 ## The levers — every knob
 
-| lever | lives in | pull it for |
-|---|---|---|
-| **CLAUDE.md** | `dotfiles/claude/` + per-repo | persistent rules/context that should ALWAYS be in mind |
-| **settings.json** | `dotfiles/claude/settings.json` | harness config: permissions, model/effort, statusLine, plugins, env |
-| **hooks** | `settings.json` → `hooks/` | DETERMINISTIC behavior the model must not skip (enforce / inject / guard) |
-| **skills** | `skills/` + plugins | ON-DEMAND procedural knowledge the model CHOOSES when relevant |
-| **slash commands** | `commands/*.md` | user-typed shortcuts |
-| **subagents** | agent dirs + plugins | parallel / isolated work in a separate context |
-| **MCP servers** | `~/.claude.json` | external tools + data sources |
-| **plugins** | `enabledPlugins` | packaged bundles of all the above |
+> **Two materializations — this is the part that trips people up.** Most levers
+> nix owns **declaratively**: a file in `dotfiles/claude/`, symlinked into
+> `~/.claude`; edit + commit = reproducible. Two — **MCP servers** and
+> **plugins** — are Claude-Code-owned **runtime** stores nix can't symlink, so
+> `modules/claude` reproduces them **imperatively** via an activation script.
+> That asymmetry is the whole reason the caveman plugin needed the sha-aware
+> install activation (a plugin install isn't a file you can symlink).
+
+| lever | lives in | how it's reproduced | pull it for |
+|---|---|---|---|
+| **CLAUDE.md** | `dotfiles/claude/` + per-repo | declarative (symlink) | persistent rules/context that should ALWAYS be in mind |
+| **settings.json** | `dotfiles/claude/settings.json` | declarative (symlink; claude also rewrites it at runtime) | harness config: permissions, model/effort, statusLine, plugins, env |
+| **hooks** | `dotfiles/claude/hooks/` (+ plugin manifests) | declarative; plugin-supplied hooks ride the plugin | DETERMINISTIC behavior the model must not skip (enforce / inject / guard) |
+| **skills** | `dotfiles/claude/skills/` (+ plugins) | declarative; plugin-supplied skills ride the plugin | ON-DEMAND procedural knowledge the model CHOOSES when relevant |
+| **slash commands** | `dotfiles/claude/commands/` | declarative (symlink) | user-typed shortcuts |
+| **subagents** | `dotfiles/claude/` (+ plugins) | declarative; or plugin-supplied | parallel / isolated work in a separate context |
+| **MCP servers** | `~/.claude.json` (runtime) | **imperative** — `registerMcpServers` activation re-adds them | external tools + data sources |
+| **plugins** | `enabledPlugins` (settings.json) + install in `~/.claude/plugins/cache` | **imperative** — enabled declaratively, installed by the `installCaveman` activation | packaged bundles of all the above |
+
+Rule of thumb: **in `dotfiles/` → nix owns it by symlink. In `~/.claude.json` /
+`~/.claude/plugins/` → Claude Code owns a runtime store; nix only pokes it via an
+activation script.**
 
 ## WHEN to use what — the decision that actually matters
 
