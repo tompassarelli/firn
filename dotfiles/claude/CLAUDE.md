@@ -29,9 +29,11 @@ Concurrent-agent write rules (`tell`/`capture`/`import`/`export` safety):
 
 ## Agent fleet — lodestar protocol, NEVER raw Agent/Workflow
 
-**Hook-enforced.** `fleet-protocol-guard.sh` hard-blocks Agent/Workflow calls.
-Quick lookups → bash/grep/read inline. Real work → the fleet protocol.
-Kill-switch: `CLAUDE_NO_AUTHORING_HOOKS=1`.
+**Hook-enforced.** `fleet-redirect.sh` (PreToolUse) intercepts Agent/Workflow and
+redirects them to the fleet. Every session boots as the **layer-0 coordinator**
+(`coordinator-session-start.sh`): decompose + delegate to the persistent fleet,
+don't grind solo. Quick lookups → bash/grep/read inline. Real work → the fleet protocol.
+Kill-switch: `CLAUDE_NO_AUTHORING_HOOKS=1`. Per-session bypass: `/fleet-redirect off`.
 
 Full protocol (spawn/role/steer/observe/concurrency):
 → [`docs/fleet-protocol.md`](docs/fleet-protocol.md)

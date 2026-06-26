@@ -6,8 +6,8 @@ substrate: persistent, role-based, lease-gated agents that are observable +
 steerable + durably coordinated through the claim graph (raw Agent/Workflow are
 ephemeral, unobservable mid-flight, un-steerable).
 
-**This is enforced by a PreToolUse hook** (`fleet-protocol-guard.sh`) that
-hard-blocks Agent/Workflow calls. Quick lookups → bash/grep/read inline.
+**This is enforced by a PreToolUse hook** (`fleet-redirect.sh`) that intercepts
+Agent/Workflow calls and redirects them to the fleet. Quick lookups → bash/grep/read inline.
 Real work → the protocol below.
 
 ## The stack

@@ -30,8 +30,8 @@ Three touch-points (cross-ref the levers in `01-canonical.md`):
    leases), NOT the host's generic spawning. Persistent, role-based, observable,
    steerable.
 
-3. **Enforcement hook** — lever ⑬. `fleet-protocol-guard.sh` (`PreToolUse`)
-   HARD-BLOCKS raw `Agent`/`Workflow` calls so habit can't bypass the protocol.
+3. **Redirect hook** — lever ⑬. `fleet-redirect.sh` (`PreToolUse`) intercepts raw
+   `Agent`/`Workflow` calls and redirects them to the fleet so habit can't bypass it.
    Kill-switch: `CLAUDE_NO_AUTHORING_HOOKS=1`.
 
 ## The seam (why it's structured this way)

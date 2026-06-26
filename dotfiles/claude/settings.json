@@ -21,6 +21,11 @@
             "type": "command",
             "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/beagle-session-start.sh",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/coordinator-session-start.sh",
+            "timeout": 10
           }
         ]
       }
@@ -46,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/fleet-protocol-guard.sh",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/fleet-redirect.sh",
             "timeout": 5
           }
         ]
