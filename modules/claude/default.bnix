@@ -56,12 +56,34 @@
                      config.home.homeDirectory
                      "/code/nixos-config/dotfiles/claude/settings.json"
                      " $HOME/.claude/settings.json\n"))
+               ;; Runs AFTER linkClaudeSettings so settings.json is a writable
+               ;; symlink — `claude plugin install` atomic-writes it (EROFS if it
+               ;; still points at the read-only nix store).
                :home.activation.installCaveman
-                (config.lib.dag.entryAfter ["writeBoundary"]
-                  (s "if [ ! -e $HOME/.claude/plugins/cache/caveman ]; then\n"
-                     "  run timeout 90 " pkgs.master.claude-code "/bin/claude plugin marketplace add tompassarelli/caveman || true\n"
-                     "  run timeout 90 " pkgs.master.claude-code "/bin/claude plugin install caveman@caveman || true\n"
-                     "fi\n"))
+                (config.lib.dag.entryAfter ["writeBoundary" "linkClaudeSettings"]
+                  (s "CLAUDE=" pkgs.master.claude-code "/bin/claude\n"
+                     ;; Bump WANT together with the fork's .claude-plugin/
+                     ;; marketplace.json pin: it's the first 12 chars of the
+                     ;; pinned commit sha = the on-disk cache dir name.
+                     "WANT=37c28ebb1e0a\n"
+                     ;; `claude plugin install` clones the plugin repo over SSH
+                     ;; (git@github.com); this host talks to GitHub over HTTPS,
+                     ;; so redirect that one clone with a throwaway git config
+                     ;; (public repo → no creds needed).
+                     "GITC=$(mktemp)\n"
+                     pkgs.git "/bin/git config -f \"$GITC\" url.\"https://github.com/\".insteadOf \"git@github.com:\"\n"
+                     "if [ ! -e $HOME/.claude/plugins/cache/caveman ]; then\n"
+                     "  run timeout 90 $CLAUDE plugin marketplace add tompassarelli/caveman || true\n"
+                     "  run timeout 90 env GIT_CONFIG_GLOBAL=\"$GITC\" $CLAUDE plugin install caveman@caveman || true\n"
+                     "elif [ ! -e $HOME/.claude/plugins/cache/caveman/caveman/$WANT ]; then\n"
+                     ;; Pin moved. `install` no-ops when present and `update`
+                     ;; needs SSH, so the only reliable upgrade is uninstall +
+                     ;; install after refreshing the marketplace metadata.
+                     "  run timeout 90 $CLAUDE plugin marketplace update caveman || true\n"
+                     "  run timeout 90 $CLAUDE plugin uninstall caveman@caveman || true\n"
+                     "  run timeout 90 env GIT_CONFIG_GLOBAL=\"$GITC\" $CLAUDE plugin install caveman@caveman || true\n"
+                     "fi\n"
+                     "rm -f \"$GITC\"\n"))
                ;; MCP server registration — reproducible, so a fresh rebuild wires the
                ;; servers instead of relying on loose `claude mcp add` state in
                ;; ~/.claude.json. fram is the GENERIC engine MCP: its corpus is selected
