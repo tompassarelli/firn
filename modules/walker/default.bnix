@@ -4,7 +4,11 @@
 
 (nix/module [config lib pkgs inputs ...]
   (let [username config.myConfig.modules.users.username]
-    {:options.myConfig.modules.walker.enable
+    {:flake-inputs
+      {:walker {:url "github:abenz1267/walker"
+                :inputs.elephant.follows "elephant"}
+       :elephant {:url "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73"}}
+     :options.myConfig.modules.walker.enable
       (lib.mkEnableOption "Walker modern wayland app launcher")
      :config
       (lib.mkIf config.myConfig.modules.walker.enable

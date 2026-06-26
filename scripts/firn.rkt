@@ -45,7 +45,8 @@
          (prefix-in tr: "firn-cmds/tag-resolve.rkt")
          (prefix-in te: "firn-cmds/tag-edit.rkt")
          (prefix-in pl: "firn-cmds/pipeline.rkt")
-         (prefix-in fl: "firn-cmds/flake.rkt"))
+         (prefix-in fl: "firn-cmds/flake.rkt")
+         (prefix-in fi: "firn-cmds/flake-inputs-resolve.rkt"))
 
 (define ALL-EDGES
   (append r:node-edges
@@ -63,7 +64,8 @@
           tr:node-edges
           te:node-edges
           pl:node-edges
-          fl:node-edges))
+          fl:node-edges
+          fi:node-edges))
 
 (define (lookup-edge node edge)
   (findf (λ (e) (and (equal? (walk-edge-node e) node)

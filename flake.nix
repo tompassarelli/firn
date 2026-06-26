@@ -25,9 +25,6 @@
       url = "github:Mic92/sops-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    nur = {
-      url = "github:nix-community/NUR";
-    };
     kanata-git = {
       url = "github:jtroo/kanata";
       flake = false;
@@ -36,29 +33,32 @@
       url = "github:tompassarelli/glide";
       flake = false;
     };
-    quickshell = {
-      url = "git+https://git.outfoxxed.me/outfoxxed/quickshell";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    zen-browser = {
-      url = "github:0xc000022070/zen-browser-flake";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     elephant = {
       url = "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73";
-    };
-    walker = {
-      url = "github:abenz1267/walker";
-      inputs.elephant.follows = "elephant";
-    };
-    palefox = {
-      url = "github:tompassarelli/palefox";
     };
     gjoa = {
       url = "github:tompassarelli/gjoa";
     };
+    nur = {
+      url = "github:nix-community/NUR";
+    };
+    palefox = {
+      url = "github:tompassarelli/palefox";
+    };
+    quickshell = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "git+https://git.outfoxxed.me/outfoxxed/quickshell";
+    };
+    walker = {
+      inputs.elephant.follows = "elephant";
+      url = "github:abenz1267/walker";
+    };
+    zen-browser = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:0xc000022070/zen-browser-flake";
+    };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, nur, elephant, walker, kanata-git, glide, quickshell, zen-browser, palefox, gjoa, ... }: let
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, gjoa, nur, palefox, quickshell, walker, zen-browser, ... }: let
     firnModules = ./modules;
   in
   {
@@ -66,13 +66,13 @@
       system = system;
       specialArgs = ({
         inputs = {
-          nur = nur;
-          walker = walker;
           elephant = elephant;
-          quickshell = quickshell;
-          zen-browser = zen-browser;
-          palefox = palefox;
           gjoa = gjoa;
+          nur = nur;
+          palefox = palefox;
+          quickshell = quickshell;
+          walker = walker;
+          zen-browser = zen-browser;
         };
         flakeRoot = self;
       } // extraSpecialArgs);
@@ -98,13 +98,13 @@
           home-manager.backupFileExtension = "backup";
           home-manager.extraSpecialArgs = ({
             inputs = {
-              nur = nur;
-              walker = walker;
               elephant = elephant;
-              quickshell = quickshell;
-              zen-browser = zen-browser;
-              palefox = palefox;
               gjoa = gjoa;
+              nur = nur;
+              palefox = palefox;
+              quickshell = quickshell;
+              walker = walker;
+              zen-browser = zen-browser;
             };
           } // extraSpecialArgs);
           home-manager.users."${config.myConfig.modules.users.username}" = {
@@ -253,9 +253,13 @@
       system = system;
       specialArgs = ({
         inputs = {
+          elephant = elephant;
+          gjoa = gjoa;
           nur = nur;
           palefox = palefox;
-          gjoa = gjoa;
+          quickshell = quickshell;
+          walker = walker;
+          zen-browser = zen-browser;
         };
         flakeRoot = self;
       } // extraSpecialArgs);
@@ -305,9 +309,13 @@
             home-manager.backupFileExtension = "backup";
             home-manager.extraSpecialArgs = ({
               inputs = {
+                elephant = elephant;
+                gjoa = gjoa;
                 nur = nur;
                 palefox = palefox;
-                gjoa = gjoa;
+                quickshell = quickshell;
+                walker = walker;
+                zen-browser = zen-browser;
               };
             } // extraSpecialArgs);
             home-manager.users."${config.myConfig.modules.users.username}" = {

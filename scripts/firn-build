@@ -63,6 +63,17 @@ if [ "${FIRN_SKIP_TAG_RESOLVE:-}" != "1" ]; then
   fi
 fi
 
+# Flake-inputs resolution: collect :flake-inputs from active modules and
+# splice into flake.bnix between markers. Runs after tag resolution (needs
+# the active module set) and before .nix regeneration (so the spliced
+# flake.bnix is what beagle-build compiles).
+if [ "${FIRN_SKIP_FLAKE_INPUTS:-}" != "1" ]; then
+  "$RACKET" ./scripts/firn.rkt flake-input resolve emit || {
+    echo "firn-build: flake-inputs resolution failed; aborting" >&2
+    exit 1
+  }
+fi
+
 # Collect stale .bnix files (missing .nix or .nix older than .bnix).
 # One Racket process then builds them all (beagle-build-all --in-place),
 # avoiding the per-file cold-start that dominated the old loop.
@@ -127,6 +138,18 @@ def strip(path):
             continue
         # Also handle single-line tag-overrides = {...};
         if re.match(r"^[ \t]*tag-overrides[ \t]*=[ \t]*\{[^\n]*\};[ \t]*$", lines[i].rstrip("\n")):
+            i += 1
+            continue
+        # Strip flake-inputs = { ... }; (multi-line brace-balanced)
+        if re.match(r"^[ \t]*flake-inputs[ \t]*=[ \t]*\{[ \t]*$", lines[i]):
+            depth = 1
+            i += 1
+            while i < len(lines) and depth > 0:
+                depth += lines[i].count("{") - lines[i].count("}")
+                i += 1
+            continue
+        # Single-line flake-inputs = {...};
+        if re.match(r"^[ \t]*flake-inputs[ \t]*=[ \t]*\{[^\n]*\};[ \t]*$", lines[i].rstrip("\n")):
             i += 1
             continue
         out.append(lines[i])

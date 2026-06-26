@@ -42,6 +42,10 @@
          resolve-host
          resolve-and-emit!
          read-bnix-forms
+         find-module-body
+         map-datum->pairs
+         keyword-symbol?
+         keyword-name
          extract-module-tags
          extract-host-tags
          clear-module-index-cache!

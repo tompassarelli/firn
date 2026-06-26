@@ -5,6 +5,9 @@
 (nix/module [config lib pkgs ...]
   {:tags [browsers]
    :tag-overrides {browsers {:myConfig.modules.firefox.palefox.enable false :myConfig.modules.firefox.default true}}
+   :flake-inputs
+    {:palefox {:url "github:tompassarelli/palefox"}
+     :nur {:url "github:nix-community/NUR"}}
    :options.myConfig.modules.firefox.enable
     (lib.mkEnableOption "Enable Firefox browser")
    :options.myConfig.modules.firefox.palefox.enable

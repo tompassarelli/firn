@@ -4,6 +4,8 @@
 
 (nix/module [config lib pkgs ...]
   {:tags-opt-in [browsers]
+   :flake-inputs
+    {:gjoa {:url "github:tompassarelli/gjoa"}}
    :options.myConfig.modules.gjoa.enable
     (lib.mkEnableOption
       "Gjoa — a Firefox fork. Wrapped via wrapFirefox; appears in launchers/drun.")

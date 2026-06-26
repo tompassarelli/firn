@@ -7,6 +7,9 @@
     [username config.myConfig.modules.users.username
      monoFont config.stylix.fonts.monospace.name]
     {:tags [desktop]
+     :flake-inputs
+      {:quickshell {:url "git+https://git.outfoxxed.me/outfoxxed/quickshell"
+                    :inputs.nixpkgs.follows "nixpkgs"}}
      :options.myConfig.modules.quickshell.enable
       (lib.mkEnableOption "Quickshell (Qt6/QML) status bar")
      :config
