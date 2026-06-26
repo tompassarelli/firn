@@ -10,6 +10,11 @@
 ;; journald logging, runs as the primary user for ~/code access, survives reboot.
 ;; Pinned code: <codeDir>/fram (canonical engine, has lease primitive as of 74898fc).
 ;; Durable log: <codeDir>/fleet-data/claims.log.
+;; Runtime: JVM (clojure -M ... serve), NOT babashka — a long-lived sole-writer
+;; coordinator wants JIT throughput, real threads, and JVM TLS (mTLS-capable),
+;; per the SAME rationale fram-daemon gives for :7977. Migrated from `bb -cp out`;
+;; the verb (`serve`) and full-store mode are unchanged — only the runtime differs.
+;; Smoke-tested: JVM `serve` binds + reifies the log in ~3s off the warm dep cache.
 ;; NOTE: still a personal daemon — slated to move out of the module library into an
 ;; instance/personal overlay (decouple cut 5); de-literalized here in the interim.
 
@@ -25,6 +30,7 @@
           {:description           "Fleet coordinator — durable claim-graph daemon (:7978) for the AI agent fleet"
            :wantedBy              ["multi-user.target"]
            :after                 ["network.target"]
+           :path                  (nix/with pkgs [clojure jdk bash coreutils git])
            :startLimitIntervalSec 0
            :environment           {:HOME homeDir}
            :serviceConfig
@@ -32,7 +38,7 @@
              :User             username
              :WorkingDirectory (s codeDir "/fram")
              :ExecStart
-              (s pkgs.babashka
-                "/bin/bb -cp out cnf_coord_daemon.clj serve 7978 " codeDir "/fleet-data/claims.log")
+              (s pkgs.clojure
+                "/bin/clojure -M cnf_coord_daemon.clj serve 7978 " codeDir "/fleet-data/claims.log")
              :Restart          "always"
              :RestartSec       2}}})}))

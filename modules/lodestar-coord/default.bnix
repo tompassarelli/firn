@@ -1,0 +1,39 @@
+#lang beagle/nix
+
+(ns default)
+
+;; Personal Lodestar coordinator (:7977) — the sole-writer daemon serving Tom's
+;; canonical claim log (~/.local/state/lodestar/claims.log). Sibling of fleet-coord
+;; (:7978): same coordinator family, but the PERSONAL store, and on the JVM
+;; (fram/bin/fram-daemon -> `clojure -M cnf_coord_daemon.clj serve-flat`). The JVM
+;; (not babashka) is deliberate per fram-daemon: a long-lived server wants JIT
+;; throughput, real threads, and JVM TLS, which bb's native image lacks. Replaces
+;; the hand-run `lodestar up` (fram-up's detached setsid) with systemd supervision
+;; so :7977 survives logout + reboot. Without this the fleet-by-default model dies
+;; the instant nobody remembers to boot it — :7977 down = no capture, no work queue.
+;; HOME is pinned to the user so `clojure -M` resolves deps from the already-warm
+;; ~/.m2 / ~/.clojure caches (offline), and the daemon writes the canonical log.
+
+(nix/module [config lib pkgs ...]
+  (let [username config.myConfig.modules.users.username
+        homeDir  config.myConfig.modules.users.homeDir
+        codeDir  config.myConfig.modules.users.codeDir]
+    {:options.myConfig.modules.lodestar-coord.enable
+      (lib.mkEnableOption "Personal Lodestar coordinator daemon (:7977) — sole-writer claim-graph service for Tom's canonical log")
+     :config
+      (lib.mkIf config.myConfig.modules.lodestar-coord.enable
+        {:systemd.services.lodestar-coord
+          {:description           "Lodestar coordinator — personal claim-graph daemon (:7977)"
+           :wantedBy              ["multi-user.target"]
+           :after                 ["network.target"]
+           :path                  (nix/with pkgs [clojure jdk bash coreutils git])
+           :startLimitIntervalSec 0
+           :environment           {:HOME homeDir}
+           :serviceConfig
+            {:Type             "simple"
+             :User             username
+             :WorkingDirectory (s codeDir "/fram")
+             :ExecStart
+              (s codeDir "/fram/bin/fram-daemon 7977 " homeDir "/.local/state/lodestar/claims.log")
+             :Restart          "always"
+             :RestartSec       2}}})}))

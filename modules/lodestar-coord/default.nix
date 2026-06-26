@@ -6,10 +6,10 @@ let
   codeDir = config.myConfig.modules.users.codeDir;
 in
 {
-  options.myConfig.modules.fleet-coord.enable = lib.mkEnableOption "Fleet coordinator daemon (:7978) — durable claim-graph coordination substrate for the AI agent fleet";
-  config = lib.mkIf config.myConfig.modules.fleet-coord.enable {
-    systemd.services.fleet-coord = {
-      description = "Fleet coordinator — durable claim-graph daemon (:7978) for the AI agent fleet";
+  options.myConfig.modules.lodestar-coord.enable = lib.mkEnableOption "Personal Lodestar coordinator daemon (:7977) — sole-writer claim-graph service for Tom's canonical log";
+  config = lib.mkIf config.myConfig.modules.lodestar-coord.enable {
+    systemd.services.lodestar-coord = {
+      description = "Lodestar coordinator — personal claim-graph daemon (:7977)";
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];
       path = with pkgs; [ clojure jdk bash coreutils git ];
@@ -21,7 +21,7 @@ in
         Type = "simple";
         User = username;
         WorkingDirectory = "${codeDir}/fram";
-        ExecStart = "${pkgs.clojure}/bin/clojure -M cnf_coord_daemon.clj serve 7978 ${codeDir}/fleet-data/claims.log";
+        ExecStart = "${codeDir}/fram/bin/fram-daemon 7977 ${homeDir}/.local/state/lodestar/claims.log";
         Restart = "always";
         RestartSec = 2;
       };
