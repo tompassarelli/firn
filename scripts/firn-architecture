@@ -1,0 +1,329 @@
+#!/usr/bin/env python3
+"""firn-architecture — generate the Claude-system architecture map FROM DISK.
+
+The hand-written docs/claude-os-architecture.md rotted because it was a static
+snapshot of a moving target. This walks the real filesystem + settings every
+time, so the map cannot be stale — it IS the system.
+
+Three layers (see modules/claude/CLAUDE.md for the design):
+  local      — how Claude Code is wired here (CLAUDE.md chain, settings, hooks)
+  substrate  — what the config points at (plugins, MCP servers, lodestar)
+  canonical  — Anthropic contracts (annotated inline; curated, not scraped)
+
+Usage:
+  firn architecture          # print the map to stdout
+  firn architecture --write  # also (re)generate docs/claude-os-architecture.md
+
+Idempotent: no wall-clock timestamp, so the doc only changes when the SYSTEM
+changes — re-run and diff to see drift.
+"""
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+HOME = Path.home()
+REPO = Path(os.environ.get("FIRN_REPO", HOME / "code" / "nixos-config")).resolve()
+CLAUDE = Path(os.environ.get("CLAUDE_CONFIG_DIR", HOME / ".claude"))
+DOTFILES = REPO / "dotfiles" / "claude"
+DOC = REPO / "docs" / "claude-os-architecture.md"
+
+
+def short(p):
+    """Abbreviate a path: subpaths of the repo -> ./…, else $HOME -> ~."""
+    try:
+        s = str(Path(p))
+    except TypeError:
+        return str(p)
+    if s.startswith(str(REPO) + os.sep):
+        return "./" + os.path.relpath(s, REPO)
+    if s.startswith(str(HOME)):
+        return "~" + s[len(str(HOME)):]
+    return s
+
+
+def classify(path):
+    """Resolve a wired path to its source-of-truth + materialization story.
+
+    Returns dict: exists, kind, immediate (one-hop target), sot (final real
+    path if under the repo), via, runtime_writable, managed.
+    """
+    p = Path(path)
+    out = {"path": short(p), "exists": p.exists() or p.is_symlink(),
+           "kind": "missing", "immediate": None, "sot": None,
+           "via": "—", "runtime_writable": False, "managed": False}
+    if not (p.exists() or p.is_symlink()):
+        return out
+
+    is_link = p.is_symlink()
+    out["kind"] = "symlink" if is_link else "file" if p.is_file() else "dir"
+    immediate = os.readlink(p) if is_link else None
+    out["immediate"] = short(immediate) if immediate else None
+    try:
+        real = Path(os.path.realpath(p))
+    except OSError:
+        real = p
+
+    under_dotfiles = str(real).startswith(str(REPO / "dotfiles"))
+    via_store = bool(immediate and "/nix/store/" in str(immediate))
+
+    if under_dotfiles:
+        out["managed"] = True
+        out["sot"] = short(real)
+        if not via_store:
+            # direct symlink → dotfiles: claude-code can atomic-write through it
+            out["via"] = "direct → dotfiles"
+            out["runtime_writable"] = True
+        else:
+            # nix-store out-of-store symlink → dotfiles: live for repo edits,
+            # but the store-symlink layer blocks runtime atomic-writes
+            out["via"] = "nix store → dotfiles (out-of-store)"
+    elif "/nix/store/" in str(real):
+        out["managed"] = True
+        out["via"] = "nix store COPY (rebuild to change)"
+        out["sot"] = short(real)
+    elif is_link:
+        out["via"] = "unmanaged symlink"
+        out["sot"] = short(real)
+    else:
+        out["via"] = "real file (is its own source)"
+        out["sot"] = short(real)
+        out["runtime_writable"] = True
+    return out
+
+
+def title_of(path):
+    """First markdown heading or first non-empty line, for a one-liner."""
+    p = Path(path)
+    try:
+        real = Path(os.path.realpath(p))
+        for line in real.read_text(errors="replace").splitlines():
+            t = line.strip()
+            if t.startswith("#"):
+                return t.lstrip("# ").strip()
+            if t:
+                return t[:80]
+    except OSError:
+        pass
+    return ""
+
+
+def lines_of(path):
+    try:
+        return len(Path(os.path.realpath(path)).read_text(errors="replace").splitlines())
+    except OSError:
+        return 0
+
+
+def load_settings():
+    try:
+        return json.loads((CLAUDE / "settings.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def load_plugins():
+    try:
+        data = json.loads((CLAUDE / "plugins" / "installed_plugins.json").read_text())
+        return data.get("plugins", {})
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def load_mcp():
+    """User-scope MCP servers from ~/.claude.json (where `claude mcp add -s user` writes)."""
+    try:
+        data = json.loads((HOME / ".claude.json").read_text())
+        return data.get("mcpServers", {})
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def basename(cmd):
+    return cmd.split("/")[-1].split('"')[0].strip() or cmd[:40]
+
+
+def gather_hooks():
+    """Merge hooks from settings.json AND every enabled plugin's plugin.json,
+    keyed by lifecycle event. Plugin-contributed hooks (e.g. caveman's Stop
+    hook) are INVISIBLE in settings.json alone — they live in the plugin
+    manifest. Each entry is (hook-name, source) where source is 'settings' or
+    the plugin name."""
+    s = load_settings()
+    plugins = load_plugins()
+    by_event = {}
+
+    def add(event, name, source):
+        by_event.setdefault(event, []).append((name, source))
+
+    for event, groups in s.get("hooks", {}).items():
+        for grp in groups:
+            for h in grp.get("hooks", []):
+                add(event, basename(h.get("command", "")), "settings")
+
+    for name, enabled in s.get("enabledPlugins", {}).items():
+        if not enabled:
+            continue
+        insts = plugins.get(name, [])
+        if not insts:
+            continue
+        ppath = Path(insts[0].get("installPath", "")) / ".claude-plugin" / "plugin.json"
+        try:
+            pj = json.loads(ppath.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        for event, groups in pj.get("hooks", {}).items():
+            for grp in groups:
+                for h in grp.get("hooks", []):
+                    add(event, basename(h.get("command", "")), name.split("@")[0])
+    return by_event
+
+
+# ---------- the precedence chain that actually loads ----------
+
+def claude_md_chain():
+    chain = [
+        ("global", CLAUDE / "CLAUDE.md", "every session, lowest precedence"),
+        ("code-root", HOME / "code" / "CLAUDE.md", "any repo under ~/code"),
+        ("repo", REPO / "CLAUDE.md", "this repo (nixos-config)"),
+    ]
+    rows = []
+    for scope, path, when in chain:
+        c = classify(path)
+        c["scope"], c["when"], c["lines"], c["title"] = scope, when, lines_of(path), title_of(path)
+        rows.append(c)
+    # module-level CLAUDE.md (nearest-wins when editing that subtree)
+    for md in sorted((REPO / "modules").glob("*/CLAUDE.md")):
+        c = classify(md)
+        c["scope"] = "module:" + md.parent.name
+        c["when"] = f"editing modules/{md.parent.name}/"
+        c["lines"], c["title"] = lines_of(md), title_of(md)
+        rows.append(c)
+    return rows
+
+
+# ---------- renderers ----------
+
+def render():
+    L = []
+    w = L.append
+    w("# Claude System — Architecture Map")
+    w("")
+    w("> GENERATED by `firn architecture` — **do not hand-edit**. Walked from")
+    w("> disk; re-run after any config change. Idempotent (no timestamp): a diff")
+    w("> here means the system actually moved.")
+    w("")
+    w(f"Repo: `{short(REPO)}` · Claude config: `{short(CLAUDE)}`")
+    w("")
+
+    # ---- LOCAL: precedence chain ----
+    w("## Layer 1 — LOCAL: CLAUDE.md precedence chain")
+    w("")
+    w("Claude merges these by proximity (global → local; nearest wins). Only the")
+    w("first few load in any given session — the rest are per-repo context.")
+    w("")
+    w("| scope | loads | materialization | source-of-truth | lines |")
+    w("|---|---|---|---|---|")
+    for c in claude_md_chain():
+        w(f"| `{c['scope']}` | {c.get('when','')} | {c['via']} | "
+          f"`{c['sot'] or c['path']}` | {c.get('lines',0)} |")
+    w("")
+
+    # ---- LOCAL: ~/.claude surface ----
+    w("## Layer 1 — LOCAL: `~/.claude` wired surface")
+    w("")
+    w("What the `modules/claude` module materializes into `~/.claude`. "
+      "`runtime-writable` = claude-code can atomic-write it (the rest are repo-edit-then-it's-live).")
+    w("")
+    w("| path | kind | materialization | runtime-writable | source-of-truth |")
+    w("|---|---|---|---|---|")
+    for name in ["CLAUDE.md", "settings.json", "commands", "skills", "hooks"]:
+        c = classify(CLAUDE / name)
+        rw = "✅" if c["runtime_writable"] else "—"
+        w(f"| `~/.claude/{name}` | {c['kind']} | {c['via']} | {rw} | `{c['sot'] or '?'}` |")
+    w("")
+
+    # ---- LOCAL: runtime wiring (settings + plugin-contributed hooks) ----
+    s = load_settings()
+    H = gather_hooks()
+    w("## Layer 1 — LOCAL: runtime wiring (`settings.json` + plugin manifests)")
+    w("")
+    statusline = s.get("statusLine", {}).get("command", "—")
+    w(f"- **statusLine** → `{statusline[:90]}{'…' if len(statusline) > 90 else ''}`")
+    w(f"- **enabledPlugins** → {', '.join('`'+k+'`' for k in s.get('enabledPlugins', {})) or '—'}")
+    w("- **hooks** (Claude Code fires these at lifecycle points; `⟨src⟩` = "
+      "settings.json or the plugin that contributes it):")
+    for event in ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SubagentStop"]:
+        entries = H.get(event, [])
+        if entries:
+            shown = ", ".join(f"`{n}` ⟨{src}⟩" for n, src in entries)
+            w(f"  - `{event}` → {shown}")
+    w("")
+
+    # ---- lifecycle control-flow (mermaid) ----
+    def edge_label(ev):
+        entries = H.get(ev, [])
+        return " · ".join(n for n, _ in entries) or "—"
+    w("### Control flow (lifecycle spine)")
+    w("")
+    w("```mermaid")
+    w("flowchart TD")
+    w("  A[session start] --> B{SessionStart}")
+    w(f"  B --> |{edge_label('SessionStart')}| C[turn loop]")
+    w("  C --> D{UserPromptSubmit}")
+    w(f"  D --> |{edge_label('UserPromptSubmit')}| E[model responds + tools]")
+    pre = edge_label('PreToolUse')
+    if pre != "—":
+        w(f"  E -. PreToolUse: {pre} .-> E")
+    w("  E --> F{Stop}")
+    w(f"  F --> |{edge_label('Stop')}| C")
+    w("  G[statusLine] -. every render .-> Hs[(.caveman-active + suffix)]")
+    w("```")
+    w("")
+
+    # ---- SUBSTRATE ----
+    w("## Layer 2 — SUBSTRATE: what the config points at")
+    w("")
+    plugins = load_plugins()
+    w("**Plugins** (installed under `~/.claude/plugins/cache`):")
+    w("")
+    w("| plugin | version/sha | install path |")
+    w("|---|---|---|")
+    for name, insts in plugins.items():
+        for i in insts:
+            w(f"| `{name}` | `{i.get('version','?')}` | `{short(i.get('installPath','?'))}` |")
+    w("")
+    mcp = load_mcp()
+    w("**MCP servers** (user scope — where lodestar plugs into Claude):")
+    w("")
+    if mcp:
+        w("| server | command |")
+        w("|---|---|")
+        for name, cfg in mcp.items():
+            cmd = cfg.get("command", "")
+            args = " ".join(cfg.get("args", []))
+            full = (short(cmd) + " " + args).strip()
+            w(f"| `{name}` | `{full}` |")
+    else:
+        w("_none registered (or ~/.claude.json unreadable)_")
+    w("")
+    w("> Layer 3 (CANONICAL Anthropic contracts) is annotated inline above where")
+    w("> it governs a local choice. A fuller canonical corpus is the next phase —")
+    w("> see modules/claude/CLAUDE.md and the `claude-code-guide` skill.")
+    w("")
+    return "\n".join(L) + "\n"
+
+
+def main():
+    out = render()
+    write = "--write" in sys.argv or "-w" in sys.argv
+    if write:
+        DOC.parent.mkdir(parents=True, exist_ok=True)
+        DOC.write_text(out)
+        sys.stderr.write(f"firn-architecture: wrote {short(DOC)}\n")
+    sys.stdout.write(out)
+
+
+if __name__ == "__main__":
+    main()

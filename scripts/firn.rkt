@@ -46,7 +46,8 @@
          (prefix-in te: "firn-cmds/tag-edit.rkt")
          (prefix-in pl: "firn-cmds/pipeline.rkt")
          (prefix-in fl: "firn-cmds/flake.rkt")
-         (prefix-in fi: "firn-cmds/flake-inputs-resolve.rkt"))
+         (prefix-in fi: "firn-cmds/flake-inputs-resolve.rkt")
+         (prefix-in ar: "firn-cmds/architecture.rkt"))
 
 (define ALL-EDGES
   (append r:node-edges
@@ -65,7 +66,8 @@
           te:node-edges
           pl:node-edges
           fl:node-edges
-          fi:node-edges))
+          fi:node-edges
+          ar:node-edges))
 
 (define (lookup-edge node edge)
   (findf (λ (e) (and (equal? (walk-edge-node e) node)
@@ -221,6 +223,7 @@
                (define host (if (pair? args) (car args) "current"))
                (list "host" "rebuild" host)])))
     (cons "doctor"  (λ (_) (list "host"   "doctor")))
+    (cons "architecture" (λ (_) (list "repo" "architecture")))
     (cons "gen"     (λ (_) (list "host"   "gen")))
     (cons "diff"    (λ (args)
                       (define rest (filter (λ (a) (not (regexp-match? #rx"^--" a))) args))
@@ -332,6 +335,7 @@
   (printf "  firn validate         lint + type/package/path check\n")
   (printf "  firn impact           what will rebuild, estimated time\n")
   (printf "  firn doctor           repo health check\n")
+  (printf "  firn architecture     regenerate the Claude-system map (docs/claude-os-architecture.md)\n")
   (printf "  firn status           modules enabled directly in configuration.bnix\n")
   (printf "  firn tag status       enabled-tags.bnix + resolved active modules\n")
   (printf "  firn tag enable <t>   add a tag to the current host\n")
