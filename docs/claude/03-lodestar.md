@@ -19,7 +19,7 @@ Claude Code is the **client**; lodestar/fram is the **substrate**.
 Three touch-points (cross-ref the levers in `01-canonical.md`):
 
 1. **MCP servers** — lever ⑥. `fram-mcp` + `lodestar-mcp`, user scope, registered
-   in `~/.claude.json` by the `registerMcpServers` activation in `modules/claude`.
+   in `~/.claude.json` by the `registerMcpServers` activation in `~/code/nixos-config/modules/claude`.
    Their instruction prose loads at session start; tool **schemas are deferred**
    (ToolSearch) → ≈0 context cost until used. This is how Claude reads/writes
    claims: `capture` / `tell` / `show` / `ready` / `next` / `leverage` / ….

@@ -12,7 +12,7 @@ Three layers (see modules/claude/CLAUDE.md for the design):
 
 Usage:
   firn architecture          # print the map to stdout
-  firn architecture --write  # also (re)generate docs/claude-os-architecture.md
+  firn architecture --write  # also (re)generate docs/claude/02-local-map.md
 
 Idempotent: no wall-clock timestamp, so the doc only changes when the SYSTEM
 changes — re-run and diff to see drift.
@@ -31,16 +31,19 @@ DOCDIR = REPO / "docs" / "claude"
 DOC = DOCDIR / "02-local-map.md"
 
 
-def short(p):
-    """Abbreviate a path: subpaths of the repo -> ./…, else $HOME -> ~."""
+def fullpath(p):
+    """`~`-anchored FULL path. Abbreviate $HOME to `~`, but keep everything after
+    it — never `./`/relative shortening. The reader must never have to intuit a
+    cwd; `~` is fine, a dangling `./dotfiles/...` is not."""
     try:
         s = str(Path(p))
     except TypeError:
         return str(p)
-    if s.startswith(str(REPO) + os.sep):
-        return "./" + os.path.relpath(s, REPO)
-    if s.startswith(str(HOME)):
-        return "~" + s[len(str(HOME)):]
+    home = str(HOME)
+    if s == home:
+        return "~"
+    if s.startswith(home + os.sep):
+        return "~" + s[len(home):]
     return s
 
 
@@ -51,7 +54,7 @@ def classify(path):
     path if under the repo), via, runtime_writable, managed.
     """
     p = Path(path)
-    out = {"path": short(p), "exists": p.exists() or p.is_symlink(),
+    out = {"path": fullpath(p), "exists": p.exists() or p.is_symlink(),
            "kind": "missing", "immediate": None, "sot": None,
            "via": "—", "runtime_writable": False, "managed": False}
     if not (p.exists() or p.is_symlink()):
@@ -60,7 +63,7 @@ def classify(path):
     is_link = p.is_symlink()
     out["kind"] = "symlink" if is_link else "file" if p.is_file() else "dir"
     immediate = os.readlink(p) if is_link else None
-    out["immediate"] = short(immediate) if immediate else None
+    out["immediate"] = fullpath(immediate) if immediate else None
     try:
         real = Path(os.path.realpath(p))
     except OSError:
@@ -71,7 +74,7 @@ def classify(path):
 
     if under_dotfiles:
         out["managed"] = True
-        out["sot"] = short(real)
+        out["sot"] = fullpath(real)
         if not via_store:
             # direct symlink → dotfiles: claude-code can atomic-write through it
             out["via"] = "direct → dotfiles"
@@ -83,13 +86,13 @@ def classify(path):
     elif "/nix/store/" in str(real):
         out["managed"] = True
         out["via"] = "nix store COPY (rebuild to change)"
-        out["sot"] = short(real)
+        out["sot"] = fullpath(real)
     elif is_link:
         out["via"] = "unmanaged symlink"
-        out["sot"] = short(real)
+        out["sot"] = fullpath(real)
     else:
         out["via"] = "real file (is its own source)"
-        out["sot"] = short(real)
+        out["sot"] = fullpath(real)
         out["runtime_writable"] = True
     return out
 
@@ -186,7 +189,7 @@ def gather_hooks():
 def claude_md_chain():
     chain = [
         ("global", CLAUDE / "CLAUDE.md", "every session, lowest precedence"),
-        ("code-root", HOME / "code" / "CLAUDE.md", "any repo under ~/code"),
+        ("code-root", HOME / "code" / "CLAUDE.md", f"any repo under {fullpath(HOME / 'code')}"),
         ("repo", REPO / "CLAUDE.md", "this repo (nixos-config)"),
     ]
     rows = []
@@ -198,7 +201,7 @@ def claude_md_chain():
     for md in sorted((REPO / "modules").glob("*/CLAUDE.md")):
         c = classify(md)
         c["scope"] = "module:" + md.parent.name
-        c["when"] = f"editing modules/{md.parent.name}/"
+        c["when"] = f"editing {fullpath(md.parent)}/"
         c["lines"], c["title"] = lines_of(md), title_of(md)
         rows.append(c)
     return rows
@@ -217,7 +220,7 @@ def render():
     w("> see [README.md](README.md) (start here), [01-canonical.md](01-canonical.md)")
     w("> (how Claude Code works), [03-lodestar.md](03-lodestar.md) (the substrate).")
     w("")
-    w(f"Repo: `{short(REPO)}` · Claude config: `{short(CLAUDE)}`")
+    w(f"Repo: `{fullpath(REPO)}` · Claude config: `{fullpath(CLAUDE)}`")
     w("")
 
     # ---- LOCAL: precedence chain ----
@@ -233,18 +236,19 @@ def render():
           f"`{c['sot'] or c['path']}` | {c.get('lines',0)} |")
     w("")
 
-    # ---- LOCAL: ~/.claude surface ----
-    w("## Layer 1 — LOCAL: `~/.claude` wired surface")
+    # ---- LOCAL: <claude-dir> surface ----
+    w(f"## Layer 1 — LOCAL: `{fullpath(CLAUDE)}` wired surface")
     w("")
-    w("What the `modules/claude` module materializes into `~/.claude`. "
-      "`runtime-writable` = claude-code can atomic-write it (the rest are repo-edit-then-it's-live).")
+    w(f"What the `{fullpath(REPO / 'modules' / 'claude')}` module materializes into "
+      f"`{fullpath(CLAUDE)}`. `runtime-writable` = claude-code can atomic-write it "
+      "(the rest are repo-edit-then-it's-live).")
     w("")
     w("| path | kind | materialization | runtime-writable | source-of-truth |")
     w("|---|---|---|---|---|")
     for name in ["CLAUDE.md", "settings.json", "commands", "skills", "hooks"]:
         c = classify(CLAUDE / name)
         rw = "✅" if c["runtime_writable"] else "—"
-        w(f"| `~/.claude/{name}` | {c['kind']} | {c['via']} | {rw} | `{c['sot'] or '?'}` |")
+        w(f"| `{fullpath(CLAUDE / name)}` | {c['kind']} | {c['via']} | {rw} | `{c['sot'] or '?'}` |")
     w("")
 
     # ---- LOCAL: runtime wiring (settings + plugin-contributed hooks) ----
@@ -295,13 +299,13 @@ def render():
     w("## Layer 2 — SUBSTRATE: what the config points at")
     w("")
     plugins = load_plugins()
-    w("**Plugins** (installed under `~/.claude/plugins/cache`):")
+    w(f"**Plugins** (installed under `{fullpath(CLAUDE / 'plugins' / 'cache')}`):")
     w("")
     w("| plugin | version/sha | install path |")
     w("|---|---|---|")
     for name, insts in plugins.items():
         for i in insts:
-            w(f"| `{name}` | `{i.get('version','?')}` | `{short(i.get('installPath','?'))}` |")
+            w(f"| `{name}` | `{i.get('version','?')}` | `{fullpath(i.get('installPath','?'))}` |")
     w("")
     mcp = load_mcp()
     w("**MCP servers** (user scope — where lodestar plugs into Claude):")
@@ -312,14 +316,14 @@ def render():
         for name, cfg in mcp.items():
             cmd = cfg.get("command", "")
             args = " ".join(cfg.get("args", []))
-            full = (short(cmd) + " " + args).strip()
+            full = (fullpath(cmd) + " " + args).strip()
             w(f"| `{name}` | `{full}` |")
     else:
-        w("_none registered (or ~/.claude.json unreadable)_")
+        w(f"_none registered (or `{fullpath(HOME / '.claude.json')}` unreadable)_")
     w("")
     w("> Layer 3 (CANONICAL Anthropic contracts) is annotated inline above where")
     w("> it governs a local choice. A fuller canonical corpus is the next phase —")
-    w("> see modules/claude/CLAUDE.md and the `claude-code-guide` skill.")
+    w(f"> see `{fullpath(REPO / 'modules' / 'claude' / 'CLAUDE.md')}` and the `claude-code-guide` skill.")
     w("")
     return "\n".join(L) + "\n"
 
@@ -347,7 +351,7 @@ def main():
     if "--write" in sys.argv or "-w" in sys.argv:
         DOC.parent.mkdir(parents=True, exist_ok=True)
         DOC.write_text(out)
-        sys.stderr.write(f"firn-architecture: wrote {short(DOC)}\n")
+        sys.stderr.write(f"firn-architecture: wrote {fullpath(DOC)}\n")
     sys.stdout.write(out)
 
 

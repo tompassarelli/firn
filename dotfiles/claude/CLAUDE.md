@@ -8,6 +8,13 @@ Default bearish — comments rot fast and cost tokens. A good comment encodes
 INTENTION, a trade-off, or a path NOT taken and why. A bad comment restates
 the code. If it doesn't say something the code can't, drop it.
 
+## Paths — always full and `~`-anchored
+
+Whenever you mention a filesystem path (in chat, docs, comments, generated
+output), write it FULL and `~`-anchored: `~/code/nixos-config/dotfiles/claude/settings.json`,
+never a bare/relative `dotfiles/claude/...` or `./...`. `~` for `$HOME` is fine —
+but keep everything after it complete. The reader must never have to intuit a cwd.
+
 ## lodestar
 
 Read `~/code/lodestar/docs/operating-manual.md` before nontrivial work. If

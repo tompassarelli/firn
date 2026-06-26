@@ -1,4 +1,4 @@
-# modules/claude — operational notes
+# ~/code/nixos-config/modules/claude — operational notes
 
 NixOS module for Claude Code: the package, out-of-store symlinks
 (commands / skills / hooks / CLAUDE.md), the **caveman** plugin install, and
@@ -8,7 +8,7 @@ best-effort (`timeout … || true`) so a network blip never fails a rebuild.
 ## settings.json is a WRITABLE symlink — load-bearing
 
 `linkClaudeSettings` points `~/.claude/settings.json` **directly** at
-`dotfiles/claude/settings.json`, bypassing the nix store, so Claude Code can
+`~/code/nixos-config/dotfiles/claude/settings.json`, bypassing the nix store, so Claude Code can
 atomic-write it (`settings.json.tmp` + rename). If it ever reverts to a
 `/nix/store/…` symlink, `claude plugin install` dies with `EROFS:
 read-only file system`. `installCaveman` is ordered
@@ -16,7 +16,7 @@ read-only file system`. `installCaveman` is ordered
 settings must be writable before the plugin CLI touches it.
 
 Cost of the writable symlink: every `claude plugin install/uninstall/enable`
-**reserializes** `dotfiles/claude/settings.json` (reorders keys) → a tracked
+**reserializes** `~/code/nixos-config/dotfiles/claude/settings.json` (reorders keys) → a tracked
 diff. Pure reorder, no content change. Commit it or discard it; it recurs on
 the next plugin op. Not worth fighting.
 
@@ -40,7 +40,7 @@ cache dir name: `~/.claude/plugins/cache/caveman/caveman/<WANT>`.
 1. Edit the fork (`~/code/caveman`), run its tests (`node tests/test_caveman_stats.js`), commit.
 2. Bump the fork's `.claude-plugin/marketplace.json` sha → that commit; commit; push.
    (Two-commit dance: a code commit, then a pin commit pointing at it.)
-3. Set `WANT=<same 12-char sha>` in `modules/claude/default.bnix`.
+3. Set `WANT=<same 12-char sha>` in `~/code/nixos-config/modules/claude/default.bnix`.
 4. `firn build` → `firn rebuild`. The activation reconciles (uninstall + install).
 
 **Keep the fork pin and `WANT` on the same sha.** If they diverge, `install`

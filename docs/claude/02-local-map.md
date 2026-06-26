@@ -15,23 +15,23 @@ first few load in any given session — the rest are per-repo context.
 
 | scope | loads | materialization | source-of-truth | lines |
 |---|---|---|---|---|
-| `global` | every session, lowest precedence | nix store → dotfiles (out-of-store) | `./dotfiles/claude/CLAUDE.md` | 54 |
-| `code-root` | any repo under ~/code | nix store → dotfiles (out-of-store) | `./dotfiles/code/CLAUDE.md` | 3 |
-| `repo` | this repo (nixos-config) | real file (is its own source) | `./CLAUDE.md` | 422 |
-| `module:claude` | editing modules/claude/ | real file (is its own source) | `./modules/claude/CLAUDE.md` | 77 |
-| `module:containers` | editing modules/containers/ | real file (is its own source) | `./modules/containers/CLAUDE.md` | 7 |
+| `global` | every session, lowest precedence | nix store → dotfiles (out-of-store) | `~/code/nixos-config/dotfiles/claude/CLAUDE.md` | 61 |
+| `code-root` | any repo under ~/code | nix store → dotfiles (out-of-store) | `~/code/nixos-config/dotfiles/code/CLAUDE.md` | 3 |
+| `repo` | this repo (nixos-config) | real file (is its own source) | `~/code/nixos-config/CLAUDE.md` | 422 |
+| `module:claude` | editing ~/code/nixos-config/modules/claude/ | real file (is its own source) | `~/code/nixos-config/modules/claude/CLAUDE.md` | 77 |
+| `module:containers` | editing ~/code/nixos-config/modules/containers/ | real file (is its own source) | `~/code/nixos-config/modules/containers/CLAUDE.md` | 7 |
 
 ## Layer 1 — LOCAL: `~/.claude` wired surface
 
-What the `modules/claude` module materializes into `~/.claude`. `runtime-writable` = claude-code can atomic-write it (the rest are repo-edit-then-it's-live).
+What the `~/code/nixos-config/modules/claude` module materializes into `~/.claude`. `runtime-writable` = claude-code can atomic-write it (the rest are repo-edit-then-it's-live).
 
 | path | kind | materialization | runtime-writable | source-of-truth |
 |---|---|---|---|---|
-| `~/.claude/CLAUDE.md` | symlink | nix store → dotfiles (out-of-store) | — | `./dotfiles/claude/CLAUDE.md` |
-| `~/.claude/settings.json` | symlink | direct → dotfiles | ✅ | `./dotfiles/claude/settings.json` |
-| `~/.claude/commands` | symlink | nix store → dotfiles (out-of-store) | — | `./dotfiles/claude/commands` |
-| `~/.claude/skills` | symlink | nix store → dotfiles (out-of-store) | — | `./dotfiles/claude/skills` |
-| `~/.claude/hooks` | symlink | nix store → dotfiles (out-of-store) | — | `./dotfiles/claude/hooks` |
+| `~/.claude/CLAUDE.md` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/dotfiles/claude/CLAUDE.md` |
+| `~/.claude/settings.json` | symlink | direct → dotfiles | ✅ | `~/code/nixos-config/dotfiles/claude/settings.json` |
+| `~/.claude/commands` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/dotfiles/claude/commands` |
+| `~/.claude/skills` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/dotfiles/claude/skills` |
+| `~/.claude/hooks` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/dotfiles/claude/hooks` |
 
 ## Layer 1 — LOCAL: runtime wiring (`settings.json` + plugin manifests)
 
@@ -77,5 +77,5 @@ flowchart TD
 
 > Layer 3 (CANONICAL Anthropic contracts) is annotated inline above where
 > it governs a local choice. A fuller canonical corpus is the next phase —
-> see modules/claude/CLAUDE.md and the `claude-code-guide` skill.
+> see `~/code/nixos-config/modules/claude/CLAUDE.md` and the `claude-code-guide` skill.
 
