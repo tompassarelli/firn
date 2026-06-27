@@ -46,6 +46,28 @@ and just do it. The gate fires when the change spans 2+ files or 2+ concerns.
 when 3+ of them were independent and could've run in parallel. The coordinator's
 job is coordination, not execution.
 
+## Measure load — never "freeze the box" (recurring reflex; KILL it)
+
+Before EVER claiming "CPU-gated" / "box busy" / "can't run concurrently" / "keep
+the box quiet" / "protect the measurement by waiting" — **MEASURE**: `nproc` +
+`cat /proc/loadavg`. On a many-core box at low loadavg you are NOT gated. The
+impulse is almost always wrong.
+
+- **LLM-agent / A/B / wall-time work is NETWORK-bound** — spawned agents sit at
+  ~0% CPU waiting on the API, so local work barely touches their wall-time. The
+  real constraint is **API throughput** (concurrent-request limits), not CPU.
+- **Default to PARALLEL.** Fan out background work and keep going; don't idle a
+  whole machine to babysit one job.
+- **Timing-sensitive trials → ISOLATE + MONITOR, never serialize the machine:**
+  pin with `taskset -c`, record loadavg at trial start, discard/rerun any trial
+  whose contention crossed a threshold. "Could there be confounds?" is answered
+  by measure-and-discard, NOT by refusing to do anything else.
+
+This reflex has recurred MULTIPLE times despite correction. Treat any "I should
+keep the box quiet / can't parallelize / wait to protect the timing" thought as a
+**bug in my own reasoning**: stop, run the two commands above, and parallelize
+unless the measured numbers actually forbid it.
+
 ## Agent coordination — lodestar protocol
 
 Work coordination uses lodestar threads. SDK dispatch (`~/code/lodestar/sdk/src/dispatch.ts`)
