@@ -1,0 +1,11 @@
+#lang beagle/nix
+
+(ns default)
+
+(nix/module [config lib pkgs ...]
+  {:tags [javascript]
+   :options.myConfig.modules.bun.enable
+    (lib.mkEnableOption "Bun JavaScript runtime and package manager")
+   :config
+    (lib.mkIf config.myConfig.modules.bun.enable
+      {:environment.systemPackages (nix/with pkgs [bun])})})
