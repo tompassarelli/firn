@@ -13,6 +13,7 @@
     ],
     "defaultMode": "auto"
   },
+  "model": "sonnet",
   "hooks": {
     "SessionStart": [
       {
@@ -48,6 +49,18 @@
             "type": "command",
             "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/firnos-guard.sh",
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/racket-build-guard.sh",
+            "timeout": 15
           }
         ]
       }
@@ -88,5 +101,6 @@
   "skipWorkflowUsageWarning": true,
   "theme": "dark",
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true
+  "voiceEnabled": true,
+  "agentPushNotifEnabled": true
 }
