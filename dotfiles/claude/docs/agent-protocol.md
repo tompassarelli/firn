@@ -15,7 +15,7 @@ Real work → the protocol below.
 - **Work queue** = lodestar threads on `:7977` (`ready`/`next`/`leverage`; claim with
   `driver @agent`). **Agent coordination** = `:7978` coordinator (presence /
   roles / leases).
-- **Spawn**: `~/code/fleet-data/spawn-agent.sh <role[,role]>` — lease-gated roles
+- **Spawn**: `~/code/agent-data/spawn-agent.sh <role[,role]>` — lease-gated roles
   (exclusive → a 2nd holder self-aborts), dormant-until-pinged (~0 idle tokens).
 - **Assign/steer by ROLE** (not uuid): `msg-cli.clj <port> send <from> <role> "<task>"`;
   a message IS the steer. **Observe/steer** live via lodestar web (`:8088`).
@@ -27,4 +27,4 @@ Real work → the protocol below.
 
 Org brain: PLAYBOOK = lodestar thread `2026-06-22-232740` (consult first; append
 learnings via `lodestar tell 2026-06-22-232740 learning "…"`). How-to:
-`~/code/fleet-data/RUNBOOK.md`. Per-repo surface: `~/code/lodestar/CLAUDE.md`.
+`~/code/agent-data/RUNBOOK.md`. Per-repo surface: `~/code/lodestar/CLAUDE.md`.

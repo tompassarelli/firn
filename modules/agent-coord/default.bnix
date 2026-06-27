@@ -6,7 +6,7 @@
 ;; leases, roles, messaging. Part of the lodestar coordination substrate alongside
 ;; lodestar-coord (:7977, thread/work store) and attention-coord (:7980, live
 ;; file-attention). Pinned code: <codeDir>/fram (canonical engine).
-;; Durable log: <codeDir>/fleet-data/claims.log.
+;; Durable log: <codeDir>/agent-data/claims.log.
 ;; Runtime: JVM — long-lived sole-writer wants JIT throughput + real threads.
 
 (nix/module [config lib pkgs ...]
@@ -31,6 +31,6 @@
              :WorkingDirectory (s codeDir "/fram")
              :ExecStart
               (s pkgs.clojure
-                "/bin/clojure -M cnf_coord_daemon.clj serve 7978 " codeDir "/fleet-data/claims.log")
+                "/bin/clojure -M cnf_coord_daemon.clj serve 7978 " codeDir "/agent-data/claims.log")
              :Restart          "always"
              :RestartSec       2}}})}))

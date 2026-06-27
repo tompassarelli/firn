@@ -21,7 +21,7 @@ in
         Type = "simple";
         User = username;
         WorkingDirectory = "${codeDir}/fram";
-        ExecStart = "${pkgs.clojure}/bin/clojure -M cnf_coord_daemon.clj serve 7978 ${codeDir}/fleet-data/claims.log";
+        ExecStart = "${pkgs.clojure}/bin/clojure -M cnf_coord_daemon.clj serve 7978 ${codeDir}/agent-data/claims.log";
         Restart = "always";
         RestartSec = 2;
       };

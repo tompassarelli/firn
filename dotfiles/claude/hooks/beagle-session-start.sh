@@ -17,8 +17,8 @@ set -uo pipefail
 
 # --- agent roster registration (any session, any project) ------------------
 # If this session declares a handle, put it on the :7978 roster + start its heartbeat.
-if [ -n "${FLEET_HANDLE:-}" ] && [ -x "$HOME/code/fleet-data/lodestar-register.sh" ]; then
-  "$HOME/code/fleet-data/lodestar-register.sh" "$FLEET_HANDLE" "$PPID" >/dev/null 2>&1 || true
+if [ -n "${FLEET_HANDLE:-}" ] && [ -x "$HOME/code/agent-data/lodestar-register.sh" ]; then
+  "$HOME/code/agent-data/lodestar-register.sh" "$FLEET_HANDLE" "$PPID" >/dev/null 2>&1 || true
 fi
 
 # Project dir: Claude Code sets CLAUDE_PROJECT_DIR; fall back to cwd.

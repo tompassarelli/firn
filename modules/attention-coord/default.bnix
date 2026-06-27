@@ -7,7 +7,7 @@
 ;; in lodestar web paints live "attending" beams from agent→file; this daemon
 ;; stores the claims those beams are built from. Claims are short-lived (TTL'd
 ;; by the writer hook) so the log stays small. Same JVM runtime as lodestar-coord.
-;; Durable log: <codeDir>/fleet-data/attention-claims.log.
+;; Durable log: <codeDir>/agent-data/attention-claims.log.
 
 (nix/module [config lib pkgs ...]
   (let [username config.myConfig.modules.users.username
@@ -31,6 +31,6 @@
              :WorkingDirectory (s codeDir "/fram")
              :ExecStart
               (s pkgs.clojure
-                "/bin/clojure -M cnf_coord_daemon.clj serve 7980 " codeDir "/fleet-data/attention-claims.log")
+                "/bin/clojure -M cnf_coord_daemon.clj serve 7980 " codeDir "/agent-data/attention-claims.log")
              :Restart          "always"
              :RestartSec       2}}})}))
