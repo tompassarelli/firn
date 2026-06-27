@@ -13,6 +13,7 @@ in
       programs.bash = {
         enable = true;
         shellAliases = {
+          dsp = "--dangerously-skip-permissions";
           du = "dust";
           ls = "eza";
           ps = "procs";

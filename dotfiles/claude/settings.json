@@ -36,6 +36,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/coordinator-edit-guard.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/claim-canonical-guard.sh",
             "timeout": 10
           },

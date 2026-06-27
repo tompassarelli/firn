@@ -23,7 +23,8 @@
                :programs.bash
                 {:enable          true
                  :shellAliases
-                  {:du    "dust"
+                  {:dsp   "--dangerously-skip-permissions"
+                   :du    "dust"
                    :ls    "eza"
                    :ps    "procs"
                    :v     "nvim"
