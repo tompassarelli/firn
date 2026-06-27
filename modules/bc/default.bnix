@@ -1,0 +1,11 @@
+#lang beagle/nix
+
+(ns default)
+
+(nix/module [config lib pkgs ...]
+  {:tags [cli-tools]
+   :options.myConfig.modules.bc.enable
+    (lib.mkEnableOption "Enable bc arbitrary-precision calculator language")
+   :config
+    (lib.mkIf config.myConfig.modules.bc.enable
+      {:environment.systemPackages (nix/with pkgs [bc])})})

@@ -6,6 +6,7 @@
   myConfig.modules.attention-coord.enable = lib.mkDefault true;
   myConfig.modules.atuin.enable = lib.mkDefault true;
   myConfig.modules.bash.enable = lib.mkDefault true;
+  myConfig.modules.bc.enable = lib.mkDefault true;
   myConfig.modules.brightnessctl.enable = lib.mkDefault true;
   myConfig.modules.btop.enable = lib.mkDefault true;
   myConfig.modules.bun.enable = lib.mkDefault true;
