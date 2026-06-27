@@ -39,7 +39,7 @@ reason = (
     "  1. Trivial lookup / single file? No agent at all — bash/grep/read inline.\n"
     "  2. One delegated job? Spawn a worker and steer it:\n"
     "       ~/code/fleet-data/spawn-agent.sh <role>\n"
-    "       ~/code/lodestar/fleet/cli/msg-cli.clj 7978 send <you> <role> \"<task>\"\n"
+    "       ~/code/lodestar/cli/msg-cli.clj 7978 send <you> <role> \"<task>\"\n"
     "     AGENT_LIFECYCLE=ephemeral for one-and-discard; standing (default) to reuse context.\n"
     "  3. Fan-out? Spawn N role-holders, fan work out with msg-cli send, collect via inbox.\n"
     "  Observe: lodestar web :8088. Coordinate: claims on :7978. Work queue: lodestar :7977.\n"
