@@ -30,8 +30,8 @@ rotting silently). This is the anti-rot gate; keep it green.
 
 **Behavior-injecting hooks have an opt-out kill-switch:**
 `CLAUDE_NO_AUTHORING_HOOKS=1` makes the SessionStart beagle handshake and the
-PreToolUse guards (claim-canonical, agent-redirect) no-op — used to pin a
-neutral, confound-free session (e.g. for experiments). Unset = normal behavior.
+PreToolUse claim-canonical guard no-op — used to pin a neutral, confound-free
+session (e.g. for experiments). Unset = normal behavior.
 
 ## Adding new wiring
 

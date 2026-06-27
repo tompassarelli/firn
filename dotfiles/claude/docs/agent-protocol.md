@@ -6,9 +6,11 @@ substrate: persistent, role-based, lease-gated agents that are observable +
 steerable + durably coordinated through the claim graph (raw Agent/Workflow are
 ephemeral, unobservable mid-flight, un-steerable).
 
-**This is enforced by a PreToolUse hook** (`agent-redirect.sh`) that intercepts
-Agent/Workflow calls and redirects them to lodestar agents. Quick lookups → bash/grep/read inline.
-Real work → the protocol below.
+**Use the lodestar MCP tools** (`mcp__lodestar__dispatch`, `mcp__lodestar__spawn`)
+to drive agents, plus the pre-edit gate — not the built-in Agent/Workflow tools.
+(The old `agent-redirect.sh` PreToolUse hook was removed; coordination is the
+tools + the gate now, not a hard intercept.) Quick lookups → bash/grep/read
+inline. Real work → the protocol below.
 
 ## The stack
 
