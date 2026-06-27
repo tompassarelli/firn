@@ -6,12 +6,12 @@ let
   codeDir = config.myConfig.modules.users.codeDir;
 in
 {
-  options.myConfig.modules.framescope.enable = lib.mkEnableOption "Framescope observatory bridge (:8088) — live cockpit for the AI agent fleet";
+  options.myConfig.modules.framescope.enable = lib.mkEnableOption "Lodestar web bridge (:8088) — live observatory cockpit for lodestar agents";
   config = lib.mkIf config.myConfig.modules.framescope.enable {
     systemd.services.framescope = {
-      description = "Framescope — observatory bridge (:8088) projecting the fleet coordinator";
+      description = "Lodestar web — observatory bridge (:8088) projecting the agent coordinator";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" "fleet-coord.service" ];
+      after = [ "network.target" "agent-coord.service" ];
       startLimitIntervalSec = 0;
       environment = {
         HOME = homeDir;

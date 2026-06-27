@@ -1,6 +1,7 @@
 { config, lib, pkgs, ... }:
 
 {
+  myConfig.modules.agent-coord.enable = lib.mkDefault true;
   myConfig.modules.attention-coord.enable = lib.mkDefault true;
   myConfig.modules.atuin.enable = lib.mkDefault true;
   myConfig.modules.bash.enable = lib.mkDefault true;

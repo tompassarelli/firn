@@ -2,17 +2,11 @@
 
 (ns default)
 
-;; Personal Lodestar coordinator (:7977) — the sole-writer daemon serving Tom's
-;; canonical claim log (~/.local/state/lodestar/claims.log). Sibling of fleet-coord
-;; (:7978): same coordinator family, but the PERSONAL store, and on the JVM
-;; (fram/bin/fram-daemon -> `clojure -M cnf_coord_daemon.clj serve-flat`). The JVM
-;; (not babashka) is deliberate per fram-daemon: a long-lived server wants JIT
-;; throughput, real threads, and JVM TLS, which bb's native image lacks. Replaces
-;; the hand-run `lodestar up` (fram-up's detached setsid) with systemd supervision
-;; so :7977 survives logout + reboot. Without this the fleet-by-default model dies
-;; the instant nobody remembers to boot it — :7977 down = no capture, no work queue.
-;; HOME is pinned to the user so `clojure -M` resolves deps from the already-warm
-;; ~/.m2 / ~/.clojure caches (offline), and the daemon writes the canonical log.
+;; Lodestar coordinator (:7977) — sole-writer daemon serving Tom's canonical
+;; claim log (~/.local/state/lodestar/claims.log). Sibling of agent-coord (:7978)
+;; and attention-coord (:7980): same coordinator family, different stores. JVM
+;; runtime — long-lived server wants JIT throughput + real threads. Systemd-managed
+;; so :7977 survives logout + reboot (down = no capture, no work queue).
 
 (nix/module [config lib pkgs ...]
   (let [username config.myConfig.modules.users.username

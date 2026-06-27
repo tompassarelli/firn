@@ -6,7 +6,7 @@
 ;; files each agent is actively reading/editing RIGHT NOW. The dark-room feature
 ;; in the observatory paints live "attending" beams from agent→file; this daemon
 ;; stores the claims those beams are built from. Claims are short-lived (TTL'd
-;; by the writer hook) so the log stays small. Same JVM runtime as fleet-coord.
+;; by the writer hook) so the log stays small. Same JVM runtime as lodestar-coord.
 ;; Durable log: <codeDir>/fleet-data/attention-claims.log.
 
 (nix/module [config lib pkgs ...]
@@ -21,7 +21,7 @@
         {:systemd.services.attention-coord
           {:description           "Attention coordinator — ephemeral claim-graph daemon (:7980) for live agent file-attention tracking"
            :wantedBy              ["multi-user.target"]
-           :after                 ["network.target" "fleet-coord.service"]
+           :after                 ["network.target" "agent-coord.service"]
            :path                  (nix/with pkgs [clojure jdk bash coreutils git])
            :startLimitIntervalSec 0
            :environment           {:HOME homeDir}

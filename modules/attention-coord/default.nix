@@ -11,7 +11,7 @@ in
     systemd.services.attention-coord = {
       description = "Attention coordinator — ephemeral claim-graph daemon (:7980) for live agent file-attention tracking";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" "fleet-coord.service" ];
+      after = [ "network.target" "agent-coord.service" ];
       path = with pkgs; [ clojure jdk bash coreutils git ];
       startLimitIntervalSec = 0;
       environment = {

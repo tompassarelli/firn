@@ -17,7 +17,7 @@
      ;; One home for the per-user facts that were scattered across modules
      ;; (git email/name, ~/code paths). Defaults preserve current behavior;
      ;; the INSTANCE (each host) overrides these — a fork sets them once here
-     ;; instead of editing git/, auto-upgrade/, timezone/, fleet-coord/.
+     ;; instead of editing git/, auto-upgrade/, timezone/, agent-coord/.
      :options.myConfig.modules.users.email
       (lib.mkOption
         {:type        lib.types.str

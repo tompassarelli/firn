@@ -34,7 +34,7 @@ coordinator MUST run this mental gate (one short paragraph, not a doc):
 
 1. **Decompose** — what are the independent subtasks in this change?
 2. **Graph** — which subtasks block which? Draw the dependency edges.
-3. **Dispatch** — independent subtasks go to fleet agents IN PARALLEL. Only
+3. **Dispatch** — independent subtasks go to lodestar agents IN PARALLEL. Only
    sequentialize what genuinely depends on a prior result.
 4. **Coordinate** — the coordinator touches ONLY cross-cutting work that spans
    multiple agents' outputs. If a subtask is self-contained, delegate it.
@@ -46,16 +46,16 @@ and just do it. The gate fires when the change spans 2+ files or 2+ concerns.
 when 3+ of them were independent and could've run in parallel. The coordinator's
 job is coordination, not execution.
 
-## Agent fleet — lodestar protocol, NEVER raw Agent/Workflow
+## Agent coordination — lodestar protocol, NEVER raw Agent/Workflow
 
-**Hook-enforced.** `fleet-redirect.sh` (PreToolUse) intercepts Agent/Workflow and
-redirects them to the fleet. Every session boots as the **layer-0 coordinator**
-(`coordinator-session-start.sh`): decompose + delegate to the persistent fleet,
-don't grind solo. Quick lookups → bash/grep/read inline. Real work → the fleet protocol.
-Kill-switch: `CLAUDE_NO_AUTHORING_HOOKS=1`. Per-session bypass: `/fleet-redirect off`.
+**Hook-enforced.** `agent-redirect.sh` (PreToolUse) intercepts Agent/Workflow and
+redirects to lodestar's persistent agent pool. Every session boots as the
+**layer-0 coordinator** (`coordinator-session-start.sh`): decompose + delegate,
+don't grind solo. Quick lookups → bash/grep/read inline. Real work → lodestar agents.
+Kill-switch: `CLAUDE_NO_AUTHORING_HOOKS=1`. Per-session bypass: `/agent-redirect off`.
 
 Full protocol (spawn/role/steer/observe/concurrency):
-→ [`docs/fleet-protocol.md`](docs/fleet-protocol.md)
+→ [`docs/agent-protocol.md`](docs/agent-protocol.md)
 
 ## Resolve CLAUDE.md files for the work at hand
 

@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/fleet-redirect.sh",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/agent-redirect.sh",
             "timeout": 5
           }
         ]

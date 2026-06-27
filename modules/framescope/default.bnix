@@ -2,27 +2,23 @@
 
 (ns default)
 
-;; Framescope bridge (:8088) — the observatory cockpit that projects a coordinator
-;; (the :7978 fleet by default) into a live web UI: roster, roles, focus, per-agent
-;; think-stream + $ cost. Babashka (bb bridge/bridge.clj), NOT the JVM — it's a thin
-;; SSE/HTTP projection where bb's fast start is fine and its bundled runtime needs no
-;; deps resolution. Replaces the hand-run `observatory/bin/framescope 8088` (a
-;; setsid/nohup detach that kept dying with the shell — the bug that repeatedly
-;; killed the bridge) with systemd supervision so the cockpit is always reachable.
-;; Ordered after fleet-coord since that is the default target daemon.
+;; Lodestar web bridge (:8088) — observatory cockpit projecting the agent
+;; coordinator (:7978) into a live web UI: roster, roles, focus, per-agent
+;; think-stream + $ cost. Babashka (bb bridge/bridge.clj) — thin SSE/HTTP
+;; projection where bb's fast start is fine. Ordered after agent-coord.
 
 (nix/module [config lib pkgs ...]
   (let [username config.myConfig.modules.users.username
         homeDir  config.myConfig.modules.users.homeDir
         codeDir  config.myConfig.modules.users.codeDir]
     {:options.myConfig.modules.framescope.enable
-      (lib.mkEnableOption "Framescope observatory bridge (:8088) — live cockpit for the AI agent fleet")
+      (lib.mkEnableOption "Lodestar web bridge (:8088) — live observatory cockpit for lodestar agents")
      :config
       (lib.mkIf config.myConfig.modules.framescope.enable
         {:systemd.services.framescope
-          {:description           "Framescope — observatory bridge (:8088) projecting the fleet coordinator"
+          {:description           "Lodestar web — observatory bridge (:8088) projecting the agent coordinator"
            :wantedBy              ["multi-user.target"]
-           :after                 ["network.target" "fleet-coord.service"]
+           :after                 ["network.target" "agent-coord.service"]
            :startLimitIntervalSec 0
            :environment           {:HOME homeDir}
            :serviceConfig
