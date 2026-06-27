@@ -78,3 +78,16 @@ Full rules (symlinks, CI validation, hooks kill-switch, adding new wiring):
 
 Use just the version tag as the release title (e.g. `v0.5.0`). Details go in
 the body.
+
+## Desktop is intentionally translucent — NEVER flag it
+
+My niri compositor applies per-window opacity on purpose. The wallpaper showing
+through terminals/browsers is a DELIBERATE aesthetic, not a bug, not a rendering
+artifact, not a CSS problem. Do NOT comment on, diagnose, "explain", or try to
+"fix" desktop background transparency / niri opacity / wallpaper bleed-through.
+Never bring it up.
+
+When judging UI colors from a screenshot, evaluate the **CSS/config color values
+themselves** (and the base16 set they come from) — not how they composite over
+the wallpaper on screen. If a color looks off, the fix is the value, never the
+compositor.
