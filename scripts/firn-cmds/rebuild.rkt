@@ -57,6 +57,21 @@
 (define (host-needs-impure? host)
   (pair? (host-impure-modules host)))
 
+;; Post-activation machine-drift gate (firnos: gate once per rebuild, never poll
+;; per session). The activation that just ran heals known drift (registerMcpServers
+;; etc.); this verifies the heal actually took. Advisory by design — the system has
+;; already switched, so a finding is surfaced loudly but never fails the rebuild.
+(define (run-drift-check)
+  (define checker (in-repo "scripts" "claude-config-check.sh"))
+  (when (file-exists? checker)
+    (printf "┌─ claude-config drift (--local)\n") (flush-output)
+    (cond
+      [(sh (path->string checker) "--local")
+       (printf "└─ ✓ claude-config drift — machine matches the dotfile source of truth\n")]
+      [else
+       (printf "└─ ⚠ claude-config drift (see above) — system already switched; fix dotfiles + re-run `firn rebuild`\n")])
+    (flush-output)))
+
 (define (handle-host-rebuild* host skip-checks?)
   ;; Line-buffer so step headers print before each child process writes
   ;; to fd1. Otherwise (block-buffered pipes) headers appear after their
@@ -237,7 +252,10 @@
        (sh "git" "-C" ROOT "tag" "-f" (string-append "gen-" gen) "HEAD"))
      (printf "\n  ✓ rebuild complete — total ~a~a\n\n"
              (fmt-elapsed total-elapsed)
-             (if gen (format ", tagged gen-~a" gen) ""))]))
+             (if gen (format ", tagged gen-~a" gen) ""))])
+  ;; Both success paths (darwin + linux) fall through here; the failure branch
+  ;; exits above. Verify machine state once, now that activation has run.
+  (run-drift-check))
 
 ;; firn host impact [<host>]  — dry-run rebuild impact prediction
 
