@@ -27,6 +27,25 @@ Thread format, lifecycle derivation, the `lodestar` CLI:
 Concurrent-agent write rules (`tell`/`capture`/`import`/`export` safety):
 → [`docs/lodestar-write-safely.md`](docs/lodestar-write-safely.md)
 
+## Pre-edit gate — MANDATORY before any code change
+
+**Stop before writing code.** Before any Edit/Write/file modification, the
+coordinator MUST run this mental gate (one short paragraph, not a doc):
+
+1. **Decompose** — what are the independent subtasks in this change?
+2. **Graph** — which subtasks block which? Draw the dependency edges.
+3. **Dispatch** — independent subtasks go to fleet agents IN PARALLEL. Only
+   sequentialize what genuinely depends on a prior result.
+4. **Coordinate** — the coordinator touches ONLY cross-cutting work that spans
+   multiple agents' outputs. If a subtask is self-contained, delegate it.
+
+If there's only ONE subtask (a typo fix, a single-file tweak), skip the gate
+and just do it. The gate fires when the change spans 2+ files or 2+ concerns.
+
+**The failure mode this prevents:** grinding through 8 files serially in-context
+when 3+ of them were independent and could've run in parallel. The coordinator's
+job is coordination, not execution.
+
 ## Agent fleet — lodestar protocol, NEVER raw Agent/Workflow
 
 **Hook-enforced.** `fleet-redirect.sh` (PreToolUse) intercepts Agent/Workflow and
