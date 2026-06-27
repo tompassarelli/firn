@@ -4,7 +4,7 @@
 
 ## What the user wants
 
-A comprehensive deep-dive report analyzing 5 interconnected areas of their Claude Code setup. The user is building a custom "ultracode" replacement using lodestar (claim-based task substrate) + a fleet protocol (role-based multi-agent coordination) + framescope (observability UI). They want to understand whether this override delivers real value, what's missing, and how to make lodestar the natural default for task/thought/project management.
+A comprehensive deep-dive report analyzing 5 interconnected areas of their Claude Code setup. The user is building a custom "ultracode" replacement using lodestar (claim-based task substrate) + a fleet protocol (role-based multi-agent coordination) + lodestar-web (observability UI). They want to understand whether this override delivers real value, what's missing, and how to make lodestar the natural default for task/thought/project management.
 
 The final deliverable is a **synthesis report** covering all 5 areas with concrete file evidence, not hand-wavy analysis.
 
@@ -29,7 +29,7 @@ The lodestar/fram fleet agent infrastructure.
 - `~/code/lodestar/CLAUDE.md`
 - `~/code/nixos-config/dotfiles/claude/docs/fleet-protocol.md`
 - CLIs under `~/code/beagle/.scratch/` — presence-cli.clj, msg-cli.clj, fleet-listen-cli.clj, lease-cli.clj
-- Ports: :7977 (lodestar work queue), :7978 (fleet coordinator), :8088 (framescope)
+- Ports: :7977 (lodestar work queue), :7978 (fleet coordinator), :8088 (lodestar-web)
 - Key Qs: Full lifecycle (spawn->role/lease->steer->observe->stop). What roles exist. What's MISSING vs Anthropic Workflow (fan-out, adversarial verify, synthesis)?
 
 ### 3. Lodestar as task management (`lodestar-task-mgmt`)
@@ -47,11 +47,11 @@ What Anthropic's ultracode actually is — canonical definition.
 - Dynamic workflow orchestration — Workflow tool capabilities (pipeline, parallel, barriers, adversarial verify, judge panels, loop-until-dry, completeness critics)
 - Key Qs: Precise definition. Specific capabilities lodestar-native ultracode needs to replicate. Where Anthropic's version is strong vs where persistent fleet could do better.
 
-### 5. Framescope override analysis (`framescope-override`)
+### 5. Framescope override analysis (`lodestar-web-override`)
 The observability UI and gain-of-function analysis.
-- `~/code/framescope/` — README, what it does (tails agent output streams, /steer endpoint)
+- `~/code/lodestar-web/` — README, what it does (tails agent output streams, /steer endpoint)
 - `~/code/fleet-data/RUNBOOK.md` — observe/steer story
-- Key Qs: What framescope IS concretely. WHY override Anthropic ultracode (gains: observability, steerability, persistence, role separation, leases). Has the override delivered value SO FAR or is it aspirational? Honest pros/cons.
+- Key Qs: What lodestar-web IS concretely. WHY override Anthropic ultracode (gains: observability, steerability, persistence, role separation, leases). Has the override delivered value SO FAR or is it aspirational? Honest pros/cons.
 
 ## Current state of the setup
 
