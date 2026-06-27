@@ -4,7 +4,7 @@
 
 ;; Attention coordinator (:7980) — ephemeral claim-graph daemon tracking which
 ;; files each agent is actively reading/editing RIGHT NOW. The dark-room feature
-;; in the observatory paints live "attending" beams from agent→file; this daemon
+;; in lodestar web paints live "attending" beams from agent→file; this daemon
 ;; stores the claims those beams are built from. Claims are short-lived (TTL'd
 ;; by the writer hook) so the log stays small. Same JVM runtime as lodestar-coord.
 ;; Durable log: <codeDir>/fleet-data/attention-claims.log.
@@ -14,7 +14,7 @@
         homeDir  config.myConfig.modules.users.homeDir
         codeDir  config.myConfig.modules.users.codeDir]
     {:options.myConfig.modules.attention-coord.enable
-      (lib.mkEnableOption "Attention coordinator daemon (:7980) — live file-attention tracking for agent observatory dark-room")
+      (lib.mkEnableOption "Attention coordinator daemon (:7980) — live file-attention tracking for lodestar web dark-room")
      :tags [terminal]
      :config
       (lib.mkIf config.myConfig.modules.attention-coord.enable

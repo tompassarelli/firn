@@ -6,7 +6,7 @@ let
   codeDir = config.myConfig.modules.users.codeDir;
 in
 {
-  options.myConfig.modules.attention-coord.enable = lib.mkEnableOption "Attention coordinator daemon (:7980) — live file-attention tracking for agent observatory dark-room";
+  options.myConfig.modules.attention-coord.enable = lib.mkEnableOption "Attention coordinator daemon (:7980) — live file-attention tracking for lodestar web dark-room";
   config = lib.mkIf config.myConfig.modules.attention-coord.enable {
     systemd.services.attention-coord = {
       description = "Attention coordinator — ephemeral claim-graph daemon (:7980) for live agent file-attention tracking";
