@@ -40,7 +40,7 @@ What the `~/code/nixos-config/modules/claude` module materializes into `~/.claud
 - **hooks** (Claude Code fires these at lifecycle points; `⟨src⟩` = settings.json or the plugin that contributes it):
   - `SessionStart` → `beagle-session-start.sh` ⟨settings⟩, `caveman-activate.js` ⟨caveman⟩
   - `UserPromptSubmit` → `caveman-mode-tracker.js` ⟨caveman⟩
-  - `PreToolUse` → `claim-canonical-guard.sh` ⟨settings⟩, `firnos-guard.sh` ⟨settings⟩, `fleet-redirect.sh` ⟨settings⟩, `firnos-guard.sh` ⟨settings⟩
+  - `PreToolUse` → `claim-canonical-guard.sh` ⟨settings⟩, `firnos-guard.sh` ⟨settings⟩
   - `Stop` → `caveman-session-stats.js` ⟨caveman⟩
 
 ### Control flow (lifecycle spine)
@@ -51,7 +51,7 @@ flowchart TD
   B -->|"beagle-session-start.sh · caveman-activate.js"| C[turn loop]
   C --> D{UserPromptSubmit}
   D -->|"caveman-mode-tracker.js"| E["model responds + tools"]
-  E -.->|"PreToolUse: claim-canonical-guard.sh · firnos-guard.sh · fleet-redirect.sh"| E
+  E -.->|"PreToolUse: claim-canonical-guard.sh · firnos-guard.sh"| E
   E --> F{Stop}
   F -->|"caveman-session-stats.js"| C
   G[statusLine] -.->|"every render"| Hs[(".caveman-active + suffix")]

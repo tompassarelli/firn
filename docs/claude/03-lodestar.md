@@ -16,7 +16,7 @@ Claude Code is the **client**; lodestar/fram is the **substrate**.
 
 ## How it plugs into the harness
 
-Three touch-points (cross-ref the levers in `01-canonical.md`):
+Two touch-points (cross-ref the levers in `01-canonical.md`):
 
 1. **MCP servers** — lever ⑥. `fram-mcp` + `lodestar-mcp`, user scope, registered
    in `~/.claude.json` by the `registerMcpServers` activation in `~/code/nixos-config/modules/claude`.
@@ -24,35 +24,21 @@ Three touch-points (cross-ref the levers in `01-canonical.md`):
    (ToolSearch) → ≈0 context cost until used. This is how Claude reads/writes
    claims: `capture` / `tell` / `show` / `ready` / `next` / `leverage` / ….
 
-2. **The fleet protocol** — replaces raw `Agent`/`Workflow`. When work means
-   multiple agents, the sanctioned substrate is lodestar threads on **:7977**
-   (pick/claim work with `driver @agent`) + the **:7978** coordinator (roles +
-   leases), NOT the host's generic spawning. Persistent, role-based, observable,
-   steerable.
-
-3. **Redirect hook** — lever ⑬. `fleet-redirect.sh` (`PreToolUse`) intercepts raw
-   `Agent`/`Workflow` calls and redirects them to the fleet so habit can't bypass it.
-   Kill-switch: `CLAUDE_NO_AUTHORING_HOOKS=1`.
+2. **SDK dispatch** — `~/code/lodestar/sdk/src/dispatch.ts` reads a thread's claims,
+   derives posture (unplanned → plan only, atomic → execute, composite → survey),
+   injects the right prompt + tool restrictions, and streams to lodestar web via
+   `query()` from `@anthropic-ai/claude-agent-sdk`. Thread-level state drives
+   agent behavior — no role-based hooks needed.
 
 ## The seam (why it's structured this way)
 
-Claude reaches the substrate through **MCP** (data) + the **fleet protocol**
-(coordination); the **guard hook** keeps the boundary honest. Concurrency lives in
-the engine — fram's `lease` primitive (`acquire`/`release`/`fence`) — never
-self-rolled in the app. (`driver` = app intent; `lease` = DB mutual-exclusion —
-don't conflate them.)
+Claude reaches the substrate through **MCP** (data) + **SDK dispatch**
+(coordination). Concurrency lives in the engine — fram's `lease` primitive
+(`acquire`/`release`/`fence`) — never self-rolled in the app. (`driver` = app
+intent; `lease` = DB mutual-exclusion — don't conflate them.)
 
 ## Pointers
 
-- Fleet playbook: lodestar thread `2026-06-22-232740` (consult before reaching for tools).
-- Runbook: `~/code/fleet-data/RUNBOOK.md`.
+- Agent playbook: lodestar thread `2026-06-22-232740` (consult before reaching for tools).
 - Write-safety + thread model: `~/code/lodestar/CLAUDE.md`.
 - CNF purity + lodestar-as-client architecture: lodestar thread `2026-06-23-132319`.
-
-## Known gaps (→ next work item)
-
-The integration is **under-leveraged**: the natural reach is still often raw
-`Agent`/`Workflow` (blocked by the guard) rather than the lodestar fleet, and the
-claim tools aren't pulled in as a default coordination surface. Closing those gaps
-— making lodestar the *natural* default rather than the guarded-against fallback —
-is the next task. Brainstorm + fixes tracked separately.

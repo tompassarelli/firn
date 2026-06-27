@@ -14,8 +14,8 @@ The map of how Claude Code is set up on this machine, split by **concern** and
   hooks-vs-skills-vs-CLAUDE.md decision. Update only when the harness changes.
 - **② local map** — **NEVER hand-edit.** Run `firn architecture` (walks disk +
   settings + plugin manifests). A diff here means the system actually moved.
-- **③ lodestar** — the substrate Claude points at, and the fleet protocol that
-  replaces raw `Agent`/`Workflow`.
+- **③ lodestar** — the substrate Claude points at, and the SDK dispatch model
+  that coordinates agent work via thread-driven posture.
 
 ## Reading the whole thing top-to-bottom
 
