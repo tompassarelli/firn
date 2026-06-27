@@ -46,13 +46,11 @@ and just do it. The gate fires when the change spans 2+ files or 2+ concerns.
 when 3+ of them were independent and could've run in parallel. The coordinator's
 job is coordination, not execution.
 
-## Agent coordination — lodestar protocol, NEVER raw Agent/Workflow
+## Agent coordination — lodestar protocol
 
-**Hook-enforced.** `agent-redirect.sh` (PreToolUse) intercepts Agent/Workflow and
-redirects to lodestar's persistent agent pool. Every session boots as the
-**layer-0 coordinator** (`coordinator-session-start.sh`): decompose + delegate,
-don't grind solo. Quick lookups → bash/grep/read inline. Real work → lodestar agents.
-Kill-switch: `CLAUDE_NO_AUTHORING_HOOKS=1`. Per-session bypass: `/agent-redirect off`.
+Work coordination uses lodestar threads. SDK dispatch (`~/code/lodestar/sdk/src/dispatch.ts`)
+derives agent posture from thread claims: unplanned → plan only, atomic → execute,
+composite → survey subtasks.
 
 Full protocol (spawn/role/steer/observe/concurrency):
 → [`docs/agent-protocol.md`](docs/agent-protocol.md)
