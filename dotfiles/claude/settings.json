@@ -32,7 +32,7 @@
         ]
       }
     ],
-    "SubagentSessionStart": [
+    "SubagentStart": [
       {
         "hooks": [
           {
@@ -78,6 +78,16 @@
             "type": "command",
             "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/racket-build-guard.sh",
             "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/lodestar/bin/lodestar-on-tooluse",
+            "timeout": 10
           }
         ]
       }
