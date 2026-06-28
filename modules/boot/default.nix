@@ -6,14 +6,12 @@
     boot.loader.systemd-boot.enable = true;
     boot.loader.efi.canTouchEfiVariables = true;
     boot.kernelModules = [ "uinput" ];
-    boot.kernelParams = [ "amdgpu.gpu_recovery=1" ];
+    boot.kernelParams = [ "amdgpu.gpu_recovery=1" "nmi_watchdog=panic" ];
     boot.kernel.sysctl = {
       "kernel.hardlockup_panic" = 1;
       "kernel.softlockup_panic" = 1;
       "kernel.panic_on_oops" = 1;
       "kernel.panic" = 20;
     };
-    boot.crashDump.enable = true;
-    boot.crashDump.reservedMemory = "512M";
   };
 }

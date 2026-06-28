@@ -390,33 +390,59 @@ fix; dropped in 7a5e18d). Crashes predate the flag (stable 9-day runs happened
 *without* it), so it was never the cause. The BIOS UMA buffer is the legit
 "give the iGPU dedicated VRAM" knob; `sg_display` is unrelated.
 
-**Capture config in place** (`modules/boot/default.bnix`):
+**Capture config in place** (`modules/boot/default.bnix`) — the live stack turns a
+silent freeze into a captured PANIC, then auto-reboots:
 
-- `amdgpu.gpu_recovery=1` — forces amdgpu to reset+log a hung GPU instead of
-  freezing silently. A GPU-induced hang now lands a ring-timeout dump in the
-  journal (flushes after the reset). This is the primary catch for the suspected
-  failure mode. **Diagnostic — remove once root cause is found.**
-- `efi_pstore` (firmware default) — catches kernel **panics** only; survives reboot
-  in UEFI vars, archived to `/var/lib/systemd/pstore/`. Won't catch a no-panic hang.
-- journald `Storage=persistent` — already on; `journalctl -b -1` reads the dead boot.
+- **watchdog→panic** — `kernel.hardlockup_panic=1`, `kernel.softlockup_panic=1`,
+  `kernel.panic_on_oops=1` (sysctls, applied live on switch) + `nmi_watchdog=panic`
+  (kernel param, covers early boot before sysctls run). nmi_watchdog already
+  *detects* hard lockups; this makes detection PANIC instead of logging into the
+  void on a box that never flushes the log.
+- `kernel.panic=20` — auto-reboot 20s after a panic so the box recovers; by then the
+  capture is archived. Keeps an unattended desktop from sitting dead.
+- `efi_pstore` (firmware default) — now the primary catch: freeze→panic dumps the
+  backtrace to UEFI vars, archived to `/var/lib/systemd/pstore/` next boot.
+- `amdgpu.gpu_recovery=1` — amdgpu resets+logs a *recoverable* GPU ring-timeout
+  instead of freezing; journal dump flushes after the reset.
+- journald `Storage=persistent` — `journalctl -b -1` reads the dead boot.
+- **Diagnostic — remove once root cause is found.**
+
+**Paths deliberately NOT taken** (both verified broken on this box, 2026-06-29):
+
+- **ramoops** — this kernel runs ONE pstore backend; `efi_pstore` registers first, so
+  ramoops is ignored (`registering with pstore failed … -16`). And `CONFIG_PSTORE_CONSOLE`
+  is off, so without a continuous mirror ramoops only dumps on panic — redundant with
+  efi_pstore. Worth it ONLY via a kernel rebuild enabling `CONFIG_PSTORE_CONSOLE` +
+  `pstore.backend=ramoops` — then it's a live console mirror that catches a *no-panic*
+  freeze (survives a warm reboot). Deferred until the pstore backtrace proves insufficient.
+- **kdump** (`boot.crashDump`) — reserves `crashkernel=` but NixOS ships NO vmcore-save
+  unit; the capture kernel drops to a shell with no auto-save and no auto-reboot, so it
+  STRANDS an unattended box. Revisit only with a real save+reboot capture init.
+
+**GPU faults have a userspace trigger (2026-06-29, via gjoa):** the Jun-27 SQC
+page-fault → `gfx_0.0.0` ring-timeout was driven by many headless Firefox/WebRender
+instances on amdgpu (Claude dark-mode work). Mitigation: those browser boots now force
+software rendering (llvmpipe), so they no longer touch the GPU. That fault RECOVERED
+(gpu_recovery did its job); the *fatal* silent crashes left no GPU trace, so they
+remain unproven and may be a different cause — the panic stack above is to settle it.
+GPU is `gfx_v11_0_0` (Strix Point APU, VCN 4.0.5); kernel 6.18.35; linux-firmware
+20260519. A gfx11/soc21 ring-hang fix may want a firmware/kernel bump — check upstream.
 
 **After the next crash — checklist:**
 
 ```bash
-journalctl -b -1 | tail -60                                  # did gpu_recovery log a reset?
+ls -R /var/lib/systemd/pstore/                               # panic backtrace captured?
+cat /var/lib/systemd/pstore/*/dmesg.txt 2>/dev/null          # read the backtrace
+journalctl -b -1 | tail -60                                  # last moments of dead boot
 journalctl -b -1 | grep -iE "ring.*timeout|GPU reset|amdgpu.*(hang|fault|reset)"
-ls /sys/fs/pstore/ /var/lib/systemd/pstore/                  # any panic captured?
 journalctl -b -1 | grep -iE "thermal|throttl|mce|hardware error|critical temp"
 ```
 
-- **GPU ring-timeout / reset logged** → confirmed amdgpu hang. Fix is an amdgpu/mesa
-  lever (kernel version, `amdgpu.lockup_timeout`, RADV/mesa bump, IOMMU), NOT sg_display.
-- **Still zero trace + recurs under load/heat** → likely hardware power-cut. Check
-  `sensors` under load, fans/vents, BIOS thermal limits, charger/PSU.
-
-**Escalation if `gpu_recovery=1` still catches nothing** (a true freeze that never
-flushes): add **ramoops** (pstore-ram mirrors dmesg to a reserved RAM region in
-real time, survives a *warm* reboot — the only thing that recovers a no-panic
-hang) or **netconsole** (streams kmsg to another LAN box). ramoops on x86 needs a
-`memmap=`-reserved physical address — set it carefully, it's boot-affecting.
+- **Panic backtrace in pstore** → software lockup; the trace names the subsystem (bet
+  amdgpu/WebRender if it predates the llvmpipe fix). Fix = amdgpu/mesa lever (kernel or
+  firmware bump, `amdgpu.lockup_timeout`, RADV/mesa, IOMMU), NOT sg_display.
+- **GPU ring-timeout / reset logged, no panic** → recoverable amdgpu hang (gpu_recovery).
+- **Still zero trace** (no panic, no pstore) → NMI couldn't fire: true SoC freeze or
+  instant hardware power-cut. THEN do the `CONFIG_PSTORE_CONSOLE` rebuild or netconsole,
+  and check `sensors` under load / fans / BIOS thermal limits / PSU.
 

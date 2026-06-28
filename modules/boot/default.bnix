@@ -13,17 +13,23 @@
        ;; --- crash forensics: whiterabbit silent-freeze hunt (diagnostic) ---
        ;; Goal: convert a no-trace freeze into a CAPTURED event. nmi_watchdog
        ;; already DETECTS hard lockups but is log-only by default — and a dying
-       ;; box never flushes that log. The sysctls below turn detection into a
-       ;; PANIC so efi-pstore (firmware vars) + kdump (full vmcore) actually fire.
-       ;; Remove once the root cause is found.
-       ;; (ramoops was tried but this kernel runs ONE pstore backend — efi_pstore
-       ;;  wins, ramoops is ignored — and without CONFIG_PSTORE_CONSOLE it's
-       ;;  redundant with efi_pstore anyway. It returns only with the PSTORE_CONSOLE
-       ;;  kernel rebuild, where pstore.backend=ramoops gives a live console mirror.)
+       ;; box never flushes that log. We turn detection into a PANIC so efi-pstore
+       ;; (firmware vars, archived to /var/lib/systemd/pstore next boot) grabs the
+       ;; backtrace, then panic=20 auto-reboots. Remove once root cause is found.
+       ;; Paths NOT taken:
+       ;;  - ramoops: this kernel runs ONE pstore backend (efi_pstore wins, ramoops
+       ;;    -16) and without CONFIG_PSTORE_CONSOLE it's redundant. Needs a
+       ;;    PSTORE_CONSOLE kernel rebuild + pstore.backend=ramoops to be worth it.
+       ;;  - kdump (boot.crashDump): reserves crashkernel but NixOS ships no vmcore
+       ;;    save unit — the capture kernel drops to a shell, no auto-save/reboot,
+       ;;    so it STRANDS an unattended box. Revisit only with a real save+reboot
+       ;;    capture init if the pstore backtrace proves insufficient.
        :boot.kernelModules ["uinput"]
 
        ;; gpu_recovery=1: amdgpu resets+logs a hung GPU instead of freezing silent.
-       :boot.kernelParams ["amdgpu.gpu_recovery=1"]
+       ;; nmi_watchdog=panic: hard-lockup detector panics from early boot (cmdline
+       ;; covers the window before systemd-sysctl applies hardlockup_panic).
+       :boot.kernelParams ["amdgpu.gpu_recovery=1" "nmi_watchdog=panic"]
 
        ;; softlockup_panic is the aggressive knob (rare false reboot on a >20s
        ;; stall); set 0 if it ever fires spuriously. panic=20 auto-reboots 20s
@@ -32,8 +38,4 @@
          {"kernel.hardlockup_panic" 1
           "kernel.softlockup_panic" 1
           "kernel.panic_on_oops" 1
-          "kernel.panic" 20}
-
-       ;; kdump: full vmcore on panic (96GB RAM -> 512M reserve is free).
-       :boot.crashDump.enable true
-       :boot.crashDump.reservedMemory "512M"})})
+          "kernel.panic" 20}})})
