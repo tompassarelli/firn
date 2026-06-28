@@ -1,0 +1,11 @@
+#lang beagle/nix
+
+(ns default)
+
+(nix/module [config lib pkgs ...]
+  {:tags [productivity]
+   :options.myConfig.modules.glow.enable
+    (lib.mkEnableOption "glow — terminal markdown renderer (tables, pager, dir browser)")
+   :config
+    (lib.mkIf config.myConfig.modules.glow.enable
+      {:environment.systemPackages (nix/with pkgs [glow])})})
