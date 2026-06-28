@@ -29,7 +29,15 @@
        ;; gpu_recovery=1: amdgpu resets+logs a hung GPU instead of freezing silent.
        ;; nmi_watchdog=panic: hard-lockup detector panics from early boot (cmdline
        ;; covers the window before systemd-sysctl applies hardlockup_panic).
-       :boot.kernelParams ["amdgpu.gpu_recovery=1" "nmi_watchdog=panic"]
+       ;; cwsr_enable=0: ROOT-CAUSE mitigation for the gfx1150 (Radeon 890M) MES
+       ;; ring-hang — broken CWSR saturates the MES ring -> SQC/UTCL2 page-fault ->
+       ;; gfx ring-timeout/reset loop. Known-open regression across kernel 6.18.x +
+       ;; 6.19.x; no upstream fix. Do NOT bump kernel/firmware — newer MES ucode
+       ;; (0x82/0x83) is the trigger, not the fix. Ref: community.frame.work/t/79221.
+       :boot.kernelParams
+         ["amdgpu.gpu_recovery=1"
+          "nmi_watchdog=panic"
+          "amdgpu.cwsr_enable=0"]
 
        ;; softlockup_panic is the aggressive knob (rare false reboot on a >20s
        ;; stall); set 0 if it ever fires spuriously. panic=20 auto-reboots 20s

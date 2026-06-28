@@ -426,7 +426,14 @@ software rendering (llvmpipe), so they no longer touch the GPU. That fault RECOV
 (gpu_recovery did its job); the *fatal* silent crashes left no GPU trace, so they
 remain unproven and may be a different cause — the panic stack above is to settle it.
 GPU is `gfx_v11_0_0` (Strix Point APU, VCN 4.0.5); kernel 6.18.35; linux-firmware
-20260519. A gfx11/soc21 ring-hang fix may want a firmware/kernel bump — check upstream.
+20260519. **Root cause = a known-OPEN amdgpu CWSR regression on gfx1150** (broken
+Compute Wavefront Save/Restore saturates the MES ring → SQC/UTCL2 page-fault →
+ring-timeout/reset loop), present across kernel 6.18.x AND 6.19.x. **Do NOT bump
+kernel/firmware to fix it** — no upstream fix exists, 6.19 still hangs + adds
+reverted regressions, and newer MES microcode (0x82/0x83) is the *trigger* (older
+0x80 didn't hang). Mitigation applied: `amdgpu.cwsr_enable=0`. Last-resort fallback:
+pin kernel 6.17.x (pre-regression). Refs: github.com/pop-os/cosmic-comp/issues/2149,
+community.frame.work/t/79221.
 
 **After the next crash — checklist:**
 

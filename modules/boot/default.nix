@@ -6,7 +6,7 @@
     boot.loader.systemd-boot.enable = true;
     boot.loader.efi.canTouchEfiVariables = true;
     boot.kernelModules = [ "uinput" ];
-    boot.kernelParams = [ "amdgpu.gpu_recovery=1" "nmi_watchdog=panic" ];
+    boot.kernelParams = [ "amdgpu.gpu_recovery=1" "nmi_watchdog=panic" "amdgpu.cwsr_enable=0" ];
     boot.kernel.sysctl = {
       "kernel.hardlockup_panic" = 1;
       "kernel.softlockup_panic" = 1;
