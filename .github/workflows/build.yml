@@ -34,16 +34,12 @@ jobs:
           nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel \
             --override-input beagle github:tompassarelli/beagle/57d84af61b818be247c795d9ae027baefe13febe \
             --override-input fram github:tompassarelli/fram/650e27604b4100b50d9c49a4d7ea82147fef0cb6 \
-            --override-input lodestar github:tompassarelli/lodestar/7b956b1ed9de1fd96bfe6556957dda077e3c88e6 \
-            --override-input lodestar/fram github:tompassarelli/fram/650e27604b4100b50d9c49a4d7ea82147fef0cb6
+            --override-input lodestar github:tompassarelli/lodestar/9fdd1ebd69678c1c0e9d88248767026ad30ba653
           # Why these overrides:
           # - beagle/fram/lodestar are authored as local git+file:///home/tom/...
           #   inputs (fast local iteration); CI can't fetch a path on the author's
           #   machine, so point each at its public github mirror. Local builds keep
           #   the file:// paths.
-          # - lodestar's published flake.nix hardcodes fram as a local path and
-          #   builds fram-engine from it, so the TRANSITIVE lodestar/fram needs
-          #   overriding too. (Real fix belongs in lodestar's flake.)
           # - Pinned to full 40-char SHAs on purpose: a bare github:owner/repo
           #   resolves HEAD via api.github.com, which rate-limits to HTTP 429 on
           #   CI; a full SHA fetches the codeload tarball directly, no API call.
