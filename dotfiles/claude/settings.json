@@ -9,7 +9,9 @@
       "Bash(nix:*)",
       "WebSearch",
       "Bash(./scripts/firn-build)",
-      "Bash(./scripts/firn-validate)"
+      "Bash(./scripts/firn-validate)",
+      "Bash(safe-push)",
+      "Bash(safe-push:*)"
     ],
     "defaultMode": "auto"
   },
