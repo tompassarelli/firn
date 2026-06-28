@@ -77,14 +77,18 @@
         "zig-overlay": "zig-overlay"
       },
       "locked": {
-        "lastModified": 1782604551,
-        "narHash": "sha256-a97w5CwG4aq2XwdBjGbT9T5uWDjb6tBDWVe+ushJJ+k=",
-        "path": "/home/tom/code/beagle-pkgflake",
-        "type": "path"
+        "lastModified": 1782604654,
+        "narHash": "sha256-BpfMsueyjM2isvh/kKn7IFkYYPA6i1qqNwbA7tBj2iY=",
+        "ref": "main",
+        "rev": "b6d1882bf3d2b0b7317c4e0efc211a7bcb29219a",
+        "revCount": 796,
+        "type": "git",
+        "url": "file:///home/tom/code/beagle"
       },
       "original": {
-        "path": "/home/tom/code/beagle-pkgflake",
-        "type": "path"
+        "ref": "main",
+        "type": "git",
+        "url": "file:///home/tom/code/beagle"
       }
     },
     "elephant": {
@@ -240,14 +244,18 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1782604449,
-        "narHash": "sha256-yL41bR8eBEk1GI3SDyy7gtYioQ5rVGE8lUUtfQM4X9I=",
-        "path": "/home/tom/code/fram-pkgflake",
-        "type": "path"
+        "lastModified": 1782607918,
+        "narHash": "sha256-xXywN85xrP3EXTgVS6ionpgnDRongdBJDZeaRC9HvF8=",
+        "ref": "main",
+        "rev": "ea0cde46f05a8d151ce77e29187481acb5497f7b",
+        "revCount": 250,
+        "type": "git",
+        "url": "file:///home/tom/code/fram"
       },
       "original": {
-        "path": "/home/tom/code/fram-pkgflake",
-        "type": "path"
+        "ref": "main",
+        "type": "git",
+        "url": "file:///home/tom/code/fram"
       }
     },
     "fram_2": {
@@ -396,14 +404,18 @@
         "nixpkgs": "nixpkgs_4"
       },
       "locked": {
-        "lastModified": 1782604484,
-        "narHash": "sha256-QZOHZag2LkVitwmTvZdB5xtGI7qDDaGkmCY0sH4ovvA=",
-        "path": "/home/tom/code/lodestar-pkgflake",
-        "type": "path"
+        "lastModified": 1782604547,
+        "narHash": "sha256-6RC6mr+8glW5yjGDXoB2OgFYocDgo73+wjH4u+x6kMc=",
+        "ref": "main",
+        "rev": "36666abe7078798090d225f0b343aa98407e2c2d",
+        "revCount": 102,
+        "type": "git",
+        "url": "file:///home/tom/code/lodestar"
       },
       "original": {
-        "path": "/home/tom/code/lodestar-pkgflake",
-        "type": "path"
+        "ref": "main",
+        "type": "git",
+        "url": "file:///home/tom/code/lodestar"
       }
     },
     "nix-darwin": {

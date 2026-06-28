@@ -7,11 +7,11 @@
 ;; fram-code-author, fram-up). Self-contained — replaces the ~/code/fram/bin
 ;; dev-checkout reliance on PATH. nixpkgs is pinned inside the pkgflake's own
 ;; lock for offline builds, so no `follows` here (overriding it would defeat
-;; that pin). path: URL for now — repoint to github on merge.
+;; that pin). Reads fram main (package/flake merged) via git+file?ref=main.
 (nix/module [config lib pkgs inputs ...]
   {:tags [development]
    :flake-inputs
-    {:fram {:url "path:/home/tom/code/fram-pkgflake"}}
+    {:fram {:url "git+file:///home/tom/code/fram?ref=main"}}
    :options.myConfig.modules.fram.enable
     (lib.mkEnableOption "fram claim-engine CLI suite")
    :config

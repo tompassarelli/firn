@@ -6,11 +6,12 @@
 ;; `beagle-*` tool, each wrapped with the pinned racket 9.1 baked in
 ;; (_BEAGLE_RACKET + PATH + PLTCOLLECTS), so no ambient racket can cause .zo
 ;; skew. This replaces the ~/code/beagle/bin dev-checkout reliance on PATH.
-;; path: URL for now — repoint to a github URL pinned to the commit on merge.
+;; Reads beagle main (where package/flake merged) via git+file?ref=main — robust
+;; to whatever branch the local checkout sits on. Repoint to a github URL off-box.
 (nix/module [config lib pkgs inputs ...]
   {:tags [development]
    :flake-inputs
-    {:beagle {:url "path:/home/tom/code/beagle-pkgflake"
+    {:beagle {:url "git+file:///home/tom/code/beagle?ref=main"
               :inputs.nixpkgs.follows "nixpkgs"}}
    :options.myConfig.modules.beagle.enable
     (lib.mkEnableOption "beagle compiler + CLI suite (racket-pinned, hermetic)")

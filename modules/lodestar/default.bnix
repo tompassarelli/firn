@@ -10,11 +10,11 @@
 ;; loop). NOTE: the pkgflake pulls fram via a flake=false path input
 ;; (path:/home/tom/code/fram), so /home/tom/code/fram must exist at EVAL time on
 ;; this machine. To make portable, repoint that input at a git URL pinned to
-;; FRAM_VERSION. path: URL for now — repoint to github on merge.
+;; FRAM_VERSION. Reads lodestar main (package/flake merged) via git+file?ref=main.
 (nix/module [config lib pkgs inputs ...]
   {:tags [cli-tools]
    :flake-inputs
-    {:lodestar {:url "path:/home/tom/code/lodestar-pkgflake"}}
+    {:lodestar {:url "git+file:///home/tom/code/lodestar?ref=main"}}
    :options.myConfig.modules.lodestar.enable
     (lib.mkEnableOption "Lodestar (life app) CLI + MCP server on PATH")
    :config

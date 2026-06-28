@@ -35,19 +35,19 @@
     };
     beagle = {
       inputs.nixpkgs.follows = "nixpkgs";
-      url = "path:/home/tom/code/beagle-pkgflake";
+      url = "git+file:///home/tom/code/beagle?ref=main";
     };
     elephant = {
       url = "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73";
     };
     fram = {
-      url = "path:/home/tom/code/fram-pkgflake";
+      url = "git+file:///home/tom/code/fram?ref=main";
     };
     gjoa = {
       url = "github:tompassarelli/gjoa";
     };
     lodestar = {
-      url = "path:/home/tom/code/lodestar-pkgflake";
+      url = "git+file:///home/tom/code/lodestar?ref=main";
     };
     nur = {
       url = "github:nix-community/NUR";
