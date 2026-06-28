@@ -3,7 +3,7 @@
 **Threads are claim-native (as of 2026-06-15 — the big cutover).** A thread file
 is `@<id>` + `predicate  object` triple lines + `---` + prose body; refs are
 `@id`, literals are EDN. There is **no `state` enum** — lifecycle is *derived*
-from facts: `committed` (accepted/in-play), `outcome` (done), `abandoned`
+from claims: `committed` (accepted/in-play), `outcome` (done), `abandoned`
 (canceled), `driver` (active now), `depends_on` (blocked). A fresh capture is
 **`committed`** by default. Relatedness is `relates_to @<thread>` (no string
 tags — former tags are `@topic-*` threads). ids are `2026-06-15-150040`.

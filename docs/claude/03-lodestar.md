@@ -6,7 +6,7 @@
 
 ## What it is (one breath)
 
-- **fram** (`~/code/fram`) = the engine. Every fact is a `(subject predicate
+- **fram** (`~/code/fram`) = the engine. Every claim is a `(subject predicate
   object)` claim; lifecycle (committed / done / blocked / active) is DERIVED from
   claims, never a stored status.
 - **lodestar** = the app on fram: a durable thread / intent ledger, served by a
