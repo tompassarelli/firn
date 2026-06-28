@@ -44,6 +44,7 @@
   myConfig.modules.ghostscript.enable = lib.mkDefault true;
   myConfig.modules.ghostty.enable = lib.mkDefault true;
   myConfig.modules.git.enable = lib.mkDefault true;
+  myConfig.modules.gitleaks.enable = lib.mkDefault true;
   myConfig.modules.glow.enable = lib.mkDefault true;
   myConfig.modules.gnome-keyring.enable = lib.mkDefault true;
   myConfig.modules.gnome-screenshot.enable = lib.mkDefault true;
