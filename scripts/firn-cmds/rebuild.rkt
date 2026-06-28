@@ -203,36 +203,6 @@
     [(not rc)
      (printf "└─ ✗ rebuild (~a)\n" (fmt-elapsed rebuild-elapsed))
      (printf "\n  total: ~a — failed\n\n" (fmt-elapsed total-elapsed))
-     ;; Attempt Claude diagnosis if claude CLI is available
-     (define claude-bin (find-executable-path "claude"))
-     (when claude-bin
-       (printf ">> diagnosing with claude...\n")
-       ;; Re-run nix build (eval-only) to capture the error message
-       (define host-name (or host (current-hostname)))
-       (define flake-ref (string-append ROOT "#nixosConfigurations." host-name
-                                        ".config.system.build.toplevel"))
-       (define nix-bin (find-executable-path "nix"))
-       (when nix-bin
-         (define err-port (open-output-string))
-         (parameterize ([current-output-port (open-output-nowhere)]
-                        [current-error-port err-port])
-           (system* nix-bin "build" "--no-link" flake-ref))
-         (define err-text (get-output-string err-port))
-         (when (non-empty-string? err-text)
-           ;; Take last 100 lines to keep the prompt manageable
-           (define err-lines (string-split err-text "\n"))
-           (define tail-lines (take-right err-lines (min 100 (length err-lines))))
-           (define tail-text (string-join tail-lines "\n"))
-           (define diag-port (open-output-string))
-           (parameterize ([current-output-port diag-port])
-             (system* claude-bin "-p"
-                      (string-append
-                       "A NixOS rebuild failed. Diagnose the root cause from this output. "
-                       "Be concise — state the fix in 1-3 sentences.\n\n"
-                       tail-text)))
-           (define diagnosis (get-output-string diag-port))
-           (when (non-empty-string? diagnosis)
-             (printf "\n~a\n" diagnosis)))))
      (exit 1)]
     [on-darwin?
      (printf "└─ ✓ rebuild (~a)\n" (fmt-elapsed rebuild-elapsed))

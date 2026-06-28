@@ -54,7 +54,7 @@
   myConfig.modules.babashka.enable = true;
   myConfig.modules.agent-coord.enable = true;
   myConfig.modules.lodestar-coord.enable = true;
-  myConfig.modules.lodestar-web.enable = true;
+  myConfig.modules.lodestar-web.enable = false;
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
   imports = [ ./_generated-enables.nix ];
 }

@@ -54,6 +54,8 @@
    :myConfig.modules.babashka.enable true
    :myConfig.modules.agent-coord.enable true
    :myConfig.modules.lodestar-coord.enable true
-   :myConfig.modules.lodestar-web.enable true
+   ;; v1 babashka bridge retired -> ~/code/lodestar/web-v1-archive. The live
+   ;; web/ is now an Elixir/Phoenix app needing its own service. Off until wired.
+   :myConfig.modules.lodestar-web.enable false
    :myConfig.modules.stylix.chosenTheme "everforest-dark-hard"
    :imports [(p "./_generated-enables.nix")]})
