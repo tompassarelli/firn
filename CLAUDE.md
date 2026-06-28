@@ -63,30 +63,13 @@ Custom command scripts live in `dotfiles/bin/` as plain executable shell scripts
 
 Run `firn` with no args for the full grid; `firn <node>` for one entity's edges. The CLI should only contain subcommands that operate on the nixos-config repo itself — general-purpose tools like `sandbox`, `vpn`, `gif` etc. stay as standalone scripts in `dotfiles/bin/` (fish has been removed from this repo).
 
-## Schema introspection (use these instead of grepping schema.json)
-
-Before adding/changing options, query the schema:
-
-```bash
-beagle-schema services.openssh.enable               # exact lookup: type, default, enum
-beagle-schema --children services.openssh           # list all sub-options under a prefix
-beagle-schema --search ssh                          # fuzzy substring search
-beagle-schema --json services.openssh.enable        # machine-readable
-```
-
-This is the right way to answer "does option X exist?" or "what type does X want?" — far better than `grep schema.json`.
+## Schema introspection
+→ [`docs/schema-introspection.md`](docs/schema-introspection.md)
+**Read when:** adding or changing any `(set …)` option path, or answering "does option X exist / what type does it want?" — query the schema with `beagle-schema` instead of grepping `schema.json`.
 
 ## Renaming option paths
-
-To rename an option path across all `.bnix` files (e.g., refactoring `myConfig.modules.foo` → `myConfig.modules.bar`):
-
-```bash
-beagle-rename --dry-run myConfig.modules.foo myConfig.modules.bar   # preview
-beagle-rename myConfig.modules.foo myConfig.modules.bar             # apply
-firn validate                                                        # verify clean
-```
-
-Word-boundary matching prevents partial collisions; string literals are skipped. After applying, always re-run `firn validate`.
+→ [`docs/renaming-option-paths.md`](docs/renaming-option-paths.md)
+**Read when:** refactoring an option path across `.bnix` files (e.g. `myConfig.modules.foo` → `bar`) with `beagle-rename`.
 
 ## Editing .bnix source
 
@@ -95,219 +78,40 @@ Use the Edit tool directly on `.bnix` files. The source is beagle/nix s-expressi
 **Every Edit/Write to a `.bnix` file triggers `.claude/hooks/post-edit-check.sh`** automatically — it runs `beagle-syntax` (structural delimiter check) and `beagle-validate` (schema check) on the file and prints actionable hints to stderr. If the hook flags a syntax error, fix delimiters first before deeper edits.
 
 ## Query the compiler instead of grep
-
-For anything mechanical (what's the signature of X, what fields does record R have, who calls this, where is this declared), use the daemon-backed query tools — they answer in ~100ms warm and never go stale:
-
-```bash
-beagle-syntax FILE                      # structural delimiter check (--ledger for trace, --repair --emit-patch for auto-fix)
-beagle-sig NAME FILE...                 # typed signature lookup
-beagle-fields RECORD FILE...            # record fields, types, accessors
-beagle-provides FILE                    # module exports
-beagle-callers NAME FILE...             # call sites
-beagle-impact NAME FILE...              # change impact: callers + transitive
-beagle-expand FILE                      # show macro expansion
-beagle-daemon status                    # confirm the warm cache is up
-beagle-daemon start --watch .           # if not running
-```
-
-The daemon auto-starts on first edit via the PostToolUse hook, but `beagle-daemon status` at session start avoids cold-start delay.
+→ [`docs/compiler-queries.md`](docs/compiler-queries.md)
+**Read when:** you'd otherwise grep `.bnix`/`.rkt` for a signature, record fields, callers, exports, or call sites — use the daemon-backed `beagle-*` query tools (~100ms warm, never stale). Also covers daemon health/start.
 
 ## Repair pipeline (when validate alone isn't enough)
-
-`firn validate` catches most things in seconds. When a bug isn't pinned to one file or the validator says something's wrong but the fix isn't obvious, use the evidence-ranked repair tools. They take a **verify script** as argument — the oracle that decides whether a speculative fix actually worked. This repo ships one:
-
-```bash
-# Confidence-ranked repair queue (does not modify files):
-beagle-repair . scripts/firn-verify
-
-# Auto-apply fixes above the confidence threshold, then re-verify:
-beagle-repair . scripts/firn-verify --auto --threshold 0.85
-
-# Emit a patch you can review before applying:
-beagle-repair . scripts/firn-verify --emit-patch
-```
-
-The pipeline combines six evidence layers (specfix-oracle 0.95, type-error + suggestion 0.90, type-error + fix-plan 0.85, trace + semantic agreement 0.80, semantic suspicion 0.65, blame 0.60) and ranks by confidence.
-
-When stuck on a specific function or after a verify failure:
-
-```bash
-beagle-trace . scripts/firn-verify --focus FN-NAME      # execution trace
-beagle-cascade . scripts/firn-verify --from-failures    # cross-file impact of the failure
-beagle-blame . scripts/firn-verify                      # semantic blame: which form is responsible
-beagle-specfix . scripts/firn-verify                    # speculative fix verified against oracle
-```
-
-`scripts/firn-verify` runs Rungs 1 + 2 (firn-build + firn-validate). Pass `--eval` to it for the heavier Rung 3 (full `nix build`) — only worth it when the validator can't see the bug.
+→ [`docs/repair-pipeline.md`](docs/repair-pipeline.md)
+Evidence-ranked repair tools driven by the `scripts/firn-verify` oracle.
+**Read when:** `firn validate` flags something but the fix isn't obvious, or a bug isn't pinned to one file (`beagle-repair` / `trace` / `cascade` / `blame` / `specfix`).
 
 ## Diagnosing schema errors
-
-When the validator reports an unknown option, type mismatch, or you're about to write a new `(set …)`, use `firn schema explain` instead of digging through `schema.json` by hand:
-
-```bash
-firn schema explain services.openssh.enable                     # bare option path
-firn schema explain "modules/foo.bnix:6:7: unknown option services.opensh.enable"   # paste a validator error directly
-```
-
-Output: type, declarations (links to upstream NixOS module sources), and every `.bnix` file in this repo that references the path. If the path doesn't exist, prints did-you-mean candidates.
+→ [`docs/diagnosing-schema-errors.md`](docs/diagnosing-schema-errors.md)
+**Read when:** the validator reports an unknown option or type mismatch, or you're about to write a new `(set …)` — use `firn schema explain` (paste the validator error directly) instead of digging through `schema.json`.
 
 ## Repo health
 
 `firn repo doctor` runs five checks: untracked `.bnix`/`.nix` (invisible to flake), stale `.nix` outputs (sibling `.bnix` newer), schema cache freshness vs `flake.lock`, orphaned modules (no host enables them directly or via a tag, ignoring `_generated-enables.bnix`), and validator clean. Exits 0 if all pass. Use this before committing if anything feels off.
 
 ## Tags (composition model)
-
-Tags are the **only** way modules get composed. Each module declares which tags it belongs to; each host enables a list of tags; the resolver unions the memberships and subtracts a per-host disabled list. This replaced the legacy `myConfig.bundles.*` pattern (per-bundle sub-options + `mkDefault` proxies), which has been fully removed — there is no `bundles/` directory.
-
-Schema (locked during the bundle→tags audit — 132 enable-wiring hits collapsed into tag membership; 9 value-override hits, all in `browsers` and `theming`, are preserved via `:tag-overrides`):
-
-### Module-side: `modules/<name>/default.bnix`
-
-```clojure
-(nix/module [config lib pkgs ...]
-  {:options.myConfig.modules.<name>.enable
-    (lib.mkEnableOption "...")
-
-   ;; --- tag membership (the only required new clause) ---
-   :tags [browsers gui-only]                  ;; default-on memberships
-   :tags-opt-in [headless-ok]                 ;; opt-in only — host must use +<name>
-   :tag-overrides                             ;; OPTIONAL: per-tag value overrides
-     {browsers {:myConfig.modules.<name>.default true}}
-
-   :config
-     (lib.mkIf config.myConfig.modules.<name>.enable
-       { ... })})
-```
-
-- `:tags` — list of bare symbols. Membership is default-on: enabling the tag enables the module unless the host edits the tag with `-<name>` or hard-disables it.
-- `:tags-opt-in` — same shape, but the module is **not** enabled by the tag automatically. The host must opt in explicitly with `+<name>` in the tag's edit-flag list. Omit the clause when empty.
-- `:tag-overrides` — optional map of `tag => {option-path value, ...}`. When the resolver activates the module *because of* that tag, the listed value-overrides are applied as `mkDefault`. This replaces the small set of non-`enable` proxies the audit flagged (8 in `browsers` for `<browser>.default`, 1 in `theming` for `stylix.chosenTheme`). Omit when not needed.
-
-Tags live in the `.bnix` source only — `firn-build` strips them out, so the generated `.nix` is unchanged.
-
-### Host-side: `hosts/<host>/enabled-tags.bnix`
-
-```clojure
-{:enabled
-  [terminal                                       ;; bare tag = defaults, no edits
-   [browsers -gjoa +qutebrowser-experimental]     ;; vector = tag + edit-flags
-   [theming -nerd-fonts]]
- :disabled [piper auto-upgrade]}                  ;; hard-off, wins over everything
-```
-
-- `:enabled` entries are either a bare symbol (the tag, no edits) or a 1+N vector `[tag flag…]` where each `flag` is a symbol prefixed `-` or `+`:
-  - `-<module>` removes that module from this tag's default-on set (per-tag scope — other tags that include the module still count).
-  - `+<module>` adds the module, but only if the module's `:tags-opt-in` includes this tag.
-- `:disabled` is a global hard-off list applied **after** the union. A module here is off no matter how many tags would otherwise pull it in.
-
-### Resolution algorithm
-
-```
-active := union over each enabled-tag T of (
-  defaults := { m | T appears in m.:tags }
-  minuses  := { x | -x in T's edit-flags }
-  pluses   := { x | +x in T's edit-flags AND T appears in x.:tags-opt-in }
-  (defaults \ minuses) ∪ pluses
-)
-enabled-modules := active \ host.:disabled
-```
-
-For each module in `enabled-modules`, the resolver also walks each tag T it joined via *defaults* (not via `+`) and applies any `:tag-overrides[T]` entries as `mkDefault`. This lets `browsers` set `firefox.default = true` for the module that joined via the `browsers` tag.
-
-### Tooling
-
-```bash
-firn tag list                       # tag universe + module counts
-firn tag show steam                 # tags + opt-in tags + overrides for one module
-firn tag filter gpu-required        # all modules with that tag
-firn tag resolve <host>             # show the active module set + which tag pulled each in
-firn tag index                      # write .beagle-cache/tags.jsonl
-firn tag index stdout               # jsonl to stdout (pipe into jq/fzf)
-```
-
-`firn tag resolve` is the debugger — given a host, it prints each enabled tag, the defaults it contributes, the minus/plus edits, the global disabled mask, and the final union. Use this when "why is module X enabled?" is non-obvious.
-
-**Full reference**: [`docs/TAGS.md`](docs/TAGS.md) — worked examples (kitchen-sink, edited tag, opt-in plus, hard disable) and the fixture used by the validator.
+→ [`docs/tags-composition.md`](docs/tags-composition.md) · full reference [`docs/TAGS.md`](docs/TAGS.md)
+Tags are the ONLY way modules get composed (the legacy `bundles/` is gone): modules declare `:tags`/`:tags-opt-in`/`:tag-overrides`; hosts enable tags in `enabled-tags.bnix`; the resolver unions memberships and subtracts a per-host disabled list.
+**Read when:** adding tag membership to a module, editing a host's `enabled-tags.bnix`, or debugging "why is module X enabled?" (`firn tag resolve`).
 
 ## Flake inputs (codegen)
-
-Modules that need a flake input declare it **co-located** in their `default.bnix` via `:flake-inputs`. `firn build` collects all `:flake-inputs` from every module and splices them into `flake.bnix` between markers. **Never hand-edit the generated sections in `flake.bnix`** — the next `firn build` overwrites them.
-
-Adding a module with a flake input = add the `:flake-inputs` clause. Removing = delete it. No flake.bnix edits needed.
-
-### Module-side
-
-```clojure
-(nix/module [config lib pkgs inputs ...]
-  {:flake-inputs
-    {:walker {:url "github:abenz1267/walker"
-              :inputs.elephant.follows "elephant"}
-     :elephant {:url "github:abenz1267/elephant/..."}}
-   :tags [desktop]
-   :options...
-   :config...})
-```
-
-Each key in `:flake-inputs` is an input name; the value is a map of flake input attributes (`:url`, `:inputs.X.follows`, `:flake`). A module may declare multiple inputs. Inputs with dependencies between them (walker → elephant) are co-declared in the owning module.
-
-### What gets generated
-
-`firn build` splices into 6 marker-delimited sections of `flake.bnix`:
-1. `:inputs` map — the input declarations
-2. Outputs arg list — binding names
-3. NixOS `specialArgs` — `:inputs` map entries
-4. HM `extraSpecialArgs` — same entries
-5. Darwin `specialArgs` — same entries
-6. Darwin HM `extraSpecialArgs` — same entries
-
-Markers look like: `;; --- GENERATED MODULE INPUTS (do not edit) ---`
-
-### Conflict detection
-
-Two modules declaring the same input name with different URLs → hard error. Same name + same URL → silently merged (the first module wins for bookkeeping).
-
-### Debugging
-
-```bash
-firn flake-input resolve show    # list collected inputs + source modules
-firn flake-input resolve emit    # splice into flake.bnix
-```
-
-### What stays hand-authored
-
-Infrastructure inputs (nixpkgs, home-manager, nix-darwin, stylix, sops-nix) and overlay-consumed inputs (kanata-git, glide) remain hand-authored in `flake.bnix` above the markers.
+→ [`docs/flake-inputs.md`](docs/flake-inputs.md)
+Modules declare flake inputs co-located via `:flake-inputs`; `firn build` splices them into `flake.bnix` between markers. **Never hand-edit the generated sections.**
+**Read when:** a module needs a flake input (adding/removing `:flake-inputs`), or `flake.bnix`'s generated input sections look wrong.
 
 ## Discovering platform compatibility
-
-`firn platform list` answers "which modules work on darwin?" by cross-referencing each module's referenced option paths against both the NixOS and darwin schema caches:
-
-```bash
-firn platform list all          # full matrix
-firn platform list darwin       # only darwin-compatible modules
-firn platform list linux        # NixOS-only
-firn platform show <name>       # single module, with blocking paths
-firn platform safelist          # safelist snippet for flake.bnix
-```
-
-Pre-req: `./scripts/firn-extract-schema` and `./scripts/firn-extract-schema --darwin` (separate caches: `.beagle-cache/schema.json` and `.beagle-cache/schema-darwin.json`). `firn repo doctor` warns when the darwin cache is stale.
-
-**Limitation**: this is a schema-compatibility check. Pure-pkg modules whose only setter is `environment.systemPackages` always pass — the option path exists on darwin even when the package has no darwin build. Use `darwin-rebuild build` to verify.
+→ [`docs/platform-compatibility.md`](docs/platform-compatibility.md)
+**Read when:** asking "which modules work on darwin?" or porting config to nix-darwin (`firn platform list`). Pre-req: the NixOS + darwin schema caches.
 
 ## Bumping inputs
-
-To bump nixpkgs and surface deprecations the schema-driven way:
-
-```bash
-firn update                # headline verb: bump every input THEN rebuild (chains `repo upgrade now` + `host rebuild`)
-firn update --no-rebuild   # fetch only: advance flake.lock + schema, install nothing
-firn update --dry-run      # preview the bump; mutate nothing
-firn repo upgrade now      # underlying-graph form of `firn update --no-rebuild`: snapshot, nix flake update, re-extract, diff, validate
-firn repo upgrade dry-run  # underlying-graph form of `firn update --dry-run`
-```
-
-The diff phase highlights any **removed** or **type-changed** option paths that this repo references — those are the actual breakage candidates, not the thousands of unrelated changes you'd see in a raw `nix flake update` log.
-
-**`firn update` moves the lock forward then applies it; `firn rebuild` applies the lock you already have.** That's the whole distinction — `update` mutates flake.lock (new nixpkgs/inputs) then switches; `rebuild` builds + switches against flake.lock unchanged. After a local-only edit (enabled a module, flipped a tag) you want `firn rebuild` — `firn update` would drag in surprise upstream drift. Reach for `firn update` only when you deliberately want newer package versions; `--no-rebuild` is the middle ground (advance the lock now, defer the install). The bump is a **gate, not a prelude**: a failed fetch / schema-extract / validate `exit 1`s before the rebuild is reached, so a known-broken config is never switched. (`firn` for exact flags.)
+→ [`docs/bumping-inputs.md`](docs/bumping-inputs.md)
+`firn update` moves the lock forward then applies it; `firn rebuild` applies the lock you already have.
+**Read when:** bumping nixpkgs/flake inputs or surfacing upstream deprecations the schema-driven way (`firn update`, `firn repo upgrade`).
 
 ## Auto-fixing typos
 
@@ -318,138 +122,14 @@ beagle-validate --auto-fix
 Rewrites unambiguous typos in place (best did-you-mean at edit distance ≤ 2 with a clear gap to the runner-up). Ambiguous cases are left for human review.
 
 ## Importing existing Nix
-
-If the user has hand-written `.nix` and wants to convert to beagle/nix:
-
-```bash
-beagle-import-nix file.nix > file.bnix
-```
-
-Built on rnix-parser (handles 100% of nixpkgs). Output may need manual adjustment to use beagle/nix forms. **Note:** `beagle-import-nix` refuses `flake-file` forms — the project flake must be migrated by hand.
+→ [`docs/importing-nix.md`](docs/importing-nix.md)
+**Read when:** converting hand-written `.nix` to beagle/nix (`beagle-import-nix`). Note: it refuses `flake-file` forms — the project flake is migrated by hand.
 
 ## Verification
-
-There's a tiered loop — pick the right rung for the change.
-
-**Rung 1 — fast (~5s, default for most edits):**
-
-```bash
-./scripts/firn-build       # regenerate any .nix whose .bnix changed
-./scripts/firn-validate    # schema-driven path + type check
-```
-
-`firn-validate` catches unknown option paths, type mismatches (bool/str/int/listOf/nullOr/enum/attrsOf-leaf), enum violations with did-you-mean — at file:line:col precision on the value. Almost every typo/wrong-type bug surfaces here in seconds. This is the right verification for module/tag/host edits where the change is "set X to Y" or "enable Z".
-
-**Rung 2 — drift check (when refactoring beagle/nix itself, or sanity-checking that hand-edited `.nix` matches what beagle would emit):**
-
-```bash
-firn repo diff             # re-emit every .bnix and unified-diff vs committed .nix
-```
-
-**Rung 3 — full evaluation (only when Rung 1 isn't sufficient — e.g. you touched flake inputs, complex module logic, evaluation-time conditionals, or anything the static checker can't see):**
-
-```bash
-nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel --no-link
-```
-
-This catches things the validator can't: input mismatches, evaluation errors in submodule freeformType paths, build-time failures.
-
-**Don't** run `firn host rebuild` to verify — that activates the system (sudo, generation switch, reboot-relevant). Leave that to the user. Use `nix build --no-link` for build-only verification.
-
-**Don't** run `nh` directly either; same reason — it switches the system. `firn host rebuild` wraps `nh` already; it's the user's command.
-
-Only verify whiterabbit. Skip thinkpad-x1e.
+→ [`docs/verification.md`](docs/verification.md)
+**Never** run `firn rebuild` / `nh` to verify — that switches the system (the USER's command). Verify build-only with `nix build --no-link`. Only verify whiterabbit; skip thinkpad-x1e.
+**Read when:** verifying a change — picking the right rung (firn-build + validate → repo diff → full `nix build`).
 
 ## Crash recovery (whiterabbit — silent reboots)
-
-whiterabbit has a history of **hard crashes that leave no trace**: the journal
-for the dying boot is severed mid-line, no shutdown sequence, `/sys/fs/pstore`
-empty. That signature = either an instant hardware power-cut (thermal trip / PSU)
-or a GPU hard-hang that froze the CPU before anything flushed to disk. A clean
-reboot always leaves `Reached target Shutdown` + `systemd-shutdown`; a crash does
-not. This is the tell.
-
-**Diagnose — classify each recent boot as clean vs crash:**
-
-```bash
-for b in -1 -2 -3 -4 -5; do
-  end=$(journalctl -b $b 2>/dev/null | grep -m1 -iE "Reached target (Shutdown|Reboot|Power-Off)|systemd-shutdown")
-  kern=$(journalctl -b $b -o short 2>/dev/null | grep -m1 -oE "6\.[0-9]+\.[0-9]+")
-  [ -n "$end" ] && v=CLEAN || v="*** CRASH (no shutdown seq) ***"
-  printf "boot %s  kernel %-9s  %s\n" "$b" "${kern:-?}" "$v"
-done
-journalctl -b -1 -p err            # errors in the boot that died
-journalctl -b -1 | tail -40        # exact moment of death
-```
-
-**Hardware context — do NOT re-add `amdgpu.sg_display=0`.** This GPU is a Strix
-Point **APU** (Radeon 890M, RADV STRIX1), not a discrete Navi 31. On an APU the
-GPU runs off system RAM via GTT, so scatter-gather display is the *normal* path —
-disabling it is mis-targeted (that flag was a copy-paste from an RX 7900 page-fault
-fix; dropped in 7a5e18d). Crashes predate the flag (stable 9-day runs happened
-*without* it), so it was never the cause. The BIOS UMA buffer is the legit
-"give the iGPU dedicated VRAM" knob; `sg_display` is unrelated.
-
-**Capture config in place** (`modules/boot/default.bnix`) — the live stack turns a
-silent freeze into a captured PANIC, then auto-reboots:
-
-- **watchdog→panic** — `kernel.hardlockup_panic=1`, `kernel.softlockup_panic=1`,
-  `kernel.panic_on_oops=1` (sysctls, applied live on switch) + `nmi_watchdog=panic`
-  (kernel param, covers early boot before sysctls run). nmi_watchdog already
-  *detects* hard lockups; this makes detection PANIC instead of logging into the
-  void on a box that never flushes the log.
-- `kernel.panic=20` — auto-reboot 20s after a panic so the box recovers; by then the
-  capture is archived. Keeps an unattended desktop from sitting dead.
-- `efi_pstore` (firmware default) — now the primary catch: freeze→panic dumps the
-  backtrace to UEFI vars, archived to `/var/lib/systemd/pstore/` next boot.
-- `amdgpu.gpu_recovery=1` — amdgpu resets+logs a *recoverable* GPU ring-timeout
-  instead of freezing; journal dump flushes after the reset.
-- journald `Storage=persistent` — `journalctl -b -1` reads the dead boot.
-- **Diagnostic — remove once root cause is found.**
-
-**Paths deliberately NOT taken** (both verified broken on this box, 2026-06-29):
-
-- **ramoops** — this kernel runs ONE pstore backend; `efi_pstore` registers first, so
-  ramoops is ignored (`registering with pstore failed … -16`). And `CONFIG_PSTORE_CONSOLE`
-  is off, so without a continuous mirror ramoops only dumps on panic — redundant with
-  efi_pstore. Worth it ONLY via a kernel rebuild enabling `CONFIG_PSTORE_CONSOLE` +
-  `pstore.backend=ramoops` — then it's a live console mirror that catches a *no-panic*
-  freeze (survives a warm reboot). Deferred until the pstore backtrace proves insufficient.
-- **kdump** (`boot.crashDump`) — reserves `crashkernel=` but NixOS ships NO vmcore-save
-  unit; the capture kernel drops to a shell with no auto-save and no auto-reboot, so it
-  STRANDS an unattended box. Revisit only with a real save+reboot capture init.
-
-**GPU faults have a userspace trigger (2026-06-29, via gjoa):** the Jun-27 SQC
-page-fault → `gfx_0.0.0` ring-timeout was driven by many headless Firefox/WebRender
-instances on amdgpu (Claude dark-mode work). Mitigation: those browser boots now force
-software rendering (llvmpipe), so they no longer touch the GPU. That fault RECOVERED
-(gpu_recovery did its job); the *fatal* silent crashes left no GPU trace, so they
-remain unproven and may be a different cause — the panic stack above is to settle it.
-GPU is `gfx_v11_0_0` (Strix Point APU, VCN 4.0.5); kernel 6.18.35; linux-firmware
-20260519. **Root cause = a known-OPEN amdgpu CWSR regression on gfx1150** (broken
-Compute Wavefront Save/Restore saturates the MES ring → SQC/UTCL2 page-fault →
-ring-timeout/reset loop), present across kernel 6.18.x AND 6.19.x. **Do NOT bump
-kernel/firmware to fix it** — no upstream fix exists, 6.19 still hangs + adds
-reverted regressions, and newer MES microcode (0x82/0x83) is the *trigger* (older
-0x80 didn't hang). Mitigation applied: `amdgpu.cwsr_enable=0`. Last-resort fallback:
-pin kernel 6.17.x (pre-regression). Refs: github.com/pop-os/cosmic-comp/issues/2149,
-community.frame.work/t/79221.
-
-**After the next crash — checklist:**
-
-```bash
-ls -R /var/lib/systemd/pstore/                               # panic backtrace captured?
-cat /var/lib/systemd/pstore/*/dmesg.txt 2>/dev/null          # read the backtrace
-journalctl -b -1 | tail -60                                  # last moments of dead boot
-journalctl -b -1 | grep -iE "ring.*timeout|GPU reset|amdgpu.*(hang|fault|reset)"
-journalctl -b -1 | grep -iE "thermal|throttl|mce|hardware error|critical temp"
-```
-
-- **Panic backtrace in pstore** → software lockup; the trace names the subsystem (bet
-  amdgpu/WebRender if it predates the llvmpipe fix). Fix = amdgpu/mesa lever (kernel or
-  firmware bump, `amdgpu.lockup_timeout`, RADV/mesa, IOMMU), NOT sg_display.
-- **GPU ring-timeout / reset logged, no panic** → recoverable amdgpu hang (gpu_recovery).
-- **Still zero trace** (no panic, no pstore) → NMI couldn't fire: true SoC freeze or
-  instant hardware power-cut. THEN do the `CONFIG_PSTORE_CONSOLE` rebuild or netconsole,
-  and check `sensors` under load / fans / BIOS thermal limits / PSU.
-
+→ [`docs/crash-recovery.md`](docs/crash-recovery.md)
+**Read when:** whiterabbit hard-crashed / silent-rebooted — classifying clean vs crash boots, reading pstore/journal, amdgpu CWSR hang diagnosis. Do NOT bump kernel/firmware or re-add `amdgpu.sg_display=0`; the mitigation is `amdgpu.cwsr_enable=0`.
