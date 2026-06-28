@@ -29,4 +29,10 @@ jobs:
           nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel \
             --override-input beagle github:tompassarelli/beagle \
             --override-input fram github:tompassarelli/fram \
-            --override-input lodestar github:tompassarelli/lodestar
+            --override-input lodestar github:tompassarelli/lodestar \
+            --override-input lodestar/fram github:tompassarelli/fram
+          # lodestar's own flake.nix hardcodes `fram.url = "path:/home/tom/code/fram"`
+          # (a local path leaked into a published flake) and builds fram-engine from
+          # it, so overriding the top-level fram isn't enough — the TRANSITIVE
+          # lodestar/fram must be overridden too. Real fix belongs in lodestar's
+          # flake (point fram at github or follow the consumer's input).

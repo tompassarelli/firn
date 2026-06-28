@@ -55,9 +55,12 @@ else
   err "settings.json is not valid JSON ($SETTINGS)"
 fi
 
-# 3. every wired hook command resolves to an existing +x file under hooks/ ----
+# 3. every wired IN-REPO hook command resolves to an existing +x file --------
 #    path-style-agnostic: match by basename so absolute, \$HOME, or repo-relative
-#    command paths all validate against the tracked hooks/ dir.
+#    command paths all validate against the tracked hooks/ dir. Hook commands
+#    pointing OUTSIDE the repo (a sibling project's bin/, e.g.
+#    ~/code/lodestar/bin/lodestar-on-spawn) are external — the repo can't vouch
+#    for them and CI can't see them, so they're noted, not failed.
 if python3 - "$SETTINGS" "$HOOKS" <<'PY'
 import json, sys, os
 settings, hooks_dir = sys.argv[1], sys.argv[2]
@@ -73,7 +76,17 @@ for ev, groups in (cfg.get("hooks") or {}).items():
                 cmds.append((ev, h["command"]))
 bad = 0
 for ev, c in cmds:
-    base = os.path.basename(c.split()[0])
+    cmd_path = c.split()[0]
+    d = os.path.dirname(cmd_path).replace(os.sep, "/")
+    # External hook: an absolute path that does NOT live under the repo's
+    # dotfiles/claude/hooks (a sibling project's bin/, e.g. lodestar-on-spawn).
+    # The repo can't vouch for it and CI can't see it -> note, don't fail.
+    # In-repo hooks (bare name, or a path under dotfiles/claude/hooks) are
+    # still validated strictly against the tracked hooks/ dir.
+    if d and not d.endswith("dotfiles/claude/hooks"):
+        print(f"note: hook {ev} -> external {cmd_path} (outside repo; not checked)")
+        continue
+    base = os.path.basename(cmd_path)
     p = os.path.join(hooks_dir, base)
     if os.path.isfile(p) and os.access(p, os.X_OK):
         print(f"ok:   hook {ev} -> {base} exists + executable")
