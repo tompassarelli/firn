@@ -7,6 +7,7 @@
   myConfig.modules.atuin.enable = lib.mkDefault true;
   myConfig.modules.bash.enable = lib.mkDefault true;
   myConfig.modules.bc.enable = lib.mkDefault true;
+  myConfig.modules.beagle.enable = lib.mkDefault true;
   myConfig.modules.brightnessctl.enable = lib.mkDefault true;
   myConfig.modules.btop.enable = lib.mkDefault true;
   myConfig.modules.bun.enable = lib.mkDefault true;
@@ -36,6 +37,7 @@
   myConfig.modules.firefox.palefox.enable = lib.mkDefault false;
   myConfig.modules.firefox.default = lib.mkDefault true;
   myConfig.modules.forgejo-cli.enable = lib.mkDefault true;
+  myConfig.modules.fram.enable = lib.mkDefault true;
   myConfig.modules.freetds.enable = lib.mkDefault true;
   myConfig.modules.gcc.enable = lib.mkDefault true;
   myConfig.modules.gh.enable = lib.mkDefault true;

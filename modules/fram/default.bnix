@@ -1,0 +1,21 @@
+#lang beagle/nix
+
+(ns default)
+
+;; fram CLI suite from the packaged flake. The default package's /bin holds
+;; `fram` plus the fram-* helpers (fram-mcp, fram-daemon, fram-primer,
+;; fram-code-author, fram-up). Self-contained — replaces the ~/code/fram/bin
+;; dev-checkout reliance on PATH. nixpkgs is pinned inside the pkgflake's own
+;; lock for offline builds, so no `follows` here (overriding it would defeat
+;; that pin). path: URL for now — repoint to github on merge.
+(nix/module [config lib pkgs inputs ...]
+  {:tags [development]
+   :flake-inputs
+    {:fram {:url "path:/home/tom/code/fram-pkgflake"}}
+   :options.myConfig.modules.fram.enable
+    (lib.mkEnableOption "fram claim-engine CLI suite")
+   :config
+    (lib.mkIf config.myConfig.modules.fram.enable
+      {:environment.systemPackages
+        [(get (get inputs.fram.packages pkgs.stdenv.hostPlatform.system)
+           :default)]})})

@@ -6,6 +6,7 @@
   myConfig.modules.atuin.enable = lib.mkDefault true;
   myConfig.modules.bash.enable = lib.mkDefault true;
   myConfig.modules.bc.enable = lib.mkDefault true;
+  myConfig.modules.beagle.enable = lib.mkDefault true;
   myConfig.modules.btop.enable = lib.mkDefault true;
   myConfig.modules.claude.enable = lib.mkDefault true;
   myConfig.modules.containers.enable = lib.mkDefault true;
@@ -17,6 +18,7 @@
   myConfig.modules.fastfetch.enable = lib.mkDefault true;
   myConfig.modules.fd.enable = lib.mkDefault true;
   myConfig.modules.forgejo-cli.enable = lib.mkDefault true;
+  myConfig.modules.fram.enable = lib.mkDefault true;
   myConfig.modules.gh.enable = lib.mkDefault true;
   myConfig.modules.ghostscript.enable = lib.mkDefault true;
   myConfig.modules.ghostty.enable = lib.mkDefault true;

@@ -33,11 +33,21 @@
       url = "github:tompassarelli/glide";
       flake = false;
     };
+    beagle = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "path:/home/tom/code/beagle-pkgflake";
+    };
     elephant = {
       url = "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73";
     };
+    fram = {
+      url = "path:/home/tom/code/fram-pkgflake";
+    };
     gjoa = {
       url = "github:tompassarelli/gjoa";
+    };
+    lodestar = {
+      url = "path:/home/tom/code/lodestar-pkgflake";
     };
     nur = {
       url = "github:nix-community/NUR";
@@ -58,7 +68,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, gjoa, nur, palefox, quickshell, walker, zen-browser, ... }: let
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, fram, gjoa, lodestar, nur, palefox, quickshell, walker, zen-browser, ... }: let
     firnModules = ./modules;
   in
   {
@@ -66,8 +76,11 @@
       system = system;
       specialArgs = ({
         inputs = {
+          beagle = beagle;
           elephant = elephant;
+          fram = fram;
           gjoa = gjoa;
+          lodestar = lodestar;
           nur = nur;
           palefox = palefox;
           quickshell = quickshell;
@@ -98,8 +111,11 @@
           home-manager.backupFileExtension = "backup";
           home-manager.extraSpecialArgs = ({
             inputs = {
+              beagle = beagle;
               elephant = elephant;
+              fram = fram;
               gjoa = gjoa;
+              lodestar = lodestar;
               nur = nur;
               palefox = palefox;
               quickshell = quickshell;
@@ -253,8 +269,11 @@
       system = system;
       specialArgs = ({
         inputs = {
+          beagle = beagle;
           elephant = elephant;
+          fram = fram;
           gjoa = gjoa;
+          lodestar = lodestar;
           nur = nur;
           palefox = palefox;
           quickshell = quickshell;
@@ -309,8 +328,11 @@
             home-manager.backupFileExtension = "backup";
             home-manager.extraSpecialArgs = ({
               inputs = {
+                beagle = beagle;
                 elephant = elephant;
+                fram = fram;
                 gjoa = gjoa;
+                lodestar = lodestar;
                 nur = nur;
                 palefox = palefox;
                 quickshell = quickshell;

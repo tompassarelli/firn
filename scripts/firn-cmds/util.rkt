@@ -58,9 +58,14 @@
 ;; ---------- repo discovery ----------
 
 (define (looks-like-firn-repo? p)
+  ;; flake.rkt is the pre-migration artifact; the repo's flake source is now
+  ;; flake.bnix (compiled to flake.nix). Checking flake.rkt made find-repo-root
+  ;; ALWAYS fall back to $HOME/code/nixos-config — so firn run from a git
+  ;; worktree silently operated on the main checkout. Accept either layout.
   (and (directory-exists? p)
        (file-exists? (build-path p "scripts" "firn-build"))
-       (file-exists? (build-path p "flake.rkt"))))
+       (or (file-exists? (build-path p "flake.bnix"))
+           (file-exists? (build-path p "flake.rkt")))))
 
 (define (find-repo-root)
   ;; Repo discovery, in order of preference:

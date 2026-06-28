@@ -1,0 +1,21 @@
+#lang beagle/nix
+
+(ns default)
+
+;; beagle CLI suite from the packaged flake. The /bin holds `beagle` plus every
+;; `beagle-*` tool, each wrapped with the pinned racket 9.1 baked in
+;; (_BEAGLE_RACKET + PATH + PLTCOLLECTS), so no ambient racket can cause .zo
+;; skew. This replaces the ~/code/beagle/bin dev-checkout reliance on PATH.
+;; path: URL for now — repoint to a github URL pinned to the commit on merge.
+(nix/module [config lib pkgs inputs ...]
+  {:tags [development]
+   :flake-inputs
+    {:beagle {:url "path:/home/tom/code/beagle-pkgflake"
+              :inputs.nixpkgs.follows "nixpkgs"}}
+   :options.myConfig.modules.beagle.enable
+    (lib.mkEnableOption "beagle compiler + CLI suite (racket-pinned, hermetic)")
+   :config
+    (lib.mkIf config.myConfig.modules.beagle.enable
+      {:environment.systemPackages
+        [(get (get inputs.beagle.packages pkgs.stdenv.hostPlatform.system)
+           :default)]})})

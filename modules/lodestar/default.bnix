@@ -2,14 +2,23 @@
 
 (ns default)
 
-(nix/module [config lib pkgs ...]
-  (let
-    [lodestar
-      (pkgs.writeShellScriptBin "lodestar"
-        (ms "#!/usr/bin/env bash" "# `lodestar` on PATH = the life-app wrapper (aims the domain-neutral Fram" "# engine at your private claim data). The wrapper in ~/code/lodestar/bin is" "# the source of truth; this only puts it on PATH declaratively." "# Engine: ~/code/fram · data: ~/code/lodestar-data (XDG ~/.local/state/lodestar)." "exec \"$HOME/code/lodestar/bin/lodestar\" \"$@\""))]
-    {:tags [cli-tools]
-     :options.myConfig.modules.lodestar.enable
-      (lib.mkEnableOption "Lodestar (life app) CLI on PATH")
-     :config
-      (lib.mkIf config.myConfig.modules.lodestar.enable
-        {:environment.systemPackages [lodestar]})}))
+;; lodestar CLI suite from the packaged flake. The default package's /bin holds
+;; `lodestar` and `lodestar-mcp`, bb-wrapped with FRAM_HOME baked to the bundled
+;; fram-engine and bb on PATH — self-contained, no separate fram clone needed at
+;; consume time. Replaces the old writeShellScriptBin wrapper that exec'd
+;; ~/code/lodestar/bin/lodestar (the dev-checkout reliance that broke the repair
+;; loop). NOTE: the pkgflake pulls fram via a flake=false path input
+;; (path:/home/tom/code/fram), so /home/tom/code/fram must exist at EVAL time on
+;; this machine. To make portable, repoint that input at a git URL pinned to
+;; FRAM_VERSION. path: URL for now — repoint to github on merge.
+(nix/module [config lib pkgs inputs ...]
+  {:tags [cli-tools]
+   :flake-inputs
+    {:lodestar {:url "path:/home/tom/code/lodestar-pkgflake"}}
+   :options.myConfig.modules.lodestar.enable
+    (lib.mkEnableOption "Lodestar (life app) CLI + MCP server on PATH")
+   :config
+    (lib.mkIf config.myConfig.modules.lodestar.enable
+      {:environment.systemPackages
+        [(get (get inputs.lodestar.packages pkgs.stdenv.hostPlatform.system)
+           :default)]})})
