@@ -69,61 +69,22 @@ full grid, or `firn <node>` for one entity's edges.
 
 ## Secrets
 
-Secrets go through [sops-nix](https://github.com/Mic92/sops-nix): the
-encrypted `secrets/*.yaml` are committed (safe — they're encrypted), the
-private age key stays machine-local at `/var/lib/sops-nix/key.txt` (never in
-the repo), and `.sops.yaml` lists the public age recipients.
+[sops-nix](https://github.com/Mic92/sops-nix): encrypted `secrets/*.yaml` are
+committed, the private age key stays machine-local, `.sops.yaml` lists the
+public recipients. Only `awscli` and `clockify` use secrets — both opt-in, off
+by default, so the config builds clean without them.
 
-Only two modules use secrets — `awscli` and `clockify` — both opt-in (off
-unless a host enables them) and both expose a `sopsFile` option so a fork
-points them at its own encrypted file.
-
-**Forking — bring your own:**
-
-```bash
-age-keygen -o ~/.config/sops/age/keys.txt           # prints your public key
-# put that public key in .sops.yaml as the `admin` recipient
-cp secrets/aws.yaml.example secrets/aws.yaml         # fill real values
-sops --encrypt --in-place secrets/aws.yaml           # encrypt to your key
-sudo install -Dm600 ~/.config/sops/age/keys.txt /var/lib/sops-nix/key.txt
-```
-
-Or simplest: **don't enable `awscli`/`clockify`** — nothing else needs
-secrets, and the config builds clean without them. The
-`secrets/*.yaml.example` files document the cleartext structure of each.
+→ **[docs/secrets.md](docs/secrets.md)** — key layout + bring-your-own-key fork recipe.
 
 ## Architecture
 
-- **Module** = atom. One package or service. Lives in
-  `modules/<name>/default.bnix` (with a regenerated `default.nix`
-  sibling).
-- **Tags** = composition. A module joins a tag via `:tags` (default-on)
-  or `:tags-opt-in` (opt-in) in its `.bnix`. Hosts declare a tag
-  selection; the resolver unions per-tag memberships and subtracts a
-  per-host disabled list. See [docs/TAGS.md](docs/TAGS.md).
-- **Host** = leaf. `hosts/<host>/configuration.bnix` sets options;
-  `hosts/<host>/enabled-tags.bnix` picks the tag set.
+**Module** = atom (one package/service, `modules/<name>/default.bnix`).
+**Tags** = composition (a module declares `:tags`; hosts select tags; the
+resolver unions memberships minus a per-host disabled list).
+**Host** = leaf (`configuration.bnix` + `enabled-tags.bnix`). `.bnix` is the
+source, `.nix` is generated — both committed, edit the `.bnix`.
 
-`firn rebuild` runs `firn-build` → `firn-validate` → `nixos-rebuild` →
-tag. Modules auto-discover via the flake's dynamic `imports` — adding a
-module means creating the directory + `.bnix`, running `firn-build`,
-and `git add`-ing both files. No flake edits.
-
-```
-.
-├── flake.bnix         source-of-truth flake (#lang beagle/nix)
-├── flake.nix          generated
-├── modules/  hosts/    .bnix source (+ generated .nix siblings)
-├── scripts/           firn (CLI), firn-build, firn-validate, firn-extract-schema
-├── template/          starting point for `nix flake init -t`
-├── dotfiles/  secrets/  assets/
-├── docs/              TAGS.md — composition model
-└── tests/             validator regression fixtures (.bnix)
-```
-
-Both `.bnix` and `.nix` are committed because the flake reads from the
-git tree. **Edit the `.bnix`** — `firn-build` overwrites direct `.nix`
-edits.
+→ **[docs/architecture.md](docs/architecture.md)** — resolver chain, repo layout, module auto-discovery.
 
 ## Documentation
 
