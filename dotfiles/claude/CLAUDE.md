@@ -121,6 +121,32 @@ Reproducibility is the point. Editing `~/.claude/*` edits nixos-config directly
 Full rules (symlinks, CI validation, hooks kill-switch, adding new wiring):
 → [`docs/nixos-config-rules.md`](docs/nixos-config-rules.md)
 
+## Pushing to GitHub — push freely; the secret scan is the guard, not a human
+
+Default: **PUSH WITHOUT ASKING.** Do not gate routine pushes on human approval —
+across many parallel agents that doesn't scale, and it's why work piles up
+unpushed. When a change is at a sensible checkpoint (coherent commit, green
+build/tests), push it. The human is not a push bottleneck.
+
+What makes this safe is the **secret scan**, not human eyeballs:
+- Push via **`safe-push`** (on PATH), not raw `git push`. It scans the
+  to-be-pushed commits with gitleaks, refuses force/destructive pushes, and pushes
+  the current branch to its upstream. A clean scan ⇒ safe to publish. The guard
+  travels with the command, so it protects even repos that have no commit-time hook.
+- Still NEVER chain `git commit && git push` in one command — commit, let the
+  commit hook run, then `safe-push`.
+
+STOP and do NOT auto-push only for these (the real "compelling reasons"):
+- gitleaks flags a secret / key / credential → FIX the leak; never push it.
+  (`safe-push` blocks this automatically.)
+- Force-push / history rewrite of already-published commits (`--force`, rebased
+  shared history) → deliberate, manual.
+- Making a private repo **public**, or pushing clearly-sensitive content to a
+  public repo.
+- The commits aren't yours to publish (another agent's in-flight WIP).
+
+Everything else: push.
+
 ## GitHub releases: version only in title
 
 Use just the version tag as the release title (e.g. `v0.5.0`). Details go in

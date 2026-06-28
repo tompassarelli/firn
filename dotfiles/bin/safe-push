@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# safe-push — the standing-authorized way to push to GitHub without asking a human.
+# Encodes the global CLAUDE.md "push freely" policy as a MECHANICAL check so every
+# agent pushes identically-safe: scan the to-be-pushed commits for secrets, refuse
+# force/destructive pushes, then push the current branch to its upstream. Any guard
+# trip => nothing is pushed, nonzero exit. The secret scan — not a human — is the
+# guard, and it travels with this command, so it protects repos that have no
+# commit-time hook (lodestar/fram/beagle today).
+#
+# Usage:  safe-push              push current branch to origin
+#         safe-push --dry-run    run the scan + checks, do not push
+set -euo pipefail
+
+git rev-parse --show-toplevel >/dev/null 2>&1 || { echo "safe-push: not in a git repo"; exit 1; }
+branch=$(git rev-parse --abbrev-ref HEAD)
+[ "$branch" = "HEAD" ] && { echo "safe-push: detached HEAD — checkout a branch first"; exit 1; }
+
+dry=0
+for a in "$@"; do
+  case "$a" in
+    --dry-run) dry=1 ;;
+    -f|--force|--force-with-lease|--mirror|--delete|--prune)
+      echo "safe-push: refuses '$a' — force/destructive pushes are deliberate + manual, not automatic"; exit 1 ;;
+  esac
+done
+
+# --- the load-bearing guard: secret scan of the commits about to be pushed -------
+command -v gitleaks >/dev/null 2>&1 || { echo "safe-push: gitleaks not on PATH — refusing to push without a secret scan"; exit 1; }
+if up=$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null); then
+  range="${up}..HEAD"
+  [ -z "$(git rev-list "$range" 2>/dev/null)" ] && { echo "safe-push: nothing to push ($branch is up to date with $up)"; exit 0; }
+  echo "safe-push: scanning $range for secrets…"
+  gitleaks detect --no-banner --redact --log-opts="$range" \
+    || { echo "safe-push: ✗ SECRET DETECTED — fix the leak; NOT pushed."; exit 1; }
+else
+  echo "safe-push: no upstream yet — scanning full history for secrets…"
+  gitleaks detect --no-banner --redact \
+    || { echo "safe-push: ✗ SECRET DETECTED — fix the leak; NOT pushed."; exit 1; }
+fi
+
+if [ "$dry" = 1 ]; then
+  echo "safe-push: ✓ clean (--dry-run) — would push $branch -> origin"
+  exit 0
+fi
+echo "safe-push: ✓ clean — pushing $branch -> origin"
+git push -u origin "$branch"
