@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse guard — FirnOS nixos-config.
+# PreToolUse guard — firn nixos-config.
 # ============================================================================
 # Two jobs, both deterministic (a CLAUDE.md line is model-discretion and gets
 # forgotten — this hook is the layer that can't be):
@@ -38,7 +38,7 @@ session = str(data.get("session_id", "nosession"))
 NIXOS = "/code/nixos-config/"
 
 DIGEST = (
-    "⚠ You are editing the FirnOS nixos-config repo (~/code/nixos-config). "
+    "⚠ You are editing the firn nixos-config repo (~/code/nixos-config). "
     "Follow its CLAUDE.md. Non-negotiable:\n"
     "1. Edit .bnix sources, NEVER .nix. The .nix is GENERATED; `firn build` "
     "overwrites hand-edits. Host config too: hosts/<host>/configuration.bnix, not .nix.\n"
@@ -50,7 +50,7 @@ DIGEST = (
     "4. Secrets: sops-nix only (secrets/*.yaml). Never plaintext creds in the repo.\n"
     "5. New module = create modules/<name>/default.bnix, `firn build`, git add both files "
     "(flake auto-imports the dir). Enable it in hosts/<host>/configuration.bnix or via a tag.\n"
-    "Invoke the `firnos` skill for the full workflow."
+    "Invoke the `firn` skill for the full workflow."
 )
 
 # --- Job 1: inject rules once per session on a nixos-config edit ---
@@ -62,7 +62,7 @@ if tool in ("Edit", "Write", "MultiEdit"):
         real = fp
     if NIXOS in (real + "/") or NIXOS in (fp + "/"):
         safe = re.sub(r"[^A-Za-z0-9_.-]", "_", session)
-        marker = os.path.join("/tmp", "claude-firnos-guard.%s" % safe)
+        marker = os.path.join("/tmp", "claude-firn-guard.%s" % safe)
         if not os.path.exists(marker):
             try:
                 open(marker, "w").close()

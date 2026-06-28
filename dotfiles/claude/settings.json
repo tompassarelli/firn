@@ -15,7 +15,6 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "sonnet",
   "hooks": {
     "SessionStart": [
       {
@@ -24,6 +23,22 @@
             "type": "command",
             "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/beagle-session-start.sh",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "/home/tom/code/lodestar/bin/lodestar-on-spawn",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SubagentSessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/lodestar/bin/lodestar-on-spawn",
+            "timeout": 15
           }
         ]
       }
@@ -39,7 +54,7 @@
           },
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/firnos-guard.sh",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/firn-guard.sh",
             "timeout": 10
           }
         ]
@@ -49,7 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/firnos-guard.sh",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/firn-guard.sh",
             "timeout": 10
           }
         ]
@@ -102,7 +117,7 @@
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "theme": "dark",
+  "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true,
-  "agentPushNotifEnabled": true
+  "voiceEnabled": true
 }

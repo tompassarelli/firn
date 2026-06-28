@@ -1,7 +1,7 @@
 #!/usr/bin/env racket
 #lang racket/base
 
-;; firn — FirnOS config management CLI.
+;; firn — config management CLI.
 ;;
 ;; Compile to a standalone binary with `./scripts/firn-build-bin`.
 ;;
@@ -326,7 +326,7 @@
 ;; ---------- help ----------
 
 (define (cmd-help _args)
-  (printf "firn — FirnOS config management\n\n")
+  (printf "firn — config management\n\n")
   (printf "Usage:\n  firn <node> <edge> [<leaf>]  [<node> <edge> [<leaf>] ...]\n\n")
   (printf "Common shortcuts (default host is auto-detected):\n")
   (printf "  firn update           bump all flake inputs + rebuild (--no-rebuild = fetch only)\n")

@@ -1,6 +1,6 @@
 # Tags — composition model
 
-Tags are the **only** composition primitive in firnos. A module joins zero or
+Tags are the **only** composition primitive in firn. A module joins zero or
 more tags by declaring them in its `.bnix` source; a host enables a list of
 tags; the resolver computes the active module set by union-then-subtract.
 

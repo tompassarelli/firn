@@ -24,7 +24,7 @@ Both `.bnix` and `.nix` are committed because the flake reads from the git tree.
 
 **Always run `./scripts/firn-build` before `nix build` / `nixos-rebuild` if any `.bnix` source changed.** Otherwise the rebuild uses stale `.nix`. Editing `.nix` directly is wrong — the next firn-build overwrites it.
 
-Reference: the [beagle repo](https://github.com/Autonymy/beagle) — DSL forms, the build/validate pipeline, and the schema toolchain. macOS works via nix-darwin (`lib.mkDarwinSystem`, `darwinConfigurations`); `firn rebuild` detects Darwin and dispatches to `darwin-rebuild`.
+Reference: the [beagle repo](https://github.com/tompassarelli/beagle) — DSL forms, the build/validate pipeline, and the schema toolchain. macOS works via nix-darwin (`lib.mkDarwinSystem`, `darwinConfigurations`); `firn rebuild` detects Darwin and dispatches to `darwin-rebuild`.
 
 ## Nix Flakes: New Files Must Be Git-Tracked
 
@@ -38,7 +38,7 @@ One namespace: `myConfig.modules.*` (atoms — one package or service per module
 
 Multi-file modules (chrome, firefox, glide, kanata, nyxt, stylix, system, users) split `default.bnix` (option declarations) and `<name>.bnix` (mkIf config).
 
-**Full reference**: the [beagle repo](https://github.com/Autonymy/beagle) — every DSL form, clause, and emitter. [`docs/TAGS.md`](docs/TAGS.md) — tag-driven composition model, worked examples, resolution algorithm.
+**Full reference**: the [beagle repo](https://github.com/tompassarelli/beagle) — every DSL form, clause, and emitter. [`docs/TAGS.md`](docs/TAGS.md) — tag-driven composition model, worked examples, resolution algorithm.
 
 ## Rules
 

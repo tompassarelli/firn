@@ -1,4 +1,4 @@
-title = "FirnOS gitleaks config"
+title = "firn gitleaks config"
 
 [extend]
 useDefault = true
@@ -28,7 +28,7 @@ regex = '''AGE-SECRET-KEY-[A-Z0-9]+'''
 tags = ["sops", "age"]
 
 [allowlist]
-description = "FirnOS global allowlist"
+description = "firn global allowlist"
 paths = [
   '''\.sops\.yaml''',
   '''secrets/.*\.yaml''',

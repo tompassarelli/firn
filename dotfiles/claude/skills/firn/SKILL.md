@@ -1,19 +1,19 @@
 ---
-name: firnos
+name: firn
 description: >-
   Use WHENEVER editing this user's NixOS configuration at ~/code/nixos-config
-  (FirnOS) — adding or removing a package/module, enabling a service, changing
+  (firn) — adding or removing a package/module, enabling a service, changing
   host config, wiring hooks/skills, bumping inputs, or any "install X
   system-wide" request. The config's write interface is beagle/nix (.bnix files
   that compile to .nix); editing .nix directly is WRONG (it is generated). This
   skill carries the edit→firn build→firn validate loop, the rule that the system
   switch (firn rebuild) is the user's to run, sops-only secrets, tag-driven
   composition, and the schema-query tools. NOT for general Nix in other repos —
-  this is specifically the FirnOS repo workflow. Pairs with beagle-authoring
+  this is specifically the firn repo workflow. Pairs with beagle-authoring
   (the .bnix language itself). The full reference is ~/code/nixos-config/CLAUDE.md.
 ---
 
-# FirnOS — editing ~/code/nixos-config
+# firn — editing ~/code/nixos-config
 
 The **write interface is beagle/nix**: `.bnix` source compiles to `.nix`. Nix is
 the build target, **not** the source of truth. Read `~/code/nixos-config/CLAUDE.md`

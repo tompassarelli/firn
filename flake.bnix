@@ -2,7 +2,7 @@
 
 (ns flake)
 
-{:description "FirnOS - A modular, shareable NixOS configuration framework"
+{:description "firn — typed authoring layer for NixOS/nix-darwin; catches config typos and type errors at the source line, before rebuild"
  :inputs
   {:nixpkgs {:url "github:nixos/nixpkgs/nixos-26.05"}
    :nixpkgs-unstable {:url "github:nixos/nixpkgs/nixos-unstable"}
@@ -18,11 +18,11 @@
    :kanata-git {:url "github:jtroo/kanata" :flake false}
    :glide {:url "github:tompassarelli/glide" :flake false}
    ;; --- GENERATED MODULE INPUTS (do not edit) ---
-   :beagle {:inputs.nixpkgs.follows "nixpkgs" :url "path:/home/tom/code/beagle-pkgflake"}
+   :beagle {:inputs.nixpkgs.follows "nixpkgs" :url "git+file:///home/tom/code/beagle?ref=main"}
    :elephant {:url "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73"}
-   :fram {:url "path:/home/tom/code/fram-pkgflake"}
+   :fram {:url "git+file:///home/tom/code/fram?ref=main"}
    :gjoa {:url "github:tompassarelli/gjoa"}
-   :lodestar {:url "path:/home/tom/code/lodestar-pkgflake"}
+   :lodestar {:url "git+file:///home/tom/code/lodestar?ref=main"}
    :nur {:url "github:nix-community/NUR"}
    :palefox {:url "github:tompassarelli/palefox"}
    :quickshell {:inputs.nixpkgs.follows "nixpkgs" :url "git+https://git.outfoxxed.me/outfoxxed/quickshell"}
@@ -397,7 +397,7 @@
             {:hostname   "ashashi"
              :hostConfig (p "./hosts/ashashi/configuration.nix")})}
        :templates.default
-        {:description "FirnOS starter configuration" :path (p "./template")}
+        {:description "firn starter configuration" :path (p "./template")}
        :devShells.x86_64-linux.default
         (let [pkgs nixpkgs.legacyPackages.x86_64-linux]
           (pkgs.mkShell

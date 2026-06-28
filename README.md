@@ -1,15 +1,16 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/firnos-logo.png" width="150">
-    <source media="(prefers-color-scheme: light)" srcset="assets/firnos-logo-dark.png" width="150">
-    <img alt="FirnOS" src="assets/firnos-logo.png" width="150">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/firn-logo.png" width="150">
+    <source media="(prefers-color-scheme: light)" srcset="assets/firn-logo-dark.png" width="150">
+    <img alt="firn" src="assets/firn-logo.png" width="150">
   </picture>
 </p>
 
-**FirnOS is a source-aware authoring layer for NixOS and nix-darwin.**
+**firn is a typed front-end for NixOS and nix-darwin — it catches option
+typos and type errors at the source line, before `nixos-rebuild` ever runs.**
 
 Keeps the standard NixOS module model, swaps in a small Racket DSL
-([beagle/nix](https://github.com/Autonymy/beagle)) for authoring,
+([beagle/nix](https://github.com/tompassarelli/beagle)) for authoring,
 adds pre-eval diagnostics that catch option typos and type errors at
 the source line — typically cutting edit/validate loops from
 ~30 seconds to ~5 seconds.
@@ -26,12 +27,12 @@ hosts/laptop/configuration.bnix:11:47: type mismatch at boot.loader.systemd-boot
 
 `file:line:col` precision on the value, with did-you-mean suggestions,
 before `nixos-rebuild` runs. That's the whole pitch — the validator
-lives in [beagle](https://github.com/Autonymy/beagle).
+lives in [beagle](https://github.com/tompassarelli/beagle).
 
 ## Who is this for?
 
-This repository is two things at once: the FirnOS framework, and the
-author's real NixOS + nix-darwin config built on it. To use FirnOS for
+This repository is two things at once: the firn framework, and the
+author's real NixOS + nix-darwin config built on it. To use firn for
 your own machines, **start from [`template/`](template/)**. The full
 repo (`hosts/whiterabbit/`, ~166 modules) is here as a study
 reference, not as something to fork wholesale.
@@ -39,8 +40,8 @@ reference, not as something to fork wholesale.
 ## Quick start
 
 ```bash
-nix flake init -t github:tompassarelli/firnos     # drops template/ in cwd
-git clone https://github.com/Autonymy/beagle ../beagle    # compiler + validator
+nix flake init -t github:tompassarelli/firn     # drops template/ in cwd
+git clone https://github.com/tompassarelli/beagle ../beagle    # compiler + validator
 cp /etc/nixos/hardware-configuration.nix .
 # edit hosts/my-machine/configuration.bnix and hosts/my-machine/enabled-tags.bnix
 ./scripts/firn-build && nixos-rebuild switch --flake .#my-machine
@@ -90,7 +91,7 @@ source, `.nix` is generated — both committed, edit the `.bnix`.
 
 - [docs/TAGS.md](docs/TAGS.md) — tag-driven composition model,
   resolution algorithm, worked examples
-- [Autonymy/beagle](https://github.com/Autonymy/beagle) —
+- [tompassarelli/beagle](https://github.com/tompassarelli/beagle) —
   the DSL itself: compiler, validator, schema extractor, migration tool
 - The `firn` CLI is self-documenting: `firn` (full grid),
   `firn <node>` (one entity), `firn schema explain <path>` (schema

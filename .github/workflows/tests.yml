@@ -11,12 +11,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          path: firnos
+          path: firn
 
       - name: Checkout beagle (sibling clone — firn-build expects ../beagle)
         uses: actions/checkout@v4
         with:
-          repository: Autonymy/beagle
+          repository: tompassarelli/beagle
           path: beagle
 
       - uses: cachix/install-nix-action@v27
@@ -24,18 +24,26 @@ jobs:
           nix_path: nixpkgs=channel:nixos-25.05
 
       - name: Install Racket
+        # Base racket on PATH; the link + drift steps below override it with
+        # beagle's flake-pinned racket via _beagle-racket.
         run: nix profile install nixpkgs#racket
 
-      - name: Link beagle package
+      - name: Link beagle package (beagle's pinned racket — MUST match firn-build)
+        # firn-build sources beagle/bin/_beagle-racket and runs under beagle's
+        # flake-pinned racket. beagle-lib MUST be linked with that SAME racket,
+        # or the collection lands in nixpkgs#racket's package DB and firn-build
+        # dies under the pinned racket with "collection not found: beagle/private/*".
+        # (nixpkgs#racket and beagle's pin are versioned independently — 9.2 vs 9.1.)
         run: |
-          raco pkg install --auto --batch --link --force "$GITHUB_WORKSPACE/beagle/beagle-lib"
-          raco setup beagle
+          source "$GITHUB_WORKSPACE/beagle/bin/_beagle-racket"
+          "$RACO" pkg install --auto --batch --link --force "$GITHUB_WORKSPACE/beagle/beagle-lib"
+          "$RACO" setup beagle
 
       - name: Drift check (.bnix and .nix in sync)
         # Regenerates every .nix from its sibling .bnix and fails if any
         # generated file differs from what's committed. Forces .bnix to
         # remain the source of truth.
-        working-directory: firnos
+        working-directory: firn
         env:
           BEAGLE_PATH: ${{ github.workspace }}/beagle
         run: |

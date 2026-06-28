@@ -1,5 +1,5 @@
 {
-  description = "FirnOS - A modular, shareable NixOS configuration framework";
+  description = "firn — typed authoring layer for NixOS/nix-darwin; catches config typos and type errors at the source line, before rebuild";
   inputs = {
     nixpkgs = {
       url = "github:nixos/nixpkgs/nixos-26.05";
@@ -390,7 +390,7 @@
       };
     };
     templates.default = {
-      description = "FirnOS starter configuration";
+      description = "firn starter configuration";
       path = ./template;
     };
     devShells.x86_64-linux.default = let

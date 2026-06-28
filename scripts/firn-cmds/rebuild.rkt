@@ -57,7 +57,7 @@
 (define (host-needs-impure? host)
   (pair? (host-impure-modules host)))
 
-;; Post-activation machine-drift gate (firnos: gate once per rebuild, never poll
+;; Post-activation machine-drift gate (firn: gate once per rebuild, never poll
 ;; per session). The activation that just ran heals known drift (registerMcpServers
 ;; etc.); this verifies the heal actually took. Advisory by design — the system has
 ;; already switched, so a finding is surfaced loudly but never fails the rebuild.

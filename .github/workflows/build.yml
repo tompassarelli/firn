@@ -20,10 +20,13 @@ jobs:
             extra-substituters = https://nix-community.cachix.org https://walker.cachix.org https://walker-git.cachix.org https://devenv.cachix.org https://quickshell.cachix.org
             extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= walker.cachix.org-1:fG8q+uAaMqhsMxWjwvk0IMb4mFPFLqHjuvfwQxE4oJM= walker-git.cachix.org-1:vmC0ocfPWh0S/vRAQGtChuiZBTAe4wiKDeyyXM0/7pM= devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw= quickshell.cachix.org-1:vBm3s5tZThc5KDLj6zhHVCMp8wX/AZJwle9wqdi81ts=
       - name: Build whiterabbit
-        # palefox is pinned in flake.lock to a github rev — no override
-        # needed. (Earlier versions of this workflow overrode it because
-        # the flake briefly pointed at a local path; that's no longer
-        # true. Locked-rev evaluation also avoids the 401 you get when
-        # nix tries to resolve `HEAD` of a cross-org public repo through
-        # GITHUB_TOKEN.)
-        run: nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel
+        # beagle/fram/lodestar are authored as local `git+file:///home/tom/...`
+        # inputs (fast local iteration on the sibling repos). CI can't fetch a
+        # path on the author's machine, so override each to its public github
+        # mirror for the build. Local `firn rebuild` keeps using the file:// paths.
+        # (palefox is already a github input — no override needed.)
+        run: |
+          nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel \
+            --override-input beagle github:tompassarelli/beagle \
+            --override-input fram github:tompassarelli/fram \
+            --override-input lodestar github:tompassarelli/lodestar
