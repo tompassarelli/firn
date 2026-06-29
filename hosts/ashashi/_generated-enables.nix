@@ -24,7 +24,9 @@
   myConfig.modules.ghostty.enable = lib.mkDefault true;
   myConfig.modules.git.enable = lib.mkDefault true;
   myConfig.modules.gitleaks.enable = lib.mkDefault true;
+  myConfig.modules.glow.enable = lib.mkDefault true;
   myConfig.modules.imagemagick.enable = lib.mkDefault true;
+  myConfig.modules.jq.enable = lib.mkDefault true;
   myConfig.modules.lodestar.enable = lib.mkDefault true;
   myConfig.modules.opencode.enable = lib.mkDefault true;
   myConfig.modules.procs.enable = lib.mkDefault true;

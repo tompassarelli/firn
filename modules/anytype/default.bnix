@@ -3,7 +3,7 @@
 (ns default)
 
 (nix/module [config lib pkgs ...]
-  {:tags [productivity]
+  {:tags [notes]
    :options.myConfig.modules.anytype.enable
     (lib.mkEnableOption "Anytype — local-first knowledge/notes workspace")
    :config

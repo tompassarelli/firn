@@ -3,7 +3,7 @@
 (ns default)
 
 (nix/module [config lib pkgs ...]
-  {:tags [productivity]
+  {:tags [notes]
    :options.myConfig.modules.obsidian.enable
     (lib.mkEnableOption "Obsidian note-taking")
    :config

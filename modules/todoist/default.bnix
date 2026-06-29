@@ -3,7 +3,7 @@
 (ns default)
 
 (nix/module [config lib pkgs ...]
-  {:tags [productivity]
+  {:tags [tasks]
    :options.myConfig.modules.todoist.enable
     (lib.mkEnableOption "Todoist task manager")
    :config

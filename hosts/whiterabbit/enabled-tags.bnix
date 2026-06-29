@@ -21,7 +21,9 @@
    [creative -blender -gimp -godot]
    [media -youtube-music]
    communication
-   [productivity -libreoffice -pomodoro -todoist]
+   [office -libreoffice]
+   notes
+   writing
    [vpn -protonvpn-cli]]
  :disabled [glide wine wowup zoom]
 }

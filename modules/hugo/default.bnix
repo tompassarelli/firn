@@ -3,7 +3,7 @@
 (ns default)
 
 (nix/module [config lib pkgs ...]
-  {:tags [productivity]
+  {:tags [writing]
    :options.myConfig.modules.hugo.enable
     (lib.mkEnableOption "Hugo static site generator")
    :config

@@ -3,7 +3,7 @@
 (ns default)
 
 (nix/module [config lib pkgs ...]
-  {:tags [productivity]
+  {:tags [office]
    :options.myConfig.modules.pandoc.enable
     (lib.mkEnableOption "Pandoc document converter")
    :config

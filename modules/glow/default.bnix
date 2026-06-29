@@ -3,7 +3,7 @@
 (ns default)
 
 (nix/module [config lib pkgs ...]
-  {:tags [productivity]
+  {:tags [cli-tools]
    :options.myConfig.modules.glow.enable
     (lib.mkEnableOption "glow — terminal markdown renderer (tables, pager, dir browser)")
    :config
