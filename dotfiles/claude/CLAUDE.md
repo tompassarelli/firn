@@ -77,6 +77,18 @@ composite → survey subtasks.
 Full protocol (spawn/role/steer/observe/concurrency):
 → [`docs/agent-protocol.md`](docs/agent-protocol.md)
 
+## Model selection for parallel work — right tier per agent
+→ [`docs/model-selection.md`](docs/model-selection.md)
+Match the model tier to the task's REASONING DEMAND, not its importance.
+Cheap-and-wide (Haiku/Sonnet) for discovery; expensive-and-narrow (Opus) for
+judgment. Coordinator stays on Opus; workers economize.
+**Personal lean:** greenfield/compiler work lacks priors, so benchmarks
+under-sell Opus there — when ambiguous OR Sonnet's visibly slow, use Opus.
+Sonnet is a separate Max usage bucket (use it to spare Opus headroom; fall back
+to Opus when it's exhausted).
+**Read when:** fanning out agents and choosing `model`/`effort` per agent
+(Agent tool, Workflow `opts.model`, cavecrew tiers).
+
 ## Resolve CLAUDE.md files for the work at hand
 
 Before editing/advising in a repo, identify its root `CLAUDE.md` for essential context.
