@@ -100,11 +100,9 @@
                      "if ! $CLAUDE mcp get lodestar >/dev/null 2>&1; then\n"
                      "  run timeout 30 $CLAUDE mcp add lodestar -s user -- $HOME/code/lodestar/bin/lodestar-mcp || true\n"
                      "fi\n"
-                     ;; Linear MSA workspaces (HTTP/OAuth, no inline secret) — declared so
-                     ;; the drift-checker treats them as known, not rot. Auth is per-machine.
-                     "if ! $CLAUDE mcp get linear-mcp-msa-old >/dev/null 2>&1; then\n"
-                     "  run timeout 30 $CLAUDE mcp add --transport http linear-mcp-msa-old https://mcp.linear.app/mcp -s user || true\n"
-                     "fi\n"
+                     ;; Linear MSA workspace (HTTP/OAuth, no inline secret) — declared so
+                     ;; the drift-checker treats it as known, not rot. Auth is per-machine.
+                     ;; (linear-mcp-msa-old retired 2026-06-30.)
                      "if ! $CLAUDE mcp get linear-mcp-msa-new >/dev/null 2>&1; then\n"
                      "  run timeout 30 $CLAUDE mcp add --transport http linear-mcp-msa-new https://mcp.linear.app/mcp -s user || true\n"
                      "fi\n"))})}})}))

@@ -1,0 +1,11 @@
+#lang beagle/nix
+
+(ns default)
+
+(nix/module [config lib pkgs ...]
+  {:tags [office]
+   :options.myConfig.modules.gnumeric.enable
+    (lib.mkEnableOption "Gnumeric lightweight spreadsheet (xlsx/ods/csv viewer)")
+   :config
+    (lib.mkIf config.myConfig.modules.gnumeric.enable
+      {:environment.systemPackages (nix/with pkgs [gnumeric])})})

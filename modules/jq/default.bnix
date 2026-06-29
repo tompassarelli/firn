@@ -1,0 +1,11 @@
+#lang beagle/nix
+
+(ns default)
+
+(nix/module [config lib pkgs ...]
+  {:tags [cli-tools]
+   :options.myConfig.modules.jq.enable
+    (lib.mkEnableOption "jq command-line JSON processor")
+   :config
+    (lib.mkIf config.myConfig.modules.jq.enable
+      {:environment.systemPackages (nix/with pkgs [jq])})})
