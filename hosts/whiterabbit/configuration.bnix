@@ -49,10 +49,12 @@
    :myConfig.modules.appimage.enable true
    :myConfig.modules.codex.enable true
    :myConfig.modules.vscode.enable true
-   :myConfig.modules.windows-vm.enable true
+   :myConfig.modules.windows-vm.enable false
    :myConfig.modules.nh.enable true
    :myConfig.modules.babashka.enable true
-   :myConfig.modules.agent-coord.enable true
+   ;; agent-coord (:7978) retired — port-partition fix moved presence/coordination
+   ;; onto the canonical :7977 (lodestar-coord); :7978 had no live readers (web is off).
+   :myConfig.modules.agent-coord.enable false
    :myConfig.modules.lodestar-coord.enable true
    ;; v1 babashka bridge retired -> ~/code/lodestar/web-v1-archive. The live
    ;; web/ is now an Elixir/Phoenix app needing its own service. Off until wired.

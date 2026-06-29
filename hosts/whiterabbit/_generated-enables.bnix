@@ -56,6 +56,7 @@
    :myConfig.modules.gnome-keyring.enable (lib.mkDefault true)
    :myConfig.modules.gnome-screenshot.enable (lib.mkDefault true)
    :myConfig.modules.gnumake.enable (lib.mkDefault true)
+   :myConfig.modules.gnumeric.enable (lib.mkDefault true)
    :myConfig.modules.gpu-screen-recorder.enable (lib.mkDefault true)
    :myConfig.modules.graphviz.enable (lib.mkDefault true)
    :myConfig.modules.grim.enable (lib.mkDefault true)
