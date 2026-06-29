@@ -138,6 +138,15 @@ STOP and do NOT auto-push only for these (the real "compelling reasons"):
 
 Everything else: push.
 
+## Internal notes go in `docs/private/` — never public `docs/`
+
+Internal agent notes, session status, scratch, and handoffs go in `docs/private/`
+(gitignored), NEVER in a public `docs/`. The public `docs/` is end-user-facing only.
+This applies to EVERY software project. Before writing an internal note in a repo,
+ensure the ignore exists: `~/code/lodestar/bin/ensure-private-docs` (idempotent —
+adds `docs/private/` to that repo's `.gitignore`). lodestar's spawn hook + SDK
+harness announce this to every agent automatically; the rule here is the anchor.
+
 ## GitHub releases: version only in title
 
 Use just the version tag as the release title (e.g. `v0.5.0`). Details go in
