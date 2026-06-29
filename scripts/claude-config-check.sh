@@ -171,7 +171,7 @@ if [ "$LOCAL" -eq 1 ]; then
 
   # 8. --local: MCP registration in ~/.claude.json — the exact rot that pointed
   #    fram at the demo corpus on 2026-06-23. USER scope must be EXACTLY the
-  #    declared set (fram,lodestar + the Linear MSA servers); fram must target
+  #    declared set (fram,lodestar + the Linear MSA server); fram must target
   #    the LIVE store, never the repo demo.
   CJSON="$HOME/.claude.json"
   if [ -f "$CJSON" ]; then
@@ -179,7 +179,7 @@ if [ "$LOCAL" -eq 1 ]; then
 import json, sys
 cfg = json.load(open(sys.argv[1]))
 servers = cfg.get("mcpServers") or {}
-allow = {"fram", "lodestar", "linear-mcp-msa-old", "linear-mcp-msa-new"}
+allow = {"fram", "lodestar", "linear-mcp-msa-new"}
 rc = 0
 for name in servers:
     if name not in allow:
