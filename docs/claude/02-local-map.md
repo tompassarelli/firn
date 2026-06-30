@@ -4,7 +4,7 @@
 > disk; re-run after any config change. Idempotent (no timestamp): a diff
 > here means the system actually moved. This is layer 2 of the bundle —
 > see [README.md](README.md) (start here), [01-canonical.md](01-canonical.md)
-> (how Claude Code works), [03-lodestar.md](03-lodestar.md) (the substrate).
+> (how Claude Code works), [03-tern.md](03-tern.md) (the substrate).
 
 Repo: `~/code/nixos-config` · Claude config: `~/.claude`
 
@@ -15,10 +15,10 @@ first few load in any given session — the rest are per-repo context.
 
 | scope | loads | materialization | source-of-truth | lines |
 |---|---|---|---|---|
-| `global` | every session, lowest precedence | nix store → dotfiles (out-of-store) | `~/code/nixos-config/dotfiles/claude/CLAUDE.md` | 61 |
+| `global` | every session, lowest precedence | nix store → dotfiles (out-of-store) | `~/code/nixos-config/dotfiles/claude/CLAUDE.md` | 166 |
 | `code-root` | any repo under ~/code | nix store → dotfiles (out-of-store) | `~/code/nixos-config/dotfiles/code/CLAUDE.md` | 3 |
-| `repo` | this repo (nixos-config) | real file (is its own source) | `~/code/nixos-config/CLAUDE.md` | 422 |
-| `module:claude` | editing ~/code/nixos-config/modules/claude/ | real file (is its own source) | `~/code/nixos-config/modules/claude/CLAUDE.md` | 77 |
+| `repo` | this repo (nixos-config) | real file (is its own source) | `~/code/nixos-config/CLAUDE.md` | 135 |
+| `module:claude` | editing ~/code/nixos-config/modules/claude/ | real file (is its own source) | `~/code/nixos-config/modules/claude/CLAUDE.md` | 38 |
 | `module:containers` | editing ~/code/nixos-config/modules/containers/ | real file (is its own source) | `~/code/nixos-config/modules/containers/CLAUDE.md` | 7 |
 
 ## Layer 1 — LOCAL: `~/.claude` wired surface
@@ -35,12 +35,13 @@ What the `~/code/nixos-config/modules/claude` module materializes into `~/.claud
 
 ## Layer 1 — LOCAL: runtime wiring (`settings.json` + plugin manifests)
 
-- **statusLine** → `f=$(ls -dt "$HOME"/.claude/plugins/cache/caveman/caveman/*/src/hooks/caveman-statusline.sh…`
+- **statusLine** → `bash "$HOME/code/nixos-config/dotfiles/claude/statusline.sh"`
 - **enabledPlugins** → `rust-analyzer-lsp@claude-plugins-official`, `typescript-lsp@claude-plugins-official`, `caveman@caveman`
 - **hooks** (Claude Code fires these at lifecycle points; `⟨src⟩` = settings.json or the plugin that contributes it):
-  - `SessionStart` → `beagle-session-start.sh` ⟨settings⟩, `caveman-activate.js` ⟨caveman⟩
+  - `SessionStart` → `beagle-session-start.sh` ⟨settings⟩, `tern-on-spawn` ⟨settings⟩, `caveman-activate.js` ⟨caveman⟩
   - `UserPromptSubmit` → `caveman-mode-tracker.js` ⟨caveman⟩
-  - `PreToolUse` → `claim-canonical-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩
+  - `PreToolUse` → `claim-canonical-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩
+  - `PostToolUse` → `racket-build-guard.sh` ⟨settings⟩, `tern-on-tooluse` ⟨settings⟩
   - `Stop` → `caveman-session-stats.js` ⟨caveman⟩
 
 ### Control flow (lifecycle spine)
@@ -48,7 +49,7 @@ What the `~/code/nixos-config/modules/claude` module materializes into `~/.claud
 ```mermaid
 flowchart TD
   A[session start] --> B{SessionStart}
-  B -->|"beagle-session-start.sh · caveman-activate.js"| C[turn loop]
+  B -->|"beagle-session-start.sh · tern-on-spawn · caveman-activate.js"| C[turn loop]
   C --> D{UserPromptSubmit}
   D -->|"caveman-mode-tracker.js"| E["model responds + tools"]
   E -.->|"PreToolUse: claim-canonical-guard.sh · firn-guard.sh"| E
@@ -68,12 +69,13 @@ flowchart TD
 | `lean@leanprover` | `0.1.0` | `~/.claude/plugins/cache/leanprover/lean/0.1.0` |
 | `caveman@caveman` | `37c28ebb1e0a` | `~/.claude/plugins/cache/caveman/caveman/37c28ebb1e0a` |
 
-**MCP servers** (user scope — where lodestar plugs into Claude):
+**MCP servers** (user scope — where tern plugs into Claude):
 
 | server | command |
 |---|---|
-| `lodestar` | `~/code/lodestar/bin/lodestar-mcp` |
 | `fram` | `~/code/fram/bin/fram-mcp` |
+| `linear-mcp-msa-new` | `.` |
+| `tern` | `~/code/tern/bin/tern-mcp` |
 
 > Layer 3 (CANONICAL Anthropic contracts) is annotated inline above where
 > it governs a local choice. A fuller canonical corpus is the next phase —
