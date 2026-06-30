@@ -15,7 +15,7 @@ description: >-
 The ecosystem: **Beagle** is the language; **Fram** is the claim engine (a
 subject-predicate-object graph + a stratified Datalog); **Chartroom** is the
 glue that projects Beagle source *into* Fram so you can ask relational questions
-the way Lodestar asks them about work. Same graph substrate, pointed at code.
+the way Tern asks them about work. Same graph substrate, pointed at code.
 
 ## When to reach for the graph (and when not to)
 
@@ -71,7 +71,7 @@ queries rather than running them.
   query projection for code-intelligence; the truth projection for graph-native
   edits/rename.
 
-The bet (shared with Lodestar): a flat text-and-grep view rots and can't compute
+The bet (shared with Tern): a flat text-and-grep view rots and can't compute
 relational questions; the graph is always current and answers them for free.
 For *writing* Beagle, see the **beagle-authoring** skill. For *authoring against the
 Fram claim/Datalog primitives directly* (`claim!`, supersession-as-update, `by-lp`,

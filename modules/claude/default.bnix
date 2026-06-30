@@ -88,17 +88,17 @@
                ;; servers instead of relying on loose `claude mcp add` state in
                ;; ~/.claude.json. fram is the GENERIC engine MCP: its corpus is selected
                ;; at deployment via env (point it at the life store; never hardcode life
-               ;; paths into the engine itself). lodestar's wrapper resolves XDG on its own.
+               ;; paths into the engine itself). tern's wrapper resolves XDG on its own.
                :home.activation.registerMcpServers
                 (config.lib.dag.entryAfter ["writeBoundary"]
                   (s "CLAUDE=" pkgs.master.claude-code "/bin/claude\n"
-                     "LIFE=$HOME/.local/state/lodestar\n"
+                     "LIFE=$HOME/.local/state/tern\n"
                      "if ! $CLAUDE mcp get fram 2>/dev/null | grep -q FRAM_LOG; then\n"
                      "  $CLAUDE mcp remove fram -s user >/dev/null 2>&1 || true\n"
                      "  run timeout 30 $CLAUDE mcp add fram -s user -e FRAM_LOG=$LIFE/claims.log -e FRAM_THREADS=$LIFE/threads -- $HOME/code/fram/bin/fram-mcp || true\n"
                      "fi\n"
-                     "if ! $CLAUDE mcp get lodestar >/dev/null 2>&1; then\n"
-                     "  run timeout 30 $CLAUDE mcp add lodestar -s user -- $HOME/code/lodestar/bin/lodestar-mcp || true\n"
+                     "if ! $CLAUDE mcp get tern >/dev/null 2>&1; then\n"
+                     "  run timeout 30 $CLAUDE mcp add tern -s user -- $HOME/code/tern/bin/tern-mcp || true\n"
                      "fi\n"
                      ;; Linear MSA workspace (HTTP/OAuth, no inline secret) — declared so
                      ;; the drift-checker treats it as known, not rot. Auth is per-machine.

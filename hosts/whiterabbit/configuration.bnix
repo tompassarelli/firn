@@ -53,11 +53,26 @@
    :myConfig.modules.nh.enable true
    :myConfig.modules.babashka.enable true
    ;; agent-coord (:7978) retired — port-partition fix moved presence/coordination
-   ;; onto the canonical :7977 (lodestar-coord); :7978 had no live readers (web is off).
+   ;; onto the canonical :7977 (tern-coord); :7978 had no live readers (web is off).
    :myConfig.modules.agent-coord.enable false
-   :myConfig.modules.lodestar-coord.enable true
-   ;; v1 babashka bridge retired -> ~/code/lodestar/web-v1-archive. The live
+   :myConfig.modules.tern-coord.enable true
+   ;; v1 babashka bridge retired -> ~/code/tern/web-v1-archive. The live
    ;; web/ is now an Elixir/Phoenix app needing its own service. Off until wired.
-   :myConfig.modules.lodestar-web.enable false
+   :myConfig.modules.tern-web.enable false
    :myConfig.modules.stylix.chosenTheme "everforest-dark-hard"
+   ;; WireGuard client tunnel (wg0) to the Kea worker box. The wireguard module
+   ;; (watchdog + wg tools) rides the `vpn` tag; this is just the host's interface
+   ;; + its private-key secret. Key plaintext never lives in the repo — only the
+   ;; sops-encrypted secrets/wireguard.yaml.
+   :sops.secrets
+    {"wireguard-laptop"
+      {:sopsFile (p "../../secrets/wireguard.yaml")}}
+   :networking.wireguard.interfaces.wg0
+    {:ips            ["10.8.0.2/24"]
+     :privateKeyFile config.sops.secrets.wireguard-laptop.path
+     :peers
+      [{:publicKey           "a7JDSXww46/FU458PmIAcHbGTqkwkMBahtmuFyku+z8="
+        :endpoint            "3.18.118.65:51820"
+        :allowedIPs          ["10.8.0.1/32"]
+        :persistentKeepalive 25}]}
    :imports [(p "./_generated-enables.nix")]})

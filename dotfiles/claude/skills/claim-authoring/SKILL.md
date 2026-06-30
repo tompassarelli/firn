@@ -50,7 +50,7 @@ claim-authoring task instead of guessing the API.
   current; the answer is scope-correct (binding identity, not name match).
 - **Know when NOT to.** A flat per-row filter (no joins/recursion) is fine as plain
   code — expressing it as Datalog is a *tax* (you re-state predicate schema the index
-  already owns; measured net-negative in `lodestar/cnf_lifecycle_test.clj` + the
+  already owns; measured net-negative in `tern/cnf_lifecycle_test.clj` + the
   leverage probe). Datalog earns its keep on the *relational/recursive* questions.
 - **No schema/migrations.** Predicates are open; adding a field is just a new claim —
   no `CREATE TABLE`/`ALTER`.
@@ -60,7 +60,7 @@ claim-authoring task instead of guessing the API.
 - **App data as claims (CRUD + history + reasoning):** `~/code/wake/web/spike/wake-on-claims/store.clj`
   — the gen-store CRUD seam, every op a claim op; the canonical add / update-as-supersede / tombstone / reaches gate.
 - **App-level blast radius (scope-correct closure):** `~/code/wake/web/spike/app-blast-radius/cascade.clj`.
-- **Stratified lifecycle (ready/blocked as rules) + the tax it can be:** `~/code/lodestar/cnf_lifecycle_test.clj`.
+- **Stratified lifecycle (ready/blocked as rules) + the tax it can be:** `~/code/tern/cnf_lifecycle_test.clj`.
 - **Reason/repair over code:** `~/code/fram/chartroom/src/resolve.clj` (refers_to, rename/delete/callgraph) — and the **code-as-claims** skill for querying.
 
 ## 3. Discipline (the smell tests)

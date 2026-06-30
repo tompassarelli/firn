@@ -2,7 +2,7 @@
 
 NixOS module for Claude Code: the package, out-of-store symlinks
 (commands / skills / hooks / CLAUDE.md), the **caveman** plugin install, and
-MCP server registration (`fram`, `lodestar`). All activation entries are
+MCP server registration (`fram`, `tern`). All activation entries are
 best-effort (`timeout … || true`) so a network blip never fails a rebuild.
 
 ## settings.json is a WRITABLE symlink — load-bearing
@@ -32,7 +32,7 @@ Personal fork `tompassarelli/caveman`, sha-pinned; `WANT` in `default.bnix` = fi
 
 ## MCP servers
 
-`registerMcpServers` adds `fram` + `lodestar` idempotently (guarded on
+`registerMcpServers` adds `fram` + `tern` idempotently (guarded on
 `mcp get`). `fram` is the **generic** engine — its corpus is selected at
 deploy time via env (`FRAM_LOG` / `FRAM_THREADS`); never hardcode life-store
 paths into the engine itself.

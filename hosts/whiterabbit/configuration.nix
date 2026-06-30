@@ -53,8 +53,21 @@
   myConfig.modules.nh.enable = true;
   myConfig.modules.babashka.enable = true;
   myConfig.modules.agent-coord.enable = false;
-  myConfig.modules.lodestar-coord.enable = true;
-  myConfig.modules.lodestar-web.enable = false;
+  myConfig.modules.tern-coord.enable = true;
+  myConfig.modules.tern-web.enable = false;
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
+  sops.secrets."wireguard-laptop".sopsFile = ../../secrets/wireguard.yaml;
+  networking.wireguard.interfaces.wg0 = {
+    ips = [ "10.8.0.2/24" ];
+    privateKeyFile = config.sops.secrets.wireguard-laptop.path;
+    peers = [
+      {
+        publicKey = "a7JDSXww46/FU458PmIAcHbGTqkwkMBahtmuFyku+z8=";
+        endpoint = "3.18.118.65:51820";
+        allowedIPs = [ "10.8.0.1/32" ];
+        persistentKeepalive = 25;
+      }
+    ];
+  };
   imports = [ ./_generated-enables.nix ];
 }

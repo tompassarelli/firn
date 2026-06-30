@@ -15,17 +15,17 @@ output), write it FULL and `~`-anchored: `~/code/nixos-config/dotfiles/claude/se
 never a bare/relative `dotfiles/claude/...` or `./...`. `~` for `$HOME` is fine —
 but keep everything after it complete. The reader must never have to intuit a cwd.
 
-## lodestar
+## tern
 
-Read `~/code/lodestar/docs/operating-manual.md` before nontrivial work. If
+Read `~/code/tern/docs/operating-manual.md` before nontrivial work. If
 anything elsewhere contradicts it, the manual wins. Trivial actions (one-command
 lookups, reading a file, quick clarifications) don't need the full manual.
 
-Thread format, lifecycle derivation, the `lodestar` CLI:
-→ [`docs/lodestar-threads.md`](docs/lodestar-threads.md)
+Thread format, lifecycle derivation, the `tern` CLI:
+→ [`docs/tern-threads.md`](docs/tern-threads.md)
 
 Concurrent-agent write rules (`tell`/`capture`/`import`/`export` safety):
-→ [`docs/lodestar-write-safely.md`](docs/lodestar-write-safely.md)
+→ [`docs/tern-write-safely.md`](docs/tern-write-safely.md)
 
 ## Pre-edit gate — MANDATORY before any code change
 
@@ -34,7 +34,7 @@ coordinator MUST run this mental gate (one short paragraph, not a doc):
 
 1. **Decompose** — what are the independent subtasks in this change?
 2. **Graph** — which subtasks block which? Draw the dependency edges.
-3. **Dispatch** — independent subtasks go to lodestar agents IN PARALLEL. Only
+3. **Dispatch** — independent subtasks go to tern agents IN PARALLEL. Only
    sequentialize what genuinely depends on a prior result.
 4. **Coordinate** — the coordinator touches ONLY cross-cutting work that spans
    multiple agents' outputs. If a subtask is self-contained, delegate it.
@@ -68,9 +68,9 @@ keep the box quiet / can't parallelize / wait to protect the timing" thought as 
 **bug in my own reasoning**: stop, run the two commands above, and parallelize
 unless the measured numbers actually forbid it.
 
-## Agent coordination — lodestar protocol
+## Agent coordination — tern protocol
 
-Work coordination uses lodestar threads. SDK dispatch (`~/code/lodestar/sdk/src/dispatch.ts`)
+Work coordination uses tern threads. SDK dispatch (`~/code/tern/sdk/src/dispatch.ts`)
 derives agent posture from thread claims: unplanned → plan only, atomic → execute,
 composite → survey subtasks.
 
@@ -143,8 +143,8 @@ Everything else: push.
 Internal agent notes, session status, scratch, and handoffs go in `docs/private/`
 (gitignored), NEVER in a public `docs/`. The public `docs/` is end-user-facing only.
 This applies to EVERY software project. Before writing an internal note in a repo,
-ensure the ignore exists: `~/code/lodestar/bin/ensure-private-docs` (idempotent —
-adds `docs/private/` to that repo's `.gitignore`). lodestar's spawn hook + SDK
+ensure the ignore exists: `~/code/tern/bin/ensure-private-docs` (idempotent —
+adds `docs/private/` to that repo's `.gitignore`). tern's spawn hook + SDK
 harness announce this to every agent automatically; the rule here is the anchor.
 
 ## GitHub releases: version only in title

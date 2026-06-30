@@ -1,0 +1,24 @@
+#lang beagle/nix
+
+(ns default)
+
+;; tern CLI suite from the packaged flake. The default package's /bin holds
+;; `tern` and `tern-mcp`, bb-wrapped with FRAM_HOME baked to the bundled
+;; fram-engine and bb on PATH — self-contained, no separate fram clone needed at
+;; consume time. Replaces the old writeShellScriptBin wrapper that exec'd
+;; ~/code/tern/bin/tern (the dev-checkout reliance that broke the repair
+;; loop). NOTE: the pkgflake pulls fram via a flake=false path input
+;; (path:/home/tom/code/fram), so /home/tom/code/fram must exist at EVAL time on
+;; this machine. To make portable, repoint that input at a git URL pinned to
+;; FRAM_VERSION. Reads tern main (package/flake merged) via git+file?ref=main.
+(nix/module [config lib pkgs inputs ...]
+  {:tags [cli-tools]
+   :flake-inputs
+    {:tern {:url "git+file:///home/tom/code/tern?ref=main"}}
+   :options.myConfig.modules.tern.enable
+    (lib.mkEnableOption "Tern (life app) CLI + MCP server on PATH")
+   :config
+    (lib.mkIf config.myConfig.modules.tern.enable
+      {:environment.systemPackages
+        [(get (get inputs.tern.packages pkgs.stdenv.hostPlatform.system)
+           :default)]})})

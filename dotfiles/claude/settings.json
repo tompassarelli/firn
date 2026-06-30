@@ -26,7 +26,7 @@
           },
           {
             "type": "command",
-            "command": "/home/tom/code/lodestar/bin/lodestar-on-spawn",
+            "command": "/home/tom/code/tern/bin/tern-on-spawn",
             "timeout": 15
           }
         ]
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/lodestar/bin/lodestar-on-spawn",
+            "command": "/home/tom/code/tern/bin/tern-on-spawn",
             "timeout": 15
           }
         ]
@@ -86,7 +86,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/lodestar/bin/lodestar-on-tooluse",
+            "command": "/home/tom/code/tern/bin/tern-on-tooluse",
             "timeout": 10
           }
         ]

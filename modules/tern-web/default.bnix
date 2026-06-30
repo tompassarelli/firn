@@ -2,7 +2,7 @@
 
 (ns default)
 
-;; Lodestar web bridge (:8088) — projects the agent coordinator (:7978) into
+;; Tern web bridge (:8088) — projects the agent coordinator (:7978) into
 ;; a live web UI: roster, roles, focus, per-agent think-stream + $ cost.
 ;; Babashka (bb bridge/bridge.clj) — thin SSE/HTTP projection where bb's
 ;; fast start is fine. Ordered after agent-coord.
@@ -11,12 +11,12 @@
   (let [username config.myConfig.modules.users.username
         homeDir  config.myConfig.modules.users.homeDir
         codeDir  config.myConfig.modules.users.codeDir]
-    {:options.myConfig.modules.lodestar-web.enable
-      (lib.mkEnableOption "Lodestar web bridge (:8088) — live web cockpit for lodestar agents")
+    {:options.myConfig.modules.tern-web.enable
+      (lib.mkEnableOption "Tern web bridge (:8088) — live web cockpit for tern agents")
      :config
-      (lib.mkIf config.myConfig.modules.lodestar-web.enable
-        {:systemd.services.lodestar-web
-          {:description           "Lodestar web bridge (:8088) — projects the agent coordinator"
+      (lib.mkIf config.myConfig.modules.tern-web.enable
+        {:systemd.services.tern-web
+          {:description           "Tern web bridge (:8088) — projects the agent coordinator"
            :wantedBy              ["multi-user.target"]
            :after                 ["network.target" "agent-coord.service"]
            :startLimitIntervalSec 0
@@ -24,7 +24,7 @@
            :serviceConfig
             {:Type             "simple"
              :User             username
-             :WorkingDirectory (s codeDir "/lodestar/web")
+             :WorkingDirectory (s codeDir "/tern/web")
              :ExecStart        (s pkgs.babashka "/bin/bb bridge/bridge.clj 8088")
              :Restart          "always"
              :RestartSec       2}}})}))

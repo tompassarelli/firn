@@ -60,7 +60,6 @@
   myConfig.modules.jq.enable = lib.mkDefault true;
   myConfig.modules.libnotify.enable = lib.mkDefault true;
   myConfig.modules.libtool.enable = lib.mkDefault true;
-  myConfig.modules.lodestar.enable = lib.mkDefault true;
   myConfig.modules.lutris.enable = lib.mkDefault true;
   myConfig.modules.mail.enable = lib.mkDefault true;
   myConfig.modules.mpv.enable = lib.mkDefault true;
@@ -100,6 +99,7 @@
   myConfig.modules.stylix.chosenTheme = lib.mkDefault "tokyo-night-dark";
   myConfig.modules.swaylock.enable = lib.mkDefault true;
   myConfig.modules.tealdeer.enable = lib.mkDefault true;
+  myConfig.modules.tern.enable = lib.mkDefault true;
   myConfig.modules.theme-switcher.enable = lib.mkDefault true;
   myConfig.modules.tree.enable = lib.mkDefault true;
   myConfig.modules.unrar.enable = lib.mkDefault true;

@@ -2,8 +2,8 @@
 
 (ns default)
 
-;; Lodestar coordinator (:7977) — sole-writer daemon serving Tom's canonical
-;; claim log (~/.local/state/lodestar/claims.log). Sibling of agent-coord (:7978)
+;; Tern coordinator (:7977) — sole-writer daemon serving Tom's canonical
+;; claim log (~/.local/state/tern/claims.log). Sibling of agent-coord (:7978)
 ;; and attention-coord (:7980): same coordinator family, different stores. JVM
 ;; runtime — long-lived server wants JIT throughput + real threads. Systemd-managed
 ;; so :7977 survives logout + reboot (down = no capture, no work queue).
@@ -12,12 +12,12 @@
   (let [username config.myConfig.modules.users.username
         homeDir  config.myConfig.modules.users.homeDir
         codeDir  config.myConfig.modules.users.codeDir]
-    {:options.myConfig.modules.lodestar-coord.enable
-      (lib.mkEnableOption "Personal Lodestar coordinator daemon (:7977) — sole-writer claim-graph service for Tom's canonical log")
+    {:options.myConfig.modules.tern-coord.enable
+      (lib.mkEnableOption "Personal Tern coordinator daemon (:7977) — sole-writer claim-graph service for Tom's canonical log")
      :config
-      (lib.mkIf config.myConfig.modules.lodestar-coord.enable
-        {:systemd.services.lodestar-coord
-          {:description           "Lodestar coordinator — personal claim-graph daemon (:7977)"
+      (lib.mkIf config.myConfig.modules.tern-coord.enable
+        {:systemd.services.tern-coord
+          {:description           "Tern coordinator — personal claim-graph daemon (:7977)"
            :wantedBy              ["multi-user.target"]
            :after                 ["network.target"]
            :path                  (nix/with pkgs [clojure jdk bash coreutils git])
@@ -28,6 +28,6 @@
              :User             username
              :WorkingDirectory (s codeDir "/fram")
              :ExecStart
-              (s codeDir "/fram/bin/fram-daemon 7977 " homeDir "/.local/state/lodestar/claims.log")
+              (s codeDir "/fram/bin/fram-daemon 7977 " homeDir "/.local/state/tern/claims.log")
              :Restart          "always"
              :RestartSec       2}}})}))
