@@ -91,21 +91,32 @@ Tested task → effort (kentgigger.com):
 The 12-file rename is the lesson: both dials have failure modes — too low breaks
 correctness, too high burns cost for nothing.
 
-## Sonnet 5 — alias + routing policy (2026-07-02)
+## Sonnet 5 — alias + routing policy (landed 2026-07-02)
 
-The tier table above predates **Sonnet 5**. Until the nix-pinned Claude Code is
-bumped (2.1.185 resolves the `sonnet` alias to 4.6), agents cannot request
-Sonnet 5 at all — the `model` knob is an alias enum with no version pin, and the
-binary owns the resolution. After the bump:
+The tier table above predates **Sonnet 5**. Since claude-code **2.1.198**
+(overlay pin `claude-code-latest` in flake.bnix) the `sonnet` alias resolves to
+Sonnet 5. Policy:
 
 - **"use Sonnet" = Sonnet 5 at *medium* effort.** That is the workhorse setting.
 - **Don't climb Sonnet's effort ladder.** Harder than sonnet-5-medium ⇒ escalate
   the MODEL (Opus, or Fable for the hardest judgment/novel work), never sonnet
   high/xhigh — a higher ceiling at modest effort beats a maxed lower ceiling
   (same lesson as the Opus-4.5-medium vs Sonnet-4.5-best datapoint above).
-- Refresh the tier table (IDs / prices / context) from the `claude-api` skill or
-  the Models API when the bump lands; treat this file's 4.x rows and effort
-  defaults as stale from that point.
+- Treat this file's 4.x tier rows and effort defaults as stale; refresh
+  IDs / prices / context from the Models API when it matters.
+
+**Enforcement — sonnet must NOT inherit a hot session's effort** (an ultracode
+session runs xhigh; a bare `model: 'sonnet'` spawn would silently run
+sonnet-xhigh, the exact anti-pattern):
+
+- **Workflow `agent()`** — always pair them: `{model: 'sonnet', effort: 'medium'}`.
+  Effort inherits the session unless set per call.
+- **Agent tool** — has NO per-call effort param; effort inherits the session.
+  Spawn the **`sonnet-worker`** agent (frontmatter pins `model: sonnet` +
+  `effort: medium`, `dotfiles/claude/agents/sonnet-worker.md`) instead of
+  `general-purpose` + `model: "sonnet"`.
+- Agent frontmatter supports `effort: low|medium|high|xhigh|max`; there is no
+  global `CLAUDE_CODE_SUBAGENT_EFFORT` env (only `..._MODEL`).
 
 ## Routing patterns for fan-out
 
