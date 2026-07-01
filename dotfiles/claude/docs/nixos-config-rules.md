@@ -9,13 +9,12 @@ must reproduce the change.
 
 ## Symlinks
 
-`~/.claude/{skills,CLAUDE.md,commands,settings.json,hooks}` are
+`~/.claude/{skills,CLAUDE.md,commands,settings.json,hooks,agents}` are
 `mkOutOfStoreSymlink`s into `nixos-config/dotfiles/claude/` (see
-`modules/claude/default.nix`). Editing them edits the repo *directly* and is
-live immediately (no rebuild) — **but you MUST commit it to `nixos-config`**,
-or it isn't reproducible. (`hooks/` was nix-wired 2026-06-20; until the next
-rebuild creates the symlink, `settings.json` still reaches them by absolute
-repo path, which also works.)
+`modules/claude/default.bnix` — `default.nix` is generated). Editing them edits
+the repo *directly* and is live immediately (no rebuild) — **but you MUST
+commit it to `nixos-config`**, or it isn't reproducible. (`docs/` is
+intentionally not wired — pointers use full repo paths.)
 
 ## CI validation
 
@@ -29,9 +28,9 @@ rotting silently). This is the anti-rot gate; keep it green.
 ## Hooks kill-switch
 
 **Behavior-injecting hooks have an opt-out kill-switch:**
-`CLAUDE_NO_AUTHORING_HOOKS=1` makes the SessionStart beagle handshake and the
-PreToolUse claim-canonical guard no-op — used to pin a neutral, confound-free
-session (e.g. for experiments). Unset = normal behavior.
+`CLAUDE_NO_AUTHORING_HOOKS=1` makes all four authoring guards no-op (beagle
+SessionStart handshake, claim-canonical guard, firn guard, racket-build guard)
+— used to pin a neutral, confound-free session. Unset = normal.
 
 ## Adding new wiring
 

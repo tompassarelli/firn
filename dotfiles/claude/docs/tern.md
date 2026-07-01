@@ -1,4 +1,16 @@
-# Writing safely under concurrent agents
+# tern — thread format + writing safely under concurrent agents
+
+## Thread files (claim-native)
+
+A thread file is `@<id>` + `predicate  object` triple lines + `---` + prose
+body; refs are `@id`, literals EDN. Lifecycle is DERIVED from claims
+(committed/outcome/abandoned/driver/depends_on) — no state enum; a fresh
+capture is committed. Relatedness is `relates_to @<thread>` (no string tags —
+former tags are `@topic-*` threads). ids: `2026-06-15-150040`. Time: `tern clock`
+(claim-native sessions; Clockify is an on-demand projection via `clock sync`).
+Full spec: ~/code/tern/docs/claim-native-redesign.md.
+
+## Writing safely under concurrent agents
 
 tern threads are backed by the Tern claim graph (engine `~/code/fram`;
 canonical log `~/.local/state/tern/claims.log`). Assume **other agents
@@ -22,5 +34,5 @@ run `tern doctor`. If it reports DOWN/DEGRADED, run
   `tern capture "<title>"` (claim-first) or file-edit + `import` is fine
   (distinct files don't collide); for field changes on existing threads under
   concurrency, prefer `tell`.
-- Reads are instant off the warm daemon (`tern serve`): ready / blocked /
+- Reads are instant off the warm coordinator (`tern up`): ready / blocked /
   leverage / validate in ~1ms.

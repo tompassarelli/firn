@@ -2,8 +2,8 @@
 
 When work means multiple agents, do NOT default to the host's generic `Agent` /
 `Workflow` / ultracode spawning. Tern fronts a real, running, *better*
-substrate: persistent, role-based, lease-gated agents that are observable +
-steerable + durably coordinated through the claim graph (raw Agent/Workflow are
+substrate: persistent agents, observable + steerable + durably coordinated
+through the claim graph (raw Agent/Workflow are
 ephemeral, unobservable mid-flight, un-steerable).
 
 **Use the tern MCP tools** (`mcp__tern__dispatch`, `mcp__tern__spawn`)
@@ -14,13 +14,14 @@ inline. Real work → the protocol below.
 
 ## The stack
 
-- **Work queue** = tern threads on `:7977` (`ready`/`next`/`leverage`; claim with
-  `driver @agent`). **Agent coordination** = `:7978` coordinator (presence /
-  roles / leases).
-- **Spawn**: `~/code/agent-data/spawn-agent.sh <role[,role]>` — lease-gated roles
-  (exclusive → a 2nd holder self-aborts), dormant-until-pinged (~0 idle tokens).
-- **Assign/steer by ROLE** (not uuid): `msg-cli.clj <port> send <from> <role> "<task>"`;
-  a message IS the steer. **Observe/steer** live via tern web (`:8088`).
+- **Work queue + coordination** = tern threads + claims on `:7977`
+  (`ready`/`next`/`leverage`; claim with `driver @agent`).
+- **Spawn**: `mcp__tern__dispatch` (thread-driven) / `mcp__tern__spawn` (ad-hoc)
+  — dormant-until-pinged (~0 idle tokens).
+- **Footprint**: declare before editing — `~/code/tern/bin/concern declare|shape|status`.
+- **Reach a live agent**: it arms `~/code/tern/bin/tern-arm <id>`; ping with
+  `bb ~/code/tern/cli/msg-cli.clj 7977 send <from> <to> "<subject>" "<msg>"` — a
+  message IS the steer. Observe via tern web (`:8088`, when the web client is running).
 - **Concurrency is the engine's job** — fram owns write-serialization + OCC + the `lease`
   primitive (`acquire`/`release`/`fence`); apps express coordination as claims, never
   self-rolled locks. (`driver` = app intent; `lease` = DB mutual-exclusion — never conflate.)
@@ -29,4 +30,4 @@ inline. Real work → the protocol below.
 
 Org brain: PLAYBOOK = tern thread `2026-06-22-232740` (consult first; append
 learnings via `tern tell 2026-06-22-232740 learning "…"`). How-to:
-`~/code/agent-data/RUNBOOK.md`. Per-repo surface: `~/code/tern/CLAUDE.md`.
+~/code/tern/docs/operating-manual.md. Per-repo surface: `~/code/tern/CLAUDE.md`.

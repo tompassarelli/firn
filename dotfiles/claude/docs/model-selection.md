@@ -6,7 +6,7 @@ setting on a 10-agent fan-out wastes money *and* wall-time.
 
 Pricing / IDs / limits: authoritative source is the bundled `claude-api` skill
 (cached 2026-06-04) or the Models API — not blogs (they lag releases and quote
-stale prices, e.g. Opus at $15/$75; current Opus 4.8 is $5/$25).
+stale prices).
 
 ## Two dials, not one ladder
 
@@ -30,18 +30,16 @@ full effort, cheaper. Pick both dials per task.
 
 ## The three tiers
 
-| Model | ID | Context | $/Mtok | Reach for it when the task is… |
-|---|---|---|---|---|
-| **Haiku 4.5** | `claude-haiku-4-5` | 200K | 1 / 5 | mechanical & fast: locate/grep/glob, file enumeration, format-preserving edits, classification, yes/no checks, log scanning. Default for read-only fan-out (~15× cheaper than Opus). |
-| **Sonnet 4.6** | `claude-sonnet-4-6` | 1M | 3 / 15 | the workhorse: a single well-specified edit, straightforward implementation, summarization, extraction, RAG over a corpus. Most worker agents. |
-| **Opus 4.8** | `claude-opus-4-8` | 1M | 5 / 25 | judgment & hard reasoning: architecture/design, cross-file refactors, ambiguous debugging, non-trivial PR review, adversarial verify/judge, synthesis. The coordinator. |
-
-Reality check (tested SWE-bench Verified, late-2025/26 — will drift): Opus 4.6
-≈80.8 / Sonnet 4.6 ≈79.6 / Haiku 4.5 ≈73.3. Opus→Sonnet is **~1 point** — Opus's
-edge is the hard tail, not the median task, which is why Sonnet is the default
-workhorse on priors-rich work. **Start one bucket lower than feels right on both
-dials, then escalate** — promotion is cheap to find, over-provisioning is silent
-waste (starting one low cut tokens 30–50% with no quality loss).
+Mechanical/locate/format-preserving → **Haiku** (no effort knob; ~15× cheaper
+than Opus — default for read-only fan-out). Well-specified
+build/edit/summarize/extract → **Sonnet** (= Sonnet 5 at medium; see below).
+Judgment: architecture, cross-file refactors, ambiguous debugging, adversarial
+verify/judge, synthesis → **Opus/Fable** (the coordinator). IDs / prices /
+context: query the Models API or the `claude-api` skill — never a static table
+here. Opus's edge over Sonnet is the hard tail, not the median task. **Start
+one bucket lower than feels right on both dials, then escalate** — promotion is
+cheap to find; over-provisioning is silent waste (one-low cut tokens 30–50%
+with no quality loss).
 
 ## Personal overrides — greenfield / compiler work
 
@@ -74,11 +72,6 @@ tool calls, less preamble (so fan-out workers run low: you don't *want* them
 wandering). Cost ladder (illustrative, third-party): low/med/high/max ≈
 **1× / 2.5× / 6× / 12×** output tokens — max is not "a bit more."
 
-Per-model defaults (Anthropic): **Sonnet 4.6** → set *medium* explicitly
-(default-high eats latency), low for chat, high for hard. **Opus 4.8** → *xhigh*
-for coding/agentic, *high* min for reasoning, max only if evals show headroom.
-**Haiku** → no effort knob.
-
 Tested task → effort (kentgigger.com):
 
 | Task | Effort | Why |
@@ -93,17 +86,14 @@ correctness, too high burns cost for nothing.
 
 ## Sonnet 5 — alias + routing policy (landed 2026-07-02)
 
-The tier table above predates **Sonnet 5**. Since claude-code **2.1.198**
-(overlay pin `claude-code-latest` in flake.bnix) the `sonnet` alias resolves to
-Sonnet 5. Policy:
+Since claude-code **2.1.198** (overlay pin `claude-code-latest` in flake.bnix)
+the `sonnet` alias resolves to Sonnet 5. Policy:
 
 - **"use Sonnet" = Sonnet 5 at *medium* effort.** That is the workhorse setting.
 - **Don't climb Sonnet's effort ladder.** Harder than sonnet-5-medium ⇒ escalate
   the MODEL (Opus, or Fable for the hardest judgment/novel work), never sonnet
   high/xhigh — a higher ceiling at modest effort beats a maxed lower ceiling
   (same lesson as the Opus-4.5-medium vs Sonnet-4.5-best datapoint above).
-- Treat this file's 4.x tier rows and effort defaults as stale; refresh
-  IDs / prices / context from the Models API when it matters.
 
 **Enforcement — sonnet must NOT inherit a hot session's effort** (an ultracode
 session runs xhigh; a bare `model: 'sonnet'` spawn would silently run
@@ -113,7 +103,7 @@ sonnet-xhigh, the exact anti-pattern):
   Effort inherits the session unless set per call.
 - **Agent tool** — has NO per-call effort param; effort inherits the session.
   Spawn the **`sonnet-worker`** agent (frontmatter pins `model: sonnet` +
-  `effort: medium`, `dotfiles/claude/agents/sonnet-worker.md`) instead of
+  `effort: medium`, `~/code/nixos-config/dotfiles/claude/agents/sonnet-worker.md`) instead of
   `general-purpose` + `model: "sonnet"`.
 - Agent frontmatter supports `effort: low|medium|high|xhigh|max`; there is no
   global `CLAUDE_CODE_SUBAGENT_EFFORT` env (only `..._MODEL`).
