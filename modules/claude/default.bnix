@@ -9,7 +9,7 @@
       (lib.mkEnableOption "Claude Code CLI configuration")
      :config
       (lib.mkIf config.myConfig.modules.claude.enable
-        {:environment.systemPackages [pkgs.master.claude-code]
+        {:environment.systemPackages [pkgs.claude-code-latest]
          :home-manager.users
           {username
             (nix/module [config ...]
@@ -61,7 +61,7 @@
                ;; still points at the read-only nix store).
                :home.activation.installCaveman
                 (config.lib.dag.entryAfter ["writeBoundary" "linkClaudeSettings"]
-                  (s "CLAUDE=" pkgs.master.claude-code "/bin/claude\n"
+                  (s "CLAUDE=" pkgs.claude-code-latest "/bin/claude\n"
                      ;; Bump WANT together with the fork's .claude-plugin/
                      ;; marketplace.json pin: it's the first 12 chars of the
                      ;; pinned commit sha = the on-disk cache dir name.
@@ -91,7 +91,7 @@
                ;; paths into the engine itself). tern's wrapper resolves XDG on its own.
                :home.activation.registerMcpServers
                 (config.lib.dag.entryAfter ["writeBoundary"]
-                  (s "CLAUDE=" pkgs.master.claude-code "/bin/claude\n"
+                  (s "CLAUDE=" pkgs.claude-code-latest "/bin/claude\n"
                      "LIFE=$HOME/.local/state/tern\n"
                      "if ! $CLAUDE mcp get fram 2>/dev/null | grep -q FRAM_LOG; then\n"
                      "  $CLAUDE mcp remove fram -s user >/dev/null 2>&1 || true\n"
