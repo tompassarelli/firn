@@ -39,8 +39,12 @@ case "$ID" in ""|"cc-$RN-") exit 0 ;; esac
 # `concern ls` prints two lines per concern: a header line carrying the owner
 # token (@<agent-id>) and a following `↳ … (concern-…)` line carrying the id.
 # The awk state machine pairs them: arm on our token, emit the id on the next line.
+# SC2016: single quotes are DELIBERATE — $CONCERN/$ID/$AWKP must expand in the
+# inner detached bash (they're exported), not here; and $0/$1 are awk fields.
+# shellcheck disable=SC2016
 AWKP='index($0,a){p=1} p&&match($0,/concern-[0-9]+-[0-9a-f]+/){print substr($0,RSTART,RLENGTH);p=0}'
 export CONCERN ID AWKP
+# shellcheck disable=SC2016
 setsid bash -c '
   timeout 10 "$CONCERN" ls 2>/dev/null \
     | awk -v a="@$ID" "$AWKP" \
