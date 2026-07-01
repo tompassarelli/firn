@@ -15,12 +15,6 @@ set -uo pipefail
 # session surface across all arms. Unset (the default) = normal behavior.
 [ -n "${CLAUDE_NO_AUTHORING_HOOKS:-}" ] && exit 0
 
-# --- agent roster registration (any session, any project) ------------------
-# If this session declares a handle, put it on the :7978 roster + start its heartbeat.
-if [ -n "${FLEET_HANDLE:-}" ] && [ -x "$HOME/code/agent-data/tern-register.sh" ]; then
-  "$HOME/code/agent-data/tern-register.sh" "$FLEET_HANDLE" "$PPID" >/dev/null 2>&1 || true
-fi
-
 # Project dir: Claude Code sets CLAUDE_PROJECT_DIR; fall back to cwd.
 dir="${CLAUDE_PROJECT_DIR:-$PWD}"
 cd "$dir" 2>/dev/null || exit 0
