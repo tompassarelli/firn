@@ -4,11 +4,9 @@ NEVER put plaintext passwords, secrets, API keys, or credentials anywhere in thi
 All secrets must go through sops-nix as encrypted files in secrets/.
 If you need a secret value in a module, use sops.secrets."name" — never inline it.
 
-NEVER chain `git commit && git push` in one command. Always:
-1. `git commit` first
-2. Verify the pre-commit hook passed (gitleaks secret detection)
-3. If secrets are detected, fix the leak before proceeding
-4. Only then advise the user to push
+NEVER chain `git commit && git push`. Commit first and let the gitleaks
+pre-commit hook run; if it flags a secret, fix the leak. Then push yourself via
+`safe-push` (global push rules apply — do not wait for the user).
 
 ## Configuration interface: beagle/nix
 
@@ -24,7 +22,7 @@ Both `.bnix` and `.nix` are committed because the flake reads from the git tree.
 
 **Always run `./scripts/firn-build` before `nix build` / `nixos-rebuild` if any `.bnix` source changed.** Otherwise the rebuild uses stale `.nix`. Editing `.nix` directly is wrong — the next firn-build overwrites it.
 
-Reference: the [beagle repo](https://github.com/tompassarelli/beagle) — DSL forms, the build/validate pipeline, and the schema toolchain. macOS works via nix-darwin (`lib.mkDarwinSystem`, `darwinConfigurations`); `firn rebuild` detects Darwin and dispatches to `darwin-rebuild`.
+Reference: the [beagle repo](https://github.com/tompassarelli/beagle) — DSL forms, the build/validate pipeline, and the schema toolchain.
 
 ## Nix Flakes: New Files Must Be Git-Tracked
 
@@ -34,7 +32,9 @@ When adding a new file to this repo, always `git add` it before rebuilding. Nix 
 
 One namespace: `myConfig.modules.*` (atoms — one package or service per module). Modules use `(module [config lib pkgs] {:options... :config...})` to emit the standard `{ config, lib, pkgs, ... }: { options...; config = mkIf cfg.enable {...}; }` wrapper.
 
-**Composition is tag-driven**, not bundle-driven. Each module declares the tags it belongs to in its `.bnix` source; each host enables a set of tags. The active module set is computed by union-then-subtract: for every enabled tag, take the modules that declare it; then remove anything the host explicitly disabled. The legacy `myConfig.bundles.*` namespace (per-bundle option-proxying with `mkDefault`) has been **fully removed** — the `bundles/` directory no longer exists and nothing references `myConfig.bundles`. See the "Tags" section below for the model that replaced it.
+**Composition is tag-driven**, not bundle-driven. Each module declares the tags it belongs to in its `.bnix` source; each host enables a set of tags. The active module set is computed by union-then-subtract: for every enabled tag, take the modules that declare it; then remove anything the host explicitly disabled (legacy `myConfig.bundles.*` is fully removed). See the "Tags" section below.
+
+macOS works via nix-darwin (`lib.mkDarwinSystem`, `darwinConfigurations`); `firn rebuild` detects Darwin and dispatches to `darwin-rebuild`.
 
 Multi-file modules (chrome, firefox, glide, kanata, nyxt, stylix, system, users) split `default.bnix` (option declarations) and `<name>.bnix` (mkIf config).
 
@@ -52,16 +52,16 @@ Multi-file modules (chrome, firefox, glide, kanata, nyxt, stylix, system, users)
 
 ## Shell scripts
 
-Custom command scripts live in `dotfiles/bin/` as plain executable shell scripts (one file per command). The `modules/bash/` module puts that directory on `PATH`. Previously these were fish functions under `dotfiles/fish/functions/`; the migration to bash + bin scripts is complete and fish has been removed from this repo.
+Custom command scripts live in `dotfiles/bin/` as plain executable shell scripts (one file per command); the `modules/bash/` module puts the directory on `PATH`. The fish→bash migration is complete.
 
 `firn` is the CLI for managing this NixOS config (modules, tags, secrets, rebuilds). It has two surfaces:
 
 - **Daily shortcuts** (what to suggest to the user). Single bare commands with auto-detected defaults: `firn rebuild`, `firn update`, `firn validate`, `firn build`, `firn status`, `firn doctor`, `firn impact`, `firn enable <tag>`, `firn disable <tag>`, `firn diff`. These are first-class, not deprecated — `scripts/firn.rkt` lists them in the help output as "Common shortcuts (default host is auto-detected)". `maybe-legacy-rewrite` rewrites them silently to the entity-first form; no deprecation pointer is ever printed. `firn enable <name>` / `firn disable <name>` target **tags** by default (mutating the current host's `enabled-tags.bnix`); when the name matches a known module, they route to `firn module enable/disable` instead (un-blacklisting / appending to `:disabled`).
-- **Underlying graph**. Every command is ultimately a `<node> <edge> [<leaf>]` triple (`firn host rebuild`, `firn tag enable terminal`, `firn tag opt-in browsers qutebrowser`, `firn tag status`, `firn module enable swap`, `firn module disable piper`, `firn schema explain X`). Useful when you need to disambiguate or scope to a non-default host. Leaves default to `all` for aggregate views and current-hostname for host-scoped commands. **The `bundle` node was removed** — composition is tag-driven now; `firn bundle …` prints a pointed error directing you to the equivalent `firn tag …` form.
+- **Underlying graph**. Every command is ultimately a `<node> <edge> [<leaf>]` triple (`firn host rebuild`, `firn tag enable terminal`, `firn tag opt-in browsers qutebrowser`, `firn tag status`, `firn module enable swap`, `firn module disable piper`, `firn schema explain X`). Useful when you need to disambiguate or scope to a non-default host. Leaves default to `all` for aggregate views and current-hostname for host-scoped commands. **The `bundle` node was removed** — `firn bundle …` prints a pointed error directing to the `firn tag …` form.
 
 **When telling the user what to run, prefer the bare daily shortcut.** Say `firn rebuild`, not `firn host rebuild`, unless there's a specific reason to scope (e.g. rebuilding `thinkpad-x1e` from `whiterabbit`).
 
-Run `firn` with no args for the full grid; `firn <node>` for one entity's edges. The CLI should only contain subcommands that operate on the nixos-config repo itself — general-purpose tools like `sandbox`, `vpn`, `gif` etc. stay as standalone scripts in `dotfiles/bin/` (fish has been removed from this repo).
+Run `firn` with no args for the full grid; `firn <node>` for one entity's edges. The CLI should only contain subcommands that operate on the nixos-config repo itself — general-purpose tools like `sandbox`, `vpn`, `gif` etc. stay as standalone scripts in `dotfiles/bin/`.
 
 ## Schema introspection
 → [`docs/schema-introspection.md`](docs/schema-introspection.md)
@@ -96,7 +96,7 @@ Evidence-ranked repair tools driven by the `scripts/firn-verify` oracle.
 
 ## Tags (composition model)
 → [`docs/tags-composition.md`](docs/tags-composition.md) · full reference [`docs/TAGS.md`](docs/TAGS.md)
-Tags are the ONLY way modules get composed (the legacy `bundles/` is gone): modules declare `:tags`/`:tags-opt-in`/`:tag-overrides`; hosts enable tags in `enabled-tags.bnix`; the resolver unions memberships and subtracts a per-host disabled list.
+Tags are the ONLY way modules get composed: modules declare `:tags`/`:tags-opt-in`/`:tag-overrides`; hosts enable tags in `enabled-tags.bnix`; the resolver unions memberships and subtracts a per-host disabled list.
 **Read when:** adding tag membership to a module, editing a host's `enabled-tags.bnix`, or debugging "why is module X enabled?" (`firn tag resolve`).
 
 ## Flake inputs (codegen)

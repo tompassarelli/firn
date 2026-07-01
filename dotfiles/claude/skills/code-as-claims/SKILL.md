@@ -3,11 +3,9 @@ name: code-as-claims
 description: >-
   Use when you need RELATIONAL code-intelligence over a BEAGLE source tree
   (.bjs/.bclj/.bnix) — scope-correct "who calls THIS x", transitive blast
-  radius / leverage, the real call graph — rather than a one-hop text match.
-  Chartroom projects the AST into a Fram claim graph and Fram's Datalog derives
-  the answer. NOT for arbitrary-language repos, plain string search, or a
-  single-file lookup (grep is fine there). Pairs with the beagle-authoring skill
-  (writing Beagle) — this one is about QUERYING a Beagle codebase as claims.
+  radius / leverage, the real call graph. Chartroom projects the AST into a
+  Fram claim graph; Datalog derives the answer. NOT for arbitrary-language
+  repos, plain string search, or a single-file lookup (grep wins there).
 ---
 
 # Code as claims — Fram + Chartroom for relational code-intelligence
@@ -73,7 +71,7 @@ queries rather than running them.
 
 The bet (shared with Tern): a flat text-and-grep view rots and can't compute
 relational questions; the graph is always current and answers them for free.
-For *writing* Beagle, see the **beagle-authoring** skill. For *authoring against the
-Fram claim/Datalog primitives directly* (`claim!`, supersession-as-update, `by-lp`,
-the `reaches` closure, stratified negation), see the **claim-authoring** skill — or
-run `~/code/fram/bin/fram-primer` for the live, generated cheatsheet.
+
+Writing Beagle → beagle-authoring; querying a Beagle tree → code-as-claims;
+engine primitives → claim-authoring (or `~/code/fram/bin/fram-primer` for the
+live, generated cheatsheet).

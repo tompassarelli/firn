@@ -2,11 +2,11 @@
 name: beagle-authoring
 description: >-
   Use WHENEVER writing, editing, or debugging Beagle source in ANY project —
-  files ending .bclj/.bcljs/.bjs/.bnix/.bgl or starting with `#lang beagle`,
-  or anything under ~/code/beagle. Establishes that the repair-compiler loop
-  is online AND functionally working before coding, keeps it from silently
-  degrading, points at the compiler as the source of truth (never a static
-  cheat sheet), and carries the stable tool/operating-mode reference.
+  files ending .bclj/.bcljs/.bjs/.bnix/.bgl, starting with `#lang beagle`, or
+  anything under ~/code/beagle. Establishes the repair-compiler loop is online
+  and functionally working BEFORE coding; the compiler is the source of truth,
+  never a static cheat sheet. NOT for relational queries over a Beagle tree —
+  that's code-as-claims.
 ---
 
 # Beagle authoring
@@ -115,12 +115,7 @@ authoritative.)
 
 ## 4. `Any` is opting OUT of the type system — don't reach for it (POLICY)
 
-`Any` tells the checker *don't look*. A value typed `:- Any` is checked exactly as
-much as untyped Clojure — **none.** So reaching for `Any` the moment data gets
-dynamic defeats the entire point of authoring in Beagle: you pay the compile +
-repair-loop cost and get zero type safety in return. The payoff was never
-Beagle-vs-Clojure — it's **`Any`-vs-a-real-type.** Porting `Any`-typed logic into a
-`.bclj` file gains nothing; it relocates the risk and only *feels* like progress.
+`Any` = unchecked; an `Any`-heavy `.bclj` gains nothing over `.clj`.
 
 **Policy — whenever you write or edit Beagle:**
 - **Express the real type first.** Define the record/shape — what a `Claim`, a
@@ -137,8 +132,8 @@ Beagle-vs-Clojure — it's **`Any`-vs-a-real-type.** Porting `Any`-typed logic i
   finding** — write it down ("Beagle can't express X") so it feeds the language's
   growth, instead of silently absorbing it as `Any`. The gap list is a deliverable.
 
-**The falsifiable probe** when you hit dynamic data and want to type it: try to
-replace the `Any` with a real type and run `beagle check`. It compiles → safety
-gained. Beagle fights you → you've found a real, recordable gap. Either outcome
-beats shipping `Any`. ("Does interop compile?" is the *wrong* probe — that passes
-trivially. "Can I even *say* this type, or am I forced back to `Any`?" is the real one.)
+**The falsifiable probe:** replace the `Any` with a real type and run
+`beagle check`. It compiles → safety gained. Beagle fights you → a real,
+recordable gap. Either outcome beats shipping `Any`. ("Does interop compile?" is
+the *wrong* probe — that passes trivially. "Can I even *say* this type, or am I
+forced back to `Any`?" is the real one.)

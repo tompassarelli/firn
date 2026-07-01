@@ -1,3 +1,3 @@
-all of my projects or client are at the root level
+My projects and client work live directly under `~/code/`.
 
-other projects that aren't mine are in /reference
+Third-party / reference clones live in `~/code/reference/` — not mine, read-only context.

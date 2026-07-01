@@ -8,9 +8,6 @@
       "Bash(cd:*)",
       "Bash(nix:*)",
       "WebSearch",
-      "Bash(./scripts/firn-build)",
-      "Bash(./scripts/firn-validate)",
-      "Bash(safe-push)",
       "Bash(safe-push:*)"
     ],
     "defaultMode": "auto"
@@ -93,7 +90,7 @@
         ]
       },
       {
-        "matcher": "Bash|Edit|Write",
+        "matcher": "Bash|Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",

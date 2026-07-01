@@ -1,15 +1,12 @@
 ---
 name: claim-canonical-authoring
 description: >-
-  Use when editing a CLAIM-CANONICAL Beagle source file — one whose source of
-  truth is the Fram claim graph, not its text (it is listed in the
-  claim-canonical registry or its leading comment block carries
-  `;; @claim-canonical`). For
-  these files the text is a regenerable view: author by GRAPH EDIT via the fram
-  MCP tools (add-def / set-body / rename / delete), never Edit/Write/MultiEdit.
-  A PreToolUse guard refuses text edits to these files; this skill is the model
-  side of that contract. NOT for ordinary Beagle files (text is still canonical
-  there — use beagle-authoring + Edit), and NOT for non-adopted modules.
+  Use when editing a CLAIM-CANONICAL Beagle source file — one listed in the
+  claim-canonical registry or whose leading comment block carries
+  `;; @claim-canonical`. Its text is a regenerable view of the Fram claim
+  graph: author by GRAPH EDIT via the mcp__fram__* tools, never
+  Edit/Write/MultiEdit (a PreToolUse guard refuses text edits). NOT for
+  ordinary Beagle files or non-adopted modules.
 ---
 
 # Claim-canonical authoring — the graph is the editing surface
@@ -50,6 +47,7 @@ does not recompile, writes no tree.
 | Replace a def by name | `mcp__fram__add-def` | `upsert-form` with an existing name; supersedes its `fN` edge |
 | Replace a defn's body | `mcp__fram__set-body` | supersedes the post-params `fN` edges |
 | Rename a def | `mcp__fram__rename-def` | O(1), scope-correct via `refers_to`, shadow-safe |
+| Insert a form after an anchor | `mcp__fram__insert-after` | ordered placement |
 | Delete a def | _(engine verb `delete` exists; MCP tool not yet exposed)_ | fail-closed on orphaned references |
 
 The new form/body is **structured data you emit** (an EDN datum, the structured
@@ -58,11 +56,9 @@ splice. It is minted into the same Fram store as `kind`/`v`/`fN` claims, and any
 reference in it resolves via the same lexical walk — so it is scope-correct for
 free (a later rename of a callee propagates into the code you just authored).
 
-> If `mcp__fram__*` graph-edit tools are not yet present in the catalog, the
-> adoption is incomplete: those tools must be added to the fram MCP surface
-> (`fram/src/fram/tools.bclj` + `fram_mcp.clj` route the single-triple `{:write}`
-> envelope today; the verb ops live in `resolve.clj`). Do NOT fall back to text
-> Edit on a guarded file — surface the gap instead.
+> If the guard denies and the `mcp__fram__*` verbs are somehow absent, surface
+> the gap — never fall back to text Edit on a guarded file. (Server entry:
+> `~/code/fram/bin/fram-mcp`.)
 
 ## 2. The loop (what each verb does under the hood)
 
@@ -92,7 +88,5 @@ must first **de-adopt** it (remove its path from `$CLAIM_CANONICAL_REGISTRY` and
 drop the `;; @claim-canonical` sentinel). That is a workflow decision, not a
 per-edit escape hatch — make it explicitly, then the guard allows text edits again.
 
-For *writing the Beagle language itself* (forms, types, the repair loop), pair with
-the **beagle-authoring** skill. For *querying* a Beagle tree as claims, see
-**code-as-claims**. For the Fram claim/Datalog primitives directly, see
-**claim-authoring**.
+Writing Beagle → beagle-authoring; querying a Beagle tree → code-as-claims;
+engine primitives → claim-authoring.

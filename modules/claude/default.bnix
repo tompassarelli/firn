@@ -75,8 +75,10 @@
                      ;; (git@github.com); this host talks to GitHub over HTTPS,
                      ;; so redirect that one clone with a throwaway git config
                      ;; (public repo → no creds needed).
-                     "GITC=$(mktemp)\n"
-                     pkgs.git "/bin/git config -f \"$GITC\" url.\"https://github.com/\".insteadOf \"git@github.com:\"\n"
+                     ;; run-wrapped for dry-run purity ($(run mktemp), not `run GITC=…`
+                     ;; — an assignment word after `run` would be command-not-found).
+                     "GITC=$(run mktemp)\n"
+                     "run " pkgs.git "/bin/git config -f \"$GITC\" url.\"https://github.com/\".insteadOf \"git@github.com:\"\n"
                      "if [ ! -e $HOME/.claude/plugins/cache/caveman ]; then\n"
                      "  run timeout 90 $CLAUDE plugin marketplace add tompassarelli/caveman || true\n"
                      "  run timeout 90 env GIT_CONFIG_GLOBAL=\"$GITC\" $CLAUDE plugin install caveman@caveman || true\n"
@@ -87,8 +89,11 @@
                      "  run timeout 90 $CLAUDE plugin marketplace update caveman || true\n"
                      "  run timeout 90 $CLAUDE plugin uninstall caveman@caveman || true\n"
                      "  run timeout 90 env GIT_CONFIG_GLOBAL=\"$GITC\" $CLAUDE plugin install caveman@caveman || true\n"
+                     ;; Reap stale pin dirs — uninstall+install leaves the old
+                     ;; $WANT cache behind forever otherwise.
+                     "  run find $HOME/.claude/plugins/cache/caveman/caveman -mindepth 1 -maxdepth 1 ! -name \"$WANT\" -exec rm -rf {} + || true\n"
                      "fi\n"
-                     "rm -f \"$GITC\"\n"))
+                     "run rm -f \"$GITC\"\n"))
                ;; MCP server registration — reproducible, so a fresh rebuild wires the
                ;; servers instead of relying on loose `claude mcp add` state in
                ;; ~/.claude.json. fram is the GENERIC engine MCP: its corpus is selected
@@ -99,7 +104,7 @@
                   (s "CLAUDE=" pkgs.claude-code-latest "/bin/claude\n"
                      "LIFE=$HOME/.local/state/tern\n"
                      "if ! $CLAUDE mcp get fram 2>/dev/null | grep -q FRAM_LOG; then\n"
-                     "  $CLAUDE mcp remove fram -s user >/dev/null 2>&1 || true\n"
+                     "  run timeout 30 $CLAUDE mcp remove fram -s user >/dev/null 2>&1 || true\n"
                      "  run timeout 30 $CLAUDE mcp add fram -s user -e FRAM_LOG=$LIFE/claims.log -e FRAM_THREADS=$LIFE/threads -- $HOME/code/fram/bin/fram-mcp || true\n"
                      "fi\n"
                      "if ! $CLAUDE mcp get tern >/dev/null 2>&1; then\n"

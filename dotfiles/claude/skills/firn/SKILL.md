@@ -1,23 +1,18 @@
 ---
 name: firn
 description: >-
-  Use WHENEVER editing this user's NixOS configuration at ~/code/nixos-config
-  (firn) — adding or removing a package/module, enabling a service, changing
-  host config, wiring hooks/skills, bumping inputs, or any "install X
-  system-wide" request. The config's write interface is beagle/nix (.bnix files
-  that compile to .nix); editing .nix directly is WRONG (it is generated). This
-  skill carries the edit→firn build→firn validate loop, the rule that the system
-  switch (firn rebuild) is the user's to run, sops-only secrets, tag-driven
-  composition, and the schema-query tools. NOT for general Nix in other repos —
-  this is specifically the firn repo workflow. Pairs with beagle-authoring
-  (the .bnix language itself). The full reference is ~/code/nixos-config/CLAUDE.md.
+  Use whenever editing ~/code/nixos-config (firn): packages, modules, services,
+  host config, hooks/skills, inputs, or any "install X system-wide" request.
+  Write interface is .bnix (compiled to .nix — never edit .nix). System switch
+  (firn rebuild) is the user's. NOT general Nix in other repos.
 ---
 
 # firn — editing ~/code/nixos-config
 
 The **write interface is beagle/nix**: `.bnix` source compiles to `.nix`. Nix is
 the build target, **not** the source of truth. Read `~/code/nixos-config/CLAUDE.md`
-for the complete contract — this skill is the operating loop.
+for the complete contract — this skill is the operating loop. The `.bnix` language
+itself → beagle-authoring.
 
 ```
 *.bnix  ──(firn build)──▶  *.nix  ──(firn rebuild, USER runs)──▶  system
@@ -98,9 +93,10 @@ firn repo doctor                              # untracked/stale/orphan/validator
 
 ## Commit discipline
 
-Never chain `git commit && git push`. Commit first; verify the gitleaks pre-commit
-hook passed; only then advise the user to push. New files (`.bnix` + `.nix`) must be
-git-added before nix can see them.
+Never chain `git commit && git push`. Commit first and let the gitleaks pre-commit
+hook run; then push it yourself via `safe-push` — the global push rules apply (push
+freely at sensible checkpoints; the human is not a push gate). New files
+(`.bnix` + `.nix`) must be git-added before nix can see them.
 
 ## Verify, don't switch
 

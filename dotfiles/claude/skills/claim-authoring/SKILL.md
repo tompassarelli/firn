@@ -2,12 +2,10 @@
 name: claim-authoring
 description: >-
   Use when AUTHORING a program, app, or tool against the Fram claim engine —
-  modeling data/logic as claims (subject predicate object) + Datalog, instead of
-  SQL/records/imperative state. Covers the write+reason loop: assert vs
-  supersede (update), live-view queries (by-lp/by-pr/current-claims), and Datalog
-  derivation (reaches-closure, stratified negation). Pairs with beagle-authoring
-  (writing the Beagle language) and code-as-claims (QUERYING a Beagle codebase).
-  NOT for one-off claim reads — just rent the store and call by-lp.
+  modeling data/logic as claims (subject predicate object) + Datalog instead of
+  SQL/records/imperative state. Covers assert vs supersede (update), live-view
+  queries, and Datalog derivation. NOT for one-off claim reads — just rent the
+  store and call by-lp.
 ---
 
 # Claim authoring — building on the Fram engine (claims + Datalog)
@@ -71,3 +69,6 @@ claim-authoring task instead of guessing the API.
   `reaches`. (The one place imperative is right: flat filters.)
 - `value!` returns a fresh-looking id but interns; never assume id→string without your
   own reverse map. Verify a round-trip on real data, like the spike's gate does.
+
+Writing Beagle → beagle-authoring; querying a Beagle tree → code-as-claims;
+engine primitives → claim-authoring.
