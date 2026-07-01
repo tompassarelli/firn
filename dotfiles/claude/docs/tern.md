@@ -36,3 +36,23 @@ run `tern doctor`. If it reports DOWN/DEGRADED, run
   concurrency, prefer `tell`.
 - Reads are instant off the warm coordinator (`tern up`): ready / blocked /
   leverage / validate in ~1ms.
+
+## Session state lives on threads — no markdown dumps (dogfood protocol)
+
+The graph is the working memory, not your context window. The recurring failure
+this kills: session state written as `docs/private/SESSION-DUMP-*.md`, recovered
+by pasting files into a fresh context — while the substrate built for exactly
+this sits unused (and unwatched: two integrity regressions went unnoticed for
+days because nobody lived in the graph).
+
+1. **Substantive work runs on a thread.** Find-or-capture it at session start;
+   `tell <id> driver @claude-code` when you actually start pushing.
+2. **State = claims, not dumps.** Milestones/findings → `tell <id> progress
+   "..."`; durable lessons → `tell <id> learning "..."`; finish → `outcome`.
+   Writing a `SESSION-DUMP-*.md` is a protocol violation — the thread IS the
+   handoff; the next session reads `tern show <id>`, not a file.
+3. **Agent briefs are thread refs.** When spawning an agent for thread work,
+   the brief is "read `tern show <id>`, write `progress` back" plus only the
+   delta the thread doesn't hold — not a restatement of everything you know.
+4. **Findings about the substrate go IN the substrate.** Found a bug mid-work?
+   `capture` it, keep moving. Discovery-by-inhabiting is the point.

@@ -8,7 +8,14 @@ Read `~/code/tern/docs/operating-manual.md` before nontrivial work. If
 anything elsewhere contradicts it, the manual wins. Trivial actions (one-command
 lookups, reading a file, quick clarifications) don't need the full manual.
 
-Thread format + concurrent-agent write safety (`tell`/`capture`/`import`/`export`):
+**Session state lives on threads, not markdown dumps.** Substantive work runs
+on a tern thread: milestones → `tell <id> progress`, lessons → `learning`,
+done → `outcome`. Writing a `SESSION-DUMP-*.md` is a protocol violation — the
+next session reads `tern show <id>`, not a file. Agent briefs = thread refs +
+the delta, not full-context restatements.
+
+Thread format + concurrent-agent write safety (`tell`/`capture`/`import`/`export`)
++ the full dogfood protocol:
 → ~/code/nixos-config/dotfiles/claude/docs/tern.md
 
 ## Pre-edit gate — MANDATORY before any code change
