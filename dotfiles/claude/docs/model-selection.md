@@ -91,6 +91,22 @@ Tested task → effort (kentgigger.com):
 The 12-file rename is the lesson: both dials have failure modes — too low breaks
 correctness, too high burns cost for nothing.
 
+## Sonnet 5 — alias + routing policy (2026-07-02)
+
+The tier table above predates **Sonnet 5**. Until the nix-pinned Claude Code is
+bumped (2.1.185 resolves the `sonnet` alias to 4.6), agents cannot request
+Sonnet 5 at all — the `model` knob is an alias enum with no version pin, and the
+binary owns the resolution. After the bump:
+
+- **"use Sonnet" = Sonnet 5 at *medium* effort.** That is the workhorse setting.
+- **Don't climb Sonnet's effort ladder.** Harder than sonnet-5-medium ⇒ escalate
+  the MODEL (Opus, or Fable for the hardest judgment/novel work), never sonnet
+  high/xhigh — a higher ceiling at modest effort beats a maxed lower ceiling
+  (same lesson as the Opus-4.5-medium vs Sonnet-4.5-best datapoint above).
+- Refresh the tier table (IDs / prices / context) from the `claude-api` skill or
+  the Models API when the bump lands; treat this file's 4.x rows and effort
+  defaults as stale from that point.
+
 ## Routing patterns for fan-out
 
 Tiered routing vs uniform-Opus cut cost **~50–80%, no quality regression**
@@ -108,8 +124,8 @@ Tiered routing vs uniform-Opus cut cost **~50–80%, no quality regression**
 
 ## How this maps to our tools
 
-- **Agent tool** — `model: "haiku" | "sonnet" | "opus"`. (A `fork` always
-  inherits the parent model; the override is ignored there.)
+- **Agent tool** — `model: "haiku" | "sonnet" | "opus" | "fable"`. (A `fork`
+  always inherits the parent model; the override is ignored there.)
 - **Workflow** — per-agent `opts.model` + `opts.effort` on each `agent()` call.
   Default to omitting `model` (inherits the session model); set it only when
   confident. Use `opts.effort: 'low'` for cheap mechanical stages.
