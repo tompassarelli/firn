@@ -62,16 +62,19 @@ if tool in ("Edit", "Write", "MultiEdit"):
         real = fp
     if NIXOS in (real + "/") or NIXOS in (fp + "/"):
         safe = re.sub(r"[^A-Za-z0-9_.-]", "_", session)
-        marker = os.path.join("/tmp", "claude-firn-guard.%s" % safe)
+        # XDG_RUNTIME_DIR: per-user tmpfs, cleared at logout — /tmp markers pile up until reboot.
+        marker = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "claude-firn-guard.%s" % safe)
         if not os.path.exists(marker):
             try:
                 open(marker, "w").close()
             except Exception:
                 pass
+            # Decision-less on purpose: emitting "allow" here auto-approved the session's
+            # FIRST nixos-config edit as a side effect of injecting context. No decision
+            # = normal permission flow; additionalContext still lands.
             print(json.dumps({
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow",
                     "additionalContext": DIGEST,
                 }
             }))
@@ -114,4 +117,16 @@ if tool == "Bash":
 allow()
 PYEOF
 
-exec python3 -c "$PY"
+# Fast-path: this hook fires on EVERY Bash/Edit/Write/MultiEdit in ALL projects, and
+# python3 startup is ~40ms. The case filter covers everything python acts on in
+# practice: Job 1 needs "nixos-config" in the path OR a ~/.claude/* symlink that
+# realpath-resolves into the repo (hence *.claude*); Job 2 needs firn/nixos-rebuild/
+# darwin-rebuild/nh in the command — bare *nh* over-matches on purpose: false positives
+# just fall through to python, which still decides. (Not a strict superset: a
+# non-.claude symlink into the repo would slip past; none exist today.)
+payload="$(cat 2>/dev/null || true)"
+case "$payload" in
+  *nixos-config*|*.claude*|*firn*|*nixos-rebuild*|*darwin-rebuild*|*nh*) ;;
+  *) exit 0 ;;
+esac
+printf '%s' "$payload" | python3 -c "$PY"

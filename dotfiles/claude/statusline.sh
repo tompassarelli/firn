@@ -17,8 +17,8 @@ SEGMENT_CAVEMAN="${SEGMENT_CAVEMAN:-on}"   # [CAVEMAN] / [CAVEMAN:MODE] mode chi
 # Claude Code pipes on stdin — captured below for whoever needs it).
 
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+# shellcheck disable=SC2034  # captured for future segments, unused today
 STDIN_JSON=$(cat 2>/dev/null)   # session payload; unused by caveman, here for new segments
-: "${STDIN_JSON:=}"
 segments=()
 
 # ── caveman: is caveman on, and in what mode ────────────────────────────────
@@ -30,15 +30,18 @@ caveman_segment() {
   local flag="$CLAUDE_DIR/.caveman-active"
   [ -L "$flag" ] && return            # refuse symlink: blocks ANSI-escape injection via the flag
   [ -f "$flag" ] || return            # absent → caveman not installed → render nothing
-  local mode
-  mode=$(head -c 64 "$flag" 2>/dev/null | tr -d '\n\r' | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')
+  # Pure bash, no forks (this runs on every prompt render). || true, not || mode="":
+  # read returns 1 on a no-trailing-newline flag file but has already set mode.
+  local mode=""
+  IFS= read -r mode < "$flag" 2>/dev/null || true
+  mode=${mode,,}; mode=${mode//[^a-z0-9-]/}; mode=${mode:0:32}
   case "$mode" in
     off|lite|full|ultra|wenyan|wenyan-lite|wenyan-full|wenyan-ultra|commit|review|compress) ;;
     *) return ;;                       # unknown/empty → render nothing, never echo raw bytes
   esac
   local color=172                      # orange = active
   [ "$mode" = off ] && color=240       # grey = installed but off
-  printf '\033[38;5;%sm[CAVEMAN:%s]\033[0m' "$color" "$(printf '%s' "$mode" | tr '[:lower:]' '[:upper:]')"
+  printf '\033[38;5;%sm[CAVEMAN:%s]\033[0m' "$color" "${mode^^}"
 }
 
 [ "$SEGMENT_CAVEMAN" = on ] && { s=$(caveman_segment); [ -n "$s" ] && segments+=("$s"); }

@@ -54,6 +54,7 @@ ambient_ver=""
 pin_path="" ; pin_ver=""
 if [ -f "$root/bin/_beagle-racket" ]; then
   # Source in a subshell so we read the resolved pin without polluting this env.
+  # shellcheck disable=SC1091
   pin_path="$(cd "$root" 2>/dev/null && source "$root/bin/_beagle-racket" >/dev/null 2>&1 && command -v "${RACKET:-racket}" 2>/dev/null || true)"
   [ -n "$pin_path" ] && pin_ver="$("$pin_path" --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+' | head -1)"
 fi
@@ -72,7 +73,7 @@ zo="$dir/compiled/$(basename "$file" .rkt)_rkt.zo"
 if [ -f "$zo" ] && [ "$file" -nt "$zo" ]; then
   msgs="${msgs}⚠ Stale bytecode: $(basename "$file") is newer than its compiled .zo.
    Rebuild before testing or the old code runs and bugs look unfixable:
-     (cd ${root} && source bin/_beagle-racket && \"\$RACO\" make ${file#$root/})
+     (cd ${root} && source bin/_beagle-racket && \"\$RACO\" make ${file#"$root"/})
 "
 fi
 

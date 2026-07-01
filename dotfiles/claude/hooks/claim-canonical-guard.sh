@@ -54,7 +54,7 @@ REGISTRY="${CLAIM_CANONICAL_REGISTRY:-$HOME/.config/fram/claim-canonical-files}"
 
 # Resolve the redirect verbs once (kept in one place so the deny reason stays honest
 # about what the agent should call instead of Edit/Write).
-read -r -d '' DENY_REASON <<'EOF'
+read -r -d '' DENY_REASON <<'EOF' || true
 This file is CLAIM-CANONICAL: its source of truth is the Fram claim graph, not its
 text. A text Edit/Write would desync the graph and is refused. Author it as a GRAPH
 EDIT via the fram MCP tools instead:

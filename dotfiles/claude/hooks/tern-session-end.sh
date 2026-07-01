@@ -41,13 +41,18 @@ case "$ID" in ""|"cc-$RN-") exit 0 ;; esac
 # The awk state machine pairs them: arm on our token, emit the id on the next line.
 # SC2016: single quotes are DELIBERATE — $CONCERN/$ID/$AWKP must expand in the
 # inner detached bash (they're exported), not here; and $0/$1 are awk fields.
-# shellcheck disable=SC2016
-AWKP='index($0,a){p=1} p&&match($0,/concern-[0-9]+-[0-9a-f]+/){print substr($0,RSTART,RLENGTH);p=0}'
+# Owner match is "@<id> " (trailing space) — `concern ls` always space-delimits the
+# owner token, and the anchor stops a hand-set TERN_AGENT_ID that PREFIXES a peer's id
+# from arming on the peer's header (which would mark a LIVE peer's concerns done).
+# SC2089/SC2090: the double quotes ARE awk source, delivered intact via "$AWKP".
+# shellcheck disable=SC2016,SC2089
+AWKP='index($0,"@" a " "){p=1} p&&match($0,/concern-[0-9]+-[0-9a-f]+/){print substr($0,RSTART,RLENGTH);p=0}'
+# shellcheck disable=SC2090
 export CONCERN ID AWKP
 # shellcheck disable=SC2016
 setsid bash -c '
   timeout 10 "$CONCERN" ls 2>/dev/null \
-    | awk -v a="@$ID" "$AWKP" \
+    | awk -v a="$ID" "$AWKP" \
     | while IFS= read -r cid; do
         [ -n "$cid" ] && timeout 10 "$CONCERN" done "$cid" >/dev/null 2>&1 || true
       done
