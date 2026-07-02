@@ -12,7 +12,8 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "opus[1m]",
+  "model": "claude-fable-5[1m]",
+  "disableClaudeAiConnectors": true,
   "hooks": {
     "SessionStart": [
       {
@@ -138,7 +139,6 @@
     "mode": "hold"
   },
   "autoMemoryEnabled": false,
-  "disableClaudeAiConnectors": true,
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "theme": "dark",
