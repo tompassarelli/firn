@@ -37,7 +37,45 @@ is_beagle() {
   done
   return 1
 }
-is_beagle || exit 0
+
+# --- graceful-degradation ladder (L0-L3): flip-level facts + announcement ----
+# fram-code-status is filesystem + a loopback port probe (<100ms, no racket).
+# GUARDED: any failure (helper missing, timeout, bad output) leaves ladder_ctx
+# empty and the hook proceeds exactly as before — this block can never fail it.
+ladder_ctx=""
+_fcs="$HOME/code/fram/bin/fram-code-status"
+if [ -x "$_fcs" ]; then
+  _facts="$(timeout 2 "$_fcs" "$dir" 2>/dev/null)" || _facts=""
+  if [ -n "$_facts" ]; then
+    _fact() { printf '%s\n' "$_facts" | tr ' ' '\n' | sed -n "s/^$1=//p" | head -1; }
+    _level="$(_fact level)"
+    case "$_level" in
+      3) ladder_ctx="[flip L3] graph-native: author via mcp__fram__* graph-edit verbs (add-def/set-body/rename-def/insert-after); ask the graph first (blast-radius/query) before reading files; registered claim-canonical files REFUSE text edits ($(_fact canonical) registered here; coordinator alive on :$(_fact port), $(_fact claims) claims)." ;;
+      2) ladder_ctx="[flip L2] this repo is flipped (.fram/code.log with $(_fact claims) claims + .mcp.json) but the warm coordinator is NOT alive (port $(_fact port)). Revive: \`fram-code-on $dir\` re-warms it; then restart Claude Code here for the mcp__fram__* graph-edit verbs." ;;
+      1) ladder_ctx="[flip L1] flippable: $(_fact src) Beagle source file(s), not flipped. \`fram-code-on $dir [--src <subdir>]\` turns on graph-native authoring (ingest -> warm coordinator -> mcp__fram__* graph-edit verbs)." ;;
+      *) ladder_ctx="" ;;  # L0 or unparseable: stay silent
+    esac
+    # The claim-canonical guard refuses text edits at ANY level — warn early so
+    # a session in a de-flipped repo isn't surprised by a PreToolUse deny.
+    if [ -n "$ladder_ctx" ] && [ "$_level" != "3" ] && [ "$(_fact canonical)" != "0" ]; then
+      ladder_ctx="$ladder_ctx Note: $(_fact canonical) claim-canonical file(s) under this repo are registered and REFUSE text edits regardless of flip level."
+    fi
+  fi
+fi
+# Emit ONLY the ladder context (early-exit paths where the full Beagle handshake
+# doesn't apply). Same SessionStart additionalContext channel as the main print.
+emit_ladder_ctx() {
+  [ -n "$ladder_ctx" ] || return 0
+  python3 -c 'import json,sys; print(json.dumps({"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":sys.argv[1]}}))' "$ladder_ctx" || true
+}
+
+# Not a Beagle project by the precise root/src probe — but the ladder scan is
+# recursive, so a repo whose Beagle sources are all NESTED (or an already-flipped
+# repo) still gets its flip level announced. L0 stays silent (empty ladder_ctx).
+if ! is_beagle; then
+  emit_ladder_ctx
+  exit 0
+fi
 
 # Resolve the `beagle` CLI robustly — beagle tools are NOT on the global PATH;
 # they live in the checkout (direnv-activated) or are reached via $BEAGLE_PATH.
@@ -48,7 +86,10 @@ beagle=""
 [ -n "${BEAGLE_PATH:-}" ] && [ -x "$BEAGLE_PATH/bin/beagle" ] && beagle="$BEAGLE_PATH/bin/beagle"
 [ -z "$beagle" ] && [ -x "$HOME/code/beagle/bin/beagle" ] && beagle="$HOME/code/beagle/bin/beagle"
 [ -z "$beagle" ] && command -v beagle >/dev/null 2>&1 && beagle="$(command -v beagle)"
-[ -n "$beagle" ] || exit 0
+if [ -z "$beagle" ]; then
+  emit_ladder_ctx   # flip level is still worth announcing without the beagle CLI
+  exit 0
+fi
 
 # --- functional handshake + self-heal (NON-BLOCKING revive) -----------------
 # The revive cold-starts the racket daemon (~20s). Run synchronously it stalls
@@ -62,6 +103,8 @@ setsid "$beagle" doctor --revive --quiet "$dir" >"${TMPDIR:-/tmp}/beagle-revive.
 line="The repair daemon is warming in the background (non-blocking)."
 
 ctx="Beagle project detected. ${line} YOU (the agent) own repair-loop health, not the user — never ask them to check a log or babysit the daemon. Before your first Beagle edit, confirm the daemon is live yourself with \`beagle-doctor --deep\` (functional handshake) and self-heal if degraded. Treat the compiler as source of truth (query beagle-* tools; never trust a static form/type/stdlib list), and trust the PostToolUse repair hook's per-edit feedback. If this project has no repair hook yet, scaffold it with \`beagle-init --hooks\`."
+# Append the flip-level announcement (graceful-degradation ladder, L1-L3).
+[ -n "$ladder_ctx" ] && ctx="$ctx $ladder_ctx"
 
 # Inject into session context via the SessionStart additionalContext channel.
 python3 -c 'import json,sys; print(json.dumps({"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":sys.argv[1]}}))' "$ctx"
