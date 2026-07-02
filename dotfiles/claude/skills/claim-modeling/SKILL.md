@@ -1,14 +1,14 @@
 ---
-name: claim-authoring
+name: claim-modeling
 description: >-
-  Use when AUTHORING a program, app, or tool against the Fram claim engine —
+  Use when BUILDING a program, app, or tool on the Fram claim engine —
   modeling data/logic as claims (subject predicate object) + Datalog instead of
   SQL/records/imperative state. Covers assert vs supersede (update), live-view
-  queries, and Datalog derivation. NOT for one-off claim reads — just rent the
-  store and call by-lp.
+  queries, and Datalog derivation. Formerly named claim-authoring. NOT for
+  one-off claim reads — just rent the store and call by-lp.
 ---
 
-# Claim authoring — building on the Fram engine (claims + Datalog)
+# Claim modeling — building on the Fram engine (claims + Datalog)
 
 The thesis (ADR 0001 in `~/code/fram/docs/adr/`): **the program/app/work IS a claim
 graph.** Data, logic, and structure live as claims, so each is *reasoned* (Datalog:
@@ -59,7 +59,7 @@ claim-authoring task instead of guessing the API.
   — the gen-store CRUD seam, every op a claim op; the canonical add / update-as-supersede / tombstone / reaches gate.
 - **App-level blast radius (scope-correct closure):** `~/code/wake/web/spike/app-blast-radius/cascade.clj`.
 - **Stratified lifecycle (ready/blocked as rules) + the tax it can be:** `~/code/tern/cnf_lifecycle_test.clj`.
-- **Reason/repair over code:** `~/code/fram/chartroom/src/resolve.clj` (refers_to, rename/delete/callgraph) — and the **code-as-claims** skill for querying.
+- **Reason/repair over code:** `~/code/fram/chartroom/src/resolve.clj` (refers_to, rename/delete/callgraph) — and the **codegraph** skill for querying.
 
 ## 3. Discipline (the smell tests)
 - If you reach for a mutable map/atom of records as the app's data model, stop — that
@@ -70,5 +70,7 @@ claim-authoring task instead of guessing the API.
 - `value!` returns a fresh-looking id but interns; never assume id→string without your
   own reverse map. Verify a round-trip on real data, like the spike's gate does.
 
-Writing Beagle → beagle-authoring; querying a Beagle tree → code-as-claims;
-engine primitives → claim-authoring.
+The family: Beagle text edits → beagle-authoring · claim-canonical files
+(graph edit channel) → claim-canonical-authoring · relational code queries
+(blast zone / who-calls) → codegraph · building apps on the engine →
+claim-modeling. Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.

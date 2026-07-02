@@ -88,5 +88,7 @@ must first **de-adopt** it (remove its path from `$CLAIM_CANONICAL_REGISTRY` and
 drop the `;; @claim-canonical` sentinel). That is a workflow decision, not a
 per-edit escape hatch — make it explicitly, then the guard allows text edits again.
 
-Writing Beagle → beagle-authoring; querying a Beagle tree → code-as-claims;
-engine primitives → claim-authoring.
+The family: Beagle text edits → beagle-authoring · claim-canonical files
+(graph edit channel) → claim-canonical-authoring · relational code queries
+(blast zone / who-calls) → codegraph · building apps on the engine →
+claim-modeling. Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.

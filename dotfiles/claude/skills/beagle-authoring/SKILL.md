@@ -137,3 +137,10 @@ authoritative.)
 recordable gap. Either outcome beats shipping `Any`. ("Does interop compile?" is
 the *wrong* probe — that passes trivially. "Can I even *say* this type, or am I
 forced back to `Any`?" is the real one.)
+
+---
+
+The family: Beagle text edits → beagle-authoring · claim-canonical files
+(graph edit channel) → claim-canonical-authoring · relational code queries
+(blast zone / who-calls) → codegraph · building apps on the engine →
+claim-modeling. Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.

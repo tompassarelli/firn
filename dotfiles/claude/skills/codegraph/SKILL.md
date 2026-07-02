@@ -1,19 +1,22 @@
 ---
-name: code-as-claims
+name: codegraph
 description: >-
   Use when you need RELATIONAL code-intelligence over a BEAGLE source tree
   (.bjs/.bclj/.bnix) — scope-correct "who calls THIS x", transitive blast
-  radius / leverage, the real call graph. Chartroom projects the AST into a
-  Fram claim graph; Datalog derives the answer. NOT for arbitrary-language
-  repos, plain string search, or a single-file lookup (grep wins there).
+  radius / leverage, the real call graph. The codegraph module (chartroom/)
+  projects the AST into a Fram claim graph; Datalog derives the answer.
+  Formerly named code-as-claims. NOT for arbitrary-language repos, plain
+  string search, or a single-file lookup (grep wins there).
 ---
 
-# Code as claims — Fram + Chartroom for relational code-intelligence
+# Codegraph — relational code-intelligence over Beagle source
 
 The ecosystem: **Beagle** is the language; **Fram** is the claim engine (a
-subject-predicate-object graph + a stratified Datalog); **Chartroom** is the
-glue that projects Beagle source *into* Fram so you can ask relational questions
-the way Tern asks them about work. Same graph substrate, pointed at code.
+subject-predicate-object graph + a stratified Datalog); the **codegraph module**
+(`fram/chartroom/` — directory rename pending) is the glue that projects Beagle
+source *into* Fram so you can ask relational questions the way Tern asks them
+about work. Same graph substrate, pointed at code. This is the **blast zone**
+faculty: edit diagnostics consulted BEFORE proposing a change.
 
 ## When to reach for the graph (and when not to)
 
@@ -72,6 +75,8 @@ queries rather than running them.
 The bet (shared with Tern): a flat text-and-grep view rots and can't compute
 relational questions; the graph is always current and answers them for free.
 
-Writing Beagle → beagle-authoring; querying a Beagle tree → code-as-claims;
-engine primitives → claim-authoring (or `~/code/fram/bin/fram-primer` for the
-live, generated cheatsheet).
+The family: Beagle text edits → beagle-authoring · claim-canonical files
+(graph edit channel) → claim-canonical-authoring · relational code queries
+(blast zone / who-calls) → codegraph · building apps on the engine →
+claim-modeling (or `~/code/fram/bin/fram-primer` for the live cheatsheet).
+Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.
