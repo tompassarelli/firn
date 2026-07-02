@@ -6,7 +6,7 @@ description: >-
   anything under ~/code/beagle. Establishes the repair loop is online and
   functionally working BEFORE coding; the compiler is the loop's oracle and
   the source of truth, never a static cheat sheet. NOT for relational queries
-  over a Beagle tree — that's code-as-claims.
+  over a Beagle tree — that's codegraph.
 ---
 
 # Beagle authoring
@@ -80,7 +80,7 @@ if the surface looks different than you expect, `git log` it.
 
 > To *query* a Beagle codebase relationally (scope-correct callers, transitive
 > blast radius / leverage, the call graph) rather than write it, see the
-> **code-as-claims** skill — it projects the source into a Fram claim graph
+> **codegraph** skill — it projects the source into a Fram claim graph
 > (Chartroom) and answers with Datalog, which beats grep/bare-symbol on exactly
 > the relational questions text search can't compute.
 

@@ -28,7 +28,7 @@ bb ~/code/fram/bin/fram-primer        # generated FROM src/fram/*.bclj — alway
 
 It prints: the live `fram.cnf` / `fram.datalog` / `fram.schema` signatures, plus the
 five idioms below with pointers to where each is proven. Read it at the start of any
-claim-authoring task instead of guessing the API.
+claim-modeling task instead of guessing the API.
 
 ## 1. The operating model (this does not churn)
 
