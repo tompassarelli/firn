@@ -18,8 +18,9 @@ inline. Real work → the protocol below.
   (`ready`/`next`/`leverage`; claim with `driver @agent`).
 - **Spawn**: `mcp__tern__dispatch` (thread-driven) / `mcp__tern__spawn` (ad-hoc)
   — dormant-until-pinged (~0 idle tokens).
-- **Footprint**: declare before editing — `~/code/tern/bin/concern declare|shape|status`.
-- **Reach a live agent**: it arms `~/code/tern/bin/tern-arm <id>`; ping with
+- **Footprint**: declare before editing — `~/code/tern/bin/concern declare|overlap|status`
+  (`overlap <id>` marks likely-to-land work per line; alias: `shape`).
+- **Reach a live agent**: it arms `~/code/tern/bin/tern listen <id>` (alias: `tern-arm`); ping with
   `bb ~/code/tern/cli/msg-cli.clj 7977 send <from> <to> "<subject>" "<msg>"` — a
   message IS the steer. Observe via tern web (`:8088`, when the web client is running).
 - **Concurrency is the engine's job** — fram owns write-serialization + OCC + the `lease`
