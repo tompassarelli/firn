@@ -15,10 +15,10 @@ first few load in any given session — the rest are per-repo context.
 
 | scope | loads | materialization | source-of-truth | lines |
 |---|---|---|---|---|
-| `global` | every session, lowest precedence | nix store → dotfiles (out-of-store) | `~/code/nixos-config/dotfiles/claude/CLAUDE.md` | 166 |
+| `global` | every session, lowest precedence | nix store → dotfiles (out-of-store) | `~/code/nixos-config/dotfiles/claude/CLAUDE.md` | 143 |
 | `code-root` | any repo under ~/code | nix store → dotfiles (out-of-store) | `~/code/nixos-config/dotfiles/code/CLAUDE.md` | 3 |
 | `repo` | this repo (nixos-config) | real file (is its own source) | `~/code/nixos-config/CLAUDE.md` | 135 |
-| `module:claude` | editing ~/code/nixos-config/modules/claude/ | real file (is its own source) | `~/code/nixos-config/modules/claude/CLAUDE.md` | 38 |
+| `module:claude` | editing ~/code/nixos-config/modules/claude/ | real file (is its own source) | `~/code/nixos-config/modules/claude/CLAUDE.md` | 16 |
 | `module:containers` | editing ~/code/nixos-config/modules/containers/ | real file (is its own source) | `~/code/nixos-config/modules/containers/CLAUDE.md` | 7 |
 
 ## Layer 1 — LOCAL: `~/.claude` wired surface
@@ -40,7 +40,7 @@ What the `~/code/nixos-config/modules/claude` module materializes into `~/.claud
 - **hooks** (Claude Code fires these at lifecycle points; `⟨src⟩` = settings.json or the plugin that contributes it):
   - `SessionStart` → `beagle-session-start.sh` ⟨settings⟩, `tern-on-spawn` ⟨settings⟩, `caveman-activate.js` ⟨caveman⟩
   - `UserPromptSubmit` → `caveman-mode-tracker.js` ⟨caveman⟩
-  - `PreToolUse` → `claim-canonical-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩
+  - `PreToolUse` → `claim-canonical-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `tripwire-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩
   - `PostToolUse` → `racket-build-guard.sh` ⟨settings⟩, `tern-on-tooluse` ⟨settings⟩
   - `Stop` → `caveman-session-stats.js` ⟨caveman⟩
 
@@ -52,7 +52,7 @@ flowchart TD
   B -->|"beagle-session-start.sh · tern-on-spawn · caveman-activate.js"| C[turn loop]
   C --> D{UserPromptSubmit}
   D -->|"caveman-mode-tracker.js"| E["model responds + tools"]
-  E -.->|"PreToolUse: claim-canonical-guard.sh · firn-guard.sh"| E
+  E -.->|"PreToolUse: claim-canonical-guard.sh · firn-guard.sh · tripwire-guard.sh"| E
   E --> F{Stop}
   F -->|"caveman-session-stats.js"| C
   G[statusLine] -.->|"every render"| Hs[(".caveman-active + suffix")]
@@ -79,5 +79,5 @@ flowchart TD
 
 > Layer 3 (CANONICAL Anthropic contracts) is annotated inline above where
 > it governs a local choice. A fuller canonical corpus is the next phase —
-> see `~/code/nixos-config/modules/claude/CLAUDE.md` and the `claude-code-guide` skill.
+> see `~/code/nixos-config/docs/claude/01-canonical.md` and the `claude-code-guide` skill.
 

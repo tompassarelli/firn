@@ -1,45 +1,16 @@
-# ~/code/nixos-config/modules/claude — operational notes
+# ~/code/nixos-config/modules/claude — Claude Code nix module
 
-NixOS module for Claude Code: the package, out-of-store symlinks
-(commands / skills / hooks / CLAUDE.md), the **caveman** plugin install, and
-MCP server registration (`fram`, `tern`). All activation entries are
-best-effort (`timeout … || true`) so a network blip never fails a rebuild.
+Wires the Claude Code package, out-of-store symlinks into
+`~/code/nixos-config/dotfiles/claude/`, the caveman plugin install, and MCP
+server registration. Source of truth is `default.bnix`; `default.nix` is
+generated.
 
-## settings.json is a WRITABLE symlink — load-bearing
+**Read before editing `default.bnix`:**
+→ `~/code/nixos-config/dotfiles/claude/docs/nixos-module.md`
+(writable settings.json symlink + EROFS, caveman fork/pin/bump + recovery,
+MCP idempotence, claim-canonical guard gap)
 
-`linkClaudeSettings` points `~/.claude/settings.json` **directly** at
-`~/code/nixos-config/dotfiles/claude/settings.json`, bypassing the nix store, so Claude Code can
-atomic-write it (`settings.json.tmp` + rename). If it ever reverts to a
-`/nix/store/…` symlink, `claude plugin install` dies with `EROFS:
-read-only file system`. `installCaveman` is ordered
-`entryAfter ["writeBoundary" "linkClaudeSettings"]` for exactly this reason —
-settings must be writable before the plugin CLI touches it.
-
-Cost of the writable symlink: every `claude plugin install/uninstall/enable`
-**reserializes** `~/code/nixos-config/dotfiles/claude/settings.json` (reorders keys) → a tracked
-diff. Pure reorder, no content change. Commit it or discard it; it recurs on
-the next plugin op. Not worth fighting.
-
-The statusLine badge is wired in **settings.json, not plugin.json** — Claude
-Code plugins cannot own `statusLine`. The command globs the newest cache dir
-(`ls -dt …/cache/caveman/caveman/*/…/caveman-statusline.sh | head -1`), so
-stale old cache dirs are harmless.
-
-## caveman plugin — fork + sha pin
-→ [`docs/caveman-plugin.md`](docs/caveman-plugin.md)
-Personal fork `tompassarelli/caveman`, sha-pinned; `WANT` in `default.bnix` = first 12 chars of that sha = on-disk cache dir name.
-**Read when:** bumping caveman (keep fork pin + `WANT` in sync), editing `default.bnix` activation / `installCaveman`, or debugging plugin install (SSH/`EROFS` errors, `claude plugin install/update/uninstall`, half-uninstalled recovery).
-
-## MCP servers
-
-`registerMcpServers` adds `fram` + `tern` idempotently (guarded on
-`mcp get`). `fram` is the **generic** engine — its corpus is selected at
-deploy time via env (`FRAM_LOG` / `FRAM_THREADS`); never hardcode life-store
-paths into the engine itself. Also registers `linear-mcp-msa-new` (HTTP/OAuth,
-per-machine auth; msa-old retired 2026-06-30).
-
-## claim-canonical guard — accepted gap (decision)
-
-`claim-canonical-guard` deliberately covers only Edit/Write/MultiEdit —
-Bash-mediated writes (`sed -i`, `tee`) to canonical files are out of contract;
-agents are steered by the `claim-canonical-authoring` skill.
+Inline tripwire: `~/.claude/settings.json` must stay a DIRECT writable symlink
+(`linkClaudeSettings`), and `installCaveman` stays ordered after it — if it
+ever reverts to a `/nix/store/…` link, `claude plugin install` dies with
+`EROFS`.

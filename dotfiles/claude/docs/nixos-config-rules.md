@@ -7,6 +7,10 @@ This covers: Claude global config (`skills/`, `CLAUDE.md`, `commands/`,
 setting. The whole point is **reproducibility** — a fresh rebuild on any machine
 must reproduce the change.
 
+Mechanics of the nix module that does the wiring (writable settings.json
+symlink, caveman plugin install, MCP registration):
+`~/code/nixos-config/dotfiles/claude/docs/nixos-module.md`.
+
 ## Symlinks
 
 `~/.claude/{skills,CLAUDE.md,commands,settings.json,hooks,agents}` are
