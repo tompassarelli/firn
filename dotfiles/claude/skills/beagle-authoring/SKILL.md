@@ -3,10 +3,10 @@ name: beagle-authoring
 description: >-
   Use WHENEVER writing, editing, or debugging Beagle source in ANY project —
   files ending .bclj/.bcljs/.bjs/.bnix/.bgl, starting with `#lang beagle`, or
-  anything under ~/code/beagle. Establishes the repair-compiler loop is online
-  and functionally working BEFORE coding; the compiler is the source of truth,
-  never a static cheat sheet. NOT for relational queries over a Beagle tree —
-  that's code-as-claims.
+  anything under ~/code/beagle. Establishes the repair loop is online and
+  functionally working BEFORE coding; the compiler is the loop's oracle and
+  the source of truth, never a static cheat sheet. NOT for relational queries
+  over a Beagle tree — that's code-as-claims.
 ---
 
 # Beagle authoring
