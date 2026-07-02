@@ -72,6 +72,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/tripwire-guard.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
             "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/firn-guard.sh",
             "timeout": 10
           }

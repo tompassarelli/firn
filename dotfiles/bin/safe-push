@@ -43,4 +43,7 @@ if [ "$dry" = 1 ]; then
   exit 0
 fi
 echo "safe-push: ✓ clean — pushing $branch -> origin"
+# Marker for tripwire-guard.sh (PreToolUse deny-hook): raw `git push` is denied
+# estate-wide; this env var identifies the sanctioned inner push as safe-push's own.
+export SAFE_PUSH_ACTIVE=1
 git push -u origin "$branch"
