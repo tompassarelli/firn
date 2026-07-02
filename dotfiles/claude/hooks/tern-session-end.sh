@@ -58,4 +58,10 @@ setsid bash -c '
       done
 ' >/dev/null 2>&1 </dev/null &
 
+# Session-end flush of the transcript stream-sync (complements the systemd
+# user timer — catches the tail of this session immediately instead of
+# waiting up to 5min). Mechanical, zero-AI, budgeted at a few seconds; never
+# block or fail this hook's exit.
+timeout 5 "$HOME/code/tern/bin/tern-stream-sync" >/dev/null 2>&1 || true
+
 exit 0

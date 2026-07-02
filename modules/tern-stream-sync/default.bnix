@@ -1,0 +1,35 @@
+#lang beagle/nix
+
+(ns default)
+
+;; Periodic trigger for `tern stream-sync` (bin/tern-stream-sync in ~/code/tern) —
+;; the zero-AI cursor-based mirror of Claude Code transcripts into
+;; streams/raw/ (see ~/code/tern/streams/CLAUDE.md). User-level timer (not a
+;; system service like tern-coord): it only touches files under $HOME, needs
+;; no privileges, and should not block boot. SessionEnd hook flush is a
+;; second, complementary trigger (dotfiles/claude/hooks/tern-session-end.sh) —
+;; the lock in tern-stream-sync itself keeps the two from interleaving.
+(nix/module [config lib pkgs ...]
+  (let [username config.myConfig.modules.users.username
+        codeDir  config.myConfig.modules.users.codeDir]
+    {:options.myConfig.modules.tern-stream-sync.enable
+      (lib.mkEnableOption "Tern stream-sync timer — periodic transcript log-shipping into streams/raw")
+     :config
+      (lib.mkIf config.myConfig.modules.tern-stream-sync.enable
+        {:home-manager.users
+          {username
+            (nix/module [config ...]
+              {:systemd.user.services.tern-stream-sync
+                {:Unit
+                  {:Description "Tern stream-sync — mirror Claude Code transcripts into streams/raw"}
+                 :Service
+                  {:Type      "oneshot"
+                   :ExecStart (s codeDir "/tern/bin/tern-stream-sync")}}
+               :systemd.user.timers.tern-stream-sync
+                {:Unit
+                  {:Description "Run tern-stream-sync periodically"}
+                 :Timer
+                  {:OnStartupSec    "2m"
+                   :OnUnitActiveSec "5m"
+                   :Persistent      true}
+                 :Install {:WantedBy ["timers.target"]}}})}})}))

@@ -56,6 +56,9 @@
    ;; onto the canonical :7977 (tern-coord); :7978 had no live readers (web is off).
    :myConfig.modules.agent-coord.enable false
    :myConfig.modules.tern-coord.enable true
+   ;; user-level timer (~5min) for tern-stream-sync — zero-AI transcript
+   ;; mirroring into ~/code/tern/streams/raw (streams/CLAUDE.md).
+   :myConfig.modules.tern-stream-sync.enable true
    ;; v1 babashka bridge retired -> ~/code/tern/web-v1-archive. The live
    ;; web/ is now an Elixir/Phoenix app needing its own service. Off until wired.
    :myConfig.modules.tern-web.enable false
