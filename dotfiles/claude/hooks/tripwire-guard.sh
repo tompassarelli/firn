@@ -266,19 +266,25 @@ handle_git() {
     esac
     i=$((i + 1))
   done
-  local j force=0
+  local j force=0 del=0
   case "$sub" in
     push)
       for ((j = i + 1; j < n; j++)); do
         case "${a[$j]}" in
           --force | --force-with-lease | --force-with-lease=* | --force-if-includes | \
-            --mirror | --delete | --prune) force=1 ;;
+            --mirror | --prune) force=1 ;;
+          --delete) del=1 ;;
           --*) ;;
           +*) force=1 ;; # +refspec is force-push syntax
+          :*) del=1 ;;   # ':branch' refspec is delete syntax
           -*f*) force=1 ;;
         esac
       done
-      [ "$force" = 1 ] && deny "git push force/mirror/delete — history rewrites are deliberate + manual, never automated"
+      [ "$force" = 1 ] && deny "git push force/mirror — history rewrites are deliberate + manual, never automated"
+      # Branch DELETION is not history rewrite (2026-07-03, Tom): a deleted branch
+      # pointer loses nothing merged, and reflog/clones keep the commits. Allowed
+      # without safe-push — there are no outgoing commits to secret-scan.
+      [ "$del" = 1 ] && return 0
       [ -n "${SAFE_PUSH_ACTIVE:-}" ] && return 0 # safe-push's own inner push
       deny "raw 'git push' — house policy: use safe-push (gitleaks-scans the outgoing commits, then pushes)"
       ;;
