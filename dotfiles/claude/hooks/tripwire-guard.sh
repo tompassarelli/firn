@@ -18,7 +18,7 @@
 #      only). safe-push's inner push exports SAFE_PUSH_ACTIVE=1 → allowed.
 #   3. Credential exfil surface: a secret-ish path (.ssh/, .aws/, *_SECRET*,
 #      *.pem, id_rsa/id_ed25519/id_ecdsa, .config/sops, /run/secrets, *.age)
-#      AND a network verb (curl/wget/nc/ncat/netcat/ssh) in the SAME command,
+#      AND a network verb (curl/wget/nc/ncat/netcat) in the SAME command,
 #      non-localhost. Plain local reads of secret paths: ALLOWED — the tripwire
 #      is the exfil COMBINATION. ssh/scp `-i <keyfile>` is authentication, not
 #      exfil: the token after -i is excluded from the secret scan.
@@ -484,7 +484,12 @@ while [ "$i" -lt "$n" ]; do
     git) handle_git ${args[@]+"${args[@]}"} ;;
     curl | wget) handle_http "$word" ${args[@]+"${args[@]}"} ;;
     nc | ncat | netcat) secret_exfil_check "$word" ;;
-    ssh) secret_exfil_check "ssh" ;;
+    # ssh intentionally NOT a class-3 verb: it's the admin channel to boxes we
+    # own, and remote reads over it are the moral equivalent of allowed local
+    # reads (a remote `grep FOO_SECRET .env | sha256sum` is verification, not
+    # exfil). The exfil shape this class guards is pushing secrets to third
+    # parties — curl/wget/nc keep the rule. Removed 2026-07-03 after two false
+    # positives on prod ops verification.
     scp | rsync) handle_scp_rsync "$word" ${args[@]+"${args[@]}"} ;;
     mkfs | mkfs.*) deny "mkfs — formatting filesystems is manual" ;;
     dd) handle_dd ${args[@]+"${args[@]}"} ;;
