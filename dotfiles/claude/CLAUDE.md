@@ -4,18 +4,14 @@ These rules apply to every session, regardless of working directory.
 
 ## tern
 
-Read `~/code/tern/docs/operating-manual.md` before nontrivial work. If
-anything elsewhere contradicts it, the manual wins. Trivial actions (one-command
-lookups, reading a file, quick clarifications) don't need the full manual.
+Read `~/code/tern/docs/operating-manual.md` before nontrivial work; if anything
+elsewhere contradicts it, the manual wins (trivial one-command lookups exempt).
+**Session state lives on threads, not markdown dumps** — milestones → `tell <id>
+progress`, lessons → `learning`, done → `outcome`. A `SESSION-DUMP-*.md` is a
+protocol violation; the next session reads `tern show <id>`, not a file. Agent
+briefs = thread refs + the delta.
 
-**Session state lives on threads, not markdown dumps.** Substantive work runs
-on a tern thread: milestones → `tell <id> progress`, lessons → `learning`,
-done → `outcome`. Writing a `SESSION-DUMP-*.md` is a protocol violation — the
-next session reads `tern show <id>`, not a file. Agent briefs = thread refs +
-the delta, not full-context restatements.
-
-Thread format + concurrent-agent write safety (`tell`/`capture`/`import`/`export`)
-+ the full dogfood protocol:
+Thread format + concurrent-agent write safety + full dogfood protocol:
 → ~/code/nixos-config/dotfiles/claude/docs/tern.md
 
 ## Pre-edit gate — MANDATORY at task intake
@@ -35,11 +31,9 @@ paragraph, not a doc:
    typecheck), and spot-check each worker's load-bearing claims yourself — a
    30-second grep beats trusting a "done" report.
 
-Skip when there's ONE subtask (typo, single-file tweak). Fires at 2+ files or
-2+ concerns.
-
-**Failure modes prevented:** serially grinding 8 files when 3+ were independent;
-shipping a worker's "done" that never actually landed. Coordinate, don't
+Skip when there's ONE subtask (typo, single-file tweak); fires at 2+ files or
+2+ concerns. Failure modes this kills: serially grinding files that were
+independent; shipping a worker's "done" that never landed. Coordinate, don't
 execute; verify, don't trust.
 
 ## Blocked ≠ stopped — find the compliant adjacent move
@@ -64,33 +58,24 @@ Full protocol (spawn/steer/observe/concurrency):
 
 ## Model selection for parallel work — right tier per agent
 → ~/code/nixos-config/dotfiles/claude/docs/model-selection.md
-Match the model tier to the task's REASONING DEMAND, not its importance.
-Cheap-and-wide (Haiku/Sonnet) for discovery; expensive-and-narrow (Opus) for
-judgment. Coordinator stays on Opus; workers economize.
-**sonnet = Sonnet 5 at *medium*** — always pin effort on spawn
-(`{model: 'sonnet', effort: 'medium'}` in Workflow, or the `sonnet-worker`
-agent); harder ⇒ escalate the MODEL (Opus/Fable), never sonnet high/xhigh.
-Sonnet is its own Max bucket — spend it to spare Opus; exhausted ⇒ route to Opus.
-**Fable = analyst/planner, never the default implementer** — coding stays ≤ Opus.
-Escalate a coding task to Fable only on a real blocker (Opus repeatedly failing
-the same defect). In a Fable session, PIN implementation spawns to opus/sonnet —
-never let build workers inherit fable.
+Tier = the task's REASONING DEMAND, never its importance: cheap-and-wide
+(Haiku/Sonnet) for discovery, expensive-and-narrow (Opus) for judgment;
+coordinator stays Opus. Two hard laws: **sonnet = Sonnet 5 at *medium* — pin
+BOTH dials on every spawn** (harder ⇒ escalate the MODEL, never sonnet effort),
+and **Fable = analyst/planner, never the default implementer** (coding ≤ Opus;
+in a Fable session PIN implementation spawns to opus/sonnet). Bucket policy,
+effort ladder, spawn-surface mappings: the doc.
 **Read when:** fanning out agents and choosing `model`/`effort` per agent
-(Agent tool, Workflow `opts.model`, cavecrew tiers).
+(Agent tool, Workflow `opts.model`, tern spawn, cavecrew tiers).
 
 ## Measure load — never "freeze the box" (recurring reflex; KILL it)
-
-Any "keep the box quiet / CPU-gated / must wait to protect the timing" thought
-is a **bug in my own reasoning** — it has recurred despite correction. Stop and
-MEASURE: `nproc` + `cat /proc/loadavg`. Many cores + low loadavg = NOT gated;
-parallelize.
-
-- **LLM-agent / A/B / wall-time work is NETWORK-bound** — spawned agents idle
-  at ~0% CPU on API waits; the constraint is API throughput, not CPU. Default
-  to PARALLEL; don't idle a machine to babysit one job.
-- **Timing-sensitive trials → ISOLATE + MONITOR, never serialize the machine:**
-  pin with `taskset -c`, record loadavg at trial start, discard/rerun contended
-  trials. Confounds are answered by measure-and-discard, not by refusing to work.
+→ ~/code/nixos-config/dotfiles/claude/docs/measure-load.md
+Any "keep the box quiet / must wait to protect the timing" thought is a bug in
+my own reasoning — MEASURE (`nproc` + `cat /proc/loadavg`) instead of
+serializing. LLM-agent work is NETWORK-bound (agents idle ~0% CPU on API
+waits): default PARALLEL.
+**Read when:** tempted to serialize/defer work "to protect the machine", or
+running timing-sensitive trials/benchmarks (isolation protocol in the doc).
 
 ## Pushing to GitHub — push freely; the secret scan is the guard, not a human
 
