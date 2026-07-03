@@ -6,7 +6,11 @@
     environment.systemPackages = [
       (pkgs.writeShellScriptBin "bench-shield" ''
         set -euo pipefail
-        SYS_CORES="0-11"; BENCH_CORES="12-23"
+        # bench-shield on [N] — reserve the top N cores (default 8; measured:
+        # control arm ~0.1 core avg, treatment gate bursts ~8 cores at p95).
+        NPROC=$(nproc)
+        N="''${2:-8}"
+        SYS_CORES="0-$((NPROC - N - 1))"; BENCH_CORES="$((NPROC - N))-$((NPROC - 1))"
         units="system.slice user.slice init.scope"
         case "''${1:-status}" in
           on)
