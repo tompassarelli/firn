@@ -14,26 +14,41 @@ on evidence — promotion is cheap, over-provisioning is silent waste.
 
 ## The stack
 
-- **sonnet-low** — discovery, triage, locate, read-only fan-out, research sweeps.
-- **sonnet-medium** — well-specified build/edit/summarize. The workhorse.
-- **Opus** — judgment: architecture, cross-file refactors, ambiguous debugging,
-  adversarial verify, synthesis. Top implementer. **Default effort: high** —
-  official Opus guidance recommends xhigh as the agentic starting point with
-  medium as the cost-sensitive step-down; our Opus work is judge-shaped
-  (under-provisioned verifier ⇒ confident wrong verdicts, costlier than the
-  tokens saved). Step DOWN to medium for scoped well-specified work
-  (implementation escalated from sonnet); xhigh for long-horizon runs. The
-  header's opus-medium≈sonnet-best figure is cross-model parity evidence,
-  not judge-sufficiency evidence.
-- **Fable** — above Opus: hardest analysis, no-priors design, root-cause,
-  planning. Coordinator tier. Never default implementer. Own usage bucket.
-  **Spawned Fable work: xhigh.** Anthropic's own Fable guidance (effort docs,
-  2026-07): high default for most tasks, xhigh for capability-sensitive —
-  and Fable routing pre-filters to exactly those; with no rung above, a
-  re-run costs more than the effort delta. Coordinator sessions: high.
-  **max is never a default**: officially gated on "evals show measurable
-  headroom at xhigh"; documented overthinking failure modes (judgment
-  reversal, spurious complexity).
+Anthropic's own /model menu agrees with this shape: Opus = "everyday,
+complex tasks" (the recommended default), Sonnet = "routine tasks", Fable =
+"hardest and longest-running".
+
+- **sonnet-low** — discovery, triage, locate, read-only fan-out, research
+  sweeps, mechanical single-shot edits.
+- **sonnet-medium** — the PATTERN-EXTENSION tier, not the workhorse:
+  **junior/mid-level dev tasks** — grunt work and/or extremely
+  well-specified, relatively simple work; extends established patterns in
+  well-trodden, solidified code. **Layer floor:** NEVER
+  foundational / architecture / library code, however mechanical the task
+  looks — the layer of the stack sets the floor, not apparent difficulty.
+  sonnet-high ≈ never: dominated by opus-medium (shingle law, below).
+- **Opus — the WORKHORSE, medium…xhigh** — **senior dev / staff engineer /
+  tech lead shaped tasks**: frontier work, anything designing something new,
+  foundational stack layers, cross-file refactors, ambiguous debugging,
+  adversarial verify, synthesis. **Default high; xhigh is the
+  preferred building rung** for real frontier work (official guidance:
+  xhigh = recommended agentic starting point); medium threads in for
+  scoped, well-specified "entry-senior" tasks (e.g. implementation
+  escalated from sonnet). opus-max: rare — tends to overthink; only with
+  demonstrated headroom, and mostly dominated by fable rungs now.
+- **Fable — high|xhigh** — **architect/researcher grade, especially on weak
+  existing priors**: hardest analysis, no-priors design, root-cause,
+  planning. Coordinator tier. Never default implementer. Own usage bucket. **Spawned fable work: xhigh** (pre-filtered hardest; no rung
+  above — a re-run costs more than the effort delta). Sessions: high. max
+  reserved for extremely critical junctures with demonstrated headroom —
+  officially gated on "evals show measurable headroom at xhigh"; documented
+  overthinking failure modes (judgment reversal, spurious complexity).
+
+**Shingle law:** each model has ~2 practical effort rungs, and a model's top
+rung is dominated by the next model's bottom rung (sonnet-high ⊂
+opus-medium; opus-max mostly ⊂ fable-high). One continuous ramp:
+sonnet-low → sonnet-medium → opus-medium → opus-high/xhigh → fable-high →
+fable-xhigh → fable-max (rare). Route on the ramp, not per-model dials.
 - **Haiku** — single-shot bulk classify/extract ONLY, NO tool chains: tool-loop
   bug (anthropics/claude-code#10029), rejects `effort` (400), two gens stale.
   One looped worker erases the price gap and emits claims that cost Opus-tier
@@ -60,6 +75,11 @@ law fires); a one-line naming decision that shapes an API is *design*. **Blast
 radius routes up; importance alone never does** — blast radius = the decision
 shapes the system going forward, importance = the outcome matters to the user.
 "Coordinates agents" is not a spawn shape — that's the session itself.
+
+**Layer floor overrides shape:** *implement* on foundational / library /
+architecture code routes to Opus regardless of how mechanical it looks —
+Sonnet only extends established patterns in solidified code. Frontier =
+Opus; well-trodden extension = Sonnet.
 
 Dials 3–4 (role authority, posture) are cached as paste-ready spawn blocks:
 `~/code/nixos-config/dotfiles/claude/docs/praxis/` — domain defaults, model
