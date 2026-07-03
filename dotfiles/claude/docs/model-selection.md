@@ -1,8 +1,8 @@
 # Model selection for parallel work
 
 Picking the right model — *and* effort level — per agent when fanning out. Cost
-spread is real (~5× Haiku→Opus on price, ~12× more low→max on effort), so a wrong
-setting on a 10-agent fan-out wastes money *and* wall-time.
+spread is real (~10× Haiku→Fable on price, ~12× more low→max on effort), so a
+wrong setting on a 10-agent fan-out wastes money *and* wall-time.
 
 Pricing / IDs / limits: authoritative source is the bundled `claude-api` skill
 (cached 2026-06-04) or the Models API — not blogs (they lag releases and quote
@@ -11,7 +11,7 @@ stale prices).
 ## Two dials, not one ladder
 
 **Match the setting to the task's reasoning demand, not its importance.** A
-"critical" rename is still mechanical → Haiku/low; a throwaway prototype's
+"critical" rename is still mechanical → sonnet-low; a throwaway prototype's
 architecture is still judgment → Opus. Reaching for Opus "because this matters"
 is how money burns on grep-shaped work.
 
@@ -28,18 +28,49 @@ judgment) vs **sonnet-high** (modest ceiling, many careful steps). And they trad
 score on 76% fewer tokens**: higher ceiling + lower effort beats lower ceiling +
 full effort, cheaper. Pick both dials per task.
 
-## The three tiers
+## The stack
 
-Mechanical/locate/format-preserving → **Haiku** (no effort dial; ~15× cheaper
-than Opus — default for read-only fan-out). Well-specified
-build/edit/summarize/extract → **Sonnet** (= Sonnet 5 at medium; see below).
-Judgment: architecture, cross-file refactors, ambiguous debugging, adversarial
-verify/judge, synthesis → **Opus/Fable** (the coordinator). IDs / prices /
-context: query the Models API or the `claude-api` skill — never a static table
-here. Opus's edge over Sonnet is the hard tail, not the median task. **Start
-one bucket lower than feels right on both dials, then escalate** — promotion is
-cheap to find; over-provisioning is silent waste (one-low cut tokens 30–50%
-with no quality loss).
+- **sonnet-low** — discovery, triage, locate, read-only fan-out, corpus reads,
+  research sweeps. Replaced Haiku as the cheap-wide tier (2026-07-03; below).
+- **sonnet-medium** — well-specified build/edit/summarize/extract. The "use
+  Sonnet" workhorse (alias policy below).
+- **Opus** — judgment: architecture, cross-file refactors, ambiguous debugging,
+  adversarial verify/judge, synthesis. The top implementer.
+- **Fable** — above Opus: hardest analysis, no-priors design, root-cause,
+  research synthesis, planning; the coordinator tier alongside Opus. Never the
+  default implementer (own section below).
+- **Haiku** — single-shot bulk text ONLY (classify/extract/summarize; one shot
+  in, one shot out, NO tool chains). Off the default stack (below).
+
+IDs / prices / context: query the Models API or the `claude-api` skill — never
+a static table here. Opus's edge over Sonnet is the hard tail, not the median
+task. **Start one bucket lower than feels right on both dials, then escalate**
+— promotion is cheap to find; over-provisioning is silent waste (one-low cut
+tokens 30–50% with no quality loss).
+
+## Haiku — demoted to single-shot bulk work (2026-07-03)
+
+Haiku 4.5 is two generations stale (no Haiku 5 announced), rejects the `effort`
+param (400 error), and has a confirmed agentic failure mode: **tool-loops** —
+re-calls already-completed tools, stalls multi-step plans
+(anthropics/claude-code#10029), hallucinates optional tool params. One looped
+or retried worker erases the price gap AND produces claims that cost extra
+Opus/Fable verification — verification is the expensive currency, so a cheap
+finder that lies is negative-value.
+
+Price reality (2026-07): Haiku $1/$5 per MTok; Sonnet 5 $2/$10 intro through
+Aug 31 2026, then $3/$15 — and Sonnet 5's new tokenizer emits ~30% more tokens
+for the same text, so the effective gap is ~2.6× now, ~3.9× after Sept 1.
+Still worth paying wherever a tool chain exists.
+
+Haiku's remaining slot: **single-shot bulk** classify/extract/summarize — one
+prompt in, one answer out, zero tool iterations, high volume. The loop bug
+can't fire there and the discount is real.
+
+The true Haiku successor is likely off-Anthropic: Gemini 2.5 Flash
+($0.30/$2.50 — 3× cheaper than Haiku, better tool-use reputation) via LiteLLM
+proxy → `ANTHROPIC_BASE_URL` into the Agent SDK. Not built; candidate tern SDK
+`flash` tier.
 
 ## Personal overrides — greenfield / compiler work
 
@@ -58,12 +89,13 @@ near-Opus benchmark parity does *not* transfer. Bend the defaults:
     spends the Sonnet pool and **preserves Opus headroom** for the hard work — free
     parallel capacity we're leaving on the table.
   - *When the Sonnet bucket is exhausted, disregard the "use Sonnet" guidance* —
-    route those build/workhorse tasks to **Opus** (Haiku still handles the
-    mechanical subset). Sonnet is the optimization, not a requirement.
+    route those build/workhorse tasks to **Opus** (Haiku still covers the
+    single-shot bulk subset). Sonnet is the optimization, not a requirement.
 
-Net default for this work: **Haiku** mechanical · **Sonnet** well-trodden build
-*while the bucket lasts* · **Opus** anything novel/ambiguous, anything Sonnet is
-visibly struggling with, or when Sonnet's tapped out.
+Net default for this work: **sonnet-low** discovery/mechanical (Haiku only for
+single-shot bulk) · **sonnet-medium** well-trodden build *while the bucket
+lasts* · **Opus** anything novel/ambiguous or Sonnet visibly struggling ·
+**Fable** the hardest analysis/planning (never default implementation).
 
 ## Effort: the second dial
 
@@ -114,8 +146,8 @@ Fable sits above Opus (Mythos-class ceiling). Its edge is the hardest
 *analysis*: architecture with no priors, root-causing thorny bugs, research
 synthesis, adversarial judgment, planning. It is **not the coding tier**:
 
-- **Coding/editing/building default to the standard ladder** (Haiku → Sonnet →
-  Opus). Opus is the top implementer.
+- **Coding/editing/building default to the standard ladder** (sonnet-low →
+  sonnet-medium → Opus). Opus is the top implementer.
 - **Escalate implementation to Fable only on a real blocker**: Opus has
   repeatedly failed the same defect, or the fix hinges on analysis Opus can't
   crack. Deliberate, per-task — never a default route.
@@ -130,13 +162,14 @@ synthesis, adversarial judgment, planning. It is **not the coding tier**:
 Tiered routing vs uniform-Opus cut cost **~50–80%, no quality regression**
 (tested, multiple sources). Converging patterns:
 
-- **Routed stack** — Haiku triages → Sonnet builds → Opus reviews. Default shape.
-- **Planner / executor** — Opus orchestrator (1–2 calls, holds context) → Sonnet
-  executors (N/step) → Haiku sub-tools. Maps to coordinator/worker.
-- **Confidence-gated escalation** — start every item on Haiku; → Sonnet on low
-  confidence, → Opus on a second failure. ~80–90% terminate at Haiku. Best when
-  difficulty is unknown up front.
-- **Discovery wide, judgment narrow** — cheap-and-wide sweep (Haiku/Sonnet) →
+- **Routed stack** — sonnet-low discovers/triages → sonnet-medium builds → Opus
+  judges → Fable plans/analyzes the hardest. Default shape.
+- **Planner / executor** — Opus/Fable orchestrator (1–2 calls, holds context) →
+  Sonnet executors (N/step) → sonnet-low sub-tools. Maps to coordinator/worker.
+- **Confidence-gated escalation** — start every item on sonnet-low; →
+  sonnet-medium on low confidence, → Opus on a second failure. Most items
+  terminate at the bottom tier. Best when difficulty is unknown up front.
+- **Discovery wide, judgment narrow** — cheap-and-wide sweep (sonnet-low) →
   expensive-and-narrow synth/verify (Opus). Verify must NOT reuse the cheap model
   that produced the finding. And model-independent: the coordinator spot-checks
   every load-bearing worker claim itself (grep/`tern show`/direct read) — worker
@@ -161,10 +194,11 @@ Native-path mappings (apply only under `my-config dispatch warn|native`):
   default (e.g. Sonnet) while the main session stays on Opus; per-agent frontmatter
   overrides (the built-in Explore subagent runs on Haiku this way).
 - **cavecrew agents** already encode tier intent — honor it:
-  - `cavecrew-investigator` (read-only locate) → Haiku, low
+  - `cavecrew-investigator` (read-only locate) → Sonnet, low (was Haiku — an
+    impossible combo with `low`, and tool-chained; re-tiered 2026-07-03)
   - `cavecrew-builder` (1–2 file edit) → Sonnet, medium
-  - `cavecrew-reviewer` (severity-tagged diff review) → Sonnet, or Opus when the
-    diff needs real judgment
+  - `cavecrew-reviewer` (severity-tagged diff review) → Sonnet medium, or Opus
+    when the diff needs real judgment
 
 ## Sources
 

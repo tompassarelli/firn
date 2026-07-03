@@ -58,13 +58,15 @@ Full protocol (spawn/steer/observe/concurrency):
 
 ## Model selection for parallel work — right tier per agent
 → ~/code/nixos-config/dotfiles/claude/docs/model-selection.md
-Tier = the task's REASONING DEMAND, never its importance: cheap-and-wide
-(Haiku/Sonnet) for discovery, expensive-and-narrow (Opus) for judgment;
-coordinator stays Opus. Two hard laws: **sonnet = Sonnet 5 at *medium* — pin
-BOTH dials on every spawn** (harder ⇒ escalate the MODEL, never sonnet effort),
-and **Fable = analyst/planner, never the default implementer** (coding ≤ Opus;
-in a Fable session PIN implementation spawns to opus/sonnet). Bucket policy,
-effort ladder, spawn-surface mappings: the doc.
+Tier = the task's REASONING DEMAND, never its importance. The stack:
+**sonnet-low** discovers/triages → **sonnet-medium** builds → **opus** judges →
+**fable** plans/analyzes the hardest; coordinator stays Opus/Fable. Haiku is
+OFF the default stack (2026-07: tool-loop bug, no effort dial, 2 gens stale) —
+single-shot bulk classify/extract only, NEVER tool chains. Two hard laws:
+**pin BOTH dials on every spawn** (harder ⇒ escalate the MODEL, never sonnet
+high/xhigh), and **Fable = analyst/planner, never the default implementer**
+(coding ≤ Opus; in a Fable session PIN implementation spawns to opus/sonnet).
+Bucket policy, effort ladder, spawn-surface mappings: the doc.
 **Read when:** fanning out agents and choosing `model`/`effort` per agent
 (Agent tool, Workflow `opts.model`, tern spawn, cavecrew tiers).
 
