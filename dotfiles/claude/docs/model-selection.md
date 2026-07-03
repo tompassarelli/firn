@@ -175,8 +175,6 @@ Tiered routing vs uniform-Opus: ~50–80% cheaper, no quality regression (tested
   `effort:'low'` for mechanical stages.
 - **Claude Code subagents**: `CLAUDE_CODE_SUBAGENT_MODEL` sets the default;
   per-agent frontmatter overrides (built-in Explore runs Haiku).
-- **cavecrew**: investigator → sonnet-low · builder → sonnet-medium ·
-  reviewer → sonnet-medium, Opus when the diff needs real judgment.
 
 ## Sources
 
