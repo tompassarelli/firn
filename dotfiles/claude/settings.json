@@ -10,9 +10,8 @@
       "WebSearch",
       "Bash(safe-push:*)"
     ],
-    "defaultMode": "auto"
+    "defaultMode": "dontAsk"
   },
-  "model": "claude-fable-5[1m]",
   "disableClaudeAiConnectors": true,
   "hooks": {
     "SessionStart": [
@@ -135,7 +134,8 @@
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
-    "caveman@caveman": true
+    "caveman@caveman": true,
+    "gaffer@gaffer": true
   },
   "extraKnownMarketplaces": {
     "claude-code-plugins": {
@@ -149,6 +149,12 @@
         "source": "github",
         "repo": "tompassarelli/caveman",
         "ref": "main"
+      }
+    },
+    "gaffer": {
+      "source": {
+        "source": "directory",
+        "path": "/home/tom/code/gaffer"
       }
     }
   },

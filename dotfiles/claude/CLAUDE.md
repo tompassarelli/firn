@@ -52,8 +52,9 @@ analyzes, never default-implements** (coding ≤ Opus; in a Fable session PIN
 implementation spawns to opus/sonnet). When out: opus-xhigh tops the ramp
 and capacity is substituted with structure (judge panels, adversarial
 verify). Haiku stays OFF the stack (single-shot bulk classify only — doc).
-tern spawns get praxis model-deltas automatically; for custom spawns
-compose role + posture from praxis/ — cache, don't re-derive.
+tern spawns get model-deltas automatically (read from `~/code/gaffer/docs`,
+the canonical block source); personal domain-posture defaults live in
+praxis/README.md. Compose, don't re-derive.
 
 ## Push freely — the scan is the guard, not a human
 

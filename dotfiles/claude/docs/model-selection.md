@@ -1,5 +1,9 @@
 # Model selection for parallel work
 
+**Normative routing lives in the gaffer plugin's doctrine** (injected every
+session; edit in `~/code/gaffer`). This doc is the evidence, calibration,
+and personal-surface reference BEHIND it — on any conflict, gaffer wins.
+
 Two dials per agent: **model = capability ceiling**, **effort = deliberation
 depth**. Orthogonal — opus-low (high ceiling, snap judgment) ≠ sonnet-high
 (low ceiling, many careful steps). They trade: Opus-4.5-medium matched
@@ -89,9 +93,11 @@ architecture code routes to Opus regardless of how mechanical it looks —
 Sonnet only extends established patterns in solidified code. Frontier =
 Opus; well-trodden extension = Sonnet.
 
-Dials 3–4 (role authority, posture) are cached as paste-ready spawn blocks:
-`~/code/nixos-config/dotfiles/claude/docs/praxis/` — domain defaults, model
-deltas, escape hatch, ≤60-line assembly cap. Compose, don't re-derive.
+Dials 3–4 (role authority, posture) are cached as paste-ready spawn blocks
+in the gaffer repo (`~/code/gaffer/docs/` — roles, postures, model deltas;
+canonical). Personal domain-posture defaults:
+`~/code/nixos-config/dotfiles/claude/docs/praxis/README.md`. Compose, don't
+re-derive; keep assembled payloads ≤ ~60 lines.
 
 ## Buckets (Max plan, /usage-verified 2026-07-03)
 
@@ -129,8 +135,8 @@ dials on every spawn** — a bare `model:'sonnet'` inherits the session's effort
 (ultracode runs xhigh: the exact anti-pattern).
 
 - Workflow `agent()`: always paired — `{model:'sonnet', effort:'medium'}`.
-- Agent tool has no effort param → spawn the `sonnet-worker` agent
-  (`~/code/nixos-config/dotfiles/claude/agents/sonnet-worker.md`), not
+- Agent tool has no effort param → spawn a gaffer squad agent
+  (`gaffer:implementer` = sonnet-medium + delta; `gaffer:executor` = sonnet-low), not
   general-purpose + `model:"sonnet"`.
 - Agent frontmatter takes `effort: low|medium|high|xhigh|max`; there is no
   global effort env (only `CLAUDE_CODE_SUBAGENT_MODEL`).

@@ -1,23 +1,11 @@
-# Praxis — composable spawn payloads
+# Praxis — personal residue (canonical blocks live in gaffer)
 
-The coordinator re-derives procedure and policy for every spawn; this
-directory caches it. Instead of brute-forcing instructions each time, compose
-from orthogonal axes and paste into the spawn prompt. Goals: cheaper spawns,
-less decision fatigue, consistent house style. Constraint: the assembled
-payload stays **≤ ~60 lines** — the cache must not become a context tax.
-
-## Assembly (three questions, then paste)
-
-1. **Domain?** — sets the DEFAULTS (table below). Usually answered by cwd.
-2. **Shape?** — execute / implement / integrate / design / invent →
-   role block from `roles.md`, model + effort per
-   `~/code/nixos-config/dotfiles/claude/docs/model-selection.md` (dials 1–2).
-3. **Posture?** — explore / deliver / preserve → block from `postures.md`.
-   Take the domain default unless the task says otherwise.
-
-Paste: role block + posture block + model delta (`deltas/opus.md` or
-`deltas/sonnet.md`) + the task itself. Most spawns = confirm domain defaults
-and go; deliberation only when the task contradicts its domain.
+The generic spawn-payload system — roles, postures, model deltas, the
+elicit → subtract → compile method, the compose/elicit procedures — is
+CANONICAL in the **gaffer plugin**: `~/code/gaffer` (docs/roles.md,
+docs/postures.md, docs/deltas/, docs/method.md). Edit blocks there; they
+ship to everyone, and tern's harness reads them from there at spawn time.
+This directory holds only what is personal:
 
 ## Domain bootstrap (defaults by entry point)
 
@@ -28,22 +16,16 @@ and go; deliberation only when the task contradicts its domain.
 | Infrastructure / config | `~/code/nixos-config`, dotfiles, CI | deliver, preserve-leaning | Reproducibility rules; blast radius = every future rebuild. |
 | Others' code | `~/code/reference/*` | read-only | Never edit; license check before leveraging. |
 
-Domain sets defaults, task shape can override a default, and the escape
+Domain sets defaults; task shape can override a default; gaffer's escape
 hatch overrides everything.
 
-## Escape hatch — presets are compression, not law
+## Fable self-report
 
-Misfit signals: the task spans domains; the posture contradicts the evidence
-in front of you; the agent keeps hitting its authority wall; the work IS this
-taxonomy. On any signal: **drop the preset, write one line naming what was
-dropped and why, operate from first principles.** A logged drop is the
-cache-miss path working, not a failure. Hyper-fit structure that can't be
-exited is worse than no structure.
+`self-reports/fable.md` — the Fable introspection (with §11 generic payload
+and §12 compilation method + trial predictions). Personal: Fable is the
+opt-in tier above gaffer's public ramp; no delta ships for it.
 
 ## Change policy — the freeze rule
 
 Edit this structure only after a real spawn hit a misfit **twice**. Never
 speculatively — no new roles, postures, domains, or deltas ahead of demand.
-Rationale for the whole design, compilation method for new model deltas
-(elicit self-report → subtract → compile in consumer's vocabulary):
-`~/code/nixos-config/dotfiles/claude/docs/praxis/self-reports/fable.md` §12.
