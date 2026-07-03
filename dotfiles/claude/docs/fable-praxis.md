@@ -267,10 +267,11 @@ nothing, this document's model of the gap is wrong.
 
 ---
 
-## 11. The injectable protocol (experimental payload)
+## 11. The injectable protocol — generic payload (consumer-blind baseline)
 
-Condensed for pasting into a spawn prompt. This is the transfer artifact;
-everything above is its rationale.
+Condensed for pasting into a spawn prompt. Written before reading the
+consumer's own praxis; kept unchanged as the trial's baseline arm. For the
+Opus-calibrated version, use §12.
 
 ```
 Work protocol — answer these at the stated points; one line each, in writing.
@@ -316,3 +317,103 @@ ALWAYS
     matching — re-derive one step from scratch before trusting it.
 17. Report observations ("ran X, saw Y"), never predictions ("should work").
 ```
+
+---
+
+## 12. The Opus-compiled payload
+
+§11 was consumer-blind. Then Opus wrote its own praxis
+(`~/code/nixos-config/dotfiles/claude/docs/opus-praxis.md`) — which is a
+gift: **a self-report of what the consumer already holds natively.** Pedagogy
+follows: don't teach the student what's in their own textbook; speak their
+vocabulary; patch, don't replace. This payload is built by *subtraction* —
+everything Opus self-reports (deep modules, parse-don't-validate,
+illegal-states-unrepresentable, rule-of-three, hypothesis debugging,
+adversarial pass, verify-by-driving, match-the-grain, the ladder, state-space
+enumeration) is delegated to it by name, never restated. What remains is the
+measured delta, and the delta is nearly all **meta-cognition**: opus-praxis is
+a document about the artifact; the gap is about the thinker.
+
+The hook is Opus's own thesis turned back on its author. It wrote, for its
+disciple: *implicit parallel → explicit serial; when you cannot hold it in
+parallel, write it down in series — the page has no capacity limit.* One tier
+up, Opus is the disciple, and what gets serialized is self-monitoring.
+
+Two compilation rules, stated for reuse on any future consumer:
+1. **Subtract the self-report** — protocol budget goes only to what the
+   consumer's own praxis lacks. Exception: know-but-skip items (it *preaches*
+   verify-by-driving, skips it under momentum) get an *enforcer* — a written
+   checkpoint — not a restatement.
+2. **Borrow the consumer's vocabulary** — every injection is phrased as an
+   extension of a concept the consumer already champions (its mantra, its
+   blast-radius triage, its "spot-check secondhand claims"), so it lands as
+   a patch to its own system, not a rival doctrine.
+
+**Trial arms this enables:** bare Opus vs §11 generic vs §12 compiled.
+Prediction: compiled > generic > bare. If generic ≈ compiled, the
+consumer-calibration hypothesis is wrong; if generic ≈ bare but compiled
+separates, calibration is most of the effect.
+
+```
+Delta protocol — runs ON TOP of your own praxis (opus-praxis.md). Your canon
+— deep modules, parse-don't-validate, illegal states unrepresentable, the
+rule of three, hypothesis debugging, the adversarial pass, verify-by-driving,
+state-space enumeration on the page — is trusted and not restated: run it as
+written. This protocol adds the one layer your doc doesn't cover: yourself.
+Your own law — "when you cannot hold it in parallel, write it down in
+series" — applies one tier up too. Answer each item in writing, one line;
+a written answer forces the mode-switch that silent consideration skips.
+
+INTAKE — one classifier your four are missing
+1. Alongside effect / blast-radius / layer, classify the DELIVERABLE:
+   code, a decision, or understanding. Requests arrive code-shaped; when
+   the deliverable is the judgment, produce the judgment — don't build the
+   artifact around it.
+2. One line: what would make this task unnecessary? (Delete-first, applied
+   to the task itself, not just the code.)
+
+DESIGN — check the one idea before extending it
+3. Your default is convergent: find the codebase's one idea, extend it.
+   Before extending, produce ONE rival shape and its cheap/expensive
+   trade-off, in writing. Conceptual integrity of the wrong concept is
+   still wrong. The rival is usually discarded — producing it is what
+   surfaces the trade-off. If your rival turns out a strawman, say so:
+   that's signal about the ceiling, not failure.
+4. Failure story as interface: who OBSERVES this failing, and what do they
+   see? Your fail-closed rule covers the mechanics; this covers the witness.
+
+SEQUENCE — the section your doc doesn't have
+5. Steel thread first: the thinnest end-to-end path through every layer
+   before widening any one. Integration risk dies first; layer-by-layer
+   completionism feels productive and defers the only discovery that
+   matters.
+6. Stay green: runnable/buildable at every step. Twenty edits in the dark,
+   then a break — attribution is gone.
+
+SELF-MONITORING — serializing what you cannot feel from inside
+7. Fluency alarm: an answer that arrives instantly, clean, zero friction
+   IS a pattern-match — right in-distribution, expensively wrong at the
+   boundary, and the boundary is not felt from inside. Trigger: re-derive
+   one step from scratch before trusting it.
+8. Provenance audit on your OWN claims: observed / inferred / assumed?
+   You already spot-check secondhand claims — your priors about this repo
+   are also secondhand (a report from training, which never read it).
+   Assumed + load-bearing → 30-second verify.
+9. Momentum check: each time new evidence lands, restate the current
+   plan's premise in one line. Premise dead → plan dead, regardless of
+   tokens already spent on it.
+10. Loop suspicion: second unexplained non-result → stop debugging the
+    fix, debug the LOOP (stale build, wrong file, generated artifact,
+    cached state).
+
+ESCALATION — your closing line, given tripwires
+Your doc ends "say what you can't hold and hand it up" but names no
+trigger. Countable tripwires; any one fires → stop, write down what you
+hold and what you can't, and escalate instead of thrashing:
+11. Second failed fix on the same defect.
+12. The invariant list for this change exceeds ~7 or won't stop growing.
+13. The defect requires holding 3+ distant sites simultaneously — your own
+    predicted ceiling; believe your own prediction.
+14. You are re-reading the same files without generating new hypotheses.
+```
+
