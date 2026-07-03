@@ -36,9 +36,16 @@ complex tasks" (the recommended default), Sonnet = "routine tasks", Fable =
   scoped, well-specified "entry-senior" tasks (e.g. implementation
   escalated from sonnet). opus-max: rare — tends to overthink; only with
   demonstrated headroom, and mostly dominated by fable rungs now.
-- **Fable — high|xhigh** — **architect/researcher grade, especially on weak
-  existing priors**: hardest analysis, no-priors design, root-cause,
-  planning. Coordinator tier. Never default implementer. Own usage bucket. **Spawned fable work: xhigh** (pre-filtered hardest; no rung
+- **Fable — OPT-IN, availability-gated (high|xhigh when live)** —
+  **architect/researcher grade, especially on weak existing priors**:
+  hardest analysis, no-priors design, root-cause, planning. NOT a standing
+  rung: the Max-plan Fable window is limited and week-scoped (verified
+  2026-07-03; treat any availability belief older than ~7 days as stale;
+  only the USER can run `/usage` — unknown ⇒ assume out). Route to Fable
+  only when the task is truly above Opus AND the bucket is verified live.
+  **Fallback when out: opus-xhigh tops the ramp; substitute capacity with
+  structure** (judge panels, adversarial verify, loop-until-dry).
+  Coordinator tier. Never default implementer. Own usage bucket. **Spawned fable work: xhigh** (pre-filtered hardest; no rung
   above — a re-run costs more than the effort delta). Sessions: high. max
   reserved for extremely critical junctures with demonstrated headroom —
   officially gated on "evals show measurable headroom at xhigh"; documented
@@ -46,9 +53,10 @@ complex tasks" (the recommended default), Sonnet = "routine tasks", Fable =
 
 **Shingle law:** each model has ~2 practical effort rungs, and a model's top
 rung is dominated by the next model's bottom rung (sonnet-high ⊂
-opus-medium; opus-max mostly ⊂ fable-high). One continuous ramp:
-sonnet-low → sonnet-medium → opus-medium → opus-high/xhigh → fable-high →
-fable-xhigh → fable-max (rare). Route on the ramp, not per-model dials.
+opus-medium; opus-max mostly ⊂ fable-high *when Fable is live*). The
+STANDING ramp: sonnet-low → sonnet-medium → opus-medium → opus-high/xhigh.
+Fable rungs (high → xhigh → max, rare) extend it ONLY when the bucket is
+verified available. Route on the ramp, not per-model dials.
 - **Haiku** — single-shot bulk classify/extract ONLY, NO tool chains: tool-loop
   bug (anthropics/claude-code#10029), rejects `effort` (400), two gens stale.
   One looped worker erases the price gap and emits claims that cost Opus-tier

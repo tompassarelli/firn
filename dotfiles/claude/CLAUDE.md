@@ -41,14 +41,19 @@ the user the finish as ONE command, and say exactly why.
 Shared routing laws (shape triage, the ramp, layer floor, shingle law,
 pin-both-dials, workflow staffing) are CANONICAL in the **gaffer plugin's
 doctrine**, injected at SessionStart — edit them in `~/code/gaffer`, never
-fork them here. Personal delta only: **Fable** is the tier above gaffer's
-ramp — architect/researcher grade, especially on weak priors; spawns xhigh,
-sessions high, max only at critical junctures with demonstrated headroom;
-**Fable analyzes, never default-implements** (coding ≤ Opus; in a Fable
-session PIN implementation spawns to opus/sonnet). Haiku stays OFF the
-stack (single-shot bulk classify only — doc). tern spawns get praxis
-model-deltas automatically; for custom spawns compose role + posture from
-praxis/ — cache, don't re-derive.
+fork them here. Personal delta only: **the standing ramp ends at
+opus-xhigh.** **Fable is OPT-IN and availability-gated, never load-bearing
+in standing machinery** — its Max-plan window is limited and week-scoped
+(any availability belief older than ~7 days is stale; only the USER can
+check `/usage`; unknown ⇒ assume out). When available AND the task is truly
+above Opus: architect/researcher on weak priors; spawns xhigh, sessions
+high, max only at critical junctures with demonstrated headroom; **Fable
+analyzes, never default-implements** (coding ≤ Opus; in a Fable session PIN
+implementation spawns to opus/sonnet). When out: opus-xhigh tops the ramp
+and capacity is substituted with structure (judge panels, adversarial
+verify). Haiku stays OFF the stack (single-shot bulk classify only — doc).
+tern spawns get praxis model-deltas automatically; for custom spawns
+compose role + posture from praxis/ — cache, don't re-derive.
 
 ## Push freely — the scan is the guard, not a human
 
