@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-# knobs — ONE entry point for the stack's orthogonal posture knobs.
+# knobs — ONE entry point for EVERY personal-stack posture knob.
 #
+#   caveman  : output compression     session level + worker default
 #   dispatch : who runs agents        tern SDK  vs  native Agent/Workflow
 #   beagle   : code representation    text      vs  claim-native (per-file)
 #   coord    : coordination protocol  tern / linear / both
+#   guards   : authoring-guard hooks  + the kill-switch
 #
-# State:       ~/.claude/knobs.state (runtime; not committed)
-# Enforcement: dispatch -> hooks/agent-spawn-guard.sh (PreToolUse deny)
-#              beagle   -> hooks/claim-canonical-guard.sh (per-file registry)
-#              coord    -> declarative (agents read it; no hard enforcement yet)
+# State: ~/.claude/knobs.state (dispatch/coord) · ~/.claude/.caveman-active
+#        (caveman, owned by the caveman plugin) · registry (beagle).
+# Knobs owned by other CLIs are pointed at, not duplicated (see footer).
 set -uo pipefail
 
 STATE="$HOME/.claude/knobs.state"
+CAVEMAN_STATE="$HOME/.claude/.caveman-active"
 REGISTRY="${CLAIM_CANONICAL_REGISTRY:-$HOME/.config/fram/claim-canonical-files}"
 SETTINGS="$HOME/code/nixos-config/dotfiles/claude/settings.json"
 
@@ -24,86 +26,116 @@ mark() { [ "$1" = "$2" ] && printf '●' || printf '○'; }
 
 tern_daemon() { (exec 3<>/dev/tcp/127.0.0.1/7977) 2>/dev/null && { exec 3>&- 2>/dev/null; echo up; } || echo DOWN; }
 linear_mcp()  { grep -q 'linear' "$HOME/.claude.json" 2>/dev/null && echo configured || echo absent; }
-spawn_guard() { grep -q 'agent-spawn-guard' "$SETTINGS" 2>/dev/null && echo wired || echo 'NOT WIRED'; }
-cc_guard()    { grep -q 'claim-canonical-guard' "$SETTINGS" 2>/dev/null && echo wired || echo 'NOT WIRED'; }
+wired()       { grep -q "$1" "$SETTINGS" 2>/dev/null && echo '✓' || echo '✗'; }
 adopted_n()   { grep -cvE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null || echo 0; }
+caveman_lvl() { local l; l=$(cat "$CAVEMAN_STATE" 2>/dev/null); printf '%s' "${l:-off}"; }
 
 status() {
-  local d c files
-  d=$(get dispatch tern); c=$(get coord tern)
-  files=$(grep -vE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null | sed 's|^/home/tom|~|; s/^/       /')
+  local d c cv files ks
+  d=$(get dispatch tern); c=$(get coord tern); cv=$(caveman_lvl)
+  ks="${CLAUDE_NO_AUTHORING_HOOKS:+ENGAGED — ALL GUARDS OFF}"
+  files=$(grep -vE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null | sed "s|^$HOME|~|; s/^/       /")
   cat <<EOF
 ╭──────────────────────────────────────────────────────────────────╮
-│  KNOBS — stack posture                          $(date +%Y-%m-%d)       │
+│  KNOBS — every stack knob, one report           $(date +%Y-%m-%d)       │
 ╰──────────────────────────────────────────────────────────────────╯
 
- 1  DISPATCH   who runs agents                 [guard: $(spawn_guard)]
+ 1  CAVEMAN    output compression
+    session: $cv (lite|full|ultra + wenyan-*)      workers: AGENT_CAVEMAN=${AGENT_CAVEMAN:-full (SDK default)}
+    flip session → knobs caveman lite|full|ultra (or /caveman)
+    flip workers → AGENT_CAVEMAN=off|lite|full on spawn
+
+ 2  DISPATCH   who runs agents                 [guard: $(wired agent-spawn-guard)]
     $(mark "$d" tern) tern     SDK workers — persistent, steerable, claim trail;
                caveman (AGENT_CAVEMAN) + model tier (AGENT_MODEL) ride along
     $(mark "$d" warn) warn     native Agent/Workflow allowed, nudged toward tern
     $(mark "$d" native) native   raw Claude Code spawns, no interference
     flip → knobs dispatch tern|warn|native
 
- 2  BEAGLE     code as text vs claims          [guard: $(cc_guard)]
+ 3  BEAGLE     code as text vs claims          [guard: $(wired claim-canonical-guard)]
     claim-native adopted (text edits denied → fram graph tools): $(adopted_n) file(s)
 ${files:-       (none)}
     default-flip: PARKED — pending M1.5-vs-M2 bake-off verdict
     flip → knobs beagle adopt|unadopt <absolute-path> · knobs beagle list
 
- 3  COORD      coordination protocol           [tern: $(tern_daemon) · linear MCP: $(linear_mcp)]
+ 4  COORD      coordination protocol           [tern: $(tern_daemon) · linear MCP: $(linear_mcp)]
     $(mark "$c" tern) tern     claims on :7977 + concerns + msg-cli chat
     $(mark "$c" linear) linear   Linear as the work queue (MCP)
     $(mark "$c" both) both     Linear as consolidation layer over tern
     note: declarative — agents read this posture; no hard enforcement yet
     flip → knobs coord tern|linear|both
 
+ 5  GUARDS     authoring-guard hooks           kill-switch: ${ks:-off (guards live)}
+    $(wired agent-spawn-guard) agent-spawn-guard   $(wired claim-canonical-guard) claim-canonical   $(wired firn-guard) firn
+    $(wired tripwire-guard) tripwire            $(wired racket-build-guard) racket-build      $(wired beagle-session-start) beagle-session
+    flip all off → CLAUDE_NO_AUTHORING_HOOKS=1 (env, per-session)
+
+ elsewhere: system/nix knobs → firn tag status · session effort → /effort
  state: ~/.claude/knobs.state · descriptions + advice: knobs help
 EOF
 }
 
 help() {
   cat <<'EOF'
-knobs — the stack's orthogonal posture, one entry point.
+knobs — every personal-stack posture knob, one entry point.
 
- 1 DISPATCH — who executes agent work.
+ 1 CAVEMAN — output compression (token economy).
+   Session level lives in ~/.claude/.caveman-active (caveman plugin);
+   lite/full/ultra + wenyan variants. Workers get AGENT_CAVEMAN via the
+   tern SDK spawn path (default full). Code/commits/quoted errors/security
+   are never compressed at any level.
+   Advice: full for coordination, lite for high-stakes design review,
+   never ultra/wenyan for substantive work (lossy — PLAYBOOK 2026-06-22).
+
+ 2 DISPATCH — who executes agent work.
    tern    (default) native Agent/Task/Workflow calls are DENIED by a
            PreToolUse hook and redirected to the tern SDK: mcp__tern__spawn
            (ad-hoc) / mcp__tern__dispatch (thread-driven). SDK workers are
            persistent, dormant-until-pinged, observable (web :8088),
            steerable (msg-cli :7977), and carry AGENT_CAVEMAN + AGENT_MODEL.
    warn    native spawns allowed; the hook injects a reminder instead.
-           Use when tern is down or for harness experiments.
-   native  no interference. Use for A/B baselines against stock Claude Code.
-   Advice: stay on tern. Drop to warn only when the daemon is down
-   (check: knobs — the COORD line shows daemon health).
+   native  no interference. For A/B baselines against stock Claude Code.
+   Advice: stay on tern. Drop to warn only when the daemon is down.
 
- 2 BEAGLE — how Beagle source is authored, per file.
+ 3 BEAGLE — how Beagle source is authored, per file.
    text          ordinary Edit/Write; the beagle-authoring repair loop.
    claim-native  file is a regenerable view of the fram claim graph; text
-                 edits are DENIED (claim-canonical-guard); author via
-                 mcp__fram__* graph tools (add-def/set-body/rename-def/...).
-   Adoption is PER-FILE and opt-in: the registry
-   (~/.config/fram/claim-canonical-files) or a first-line `;; @claim-canonical`
-   sentinel. The cascade (which skill loads, which guard fires, repair loop
-   vs recompile gate) keys off adoption automatically.
-   Advice: do not flip the default until the M1.5-vs-M2 bake-off verdict —
-   the easy claim-edit tool still rejects edits (PLAYBOOK, 2026-06-22).
+                 edits DENIED (claim-canonical-guard); author via
+                 mcp__fram__* graph tools. Adoption is PER-FILE: the
+                 registry (~/.config/fram/claim-canonical-files) or a
+                 first-line `;; @claim-canonical` sentinel. The cascade
+                 (skill, guard, repair loop vs recompile gate) keys off
+                 adoption automatically.
+   Advice: don't flip the default until the M1.5-vs-M2 bake-off verdict.
 
- 3 COORD — which system is the source of truth for work coordination.
-   tern    threads/claims on :7977; concerns for footprints; msg-cli chat.
-   linear  Linear via MCP as the work queue.
-   both    Linear as a consolidation/reporting layer over tern.
-   Declarative for now: agents read this posture from the knobs report;
-   nothing mechanically blocks the other system yet.
-   Advice: tern. Flip to both only when Linear consolidation is actually
-   wired; flipping the knob does not build the sync.
+ 4 COORD — source of truth for work coordination.
+   tern / linear / both (Linear as consolidation layer over tern).
+   Declarative for now: agents read this posture; nothing mechanically
+   blocks the other system yet. Flipping the knob does not build the sync.
+   Advice: tern.
 
-Kill-switch for all authoring guards (incl. dispatch): CLAUDE_NO_AUTHORING_HOOKS=1
+ 5 GUARDS — the PreToolUse/SessionStart authoring guards.
+   Individually wired in ~/code/nixos-config/dotfiles/claude/settings.json;
+   collectively killed by CLAUDE_NO_AUTHORING_HOOKS=1 for a neutral,
+   confound-free session. Un-wiring is a nixos-config change; the env
+   kill-switch is the session-scoped off.
+
+ Elsewhere (owned by other CLIs, not duplicated here):
+   system/nix composition → firn tag status · firn enable <tag>
+   session effort/ultracode → /effort (harness-level, not script-readable)
 EOF
 }
 
 case "${1:-status}" in
   status|"") status ;;
+  caveman)
+    case "${2:-}" in
+      lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra)
+        printf '%s' "$2" > "$CAVEMAN_STATE"; echo "caveman session level → $2 (plugin reads ~/.claude/.caveman-active)" ;;
+      "") echo "caveman = $(caveman_lvl)   (knobs caveman lite|full|ultra; off → say 'stop caveman' / use /caveman)" ;;
+      off) echo "turn off via the plugin: say 'stop caveman' or /caveman — plugin owns the off-path" >&2; exit 1 ;;
+      *) echo "usage: knobs caveman [lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra]" >&2; exit 1 ;;
+    esac ;;
   dispatch)
     case "${2:-}" in
       tern|warn|native) put dispatch "$2"; echo "dispatch → $2 $( [ "$2" = tern ] && echo '(native Agent/Workflow now DENIED → tern SDK)' || { [ "$2" = warn ] && echo '(native allowed, nudged)' || echo '(native allowed, silent)'; } )" ;;
@@ -132,6 +164,11 @@ case "${1:-status}" in
         echo "un-adopted (text mode again): $3" ;;
       *) echo "usage: knobs beagle [list|adopt <path>|unadopt <path>]" >&2; exit 1 ;;
     esac ;;
+  guards)
+    echo "kill-switch CLAUDE_NO_AUTHORING_HOOKS: ${CLAUDE_NO_AUTHORING_HOOKS:-unset (guards live)}"
+    for g in agent-spawn-guard claim-canonical-guard firn-guard tripwire-guard racket-build-guard beagle-session-start; do
+      printf '  %s %s\n' "$(wired "$g")" "$g"
+    done ;;
   help|-h|--help) help ;;
-  *) echo "usage: knobs [status|dispatch|beagle|coord|help]" >&2; exit 1 ;;
+  *) echo "usage: knobs [status|caveman|dispatch|beagle|coord|guards|help]" >&2; exit 1 ;;
 esac

@@ -1,5 +1,5 @@
 ---
-description: Stack posture — view & flip the dispatch / beagle / coord knobs
+description: Every stack knob, one report — caveman / dispatch / beagle / coord / guards
 allowed-tools: Bash(knobs:*), Bash(/home/tom/code/nixos-config/dotfiles/bin/knobs:*)
 ---
 
