@@ -9,8 +9,8 @@ ephemeral, unobservable mid-flight, un-steerable).
 **Use the tern MCP tools** (`mcp__tern__dispatch`, `mcp__tern__spawn`)
 to drive agents, plus the pre-edit gate — not the built-in Agent/Workflow tools.
 (Enforced mechanically: `agent-spawn-guard.sh` PreToolUse denies native
-Agent/Task/Workflow while the dispatch knob is `tern` — view/flip via `knobs` /
-`/knobs`. Reinstated 2026-07-03; the P6 prose-only bet did not hold.)
+Agent/Task/Workflow while the dispatch knob is `tern` — view/flip via `my-config` /
+`/my-config`. Reinstated 2026-07-03; the P6 prose-only bet did not hold.)
 Quick lookups → bash/grep/read inline. Real work → the protocol below.
 
 ## The stack
