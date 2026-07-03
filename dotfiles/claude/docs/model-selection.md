@@ -30,16 +30,21 @@ complex tasks" (the recommended default), Sonnet = "routine tasks", Fable =
   well-trodden, solidified code. **Layer floor:** NEVER
   foundational / architecture / library code, however mechanical the task
   looks — the layer of the stack sets the floor, not apparent difficulty.
-  sonnet-high ≈ never: dominated by opus-medium (shingle law, below).
-- **Opus — the WORKHORSE, medium…xhigh** — **senior dev / staff engineer /
+  sonnet-high ≈ never: dominated by opus-high, opus's entry rung (shingle
+  law, below).
+- **Opus — the WORKHORSE, high / xhigh** — **senior dev / staff engineer /
   tech lead shaped tasks**: frontier work, anything designing something new,
   foundational stack layers, cross-file refactors, ambiguous debugging,
-  adversarial verify, synthesis. **Default high; xhigh is the
-  preferred building rung** for real frontier work (official guidance:
-  xhigh = recommended agentic starting point); medium threads in for
-  scoped, well-specified "entry-senior" tasks (e.g. implementation
-  escalated from sonnet). opus-max: rare — tends to overthink; only with
-  demonstrated headroom, and mostly dominated by fable rungs now.
+  adversarial verify, synthesis. **Two rungs only: high (default) and
+  xhigh (frontier).** opus-low/medium are dropped — if you routed to Opus
+  the task needs its ceiling, and low/medium starve it (BrowseComp effort
+  curve: opus low→med→high is a flat ~2pp creep, xhigh/max are where it
+  climbs); a task cheap enough for opus-medium was a sonnet task. Step
+  high→xhigh when being wrong is expensive or the work is at the frontier
+  (design that commits the system, hardest debugging, long-horizon runs) —
+  the high→xhigh boundary is a live calibration, sharpen with targeted
+  evals. opus-max: rare — tends to overthink; only with demonstrated
+  headroom, and mostly dominated by fable rungs now.
 - **Fable — OPT-IN, availability-gated (high|xhigh when live)** —
   **architect/inventor grade, especially on weak existing priors**:
   hardest analysis, no-priors design, root-cause, planning. NOT a standing
@@ -55,12 +60,14 @@ complex tasks" (the recommended default), Sonnet = "routine tasks", Fable =
   officially gated on "evals show measurable headroom at xhigh"; documented
   overthinking failure modes (judgment reversal, spurious complexity).
 
-**Shingle law:** each model has ~2 practical effort rungs, and a model's top
-rung is dominated by the next model's bottom rung (sonnet-high ⊂
-opus-medium; opus-max mostly ⊂ fable-high *when Fable is live*). The
-STANDING ramp: sonnet-low → sonnet-medium → opus-medium → opus-high/xhigh.
-Fable rungs (high → xhigh → max, rare) extend it ONLY when the bucket is
-verified available. Route on the ramp, not per-model dials.
+**Shingle law:** each model has ~2 practical effort rungs — **sonnet: low,
+medium · opus: high, xhigh** — and the dominated middle (sonnet-high,
+opus-low/medium) is never the pick: sonnet-high/xhigh ⊂ opus-high on
+cost-perf, and opus-low/medium starve a ceiling you only pay for when the
+task needs it. opus-max ⊂ fable-high *when Fable is live*. The STANDING
+ramp: sonnet-low → sonnet-medium → opus-high → opus-xhigh. Fable rungs
+(high → xhigh → max, rare) extend it ONLY when the bucket is verified
+available. Route on the ramp, not per-model dials.
 - **Haiku** — single-shot bulk classify/extract ONLY, NO tool chains: tool-loop
   bug (anthropics/claude-code#10029), rejects `effort` (400), two gens stale.
   One looped worker erases the price gap and emits claims that cost Opus-tier
