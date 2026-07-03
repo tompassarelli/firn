@@ -111,6 +111,14 @@ mechanism and reimplementing from understanding is always fine — the license
 governs copied expression, not ideas. If a license is overly restrictive for
 the intended use, say so up front, before any work builds on it.
 
+## Reference reads — vetted takeaways from ~/code/reference
+→ ~/code/nixos-config/dotfiles/claude/docs/reference-reads.md
+Curated pointers from scanned forks (licenses checked): skill-authoring
+methodology, debugging technique docs, measured MCP output caps, benchmark
+harness designs. **Read when:** authoring a new skill, building an MCP tool
+that returns big payloads, hunting a test-state polluter, or designing an
+agent-behavior benchmark.
+
 ## Internal notes go in `docs/private/` — never public `docs/`
 
 Internal agent notes, session status, scratch, and handoffs go in `docs/private/`
