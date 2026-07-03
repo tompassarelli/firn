@@ -88,22 +88,25 @@ was tested ON.** Bend the defaults:
 - **Promotion trigger:** if Sonnet is **taking longer than it should** —
   thrashing, retrying, over-exploring — that's it hitting its ceiling. Promote to
   Opus; don't prompt around it.
-- **Sonnet is its own usage bucket** on the Max account — cuts both ways
-  *(UNVERIFIED against the 2026-06 plan change: reports say Max moved to one
-  unified 5h rolling pool plus a separate monthly credit bucket for
-  non-interactive/SDK use. Check /usage before leaning on bucket-splitting;
-  the preserve-Opus-headroom logic below survives either way)*:
-  - *Use it more than we currently do.* Routing well-trodden build tasks to Sonnet
-    spends the Sonnet pool and **preserves Opus headroom** for the hard work — free
-    parallel capacity we're leaving on the table.
-  - *When the Sonnet bucket is exhausted, disregard the "use Sonnet" guidance* —
-    route those build/workhorse tasks to **Opus** (Haiku still covers the
-    single-shot bulk subset). Sonnet is the optimization, not a requirement.
+- **Buckets (verified against /usage, 2026-07-03): Sonnet has NO separate
+  bucket — sonnet/opus/haiku draw from the one unified pool. FABLE is its own
+  bucket.** Consequences:
+  - Routing build work to Sonnet still saves — a cheaper per-token draw on the
+    shared pool — but it's cost-weighting, not free parallel capacity. The old
+    "Sonnet preserves Opus headroom" framing is dead.
+  - Fable spends NONE of the shared pool. Coordinator sessions and hardest
+    analysis/planning on Fable are budget-orthogonal to the worker fleet —
+    a second reason (beyond capability) the coordinator tier is Fable.
+  - Pressure valve runs both directions: shared pool hot → push the hardest
+    work up to Fable (separate budget); Fable bucket hot → coordinator drops
+    to Opus. Re-check /usage when either feels tight; plan structure has
+    changed once already (2026-06).
 
 Net default for this work: **sonnet-low** discovery/mechanical (Haiku only for
-single-shot bulk) · **sonnet-medium** well-trodden build *while the bucket
-lasts* · **Opus** anything novel/ambiguous or Sonnet visibly struggling ·
-**Fable** the hardest analysis/planning (never default implementation).
+single-shot bulk) · **sonnet-medium** well-trodden build (cheapest draw on the
+shared pool) · **Opus** anything novel/ambiguous or Sonnet visibly struggling ·
+**Fable** the hardest analysis/planning (never default implementation; own
+bucket).
 
 ## Effort: the second dial
 
