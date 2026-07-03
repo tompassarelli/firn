@@ -76,7 +76,11 @@ proxy → `ANTHROPIC_BASE_URL` into the Agent SDK. Not built; candidate tern SDK
 
 The tables above assume tasks *with priors* — that's what SWE-bench measures. My
 actual work (compiler, innovative greenfield) often **lacks priors**, so Sonnet's
-near-Opus benchmark parity does *not* transfer. Bend the defaults:
+near-Opus benchmark parity does *not* transfer. **General law, wider than
+models: any guidance calibrated on run-of-the-mill work — benchmark parity,
+effort ladders, YAGNI/code-minimization ladders — silently mis-advises
+priors-poor core work. Before applying a tested default, ask what corpus it
+was tested ON.** Bend the defaults:
 
 - **Ambiguous or novel → Opus, as the main agent.** Don't default that work to
   Sonnet. The benchmarks are positive but priors-rich; design work without priors
@@ -84,7 +88,11 @@ near-Opus benchmark parity does *not* transfer. Bend the defaults:
 - **Promotion trigger:** if Sonnet is **taking longer than it should** —
   thrashing, retrying, over-exploring — that's it hitting its ceiling. Promote to
   Opus; don't prompt around it.
-- **Sonnet is its own usage bucket** on the Max account — cuts both ways:
+- **Sonnet is its own usage bucket** on the Max account — cuts both ways
+  *(UNVERIFIED against the 2026-06 plan change: reports say Max moved to one
+  unified 5h rolling pool plus a separate monthly credit bucket for
+  non-interactive/SDK use. Check /usage before leaning on bucket-splitting;
+  the preserve-Opus-headroom logic below survives either way)*:
   - *Use it more than we currently do.* Routing well-trodden build tasks to Sonnet
     spends the Sonnet pool and **preserves Opus headroom** for the hard work — free
     parallel capacity we're leaving on the table.
