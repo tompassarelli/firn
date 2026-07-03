@@ -1,0 +1,40 @@
+#lang beagle/nix
+
+(ns default)
+
+;; CPU shield for timing-sensitive experiments (benchmarks, A/B arm runs).
+;; `bench-shield on` confines system.slice + user.slice + init.scope to cores
+;; 0-11 at runtime (cgroup cpusets — kernel-enforced, non-persistent, reboot
+;; clears); cores 12-23 are then vacant, and an experiment launched with
+;; `taskset -c 12-23 <cmd>` has them exclusively — no root needed for the run
+;; itself. `off` lifts the confinement; `status` shows current AllowedCPUs.
+;; Chosen over a DO box (shared-tenancy steal time is a worse timing confound
+;; than local contention) and over isolcpus= (static; wastes half the box when
+;; no experiment is running). See ~/code/nixos-config/dotfiles/claude/docs/measure-load.md.
+(nix/module [config lib pkgs ...]
+  {:tags [development]
+   :options.myConfig.modules.bench-shield.enable
+    (lib.mkEnableOption "runtime CPU shield for timing-sensitive experiment runs")
+   :config
+    (lib.mkIf config.myConfig.modules.bench-shield.enable
+      {:environment.systemPackages
+        [(pkgs.writeShellScriptBin "bench-shield"
+           (ms "set -euo pipefail"
+               "SYS_CORES=\"0-11\"; BENCH_CORES=\"12-23\""
+               "units=\"system.slice user.slice init.scope\""
+               "case \"${1:-status}\" in"
+               "  on)"
+               "    for u in $units; do sudo systemctl set-property --runtime \"$u\" AllowedCPUs=$SYS_CORES; done"
+               "    echo \"shield ON — everything else confined to $SYS_CORES.\""
+               "    echo \"run experiments with: taskset -c $BENCH_CORES <cmd>  (cores $BENCH_CORES are now exclusive)\""
+               "    ;;"
+               "  off)"
+               "    for u in $units; do sudo systemctl set-property --runtime \"$u\" AllowedCPUs=\"\"; done"
+               "    echo \"shield OFF — all cores shared again.\""
+               "    ;;"
+               "  status)"
+               "    for u in $units; do printf '%-14s AllowedCPUs=%s\\n' \"$u\" \"$(systemctl show -p AllowedCPUs --value \"$u\")\"; done"
+               "    ;;"
+               "  *) echo \"usage: bench-shield on|off|status\" >&2; exit 2 ;;"
+               "esac"
+               ""))]})})

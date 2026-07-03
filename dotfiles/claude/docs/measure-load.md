@@ -21,6 +21,13 @@ parallelize.
   frozen DESIGN; measurement showed runs network-bound at ~35% load — halved
   wall-clock by pairing arms, which is also FAIRER: within-pair conditions are
   identical for the ratio metric.)
+- **The standard isolation tool on whiterabbit is `bench-shield`**
+  (`~/code/nixos-config/modules/bench-shield/`): `bench-shield on` confines
+  everything else to cores 0-11 (runtime cgroup cpusets, reboot clears), then
+  run the experiment with `taskset -c 12-23 <cmd>` — kernel-enforced exclusive
+  cores, no root needed for the run itself. `off` releases. Prefer this over
+  cloud boxes (shared-tenancy steal time is a WORSE timing confound) and over
+  `isolcpus=` (static, wastes idle cores).
 - **A frozen protocol that encodes the reflex is not sacred.** Measure, then
   fix it the compliant way — a dated pre-run amendment — and parallelize.
   For A/B arms specifically: running both arms SIMULTANEOUSLY beats
