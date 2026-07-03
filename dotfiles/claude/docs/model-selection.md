@@ -33,18 +33,19 @@ complex tasks" (the recommended default), Sonnet = "routine tasks", Fable =
   sonnet-high ≈ never: dominated by opus-high, opus's entry rung (shingle
   law, below).
 - **Opus — the WORKHORSE, high / xhigh** — **senior dev / staff engineer /
-  tech lead shaped tasks**: frontier work, anything designing something new,
-  foundational stack layers, cross-file refactors, ambiguous debugging,
-  adversarial verify, synthesis. **Two rungs only: high (default) and
-  xhigh (frontier).** opus-low/medium are dropped — if you routed to Opus
-  the task needs its ceiling, and low/medium starve it (BrowseComp effort
-  curve: opus low→med→high is a flat ~2pp creep, xhigh/max are where it
-  climbs); a task cheap enough for opus-medium was a sonnet task. Step
-  high→xhigh when being wrong is expensive or the work is at the frontier
-  (design that commits the system, hardest debugging, long-horizon runs) —
-  the high→xhigh boundary is a live calibration, sharpen with targeted
-  evals. opus-max: rare — tends to overthink; only with demonstrated
-  headroom, and mostly dominated by fable rungs now.
+  tech lead shaped tasks**: novel/judgment work, anything designing
+  something new, foundational stack layers, cross-file refactors, ambiguous
+  debugging, adversarial verify, synthesis. **Two rungs: high (default
+  judgment) and xhigh (HARD/hardest tasks).** opus-low/medium are dropped —
+  if you routed to Opus the task needs its ceiling, and low/medium starve
+  it (BrowseComp effort curve: opus low→med→high is a flat ~2pp creep,
+  xhigh/max are where it climbs); a task cheap enough for opus-medium was a
+  sonnet task. Step high→xhigh when being wrong is expensive or the task is
+  gnarly (design that commits the system, hardest debugging, long-horizon
+  runs) — the high→xhigh boundary is a live calibration, sharpen with
+  targeted evals. **opus-max = FRONTIER only** — genuinely at-the-edge
+  problems, rare, demonstrated headroom (tends to overthink otherwise);
+  mostly dominated by fable rungs when Fable is live.
 - **Fable — OPT-IN, availability-gated (high|xhigh when live)** —
   **architect/inventor grade, especially on weak existing priors**:
   hardest analysis, no-priors design, root-cause, planning. NOT a standing
