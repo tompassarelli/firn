@@ -37,7 +37,7 @@ status() {
   files=$(grep -vE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null | sed "s|^$HOME|~|; s/^/       /")
   cat <<EOF
 ╭──────────────────────────────────────────────────────────────────╮
-│  MY-CONFIG — every stack knob, one report           $(date +%Y-%m-%d)       │
+│  MY-CONFIG — every stack knob, one report        $(date +%Y-%m-%d)       │
 ╰──────────────────────────────────────────────────────────────────╯
 
  1  CAVEMAN    output compression
