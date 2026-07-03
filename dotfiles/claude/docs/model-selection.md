@@ -144,6 +144,14 @@ Tiered routing vs uniform-Opus cut cost **~50–80%, no quality regression**
 
 ## How this maps to our tools
 
+- **tern SDK (the PRIMARY spawn surface** while the dispatch knob is `tern` —
+  the native tools below are denied there; see `my-config`): `mcp__tern__spawn`
+  takes `{model: opus|sonnet|haiku, effort}` per call; env `AGENT_MODEL` sets
+  the dispatch.ts default; `AGENT_CAVEMAN` rides along. Same rule as Workflow:
+  pin BOTH dials per spawn — workers must not inherit a hot session's effort.
+
+Native-path mappings (apply only under `my-config dispatch warn|native`):
+
 - **Agent tool** — `model: "haiku" | "sonnet" | "opus" | "fable"`. (A `fork`
   always inherits the parent model; the override is ignored there.)
 - **Workflow** — per-agent `opts.model` + `opts.effort` on each `agent()` call.
