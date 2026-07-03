@@ -47,6 +47,10 @@ radius routes up; importance alone never does** — blast radius = the decision
 shapes the system going forward, importance = the outcome matters to the user.
 "Coordinates agents" is not a spawn shape — that's the session itself.
 
+Dials 3–4 (role authority, posture) are cached as paste-ready spawn blocks:
+`~/code/nixos-config/dotfiles/claude/docs/praxis/` — domain defaults, model
+deltas, escape hatch, ≤60-line assembly cap. Compose, don't re-derive.
+
 ## Buckets (Max plan, /usage-verified 2026-07-03)
 
 One unified pool: sonnet/opus/haiku. **Fable: own bucket.** So Sonnet routing =

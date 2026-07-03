@@ -69,6 +69,9 @@ single-shot bulk classify/extract only, NEVER tool chains. Two hard laws:
 high/xhigh), and **Fable = analyst/planner, never the default implementer**
 (coding ≤ Opus; in a Fable session PIN implementation spawns to opus/sonnet).
 Bucket policy, effort ladder, spawn-surface mappings: the doc.
+Spawn payloads: compose role + posture + model-delta blocks from
+~/code/nixos-config/dotfiles/claude/docs/praxis/ (domain defaults, escape
+hatch, ≤60-line cap — see its README). Cache, don't re-derive per spawn.
 **Read when:** fanning out agents and choosing `model`/`effort` per agent
 (Agent tool, Workflow `opts.model`, tern spawn, cavecrew tiers).
 
