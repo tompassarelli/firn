@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# knobs — ONE entry point for the stack's orthogonal posture knobs.
+#
+#   dispatch : who runs agents        tern SDK  vs  native Agent/Workflow
+#   beagle   : code representation    text      vs  claim-native (per-file)
+#   coord    : coordination protocol  tern / linear / both
+#
+# State:       ~/.claude/knobs.state (runtime; not committed)
+# Enforcement: dispatch -> hooks/agent-spawn-guard.sh (PreToolUse deny)
+#              beagle   -> hooks/claim-canonical-guard.sh (per-file registry)
+#              coord    -> declarative (agents read it; no hard enforcement yet)
+set -uo pipefail
+
+STATE="$HOME/.claude/knobs.state"
+REGISTRY="${CLAIM_CANONICAL_REGISTRY:-$HOME/.config/fram/claim-canonical-files}"
+SETTINGS="$HOME/code/nixos-config/dotfiles/claude/settings.json"
+
+get() { local v; v=$(grep -E "^$1=" "$STATE" 2>/dev/null | tail -1 | cut -d= -f2-); printf '%s' "${v:-$2}"; }
+put() {
+  mkdir -p "$(dirname "$STATE")"; touch "$STATE"
+  { grep -vE "^$1=" "$STATE" 2>/dev/null; echo "$1=$2"; } > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+}
+mark() { [ "$1" = "$2" ] && printf '●' || printf '○'; }
+
+tern_daemon() { (exec 3<>/dev/tcp/127.0.0.1/7977) 2>/dev/null && { exec 3>&- 2>/dev/null; echo up; } || echo DOWN; }
+linear_mcp()  { grep -q 'linear' "$HOME/.claude.json" 2>/dev/null && echo configured || echo absent; }
+spawn_guard() { grep -q 'agent-spawn-guard' "$SETTINGS" 2>/dev/null && echo wired || echo 'NOT WIRED'; }
+cc_guard()    { grep -q 'claim-canonical-guard' "$SETTINGS" 2>/dev/null && echo wired || echo 'NOT WIRED'; }
+adopted_n()   { grep -cvE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null || echo 0; }
+
+status() {
+  local d c files
+  d=$(get dispatch tern); c=$(get coord tern)
+  files=$(grep -vE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null | sed 's|^/home/tom|~|; s/^/       /')
+  cat <<EOF
+╭──────────────────────────────────────────────────────────────────╮
+│  KNOBS — stack posture                          $(date +%Y-%m-%d)       │
+╰──────────────────────────────────────────────────────────────────╯
+
+ 1  DISPATCH   who runs agents                 [guard: $(spawn_guard)]
+    $(mark "$d" tern) tern     SDK workers — persistent, steerable, claim trail;
+               caveman (AGENT_CAVEMAN) + model tier (AGENT_MODEL) ride along
+    $(mark "$d" warn) warn     native Agent/Workflow allowed, nudged toward tern
+    $(mark "$d" native) native   raw Claude Code spawns, no interference
+    flip → knobs dispatch tern|warn|native
+
+ 2  BEAGLE     code as text vs claims          [guard: $(cc_guard)]
+    claim-native adopted (text edits denied → fram graph tools): $(adopted_n) file(s)
+${files:-       (none)}
+    default-flip: PARKED — pending M1.5-vs-M2 bake-off verdict
+    flip → knobs beagle adopt|unadopt <absolute-path> · knobs beagle list
+
+ 3  COORD      coordination protocol           [tern: $(tern_daemon) · linear MCP: $(linear_mcp)]
+    $(mark "$c" tern) tern     claims on :7977 + concerns + msg-cli chat
+    $(mark "$c" linear) linear   Linear as the work queue (MCP)
+    $(mark "$c" both) both     Linear as consolidation layer over tern
+    note: declarative — agents read this posture; no hard enforcement yet
+    flip → knobs coord tern|linear|both
+
+ state: ~/.claude/knobs.state · descriptions + advice: knobs help
+EOF
+}
+
+help() {
+  cat <<'EOF'
+knobs — the stack's orthogonal posture, one entry point.
+
+ 1 DISPATCH — who executes agent work.
+   tern    (default) native Agent/Task/Workflow calls are DENIED by a
+           PreToolUse hook and redirected to the tern SDK: mcp__tern__spawn
+           (ad-hoc) / mcp__tern__dispatch (thread-driven). SDK workers are
+           persistent, dormant-until-pinged, observable (web :8088),
+           steerable (msg-cli :7977), and carry AGENT_CAVEMAN + AGENT_MODEL.
+   warn    native spawns allowed; the hook injects a reminder instead.
+           Use when tern is down or for harness experiments.
+   native  no interference. Use for A/B baselines against stock Claude Code.
+   Advice: stay on tern. Drop to warn only when the daemon is down
+   (check: knobs — the COORD line shows daemon health).
+
+ 2 BEAGLE — how Beagle source is authored, per file.
+   text          ordinary Edit/Write; the beagle-authoring repair loop.
+   claim-native  file is a regenerable view of the fram claim graph; text
+                 edits are DENIED (claim-canonical-guard); author via
+                 mcp__fram__* graph tools (add-def/set-body/rename-def/...).
+   Adoption is PER-FILE and opt-in: the registry
+   (~/.config/fram/claim-canonical-files) or a first-line `;; @claim-canonical`
+   sentinel. The cascade (which skill loads, which guard fires, repair loop
+   vs recompile gate) keys off adoption automatically.
+   Advice: do not flip the default until the M1.5-vs-M2 bake-off verdict —
+   the easy claim-edit tool still rejects edits (PLAYBOOK, 2026-06-22).
+
+ 3 COORD — which system is the source of truth for work coordination.
+   tern    threads/claims on :7977; concerns for footprints; msg-cli chat.
+   linear  Linear via MCP as the work queue.
+   both    Linear as a consolidation/reporting layer over tern.
+   Declarative for now: agents read this posture from the knobs report;
+   nothing mechanically blocks the other system yet.
+   Advice: tern. Flip to both only when Linear consolidation is actually
+   wired; flipping the knob does not build the sync.
+
+Kill-switch for all authoring guards (incl. dispatch): CLAUDE_NO_AUTHORING_HOOKS=1
+EOF
+}
+
+case "${1:-status}" in
+  status|"") status ;;
+  dispatch)
+    case "${2:-}" in
+      tern|warn|native) put dispatch "$2"; echo "dispatch → $2 $( [ "$2" = tern ] && echo '(native Agent/Workflow now DENIED → tern SDK)' || { [ "$2" = warn ] && echo '(native allowed, nudged)' || echo '(native allowed, silent)'; } )" ;;
+      "") echo "dispatch = $(get dispatch tern)   (knobs dispatch tern|warn|native)" ;;
+      *) echo "usage: knobs dispatch [tern|warn|native]" >&2; exit 1 ;;
+    esac ;;
+  coord)
+    case "${2:-}" in
+      tern|linear|both) put coord "$2"; echo "coord → $2 (declarative; agents read it from the knobs report)" ;;
+      "") echo "coord = $(get coord tern)   (knobs coord tern|linear|both)" ;;
+      *) echo "usage: knobs coord [tern|linear|both]" >&2; exit 1 ;;
+    esac ;;
+  beagle)
+    case "${2:-list}" in
+      list) echo "claim-native adopted files ($(adopted_n)):"; grep -vE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null || echo "  (none)" ;;
+      adopt)
+        [ -z "${3:-}" ] && { echo "usage: knobs beagle adopt </absolute/path>" >&2; exit 1; }
+        [ -f "$3" ] || { echo "no such file: $3" >&2; exit 1; }
+        mkdir -p "$(dirname "$REGISTRY")"; touch "$REGISTRY"
+        grep -qxF "$3" "$REGISTRY" || echo "$3" >> "$REGISTRY"
+        echo "adopted claim-native: $3 (text edits now denied; use mcp__fram__* graph tools)" ;;
+      unadopt)
+        [ -z "${3:-}" ] && { echo "usage: knobs beagle unadopt </absolute/path>" >&2; exit 1; }
+        grep -vxF "$3" "$REGISTRY" > "$REGISTRY.tmp" 2>/dev/null || true
+        mv "$REGISTRY.tmp" "$REGISTRY"
+        echo "un-adopted (text mode again): $3" ;;
+      *) echo "usage: knobs beagle [list|adopt <path>|unadopt <path>]" >&2; exit 1 ;;
+    esac ;;
+  help|-h|--help) help ;;
+  *) echo "usage: knobs [status|dispatch|beagle|coord|help]" >&2; exit 1 ;;
+esac

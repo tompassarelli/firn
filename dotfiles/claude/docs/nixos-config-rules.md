@@ -32,9 +32,9 @@ rotting silently). This is the anti-rot gate; keep it green.
 ## Hooks kill-switch
 
 **Behavior-injecting hooks have an opt-out kill-switch:**
-`CLAUDE_NO_AUTHORING_HOOKS=1` makes all four authoring guards no-op (beagle
-SessionStart handshake, claim-canonical guard, firn guard, racket-build guard)
-— used to pin a neutral, confound-free session. Unset = normal.
+`CLAUDE_NO_AUTHORING_HOOKS=1` makes all five authoring guards no-op (beagle
+SessionStart handshake, claim-canonical guard, firn guard, racket-build guard,
+agent-spawn-guard) — used to pin a neutral, confound-free session. Unset = normal.
 
 ## Adding new wiring
 
