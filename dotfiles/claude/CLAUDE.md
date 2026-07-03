@@ -38,25 +38,17 @@ the user the finish as ONE command, and say exactly why.
 → `~/code/nixos-config/dotfiles/claude/docs/model-selection.md`
 → `~/code/nixos-config/dotfiles/claude/docs/praxis/` (spawn payload blocks; README = assembly)
 
-Tier = the task's REASONING DEMAND, never its importance. Shape triage —
-execute / implement / integrate / design / invent — maps onto the ramp:
-**sonnet low|medium** = junior/mid dev (grunt work, extremely well-specified
-simple work, extending established patterns in well-trodden code) →
-**opus medium…xhigh** = senior/staff/tech-lead, the WORKHORSE (frontier
-work, new design, foundational layers, judging; default high, xhigh for
-real building, medium for scoped senior-lite tasks) → **fable high|xhigh**
-= architect/researcher, especially on weak priors (spawns xhigh, sessions
-high, max only at critical junctures with demonstrated headroom). **Layer floor:**
-foundational / architecture / library code never goes to Sonnet, however
-mechanical it looks. **Shingle law:** ~2 practical efforts per model; a
-model's top rung is dominated by the next model's bottom (sonnet-high ≈
-never — that's opus-medium). Haiku is
-OFF the stack (single-shot bulk classify only — details in doc). Two hard
-laws: **pin BOTH dials on every spawn** (harder ⇒ escalate the MODEL, never
-sonnet high/xhigh); **Fable analyzes, never default-implements** (coding ≤
-Opus; in a Fable session PIN implementation spawns to opus/sonnet). Spawns
-compose role + posture + model-delta blocks from praxis/ — cache, don't
-re-derive; tern spawns get the delta automatically.
+Shared routing laws (shape triage, the ramp, layer floor, shingle law,
+pin-both-dials, workflow staffing) are CANONICAL in the **gaffer plugin's
+doctrine**, injected at SessionStart — edit them in `~/code/gaffer`, never
+fork them here. Personal delta only: **Fable** is the tier above gaffer's
+ramp — architect/researcher grade, especially on weak priors; spawns xhigh,
+sessions high, max only at critical junctures with demonstrated headroom;
+**Fable analyzes, never default-implements** (coding ≤ Opus; in a Fable
+session PIN implementation spawns to opus/sonnet). Haiku stays OFF the
+stack (single-shot bulk classify only — doc). tern spawns get praxis
+model-deltas automatically; for custom spawns compose role + posture from
+praxis/ — cache, don't re-derive.
 
 ## Push freely — the scan is the guard, not a human
 
