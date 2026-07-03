@@ -17,9 +17,13 @@ on evidence — promotion is cheap, over-provisioning is silent waste.
 - **sonnet-low** — discovery, triage, locate, read-only fan-out, research sweeps.
 - **sonnet-medium** — well-specified build/edit/summarize. The workhorse.
 - **Opus** — judgment: architecture, cross-file refactors, ambiguous debugging,
-  adversarial verify, synthesis. Top implementer.
+  adversarial verify, synthesis. Top implementer. **Default effort: medium**
+  (the tested sweet spot — see header); escalate to high/xhigh only on
+  evidence: ambiguity that survived a medium pass, or a stuck root-cause.
 - **Fable** — above Opus: hardest analysis, no-priors design, root-cause,
   planning. Coordinator tier. Never default implementer. Own usage bucket.
+  **Default effort: high** (fable work is pre-filtered hardest — depth is
+  usually the point); max for root-cause hunts.
 - **Haiku** — single-shot bulk classify/extract ONLY, NO tool chains: tool-loop
   bug (anthropics/claude-code#10029), rejects `effort` (400), two gens stale.
   One looped worker erases the price gap and emits claims that cost Opus-tier

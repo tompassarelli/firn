@@ -40,8 +40,11 @@ the user the finish as ONE command, and say exactly why.
 
 Tier = the task's REASONING DEMAND, never its importance. Shape triage —
 execute / implement / integrate / design / invent — maps onto the stack:
-**sonnet-low** discovers → **sonnet-medium** builds → **opus** judges →
-**fable** plans/analyzes the hardest; coordinator stays Opus/Fable. Haiku is
+**sonnet-low** discovers → **sonnet-medium** builds → **opus-medium** judges
+→ **fable-high** plans/analyzes the hardest; coordinator stays Opus/Fable.
+Those are STARTING efforts — escalate on evidence (survived-medium ambiguity,
+stuck root-cause), never as the default: opus-xhigh ≈ 12× cost, and a higher
+ceiling at modest effort beats maxed effort (tested — doc). Haiku is
 OFF the stack (single-shot bulk classify only — details in doc). Two hard
 laws: **pin BOTH dials on every spawn** (harder ⇒ escalate the MODEL, never
 sonnet high/xhigh); **Fable analyzes, never default-implements** (coding ≤
