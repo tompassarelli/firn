@@ -56,6 +56,17 @@ tern spawns get model-deltas automatically (read from `~/code/gaffer/docs`,
 the canonical block source); personal domain-posture defaults live in
 praxis/README.md. Compose, don't re-derive.
 
+**tern IS the spawn surface here — gaffer names the squad, tern delivers
+it.** The native Agent tool is denied under `/my-config dispatch=tern`, so a
+gaffer squad pick is NOT spawned via `subagent_type` — translate it to
+`mcp__tern__spawn {prompt, model, effort, role, posture}` using that role's
+pinned dials from the doctrine (e.g. `gaffer:researcher` → `{model:'sonnet',
+effort:'low', role:'researcher'}`; `gaffer:integrator` → `{model:'opus',
+effort:'high', role:'integrator'}`). The role/posture params inject the
+gaffer payload; the delta rides automatically. A native-Agent denial is a
+routing instruction (use tern), never a wall — never abandon the pick or
+fall back to an unrouted spawn.
+
 ## Push freely — the scan is the guard, not a human
 
 Commit at coherent checkpoints, then **`safe-push`** — never raw `git push`,
