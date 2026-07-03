@@ -26,6 +26,27 @@ on evidence — promotion is cheap, over-provisioning is silent waste.
   verification. True successor is off-Anthropic (Gemini Flash via LiteLLM →
   `ANTHROPIC_BASE_URL`); unbuilt — candidate tern `flash` tier.
 
+## Route by task shape, not difficulty
+
+First triage question (dial 1): is this task execution, implementation,
+integration, design, or invention?
+
+- **execute** — bounded, mechanical: apply patch, rename, obvious tests → sonnet-low
+- **implement** — one feature/fix inside known patterns → sonnet-medium
+- **integrate** — cross-file, ambiguous debugging, refactor with behavior at
+  stake → Opus
+- **design** — choose the shape: APIs, lifecycles, decomposition → Opus;
+  Fable only when no priors
+- **invent** — is the primitive itself right? what should exist? → Fable
+  plans, Opus implements/reviews
+
+Shape picks the MODEL; effort is still set separately (dial 2). Difficulty ≠
+shape: a hard-but-local testable bug is still *implement* (unless the priors
+law fires); a one-line naming decision that shapes an API is *design*. **Blast
+radius routes up; importance alone never does** — blast radius = the decision
+shapes the system going forward, importance = the outcome matters to the user.
+"Coordinates agents" is not a spawn shape — that's the session itself.
+
 ## Buckets (Max plan, /usage-verified 2026-07-03)
 
 One unified pool: sonnet/opus/haiku. **Fable: own bucket.** So Sonnet routing =

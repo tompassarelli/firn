@@ -58,7 +58,9 @@ Full protocol (spawn/steer/observe/concurrency):
 
 ## Model selection for parallel work — right tier per agent
 → ~/code/nixos-config/dotfiles/claude/docs/model-selection.md
-Tier = the task's REASONING DEMAND, never its importance. The stack:
+Tier = the task's REASONING DEMAND, never its importance. Triage by SHAPE:
+execute / implement / integrate / design / invent (doc maps shapes → tiers);
+blast radius routes up, importance alone never. The stack:
 **sonnet-low** discovers/triages → **sonnet-medium** builds → **opus** judges →
 **fable** plans/analyzes the hardest; coordinator stays Opus/Fable. Haiku is
 OFF the default stack (2026-07: tool-loop bug, no effort dial, 2 gens stale) —
