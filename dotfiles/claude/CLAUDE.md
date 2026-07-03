@@ -166,3 +166,13 @@ terminals/browsers is a deliberate aesthetic — never comment on, diagnose, or
 "fix" it. When judging UI colors from a screenshot, evaluate the CSS/config
 values (and their base16 set), not how they composite over the wallpaper; if a
 color is off, the fix is the value, never the compositor.
+
+## Model billing — Max plan only, never API credits
+
+Every model call (sessions, spawned agents, experiment harnesses shelling
+`claude -p`, tern SDK dispatch) runs on the Anthropic Max subscription via CLI
+auth (`claude.ai` OAuth). NEVER introduce `ANTHROPIC_API_KEY` / `apiKeyHelper` /
+API-credit billing into env, settings, or harness code — no key on the machine
+is the structural guarantee. `total_cost_usd` in CLI JSON output is API-price
+ACCOUNTING (informational), not billed credits — label it "API-equivalent
+accounting" when reporting experiment costs.
