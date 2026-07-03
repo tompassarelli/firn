@@ -19,7 +19,7 @@ Model and effort are **orthogonal**, not a single 1–9 scale:
 - **Model = capability ceiling** (+ cost/speed) — raises what's *possible*.
 - **Effort = deliberation depth** on a fixed ceiling — more thinking / tool calls
   / self-checking. A behavioral signal, not a hard budget: at low effort the
-  model still thinks on hard problems, just less. (Haiku has *no* effort knob —
+  model still thinks on hard problems, just less. (Haiku has *no* effort dial —
   passing `effort` errors.)
 
 Off-diagonal proves they don't collapse: **opus-low** (high ceiling, snap
@@ -30,7 +30,7 @@ full effort, cheaper. Pick both dials per task.
 
 ## The three tiers
 
-Mechanical/locate/format-preserving → **Haiku** (no effort knob; ~15× cheaper
+Mechanical/locate/format-preserving → **Haiku** (no effort dial; ~15× cheaper
 than Opus — default for read-only fan-out). Well-specified
 build/edit/summarize/extract → **Sonnet** (= Sonnet 5 at medium; see below).
 Judgment: architecture, cross-file refactors, ambiguous debugging, adversarial
@@ -144,7 +144,7 @@ Tiered routing vs uniform-Opus cut cost **~50–80%, no quality regression**
 
 ## How this maps to our tools
 
-- **tern SDK (the PRIMARY spawn surface** while the dispatch knob is `tern` —
+- **tern SDK (the PRIMARY spawn surface** while the /my-config dispatch setting is `tern` —
   the native tools below are denied there; see `my-config`): `mcp__tern__spawn`
   takes `{model: opus|sonnet|haiku, effort}` per call; env `AGENT_MODEL` sets
   the dispatch.ts default; `AGENT_CAVEMAN` rides along. Same rule as Workflow:

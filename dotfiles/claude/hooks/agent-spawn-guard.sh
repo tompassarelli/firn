@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse agent-spawn-guard — enforcement half of the DISPATCH knob (see `my-config`).
+# PreToolUse agent-spawn-guard — enforcement half of the /my-config dispatch setting.
 # ============================================================================
 # Successor of agent-redirect.sh (removed in the P6 hook cleanup, ae3b31e).
 # Reinstated 2026-07-03: without a mechanical intercept, native catch-all
@@ -53,13 +53,13 @@ if mode == "warn":
     out = {"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "allow",
-        "additionalContext": "dispatch knob = warn. " + recipe,
+        "additionalContext": "/my-config dispatch = warn. " + recipe,
     }}
 else:
     out = {"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
-        "permissionDecisionReason": "DENIED by dispatch knob (tern). " + recipe,
+        "permissionDecisionReason": "DENIED by /my-config dispatch setting (tern). " + recipe,
     }}
 
 print(json.dumps(out))

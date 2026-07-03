@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# my-config — ONE entry point for EVERY personal-stack posture knob.
+# my-config — every personal-stack setting, one entry point.
 #
 #   caveman  : output compression     session level + worker default
 #   dispatch : who runs agents        tern SDK  vs  native Agent/Workflow
@@ -9,7 +9,7 @@
 #
 # State: ~/.claude/my-config.state (dispatch/coord) · ~/.claude/.caveman-active
 #        (caveman, owned by the caveman plugin) · registry (beagle).
-# Knobs owned by other CLIs are pointed at, not duplicated (see footer).
+# Settings owned by other CLIs are pointed at, not duplicated (see footer).
 set -uo pipefail
 
 STATE="$HOME/.claude/my-config.state"
@@ -37,7 +37,7 @@ status() {
   files=$(grep -vE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null | sed "s|^$HOME|~|; s/^/       /")
   cat <<EOF
 ╭──────────────────────────────────────────────────────────────────╮
-│  MY-CONFIG — every stack knob, one report        $(date +%Y-%m-%d)       │
+│  MY-CONFIG — every setting, one report           $(date +%Y-%m-%d)       │
 ╰──────────────────────────────────────────────────────────────────╯
 
  1  CAVEMAN    output compression
@@ -70,14 +70,14 @@ ${files:-       (none)}
     $(wired tripwire-guard) tripwire            $(wired racket-build-guard) racket-build      $(wired beagle-session-start) beagle-session
     flip all off → CLAUDE_NO_AUTHORING_HOOKS=1 (env, per-session)
 
- elsewhere: system/nix my-config → firn tag status · session effort → /effort
+ elsewhere: system/nix settings → firn tag status · session effort → /effort
  state: ~/.claude/my-config.state · descriptions + advice: my-config help
 EOF
 }
 
 help() {
   cat <<'EOF'
-my-config — every personal-stack posture knob, one entry point.
+my-config — every personal-stack posture setting, one entry point.
 
  1 CAVEMAN — output compression (token economy).
    Session level lives in ~/.claude/.caveman-active (caveman plugin);
@@ -111,7 +111,7 @@ my-config — every personal-stack posture knob, one entry point.
  4 COORD — source of truth for work coordination.
    tern / linear / both (Linear as consolidation layer over tern).
    Declarative for now: agents read this posture; nothing mechanically
-   blocks the other system yet. Flipping the knob does not build the sync.
+   blocks the other system yet. Flipping the option does not build the sync.
    Advice: tern.
 
  5 GUARDS — the PreToolUse/SessionStart authoring guards.

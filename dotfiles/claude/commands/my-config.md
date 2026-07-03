@@ -1,6 +1,6 @@
 ---
-description: Every stack knob, one report — caveman / dispatch / beagle / coord / guards
-allowed-tools: Bash(knobs:*), Bash(/home/tom/code/nixos-config/dotfiles/bin/my-config:*)
+description: Personal stack settings, one report — caveman / dispatch / beagle / coord / guards
+allowed-tools: Bash(/home/tom/code/nixos-config/dotfiles/bin/my-config:*)
 ---
 
 Run exactly this via Bash: `~/code/nixos-config/dotfiles/bin/my-config $ARGUMENTS`
