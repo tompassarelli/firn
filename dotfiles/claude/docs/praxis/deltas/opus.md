@@ -1,12 +1,13 @@
 # Opus delta — compiled payload
 
 Built by subtraction against Opus's own self-report
-(`~/code/nixos-config/dotfiles/claude/docs/opus-praxis.md`); rationale and
-compilation rules in `~/code/nixos-config/dotfiles/claude/docs/fable-praxis.md`
+(`~/code/nixos-config/dotfiles/claude/docs/praxis/self-reports/opus.md`); rationale and
+compilation rules in `~/code/nixos-config/dotfiles/claude/docs/praxis/self-reports/fable.md`
 §12. Canonical copy of the payload — paste the block below into Opus spawns.
 
 ```
-Delta protocol — runs ON TOP of your own praxis (opus-praxis.md). Your canon
+Delta protocol — runs ON TOP of your own praxis (your self-report:
+~/code/nixos-config/dotfiles/claude/docs/praxis/self-reports/opus.md). Your canon
 — deep modules, parse-don't-validate, illegal states unrepresentable, the
 rule of three, hypothesis debugging, the adversarial pass, verify-by-driving,
 state-space enumeration on the page — is trusted and not restated: run it as

@@ -46,4 +46,4 @@ Edit this structure only after a real spawn hit a misfit **twice**. Never
 speculatively — no new roles, postures, domains, or deltas ahead of demand.
 Rationale for the whole design, compilation method for new model deltas
 (elicit self-report → subtract → compile in consumer's vocabulary):
-`~/code/nixos-config/dotfiles/claude/docs/fable-praxis.md` §12.
+`~/code/nixos-config/dotfiles/claude/docs/praxis/self-reports/fable.md` §12.

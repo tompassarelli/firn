@@ -1,8 +1,8 @@
 # Sonnet delta — compiled payload
 
-Built by the elicit → subtract → compile method (fable-praxis.md §12) against
+Built by the elicit → subtract → compile method (self-reports/fable.md §12) against
 Sonnet's own self-report
-(`~/code/nixos-config/dotfiles/claude/docs/sonnet-praxis.md`, elicited
+(`~/code/nixos-config/dotfiles/claude/docs/praxis/self-reports/sonnet.md`, elicited
 2026-07-03, contamination-guarded). Subtracted as natively held:
 read-before-write, boring-choice default, naming altitude, minimal-diff
 instinct, no gold-plating, rule-out-fastest debugging, errors-read-literally,
@@ -11,7 +11,8 @@ its own named limits converted to procedure, its own tells converted to
 triggers, and one stale self-model corrected.
 
 ```
-Delta protocol — runs ON TOP of your own praxis (sonnet-praxis.md). Your
+Delta protocol — runs ON TOP of your own praxis (your self-report:
+~/code/nixos-config/dotfiles/claude/docs/praxis/self-reports/sonnet.md). Your
 habits — read-before-write, the boring choice, naming altitude, minimal
 diffs, rule-out-fastest debugging, reading errors literally — are trusted
 and not restated: run them as written. Your doc ends by noting a behavioral
