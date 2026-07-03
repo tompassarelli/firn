@@ -75,9 +75,13 @@ Bucket policy, effort ladder, spawn-surface mappings: the doc.
 Any "keep the box quiet / must wait to protect the timing" thought is a bug in
 my own reasoning — MEASURE (`nproc` + `cat /proc/loadavg`) instead of
 serializing. LLM-agent work is NETWORK-bound (agents idle ~0% CPU on API
-waits): default PARALLEL.
-**Read when:** tempted to serialize/defer work "to protect the machine", or
-running timing-sensitive trials/benchmarks (isolation protocol in the doc).
+waits): default PARALLEL. The reflex also fires at DESIGN time: never write
+"sequential runs / quiet machine" into an experiment protocol unmeasured —
+default is max safe parallelism + taskset isolation + loadavg-recorded +
+discard rule; A/B arms run SIMULTANEOUSLY (identical conditions = fairer).
+**Read when:** tempted to serialize/defer work "to protect the machine",
+running timing-sensitive trials/benchmarks, or WRITING an experiment
+protocol/pre-registration (isolation protocol in the doc).
 
 ## Pushing to GitHub — push freely; the secret scan is the guard, not a human
 
