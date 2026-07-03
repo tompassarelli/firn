@@ -46,7 +46,7 @@ opus-xhigh.** **Fable is OPT-IN and availability-gated, never load-bearing
 in standing machinery** — its Max-plan window is limited and week-scoped
 (any availability belief older than ~7 days is stale; only the USER can
 check `/usage`; unknown ⇒ assume out). When available AND the task is truly
-above Opus: architect/researcher on weak priors; spawns xhigh, sessions
+above Opus: architect/inventor on weak priors; spawns xhigh, sessions
 high, max only at critical junctures with demonstrated headroom; **Fable
 analyzes, never default-implements** (coding ≤ Opus; in a Fable session PIN
 implementation spawns to opus/sonnet). When out: opus-xhigh tops the ramp

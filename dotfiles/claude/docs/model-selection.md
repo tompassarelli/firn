@@ -37,7 +37,7 @@ complex tasks" (the recommended default), Sonnet = "routine tasks", Fable =
   escalated from sonnet). opus-max: rare — tends to overthink; only with
   demonstrated headroom, and mostly dominated by fable rungs now.
 - **Fable — OPT-IN, availability-gated (high|xhigh when live)** —
-  **architect/researcher grade, especially on weak existing priors**:
+  **architect/inventor grade, especially on weak existing priors**:
   hardest analysis, no-priors design, root-cause, planning. NOT a standing
   rung: the Max-plan Fable window is limited and week-scoped (verified
   2026-07-03; treat any availability belief older than ~7 days as stale;
