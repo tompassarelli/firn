@@ -108,6 +108,23 @@ sonnet-xhigh, the exact anti-pattern):
 - Agent frontmatter supports `effort: low|medium|high|xhigh|max`; there is no
   global `CLAUDE_CODE_SUBAGENT_EFFORT` env (only `..._MODEL`).
 
+## Fable — analyst/planner tier, NOT the implementer
+
+Fable sits above Opus (Mythos-class ceiling). Its edge is the hardest
+*analysis*: architecture with no priors, root-causing thorny bugs, research
+synthesis, adversarial judgment, planning. It is **not the coding tier**:
+
+- **Coding/editing/building default to the standard ladder** (Haiku → Sonnet →
+  Opus). Opus is the top implementer.
+- **Escalate implementation to Fable only on a real blocker**: Opus has
+  repeatedly failed the same defect, or the fix hinges on analysis Opus can't
+  crack. Deliberate, per-task — never a default route.
+- **Shape**: Fable diagnoses/plans → Opus/Sonnet implement → review at Opus.
+- **Inheritance trap**: a coordinator session running on Fable leaks it —
+  Workflow `agent()` without `opts.model` and the Agent tool both inherit the
+  session model. In a Fable session, explicitly pin `model: 'opus'|'sonnet'`
+  on every implementation spawn.
+
 ## Routing patterns for fan-out
 
 Tiered routing vs uniform-Opus cut cost **~50–80%, no quality regression**

@@ -54,6 +54,10 @@ judgment. Coordinator stays on Opus; workers economize.
 (`{model: 'sonnet', effort: 'medium'}` in Workflow, or the `sonnet-worker`
 agent); harder ⇒ escalate the MODEL (Opus/Fable), never sonnet high/xhigh.
 Sonnet is its own Max bucket — spend it to spare Opus; exhausted ⇒ route to Opus.
+**Fable = analyst/planner, never the default implementer** — coding stays ≤ Opus.
+Escalate a coding task to Fable only on a real blocker (Opus repeatedly failing
+the same defect). In a Fable session, PIN implementation spawns to opus/sonnet —
+never let build workers inherit fable.
 **Read when:** fanning out agents and choosing `model`/`effort` per agent
 (Agent tool, Workflow `opts.model`, cavecrew tiers).
 
