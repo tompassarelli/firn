@@ -98,6 +98,19 @@ leak; never push it — safe-push blocks this); force-push / rewrite of publishe
 history; making a private repo public or pushing clearly-sensitive content to a
 public one; commits that aren't yours to publish (another agent's in-flight WIP).
 
+## Using others' code — check the license first
+
+Before leveraging external code (reference repos in `~/code/reference`, forks,
+vendored snippets, "how did X do it" reads): read its LICENSE. Permissive
+(MIT/Apache-2.0/BSD/ISC) → adapt freely; carry attribution/NOTICE where the
+license requires it. Copyleft (GPL/AGPL/SSPL) → READING for ideas is fine;
+FLAG before deriving/copying code into a differently-licensed project.
+No license file / "all rights reserved" / non-commercial or no-derivative
+terms → flag to the user BEFORE using it as a reference at all. Studying a
+mechanism and reimplementing from understanding is always fine — the license
+governs copied expression, not ideas. If a license is overly restrictive for
+the intended use, say so up front, before any work builds on it.
+
 ## Internal notes go in `docs/private/` — never public `docs/`
 
 Internal agent notes, session status, scratch, and handoffs go in `docs/private/`
