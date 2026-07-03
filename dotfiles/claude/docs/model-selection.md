@@ -17,9 +17,14 @@ on evidence — promotion is cheap, over-provisioning is silent waste.
 - **sonnet-low** — discovery, triage, locate, read-only fan-out, research sweeps.
 - **sonnet-medium** — well-specified build/edit/summarize. The workhorse.
 - **Opus** — judgment: architecture, cross-file refactors, ambiguous debugging,
-  adversarial verify, synthesis. Top implementer. **Default effort: medium**
-  (the tested sweet spot — see header); escalate to high/xhigh only on
-  evidence: ambiguity that survived a medium pass, or a stuck root-cause.
+  adversarial verify, synthesis. Top implementer. **Default effort: high** —
+  official Opus guidance recommends xhigh as the agentic starting point with
+  medium as the cost-sensitive step-down; our Opus work is judge-shaped
+  (under-provisioned verifier ⇒ confident wrong verdicts, costlier than the
+  tokens saved). Step DOWN to medium for scoped well-specified work
+  (implementation escalated from sonnet); xhigh for long-horizon runs. The
+  header's opus-medium≈sonnet-best figure is cross-model parity evidence,
+  not judge-sufficiency evidence.
 - **Fable** — above Opus: hardest analysis, no-priors design, root-cause,
   planning. Coordinator tier. Never default implementer. Own usage bucket.
   **Spawned Fable work: xhigh.** Anthropic's own Fable guidance (effort docs,
