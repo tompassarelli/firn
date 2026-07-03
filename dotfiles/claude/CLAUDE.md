@@ -156,6 +156,20 @@ shell active. If `.envrc` is missing, suggest writing one
 → ~/code/nixos-config/dotfiles/claude/docs/racket-beagle-bytecode.md
 **Read when:** working in any Beagle/Racket project (`~/code/beagle`, `.rkt` edits, `raco`/`racket` invocations); a fix "doesn't take" or racket dies with `body of .../raco.rkt`; building/testing in a git worktree of a flake project.
 
+## New code — the ladder is for glue, never the core
+
+Before writing code, ask which layer it lives in. **Incidental code** (glue,
+scripts, plumbing, one-off tooling, run-of-the-mill features): walk the ladder —
+needs to exist at all? → repo already does it → stdlib → platform native →
+existing dep → one-liner → smallest block that works; stop at the first
+sufficient rung. The cheapest line is the one never written. **Core code**
+(the thing the project IS: compiler internals, novel infra, perf-critical
+paths): the ladder INVERTS — hand-rolling, specialization, and "reinventing
+wheels" are the work; never outsource the core to a dep or golf it down for
+line count. Test: "deliverable, or incidental to the deliverable?" Incidental
+→ minimize. Deliverable → build deliberately. Correctness, error handling,
+and security are never laddered away at either layer.
+
 ## Code comments — conservative, terse, high-value
 
 Default bearish — comments rot fast and cost tokens. A good comment encodes
