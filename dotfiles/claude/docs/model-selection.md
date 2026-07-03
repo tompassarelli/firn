@@ -138,7 +138,9 @@ Tiered routing vs uniform-Opus cut cost **~50–80%, no quality regression**
   difficulty is unknown up front.
 - **Discovery wide, judgment narrow** — cheap-and-wide sweep (Haiku/Sonnet) →
   expensive-and-narrow synth/verify (Opus). Verify must NOT reuse the cheap model
-  that produced the finding.
+  that produced the finding. And model-independent: the coordinator spot-checks
+  every load-bearing worker claim itself (grep/`tern show`/direct read) — worker
+  reports are claims, not facts, whatever tier produced them.
 
 ## How this maps to our tools
 

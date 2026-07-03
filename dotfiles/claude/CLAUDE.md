@@ -18,23 +18,40 @@ Thread format + concurrent-agent write safety (`tell`/`capture`/`import`/`export
 + the full dogfood protocol:
 → ~/code/nixos-config/dotfiles/claude/docs/tern.md
 
-## Pre-edit gate — MANDATORY before any code change
+## Pre-edit gate — MANDATORY at task intake
 
-**Stop before writing code.** Before any Edit/Write/file modification, the
-coordinator MUST run this mental gate (one short paragraph, not a doc):
+**Run the gate the moment the shape of the work is clear** — at task intake,
+not when the first Edit looms (by then the plan is already set). One short
+paragraph, not a doc:
 
 1. **Decompose** — what are the independent subtasks in this change?
-2. **Graph** — which subtasks block which? Draw the dependency edges.
-3. **Dispatch** — independent subtasks go to tern agents IN PARALLEL. Only
-   sequentialize what genuinely depends on a prior result.
-4. **Coordinate** — the coordinator touches ONLY cross-cutting work that spans
-   multiple agents' outputs. If a subtask is self-contained, delegate it.
+2. **Graph** — which subtasks block which? Only sequentialize true dependencies.
+3. **Dispatch** — independent subtasks → tern agents IN PARALLEL, each with
+   model + effort picked per model-selection.md (tier per SUBTASK, never
+   inherited from the session).
+4. **Coordinate** — the coordinator touches ONLY cross-cutting seams spanning
+   multiple agents' outputs. Self-contained subtask ⇒ delegate it.
+5. **Verify** — before calling it done: drive the change end-to-end (not just
+   typecheck), and spot-check each worker's load-bearing claims yourself — a
+   30-second grep beats trusting a "done" report.
 
-If there's only ONE subtask (a typo fix, a single-file tweak), skip the gate
-and just do it. The gate fires when the change spans 2+ files or 2+ concerns.
+Skip when there's ONE subtask (typo, single-file tweak). Fires at 2+ files or
+2+ concerns.
 
-**Failure mode prevented:** serially grinding 8 files when 3+ were independent.
-Coordinate, don't execute.
+**Failure modes prevented:** serially grinding 8 files when 3+ were independent;
+shipping a worker's "done" that never actually landed. Coordinate, don't
+execute; verify, don't trust.
+
+## Blocked ≠ stopped — find the compliant adjacent move
+
+When a guard, permission classifier, or owning agent blocks an action: never
+retry verbatim, never subvert the intent — find the nearest COMPLIANT move that
+still advances the goal (can't delete the file → scrub the offending lines;
+can't rewrite a shared log → same-length byte-patch, or package it as a script
+for the user). Verify a blocker's load-bearing claim yourself before accepting
+OR overriding it. At a hard wall (permission system, another agent's live
+dependency): stop, hand the user the finish as ONE command, and say exactly
+why you stopped. Denial is information about the path, not the goal.
 
 ## Agent coordination — tern protocol
 
