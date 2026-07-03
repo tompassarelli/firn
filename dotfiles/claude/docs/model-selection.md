@@ -22,8 +22,13 @@ on evidence — promotion is cheap, over-provisioning is silent waste.
   evidence: ambiguity that survived a medium pass, or a stuck root-cause.
 - **Fable** — above Opus: hardest analysis, no-priors design, root-cause,
   planning. Coordinator tier. Never default implementer. Own usage bucket.
-  **Default effort: high** (fable work is pre-filtered hardest — depth is
-  usually the point); max for root-cause hunts.
+  **Spawned Fable work: xhigh.** Anthropic's own Fable guidance (effort docs,
+  2026-07): high default for most tasks, xhigh for capability-sensitive —
+  and Fable routing pre-filters to exactly those; with no rung above, a
+  re-run costs more than the effort delta. Coordinator sessions: high.
+  **max is never a default**: officially gated on "evals show measurable
+  headroom at xhigh"; documented overthinking failure modes (judgment
+  reversal, spurious complexity).
 - **Haiku** — single-shot bulk classify/extract ONLY, NO tool chains: tool-loop
   bug (anthropics/claude-code#10029), rejects `effort` (400), two gens stale.
   One looped worker erases the price gap and emits claims that cost Opus-tier
@@ -136,6 +141,8 @@ Tiered routing vs uniform-Opus: ~50–80% cheaper, no quality regression (tested
 
 ## Sources
 
-kentgigger.com (effort, tested); ayautomate / augmentcode (routing, tested).
-No rigorous public task × model × effort grid exists — figures directional;
-re-check on own evals.
+kentgigger.com (effort, tested); ayautomate / augmentcode (routing, tested);
+platform.claude.com effort docs + Fable 5 prompting guide (official per-model
+effort guidance, web-verified 2026-07-03). Still no public per-effort
+benchmark table for Fable 5 — the high/xhigh/max guidance is official but
+qualitative; figures directional; re-check on own evals.
