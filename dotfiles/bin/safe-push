@@ -9,6 +9,9 @@
 #
 # Usage:  safe-push              push current branch to origin
 #         safe-push --dry-run    run the scan + checks, do not push
+#         safe-push --tag NAME   push tag NAME; its target commit must already be
+#                                on origin (i.e. previously safe-pushed), and the
+#                                tag annotation itself is secret-scanned
 set -euo pipefail
 
 git rev-parse --show-toplevel >/dev/null 2>&1 || { echo "safe-push: not in a git repo"; exit 1; }
@@ -16,13 +19,42 @@ branch=$(git rev-parse --abbrev-ref HEAD)
 [ "$branch" = "HEAD" ] && { echo "safe-push: detached HEAD — checkout a branch first"; exit 1; }
 
 dry=0
+tag=""
+expect_tag=0
 for a in "$@"; do
+  if [ "$expect_tag" = 1 ]; then tag="$a"; expect_tag=0; continue; fi
   case "$a" in
     --dry-run) dry=1 ;;
+    --tag) expect_tag=1 ;;
     -f|--force|--force-with-lease|--mirror|--delete|--prune)
       echo "safe-push: refuses '$a' — force/destructive pushes are deliberate + manual, not automatic"; exit 1 ;;
   esac
 done
+[ "$expect_tag" = 1 ] && { echo "safe-push: --tag needs a name"; exit 1; }
+
+# --- tag mode: no new commit content may ride a tag push --------------------------
+# A tag ref carries only the tag object; the guard is (a) its target commit is
+# already on origin — meaning it went through a scanned branch push — and (b) the
+# annotation text itself is scanned (it is published content too).
+if [ -n "$tag" ]; then
+  git rev-parse -q --verify "refs/tags/$tag" >/dev/null || { echo "safe-push: no such tag '$tag'"; exit 1; }
+  target=$(git rev-list -n1 "$tag")
+  git fetch -q origin
+  git branch -r --contains "$target" 2>/dev/null | grep -q . \
+    || { echo "safe-push: tag '$tag' targets $target which is NOT on origin — safe-push the branch first"; exit 1; }
+  command -v gitleaks >/dev/null 2>&1 || { echo "safe-push: gitleaks not on PATH — refusing to push without a secret scan"; exit 1; }
+  tmpd=$(mktemp -d) && trap 'rm -rf "$tmpd"' EXIT
+  git tag -l --format='%(contents)' "$tag" > "$tmpd/tag-message.txt"
+  # gitleaks CLI drift: 8.19+ uses `dir`, older uses `detect --no-git --source`
+  gitleaks dir "$tmpd" --no-banner --redact >/dev/null 2>&1 \
+    || gitleaks detect --no-git --source "$tmpd" --no-banner --redact >/dev/null 2>&1 \
+    || { echo "safe-push: ✗ SECRET DETECTED in tag annotation — fix it; NOT pushed."; exit 1; }
+  if [ "$dry" = 1 ]; then echo "safe-push: ✓ clean (--dry-run) — would push tag $tag -> origin"; exit 0; fi
+  echo "safe-push: ✓ clean — pushing tag $tag -> origin"
+  export SAFE_PUSH_ACTIVE=1
+  git push origin "refs/tags/$tag"
+  exit 0
+fi
 
 # --- the load-bearing guard: secret scan of the commits about to be pushed -------
 command -v gitleaks >/dev/null 2>&1 || { echo "safe-push: gitleaks not on PATH — refusing to push without a secret scan"; exit 1; }
