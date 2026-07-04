@@ -8,4 +8,7 @@
     (lib.mkEnableOption "Python runtime with uv")
    :config
     (lib.mkIf config.myConfig.modules.python.enable
-      {:environment.systemPackages (nix/with pkgs [python3])})})
+      ;; boto3 in the base runtime: ad-hoc AWS scripting (bucket purges, batch
+      ;; ops the cli is clumsy at). Single python3 on the system → no PATH
+      ;; collision (a second bare python3 elsewhere would shadow this one).
+      {:environment.systemPackages [(pkgs.python3.withPackages (fn [ps] (nix/with ps [boto3])))]})})

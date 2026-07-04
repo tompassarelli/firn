@@ -17,10 +17,7 @@
          :description "sops file holding the AWS credentials (aws-access-key-id, aws-secret-access-key)"})
      :config
       (lib.mkIf config.myConfig.modules.awscli.enable
-        {:environment.systemPackages [pkgs.awscli2
-                                      ;; python3 + boto3 for ad-hoc AWS scripting
-                                      ;; (bucket purges, batch ops the cli is clumsy at)
-                                      (pkgs.python3.withPackages (fn [ps] (nix/with ps [boto3])))]
+        {:environment.systemPackages [pkgs.awscli2]
          :sops.secrets
           {"aws-access-key-id"
             {:sopsFile sopsFile :owner username}

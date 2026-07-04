@@ -12,7 +12,7 @@ in
     description = "sops file holding the AWS credentials (aws-access-key-id, aws-secret-access-key)";
   };
   config = lib.mkIf config.myConfig.modules.awscli.enable {
-    environment.systemPackages = [ pkgs.awscli2 (pkgs.python3.withPackages (ps: with ps; [ boto3 ])) ];
+    environment.systemPackages = [ pkgs.awscli2 ];
     sops.secrets = {
       "aws-access-key-id" = {
         sopsFile = sopsFile;
