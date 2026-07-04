@@ -57,15 +57,31 @@ the canonical block source); personal domain-posture defaults live in
 praxis/README.md. Compose, don't re-derive.
 
 **tern IS the spawn surface here — gaffer names the squad, tern delivers
-it.** The native Agent tool is denied under `/my-config dispatch=tern`, so a
-gaffer squad pick is NOT spawned via `subagent_type` — translate it to
-`mcp__tern__spawn {prompt, model, effort, role, posture}` using that role's
-pinned dials from the doctrine (e.g. `gaffer:researcher` → `{model:'sonnet',
-effort:'low', role:'researcher'}`; `gaffer:integrator` → `{model:'opus',
-effort:'high', role:'integrator'}`). The role/posture params inject the
-gaffer payload; the delta rides automatically. A native-Agent denial is a
-routing instruction (use tern), never a wall — never abandon the pick or
-fall back to an unrouted spawn.
+it.** Under `/my-config dispatch=tern` the native Agent/Task/Workflow tools
+are DENIED. The harness still advertises `gaffer:*` + native agent types and
+the gaffer doctrine lists native Agent as spawn-surface #1 — **IGNORE both
+and go STRAIGHT to `mcp__tern__spawn`**; never let the advertised list bait a
+native call (that's the recurring misfire). Don't spawn via `subagent_type` —
+translate the squad pick to `mcp__tern__spawn {prompt, model, effort, role,
+posture}` with the pinned dials below. The five praxis roles pass a tern
+`role` block; the read-only tiers (analyst/verifier/judge) have NO tern role
+block → pin model+effort+`posture:explore` and carry the role in the prompt.
+
+| gaffer role | model | effort | tern role | posture |
+|---|---|---|---|---|
+| executor | sonnet | low | executor | deliver |
+| implementer | sonnet | medium | implementer | deliver |
+| integrator | opus | high | integrator | deliver |
+| designer | opus | xhigh | designer | explore |
+| researcher | sonnet | low | researcher | explore |
+| analyst · verifier · judge | opus | high | *(none)* | explore |
+
+The role/posture params inject the gaffer payload; the delta rides
+automatically. If a native call slips through, the `agent-spawn-guard` hook
+now DENIES with the exact `mcp__tern__spawn` call pre-resolved for that role —
+a one-paste recovery, not a re-derivation. A native-Agent denial is a routing
+instruction (use tern), never a wall — never abandon the pick or fall back to
+an unrouted spawn.
 
 ## Push freely — the scan is the guard, not a human
 

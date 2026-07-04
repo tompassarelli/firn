@@ -36,18 +36,59 @@ if tool not in ("Agent", "Task", "Workflow"):
     sys.exit(0)
 
 mode = os.environ.get("AGENT_SPAWN_GUARD_MODE", "tern")
+ti = data.get("tool_input", {}) or {}
 
-recipe = (
-    "Native " + tool + " is ephemeral — no claim trail, no steering, no observability. "
-    "Do the SAME work on tern:\n"
-    "  1. Trivial lookup / single file? No agent at all — bash/grep/read inline.\n"
-    "  2. One job: mcp__tern__spawn {prompt, model, effort} (ad-hoc), or capture a "
-    "thread + mcp__tern__dispatch (thread-driven posture).\n"
-    "  3. Fan-out: N x mcp__tern__spawn in parallel; message workers via "
-    "bb ~/code/tern/cli/msg-cli.clj 7977 send; observe via web :8088.\n"
-    "  Caveman + model tier ride the SDK path (AGENT_CAVEMAN / AGENT_MODEL).\n"
-    "Bypass deliberately: my-config dispatch warn|native (or /my-config)."
-)
+# gaffer squad role -> tern spawn dials. The five praxis roles map to a tern
+# `role` block; the read-only tiers (analyst / verifier / judge) have no tern
+# role block, so they pin model+effort+posture and carry the role in-prompt.
+ROLE_MAP = {
+    "executor":    {"model": "sonnet", "effort": "low",    "role": "executor",    "posture": "deliver"},
+    "implementer": {"model": "sonnet", "effort": "medium", "role": "implementer", "posture": "deliver"},
+    "integrator":  {"model": "opus",   "effort": "high",   "role": "integrator",  "posture": "deliver"},
+    "designer":    {"model": "opus",   "effort": "xhigh",  "role": "designer",    "posture": "explore"},
+    "researcher":  {"model": "sonnet", "effort": "low",    "role": "researcher",  "posture": "explore"},
+    "analyst":     {"model": "opus",   "effort": "high",                          "posture": "explore"},
+    "verifier":    {"model": "opus",   "effort": "high",                          "posture": "explore"},
+    "judge":       {"model": "opus",   "effort": "high",                          "posture": "explore"},
+}
+
+def tern_call(d):
+    parts = ['model:"%s"' % d["model"], 'effort:"%s"' % d["effort"]]
+    if "role" in d:
+        parts.append('role:"%s"' % d["role"])
+    parts.append('posture:"%s"' % d["posture"])
+    parts.append("prompt:<your same prompt, verbatim>")
+    return "mcp__tern__spawn { " + ", ".join(parts) + " }"
+
+# Was this a gaffer squad pick? If so, translate it to the EXACT tern call so
+# recovery is a single paste — no re-deriving role->dials by hand every time.
+subagent = ""
+if tool in ("Agent", "Task"):
+    subagent = ti.get("subagent_type") or ti.get("subagentType") or ""
+role_key = subagent.split(":")[-1].strip().lower() if subagent else ""
+
+if role_key in ROLE_MAP:
+    recipe = (
+        "Native " + tool + " (" + subagent + ") is ephemeral — no claim trail, "
+        "no steering, no observability. Re-issue the SAME work on tern; dials are "
+        "already resolved for gaffer:" + role_key + " — just paste your prompt in:\n"
+        "  " + tern_call(ROLE_MAP[role_key]) + "\n"
+        "Fan-out? fire one mcp__tern__spawn per lane in the same turn. "
+        "Observe: web :8088. Deliberate bypass: my-config dispatch warn|native."
+    )
+else:
+    where = subagent or tool
+    recipe = (
+        "Native " + tool + " (" + where + ") is ephemeral — no claim trail, no "
+        "steering, no observability. Do the SAME work on tern:\n"
+        "  1. Trivial lookup / single file? No agent at all — bash/grep/read inline.\n"
+        "  2. One job: mcp__tern__spawn {prompt, model, effort} (pick dials by task "
+        "shape), or capture a thread + mcp__tern__dispatch (thread-driven posture).\n"
+        "  3. Fan-out: N x mcp__tern__spawn in parallel; message workers via "
+        "bb ~/code/tern/cli/msg-cli.clj 7977 send; observe via web :8088.\n"
+        "  Caveman + model tier ride the SDK path (AGENT_CAVEMAN / AGENT_MODEL).\n"
+        "Bypass deliberately: my-config dispatch warn|native (or /my-config)."
+    )
 
 if mode == "warn":
     out = {"hookSpecificOutput": {
