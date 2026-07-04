@@ -131,3 +131,7 @@ trade-offs, paths-not-taken only; if the code can say it, drop it.
   settings, or harness code; no key on the machine is the structural
   guarantee. `total_cost_usd` in CLI output = "API-equivalent accounting",
   never billed credits.
+- **Banned vocabulary: "fleet"** for agent groups — dead pre-rename naming;
+  the harness's own "FleetView" string is not our vocabulary and must not
+  leak back in. Say lanes / agents / workers / spawns. (Ordinary English
+  "fleeting" is fine.)
