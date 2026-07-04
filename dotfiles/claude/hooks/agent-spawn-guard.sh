@@ -38,9 +38,13 @@ if tool not in ("Agent", "Task", "Workflow"):
 mode = os.environ.get("AGENT_SPAWN_GUARD_MODE", "tern")
 ti = data.get("tool_input", {}) or {}
 
-# gaffer squad role -> tern spawn dials. The five praxis roles map to a tern
-# `role` block; the read-only tiers (analyst / verifier / judge) have no tern
-# role block, so they pin model+effort+posture and carry the role in-prompt.
+# gaffer squad role -> tern spawn dials. CANONICAL source is gaffer's RECIPES
+# (~/code/gaffer/scripts/build-agents.mjs, which also generates the tern-adapter
+# doctrine block docs/adapters/tern.md); duplicated here for enforcement because
+# a PreToolUse hook can't import from the plugin. Keep the two in sync.
+# The five praxis roles map to a tern `role` block; the read-only tiers
+# (analyst / verifier / judge) have no tern role block, so they pin
+# model+effort+posture and carry the role in-prompt.
 ROLE_MAP = {
     "executor":    {"model": "sonnet", "effort": "low",    "role": "executor",    "posture": "deliver"},
     "implementer": {"model": "sonnet", "effort": "medium", "role": "implementer", "posture": "deliver"},
