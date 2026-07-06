@@ -158,13 +158,13 @@
                            :claude-code-latest
                             (final.master.claude-code.overrideAttrs
                               (fn [old]
-                                {:version "2.1.198"
+                                {:version "2.1.201"
                                  :src
                                   (final.fetchurl
                                     {:url
-                                      "https://downloads.claude.ai/claude-code-releases/2.1.198/linux-x64/claude"
+                                      "https://downloads.claude.ai/claude-code-releases/2.1.201/linux-x64/claude"
                                      :sha256
-                                      "7066af42a5fe93038c13af5072d4c034dc3928092cb121fdd892c76b94b6b84d"})}))
+                                      "a34809a6839fdefff21b9347d7fb5b6b58e6a9cc208a5e62853f29c83eb107a3"})}))
                            :kanata-git
                             (final.unstable.kanata.overrideAttrs
                               (fn [old]
