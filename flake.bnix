@@ -96,11 +96,6 @@
                  hostConfig
                  (nix/module [config pkgs ...]
                    {:networking.hostName hostname
-                    ;; bitwarden-desktop pins electron-39, marked EOL/insecure in
-                    ;; the 2026-06 nixpkgs bump. Scoped allow for that one version
-                    ;; so the password manager keeps building; revisit when nixpkgs
-                    ;; bumps bitwarden to a supported electron.
-                    :nixpkgs.config.permittedInsecurePackages ["electron-39.8.10"]
                     :sops.age.keyFile "/var/lib/sops-nix/key.txt"
                     :environment.sessionVariables.SOPS_AGE_KEY_FILE
                      "/var/lib/sops-nix/key.txt"

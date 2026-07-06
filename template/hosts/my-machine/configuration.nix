@@ -14,7 +14,6 @@
   myConfig.modules.input.enable = true;
   myConfig.modules.kanata.enable = true;
   myConfig.modules.neovim.enable = true;
-  myConfig.modules.password.enable = true;
   myConfig.modules.stylix.chosenTheme = "tokyo-night-dark";
   imports = [ ./_generated-enables.nix ];
 }

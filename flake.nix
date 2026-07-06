@@ -97,7 +97,6 @@
         hostConfig
         ({ config, pkgs, ... }: {
           networking.hostName = hostname;
-          nixpkgs.config.permittedInsecurePackages = [ "electron-39.8.10" ];
           sops.age.keyFile = "/var/lib/sops-nix/key.txt";
           environment.sessionVariables.SOPS_AGE_KEY_FILE = "/var/lib/sops-nix/key.txt";
           systemd.tmpfiles.rules = [

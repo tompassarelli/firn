@@ -1,8 +1,0 @@
-{ config, lib, pkgs, ... }:
-
-{
-  options.myConfig.modules.password.enable = lib.mkEnableOption "password management tools";
-  config = lib.mkIf config.myConfig.modules.password.enable {
-    environment.systemPackages = with pkgs; [ bitwarden-desktop ];
-  };
-}
