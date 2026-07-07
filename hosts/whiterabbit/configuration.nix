@@ -20,7 +20,7 @@
   myConfig.modules.fwupd.enable = true;
   myConfig.modules.thermal-management.enable = true;
   myConfig.modules.pipewire.enable = true;
-  myConfig.modules.bluetooth.enable = true;
+  myConfig.modules.bluetooth.enable = false;
   myConfig.modules.input.enable = true;
   myConfig.modules.piper.enable = false;
   myConfig.modules.g203-led.enable = true;
