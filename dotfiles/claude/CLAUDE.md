@@ -15,6 +15,20 @@ agent posture from thread claims.
 Thread format + concurrent write safety: → `~/code/nixos-config/dotfiles/claude/docs/tern.md`
 Spawn/steer/observe/concurrency: → `~/code/nixos-config/dotfiles/claude/docs/agent-protocol.md`
 
+## Billable work — clock or it didn't happen
+
+**Any edit under `~/code/client/**` is billable and MUST run against a live tern
+clock on a thread linked to its Linear ticket.** This is enforced mechanically —
+`tern-clock-guard` (PreToolUse) DENIES the edit if no clock is running — because
+prose here already failed once: ~22h of MSA work shipped with zero logged time
+and had to be reconstructed by hand for an invoice. Don't wait for the deny:
+**at intake on client work, derive the ticket from the branch (`msa-NNN` →
+`MSA-NNN`), find-or-`capture` its thread (`owner msa`, `linear MSA-NNN`, `rate`),
+and `tern clock start` it BEFORE the first edit.** One clock at a time; `clock
+stop` on context switch. Billing is derived, never invented: worklog =
+`tern-timelog`, invoice state machine = `tern-invoice` (uninvoiced → invoice-sent
+→ invoice-paid). Bypass only deliberately (`CLAUDE_NO_AUTHORING_HOOKS=1`).
+
 ## Pre-edit gate — MANDATORY at task intake
 
 Run it the moment the work's shape is clear (not when the first Edit looms):

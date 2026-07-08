@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# PreToolUse tern-clock-guard — HARD-DENY billable client edits when no tern
+# clock is running. The forcing function for "never do billable work untracked."
+# ============================================================================
+# Prose in CLAUDE.md demonstrably did not hold: ~22h of MSA client work once
+# shipped with ZERO tern time logged, then had to be reconstructed by hand for an
+# invoice. This makes untracked billable edits mechanically impossible instead of
+# merely discouraged — the same reason agent-spawn-guard exists.
+#
+#   Edit/Write/MultiEdit whose target is under ~/code/client/**
+#     AND no tern clock running                       -> DENY (with a clock-in recipe)
+#   any other path, or a clock IS running             -> allow
+#   tern unavailable (coordinator down / not installed)-> FAIL-OPEN (never lock you out)
+#
+# "Any running clock" satisfies the gate for v1 — the failure mode was NO clock at
+# all. Tightening to "clock on a thread owned by THIS client" is a later refinement.
+# Kill-switch: CLAUDE_NO_AUTHORING_HOOKS=1 (same as the other authoring guards).
+# ============================================================================
+set -uo pipefail
+
+[ -n "${CLAUDE_NO_AUTHORING_HOOKS:-}" ] && exit 0
+
+IN="$(cat 2>/dev/null || true)"
+
+# Target file path from tool_input (jq-free; python3 is on PATH per the other guards).
+FP="$(printf '%s' "$IN" | python3 -c 'import sys,json
+try: d=json.load(sys.stdin)
+except Exception: sys.exit(0)
+print((d.get("tool_input") or {}).get("file_path","") or "")' 2>/dev/null || true)"
+[ -z "$FP" ] && exit 0
+case "$FP" in /*) : ;; *) FP="$PWD/$FP" ;; esac      # relative -> absolute
+
+# Only billable client work is gated.
+case "$FP" in *"/code/client/"*) : ;; *) exit 0 ;; esac
+
+TERN="$HOME/code/tern/bin/tern"
+[ -x "$TERN" ] || exit 0                              # no tern -> no gate (fail-open)
+
+STATUS="$(timeout 6 "$TERN" clock status 2>/dev/null || true)"
+[ -z "$STATUS" ] && exit 0                            # unreadable (coord down) -> fail-open
+# NOTE: "not clocked in" contains "clocked in" — test the negative FIRST.
+case "$STATUS" in
+  *"not clocked in"*) : ;;                            # fall through to DENY
+  *"clocked in"*)     exit 0 ;;                        # a clock is running -> allow
+  *)                  exit 0 ;;                        # unknown shape -> fail-open
+esac
+
+# ---- DENY. Best-effort: derive the Linear ticket from the branch and locate its
+# thread, so recovery is one paste (the friction-kill layer). ------------------
+REPO="$(git -C "$(dirname "$FP")" rev-parse --show-toplevel 2>/dev/null || true)"
+BRANCH="$(git -C "${REPO:-$PWD}" branch --show-current 2>/dev/null || true)"
+TICKET="$(printf '%s' "$BRANCH" | grep -oiE 'msa-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]' || true)"
+
+if [ -n "$TICKET" ]; then
+  LOG="${FRAM_LOG:-$HOME/.local/state/tern/claims.log}"
+  TID="$(sed -n "s/.*:l \"\(@[0-9a-f-]*\)\".*\"linear\".*\"$TICKET\".*/\1/p" "$LOG" 2>/dev/null | tail -1)"
+  if [ -n "$TID" ]; then
+    HINT="Thread for $TICKET exists — clock in:  tern clock start ${TID#@}"
+  else
+    HINT="No thread for $TICKET yet:  tern capture \"$TICKET <title>\" msa   then   tern clock start <id>"
+  fi
+else
+  HINT="Find/create the thread:  tern ready  (or  tern capture \"<title>\" msa ),  then  tern clock start <id>"
+fi
+
+REASON="Billable client edit blocked — no tern clock running. Client work is never done untracked (this gate exists because ~22h of MSA work once shipped with zero logged time and had to be reconstructed for an invoice). Start a clock, then retry the edit:
+  ${HINT}
+Deliberate bypass: set CLAUDE_NO_AUTHORING_HOOKS=1 in the environment."
+
+printf '%s' "$REASON" | python3 -c 'import sys,json
+r=sys.stdin.read()
+print(json.dumps({"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":r}}))'
+exit 0
