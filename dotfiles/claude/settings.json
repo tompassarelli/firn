@@ -68,7 +68,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/graph-owned-guard.sh",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/code-upstream-guard.sh",
             "timeout": 10
           },
           {

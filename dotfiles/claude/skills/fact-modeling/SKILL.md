@@ -70,7 +70,7 @@ fact-modeling task instead of guessing the API.
 - `value!` returns a fresh-looking id but interns; never assume id→string without your
   own reverse map. Verify a round-trip on real data, like the spike's gate does.
 
-The family: Beagle text edits → beagle-authoring · graph-owned files
-(graph edit channel) → graph-owned-authoring · relational code queries
+The family: Beagle text edits → beagle-authoring · graph-upstream files
+(graph edit channel) → code-as-facts · relational code queries
 (blast zone / who-calls) → codegraph · building apps on the engine →
 fact-modeling. Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.

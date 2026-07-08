@@ -1,9 +1,9 @@
 ---
-name: graph-owned-authoring
+name: code-as-facts
 description: >-
-  Use when editing a GRAPH-OWNED Beagle source file — one listed in the
-  graph-owned registry or whose leading comment block carries
-  `;; @graph-owned`. Its text is a regenerable view of the Fram fact
+  Use when editing a Beagle source file whose UPSTREAM is the fact GRAPH (code-as-facts) — one listed in the
+  graph-upstream registry or whose leading comment block carries
+  `;; @upstream:graph`. Its text is a regenerable view of the Fram fact
   graph: author by GRAPH EDIT via the mcp__fram__* tools, never
   Edit/Write/MultiEdit (a PreToolUse guard refuses text edits). NOT for
   ordinary Beagle files or non-adopted modules.
@@ -12,25 +12,25 @@ description: >-
 # Claim-canonical authoring — the graph is the editing surface
 
 Most Beagle files are text-canonical: you Edit/Write the text and the compiler
-reads it. A **graph-owned** file is the inverse (the move-3 flip): its source
+reads it. A **graph-upstream** file is the inverse (the move-3 flip): its source
 of truth is the **Fram fact graph**, and the on-disk `.bclj` is a *regenerated
 downstream view* — like a file that a formatter owns. Editing such a file as text
 desyncs the graph from the bytes, so the deterministic **PreToolUse guard refuses
 Edit/Write/MultiEdit** on it. This skill is the model half: for these files you
 author by **graph edit**.
 
-## 0. Is this file graph-owned? (when this skill applies)
+## 0. Is this file graph-upstream? (when this skill applies)
 
-A file is graph-owned iff EITHER:
+A file is graph-upstream iff EITHER:
 - its absolute path is listed in `$CLAIM_CANONICAL_REGISTRY`
-  (default `~/.config/fram/graph-owned-files`) — the authoritative marker, OR
-- its **leading comment block** contains the sentinel `;; @graph-owned`
+  (default `~/.config/fram/graph-upstream-files`) — the authoritative marker, OR
+- its **leading comment block** contains the sentinel `;; @upstream:graph`
   (the in-band, travels-with-the-file marker; it survives the lossless round-trip,
   landing just after the regenerated `(define-target clj)` header).
 
 If neither holds, this skill does NOT apply — use the **beagle-authoring** skill
 and ordinary Edit/Write. (Adoption is per-file and opt-in; there is no blanket
-"all .bclj" rule. The honest line: code *can* be graph-owned — see
+"all .bclj" rule. The honest line: code *can* be graph-upstream — see
 `~/code/beagle/bin/test/code-as-facts/README.md` "Capability vs adoption".)
 
 ## 1. The graph-edit verbs (use these instead of Edit/Write)
@@ -83,12 +83,12 @@ The CI gate that proves all of this is GREEN:
 
 ## 3. If you genuinely must edit text
 
-Adoption is reversible and deliberate. To edit a graph-owned file as text you
+Adoption is reversible and deliberate. To edit a graph-upstream file as text you
 must first **de-adopt** it (remove its path from `$CLAIM_CANONICAL_REGISTRY` and
-drop the `;; @graph-owned` sentinel). That is a workflow decision, not a
+drop the `;; @upstream:graph` sentinel). That is a workflow decision, not a
 per-edit escape hatch — make it explicitly, then the guard allows text edits again.
 
-The family: Beagle text edits → beagle-authoring · graph-owned files
-(graph edit channel) → graph-owned-authoring · relational code queries
+The family: Beagle text edits → beagle-authoring · graph-upstream files
+(graph edit channel) → graph-upstream-authoring · relational code queries
 (blast zone / who-calls) → codegraph · building apps on the engine →
 fact-modeling. Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.

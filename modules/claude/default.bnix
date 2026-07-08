@@ -45,9 +45,14 @@
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
                         "/code/nixos-config/dotfiles/code/CLAUDE.md"))}
-                 ;; caveman defaultMode — static config the plugin reads.
+                 ;; caveman defaultMode — lives in the dotfile now, flipped by
+                 ;; `my-config caveman default <mode>`. Out-of-store symlink so
+                 ;; the flip takes effect without a rebuild.
                  ".config/caveman/config.json"
-                  {:text (builtins.toJSON {:defaultMode "full"})}}
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/caveman/config.json"))}}
                ;; caveman plugin install: enablement lives in settings.json, but the
                ;; on-disk cache (~/.claude/plugins/cache) is runtime state. Best-effort,
                ;; timeout-bounded, || true so it never fails the rebuild.

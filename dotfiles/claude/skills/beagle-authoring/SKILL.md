@@ -140,7 +140,7 @@ forced back to `Any`?" is the real one.)
 
 ---
 
-The family: Beagle text edits → beagle-authoring · graph-owned files
-(graph edit channel) → graph-owned-authoring · relational code queries
+The family: Beagle text edits → beagle-authoring · graph-upstream files
+(graph edit channel) → code-as-facts · relational code queries
 (blast zone / who-calls) → codegraph · building apps on the engine →
 fact-modeling. Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.

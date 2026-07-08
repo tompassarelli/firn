@@ -75,8 +75,8 @@ queries rather than running them.
 The bet (shared with Tern): a flat text-and-grep view rots and can't compute
 relational questions; the graph is always current and answers them for free.
 
-The family: Beagle text edits → beagle-authoring · graph-owned files
-(graph edit channel) → graph-owned-authoring · relational code queries
+The family: Beagle text edits → beagle-authoring · graph-upstream files
+(graph edit channel) → code-as-facts · relational code queries
 (blast zone / who-calls) → codegraph · building apps on the engine →
 fact-modeling (or `~/code/fram/bin/fram-primer` for the live cheatsheet).
 Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.
