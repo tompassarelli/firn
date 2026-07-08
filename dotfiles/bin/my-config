@@ -3,7 +3,7 @@
 #
 #   caveman  : output compression     session level + worker default
 #   dispatch : who runs agents        tern SDK  vs  native Agent/Workflow
-#   beagle   : code representation    text      vs  claim-native (per-file)
+#   beagle   : code representation    text      vs  fact-native (per-file)
 #   coord    : coordination protocol  tern / linear / both
 #   guards   : authoring-guard hooks  + the kill-switch
 #
@@ -14,7 +14,8 @@ set -uo pipefail
 
 STATE="$HOME/.claude/my-config.state"
 CAVEMAN_STATE="$HOME/.claude/.caveman-active"
-REGISTRY="${CLAIM_CANONICAL_REGISTRY:-$HOME/.config/fram/claim-canonical-files}"
+CAVEMAN_DEFAULT="$HOME/code/nixos-config/dotfiles/caveman/config.json"
+REGISTRY="${GRAPH_OWNED_REGISTRY:-$HOME/.config/fram/upstream:graph-files}"
 SETTINGS="$HOME/code/nixos-config/dotfiles/claude/settings.json"
 
 get() { local v; v=$(grep -E "^$1=" "$STATE" 2>/dev/null | tail -1 | cut -d= -f2-); printf '%s' "${v:-$2}"; }
@@ -29,10 +30,11 @@ linear_mcp()  { grep -q 'linear' "$HOME/.claude.json" 2>/dev/null && echo config
 wired()       { grep -q "$1" "$SETTINGS" 2>/dev/null && echo '✓' || echo '✗'; }
 adopted_n()   { grep -cvE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null || echo 0; }
 caveman_lvl() { local l; l=$(cat "$CAVEMAN_STATE" 2>/dev/null); printf '%s' "${l:-off}"; }
+caveman_default() { local v; v=$(grep -o '"defaultMode"[[:space:]]*:[[:space:]]*"[^"]*"' "$CAVEMAN_DEFAULT" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/'); printf '%s' "${v:-full}"; }
 
 status() {
-  local d c cv files ks
-  d=$(get dispatch tern); c=$(get coord tern); cv=$(caveman_lvl)
+  local d c cv cd files ks
+  d=$(get dispatch tern); c=$(get coord tern); cv=$(caveman_lvl); cd=$(caveman_default)
   ks="${CLAUDE_NO_AUTHORING_HOOKS:+ENGAGED — ALL GUARDS OFF}"
   files=$(grep -vE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null | sed "s|^$HOME|~|; s/^/       /")
   cat <<EOF
@@ -42,31 +44,33 @@ status() {
 
  1  CAVEMAN    output compression
     session: $cv (lite|full|ultra + wenyan-*)      workers: AGENT_CAVEMAN=${AGENT_CAVEMAN:-full (SDK default)}
+    default: $cd (persists — new sessions start here)
     flip session → my-config caveman lite|full|ultra (or /caveman)
+    flip default → my-config caveman default off|lite|full|ultra
     flip workers → AGENT_CAVEMAN=off|lite|full on spawn
 
  2  DISPATCH   who runs agents                 [guard: $(wired agent-spawn-guard)]
-    $(mark "$d" tern) tern     SDK workers — persistent, steerable, claim trail;
+    $(mark "$d" tern) tern     SDK workers — persistent, steerable, fact trail;
                caveman (AGENT_CAVEMAN) + model tier (AGENT_MODEL) ride along
     $(mark "$d" warn) warn     native Agent/Workflow allowed, nudged toward tern
     $(mark "$d" native) native   raw Claude Code spawns, no interference
     flip → my-config dispatch tern|warn|native
 
- 3  BEAGLE     code as text vs claims          [guard: $(wired claim-canonical-guard)]
-    claim-native adopted (text edits denied → fram graph tools): $(adopted_n) file(s)
+ 3  BEAGLE     code as text vs facts          [guard: $(wired code-upstream-guard)]
+    fact-native adopted (text edits denied → fram graph tools): $(adopted_n) file(s)
 ${files:-       (none)}
     default-flip: PARKED — pending M1.5-vs-M2 bake-off verdict
     flip → my-config beagle adopt|unadopt <absolute-path> · my-config beagle list
 
  4  COORD      coordination protocol           [tern: $(tern_daemon) · linear MCP: $(linear_mcp)]
-    $(mark "$c" tern) tern     claims on :7977 + concerns + msg-cli chat
+    $(mark "$c" tern) tern     facts on :7977 + concerns + msg-cli chat
     $(mark "$c" linear) linear   Linear as the work queue (MCP)
     $(mark "$c" both) both     Linear as consolidation layer over tern
     note: declarative — agents read this posture; no hard enforcement yet
     flip → my-config coord tern|linear|both
 
  5  GUARDS     authoring-guard hooks           kill-switch: ${ks:-off (guards live)}
-    $(wired agent-spawn-guard) agent-spawn-guard   $(wired claim-canonical-guard) claim-canonical   $(wired firn-guard) firn
+    $(wired agent-spawn-guard) agent-spawn-guard   $(wired code-upstream-guard) upstream:graph   $(wired firn-guard) firn
     $(wired tripwire-guard) tripwire            $(wired racket-build-guard) racket-build      $(wired beagle-session-start) beagle-session
     flip all off → CLAUDE_NO_AUTHORING_HOOKS=1 (env, per-session)
 
@@ -84,6 +88,14 @@ my-config — every personal-stack posture setting, one entry point.
    lite/full/ultra + wenyan variants. Workers get AGENT_CAVEMAN via the
    tern SDK spawn path (default full). Code/commits/quoted errors/security
    are never compressed at any level.
+   Global default (new sessions start here) resolution order:
+     CAVEMAN_DEFAULT_MODE env > repo-local .caveman.json
+       > ~/.config/caveman/config.json ("defaultMode" field) > "full"
+   ~/.config/caveman/config.json is a home-manager out-of-store symlink
+   into ~/code/nixos-config/dotfiles/caveman/config.json — edit via
+   `my-config caveman default <mode>`, then commit in nixos-config.
+   One-time: `firn rebuild` wires the symlink if not already present.
+   flip default → my-config caveman default off|lite|full|ultra|wenyan-*
    Advice: full for coordination, lite for high-stakes design review,
    never ultra/wenyan for substantive work (lossy — PLAYBOOK 2026-06-22).
 
@@ -99,11 +111,11 @@ my-config — every personal-stack posture setting, one entry point.
 
  3 BEAGLE — how Beagle source is authored, per file.
    text          ordinary Edit/Write; the beagle-authoring repair loop.
-   claim-native  file is a regenerable view of the fram claim graph; text
-                 edits DENIED (claim-canonical-guard); author via
+   fact-native  file is a regenerable view of the fram fact graph; text
+                 edits DENIED (code-upstream-guard); author via
                  mcp__fram__* graph tools. Adoption is PER-FILE: the
-                 registry (~/.config/fram/claim-canonical-files) or a
-                 first-line `;; @claim-canonical` sentinel. The cascade
+                 registry (~/.config/fram/upstream:graph-files) or a
+                 first-line `;; @upstream:graph` sentinel. The cascade
                  (skill, guard, repair loop vs recompile gate) keys off
                  adoption automatically.
    Advice: don't flip the default until the M1.5-vs-M2 bake-off verdict.
@@ -130,11 +142,25 @@ case "${1:-status}" in
   status|"") status ;;
   caveman)
     case "${2:-}" in
+      default)
+        case "${3:-}" in
+          off|lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra)
+            mkdir -p "$(dirname "$CAVEMAN_DEFAULT")"
+            printf '{"defaultMode":"%s"}\n' "$3" > "$CAVEMAN_DEFAULT"
+            echo "caveman default → $3 (written to ~/code/nixos-config/dotfiles/caveman/config.json)"
+            if [ "$(readlink -f "$HOME/.config/caveman/config.json" 2>/dev/null)" != "$CAVEMAN_DEFAULT" ]; then
+              echo "  ⚠  ~/.config/caveman/config.json not yet linked — run: firn rebuild" >&2
+            fi
+            echo "  note: change lives in nixos-config — commit it there" ;;
+          "")
+            echo "caveman default = $(caveman_default)   (my-config caveman default <mode>)" ;;
+          *) echo "usage: my-config caveman default [off|lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra]" >&2; exit 1 ;;
+        esac ;;
       lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra)
         printf '%s' "$2" > "$CAVEMAN_STATE"; echo "caveman session level → $2 (plugin reads ~/.claude/.caveman-active)" ;;
-      "") echo "caveman = $(caveman_lvl)   (my-config caveman lite|full|ultra; off → say 'stop caveman' / use /caveman)" ;;
+      "") echo "caveman = $(caveman_lvl)   default = $(caveman_default)   (my-config caveman lite|full|ultra|default <mode>; off → say 'stop caveman' / use /caveman)" ;;
       off) echo "turn off via the plugin: say 'stop caveman' or /caveman — plugin owns the off-path" >&2; exit 1 ;;
-      *) echo "usage: my-config caveman [lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra]" >&2; exit 1 ;;
+      *) echo "usage: my-config caveman [default <mode>|lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra]" >&2; exit 1 ;;
     esac ;;
   dispatch)
     case "${2:-}" in
@@ -150,13 +176,13 @@ case "${1:-status}" in
     esac ;;
   beagle)
     case "${2:-list}" in
-      list) echo "claim-native adopted files ($(adopted_n)):"; grep -vE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null || echo "  (none)" ;;
+      list) echo "fact-native adopted files ($(adopted_n)):"; grep -vE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null || echo "  (none)" ;;
       adopt)
         [ -z "${3:-}" ] && { echo "usage: my-config beagle adopt </absolute/path>" >&2; exit 1; }
         [ -f "$3" ] || { echo "no such file: $3" >&2; exit 1; }
         mkdir -p "$(dirname "$REGISTRY")"; touch "$REGISTRY"
         grep -qxF "$3" "$REGISTRY" || echo "$3" >> "$REGISTRY"
-        echo "adopted claim-native: $3 (text edits now denied; use mcp__fram__* graph tools)" ;;
+        echo "adopted fact-native: $3 (text edits now denied; use mcp__fram__* graph tools)" ;;
       unadopt)
         [ -z "${3:-}" ] && { echo "usage: my-config beagle unadopt </absolute/path>" >&2; exit 1; }
         grep -vxF "$3" "$REGISTRY" > "$REGISTRY.tmp" 2>/dev/null || true
@@ -166,7 +192,7 @@ case "${1:-status}" in
     esac ;;
   guards)
     echo "kill-switch CLAUDE_NO_AUTHORING_HOOKS: ${CLAUDE_NO_AUTHORING_HOOKS:-unset (guards live)}"
-    for g in agent-spawn-guard claim-canonical-guard firn-guard tripwire-guard racket-build-guard beagle-session-start; do
+    for g in agent-spawn-guard code-upstream-guard firn-guard tripwire-guard racket-build-guard beagle-session-start; do
       printf '  %s %s\n' "$(wired "$g")" "$g"
     done ;;
   help|-h|--help) help ;;
