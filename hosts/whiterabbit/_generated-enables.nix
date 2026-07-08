@@ -20,6 +20,7 @@
   myConfig.modules.clojure.enable = lib.mkDefault true;
   myConfig.modules.cmake.enable = lib.mkDefault true;
   myConfig.modules.containers.enable = lib.mkDefault true;
+  myConfig.modules.convoy.enable = lib.mkDefault true;
   myConfig.modules.curl.enable = lib.mkDefault true;
   myConfig.modules.dbeaver.enable = lib.mkDefault true;
   myConfig.modules.delta.enable = lib.mkDefault true;

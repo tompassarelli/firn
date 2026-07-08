@@ -25,7 +25,7 @@
    :nur {:url "github:nix-community/NUR"}
    :palefox {:url "github:tompassarelli/palefox"}
    :quickshell {:inputs.nixpkgs.follows "nixpkgs" :url "git+https://git.outfoxxed.me/outfoxxed/quickshell"}
-   :tern {:url "git+file:///home/tom/code/tern?ref=main"}
+   :tern {:url "git+file:///home/tom/code/tern?ref=main" :inputs.fram.follows "fram"}
    :walker {:inputs.elephant.follows "elephant" :url "github:abenz1267/walker"}
    :zen-browser {:inputs.nixpkgs.follows "nixpkgs" :url "github:0xc000022070/zen-browser-flake"}
    ;; --- END GENERATED MODULE INPUTS ---

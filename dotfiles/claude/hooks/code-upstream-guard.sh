@@ -55,7 +55,7 @@ REGISTRY="${GRAPH_UPSTREAM_REGISTRY:-$HOME/.config/fram/graph-upstream-files}"
 # Resolve the redirect verbs once (kept in one place so the deny reason stays honest
 # about what the agent should call instead of Edit/Write).
 read -r -d '' DENY_REASON <<'EOF' || true
-This file is GRAPH-OWNED: the code lives in the Fram fact graph; this
+This file's UPSTREAM is the GRAPH: the code lives in the Fram fact graph; this
 text is GENERATED output. A text Edit/Write would desync the graph and is refused. Author it as a GRAPH
 EDIT via the fram MCP tools instead:
   - mcp__fram__add-def     — add a new top-level def (upsert-form, new name)

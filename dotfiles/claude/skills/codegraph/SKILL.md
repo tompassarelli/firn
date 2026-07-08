@@ -5,7 +5,7 @@ description: >-
   (.bjs/.bclj/.bnix) — scope-correct "who calls THIS x", transitive blast
   radius / leverage, the real call graph. The codegraph module (chartroom/)
   projects the AST into a Fram fact graph; Datalog derives the answer.
-  Formerly named code-as-facts. NOT for arbitrary-language repos, plain
+  NOT for arbitrary-language repos, plain
   string search, or a single-file lookup (grep wins there).
 ---
 
