@@ -8,12 +8,12 @@ body; refs are `@id`, literals EDN. Lifecycle is DERIVED from facts
 capture is committed. Relatedness is `relates_to @<thread>` (no string tags —
 former tags are `@topic-*` threads). ids: `2026-06-15-150040`. Time: `tern clock`
 (fact-native sessions; Clockify is an on-demand projection via `clock sync`).
-Full spec: ~/code/tern/docs/claim-native-redesign.md.
+Full spec: ~/code/tern/docs/fact-native-redesign.md.
 
 ## Writing safely under concurrent agents
 
 tern threads are backed by the Tern fact graph (engine `~/code/fram`;
-canonical log `~/.local/state/tern/claims.log`). Assume **other agents
+canonical log `~/.local/state/tern/facts.log`). Assume **other agents
 may be editing concurrently**:
 
 **Session-start handshake (before coordinating tern, mirrors beagle-doctor):**

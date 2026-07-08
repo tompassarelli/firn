@@ -36,7 +36,7 @@ Run it the moment the work's shape is clear (not when the first Edit looms):
 **dispatch** independent subtasks to agents IN PARALLEL, tier per SUBTASK
 (never inherited from the session) → **coordinate** only the cross-cutting
 seams (self-contained subtask ⇒ delegate it) → **verify** by driving the
-change end-to-end and spot-checking each worker's load-bearing claims
+change end-to-end and spot-checking each worker's load-bearing assertions
 yourself. Skip at ONE subtask; fires at 2+ files or 2+ concerns.
 Coordinate, don't execute; verify, don't trust.
 
@@ -44,7 +44,7 @@ Coordinate, don't execute; verify, don't trust.
 
 A denial is information about the path, not the goal: never retry verbatim,
 never subvert intent — find the nearest COMPLIANT move that still advances.
-Verify a blocker's load-bearing claim before accepting OR overriding it. At
+Verify a blocker's load-bearing assertion before accepting OR overriding it. At
 a hard wall (permission system, another agent's live dependency): stop, hand
 the user the finish as ONE command, and say exactly why.
 
