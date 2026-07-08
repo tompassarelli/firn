@@ -15,7 +15,7 @@ set -uo pipefail
 STATE="$HOME/.claude/my-config.state"
 CAVEMAN_STATE="$HOME/.claude/.caveman-active"
 CAVEMAN_DEFAULT="$HOME/code/nixos-config/dotfiles/caveman/config.json"
-REGISTRY="${GRAPH_OWNED_REGISTRY:-$HOME/.config/fram/upstream:graph-files}"
+REGISTRY="${GRAPH_UPSTREAM_REGISTRY:-$HOME/.config/fram/graph-upstream-files}"
 SETTINGS="$HOME/code/nixos-config/dotfiles/claude/settings.json"
 
 get() { local v; v=$(grep -E "^$1=" "$STATE" 2>/dev/null | tail -1 | cut -d= -f2-); printf '%s' "${v:-$2}"; }
@@ -114,7 +114,7 @@ my-config — every personal-stack posture setting, one entry point.
    fact-native  file is a regenerable view of the fram fact graph; text
                  edits DENIED (code-upstream-guard); author via
                  mcp__fram__* graph tools. Adoption is PER-FILE: the
-                 registry (~/.config/fram/upstream:graph-files) or a
+                 registry (~/.config/fram/graph-upstream-files) or a
                  first-line `;; @upstream:graph` sentinel. The cascade
                  (skill, guard, repair loop vs recompile gate) keys off
                  adoption automatically.
