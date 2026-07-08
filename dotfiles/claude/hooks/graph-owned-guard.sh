@@ -2,7 +2,7 @@
 # PreToolUse guard — the DETERMINISTIC half of "the graph is the editing surface".
 # ============================================================================
 # STATUS: LIVE. Wired into settings.json (PreToolUse, Edit|Write|MultiEdit) and
-# ACTIVE as of 2026-06-20. Adopted claim-canonical modules are guarded right now:
+# ACTIVE as of 2026-06-20. Adopted graph-owned modules are guarded right now:
 # fram/src/fram/schema.bclj is the first adopted module (in the registry below).
 # To run a clean-room/experiment session WITHOUT this guard, set
 # CLAUDE_NO_AUTHORING_HOOKS=1 (the kill-switch below) — do NOT un-wire it.
@@ -11,7 +11,7 @@
 #
 # WHAT IT DOES
 #   On Edit | Write | MultiEdit it reads tool_input.file_path from the hook's stdin
-#   JSON and asks: is THIS file claim-canonical? If and only if it is, it RETURNS a
+#   JSON and asks: is THIS file graph-owned? If and only if it is, it RETURNS a
 #   PreToolUse permissionDecision of "deny" with a reason that redirects the agent to
 #   the graph-edit MCP tools. For every other file it returns NOTHING (empty stdout),
 #   which Claude Code treats as "no opinion" — ordinary edits sail through untouched.
@@ -21,7 +21,7 @@
 #   late to keep text from becoming a second source of truth. So enforcement lives here.
 #
 # SCOPING — why this never blocks ordinary edits (the critical requirement)
-#   The guard is FAIL-OPEN and CLOSED-LIST. A file is claim-canonical iff it is named
+#   The guard is FAIL-OPEN and CLOSED-LIST. A file is graph-owned iff it is named
 #   in the explicit all\-list resolved by is_claim_canonical() below. The list starts
 #   as EXACTLY ONE adopted module. A file that is missing, unreadable, not in the
 #   list, or that the check errors on -> the script prints nothing and exits 0, i.e.
@@ -32,9 +32,9 @@
 # THE MARKER (defined here — none exists in the repo yet)
 #   Adoption is recorded two redundant ways; a file is canonical if EITHER holds:
 #     (1) the file's path appears (one absolute path per line, blank/`#` lines
-#         ignored) in the registry file $CLAIM_CANONICAL_REGISTRY
-#         (default: ~/.config/fram/claim-canonical-files), OR
-#     (2) the file's FIRST LINE contains the in-band sentinel  ;; @claim-canonical
+#         ignored) in the registry file $GRAPH_OWNED_REGISTRY
+#         (default: ~/.config/fram/graph-owned-files), OR
+#     (2) the file's FIRST LINE contains the in-band sentinel  ;; @graph-owned
 #         (a Beagle line comment, so it survives the lossless round-trip as a
 #         comment node and recompiles cleanly).
 #   (1) is the source of truth for the guard (cheap, no file read needed if absent);
@@ -50,20 +50,20 @@ set -uo pipefail
 # surface WITHOUT editing settings.json. Unset (the default) = guard active.
 [ -n "${CLAUDE_NO_AUTHORING_HOOKS:-}" ] && exit 0
 
-REGISTRY="${CLAIM_CANONICAL_REGISTRY:-$HOME/.config/fram/claim-canonical-files}"
+REGISTRY="${GRAPH_OWNED_REGISTRY:-$HOME/.config/fram/graph-owned-files}"
 
 # Resolve the redirect verbs once (kept in one place so the deny reason stays honest
 # about what the agent should call instead of Edit/Write).
 read -r -d '' DENY_REASON <<'EOF' || true
-This file is CLAIM-CANONICAL: its source of truth is the Fram claim graph, not its
+This file is GRAPH-OWNED: its source of truth is the Fram fact graph, not its
 text. A text Edit/Write would desync the graph and is refused. Author it as a GRAPH
 EDIT via the fram MCP tools instead:
   - mcp__fram__add-def     — add a new top-level def (upsert-form, new name)
   - mcp__fram__set-body    — replace a defn's body
   - mcp__fram__rename-def  — rename a def (O(1), scope-correct via refers_to)
 Each is recompile-gated and fail-closed; the regenerated text is a downstream view.
-See the claim-canonical-authoring skill. (To edit as text anyway you must first
-de-adopt the file from the claim-canonical registry — a deliberate workflow change.)
+See the graph-owned-authoring skill. (To edit as text anyway you must first
+de-adopt the file from the graph-owned registry — a deliberate workflow change.)
 EOF
 
 # python3 does the JSON I/O (jq is not available in this environment; the existing
@@ -118,7 +118,7 @@ def in_registry(path):
     return False
 
 def self_declared(path):
-    # In-band sentinel `;; @claim-canonical` in the file's LEADING comment block.
+    # In-band sentinel `;; @graph-owned` in the file's LEADING comment block.
     # Scanned over the first few lines (not just line 1) because the lossless
     # round-trip's --render emits a `(define-target clj)` header + blank line ahead
     # of the source's leading comments, so a sentinel comment lands ~line 3 after a
@@ -131,7 +131,7 @@ def self_declared(path):
                 if line == "":
                     break
                 s = line.strip()
-                if "@claim-canonical" in s:
+                if "@graph-owned" in s or "@claim-canonical" in s:
                     return True
                 # keep scanning through the header / lang line / comments / blanks
                 if s == "" or s.startswith(";;") or s.startswith("#lang") or s.startswith("(define-target"):

@@ -68,7 +68,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/claim-canonical-guard.sh",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/graph-owned-guard.sh",
             "timeout": 10
           },
           {
@@ -174,5 +174,6 @@
   "theme": "dark",
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true
+  "voiceEnabled": true,
+  "model": "claude-fable-5[1m]"
 }
