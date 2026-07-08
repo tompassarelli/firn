@@ -104,9 +104,11 @@ Every repo: agent notes, status, scratch, and handoffs go in gitignored
 ## Global config goes through nixos-config — ALWAYS
 → `~/code/nixos-config/dotfiles/claude/docs/nixos-config-rules.md`
 `~/.claude/*` are symlinks into nixos-config: every edit MUST be committed
-there. `firn rebuild` is the USER's command — never run it; verify with
-`nix build --no-link`. Dev environments activate via direnv (`use flake` in
-`.envrc`) — never bare `nix develop` / `nix shell`.
+there. `firn rebuild` is agent-runnable ONLY after `firn build` + `firn
+validate` are green and the tree is committed; `firn update` and raw
+nixos-rebuild/nh stay the USER's. Build-only verify: `nix build --no-link`.
+Dev environments activate via direnv (`use flake` in `.envrc`) — never bare
+`nix develop` / `nix shell`.
 
 ## Paths — full and `~`-anchored, always
 

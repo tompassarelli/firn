@@ -44,9 +44,9 @@ DIGEST = (
     "overwrites hand-edits. Host config too: hosts/<host>/configuration.bnix, not .nix.\n"
     "2. After any .bnix change: run `firn build` then `firn validate`. git add BOTH "
     "the .bnix AND the generated .nix (the flake only sees git-tracked files).\n"
-    "3. Do NOT run `firn rebuild` / `nixos-rebuild switch` / `nh switch` — that "
-    "activates the system (sudo, new generation). Leave the switch to the USER. "
-    "Verify with `firn validate` or `nix build --no-link`.\n"
+    "3. `firn rebuild` is agent-runnable ONLY after `firn build` + `firn validate` "
+    "are green and the tree is committed (generations must map to commits). Raw "
+    "`nixos-rebuild switch` / `nh switch` / `firn update` stay USER-only.\n"
     "4. Secrets: sops-nix only (secrets/*.yaml). Never plaintext creds in the repo.\n"
     "5. New module = create modules/<name>/default.bnix, `firn build`, git add both files "
     "(flake auto-imports the dir). Enable it in hosts/<host>/configuration.bnix or via a tag.\n"
@@ -87,10 +87,13 @@ if tool == "Bash":
     # Anchor at command position (start of string, after a shell separator, or
     # after sudo/doas) so we match a real INVOCATION — not a mere mention of the
     # string inside an echo / grep / doc-write argument.
+    # 2026-07-08 policy change (Tom): `firn rebuild` is agent-runnable — it is the
+    # sanctioned wrapper (build+validate-gated, generations rollback-able). The deny
+    # keeps covering the BYPASSES (raw nixos-rebuild/darwin-rebuild/nh) and
+    # `firn update` (wholesale input bumps stay user-gated).
     switch = re.compile(
         r"(?:^|[\n;&|(`])\s*(?:sudo\s+|doas\s+)?("
-        r"firn\s+(?:host\s+)?rebuild\b"
-        r"|firn\s+update(?!\s+--(?:no-rebuild|dry-run))\b"
+        r"firn\s+update(?!\s+--(?:no-rebuild|dry-run))\b"
         r"|nixos-rebuild\b[^\n]*\b(?:switch|boot|test)\b"
         r"|darwin-rebuild\b[^\n]*\b(?:switch|boot)\b"
         r"|nh\s+(?:os\s+)?(?:switch|boot)\b"
@@ -98,11 +101,10 @@ if tool == "Bash":
     )
     if switch.search(cmd):
         reason = (
-            "BLOCKED: that command switches the system (sudo / new generation). "
-            "Per ~/code/nixos-config/CLAUDE.md the rebuild is the USER's to run, not the agent's. "
-            "Prepare + verify instead: `firn build` then `firn validate` (or `nix build --no-link`), "
-            "then tell the user to run `firn rebuild` themselves (they can type `! firn rebuild`). "
-            "Rare explicit override: prefix with CLAUDE_NO_AUTHORING_HOOKS=1."
+            "BLOCKED: that command switches the system OUTSIDE the sanctioned wrapper. "
+            "Agents may run `firn rebuild` (after `firn build` + `firn validate` green, tree "
+            "committed) — raw nixos-rebuild/darwin-rebuild/nh and `firn update` stay the "
+            "USER's. Rare explicit override: prefix with CLAUDE_NO_AUTHORING_HOOKS=1."
         )
         print(json.dumps({
             "hookSpecificOutput": {

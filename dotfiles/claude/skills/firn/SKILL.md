@@ -4,7 +4,8 @@ description: >-
   Use whenever editing ~/code/nixos-config (firn): packages, modules, services,
   host config, hooks/skills, inputs, or any "install X system-wide" request.
   Write interface is .bnix (compiled to .nix — never edit .nix). System switch
-  (firn rebuild) is the user's. NOT general Nix in other repos.
+  (firn rebuild) is agent-runnable after build+validate green, tree committed.
+  NOT general Nix in other repos.
 ---
 
 # firn — editing ~/code/nixos-config
@@ -15,7 +16,7 @@ for the complete contract — this skill is the operating loop. The `.bnix` lang
 itself → beagle-authoring.
 
 ```
-*.bnix  ──(firn build)──▶  *.nix  ──(firn rebuild, USER runs)──▶  system
+*.bnix  ──(firn build)──▶  *.nix  ──(firn rebuild)──▶  system
 ```
 
 ## The five rules that bite
@@ -29,11 +30,13 @@ itself → beagle-authoring.
 3. **`git add` BOTH the `.bnix` and the generated `.nix`.** Flakes only see
    git-tracked files — an untracked module is invisible to `builtins.readDir` and
    silently skipped.
-4. **Never run `firn rebuild` / `nixos-rebuild switch` / `nh switch` / `firn update`.**
-   Those activate the system (sudo, new generation) — the user's call, not the
-   agent's. (A `PreToolUse` hook hard-denies these.) Verify build-only with
-   `nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel --no-link`
-   when validate isn't enough; otherwise hand `firn rebuild` to the user.
+4. **`firn rebuild` is agent-runnable ONLY after `firn build` + `firn validate`
+   are green and the tree is COMMITTED** (generations must map to commits; it
+   switches the system — sudo, new generation — and `firn rollback` / the boot
+   menu undo it). Raw `nixos-rebuild switch` / `nh switch` and `firn update`
+   (wholesale input bumps) stay the USER's — the hook still denies those.
+   Build-only verification when validate isn't enough:
+   `nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel --no-link`.
 5. **Secrets via sops-nix only.** Encrypted files in `secrets/`, referenced with
    `sops.secrets."name"`. Never inline a plaintext credential anywhere in the repo
    (a gitleaks pre-commit hook will catch it).
@@ -98,10 +101,11 @@ hook run; then push it yourself via `safe-push` — the global push rules apply 
 freely at sensible checkpoints; the human is not a push gate). New files
 (`.bnix` + `.nix`) must be git-added before nix can see them.
 
-## Verify, don't switch
+## Verify, then switch
 
 `firn build` + `firn validate` is the default loop. `firn repo diff` re-emits and
 diffs vs committed `.nix` (drift check). `nix build … --no-link` is full evaluation
 when the static checker can't see a build-time problem. The system switch
-(`firn rebuild`) is **always** the user's to run — prepare it, verify it, hand it off.
-Only verify `whiterabbit`; skip `thinkpad-x1e`.
+(`firn rebuild`) is agent-runnable once build + validate are green and the tree is
+COMMITTED — generations map to commits, `firn rollback` undoes. `firn update`
+(input bumps) stays the user's. Only verify `whiterabbit`; skip `thinkpad-x1e`.

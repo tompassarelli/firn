@@ -127,7 +127,7 @@ Rewrites unambiguous typos in place (best did-you-mean at edit distance ≤ 2 wi
 
 ## Verification
 → [`docs/verification.md`](docs/verification.md)
-**Never** run `firn rebuild` / `nh` to verify — that switches the system (the USER's command). Verify build-only with `nix build --no-link`. Only verify whiterabbit; skip thinkpad-x1e.
+Agents MAY run `firn rebuild` — only after `firn build` + `firn validate` are green and the tree is committed (generations map to commits). Never raw `nh`/nixos-rebuild, never `firn update` (input bumps are the USER's). Build-only verification: `nix build --no-link`. Only verify whiterabbit; skip thinkpad-x1e.
 **Read when:** verifying a change — picking the right rung (firn-build + validate → repo diff → full `nix build`).
 
 ## Crash recovery (whiterabbit — silent reboots)
