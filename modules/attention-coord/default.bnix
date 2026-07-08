@@ -2,12 +2,12 @@
 
 (ns default)
 
-;; Attention coordinator (:7980) — ephemeral claim-graph daemon tracking which
+;; Attention coordinator (:7980) — ephemeral fact-graph daemon tracking which
 ;; files each agent is actively reading/editing RIGHT NOW. The dark-room feature
 ;; in tern web paints live "attending" beams from agent→file; this daemon
-;; stores the claims those beams are built from. Claims are short-lived (TTL'd
+;; stores the facts those beams are built from. Facts are short-lived (TTL'd
 ;; by the writer hook) so the log stays small. Same JVM runtime as tern-coord.
-;; Durable log: <codeDir>/agent-data/attention-claims.log.
+;; Durable log: <codeDir>/agent-data/attention-facts.log.
 
 (nix/module [config lib pkgs ...]
   (let [username config.myConfig.modules.users.username
@@ -19,7 +19,7 @@
      :config
       (lib.mkIf config.myConfig.modules.attention-coord.enable
         {:systemd.services.attention-coord
-          {:description           "Attention coordinator — ephemeral claim-graph daemon (:7980) for live agent file-attention tracking"
+          {:description           "Attention coordinator — ephemeral fact-graph daemon (:7980) for live agent file-attention tracking"
            :wantedBy              ["multi-user.target"]
            :after                 ["network.target" "agent-coord.service"]
            :path                  (nix/with pkgs [clojure jdk bash coreutils git])
@@ -31,6 +31,6 @@
              :WorkingDirectory (s codeDir "/fram")
              :ExecStart
               (s pkgs.clojure
-                "/bin/clojure -M cnf_coord_daemon.clj serve 7980 " codeDir "/agent-data/attention-claims.log")
+                "/bin/clojure -M coord_daemon.clj serve 7980 " codeDir "/agent-data/attention-facts.log")
              :Restart          "always"
              :RestartSec       2}}})}))

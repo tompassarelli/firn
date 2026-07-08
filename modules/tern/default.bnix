@@ -14,7 +14,8 @@
 (nix/module [config lib pkgs inputs ...]
   {:tags [cli-tools]
    :flake-inputs
-    {:tern {:url "git+file:///home/tom/code/tern?ref=main"}}
+    {:tern {:url "git+file:///home/tom/code/tern?ref=main"
+            :inputs.fram.follows "fram"}}
    :options.myConfig.modules.tern.enable
     (lib.mkEnableOption "Tern (life app) CLI + MCP server on PATH")
    :config

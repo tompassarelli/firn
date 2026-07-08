@@ -58,6 +58,7 @@
     };
     tern = {
       url = "git+file:///home/tom/code/tern?ref=main";
+      inputs.fram.follows = "fram";
     };
     walker = {
       inputs.elephant.follows = "elephant";

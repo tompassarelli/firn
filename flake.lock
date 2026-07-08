@@ -308,11 +308,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1783178586,
-        "narHash": "sha256-V1ZlXKG6FWjKfYQuE0BTwHQwN/KWPWUpCJLTAbUZ774=",
+        "lastModified": 1783519962,
+        "narHash": "sha256-c0Od2c+EajN8RbnZikrrj/CUb29xwwbIh8yHOGY6fgk=",
         "ref": "main",
-        "rev": "408570e108add0e8ee41cad05a62ae45d202b60a",
-        "revCount": 308,
+        "rev": "c20cde511762e66e49b11d1fd48dd3a183d51053",
+        "revCount": 323,
         "type": "git",
         "url": "file:///home/tom/code/fram"
       },
@@ -320,22 +320,6 @@
         "ref": "main",
         "type": "git",
         "url": "file:///home/tom/code/fram"
-      }
-    },
-    "fram_2": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1782670428,
-        "narHash": "sha256-W8WoiIiO9Q4MWtK4/3TcaM3kNrS83lbR5JJggJKdX/I=",
-        "owner": "tompassarelli",
-        "repo": "fram",
-        "rev": "650e27604b4100b50d9c49a4d7ea82147fef0cb6",
-        "type": "github"
-      },
-      "original": {
-        "owner": "tompassarelli",
-        "repo": "fram",
-        "type": "github"
       }
     },
     "fromYaml": {
@@ -962,15 +946,17 @@
     "tern": {
       "inputs": {
         "flake-utils": "flake-utils_3",
-        "fram": "fram_2",
+        "fram": [
+          "fram"
+        ],
         "nixpkgs": "nixpkgs_8"
       },
       "locked": {
-        "lastModified": 1783124397,
-        "narHash": "sha256-UD9x0wVvixqaNsEDkNaTf5DzUzec4WO75Lyz5MSbzc8=",
+        "lastModified": 1783516245,
+        "narHash": "sha256-F/VJ9aZ1wQ/q7V6oCXAV0jIpxARebCZnu5H4CTuV1cA=",
         "ref": "main",
-        "rev": "d96273277004b94040a15c4dd7a4bb197dcec118",
-        "revCount": 197,
+        "rev": "a0069c98e85a3baef7144a22ac670e562cd27f3e",
+        "revCount": 209,
         "type": "git",
         "url": "file:///home/tom/code/tern"
       },
