@@ -11,7 +11,7 @@ anything contradicts it, the manual wins (trivial lookups exempt).
 **Session state lives on threads, not markdown dumps** — milestones → `tell
 <id> progress`, lessons → `learning`, done → `outcome`; the next session
 reads `tern show <id>`, never a SESSION-DUMP file. SDK dispatch derives
-agent posture from thread claims.
+agent posture from thread facts.
 Thread format + concurrent write safety: → `~/code/nixos-config/dotfiles/claude/docs/tern.md`
 Spawn/steer/observe/concurrency: → `~/code/nixos-config/dotfiles/claude/docs/agent-protocol.md`
 
