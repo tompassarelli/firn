@@ -80,7 +80,7 @@ if the surface looks different than you expect, `git log` it.
 
 > To *query* a Beagle codebase relationally (scope-correct callers, transitive
 > blast radius / leverage, the call graph) rather than write it, see the
-> **codegraph** skill — it projects the source into a Fram claim graph
+> **codegraph** skill — it projects the source into a Fram fact graph
 > (Chartroom) and answers with Datalog, which beats grep/bare-symbol on exactly
 > the relational questions text search can't compute.
 
@@ -91,7 +91,7 @@ if the surface looks different than you expect, `git log` it.
 - **Surface lock:** typed Clojure with inline `:-` annotations only —
   `(def x :- T v)`, `(defn f [p :- T ...] :- R body)`, `(defonce …)`,
   `(defrecord N [field :- T …])`. Interiors are inferred. `:` (Rust-style) and
-  `(claim …)` are **hard-rejected**.
+  `(fact …)` are **hard-rejected**.
 - **Zero external users → hard removal.** When a form/keyword is wrong, REMOVE
   it (pointed error naming the replacement) — never deprecate or alias.
 - **Prefix where meaning diverges from Clojure:** `nix/assert`, `nix/with`,
@@ -140,7 +140,7 @@ forced back to `Any`?" is the real one.)
 
 ---
 
-The family: Beagle text edits → beagle-authoring · claim-canonical files
-(graph edit channel) → claim-canonical-authoring · relational code queries
+The family: Beagle text edits → beagle-authoring · graph-owned files
+(graph edit channel) → graph-owned-authoring · relational code queries
 (blast zone / who-calls) → codegraph · building apps on the engine →
-claim-modeling. Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.
+fact-modeling. Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.

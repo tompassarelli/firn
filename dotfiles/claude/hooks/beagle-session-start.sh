@@ -9,7 +9,7 @@
 # Outside a Beagle project it is a fast no-op (a few globs, no heavy work).
 set -uo pipefail
 
-# Clean-room / experiment kill-switch (opt-OUT; see claim-canonical-guard.sh).
+# Clean-room / experiment kill-switch (opt-OUT; see graph-owned-guard.sh).
 # When CLAUDE_NO_AUTHORING_HOOKS is set, this hook no-ops — no daemon revive, no
 # authoring context injected — so a controlled run keeps an identical neutral
 # session surface across all arms. Unset (the default) = normal behavior.
@@ -50,15 +50,15 @@ if [ -x "$_fcs" ]; then
     _fact() { printf '%s\n' "$_facts" | tr ' ' '\n' | sed -n "s/^$1=//p" | head -1; }
     _level="$(_fact level)"
     case "$_level" in
-      3) ladder_ctx="[flip L3] graph-native: author via mcp__fram__* graph-edit verbs (add-def/set-body/rename-def/insert-after); ask the graph first (blast-radius/query) before reading files; registered claim-canonical files REFUSE text edits ($(_fact canonical) registered here; coordinator alive on :$(_fact port), $(_fact claims) claims)." ;;
-      2) ladder_ctx="[flip L2] this repo is flipped (.fram/code.log with $(_fact claims) claims + .mcp.json) but the warm coordinator is NOT alive (port $(_fact port)). Revive: \`fram-code-on $dir\` re-warms it; then restart Claude Code here for the mcp__fram__* graph-edit verbs." ;;
+      3) ladder_ctx="[flip L3] graph-native: author via mcp__fram__* graph-edit verbs (add-def/set-body/rename-def/insert-after); ask the graph first (blast-radius/query) before reading files; registered graph-owned files REFUSE text edits ($(_fact canonical) registered here; coordinator alive on :$(_fact port), $(_fact facts) facts)." ;;
+      2) ladder_ctx="[flip L2] this repo is flipped (.fram/code.log with $(_fact facts) facts + .mcp.json) but the warm coordinator is NOT alive (port $(_fact port)). Revive: \`fram-code-on $dir\` re-warms it; then restart Claude Code here for the mcp__fram__* graph-edit verbs." ;;
       1) ladder_ctx="[flip L1] flippable: $(_fact src) Beagle source file(s), not flipped. \`fram-code-on $dir [--src <subdir>]\` turns on graph-native authoring (ingest -> warm coordinator -> mcp__fram__* graph-edit verbs)." ;;
       *) ladder_ctx="" ;;  # L0 or unparseable: stay silent
     esac
-    # The claim-canonical guard refuses text edits at ANY level — warn early so
+    # The graph-owned guard refuses text edits at ANY level — warn early so
     # a session in a de-flipped repo isn't surprised by a PreToolUse deny.
     if [ -n "$ladder_ctx" ] && [ "$_level" != "3" ] && [ "$(_fact canonical)" != "0" ]; then
-      ladder_ctx="$ladder_ctx Note: $(_fact canonical) claim-canonical file(s) under this repo are registered and REFUSE text edits regardless of flip level."
+      ladder_ctx="$ladder_ctx Note: $(_fact canonical) graph-owned file(s) under this repo are registered and REFUSE text edits regardless of flip level."
     fi
   fi
 fi

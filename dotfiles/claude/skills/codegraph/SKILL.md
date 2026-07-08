@@ -4,14 +4,14 @@ description: >-
   Use when you need RELATIONAL code-intelligence over a BEAGLE source tree
   (.bjs/.bclj/.bnix) — scope-correct "who calls THIS x", transitive blast
   radius / leverage, the real call graph. The codegraph module (chartroom/)
-  projects the AST into a Fram claim graph; Datalog derives the answer.
-  Formerly named code-as-claims. NOT for arbitrary-language repos, plain
+  projects the AST into a Fram fact graph; Datalog derives the answer.
+  Formerly named code-as-facts. NOT for arbitrary-language repos, plain
   string search, or a single-file lookup (grep wins there).
 ---
 
 # Codegraph — relational code-intelligence over Beagle source
 
-The ecosystem: **Beagle** is the language; **Fram** is the claim engine (a
+The ecosystem: **Beagle** is the language; **Fram** is the fact engine (a
 subject-predicate-object graph + a stratified Datalog); the **codegraph module**
 (`fram/chartroom/` — directory rename pending) is the glue that projects Beagle
 source *into* Fram so you can ask relational questions the way Tern asks them
@@ -38,16 +38,16 @@ up for "find the string `foo`" or a single-file read — grep wins on cost there
 ## The pipeline
 
 ```
-*.bjs/.bclj/.bnix ──beagle-claims──▶ [subj "pred" obj] ──fold──▶ Fram store ──Datalog──▶ callers / leverage
+*.bjs/.bclj/.bnix ──beagle-facts──▶ [subj "pred" obj] ──fold──▶ Fram store ──Datalog──▶ callers / leverage
    (AST, any #lang)                  EDN triples            (interned graph)   (transitive closure)
 ```
 
 ```sh
-# 1. project a source tree → claim triples  (chartroom uses beagle's bin/beagle-claims)
+# 1. project a source tree → fact triples  (chartroom uses beagle's bin/beagle-facts)
 cd ~/code/fram/chartroom          # chartroom folded INTO fram (ADR 0001); was ~/code/chartroom
-bin/emit-corpus  ~/code/<proj>/src ~/code/<proj>/tools  build/<proj>.claims
+bin/emit-corpus  ~/code/<proj>/src ~/code/<proj>/tools  build/<proj>.facts
 # 2. fold into Fram + derive the namespace-correct call graph / leverage
-bb -cp ~/code/fram/out  src/chartroom.clj  build/<proj>.claims
+bb -cp ~/code/fram/out  src/chartroom.clj  build/<proj>.facts
 ```
 
 For ad-hoc relational queries beyond chartroom's built-in benchmarks, query the
@@ -58,14 +58,14 @@ queries rather than running them.
 
 ## Honest scope + status
 
-- **Beagle source only.** `beagle-claims` reflects `.bjs`/`.bclj`/`.bnix` ASTs
+- **Beagle source only.** `beagle-facts` reflects `.bjs`/`.bclj`/`.bnix` ASTs
   (ignoring each file's `#lang`). It is NOT a general multi-language indexer.
 - **It's validated glue, not a turnkey IDE.** Headline gates hold (1100/1100
   forms, 97/97 files; leverage axis validated on gjoa). But it needs **fram**
   checked out (build `fram/out`; **chartroom now lives at `fram/chartroom`**, folded
   per ADR 0001 — no longer a standalone repo) and **beagle** (provides
-  `bin/beagle-claims`), plus `bb` on PATH.
-- **Two projections, two jobs:** the *query* projection (`beagle-claims`, ~18
+  `bin/beagle-facts`), plus `bb` on PATH.
+- **Two projections, two jobs:** the *query* projection (`beagle-facts`, ~18
   triples/form) is compact + great for leverage but lossy (drops types/params);
   the *truth* projection (`beagle-roundtrip`, ~238/form) round-trips the program
   losslessly (the graph as source of truth, text as a regenerable view). Use the
@@ -75,8 +75,8 @@ queries rather than running them.
 The bet (shared with Tern): a flat text-and-grep view rots and can't compute
 relational questions; the graph is always current and answers them for free.
 
-The family: Beagle text edits → beagle-authoring · claim-canonical files
-(graph edit channel) → claim-canonical-authoring · relational code queries
+The family: Beagle text edits → beagle-authoring · graph-owned files
+(graph edit channel) → graph-owned-authoring · relational code queries
 (blast zone / who-calls) → codegraph · building apps on the engine →
-claim-modeling (or `~/code/fram/bin/fram-primer` for the live cheatsheet).
+fact-modeling (or `~/code/fram/bin/fram-primer` for the live cheatsheet).
 Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.

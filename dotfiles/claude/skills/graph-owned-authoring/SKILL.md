@@ -1,9 +1,9 @@
 ---
-name: claim-canonical-authoring
+name: graph-owned-authoring
 description: >-
-  Use when editing a CLAIM-CANONICAL Beagle source file — one listed in the
-  claim-canonical registry or whose leading comment block carries
-  `;; @claim-canonical`. Its text is a regenerable view of the Fram claim
+  Use when editing a GRAPH-OWNED Beagle source file — one listed in the
+  graph-owned registry or whose leading comment block carries
+  `;; @graph-owned`. Its text is a regenerable view of the Fram fact
   graph: author by GRAPH EDIT via the mcp__fram__* tools, never
   Edit/Write/MultiEdit (a PreToolUse guard refuses text edits). NOT for
   ordinary Beagle files or non-adopted modules.
@@ -12,32 +12,32 @@ description: >-
 # Claim-canonical authoring — the graph is the editing surface
 
 Most Beagle files are text-canonical: you Edit/Write the text and the compiler
-reads it. A **claim-canonical** file is the inverse (the move-3 flip): its source
-of truth is the **Fram claim graph**, and the on-disk `.bclj` is a *regenerated
+reads it. A **graph-owned** file is the inverse (the move-3 flip): its source
+of truth is the **Fram fact graph**, and the on-disk `.bclj` is a *regenerated
 downstream view* — like a file that a formatter owns. Editing such a file as text
 desyncs the graph from the bytes, so the deterministic **PreToolUse guard refuses
 Edit/Write/MultiEdit** on it. This skill is the model half: for these files you
 author by **graph edit**.
 
-## 0. Is this file claim-canonical? (when this skill applies)
+## 0. Is this file graph-owned? (when this skill applies)
 
-A file is claim-canonical iff EITHER:
+A file is graph-owned iff EITHER:
 - its absolute path is listed in `$CLAIM_CANONICAL_REGISTRY`
-  (default `~/.config/fram/claim-canonical-files`) — the authoritative marker, OR
-- its **leading comment block** contains the sentinel `;; @claim-canonical`
+  (default `~/.config/fram/graph-owned-files`) — the authoritative marker, OR
+- its **leading comment block** contains the sentinel `;; @graph-owned`
   (the in-band, travels-with-the-file marker; it survives the lossless round-trip,
   landing just after the regenerated `(define-target clj)` header).
 
 If neither holds, this skill does NOT apply — use the **beagle-authoring** skill
 and ordinary Edit/Write. (Adoption is per-file and opt-in; there is no blanket
-"all .bclj" rule. The honest line: code *can* be claim-canonical — see
-`~/code/beagle/bin/test/code-as-claims/README.md` "Capability vs adoption".)
+"all .bclj" rule. The honest line: code *can* be graph-owned — see
+`~/code/beagle/bin/test/code-as-facts/README.md` "Capability vs adoption".)
 
 ## 1. The graph-edit verbs (use these instead of Edit/Write)
 
 The authoring engine is `~/code/fram/chartroom/src/resolve.clj` (modes
 `upsert-form` / `set-body` / `rename` / `delete`), exposed AI-facing over the fram
-MCP server. Each is a genuine claim operation on the lossless AST projection,
+MCP server. Each is a genuine fact operation on the lossless AST projection,
 **recompile-gated and fail-closed** — an edit that the engine refuses, or that
 does not recompile, writes no tree.
 
@@ -52,7 +52,7 @@ does not recompile, writes no tree.
 
 The new form/body is **structured data you emit** (an EDN datum, the structured
 edit spec — e.g. `(defn add-two [x :- Int] :- Int (base (+ x 2)))`), not a text
-splice. It is minted into the same Fram store as `kind`/`v`/`fN` claims, and any
+splice. It is minted into the same Fram store as `kind`/`v`/`fN` facts, and any
 reference in it resolves via the same lexical walk — so it is scope-correct for
 free (a later rename of a callee propagates into the code you just authored).
 
@@ -63,32 +63,32 @@ free (a later rename of a callee propagates into the code you just authored).
 ## 2. The loop (what each verb does under the hood)
 
 ```
-.bclj  --emit-edn-->  lossless AST claims  --(resolve.clj <verb>)-->  edited claims
+.bclj  --emit-edn-->  lossless AST facts  --(resolve.clj <verb>)-->  edited facts
        <--render-- (byte-stable regenerated .bclj, recompile-gated) <--
 ```
 
 The CLI form the MCP tools wrap (for grounding / manual runs):
 
 ```sh
-# project the module to lossless AST-claims EDN
-racket ~/code/beagle/beagle-lib/private/claims-roundtrip.rkt --emit-edn <file.bclj> > a.edn
+# project the module to lossless AST-facts EDN
+racket ~/code/beagle/beagle-lib/private/facts-roundtrip.rkt --emit-edn <file.bclj> > a.edn
 # apply the edit as a CLAIM OP (writes the rendered projection to $RESOLVE_OUT)
 bb -cp ~/code/fram/out ~/code/fram/chartroom/src/resolve.clj set-body <name> <scope> <body.edn> a.edn
 # regenerate byte-stable text + recompile-gate (committed only if it builds)
-racket ~/code/beagle/beagle-lib/private/claims-roundtrip.rkt --render "$RESOLVE_OUT/resolved-<file>.edn"
+racket ~/code/beagle/beagle-lib/private/facts-roundtrip.rkt --render "$RESOLVE_OUT/resolved-<file>.edn"
 ```
 
 The CI gate that proves all of this is GREEN:
-`~/code/beagle/bin/test/code-as-claims/authoring-verbs.sh`.
+`~/code/beagle/bin/test/code-as-facts/authoring-verbs.sh`.
 
 ## 3. If you genuinely must edit text
 
-Adoption is reversible and deliberate. To edit a claim-canonical file as text you
+Adoption is reversible and deliberate. To edit a graph-owned file as text you
 must first **de-adopt** it (remove its path from `$CLAIM_CANONICAL_REGISTRY` and
-drop the `;; @claim-canonical` sentinel). That is a workflow decision, not a
+drop the `;; @graph-owned` sentinel). That is a workflow decision, not a
 per-edit escape hatch — make it explicitly, then the guard allows text edits again.
 
-The family: Beagle text edits → beagle-authoring · claim-canonical files
-(graph edit channel) → claim-canonical-authoring · relational code queries
+The family: Beagle text edits → beagle-authoring · graph-owned files
+(graph edit channel) → graph-owned-authoring · relational code queries
 (blast zone / who-calls) → codegraph · building apps on the engine →
-claim-modeling. Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.
+fact-modeling. Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.
