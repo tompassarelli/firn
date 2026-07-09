@@ -4,7 +4,7 @@ The generic spawn-payload system — roles, postures, model deltas, the
 elicit → subtract → compile method, the compose/elicit procedures — is
 CANONICAL in the **gaffer plugin**: `~/code/gaffer` (docs/roles.md,
 docs/postures.md, docs/deltas/, docs/method.md). Edit blocks there; they
-ship to everyone, and tern's harness reads them from there at spawn time.
+ship to everyone, and north's harness reads them from there at spawn time.
 This directory holds only what is personal:
 
 ## Domain bootstrap (defaults by entry point)
@@ -12,7 +12,7 @@ This directory holds only what is personal:
 | Domain | Path signal | Default posture | Notes |
 |---|---|---|---|
 | Client delivery | `~/code/client/*` | deliver (preserve on existing code) | Deadline-real. Ladder hard: glue minimized. Confidential — no cross-references out. |
-| Novel core / research | `~/code/beagle`, tern core, new primitives | explore → deliver once shaped | Priors law ACTIVE: distrust fluent defaults, derive and verify. Core inversion: hand-build the deliverable. |
+| Novel core / research | `~/code/beagle`, north core, new primitives | explore → deliver once shaped | Priors law ACTIVE: distrust fluent defaults, derive and verify. Core inversion: hand-build the deliverable. |
 | Infrastructure / config | `~/code/nixos-config`, dotfiles, CI | deliver, preserve-leaning | Reproducibility rules; blast radius = every future rebuild. |
 | Others' code | `~/code/reference/*` | read-only | Never edit; license check before leveraging. |
 

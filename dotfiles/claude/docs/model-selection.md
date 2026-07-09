@@ -73,7 +73,7 @@ available. Route on the ramp, not per-model dials.
   bug (anthropics/claude-code#10029), rejects `effort` (400), two gens stale.
   One looped worker erases the price gap and emits claims that cost Opus-tier
   verification. True successor is off-Anthropic (Gemini Flash via LiteLLM →
-  `ANTHROPIC_BASE_URL`); unbuilt — candidate tern `flash` tier.
+  `ANTHROPIC_BASE_URL`); unbuilt — candidate north `flash` tier.
 
 ## Route by task shape, not difficulty
 
@@ -173,8 +173,8 @@ Tiered routing vs uniform-Opus: ~50–80% cheaper, no quality regression (tested
 
 ## Spawn surfaces
 
-- **tern SDK** (PRIMARY while /my-agent-config dispatch=tern; native tools denied
-  there): `mcp__tern__spawn {model: opus|sonnet|haiku, effort}` — pin both.
+- **north SDK** (PRIMARY while /my-agent-config dispatch=north; native tools denied
+  there): `mcp__north__spawn {model: opus|sonnet|haiku, effort}` — pin both.
   `AGENT_MODEL` sets the dispatch default; `AGENT_CAVEMAN` / `AGENT_LAWS` /
   `AGENT_ESO` ride along.
 - **Agent tool** (native mode): `model: haiku|sonnet|opus|fable`. Forks always

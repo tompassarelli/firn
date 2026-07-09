@@ -6,7 +6,7 @@ The module that wires Claude Code onto the system:
 out-of-store symlinks into `~/code/nixos-config/dotfiles/claude/`
 (`commands` / `skills` / `hooks` / `agents` / `CLAUDE.md`, plus the
 `~/code/CLAUDE.md` routing file and caveman's `~/.config/caveman/config.json`),
-the **caveman** plugin install, and MCP server registration (`fram`, `tern`,
+the **caveman** plugin install, and MCP server registration (`fram`, `north`,
 `linear-mcp-msa-new`). All activation entries are best-effort
 (`timeout … || true`) so a network blip never fails a rebuild.
 
@@ -86,7 +86,7 @@ it again. `enabledPlugins` in settings.json is tracked separately.
 
 ## MCP servers
 
-`registerMcpServers` adds `fram` + `tern` idempotently (guarded on
+`registerMcpServers` adds `fram` + `north` idempotently (guarded on
 `mcp get`). `fram` is the **generic** engine — its corpus is selected at
 deploy time via env (`FRAM_LOG` / `FRAM_THREADS`); never hardcode life-store
 paths into the engine itself. Also registers `linear-mcp-msa-new` (HTTP/OAuth,

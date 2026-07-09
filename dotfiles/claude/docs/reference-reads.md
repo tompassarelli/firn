@@ -36,7 +36,7 @@ pointers worth returning to.
 - `~/code/reference/Cortex/mcp_server/core/response_budget.py` — EMPIRICALLY
   MEASURED Claude Code MCP output ceiling: 25k tokens / 100k chars, UTF-16 vs
   code-point safety factor 0.75, priority-weighted water-fill truncation. Any
-  tern MCP tool returning variable-size payloads needs exactly this arithmetic.
+  north MCP tool returning variable-size payloads needs exactly this arithmetic.
 - `~/code/reference/Cortex/mcp_server/core/gist_extraction.py` — deterministic
   head + signal-lines + tail gisting within a budget; the HIGH_VALUE_PATTERNS
   vocabulary (error/exception/decided/migrated/...) is a useful signal list.

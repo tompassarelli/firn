@@ -46,7 +46,7 @@ AND by `my-agent-config`, so report and enforcement cannot disagree:
 
 Killed = every authoring guard no-ops (beagle SessionStart handshake,
 code-upstream guard, firn guard, racket-build guard, agent-spawn-guard,
-tripwire, tern-clock guard) — used to pin a neutral, confound-free session.
+tripwire, north-clock guard) — used to pin a neutral, confound-free session.
 
 ## Adding new wiring
 
