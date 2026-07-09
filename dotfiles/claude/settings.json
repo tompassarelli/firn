@@ -24,7 +24,7 @@
           },
           {
             "type": "command",
-            "command": "/home/tom/code/tern/bin/tern-on-spawn",
+            "command": "/home/tom/code/north/bin/tern-on-spawn",
             "timeout": 15
           }
         ]
@@ -35,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/tern/bin/tern-on-spawn",
+            "command": "/home/tom/code/north/bin/tern-on-spawn",
             "timeout": 15
           }
         ]
@@ -46,7 +46,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/tern-session-end.sh",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/north-session-end.sh",
             "timeout": 15
           }
         ]
@@ -78,7 +78,7 @@
           },
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/tern-clock-guard.sh",
+            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/north-clock-guard.sh",
             "timeout": 10
           }
         ]
@@ -125,7 +125,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/tern/bin/tern-on-tooluse",
+            "command": "/home/tom/code/north/bin/tern-on-tooluse",
             "timeout": 10
           }
         ]

@@ -7,7 +7,7 @@
 # CLAUDE.md demonstrably does not hold. Fires on subagent tool calls too,
 # so nested native spawns are covered.
 #
-#   dispatch=tern   -> DENY native Agent/Task/Workflow; hand back the tern recipe
+#   dispatch=north  -> DENY native Agent/Task/Workflow; hand back the north recipe
 #   dispatch=warn   -> allow, inject a nudge (additionalContext)
 #   dispatch=native -> allow silently
 #
@@ -26,7 +26,8 @@ set -uo pipefail
 type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 MODE=$(grep -E '^dispatch=' "$HOME/.claude/my-config.state" 2>/dev/null | tail -1 | cut -d= -f2-)
-MODE="${MODE:-tern}"
+MODE="${MODE:-north}"
+[ "$MODE" = "tern" ] && MODE="north"                 # migrate legacy state value
 [ "$MODE" = "native" ] && exit 0
 export AGENT_SPAWN_GUARD_MODE="$MODE"
 
@@ -42,15 +43,15 @@ tool = data.get("tool_name", "")
 if tool not in ("Agent", "Task", "Workflow"):
     sys.exit(0)
 
-mode = os.environ.get("AGENT_SPAWN_GUARD_MODE", "tern")
+mode = os.environ.get("AGENT_SPAWN_GUARD_MODE", "north")
 ti = data.get("tool_input", {}) or {}
 
-# gaffer squad role -> tern spawn dials. CANONICAL source is gaffer's RECIPES
-# (~/code/gaffer/scripts/build-agents.mjs, which also generates the tern-adapter
-# doctrine block docs/adapters/tern.md); duplicated here for enforcement because
+# gaffer squad role -> north spawn dials. CANONICAL source is gaffer's RECIPES
+# (~/code/gaffer/scripts/build-agents.mjs, which also generates the north-adapter
+# doctrine block); duplicated here for enforcement because
 # a PreToolUse hook can't import from the plugin. Keep the two in sync.
-# The five praxis roles map to a tern `role` block; the read-only tiers
-# (analyst / verifier / judge) have no tern role block, so they pin
+# The five praxis roles map to a north `role` block; the read-only tiers
+# (analyst / verifier / judge) have no north role block, so they pin
 # model+effort+posture and carry the role in-prompt.
 ROLE_MAP = {
     "executor":    {"model": "sonnet", "effort": "low",    "role": "executor",    "posture": "deliver"},
@@ -63,15 +64,15 @@ ROLE_MAP = {
     "judge":       {"model": "opus",   "effort": "high",                          "posture": "explore"},
 }
 
-def tern_call(d):
+def north_call(d):
     parts = ['model:"%s"' % d["model"], 'effort:"%s"' % d["effort"]]
     if "role" in d:
         parts.append('role:"%s"' % d["role"])
     parts.append('posture:"%s"' % d["posture"])
     parts.append("prompt:<your same prompt, verbatim>")
-    return "mcp__tern__spawn { " + ", ".join(parts) + " }"
+    return "mcp__north__spawn { " + ", ".join(parts) + " }"
 
-# Was this a gaffer squad pick? If so, translate it to the EXACT tern call so
+# Was this a gaffer squad pick? If so, translate it to the EXACT north call so
 # recovery is a single paste — no re-deriving role->dials by hand every time.
 subagent = ""
 if tool in ("Agent", "Task"):
@@ -81,22 +82,22 @@ role_key = subagent.split(":")[-1].strip().lower() if subagent else ""
 if role_key in ROLE_MAP:
     recipe = (
         "Native " + tool + " (" + subagent + ") is ephemeral — no claim trail, "
-        "no steering, no observability. Re-issue the SAME work on tern; dials are "
+        "no steering, no observability. Re-issue the SAME work on north; dials are "
         "already resolved for gaffer:" + role_key + " — just paste your prompt in:\n"
-        "  " + tern_call(ROLE_MAP[role_key]) + "\n"
-        "Fan-out? fire one mcp__tern__spawn per lane in the same turn. "
+        "  " + north_call(ROLE_MAP[role_key]) + "\n"
+        "Fan-out? fire one mcp__north__spawn per lane in the same turn. "
         "Observe: web :8088. Deliberate bypass: my-agent-config dispatch warn|native."
     )
 else:
     where = subagent or tool
     recipe = (
         "Native " + tool + " (" + where + ") is ephemeral — no claim trail, no "
-        "steering, no observability. Do the SAME work on tern:\n"
+        "steering, no observability. Do the SAME work on north:\n"
         "  1. Trivial lookup / single file? No agent at all — bash/grep/read inline.\n"
-        "  2. One job: mcp__tern__spawn {prompt, model, effort} (pick dials by task "
-        "shape), or capture a thread + mcp__tern__dispatch (thread-driven posture).\n"
-        "  3. Fan-out: N x mcp__tern__spawn in parallel; message workers via "
-        "bb ~/code/tern/cli/msg-cli.clj 7977 send; observe via web :8088.\n"
+        "  2. One job: mcp__north__spawn {prompt, model, effort} (pick dials by task "
+        "shape), or capture a thread + mcp__north__dispatch (thread-driven posture).\n"
+        "  3. Fan-out: N x mcp__north__spawn in parallel; message workers via "
+        "bb ~/code/north/cli/msg-cli.clj 7977 send; observe via web :8088.\n"
         "  Caveman + model tier ride the SDK path (AGENT_CAVEMAN / AGENT_MODEL).\n"
         "Bypass deliberately: my-agent-config dispatch warn|native (or /my-config)."
     )
@@ -111,7 +112,7 @@ else:
     out = {"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
-        "permissionDecisionReason": "DENIED by /my-agent-config dispatch setting (tern). " + recipe,
+        "permissionDecisionReason": "DENIED by /my-agent-config dispatch setting (north). " + recipe,
     }}
 
 print(json.dumps(out))

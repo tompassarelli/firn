@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# PreToolUse tern-clock-guard — HARD-DENY billable client edits when no tern
+# PreToolUse north-clock-guard — HARD-DENY billable client edits when no north
 # clock is running. The forcing function for "never do billable work untracked."
 # ============================================================================
 # Prose in CLAUDE.md demonstrably did not hold: ~22h of MSA client work once
-# shipped with ZERO tern time logged, then had to be reconstructed by hand for an
+# shipped with ZERO north time logged, then had to be reconstructed by hand for an
 # invoice. This makes untracked billable edits mechanically impossible instead of
 # merely discouraged — the same reason agent-spawn-guard exists.
 #
 #   Edit/Write/MultiEdit whose target is under ~/code/client/**
-#     AND no tern clock running                       -> DENY (with a clock-in recipe)
+#     AND no north clock running                      -> DENY (with a clock-in recipe)
 #   any other path, or a clock IS running             -> allow
-#   tern unavailable (coordinator down / not installed)-> FAIL-OPEN (never lock you out)
+#   north unavailable (coordinator down / not installed)-> FAIL-OPEN (never lock you out)
 #
 # "Any running clock" satisfies the gate for v1 — the failure mode was NO clock at
 # all. Tightening to "clock on a thread owned by THIS client" is a later refinement.
@@ -40,10 +40,10 @@ case "$FP" in /*) : ;; *) FP="$PWD/$FP" ;; esac      # relative -> absolute
 # Only billable client work is gated.
 case "$FP" in *"/code/client/"*) : ;; *) exit 0 ;; esac
 
-TERN="$HOME/code/tern/bin/tern"
-[ -x "$TERN" ] || exit 0                              # no tern -> no gate (fail-open)
+NORTH="$HOME/code/north/bin/north"
+[ -x "$NORTH" ] || exit 0                             # no north -> no gate (fail-open)
 
-STATUS="$(timeout 6 "$TERN" clock status 2>/dev/null || true)"
+STATUS="$(timeout 6 "$NORTH" clock status 2>/dev/null || true)"
 [ -z "$STATUS" ] && exit 0                            # unreadable (coord down) -> fail-open
 # NOTE: "not clocked in" contains "clocked in" — test the negative FIRST.
 case "$STATUS" in
@@ -59,18 +59,18 @@ BRANCH="$(git -C "${REPO:-$PWD}" branch --show-current 2>/dev/null || true)"
 TICKET="$(printf '%s' "$BRANCH" | grep -oiE 'msa-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]' || true)"
 
 if [ -n "$TICKET" ]; then
-  LOG="${FRAM_LOG:-$HOME/.local/state/tern/claims.log}"
+  LOG="${FRAM_LOG:-$HOME/.local/state/north/claims.log}"
   TID="$(sed -n "s/.*:l \"\(@[0-9a-f-]*\)\".*\"linear\".*\"$TICKET\".*/\1/p" "$LOG" 2>/dev/null | tail -1)"
   if [ -n "$TID" ]; then
-    HINT="Thread for $TICKET exists — clock in:  tern clock start ${TID#@}"
+    HINT="Thread for $TICKET exists — clock in:  north clock start ${TID#@}"
   else
-    HINT="No thread for $TICKET yet:  tern capture \"$TICKET <title>\" msa   then   tern clock start <id>"
+    HINT="No thread for $TICKET yet:  north capture \"$TICKET <title>\" msa   then   north clock start <id>"
   fi
 else
-  HINT="Find/create the thread:  tern ready  (or  tern capture \"<title>\" msa ),  then  tern clock start <id>"
+  HINT="Find/create the thread:  north ready  (or  north capture \"<title>\" msa ),  then  north clock start <id>"
 fi
 
-REASON="Billable client edit blocked — no tern clock running. Client work is never done untracked (this gate exists because ~22h of MSA work once shipped with zero logged time and had to be reconstructed for an invoice). Start a clock, then retry the edit:
+REASON="Billable client edit blocked — no north clock running. Client work is never done untracked (this gate exists because ~22h of MSA work once shipped with zero logged time and had to be reconstructed for an invoice). Start a clock, then retry the edit:
   ${HINT}
 Deliberate bypass: my-agent-config guards off (persistent, live) — or a session launched with CLAUDE_NO_AUTHORING_HOOKS=1."
 

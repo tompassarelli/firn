@@ -3,7 +3,7 @@
 # Run after EVERY edit to the hook: ./tripwire-guard.test.sh
 # Pipes synthetic PreToolUse hook-input JSON into the hook and asserts the
 # exit code (0 = allow, 2 = deny). Denies are logged to a scratch dir via
-# TRIPWIRE_LOG_DIR so the real ~/.local/state/tern/tripwire.log stays clean.
+# TRIPWIRE_LOG_DIR so the real ~/.local/state/north/tripwire.log stays clean.
 # shellcheck disable=SC2016,SC2088  # fixtures are LITERAL command strings ($HOME, ~, $( ) on purpose)
 set -uo pipefail
 
@@ -139,15 +139,16 @@ run deny 'chmod -R 000' 'chmod -R 000 /home/tom/code'
 run deny 'chown -R root' 'chown -R root /srv/data'
 run allow 'dd to file' 'dd if=/dev/sda of=/tmp/disk.img'
 run allow 'dd to /dev/null' 'dd if=big.bin of=/dev/null bs=1M'
-run allow 'systemctl --user' 'systemctl --user restart tern-agent.service'
+run allow 'systemctl --user' 'systemctl --user restart north-agent.service'
 run allow 'systemctl stop tern* unit' 'sudo systemctl stop tern-sync.service'
+run allow 'systemctl stop north* unit' 'sudo systemctl stop north-coord.service'
 run allow 'systemctl status' 'systemctl status nginx'
 run allow 'chmod -R 755' 'chmod -R 755 .'
 run allow 'chown -R tom' 'chown -R tom:users /tmp/claude-x'
 
 echo "== estate hot paths (must never trip) =="
 run allow 'firn build + validate' 'firn build && firn validate'
-run allow 'tern CLI' '~/code/tern/bin/tern show 019f2053 && ~/code/tern/bin/tern tell 019f2053 progress "done"'
+run allow 'north CLI' '~/code/north/bin/north show 019f2053 && ~/code/north/bin/north tell 019f2053 progress "done"'
 run allow 'beagle build' 'cd ~/code/beagle && source bin/_beagle-racket && "$RACO" make src/main.rkt'
 run allow 'nix build' 'nix build --no-link .#default'
 run allow 'plain ls' 'ls -la'

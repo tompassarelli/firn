@@ -14,7 +14,7 @@ description: >-
 The ecosystem: **Beagle** is the language; **Fram** is the fact engine (a
 subject-predicate-object graph + a stratified Datalog); the **codegraph module**
 (`fram/chartroom/` — directory rename pending) is the glue that projects Beagle
-source *into* Fram so you can ask relational questions the way Tern asks them
+source *into* Fram so you can ask relational questions the way North asks them
 about work. Same graph substrate, pointed at code. This is the **blast zone**
 faculty: edit diagnostics consulted BEFORE proposing a change.
 
@@ -72,7 +72,7 @@ queries rather than running them.
   query projection for code-intelligence; the truth projection for graph-native
   edits/rename.
 
-The bet (shared with Tern): a flat text-and-grep view rots and can't compute
+The bet (shared with North): a flat text-and-grep view rots and can't compute
 relational questions; the graph is always current and answers them for free.
 
 The family: Beagle text edits → beagle-authoring · graph-upstream files

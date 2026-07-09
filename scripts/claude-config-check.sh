@@ -14,7 +14,7 @@
 # valid JSON; a wired hook command points at a missing/non-executable file;
 # autoMemoryEnabled is not false (reproducibility invariant); [--local] a
 # ~/.claude entry no longer resolves to the dotfile SoT; [--local] the USER-scope
-# MCP set drifts from {fram,tern} or fram points at the DEMO corpus.
+# MCP set drifts from {fram,north} or fram points at the DEMO corpus.
 # SOFT WARNS: a skill missing SKILL.md frontmatter; --local CLI gaps;
 # project-scoped MCP servers (reported for visibility).
 #
@@ -59,7 +59,7 @@ fi
 #    path-style-agnostic: match by basename so absolute, \$HOME, or repo-relative
 #    command paths all validate against the tracked hooks/ dir. Hook commands
 #    pointing OUTSIDE the repo (a sibling project's bin/, e.g.
-#    ~/code/tern/bin/tern-on-spawn) are external — the repo can't vouch
+#    ~/code/north/bin/tern-on-spawn) are external — the repo can't vouch
 #    for them and CI can't see them, so they're noted, not failed.
 if python3 - "$SETTINGS" "$HOOKS" <<'PY'
 import json, sys, os
@@ -127,7 +127,7 @@ then :; else fail=1; fi
 
 # 6. --local: the CLIs CLAUDE.md names exist; removed ones stay removed ------
 if [ "$LOCAL" -eq 1 ]; then
-  for c in tern direnv nix; do
+  for c in north direnv nix; do
     if command -v "$c" >/dev/null 2>&1; then ok "CLI present: $c"
     else err "CLI named in CLAUDE.md is missing from PATH: $c"; fi
   done
@@ -155,7 +155,7 @@ if [ "$LOCAL" -eq 1 ]; then
 
   # 8. --local: MCP registration in ~/.claude.json — the exact rot that pointed
   #    fram at the demo corpus on 2026-06-23. USER scope must be EXACTLY the
-  #    declared set (fram,tern + the Linear MSA server); fram must target
+  #    declared set (fram,north + the Linear MSA server); fram must target
   #    the LIVE store, never the repo demo.
   CJSON="$HOME/.claude.json"
   if [ -f "$CJSON" ]; then
@@ -163,7 +163,7 @@ if [ "$LOCAL" -eq 1 ]; then
 import json, sys
 cfg = json.load(open(sys.argv[1]))
 servers = cfg.get("mcpServers") or {}
-allow = {"fram", "tern", "linear-mcp-msa-new"}
+allow = {"fram", "north", "linear-mcp-msa-new"}
 rc = 0
 for name in servers:
     if name not in allow:
@@ -177,7 +177,7 @@ if not log:
     print("FAIL: fram MCP has no FRAM_LOG -> falls back to the repo DEMO corpus (footgun)", file=sys.stderr); rc = 1
 elif "/code/fram" in log:
     print(f"FAIL: fram MCP points at the DEMO corpus ({log}) — must be the live store", file=sys.stderr); rc = 1
-elif "tern" in log:
+elif "north" in log:
     print(f"ok:   fram MCP -> live corpus ({log})")
 else:
     print(f"warn: fram FRAM_LOG set but unrecognized ({log})", file=sys.stderr)

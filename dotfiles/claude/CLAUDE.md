@@ -4,29 +4,29 @@ Constitution, not manual: durable posture, authority, and routing — applies
 to every session, every directory. Detail lives in the linked docs; read a
 doc when its trigger fires, not preemptively.
 
-## tern — the coordination substrate
+## north — the coordination substrate
 
-Read `~/code/tern/docs/operating-manual.md` before nontrivial work; where
+Read `~/code/north/docs/operating-manual.md` before nontrivial work; where
 anything contradicts it, the manual wins (trivial lookups exempt).
 **Session state lives on threads, not markdown dumps** — milestones → `tell
 <id> progress`, lessons → `learning`, done → `outcome`; the next session
-reads `tern show <id>`, never a SESSION-DUMP file. SDK dispatch derives
+reads `north show <id>`, never a SESSION-DUMP file. SDK dispatch derives
 agent posture from thread facts.
-Thread format + concurrent write safety: → `~/code/nixos-config/dotfiles/claude/docs/tern.md`
+Thread format + concurrent write safety: → `~/code/nixos-config/dotfiles/claude/docs/north.md`
 Spawn/steer/observe/concurrency: → `~/code/nixos-config/dotfiles/claude/docs/agent-protocol.md`
 
 ## Billable work — clock or it didn't happen
 
-**Any edit under `~/code/client/**` is billable and MUST run against a live tern
+**Any edit under `~/code/client/**` is billable and MUST run against a live north
 clock on a thread linked to its Linear ticket.** This is enforced mechanically —
-`tern-clock-guard` (PreToolUse) DENIES the edit if no clock is running — because
+`north-clock-guard` (PreToolUse) DENIES the edit if no clock is running — because
 prose here already failed once: ~22h of MSA work shipped with zero logged time
 and had to be reconstructed by hand for an invoice. Don't wait for the deny:
 **at intake on client work, derive the ticket from the branch (`msa-NNN` →
 `MSA-NNN`), find-or-`capture` its thread (`owner msa`, `linear MSA-NNN`, `rate`),
-and `tern clock start` it BEFORE the first edit.** One clock at a time; `clock
+and `north clock start` it BEFORE the first edit.** One clock at a time; `clock
 stop` on context switch. Billing is derived, never invented: worklog =
-`tern-timelog`, invoice state machine = `tern-invoice` (uninvoiced → invoice-sent
+`north-timelog`, invoice state machine = `north-invoice` (uninvoiced → invoice-sent
 → invoice-paid). Bypass only deliberately (`my-agent-config guards off`, or launch with `CLAUDE_NO_AUTHORING_HOOKS=1`).
 
 ## Pre-edit gate — MANDATORY at task intake
@@ -66,19 +66,19 @@ analyzes, never default-implements** (coding ≤ Opus; in a Fable session PIN
 implementation spawns to opus/sonnet). When out: opus-xhigh tops the ramp
 and capacity is substituted with structure (judge panels, adversarial
 verify). Haiku stays OFF the stack (single-shot bulk classify only — doc).
-tern spawns get model-deltas automatically (read from `~/code/gaffer/docs`,
+north spawns get model-deltas automatically (read from `~/code/gaffer/docs`,
 the canonical block source); personal domain-posture defaults live in
 praxis/README.md. Compose, don't re-derive.
 
-**tern IS the spawn surface here — gaffer names the squad, tern delivers
-it.** The native Agent tool is denied under `/my-agent-config dispatch=tern`, so a
+**north IS the spawn surface here — gaffer names the squad, north delivers
+it.** The native Agent tool is denied under `/my-agent-config dispatch=north`, so a
 gaffer squad pick is NOT spawned via `subagent_type` — translate it to
-`mcp__tern__spawn {prompt, model, effort, role, posture}` using that role's
+`mcp__north__spawn {prompt, model, effort, role, posture}` using that role's
 pinned dials from the doctrine (e.g. `gaffer:researcher` → `{model:'sonnet',
 effort:'low', role:'researcher'}`; `gaffer:integrator` → `{model:'opus',
 effort:'high', role:'integrator'}`). The role/posture params inject the
 gaffer payload; the delta rides automatically. A native-Agent denial is a
-routing instruction (use tern), never a wall — never abandon the pick or
+routing instruction (use north), never a wall — never abandon the pick or
 fall back to an unrouted spawn.
 
 ## Push freely — the scan is the guard, not a human
@@ -98,7 +98,7 @@ unlicensed sources to the user BEFORE building on them.
 ## Internal notes → docs/private/, never public docs/
 
 Every repo: agent notes, status, scratch, and handoffs go in gitignored
-`docs/private/` (`~/code/tern/bin/ensure-private-docs` sets it up). Public
+`docs/private/` (`~/code/north/bin/ensure-private-docs` sets it up). Public
 `docs/` is end-user-facing only.
 
 ## Global config goes through nixos-config — ALWAYS

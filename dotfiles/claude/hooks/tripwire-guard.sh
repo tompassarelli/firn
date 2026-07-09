@@ -31,7 +31,7 @@
 #      non-flag arg) is a remote host not in {github.com, localhost, 127.0.0.1}.
 #   5. Destructive system ops: mkfs*, dd of=/dev/* (except null/stdout/stderr),
 #      shutdown/reboot/poweroff/halt, systemctl (system, not --user)
-#      stop/disable/mask of non-tern* units + power subcommands,
+#      stop/disable/mask of non-tern*/north* units + power subcommands,
 #      chmod -R 000, chown -R root.
 #
 # Design constraints honored:
@@ -43,8 +43,8 @@
 #     destructive patterns, not a general classifier. Deliberate accepted
 #     misses: `bash -c "…"`/xargs indirection, unexpanded $VAR targets,
 #     find with \( \) grouping (the grouped -delete lands in another segment).
-#   - Every DENY is appended to ~/.local/state/tern/tripwire.log
-#     (ISO ts <TAB> cwd <TAB> reason <TAB> command head) so tern-mine can audit.
+#   - Every DENY is appended to ~/.local/state/north/tripwire.log
+#     (ISO ts <TAB> cwd <TAB> reason <TAB> command head) so north-mine can audit.
 #
 # Test matrix: sibling tripwire-guard.test.sh — run it after EVERY edit here.
 # Kill-switch: persistent `my-agent-config guards off` (state) OR env
@@ -87,7 +87,7 @@ ensure_cwd() {
   CWD_SET=1
 }
 
-LOGDIR="${TRIPWIRE_LOG_DIR:-$HOME/.local/state/tern}" # override: tests only
+LOGDIR="${TRIPWIRE_LOG_DIR:-$HOME/.local/state/north}" # override: tests only
 deny() {
   ensure_cwd
   local head="${cmd//$'\n'/ }"
@@ -422,8 +422,8 @@ handle_systemctl() {
   for t in "${units[@]}"; do
     strip_g "$t"
     case "$S" in
-      tern*) ;;
-      *) deny "systemctl $sub $S — stopping/disabling system units is manual (tern* only)" ;;
+      tern* | north*) ;;
+      *) deny "systemctl $sub $S — stopping/disabling system units is manual (tern*/north* only)" ;;
     esac
   done
 }

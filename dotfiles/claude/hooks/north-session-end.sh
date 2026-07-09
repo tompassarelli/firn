@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# SessionEnd hook — deregister THIS agent from tern on a clean session exit by
+# SessionEnd hook — deregister THIS agent from north on a clean session exit by
 # marking its still-active concerns `done` (reach `landed`), so a peer's
 # `concern ls` is instant-clean the moment the terminal closes.
 #
 # WHY reconstruct the id instead of reading a pidfile: the registrar
-# (~/code/tern/bin/tern-on-spawn) does NOT persist the agent id — it derives it
+# (~/code/north/bin/tern-on-spawn) does NOT persist the agent id — it derives it
 # deterministically as ${TERN_AGENT_ID:-cc-<repo>-<session_id[:8]>} from the
+# (env var name stays TERN_AGENT_ID — cross-repo contract with the unrenamed
+#  tern-on-spawn registrar; renamed atomically at coordinator cutover)
 # session_id + cwd that Claude Code also hands this hook on stdin. We mirror that
 # derivation EXACTLY, so no spawn-side change (and no state file) is needed.
 #
@@ -15,7 +17,7 @@
 # CLEAN-exit case. Best-effort throughout: never block exit, never emit stdout.
 set -uo pipefail
 
-CONCERN="$HOME/code/tern/bin/concern"
+CONCERN="$HOME/code/north/bin/concern"
 [ -x "$CONCERN" ] || exit 0
 
 # Claude Code delivers a JSON event on stdin; pull flat string fields without jq
@@ -62,6 +64,6 @@ setsid bash -c '
 # user timer — catches the tail of this session immediately instead of
 # waiting up to 5min). Mechanical, zero-AI, budgeted at a few seconds; never
 # block or fail this hook's exit.
-timeout 5 "$HOME/code/tern/bin/tern-stream-sync" >/dev/null 2>&1 || true
+timeout 5 "$HOME/code/north/bin/tern-stream-sync" >/dev/null 2>&1 || true
 
 exit 0

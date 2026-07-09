@@ -8,7 +8,7 @@ The text after `/req` is forked, ALWAYS. Your turn is a PASS-THROUGH, not a
 triage stage: no role decision, no analysis, no clarifying questions, no
 inline work. One spawn, one confirmation, end of turn — seconds.
 
-1. SPAWN via `mcp__tern__spawn`: model `opus`, effort `high`, role
+1. SPAWN via `mcp__north__spawn`: model `opus`, effort `high`, role
    `integrator`, posture `deliver`. The prompt carries:
    - the user's request VERBATIM,
    - cwd/repo context (one line),
@@ -22,9 +22,9 @@ inline work. One spawn, one confirmation, end of turn — seconds.
      coherent step; never push unless the request says to; report to
      docs/private/<slug>-report.md; ports 7977/7978/7980/48942/48950/48992/
      49060 untouchable; facts vocabulary (never claims).
-   - `AGENT_COORDINATOR` = this session's tern id (completion/death pings
+   - `AGENT_COORDINATOR` = this session's north id (completion/death pings
      land back here automatically).
-2. CONFIRM in ≤3 lines: agent id + `tern watch <id>`. END YOUR TURN —
+2. CONFIRM in ≤3 lines: agent id + `north watch <id>`. END YOUR TURN —
    never wait for the fork.
 
 Only exception: a one-line factual question answerable from THIS session's

@@ -2,8 +2,8 @@
 # my-agent-config — every personal-stack setting, one entry point.
 #
 #   caveman  : output compression     session level + worker default
-#   dispatch : who runs agents        tern SDK  vs  native Agent/Workflow
-#   coord    : coordination protocol  tern / linear / both
+#   dispatch : who runs agents        north SDK  vs  native Agent/Workflow
+#   coord    : coordination protocol  north / linear / both
 #   beagle   : code representation    text      vs  fact-native (per-file)
 #   guards   : authoring-guard hooks  + the kill-switch
 #
@@ -25,7 +25,7 @@ put() {
 }
 mark() { [ "$1" = "$2" ] && printf '●' || printf '○'; }
 
-tern_daemon() { (exec 3<>/dev/tcp/127.0.0.1/7977) 2>/dev/null && { exec 3>&- 2>/dev/null; echo up; } || echo DOWN; }
+north_daemon() { (exec 3<>/dev/tcp/127.0.0.1/7977) 2>/dev/null && { exec 3>&- 2>/dev/null; echo up; } || echo DOWN; }
 linear_mcp()  { grep -q 'linear' "$HOME/.claude.json" 2>/dev/null && echo configured || echo absent; }
 wired()       { grep -q "$1" "$SETTINGS" 2>/dev/null && echo '✓' || echo '✗'; }
 adopted_n()   { grep -cvE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null || echo 0; }
@@ -57,7 +57,9 @@ effective_ks() {
 
 status() {
   local d c cv cd files ks
-  d=$(get dispatch tern); c=$(get coord tern); cv=$(caveman_lvl); cd=$(caveman_default)
+  d=$(get dispatch north); [ "$d" = tern ] && d=north
+  c=$(get coord north);    [ "$c" = tern ] && c=north
+  cv=$(caveman_lvl); cd=$(caveman_default)
   ks=$(effective_ks)
   files=$(grep -vE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null | sed "s|^$HOME|~|; s/^/       /")
   cat <<EOF
@@ -73,18 +75,18 @@ status() {
     flip workers → AGENT_CAVEMAN=off|lite|full on spawn
 
  2  DISPATCH   who runs agents                 [guard: $(wired agent-spawn-guard)]
-    $(mark "$d" tern) tern     SDK workers — persistent, steerable, fact trail;
+    $(mark "$d" north) north    SDK workers — persistent, steerable, fact trail;
                caveman (AGENT_CAVEMAN) + model tier (AGENT_MODEL) ride along
-    $(mark "$d" warn) warn     native Agent/Workflow allowed, nudged toward tern
+    $(mark "$d" warn) warn     native Agent/Workflow allowed, nudged toward north
     $(mark "$d" native) native   raw Claude Code spawns, no interference
-    flip → my-agent-config dispatch tern|warn|native
+    flip → my-agent-config dispatch north|warn|native
 
- 3  COORD      coordination protocol           [tern: $(tern_daemon) · linear MCP: $(linear_mcp)]
-    $(mark "$c" tern) tern     facts on :7977 + concerns + msg-cli chat
+ 3  COORD      coordination protocol           [north: $(north_daemon) · linear MCP: $(linear_mcp)]
+    $(mark "$c" north) north    facts on :7977 + concerns + msg-cli chat
     $(mark "$c" linear) linear   Linear as the work queue (MCP)
-    $(mark "$c" both) both     Linear as consolidation layer over tern
+    $(mark "$c" both) both     Linear as consolidation layer over north
     note: declarative — agents read this posture; no hard enforcement yet
-    flip → my-agent-config coord tern|linear|both
+    flip → my-agent-config coord north|linear|both
 
  4  BEAGLE     code as text vs facts          [guard: $(wired code-upstream-guard)]
     fact-native adopted (text edits denied → fram graph tools): $(adopted_n) file(s)
@@ -110,7 +112,7 @@ my-agent-config — every personal-stack posture setting, one entry point.
  1 CAVEMAN — output compression (token economy).
    Session level lives in ~/.claude/.caveman-active (caveman plugin);
    lite/full/ultra + wenyan variants. Workers get AGENT_CAVEMAN via the
-   tern SDK spawn path (default full). Code/commits/quoted errors/security
+   north SDK spawn path (default full). Code/commits/quoted errors/security
    are never compressed at any level.
    Global default (new sessions start here) resolution order:
      CAVEMAN_DEFAULT_MODE env > repo-local .caveman.json
@@ -124,20 +126,20 @@ my-agent-config — every personal-stack posture setting, one entry point.
    never ultra/wenyan for substantive work (lossy — PLAYBOOK 2026-06-22).
 
  2 DISPATCH — who executes agent work.
-   tern    (default) native Agent/Task/Workflow calls are DENIED by a
-           PreToolUse hook and redirected to the tern SDK: mcp__tern__spawn
-           (ad-hoc) / mcp__tern__dispatch (thread-driven). SDK workers are
+   north   (default) native Agent/Task/Workflow calls are DENIED by a
+           PreToolUse hook and redirected to the north SDK: mcp__north__spawn
+           (ad-hoc) / mcp__north__dispatch (thread-driven). SDK workers are
            persistent, dormant-until-pinged, observable (web :8088),
            steerable (msg-cli :7977), and carry AGENT_CAVEMAN + AGENT_MODEL.
    warn    native spawns allowed; the hook injects a reminder instead.
    native  no interference. For A/B baselines against stock Claude Code.
-   Advice: stay on tern. Drop to warn only when the daemon is down.
+   Advice: stay on north. Drop to warn only when the daemon is down.
 
  3 COORD — source of truth for work coordination.
-   tern / linear / both (Linear as consolidation layer over tern).
+   north / linear / both (Linear as consolidation layer over north).
    Declarative for now: agents read this posture; nothing mechanically
    blocks the other system yet. Flipping the option does not build the sync.
-   Advice: tern.
+   Advice: north.
 
  4 BEAGLE — how Beagle source is authored, per file.
    text          ordinary Edit/Write; the beagle-authoring repair loop.
@@ -200,15 +202,19 @@ case "${1:-status}" in
     esac ;;
   dispatch)
     case "${2:-}" in
-      tern|warn|native) put dispatch "$2"; echo "dispatch → $2 $( [ "$2" = tern ] && echo '(native Agent/Workflow now DENIED → tern SDK)' || { [ "$2" = warn ] && echo '(native allowed, nudged)' || echo '(native allowed, silent)'; } )" ;;
-      "") echo "dispatch = $(get dispatch tern)   (my-agent-config dispatch tern|warn|native)" ;;
-      *) echo "usage: my-agent-config dispatch [tern|warn|native]" >&2; exit 1 ;;
+      north|tern|warn|native)
+        v="$2"; [ "$v" = tern ] && v=north                # accept legacy `tern`, normalize to north
+        put dispatch "$v"; echo "dispatch → $v $( [ "$v" = north ] && echo '(native Agent/Workflow now DENIED → north SDK)' || { [ "$v" = warn ] && echo '(native allowed, nudged)' || echo '(native allowed, silent)'; } )" ;;
+      "") d=$(get dispatch north); [ "$d" = tern ] && d=north; echo "dispatch = $d   (my-agent-config dispatch north|warn|native)" ;;
+      *) echo "usage: my-agent-config dispatch [north|warn|native]" >&2; exit 1 ;;
     esac ;;
   coord)
     case "${2:-}" in
-      tern|linear|both) put coord "$2"; echo "coord → $2 (declarative; agents read it from the my-agent-config report)" ;;
-      "") echo "coord = $(get coord tern)   (my-agent-config coord tern|linear|both)" ;;
-      *) echo "usage: my-agent-config coord [tern|linear|both]" >&2; exit 1 ;;
+      north|tern|linear|both)
+        v="$2"; [ "$v" = tern ] && v=north                # accept legacy `tern`, normalize to north
+        put coord "$v"; echo "coord → $v (declarative; agents read it from the my-agent-config report)" ;;
+      "") c=$(get coord north); [ "$c" = tern ] && c=north; echo "coord = $c   (my-agent-config coord north|linear|both)" ;;
+      *) echo "usage: my-agent-config coord [north|linear|both]" >&2; exit 1 ;;
     esac ;;
   beagle)
     case "${2:-list}" in
