@@ -78,11 +78,11 @@
         "zig-overlay": "zig-overlay"
       },
       "locked": {
-        "lastModified": 1783164680,
-        "narHash": "sha256-wikAfyRTmdD0DvBGwfaR5DDJDOVL3YeOaBxubtyKnhQ=",
+        "lastModified": 1783560312,
+        "narHash": "sha256-7Z817webHoUqQP6ksJlaK0GiWOAqacRmwNLq2JZbof0=",
         "ref": "main",
-        "rev": "fede0ef3343b635f0e9db1f9510713dc0caf8a03",
-        "revCount": 912,
+        "rev": "2807dcc67582eed96fd0cfcd9e57c03d4e4fef23",
+        "revCount": 920,
         "type": "git",
         "url": "file:///home/tom/code/beagle"
       },
