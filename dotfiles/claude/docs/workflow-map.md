@@ -71,7 +71,7 @@ tells you which facts to expect:
 
 `mcp__tern__spawn` and `mcp__tern__dispatch` are the MCP tool faces of the SDK
 lineage (registered in `harness.ts`'s `NATIVE_TOOLS`). The CLI faces are
-`tern spawn` / `tern req` (in `cli/agents-cli.clj`) and `convoy spawn` (in
+`tern spawn` / `tern request` (in `cli/agents-cli.clj`) and `convoy spawn` (in
 `convoy/bin/my-agents`), both of which resolve gaffer dials and then
 `bun run sdk/src/spawn.ts`.
 
@@ -79,7 +79,7 @@ lineage (registered in `harness.ts`'s `NATIVE_TOOLS`). The CLI faces are
 flowchart TD
     A["A — interactive session"] --> SES["session lineage<br/>bin/tern-on-spawn hook"]
     B["B — /request fork"] --> SP["spawn.ts"]
-    C["C — shell tern req"] --> SP
+    C["C — shell tern request"] --> SP
     D["D — tern spawn role"] --> SP
     E["E — dispatch @thread"] --> DI["dispatch.ts"]
     F["F — /fork"] --> X["UNMANAGED — invisible to tern"]
@@ -136,17 +136,17 @@ activity.
 
 ### Pattern B — `/request` fork-everything
 
-**Trigger:** a human types `/req <text>` (`commands/request.md`).
+**Trigger:** a human types `/request <text>` (`commands/request.md`).
 **Lineage:** SDK-lane via `spawn.ts`, always opus/high/integrator/deliver.
 
 ```mermaid
 sequenceDiagram
     actor H as human
-    participant R as /req (pass-through)
+    participant R as /request (pass-through)
     participant SP as spawn.ts (via mcp__tern__spawn)
     participant T as tern :7977
     participant CO as coordinator inbox
-    H->>R: /req X
+    H->>R: /request X
     R->>SP: INTAKE — wrap X + self-triage contract + cwd + discipline ·<br/>AGENT_COORDINATOR = this session id
     SP->>SP: ID MINT — opts.agentId ?? lane-{ts36}
     SP->>T: IDENTITY FACTS (writeAgentFacts) — kind=lane,<br/>role/model/effort/goal/display_name/spawned_at
@@ -173,9 +173,9 @@ caught subprocess death (`death.ts`).
 
 ---
 
-### Pattern C — shell `tern req`
+### Pattern C — shell `tern request`
 
-**Trigger:** `tern req "<text>"` at a shell (`agents-cli.clj:cmd-req`).
+**Trigger:** `tern request "<text>"` at a shell (`agents-cli.clj:cmd-req`).
 **Lineage:** identical to B (opus/high/integrator), minted from the CLI.
 
 ```mermaid
@@ -185,7 +185,7 @@ sequenceDiagram
     participant CS as cmd-spawn (dial table)
     participant SP as spawn.ts
     participant T as tern :7977
-    SH->>CLI: tern req X
+    SH->>CLI: tern request X
     CLI->>CLI: INTAKE — prepend "REQUEST:" + OPERATING CONTRACT<br/>(triage / sync / no-push / report-to-private)
     CLI->>CS: resolve role "integrator" via gaffer dial table<br/>(docs/adapters/tern.md)
     CS->>CS: ID MINT — lane-{uuid8} · env AGENT_ID/MODEL/EFFORT/ROLE/POSTURE<br/>(+ AGENT_COORDINATOR if --notify)
