@@ -83,6 +83,7 @@
   myConfig.modules.quickshell.enable = lib.mkDefault true;
   myConfig.modules.qutebrowser.enable = lib.mkDefault true;
   myConfig.modules.racket.enable = lib.mkDefault true;
+  myConfig.modules.rebuild-nopasswd.enable = lib.mkDefault true;
   myConfig.modules.ripgrep.enable = lib.mkDefault true;
   myConfig.modules.rofi.enable = lib.mkDefault true;
   myConfig.modules.rust-analyzer.enable = lib.mkDefault true;

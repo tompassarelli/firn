@@ -32,6 +32,7 @@
   myConfig.modules.opencode.enable = lib.mkDefault true;
   myConfig.modules.procs.enable = lib.mkDefault true;
   myConfig.modules.promptfoo.enable = lib.mkDefault true;
+  myConfig.modules.rebuild-nopasswd.enable = lib.mkDefault true;
   myConfig.modules.ripgrep.enable = lib.mkDefault true;
   myConfig.modules.starship.enable = lib.mkDefault true;
   myConfig.modules.tealdeer.enable = lib.mkDefault true;

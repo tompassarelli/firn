@@ -1,0 +1,23 @@
+#lang beagle/nix
+
+(ns default)
+
+;; Agent-autonomous rebuilds: NOPASSWD sudo for exactly the rebuild binary.
+;; Honest security note (decided 2026-07-09): on this single-user box the
+;; password on nixos-rebuild is a speed bump, not a boundary — anything running
+;; as tom can edit the user-owned flake and becomes root at the next legitimate
+;; activation anyway. Scoping to the one binary keeps `sudo bash` etc. gated.
+;; The real discipline lives in the firn-guard hook (build+validate green,
+;; committed, clean build inputs). v2 refinement queued: fact-native rebuild
+;; lease + root broker (auditable, revocable) — coordination thread 019f4418.
+(nix/module [config lib pkgs ...]
+  {:tags [cli-tools]
+   :options.myConfig.modules.rebuild-nopasswd.enable
+    (lib.mkEnableOption "Passwordless sudo for nixos-rebuild (agent-autonomous firn rebuild)")
+   :config
+    (lib.mkIf config.myConfig.modules.rebuild-nopasswd.enable
+      {:security.sudo.extraRules
+        [{:users ["tom"]
+          :commands
+           [{:command "/run/current-system/sw/bin/nixos-rebuild"
+             :options ["NOPASSWD" "SETENV"]}]}]})})

@@ -95,10 +95,17 @@
   ;; sudo invocations within ~5 min (default sudo timeout) skip the prompt.
   (define on-linux? (not (equal? "Darwin" (string-trim (sh-out "uname" "-s")))))
   (when on-linux?
-    (printf "── sudo: caching credentials upfront (no prompt during build)\n")
-    (flush-output)
-    (unless (sh "sudo" "-v")
-      (eprintf "firn rebuild: sudo authentication failed\n") (exit 1)))
+    ;; NOPASSWD-aware: when the scoped sudoers rule covers nixos-rebuild
+    ;; (rebuild-nopasswd module), no credential cache is needed — skip the
+    ;; interactive -v gate entirely so agent runs never cold-start on a prompt.
+    (define passwordless?
+      (or (sh "sudo" "-n" "true")
+          (sh "sudo" "-n" "nixos-rebuild" "list-generations")))
+    (unless passwordless?
+      (printf "── sudo: caching credentials upfront (no prompt during build)\n")
+      (flush-output)
+      (unless (sh "sudo" "-v")
+        (eprintf "firn rebuild: sudo authentication failed\n") (exit 1))))
 
   ;; Keep sudo timestamp warm for the duration of the build by re-validating
   ;; every 60 seconds in the background. nh's activation phase can land
