@@ -20,7 +20,6 @@
   myConfig.modules.clojure.enable = lib.mkDefault true;
   myConfig.modules.cmake.enable = lib.mkDefault true;
   myConfig.modules.containers.enable = lib.mkDefault true;
-  myConfig.modules.convoy.enable = lib.mkDefault true;
   myConfig.modules.curl.enable = lib.mkDefault true;
   myConfig.modules.dbeaver.enable = lib.mkDefault true;
   myConfig.modules.delta.enable = lib.mkDefault true;
@@ -65,6 +64,7 @@
   myConfig.modules.lutris.enable = lib.mkDefault true;
   myConfig.modules.mail.enable = lib.mkDefault true;
   myConfig.modules.mpv.enable = lib.mkDefault true;
+  myConfig.modules.my-agents.enable = lib.mkDefault true;
   myConfig.modules.nautilus.enable = lib.mkDefault true;
   myConfig.modules.nerd-fonts.enable = lib.mkDefault true;
   myConfig.modules.niri.enable = lib.mkDefault true;

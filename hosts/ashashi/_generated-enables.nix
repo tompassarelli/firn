@@ -11,7 +11,6 @@
   myConfig.modules.btop.enable = lib.mkDefault true;
   myConfig.modules.claude.enable = lib.mkDefault true;
   myConfig.modules.containers.enable = lib.mkDefault true;
-  myConfig.modules.convoy.enable = lib.mkDefault true;
   myConfig.modules.curl.enable = lib.mkDefault true;
   myConfig.modules.delta.enable = lib.mkDefault true;
   myConfig.modules.direnv.enable = lib.mkDefault true;
@@ -29,6 +28,7 @@
   myConfig.modules.glow.enable = lib.mkDefault true;
   myConfig.modules.imagemagick.enable = lib.mkDefault true;
   myConfig.modules.jq.enable = lib.mkDefault true;
+  myConfig.modules.my-agents.enable = lib.mkDefault true;
   myConfig.modules.opencode.enable = lib.mkDefault true;
   myConfig.modules.procs.enable = lib.mkDefault true;
   myConfig.modules.promptfoo.enable = lib.mkDefault true;

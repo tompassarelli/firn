@@ -24,7 +24,7 @@ inline work. One spawn, one confirmation, end of turn — seconds.
      49060 untouchable; facts vocabulary (never claims).
    - `AGENT_COORDINATOR` = this session's tern id (completion/death pings
      land back here automatically).
-2. CONFIRM in ≤3 lines: agent id + `convoy watch <id>`. END YOUR TURN —
+2. CONFIRM in ≤3 lines: agent id + `tern watch <id>`. END YOUR TURN —
    never wait for the fork.
 
 Only exception: a one-line factual question answerable from THIS session's

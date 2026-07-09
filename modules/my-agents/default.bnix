@@ -1,0 +1,21 @@
+#lang beagle/nix
+
+(ns default)
+
+;; My-agents — the cockpit command over the agentic stack (fram fact engine ·
+;; tern coordination · gaffer staffing · beagle/firn authoring). One entry
+;; point: dashboard, help router, spawn/watch/steer, profile rungs.
+;; Thin PATH wrapper exec'ing the tree bin ON PURPOSE: my-agents is glue over
+;; tree-local tools (tern/fram bins, gaffer docs) and must track them live —
+;; a hermetic package would pin yesterday's stack. Requires ~/code/my-agents.
+(nix/module [config lib pkgs ...]
+  {:tags [cli-tools]
+   :options.myConfig.modules.my-agents.enable
+    (lib.mkEnableOption "My-agents — cockpit command for the agentic stack")
+   :config
+    (lib.mkIf config.myConfig.modules.my-agents.enable
+      {:environment.systemPackages
+        [(pkgs.writeShellScriptBin "my-agents"
+           (ms "exec /home/tom/code/convoy/bin/my-agents \"$@\""))
+         (pkgs.writeShellScriptBin "myag"
+           (ms "exec /home/tom/code/convoy/bin/my-agents \"$@\""))]})})

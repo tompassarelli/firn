@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse agent-spawn-guard — enforcement half of the /my-config dispatch setting.
+# PreToolUse agent-spawn-guard — enforcement half of the /my-agent-config dispatch setting.
 # ============================================================================
 # Successor of agent-redirect.sh (removed in the P6 hook cleanup, ae3b31e).
 # Reinstated 2026-07-03: without a mechanical intercept, native catch-all
@@ -11,7 +11,7 @@
 #   dispatch=warn   -> allow, inject a nudge (additionalContext)
 #   dispatch=native -> allow silently
 #
-# State:       ~/.claude/my-config.state  (flip via `my-config dispatch <mode>`)
+# State:       ~/.claude/my-config.state  (flip via `my-agent-config dispatch <mode>`)
 # Kill-switch: CLAUDE_NO_AUTHORING_HOOKS=1 (same as the other authoring guards)
 # ============================================================================
 set -uo pipefail
@@ -78,7 +78,7 @@ if role_key in ROLE_MAP:
         "already resolved for gaffer:" + role_key + " — just paste your prompt in:\n"
         "  " + tern_call(ROLE_MAP[role_key]) + "\n"
         "Fan-out? fire one mcp__tern__spawn per lane in the same turn. "
-        "Observe: web :8088. Deliberate bypass: my-config dispatch warn|native."
+        "Observe: web :8088. Deliberate bypass: my-agent-config dispatch warn|native."
     )
 else:
     where = subagent or tool
@@ -91,20 +91,20 @@ else:
         "  3. Fan-out: N x mcp__tern__spawn in parallel; message workers via "
         "bb ~/code/tern/cli/msg-cli.clj 7977 send; observe via web :8088.\n"
         "  Caveman + model tier ride the SDK path (AGENT_CAVEMAN / AGENT_MODEL).\n"
-        "Bypass deliberately: my-config dispatch warn|native (or /my-config)."
+        "Bypass deliberately: my-agent-config dispatch warn|native (or /my-config)."
     )
 
 if mode == "warn":
     out = {"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "allow",
-        "additionalContext": "/my-config dispatch = warn. " + recipe,
+        "additionalContext": "/my-agent-config dispatch = warn. " + recipe,
     }}
 else:
     out = {"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
-        "permissionDecisionReason": "DENIED by /my-config dispatch setting (tern). " + recipe,
+        "permissionDecisionReason": "DENIED by /my-agent-config dispatch setting (tern). " + recipe,
     }}
 
 print(json.dumps(out))
