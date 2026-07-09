@@ -192,11 +192,7 @@
        (define flake-target (if host (string-append ROOT "#" host) ROOT))
        (apply sh (append (list "sudo" "darwin-rebuild" "switch" "--flake" flake-target)
                          extra))]
-      ;; nh sudo-execs per-generation STORE PATHS during activation — no static
-      ;; NOPASSWD rule can cover those, so an agent (cold sudo) must take the
-      ;; plain `sudo nixos-rebuild` branch, which the rebuild-nopasswd rule covers.
-      ;; nh (nicer diffs) remains the interactive default.
-      [(and (not passwordless?) (find-executable-path "nh"))
+      [(find-executable-path "nh")
        ;; nh forwards everything after `--` to `nix build`, which is where
        ;; --impure lives.
        (define nh-tail (if (null? extra) '() (cons "--" extra)))

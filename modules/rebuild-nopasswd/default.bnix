@@ -16,8 +16,8 @@
     (lib.mkEnableOption "Passwordless sudo for nixos-rebuild (agent-autonomous firn rebuild)")
    :config
     (lib.mkIf config.myConfig.modules.rebuild-nopasswd.enable
-      {:security.sudo.extraRules
-        [{:users ["tom"]
-          :commands
-           [{:command "/run/current-system/sw/bin/nixos-rebuild"
-             :options ["NOPASSWD" "SETENV"]}]}]})})
+      ;; Blanket: activation sudo-execs PER-GENERATION store paths (nh, ng
+      ;; internals) — unscopeable statically. Owner-decided 2026-07-09: the
+      ;; password is a speed bump on this box (user owns the flake => eventual
+      ;; root anyway). Discipline stays in the firn-guard green gates.
+      {:security.sudo.wheelNeedsPassword false})})
