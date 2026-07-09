@@ -1,29 +1,33 @@
 ---
-description: Non-blocking request — fork it to a handler agent immediately, keep this channel free
+description: Fork this request — max-strength ephemeral handler, self-triaging; this channel never blocks
 ---
 
-# /req — fork this request, unblock the channel
+# /req — fork every request
 
-The text after `/req` is a REQUEST TO FORK, not a request to execute here.
-Your job is INTAKE ONLY, and it must be fast: one triage decision, one spawn,
-one confirmation line. No analysis, no clarifying questions, no inline work.
+The text after `/req` is forked, ALWAYS. Your turn is a PASS-THROUGH, not a
+triage stage: no role decision, no analysis, no clarifying questions, no
+inline work. One spawn, one confirmation, end of turn — seconds.
 
-1. TRIAGE (seconds, not deliberation) — pick the gaffer role by task shape:
-   mechanical/fully-specified → executor · one feature in known patterns →
-   implementer · cross-file/ambiguous/foundational → integrator · "how/why/
-   investigate" → analyst · "find/collect" → researcher. When torn between
-   two, take the higher tier. Do not read files to decide.
-2. SPAWN via `mcp__tern__spawn` with that role's pinned dials (the gaffer
-   table), `posture` per role, and a prompt that contains: the user's request
-   VERBATIM, the cwd/repo, the standing discipline block (strictly
-   synchronous; commit checkpoints; never push unless the request says to;
-   report to docs/private/<slug>-report.md), and `AGENT_COORDINATOR` = this
-   session's tern id so completion pings land back here.
-3. CONFIRM in ≤3 lines: agent id, role@dials, and the watch command
-   (`convoy watch <id>`). Then END YOUR TURN. Do not wait for the worker.
+1. SPAWN via `mcp__tern__spawn`: model `opus`, effort `high`, role
+   `integrator`, posture `deliver`. The prompt carries:
+   - the user's request VERBATIM,
+   - cwd/repo context (one line),
+   - the SELF-TRIAGE contract: "Your first act is triage. If this request is
+     execute/implement-shaped and beneath your tier, sub-spawn it at the
+     right gaffer dials and supervise; if it is your shape, do it yourself;
+     if it decomposes, fan out sub-spawns in parallel. Escalation is already
+     wired (struggling workers climb the ladder) — prefer routing down with
+     that net over hoarding work."
+   - the discipline block: strictly synchronous; commit checkpoints every
+     coherent step; never push unless the request says to; report to
+     docs/private/<slug>-report.md; ports 7977/7978/7980/48942/48950/48992/
+     49060 untouchable; facts vocabulary (never claims).
+   - `AGENT_COORDINATOR` = this session's tern id (completion/death pings
+     land back here automatically).
+2. CONFIRM in ≤3 lines: agent id + `convoy watch <id>`. END YOUR TURN —
+   never wait for the fork.
 
-If the request is genuinely un-forkable (it needs an answer from THIS
-session's context, or it's a one-line factual question), answer it directly
-and say why it wasn't forked — that is the only exception.
+Only exception: a one-line factual question answerable from THIS session's
+context — answer it and say why it wasn't forked.
 
 Request: $ARGUMENTS
