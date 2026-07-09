@@ -16,6 +16,4 @@
     (lib.mkIf config.myConfig.modules.my-agents.enable
       {:environment.systemPackages
         [(pkgs.writeShellScriptBin "my-agents"
-           (ms "exec /home/tom/code/convoy/bin/my-agents \"$@\""))
-         (pkgs.writeShellScriptBin "myag"
            (ms "exec /home/tom/code/convoy/bin/my-agents \"$@\""))]})})

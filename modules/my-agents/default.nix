@@ -7,9 +7,6 @@
       (pkgs.writeShellScriptBin "my-agents" ''
         exec /home/tom/code/convoy/bin/my-agents "$@"
       '')
-      (pkgs.writeShellScriptBin "myag" ''
-        exec /home/tom/code/convoy/bin/my-agents "$@"
-      '')
     ];
   };
 }
