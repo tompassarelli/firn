@@ -2,29 +2,39 @@
 
 (ns default)
 
-;; Tern web bridge (:8088) — projects the agent coordinator (:7978) into
-;; a live web UI: roster, roles, focus, per-agent think-stream + $ cost.
-;; Babashka (bb bridge/bridge.clj) — thin SSE/HTTP projection where bb's
-;; fast start is fine. Ordered after agent-coord.
+;; Tern web (:8088) — the Elixir/Phoenix cockpit over the canonical tern
+;; coordinator (:7977): board, roster, per-agent live stream + /steer.
+;; Runs the dev-mode server (mix phx.server) under the repo's OWN flake env
+;; via `direnv exec` so the elixir/OTP that compiled web/_build is the one
+;; that runs it (nixpkgs elixir may drift from the flake pin). Supervised
+;; because the unsupervised process crashed 2026-06-28 and sat dead for 11
+;; days unnoticed. mix-release upgrade tracked in tern thread 019f4528.
 
 (nix/module [config lib pkgs ...]
   (let [username config.myConfig.modules.users.username
         homeDir  config.myConfig.modules.users.homeDir
         codeDir  config.myConfig.modules.users.codeDir]
     {:options.myConfig.modules.tern-web.enable
-      (lib.mkEnableOption "Tern web bridge (:8088) — live web cockpit for tern agents")
+      (lib.mkEnableOption "Tern web (:8088) — Phoenix cockpit for tern agents")
      :config
       (lib.mkIf config.myConfig.modules.tern-web.enable
         {:systemd.services.tern-web
-          {:description           "Tern web bridge (:8088) — projects the agent coordinator"
+          {:description           "Tern web (:8088) — Phoenix cockpit over the tern coordinator"
            :wantedBy              ["multi-user.target"]
-           :after                 ["network.target" "agent-coord.service"]
+           :after                 ["network.target" "tern-coord.service"]
+           :path                  (nix/with pkgs [bash coreutils git nix direnv])
            :startLimitIntervalSec 0
-           :environment           {:HOME homeDir}
+           :environment           {:HOME homeDir
+                                   :PORT "8088"
+                                   :LANG "en_US.UTF-8"}
            :serviceConfig
             {:Type             "simple"
              :User             username
              :WorkingDirectory (s codeDir "/tern/web")
-             :ExecStart        (s pkgs.babashka "/bin/bb bridge/bridge.clj 8088")
+             ;; direnv exec <repo> — flake env of ~/code/tern; cwd stays web/.
+             :ExecStart
+              (s pkgs.direnv "/bin/direnv exec " codeDir "/tern "
+                 pkgs.bash "/bin/bash -c 'exec mix phx.server'")
              :Restart          "always"
-             :RestartSec       2}}})}))
+             ;; flake eval on restart is not free — don't thrash.
+             :RestartSec       5}}})}))

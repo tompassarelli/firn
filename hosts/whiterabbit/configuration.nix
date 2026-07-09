@@ -51,10 +51,9 @@
   myConfig.modules.windows-vm.enable = false;
   myConfig.modules.nh.enable = true;
   myConfig.modules.babashka.enable = true;
-  myConfig.modules.agent-coord.enable = false;
   myConfig.modules.tern-coord.enable = true;
   myConfig.modules.tern-stream-sync.enable = true;
-  myConfig.modules.tern-web.enable = false;
+  myConfig.modules.tern-web.enable = true;
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
   sops.secrets."wireguard-laptop".sopsFile = ../../secrets/wireguard.yaml;
   networking.wireguard.interfaces.wg0 = {

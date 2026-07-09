@@ -34,14 +34,14 @@ what could not be verified from source.
 | **role** | a `(model, effort)` pin plus a prompt block; gaffer names it, tern delivers it |
 | **the reactor** | a long-lived sidecar (`tern reactor`) that re-projects touched threads off the commit firehose; the intended home of specced auto-reaping |
 
-**The four ports** (from `convoy` daemon-health + `harness.ts`):
+**The two ports** (simplified 2026-07-09 — `:7978`/`:7980` retired, modules deleted;
+`:7978` was the stranded split-brain source of §3 F7, `:7980`'s dark-room log held
+only a bootstrap tx):
 
 | port | role |
 |------|------|
-| `:7977` | **tern coordinator** — the canonical fact log. Roster, concerns, board, mail, presence ALL read here. |
-| `:7978` | agent daemon — **stranded**; presence/roster/board never read it (see §3 write-fork) |
-| `:7980` | attention / served |
-| `:8088` | tern web — the stakeholder view |
+| `:7977` | **tern coordinator** — the canonical fact log. Roster, concerns, board, mail, presence ALL read AND write here. |
+| `:8088` | tern web — Phoenix cockpit (systemd-supervised: `tern-web.service`) |
 
 ---
 
