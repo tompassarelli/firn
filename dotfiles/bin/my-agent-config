@@ -39,7 +39,7 @@ status() {
   files=$(grep -vE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null | sed "s|^$HOME|~|; s/^/       /")
   cat <<EOF
 ╭──────────────────────────────────────────────────────────────────╮
-│  MY-CONFIG — every setting, one report           $(date +%Y-%m-%d)       │
+│  MY-AGENT-CONFIG — every setting, one report           $(date +%Y-%m-%d)       │
 ╰──────────────────────────────────────────────────────────────────╯
 
  1  CAVEMAN    output compression
@@ -75,7 +75,7 @@ ${files:-       (none)}
     flip all off → CLAUDE_NO_AUTHORING_HOOKS=1 (env, per-session)
 
  elsewhere: system/nix settings → firn tag status · session effort → /effort
- state: ~/.claude/my-config.state · descriptions + advice: my-config help
+ state: ~/.claude/my-config.state · descriptions + advice: my-agent-config help
 EOF
 }
 
