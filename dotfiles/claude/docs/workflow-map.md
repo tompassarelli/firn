@@ -165,7 +165,7 @@ sequenceDiagram
     Note over T: REAPING — lease lapses at TTL
 ```
 
-Notes: `/req` is a **strict pass-through** — the human's turn does no triage,
+Notes: `/request` is a **strict pass-through** — the human's turn does no triage,
 no work; one spawn, one confirmation, end of turn. The *lane* self-triages
 (routes down / fans out) as its first act. The coordinator hears back exactly
 twice: `AGENT COMPLETE` on clean finish (`spawn.ts:147`) or `AGENT DEATH` on a
@@ -197,7 +197,7 @@ sequenceDiagram
 ```
 
 Notes: same contract, same dials, same completion/death/reaping as B. The
-difference is **intake surface only** (shell vs `/req` slash command). The lane
+difference is **intake surface only** (shell vs `/request` slash command). The lane
 runs detached with its transcript at `~/.local/state/tern/agents/<id>.log`
 (watched by `tern watch <id>`).
 
@@ -521,6 +521,6 @@ below are its rule set.
 | listener | `~/code/tern/cli/tern-listen.clj` | dormant-until-pinged pub/sub; role-addressing |
 | cockpit | `~/code/convoy/bin/my-agents` + `DESIGN.md` | dashboard/doctor/profile; parse-don't-fork gaffer; ownership rule |
 | staffing | `~/code/gaffer/doctrine.md` + `docs/adapters/tern.md` | shapes→squad, laws, canonical dial table |
-| fork intake | `~/code/nixos-config/dotfiles/claude/commands/request.md` | `/req` pass-through contract |
+| fork intake | `~/code/nixos-config/dotfiles/claude/commands/request.md` | `/request` pass-through contract |
 | coordination-v2 | thread `019f4418-bed5-7625-b2ad-41abb6518269` | census, failure receipts, the specced reaping fix plan |
 ```
