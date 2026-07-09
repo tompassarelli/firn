@@ -14,11 +14,18 @@
 #
 # "Any running clock" satisfies the gate for v1 — the failure mode was NO clock at
 # all. Tightening to "clock on a thread owned by THIS client" is a later refinement.
-# Kill-switch: CLAUDE_NO_AUTHORING_HOOKS=1 (same as the other authoring guards).
+# Kill-switch: persistent `my-agent-config guards off` (state) OR env
+# CLAUDE_NO_AUTHORING_HOOKS (any value but 0/false; 0/false forces guards live).
+# Shared impl: lib/authoring-killswitch.sh.
 # ============================================================================
 set -uo pipefail
 
-[ -n "${CLAUDE_NO_AUTHORING_HOOKS:-}" ] && exit 0
+# Kill-switch: shared semantics in lib/authoring-killswitch.sh — persistent
+# `my-agent-config guards off` (state, live) or env CLAUDE_NO_AUTHORING_HOOKS
+# (any value but 0/false kills this session; 0/false forces guards live).
+# shellcheck disable=SC1090,SC1091
+. "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
+type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 IN="$(cat 2>/dev/null || true)"
 
@@ -65,7 +72,7 @@ fi
 
 REASON="Billable client edit blocked — no tern clock running. Client work is never done untracked (this gate exists because ~22h of MSA work once shipped with zero logged time and had to be reconstructed for an invoice). Start a clock, then retry the edit:
   ${HINT}
-Deliberate bypass: set CLAUDE_NO_AUTHORING_HOOKS=1 in the environment."
+Deliberate bypass: my-agent-config guards off (persistent, live) — or a session launched with CLAUDE_NO_AUTHORING_HOOKS=1."
 
 printf '%s' "$REASON" | python3 -c 'import sys,json
 r=sys.stdin.read()

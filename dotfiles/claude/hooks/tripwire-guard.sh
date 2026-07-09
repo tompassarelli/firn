@@ -43,11 +43,18 @@
 #     (ISO ts <TAB> cwd <TAB> reason <TAB> command head) so tern-mine can audit.
 #
 # Test matrix: sibling tripwire-guard.test.sh — run it after EVERY edit here.
-# Kill-switch: CLAUDE_NO_AUTHORING_HOOKS=1 in the hook env (house parity).
+# Kill-switch: persistent `my-agent-config guards off` (state) OR env
+# CLAUDE_NO_AUTHORING_HOOKS (any value but 0/false; 0/false forces guards live).
+# Shared impl: lib/authoring-killswitch.sh. House parity.
 # =============================================================================
 set -uo pipefail
 
-[ -n "${CLAUDE_NO_AUTHORING_HOOKS:-}" ] && exit 0
+# Kill-switch: shared semantics in lib/authoring-killswitch.sh — persistent
+# `my-agent-config guards off` (state, live) or env CLAUDE_NO_AUTHORING_HOOKS
+# (any value but 0/false kills this session; 0/false forces guards live).
+# shellcheck disable=SC1090,SC1091
+. "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
+type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 payload="$(cat 2>/dev/null || true)"
 [ -n "$payload" ] || exit 0

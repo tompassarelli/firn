@@ -14,11 +14,18 @@
 #      nh switch / darwin-rebuild switch / firn update). Per nixos-config
 #      CLAUDE.md the switch is the USER's to run — agents prepare + verify only.
 #
-# Kill-switch: CLAUDE_NO_AUTHORING_HOOKS=1 disables this (same as the other guards).
+# Kill-switch: persistent `my-agent-config guards off` (state) OR env
+# CLAUDE_NO_AUTHORING_HOOKS (any value but 0/false; 0/false forces guards live).
+# Shared impl: lib/authoring-killswitch.sh.
 # ============================================================================
 set -uo pipefail
 
-[ -n "${CLAUDE_NO_AUTHORING_HOOKS:-}" ] && exit 0
+# Kill-switch: shared semantics in lib/authoring-killswitch.sh — persistent
+# `my-agent-config guards off` (state, live) or env CLAUDE_NO_AUTHORING_HOOKS
+# (any value but 0/false kills this session; 0/false forces guards live).
+# shellcheck disable=SC1090,SC1091
+. "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
+type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 read -r -d '' PY <<'PYEOF' || true
 import sys, json, os, re
@@ -105,8 +112,10 @@ if tool == "Bash":
             "BLOCKED: that command switches the system OUTSIDE the sanctioned wrapper. "
             "Agents may run `firn rebuild` (build+validate green, own changes committed, "
             "no dirty .bnix/.nix/flake.lock) — raw nixos-rebuild/darwin-rebuild/nh and "
-            "`firn update` stay the USER's. Rare explicit override: prefix with "
-            "CLAUDE_NO_AUTHORING_HOOKS=1."
+            "`firn update` stay the USER's. Rare explicit override: `my-agent-config "
+            "guards off` (persistent, live). A CLAUDE_NO_AUTHORING_HOOKS=1 PREFIX on this "
+            "command does NOT work — the guard reads its own env before the command runs; "
+            "only a session LAUNCHED with CLAUDE_NO_AUTHORING_HOOKS=1 bypasses it."
         )
         print(json.dumps({
             "hookSpecificOutput": {

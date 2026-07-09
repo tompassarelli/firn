@@ -31,10 +31,22 @@ rotting silently). This is the anti-rot gate; keep it green.
 
 ## Hooks kill-switch
 
-**Behavior-injecting hooks have an opt-out kill-switch:**
-`CLAUDE_NO_AUTHORING_HOOKS=1` makes all five authoring guards no-op (beagle
-SessionStart handshake, claim-canonical guard, firn guard, racket-build guard,
-agent-spawn-guard) — used to pin a neutral, confound-free session. Unset = normal.
+**Behavior-injecting hooks share one kill-switch** — semantics live in
+`dotfiles/claude/hooks/lib/authoring-killswitch.sh`, sourced by every guard
+AND by `my-agent-config`, so report and enforcement cannot disagree:
+
+- **Persistent, live flip (all sessions):** `my-agent-config guards off` /
+  `guards on` — writes `guards=on|off` to `~/.claude/my-config.state`; hooks
+  re-read it on every call, so it takes effect immediately, no relaunch.
+- **Per-session override at launch:** `CLAUDE_NO_AUTHORING_HOOKS=1 claude` —
+  any value except `0`/`false`/empty engages the kill-switch for that session;
+  `0`/`false` forces guards LIVE (beats the state file). The var must be in
+  Claude Code's own environment, i.e. set when launching — exporting inside a
+  running session does nothing.
+
+Killed = every authoring guard no-ops (beagle SessionStart handshake,
+code-upstream guard, firn guard, racket-build guard, agent-spawn-guard,
+tripwire, tern-clock guard) — used to pin a neutral, confound-free session.
 
 ## Adding new wiring
 

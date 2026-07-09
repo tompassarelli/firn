@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# my-config — every personal-stack setting, one entry point.
+# my-agent-config — every personal-stack setting, one entry point.
 #
 #   caveman  : output compression     session level + worker default
 #   dispatch : who runs agents        tern SDK  vs  native Agent/Workflow
-#   beagle   : code representation    text      vs  fact-native (per-file)
 #   coord    : coordination protocol  tern / linear / both
+#   beagle   : code representation    text      vs  fact-native (per-file)
 #   guards   : authoring-guard hooks  + the kill-switch
 #
-# State: ~/.claude/my-config.state (dispatch/coord) · ~/.claude/.caveman-active
+# State: ~/.claude/my-config.state (dispatch/coord/guards) · ~/.claude/.caveman-active
 #        (caveman, owned by the caveman plugin) · registry (beagle).
 # Settings owned by other CLIs are pointed at, not duplicated (see footer).
 set -uo pipefail
@@ -32,10 +32,33 @@ adopted_n()   { grep -cvE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null || echo 0
 caveman_lvl() { local l; l=$(cat "$CAVEMAN_STATE" 2>/dev/null); printf '%s' "${l:-off}"; }
 caveman_default() { local v; v=$(grep -o '"defaultMode"[[:space:]]*:[[:space:]]*"[^"]*"' "$CAVEMAN_DEFAULT" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/'); printf '%s' "${v:-full}"; }
 
+# Derive effective kill-switch state + source, using the shared lib.
+# Precedence matches authoring-killswitch.sh exactly:
+#   env set (not 0/false/empty) → engaged via env
+#   env = 0|false              → force-live via env (beats state)
+#   unset/empty → state file   → engaged via state OR live
+effective_ks() {
+  . "$HOME/.claude/hooks/lib/authoring-killswitch.sh" 2>/dev/null || true
+  if ! type authoring_guards_off >/dev/null 2>&1; then
+    printf 'unknown (lib missing) — assuming guards live'
+    return
+  fi
+  case "${CLAUDE_NO_AUTHORING_HOOKS:-}" in
+    0|false) printf 'env force-live — guards LIVE (state ignored this session)' ;;
+    ?*)      printf 'ENGAGED via env (this session) — ALL GUARDS OFF' ;;
+    *)
+      if authoring_guards_off; then
+        printf 'ENGAGED via state — ALL GUARDS OFF (my-agent-config guards on restores)'
+      else
+        printf 'off — guards LIVE'
+      fi ;;
+  esac
+}
+
 status() {
   local d c cv cd files ks
   d=$(get dispatch tern); c=$(get coord tern); cv=$(caveman_lvl); cd=$(caveman_default)
-  ks="${CLAUDE_NO_AUTHORING_HOOKS:+ENGAGED — ALL GUARDS OFF}"
+  ks=$(effective_ks)
   files=$(grep -vE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null | sed "s|^$HOME|~|; s/^/       /")
   cat <<EOF
 ╭──────────────────────────────────────────────────────────────────╮
@@ -45,8 +68,8 @@ status() {
  1  CAVEMAN    output compression
     session: $cv (lite|full|ultra + wenyan-*)      workers: AGENT_CAVEMAN=${AGENT_CAVEMAN:-full (SDK default)}
     default: $cd (persists — new sessions start here)
-    flip session → my-config caveman lite|full|ultra (or /caveman)
-    flip default → my-config caveman default off|lite|full|ultra
+    flip session → my-agent-config caveman lite|full|ultra (or /caveman)
+    flip default → my-agent-config caveman default off|lite|full|ultra
     flip workers → AGENT_CAVEMAN=off|lite|full on spawn
 
  2  DISPATCH   who runs agents                 [guard: $(wired agent-spawn-guard)]
@@ -54,25 +77,26 @@ status() {
                caveman (AGENT_CAVEMAN) + model tier (AGENT_MODEL) ride along
     $(mark "$d" warn) warn     native Agent/Workflow allowed, nudged toward tern
     $(mark "$d" native) native   raw Claude Code spawns, no interference
-    flip → my-config dispatch tern|warn|native
+    flip → my-agent-config dispatch tern|warn|native
 
- 3  BEAGLE     code as text vs facts          [guard: $(wired code-upstream-guard)]
-    fact-native adopted (text edits denied → fram graph tools): $(adopted_n) file(s)
-${files:-       (none)}
-    default-flip: PARKED — pending M1.5-vs-M2 bake-off verdict
-    flip → my-config beagle adopt|unadopt <absolute-path> · my-config beagle list
-
- 4  COORD      coordination protocol           [tern: $(tern_daemon) · linear MCP: $(linear_mcp)]
+ 3  COORD      coordination protocol           [tern: $(tern_daemon) · linear MCP: $(linear_mcp)]
     $(mark "$c" tern) tern     facts on :7977 + concerns + msg-cli chat
     $(mark "$c" linear) linear   Linear as the work queue (MCP)
     $(mark "$c" both) both     Linear as consolidation layer over tern
     note: declarative — agents read this posture; no hard enforcement yet
-    flip → my-config coord tern|linear|both
+    flip → my-agent-config coord tern|linear|both
 
- 5  GUARDS     authoring-guard hooks           kill-switch: ${ks:-off (guards live)}
+ 4  BEAGLE     code as text vs facts          [guard: $(wired code-upstream-guard)]
+    fact-native adopted (text edits denied → fram graph tools): $(adopted_n) file(s)
+${files:-       (none)}
+    default-flip: PARKED — pending M1.5-vs-M2 bake-off verdict
+    flip → my-agent-config beagle adopt|unadopt <absolute-path> · my-agent-config beagle list
+
+ 5  GUARDS     authoring-guard hooks           kill-switch: $ks
     $(wired agent-spawn-guard) agent-spawn-guard   $(wired code-upstream-guard) upstream:graph   $(wired firn-guard) firn
     $(wired tripwire-guard) tripwire            $(wired racket-build-guard) racket-build      $(wired beagle-session-start) beagle-session
-    flip all off → CLAUDE_NO_AUTHORING_HOOKS=1 (env, per-session)
+    flip all → my-agent-config guards on|off   (persistent, live in all sessions)
+    session override at launch → CLAUDE_NO_AUTHORING_HOOKS=1 claude   (≠0/false kills; 0/false forces live)
 
  elsewhere: system/nix settings → firn tag status · session effort → /effort
  state: ~/.claude/my-config.state · descriptions + advice: my-agent-config help
@@ -81,7 +105,7 @@ EOF
 
 help() {
   cat <<'EOF'
-my-config — every personal-stack posture setting, one entry point.
+my-agent-config — every personal-stack posture setting, one entry point.
 
  1 CAVEMAN — output compression (token economy).
    Session level lives in ~/.claude/.caveman-active (caveman plugin);
@@ -93,9 +117,9 @@ my-config — every personal-stack posture setting, one entry point.
        > ~/.config/caveman/config.json ("defaultMode" field) > "full"
    ~/.config/caveman/config.json is a home-manager out-of-store symlink
    into ~/code/nixos-config/dotfiles/caveman/config.json — edit via
-   `my-config caveman default <mode>`, then commit in nixos-config.
+   `my-agent-config caveman default <mode>`, then commit in nixos-config.
    One-time: `firn rebuild` wires the symlink if not already present.
-   flip default → my-config caveman default off|lite|full|ultra|wenyan-*
+   flip default → my-agent-config caveman default off|lite|full|ultra|wenyan-*
    Advice: full for coordination, lite for high-stakes design review,
    never ultra/wenyan for substantive work (lossy — PLAYBOOK 2026-06-22).
 
@@ -109,7 +133,13 @@ my-config — every personal-stack posture setting, one entry point.
    native  no interference. For A/B baselines against stock Claude Code.
    Advice: stay on tern. Drop to warn only when the daemon is down.
 
- 3 BEAGLE — how Beagle source is authored, per file.
+ 3 COORD — source of truth for work coordination.
+   tern / linear / both (Linear as consolidation layer over tern).
+   Declarative for now: agents read this posture; nothing mechanically
+   blocks the other system yet. Flipping the option does not build the sync.
+   Advice: tern.
+
+ 4 BEAGLE — how Beagle source is authored, per file.
    text          ordinary Edit/Write; the beagle-authoring repair loop.
    fact-native  file is a regenerable view of the fram fact graph; text
                  edits DENIED (code-upstream-guard); author via
@@ -120,17 +150,23 @@ my-config — every personal-stack posture setting, one entry point.
                  adoption automatically.
    Advice: don't flip the default until the M1.5-vs-M2 bake-off verdict.
 
- 4 COORD — source of truth for work coordination.
-   tern / linear / both (Linear as consolidation layer over tern).
-   Declarative for now: agents read this posture; nothing mechanically
-   blocks the other system yet. Flipping the option does not build the sync.
-   Advice: tern.
-
  5 GUARDS — the PreToolUse/SessionStart authoring guards.
-   Individually wired in ~/code/nixos-config/dotfiles/claude/settings.json;
-   collectively killed by CLAUDE_NO_AUTHORING_HOOKS=1 for a neutral,
-   confound-free session. Un-wiring is a nixos-config change; the env
-   kill-switch is the session-scoped off.
+   Individually wired in ~/code/nixos-config/dotfiles/claude/settings.json.
+   Kill-switch is VALUE-AWARE and has two surfaces:
+
+   Persistent state flip (primary — live across ALL sessions immediately,
+   no relaunch; hooks source the lib and re-read state on every call):
+     my-agent-config guards off   → writes guards=off to ~/.claude/my-config.state
+     my-agent-config guards on    → removes that line (or writes guards=on)
+
+   Launch-time env override (single pinned session, beats state):
+     CLAUDE_NO_AUTHORING_HOOKS=1 claude     all guards OFF this session
+     CLAUDE_NO_AUTHORING_HOOKS=0 claude     force-live (state ignored)
+   Any non-empty value other than 0/false kills guards; 0 or false forces
+   them live — this fixes the old "presence = killed" trap where =0 also
+   killed guards. Env beats state. Semantics live in the shared lib
+   sourced by every guard hook AND by this script:
+     ~/.claude/hooks/lib/authoring-killswitch.sh
 
  Elsewhere (owned by other CLIs, not duplicated here):
    system/nix composition → firn tag status · firn enable <tag>
@@ -153,48 +189,54 @@ case "${1:-status}" in
             fi
             echo "  note: change lives in nixos-config — commit it there" ;;
           "")
-            echo "caveman default = $(caveman_default)   (my-config caveman default <mode>)" ;;
-          *) echo "usage: my-config caveman default [off|lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra]" >&2; exit 1 ;;
+            echo "caveman default = $(caveman_default)   (my-agent-config caveman default <mode>)" ;;
+          *) echo "usage: my-agent-config caveman default [off|lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra]" >&2; exit 1 ;;
         esac ;;
       lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra)
         printf '%s' "$2" > "$CAVEMAN_STATE"; echo "caveman session level → $2 (plugin reads ~/.claude/.caveman-active)" ;;
-      "") echo "caveman = $(caveman_lvl)   default = $(caveman_default)   (my-config caveman lite|full|ultra|default <mode>; off → say 'stop caveman' / use /caveman)" ;;
+      "") echo "caveman = $(caveman_lvl)   default = $(caveman_default)   (my-agent-config caveman lite|full|ultra|default <mode>; off → say 'stop caveman' / use /caveman)" ;;
       off) echo "turn off via the plugin: say 'stop caveman' or /caveman — plugin owns the off-path" >&2; exit 1 ;;
-      *) echo "usage: my-config caveman [default <mode>|lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra]" >&2; exit 1 ;;
+      *) echo "usage: my-agent-config caveman [default <mode>|lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra]" >&2; exit 1 ;;
     esac ;;
   dispatch)
     case "${2:-}" in
       tern|warn|native) put dispatch "$2"; echo "dispatch → $2 $( [ "$2" = tern ] && echo '(native Agent/Workflow now DENIED → tern SDK)' || { [ "$2" = warn ] && echo '(native allowed, nudged)' || echo '(native allowed, silent)'; } )" ;;
-      "") echo "dispatch = $(get dispatch tern)   (my-config dispatch tern|warn|native)" ;;
-      *) echo "usage: my-config dispatch [tern|warn|native]" >&2; exit 1 ;;
+      "") echo "dispatch = $(get dispatch tern)   (my-agent-config dispatch tern|warn|native)" ;;
+      *) echo "usage: my-agent-config dispatch [tern|warn|native]" >&2; exit 1 ;;
     esac ;;
   coord)
     case "${2:-}" in
-      tern|linear|both) put coord "$2"; echo "coord → $2 (declarative; agents read it from the my-config report)" ;;
-      "") echo "coord = $(get coord tern)   (my-config coord tern|linear|both)" ;;
-      *) echo "usage: my-config coord [tern|linear|both]" >&2; exit 1 ;;
+      tern|linear|both) put coord "$2"; echo "coord → $2 (declarative; agents read it from the my-agent-config report)" ;;
+      "") echo "coord = $(get coord tern)   (my-agent-config coord tern|linear|both)" ;;
+      *) echo "usage: my-agent-config coord [tern|linear|both]" >&2; exit 1 ;;
     esac ;;
   beagle)
     case "${2:-list}" in
       list) echo "fact-native adopted files ($(adopted_n)):"; grep -vE '^[[:space:]]*(#|$)' "$REGISTRY" 2>/dev/null || echo "  (none)" ;;
       adopt)
-        [ -z "${3:-}" ] && { echo "usage: my-config beagle adopt </absolute/path>" >&2; exit 1; }
+        [ -z "${3:-}" ] && { echo "usage: my-agent-config beagle adopt </absolute/path>" >&2; exit 1; }
         [ -f "$3" ] || { echo "no such file: $3" >&2; exit 1; }
         mkdir -p "$(dirname "$REGISTRY")"; touch "$REGISTRY"
         grep -qxF "$3" "$REGISTRY" || echo "$3" >> "$REGISTRY"
         echo "adopted fact-native: $3 (text edits now denied; use mcp__fram__* graph tools)" ;;
       unadopt)
-        [ -z "${3:-}" ] && { echo "usage: my-config beagle unadopt </absolute/path>" >&2; exit 1; }
+        [ -z "${3:-}" ] && { echo "usage: my-agent-config beagle unadopt </absolute/path>" >&2; exit 1; }
         grep -vxF "$3" "$REGISTRY" > "$REGISTRY.tmp" 2>/dev/null || true
         mv "$REGISTRY.tmp" "$REGISTRY"
         echo "un-adopted (text mode again): $3" ;;
-      *) echo "usage: my-config beagle [list|adopt <path>|unadopt <path>]" >&2; exit 1 ;;
+      *) echo "usage: my-agent-config beagle [list|adopt <path>|unadopt <path>]" >&2; exit 1 ;;
     esac ;;
   guards)
-    echo "kill-switch CLAUDE_NO_AUTHORING_HOOKS: ${CLAUDE_NO_AUTHORING_HOOKS:-unset (guards live)}"
-    for g in agent-spawn-guard code-upstream-guard firn-guard tripwire-guard racket-build-guard beagle-session-start; do
-      printf '  %s %s\n' "$(wired "$g")" "$g"
-    done ;;
+    case "${2:-}" in
+      off) put guards off; echo "guards → OFF in all sessions (hooks re-read state per call, no relaunch needed); my-agent-config guards on restores" ;;
+      on)  put guards on;  echo "guards → LIVE in all sessions (takes effect immediately)" ;;
+      "")
+        echo "kill-switch: $(effective_ks)"
+        for g in agent-spawn-guard code-upstream-guard firn-guard tripwire-guard racket-build-guard beagle-session-start; do
+          printf '  %s %s\n' "$(wired "$g")" "$g"
+        done ;;
+      *) echo "usage: my-agent-config guards [on|off]" >&2; exit 1 ;;
+    esac ;;
   help|-h|--help) help ;;
-  *) echo "usage: my-config [status|caveman|dispatch|beagle|coord|guards|help]" >&2; exit 1 ;;
+  *) echo "usage: my-agent-config [status|caveman|dispatch|coord|beagle|guards [on|off]|help]" >&2; exit 1 ;;
 esac

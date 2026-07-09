@@ -27,7 +27,7 @@ and had to be reconstructed by hand for an invoice. Don't wait for the deny:
 and `tern clock start` it BEFORE the first edit.** One clock at a time; `clock
 stop` on context switch. Billing is derived, never invented: worklog =
 `tern-timelog`, invoice state machine = `tern-invoice` (uninvoiced → invoice-sent
-→ invoice-paid). Bypass only deliberately (`CLAUDE_NO_AUTHORING_HOOKS=1`).
+→ invoice-paid). Bypass only deliberately (`my-agent-config guards off`, or launch with `CLAUDE_NO_AUTHORING_HOOKS=1`).
 
 ## Pre-edit gate — MANDATORY at task intake
 

@@ -9,11 +9,15 @@
 # Outside a Beagle project it is a fast no-op (a few globs, no heavy work).
 set -uo pipefail
 
-# Clean-room / experiment kill-switch (opt-OUT; see graph-upstream-guard.sh).
-# When CLAUDE_NO_AUTHORING_HOOKS is set, this hook no-ops — no daemon revive, no
-# authoring context injected — so a controlled run keeps an identical neutral
-# session surface across all arms. Unset (the default) = normal behavior.
-[ -n "${CLAUDE_NO_AUTHORING_HOOKS:-}" ] && exit 0
+# Clean-room / experiment kill-switch (opt-OUT; see code-upstream-guard.sh).
+# When guards are OFF this hook no-ops — no daemon revive, no authoring context
+# injected — so a controlled run keeps an identical neutral session surface
+# across all arms. Engaged two ways: persistent `my-agent-config guards off`
+# (state, live), or env CLAUDE_NO_AUTHORING_HOOKS (any value but 0/false;
+# 0/false forces guards live). Neither engaged (the default) = normal behavior.
+# shellcheck disable=SC1090,SC1091
+. "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
+type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 # Project dir: Claude Code sets CLAUDE_PROJECT_DIR; fall back to cwd.
 dir="${CLAUDE_PROJECT_DIR:-$PWD}"

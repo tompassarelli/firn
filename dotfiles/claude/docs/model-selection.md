@@ -173,7 +173,7 @@ Tiered routing vs uniform-Opus: ~50–80% cheaper, no quality regression (tested
 
 ## Spawn surfaces
 
-- **tern SDK** (PRIMARY while /my-config dispatch=tern; native tools denied
+- **tern SDK** (PRIMARY while /my-agent-config dispatch=tern; native tools denied
   there): `mcp__tern__spawn {model: opus|sonnet|haiku, effort}` — pin both.
   `AGENT_MODEL` sets the dispatch default; `AGENT_CAVEMAN` / `AGENT_LAWS` /
   `AGENT_ESO` ride along.

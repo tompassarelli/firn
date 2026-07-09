@@ -23,7 +23,8 @@ run() {
   local json rc want out
   json="$(jq -n --arg c "$c" --arg d "$wd" \
     '{tool_name:"Bash", tool_input:{command:$c}, cwd:$d}')"
-  set -- env -u CLAUDE_NO_AUTHORING_HOOKS -u SAFE_PUSH_ACTIVE TRIPWIRE_LOG_DIR="$SCRATCH"
+  set -- env -u CLAUDE_NO_AUTHORING_HOOKS -u SAFE_PUSH_ACTIVE \
+    TRIPWIRE_LOG_DIR="$SCRATCH" AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state"
   [ -n "$extra" ] && set -- "$@" "$extra"
   out="$(printf '%s' "$json" | "$@" "$HOOK" 2>&1)"
   rc=$?
@@ -42,7 +43,8 @@ run() {
 raw() {
   local expect="$1" desc="$2" payload="$3" rc want
   printf '%s' "$payload" |
-    env -u CLAUDE_NO_AUTHORING_HOOKS -u SAFE_PUSH_ACTIVE TRIPWIRE_LOG_DIR="$SCRATCH" \
+    env -u CLAUDE_NO_AUTHORING_HOOKS -u SAFE_PUSH_ACTIVE \
+      TRIPWIRE_LOG_DIR="$SCRATCH" AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
       "$HOOK" >/dev/null 2>&1
   rc=$?
   case "$expect" in allow) want=0 ;; deny) want=2 ;; esac
@@ -159,6 +161,26 @@ else
   fail=$((fail + 1))
   echo 'FAIL  plumb  deny log missing or incomplete'
 fi
+
+echo "== kill-switch: shared value-aware semantics (lib/authoring-killswitch.sh) =="
+# Precedence: env 0/false = force-live (beats state); any other non-empty env =
+# off; else state `guards=off` = off, unset/empty = live. `rm -rf /home/tom` is an
+# outright-deny tripwire, so a running guard ALWAYS denies it — the only way to see
+# an allow here is the kill-switch engaging BEFORE the guard parses the command.
+# (The env=1 allow case lives in the plumbing block above.)
+# env 0/false force guards LIVE -> guard runs -> deny. The old presence-only check
+# (`[ -n "$VAR" ] && exit 0`) would have ALLOWED these — the bug this rewire fixes.
+run deny 'env CLAUDE_NO_AUTHORING_HOOKS=0 forces guards live (old bug allowed)' \
+  'rm -rf /home/tom' "$REPO_CWD" CLAUDE_NO_AUTHORING_HOOKS=0
+run deny 'env CLAUDE_NO_AUTHORING_HOOKS=false forces guards live' \
+  'rm -rf /home/tom' "$REPO_CWD" CLAUDE_NO_AUTHORING_HOOKS=false
+# Persistent state `guards=off` (env unset) -> guards OFF -> allow.
+printf 'guards=off\n' >"$SCRATCH/killswitch.state"
+run allow 'state guards=off (persistent kill) -> allow' 'rm -rf /home/tom'
+# State off BUT env=0 -> env force-live BEATS state -> deny.
+run deny 'env=0 force-live beats state guards=off' \
+  'rm -rf /home/tom' "$REPO_CWD" CLAUDE_NO_AUTHORING_HOOKS=0
+rm -f "$SCRATCH/killswitch.state" # restore neutral state for the benches below
 
 echo "== latency (fast path = prescreen miss; slow path = parse, allow) =="
 bench() {

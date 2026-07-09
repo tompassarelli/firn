@@ -4,8 +4,9 @@
 # STATUS: LIVE. Wired into settings.json (PreToolUse, Edit|Write|MultiEdit) and
 # ACTIVE as of 2026-06-20. Adopted graph-upstream modules are guarded right now:
 # fram/src/fram/schema.bclj is the first adopted module (in the registry below).
-# To run a clean-room/experiment session WITHOUT this guard, set
-# CLAUDE_NO_AUTHORING_HOOKS=1 (the kill-switch below) — do NOT un-wire it.
+# To run a clean-room/experiment session WITHOUT this guard, engage the
+# kill-switch below — persistent `my-agent-config guards off`, or launch with
+# CLAUDE_NO_AUTHORING_HOOKS set to any value but 0/false — do NOT un-wire it.
 # (History: this began as a proposed/un-wired artifact; it was armed in
 # nixos-config b1bd624 once schema.bclj was adopted.)
 #
@@ -44,11 +45,15 @@
 # ============================================================================
 set -uo pipefail
 
-# Clean-room / experiment kill-switch (opt-OUT). When CLAUDE_NO_AUTHORING_HOOKS is
-# set, this guard no-ops (exit 0 = allow the edit), letting a controlled run — e.g.
-# the concurrent-authoring experiment — pin a hook-free, confound-free session
-# surface WITHOUT editing settings.json. Unset (the default) = guard active.
-[ -n "${CLAUDE_NO_AUTHORING_HOOKS:-}" ] && exit 0
+# Clean-room / experiment kill-switch (opt-OUT). When guards are OFF this guard
+# no-ops (exit 0 = allow the edit), letting a controlled run — e.g. the
+# concurrent-authoring experiment — pin a hook-free, confound-free session
+# surface WITHOUT editing settings.json. Engaged two ways: persistent
+# `my-agent-config guards off` (state, live), or env CLAUDE_NO_AUTHORING_HOOKS
+# (any value but 0/false; 0/false forces guards live). Neither = guard active.
+# shellcheck disable=SC1090,SC1091
+. "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
+type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 REGISTRY="${GRAPH_UPSTREAM_REGISTRY:-$HOME/.config/fram/graph-upstream-files}"
 
