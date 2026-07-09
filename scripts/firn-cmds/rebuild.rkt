@@ -99,9 +99,14 @@
     ;; NOPASSWD-aware: when the scoped sudoers rule covers nixos-rebuild
     ;; (rebuild-nopasswd module), no credential cache is needed — skip the
     ;; interactive -v gate entirely so agent runs never cold-start on a prompt.
-    (set! passwordless?
-      (or (sh "sudo" "-n" "true")
-          (sh "sudo" "-n" "nixos-rebuild" "list-generations")))
+    (set! passwordless? (sh "sudo" "-n" "true" "2>/dev/null"))
+    ;; quiet probe: blanket NOPASSWD only; no stdout side effects (the old
+    ;; list-generations probe dumped 65 generations into the user's terminal).
+    (unless passwordless?
+      (set! passwordless?
+        (parameterize ([current-output-port (open-output-nowhere)]
+                       [current-error-port (open-output-nowhere)])
+          (sh "sudo" "-n" "true"))))
     (unless passwordless?
       (printf "── sudo: caching credentials upfront (no prompt during build)\n")
       (flush-output)
