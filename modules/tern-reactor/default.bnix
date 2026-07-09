@@ -1,0 +1,46 @@
+#lang beagle/nix
+
+(ns default)
+
+;; Tern reactor SWEEP timer — the liveness reaper that was RUNNING NEVER. Nothing
+;; ever started it, so stale `building` concerns and silently-dead lanes accumulated
+;; unswept (same failure class as tern-web's 11-day unsupervised death). A user-level
+;; timer (mirror tern-stream-sync) fires `tern-reactor.clj sweep-once` every ~5min:
+;; one-shot, exits each run — no port, no linger, no daemon to supervise.
+;;
+;; SCOPE = the sweep ONLY. The reactor's long-lived loop mode (-main) ALSO runs
+;; feed-triggered thread-md reprojection (subscribe the :7977 commit firehose ->
+;; debounce -> `tern heal`); it does NOT handle @cmd or any other verb. That
+;; reprojection is a SEPARATE concern from reaping and is deliberately NOT daemonized
+;; here — the sweep is idempotent and writes its verdicts through :7977
+;; (coord append!/put!), so a periodic one-shot fully covers the reap responsibility.
+;;
+;; PATH carries babashka so both the ExecStart `bb` and the reactor's own
+;; ping-coordinator shell-out (bare `bb msg-cli.clj` when a reaped lane names a
+;; coordinator) resolve. Runs as the user: the sweep is a :7977 client, needs no root.
+(nix/module [config lib pkgs ...]
+  (let [username config.myConfig.modules.users.username
+        codeDir  config.myConfig.modules.users.codeDir]
+    {:options.myConfig.modules.tern-reactor.enable
+      (lib.mkEnableOption "Tern reactor sweep timer — periodic liveness reap of stale concerns + silently-dead lanes")
+     :config
+      (lib.mkIf config.myConfig.modules.tern-reactor.enable
+        {:home-manager.users
+          {username
+            (nix/module [config ...]
+              {:systemd.user.services.tern-reactor-sweep
+                {:Unit
+                  {:Description "Tern reactor sweep — reap stale concerns + silently-dead lanes"}
+                 :Service
+                  {:Type             "oneshot"
+                   :Environment      [(s "PATH=" pkgs.babashka "/bin:" pkgs.coreutils "/bin")]
+                   :WorkingDirectory (s codeDir "/tern")
+                   :ExecStart        (s pkgs.babashka "/bin/bb " codeDir "/tern/cli/tern-reactor.clj sweep-once")}}
+               :systemd.user.timers.tern-reactor-sweep
+                {:Unit
+                  {:Description "Run the tern reactor liveness sweep periodically"}
+                 :Timer
+                  {:OnStartupSec    "3m"
+                   :OnUnitActiveSec "5m"
+                   :Persistent      true}
+                 :Install {:WantedBy ["timers.target"]}}})}})}))

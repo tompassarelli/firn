@@ -53,6 +53,7 @@
   myConfig.modules.babashka.enable = true;
   myConfig.modules.tern-coord.enable = true;
   myConfig.modules.tern-stream-sync.enable = true;
+  myConfig.modules.tern-reactor.enable = true;
   myConfig.modules.tern-web.enable = true;
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
   sops.secrets."wireguard-laptop".sopsFile = ../../secrets/wireguard.yaml;

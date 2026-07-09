@@ -59,6 +59,10 @@
    ;; user-level timer (~5min) for tern-stream-sync — zero-AI transcript
    ;; mirroring into ~/code/tern/streams/raw (streams/CLAUDE.md).
    :myConfig.modules.tern-stream-sync.enable true
+   ;; reactor liveness-sweep timer (~5min) — reaps stale concerns + silently-dead
+   ;; lanes. Was RUNNING NEVER (no unit started it); same never-again lesson as
+   ;; tern-web. Sweep only; loop-mode reprojection stays out of scope (see module).
+   :myConfig.modules.tern-reactor.enable true
    ;; Phoenix cockpit (:8088), supervised — crashed 2026-06-28 and sat dead
    ;; 11 days while unsupervised; never again.
    :myConfig.modules.tern-web.enable true
