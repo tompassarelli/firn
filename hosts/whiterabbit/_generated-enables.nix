@@ -67,6 +67,7 @@
   myConfig.modules.nerd-fonts.enable = lib.mkDefault true;
   myConfig.modules.niri.enable = lib.mkDefault true;
   myConfig.modules.nodejs.enable = lib.mkDefault true;
+  myConfig.modules.north.enable = lib.mkDefault true;
   myConfig.modules.obs-studio.enable = lib.mkDefault true;
   myConfig.modules.obsidian.enable = lib.mkDefault true;
   myConfig.modules.opencode.enable = lib.mkDefault true;
@@ -100,7 +101,6 @@
   myConfig.modules.stylix.chosenTheme = lib.mkDefault "tokyo-night-dark";
   myConfig.modules.swaylock.enable = lib.mkDefault true;
   myConfig.modules.tealdeer.enable = lib.mkDefault true;
-  myConfig.modules.tern.enable = lib.mkDefault true;
   myConfig.modules.theme-switcher.enable = lib.mkDefault true;
   myConfig.modules.tree.enable = lib.mkDefault true;
   myConfig.modules.unrar.enable = lib.mkDefault true;

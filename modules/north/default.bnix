@@ -1,0 +1,31 @@
+#lang beagle/nix
+
+(ns default)
+
+;; north CLI suite from the packaged flake. The default package's /bin holds
+;; `north` (was `tern`) and `north-mcp`, bb-wrapped with FRAM_HOME baked to the
+;; bundled fram-engine and bb on PATH — self-contained, no separate fram clone
+;; needed at consume time. Replaces the old writeShellScriptBin wrapper that
+;; exec'd ~/code/north/bin/tern (the dev-checkout reliance that broke the repair
+;; loop). NOTE: the pkgflake pulls fram via a flake=false path input
+;; (path:/home/tom/code/fram), so /home/tom/code/fram must exist at EVAL time on
+;; this machine. To make portable, repoint that input at a git URL pinned to
+;; FRAM_VERSION. Reads north main (package/flake merged) via git+file?ref=main.
+;;
+;; TODO(cutover): the flake-input NAME below is still `tern` and the URL still
+;; points at .../tern — renaming the input to `north` churns a flake.lock node,
+;; and the URL flip waits on the github repo rename. Both are coordinator cutover
+;; steps. The ~/code/north symlink makes the current URL resolve today.
+;; url → git+file:///home/tom/code/north?ref=main after gh rename.
+(nix/module [config lib pkgs inputs ...]
+  {:tags [cli-tools]
+   :flake-inputs
+    {:tern {:url "git+file:///home/tom/code/tern?ref=main"
+            :inputs.fram.follows "fram"}}
+   :options.myConfig.modules.north.enable
+    (lib.mkEnableOption "North (life app) CLI + MCP server on PATH")
+   :config
+    (lib.mkIf config.myConfig.modules.north.enable
+      {:environment.systemPackages
+        [(get (get inputs.tern.packages pkgs.stdenv.hostPlatform.system)
+           :default)]})})

@@ -6,10 +6,10 @@ let
   codeDir = config.myConfig.modules.users.codeDir;
 in
 {
-  options.myConfig.modules.tern-coord.enable = lib.mkEnableOption "Personal Tern coordinator daemon (:7977) — sole-writer fact-graph service for Tom's canonical log";
-  config = lib.mkIf config.myConfig.modules.tern-coord.enable {
-    systemd.services.tern-coord = {
-      description = "Tern coordinator — personal fact-graph daemon (:7977)";
+  options.myConfig.modules.north-coord.enable = lib.mkEnableOption "Personal North coordinator daemon (:7977) — sole-writer fact-graph service for Tom's canonical log";
+  config = lib.mkIf config.myConfig.modules.north-coord.enable {
+    systemd.services.north-coord = {
+      description = "North coordinator — personal fact-graph daemon (:7977)";
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];
       path = with pkgs; [ clojure jdk bash coreutils git ];
@@ -21,7 +21,7 @@ in
         Type = "simple";
         User = username;
         WorkingDirectory = "${codeDir}/fram";
-        ExecStart = "${codeDir}/fram/bin/fram-daemon 7977 ${homeDir}/.local/state/tern/facts.log";
+        ExecStart = "${codeDir}/fram/bin/fram-daemon 7977 ${homeDir}/.local/state/north/facts.log";
         Restart = "always";
         RestartSec = 2;
       };

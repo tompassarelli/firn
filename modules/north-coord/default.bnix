@@ -2,8 +2,8 @@
 
 (ns default)
 
-;; Tern coordinator (:7977) — sole-writer daemon serving Tom's canonical
-;; fact log (~/.local/state/tern/facts.log). Sibling of agent-coord (:7978)
+;; North coordinator (:7977) — sole-writer daemon serving Tom's canonical
+;; fact log (~/.local/state/north/facts.log). Sibling of agent-coord (:7978)
 ;; and attention-coord (:7980): same coordinator family, different stores. JVM
 ;; runtime — long-lived server wants JIT throughput + real threads. Systemd-managed
 ;; so :7977 survives logout + reboot (down = no capture, no work queue).
@@ -12,12 +12,12 @@
   (let [username config.myConfig.modules.users.username
         homeDir  config.myConfig.modules.users.homeDir
         codeDir  config.myConfig.modules.users.codeDir]
-    {:options.myConfig.modules.tern-coord.enable
-      (lib.mkEnableOption "Personal Tern coordinator daemon (:7977) — sole-writer fact-graph service for Tom's canonical log")
+    {:options.myConfig.modules.north-coord.enable
+      (lib.mkEnableOption "Personal North coordinator daemon (:7977) — sole-writer fact-graph service for Tom's canonical log")
      :config
-      (lib.mkIf config.myConfig.modules.tern-coord.enable
-        {:systemd.services.tern-coord
-          {:description           "Tern coordinator — personal fact-graph daemon (:7977)"
+      (lib.mkIf config.myConfig.modules.north-coord.enable
+        {:systemd.services.north-coord
+          {:description           "North coordinator — personal fact-graph daemon (:7977)"
            :wantedBy              ["multi-user.target"]
            :after                 ["network.target"]
            :path                  (nix/with pkgs [clojure jdk bash coreutils git])
@@ -28,6 +28,6 @@
              :User             username
              :WorkingDirectory (s codeDir "/fram")
              :ExecStart
-              (s codeDir "/fram/bin/fram-daemon 7977 " homeDir "/.local/state/tern/facts.log")
+              (s codeDir "/fram/bin/fram-daemon 7977 " homeDir "/.local/state/north/facts.log")
              :Restart          "always"
              :RestartSec       2}}})}))

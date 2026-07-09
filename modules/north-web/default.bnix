@@ -2,26 +2,26 @@
 
 (ns default)
 
-;; Tern web (:8088) — the Elixir/Phoenix cockpit over the canonical tern
+;; North web (:8088) — the Elixir/Phoenix cockpit over the canonical north
 ;; coordinator (:7977): board, roster, per-agent live stream + /steer.
 ;; Runs the dev-mode server (mix phx.server) under the repo's OWN flake env
 ;; via `direnv exec` so the elixir/OTP that compiled web/_build is the one
 ;; that runs it (nixpkgs elixir may drift from the flake pin). Supervised
 ;; because the unsupervised process crashed 2026-06-28 and sat dead for 11
-;; days unnoticed. mix-release upgrade tracked in tern thread 019f4528.
+;; days unnoticed. mix-release upgrade tracked in north thread 019f4528.
 
 (nix/module [config lib pkgs ...]
   (let [username config.myConfig.modules.users.username
         homeDir  config.myConfig.modules.users.homeDir
         codeDir  config.myConfig.modules.users.codeDir]
-    {:options.myConfig.modules.tern-web.enable
-      (lib.mkEnableOption "Tern web (:8088) — Phoenix cockpit for tern agents")
+    {:options.myConfig.modules.north-web.enable
+      (lib.mkEnableOption "North web (:8088) — Phoenix cockpit for north agents")
      :config
-      (lib.mkIf config.myConfig.modules.tern-web.enable
-        {:systemd.services.tern-web
-          {:description           "Tern web (:8088) — Phoenix cockpit over the tern coordinator"
+      (lib.mkIf config.myConfig.modules.north-web.enable
+        {:systemd.services.north-web
+          {:description           "North web (:8088) — Phoenix cockpit over the north coordinator"
            :wantedBy              ["multi-user.target"]
-           :after                 ["network.target" "tern-coord.service"]
+           :after                 ["network.target" "north-coord.service"]
            :path                  (nix/with pkgs [bash coreutils git nix direnv])
            :startLimitIntervalSec 0
            :environment           {:HOME homeDir
@@ -30,10 +30,10 @@
            :serviceConfig
             {:Type             "simple"
              :User             username
-             :WorkingDirectory (s codeDir "/tern/web")
-             ;; direnv exec <repo> — flake env of ~/code/tern; cwd stays web/.
+             :WorkingDirectory (s codeDir "/north/web")
+             ;; direnv exec <repo> — flake env of ~/code/north; cwd stays web/.
              :ExecStart
-              (s pkgs.direnv "/bin/direnv exec " codeDir "/tern "
+              (s pkgs.direnv "/bin/direnv exec " codeDir "/north "
                  pkgs.bash "/bin/bash -c 'exec mix phx.server'")
              :Restart          "always"
              ;; flake eval on restart is not free — don't thrash.

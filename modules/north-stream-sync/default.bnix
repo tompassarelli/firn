@@ -1,0 +1,38 @@
+#lang beagle/nix
+
+(ns default)
+
+;; Periodic trigger for `north stream-sync` (bin/tern-stream-sync in ~/code/north) —
+;; the zero-AI cursor-based mirror of Claude Code transcripts into
+;; streams/raw/ (see ~/code/north/streams/CLAUDE.md). User-level timer (not a
+;; system service like north-coord): it only touches files under $HOME, needs
+;; no privileges, and should not block boot. SessionEnd hook flush is a
+;; second, complementary trigger (dotfiles/claude/hooks/north-session-end.sh) —
+;; the lock in the stream-sync script itself keeps the two from interleaving.
+;; NOTE: ExecStart basename is still `tern-stream-sync` — the ~/code/north repo
+;; script has not been renamed (resolves via the ~/code/north dir symlink); the
+;; basename flip is a coordinator cutover step.
+(nix/module [config lib pkgs ...]
+  (let [username config.myConfig.modules.users.username
+        codeDir  config.myConfig.modules.users.codeDir]
+    {:options.myConfig.modules.north-stream-sync.enable
+      (lib.mkEnableOption "North stream-sync timer — periodic transcript log-shipping into streams/raw")
+     :config
+      (lib.mkIf config.myConfig.modules.north-stream-sync.enable
+        {:home-manager.users
+          {username
+            (nix/module [config ...]
+              {:systemd.user.services.north-stream-sync
+                {:Unit
+                  {:Description "North stream-sync — mirror Claude Code transcripts into streams/raw"}
+                 :Service
+                  {:Type      "oneshot"
+                   :ExecStart (s codeDir "/north/bin/tern-stream-sync")}}
+               :systemd.user.timers.north-stream-sync
+                {:Unit
+                  {:Description "Run north-stream-sync periodically"}
+                 :Timer
+                  {:OnStartupSec    "2m"
+                   :OnUnitActiveSec "5m"
+                   :Persistent      true}
+                 :Install {:WantedBy ["timers.target"]}}})}})}))

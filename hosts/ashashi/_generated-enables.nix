@@ -27,6 +27,7 @@
   myConfig.modules.imagemagick.enable = lib.mkDefault true;
   myConfig.modules.jq.enable = lib.mkDefault true;
   myConfig.modules.my-agents.enable = lib.mkDefault true;
+  myConfig.modules.north.enable = lib.mkDefault true;
   myConfig.modules.opencode.enable = lib.mkDefault true;
   myConfig.modules.procs.enable = lib.mkDefault true;
   myConfig.modules.promptfoo.enable = lib.mkDefault true;
@@ -34,7 +35,6 @@
   myConfig.modules.ripgrep.enable = lib.mkDefault true;
   myConfig.modules.starship.enable = lib.mkDefault true;
   myConfig.modules.tealdeer.enable = lib.mkDefault true;
-  myConfig.modules.tern.enable = lib.mkDefault true;
   myConfig.modules.tree.enable = lib.mkDefault true;
   myConfig.modules.unrar.enable = lib.mkDefault true;
   myConfig.modules.unzip.enable = lib.mkDefault true;

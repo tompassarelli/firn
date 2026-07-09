@@ -6,12 +6,12 @@ let
   codeDir = config.myConfig.modules.users.codeDir;
 in
 {
-  options.myConfig.modules.tern-web.enable = lib.mkEnableOption "Tern web (:8088) — Phoenix cockpit for tern agents";
-  config = lib.mkIf config.myConfig.modules.tern-web.enable {
-    systemd.services.tern-web = {
-      description = "Tern web (:8088) — Phoenix cockpit over the tern coordinator";
+  options.myConfig.modules.north-web.enable = lib.mkEnableOption "North web (:8088) — Phoenix cockpit for north agents";
+  config = lib.mkIf config.myConfig.modules.north-web.enable {
+    systemd.services.north-web = {
+      description = "North web (:8088) — Phoenix cockpit over the north coordinator";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" "tern-coord.service" ];
+      after = [ "network.target" "north-coord.service" ];
       path = with pkgs; [ bash coreutils git nix direnv ];
       startLimitIntervalSec = 0;
       environment = {
@@ -22,8 +22,8 @@ in
       serviceConfig = {
         Type = "simple";
         User = username;
-        WorkingDirectory = "${codeDir}/tern/web";
-        ExecStart = "${pkgs.direnv}/bin/direnv exec ${codeDir}/tern ${pkgs.bash}/bin/bash -c 'exec mix phx.server'";
+        WorkingDirectory = "${codeDir}/north/web";
+        ExecStart = "${pkgs.direnv}/bin/direnv exec ${codeDir}/north ${pkgs.bash}/bin/bash -c 'exec mix phx.server'";
         Restart = "always";
         RestartSec = 5;
       };
