@@ -94,11 +94,12 @@
   ;; `sudo -v` validates and extends the cached timestamp; subsequent
   ;; sudo invocations within ~5 min (default sudo timeout) skip the prompt.
   (define on-linux? (not (equal? "Darwin" (string-trim (sh-out "uname" "-s")))))
+  (define passwordless? #f)
   (when on-linux?
     ;; NOPASSWD-aware: when the scoped sudoers rule covers nixos-rebuild
     ;; (rebuild-nopasswd module), no credential cache is needed — skip the
     ;; interactive -v gate entirely so agent runs never cold-start on a prompt.
-    (define passwordless?
+    (set! passwordless?
       (or (sh "sudo" "-n" "true")
           (sh "sudo" "-n" "nixos-rebuild" "list-generations")))
     (unless passwordless?
@@ -191,7 +192,11 @@
        (define flake-target (if host (string-append ROOT "#" host) ROOT))
        (apply sh (append (list "sudo" "darwin-rebuild" "switch" "--flake" flake-target)
                          extra))]
-      [(find-executable-path "nh")
+      ;; nh sudo-execs per-generation STORE PATHS during activation — no static
+      ;; NOPASSWD rule can cover those, so an agent (cold sudo) must take the
+      ;; plain `sudo nixos-rebuild` branch, which the rebuild-nopasswd rule covers.
+      ;; nh (nicer diffs) remains the interactive default.
+      [(and (not passwordless?) (find-executable-path "nh"))
        ;; nh forwards everything after `--` to `nix build`, which is where
        ;; --impure lives.
        (define nh-tail (if (null? extra) '() (cons "--" extra)))
