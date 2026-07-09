@@ -4,7 +4,8 @@ description: >-
   Use whenever editing ~/code/nixos-config (firn): packages, modules, services,
   host config, hooks/skills, inputs, or any "install X system-wide" request.
   Write interface is .bnix (compiled to .nix — never edit .nix). System switch
-  (firn rebuild) is agent-runnable after build+validate green, tree committed.
+  (firn rebuild) is agent-runnable after build+validate green, own changes
+  committed, no dirty build inputs (.bnix/.nix/flake.lock).
   NOT general Nix in other repos.
 ---
 
@@ -31,9 +32,13 @@ itself → beagle-authoring.
    git-tracked files — an untracked module is invisible to `builtins.readDir` and
    silently skipped.
 4. **`firn rebuild` is agent-runnable ONLY after `firn build` + `firn validate`
-   are green and the tree is COMMITTED** (generations must map to commits; it
-   switches the system — sudo, new generation — and `firn rollback` / the boot
-   menu undo it). Raw `nixos-rebuild switch` / `nh switch` and `firn update`
+   are green, YOUR changes are committed, and no build input is dirty** — zero
+   uncommitted `*.bnix`/`*.nix`/`flake.lock` in the tree. Flakes build the
+   working tree, so a dirty build input bakes another session's WIP into a
+   generation no commit maps to; other sessions' dirty non-build files (docs,
+   dotfiles/bin, …) do NOT block. It switches the system — sudo, new
+   generation — and `firn rollback` / the boot menu undo it. Raw
+   `nixos-rebuild switch` / `nh switch` and `firn update`
    (wholesale input bumps) stay the USER's — the hook still denies those.
    Build-only verification when validate isn't enough:
    `nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel --no-link`.
@@ -106,6 +111,7 @@ freely at sensible checkpoints; the human is not a push gate). New files
 `firn build` + `firn validate` is the default loop. `firn repo diff` re-emits and
 diffs vs committed `.nix` (drift check). `nix build … --no-link` is full evaluation
 when the static checker can't see a build-time problem. The system switch
-(`firn rebuild`) is agent-runnable once build + validate are green and the tree is
-COMMITTED — generations map to commits, `firn rollback` undoes. `firn update`
+(`firn rebuild`) is agent-runnable once build + validate are green, your own
+changes are committed, and no build input is dirty (no uncommitted
+`*.bnix`/`*.nix`/`flake.lock`) — `firn rollback` undoes. `firn update`
 (input bumps) stays the user's. Only verify `whiterabbit`; skip `thinkpad-x1e`.

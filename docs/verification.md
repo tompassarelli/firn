@@ -25,8 +25,8 @@ nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel --no-li
 
 This catches things the validator can't: input mismatches, evaluation errors in submodule freeformType paths, build-time failures.
 
-**Don't** run `firn host rebuild` to verify — that activates the system (sudo, generation switch, reboot-relevant). Leave that to the user. Use `nix build --no-link` for build-only verification.
+`firn rebuild` (the sanctioned wrapper) IS agent-runnable — policy change 2026-07-08 — once `firn build` + `firn validate` are green, your own changes are committed, and no build input is dirty: zero uncommitted `*.bnix`/`*.nix`/`flake.lock` anywhere in the tree (flakes build the working tree; a dirty build input bakes another session's WIP into a generation no commit maps to). Other sessions' dirty non-build files don't block. `firn rollback` / the boot menu undo a switch.
 
-**Don't** run `nh` directly either; same reason — it switches the system. `firn host rebuild` wraps `nh` already; it's the user's command.
+**Don't** run `nh` or `nixos-rebuild` directly — only the wrapper; the firn-guard hook denies the bypasses. `firn update` (wholesale input bumps) stays the user's.
 
 Only verify whiterabbit. Skip thinkpad-x1e.

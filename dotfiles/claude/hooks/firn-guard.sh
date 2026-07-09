@@ -45,7 +45,8 @@ DIGEST = (
     "2. After any .bnix change: run `firn build` then `firn validate`. git add BOTH "
     "the .bnix AND the generated .nix (the flake only sees git-tracked files).\n"
     "3. `firn rebuild` is agent-runnable ONLY after `firn build` + `firn validate` "
-    "are green and the tree is committed (generations must map to commits). Raw "
+    "are green, your changes are committed, and no build input is dirty (zero "
+    "uncommitted .bnix/.nix/flake.lock; others' dirty non-build files don't block). Raw "
     "`nixos-rebuild switch` / `nh switch` / `firn update` stay USER-only.\n"
     "4. Secrets: sops-nix only (secrets/*.yaml). Never plaintext creds in the repo.\n"
     "5. New module = create modules/<name>/default.bnix, `firn build`, git add both files "
@@ -102,9 +103,10 @@ if tool == "Bash":
     if switch.search(cmd):
         reason = (
             "BLOCKED: that command switches the system OUTSIDE the sanctioned wrapper. "
-            "Agents may run `firn rebuild` (after `firn build` + `firn validate` green, tree "
-            "committed) — raw nixos-rebuild/darwin-rebuild/nh and `firn update` stay the "
-            "USER's. Rare explicit override: prefix with CLAUDE_NO_AUTHORING_HOOKS=1."
+            "Agents may run `firn rebuild` (build+validate green, own changes committed, "
+            "no dirty .bnix/.nix/flake.lock) — raw nixos-rebuild/darwin-rebuild/nh and "
+            "`firn update` stay the USER's. Rare explicit override: prefix with "
+            "CLAUDE_NO_AUTHORING_HOOKS=1."
         )
         print(json.dumps({
             "hookSpecificOutput": {
