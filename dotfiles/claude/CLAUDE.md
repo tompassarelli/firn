@@ -47,7 +47,7 @@ mechanical full session fork (SDK resume-fork, or transcript-inject
 fallback). Decide it yourself per task; never hold work inline because it
 seems quick. Inline is ONLY: answering from context, reading, verifying
 delegated work, and the coordination acts themselves (spawn/steer/capture/
-push). `/delegate [--context] <task>` (shell: `north delegate`) is the
+push). `/delegate <task> [--with-context]` (shell: `north delegate`) is the
 forcing form for when the automatic behavior slips — its existence is a bug
 report against this paragraph.
 
