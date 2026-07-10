@@ -2,7 +2,7 @@
 
 (ns default)
 
-;; Periodic trigger for `north stream-sync` (bin/tern-stream-sync in ~/code/north) —
+;; Periodic trigger for `north stream-sync` (bin/north-stream-sync in ~/code/north) —
 ;; the zero-AI cursor-based mirror of Claude Code transcripts into
 ;; streams/raw/ (see ~/code/north/streams/CLAUDE.md). User-level timer (not a
 ;; system service like north-coord): it only touches files under $HOME, needs
@@ -27,7 +27,7 @@
                   {:Description "North stream-sync — mirror Claude Code transcripts into streams/raw"}
                  :Service
                   {:Type      "oneshot"
-                   :ExecStart (s codeDir "/north/bin/tern-stream-sync")}}
+                   :ExecStart (s codeDir "/north/bin/north-stream-sync")}}
                :systemd.user.timers.north-stream-sync
                 {:Unit
                   {:Description "Run north-stream-sync periodically"}

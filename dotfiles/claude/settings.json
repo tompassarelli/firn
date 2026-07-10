@@ -24,7 +24,7 @@
           },
           {
             "type": "command",
-            "command": "/home/tom/code/north/bin/tern-on-spawn",
+            "command": "/home/tom/code/north/bin/north-on-spawn",
             "timeout": 15
           }
         ]
@@ -35,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/north/bin/tern-on-spawn",
+            "command": "/home/tom/code/north/bin/north-on-spawn",
             "timeout": 15
           }
         ]
@@ -125,7 +125,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/north/bin/tern-on-tooluse",
+            "command": "/home/tom/code/north/bin/north-on-tooluse",
             "timeout": 10
           }
         ]

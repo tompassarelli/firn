@@ -14,7 +14,7 @@ in
         };
         Service = {
           Type = "oneshot";
-          ExecStart = "${codeDir}/north/bin/tern-stream-sync";
+          ExecStart = "${codeDir}/north/bin/north-stream-sync";
         };
       };
       systemd.user.timers.north-stream-sync = {
