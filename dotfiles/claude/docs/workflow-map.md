@@ -72,14 +72,14 @@ tells you which facts to expect:
 
 `mcp__north__spawn` and `mcp__north__dispatch` are the MCP tool faces of the SDK
 lineage (registered in `harness.ts`'s `NATIVE_TOOLS`). The CLI faces are
-`north spawn` / `north request` (in `cli/agents-cli.clj`), which resolve gaffer
+`north spawn` / `north delegate` (in `cli/agents-cli.clj`), which resolve gaffer
 dials and then `bun run sdk/src/spawn.ts`.
 
 ```mermaid
 flowchart TD
     A["A — interactive session"] --> SES["session lineage<br/>bin/north-on-spawn hook"]
-    B["B — /request fork"] --> SP["spawn.ts"]
-    C["C — shell north request"] --> SP
+    B["B — /delegate (chat)"] --> SP["spawn.ts"]
+    C["C — shell north delegate"] --> SP
     D["D — north spawn role"] --> SP
     E["E — dispatch @thread"] --> DI["dispatch.ts"]
     F["F — /fork"] --> X["UNMANAGED — invisible to north"]
@@ -134,20 +134,23 @@ activity.
 
 ---
 
-### Pattern B — `/request` fork-everything
+### Pattern B — `/delegate` (chat)
 
-**Trigger:** a human types `/request <text>` (`commands/request.md`).
+**Trigger:** a human types `/delegate [context:all|none] <text>` (`commands/delegate.md`).
 **Lineage:** SDK-lane via `spawn.ts`, always opus/high/integrator/deliver.
+The CONTEXT DIAL is a parameter, not a separate verb: `context:all` composes and
+attaches this session's brief; `context:none` starts fresh; absent → the session
+picks. (Merges the retired `/request` + `/offload`.)
 
 ```mermaid
 sequenceDiagram
     actor H as human
-    participant R as /request (pass-through)
+    participant R as /delegate (pass-through)
     participant SP as spawn.ts (via mcp__north__spawn)
     participant T as north :7977
     participant CO as coordinator inbox
-    H->>R: /request X
-    R->>SP: INTAKE — wrap X + self-triage contract + cwd + discipline ·<br/>AGENT_COORDINATOR = this session id
+    H->>R: /delegate [context:*] X
+    R->>SP: INTAKE — wrap X + optional context brief + self-triage contract<br/>+ cwd + discipline · AGENT_COORDINATOR = this session id
     SP->>SP: ID MINT — opts.agentId ?? lane-{ts36}
     SP->>T: IDENTITY FACTS (writeAgentFacts) — kind=lane,<br/>role/model/effort/goal/display_name/spawned_at
     SP->>T: PRESENCE (harnessOptions) — register lease
@@ -165,28 +168,31 @@ sequenceDiagram
     Note over T: REAPING — lease lapses at TTL
 ```
 
-Notes: `/request` is a **strict pass-through** — the human's turn does no triage,
-no work; one spawn, one confirmation, end of turn. The *lane* self-triages
-(routes down / fans out) as its first act. The coordinator hears back exactly
+Notes: `/delegate` is a **strict pass-through** — the human's turn does no triage,
+no work; one spawn, one confirmation, end of turn (context:all adds one step:
+compose the brief). The *lane* self-triages (routes down / fans out) as its first
+act. The coordinator hears back exactly
 twice: `AGENT COMPLETE` on clean finish (`spawn.ts:147`) or `AGENT DEATH` on a
 caught subprocess death (`death.ts`).
 
 ---
 
-### Pattern C — shell `north request`
+### Pattern C — shell `north delegate`
 
-**Trigger:** `north request "<text>"` at a shell (`agents-cli.clj:cmd-req`).
+**Trigger:** `north delegate "<text>" [--context <file>]` at a shell (`agents-cli.clj:cmd-delegate`).
 **Lineage:** identical to B (opus/high/integrator), minted from the CLI.
+ASYMMETRY: `context:all` (a session composing its OWN brief live) is chat-only;
+the shell attaches a pre-composed brief with `--context <file>` instead.
 
 ```mermaid
 sequenceDiagram
     actor SH as shell
-    participant CLI as agents-cli cmd-req
+    participant CLI as agents-cli cmd-delegate
     participant CS as cmd-spawn (dial table)
     participant SP as spawn.ts
     participant T as north :7977
-    SH->>CLI: north request X
-    CLI->>CLI: INTAKE — prepend "REQUEST:" + OPERATING CONTRACT<br/>(triage / sync / no-push / report-to-private)
+    SH->>CLI: north delegate X [--context f]
+    CLI->>CLI: INTAKE — prepend optional CONTEXT BRIEF + "DELEGATE TASK:"<br/>+ OPERATING CONTRACT (triage / sync / no-push / report-to-private)
     CLI->>CS: resolve role "integrator" via gaffer dial table<br/>(docs/adapters/north.md)
     CS->>CS: ID MINT — lane-{uuid8} · env AGENT_ID/MODEL/EFFORT/ROLE/POSTURE<br/>(+ AGENT_COORDINATOR if --notify)
     CS->>SP: bun run spawn.ts (detached · log → ~/.local/state/north/agents/{id}.log)
@@ -197,7 +203,7 @@ sequenceDiagram
 ```
 
 Notes: same contract, same dials, same completion/death/reaping as B. The
-difference is **intake surface only** (shell vs `/request` slash command). The lane
+difference is **intake surface only** (shell vs `/delegate` slash command). The lane
 runs detached with its transcript at `~/.local/state/north/agents/<id>.log`
 (watched by `north watch <id>`).
 
@@ -301,16 +307,18 @@ id, no identity, no presence, no death signal. That is the direct cause of
 identity + presence + death ping) is the obvious remedy but is **not
 implemented today.**
 
-> **Status note (2026-07-10). Managed fork shipped** as a *separate, opt-in*
-> surface: shell `north fork "<task>" [--context <file>]` (`agents-cli.clj`)
-> and slash `/offload` (`commands/offload.md`) — a context-carrying handoff on
-> the SDK-lane lineage (pattern C's contract + a prepended parent-context
-> brief), so it gets the full invariant spine (id mint · identity facts ·
-> presence · completion/death ping). The harness-native `/fork` itself remains
-> unmanaged (F4 still applies to it); `/offload` is the managed alternative to
-> reach for, not a shadow of the builtin (the native `/fork` is a `local-jsx`
-> builtin — a same-named file command risks silently losing the collision,
-> hence the distinct name).
+> **Status note (2026-07-10, updated). Managed context-carrying handoff** is the
+> `context:all` mode of the unified delegation verb: shell `north delegate
+> "<task>" --context <file>` (`agents-cli.clj:cmd-delegate`) and slash `/delegate
+> context:all` (`commands/delegate.md`) — a context-carrying handoff on the
+> SDK-lane lineage (pattern C's contract + a prepended parent-context brief), so
+> it gets the full invariant spine (id mint · identity facts · presence ·
+> completion/death ping). (The delegation surface unified 2026-07-10: the earlier
+> `north fork` / `/offload` verbs merged into `delegate`, context as a parameter.)
+> The harness-native `/fork` itself remains unmanaged (F4 still applies to it);
+> `/delegate` is the managed alternative to reach for, not a shadow of the builtin
+> — the native `/fork` is a `local-jsx` builtin, and `/delegate`'s distinct name
+> avoids the same-named-command collision.
 
 ---
 
@@ -532,6 +540,6 @@ below are its rule set.
 | listener | `~/code/north/cli/north-listen.clj` | dormant-until-pinged pub/sub; role-addressing |
 | cockpit | `~/code/north/cli/dashboard-cli.clj` (`north dashboard`/`doctor`; bare `north` card in `bin/north`) | dashboard/doctor/profile; parse-don't-fork gaffer; ownership rule (folded from convoy 2026-07-10) |
 | staffing | `~/code/gaffer/doctrine.md` + `docs/adapters/north.md` | shapes→squad, laws, canonical dial table |
-| fork intake | `~/code/nixos-config/dotfiles/claude/commands/request.md` | `/request` pass-through contract |
+| delegate intake | `~/code/nixos-config/dotfiles/claude/commands/delegate.md` | `/delegate` pass-through contract (context as a parameter) |
 | coordination-v2 | thread `019f4418-bed5-7625-b2ad-41abb6518269` | census, failure receipts, the specced reaping fix plan |
 ```
