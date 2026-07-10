@@ -39,6 +39,12 @@ seams (self-contained subtask ⇒ delegate it) → **verify** by driving the
 change end-to-end and spot-checking each worker's load-bearing assertions
 yourself. Skip at ONE subtask; fires at 2+ files or 2+ concerns.
 Coordinate, don't execute; verify, don't trust.
+**Fork by default (2026-07-10):** a substantive build/fix/research request in
+chat FORKS (spawn a self-triaging lane, /request semantics) without the user
+typing /request — the supervisor channel stays free. Inline only for:
+conversational/read-only turns, trivial one-file edits, or work on the very
+thing the user is actively steering turn-by-turn. /request and /offload remain
+the explicit forcing forms (offload = carry context).
 
 ## Blocked ≠ stopped
 
