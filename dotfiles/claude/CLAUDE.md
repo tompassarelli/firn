@@ -76,7 +76,13 @@ high, max only at critical junctures with demonstrated headroom; **Fable
 analyzes, never default-implements** (coding ≤ Opus; in a Fable session PIN
 implementation spawns to opus/sonnet). When out: opus-xhigh tops the ramp
 and capacity is substituted with structure (judge panels, adversarial
-verify). Haiku stays OFF the stack (single-shot bulk classify only — doc).
+verify). **EXCEPTION — standing Fable window 2026-07-10→13, owner-authorized:**
+until 2026-07-13T00:00 Asia/Shanghai a MECHANICAL date gate (cli/agents-cli.clj
++ sdk/src/fable-window.ts + ladder.ts + delegate.md) routes orchestrator-tier
+forks to fable-high and lets workers escalate to fable above opus-xhigh; it
+auto-expires with zero action, reverting orchestrators to opus-xhigh —
+TEMPORARY personal-delta, not a doctrine fork. Haiku stays OFF the stack
+(single-shot bulk classify only — doc).
 north spawns get model-deltas automatically (read from `~/code/gaffer/docs`,
 the canonical block source); personal domain-posture defaults live in
 praxis/README.md. Compose, don't re-derive.

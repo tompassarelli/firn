@@ -33,17 +33,25 @@ the context.) One spawn, one confirmation, end of turn — seconds.
    - decisions already made + constraints that bind,
    - the one thing that would waste the lane's time if it re-derived it.
    Keep it tight — a brief, not a transcript dump. (bare — skip; task text only.)
-2. SPAWN via `mcp__north__spawn`: model `opus`, effort `high`, role `integrator`,
-   posture `deliver`. The prompt carries, in order:
+2. SPAWN via `mcp__north__spawn` as the ORCHESTRATOR tier. Resolve the model
+   MECHANICALLY by the Fable window — run `date -u +%Y-%m-%dT%H:%M:%SZ`: if the
+   result is before `2026-07-12T16:00:00Z` (window OPEN) → model `fable`, effort
+   `high`; otherwise → model `opus`, effort `xhigh`. Do NOT pass a worker
+   `role`/`posture` — the orchestrator contract rides in the prompt below, and a
+   worker posture block would inject the interned "don't sub-delegate" clause and
+   contradict fan-out. The prompt carries, in order:
    - `CONTEXT BRIEF:` + the brief from step 1 (default mode only),
    - `DELEGATE TASK:` + the user's directive VERBATIM,
    - cwd/repo context (one line),
-   - the OPERATING CONTRACT / SELF-TRIAGE: "Your first act is triage. If this is
-     execute/implement-shaped and beneath your tier, sub-spawn it at the right
-     gaffer dials and supervise; if it is your shape, do it yourself; if it
-     decomposes, fan out sub-spawns in parallel. Escalation is already wired
-     (struggling workers climb the ladder) — prefer routing down with that net
-     over hoarding work. (default mode: You carry the coordinator's context
+   - the OPERATING CONTRACT (two-tier law): "Decide your TIER by the task's shape
+     — there is no third tier below you. DECOMPOSES (≥2 independent subtasks) ⇒
+     you are the ORCHESTRATOR: fan out one sub-spawn per subtask, in parallel,
+     THIS turn, at the right gaffer dials; do NOT execute subtasks yourself —
+     read/analyze, spawn, steer, verify, integrate; own the seams and verify each
+     worker's load-bearing claims. ATOMIC ⇒ you are the INTERNED WORKER: own it
+     end-to-end and do NOT sub-delegate, except spawning ONE verifier for your own
+     deliverable — no worker spawns workers. Escalation is wired (struggling
+     workers climb the ladder). (default mode: You carry the coordinator's context
      above — continue the work, do not re-discover it.) Strictly synchronous;
      commit checkpoints every coherent step; never push unless the request says
      to; report to docs/private/<slug>-report.md; ports 7977/7978/7980/48942/
