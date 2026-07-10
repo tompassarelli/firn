@@ -689,11 +689,11 @@
         "nixpkgs": "nixpkgs_5"
       },
       "locked": {
-        "lastModified": 1783597217,
-        "narHash": "sha256-VnJ3zd87yxXEK8KwqfhabTvY8+SQBLUhTo9Yeg8a+s8=",
+        "lastModified": 1783665001,
+        "narHash": "sha256-Kds2X3Gy9dvA6+Blln2PeyYvkVnUz4y/G1mOmIhC5TU=",
         "ref": "main",
-        "rev": "3c1d1b388c4b7dc2564286b71555787d486cbfde",
-        "revCount": 230,
+        "rev": "ea68e2044d6adadf88d8838198610de5798b4d8b",
+        "revCount": 236,
         "type": "git",
         "url": "file:///home/tom/code/north"
       },
