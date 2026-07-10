@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # authoring-killswitch.sh — the ONE implementation of the authoring-guard
-# kill-switch. Sourced by every guard hook AND by my-agent-config, so the
+# kill-switch. Sourced by every guard hook AND by north config, so the
 # report and the enforcement can never disagree.
 #
 # Effective state, in precedence order (explicit session env beats state):
@@ -9,7 +9,7 @@
 #   unset/empty → state file decides: `guards=off` → guards OFF, else LIVE
 #
 # Persistent flip (all sessions, takes effect immediately — hooks re-read
-# state on every call, no relaunch): `my-agent-config guards on|off`.
+# state on every call, no relaunch): `north config guards on|off`.
 # The env var remains the launch-time override for a single pinned session:
 #   CLAUDE_NO_AUTHORING_HOOKS=1 claude
 # Tests override the state path via AUTHORING_KILLSWITCH_STATE.

@@ -33,9 +33,9 @@ rotting silently). This is the anti-rot gate; keep it green.
 
 **Behavior-injecting hooks share one kill-switch** — semantics live in
 `dotfiles/claude/hooks/lib/authoring-killswitch.sh`, sourced by every guard
-AND by `my-agent-config`, so report and enforcement cannot disagree:
+AND by `north config`, so report and enforcement cannot disagree:
 
-- **Persistent, live flip (all sessions):** `my-agent-config guards off` /
+- **Persistent, live flip (all sessions):** `north config guards off` /
   `guards on` — writes `guards=on|off` to `~/.claude/my-config.state`; hooks
   re-read it on every call, so it takes effect immediately, no relaunch.
 - **Per-session override at launch:** `CLAUDE_NO_AUTHORING_HOOKS=1 claude` —

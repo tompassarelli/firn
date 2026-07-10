@@ -12,7 +12,7 @@ set -uo pipefail
 # Clean-room / experiment kill-switch (opt-OUT; see code-upstream-guard.sh).
 # When guards are OFF this hook no-ops — no daemon revive, no authoring context
 # injected — so a controlled run keeps an identical neutral session surface
-# across all arms. Engaged two ways: persistent `my-agent-config guards off`
+# across all arms. Engaged two ways: persistent `north config guards off`
 # (state, live), or env CLAUDE_NO_AUTHORING_HOOKS (any value but 0/false;
 # 0/false forces guards live). Neither engaged (the default) = normal behavior.
 # shellcheck disable=SC1090,SC1091

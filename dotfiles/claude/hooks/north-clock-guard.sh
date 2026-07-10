@@ -14,14 +14,14 @@
 #
 # "Any running clock" satisfies the gate for v1 — the failure mode was NO clock at
 # all. Tightening to "clock on a thread owned by THIS client" is a later refinement.
-# Kill-switch: persistent `my-agent-config guards off` (state) OR env
+# Kill-switch: persistent `north config guards off` (state) OR env
 # CLAUDE_NO_AUTHORING_HOOKS (any value but 0/false; 0/false forces guards live).
 # Shared impl: lib/authoring-killswitch.sh.
 # ============================================================================
 set -uo pipefail
 
 # Kill-switch: shared semantics in lib/authoring-killswitch.sh — persistent
-# `my-agent-config guards off` (state, live) or env CLAUDE_NO_AUTHORING_HOOKS
+# `north config guards off` (state, live) or env CLAUDE_NO_AUTHORING_HOOKS
 # (any value but 0/false kills this session; 0/false forces guards live).
 # shellcheck disable=SC1090,SC1091
 . "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
@@ -72,7 +72,7 @@ fi
 
 REASON="Billable client edit blocked — no north clock running. Client work is never done untracked (this gate exists because ~22h of MSA work once shipped with zero logged time and had to be reconstructed for an invoice). Start a clock, then retry the edit:
   ${HINT}
-Deliberate bypass: my-agent-config guards off (persistent, live) — or a session launched with CLAUDE_NO_AUTHORING_HOOKS=1."
+Deliberate bypass: north config guards off (persistent, live) — or a session launched with CLAUDE_NO_AUTHORING_HOOKS=1."
 
 printf '%s' "$REASON" | python3 -c 'import sys,json
 r=sys.stdin.read()

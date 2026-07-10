@@ -15,13 +15,13 @@
 # build/test uses the pinned racket and fresh bytecode. It never blocks the edit
 # (the edit already happened); it makes the failure mode impossible to miss.
 #
-# Kill-switch: persistent `my-agent-config guards off` (state) OR env
+# Kill-switch: persistent `north config guards off` (state) OR env
 # CLAUDE_NO_AUTHORING_HOOKS (any value but 0/false; 0/false forces guards live).
 # Shared impl: lib/authoring-killswitch.sh. Parity with the other hooks.
 set -uo pipefail
 
 # Kill-switch: shared semantics in lib/authoring-killswitch.sh — persistent
-# `my-agent-config guards off` (state, live) or env CLAUDE_NO_AUTHORING_HOOKS
+# `north config guards off` (state, live) or env CLAUDE_NO_AUTHORING_HOOKS
 # (any value but 0/false kills this session; 0/false forces guards live).
 # shellcheck disable=SC1090,SC1091
 . "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true

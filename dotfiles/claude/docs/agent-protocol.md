@@ -9,8 +9,8 @@ ephemeral, unobservable mid-flight, un-steerable).
 **Use the north MCP tools** (`mcp__north__dispatch`, `mcp__north__spawn`)
 to drive agents, plus the pre-edit gate — not the built-in Agent/Workflow tools.
 (Enforced mechanically: `agent-spawn-guard.sh` PreToolUse denies native
-Agent/Task/Workflow while the /my-agent-config dispatch setting is `north` — view/flip via
-`my-agent-config` / `/my-agent-config`. Reinstated 2026-07-03; the P6 prose-only bet did not hold.)
+Agent/Task/Workflow while the north config dispatch setting is `north` — view/flip via
+`north config` / `/north-config`. Reinstated 2026-07-03; the P6 prose-only bet did not hold.)
 Quick lookups → bash/grep/read inline. Real work → the protocol below.
 Lifecycle anatomy + failure debugging (patterns A–F, zombie forks, split-brain):
 → `~/code/nixos-config/dotfiles/claude/docs/workflow-map.md`

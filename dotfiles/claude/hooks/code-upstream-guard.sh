@@ -5,7 +5,7 @@
 # ACTIVE as of 2026-06-20. Adopted graph-upstream modules are guarded right now:
 # fram/src/fram/schema.bclj is the first adopted module (in the registry below).
 # To run a clean-room/experiment session WITHOUT this guard, engage the
-# kill-switch below — persistent `my-agent-config guards off`, or launch with
+# kill-switch below — persistent `north config guards off`, or launch with
 # CLAUDE_NO_AUTHORING_HOOKS set to any value but 0/false — do NOT un-wire it.
 # (History: this began as a proposed/un-wired artifact; it was armed in
 # nixos-config b1bd624 once schema.bclj was adopted.)
@@ -49,7 +49,7 @@ set -uo pipefail
 # no-ops (exit 0 = allow the edit), letting a controlled run — e.g. the
 # concurrent-authoring experiment — pin a hook-free, confound-free session
 # surface WITHOUT editing settings.json. Engaged two ways: persistent
-# `my-agent-config guards off` (state, live), or env CLAUDE_NO_AUTHORING_HOOKS
+# `north config guards off` (state, live), or env CLAUDE_NO_AUTHORING_HOOKS
 # (any value but 0/false; 0/false forces guards live). Neither = guard active.
 # shellcheck disable=SC1090,SC1091
 . "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true

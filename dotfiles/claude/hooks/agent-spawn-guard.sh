@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse agent-spawn-guard — enforcement half of the /my-agent-config dispatch setting.
+# PreToolUse agent-spawn-guard — enforcement half of the north config dispatch setting.
 # ============================================================================
 # Successor of agent-redirect.sh (removed in the P6 hook cleanup, ae3b31e).
 # Reinstated 2026-07-03: without a mechanical intercept, native catch-all
@@ -11,15 +11,15 @@
 #   dispatch=warn   -> allow, inject a nudge (additionalContext)
 #   dispatch=native -> allow silently
 #
-# State:       ~/.claude/my-config.state  (flip via `my-agent-config dispatch <mode>`)
-# Kill-switch: persistent `my-agent-config guards off` (state) OR env
+# State:       ~/.claude/my-config.state  (flip via `north config dispatch <mode>`)
+# Kill-switch: persistent `north config guards off` (state) OR env
 #              CLAUDE_NO_AUTHORING_HOOKS (any value but 0/false; 0/false forces
 #              guards live). Shared impl: lib/authoring-killswitch.sh.
 # ============================================================================
 set -uo pipefail
 
 # Kill-switch: shared semantics in lib/authoring-killswitch.sh — persistent
-# `my-agent-config guards off` (state, live) or env CLAUDE_NO_AUTHORING_HOOKS
+# `north config guards off` (state, live) or env CLAUDE_NO_AUTHORING_HOOKS
 # (any value but 0/false kills this session; 0/false forces guards live).
 # shellcheck disable=SC1090,SC1091
 . "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
@@ -86,7 +86,7 @@ if role_key in ROLE_MAP:
         "already resolved for gaffer:" + role_key + " — just paste your prompt in:\n"
         "  " + north_call(ROLE_MAP[role_key]) + "\n"
         "Fan-out? fire one mcp__north__spawn per lane in the same turn. "
-        "Observe: web :8088. Deliberate bypass: my-agent-config dispatch warn|native."
+        "Observe: web :8088. Deliberate bypass: north config dispatch warn|native."
     )
 else:
     where = subagent or tool
@@ -99,20 +99,20 @@ else:
         "  3. Fan-out: N x mcp__north__spawn in parallel; message workers via "
         "bb ~/code/north/cli/msg-cli.clj 7977 send; observe via web :8088.\n"
         "  Caveman + model tier ride the SDK path (AGENT_CAVEMAN / AGENT_MODEL).\n"
-        "Bypass deliberately: my-agent-config dispatch warn|native (or /my-config)."
+        "Bypass deliberately: north config dispatch warn|native (or /north-config)."
     )
 
 if mode == "warn":
     out = {"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "allow",
-        "additionalContext": "/my-agent-config dispatch = warn. " + recipe,
+        "additionalContext": "north config dispatch = warn. " + recipe,
     }}
 else:
     out = {"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
-        "permissionDecisionReason": "DENIED by /my-agent-config dispatch setting (north). " + recipe,
+        "permissionDecisionReason": "DENIED by north config dispatch setting (north). " + recipe,
     }}
 
 print(json.dumps(out))

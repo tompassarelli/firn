@@ -173,7 +173,7 @@ Tiered routing vs uniform-Opus: ~50–80% cheaper, no quality regression (tested
 
 ## Spawn surfaces
 
-- **north SDK** (PRIMARY while /my-agent-config dispatch=north; native tools denied
+- **north SDK** (PRIMARY while north config dispatch=north; native tools denied
   there): `mcp__north__spawn {model: opus|sonnet|haiku, effort}` — pin both.
   `AGENT_MODEL` sets the dispatch default; `AGENT_CAVEMAN` / `AGENT_LAWS` /
   `AGENT_ESO` ride along.
