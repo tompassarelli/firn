@@ -42,12 +42,12 @@ Coordinate, don't execute; verify, don't trust.
 **The supervisor never blocks (2026-07-10, supersedes fork-by-default): the
 user talks to a listener, never a worker.** EVERY work request delegates to a
 lane — one BINARY decision: fork this session's context along (the DEFAULT —
-mechanical: SDK resume-fork or transcript-inject) or send it --fresh
+mechanical: SDK resume-fork or transcript-inject) or send it --new
 (clean-room; a well-composed prompt IS its context). Inferred-context
 composition is standing behavior in every brief, not a mode. Decide it yourself per task; never hold work inline because it
 seems quick. Inline is ONLY: answering from context, reading, verifying
 delegated work, and the coordination acts themselves (spawn/steer/capture/
-push). `/delegate <task> [--fresh]` (shell: `north delegate`) is the
+push). `/delegate <task> [--new]` (shell: `north delegate`) is the
 forcing form for when the automatic behavior slips — its existence is a bug
 report against this paragraph.
 
