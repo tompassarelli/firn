@@ -170,9 +170,9 @@ sequenceDiagram
 ```
 
 Notes: `/delegate` is a **strict pass-through** — the human's turn does no triage,
-no work; one spawn, one confirmation, end of turn (context:all adds one step:
-compose the brief). The *lane* self-triages (routes down / fans out) as its first
-act. The coordinator hears back exactly
+no work; one spawn, one confirmation, end of turn (`--with-context` adds one step:
+carry the session brief). The *lane* self-triages (routes down / fans out) as its
+first act. The coordinator hears back exactly
 twice: `AGENT COMPLETE` on clean finish (`spawn.ts:147`) or `AGENT DEATH` on a
 caught subprocess death (`death.ts`).
 
