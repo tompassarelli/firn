@@ -29,8 +29,12 @@ the context.) One spawn, one confirmation, end of turn — seconds.
    realization: COMPOSE a context brief from your own conversation — crisp,
    load-bearing only:
    - current task state (what is done, what remains),
-   - key file paths (`~`-anchored),
+   - reference existing artifacts — reports, specs, commits, diffs — by
+     `~`-anchored path; don't restate their content,
    - decisions already made + constraints that bind,
+   - redact secrets/keys/PII from the brief,
+   - where the continuation has a clear shape, name the suggested gaffer role
+     for it,
    - the one thing that would waste the lane's time if it re-derived it.
    Keep it tight — a brief, not a transcript dump. (bare — skip; task text only.)
 2. SPAWN via `mcp__north__spawn` as the ORCHESTRATOR tier. Resolve the model
@@ -47,8 +51,10 @@ the context.) One spawn, one confirmation, end of turn — seconds.
      — there is no third tier below you. DECOMPOSES (≥2 independent subtasks) ⇒
      you are the ORCHESTRATOR: fan out one sub-spawn per subtask, in parallel,
      THIS turn, at the right gaffer dials; do NOT execute subtasks yourself —
-     read/analyze, spawn, steer, verify, integrate; own the seams and verify each
-     worker's load-bearing claims. ATOMIC ⇒ you are the INTERNED WORKER: own it
+     read/analyze, spawn, steer, verify, integrate; give each sub-brief steps
+     that end on a checkable done-bar (a command + expected output, or a grep +
+     expected hit count); own the seams and verify each worker AGAINST ITS
+     done-bars — a bare 'done' is never accepted. ATOMIC ⇒ you are the INTERNED WORKER: own it
      end-to-end and do NOT sub-delegate, except spawning ONE verifier for your own
      deliverable — no worker spawns workers. Escalation is wired (struggling
      workers climb the ladder). (default mode: You carry the coordinator's context
