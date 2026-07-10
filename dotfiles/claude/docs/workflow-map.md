@@ -42,7 +42,7 @@ only a bootstrap tx):
 | port | role |
 |------|------|
 | `:7977` | **north coordinator** — the canonical fact log. Roster, concerns, board, mail, presence ALL read AND write here. |
-| `:8088` | north web — Phoenix cockpit (systemd-supervised: `north-web.service`) |
+| `:8088` | north web — bjs/Bun cockpit (systemd-supervised: `north-web.service`) |
 
 ---
 
