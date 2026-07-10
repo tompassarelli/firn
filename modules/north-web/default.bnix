@@ -2,39 +2,49 @@
 
 (ns default)
 
-;; North web (:8088) — the Elixir/Phoenix cockpit over the canonical north
-;; coordinator (:7977): board, roster, per-agent live stream + /steer.
-;; Runs the dev-mode server (mix phx.server) under the repo's OWN flake env
-;; via `direnv exec` so the elixir/OTP that compiled web/_build is the one
-;; that runs it (nixpkgs elixir may drift from the flake pin). Supervised
-;; because the unsupervised process crashed 2026-06-28 and sat dead for 11
-;; days unnoticed. mix-release upgrade tracked in north thread 019f4528.
+;; North web (:8088) — the cockpit over the canonical north coordinator
+;; (:7977): board, roster, per-agent live stream + /steer. Beagle-JS (.bjs)
+;; server on Bun, replacing the retired Elixir/Phoenix app (web-v1-archive/).
+;;
+;; Source of truth is web-bjs/src/*.bjs; ExecStartPre compiles it with the
+;; hermetic system `beagle` (racket-pinned) and ExecStart runs the emitted
+;; entrypoint on Bun. This drops the old `mix phx.server` under `direnv exec
+;; <repo>`, which required an `.envrc`-allow and the repo's flake env baked
+;; into systemd — that wrinkle is gone: no direnv, no flake-env-in-unit, just
+;; two hermetic system tools (beagle, bun). Supervised because the
+;; unsupervised process crashed 2026-06-28 and sat dead 11 days unnoticed.
 
-(nix/module [config lib pkgs ...]
+(nix/module [config lib pkgs inputs ...]
   (let [username config.myConfig.modules.users.username
         homeDir  config.myConfig.modules.users.homeDir
-        codeDir  config.myConfig.modules.users.codeDir]
+        codeDir  config.myConfig.modules.users.codeDir
+        beaglePkg (get (get inputs.beagle.packages pkgs.stdenv.hostPlatform.system) :default)
+        webBjs   (s codeDir "/north/web-bjs")]
     {:options.myConfig.modules.north-web.enable
-      (lib.mkEnableOption "North web (:8088) — Phoenix cockpit for north agents")
+      (lib.mkEnableOption "North web (:8088) — bjs/Bun cockpit for north agents")
      :config
       (lib.mkIf config.myConfig.modules.north-web.enable
         {:systemd.services.north-web
-          {:description           "North web (:8088) — Phoenix cockpit over the north coordinator"
+          {:description           "North web (:8088) — bjs/Bun cockpit over the north coordinator"
            :wantedBy              ["multi-user.target"]
            :after                 ["network.target" "north-coord.service"]
-           :path                  (nix/with pkgs [bash coreutils git nix direnv])
+           :path                  [pkgs.bash pkgs.coreutils pkgs.git pkgs.bun beaglePkg]
            :startLimitIntervalSec 0
-           :environment           {:HOME homeDir
-                                   :PORT "8088"
-                                   :LANG "en_US.UTF-8"}
+           :environment           {:HOME       homeDir
+                                   :PORT       "8088"
+                                   :STATIC_DIR (s codeDir "/north/web/priv/static")
+                                   :LANG       "en_US.UTF-8"}
            :serviceConfig
             {:Type             "simple"
              :User             username
-             :WorkingDirectory (s codeDir "/north/web")
-             ;; direnv exec <repo> — flake env of ~/code/north; cwd stays web/.
+             :WorkingDirectory webBjs
+             ;; compile .bjs → out/north/*.js with the hermetic system beagle,
+             ;; then serve the emitted entrypoint on Bun. bash -c so the src
+             ;; glob expands; both tools come from :path above.
+             :ExecStartPre
+              (s pkgs.bash "/bin/bash -c 'exec beagle build src/*.bjs --out out'")
              :ExecStart
-              (s pkgs.direnv "/bin/direnv exec " codeDir "/north "
-                 pkgs.bash "/bin/bash -c 'exec mix phx.server'")
+              (s pkgs.bun "/bin/bun run out/north/boot.js")
              :Restart          "always"
-             ;; flake eval on restart is not free — don't thrash.
+             ;; a compile + flake-free start is cheap, but don't thrash.
              :RestartSec       5}}})}))
