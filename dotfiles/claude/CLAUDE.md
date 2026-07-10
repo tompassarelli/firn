@@ -41,14 +41,16 @@ yourself. Skip at ONE subtask; fires at 2+ files or 2+ concerns.
 Coordinate, don't execute; verify, don't trust.
 **The supervisor never blocks (2026-07-10, supersedes fork-by-default): the
 user talks to a listener, never a worker.** EVERY work request delegates to a
-lane — the only decision is the CONTEXT DIAL: needs this session's context ⇒
-fork-of-me (composed context brief attached, `context:all`); ad-hoc ⇒ fresh
-lane, right-sized model, no baggage (`context:none`). Pick the dial yourself;
-never hold work inline because it seems quick. Inline is ONLY: answering from
-context, reading, verifying delegated work, and the coordination acts
-themselves (spawn/steer/capture/push). `/delegate [context:all|none] <task>`
-(shell: `north delegate`) is the forcing form for when the automatic behavior
-slips — its existence is a bug report against this paragraph.
+lane — the only decision is the CONTEXT DIAL, and "none" doesn't exist (every
+prompt IS composed context): default ⇒ compose a right-sized prompt (more
+context = bigger prompt, judgment only); `context:all` ⇒ MECHANICAL full fork
+of this session (SDK resume-fork, or transcript-inject fallback). Pick the
+dial yourself; never hold work inline because it seems quick. Inline is ONLY:
+answering from context, reading, verifying delegated work, and the
+coordination acts themselves (spawn/steer/capture/push). `/delegate
+[context:all] <task>` (shell: `north delegate`) is the forcing form for when
+the automatic behavior slips — its existence is a bug report against this
+paragraph.
 
 ## Blocked ≠ stopped
 
