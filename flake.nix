@@ -46,6 +46,10 @@
     gjoa = {
       url = "github:tompassarelli/gjoa";
     };
+    north = {
+      url = "git+file:///home/tom/code/north?ref=main";
+      inputs.fram.follows = "fram";
+    };
     nur = {
       url = "github:nix-community/NUR";
     };
@@ -56,10 +60,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "git+https://git.outfoxxed.me/outfoxxed/quickshell";
     };
-    tern = {
-      url = "git+file:///home/tom/code/tern?ref=main";
-      inputs.fram.follows = "fram";
-    };
     walker = {
       inputs.elephant.follows = "elephant";
       url = "github:abenz1267/walker";
@@ -69,7 +69,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, fram, gjoa, nur, palefox, quickshell, tern, walker, zen-browser, ... }: let
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, fram, gjoa, north, nur, palefox, quickshell, walker, zen-browser, ... }: let
     firnModules = ./modules;
   in
   {
@@ -81,10 +81,10 @@
           elephant = elephant;
           fram = fram;
           gjoa = gjoa;
+          north = north;
           nur = nur;
           palefox = palefox;
           quickshell = quickshell;
-          tern = tern;
           walker = walker;
           zen-browser = zen-browser;
         };
@@ -115,10 +115,10 @@
               elephant = elephant;
               fram = fram;
               gjoa = gjoa;
+              north = north;
               nur = nur;
               palefox = palefox;
               quickshell = quickshell;
-              tern = tern;
               walker = walker;
               zen-browser = zen-browser;
             };
@@ -280,10 +280,10 @@
           elephant = elephant;
           fram = fram;
           gjoa = gjoa;
+          north = north;
           nur = nur;
           palefox = palefox;
           quickshell = quickshell;
-          tern = tern;
           walker = walker;
           zen-browser = zen-browser;
         };
@@ -339,10 +339,10 @@
                 elephant = elephant;
                 fram = fram;
                 gjoa = gjoa;
+                north = north;
                 nur = nur;
                 palefox = palefox;
                 quickshell = quickshell;
-                tern = tern;
                 walker = walker;
                 zen-browser = zen-browser;
               };
