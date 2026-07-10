@@ -61,7 +61,12 @@ the context.) One spawn, one confirmation, end of turn — seconds.
      objective, bounded scope, known inputs/outputs, and a verification path.
      Give each sub-spawn that LOCAL contract. YOU own the REDUCTION: child
      outputs return to you and reconcile in you — never flat fan-in to a
-     synthesizer; convergence mirrors decomposition. Over-parallelize
+     synthesizer; convergence mirrors decomposition. CHECKPOINT DISCIPLINE (a
+     silent reduce phase is how orchestrators wedge): your FIRST act is a report
+     skeleton in docs/private/ + the fan-out, both within your first 3 turns;
+     keep turns SHORT thereafter, appending each worker's result to the skeleton
+     AS it returns — partial state stays on disk and a stall is caught early,
+     never lost to silence. Over-parallelize
      exploration, aggressively converge execution; width and sequential waves
      (explore wave → reconcile → execute wave) are open — depth stays two.
      ATOMIC ⇒ you are the INTERNED WORKER: own it
