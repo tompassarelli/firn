@@ -136,11 +136,12 @@ activity.
 
 ### Pattern B — `/delegate` (chat)
 
-**Trigger:** a human types `/delegate [context:all|none] <text>` (`commands/delegate.md`).
+**Trigger:** a human types `/delegate <text> [--with-context]` (`commands/delegate.md`).
 **Lineage:** SDK-lane via `spawn.ts`, always opus/high/integrator/deliver.
-The CONTEXT DIAL is a parameter, not a separate verb: `context:all` composes and
-attaches this session's brief; `context:none` starts fresh; absent → the session
-picks. (Merges the retired `/request` + `/offload`.)
+Carrying context is BINARY (y/n), a trailing flag not a separate verb: bare =
+compose a right-sized fresh prompt; `--with-context` = carry this session forward
+(mechanical session fork; transcript-inject brief as fallback); absent → the
+session decides. (Merges the retired `/request` + `/offload`.)
 
 ```mermaid
 sequenceDiagram
@@ -179,10 +180,11 @@ caught subprocess death (`death.ts`).
 
 ### Pattern C — shell `north delegate`
 
-**Trigger:** `north delegate "<text>" [--context <file>]` at a shell (`agents-cli.clj:cmd-delegate`).
+**Trigger:** `north delegate "<text>" [--with-context <file>]` at a shell (`agents-cli.clj:cmd-delegate`).
 **Lineage:** identical to B (opus/high/integrator), minted from the CLI.
-ASYMMETRY: `context:all` (a session composing its OWN brief live) is chat-only;
-the shell attaches a pre-composed brief with `--context <file>` instead.
+ASYMMETRY: the chat `--with-context` is a mechanical session fork (a session
+carries ITSELF forward); the shell has no session to fork, so it attaches a
+pre-composed brief with `--with-context <file>` instead.
 
 ```mermaid
 sequenceDiagram
@@ -191,7 +193,7 @@ sequenceDiagram
     participant CS as cmd-spawn (dial table)
     participant SP as spawn.ts
     participant T as north :7977
-    SH->>CLI: north delegate X [--context f]
+    SH->>CLI: north delegate X [--with-context f]
     CLI->>CLI: INTAKE — prepend optional CONTEXT BRIEF + "DELEGATE TASK:"<br/>+ OPERATING CONTRACT (triage / sync / no-push / report-to-private)
     CLI->>CS: resolve role "integrator" via gaffer dial table<br/>(docs/adapters/north.md)
     CS->>CS: ID MINT — lane-{uuid8} · env AGENT_ID/MODEL/EFFORT/ROLE/POSTURE<br/>(+ AGENT_COORDINATOR if --notify)
@@ -308,13 +310,14 @@ identity + presence + death ping) is the obvious remedy but is **not
 implemented today.**
 
 > **Status note (2026-07-10, updated). Managed context-carrying handoff** is the
-> `context:all` mode of the unified delegation verb: shell `north delegate
-> "<task>" --context <file>` (`agents-cli.clj:cmd-delegate`) and slash `/delegate
-> context:all` (`commands/delegate.md`) — a context-carrying handoff on the
-> SDK-lane lineage (pattern C's contract + a prepended parent-context brief), so
-> it gets the full invariant spine (id mint · identity facts · presence ·
-> completion/death ping). (The delegation surface unified 2026-07-10: the earlier
-> `north fork` / `/offload` verbs merged into `delegate`, context as a parameter.)
+> `--with-context` mode of the unified delegation verb: shell `north delegate
+> "<task>" --with-context <file>` (`agents-cli.clj:cmd-delegate`) and slash
+> `/delegate <task> --with-context` (`commands/delegate.md`) — a context-carrying
+> handoff on the SDK-lane lineage (pattern C's contract + a prepended
+> parent-context brief), so it gets the full invariant spine (id mint · identity
+> facts · presence · completion/death ping). (The delegation surface unified
+> 2026-07-10: the earlier `north fork` / `/offload` verbs merged into `delegate`,
+> carrying context is now a binary trailing flag.)
 > The harness-native `/fork` itself remains unmanaged (F4 still applies to it);
 > `/delegate` is the managed alternative to reach for, not a shadow of the builtin
 > — the native `/fork` is a `local-jsx` builtin, and `/delegate`'s distinct name
