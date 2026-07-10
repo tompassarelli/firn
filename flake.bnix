@@ -22,10 +22,10 @@
    :elephant {:url "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73"}
    :fram {:url "git+file:///home/tom/code/fram?ref=main"}
    :gjoa {:url "github:tompassarelli/gjoa"}
+   :north {:url "git+file:///home/tom/code/north?ref=main" :inputs.fram.follows "fram"}
    :nur {:url "github:nix-community/NUR"}
    :palefox {:url "github:tompassarelli/palefox"}
    :quickshell {:inputs.nixpkgs.follows "nixpkgs" :url "git+https://git.outfoxxed.me/outfoxxed/quickshell"}
-   :tern {:url "git+file:///home/tom/code/tern?ref=main" :inputs.fram.follows "fram"}
    :walker {:inputs.elephant.follows "elephant" :url "github:abenz1267/walker"}
    :zen-browser {:inputs.nixpkgs.follows "nixpkgs" :url "github:0xc000022070/zen-browser-flake"}
    ;; --- END GENERATED MODULE INPUTS ---
@@ -47,10 +47,10 @@
      elephant
      fram
      gjoa
+     north
      nur
      palefox
      quickshell
-     tern
      walker
      zen-browser
      ;; --- END GENERATED MODULE ARGS ---
@@ -77,10 +77,10 @@
                     :elephant elephant
                     :fram fram
                     :gjoa gjoa
+                    :north north
                     :nur nur
                     :palefox palefox
                     :quickshell quickshell
-                    :tern tern
                     :walker walker
                     :zen-browser zen-browser
                    ;; --- END GENERATED MODULE SPECIALARGS ---
@@ -123,10 +123,10 @@
                     :elephant elephant
                     :fram fram
                     :gjoa gjoa
+                    :north north
                     :nur nur
                     :palefox palefox
                     :quickshell quickshell
-                    :tern tern
                     :walker walker
                     :zen-browser zen-browser
                           ;; --- END GENERATED HM SPECIALARGS ---
@@ -286,10 +286,10 @@
                     :elephant elephant
                     :fram fram
                     :gjoa gjoa
+                    :north north
                     :nur nur
                     :palefox palefox
                     :quickshell quickshell
-                    :tern tern
                     :walker walker
                     :zen-browser zen-browser
                              ;; --- END GENERATED DARWIN SPECIALARGS ---
@@ -352,10 +352,10 @@
                     :elephant elephant
                     :fram fram
                     :gjoa gjoa
+                    :north north
                     :nur nur
                     :palefox palefox
                     :quickshell quickshell
-                    :tern tern
                     :walker walker
                     :zen-browser zen-browser
                                      ;; --- END GENERATED DARWIN HM SPECIALARGS ---
