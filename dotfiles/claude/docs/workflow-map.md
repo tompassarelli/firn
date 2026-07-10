@@ -301,6 +301,17 @@ id, no identity, no presence, no death signal. That is the direct cause of
 identity + presence + death ping) is the obvious remedy but is **not
 implemented today.**
 
+> **Status note (2026-07-10). Managed fork shipped** as a *separate, opt-in*
+> surface: shell `north fork "<task>" [--context <file>]` (`agents-cli.clj`)
+> and slash `/offload` (`commands/offload.md`) — a context-carrying handoff on
+> the SDK-lane lineage (pattern C's contract + a prepended parent-context
+> brief), so it gets the full invariant spine (id mint · identity facts ·
+> presence · completion/death ping). The harness-native `/fork` itself remains
+> unmanaged (F4 still applies to it); `/offload` is the managed alternative to
+> reach for, not a shadow of the builtin (the native `/fork` is a `local-jsx`
+> builtin — a same-named file command risks silently losing the collision,
+> hence the distinct name).
+
 ---
 
 ## 2. CONSTANT vs CONDITIONAL — the invariant spine

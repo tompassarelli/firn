@@ -30,4 +30,8 @@ inline work. One spawn, one confirmation, end of turn — seconds.
 Only exception: a one-line factual question answerable from THIS session's
 context — answer it and say why it wasn't forked.
 
+> `/request` spawns a FRESH lane — task text only, no context carry. To hand off
+> work the lane should CONTINUE (with your files/decisions/constraints), use
+> `/offload` (context-carrying managed fork) instead.
+
 Request: $ARGUMENTS
