@@ -20,7 +20,7 @@ jobs:
             extra-substituters = https://nix-community.cachix.org https://walker.cachix.org https://walker-git.cachix.org https://devenv.cachix.org https://quickshell.cachix.org
             extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= walker.cachix.org-1:fG8q+uAaMqhsMxWjwvk0IMb4mFPFLqHjuvfwQxE4oJM= walker-git.cachix.org-1:vmC0ocfPWh0S/vRAQGtChuiZBTAe4wiKDeyyXM0/7pM= devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw= quickshell.cachix.org-1:vBm3s5tZThc5KDLj6zhHVCMp8wX/AZJwle9wqdi81ts=
       - name: Build whiterabbit
-        # beagle/fram/tern are authored as local `git+file:///home/tom/...`
+        # beagle/fram/north are authored as local `git+file:///home/tom/...`
         # inputs (fast local iteration on the sibling repos). CI can't fetch a
         # path on the author's machine, so override each to its public github
         # mirror for the build. Local rebuilds keep using the file:// paths.
@@ -38,9 +38,9 @@ jobs:
           nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel \
             --override-input beagle github:tompassarelli/beagle/57d84af61b818be247c795d9ae027baefe13febe \
             --override-input fram github:tompassarelli/fram/650e27604b4100b50d9c49a4d7ea82147fef0cb6 \
-            --override-input tern github:tompassarelli/tern/9fdd1ebd69678c1c0e9d88248767026ad30ba653
+            --override-input north github:tompassarelli/north/d234623ff446fb823ace3b609e180b1840d61932
           # Why these overrides:
-          # - beagle/fram/tern are authored as local git+file:///home/tom/...
+          # - beagle/fram/north are authored as local git+file:///home/tom/...
           #   inputs (fast local iteration); CI can't fetch a path on the author's
           #   machine, so point each at its public github mirror. Local builds keep
           #   the file:// paths.

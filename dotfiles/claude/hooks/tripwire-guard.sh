@@ -31,7 +31,7 @@
 #      non-flag arg) is a remote host not in {github.com, localhost, 127.0.0.1}.
 #   5. Destructive system ops: mkfs*, dd of=/dev/* (except null/stdout/stderr),
 #      shutdown/reboot/poweroff/halt, systemctl (system, not --user)
-#      stop/disable/mask of non-tern*/north* units + power subcommands,
+#      stop/disable/mask of non-north* units + power subcommands,
 #      chmod -R 000, chown -R root.
 #
 # Design constraints honored:
@@ -422,8 +422,8 @@ handle_systemctl() {
   for t in "${units[@]}"; do
     strip_g "$t"
     case "$S" in
-      tern* | north*) ;;
-      *) deny "systemctl $sub $S — stopping/disabling system units is manual (tern*/north* only)" ;;
+      north*) ;;
+      *) deny "systemctl $sub $S — stopping/disabling system units is manual (north* only)" ;;
     esac
   done
 }

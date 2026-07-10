@@ -4,10 +4,9 @@
 # `concern ls` is instant-clean the moment the terminal closes.
 #
 # WHY reconstruct the id instead of reading a pidfile: the registrar
-# (~/code/north/bin/tern-on-spawn) does NOT persist the agent id — it derives it
-# deterministically as ${TERN_AGENT_ID:-cc-<repo>-<session_id[:8]>} from the
-# (env var name stays TERN_AGENT_ID — cross-repo contract with the unrenamed
-#  tern-on-spawn registrar; renamed atomically at coordinator cutover)
+# (~/code/north/bin/north-on-spawn) does NOT persist the agent id — it derives it
+# deterministically as ${NORTH_AGENT_ID:-cc-<repo>-<session_id[:8]>} from the
+# (NORTH_AGENT_ID primary; TERN_AGENT_ID accepted as transitional fallback)
 # session_id + cwd that Claude Code also hands this hook on stdin. We mirror that
 # derivation EXACTLY, so no spawn-side change (and no state file) is needed.
 #
@@ -21,7 +20,7 @@ CONCERN="$HOME/code/north/bin/concern"
 [ -x "$CONCERN" ] || exit 0
 
 # Claude Code delivers a JSON event on stdin; pull flat string fields without jq
-# (jq is not on PATH in this hook environment) — same jget as tern-on-spawn.
+# (jq is not on PATH in this hook environment) — same jget as north-on-spawn.
 IN="$(cat 2>/dev/null || true)"
 jget() { printf '%s' "$IN" | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -1; }
 cwd="$(jget cwd)"; [ -z "$cwd" ] && cwd="$PWD"
@@ -29,7 +28,7 @@ sid="$(jget session_id)"
 
 REPO="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || echo "$cwd")"
 RN="$(basename "$REPO")"
-ID="${TERN_AGENT_ID:-cc-$RN-${sid:0:8}}"
+ID="${NORTH_AGENT_ID:-${TERN_AGENT_ID:-cc-$RN-${sid:0:8}}}"
 # No session id and no explicit override -> we'd only be guessing. Bail.
 case "$ID" in ""|"cc-$RN-") exit 0 ;; esac
 
@@ -44,7 +43,7 @@ case "$ID" in ""|"cc-$RN-") exit 0 ;; esac
 # SC2016: single quotes are DELIBERATE — $CONCERN/$ID/$AWKP must expand in the
 # inner detached bash (they're exported), not here; and $0/$1 are awk fields.
 # Owner match is "@<id> " (trailing space) — `concern ls` always space-delimits the
-# owner token, and the anchor stops a hand-set TERN_AGENT_ID that PREFIXES a peer's id
+# owner token, and the anchor stops a hand-set agent-id pin that PREFIXES a peer's id
 # from arming on the peer's header (which would mark a LIVE peer's concerns done).
 # SC2089/SC2090: the double quotes ARE awk source, delivered intact via "$AWKP".
 # shellcheck disable=SC2016,SC2089

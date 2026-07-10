@@ -93,7 +93,7 @@ flowchart TD
 
 > **`command_peer` — the decentralized initiator.** Any of patterns B–E can be
 > *started by a peer instead of a human*, with no human relay. `command_peer`
-> (`harness.ts:55`, tool `mcp__tern-peer__command_peer`) shells to
+> (`harness.ts:55`, tool `mcp__north-peer__command_peer`) shells to
 > `msg-cli send-cmd`, which asserts a command as facts on `@cmd:<id>` (op ∈
 > {spawn, dispatch, tell, acquire}); the target's reactor triggers on the
 > `target` routing key and runs the op. So "peer commands a spawn" is just
@@ -126,7 +126,7 @@ sequenceDiagram
 ```
 
 Notes: a session mints its id **itself** in the hook, de-aliasing an inherited
-`TERN_AGENT_ID` (§3 id-collision). It has no `coordinator`, so there is **no
+`NORTH_AGENT_ID` pin (§3 id-collision). It has no `coordinator`, so there is **no
 AGENT COMPLETE / AGENT DEATH ping** — its end is observed only as the lease
 lapsing. Renewal is real here: the Claude-Code **PostToolUse hook** renews the
 30-min lease on tool calls (`presence-cli.clj:21`), so `EXPIRES` tracks
@@ -417,7 +417,7 @@ flowchart TD
 | F3 | **alive-then-dead with fresh TTL** | 3 (PRESENCE) — inverse of F2 | The lane dies but its 30-min lease has not expired, so `north agents` still shows `ONLINE yes / <n>s`. If death was a hard SIGKILL that skipped the `finally`, even the death ping may be missing. | thread progress: "alive-then-dead (N lanes died with fresh TTL)" |
 | F4 | **zombie forks** | 1–3, 6 ALL ABSENT | A `/fork` (pattern F) does real work with no id mint, no identity, no presence, no death ping — invisible to every observation command. | §1 pattern F; brief |
 | F5 | **stale concerns misrouting** | 7 (REAPING absent) | A concern owned by a dead/lapsed agent stays `building`; `concern overlap` still counts it, so a live lane shapes its work around a footprint that will never land — or is routed off it. | thread census: "17 STALE-building from dead agents… stale concern misrouted lane X-E" |
-| F6 | **id-collision / aliasing** | 2 (ID MINT) | An inherited `TERN_AGENT_ID` (a parent's env leaking into a subagent — SubagentSessionStart fires with the subagent's own `session_id` but the parent's env) makes two live actors share one `@agent:<id>`: mail answered by the wrong actor; roster phantom flood. Guarded now by the de-alias logic in `north-on-spawn` (only the *first* acquirer keeps a pin). | `north-on-spawn` comments: 2026-07-03 `cc-fram-*` had 3 workstreams + mail to wrong actor; 2026-07-02 **188 `cc-after-text-*` ghosts** |
+| F6 | **id-collision / aliasing** | 2 (ID MINT) | An inherited `NORTH_AGENT_ID` pin (a parent's env leaking into a subagent — SubagentSessionStart fires with the subagent's own `session_id` but the parent's env) makes two live actors share one `@agent:<id>`: mail answered by the wrong actor; roster phantom flood. Guarded now by the de-alias logic in `north-on-spawn` (only the *first* acquirer keeps a pin). | `north-on-spawn` comments: 2026-07-03 `cc-fram-*` had 3 workstreams + mail to wrong actor; 2026-07-02 **188 `cc-after-text-*` ghosts** |
 | F7 | **write-fork (split-brain)** | 3–6 substrate | Writes land on the stranded `:7978` daemon instead of the canonical `:7977` log; roster/board/concern all read `:7977`, so the facts are "written" yet invisible. | `north-on-spawn:53`, `harness.ts:122-123` ("presence on :7978 stranded"); `concern-cli.clj:54` ("split-brain that stranded `reached landed` facts invisibly, 2026-07-02"); brief cites a **2026-07-08 cutover incident** *(date per brief; the split-brain mechanism is in source, the specific 07-08 event is not a thread I read)* |
 
 ---
@@ -486,10 +486,10 @@ below are its rule set.
 - **Confirm:** `north show @agent:<id>` shows facts that cannot belong to one
   actor (two repos/goals racing); or `north agents` lists many
   `session-<repo>-*` phantoms.
-- **Remedy:** already guarded — `north-on-spawn` honors a `TERN_AGENT_ID` pin
+- **Remedy:** already guarded — `north-on-spawn` honors a `NORTH_AGENT_ID` pin (legacy `TERN_AGENT_ID` accepted transitionally)
   **only** if no other session owns it (first-acquirer wins), else derives
   `session-<repo>-<sid8>`. If phantoms predate the guard, they age out at TTL.
-  Never re-export a parent's `TERN_AGENT_ID` into a child spawn.
+  Never re-export a parent's `NORTH_AGENT_ID` into a child spawn.
 
 ### F7 — write-fork (split-brain)
 - **Presents:** a lane reports "told" / "committed" but `north show` / `north

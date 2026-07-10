@@ -59,7 +59,7 @@ fi
 #    path-style-agnostic: match by basename so absolute, \$HOME, or repo-relative
 #    command paths all validate against the tracked hooks/ dir. Hook commands
 #    pointing OUTSIDE the repo (a sibling project's bin/, e.g.
-#    ~/code/north/bin/tern-on-spawn) are external — the repo can't vouch
+#    ~/code/north/bin/north-on-spawn) are external — the repo can't vouch
 #    for them and CI can't see them, so they're noted, not failed.
 if python3 - "$SETTINGS" "$HOOKS" <<'PY'
 import json, sys, os
@@ -79,7 +79,7 @@ for ev, c in cmds:
     cmd_path = c.split()[0]
     d = os.path.dirname(cmd_path).replace(os.sep, "/")
     # External hook: an absolute path that does NOT live under the repo's
-    # dotfiles/claude/hooks (a sibling project's bin/, e.g. tern-on-spawn).
+    # dotfiles/claude/hooks (a sibling project's bin/, e.g. north-on-spawn).
     # The repo can't vouch for it and CI can't see it -> note, don't fail.
     # In-repo hooks (bare name, or a path under dotfiles/claude/hooks) are
     # still validated strictly against the tracked hooks/ dir.
