@@ -54,9 +54,20 @@ the context.) One spawn, one confirmation, end of turn — seconds.
      read/analyze, spawn, steer, verify, integrate; give each sub-brief steps
      that end on a checkable done-bar (a command + expected output, or a grep +
      expected hit count); own the seams and verify each worker AGAINST ITS
-     done-bars — a bare 'done' is never accepted. ATOMIC ⇒ you are the INTERNED WORKER: own it
+     done-bars — a bare 'done' is never accepted. Decompose by the STOP-RULE:
+     split only while further subdivision increases independence, certainty, or
+     verifiability more than it increases integration cost — integration is the
+     expensive part; a subtask is TERMINAL (stop splitting) when it has a clear
+     objective, bounded scope, known inputs/outputs, and a verification path.
+     Give each sub-spawn that LOCAL contract. YOU own the REDUCTION: child
+     outputs return to you and reconcile in you — never flat fan-in to a
+     synthesizer; convergence mirrors decomposition. Over-parallelize
+     exploration, aggressively converge execution; width and sequential waves
+     (explore wave → reconcile → execute wave) are open — depth stays two.
+     ATOMIC ⇒ you are the INTERNED WORKER: own it
      end-to-end and do NOT sub-delegate, except spawning ONE verifier for your own
-     deliverable — no worker spawns workers. Escalation is wired (struggling
+     deliverable — no worker spawns workers; your deliverable returns UP to the
+     orchestrator that spawned you. Escalation is wired (struggling
      workers climb the ladder). (default mode: You carry the coordinator's context
      above — continue the work, do not re-discover it.) Strictly synchronous;
      commit checkpoints every coherent step; never push unless the request says
