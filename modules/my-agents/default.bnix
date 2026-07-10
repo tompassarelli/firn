@@ -2,18 +2,18 @@
 
 (ns default)
 
-;; My-agents — the cockpit command over the agentic stack (fram fact engine ·
-;; north coordination · gaffer staffing · beagle/firn authoring). One entry
-;; point: dashboard, help router, spawn/watch/steer, profile rungs.
-;; Thin PATH wrapper exec'ing the tree bin ON PURPOSE: my-agents is glue over
-;; tree-local tools (north/fram bins, gaffer docs) and must track them live —
-;; a hermetic package would pin yesterday's stack. Requires ~/code/my-agents.
+;; My-agents — FOLDED INTO NORTH (2026-07-10). The cockpit is native now:
+;; `north dashboard` (was my-agents), `north doctor` (health sweep), bare `north`
+;; (the incantation card). This module survives only to TEACH the move: it keeps
+;; `my-agents` on PATH so the old habit gets redirected, self-contained (no
+;; dependency on the archived convoy repo). Teach, don't alias — precedent:
+;; north/bin/tern.
 (nix/module [config lib pkgs ...]
   {:tags [cli-tools]
    :options.myConfig.modules.my-agents.enable
-    (lib.mkEnableOption "My-agents — cockpit command for the agentic stack")
+    (lib.mkEnableOption "my-agents — teach-only shim (folded into `north dashboard`)")
    :config
     (lib.mkIf config.myConfig.modules.my-agents.enable
       {:environment.systemPackages
         [(pkgs.writeShellScriptBin "my-agents"
-           (ms "exec /home/tom/code/convoy/bin/my-agents \"$@\""))]})})
+           (ms "echo 'moved: north dashboard   (also: north doctor · north — the card)' >&2; exit 1"))]})})

@@ -6,7 +6,8 @@ doubling as the pipeline-debug spec.*
 > **Naming.** The stack as a whole has no settled name yet; a naming pass is
 > pending. Today the parts carry their own names and this doc uses them as
 > found in source: **fram** (fact engine), **north** (coordination substrate),
-> **gaffer** (staffing doctrine), **convoy** (cockpit / dashboard). Any of
+> **gaffer** (staffing doctrine). The cockpit/dashboard folded into north
+> (2026-07-10): `north dashboard` / `north doctor` / bare `north` (the card). Any of
 > these names may change. Where this doc says "the stack" it means the whole;
 > where it names a part it means that part's code as it exists on 2026-07-09.
 
@@ -71,9 +72,8 @@ tells you which facts to expect:
 
 `mcp__north__spawn` and `mcp__north__dispatch` are the MCP tool faces of the SDK
 lineage (registered in `harness.ts`'s `NATIVE_TOOLS`). The CLI faces are
-`north spawn` / `north request` (in `cli/agents-cli.clj`) and `convoy spawn` (in
-`convoy/bin/my-agents`), both of which resolve gaffer dials and then
-`bun run sdk/src/spawn.ts`.
+`north spawn` / `north request` (in `cli/agents-cli.clj`), which resolve gaffer
+dials and then `bun run sdk/src/spawn.ts`.
 
 ```mermaid
 flowchart TD
@@ -205,8 +205,8 @@ runs detached with its transcript at `~/.local/state/north/agents/<id>.log`
 
 ### Pattern D — `north spawn <role>`
 
-**Trigger:** `north spawn <role> "<prompt>"` (or `convoy spawn`, or
-`mcp__north__spawn`). The general single-lane path; role picks the dials.
+**Trigger:** `north spawn <role> "<prompt>"` (or `mcp__north__spawn`). The
+general single-lane path; role picks the dials.
 **Lineage:** SDK-lane via `spawn.ts`.
 
 ```mermaid
@@ -366,7 +366,7 @@ pipeline-debug checklist and the spec skeleton for a future `north trace
 
 3. **Presence lease held, ONLINE.**
    `north agents` → `ONLINE yes`, `EXPIRES <n>s` (not `lapsed`).
-   Dashboard view: `my-agents` → the agents pane shows `● <display_name> ttl <n>s`.
+   Dashboard view: `north dashboard` → the agents pane shows `● <display_name> ttl <n>s`.
 
 4. **Work is advancing.**
    `north watch <id>` → transcript tail moves (or web `http://127.0.0.1:8088`).
@@ -482,7 +482,7 @@ below are its rule set.
   it enters the invariant spine.
 
 ### F5 — stale concerns misrouting
-- **Presents:** `my-agents` concerns pane counts a repo's concerns high, but the
+- **Presents:** `north dashboard` concerns pane counts a repo's concerns high, but the
   owners are not in the live-agents pane.
 - **Confirm:** `~/code/north/bin/concern ls <repo>` shows `building` concerns
   whose owner id is `lapsed`/absent in `north agents`.
@@ -507,10 +507,10 @@ below are its rule set.
   board` never reflect it; facts seem to vanish.
 - **Confirm:** the write targeted `:7978` (or any non-`:7977` port) while
   roster/board/concern read `:7977`. Check the port every tool used
-  (`TERN_PORT`, daemon-health in `my-agents doctor` → `7978 agent`).
+  (`TERN_PORT`, daemon-health in `north doctor` → `7978 agent`).
 - **Remedy:** force everything onto the canonical `:7977` log (the default in
   `harness.ts`, `north-on-spawn`, `presence-cli`). Never point a writer at
-  `:7978`; it is stranded by design. `my-agents doctor` surfaces daemon skew.
+  `:7978`; it is stranded by design. `north doctor` surfaces daemon skew.
 
 ---
 
@@ -530,7 +530,7 @@ below are its rule set.
 | presence/lease | `~/code/north/cli/presence-cli.clj` | 30-min TTL, `presence` projection, `slackers`, `pin` |
 | mail/commands | `~/code/north/cli/msg-cli.clj` | `send`/`inbox`/`ack`/`send-cmd` (@cmd facts), derived inbox |
 | listener | `~/code/north/cli/north-listen.clj` | dormant-until-pinged pub/sub; role-addressing |
-| cockpit | `~/code/convoy/bin/my-agents` + `DESIGN.md` | dashboard/doctor/profile; parse-don't-fork gaffer; ownership rule |
+| cockpit | `~/code/north/cli/dashboard-cli.clj` (`north dashboard`/`doctor`; bare `north` card in `bin/north`) | dashboard/doctor/profile; parse-don't-fork gaffer; ownership rule (folded from convoy 2026-07-10) |
 | staffing | `~/code/gaffer/doctrine.md` + `docs/adapters/north.md` | shapes→squad, laws, canonical dial table |
 | fork intake | `~/code/nixos-config/dotfiles/claude/commands/request.md` | `/request` pass-through contract |
 | coordination-v2 | thread `019f4418-bed5-7625-b2ad-41abb6518269` | census, failure receipts, the specced reaping fix plan |
