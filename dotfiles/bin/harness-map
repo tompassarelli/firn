@@ -278,8 +278,8 @@ for (const p of mcpJsonPaths) {
   if (d) mcpServers.push(...collectMcpServers(d));
 }
 
-// 1h. Tern harness constants
-const harnessPath = `${HOME}/code/tern/sdk/src/harness.ts`;
+// 1h. North harness constants
+const harnessPath = `${HOME}/code/north/sdk/src/harness.ts`;
 const harnessText = readText(harnessPath) || "";
 const praxisDirMatch = harnessText.match(/const PRAXIS_DIR\s*=\s*`([^`]+)`/);
 const praxisDir = praxisDirMatch
@@ -325,15 +325,15 @@ for (const name of claudeSymlinks) {
   }
 }
 
-// Tern PRAXIS_DIR
+// North PRAXIS_DIR
 if (praxisDir) {
-  check("tern PRAXIS_DIR exists", praxisDir);
-  check("tern PRAXIS_DIR/roles.md", `${praxisDir}/roles.md`);
-  check("tern PRAXIS_DIR/postures.md", `${praxisDir}/postures.md`);
-  check("tern PRAXIS_DIR/comms.md", `${praxisDir}/comms.md`);
-  check("tern PRAXIS_DIR/deltas/ dir", `${praxisDir}/deltas`);
+  check("north PRAXIS_DIR exists", praxisDir);
+  check("north PRAXIS_DIR/roles.md", `${praxisDir}/roles.md`);
+  check("north PRAXIS_DIR/postures.md", `${praxisDir}/postures.md`);
+  check("north PRAXIS_DIR/comms.md", `${praxisDir}/comms.md`);
+  check("north PRAXIS_DIR/deltas/ dir", `${praxisDir}/deltas`);
 } else {
-  flags.push("FLAG  tern PRAXIS_DIR  →  not found in harness.ts");
+  flags.push("FLAG  north PRAXIS_DIR  →  not found in harness.ts");
 }
 
 // gaffer build-agents check
@@ -522,7 +522,7 @@ if (mcpServers.length > 0) {
   }
 }
 
-// Check tern-peer and tern MCP from the running session context
+// Check north-peer and north MCP from the running session context
 // These are noted in system context but not in files — report from settings
 const mcpSection = settings.mcpServers;
 if (!mcpSection || Object.keys(mcpSection).length === 0) {
@@ -530,12 +530,12 @@ if (!mcpSection || Object.keys(mcpSection).length === 0) {
 }
 emit("");
 
-// 1h. Tern harness / spawn wiring
-emit("### h. Cross-repo spawn wiring (tern harness)\n");
+// 1h. North harness / spawn wiring
+emit("### h. Cross-repo spawn wiring (north harness)\n");
 
 emit(`- harness: \`${tilde(harnessPath)}\``);
 emit(`- PRAXIS_DIR: \`${praxisDir ? tilde(praxisDir) : "(not found)"}\``);
-emit(`  - tern reads spawn blocks from: gaffer docs (single source of truth)`);
+emit(`  - north reads spawn blocks from: gaffer docs (single source of truth)`);
 emit(`  - personal residue: \`~/code/nixos-config/dotfiles/claude/docs/praxis/\``);
 emit(`- appendix functions found in harness: ${appendixFns.join(", ")}`);
 emit(`  - globalLawsAppendix: injects global CLAUDE.md laws into every spawn`);
@@ -560,12 +560,12 @@ emit("  pluginRustLsp[\"plugin: rust-analyzer-lsp\"]");
 emit("  pluginTsLsp[\"plugin: typescript-lsp\"]");
 emit("  pluginLean[\"plugin: lean\"]");
 emit("  gafferDoctrine[\"gaffer/doctrine.md\\n(routing doctrine)\"]");
-emit("  ternHarness[\"tern sdk/src/harness.ts\"]");
+emit("  ternHarness[\"north sdk/src/harness.ts\"]");
 emit("  gafferDocs[\"~/code/gaffer/docs\\n(PRAXIS_DIR: roles/postures/deltas)\"]");
 emit("  praxisPersonal[\"personal praxis residue\\n~/code/nixos-config/dotfiles/claude/docs/praxis/\"]");
 emit("  nixosClaudeMd[\"nixos-config/CLAUDE.md\\n(per-project rules)\"]");
-emit("  ternOnSpawn[\"tern-on-spawn\\n(SessionStart hook)\"]");
-emit("  ternOnTooluse[\"tern-on-tooluse\\n(PostToolUse hook)\"]");
+emit("  ternOnSpawn[\"north-on-spawn\\n(SessionStart hook)\"]");
+emit("  ternOnTooluse[\"north-on-tooluse\\n(PostToolUse hook)\"]");
 emit("");
 emit("  session -->|loads| settingsJson");
 emit("  session -->|loads| claudeMdGlobal");

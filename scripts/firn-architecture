@@ -7,7 +7,7 @@ time, so the map cannot be stale — it IS the system.
 
 Three layers (see docs/claude/README.md for the design):
   local      — how Claude Code is wired here (CLAUDE.md chain, settings, hooks)
-  substrate  — what the config points at (plugins, MCP servers, tern)
+  substrate  — what the config points at (plugins, MCP servers, north)
   canonical  — Anthropic contracts (annotated inline; curated, not scraped)
 
 Usage:
@@ -218,7 +218,7 @@ def render():
     w("> disk; re-run after any config change. Idempotent (no timestamp): a diff")
     w("> here means the system actually moved. This is layer 2 of the bundle —")
     w("> see [README.md](README.md) (start here), [01-canonical.md](01-canonical.md)")
-    w("> (how Claude Code works), [03-tern.md](03-tern.md) (the substrate).")
+    w("> (how Claude Code works), [03-north.md](03-north.md) (the substrate).")
     w("")
     w(f"Repo: `{fullpath(REPO)}` · Claude config: `{fullpath(CLAUDE)}`")
     w("")
@@ -308,7 +308,7 @@ def render():
             w(f"| `{name}` | `{i.get('version','?')}` | `{fullpath(i.get('installPath','?'))}` |")
     w("")
     mcp = load_mcp()
-    w("**MCP servers** (user scope — where tern plugs into Claude):")
+    w("**MCP servers** (user scope — where north plugs into Claude):")
     w("")
     if mcp:
         w("| server | command |")
@@ -330,14 +330,14 @@ def render():
 
 def bundle():
     """Concatenate the full bundle in reading order for a single top-to-bottom
-    read: README + canonical (hand) + local map (freshly generated) + tern."""
+    read: README + canonical (hand) + local map (freshly generated) + north."""
     parts = []
     for f in ("README.md", "01-canonical.md"):
         p = DOCDIR / f
         if p.exists():
             parts.append(p.read_text())
     parts.append(render())  # 02 — fresh, not the on-disk copy
-    p3 = DOCDIR / "03-tern.md"
+    p3 = DOCDIR / "03-north.md"
     if p3.exists():
         parts.append(p3.read_text())
     return "\n\n---\n\n".join(parts)

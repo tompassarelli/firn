@@ -13,7 +13,7 @@
 (define (handle-architecture leaf)
   (define script (path->string (in-repo "scripts" "firn-architecture")))
   (if (member leaf '("bundle" "--bundle"))
-      (sh script "--bundle")    ; print canonical + local + tern, top to bottom
+      (sh script "--bundle")    ; print canonical + local + north, top to bottom
       (sh script "--write")))    ; regenerate docs/claude/02-local-map.md + print it
 
 (define node-edges

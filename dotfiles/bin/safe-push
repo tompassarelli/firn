@@ -5,7 +5,7 @@
 # force/destructive pushes, then push the current branch to its upstream. Any guard
 # trip => nothing is pushed, nonzero exit. The secret scan — not a human — is the
 # guard, and it travels with this command, so it protects repos that have no
-# commit-time hook (tern/fram/beagle today).
+# commit-time hook (north/fram/beagle today).
 #
 # Usage:  safe-push              push current branch to origin
 #         safe-push --dry-run    run the scan + checks, do not push

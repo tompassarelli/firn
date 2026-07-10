@@ -7,20 +7,20 @@ The map of how Claude Code is set up on this machine, split by **concern** and
 |---|---|---|---|---|
 | 1 | [01-canonical.md](01-canonical.md) | how Claude Code works + the levers + when to use each | slowly (Anthropic contracts) | hand |
 | 2 | [02-local-map.md](02-local-map.md) | how THIS system is wired right now | every config change | **generated** |
-| 3 | [03-tern.md](03-tern.md) | where the tern/claim substrate plugs in | occasionally | hand |
+| 3 | [03-north.md](03-north.md) | where the north/claim substrate plugs in | occasionally | hand |
 
 - **① canonical** — the stable model. What Claude Code *is*, the 80/20 levers
   (CLAUDE.md / settings / hooks / skills / MCP / plugins / subagents), and the
   hooks-vs-skills-vs-CLAUDE.md decision. Update only when the harness changes.
 - **② local map** — **NEVER hand-edit.** Run `firn architecture` (walks disk +
   settings + plugin manifests). A diff here means the system actually moved.
-- **③ tern** — the substrate Claude points at, and the SDK dispatch model
+- **③ north** — the substrate Claude points at, and the SDK dispatch model
   that coordinates agent work via thread-driven posture.
 
 ## Reading the whole thing top-to-bottom
 
 ```bash
-firn architecture bundle   # canonical + (freshly-generated) local map + tern, concatenated
+firn architecture bundle   # canonical + (freshly-generated) local map + north, concatenated
 firn architecture          # just regenerate + print the local map (02)
 ```
 

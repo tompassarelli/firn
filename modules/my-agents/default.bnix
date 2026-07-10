@@ -3,10 +3,10 @@
 (ns default)
 
 ;; My-agents — the cockpit command over the agentic stack (fram fact engine ·
-;; tern coordination · gaffer staffing · beagle/firn authoring). One entry
+;; north coordination · gaffer staffing · beagle/firn authoring). One entry
 ;; point: dashboard, help router, spawn/watch/steer, profile rungs.
 ;; Thin PATH wrapper exec'ing the tree bin ON PURPOSE: my-agents is glue over
-;; tree-local tools (tern/fram bins, gaffer docs) and must track them live —
+;; tree-local tools (north/fram bins, gaffer docs) and must track them live —
 ;; a hermetic package would pin yesterday's stack. Requires ~/code/my-agents.
 (nix/module [config lib pkgs ...]
   {:tags [cli-tools]

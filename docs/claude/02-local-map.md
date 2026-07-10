@@ -4,7 +4,7 @@
 > disk; re-run after any config change. Idempotent (no timestamp): a diff
 > here means the system actually moved. This is layer 2 of the bundle —
 > see [README.md](README.md) (start here), [01-canonical.md](01-canonical.md)
-> (how Claude Code works), [03-tern.md](03-tern.md) (the substrate).
+> (how Claude Code works), [03-north.md](03-north.md) (the substrate).
 
 Repo: `~/code/nixos-config` · Claude config: `~/.claude`
 
@@ -38,10 +38,10 @@ What the `~/code/nixos-config/modules/claude` module materializes into `~/.claud
 - **statusLine** → `bash "$HOME/code/nixos-config/dotfiles/claude/statusline.sh"`
 - **enabledPlugins** → `rust-analyzer-lsp@claude-plugins-official`, `typescript-lsp@claude-plugins-official`, `caveman@caveman`
 - **hooks** (Claude Code fires these at lifecycle points; `⟨src⟩` = settings.json or the plugin that contributes it):
-  - `SessionStart` → `beagle-session-start.sh` ⟨settings⟩, `tern-on-spawn` ⟨settings⟩, `caveman-activate.js` ⟨caveman⟩
+  - `SessionStart` → `beagle-session-start.sh` ⟨settings⟩, `north-on-spawn` ⟨settings⟩, `caveman-activate.js` ⟨caveman⟩
   - `UserPromptSubmit` → `caveman-mode-tracker.js` ⟨caveman⟩
   - `PreToolUse` → `claim-canonical-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `tripwire-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩
-  - `PostToolUse` → `racket-build-guard.sh` ⟨settings⟩, `tern-on-tooluse` ⟨settings⟩
+  - `PostToolUse` → `racket-build-guard.sh` ⟨settings⟩, `north-on-tooluse` ⟨settings⟩
   - `Stop` → `caveman-session-stats.js` ⟨caveman⟩
 
 ### Control flow (lifecycle spine)
@@ -49,7 +49,7 @@ What the `~/code/nixos-config/modules/claude` module materializes into `~/.claud
 ```mermaid
 flowchart TD
   A[session start] --> B{SessionStart}
-  B -->|"beagle-session-start.sh · tern-on-spawn · caveman-activate.js"| C[turn loop]
+  B -->|"beagle-session-start.sh · north-on-spawn · caveman-activate.js"| C[turn loop]
   C --> D{UserPromptSubmit}
   D -->|"caveman-mode-tracker.js"| E["model responds + tools"]
   E -.->|"PreToolUse: claim-canonical-guard.sh · firn-guard.sh · tripwire-guard.sh"| E
@@ -69,13 +69,13 @@ flowchart TD
 | `lean@leanprover` | `0.1.0` | `~/.claude/plugins/cache/leanprover/lean/0.1.0` |
 | `caveman@caveman` | `37c28ebb1e0a` | `~/.claude/plugins/cache/caveman/caveman/37c28ebb1e0a` |
 
-**MCP servers** (user scope — where tern plugs into Claude):
+**MCP servers** (user scope — where north plugs into Claude):
 
 | server | command |
 |---|---|
 | `fram` | `~/code/fram/bin/fram-mcp` |
 | `linear-mcp-msa-new` | `.` |
-| `tern` | `~/code/tern/bin/tern-mcp` |
+| `north` | `~/code/north/bin/north-mcp` |
 
 > Layer 3 (CANONICAL Anthropic contracts) is annotated inline above where
 > it governs a local choice. A fuller canonical corpus is the next phase —
