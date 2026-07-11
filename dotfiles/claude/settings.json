@@ -129,6 +129,27 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "mcp__north__spawn|mcp__north__dispatch|Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/north/bin/north-mark-delegated",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/north/bin/north-on-stop",
+            "timeout": 10
+          }
+        ]
       }
     ]
   },
