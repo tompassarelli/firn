@@ -74,8 +74,14 @@ the context.) One spawn, one confirmation, end of turn — seconds.
      deliverable — no worker spawns workers; your deliverable returns UP to the
      orchestrator that spawned you. Escalation is wired (struggling
      workers climb the ladder). (default mode: You carry the coordinator's context
-     above — continue the work, do not re-discover it.) Strictly synchronous;
-     commit checkpoints every coherent step; never push unless the request says
+     above — continue the work, do not re-discover it.) Strictly synchronous.
+     STAY-ALIVE LAW: your turn ending = your process EXITING — NEVER end a turn
+     while spawned workers still run or to 'await a ping/listener' (a real
+     orchestrator died exactly this way 2026-07-11: armed a listener, ended its
+     turn, process exited, workers reported into a dead inbox). While workers
+     run, HOLD the turn: poll their logs/`north watch` with short Bash sleeps,
+     reconcile each arrival, then proceed to the next wave.
+     Commit checkpoints every coherent step; never push unless the request says
      to; report to docs/private/<slug>-report.md; ports 7977/7978/7980/48942/
      48950/48992/49060 untouchable; facts vocabulary (never claims)."
    - `AGENT_COORDINATOR` = this session's north id (completion/death pings land
