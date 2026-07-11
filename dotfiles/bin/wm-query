@@ -1,0 +1,57 @@
+#!/usr/bin/env bb
+;; wm-query — read helper over the window-fact world written by wm-facts-daemon.
+;; Folds the fram world log (FRAM_LOG, newest assertion wins per subject/pred)
+;; and answers questions about live windows.
+;;
+;;   wm-query recent-terminal
+;;     -> most recently focused, still-open window whose app_id names a
+;;        terminal (contains ghostty / Alacritty / foot).
+;;        prints:  <window-id><TAB><title>
+
+(require '[clojure.edn :as edn]
+         '[clojure.java.io :as io]
+         '[clojure.string :as str])
+
+(def log-file
+  (or (System/getenv "FRAM_LOG")
+      (str (System/getenv "HOME") "/.local/state/wm-world/facts.log")))
+
+(def terminal-marks ["ghostty" "Alacritty" "foot"])
+(defn terminal? [app]
+  (boolean (and app (some #(str/includes? app %) terminal-marks))))
+
+(defn fold
+  "Fold the append-only log into {subject {pred value}}, newest wins."
+  []
+  (let [state (atom {})]
+    (when (.exists (io/file log-file))
+      (with-open [r (io/reader log-file)]
+        (doseq [line (line-seq r) :when (not (str/blank? line))]
+          (try
+            (let [{:keys [l p r op]} (edn/read-string line)]
+              (when (= op "assert")
+                (swap! state assoc-in [l p] r)))
+            (catch Exception _ nil)))))
+    @state))
+
+(defn recent-terminal []
+  (->> (fold)
+       (keep (fn [[subj f]]
+               (let [app (get f "app_id")
+                     fa  (get f "focused_at")]
+                 (when (and (terminal? app) fa (not (get f "closed_at")))
+                   {:id subj :title (get f "title") :fa fa}))))
+       (sort-by :fa)           ; ISO-8601 UTC strings sort chronologically
+       last))
+
+(defn -main [args]
+  (case (first args)
+    "recent-terminal"
+    (if-let [w (recent-terminal)]
+      (println (str (str/replace (:id w) #"^@" "") "\t" (:title w)))
+      (do (binding [*out* *err*] (println "no terminal window found"))
+          (System/exit 1)))
+    (do (binding [*out* *err*] (println "usage: wm-query recent-terminal"))
+        (System/exit 2))))
+
+(-main *command-line-args*)

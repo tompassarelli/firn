@@ -1,0 +1,100 @@
+#!/usr/bin/env bb
+;; wm-facts-daemon — subscribe to niri's event-stream and append window facts
+;; to a dedicated fram world (FRAM_LOG). Sole writer of that world: appends
+;; fram log lines directly (no coordinator dependency), which the fram fold
+;; reads back fact-identically.
+;;
+;; Vocabulary (seed, do not expand): subject @w<niri-id>; predicates
+;; app_id title workspace opened_at closed_at focused_at.
+;; Timestamps are ISO-8601 UTC (java.time.Instant). Single-valued by latest
+;; assertion (append-only: newest line wins on fold).
+
+(require '[cheshire.core :as json]
+         '[babashka.process :as proc]
+         '[clojure.java.io :as io]
+         '[clojure.edn :as edn]
+         '[clojure.string :as str])
+
+(def log-file
+  (or (System/getenv "FRAM_LOG")
+      (str (System/getenv "HOME") "/.local/state/wm-world/facts.log")))
+
+(io/make-parents log-file)
+
+(def tx-counter (atom 0))          ; monotonic tx, primed from existing log
+(def known (atom #{}))             ; subjects that already have opened_at
+(def last-vals (atom {}))          ; [subj pred] -> last emitted value (dedupe stable preds)
+
+(defn err [& xs] (binding [*out* *err*] (apply println xs)))
+
+(defn prime!
+  "Rebuild tx/known/last-vals from the existing log so a restart neither
+   rewinds tx nor re-emits opened_at or unchanged app_id/title/workspace."
+  []
+  (when (.exists (io/file log-file))
+    (with-open [r (io/reader log-file)]
+      (doseq [line (line-seq r) :when (not (str/blank? line))]
+        (try
+          (let [{:keys [tx l p r]} (edn/read-string line)]
+            (when tx (swap! tx-counter max tx))
+            (when (= p "opened_at") (swap! known conj l))
+            (when (#{"app_id" "title" "workspace"} p)
+              (swap! last-vals assoc [l p] r)))
+          (catch Exception _ nil))))))
+
+(defn now-iso [] (str (java.time.Instant/now)))
+
+(def out-lock (Object.))
+(defn emit [subj pred val]
+  (let [tx   (swap! tx-counter inc)
+        line (pr-str {:tx tx :op "assert" :l subj :p pred :r val
+                      :frame "wm" :ts (now-iso)})]
+    (locking out-lock
+      (spit log-file (str line "\n") :append true))))
+
+(defn emit-val
+  "Emit a stable-valued predicate only when it actually changed — keeps the
+   log from churning on every niri window-changed event (mostly title noise)."
+  [subj pred val]
+  (let [k [subj pred]]
+    (when (not= (get @last-vals k) val)
+      (swap! last-vals assoc k val)
+      (emit subj pred val))))
+
+(defn handle-window [w]
+  (let [subj (str "@w" (:id w))]
+    (when-let [a (:app_id w)]       (emit-val subj "app_id" a))
+    (when-let [t (:title w)]        (emit-val subj "title" t))
+    (when-let [ws (:workspace_id w)] (emit-val subj "workspace" ws))
+    (when-not (contains? @known subj)
+      (swap! known conj subj)
+      (emit subj "opened_at" (now-iso)))
+    (when (:is_focused w)
+      (emit subj "focused_at" (now-iso)))))
+
+(defn handle-event [ev]
+  (let [[k v] (first ev)]
+    (case (name k)
+      "WindowsChanged"         (doseq [w (:windows v)] (handle-window w))
+      "WindowOpenedOrChanged"  (handle-window (:window v))
+      "WindowClosed"           (emit (str "@w" (:id v)) "closed_at" (now-iso))
+      "WindowFocusChanged"     (when-let [id (:id v)]
+                                 (emit (str "@w" id) "focused_at" (now-iso)))
+      nil)))
+
+(defn run []
+  (loop []
+    (try
+      (let [p (proc/process ["niri" "msg" "-j" "event-stream"] {:err :inherit})]
+        (with-open [rdr (io/reader (:out p))]
+          (doseq [line (line-seq rdr) :when (not (str/blank? line))]
+            (try (handle-event (json/parse-string line true))
+                 (catch Exception e (err "event error:" (.getMessage e)))))))
+      (catch Exception e (err "stream error:" (.getMessage e))))
+    (err "niri stream ended; reconnecting in 2s")
+    (Thread/sleep 2000)
+    (recur)))
+
+(prime!)
+(err "wm-facts-daemon started; log =" log-file "tx =" @tx-counter)
+(run)
