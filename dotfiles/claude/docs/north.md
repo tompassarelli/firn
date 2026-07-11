@@ -15,18 +15,18 @@ Full spec: ~/code/north/docs/fact-native-redesign.md.
 Two predicates, both `cardinality multi`, `value_kind literal`:
 
 - **`done_when`** — one completion criterion per fact; phrasing convention "probe + expected result" (e.g. `"north validate exits 0"`, `"firn build + validate green"`). Threads SHOULD carry these by commit time.
-- **`bar_evidence`** — one observed probe result per fact, backing a bar (e.g. `"north validate → exit 0 2026-07-11"`). `needs-review` surfaces outcomes where `bar_evidence` count < `done_when` count.
+- **`bar_evidence`** — one observed probe result per fact, QUOTING its bar: `"<bar> → <observed result>"` (e.g. `"north validate exits 0 → exit 0, 2026-07-11"`). Pairing is text containment — a bar is ✓ when some evidence fact quotes it.
 
 **Friction gradient:**
 - **capture** — zero ceremony; no bars required at jot time.
 - **commit/dispatch** — bars expected; `north dispatch` warns on bar-less committed threads and injects "define your done bar first" into worker contracts.
 - **outcome** — `north tell <id> outcome ...` on a barred thread echoes the bars (reminder, never a reject).
-- **needs-review** — flags (i) committed+driven threads without `done_when`, (ii) outcomes on barred threads with fewer `bar_evidence` than bars.
+- **needs-review** — flags (i) committed+driven threads without `done_when`, (ii) outcomes on barred threads with ○ (unquoted-by-evidence) bars, each marked ✓/○.
 
 Example:
 ```
 north tell 2026-07-11-120000 done_when "north validate exits 0"
-north tell 2026-07-11-120000 bar_evidence "north validate → exit 0 2026-07-11"
+north tell 2026-07-11-120000 bar_evidence "north validate exits 0 → exit 0, 2026-07-11"
 ```
 
 `north schema thread` shows `done_when` metadata once declared. Full spec: ~/code/north/docs/operating-manual.md §Done-bars.
