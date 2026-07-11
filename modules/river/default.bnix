@@ -8,21 +8,67 @@
 ;; pkgs.unstable.river (0.4.5) to guarantee 0.4 — river-classic is the old
 ;; 0.3 and is not used here.
 ;;
-;; NOTE: river 0.4 ships NO built-in window manager — an external WM client
-;; over the river-window-management-v1 protocol is REQUIRED for a usable
-;; session. None is packaged in nixpkgs yet (wideriver is a river-0.3
-;; layout generator, incompatible). Intended WM is rill (MIT, Zig,
-;; https://codeberg.org/lzj15/rill) — packaging it is a follow-up; add it to
-;; programs.river.extraPackages once packaged. Until then a river session
-;; starts but has no WM.
+;; river 0.4 ships NO built-in window manager — an external WM client over
+;; the river-window-management-v1 protocol is REQUIRED for a usable session.
+;; WM here is rill (MIT, Zig 0.16, https://codeberg.org/lzj15/rill), packaged
+;; below and wired into programs.river.extraPackages. rill is co-located in
+;; this module (not its own modules/rill) because it exists ONLY to serve
+;; river — no host would ever enable it standalone.
+;;
+;; rill packaging: no upstream flake, so a hand-rolled stdenv derivation
+;; using nixpkgs' zig 0.16 setup hook + the `--system <linkFarm>` offline-deps
+;; pattern (same as nixpkgs' own river). rill's two build.zig.zon deps
+;; (zig-wayland 0.6.0, zig-xkbcommon 0.4.0 — both dependency-free) reuse the
+;; exact fetchzip url+hash pairs from nixpkgs river's build.zig.zon.nix, so
+;; the dep hashes are upstream-verified. Pinned to tag 0.6.0 (commit
+;; b0634853de4be8942a92306e386a23884841f1b2); protocol river-window-management
+;; v4, matching river 0.4.5.
 
 (nix/module [config lib pkgs ...]
-  {:tags-opt-in [desktop]
-   :options.myConfig.modules.river.enable
-    (lib.mkEnableOption "Enable river 0.4 Wayland compositor (pluggable-WM lane; opt-in)")
-   :config
-    (lib.mkIf config.myConfig.modules.river.enable
-      {:programs.river.enable true
-       :programs.river.package pkgs.unstable.river
-       :programs.river.xwayland.enable true
-       :environment.sessionVariables.NIXOS_OZONE_WL "1"})})
+  (let
+    [zig pkgs.zig_0_16
+     rillDeps
+      (pkgs.linkFarm "rill-zig-deps"
+        [{:name "wayland-0.6.0-lQa1kqz8AQADQmdNJsNhLoNHcnEGEUjrOaPV-dtEnEmX"
+          :path
+           (pkgs.fetchzip
+             {:url  "https://codeberg.org/ifreund/zig-wayland/archive/v0.6.0.tar.gz"
+              :hash "sha256-3m/ITNhZUJ/5uD/Tqm+0uZSktGoYgWF5oldOqOCUkIE="})}
+         {:name "xkbcommon-0.4.0-VDqIe0i2AgDRsok2GpMFYJ8SVhQS10_PI2M_CnHXsJJZ"
+          :path
+           (pkgs.fetchzip
+             {:url  "https://codeberg.org/ifreund/zig-xkbcommon/archive/v0.4.0.tar.gz"
+              :hash "sha256-zQkmP/cuhAtjOLqYS5D15khKzpqyhbyZ0TD6/8jOkqE="})}])
+     rill
+      (pkgs.stdenv.mkDerivation
+        {:pname   "rill"
+         :version "0.6.0"
+         :src
+          (pkgs.fetchFromCodeberg
+            {:owner "lzj15"
+             :repo  "rill"
+             :tag   "0.6.0"
+             :hash  "sha256-32DtBy/zgic2iKGrs8WRr7bzv640ACsI8KmzENtcLtA="})
+         :strictDeps      true
+         :nativeBuildInputs [pkgs.pkg-config pkgs.wayland-scanner zig]
+         ;; wayland-scanner in buildInputs (not just native): zig-wayland's
+         ;; Scanner runs `pkg-config wayland-scanner` on the host pkg-config path
+         :buildInputs     [pkgs.wayland pkgs.wayland-protocols pkgs.wayland-scanner pkgs.libxkbcommon]
+         ;; offline zig deps via the linkFarm, same as nixpkgs river
+         :zigBuildFlags   ["--system" (s rillDeps)]
+         :meta
+          {:description "Minimalist scrolling window manager for river (river-window-management-v1)"
+           :homepage    "https://codeberg.org/lzj15/rill"
+           :license     lib.licenses.mit
+           :mainProgram "rill"
+           :platforms   lib.platforms.linux}})]
+    {:tags-opt-in [desktop]
+     :options.myConfig.modules.river.enable
+      (lib.mkEnableOption "Enable river 0.4 Wayland compositor (pluggable-WM lane; opt-in)")
+     :config
+      (lib.mkIf config.myConfig.modules.river.enable
+        {:programs.river.enable true
+         :programs.river.package pkgs.unstable.river
+         :programs.river.extraPackages [rill]
+         :programs.river.xwayland.enable true
+         :environment.sessionVariables.NIXOS_OZONE_WL "1"})}))
