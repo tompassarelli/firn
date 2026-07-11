@@ -59,6 +59,20 @@ Verify a blocker's load-bearing assertion before accepting OR overriding it. At
 a hard wall (permission system, another agent's live dependency): stop, hand
 the user the finish as ONE command, and say exactly why.
 
+## Done-claims carry a bar — probe + observed result
+
+"Done"/"verified"/"fixed" is a JUDGMENT and must cite its evidence: state the
+probe run and the result observed ("north validate → exit 0", "firn build +
+validate → green"), never the bare adjective. firn's green gates are the
+precedent: rebuild is earned by build+validate output, not by belief. Same
+discipline graph-side: threads SHOULD carry `done_when` facts (probe +
+expected result, one per fact) by commit time; `north dispatch` warns when a
+committed thread lacks them and workers define their own bar as a first act;
+outcomes on barred threads echo the bars, and needs-review surfaces
+unevidenced ones (`bar_evidence` facts hold observed results). Capture stays
+zero-ceremony — the bar attaches when work is ACCEPTED, not when a thought
+is jotted.
+
 ## Model + payload routing — per agent, both dials
 → `~/code/nixos-config/dotfiles/claude/docs/model-selection.md`
 → `~/code/nixos-config/dotfiles/claude/docs/praxis/` (spawn payload blocks; README = assembly)

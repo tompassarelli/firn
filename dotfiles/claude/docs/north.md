@@ -10,6 +10,27 @@ former tags are `@topic-*` threads). ids: `2026-06-15-150040`. Time: `north cloc
 (fact-native sessions; Clockify is an on-demand projection via `clock sync`).
 Full spec: ~/code/north/docs/fact-native-redesign.md.
 
+## Done-bars — completion evidence on threads
+
+Two predicates, both `cardinality multi`, `value_kind literal`:
+
+- **`done_when`** — one completion criterion per fact; phrasing convention "probe + expected result" (e.g. `"north validate exits 0"`, `"firn build + validate green"`). Threads SHOULD carry these by commit time.
+- **`bar_evidence`** — one observed probe result per fact, backing a bar (e.g. `"north validate → exit 0 2026-07-11"`). `needs-review` surfaces outcomes where `bar_evidence` count < `done_when` count.
+
+**Friction gradient:**
+- **capture** — zero ceremony; no bars required at jot time.
+- **commit/dispatch** — bars expected; `north dispatch` warns on bar-less committed threads and injects "define your done bar first" into worker contracts.
+- **outcome** — `north tell <id> outcome ...` on a barred thread echoes the bars (reminder, never a reject).
+- **needs-review** — flags (i) committed+driven threads without `done_when`, (ii) outcomes on barred threads with fewer `bar_evidence` than bars.
+
+Example:
+```
+north tell 2026-07-11-120000 done_when "north validate exits 0"
+north tell 2026-07-11-120000 bar_evidence "north validate → exit 0 2026-07-11"
+```
+
+`north schema thread` shows `done_when` metadata once declared. Full spec: ~/code/north/docs/operating-manual.md §Done-bars.
+
 ## Writing safely under concurrent agents
 
 north threads are backed by the North fact graph (engine `~/code/fram`;
