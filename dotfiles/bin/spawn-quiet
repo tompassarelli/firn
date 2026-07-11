@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# spawn-quiet <cmd> [args...] — open a window WITHOUT stealing focus.
+#
+# "Window opened" and "window deserves focus" are separated into two events.
+# Two layers, both leaving the user where they were:
+#   1. Marker path (preferred, no flicker): terminals we know how to tag get
+#      app-id "quiet.spawn", which the niri window-rule catches with
+#      `open-focused false` — focus never moves in the first place.
+#   2. Universal fallback (any app): snapshot the focused window, watch for the
+#      new window to appear, and if it grabbed focus, hand focus straight back.
+# Either way the new window is flagged urgent — the bar signals "wants you"
+# instead of taking you. Prints the new window id on success.
+#
+# Apps with no app-id/class control (many GTK/Qt apps hardcode their app-id)
+# can't take the marker path; the fallback covers them (one focus flicker).
+set -euo pipefail
+
+[ "$#" -ge 1 ] || { echo "usage: spawn-quiet <cmd> [args...]" >&2; exit 2; }
+
+MARK="quiet.spawn"
+TIMEOUT="${SPAWN_QUIET_TIMEOUT:-5}"   # seconds to wait for the new window
+
+ids()        { niri msg -j windows        | jq -r '.[].id'; }
+focused_id() { niri msg -j focused-window | jq -r '.id // empty'; }
+
+prev_focus="$(focused_id || true)"
+before="$(ids | sort)"
+
+# Marker path: tag terminals that expose app-id/class control so the rule
+# handles focus declaratively. Extend this case for other markable apps.
+cmd=( "$@" )
+case "$(basename -- "$1")" in
+  ghostty) cmd=( "$1" "--class=$MARK" "${@:2}" ) ;;
+esac
+
+if command -v setsid >/dev/null 2>&1; then
+  setsid -f "${cmd[@]}" >/dev/null 2>&1
+else
+  nohup "${cmd[@]}" >/dev/null 2>&1 &
+  disown || true
+fi
+
+# Wait for a new window id to appear.
+new=""
+deadline=$(( $(date +%s) + TIMEOUT ))
+while [ "$(date +%s)" -lt "$deadline" ]; do
+  new="$(comm -13 <(printf '%s\n' "$before") <(ids | sort) | sort -n | tail -n1)"
+  [ -n "$new" ] && break
+  sleep 0.1
+done
+
+if [ -z "$new" ]; then
+  echo "spawn-quiet: no new window within ${TIMEOUT}s (spawn may have failed)" >&2
+  exit 1
+fi
+
+# Fallback: if the marker path didn't stop the grab, hand focus back.
+cur="$(focused_id || true)"
+if [ -n "$prev_focus" ] && [ "$cur" = "$new" ] && [ "$cur" != "$prev_focus" ]; then
+  niri msg action focus-window --id "$prev_focus" >/dev/null 2>&1 || true
+fi
+
+# Attention instead of theft.
+niri msg action set-window-urgent --id "$new" >/dev/null 2>&1 || true
+
+echo "$new"

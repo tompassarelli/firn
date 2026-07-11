@@ -350,6 +350,15 @@ window-rule {
     clip-to-geometry true
 }
 
+// Focus sovereignty: windows opened via `spawn-quiet` (app-id "quiet.spawn")
+// open WITHOUT stealing focus. "Window opened" and "window deserves focus"
+// are separate events — the wrapper flags the window urgent instead so the
+// bar signals "wants you" rather than taking you.
+window-rule {
+    match app-id=r#"^quiet\.spawn$"#
+    open-focused false
+}
+
 // Global Transparency (see-through / frosted glass)
 window-rule {
   opacity 0.88
