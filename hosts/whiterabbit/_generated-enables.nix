@@ -84,6 +84,7 @@
   myConfig.modules.racket.enable = lib.mkDefault true;
   myConfig.modules.rebuild-nopasswd.enable = lib.mkDefault true;
   myConfig.modules.ripgrep.enable = lib.mkDefault true;
+  myConfig.modules.river.enable = lib.mkDefault true;
   myConfig.modules.rofi.enable = lib.mkDefault true;
   myConfig.modules.rust-analyzer.enable = lib.mkDefault true;
   myConfig.modules.rustc.enable = lib.mkDefault true;
