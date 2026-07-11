@@ -1,0 +1,39 @@
+#!/usr/bin/env bb
+;; wm-unmark <letter> — drop a mark from the marks world (MARKS_LOG).
+;; Writes a retract line the fold honours (removes the whole @mark-<letter>
+;; subject). Co-writer with wm-mark; sole writers of MARKS_LOG.
+
+(require '[babashka.process :as proc]
+         '[clojure.edn :as edn]
+         '[clojure.java.io :as io]
+         '[clojure.string :as str])
+
+(def log-file
+  (or (System/getenv "MARKS_LOG")
+      (str (System/getenv "HOME") "/.local/state/wm-world/marks.log")))
+(io/make-parents log-file)
+
+(defn err [& xs] (binding [*out* *err*] (apply println xs)))
+(defn now-iso [] (str (java.time.Instant/now)))
+
+(defn max-tx []
+  (let [t (atom 0)]
+    (when (.exists (io/file log-file))
+      (with-open [r (io/reader log-file)]
+        (doseq [line (line-seq r) :when (not (str/blank? line))]
+          (try (when-let [tx (:tx (edn/read-string line))] (swap! t max tx))
+               (catch Exception _ nil)))))
+    @t))
+
+(defn -main [args]
+  (let [letter (first args)]
+    (when-not (and letter (re-matches #"[A-Za-z0-9]" letter))
+      (err "usage: wm-unmark <letter>")
+      (System/exit 2))
+    (let [subj (str "@mark-" (str/lower-case letter))
+          line (pr-str {:tx (inc (max-tx)) :op "retract" :l subj
+                        :frame "wm-mark" :ts (now-iso)})]
+      (spit log-file (str line "\n") :append true)
+      (println (str "unmarked " (str/lower-case letter))))))
+
+(-main *command-line-args*)

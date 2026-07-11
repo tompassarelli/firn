@@ -1,0 +1,91 @@
+#!/usr/bin/env bb
+;; wm-jump <letter> — focus the window a mark points at.
+;;   exact:               the marked niri id is still alive -> focus it.
+;;   resolved-by-identity: the marked id is gone (closed, or niri restarted and
+;;                         ids reset) -> focus the best LIVE window matching the
+;;                         app_id snapshot (title similarity breaks ties).
+;;   unresolvable:        no live window matches -> exit 1.
+;; Read-only over MARKS_LOG (folded latest-wins); focuses via niri IPC.
+
+(require '[cheshire.core :as json]
+         '[babashka.process :as proc]
+         '[clojure.edn :as edn]
+         '[clojure.java.io :as io]
+         '[clojure.string :as str])
+
+(def log-file
+  (or (System/getenv "MARKS_LOG")
+      (str (System/getenv "HOME") "/.local/state/wm-world/marks.log")))
+
+(defn err [& xs] (binding [*out* *err*] (apply println xs)))
+
+(defn niri-json [& args]
+  (json/parse-string (:out (apply proc/sh "niri" "msg" "-j" args)) true))
+
+(defn fold
+  "Fold MARKS_LOG into {subject {pred value}}. assert = latest wins;
+   retract with :p drops a pred, without :p drops the whole subject."
+  []
+  (let [state (atom {})]
+    (when (.exists (io/file log-file))
+      (with-open [r (io/reader log-file)]
+        (doseq [line (line-seq r) :when (not (str/blank? line))]
+          (try
+            (let [{:keys [l p r op]} (edn/read-string line)]
+              (cond
+                (= op "retract") (if p (swap! state update l dissoc p)
+                                     (swap! state dissoc l))
+                (= op "assert")  (swap! state assoc-in [l p] r)))
+            (catch Exception _ nil)))))
+    @state))
+
+(defn levenshtein [a b]
+  (let [a (or a "") b (or b "") m (count a) n (count b)]
+    (loop [i 1 prev (vec (range (inc n)))]
+      (if (> i m)
+        (last prev)
+        (recur (inc i)
+               (loop [j 1 row [i]]
+                 (if (> j n)
+                   row
+                   (let [cost (if (= (nth a (dec i)) (nth b (dec j))) 0 1)]
+                     (recur (inc j)
+                            (conj row (min (inc (nth row (dec j)))
+                                           (inc (nth prev j))
+                                           (+ cost (nth prev (dec j))))))))))))))
+
+(defn similarity [a b]
+  (let [a (str/lower-case (or a "")) b (str/lower-case (or b ""))
+        ml (max (count a) (count b))]
+    (if (zero? ml) 1.0 (- 1.0 (/ (double (levenshtein a b)) ml)))))
+
+(defn focus! [id] (proc/sh "niri" "msg" "action" "focus-window" "--id" (str id)))
+
+(defn -main [args]
+  (let [letter (first args)]
+    (when-not (and letter (re-matches #"[A-Za-z0-9]" letter))
+      (err "usage: wm-jump <letter>") (System/exit 2))
+    (let [subj (str "@mark-" (str/lower-case letter))
+          mark (get (fold) subj)]
+      (when-not mark
+        (err "no mark" (str/lower-case letter)) (System/exit 1))
+      (let [marked-id (some-> (get mark "window") (->> (re-find #"\d+")) parse-long)
+            snap-app  (get mark "app_id")
+            snap-ttl  (get mark "title")
+            windows   (niri-json "windows")
+            live-ids  (set (map :id windows))]
+        (if (and marked-id (contains? live-ids marked-id))
+          (do (focus! marked-id)
+              (println (str "exact -> @w" marked-id "  " snap-app)))
+          ;; identity fallback
+          (let [cands (filter #(= snap-app (:app_id %)) windows)]
+            (if (empty? cands)
+              (do (err (str "unresolvable: mark " (str/lower-case letter)
+                            " -> " snap-app " (no live window of that app)"))
+                  (System/exit 1))
+              (let [best (apply max-key #(similarity snap-ttl (:title %)) cands)]
+                (focus! (:id best))
+                (println (str "resolved-by-identity -> @w" (:id best)
+                              "  " (:app_id best) "  " (:title best)))))))))))
+
+(-main *command-line-args*)

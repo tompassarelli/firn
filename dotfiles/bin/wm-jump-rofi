@@ -1,0 +1,53 @@
+#!/usr/bin/env bb
+;; wm-jump-rofi — pick a mark in rofi, then wm-jump to it.
+;; Bound to Mod+Apostrophe. Read-only over MARKS_LOG.
+
+(require '[cheshire.core :as json]
+         '[babashka.process :as proc]
+         '[clojure.edn :as edn]
+         '[clojure.java.io :as io]
+         '[clojure.string :as str])
+
+(def log-file
+  (or (System/getenv "MARKS_LOG")
+      (str (System/getenv "HOME") "/.local/state/wm-world/marks.log")))
+
+(defn niri-json [& args]
+  (json/parse-string (:out (apply proc/sh "niri" "msg" "-j" args)) true))
+
+(defn fold []
+  (let [state (atom {})]
+    (when (.exists (io/file log-file))
+      (with-open [r (io/reader log-file)]
+        (doseq [line (line-seq r) :when (not (str/blank? line))]
+          (try
+            (let [{:keys [l p r op]} (edn/read-string line)]
+              (cond
+                (= op "retract") (if p (swap! state update l dissoc p)
+                                     (swap! state dissoc l))
+                (= op "assert")  (swap! state assoc-in [l p] r)))
+            (catch Exception _ nil)))))
+    @state))
+
+(defn -main [_]
+  (let [marks    (->> (fold)
+                      (filter (fn [[k _]] (str/starts-with? k "@mark-")))
+                      (sort-by first))
+        live-ids (set (map :id (niri-json "windows")))]
+    (when (empty? marks)
+      (proc/sh "rofi" "-e" "no marks set")
+      (System/exit 0))
+    (let [rows (for [[subj f] marks]
+                 (let [letter (subs subj 6)
+                       id (some-> (get f "window") (->> (re-find #"\d+")) parse-long)
+                       alive (if (and id (contains? live-ids id)) "●" "○")]
+                   (str letter "  " alive "  " (or (get f "app_id") "")
+                        " — " (or (get f "title") ""))))
+          menu (str/join "\n" rows)
+          sel  (:out (proc/sh {:in menu}
+                              "rofi" "-dmenu" "-i" "-p" "jump to mark"))
+          letter (some-> sel str/trim (str/split #"\s") first)]
+      (when (and letter (not (str/blank? letter)))
+        (proc/exec "wm-jump" letter)))))
+
+(-main *command-line-args*)

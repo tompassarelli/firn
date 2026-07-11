@@ -379,6 +379,8 @@ binds {
     Super+S hotkey-overlay-title="App Switcher" { spawn "rofi" "-show" "combi" "-combi-modes" "window,drun"; }
     Super+Ctrl+Space hotkey-overlay-title="App Launcher" { spawn "rofi" "-show" "drun"; }
     Super+D hotkey-overlay-title="App Launcher" { spawn "rofi" "-show" "drun"; }
+    Mod+Apostrophe hotkey-overlay-title="Jump to Mark" { spawn "wm-jump-rofi"; }
+    Mod+Shift+Apostrophe hotkey-overlay-title="Set Mark" { spawn "wm-mark-rofi"; }
     Super+Alt+Ctrl+L hotkey-overlay-title="Lock the Screen: swaylock" { spawn "swaylock"; }
 
     // Dismiss all notifications

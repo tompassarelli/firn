@@ -1,0 +1,70 @@
+#!/usr/bin/env bb
+;; wm-mark <letter> [id] — mark a window into the marks world (MARKS_LOG).
+;; Default target is the currently focused window (niri msg -j focused-window);
+;; an explicit niri window id may be given (used by wm-mark-rofi, which must
+;; snapshot the target BEFORE rofi steals focus).
+;;
+;; CONSTRAINT: this log is separate from wm-facts-daemon's facts.log — that
+;; daemon is the sole writer there. wm-mark / wm-unmark are the only writers of
+;; MARKS_LOG, with their own tx counter. Same EDN line format.
+;;
+;; A mark is subject @mark-<letter> with predicates:
+;;   window "@w<id>"  app_id <snapshot>  title <snapshot>  marked_at <iso>
+;; Re-marking a letter supersedes it (newest line wins on fold).
+
+(require '[cheshire.core :as json]
+         '[babashka.process :as proc]
+         '[clojure.edn :as edn]
+         '[clojure.java.io :as io]
+         '[clojure.string :as str])
+
+(def log-file
+  (or (System/getenv "MARKS_LOG")
+      (str (System/getenv "HOME") "/.local/state/wm-world/marks.log")))
+(io/make-parents log-file)
+
+(defn err [& xs] (binding [*out* *err*] (apply println xs)))
+(defn now-iso [] (str (java.time.Instant/now)))
+
+(defn niri-json [& args]
+  (json/parse-string (:out (apply proc/sh "niri" "msg" "-j" args)) true))
+
+(defn max-tx []
+  (let [t (atom 0)]
+    (when (.exists (io/file log-file))
+      (with-open [r (io/reader log-file)]
+        (doseq [line (line-seq r) :when (not (str/blank? line))]
+          (try (when-let [tx (:tx (edn/read-string line))] (swap! t max tx))
+               (catch Exception _ nil)))))
+    @t))
+
+(def out-lock (Object.))
+(defn emit-facts [subj kvs]
+  (let [tx (atom (max-tx))
+        lines (for [[p r] kvs]
+                (pr-str {:tx (swap! tx inc) :op "assert" :l subj :p p :r r
+                         :frame "wm-mark" :ts (now-iso)}))]
+    (locking out-lock
+      (spit log-file (str (str/join "\n" lines) "\n") :append true))))
+
+(defn -main [args]
+  (let [letter (first args)
+        id-arg (second args)]
+    (when-not (and letter (re-matches #"[A-Za-z0-9]" letter))
+      (err "usage: wm-mark <letter> [id]  (letter = single alphanumeric)")
+      (System/exit 2))
+    (let [w (if id-arg
+              (let [id (parse-long id-arg)]
+                (or (->> (niri-json "windows") (filter #(= id (:id %))) first)
+                    (do (err "no window with id" id-arg) (System/exit 1))))
+              (niri-json "focused-window"))]
+      (when-not (:id w) (err "no focused window") (System/exit 1))
+      (let [subj (str "@mark-" (str/lower-case letter))]
+        (emit-facts subj [["window" (str "@w" (:id w))]
+                          ["app_id" (:app_id w)]
+                          ["title" (:title w)]
+                          ["marked_at" (now-iso)]])
+        (println (str "marked " (str/lower-case letter) " -> @w" (:id w)
+                      "  " (:app_id w) "  " (:title w)))))))
+
+(-main *command-line-args*)

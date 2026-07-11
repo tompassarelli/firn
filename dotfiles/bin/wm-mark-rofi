@@ -1,0 +1,27 @@
+#!/usr/bin/env bb
+;; wm-mark-rofi — type a letter in rofi, mark the currently focused window.
+;; Bound to Mod+Shift+Apostrophe.
+;;
+;; rofi is a niri window here (see config.kdl `match app-id="rofi"`), so opening
+;; it steals focus. We snapshot the focused window id BEFORE rofi opens and pass
+;; it to wm-mark, so the mark lands on the real target, not on rofi.
+
+(require '[cheshire.core :as json]
+         '[babashka.process :as proc]
+         '[clojure.string :as str])
+
+(defn niri-json [& args]
+  (json/parse-string (:out (apply proc/sh "niri" "msg" "-j" args)) true))
+
+(defn -main [_]
+  (let [w (niri-json "focused-window")]
+    (when-not (:id w)
+      (proc/sh "rofi" "-e" "no focused window to mark")
+      (System/exit 1))
+    (let [sel (:out (proc/sh {:in ""} "rofi" "-dmenu" "-p"
+                             (str "set mark for: " (:app_id w))))
+          letter (some-> sel str/trim)]
+      (when (and letter (re-matches #"[A-Za-z0-9]" letter))
+        (proc/exec "wm-mark" letter (str (:id w)))))))
+
+(-main *command-line-args*)
