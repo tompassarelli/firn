@@ -330,6 +330,17 @@ window-rule {
     open-on-workspace "heist"
 }
 
+// gjoa dark-mode render harness: real-window (stealth) test browsers land on a
+// dedicated "render" workspace without stealing focus — necessary because
+// bot-walled pages (youtube/zdnet/...) detect headless; a real surface on a
+// hidden workspace still defeats them. Harness sets MOZ_APP_REMOTINGNAME=gjoa-render.
+workspace "render"
+window-rule {
+    match app-id=r#"^gjoa-render$"#
+    open-on-workspace "render"
+    open-focused false
+}
+
 
 // Example: block out two password managers from screen capture.
 // (This example rule is commented out with a "/-" in front.)
@@ -361,7 +372,7 @@ window-rule {
 
 // Global Transparency (see-through / frosted glass)
 window-rule {
-  opacity 0.88
+  opacity 0.99
 }
 
 binds {
