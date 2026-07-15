@@ -69,16 +69,25 @@ ti = d.get("tool_input") or {}
 topcwd = d.get("cwd") or ""
 CRE = re.compile(r"/code/client/([^/\s]+)")
 # Mutation heuristic — conservative, one place. Matches a file-writing shell op.
-# stdout redirection (> >>, NOT fd-prefixed 2>/dev/null stderr), tee, in-place
-# sed/perl, mutating git subcommands, and the usual fs mutators / package writes.
+# VERBS (tee / sed -i / mutating git subcommands / fs mutators / package writes)
+# fire ONLY in COMMAND POSITION — at string start or right after a command
+# separator (; & | ( ` newline), optionally through wrappers (sudo, env VAR=,
+# timeout N, nice, xargs). This is the fix for the false-positive class where a
+# mutator word buried in a FILENAME segment (ls north-install-commit-guard,
+# my-cp-notes.txt, /x/dd/y) tripped a bare \b and DENIED a pure read. stdout
+# redirection (> >>) is matched positionally but the (?<!\d) + [^&\s|] clause
+# skips fd-dups / fd-prefixed stderr (2>&1, >&2, 2>/dev/null).
+CP = (r"(?:^|[;&|(`\n])\s*"
+      r"(?:sudo\s+|env\s+(?:\w+=\S*\s+)*|timeout\s+\S+\s+"
+      r"|nice\s+(?:-n\s*\S+\s+)?|xargs\s+(?:-\w+\s*\S*\s+)*)*")
 MUT = re.compile(
     r"(?:(?<!\d)>>?\s*[^&\s|])"
-    r"|\btee\b"
-    r"|\bsed\b[^|;&]*-\w*i"
-    r"|\bperl\b[^|;&]*-\w*i"
-    r"|\bgit\s+(?:commit|apply|merge|rebase|cherry-pick|stash\s+pop|checkout\s+--|restore|clean)\b"
-    r"|\brm\b|\bmv\b|\bcp\b|\btouch\b|\bmkdir\b|\bln\b|\bpatch\b|\brsync\b|\bdd\b|\binstall\b"
-    r"|\b(?:npm|pnpm|yarn|bun)\s+(?:install|add|run)\b")
+    "|" + CP + r"tee\b"
+    "|" + CP + r"sed\b[^|;&]*-\w*i"
+    "|" + CP + r"perl\b[^|;&]*-\w*i"
+    "|" + CP + r"git\s+(?:commit|apply|merge|rebase|cherry-pick|stash\s+pop|checkout\s+--|restore|clean)\b"
+    "|" + CP + r"(?:rm|mv|cp|touch|mkdir|ln|patch|rsync|dd|install)\b"
+    "|" + CP + r"(?:npm|pnpm|yarn|bun)\s+(?:install|add|run)\b")
 def clientof(s):
     m = CRE.search(s or "")
     return m.group(1) if m else None

@@ -119,6 +119,30 @@ run allow 'ls client dir'                           closed.log Bash "ls -la" "$C
 run allow 'find client dir (no -delete)'            closed.log Bash "find . -name '*.py'" "$CLIENT_DIR"
 run allow 'curl GET referencing nothing client'     closed.log Bash "curl -s https://api.github.com" "$CLIENT_DIR"
 
+echo "== command-position anchoring: mutator words in FILENAMES never deny =="
+# The confirmed live defect: bare \b verb boundaries matched inside hyphen-/path-
+# delimited filename segments, so a pure read from a client cwd got DENIED.
+run allow 'EXACT REPRO: pwd && ls -la north-*-guard 2>&1 && git log' closed.log Bash \
+  "pwd && ls -la ~/code/north/bin/north-commit-guard ~/code/north/bin/north-install-commit-guard 2>&1 && git -C ~/code/north log --oneline -4" "$CLIENT_DIR"
+run allow 'ls path with install/rm/cp/dd/ln in NAMES'   closed.log Bash "ls -la any/path/with-install-rm-cp-dd-ln-in-names" "$CLIENT_DIR"
+run allow 'cat file named my-cp-notes.txt'              closed.log Bash "cat ./my-cp-notes.txt" "$CLIENT_DIR"
+run allow 'grep -rn pattern . (recursive read)'         closed.log Bash "grep -rn pattern ." "$CLIENT_DIR"
+run allow 'read a path segment /x/dd/y.txt'             closed.log Bash "cat /x/dd/y.txt" "$CLIENT_DIR"
+run allow 'filename not-git-commit.md in an ls'         closed.log Bash "ls -la not-git-commit.md" "$CLIENT_DIR"
+run allow 'bun test (test != run)'                      closed.log Bash "bun test" "$CLIENT_DIR"
+
+echo "== fd-dups / fd-prefixed stderr redirects never deny =="
+run allow 'grep with 2>&1 fd-dup'                       closed.log Bash "grep -n foo bar 2>&1" "$CLIENT_DIR"
+run allow 'command with >&2 fd-dup'                     closed.log Bash "cat f >&2" "$CLIENT_DIR"
+run allow 'grep with 2>/dev/null fd-prefixed stderr'    closed.log Bash "grep -n foo bar 2>/dev/null" "$CLIENT_DIR"
+
+echo "== command-position anchoring: real mutations STILL deny =="
+run deny  'sed -i at command position'                  closed.log Bash "sed -i s/a/b/ file.ts" "$CLIENT_DIR"
+run deny  'sudo rm (through wrapper)'                    closed.log Bash "sudo rm x" "$CLIENT_DIR"
+run deny  'rm after && separator'                        closed.log Bash "foo && rm x" "$CLIENT_DIR"
+run deny  'rm piped after |'                             closed.log Bash "true | rm x" "$CLIENT_DIR"
+run deny  'echo redirect > file'                        closed.log Bash "echo hi > file" "$CLIENT_DIR"
+
 echo "== non-client + fail-open =="
 run allow 'Bash mutation outside client'            closed.log Bash "rm -rf ./build" "$NONCLIENT"
 run allow 'Edit, FRAM_LOG missing -> fail-open'     nonexistent.log Edit "$CLIENT_DIR/api.py"
