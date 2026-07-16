@@ -3,17 +3,17 @@
 (ns default)
 
 ;; north CLI suite from the packaged flake. The default package's /bin holds
-;; `north` (was `tern`) and `north-mcp`, bb-wrapped with FRAM_HOME baked to the
+;; `north` and `north-mcp`, bb-wrapped with FRAM_HOME baked to the
 ;; bundled fram-engine and bb on PATH — self-contained, no separate fram clone
 ;; needed at consume time. Replaces the old writeShellScriptBin wrapper that
-;; exec'd ~/code/north/bin/tern (the dev-checkout reliance that broke the repair
-;; loop). NOTE: the pkgflake pulls fram via a flake=false path input
+;; exec'd the ~/code/north dev-checkout wrapper directly (the reliance that
+;; broke the repair loop). NOTE: the pkgflake pulls fram via a flake=false path input
 ;; (path:/home/tom/code/fram), so /home/tom/code/fram must exist at EVAL time on
 ;; this machine. To make portable, repoint that input at a git URL pinned to
 ;; FRAM_VERSION. Reads north main (package/flake merged) via git+file?ref=main.
 ;;
-;; Cutover 2026-07-09: input renamed tern→north with the physical dir + github
-;; rename (repo lives at ~/code/north; github redirects tompassarelli/tern).
+;; Cutover 2026-07-09: flake input, physical dir, and github repo all renamed
+;; to `north` (github redirects the old repo slug; repo lives at ~/code/north).
 (nix/module [config lib pkgs inputs ...]
   {:tags [cli-tools]
    :flake-inputs

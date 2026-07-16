@@ -5,7 +5,7 @@
 ;; North reactor SWEEP timer — the liveness reaper that was RUNNING NEVER. Nothing
 ;; ever started it, so stale `building` concerns and silently-dead lanes accumulated
 ;; unswept (same failure class as north-web's 11-day unsupervised death). A user-level
-;; timer (mirror north-stream-sync) fires `tern-reactor.clj sweep-once` every ~5min:
+;; timer (mirror north-stream-sync) fires `north-reactor.clj sweep-once` every ~5min:
 ;; one-shot, exits each run — no port, no linger, no daemon to supervise.
 ;;
 ;; SCOPE = the sweep ONLY. The reactor's long-lived loop mode (-main) ALSO runs
@@ -18,9 +18,6 @@
 ;; PATH carries babashka so both the ExecStart `bb` and the reactor's own
 ;; ping-coordinator shell-out (bare `bb msg-cli.clj` when a reaped lane names a
 ;; coordinator) resolve. Runs as the user: the sweep is a :7977 client, needs no root.
-;; NOTE: ExecStart basename is still `tern-reactor.clj` — the ~/code/north repo
-;; script has not been renamed (resolves via the ~/code/north dir symlink); the
-;; basename flip is a coordinator cutover step.
 (nix/module [config lib pkgs ...]
   (let [username config.myConfig.modules.users.username
         codeDir  config.myConfig.modules.users.codeDir]
@@ -38,7 +35,7 @@
                   {:Type             "oneshot"
                    :Environment      [(s "PATH=" pkgs.babashka "/bin:" pkgs.coreutils "/bin")]
                    :WorkingDirectory (s codeDir "/north")
-                   :ExecStart        (s pkgs.babashka "/bin/bb " codeDir "/north/cli/tern-reactor.clj sweep-once")}}
+                   :ExecStart        (s pkgs.babashka "/bin/bb " codeDir "/north/cli/north-reactor.clj sweep-once")}}
                :systemd.user.timers.north-reactor-sweep
                 {:Unit
                   {:Description "Run the north reactor liveness sweep periodically"}

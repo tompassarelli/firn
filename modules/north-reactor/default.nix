@@ -16,7 +16,7 @@ in
           Type = "oneshot";
           Environment = [ "PATH=${pkgs.babashka}/bin:${pkgs.coreutils}/bin" ];
           WorkingDirectory = "${codeDir}/north";
-          ExecStart = "${pkgs.babashka}/bin/bb ${codeDir}/north/cli/tern-reactor.clj sweep-once";
+          ExecStart = "${pkgs.babashka}/bin/bb ${codeDir}/north/cli/north-reactor.clj sweep-once";
         };
       };
       systemd.user.timers.north-reactor-sweep = {

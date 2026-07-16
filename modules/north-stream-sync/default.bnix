@@ -9,9 +9,6 @@
 ;; no privileges, and should not block boot. SessionEnd hook flush is a
 ;; second, complementary trigger (dotfiles/claude/hooks/north-session-end.sh) —
 ;; the lock in the stream-sync script itself keeps the two from interleaving.
-;; NOTE: ExecStart basename is still `tern-stream-sync` — the ~/code/north repo
-;; script has not been renamed (resolves via the ~/code/north dir symlink); the
-;; basename flip is a coordinator cutover step.
 (nix/module [config lib pkgs ...]
   (let [username config.myConfig.modules.users.username
         codeDir  config.myConfig.modules.users.codeDir]

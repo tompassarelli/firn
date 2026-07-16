@@ -6,8 +6,7 @@
 ;; `north dashboard` (was my-agents), `north doctor` (health sweep), bare `north`
 ;; (the incantation card). This module survives only to TEACH the move: it keeps
 ;; `my-agents` on PATH so the old habit gets redirected, self-contained (no
-;; dependency on the archived convoy repo). Teach, don't alias — precedent:
-;; north/bin/tern.
+;; dependency on the archived convoy repo). Teach, don't alias.
 (nix/module [config lib pkgs ...]
   {:tags [cli-tools]
    :options.myConfig.modules.my-agents.enable

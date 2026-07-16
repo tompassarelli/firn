@@ -27,7 +27,6 @@ type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 MODE=$(grep -E '^dispatch=' "$HOME/.claude/my-config.state" 2>/dev/null | tail -1 | cut -d= -f2-)
 MODE="${MODE:-north}"
-[ "$MODE" = "tern" ] && MODE="north"                 # migrate legacy state value
 [ "$MODE" = "native" ] && exit 0
 export AGENT_SPAWN_GUARD_MODE="$MODE"
 
