@@ -3,7 +3,9 @@
 (ns default)
 
 ;; North coordinator (:7977) — sole-writer daemon serving Tom's canonical
-;; fact log (~/.local/state/north/facts.log). Sibling of agent-coord (:7978)
+;; fact log (~/.local/state/north/coordination.log; the 2026-07-16 log split
+;; peeled telemetry into telemetry.log beside it — facts.log is the frozen
+;; pre-split backup). Sibling of agent-coord (:7978)
 ;; and attention-coord (:7980): same coordinator family, different stores. JVM
 ;; runtime — long-lived server wants JIT throughput + real threads. Systemd-managed
 ;; so :7977 survives logout + reboot (down = no capture, no work queue).
@@ -28,6 +30,6 @@
              :User             username
              :WorkingDirectory (s codeDir "/fram")
              :ExecStart
-              (s codeDir "/fram/bin/fram-daemon 7977 " homeDir "/.local/state/north/facts.log")
+              (s codeDir "/fram/bin/fram-daemon 7977 " homeDir "/.local/state/north/coordination.log")
              :Restart          "always"
              :RestartSec       2}}})}))

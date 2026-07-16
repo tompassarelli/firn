@@ -21,7 +21,7 @@ in
         Type = "simple";
         User = username;
         WorkingDirectory = "${codeDir}/fram";
-        ExecStart = "${codeDir}/fram/bin/fram-daemon 7977 ${homeDir}/.local/state/north/facts.log";
+        ExecStart = "${codeDir}/fram/bin/fram-daemon 7977 ${homeDir}/.local/state/north/coordination.log";
         Restart = "always";
         RestartSec = 2;
       };
