@@ -16,8 +16,9 @@
 #   2. Force-push / history rewrite: git push with -f/--force/--force-with-lease/
 #      --mirror/--delete/--prune; and raw `git push` (house policy: safe-push
 #      only). safe-push's inner push exports SAFE_PUSH_ACTIVE=1 → allowed.
-#   3. Credential exfil surface: a secret-ish path (.ssh/, .aws/, *_SECRET*,
-#      *.pem, id_rsa/id_ed25519/id_ecdsa, .config/sops, /run/secrets, *.age)
+#   3. Credential exfil surface: a secret-ish path (.ssh/, .aws/ — incl. the
+#      bare dirs ~/.ssh ~/.aws — *_SECRET*, *.pem, id_rsa/id_ed25519/id_ecdsa,
+#      .config/sops, /run/secrets, *.age)
 #      AND a network verb (curl/wget/nc/ncat/netcat) in the SAME command,
 #      non-localhost; PLUS ssh in the pipe-in shape ONLY — a secret path in an
 #      earlier PIPE stage (`secret … | ssh host …`) feeding ssh's stdin.
@@ -27,8 +28,13 @@
 #      args (a remote read like `ssh box 'grep X_SECRET .env'`) stay ALLOWED —
 #      only local material piped INTO ssh trips (see the ssh dispatch note).
 #   4. Outbound uploads: curl/wget with -T/--upload-file/-d @f/--data-binary @f/
-#      -F x=@f/--post-file to non-localhost; scp/rsync whose DESTINATION (last
-#      non-flag arg) is a remote host not in {github.com, localhost, 127.0.0.1}.
+#      -F x=@f/--post-file to non-localhost; scp/rsync ONLY when a SOURCE is a
+#      secret-ish path and the DESTINATION (last non-flag arg) is a remote,
+#      non-localhost host. Non-secret scp/rsync uploads are ALLOWED — same
+#      2026-07-09 narrowing ssh got (see the ssh dispatch note): `scp f box:`
+#      moves the bytes the allowed `ssh box 'cat > f' < f` already moves, so
+#      the old destination allowlist only taxed the honest path (2026-07-16,
+#      false positive #3 — kea prod-ops upload to the WG box).
 #   5. Destructive system ops: mkfs*, dd of=/dev/* (except null/stdout/stderr),
 #      shutdown/reboot/poweroff/halt, systemctl (system, not --user)
 #      stop/disable/mask of non-north* units + power subcommands,
@@ -186,8 +192,9 @@ check_delete_target() {
 # material. Single source of the secret-path pattern — the precompute AND the ssh
 # pipe-in check both call it, so the list never forks.
 is_secret_path() {
-  case "$S" in
-    *.ssh/* | *.aws/* | *_SECRET* | *.pem | *id_rsa* | *id_ed25519* | *id_ecdsa* | \
+  local p="${S%/}" # dir with/without trailing slash matches the same (~/.ssh ≡ ~/.ssh/)
+  case "$p" in
+    *.ssh/* | */.ssh | *.aws/* | */.aws | *_SECRET* | *.pem | *id_rsa* | *id_ed25519* | *id_ecdsa* | \
       *.config/sops* | */run/secrets* | *.age) return 0 ;;
   esac
   return 1
@@ -371,33 +378,56 @@ handle_http() { # curl / wget
   deny "$verb file upload to non-localhost — outbound exfil surface"
 }
 
-handle_scp_rsync() { # destination = LAST non-flag arg; downloads (remote src) stay allowed
-  local verb="$1" t dest="" skipnext=0
+# scp/rsync: SOURCE-based, mirroring the 2026-07-09 ssh narrowing (see the ssh
+# dispatch note). Deny ONLY a secret-ish LOCAL SOURCE bound for a remote,
+# non-localhost destination (last non-flag arg). Downloads (remote src, local
+# dest) and non-secret uploads: ALLOWED. Per-verb arg-taking flags are skipped
+# so `scp -i key.pem` (auth — same carve-out as class 3) and
+# `-o IdentityFile=…` never read as sources; the same short flag differs by
+# verb (scp -P takes a port, rsync -P is --partial --progress), hence two lists.
+handle_scp_rsync() {
+  local verb="$1" t skipnext=0 arg_flags
   shift
+  case "$verb" in
+    scp) arg_flags=' -i --identity -o -P -F -J -S ' ;;
+    *) arg_flags=' -e -f -B --rsh ' ;; # rsync
+  esac
+  local -a nonflag=()
   for t in "$@"; do
     if [ "$skipnext" = 1 ]; then skipnext=0; continue; fi
     redirect_skip "$t"
     if [ "$REDIR" = 1 ]; then skipnext="$REDIR_NEXT"; continue; fi
+    case "$t" in
+      -*)
+        case "$arg_flags" in *" $t "*) skipnext=1 ;; esac
+        continue
+        ;;
+    esac
     strip_g "$t"
-    case "$S" in -*) ;; *) dest="$S" ;; esac
+    nonflag+=("$S")
   done
-  [ -n "$dest" ] || return 0
-  local h=""
+  [ "${#nonflag[@]}" -ge 2 ] || return 0 # an upload needs a source + a dest
+  local dest="${nonflag[${#nonflag[@]} - 1]}" h=""
   case "$dest" in
     rsync://*)
       h="${dest#rsync://}"
       h="${h%%/*}"
       ;;
-    /* | ./* | ../*) return 0 ;;
+    /* | ./* | ../*) return 0 ;; # local dest — download/move, not an upload
     *:*) h="${dest%%:*}" ;;
-    *) return 0 ;;
+    *) return 0 ;; # relative local dest
   esac
   h="${h#*@}"
   case "$h" in
-    '' | localhost | 127.0.0.1 | ::1 | github.com) return 0 ;;
+    '' | localhost | 127.0.0.1 | ::1) return 0 ;;
     *[!A-Za-z0-9._-]*) return 0 ;; # not a hostname → fail-open
   esac
-  deny "$verb to remote host '$h' — not in allowlist (github.com, localhost)"
+  local k
+  for ((k = 0; k < ${#nonflag[@]} - 1; k++)); do
+    S="${nonflag[$k]}"
+    is_secret_path && deny "$verb of secret path '$S' to remote host '$h' — credential exfil surface (non-secret uploads are allowed)"
+  done
+  return 0
 }
 
 handle_systemctl() {
