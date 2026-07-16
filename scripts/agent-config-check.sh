@@ -35,6 +35,18 @@ group() {
   fi
   details=()
 }
+provider_group() {
+  local name="$1" before="$2"
+  shift 2
+  if [ "$fail" -eq "$before" ]; then printf '✓ %s\n' "$name"
+  else printf '✗ %s\n' "$name" >&2; fi
+  local line
+  for line in "$@"; do printf '  %s\n' "$line"; done
+  if [ "$VERBOSE" -eq 1 ]; then
+    for line in "${details[@]}"; do printf '    %s\n' "$line"; done
+  fi
+  details=()
+}
 need_json() {
   local file="$1" label="$2"
   if jq -e . "$file" >/dev/null 2>&1; then ok_detail "$label is valid JSON"
@@ -104,6 +116,9 @@ validate_hooks() {
 }
 
 before=$fail
+claude_north='connection deferred to --local'
+claude_fram='connection deferred to --local'
+claude_linear='connection deferred to --local'
 need_json "$CLAUDE/settings.json" 'Claude settings'
 if jq -e '.autoMemoryEnabled == false' "$CLAUDE/settings.json" >/dev/null; then ok_detail "auto-memory disabled"
 else bad "Claude autoMemoryEnabled must be false"; fi
@@ -127,15 +142,32 @@ if [ "$LOCAL" -eq 1 ]; then
     note "$project_count project-scoped Claude MCP registrations (allowed)"
     ok_detail "Claude MCP: north + fram live corpus + Linear"
   else bad "$HOME/.claude.json is missing"; fi
+  if command -v claude >/dev/null 2>&1; then
+    claude_mcp_output="$(claude mcp list 2>&1)" || bad "claude rejected its config while checking MCP health:\n$claude_mcp_output"
+    for server in north fram linear-mcp-msa-new; do
+      grep -Eq "^${server}:.*Connected" <<<"$claude_mcp_output" || bad "Claude MCP '$server' is missing or not connected:\n$claude_mcp_output"
+    done
+    claude_north='connected'
+    claude_fram='connected'
+    claude_linear='connected'
+    ok_detail "Claude reports North + Fram + Linear MCP connected"
+  else bad "claude CLI is missing from PATH"; fi
 fi
-group Claude "$claude_bindings hook bindings · bootstrap + MCP policy" "$before"
+provider_group Claude "$before" \
+  "Hooks       $claude_bindings bindings" \
+  'Bootstrap   config policy OK' \
+  "MCP         North: $claude_north" \
+  "            Fram: $claude_fram" \
+  "            Linear: $claude_linear"
 
 before=$fail
 need_json "$CODEX/hooks.json" 'Codex hooks'
 need_toml "$CODEX/config.toml" 'Codex config'
 validate_hooks "$CODEX/hooks.json" Codex
 codex_bindings="$HOOK_BINDINGS"
-codex_auth="Linear auth: local probe deferred"
+codex_north='declared; live probe deferred'
+codex_fram='declared; live probe deferred'
+codex_linear='auth probe deferred to --local'
 grep -q '^\[mcp_servers\.north\]' "$CODEX/config.toml" || bad "Codex config does not declare North MCP"
 grep -q '^\[mcp_servers\.fram\]' "$CODEX/config.toml" || bad "Codex config does not declare Fram MCP"
 grep -q '^\[mcp_servers\.linear-mcp-msa-new\]' "$CODEX/config.toml" || bad "Codex config does not declare Linear MCP"
@@ -150,16 +182,22 @@ if [ "$LOCAL" -eq 1 ]; then
       grep -Eq "^${server}[[:space:]]" <<<"$mcp_output" || bad "Codex MCP '$server' is missing/disabled"
     done
     linear_line="$(grep -E '^linear-mcp-msa-new[[:space:]]' <<<"$mcp_output" || true)"
-    if [[ "$linear_line" = *'Not logged in'* ]]; then codex_auth='Linear auth: not logged in'
-    elif [[ "$linear_line" = *OAuth* || "$linear_line" = *'Logged in'* ]]; then codex_auth='Linear auth: ready'
-    else codex_auth='Linear auth: unknown'; fi
+    if [[ "$linear_line" = *'Not logged in'* ]]; then codex_linear='not logged in'
+    elif [[ "$linear_line" = *OAuth* || "$linear_line" = *'Logged in'* ]]; then codex_linear='authenticated'
+    else codex_linear='auth unknown'; fi
     ok_detail "Codex config parsed; North + Fram + Linear MCP listed"
+    codex_north='enabled'
+    codex_fram='enabled'
   else bad "codex CLI is missing from PATH"; fi
 fi
-group Codex/OpenAI "$codex_bindings hook bindings · bootstrap + MCP policy · $codex_auth" "$before"
+provider_group Codex/OpenAI "$before" \
+  "Hooks       $codex_bindings bindings" \
+  'Bootstrap   config policy OK' \
+  "MCP         North: $codex_north" \
+  "            Fram: $codex_fram" \
+  "            Linear: $codex_linear"
 
 before=$fail
-north_summary='provider probe deferred to --local'
 if [ "$LOCAL" -eq 1 ]; then
   if command -v north >/dev/null 2>&1; then
     provider_output="$(north providers 2>&1)" || bad "installed North provider readiness failed:\n$provider_output"
@@ -167,11 +205,16 @@ if [ "$LOCAL" -eq 1 ]; then
     grep -Eq '^openai[[:space:]]+ready' <<<"$provider_output" || bad "North reports OpenAI/Codex unavailable:\n$provider_output"
     grep -Eq '^auto[[:space:]]+(anthropic|openai)' <<<"$provider_output" || bad "North auto-route decision missing:\n$provider_output"
     auto_provider="$(awk '/^auto[[:space:]]/ { print $2; exit }' <<<"$provider_output")"
-    north_summary="Anthropic ready · OpenAI ready · auto→${auto_provider:-unknown}"
     ok_detail "$(tr '\n' ';' <<<"$provider_output" | sed 's/;$/ /; s/;/ · /g')"
   else bad "installed North CLI is missing from PATH"; fi
 else ok_detail "provider readiness deferred to --local"; fi
-group North "$north_summary" "$before"
+if [ "$LOCAL" -eq 1 ]; then
+  provider_group North "$before" \
+    'Providers   Anthropic ready · OpenAI ready' \
+    "Routing     auto→${auto_provider:-unknown}"
+else
+  provider_group North "$before" 'Providers   readiness deferred to --local'
+fi
 
 if [ "$fail" -ne 0 ]; then printf 'agent-config-check: FAILED\n' >&2; exit 1; fi
 if [ "$warn" -gt 0 ]; then printf 'agent-config-check: passed with %s warning(s)\n' "$warn"
