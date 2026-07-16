@@ -4,6 +4,7 @@
          racket/list
          racket/math
          racket/path
+         racket/set
          racket/system
          racket/file
          racket/port
@@ -129,21 +130,8 @@
 
   ;; ─── Phase helpers ───────────────────────────────────────────────────
   ;; Each phase prints a banner, runs the body, then OK/FAIL with elapsed.
-  ;; Long phases (nh switch) stream child output live.
+  ;; Long phases (the switch) stream child output live.
   (define total-start (current-inexact-milliseconds))
-  (define lock-path (in-repo "flake.lock"))
-  (define lock-backup #f)
-  (define provisional-lock? #f)
-  (define (restore-provisional-lock!)
-    (when (and provisional-lock? lock-backup (file-exists? lock-backup))
-      ;; A commit hook may fail after `git add`; restore both index and worktree.
-      (sh "git" "-C" ROOT "reset" "--quiet" "HEAD" "--" "flake.lock")
-      (copy-file lock-backup lock-path #t)
-      (set! provisional-lock? #f)
-      (eprintf "firn rebuild: restored previous flake.lock after failed verification.\n")))
-  (define (discard-lock-backup!)
-    (when (and lock-backup (file-exists? lock-backup)) (delete-file lock-backup))
-    (set! lock-backup #f))
   (define (fmt-elapsed ms)
     (cond [(< ms 1000) (format "~ams" (exact-round ms))]
           [(< ms 60000) (format "~as" (exact-round (/ ms 1000.0)))]
@@ -158,51 +146,139 @@
     (cond
       [ok? (printf "└─ ✓ ~a (~a)\n" name (fmt-elapsed elapsed))]
       [else
-       (restore-provisional-lock!)
-       (discard-lock-backup!)
        (printf "└─ ✗ ~a (~a)\n" name (fmt-elapsed elapsed))
        (eprintf "firn rebuild: ~a failed; aborting.\n" name)
        (exit 1)])
     (flush-output))
 
-  ;; Normal rebuilds refresh local inputs provisionally. The old lock remains
-  ;; recoverable until generation, validation, and a host closure build prove
-  ;; the new sources. --skip-checks intentionally keeps the committed lock: it
-  ;; may switch an already-known generation, but can never commit a new pointer.
+  ;; ─── Commit snapshot ─────────────────────────────────────────────────
+  ;; Generations build from the COMMITTED tree (git+file?rev=HEAD), never the
+  ;; working tree. Concurrent sessions' WIP — here or in any local input —
+  ;; can neither leak into a generation nor block a switch. Self-heal commits
+  ;; below may advance HEAD, so the snapshot ref is computed lazily.
+  (define (git-head) (string-trim (sh-out "git" "-C" ROOT "rev-parse" "HEAD")))
+  (define build-branch (string-trim (sh-out "git" "-C" ROOT "branch" "--show-current")))
+  (define (snapshot-ref)
+    (format "git+file://~a?rev=~a~a" ROOT (git-head)
+            (if (non-empty-string? build-branch)
+                (format "&ref=~a" build-branch) "")))
+  (define (dirty-build-files)
+    (for/list ([l (in-list (string-split
+                            (sh-out "git" "-C" ROOT "status" "--porcelain" "--untracked-files=no")
+                            "\n"))]
+               #:when (and (> (string-length l) 3)
+                           (regexp-match? #rx"\\.(bnix|nix)$|flake\\.lock$" l)))
+      (substring l 3)))
+  (let ([dirty (dirty-build-files)])
+    (unless (null? dirty)
+      (printf "── snapshot: building committed ~a — ~a in-flight build file(s) stay out of this generation:\n"
+              (substring (git-head) 0 8) (length dirty))
+      (for ([f (in-list dirty)]) (printf "     ~a\n" f))))
+
+  ;; Local input pins: plan-only (no lock mutation). Promotable moves become
+  ;; --override-input flags on the snapshot build; the lock is re-pointed and
+  ;; mechanically committed only after the closure verifies.
+  (define overrides '())   ; (list input target-rev repo)
   (cond
     [skip-checks?
-     (printf "── local inputs unchanged (--skip-checks cannot refresh or commit unverified pointers)\n")]
+     (printf "── local inputs: committed lock as-is (--skip-checks never promotes pins)\n")]
     [else
-     (set! lock-backup (make-temporary-file "firn-flake-lock-~a"))
-     (copy-file lock-path lock-backup #t)
-     (phase "local inputs (provisional)"
+     (phase "local inputs (plan)"
        (λ ()
-         (define ok? (sh (path->string (in-repo "scripts" "firn-sync-local-inputs")) "--provisional"))
+         (define plan-file (make-temporary-file "firn-plan-~a"))
+         (define ok?
+           (sh "bash" "-c"
+               (format "'~a' --plan > '~a'"
+                       (path->string (in-repo "scripts" "firn-sync-local-inputs"))
+                       plan-file)))
          (when ok?
-           (set! provisional-lock?
-             (not (sh "git" "-C" ROOT "diff" "--quiet" "--" "flake.lock"))))
+           (for ([line (in-list (string-split (file->string plan-file) "\n"))])
+             (define m (regexp-match #px"^plan (\\S+) ([0-9a-f]{40}) ([0-9a-f]{40}) (\\S+)$" line))
+             (if m
+                 (set! overrides (cons (list (list-ref m 1) (list-ref m 3) (list-ref m 4))
+                                       overrides))
+                 (when (non-empty-string? (string-trim line))
+                   (printf "~a\n" line)))))
+         (delete-file plan-file)
          ok?))])
+  (define override-args
+    (append*
+     (for/list ([o (in-list overrides)])
+       (list "--override-input" (car o)
+             (format "git+file://~a?ref=main&rev=~a" (caddr o) (cadr o))))))
 
   (unless skip-checks?
-    ;; Step 1: regenerate any out-of-date .nix from .bnix sources.
+    ;; Step 1: regenerate any out-of-date .nix from .bnix sources, then
+    ;; self-heal: regenerated outputs whose sources are committed-clean are
+    ;; deterministic derivations of the commit — mechanically commit them so
+    ;; the snapshot stays self-consistent. Outputs downstream of in-flight
+    ;; WIP are left alone (the snapshot keeps their committed versions).
+    (define pre-dirty (list->set (dirty-build-files)))
     (phase "firn-build"
       (λ () (sh (path->string (in-repo "scripts" "firn-build")))))
+    (let* ([post-dirty (list->set (dirty-build-files))]
+           [newly (set->list (set-subtract post-dirty pre-dirty))]
+           [generated? (λ (f) (or (member f '("flake.bnix" "flake.nix"))
+                                  (regexp-match? #rx"_generated-enables\\.bnix$" f)))]
+           [foreign-bnix? (for/or ([f (in-set post-dirty)])
+                            (and (regexp-match? #rx"\\.bnix$" f) (not (generated? f))))]
+           [heal (for/list ([f (in-list newly)]
+                            #:when (or (and (regexp-match? #rx"\\.nix$" f)
+                                            (not (equal? f "flake.nix"))
+                                            (let ([src (regexp-replace #rx"\\.nix$" f ".bnix")])
+                                              (and (file-exists? (build-path ROOT src))
+                                                   (not (set-member? post-dirty src)))))
+                                       (and (generated? f) (not foreign-bnix?))))
+                   f)]
+           [skipped (remove* heal newly)])
+      (unless (null? heal)
+        (phase "self-heal stale committed outputs"
+          (λ () (apply sh "git" "-C" ROOT "commit" "--only" "-m"
+                       "regenerate stale committed outputs (firn rebuild self-heal)"
+                       "--" heal))))
+      (unless (null? skipped)
+        (printf "── note: regenerated outputs depend on in-flight WIP; snapshot keeps their committed versions:\n")
+        (for ([f (in-list skipped)]) (printf "     ~a\n" f))))
 
-    ;; Step 1b: warn about untracked .bnix/.nix — Nix can't see them.
+    ;; Step 1b: untracked build files are invisible to the snapshot. A warning,
+    ;; not a wall — they may be another session's half-born module.
     (define untracked
       (let ([s (sh-out "git" "-C" ROOT "ls-files" "--others" "--exclude-standard")])
         (filter (λ (p) (regexp-match? #rx"\\.(bnix|rkt|nix)$" p))
                 (string-split s "\n"))))
     (unless (null? untracked)
-      (eprintf "✗ untracked files invisible to Nix — git add them first:\n")
-      (for ([p (in-list untracked)]) (eprintf "  ~a\n" p))
-      (restore-provisional-lock!)
-      (discard-lock-backup!)
-      (exit 1))
+      (printf "── warning: untracked files are NOT in this build (git add + commit to include):\n")
+      (for ([p (in-list untracked)]) (printf "     ~a\n" p)))
 
-    ;; Step 2: validate paths and value types against the schema.
-    (phase "firn-validate"
-      (λ () (sh (path->string (in-repo "scripts" "firn-validate")))))
+    ;; Step 2: validate the SNAPSHOT, not the working tree — a peer's mid-edit
+    ;; .bnix must not fail an unrelated rebuild. A detached temp worktree gives
+    ;; the validator the committed content.
+    (define wt-parent (make-temporary-file "firn-snapshot-~a" 'directory))
+    (define wt (build-path wt-parent "wt"))
+    (define (cleanup-worktree!)
+      (parameterize ([current-output-port (open-output-nowhere)]
+                     [current-error-port (open-output-nowhere)])
+        (sh "git" "-C" ROOT "worktree" "remove" "--force" (path->string wt)))
+      (when (directory-exists? wt-parent)
+        (delete-directory/files wt-parent #:must-exist? #f)))
+    (define old-exit (exit-handler))
+    (exit-handler (λ (c) (cleanup-worktree!) (old-exit c)))
+    (phase "firn-validate (snapshot)"
+      (λ ()
+        (and (sh "git" "-C" ROOT "worktree" "add" "--detach" (path->string wt) (git-head))
+             (let ([old-repo (getenv "FIRN_REPO")]
+                   [old-beagle (getenv "BEAGLE_PATH")])
+               (putenv "FIRN_REPO" (path->string wt))
+               (putenv "BEAGLE_PATH"
+                       (or old-beagle
+                           (path->string (simplify-path (build-path ROOT 'up "beagle")))))
+               (begin0
+                 (parameterize ([current-directory wt])
+                   (sh (path->string (build-path wt "scripts" "firn-validate"))))
+                 (putenv "FIRN_REPO" (or old-repo ""))
+                 (unless old-beagle (putenv "BEAGLE_PATH" "")))))))
+    (cleanup-worktree!)
+    (exit-handler old-exit)
 
     ;; Step 2b: flake input purity.
     (if auto-impure?
@@ -216,55 +292,56 @@
                   (eprintf "  flake has absolute-path inputs that break pure eval:\n")
                   (for ([line (in-list purity-issues)]) (eprintf "  ~a\n" line))
                   (eprintf "  fix: publish to a git remote (github:owner/repo), or override locally with --override-input.\n")
-                  #f)))))
+                  #f))))))
 
-    ;; Step 2c: build the exact host closure before the derived lock commit.
-    ;; The subsequent switch reuses this result, so the gate adds integrity,
-    ;; not a second system build.
-    (phase "source/package smoke"
-      (λ ()
-        (define attr
-          (if on-linux?
-              (format ".#nixosConfigurations.~a.config.system.build.toplevel" host)
-              (format ".#darwinConfigurations.~a.system" host)))
-        (apply sh (append (list "nix" "build" "--no-link" attr)
-                          (if auto-impure? (list "--impure") '())))))
-
-    ;; Only a verified pointer earns a mechanical commit. No-op refreshes do
-    ;; not create empty commits.
-    (when provisional-lock?
-      (phase "commit verified local inputs"
-        (λ ()
-          (and (sh "git" "-C" ROOT "add" "flake.lock")
-               (sh "git" "-C" ROOT "commit" "--only" "-m"
-                   "refresh verified local inputs" "--" "flake.lock"))))
-      (set! provisional-lock? #f))
-    (discard-lock-backup!))
-
-  ;; Step 3: actual rebuild. Dispatch by platform.
-  (printf "┌─ rebuild\n") (flush-output)
-  (define rebuild-start (current-inexact-milliseconds))
+  ;; Step 2c: build the exact host closure from the snapshot. Always runs
+  ;; (with --skip-checks too): the switch below activates THIS store path, so
+  ;; what was verified is byte-identical to what runs.
   (define on-darwin?
     (equal? "Darwin" (string-trim (sh-out "uname" "-s"))))
   (define extra (if auto-impure? (list "--impure") '()))
+  (define built-path #f)
+  (phase "build snapshot closure"
+    (λ ()
+      (define attr
+        (format "~a#~a" (snapshot-ref)
+                (if on-linux?
+                    (format "nixosConfigurations.~a.config.system.build.toplevel" host)
+                    (format "darwinConfigurations.~a.system" host))))
+      (define out (apply sh-out (append (list "nix" "build" "--no-link" "--print-out-paths" attr)
+                                        override-args extra)))
+      (set! built-path (and (regexp-match? #rx"^/nix/store/" out) out))
+      (and built-path #t)))
+  (when (and on-linux? built-path)
+    (printf "── closure diff vs running system:\n") (flush-output)
+    (sh "nix" "store" "diff-closures" "/run/current-system" built-path))
+
+  ;; Only a verified pointer earns a mechanical lock commit; deferrals inside
+  ;; the script are notices, never failures.
+  (unless (or skip-checks? (null? overrides))
+    (phase "promote verified local inputs"
+      (λ () (apply sh (path->string (in-repo "scripts" "firn-sync-local-inputs"))
+                   "--commit" (map car overrides)))))
+
+  ;; Step 3: switch. On Linux, activate the EXACT store path the smoke build
+  ;; produced (profile set + switch-to-configuration) — no second evaluation,
+  ;; no root-side git access to a user checkout, and the verified closure is
+  ;; byte-identical to the activated one. Darwin keeps darwin-rebuild but on
+  ;; the same commit snapshot.
+  (printf "┌─ rebuild\n") (flush-output)
+  (define rebuild-start (current-inexact-milliseconds))
   (define rc
     (cond
       [on-darwin?
-       (define flake-target (if host (string-append ROOT "#" host) ROOT))
-       (apply sh (append (list "sudo" "darwin-rebuild" "switch" "--flake" flake-target)
-                         extra))]
-      [(find-executable-path "nh")
-       ;; nh forwards everything after `--` to `nix build`, which is where
-       ;; --impure lives.
-       (define nh-tail (if (null? extra) '() (cons "--" extra)))
-       (apply system* (find-executable-path "nh")
-              (append (list "os" "switch" ROOT)
-                      (if host (list "-H" host) '())
-                      nh-tail))]
+       (apply sh (append (list "sudo" "darwin-rebuild" "switch" "--flake"
+                               (format "~a#~a" (snapshot-ref) host))
+                         override-args extra))]
       [else
-       (define flake-target (if host (string-append ROOT "#" host) ROOT))
-       (apply sh (append (list "sudo" "nixos-rebuild" "switch" "--flake" flake-target)
-                         extra))]))
+       (and built-path
+            (sh "sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
+                "--set" built-path)
+            (sh "sudo" (string-append built-path "/bin/switch-to-configuration")
+                "switch"))]))
   (when sudo-keepalive (kill-thread sudo-keepalive))
   (define rebuild-elapsed (- (current-inexact-milliseconds) rebuild-start))
   (define total-elapsed (- (current-inexact-milliseconds) total-start))
@@ -309,7 +386,7 @@
   (list
    (walk-edge "host" "rebuild" "<host>" 'current-host
               handle-host-rebuild
-              "refresh local inputs → build → validate → switch → tag generation")
+              "plan pins → build+validate commit snapshot → switch verified closure → tag generation")
    (walk-edge "host" "impact" "[<host>]" 'current-host
               handle-host-impact
               "dry-run impact prediction (what will rebuild, estimated time)")))

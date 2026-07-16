@@ -1,14 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Keep development checkouts reproducible without making the user maintain
-# flake.lock pointers. This deliberately refreshes only local harness inputs;
-# wholesale upstream movement remains `firn update` territory.
+# Local development inputs (beagle/fram/north) are git+file flake inputs pinned
+# by flake.lock to committed revisions. `firn rebuild` builds a COMMIT snapshot
+# of this repo, so nothing in any working tree can enter a generation; this
+# script only decides which committed revs to PROMOTE.
 #
-# Never a rebuild blocker: an input checkout that isn't in a promotable state
-# (dirty tracked files, non-main branch) simply keeps its already-verified
-# flake.lock pin for this rebuild. Blocking here would let any concurrent
-# session's WIP in ~/code/{beagle,fram,north} veto unrelated system rebuilds.
+#   --plan            Read-only. Prints a human status line per input, and for
+#                     each promotable move a machine line:
+#                       plan <input> <locked-rev> <target-rev> <repo-path>
+#                     rebuild.rkt turns plan lines into --override-input flags,
+#                     builds/verifies with them, and only then calls --commit.
+#   --commit <in>...  After the snapshot build verified the targets: re-point
+#                     flake.lock (targeted nix flake update) and make the
+#                     mechanical "refresh verified local inputs" commit.
+#
+# NEVER a rebuild blocker. An input checkout that isn't promotable — dirty
+# tracked files (another session's WIP), a non-main branch — holds its
+# already-verified pin for this run with a printed notice and promotes on a
+# later rebuild once clean. --commit degrades to a notice + exit 0 on any
+# non-promotable state (the system has already switched at that point).
+# Hard `die` is reserved for structural breakage (missing lock entry, not a
+# git checkout, missing tools).
 
 ROOT="${FIRN_REPO:-$(git rev-parse --show-toplevel)}"
 LOCK="$ROOT/flake.lock"
@@ -19,12 +32,18 @@ die() {
   exit 1
 }
 
+notice() {
+  printf '  %s\n' "$*"
+}
+
+MODE=""
 case "${1:-}" in
-  --provisional) PROVISIONAL=1 ;;
-  --commit) PROVISIONAL=0 ;;
-  *) die "usage: firn-sync-local-inputs --provisional|--commit" ;;
+  --plan) MODE=plan ;;
+  --provisional) MODE=plan ;;   # legacy alias: planning no longer mutates the lock
+  --commit) MODE=commit ;;
+  *) die "usage: firn-sync-local-inputs --plan | --commit <input>..." ;;
 esac
-[ "$#" -eq 1 ] || die "usage: firn-sync-local-inputs --provisional|--commit"
+shift
 
 short_rev() {
   printf '%.8s' "$1"
@@ -37,67 +56,93 @@ repo_for() {
   printf '%s' "${!override:-${HOME}/code/${input}}"
 }
 
-[ -f "$LOCK" ] || die "missing $LOCK"
-command -v jq >/dev/null || die "jq is required to inspect flake.lock"
-command -v nix >/dev/null || die "nix is required to refresh local inputs"
+# Locked rev of an input as of the snapshot (HEAD's lock, not the worktree's —
+# the snapshot build reads flake.lock from the commit).
+locked_rev() {
+  git -C "$ROOT" show HEAD:flake.lock 2>/dev/null \
+    | jq -r --arg input "$1" '.nodes[$input].locked.rev // empty'
+}
 
-# Never overwrite or fold an existing lock edit into the mechanical commit.
-git -C "$ROOT" diff --quiet -- flake.lock ||
-  die "flake.lock already has unstaged changes; commit or restore them first"
-git -C "$ROOT" diff --cached --quiet -- flake.lock ||
-  die "flake.lock already has staged changes; commit or restore them first"
-
-declare -A before after
-for input in "${INPUTS[@]}"; do
+# Promotable target for an input: HEAD when the checkout is clean and on main;
+# otherwise hold the locked rev. Prints the human status line as a side effect.
+# Sets REPLY_TARGET.
+resolve_target() {
+  local input="$1" repo head locked branch
   repo="$(repo_for "$input")"
   [ -d "$repo/.git" ] || git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 ||
     die "$repo is not a Git checkout"
   head="$(git -C "$repo" rev-parse HEAD)"
-  locked="$(jq -r --arg input "$input" '.nodes[$input].locked.rev // empty' "$LOCK")"
+  locked="$(locked_rev "$input")"
   [ -n "$locked" ] || die "flake.lock has no locked revision for '$input'"
-  before["$input"]="$locked"
-  after["$input"]="$head"
-  # The generation is built from the LOCKED COMMIT — a dirty working tree can
-  # never leak in. But promoting the pin under someone's in-flight WIP (or from
-  # a non-main checkout) would promote a state nobody signed off on, and another
-  # session's WIP must never block this rebuild: hold the verified pin instead
-  # and refresh on a later rebuild once the checkout is clean.
   if [ -n "$(git -C "$repo" status --porcelain --untracked-files=no)" ]; then
     if [ "$head" = "$locked" ]; then
-      printf '  %-6s dirty tree; pin already at HEAD %s (tracked WIP stays out of the generation)\n' \
-        "$input" "$(short_rev "$locked")"
+      notice "$(printf '%-6s dirty tree; pin already at HEAD %s (tracked WIP stays out of the generation)' \
+        "$input" "$(short_rev "$locked")")"
     else
-      printf '  %-6s dirty tree; holding verified %s (HEAD %s not promoted)\n' \
-        "$input" "$(short_rev "$locked")" "$(short_rev "$head")"
+      notice "$(printf '%-6s dirty tree; holding verified %s (HEAD %s not promoted)' \
+        "$input" "$(short_rev "$locked")" "$(short_rev "$head")")"
     fi
-    after["$input"]="$locked"
-    continue
+    REPLY_TARGET="$locked"
+    return 0
   fi
   if [ "$head" != "$locked" ]; then
     branch="$(git -C "$repo" branch --show-current)"
     if [ "$branch" != main ]; then
-      printf '  %-6s on %s, not main; holding verified %s (HEAD %s not promoted)\n' \
-        "$input" "${branch:-detached-HEAD}" "$(short_rev "$locked")" "$(short_rev "$head")"
-      after["$input"]="$locked"
-      continue
+      notice "$(printf '%-6s on %s, not main; holding verified %s (HEAD %s not promoted)' \
+        "$input" "${branch:-detached-HEAD}" "$(short_rev "$locked")" "$(short_rev "$head")")"
+      REPLY_TARGET="$locked"
+      return 0
     fi
+    notice "$(printf '%-6s %s → %s' "$input" "$(short_rev "$locked")" "$(short_rev "$head")")"
+  else
+    notice "$(printf '%-6s current at %s' "$input" "$(short_rev "$locked")")"
   fi
-done
+  REPLY_TARGET="$head"
+}
 
-changed=()
-for input in "${INPUTS[@]}"; do
-  if [ "${before[$input]}" != "${after[$input]}" ]; then
-    changed+=("$input")
-  fi
-done
+[ -f "$LOCK" ] || die "missing $LOCK"
+command -v jq >/dev/null || die "jq is required to inspect flake.lock"
 
-if [ "${#changed[@]}" -eq 0 ]; then
-  printf '  local inputs already current: beagle %s · fram %s · north %s\n' \
-    "$(short_rev "${after[beagle]}")" \
-    "$(short_rev "${after[fram]}")" \
-    "$(short_rev "${after[north]}")"
+if [ "$MODE" = plan ]; then
+  for input in "${INPUTS[@]}"; do
+    REPLY_TARGET=""
+    resolve_target "$input"
+    locked="$(locked_rev "$input")"
+    if [ "$REPLY_TARGET" != "$locked" ]; then
+      printf 'plan %s %s %s %s\n' "$input" "$locked" "$REPLY_TARGET" "$(repo_for "$input")"
+    fi
+  done
   exit 0
 fi
+
+# ── --commit ────────────────────────────────────────────────────────────────
+command -v nix >/dev/null || die "nix is required to refresh local inputs"
+[ "$#" -ge 1 ] || { notice "no inputs to promote"; exit 0; }
+
+# The lock rewrite goes through `nix flake update` against the worktree flake.
+# Any foreign edit in the way just defers promotion — the switched generation
+# already carries the verified revs via --override-input.
+if ! git -C "$ROOT" diff --quiet -- flake.lock ||
+   ! git -C "$ROOT" diff --cached --quiet -- flake.lock; then
+  notice "flake.lock has local edits; deferring pin promotion (generation already carries verified revs)"
+  exit 0
+fi
+if ! git -C "$ROOT" diff --quiet -- flake.nix flake.bnix ||
+   ! git -C "$ROOT" diff --cached --quiet -- flake.nix flake.bnix; then
+  notice "flake source has local edits; deferring pin promotion (generation already carries verified revs)"
+  exit 0
+fi
+
+declare -A target
+for input in "$@"; do
+  REPLY_TARGET=""
+  resolve_target "$input" >/dev/null
+  target["$input"]="$REPLY_TARGET"
+  if [ "${target[$input]}" = "$(locked_rev "$input")" ]; then
+    notice "$input no longer promotable; deferring"
+    exit 0
+  fi
+done
 
 backup="$(mktemp "${TMPDIR:-/tmp}/firn-flake-lock.XXXXXX")"
 cp "$LOCK" "$backup"
@@ -109,24 +154,31 @@ restore_lock() {
 trap restore_lock EXIT INT TERM
 
 # One targeted invocation preserves unrelated remote input pins.
-nix flake update --flake "$ROOT" "${changed[@]}"
+nix flake update --flake "$ROOT" "$@"
 
-for input in "${changed[@]}"; do
+for input in "$@"; do
   locked="$(jq -r --arg input "$input" '.nodes[$input].locked.rev // empty' "$LOCK")"
-  [ "$locked" = "${after[$input]}" ] ||
-    die "$input refreshed to ${locked:-<missing>}, expected ${after[$input]}"
+  if [ "$locked" != "${target[$input]}" ]; then
+    # The input's main advanced between plan and commit (concurrent land).
+    # Not an error: the switched generation used the verified rev; the newer
+    # commit promotes on the next rebuild after its own verification.
+    notice "$input moved to $(short_rev "$locked") since planning $(short_rev "${target[$input]}"); deferring promotion"
+    restore_lock
+    trap - EXIT INT TERM
+    exit 0
+  fi
 done
 
-if [ "$PROVISIONAL" -eq 0 ]; then
-  git -C "$ROOT" add flake.lock
-  message="refresh local inputs: $(IFS=,; printf '%s' "${changed[*]}")"
-  git -C "$ROOT" commit --only -m "$message" -- flake.lock
+git -C "$ROOT" add flake.lock
+if ! git -C "$ROOT" commit --only -m "refresh verified local inputs" -- flake.lock; then
+  notice "mechanical lock commit failed (hook?); deferring promotion"
+  restore_lock
+  trap - EXIT INT TERM
+  exit 0
 fi
 trap - EXIT INT TERM
 rm -f "$backup"
 
-for input in "${INPUTS[@]}"; do
-  marker='='
-  [ "${before[$input]}" = "${after[$input]}" ] || marker='→'
-  printf '  %-6s %s %s %s\n' "$input" "$(short_rev "${before[$input]}")" "$marker" "$(short_rev "${after[$input]}")"
+for input in "$@"; do
+  notice "$input promoted to $(short_rev "${target[$input]}")"
 done

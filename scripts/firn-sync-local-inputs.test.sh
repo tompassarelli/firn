@@ -62,87 +62,105 @@ export FIRN_FRAM_REPO="$TMP/fram"
 export FIRN_NORTH_REPO="$TMP/north"
 export PATH="$TMP/bin:$PATH"
 
-output="$($SCRIPT --commit)"
-grep -q 'already current' <<<"$output"
+lock_rev() { jq -r --arg i "$1" '.nodes[$i].locked.rev' "$TMP/firn/flake.lock"; }
+lock_clean() {
+  git -C "$TMP/firn" diff --quiet -- flake.lock &&
+  git -C "$TMP/firn" diff --cached --quiet -- flake.lock
+}
 
-# Tool/editor state is not part of a Git input snapshot and must not block.
+# All current: no plan lines, nothing mutated.
+output="$($SCRIPT --plan)"
+grep -q 'current at' <<<"$output"
+! grep -q '^plan ' <<<"$output"
+lock_clean
+
+# Tool/editor state is not part of a Git input snapshot and must not matter.
 printf 'local state\n' >"$TMP/beagle/untracked"
-output="$($SCRIPT --commit)"
-grep -q 'already current' <<<"$output"
+output="$($SCRIPT --plan)"
+! grep -q '^plan ' <<<"$output"
 
+# A new commit on main plans a promotable move — and planning NEVER mutates.
 printf 'v2\n' >>"$TMP/north/source"
 git -C "$TMP/north" add source
 git -C "$TMP/north" commit -qm update
+old_north="$(lock_rev north)"
+new_north="$(git -C "$TMP/north" rev-parse HEAD)"
+output="$($SCRIPT --plan)"
+grep -q "^plan north $old_north $new_north $TMP/north\$" <<<"$output"
+lock_clean
+[ "$(lock_rev north)" = "$old_north" ]
+
+# --commit promotes the verified target and makes the mechanical commit.
 before_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
+output="$($SCRIPT --commit north)"
+grep -q 'north promoted' <<<"$output"
+[ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq $((before_count + 1)) ]
+[ "$(lock_rev north)" = "$new_north" ]
+lock_clean
 
-# Provisional refresh advances the worktree pointer but never stages/commits it.
-output="$($SCRIPT --provisional)"
-provisional_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
-[ "$provisional_count" -eq "$before_count" ]
-git -C "$TMP/firn" diff --quiet -- flake.lock && exit 1
-git -C "$TMP/firn" diff --cached --quiet -- flake.lock
-git -C "$TMP/firn" restore flake.lock
-
-output="$($SCRIPT --commit)"
-after_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
-[ "$after_count" -eq $((before_count + 1)) ]
-grep -q 'north.*→' <<<"$output"
-[ "$(jq -r '.nodes.north.locked.rev' "$TMP/firn/flake.lock")" = "$(git -C "$TMP/north" rev-parse HEAD)" ]
-
-# Verification failure restores both worktree and index to the original lock.
+# A lock refresh that lands on the wrong rev defers (exit 0) and restores.
 printf 'v3\n' >>"$TMP/beagle/source"
 git -C "$TMP/beagle" add source
 git -C "$TMP/beagle" commit -qm update-verify-failure
 original_lock="$(sha256sum "$TMP/firn/flake.lock")"
-if FAKE_NIX_WRONG=1 "$SCRIPT" --provisional >"$TMP/out" 2>"$TMP/err"; then
-  echo 'expected refreshed-revision verification failure' >&2
-  exit 1
-fi
+count_before="$(git -C "$TMP/firn" rev-list --count HEAD)"
+output="$(FAKE_NIX_WRONG=1 "$SCRIPT" --commit beagle)"
+grep -q 'deferring' <<<"$output"
 [ "$(sha256sum "$TMP/firn/flake.lock")" = "$original_lock" ]
-git -C "$TMP/firn" diff --quiet -- flake.lock
-git -C "$TMP/firn" diff --cached --quiet -- flake.lock
+[ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq "$count_before" ]
+lock_clean
 
-# Commit-hook failure after staging also restores worktree and index.
+# Commit-hook failure after staging also defers and restores.
 mkdir -p "$TMP/firn/.git/hooks"
 printf '#!/usr/bin/env bash\nexit 1\n' >"$TMP/firn/.git/hooks/pre-commit"
 chmod +x "$TMP/firn/.git/hooks/pre-commit"
-if "$SCRIPT" --commit >"$TMP/out" 2>"$TMP/err"; then
-  echo 'expected mechanical commit failure' >&2
-  exit 1
-fi
+output="$($SCRIPT --commit beagle)"
+grep -q 'deferring' <<<"$output"
 [ "$(sha256sum "$TMP/firn/flake.lock")" = "$original_lock" ]
-git -C "$TMP/firn" diff --quiet -- flake.lock
-git -C "$TMP/firn" diff --cached --quiet -- flake.lock
+lock_clean
 rm "$TMP/firn/.git/hooks/pre-commit"
 
 # Another session's WIP never blocks: the dirty input holds its verified pin
-# while clean inputs still refresh (beagle has a pending commit at this point).
+# while a clean input still plans its move (beagle is still pending here).
 printf 'dirty\n' >>"$TMP/fram/source"
-output="$($SCRIPT --commit)"
+output="$($SCRIPT --plan)"
 grep -q 'fram.*dirty tree' <<<"$output"
-grep -q 'beagle.*→' <<<"$output"
-[ "$(jq -r '.nodes.beagle.locked.rev' "$TMP/firn/flake.lock")" = "$(git -C "$TMP/beagle" rev-parse HEAD)" ]
+! grep -q '^plan fram ' <<<"$output"
+grep -q '^plan beagle ' <<<"$output"
 
-# Dirty repo whose HEAD moved ahead of the pin: the old verified rev is held.
+# Dirty repo whose HEAD moved ahead of the pin: hold the old verified rev.
 git -C "$TMP/fram" add source
 git -C "$TMP/fram" commit -qm wip-base
 printf 'more wip\n' >>"$TMP/fram/source"
-locked_fram="$(jq -r '.nodes.fram.locked.rev' "$TMP/firn/flake.lock")"
-output="$($SCRIPT --commit)"
+output="$($SCRIPT --plan)"
 grep -q 'fram.*holding verified' <<<"$output"
-[ "$(jq -r '.nodes.fram.locked.rev' "$TMP/firn/flake.lock")" = "$locked_fram" ]
+! grep -q '^plan fram ' <<<"$output"
 
 # Non-main checkout holds too — refresh only promotes commits from main.
 git -C "$TMP/fram" checkout -q -- source
 git -C "$TMP/fram" checkout -qb feature
-output="$($SCRIPT --commit)"
+output="$($SCRIPT --plan)"
 grep -q 'fram.*not main' <<<"$output"
-[ "$(jq -r '.nodes.fram.locked.rev' "$TMP/firn/flake.lock")" = "$locked_fram" ]
+! grep -q '^plan fram ' <<<"$output"
 
-# Back on clean main, the held commit promotes normally.
+# Back on clean main, the held commit plans and promotes normally.
 git -C "$TMP/fram" checkout -q main
-output="$($SCRIPT --commit)"
-grep -q 'fram.*→' <<<"$output"
-[ "$(jq -r '.nodes.fram.locked.rev' "$TMP/firn/flake.lock")" = "$(git -C "$TMP/fram" rev-parse HEAD)" ]
+output="$($SCRIPT --plan)"
+grep -q '^plan fram ' <<<"$output"
+output="$($SCRIPT --commit fram beagle)"
+grep -q 'fram promoted' <<<"$output"
+grep -q 'beagle promoted' <<<"$output"
+[ "$(lock_rev fram)" = "$(git -C "$TMP/fram" rev-parse HEAD)" ]
+[ "$(lock_rev beagle)" = "$(git -C "$TMP/beagle" rev-parse HEAD)" ]
+lock_clean
+
+# A foreign edit to the firn lock itself defers promotion, never blocks.
+printf 'v4\n' >>"$TMP/north/source"
+git -C "$TMP/north" add source
+git -C "$TMP/north" commit -qm another
+printf ' \n' >>"$TMP/firn/flake.lock"
+output="$($SCRIPT --commit north)"
+grep -q 'deferring' <<<"$output"
+git -C "$TMP/firn" checkout -q -- flake.lock
 
 printf 'ok: firn-sync-local-inputs\n'
