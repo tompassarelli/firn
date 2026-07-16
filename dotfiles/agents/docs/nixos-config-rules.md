@@ -24,11 +24,13 @@ reproducible.
 ## CI validation
 
 **The agent config is CI-validated** — `.github/workflows/claude-config.yml`
-runs `scripts/claude-config-check.sh`: shellchecks the hooks, JSON-validates
-`settings.json`, and asserts every wired hook path exists + is executable. Run
-`scripts/claude-config-check.sh --local` on the machine to ALSO `command -v`
-the CLIs this file names (so a removed/renamed tool fails loudly instead of
-rotting silently). This is the anti-rot gate; keep it green.
+runs `scripts/agent-config-check.sh`: it checks the shared instructions, skills,
+and hooks plus both the Claude and Codex adapters. Run
+`scripts/agent-config-check.sh --local` to additionally verify live symlinks,
+both MCP registrations, external North lifecycle hooks, and installed North's
+Anthropic/OpenAI provider readiness. Normal output is a grouped summary;
+`--verbose` prints every assertion. `scripts/claude-config-check.sh` remains a
+compatibility entry point. This is the anti-rot gate; keep it green.
 
 ## Hooks kill-switch
 

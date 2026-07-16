@@ -62,14 +62,14 @@
 ;; etc.); this verifies the heal actually took. Advisory by design — the system has
 ;; already switched, so a finding is surfaced loudly but never fails the rebuild.
 (define (run-drift-check)
-  (define checker (in-repo "scripts" "claude-config-check.sh"))
+  (define checker (in-repo "scripts" "agent-config-check.sh"))
   (when (file-exists? checker)
-    (printf "┌─ claude-config drift (--local)\n") (flush-output)
+    (printf "┌─ agent harness (--local)\n") (flush-output)
     (cond
       [(sh (path->string checker) "--local")
-       (printf "└─ ✓ claude-config drift — machine matches the dotfile source of truth\n")]
+       (printf "└─ ✓ agent harness — shared, Claude, Codex, and North state match\n")]
       [else
-       (printf "└─ ⚠ claude-config drift (see above) — system already switched; fix dotfiles + re-run `firn rebuild`\n")])
+       (printf "└─ ⚠ agent harness drift (see above) — system already switched; fix config + re-run `firn rebuild`\n")])
     (flush-output)))
 
 (define (handle-host-rebuild* host skip-checks?)
