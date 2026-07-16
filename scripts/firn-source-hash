@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="${FIRN_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+
+{
+  printf '%s\0' "$ROOT/scripts/firn.rkt"
+  find "$ROOT/scripts/firn-cmds" -type f -name '*.rkt' -print0 | sort -z
+} | xargs -0 sha256sum | sha256sum | cut -d' ' -f1
+
