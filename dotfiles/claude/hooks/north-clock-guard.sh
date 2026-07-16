@@ -109,10 +109,18 @@ if tool == "Bash":
     # Explicit client paths anywhere in the command still gate regardless.
     mcd = re.match(r"\s*(?:[A-Za-z_]\w*=\S*\s*(?:&&|;)\s*)*cd\s+[\"\x27]?([^\s\"\x27;|&]+)", cmd)
     cdto = mcd.group(1) if mcd else None
-    if cdto and (cdto.startswith("/") or cdto.startswith("~")) and not CRE.search(cdto):
-        c = clientof(cmd)
-    else:
-        c = clientof(cmd) or clientof(cwd)
+    escape = bool(cdto and (cdto.startswith("/") or cdto.startswith("~")) and not CRE.search(cdto))
+    # Second escape (2026-07-16 false positive #4): a SINGLE fs-mutator command
+    # whose every target is an absolute non-client path acts on those paths,
+    # not the session cwd (bare rm of /run/user/... from a client cwd is not
+    # client work). Compound commands (any separator) keep cwd attribution —
+    # a client mutation could hide after the separator.
+    if not escape and not re.search(r"[;&|`]|\$\(", cmd):
+        mfs = re.match(r"\s*(?:sudo\s+)?(?:rm|mv|cp|touch|mkdir|ln)\s+(\S.*)$", cmd, re.S)
+        if mfs:
+            args = [t.strip("\x22\x27") for t in mfs.group(1).split() if not t.startswith("-")]
+            escape = bool(args) and all((a.startswith("/") or a.startswith("~")) and not CRE.search(a) for a in args)
+    c = clientof(cmd) if escape else (clientof(cmd) or clientof(cwd))
     if not c: sys.exit(0)
     if not MUT.search(cmd): sys.exit(0)           # pure read -> allow
     print("1\t%s\t%s" % (c, cwd)); sys.exit(0)

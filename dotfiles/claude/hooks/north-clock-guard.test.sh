@@ -149,6 +149,12 @@ run allow 'VAR= prefix then cd non-client && git commit'        closed.log Bash 
 run deny  'cd non-client, client path still in command'         closed.log Bash "cd /tmp && rm -rf $CLIENT_DIR/build" "$CLIENT_DIR"
 run deny  'relative cd stays session-attributed'                closed.log Bash "cd sub && git commit -m x" "$CLIENT_DIR"
 
+echo "== fs-mutator with only abs non-client targets acts THERE, not the cwd =="
+run allow 'rm abs /run path (stop-hook marker shape, 2026-07-16 repro)' closed.log Bash "rm /run/user/1000/north-delegated/session-x" "$CLIENT_DIR"
+run allow 'mkdir -p abs /tmp path'                             closed.log Bash "mkdir -p /tmp/foo/bar" "$CLIENT_DIR"
+run deny  'rm relative target stays cwd-gated'                 closed.log Bash "rm -f build.o" "$CLIENT_DIR"
+run deny  'compound rm /tmp then git commit stays gated'       closed.log Bash "rm /tmp/x && git commit -m x" "$CLIENT_DIR"
+
 echo "== sed -i anchoring: an i in a hyphenated ARG (nixos-config) never denies =="
 run allow 'sed -n read of a nixos-config path (2026-07-16 repro)' closed.log Bash "sed -n '1,80p' $NONCLIENT/dotfiles/claude/hooks/north-clock-guard.sh" "$CLIENT_DIR"
 run deny  'sed --in-place still gated'                          closed.log Bash "sed --in-place s/a/b/ f.ts" "$CLIENT_DIR"
