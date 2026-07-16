@@ -46,8 +46,8 @@ binary — that is the whole game.
 |---|---|---|---|
 | **CLAUDE.md** | `~/code/nixos-config/dotfiles/claude/` + per-repo | declarative (symlink) | persistent rules/context that should ALWAYS be in mind |
 | **settings.json** | `~/code/nixos-config/dotfiles/claude/settings.json` | declarative (symlink; claude also rewrites it at runtime) | harness config: permissions, model/effort, statusLine, plugins, env |
-| **hooks** | `~/code/nixos-config/dotfiles/claude/hooks/` (+ plugin manifests) | declarative; plugin-supplied hooks ride the plugin | DETERMINISTIC behavior the model must not skip (enforce / inject / guard) |
-| **skills** | `~/code/nixos-config/dotfiles/claude/skills/` (+ plugins) | declarative; plugin-supplied skills ride the plugin | ON-DEMAND procedural knowledge the model CHOOSES when relevant |
+| **hooks** | `~/code/nixos-config/dotfiles/agents/hooks/` (+ plugin manifests) | declarative; plugin-supplied hooks ride the plugin | DETERMINISTIC behavior the model must not skip (enforce / inject / guard) |
+| **skills** | `~/code/nixos-config/dotfiles/agents/skills/` (+ plugins) | declarative; plugin-supplied skills ride the plugin | ON-DEMAND procedural knowledge the model CHOOSES when relevant |
 | **slash commands** | `~/code/nixos-config/dotfiles/claude/commands/` | declarative (symlink) | user-typed shortcuts |
 | **subagents** | `~/code/nixos-config/dotfiles/claude/` (+ plugins) | declarative; or plugin-supplied | parallel / isolated work in a separate context |
 | **MCP servers** | `~/.claude.json` (runtime) | **imperative** — `registerMcpServers` activation re-adds them | external tools + data sources |

@@ -4,18 +4,19 @@
 # report and the enforcement can never disagree.
 #
 # Effective state, in precedence order (explicit session env beats state):
-#   CLAUDE_NO_AUTHORING_HOOKS = anything but 0/false/empty  → guards OFF (this session)
-#   CLAUDE_NO_AUTHORING_HOOKS = 0|false                     → guards LIVE (force-live, state ignored)
+#   AGENT_NO_AUTHORING_HOOKS = anything but 0/false/empty   → guards OFF (this session)
+#   AGENT_NO_AUTHORING_HOOKS = 0|false                      → guards LIVE (force-live, state ignored)
+#   CLAUDE_NO_AUTHORING_HOOKS remains a compatibility alias.
 #   unset/empty → state file decides: `guards=off` → guards OFF, else LIVE
 #
 # Persistent flip (all sessions, takes effect immediately — hooks re-read
 # state on every call, no relaunch): `north config guards on|off`.
 # The env var remains the launch-time override for a single pinned session:
-#   CLAUDE_NO_AUTHORING_HOOKS=1 claude
+#   AGENT_NO_AUTHORING_HOOKS=1 claude   # or codex
 # Tests override the state path via AUTHORING_KILLSWITCH_STATE.
 
 authoring_guards_off() {
-  case "${CLAUDE_NO_AUTHORING_HOOKS:-}" in
+  case "${AGENT_NO_AUTHORING_HOOKS:-${CLAUDE_NO_AUTHORING_HOOKS:-}}" in
     0|false) return 1 ;;
     ?*)      return 0 ;;
   esac

@@ -18,7 +18,7 @@ version-specific: load 9.1-compiled `.zo` under 9.2 and racket dies with
    the SAME pinned racket for build AND test in the worktree (source
    `bin/_beagle-racket`). Never mix the worktree's bare racket with the main pin.
 
-The `~/code/nixos-config/dotfiles/claude/hooks/racket-build-guard.sh` PostToolUse
+The `~/code/nixos-config/dotfiles/agents/hooks/racket-build-guard.sh` PostToolUse
 hook enforces this: on any `.rkt` edit it warns (exit 2) if the ambient racket
 ≠ the project pin, or if the edited file's `.zo` is now stale. Heed it — don't
 build/test until it's clean.

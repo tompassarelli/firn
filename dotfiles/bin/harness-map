@@ -228,7 +228,7 @@ const allSessionStartHooks = [
 ];
 
 // 1e. Skills registry
-const personalSkillsDir = `${HOME}/code/nixos-config/dotfiles/claude/skills`;
+const personalSkillsDir = `${HOME}/code/nixos-config/dotfiles/agents/skills`;
 const nixSkillsDir = `${HOME}/.claude/skills`; // symlink
 const personalSkills = listDir(personalSkillsDir);
 const pluginSkills = pluginDetails.flatMap(p => p.skillNames.map(s => ({ plugin: p.key, name: s })));
@@ -536,7 +536,7 @@ emit("### h. Cross-repo spawn wiring (north harness)\n");
 emit(`- harness: \`${tilde(harnessPath)}\``);
 emit(`- PRAXIS_DIR: \`${praxisDir ? tilde(praxisDir) : "(not found)"}\``);
 emit(`  - north reads spawn blocks from: gaffer docs (single source of truth)`);
-emit(`  - personal residue: \`~/code/nixos-config/dotfiles/claude/docs/praxis/\``);
+emit(`  - personal residue: \`~/code/nixos-config/dotfiles/agents/docs/praxis/\``);
 emit(`- appendix functions found in harness: ${appendixFns.join(", ")}`);
 emit(`  - globalLawsAppendix: injects global CLAUDE.md laws into every spawn`);
 emit(`  - praxisAppendix: reads role/posture/delta from PRAXIS_DIR per model`);
@@ -562,7 +562,7 @@ emit("  pluginLean[\"plugin: lean\"]");
 emit("  gafferDoctrine[\"gaffer/doctrine.md\\n(routing doctrine)\"]");
 emit("  ternHarness[\"north sdk/src/harness.ts\"]");
 emit("  gafferDocs[\"~/code/gaffer/docs\\n(PRAXIS_DIR: roles/postures/deltas)\"]");
-emit("  praxisPersonal[\"personal praxis residue\\n~/code/nixos-config/dotfiles/claude/docs/praxis/\"]");
+emit("  praxisPersonal[\"personal praxis residue\\n~/code/nixos-config/dotfiles/agents/docs/praxis/\"]");
 emit("  nixosClaudeMd[\"nixos-config/CLAUDE.md\\n(per-project rules)\"]");
 emit("  ternOnSpawn[\"north-on-spawn\\n(SessionStart hook)\"]");
 emit("  ternOnTooluse[\"north-on-tooluse\\n(PostToolUse hook)\"]");

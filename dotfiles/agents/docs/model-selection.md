@@ -104,7 +104,7 @@ Opus; well-trodden extension = Sonnet.
 Dials 3–4 (role authority, posture) are cached as paste-ready spawn blocks
 in the gaffer repo (`~/code/gaffer/docs/` — roles, postures, model deltas;
 canonical). Personal domain-posture defaults:
-`~/code/nixos-config/dotfiles/claude/docs/praxis/README.md`. Compose, don't
+`~/code/nixos-config/dotfiles/agents/docs/praxis/README.md`. Compose, don't
 re-derive; keep assembled payloads ≤ ~60 lines.
 
 ## Buckets (Max plan, /usage-verified 2026-07-03)

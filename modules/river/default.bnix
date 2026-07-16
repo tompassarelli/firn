@@ -5,13 +5,14 @@
 ;; river 0.4 — pluggable-WM Wayland compositor. Opt-in only (:tags-opt-in
 ;; [desktop]): present in the desktop tag but OFF unless a host writes
 ;; +river, so niri (daily driver) is untouched. Package pinned to
-;; pkgs.unstable.river (0.4.5) to guarantee 0.4 — river-classic is the old
-;; 0.3 and is not used here.
+;; pkgs.unstable.river (0.4.5) to guarantee 0.4. Home Manager calls this
+;; option namespace programs.river-classic, but its old 0.3 default package
+;; is overridden here and is not used.
 ;;
 ;; river 0.4 ships NO built-in window manager — an external WM client over
 ;; the river-window-management-v1 protocol is REQUIRED for a usable session.
 ;; WM here is rill (MIT, Zig 0.16, https://codeberg.org/lzj15/rill), packaged
-;; below and wired into programs.river.extraPackages. rill is co-located in
+;; below and wired into programs.river-classic.extraPackages. rill is co-located in
 ;; this module (not its own modules/rill) because it exists ONLY to serve
 ;; river — no host would ever enable it standalone.
 ;;
@@ -67,8 +68,8 @@
       (lib.mkEnableOption "Enable river 0.4 Wayland compositor (pluggable-WM lane; opt-in)")
      :config
       (lib.mkIf config.myConfig.modules.river.enable
-        {:programs.river.enable true
-         :programs.river.package pkgs.unstable.river
-         :programs.river.extraPackages [rill]
-         :programs.river.xwayland.enable true
+        {:programs.river-classic.enable true
+         :programs.river-classic.package pkgs.unstable.river
+         :programs.river-classic.extraPackages [rill]
+         :programs.river-classic.xwayland.enable true
          :environment.sessionVariables.NIXOS_OZONE_WL "1"})}))

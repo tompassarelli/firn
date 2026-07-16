@@ -1,6 +1,7 @@
 { config, lib, pkgs, ... }:
 
 {
+  myConfig.modules.agent-core.enable = lib.mkDefault true;
   myConfig.modules.atuin.enable = lib.mkDefault true;
   myConfig.modules.bash.enable = lib.mkDefault true;
   myConfig.modules.bc.enable = lib.mkDefault true;

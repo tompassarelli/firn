@@ -156,7 +156,7 @@ run deny  'rm relative target stays cwd-gated'                 closed.log Bash "
 run deny  'compound rm /tmp then git commit stays gated'       closed.log Bash "rm /tmp/x && git commit -m x" "$CLIENT_DIR"
 
 echo "== sed -i anchoring: an i in a hyphenated ARG (nixos-config) never denies =="
-run allow 'sed -n read of a nixos-config path (2026-07-16 repro)' closed.log Bash "sed -n '1,80p' $NONCLIENT/dotfiles/claude/hooks/north-clock-guard.sh" "$CLIENT_DIR"
+run allow 'sed -n read of a nixos-config path (2026-07-16 repro)' closed.log Bash "sed -n '1,80p' $NONCLIENT/dotfiles/agents/hooks/north-clock-guard.sh" "$CLIENT_DIR"
 run deny  'sed --in-place still gated'                          closed.log Bash "sed --in-place s/a/b/ f.ts" "$CLIENT_DIR"
 
 echo "== non-client + fail-open =="

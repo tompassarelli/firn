@@ -23,7 +23,7 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/claude/skills"))}
+                        "/code/nixos-config/dotfiles/agents/skills"))}
                  ".claude/CLAUDE.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
@@ -33,7 +33,7 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/claude/hooks"))}
+                        "/code/nixos-config/dotfiles/agents/hooks"))}
                  ".claude/agents"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink

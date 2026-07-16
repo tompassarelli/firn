@@ -1,28 +1,29 @@
 # System / global config changes — nixos-config rules
 
-Any change to the machine's configuration **or** to Claude's global setup is made
+Any change to the machine's configuration **or** to a coding agent's global setup is made
 **idiomatically through `~/code/nixos-config`**, never ad-hoc in the live system.
-This covers: Claude global config (`skills/`, `CLAUDE.md`, `commands/`,
-`settings.json`), system packages, services, dotfiles, and any host / home-manager
-setting. The whole point is **reproducibility** — a fresh rebuild on any machine
-must reproduce the change.
+This covers shared agent config (`AGENTS.md`, `skills/`, `docs/`, `hooks/`),
+provider adapters (`dotfiles/claude/`, `dotfiles/codex/`), system packages,
+services, dotfiles, and any host / home-manager setting. The whole point is
+**reproducibility** — a fresh rebuild on any machine must reproduce the change.
 
 Mechanics of the nix module that does the wiring (writable settings.json
 symlink, caveman plugin install, MCP registration):
-`~/code/nixos-config/dotfiles/claude/docs/nixos-module.md`.
+`~/code/nixos-config/dotfiles/agents/docs/nixos-module.md`.
 
 ## Symlinks
 
-`~/.claude/{skills,CLAUDE.md,commands,settings.json,hooks,agents}` are
-`mkOutOfStoreSymlink`s into `nixos-config/dotfiles/claude/` (see
-`modules/claude/default.bnix` — `default.nix` is generated). Editing them edits
-the repo *directly* and is live immediately (no rebuild) — **but you MUST
-commit it to `nixos-config`**, or it isn't reproducible. (`docs/` is
-intentionally not wired — pointers use full repo paths.)
+`~/.agents/{skills,docs,hooks}`, `~/.codex/{AGENTS.md,config.toml,hooks.json}`,
+and `~/.claude/{skills,CLAUDE.md,commands,settings.json,hooks,agents}` are
+`mkOutOfStoreSymlink`s into `nixos-config/dotfiles/` (see
+`modules/agent-core`, `modules/codex`, and `modules/claude`; generated `.nix`
+files are build targets). Editing them edits the repo *directly* and is live
+immediately — **but you MUST commit it to `nixos-config`**, or it isn't
+reproducible.
 
 ## CI validation
 
-**The Claude config is CI-validated** — `.github/workflows/claude-config.yml`
+**The agent config is CI-validated** — `.github/workflows/claude-config.yml`
 runs `scripts/claude-config-check.sh`: shellchecks the hooks, JSON-validates
 `settings.json`, and asserts every wired hook path exists + is executable. Run
 `scripts/claude-config-check.sh --local` on the machine to ALSO `command -v`
@@ -32,7 +33,7 @@ rotting silently). This is the anti-rot gate; keep it green.
 ## Hooks kill-switch
 
 **Behavior-injecting hooks share one kill-switch** — semantics live in
-`dotfiles/claude/hooks/lib/authoring-killswitch.sh`, sourced by every guard
+`dotfiles/agents/hooks/lib/authoring-killswitch.sh`, sourced by every guard
 AND by `north config`, so report and enforcement cannot disagree:
 
 - **Persistent, live flip (all sessions):** `north config guards off` /

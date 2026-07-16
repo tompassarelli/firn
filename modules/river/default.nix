@@ -48,10 +48,10 @@ in
 {
   options.myConfig.modules.river.enable = lib.mkEnableOption "Enable river 0.4 Wayland compositor (pluggable-WM lane; opt-in)";
   config = lib.mkIf config.myConfig.modules.river.enable {
-    programs.river.enable = true;
-    programs.river.package = pkgs.unstable.river;
-    programs.river.extraPackages = [ rill ];
-    programs.river.xwayland.enable = true;
+    programs.river-classic.enable = true;
+    programs.river-classic.package = pkgs.unstable.river;
+    programs.river-classic.extraPackages = [ rill ];
+    programs.river-classic.xwayland.enable = true;
     environment.sessionVariables.NIXOS_OZONE_WL = "1";
   };
 }

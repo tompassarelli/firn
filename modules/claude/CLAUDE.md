@@ -6,7 +6,7 @@ server registration. Source of truth is `default.bnix`; `default.nix` is
 generated.
 
 **Read before editing `default.bnix`:**
-→ `~/code/nixos-config/dotfiles/claude/docs/nixos-module.md`
+→ `~/code/nixos-config/dotfiles/agents/docs/nixos-module.md`
 (writable settings.json symlink + EROFS, caveman fork/pin/bump + recovery,
 MCP idempotence, claim-canonical guard gap)
 

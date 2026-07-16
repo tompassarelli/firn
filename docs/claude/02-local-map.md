@@ -30,8 +30,8 @@ What the `~/code/nixos-config/modules/claude` module materializes into `~/.claud
 | `~/.claude/CLAUDE.md` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/dotfiles/claude/CLAUDE.md` |
 | `~/.claude/settings.json` | symlink | direct → dotfiles | ✅ | `~/code/nixos-config/dotfiles/claude/settings.json` |
 | `~/.claude/commands` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/dotfiles/claude/commands` |
-| `~/.claude/skills` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/dotfiles/claude/skills` |
-| `~/.claude/hooks` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/dotfiles/claude/hooks` |
+| `~/.claude/skills` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/dotfiles/agents/skills` |
+| `~/.claude/hooks` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/dotfiles/agents/hooks` |
 
 ## Layer 1 — LOCAL: runtime wiring (`settings.json` + plugin manifests)
 

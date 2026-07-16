@@ -3,8 +3,28 @@
 (ns default)
 
 (nix/module [config lib pkgs ...]
-  {:options.myConfig.modules.codex.enable
-    (lib.mkEnableOption "OpenAI Codex CLI (master/bleeding-edge)")
-   :config
-    (lib.mkIf config.myConfig.modules.codex.enable
-      {:environment.systemPackages [pkgs.master.codex]})})
+  (let [username config.myConfig.modules.users.username]
+    {:options.myConfig.modules.codex.enable
+      (lib.mkEnableOption "OpenAI Codex CLI (master/bleeding-edge)")
+     :config
+      (lib.mkIf config.myConfig.modules.codex.enable
+        {:environment.systemPackages [pkgs.master.codex]
+         :home-manager.users
+          {username
+            (nix/module [config ...]
+              {:home.file
+                {".codex/AGENTS.md"
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/agents/AGENTS.md"))}
+                 ".codex/config.toml"
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/codex/config.toml"))}
+                 ".codex/hooks.json"
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/codex/hooks.json"))}}})}})}))

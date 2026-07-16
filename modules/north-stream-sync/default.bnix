@@ -7,7 +7,7 @@
 ;; streams/raw/ (see ~/code/north/streams/CLAUDE.md). User-level timer (not a
 ;; system service like north-coord): it only touches files under $HOME, needs
 ;; no privileges, and should not block boot. SessionEnd hook flush is a
-;; second, complementary trigger (dotfiles/claude/hooks/north-session-end.sh) —
+;; second, complementary trigger (dotfiles/agents/hooks/north-session-end.sh) —
 ;; the lock in the stream-sync script itself keeps the two from interleaving.
 (nix/module [config lib pkgs ...]
   (let [username config.myConfig.modules.users.username

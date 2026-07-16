@@ -13,7 +13,7 @@ Agent/Task/Workflow while the north config dispatch setting is `north` — view/
 `north config` / `/north-config`. Reinstated 2026-07-03; the P6 prose-only bet did not hold.)
 Quick lookups → bash/grep/read inline. Real work → the protocol below.
 Lifecycle anatomy + failure debugging (patterns A–F, zombie forks, split-brain):
-→ `~/code/nixos-config/dotfiles/claude/docs/workflow-map.md`
+→ `~/code/nixos-config/dotfiles/agents/docs/workflow-map.md`
 
 ## The stack
 

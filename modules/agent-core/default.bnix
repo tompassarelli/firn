@@ -1,0 +1,38 @@
+#lang beagle/nix
+
+(ns default)
+
+;; Provider-neutral instructions, skills, documentation, and enforcement.
+;; Claude Code and Codex modules only adapt their own discovery/config paths.
+(nix/module [config lib ...]
+  (let [username config.myConfig.modules.users.username]
+    {:tags [development]
+     :options.myConfig.modules.agent-core.enable
+      (lib.mkEnableOption "Shared provider-neutral agent configuration")
+     :config
+      (lib.mkIf config.myConfig.modules.agent-core.enable
+        {:home-manager.users
+          {username
+            (nix/module [config ...]
+              {:home.file
+                {".agents/skills"
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/agents/skills"))}
+                 ".agents/docs"
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/agents/docs"))}
+                 ".agents/hooks"
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/agents/hooks"))}
+                 ;; Provider-neutral routing instructions for the ~/code root.
+                 "code/AGENTS.md"
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/code/AGENTS.md"))}}})}})}))

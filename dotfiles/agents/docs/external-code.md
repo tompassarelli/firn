@@ -22,7 +22,7 @@ on it.
 ## Vetted takeaways from ~/code/reference
 
 Curated pointers from scanned forks (licenses already checked):
-→ `~/code/nixos-config/dotfiles/claude/docs/reference-reads.md`
+→ `~/code/nixos-config/dotfiles/agents/docs/reference-reads.md`
 Covers: skill-authoring methodology, debugging technique docs, measured MCP
 output caps, benchmark harness designs. Read when authoring a new skill,
 building an MCP tool returning big payloads, hunting a test-state polluter,

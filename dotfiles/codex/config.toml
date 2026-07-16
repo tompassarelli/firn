@@ -1,0 +1,35 @@
+# Provider-specific Codex settings. Shared operating instructions live in
+# ../agents/AGENTS.md and shared lifecycle policy lives in ../agents/hooks/.
+project_doc_fallback_filenames = ["CLAUDE.md"]
+approvals_reviewer = "user"
+
+[projects."/home/tom"]
+trust_level = "trusted"
+
+[projects."/home/tom/code/client/msa/kea"]
+trust_level = "trusted"
+
+[projects."/home/tom/code/nixos-config"]
+trust_level = "trusted"
+
+[tui.model_availability_nux]
+"gpt-5.6-sol" = 1
+
+[features]
+hooks = true
+
+[mcp_servers.north]
+command = "/home/tom/code/north/bin/north-mcp"
+startup_timeout_sec = 15
+
+[mcp_servers.fram]
+command = "/home/tom/code/fram/bin/fram-mcp"
+startup_timeout_sec = 15
+
+[mcp_servers.fram.env]
+FRAM_LOG = "/home/tom/.local/state/north/facts.log"
+FRAM_THREADS = "/home/tom/.local/state/north/threads"
+
+[mcp_servers.linear-mcp-msa-new]
+url = "https://mcp.linear.app/mcp"
+auth = "oauth"

@@ -1,0 +1,136 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/beagle-session-start.sh",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "/home/tom/code/north/bin/north-on-spawn",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/north/bin/north-on-spawn",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/agent-spawn-guard.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/code-upstream-guard.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/firn-guard.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/north-clock-guard.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|shell|exec_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/tripwire-guard.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/firn-guard.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/north-clock-guard.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|shell|exec_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/logcompress-hook.js",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/racket-build-guard.sh",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|shell|exec_command|Edit|Write|MultiEdit|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/north/bin/north-on-tooluse",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__north__spawn|mcp__north__dispatch|Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/north/bin/north-mark-delegated",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/tom/code/north/bin/north-on-stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

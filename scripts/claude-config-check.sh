@@ -24,6 +24,7 @@ set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DOT="$REPO/dotfiles/claude"
+SHARED="$REPO/dotfiles/agents"
 HOOKS="$DOT/hooks"
 SETTINGS="$DOT/settings.json"
 LOCAL=0; [ "${1:-}" = "--local" ] && LOCAL=1
@@ -61,9 +62,11 @@ fi
 #    pointing OUTSIDE the repo (a sibling project's bin/, e.g.
 #    ~/code/north/bin/north-on-spawn) are external — the repo can't vouch
 #    for them and CI can't see them, so they're noted, not failed.
-if python3 - "$SETTINGS" "$HOOKS" <<'PY'
+if python3 - "$SETTINGS" "$HOOKS" "$REPO" <<'PY'
 import json, sys, os
-settings, hooks_dir = sys.argv[1], sys.argv[2]
+settings, hooks_dir, repo = sys.argv[1], sys.argv[2], sys.argv[3]
+canonical_hooks = os.path.realpath(hooks_dir)
+canonical_repo = os.path.realpath(repo)
 try:
     cfg = json.load(open(settings))
 except Exception as e:
@@ -77,21 +80,18 @@ for ev, groups in (cfg.get("hooks") or {}).items():
 bad = 0
 for ev, c in cmds:
     cmd_path = c.split()[0]
-    d = os.path.dirname(cmd_path).replace(os.sep, "/")
-    # External hook: an absolute path that does NOT live under the repo's
-    # dotfiles/claude/hooks (a sibling project's bin/, e.g. north-on-spawn).
-    # The repo can't vouch for it and CI can't see it -> note, don't fail.
-    # In-repo hooks (bare name, or a path under dotfiles/claude/hooks) are
-    # still validated strictly against the tracked hooks/ dir.
-    if d and not d.endswith("dotfiles/claude/hooks"):
-        print(f"note: hook {ev} -> external {cmd_path} (outside repo; not checked)")
-        continue
     base = os.path.basename(cmd_path)
     p = os.path.join(hooks_dir, base)
-    if os.path.isfile(p) and os.access(p, os.X_OK):
+    resolved = os.path.realpath(cmd_path) if os.path.isabs(cmd_path) else os.path.realpath(p)
+    expected = os.path.realpath(p)
+    # Both dotfiles/claude/hooks (compatibility link) and dotfiles/agents/hooks
+    # resolve here. Validate the canonical file, never the spelling of its path.
+    if resolved == expected and os.path.isfile(expected) and os.access(expected, os.X_OK):
         print(f"ok:   hook {ev} -> {base} exists + executable")
+    elif os.path.isabs(cmd_path) and not resolved.startswith(canonical_repo + os.sep):
+        print(f"note: hook {ev} -> external {cmd_path} (outside repo; not checked)")
     else:
-        print(f"FAIL: hook {ev} command not found/executable in hooks/: {c}", file=sys.stderr)
+        print(f"FAIL: hook {ev} command does not resolve to canonical hooks/: {c}", file=sys.stderr)
         bad = 1
 sys.exit(bad)
 PY
@@ -138,19 +138,30 @@ if [ "$LOCAL" -eq 1 ]; then
     ok "'los' absent (matches CLAUDE.md)"
   fi
 
-  # 7. --local: each nix-managed ~/.claude entry resolves to the dotfile SoT.
-  #    Catches a stale/broken home-manager generation (the EROFS read-only-symlink
-  #    failure) before it silently desyncs the live config from the repo.
+  # 7. --local: each nix-managed ~/.claude entry resolves to its canonical SoT.
+  #    Provider-specific settings/commands stay under dotfiles/claude; shared
+  #    instructions, skills, and hooks intentionally resolve under dotfiles/agents.
+  #    Validate the declared target per entry instead of assuming one directory —
+  #    otherwise a correct provider-neutral generation is misreported as stale.
   for entry in settings.json skills hooks CLAUDE.md commands; do
     link="$HOME/.claude/$entry"
     if [ ! -e "$link" ]; then
       err ".claude/$entry is missing (home-manager not applied?)"; continue
     fi
     real="$(readlink -f "$link" 2>/dev/null)"
-    case "$real" in
-      "$DOT"/*) ok ".claude/$entry resolves to dotfiles/claude/" ;;
-      *)        err ".claude/$entry resolves to '$real', not dotfiles/claude/ (stale home-manager generation)" ;;
+    case "$entry" in
+      settings.json) expected="$DOT/settings.json" ;;
+      commands)      expected="$DOT/commands" ;;
+      skills)        expected="$SHARED/skills" ;;
+      hooks)         expected="$SHARED/hooks" ;;
+      CLAUDE.md)     expected="$SHARED/AGENTS.md" ;;
     esac
+    expected="$(readlink -f "$expected" 2>/dev/null)"
+    if [ "$real" = "$expected" ]; then
+      ok ".claude/$entry resolves to canonical ${expected#$REPO/}"
+    else
+      err ".claude/$entry resolves to '$real', expected '$expected' (home-manager drift)"
+    fi
   done
 
   # 8. --local: MCP registration in ~/.claude.json — the exact rot that pointed

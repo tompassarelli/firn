@@ -12,7 +12,7 @@ the **caveman** plugin install, and MCP server registration (`fram`, `north`,
 
 Why everything routes through nixos-config (reproducibility rule, CI
 validation, hooks kill-switch):
-`~/code/nixos-config/dotfiles/claude/docs/nixos-config-rules.md`.
+`~/code/nixos-config/dotfiles/agents/docs/nixos-config-rules.md`.
 
 ## settings.json is a WRITABLE symlink — load-bearing
 
