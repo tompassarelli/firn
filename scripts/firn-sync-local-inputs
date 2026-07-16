@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Keep development checkouts reproducible without making the user maintain
+# flake.lock pointers. This deliberately refreshes only local harness inputs;
+# wholesale upstream movement remains `firn update` territory.
+
+ROOT="${FIRN_REPO:-$(git rev-parse --show-toplevel)}"
+LOCK="$ROOT/flake.lock"
+INPUTS=(beagle fram north)
+
+die() {
+  printf 'firn rebuild: %s\n' "$*" >&2
+  exit 1
+}
+
+short_rev() {
+  printf '%.8s' "$1"
+}
+
+repo_for() {
+  local input="$1" upper override
+  upper="$(printf '%s' "$input" | tr '[:lower:]' '[:upper:]')"
+  override="FIRN_${upper}_REPO"
+  printf '%s' "${!override:-${HOME}/code/${input}}"
+}
+
+[ -f "$LOCK" ] || die "missing $LOCK"
+command -v jq >/dev/null || die "jq is required to inspect flake.lock"
+command -v nix >/dev/null || die "nix is required to refresh local inputs"
+
+# Never overwrite or fold an existing lock edit into the mechanical commit.
+git -C "$ROOT" diff --quiet -- flake.lock ||
+  die "flake.lock already has unstaged changes; commit or restore them first"
+git -C "$ROOT" diff --cached --quiet -- flake.lock ||
+  die "flake.lock already has staged changes; commit or restore them first"
+
+declare -A before after
+for input in "${INPUTS[@]}"; do
+  repo="$(repo_for "$input")"
+  [ -d "$repo/.git" ] || git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 ||
+    die "$repo is not a Git checkout"
+  head="$(git -C "$repo" rev-parse HEAD)"
+  locked="$(jq -r --arg input "$input" '.nodes[$input].locked.rev // empty' "$LOCK")"
+  [ -n "$locked" ] || die "flake.lock has no locked revision for '$input'"
+  # Untracked editor/daemon state is outside the Git input snapshot and must not
+  # make ordinary development brittle. Tracked edits would be silently omitted
+  # from the generation, so require those to have a source commit.
+  [ -z "$(git -C "$repo" status --porcelain --untracked-files=no)" ] ||
+    die "$repo has uncommitted tracked changes; commit them before rebuilding"
+  if [ "$head" != "$locked" ]; then
+    branch="$(git -C "$repo" branch --show-current)"
+    [ "$branch" = main ] || die "$repo is on '$branch', expected 'main' before refreshing '$input'"
+  fi
+  before["$input"]="$locked"
+  after["$input"]="$head"
+done
+
+changed=()
+for input in "${INPUTS[@]}"; do
+  if [ "${before[$input]}" != "${after[$input]}" ]; then
+    changed+=("$input")
+  fi
+done
+
+if [ "${#changed[@]}" -eq 0 ]; then
+  printf '  local inputs already current: beagle %s · fram %s · north %s\n' \
+    "$(short_rev "${after[beagle]}")" \
+    "$(short_rev "${after[fram]}")" \
+    "$(short_rev "${after[north]}")"
+  exit 0
+fi
+
+backup="$(mktemp "${TMPDIR:-/tmp}/firn-flake-lock.XXXXXX")"
+cp "$LOCK" "$backup"
+restore_lock() {
+  cp "$backup" "$LOCK"
+  rm -f "$backup"
+}
+trap restore_lock ERR INT TERM
+
+# One targeted invocation preserves unrelated remote input pins.
+nix flake update --flake "$ROOT" "${changed[@]}"
+
+for input in "${changed[@]}"; do
+  locked="$(jq -r --arg input "$input" '.nodes[$input].locked.rev // empty' "$LOCK")"
+  [ "$locked" = "${after[$input]}" ] ||
+    die "$input refreshed to ${locked:-<missing>}, expected ${after[$input]}"
+done
+
+git -C "$ROOT" add flake.lock
+message="refresh local inputs: $(IFS=,; printf '%s' "${changed[*]}")"
+git -C "$ROOT" commit --only -m "$message" -- flake.lock
+trap - ERR INT TERM
+rm -f "$backup"
+
+for input in "${INPUTS[@]}"; do
+  marker='='
+  [ "${before[$input]}" = "${after[$input]}" ] || marker='→'
+  printf '  %-6s %s %s %s\n' "$input" "$(short_rev "${before[$input]}")" "$marker" "$(short_rev "${after[$input]}")"
+done

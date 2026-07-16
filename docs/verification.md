@@ -27,6 +27,13 @@ This catches things the validator can't: input mismatches, evaluation errors in 
 
 `firn rebuild` (the sanctioned wrapper) IS agent-runnable — policy change 2026-07-08 — once `firn build` + `firn validate` are green, your own changes are committed, and no build input is dirty: zero uncommitted `*.bnix`/`*.nix`/`flake.lock` anywhere in the tree (flakes build the working tree; a dirty build input bakes another session's WIP into a generation no commit maps to). Other sessions' dirty non-build files don't block. `firn rollback` / the boot menu undo a switch.
 
+Before those gates, rebuild refreshes the committed `main` revisions of the local
+`~/code/beagle`, `~/code/fram`, and `~/code/north` inputs. It updates no remote
+inputs and automatically commits only the derived `flake.lock` change. A dirty
+local checkout, non-`main` branch, or pre-existing lockfile edit aborts before
+the build, so local development stays one-command without consuming uncommitted
+tracked source. Untracked editor and daemon state does not block the refresh.
+
 **Don't** run `nh` or `nixos-rebuild` directly — only the wrapper; the firn-guard hook denies the bypasses. `firn update` (wholesale input bumps) stays the user's.
 
 Only verify whiterabbit. Skip thinkpad-x1e.

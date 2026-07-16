@@ -150,6 +150,13 @@
        (exit 1)])
     (flush-output))
 
+  ;; Local harness development is commit-driven: refresh only the local
+  ;; git+file inputs and mechanically commit the resulting lock pointer.
+  ;; This is intentionally narrower than `firn update` (no remote bumps),
+  ;; and remains mandatory when --skip-checks bypasses build/validation.
+  (phase "local inputs"
+    (λ () (sh (path->string (in-repo "scripts" "firn-sync-local-inputs")))))
+
   (unless skip-checks?
     ;; Step 1: regenerate any out-of-date .nix from .bnix sources.
     (phase "firn-build"
@@ -253,7 +260,7 @@
   (list
    (walk-edge "host" "rebuild" "<host>" 'current-host
               handle-host-rebuild
-              "firn-build → validate → nixos-rebuild → tag generation")
+              "refresh local inputs → build → validate → switch → tag generation")
    (walk-edge "host" "impact" "[<host>]" 'current-host
               handle-host-impact
               "dry-run impact prediction (what will rebuild, estimated time)")))
