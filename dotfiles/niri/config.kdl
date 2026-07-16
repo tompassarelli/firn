@@ -334,7 +334,8 @@ window-rule {
 // dedicated "render" workspace without stealing focus — necessary because
 // bot-walled pages (youtube/zdnet/...) detect headless; a real surface on a
 // hidden workspace still defeats them. Harness sets MOZ_APP_REMOTINGNAME=gjoa-render.
-workspace "render"
+// The workspace is NOT declared here (declared = permanent even when empty);
+// render-arm.sh names it at launch and unnames it on cleanup, like "heist".
 window-rule {
     match app-id=r#"^gjoa-render$"#
     open-on-workspace "render"
