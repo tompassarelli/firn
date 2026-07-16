@@ -25,18 +25,21 @@ nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel --no-li
 
 This catches things the validator can't: input mismatches, evaluation errors in submodule freeformType paths, build-time failures.
 
-`firn rebuild` (the sanctioned wrapper) IS agent-runnable — policy change 2026-07-08 — once `firn build` + `firn validate` are green, your own changes are committed, and no build input is dirty: zero uncommitted `*.bnix`/`*.nix`/`flake.lock` anywhere in the tree (flakes build the working tree; a dirty build input bakes another session's WIP into a generation no commit maps to). Other sessions' dirty non-build files don't block. `firn rollback` / the boot menu undo a switch.
+`firn rebuild` (the sanctioned wrapper) IS agent-runnable — policy change 2026-07-08, snapshot semantics 2026-07-16. It builds a **commit snapshot** (`git+file://<repo>?rev=HEAD`), never the working tree: uncommitted state — yours or any concurrent session's — can neither block a rebuild nor leak into a generation. The one gate that remains YOURS: **commit your own changes first**, or they simply won't be in the build (the pipeline prints exactly which in-flight files it excluded). Every generation maps to a commit by construction. `firn rollback` / the boot menu undo a switch.
 
-Before those gates, rebuild provisionally refreshes the committed `main`
-revisions of the local `~/code/beagle`, `~/code/fram`, and `~/code/north`
-inputs. It updates no remote inputs. Firn then regenerates, validates, and builds
-the selected host closure as a source/package smoke gate; only that verified
-derived `flake.lock` change is committed. Any pre-commit gate failure restores
-the previous lock automatically. `--skip-checks` keeps the existing lock and
-therefore cannot commit an unverified pointer. A dirty
-local checkout, non-`main` branch, or pre-existing lockfile edit aborts before
-the build, so local development stays one-command without consuming uncommitted
-tracked source. Untracked editor and daemon state does not block the refresh.
+The pipeline: plan local-input pin moves for `~/code/beagle`, `~/code/fram`,
+`~/code/north` (a checkout with dirty tracked files or off `main` **holds its
+already-verified pin** with a printed notice — never a wall); regenerate `.nix`
+(stale committed outputs are self-healed with a mechanical commit; outputs
+downstream of in-flight WIP keep their committed versions); validate the
+snapshot in a detached temp worktree (a peer's mid-edit `.bnix` can't fail your
+rebuild); build the host closure from the snapshot with `--override-input` for
+planned pin moves; switch that **exact store path** (no second evaluation);
+then commit the verified `flake.lock` pointer — any non-promotable state
+(foreign lock edit, raced input, hook failure) defers with a notice, exit 0.
+`--skip-checks` still builds and switches the HEAD snapshot with the committed
+lock; it only skips validation and pin planning. Untracked files are a printed
+warning ("not in this build"), no longer a hard stop.
 
 **Don't** run `nh` or `nixos-rebuild` directly — only the wrapper; the firn-guard hook denies the bypasses. `firn update` (wholesale input bumps) stays the user's.
 

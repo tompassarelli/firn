@@ -127,11 +127,12 @@ Every repo: agent notes, status, scratch, and handoffs go in gitignored
 Shared policy lives under `dotfiles/agents`; Claude Code and Codex config are
 thin adapters under `dotfiles/claude` and `dotfiles/codex`. Their live global
 files are symlinks into nixos-config, so every edit MUST be committed there.
-`firn rebuild` is agent-runnable ONLY after `firn build` + `firn
-validate` are green, your changes are committed, and no build input is
-dirty — zero uncommitted `*.bnix`/`*.nix`/`flake.lock` in the tree (others'
-dirty non-build files don't block); `firn update` and raw nixos-rebuild/nh
-stay the USER's. Build-only verify: `nix build --no-link`.
+`firn rebuild` is agent-runnable and builds a COMMIT SNAPSHOT (`rev=HEAD`),
+never the working tree — no session's uncommitted state blocks it or leaks
+into a generation. Your one gate: commit YOUR OWN changes first, or they
+won't be in the build (the pipeline prints what it excluded); `firn update`
+and raw nixos-rebuild/nh stay the USER's. Build-only verify:
+`nix build --no-link`.
 Dev environments activate via direnv (`use flake` in `.envrc`) — never bare
 `nix develop` / `nix shell`.
 

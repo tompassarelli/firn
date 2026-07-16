@@ -127,7 +127,7 @@ Rewrites unambiguous typos in place (best did-you-mean at edit distance ≤ 2 wi
 
 ## Verification
 → [`docs/verification.md`](docs/verification.md)
-Agents MAY run `firn rebuild` — only after `firn build` + `firn validate` are green, your own changes are committed, and no build input is dirty: zero uncommitted `*.bnix`/`*.nix`/`flake.lock` anywhere in the tree (flakes build the working tree, so a dirty build input bakes foreign WIP into a generation no commit maps to). Other sessions' dirty non-build files (docs, dotfiles/bin, …) don't block. Never raw `nh`/nixos-rebuild, never `firn update` (input bumps are the USER's). Build-only verification: `nix build --no-link`. Only verify whiterabbit; skip thinkpad-x1e.
+Agents MAY run `firn rebuild`. It builds a **commit snapshot** (`git+file?rev=HEAD`), never the working tree — no session's uncommitted state can block a rebuild or leak into a generation, so there is no "dirty tree" precondition to check. The one rule that is yours: **commit your own changes first**, or they won't be in the build (the pipeline prints what it excluded). The pipeline itself regenerates + validates the snapshot, self-heals stale committed `.nix`, holds any local input (beagle/fram/north) that has WIP or is off `main` at its verified pin, and switches the exact verified closure. Never raw `nh`/nixos-rebuild, never `firn update` (input bumps are the USER's). Build-only verification: `nix build --no-link`. Only verify whiterabbit; skip thinkpad-x1e.
 **Read when:** verifying a change — picking the right rung (firn-build + validate → repo diff → full `nix build`).
 
 ## Crash recovery (whiterabbit — silent reboots)

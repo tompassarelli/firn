@@ -363,14 +363,18 @@
     [else
      (printf "└─ ✓ rebuild (~a)\n" (fmt-elapsed rebuild-elapsed))
      (define gens (sh-out "nixos-rebuild" "list-generations"))
-     (define cur-line
-       (for/or ([line (in-list (string-split gens "\n"))]
-                #:when (regexp-match? #rx"current" line))
-         line))
+     ;; Current generation: modern `list-generations` marks it with a trailing
+     ;; True column ("Current" appears only in the header); the old format
+     ;; carried a lowercase "current" marker. Accept both — the old parser
+     ;; matched neither and silently stopped tagging at gen-783.
      (define gen
-       (and cur-line
-            (let ([n (car (string-split (string-trim cur-line)))])
-              (and (regexp-match? #rx"^[0-9]+$" n) n))))
+       (for/or ([line (in-list (string-split gens "\n"))])
+         (define t (string-trim line))
+         (define m (regexp-match #px"^([0-9]+)\\s" t))
+         (and m
+              (or (regexp-match? #px"\\bTrue\\s*$" t)
+                  (regexp-match? #rx"current" t))
+              (cadr m))))
      (when gen
        (sh "git" "-C" ROOT "tag" "-f" (string-append "gen-" gen) "HEAD"))
      (printf "\n  ✓ rebuild complete — total ~a~a\n\n"
