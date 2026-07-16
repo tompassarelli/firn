@@ -2,9 +2,10 @@
 # north-clock-guard.test.sh — hermetic test matrix for north-clock-guard.sh.
 # Run after EVERY edit to the hook: ./north-clock-guard.test.sh
 # Pipes synthetic PreToolUse hook-input JSON into the hook and asserts the
-# decision. FRAM_LOG is pointed at fixture files under a scratch dir so the real
-# ~/.local/state/north/facts.log is NEVER read or written. AUTHORING_KILLSWITCH_STATE
-# is likewise scratch-scoped so the machine's real kill-switch can't skew results.
+# decision. FRAM_LOG/FRAM_TELEMETRY_LOG point at fixture files, or HOME points
+# at a scratch canonical corpus, so the real ~/.local/state/north logs are NEVER
+# read or written. AUTHORING_KILLSWITCH_STATE is likewise scratch-scoped so the
+# machine's real kill-switch cannot skew results.
 # shellcheck disable=SC2016  # fixtures contain literal $ and shell operators on purpose
 set -uo pipefail
 
@@ -69,7 +70,7 @@ run() {
   local expect="$1" desc="$2" log="$3" tool="$4" arg="$5" cwd="${6:-}"
   local json out
   json="$(emit_json "$tool" "$arg" "$cwd")"
-  out="$(printf '%s' "$json" | env -u CLAUDE_NO_AUTHORING_HOOKS \
+  out="$(printf '%s' "$json" | env -u CLAUDE_NO_AUTHORING_HOOKS -u FRAM_TELEMETRY_LOG \
     FRAM_LOG="$SCRATCH/$log" \
     AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
     "$HOOK" 2>/dev/null)"
@@ -162,6 +163,109 @@ run deny  'sed --in-place still gated'                          closed.log Bash 
 echo "== non-client + fail-open =="
 run allow 'Bash mutation outside client'            closed.log Bash "rm -rf ./build" "$NONCLIENT"
 run allow 'Edit, FRAM_LOG missing -> fail-open'     nonexistent.log Edit "$CLIENT_DIR/api.py"
+
+echo "== canonical split corpus + stale-monolith contradictions =="
+DEFAULT_HOME="$SCRATCH/home"
+DEFAULT_STATE="$DEFAULT_HOME/.local/state/north"
+DEFAULT_REPO="$DEFAULT_HOME/code/client/msa/work"
+mkdir -p "$DEFAULT_STATE" "$DEFAULT_REPO"
+git -C "$DEFAULT_REPO" init -q -b msa-321-work
+git -C "$DEFAULT_REPO" -c user.name=test -c user.email=test@example.invalid \
+  commit --allow-empty --no-verify -qm init
+
+fact() {
+  printf '{:tx %s, :op "%s", :l "%s", :p "%s", :r "%s", :by "test"}\n' \
+    "$1" "$2" "$3" "$4" "$5"
+}
+assert_fact() { fact "$1" assert "$2" "$3" "$4"; }
+
+run_default() {
+  local json
+  json="$(emit_json Edit "$DEFAULT_REPO/api.py")"
+  printf '%s' "$json" | env -u CLAUDE_NO_AUTHORING_HOOKS -u FRAM_LOG -u FRAM_TELEMETRY_LOG \
+    HOME="$DEFAULT_HOME" AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
+    "$HOOK" 2>/dev/null
+}
+
+# Stale facts.log says no clock; the live split says an msa clock is open. The
+# end_time retraction proves the merge applies exact current-state semantics.
+{
+  assert_fact 1 '@stale-thread' owner msa
+  assert_fact 2 '@stale-thread' linear MSA-321
+} > "$DEFAULT_STATE/facts.log"
+{
+  assert_fact 101 '@live-thread' owner msa
+  assert_fact 102 '@live-thread' linear MSA-321
+} > "$DEFAULT_STATE/coordination.log"
+{
+  assert_fact 103 '@live-session' session_of '@live-thread'
+  assert_fact 104 '@live-session' start_time '2026-07-16T12:00:00Z'
+  assert_fact 105 '@live-session' end_time '2026-07-16T12:01:00Z'
+  fact 106 retract '@live-session' end_time '2026-07-16T12:01:00Z'
+} > "$DEFAULT_STATE/telemetry.log"
+split_out="$(run_default)"
+if [[ "$split_out" != *'"permissionDecision": "deny"'* ]]; then
+  pass=$((pass + 1)); echo "PASS  allow     split owner + re-opened telemetry session beats stale monolith"
+else
+  fail=$((fail + 1)); echo "FAIL  allow     split join denied: $split_out"
+fi
+
+# The same pair remains selectable explicitly for isolated fixtures/instances.
+split_json="$(emit_json Edit "$DEFAULT_REPO/api.py")"
+split_override_out="$(printf '%s' "$split_json" | env -u CLAUDE_NO_AUTHORING_HOOKS \
+  HOME="$DEFAULT_HOME" FRAM_LOG="$DEFAULT_STATE/coordination.log" \
+  FRAM_TELEMETRY_LOG="$DEFAULT_STATE/telemetry.log" \
+  AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" "$HOOK" 2>/dev/null)"
+if [[ "$split_override_out" != *'"permissionDecision": "deny"'* ]]; then
+  pass=$((pass + 1)); echo "PASS  allow     explicit FRAM_LOG + FRAM_TELEMETRY_LOG pair is preserved"
+else
+  fail=$((fail + 1)); echo "FAIL  allow     explicit split override denied: $split_override_out"
+fi
+
+# Reverse the contradiction: stale facts.log has an msa clock, while the live
+# split has only a personal clock. The deny hint must use the current live Linear
+# link, not the stale monolith or a newer-but-retracted link.
+{
+  assert_fact 1 '@stale-thread' owner msa
+  assert_fact 2 '@stale-thread' linear MSA-321
+  assert_fact 3 '@stale-session' session_of '@stale-thread'
+  assert_fact 4 '@stale-session' start_time '2026-07-16T11:00:00Z'
+} > "$DEFAULT_STATE/facts.log"
+{
+  assert_fact 201 '@live-thread' owner msa
+  assert_fact 202 '@live-thread' linear MSA-321
+  assert_fact 203 '@personal-thread' owner personal
+  assert_fact 250 '@retracted-thread' linear MSA-321
+  fact 251 retract '@retracted-thread' linear MSA-321
+} > "$DEFAULT_STATE/coordination.log"
+{
+  assert_fact 204 '@personal-session' session_of '@personal-thread'
+  assert_fact 205 '@personal-session' start_time '2026-07-16T12:30:00Z'
+} > "$DEFAULT_STATE/telemetry.log"
+split_out="$(run_default)"
+if [[ "$split_out" == *'"permissionDecision": "deny"'* &&
+      "$split_out" == *'WRONG clock'* &&
+      "$split_out" == *'clock start live-thread'* &&
+      "$split_out" != *'clock start stale-thread'* &&
+      "$split_out" != *'clock start retracted-thread'* ]]; then
+  pass=$((pass + 1)); echo "PASS  mismatch  live split verdict + Linear hint ignore stale/retracted links"
+else
+  fail=$((fail + 1)); echo "FAIL  mismatch  split/hint result: $split_out"
+fi
+
+# With the split absent, the legacy monolith remains a supported fallback.
+rm -f "$DEFAULT_STATE/coordination.log" "$DEFAULT_STATE/telemetry.log"
+{
+  assert_fact 301 '@legacy-thread' owner msa
+  assert_fact 302 '@legacy-session' session_of '@legacy-thread'
+  assert_fact 303 '@legacy-session' start_time '2026-07-16T13:00:00Z'
+} > "$DEFAULT_STATE/facts.log"
+legacy_out="$(run_default)"
+if [[ "$legacy_out" != *'"permissionDecision": "deny"'* ]]; then
+  pass=$((pass + 1)); echo "PASS  allow     facts.log fallback applies only when split is absent"
+else
+  fail=$((fail + 1)); echo "FAIL  allow     legacy fallback denied: $legacy_out"
+fi
 
 echo "== kill-switch (env) forces allow =="
 ks_json="$(emit_json Edit "$CLIENT_DIR/api.py")"

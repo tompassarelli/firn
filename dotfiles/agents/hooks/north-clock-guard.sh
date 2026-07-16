@@ -29,15 +29,15 @@
 #   any non-client path, or a read, or non-Bash/non-edit tool         -> allow
 #   log missing/unreadable · python3 absent · killswitch              -> FAIL-OPEN
 #
-# Open sessions are read by parsing the fram fact log DIRECTLY (env FRAM_LOG),
-# the same coupling v1 already had at its ticket-HINT lookup. An open session =
-# a subject with session_of + start_time facts and no end_time fact; single-
-# valued predicates replace on assert and clear on retract. Tolerates MULTIPLE
-# open sessions (per-agent concurrent clocks) — ANY matching owner allows.
-# NOTE: default log is facts.log, the real session store. v1's default was
-# claims.log, which does not exist on disk — pointing the clock check there
-# would make it inert. facts.log is where session_of/start_time/end_time/owner
-# facts actually live; FRAM_LOG overrides it (tests point it at a fixture).
+# Open sessions are read by folding North's canonical corpus DIRECTLY. In the
+# split store, thread ownership/Linear links live in coordination.log and clock
+# sessions live in telemetry.log; neither file alone can answer the join. An
+# open session = a subject with session_of + start_time facts and no end_time
+# fact; single-valued predicates replace on assert and clear on exact retract.
+# Tolerates MULTIPLE open sessions (per-agent concurrent clocks) — ANY matching
+# owner allows. FRAM_LOG + FRAM_TELEMETRY_LOG override the pair for fixtures or
+# alternate instances. The pre-split facts.log is fallback only when the split
+# corpus is absent.
 #
 # Kill-switch: persistent `north config guards off` (state) OR env
 # CLAUDE_NO_AUTHORING_HOOKS (any value but 0/false; 0/false forces guards live).
@@ -132,45 +132,69 @@ IFS=$'\t' read -r FIRE CLIENT TARGETDIR <<<"$PARSE"
 [ "$FIRE" = 1 ] || exit 0
 [ -n "$CLIENT" ] || exit 0
 
-FRAM_LOG="${FRAM_LOG:-$HOME/.local/state/north/facts.log}"
+# Resolve the canonical pair before the fold. An explicit coordination.log
+# infers its sibling telemetry.log, matching ~/code/north/bin/north. An explicit
+# arbitrary FRAM_LOG remains a single-file fixture unless FRAM_TELEMETRY_LOG is
+# also set. A present-but-unreadable split fails open; it never falls back to a
+# stale legacy monolith.
+LOGS=()
+if [ -n "${FRAM_LOG:-}" ]; then
+  LOGS+=("$FRAM_LOG")
+  if [ -n "${FRAM_TELEMETRY_LOG:-}" ]; then
+    LOGS+=("$FRAM_TELEMETRY_LOG")
+  elif [ "$(basename "$FRAM_LOG")" = coordination.log ] && [ -e "$(dirname "$FRAM_LOG")/telemetry.log" ]; then
+    LOGS+=("$(dirname "$FRAM_LOG")/telemetry.log")
+  fi
+elif [ -e "$HOME/.local/state/north/coordination.log" ]; then
+  LOGS+=("$HOME/.local/state/north/coordination.log")
+  [ -e "$HOME/.local/state/north/telemetry.log" ] && LOGS+=("$HOME/.local/state/north/telemetry.log")
+elif [ -e "$HOME/.local/state/north/facts.log" ]; then
+  LOGS+=("$HOME/.local/state/north/facts.log")
+fi
+[ "${#LOGS[@]}" -gt 0 ] || exit 0
+for log in "${LOGS[@]}"; do [ -r "$log" ] || exit 0; done
 
-# ---- Stage 2: decide against open sessions in the fact log. Prints exactly one
+# Resolve the branch ticket before the fold so the clock verdict and recovery
+# hint come from the same transaction-ordered current-state pass.
+REPO="$(git -C "${TARGETDIR:-$PWD}" rev-parse --show-toplevel 2>/dev/null || true)"
+BRANCH="$(git -C "${REPO:-${TARGETDIR:-$PWD}}" branch --show-current 2>/dev/null || true)"
+TICKET="$(printf '%s' "$BRANCH" | grep -oiE "${CLIENT}-[0-9]+" | head -1 | tr '[:lower:]' '[:upper:]' || true)"
+
+# ---- Stage 2: decide against open sessions in the merged corpus. Prints one
 # of: ALLOW (matching owner, OR fail-open on a missing/garbled log) ·
-# NOCLOCK (no open session) · MISMATCH<TAB><details> (open, none owned by CLIENT).
-DECISION="$(CLIENT="$CLIENT" FRAM_LOG="$FRAM_LOG" python3 -c '
-import sys, os, re
-client = os.environ.get("CLIENT", "")
-log = os.environ.get("FRAM_LOG") or os.path.expanduser("~/.local/state/north/facts.log")
-try:
-    f = open(log, "r", errors="replace")
-except Exception:
-    print("ALLOW"); sys.exit(0)                    # missing/unreadable -> fail-open
+# NOCLOCK<TAB><ticket-thread> (no open session) ·
+# MISMATCH<TAB><ticket-thread><TAB><details> (open, none owned by CLIENT).
+DECISION="$(python3 - "$CLIENT" "$TICKET" "${LOGS[@]}" <<'PY' 2>/dev/null || true
+import sys, re
+client, ticket, *logs = sys.argv[1:]
+TX = re.compile(r":tx\s+(\d+)")
 OP = re.compile(r":op \"(\w+)\"")
 L  = re.compile(r":l \"([^\"]*)\"")
 P  = re.compile(r":p \"([^\"]*)\"")
 R  = re.compile(r":r \"([^\"]*)\"")
-KEEP = ("session_of", "start_time", "end_time", "owner")
-state = {}   # (subject, predicate) -> object ; single-valued: assert replaces, retract clears
+KEEP = {"session_of", "start_time", "end_time", "owner", "linear"}
+events = []
 try:
-    for line in f:
-        if ("session_of" not in line and "start_time" not in line
-                and "end_time" not in line and "owner" not in line):
-            continue
-        mp = P.search(line)
-        if not mp or mp.group(1) not in KEEP: continue
-        mo = OP.search(line); ml = L.search(line)
-        if not mo or not ml: continue
-        op, subj, pred = mo.group(1), ml.group(1), mp.group(1)
-        mr = R.search(line); obj = mr.group(1) if mr else None
-        k = (subj, pred)
-        if op == "assert":
-            state[k] = obj
-        elif op == "retract":
-            if state.get(k) == obj: state.pop(k, None)
+    for path in logs:
+        with open(path, "r", errors="replace") as f:
+            for line in f:
+                if not any(p in line for p in KEEP): continue
+                mt, mo, ml, mp = TX.search(line), OP.search(line), L.search(line), P.search(line)
+                if not mt or not mo or not ml or not mp or mp.group(1) not in KEEP: continue
+                mr = R.search(line)
+                events.append((int(mt.group(1)), ml.group(1), mp.group(1),
+                               mo.group(1), mr.group(1) if mr else None))
 except Exception:
     print("ALLOW"); sys.exit(0)                    # garbled -> fail-open
+# Apply exact Fram singleton semantics in global tx order: assert supersedes;
+# retract clears only when it names the currently-live object.
+state = {}   # (subject, predicate) -> (object, assert-tx)
+for tx, subj, pred, op, obj in sorted(events, key=lambda e: e[0]):
+    k = (subj, pred)
+    if op == "assert": state[k] = (obj, tx)
+    elif op == "retract" and state.get(k, (None,))[0] == obj: state.pop(k, None)
 byS = {}
-for (s, p), v in state.items():
+for (s, p), (v, _tx) in state.items():
     byS.setdefault(s, {})[p] = v
 open_sess = []   # (thread_id, owner) for each OPEN session
 for s, pd in byS.items():
@@ -180,26 +204,26 @@ for s, pd in byS.items():
 for th, ow in open_sess:
     if ow == client:
         print("ALLOW"); sys.exit(0)                # a clock owned by this client is live
+linked = [(tx, s) for (s, p), (v, tx) in state.items()
+          if p == "linear" and v == ticket]
+linked.sort(reverse=True)
+tid = linked[0][1] if linked else ""
 if not open_sess:
-    print("NOCLOCK"); sys.exit(0)
+    print("NOCLOCK\t" + tid); sys.exit(0)
 det = " ; ".join("%s owner=%s" % (t, (o or "none")) for t, o in open_sess)
-print("MISMATCH\t" + det)
-' 2>/dev/null || true)"
+print("MISMATCH\t%s\t%s" % (tid, det))
+PY
+)"
 
 [ -z "$DECISION" ] && exit 0                        # fail-open if stage 2 produced nothing
 case "$DECISION" in
   ALLOW*) exit 0 ;;
 esac
 
-# ---- DENY. Best-effort friction-kill: derive the Linear ticket from the target
-# repo's branch and locate its thread, so recovery is one paste. Same fact-log
-# coupling as the clock check (FRAM_LOG).
-REPO="$(git -C "${TARGETDIR:-$PWD}" rev-parse --show-toplevel 2>/dev/null || true)"
-BRANCH="$(git -C "${REPO:-${TARGETDIR:-$PWD}}" branch --show-current 2>/dev/null || true)"
-TICKET="$(printf '%s' "$BRANCH" | grep -oiE 'msa-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]' || true)"
+# ---- DENY. The ticket/thread hint was resolved by the same folded read.
+TID="$(printf '%s' "$DECISION" | cut -f2)"
 
 if [ -n "$TICKET" ]; then
-  TID="$(sed -n "s/.*:l \"\(@[0-9a-f-]*\)\".*\"linear\".*\"$TICKET\".*/\1/p" "$FRAM_LOG" 2>/dev/null | tail -1)"
   if [ -n "$TID" ]; then
     HINT="Thread for $TICKET exists — clock in:  north clock start ${TID#@}"
   else
@@ -211,7 +235,7 @@ fi
 
 case "$DECISION" in
   MISMATCH*)
-    DETAILS="${DECISION#MISMATCH$'\t'}"
+    DETAILS="$(printf '%s' "$DECISION" | cut -f3-)"
     REASON="Billable client edit blocked — WRONG clock. This edit is for client '$CLIENT', but the only running clock(s) are owned by someone else:
   ${DETAILS}
 A clock on an unrelated thread does NOT legalize this edit — it mis-attributes the time. Stop the wrong clock and start one on a $CLIENT thread, then retry:
