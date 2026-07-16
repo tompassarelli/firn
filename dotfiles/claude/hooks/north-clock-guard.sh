@@ -83,8 +83,8 @@ CP = (r"(?:^|[;&|(`\n])\s*"
 MUT = re.compile(
     r"(?:(?<!\d)>>?\s*[^&\s|])"
     "|" + CP + r"tee\b"
-    "|" + CP + r"sed\b[^|;&]*-\w*i"
-    "|" + CP + r"perl\b[^|;&]*-\w*i"
+    "|" + CP + r"sed\b[^|;&]*\s(?:-\w*i\b|--in-place\b)"
+    "|" + CP + r"perl\b[^|;&]*\s-\w*i\b"
     "|" + CP + r"git\s+(?:commit|apply|merge|rebase|cherry-pick|stash\s+pop|checkout\s+--|restore|clean)\b"
     "|" + CP + r"(?:rm|mv|cp|touch|mkdir|ln|patch|rsync|dd|install)\b"
     "|" + CP + r"(?:npm|pnpm|yarn|bun)\s+(?:install|add|run)\b")
@@ -102,7 +102,17 @@ if tool == "Bash":
     cmd = ti.get("command") or ""
     if not cmd: sys.exit(0)
     cwd = ti.get("cwd") or topcwd or os.getcwd()
-    c = clientof(cmd) or clientof(cwd)
+    # cwd attribution is a FALLBACK for commands acting in the session dir. A
+    # command whose first act is "cd <abs non-client path>" (optionally after
+    # VAR=val segments) acts THERE, not here — cwd-attributing it billed
+    # nixos-config guard maintenance to a client (2026-07-16 false positive).
+    # Explicit client paths anywhere in the command still gate regardless.
+    mcd = re.match(r"\s*(?:[A-Za-z_]\w*=\S*\s*(?:&&|;)\s*)*cd\s+[\"\x27]?([^\s\"\x27;|&]+)", cmd)
+    cdto = mcd.group(1) if mcd else None
+    if cdto and (cdto.startswith("/") or cdto.startswith("~")) and not CRE.search(cdto):
+        c = clientof(cmd)
+    else:
+        c = clientof(cmd) or clientof(cwd)
     if not c: sys.exit(0)
     if not MUT.search(cmd): sys.exit(0)           # pure read -> allow
     print("1\t%s\t%s" % (c, cwd)); sys.exit(0)

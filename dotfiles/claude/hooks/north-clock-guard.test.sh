@@ -143,6 +143,16 @@ run deny  'rm after && separator'                        closed.log Bash "foo &&
 run deny  'rm piped after |'                             closed.log Bash "true | rm x" "$CLIENT_DIR"
 run deny  'echo redirect > file'                        closed.log Bash "echo hi > file" "$CLIENT_DIR"
 
+echo "== cwd-escape: cd to an abs non-client dir attributes THERE, not the session cwd =="
+run allow 'cd nixos-config && git stash pop (2026-07-16 repro)' closed.log Bash "cd $NONCLIENT && git stash -q && git stash pop -q" "$CLIENT_DIR"
+run allow 'VAR= prefix then cd non-client && git commit'        closed.log Bash "V=1 && cd $NONCLIENT && git commit -m x" "$CLIENT_DIR"
+run deny  'cd non-client, client path still in command'         closed.log Bash "cd /tmp && rm -rf $CLIENT_DIR/build" "$CLIENT_DIR"
+run deny  'relative cd stays session-attributed'                closed.log Bash "cd sub && git commit -m x" "$CLIENT_DIR"
+
+echo "== sed -i anchoring: an i in a hyphenated ARG (nixos-config) never denies =="
+run allow 'sed -n read of a nixos-config path (2026-07-16 repro)' closed.log Bash "sed -n '1,80p' $NONCLIENT/dotfiles/claude/hooks/north-clock-guard.sh" "$CLIENT_DIR"
+run deny  'sed --in-place still gated'                          closed.log Bash "sed --in-place s/a/b/ f.ts" "$CLIENT_DIR"
+
 echo "== non-client + fail-open =="
 run allow 'Bash mutation outside client'            closed.log Bash "rm -rf ./build" "$NONCLIENT"
 run allow 'Edit, FRAM_LOG missing -> fail-open'     nonexistent.log Edit "$CLIENT_DIR/api.py"
