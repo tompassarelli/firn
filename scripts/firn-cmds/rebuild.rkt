@@ -131,6 +131,19 @@
   ;; Each phase prints a banner, runs the body, then OK/FAIL with elapsed.
   ;; Long phases (nh switch) stream child output live.
   (define total-start (current-inexact-milliseconds))
+  (define lock-path (in-repo "flake.lock"))
+  (define lock-backup #f)
+  (define provisional-lock? #f)
+  (define (restore-provisional-lock!)
+    (when (and provisional-lock? lock-backup (file-exists? lock-backup))
+      ;; A commit hook may fail after `git add`; restore both index and worktree.
+      (sh "git" "-C" ROOT "reset" "--quiet" "HEAD" "--" "flake.lock")
+      (copy-file lock-backup lock-path #t)
+      (set! provisional-lock? #f)
+      (eprintf "firn rebuild: restored previous flake.lock after failed verification.\n")))
+  (define (discard-lock-backup!)
+    (when (and lock-backup (file-exists? lock-backup)) (delete-file lock-backup))
+    (set! lock-backup #f))
   (define (fmt-elapsed ms)
     (cond [(< ms 1000) (format "~ams" (exact-round ms))]
           [(< ms 60000) (format "~as" (exact-round (/ ms 1000.0)))]
@@ -145,17 +158,30 @@
     (cond
       [ok? (printf "└─ ✓ ~a (~a)\n" name (fmt-elapsed elapsed))]
       [else
+       (restore-provisional-lock!)
+       (discard-lock-backup!)
        (printf "└─ ✗ ~a (~a)\n" name (fmt-elapsed elapsed))
        (eprintf "firn rebuild: ~a failed; aborting.\n" name)
        (exit 1)])
     (flush-output))
 
-  ;; Local harness development is commit-driven: refresh only the local
-  ;; git+file inputs and mechanically commit the resulting lock pointer.
-  ;; This is intentionally narrower than `firn update` (no remote bumps),
-  ;; and remains mandatory when --skip-checks bypasses build/validation.
-  (phase "local inputs"
-    (λ () (sh (path->string (in-repo "scripts" "firn-sync-local-inputs")))))
+  ;; Normal rebuilds refresh local inputs provisionally. The old lock remains
+  ;; recoverable until generation, validation, and a host closure build prove
+  ;; the new sources. --skip-checks intentionally keeps the committed lock: it
+  ;; may switch an already-known generation, but can never commit a new pointer.
+  (cond
+    [skip-checks?
+     (printf "── local inputs unchanged (--skip-checks cannot refresh or commit unverified pointers)\n")]
+    [else
+     (set! lock-backup (make-temporary-file "firn-flake-lock-~a"))
+     (copy-file lock-path lock-backup #t)
+     (phase "local inputs (provisional)"
+       (λ ()
+         (define ok? (sh (path->string (in-repo "scripts" "firn-sync-local-inputs")) "--provisional"))
+         (when ok?
+           (set! provisional-lock?
+             (not (sh "git" "-C" ROOT "diff" "--quiet" "--" "flake.lock"))))
+         ok?))])
 
   (unless skip-checks?
     ;; Step 1: regenerate any out-of-date .nix from .bnix sources.
@@ -170,6 +196,8 @@
     (unless (null? untracked)
       (eprintf "✗ untracked files invisible to Nix — git add them first:\n")
       (for ([p (in-list untracked)]) (eprintf "  ~a\n" p))
+      (restore-provisional-lock!)
+      (discard-lock-backup!)
       (exit 1))
 
     ;; Step 2: validate paths and value types against the schema.
@@ -177,20 +205,41 @@
       (λ () (sh (path->string (in-repo "scripts" "firn-validate")))))
 
     ;; Step 2b: flake input purity.
-    (cond
-      [auto-impure?
-       (printf "── flake-input-purity skipped (--impure)\n")]
-      [else
-       (phase "flake-input-purity"
-         (λ ()
-           (define purity-issues (flake-input-purity-violations))
-           (cond
-             [(null? purity-issues) #t]
-             [else
-              (eprintf "  flake has absolute-path inputs that break pure eval:\n")
-              (for ([line (in-list purity-issues)]) (eprintf "  ~a\n" line))
-              (eprintf "  fix: publish to a git remote (github:owner/repo), or override locally with --override-input.\n")
-              #f])))]))
+    (if auto-impure?
+        (printf "── flake-input-purity skipped (--impure)\n")
+        (phase "flake-input-purity"
+          (λ ()
+            (define purity-issues (flake-input-purity-violations))
+            (if (null? purity-issues)
+                #t
+                (begin
+                  (eprintf "  flake has absolute-path inputs that break pure eval:\n")
+                  (for ([line (in-list purity-issues)]) (eprintf "  ~a\n" line))
+                  (eprintf "  fix: publish to a git remote (github:owner/repo), or override locally with --override-input.\n")
+                  #f)))))
+
+    ;; Step 2c: build the exact host closure before the derived lock commit.
+    ;; The subsequent switch reuses this result, so the gate adds integrity,
+    ;; not a second system build.
+    (phase "source/package smoke"
+      (λ ()
+        (define attr
+          (if on-linux?
+              (format ".#nixosConfigurations.~a.config.system.build.toplevel" host)
+              (format ".#darwinConfigurations.~a.system" host)))
+        (apply sh (append (list "nix" "build" "--no-link" attr)
+                          (if auto-impure? (list "--impure") '())))))
+
+    ;; Only a verified pointer earns a mechanical commit. No-op refreshes do
+    ;; not create empty commits.
+    (when provisional-lock?
+      (phase "commit verified local inputs"
+        (λ ()
+          (and (sh "git" "-C" ROOT "add" "flake.lock")
+               (sh "git" "-C" ROOT "commit" "--only" "-m"
+                   "refresh verified local inputs" "--" "flake.lock"))))
+      (set! provisional-lock? #f))
+    (discard-lock-backup!))
 
   ;; Step 3: actual rebuild. Dispatch by platform.
   (printf "┌─ rebuild\n") (flush-output)

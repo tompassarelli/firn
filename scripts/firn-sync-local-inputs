@@ -14,6 +14,13 @@ die() {
   exit 1
 }
 
+case "${1:-}" in
+  --provisional) PROVISIONAL=1 ;;
+  --commit) PROVISIONAL=0 ;;
+  *) die "usage: firn-sync-local-inputs --provisional|--commit" ;;
+esac
+[ "$#" -eq 1 ] || die "usage: firn-sync-local-inputs --provisional|--commit"
+
 short_rev() {
   printf '%.8s' "$1"
 }
@@ -74,10 +81,11 @@ fi
 backup="$(mktemp "${TMPDIR:-/tmp}/firn-flake-lock.XXXXXX")"
 cp "$LOCK" "$backup"
 restore_lock() {
+  git -C "$ROOT" reset --quiet HEAD -- flake.lock >/dev/null 2>&1 || true
   cp "$backup" "$LOCK"
   rm -f "$backup"
 }
-trap restore_lock ERR INT TERM
+trap restore_lock EXIT INT TERM
 
 # One targeted invocation preserves unrelated remote input pins.
 nix flake update --flake "$ROOT" "${changed[@]}"
@@ -88,10 +96,12 @@ for input in "${changed[@]}"; do
     die "$input refreshed to ${locked:-<missing>}, expected ${after[$input]}"
 done
 
-git -C "$ROOT" add flake.lock
-message="refresh local inputs: $(IFS=,; printf '%s' "${changed[*]}")"
-git -C "$ROOT" commit --only -m "$message" -- flake.lock
-trap - ERR INT TERM
+if [ "$PROVISIONAL" -eq 0 ]; then
+  git -C "$ROOT" add flake.lock
+  message="refresh local inputs: $(IFS=,; printf '%s' "${changed[*]}")"
+  git -C "$ROOT" commit --only -m "$message" -- flake.lock
+fi
+trap - EXIT INT TERM
 rm -f "$backup"
 
 for input in "${INPUTS[@]}"; do

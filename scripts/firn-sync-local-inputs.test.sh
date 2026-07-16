@@ -48,6 +48,7 @@ for input in "${inputs[@]}"; do
   upper="$(printf '%s' "$input" | tr '[:lower:]' '[:upper:]')"
   var="FIRN_${upper}_REPO"
   rev="$(git -C "${!var}" rev-parse HEAD)"
+  [ "${FAKE_NIX_WRONG:-0}" != 1 ] || rev=0000000000000000000000000000000000000000
   tmp="$root/flake.lock.tmp"
   jq --arg input "$input" --arg rev "$rev" '.nodes[$input].locked.rev=$rev' "$root/flake.lock" >"$tmp"
   mv "$tmp" "$root/flake.lock"
@@ -61,26 +62,61 @@ export FIRN_FRAM_REPO="$TMP/fram"
 export FIRN_NORTH_REPO="$TMP/north"
 export PATH="$TMP/bin:$PATH"
 
-output="$($SCRIPT)"
+output="$($SCRIPT --commit)"
 grep -q 'already current' <<<"$output"
 
 # Tool/editor state is not part of a Git input snapshot and must not block.
 printf 'local state\n' >"$TMP/beagle/untracked"
-output="$($SCRIPT)"
+output="$($SCRIPT --commit)"
 grep -q 'already current' <<<"$output"
 
 printf 'v2\n' >>"$TMP/north/source"
 git -C "$TMP/north" add source
 git -C "$TMP/north" commit -qm update
 before_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
-output="$($SCRIPT)"
+
+# Provisional refresh advances the worktree pointer but never stages/commits it.
+output="$($SCRIPT --provisional)"
+provisional_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
+[ "$provisional_count" -eq "$before_count" ]
+git -C "$TMP/firn" diff --quiet -- flake.lock && exit 1
+git -C "$TMP/firn" diff --cached --quiet -- flake.lock
+git -C "$TMP/firn" restore flake.lock
+
+output="$($SCRIPT --commit)"
 after_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
 [ "$after_count" -eq $((before_count + 1)) ]
 grep -q 'north.*→' <<<"$output"
 [ "$(jq -r '.nodes.north.locked.rev' "$TMP/firn/flake.lock")" = "$(git -C "$TMP/north" rev-parse HEAD)" ]
 
+# Verification failure restores both worktree and index to the original lock.
+printf 'v3\n' >>"$TMP/beagle/source"
+git -C "$TMP/beagle" add source
+git -C "$TMP/beagle" commit -qm update-verify-failure
+original_lock="$(sha256sum "$TMP/firn/flake.lock")"
+if FAKE_NIX_WRONG=1 "$SCRIPT" --provisional >"$TMP/out" 2>"$TMP/err"; then
+  echo 'expected refreshed-revision verification failure' >&2
+  exit 1
+fi
+[ "$(sha256sum "$TMP/firn/flake.lock")" = "$original_lock" ]
+git -C "$TMP/firn" diff --quiet -- flake.lock
+git -C "$TMP/firn" diff --cached --quiet -- flake.lock
+
+# Commit-hook failure after staging also restores worktree and index.
+mkdir -p "$TMP/firn/.git/hooks"
+printf '#!/usr/bin/env bash\nexit 1\n' >"$TMP/firn/.git/hooks/pre-commit"
+chmod +x "$TMP/firn/.git/hooks/pre-commit"
+if "$SCRIPT" --commit >"$TMP/out" 2>"$TMP/err"; then
+  echo 'expected mechanical commit failure' >&2
+  exit 1
+fi
+[ "$(sha256sum "$TMP/firn/flake.lock")" = "$original_lock" ]
+git -C "$TMP/firn" diff --quiet -- flake.lock
+git -C "$TMP/firn" diff --cached --quiet -- flake.lock
+rm "$TMP/firn/.git/hooks/pre-commit"
+
 printf 'dirty\n' >>"$TMP/fram/source"
-if "$SCRIPT" >"$TMP/out" 2>"$TMP/err"; then
+if "$SCRIPT" --commit >"$TMP/out" 2>"$TMP/err"; then
   echo 'expected dirty local repo rejection' >&2
   exit 1
 fi
