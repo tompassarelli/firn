@@ -49,8 +49,13 @@
 #     destructive patterns, not a general classifier. Deliberate accepted
 #     misses: `bash -c "…"`/xargs indirection, unexpanded $VAR targets,
 #     find with \( \) grouping (the grouped -delete lands in another segment).
-#   - Every DENY is appended to ~/.local/state/north/tripwire.log
-#     (ISO ts <TAB> cwd <TAB> reason <TAB> command head) so north-mine can audit.
+#   - Every DENY is (1) appended to ~/.local/state/north/tripwire.log (ISO ts <TAB>
+#     cwd <TAB> reason <TAB> command head) so north-mine can audit, AND (2) routed
+#     through the guard_denial fact idiom (sdk/src/guard-log.ts): a titleless
+#     @denial:<agent>-<ts> subject, kind=guard_denial + agent/guard/tool/target/reason/at
+#     + source=tripwire — so the block is ATTRIBUTED (which agent) and queryable off the
+#     graph, not just a loose unattributed TSV line. Fire-and-forget + detached: a
+#     fact-write failure NEVER delays or breaks the DENY; the file line stays regardless.
 #
 # Test matrix: sibling tripwire-guard.test.sh — run it after EVERY edit here.
 # Kill-switch: persistent `north config guards off` (state) OR env
@@ -94,12 +99,67 @@ ensure_cwd() {
 }
 
 LOGDIR="${TRIPWIRE_LOG_DIR:-$HOME/.local/state/north}" # override: tests only
+
+# resolve_agent_id -> stdout : who is running this Bash call. SAME resolution order as
+# bin/north-on-tooluse — the per-session cache is the truth (env is ambient + inheritable,
+# so a parent's NORTH_AGENT_ID leaks into subagents; cache is keyed by session_id and
+# cannot alias), env is the fallback for an SDK-dispatched process whose spawn hook never
+# fired, then a derived session id. jq is already known-present here (deny fires only after
+# the slow path parsed the command with it).
+resolve_agent_id() {
+  local sid rn repo id cache
+  sid="$(jq -r '.session_id // empty' <<<"$payload" 2>/dev/null || true)"
+  ensure_cwd
+  repo="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || echo "$cwd")"
+  rn="$(basename "$repo")"
+  id=""
+  cache="${XDG_RUNTIME_DIR:-/tmp}/north-agent-ids/$sid"
+  [ -n "$sid" ] && [ -r "$cache" ] && id="$(cat "$cache" 2>/dev/null || true)"
+  [ -z "$id" ] && id="${NORTH_AGENT_ID:-}"
+  [ -z "$id" ] && id="session-$rn-${sid:0:8}"
+  [ "$id" = "session-$rn-" ] && id="session-$rn-unknown"
+  printf '%s' "$id"
+}
+
+# record_denial_fact REASON TARGET : route this DENY ALSO through the guard_denial fact
+# idiom (sdk/src/guard-log.ts) — a titleless @denial:<agent>-<ts> subject with
+# kind=guard_denial + the mirror predicates (agent/guard/tool/target/reason/at) +
+# source=tripwire, so a worker block is attributed + queryable off the graph. The
+# tripwire.log line stays (belt and braces). DETACHED (setsid, fully disowned) +
+# error-swallowed: a fact-write failure / slow coordinator / down daemon must NEVER delay
+# or break the exit-2 the guard already decided. The resolved `north` path is passed into
+# the child so it never depends on the detached env's PATH.
+record_denial_fact() {
+  local reason="$1" target="$2" nbin id at subj
+  # NORTH_BIN override mirrors guard-log.ts / telemetry.ts / death.ts — tests point it at
+  # a no-op (/bin/true) so the suite never writes denial facts to the live graph.
+  nbin="${NORTH_BIN:-$(command -v north 2>/dev/null || true)}"
+  [ -n "$nbin" ] || return 0 # no CLI on PATH -> the file line above is enough
+  id="$(resolve_agent_id)"
+  at="$(date -Is 2>/dev/null || true)"
+  subj="denial:${id}-$(date +%s%N 2>/dev/null || echo 0)"
+  setsid bash -c '
+    n=$1 s=$2 ag=$3 at=$4 tg=$5 rs=$6
+    "$n" tell "$s" kind guard_denial
+    "$n" tell "$s" agent "$ag"
+    "$n" tell "$s" guard tripwire-guard
+    "$n" tell "$s" tool Bash
+    "$n" tell "$s" source tripwire
+    [ -n "$at" ] && "$n" tell "$s" at "$at"
+    [ -n "$tg" ] && "$n" tell "$s" target "$tg"
+    [ -n "$rs" ] && "$n" tell "$s" reason "$rs"
+  ' _ "$nbin" "$subj" "$id" "$at" "$target" "$reason" >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+}
+
 deny() {
   ensure_cwd
   local head="${cmd//$'\n'/ }"
+  head="${head:0:200}"
   mkdir -p "$LOGDIR" 2>/dev/null || true
-  printf '%s\t%s\t%s\t%s\n' "$(date -Is)" "$cwd" "$1" "${head:0:200}" \
+  printf '%s\t%s\t%s\t%s\n' "$(date -Is)" "$cwd" "$1" "$head" \
     >>"$LOGDIR/tripwire.log" 2>/dev/null || true
+  record_denial_fact "$1" "$head" # ALSO route to the guard_denial graph idiom (fire-and-forget)
   printf 'tripwire: %s\n' "$1" >&2
   exit 2
 }

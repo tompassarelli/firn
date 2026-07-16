@@ -24,7 +24,8 @@ run() {
   json="$(jq -n --arg c "$c" --arg d "$wd" \
     '{tool_name:"Bash", tool_input:{command:$c}, cwd:$d}')"
   set -- env -u CLAUDE_NO_AUTHORING_HOOKS -u SAFE_PUSH_ACTIVE \
-    TRIPWIRE_LOG_DIR="$SCRATCH" AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state"
+    TRIPWIRE_LOG_DIR="$SCRATCH" AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
+    NORTH_BIN=/bin/true
   [ -n "$extra" ] && set -- "$@" "$extra"
   out="$(printf '%s' "$json" | "$@" "$HOOK" 2>&1)"
   rc=$?
@@ -45,6 +46,7 @@ raw() {
   printf '%s' "$payload" |
     env -u CLAUDE_NO_AUTHORING_HOOKS -u SAFE_PUSH_ACTIVE \
       TRIPWIRE_LOG_DIR="$SCRATCH" AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
+      NORTH_BIN=/bin/true \
       "$HOOK" >/dev/null 2>&1
   rc=$?
   case "$expect" in allow) want=0 ;; deny) want=2 ;; esac
