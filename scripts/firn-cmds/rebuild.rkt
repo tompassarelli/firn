@@ -266,6 +266,13 @@
     (phase "firn-validate (snapshot)"
       (λ ()
         (and (sh "git" "-C" ROOT "worktree" "add" "--detach" (path->string wt) (git-head))
+             ;; The schema cache is untracked by design; share the live one.
+             (begin
+               (when (and (directory-exists? (build-path ROOT ".beagle-cache"))
+                          (not (directory-exists? (build-path wt ".beagle-cache"))))
+                 (make-file-or-directory-link (build-path ROOT ".beagle-cache")
+                                              (build-path wt ".beagle-cache")))
+               #t)
              (let ([old-repo (getenv "FIRN_REPO")]
                    [old-beagle (getenv "BEAGLE_PATH")])
                (putenv "FIRN_REPO" (path->string wt))
