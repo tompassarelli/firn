@@ -4,6 +4,11 @@ set -euo pipefail
 # Keep development checkouts reproducible without making the user maintain
 # flake.lock pointers. This deliberately refreshes only local harness inputs;
 # wholesale upstream movement remains `firn update` territory.
+#
+# Never a rebuild blocker: an input checkout that isn't in a promotable state
+# (dirty tracked files, non-main branch) simply keeps its already-verified
+# flake.lock pin for this rebuild. Blocking here would let any concurrent
+# session's WIP in ~/code/{beagle,fram,north} veto unrelated system rebuilds.
 
 ROOT="${FIRN_REPO:-$(git rev-parse --show-toplevel)}"
 LOCK="$ROOT/flake.lock"
@@ -50,17 +55,33 @@ for input in "${INPUTS[@]}"; do
   head="$(git -C "$repo" rev-parse HEAD)"
   locked="$(jq -r --arg input "$input" '.nodes[$input].locked.rev // empty' "$LOCK")"
   [ -n "$locked" ] || die "flake.lock has no locked revision for '$input'"
-  # Untracked editor/daemon state is outside the Git input snapshot and must not
-  # make ordinary development brittle. Tracked edits would be silently omitted
-  # from the generation, so require those to have a source commit.
-  [ -z "$(git -C "$repo" status --porcelain --untracked-files=no)" ] ||
-    die "$repo has uncommitted tracked changes; commit them before rebuilding"
-  if [ "$head" != "$locked" ]; then
-    branch="$(git -C "$repo" branch --show-current)"
-    [ "$branch" = main ] || die "$repo is on '$branch', expected 'main' before refreshing '$input'"
-  fi
   before["$input"]="$locked"
   after["$input"]="$head"
+  # The generation is built from the LOCKED COMMIT — a dirty working tree can
+  # never leak in. But promoting the pin under someone's in-flight WIP (or from
+  # a non-main checkout) would promote a state nobody signed off on, and another
+  # session's WIP must never block this rebuild: hold the verified pin instead
+  # and refresh on a later rebuild once the checkout is clean.
+  if [ -n "$(git -C "$repo" status --porcelain --untracked-files=no)" ]; then
+    if [ "$head" = "$locked" ]; then
+      printf '  %-6s dirty tree; pin already at HEAD %s (tracked WIP stays out of the generation)\n' \
+        "$input" "$(short_rev "$locked")"
+    else
+      printf '  %-6s dirty tree; holding verified %s (HEAD %s not promoted)\n' \
+        "$input" "$(short_rev "$locked")" "$(short_rev "$head")"
+    fi
+    after["$input"]="$locked"
+    continue
+  fi
+  if [ "$head" != "$locked" ]; then
+    branch="$(git -C "$repo" branch --show-current)"
+    if [ "$branch" != main ]; then
+      printf '  %-6s on %s, not main; holding verified %s (HEAD %s not promoted)\n' \
+        "$input" "${branch:-detached-HEAD}" "$(short_rev "$locked")" "$(short_rev "$head")"
+      after["$input"]="$locked"
+      continue
+    fi
+  fi
 done
 
 changed=()

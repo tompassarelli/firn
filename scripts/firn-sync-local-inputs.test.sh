@@ -115,11 +115,34 @@ git -C "$TMP/firn" diff --quiet -- flake.lock
 git -C "$TMP/firn" diff --cached --quiet -- flake.lock
 rm "$TMP/firn/.git/hooks/pre-commit"
 
+# Another session's WIP never blocks: the dirty input holds its verified pin
+# while clean inputs still refresh (beagle has a pending commit at this point).
 printf 'dirty\n' >>"$TMP/fram/source"
-if "$SCRIPT" --commit >"$TMP/out" 2>"$TMP/err"; then
-  echo 'expected dirty local repo rejection' >&2
-  exit 1
-fi
-grep -q 'uncommitted tracked changes' "$TMP/err"
+output="$($SCRIPT --commit)"
+grep -q 'fram.*dirty tree' <<<"$output"
+grep -q 'beagle.*→' <<<"$output"
+[ "$(jq -r '.nodes.beagle.locked.rev' "$TMP/firn/flake.lock")" = "$(git -C "$TMP/beagle" rev-parse HEAD)" ]
+
+# Dirty repo whose HEAD moved ahead of the pin: the old verified rev is held.
+git -C "$TMP/fram" add source
+git -C "$TMP/fram" commit -qm wip-base
+printf 'more wip\n' >>"$TMP/fram/source"
+locked_fram="$(jq -r '.nodes.fram.locked.rev' "$TMP/firn/flake.lock")"
+output="$($SCRIPT --commit)"
+grep -q 'fram.*holding verified' <<<"$output"
+[ "$(jq -r '.nodes.fram.locked.rev' "$TMP/firn/flake.lock")" = "$locked_fram" ]
+
+# Non-main checkout holds too — refresh only promotes commits from main.
+git -C "$TMP/fram" checkout -q -- source
+git -C "$TMP/fram" checkout -qb feature
+output="$($SCRIPT --commit)"
+grep -q 'fram.*not main' <<<"$output"
+[ "$(jq -r '.nodes.fram.locked.rev' "$TMP/firn/flake.lock")" = "$locked_fram" ]
+
+# Back on clean main, the held commit promotes normally.
+git -C "$TMP/fram" checkout -q main
+output="$($SCRIPT --commit)"
+grep -q 'fram.*→' <<<"$output"
+[ "$(jq -r '.nodes.fram.locked.rev' "$TMP/firn/flake.lock")" = "$(git -C "$TMP/fram" rev-parse HEAD)" ]
 
 printf 'ok: firn-sync-local-inputs\n'
