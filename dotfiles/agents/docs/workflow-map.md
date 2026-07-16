@@ -32,7 +32,9 @@ what could not be verified from source.
 | **concern** | a declared work footprint (files + intent); a coordination signal, **not a lock** — declaring never blocks |
 | **presence / lease** | a heartbeat registration on the `:7977` coordinator with a **30-min TTL**; renewed (in session agents) on tool use |
 | **posture** | how a lane works (`deliver` / `explore`); derived from thread facts by `dispatch`, or passed on `spawn` |
-| **role** | a `(model, effort)` pin plus a prompt block; gaffer names it, north delivers it |
+| **function / role** | responsibility and deliverable; independent of task grade, domain requirements, topology, semantic tier, and deliberation |
+| **task grade** | prior for the work's scope, autonomy, novelty, and integration responsibility (`novice` through `research-grade`), not a model identity |
+| **semantic tier** | provider-neutral model capability floor (`economy` / `standard` / `senior` / `frontier`) |
 | **the reactor** | a long-lived sidecar (`north reactor`) that re-projects touched threads off the commit firehose; the intended home of specced auto-reaping |
 
 **The two ports** (simplified 2026-07-09 — `:7978`/`:7980` retired, modules deleted;
@@ -214,7 +216,9 @@ runs detached with its transcript at `~/.local/state/north/agents/<id>.log`
 ### Pattern D — `north spawn <role>`
 
 **Trigger:** `north spawn <role> "<prompt>"` (or `mcp__north__spawn`). The
-general single-lane path; role picks the dials.
+general single-lane path; a preset proposes the dials, which remain explicit
+and independently overridable. A bespoke role is allowed and its composition
+decision is recorded when no preset fits.
 **Lineage:** SDK-lane via `spawn.ts`.
 
 ```mermaid
@@ -226,7 +230,7 @@ sequenceDiagram
     participant T as north :7977
     CA->>CS: north spawn R "P" — INTAKE: role R, prompt P
     CS->>G: parse dial table (never fork the doctrine)
-    G-->>CS: R → model, effort, north-role, posture
+    G-->>CS: R → function, taskGrade, domain requirements,<br/>topology, tier, deliberation, posture
     CS->>CS: ID MINT — lane-{uuid8} · env AGENT_MODEL/EFFORT/ROLE/POSTURE<br/>(+ AGENT_COORDINATOR if --notify)
     opt --dry-run
         CS-->>CA: print id + display_name, STOP
@@ -242,8 +246,11 @@ sequenceDiagram
 ```
 
 Notes: this is the surface gaffer's doctrine actually routes to under
-`dispatch=north`. The **role→dials** resolution is by *parsing* gaffer's
-canonical table (`agents-cli.clj:dial-table`), never re-deriving it. Optional
+`dispatch=north`. Preset resolution consumes Gaffer's canonical provider-neutral
+contract in `~/code/gaffer/docs/routing.md`; this workflow map does not redefine
+the axes or infer one from another. Source gathering uses the `scout` preset;
+novel hypothesis/experiment work uses `research-scientist` at frontier tier and
+research-grade. Optional
 **escalate-not-kill**: with `AGENT_ESCALATE=1` a struggling lane climbs the
 `LADDER` in-flight (`spawn.ts:88-106`) instead of dying at a turn cap.
 

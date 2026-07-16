@@ -78,20 +78,29 @@ is jotted.
 → `~/code/nixos-config/dotfiles/agents/docs/model-selection.md`
 → `~/code/nixos-config/dotfiles/agents/docs/praxis/` (spawn payload blocks; README = assembly)
 
-Shared routing laws are CANONICAL in `~/code/gaffer`: task shape selects a
-semantic tier (`economy`, `standard`, `senior`, `frontier`), while North selects
-an available provider and resolves that tier through the provider catalog.
-Provider model names and credit pools are adapter facts, never global doctrine.
-Use `provider:auto` unless the user or task requires a provider. North records
-the resolved provider/model/reason and may fall back only before side effects.
+Shared routing laws are CANONICAL in `~/code/gaffer/doctrine.md`; the portable
+contract is `~/code/gaffer/docs/routing.md`. Keep its axes independent:
+function/role (deliverable), `taskGrade` (work scope and judgment), domain
+requirements, topology (worker/verifier/orchestrator), semantic tier
+(`economy`, `standard`, `senior`, `frontier`), and deliberation. Presets supply
+defaults, not types or limits. A bespoke role is valid when no preset fits;
+record its nearest preset and the reason so recurrence can inform Gaffer later.
+North selects an available provider and resolves the semantic tier through its
+provider catalog. Provider model names and subscription entitlement pools are
+adapter facts, never global doctrine. Use `provider:auto` unless the user or
+task requires a provider. North records the resolved provider/model/reason and
+may fall back only before side effects.
 
 **North is the spawn surface; Gaffer names the squad; provider adapters deliver
 it.** Translate a Gaffer pick to
 `mcp__north__spawn {prompt, provider:'auto', tier, role, posture}`. Examples:
-researcher → `economy`; implementer → `standard`; integrator → `senior`;
-designer → `frontier`. A native-agent denial is a routing instruction, never a
-wall. Provider-specific model deltas are resolved from `~/code/gaffer/providers`
-and `~/code/gaffer/docs`; personal posture residue lives in `praxis/README.md`.
+scout/source gathering → `economy`; implementer → `standard`; integrator →
+`senior`; designer → `frontier`; research-scientist/cutting-edge research →
+`frontier` with `taskGrade:research-grade`. These are preset defaults, not
+inference rules between axes. A native-agent denial is a routing instruction,
+never a wall. Provider-specific model deltas are resolved from
+`~/code/gaffer/providers` and `~/code/gaffer/docs`; personal posture residue
+lives in `~/code/nixos-config/dotfiles/agents/docs/praxis/README.md`.
 
 ## Push freely — the scan is the guard, not a human
 

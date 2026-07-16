@@ -1,10 +1,14 @@
 # Praxis — personal residue (canonical blocks live in gaffer)
 
-The generic spawn-payload system — roles, postures, model deltas, the
-elicit → subtract → compile method, the compose/elicit procedures — is
-CANONICAL in the **gaffer plugin**: `~/code/gaffer` (docs/roles.md,
-docs/postures.md, docs/deltas/, docs/method.md). Edit blocks there; they
-ship to everyone, and north's harness reads them from there at spawn time.
+The generic spawn-payload system — function/role, task grade, domain
+requirements, topology, semantic tier, deliberation, postures, model deltas,
+and the compose/elicit procedures — is CANONICAL in Gaffer:
+`~/code/gaffer/doctrine.md` and `~/code/gaffer/docs/routing.md` (supporting
+blocks live under `~/code/gaffer/docs/`). Presets are overridable defaults;
+when none fits, use a bespoke role and record its nearest preset and reason so
+recurring successful compositions can be considered for promotion. Edit the
+blocks there; they ship to everyone, and north's harness reads them from there
+at spawn time.
 This directory holds only what is personal:
 
 ## Domain bootstrap (defaults by entry point)

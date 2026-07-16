@@ -4,9 +4,19 @@
 session; edit in `~/code/gaffer`). This doc is the evidence, calibration,
 and personal-surface reference BEHIND it — on any conflict, gaffer wins.
 
-Two dials per agent: **model = capability ceiling**, **effort = deliberation
-depth**. Orthogonal — opus-low (high ceiling, snap judgment) ≠ sonnet-high
-(low ceiling, many careful steps). They trade: Opus-4.5-medium matched
+The portable decision has six independent axes: **function/role**, **task
+grade**, **domain requirements**, **topology**, **semantic tier**, and
+**deliberation**. A role names responsibility and deliverable; it does not hide
+seniority, model choice, or coordination authority. Human-readable task grades
+(`novice` through `research-grade`) describe the work, while semantic tiers
+describe the capability floor. Gaffer's presets merely propose common
+combinations; a coordinator may override fields or author and log a bespoke
+role when none fits. See `~/code/gaffer/doctrine.md` and
+`~/code/gaffer/docs/routing.md` rather than duplicating that contract here.
+
+At the provider-calibration layer, two dials remain: **model = capability
+ceiling**, **effort = deliberation depth**. Orthogonal — opus-low (high
+ceiling, snap judgment) ≠ sonnet-high (low ceiling, many careful steps). They trade: Opus-4.5-medium matched
 Sonnet-4.5-best on SWE-bench at 76% fewer tokens — higher ceiling at modest
 effort beats a maxed lower ceiling. Pricing/IDs: Models API or the `claude-api`
 skill, never blogs.
@@ -22,8 +32,9 @@ Anthropic's own /model menu agrees with this shape: Opus = "everyday,
 complex tasks" (the recommended default), Sonnet = "routine tasks", Fable =
 "hardest and longest-running".
 
-- **sonnet-low** — discovery, triage, locate, read-only fan-out, research
-  sweeps, mechanical single-shot edits.
+- **sonnet-low** — discovery, triage, locate, read-only scout fan-out, source
+  sweeps, mechanical single-shot edits. Cutting-edge research is not this
+  shape: `research-scientist` is frontier capability and `research-grade` work.
 - **sonnet-medium** — the PATTERN-EXTENSION tier, not the workhorse:
   **junior/mid-level dev tasks** — grunt work and/or extremely
   well-specified, relatively simple work; extends established patterns in
@@ -101,9 +112,9 @@ architecture code routes to Opus regardless of how mechanical it looks —
 Sonnet only extends established patterns in solidified code. Frontier =
 Opus; well-trodden extension = Sonnet.
 
-Dials 3–4 (role authority, posture) are cached as paste-ready spawn blocks
-in the gaffer repo (`~/code/gaffer/docs/` — roles, postures, model deltas;
-canonical). Personal domain-posture defaults:
+Dials for function, task grade, domain requirements, topology, and posture are
+assembled from Gaffer's canonical blocks (`~/code/gaffer/docs/` — roles,
+postures, model deltas). Personal domain-posture defaults:
 `~/code/nixos-config/dotfiles/agents/docs/praxis/README.md`. Compose, don't
 re-derive; keep assembled payloads ≤ ~60 lines.
 

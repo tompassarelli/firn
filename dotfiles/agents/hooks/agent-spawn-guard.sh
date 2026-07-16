@@ -31,7 +31,7 @@ MODE="${MODE:-north}"
 export AGENT_SPAWN_GUARD_MODE="$MODE"
 
 read -r -d '' PY <<'PYEOF' || true
-import sys, json, os
+import sys, json, os, re
 
 try:
     data = json.load(sys.stdin)
@@ -45,29 +45,36 @@ if tool not in ("Agent", "Task", "Workflow"):
 mode = os.environ.get("AGENT_SPAWN_GUARD_MODE", "north")
 ti = data.get("tool_input", {}) or {}
 
-# gaffer squad role -> north spawn dials. CANONICAL source is gaffer's RECIPES
-# (~/code/gaffer/scripts/build-agents.mjs, which also generates the north-adapter
-# doctrine block); duplicated here for enforcement because
-# a PreToolUse hook can't import from the plugin. Keep the two in sync.
-# The five praxis roles map to a north `role` block; the read-only tiers
-# (analyst / verifier / judge) have no north role block, so they pin
-# model+effort+posture and carry the role in-prompt.
-ROLE_MAP = {
-    "executor":    {"model": "sonnet", "effort": "low",    "role": "executor",    "posture": "deliver"},
-    "implementer": {"model": "sonnet", "effort": "medium", "role": "implementer", "posture": "deliver"},
-    "integrator":  {"model": "opus",   "effort": "high",   "role": "integrator",  "posture": "deliver"},
-    "designer":    {"model": "opus",   "effort": "xhigh",  "role": "designer",    "posture": "explore"},
-    "researcher":  {"model": "sonnet", "effort": "low",    "role": "researcher",  "posture": "explore"},
-    "analyst":     {"model": "opus",   "effort": "high",                          "posture": "explore"},
-    "verifier":    {"model": "opus",   "effort": "high",                          "posture": "explore"},
-    "judge":       {"model": "opus",   "effort": "high",                          "posture": "explore"},
-}
+GAFFER_AGENTS = os.path.expanduser("~/code/gaffer/agents")
+SAFE_ROLE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+ROUTING_COMMENT = re.compile(r"<!--\s*GAFFER_ROUTING\s+(\{.*?\})\s*-->")
+
+def routing_for(invoked_role):
+    """Read the generated adapter contract; never infer provider dials here."""
+    if not SAFE_ROLE.fullmatch(invoked_role):
+        return None
+    path = os.path.join(GAFFER_AGENTS, invoked_role + ".md")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            match = ROUTING_COMMENT.search(handle.read())
+        routing = json.loads(match.group(1)) if match else None
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    required = ("role", "taskGrade", "tier", "posture", "composition")
+    if not isinstance(routing, dict) or any(key not in routing for key in required):
+        return None
+    if not all(isinstance(routing[key], str) for key in ("role", "taskGrade", "tier", "posture")):
+        return None
+    if not isinstance(routing["composition"], dict):
+        return None
+    return routing
 
 def north_call(d):
-    parts = ['model:"%s"' % d["model"], 'effort:"%s"' % d["effort"]]
-    if "role" in d:
-        parts.append('role:"%s"' % d["role"])
-    parts.append('posture:"%s"' % d["posture"])
+    parts = ['provider:"auto"', 'tier:%s' % json.dumps(d["tier"])]
+    parts.append('role:%s' % json.dumps(d["role"]))
+    parts.append('posture:%s' % json.dumps(d["posture"]))
+    parts.append('taskGrade:%s' % json.dumps(d["taskGrade"]))
+    parts.append('composition:%s' % json.dumps(d["composition"], separators=(",", ":")))
     parts.append("prompt:<your same prompt, verbatim>")
     return "mcp__north__spawn { " + ", ".join(parts) + " }"
 
@@ -76,14 +83,16 @@ def north_call(d):
 subagent = ""
 if tool in ("Agent", "Task"):
     subagent = ti.get("subagent_type") or ti.get("subagentType") or ""
-role_key = subagent.split(":")[-1].strip().lower() if subagent else ""
+is_gaffer = subagent.lower().startswith("gaffer:")
+role_key = subagent.split(":", 1)[1].strip().lower() if is_gaffer else ""
+routing = routing_for(role_key) if role_key else None
 
-if role_key in ROLE_MAP:
+if routing:
     recipe = (
         "Native " + tool + " (" + subagent + ") is ephemeral — no claim trail, "
         "no steering, no observability. Re-issue the SAME work on north; dials are "
-        "already resolved for gaffer:" + role_key + " — just paste your prompt in:\n"
-        "  " + north_call(ROLE_MAP[role_key]) + "\n"
+        "read from canonical gaffer:" + role_key + " metadata — just paste your prompt in:\n"
+        "  " + north_call(routing) + "\n"
         "Fan-out? fire one mcp__north__spawn per lane in the same turn. "
         "Observe: web :8088. Deliberate bypass: north config dispatch warn|native."
     )
@@ -93,11 +102,12 @@ else:
         "Native " + tool + " (" + where + ") is ephemeral — no claim trail, no "
         "steering, no observability. Do the SAME work on north:\n"
         "  1. Trivial lookup / single file? No agent at all — bash/grep/read inline.\n"
-        "  2. One job: mcp__north__spawn {prompt, model, effort} (pick dials by task "
-        "shape), or capture a thread + mcp__north__dispatch (thread-driven posture).\n"
+        "  2. One job: mcp__north__spawn {prompt, provider:\"auto\", tier, role, "
+        "posture} (pick semantic tier by task shape), or capture a thread + "
+        "mcp__north__dispatch (thread-driven posture).\n"
         "  3. Fan-out: N x mcp__north__spawn in parallel; message workers via "
         "bb ~/code/north/cli/msg-cli.clj 7977 send; observe via web :8088.\n"
-        "  Caveman + model tier ride the SDK path (AGENT_CAVEMAN / AGENT_MODEL).\n"
+        "  Provider resolution and concrete model selection belong to North.\n"
         "Bypass deliberately: north config dispatch warn|native (or /north-config)."
     )
 
