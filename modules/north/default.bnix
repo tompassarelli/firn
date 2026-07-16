@@ -2,27 +2,60 @@
 
 (ns default)
 
-;; north CLI suite from the packaged flake. The default package's /bin holds
-;; `north` and `north-mcp`, bb-wrapped with FRAM_HOME baked to the
-;; bundled fram-engine and bb on PATH — self-contained, no separate fram clone
-;; needed at consume time. Replaces the old writeShellScriptBin wrapper that
-;; exec'd the ~/code/north dev-checkout wrapper directly (the reliance that
-;; broke the repair loop). NOTE: the pkgflake pulls fram via a flake=false path input
-;; (path:/home/tom/code/fram), so /home/tom/code/fram must exist at EVAL time on
-;; this machine. To make portable, repoint that input at a git URL pinned to
-;; FRAM_VERSION. Reads north main (package/flake merged) via git+file?ref=main.
-;;
-;; Cutover 2026-07-09: flake input, physical dir, and github repo all renamed
-;; to `north` (github redirects the old repo slug; repo lives at ~/code/north).
+;; Personal development mode is checkout-first: hooks, MCP, the Fram daemon,
+;; and ordinary shell calls all exercise the same ~/code checkout. Scripts,
+;; TypeScript/Clojure, and regenerated outputs are immediate; North .bclj edits
+;; require ~/code/north/build.sh to refresh out/ before the runtime changes.
+;; The flake package remains in the closure behind explicit *-packaged smoke
+;; commands; promotion is still a pinned-lock decision, never an implicit
+;; fallback when a checkout is missing.
 (nix/module [config lib pkgs inputs ...]
-  {:tags [cli-tools]
-   :flake-inputs
-    {:north {:url "git+file:///home/tom/code/north?ref=main"
-             :inputs.fram.follows "fram"}}
-   :options.myConfig.modules.north.enable
-    (lib.mkEnableOption "North (life app) CLI + MCP server on PATH")
-   :config
-    (lib.mkIf config.myConfig.modules.north.enable
-      {:environment.systemPackages
-        [(get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)
-           :default)]})})
+  (let
+    [northPkg
+      (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)
+     liveInputs (nix/with pkgs [bash coreutils git babashka bun jq])
+     northLive
+      (pkgs.writeShellApplication
+        {:name "north"
+         :runtimeInputs liveInputs
+         :text
+          (ms "checkout=${NORTH_CHECKOUT:-$HOME/code/north}"
+              "target=$checkout/bin/north"
+              "if [ ! -x \"$target\" ]; then"
+              "  echo \"north: live checkout executable missing: $target\" >&2"
+              "  echo \"north: restore that checkout or use north-packaged for the pinned closure\" >&2"
+              "  exit 127"
+              "fi"
+              "exec \"$target\" \"$@\"")})
+     northMcpLive
+      (pkgs.writeShellApplication
+        {:name "north-mcp"
+         :runtimeInputs liveInputs
+         :text
+          (ms "checkout=${NORTH_CHECKOUT:-$HOME/code/north}"
+              "target=$checkout/bin/north-mcp"
+              "if [ ! -x \"$target\" ]; then"
+              "  echo \"north-mcp: live checkout executable missing: $target\" >&2"
+              "  echo \"north-mcp: restore that checkout or use north-mcp-packaged for the pinned closure\" >&2"
+              "  exit 127"
+              "fi"
+              "exec \"$target\" \"$@\"")})
+     northPackaged
+      (pkgs.writeShellApplication
+        {:name "north-packaged"
+         :text (ms (s "exec " northPkg "/bin/north \"$@\""))})
+     northMcpPackaged
+      (pkgs.writeShellApplication
+        {:name "north-mcp-packaged"
+         :text (ms (s "exec " northPkg "/bin/north-mcp \"$@\""))})]
+    {:tags [cli-tools]
+     :flake-inputs
+      {:north {:url "git+file:///home/tom/code/north?ref=main"
+               :inputs.fram.follows "fram"}}
+     :options.myConfig.modules.north.enable
+      (lib.mkEnableOption
+        "checkout-first North CLI/MCP with explicit packaged smoke commands")
+     :config
+      (lib.mkIf config.myConfig.modules.north.enable
+        {:environment.systemPackages
+          [northLive northMcpLive northPackaged northMcpPackaged]})}))

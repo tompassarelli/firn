@@ -27,7 +27,8 @@ command = "/home/tom/code/fram/bin/fram-mcp"
 startup_timeout_sec = 15
 
 [mcp_servers.fram.env]
-FRAM_LOG = "/home/tom/.local/state/north/facts.log"
+FRAM_LOG = "/home/tom/.local/state/north/coordination.log"
+FRAM_TELEMETRY_LOG = "/home/tom/.local/state/north/telemetry.log"
 FRAM_THREADS = "/home/tom/.local/state/north/threads"
 
 [mcp_servers.linear-mcp-msa-new]

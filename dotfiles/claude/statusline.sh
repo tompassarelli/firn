@@ -17,9 +17,31 @@ SEGMENT_CAVEMAN="${SEGMENT_CAVEMAN:-on}"   # [CAVEMAN] / [CAVEMAN:MODE] mode chi
 # Claude Code pipes on stdin — captured below for whoever needs it).
 
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-# shellcheck disable=SC2034  # captured for future segments, unused today
-STDIN_JSON=$(cat 2>/dev/null)   # session payload; unused by caveman, here for new segments
+STDIN_JSON=$(cat 2>/dev/null)   # session payload; entitlement observer + future segments
 segments=()
+
+# Claude.ai subscriber limits arrive in this already-local payload after the
+# first response. Hand them to North without an API call, credential read, model
+# turn, or statusline dependency: the detached observer is silent and fail-open.
+forward_rate_limits() {
+  local north="$HOME/code/north/bin/north"
+  [ -x "$north" ] || return
+  case "$STDIN_JSON" in *'"rate_limits"'*) ;; *) return ;; esac
+  local runtime="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"
+  local lock="$runtime/north-claude-statusline-${UID}.lock" lock_fd
+  command -v flock >/dev/null 2>&1 || return
+  exec {lock_fd}> "$lock"
+  if ! flock -n "$lock_fd"; then exec {lock_fd}>&-; return; fi
+  {
+    printf '%s' "$STDIN_JSON" | "$north" provider-observe claude-statusline
+    sleep 1
+  } >/dev/null 2>&1 &
+  # The detached worker inherited the locked open-file description. Closing the
+  # statusline's copy keeps rendering non-blocking; kernel release is automatic
+  # even if the observer crashes.
+  exec {lock_fd}>&-
+}
+forward_rate_limits
 
 # ── caveman: is caveman on, and in what mode ────────────────────────────────
 # Self-contained: reads caveman's own flag file directly, no plugin dependency,

@@ -24,7 +24,8 @@
            :after                 ["network.target"]
            :path                  (nix/with pkgs [clojure jdk bash coreutils git])
            :startLimitIntervalSec 0
-           :environment           {:HOME homeDir}
+           :environment           {:HOME homeDir
+                                   :FRAM_TELEMETRY_LOG (s homeDir "/.local/state/north/telemetry.log")}
            :serviceConfig
             {:Type             "simple"
              :User             username

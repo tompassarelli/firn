@@ -16,6 +16,7 @@ in
       startLimitIntervalSec = 0;
       environment = {
         HOME = homeDir;
+        FRAM_TELEMETRY_LOG = "${homeDir}/.local/state/north/telemetry.log";
       };
       serviceConfig = {
         Type = "simple";

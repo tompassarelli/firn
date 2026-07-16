@@ -10,8 +10,9 @@
 - **Host** = leaf. `hosts/<host>/configuration.bnix` sets options;
   `hosts/<host>/enabled-tags.bnix` picks the tag set.
 
-`firn rebuild` runs `firn-build` → `firn-validate` → `nixos-rebuild` →
-tag. Modules auto-discover via the flake's dynamic `imports` — adding a
+`firn rebuild` provisionally refreshes local harness inputs, then runs
+`firn-build` → `firn-validate` → host-closure build → verified lock commit →
+system switch → tag. Modules auto-discover via the flake's dynamic `imports` — adding a
 module means creating the directory + `.bnix`, running `firn-build`,
 and `git add`-ing both files. No flake edits.
 
@@ -30,3 +31,6 @@ and `git add`-ing both files. No flake edits.
 Both `.bnix` and `.nix` are committed because the flake reads from the
 git tree. **Edit the `.bnix`** — `firn-build` overwrites direct `.nix`
 edits.
+
+The personal North module intentionally distinguishes live development from
+pinned promotion. See [north-delivery-mode.md](north-delivery-mode.md).
