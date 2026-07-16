@@ -308,11 +308,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1784203823,
-        "narHash": "sha256-AAf+/sTzdRsWHNDAZIXIZA93lSU6rvE025Q00b2Lvx0=",
+        "lastModified": 1784207951,
+        "narHash": "sha256-249dXL8bEjlGYSCxcteNihv4dhkTLOdrL+lc9fE1GwE=",
         "ref": "main",
-        "rev": "26f9c0d888bde0b30801892322f3421c5232affb",
-        "revCount": 331,
+        "rev": "8652fc09620427ab9d4483c929a7666a9b695d6b",
+        "revCount": 332,
         "type": "git",
         "url": "file:///home/tom/code/fram"
       },
@@ -335,6 +335,22 @@
       "original": {
         "owner": "SenchoPens",
         "repo": "fromYaml",
+        "type": "github"
+      }
+    },
+    "gaffer": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1784206922,
+        "narHash": "sha256-bfxWUsUAvYRuE8zeVcBiuFEbvva08cid8Rhb1p5H+TM=",
+        "owner": "tompassarelli",
+        "repo": "gaffer",
+        "rev": "e142af0c272e7ad5e5686ee56491a0dc5712f3fd",
+        "type": "github"
+      },
+      "original": {
+        "owner": "tompassarelli",
+        "repo": "gaffer",
         "type": "github"
       }
     },
@@ -686,14 +702,15 @@
         "fram": [
           "fram"
         ],
+        "gaffer": "gaffer",
         "nixpkgs": "nixpkgs_5"
       },
       "locked": {
-        "lastModified": 1784205263,
-        "narHash": "sha256-Lbzsm7kSKA+zXaK3ovglWCaHZmqO7d+rzHps+AOMVUI=",
+        "lastModified": 1784209074,
+        "narHash": "sha256-NWYLwLXsPuE1ebuWU+/TuRSSXAR3bH4ItRAUPyPh+T8=",
         "ref": "main",
-        "rev": "6cdae26d04b0bb8f0f39fee63e3b9e45d2ab0fe0",
-        "revCount": 282,
+        "rev": "9aed067c9f5fbcfc42bf7b564b83a01cdec9b693",
+        "revCount": 286,
         "type": "git",
         "url": "file:///home/tom/code/north"
       },
