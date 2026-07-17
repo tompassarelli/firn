@@ -90,6 +90,22 @@ classify_gaffer_cache "${feature_full:0:12}" "$feature_full" '' feature 'dirty'
 # simulates a relocated checkout; only --local may require live resolution.
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/agent-config-relocation.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
+
+# Numeric Codex state coordinates must resolve to a human-meaningful command.
+# In particular, SessionStart 0:1 is North registration, not the Beagle hook.
+expected_north_spawn='AGENT_PROVIDER=openai /home/tom/code/north/bin/north-on-spawn'
+[ "$(jq -r '.hooks.SessionStart[0].hooks[1].command' "$REPO/dotfiles/codex/hooks.json")" = "$expected_north_spawn" ]
+disabled_fixture="$scratch/disabled-hook.toml"
+printf '%s\n' \
+  '[hooks.state]' \
+  '[hooks.state."/home/tom/.codex/hooks.json:session_start:0:1"]' \
+  'enabled = false' \
+  '[hooks.state."/tmp/plugin/hooks.json:session_start:0:0"]' \
+  'enabled = false' \
+  >"$disabled_fixture"
+[ "$(list_disabled_codex_hooks "$REPO/dotfiles/codex/hooks.json" "$disabled_fixture")" = \
+  $'SessionStart\t0:1\t'"$expected_north_spawn" ]
+
 mkdir -p "$scratch/bin"
 printf '%s\n' '#!/bin/sh' 'exit 1' >"$scratch/bin/readlink"
 chmod +x "$scratch/bin/readlink"

@@ -36,6 +36,52 @@ classify_gaffer_cache() {
   fi
 }
 
+# Codex stores per-hook trust/enablement by numeric manifest coordinates. Resolve
+# disabled entries back to their event and command so drift reports name the
+# behavior that was actually turned off instead of an opaque `0:1` key.
+list_disabled_codex_hooks() {
+  local manifest="$1" config="$2"
+  local state_manifest="${3:-/home/tom/.codex/hooks.json}"
+  python3 - "$manifest" "$config" "$state_manifest" <<'PY'
+import json
+import re
+import sys
+import tomllib
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    manifest = json.load(handle)
+with open(sys.argv[2], "rb") as handle:
+    config = tomllib.load(handle)
+
+hooks = manifest.get("hooks", {})
+
+def normalized(value):
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+event_by_key = {normalized(name): name for name in hooks}
+states = config.get("hooks", {}).get("state", {})
+for key, state in states.items():
+    if not isinstance(state, dict) or state.get("enabled") is not False:
+        continue
+    manifest_path = "unknown"
+    event_key = "unknown"
+    group_raw = "?"
+    hook_raw = "?"
+    try:
+        manifest_path, event_key, group_raw, hook_raw = key.rsplit(":", 3)
+        if manifest_path not in (sys.argv[1], sys.argv[3]):
+            continue
+        group_index = int(group_raw)
+        hook_index = int(hook_raw)
+        event = event_by_key[normalized(event_key)]
+        command = hooks[event][group_index]["hooks"][hook_index]["command"]
+    except (KeyError, IndexError, TypeError, ValueError):
+        event = event_by_key.get(normalized(event_key), event_key)
+        command = "<unresolved manifest coordinate>"
+    print(f"{event}\t{group_raw}:{hook_raw}\t{command}")
+PY
+}
+
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
   return 0
 fi
@@ -403,6 +449,19 @@ before=$fail
 need_json "$CODEX/hooks.json" 'Codex hooks'
 need_toml "$CODEX/config.toml" 'Codex config'
 validate_hooks "$CODEX/hooks.json" Codex openai
+disabled_codex_hooks="$(list_disabled_codex_hooks "$CODEX/hooks.json" "$CODEX/config.toml" 2>/dev/null)" ||
+  bad "Codex disabled-hook state could not be mapped to $CODEX/hooks.json"
+while IFS=$'\t' read -r event coordinate command; do
+  [ -n "$event" ] || continue
+  case "$command" in
+    *'/home/tom/code/north/bin/'*)
+      bad "Codex hook disabled: ${event}[$coordinate] → $command"
+      ;;
+    *)
+      soft "Codex hook disabled: ${event}[$coordinate] → $command"
+      ;;
+  esac
+done <<<"${disabled_codex_hooks:-}"
 require_manifest_guard_count "$CODEX/hooks.json" Codex Bash 0 'user Bash guard is absent (managed binding is the sole Bash guard)'
 require_manifest_guard_count "$CODEX/hooks.json" Codex Agent 1 'native Agent redirect remains a trust-reviewed user hook'
 validate_codex_managed_worker_guard

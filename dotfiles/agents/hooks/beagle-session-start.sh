@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # SessionStart hook (global, guarded) — the DETERMINISTIC layer of the Beagle
-# authoring setup. Skills/CLAUDE.md are model-discretion (can be forgotten);
-# this hook is harness-enforced and fires once per session.
+# authoring setup. Skills/AGENTS.md are model-discretion (can be forgotten);
+# this hook is harness-enforced at startup, resume, clear, and compact.
 #
-# In a Beagle project it: (1) revives the daemon + functionally verifies the
-# repair loop (beagle-doctor --revive --quiet), and (2) injects the authoring
-# handshake into the session context so the agent starts on solid ground.
+# In a Beagle project it: (1) starts a throttled, non-blocking repair-loop
+# revive, and (2) injects source-aware authoring context. Repeated resumes in
+# one session are silent; clear/compact re-inject because they rebuild context.
 # Outside a Beagle project it is a fast no-op (a few globs, no heavy work).
 set -uo pipefail
 
@@ -19,9 +19,111 @@ set -uo pipefail
 . "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
 type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
-# Project dir: Claude Code sets CLAUDE_PROJECT_DIR; fall back to cwd.
-dir="${CLAUDE_PROJECT_DIR:-$PWD}"
+# Both Claude Code and Codex pass a SessionStart JSON envelope on stdin. Parse
+# it opportunistically: malformed/missing input must never break startup.
+payload="$(cat 2>/dev/null || true)"
+event_cwd=""
+session_id=""
+session_source=""
+if [ -n "$payload" ] && command -v python3 >/dev/null 2>&1; then
+  mapfile -t event_fields < <(
+    printf '%s' "$payload" | python3 -c '
+import json
+import sys
+
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    data = {}
+
+for key in ("cwd", "session_id", "source"):
+    value = data.get(key, "")
+    print(value if isinstance(value, str) else "")
+' 2>/dev/null
+  )
+  event_cwd="${event_fields[0]:-}"
+  session_id="${event_fields[1]:-}"
+  session_source="${event_fields[2]:-}"
+fi
+session_source="${session_source,,}"
+
+# Claude Code sets CLAUDE_PROJECT_DIR. Codex relies on the event cwd. Preserve
+# the Claude override, then fall back through the event and process cwd.
+dir="${CLAUDE_PROJECT_DIR:-${event_cwd:-$PWD}}"
 cd "$dir" 2>/dev/null || exit 0
+dir="$(pwd -P)"
+
+# SessionStart is not literally once per session: resume, clear, and compact
+# also fire it. An atomic marker keeps ordinary startup/resume idempotent while
+# clear/compact deliberately restore context after a context reset.
+if [ -n "${BEAGLE_SESSION_STATE_DIR:-}" ]; then
+  state_dir="$BEAGLE_SESSION_STATE_DIR"
+elif [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+  state_dir="$XDG_RUNTIME_DIR/beagle-session-start"
+else
+  runtime_uid="${UID:-$(id -u)}"
+  state_dir="${TMPDIR:-/tmp}/beagle-session-start-$runtime_uid"
+fi
+state_ready=0
+if mkdir -p "$state_dir" 2>/dev/null; then
+  chmod 700 "$state_dir" 2>/dev/null || true
+  state_ready=1
+fi
+
+state_hash() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | awk '{print $1}'
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
+  else
+    cksum | awk '{print $1}'
+  fi
+}
+
+dir_key="$(printf '%s' "$dir" | state_hash)"
+session_marker=""
+if [ -n "$session_id" ]; then
+  session_key="$(printf '%s\0%s' "$session_id" "$dir" | state_hash)"
+  session_marker="$state_dir/context-$session_key"
+fi
+
+claim_session_context() {
+  if [ "$state_ready" -eq 0 ] || [ -z "$session_marker" ]; then
+    return 0
+  fi
+  (set -o noclobber; printf '%s\n' "$session_source" >"$session_marker") 2>/dev/null
+}
+
+remember_session_context() {
+  [ "$state_ready" -eq 1 ] && [ -n "$session_marker" ] || return 0
+  printf '%s\n' "$session_source" >"$session_marker" 2>/dev/null || true
+}
+
+context_mode=full
+context_prepared=0
+prepare_context_mode() {
+  [ "$context_prepared" -eq 0 ] || return 0
+  context_prepared=1
+  case "$session_source" in
+    clear)
+      # /clear discards prior context, so restore the complete handshake.
+      remember_session_context
+      ;;
+    compact)
+      # Compaction also rebuilds context, but a concise reminder is enough.
+      remember_session_context
+      context_mode=compact
+      ;;
+    startup|resume|"")
+      claim_session_context || context_mode=none
+      ;;
+    *)
+      # Unknown providers/sources retain legacy behavior, with dedupe when a
+      # stable session id is available.
+      claim_session_context || context_mode=none
+      ;;
+  esac
+}
 
 # --- fast Beagle-context detection (cheap; gate all heavy work behind it) ---
 is_beagle() {
@@ -70,6 +172,8 @@ fi
 # doesn't apply). Same SessionStart additionalContext channel as the main print.
 emit_ladder_ctx() {
   [ -n "$ladder_ctx" ] || return 0
+  prepare_context_mode
+  [ "$context_mode" != none ] || return 0
   python3 -c 'import json,sys; print(json.dumps({"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":sys.argv[1]}}))' "$ladder_ctx" || true
 }
 
@@ -95,18 +199,63 @@ if [ -z "$beagle" ]; then
   exit 0
 fi
 
-# --- functional handshake + self-heal (NON-BLOCKING revive) -----------------
-# The revive cold-starts the racket daemon (~20s). Run synchronously it stalls
-# the FIRST user turn — Claude blocks that turn on this hook's exit (SessionStart
-# additionalContext channel). So detach it: `setsid … &` runs the revive in its
-# own session (immune to this hook's process-group teardown) and the hook returns
-# instantly. No synchronous boot-time verdict — health is the AGENT's job to
-# confirm on demand (and the PostToolUse repair hook self-heals per edit). Output
-# goes to a debug log NOBODY is asked to watch.
-setsid "$beagle" doctor --revive --quiet "$dir" >"${TMPDIR:-/tmp}/beagle-revive.log" 2>&1 </dev/null &
-line="The repair daemon is warming in the background (non-blocking)."
+# --- functional handshake + self-heal (NON-BLOCKING, THROTTLED revive) -------
+# SessionStart can arrive several times in quick succession. A per-checkout
+# advisory lock makes launch admission atomic; its fd is inherited by the
+# detached doctor, so a crash releases it automatically. The timestamp adds a
+# cooldown after completion without ever becoming a permanent lock.
+warm_started=0
+warm_ttl="${BEAGLE_SESSION_WARM_TTL_SECONDS:-300}"
+case "$warm_ttl" in ""|*[!0-9]*) warm_ttl=300 ;; esac
+maybe_start_warm() {
+  [ "$state_ready" -eq 1 ] || return 0
+  command -v flock >/dev/null 2>&1 || return 0
+  command -v setsid >/dev/null 2>&1 || return 0
 
-ctx="Beagle project detected. ${line} YOU (the agent) own repair-loop health, not the user — never ask them to check a log or babysit the daemon. Before your first Beagle edit, confirm the daemon is live yourself with \`beagle-doctor --deep\` (functional handshake) and self-heal if degraded. Treat the compiler as source of truth (query beagle-* tools; never trust a static form/type/stdlib list), and trust the PostToolUse repair hook's per-edit feedback. If this project has no repair hook yet, scaffold it with \`beagle-init --hooks\`."
+  local lock="$state_dir/warm-$dir_key.lock"
+  local stamp="$state_dir/warm-$dir_key.stamp"
+  local now last
+  exec 9>"$lock" 2>/dev/null || return 0
+  if ! flock -n 9; then
+    exec 9>&-
+    return 0
+  fi
+
+  now="$(date +%s)"
+  last="$(cat "$stamp" 2>/dev/null || true)"
+  case "$last" in ""|*[!0-9]*) last=0 ;; esac
+  if [ $((now - last)) -lt "$warm_ttl" ]; then
+    flock -u 9
+    exec 9>&-
+    return 0
+  fi
+
+  printf '%s\n' "$now" >"$stamp" 2>/dev/null || true
+  # fd 9 stays inherited by the child until doctor exits; closing the parent's
+  # copy below cannot release the child-held lock.
+  setsid "$beagle" doctor --revive --quiet "$dir" \
+    >"$state_dir/revive-$dir_key.log" 2>&1 </dev/null 9>&9 &
+  warm_started=1
+  disown 2>/dev/null || true
+  exec 9>&-
+}
+maybe_start_warm
+
+prepare_context_mode
+if [ "$context_mode" = none ]; then
+  exit 0
+fi
+
+warm_ctx=""
+if [ "$warm_started" -eq 1 ]; then
+  warm_ctx=" A background \`beagle doctor --revive --quiet\` check was started for this checkout."
+fi
+
+if [ "$context_mode" = compact ]; then
+  ctx="Beagle authoring context restored after compaction. Before the next Beagle edit, run \`beagle doctor --deep\`; treat compiler and PostToolUse repair feedback as authoritative.${warm_ctx}"
+else
+  ctx="Beagle authoring is active.${warm_ctx} YOU (the agent) own repair-loop health, not the user. Before the first Beagle edit, run \`beagle doctor --deep\` and self-heal if degraded. Treat the compiler as source of truth (query Beagle tools; never trust a static form/type/stdlib list), and trust the PostToolUse repair hook's per-edit feedback. If this project has no repair hook, scaffold it with \`beagle init --hooks\`."
+fi
 # Append the flip-level announcement (graceful-degradation ladder, L1-L3).
 [ -n "$ladder_ctx" ] && ctx="$ctx $ladder_ctx"
 

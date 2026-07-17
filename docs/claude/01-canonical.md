@@ -7,10 +7,12 @@
 
 ## Context assembly — what reaches the model, in order
 
-Once per session, then per turn. Every line is a lever you can pull.
+At context assembly boundaries, then per turn. Every line is a lever you can
+pull. `SessionStart` is a lifecycle name, not a once-only promise: current
+harnesses invoke it for startup, resume, clear, and compact.
 
 ```
-ONCE PER SESSION
+AT STARTUP / RESUME / CLEAR / COMPACT
  ① base system prompt   baked in binary           CLI: append-only; full replace = SDK
  ② tool definitions     built-in + DEFERRED        permissions.deny removes; MCP/web deferred ≈ free
  ③ environment block    cwd / git / os / model     --exclude-dynamic-…-sections
@@ -20,7 +22,7 @@ ONCE PER SESSION
  ⑦ skill descriptions   name + description only; BODY deferred until invoked
  ⑧ agent types          subagent roster
  ⑨ slash commands       commands/*.md
- ⑩ SessionStart hook    injected as a system message
+ ⑩ SessionStart hook    injected as a system message; hook owns source-aware dedupe
 EVERY TURN
  ⑪ user prompt
  ⑫ UserPromptSubmit hook    inject text / block the prompt
