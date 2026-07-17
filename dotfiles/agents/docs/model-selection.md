@@ -14,11 +14,19 @@ runtime and records both the request and the result.
 
 Decide each Gaffer axis independently:
 
-1. `role` names the responsibility and deliverable. Start with a canonical
-   preset. If none fits, author a fully specified bespoke composition.
+1. `role` names the responsibility and deliverable. Start with an exact stock
+   template when its responsibility, deliverable, done criteria, report shape,
+   and fixed topology/capability boundary fit. Override only task grade,
+   domains, tier, reasoning, or posture, with a reason, while those properties
+   remain unchanged. Any topology/authority change — or a different
+   responsibility, deliverable, done criteria, report shape, or capability
+   boundary — requires a fully specified bespoke composition.
 2. `taskGrade` describes the work's scope and expected judgment: `novice`,
    `junior`, `mid`, `senior`, `staff`, `principal`, or `research-grade`.
 3. `domainRequirements` states expertise/context the brief must actually load.
+   It is prompt/context metadata, not proof of connector capability,
+   authentication, or pre-turn authority. Deterministic Linear operations use
+   the separate `north linear` surface.
 4. `topology` is coordination authority: `worker` or `orchestrator`. Verifier
    and judge are worker roles, not topologies. Choose from dependency shape;
    importance alone does not justify an orchestrator.
@@ -28,15 +36,29 @@ Decide each Gaffer axis independently:
 6. `reasoning` is deliberation: `low`, `medium`, `high`, `xhigh`, or `max`.
    It remains independent from tier, but the pair must be supported by a
    provider catalog.
-7. `posture` is `explore`, `deliver`, or `preserve`.
-8. `composition` records provenance: exact preset, preset plus explicit
-   overrides/reason, or a complete bespoke contract.
+7. `posture` is `explore`, `deliver`, `evaluate`, or `preserve`. `evaluate`
+   orders its priorities as evidence quality, decision correctness, coverage,
+   speed, then polish. It licenses adversarial probes, reproduction, and an
+   explicit `cannot-determine` result; it forbids unsupported verdicts,
+   criteria invented after seeing results, and modification of the artifact
+   under evaluation.
+8. `composition` records provenance: exact template, template plus explicit
+   overrides/reason, or a complete bespoke contract. The compatibility wire
+   retains `composition.kind:"preset"` for templates and `nearestPreset` for
+   the optional nearest-template hint.
 
-Presets are defaults, not coupled identities. An override changes only the
-named axes and records why. A bespoke composition requires responsibility,
-deliverable, canonical capabilities, decision authority, escalation bounds,
-done criteria, and report shape; `nearestPreset` is optional and grants no
-authority.
+Templates are reusable defaults for common input-to-deliverable shapes, not
+mandatory identities or a closed role vocabulary. An override changes only
+the named axes and records why; it is not a way to disguise a different
+deliverable. A bespoke composition requires responsibility, deliverable,
+canonical capabilities, decision authority, escalation bounds, done criteria,
+and report shape; `nearestPreset` is optional and grants no authority.
+
+Verifier and judge remain distinct worker roles. A verifier decides one claim:
+affirmative evidence can confirm it, counterevidence can refute it, and
+ambiguous or missing coverage yields `cannot-determine`. A judge compares
+multiple supplied alternatives against criteria declared before scoring and
+rejects a comparison whose candidates or criteria are not actually comparable.
 
 ## Send the complete request
 
@@ -59,7 +81,10 @@ execution controls and the prompt:
 ```
 
 Direct `mcp__north__spawn` callers send this complete object. The forcing CLI
-`north spawn <preset> "<prompt>"` hydrates a known preset mechanically.
+`north spawn <template-id> "<prompt>"` hydrates a known template mechanically;
+its emitted machine payload still uses `composition.kind:"preset"`. Run
+`north templates` to inspect the stock catalog and its resolved routing
+defaults before selecting one.
 Delegation is dependency-shape classified rather than a director alias:
 
 ```sh
@@ -69,9 +94,9 @@ north delegate "<task>" --composite [spawn options]          # composite
 
 The intelligent `/delegate` adapter makes that decision while preserving one
 user-facing verb. Atomic work selects exactly one terminal worker composition:
-an unchanged preset, a preset with explicit axis overrides and an
+an unchanged template, a template with explicit axis overrides and an
 `--override-reason`, or a fully specified bespoke role with rationale and a
-structured contract. Presets are defaults, not a closed vocabulary; repeated
+structured contract. Templates are defaults, not a closed vocabulary; repeated
 bespoke use is recorded for possible human promotion review, and North renders
 its provenance as `gaffer:bespoke:<id>` rather than a generic `custom` or
 missing-composition label. Composite work alone hydrates the canonical director,

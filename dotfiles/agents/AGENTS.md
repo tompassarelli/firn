@@ -82,15 +82,32 @@ Shared routing laws are CANONICAL in `~/code/gaffer/doctrine.md`; the portable
 contract is `~/code/gaffer/docs/routing.md`. Keep its axes independent:
 function/role (deliverable), `taskGrade` (work scope and judgment), domain
 requirements, topology (`worker`/`orchestrator`), semantic tier
-(`economy`, `standard`, `senior`, `frontier`), and deliberation. Presets supply
-defaults, not types or limits. Topology is only `worker` or `orchestrator`;
-verifier and judge are worker roles. When no preset fits, author a bespoke
-composition with a distinct lowercase-kebab role ID, reason, explicit routing
-axes, promotion-candidate boolean, and structured contract: responsibility,
-deliverable, canonical capabilities, decision/escalation boundaries,
-done-when criteria, and report shape. A nearest preset is optional and never
-grants capabilities implicitly. Recurrence informs review; it never silently
-promotes a bespoke composition into the preset library.
+(`economy`, `standard`, `senior`, `frontier`), deliberation, and posture
+(`explore`, `deliver`, `evaluate`, `preserve`). `evaluate` prioritizes evidence
+quality, decision correctness, coverage, speed, then polish; unsupported
+verdicts become explicit `cannot-determine` findings. Templates are reusable
+defaults for common input-to-deliverable shapes, never mandatory identities,
+types, or limits. The compatibility wire encodes a stock template as
+`composition.kind:"preset"` and names the nearest-template hint
+`nearestPreset`.
+
+Select an exact template when its responsibility, deliverable, done criteria,
+report shape, and fixed topology/capability boundary fit. Override only task
+grade, domains, tier, reasoning, or posture, with a reason, while those
+properties remain unchanged. Any topology/authority change — or a different
+responsibility, deliverable, done criteria, report shape, or capability
+boundary — requires a complete bespoke composition with a distinct
+lowercase-kebab role ID, reason, explicit routing axes, promotion-candidate
+boolean, and structured contract: responsibility, deliverable, canonical
+capabilities, decision/escalation boundaries, done-when criteria, and report
+shape. `nearestPreset` is optional and never grants capabilities implicitly.
+Recurrence informs review; it never silently promotes a bespoke composition
+into the template library.
+
+Topology is only `worker` or `orchestrator`. Verifier and judge are worker
+roles, not topologies: a verifier evaluates one claim from affirmative or
+counterevidence and may conclude `cannot-determine`; a judge ranks multiple
+comparable alternatives against criteria declared before scoring.
 North selects an available provider and resolves the semantic tier through its
 provider catalog. Provider model names and subscription entitlement pools are
 adapter facts, never global doctrine. Use `provider:auto` unless the user or
@@ -102,14 +119,18 @@ it.** Translate a Gaffer pick to North's execution envelope containing the full
 eight-field Gaffer request (`role`, `taskGrade`, `domainRequirements`,
 `topology`, `tier`, `reasoning`, `posture`, `composition`) plus `prompt` and
 normally `provider:'auto'`. Managed North work fails closed without either an
-exact/overridden preset composition or a complete bespoke composition. Display
-provenance as `gaffer:<preset>`, `gaffer:<preset>+override`, or
+exact/overridden template composition or a complete bespoke composition.
+`domainRequirements` declares expertise and context the brief must load; it is
+not proof of connector capability, authentication, or pre-turn authority.
+Deterministic Linear operations remain a separate `north linear` surface.
+Display provenance as `gaffer:<template-id>`,
+`gaffer:<template-id>+override`, or
 `gaffer:bespoke:<id>`; `gaffer:not-selected` is native-only and
 `gaffer:legacy-debt` is migration-only. Never emit ambiguous `gaffer:none`.
 Examples:
 scout/source gathering → `economy`; implementer → `standard`; integrator →
 `senior`; designer → `frontier`; research-scientist/cutting-edge research →
-`frontier` with `taskGrade:research-grade`. These are preset defaults, not
+`frontier` with `taskGrade:research-grade`. These are template defaults, not
 inference rules between axes. A native-agent denial is a routing instruction,
 never a wall. Provider-specific model deltas are resolved from
 `~/code/gaffer/providers` and `~/code/gaffer/docs`; personal posture residue

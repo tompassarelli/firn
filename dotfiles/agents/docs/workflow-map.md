@@ -31,7 +31,8 @@ what could not be verified from source.
 | **`@swarm`** | the coordinator-visible roster node; where `budget_total` and `agent_death` facts land |
 | **concern** | a declared work footprint (files + intent); a coordination signal, **not a lock** — declaring never blocks |
 | **presence / lease** | a heartbeat registration on the `:7977` coordinator with a **30-min TTL**; renewed (in session agents) on tool use |
-| **posture** | how a lane works (`deliver` / `explore`); derived from thread facts by `dispatch`, or passed on `spawn` |
+| **posture** | how a lane works (`explore` / `deliver` / `evaluate` / `preserve`); `evaluate` orders evidence quality, decision correctness, coverage, speed, then polish; derived from thread facts by `dispatch`, or passed on `spawn` |
+| **template** | reusable defaults for a common input-to-deliverable shape, encoded as `composition.kind:"preset"` on the compatibility wire; never a mandatory worker identity |
 | **function / role** | responsibility and deliverable; independent of task grade, domain requirements, topology, semantic tier, and deliberation |
 | **task grade** | prior for the work's scope, autonomy, novelty, and integration responsibility (`novice` through `research-grade`), not a model identity |
 | **semantic tier** | provider-neutral model capability floor (`economy` / `standard` / `senior` / `frontier`) |
@@ -140,8 +141,9 @@ activity.
 
 **Trigger:** a human types `/delegate <text> [--new]` (`commands/delegate.md`).
 **Lineage:** the slash command is an intelligent adapter over `north delegate`.
-It classifies dependency shape once: atomic work selects one exact, overridden,
-or bespoke terminal Gaffer worker; composite work alone selects the director.
+It classifies dependency shape once: atomic work selects an exact stock
+template, an explicit template override, or a bespoke composition for its
+terminal Gaffer worker; composite work alone selects the director.
 North then selects the provider, account, concrete model, and runtime control.
 Carrying context is BINARY (y/n), a trailing flag not a separate verb: bare =
 this session's concise context brief rides along by default; `--new` = a clean
@@ -206,7 +208,7 @@ subprocess death (`death.ts`).
 [--context <file>] [spawn options]` at a shell
 (`agents-cli.clj:cmd-delegate`).
 **Lineage:** identical to B after classification: `--role` launches one atomic
-terminal worker (exact preset, recorded preset overrides, or a structured
+terminal worker (exact template, recorded template overrides, or a structured
 bespoke composition); `--composite` alone hydrates the director. North refuses
 an unclassified handoff and resolves provider/account/model after the
 provider-neutral request. The shell has no conversation to summarize, so
@@ -222,7 +224,7 @@ sequenceDiagram
     SH->>CLI: north delegate X (--role R | --composite) [--context f] [spawn options]
     CLI->>CLI: INTAKE — require exactly one classification;<br/>prepend optional CONTEXT BRIEF + mode-specific operating contract
     alt --role R (atomic)
-        CLI->>CS: hydrate R + forwarded preset overrides or bespoke contract
+        CLI->>CS: hydrate R + forwarded template overrides or bespoke contract
     else --composite
         CLI->>CS: hydrate canonical director request
     end
@@ -245,9 +247,13 @@ The lane runs detached with its transcript at
 ### Pattern D — `north spawn <role>`
 
 **Trigger:** `north spawn <role> "<prompt>"` (or `mcp__north__spawn`). The
-general single-lane path; a preset proposes the dials, which remain explicit
-and independently overridable. A bespoke role is allowed and its composition
-decision is recorded when no preset fits.
+general single-lane path. Use a template when its responsibility, deliverable,
+done criteria, report shape, and fixed topology/capability boundary fit; only
+task grade, domains, tier, reasoning, or posture may be explicitly overridden
+while those properties remain unchanged. Any topology/authority change — or a
+different responsibility, deliverable, done criteria, report shape, or
+capability boundary — requires a bespoke role, and that composition decision
+is recorded.
 **Lineage:** SDK-lane via `spawn.ts`.
 
 ```mermaid
@@ -278,9 +284,10 @@ sequenceDiagram
 ```
 
 Notes: this is the surface gaffer's doctrine actually routes to under
-`dispatch=north`. Preset resolution consumes Gaffer's canonical provider-neutral
+`dispatch=north`. Template resolution consumes Gaffer's canonical provider-neutral
 contract in `~/code/gaffer/docs/routing.md`; this workflow map does not redefine
-the axes or infer one from another. Source gathering uses the `scout` preset;
+the axes or infer one from another. `north templates` renders the stock catalog
+and its resolved routing defaults. Source gathering uses the `scout` template;
 novel hypothesis/experiment work uses `research-scientist` at frontier tier and
 research-grade. Optional
 **escalate-not-kill**: with `AGENT_ESCALATE=1` a struggling lane climbs the
