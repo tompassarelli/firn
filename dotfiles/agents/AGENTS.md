@@ -189,3 +189,14 @@ trade-offs, paths-not-taken only; if the code can say it, drop it.
   the harness's own "FleetView" string is not our vocabulary and must not
   leak back in. Say lanes / agents / workers / spawns. (Ordinary English
   "fleeting" is fine.)
+- **`rm` on variable paths — make it self-evidently safe so the rm-guard
+  never has to prompt.** The guard fires on `rm … "$VAR"/glob` because an
+  empty/unset `$VAR` expands to a bare-root delete (`rm -f /*.lock`). So
+  NEVER write that shape. Instead: (a) brace-guard every interpolated path
+  segment — `rm -rf "${VAR:?}"/*.lock` aborts if `VAR` is empty/unset; or
+  (b) delete the whole scratch dir by its literal absolute path and recreate
+  it (`rm -rf /tmp/claude-…/scratch && mkdir -p …`), never per-glob inside a
+  variable; or (c) rely on tooling that already excludes (rsync `--exclude`)
+  and skip the follow-up `rm` entirely. Scratch/temp cleanup is routine and
+  should run without a prompt — the fix is command hygiene, not disabling the
+  guard.
