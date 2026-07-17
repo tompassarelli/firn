@@ -25,10 +25,14 @@ if $DARWIN; then
   HOST="${1:-ashashi}"
   TARGET="darwinConfigurations.$HOST.options"
   OUT="$REPO/.beagle-cache/schema-darwin.json"
+  FINGERPRINT_OUT="$REPO/.beagle-cache/schema-darwin.inputs.sha256"
+  FINGERPRINT_MODE=darwin
 else
   HOST="${1:-whiterabbit}"
   TARGET="nixosConfigurations.$HOST.options"
   OUT="$REPO/.beagle-cache/schema.json"
+  FINGERPRINT_OUT="$REPO/.beagle-cache/schema.inputs.sha256"
+  FINGERPRINT_MODE=nixos
 fi
 
 if [[ ! -x "$BEAGLE_EXTRACT" ]]; then
@@ -38,7 +42,28 @@ if [[ ! -x "$BEAGLE_EXTRACT" ]]; then
   exit 2
 fi
 
-exec "$BEAGLE_EXTRACT" \
+FINGERPRINT_HELPER="$REPO/scripts/firn-schema-input-fingerprint"
+if [[ ! -x "$FINGERPRINT_HELPER" ]]; then
+  echo "firn-extract-schema: fingerprint helper missing at $FINGERPRINT_HELPER" >&2
+  exit 2
+fi
+
+before_fingerprint="$($FINGERPRINT_HELPER --mode "$FINGERPRINT_MODE" --lock "$REPO/flake.lock")"
+
+"$BEAGLE_EXTRACT" \
   --target "$TARGET" \
   --out "$OUT" \
   --flake "$REPO"
+
+after_fingerprint="$($FINGERPRINT_HELPER --mode "$FINGERPRINT_MODE" --lock "$REPO/flake.lock")"
+if [[ "$before_fingerprint" != "$after_fingerprint" ]]; then
+  echo "firn-extract-schema: flake.lock changed during extraction; refusing a mismatched fingerprint" >&2
+  exit 1
+fi
+
+mkdir -p "$(dirname "$FINGERPRINT_OUT")"
+fingerprint_tmp="$(mktemp "${FINGERPRINT_OUT}.tmp.XXXXXX")"
+trap 'rm -f "$fingerprint_tmp"' EXIT
+printf '%s\n' "$after_fingerprint" >"$fingerprint_tmp"
+mv "$fingerprint_tmp" "$FINGERPRINT_OUT"
+trap - EXIT

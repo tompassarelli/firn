@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""Fingerprint only the locked inputs that produce Firn option schemas."""
+
+import argparse
+import hashlib
+import json
+import pathlib
+import sys
+
+
+INPUTS = {
+    "nixos": ("nixpkgs", "home-manager"),
+    "darwin": ("nixpkgs", "home-manager", "nix-darwin"),
+}
+
+
+def fail(message: str) -> "NoReturn":
+    raise SystemExit(f"firn-schema-input-fingerprint: {message}")
+
+
+def resolve_node_id(reference, nodes, root_id):
+    if isinstance(reference, str):
+        if reference not in nodes:
+            fail(f"lock node {reference!r} is missing")
+        return reference
+    if not isinstance(reference, list) or not reference:
+        fail(f"invalid input reference: {reference!r}")
+
+    current = root_id
+    for name in reference:
+        if not isinstance(name, str):
+            fail(f"invalid follows path: {reference!r}")
+        inputs = nodes.get(current, {}).get("inputs", {})
+        if name not in inputs:
+            fail(f"follows path {reference!r} cannot resolve {name!r}")
+        current = resolve_node_id(inputs[name], nodes, root_id)
+    return current
+
+
+def fingerprint(lock, mode):
+    nodes = lock.get("nodes")
+    root_id = lock.get("root")
+    if not isinstance(nodes, dict) or root_id not in nodes:
+        fail("malformed flake.lock root or nodes")
+    root_inputs = nodes[root_id].get("inputs", {})
+
+    selected = {}
+    for name in INPUTS[mode]:
+        if name not in root_inputs:
+            fail(f"root input {name!r} is missing")
+        node_id = resolve_node_id(root_inputs[name], nodes, root_id)
+        locked = nodes[node_id].get("locked")
+        if not isinstance(locked, dict):
+            fail(f"root input {name!r} has no locked source")
+        selected[name] = locked
+
+    payload = {
+        "format": "firn-schema-inputs-v1",
+        "mode": mode,
+        "inputs": selected,
+    }
+    canonical = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", required=True, choices=sorted(INPUTS))
+    parser.add_argument("--lock", required=True, type=pathlib.Path)
+    args = parser.parse_args()
+    try:
+        lock = json.loads(args.lock.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        fail(f"cannot read {args.lock}: {error}")
+    print(fingerprint(lock, args.mode))
+
+
+if __name__ == "__main__":
+    main()

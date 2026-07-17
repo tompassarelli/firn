@@ -53,15 +53,13 @@
      (string->path (regexp-replace #rx"\\.bnix$" s ".nix"))]
     [else (error 'bnix->nix-path "not a .bnix file: ~a" s)]))
 
-;; Strip the authoring-only `tags`, `tags-opt-in`, and `tag-overrides` attrs
-;; that beagle emits from the :tags / :tags-opt-in / :tag-overrides clauses.
-;; These are resolver-only metadata that firn-build removes before the .nix
-;; lands; re-emitting without this would report spurious diffs on every tagged
-;; module. Mirrors the post-process in scripts/firn-build.
+;; Strip authoring-only resolver metadata that firn-build removes before the
+;; .nix lands. Re-emitting without this would report spurious drift for tagged
+;; modules and modules that contribute flake inputs.
 (define (count-ch s ch)
   (for/sum ([c (in-string s)]) (if (char=? c ch) 1 0)))
 
-(define (strip-tag-attrs text)
+(define (strip-authoring-attrs text)
   (define t1 (regexp-replace* #px"(?m:^[ \t]*tags[ \t]*=[ \t]*\\[[^]]*\\];[ \t]*\n)" text ""))
   (define t2 (regexp-replace* #px"(?m:^[ \t]*tags-opt-in[ \t]*=[ \t]*\\[[^]]*\\];[ \t]*\n)" t1 ""))
   (define lines (string-split t2 "\n" #:trim? #f))
@@ -80,9 +78,21 @@
       ;; Single-line `tag-overrides = { … };`
       [(regexp-match? #px"^[ \t]*tag-overrides[ \t]*=[ \t]*\\{.*\\};[ \t]*$" (car ls))
        (loop (cdr ls) acc)]
+      ;; Multi-line `flake-inputs = {` … `};` — consume balanced braces.
+      [(regexp-match? #px"^[ \t]*flake-inputs[ \t]*=[ \t]*\\{[ \t]*$" (car ls))
+       (let skip ([rest (cdr ls)] [depth 1])
+         (cond
+           [(or (null? rest) (<= depth 0)) (loop rest acc)]
+           [else
+            (define line (car rest))
+            (skip (cdr rest)
+                  (+ depth (count-ch line #\{) (- (count-ch line #\})))) ]))]
+      ;; Single-line `flake-inputs = { … };`
+      [(regexp-match? #px"^[ \t]*flake-inputs[ \t]*=[ \t]*\\{.*\\};[ \t]*$" (car ls))
+       (loop (cdr ls) acc)]
       [else (loop (cdr ls) (cons (car ls) acc))])))
 
-;; Re-emit a .bnix to a Nix string (tag attrs stripped). #f on build failure.
+;; Re-emit a .bnix to a Nix string (authoring attrs stripped). #f on failure.
 (define (re-emit-nix bnix-path)
   (define tmp (make-temporary-file "firn-emit-~a.nix"))
   (define err (open-output-string))
@@ -94,7 +104,7 @@
     [ok?
      (define out (file->string tmp))
      (delete-file tmp)
-     (strip-tag-attrs out)]
+     (strip-authoring-attrs out)]
     [else
      (when (file-exists? tmp) (delete-file tmp))
      (eprintf "firn diff: failed to emit ~a\n" (path->string bnix-path))
@@ -166,3 +176,28 @@
    (walk-edge "repo" "diff" "<target>|all" 'all
               handle-repo-diff
               "re-emit Nix from .bnix and diff vs committed .nix")))
+
+(module+ test
+  (require rackunit)
+
+  (define emitted
+    (string-append
+     "{\n"
+     "  tags = [ development ];\n"
+     "  tags-opt-in = [ optional ];\n"
+     "  tag-overrides = {\n"
+     "    ash = [ darwin ];\n"
+     "  };\n"
+     "  flake-inputs = {\n"
+     "    fram = {\n"
+     "      url = \"git+file:///home/tom/code/fram?ref=main\";\n"
+     "    };\n"
+     "  };\n"
+     "  config = { enable = true; };\n"
+     "}\n"))
+  (check-equal?
+   (strip-authoring-attrs emitted)
+   (string-append
+    "{\n"
+    "  config = { enable = true; };\n"
+    "}\n")))

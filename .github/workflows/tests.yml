@@ -52,3 +52,11 @@ jobs:
             echo "::error::Generated .nix files don't match .bnix sources. Run firn-build locally and commit."
             exit 1
           fi
+
+      - name: Test Firn CLI contracts
+        working-directory: firn
+        run: |
+          source "$GITHUB_WORKSPACE/beagle/bin/_beagle-racket"
+          "$RACO" test scripts/firn-cmds/doctor.rkt
+          "$RACO" test scripts/firn-cmds/diff.rkt
+          ./scripts/firn-schema-input-fingerprint.test.sh
