@@ -341,11 +341,11 @@
     "gaffer": {
       "flake": false,
       "locked": {
-        "lastModified": 1784206922,
-        "narHash": "sha256-bfxWUsUAvYRuE8zeVcBiuFEbvva08cid8Rhb1p5H+TM=",
+        "lastModified": 1784253813,
+        "narHash": "sha256-M06wMGEF/sQN5/LoqTLyzC+6GFPcNzf7nB92NhiAHr0=",
         "owner": "tompassarelli",
         "repo": "gaffer",
-        "rev": "e142af0c272e7ad5e5686ee56491a0dc5712f3fd",
+        "rev": "30fa0076dce9bf3f7a67be8ee3943181e2bf7b74",
         "type": "github"
       },
       "original": {
@@ -706,11 +706,11 @@
         "nixpkgs": "nixpkgs_5"
       },
       "locked": {
-        "lastModified": 1784224209,
-        "narHash": "sha256-L4e0DAxRS7ycUzGh3m6EQV2EmpiuMVBlth3bN6bm0JE=",
+        "lastModified": 1784262843,
+        "narHash": "sha256-w+0LunjStHVv7n51Zi0g/9aGptA2JFGxaTeT8j3D+8A=",
         "ref": "main",
-        "rev": "5eeeb718b8dcd72b87b7c941f4b0c005b94e5da6",
-        "revCount": 292,
+        "rev": "d315c3cca450b857a784687c8fefd0461e03d35c",
+        "revCount": 294,
         "type": "git",
         "url": "file:///home/tom/code/north"
       },
