@@ -71,13 +71,19 @@ lock_clean() {
 # All current: no plan lines, nothing mutated.
 output="$($SCRIPT --plan)"
 grep -q 'current at' <<<"$output"
-! grep -q '^plan ' <<<"$output"
+if grep -q '^plan ' <<<"$output"; then
+  printf 'current inputs unexpectedly produced a plan\n' >&2
+  exit 1
+fi
 lock_clean
 
 # Tool/editor state is not part of a Git input snapshot and must not matter.
 printf 'local state\n' >"$TMP/beagle/untracked"
 output="$($SCRIPT --plan)"
-! grep -q '^plan ' <<<"$output"
+if grep -q '^plan ' <<<"$output"; then
+  printf 'untracked input state unexpectedly produced a plan\n' >&2
+  exit 1
+fi
 
 # A new commit on main plans a promotable move — and planning NEVER mutates.
 printf 'v2\n' >>"$TMP/north/source"
@@ -92,10 +98,34 @@ lock_clean
 
 # --commit promotes the verified target and makes the mechanical commit.
 before_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
-output="$($SCRIPT --commit north)"
+output="$($SCRIPT --commit "north=$new_north")"
 grep -q 'north promoted' <<<"$output"
 [ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq $((before_count + 1)) ]
 [ "$(lock_rev north)" = "$new_north" ]
+lock_clean
+
+# The internal commit contract is explicit and rejects malformed target specs
+# before any lock mutation.
+if output="$("$SCRIPT" --commit north 2>&1)"; then
+  printf 'expected missing commit revision to fail\n' >&2
+  exit 1
+fi
+grep -q 'must be <input>=<verified-rev>' <<<"$output"
+if output="$("$SCRIPT" --commit "other=$new_north" 2>&1)"; then
+  printf 'expected unknown local input to fail\n' >&2
+  exit 1
+fi
+grep -q "unknown local input 'other'" <<<"$output"
+if output="$("$SCRIPT" --commit 'north=not-a-revision' 2>&1)"; then
+  printf 'expected malformed revision to fail\n' >&2
+  exit 1
+fi
+grep -q 'invalid verified revision' <<<"$output"
+if output="$("$SCRIPT" --commit "north=$new_north" "north=$new_north" 2>&1)"; then
+  printf 'expected duplicate local input to fail\n' >&2
+  exit 1
+fi
+grep -q 'duplicate --commit target' <<<"$output"
 lock_clean
 
 # A lock refresh that lands on the wrong rev defers (exit 0) and restores.
@@ -104,7 +134,8 @@ git -C "$TMP/beagle" add source
 git -C "$TMP/beagle" commit -qm update-verify-failure
 original_lock="$(sha256sum "$TMP/firn/flake.lock")"
 count_before="$(git -C "$TMP/firn" rev-list --count HEAD)"
-output="$(FAKE_NIX_WRONG=1 "$SCRIPT" --commit beagle)"
+new_beagle="$(git -C "$TMP/beagle" rev-parse HEAD)"
+output="$(FAKE_NIX_WRONG=1 "$SCRIPT" --commit "beagle=$new_beagle")"
 grep -q 'deferring' <<<"$output"
 [ "$(sha256sum "$TMP/firn/flake.lock")" = "$original_lock" ]
 [ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq "$count_before" ]
@@ -114,52 +145,87 @@ lock_clean
 mkdir -p "$TMP/firn/.git/hooks"
 printf '#!/usr/bin/env bash\nexit 1\n' >"$TMP/firn/.git/hooks/pre-commit"
 chmod +x "$TMP/firn/.git/hooks/pre-commit"
-output="$($SCRIPT --commit beagle)"
+output="$($SCRIPT --commit "beagle=$new_beagle")"
 grep -q 'deferring' <<<"$output"
 [ "$(sha256sum "$TMP/firn/flake.lock")" = "$original_lock" ]
 lock_clean
 rm "$TMP/firn/.git/hooks/pre-commit"
 
-# Another session's WIP never blocks: the dirty input holds its verified pin
-# while a clean input still plans its move (beagle is still pending here).
+# Another session's WIP never blocks and never leaks. At the current pin it is
+# merely reported as excluded, while a clean input still plans its move.
 printf 'dirty\n' >>"$TMP/fram/source"
 output="$($SCRIPT --plan)"
-grep -q 'fram.*dirty tree' <<<"$output"
-! grep -q '^plan fram ' <<<"$output"
+grep -q 'fram.*tracked WIP excluded' <<<"$output"
+if grep -q '^plan fram ' <<<"$output"; then
+  printf 'dirty worktree at the locked commit unexpectedly produced a plan\n' >&2
+  exit 1
+fi
 grep -q '^plan beagle ' <<<"$output"
 
-# Dirty repo whose HEAD moved ahead of the pin: hold the old verified rev.
+# Dirty main whose HEAD moved ahead of the pin promotes committed HEAD only.
 git -C "$TMP/fram" add source
 git -C "$TMP/fram" commit -qm wip-base
 printf 'more wip\n' >>"$TMP/fram/source"
+new_fram="$(git -C "$TMP/fram" rev-parse HEAD)"
 output="$($SCRIPT --plan)"
-grep -q 'fram.*holding verified' <<<"$output"
-! grep -q '^plan fram ' <<<"$output"
+grep -q 'fram.*tracked WIP excluded' <<<"$output"
+grep -q "^plan fram .* $new_fram $TMP/fram\$" <<<"$output"
+output="$($SCRIPT --commit "fram=$new_fram")"
+grep -q 'fram promoted' <<<"$output"
+[ "$(lock_rev fram)" = "$new_fram" ]
+grep -q '^ M source$' < <(git -C "$TMP/fram" status --short)
+if git -C "$TMP/fram" show HEAD:source | grep -q 'more wip'; then
+  printf 'dirty worktree content leaked into committed HEAD\n' >&2
+  exit 1
+fi
 
 # Non-main checkout holds too — refresh only promotes commits from main.
 git -C "$TMP/fram" checkout -q -- source
 git -C "$TMP/fram" checkout -qb feature
+printf 'feature\n' >>"$TMP/fram/source"
+git -C "$TMP/fram" add source
+git -C "$TMP/fram" commit -qm feature-only
 output="$($SCRIPT --plan)"
 grep -q 'fram.*not main' <<<"$output"
-! grep -q '^plan fram ' <<<"$output"
+if grep -q '^plan fram ' <<<"$output"; then
+  printf 'feature-branch input unexpectedly produced a plan\n' >&2
+  exit 1
+fi
 
-# Back on clean main, the held commit plans and promotes normally.
+# Back on clean main, only the pending clean input promotes.
 git -C "$TMP/fram" checkout -q main
 output="$($SCRIPT --plan)"
-grep -q '^plan fram ' <<<"$output"
-output="$($SCRIPT --commit fram beagle)"
-grep -q 'fram promoted' <<<"$output"
+if grep -q '^plan fram ' <<<"$output"; then
+  printf 'already-promoted main input unexpectedly produced a plan\n' >&2
+  exit 1
+fi
+output="$($SCRIPT --commit "beagle=$new_beagle")"
 grep -q 'beagle promoted' <<<"$output"
 [ "$(lock_rev fram)" = "$(git -C "$TMP/fram" rev-parse HEAD)" ]
 [ "$(lock_rev beagle)" = "$(git -C "$TMP/beagle" rev-parse HEAD)" ]
 lock_clean
 
-# A foreign edit to the firn lock itself defers promotion, never blocks.
+# A commit landing after plan is not the revision that was built, so commit
+# defers before nix can rewrite the lock.
 printf 'v4\n' >>"$TMP/north/source"
 git -C "$TMP/north" add source
-git -C "$TMP/north" commit -qm another
+git -C "$TMP/north" commit -qm planned
+planned_north="$(git -C "$TMP/north" rev-parse HEAD)"
+output="$($SCRIPT --plan)"
+grep -q "^plan north .* $planned_north $TMP/north\$" <<<"$output"
+printf 'v5\n' >>"$TMP/north/source"
+git -C "$TMP/north" add source
+git -C "$TMP/north" commit -qm raced
+before_race_lock="$(lock_rev north)"
+output="$($SCRIPT --commit "north=$planned_north")"
+grep -q 'not built target.*deferring' <<<"$output"
+[ "$(lock_rev north)" = "$before_race_lock" ]
+lock_clean
+
+# A foreign edit to the firn lock itself defers promotion, never blocks.
+new_north="$(git -C "$TMP/north" rev-parse HEAD)"
 printf ' \n' >>"$TMP/firn/flake.lock"
-output="$($SCRIPT --commit north)"
+output="$($SCRIPT --commit "north=$new_north")"
 grep -q 'deferring' <<<"$output"
 git -C "$TMP/firn" checkout -q -- flake.lock
 

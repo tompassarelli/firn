@@ -28,15 +28,17 @@ This catches things the validator can't: input mismatches, evaluation errors in 
 `firn rebuild` (the sanctioned wrapper) IS agent-runnable — policy change 2026-07-08, snapshot semantics 2026-07-16. It builds a **commit snapshot** (`git+file://<repo>?rev=HEAD`), never the working tree: uncommitted state — yours or any concurrent session's — can neither block a rebuild nor leak into a generation. The one gate that remains YOURS: **commit your own changes first**, or they simply won't be in the build (the pipeline prints exactly which in-flight files it excluded). Every generation maps to a commit by construction. `firn rollback` / the boot menu undo a switch.
 
 The pipeline: plan local-input pin moves for `~/code/beagle`, `~/code/fram`,
-`~/code/north` (a checkout with dirty tracked files or off `main` **holds its
-already-verified pin** with a printed notice — never a wall); regenerate `.nix`
+`~/code/north` (committed `main` HEAD remains eligible with dirty tracked files;
+the exact-rev snapshot excludes that WIP and prints the exclusion, while an
+off-`main` checkout **holds its already-verified pin**); regenerate `.nix`
 (stale committed outputs are self-healed with a mechanical commit; outputs
 downstream of in-flight WIP keep their committed versions); validate the
 snapshot in a detached temp worktree (a peer's mid-edit `.bnix` can't fail your
 rebuild); build the host closure from the snapshot with `--override-input` for
 planned pin moves; switch that **exact store path** (no second evaluation);
-then commit the verified `flake.lock` pointer — any non-promotable state
-(foreign lock edit, raced input, hook failure) defers with a notice, exit 0.
+then commit the verified `flake.lock` pointer — commit receives the exact built
+revision, and any non-promotable state (foreign lock edit, raced input, hook
+failure) defers with a notice, exit 0.
 `--skip-checks` still builds and switches the HEAD snapshot with the committed
 lock; it only skips validation and pin planning. Untracked files are a printed
 warning ("not in this build"), no longer a hard stop.

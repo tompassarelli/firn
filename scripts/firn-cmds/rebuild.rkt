@@ -327,8 +327,11 @@
   ;; the script are notices, never failures.
   (unless (or skip-checks? (null? overrides))
     (phase "promote verified local inputs"
-      (λ () (apply sh (path->string (in-repo "scripts" "firn-sync-local-inputs"))
-                   "--commit" (map car overrides)))))
+      (λ () (apply sh
+                   (path->string (in-repo "scripts" "firn-sync-local-inputs"))
+                   "--commit"
+                   (for/list ([o (in-list overrides)])
+                     (format "~a=~a" (car o) (cadr o)))))))
 
   ;; Step 3: switch. On Linux, activate the EXACT store path the smoke build
   ;; produced (profile set + switch-to-configuration) — no second evaluation,

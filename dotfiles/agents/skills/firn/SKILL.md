@@ -35,8 +35,10 @@ itself → beagle-authoring.
    tree — commit YOUR changes first or they won't be in the build.** No
    session's uncommitted state (yours or a peer's) can block the rebuild or
    leak into the generation; the pipeline prints exactly which in-flight files
-   it excluded, validates the snapshot itself, and holds any local input
-   (beagle/fram/north) with WIP or off `main` at its already-verified pin.
+   it excluded and validates the snapshot itself. For local inputs
+   (beagle/fram/north), committed `main` HEAD remains promotable with dirty WIP
+   because only its exact Git object enters the build; off-`main` still holds
+   the already-verified pin.
    It switches the system — sudo, new generation — and `firn rollback` / the
    boot menu undo it. Raw `nixos-rebuild switch` / `nh switch` and
    `firn update` (wholesale input bumps) stay the USER's — the hook still
