@@ -294,38 +294,61 @@
         hostConfig
         ({ config, lib, pkgs, ... }: {
           imports = ((builtins.map (m: "${firnModules}/${m}") [
-            "kitty"
-            "fish"
-            "zoxide"
+            "agent-core"
             "atuin"
-            "starship"
-            "yazi"
-            "tree"
+            "bash"
+            "bc"
+            "beagle"
+            "btop"
+            "claude"
+            "curl"
+            "delta"
+            "direnv"
             "dust"
             "eza"
-            "procs"
-            "tealdeer"
             "fastfetch"
-            "btop"
-            "unrar"
-            "curl"
-            "wget"
-            "unzip"
-            "imagemagick"
-            "ghostscript"
-            "git"
-            "gh"
-            "delta"
-            "vim"
-            "claude"
-            "direnv"
-            "ripgrep"
             "fd"
+            "forgejo-cli"
+            "fram"
+            "gh"
+            "ghostscript"
+            "ghostty"
+            "git"
+            "gitleaks"
+            "glow"
+            "imagemagick"
+            "jq"
+            "kitty"
+            "my-agents"
+            "north"
+            "opencode"
+            "procs"
+            "promptfoo"
+            "ripgrep"
+            "starship"
+            "tealdeer"
+            "tree"
+            "unrar"
+            "unzip"
+            "vim"
+            "wget"
+            "yazi"
+            "zoxide"
           ]));
           options.myConfig.modules.users.username = lib.mkOption {
             type = lib.types.str;
             default = "you";
             description = "Primary system username";
+          };
+          options.myConfig.modules.users.email = lib.mkOption {
+            type = lib.types.str;
+            default = "";
+            description = "Primary git/commit email";
+          };
+          options.myConfig.modules.users.fullName = lib.mkOption {
+            type = lib.types.str;
+            default = "";
+            description = "Git author / display name";
           };
           config = {
             networking.hostName = hostname;

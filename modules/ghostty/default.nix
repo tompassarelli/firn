@@ -2,6 +2,7 @@
 
 let
   username = config.myConfig.modules.users.username;
+  ghosttyPackage = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.unstable.ghostty;
 in
 {
   options.myConfig.modules.ghostty.enable = lib.mkEnableOption "Ghostty terminal";
@@ -9,7 +10,7 @@ in
     home-manager.users.${username} = {
       programs.ghostty = {
         enable = true;
-        package = pkgs.unstable.ghostty;
+        package = ghosttyPackage;
         settings = {
           window-padding-x = 6;
           window-padding-y = 4;

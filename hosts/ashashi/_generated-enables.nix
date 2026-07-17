@@ -6,10 +6,8 @@
   myConfig.modules.bash.enable = lib.mkDefault true;
   myConfig.modules.bc.enable = lib.mkDefault true;
   myConfig.modules.beagle.enable = lib.mkDefault true;
-  myConfig.modules.bench-shield.enable = lib.mkDefault true;
   myConfig.modules.btop.enable = lib.mkDefault true;
   myConfig.modules.claude.enable = lib.mkDefault true;
-  myConfig.modules.containers.enable = lib.mkDefault true;
   myConfig.modules.curl.enable = lib.mkDefault true;
   myConfig.modules.delta.enable = lib.mkDefault true;
   myConfig.modules.direnv.enable = lib.mkDefault true;
@@ -32,7 +30,6 @@
   myConfig.modules.opencode.enable = lib.mkDefault true;
   myConfig.modules.procs.enable = lib.mkDefault true;
   myConfig.modules.promptfoo.enable = lib.mkDefault true;
-  myConfig.modules.rebuild-nopasswd.enable = lib.mkDefault true;
   myConfig.modules.ripgrep.enable = lib.mkDefault true;
   myConfig.modules.starship.enable = lib.mkDefault true;
   myConfig.modules.tealdeer.enable = lib.mkDefault true;

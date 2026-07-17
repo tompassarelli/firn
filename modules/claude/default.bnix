@@ -3,13 +3,19 @@
 (ns default)
 
 (nix/module [config lib pkgs ...]
-  (let [username config.myConfig.modules.users.username]
+  (let [username config.myConfig.modules.users.username
+        ;; Preserve the explicitly pinned native Linux binary while using the
+        ;; pinned nixpkgs-master package that actually supports aarch64-darwin.
+        claudePackage
+         (if pkgs.stdenv.hostPlatform.isDarwin
+           pkgs.master.claude-code
+           pkgs.claude-code-latest)]
     {:tags [development]
      :options.myConfig.modules.claude.enable
       (lib.mkEnableOption "Claude Code CLI configuration")
      :config
       (lib.mkIf config.myConfig.modules.claude.enable
-        {:environment.systemPackages [pkgs.claude-code-latest]
+        {:environment.systemPackages [claudePackage]
          :home-manager.users
           {username
             (nix/module [config ...]
@@ -71,7 +77,7 @@
                ;; still points at the read-only nix store).
                :home.activation.installCaveman
                 (config.lib.dag.entryAfter ["writeBoundary" "linkClaudeSettings"]
-                  (s "CLAUDE=" pkgs.claude-code-latest "/bin/claude\n"
+                  (s "CLAUDE=" claudePackage "/bin/claude\n"
                      ;; Bump WANT together with the fork's .claude-plugin/
                      ;; marketplace.json pin: it's the first 12 chars of the
                      ;; pinned commit sha = the on-disk cache dir name.
@@ -106,7 +112,7 @@
                ;; paths into the engine itself). north's wrapper resolves XDG on its own.
                :home.activation.registerMcpServers
                 (config.lib.dag.entryAfter ["writeBoundary"]
-                  (s "CLAUDE=" pkgs.claude-code-latest "/bin/claude\n"
+                  (s "CLAUDE=" claudePackage "/bin/claude\n"
                      "LIFE=$HOME/.local/state/north\n"
                      "WANT_FRAM_LOG=$LIFE/coordination.log\n"
                      "WANT_FRAM_TELEMETRY_LOG=$LIFE/telemetry.log\n"

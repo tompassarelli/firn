@@ -6,4 +6,8 @@
   [terminal
    cli-tools
    development]
+ :disabled
+  [bench-shield
+   containers
+   rebuild-nopasswd]
 }

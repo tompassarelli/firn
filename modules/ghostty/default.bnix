@@ -3,7 +3,11 @@
 (ns default)
 
 (nix/module [config lib pkgs ...]
-  (let [username config.myConfig.modules.users.username]
+  (let [username config.myConfig.modules.users.username
+        ghosttyPackage
+         (if pkgs.stdenv.hostPlatform.isDarwin
+             nil
+             pkgs.unstable.ghostty)]
     {:tags [terminal]
      :options.myConfig.modules.ghostty.enable
       (lib.mkEnableOption "Ghostty terminal")
@@ -13,7 +17,7 @@
           {username
             {:programs.ghostty
               {:enable   true
-               :package  pkgs.unstable.ghostty
+               :package  ghosttyPackage
                :settings
                 {:window-padding-x 6
                  :window-padding-y 4
