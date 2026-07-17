@@ -39,8 +39,9 @@ binary — that is the whole game.
 > `~/.claude`; edit + commit = reproducible. Two — **MCP servers** and
 > **plugins** — are Claude-Code-owned **runtime** stores nix can't symlink, so
 > `~/code/nixos-config/modules/claude` reproduces them **imperatively** via an activation script.
-> That asymmetry is the whole reason the caveman plugin needed the sha-aware
-> install activation (a plugin install isn't a file you can symlink).
+> That asymmetry is why caveman needs its sha-aware install activation and why
+> Gaffer's local-directory marketplace needs an explicit cache-sync activation
+> (a plugin install isn't a file you can symlink).
 
 | lever | lives in | how it's reproduced | pull it for |
 |---|---|---|---|
@@ -51,7 +52,7 @@ binary — that is the whole game.
 | **slash commands** | `~/code/nixos-config/dotfiles/claude/commands/` | declarative (symlink) | user-typed shortcuts |
 | **subagents** | `~/code/nixos-config/dotfiles/claude/` (+ plugins) | declarative; or plugin-supplied | parallel / isolated work in a separate context |
 | **MCP servers** | `~/.claude.json` (runtime) | **imperative** — `registerMcpServers` activation re-adds them | external tools + data sources |
-| **plugins** | `enabledPlugins` (settings.json) + install in `~/.claude/plugins/cache` | **imperative** — enabled declaratively, installed by the `installCaveman` activation | packaged bundles of all the above |
+| **plugins** | `enabledPlugins` (settings.json) + install in `~/.claude/plugins/cache` | **imperative** — enabled declaratively; caveman is installed by `installCaveman`, Gaffer is reconciled by `syncGafferPlugin` | packaged bundles of all the above |
 
 Rule of thumb: **in `~/code/nixos-config/dotfiles/` → nix owns it by symlink. In `~/.claude.json` /
 `~/.claude/plugins/` → Claude Code owns a runtime store; nix only pokes it via an

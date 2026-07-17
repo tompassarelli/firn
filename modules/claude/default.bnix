@@ -2,14 +2,18 @@
 
 (ns default)
 
-(nix/module [config lib pkgs ...]
+(nix/module [config lib pkgs flakeRoot ...]
   (let [username config.myConfig.modules.users.username
         ;; Preserve the explicitly pinned native Linux binary while using the
         ;; pinned nixpkgs-master package that actually supports aarch64-darwin.
         claudePackage
          (if pkgs.stdenv.hostPlatform.isDarwin
            pkgs.master.claude-code
-           pkgs.claude-code-latest)]
+           pkgs.claude-code-latest)
+        gafferPluginSync
+         (pkgs.writeShellScript "claude-gaffer-plugin-sync"
+           (builtins.readFile
+             (s flakeRoot "/scripts/claude-gaffer-plugin-sync.sh")))]
     {:tags [development]
      :options.myConfig.modules.claude.enable
       (lib.mkEnableOption "Claude Code CLI configuration")
@@ -105,6 +109,26 @@
                      "  run find $HOME/.claude/plugins/cache/caveman/caveman -mindepth 1 -maxdepth 1 ! -name \"$WANT\" -exec rm -rf {} + || true\n"
                      "fi\n"
                      "run rm -f \"$GITC\"\n"))
+               ;; Claude copies marketplace plugins into a versioned cache, and
+               ;; local/third-party marketplaces do not auto-update by default.
+               ;; Reconcile Gaffer through Claude's supported noninteractive
+               ;; update/install surface on every rebuild; never edit cache JSON.
+               :home.activation.syncGafferPlugin
+                (config.lib.dag.entryAfter
+                  ["writeBoundary" "linkClaudeSettings" "installCaveman"]
+                  (s "if ! run env CLAUDE_BIN="
+                     claudePackage
+                     "/bin/claude GIT_BIN="
+                     pkgs.git
+                     "/bin/git JQ_BIN="
+                     pkgs.jq
+                     "/bin/jq TIMEOUT_BIN="
+                     pkgs.coreutils
+                     "/bin/timeout GAFFER_HOME=$HOME/code/gaffer "
+                     gafferPluginSync
+                     "; then\n"
+                     "  echo \"warning: Gaffer Claude plugin sync failed; agent-config-check --local will report the drift\" >&2\n"
+                     "fi\n"))
                ;; MCP server registration — reproducible, so a fresh rebuild wires the
                ;; servers instead of relying on loose `claude mcp add` state in
                ;; ~/.claude.json. fram is the GENERIC engine MCP: its corpus is selected

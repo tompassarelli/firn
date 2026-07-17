@@ -62,6 +62,28 @@ grep -Fq '"Allocation  ' \
   "$REPO/scripts/agent-config-check.sh"
 grep -Fq 'North providers JSON v2' \
   "$REPO/scripts/agent-config-check.sh"
+grep -Fq 'timeout 30 claude plugin list --json' \
+  "$REPO/scripts/agent-config-check.sh"
+grep -Fq 'held at committed' \
+  "$REPO/scripts/agent-config-check.sh"
+if grep -Fq 'claude plugin list --json 2>&1' \
+  "$REPO/scripts/agent-config-check.sh"; then
+  printf 'plugin stderr must not be merged into the JSON document\n' >&2
+  exit 1
+fi
+
+# Off-main HEAD is excluded from plugin reconciliation. A cache matching main is
+# held; a cache matching only the feature HEAD is deferred, never declared
+# current and never promoted to hard drift while the checkout is ineligible.
+source "$REPO/scripts/agent-config-check.sh"
+main_full='1111111111111111111111111111111111111111'
+feature_full='2222222222222222222222222222222222222222'
+classify_gaffer_cache "${main_full:0:12}" "$feature_full" "$main_full" feature ''
+[ "$GAFFER_CACHE_STATE" = held-off-main ]
+classify_gaffer_cache "${feature_full:0:12}" "$feature_full" "$main_full" feature ''
+[ "$GAFFER_CACHE_STATE" = deferred-off-main ]
+classify_gaffer_cache "${feature_full:0:12}" "$feature_full" '' feature 'dirty'
+[ "$GAFFER_CACHE_STATE" = deferred-no-main-ref ]
 
 # Repository/CI mode validates canonical declarations against this checkout,
 # not whether Tom's absolute live path happens to exist. A failing readlink shim

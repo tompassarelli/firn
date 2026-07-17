@@ -6,8 +6,8 @@ The module that wires Claude Code onto the system:
 out-of-store symlinks into `~/code/nixos-config/dotfiles/claude/`
 (`commands` / `skills` / `hooks` / `agents` / `CLAUDE.md`, plus the
 `~/code/CLAUDE.md` routing file and caveman's `~/.config/caveman/config.json`),
-the **caveman** plugin install, and MCP server registration (`fram`, `north`,
-`linear-mcp-msa-new`). All activation entries are best-effort
+the **caveman** plugin install, Gaffer's cached-plugin reconciliation, and MCP
+server registration (`fram`, `north`, `linear-mcp-msa-new`). All activation entries are best-effort
 (`timeout … || true`) so a network blip never fails a rebuild.
 
 Why everything routes through nixos-config (reproducibility rule, CI
@@ -34,6 +34,49 @@ plugins cannot own `statusLine`. It points at
 `~/code/nixos-config/dotfiles/claude/statusline.sh`, a self-contained segment
 bus in this repo; the caveman segment reads the plugin's flag file directly
 (no plugin-cache dependency).
+
+## Gaffer plugin — local source, rebuild-synchronized cache
+
+Claude Code does not run marketplace plugins in place. It copies them to
+`~/.claude/plugins/cache`, and local/third-party marketplaces do not auto-update
+by default. Merely declaring Gaffer's directory marketplace in
+`~/code/nixos-config/dotfiles/claude/settings.json` therefore does not make a
+new Claude session consume a newer Gaffer commit.
+
+`syncGafferPlugin` runs after `linkClaudeSettings` on every `firn rebuild`. It
+executes `~/code/nixos-config/scripts/claude-gaffer-plugin-sync.sh` from the
+evaluated snapshot. The script uses Claude's supported noninteractive
+`plugin update` command; on a fresh machine it falls back to marketplace
+registration plus `plugin install`. It never edits
+`~/.claude/plugins/installed_plugins.json`, deletes cache directories, or
+uninstalls the plugin. Fresh installation and cache reconciliation assume the
+Gaffer checkout exists at `~/code/gaffer`; a fresh host must clone it before the
+rebuild can populate Claude's cache. Any path that would copy bytes fails closed
+unless that checkout is a clean `main` branch and both plugin manifests omit an
+explicit version, so Claude's cache key is the committed Git SHA rather than a
+mutable label. When the cache already matches the checked-out commit, dirty or
+off-main source is not copied and the activation exits without warning because
+no copy is needed; this no-op does not make an off-main commit eligible. After
+an update/install, the script reads
+`claude plugin list --json` again and requires its version to equal that SHA
+(12-character or full form). List and marketplace probes are capped at 10
+seconds; update/install calls at 30 seconds.
+
+The local config check compares an off-main checkout's installed cache against
+the local `main` ref (falling back to `origin/main`), never against the feature
+HEAD. A mismatch is therefore reported as deferred advisory state until the
+checkout returns to clean `main`; it is not false drift and does not make the
+feature commit eligible for installation.
+
+The operating loop is therefore one existing command: commit Gaffer, then
+`firn rebuild`. The rebuild reconciles Claude's cached copy; the next Claude
+session loads it. An already-running session retains the plugin snapshot it
+started with until Claude reloads plugins or the session restarts.
+
+Codex and North have no corresponding cache pointer: the shared
+`~/code/nixos-config/dotfiles/agents/AGENTS.md` routes Codex to
+`~/code/gaffer`, while North reads `~/code/gaffer/staffing/catalog.json`,
+provider catalogs, and Gaffer prompt blocks directly.
 
 ## caveman plugin — fork + sha pin
 

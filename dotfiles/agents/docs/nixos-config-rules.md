@@ -8,7 +8,7 @@ services, dotfiles, and any host / home-manager setting. The whole point is
 **reproducibility** — a fresh rebuild on any machine must reproduce the change.
 
 Mechanics of the nix module that does the wiring (writable settings.json
-symlink, caveman plugin install, MCP registration):
+symlink, Claude plugin reconciliation, MCP registration):
 `~/code/nixos-config/dotfiles/agents/docs/nixos-module.md`.
 
 ## Symlinks

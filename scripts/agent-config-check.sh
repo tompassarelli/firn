@@ -4,11 +4,49 @@
 # individual assertions; failures always print their full diagnostic.
 set -uo pipefail
 
+gaffer_version_matches() {
+  local version="$1" commit="$2"
+  [ -n "$commit" ] &&
+    { [ "$version" = "$commit" ] || [ "$version" = "${commit:0:12}" ]; }
+}
+
+# Classify cache freshness without treating an excluded feature checkout as an
+# eligible plugin source. Tests source this file and exercise this pure seam.
+classify_gaffer_cache() {
+  local version="$1" checkout_head="$2" main_head="$3" branch="$4" dirty="$5"
+
+  if [ "$branch" = main ]; then
+    if gaffer_version_matches "$version" "$checkout_head"; then
+      if [ -n "$dirty" ]; then
+        GAFFER_CACHE_STATE='held-dirty-main'
+      else
+        GAFFER_CACHE_STATE='current-main'
+      fi
+    else
+      GAFFER_CACHE_STATE='stale-main'
+    fi
+  else
+    if [ -z "$main_head" ]; then
+      GAFFER_CACHE_STATE='deferred-no-main-ref'
+    elif gaffer_version_matches "$version" "$main_head"; then
+      GAFFER_CACHE_STATE='held-off-main'
+    else
+      GAFFER_CACHE_STATE='deferred-off-main'
+    fi
+  fi
+}
+
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  return 0
+fi
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHARED="$REPO/dotfiles/agents"
 CLAUDE="$REPO/dotfiles/claude"
 CODEX="$REPO/dotfiles/codex"
 CODEX_REQUIREMENTS="$REPO/modules/codex/requirements.toml"
+CLAUDE_MODULE="$REPO/modules/claude/default.bnix"
+GAFFER_SYNC="$REPO/scripts/claude-gaffer-plugin-sync.sh"
 LOCAL=0
 VERBOSE=0
 CANONICAL_FRAM_LOG="$HOME/.local/state/north/coordination.log"
@@ -214,6 +252,7 @@ claude_north='connection deferred to --local'
 claude_fram='connection deferred to --local'
 claude_fram_topology='topology deferred'
 claude_linear='connection deferred to --local'
+claude_gaffer='cache freshness deferred to --local'
 need_json "$CLAUDE/settings.json" 'Claude settings'
 if command -v shellcheck >/dev/null 2>&1 && shellcheck -S warning "$CLAUDE/statusline.sh"; then
   ok_detail "Claude statusline shellcheck"
@@ -226,6 +265,27 @@ if bash "$CLAUDE/statusline.test.sh" >/dev/null; then
 else bad "Claude statusline observer test failed"; fi
 if jq -e '.autoMemoryEnabled == false' "$CLAUDE/settings.json" >/dev/null; then ok_detail "auto-memory disabled"
 else bad "Claude autoMemoryEnabled must be false"; fi
+if jq -e '
+  .enabledPlugins["gaffer@gaffer"] == true
+  and .extraKnownMarketplaces.gaffer.source == {
+    "source": "directory",
+    "path": "/home/tom/code/gaffer"
+  }
+' "$CLAUDE/settings.json" >/dev/null; then
+  ok_detail "Gaffer plugin uses the canonical local directory marketplace"
+else
+  bad "Claude Gaffer plugin must be enabled from /home/tom/code/gaffer"
+fi
+if command -v shellcheck >/dev/null 2>&1 && shellcheck -S warning "$GAFFER_SYNC"; then
+  ok_detail "Gaffer plugin sync shellcheck"
+else bad "Gaffer plugin sync shellcheck failed"; fi
+if grep -Fq ':home.activation.syncGafferPlugin' "$CLAUDE_MODULE" &&
+   grep -Fq '/scripts/claude-gaffer-plugin-sync.sh' "$CLAUDE_MODULE" &&
+   ! grep -Fq 'installed_plugins.json' "$GAFFER_SYNC"; then
+  ok_detail "Firn rebuild declares Claude-owned Gaffer cache reconciliation"
+else
+  bad "Claude module must reconcile Gaffer through the supported plugin CLI"
+fi
 validate_hooks "$CLAUDE/settings.json" Claude anthropic
 require_manifest_guard_count "$CLAUDE/settings.json" Claude Bash 1 'user Bash topology guard is bound once'
 claude_bindings="$HOOK_BINDINGS"
@@ -263,13 +323,78 @@ if [ "$LOCAL" -eq 1 ]; then
     claude_fram="connected; $claude_fram_topology"
     claude_linear='connected'
     ok_detail "Claude reports North + Fram + Linear MCP connected"
+    if gaffer_plugins="$(timeout 30 claude plugin list --json 2>/dev/null)" &&
+       gaffer_version="$(jq -er '
+         [.[] | select(.id == "gaffer@gaffer")]
+         | if length == 1 then .[0].version else error("expected one Gaffer plugin") end
+       ' <<<"$gaffer_plugins")" &&
+       gaffer_head_full="$(git -C "$HOME/code/gaffer" rev-parse HEAD 2>/dev/null)"; then
+      gaffer_head="${gaffer_head_full:0:12}"
+      gaffer_branch="$(git -C "$HOME/code/gaffer" symbolic-ref --quiet --short HEAD 2>/dev/null || printf detached)"
+      gaffer_dirty="$(git -C "$HOME/code/gaffer" status --porcelain --untracked-files=normal 2>/dev/null || printf status-unavailable)"
+      gaffer_main_full=''
+      gaffer_main_label='local main'
+      if gaffer_main_full="$(git -C "$HOME/code/gaffer" rev-parse --verify 'refs/heads/main^{commit}' 2>/dev/null)"; then
+        :
+      elif gaffer_main_full="$(git -C "$HOME/code/gaffer" rev-parse --verify 'refs/remotes/origin/main^{commit}' 2>/dev/null)"; then
+        gaffer_main_label='origin/main'
+      else
+        gaffer_main_full=''
+        gaffer_main_label='main ref unavailable'
+      fi
+      gaffer_main="${gaffer_main_full:0:12}"
+      classify_gaffer_cache \
+        "$gaffer_version" "$gaffer_head_full" "$gaffer_main_full" \
+        "$gaffer_branch" "$gaffer_dirty"
+
+      gaffer_source_state='clean main'
+      [ "$gaffer_branch" = main ] ||
+        gaffer_source_state="branch $gaffer_branch"
+      if [ -n "$gaffer_dirty" ]; then
+        if [ "$gaffer_source_state" = 'clean main' ]; then
+          gaffer_source_state='dirty worktree'
+        else
+          gaffer_source_state="$gaffer_source_state + dirty worktree"
+        fi
+      fi
+
+      case "$GAFFER_CACHE_STATE" in
+        current-main)
+          claude_gaffer="current at $gaffer_head"
+          ok_detail "Claude Gaffer cache matches committed source $gaffer_head"
+          ;;
+        held-dirty-main)
+          claude_gaffer="held at committed $gaffer_head · $gaffer_source_state excluded"
+          ok_detail "Claude Gaffer cache is safely held at committed $gaffer_head; $gaffer_source_state is not copied"
+          ;;
+        stale-main)
+          bad "Claude Gaffer cache is $gaffer_version, committed main source is $gaffer_head ($gaffer_source_state); make the checkout clean, then run firn rebuild"
+          claude_gaffer="stale ($gaffer_version → $gaffer_head)"
+          ;;
+        held-off-main)
+          claude_gaffer="held at $gaffer_main_label $gaffer_main · $gaffer_source_state excluded"
+          ok_detail "Claude Gaffer cache matches eligible $gaffer_main_label $gaffer_main; $gaffer_source_state is not copied"
+          ;;
+        deferred-off-main)
+          claude_gaffer="deferred ($gaffer_version → $gaffer_main_label $gaffer_main) · $gaffer_source_state excluded"
+          soft "Claude Gaffer cache is $gaffer_version and eligible $gaffer_main_label is $gaffer_main; $gaffer_source_state is excluded, so reconciliation is deferred until a clean main checkout"
+          ;;
+        deferred-no-main-ref)
+          claude_gaffer="deferred ($gaffer_version · no eligible main ref) · $gaffer_source_state excluded"
+          soft "Claude Gaffer cache is $gaffer_version, but no eligible main ref is available; $gaffer_source_state is excluded, so freshness is deferred"
+          ;;
+      esac
+    else
+      bad "Claude Gaffer plugin/source freshness could not be determined (plugin-list probe is capped at 30s)"
+      claude_gaffer='freshness unknown'
+    fi
   else bad "claude CLI is missing from PATH"; fi
 fi
 provider_group Claude "$before" \
   "Hooks       $claude_bindings bindings" \
   'Identity    adapter-pinned native spawn + repair → anthropic' \
   'Topology    user Bash hook (loaded directly by Claude)' \
-  'Bootstrap   static config parsed' \
+  "Bootstrap   static config parsed · Gaffer $claude_gaffer" \
   "MCP         North: $claude_north" \
   "            Fram: $claude_fram" \
   "            Linear: $claude_linear"
