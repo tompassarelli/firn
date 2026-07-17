@@ -8,6 +8,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHARED="$REPO/dotfiles/agents"
 CLAUDE="$REPO/dotfiles/claude"
 CODEX="$REPO/dotfiles/codex"
+CODEX_REQUIREMENTS="$REPO/modules/codex/requirements.toml"
 LOCAL=0
 VERBOSE=0
 CANONICAL_FRAM_LOG="$HOME/.local/state/north/coordination.log"
@@ -99,24 +100,113 @@ group shared "$hook_count hooks linted · $skill_count skills · canonical instr
 # hook implementation. External North lifecycle hooks are strict on a local
 # machine and informational in repository-only/CI mode.
 validate_hooks() {
-  local manifest="$1" provider="$2"
-  local count=0 ev command first resolved expected
+  local manifest="$1" provider="$2" expected_provider="$3"
+  local count=0 ev command raw_command provider_marker identity_kind first resolved expected basename declared_shared
   while IFS=$'\t' read -r ev command; do
     [ -n "$command" ] || continue
-    count=$((count + 1)); first="${command%% *}"
-    if [[ "$first" = /* ]]; then resolved="$(readlink -f "$first" 2>/dev/null || true)"
-    else resolved="$(readlink -f "$SHARED/hooks/${first##*/}" 2>/dev/null || true)"; fi
-    expected="$(readlink -f "$SHARED/hooks/${first##*/}" 2>/dev/null || true)"
-    if [ -n "$expected" ] && [ "$resolved" = "$expected" ] && [ -x "$expected" ]; then
-      ok_detail "$provider $ev → ${first##*/}"
+    count=$((count + 1))
+    raw_command="$command"
+    provider_marker=''
+    if [[ "$command" =~ ^AGENT_PROVIDER=([^[:space:]]+)[[:space:]]+(.+)$ ]]; then
+      provider_marker="${BASH_REMATCH[1]}"
+      command="${BASH_REMATCH[2]}"
+    fi
+    first="${command%% *}"
+    basename="${first##*/}"
+    identity_kind=''
+    case "$first" in
+      /home/tom/code/north/bin/north-on-spawn) identity_kind='spawn' ;;
+      /home/tom/code/north/bin/north-on-tooluse) identity_kind='repair' ;;
+    esac
+    expected="$SHARED/hooks/$basename"
+    declared_shared=0
+    case "$first" in
+      "/home/tom/code/nixos-config/dotfiles/agents/hooks/$basename"|"/home/tom/code/nixos-config/dotfiles/claude/hooks/$basename"|"$expected"|"$basename")
+        declared_shared=1
+        ;;
+    esac
+    if [ -n "$provider_marker" ] && [ -z "$identity_kind" ]; then
+      bad "$provider $ev sets AGENT_PROVIDER on an unrelated hook: $raw_command"
+    elif [ -n "$identity_kind" ] && [ "$provider_marker" != "$expected_provider" ]; then
+      bad "$provider $ev North identity $identity_kind must set AGENT_PROVIDER=$expected_provider: $raw_command"
     elif [[ "$first" = /home/tom/code/north/bin/* ]]; then
       if [ "$LOCAL" -eq 1 ]; then
         if [ -x "$first" ]; then ok_detail "$provider $ev → North ${first##*/}"
         else bad "$provider $ev external North hook missing/not executable: $first"; fi
       else note "$provider $ev uses external North hook ${first##*/} (local check deferred)"; fi
-    else bad "$provider $ev hook is missing, non-executable, or outside canonical hooks: $command"; fi
+    elif [ "$declared_shared" -eq 1 ] && [ -x "$expected" ]; then
+      if [ "$LOCAL" -eq 1 ]; then
+        resolved="$(readlink -f "$first" 2>/dev/null || true)"
+        if [ "$resolved" = "$(readlink -f "$expected" 2>/dev/null || true)" ]; then
+          ok_detail "$provider $ev → $basename"
+        else
+          bad "$provider $ev live hook resolves to '${resolved:-missing}', expected '$expected'"
+        fi
+      else
+        ok_detail "$provider $ev declares canonical shared hook $basename"
+      fi
+    else bad "$provider $ev hook is missing, non-executable, or outside canonical hooks: $raw_command"; fi
   done < <(jq -r '.hooks // {} | to_entries[] | .key as $event | .value[] | .hooks[]? | select(.type == "command") | [$event,.command] | @tsv' "$manifest")
   HOOK_BINDINGS="$count"
+}
+
+manifest_guard_count() {
+  local manifest="$1" matcher_token="$2"
+  jq -r --arg token "$matcher_token" '
+    [.hooks.PreToolUse[]? |
+     select(((.matcher // "") | split("|") | index($token)) != null) |
+     .hooks[]? |
+     select(.type == "command" and (.command | endswith("/agent-spawn-guard.sh")))] |
+    length
+  ' "$manifest"
+}
+
+require_manifest_guard_count() {
+  local manifest="$1" provider="$2" matcher_token="$3" expected="$4" contract="$5" count
+  count="$(manifest_guard_count "$manifest" "$matcher_token" 2>/dev/null || printf invalid)"
+  if [ "$count" = "$expected" ]; then ok_detail "$provider $contract"
+  else bad "$provider $contract: found $count matching guard binding(s), expected $expected"; fi
+}
+
+validate_codex_managed_worker_guard() {
+  if ! need_toml "$CODEX_REQUIREMENTS" 'Codex managed requirements'; then return; fi
+  if python3 - "$CODEX_REQUIREMENTS" <<'PY'
+import sys, tomllib
+with open(sys.argv[1], "rb") as handle:
+    policy = tomllib.load(handle)
+assert set(policy) == {"features", "hooks"}
+assert policy["features"] == {"hooks": True}
+hooks = policy["hooks"]
+assert set(hooks) == {"managed_dir", "PreToolUse"}
+assert hooks["managed_dir"] == "/etc/codex/hooks"
+assert len(hooks["PreToolUse"]) == 1
+binding = hooks["PreToolUse"][0]
+assert binding["matcher"] == "^Bash$"
+assert len(binding["hooks"]) == 1
+assert binding["hooks"][0] == {
+    "type": "command",
+    "command": "/etc/codex/hooks/agent-spawn-guard.sh",
+    "timeout": 10,
+}
+PY
+  then ok_detail 'Codex managed policy is exactly one trusted Bash topology guard; user/plugin hooks remain permitted'
+  else bad "Codex managed requirements add policy beyond the single approved Bash topology guard"; fi
+
+  local module="$REPO/modules/codex/default.bnix"
+  for source in '/modules/codex/requirements.toml' '/dotfiles/agents/hooks/agent-spawn-guard.sh' '/dotfiles/agents/hooks/lib/authoring-killswitch.sh'; do
+    if grep -Fq "(s flakeRoot \"$source\")" "$module"; then :
+    else bad "Codex module does not install managed-hook source $source"; fi
+  done
+
+  if [ "$LOCAL" -eq 1 ]; then
+    if cmp -s "$CODEX_REQUIREMENTS" /etc/codex/requirements.toml &&
+       cmp -s "$SHARED/hooks/agent-spawn-guard.sh" /etc/codex/hooks/agent-spawn-guard.sh &&
+       cmp -s "$SHARED/hooks/lib/authoring-killswitch.sh" /etc/codex/hooks/lib/authoring-killswitch.sh; then
+      ok_detail 'Codex managed Bash topology guard is live from /etc (policy-trusted, no /hooks action)'
+    else
+      bad 'Codex managed Bash topology guard is not the current /etc generation; run firn rebuild after commit'
+    fi
+  fi
 }
 
 before=$fail
@@ -136,7 +226,8 @@ if bash "$CLAUDE/statusline.test.sh" >/dev/null; then
 else bad "Claude statusline observer test failed"; fi
 if jq -e '.autoMemoryEnabled == false' "$CLAUDE/settings.json" >/dev/null; then ok_detail "auto-memory disabled"
 else bad "Claude autoMemoryEnabled must be false"; fi
-validate_hooks "$CLAUDE/settings.json" Claude
+validate_hooks "$CLAUDE/settings.json" Claude anthropic
+require_manifest_guard_count "$CLAUDE/settings.json" Claude Bash 1 'user Bash topology guard is bound once'
 claude_bindings="$HOOK_BINDINGS"
 if [ "$LOCAL" -eq 1 ]; then
   canonical_link "$HOME/.claude/settings.json" "$CLAUDE/settings.json" "$HOME/.claude/settings.json"
@@ -176,6 +267,8 @@ if [ "$LOCAL" -eq 1 ]; then
 fi
 provider_group Claude "$before" \
   "Hooks       $claude_bindings bindings" \
+  'Identity    adapter-pinned native spawn + repair → anthropic' \
+  'Topology    user Bash hook (loaded directly by Claude)' \
   'Bootstrap   static config parsed' \
   "MCP         North: $claude_north" \
   "            Fram: $claude_fram" \
@@ -184,7 +277,10 @@ provider_group Claude "$before" \
 before=$fail
 need_json "$CODEX/hooks.json" 'Codex hooks'
 need_toml "$CODEX/config.toml" 'Codex config'
-validate_hooks "$CODEX/hooks.json" Codex
+validate_hooks "$CODEX/hooks.json" Codex openai
+require_manifest_guard_count "$CODEX/hooks.json" Codex Bash 0 'user Bash guard is absent (managed binding is the sole Bash guard)'
+require_manifest_guard_count "$CODEX/hooks.json" Codex Agent 1 'native Agent redirect remains a trust-reviewed user hook'
+validate_codex_managed_worker_guard
 codex_bindings="$HOOK_BINDINGS"
 codex_north='declared; live probe deferred'
 codex_fram='declared; canonical split corpus; live probe deferred'
@@ -218,6 +314,8 @@ if [ "$LOCAL" -eq 1 ]; then
 fi
 provider_group Codex "$before" \
   "Hooks       $codex_bindings bindings" \
+  'Identity    adapter-pinned native spawn + repair → openai' \
+  'Topology    managed /etc Bash guard (policy-trusted) · native redirect user hook (trust-reviewed)' \
   'Bootstrap   static config parsed' \
   "MCP         North: $codex_north" \
   "            Fram: $codex_fram" \
@@ -238,7 +336,7 @@ if [ "$LOCAL" -eq 1 ]; then
   openai_authenticated='unknown'
   openai_headroom='unknown'
   if command -v north >/dev/null 2>&1; then
-    if provider_output="$(north providers 2>&1)"; then
+    if provider_output="$(north providers --json 2>&1)"; then
       if anthropic_fields="$(printf '%s\n' "$provider_output" | "$REPO/scripts/agent-provider-status.sh" anthropic)"; then
         IFS='|' read -r anthropic_installed anthropic_authenticated anthropic_headroom <<<"$anthropic_fields"
         [ "$anthropic_installed" = yes ] || bad "North reports Anthropic not installed"
@@ -249,10 +347,19 @@ if [ "$LOCAL" -eq 1 ]; then
         [ "$openai_installed" = yes ] || bad "North reports OpenAI/Codex not installed"
         [ "$openai_authenticated" = yes ] || bad "North reports OpenAI/Codex not authenticated"
       else bad "North omitted or malformed OpenAI capability status:\n$provider_output"; fi
-      if grep -Eq '^auto[[:space:]]+(anthropic|openai)' <<<"$provider_output"; then
-        auto_provider="$(awk '/^auto[[:space:]]/ { print $2; exit }' <<<"$provider_output")"
-      else bad "North auto-route decision missing:\n$provider_output"; fi
-      ok_detail "$(tr '\n' ';' <<<"$provider_output" | sed 's/;$/ /; s/;/ · /g')"
+      if allocation_summary="$(jq -er '
+        .allocationMode as $mode
+        | if ($mode == "balanced" or $mode == "preferential" or $mode == "reserved") then
+            ([.providers[]?.targets[]? | select(.routing == "eligible")] | length) as $eligible
+            | if $eligible > 0 then "\($mode) · \($eligible) eligible accounts"
+              else error("no eligible routing accounts") end
+          else error("unsupported allocation mode") end
+      ' <<<"$provider_output")"; then
+        :
+      else bad "North allocation policy missing or malformed:\n$provider_output"; fi
+      provider_source="$(jq -r '.source // "unknown source"' <<<"$provider_output")"
+      provider_target_count="$(jq '[.providers[]?.targets[]?] | length' <<<"$provider_output")"
+      ok_detail "North providers JSON v2 · $provider_target_count targets · $provider_source"
     else bad "installed North provider readiness failed:\n$provider_output"; fi
   else bad "installed North CLI is missing from PATH"; fi
 else ok_detail "provider readiness deferred to --local"; fi
@@ -260,7 +367,7 @@ if [ "$LOCAL" -eq 1 ]; then
   provider_group North "$before" \
     "Anthropic   installed=$anthropic_installed · authenticated=$anthropic_authenticated · headroom=$anthropic_headroom" \
     "OpenAI      installed=$openai_installed · authenticated=$openai_authenticated · headroom=$openai_headroom" \
-    "Routing     auto→${auto_provider:-unknown}"
+    "Allocation  ${allocation_summary:-unknown}"
 else
   provider_group North "$before" 'Providers   readiness deferred to --local'
 fi

@@ -4,12 +4,13 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP/home/code/north/bin" "$TMP/home/.claude"
+mkdir -p "$TMP/home/code/north/bin" "$TMP/home/.claude" "$TMP/runtime"
 printf 'lite\n' > "$TMP/home/.claude/.caveman-active"
 
 cat > "$TMP/home/code/north/bin/north" <<'FAKE'
 #!/usr/bin/env bash
-sleep 1
+printf 'started\n' > "$STATUSLINE_STARTED"
+sleep 2
 cat > "$STATUSLINE_CAPTURE"
 printf 'call\n' >> "$STATUSLINE_CALLS"
 printf 'observer output must stay hidden\n'
@@ -17,14 +18,18 @@ FAKE
 chmod +x "$TMP/home/code/north/bin/north"
 
 payload='{"cwd":"/private/project","rate_limits":{"five_hour":{"used_percentage":23.5,"resets_at":1738425600}}}'
-start="$EPOCHREALTIME"
-output="$(printf '%s' "$payload" | HOME="$TMP/home" STATUSLINE_CAPTURE="$TMP/capture.json" STATUSLINE_CALLS="$TMP/calls" bash "$HERE/statusline.sh")"
-elapsed="$(awk -v start="$start" -v finish="$EPOCHREALTIME" 'BEGIN { print finish - start }')"
+output="$(printf '%s' "$payload" | HOME="$TMP/home" XDG_RUNTIME_DIR="$TMP/runtime" STATUSLINE_STARTED="$TMP/started" \
+  STATUSLINE_CAPTURE="$TMP/capture.json" STATUSLINE_CALLS="$TMP/calls" bash "$HERE/statusline.sh")"
 
 [[ "$output" == $'\033[38;5;172m[CAVEMAN:LITE]\033[0m' ]]
-awk -v elapsed="$elapsed" 'BEGIN { exit !(elapsed < 0.5) }'
-
 for _ in {1..30}; do
+  [[ -f "$TMP/started" ]] && break
+  sleep 0.1
+done
+[[ -f "$TMP/started" ]]
+[[ ! -f "$TMP/capture.json" ]] # caller returned while observer was still sleeping
+
+for _ in {1..50}; do
   [[ -f "$TMP/capture.json" ]] && break
   sleep 0.1
 done
@@ -35,7 +40,8 @@ cmp -s <(printf '%s' "$payload") "$TMP/capture.json"
 sleep 1.2
 rm -f "$TMP/calls" "$TMP/capture.json"
 for i in {1..20}; do
-  printf '%s' "$payload" | HOME="$TMP/home" STATUSLINE_CAPTURE="$TMP/capture.json" STATUSLINE_CALLS="$TMP/calls" \
+  printf '%s' "$payload" | HOME="$TMP/home" XDG_RUNTIME_DIR="$TMP/runtime" STATUSLINE_STARTED="$TMP/started" \
+    STATUSLINE_CAPTURE="$TMP/capture.json" STATUSLINE_CALLS="$TMP/calls" \
     bash "$HERE/statusline.sh" > "$TMP/output-$i" &
 done
 wait

@@ -2,13 +2,21 @@
 
 (ns default)
 
-(nix/module [config lib pkgs ...]
+(nix/module [config lib pkgs flakeRoot ...]
   (let [username config.myConfig.modules.users.username]
     {:options.myConfig.modules.codex.enable
       (lib.mkEnableOption "OpenAI Codex CLI (master/bleeding-edge)")
      :config
       (lib.mkIf config.myConfig.modules.codex.enable
         {:environment.systemPackages [pkgs.master.codex]
+         :environment.etc
+          {"codex/requirements.toml"
+            {:text (builtins.readFile (s flakeRoot "/modules/codex/requirements.toml"))}
+           "codex/hooks/agent-spawn-guard.sh"
+            {:text (builtins.readFile (s flakeRoot "/dotfiles/agents/hooks/agent-spawn-guard.sh"))
+             :mode "0555"}
+           "codex/hooks/lib/authoring-killswitch.sh"
+            {:text (builtins.readFile (s flakeRoot "/dotfiles/agents/hooks/lib/authoring-killswitch.sh"))}}
          :home-manager.users
           {username
             (nix/module [config ...]

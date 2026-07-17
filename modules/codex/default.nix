@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, flakeRoot, ... }:
 
 let
   username = config.myConfig.modules.users.username;
@@ -7,6 +7,14 @@ in
   options.myConfig.modules.codex.enable = lib.mkEnableOption "OpenAI Codex CLI (master/bleeding-edge)";
   config = lib.mkIf config.myConfig.modules.codex.enable {
     environment.systemPackages = [ pkgs.master.codex ];
+    environment.etc = {
+      "codex/requirements.toml".text = builtins.readFile "${flakeRoot}/modules/codex/requirements.toml";
+      "codex/hooks/agent-spawn-guard.sh" = {
+        text = builtins.readFile "${flakeRoot}/dotfiles/agents/hooks/agent-spawn-guard.sh";
+        mode = "0555";
+      };
+      "codex/hooks/lib/authoring-killswitch.sh".text = builtins.readFile "${flakeRoot}/dotfiles/agents/hooks/lib/authoring-killswitch.sh";
+    };
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {
         ".codex/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/agents/AGENTS.md";

@@ -13,12 +13,28 @@
 # state on every call, no relaunch): `north config guards on|off`.
 # The env var remains the launch-time override for a single pinned session:
 #   AGENT_NO_AUTHORING_HOOKS=1 claude   # or codex
-# Tests override the state path via AUTHORING_KILLSWITCH_STATE.
+# Canonical persistent state is provider-neutral:
+#   ~/.local/state/north/harness.conf
+# A pre-migration ~/.claude/my-config.state is read only when canonical state is
+# absent. Tests may override via NORTH_HARNESS_STATE; the older
+# AUTHORING_KILLSWITCH_STATE test seam remains compatible.
+
+north_harness_state_path() {
+  if [ -n "${NORTH_HARNESS_STATE:-}" ]; then
+    printf '%s\n' "$NORTH_HARNESS_STATE"
+  elif [ -n "${AUTHORING_KILLSWITCH_STATE:-}" ]; then
+    printf '%s\n' "$AUTHORING_KILLSWITCH_STATE"
+  elif [ -f "$HOME/.local/state/north/harness.conf" ]; then
+    printf '%s\n' "$HOME/.local/state/north/harness.conf"
+  else
+    printf '%s\n' "$HOME/.claude/my-config.state"
+  fi
+}
 
 authoring_guards_off() {
   case "${AGENT_NO_AUTHORING_HOOKS:-${CLAUDE_NO_AUTHORING_HOOKS:-}}" in
     0|false) return 1 ;;
     ?*)      return 0 ;;
   esac
-  [ "$(grep -E '^guards=' "${AUTHORING_KILLSWITCH_STATE:-$HOME/.claude/my-config.state}" 2>/dev/null | tail -1 | cut -d= -f2-)" = off ]
+  [ "$(grep -E '^guards=' "$(north_harness_state_path)" 2>/dev/null | tail -1 | cut -d= -f2-)" = off ]
 }

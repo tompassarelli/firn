@@ -81,10 +81,16 @@ is jotted.
 Shared routing laws are CANONICAL in `~/code/gaffer/doctrine.md`; the portable
 contract is `~/code/gaffer/docs/routing.md`. Keep its axes independent:
 function/role (deliverable), `taskGrade` (work scope and judgment), domain
-requirements, topology (worker/verifier/orchestrator), semantic tier
+requirements, topology (`worker`/`orchestrator`), semantic tier
 (`economy`, `standard`, `senior`, `frontier`), and deliberation. Presets supply
-defaults, not types or limits. A bespoke role is valid when no preset fits;
-record its nearest preset and the reason so recurrence can inform Gaffer later.
+defaults, not types or limits. Topology is only `worker` or `orchestrator`;
+verifier and judge are worker roles. When no preset fits, author a bespoke
+composition with a distinct lowercase-kebab role ID, reason, explicit routing
+axes, promotion-candidate boolean, and structured contract: responsibility,
+deliverable, canonical capabilities, decision/escalation boundaries,
+done-when criteria, and report shape. A nearest preset is optional and never
+grants capabilities implicitly. Recurrence informs review; it never silently
+promotes a bespoke composition into the preset library.
 North selects an available provider and resolves the semantic tier through its
 provider catalog. Provider model names and subscription entitlement pools are
 adapter facts, never global doctrine. Use `provider:auto` unless the user or
@@ -92,8 +98,15 @@ task requires a provider. North records the resolved provider/model/reason and
 may fall back only before side effects.
 
 **North is the spawn surface; Gaffer names the squad; provider adapters deliver
-it.** Translate a Gaffer pick to
-`mcp__north__spawn {prompt, provider:'auto', tier, role, posture}`. Examples:
+it.** Translate a Gaffer pick to North's execution envelope containing the full
+eight-field Gaffer request (`role`, `taskGrade`, `domainRequirements`,
+`topology`, `tier`, `reasoning`, `posture`, `composition`) plus `prompt` and
+normally `provider:'auto'`. Managed North work fails closed without either an
+exact/overridden preset composition or a complete bespoke composition. Display
+provenance as `gaffer:<preset>`, `gaffer:<preset>+override`, or
+`gaffer:bespoke:<id>`; `gaffer:not-selected` is native-only and
+`gaffer:legacy-debt` is migration-only. Never emit ambiguous `gaffer:none`.
+Examples:
 scout/source gathering → `economy`; implementer → `standard`; integrator →
 `senior`; designer → `frontier`; research-scientist/cutting-edge research →
 `frontier` with `taskGrade:research-grade`. These are preset defaults, not

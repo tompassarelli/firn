@@ -9,18 +9,26 @@ on:
       - 'dotfiles/claude/**'
       - 'dotfiles/codex/**'
       - 'dotfiles/agents/**'
+      - 'modules/codex/**'
       - 'scripts/agent-config-check.sh'
+      - 'scripts/agent-config-check.test.sh'
+      - 'scripts/agent-provider-status.sh'
+      - 'scripts/agent-provider-status.test.sh'
       - 'scripts/claude-config-check.sh'
-      - '.github/workflows/claude-config.yml'
+      - '.github/workflows/agent-config.yml'
   pull_request:
     branches: [main]
     paths:
       - 'dotfiles/claude/**'
       - 'dotfiles/codex/**'
       - 'dotfiles/agents/**'
+      - 'modules/codex/**'
       - 'scripts/agent-config-check.sh'
+      - 'scripts/agent-config-check.test.sh'
+      - 'scripts/agent-provider-status.sh'
+      - 'scripts/agent-provider-status.test.sh'
       - 'scripts/claude-config-check.sh'
-      - '.github/workflows/claude-config.yml'
+      - '.github/workflows/agent-config.yml'
 
 jobs:
   validate:
@@ -38,3 +46,9 @@ jobs:
           fi
       - name: Validate agent harness config
         run: ./scripts/agent-config-check.sh
+      - name: Test provider identity boundaries
+        run: bash ./scripts/agent-config-check.test.sh
+      - name: Test worker topology enforcement
+        run: ./dotfiles/agents/hooks/agent-spawn-guard.test.sh
+      - name: Test provider status contract
+        run: ./scripts/agent-provider-status.test.sh

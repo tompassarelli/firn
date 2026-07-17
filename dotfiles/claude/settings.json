@@ -25,7 +25,7 @@
           },
           {
             "type": "command",
-            "command": "/home/tom/code/north/bin/north-on-spawn",
+            "command": "AGENT_PROVIDER=anthropic /home/tom/code/north/bin/north-on-spawn",
             "timeout": 15
           }
         ]
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/north/bin/north-on-spawn",
+            "command": "AGENT_PROVIDER=anthropic /home/tom/code/north/bin/north-on-spawn",
             "timeout": 15
           }
         ]
@@ -89,6 +89,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/agent-spawn-guard.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
             "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/tripwire-guard.sh",
             "timeout": 10
           },
@@ -131,7 +136,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/north/bin/north-on-tooluse",
+            "command": "AGENT_PROVIDER=anthropic /home/tom/code/north/bin/north-on-tooluse",
             "timeout": 10
           }
         ]

@@ -5,8 +5,10 @@ requirements, topology, semantic tier, deliberation, postures, model deltas,
 and the compose/elicit procedures — is CANONICAL in Gaffer:
 `~/code/gaffer/doctrine.md` and `~/code/gaffer/docs/routing.md` (supporting
 blocks live under `~/code/gaffer/docs/`). Presets are overridable defaults;
-when none fits, use a bespoke role and record its nearest preset and reason so
-recurring successful compositions can be considered for promotion. Edit the
+when none fits, use a fully specified bespoke composition with a reason and an
+explicit `promotionCandidate` decision (false by default). `nearestPreset` is
+optional and grants no capabilities; recurrence only informs human review and
+never promotes a composition automatically. Edit the
 blocks there; they ship to everyone, and north's harness reads them from there
 at spawn time.
 This directory holds only what is personal:
@@ -25,9 +27,10 @@ hatch overrides everything.
 
 ## Fable self-report
 
-`self-reports/fable.md` — the Fable introspection (with §11 generic payload
-and §12 compilation method + trial predictions). Personal: Fable is the
-opt-in tier above gaffer's public ramp; no delta ships for it.
+`self-reports/fable.md` — historical model introspection (with §11 generic
+payload and §12 compilation method + trial predictions). It is calibration
+evidence, not routing policy; current provider catalogs and North availability
+signals decide whether any concrete model is eligible.
 
 ## Change policy — the freeze rule
 

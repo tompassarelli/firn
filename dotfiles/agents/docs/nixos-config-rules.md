@@ -23,7 +23,7 @@ reproducible.
 
 ## CI validation
 
-**The agent config is CI-validated** — `.github/workflows/claude-config.yml`
+**The agent config is CI-validated** — `.github/workflows/agent-config.yml`
 runs `scripts/agent-config-check.sh`: it checks the shared instructions, skills,
 and hooks plus both the Claude and Codex adapters. Run
 `scripts/agent-config-check.sh --local` to additionally verify live symlinks,
@@ -39,13 +39,18 @@ compatibility entry point. This is the anti-rot gate; keep it green.
 AND by `north config`, so report and enforcement cannot disagree:
 
 - **Persistent, live flip (all sessions):** `north config guards off` /
-  `guards on` — writes `guards=on|off` to `~/.claude/my-config.state`; hooks
-  re-read it on every call, so it takes effect immediately, no relaunch.
-- **Per-session override at launch:** `CLAUDE_NO_AUTHORING_HOOKS=1 claude` —
+  `guards on` — writes `guards=on|off` to
+  `~/.local/state/north/harness.conf`; hooks re-read it on every call, so it
+  takes effect immediately, no relaunch. A pre-migration
+  `~/.claude/my-config.state` is a read-only fallback only while the canonical
+  file is absent.
+- **Per-session override at launch:** `AGENT_NO_AUTHORING_HOOKS=1 claude` (or
+  `AGENT_NO_AUTHORING_HOOKS=1 codex`) —
   any value except `0`/`false`/empty engages the kill-switch for that session;
   `0`/`false` forces guards LIVE (beats the state file). The var must be in
-  Claude Code's own environment, i.e. set when launching — exporting inside a
-  running session does nothing.
+  the provider CLI's own launch environment — exporting inside a running
+  session does nothing. `CLAUDE_NO_AUTHORING_HOOKS` remains a compatibility
+  alias.
 
 Killed = every authoring guard no-ops (beagle SessionStart handshake,
 code-upstream guard, firn guard, racket-build guard, agent-spawn-guard,

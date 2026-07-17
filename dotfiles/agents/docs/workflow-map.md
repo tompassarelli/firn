@@ -139,27 +139,42 @@ activity.
 ### Pattern B — `/delegate` (chat)
 
 **Trigger:** a human types `/delegate <text> [--new]` (`commands/delegate.md`).
-**Lineage:** SDK-lane via `spawn.ts`, always opus/high/integrator/deliver.
+**Lineage:** the slash command is an intelligent adapter over `north delegate`.
+It classifies dependency shape once: atomic work selects one exact, overridden,
+or bespoke terminal Gaffer worker; composite work alone selects the director.
+North then selects the provider, account, concrete model, and runtime control.
 Carrying context is BINARY (y/n), a trailing flag not a separate verb: bare =
-this session's context rides along by default; `--new` = empty-context lane
-(mechanical session fork; transcript-inject brief as fallback); absent → the
-session decides. (Merges the retired `/request` + `/offload`.)
+this session's concise context brief rides along by default; `--new` = a clean
+lane with a self-contained task. (Merges the retired `/request` + `/offload`.)
 
 ```mermaid
 sequenceDiagram
     actor H as human
-    participant R as /delegate (pass-through)
-    participant SP as spawn.ts (via mcp__north__spawn)
+    participant R as /delegate (classifier)
+    participant CLI as north delegate
+    participant SP as spawn.ts
     participant T as north :7977
     participant CO as coordinator inbox
-    H->>R: /delegate [context:*] X
-    R->>SP: INTAKE — wrap X + optional context brief + self-triage contract<br/>+ cwd + discipline · AGENT_COORDINATOR = this session id
-    SP->>SP: ID MINT — opts.agentId ?? lane-{ts36}
-    SP->>T: IDENTITY FACTS (writeAgentFacts) — kind=lane,<br/>role/model/effort/goal/display_name/spawned_at
+    H->>R: /delegate X [--new]
+    R->>R: CLASSIFY dependency shape + terminal role/composition if atomic
+    alt atomic
+        R->>CLI: X --role worker [overrides or bespoke contract]<br/>+ context brief (default) or clean X (--new)
+        CLI->>SP: one complete worker-topology Gaffer request
+    else composite
+        R->>CLI: X --composite<br/>+ context brief (default) or clean X (--new)
+        CLI->>SP: canonical director Gaffer request
+    end
+    SP->>SP: FILTER capabilities/auth/usage → resolve provider/account/model
+    SP->>SP: ID MINT — collision-safe lane id
+    SP->>T: IDENTITY FACTS — requested composition +<br/>resolved provider/account/model/reasoning + goal/handle
     SP->>T: PRESENCE (harnessOptions) — register lease
-    SP-->>R: id + north watch {id}
+    CLI-->>R: id + north watch {id}
     Note over H,R: END TURN — the human never waits
-    SP->>SP: WORK — streaming query · first act = TRIAGE →<br/>self / sub-spawn / fan out (child lanes)
+    alt atomic work
+        SP->>SP: WORK — terminal worker executes directly; no agent spawning
+    else composite work
+        SP->>SP: WORK — director staffs worker lanes and owns reduction;<br/>director never executes a worker subtask
+    end
     T-->>SP: STEER — peer ping (subscribeFeed) injected as user turn, no re-arm
     alt clean finish
         SP->>T: COMPLETION — recordRun outcome=ran
@@ -171,22 +186,31 @@ sequenceDiagram
     Note over T: REAPING — lease lapses at TTL
 ```
 
-Notes: `/delegate` is a **strict pass-through** — the human's turn does no triage,
-no work; one spawn, one confirmation, end of turn (default mode adds one step:
-carry the session brief). The *lane* self-triages (routes down / fans out) as its
-first act. The coordinator hears back exactly
-twice: `AGENT COMPLETE` on clean finish (`spawn.ts:147`) or `AGENT DEATH` on a
-caught subprocess death (`death.ts`).
+Notes: `/delegate` is a **thin intelligent adapter** — the human's turn performs
+one bounded intake decision but no delegated work: classify atomic versus
+composite, select a terminal role/composition only for atomic work, spawn once,
+confirm once, end the turn. It never selects provider, account, or concrete
+model from its current session. Allocation stays automatic unless an explicit
+user/task provider or exceptional account pin is forwarded; concrete model
+selection stays North-owned. The launched lane does not re-decide its topology:
+an atomic worker executes directly; a composite director decomposes and
+reduces. The coordinator hears back through one of two terminal signals:
+`AGENT COMPLETE` on clean finish (`spawn.ts:147`) or `AGENT DEATH` on a caught
+subprocess death (`death.ts`).
 
 ---
 
 ### Pattern C — shell `north delegate`
 
-**Trigger:** `north delegate "<text>" [--context <file>]` at a shell (`agents-cli.clj:cmd-delegate`).
-**Lineage:** identical to B (opus/high/integrator), minted from the CLI.
-ASYMMETRY: chat default mode is a mechanical session fork (a session
-carries ITSELF forward); the shell has no session to fork, so it attaches a
-pre-composed brief with `--context <file>` instead.
+**Trigger:** `north delegate "<text>" (--role <worker-role> | --composite)
+[--context <file>] [spawn options]` at a shell
+(`agents-cli.clj:cmd-delegate`).
+**Lineage:** identical to B after classification: `--role` launches one atomic
+terminal worker (exact preset, recorded preset overrides, or a structured
+bespoke composition); `--composite` alone hydrates the director. North refuses
+an unclassified handoff and resolves provider/account/model after the
+provider-neutral request. The shell has no conversation to summarize, so
+context is attached explicitly with `--context <file>`.
 
 ```mermaid
 sequenceDiagram
@@ -195,10 +219,14 @@ sequenceDiagram
     participant CS as cmd-spawn (dial table)
     participant SP as spawn.ts
     participant T as north :7977
-    SH->>CLI: north delegate X [--context f]
-    CLI->>CLI: INTAKE — prepend optional CONTEXT BRIEF + "DELEGATE TASK:"<br/>+ OPERATING CONTRACT (triage / sync / no-push / report-to-private)
-    CLI->>CS: resolve role "integrator" via gaffer dial table<br/>(docs/adapters/north.md)
-    CS->>CS: ID MINT — lane-{uuid8} · env AGENT_ID/MODEL/EFFORT/ROLE/POSTURE<br/>(+ AGENT_COORDINATOR if --notify)
+    SH->>CLI: north delegate X (--role R | --composite) [--context f] [spawn options]
+    CLI->>CLI: INTAKE — require exactly one classification;<br/>prepend optional CONTEXT BRIEF + mode-specific operating contract
+    alt --role R (atomic)
+        CLI->>CS: hydrate R + forwarded preset overrides or bespoke contract
+    else --composite
+        CLI->>CS: hydrate canonical director request
+    end
+    CS->>CS: North allocation default → filter capabilities/auth/usage →<br/>resolve provider/account/model; mint collision-safe id
     CS->>SP: bun run spawn.ts (detached · log → ~/.local/state/north/agents/{id}.log)
     SP->>T: IDENTITY FACTS on @agent:{id}
     SP->>T: PRESENCE — register lease
@@ -206,10 +234,11 @@ sequenceDiagram
     Note over SP,T: WORK / STEER / COMPLETION / DEATH / REAPING — same tail as pattern B
 ```
 
-Notes: same contract, same dials, same completion/death/reaping as B. The
-difference is **intake surface only** (shell vs `/delegate` slash command). The lane
-runs detached with its transcript at `~/.local/state/north/agents/<id>.log`
-(watched by `north watch <id>`).
+Notes: same classification, context, allocation, completion/death, and reaping
+contract as B. The difference is **intake surface only**: the intelligent chat
+adapter derives `--role` versus `--composite`, while a shell caller states it.
+The lane runs detached with its transcript at
+`~/.local/state/north/agents/<id>.log` (watched by `north watch <id>`).
 
 ---
 
@@ -225,13 +254,16 @@ decision is recorded when no preset fits.
 sequenceDiagram
     actor CA as caller
     participant CS as cmd-spawn
-    participant G as gaffer dial table
+    participant G as Gaffer catalog
+    participant R as North resolver
     participant SP as spawn.ts
     participant T as north :7977
     CA->>CS: north spawn R "P" — INTAKE: role R, prompt P
     CS->>G: parse dial table (never fork the doctrine)
-    G-->>CS: R → function, taskGrade, domain requirements,<br/>topology, tier, deliberation, posture
-    CS->>CS: ID MINT — lane-{uuid8} · env AGENT_MODEL/EFFORT/ROLE/POSTURE<br/>(+ AGENT_COORDINATOR if --notify)
+    G-->>CS: role, taskGrade, domainRequirements, topology,<br/>tier, reasoning, posture, composition
+    CS->>R: full semantic request + provider/account preference
+    R-->>CS: eligible provider/account + concrete model/control<br/>(capability/auth/usage filtered)
+    CS->>CS: mint collision-safe id; preserve requested + resolved route
     opt --dry-run
         CS-->>CA: print id + display_name, STOP
     end
@@ -318,7 +350,8 @@ implemented today.**
 
 > **Status note (2026-07-10, updated). Managed context-carrying handoff** is the
 > default mode of the unified delegation verb: shell `north delegate
-> "<task>" --context <file>` (`agents-cli.clj:cmd-delegate`) and slash
+> "<task>" (--role <worker> | --composite) --context <file>`
+> (`agents-cli.clj:cmd-delegate`) and slash
 > `/delegate <task>` (`commands/delegate.md`, context by default) — a context-carrying
 > handoff on the SDK-lane lineage (pattern C's contract + a prepended
 > parent-context brief), so it gets the full invariant spine (id mint · identity
@@ -550,6 +583,6 @@ below are its rule set.
 | listener | `~/code/north/cli/north-listen.clj` | dormant-until-pinged pub/sub; role-addressing |
 | cockpit | `~/code/north/cli/dashboard-cli.clj` (`north dashboard`/`doctor`; bare `north` card in `bin/north`) | dashboard/doctor/profile; parse-don't-fork gaffer; ownership rule (folded from convoy 2026-07-10) |
 | staffing | `~/code/gaffer/doctrine.md` + `docs/adapters/north.md` | shapes→squad, laws, canonical dial table |
-| delegate intake | `~/code/nixos-config/dotfiles/claude/commands/delegate.md` | `/delegate` pass-through contract (context as a parameter) |
+| delegate intake | `~/code/nixos-config/dotfiles/claude/commands/delegate.md` | `/delegate` intelligent atomic/composite classifier (context is orthogonal) |
 | coordination-v2 | thread `019f4418-bed5-7625-b2ad-41abb6518269` | census, failure receipts, the specced reaping fix plan |
 ```

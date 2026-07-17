@@ -1,0 +1,13 @@
+[features]
+hooks = true
+
+[hooks]
+managed_dir = "/etc/codex/hooks"
+
+[[hooks.PreToolUse]]
+matcher = "^Bash$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "/etc/codex/hooks/agent-spawn-guard.sh"
+timeout = 10

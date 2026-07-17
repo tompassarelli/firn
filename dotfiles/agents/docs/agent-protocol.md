@@ -29,9 +29,11 @@ Lifecycle anatomy + failure debugging (patterns A–F, zombie forks, split-brain
 - **Concurrency is the engine's job** — fram owns write-serialization + OCC + the `lease`
   primitive (`acquire`/`release`/`fence`); apps express coordination as facts, never
   self-rolled locks. (`driver` = app intent; `lease` = DB mutual-exclusion — never conflate.)
-- Recursive teams coordinate peer-to-peer — ALWAYS through the protocol, NEVER
-  ultracode/Workflow.
+- Director and worker lanes coordinate through North. Workers report and
+  escalate upward; only the director owns fan-out and peer control. NEVER use
+  ultracode/Workflow as a recursive third tier.
 
 Org brain: PLAYBOOK = north thread `2026-06-22-232740` (consult first; append
 learnings via `north tell 2026-06-22-232740 learning "…"`). How-to:
-~/code/north/docs/operating-manual.md. Per-repo surface: `~/code/north/CLAUDE.md`.
+`~/code/north/docs/operating-manual.md`. Per-repo surface:
+`~/code/north/AGENTS.md`.

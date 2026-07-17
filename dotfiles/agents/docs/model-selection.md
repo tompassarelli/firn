@@ -1,204 +1,110 @@
-# Model selection for parallel work
+# Model and payload selection
 
-**Normative routing lives in the gaffer plugin's doctrine** (injected every
-session; edit in `~/code/gaffer`). This doc is the evidence, calibration,
-and personal-surface reference BEHIND it — on any conflict, gaffer wins.
+This file is the personal adapter, not another routing doctrine. Normative
+semantics live in `~/code/gaffer/doctrine.md` and
+`~/code/gaffer/docs/routing.md`; provider/account allocation lives in
+`~/code/north/docs/provider-architecture.md`. If this file disagrees with
+either, those sources win.
 
-The portable decision has six independent axes: **function/role**, **task
-grade**, **domain requirements**, **topology**, **semantic tier**, and
-**deliberation**. A role names responsibility and deliverable; it does not hide
-seniority, model choice, or coordination authority. Human-readable task grades
-(`novice` through `research-grade`) describe the work, while semantic tiers
-describe the capability floor. Gaffer's presets merely propose common
-combinations; a coordinator may override fields or author and log a bespoke
-role when none fits. See `~/code/gaffer/doctrine.md` and
-`~/code/gaffer/docs/routing.md` rather than duplicating that contract here.
+Shared policy never chooses a concrete provider model, account, SDK, or
+subscription pool. Gaffer describes the work; North resolves an executable
+runtime and records both the request and the result.
 
-At the provider-calibration layer, two dials remain: **model = capability
-ceiling**, **effort = deliberation depth**. Orthogonal — opus-low (high
-ceiling, snap judgment) ≠ sonnet-high (low ceiling, many careful steps). They trade: Opus-4.5-medium matched
-Sonnet-4.5-best on SWE-bench at 76% fewer tokens — higher ceiling at modest
-effort beats a maxed lower ceiling. Pricing/IDs: Models API or the `claude-api`
-skill, never blogs.
+## Compose the semantic request
 
-**Tier = the task's reasoning demand, never its importance.** A critical rename
-is still mechanical → sonnet-low; a throwaway prototype's architecture is still
-judgment → Opus. Start one tier lower than feels right on both dials; escalate
-on evidence — promotion is cheap, over-provisioning is silent waste.
+Decide each Gaffer axis independently:
 
-## The stack
+1. `role` names the responsibility and deliverable. Start with a canonical
+   preset. If none fits, author a fully specified bespoke composition.
+2. `taskGrade` describes the work's scope and expected judgment: `novice`,
+   `junior`, `mid`, `senior`, `staff`, `principal`, or `research-grade`.
+3. `domainRequirements` states expertise/context the brief must actually load.
+4. `topology` is coordination authority: `worker` or `orchestrator`. Verifier
+   and judge are worker roles, not topologies. Choose from dependency shape;
+   importance alone does not justify an orchestrator.
+5. `tier` is the capability floor: `economy`, `standard`, `senior`, or
+   `frontier`. Task shape, leverage, blast radius, and foundational-layer floors
+   inform it; provider names do not.
+6. `reasoning` is deliberation: `low`, `medium`, `high`, `xhigh`, or `max`.
+   It remains independent from tier, but the pair must be supported by a
+   provider catalog.
+7. `posture` is `explore`, `deliver`, or `preserve`.
+8. `composition` records provenance: exact preset, preset plus explicit
+   overrides/reason, or a complete bespoke contract.
 
-Anthropic's own /model menu agrees with this shape: Opus = "everyday,
-complex tasks" (the recommended default), Sonnet = "routine tasks", Fable =
-"hardest and longest-running".
+Presets are defaults, not coupled identities. An override changes only the
+named axes and records why. A bespoke composition requires responsibility,
+deliverable, canonical capabilities, decision authority, escalation bounds,
+done criteria, and report shape; `nearestPreset` is optional and grants no
+authority.
 
-- **sonnet-low** — discovery, triage, locate, read-only scout fan-out, source
-  sweeps, mechanical single-shot edits. Cutting-edge research is not this
-  shape: `research-scientist` is frontier capability and `research-grade` work.
-- **sonnet-medium** — the PATTERN-EXTENSION tier, not the workhorse:
-  **junior/mid-level dev tasks** — grunt work and/or extremely
-  well-specified, relatively simple work; extends established patterns in
-  well-trodden, solidified code. **Layer floor:** NEVER
-  foundational / architecture / library code, however mechanical the task
-  looks — the layer of the stack sets the floor, not apparent difficulty.
-  sonnet-high ≈ never: dominated by opus-high, opus's entry rung (shingle
-  law, below).
-- **Opus — the WORKHORSE, high / xhigh** — **senior dev / staff engineer /
-  tech lead shaped tasks**: novel/judgment work, anything designing
-  something new, foundational stack layers, cross-file refactors, ambiguous
-  debugging, adversarial verify, synthesis. **Two rungs: high (default
-  judgment) and xhigh (HARD/hardest tasks).** opus-low/medium are dropped —
-  if you routed to Opus the task needs its ceiling, and low/medium starve
-  it (BrowseComp effort curve: opus low→med→high is a flat ~2pp creep,
-  xhigh/max are where it climbs); a task cheap enough for opus-medium was a
-  sonnet task. Step high→xhigh when being wrong is expensive or the task is
-  gnarly (design that commits the system, hardest debugging, long-horizon
-  runs) — the high→xhigh boundary is a live calibration, sharpen with
-  targeted evals. **opus-max = FRONTIER only** — genuinely at-the-edge
-  problems, rare, demonstrated headroom (tends to overthink otherwise);
-  mostly dominated by fable rungs when Fable is live.
-- **Fable — OPT-IN, availability-gated (high|xhigh when live)** —
-  **architect/inventor grade, especially on weak existing priors**:
-  hardest analysis, no-priors design, root-cause, planning. NOT a standing
-  rung: the Max-plan Fable window is limited and week-scoped (verified
-  2026-07-03; treat any availability belief older than ~7 days as stale;
-  only the USER can run `/usage` — unknown ⇒ assume out). Route to Fable
-  only when the task is truly above Opus AND the bucket is verified live.
-  **Fallback when out: opus-xhigh tops the ramp; substitute capacity with
-  structure** (judge panels, adversarial verify, loop-until-dry).
-  Coordinator tier. Never default implementer. Own usage bucket. **Spawned fable work: xhigh** (pre-filtered hardest; no rung
-  above — a re-run costs more than the effort delta). Sessions: high. max
-  reserved for extremely critical junctures with demonstrated headroom —
-  officially gated on "evals show measurable headroom at xhigh"; documented
-  overthinking failure modes (judgment reversal, spurious complexity).
+## Send the complete request
 
-**Shingle law:** each model has ~2 practical effort rungs — **sonnet: low,
-medium · opus: high, xhigh** — and the dominated middle (sonnet-high,
-opus-low/medium) is never the pick: sonnet-high/xhigh ⊂ opus-high on
-cost-perf, and opus-low/medium starve a ceiling you only pay for when the
-task needs it. opus-max ⊂ fable-high *when Fable is live*. The STANDING
-ramp: sonnet-low → sonnet-medium → opus-high → opus-xhigh. Fable rungs
-(high → xhigh → max, rare) extend it ONLY when the bucket is verified
-available. Route on the ramp, not per-model dials.
-- **Haiku** — single-shot bulk classify/extract ONLY, NO tool chains: tool-loop
-  bug (anthropics/claude-code#10029), rejects `effort` (400), two gens stale.
-  One looped worker erases the price gap and emits claims that cost Opus-tier
-  verification. True successor is off-Anthropic (Gemini Flash via LiteLLM →
-  `ANTHROPIC_BASE_URL`); unbuilt — candidate north `flash` tier.
+The managed MCP envelope contains the eight Gaffer fields plus North-owned
+execution controls and the prompt:
 
-## Route by task shape, not difficulty
+```json
+{
+  "prompt": "implement the bounded change",
+  "provider": "auto",
+  "role": "implementer",
+  "taskGrade": "mid",
+  "domainRequirements": [],
+  "topology": "worker",
+  "tier": "standard",
+  "reasoning": "medium",
+  "posture": "deliver",
+  "composition": {"kind": "preset", "id": "implementer", "overrides": []}
+}
+```
 
-First triage question (dial 1): is this task execution, implementation,
-integration, design, or invention?
+Direct `mcp__north__spawn` callers send this complete object. The forcing CLI
+`north spawn <preset> "<prompt>"` hydrates a known preset mechanically.
+Delegation is dependency-shape classified rather than a director alias:
 
-- **execute** — bounded, mechanical: apply patch, rename, obvious tests → sonnet-low
-- **implement** — one feature/fix inside known patterns → sonnet-medium
-- **integrate** — cross-file, ambiguous debugging, refactor with behavior at
-  stake → Opus
-- **design** — choose the shape: APIs, lifecycles, decomposition → Opus;
-  Fable only when no priors
-- **invent** — is the primitive itself right? what should exist? → Fable
-  plans, Opus implements/reviews
+```sh
+north delegate "<task>" --role <worker-role> [spawn options] # atomic
+north delegate "<task>" --composite [spawn options]          # composite
+```
 
-Shape picks the MODEL; effort is still set separately (dial 2). Difficulty ≠
-shape: a hard-but-local testable bug is still *implement* (unless the priors
-law fires); a one-line naming decision that shapes an API is *design*. **Blast
-radius routes up; importance alone never does** — blast radius = the decision
-shapes the system going forward, importance = the outcome matters to the user.
-"Coordinates agents" is not a spawn shape — that's the session itself.
+The intelligent `/delegate` adapter makes that decision while preserving one
+user-facing verb. Atomic work selects exactly one terminal worker composition:
+an unchanged preset, a preset with explicit axis overrides and an
+`--override-reason`, or a fully specified bespoke role with rationale and a
+structured contract. Presets are defaults, not a closed vocabulary; repeated
+bespoke use is recorded for possible human promotion review, and North renders
+its provenance as `gaffer:bespoke:<id>` rather than a generic `custom` or
+missing-composition label. Composite work alone hydrates the canonical director,
+which owns fan-out and reduction.
+Importance and difficulty do not substitute for two independently executable
+units. Managed North paths fail closed rather than inventing a mode or missing
+axes.
 
-**Layer floor overrides shape:** *implement* on foundational / library /
-architecture code routes to Opus regardless of how mechanical it looks —
-Sonnet only extends established patterns in solidified code. Frontier =
-Opus; well-trodden extension = Sonnet.
+Context carriage is orthogonal: `--context <file>` may accompany either form;
+the chat adapter carries a concise session brief by default and `/delegate
+<task> --new` omits it. The chat adapter leaves provider/account allocation on
+North's automatic policy by default and forwards a pin only when the user or
+task explicitly requires one; account pins are exceptional, and it never
+infers either pin from the current provider session. Concrete model selection
+remains provider-catalog/North-owned unless a supported explicit override
+contract says otherwise.
 
-Dials for function, task grade, domain requirements, topology, and posture are
-assembled from Gaffer's canonical blocks (`~/code/gaffer/docs/` — roles,
-postures, model deltas). Personal domain-posture defaults:
-`~/code/nixos-config/dotfiles/agents/docs/praxis/README.md`. Compose, don't
-re-derive; keep assembled payloads ≤ ~60 lines.
+## Runtime allocation
 
-## Buckets (Max plan, /usage-verified 2026-07-03)
+Use `provider:"auto"` unless the user or task explicitly pins a provider or
+account. North filters for authentication and enforceable capabilities, reads
+provider subscription-usage signals, applies the configured balanced,
+preferential, or reserved allocation policy, and resolves tier+reasoning via
+Gaffer's provider catalogs. It may substitute provider/account/model only
+before side effects and only while preserving tier, reasoning, and authority.
+Any degradation is explicit and recorded.
 
-One unified pool: sonnet/opus/haiku. **Fable: own bucket.** So Sonnet routing =
-cheaper draw on the shared pool (cost-weighting, not free capacity), and Fable
-coordination spends no worker budget. Pool hot → push hardest work up to Fable;
-Fable hot → coordinator drops to Opus. Re-check /usage when tight.
+Concrete model names, temporary availability windows, usage endpoint details,
+and per-provider calibration belong under `~/code/gaffer/providers/`,
+`~/code/gaffer/docs/`, and North's provider adapters. Never copy them into
+shared spawn policy, never route through API keys or API-credit balances, and
+never use native provider inheritance as a substitute for an explicit Gaffer
+request.
 
-## Priors law (compiler / greenfield work)
-
-Benchmarks measure priors-rich work. **Any default calibrated on
-run-of-the-mill corpora — benchmark parity, effort ladders, YAGNI ladders —
-mis-advises priors-poor core work. Ask what corpus it was tested on.**
-Ambiguous or novel → Opus as the main agent. Sonnet thrashing / retrying /
-over-exploring = ceiling hit → promote the model, don't prompt around it.
-
-## Effort
-
-Effort hits all tokens (text, tool calls, thinking). Cost ladder ≈
-**1× / 2.5× / 6× / 12×** for low/med/high/max. Fan-out workers run low — you
-don't want them wandering.
-
-| Task | Effort |
-|---|---|
-| rename a var, fix a typo | low |
-| batch rename across ~12 files | medium — low broke imports; max = ~50× cost, no gain |
-| tests against a known function | medium |
-| unresolved auth race condition | max — root cause in 5 min after 1 hr manual |
-
-## Sonnet alias policy
-
-`sonnet` = Sonnet 5 (claude-code ≥ 2.1.198). **"Use Sonnet" = sonnet-5 at
-medium.** Harder ⇒ escalate the MODEL, never sonnet high/xhigh. **Pin BOTH
-dials on every spawn** — a bare `model:'sonnet'` inherits the session's effort
-(ultracode runs xhigh: the exact anti-pattern).
-
-- Workflow `agent()`: always paired — `{model:'sonnet', effort:'medium'}`.
-- Agent tool has no effort param → spawn a gaffer squad agent
-  (`gaffer:implementer` = sonnet-medium + delta; `gaffer:executor` = sonnet-low), not
-  general-purpose + `model:"sonnet"`.
-- Agent frontmatter takes `effort: low|medium|high|xhigh|max`; there is no
-  global effort env (only `CLAUDE_CODE_SUBAGENT_MODEL`).
-
-## Fable
-
-Analyst/planner, not implementer. Coding ≤ Opus. Escalate implementation to
-Fable only after Opus repeatedly fails the same defect. Shape: Fable
-diagnoses/plans → Opus/Sonnet implement → Opus reviews. **Inheritance trap**:
-in a Fable session, Workflow `agent()` and the Agent tool inherit fable — PIN
-`model:'opus'|'sonnet'` on every implementation spawn.
-
-## Routing patterns
-
-Tiered routing vs uniform-Opus: ~50–80% cheaper, no quality regression (tested).
-
-- **Routed stack** (default) — sonnet-low discovers → sonnet-medium builds →
-  Opus judges → Fable plans/analyzes the hardest.
-- **Planner/executor** — Opus/Fable orchestrator → Sonnet executors →
-  sonnet-low sub-tools.
-- **Confidence-gated** — start sonnet-low; low confidence → sonnet-medium;
-  second failure → Opus. Best when difficulty is unknown.
-- **Discovery wide, judgment narrow** — sonnet-low sweep → Opus verify. The
-  verifier never reuses the finder's model, and the coordinator spot-checks
-  load-bearing claims itself whatever the tier.
-
-## Spawn surfaces
-
-- **north SDK** (PRIMARY while north config dispatch=north; native tools denied
-  there): `mcp__north__spawn {model: opus|sonnet|haiku, effort}` — pin both.
-  `AGENT_MODEL` sets the dispatch default; `AGENT_CAVEMAN` / `AGENT_LAWS` /
-  `AGENT_ESO` ride along.
-- **Agent tool** (native mode): `model: haiku|sonnet|opus|fable`. Forks always
-  inherit the parent model.
-- **Workflow**: per-call `opts.model` + `opts.effort`; omit model to inherit;
-  `effort:'low'` for mechanical stages.
-- **Claude Code subagents**: `CLAUDE_CODE_SUBAGENT_MODEL` sets the default;
-  per-agent frontmatter overrides (built-in Explore runs Haiku).
-
-## Sources
-
-kentgigger.com (effort, tested); ayautomate / augmentcode (routing, tested);
-platform.claude.com effort docs + Fable 5 prompting guide (official per-model
-effort guidance, web-verified 2026-07-03). Still no public per-effort
-benchmark table for Fable 5 — the high/xhigh/max guidance is official but
-qualitative; figures directional; re-check on own evals.
+Personal domain/posture defaults live in
+`~/code/nixos-config/dotfiles/agents/docs/praxis/README.md`.
