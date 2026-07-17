@@ -60,6 +60,19 @@ ambiguous or missing coverage yields `cannot-determine`. A judge compares
 multiple supplied alternatives against criteria declared before scoring and
 rejects a comparison whose candidates or criteria are not actually comparable.
 
+## Attach verification to the outcome
+
+Verification is neither a third topology nor a mandatory verifier after every
+worker. A self-contained terminal worker supplies evidence against its local,
+objective done-bars; add a context-carrying verifier sibling only when the
+leverage of a plausible wrong verdict warrants independent attestation. When
+several pieces produce an emergent aggregate, the director always assigns a
+context-carrying verifier sibling to independently attest the whole outcome —
+per-piece evidence does not prove the integration. The verifier reports a
+per-claim verdict, probe, and observed result. The director consumes and
+reconciles that evidence and may spot-check at most one suspicious load-bearing
+claim; rerunning completion probes wholesale is worker execution.
+
 ## Send the complete request
 
 The managed MCP envelope contains the eight Gaffer fields plus North-owned

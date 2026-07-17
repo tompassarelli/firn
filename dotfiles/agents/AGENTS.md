@@ -36,19 +36,24 @@ Run it the moment the work's shape is clear (not when the first Edit looms):
 **decompose** into independent subtasks → **graph** true dependencies only →
 **dispatch** independent subtasks to agents IN PARALLEL, tier per SUBTASK
 (never inherited from the session) → **coordinate** only the cross-cutting
-seams (self-contained subtask ⇒ delegate it) → **verify** by driving the
-change end-to-end and spot-checking each worker's load-bearing assertions
-yourself. Skip at ONE subtask; fires at 2+ files or 2+ concerns.
-Coordinate, don't execute; verify, don't trust.
+seams (self-contained subtask ⇒ delegate it) → **attach verification where the
+outcome lives**: self-contained workers supply local bar evidence; add a
+context-carrying verifier sibling when verdict leverage warrants one; every
+emergent aggregate gets context-carrying whole-outcome attestation →
+**consume and reconcile** that evidence, with at most one suspicious
+load-bearing claim spot-checked on smell. Skip at ONE subtask; fires at 2+
+files or 2+ concerns. Coordinate, don't execute; reconcile evidence, don't
+trust a bare done-claim.
 **The supervisor never blocks (2026-07-10, supersedes fork-by-default): the
 user talks to a listener, never a worker.** EVERY work request delegates to a
 lane — one BINARY decision: fork this session's context along (the DEFAULT —
 mechanical: SDK resume-fork or transcript-inject) or send it --new
 (clean-room; a well-composed prompt IS its context). Inferred-context
 composition is standing behavior in every brief, not a mode. Decide it yourself per task; never hold work inline because it
-seems quick. Inline is ONLY: answering from context, reading, verifying
-delegated work, and the coordination acts themselves (spawn/steer/capture/
-push). `/delegate <task> [--new]` (shell: `north delegate`) is the
+seems quick. Inline is ONLY: answering from context, reading, consuming and
+reconciling delegated evidence as above, the one allowed suspicious spot-check,
+and the coordination acts themselves (spawn/steer/capture/push). `/delegate
+<task> [--new]` (shell: `north delegate`) is the
 forcing form for when the automatic behavior slips — its existence is a bug
 report against this paragraph.
 
@@ -73,6 +78,16 @@ outcomes on barred threads echo the bars, and needs-review surfaces
 unevidenced ones (`bar_evidence` facts hold observed results). Capture stays
 zero-ceremony — the bar attaches when work is ACCEPTED, not when a thought
 is jotted.
+
+Evidence attaches where the done-claim lives. A self-contained terminal worker
+reports its own observed result against local bars; a context-carrying verifier
+sibling independently attests it only when a plausible wrong verdict has enough
+leverage to justify one. Pieces whose aggregate is the deliverable always get
+an independent, context-carrying attestation of the whole outcome — local
+evidence never sums to proof of the aggregate. A verifier reports per-claim
+verdict + probe + observed result. The coordinator consumes and reconciles
+those reports; it does not rerun completion probes wholesale, though it may
+spot-check at most one suspicious load-bearing claim before deciding.
 
 ## Model + payload routing — per agent, both dials
 → `~/code/nixos-config/dotfiles/agents/docs/model-selection.md`

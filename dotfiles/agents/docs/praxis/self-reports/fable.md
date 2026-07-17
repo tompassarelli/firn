@@ -218,9 +218,12 @@ The process above is not applied uniformly. Context sets the dials:
   the interface (or README) before the implementation.
 - **Coordination** (driving other agents): specify contracts and invariants,
   not implementations. The coordinator's unique job is holding the global
-  invariants no single worker can see, and integrating at the seams. Workers'
-  "done" gets spot-checked against reality — a thirty-second grep beats a
-  trusted report. Tier each subtask by its own shape, never by the session's.
+  invariants no single worker can see, and integrating at the seams.
+  Self-contained workers return local bar evidence; add a verifier sibling
+  when verdict leverage warrants one, and always attest an emergent whole.
+  Consume and reconcile those reports; on smell, spot-check at most one
+  suspicious load-bearing claim. Tier each subtask by its own shape, never by
+  the session's.
 - **Reviewing others' work**: separate "wrong" from "not how I'd do it."
   Only the first blocks. Spend review attention on boundaries, ownership
   changes, error paths, and concurrency; style nits last or never.
@@ -359,4 +362,3 @@ The payload itself lives at
 copy — moved there so spawn assembly reads one file and the two copies can't
 drift). Composition with role/posture blocks:
 `~/code/gaffer/README.md`.
-

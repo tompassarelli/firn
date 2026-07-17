@@ -32,6 +32,12 @@ Lifecycle anatomy + failure debugging (patterns A–F, zombie forks, split-brain
 - Director and worker lanes coordinate through North. Workers report and
   escalate upward; only the director owns fan-out and peer control. NEVER use
   ultracode/Workflow as a recursive third tier.
+- Verification attaches where the outcome lives. A self-contained worker
+  returns local bar evidence; the director adds a context-carrying verifier
+  sibling only when verdict leverage warrants one. An emergent aggregate always
+  receives a context-carrying whole-outcome attestation. The director consumes
+  and reconciles these reports, with at most one suspicious load-bearing
+  spot-check; it does not rerun every completion probe.
 
 Org brain: PLAYBOOK = north thread `2026-06-22-232740` (consult first; append
 learnings via `north tell 2026-06-22-232740 learning "…"`). How-to:
