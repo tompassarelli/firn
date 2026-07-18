@@ -36,7 +36,7 @@ itself → beagle-authoring.
    session's uncommitted state (yours or a peer's) can block the rebuild or
    leak into the generation; the pipeline prints exactly which in-flight files
    it excluded and validates the snapshot itself. For local inputs
-   (beagle/fram/north), committed `main` HEAD remains promotable with dirty WIP
+   (beagle/fram/gaffer/north), committed `main` HEAD remains promotable with dirty WIP
    because only its exact Git object enters the build; off-`main` still holds
    the already-verified pin.
    It switches the system — sudo, new generation — and `firn rollback` / the

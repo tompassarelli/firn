@@ -20,14 +20,16 @@ make_repo() {
 }
 
 make_repo "$TMP/firn"
-for input in beagle fram north; do make_repo "$TMP/$input"; done
+for input in beagle fram gaffer north; do make_repo "$TMP/$input"; done
 
-for input in beagle fram north; do
+for input in beagle fram gaffer north; do
   rev="$(git -C "$TMP/$input" rev-parse HEAD)"
   jq -n --arg input "$input" --arg rev "$rev" \
     '{nodes:{($input):{locked:{rev:$rev}}}}' >"$TMP/$input.json"
 done
-jq -s '{nodes:(map(.nodes)|add)}' "$TMP/beagle.json" "$TMP/fram.json" "$TMP/north.json" >"$TMP/firn/flake.lock"
+jq -s '{nodes:(map(.nodes)|add)}' \
+  "$TMP/beagle.json" "$TMP/fram.json" "$TMP/gaffer.json" "$TMP/north.json" \
+  >"$TMP/firn/flake.lock"
 git -C "$TMP/firn" add flake.lock
 git -C "$TMP/firn" commit -qm lock
 
@@ -40,7 +42,7 @@ inputs=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --flake) root="$2"; shift 2 ;;
-    beagle|fram|north) inputs+=("$1"); shift ;;
+    beagle|fram|gaffer|north) inputs+=("$1"); shift ;;
     *) shift ;;
   esac
 done
@@ -59,6 +61,7 @@ chmod +x "$TMP/bin/nix"
 export FIRN_REPO="$TMP/firn"
 export FIRN_BEAGLE_REPO="$TMP/beagle"
 export FIRN_FRAM_REPO="$TMP/fram"
+export FIRN_GAFFER_REPO="$TMP/gaffer"
 export FIRN_NORTH_REPO="$TMP/north"
 export PATH="$TMP/bin:$PATH"
 
@@ -84,6 +87,24 @@ if grep -q '^plan ' <<<"$output"; then
   printf 'untracked input state unexpectedly produced a plan\n' >&2
   exit 1
 fi
+
+# Gaffer is a first-class local input: committed main HEAD plans, verifies,
+# promotes, and leaves no provisional lock mutation behind.
+printf 'v2\n' >>"$TMP/gaffer/source"
+git -C "$TMP/gaffer" add source
+git -C "$TMP/gaffer" commit -qm update
+old_gaffer="$(lock_rev gaffer)"
+new_gaffer="$(git -C "$TMP/gaffer" rev-parse HEAD)"
+output="$($SCRIPT --plan)"
+grep -q "^plan gaffer $old_gaffer $new_gaffer $TMP/gaffer\$" <<<"$output"
+lock_clean
+[ "$(lock_rev gaffer)" = "$old_gaffer" ]
+before_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
+output="$($SCRIPT --commit "gaffer=$new_gaffer")"
+grep -q 'gaffer promoted' <<<"$output"
+[ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq $((before_count + 1)) ]
+[ "$(lock_rev gaffer)" = "$new_gaffer" ]
+lock_clean
 
 # A new commit on main plans a promotable move — and planning NEVER mutates.
 printf 'v2\n' >>"$TMP/north/source"

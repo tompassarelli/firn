@@ -50,8 +50,11 @@
          :text (ms (s "exec " northPkg "/bin/north-mcp \"$@\""))})]
     {:tags [cli-tools]
      :flake-inputs
-      {:north {:url "git+file:///home/tom/code/north?ref=main"
-               :inputs.fram.follows "fram"}}
+      {:gaffer {:url "git+file:///home/tom/code/gaffer?ref=main"
+                :flake "false"}
+       :north {:url "git+file:///home/tom/code/north?ref=main"
+               :inputs.fram.follows "fram"
+               :inputs.gaffer.follows "gaffer"}}
      :options.myConfig.modules.north.enable
       (lib.mkEnableOption
         "checkout-first North CLI/MCP with explicit packaged smoke commands")

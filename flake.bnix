@@ -21,8 +21,9 @@
    :beagle {:inputs.nixpkgs.follows "nixpkgs" :url "git+file:///home/tom/code/beagle?ref=main"}
    :elephant {:url "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73"}
    :fram {:url "git+file:///home/tom/code/fram?ref=main"}
+   :gaffer {:url "git+file:///home/tom/code/gaffer?ref=main" :flake false}
    :gjoa {:url "github:tompassarelli/gjoa"}
-   :north {:url "git+file:///home/tom/code/north?ref=main" :inputs.fram.follows "fram"}
+   :north {:inputs.gaffer.follows "gaffer" :url "git+file:///home/tom/code/north?ref=main" :inputs.fram.follows "fram"}
    :nur {:url "github:nix-community/NUR"}
    :palefox {:url "github:tompassarelli/palefox"}
    :quickshell {:inputs.nixpkgs.follows "nixpkgs" :url "git+https://git.outfoxxed.me/outfoxxed/quickshell"}
@@ -46,6 +47,7 @@
      beagle
      elephant
      fram
+     gaffer
      gjoa
      north
      nur
@@ -76,6 +78,7 @@
                     :beagle beagle
                     :elephant elephant
                     :fram fram
+                    :gaffer gaffer
                     :gjoa gjoa
                     :north north
                     :nur nur
@@ -122,6 +125,7 @@
                     :beagle beagle
                     :elephant elephant
                     :fram fram
+                    :gaffer gaffer
                     :gjoa gjoa
                     :north north
                     :nur nur
@@ -285,6 +289,7 @@
                     :beagle beagle
                     :elephant elephant
                     :fram fram
+                    :gaffer gaffer
                     :gjoa gjoa
                     :north north
                     :nur nur
@@ -374,6 +379,7 @@
                     :beagle beagle
                     :elephant elephant
                     :fram fram
+                    :gaffer gaffer
                     :gjoa gjoa
                     :north north
                     :nur nur

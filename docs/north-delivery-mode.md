@@ -21,8 +21,10 @@ checkout.
 The flake-pinned package remains part of the system closure behind
 `north-packaged` and `north-mcp-packaged`. Use those names to smoke-test what the
 current `flake.lock` would deploy. `firn rebuild` promotes committed local North,
-Fram, and Beagle revisions only after its build and validation gates; that pinned
-promotion is the reproducible path for another machine or a release.
+Fram, Gaffer, and Beagle revisions only after its build and validation gates.
+North's packaged input follows the root Gaffer pin, so the verified North
+closure and its routing contract always move together. That pinned promotion is
+the reproducible path for another machine or a release.
 
 In short: ordinary names optimize the personal workstation for live harness
 development, while the `*-packaged` names expose the pinned promotion candidate

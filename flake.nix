@@ -43,10 +43,15 @@
     fram = {
       url = "git+file:///home/tom/code/fram?ref=main";
     };
+    gaffer = {
+      url = "git+file:///home/tom/code/gaffer?ref=main";
+      flake = false;
+    };
     gjoa = {
       url = "github:tompassarelli/gjoa";
     };
     north = {
+      inputs.gaffer.follows = "gaffer";
       url = "git+file:///home/tom/code/north?ref=main";
       inputs.fram.follows = "fram";
     };
@@ -69,7 +74,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, fram, gjoa, north, nur, palefox, quickshell, walker, zen-browser, ... }: let
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, fram, gaffer, gjoa, north, nur, palefox, quickshell, walker, zen-browser, ... }: let
     firnModules = ./modules;
   in
   {
@@ -80,6 +85,7 @@
           beagle = beagle;
           elephant = elephant;
           fram = fram;
+          gaffer = gaffer;
           gjoa = gjoa;
           north = north;
           nur = nur;
@@ -114,6 +120,7 @@
               beagle = beagle;
               elephant = elephant;
               fram = fram;
+              gaffer = gaffer;
               gjoa = gjoa;
               north = north;
               nur = nur;
@@ -279,6 +286,7 @@
           beagle = beagle;
           elephant = elephant;
           fram = fram;
+          gaffer = gaffer;
           gjoa = gjoa;
           north = north;
           nur = nur;
@@ -361,6 +369,7 @@
                 beagle = beagle;
                 elephant = elephant;
                 fram = fram;
+                gaffer = gaffer;
                 gjoa = gjoa;
                 north = north;
                 nur = nur;
