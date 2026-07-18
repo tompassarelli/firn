@@ -2,12 +2,13 @@
 
 (ns default)
 
-;; Personal development mode is checkout-first for Fram's supported command
-;; surface. Shell/Clojure/script edits are immediate; .bclj edits require
+;; Personal development mode is checkout-first for Fram's six live commands.
+;; Shell/Clojure/script edits are immediate; .bclj edits require
 ;; ~/code/fram/build.sh to refresh out/ before the runtime changes. The pinned
-;; package remains at low priority for internal helper compatibility, while
-;; explicit *-packaged commands expose the six supported programs for smoke
-;; tests. A missing checkout is an error, never an implicit stale fallback.
+;; package remains at low priority for core runtime compatibility, while explicit
+;; *-packaged commands expose only the four hermetic core programs. Checkout-only
+;; authoring and process-control helpers never masquerade as packaged fallbacks.
+;; A missing checkout is an error, never an implicit stale fallback.
 (nix/module [config lib pkgs inputs ...]
   (let
     [framPkg
@@ -17,9 +18,11 @@
         (nix/with pkgs [babashka clojure jdk coreutils bash gnused gnugrep git])
         (lib.optionals pkgs.stdenv.hostPlatform.isLinux
           (nix/with pkgs [iproute2])))
-     commands
+     liveCommandNames
       ["fram" "fram-daemon" "fram-mcp" "fram-primer" "fram-up"
        "fram-code-author"]
+     packagedCommandNames
+      ["fram" "fram-daemon" "fram-mcp" "fram-primer"]
      mkLive
       (fn [name]
         (lib.hiPrio
@@ -33,8 +36,8 @@
                   (s "  echo \"" name
                      ": live checkout executable missing: $target\" >&2")
                   (s "  echo \"" name
-                     ": restore that checkout or use " name
-                     "-packaged for the pinned closure\" >&2")
+                     ": restore that checkout; pinned fallbacks are limited to "
+                     "fram[-daemon|-mcp|-primer]-packaged\" >&2")
                   "  exit 127"
                   "fi"
                   "exec \"$target\" \"$@\"")})))
@@ -43,14 +46,14 @@
         (pkgs.writeShellApplication
           {:name (s name "-packaged")
            :text (ms (s "exec " framPkg "/bin/" name " \"$@\""))}))
-     liveCommands (builtins.map mkLive commands)
-     packagedCommands (builtins.map mkPackaged commands)]
+     liveCommands (builtins.map mkLive liveCommandNames)
+     packagedCommands (builtins.map mkPackaged packagedCommandNames)]
     {:tags [development]
      :flake-inputs
       {:fram {:url "git+file:///home/tom/code/fram?ref=main"}}
      :options.myConfig.modules.fram.enable
       (lib.mkEnableOption
-        "checkout-first Fram CLI suite with pinned helper compatibility")
+        "checkout-first Fram development commands with pinned core-command fallbacks")
      :config
       (lib.mkIf config.myConfig.modules.fram.enable
         {:environment.systemPackages

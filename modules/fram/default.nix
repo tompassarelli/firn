@@ -12,7 +12,8 @@ let
     gnugrep
     git
   ]) ++ (lib.optionals pkgs.stdenv.hostPlatform.isLinux (with pkgs; [ iproute2 ])));
-  commands = [ "fram" "fram-daemon" "fram-mcp" "fram-primer" "fram-up" "fram-code-author" ];
+  liveCommandNames = [ "fram" "fram-daemon" "fram-mcp" "fram-primer" "fram-up" "fram-code-author" ];
+  packagedCommandNames = [ "fram" "fram-daemon" "fram-mcp" "fram-primer" ];
   mkLive = name: lib.hiPrio (pkgs.writeShellApplication {
     name = name;
     runtimeInputs = liveInputs;
@@ -21,7 +22,7 @@ let
       target=$checkout/bin/${name}
       if [ ! -x "$target" ]; then
         echo "${name}: live checkout executable missing: $target" >&2
-        echo "${name}: restore that checkout or use ${name}-packaged for the pinned closure" >&2
+        echo "${name}: restore that checkout; pinned fallbacks are limited to fram[-daemon|-mcp|-primer]-packaged" >&2
         exit 127
       fi
       exec "$target" "$@"
@@ -33,11 +34,11 @@ let
       exec ${framPkg}/bin/${name} "$@"
     '';
   };
-  liveCommands = builtins.map mkLive commands;
-  packagedCommands = builtins.map mkPackaged commands;
+  liveCommands = builtins.map mkLive liveCommandNames;
+  packagedCommands = builtins.map mkPackaged packagedCommandNames;
 in
 {
-  options.myConfig.modules.fram.enable = lib.mkEnableOption "checkout-first Fram CLI suite with pinned helper compatibility";
+  options.myConfig.modules.fram.enable = lib.mkEnableOption "checkout-first Fram development commands with pinned core-command fallbacks";
   config = lib.mkIf config.myConfig.modules.fram.enable {
     environment.systemPackages = (liveCommands ++ packagedCommands ++ [ (lib.lowPrio framPkg) ]);
   };
