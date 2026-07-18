@@ -4,7 +4,7 @@
 "use strict";
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { execFileSync } = require("child_process");
+const { execFileSync, spawn } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -129,6 +129,28 @@ test("legacy string response fails open rather than emitting an invalid replacem
 test("malformed input fails open (no throw, no output)", () => {
   const out = execFileSync("node", [HOOK], { input: "not json", encoding: "utf8" });
   assert.equal(out, "");
+});
+
+test("held-open stdin is cut off before the provider deadline", async () => {
+  const started = Date.now();
+  const child = spawn("node", [HOOK], {
+    env: process.env,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8").on("data", (chunk) => { stdout += chunk; });
+  child.stderr.setEncoding("utf8").on("data", (chunk) => { stderr += chunk; });
+  const status = await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", resolve);
+  });
+  const elapsed = Date.now() - started;
+  assert.equal(status, 0);
+  assert.equal(stdout, "");
+  assert.equal(stderr, "");
+  assert.ok(elapsed >= 800, `stdin deadline fired implausibly early (${elapsed}ms)`);
+  assert.ok(elapsed < 3000, `stdin pipe exceeded fail-open ceiling (${elapsed}ms)`);
 });
 
 test("missing compressor module fails open inside the supervisor", () => {

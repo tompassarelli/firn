@@ -26,23 +26,18 @@ umask 077
 # supervisor buffers and validates its complete envelope. A slow pin script or
 # filesystem becomes a clean no-op, never a provider timeout or partial JSON.
 if [ "${RACKET_BUILD_GUARD_INNER:-0}" != 1 ]; then
-  out_dir="${XDG_RUNTIME_DIR:-/tmp}"
-  mkdir -p "$out_dir" 2>/dev/null || out_dir=/tmp
-  out="$(mktemp "$out_dir/racket-build-guard-output.XXXXXX" 2>/dev/null || true)"
-  [ -n "$out" ] || exit 0
-  trap 'rm -f "$out" 2>/dev/null || true' EXIT
-  if RACKET_BUILD_GUARD_INNER=1 \
-      timeout --signal=TERM --kill-after=0.2s 4s "$0" >"$out" 2>/dev/null &&
-      [ -s "$out" ] &&
+  json_payload="$(RACKET_BUILD_GUARD_INNER=1 \
+    timeout --signal=TERM --kill-after=0.2s 4s "$0" 2>/dev/null || true)"
+  if [ -n "$json_payload" ] &&
+      printf '%s' "$json_payload" | timeout --signal=TERM --kill-after=0.1s 0.5s \
       python3 -c '
 import json
 import sys
 
-with open(sys.argv[1], encoding="utf-8") as stream:
-    payload = json.load(stream)
+payload = json.load(sys.stdin)
 assert payload.get("hookSpecificOutput", {}).get("hookEventName") == "PostToolUse"
-' "$out" 2>/dev/null; then
-    cat "$out" 2>/dev/null || true
+' 2>/dev/null; then
+    printf '%s\n' "$json_payload"
   fi
   exit 0
 fi

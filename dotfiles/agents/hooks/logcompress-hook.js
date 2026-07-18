@@ -24,7 +24,18 @@ function passthrough() { process.exit(0); } // no output → original result is 
 // clean no-op, never a provider timeout or a partial replacement envelope.
 if (process.env.LOGCOMPRESS_INNER !== "1") {
   try {
-    const input = fs.readFileSync(0);
+    const inputRead = spawnSync(
+      "timeout",
+      ["--signal=TERM", "--kill-after=0.1s", "1s", "cat"],
+      {
+        stdio: [0, "pipe", "ignore"],
+        maxBuffer: 64 * 1024 * 1024,
+        timeout: 2000,
+        killSignal: "SIGKILL",
+      },
+    );
+    if (inputRead.status !== 0) process.exit(0);
+    const input = inputRead.stdout;
     const maxBuffer = Math.min(
       Math.max(input.length * 2 + 1024 * 1024, 1024 * 1024),
       64 * 1024 * 1024,
