@@ -75,24 +75,40 @@ const env = { XDG_CACHE_HOME: cacheDir };
 // actual cache subdir the hook will create
 const lcDir = path.join(cacheDir, "claude-logcompress");
 
-const bashStorm = { tool_name: "Bash", tool_response: storm };
+const bashResult = (stdout) => ({
+  stdout,
+  stderr: "",
+  interrupted: false,
+  isImage: false,
+  noOutputExpected: false,
+});
+const bashStorm = { tool_name: "Bash", tool_response: bashResult(storm) };
 
-test("hook emits updatedToolOutput on storm", () => {
+test("hook emits a shape-preserving updatedToolOutput object on storm", () => {
   const out = run(bashStorm, env);
-  assert.ok(out.includes("updatedToolOutput"));
-  assert.ok(out.includes("×26"));
+  const updated = JSON.parse(out).hookSpecificOutput.updatedToolOutput;
+  assert.equal(typeof updated, "object");
+  assert.ok(updated.stdout.includes("×26"));
+  assert.match(updated.stdout, /collapsed 25 repeated line\(s\)/);
+  assert.match(updated.stdout, /saved \d+ chars total/);
+  assert.doesNotMatch(updated.stdout, /ANSI/);
+  assert.equal(updated.stderr, "");
+  assert.equal(updated.interrupted, false);
+  assert.equal(updated.isImage, false);
+  assert.equal(updated.noOutputExpected, false);
 });
 
 test("hook stashes original to cache file", () => {
   const out = run(bashStorm, env);
-  const hash = JSON.parse(out).hookSpecificOutput.updatedToolOutput.match(/cat .+\/(\w+)\.json/)[1];
+  const stdout = JSON.parse(out).hookSpecificOutput.updatedToolOutput.stdout;
+  const hash = stdout.match(/cat .+\/(\w+)\.json/)[1];
   const stashed = fs.readFileSync(path.join(lcDir, `${hash}.json`), "utf8");
   assert.equal(stashed, storm);
 });
 
 test("hook retrieval note uses cat, not eso retrieve", () => {
   const out = run(bashStorm, env);
-  const note = JSON.parse(out).hookSpecificOutput.updatedToolOutput;
+  const note = JSON.parse(out).hookSpecificOutput.updatedToolOutput.stdout;
   assert.ok(note.includes("cat "));
   assert.ok(!note.includes("eso retrieve"));
 });
@@ -103,12 +119,48 @@ test("non-Bash tool passes through", () => {
 
 test("non-repetitive Bash passes through (no collapse, no ANSI)", () => {
   const trace = Array.from({ length: 30 }, (_, i) => `  File "app/x${i}.py", line ${i}, in f${i}`).join("\n");
-  assert.equal(run({ tool_name: "Bash", tool_response: trace }, env), "");
+  assert.equal(run({ tool_name: "Bash", tool_response: bashResult(trace) }, env), "");
+});
+
+test("legacy string response fails open rather than emitting an invalid replacement shape", () => {
+  assert.equal(run({ tool_name: "Bash", tool_response: storm }, env), "");
 });
 
 test("malformed input fails open (no throw, no output)", () => {
   const out = execFileSync("node", [HOOK], { input: "not json", encoding: "utf8" });
   assert.equal(out, "");
+});
+
+test("missing compressor module fails open inside the supervisor", () => {
+  const isolated = fs.mkdtempSync(path.join(os.tmpdir(), "logcompress-missing-module-"));
+  const isolatedHook = path.join(isolated, "logcompress-hook.js");
+  fs.copyFileSync(HOOK, isolatedHook);
+  const out = execFileSync("node", [isolatedHook], {
+    input: JSON.stringify(bashStorm),
+    encoding: "utf8",
+  });
+  assert.equal(out, "");
+  fs.rmSync(isolated, { recursive: true, force: true });
+});
+
+test("inner deadline turns a hung compressor into a clean no-op", () => {
+  const pidFile = path.join(cacheDir, "hung-inner.pid");
+  const started = Date.now();
+  const out = run(bashStorm, {
+    ...env,
+    LOGCOMPRESS_TEST_HANG: "1",
+    LOGCOMPRESS_TEST_PID_FILE: pidFile,
+  });
+  const elapsed = Date.now() - started;
+  assert.equal(out, "");
+  assert.ok(elapsed >= 1700, `deadline fired implausibly early (${elapsed}ms)`);
+  assert.ok(elapsed < 4000, `deadline exceeded fail-open ceiling (${elapsed}ms)`);
+  const innerPid = Number(fs.readFileSync(pidFile, "utf8"));
+  assert.throws(
+    () => process.kill(innerPid, 0),
+    (error) => error?.code === "ESRCH",
+    `inner process ${innerPid} survived its deadline`,
+  );
 });
 
 // ANSI-savings gate: >200 ANSI chars stripped → emit even without collapse
@@ -122,8 +174,11 @@ test("ANSI-only savings >200 chars triggers emit", () => {
   assert.ok(saved > 200, `expected saved > 200 chars, got ${saved}`);
   assert.equal(dropped, 0); // no collapse (below gate)
 
-  const out = run({ tool_name: "Bash", tool_response: ansiHeavy }, env);
+  const out = run({ tool_name: "Bash", tool_response: bashResult(ansiHeavy) }, env);
   assert.ok(out.includes("updatedToolOutput"), "hook should emit on ANSI-only savings > 200");
+  const stdout = JSON.parse(out).hookSpecificOutput.updatedToolOutput.stdout;
+  assert.match(stdout, /stripped \d+ ANSI chars/);
+  assert.doesNotMatch(stdout, /chars total/);
 });
 
 // ANSI-savings gate: ≤200 chars saved, no collapse → passthrough
@@ -133,5 +188,5 @@ test("ANSI-only savings ≤200 chars passes through", () => {
   const { saved, dropped } = compress(ansiLight);
   assert.ok(saved <= 200);
   assert.equal(dropped, 0);
-  assert.equal(run({ tool_name: "Bash", tool_response: ansiLight }, env), "");
+  assert.equal(run({ tool_name: "Bash", tool_response: bashResult(ansiLight) }, env), "");
 });

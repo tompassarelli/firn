@@ -10,15 +10,42 @@
 #   2. STALE BYTECODE — a .rkt edited but its compiled/<name>_rkt.zo not rebuilt,
 #      so a later run executes old code and a bug looks unfixable / confounded.
 #
-# This hook fires after an edit to a .rkt (or Beagle dialect) file and emits
-# actionable guidance on stderr (exit 2 -> surfaced to the agent) so the NEXT
-# build/test uses the pinned racket and fresh bytecode. It never blocks the edit
-# (the edit already happened); it makes the failure mode impossible to miss.
+# This hook fires after an edit to a .rkt file and returns actionable guidance
+# through PostToolUse additionalContext so the NEXT build/test uses the pinned
+# racket and fresh bytecode. It always exits 0: the edit already happened, and
+# diagnostics are context rather than a false hook failure.
 #
 # Kill-switch: persistent `north config guards off` (state) OR env
 # CLAUDE_NO_AUTHORING_HOOKS (any value but 0/false; 0/false forces guards live).
 # Shared impl: lib/authoring-killswitch.sh. Parity with the other hooks.
 set -uo pipefail
+umask 077
+
+# Stay well inside the provider's 15s hook deadline. The inner process owns
+# project discovery, pin sourcing, version probes, and JSON encoding; this
+# supervisor buffers and validates its complete envelope. A slow pin script or
+# filesystem becomes a clean no-op, never a provider timeout or partial JSON.
+if [ "${RACKET_BUILD_GUARD_INNER:-0}" != 1 ]; then
+  out_dir="${XDG_RUNTIME_DIR:-/tmp}"
+  mkdir -p "$out_dir" 2>/dev/null || out_dir=/tmp
+  out="$(mktemp "$out_dir/racket-build-guard-output.XXXXXX" 2>/dev/null || true)"
+  [ -n "$out" ] || exit 0
+  trap 'rm -f "$out" 2>/dev/null || true' EXIT
+  if RACKET_BUILD_GUARD_INNER=1 \
+      timeout --signal=TERM --kill-after=0.2s 4s "$0" >"$out" 2>/dev/null &&
+      [ -s "$out" ] &&
+      python3 -c '
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    payload = json.load(stream)
+assert payload.get("hookSpecificOutput", {}).get("hookEventName") == "PostToolUse"
+' "$out" 2>/dev/null; then
+    cat "$out" 2>/dev/null || true
+  fi
+  exit 0
+fi
 
 # Kill-switch: shared semantics in lib/authoring-killswitch.sh — persistent
 # `north config guards off` (state, live) or env CLAUDE_NO_AUTHORING_HOOKS
@@ -86,5 +113,22 @@ fi
 
 [ -z "$msgs" ] && exit 0
 
-printf '%s' "$msgs" >&2
-exit 2
+json_payload="$(python3 -c '
+import json
+import sys
+
+print(json.dumps({
+    "hookSpecificOutput": {
+        "hookEventName": "PostToolUse",
+        "additionalContext": sys.argv[1],
+    }
+}))
+' "$msgs" 2>/dev/null)" || json_payload=""
+if [ -n "$json_payload" ]; then
+  printf '%s\n' "$json_payload"
+else
+  # Transport failure must not turn an advisory PostToolUse hook into a generic
+  # hook error. Preserve the diagnostic as a plain fallback and still exit 0.
+  printf '%s' "$msgs" >&2
+fi
+exit 0
