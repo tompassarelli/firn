@@ -30,6 +30,7 @@
            :startLimitIntervalSec 0
            :restartIfChanged      true
            :environment           {:HOME homeDir
+                                   :FRAM_REQUIRE_LOG_FENCE "1"
                                    :FRAM_TELEMETRY_LOG (s homeDir "/.local/state/north/telemetry.log")}
            :serviceConfig
             {:Type             "simple"

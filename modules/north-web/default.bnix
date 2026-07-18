@@ -31,6 +31,9 @@
            :path                  [pkgs.bash pkgs.coreutils pkgs.git pkgs.bun beaglePkg]
            :startLimitIntervalSec 0
            :environment           {:HOME       homeDir
+                                   :FRAM_LOG   (s homeDir "/.local/state/north/coordination.log")
+                                   :FRAM_TELEMETRY_LOG
+                                     (s homeDir "/.local/state/north/telemetry.log")
                                    :PORT       "8088"
                                    :STATIC_DIR (s codeDir "/north/web/priv/static")
                                    :LANG       "en_US.UTF-8"}

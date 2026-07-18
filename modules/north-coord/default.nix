@@ -17,6 +17,7 @@ in
       restartIfChanged = true;
       environment = {
         HOME = homeDir;
+        FRAM_REQUIRE_LOG_FENCE = "1";
         FRAM_TELEMETRY_LOG = "${homeDir}/.local/state/north/telemetry.log";
       };
       serviceConfig = {

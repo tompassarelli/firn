@@ -18,6 +18,8 @@ in
       startLimitIntervalSec = 0;
       environment = {
         HOME = homeDir;
+        FRAM_LOG = "${homeDir}/.local/state/north/coordination.log";
+        FRAM_TELEMETRY_LOG = "${homeDir}/.local/state/north/telemetry.log";
         PORT = "8088";
         STATIC_DIR = "${codeDir}/north/web/priv/static";
         LANG = "en_US.UTF-8";
