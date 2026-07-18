@@ -16,20 +16,27 @@ jq -er --arg provider "$provider" '
     elif . == "plenty" then 4
     else -1 end;
 
-  if .schemaVersion != 2 or (.providers | type) != "array" then
+  if ((.schemaVersion != 2 and .schemaVersion != 3) or
+      (.providers | type) != "array") then
     error("unsupported north providers schema")
   else
-    [.providers[] | select(.provider == $provider)] as $groups
-    | if ($groups | length) != 1 or ($groups[0].targets | type) != "array" or
+    [.providers[] |
+      select((type == "object") and (.provider == $provider))] as $groups
+    | if ($groups | length) != 1 or
+         ($groups[0].provider | type) != "string" or
+         ($groups[0].targets | type) != "array" or
          ($groups[0].targets | length) == 0 then
         error("provider missing or malformed")
       else
         $groups[0].targets as $targets
         | if any($targets[];
-            (.installed | type) != "boolean" or
-            (.authenticated | type) != "boolean" or
-            (.routing != "eligible" and .routing != "unavailable" and .routing != "disabled") or
-            (.headroom | valid_headroom | not)) then
+            if type != "object" then true
+            else
+              (.installed | type) != "boolean" or
+              (.authenticated | type) != "boolean" or
+              (.routing != "eligible" and .routing != "unavailable" and .routing != "disabled") or
+              (.headroom | valid_headroom | not)
+            end) then
             error("provider target malformed")
           else
             [$targets[] | select(.routing == "eligible") | .headroom] as $eligible_headroom
