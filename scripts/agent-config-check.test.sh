@@ -76,6 +76,32 @@ fi
 # held; a cache matching only the feature HEAD is deferred, never declared
 # current and never promoted to hard drift while the checkout is ineligible.
 source "$REPO/scripts/agent-config-check.sh"
+
+# The live coordinator must positively identify the direct executable from the
+# pinned Fram derivation. A checkout path and a merely store-backed wrapper are
+# both rejected: the former bypasses promotion, the latter does not prove which
+# Fram closure actually runs.
+nix_hash='0123456789abcdfghijklmnpqrsvwxyz'
+pinned_path="/nix/store/${nix_hash}-fram-0-unstable-2026-06-28/bin/fram-daemon"
+pinned_exec="{ path=$pinned_path ; argv[]=$pinned_path 7977 /home/tom/.local/state/north/coordination.log ; ignore_errors=no ; }"
+classify_north_coord_exec "$pinned_exec"
+[ "$NORTH_COORD_EXEC_KIND" = pinned-package ]
+[ "$NORTH_COORD_EXEC_PATH" = "$pinned_path" ]
+
+checkout_path='/home/tom/code/fram/bin/fram-daemon'
+if classify_north_coord_exec "{ path=$checkout_path ; argv[]=$checkout_path 7977 /tmp/facts.log ; }"; then
+  printf 'checkout-backed north-coord was accepted as pinned\\n' >&2
+  exit 1
+fi
+[ "$NORTH_COORD_EXEC_KIND" = checkout ]
+
+wrapper_path="/nix/store/${nix_hash}-fram-daemon-packaged/bin/fram-daemon-packaged"
+if classify_north_coord_exec "{ path=$wrapper_path ; argv[]=$wrapper_path 7977 /tmp/facts.log ; }"; then
+  printf 'indirect store wrapper was accepted as the pinned Fram package\\n' >&2
+  exit 1
+fi
+[ "$NORTH_COORD_EXEC_KIND" = unrecognized ]
+
 main_full='1111111111111111111111111111111111111111'
 feature_full='2222222222222222222222222222222222222222'
 classify_gaffer_cache "${main_full:0:12}" "$feature_full" "$main_full" feature ''

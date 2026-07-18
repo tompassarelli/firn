@@ -10,6 +10,33 @@ gaffer_version_matches() {
     { [ "$version" = "$commit" ] || [ "$version" = "${commit:0:12}" ]; }
 }
 
+# Classify the executable path from systemctl's structured ExecStart rendering.
+# A store path is positive evidence of the verified Fram closure; rejecting the
+# familiar checkout path alone would still accept arbitrary unpinned wrappers.
+classify_north_coord_exec() {
+  local exec_spec="$1" path=''
+
+  NORTH_COORD_EXEC_KIND='unrecognized'
+  NORTH_COORD_EXEC_PATH=''
+  if [[ "$exec_spec" =~ path=([^[:space:]\;]+) ]]; then
+    path="${BASH_REMATCH[1]}"
+  else
+    path="${exec_spec%% *}"
+  fi
+  NORTH_COORD_EXEC_PATH="$path"
+
+  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*/bin/fram-daemon$ ]]; then
+    NORTH_COORD_EXEC_KIND='pinned-package'
+    return 0
+  fi
+  case "$path" in
+    */code/fram/bin/fram-daemon)
+      NORTH_COORD_EXEC_KIND='checkout'
+      ;;
+  esac
+  return 1
+}
+
 # Classify cache freshness without treating an excluded feature checkout as an
 # eligible plugin source. Tests source this file and exercise this pure seam.
 classify_gaffer_cache() {
@@ -512,6 +539,13 @@ if [ "$LOCAL" -eq 1 ]; then
     north_coord_exec="$(systemctl show north-coord -p ExecStart --value 2>/dev/null || true)"
     [[ "$north_coord_env" == *"FRAM_TELEMETRY_LOG=$CANONICAL_FRAM_TELEMETRY_LOG"* ]] || bad "north-coord lacks canonical FRAM_TELEMETRY_LOG in its live environment"
     [[ "$north_coord_exec" == *" $CANONICAL_FRAM_LOG "* ]] || bad "north-coord does not serve canonical coordination.log: $north_coord_exec"
+    if classify_north_coord_exec "$north_coord_exec"; then
+      ok_detail "north-coord executes pinned Fram package: $NORTH_COORD_EXEC_PATH"
+    elif [ "$NORTH_COORD_EXEC_KIND" = checkout ]; then
+      bad "north-coord is checkout-backed; expected the pinned Fram package: $NORTH_COORD_EXEC_PATH"
+    else
+      bad "north-coord does not execute a recognized pinned Fram package: ${NORTH_COORD_EXEC_PATH:-missing}"
+    fi
   else bad "north-coord systemd service is not active"; fi
   anthropic_installed='unknown'
   anthropic_authenticated='unknown'
