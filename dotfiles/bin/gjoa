@@ -94,7 +94,17 @@ case "${1:-}" in
     # never attaches to a survivor.
     if pkill -f "$mach_bin" 2>/dev/null; then
       echo "gjoa hotreload: stopped the running dev instance — relaunching fresh" >&2
-      sleep 1   # let the profile lock release before -no-remote
+      # AWAIT the old instance (parent + all content procs) to actually EXIT before
+      # relaunching — a fixed `sleep 1` was a smell: under load (e.g. a concurrent
+      # build) the content procs take >1s to reap, so the profile lock is still held
+      # and the -no-remote relaunch fails SILENTLY ("profile already in use") → the
+      # window never appears ("Gjoa Dev doesn't load"). Poll up to ~10s, then a
+      # small buffer for the .parentlock file to clear after the last proc dies.
+      for _ in $(seq 1 50); do
+        pgrep -f "$mach_bin" >/dev/null 2>&1 || break
+        sleep 0.2
+      done
+      sleep 0.3
     fi
     echo "gjoa hotreload: launching FRESH (chrome synced, new instance)" >&2
     if [ "${2:-}" = "-f" ]; then
