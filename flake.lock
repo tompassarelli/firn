@@ -78,11 +78,11 @@
         "zig-overlay": "zig-overlay"
       },
       "locked": {
-        "lastModified": 1784273195,
-        "narHash": "sha256-861Xv4CivdiK/+MCJAm0KuCyEOytN0HKXfF0Qxfal14=",
+        "lastModified": 1784379874,
+        "narHash": "sha256-fge1jn0+lGKuYbdTFJgPln+Q2645YBJmyaef61BtxhA=",
         "ref": "main",
-        "rev": "ab40250264e59dfd21a2e0a0cc5e1f72b69188ad",
-        "revCount": 924,
+        "rev": "9ca9e0efc6fe050c4f74831f421c7a35547dafc5",
+        "revCount": 925,
         "type": "git",
         "url": "file:///home/tom/code/beagle"
       },
@@ -308,11 +308,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1784247632,
-        "narHash": "sha256-Rcq6eW9Z/Q1Chidgg9TVm8D4pWeNv9DSMP13GH952TY=",
+        "lastModified": 1784382206,
+        "narHash": "sha256-FuldsziwNAu6p8wKYEVJ8zsSYT7PcbC06WVww6Hl5dg=",
         "ref": "main",
-        "rev": "fe60d283b410355d25e857be3caa12b58563baed",
-        "revCount": 333,
+        "rev": "85b4dc49813620c75154f0dc91851ae9d969a598",
+        "revCount": 335,
         "type": "git",
         "url": "file:///home/tom/code/fram"
       },
@@ -341,17 +341,18 @@
     "gaffer": {
       "flake": false,
       "locked": {
-        "lastModified": 1784253813,
-        "narHash": "sha256-M06wMGEF/sQN5/LoqTLyzC+6GFPcNzf7nB92NhiAHr0=",
-        "owner": "tompassarelli",
-        "repo": "gaffer",
-        "rev": "30fa0076dce9bf3f7a67be8ee3943181e2bf7b74",
-        "type": "github"
+        "lastModified": 1784289105,
+        "narHash": "sha256-/45MKuTJHB4KpWciIrBd/hcOBQg7aifbAN5zK5tSkNw=",
+        "ref": "main",
+        "rev": "a920ac8de731907ca5b5fbed418f39ab2bc3fdb8",
+        "revCount": 32,
+        "type": "git",
+        "url": "file:///home/tom/code/gaffer"
       },
       "original": {
-        "owner": "tompassarelli",
-        "repo": "gaffer",
-        "type": "github"
+        "ref": "main",
+        "type": "git",
+        "url": "file:///home/tom/code/gaffer"
       }
     },
     "gjoa": {
@@ -702,15 +703,17 @@
         "fram": [
           "fram"
         ],
-        "gaffer": "gaffer",
+        "gaffer": [
+          "gaffer"
+        ],
         "nixpkgs": "nixpkgs_5"
       },
       "locked": {
-        "lastModified": 1784291666,
-        "narHash": "sha256-1W3cFf7UmaWLxuFM0D82E9soR2ir/P4wiejv5hLnUn4=",
+        "lastModified": 1784383606,
+        "narHash": "sha256-viz6Ayu6Uq7hP24qPEErWaFi5dWJ7ovBWxppB07AXP8=",
         "ref": "main",
-        "rev": "2256019345f09d7d97174f5b01934830d758dada",
-        "revCount": 297,
+        "rev": "4af77e618e30c4146f983fd8dc3e38593f35d459",
+        "revCount": 307,
         "type": "git",
         "url": "file:///home/tom/code/north"
       },
@@ -807,6 +810,7 @@
         "beagle": "beagle",
         "elephant": "elephant",
         "fram": "fram",
+        "gaffer": "gaffer",
         "gjoa": "gjoa",
         "glide": "glide",
         "home-manager": "home-manager",
