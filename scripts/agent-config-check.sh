@@ -405,6 +405,7 @@ def command(path, timeout):
 
 expected = {
     "allow_managed_hooks_only": True,
+    "allow_remote_control": False,
     "features": {"hooks": True},
     "hooks": {
         "managed_dir": "/etc/codex/hooks",
@@ -468,6 +469,10 @@ expected = {
 
 with open(sys.argv[1], "rb") as handle:
     policy = tomllib.load(handle)
+if type(policy.get("allow_managed_hooks_only")) is not bool:
+    raise SystemExit("allow_managed_hooks_only must be a boolean")
+if type(policy.get("allow_remote_control")) is not bool:
+    raise SystemExit("allow_remote_control must be a boolean")
 if policy != expected:
     raise SystemExit("managed Codex policy differs from the canonical contract")
 print(sum(
@@ -711,7 +716,7 @@ validate_codex_managed_policy() {
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
   if [ "$CODEX_MANAGED_BINDINGS" = 17 ]; then
-    ok_detail 'Codex managed-only policy is the exact 17-binding authoritative contract'
+    ok_detail 'Codex managed-only, remote-control-disabled policy is the exact 17-binding authoritative contract'
   else
     bad 'Codex managed requirements differ from the authoritative hook contract'
   fi

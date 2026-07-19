@@ -79,6 +79,30 @@ if codex_managed_policy_binding_count \
   printf 'non-exclusive Codex managed policy was accepted\n' >&2
   exit 1
 fi
+cp "$managed_policy" "$scratch/managed-policy-remote-control-missing.toml"
+sed -i '/^allow_remote_control = false$/d' \
+  "$scratch/managed-policy-remote-control-missing.toml"
+if codex_managed_policy_binding_count \
+  "$scratch/managed-policy-remote-control-missing.toml" >/dev/null 2>&1; then
+  printf 'Codex managed policy without an explicit remote-control deny was accepted\n' >&2
+  exit 1
+fi
+cp "$managed_policy" "$scratch/managed-policy-remote-control-enabled.toml"
+sed -i 's/^allow_remote_control = false$/allow_remote_control = true/' \
+  "$scratch/managed-policy-remote-control-enabled.toml"
+if codex_managed_policy_binding_count \
+  "$scratch/managed-policy-remote-control-enabled.toml" >/dev/null 2>&1; then
+  printf 'Codex managed policy with remote control enabled was accepted\n' >&2
+  exit 1
+fi
+cp "$managed_policy" "$scratch/managed-policy-remote-control-wrong-type.toml"
+sed -i 's/^allow_remote_control = false$/allow_remote_control = 0/' \
+  "$scratch/managed-policy-remote-control-wrong-type.toml"
+if codex_managed_policy_binding_count \
+  "$scratch/managed-policy-remote-control-wrong-type.toml" >/dev/null 2>&1; then
+  printf 'Codex managed policy with a non-boolean remote-control setting was accepted\n' >&2
+  exit 1
+fi
 cp "$managed_policy" "$scratch/managed-policy-timeout-drift.toml"
 sed -i '0,/^timeout = 10$/s//timeout = 11/' \
   "$scratch/managed-policy-timeout-drift.toml"

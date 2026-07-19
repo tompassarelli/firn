@@ -1,4 +1,5 @@
 allow_managed_hooks_only = true
+allow_remote_control = false
 
 [features]
 hooks = true

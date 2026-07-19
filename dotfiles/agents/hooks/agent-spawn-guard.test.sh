@@ -299,26 +299,53 @@ if jq -e '
 import sys, tomllib
 with open(sys.argv[1], "rb") as handle:
     policy = tomllib.load(handle)
-assert set(policy) == {"features", "hooks"}
+assert set(policy) == {
+    "allow_managed_hooks_only",
+    "allow_remote_control",
+    "features",
+    "hooks",
+}
+assert type(policy["allow_managed_hooks_only"]) is bool
+assert policy["allow_managed_hooks_only"] is True
+assert type(policy["allow_remote_control"]) is bool
+assert policy["allow_remote_control"] is False
 assert policy["features"] == {"hooks": True}
 hooks = policy["hooks"]
-assert set(hooks) == {"managed_dir", "PreToolUse"}
+assert set(hooks) == {
+    "managed_dir",
+    "SessionStart",
+    "SubagentStart",
+    "PreToolUse",
+    "PostToolUse",
+    "Stop",
+}
 assert hooks["managed_dir"] == "/etc/codex/hooks"
-assert len(hooks["PreToolUse"]) == 1
-binding = hooks["PreToolUse"][0]
-assert binding["matcher"] == "^Bash$"
-assert len(binding["hooks"]) == 1
-command = binding["hooks"][0]
+bindings = [
+    binding
+    for binding in hooks["PreToolUse"]
+    if binding.get("matcher") == "^Bash$"
+]
+assert len(bindings) == 1
+commands = [
+    command
+    for command in bindings[0]["hooks"]
+    if command.get("command", "").endswith("/agent-spawn-guard.sh")
+]
+assert len(commands) == 1
+command = commands[0]
 assert command == {
     "type": "command",
-    "command": "/etc/codex/hooks/agent-spawn-guard.sh",
+    "command": (
+        "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV "
+        "/etc/codex/hooks/runtime/bash /etc/codex/hooks/agent-spawn-guard.sh"
+    ),
     "timeout": 10,
 }
 PY
 then
-  pass=$((pass + 1)); echo 'PASS  bind   Codex has one narrow managed guard; user/plugin hooks remain permitted'
+  pass=$((pass + 1)); echo 'PASS  bind   Codex authoritative managed policy has one Bash worker guard'
 else
-  fail=$((fail + 1)); echo 'FAIL  bind   Codex managed guard is missing, duplicated, or over-broad'
+  fail=$((fail + 1)); echo 'FAIL  bind   Codex managed policy or Bash worker guard differs from its authoritative contract'
 fi
 
 echo
