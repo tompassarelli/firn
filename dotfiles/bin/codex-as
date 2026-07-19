@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Run codex under a specific north-managed account.
+set -u
+
+ACCOUNTS_ROOT="$HOME/.local/state/north/accounts/openai"
+
+list_accounts() {
+  if [ -d "$ACCOUNTS_ROOT" ]; then
+    find "$ACCOUNTS_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort
+  fi
+}
+
+usage() {
+  cat <<EOF
+codex-as <account-id> [codex args...]
+
+  Runs codex with CODEX_HOME/CODEX_SQLITE_HOME pointed at
+  $ACCOUNTS_ROOT/<account-id>
+
+Available accounts:
+$(list_accounts | sed 's/^/  /')
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+account="${1:-}"
+if [ -z "$account" ]; then
+  echo "codex-as: missing <account-id>" >&2
+  usage >&2
+  exit 1
+fi
+shift
+
+root="$ACCOUNTS_ROOT/$account"
+if [ ! -d "$root" ]; then
+  echo "codex-as: unknown account '$account'" >&2
+  usage >&2
+  exit 1
+fi
+
+export CODEX_HOME="$root"
+export CODEX_SQLITE_HOME="$root/sqlite"
+exec codex "$@"
