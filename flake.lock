@@ -78,11 +78,11 @@
         "zig-overlay": "zig-overlay"
       },
       "locked": {
-        "lastModified": 1784379874,
-        "narHash": "sha256-fge1jn0+lGKuYbdTFJgPln+Q2645YBJmyaef61BtxhA=",
+        "lastModified": 1784411240,
+        "narHash": "sha256-jK2TRKtWHrZ53iINQs/Jbd9DhULN+ra3Q5LiInzdYvU=",
         "ref": "main",
-        "rev": "9ca9e0efc6fe050c4f74831f421c7a35547dafc5",
-        "revCount": 925,
+        "rev": "e82305057bb5cf74edf74476776ff5b98c94071c",
+        "revCount": 927,
         "type": "git",
         "url": "file:///home/tom/code/beagle"
       },
@@ -115,10 +115,56 @@
         "type": "github"
       }
     },
+    "clj-nix_2": {
+      "inputs": {
+        "devshell": "devshell_2",
+        "nix-fetcher-data": "nix-fetcher-data_2",
+        "nixpkgs": [
+          "fram",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1776760934,
+        "narHash": "sha256-WVzvTigFwWcJ0VkAFMzA3jE8kbHGahCJ0FJFqVYhPqM=",
+        "owner": "jlesquembre",
+        "repo": "clj-nix",
+        "rev": "2b1290ee56e9bbd50e9b5874c985d34ad2f1b458",
+        "type": "github"
+      },
+      "original": {
+        "owner": "jlesquembre",
+        "repo": "clj-nix",
+        "rev": "2b1290ee56e9bbd50e9b5874c985d34ad2f1b458",
+        "type": "github"
+      }
+    },
     "devshell": {
       "inputs": {
         "nixpkgs": [
           "beagle",
+          "clj-nix",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1768818222,
+        "narHash": "sha256-460jc0+CZfyaO8+w8JNtlClB2n4ui1RbHfPTLkpwhU8=",
+        "owner": "numtide",
+        "repo": "devshell",
+        "rev": "255a2b1725a20d060f566e4755dbf571bbbb5f76",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "devshell",
+        "type": "github"
+      }
+    },
+    "devshell_2": {
+      "inputs": {
+        "nixpkgs": [
+          "fram",
           "clj-nix",
           "nixpkgs"
         ]
@@ -209,6 +255,24 @@
     },
     "flake-parts_2": {
       "inputs": {
+        "nixpkgs-lib": "nixpkgs-lib_2"
+      },
+      "locked": {
+        "lastModified": 1719745305,
+        "narHash": "sha256-xwgjVUpqSviudEkpQnioeez1Uo2wzrsMaJKJClh+Bls=",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "c3c5ecc05edc7dafba779c6c1a61cd08ac6583e9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
+      }
+    },
+    "flake-parts_3": {
+      "inputs": {
         "nixpkgs-lib": [
           "nur",
           "nixpkgs"
@@ -228,7 +292,7 @@
         "type": "github"
       }
     },
-    "flake-parts_3": {
+    "flake-parts_4": {
       "inputs": {
         "nixpkgs-lib": [
           "stylix",
@@ -305,14 +369,15 @@
     },
     "fram": {
       "inputs": {
+        "clj-nix": "clj-nix_2",
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1784392355,
-        "narHash": "sha256-VNRRrW+u++8yCNz7LGS7L/HJ4q0SPepBvVLC+oClx/g=",
+        "lastModified": 1784441932,
+        "narHash": "sha256-TtgBoJPznX6M0lI3p9iJm/DffvQGJoIgyROAJvh5Cn4=",
         "ref": "main",
-        "rev": "34753a001bdcb786ae4b8bd171d9848f5e0a4276",
-        "revCount": 336,
+        "rev": "1447da8623928a07cec7cc0f4a10ab34aeaa2d67",
+        "revCount": 341,
         "type": "git",
         "url": "file:///home/tom/code/fram"
       },
@@ -341,11 +406,11 @@
     "gaffer": {
       "flake": false,
       "locked": {
-        "lastModified": 1784289105,
-        "narHash": "sha256-/45MKuTJHB4KpWciIrBd/hcOBQg7aifbAN5zK5tSkNw=",
+        "lastModified": 1784430698,
+        "narHash": "sha256-sRgIxCAnbBC6nlx+o8hHSWCgyAIL8ddbW4iutv9QiIE=",
         "ref": "main",
-        "rev": "a920ac8de731907ca5b5fbed418f39ab2bc3fdb8",
-        "revCount": 32,
+        "rev": "04452406cad81c08ccf99726b027301ed1fdeae7",
+        "revCount": 34,
         "type": "git",
         "url": "file:///home/tom/code/gaffer"
       },
@@ -509,6 +574,29 @@
         "type": "github"
       }
     },
+    "nix-fetcher-data_2": {
+      "inputs": {
+        "flake-parts": "flake-parts_2",
+        "nixpkgs": [
+          "fram",
+          "clj-nix",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1755022803,
+        "narHash": "sha256-/QtBdVfZlrRJW5enUoWlBE2wrLXJBMJ45X0rZh0jiaU=",
+        "owner": "jlesquembre",
+        "repo": "nix-fetcher-data",
+        "rev": "9da3926b1459d6ff15268072d1c51351b82811b9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "jlesquembre",
+        "repo": "nix-fetcher-data",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1760284886,
@@ -526,6 +614,18 @@
       }
     },
     "nixpkgs-lib": {
+      "locked": {
+        "lastModified": 1717284937,
+        "narHash": "sha256-lIbdfCsf8LMFloheeE6N31+BMIeixqyQWbSr2vk79EQ=",
+        "type": "tarball",
+        "url": "https://github.com/NixOS/nixpkgs/archive/eb9ceca17df2ea50a250b6b27f7bf6ab0186f198.tar.gz"
+      },
+      "original": {
+        "type": "tarball",
+        "url": "https://github.com/NixOS/nixpkgs/archive/eb9ceca17df2ea50a250b6b27f7bf6ab0186f198.tar.gz"
+      }
+    },
+    "nixpkgs-lib_2": {
       "locked": {
         "lastModified": 1717284937,
         "narHash": "sha256-lIbdfCsf8LMFloheeE6N31+BMIeixqyQWbSr2vk79EQ=",
@@ -699,6 +799,9 @@
     },
     "north": {
       "inputs": {
+        "beagle": [
+          "beagle"
+        ],
         "flake-utils": "flake-utils_3",
         "fram": [
           "fram"
@@ -709,11 +812,11 @@
         "nixpkgs": "nixpkgs_5"
       },
       "locked": {
-        "lastModified": 1784392730,
-        "narHash": "sha256-MYFKrLN92+XAkbTZupKkJrlVvAxbBE7lMDfljsTYq/Q=",
+        "lastModified": 1784442525,
+        "narHash": "sha256-x1GWZmXk0qBglDO31f4WxZHoOGiWb73djvsAwFStXeM=",
         "ref": "main",
-        "rev": "9221237aa5dd14edddb12ad220dd6a209eab91f6",
-        "revCount": 309,
+        "rev": "55e254f54a09df66dd2900440f98808bf23eb8ef",
+        "revCount": 315,
         "type": "git",
         "url": "file:///home/tom/code/north"
       },
@@ -725,7 +828,7 @@
     },
     "nur": {
       "inputs": {
-        "flake-parts": "flake-parts_2",
+        "flake-parts": "flake-parts_3",
         "nixpkgs": "nixpkgs_6"
       },
       "locked": {
@@ -856,7 +959,7 @@
         "base16-helix": "base16-helix",
         "base16-vim": "base16-vim",
         "firefox-gnome-theme": "firefox-gnome-theme",
-        "flake-parts": "flake-parts_3",
+        "flake-parts": "flake-parts_4",
         "gnome-shell": "gnome-shell",
         "nixpkgs": "nixpkgs_8",
         "nur": "nur_2",
