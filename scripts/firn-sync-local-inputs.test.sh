@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT="$(cd "$(dirname "$0")" && pwd)/firn-sync-local-inputs"
+REBUILD="$(cd "$(dirname "$0")" && pwd)/firn-cmds/rebuild.rkt"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -49,12 +50,24 @@ done
 for input in "${inputs[@]}"; do
   upper="$(printf '%s' "$input" | tr '[:lower:]' '[:upper:]')"
   var="FIRN_${upper}_REPO"
-  rev="$(git -C "${!var}" rev-parse HEAD)"
+  if [ "${FAKE_NIX_ADVANCE_INPUT:-}" = "$input" ]; then
+    printf 'nix-resolution-race\n' >>"${!var}/source"
+    git -C "${!var}" add source
+    git -C "${!var}" commit -qm nix-resolution-race
+  fi
+  rev="$(git -C "${!var}" rev-parse --verify 'refs/heads/main^{commit}')"
   [ "${FAKE_NIX_WRONG:-0}" != 1 ] || rev=0000000000000000000000000000000000000000
   tmp="$root/flake.lock.tmp"
   jq --arg input "$input" --arg rev "$rev" '.nodes[$input].locked.rev=$rev' "$root/flake.lock" >"$tmp"
   mv "$tmp" "$root/flake.lock"
 done
+if [ -n "${FAKE_NIX_REWRITE_UNREQUESTED:-}" ]; then
+  tmp="$root/flake.lock.tmp"
+  jq --arg input "$FAKE_NIX_REWRITE_UNREQUESTED" \
+    '.nodes[$input].locked.rev="0000000000000000000000000000000000000000"' \
+    "$root/flake.lock" >"$tmp"
+  mv "$tmp" "$root/flake.lock"
+fi
 EOF
 chmod +x "$TMP/bin/nix"
 
@@ -70,6 +83,9 @@ lock_clean() {
   git -C "$TMP/firn" diff --quiet -- flake.lock &&
   git -C "$TMP/firn" diff --cached --quiet -- flake.lock
 }
+
+# The build consumes the exact planned object even if local main advances.
+grep -Fq '(format "git+file://~a?ref=main&rev=~a"' "$REBUILD"
 
 # All current: no plan lines, nothing mutated.
 output="$($SCRIPT --plan)"
@@ -124,6 +140,34 @@ grep -q 'north promoted' <<<"$output"
 [ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq $((before_count + 1)) ]
 [ "$(lock_rev north)" = "$new_north" ]
 lock_clean
+
+# An EXIT/TERM crash immediately after the mechanical commit must preserve the
+# exact promoted lock already in HEAD. The handler heals index/worktree to that
+# commit, removes its recovery files, and the next run sees a current pin.
+printf 'v3\n' >>"$TMP/gaffer/source"
+git -C "$TMP/gaffer" add source
+git -C "$TMP/gaffer" commit -qm post-commit-crash-target
+crash_gaffer="$(git -C "$TMP/gaffer" rev-parse HEAD)"
+crash_count_before="$(git -C "$TMP/firn" rev-list --count HEAD)"
+mkdir "$TMP/recovery-tmp"
+if output="$(
+  TMPDIR="$TMP/recovery-tmp" \
+  FIRN_INJECT_CRASH_AFTER_COMMIT=1 \
+    "$SCRIPT" --commit "gaffer=$crash_gaffer" 2>&1
+)"; then
+  printf 'injected post-commit crash unexpectedly returned success\n' >&2
+  exit 1
+fi
+[ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq $((crash_count_before + 1)) ]
+[ "$(lock_rev gaffer)" = "$crash_gaffer" ]
+lock_clean
+[ -z "$(find "$TMP/recovery-tmp" -mindepth 1 -print -quit)" ]
+output="$($SCRIPT --plan)"
+grep -q "gaffer.*current at ${crash_gaffer:0:8}" <<<"$output"
+if grep -q '^plan gaffer ' <<<"$output"; then
+  printf 'post-commit crash recovery left Gaffer promotable\n' >&2
+  exit 1
+fi
 
 # The internal commit contract is explicit and rejects malformed target specs
 # before any lock mutation.
@@ -183,11 +227,11 @@ if grep -q '^plan fram ' <<<"$output"; then
 fi
 grep -q '^plan beagle ' <<<"$output"
 
-# Dirty main whose HEAD moved ahead of the pin promotes committed HEAD only.
+# Dirty main whose local main moved ahead of the pin promotes committed main only.
 git -C "$TMP/fram" add source
 git -C "$TMP/fram" commit -qm wip-base
 printf 'more wip\n' >>"$TMP/fram/source"
-new_fram="$(git -C "$TMP/fram" rev-parse HEAD)"
+new_fram="$(git -C "$TMP/fram" rev-parse 'refs/heads/main^{commit}')"
 output="$($SCRIPT --plan)"
 grep -q 'fram.*tracked WIP excluded' <<<"$output"
 grep -q "^plan fram .* $new_fram $TMP/fram\$" <<<"$output"
@@ -195,25 +239,49 @@ output="$($SCRIPT --commit "fram=$new_fram")"
 grep -q 'fram promoted' <<<"$output"
 [ "$(lock_rev fram)" = "$new_fram" ]
 grep -q '^ M source$' < <(git -C "$TMP/fram" status --short)
-if git -C "$TMP/fram" show HEAD:source | grep -q 'more wip'; then
-  printf 'dirty worktree content leaked into committed HEAD\n' >&2
+if git -C "$TMP/fram" show 'refs/heads/main:source' | grep -q 'more wip'; then
+  printf 'dirty worktree content leaked into committed main\n' >&2
   exit 1
 fi
 
-# Non-main checkout holds too — refresh only promotes commits from main.
+# A feature-only commit is never eligible.
 git -C "$TMP/fram" checkout -q -- source
 git -C "$TMP/fram" checkout -qb feature
 printf 'feature\n' >>"$TMP/fram/source"
 git -C "$TMP/fram" add source
 git -C "$TMP/fram" commit -qm feature-only
+feature_fram="$(git -C "$TMP/fram" rev-parse HEAD)"
 output="$($SCRIPT --plan)"
-grep -q 'fram.*not main' <<<"$output"
+grep -q 'fram.*checkout feature' <<<"$output"
 if grep -q '^plan fram ' <<<"$output"; then
   printf 'feature-branch input unexpectedly produced a plan\n' >&2
   exit 1
 fi
 
+# Another worktree may advance local main while the developer remains on a
+# dirty feature checkout. The new committed main plans and promotes; feature
+# HEAD and dirty bytes remain excluded.
+git -C "$TMP/fram" worktree add -q "$TMP/fram-main" main
+printf 'main-from-other-worktree\n' >>"$TMP/fram-main/source"
+git -C "$TMP/fram-main" add source
+git -C "$TMP/fram-main" commit -qm main-from-other-worktree
+advanced_main_fram="$(git -C "$TMP/fram-main" rev-parse HEAD)"
+git -C "$TMP/fram" worktree remove "$TMP/fram-main"
+printf 'dirty-feature-only\n' >>"$TMP/fram/source"
+output="$($SCRIPT --plan)"
+grep -q 'fram.*checkout feature.*tracked WIP excluded' <<<"$output"
+grep -q "^plan fram .* $advanced_main_fram $TMP/fram\$" <<<"$output"
+if grep -q "$feature_fram" <<<"$output"; then
+  printf 'feature-only HEAD appeared in the local-main plan\n' >&2
+  exit 1
+fi
+output="$($SCRIPT --commit "fram=$advanced_main_fram")"
+grep -q 'fram promoted' <<<"$output"
+[ "$(lock_rev fram)" = "$advanced_main_fram" ]
+grep -q '^ M source$' < <(git -C "$TMP/fram" status --short)
+
 # Back on clean main, only the pending clean input promotes.
+git -C "$TMP/fram" checkout -q -- source
 git -C "$TMP/fram" checkout -q main
 output="$($SCRIPT --plan)"
 if grep -q '^plan fram ' <<<"$output"; then
@@ -243,8 +311,70 @@ grep -q 'not built target.*deferring' <<<"$output"
 [ "$(lock_rev north)" = "$before_race_lock" ]
 lock_clean
 
+# A main advance inside `nix flake update` happens after commit preflight. The
+# post-resolution check catches it, restores the whole lock, and commits
+# nothing; the newly resolved but unbuilt revision never becomes the pin.
+planned_north="$(git -C "$TMP/north" rev-parse 'refs/heads/main^{commit}')"
+before_resolution_race_hash="$(sha256sum "$TMP/firn/flake.lock")"
+before_resolution_race_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
+output="$(FAKE_NIX_ADVANCE_INPUT=north "$SCRIPT" --commit "north=$planned_north")"
+grep -Eq 'moved to|raced to' <<<"$output"
+[ "$(sha256sum "$TMP/firn/flake.lock")" = "$before_resolution_race_hash" ]
+[ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq "$before_resolution_race_count" ]
+lock_clean
+
+# A targeted update may not rewrite any part of an unrequested local pin.
+planned_north="$(git -C "$TMP/north" rev-parse 'refs/heads/main^{commit}')"
+before_unrequested_hash="$(sha256sum "$TMP/firn/flake.lock")"
+before_unrequested_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
+output="$(FAKE_NIX_REWRITE_UNREQUESTED=fram "$SCRIPT" --commit "north=$planned_north")"
+grep -q 'rewrote unrequested local input fram.*deferring' <<<"$output"
+[ "$(sha256sum "$TMP/firn/flake.lock")" = "$before_unrequested_hash" ]
+[ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq "$before_unrequested_count" ]
+lock_clean
+
+# Missing local main is an explicit hold, not a fallback to feature HEAD.
+gaffer_main="$(git -C "$TMP/gaffer" rev-parse 'refs/heads/main^{commit}')"
+git -C "$TMP/gaffer" checkout -qb missing-main-probe
+git -C "$TMP/gaffer" branch -D main >/dev/null
+output="$($SCRIPT --plan)"
+grep -q 'gaffer.*refs/heads/main is missing.*holding verified' <<<"$output"
+if grep -q '^plan gaffer ' <<<"$output"; then
+  printf 'input with missing local main unexpectedly produced a plan\n' >&2
+  exit 1
+fi
+git -C "$TMP/gaffer" branch main "$gaffer_main"
+git -C "$TMP/gaffer" checkout -q main
+git -C "$TMP/gaffer" branch -D missing-main-probe >/dev/null
+
+# A rewound or divergent local main can never downgrade/replace the verified
+# pin. Prove both relationships while keeping the active checkout off main.
+locked_gaffer="$(lock_rev gaffer)"
+gaffer_parent="$(git -C "$TMP/gaffer" rev-parse "$locked_gaffer^")"
+git -C "$TMP/gaffer" checkout -qb non-ff-probe "$gaffer_parent"
+git -C "$TMP/gaffer" branch -f main "$gaffer_parent"
+output="$($SCRIPT --plan)"
+grep -q 'gaffer.*behind verified.*non-fast-forward not promoted' <<<"$output"
+if grep -q '^plan gaffer ' <<<"$output"; then
+  printf 'rewound local main unexpectedly produced a downgrade plan\n' >&2
+  exit 1
+fi
+printf 'divergent\n' >>"$TMP/gaffer/source"
+git -C "$TMP/gaffer" add source
+git -C "$TMP/gaffer" commit -qm divergent
+git -C "$TMP/gaffer" branch -f main HEAD
+output="$($SCRIPT --plan)"
+grep -q 'gaffer.*diverged from verified.*non-fast-forward not promoted' <<<"$output"
+if grep -q '^plan gaffer ' <<<"$output"; then
+  printf 'divergent local main unexpectedly produced a plan\n' >&2
+  exit 1
+fi
+git -C "$TMP/gaffer" branch -f main "$locked_gaffer"
+git -C "$TMP/gaffer" checkout -q main
+git -C "$TMP/gaffer" branch -D non-ff-probe >/dev/null
+
 # A foreign edit to the firn lock itself defers promotion, never blocks.
-new_north="$(git -C "$TMP/north" rev-parse HEAD)"
+new_north="$(git -C "$TMP/north" rev-parse 'refs/heads/main^{commit}')"
 printf ' \n' >>"$TMP/firn/flake.lock"
 output="$($SCRIPT --commit "north=$new_north")"
 grep -q 'deferring' <<<"$output"

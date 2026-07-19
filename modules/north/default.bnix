@@ -2,13 +2,12 @@
 
 (ns default)
 
-;; Personal development mode is checkout-first: hooks, MCP, the Fram daemon,
-;; and ordinary shell calls all exercise the same ~/code checkout. Scripts,
-;; TypeScript/Clojure, and regenerated outputs are immediate; North .bclj edits
-;; require ~/code/north/build.sh to refresh out/ before the runtime changes.
-;; The flake package remains in the closure behind explicit *-packaged smoke
-;; commands; promotion is still a pinned-lock decision, never an implicit
-;; fallback when a checkout is missing.
+;; Interactive development surfaces are checkout-first: the ordinary CLI, MCP,
+;; and lifecycle hooks exercise ~/code/north so source/output iteration is
+;; immediate. Explicit *-packaged commands probe the exact promoted closure.
+;; Long-lived north-coord and north-web services are separate deployment
+;; surfaces: they run immutable package paths from the verified flake inputs,
+;; never these checkout-first wrappers.
 (nix/module [config lib pkgs inputs ...]
   (let
     [northPkg
@@ -53,6 +52,7 @@
       {:gaffer {:url "git+file:///home/tom/code/gaffer?ref=main"
                 :flake "false"}
        :north {:url "git+file:///home/tom/code/north?ref=main"
+               :inputs.beagle.follows "beagle"
                :inputs.fram.follows "fram"
                :inputs.gaffer.follows "gaffer"}}
      :options.myConfig.modules.north.enable

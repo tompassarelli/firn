@@ -2,6 +2,8 @@
 # ../agents/AGENTS.md and shared lifecycle policy lives in ../agents/hooks/.
 project_doc_fallback_filenames = ["CLAUDE.md"]
 approvals_reviewer = "user"
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"
 
 [projects."/home/tom"]
 trust_level = "trusted"
@@ -10,6 +12,18 @@ trust_level = "trusted"
 trust_level = "trusted"
 
 [projects."/home/tom/code/nixos-config"]
+trust_level = "trusted"
+
+[projects."/home/tom/code/north"]
+trust_level = "trusted"
+
+[projects."/tmp"]
+trust_level = "trusted"
+
+[projects."/home/tom/code/beagle"]
+trust_level = "trusted"
+
+[projects."/home/tom/code/fram"]
 trust_level = "trusted"
 
 [tui.model_availability_nux]
@@ -21,6 +35,12 @@ hooks = true
 [mcp_servers.north]
 command = "/home/tom/code/north/bin/north-mcp"
 startup_timeout_sec = 15
+
+[mcp_servers.north.env]
+FRAM_LOG = "/home/tom/.local/state/north/coordination.log"
+FRAM_TELEMETRY_LOG = "/home/tom/.local/state/north/telemetry.log"
+FRAM_THREADS = "/home/tom/.local/state/north/threads"
+NORTH_PORT = "7977"
 
 [mcp_servers.fram]
 command = "/home/tom/code/fram/bin/fram-mcp"
@@ -82,3 +102,6 @@ trusted_hash = "sha256:32e1ac375eff82bf035169460755bca4b4b2f77025e1169f52f354d04
 
 [hooks.state."/home/tom/.codex/hooks.json:stop:0:0"]
 trusted_hash = "sha256:4d6d37141f7e42a6ccfebd7d5aab35228902278b9284b1643fd015c56a639bc6"
+
+[notice]
+hide_full_access_warning = true

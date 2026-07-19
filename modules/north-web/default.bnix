@@ -6,20 +6,15 @@
 ;; (:7977): board, roster, per-agent live stream + /steer. Beagle-JS (.bjs)
 ;; server on Bun, replacing the retired Elixir/Phoenix app (web-v1-archive/).
 ;;
-;; Source of truth is web-bjs/src/*.bjs; ExecStartPre compiles it with the
-;; hermetic system `beagle` (racket-pinned) and ExecStart runs the emitted
-;; entrypoint on Bun. This drops the old `mix phx.server` under `direnv exec
-;; <repo>`, which required an `.envrc`-allow and the repo's flake env baked
-;; into systemd — that wrinkle is gone: no direnv, no flake-env-in-unit, just
-;; two hermetic system tools (beagle, bun). Supervised because the
-;; unsupervised process crashed 2026-06-28 and sat dead 11 days unnoticed.
+;; Build and runtime both come from the exact promoted North flake revision.
+;; No compiler, checkout, or mutable static path participates in the unit.
 
 (nix/module [config lib pkgs inputs ...]
   (let [username config.myConfig.modules.users.username
         homeDir  config.myConfig.modules.users.homeDir
-        codeDir  config.myConfig.modules.users.codeDir
-        beaglePkg (get (get inputs.beagle.packages pkgs.stdenv.hostPlatform.system) :default)
-        webBjs   (s codeDir "/north/web-bjs")]
+        northWebPkg
+          (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)
+               :north-web)]
     {:options.myConfig.modules.north-web.enable
       (lib.mkEnableOption "North web (:8088) — bjs/Bun cockpit for north agents")
      :config
@@ -28,26 +23,22 @@
           {:description           "North web (:8088) — bjs/Bun cockpit over the north coordinator"
            :wantedBy              ["multi-user.target"]
            :after                 ["network.target" "north-coord.service"]
-           :path                  [pkgs.bash pkgs.coreutils pkgs.git pkgs.bun beaglePkg]
            :startLimitIntervalSec 0
-           :environment           {:HOME       homeDir
-                                   :FRAM_LOG   (s homeDir "/.local/state/north/coordination.log")
+           :restartIfChanged      true
+           :environment           {:HOME homeDir
+                                   :FRAM_LOG
+                                     (s homeDir "/.local/state/north/coordination.log")
                                    :FRAM_TELEMETRY_LOG
                                      (s homeDir "/.local/state/north/telemetry.log")
-                                   :PORT       "8088"
-                                   :STATIC_DIR (s codeDir "/north/web/priv/static")
-                                   :LANG       "en_US.UTF-8"}
+                                   :NORTH_PORT "7977"
+                                   :NORTH_WEB_BIND "127.0.0.1"
+                                   :PORT "8088"
+                                   :LANG "en_US.UTF-8"}
            :serviceConfig
             {:Type             "simple"
              :User             username
-             :WorkingDirectory webBjs
-             ;; compile .bjs → out/north/*.js with the hermetic system beagle,
-             ;; then serve the emitted entrypoint on Bun. bash -c so the src
-             ;; glob expands; both tools come from :path above.
-             :ExecStartPre
-              (s pkgs.bash "/bin/bash -c 'exec beagle build src/*.bjs --out out'")
+             :WorkingDirectory (s northWebPkg "/libexec/north-web")
              :ExecStart
-              (s pkgs.bun "/bin/bun run out/north/boot.js")
+              (s northWebPkg "/bin/north-web")
              :Restart          "always"
-             ;; a compile + flake-free start is cheap, but don't thrash.
              :RestartSec       5}}})}))

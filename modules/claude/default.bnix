@@ -2,7 +2,7 @@
 
 (ns default)
 
-(nix/module [config lib pkgs flakeRoot ...]
+(nix/module [config lib pkgs inputs flakeRoot ...]
   (let [username config.myConfig.modules.users.username
         ;; Preserve the explicitly pinned native Linux binary while using the
         ;; pinned nixpkgs-master package that actually supports aarch64-darwin.
@@ -10,6 +10,11 @@
          (if pkgs.stdenv.hostPlatform.isDarwin
            pkgs.master.claude-code
            pkgs.claude-code-latest)
+        psBin
+         (if pkgs.stdenv.hostPlatform.isDarwin
+           "/bin/ps"
+           (s pkgs.procps "/bin/ps"))
+        gafferRev inputs.gaffer.rev
         gafferPluginSync
          (pkgs.writeShellScript "claude-gaffer-plugin-sync"
            (builtins.readFile
@@ -111,8 +116,9 @@
                      "run rm -f \"$GITC\"\n"))
                ;; Claude copies marketplace plugins into a versioned cache, and
                ;; local/third-party marketplaces do not auto-update by default.
-               ;; Reconcile Gaffer through Claude's supported noninteractive
-               ;; update/install surface on every rebuild; never edit cache JSON.
+               ;; Materialize the exact built Gaffer revision into our detached
+               ;; managed marketplace source, then reconcile through Claude's
+               ;; supported update/install surface; never edit cache JSON.
                :home.activation.syncGafferPlugin
                 (config.lib.dag.entryAfter
                   ["writeBoundary" "linkClaudeSettings" "installCaveman"]
@@ -124,7 +130,21 @@
                      pkgs.jq
                      "/bin/jq TIMEOUT_BIN="
                      pkgs.coreutils
-                     "/bin/timeout GAFFER_HOME=$HOME/code/gaffer "
+                     "/bin/timeout FLOCK_BIN="
+                     pkgs.util-linux
+                     "/bin/flock MV_BIN="
+                     pkgs.coreutils
+                     "/bin/mv SLEEP_BIN="
+                     pkgs.coreutils
+                     "/bin/sleep WC_BIN="
+                     pkgs.coreutils
+                     "/bin/wc PS_BIN="
+                     psBin
+                     " GAFFER_HOME=$HOME/code/gaffer "
+                     "GAFFER_SOURCE=$HOME/.local/state/north/gaffer-plugin-source "
+                     "GAFFER_REV="
+                     gafferRev
+                     " "
                      gafferPluginSync
                      "; then\n"
                      "  echo \"warning: Gaffer Claude plugin sync failed; agent-config-check --local will report the drift\" >&2\n"
@@ -140,13 +160,17 @@
                      "LIFE=$HOME/.local/state/north\n"
                      "WANT_FRAM_LOG=$LIFE/coordination.log\n"
                      "WANT_FRAM_TELEMETRY_LOG=$LIFE/telemetry.log\n"
+                     "WANT_FRAM_THREADS=$LIFE/threads\n"
+                     "WANT_NORTH_PORT=7977\n"
                      "FRAM_CFG=$($CLAUDE mcp get fram 2>/dev/null || true)\n"
-                     "if ! grep -Fq \"FRAM_LOG=$WANT_FRAM_LOG\" <<<\"$FRAM_CFG\" || ! grep -Fq \"FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG\" <<<\"$FRAM_CFG\"; then\n"
+                     "if ! grep -Fq \"FRAM_LOG=$WANT_FRAM_LOG\" <<<\"$FRAM_CFG\" || ! grep -Fq \"FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG\" <<<\"$FRAM_CFG\" || ! grep -Fq \"FRAM_THREADS=$WANT_FRAM_THREADS\" <<<\"$FRAM_CFG\"; then\n"
                      "  run timeout 30 $CLAUDE mcp remove fram -s user >/dev/null 2>&1 || true\n"
-                     "  run timeout 30 $CLAUDE mcp add fram -s user -e FRAM_LOG=$WANT_FRAM_LOG -e FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG -e FRAM_THREADS=$LIFE/threads -- $HOME/code/fram/bin/fram-mcp || true\n"
+                     "  run timeout 30 $CLAUDE mcp add fram -s user -e FRAM_LOG=$WANT_FRAM_LOG -e FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG -e FRAM_THREADS=$WANT_FRAM_THREADS -- $HOME/code/fram/bin/fram-mcp || true\n"
                      "fi\n"
-                     "if ! $CLAUDE mcp get north >/dev/null 2>&1; then\n"
-                     "  run timeout 30 $CLAUDE mcp add north -s user -- $HOME/code/north/bin/north-mcp || true\n"
+                     "NORTH_CFG=$($CLAUDE mcp get north 2>/dev/null || true)\n"
+                     "if ! grep -Fq \"Command: $HOME/code/north/bin/north-mcp\" <<<\"$NORTH_CFG\" || ! grep -Fq \"FRAM_LOG=$WANT_FRAM_LOG\" <<<\"$NORTH_CFG\" || ! grep -Fq \"FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG\" <<<\"$NORTH_CFG\" || ! grep -Fq \"FRAM_THREADS=$WANT_FRAM_THREADS\" <<<\"$NORTH_CFG\" || ! grep -Fq \"NORTH_PORT=$WANT_NORTH_PORT\" <<<\"$NORTH_CFG\"; then\n"
+                     "  run timeout 30 $CLAUDE mcp remove north -s user >/dev/null 2>&1 || true\n"
+                     "  run timeout 30 $CLAUDE mcp add north -s user -e FRAM_LOG=$WANT_FRAM_LOG -e FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG -e FRAM_THREADS=$WANT_FRAM_THREADS -e NORTH_PORT=$WANT_NORTH_PORT -- $HOME/code/north/bin/north-mcp || true\n"
                      "fi\n"
                      ;; Linear MSA workspace (HTTP/OAuth, no inline secret) — declared so
                      ;; the drift-checker treats it as known, not rot. Auth is per-machine.

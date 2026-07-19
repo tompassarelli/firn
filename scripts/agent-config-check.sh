@@ -4,10 +4,223 @@
 # individual assertions; failures always print their full diagnostic.
 set -uo pipefail
 
+AGENT_CONFIG_CHECK_SELF="${BASH_SOURCE[0]}"
+AGENT_CONFIG_BOUNDED_CHILD_MODE='--agent-config-bounded-child-v1'
+
+is_positive_probe_decimal() {
+  local value="$1"
+
+  [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+    [ -n "${value//[0.]/}" ]
+}
+
+hold_probe_group() {
+  trap '' TERM
+  while :; do
+    "${PROBE_SLEEP_BIN:-sleep}" 3600 || true
+  done
+}
+
+probe_child_main() {
+  local pid_file="$1" status_file="$2" stdout_file="$3" stderr_file="$4"
+  local command_pid command_status term_observed=0 temp
+  shift 4
+  [ "$#" -gt 0 ] || exit 125
+
+  temp="$(mktemp "${pid_file}.tmp.XXXXXX")" || exit 125
+  printf '%s\n' "$$" >"$temp" || exit 125
+  command mv "$temp" "$pid_file" || exit 125
+  trap 'term_observed=1' TERM
+  (
+    ulimit -f "${PROBE_MAX_OUTPUT_KIB:-256}" || exit 125
+    exec "$@"
+  ) >"$stdout_file" 2>"$stderr_file" &
+  command_pid=$!
+  wait "$command_pid" 2>>"$stderr_file"
+  command_status=$?
+  if [ "$term_observed" -eq 1 ]; then
+    hold_probe_group
+  fi
+
+  temp="$(mktemp "${status_file}.tmp.XXXXXX")" || exit 125
+  printf '%s\n' "$command_status" >"$temp" || exit 125
+  command mv "$temp" "$status_file" || exit 125
+  hold_probe_group
+}
+
+run_bounded_process() {
+  local duration="$1" scratch pid_file status_file stdout_file stderr_file
+  local timeout_pid timeout_status timeout_pgid leader leader_pgid command_status
+  local stdout_size stderr_size max_output_bytes
+  shift
+
+  if ! is_positive_probe_decimal "$duration" ||
+     ! is_positive_probe_decimal "${PROBE_KILL_AFTER_SECONDS:-2}" ||
+     ! is_positive_probe_decimal "${PROBE_POLL_SECONDS:-0.02}" ||
+     ! [[ "${PROBE_MAX_OUTPUT_KIB:-256}" =~ ^[1-9][0-9]*$ ]]; then
+    printf 'invalid bounded-probe limit\n' >&2
+    return 125
+  fi
+  max_output_bytes=$((${PROBE_MAX_OUTPUT_KIB:-256} * 1024))
+  scratch="$(mktemp -d "${TMPDIR:-/tmp}/agent-probe.XXXXXX")" || return 125
+  pid_file="$scratch/leader"
+  status_file="$scratch/status"
+  stdout_file="$scratch/stdout"
+  stderr_file="$scratch/stderr"
+
+  "${PROBE_TIMEOUT_BIN:-timeout}" --signal=TERM \
+    --kill-after="${PROBE_KILL_AFTER_SECONDS:-2}" "$duration" \
+    "$AGENT_CONFIG_CHECK_SELF" "$AGENT_CONFIG_BOUNDED_CHILD_MODE" \
+    "$pid_file" "$status_file" "$stdout_file" "$stderr_file" "$@" &
+  timeout_pid=$!
+  while [ ! -s "$status_file" ] && kill -0 "$timeout_pid" 2>/dev/null; do
+    "${PROBE_SLEEP_BIN:-sleep}" "${PROBE_POLL_SECONDS:-0.02}"
+  done
+
+  if [ -s "$status_file" ]; then
+    IFS= read -r leader <"$pid_file" || leader=''
+    IFS= read -r command_status <"$status_file" || command_status=''
+    timeout_pgid="$("${PROBE_PS_BIN:-ps}" -o pgid= -p "$timeout_pid" 2>/dev/null || true)"
+    leader_pgid="$("${PROBE_PS_BIN:-ps}" -o pgid= -p "$leader" 2>/dev/null || true)"
+    timeout_pgid="${timeout_pgid//[[:space:]]/}"
+    leader_pgid="${leader_pgid//[[:space:]]/}"
+    if [[ "$leader" =~ ^[1-9][0-9]*$ ]] &&
+       [[ "$command_status" =~ ^[0-9]+$ ]] &&
+       [ "$command_status" -le 255 ] &&
+       [ "$timeout_pgid" = "$timeout_pid" ] &&
+       [ "$leader_pgid" = "$timeout_pid" ]; then
+      kill -KILL -- "-$timeout_pid" 2>/dev/null || true
+      wait "$timeout_pid" 2>/dev/null || true
+      stdout_size="$("${PROBE_WC_BIN:-wc}" -c <"$stdout_file" 2>/dev/null || printf invalid)"
+      stderr_size="$("${PROBE_WC_BIN:-wc}" -c <"$stderr_file" 2>/dev/null || printf invalid)"
+      if
+       [[ "$stdout_size" =~ ^[0-9]+$ ]] &&
+       [[ "$stderr_size" =~ ^[0-9]+$ ]] &&
+       [ "$stdout_size" -lt "$max_output_bytes" ] &&
+       [ "$stderr_size" -lt "$max_output_bytes" ]
+      then
+        [ ! -s "$stderr_file" ] || command cat "$stderr_file" >&2
+        [ ! -f "$stdout_file" ] || command cat "$stdout_file"
+        rm -rf "$scratch"
+        return "$command_status"
+      fi
+      rm -rf "$scratch"
+      return 125
+    fi
+  fi
+
+  wait "$timeout_pid"
+  timeout_status=$?
+  rm -rf "$scratch"
+  case "$timeout_status" in
+    0) return 125 ;;
+    124|137) return 124 ;;
+  esac
+  return "$timeout_status"
+}
+
+run_claude_probe() {
+  local duration="$1"
+  shift
+  run_bounded_process "$duration" "${CLAUDE_BIN:-claude}" "$@"
+}
+
+run_codex_probe() {
+  local duration="$1"
+  shift
+  run_bounded_process "$duration" "${CODEX_BIN:-codex}" "$@"
+}
+
 gaffer_version_matches() {
   local version="$1" commit="$2"
-  [ -n "$commit" ] &&
-    { [ "$version" = "$commit" ] || [ "$version" = "${commit:0:12}" ]; }
+
+  [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || return 1
+  [[ "$version" =~ ^[0-9a-f]{12}$|^[0-9a-f]{40}$ ]] || return 1
+  [ "$version" = "$commit" ] || [ "$version" = "${commit:0:12}" ]
+}
+
+gaffer_revisions_converged() {
+  local intent="$1" source_head="$2" verified_input="$3"
+
+  [[ "$intent" =~ ^[0-9a-f]{40}$ ]] &&
+    [ "$intent" = "$source_head" ] &&
+    [ "$intent" = "$verified_input" ]
+}
+
+north_provider_schema_version() {
+  jq -er '
+    .schemaVersion as $version
+    | if (($version | type) == "number"
+          and ($version | floor) == $version
+          and $version >= 1)
+      then $version | tostring
+      else error("invalid provider schemaVersion")
+      end
+  '
+}
+
+run_north_packaged() {
+  run_bounded_process "${NORTH_PROBE_TIMEOUT_SECONDS:-15}" \
+    "${NORTH_PACKAGED_BIN:-north-packaged}" "$@"
+}
+
+codex_north_env_is_canonical() {
+  python3 - "$1" <<'PY'
+import json
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as handle:
+    config = tomllib.load(handle)
+
+expected = {
+    "FRAM_LOG": "/home/tom/.local/state/north/coordination.log",
+    "FRAM_TELEMETRY_LOG": "/home/tom/.local/state/north/telemetry.log",
+    "FRAM_THREADS": "/home/tom/.local/state/north/threads",
+    "NORTH_PORT": "7977",
+}
+actual = config.get("mcp_servers", {}).get("north", {}).get("env")
+if actual != expected:
+    print(
+        "expected "
+        + json.dumps(expected, sort_keys=True)
+        + ", observed "
+        + json.dumps(actual, sort_keys=True),
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+PY
+}
+
+declare -A LIVE_HOOK_TARGET_BY_ROLE=()
+declare -A LIVE_HOOK_HASH_BY_ROLE=()
+
+hook_target_fingerprint() {
+  local declared="$1" canonical_root="$2" resolved hash
+
+  [ -x "$declared" ] || return 1
+  resolved="$(readlink -f "$declared" 2>/dev/null)" || return 1
+  case "$resolved" in
+    "$canonical_root"/*) ;;
+    *) return 1 ;;
+  esac
+  hash="$(sha256sum "$resolved" 2>/dev/null | awk '{print $1}')" || return 1
+  [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || return 1
+  printf '%s\t%s\n' "$resolved" "$hash"
+}
+
+record_live_hook_binding() {
+  local role="$1" target="$2" hash="$3"
+
+  HOOK_SPLIT_REASON=''
+  if [[ -v "LIVE_HOOK_TARGET_BY_ROLE[$role]" ]] &&
+     { [ "${LIVE_HOOK_TARGET_BY_ROLE[$role]}" != "$target" ] ||
+       [ "${LIVE_HOOK_HASH_BY_ROLE[$role]}" != "$hash" ]; }; then
+    HOOK_SPLIT_REASON="$role changed from ${LIVE_HOOK_TARGET_BY_ROLE[$role]}@${LIVE_HOOK_HASH_BY_ROLE[$role]} to $target@$hash"
+    return 1
+  fi
+  LIVE_HOOK_TARGET_BY_ROLE["$role"]="$target"
+  LIVE_HOOK_HASH_BY_ROLE["$role"]="$hash"
 }
 
 # Classify the executable path from systemctl's structured ExecStart rendering.
@@ -37,30 +250,80 @@ classify_north_coord_exec() {
   return 1
 }
 
-# Classify cache freshness without treating an excluded feature checkout as an
-# eligible plugin source. Tests source this file and exercise this pure seam.
-classify_gaffer_cache() {
-  local version="$1" checkout_head="$2" main_head="$3" branch="$4" dirty="$5"
+# North web must run the exact executable and working directory from one
+# promoted north-web derivation. Merely seeing /nix/store is insufficient:
+# an indirect wrapper or store Bun executable does not prove which North
+# revision and static tree are serving.
+classify_north_web_exec() {
+  local exec_spec="$1" path=''
 
-  if [ "$branch" = main ]; then
-    if gaffer_version_matches "$version" "$checkout_head"; then
-      if [ -n "$dirty" ]; then
-        GAFFER_CACHE_STATE='held-dirty-main'
-      else
-        GAFFER_CACHE_STATE='current-main'
-      fi
-    else
-      GAFFER_CACHE_STATE='stale-main'
-    fi
+  NORTH_WEB_EXEC_KIND='unrecognized'
+  NORTH_WEB_EXEC_PATH=''
+  if [[ "$exec_spec" =~ path=([^[:space:]\;]+) ]]; then
+    path="${BASH_REMATCH[1]}"
   else
-    if [ -z "$main_head" ]; then
-      GAFFER_CACHE_STATE='deferred-no-main-ref'
-    elif gaffer_version_matches "$version" "$main_head"; then
-      GAFFER_CACHE_STATE='held-off-main'
-    else
-      GAFFER_CACHE_STATE='deferred-off-main'
-    fi
+    path="${exec_spec%% *}"
   fi
+  NORTH_WEB_EXEC_PATH="$path"
+
+  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-north-web[^/]*/bin/north-web$ ]]; then
+    NORTH_WEB_EXEC_KIND='pinned-package'
+    return 0
+  fi
+  case "$path" in
+    */code/north/*)
+      NORTH_WEB_EXEC_KIND='checkout'
+      ;;
+  esac
+  return 1
+}
+
+classify_north_web_workdir() {
+  local workdir="$1"
+
+  NORTH_WEB_WORKDIR_KIND='unrecognized'
+  if [[ "$workdir" =~ ^/nix/store/[a-z0-9]{32}-north-web[^/]*/libexec/north-web$ ]]; then
+    NORTH_WEB_WORKDIR_KIND='pinned-package'
+    return 0
+  fi
+  case "$workdir" in
+    */code/north/*)
+      NORTH_WEB_WORKDIR_KIND='checkout'
+      ;;
+  esac
+  return 1
+}
+
+systemd_environment_has() {
+  local environment="$1" assignment="$2"
+  [[ " $environment " == *" $assignment "* ]]
+}
+
+north_web_environment_is_canonical() {
+  local environment="$1" home="$2" expected=''
+
+  NORTH_WEB_ENV_REASON=''
+  for expected in \
+    "HOME=$home" \
+    "FRAM_LOG=$home/.local/state/north/coordination.log" \
+    "FRAM_TELEMETRY_LOG=$home/.local/state/north/telemetry.log" \
+    "NORTH_PORT=7977" \
+    "NORTH_WEB_BIND=127.0.0.1" \
+    "PORT=8088"; do
+    if ! systemd_environment_has "$environment" "$expected"; then
+      NORTH_WEB_ENV_REASON="missing exact $expected"
+      return 1
+    fi
+  done
+  if [[ " $environment " == *" STATIC_DIR="* ]]; then
+    NORTH_WEB_ENV_REASON='STATIC_DIR must come from the packaged executable, not the unit'
+    return 1
+  fi
+  if [[ "$environment" == *"/code/north"* ]]; then
+    NORTH_WEB_ENV_REASON='checkout path present in unit environment'
+    return 1
+  fi
+  return 0
 }
 
 # Codex stores per-hook trust/enablement by numeric manifest coordinates. Resolve
@@ -109,6 +372,12 @@ for key, state in states.items():
 PY
 }
 
+if [ "${1:-}" = "$AGENT_CONFIG_BOUNDED_CHILD_MODE" ]; then
+  shift
+  probe_child_main "$@"
+  exit 125
+fi
+
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
   return 0
 fi
@@ -118,12 +387,12 @@ SHARED="$REPO/dotfiles/agents"
 CLAUDE="$REPO/dotfiles/claude"
 CODEX="$REPO/dotfiles/codex"
 CODEX_REQUIREMENTS="$REPO/modules/codex/requirements.toml"
-CLAUDE_MODULE="$REPO/modules/claude/default.bnix"
 GAFFER_SYNC="$REPO/scripts/claude-gaffer-plugin-sync.sh"
 LOCAL=0
 VERBOSE=0
 CANONICAL_FRAM_LOG="$HOME/.local/state/north/coordination.log"
 CANONICAL_FRAM_TELEMETRY_LOG="$HOME/.local/state/north/telemetry.log"
+CANONICAL_FRAM_THREADS="$HOME/.local/state/north/threads"
 for arg in "$@"; do
   case "$arg" in
     --local) LOCAL=1 ;;
@@ -213,6 +482,9 @@ group shared "$hook_count hooks linted · $skill_count skills · canonical instr
 validate_hooks() {
   local manifest="$1" provider="$2" expected_provider="$3"
   local count=0 ev command raw_command provider_marker identity_kind first resolved expected basename declared_shared
+  local hook_sha role provenance_manifest provenance_digest expected_resolved
+  local -A provenance_seen=()
+  HOOK_PROVENANCE_SUMMARY='development checkout (mutable) · provenance deferred to --local'
   while IFS=$'\t' read -r ev command; do
     [ -n "$command" ] || continue
     count=$((count + 1))
@@ -242,22 +514,48 @@ validate_hooks() {
       bad "$provider $ev North identity $identity_kind must set AGENT_PROVIDER=$expected_provider: $raw_command"
     elif [[ "$first" = /home/tom/code/north/bin/* ]]; then
       if [ "$LOCAL" -eq 1 ]; then
-        if [ -x "$first" ]; then ok_detail "$provider $ev → North ${first##*/}"
-        else bad "$provider $ev external North hook missing/not executable: $first"; fi
+        if IFS=$'\t' read -r resolved hook_sha \
+          < <(hook_target_fingerprint "$first" /home/tom/code/north); then
+          role="$basename:north-lifecycle"
+          if record_live_hook_binding "$role" "$resolved" "$hook_sha"; then
+            provenance_seen["$resolved"$'\t'"$hook_sha"]=1
+            ok_detail "$provider $ev → North $basename · development checkout (mutable): $resolved · sha256=$hook_sha"
+          else
+            bad "$provider $ev split North hook binding: $HOOK_SPLIT_REASON"
+          fi
+        else
+          bad "$provider $ev North hook is missing/non-executable or resolves outside /home/tom/code/north: $first"
+        fi
       else note "$provider $ev uses external North hook ${first##*/} (local check deferred)"; fi
     elif [ "$declared_shared" -eq 1 ] && [ -x "$expected" ]; then
       if [ "$LOCAL" -eq 1 ]; then
-        resolved="$(readlink -f "$first" 2>/dev/null || true)"
-        if [ "$resolved" = "$(readlink -f "$expected" 2>/dev/null || true)" ]; then
-          ok_detail "$provider $ev → $basename"
+        expected_resolved="$(readlink -f "$expected" 2>/dev/null || true)"
+        if IFS=$'\t' read -r resolved hook_sha \
+          < <(hook_target_fingerprint "$first" /home/tom/code/nixos-config) &&
+           [ "$resolved" = "$expected_resolved" ]; then
+          role="$basename:shared-adapter"
+          if record_live_hook_binding "$role" "$resolved" "$hook_sha"; then
+            provenance_seen["$resolved"$'\t'"$hook_sha"]=1
+            ok_detail "$provider $ev → $basename · development checkout (mutable): $resolved · sha256=$hook_sha"
+          else
+            bad "$provider $ev split shared hook binding: $HOOK_SPLIT_REASON"
+          fi
         else
-          bad "$provider $ev live hook resolves to '${resolved:-missing}', expected '$expected'"
+          bad "$provider $ev live hook is missing/non-executable or resolves to '${resolved:-missing}', expected '$expected_resolved'"
         fi
       else
         ok_detail "$provider $ev declares canonical shared hook $basename"
       fi
     else bad "$provider $ev hook is missing, non-executable, or outside canonical hooks: $raw_command"; fi
   done < <(jq -r '.hooks // {} | to_entries[] | .key as $event | .value[] | .hooks[]? | select(.type == "command") | [$event,.command] | @tsv' "$manifest")
+  if [ "$LOCAL" -eq 1 ] && [ "${#provenance_seen[@]}" -gt 0 ]; then
+    provenance_manifest="$(
+      printf '%s\n' "${!provenance_seen[@]}" |
+        sort
+    )"
+    provenance_digest="$(printf '%s\n' "$provenance_manifest" | sha256sum | awk '{print $1}')"
+    HOOK_PROVENANCE_SUMMARY="development checkout (mutable) · ${#provenance_seen[@]} canonical targets · manifest sha256=$provenance_digest"
+  fi
   HOOK_BINDINGS="$count"
 }
 
@@ -322,6 +620,7 @@ PY
 
 before=$fail
 claude_north='connection deferred to --local'
+claude_north_topology='explicit corpus env deferred'
 claude_fram='connection deferred to --local'
 claude_fram_topology='topology deferred'
 claude_linear='connection deferred to --local'
@@ -342,26 +641,20 @@ if jq -e '
   .enabledPlugins["gaffer@gaffer"] == true
   and .extraKnownMarketplaces.gaffer.source == {
     "source": "directory",
-    "path": "/home/tom/code/gaffer"
+    "path": "/home/tom/.local/state/north/gaffer-plugin-source"
   }
 ' "$CLAUDE/settings.json" >/dev/null; then
-  ok_detail "Gaffer plugin uses the canonical local directory marketplace"
+  ok_detail "Gaffer plugin uses the managed exact-revision marketplace"
 else
-  bad "Claude Gaffer plugin must be enabled from /home/tom/code/gaffer"
+  bad "Claude Gaffer plugin must be enabled from /home/tom/.local/state/north/gaffer-plugin-source"
 fi
 if command -v shellcheck >/dev/null 2>&1 && shellcheck -S warning "$GAFFER_SYNC"; then
   ok_detail "Gaffer plugin sync shellcheck"
 else bad "Gaffer plugin sync shellcheck failed"; fi
-if grep -Fq ':home.activation.syncGafferPlugin' "$CLAUDE_MODULE" &&
-   grep -Fq '/scripts/claude-gaffer-plugin-sync.sh' "$CLAUDE_MODULE" &&
-   ! grep -Fq 'installed_plugins.json' "$GAFFER_SYNC"; then
-  ok_detail "Firn rebuild declares Claude-owned Gaffer cache reconciliation"
-else
-  bad "Claude module must reconcile Gaffer through the supported plugin CLI"
-fi
 validate_hooks "$CLAUDE/settings.json" Claude anthropic
 require_manifest_guard_count "$CLAUDE/settings.json" Claude Bash 1 'user Bash topology guard is bound once'
 claude_bindings="$HOOK_BINDINGS"
+claude_hook_provenance="$HOOK_PROVENANCE_SUMMARY"
 if [ "$LOCAL" -eq 1 ]; then
   canonical_link "$HOME/.claude/settings.json" "$CLAUDE/settings.json" "$HOME/.claude/settings.json"
   canonical_link "$HOME/.claude/skills" "$SHARED/skills" "$HOME/.claude/skills"
@@ -376,89 +669,154 @@ if [ "$LOCAL" -eq 1 ]; then
     [ -z "$extra" ] || bad "unexpected Claude user MCP server(s): ${extra//$'\n'/, }"
     fram_log="$(jq -r '.mcpServers.fram.env.FRAM_LOG // empty' "$HOME/.claude.json")"
     fram_telemetry_log="$(jq -r '.mcpServers.fram.env.FRAM_TELEMETRY_LOG // empty' "$HOME/.claude.json")"
+    fram_threads="$(jq -r '.mcpServers.fram.env.FRAM_THREADS // empty' "$HOME/.claude.json")"
     [ "$fram_log" = "$CANONICAL_FRAM_LOG" ] || bad "Claude Fram FRAM_LOG is '${fram_log:-unset}', expected '$CANONICAL_FRAM_LOG'"
     [ "$fram_telemetry_log" = "$CANONICAL_FRAM_TELEMETRY_LOG" ] || bad "Claude Fram FRAM_TELEMETRY_LOG is '${fram_telemetry_log:-unset}', expected '$CANONICAL_FRAM_TELEMETRY_LOG'"
-    if [ "$fram_log" = "$CANONICAL_FRAM_LOG" ] && [ "$fram_telemetry_log" = "$CANONICAL_FRAM_TELEMETRY_LOG" ]; then
+    [ "$fram_threads" = "$CANONICAL_FRAM_THREADS" ] || bad "Claude Fram FRAM_THREADS is '${fram_threads:-unset}', expected '$CANONICAL_FRAM_THREADS'"
+    if [ "$fram_log" = "$CANONICAL_FRAM_LOG" ] &&
+       [ "$fram_telemetry_log" = "$CANONICAL_FRAM_TELEMETRY_LOG" ] &&
+       [ "$fram_threads" = "$CANONICAL_FRAM_THREADS" ]; then
       claude_fram_topology='canonical split corpus'
     else
       claude_fram_topology='stale corpus configuration'
     fi
+    north_log="$(jq -r '.mcpServers.north.env.FRAM_LOG // empty' "$HOME/.claude.json")"
+    north_telemetry_log="$(jq -r '.mcpServers.north.env.FRAM_TELEMETRY_LOG // empty' "$HOME/.claude.json")"
+    north_threads="$(jq -r '.mcpServers.north.env.FRAM_THREADS // empty' "$HOME/.claude.json")"
+    north_port="$(jq -r '.mcpServers.north.env.NORTH_PORT // empty' "$HOME/.claude.json")"
+    [ "$north_log" = "$CANONICAL_FRAM_LOG" ] || bad "Claude North FRAM_LOG is '${north_log:-unset}', expected '$CANONICAL_FRAM_LOG'"
+    [ "$north_telemetry_log" = "$CANONICAL_FRAM_TELEMETRY_LOG" ] || bad "Claude North FRAM_TELEMETRY_LOG is '${north_telemetry_log:-unset}', expected '$CANONICAL_FRAM_TELEMETRY_LOG'"
+    [ "$north_threads" = "$CANONICAL_FRAM_THREADS" ] || bad "Claude North FRAM_THREADS is '${north_threads:-unset}', expected '$CANONICAL_FRAM_THREADS'"
+    [ "$north_port" = 7977 ] || bad "Claude North NORTH_PORT is '${north_port:-unset}', expected '7977'"
+    if [ "$north_log" = "$CANONICAL_FRAM_LOG" ] &&
+       [ "$north_telemetry_log" = "$CANONICAL_FRAM_TELEMETRY_LOG" ] &&
+       [ "$north_threads" = "$CANONICAL_FRAM_THREADS" ] &&
+       [ "$north_port" = 7977 ]; then
+      claude_north_topology='canonical explicit instance env'
+    else
+      claude_north_topology='stale/missing instance env'
+    fi
     project_count="$(jq '[.projects[]? | select(.mcpServers != null)] | length' "$HOME/.claude.json")"
     note "$project_count project-scoped Claude MCP registrations (allowed)"
-    ok_detail "Claude MCP: North + canonical split Fram corpus + Linear"
+    ok_detail "Claude MCP declarations: North + canonical split Fram corpus + Linear"
   else bad "$HOME/.claude.json is missing"; fi
   if command -v claude >/dev/null 2>&1; then
-    claude_mcp_output="$(claude mcp list 2>&1)" || bad "claude rejected its config while checking MCP health:\n$claude_mcp_output"
-    for server in north fram linear-mcp-msa-new; do
-      grep -Eq "^${server}:.*Connected" <<<"$claude_mcp_output" || bad "Claude MCP '$server' is missing or not connected:\n$claude_mcp_output"
-    done
-    claude_north='connected'
-    claude_fram="connected; $claude_fram_topology"
-    claude_linear='connected'
-    ok_detail "Claude reports North + Fram + Linear MCP connected"
-    if gaffer_plugins="$(timeout 30 claude plugin list --json 2>/dev/null)" &&
+    claude_mcp_status=0
+    claude_mcp_output="$(
+      run_claude_probe "${MCP_PROBE_TIMEOUT_SECONDS:-20}" mcp list 2>&1
+    )" || claude_mcp_status=$?
+    if [ "$claude_mcp_status" -eq 0 ]; then
+      claude_mcp_exact=1
+      for server in north fram linear-mcp-msa-new; do
+        grep -Eq "^${server}:.*Connected" <<<"$claude_mcp_output" || {
+          claude_mcp_exact=0
+          bad "Claude MCP '$server' is missing or not connected:\n$claude_mcp_output"
+        }
+      done
+      if [ "$claude_mcp_exact" -eq 1 ]; then
+        claude_north="connected; $claude_north_topology"
+        claude_fram="connected; $claude_fram_topology"
+        claude_linear='connected'
+        ok_detail "Claude reports North + Fram + Linear MCP connected"
+      fi
+    elif [ "$claude_mcp_status" -eq 124 ]; then
+      bad "Claude MCP health probe timed out after ${MCP_PROBE_TIMEOUT_SECONDS:-20}s; its process group was reaped"
+    else
+      bad "claude rejected its config while checking MCP health (exit $claude_mcp_status):\n$claude_mcp_output"
+    fi
+    gaffer_source="$HOME/.local/state/north/gaffer-plugin-source"
+    gaffer_expected="$(jq -er '.nodes.gaffer.locked.rev | select(test("^[0-9a-f]{40}$"))' "$REPO/flake.lock" 2>/dev/null || true)"
+    gaffer_plugin_probe_status=0
+    gaffer_plugins="$(
+      run_claude_probe "${PLUGIN_PROBE_TIMEOUT_SECONDS:-15}" plugin list --json 2>/dev/null
+    )" || gaffer_plugin_probe_status=$?
+    if [ "$gaffer_plugin_probe_status" -eq 0 ] &&
        gaffer_version="$(jq -er '
          [.[] | select(.id == "gaffer@gaffer")]
          | if length == 1 then .[0].version else error("expected one Gaffer plugin") end
        ' <<<"$gaffer_plugins")" &&
-       gaffer_head_full="$(git -C "$HOME/code/gaffer" rev-parse HEAD 2>/dev/null)"; then
-      gaffer_head="${gaffer_head_full:0:12}"
-      gaffer_branch="$(git -C "$HOME/code/gaffer" symbolic-ref --quiet --short HEAD 2>/dev/null || printf detached)"
-      gaffer_dirty="$(git -C "$HOME/code/gaffer" status --porcelain --untracked-files=normal 2>/dev/null || printf status-unavailable)"
-      gaffer_main_full=''
-      gaffer_main_label='local main'
-      if gaffer_main_full="$(git -C "$HOME/code/gaffer" rev-parse --verify 'refs/heads/main^{commit}' 2>/dev/null)"; then
-        :
-      elif gaffer_main_full="$(git -C "$HOME/code/gaffer" rev-parse --verify 'refs/remotes/origin/main^{commit}' 2>/dev/null)"; then
-        gaffer_main_label='origin/main'
-      else
-        gaffer_main_full=''
-        gaffer_main_label='main ref unavailable'
+       [ -n "$gaffer_expected" ] &&
+       gaffer_source_head="$(git -C "$gaffer_source" rev-parse --verify HEAD 2>/dev/null)" &&
+       gaffer_source_top="$(git -C "$gaffer_source" rev-parse --path-format=absolute --show-toplevel 2>/dev/null)" &&
+       gaffer_source_common="$(git -C "$gaffer_source" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" &&
+       gaffer_home_common="$(git -C "$HOME/code/gaffer" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" &&
+       gaffer_source_git_dir="$(git -C "$gaffer_source" rev-parse --path-format=absolute --git-dir 2>/dev/null)" &&
+       gaffer_version_resolved="$(git -C "$gaffer_source" rev-parse --verify "$gaffer_version^{commit}" 2>/dev/null)"; then
+      gaffer_source_dirty="$(git -C "$gaffer_source" status --porcelain --untracked-files=all 2>/dev/null || printf status-unavailable)"
+      gaffer_source_ref="$(git -C "$gaffer_source" symbolic-ref --quiet HEAD 2>/dev/null || true)"
+      gaffer_marker=''
+      if [ -f "$gaffer_source_git_dir/north-managed-gaffer-plugin-source" ]; then
+        IFS= read -r gaffer_marker \
+          <"$gaffer_source_git_dir/north-managed-gaffer-plugin-source" || true
       fi
-      gaffer_main="${gaffer_main_full:0:12}"
-      classify_gaffer_cache \
-        "$gaffer_version" "$gaffer_head_full" "$gaffer_main_full" \
-        "$gaffer_branch" "$gaffer_dirty"
-
-      gaffer_source_state='clean main'
-      [ "$gaffer_branch" = main ] ||
-        gaffer_source_state="branch $gaffer_branch"
-      if [ -n "$gaffer_dirty" ]; then
-        if [ "$gaffer_source_state" = 'clean main' ]; then
-          gaffer_source_state='dirty worktree'
-        else
-          gaffer_source_state="$gaffer_source_state + dirty worktree"
+      gaffer_exact=1
+      [ "$gaffer_source_top" = "$gaffer_source" ] || {
+        gaffer_exact=0
+        bad "managed Gaffer source resolves to $gaffer_source_top, expected $gaffer_source"
+      }
+      [ "$gaffer_source_common" = "$gaffer_home_common" ] || {
+        gaffer_exact=0
+        bad "managed Gaffer source is not a worktree of $HOME/code/gaffer"
+      }
+      [ "$gaffer_marker" = north-gaffer-plugin-source-v1 ] || {
+        gaffer_exact=0
+        bad "managed Gaffer source lacks the sync ownership marker"
+      }
+      if gaffer_intent_revision="$(jq -er \
+        --arg source "$gaffer_source" \
+        --arg commonDir "$gaffer_home_common" '
+          if type == "object"
+             and (keys | sort) == ["commonDir", "revision", "source", "version"]
+             and .version == "north-gaffer-plugin-source-intent-v1"
+             and .source == $source
+             and .commonDir == $commonDir
+             and (.revision | type) == "string"
+             and (.revision | test("^[0-9a-f]{40}$"))
+          then .revision
+          else error("invalid ownership intent")
+          end
+        ' "$gaffer_source.intent" 2>/dev/null)" &&
+         git -C "$gaffer_source" cat-file -e "$gaffer_intent_revision^{commit}" 2>/dev/null; then
+        if ! gaffer_revisions_converged \
+          "$gaffer_intent_revision" "$gaffer_source_head" "$gaffer_expected"; then
+          gaffer_exact=0
+          bad "managed Gaffer intent is ${gaffer_intent_revision:0:12}; source/input are ${gaffer_source_head:0:12}/${gaffer_expected:0:12}"
         fi
+      else
+        gaffer_exact=0
+        bad "managed Gaffer source lacks a valid durable creation intent"
       fi
-
-      case "$GAFFER_CACHE_STATE" in
-        current-main)
-          claude_gaffer="current at $gaffer_head"
-          ok_detail "Claude Gaffer cache matches committed source $gaffer_head"
-          ;;
-        held-dirty-main)
-          claude_gaffer="held at committed $gaffer_head · $gaffer_source_state excluded"
-          ok_detail "Claude Gaffer cache is safely held at committed $gaffer_head; $gaffer_source_state is not copied"
-          ;;
-        stale-main)
-          bad "Claude Gaffer cache is $gaffer_version, committed main source is $gaffer_head ($gaffer_source_state); make the checkout clean, then run firn rebuild"
-          claude_gaffer="stale ($gaffer_version → $gaffer_head)"
-          ;;
-        held-off-main)
-          claude_gaffer="held at $gaffer_main_label $gaffer_main · $gaffer_source_state excluded"
-          ok_detail "Claude Gaffer cache matches eligible $gaffer_main_label $gaffer_main; $gaffer_source_state is not copied"
-          ;;
-        deferred-off-main)
-          claude_gaffer="deferred ($gaffer_version → $gaffer_main_label $gaffer_main) · $gaffer_source_state excluded"
-          soft "Claude Gaffer cache is $gaffer_version and eligible $gaffer_main_label is $gaffer_main; $gaffer_source_state is excluded, so reconciliation is deferred until a clean main checkout"
-          ;;
-        deferred-no-main-ref)
-          claude_gaffer="deferred ($gaffer_version · no eligible main ref) · $gaffer_source_state excluded"
-          soft "Claude Gaffer cache is $gaffer_version, but no eligible main ref is available; $gaffer_source_state is excluded, so freshness is deferred"
-          ;;
-      esac
-    else
-      bad "Claude Gaffer plugin/source freshness could not be determined (plugin-list probe is capped at 30s)"
+      [ -z "$gaffer_source_ref" ] || {
+        gaffer_exact=0
+        bad "managed Gaffer source is attached to $gaffer_source_ref, expected detached exact revision"
+      }
+      [ -z "$gaffer_source_dirty" ] || {
+        gaffer_exact=0
+        bad "managed Gaffer source has unexpected tracked or untracked changes"
+      }
+      [ "$gaffer_source_head" = "$gaffer_expected" ] || {
+        gaffer_exact=0
+        bad "managed Gaffer source is ${gaffer_source_head:0:12}, verified input is ${gaffer_expected:0:12}"
+      }
+      if ! gaffer_version_matches "$gaffer_version" "$gaffer_expected" ||
+         [ "$gaffer_version_resolved" != "$gaffer_expected" ]; then
+        gaffer_exact=0
+        bad "Claude Gaffer cache is $gaffer_version, verified input is ${gaffer_expected:0:12}"
+      fi
+      if [ "$gaffer_exact" -eq 1 ]; then
+        claude_gaffer="exact verified input ${gaffer_expected:0:12}"
+        ok_detail "Claude Gaffer cache + managed source match exact verified input $gaffer_expected"
+      else
+        claude_gaffer="exact-input drift detected"
+      fi
+      else
+      if [ "$gaffer_plugin_probe_status" -eq 124 ]; then
+        bad "Claude Gaffer plugin-list probe timed out after ${PLUGIN_PROBE_TIMEOUT_SECONDS:-15}s; its process group was reaped"
+      elif [ "$gaffer_plugin_probe_status" -eq 0 ]; then
+        bad "Claude Gaffer cache/managed-source exact revision could not be determined after the bounded plugin list succeeded"
+      else
+        bad "Claude Gaffer plugin/managed-source exact revision could not be determined (plugin-list exit $gaffer_plugin_probe_status)"
+      fi
       claude_gaffer='freshness unknown'
     fi
   else bad "claude CLI is missing from PATH"; fi
@@ -467,6 +825,7 @@ provider_group Claude "$before" \
   "Hooks       $claude_bindings bindings" \
   'Identity    adapter-pinned native spawn + repair → anthropic' \
   'Topology    user Bash hook (loaded directly by Claude)' \
+  "Hook source $claude_hook_provenance" \
   "Bootstrap   static config parsed · Gaffer $claude_gaffer" \
   "MCP         North: $claude_north" \
   "            Fram: $claude_fram" \
@@ -493,68 +852,217 @@ require_manifest_guard_count "$CODEX/hooks.json" Codex Bash 0 'user Bash guard i
 require_manifest_guard_count "$CODEX/hooks.json" Codex Agent 1 'native Agent redirect remains a trust-reviewed user hook'
 validate_codex_managed_worker_guard
 codex_bindings="$HOOK_BINDINGS"
-codex_north='declared; live probe deferred'
+codex_hook_provenance="$HOOK_PROVENANCE_SUMMARY"
+codex_north='declared; canonical explicit instance env; live probe deferred'
 codex_fram='declared; canonical split corpus; live probe deferred'
 codex_linear='auth probe deferred to --local'
 grep -q '^\[mcp_servers\.north\]' "$CODEX/config.toml" || bad "Codex config does not declare North MCP"
 grep -q '^\[mcp_servers\.fram\]' "$CODEX/config.toml" || bad "Codex config does not declare Fram MCP"
 grep -q '^\[mcp_servers\.linear-mcp-msa-new\]' "$CODEX/config.toml" || bad "Codex config does not declare Linear MCP"
-codex_fram_paths="$(python3 -c 'import sys,tomllib; c=tomllib.load(open(sys.argv[1],"rb")); e=c.get("mcp_servers",{}).get("fram",{}).get("env",{}); print(e.get("FRAM_LOG","")); print(e.get("FRAM_TELEMETRY_LOG",""))' "$CODEX/config.toml" 2>/dev/null || true)"
+codex_north_env_ok=0
+if codex_north_env_error="$(codex_north_env_is_canonical "$CODEX/config.toml" 2>&1)"; then
+  codex_north_env_ok=1
+  ok_detail "Codex North MCP has exactly the canonical explicit instance environment"
+else
+  codex_north='declared; explicit instance env drift detected'
+  bad "Codex North MCP environment is not exact: $codex_north_env_error"
+fi
+codex_fram_paths="$(python3 -c 'import sys,tomllib; c=tomllib.load(open(sys.argv[1],"rb")); e=c.get("mcp_servers",{}).get("fram",{}).get("env",{}); print(e.get("FRAM_LOG","")); print(e.get("FRAM_TELEMETRY_LOG","")); print(e.get("FRAM_THREADS",""))' "$CODEX/config.toml" 2>/dev/null || true)"
 codex_fram_log="$(sed -n '1p' <<<"$codex_fram_paths")"
 codex_fram_telemetry_log="$(sed -n '2p' <<<"$codex_fram_paths")"
+codex_fram_threads="$(sed -n '3p' <<<"$codex_fram_paths")"
 [ "$codex_fram_log" = "$CANONICAL_FRAM_LOG" ] || bad "Codex Fram FRAM_LOG is '${codex_fram_log:-unset}', expected '$CANONICAL_FRAM_LOG'"
 [ "$codex_fram_telemetry_log" = "$CANONICAL_FRAM_TELEMETRY_LOG" ] || bad "Codex Fram FRAM_TELEMETRY_LOG is '${codex_fram_telemetry_log:-unset}', expected '$CANONICAL_FRAM_TELEMETRY_LOG'"
+[ "$codex_fram_threads" = "$CANONICAL_FRAM_THREADS" ] || bad "Codex Fram FRAM_THREADS is '${codex_fram_threads:-unset}', expected '$CANONICAL_FRAM_THREADS'"
 if [ "$LOCAL" -eq 1 ]; then
   canonical_link "$HOME/.codex/config.toml" "$CODEX/config.toml" "$HOME/.codex/config.toml"
   canonical_link "$HOME/.codex/hooks.json" "$CODEX/hooks.json" "$HOME/.codex/hooks.json"
   canonical_link "$HOME/.codex/AGENTS.md" "$SHARED/AGENTS.md" "$HOME/.codex/AGENTS.md"
   canonical_link "$HOME/.agents/skills" "$SHARED/skills" "$HOME/.agents/skills"
   if command -v codex >/dev/null 2>&1; then
-    mcp_output="$(codex mcp list 2>&1)" || bad "codex rejected its config while listing MCPs:\n$mcp_output"
-    for server in north fram linear-mcp-msa-new; do
-      grep -Eq "^${server}[[:space:]]" <<<"$mcp_output" || bad "Codex MCP '$server' is missing/disabled"
-    done
-    linear_line="$(grep -E '^linear-mcp-msa-new[[:space:]]' <<<"$mcp_output" || true)"
-    if [[ "$linear_line" = *'Not logged in'* ]]; then codex_linear='not logged in'
-    elif [[ "$linear_line" = *OAuth* || "$linear_line" = *'Logged in'* ]]; then codex_linear='authenticated'
-    else codex_linear='auth unknown'; fi
-    ok_detail "Codex config parsed; North + Fram + Linear MCP listed"
-    codex_north='enabled'
-    codex_fram='enabled; canonical split corpus'
+    codex_mcp_status=0
+    mcp_output="$(
+      run_codex_probe "${MCP_PROBE_TIMEOUT_SECONDS:-20}" mcp list 2>&1
+    )" || codex_mcp_status=$?
+    if [ "$codex_mcp_status" -eq 0 ]; then
+      for server in north fram linear-mcp-msa-new; do
+        grep -Eq "^${server}[[:space:]]" <<<"$mcp_output" ||
+          bad "Codex MCP '$server' is missing/disabled"
+      done
+      linear_line="$(grep -E '^linear-mcp-msa-new[[:space:]]' <<<"$mcp_output" || true)"
+      if [[ "$linear_line" = *'Not logged in'* ]]; then codex_linear='not logged in'
+      elif [[ "$linear_line" = *OAuth* || "$linear_line" = *'Logged in'* ]]; then codex_linear='authenticated'
+      else codex_linear='auth unknown'; fi
+      ok_detail "Codex config parsed; North + Fram + Linear MCP listed"
+      if [ "$codex_north_env_ok" -eq 1 ]; then
+        codex_north='enabled; canonical explicit instance env'
+      else
+        codex_north='enabled; explicit instance env drift detected'
+      fi
+      codex_fram='enabled; canonical split corpus'
+    elif [ "$codex_mcp_status" -eq 124 ]; then
+      bad "Codex MCP-list probe timed out after ${MCP_PROBE_TIMEOUT_SECONDS:-20}s; its process group was reaped"
+    else
+      bad "codex rejected its config while listing MCPs (exit $codex_mcp_status):\n$mcp_output"
+    fi
   else bad "codex CLI is missing from PATH"; fi
 fi
 provider_group Codex "$before" \
   "Hooks       $codex_bindings bindings" \
   'Identity    adapter-pinned native spawn + repair → openai' \
   'Topology    managed /etc Bash guard (policy-trusted) · native redirect user hook (trust-reviewed)' \
+  "Hook source $codex_hook_provenance" \
   'Bootstrap   static config parsed' \
   "MCP         North: $codex_north" \
   "            Fram: $codex_fram" \
   "            Linear: $codex_linear"
 
 before=$fail
+north_coord_runtime='live probe deferred'
+north_web_runtime='live probe deferred'
+north_cli_web_parity='live probe deferred'
+north_coord_ok=0
+north_web_package_ok=0
+north_web_env_ok=0
+north_web_socket_ok=0
 if [ "$LOCAL" -eq 1 ]; then
   if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet north-coord; then
     north_coord_env="$(systemctl show north-coord -p Environment --value 2>/dev/null || true)"
     north_coord_exec="$(systemctl show north-coord -p ExecStart --value 2>/dev/null || true)"
-    [[ "$north_coord_env" == *"FRAM_TELEMETRY_LOG=$CANONICAL_FRAM_TELEMETRY_LOG"* ]] || bad "north-coord lacks canonical FRAM_TELEMETRY_LOG in its live environment"
-    [[ "$north_coord_exec" == *" $CANONICAL_FRAM_LOG "* ]] || bad "north-coord does not serve canonical coordination.log: $north_coord_exec"
+    north_coord_ok=1
+    systemd_environment_has "$north_coord_env" "FRAM_TELEMETRY_LOG=$CANONICAL_FRAM_TELEMETRY_LOG" || {
+      north_coord_ok=0
+      bad "north-coord lacks canonical FRAM_TELEMETRY_LOG in its live environment"
+    }
+    systemd_environment_has "$north_coord_env" 'FRAM_REQUIRE_LOG_FENCE=1' || {
+      north_coord_ok=0
+      bad "north-coord lacks FRAM_REQUIRE_LOG_FENCE=1 in its live environment"
+    }
+    [[ "$north_coord_exec" == *" $CANONICAL_FRAM_LOG "* ]] || {
+      north_coord_ok=0
+      bad "north-coord does not serve canonical coordination.log: $north_coord_exec"
+    }
     if classify_north_coord_exec "$north_coord_exec"; then
       ok_detail "north-coord executes pinned Fram package: $NORTH_COORD_EXEC_PATH"
     elif [ "$NORTH_COORD_EXEC_KIND" = checkout ]; then
+      north_coord_ok=0
       bad "north-coord is checkout-backed; expected the pinned Fram package: $NORTH_COORD_EXEC_PATH"
     else
+      north_coord_ok=0
       bad "north-coord does not execute a recognized pinned Fram package: ${NORTH_COORD_EXEC_PATH:-missing}"
     fi
-  else bad "north-coord systemd service is not active"; fi
+    if [ "$north_coord_ok" -eq 1 ]; then
+      north_coord_runtime='pinned Fram · canonical coordination.log · fenced'
+    elif [ "$NORTH_COORD_EXEC_KIND" = checkout ]; then
+      north_coord_runtime='checkout-backed (invalid)'
+    else
+      north_coord_runtime='deployment drift detected'
+    fi
+  else
+    bad "north-coord systemd service is not active"
+    north_coord_runtime='inactive'
+  fi
+  if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet north-web; then
+    north_web_env="$(systemctl show north-web -p Environment --value 2>/dev/null || true)"
+    north_web_exec="$(systemctl show north-web -p ExecStart --value 2>/dev/null || true)"
+    north_web_exec_pre="$(systemctl show north-web -p ExecStartPre --value 2>/dev/null || true)"
+    north_web_workdir="$(systemctl show north-web -p WorkingDirectory --value 2>/dev/null || true)"
+    north_web_package_ok=1
+    if ! classify_north_web_exec "$north_web_exec"; then
+      north_web_package_ok=0
+      if [ "$NORTH_WEB_EXEC_KIND" = checkout ]; then
+        bad "north-web is checkout-backed; expected the pinned North web package: $NORTH_WEB_EXEC_PATH"
+      else
+        bad "north-web does not execute a recognized pinned North web package: ${NORTH_WEB_EXEC_PATH:-missing}"
+      fi
+    fi
+    if ! classify_north_web_workdir "$north_web_workdir"; then
+      north_web_package_ok=0
+      if [ "$NORTH_WEB_WORKDIR_KIND" = checkout ]; then
+        bad "north-web WorkingDirectory is checkout-backed: $north_web_workdir"
+      else
+        bad "north-web WorkingDirectory is not the pinned North web package: ${north_web_workdir:-missing}"
+      fi
+    fi
+    if [ "$north_web_package_ok" -eq 1 ]; then
+      north_web_exec_root="${NORTH_WEB_EXEC_PATH%/bin/north-web}"
+      north_web_workdir_root="${north_web_workdir%/libexec/north-web}"
+      if [ "$north_web_exec_root" = "$north_web_workdir_root" ]; then
+        ok_detail "north-web executable + working directory share pinned package $north_web_exec_root"
+      else
+        north_web_package_ok=0
+        bad "north-web executable and WorkingDirectory come from different package closures"
+      fi
+    fi
+    [ -z "$north_web_exec_pre" ] || {
+      north_web_package_ok=0
+      bad "north-web still has ExecStartPre checkout compilation: $north_web_exec_pre"
+    }
+    north_web_env_ok=1
+    if north_web_environment_is_canonical "$north_web_env" "$HOME"; then
+      ok_detail "north-web has loopback :8088, coordinator :7977, and canonical split corpus env"
+    else
+      north_web_env_ok=0
+      bad "north-web live environment is stale: $NORTH_WEB_ENV_REASON"
+    fi
+    north_web_socket_ok=0
+    if command -v ss >/dev/null 2>&1; then
+      north_web_listeners="$(ss -H -ltn 'sport = :8088' 2>/dev/null | awk '{print $4}' | sort -u)"
+      if [ "$north_web_listeners" = '127.0.0.1:8088' ]; then
+        north_web_socket_ok=1
+        ok_detail "north-web live socket is loopback-only at 127.0.0.1:8088"
+      else
+        bad "north-web live listener must be exactly 127.0.0.1:8088, observed '${north_web_listeners:-none}'"
+      fi
+    else
+      bad "ss is required to verify north-web's live loopback socket"
+    fi
+    if [ "$north_web_package_ok" -eq 1 ] &&
+       [ "$north_web_env_ok" -eq 1 ] &&
+       [ "$north_web_socket_ok" -eq 1 ]; then
+      north_web_runtime='pinned North web · canonical corpus · 127.0.0.1:8088'
+    else
+      north_web_runtime='deployment drift detected'
+    fi
+  else
+    bad "north-web systemd service is not active"
+    north_web_runtime='inactive'
+  fi
+  if [ "$north_coord_ok" -eq 1 ] &&
+     [ "$north_web_package_ok" -eq 1 ] &&
+     [ "$north_web_env_ok" -eq 1 ] &&
+     [ "$north_web_socket_ok" -eq 1 ]; then
+    if command -v "${NORTH_PACKAGED_BIN:-north-packaged}" >/dev/null 2>&1; then
+      north_parity_status=0
+      if north_parity_output="$(
+        run_north_packaged agents --check-web http://127.0.0.1:8088 2>&1
+      )"; then
+        north_cli_web_parity='semantic roster parity passed'
+        ok_detail "north-packaged agents confirms CLI/web semantic roster parity"
+      else
+        north_parity_status=$?
+        north_cli_web_parity='semantic roster parity failed'
+        if [ "$north_parity_status" -eq 124 ]; then
+          bad "north-packaged CLI/web parity timed out after ${NORTH_PROBE_TIMEOUT_SECONDS:-15}s; its process group was reaped"
+        else
+          bad "north-packaged CLI/web semantic roster parity failed (exit $north_parity_status):\n$north_parity_output"
+        fi
+      fi
+    else
+      north_cli_web_parity='north-packaged missing'
+      bad "north-packaged is required for deployed CLI/web semantic roster parity"
+    fi
+  else
+    north_cli_web_parity='blocked by coordinator/web runtime health'
+  fi
   anthropic_installed='unknown'
   anthropic_authenticated='unknown'
   anthropic_headroom='unknown'
   openai_installed='unknown'
   openai_authenticated='unknown'
   openai_headroom='unknown'
-  if command -v north >/dev/null 2>&1; then
-    if provider_output="$(north providers --json 2>&1)"; then
+  if command -v "${NORTH_PACKAGED_BIN:-north-packaged}" >/dev/null 2>&1; then
+    if provider_output="$(run_north_packaged providers --json 2>&1)"; then
       if anthropic_fields="$(printf '%s\n' "$provider_output" | "$REPO/scripts/agent-provider-status.sh" anthropic)"; then
         IFS='|' read -r anthropic_installed anthropic_authenticated anthropic_headroom <<<"$anthropic_fields"
         [ "$anthropic_installed" = yes ] || bad "North reports Anthropic not installed"
@@ -577,17 +1085,33 @@ if [ "$LOCAL" -eq 1 ]; then
       else bad "North allocation policy missing or malformed:\n$provider_output"; fi
       provider_source="$(jq -r '.source // "unknown source"' <<<"$provider_output")"
       provider_target_count="$(jq '[.providers[]?.targets[]?] | length' <<<"$provider_output")"
-      ok_detail "North providers JSON v2 · $provider_target_count targets · $provider_source"
-    else bad "installed North provider readiness failed:\n$provider_output"; fi
-  else bad "installed North CLI is missing from PATH"; fi
+      if provider_schema_version="$(north_provider_schema_version <<<"$provider_output")"; then
+        ok_detail "North providers JSON v$provider_schema_version · $provider_target_count targets · $provider_source"
+      else
+        bad "North providers schemaVersion is missing or malformed:\n$provider_output"
+      fi
+    else
+      provider_status=$?
+      if [ "$provider_status" -eq 124 ]; then
+        bad "packaged North provider readiness timed out after ${NORTH_PROBE_TIMEOUT_SECONDS:-15}s; its process group was reaped"
+      else
+        bad "packaged North provider readiness failed (exit $provider_status):\n$provider_output"
+      fi
+    fi
+  else bad "north-packaged is missing from PATH"; fi
 else ok_detail "provider readiness deferred to --local"; fi
 if [ "$LOCAL" -eq 1 ]; then
   provider_group North "$before" \
+    "Coordinator $north_coord_runtime" \
+    "Web         $north_web_runtime" \
+    "CLI/web     $north_cli_web_parity" \
     "Anthropic   installed=$anthropic_installed · authenticated=$anthropic_authenticated · headroom=$anthropic_headroom" \
     "OpenAI      installed=$openai_installed · authenticated=$openai_authenticated · headroom=$openai_headroom" \
     "Allocation  ${allocation_summary:-unknown}"
 else
-  provider_group North "$before" 'Providers   readiness deferred to --local'
+  provider_group North "$before" \
+    'Runtime     deployment identity/env/socket probes deferred to --local' \
+    'Providers   readiness deferred to --local'
 fi
 
 if [ "$fail" -ne 0 ]; then printf 'agent-config-check: FAILED\n' >&2; exit 1; fi

@@ -28,9 +28,11 @@ This catches things the validator can't: input mismatches, evaluation errors in 
 `firn rebuild` (the sanctioned wrapper) IS agent-runnable — policy change 2026-07-08, snapshot semantics 2026-07-16. It builds a **commit snapshot** (`git+file://<repo>?rev=HEAD`), never the working tree: uncommitted state — yours or any concurrent session's — can neither block a rebuild nor leak into a generation. The one gate that remains YOURS: **commit your own changes first**, or they simply won't be in the build (the pipeline prints exactly which in-flight files it excluded). Every generation maps to a commit by construction. `firn rollback` / the boot menu undo a switch.
 
 The pipeline: plan local-input pin moves for `~/code/beagle`, `~/code/fram`,
-`~/code/gaffer`, and `~/code/north` (committed `main` HEAD remains eligible with dirty tracked files;
-the exact-rev snapshot excludes that WIP and prints the exclusion, while an
-off-`main` checkout **holds its already-verified pin**); regenerate `.nix`
+`~/code/gaffer`, and `~/code/north` from each repo's committed local
+`refs/heads/main`. The active checkout may remain on a dirty feature branch:
+its HEAD and WIP are excluded, while committed local `main` remains eligible.
+A missing, rewound, or divergent local `main` holds the already-verified pin;
+only an ancestry-proven fast-forward can promote. Then regenerate `.nix`
 (stale committed outputs are self-healed with a mechanical commit; outputs
 downstream of in-flight WIP keep their committed versions); validate the
 snapshot in a detached temp worktree (a peer's mid-edit `.bnix` can't fail your
@@ -38,7 +40,10 @@ rebuild); build the host closure from the snapshot with `--override-input` for
 planned pin moves; switch that **exact store path** (no second evaluation);
 then commit the verified `flake.lock` pointer — commit receives the exact built
 revision, and any non-promotable state (foreign lock edit, raced input, hook
-failure) defers with a notice, exit 0.
+failure) defers with a notice, exit 0. Recovery is commit-aware: if the
+mechanical commit lands immediately before an exit/signal, the handler
+preserves that exact promoted lock and heals the index/worktree to the new HEAD
+instead of restoring the obsolete pre-promotion backup.
 `--skip-checks` still builds and switches the HEAD snapshot with the committed
 lock; it only skips validation and pin planning. Untracked files are a printed
 warning ("not in this build"), no longer a hard stop.

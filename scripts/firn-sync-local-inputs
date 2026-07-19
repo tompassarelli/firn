@@ -16,11 +16,12 @@ set -euo pipefail
 #                     re-point flake.lock (targeted nix flake update) and make
 #                     the mechanical "refresh verified local inputs" commit.
 #
-# NEVER a rebuild blocker. A dirty main checkout still promotes its committed
-# HEAD: exact-rev Git URLs exclude every working-tree change by construction,
-# and the status line makes that exclusion visible. A non-main checkout holds
-# its already-verified pin. --commit degrades to a notice + exit 0 on any
-# non-promotable or raced state (the system has already switched at that point).
+# NEVER a rebuild blocker. Eligibility comes from the repo's committed local
+# refs/heads/main, never from whichever branch a developer has checked out.
+# Exact-rev Git URLs exclude every working-tree change by construction, and the
+# status line makes that exclusion visible. --commit degrades to a notice +
+# exit 0 on any non-promotable or raced state (the system has already switched
+# at that point).
 # Hard `die` is reserved for structural breakage (missing lock entry, not a
 # git checkout, missing tools).
 
@@ -64,45 +65,66 @@ locked_rev() {
     | jq -r --arg input "$1" '.nodes[$input].locked.rev // empty'
 }
 
-# Promotable target for an input: committed HEAD when the checkout is on main,
-# even if tracked working-tree changes exist. Exact-rev Git URLs make those
-# changes unreachable. Non-main checkouts hold the locked rev. Prints the human
-# status line as a side effect. Sets REPLY_TARGET.
+# Promotable target for an input: the committed local main ref, but only when
+# it is equal to or an ancestry-proven fast-forward of the verified lock. The
+# active checkout and its dirty state are never input bytes. Prints the human
+# status line as a side effect. Sets REPLY_TARGET and REPLY_HOLD_REASON.
 resolve_target() {
-  local input="$1" repo head locked branch dirty_suffix
+  local input="$1" repo head locked main branch checkout_note relation
   repo="$(repo_for "$input")"
   [ -d "$repo/.git" ] || git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 ||
     die "$repo is not a Git checkout"
   head="$(git -C "$repo" rev-parse HEAD)"
   locked="$(locked_rev "$input")"
   [ -n "$locked" ] || die "flake.lock has no locked revision for '$input'"
+  main="$(git -C "$repo" rev-parse --verify 'refs/heads/main^{commit}' 2>/dev/null || true)"
   branch="$(git -C "$repo" branch --show-current)"
-  if [ "$head" != "$locked" ]; then
-    if [ "$branch" != main ]; then
-      notice "$(printf '%-6s on %s, not main; holding verified %s (HEAD %s not promoted)' \
-        "$input" "${branch:-detached-HEAD}" "$(short_rev "$locked")" "$(short_rev "$head")")"
-      REPLY_TARGET="$locked"
-      return 0
+  REPLY_HOLD_REASON=""
+
+  checkout_note=""
+  if [ "$branch" != main ] || [ "$head" != "$main" ]; then
+    checkout_note="$(printf ' (checkout %s@%s excluded' \
+      "${branch:-detached-HEAD}" "$(short_rev "$head")")"
+    if [ -n "$(git -C "$repo" status --porcelain --untracked-files=no)" ]; then
+      checkout_note="$checkout_note; tracked WIP excluded"
     fi
-  elif [ "$branch" != main ]; then
-    notice "$(printf '%-6s on %s, not main; pin already at verified %s' \
-      "$input" "${branch:-detached-HEAD}" "$(short_rev "$locked")")"
+    checkout_note="$checkout_note)"
+  elif [ -n "$(git -C "$repo" status --porcelain --untracked-files=no)" ]; then
+    checkout_note=" (tracked WIP excluded; only committed local main is eligible)"
+  fi
+
+  if [ -z "$main" ]; then
+    REPLY_HOLD_REASON="local refs/heads/main is missing"
+    notice "$(printf '%-6s %s; holding verified %s%s' \
+      "$input" "$REPLY_HOLD_REASON" "$(short_rev "$locked")" "$checkout_note")"
     REPLY_TARGET="$locked"
     return 0
   fi
-  if [ -n "$(git -C "$repo" status --porcelain --untracked-files=no)" ]; then
-    dirty_suffix=" (tracked WIP excluded; only committed HEAD is eligible)"
-  else
-    dirty_suffix=""
+
+  if [ "$main" != "$locked" ] &&
+     ! git -C "$repo" merge-base --is-ancestor "$locked" "$main" 2>/dev/null; then
+    if git -C "$repo" merge-base --is-ancestor "$main" "$locked" 2>/dev/null; then
+      relation="behind"
+    elif git -C "$repo" cat-file -e "$locked^{commit}" 2>/dev/null; then
+      relation="diverged from"
+    else
+      relation="not ancestry-provable from"
+    fi
+    REPLY_HOLD_REASON="local main $(short_rev "$main") is $relation verified $(short_rev "$locked"); non-fast-forward not promoted"
+    notice "$(printf '%-6s %s; holding verified pin%s' \
+      "$input" "$REPLY_HOLD_REASON" "$checkout_note")"
+    REPLY_TARGET="$locked"
+    return 0
   fi
-  if [ "$head" != "$locked" ]; then
+
+  if [ "$main" != "$locked" ]; then
     notice "$(printf '%-6s %s → %s%s' \
-      "$input" "$(short_rev "$locked")" "$(short_rev "$head")" "$dirty_suffix")"
+      "$input" "$(short_rev "$locked")" "$(short_rev "$main")" "$checkout_note")"
   else
     notice "$(printf '%-6s current at %s%s' \
-      "$input" "$(short_rev "$locked")" "$dirty_suffix")"
+      "$input" "$(short_rev "$locked")" "$checkout_note")"
   fi
-  REPLY_TARGET="$head"
+  REPLY_TARGET="$main"
 }
 
 [ -f "$LOCK" ] || die "missing $LOCK"
@@ -162,9 +184,14 @@ done
 for input in "${inputs[@]}"; do
   verified="${target[$input]}"
   REPLY_TARGET=""
+  REPLY_HOLD_REASON=""
   resolve_target "$input" >/dev/null
   if [ "$REPLY_TARGET" != "$verified" ]; then
-    notice "$input HEAD is now $(short_rev "$REPLY_TARGET"), not built target $(short_rev "$verified"); deferring promotion"
+    if [ -n "$REPLY_HOLD_REASON" ]; then
+      notice "$input $REPLY_HOLD_REASON; built target $(short_rev "$verified") is not promotable, deferring"
+    else
+      notice "$input local main is now $(short_rev "$REPLY_TARGET"), not built target $(short_rev "$verified"); deferring promotion"
+    fi
     exit 0
   fi
   if [ "$verified" = "$(locked_rev "$input")" ]; then
@@ -174,13 +201,30 @@ for input in "${inputs[@]}"; do
 done
 
 backup="$(mktemp "${TMPDIR:-/tmp}/firn-flake-lock.XXXXXX")"
+promoted_lock=''
 cp "$LOCK" "$backup"
 restore_lock() {
+  local head_lock_blob='' promoted_lock_blob=''
+
   git -C "$ROOT" reset --quiet HEAD -- flake.lock >/dev/null 2>&1 || true
-  cp "$backup" "$LOCK"
-  rm -f "$backup"
+  if [ -n "$promoted_lock" ] && [ -f "$promoted_lock" ]; then
+    head_lock_blob="$(git -C "$ROOT" rev-parse HEAD:flake.lock 2>/dev/null || true)"
+    promoted_lock_blob="$(git hash-object "$promoted_lock" 2>/dev/null || true)"
+  fi
+  if [ -n "$head_lock_blob" ] &&
+     [ "$head_lock_blob" = "$promoted_lock_blob" ]; then
+    # The mechanical commit landed before an EXIT/TERM crash. Preserve its
+    # exact verified lock and heal the index/worktree to committed HEAD rather
+    # than copying the pre-promotion backup over the new commit.
+    cp "$promoted_lock" "$LOCK"
+  else
+    cp "$backup" "$LOCK"
+  fi
+  rm -f "$backup" "${promoted_lock:-}"
 }
-trap restore_lock EXIT INT TERM
+trap restore_lock EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # One targeted invocation preserves unrelated remote input pins.
 nix flake update --flake "$ROOT" "${inputs[@]}"
@@ -196,8 +240,39 @@ for input in "${inputs[@]}"; do
     trap - EXIT INT TERM
     exit 0
   fi
+  main_now="$(git -C "$(repo_for "$input")" rev-parse --verify 'refs/heads/main^{commit}' 2>/dev/null || true)"
+  if [ "$main_now" != "${target[$input]}" ]; then
+    if [ -n "$main_now" ]; then
+      raced_main="$(short_rev "$main_now")"
+    else
+      raced_main="missing"
+    fi
+    notice "$input local main raced to $raced_main after resolution; deferring promotion"
+    restore_lock
+    trap - EXIT INT TERM
+    exit 0
+  fi
 done
 
+for input in "${INPUTS[@]}"; do
+  if [[ -v "seen[$input]" ]]; then
+    continue
+  fi
+  before_locked="$(git -C "$ROOT" show HEAD:flake.lock 2>/dev/null |
+    jq -cS --arg input "$input" '.nodes[$input].locked // null')"
+  after_locked="$(jq -cS --arg input "$input" '.nodes[$input].locked // null' "$LOCK")"
+  if [ "$after_locked" != "$before_locked" ]; then
+    before_rev="$(jq -r '.rev // "missing"' <<<"$before_locked")"
+    after_rev="$(jq -r '.rev // "missing"' <<<"$after_locked")"
+    notice "nix rewrote unrequested local input $input from $(short_rev "$before_rev") to $(short_rev "$after_rev"); deferring promotion"
+    restore_lock
+    trap - EXIT INT TERM
+    exit 0
+  fi
+done
+
+promoted_lock="$(mktemp "${TMPDIR:-/tmp}/firn-promoted-lock.XXXXXX")"
+cp "$LOCK" "$promoted_lock"
 git -C "$ROOT" add flake.lock
 if ! git -C "$ROOT" commit --only -m "refresh verified local inputs" -- flake.lock; then
   notice "mechanical lock commit failed (hook?); deferring promotion"
@@ -205,8 +280,11 @@ if ! git -C "$ROOT" commit --only -m "refresh verified local inputs" -- flake.lo
   trap - EXIT INT TERM
   exit 0
 fi
+if [ "${FIRN_INJECT_CRASH_AFTER_COMMIT:-0}" -eq 1 ]; then
+  exit 99
+fi
 trap - EXIT INT TERM
-rm -f "$backup"
+rm -f "$backup" "$promoted_lock"
 
 for input in "${inputs[@]}"; do
   notice "$input promoted to $(short_rev "${target[$input]}")"

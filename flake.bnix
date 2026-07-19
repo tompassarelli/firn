@@ -23,7 +23,7 @@
    :fram {:url "git+file:///home/tom/code/fram?ref=main"}
    :gaffer {:url "git+file:///home/tom/code/gaffer?ref=main" :flake false}
    :gjoa {:url "github:tompassarelli/gjoa"}
-   :north {:inputs.gaffer.follows "gaffer" :url "git+file:///home/tom/code/north?ref=main" :inputs.fram.follows "fram"}
+   :north {:inputs.gaffer.follows "gaffer" :url "git+file:///home/tom/code/north?ref=main" :inputs.fram.follows "fram" :inputs.beagle.follows "beagle"}
    :nur {:url "github:nix-community/NUR"}
    :palefox {:url "github:tompassarelli/palefox"}
    :quickshell {:inputs.nixpkgs.follows "nixpkgs" :url "git+https://git.outfoxxed.me/outfoxxed/quickshell"}

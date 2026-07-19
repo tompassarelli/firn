@@ -12,7 +12,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "sonnet",
+  "model": "claude-fable-5[1m]",
   "disableClaudeAiConnectors": true,
   "hooks": {
     "SessionStart": [
@@ -184,7 +184,7 @@
     "gaffer": {
       "source": {
         "source": "directory",
-        "path": "/home/tom/code/gaffer"
+        "path": "/home/tom/.local/state/north/gaffer-plugin-source"
       }
     },
     "caveman": {

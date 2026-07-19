@@ -2,6 +2,8 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/agent-config-check.XXXXXX")"
+trap 'rm -rf "$scratch"' EXIT
 
 assert_native_identity() {
   local manifest="$1" expected_provider="$2" label="$3"
@@ -60,22 +62,251 @@ if grep -Fq '.diagnosticRouteProbe' "$REPO/scripts/agent-config-check.sh"; then
 fi
 grep -Fq '"Allocation  ' \
   "$REPO/scripts/agent-config-check.sh"
-grep -Fq 'North providers JSON v2' \
-  "$REPO/scripts/agent-config-check.sh"
-grep -Fq 'timeout 30 claude plugin list --json' \
-  "$REPO/scripts/agent-config-check.sh"
-grep -Fq 'held at committed' \
-  "$REPO/scripts/agent-config-check.sh"
-if grep -Fq 'claude plugin list --json 2>&1' \
-  "$REPO/scripts/agent-config-check.sh"; then
-  printf 'plugin stderr must not be merged into the JSON document\n' >&2
+
+source "$REPO/scripts/agent-config-check.sh"
+
+# Checkout-first hooks carry explicit mutable provenance. Canonical targets
+# fingerprint cleanly; a split target/hash for one basename+role is rejected.
+IFS=$'\t' read -r north_spawn_target north_spawn_sha \
+  < <(hook_target_fingerprint \
+    /home/tom/code/north/bin/north-on-spawn \
+    /home/tom/code/north)
+[ "$north_spawn_target" = /home/tom/code/north/bin/north-on-spawn ]
+[[ "$north_spawn_sha" =~ ^[0-9a-f]{64}$ ]]
+if hook_target_fingerprint \
+  /home/tom/code/north/bin/north-on-spawn \
+  /home/tom/code/nixos-config >/dev/null; then
+  printf 'North checkout hook was accepted under the wrong canonical repo\n' >&2
+  exit 1
+fi
+record_live_hook_binding \
+  north-on-spawn:north-lifecycle "$north_spawn_target" "$north_spawn_sha"
+if record_live_hook_binding \
+  north-on-spawn:north-lifecycle "$north_spawn_target" \
+  0000000000000000000000000000000000000000000000000000000000000000; then
+  printf 'split bytes for one live hook role were accepted\n' >&2
+  exit 1
+fi
+grep -q 'north-on-spawn:north-lifecycle changed from' <<<"$HOOK_SPLIT_REASON"
+
+# Both deployed readiness and CLI/web semantic parity go through the packaged
+# closure. The sourceable seam makes the exact argv contract hermetic.
+mkdir -p "$scratch/bin"
+cat >"$scratch/bin/north-packaged" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$NORTH_PACKAGED_CALLS"
+case "$*" in
+  'providers --json')
+    printf '%s\n' '{"schemaVersion":3}'
+    ;;
+  'agents --check-web http://127.0.0.1:8088')
+    printf '%s\n' 'semantic roster parity ok'
+    ;;
+  *)
+    exit 97
+    ;;
+esac
+SH
+chmod +x "$scratch/bin/north-packaged"
+: >"$scratch/north-packaged-calls"
+NORTH_PACKAGED_CALLS="$scratch/north-packaged-calls" \
+  NORTH_PACKAGED_BIN="$scratch/bin/north-packaged" \
+  run_north_packaged providers --json >/dev/null
+NORTH_PACKAGED_CALLS="$scratch/north-packaged-calls" \
+  NORTH_PACKAGED_BIN="$scratch/bin/north-packaged" \
+  run_north_packaged agents --check-web http://127.0.0.1:8088 >/dev/null
+diff -u \
+  <(printf '%s\n' \
+    'providers --json' \
+    'agents --check-web http://127.0.0.1:8088') \
+  "$scratch/north-packaged-calls"
+: >"$scratch/north-packaged-calls"
+PATH="$scratch/bin:$PATH" \
+NORTH_PACKAGED_CALLS="$scratch/north-packaged-calls" \
+  run_north_packaged providers --json >/dev/null
+[ "$(<"$scratch/north-packaged-calls")" = 'providers --json' ]
+
+# Successful probes reap their exact GNU-timeout process group immediately.
+# The timeout PID is the group leader; the recursive child belongs to that
+# group but has a distinct PID.
+cat >"$scratch/bin/probe-ps" <<'SH'
+#!/usr/bin/env bash
+output="$("$REAL_PROBE_PS" "$@")" || exit
+pid="${*: -1}"
+pgid="${output//[[:space:]]/}"
+printf '%s %s\n' "$pid" "$pgid" >>"$PROBE_PS_CALLS"
+printf '%s\n' "$output"
+SH
+chmod +x "$scratch/bin/probe-ps"
+: >"$scratch/probe-ps-calls"
+fast_probe_start_ns="$(date +%s%N)"
+PROBE_PS_BIN="$scratch/bin/probe-ps" \
+REAL_PROBE_PS="$(command -v ps)" \
+PROBE_PS_CALLS="$scratch/probe-ps-calls" \
+NORTH_PACKAGED_CALLS="$scratch/north-packaged-calls" \
+NORTH_PACKAGED_BIN="$scratch/bin/north-packaged" \
+  run_north_packaged providers --json >/dev/null
+fast_probe_elapsed_ms=$((($(date +%s%N) - fast_probe_start_ns) / 1000000))
+[ "$fast_probe_elapsed_ms" -lt 1000 ]
+mapfile -t probe_pgid_calls <"$scratch/probe-ps-calls"
+[ "${#probe_pgid_calls[@]}" -eq 2 ]
+read -r probe_timeout_pid probe_timeout_pgid <<<"${probe_pgid_calls[0]}"
+read -r probe_child_pid probe_child_pgid <<<"${probe_pgid_calls[1]}"
+[ "$probe_timeout_pid" = "$probe_timeout_pgid" ]
+[ "$probe_child_pid" != "$probe_timeout_pid" ]
+[ "$probe_child_pgid" = "$probe_timeout_pgid" ]
+
+# Same-directory status publication is portable to BSD mv; no GNU -T leaks
+# into the recursively executed checker child.
+mkdir "$scratch/bsd-path"
+cat >"$scratch/bsd-path/mv" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$BSD_PROBE_MV_CALLS"
+for arg in "$@"; do
+  [ "$arg" != -T ] || exit 91
+done
+exec "$REAL_BSD_PROBE_MV" "$@"
+SH
+chmod +x "$scratch/bsd-path/mv"
+: >"$scratch/bsd-probe-mv-calls"
+export BSD_PROBE_MV_CALLS="$scratch/bsd-probe-mv-calls"
+REAL_BSD_PROBE_MV="$(command -v mv)"
+export REAL_BSD_PROBE_MV
+PATH="$scratch/bsd-path:$PATH" \
+  run_bounded_process 0.2 "$(command -v true)" >/dev/null
+[ "$(wc -l <"$scratch/bsd-probe-mv-calls")" -eq 2 ]
+if grep -Eq '(^| )-T( |$)' "$scratch/bsd-probe-mv-calls"; then
+  printf 'checker bounded child used nonportable mv -T\n' >&2
+  exit 1
+fi
+unset BSD_PROBE_MV_CALLS REAL_BSD_PROBE_MV
+
+# Exit zero from the outer supervisor is not success without the authenticated
+# child-status record. Zero-valued deadlines/kill grace are also rejected
+# because GNU timeout treats them as disabled.
+if PROBE_TIMEOUT_BIN="$(command -v true)" \
+   run_bounded_process 0.1 "$(command -v true)" >/dev/null 2>&1; then
+  printf 'missing bounded-probe status was accepted as success\n' >&2
+  exit 1
+else
+  [ "$?" -eq 125 ]
+fi
+if run_bounded_process 0 "$(command -v true)" >/dev/null 2>&1; then
+  printf 'zero probe deadline was accepted\n' >&2
+  exit 1
+else
+  [ "$?" -eq 125 ]
+fi
+if PROBE_KILL_AFTER_SECONDS=0 \
+   run_bounded_process 0.1 "$(command -v true)" >/dev/null 2>&1; then
+  printf 'disabled probe KILL grace was accepted\n' >&2
+  exit 1
+else
+  [ "$?" -eq 125 ]
+fi
+
+# Network/service-facing wrappers all share the same TERM→KILL boundary. A
+# direct command exits on TERM while its descendant ignores TERM and attempts
+# delayed mutation; the probe must return 124 only after the group is reaped.
+cat >"$scratch/bin/hostile-probe" <<'SH'
+#!/usr/bin/env bash
+(
+  trap '' TERM
+  printf '%s\n' "$BASHPID" >"$HUNG_PID_FILE"
+  sleep 0.5
+  printf '%s\n' leaked >"$HUNG_MUTATION_FILE"
+) &
+trap 'exit 0' TERM
+wait
+SH
+chmod +x "$scratch/bin/hostile-probe"
+
+assert_hung_probe_reaped() {
+  local label="$1" output status pid state
+  shift
+  rm -f "$scratch/$label.pid" "$scratch/$label.mutation"
+  if output="$(
+    export HUNG_PID_FILE="$scratch/$label.pid"
+    export HUNG_MUTATION_FILE="$scratch/$label.mutation"
+    export PROBE_KILL_AFTER_SECONDS=0.1
+    export PROBE_POLL_SECONDS=0.01
+    "$@" 2>&1
+  )"; then
+    printf '%s hostile probe unexpectedly succeeded\n' "$label" >&2
+    exit 1
+  else
+    status=$?
+  fi
+  [ "$status" -eq 124 ]
+  [ -z "$output" ]
+  [ -s "$scratch/$label.pid" ]
+  pid="$(<"$scratch/$label.pid")"
+  sleep 0.6
+  [ ! -e "$scratch/$label.mutation" ]
+  if kill -0 "$pid" 2>/dev/null; then
+    state="$(ps -o stat= -p "$pid" 2>/dev/null | tr -d ' ' || true)"
+    case "$state" in Z*|'') ;; *) return 1 ;; esac
+  fi
+}
+
+CLAUDE_BIN="$scratch/bin/hostile-probe" \
+  assert_hung_probe_reaped claude run_claude_probe 0.1 mcp list
+CODEX_BIN="$scratch/bin/hostile-probe" \
+  assert_hung_probe_reaped codex run_codex_probe 0.1 mcp list
+NORTH_PACKAGED_BIN="$scratch/bin/hostile-probe" \
+NORTH_PROBE_TIMEOUT_SECONDS=0.1 \
+  assert_hung_probe_reaped north run_north_packaged providers --json
+
+# Per-stream RLIMIT_FSIZE prevents a hostile JSON producer from filling temp
+# storage before its whole-process deadline.
+cat >"$scratch/bin/flood-probe" <<'SH'
+#!/usr/bin/env bash
+while printf '%064d\n' 0; do :; done
+SH
+chmod +x "$scratch/bin/flood-probe"
+if PROBE_MAX_OUTPUT_KIB=4 \
+   PROBE_KILL_AFTER_SECONDS=0.1 \
+   run_bounded_process 0.2 "$scratch/bin/flood-probe" >/dev/null 2>&1; then
+  printf 'output-flood probe unexpectedly succeeded\n' >&2
   exit 1
 fi
 
-# Off-main HEAD is excluded from plugin reconciliation. A cache matching main is
-# held; a cache matching only the feature HEAD is deferred, never declared
-# current and never promoted to hard drift while the checkout is ineligible.
-source "$REPO/scripts/agent-config-check.sh"
+[ "$(printf '%s\n' '{"schemaVersion":2}' | north_provider_schema_version)" = 2 ]
+[ "$(printf '%s\n' '{"schemaVersion":3}' | north_provider_schema_version)" = 3 ]
+if printf '%s\n' '{"schemaVersion":"3"}' | north_provider_schema_version >/dev/null 2>&1; then
+  printf 'string provider schemaVersion was accepted as canonical\n' >&2
+  exit 1
+fi
+
+# A structurally valid but stale intent is drift, even when its object remains
+# available: intent, managed HEAD, and verified flake input must be identical.
+verified_revision=1111111111111111111111111111111111111111
+stale_intent_revision=2222222222222222222222222222222222222222
+gaffer_revisions_converged \
+  "$verified_revision" "$verified_revision" "$verified_revision"
+if gaffer_revisions_converged \
+  "$stale_intent_revision" "$verified_revision" "$verified_revision"; then
+  printf 'stale but valid Gaffer intent revision was accepted\n' >&2
+  exit 1
+fi
+
+# Codex North carries one exact explicit env map. Missing, changed, or extra
+# keys are drift rather than "materialized" implicitly by the wrapper.
+codex_north_env_is_canonical "$REPO/dotfiles/codex/config.toml"
+cp "$REPO/dotfiles/codex/config.toml" "$scratch/codex-extra-env.toml"
+sed -i '/^NORTH_PORT = "7977"$/a EXTRA = "not-canonical"' \
+  "$scratch/codex-extra-env.toml"
+if codex_north_env_is_canonical "$scratch/codex-extra-env.toml" >/dev/null 2>&1; then
+  printf 'extra Codex North MCP env key was accepted\n' >&2
+  exit 1
+fi
+cp "$REPO/dotfiles/codex/config.toml" "$scratch/codex-wrong-env.toml"
+sed -i 's#^FRAM_LOG = "/home/tom/.local/state/north/coordination.log"$#FRAM_LOG = "/tmp/wrong.log"#' \
+  "$scratch/codex-wrong-env.toml"
+if codex_north_env_is_canonical "$scratch/codex-wrong-env.toml" >/dev/null 2>&1; then
+  printf 'wrong Codex North MCP coordination log was accepted\n' >&2
+  exit 1
+fi
 
 # The live coordinator must positively identify the direct executable from the
 # pinned Fram derivation. A checkout path and a merely store-backed wrapper are
@@ -102,21 +333,66 @@ if classify_north_coord_exec "{ path=$wrapper_path ; argv[]=$wrapper_path 7977 /
 fi
 [ "$NORTH_COORD_EXEC_KIND" = unrecognized ]
 
-main_full='1111111111111111111111111111111111111111'
-feature_full='2222222222222222222222222222222222222222'
-classify_gaffer_cache "${main_full:0:12}" "$feature_full" "$main_full" feature ''
-[ "$GAFFER_CACHE_STATE" = held-off-main ]
-classify_gaffer_cache "${feature_full:0:12}" "$feature_full" "$main_full" feature ''
-[ "$GAFFER_CACHE_STATE" = deferred-off-main ]
-classify_gaffer_cache "${feature_full:0:12}" "$feature_full" '' feature 'dirty'
-[ "$GAFFER_CACHE_STATE" = deferred-no-main-ref ]
+# North web has two positive store identities (entrypoint + workdir) and one
+# exact runtime environment. Wrong corpus, missing loopback, explicit static
+# overrides, and checkout paths all fail the pure contract before any live
+# systemd probe.
+pinned_web_root="/nix/store/${nix_hash}-north-web-0.1.0"
+pinned_web_exec="$pinned_web_root/bin/north-web"
+pinned_web_workdir="$pinned_web_root/libexec/north-web"
+classify_north_web_exec \
+  "{ path=$pinned_web_exec ; argv[]=$pinned_web_exec ; ignore_errors=no ; }"
+[ "$NORTH_WEB_EXEC_KIND" = pinned-package ]
+[ "$NORTH_WEB_EXEC_PATH" = "$pinned_web_exec" ]
+classify_north_web_workdir "$pinned_web_workdir"
+[ "$NORTH_WEB_WORKDIR_KIND" = pinned-package ]
+
+if classify_north_web_exec \
+  '{ path=/home/tom/code/north/bin/north-web ; argv[]=/home/tom/code/north/bin/north-web ; }'; then
+  printf 'checkout-backed north-web was accepted as pinned\n' >&2
+  exit 1
+fi
+[ "$NORTH_WEB_EXEC_KIND" = checkout ]
+if classify_north_web_exec \
+  "{ path=/nix/store/${nix_hash}-bun/bin/bun ; argv[]=/nix/store/${nix_hash}-bun/bin/bun run out/north/boot.js ; }"; then
+  printf 'store Bun was accepted as proof of a pinned North web package\n' >&2
+  exit 1
+fi
+[ "$NORTH_WEB_EXEC_KIND" = unrecognized ]
+if classify_north_web_workdir '/home/tom/code/north/web-bjs'; then
+  printf 'checkout-backed north-web WorkingDirectory was accepted\n' >&2
+  exit 1
+fi
+[ "$NORTH_WEB_WORKDIR_KIND" = checkout ]
+if classify_north_web_workdir "/nix/store/${nix_hash}-north-cli/libexec/north-web"; then
+  printf 'unrelated store WorkingDirectory was accepted as North web\n' >&2
+  exit 1
+fi
+[ "$NORTH_WEB_WORKDIR_KIND" = unrecognized ]
+
+canonical_web_env='HOME=/home/tom FRAM_LOG=/home/tom/.local/state/north/coordination.log FRAM_TELEMETRY_LOG=/home/tom/.local/state/north/telemetry.log NORTH_PORT=7977 NORTH_WEB_BIND=127.0.0.1 PORT=8088'
+north_web_environment_is_canonical "$canonical_web_env" /home/tom
+wrong_corpus_env="${canonical_web_env/coordination.log/facts.log}"
+if north_web_environment_is_canonical "$wrong_corpus_env" /home/tom; then
+  printf 'north-web facts.log split-brain was accepted as the canonical corpus\n' >&2
+  exit 1
+fi
+grep -q 'FRAM_LOG=/home/tom/.local/state/north/coordination.log' <<<"$NORTH_WEB_ENV_REASON"
+missing_bind_env="${canonical_web_env/ NORTH_WEB_BIND=127.0.0.1/}"
+if north_web_environment_is_canonical "$missing_bind_env" /home/tom; then
+  printf 'north-web without an explicit loopback bind was accepted\n' >&2
+  exit 1
+fi
+stale_static_env="$canonical_web_env STATIC_DIR=/home/tom/code/north/web/priv/static"
+if north_web_environment_is_canonical "$stale_static_env" /home/tom; then
+  printf 'north-web checkout STATIC_DIR was accepted\n' >&2
+  exit 1
+fi
+grep -q 'STATIC_DIR' <<<"$NORTH_WEB_ENV_REASON"
 
 # Repository/CI mode validates canonical declarations against this checkout,
 # not whether Tom's absolute live path happens to exist. A failing readlink shim
 # simulates a relocated checkout; only --local may require live resolution.
-scratch="$(mktemp -d "${TMPDIR:-/tmp}/agent-config-relocation.XXXXXX")"
-trap 'rm -rf "$scratch"' EXIT
-
 # Numeric Codex state coordinates must resolve to a human-meaningful command.
 # In particular, SessionStart 0:1 is North registration, not the Beagle hook.
 expected_north_spawn='AGENT_PROVIDER=openai /home/tom/code/north/bin/north-on-spawn'

@@ -54,6 +54,7 @@
       inputs.gaffer.follows = "gaffer";
       url = "git+file:///home/tom/code/north?ref=main";
       inputs.fram.follows = "fram";
+      inputs.beagle.follows = "beagle";
     };
     nur = {
       url = "github:nix-community/NUR";

@@ -35,43 +35,68 @@ plugins cannot own `statusLine`. It points at
 bus in this repo; the caveman segment reads the plugin's flag file directly
 (no plugin-cache dependency).
 
-## Gaffer plugin — local source, rebuild-synchronized cache
+## Gaffer plugin — exact-revision managed source + synchronized cache
 
 Claude Code does not run marketplace plugins in place. It copies them to
 `~/.claude/plugins/cache`, and local/third-party marketplaces do not auto-update
-by default. Merely declaring Gaffer's directory marketplace in
+by default. Merely declaring a Gaffer directory marketplace in
 `~/code/nixos-config/dotfiles/claude/settings.json` therefore does not make a
 new Claude session consume a newer Gaffer commit.
 
 `syncGafferPlugin` runs after `linkClaudeSettings` on every `firn rebuild`. It
 executes `~/code/nixos-config/scripts/claude-gaffer-plugin-sync.sh` from the
-evaluated snapshot. The script uses Claude's supported noninteractive
-`plugin update` command; on a fresh machine it falls back to marketplace
-registration plus `plugin install`. It never edits
+evaluated snapshot and receives the exact `inputs.gaffer.rev` that entered the
+built closure. The script resolves that object from `~/code/gaffer` and
+materializes it at
+`~/.local/state/north/gaffer-plugin-source`, the stable directory marketplace
+declared in settings. That source is a marker-owned, detached Git worktree at
+the exact built revision. It is also Git-locked against prune/removal. Before
+creating it, the sync atomically publishes a durable sidecar intent naming the
+canonical Gaffer common directory, managed path, and exact selected revision.
+If activation dies after `git worktree add` but before the marker is finalized,
+the next activation validates that intent plus the clean detached worktree and
+completes ownership automatically. After later exact checkouts, it atomically
+converges the intent to the new managed HEAD before touching Claude. Crashes on
+either side of checkout/intent publication are recoverable on the next run; the
+checker requires intent, managed HEAD, cache, and verified input to agree.
+
+The developer's primary `~/code/gaffer` checkout is only the object database:
+its active branch, HEAD, dirty bytes, and the current shape of
+`refs/heads/main` never select plugin bytes. An unknown existing managed path,
+unexpected worktree changes, a foreign worktree/lock, or a missing exact object
+fails closed without clobbering anything.
+
+The script first reads Claude's supported marketplace registry. A fresh
+profile is registered with `plugin marketplace add`; the one recognized legacy
+state—the single `gaffer` directory marketplace at `~/code/gaffer`—is
+deterministically migrated to the managed source with the same supported
+command. Any duplicate or other same-name source fails closed before plugin
+mutation. The script then uses Claude's noninteractive `plugin update` command;
+on a fresh machine it uses `plugin install`. It never edits
 `~/.claude/plugins/installed_plugins.json`, deletes cache directories, or
-uninstalls the plugin. Fresh installation and cache reconciliation assume the
-Gaffer checkout exists at `~/code/gaffer`; a fresh host must clone it before the
-rebuild can populate Claude's cache. Any path that would copy bytes fails closed
-unless that checkout is a clean `main` branch and both plugin manifests omit an
-explicit version, so Claude's cache key is the committed Git SHA rather than a
-mutable label. When the cache already matches the checked-out commit, dirty or
-off-main source is not copied and the activation exits without warning because
-no copy is needed; this no-op does not make an off-main commit eligible. After
-an update/install, the script reads
-`claude plugin list --json` again and requires its version to equal that SHA
-(12-character or full form). List and marketplace probes are capped at 10
-seconds; update/install calls at 30 seconds.
+uninstalls the plugin. Both plugin manifests must omit an explicit version so
+Claude reports the Git revision. After an update/install, the script reads
+`claude plugin list --json` again and resolves Claude's 12-character (or full)
+version back to the exact 40-character built revision.
 
-The local config check compares an off-main checkout's installed cache against
-the local `main` ref (falling back to `origin/main`), never against the feature
-HEAD. A mismatch is therefore reported as deferred advisory state until the
-checkout returns to clean `main`; it is not false drift and does not make the
-feature commit eligible for installation.
+A bounded process lock serializes the entire worktree + Claude transaction, so
+overlapping activations built from different revisions cannot interleave their
+checkout, update, and verification steps. Lock wait is capped at 45 seconds;
+marketplace/plugin list probes are capped at 10 seconds and marketplace
+registration/update/install calls at 30 seconds. Each CLI runs in a supervised
+process group: TERM at the deadline, KILL two seconds later, and immediate
+whole-group reap after a normal result, so a descendant cannot mutate after the
+lock is released. Stdout and stderr each inherit a 256 KiB file-size ceiling.
+Activation reports a warning on failure and
+`agent-config-check --local` compares the managed worktree and Claude cache
+against the exact verified `flake.lock` input revision.
 
-The operating loop is therefore one existing command: commit Gaffer, then
-`firn rebuild`. The rebuild reconciles Claude's cached copy; the next Claude
-session loads it. An already-running session retains the plugin snapshot it
-started with until Claude reloads plugins or the session restarts.
+The operating loop stays one command after a Gaffer change lands on local
+`refs/heads/main`: `firn rebuild`. Firn verifies and promotes that exact commit
+without requiring the primary checkout to switch branches or become clean,
+then the activation reconciles Claude's cached copy. The next Claude session
+loads it; an already-running session retains the plugin snapshot it started
+with until Claude reloads plugins or the session restarts.
 
 Codex and North have no corresponding cache pointer: the shared
 `~/code/nixos-config/dotfiles/agents/AGENTS.md` routes Codex to
