@@ -132,7 +132,7 @@ case "$*" in
         ;;
       exact)
         printf '[{"name":"gaffer","source":"directory","path":"%s","installLocation":"%s"}]\n' \
-          "$FAKE_SOURCE" "$FAKE_SOURCE"
+          "$FAKE_MARKETPLACE_PATH" "$FAKE_MARKETPLACE_PATH"
         ;;
       legacy)
         printf '[{"name":"gaffer","source":"directory","path":"%s","installLocation":"%s"}]\n' \
@@ -253,6 +253,7 @@ run_sync() {
   MARKETPLACE_STATE_FILE="$SCRATCH/marketplace-state" \
   LIST_COUNT_FILE="$SCRATCH/list-count" \
   FAKE_SOURCE="${GAFFER_SOURCE_OVERRIDE:-$MANAGED_SOURCE}" \
+  FAKE_MARKETPLACE_PATH="${FAKE_MARKETPLACE_PATH:-${GAFFER_SOURCE_OVERRIDE:-$MANAGED_SOURCE}}" \
   FAKE_LEGACY_SOURCE="$GAFFER" \
   FAKE_REV_FULL="$revision" \
   FAKE_REV_SHORT="${revision:0:12}" \
@@ -314,7 +315,7 @@ assert_exact_managed_source() {
      and .revision == $revision' \
     "$source.intent" >/dev/null
   "$REAL_GIT" -C "$GAFFER" worktree list --porcelain |
-    grep -A4 -F "worktree $source" |
+    grep -A4 -F "worktree $(realpath -m "$source")" |
     grep -Fx 'locked north-gaffer-plugin-source-v1' >/dev/null
   [ "$("$REAL_GIT" -C "$GAFFER" rev-parse HEAD)" = "$FEATURE_REV" ]
   grep -q 'dirty feature bytes' "$GAFFER/doctrine.md"
@@ -819,6 +820,29 @@ esac
 [ "$("$REAL_GIT" -C "$GAFFER" rev-parse HEAD)" = "$FEATURE_REV" ]
 grep -q 'dirty feature bytes' "$GAFFER/doctrine.md"
 [ -f "$GAFFER/untracked" ]
+
+# The managed source is declared at a stable logical path whose parent is an
+# XDG-state symlink into the real repo tree; Git and Claude both report the
+# symlink-resolved canonical path. A logical-vs-canonical alias is the SAME
+# source, not a foreign conflict: the whole transaction (worktree identity,
+# managed lock, marketplace state) must canonicalize both sides. The managed
+# source is still created, marked, locked, and compared at the logical path,
+# while Claude's canonical marketplace path resolves to it.
+mkdir -p "$SCRATCH/canonical-root"
+ln -s canonical-root "$SCRATCH/logical-root"
+LOGICAL_SOURCE="$SCRATCH/logical-root/north/gaffer-plugin-source"
+CANONICAL_SOURCE="$SCRATCH/canonical-root/north/gaffer-plugin-source"
+printf '%s\n' current >"$SCRATCH/plugin-state"
+printf '%s\n' exact >"$SCRATCH/marketplace-state"
+reset_calls
+GAFFER_SOURCE_OVERRIDE="$LOGICAL_SOURCE" \
+GAFFER_LOCK_OVERRIDE="$SCRATCH/logical-root/north/gaffer-plugin-source.lock" \
+FAKE_MARKETPLACE_PATH="$CANONICAL_SOURCE" \
+  run_sync
+assert_calls \
+  'plugin marketplace list --json' \
+  'plugin list --json'
+assert_exact_managed_source "$LOGICAL_SOURCE"
 
 if grep -Fq 'installed_plugins.json' "$REPO/scripts/claude-gaffer-plugin-sync.sh" ||
    grep -Fq 'plugin uninstall' "$REPO/scripts/claude-gaffer-plugin-sync.sh" ||

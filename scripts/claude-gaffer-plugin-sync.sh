@@ -11,6 +11,7 @@ MV_BIN="${MV_BIN:-mv}"
 SLEEP_BIN="${SLEEP_BIN:-sleep}"
 PS_BIN="${PS_BIN:-ps}"
 WC_BIN="${WC_BIN:-wc}"
+REALPATH_BIN="${REALPATH_BIN:-realpath}"
 GAFFER_HOME="${GAFFER_HOME:-$HOME/code/gaffer}"
 GAFFER_SOURCE="${GAFFER_SOURCE:-$HOME/.local/state/north/gaffer-plugin-source}"
 GAFFER_LOCK="${GAFFER_LOCK:-$HOME/.local/state/north/gaffer-plugin-source.lock}"
@@ -32,6 +33,23 @@ SYNC_SCRIPT_PATH="${BASH_SOURCE[0]}"
 die() {
   printf '%s\n' "$*" >&2
   exit 1
+}
+
+# The managed source is declared at a stable logical path (its parent may be an
+# XDG-state symlink into the real repo tree), but Git and Claude always report
+# the symlink-resolved canonical path. Identity comparisons must canonicalize
+# BOTH sides so a logical/canonical alias is not mistaken for a foreign source.
+# The logical marketplace declaration itself is preserved; only comparisons
+# resolve. `-m` tolerates a not-yet-created path.
+canonical_path() {
+  local resolved
+  resolved="$("$REALPATH_BIN" -m -- "$1" 2>/dev/null)" && [ -n "$resolved" ] ||
+    resolved="$1"
+  printf '%s' "$resolved"
+}
+
+same_path() {
+  [ "$(canonical_path "$1")" = "$(canonical_path "$2")" ]
 }
 
 is_positive_decimal() {
@@ -227,11 +245,11 @@ read_intent() {
   INTENT_FILE_VERSION="$("$JQ_BIN" -r '.version' <<<"$intent_json")"
   [ "$INTENT_FILE_VERSION" = "$INTENT_VERSION" ] ||
     die "Gaffer managed-source intent has unknown version '$INTENT_FILE_VERSION'"
-  [ "$INTENT_SOURCE" = "$GAFFER_SOURCE" ] ||
+  same_path "$INTENT_SOURCE" "$GAFFER_SOURCE" ||
     die "Gaffer managed-source intent owns $INTENT_SOURCE, not $GAFFER_SOURCE"
   home_common="$("$GIT_BIN" -C "$GAFFER_HOME" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" ||
     die "Gaffer repository common directory could not be resolved"
-  [ "$INTENT_COMMON_DIR" = "$home_common" ] ||
+  same_path "$INTENT_COMMON_DIR" "$home_common" ||
     die "Gaffer managed-source intent names $INTENT_COMMON_DIR, not $home_common"
   [[ "$INTENT_REVISION" =~ ^[0-9a-f]{40}$ ]] ||
     die "Gaffer managed-source intent revision is not exact"
@@ -303,12 +321,13 @@ ensure_managed_worktree_lock() {
 
   while IFS= read -r line; do
     case "$line" in
-      "worktree $GAFFER_SOURCE")
-        in_record=1
-        saw_record=1
-        ;;
       worktree\ *)
-        in_record=0
+        if same_path "${line#worktree }" "$GAFFER_SOURCE"; then
+          in_record=1
+          saw_record=1
+        else
+          in_record=0
+        fi
         ;;
       locked)
         if [ "$in_record" -eq 1 ]; then
@@ -341,13 +360,13 @@ require_managed_identity() {
   read_intent
   source_top="$("$GIT_BIN" -C "$GAFFER_SOURCE" rev-parse --path-format=absolute --show-toplevel 2>/dev/null)" ||
     die "$GAFFER_SOURCE exists but is not a Git worktree"
-  [ "$source_top" = "$GAFFER_SOURCE" ] ||
+  same_path "$source_top" "$GAFFER_SOURCE" ||
     die "$GAFFER_SOURCE resolves to unexpected worktree root $source_top"
   source_common="$("$GIT_BIN" -C "$GAFFER_SOURCE" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" ||
     die "Gaffer managed worktree common directory could not be resolved"
   home_common="$("$GIT_BIN" -C "$GAFFER_HOME" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" ||
     die "Gaffer repository common directory could not be resolved"
-  [ "$source_common" = "$home_common" ] ||
+  same_path "$source_common" "$home_common" ||
     die "$GAFFER_SOURCE is a worktree of $source_common, not $GAFFER_HOME"
   managed_git_dir="$(read_managed_git_dir)" || exit
   marker=''
@@ -480,11 +499,11 @@ read_marketplace_state() {
       install_location="$("$JQ_BIN" -er \
         '.[] | select(.name == "gaffer") | .installLocation | strings' <<<"$json")" ||
         die "Claude Gaffer marketplace has no install location"
-      if [ "$source" != directory ] || [ "$install_location" != "$path" ]; then
+      if [ "$source" != directory ] || ! same_path "$install_location" "$path"; then
         MARKETPLACE_STATE='conflict'
-      elif [ "$path" = "$GAFFER_SOURCE" ]; then
+      elif same_path "$path" "$GAFFER_SOURCE"; then
         MARKETPLACE_STATE='exact'
-      elif [ "$path" = "$GAFFER_HOME" ]; then
+      elif same_path "$path" "$GAFFER_HOME"; then
         MARKETPLACE_STATE='legacy-v0'
       else
       MARKETPLACE_STATE='conflict'
