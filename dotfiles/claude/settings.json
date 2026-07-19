@@ -79,7 +79,7 @@
           },
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/north-clock-guard.sh",
+            "command": "/run/current-system/sw/bin/bash /home/tom/code/nixos-config/dotfiles/claude/hooks/north-clock-guard.sh",
             "timeout": 10
           }
         ]
@@ -104,7 +104,7 @@
           },
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/north-clock-guard.sh",
+            "command": "/run/current-system/sw/bin/bash /home/tom/code/nixos-config/dotfiles/claude/hooks/north-clock-guard.sh",
             "timeout": 10
           }
         ]

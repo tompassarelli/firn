@@ -44,9 +44,32 @@ print(json.dumps({
 ' "$1"
 }
 
+patch_event_json() {
+  local target="${1:-main.rkt}" body="${2:-+new}"
+  python3 -c '
+import json
+import sys
+
+patch = "\n".join([
+    "*** Begin Patch",
+    "*** Update File: " + sys.argv[1],
+    "@@",
+    "-old",
+    sys.argv[2],
+    "*** End Patch",
+])
+print(json.dumps({
+    "hook_event_name": "PostToolUse",
+    "tool_name": "apply_patch",
+    "tool_input": {"command": patch},
+    "cwd": sys.argv[3],
+}))
+' "$target" "$body" "$PROJECT"
+}
+
 run_hook() {
-  local guards="$1" payload
-  payload="$(event_json "$SOURCE")"
+  local guards="$1" payload="${2:-}"
+  [ -n "$payload" ] || payload="$(event_json "$SOURCE")"
   env PATH="$BIN:$PATH" \
     HOME="$HOME_DIR" \
     AGENT_NO_AUTHORING_HOOKS="$guards" \
@@ -119,6 +142,21 @@ if [[ "$context" == *'Stale bytecode'* ]]; then
 else
   not_ok 'structured context preserves stale-bytecode guidance'
 fi
+
+run_hook 0 "$(patch_event_json)"
+if jq -e '
+  .hookSpecificOutput.hookEventName == "PostToolUse"
+  and (.hookSpecificOutput.additionalContext | contains("Stale bytecode"))
+' <<<"$RUN_STDOUT" >/dev/null 2>&1; then
+  ok 'Codex canonical apply_patch target receives Racket diagnostics'
+else
+  not_ok "Codex canonical apply_patch target receives Racket diagnostics (got: $RUN_STDOUT)"
+fi
+
+touch "$PROJECT/notes.txt"
+run_hook 0 "$(patch_event_json notes.txt '+# main.rkt is prose, not a target')"
+assert_empty "$RUN_STDOUT" 'apply_patch body text cannot impersonate a .rkt target'
+assert_empty "$RUN_STDERR" 'apply_patch non-target decoy emits no stderr'
 
 select_pin "$PIN_HANG"
 started_ms="$(date +%s%3N)"

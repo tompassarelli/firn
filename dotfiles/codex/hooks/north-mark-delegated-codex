@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# A managed lane's delegation/listener lifecycle is harness-owned. The native
+# marker derives identity from provider session caches, so it is native-only.
+set -uo pipefail
+
+if [ "${NORTH_MANAGED_LANE:-}" = 1 ]; then
+  case "${AGENT_TOPOLOGY:-}" in
+    worker|orchestrator)
+      [[ "${AGENT_ID:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$ ]] && exit 0
+      ;;
+  esac
+fi
+
+HERE="$(
+  CDPATH='' builtin cd -- "${BASH_SOURCE[0]%/*}" 2>/dev/null &&
+    builtin pwd -P
+)" || exit 0
+BASH_BIN="$HERE/runtime/bash"
+NORTH_HOME="$HERE/north"
+TARGET="$NORTH_HOME/bin/north-mark-delegated"
+[ -x "$BASH_BIN" ] && [ -x "$TARGET" ] || exit 0
+
+unset AGENT_ID AGENT_TOPOLOGY NORTH_MANAGED_LANE
+export AGENT_PROVIDER=openai NORTH_HOME
+exec "$BASH_BIN" "$TARGET" "$@"

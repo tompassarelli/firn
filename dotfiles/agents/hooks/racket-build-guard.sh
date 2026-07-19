@@ -50,8 +50,55 @@ fi
 type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 payload="$(cat 2>/dev/null || true)"
-# file_path from the tool input (best-effort, no jq dependency).
-file="$(printf '%s' "$payload" | sed -nE 's/.*"file_path"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -1)"
+# Resolve either the ordinary provider file_path or Codex canonical apply_patch
+# target headers. Patch body text is never considered a target, so a comment
+# mentioning a .rkt path cannot trigger diagnostics.
+file="$(
+  printf '%s' "$payload" | python3 -c '
+import json
+import os
+import re
+import sys
+
+try:
+    data = json.load(sys.stdin)
+    if not isinstance(data, dict):
+        raise ValueError("root")
+    tool = data.get("tool_name", "")
+    tool_input = data.get("tool_input", {})
+    cwd = data.get("cwd", "") or os.getcwd()
+    if not isinstance(tool, str) or not isinstance(tool_input, dict):
+        raise ValueError("envelope")
+    if not isinstance(cwd, str) or not cwd or "\0" in cwd:
+        raise ValueError("cwd")
+    targets = []
+    direct = tool_input.get("file_path")
+    if isinstance(direct, str) and direct:
+        targets.append(direct)
+    if tool.rsplit(".", 1)[-1] == "apply_patch":
+        patch = tool_input.get("command")
+        if not isinstance(patch, str) or "*** Begin Patch" not in patch:
+            raise ValueError("patch")
+        targets.extend(re.findall(
+            r"^\*\*\* (?:Add|Update|Delete) File:\s+(.+?)\s*$",
+            patch, re.M))
+        targets.extend(re.findall(
+            r"^\*\*\* Move to:\s+(.+?)\s*$", patch, re.M))
+    for target in targets:
+        if not isinstance(target, str) or not target or any(
+                char in target for char in ("\0", "\n", "\r")):
+            raise ValueError("target")
+        expanded = os.path.expanduser(target)
+        if not os.path.isabs(expanded):
+            expanded = os.path.join(cwd, expanded)
+        canonical = os.path.realpath(os.path.abspath(expanded))
+        if canonical.endswith(".rkt"):
+            print(canonical)
+            raise SystemExit(0)
+except Exception:
+    pass
+' 2>/dev/null
+)"
 [ -n "$file" ] || exit 0
 
 # Only racket-compiled sources (these go through .zo bytecode).

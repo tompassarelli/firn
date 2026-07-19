@@ -372,6 +372,113 @@ for key, state in states.items():
 PY
 }
 
+canonical_existing_path() {
+  local path="$1"
+  [ -e "$path" ] || return 1
+  readlink -f -- "$path" 2>/dev/null
+}
+
+managed_source_root_matches() {
+  local logical_source="$1" observed_root="$2"
+  local expected_canonical observed_canonical
+  expected_canonical="$(canonical_existing_path "$logical_source")" || return 1
+  observed_canonical="$(canonical_existing_path "$observed_root")" || return 1
+  [ "$observed_canonical" = "$expected_canonical" ]
+}
+
+codex_managed_policy_binding_count() {
+  python3 - "$1" <<'PY'
+import sys
+import tomllib
+
+def command(path, timeout):
+    interpreter = "node" if path.endswith(".js") else "bash"
+    return {
+        "type": "command",
+        "command": (
+            "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV "
+            "/etc/codex/hooks/runtime/%s /etc/codex/hooks/%s"
+            % (interpreter, path)
+        ),
+        "timeout": timeout,
+    }
+
+expected = {
+    "allow_managed_hooks_only": True,
+    "features": {"hooks": True},
+    "hooks": {
+        "managed_dir": "/etc/codex/hooks",
+        "SessionStart": [{
+            "hooks": [
+                command("beagle-session-start.sh", 30),
+                command("north-on-spawn-codex", 15),
+            ],
+        }],
+        "SubagentStart": [{
+            "hooks": [command("north-on-spawn-codex", 15)],
+        }],
+        "PreToolUse": [
+            {
+                "matcher": "^(Agent|Task|Workflow)$",
+                "hooks": [command("agent-spawn-guard.sh", 10)],
+            },
+            {
+                "matcher": "^(Edit|Write|MultiEdit|apply_patch)$",
+                "hooks": [
+                    command("code-upstream-guard.sh", 10),
+                    command("firn-guard.sh", 10),
+                    command("north-clock-guard-codex", 10),
+                ],
+            },
+            {
+                "matcher": "^Bash$",
+                "hooks": [
+                    command("agent-spawn-guard.sh", 10),
+                    command("tripwire-guard.sh", 10),
+                    command("firn-guard.sh", 10),
+                    command("north-clock-guard-codex", 10),
+                ],
+            },
+        ],
+        "PostToolUse": [
+            {
+                "matcher": "^Bash$",
+                "hooks": [
+                    command("logcompress-hook.js", 10),
+                    command("north-on-tooluse-codex", 10),
+                ],
+            },
+            {
+                "matcher": "^(Edit|Write|MultiEdit|apply_patch)$",
+                "hooks": [
+                    command("racket-build-guard.sh", 15),
+                    command("north-on-tooluse-codex", 10),
+                ],
+            },
+            {
+                "matcher": "^(mcp__north__spawn|mcp__north__dispatch|Task|Agent)$",
+                "hooks": [command("north-mark-delegated-codex", 10)],
+            },
+        ],
+        "Stop": [{
+            "hooks": [command("north-on-stop-codex", 10)],
+        }],
+    },
+}
+
+with open(sys.argv[1], "rb") as handle:
+    policy = tomllib.load(handle)
+if policy != expected:
+    raise SystemExit("managed Codex policy differs from the canonical contract")
+print(sum(
+    len(binding["hooks"])
+    for event, bindings in policy["hooks"].items()
+    if event != "managed_dir"
+    for binding in bindings
+))
+PY
+}
+
 if [ "${1:-}" = "$AGENT_CONFIG_BOUNDED_CHILD_MODE" ]; then
   shift
   probe_child_main "$@"
@@ -387,6 +494,7 @@ SHARED="$REPO/dotfiles/agents"
 CLAUDE="$REPO/dotfiles/claude"
 CODEX="$REPO/dotfiles/codex"
 CODEX_REQUIREMENTS="$REPO/modules/codex/requirements.toml"
+CODEX_LEGACY_HOOKS="${CODEX_LEGACY_HOOKS:-$CODEX/hooks.json}"
 GAFFER_SYNC="$REPO/scripts/claude-gaffer-plugin-sync.sh"
 LOCAL=0
 VERBOSE=0
@@ -453,6 +561,18 @@ canonical_link() {
   else bad "$label resolves to '${got:-missing}', expected '$want'"; fi
 }
 
+note_ignored_codex_legacy_manifest() {
+  local manifest="$1"
+  if [ ! -e "$manifest" ]; then
+    note "Codex legacy user hook manifest is absent (ignored by managed-only policy)"
+  elif jq -e . "$manifest" >/dev/null 2>&1; then
+    note "Codex legacy user hook manifest is present + valid JSON, but ignored"
+  else
+    note "Codex legacy user hook manifest is invalid JSON, but ignored"
+  fi
+  return 0
+}
+
 printf 'agent harness check%s\n' "$([ "$LOCAL" -eq 1 ] && printf ' (local)' || true)"
 
 # Shared constitution, skills, and executable hook implementations.
@@ -481,7 +601,7 @@ group shared "$hook_count hooks linted · $skill_count skills · canonical instr
 # machine and informational in repository-only/CI mode.
 validate_hooks() {
   local manifest="$1" provider="$2" expected_provider="$3"
-  local count=0 ev command raw_command provider_marker identity_kind first resolved expected basename declared_shared
+  local count=0 ev command raw_command provider_marker identity_kind first resolved expected basename declared_shared interpreter
   local hook_sha role provenance_manifest provenance_digest expected_resolved
   local -A provenance_seen=()
   HOOK_PROVENANCE_SUMMARY='development checkout (mutable) · provenance deferred to --local'
@@ -490,9 +610,14 @@ validate_hooks() {
     count=$((count + 1))
     raw_command="$command"
     provider_marker=''
+    interpreter=''
     if [[ "$command" =~ ^AGENT_PROVIDER=([^[:space:]]+)[[:space:]]+(.+)$ ]]; then
       provider_marker="${BASH_REMATCH[1]}"
       command="${BASH_REMATCH[2]}"
+    fi
+    if [[ "$command" =~ ^/run/current-system/sw/bin/bash[[:space:]]+(.+)$ ]]; then
+      interpreter='/run/current-system/sw/bin/bash'
+      command="${BASH_REMATCH[1]}"
     fi
     first="${command%% *}"
     basename="${first##*/}"
@@ -508,6 +633,9 @@ validate_hooks() {
         declared_shared=1
         ;;
     esac
+    if [ -n "$interpreter" ]; then
+      ok_detail "$provider $ev uses root-managed exact Bash interpreter"
+    fi
     if [ -n "$provider_marker" ] && [ -z "$identity_kind" ]; then
       bad "$provider $ev sets AGENT_PROVIDER on an unrelated hook: $raw_command"
     elif [ -n "$identity_kind" ] && [ "$provider_marker" != "$expected_provider" ]; then
@@ -577,44 +705,158 @@ require_manifest_guard_count() {
   else bad "$provider $contract: found $count matching guard binding(s), expected $expected"; fi
 }
 
-validate_codex_managed_worker_guard() {
+validate_codex_managed_policy() {
   if ! need_toml "$CODEX_REQUIREMENTS" 'Codex managed requirements'; then return; fi
-  if python3 - "$CODEX_REQUIREMENTS" <<'PY'
-import sys, tomllib
-with open(sys.argv[1], "rb") as handle:
-    policy = tomllib.load(handle)
-assert set(policy) == {"features", "hooks"}
-assert policy["features"] == {"hooks": True}
-hooks = policy["hooks"]
-assert set(hooks) == {"managed_dir", "PreToolUse"}
-assert hooks["managed_dir"] == "/etc/codex/hooks"
-assert len(hooks["PreToolUse"]) == 1
-binding = hooks["PreToolUse"][0]
-assert binding["matcher"] == "^Bash$"
-assert len(binding["hooks"]) == 1
-assert binding["hooks"][0] == {
-    "type": "command",
-    "command": "/etc/codex/hooks/agent-spawn-guard.sh",
-    "timeout": 10,
-}
-PY
-  then ok_detail 'Codex managed policy is exactly one trusted Bash topology guard; user/plugin hooks remain permitted'
-  else bad "Codex managed requirements add policy beyond the single approved Bash topology guard"; fi
+  CODEX_MANAGED_BINDINGS="$(
+    codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
+  )" || CODEX_MANAGED_BINDINGS=''
+  if [ "$CODEX_MANAGED_BINDINGS" = 17 ]; then
+    ok_detail 'Codex managed-only policy is the exact 17-binding authoritative contract'
+  else
+    bad 'Codex managed requirements differ from the authoritative hook contract'
+  fi
 
   local module="$REPO/modules/codex/default.bnix"
-  for source in '/modules/codex/requirements.toml' '/dotfiles/agents/hooks/agent-spawn-guard.sh' '/dotfiles/agents/hooks/lib/authoring-killswitch.sh'; do
+  local source relative live expected resolved north_revision
+  local -a sources=(
+    '/modules/codex/requirements.toml'
+    '/dotfiles/agents/hooks/beagle-session-start.sh'
+    '/dotfiles/agents/hooks/agent-spawn-guard.sh'
+    '/dotfiles/agents/hooks/code-upstream-guard.sh'
+    '/dotfiles/agents/hooks/firn-guard.sh'
+    '/dotfiles/agents/hooks/north-clock-guard.sh'
+    '/dotfiles/agents/hooks/north-clock-guard.py'
+    '/dotfiles/agents/hooks/tripwire-guard.sh'
+    '/dotfiles/agents/hooks/logcompress-hook.js'
+    '/dotfiles/agents/hooks/logcompress.js'
+    '/dotfiles/agents/hooks/racket-build-guard.sh'
+    '/dotfiles/agents/hooks/lib/authoring-killswitch.sh'
+    '/dotfiles/codex/hooks/north-on-spawn-codex'
+    '/dotfiles/codex/hooks/north-on-tooluse-codex'
+    '/dotfiles/codex/hooks/north-mark-delegated-codex'
+    '/dotfiles/codex/hooks/north-on-stop-codex'
+    '/dotfiles/codex/hooks/north-clock-guard-codex'
+  )
+  for source in "${sources[@]}"; do
     if grep -Fq "(s flakeRoot \"$source\")" "$module"; then :
     else bad "Codex module does not install managed-hook source $source"; fi
   done
+  local runtime package binary
+  local -a runtimes=(
+    'bash|pkgs.bash|bash'
+    'cat|pkgs.coreutils|cat'
+    'env|pkgs.coreutils|env'
+    'git|pkgs.git|git'
+    'mktemp|pkgs.coreutils|mktemp'
+    'node|pkgs.nodejs|node'
+    'python3|pkgs.python3|python3'
+    'rm|pkgs.coreutils|rm'
+    'timeout|pkgs.coreutils|timeout'
+  )
+  for source in "${runtimes[@]}"; do
+    IFS='|' read -r runtime package binary <<<"$source"
+    if grep -Fq "\"codex/hooks/runtime/$runtime\"" "$module" &&
+       grep -Fq "{:source (s $package \"/bin/$binary\")}" "$module"; then :
+    else bad "Codex module does not bind exact runtime $runtime from $package"; fi
+  done
+  if grep -Fq '"codex/hooks/north"' "$module" &&
+     grep -Fq '{:source inputs.north}' "$module"; then
+    ok_detail 'Codex module pins the complete North hook runtime from inputs.north'
+  else
+    bad 'Codex module does not install the exact inputs.north hook runtime'
+  fi
+  if grep -Fq ':mode ' "$module"; then
+    bad 'Codex hook sources must remain /etc symlinks into /nix/store; explicit mode copies are forbidden'
+  fi
+
+  local wrappers="$CODEX/hooks"
+  if command -v shellcheck >/dev/null 2>&1 &&
+     shellcheck -S warning \
+       "$wrappers/north-on-spawn-codex" \
+       "$wrappers/north-on-tooluse-codex" \
+       "$wrappers/north-mark-delegated-codex" \
+       "$wrappers/north-on-stop-codex" \
+       "$wrappers/north-clock-guard-codex"; then
+    ok_detail 'Codex managed lifecycle + clock adapters pass shellcheck'
+  else
+    bad 'Codex managed lifecycle or clock adapter fails shellcheck'
+  fi
+  if python3 - "$SHARED/hooks/north-clock-guard.py" <<'PY'
+import pathlib
+import sys
+source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+compile(source, sys.argv[1], "exec")
+PY
+  then
+    ok_detail 'Provider-neutral clock admission core compiles as Python'
+  else
+    bad 'Provider-neutral clock admission core fails Python compilation'
+  fi
 
   if [ "$LOCAL" -eq 1 ]; then
-    if cmp -s "$CODEX_REQUIREMENTS" /etc/codex/requirements.toml &&
-       cmp -s "$SHARED/hooks/agent-spawn-guard.sh" /etc/codex/hooks/agent-spawn-guard.sh &&
-       cmp -s "$SHARED/hooks/lib/authoring-killswitch.sh" /etc/codex/hooks/lib/authoring-killswitch.sh; then
-      ok_detail 'Codex managed Bash topology guard is live from /etc (policy-trusted, no /hooks action)'
+    local generation_exact=1
+    if cmp -s "$CODEX_REQUIREMENTS" /etc/codex/requirements.toml; then :
     else
-      bad 'Codex managed Bash topology guard is not the current /etc generation; run firn rebuild after commit'
+      generation_exact=0
+      bad 'Codex managed requirements are not the current /etc generation'
     fi
+    for source in "${sources[@]:1}"; do
+      relative="${source#/dotfiles/agents/hooks/}"
+      if [ "$relative" = "$source" ]; then
+        relative="${source#/dotfiles/codex/hooks/}"
+      fi
+      live="/etc/codex/hooks/$relative"
+      expected="$REPO$source"
+      resolved="$(readlink -f "$live" 2>/dev/null || true)"
+      if [ -n "$resolved" ] && [[ "$resolved" = /nix/store/* ]] &&
+         cmp -s "$expected" "$live"; then :
+      else
+        generation_exact=0
+        bad "Codex managed hook $live is not the exact store-backed Firn source"
+      fi
+    done
+    for source in "${runtimes[@]}"; do
+      IFS='|' read -r runtime package binary <<<"$source"
+      live="/etc/codex/hooks/runtime/$runtime"
+      resolved="$(readlink -f "$live" 2>/dev/null || true)"
+      if [ -x "$live" ] && [[ "$resolved" = /nix/store/* ]]; then :
+      else
+        generation_exact=0
+        bad "Codex runtime $live is missing, non-executable, or not store-backed"
+      fi
+    done
+    resolved="$(readlink -f /etc/codex/hooks/north 2>/dev/null || true)"
+    if [ -n "$resolved" ] && [[ "$resolved" = /nix/store/* ]]; then :
+    else
+      generation_exact=0
+      bad 'Codex pinned North hook runtime is missing or not store-backed'
+    fi
+    north_revision="$(
+      jq -er '.nodes.north.locked.rev | select(test("^[0-9a-f]{40}$"))' \
+        "$REPO/flake.lock" 2>/dev/null || true
+    )"
+    for relative in \
+      bin/north-on-spawn \
+      bin/north-on-tooluse \
+      bin/north-mark-delegated \
+      bin/north-on-stop; do
+      if [ -n "$north_revision" ] &&
+         git -C "$HOME/code/north" cat-file -e "$north_revision:$relative" 2>/dev/null &&
+         cmp -s "/etc/codex/hooks/north/$relative" \
+           <(git -C "$HOME/code/north" show "$north_revision:$relative"); then :
+      else
+        generation_exact=0
+        bad "Codex North runtime $relative does not match locked revision ${north_revision:-missing}"
+      fi
+    done
+    if [ "$generation_exact" -eq 1 ]; then
+      CODEX_HOOK_PROVENANCE='immutable /nix/store generation · exact Firn + locked North sources'
+      ok_detail 'Codex authoritative hook generation is exact, immutable, and store-backed'
+    else
+      CODEX_HOOK_PROVENANCE='generation drift detected'
+    fi
+  else
+    CODEX_HOOK_PROVENANCE='immutable /nix/store generation deferred to --local'
   fi
 }
 
@@ -652,6 +894,25 @@ if command -v shellcheck >/dev/null 2>&1 && shellcheck -S warning "$GAFFER_SYNC"
   ok_detail "Gaffer plugin sync shellcheck"
 else bad "Gaffer plugin sync shellcheck failed"; fi
 validate_hooks "$CLAUDE/settings.json" Claude anthropic
+if jq -e '
+  [
+    .hooks.PreToolUse[]?.hooks[]?
+    | select(
+        .type == "command"
+        and (.command | endswith("/north-clock-guard.sh"))
+      )
+    | .command
+  ] as $commands
+  | ($commands | length) == 2
+    and all(
+      $commands[];
+      . == "/run/current-system/sw/bin/bash /home/tom/code/nixos-config/dotfiles/claude/hooks/north-clock-guard.sh"
+    )
+' "$CLAUDE/settings.json" >/dev/null; then
+  ok_detail 'Claude clock guard uses root-managed exact Bash for both bindings'
+else
+  bad 'Claude clock guard must use root-managed exact Bash for both bindings'
+fi
 require_manifest_guard_count "$CLAUDE/settings.json" Claude Bash 1 'user Bash topology guard is bound once'
 claude_bindings="$HOOK_BINDINGS"
 claude_hook_provenance="$HOOK_PROVENANCE_SUMMARY"
@@ -750,9 +1011,9 @@ if [ "$LOCAL" -eq 1 ]; then
           <"$gaffer_source_git_dir/north-managed-gaffer-plugin-source" || true
       fi
       gaffer_exact=1
-      [ "$gaffer_source_top" = "$gaffer_source" ] || {
+      managed_source_root_matches "$gaffer_source" "$gaffer_source_top" || {
         gaffer_exact=0
-        bad "managed Gaffer source resolves to $gaffer_source_top, expected $gaffer_source"
+        bad "managed Gaffer source root mismatch: observed $gaffer_source_top, expected canonical identity of $gaffer_source"
       }
       [ "$gaffer_source_common" = "$gaffer_home_common" ] || {
         gaffer_exact=0
@@ -832,27 +1093,12 @@ provider_group Claude "$before" \
   "            Linear: $claude_linear"
 
 before=$fail
-need_json "$CODEX/hooks.json" 'Codex hooks'
+note_ignored_codex_legacy_manifest "$CODEX_LEGACY_HOOKS"
 need_toml "$CODEX/config.toml" 'Codex config'
-validate_hooks "$CODEX/hooks.json" Codex openai
-disabled_codex_hooks="$(list_disabled_codex_hooks "$CODEX/hooks.json" "$CODEX/config.toml" 2>/dev/null)" ||
-  bad "Codex disabled-hook state could not be mapped to $CODEX/hooks.json"
-while IFS=$'\t' read -r event coordinate command; do
-  [ -n "$event" ] || continue
-  case "$command" in
-    *'/home/tom/code/north/bin/'*)
-      bad "Codex hook disabled: ${event}[$coordinate] → $command"
-      ;;
-    *)
-      soft "Codex hook disabled: ${event}[$coordinate] → $command"
-      ;;
-  esac
-done <<<"${disabled_codex_hooks:-}"
-require_manifest_guard_count "$CODEX/hooks.json" Codex Bash 0 'user Bash guard is absent (managed binding is the sole Bash guard)'
-require_manifest_guard_count "$CODEX/hooks.json" Codex Agent 1 'native Agent redirect remains a trust-reviewed user hook'
-validate_codex_managed_worker_guard
-codex_bindings="$HOOK_BINDINGS"
-codex_hook_provenance="$HOOK_PROVENANCE_SUMMARY"
+validate_codex_managed_policy
+codex_bindings="${CODEX_MANAGED_BINDINGS:-invalid}"
+codex_hook_provenance="${CODEX_HOOK_PROVENANCE:-declaration drift detected}"
+ok_detail 'Codex legacy ~/.codex/hooks.json is intentionally ignored; it contributes zero active bindings'
 codex_north='declared; canonical explicit instance env; live probe deferred'
 codex_fram='declared; canonical split corpus; live probe deferred'
 codex_linear='auth probe deferred to --local'
@@ -876,7 +1122,6 @@ codex_fram_threads="$(sed -n '3p' <<<"$codex_fram_paths")"
 [ "$codex_fram_threads" = "$CANONICAL_FRAM_THREADS" ] || bad "Codex Fram FRAM_THREADS is '${codex_fram_threads:-unset}', expected '$CANONICAL_FRAM_THREADS'"
 if [ "$LOCAL" -eq 1 ]; then
   canonical_link "$HOME/.codex/config.toml" "$CODEX/config.toml" "$HOME/.codex/config.toml"
-  canonical_link "$HOME/.codex/hooks.json" "$CODEX/hooks.json" "$HOME/.codex/hooks.json"
   canonical_link "$HOME/.codex/AGENTS.md" "$SHARED/AGENTS.md" "$HOME/.codex/AGENTS.md"
   canonical_link "$HOME/.agents/skills" "$SHARED/skills" "$HOME/.agents/skills"
   if command -v codex >/dev/null 2>&1; then
@@ -908,9 +1153,10 @@ if [ "$LOCAL" -eq 1 ]; then
   else bad "codex CLI is missing from PATH"; fi
 fi
 provider_group Codex "$before" \
-  "Hooks       $codex_bindings bindings" \
-  'Identity    adapter-pinned native spawn + repair → openai' \
-  'Topology    managed /etc Bash guard (policy-trusted) · native redirect user hook (trust-reviewed)' \
+  "Hooks       $codex_bindings managed authoritative bindings" \
+  'Legacy      ~/.codex/hooks.json ignored by managed-only policy (0 active bindings)' \
+  'Identity    managed lanes harness-owned · pinned native fallback → openai' \
+  'Topology    sole policy: managed /etc/codex/hooks' \
   "Hook source $codex_hook_provenance" \
   'Bootstrap   static config parsed' \
   "MCP         North: $codex_north" \

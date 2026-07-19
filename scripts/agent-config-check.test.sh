@@ -51,8 +51,12 @@ assert_native_identity() {
 }
 
 assert_native_identity "$REPO/dotfiles/claude/settings.json" anthropic Claude
-assert_native_identity "$REPO/dotfiles/codex/hooks.json" openai Codex
-"$REPO/scripts/agent-config-check.sh" >/dev/null
+report="$("$REPO/scripts/agent-config-check.sh")"
+grep -Fq '17 managed authoritative bindings' <<<"$report"
+# shellcheck disable=SC2088  # report intentionally renders the literal user-facing alias
+grep -Fq '~/.codex/hooks.json ignored by managed-only policy (0 active bindings)' <<<"$report"
+"$REPO/dotfiles/codex/hooks/codex-lifecycle-wrappers.test.sh" >/dev/null
+"$REPO/dotfiles/codex/hooks/north-clock-guard-codex.test.sh" >/dev/null
 
 # A deterministic route probe is diagnostic evidence, not provider preference.
 # The compact harness report must summarize the allocation policy itself.
@@ -64,6 +68,67 @@ grep -Fq '"Allocation  ' \
   "$REPO/scripts/agent-config-check.sh"
 
 source "$REPO/scripts/agent-config-check.sh"
+
+managed_policy="$REPO/modules/codex/requirements.toml"
+[ "$(codex_managed_policy_binding_count "$managed_policy")" = 17 ]
+cp "$managed_policy" "$scratch/managed-policy-not-exclusive.toml"
+sed -i 's/^allow_managed_hooks_only = true$/allow_managed_hooks_only = false/' \
+  "$scratch/managed-policy-not-exclusive.toml"
+if codex_managed_policy_binding_count \
+  "$scratch/managed-policy-not-exclusive.toml" >/dev/null 2>&1; then
+  printf 'non-exclusive Codex managed policy was accepted\n' >&2
+  exit 1
+fi
+cp "$managed_policy" "$scratch/managed-policy-timeout-drift.toml"
+sed -i '0,/^timeout = 10$/s//timeout = 11/' \
+  "$scratch/managed-policy-timeout-drift.toml"
+if codex_managed_policy_binding_count \
+  "$scratch/managed-policy-timeout-drift.toml" >/dev/null 2>&1; then
+  printf 'Codex managed hook timeout drift was accepted\n' >&2
+  exit 1
+fi
+# shellcheck disable=SC2016  # match source text, not this test process environment
+if grep -Fq 'validate_hooks "$CODEX/hooks.json"' \
+  "$REPO/scripts/agent-config-check.sh"; then
+  printf 'ignored Codex user manifest is still counted as active policy\n' >&2
+  exit 1
+fi
+
+missing_legacy="$scratch/missing-legacy-hooks.json"
+missing_legacy_report="$(
+  CODEX_LEGACY_HOOKS="$missing_legacy" \
+    "$REPO/scripts/agent-config-check.sh"
+)"
+grep -Fq '17 managed authoritative bindings' <<<"$missing_legacy_report"
+grep -Fq 'ignored by managed-only policy (0 active bindings)' \
+  <<<"$missing_legacy_report"
+printf '%s\n' '{not-json' >"$scratch/invalid-legacy-hooks.json"
+invalid_legacy_report="$(
+  CODEX_LEGACY_HOOKS="$scratch/invalid-legacy-hooks.json" \
+    "$REPO/scripts/agent-config-check.sh"
+)"
+grep -Fq '17 managed authoritative bindings' <<<"$invalid_legacy_report"
+grep -Fq 'ignored by managed-only policy (0 active bindings)' \
+  <<<"$invalid_legacy_report"
+
+# A logical state path may traverse symlinks before Git reports its physical
+# worktree root. Canonical identity must accept that alias, but never a distinct
+# repository merely because its lexical path looks related.
+mkdir -p "$scratch/gaffer-real" "$scratch/gaffer-distinct"
+git -C "$scratch/gaffer-real" init -q
+git -C "$scratch/gaffer-distinct" init -q
+ln -s "$scratch/gaffer-real" "$scratch/gaffer-logical"
+gaffer_observed="$(
+  git -C "$scratch/gaffer-logical" rev-parse --path-format=absolute --show-toplevel
+)"
+managed_source_root_matches "$scratch/gaffer-logical" "$gaffer_observed"
+distinct_observed="$(
+  git -C "$scratch/gaffer-distinct" rev-parse --path-format=absolute --show-toplevel
+)"
+if managed_source_root_matches "$scratch/gaffer-logical" "$distinct_observed"; then
+  printf 'distinct managed Gaffer worktree root was accepted through a logical alias\n' >&2
+  exit 1
+fi
 
 # Checkout-first hooks carry explicit mutable provenance. Canonical targets
 # fingerprint cleanly; a split target/hash for one basename+role is rejected.
@@ -393,8 +458,8 @@ grep -q 'STATIC_DIR' <<<"$NORTH_WEB_ENV_REASON"
 # Repository/CI mode validates canonical declarations against this checkout,
 # not whether Tom's absolute live path happens to exist. A failing readlink shim
 # simulates a relocated checkout; only --local may require live resolution.
-# Numeric Codex state coordinates must resolve to a human-meaningful command.
-# In particular, SessionStart 0:1 is North registration, not the Beagle hook.
+# The legacy user manifest is ignored by managed-only policy, but its state
+# coordinate parser remains deterministic for diagnostics and migration.
 expected_north_spawn='AGENT_PROVIDER=openai /home/tom/code/north/bin/north-on-spawn'
 [ "$(jq -r '.hooks.SessionStart[0].hooks[1].command' "$REPO/dotfiles/codex/hooks.json")" = "$expected_north_spawn" ]
 disabled_fixture="$scratch/disabled-hook.toml"
@@ -413,4 +478,4 @@ printf '%s\n' '#!/bin/sh' 'exit 1' >"$scratch/bin/readlink"
 chmod +x "$scratch/bin/readlink"
 PATH="$scratch/bin:$PATH" "$REPO/scripts/agent-config-check.sh" >/dev/null
 
-printf 'ok: native identity is adapter-pinned and North reports allocation policy, not a diagnostic route probe\n'
+printf 'ok: Claude native identity + authoritative Codex managed policy + canonical Gaffer source identity are exact\n'

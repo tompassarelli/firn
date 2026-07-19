@@ -20,21 +20,29 @@
 # AUTHORING_KILLSWITCH_STATE test seam remains compatible.
 
 north_harness_state_path() {
-  if [ -n "${NORTH_HARNESS_STATE:-}" ]; then
-    printf '%s\n' "$NORTH_HARNESS_STATE"
-  elif [ -n "${AUTHORING_KILLSWITCH_STATE:-}" ]; then
-    printf '%s\n' "$AUTHORING_KILLSWITCH_STATE"
-  elif [ -f "$HOME/.local/state/north/harness.conf" ]; then
-    printf '%s\n' "$HOME/.local/state/north/harness.conf"
+  if [[ -n "${NORTH_HARNESS_STATE:-}" ]]; then
+    builtin printf '%s\n' "$NORTH_HARNESS_STATE"
+  elif [[ -n "${AUTHORING_KILLSWITCH_STATE:-}" ]]; then
+    builtin printf '%s\n' "$AUTHORING_KILLSWITCH_STATE"
+  elif [[ -f "$HOME/.local/state/north/harness.conf" ]]; then
+    builtin printf '%s\n' "$HOME/.local/state/north/harness.conf"
   else
-    printf '%s\n' "$HOME/.claude/my-config.state"
+    builtin printf '%s\n' "$HOME/.claude/my-config.state"
   fi
 }
 
 authoring_guards_off() {
+  local line state_path state_value=''
   case "${AGENT_NO_AUTHORING_HOOKS:-${CLAUDE_NO_AUTHORING_HOOKS:-}}" in
     0|false) return 1 ;;
     ?*)      return 0 ;;
   esac
-  [ "$(grep -E '^guards=' "$(north_harness_state_path)" 2>/dev/null | tail -1 | cut -d= -f2-)" = off ]
+  state_path="$(north_harness_state_path)" || return 1
+  [[ -r "$state_path" ]] || return 1
+  while IFS= builtin read -r line; do
+    case "$line" in
+      guards=*) state_value="${line#guards=}" ;;
+    esac
+  done <"$state_path"
+  [[ "$state_value" == off ]]
 }

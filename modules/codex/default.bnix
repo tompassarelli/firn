@@ -2,7 +2,7 @@
 
 (ns default)
 
-(nix/module [config lib pkgs flakeRoot ...]
+(nix/module [config inputs lib pkgs flakeRoot ...]
   (let [username config.myConfig.modules.users.username]
     {:options.myConfig.modules.codex.enable
       (lib.mkEnableOption "OpenAI Codex CLI (master/bleeding-edge)")
@@ -11,12 +11,59 @@
         {:environment.systemPackages [pkgs.master.codex]
          :environment.etc
           {"codex/requirements.toml"
-            {:text (builtins.readFile (s flakeRoot "/modules/codex/requirements.toml"))}
+            {:source (s flakeRoot "/modules/codex/requirements.toml")}
+           "codex/hooks/beagle-session-start.sh"
+            {:source (s flakeRoot "/dotfiles/agents/hooks/beagle-session-start.sh")}
            "codex/hooks/agent-spawn-guard.sh"
-            {:text (builtins.readFile (s flakeRoot "/dotfiles/agents/hooks/agent-spawn-guard.sh"))
-             :mode "0555"}
+            {:source (s flakeRoot "/dotfiles/agents/hooks/agent-spawn-guard.sh")}
+           "codex/hooks/code-upstream-guard.sh"
+            {:source (s flakeRoot "/dotfiles/agents/hooks/code-upstream-guard.sh")}
+           "codex/hooks/firn-guard.sh"
+            {:source (s flakeRoot "/dotfiles/agents/hooks/firn-guard.sh")}
+           "codex/hooks/north-clock-guard.sh"
+            {:source (s flakeRoot "/dotfiles/agents/hooks/north-clock-guard.sh")}
+           "codex/hooks/north-clock-guard.py"
+            {:source (s flakeRoot "/dotfiles/agents/hooks/north-clock-guard.py")}
+           "codex/hooks/tripwire-guard.sh"
+            {:source (s flakeRoot "/dotfiles/agents/hooks/tripwire-guard.sh")}
+           "codex/hooks/logcompress-hook.js"
+            {:source (s flakeRoot "/dotfiles/agents/hooks/logcompress-hook.js")}
+           "codex/hooks/logcompress.js"
+            {:source (s flakeRoot "/dotfiles/agents/hooks/logcompress.js")}
+           "codex/hooks/racket-build-guard.sh"
+            {:source (s flakeRoot "/dotfiles/agents/hooks/racket-build-guard.sh")}
            "codex/hooks/lib/authoring-killswitch.sh"
-            {:text (builtins.readFile (s flakeRoot "/dotfiles/agents/hooks/lib/authoring-killswitch.sh"))}}
+            {:source (s flakeRoot "/dotfiles/agents/hooks/lib/authoring-killswitch.sh")}
+           "codex/hooks/north-on-spawn-codex"
+            {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-spawn-codex")}
+           "codex/hooks/north-on-tooluse-codex"
+            {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-tooluse-codex")}
+           "codex/hooks/north-mark-delegated-codex"
+            {:source (s flakeRoot "/dotfiles/codex/hooks/north-mark-delegated-codex")}
+           "codex/hooks/north-on-stop-codex"
+            {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-stop-codex")}
+           "codex/hooks/north-clock-guard-codex"
+            {:source (s flakeRoot "/dotfiles/codex/hooks/north-clock-guard-codex")}
+           "codex/hooks/runtime/bash"
+            {:source (s pkgs.bash "/bin/bash")}
+           "codex/hooks/runtime/cat"
+            {:source (s pkgs.coreutils "/bin/cat")}
+           "codex/hooks/runtime/env"
+            {:source (s pkgs.coreutils "/bin/env")}
+           "codex/hooks/runtime/git"
+            {:source (s pkgs.git "/bin/git")}
+           "codex/hooks/runtime/mktemp"
+            {:source (s pkgs.coreutils "/bin/mktemp")}
+           "codex/hooks/runtime/node"
+            {:source (s pkgs.nodejs "/bin/node")}
+           "codex/hooks/runtime/python3"
+            {:source (s pkgs.python3 "/bin/python3")}
+           "codex/hooks/runtime/rm"
+            {:source (s pkgs.coreutils "/bin/rm")}
+           "codex/hooks/runtime/timeout"
+            {:source (s pkgs.coreutils "/bin/timeout")}
+           "codex/hooks/north"
+            {:source inputs.north}}
          :home-manager.users
           {username
             (nix/module [config ...]
