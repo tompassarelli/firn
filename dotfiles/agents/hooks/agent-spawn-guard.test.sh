@@ -302,6 +302,7 @@ with open(sys.argv[1], "rb") as handle:
 assert set(policy) == {
     "allow_managed_hooks_only",
     "allow_remote_control",
+    "managed_hook_failure_mode",
     "features",
     "hooks",
 }
@@ -309,6 +310,8 @@ assert type(policy["allow_managed_hooks_only"]) is bool
 assert policy["allow_managed_hooks_only"] is True
 assert type(policy["allow_remote_control"]) is bool
 assert policy["allow_remote_control"] is False
+assert type(policy["managed_hook_failure_mode"]) is str
+assert policy["managed_hook_failure_mode"] == "block"
 assert policy["features"] == {"hooks": True}
 hooks = policy["hooks"]
 assert set(hooks) == {

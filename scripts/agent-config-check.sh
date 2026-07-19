@@ -406,6 +406,7 @@ def command(path, timeout):
 expected = {
     "allow_managed_hooks_only": True,
     "allow_remote_control": False,
+    "managed_hook_failure_mode": "block",
     "features": {"hooks": True},
     "hooks": {
         "managed_dir": "/etc/codex/hooks",
@@ -473,6 +474,10 @@ if type(policy.get("allow_managed_hooks_only")) is not bool:
     raise SystemExit("allow_managed_hooks_only must be a boolean")
 if type(policy.get("allow_remote_control")) is not bool:
     raise SystemExit("allow_remote_control must be a boolean")
+if type(policy.get("managed_hook_failure_mode")) is not str:
+    raise SystemExit("managed_hook_failure_mode must be a string")
+if policy["managed_hook_failure_mode"] != "block":
+    raise SystemExit("managed_hook_failure_mode must be block")
 if policy != expected:
     raise SystemExit("managed Codex policy differs from the canonical contract")
 print(sum(
@@ -716,7 +721,7 @@ validate_codex_managed_policy() {
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
   if [ "$CODEX_MANAGED_BINDINGS" = 17 ]; then
-    ok_detail 'Codex managed-only, remote-control-disabled policy is the exact 17-binding authoritative contract'
+    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 17-binding authoritative contract'
   else
     bad 'Codex managed requirements differ from the authoritative hook contract'
   fi
@@ -769,6 +774,15 @@ validate_codex_managed_policy() {
     ok_detail 'Codex module pins the complete North hook runtime from inputs.north'
   else
     bad 'Codex module does not install the exact inputs.north hook runtime'
+  fi
+  if grep -Fq '(get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)' "$module" &&
+     grep -Fq ':codex)' "$module" &&
+     grep -Fq ':environment.systemPackages [codexPkg]' "$module" &&
+     grep -Fq '"codex/runtime"' "$module" &&
+     grep -Fq '{:source codexPkg}' "$module"; then
+    ok_detail 'Interactive Codex and the managed runtime marker share inputs.north.packages.${system}.codex'
+  else
+    bad 'Codex module must install and expose the exact inputs.north packages.${system}.codex derivation'
   fi
   if grep -Fq ':mode ' "$module"; then
     bad 'Codex hook sources must remain /etc symlinks into /nix/store; explicit mode copies are forbidden'
@@ -835,6 +849,17 @@ PY
     else
       generation_exact=0
       bad 'Codex pinned North hook runtime is missing or not store-backed'
+    fi
+    local interactive_codex managed_codex
+    interactive_codex="$(command -v codex 2>/dev/null || true)"
+    managed_codex="$(readlink -f /etc/codex/runtime/bin/codex 2>/dev/null || true)"
+    interactive_codex="$(readlink -f "$interactive_codex" 2>/dev/null || true)"
+    if [ -n "$managed_codex" ] && [[ "$managed_codex" = /nix/store/* ]] &&
+       [ -x "$managed_codex" ] && [ "$interactive_codex" = "$managed_codex" ]; then
+      ok_detail 'Interactive Codex is byte-identical to North managed Codex'
+    else
+      generation_exact=0
+      bad 'Interactive Codex does not resolve to the exact North managed Codex runtime'
     fi
     north_revision="$(
       jq -er '.nodes.north.locked.rev | select(test("^[0-9a-f]{40}$"))' \

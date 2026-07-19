@@ -2,13 +2,17 @@
 
 let
   username = config.myConfig.modules.users.username;
+  codexPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".codex;
 in
 {
-  options.myConfig.modules.codex.enable = lib.mkEnableOption "OpenAI Codex CLI (master/bleeding-edge)";
+  options.myConfig.modules.codex.enable = lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)";
   config = lib.mkIf config.myConfig.modules.codex.enable {
-    environment.systemPackages = [ pkgs.master.codex ];
+    environment.systemPackages = [ codexPkg ];
     environment.etc = {
       "codex/requirements.toml".source = "${flakeRoot}/modules/codex/requirements.toml";
+      "codex/runtime" = {
+        source = codexPkg;
+      };
       "codex/hooks/beagle-session-start.sh".source = "${flakeRoot}/dotfiles/agents/hooks/beagle-session-start.sh";
       "codex/hooks/agent-spawn-guard.sh".source = "${flakeRoot}/dotfiles/agents/hooks/agent-spawn-guard.sh";
       "codex/hooks/code-upstream-guard.sh".source = "${flakeRoot}/dotfiles/agents/hooks/code-upstream-guard.sh";

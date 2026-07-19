@@ -3,15 +3,20 @@
 (ns default)
 
 (nix/module [config inputs lib pkgs flakeRoot ...]
-  (let [username config.myConfig.modules.users.username]
+  (let [username config.myConfig.modules.users.username
+        codexPkg
+         (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)
+           :codex)]
     {:options.myConfig.modules.codex.enable
-      (lib.mkEnableOption "OpenAI Codex CLI (master/bleeding-edge)")
+      (lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)")
      :config
       (lib.mkIf config.myConfig.modules.codex.enable
-        {:environment.systemPackages [pkgs.master.codex]
+        {:environment.systemPackages [codexPkg]
          :environment.etc
           {"codex/requirements.toml"
             {:source (s flakeRoot "/modules/codex/requirements.toml")}
+           "codex/runtime"
+            {:source codexPkg}
            "codex/hooks/beagle-session-start.sh"
             {:source (s flakeRoot "/dotfiles/agents/hooks/beagle-session-start.sh")}
            "codex/hooks/agent-spawn-guard.sh"

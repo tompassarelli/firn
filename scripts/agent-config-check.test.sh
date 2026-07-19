@@ -71,6 +71,38 @@ source "$REPO/scripts/agent-config-check.sh"
 
 managed_policy="$REPO/modules/codex/requirements.toml"
 [ "$(codex_managed_policy_binding_count "$managed_policy")" = 17 ]
+cp "$managed_policy" "$scratch/managed-policy-failure-mode-missing.toml"
+sed -i '/^managed_hook_failure_mode = "block"$/d' \
+  "$scratch/managed-policy-failure-mode-missing.toml"
+if codex_managed_policy_binding_count \
+  "$scratch/managed-policy-failure-mode-missing.toml" >/dev/null 2>&1; then
+  printf 'Codex managed policy without a hook failure mode was accepted\n' >&2
+  exit 1
+fi
+cp "$managed_policy" "$scratch/managed-policy-failure-mode-continue.toml"
+sed -i 's/^managed_hook_failure_mode = "block"$/managed_hook_failure_mode = "continue"/' \
+  "$scratch/managed-policy-failure-mode-continue.toml"
+if codex_managed_policy_binding_count \
+  "$scratch/managed-policy-failure-mode-continue.toml" >/dev/null 2>&1; then
+  printf 'Codex managed policy with continuing hook failures was accepted\n' >&2
+  exit 1
+fi
+cp "$managed_policy" "$scratch/managed-policy-failure-mode-boolean.toml"
+sed -i 's/^managed_hook_failure_mode = "block"$/managed_hook_failure_mode = true/' \
+  "$scratch/managed-policy-failure-mode-boolean.toml"
+if codex_managed_policy_binding_count \
+  "$scratch/managed-policy-failure-mode-boolean.toml" >/dev/null 2>&1; then
+  printf 'Codex managed policy with a boolean hook failure mode was accepted\n' >&2
+  exit 1
+fi
+cp "$managed_policy" "$scratch/managed-policy-failure-mode-invalid.toml"
+sed -i 's/^managed_hook_failure_mode = "block"$/managed_hook_failure_mode = "BLOCK"/' \
+  "$scratch/managed-policy-failure-mode-invalid.toml"
+if codex_managed_policy_binding_count \
+  "$scratch/managed-policy-failure-mode-invalid.toml" >/dev/null 2>&1; then
+  printf 'Codex managed policy with an invalid hook failure mode was accepted\n' >&2
+  exit 1
+fi
 cp "$managed_policy" "$scratch/managed-policy-not-exclusive.toml"
 sed -i 's/^allow_managed_hooks_only = true$/allow_managed_hooks_only = false/' \
   "$scratch/managed-policy-not-exclusive.toml"

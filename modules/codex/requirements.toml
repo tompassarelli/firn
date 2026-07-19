@@ -1,5 +1,6 @@
 allow_managed_hooks_only = true
 allow_remote_control = false
+managed_hook_failure_mode = "block"
 
 [features]
 hooks = true
