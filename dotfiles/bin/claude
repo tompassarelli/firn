@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Bootloader wrapper for the `claude` CLI.
+#   bare / any args -> auto-select the north-managed Anthropic account with the
+#                      most headroom, then exec the real claude.
+#   as <id> [args]  -> pin one account explicitly.
+# Fails open: if north can't answer, run the real binary ambient.
+set -u
+
+PROVIDER_WORD="claude"
+ACCOUNTS_ROOT="$HOME/.local/state/north/accounts/anthropic"
+NORTH_PROVIDER="anthropic"
+BIND_LIMIT="claude:seven_day"   # window that binds Anthropic subscription usage
+
+# Locate the real claude: first PATH entry that isn't this wrapper itself.
+self="$(realpath "$0" 2>/dev/null || echo "$0")"
+REAL=""
+while IFS= read -r cand; do
+  [ -n "$cand" ] || continue
+  cp="$(realpath "$cand" 2>/dev/null || echo "$cand")"
+  [ "$cp" = "$self" ] && continue
+  REAL="$cand"; break
+done < <(type -aP claude 2>/dev/null)
+if [ -z "$REAL" ]; then
+  echo "claude: real binary not found on PATH" >&2
+  exit 127
+fi
+
+# 1. Passthrough guard: an account is already pinned (north's own lanes /
+#    app-server probes, or explicit user env). Do not recurse or re-route.
+if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then
+  exec "$REAL" "$@"
+fi
+
+list_accounts() {
+  [ -d "$ACCOUNTS_ROOT" ] && \
+    find "$ACCOUNTS_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort
+}
+
+# 2. Explicit pin: `claude as <id> [args...]`.
+if [ "${1:-}" = "as" ]; then
+  shift
+  acct="${1:-}"
+  usage() {
+    echo "usage: claude as <account-id> [claude args...]"
+    echo "available account ids:"
+    list_accounts | sed 's/^/  /'
+  }
+  case "$acct" in
+    -h|--help) usage; exit 0 ;;
+    "")        usage >&2; exit 1 ;;
+  esac
+  shift
+  root="$ACCOUNTS_ROOT/$acct"
+  if [ ! -d "$root" ]; then
+    {
+      echo "claude as: unknown account '$acct'"
+      echo "available account ids:"
+      list_accounts | sed 's/^/  /'
+    } >&2
+    exit 1
+  fi
+  export CLAUDE_CONFIG_DIR="$root"
+  exec "$REAL" "$@"
+fi
+
+# 3. Auto-select greatest-headroom account from north's machine boundary.
+#    Rank: headroom class (plenty>low>other), then lowest used% on the binding
+#    window, then north's target listing order. Fail open on any trouble.
+choose() {
+  command -v north >/dev/null 2>&1 || return 1
+  local json
+  json="$(north providers --json 2>/dev/null)" || return 1
+  [ -n "$json" ] || return 1
+  printf '%s' "$json" | jq -r --arg prov "$NORTH_PROVIDER" --arg limit "$BIND_LIMIT" '
+    (.providers[]? | select(.provider==$prov) | .targets) // []
+    | to_entries
+    | map(.value + {order: .key})
+    | map(select(.authenticated==true and .routing=="eligible"))
+    | map({
+        id,
+        order,
+        hclass: (if .headroom=="plenty" then 0
+                 elif .headroom=="low" then 1
+                 else 2 end),
+        used: ([.usage.windows[]? | select(.limitId==$limit) | .usedPercent][0] // 999)
+      })
+    | sort_by(.hclass, .used, .order)
+    | .[0].id // empty
+  ' 2>/dev/null
+}
+
+acct="$(choose)"
+if [ -n "$acct" ] && [ -d "$ACCOUNTS_ROOT/$acct" ]; then
+  export CLAUDE_CONFIG_DIR="$ACCOUNTS_ROOT/$acct"
+  echo "[$PROVIDER_WORD → $acct]" >&2
+else
+  echo "[$PROVIDER_WORD → ambient (north unavailable)]" >&2
+fi
+exec "$REAL" "$@"
