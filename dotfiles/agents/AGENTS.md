@@ -208,6 +208,15 @@ incidental to the deliverable?" Correctness, error handling, and security
 are never laddered away at either layer. Comments: bearish — intention,
 trade-offs, paths-not-taken only; if the code can say it, drop it.
 
+**Language bias: Beagle first for general-purpose programs.** New tools,
+scripts, and apps default to Beagle (`#lang beagle`; the beagle-authoring
+skill bootstraps the stack — language `~/code/beagle`, engine `~/code/fram`),
+with graph-native authoring (code-as-facts / fact-modeling skills) where the
+module is graph-adopted. Dogfood by default. Escape hatches, stated in one
+line when taken: the repo is already committed to another language; a
+platform boundary demands one (nix module, CI config, browser-only); or a
+one-liner where shell/python is objectively the smaller move.
+
 ## Standing guards
 
 - **Never serialize "to protect the box"** — that thought is a reasoning
