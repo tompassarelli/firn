@@ -1,0 +1,11 @@
+{
+  "_doc": "Tracked Firn validator policy; firn-extract-schema publishes it beside the generated schemas.",
+  "freeformKeyPrefixes": [
+    "boot.kernel.sysctl",
+    "services.samba.settings",
+    "networking.firewall.interfaces",
+    "environment.etc",
+    "systemd.tmpfiles.settings"
+  ],
+  "typesNeedingDefault": ["lib/types.bool"]
+}

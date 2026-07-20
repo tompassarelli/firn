@@ -25,40 +25,92 @@ if [[ ! -x "$BEAGLE_VALIDATE" ]]; then
   exit 2
 fi
 
-# Schema-cache identity check: .beagle-cache/schema.json is only truthful
-# for the exact nixpkgs/home-manager revisions it was extracted against
-# (recorded by firn-extract-schema as schema.inputs.sha256). If flake.lock
-# has moved since extraction, the cached option table can silently omit or
-# invent options — refuse to validate against a cache that can no longer
-# prove it matches the pinned revision, rather than emitting unknown-option
-# diagnostics that may just be schema-cache drift.
+# The schema cache is derived state. A clean worktree must be able to validate
+# without borrowing another checkout's ignored cache, and a partial/stale cache
+# must never be trusted. firn-extract-schema publishes complete JSON through
+# same-directory atomic renames and writes the input fingerprint last.
 SCHEMA_JSON="$REPO/.beagle-cache/schema.json"
-if [[ -f "$SCHEMA_JSON" ]]; then
-  SCHEMA_FP="$REPO/.beagle-cache/schema.inputs.sha256"
-  FP_HELPER="$REPO/scripts/firn-schema-input-fingerprint"
-  FLAKE_LOCK="$REPO/flake.lock"
+SCHEMA_HM="$REPO/.beagle-cache/schema-hm.json"
+SCHEMA_FP="$REPO/.beagle-cache/schema.inputs.sha256"
+SCHEMA_CONFIG="$REPO/.beagle-cache/validate-config.json"
+SCHEMA_CONFIG_SOURCE="${FIRN_SCHEMA_CONFIG:-$REPO/config/beagle-validate.json}"
+FP_HELPER="$REPO/scripts/firn-schema-input-fingerprint"
+FLAKE_LOCK="$REPO/flake.lock"
+SCHEMA_EXTRACT="${FIRN_EXTRACT_SCHEMA:-$REPO/scripts/firn-extract-schema}"
 
-  if [[ ! -x "$FP_HELPER" ]]; then
-    echo "firn-validate: fingerprint helper missing at $FP_HELPER" >&2
-    exit 2
+schema_cache_is_current() {
+  local recorded_fp current_fp
+
+  SCHEMA_CACHE_REASON=''
+  for required in "$SCHEMA_JSON" "$SCHEMA_HM" "$SCHEMA_FP" "$SCHEMA_CONFIG"; do
+    if [[ ! -f "$required" ]]; then
+      SCHEMA_CACHE_REASON="missing ${required#"$REPO"/}"
+      return 1
+    fi
+  done
+  if ! cmp -s "$SCHEMA_CONFIG_SOURCE" "$SCHEMA_CONFIG"; then
+    SCHEMA_CACHE_REASON='validator policy differs from tracked config/beagle-validate.json'
+    return 1
   fi
-  if [[ ! -f "$FLAKE_LOCK" ]]; then
-    echo "firn-validate: flake.lock missing at $FLAKE_LOCK; cannot verify schema-cache identity" >&2
-    exit 2
-  fi
-  if [[ ! -f "$SCHEMA_FP" ]]; then
-    echo "firn-validate: .beagle-cache/schema.json has no recorded input fingerprint ($SCHEMA_FP missing)" >&2
-    echo "  cache identity is unverifiable — re-run: ./scripts/firn-extract-schema" >&2
-    exit 1
+  if ! python3 - "$SCHEMA_JSON" "$SCHEMA_HM" "$SCHEMA_CONFIG" <<'PY'
+import json
+import pathlib
+import sys
+
+for path_arg in sys.argv[1:3]:
+    path = pathlib.Path(path_arg)
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        raise SystemExit(1)
+    if not isinstance(value, list) or not value:
+        raise SystemExit(1)
+try:
+    config = json.loads(pathlib.Path(sys.argv[3]).read_text(encoding="utf-8"))
+except (OSError, UnicodeError, json.JSONDecodeError):
+    raise SystemExit(1)
+if not isinstance(config, dict):
+    raise SystemExit(1)
+PY
+  then
+    SCHEMA_CACHE_REASON='schema JSON is partial or malformed'
+    return 1
   fi
   recorded_fp="$(<"$SCHEMA_FP")"
-  current_fp="$("$FP_HELPER" --mode nixos --lock "$FLAKE_LOCK")"
+  current_fp="$("$FP_HELPER" --mode nixos --lock "$FLAKE_LOCK" 2>/dev/null)" || {
+    SCHEMA_CACHE_REASON='cannot fingerprint flake.lock schema inputs'
+    return 1
+  }
   if [[ "$recorded_fp" != "$current_fp" ]]; then
-    echo "firn-validate: schema cache is stale — .beagle-cache/schema.json was extracted for a" >&2
-    echo "  different nixpkgs/home-manager revision than flake.lock currently pins." >&2
-    echo "  recorded fingerprint: $recorded_fp" >&2
-    echo "  current  fingerprint: $current_fp" >&2
-    echo "  re-run: ./scripts/firn-extract-schema" >&2
+    SCHEMA_CACHE_REASON='schema input fingerprint differs from flake.lock'
+    return 1
+  fi
+  return 0
+}
+
+if [[ ! -x "$FP_HELPER" ]]; then
+  echo "firn-validate: fingerprint helper missing at $FP_HELPER" >&2
+  exit 2
+fi
+if [[ ! -f "$FLAKE_LOCK" ]]; then
+  echo "firn-validate: flake.lock missing at $FLAKE_LOCK; cannot identify the schema cache" >&2
+  exit 2
+fi
+if [[ ! -f "$SCHEMA_CONFIG_SOURCE" ]]; then
+  echo "firn-validate: tracked validator policy missing at $SCHEMA_CONFIG_SOURCE" >&2
+  exit 2
+fi
+if ! schema_cache_is_current; then
+  refresh_reason=$SCHEMA_CACHE_REASON
+  if [[ ! -x "$SCHEMA_EXTRACT" ]]; then
+    echo "firn-validate: schema cache needs refresh ($refresh_reason), but extractor is missing at $SCHEMA_EXTRACT" >&2
+    exit 2
+  fi
+  echo "firn-validate: refreshing schema cache ($refresh_reason)..." >&2
+  FIRN_REPO="$REPO" BEAGLE_PATH="$BEAGLE_PATH" FIRN_SCHEMA_CONFIG="$SCHEMA_CONFIG_SOURCE" \
+    "$SCHEMA_EXTRACT"
+  if ! schema_cache_is_current; then
+    echo "firn-validate: refreshed schema cache is not valid: $SCHEMA_CACHE_REASON" >&2
     exit 1
   fi
 fi
