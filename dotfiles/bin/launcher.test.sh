@@ -23,7 +23,7 @@ trap 'rm -rf "$SCRATCH"' EXIT
 BIN="$SCRATCH/bin"      # coreutils + jq + fake real CLIs (always on PATH)
 NBIN="$SCRATCH/nbin"    # holds the stub `north` (added to PATH only when present)
 mkdir -p "$BIN" "$NBIN"
-for tool in env bash realpath jq find sort sed head mktemp paste rm cat; do
+for tool in env bash realpath jq find sort sed head mktemp paste rm cat git; do
   real="$(command -v "$tool" 2>/dev/null)" || { echo "missing host tool: $tool" >&2; exit 2; }
   # Link straight to the resolved command-v path; do NOT depend on `readlink`
   # (agent-config-check.test.sh runs this under a readlink-fails shim).
@@ -34,6 +34,16 @@ done
 cat >"$NBIN/north" <<'NORTH'
 #!/usr/bin/env bash
 [ -n "${NORTH_STDERR:-}" ] && printf '%s\n' "$NORTH_STDERR" >&2
+# Record whatever NORTH_CHECKOUT this invocation actually saw (or that it was
+# unset), so the test can assert the wrapper's discovery/preservation logic
+# without the stub caring about routing itself.
+if [ -n "${NORTH_CHECKOUT_RECORD:-}" ]; then
+  if [ -n "${NORTH_CHECKOUT+x}" ]; then
+    printf '%s' "$NORTH_CHECKOUT" >"$NORTH_CHECKOUT_RECORD"
+  else
+    printf '<unset>' >"$NORTH_CHECKOUT_RECORD"
+  fi
+fi
 if [ -n "${NORTH_JSON:-}" ] && [ -f "$NORTH_JSON" ]; then
   cat "$NORTH_JSON"
 fi
@@ -84,6 +94,30 @@ run() {
     "${envv[@]}" bash "$HERE/$launcher" "${argv[@]}" 2>&1 1>/dev/null)"
 }
 record_field() { sed -n "s/^$2=//p" "$RECORD"; }
+
+# --- $HOME/code/north git fixtures for the main-worktree discovery cases. ---
+# All repos live entirely under $SCRATCH (real host git, linked into $BIN
+# above) and are torn down with it.
+# mode=main-elsewhere: $HOME/code/north itself sits on a feature branch (the
+#   ordinary day-to-day dev checkout); a second, separate worktree provably
+#   holds main. Prints that main worktree's path on stdout.
+# mode=no-main: only the feature branch exists anywhere; no worktree is ever
+#   on main.
+setup_north_git() {
+  local home_dir="$1" mode="$2"
+  local north_dir="$home_dir/code/north"
+  mkdir -p "$home_dir/code"
+  git init -q -b feature "$north_dir" >/dev/null
+  git -C "$north_dir" config user.email t@example.com
+  git -C "$north_dir" config user.name test
+  git -C "$north_dir" commit -q --allow-empty -m init
+  if [ "$mode" = main-elsewhere ]; then
+    local main_wt="$SCRATCH/north-main-$$-$RANDOM"
+    git -C "$north_dir" branch main
+    git -C "$north_dir" worktree add -q "$main_wt" main >/dev/null
+    printf '%s' "$main_wt"
+  fi
+}
 
 # Per-launcher config: provider key + binding limit + the env var a successful
 # selection must export into the real CLI.
@@ -195,6 +229,53 @@ JSON
   check "$launcher/passthrough emits no banner" test -z "$s"
   check "$launcher/passthrough preserves the caller pin" \
     test "$(record_field _ "$pinvar")" = "$ROOT/acctA"
+
+  # --- NORTH_CHECKOUT / main-worktree discovery matrix ---
+  checkout_record="$SCRATCH/$launcher-checkout-record"
+
+  # 10. default feature-branch checkout, separate main worktree present ->
+  #     the provider snapshot must run against the main worktree, not the
+  #     ambient feature-branch checkout.
+  main_wt="$(setup_north_git "$HOME_DIR" main-elsewhere)"
+  rm -f "$checkout_record"
+  run "$launcher" 1 "NORTH_JSON=$eligible" "NORTH_CHECKOUT_RECORD=$checkout_record" -- ; s="$STDERR"
+  check "$launcher/main-worktree-discovery routes snapshot to main worktree" \
+    test "$(cat "$checkout_record" 2>/dev/null)" = "$main_wt"
+  check "$launcher/main-worktree-discovery still selects an account" \
+    contains "$s" "[$launcher → acctA]"
+  rm -rf "$HOME_DIR/code"
+
+  # 11. explicit caller NORTH_CHECKOUT is authoritative even when a main
+  #     worktree is separately discoverable -> must be preserved exactly,
+  #     never overridden by discovery.
+  setup_north_git "$HOME_DIR" main-elsewhere >/dev/null
+  explicit_checkout="/explicit/caller/checkout"
+  rm -f "$checkout_record"
+  run "$launcher" 1 "NORTH_JSON=$eligible" "NORTH_CHECKOUT_RECORD=$checkout_record" \
+    "NORTH_CHECKOUT=$explicit_checkout" -- ; s="$STDERR"
+  check "$launcher/explicit-checkout is preserved exactly" \
+    test "$(cat "$checkout_record" 2>/dev/null)" = "$explicit_checkout"
+  rm -rf "$HOME_DIR/code"
+
+  # 12. no worktree of $HOME/code/north is ever on main -> no override is
+  #     applied; the ordinary north command runs (ambient checkout) and its
+  #     existing distinct diagnostics are unaffected, and no account is
+  #     ever guessed from an unproven checkout.
+  setup_north_git "$HOME_DIR" no-main
+  rm -f "$checkout_record"
+  run "$launcher" 1 "NORTH_JSON=$eligible" "NORTH_CHECKOUT_RECORD=$checkout_record" -- ; s="$STDERR"
+  check "$launcher/no-main-worktree leaves NORTH_CHECKOUT unset" \
+    test "$(cat "$checkout_record" 2>/dev/null)" = "<unset>"
+  check "$launcher/no-main-worktree still falls back to ordinary selection" \
+    contains "$s" "[$launcher → acctA]"
+  rm -rf "$HOME_DIR/code"
+
+  # 13. $HOME/code/north entirely absent -> discovery is a clean no-op, same
+  #     ordinary fallback as case 12.
+  rm -f "$checkout_record"
+  run "$launcher" 1 "NORTH_JSON=$eligible" "NORTH_CHECKOUT_RECORD=$checkout_record" -- ; s="$STDERR"
+  check "$launcher/no-north-checkout-dir leaves NORTH_CHECKOUT unset" \
+    test "$(cat "$checkout_record" 2>/dev/null)" = "<unset>"
 done
 
 printf '\n== result: %d passed, %d failed ==\n' "$pass" "$fail"
