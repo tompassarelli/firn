@@ -1,6 +1,9 @@
 # Provider-specific Codex settings. Shared operating instructions live in
 # ../agents/AGENTS.md and shared lifecycle policy lives in ../agents/hooks/.
 project_doc_fallback_filenames = ["CLAUDE.md"]
+default_permissions = ":danger-full-access"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
 approvals_reviewer = "user"
 model = "gpt-5.6-sol"
 model_reasoning_effort = "xhigh"
