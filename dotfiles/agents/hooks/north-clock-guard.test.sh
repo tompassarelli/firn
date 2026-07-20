@@ -40,6 +40,8 @@ for ((directory = 1; directory <= 10; directory++)); do
 done
 CLIENT_DIR="$CANON_CLIENT"
 NONCLIENT="$CANON_NONCLIENT"
+QUOTED_NONCLIENT="$CANON_ROOT/non client"
+mkdir -p "$QUOTED_NONCLIENT"
 git -C "$CLIENT_DIR" init -q -b msa-242-work
 git -C "$CLIENT_DIR" -c user.name=test -c user.email=test@example.invalid \
   commit --allow-empty --no-verify -qm init
@@ -684,6 +686,28 @@ PATH="$shadow_bin:$PATH" \
 echo "== cwd-escape: cd to an abs non-client dir attributes THERE, not the session cwd =="
 run na 'cd nixos-config && git stash pop (2026-07-16 repro)' closed.log Bash "cd $NONCLIENT && git stash -q && git stash pop -q" "$CLIENT_DIR"
 run na 'VAR= prefix then cd non-client && git commit'        closed.log Bash "V=1 && cd $NONCLIENT && git commit -m x" "$CLIENT_DIR"
+run na 'explicit nonclient cd scopes bounded composite inspection' closed.log Bash \
+  "cd \"$NONCLIENT\" && git status && git log --oneline -5 && sed -n '1,80p' README.md && rg -n needle ." \
+  "$CLIENT_DIR"
+run na 'quoted nonclient path with spaces establishes scope' closed.log Bash \
+  "cd \"$QUOTED_NONCLIENT\" && sed -n '1,20p' README.md && rg -n needle ." \
+  "$CLIENT_DIR"
+run deny 'nonclient cd cannot hide absolute client mutation' closed.log Bash \
+  "cd \"$NONCLIENT\" && sed -i s/a/b/ \"$CLIENT_DIR/api.py\"" \
+  "$CLIENT_DIR"
+run deny 'later client cd invalidates explicit nonclient scope' closed.log Bash \
+  "cd \"$NONCLIENT\" && git status && cd \"$CLIENT_DIR\" && git commit -m x" \
+  "$CLIENT_DIR"
+run deny 'arbitrary shell is not broadly blessed by nonclient cd' closed.log Bash \
+  "cd \"$NONCLIENT\" && python3 -c 'print(1)'" "$CLIENT_DIR"
+run deny 'arbitrary Git helper is not broadly blessed by nonclient cd' closed.log Bash \
+  "cd \"$NONCLIENT\" && git difftool" "$CLIENT_DIR"
+run deny 'later sed program option is not blessed by nonclient cd' closed.log Bash \
+  "cd \"$NONCLIENT\" && sed -n '1,20p' README.md -e '1w $CLIENT_DIR/generated.txt'" \
+  "$CLIENT_DIR"
+run deny 'rg preprocessor is not blessed by nonclient cd' closed.log Bash \
+  "cd \"$NONCLIENT\" && rg --pre 'touch generated.txt' needle ." \
+  "$CLIENT_DIR"
 run na 'explicit git -C nonclient scope ignores inherited client cwd' \
   closed.log Bash "git -C $NONCLIENT status" "$CLIENT_DIR"
 run na 'explicit git -C nonclient mutation ignores inherited client cwd' \

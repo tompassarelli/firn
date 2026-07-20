@@ -77,6 +77,8 @@ STORE_COMMAND_FAMILIES = {
     "wc": "coreutils",
     "grep": "gnugrep",
     "jq": "jq",
+    "rg": "ripgrep",
+    "sed": "gnused",
     "which": "which",
     "git": "git",
     "north": "north",
@@ -739,51 +741,90 @@ def generic_command_paths(
     return result
 
 
-def leading_cd_git_target(command: str, cwd: str) -> str | None:
-    match = re.match(
-        r"\s*(?:[A-Za-z_]\w*=\S*\s*&&\s*)*"
-        r"cd\s+[\"']?([^\s\"';|&]+)[\"']?\s*&&\s*(.+)\Z",
-        command,
-        re.S,
-    )
-    if not match:
-        return None
-    raw_target, remainder = match.groups()
+def segment_is_bounded_nonclient_command(segment: list[str]) -> bool:
+    command, arguments = command_head(segment)
+    if not command or command == "cd":
+        return False
+    if segment_is_execution_free(segment):
+        return True
+    if command == "git" and trusted_command("git"):
+        return git_subcommand([command, *arguments]) in (
+            GIT_MUTATORS | {"log", "status"}
+        ) and not any(
+            token in {"-C", "-c", "--git-dir", "--work-tree"}
+            or token.startswith(
+                (
+                    "--git-dir=",
+                    "--work-tree=",
+                    "--namespace=",
+                    "--super-prefix=",
+                )
+            )
+            for token in arguments
+        )
+    if command == "sed" and trusted_command("sed"):
+        return (
+            len(arguments) >= 3
+            and arguments[0] == "-n"
+            and bool(
+                re.fullmatch(
+                    r"(?:[0-9]+|\$)(?:,(?:[0-9]+|\$))?p",
+                    arguments[1],
+                )
+            )
+            and all(not argument.startswith("-") for argument in arguments[2:])
+        )
+    if command == "rg" and trusted_command("rg"):
+        return (
+            not os.environ.get("RIPGREP_CONFIG_PATH")
+            and not any(
+                argument == "--pre"
+                or argument.startswith(("--pre=", "--pre-glob"))
+                for argument in arguments
+            )
+        )
+    return False
+
+
+def leading_nonclient_scope_target(command: str, cwd: str) -> str | None:
+    """Prove a static `cd /nonclient && ...` scope for a bounded chain."""
     if (
-        not raw_target.startswith(("/", "~"))
-        or any(marker in remainder for marker in ("$", "`", "\n"))
-        or re.search(r"(?:\|\||[;|()<>]|(?<!&)&(?!&))", remainder)
-        or os.environ.get("BASH_ENV")
+        os.environ.get("BASH_ENV")
         or os.environ.get("ENV")
+        or "`" in command
+        or "$(" in command
+        or "\n" in command
     ):
         return None
-    target = canonical_path(raw_target, cwd)
-    if client_of(target):
+    tokens = shell_tokens(command)
+    separators = [token for token in tokens if token in SEPARATORS]
+    segments = list(simple_commands(tokens))
+    if (
+        len(segments) < 2
+        or len(separators) != len(segments) - 1
+        or any(separator != "&&" for separator in separators)
+    ):
         return None
-    for segment in re.split(r"\s*&&\s*", remainder):
-        try:
-            tokens = shlex.split(segment, posix=True)
-        except ValueError:
-            return None
-        if (
-            not tokens
-            or tokens[0] != "git"
-            or not trusted_command("git")
-            or any(
-                token in {"-C", "-c", "--git-dir", "--work-tree"}
-                or token.startswith(
-                    (
-                        "--git-dir=",
-                        "--work-tree=",
-                        "--namespace=",
-                        "--super-prefix=",
-                    )
-                )
-                for token in tokens[1:]
-            )
-            or git_subcommand(tokens) not in GIT_MUTATORS
-        ):
-            return None
+    index = 0
+    while index < len(segments) and not command_head(segments[index])[0]:
+        index += 1
+    if index >= len(segments):
+        return None
+    command_name, arguments = command_head(segments[index])
+    if command_name != "cd" or len(arguments) != 1:
+        return None
+    raw_target = arguments[0]
+    if not raw_target.startswith(("/", "~")):
+        return None
+    target = canonical_path(raw_target, cwd)
+    if CLIENT_NAMESPACE_RE.search(target):
+        return None
+    remainder = segments[index + 1 :]
+    if not remainder or not all(
+        segment_is_bounded_nonclient_command(segment)
+        for segment in remainder
+    ):
+        return None
     return target
 
 
@@ -885,11 +926,13 @@ def classify_shell(tool_input: dict[str, object], cwd: str) -> tuple[str, str] |
     ):
         raise AdmissionUnavailable("invalid shell envelope")
     shell_cwd = canonical_path(input_cwd or cwd or os.getcwd(), os.getcwd())
+    leading_scope = leading_nonclient_scope_target(command, shell_cwd)
+    analysis_cwd = leading_scope or shell_cwd
 
-    paths = mutation_paths(command, shell_cwd)
+    paths = mutation_paths(command, analysis_cwd)
     for discovered in (
-        git_scope_paths(command, shell_cwd),
-        generic_command_paths(command, shell_cwd),
+        git_scope_paths(command, analysis_cwd),
+        generic_command_paths(command, analysis_cwd),
     ):
         for client, values in discovered.items():
             paths.setdefault(client, []).extend(values)
@@ -898,7 +941,7 @@ def classify_shell(tool_input: dict[str, object], cwd: str) -> tuple[str, str] |
     command_client = next(iter(paths), None)
 
     escape = (
-        leading_cd_git_target(command, shell_cwd) is not None
+        leading_scope is not None
         or explicit_nonclient_git_target(command, shell_cwd) is not None
     )
     if not escape and not re.search(r"[;&|`]|\$\(", command):
