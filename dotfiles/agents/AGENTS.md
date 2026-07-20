@@ -32,6 +32,10 @@ records its own concurrent `kind run` timing against its exact thread so actuals
 continue to ground estimates. Run clocks may overlap, start and stop with the
 lane, never appear on invoices, and never satisfy the client-edit guard. Do not
 serialize workers or churn the human client clock to make task telemetry fit.
+Closed legacy `session_of` rows already attached to an invoice remain in
+historical timelog/invoice totals so sent invoices do not change retroactively;
+that compatibility projection never makes a legacy or agent row a live billing
+session and never authorizes a new client edit.
 
 The axes join only for traceability: at intake, derive the Linear ticket from
 the branch (`msa-NNN` → `MSA-NNN`) and find-or-`capture` exactly one thread with

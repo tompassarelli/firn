@@ -49,6 +49,7 @@ git -C "$CLIENT_DIR" -c user.name=test -c user.email=test@example.invalid \
 cat >"$SCRATCH/open-msa.log" <<'EOF'
 {:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 90, :op "assert", :l "@thread-msa", :p "title", :r "MSA-242 digest", :by "coord"}
 {:tx 3, :op "assert", :l "@client-session-1", :p "kind", :r "client_session", :by "coord"}
 {:tx 4, :op "assert", :l "@client-session-1", :p "owner", :r "msa", :by "coord"}
 {:tx 5, :op "assert", :l "@client-session-1", :p "clocked_by", :r "user", :by "coord"}
@@ -62,6 +63,8 @@ cat >"$SCRATCH/open-msa-wrong-ticket.log" <<'EOF'
 {:tx 2, :op "assert", :l "@thread-msa-current", :p "linear", :r "MSA-242", :by "coord"}
 {:tx 3, :op "assert", :l "@thread-msa-other", :p "owner", :r "msa", :by "coord"}
 {:tx 4, :op "assert", :l "@thread-msa-other", :p "linear", :r "MSA-999", :by "coord"}
+{:tx 90, :op "assert", :l "@thread-msa-current", :p "title", :r "MSA-242 digest", :by "coord"}
+{:tx 91, :op "assert", :l "@thread-msa-other", :p "title", :r "MSA-999 other", :by "coord"}
 {:tx 5, :op "assert", :l "@client-session-msa", :p "kind", :r "client_session", :by "coord"}
 {:tx 6, :op "assert", :l "@client-session-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 7, :op "assert", :l "@client-session-msa", :p "clocked_by", :r "user", :by "coord"}
@@ -74,6 +77,8 @@ cat >"$SCRATCH/duplicate-ticket-threads.log" <<'EOF'
 {:tx 2, :op "assert", :l "@thread-msa-a", :p "linear", :r "MSA-242", :by "coord"}
 {:tx 3, :op "assert", :l "@thread-msa-b", :p "owner", :r "msa", :by "coord"}
 {:tx 4, :op "assert", :l "@thread-msa-b", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 90, :op "assert", :l "@thread-msa-a", :p "title", :r "first MSA-242", :by "coord"}
+{:tx 91, :op "assert", :l "@thread-msa-b", :p "title", :r "second MSA-242", :by "coord"}
 {:tx 5, :op "assert", :l "@client-session-msa", :p "kind", :r "client_session", :by "coord"}
 {:tx 6, :op "assert", :l "@client-session-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 7, :op "assert", :l "@client-session-msa", :p "clocked_by", :r "user", :by "coord"}
@@ -85,6 +90,7 @@ EOF
 cat >"$SCRATCH/open-personal.log" <<'EOF'
 {:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 90, :op "assert", :l "@thread-msa", :p "title", :r "MSA-242 digest", :by "coord"}
 {:tx 3, :op "assert", :l "@client-session-acme", :p "kind", :r "client_session", :by "coord"}
 {:tx 4, :op "assert", :l "@client-session-acme", :p "owner", :r "acme", :by "coord"}
 {:tx 5, :op "assert", :l "@client-session-acme", :p "clocked_by", :r "user", :by "coord"}
@@ -96,6 +102,7 @@ EOF
 cat >"$SCRATCH/closed.log" <<'EOF'
 {:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 90, :op "assert", :l "@thread-msa", :p "title", :r "MSA-242 digest", :by "coord"}
 {:tx 3, :op "assert", :l "@client-session-1", :p "kind", :r "client_session", :by "coord"}
 {:tx 4, :op "assert", :l "@client-session-1", :p "owner", :r "msa", :by "coord"}
 {:tx 5, :op "assert", :l "@client-session-1", :p "clocked_by", :r "user", :by "coord"}
@@ -108,6 +115,7 @@ EOF
 cat >"$SCRATCH/two-open.log" <<'EOF'
 {:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 90, :op "assert", :l "@thread-msa", :p "title", :r "MSA-242 digest", :by "coord"}
 {:tx 3, :op "assert", :l "@client-session-acme", :p "kind", :r "client_session", :by "coord"}
 {:tx 4, :op "assert", :l "@client-session-acme", :p "owner", :r "acme", :by "coord"}
 {:tx 5, :op "assert", :l "@client-session-acme", :p "clocked_by", :r "user", :by "coord"}
@@ -123,6 +131,7 @@ EOF
 cat >"$SCRATCH/agent-run-only.log" <<'EOF'
 {:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 90, :op "assert", :l "@thread-msa", :p "title", :r "MSA-242 digest", :by "coord"}
 {:tx 3, :op "assert", :l "@run-1", :p "kind", :r "run", :by "coord"}
 {:tx 4, :op "assert", :l "@run-1", :p "owner", :r "msa", :by "coord"}
 {:tx 5, :op "assert", :l "@run-1", :p "clocked_by", :r "agent", :by "coord"}
@@ -132,6 +141,7 @@ EOF
 cat >"$SCRATCH/legacy-session-only.log" <<'EOF'
 {:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 90, :op "assert", :l "@thread-msa", :p "title", :r "MSA-242 digest", :by "coord"}
 {:tx 3, :op "assert", :l "@legacy-session", :p "owner", :r "msa", :by "coord"}
 {:tx 4, :op "assert", :l "@legacy-session", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
 EOF
@@ -139,6 +149,7 @@ EOF
 cat >"$SCRATCH/non-user-client-session.log" <<'EOF'
 {:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 90, :op "assert", :l "@thread-msa", :p "title", :r "MSA-242 digest", :by "coord"}
 {:tx 3, :op "assert", :l "@client-session-agent", :p "kind", :r "client_session", :by "coord"}
 {:tx 4, :op "assert", :l "@client-session-agent", :p "owner", :r "msa", :by "coord"}
 {:tx 5, :op "assert", :l "@client-session-agent", :p "clocked_by", :r "agent", :by "coord"}
@@ -149,6 +160,17 @@ EOF
 cat >"$SCRATCH/missing-ticket-trace.log" <<'EOF'
 {:tx 1, :op "assert", :l "@thread-other", :p "owner", :r "msa", :by "coord"}
 {:tx 2, :op "assert", :l "@thread-other", :p "linear", :r "MSA-999", :by "coord"}
+{:tx 90, :op "assert", :l "@thread-other", :p "title", :r "MSA-999 other", :by "coord"}
+{:tx 3, :op "assert", :l "@client-session-msa", :p "kind", :r "client_session", :by "coord"}
+{:tx 4, :op "assert", :l "@client-session-msa", :p "owner", :r "msa", :by "coord"}
+{:tx 5, :op "assert", :l "@client-session-msa", :p "clocked_by", :r "user", :by "coord"}
+{:tx 6, :op "assert", :l "@client-session-msa", :p "rate", :r "175", :by "coord"}
+{:tx 7, :op "assert", :l "@client-session-msa", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
+EOF
+
+cat >"$SCRATCH/titleless-ticket-trace.log" <<'EOF'
+{:tx 1, :op "assert", :l "@malformed-ticket-subject", :p "owner", :r "msa", :by "coord"}
+{:tx 2, :op "assert", :l "@malformed-ticket-subject", :p "linear", :r "MSA-242", :by "coord"}
 {:tx 3, :op "assert", :l "@client-session-msa", :p "kind", :r "client_session", :by "coord"}
 {:tx 4, :op "assert", :l "@client-session-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 5, :op "assert", :l "@client-session-msa", :p "clocked_by", :r "user", :by "coord"}
@@ -159,6 +181,7 @@ EOF
 cat >"$SCRATCH/incomplete-client-session.log" <<'EOF'
 {:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 90, :op "assert", :l "@thread-msa", :p "title", :r "MSA-242 digest", :by "coord"}
 {:tx 3, :op "assert", :l "@client-session-msa", :p "kind", :r "client_session", :by "coord"}
 {:tx 4, :op "assert", :l "@client-session-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 5, :op "assert", :l "@client-session-msa", :p "clocked_by", :r "user", :by "coord"}
@@ -302,7 +325,8 @@ run deny     '(j) agent run telemetry cannot authorize billing'     agent-run-on
 run deny     '(k) legacy session shape cannot authorize billing'    legacy-session-only.log Edit "$CLIENT_DIR/api.py"
 run deny     '(l) non-user client_session cannot authorize billing' non-user-client-session.log Edit "$CLIENT_DIR/api.py"
 run trace    '(m) matching human clock cannot replace ticket trace' missing-ticket-trace.log Edit "$CLIENT_DIR/api.py"
-run unavailable '(n) incomplete human billing row fails closed' incomplete-client-session.log Edit "$CLIENT_DIR/api.py"
+run trace    '(n) owner+Linear without title is not a North thread' titleless-ticket-trace.log Edit "$CLIENT_DIR/api.py"
+run unavailable '(o) incomplete human billing row fails closed' incomplete-client-session.log Edit "$CLIENT_DIR/api.py"
 
 echo "== output protocol: native silence vs opt-in machine attestation =="
 open_edit_json="$(emit_json Edit "$CLIENT_DIR/api.py")"
@@ -852,6 +876,7 @@ run_default() {
 {
   assert_fact 101 '@live-thread' owner msa
   assert_fact 102 '@live-thread' linear MSA-321
+  assert_fact 120 '@live-thread' title 'MSA-321 live'
 } > "$DEFAULT_STATE/coordination.log"
 {
   assert_fact 103 '@live-client-session' kind client_session
@@ -888,6 +913,7 @@ check_output silent 'explicit FRAM_LOG + FRAM_TELEMETRY_LOG pair is preserved' "
 {
   assert_fact 201 '@live-thread' owner msa
   assert_fact 202 '@live-thread' linear MSA-321
+  assert_fact 252 '@live-thread' title 'MSA-321 live'
   assert_fact 250 '@retracted-thread' linear MSA-321
   fact 251 retract '@retracted-thread' linear MSA-321
 } > "$DEFAULT_STATE/coordination.log"
@@ -914,6 +940,7 @@ rm -f "$DEFAULT_STATE/coordination.log" "$DEFAULT_STATE/telemetry.log"
 {
   assert_fact 301 '@legacy-thread' owner msa
   assert_fact 302 '@legacy-thread' linear MSA-321
+  assert_fact 308 '@legacy-thread' title 'MSA-321 legacy'
   assert_fact 303 '@legacy-client-session' kind client_session
   assert_fact 304 '@legacy-client-session' owner msa
   assert_fact 305 '@legacy-client-session' clocked_by user

@@ -55,6 +55,7 @@ FACT_PREDICATES = {
     "clocked_by",
     "rate",
     "linear",
+    "title",
 }
 STORE_GIT_RE = re.compile(
     r"/nix/store/[a-z0-9]{32}-git(?:-[^/]*)?/bin/git"
@@ -1166,7 +1167,9 @@ def clock_decision(
     candidate_threads = {
         subject
         for subject, facts in by_subject.items()
-        if facts.get("owner") == client and facts.get("linear") == ticket
+        if facts.get("owner") == client
+        and facts.get("linear") == ticket
+        and bool(facts.get("title"))
     }
     if len(candidate_threads) > 1:
         raise AdmissionUnavailable("duplicate ticket thread identity")
