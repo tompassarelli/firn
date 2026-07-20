@@ -77,7 +77,6 @@
       {:gaffer {:url "git+file:///home/tom/code/gaffer?ref=main"
                 :flake "false"}
        :north {:url "git+file:///home/tom/code/north?ref=main"
-               :inputs.beagle.follows "beagle"
                :inputs.fram.follows "fram"
                :inputs.gaffer.follows "gaffer"}}
      :options.myConfig.modules.north.enable
