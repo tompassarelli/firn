@@ -64,7 +64,8 @@
                 :flake "false"}
        :north {:url "git+file:///home/tom/code/north?ref=main"
                :inputs.fram.follows "fram"
-               :inputs.gaffer.follows "gaffer"}}
+               :inputs.gaffer.follows "gaffer"
+               :inputs.nixpkgs-master.follows "nixpkgs-master"}}
      :options.myConfig.modules.north.enable
       (lib.mkEnableOption
         "checkout-first North CLI/MCP with explicit packaged smoke commands")

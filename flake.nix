@@ -56,6 +56,7 @@
     };
     north = {
       inputs.gaffer.follows = "gaffer";
+      inputs.nixpkgs-master.follows = "nixpkgs-master";
       url = "git+file:///home/tom/code/north?ref=main";
       inputs.fram.follows = "fram";
     };
