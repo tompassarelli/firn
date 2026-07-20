@@ -66,9 +66,6 @@
    ;; lanes. Was RUNNING NEVER (no unit started it); same never-again lesson as
    ;; north-web. Sweep only; loop-mode reprojection stays out of scope (see module).
    :myConfig.modules.north-reactor.enable true
-   ;; bjs/Bun cockpit (:8088), supervised — the earlier unsupervised Phoenix
-   ;; process crashed 2026-06-28 and sat dead 11 days; never again.
-   :myConfig.modules.north-web.enable true
    :myConfig.modules.stylix.chosenTheme "everforest-dark-hard"
    ;; WireGuard client tunnel (wg0) to the Kea worker box. The wireguard module
    ;; (watchdog + wg tools) rides the `vpn` tag; this is just the host's interface
