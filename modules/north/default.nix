@@ -8,6 +8,19 @@ let
     runtimeInputs = liveInputs;
     text = ''
       checkout=''${NORTH_CHECKOUT:-$HOME/code/north-routing-robustness-landing}
+      runtimeRoot=''${NORTH_COORD_RUNTIME_STATE:-$HOME/.local/state/north/fram-runtime}/current
+      if [ ! -L "$runtimeRoot" ] || [ ! -x "$runtimeRoot/bin/fram-daemon" ]; then
+        echo "north: selected Fram checkout runtime is missing: $runtimeRoot" >&2
+        echo "north: run north-coord-runtime promote, then restart north-coord.service" >&2
+        exit 127
+      fi
+      if ! git -C "$runtimeRoot" rev-parse --show-toplevel >/dev/null 2>&1; then
+        echo "north: selected Fram runtime is package mode; use north-packaged or promote a checkout" >&2
+        exit 2
+      fi
+      export NORTH_FRAM_RUNTIME=checkout
+      export FRAM_HOME=$runtimeRoot
+      export FRAM_BIN=$runtimeRoot/bin
       target=$checkout/bin/north
       if [ ! -x "$target" ]; then
         echo "north: live checkout executable missing: $target" >&2
@@ -22,6 +35,19 @@ let
     runtimeInputs = liveInputs;
     text = ''
       checkout=''${NORTH_CHECKOUT:-$HOME/code/north-routing-robustness-landing}
+      runtimeRoot=''${NORTH_COORD_RUNTIME_STATE:-$HOME/.local/state/north/fram-runtime}/current
+      if [ ! -L "$runtimeRoot" ] || [ ! -x "$runtimeRoot/bin/fram-daemon" ]; then
+        echo "north-mcp: selected Fram checkout runtime is missing: $runtimeRoot" >&2
+        echo "north-mcp: run north-coord-runtime promote, then restart north-coord.service" >&2
+        exit 127
+      fi
+      if ! git -C "$runtimeRoot" rev-parse --show-toplevel >/dev/null 2>&1; then
+        echo "north-mcp: selected Fram runtime is package mode; use north-mcp-packaged or promote a checkout" >&2
+        exit 2
+      fi
+      export NORTH_FRAM_RUNTIME=checkout
+      export FRAM_HOME=$runtimeRoot
+      export FRAM_BIN=$runtimeRoot/bin
       target=$checkout/bin/north-mcp
       if [ ! -x "$target" ]; then
         echo "north-mcp: live checkout executable missing: $target" >&2

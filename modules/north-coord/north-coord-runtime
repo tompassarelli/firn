@@ -1,0 +1,268 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+umask 077
+
+program=${0##*/}
+
+die() {
+  printf '%s: %s\n' "$program" "$*" >&2
+  exit 2
+}
+
+need_setting() {
+  local name=$1
+  [[ -n "${!name:-}" ]] || die "required deployment setting is missing: $name"
+}
+
+need_setting NORTH_COORD_RUNTIME_STATE
+need_setting NORTH_COORD_FRAM_PACKAGE
+need_setting NORTH_COORD_FRAM_PACKAGE_REV
+need_setting NORTH_COORD_FRAM_CHECKOUT
+need_setting NORTH_COORD_FRAM_LOG
+
+state_root=$NORTH_COORD_RUNTIME_STATE
+deployments=$state_root/deployments
+current_link=$state_root/current
+previous_link=$state_root/previous
+
+case "$state_root" in
+  /*) ;;
+  *) die "runtime state path must be absolute: $state_root" ;;
+esac
+
+valid_revision() {
+  [[ "$1" =~ ^[0-9a-f]{40}$ ]]
+}
+
+ensure_state() {
+  mkdir -p "$deployments"
+  chmod 0700 "$state_root" "$deployments"
+}
+
+selector_target() {
+  local link=$1 target canonical_deployments canonical_package
+
+  [[ -L "$link" ]] || return 1
+  target=$(readlink -f "$link") || return 1
+  canonical_deployments=$(realpath -e "$deployments") || return 1
+  canonical_package=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") || return 1
+  case "$target" in
+    "$canonical_package"|"$canonical_deployments"/*) ;;
+    *) return 1 ;;
+  esac
+  [[ -d "$target" ]] || return 1
+  printf '%s\n' "$target"
+}
+
+checkout_origin() {
+  local source=$1 common_dir
+
+  common_dir=$(git -C "$source" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) ||
+    die "cannot resolve checkout deployment origin: $source"
+  case "$common_dir" in
+    */.git) printf '%s\n' "${common_dir%/.git}" ;;
+    *) printf '%s\n' "$common_dir" ;;
+  esac
+}
+
+validate_package() {
+  local canonical_package
+
+  valid_revision "$runtime_revision" || die "packaged Fram revision is not an exact Git SHA"
+  canonical_package=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") ||
+    die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
+  [[ "$runtime_source" == "$canonical_package" ]] ||
+    die "selected package does not name this system generation's Fram package"
+  [[ -x "$runtime_source/bin/fram-daemon" ]] ||
+    die "packaged Fram daemon is not executable: $runtime_source/bin/fram-daemon"
+  runtime_origin=$runtime_source
+}
+
+validate_checkout() {
+  local canonical_source expected_source observed_revision
+
+  canonical_source=$(realpath -e "$runtime_source") ||
+    die "checkout deployment is missing: $runtime_source"
+  [[ -x "$canonical_source/bin/fram-daemon" ]] ||
+    die "checkout Fram daemon is not executable: $canonical_source/bin/fram-daemon"
+  [[ $(git -C "$canonical_source" rev-parse --show-toplevel 2>/dev/null) == "$canonical_source" ]] ||
+    die "checkout deployment is not a Git worktree root: $canonical_source"
+  observed_revision=$(git -C "$canonical_source" rev-parse --verify HEAD 2>/dev/null) ||
+    die "cannot resolve checkout deployment HEAD"
+  valid_revision "$observed_revision" || die "checkout revision is not an exact Git SHA"
+  expected_source=$(realpath -m "$deployments/$observed_revision")
+  [[ "$canonical_source" == "$expected_source" ]] ||
+    die "checkout deployment is outside its revision-owned runtime path"
+  git -C "$canonical_source" diff --quiet --no-ext-diff -- ||
+    die "checkout deployment has modified tracked files: $canonical_source"
+  git -C "$canonical_source" diff --cached --quiet --no-ext-diff -- ||
+    die "checkout deployment has staged tracked files: $canonical_source"
+
+  runtime_source=$canonical_source
+  runtime_revision=$observed_revision
+  runtime_origin=$(checkout_origin "$canonical_source")
+}
+
+load_selected() {
+  local selected canonical_package
+
+  ensure_state
+  canonical_package=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") ||
+    die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
+  if [[ -e "$current_link" && ! -L "$current_link" ]]; then
+    die "current runtime selector is not a symlink: $current_link"
+  fi
+  if [[ -L "$current_link" ]]; then
+    selected=$(selector_target "$current_link") ||
+      die "current runtime selector is invalid: $current_link"
+  else
+    selected=$canonical_package
+    replace_link "$current_link" "$selected"
+  fi
+
+  if [[ "$selected" == "$canonical_package" ]]; then
+    runtime_mode=package
+    runtime_source=$canonical_package
+    runtime_revision=$NORTH_COORD_FRAM_PACKAGE_REV
+    validate_package
+  else
+    runtime_mode=checkout
+    runtime_source=$selected
+    validate_checkout
+  fi
+}
+
+replace_link() {
+  local link=$1 target=$2
+  local temp=${link}.next.$$
+
+  [[ ! -e "$temp" && ! -L "$temp" ]] || die "temporary selector already exists: $temp"
+  ln -s "$target" "$temp"
+  mv -T "$temp" "$link"
+}
+
+select_target() {
+  local target=$1 old_target=''
+
+  if [[ -L "$current_link" ]]; then
+    old_target=$(selector_target "$current_link") ||
+      die "refusing to replace invalid current selector: $current_link"
+  elif [[ -e "$current_link" ]]; then
+    die "refusing to replace non-symlink current selector: $current_link"
+  fi
+  if [[ -n "$old_target" && "$old_target" != "$target" ]]; then
+    replace_link "$previous_link" "$old_target"
+  fi
+  replace_link "$current_link" "$target"
+}
+
+print_restart_instruction() {
+  printf 'selected %s@%s\n' "$runtime_mode" "$runtime_revision"
+  printf 'apply with: sudo systemctl restart north-coord.service\n'
+}
+
+promote_checkout() {
+  local origin=${1:-$NORTH_COORD_FRAM_CHECKOUT}
+  local requested=${2:-HEAD}
+  local canonical_origin revision deployment
+
+  ensure_state
+  canonical_origin=$(realpath -e "$origin") || die "Fram checkout is missing: $origin"
+  [[ $(git -C "$canonical_origin" rev-parse --show-toplevel 2>/dev/null) == "$canonical_origin" ]] ||
+    die "Fram checkout is not a Git worktree root: $canonical_origin"
+  revision=$(git -C "$canonical_origin" rev-parse --verify "${requested}^{commit}" 2>/dev/null) ||
+    die "cannot resolve Fram revision: $requested"
+  valid_revision "$revision" || die "resolved Fram revision is not an exact Git SHA: $revision"
+
+  deployment=$deployments/$revision
+  if [[ ! -e "$deployment" ]]; then
+    git -C "$canonical_origin" worktree add --detach "$deployment" "$revision" >/dev/null
+  fi
+
+  runtime_mode=checkout
+  runtime_source=$deployment
+  validate_checkout
+  [[ "$runtime_origin" == "$canonical_origin" ]] ||
+    die "deployment origin mismatch: wanted $canonical_origin, found $runtime_origin"
+  select_target "$runtime_source"
+  print_restart_instruction
+}
+
+select_package() {
+  local canonical_package
+
+  ensure_state
+  canonical_package=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") ||
+    die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
+  runtime_mode=package
+  runtime_source=$canonical_package
+  runtime_revision=$NORTH_COORD_FRAM_PACKAGE_REV
+  validate_package
+  select_target "$runtime_source"
+  print_restart_instruction
+}
+
+rollback_runtime() {
+  local target old_target
+
+  ensure_state
+  target=$(selector_target "$previous_link") || die "no valid previous runtime is available"
+  if [[ -L "$current_link" ]]; then
+    old_target=$(selector_target "$current_link") ||
+      die "current runtime selector is invalid: $current_link"
+  elif [[ -e "$current_link" ]]; then
+    die "current runtime selector is not a symlink: $current_link"
+  else
+    old_target=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") ||
+      die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
+  fi
+
+  replace_link "$current_link" "$target"
+  replace_link "$previous_link" "$old_target"
+  load_selected
+  print_restart_instruction
+}
+
+show_status() {
+  local selected_from=default-package
+
+  load_selected
+  [[ -L "$current_link" ]] && selected_from=$current_link
+  printf 'mode=%s\n' "$runtime_mode"
+  printf 'source=%s\n' "$runtime_source"
+  printf 'revision=%s\n' "$runtime_revision"
+  printf 'origin=%s\n' "$runtime_origin"
+  printf 'selector=%s\n' "$selected_from"
+}
+
+start_runtime() {
+  load_selected
+  export NORTH_FRAM_RUNTIME=$runtime_mode
+  export FRAM_HOME=$current_link
+  export FRAM_BIN=$current_link/bin
+  export FRAM_RUNTIME_SOURCE=$runtime_source
+  export FRAM_RUNTIME_REV=$runtime_revision
+  export FRAM_RUNTIME_ORIGIN=$runtime_origin
+  exec "$runtime_source/bin/fram-daemon" 7977 "$NORTH_COORD_FRAM_LOG"
+}
+
+usage() {
+  cat >&2 <<EOF
+usage: $program start
+       $program status
+       $program promote [FRAM_CHECKOUT] [REVISION]
+       $program package
+       $program rollback
+EOF
+  exit 2
+}
+
+case "${1:-}" in
+  start) [[ $# -eq 1 ]] || usage; start_runtime ;;
+  status) [[ $# -eq 1 ]] || usage; show_status ;;
+  promote) shift; [[ $# -le 2 ]] || usage; promote_checkout "$@" ;;
+  package) [[ $# -eq 1 ]] || usage; select_package ;;
+  rollback) [[ $# -eq 1 ]] || usage; rollback_runtime ;;
+  *) usage ;;
+esac

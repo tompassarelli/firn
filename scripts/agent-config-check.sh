@@ -224,8 +224,10 @@ record_live_hook_binding() {
 }
 
 # Classify the executable path from systemctl's structured ExecStart rendering.
-# A store path is positive evidence of the verified Fram closure; rejecting the
-# familiar checkout path alone would still accept arbitrary unpinned wrappers.
+# The unit owns one immutable launcher; that launcher owns the mutable, exact-
+# revision selector. A direct Fram executable would recreate the supervisor race
+# and bypass selector validation, even when that executable happens to be in the
+# Nix store.
 classify_north_coord_exec() {
   local exec_spec="$1" path=''
 
@@ -238,16 +240,103 @@ classify_north_coord_exec() {
   fi
   NORTH_COORD_EXEC_PATH="$path"
 
-  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*/bin/fram-daemon$ ]]; then
-    NORTH_COORD_EXEC_KIND='pinned-package'
+  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-north-coord-runtime/bin/north-coord-runtime$ ]]; then
+    NORTH_COORD_EXEC_KIND='runtime-selector'
     return 0
+  fi
+  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*/bin/fram-daemon$ ]]; then
+    NORTH_COORD_EXEC_KIND='direct-package'
+    return 1
   fi
   case "$path" in
     */code/fram/bin/fram-daemon)
-      NORTH_COORD_EXEC_KIND='checkout'
+      NORTH_COORD_EXEC_KIND='direct-checkout'
       ;;
   esac
   return 1
+}
+
+environment_lines_value() {
+  local environment="$1" key="$2" line value='' count=0
+
+  while IFS= read -r line; do
+    case "$line" in
+      "$key="*)
+        value=${line#*=}
+        count=$((count + 1))
+        ;;
+    esac
+  done <<<"$environment"
+  [ "$count" -eq 1 ] || return 1
+  printf '%s\n' "$value"
+}
+
+north_coord_runtime_identity_is_valid() {
+  local mode="$1" source="$2" revision="$3" selector="$4"
+  local canonical_source canonical_selector expected_source observed_revision
+
+  NORTH_COORD_RUNTIME_IDENTITY_REASON=''
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON='revision is not an exact Git SHA'
+    return 1
+  }
+  [ -L "$selector" ] || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON="stable selector is not a symlink: $selector"
+    return 1
+  }
+  canonical_source="$(realpath -e "$source" 2>/dev/null)" || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON="runtime source is missing: $source"
+    return 1
+  }
+  canonical_selector="$(readlink -f "$selector" 2>/dev/null)" || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON="stable selector cannot be resolved: $selector"
+    return 1
+  }
+  [ "$canonical_source" = "$canonical_selector" ] || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON='runtime source and stable selector resolve differently'
+    return 1
+  }
+  [ -x "$canonical_source/bin/fram-daemon" ] || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON='selected Fram daemon is not executable'
+    return 1
+  }
+
+  case "$mode" in
+    checkout)
+      expected_source="$(realpath -m "$(dirname "$selector")/deployments/$revision")"
+      [ "$canonical_source" = "$expected_source" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source is outside its revision-owned deployment path'
+        return 1
+      }
+      observed_revision="$(git -C "$canonical_source" rev-parse --verify HEAD 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source has no readable Git HEAD'
+        return 1
+      }
+      [ "$observed_revision" = "$revision" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source HEAD differs from declared revision'
+        return 1
+      }
+      git -C "$canonical_source" diff --quiet --no-ext-diff -- || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source has modified tracked files'
+        return 1
+      }
+      git -C "$canonical_source" diff --cached --quiet --no-ext-diff -- || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source has staged tracked files'
+        return 1
+      }
+      ;;
+    package)
+      [[ "$canonical_source" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*$ ]] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='package source is not a direct Fram Nix-store root'
+        return 1
+      }
+      ;;
+    *)
+      NORTH_COORD_RUNTIME_IDENTITY_REASON="unknown runtime mode: $mode"
+      return 1
+      ;;
+  esac
+  return 0
 }
 
 # North web must run the exact executable and working directory from one
@@ -1397,6 +1486,7 @@ if [ "$LOCAL" -eq 1 ]; then
   if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet north-coord; then
     north_coord_env="$(systemctl show north-coord -p Environment --value 2>/dev/null || true)"
     north_coord_exec="$(systemctl show north-coord -p ExecStart --value 2>/dev/null || true)"
+    north_coord_pid="$(systemctl show north-coord -p MainPID --value 2>/dev/null || true)"
     north_coord_ok=1
     systemd_environment_has "$north_coord_env" "FRAM_TELEMETRY_LOG=$CANONICAL_FRAM_TELEMETRY_LOG" || {
       north_coord_ok=0
@@ -1406,25 +1496,51 @@ if [ "$LOCAL" -eq 1 ]; then
       north_coord_ok=0
       bad "north-coord lacks FRAM_REQUIRE_LOG_FENCE=1 in its live environment"
     }
-    [[ "$north_coord_exec" == *" $CANONICAL_FRAM_LOG "* ]] || {
-      north_coord_ok=0
-      bad "north-coord does not serve canonical coordination.log: $north_coord_exec"
-    }
     if classify_north_coord_exec "$north_coord_exec"; then
-      ok_detail "north-coord executes pinned Fram package: $NORTH_COORD_EXEC_PATH"
-    elif [ "$NORTH_COORD_EXEC_KIND" = checkout ]; then
+      ok_detail "north-coord executes the system-owned runtime selector: $NORTH_COORD_EXEC_PATH"
+    elif [ "$NORTH_COORD_EXEC_KIND" = direct-checkout ]; then
       north_coord_ok=0
-      bad "north-coord is checkout-backed; expected the pinned Fram package: $NORTH_COORD_EXEC_PATH"
+      bad "north-coord directly executes a checkout and bypasses the system-owned selector: $NORTH_COORD_EXEC_PATH"
+    elif [ "$NORTH_COORD_EXEC_KIND" = direct-package ]; then
+      north_coord_ok=0
+      bad "north-coord directly executes a pinned package and bypasses runtime promotion: $NORTH_COORD_EXEC_PATH"
     else
       north_coord_ok=0
-      bad "north-coord does not execute a recognized pinned Fram package: ${NORTH_COORD_EXEC_PATH:-missing}"
+      bad "north-coord does not execute the recognized runtime selector: ${NORTH_COORD_EXEC_PATH:-missing}"
     fi
-    if [ "$north_coord_ok" -eq 1 ]; then
-      north_coord_runtime='pinned Fram · canonical coordination.log · fenced'
-    elif [ "$NORTH_COORD_EXEC_KIND" = checkout ]; then
-      north_coord_runtime='checkout-backed (invalid)'
+
+    if [[ "$north_coord_pid" =~ ^[1-9][0-9]*$ ]] &&
+       [ -r "/proc/$north_coord_pid/environ" ] &&
+       [ -r "/proc/$north_coord_pid/cmdline" ]; then
+      north_coord_process_env="$(tr '\0' '\n' <"/proc/$north_coord_pid/environ")"
+      north_coord_process_cmdline="$(tr '\0' '\n' <"/proc/$north_coord_pid/cmdline")"
+      north_coord_mode="$(environment_lines_value "$north_coord_process_env" NORTH_FRAM_RUNTIME 2>/dev/null || true)"
+      north_coord_source="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_SOURCE 2>/dev/null || true)"
+      north_coord_revision="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_REV 2>/dev/null || true)"
+      north_coord_selector="$HOME/.local/state/north/fram-runtime/current"
+      if ! grep -Fxq "$CANONICAL_FRAM_LOG" <<<"$north_coord_process_cmdline"; then
+        north_coord_ok=0
+        bad "north-coord process does not serve canonical coordination.log"
+      fi
+      if north_coord_runtime_identity_is_valid \
+           "$north_coord_mode" "$north_coord_source" "$north_coord_revision" \
+           "$north_coord_selector"; then
+        ok_detail "north-coord runtime identity is exact: $north_coord_mode@$north_coord_revision ($north_coord_source)"
+      else
+        north_coord_ok=0
+        bad "north-coord runtime identity is invalid: ${NORTH_COORD_RUNTIME_IDENTITY_REASON:-missing identity}"
+      fi
     else
-      north_coord_runtime='deployment drift detected'
+      north_coord_ok=0
+      bad "north-coord MainPID is missing or its process identity is unreadable: ${north_coord_pid:-missing}"
+    fi
+
+    if [ "$north_coord_ok" -eq 1 ]; then
+      north_coord_runtime="$north_coord_mode ${north_coord_revision:0:12} · atomic selector · canonical coordination.log · fenced"
+    elif [[ "$NORTH_COORD_EXEC_KIND" == direct-* ]]; then
+      north_coord_runtime='direct runtime bypass (invalid)'
+    else
+      north_coord_runtime='deployment identity drift detected'
     fi
   else
     bad "north-coord systemd service is not active"

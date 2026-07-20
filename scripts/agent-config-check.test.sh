@@ -429,23 +429,31 @@ if codex_north_env_is_canonical "$scratch/codex-wrong-env.toml" >/dev/null 2>&1;
   exit 1
 fi
 
-# The live coordinator must positively identify the direct executable from the
-# pinned Fram derivation. A checkout path and a merely store-backed wrapper are
-# both rejected: the former bypasses promotion, the latter does not prove which
-# Fram closure actually runs.
+# The live coordinator must positively identify the immutable runtime-selector
+# launcher. Direct checkout and direct package execution both bypass atomic
+# promotion/rollback and are rejected.
 nix_hash='0123456789abcdfghijklmnpqrsvwxyz'
+selector_path="/nix/store/${nix_hash}-north-coord-runtime/bin/north-coord-runtime"
+selector_exec="{ path=$selector_path ; argv[]=$selector_path start ; ignore_errors=no ; }"
+classify_north_coord_exec "$selector_exec"
+[ "$NORTH_COORD_EXEC_KIND" = runtime-selector ]
+[ "$NORTH_COORD_EXEC_PATH" = "$selector_path" ]
+
 pinned_path="/nix/store/${nix_hash}-fram-0-unstable-2026-06-28/bin/fram-daemon"
 pinned_exec="{ path=$pinned_path ; argv[]=$pinned_path 7977 /home/tom/.local/state/north/coordination.log ; ignore_errors=no ; }"
-classify_north_coord_exec "$pinned_exec"
-[ "$NORTH_COORD_EXEC_KIND" = pinned-package ]
+if classify_north_coord_exec "$pinned_exec"; then
+  printf 'direct pinned north-coord package was accepted\n' >&2
+  exit 1
+fi
+[ "$NORTH_COORD_EXEC_KIND" = direct-package ]
 [ "$NORTH_COORD_EXEC_PATH" = "$pinned_path" ]
 
 checkout_path='/home/tom/code/fram/bin/fram-daemon'
 if classify_north_coord_exec "{ path=$checkout_path ; argv[]=$checkout_path 7977 /tmp/facts.log ; }"; then
-  printf 'checkout-backed north-coord was accepted as pinned\\n' >&2
+  printf 'direct checkout north-coord was accepted\n' >&2
   exit 1
 fi
-[ "$NORTH_COORD_EXEC_KIND" = checkout ]
+[ "$NORTH_COORD_EXEC_KIND" = direct-checkout ]
 
 wrapper_path="/nix/store/${nix_hash}-fram-daemon-packaged/bin/fram-daemon-packaged"
 if classify_north_coord_exec "{ path=$wrapper_path ; argv[]=$wrapper_path 7977 /tmp/facts.log ; }"; then
@@ -453,6 +461,36 @@ if classify_north_coord_exec "{ path=$wrapper_path ; argv[]=$wrapper_path 7977 /
   exit 1
 fi
 [ "$NORTH_COORD_EXEC_KIND" = unrecognized ]
+
+# Process identity must resolve through the stable selector to an exact, clean,
+# revision-owned deployment. SHA equality alone cannot bless a different root.
+identity_repo="$scratch/runtime-identity-repo"
+identity_state="$scratch/runtime-identity-state"
+mkdir -p "$identity_repo/bin" "$identity_state/deployments"
+git -C "$identity_repo" init -q
+git -C "$identity_repo" config user.email test@example.invalid
+git -C "$identity_repo" config user.name runtime-test
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$identity_repo/bin/fram-daemon"
+chmod +x "$identity_repo/bin/fram-daemon"
+git -C "$identity_repo" add bin/fram-daemon
+git -C "$identity_repo" commit -qm runtime
+identity_revision="$(git -C "$identity_repo" rev-parse HEAD)"
+identity_deployment="$identity_state/deployments/$identity_revision"
+git -C "$identity_repo" worktree add --detach "$identity_deployment" "$identity_revision" >/dev/null
+ln -s "$identity_deployment" "$identity_state/current"
+north_coord_runtime_identity_is_valid \
+  checkout "$identity_deployment" "$identity_revision" "$identity_state/current"
+if north_coord_runtime_identity_is_valid \
+   checkout "$identity_repo" "$identity_revision" "$identity_state/current"; then
+  printf 'same-revision runtime outside the selected deployment was accepted\n' >&2
+  exit 1
+fi
+printf 'drift\n' >>"$identity_deployment/bin/fram-daemon"
+if north_coord_runtime_identity_is_valid \
+   checkout "$identity_deployment" "$identity_revision" "$identity_state/current"; then
+  printf 'dirty selected runtime was accepted\n' >&2
+  exit 1
+fi
 
 # North web has two positive store identities (entrypoint + workdir) and one
 # exact runtime environment. Wrong corpus, missing loopback, explicit static
