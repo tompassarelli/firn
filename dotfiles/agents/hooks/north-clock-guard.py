@@ -344,6 +344,31 @@ def command_head(tokens: list[str]) -> tuple[str, list[str]]:
     return os.path.basename(tokens[index]), tokens[index + 1 :]
 
 
+def trusted_store_entry(command: str, executable: str) -> str | None:
+    family = STORE_COMMAND_FAMILIES.get(command)
+    if not family:
+        return None
+    candidate = os.path.abspath(executable)
+    seen: set[str] = set()
+    while candidate not in seen:
+        seen.add(candidate)
+        if re.fullmatch(
+            rf"/nix/store/[a-z0-9]{{32}}-{re.escape(family)}"
+            rf"(?:-[^/]*)?/bin/{re.escape(command)}",
+            candidate,
+        ):
+            return candidate
+        if not os.path.islink(candidate):
+            return None
+        target = os.readlink(candidate)
+        candidate = os.path.normpath(
+            target
+            if os.path.isabs(target)
+            else os.path.join(os.path.dirname(candidate), target)
+        )
+    return None
+
+
 def trusted_command(command: str) -> bool:
     if any(
         key.startswith(f"BASH_FUNC_{command}%%") for key in os.environ
@@ -351,18 +376,23 @@ def trusted_command(command: str) -> bool:
         return False
     if command in SHELL_BUILTINS:
         return True
-    family = STORE_COMMAND_FAMILIES.get(command)
     executable = shutil.which(command)
-    if not family or not executable:
+    return bool(executable and trusted_store_entry(command, executable))
+
+
+def trusted_command_token(token: str) -> bool:
+    """Prove the executable named by this exact, unexpanded shell token."""
+    command = os.path.basename(token)
+    if token == command:
+        return trusted_command(command)
+    if (
+        not os.path.isabs(token)
+        or os.path.normpath(token) != token
+        or os.path.realpath(token) != token
+        or not os.access(token, os.X_OK)
+    ):
         return False
-    resolved = os.path.realpath(executable)
-    return bool(
-        re.match(
-            rf"^/nix/store/[a-z0-9]{{32}}-{re.escape(family)}"
-            rf"(?:-[^/]*)?/bin/",
-            resolved,
-        )
-    )
+    return trusted_store_entry(command, token) == token
 
 
 def git_subcommand(tokens: list[str]) -> str:
@@ -419,9 +449,9 @@ def write_redirect_targets(tokens: list[str]) -> tuple[list[str], bool]:
 
 
 def segment_is_execution_free(segment: list[str]) -> bool:
-    command, _arguments = command_head(segment)
-    if not command or not trusted_command(command):
+    if not segment or not trusted_command_token(segment[0]):
         return False
+    command = os.path.basename(segment[0])
     if command == "git":
         return False
     if command == "cd":
@@ -742,12 +772,14 @@ def generic_command_paths(
 
 
 def segment_is_bounded_nonclient_command(segment: list[str]) -> bool:
-    command, arguments = command_head(segment)
+    if not segment or not trusted_command_token(segment[0]):
+        return False
+    command, arguments = os.path.basename(segment[0]), segment[1:]
     if not command or command == "cd":
         return False
     if segment_is_execution_free(segment):
         return True
-    if command == "git" and trusted_command("git"):
+    if command == "git":
         return git_subcommand([command, *arguments]) in (
             GIT_MUTATORS | {"log", "status"}
         ) and not any(
@@ -762,7 +794,7 @@ def segment_is_bounded_nonclient_command(segment: list[str]) -> bool:
             )
             for token in arguments
         )
-    if command == "sed" and trusted_command("sed"):
+    if command == "sed":
         return (
             len(arguments) >= 3
             and arguments[0] == "-n"
@@ -774,7 +806,7 @@ def segment_is_bounded_nonclient_command(segment: list[str]) -> bool:
             )
             and all(not argument.startswith("-") for argument in arguments[2:])
         )
-    if command == "rg" and trusted_command("rg"):
+    if command == "rg":
         return (
             not os.environ.get("RIPGREP_CONFIG_PATH")
             and not any(

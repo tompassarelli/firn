@@ -692,6 +692,25 @@ run na 'explicit nonclient cd scopes bounded composite inspection' closed.log Ba
 run na 'quoted nonclient path with spaces establishes scope' closed.log Bash \
   "cd \"$QUOTED_NONCLIENT\" && sed -n '1,20p' README.md && rg -n needle ." \
   "$CLIENT_DIR"
+for impostor in git sed rg cat; do
+  run deny "path-qualified $impostor impostor cannot establish external scope" \
+    closed.log Bash "cd \"$NONCLIENT\" && /tmp/$impostor --version" \
+    "$CLIENT_DIR"
+done
+canonical_git="$(realpath "$(command -v git)")"
+run na 'exact canonical trusted executable remains bounded' closed.log Bash \
+  "cd \"$NONCLIENT\" && $canonical_git status" "$CLIENT_DIR"
+canonical_cat="$(realpath "$(command -v cat)")"
+mkdir -p "$SCRATCH/path-qualified"
+cat_symlink="$SCRATCH/path-qualified/cat"
+ln -s "$canonical_cat" "$cat_symlink"
+run deny 'path-qualified symlink cannot impersonate trusted command' closed.log Bash \
+  "cd \"$NONCLIENT\" && $cat_symlink README.md" "$CLIENT_DIR"
+PATH="$shadow_bin:$PATH" run deny \
+  'inline env wrapper cannot redirect a trusted bare command' closed.log Bash \
+  "cd \"$NONCLIENT\" && env PATH=$shadow_bin cat README.md" "$CLIENT_DIR"
+READER='cat' run deny 'parameter-expanded command token is not trusted' \
+  closed.log Bash "cd \"$NONCLIENT\" && \${READER} README.md" "$CLIENT_DIR"
 run deny 'nonclient cd cannot hide absolute client mutation' closed.log Bash \
   "cd \"$NONCLIENT\" && sed -i s/a/b/ \"$CLIENT_DIR/api.py\"" \
   "$CLIENT_DIR"
