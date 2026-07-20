@@ -7,7 +7,7 @@ let
     name = "north";
     runtimeInputs = liveInputs;
     text = ''
-      checkout=''${NORTH_CHECKOUT:-$HOME/code/north}
+      checkout=''${NORTH_CHECKOUT:-$HOME/code/north-routing-robustness-landing}
       target=$checkout/bin/north
       if [ ! -x "$target" ]; then
         echo "north: live checkout executable missing: $target" >&2
@@ -21,7 +21,7 @@ let
     name = "north-mcp";
     runtimeInputs = liveInputs;
     text = ''
-      checkout=''${NORTH_CHECKOUT:-$HOME/code/north}
+      checkout=''${NORTH_CHECKOUT:-$HOME/code/north-routing-robustness-landing}
       target=$checkout/bin/north-mcp
       if [ ! -x "$target" ]; then
         echo "north-mcp: live checkout executable missing: $target" >&2

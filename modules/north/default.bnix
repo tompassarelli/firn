@@ -18,7 +18,7 @@
         {:name "north"
          :runtimeInputs liveInputs
          :text
-          (ms "checkout=${NORTH_CHECKOUT:-$HOME/code/north}"
+          (ms "checkout=${NORTH_CHECKOUT:-$HOME/code/north-routing-robustness-landing}"
               "target=$checkout/bin/north"
               "if [ ! -x \"$target\" ]; then"
               "  echo \"north: live checkout executable missing: $target\" >&2"
@@ -31,7 +31,7 @@
         {:name "north-mcp"
          :runtimeInputs liveInputs
          :text
-          (ms "checkout=${NORTH_CHECKOUT:-$HOME/code/north}"
+          (ms "checkout=${NORTH_CHECKOUT:-$HOME/code/north-routing-robustness-landing}"
               "target=$checkout/bin/north-mcp"
               "if [ ! -x \"$target\" ]; then"
               "  echo \"north-mcp: live checkout executable missing: $target\" >&2"
