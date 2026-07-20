@@ -64,8 +64,8 @@
    ;; mirroring into ~/code/north/streams/raw (streams/CLAUDE.md).
    :myConfig.modules.north-stream-sync.enable true
    ;; reactor liveness-sweep timer (~5min) — reaps stale concerns + silently-dead
-   ;; lanes. Was RUNNING NEVER (no unit started it); same never-again lesson as
-   ;; north-web. Sweep only; loop-mode reprojection stays out of scope (see module).
+   ;; lanes. Was RUNNING NEVER (no unit started it). Sweep only; loop-mode
+   ;; reprojection stays out of scope (see module).
    :myConfig.modules.north-reactor.enable true
    :myConfig.modules.stylix.chosenTheme "everforest-dark-hard"
    ;; WireGuard client tunnel (wg0) to the Kea worker box. The wireguard module

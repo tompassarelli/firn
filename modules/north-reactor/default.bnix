@@ -4,7 +4,7 @@
 
 ;; North reactor SWEEP timer — the liveness reaper that was RUNNING NEVER. Nothing
 ;; ever started it, so stale `building` concerns and silently-dead lanes accumulated
-;; unswept (same failure class as north-web's 11-day unsupervised death). A user-level
+;; unswept (same failure class as an unsupervised service's death). A user-level
 ;; timer (mirror north-stream-sync) fires `north-reactor.clj sweep-once` every ~5min:
 ;; one-shot, exits each run — no port, no linger, no daemon to supervise.
 ;;

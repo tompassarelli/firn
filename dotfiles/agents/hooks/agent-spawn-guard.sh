@@ -701,7 +701,7 @@ if routing:
         "read from canonical gaffer:" + role_key + " metadata — just paste your prompt in:\n"
         "  " + north_call(routing) + "\n"
         "Fan-out? fire one mcp__north__spawn per lane in the same turn. "
-        "Observe: web :8088. Deliberate bypass: north config dispatch warn|native."
+        "Observe: north watch/agents/board. Deliberate bypass: north config dispatch warn|native."
     )
 else:
     where = subagent or tool
@@ -721,7 +721,7 @@ else:
         "contract. A captured "
         "thread may use mcp__north__dispatch with the same contract.\n"
         "  3. Fan-out: N x mcp__north__spawn in parallel; message workers via "
-        "bb ~/code/north/cli/msg-cli.clj 7977 send; observe via web :8088.\n"
+        "bb ~/code/north/cli/msg-cli.clj 7977 send; observe via north watch/agents/board.\n"
         "  Provider resolution and concrete model selection belong to North.\n"
         "Bypass deliberately: north config dispatch warn|native (or /north-config)."
     )

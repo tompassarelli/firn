@@ -26,7 +26,7 @@ Two touch-points (cross-ref the levers in `01-canonical.md`):
 
 2. **SDK dispatch** — `~/code/north/sdk/src/dispatch.ts` reads a thread's claims,
    derives posture (unplanned → plan only, atomic → execute, composite → survey),
-   injects the right prompt + tool restrictions, and streams to north web via
+   injects the right prompt + tool restrictions, and streams through North's provider adapter via
    `query()` from `@anthropic-ai/claude-agent-sdk`. Thread-level state drives
    agent behavior — no role-based hooks needed.
 

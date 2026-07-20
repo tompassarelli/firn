@@ -7,6 +7,7 @@
 ;; immediate. Explicit *-packaged commands probe the exact promoted closure.
 ;; The ordinary wrappers share north-coord's exact selected Fram deployment;
 ;; direct source launch remains the distinct mutable development surface.
+;; North's retired web service is not part of this deployment surface.
 (nix/module [config lib pkgs inputs ...]
   (let
     [northPkg

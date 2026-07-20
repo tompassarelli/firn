@@ -45,7 +45,6 @@ only a bootstrap tx):
 | port | role |
 |------|------|
 | `:7977` | **north coordinator** — the canonical fact log. Roster, concerns, board, mail, presence ALL read AND write here. |
-| `:8088` | north web — bjs/Bun cockpit (systemd-supervised: `north-web.service`) |
 
 ---
 
@@ -427,7 +426,7 @@ pipeline-debug checklist and the spec skeleton for a future `north trace
    Dashboard view: `north dashboard` → the agents pane shows `● <display_name> ttl <n>s`.
 
 4. **Work is advancing.**
-   `north watch <id>` → transcript tail moves (or web `http://127.0.0.1:8088`).
+   `north watch <id>` → transcript tail moves.
    Footprint: `~/code/north/bin/concern ls <repo>` → the lane's concern is
    declared and `building`.
 

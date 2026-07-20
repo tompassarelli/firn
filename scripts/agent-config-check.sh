@@ -412,50 +412,6 @@ north_coord_runtime_identity_is_valid() {
   return 0
 }
 
-# North web must run the exact executable and working directory from one
-# promoted north-web derivation. Merely seeing /nix/store is insufficient:
-# an indirect wrapper or store Bun executable does not prove which North
-# revision and static tree are serving.
-classify_north_web_exec() {
-  local exec_spec="$1" path=''
-
-  NORTH_WEB_EXEC_KIND='unrecognized'
-  NORTH_WEB_EXEC_PATH=''
-  if [[ "$exec_spec" =~ path=([^[:space:]\;]+) ]]; then
-    path="${BASH_REMATCH[1]}"
-  else
-    path="${exec_spec%% *}"
-  fi
-  NORTH_WEB_EXEC_PATH="$path"
-
-  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-north-web[^/]*/bin/north-web$ ]]; then
-    NORTH_WEB_EXEC_KIND='pinned-package'
-    return 0
-  fi
-  case "$path" in
-    */code/north/*)
-      NORTH_WEB_EXEC_KIND='checkout'
-      ;;
-  esac
-  return 1
-}
-
-classify_north_web_workdir() {
-  local workdir="$1"
-
-  NORTH_WEB_WORKDIR_KIND='unrecognized'
-  if [[ "$workdir" =~ ^/nix/store/[a-z0-9]{32}-north-web[^/]*/libexec/north-web$ ]]; then
-    NORTH_WEB_WORKDIR_KIND='pinned-package'
-    return 0
-  fi
-  case "$workdir" in
-    */code/north/*)
-      NORTH_WEB_WORKDIR_KIND='checkout'
-      ;;
-  esac
-  return 1
-}
-
 systemd_environment_has() {
   local environment="$1" assignment="$2"
   [[ " $environment " == *" $assignment "* ]]
@@ -472,33 +428,6 @@ north_coord_listener_set_matches_mainpid() {
   shift
 
   [[ "$main_pid" =~ ^[1-9][0-9]*$ && $# -eq 1 && "${1:-}" == "$main_pid" ]]
-}
-
-north_web_environment_is_canonical() {
-  local environment="$1" home="$2" expected=''
-
-  NORTH_WEB_ENV_REASON=''
-  for expected in \
-    "HOME=$home" \
-    "FRAM_LOG=$home/.local/state/north/coordination.log" \
-    "FRAM_TELEMETRY_LOG=$home/.local/state/north/telemetry.log" \
-    "NORTH_PORT=7977" \
-    "NORTH_WEB_BIND=127.0.0.1" \
-    "PORT=8088"; do
-    if ! systemd_environment_has "$environment" "$expected"; then
-      NORTH_WEB_ENV_REASON="missing exact $expected"
-      return 1
-    fi
-  done
-  if [[ " $environment " == *" STATIC_DIR="* ]]; then
-    NORTH_WEB_ENV_REASON='STATIC_DIR must come from the packaged executable, not the unit'
-    return 1
-  fi
-  if [[ "$environment" == *"/code/north"* ]]; then
-    NORTH_WEB_ENV_REASON='checkout path present in unit environment'
-    return 1
-  fi
-  return 0
 }
 
 # Codex stores per-hook trust/enablement by numeric manifest coordinates. Resolve
@@ -1582,12 +1511,7 @@ provider_group Hermes "$before" \
 
 before=$fail
 north_coord_runtime='live probe deferred'
-north_web_runtime='live probe deferred'
-north_cli_web_parity='live probe deferred'
 north_coord_ok=0
-north_web_package_ok=0
-north_web_env_ok=0
-north_web_socket_ok=0
 if [ "$LOCAL" -eq 1 ]; then
   if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet north-coord; then
     north_coord_env="$(systemctl show north-coord -p Environment --value 2>/dev/null || true)"
@@ -1686,99 +1610,6 @@ if [ "$LOCAL" -eq 1 ]; then
     bad "north-coord systemd service is not active"
     north_coord_runtime='inactive'
   fi
-  if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet north-web; then
-    north_web_env="$(systemctl show north-web -p Environment --value 2>/dev/null || true)"
-    north_web_exec="$(systemctl show north-web -p ExecStart --value 2>/dev/null || true)"
-    north_web_exec_pre="$(systemctl show north-web -p ExecStartPre --value 2>/dev/null || true)"
-    north_web_workdir="$(systemctl show north-web -p WorkingDirectory --value 2>/dev/null || true)"
-    north_web_package_ok=1
-    if ! classify_north_web_exec "$north_web_exec"; then
-      north_web_package_ok=0
-      if [ "$NORTH_WEB_EXEC_KIND" = checkout ]; then
-        bad "north-web is checkout-backed; expected the pinned North web package: $NORTH_WEB_EXEC_PATH"
-      else
-        bad "north-web does not execute a recognized pinned North web package: ${NORTH_WEB_EXEC_PATH:-missing}"
-      fi
-    fi
-    if ! classify_north_web_workdir "$north_web_workdir"; then
-      north_web_package_ok=0
-      if [ "$NORTH_WEB_WORKDIR_KIND" = checkout ]; then
-        bad "north-web WorkingDirectory is checkout-backed: $north_web_workdir"
-      else
-        bad "north-web WorkingDirectory is not the pinned North web package: ${north_web_workdir:-missing}"
-      fi
-    fi
-    if [ "$north_web_package_ok" -eq 1 ]; then
-      north_web_exec_root="${NORTH_WEB_EXEC_PATH%/bin/north-web}"
-      north_web_workdir_root="${north_web_workdir%/libexec/north-web}"
-      if [ "$north_web_exec_root" = "$north_web_workdir_root" ]; then
-        ok_detail "north-web executable + working directory share pinned package $north_web_exec_root"
-      else
-        north_web_package_ok=0
-        bad "north-web executable and WorkingDirectory come from different package closures"
-      fi
-    fi
-    [ -z "$north_web_exec_pre" ] || {
-      north_web_package_ok=0
-      bad "north-web still has ExecStartPre checkout compilation: $north_web_exec_pre"
-    }
-    north_web_env_ok=1
-    if north_web_environment_is_canonical "$north_web_env" "$HOME"; then
-      ok_detail "north-web has loopback :8088, coordinator :7977, and canonical split corpus env"
-    else
-      north_web_env_ok=0
-      bad "north-web live environment is stale: $NORTH_WEB_ENV_REASON"
-    fi
-    north_web_socket_ok=0
-    if command -v ss >/dev/null 2>&1; then
-      north_web_listeners="$(ss -H -ltn 'sport = :8088' 2>/dev/null | awk '{print $4}' | sort -u)"
-      if [ "$north_web_listeners" = '127.0.0.1:8088' ]; then
-        north_web_socket_ok=1
-        ok_detail "north-web live socket is loopback-only at 127.0.0.1:8088"
-      else
-        bad "north-web live listener must be exactly 127.0.0.1:8088, observed '${north_web_listeners:-none}'"
-      fi
-    else
-      bad "ss is required to verify north-web's live loopback socket"
-    fi
-    if [ "$north_web_package_ok" -eq 1 ] &&
-       [ "$north_web_env_ok" -eq 1 ] &&
-       [ "$north_web_socket_ok" -eq 1 ]; then
-      north_web_runtime='pinned North web · canonical corpus · 127.0.0.1:8088'
-    else
-      north_web_runtime='deployment drift detected'
-    fi
-  else
-    bad "north-web systemd service is not active"
-    north_web_runtime='inactive'
-  fi
-  if [ "$north_coord_ok" -eq 1 ] &&
-     [ "$north_web_package_ok" -eq 1 ] &&
-     [ "$north_web_env_ok" -eq 1 ] &&
-     [ "$north_web_socket_ok" -eq 1 ]; then
-    if command -v "${NORTH_PACKAGED_BIN:-north-packaged}" >/dev/null 2>&1; then
-      north_parity_status=0
-      if north_parity_output="$(
-        run_north_packaged agents --check-web http://127.0.0.1:8088 2>&1
-      )"; then
-        north_cli_web_parity='semantic roster parity passed'
-        ok_detail "north-packaged agents confirms CLI/web semantic roster parity"
-      else
-        north_parity_status=$?
-        north_cli_web_parity='semantic roster parity failed'
-        if [ "$north_parity_status" -eq 124 ]; then
-          bad "north-packaged CLI/web parity timed out after ${NORTH_PROBE_TIMEOUT_SECONDS:-15}s; its process group was reaped"
-        else
-          bad "north-packaged CLI/web semantic roster parity failed (exit $north_parity_status):\n$north_parity_output"
-        fi
-      fi
-    else
-      north_cli_web_parity='north-packaged missing'
-      bad "north-packaged is required for deployed CLI/web semantic roster parity"
-    fi
-  else
-    north_cli_web_parity='blocked by coordinator/web runtime health'
-  fi
   anthropic_installed='unknown'
   anthropic_authenticated='unknown'
   anthropic_headroom='unknown'
@@ -1829,8 +1660,7 @@ else ok_detail "provider readiness deferred to --local"; fi
 if [ "$LOCAL" -eq 1 ]; then
   provider_group North "$before" \
     "Coordinator $north_coord_runtime" \
-    "Web         $north_web_runtime" \
-    "CLI/web     $north_cli_web_parity" \
+    'Surface     CLI/MCP only · web deployment retired' \
     "Anthropic   installed=$anthropic_installed · authenticated=$anthropic_authenticated · routing=$anthropic_routing · headroom=$anthropic_headroom" \
     "OpenAI      installed=$openai_installed · authenticated=$openai_authenticated · routing=$openai_routing · headroom=$openai_headroom" \
     "Allocation  ${allocation_summary:-unknown}"

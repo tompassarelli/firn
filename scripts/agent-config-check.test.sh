@@ -210,8 +210,8 @@ if record_live_hook_binding \
 fi
 grep -q 'north-on-spawn:north-lifecycle changed from' <<<"$HOOK_SPLIT_REASON"
 
-# Both deployed readiness and CLI/web semantic parity go through the packaged
-# closure. The sourceable seam makes the exact argv contract hermetic.
+# Deployed provider readiness goes through the packaged closure. The sourceable
+# seam makes the exact argv contract hermetic.
 mkdir -p "$scratch/bin"
 cat >"$scratch/bin/north-packaged" <<'SH'
 #!/usr/bin/env bash
@@ -219,9 +219,6 @@ printf '%s\n' "$*" >>"$NORTH_PACKAGED_CALLS"
 case "$*" in
   'providers --json')
     printf '%s\n' '{"schemaVersion":3}'
-    ;;
-  'agents --check-web http://127.0.0.1:8088')
-    printf '%s\n' 'semantic roster parity ok'
     ;;
   *)
     exit 97
@@ -233,13 +230,8 @@ chmod +x "$scratch/bin/north-packaged"
 NORTH_PACKAGED_CALLS="$scratch/north-packaged-calls" \
   NORTH_PACKAGED_BIN="$scratch/bin/north-packaged" \
   run_north_packaged providers --json >/dev/null
-NORTH_PACKAGED_CALLS="$scratch/north-packaged-calls" \
-  NORTH_PACKAGED_BIN="$scratch/bin/north-packaged" \
-  run_north_packaged agents --check-web http://127.0.0.1:8088 >/dev/null
 diff -u \
-  <(printf '%s\n' \
-    'providers --json' \
-    'agents --check-web http://127.0.0.1:8088') \
+  <(printf '%s\n' 'providers --json') \
   "$scratch/north-packaged-calls"
 : >"$scratch/north-packaged-calls"
 PATH="$scratch/bin:$PATH" \
@@ -575,62 +567,11 @@ if north_coord_runtime_identity_is_valid \
   exit 1
 fi
 
-# North web has two positive store identities (entrypoint + workdir) and one
-# exact runtime environment. Wrong corpus, missing loopback, explicit static
-# overrides, and checkout paths all fail the pure contract before any live
-# systemd probe.
-pinned_web_root="/nix/store/${nix_hash}-north-web-0.1.0"
-pinned_web_exec="$pinned_web_root/bin/north-web"
-pinned_web_workdir="$pinned_web_root/libexec/north-web"
-classify_north_web_exec \
-  "{ path=$pinned_web_exec ; argv[]=$pinned_web_exec ; ignore_errors=no ; }"
-[ "$NORTH_WEB_EXEC_KIND" = pinned-package ]
-[ "$NORTH_WEB_EXEC_PATH" = "$pinned_web_exec" ]
-classify_north_web_workdir "$pinned_web_workdir"
-[ "$NORTH_WEB_WORKDIR_KIND" = pinned-package ]
-
-if classify_north_web_exec \
-  '{ path=/home/tom/code/north/bin/north-web ; argv[]=/home/tom/code/north/bin/north-web ; }'; then
-  printf 'checkout-backed north-web was accepted as pinned\n' >&2
+# North has no web package or service; keep the config check CLI/MCP-only.
+if rg -n -- 'check-web|NORTH_WEB|north-web' "$REPO/scripts/agent-config-check.sh"; then
+  printf 'agent-config-check still carries retired North web health checks\n' >&2
   exit 1
 fi
-[ "$NORTH_WEB_EXEC_KIND" = checkout ]
-if classify_north_web_exec \
-  "{ path=/nix/store/${nix_hash}-bun/bin/bun ; argv[]=/nix/store/${nix_hash}-bun/bin/bun run out/north/boot.js ; }"; then
-  printf 'store Bun was accepted as proof of a pinned North web package\n' >&2
-  exit 1
-fi
-[ "$NORTH_WEB_EXEC_KIND" = unrecognized ]
-if classify_north_web_workdir '/home/tom/code/north/web-bjs'; then
-  printf 'checkout-backed north-web WorkingDirectory was accepted\n' >&2
-  exit 1
-fi
-[ "$NORTH_WEB_WORKDIR_KIND" = checkout ]
-if classify_north_web_workdir "/nix/store/${nix_hash}-north-cli/libexec/north-web"; then
-  printf 'unrelated store WorkingDirectory was accepted as North web\n' >&2
-  exit 1
-fi
-[ "$NORTH_WEB_WORKDIR_KIND" = unrecognized ]
-
-canonical_web_env='HOME=/home/tom FRAM_LOG=/home/tom/.local/state/north/coordination.log FRAM_TELEMETRY_LOG=/home/tom/.local/state/north/telemetry.log NORTH_PORT=7977 NORTH_WEB_BIND=127.0.0.1 PORT=8088'
-north_web_environment_is_canonical "$canonical_web_env" /home/tom
-wrong_corpus_env="${canonical_web_env/coordination.log/facts.log}"
-if north_web_environment_is_canonical "$wrong_corpus_env" /home/tom; then
-  printf 'north-web facts.log split-brain was accepted as the canonical corpus\n' >&2
-  exit 1
-fi
-grep -q 'FRAM_LOG=/home/tom/.local/state/north/coordination.log' <<<"$NORTH_WEB_ENV_REASON"
-missing_bind_env="${canonical_web_env/ NORTH_WEB_BIND=127.0.0.1/}"
-if north_web_environment_is_canonical "$missing_bind_env" /home/tom; then
-  printf 'north-web without an explicit loopback bind was accepted\n' >&2
-  exit 1
-fi
-stale_static_env="$canonical_web_env STATIC_DIR=/home/tom/code/north/web/priv/static"
-if north_web_environment_is_canonical "$stale_static_env" /home/tom; then
-  printf 'north-web checkout STATIC_DIR was accepted\n' >&2
-  exit 1
-fi
-grep -q 'STATIC_DIR' <<<"$NORTH_WEB_ENV_REASON"
 
 # Repository/CI mode validates canonical declarations against this checkout,
 # not whether Tom's absolute live path happens to exist. A failing readlink shim
