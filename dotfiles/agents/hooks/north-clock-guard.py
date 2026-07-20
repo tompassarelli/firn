@@ -369,10 +369,15 @@ def trusted_store_entry(command: str, executable: str) -> str | None:
     return None
 
 
+def imported_shell_function(command: str) -> bool:
+    return any(
+        key in {f"BASH_FUNC_{command}%%", f"BASH_FUNC_{command}()"}
+        for key in os.environ
+    )
+
+
 def trusted_command(command: str) -> bool:
-    if any(
-        key.startswith(f"BASH_FUNC_{command}%%") for key in os.environ
-    ):
+    if imported_shell_function(command):
         return False
     if command in SHELL_BUILTINS:
         return True
@@ -843,7 +848,11 @@ def leading_nonclient_scope_target(command: str, cwd: str) -> str | None:
         index += 1
     if index >= len(segments):
         return None
-    if segments[index][0] != "cd" or len(segments[index]) != 2:
+    if (
+        segments[index][0] != "cd"
+        or len(segments[index]) != 2
+        or not trusted_command_token(segments[index][0])
+    ):
         return None
     arguments = segments[index][1:]
     raw_target = arguments[0]

@@ -626,6 +626,12 @@ run na 'guard kill-switch command is itself always reachable' closed.log Bash \
   "north config guards off" "$CLIENT_DIR"
 run na 'capture can create missing traceability while an edit is denied' closed.log Bash \
   "north capture 'MSA-244 digest delivery' msa" "$CLIENT_DIR"
+# shellcheck disable=SC2329  # invoked after export by the hook's child Bash
+north() { :; }
+export -f north
+run deny 'imported north function cannot claim control exemption' closed.log Bash \
+  "north clock status" "$CLIENT_DIR"
+unset -f north
 canonical_north="$(realpath "$(command -v north)")"
 run na 'canonical absolute trusted north control remains exempt' closed.log Bash \
   "$canonical_north clock status" "$CLIENT_DIR"
@@ -699,6 +705,12 @@ chmod +x "$shadow_bin/cat"
 PATH="$shadow_bin:$PATH" \
   run deny 'PATH-shadowed allowed command is not trusted as read-only' \
     closed.log Bash "cat README.md" "$CLIENT_DIR"
+# shellcheck disable=SC2329  # invoked after export by the hook's child Bash
+cat() { :; }
+export -f cat
+run deny 'imported read-command function cannot borrow executable trust' \
+  closed.log Bash "cat README.md" "$CLIENT_DIR"
+unset -f cat
 
 echo "== cwd-escape: cd to an abs non-client dir attributes THERE, not the session cwd =="
 run na 'cd nixos-config && git stash pop (2026-07-16 repro)' closed.log Bash "cd $NONCLIENT && git stash -q && git stash pop -q" "$CLIENT_DIR"
@@ -736,6 +748,28 @@ run deny 'later client cd invalidates explicit nonclient scope' closed.log Bash 
   "$CLIENT_DIR"
 run deny 'path-qualified cd impostor cannot establish external scope' closed.log Bash \
   "/tmp/cd \"$NONCLIENT\" && git status" "$CLIENT_DIR"
+cd_override_marker="$SCRATCH/imported-cd-ran"
+# shellcheck disable=SC2329  # invoked after export by the child Bash probe
+cd() {
+  builtin printf '%s\n' invoked >>"${CLOCK_GUARD_CD_MARKER:?}"
+  builtin cd "$@" || return
+}
+export -f cd
+CLOCK_GUARD_CD_MARKER="$cd_override_marker" \
+  bash -c 'cd "$1"' imported-cd-probe "$NONCLIENT"
+if [ -s "$cd_override_marker" ]; then
+  pass=$((pass + 1))
+  printf 'PASS  %-11s  %s\n' internal \
+    'actual Bash imports and invokes BASH_FUNC_cd%% override'
+else
+  fail=$((fail + 1))
+  printf 'FAIL  %-11s  %s\n' internal \
+    'actual Bash imports and invokes BASH_FUNC_cd%% override'
+fi
+CLOCK_GUARD_CD_MARKER="$cd_override_marker" \
+  run deny 'imported cd function cannot establish external scope' \
+    closed.log Bash "cd \"$NONCLIENT\" && git status" "$CLIENT_DIR"
+unset -f cd
 run deny 'arbitrary shell is not broadly blessed by nonclient cd' closed.log Bash \
   "cd \"$NONCLIENT\" && python3 -c 'print(1)'" "$CLIENT_DIR"
 run deny 'arbitrary Git helper is not broadly blessed by nonclient cd' closed.log Bash \
