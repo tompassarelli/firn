@@ -455,6 +455,22 @@ if classify_north_coord_exec "{ path=$checkout_path ; argv[]=$checkout_path 7977
 fi
 [ "$NORTH_COORD_EXEC_KIND" = direct-checkout ]
 
+mapfile -t parsed_coord_pids < <(
+  printf '%s\n' \
+    'LISTEN 0 50 127.0.0.1:7977 0.0.0.0:* users:(("java",pid=42,fd=16))' \
+    'LISTEN 0 50 [::1]:7977 [::]:* users:(("java",pid=42,fd=17))' \
+    'LISTEN 0 50 127.0.0.1:7977 0.0.0.0:* users:(("other",pid=99,fd=18))' |
+    north_coord_listener_pids_from_ss
+)
+[ "${parsed_coord_pids[*]}" = '42 99' ]
+north_coord_listener_set_matches_mainpid 42 42
+if north_coord_listener_set_matches_mainpid 42 99 ||
+   north_coord_listener_set_matches_mainpid 42 42 99 ||
+   north_coord_listener_set_matches_mainpid 42; then
+  printf 'foreign or ambiguous :7977 listener set matched systemd MainPID\n' >&2
+  exit 1
+fi
+
 # Interactive checkout-first wrappers delegate Fram selection and identity to
 # the same exact runtime transaction used by the system service.
 [ "$(grep -c 'exec /run/current-system/sw/bin/north-coord-runtime exec-checkout' \
@@ -466,6 +482,10 @@ if grep -q 'export FRAM_RUNTIME_SOURCE\|export FRAM_RUNTIME_REV' \
 fi
 grep -q ':ExecStartPre (s northCoordRuntime "/bin/north-coord-runtime initialize")' \
   "$REPO/modules/north-coord/default.bnix"
+grep -q ':ExecCondition (s northCoordRuntime "/bin/north-coord-runtime preflight")' \
+  "$REPO/modules/north-coord/default.bnix"
+grep -q ':startLimitIntervalSec 60' "$REPO/modules/north-coord/default.bnix"
+grep -q ':startLimitBurst       3' "$REPO/modules/north-coord/default.bnix"
 
 wrapper_path="/nix/store/${nix_hash}-fram-daemon-packaged/bin/fram-daemon-packaged"
 if classify_north_coord_exec "{ path=$wrapper_path ; argv[]=$wrapper_path 7977 /tmp/facts.log ; }"; then

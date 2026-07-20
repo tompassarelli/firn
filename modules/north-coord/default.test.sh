@@ -10,6 +10,7 @@ state=$scratch/state
 repo=$scratch/fram
 package=$scratch/package
 log=$scratch/coordination.log
+test_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
 mkdir -p "$repo/bin" "$package/bin"
 
 git -C "$repo" init -q
@@ -61,6 +62,7 @@ run_runtime_in_state() {
   NORTH_COORD_FRAM_PACKAGE_REV=$package_revision \
   NORTH_COORD_FRAM_CHECKOUT=$repo \
   NORTH_COORD_FRAM_LOG=$log \
+  NORTH_COORD_FRAM_PORT=$test_port \
     "$runtime" "$@"
 }
 
@@ -146,7 +148,7 @@ grep -Fxq "daemon=$deployment_one/bin/fram-daemon" <<<"$checkout_start"
 grep -Fxq 'owner=unset' <<<"$checkout_start"
 grep -Fxq "home=$deployment_one" <<<"$checkout_start"
 grep -Fxq "bin=$deployment_one/bin" <<<"$checkout_start"
-grep -Fxq "args=7977|$log" <<<"$checkout_start"
+grep -Fxq "args=$test_port|$log" <<<"$checkout_start"
 
 # Ordinary North launchers consume the same exact validation/export path.
 identity_probe=$scratch/identity-probe
@@ -299,6 +301,23 @@ if run_runtime exec-checkout "$identity_probe" >/dev/null 2>&1; then
   printf 'checkout launcher accepted package selection\n' >&2
   exit 1
 fi
+
+# Systemd's ExecCondition refuses an occupied port before loading the fact log.
+run_runtime preflight
+python3 -m http.server "$test_port" --bind 127.0.0.1 >/dev/null 2>&1 & listener_pid=$!
+for _ in $(seq 1 50); do
+  [[ -n $(ss -H -ltn "sport = :$test_port") ]] && break
+  sleep 0.02
+done
+if run_runtime preflight >/dev/null 2>&1; then
+  printf 'occupied coordinator port passed preflight\n' >&2
+  kill "$listener_pid"
+  wait "$listener_pid" 2>/dev/null || true
+  exit 1
+fi
+kill "$listener_pid"
+wait "$listener_pid" 2>/dev/null || true
+run_runtime preflight
 
 # Stable selectors and active generations themselves are protected from path
 # substitution rather than canonicalized into attacker-selected state.

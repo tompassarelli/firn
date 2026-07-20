@@ -20,6 +20,7 @@ need_setting NORTH_COORD_FRAM_PACKAGE
 need_setting NORTH_COORD_FRAM_PACKAGE_REV
 need_setting NORTH_COORD_FRAM_CHECKOUT
 need_setting NORTH_COORD_FRAM_LOG
+need_setting NORTH_COORD_FRAM_PORT
 
 state_root=$NORTH_COORD_RUNTIME_STATE
 state_parent=${state_root%/*}
@@ -31,6 +32,7 @@ current_link=$state_root/current
 previous_link=$state_root/previous
 selector_lock=$state_parent/.${state_name}.lock
 initialization_marker=$state_parent/.${state_name}.initialized
+runtime_port=$NORTH_COORD_FRAM_PORT
 
 case "$state_root" in
   /*) ;;
@@ -38,6 +40,11 @@ case "$state_root" in
 esac
 [[ "$state_parent" != "$state_root" && -n "$state_name" ]] ||
   die "runtime state path must have a parent directory: $state_root"
+if ! [[ "$runtime_port" =~ ^[0-9]+$ ]] ||
+   (( 10#$runtime_port < 1 || 10#$runtime_port > 65535 )); then
+  die "runtime port must be an integer from 1 through 65535: $runtime_port"
+fi
+runtime_port=$((10#$runtime_port))
 
 valid_revision() {
   [[ "$1" =~ ^[0-9a-f]{40}$ ]]
@@ -503,7 +510,25 @@ start_runtime() {
   export_runtime_identity
   release_lock
   cd "$runtime_source"
-  exec "$runtime_daemon" 7977 "$NORTH_COORD_FRAM_LOG"
+  exec "$runtime_daemon" "$runtime_port" "$NORTH_COORD_FRAM_LOG"
+}
+
+preflight_runtime() {
+  local listeners pid cgroup
+
+  listeners=$(ss -H -ltnp "sport = :$runtime_port") ||
+    die "cannot inspect coordinator socket before startup"
+  if [[ -n "$listeners" ]]; then
+    printf '%s: coordinator port %s is already occupied; skipping systemd startup before runtime load\n' \
+      "$program" "$runtime_port" >&2
+    printf '%s\n' "$listeners" >&2
+    while IFS= read -r pid; do
+      [[ -n "$pid" ]] || continue
+      cgroup=$(tr '\n' ' ' <"/proc/$pid/cgroup" 2>/dev/null || printf unreadable)
+      printf '%s: listener pid=%s cgroup=%s\n' "$program" "$pid" "$cgroup" >&2
+    done < <(grep -oE 'pid=[0-9]+' <<<"$listeners" | cut -d= -f2 | sort -nu)
+    return 1
+  fi
 }
 
 exec_checkout() {
@@ -521,6 +546,7 @@ exec_checkout() {
 usage() {
   cat >&2 <<EOF
 usage: $program initialize
+       $program preflight
        $program start
        $program status
        $program promote [FRAM_CHECKOUT] [REVISION]
@@ -534,6 +560,7 @@ EOF
 prepare_lock
 case "${1:-}" in
   initialize) [[ $# -eq 1 ]] || usage; initialize_runtime ;;
+  preflight) [[ $# -eq 1 ]] || usage; preflight_runtime ;;
   start) [[ $# -eq 1 ]] || usage; start_runtime ;;
   status) [[ $# -eq 1 ]] || usage; show_status ;;
   promote) shift; [[ $# -le 2 ]] || usage; promote_checkout "$@" ;;

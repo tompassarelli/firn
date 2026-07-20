@@ -34,6 +34,13 @@ and `north-packaged` wrappers reject direct `north up` launch/restart commands
 before entering North code, while preserving the read-only `north up
 --check-runtime` probe.
 
+Before systemd loads the fact log, an `ExecCondition` checks that port 7977 is
+free. A pre-existing listener skips startup instead of entering a memory-heavy
+restart loop; the health probe separately requires the service `MainPID` to own
+the listening socket. After removing a foreign listener, explicitly run
+`sudo systemctl restart north-coord.service`; a skipped condition does not poll
+the port or claim it later.
+
 On first installation, the unit runs `north-coord-runtime initialize` as a
 distinct initialization transaction. Once initialized, deleting the active
 selection is corruption and fails closed; status or startup never reconstructs

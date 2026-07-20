@@ -461,6 +461,19 @@ systemd_environment_has() {
   [[ " $environment " == *" $assignment "* ]]
 }
 
+north_coord_listener_pids_from_ss() {
+  grep -oE 'pid=[0-9]+' |
+    cut -d= -f2 |
+    sort -nu
+}
+
+north_coord_listener_set_matches_mainpid() {
+  local main_pid=$1
+  shift
+
+  [[ "$main_pid" =~ ^[1-9][0-9]*$ && $# -eq 1 && "${1:-}" == "$main_pid" ]]
+}
+
 north_web_environment_is_canonical() {
   local environment="$1" home="$2" expected=''
 
@@ -1615,6 +1628,27 @@ if [ "$LOCAL" -eq 1 ]; then
          ! grep -Eq '^[^:]*:[^:]*:/system\.slice/north-coord\.service(/|$)' "/proc/$north_coord_pid/cgroup"; then
         north_coord_ok=0
         bad "north-coord MainPID is not owned by system.slice/north-coord.service"
+      fi
+      if command -v ss >/dev/null 2>&1; then
+        mapfile -t north_coord_listener_pids < <(
+          ss -H -ltnp 'sport = :7977' 2>/dev/null |
+            north_coord_listener_pids_from_ss
+        )
+        if north_coord_listener_set_matches_mainpid \
+             "$north_coord_pid" "${north_coord_listener_pids[@]}"; then
+          ok_detail "north-coord systemd MainPID owns the :7977 listening socket"
+        else
+          north_coord_ok=0
+          north_coord_listener_detail=''
+          for north_coord_listener_pid in "${north_coord_listener_pids[@]}"; do
+            north_coord_listener_cgroup="$(tr '\n' ' ' <"/proc/$north_coord_listener_pid/cgroup" 2>/dev/null || printf unreadable)"
+            north_coord_listener_detail+=" pid=$north_coord_listener_pid cgroup=$north_coord_listener_cgroup"
+          done
+          bad "north-coord :7977 listener PID does not equal systemd MainPID (MainPID: $north_coord_pid; listeners:${north_coord_listener_detail:- missing})"
+        fi
+      else
+        north_coord_ok=0
+        bad "ss is required to verify north-coord MainPID socket ownership"
       fi
     else
       north_coord_ok=0
