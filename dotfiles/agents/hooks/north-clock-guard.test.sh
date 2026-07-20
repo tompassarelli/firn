@@ -178,6 +178,17 @@ cat >"$SCRATCH/titleless-ticket-trace.log" <<'EOF'
 {:tx 7, :op "assert", :l "@client-session-msa", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
 EOF
 
+cat >"$SCRATCH/whitespace-title-ticket-trace.log" <<'EOF'
+{:tx 1, :op "assert", :l "@malformed-ticket-subject", :p "owner", :r "msa", :by "coord"}
+{:tx 2, :op "assert", :l "@malformed-ticket-subject", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 3, :op "assert", :l "@malformed-ticket-subject", :p "title", :r "   ", :by "coord"}
+{:tx 4, :op "assert", :l "@client-session-msa", :p "kind", :r "client_session", :by "coord"}
+{:tx 5, :op "assert", :l "@client-session-msa", :p "owner", :r "msa", :by "coord"}
+{:tx 6, :op "assert", :l "@client-session-msa", :p "clocked_by", :r "user", :by "coord"}
+{:tx 7, :op "assert", :l "@client-session-msa", :p "rate", :r "175", :by "coord"}
+{:tx 8, :op "assert", :l "@client-session-msa", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
+EOF
+
 cat >"$SCRATCH/incomplete-client-session.log" <<'EOF'
 {:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
@@ -326,7 +337,8 @@ run deny     '(k) legacy session shape cannot authorize billing'    legacy-sessi
 run deny     '(l) non-user client_session cannot authorize billing' non-user-client-session.log Edit "$CLIENT_DIR/api.py"
 run trace    '(m) matching human clock cannot replace ticket trace' missing-ticket-trace.log Edit "$CLIENT_DIR/api.py"
 run trace    '(n) owner+Linear without title is not a North thread' titleless-ticket-trace.log Edit "$CLIENT_DIR/api.py"
-run unavailable '(o) incomplete human billing row fails closed' incomplete-client-session.log Edit "$CLIENT_DIR/api.py"
+run trace    '(o) whitespace title is not a North thread' whitespace-title-ticket-trace.log Edit "$CLIENT_DIR/api.py"
+run unavailable '(p) incomplete human billing row fails closed' incomplete-client-session.log Edit "$CLIENT_DIR/api.py"
 
 echo "== output protocol: native silence vs opt-in machine attestation =="
 open_edit_json="$(emit_json Edit "$CLIENT_DIR/api.py")"

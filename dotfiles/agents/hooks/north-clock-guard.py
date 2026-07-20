@@ -1169,7 +1169,8 @@ def clock_decision(
         for subject, facts in by_subject.items()
         if facts.get("owner") == client
         and facts.get("linear") == ticket
-        and bool(facts.get("title"))
+        and isinstance(facts.get("title"), str)
+        and bool(facts["title"].strip())
     }
     if len(candidate_threads) > 1:
         raise AdmissionUnavailable("duplicate ticket thread identity")
