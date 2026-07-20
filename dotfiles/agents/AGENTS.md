@@ -15,20 +15,38 @@ agent posture from thread facts.
 Thread format + concurrent write safety: → `~/code/nixos-config/dotfiles/agents/docs/north.md`
 Spawn/steer/observe/concurrency: → `~/code/nixos-config/dotfiles/agents/docs/agent-protocol.md`
 
-## Billable work — clock or it didn't happen
+## Client time and agent time — two orthogonal clocks
 
-**Any edit under `~/code/client/**` is billable and MUST run against a live north
-clock on a thread linked to its Linear ticket.** This is enforced mechanically —
-`north-clock-guard` (PreToolUse) DENIES the edit if no clock is running — because
-prose here already failed once: ~22h of MSA work shipped with zero logged time
-and had to be reconstructed by hand for an invoice. Don't wait for the deny:
-**at intake on client work, derive the ticket from the branch (`msa-NNN` →
-`MSA-NNN`), find-or-`capture` its thread (`owner msa`, `linear MSA-NNN`, `rate`),
-and `north clock start` it BEFORE the first edit.** One clock at a time; `clock
-stop` on context switch. Billing is derived, never invented: worklog =
-`north-timelog`, invoice state machine = `north-invoice` (uninvoiced → invoice-sent
-→ invoice-paid). Bypass only deliberately (`north config guards off`, or launch
-with `AGENT_NO_AUTHORING_HOOKS=1`; the legacy Claude-named alias remains supported).
+**Human/client presence is the billing clock.** Before any edit under
+`~/code/client/<owner>/**`, exactly one open North row must identify
+`kind client_session`, `clocked_by user`, and that `owner` (with its captured
+rate). Use `north clock in <owner>` once when the client block starts and
+`north clock out` only when the human context clearly leaves that client. A
+switch among tickets for the same client does **not** stop or restart this
+clock. Ambiguous topic drift gets one warning; explicit client/repo departure
+clocks out. Generation waits, builds, and delegated work remain inside the
+client block while it is still the focal human context.
+
+**Agent/task duration is telemetry, not billing authority.** Every managed lane
+records its own concurrent `kind run` timing against its exact thread so actuals
+continue to ground estimates. Run clocks may overlap, start and stop with the
+lane, never appear on invoices, and never satisfy the client-edit guard. Do not
+serialize workers or churn the human client clock to make task telemetry fit.
+
+The axes join only for traceability: at intake, derive the Linear ticket from
+the branch (`msa-NNN` → `MSA-NNN`) and find-or-`capture` exactly one thread with
+`owner msa` + `linear MSA-NNN`. `north-clock-guard` then requires both that exact
+branch/thread identity and the matching human `client_session`; it does not
+require the session to point at the ticket. North coordination and clock
+commands always remain available so the guard cannot block its own recovery.
+Unrelated repositories and proved read-only operations do not inherit a deny
+merely from the provider hook's original client cwd; ambiguous actual client
+mutations still fail closed.
+
+Billing is derived, never invented: worklog = `north-timelog`, invoice state
+machine = `north-invoice` (uninvoiced → invoice-sent → invoice-paid). Bypass only
+deliberately (`north config guards off`, or launch with
+`AGENT_NO_AUTHORING_HOOKS=1`; the legacy Claude-named alias remains supported).
 
 ## Pre-edit gate — MANDATORY at task intake
 

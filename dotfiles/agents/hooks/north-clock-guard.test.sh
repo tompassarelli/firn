@@ -45,20 +45,28 @@ git -C "$CLIENT_DIR" -c user.name=test -c user.email=test@example.invalid \
   commit --allow-empty --no-verify -qm init
 
 # ---- fixtures: minimal fact logs in the facts.log line shape --------------
-# An OPEN session owned by msa (session_of + start_time, no end_time; thread owner=msa).
+# An OPEN human client session for msa. Ticket traceability is a separate thread.
 cat >"$SCRATCH/open-msa.log" <<'EOF'
 {:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
-{:tx 3, :op "assert", :l "@sess-1", :p "session_of", :r "@thread-msa", :by "coord"}
-{:tx 4, :op "assert", :l "@sess-1", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
+{:tx 3, :op "assert", :l "@client-session-1", :p "kind", :r "client_session", :by "coord"}
+{:tx 4, :op "assert", :l "@client-session-1", :p "owner", :r "msa", :by "coord"}
+{:tx 5, :op "assert", :l "@client-session-1", :p "clocked_by", :r "user", :by "coord"}
+{:tx 6, :op "assert", :l "@client-session-1", :p "rate", :r "175", :by "coord"}
+{:tx 7, :op "assert", :l "@client-session-1", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
 EOF
 
-# Same client, wrong ticket: this must never authorize MSA-242 work.
+# The human stays clocked into msa while the branch moves to another msa ticket.
 cat >"$SCRATCH/open-msa-wrong-ticket.log" <<'EOF'
-{:tx 1, :op "assert", :l "@thread-msa-wrong", :p "owner", :r "msa", :by "coord"}
-{:tx 2, :op "assert", :l "@thread-msa-wrong", :p "linear", :r "MSA-999", :by "coord"}
-{:tx 3, :op "assert", :l "@sess-wrong", :p "session_of", :r "@thread-msa-wrong", :by "coord"}
-{:tx 4, :op "assert", :l "@sess-wrong", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
+{:tx 1, :op "assert", :l "@thread-msa-current", :p "owner", :r "msa", :by "coord"}
+{:tx 2, :op "assert", :l "@thread-msa-current", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 3, :op "assert", :l "@thread-msa-other", :p "owner", :r "msa", :by "coord"}
+{:tx 4, :op "assert", :l "@thread-msa-other", :p "linear", :r "MSA-999", :by "coord"}
+{:tx 5, :op "assert", :l "@client-session-msa", :p "kind", :r "client_session", :by "coord"}
+{:tx 6, :op "assert", :l "@client-session-msa", :p "owner", :r "msa", :by "coord"}
+{:tx 7, :op "assert", :l "@client-session-msa", :p "clocked_by", :r "user", :by "coord"}
+{:tx 8, :op "assert", :l "@client-session-msa", :p "rate", :r "175", :by "coord"}
+{:tx 9, :op "assert", :l "@client-session-msa", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
 EOF
 
 cat >"$SCRATCH/duplicate-ticket-threads.log" <<'EOF'
@@ -66,37 +74,95 @@ cat >"$SCRATCH/duplicate-ticket-threads.log" <<'EOF'
 {:tx 2, :op "assert", :l "@thread-msa-a", :p "linear", :r "MSA-242", :by "coord"}
 {:tx 3, :op "assert", :l "@thread-msa-b", :p "owner", :r "msa", :by "coord"}
 {:tx 4, :op "assert", :l "@thread-msa-b", :p "linear", :r "MSA-242", :by "coord"}
-{:tx 5, :op "assert", :l "@sess-a", :p "session_of", :r "@thread-msa-a", :by "coord"}
-{:tx 6, :op "assert", :l "@sess-a", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
+{:tx 5, :op "assert", :l "@client-session-msa", :p "kind", :r "client_session", :by "coord"}
+{:tx 6, :op "assert", :l "@client-session-msa", :p "owner", :r "msa", :by "coord"}
+{:tx 7, :op "assert", :l "@client-session-msa", :p "clocked_by", :r "user", :by "coord"}
+{:tx 8, :op "assert", :l "@client-session-msa", :p "rate", :r "175", :by "coord"}
+{:tx 9, :op "assert", :l "@client-session-msa", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
 EOF
 
-# An OPEN session owned by personal (wrong owner for an msa edit).
+# An OPEN human session owned by another client (wrong owner for an msa edit).
 cat >"$SCRATCH/open-personal.log" <<'EOF'
-{:tx 1, :op "assert", :l "@thread-p", :p "owner", :r "personal", :by "coord"}
-{:tx 2, :op "assert", :l "@thread-p", :p "linear", :r "PERSONAL-1", :by "coord"}
-{:tx 3, :op "assert", :l "@sess-2", :p "session_of", :r "@thread-p", :by "coord"}
-{:tx 4, :op "assert", :l "@sess-2", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
+{:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
+{:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 3, :op "assert", :l "@client-session-acme", :p "kind", :r "client_session", :by "coord"}
+{:tx 4, :op "assert", :l "@client-session-acme", :p "owner", :r "acme", :by "coord"}
+{:tx 5, :op "assert", :l "@client-session-acme", :p "clocked_by", :r "user", :by "coord"}
+{:tx 6, :op "assert", :l "@client-session-acme", :p "rate", :r "200", :by "coord"}
+{:tx 7, :op "assert", :l "@client-session-acme", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
 EOF
 
-# No open session: the msa session was started then STOPPED (end_time present).
+# No open session: the human msa session was started then closed.
 cat >"$SCRATCH/closed.log" <<'EOF'
 {:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
 {:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
-{:tx 3, :op "assert", :l "@sess-1", :p "session_of", :r "@thread-msa", :by "coord"}
-{:tx 4, :op "assert", :l "@sess-1", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
-{:tx 5, :op "assert", :l "@sess-1", :p "end_time", :r "2026-07-15T11:00:00", :by "coord"}
+{:tx 3, :op "assert", :l "@client-session-1", :p "kind", :r "client_session", :by "coord"}
+{:tx 4, :op "assert", :l "@client-session-1", :p "owner", :r "msa", :by "coord"}
+{:tx 5, :op "assert", :l "@client-session-1", :p "clocked_by", :r "user", :by "coord"}
+{:tx 6, :op "assert", :l "@client-session-1", :p "rate", :r "175", :by "coord"}
+{:tx 7, :op "assert", :l "@client-session-1", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
+{:tx 8, :op "assert", :l "@client-session-1", :p "end_time", :r "2026-07-15T11:00:00", :by "coord"}
 EOF
 
-# Two open sessions: one personal, one msa. ANY matching owner must allow.
+# Multiple open human client sessions are ambiguous and fail closed.
 cat >"$SCRATCH/two-open.log" <<'EOF'
-{:tx 1, :op "assert", :l "@thread-p", :p "owner", :r "personal", :by "coord"}
-{:tx 2, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
-{:tx 3, :op "assert", :l "@thread-p", :p "linear", :r "PERSONAL-1", :by "coord"}
-{:tx 4, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
-{:tx 5, :op "assert", :l "@sess-p", :p "session_of", :r "@thread-p", :by "coord"}
-{:tx 6, :op "assert", :l "@sess-p", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
-{:tx 7, :op "assert", :l "@sess-m", :p "session_of", :r "@thread-msa", :by "coord"}
-{:tx 8, :op "assert", :l "@sess-m", :p "start_time", :r "2026-07-15T10:05:00", :by "coord"}
+{:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
+{:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 3, :op "assert", :l "@client-session-acme", :p "kind", :r "client_session", :by "coord"}
+{:tx 4, :op "assert", :l "@client-session-acme", :p "owner", :r "acme", :by "coord"}
+{:tx 5, :op "assert", :l "@client-session-acme", :p "clocked_by", :r "user", :by "coord"}
+{:tx 6, :op "assert", :l "@client-session-acme", :p "rate", :r "200", :by "coord"}
+{:tx 7, :op "assert", :l "@client-session-acme", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
+{:tx 8, :op "assert", :l "@client-session-msa", :p "kind", :r "client_session", :by "coord"}
+{:tx 9, :op "assert", :l "@client-session-msa", :p "owner", :r "msa", :by "coord"}
+{:tx 10, :op "assert", :l "@client-session-msa", :p "clocked_by", :r "user", :by "coord"}
+{:tx 11, :op "assert", :l "@client-session-msa", :p "rate", :r "175", :by "coord"}
+{:tx 12, :op "assert", :l "@client-session-msa", :p "start_time", :r "2026-07-15T10:05:00", :by "coord"}
+EOF
+
+cat >"$SCRATCH/agent-run-only.log" <<'EOF'
+{:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
+{:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 3, :op "assert", :l "@run-1", :p "kind", :r "run", :by "coord"}
+{:tx 4, :op "assert", :l "@run-1", :p "owner", :r "msa", :by "coord"}
+{:tx 5, :op "assert", :l "@run-1", :p "clocked_by", :r "agent", :by "coord"}
+{:tx 6, :op "assert", :l "@run-1", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
+EOF
+
+cat >"$SCRATCH/legacy-session-only.log" <<'EOF'
+{:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
+{:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 3, :op "assert", :l "@legacy-session", :p "owner", :r "msa", :by "coord"}
+{:tx 4, :op "assert", :l "@legacy-session", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
+EOF
+
+cat >"$SCRATCH/non-user-client-session.log" <<'EOF'
+{:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
+{:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 3, :op "assert", :l "@client-session-agent", :p "kind", :r "client_session", :by "coord"}
+{:tx 4, :op "assert", :l "@client-session-agent", :p "owner", :r "msa", :by "coord"}
+{:tx 5, :op "assert", :l "@client-session-agent", :p "clocked_by", :r "agent", :by "coord"}
+{:tx 6, :op "assert", :l "@client-session-agent", :p "rate", :r "175", :by "coord"}
+{:tx 7, :op "assert", :l "@client-session-agent", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
+EOF
+
+cat >"$SCRATCH/missing-ticket-trace.log" <<'EOF'
+{:tx 1, :op "assert", :l "@thread-other", :p "owner", :r "msa", :by "coord"}
+{:tx 2, :op "assert", :l "@thread-other", :p "linear", :r "MSA-999", :by "coord"}
+{:tx 3, :op "assert", :l "@client-session-msa", :p "kind", :r "client_session", :by "coord"}
+{:tx 4, :op "assert", :l "@client-session-msa", :p "owner", :r "msa", :by "coord"}
+{:tx 5, :op "assert", :l "@client-session-msa", :p "clocked_by", :r "user", :by "coord"}
+{:tx 6, :op "assert", :l "@client-session-msa", :p "rate", :r "175", :by "coord"}
+{:tx 7, :op "assert", :l "@client-session-msa", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
+EOF
+
+cat >"$SCRATCH/incomplete-client-session.log" <<'EOF'
+{:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa", :by "coord"}
+{:tx 2, :op "assert", :l "@thread-msa", :p "linear", :r "MSA-242", :by "coord"}
+{:tx 3, :op "assert", :l "@client-session-msa", :p "kind", :r "client_session", :by "coord"}
+{:tx 4, :op "assert", :l "@client-session-msa", :p "owner", :r "msa", :by "coord"}
+{:tx 5, :op "assert", :l "@client-session-msa", :p "clocked_by", :r "user", :by "coord"}
+{:tx 6, :op "assert", :l "@client-session-msa", :p "start_time", :r "2026-07-15T10:00:00", :by "coord"}
 EOF
 
 # Corpus uncertainty fixtures.
@@ -106,7 +172,7 @@ cat >"$SCRATCH/malformed-relevant.log" <<'EOF'
 EOF
 cat >"$SCRATCH/duplicate-tx.log" <<'EOF'
 {:tx 1, :op "assert", :l "@thread-msa", :p "owner", :r "msa"}
-{:tx 1, :op "assert", :l "@sess-1", :p "session_of", :r "@thread-msa"}
+{:tx 1, :op "assert", :l "@client-session-1", :p "kind", :r "client_session"}
 EOF
 cp "$SCRATCH/open-msa.log" "$SCRATCH/unreadable.log"
 chmod 000 "$SCRATCH/unreadable.log"
@@ -134,6 +200,12 @@ emit_patch_json() {
     "$tool" "$patch" "$cwd"
 }
 
+emit_workdir_json() {
+  local command="$1" cwd="$2" workdir="$3"
+  python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","tool_input":{"command":sys.argv[1],"workdir":sys.argv[3]},"cwd":sys.argv[2]}))' \
+    "$command" "$cwd" "$workdir"
+}
+
 # run EXPECT DESC LOG TOOL ARG [CWD] — attestation mode expectations:
 #   clock       -> exactly one root matching-clock attestation
 #   na          -> exactly one root not-applicable attestation
@@ -142,13 +214,14 @@ emit_patch_json() {
 #   unavailable -> stable fail-closed infrastructure reason
 check_output() {
   local expect="$1" desc="$2" out="$3"
-  local denied=0 mism=0 unavailable=0 ticket=0
+  local denied=0 mism=0 unavailable=0 ticket=0 trace=0
   case "$out" in
     *'"permissionDecision":"deny"'*|*'"permissionDecision": "deny"'*) denied=1 ;;
   esac
-  case "$out" in *'WRONG clock'*) mism=1 ;; esac
+  case "$out" in *'WRONG client clock'*) mism=1 ;; esac
   case "$out" in *"$UNAVAILABLE_REASON"*) unavailable=1 ;; esac
   case "$out" in *'branch ticket is missing or ambiguous'*) ticket=1 ;; esac
+  case "$out" in *'exact North traceability thread'*) trace=1 ;; esac
   local ok=0
   case "$expect" in
     clock)    [ "$out" = "$CLOCK_ALLOW" ] && ok=1 ;;
@@ -157,6 +230,7 @@ check_output() {
               [[ "$out" == *'no north clock running'* ]] && ok=1 ;;
     mismatch) [ "$denied" = 1 ] && [ "$mism" = 1 ] && ok=1 ;;
     ticket)   [ "$denied" = 1 ] && [ "$ticket" = 1 ] && ok=1 ;;
+    trace)    [ "$denied" = 1 ] && [ "$trace" = 1 ] && ok=1 ;;
     unavailable) [ "$denied" = 1 ] && [ "$unavailable" = 1 ] && ok=1 ;;
     silent) [ -z "$out" ] && ok=1 ;;
   esac
@@ -164,8 +238,8 @@ check_output() {
     pass=$((pass + 1)); printf 'PASS  %-11s  %s\n' "$expect" "$desc"
   else
     fail=$((fail + 1))
-    printf 'FAIL  %-11s  %s\n      denied=%s mism=%s ticket=%s unavailable=%s out=%s\n' \
-      "$expect" "$desc" "$denied" "$mism" "$ticket" "$unavailable" "$out"
+    printf 'FAIL  %-11s  %s\n      denied=%s mism=%s ticket=%s trace=%s unavailable=%s out=%s\n' \
+      "$expect" "$desc" "$denied" "$mism" "$ticket" "$trace" "$unavailable" "$out"
   fi
 }
 
@@ -221,9 +295,14 @@ run mismatch '(c) Edit client path, open session owner=personal'    open-persona
 run deny     '(d) Bash sed -i on client path, no clock'             closed.log        Bash "sed -i s/a/b/ $CLIENT_DIR/api.py"
 run deny     '(e) ambient Git read may execute configured helpers' closed.log        Bash "git log --oneline -5" "$CLIENT_DIR"
 run na       '(f) Edit outside client'                              closed.log        Edit "$NONCLIENT/flake.nix"
-run clock    '(g) two open sessions, one owner=msa'                 two-open.log      Edit "$CLIENT_DIR/api.py"
-run mismatch '(h) right owner but wrong Linear ticket is rejected'  open-msa-wrong-ticket.log Edit "$CLIENT_DIR/api.py"
+run unavailable '(g) multiple human client sessions are ambiguous' two-open.log      Edit "$CLIENT_DIR/api.py"
+run clock    '(h) same-client ticket switch keeps the human clock'  open-msa-wrong-ticket.log Edit "$CLIENT_DIR/api.py"
 run unavailable '(i) duplicate ticket-thread identity cannot authorize' duplicate-ticket-threads.log Edit "$CLIENT_DIR/api.py"
+run deny     '(j) agent run telemetry cannot authorize billing'     agent-run-only.log Edit "$CLIENT_DIR/api.py"
+run deny     '(k) legacy session shape cannot authorize billing'    legacy-session-only.log Edit "$CLIENT_DIR/api.py"
+run deny     '(l) non-user client_session cannot authorize billing' non-user-client-session.log Edit "$CLIENT_DIR/api.py"
+run trace    '(m) matching human clock cannot replace ticket trace' missing-ticket-trace.log Edit "$CLIENT_DIR/api.py"
+run unavailable '(n) incomplete human billing row fails closed' incomplete-client-session.log Edit "$CLIENT_DIR/api.py"
 
 echo "== output protocol: native silence vs opt-in machine attestation =="
 open_edit_json="$(emit_json Edit "$CLIENT_DIR/api.py")"
@@ -496,17 +575,23 @@ ENV="$malicious_bash_env" \
   run deny 'ambient ENV prevents a provider-shell read-only proof' \
     closed.log Bash "cat README.md" "$CLIENT_DIR"
 
-echo "== exact North clock recovery commands cannot deadlock behind this guard =="
-run na 'exact north clock start recovery command is exempt' closed.log Bash \
-  "north clock start 2026-07-19-123456" "$CLIENT_DIR"
+echo "== North coordination and client-clock recovery cannot deadlock behind this guard =="
+run na 'exact north clock in recovery command is exempt' closed.log Bash \
+  "north clock in msa" "$CLIENT_DIR"
 run na 'exact north clock status control command is exempt' closed.log Bash \
   "north clock status" "$CLIENT_DIR"
-run na 'exact north clock stop recovery command is exempt' closed.log Bash \
-  "north clock stop" "$CLIENT_DIR"
-run deny 'compound clock-start command is never exempt' closed.log Bash \
-  "north clock start 2026-07-19-123456 && true" "$CLIENT_DIR"
-run deny 'malformed thread id is never exempt' closed.log Bash \
-  "north clock start '../../personal'" "$CLIENT_DIR"
+run na 'exact north clock out recovery command is exempt' closed.log Bash \
+  "north clock out" "$CLIENT_DIR"
+run na 'exact tell repairs the observed Linear identity catch-22' closed.log Bash \
+  "north tell 019f8081-28d9-7d52-b65f-68aae73446d9 linear MSA-244" "$CLIENT_DIR"
+run na 'guard kill-switch command is itself always reachable' closed.log Bash \
+  "north config guards off" "$CLIENT_DIR"
+run na 'capture can create missing traceability while an edit is denied' closed.log Bash \
+  "north capture 'MSA-244 digest delivery' msa" "$CLIENT_DIR"
+run deny 'compound north control command is never exempt' closed.log Bash \
+  "north clock in msa && true" "$CLIENT_DIR"
+run deny 'north output redirected into client code remains a mutation' closed.log Bash \
+  "north clock status > $CLIENT_DIR/clock-status" "$CLIENT_DIR"
 
 echo "== bash mutation heuristic: pure reads never deny =="
 run deny 'git status in client cwd may execute fsmonitor' closed.log Bash "git status" "$CLIENT_DIR"
@@ -563,6 +648,14 @@ PATH="$shadow_bin:$PATH" \
 echo "== cwd-escape: cd to an abs non-client dir attributes THERE, not the session cwd =="
 run na 'cd nixos-config && git stash pop (2026-07-16 repro)' closed.log Bash "cd $NONCLIENT && git stash -q && git stash pop -q" "$CLIENT_DIR"
 run na 'VAR= prefix then cd non-client && git commit'        closed.log Bash "V=1 && cd $NONCLIENT && git commit -m x" "$CLIENT_DIR"
+run na 'explicit git -C nonclient scope ignores inherited client cwd' \
+  closed.log Bash "git -C $NONCLIENT status" "$CLIENT_DIR"
+run na 'explicit git -C nonclient mutation ignores inherited client cwd' \
+  closed.log Bash "git -C $NONCLIENT commit -m x" "$CLIENT_DIR"
+run_payload attest na 'provider workdir overrides its inherited root client cwd' closed.log \
+  "$(emit_workdir_json 'git status' "$CLIENT_DIR" "$NONCLIENT")"
+run deny 'explicit git -C config override cannot forge a nonclient proof' \
+  closed.log Bash "git -C $NONCLIENT -c test.key=value status" "$CLIENT_DIR"
 run deny 'git -c escape remains clocked because config may execute helpers' \
   closed.log Bash "cd $NONCLIENT && git -c test.key=value commit -m x" "$CLIENT_DIR"
 if python3 - "$HERE/north-clock-guard.py" "$NONCLIENT" "$CLIENT_DIR" <<'PY'
@@ -750,8 +843,8 @@ run_default() {
     "$HOOK" 2>/dev/null
 }
 
-# Stale facts.log says no clock; the live split says an msa clock is open. The
-# end_time retraction proves the merge applies exact current-state semantics.
+# Stale facts.log says no clock; the live split says a human msa client session
+# is open. The end_time retraction proves exact current-state semantics.
 {
   assert_fact 1 '@stale-thread' owner msa
   assert_fact 2 '@stale-thread' linear MSA-321
@@ -761,13 +854,16 @@ run_default() {
   assert_fact 102 '@live-thread' linear MSA-321
 } > "$DEFAULT_STATE/coordination.log"
 {
-  assert_fact 103 '@live-session' session_of '@live-thread'
-  assert_fact 104 '@live-session' start_time '2026-07-16T12:00:00Z'
-  assert_fact 105 '@live-session' end_time '2026-07-16T12:01:00Z'
-  fact 106 retract '@live-session' end_time '2026-07-16T12:01:00Z'
+  assert_fact 103 '@live-client-session' kind client_session
+  assert_fact 104 '@live-client-session' owner msa
+  assert_fact 105 '@live-client-session' clocked_by user
+  assert_fact 106 '@live-client-session' rate 175
+  assert_fact 107 '@live-client-session' start_time '2026-07-16T12:00:00Z'
+  assert_fact 108 '@live-client-session' end_time '2026-07-16T12:01:00Z'
+  fact 109 retract '@live-client-session' end_time '2026-07-16T12:01:00Z'
 } > "$DEFAULT_STATE/telemetry.log"
 split_out="$(run_default)"
-check_output silent 'split owner + re-opened telemetry session beats stale monolith' "$split_out"
+check_output silent 'split trace + re-opened human client session beat stale monolith' "$split_out"
 
 # The same pair remains selectable explicitly for isolated fixtures/instances.
 split_json="$(emit_json Edit "$DEFAULT_REPO/api.py")"
@@ -778,34 +874,37 @@ split_override_out="$(printf '%s' "$split_json" | env -u AGENT_NO_AUTHORING_HOOK
   AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" "$HOOK" 2>/dev/null)"
 check_output silent 'explicit FRAM_LOG + FRAM_TELEMETRY_LOG pair is preserved' "$split_override_out"
 
-# Reverse the contradiction: stale facts.log has an msa clock, while the live
-# split has only a personal clock. The deny hint must use the current live Linear
-# link, not the stale monolith or a newer-but-retracted link.
+# Reverse the contradiction: stale facts.log has a human msa session, while the
+# live split has only an acme human session. The verdict must use live split data.
 {
   assert_fact 1 '@stale-thread' owner msa
   assert_fact 2 '@stale-thread' linear MSA-321
-  assert_fact 3 '@stale-session' session_of '@stale-thread'
-  assert_fact 4 '@stale-session' start_time '2026-07-16T11:00:00Z'
+  assert_fact 3 '@stale-client-session' kind client_session
+  assert_fact 4 '@stale-client-session' owner msa
+  assert_fact 5 '@stale-client-session' clocked_by user
+  assert_fact 6 '@stale-client-session' rate 175
+  assert_fact 7 '@stale-client-session' start_time '2026-07-16T11:00:00Z'
 } > "$DEFAULT_STATE/facts.log"
 {
   assert_fact 201 '@live-thread' owner msa
   assert_fact 202 '@live-thread' linear MSA-321
-  assert_fact 203 '@personal-thread' owner personal
   assert_fact 250 '@retracted-thread' linear MSA-321
   fact 251 retract '@retracted-thread' linear MSA-321
 } > "$DEFAULT_STATE/coordination.log"
 {
-  assert_fact 204 '@personal-session' session_of '@personal-thread'
-  assert_fact 205 '@personal-session' start_time '2026-07-16T12:30:00Z'
+  assert_fact 203 '@client-session-acme' kind client_session
+  assert_fact 204 '@client-session-acme' owner acme
+  assert_fact 205 '@client-session-acme' clocked_by user
+  assert_fact 206 '@client-session-acme' rate 200
+  assert_fact 207 '@client-session-acme' start_time '2026-07-16T12:30:00Z'
 } > "$DEFAULT_STATE/telemetry.log"
 split_out="$(run_default)"
 if [[ ("$split_out" == *'"permissionDecision": "deny"'* ||
        "$split_out" == *'"permissionDecision":"deny"'*) &&
-      "$split_out" == *'WRONG clock'* &&
-      "$split_out" == *'clock start live-thread'* &&
-      "$split_out" != *'clock start stale-thread'* &&
-      "$split_out" != *'clock start retracted-thread'* ]]; then
-  pass=$((pass + 1)); echo "PASS  mismatch  live split verdict + Linear hint ignore stale/retracted links"
+      "$split_out" == *'WRONG client clock'* &&
+      "$split_out" == *'client-session-acme'* &&
+      "$split_out" != *'stale-client-session'* ]]; then
+  pass=$((pass + 1)); echo "PASS  mismatch  live split human-client verdict ignores stale monolith"
 else
   fail=$((fail + 1)); echo "FAIL  mismatch  split/hint result: $split_out"
 fi
@@ -815,11 +914,14 @@ rm -f "$DEFAULT_STATE/coordination.log" "$DEFAULT_STATE/telemetry.log"
 {
   assert_fact 301 '@legacy-thread' owner msa
   assert_fact 302 '@legacy-thread' linear MSA-321
-  assert_fact 303 '@legacy-session' session_of '@legacy-thread'
-  assert_fact 304 '@legacy-session' start_time '2026-07-16T13:00:00Z'
+  assert_fact 303 '@legacy-client-session' kind client_session
+  assert_fact 304 '@legacy-client-session' owner msa
+  assert_fact 305 '@legacy-client-session' clocked_by user
+  assert_fact 306 '@legacy-client-session' rate 175
+  assert_fact 307 '@legacy-client-session' start_time '2026-07-16T13:00:00Z'
 } > "$DEFAULT_STATE/facts.log"
 legacy_out="$(run_default)"
-check_output silent 'facts.log fallback applies only when split is absent' "$legacy_out"
+check_output silent 'facts.log fallback supports new human sessions only when split is absent' "$legacy_out"
 
 echo "== explicit kill-switch is the only bypass and never forges attestation =="
 ks_json="$(emit_json Edit "$CLIENT_DIR/api.py")"

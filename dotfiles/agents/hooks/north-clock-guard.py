@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Provider-neutral billable-work clock admission core.
+"""Provider-neutral human client-session admission core.
 
 The shell wrapper owns the explicit authoring kill-switch and launches this
 file with an attested Python interpreter. This core is total over the supported
 Claude/Codex hook envelopes: it emits a private allow/not-applicable
 attestation when requested, a protocol-valid denial for a missing/mismatched
-clock, or the stable infrastructure denial when admission cannot be proved.
+client session, or the stable infrastructure denial when admission cannot be
+proved. Managed-agent run telemetry is deliberately orthogonal: it measures
+task execution but never authorizes or bills client work.
 """
 
 from __future__ import annotations
@@ -45,7 +47,15 @@ OP_RE = re.compile(r':op\s+"(assert|retract)"')
 L_RE = re.compile(r':l\s+"((?:\\.|[^"\\])*)"')
 P_RE = re.compile(r':p\s+"((?:\\.|[^"\\])*)"')
 R_RE = re.compile(r':r\s+"((?:\\.|[^"\\])*)"')
-FACT_PREDICATES = {"session_of", "start_time", "end_time", "owner", "linear"}
+FACT_PREDICATES = {
+    "kind",
+    "start_time",
+    "end_time",
+    "owner",
+    "clocked_by",
+    "rate",
+    "linear",
+}
 STORE_GIT_RE = re.compile(
     r"/nix/store/[a-z0-9]{32}-git(?:-[^/]*)?/bin/git"
 )
@@ -405,27 +415,6 @@ def write_redirect_targets(tokens: list[str]) -> tuple[list[str], bool]:
     return targets, malformed
 
 
-def exact_clock_control(command: str) -> bool:
-    try:
-        tokens = shlex.split(command, posix=True)
-    except ValueError:
-        return False
-    if not trusted_command("north"):
-        return False
-    if tokens in (["north", "clock", "status"], ["north", "clock", "stop"]):
-        return True
-    return (
-        len(tokens) == 4
-        and tokens[:3] == ["north", "clock", "start"]
-        and bool(
-            re.fullmatch(
-                r"@?[A-Za-z0-9][A-Za-z0-9._:-]{0,127}",
-                tokens[3],
-            )
-        )
-    )
-
-
 def segment_is_execution_free(segment: list[str]) -> bool:
     command, _arguments = command_head(segment)
     if not command or not trusted_command(command):
@@ -437,20 +426,12 @@ def segment_is_execution_free(segment: list[str]) -> bool:
     return command in EXECUTION_FREE_COMMANDS
 
 
-def segment_is_data_only_north_steer(segment: list[str]) -> bool:
+def segment_is_north_control(segment: list[str]) -> bool:
     command, arguments = command_head(segment)
     return (
         command == "north"
         and trusted_command("north")
-        and len(arguments) == 3
-        and arguments[0] == "steer"
-        and bool(
-            re.fullmatch(
-                r"@?[A-Za-z0-9][A-Za-z0-9._:-]{0,511}",
-                arguments[1],
-            )
-        )
-        and bool(arguments[2])
+        and bool(arguments)
         and not write_redirect_targets(segment)[0]
         and not write_redirect_targets(segment)[1]
     )
@@ -459,8 +440,6 @@ def segment_is_data_only_north_steer(segment: list[str]) -> bool:
 def command_is_execution_free(command: str) -> bool:
     if os.environ.get("BASH_ENV") or os.environ.get("ENV"):
         return False
-    if exact_clock_control(command):
-        return True
     stripped = re.sub(
         r"(?:\d*>\s*&\s*\d+|\d+>\s*/dev/null|>\s*&\s*\d+)",
         "",
@@ -473,10 +452,10 @@ def command_is_execution_free(command: str) -> bool:
     if redirect_targets or malformed_redirect:
         return False
     commands = list(simple_commands(tokens))
+    if len(commands) == 1 and segment_is_north_control(commands[0]):
+        return True
     return bool(commands) and all(
-        segment_is_execution_free(segment)
-        or segment_is_data_only_north_steer(segment)
-        for segment in commands
+        segment_is_execution_free(segment) for segment in commands
     )
 
 
@@ -742,7 +721,7 @@ def generic_command_paths(
     for segment, ambiguity in expanded_commands(command, cwd):
         if (
             segment_is_execution_free(segment)
-            or segment_is_data_only_north_steer(segment)
+            or segment_is_north_control(segment)
         ):
             continue
         command_name, _arguments = command_head(segment)
@@ -807,6 +786,32 @@ def leading_cd_git_target(command: str, cwd: str) -> str | None:
     return target
 
 
+def explicit_nonclient_git_target(command: str, cwd: str) -> str | None:
+    """Return the exact absolute non-client scope of a single `git -C` call."""
+    if os.environ.get("BASH_ENV") or os.environ.get("ENV"):
+        return None
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        return None
+    if (
+        len(tokens) < 4
+        or tokens[0] != "git"
+        or tokens[1] != "-C"
+        or not tokens[2].startswith(("/", "~"))
+        or not trusted_command("git")
+        or any(
+            token in {"-c", "--git-dir", "--work-tree"}
+            or token.startswith(("--git-dir=", "--work-tree="))
+            for token in tokens[3:]
+        )
+        or any(marker in command for marker in (";", "&", "|", "`", "$(", "\n"))
+    ):
+        return None
+    target = canonical_path(tokens[2], cwd)
+    return None if client_of(target) else target
+
+
 def classify_edit(tool_input: dict[str, object], cwd: str) -> tuple[str, str] | None:
     path = canonical_path(tool_input.get("file_path"), cwd)
     client = client_of(path)
@@ -869,7 +874,7 @@ def classify_patch(tool_input: object, cwd: str) -> tuple[str, str] | None:
 
 def classify_shell(tool_input: dict[str, object], cwd: str) -> tuple[str, str] | None:
     command = tool_input.get("command", tool_input.get("cmd"))
-    input_cwd = tool_input.get("cwd", tool_input.get("workdir", ""))
+    input_cwd = tool_input.get("workdir") or tool_input.get("cwd", "")
     if (
         not isinstance(command, str)
         or not command
@@ -891,7 +896,10 @@ def classify_shell(tool_input: dict[str, object], cwd: str) -> tuple[str, str] |
         raise AdmissionUnavailable("multiple clients")
     command_client = next(iter(paths), None)
 
-    escape = leading_cd_git_target(command, shell_cwd) is not None
+    escape = (
+        leading_cd_git_target(command, shell_cwd) is not None
+        or explicit_nonclient_git_target(command, shell_cwd) is not None
+    )
     if not escape and not re.search(r"[;&|`]|\$\(", command):
         commands = expanded_commands(command, shell_cwd)
         if len(commands) == 1:
@@ -1155,22 +1163,6 @@ def clock_decision(
     by_subject: dict[str, dict[str, str]] = {}
     for (subject, predicate), (value, _transaction) in state.items():
         by_subject.setdefault(subject, {})[predicate] = value
-    open_sessions: list[tuple[str, str | None, str | None]] = []
-    for facts in by_subject.values():
-        if (
-            "session_of" in facts
-            and "start_time" in facts
-            and "end_time" not in facts
-        ):
-            thread = facts["session_of"]
-            thread_facts = by_subject.get(thread, {})
-            open_sessions.append(
-                (
-                    thread,
-                    thread_facts.get("owner"),
-                    thread_facts.get("linear"),
-                )
-            )
     candidate_threads = {
         subject
         for subject, facts in by_subject.items()
@@ -1179,18 +1171,35 @@ def clock_decision(
     if len(candidate_threads) > 1:
         raise AdmissionUnavailable("duplicate ticket thread identity")
     exact_thread = next(iter(candidate_threads), None)
-    if exact_thread and any(
-        thread == exact_thread for thread, _owner, _linear in open_sessions
-    ):
-        return "ALLOW", "", ""
-    thread_id = exact_thread or ""
+    if exact_thread is None:
+        return "NOTHREAD", "", ""
+
+    open_sessions: list[tuple[str, str]] = []
+    for subject, facts in by_subject.items():
+        if (
+            facts.get("kind") != "client_session"
+            or facts.get("clocked_by") != "user"
+            or "start_time" not in facts
+            or "end_time" in facts
+        ):
+            continue
+        owner = facts.get("owner")
+        rate = facts.get("rate")
+        if not owner or not rate:
+            raise AdmissionUnavailable("incomplete human client session")
+        open_sessions.append((subject, owner))
+    if len(open_sessions) > 1:
+        raise AdmissionUnavailable("multiple open human client sessions")
     if not open_sessions:
-        return "NOCLOCK", thread_id, ""
+        return "NOCLOCK", exact_thread, ""
+    session, owner = open_sessions[0]
+    if owner == client:
+        return "ALLOW", exact_thread, ""
     details = " ; ".join(
-        f"{thread} owner={owner or 'none'} linear={linear or 'none'}"
-        for thread, owner, linear in open_sessions
+        f"{session_id} owner={session_owner} clocked_by=user"
+        for session_id, session_owner in open_sessions
     )
-    return "MISMATCH", thread_id, details
+    return "MISMATCH", exact_thread, details
 
 
 def denial_reason(
@@ -1205,40 +1214,39 @@ def denial_reason(
             "Billable client edit blocked — branch ticket is missing or "
             f"ambiguous. The client '{client}' path must be in a Git worktree "
             f"whose current branch contains exactly one {client.upper()}-NNN "
-            "ticket, and the running North clock must be on that exact ticket "
-            "thread.\nCreate/switch to the ticket branch and retry after "
-            "starting its clock.\nDeliberate bypass: north config guards off "
+            "ticket.\nCreate or switch to the ticket branch, then retry. "
+            "North coordination and clock commands remain available while "
+            "this guard is denying the edit.\nDeliberate bypass: north config guards off "
             "(persistent, live) — or a session launched with "
             "AGENT_NO_AUTHORING_HOOKS=1."
         )
-    if thread_id:
-        hint = (
-            f"Thread for {ticket} exists — clock in:  "
-            f"north clock start {thread_id.removeprefix('@')}"
+    if kind == "NOTHREAD":
+        return (
+            f"Billable client edit blocked — branch ticket '{ticket}' has no "
+            "exact North traceability thread carrying both "
+            f"owner='{client}' and linear='{ticket}'. Create or repair that "
+            "thread; the human client clock is intentionally independent of "
+            "ticket changes.\nDeliberate bypass: north config guards off "
+            "(persistent, live) — or a session launched with "
+            "AGENT_NO_AUTHORING_HOOKS=1."
         )
-    else:
-        hint = (
-            f"No thread for {ticket} yet:  north capture "
-            f'"{ticket} <title>" {client}   then   north clock start <id>'
-        )
+    hint = f"north clock in {client}"
     if kind == "MISMATCH":
         return (
-            f"Billable client edit blocked — WRONG clock. This edit is for "
-            f"exact ticket '{ticket}', but no running clock is on a thread "
-            f"carrying both owner='{client}' and linear='{ticket}':\n  "
-            f"{details}\nA clock for the right client but a different ticket "
-            "does NOT legalize this edit — it mis-attributes the time. Stop "
-            "the wrong clock and start the exact ticket thread, then retry:\n"
-            f"  north clock stop\n  {hint}\nDeliberate bypass: north config "
+            f"Billable client edit blocked — WRONG client clock. Ticket "
+            f"'{ticket}' is traceable, but the one open human client session "
+            f"does not belong to owner='{client}':\n  {details}\nClock out of "
+            "the other client and into this client, then retry:\n"
+            f"  north clock out\n  {hint}\nDeliberate bypass: north config "
             "guards off (persistent, live) — or a session launched with "
             "AGENT_NO_AUTHORING_HOOKS=1."
         )
     return (
-        f"Billable client edit blocked — no north clock running for exact "
-        f"ticket '{ticket}' owned by client '{client}'. Client work is never "
+        f"Billable client edit blocked — no north clock running for human "
+        f"client owner '{client}' (ticket '{ticket}' is traceable). Client work is never "
         "done untracked (this gate exists because ~22h of MSA work once "
         "shipped with zero logged time and had to be reconstructed for an "
-        f"invoice). Start the exact ticket thread clock, then retry the edit:\n"
+        f"invoice). Clock into the client once, then retry the edit:\n"
         f"  {hint}\nDeliberate bypass: north config guards off (persistent, "
         "live) — or a session launched with AGENT_NO_AUTHORING_HOOKS=1."
     )
