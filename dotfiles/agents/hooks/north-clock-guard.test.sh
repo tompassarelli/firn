@@ -626,6 +626,23 @@ run na 'guard kill-switch command is itself always reachable' closed.log Bash \
   "north config guards off" "$CLIENT_DIR"
 run na 'capture can create missing traceability while an edit is denied' closed.log Bash \
   "north capture 'MSA-244 digest delivery' msa" "$CLIENT_DIR"
+canonical_north="$(realpath "$(command -v north)")"
+run na 'canonical absolute trusted north control remains exempt' closed.log Bash \
+  "$canonical_north clock status" "$CLIENT_DIR"
+run deny 'path-qualified north impostor cannot claim control exemption' closed.log Bash \
+  "/tmp/north anything" "$CLIENT_DIR"
+mkdir -p "$SCRATCH/north-link"
+ln -s "$canonical_north" "$SCRATCH/north-link/north"
+run deny 'path-qualified north symlink cannot claim control exemption' closed.log Bash \
+  "$SCRATCH/north-link/north clock status" "$CLIENT_DIR"
+run deny 'env wrapper cannot claim north control exemption' closed.log Bash \
+  "env north clock status" "$CLIENT_DIR"
+run deny 'command wrapper cannot claim north control exemption' closed.log Bash \
+  "command north clock status" "$CLIENT_DIR"
+NORTH_TEST='1' run deny 'assignment cannot claim north control exemption' \
+  closed.log Bash "NORTH_TEST=1 north clock status" "$CLIENT_DIR"
+CONTROL='north' run deny 'parameter command cannot claim north control exemption' \
+  closed.log Bash "\${CONTROL} clock status" "$CLIENT_DIR"
 run deny 'compound north control command is never exempt' closed.log Bash \
   "north clock in msa && true" "$CLIENT_DIR"
 run deny 'north output redirected into client code remains a mutation' closed.log Bash \
@@ -717,6 +734,8 @@ run deny 'nonclient cd cannot hide absolute client mutation' closed.log Bash \
 run deny 'later client cd invalidates explicit nonclient scope' closed.log Bash \
   "cd \"$NONCLIENT\" && git status && cd \"$CLIENT_DIR\" && git commit -m x" \
   "$CLIENT_DIR"
+run deny 'path-qualified cd impostor cannot establish external scope' closed.log Bash \
+  "/tmp/cd \"$NONCLIENT\" && git status" "$CLIENT_DIR"
 run deny 'arbitrary shell is not broadly blessed by nonclient cd' closed.log Bash \
   "cd \"$NONCLIENT\" && python3 -c 'print(1)'" "$CLIENT_DIR"
 run deny 'arbitrary Git helper is not broadly blessed by nonclient cd' closed.log Bash \

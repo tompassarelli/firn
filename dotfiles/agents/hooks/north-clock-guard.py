@@ -460,10 +460,11 @@ def segment_is_execution_free(segment: list[str]) -> bool:
 
 
 def segment_is_north_control(segment: list[str]) -> bool:
-    command, arguments = command_head(segment)
+    if not segment or not trusted_command_token(segment[0]):
+        return False
+    command, arguments = os.path.basename(segment[0]), segment[1:]
     return (
         command == "north"
-        and trusted_command("north")
         and bool(arguments)
         and not write_redirect_targets(segment)[0]
         and not write_redirect_targets(segment)[1]
@@ -842,9 +843,9 @@ def leading_nonclient_scope_target(command: str, cwd: str) -> str | None:
         index += 1
     if index >= len(segments):
         return None
-    command_name, arguments = command_head(segments[index])
-    if command_name != "cd" or len(arguments) != 1:
+    if segments[index][0] != "cd" or len(segments[index]) != 2:
         return None
+    arguments = segments[index][1:]
     raw_target = arguments[0]
     if not raw_target.startswith(("/", "~")):
         return None
