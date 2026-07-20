@@ -59,6 +59,7 @@
   myConfig.modules.imv.enable = lib.mkDefault true;
   myConfig.modules.jq.enable = lib.mkDefault true;
   myConfig.modules.libnotify.enable = lib.mkDefault true;
+  myConfig.modules.libsecret.enable = lib.mkDefault true;
   myConfig.modules.libtool.enable = lib.mkDefault true;
   myConfig.modules.lutris.enable = lib.mkDefault true;
   myConfig.modules.mail.enable = lib.mkDefault true;
