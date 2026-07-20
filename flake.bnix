@@ -23,6 +23,7 @@
    :fram {:url "git+file:///home/tom/code/fram?ref=main"}
    :gaffer {:url "git+file:///home/tom/code/gaffer?ref=main" :flake false}
    :gjoa {:url "github:tompassarelli/gjoa"}
+   :hermes-agent {:inputs.nixpkgs.follows "nixpkgs" :url "github:NousResearch/hermes-agent/244dabbd9c4b542bf5c1ad0159af512c2b5d6e08"}
    :north {:inputs.gaffer.follows "gaffer" :url "git+file:///home/tom/code/north?ref=main" :inputs.fram.follows "fram" :inputs.beagle.follows "beagle"}
    :nur {:url "github:nix-community/NUR"}
    :palefox {:url "github:tompassarelli/palefox"}
@@ -49,6 +50,7 @@
      fram
      gaffer
      gjoa
+     hermes-agent
      north
      nur
      palefox
@@ -80,6 +82,7 @@
                     :fram fram
                     :gaffer gaffer
                     :gjoa gjoa
+                    :hermes-agent hermes-agent
                     :north north
                     :nur nur
                     :palefox palefox
@@ -127,6 +130,7 @@
                     :fram fram
                     :gaffer gaffer
                     :gjoa gjoa
+                    :hermes-agent hermes-agent
                     :north north
                     :nur nur
                     :palefox palefox
@@ -291,6 +295,7 @@
                     :fram fram
                     :gaffer gaffer
                     :gjoa gjoa
+                    :hermes-agent hermes-agent
                     :north north
                     :nur nur
                     :palefox palefox
@@ -381,6 +386,7 @@
                     :fram fram
                     :gaffer gaffer
                     :gjoa gjoa
+                    :hermes-agent hermes-agent
                     :north north
                     :nur nur
                     :palefox palefox

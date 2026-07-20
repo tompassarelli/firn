@@ -1,0 +1,73 @@
+#lang beagle/nix
+
+(ns default)
+
+;; Hermes — a CONTROLLER HOST over the North MCP, not a new North provider.
+;;
+;; This module installs the pinned upstream Hermes CLI (NousResearch/hermes-agent,
+;; MIT, reviewed read-only) and materialises the canonical controller surface:
+;;
+;;   * ~/.hermes/config.yaml   — the ONLY enabled plugin is the Nix-owned
+;;     north-bridge adapter; native delegation (the `delegation` toolset /
+;;     delegate_task) is disabled; the canonical packaged North MCP is registered
+;;     by absolute path with the shared coordinator port + split-corpus state env
+;;     and Hermes' own `connect_timeout` key; shared external skills are wired to
+;;     ~/.agents/skills. No credentials.
+;;   * ~/.hermes/SOUL.md       — the stable shared global constitution (the same
+;;     provider-neutral dotfiles/agents/AGENTS.md every adapter obeys).
+;;   * ~/.hermes/plugins/north-bridge — the standalone fail-closed guard +
+;;     North-lifecycle bridge, installed as an IMMUTABLE nix-store source so
+;;     Python imports cannot write __pycache__ back into the dotfiles tree.
+;;
+;; NORTH_HERMES_LIFECYCLE_DIR points the bridge at the pinned North PACKAGE's bin
+;; (inputs.north.packages.${system}.default/bin) so it drives the real WRAPPED
+;; north-on-spawn / north-on-tooluse / north-on-stop / north-mark-delegated
+;; scripts — never the raw source checkout, never a fork. The bridge runs them
+;; with the provider env UNSET (never AGENT_PROVIDER=hermes) so North records the
+;; provider unobserved: Hermes is a controller host, not a North provider.
+;;
+;; The hermes-agent input follows root nixpkgs (see :flake-inputs) so it does not
+;; drag a second nixpkgs into the closure; the input URL pins the exact reviewed
+;; MIT commit and flake.lock records it. Package: the pinned upstream flake's
+;; `minimal` output (CLI + plugin/MCP runtime) — the lighter closure; `full`
+;; pulls every optional integration.
+(nix/module [config lib pkgs inputs flakeRoot ...]
+  (let
+    [username config.myConfig.modules.users.username
+     hermesPkg
+      (get (get inputs.hermes-agent.packages pkgs.stdenv.hostPlatform.system)
+        :minimal)
+     northPkg
+      (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)
+        :default)
+     northBin (s northPkg "/bin")]
+    {:flake-inputs
+      {:hermes-agent {:url "github:NousResearch/hermes-agent/244dabbd9c4b542bf5c1ad0159af512c2b5d6e08"
+                      :inputs.nixpkgs.follows "nixpkgs"}}
+     :options.myConfig.modules.hermes.enable
+      (lib.mkEnableOption
+        "Hermes controller host over the North MCP with the fail-closed north-bridge adapter")
+     :config
+      (lib.mkIf config.myConfig.modules.hermes.enable
+        {:environment.systemPackages [hermesPkg]
+         ;; Point the bridge at the pinned North source's hook scripts.
+         :environment.variables.NORTH_HERMES_LIFECYCLE_DIR northBin
+         :home-manager.users
+          {username
+            (nix/module [config ...]
+              {:home.sessionVariables.NORTH_HERMES_LIFECYCLE_DIR northBin
+               :home.file
+                {".hermes/config.yaml"
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/hermes/config.yaml"))}
+                 ".hermes/SOUL.md"
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/agents/AGENTS.md"))}
+                 ;; Immutable store copy — read-only, so `import north_bridge`
+                 ;; cannot scribble __pycache__ into dotfiles/hermes.
+                 ".hermes/plugins/north-bridge"
+                  {:source (s flakeRoot "/dotfiles/hermes/plugins/north-bridge")}}})}})}))

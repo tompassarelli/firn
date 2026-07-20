@@ -1,0 +1,46 @@
+# Canonical Hermes controller config — firn-managed (modules/hermes).
+#
+# Hermes is a controller HOST over the North MCP, NOT a North provider. This
+# file is materialised read-only from the repo; edit it here, not in ~/.hermes.
+#
+# It does four load-bearing things:
+#   1. Enables ONLY the Nix-owned north-bridge plugin (the fail-closed guard +
+#      North-lifecycle adapter). Plugins are opt-in in Hermes; nothing else runs.
+#   2. Disables native delegation (the `delegation` toolset / delegate_task).
+#      Delegation is a North lifecycle operation, dispatched through the North
+#      MCP — Hermes must never spawn its own subagent tree.
+#   3. Shares the provider-neutral external skills from ~/.agents/skills.
+#   4. Registers the canonical packaged North MCP with the same North coordinator
+#      port + split-corpus state env every other adapter uses. No credentials.
+
+plugins:
+  # Opt-in allow-list. north-bridge is the only local plugin.
+  enabled:
+    - north-bridge
+
+agent:
+  # Kill native delegation: the `delegation` toolset (delegate_task) is removed
+  # from every agent build. Delegation goes through North, not Hermes.
+  disabled_toolsets:
+    - delegation
+
+skills:
+  # Shared, read-only external skills — the same provider-neutral set Claude
+  # Code and Codex resolve. Skill creation still writes to ~/.hermes/skills.
+  external_dirs:
+    - ~/.agents/skills
+
+mcp_servers:
+  # Canonical packaged North MCP (pinned closure, not a checkout wrapper) with
+  # the canonical North coordinator port and split-corpus state env.
+  north:
+    # Absolute path to the pinned packaged closure (not a bare name resolved off
+    # PATH). connect_timeout is Hermes' own MCP schema key (hermes_cli.mcp_config,
+    # default 60) — startup_timeout_sec is a Codex-ism and is NOT a Hermes key.
+    command: /run/current-system/sw/bin/north-mcp-packaged
+    connect_timeout: 15
+    env:
+      FRAM_LOG: /home/tom/.local/state/north/coordination.log
+      FRAM_TELEMETRY_LOG: /home/tom/.local/state/north/telemetry.log
+      FRAM_THREADS: /home/tom/.local/state/north/threads
+      NORTH_PORT: "7977"

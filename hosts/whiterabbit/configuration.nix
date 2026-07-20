@@ -49,6 +49,7 @@
   myConfig.modules.nix-ld.enable = true;
   myConfig.modules.appimage.enable = true;
   myConfig.modules.codex.enable = true;
+  myConfig.modules.hermes.enable = true;
   myConfig.modules.vscode.enable = true;
   myConfig.modules.zed.enable = true;
   myConfig.modules.windows-vm.enable = false;

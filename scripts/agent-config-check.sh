@@ -505,6 +505,9 @@ CLAUDE="$REPO/dotfiles/claude"
 CODEX="$REPO/dotfiles/codex"
 CODEX_REQUIREMENTS="$REPO/modules/codex/requirements.toml"
 CODEX_LEGACY_HOOKS="${CODEX_LEGACY_HOOKS:-$CODEX/hooks.json}"
+HERMES="${AGENT_CONFIG_HERMES:-$REPO/dotfiles/hermes}"
+HERMES_BRIDGE="$HERMES/plugins/north-bridge"
+HERMES_MODULE="${AGENT_CONFIG_HERMES_MODULE:-$REPO/modules/hermes/default.bnix}"
 GAFFER_SYNC="$REPO/scripts/claude-gaffer-plugin-sync.sh"
 LOCAL=0
 VERBOSE=0
@@ -560,6 +563,24 @@ need_toml() {
   else
     bad "$label is not valid TOML: $file"
     return 1
+  fi
+}
+need_yaml() {
+  # Strict parse only when a YAML parser is present (PyYAML is not stdlib and
+  # is absent from the minimal system python / CI). When absent, structural
+  # grep assertions below carry the load — this never hard-fails on a missing
+  # parser, only on a genuinely malformed document.
+  local file="$1" label="$2"
+  [ -f "$file" ] || { bad "$label is missing: $file"; return 1; }
+  if python3 -c 'import yaml' >/dev/null 2>&1; then
+    if python3 -c 'import sys, yaml; yaml.safe_load(open(sys.argv[1]))' "$file" >/dev/null 2>&1; then
+      ok_detail "$label is valid YAML"
+    else
+      bad "$label is not valid YAML: $file"
+      return 1
+    fi
+  else
+    note "$label YAML strict-parse skipped (no PyYAML); structural checks apply"
   fi
 }
 canonical_link() {
@@ -1192,6 +1213,177 @@ provider_group Codex "$before" \
   "MCP         North: $codex_north" \
   "            Fram: $codex_fram" \
   "            Linear: $codex_linear"
+
+# Hermes — controller host over the North MCP. The static surface (config,
+# plugin manifest, fail-closed adapter, and firn module) is asserted here; live
+# symlink resolution is deferred to --local.
+before=$fail
+hermes_plugin='north-bridge (fail-closed guard + North lifecycle)'
+hermes_mcp='declared; canonical packaged North MCP + state env; live probe deferred'
+hermes_delegation='native delegate_task disabled (delegation toolset off)'
+hermes_adapter='fail-closed contract deferred'
+hermes_link='symlink resolution deferred to --local'
+need_yaml "$HERMES/config.yaml" 'Hermes controller config'
+# Structural assertions (parser-free): the config is small and firn-owned, so
+# canonical lines are unambiguous. Mirrors the codex grep-based MCP checks.
+grep -qE '^\s*-\s*north-bridge\s*$' "$HERMES/config.yaml" ||
+  bad 'Hermes config must enable the north-bridge plugin (plugins.enabled)'
+grep -qE '^\s*-\s*delegation\s*$' "$HERMES/config.yaml" ||
+  bad 'Hermes config must disable native delegation (agent.disabled_toolsets: - delegation)'
+grep -qE '^\s*command:\s*/run/current-system/sw/bin/north-mcp-packaged\s*$' "$HERMES/config.yaml" ||
+  bad 'Hermes North MCP command must be the absolute packaged path /run/current-system/sw/bin/north-mcp-packaged'
+grep -qE '^\s*connect_timeout:\s*[0-9]+\s*$' "$HERMES/config.yaml" ||
+  bad 'Hermes North MCP must set connect_timeout (Hermes MCP schema key)'
+if grep -qE '^\s*startup_timeout_sec:' "$HERMES/config.yaml"; then
+  bad 'Hermes config must not use startup_timeout_sec (Codex-ism, not a Hermes MCP key)'
+fi
+# No provider/auth surface may leak into the controller config.
+if grep -qiE '^\s*(api_key|provider|auth_mode|base_url|OPENROUTER_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|NOUS_API_KEY|token)\s*:' "$HERMES/config.yaml"; then
+  bad 'Hermes controller config must carry NO provider/auth/credential keys'
+fi
+grep -qE '^\s*NORTH_PORT:\s*"?7977"?\s*$' "$HERMES/config.yaml" ||
+  bad 'Hermes North MCP NORTH_PORT must be 7977'
+grep -qF "FRAM_LOG: $CANONICAL_FRAM_LOG" "$HERMES/config.yaml" ||
+  bad "Hermes North FRAM_LOG must be $CANONICAL_FRAM_LOG"
+grep -qF "FRAM_TELEMETRY_LOG: $CANONICAL_FRAM_TELEMETRY_LOG" "$HERMES/config.yaml" ||
+  bad "Hermes North FRAM_TELEMETRY_LOG must be $CANONICAL_FRAM_TELEMETRY_LOG"
+grep -qF "FRAM_THREADS: $CANONICAL_FRAM_THREADS" "$HERMES/config.yaml" ||
+  bad "Hermes North FRAM_THREADS must be $CANONICAL_FRAM_THREADS"
+if grep -qE '^\s*-\s*~/\.agents/skills\s*$' "$HERMES/config.yaml"; then
+  ok_detail 'Hermes shares provider-neutral ~/.agents/skills'
+else
+  bad 'Hermes config must share external skills ~/.agents/skills'
+fi
+# Source-code validation — parse through Hermes' OWN config loader, not just a
+# generic YAML parser. HERMES_VENV_PYTHON (or a hermes venv python discoverable
+# via HERMES_CONFIG_VALIDATOR) must be able to import hermes_cli.config and load
+# the file with every canonical value preserved. Deferred (structural checks
+# carry the load) when no Hermes venv is available (minimal CI / cross-eval).
+hermes_config='structural checks only (Hermes loader deferred)'
+hermes_validator="${HERMES_VENV_PYTHON:-${HERMES_CONFIG_VALIDATOR:-}}"
+if [ -n "$hermes_validator" ] && [ -x "$hermes_validator" ]; then
+  if "$hermes_validator" - "$HERMES/config.yaml" <<'PYEOF' >/dev/null 2>&1
+import os, sys, tempfile, shutil
+src = sys.argv[1]
+home = tempfile.mkdtemp()
+shutil.copy(src, os.path.join(home, "config.yaml"))
+os.environ["HERMES_HOME"] = home
+from hermes_cli.config import load_config
+cfg = load_config()
+mcp = (cfg.get("mcp_servers") or {}).get("north") or {}
+assert mcp.get("command") == "/run/current-system/sw/bin/north-mcp-packaged", mcp
+assert int(mcp.get("connect_timeout")) == 15, mcp
+assert (mcp.get("env") or {}).get("NORTH_PORT") == "7977", mcp
+assert "north-bridge" in (cfg.get("plugins") or {}).get("enabled", []), cfg.get("plugins")
+assert "delegation" in (cfg.get("agent") or {}).get("disabled_toolsets", []), cfg.get("agent")
+assert any("agents/skills" in d for d in (cfg.get("skills") or {}).get("external_dirs", [])), cfg.get("skills")
+PYEOF
+  then
+    hermes_config='validated through hermes_cli.config.load_config (values preserved)'
+    ok_detail 'Hermes config validated by the pinned Hermes loader (hermes_cli.config)'
+  else
+    hermes_config='REJECTED by hermes_cli.config.load_config'
+    bad 'Hermes config failed validation through the pinned Hermes loader (hermes_cli.config)'
+  fi
+fi
+# Plugin manifest + fail-closed adapter.
+if [ -f "$HERMES_BRIDGE/plugin.yaml" ]; then
+  need_yaml "$HERMES_BRIDGE/plugin.yaml" 'Hermes north-bridge manifest'
+  # The controller adapter must register the guard hook AND every lifecycle
+  # seam it maps: mail-context capture (post_tool_call), additionalContext
+  # injection (transform_tool_result / pre_llm_call), and the north-on-stop
+  # keep-going decision (pre_verify).
+  for hook in pre_tool_call post_tool_call transform_tool_result \
+              pre_llm_call pre_verify on_session_start on_session_end; do
+    grep -qE "^\s*-\s*$hook\s*$" "$HERMES_BRIDGE/plugin.yaml" ||
+      bad "north-bridge manifest must register the $hook hook"
+  done
+else
+  bad "north-bridge plugin manifest is missing: $HERMES_BRIDGE/plugin.yaml"
+fi
+# Hermes is a controller HOST, not a North provider: the adapter must NEVER
+# stamp AGENT_PROVIDER=hermes, so North records the provider unobserved.
+# Match a real assignment ("AGENT_PROVIDER": "hermes" / ["AGENT_PROVIDER"] =
+# "hermes"), not prose in a docstring that names the anti-pattern.
+if [ -f "$HERMES_BRIDGE/__init__.py" ] &&
+   grep -qE '"AGENT_PROVIDER"[^#]*"hermes"' "$HERMES_BRIDGE/__init__.py"; then
+  bad 'north-bridge must not set AGENT_PROVIDER=hermes (provider stays unobserved)'
+fi
+if [ -f "$HERMES_BRIDGE/__init__.py" ]; then
+  if command -v python3 >/dev/null 2>&1; then
+    if adapter_output="$(python3 "$HERMES_BRIDGE/north-bridge.test.py" 2>&1)"; then
+      hermes_adapter='fail-closed deny + unavailable + lifecycle proven'
+      ok_detail 'north-bridge adapter tests pass (fail-closed guard, unavailable, delegation, lifecycle)'
+    else
+      hermes_adapter='fail-closed contract BROKEN'
+      bad "north-bridge adapter tests failed — fail-closed enforcement may be broken:\n$adapter_output"
+    fi
+  else
+    bad 'python3 is required to prove the north-bridge fail-closed contract'
+  fi
+else
+  bad "north-bridge adapter implementation is missing: $HERMES_BRIDGE/__init__.py"
+fi
+# Firn module: pinned upstream package + materialised controller surface.
+HERMES_PINNED_REV='244dabbd9c4b542bf5c1ad0159af512c2b5d6e08'
+if [ -f "$HERMES_MODULE" ]; then
+  grep -q 'inputs.hermes-agent.packages' "$HERMES_MODULE" ||
+    bad 'Hermes module must install the pinned upstream inputs.hermes-agent package'
+  # The input URL must pin the exact reviewed MIT commit, not a floating branch.
+  grep -qF "\"github:NousResearch/hermes-agent/$HERMES_PINNED_REV\"" "$HERMES_MODULE" ||
+    bad "Hermes module must pin hermes-agent to the reviewed commit $HERMES_PINNED_REV"
+  # Lifecycle must drive the WRAPPED North package bin, never the source checkout.
+  grep -q 'inputs.north.packages' "$HERMES_MODULE" ||
+    bad 'Hermes module must resolve lifecycle scripts from inputs.north.packages.${system}.default'
+  if grep -qF '(s inputs.north "/bin")' "$HERMES_MODULE"; then
+    bad 'Hermes lifecycle dir must use the packaged North default/bin, not the raw inputs.north source'
+  fi
+  grep -q 'NORTH_HERMES_LIFECYCLE_DIR' "$HERMES_MODULE" ||
+    bad 'Hermes module must set NORTH_HERMES_LIFECYCLE_DIR for the bridge'
+  for want in '.hermes/config.yaml' '.hermes/SOUL.md' '.hermes/plugins/north-bridge'; do
+    grep -q "\"$want\"" "$HERMES_MODULE" ||
+      bad "Hermes module does not materialise $want"
+  done
+else
+  bad "Hermes firn module is missing: $HERMES_MODULE"
+fi
+# flake.lock must record the exact reviewed hermes-agent revision.
+hermes_locked_rev="$(
+  jq -er '.nodes["hermes-agent"].locked.rev | select(test("^[0-9a-f]{40}$"))' \
+    "$REPO/flake.lock" 2>/dev/null || true
+)"
+if [ "$hermes_locked_rev" = "$HERMES_PINNED_REV" ]; then
+  ok_detail "flake.lock pins hermes-agent to the reviewed commit ${HERMES_PINNED_REV:0:12}"
+else
+  bad "flake.lock hermes-agent rev is '${hermes_locked_rev:-missing}', expected $HERMES_PINNED_REV"
+fi
+if [ "$LOCAL" -eq 1 ]; then
+  canonical_link "$HOME/.hermes/config.yaml" "$HERMES/config.yaml" "$HOME/.hermes/config.yaml"
+  canonical_link "$HOME/.hermes/SOUL.md" "$SHARED/AGENTS.md" "$HOME/.hermes/SOUL.md"
+  # The plugin is an IMMUTABLE nix-store source (so imports cannot write
+  # __pycache__ into dotfiles) — assert it resolves into /nix/store, not the
+  # mutable working tree.
+  hermes_plugin_target="$(readlink -f "$HOME/.hermes/plugins/north-bridge" 2>/dev/null || true)"
+  case "$hermes_plugin_target" in
+    /nix/store/*) ok_detail 'Hermes north-bridge plugin is an immutable nix-store source' ;;
+    *) bad "Hermes north-bridge plugin must resolve into /nix/store (immutable), got: ${hermes_plugin_target:-<unresolved>}" ;;
+  esac
+  if command -v hermes >/dev/null 2>&1; then
+    hermes_link='config, constitution, and north-bridge symlinks resolve; hermes on PATH'
+  else
+    hermes_link='config/constitution/plugin symlinks resolve; hermes CLI missing from PATH'
+    bad 'hermes CLI is missing from PATH'
+  fi
+fi
+provider_group Hermes "$before" \
+  "Package     pinned upstream NousResearch/hermes-agent (minimal)" \
+  "Plugin      $hermes_plugin" \
+  "Delegation  $hermes_delegation" \
+  "Adapter     $hermes_adapter" \
+  "Config      $hermes_config" \
+  "MCP         North: $hermes_mcp" \
+  "Skills      shared ~/.agents/skills · constitution ~/.hermes/SOUL.md" \
+  "Link        $hermes_link"
 
 before=$fail
 north_coord_runtime='live probe deferred'

@@ -534,4 +534,120 @@ printf '%s\n' '#!/bin/sh' 'exit 1' >"$scratch/bin/readlink"
 chmod +x "$scratch/bin/readlink"
 PATH="$scratch/bin:$PATH" "$REPO/scripts/agent-config-check.sh" >/dev/null
 
+# --- Hermes controller adapter coverage ------------------------------------
+# The compact report must surface the Hermes group and its fail-closed adapter.
+hermes_report="$("$REPO/scripts/agent-config-check.sh")"
+grep -Fq 'native delegate_task disabled' <<<"$hermes_report"
+grep -Fq 'fail-closed deny + unavailable + lifecycle proven' <<<"$hermes_report"
+
+# The canonical config uses the absolute packaged command + Hermes' connect_timeout
+# key, and must NOT carry the Codex-ism startup_timeout_sec.
+grep -qE '^\s*command:\s*/run/current-system/sw/bin/north-mcp-packaged\s*$' \
+  "$REPO/dotfiles/hermes/config.yaml"
+grep -qE '^\s*connect_timeout:\s*[0-9]+\s*$' "$REPO/dotfiles/hermes/config.yaml"
+! grep -qE '^\s*startup_timeout_sec:' "$REPO/dotfiles/hermes/config.yaml"
+
+# The standalone north-bridge adapter tests are the fail-closed proof.
+python3 "$REPO/dotfiles/hermes/plugins/north-bridge/north-bridge.test.py" >/dev/null 2>&1
+
+# The adapter maps every North lifecycle seam Hermes exposes: it must declare
+# the guard hook, the mail-context capture, the additionalContext injection
+# points, and the north-on-stop keep-going decision gate.
+for hook in pre_tool_call post_tool_call transform_tool_result \
+            pre_llm_call pre_verify on_session_start on_session_end; do
+  grep -qE "^\s*-\s*$hook\s*$" \
+    "$REPO/dotfiles/hermes/plugins/north-bridge/plugin.yaml" || {
+    printf 'north-bridge manifest is missing the %s hook\n' "$hook" >&2
+    exit 1
+  }
+done
+# Hermes is a controller host, not a North provider — the adapter must never
+# stamp AGENT_PROVIDER=hermes so North records the provider unobserved.
+if grep -qE '"AGENT_PROVIDER"[^#]*"hermes"' \
+   "$REPO/dotfiles/hermes/plugins/north-bridge/__init__.py"; then
+  printf 'north-bridge sets AGENT_PROVIDER=hermes (provider must stay unobserved)\n' >&2
+  exit 1
+fi
+# The module must pin the exact reviewed hermes-agent commit and drive the
+# WRAPPED North package bin, never the raw source checkout.
+grep -qF '"github:NousResearch/hermes-agent/244dabbd9c4b542bf5c1ad0159af512c2b5d6e08"' \
+  "$REPO/modules/hermes/default.bnix"
+grep -qF 'inputs.north.packages' "$REPO/modules/hermes/default.bnix"
+if grep -qF '(s inputs.north "/bin")' "$REPO/modules/hermes/default.bnix"; then
+  printf 'Hermes lifecycle dir still points at the raw inputs.north source\n' >&2
+  exit 1
+fi
+
+# Regression: a Hermes module whose hermes-agent URL floats (no pinned rev) must
+# be REJECTED — the reviewed commit is load-bearing.
+hermes_module_unpinned="$scratch/hermes-module-unpinned.bnix"
+sed 's#github:NousResearch/hermes-agent/244dabbd9c4b542bf5c1ad0159af512c2b5d6e08#github:NousResearch/hermes-agent#' \
+  "$REPO/modules/hermes/default.bnix" >"$hermes_module_unpinned"
+if AGENT_CONFIG_HERMES_MODULE="$hermes_module_unpinned" \
+   "$REPO/scripts/agent-config-check.sh" >/dev/null 2>&1; then
+  printf 'agent-config-check accepted an unpinned hermes-agent module URL\n' >&2
+  exit 1
+fi
+
+# Regression: a Hermes config that re-enables native delegation AND drops the
+# north-bridge plugin AND points the North MCP at a checkout must be REJECTED.
+hermes_fixture="$scratch/hermes-broken"
+mkdir -p "$hermes_fixture/plugins/north-bridge"
+cp "$REPO/dotfiles/hermes/plugins/north-bridge/plugin.yaml" \
+   "$REPO/dotfiles/hermes/plugins/north-bridge/__init__.py" \
+   "$REPO/dotfiles/hermes/plugins/north-bridge/north-bridge.test.py" \
+   "$hermes_fixture/plugins/north-bridge/"
+printf '%s\n' \
+  'plugins:' \
+  '  enabled: []' \
+  'agent:' \
+  '  disabled_toolsets: []' \
+  'skills:' \
+  '  external_dirs: []' \
+  'mcp_servers:' \
+  '  north:' \
+  '    command: north-mcp' \
+  >"$hermes_fixture/config.yaml"
+if AGENT_CONFIG_HERMES="$hermes_fixture" \
+   "$REPO/scripts/agent-config-check.sh" >/dev/null 2>&1; then
+  printf 'agent-config-check accepted a Hermes config with native delegation re-enabled\n' >&2
+  exit 1
+fi
+
+# Regression: a config that keeps the plugin/delegation/skills correct but uses
+# the Codex-ism startup_timeout_sec + a bare (non-absolute) command must be
+# REJECTED — the schema key and the absolute path are load-bearing.
+hermes_fixture2="$scratch/hermes-timeout"
+mkdir -p "$hermes_fixture2/plugins/north-bridge"
+cp "$REPO/dotfiles/hermes/plugins/north-bridge/plugin.yaml" \
+   "$REPO/dotfiles/hermes/plugins/north-bridge/__init__.py" \
+   "$REPO/dotfiles/hermes/plugins/north-bridge/north-bridge.test.py" \
+   "$hermes_fixture2/plugins/north-bridge/"
+printf '%s\n' \
+  'plugins:' \
+  '  enabled:' \
+  '    - north-bridge' \
+  'agent:' \
+  '  disabled_toolsets:' \
+  '    - delegation' \
+  'skills:' \
+  '  external_dirs:' \
+  '    - ~/.agents/skills' \
+  'mcp_servers:' \
+  '  north:' \
+  '    command: north-mcp-packaged' \
+  '    startup_timeout_sec: 15' \
+  '    env:' \
+  '      NORTH_PORT: "7977"' \
+  '      FRAM_LOG: /home/tom/.local/state/north/coordination.log' \
+  '      FRAM_TELEMETRY_LOG: /home/tom/.local/state/north/telemetry.log' \
+  '      FRAM_THREADS: /home/tom/.local/state/north/threads' \
+  >"$hermes_fixture2/config.yaml"
+if AGENT_CONFIG_HERMES="$hermes_fixture2" \
+   "$REPO/scripts/agent-config-check.sh" >/dev/null 2>&1; then
+  printf 'agent-config-check accepted a Hermes config with startup_timeout_sec + bare command\n' >&2
+  exit 1
+fi
+
 printf 'ok: Claude native identity + authoritative Codex managed policy + canonical Gaffer source identity are exact\n'
+printf 'ok: Hermes controller adapter — fail-closed north-bridge, disabled native delegation, packaged North MCP\n'

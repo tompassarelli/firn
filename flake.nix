@@ -50,6 +50,10 @@
     gjoa = {
       url = "github:tompassarelli/gjoa";
     };
+    hermes-agent = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:NousResearch/hermes-agent/244dabbd9c4b542bf5c1ad0159af512c2b5d6e08";
+    };
     north = {
       inputs.gaffer.follows = "gaffer";
       url = "git+file:///home/tom/code/north?ref=main";
@@ -75,7 +79,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, fram, gaffer, gjoa, north, nur, palefox, quickshell, walker, zen-browser, ... }: let
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, fram, gaffer, gjoa, hermes-agent, north, nur, palefox, quickshell, walker, zen-browser, ... }: let
     firnModules = ./modules;
   in
   {
@@ -88,6 +92,7 @@
           fram = fram;
           gaffer = gaffer;
           gjoa = gjoa;
+          hermes-agent = hermes-agent;
           north = north;
           nur = nur;
           palefox = palefox;
@@ -123,6 +128,7 @@
               fram = fram;
               gaffer = gaffer;
               gjoa = gjoa;
+              hermes-agent = hermes-agent;
               north = north;
               nur = nur;
               palefox = palefox;
@@ -289,6 +295,7 @@
           fram = fram;
           gaffer = gaffer;
           gjoa = gjoa;
+          hermes-agent = hermes-agent;
           north = north;
           nur = nur;
           palefox = palefox;
@@ -372,6 +379,7 @@
                 fram = fram;
                 gaffer = gaffer;
                 gjoa = gjoa;
+                hermes-agent = hermes-agent;
                 north = north;
                 nur = nur;
                 palefox = palefox;
