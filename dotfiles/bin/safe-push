@@ -7,30 +7,70 @@
 # guard, and it travels with this command, so it protects repos that have no
 # commit-time hook (north/fram/beagle today).
 #
-# Usage:  safe-push              push current branch to origin
-#         safe-push --dry-run    run the scan + checks, do not push
-#         safe-push --tag NAME   push tag NAME; its target commit must already be
-#                                on origin (i.e. previously safe-pushed), and the
-#                                tag annotation itself is secret-scanned
+# Usage:  safe-push [--dry-run]
+#         safe-push [--dry-run] --tag NAME
 set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: safe-push [--dry-run]
+       safe-push [--dry-run] --tag NAME
+
+Scan outgoing content for secrets, then push the current branch or one tag.
+
+Options:
+  --dry-run    run all safety checks without pushing
+  --tag NAME   push an existing tag whose target is already on origin
+  -h, --help   print this help without inspecting a repository
+USAGE
+}
+
+argument_error() {
+  printf 'safe-push: %s\n' "$1" >&2
+  usage >&2
+  exit 2
+}
+
+dry=0
+tag=""
+tag_seen=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help)
+      if [ "$#" -ne 1 ] || [ "$dry" -eq 1 ] || [ "$tag_seen" -eq 1 ]; then
+        argument_error '--help cannot be combined with other arguments'
+      fi
+      usage
+      exit 0
+      ;;
+    --dry-run)
+      [ "$dry" -eq 0 ] || argument_error 'duplicate --dry-run'
+      dry=1
+      shift
+      ;;
+    --tag)
+      [ "$tag_seen" -eq 0 ] || argument_error 'duplicate --tag'
+      [ "$#" -ge 2 ] || argument_error '--tag needs a name'
+      case "$2" in
+        ''|-*) argument_error '--tag needs a name' ;;
+      esac
+      tag="$2"
+      tag_seen=1
+      shift 2
+      ;;
+    -f|--force|--force-with-lease|--mirror|--delete|--prune)
+      printf "safe-push: refuses '%s' — force/destructive pushes are deliberate + manual, not automatic\n" "$1" >&2
+      exit 1
+      ;;
+    *)
+      argument_error "unknown argument '$1'"
+      ;;
+  esac
+done
 
 git rev-parse --show-toplevel >/dev/null 2>&1 || { echo "safe-push: not in a git repo"; exit 1; }
 branch=$(git rev-parse --abbrev-ref HEAD)
 [ "$branch" = "HEAD" ] && { echo "safe-push: detached HEAD — checkout a branch first"; exit 1; }
-
-dry=0
-tag=""
-expect_tag=0
-for a in "$@"; do
-  if [ "$expect_tag" = 1 ]; then tag="$a"; expect_tag=0; continue; fi
-  case "$a" in
-    --dry-run) dry=1 ;;
-    --tag) expect_tag=1 ;;
-    -f|--force|--force-with-lease|--mirror|--delete|--prune)
-      echo "safe-push: refuses '$a' — force/destructive pushes are deliberate + manual, not automatic"; exit 1 ;;
-  esac
-done
-[ "$expect_tag" = 1 ] && { echo "safe-push: --tag needs a name"; exit 1; }
 
 # --- tag mode: no new commit content may ride a tag push --------------------------
 # A tag ref carries only the tag object; the guard is (a) its target commit is

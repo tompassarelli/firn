@@ -60,3 +60,7 @@ jobs:
           "$RACO" test scripts/firn-cmds/doctor.rkt
           "$RACO" test scripts/firn-cmds/diff.rkt
           ./scripts/firn-schema-input-fingerprint.test.sh
+
+      - name: Test safe-push argument gate
+        working-directory: firn
+        run: ./dotfiles/bin/safe-push.test.sh
