@@ -1,0 +1,27 @@
+#lang beagle/nix
+
+(ns default)
+
+(nix/module [config lib pkgs ...]
+  (let [username config.myConfig.modules.users.username]
+    {:options.myConfig.modules.proton-autopurge.enable
+      (lib.mkEnableOption
+        "Daily Proton spam autopurge via ~/proton-triage (rescue correspondents, purge the rest)")
+     :config
+      (lib.mkIf config.myConfig.modules.proton-autopurge.enable
+        {:home-manager.users
+          {username
+            (nix/module [config ...]
+              {:systemd.user.services.proton-spam-autopurge
+                {:Unit
+                  {:Description "Proton spam autopurge (rescue -> grace -> purge, ledgered)"}
+                 :Service
+                  {:Type "oneshot"
+                   :ExecStart "/home/tom/proton-triage/autopurge-run.sh"}}
+               :systemd.user.timers.proton-spam-autopurge
+                {:Unit {:Description "Daily Proton spam autopurge"}
+                 :Timer
+                  {:OnCalendar "*-*-* 09:30"
+                   :Persistent true
+                   :RandomizedDelaySec "10m"}
+                 :Install {:WantedBy ["timers.target"]}}})}})}))
