@@ -2,7 +2,15 @@
 
 let
   username = config.myConfig.modules.users.username;
-  hermesPkg = inputs.hermes-agent.packages."${pkgs.stdenv.hostPlatform.system}".minimal;
+  minimalPkg = inputs.hermes-agent.packages."${pkgs.stdenv.hostPlatform.system}".minimal;
+  hermesPkg = minimalPkg.override (prev: {
+    callPackage = f: args: let
+      drv = prev.callPackage f args;
+    in
+    if ((drv.pname or null) == "hermes-tui") then drv.overrideAttrs (o: {
+      src = inputs.hermes-agent;
+    }) else drv;
+  });
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
   northBin = "${northPkg}/bin";
 in

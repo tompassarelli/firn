@@ -34,9 +34,28 @@
 (nix/module [config lib pkgs inputs flakeRoot ...]
   (let
     [username config.myConfig.modules.users.username
-     hermesPkg
+     ;; Upstream nix/tui.nix builds hermes-tui with `dirs = ["ui-tui"]`, which
+     ;; filters the npm src to just ui-tui and OMITS the apps/shared workspace
+     ;; member. ui-tui/package.json declares `@hermes/shared: file:../apps/shared`
+     ;; and (at rev 244dabbd) ui-tui imports `@hermes/shared/charge-settlement`,
+     ;; so esbuild can't resolve it and the hermes-tui build — a build-time dep
+     ;; of the minimal package — fails. The reviewed pin is correct; the Nix
+     ;; packaging omitted a workspace source. Fix stays in nixos-config with the
+     ;; upstream checkout read-only: intercept the flake's own callPackage and
+     ;; widen ONLY hermes-tui's src to the full workspace tree so npm's
+     ;; file:../apps/shared symlink resolves. Everything else is untouched.
+     minimalPkg
       (get (get inputs.hermes-agent.packages pkgs.stdenv.hostPlatform.system)
         :minimal)
+     hermesPkg
+      (minimalPkg.override
+        (fn [prev]
+          {:callPackage
+            (fn [f args]
+              (let [drv (prev.callPackage f args)]
+                (if (== (get-or drv pname nil) "hermes-tui")
+                  (drv.overrideAttrs (fn [o] {:src inputs.hermes-agent}))
+                  drv)))}))
      northPkg
       (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)
         :default)
