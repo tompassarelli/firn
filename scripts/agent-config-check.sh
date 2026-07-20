@@ -698,6 +698,7 @@ HERMES="${AGENT_CONFIG_HERMES:-$REPO/dotfiles/hermes}"
 HERMES_BRIDGE="$HERMES/plugins/north-bridge"
 HERMES_MODULE="${AGENT_CONFIG_HERMES_MODULE:-$REPO/modules/hermes/default.bnix}"
 GAFFER_SYNC="$REPO/scripts/claude-gaffer-plugin-sync.sh"
+LAUNCHER_BIN="$REPO/dotfiles/bin"
 LOCAL=0
 VERBOSE=0
 CANONICAL_FRAM_LOG="$HOME/.local/state/north/coordination.log"
@@ -1115,6 +1116,13 @@ else bad "Claude statusline is not wired to $CLAUDE/statusline.sh"; fi
 if bash "$CLAUDE/statusline.test.sh" >/dev/null; then
   ok_detail "Claude statusline observer is detached and output-safe"
 else bad "Claude statusline observer test failed"; fi
+if command -v shellcheck >/dev/null 2>&1 && \
+   shellcheck -S warning "$LAUNCHER_BIN/claude" "$LAUNCHER_BIN/codex" "$LAUNCHER_BIN/launcher.test.sh"; then
+  ok_detail "Account launcher wrappers shellcheck"
+else bad "Account launcher wrappers shellcheck failed"; fi
+if bash "$LAUNCHER_BIN/launcher.test.sh" >/dev/null; then
+  ok_detail "Account launcher fallbacks are diagnostic (missing/nonzero/empty/malformed north, no-eligible, absent dir, clean pick)"
+else bad "Account launcher diagnostics test failed"; fi
 if jq -e '.autoMemoryEnabled == false' "$CLAUDE/settings.json" >/dev/null; then ok_detail "auto-memory disabled"
 else bad "Claude autoMemoryEnabled must be false"; fi
 if jq -e '

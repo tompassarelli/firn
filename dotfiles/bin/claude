@@ -3,7 +3,11 @@
 #   bare / any args -> auto-select the north-managed Anthropic account with the
 #                      most headroom, then exec the real claude.
 #   as <id> [args]  -> pin one account explicitly.
-# Fails open: if north can't answer, run the real binary ambient.
+# Fails OPEN: north trouble never blocks the real binary — but the banner names
+# the ACTUAL reason (north missing / snapshot error / empty or malformed data /
+# no eligible account / vanished account dir), never a blanket "north
+# unavailable", and points at an explicit `claude as <id>` recovery — using a
+# real id when one is known, never guessing one.
 set -u
 
 PROVIDER_WORD="claude"
@@ -65,13 +69,47 @@ fi
 
 # 3. Auto-select greatest-headroom account from north's machine boundary.
 #    Rank: headroom class (plenty>low>other), then lowest used% on the binding
-#    window, then north's target listing order. Fail open on any trouble.
-choose() {
-  command -v north >/dev/null 2>&1 || return 1
-  local json
-  json="$(north providers --json 2>/dev/null)" || return 1
-  [ -n "$json" ] || return 1
-  printf '%s' "$json" | jq -r --arg prov "$NORTH_PROVIDER" --arg limit "$BIND_LIMIT" '
+#    window, then north's target listing order. Every failure mode fails OPEN
+#    but is reported distinctly — the caller learns WHY it went ambient.
+#
+#    Emits a single tab-separated verdict line on stdout:
+#      ok\t<account-id>     a rankable eligible account was chosen
+#      err\t<reason>        no id — <reason> is a concise, actionable cause
+#    Never touches account state; the caller decides how to act on the verdict.
+select_account() {
+  if ! command -v north >/dev/null 2>&1; then
+    printf 'err\tnorth not found on PATH\n'
+    return
+  fi
+
+  local errfile json rc detail
+  errfile="$(mktemp 2>/dev/null || true)"
+  if [ -n "$errfile" ]; then
+    json="$(north providers --json 2>"$errfile")"; rc=$?
+  else
+    json="$(north providers --json 2>/dev/null)"; rc=$?
+  fi
+
+  if [ "$rc" -ne 0 ]; then
+    detail=""
+    [ -n "$errfile" ] && detail="$(head -n1 "$errfile" 2>/dev/null)"
+    [ -n "$errfile" ] && rm -f "$errfile"
+    if [ -n "$detail" ]; then
+      printf 'err\tnorth providers exited %s: %s\n' "$rc" "$detail"
+    else
+      printf 'err\tnorth providers exited %s\n' "$rc"
+    fi
+    return
+  fi
+  [ -n "$errfile" ] && rm -f "$errfile"
+
+  if [ -z "$json" ]; then
+    printf 'err\tnorth providers returned no output\n'
+    return
+  fi
+
+  local id
+  if ! id="$(printf '%s' "$json" | jq -r --arg prov "$NORTH_PROVIDER" --arg limit "$BIND_LIMIT" '
     (.providers[]? | select(.provider==$prov) | .targets) // []
     | to_entries
     | map(.value + {order: .key})
@@ -86,14 +124,49 @@ choose() {
       })
     | sort_by(.hclass, .used, .order)
     | .[0].id // empty
-  ' 2>/dev/null
+  ' 2>/dev/null)"; then
+    printf 'err\tnorth providers JSON was malformed\n'
+    return
+  fi
+
+  if [ -z "$id" ]; then
+    printf 'err\tno eligible %s account (need authenticated + routing-eligible)\n' "$NORTH_PROVIDER"
+    return
+  fi
+
+  printf 'ok\t%s\n' "$id"
 }
 
-acct="$(choose)"
-if [ -n "$acct" ] && [ -d "$ACCOUNTS_ROOT/$acct" ]; then
-  export CLAUDE_CONFIG_DIR="$ACCOUNTS_ROOT/$acct"
-  echo "[$PROVIDER_WORD → $acct]" >&2
+# Concise recovery hint: prefer a real, known id; otherwise show the command
+# shape with any on-disk account ids, never inventing an account.
+recovery_hint() {
+  local known
+  known="$(list_accounts | paste -sd, - 2>/dev/null)"
+  if [ -n "$known" ]; then
+    printf 'pin explicitly: %s as <id> (known: %s)' "$PROVIDER_WORD" "$known"
+  else
+    printf 'no %s accounts present — authenticate one, then: %s as <id>' \
+      "$PROVIDER_WORD" "$PROVIDER_WORD"
+  fi
+}
+
+verdict="$(select_account)"
+kind="${verdict%%$'\t'*}"
+value="${verdict#*$'\t'}"
+
+if [ "$kind" = "ok" ] && [ -n "$value" ]; then
+  if [ -d "$ACCOUNTS_ROOT/$value" ]; then
+    export CLAUDE_CONFIG_DIR="$ACCOUNTS_ROOT/$value"
+    printf '[%s → %s]\n' "$PROVIDER_WORD" "$value" >&2
+  else
+    # An id was selected but its state dir vanished. Do NOT auto-pick it
+    # (unverified stale account); fail open and name the exact recovery.
+    printf '[%s → ambient] selected %s but %s/%s is absent — pin once restored: %s as %s\n' \
+      "$PROVIDER_WORD" "$value" "$ACCOUNTS_ROOT" "$value" "$PROVIDER_WORD" "$value" >&2
+  fi
 else
-  echo "[$PROVIDER_WORD → ambient (north unavailable)]" >&2
+  reason="$value"
+  [ "$kind" = "ok" ] && reason="north returned an empty selection"
+  printf '[%s → ambient] %s — %s\n' "$PROVIDER_WORD" "$reason" "$(recovery_hint)" >&2
 fi
 exec "$REAL" "$@"
