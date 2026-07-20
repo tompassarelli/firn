@@ -272,8 +272,9 @@ environment_lines_value() {
 }
 
 north_coord_runtime_identity_is_valid() {
-  local mode="$1" source="$2" revision="$3" selector="$4"
-  local canonical_source canonical_selector expected_source observed_revision
+  local mode="$1" source="$2" revision="$3" tree="$4" origin="$5" daemon="$6" selector="$7"
+  local canonical_source canonical_selector canonical_daemon expected_source
+  local observed_revision observed_tree observed_common observed_origin top_level
 
   NORTH_COORD_RUNTIME_IDENTITY_REASON=''
   [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || {
@@ -282,6 +283,10 @@ north_coord_runtime_identity_is_valid() {
   }
   [ -L "$selector" ] || {
     NORTH_COORD_RUNTIME_IDENTITY_REASON="stable selector is not a symlink: $selector"
+    return 1
+  }
+  [ "$(readlink "$selector")" = active/current ] || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON="stable selector target is substituted: $selector"
     return 1
   }
   canonical_source="$(realpath -e "$source" 2>/dev/null)" || {
@@ -300,6 +305,14 @@ north_coord_runtime_identity_is_valid() {
     NORTH_COORD_RUNTIME_IDENTITY_REASON='selected Fram daemon is not executable'
     return 1
   }
+  canonical_daemon="$(realpath -e "$daemon" 2>/dev/null)" || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON="runtime daemon is missing: $daemon"
+    return 1
+  }
+  [ "$canonical_daemon" = "$canonical_source/bin/fram-daemon" ] || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON='runtime daemon is not the selected physical Fram daemon'
+    return 1
+  }
 
   case "$mode" in
     checkout)
@@ -308,12 +321,56 @@ north_coord_runtime_identity_is_valid() {
         NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source is outside its revision-owned deployment path'
         return 1
       }
+      [ -d "$source" ] && [ ! -L "$source" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout deployment is not a real directory'
+        return 1
+      }
+      top_level="$(git -C "$canonical_source" rev-parse --show-toplevel 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source is not a Git worktree root'
+        return 1
+      }
+      [ "$(realpath -e "$top_level" 2>/dev/null)" = "$canonical_source" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source is not its Git worktree root'
+        return 1
+      }
+      if git -C "$canonical_source" symbolic-ref -q HEAD >/dev/null 2>&1; then
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source HEAD is attached to a mutable branch'
+        return 1
+      fi
       observed_revision="$(git -C "$canonical_source" rev-parse --verify HEAD 2>/dev/null)" || {
         NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source has no readable Git HEAD'
         return 1
       }
       [ "$observed_revision" = "$revision" ] || {
         NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source HEAD differs from declared revision'
+        return 1
+      }
+      [[ "$tree" =~ ^[0-9a-f]{40}$ ]] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout tree is not an exact Git object ID'
+        return 1
+      }
+      observed_tree="$(git -C "$canonical_source" rev-parse --verify 'HEAD^{tree}' 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source tree is unreadable'
+        return 1
+      }
+      [ "$observed_tree" = "$tree" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source tree differs from declared tree'
+        return 1
+      }
+      observed_common="$(git -C "$canonical_source" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source origin is unreadable'
+        return 1
+      }
+      case "$observed_common" in
+        */.git) observed_origin=${observed_common%/.git} ;;
+        *) observed_origin=$observed_common ;;
+      esac
+      observed_origin="$(realpath -e "$observed_origin" 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source origin cannot be canonicalized'
+        return 1
+      }
+      [ "$observed_origin" = "$origin" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source origin differs from declared origin'
         return 1
       }
       git -C "$canonical_source" diff --quiet --no-ext-diff -- || {
@@ -328,6 +385,14 @@ north_coord_runtime_identity_is_valid() {
     package)
       [[ "$canonical_source" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*$ ]] || {
         NORTH_COORD_RUNTIME_IDENTITY_REASON='package source is not a direct Fram Nix-store root'
+        return 1
+      }
+      [ "$tree" = "immutable:$revision" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='package tree marker does not bind its package revision'
+        return 1
+      }
+      [ "$origin" = "$canonical_source" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='package origin does not name its immutable store root'
         return 1
       }
       ;;
@@ -1517,6 +1582,9 @@ if [ "$LOCAL" -eq 1 ]; then
       north_coord_mode="$(environment_lines_value "$north_coord_process_env" NORTH_FRAM_RUNTIME 2>/dev/null || true)"
       north_coord_source="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_SOURCE 2>/dev/null || true)"
       north_coord_revision="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_REV 2>/dev/null || true)"
+      north_coord_tree="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_TREE 2>/dev/null || true)"
+      north_coord_origin="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_ORIGIN 2>/dev/null || true)"
+      north_coord_daemon="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_DAEMON 2>/dev/null || true)"
       north_coord_selector="$HOME/.local/state/north/fram-runtime/current"
       if ! grep -Fxq "$CANONICAL_FRAM_LOG" <<<"$north_coord_process_cmdline"; then
         north_coord_ok=0
@@ -1524,11 +1592,21 @@ if [ "$LOCAL" -eq 1 ]; then
       fi
       if north_coord_runtime_identity_is_valid \
            "$north_coord_mode" "$north_coord_source" "$north_coord_revision" \
+           "$north_coord_tree" "$north_coord_origin" "$north_coord_daemon" \
            "$north_coord_selector"; then
         ok_detail "north-coord runtime identity is exact: $north_coord_mode@$north_coord_revision ($north_coord_source)"
       else
         north_coord_ok=0
         bad "north-coord runtime identity is invalid: ${NORTH_COORD_RUNTIME_IDENTITY_REASON:-missing identity}"
+      fi
+      if grep -q '^FRAM_RUNTIME_OWNER_TOKEN=' <<<"$north_coord_process_env"; then
+        north_coord_ok=0
+        bad "north-coord systemd service carries a direct-launch owner token"
+      fi
+      if [ ! -r "/proc/$north_coord_pid/cgroup" ] ||
+         ! grep -Eq '^[^:]*:[^:]*:/system\.slice/north-coord\.service(/|$)' "/proc/$north_coord_pid/cgroup"; then
+        north_coord_ok=0
+        bad "north-coord MainPID is not owned by system.slice/north-coord.service"
       fi
     else
       north_coord_ok=0

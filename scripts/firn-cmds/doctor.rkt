@@ -113,6 +113,8 @@
 (define (current-schema-fingerprint root mode)
   (define helper (build-path root "scripts" "firn-schema-input-fingerprint"))
   (define lock (build-path root "flake.lock"))
+  (define beagle-path
+    (or (getenv "BEAGLE_PATH") (build-path root ".." "beagle")))
   (cond
     [(not (file-exists? helper))
      (values #f "" (format "fingerprint helper missing: ~a" helper))]
@@ -125,7 +127,8 @@
        (parameterize ([current-output-port out] [current-error-port err])
          (system* (path->string helper)
                   "--mode" mode
-                  "--lock" (path->string lock))))
+                  "--lock" (path->string lock)
+                  "--beagle-path" (path->string beagle-path))))
      (values ok?
              (string-trim (get-output-string out))
              (string-trim (get-output-string err)))]))

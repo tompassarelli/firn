@@ -77,12 +77,12 @@ PY
     return 1
   fi
   recorded_fp="$(<"$SCHEMA_FP")"
-  current_fp="$("$FP_HELPER" --mode nixos --lock "$FLAKE_LOCK" 2>/dev/null)" || {
-    SCHEMA_CACHE_REASON='cannot fingerprint flake.lock schema inputs'
+  current_fp="$("$FP_HELPER" --mode nixos --lock "$FLAKE_LOCK" --beagle-path "$BEAGLE_PATH" 2>/dev/null)" || {
+    SCHEMA_CACHE_REASON='cannot fingerprint flake.lock and Beagle schema tool inputs'
     return 1
   }
   if [[ "$recorded_fp" != "$current_fp" ]]; then
-    SCHEMA_CACHE_REASON='schema input fingerprint differs from flake.lock'
+    SCHEMA_CACHE_REASON='schema input fingerprint differs from flake.lock or Beagle tool identity'
     return 1
   fi
   return 0

@@ -37,26 +37,40 @@ mutate_lock() {
 }
 
 LOCK="$SCRATCH/flake.lock"
+BEAGLE="$SCRATCH/beagle"
+mkdir -p "$BEAGLE/bin" "$BEAGLE/beagle-lib"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$BEAGLE/bin/beagle-extract-schema"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$BEAGLE/bin/beagle-validate"
+printf '%s\n' '#lang racket/base' '(define tool-rev 1)' >"$BEAGLE/beagle-lib/schema-tool.rkt"
+chmod +x "$BEAGLE/bin/beagle-extract-schema" "$BEAGLE/bin/beagle-validate"
 write_lock "$LOCK"
-nixos_initial="$($HELPER --mode nixos --lock "$LOCK")"
-darwin_initial="$($HELPER --mode darwin --lock "$LOCK")"
+nixos_initial="$($HELPER --mode nixos --lock "$LOCK" --beagle-path "$BEAGLE")"
+darwin_initial="$($HELPER --mode darwin --lock "$LOCK" --beagle-path "$BEAGLE")"
 
 mutate_lock "$LOCK" '.nodes["north-node"].locked.rev = "north-2"'
-[[ "$($HELPER --mode nixos --lock "$LOCK")" == "$nixos_initial" ]]
-[[ "$($HELPER --mode darwin --lock "$LOCK")" == "$darwin_initial" ]]
+[[ "$($HELPER --mode nixos --lock "$LOCK" --beagle-path "$BEAGLE")" == "$nixos_initial" ]]
+[[ "$($HELPER --mode darwin --lock "$LOCK" --beagle-path "$BEAGLE")" == "$darwin_initial" ]]
+
+# Dirty or changed Beagle implementation bytes invalidate the schema cache even
+# when every flake input is unchanged.
+printf '%s\n' '#lang racket/base' '(define tool-rev 2)' >"$BEAGLE/beagle-lib/schema-tool.rkt"
+[[ "$($HELPER --mode nixos --lock "$LOCK" --beagle-path "$BEAGLE")" != "$nixos_initial" ]]
+[[ "$($HELPER --mode darwin --lock "$LOCK" --beagle-path "$BEAGLE")" != "$darwin_initial" ]]
+printf '%s\n' '#lang racket/base' '(define tool-rev 1)' >"$BEAGLE/beagle-lib/schema-tool.rkt"
+[[ "$($HELPER --mode nixos --lock "$LOCK" --beagle-path "$BEAGLE")" == "$nixos_initial" ]]
 
 mutate_lock "$LOCK" '.nodes["nixpkgs-node"].locked.rev = "nixpkgs-2"'
-nixos_after_nixpkgs="$($HELPER --mode nixos --lock "$LOCK")"
-darwin_after_nixpkgs="$($HELPER --mode darwin --lock "$LOCK")"
+nixos_after_nixpkgs="$($HELPER --mode nixos --lock "$LOCK" --beagle-path "$BEAGLE")"
+darwin_after_nixpkgs="$($HELPER --mode darwin --lock "$LOCK" --beagle-path "$BEAGLE")"
 [[ "$nixos_after_nixpkgs" != "$nixos_initial" ]]
 [[ "$darwin_after_nixpkgs" != "$darwin_initial" ]]
 
 mutate_lock "$LOCK" '.nodes["darwin-node"].locked.rev = "darwin-2"'
-[[ "$($HELPER --mode nixos --lock "$LOCK")" == "$nixos_after_nixpkgs" ]]
-[[ "$($HELPER --mode darwin --lock "$LOCK")" != "$darwin_after_nixpkgs" ]]
+[[ "$($HELPER --mode nixos --lock "$LOCK" --beagle-path "$BEAGLE")" == "$nixos_after_nixpkgs" ]]
+[[ "$($HELPER --mode darwin --lock "$LOCK" --beagle-path "$BEAGLE")" != "$darwin_after_nixpkgs" ]]
 
 mutate_lock "$LOCK" 'del(.nodes.root.inputs["home-manager"])'
-if "$HELPER" --mode nixos --lock "$LOCK" >/dev/null 2>&1; then
+if "$HELPER" --mode nixos --lock "$LOCK" --beagle-path "$BEAGLE" >/dev/null 2>&1; then
   echo 'FAIL: missing schema input was accepted' >&2
   exit 1
 fi
@@ -64,7 +78,6 @@ fi
 # Integration: a successful extraction records the matching sidecar for each
 # platform. The fake extractor keeps this test hermetic and fast.
 REPO="$SCRATCH/repo"
-BEAGLE="$SCRATCH/beagle"
 mkdir -p "$REPO/scripts" "$REPO/config" "$BEAGLE/bin"
 cp "$HELPER" "$REPO/scripts/firn-schema-input-fingerprint"
 printf '%s\n' '{"freeformKeyPrefixes":[],"typesNeedingDefault":["lib/types.bool"]}' \
@@ -100,7 +113,7 @@ FIRN_REPO="$REPO" BEAGLE_PATH="$BEAGLE" "$EXTRACT"
 cmp -s "$REPO/config/beagle-validate.json" \
   "$REPO/.beagle-cache/validate-config.json"
 [[ "$(<"$REPO/.beagle-cache/schema.inputs.sha256")" == \
-   "$($HELPER --mode nixos --lock "$REPO/flake.lock")" ]]
+   "$($HELPER --mode nixos --lock "$REPO/flake.lock" --beagle-path "$BEAGLE")" ]]
 
 # A failed second-stage HM extraction cannot publish a partial generation.
 before_schema="$(sha256sum "$REPO/.beagle-cache/schema.json")"
@@ -117,6 +130,6 @@ fi
 FIRN_REPO="$REPO" BEAGLE_PATH="$BEAGLE" "$EXTRACT" --darwin
 [[ -s "$REPO/.beagle-cache/schema-darwin.json" ]]
 [[ "$(<"$REPO/.beagle-cache/schema-darwin.inputs.sha256")" == \
-   "$($HELPER --mode darwin --lock "$REPO/flake.lock")" ]]
+   "$($HELPER --mode darwin --lock "$REPO/flake.lock" --beagle-path "$BEAGLE")" ]]
 
-printf 'ok: schema fingerprints split dependencies and extraction publishes complete atomic generations\n'
+printf 'ok: schema fingerprints bind flake and Beagle tool identity and extraction publishes complete atomic generations\n'

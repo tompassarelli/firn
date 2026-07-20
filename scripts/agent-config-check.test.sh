@@ -455,6 +455,18 @@ if classify_north_coord_exec "{ path=$checkout_path ; argv[]=$checkout_path 7977
 fi
 [ "$NORTH_COORD_EXEC_KIND" = direct-checkout ]
 
+# Interactive checkout-first wrappers delegate Fram selection and identity to
+# the same exact runtime transaction used by the system service.
+[ "$(grep -c 'exec /run/current-system/sw/bin/north-coord-runtime exec-checkout' \
+  "$REPO/modules/north/default.bnix")" -eq 2 ]
+if grep -q 'export FRAM_RUNTIME_SOURCE\|export FRAM_RUNTIME_REV' \
+  "$REPO/modules/north/default.bnix"; then
+  printf 'North wrapper duplicates selector identity instead of delegating it\n' >&2
+  exit 1
+fi
+grep -q ':ExecStartPre (s northCoordRuntime "/bin/north-coord-runtime initialize")' \
+  "$REPO/modules/north-coord/default.bnix"
+
 wrapper_path="/nix/store/${nix_hash}-fram-daemon-packaged/bin/fram-daemon-packaged"
 if classify_north_coord_exec "{ path=$wrapper_path ; argv[]=$wrapper_path 7977 /tmp/facts.log ; }"; then
   printf 'indirect store wrapper was accepted as the pinned Fram package\\n' >&2
@@ -475,19 +487,40 @@ chmod +x "$identity_repo/bin/fram-daemon"
 git -C "$identity_repo" add bin/fram-daemon
 git -C "$identity_repo" commit -qm runtime
 identity_revision="$(git -C "$identity_repo" rev-parse HEAD)"
+identity_tree="$(git -C "$identity_repo" rev-parse 'HEAD^{tree}')"
 identity_deployment="$identity_state/deployments/$identity_revision"
 git -C "$identity_repo" worktree add --detach "$identity_deployment" "$identity_revision" >/dev/null
-ln -s "$identity_deployment" "$identity_state/current"
+mkdir -p "$identity_state/generations/g1"
+ln -s "$identity_deployment" "$identity_state/generations/g1/current"
+ln -s "$identity_deployment" "$identity_state/generations/g1/previous"
+ln -s generations/g1 "$identity_state/active"
+ln -s active/current "$identity_state/current"
 north_coord_runtime_identity_is_valid \
-  checkout "$identity_deployment" "$identity_revision" "$identity_state/current"
+  checkout "$identity_deployment" "$identity_revision" "$identity_tree" \
+  "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"
 if north_coord_runtime_identity_is_valid \
-   checkout "$identity_repo" "$identity_revision" "$identity_state/current"; then
+   checkout "$identity_repo" "$identity_revision" "$identity_tree" \
+   "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"; then
   printf 'same-revision runtime outside the selected deployment was accepted\n' >&2
+  exit 1
+fi
+if north_coord_runtime_identity_is_valid \
+   checkout "$identity_deployment" "$identity_revision" \
+   aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+   "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"; then
+  printf 'wrong checkout tree identity was accepted\n' >&2
+  exit 1
+fi
+if north_coord_runtime_identity_is_valid \
+   checkout "$identity_deployment" "$identity_revision" "$identity_tree" \
+   "$identity_repo" /bin/true "$identity_state/current"; then
+  printf 'wrong checkout daemon identity was accepted\n' >&2
   exit 1
 fi
 printf 'drift\n' >>"$identity_deployment/bin/fram-daemon"
 if north_coord_runtime_identity_is_valid \
-   checkout "$identity_deployment" "$identity_revision" "$identity_state/current"; then
+   checkout "$identity_deployment" "$identity_revision" "$identity_tree" \
+   "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"; then
   printf 'dirty selected runtime was accepted\n' >&2
   exit 1
 fi

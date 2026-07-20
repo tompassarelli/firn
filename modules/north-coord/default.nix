@@ -8,7 +8,7 @@ let
   runtimeState = "${homeDir}/.local/state/north/fram-runtime";
   northCoordRuntime = pkgs.writeShellApplication {
     name = "north-coord-runtime";
-    runtimeInputs = with pkgs; [ bash coreutils git ];
+    runtimeInputs = with pkgs; [ bash coreutils git util-linux ];
     text = ''
       export NORTH_COORD_RUNTIME_STATE=${runtimeState}
       export NORTH_COORD_FRAM_PACKAGE=${framPkg}
@@ -39,6 +39,7 @@ in
         Type = "simple";
         User = username;
         WorkingDirectory = homeDir;
+        ExecStartPre = "${northCoordRuntime}/bin/north-coord-runtime initialize";
         ExecStart = "${northCoordRuntime}/bin/north-coord-runtime start";
         Restart = "always";
         RestartSec = 2;

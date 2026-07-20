@@ -31,6 +31,7 @@ cp "$seed/schema.json" "$cache/schema.json.next"
 cp "$seed/schema-hm.json" "$cache/schema-hm.json.next"
 cp "$repo/config/beagle-validate.json" "$cache/validate-config.json.next"
 "$repo/scripts/firn-schema-input-fingerprint" --mode nixos --lock "$repo/flake.lock" \
+  --beagle-path "$BEAGLE_PATH" \
   >"$cache/schema.inputs.sha256.next"
 mv "$cache/schema.json.next" "$cache/schema.json"
 mv "$cache/schema-hm.json.next" "$cache/schema-hm.json"
@@ -77,6 +78,7 @@ run_validate() {
 seed_current_cache() {
   local dir=$1
   FIRN_REPO="$dir" \
+  BEAGLE_PATH="$BEAGLE_PATH" \
   FIRN_SCHEMA_TEST_SEED="$SEED" \
   FIRN_SCHEMA_TEST_COUNTER="$dir/extract.count" \
     "$FAKE_EXTRACT"

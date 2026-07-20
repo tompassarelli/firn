@@ -56,7 +56,7 @@ if [[ ! -f "$VALIDATOR_CONFIG_SOURCE" ]]; then
   exit 2
 fi
 
-before_fingerprint="$($FINGERPRINT_HELPER --mode "$FINGERPRINT_MODE" --lock "$REPO/flake.lock")"
+before_fingerprint="$($FINGERPRINT_HELPER --mode "$FINGERPRINT_MODE" --lock "$REPO/flake.lock" --beagle-path "$BEAGLE_PATH")"
 
 mkdir -p "$REPO/.beagle-cache"
 schema_tmp="$(mktemp "$REPO/.beagle-cache/schema.tmp.XXXXXX")"
@@ -108,9 +108,9 @@ if not isinstance(config, dict):
     raise SystemExit("firn-extract-schema: validator policy must be a JSON object")
 PY
 
-after_fingerprint="$($FINGERPRINT_HELPER --mode "$FINGERPRINT_MODE" --lock "$REPO/flake.lock")"
+after_fingerprint="$($FINGERPRINT_HELPER --mode "$FINGERPRINT_MODE" --lock "$REPO/flake.lock" --beagle-path "$BEAGLE_PATH")"
 if [[ "$before_fingerprint" != "$after_fingerprint" ]]; then
-  echo "firn-extract-schema: flake.lock changed during extraction; refusing a mismatched fingerprint" >&2
+  echo "firn-extract-schema: flake.lock or Beagle tool changed during extraction; refusing a mismatched fingerprint" >&2
   exit 1
 fi
 
