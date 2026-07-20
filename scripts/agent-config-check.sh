@@ -274,7 +274,7 @@ environment_lines_value() {
 north_coord_runtime_identity_is_valid() {
   local mode="$1" source="$2" revision="$3" tree="$4" origin="$5" daemon="$6" selector="$7"
   local canonical_source canonical_selector canonical_daemon expected_source
-  local observed_revision observed_tree observed_common observed_origin top_level
+  local observed_revision observed_tree observed_common observed_origin top_level worktree_status
 
   NORTH_COORD_RUNTIME_IDENTITY_REASON=''
   [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || {
@@ -379,6 +379,14 @@ north_coord_runtime_identity_is_valid() {
       }
       git -C "$canonical_source" diff --cached --quiet --no-ext-diff -- || {
         NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source has staged tracked files'
+        return 1
+      }
+      worktree_status="$(git -C "$canonical_source" status --porcelain=v1 --untracked-files=all 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source cleanliness is unreadable'
+        return 1
+      }
+      [ -z "$worktree_status" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source has tracked or untracked worktree changes'
         return 1
       }
       ;;

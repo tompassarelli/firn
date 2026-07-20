@@ -100,7 +100,7 @@ validate_package_target() {
 validate_checkout_target() {
   local source=$1 expected_revision=${2:-} expected_origin=${3:-}
   local canonical_source canonical_deployments lexical_source observed_revision observed_tree
-  local observed_origin top_level
+  local observed_origin top_level worktree_status
 
   require_real_directory "$deployments" "deployment root"
   [[ -d "$source" && ! -L "$source" ]] ||
@@ -132,6 +132,10 @@ validate_checkout_target() {
     die "checkout deployment has modified tracked files: $canonical_source"
   git -C "$canonical_source" diff --cached --quiet --no-ext-diff HEAD -- ||
     die "checkout deployment has staged tracked files: $canonical_source"
+  worktree_status=$(git -C "$canonical_source" status --porcelain=v1 --untracked-files=all) ||
+    die "cannot inspect checkout deployment cleanliness: $canonical_source"
+  [[ -z "$worktree_status" ]] ||
+    die "checkout deployment contains tracked or untracked worktree changes: $canonical_source"
   observed_tree=$(git -C "$canonical_source" rev-parse --verify 'HEAD^{tree}' 2>/dev/null) ||
     die "cannot resolve checkout deployment tree"
   valid_revision "$observed_tree" || die "checkout tree is not an exact Git object ID"

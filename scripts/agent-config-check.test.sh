@@ -517,6 +517,15 @@ if north_coord_runtime_identity_is_valid \
   printf 'wrong checkout daemon identity was accepted\n' >&2
   exit 1
 fi
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$identity_deployment/UNTRACKED-EXECUTABLE"
+chmod +x "$identity_deployment/UNTRACKED-EXECUTABLE"
+if north_coord_runtime_identity_is_valid \
+   checkout "$identity_deployment" "$identity_revision" "$identity_tree" \
+   "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"; then
+  printf 'untracked selected runtime bytes were accepted\n' >&2
+  exit 1
+fi
+unlink "$identity_deployment/UNTRACKED-EXECUTABLE"
 printf 'drift\n' >>"$identity_deployment/bin/fram-daemon"
 if north_coord_runtime_identity_is_valid \
    checkout "$identity_deployment" "$identity_revision" "$identity_tree" \

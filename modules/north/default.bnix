@@ -12,6 +12,11 @@
     [northPkg
       (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)
      liveInputs (nix/with pkgs [bash coreutils git babashka bun jq])
+     northRuntimeOwnerGuard
+      (pkgs.writeShellApplication
+        {:name "north-runtime-owner-guard"
+         :runtimeInputs (nix/with pkgs [bash coreutils])
+         :text (builtins.readFile (p "./north-runtime-owner-guard"))})
      northLive
       (pkgs.writeShellApplication
         {:name "north"
@@ -19,6 +24,7 @@
          :text
           (ms "checkout=${NORTH_CHECKOUT:-$HOME/code/north}"
               "target=$checkout/bin/north"
+              (s northRuntimeOwnerGuard "/bin/north-runtime-owner-guard \"$@\"")
               "if [ ! -x \"$target\" ]; then"
               "  echo \"north: live checkout executable missing: $target\" >&2"
               "  echo \"north: restore that checkout or use north-packaged for the pinned closure\" >&2"
@@ -41,7 +47,9 @@
      northPackaged
       (pkgs.writeShellApplication
         {:name "north-packaged"
-         :text (ms (s "exec " northPkg "/bin/north \"$@\""))})
+         :text
+          (ms (s northRuntimeOwnerGuard "/bin/north-runtime-owner-guard \"$@\"")
+              (s "exec " northPkg "/bin/north \"$@\""))})
      northMcpPackaged
       (pkgs.writeShellApplication
         {:name "north-mcp-packaged"

@@ -180,6 +180,18 @@ if run_runtime exec-checkout "$identity_probe" >/dev/null 2>&1; then
 fi
 git -C "$deployment_one" restore revision.txt
 
+printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$deployment_one/bin/UNTRACKED-EXECUTABLE"
+chmod +x "$deployment_one/bin/UNTRACKED-EXECUTABLE"
+if run_runtime status >/dev/null 2>&1 || run_runtime start >/dev/null 2>&1; then
+  printf 'untracked executable in selected deployment was accepted\n' >&2
+  exit 1
+fi
+if run_runtime exec-checkout "$identity_probe" >/dev/null 2>&1; then
+  printf 'ordinary launcher accepted untracked deployment bytes\n' >&2
+  exit 1
+fi
+unlink "$deployment_one/bin/UNTRACKED-EXECUTABLE"
+
 run_runtime promote "$repo" "$revision_two" >/dev/null
 deployment_two=$state/deployments/$revision_two
 run_runtime promote "$repo" "$revision_three" >/dev/null

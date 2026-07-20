@@ -3,12 +3,18 @@
 let
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
   liveInputs = with pkgs; [ bash coreutils git babashka bun jq ];
+  northRuntimeOwnerGuard = pkgs.writeShellApplication {
+    name = "north-runtime-owner-guard";
+    runtimeInputs = with pkgs; [ bash coreutils ];
+    text = builtins.readFile ./north-runtime-owner-guard;
+  };
   northLive = pkgs.writeShellApplication {
     name = "north";
     runtimeInputs = liveInputs;
     text = ''
       checkout=''${NORTH_CHECKOUT:-$HOME/code/north}
       target=$checkout/bin/north
+      ${northRuntimeOwnerGuard}/bin/north-runtime-owner-guard "$@"
       if [ ! -x "$target" ]; then
         echo "north: live checkout executable missing: $target" >&2
         echo "north: restore that checkout or use north-packaged for the pinned closure" >&2
@@ -34,6 +40,7 @@ let
   northPackaged = pkgs.writeShellApplication {
     name = "north-packaged";
     text = ''
+      ${northRuntimeOwnerGuard}/bin/north-runtime-owner-guard "$@"
       exec ${northPkg}/bin/north "$@"
     '';
   };

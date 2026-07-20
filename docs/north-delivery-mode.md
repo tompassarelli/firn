@@ -6,7 +6,7 @@ The personal NixOS profile deliberately runs North checkout-first. `north` and
 MCP configuration. Before either entrypoint runs, the wrapper asks
 `/run/current-system/sw/bin/north-coord-runtime` to validate the selected Fram
 deployment and export its exact source, commit, tree, origin, and daemon path.
-The selection must be a real, detached, tracked-clean worktree at
+The selection must be a real, detached, completely clean worktree at
 `~/.local/state/north/fram-runtime/deployments/<commit>`; package mode is not an
 implicit substitute for an ordinary checkout-first command.
 
@@ -17,9 +17,10 @@ wrapper then exercises that output immediately. Checkout-first removes the Nix
 promotion delay, not Beagle code generation.
 
 This is a development policy, not a claim that dirty North source is
-reproducible. A missing or non-executable North checkout fails clearly; a dirty,
-attached, missing, or path-substituted Fram deployment also fails closed. Set
-`NORTH_CHECKOUT` only when deliberately testing another North checkout.
+reproducible. A missing or non-executable North checkout fails clearly; a dirty
+(including untracked bytes), attached, missing, or path-substituted Fram
+deployment also fails closed. Set `NORTH_CHECKOUT` only when deliberately
+testing another North checkout.
 
 The coordinator on port 7977 is systemd-owned. Its `Type=simple` service uses
 the same selector to `exec` the physical `fram-daemon`, so systemd's `MainPID`
@@ -28,7 +29,10 @@ are serialized transactions that publish one complete current/previous
 generation through `~/.local/state/north/fram-runtime/active`. They do not
 restart the service. Apply a selection explicitly with
 `sudo systemctl restart north-coord.service`; a checkout-side `north up
---restart` must not compete with the system service.
+--restart` must not compete with the system service. The ordinary Firn `north`
+and `north-packaged` wrappers reject direct `north up` launch/restart commands
+before entering North code, while preserving the read-only `north up
+--check-runtime` probe.
 
 On first installation, the unit runs `north-coord-runtime initialize` as a
 distinct initialization transaction. Once initialized, deleting the active
