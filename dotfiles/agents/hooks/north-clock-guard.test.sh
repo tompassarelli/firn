@@ -800,6 +800,30 @@ EOF
 )"
 run na 'quoted commit-message heredoc is inert nonclient data' \
   closed.log Bash "$quoted_commit_heredoc" "$CLIENT_DIR"
+printf -v single_quoted_here_string '%s\n' \
+  "cat <<<'NORTH_HERE_STRING'" \
+  "touch $CLIENT_DIR/here-string-single-quote-probe" \
+  'NORTH_HERE_STRING'
+run deny 'single-quoted here-string cannot hide a following executable line' \
+  closed.log Bash "$single_quoted_here_string" "$NONCLIENT"
+printf -v double_quoted_here_string '%s\n' \
+  'cat <<< "NORTH_HERE_STRING"' \
+  "touch $CLIENT_DIR/here-string-double-quote-probe" \
+  'NORTH_HERE_STRING'
+run deny 'spaced double-quoted here-string keeps later execution visible' \
+  closed.log Bash "$double_quoted_here_string" "$NONCLIENT"
+printf -v escaped_here_string '%s\n' \
+  'cat <<<\NORTH_HERE_STRING' \
+  "touch $CLIENT_DIR/here-string-escaped-word-probe" \
+  'NORTH_HERE_STRING'
+run deny 'escaped here-string word keeps later execution visible' \
+  closed.log Bash "$escaped_here_string" "$NONCLIENT"
+printf -v ambiguous_angle_redirect '%s\n' \
+  "cat <<<<'NORTH_HERE_STRING'" \
+  "touch $CLIENT_DIR/ambiguous-angle-probe" \
+  'NORTH_HERE_STRING'
+run unavailable 'four-angle redirect remains unsupported and fail-closed' \
+  closed.log Bash "$ambiguous_angle_redirect" "$NONCLIENT"
 run deny 'compound nonclient Git cannot hide a later client write' \
   closed.log Bash \
   "git -C $NONCLIENT status && printf x > $CLIENT_DIR/generated.txt" \

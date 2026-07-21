@@ -43,11 +43,14 @@ SAFE_MKTEMP_ASSIGNMENT_RE = re.compile(
     r'(?P<separator>[ \t]*(?:&&|;|\n)|[ \t]*\Z)',
 )
 QUOTED_HEREDOC_RE = re.compile(
-    r"(?P<operator><<(?P<strip>-)?)[ \t]*"
+    r"(?P<operator>(?<!<)<<(?!<)(?P<strip>-)?)[ \t]*"
     r"(?:'(?P<single>[A-Za-z0-9_][A-Za-z0-9_.-]*)'|"
     r'"(?P<double>[A-Za-z0-9_][A-Za-z0-9_.-]*)"|'
     r"\\(?P<escaped>[A-Za-z0-9_][A-Za-z0-9_.-]*))"
     r"[ \t]*$"
+)
+HEREDOC_LIKE_OPERATOR_RE = re.compile(
+    r"(?<!<)(?P<angles><{2,})(?!<)"
 )
 TX_RE = re.compile(r":tx\s+(\d+)")
 OP_RE = re.compile(r':op\s+"(assert|retract)"')
@@ -291,7 +294,9 @@ def strip_quoted_heredoc_bodies(command: str) -> str:
 
     A quoted delimiter makes the body inert data. Unquoted, malformed, nested,
     and multi-heredoc lines remain unavailable because their bodies can perform
-    substitutions or are too easy to attribute incorrectly.
+    substitutions or are too easy to attribute incorrectly. A maximal ``<<<``
+    run is a Bash here-string, not a heredoc opener, so it and every following
+    line remain in the executable analysis stream.
     """
     if "<<" not in command:
         return command
@@ -303,12 +308,13 @@ def strip_quoted_heredoc_bodies(command: str) -> str:
         header = line.rstrip("\r\n")
         match = QUOTED_HEREDOC_RE.search(header)
         if match is None:
-            if "<<" in header:
+            operators = HEREDOC_LIKE_OPERATOR_RE.finditer(header)
+            if any(len(operator.group("angles")) != 3 for operator in operators):
                 raise AdmissionUnavailable("unsupported heredoc")
             result.append(line)
             index += 1
             continue
-        if "<<" in header[: match.start()]:
+        if HEREDOC_LIKE_OPERATOR_RE.search(header[: match.start()]):
             raise AdmissionUnavailable("multiple heredocs")
         delimiter = (
             match.group("single")
