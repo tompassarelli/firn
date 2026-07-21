@@ -8,12 +8,18 @@ umask 077
 NOOP='{"hookSpecificOutput":{"hookEventName":"PreToolUse"}}'
 UNAVAILABLE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"billable_clock_guard_unavailable"}}'
 
+drain_stdin() {
+  cat >/dev/null
+}
+
 noop() {
+  drain_stdin
   builtin printf '%s\n' "$NOOP"
   exit 0
 }
 
 deny_unavailable() {
+  drain_stdin
   builtin printf '%s\n' "$UNAVAILABLE"
   exit 0
 }

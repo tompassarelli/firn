@@ -6,7 +6,10 @@ set -uo pipefail
 if [ "${NORTH_MANAGED_LANE:-}" = 1 ]; then
   case "${AGENT_TOPOLOGY:-}" in
     worker|orchestrator)
-      [[ "${AGENT_ID:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$ ]] && exit 0
+      if [[ "${AGENT_ID:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$ ]]; then
+        cat >/dev/null
+        exit 0
+      fi
       ;;
   esac
 fi

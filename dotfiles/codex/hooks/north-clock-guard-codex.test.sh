@@ -187,6 +187,50 @@ PY
 )" || result=DRAIN_FAILED
   printf '%s\n' "$result"
 }
+
+pre_drain_failure_probe() {
+  local result
+  result="$("$HOOKS/runtime/python3" - \
+    "$HOOKS/runtime/env" "$HOOKS/runtime/bash" \
+    "$HOOKS/north-clock-guard-codex" <<'PY'
+import os
+import subprocess
+import sys
+import time
+
+env_bin, bash_bin, adapter = sys.argv[1:]
+payload = b'{"tool_input":{"padding":"' + b"x" * (512 * 1024) + b'"}}'
+process = subprocess.Popen(
+    [env_bin, "-u", "BASH_ENV", "-u", "ENV", bash_bin, adapter],
+    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=os.environ.copy()
+)
+broken = False
+for offset in range(0, len(payload), 8192):
+    try:
+        process.stdin.write(payload[offset : offset + 8192])
+        process.stdin.flush()
+    except BrokenPipeError:
+        broken = True
+        break
+    time.sleep(0.001)
+try:
+    process.stdin.close()
+except BrokenPipeError:
+    broken = True
+stdout = process.stdout.read().decode().strip()
+stderr = process.stderr.read()
+try:
+    status = process.wait(timeout=5)
+except subprocess.TimeoutExpired:
+    process.kill()
+    status = process.wait()
+    broken = True
+expected = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"billable_clock_guard_unavailable"}}'
+print("DRAIN_FAILED" if broken or status or stdout != expected or stderr else "DRAINED")
+PY
+)" || result=DRAIN_FAILED
+  test "$result" = DRAINED
+}
 expect 'env bypass drains a delayed large hook envelope before no-op' "$NOOP" \
   drain_probe explicit
 expect 'persistent bypass drains a delayed large hook envelope before no-op' "$NOOP" \
@@ -204,6 +248,11 @@ mv "$HOOKS/north-clock-guard.py.missing" "$HOOKS/north-clock-guard.py"
 mv "$HOOKS/runtime/python3" "$HOOKS/runtime/python3.missing"
 expect 'missing pinned runtime dependency fails closed' "$UNAVAILABLE" invoke allow env
 mv "$HOOKS/runtime/python3.missing" "$HOOKS/runtime/python3"
+
+mv "$HOOKS/runtime/git" "$HOOKS/runtime/git.missing"
+expect 'pre-drain dependency failure drains delayed pipe-buffer envelope' '' \
+  pre_drain_failure_probe
+mv "$HOOKS/runtime/git.missing" "$HOOKS/runtime/git"
 
 LATE="$SCRATCH/late"
 expect 'timeout with TERM-ignoring descendant fails closed' "$UNAVAILABLE" \

@@ -68,6 +68,52 @@ record_has_no_managed_env() {
     grep -Fxq 'managed_lane=' "$1"
 }
 
+drain_probe() {
+  local wrapper="$1" delay="$2" result
+  result="$(python3 - "$HOOKS/$wrapper" "$delay" <<'PY'
+import os
+import subprocess
+import sys
+import time
+
+wrapper, delay = sys.argv[1:]
+payload = b'{"padding":"' + b"x" * (512 * 1024) + b'"}'
+env = os.environ | {
+    "NORTH_MANAGED_LANE": "1",
+    "AGENT_ID": "lane-123",
+    "AGENT_TOPOLOGY": "worker",
+}
+process = subprocess.Popen(
+    [wrapper], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env
+)
+broken = False
+for offset in range(0, len(payload), 8192):
+    try:
+        process.stdin.write(payload[offset : offset + 8192])
+        process.stdin.flush()
+    except BrokenPipeError:
+        broken = True
+        break
+    if delay == "delayed":
+        time.sleep(0.001)
+try:
+    process.stdin.close()
+except BrokenPipeError:
+    broken = True
+stdout = process.stdout.read()
+stderr = process.stderr.read()
+try:
+    status = process.wait(timeout=5)
+except subprocess.TimeoutExpired:
+    process.kill()
+    status = process.wait()
+    broken = True
+print("DRAIN_FAILED" if broken or status or stdout or stderr else "DRAINED")
+PY
+)" || result=DRAIN_FAILED
+  test "$result" = DRAINED
+}
+
 # This is the exact graph shape the managed branch must leave untouched: one
 # harness-owned lane identity and no provider-derived session row.
 GRAPH="$SCRATCH/graph"
@@ -82,6 +128,10 @@ for wrapper in "${wrappers[@]}"; do
   )"
   check "$wrapper managed branch is output-silent" test -z "$output"
   check "$wrapper managed branch never delegates to native lifecycle" test ! -e "$record"
+  check "$wrapper managed branch drains a pipe-buffer payload" \
+    drain_probe "$wrapper" immediate
+  check "$wrapper managed branch drains delayed writer payload" \
+    drain_probe "$wrapper" delayed
 done
 graph_after="$(sha256sum "$GRAPH")"
 check 'managed wrappers leave the sole kind=lane identity unchanged' \
@@ -93,7 +143,7 @@ check 'managed wrappers create no derived session row' \
 # suppression. Stale native residue must always take the native lifecycle path.
 record="$SCRATCH/stale-complete-tuple.native"
 printf '%s' '{"session_id":"native-with-stale-complete-tuple"}' |
-  AGENT_ID=stale-id AGENT_TOPOLOGY=worker WRAPPER_TEST_RECORD="$record" \
+  env -u NORTH_MANAGED_LANE AGENT_ID=stale-id AGENT_TOPOLOGY=worker WRAPPER_TEST_RECORD="$record" \
   "$HOOKS/north-on-spawn-codex" >/dev/null
 check 'AGENT_ID + topology without explicit managed marker follows native lifecycle' \
   grep -Fxq 'target=north-on-spawn' "$record"
@@ -102,7 +152,7 @@ check 'stale complete tuple is scrubbed before native delegation' \
 
 record="$SCRATCH/stale-agent-id.native"
 printf '%s' '{"session_id":"native-with-stale-id"}' |
-  AGENT_ID=stale-id WRAPPER_TEST_RECORD="$record" \
+  env -u NORTH_MANAGED_LANE AGENT_ID=stale-id WRAPPER_TEST_RECORD="$record" \
   "$HOOKS/north-on-spawn-codex" >/dev/null
 check 'AGENT_ID without managed topology follows native lifecycle' \
   grep -Fxq 'target=north-on-spawn' "$record"
