@@ -24,6 +24,23 @@ jq -er --arg provider "$provider" '
   def valid_availability_reason:
     . == "ready" or . == "command_missing" or
     . == "authentication_missing" or . == "disabled" or . == "unknown";
+  def valid_availability_tuple:
+    if .availabilityReason == "ready" then
+      .installed and .authenticated and .available
+    elif .availabilityReason == "command_missing" then
+      (.installed | not) and (.authenticated | not) and (.available | not)
+    elif .availabilityReason == "authentication_missing" then
+      .installed and (.authenticated | not) and (.available | not)
+    elif .availabilityReason == "unknown" then
+      (.authenticated | not) and (.available | not)
+    elif .availabilityReason == "disabled" then
+      (.available | not) and ((.authenticated | not) or .installed)
+    else false end;
+  def expected_routing:
+    if .availabilityReason == "disabled" then "disabled"
+    elif (.available | not) then "unavailable"
+    elif .headroom == "exhausted" then "exhausted"
+    else "eligible" end;
   def valid_v3_target($provider):
     type == "object" and
     (.id | type) == "string" and (.id | length) > 0 and
@@ -33,20 +50,23 @@ jq -er --arg provider "$provider" '
     (.available | type) == "boolean" and
     (.availabilityReason | valid_availability_reason) and
     (.headroom | valid_headroom) and
-    (if .routing == "eligible" then
-       .available and .installed and .authenticated and
-       .availabilityReason == "ready" and .headroom != "exhausted"
-     elif .routing == "exhausted" then
-       .available and .installed and .authenticated and
-       .availabilityReason == "ready" and .headroom == "exhausted"
-     elif .routing == "unavailable" then
-       (.available | not) and .availabilityReason != "disabled"
-     elif .routing == "disabled" then
-       (.available | not) and .availabilityReason == "disabled"
-     else false end);
+    ((.authenticated and .headroom == "unknown") | not) and
+    valid_availability_tuple and
+    .routing == expected_routing;
+  def valid_v3_document:
+    [.providers[].provider] as $provider_ids
+    | [.providers[].targets[].id] as $target_ids
+    | ($provider_ids | length) == ($provider_ids | unique | length) and
+      ($target_ids | length) == ($target_ids | unique | length) and
+      all(.providers[];
+        type == "object" and
+        (.provider == "anthropic" or .provider == "openai") and
+        (.targets | type) == "array" and (.targets | length) > 0 and
+        (. as $group | all(.targets[]; valid_v3_target($group.provider))));
 
   if ((.schemaVersion != 2 and .schemaVersion != 3) or
-      (.providers | type) != "array") then
+      (.providers | type) != "array" or
+      (.schemaVersion == 3 and (valid_v3_document | not))) then
     error("unsupported north providers schema")
   else
     [.providers[] |
@@ -61,7 +81,7 @@ jq -er --arg provider "$provider" '
         | $groups[0].targets as $targets
         | if any($targets[];
             if $schema == 2 then (valid_v2_target | not)
-            else (valid_v3_target($provider) | not) end) then
+            else false end) then
             error("provider target malformed")
           else
             [$targets[] | select(.routing == "eligible") | .headroom] as $eligible_headroom
