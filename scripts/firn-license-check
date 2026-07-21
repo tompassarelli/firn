@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+fail() {
+  printf 'firn-license-check: %s\n' "$*" >&2
+  exit 1
+}
+
+check_hash() {
+  local file="$1" expected="$2" actual
+  actual="$(sha256sum "$REPO/$file" | cut -d' ' -f1)"
+  [ "$actual" = "$expected" ] ||
+    fail "$file differs from the canonical repository copy (expected $expected, got $actual)"
+}
+
+check_hash LICENSE-APACHE f110de2d532584ec2c07e8b91be68b3ecaea74e6d3a100bf796665923d8d63a9
+check_hash LICENSE-MIT 51adc9bf9e72be82d08c2a694bcca11a6ac1b9e520bb537e1100a158d7d0d06d
+check_hash LICENSE 38735a59a59d9792ed4195181dde826e80a2e2e3bbb2039531b8efb2549daeda
+
+readme_license="$({
+  awk '
+    /^## License$/ { in_license = 1 }
+    in_license && /^## / && $0 != "## License" { exit }
+    in_license { print }
+    END { if (!in_license) exit 1 }
+  ' "$REPO/README.md"
+} || fail 'README.md has no License section')"
+
+expected_readme_license='## License
+
+Firn is dual-licensed under either the [MIT License](LICENSE-MIT) or the
+[Apache License, Version 2.0](LICENSE-APACHE), at your option
+(`MIT OR Apache-2.0`).'
+
+[ "$readme_license" = "$expected_readme_license" ] ||
+  fail 'README.md License section does not match the canonical dual-license notice'
+
+printf 'ok: Firn license files and README declare MIT OR Apache-2.0 consistently\n'

@@ -63,6 +63,7 @@ jobs:
           ./scripts/firn-build-bin.test.sh
           ./scripts/firn-source-hash.test.sh
           ./scripts/firn-schema-input-fingerprint.test.sh
+          ./scripts/firn-license-check
 
       - name: Test safe-push argument gate
         working-directory: firn
