@@ -11,13 +11,12 @@ REPO="${FIRN_REPO:-$HOME/code/nixos-config}"
 BEAGLE_PATH="${BEAGLE_PATH:-$REPO/../beagle}"
 BUILD_SCRIPT="$REPO/scripts/firn-build-bin"
 SOURCE_HASH_SCRIPT="$REPO/scripts/firn-source-hash"
-SOURCE_HASH_FILE="$SHARE_DIR/$BUILT_RACKET_HASH/firn.zo.source-hash"
 
 # Fast path requires both the pinned runtime and the exact Racket source set.
 CURRENT_SOURCE_HASH="$("$SOURCE_HASH_SCRIPT")"
-BUILT_SOURCE_HASH="$(cat "$SOURCE_HASH_FILE" 2>/dev/null || true)"
-if [ -x "$BUILT_RACKET_BIN" ]    && [ -f "$SHARE_DIR/$BUILT_RACKET_HASH/firn.zo" ]    && [ "$CURRENT_SOURCE_HASH" = "$BUILT_SOURCE_HASH" ]; then
-  exec "$BUILT_RACKET_BIN" "$SHARE_DIR/$BUILT_RACKET_HASH/firn.zo" "$@"
+ZO="$SHARE_DIR/$BUILT_RACKET_HASH/$CURRENT_SOURCE_HASH/firn.zo"
+if [ -x "$BUILT_RACKET_BIN" ]    && [ -s "$ZO" ]; then
+  exec "$BUILT_RACKET_BIN" "$ZO" "$@"
 fi
 
 # Slow path: beagle's racket moved store paths (a beagle flake bump) or this is
@@ -33,11 +32,9 @@ if ! command -v "$RACKET" >/dev/null 2>&1; then
 fi
 CURRENT_RACKET_BIN="$(readlink -f "$(command -v "$RACKET")")"
 CURRENT_RACKET_HASH="$(printf '%s' "$CURRENT_RACKET_BIN" | sha1sum | cut -c1-12)"
-ZO="$SHARE_DIR/$CURRENT_RACKET_HASH/firn.zo"
+ZO="$SHARE_DIR/$CURRENT_RACKET_HASH/$CURRENT_SOURCE_HASH/firn.zo"
 
-CURRENT_HASH_FILE="$ZO.source-hash"
-CURRENT_BUILT_HASH="$(cat "$CURRENT_HASH_FILE" 2>/dev/null || true)"
-if [ ! -f "$ZO" ] || [ "$CURRENT_SOURCE_HASH" != "$CURRENT_BUILT_HASH" ]; then
+if [ ! -s "$ZO" ]; then
   CURRENT_RACKET_VERSION="$("$RACKET" --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo unknown)"
   echo "firn: source or Beagle racket changed; rebuilding cache under $CURRENT_RACKET_VERSION (~20s)..." >&2
   if [ ! -x "$BUILD_SCRIPT" ]; then

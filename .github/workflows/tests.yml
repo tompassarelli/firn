@@ -59,6 +59,7 @@ jobs:
           source "$GITHUB_WORKSPACE/beagle/bin/_beagle-racket"
           "$RACO" test scripts/firn-cmds/doctor.rkt
           "$RACO" test scripts/firn-cmds/diff.rkt
+          ./scripts/firn-build-bin.test.sh
           ./scripts/firn-schema-input-fingerprint.test.sh
 
       - name: Test safe-push argument gate
