@@ -42,13 +42,6 @@ SAFE_MKTEMP_ASSIGNMENT_RE = re.compile(
     r'(?:-d|--directory)[ \t]*\)(?P=quote)'
     r'(?P<separator>[ \t]*(?:&&|;|\n)|[ \t]*\Z)',
 )
-QUOTED_HEREDOC_RE = re.compile(
-    r"(?P<operator><<(?P<strip>-)?)[ \t]*"
-    r"(?:'(?P<single>[A-Za-z0-9_][A-Za-z0-9_.-]*)'|"
-    r'"(?P<double>[A-Za-z0-9_][A-Za-z0-9_.-]*)"|'
-    r"\\(?P<escaped>[A-Za-z0-9_][A-Za-z0-9_.-]*))"
-    r"[ \t]*$"
-)
 TX_RE = re.compile(r":tx\s+(\d+)")
 OP_RE = re.compile(r':op\s+"(assert|retract)"')
 L_RE = re.compile(r':l\s+"((?:\\.|[^"\\])*)"')
@@ -286,50 +279,6 @@ def normalize_safe_mktemp_assignment(command: str, cwd: str) -> str:
     return f"{replacement}{command[match.end():]}"
 
 
-def strip_quoted_heredoc_bodies(command: str) -> str:
-    """Remove exact expansion-free heredoc bodies from static shell analysis.
-
-    A quoted delimiter makes the body inert data. Unquoted, malformed, nested,
-    and multi-heredoc lines remain unavailable because their bodies can perform
-    substitutions or are too easy to attribute incorrectly.
-    """
-    if "<<" not in command:
-        return command
-    lines = command.splitlines(keepends=True)
-    result: list[str] = []
-    index = 0
-    while index < len(lines):
-        line = lines[index]
-        header = line.rstrip("\r\n")
-        match = QUOTED_HEREDOC_RE.search(header)
-        if match is None:
-            if "<<" in header:
-                raise AdmissionUnavailable("unsupported heredoc")
-            result.append(line)
-            index += 1
-            continue
-        if "<<" in header[: match.start()]:
-            raise AdmissionUnavailable("multiple heredocs")
-        delimiter = (
-            match.group("single")
-            or match.group("double")
-            or match.group("escaped")
-        )
-        assert delimiter is not None
-        line_ending = line[len(header) :]
-        result.append(f"{header[: match.start()]}{line_ending}")
-        index += 1
-        while index < len(lines):
-            candidate = lines[index].rstrip("\r\n")
-            comparable = candidate.lstrip("\t") if match.group("strip") else candidate
-            index += 1
-            if comparable == delimiter:
-                break
-        else:
-            raise AdmissionUnavailable("unterminated heredoc")
-    return "".join(result)
-
-
 def expanded_commands(
     command: str,
     cwd: str,
@@ -484,48 +433,6 @@ def git_subcommand(tokens: list[str]) -> str:
             continue
         return token
     return ""
-
-
-def git_effective_cwd(tokens: list[str], cwd: str) -> str:
-    """Resolve Git's leading ``-C`` chain for operand attribution."""
-    current = cwd
-    index = 1
-    while index < len(tokens):
-        token = tokens[index]
-        if token == "-C":
-            if index + 1 >= len(tokens):
-                raise AdmissionUnavailable("missing Git -C target")
-            current = canonical_path(tokens[index + 1], current)
-            index += 2
-            continue
-        if token in {
-            "-c",
-            "--git-dir",
-            "--work-tree",
-            "--namespace",
-            "--super-prefix",
-        }:
-            index += 2
-            continue
-        if token.startswith(
-            (
-                "--git-dir=",
-                "--work-tree=",
-                "--namespace=",
-                "--super-prefix=",
-            )
-        ) or token in {
-            "--no-pager",
-            "--paginate",
-            "--literal-pathspecs",
-            "--no-literal-pathspecs",
-            "--no-replace-objects",
-            "--bare",
-        }:
-            index += 1
-            continue
-        break
-    return current
 
 
 def write_redirect_targets(tokens: list[str]) -> tuple[list[str], bool]:
@@ -766,7 +673,6 @@ def mutation_paths(command: str, cwd: str) -> dict[str, list[str]]:
         argument_offset = len(segment) - len(arguments)
         argument_ambiguity = ambiguity[argument_offset:]
         candidates: list[tuple[str, bool]] = []
-        candidate_cwd = cwd
         if command_name in FS_MUTATORS:
             candidates = [
                 (argument, uncertain)
@@ -812,14 +718,13 @@ def mutation_paths(command: str, cwd: str) -> dict[str, list[str]]:
         elif command_name == "git":
             full = ["git", *arguments]
             if git_subcommand(full) in GIT_MUTATORS:
-                candidate_cwd = git_effective_cwd(full, cwd)
                 candidates = list(
                     zip(arguments, argument_ambiguity, strict=True)
                 )
         for candidate, uncertain in candidates:
             if uncertain:
                 raise AdmissionUnavailable("ambiguous mutator operand")
-            add_candidate(result, candidate, candidate_cwd)
+            add_candidate(result, candidate, cwd)
     return result
 
 
@@ -858,14 +763,9 @@ def generic_command_paths(
             or segment_is_north_control(segment)
         ):
             continue
-        command_name, arguments = command_head(segment)
+        command_name, _arguments = command_head(segment)
         if not command_name:
             continue
-        segment_cwd = (
-            git_effective_cwd(["git", *arguments], cwd)
-            if command_name == "git"
-            else cwd
-        )
         for index, (word, uncertain) in enumerate(
             zip(segment, ambiguity, strict=True)
         ):
@@ -873,7 +773,7 @@ def generic_command_paths(
                 continue
             if uncertain and CLIENT_ROOT in word:
                 raise AdmissionUnavailable("ambiguous client operand")
-            add_candidate(result, word, segment_cwd, expand_globs=False)
+            add_candidate(result, word, cwd, expand_globs=False)
     return result
 
 
@@ -996,159 +896,6 @@ def explicit_nonclient_git_target(command: str, cwd: str) -> str | None:
     return None if client_of(target) else target
 
 
-def explicit_nonclient_redirects(
-    segment: list[str],
-    ambiguity: list[bool],
-    cwd: str,
-) -> tuple[bool, bool]:
-    """Return (has-write-redirect, all-write-redirects-proved-nonclient)."""
-    has_redirect = False
-    for index, token in enumerate(segment):
-        if token not in WRITE_REDIRECTS:
-            continue
-        if index + 1 >= len(segment):
-            return True, False
-        target = segment[index + 1]
-        if (
-            token == ">&" and re.fullmatch(r"&?[0-9]+|-", target)
-        ) or target == "/dev/null":
-            continue
-        has_redirect = True
-        if ambiguity[index + 1] or not target.startswith(("/", "~")):
-            return True, False
-        resolved = canonical_path(target, cwd)
-        if CLIENT_NAMESPACE_RE.search(resolved):
-            return True, False
-    return has_redirect, True
-
-
-def git_segment_has_explicit_nonclient_scope(
-    segment: list[str],
-    ambiguity: list[bool],
-    cwd: str,
-) -> bool:
-    if (
-        len(segment) < 4
-        or segment[0] != "git"
-        or segment[1] != "-C"
-        or ambiguity[2]
-        or not segment[2].startswith(("/", "~"))
-        or not trusted_command_token(segment[0])
-    ):
-        return False
-    target = canonical_path(segment[2], cwd)
-    if CLIENT_NAMESPACE_RE.search(target):
-        return False
-    arguments = segment[3:]
-    if any(ambiguity[3:]):
-        return False
-    if any(
-        token in {"-C", "-c", "--git-dir", "--work-tree"}
-        or token.startswith(
-            (
-                "--git-dir=",
-                "--work-tree=",
-                "--namespace=",
-                "--super-prefix=",
-            )
-        )
-        for token in arguments
-    ):
-        return False
-    subcommand = git_subcommand(["git", *arguments])
-    return subcommand in (GIT_MUTATORS | {"log", "status"})
-
-
-def filesystem_segment_has_explicit_nonclient_operands(
-    segment: list[str],
-    ambiguity: list[bool],
-    cwd: str,
-) -> bool:
-    if (
-        not segment
-        or os.path.basename(segment[0])
-        not in {"rm", "mv", "cp", "touch", "mkdir", "ln"}
-        or not trusted_command_token(segment[0])
-    ):
-        return False
-    redirect_indexes = {
-        index
-        for position, token in enumerate(segment)
-        if token in WRITE_REDIRECTS
-        for index in (position, position + 1)
-    }
-    operands = [
-        (argument, ambiguity[index])
-        for index, argument in enumerate(segment[1:], start=1)
-        if index not in redirect_indexes and not argument.startswith("-")
-    ]
-    if not operands or any(uncertain for _argument, uncertain in operands):
-        return False
-    if not all(argument.startswith(("/", "~")) for argument, _ in operands):
-        return False
-    return all(
-        not CLIENT_NAMESPACE_RE.search(canonical_path(argument, cwd))
-        for argument, _ in operands
-    )
-
-
-def command_has_bounded_explicit_nonclient_effects(
-    command: str,
-    cwd: str,
-) -> bool:
-    """Prove every effect in a bounded compound shell chain is non-client.
-
-    This is deliberately narrower than general shell interpretation. It covers
-    the coordinator's isolated-workspace lifecycle: trusted Git calls with an
-    exact non-client ``-C``, explicit non-client filesystem operands, and inert
-    data writers whose output redirects are exact non-client paths.
-    """
-    command = normalize_safe_mktemp_assignment(command, cwd)
-    if os.environ.get("BASH_ENV") or os.environ.get("ENV"):
-        return False
-    if "`" in command or "$(" in command:
-        return False
-    tokens = shell_tokens(command)
-    if any(
-        token in {"||", "|", "&", "(", ")"}
-        for token in tokens
-        if token in SEPARATORS
-    ):
-        return False
-    proved_effect = False
-    for segment, ambiguity in expanded_commands(command, cwd):
-        command_name, _arguments = command_head(segment)
-        if not command_name:
-            if any(ambiguity):
-                return False
-            continue
-        has_redirect, redirects_safe = explicit_nonclient_redirects(
-            segment, ambiguity, cwd
-        )
-        if not redirects_safe:
-            return False
-        if segment_is_execution_free(segment) and not has_redirect:
-            continue
-        direct_command = os.path.basename(segment[0]) if segment else ""
-        if (
-            direct_command in {"cat", "echo", "printf"}
-            and trusted_command_token(segment[0])
-            and has_redirect
-        ):
-            proved_effect = True
-            continue
-        if git_segment_has_explicit_nonclient_scope(segment, ambiguity, cwd):
-            proved_effect = True
-            continue
-        if filesystem_segment_has_explicit_nonclient_operands(
-            segment, ambiguity, cwd
-        ):
-            proved_effect = True
-            continue
-        return False
-    return proved_effect
-
-
 def classify_edit(tool_input: dict[str, object], cwd: str) -> tuple[str, str] | None:
     path = canonical_path(tool_input.get("file_path"), cwd)
     client = client_of(path)
@@ -1221,7 +968,6 @@ def classify_shell(tool_input: dict[str, object], cwd: str) -> tuple[str, str] |
     ):
         raise AdmissionUnavailable("invalid shell envelope")
     shell_cwd = canonical_path(input_cwd or cwd or os.getcwd(), os.getcwd())
-    command = strip_quoted_heredoc_bodies(command)
     leading_scope = leading_nonclient_scope_target(command, shell_cwd)
     analysis_cwd = leading_scope or shell_cwd
 
@@ -1239,7 +985,6 @@ def classify_shell(tool_input: dict[str, object], cwd: str) -> tuple[str, str] |
     escape = (
         leading_scope is not None
         or explicit_nonclient_git_target(command, shell_cwd) is not None
-        or command_has_bounded_explicit_nonclient_effects(command, shell_cwd)
     )
     if not escape and not re.search(r"[;&|`]|\$\(", command):
         commands = expanded_commands(command, shell_cwd)

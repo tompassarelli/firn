@@ -784,34 +784,6 @@ run na 'explicit git -C nonclient scope ignores inherited client cwd' \
   closed.log Bash "git -C $NONCLIENT status" "$CLIENT_DIR"
 run na 'explicit git -C nonclient mutation ignores inherited client cwd' \
   closed.log Bash "git -C $NONCLIENT commit -m x" "$CLIENT_DIR"
-run na 'compound explicit git -C operations ignore inherited client cwd' \
-  closed.log Bash \
-  "git -C $NONCLIENT add dotfiles/agents/hooks/north-clock-guard.py && git -C $NONCLIENT commit -F /tmp/north-commit-message" \
-  "$CLIENT_DIR"
-run na 'nonclient redirect plus git commit -F ignores inherited client cwd' \
-  closed.log Bash \
-  "printf '%s\\n' subject > /tmp/north-commit-message && git -C $NONCLIENT commit -F /tmp/north-commit-message" \
-  "$CLIENT_DIR"
-quoted_commit_heredoc="$(cat <<EOF
-git -C $NONCLIENT commit -F - <<'NORTH_COMMIT'
-subject with literal \`ticks\` and \$(inert-substitution)
-NORTH_COMMIT
-EOF
-)"
-run na 'quoted commit-message heredoc is inert nonclient data' \
-  closed.log Bash "$quoted_commit_heredoc" "$CLIENT_DIR"
-run deny 'compound nonclient Git cannot hide a later client write' \
-  closed.log Bash \
-  "git -C $NONCLIENT status && printf x > $CLIENT_DIR/generated.txt" \
-  "$CLIENT_DIR"
-unquoted_commit_heredoc="$(cat <<EOF
-git -C $NONCLIENT commit -F - <<NORTH_COMMIT
-\$(touch $CLIENT_DIR/generated.txt)
-NORTH_COMMIT
-EOF
-)"
-run unavailable 'unquoted heredoc expansion remains fail-closed' \
-  closed.log Bash "$unquoted_commit_heredoc" "$CLIENT_DIR"
 run_payload attest na 'provider workdir overrides its inherited root client cwd' closed.log \
   "$(emit_workdir_json 'git status' "$CLIENT_DIR" "$NONCLIENT")"
 run deny 'explicit git -C config override cannot forge a nonclient proof' \
@@ -926,22 +898,6 @@ run deny 'steer output redirection remains a client write' \
   "$NONCLIENT"
 
 echo "== malformed envelopes and unavailable/uncertain corpus fail closed =="
-run na 'bare trusted read never depends on the billing corpus' \
-  nonexistent.log Bash "cat $NONCLIENT/README.md" "$CLIENT_DIR"
-run na 'explicit nonclient write never depends on the billing corpus' \
-  nonexistent.log Bash "touch /tmp/north-clock-nonclient-marker" "$CLIENT_DIR"
-run na 'bounded nonclient compound never depends on corpus or coordinator' \
-  nonexistent.log Bash \
-  "git -C $NONCLIENT add dotfiles/agents/hooks/north-clock-guard.py && git -C $NONCLIENT commit -F /tmp/north-commit-message" \
-  "$CLIENT_DIR"
-backend_down_json="$(emit_json Bash "touch /tmp/north-clock-backend-down" "$CLIENT_DIR")"
-backend_down_out="$(printf '%s' "$backend_down_json" | env \
-  -u AGENT_NO_AUTHORING_HOOKS -u CLAUDE_NO_AUTHORING_HOOKS \
-  -u FRAM_TELEMETRY_LOG NORTH_PORT=1 NORTH_CLOCK_GUARD_ATTEST=1 \
-  FRAM_LOG="$SCRATCH/nonexistent.log" \
-  AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" "$HOOK" 2>/dev/null)"
-check_output na 'proved nonclient applicability ignores an unreachable coordinator' \
-  "$backend_down_out"
 run unavailable 'classified client edit + missing corpus' nonexistent.log Edit "$CLIENT_DIR/api.py"
 run unavailable 'classified client edit + unreadable corpus' unreadable.log Edit "$CLIENT_DIR/api.py"
 run unavailable 'classified client edit + grossly garbled corpus' garbled.log Edit "$CLIENT_DIR/api.py"

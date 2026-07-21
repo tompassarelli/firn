@@ -34,8 +34,19 @@ TIMEOUT="$RUNTIME/timeout"
 for dependency in "$BASH_BIN" "$CAT" "$GIT" "$MKTEMP" "$PYTHON" "$RM" "$TIMEOUT"; do
   [ -x "$dependency" ] || deny_unavailable
 done
+KILLSWITCH="$HERE/lib/authoring-killswitch.sh"
+[ -r "$KILLSWITCH" ] || deny_unavailable
+# shellcheck disable=SC1090
+builtin source "$KILLSWITCH" 2>/dev/null || deny_unavailable
+authoring_guards_off && noop
+
+CORE="$HERE/north-clock-guard.py"
+[ -r "$CORE" ] || deny_unavailable
 PYTHON_STORE="$("$PYTHON" -I -S -c \
   'import os,sys; print(os.path.realpath(sys.argv[1]))' "$PYTHON" 2>/dev/null)" ||
+  deny_unavailable
+GIT_STORE="$("$PYTHON" -I -S -c \
+  'import os,sys; print(os.path.realpath(sys.argv[1]))' "$GIT" 2>/dev/null)" ||
   deny_unavailable
 
 WORK="$(
@@ -52,43 +63,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Drain the complete hook envelope before any kill-switch/no-op exit. Retain at
-# most MAX_INPUT_BYTES+1 while continuing to EOF, so a disabled guard cannot
-# close Codex's writer early and an oversized envelope remains memory-bounded.
+# Bound both transport directions. A pathological hook envelope or a flooding
+# child becomes the stable infrastructure denial, never a provider timeout.
 # shellcheck disable=SC2016
 if ! "$TIMEOUT" --signal=TERM --kill-after=0.2s 1s \
-    "$PYTHON_STORE" -I -S -c '
-import sys
-
-limit = 1 << 20
-remaining = limit + 1
-total = 0
-with open(sys.argv[1], "wb") as output:
-    while True:
-        chunk = sys.stdin.buffer.read(65536)
-        if not chunk:
-            break
-        total += len(chunk)
-        if remaining:
-            retained = chunk[:remaining]
-            output.write(retained)
-            remaining -= len(retained)
-raise SystemExit(0 if total <= limit else 65)
-' "$INPUT" 2>/dev/null; then
+    "$BASH_BIN" -c 'ulimit -f 16384; exec "$1" >"$2"' \
+      _ "$CAT" "$INPUT" 2>/dev/null; then
   deny_unavailable
 fi
-
-KILLSWITCH="$HERE/lib/authoring-killswitch.sh"
-[ -r "$KILLSWITCH" ] || deny_unavailable
-# shellcheck disable=SC1090
-builtin source "$KILLSWITCH" 2>/dev/null || deny_unavailable
-authoring_guards_off && noop
-
-CORE="$HERE/north-clock-guard.py"
-[ -r "$CORE" ] || deny_unavailable
-GIT_STORE="$("$PYTHON" -I -S -c \
-  'import os,sys; print(os.path.realpath(sys.argv[1]))' "$GIT" 2>/dev/null)" ||
-  deny_unavailable
 
 core_status=0
 # shellcheck disable=SC2016
