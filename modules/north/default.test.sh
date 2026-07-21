@@ -25,6 +25,14 @@ printf 'ok: Firn ordinary North wrapper rejects direct coordinator lifecycle bef
 # ambient forgery with the exact immutable managed Codex executable before the
 # checkout receives control.
 if [ -n "${NORTH_LIVE_WRAPPER_BIN:-}" ]; then
+  live_checkout_target="${NORTH_LIVE_CHECKOUT_TARGET:-north}"
+  case "$live_checkout_target" in
+    north|north-mcp) ;;
+    *)
+      printf 'unsupported North live checkout target: %s\n' "$live_checkout_target" >&2
+      exit 1
+      ;;
+  esac
   [ -x "$NORTH_LIVE_WRAPPER_BIN" ] || {
     printf 'built North live wrapper is not executable: %s\n' "$NORTH_LIVE_WRAPPER_BIN" >&2
     exit 1
@@ -48,7 +56,7 @@ if [ -n "${NORTH_LIVE_WRAPPER_BIN:-}" ]; then
   trap 'rm -rf "${scratch:?}"' EXIT
   mkdir -p "$scratch/checkout/bin"
   ln -s "${NORTH_TRUSTED_RUNTIME_BUN:-/run/current-system/sw/bin/bun}" \
-    "$scratch/checkout/bin/north"
+    "$scratch/checkout/bin/$live_checkout_target"
   probe_source='import { trustedManagedCodexExecutable } from "'"${NORTH_TRUSTED_RUNTIME_MODULE:-/home/tom/code/north/sdk/src/trusted-runtime.ts}"'"; console.log(trustedManagedCodexExecutable())'
   observed="$({
     NORTH_CHECKOUT="$scratch/checkout" \
@@ -60,5 +68,6 @@ if [ -n "${NORTH_LIVE_WRAPPER_BIN:-}" ]; then
       "$observed" "$expected_managed_codex" >&2
     exit 1
   }
-  printf 'ok: built North live wrapper passes exact managed OpenAI executable preflight\n'
+  printf 'ok: built %s live wrapper passes exact managed OpenAI executable preflight\n' \
+    "$live_checkout_target"
 fi
