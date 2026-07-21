@@ -35,7 +35,7 @@ fixture_v3='{
       "provider": "openai",
       "targets": [
         {"id":"o-unavailable","provider":"openai","installed":true,"authenticated":false,"available":false,"availabilityReason":"authentication_missing","routing":"unavailable","headroom":"unknown"},
-        {"id":"o-eligible","provider":"openai","installed":true,"authenticated":true,"available":true,"availabilityReason":"ready","routing":"eligible","headroom":"normal"},
+        {"id":"o-eligible","provider":"openai","installed":true,"authenticated":true,"available":true,"availabilityReason":"ready","routing":"eligible","headroom":"unknown"},
         {"id":"o-disabled","provider":"openai","installed":true,"authenticated":true,"available":false,"availabilityReason":"disabled","routing":"disabled","headroom":"normal"}
       ]
     }
@@ -57,7 +57,7 @@ assert_rejected() {
 [ "$(printf '%s\n' "$fixture_v2" | "$HERE/agent-provider-status.sh" anthropic)" = 'yes|yes|plenty|eligible' ]
 [ "$(printf '%s\n' "$fixture_v2" | "$HERE/agent-provider-status.sh" openai)" = 'yes|no|unknown|unavailable' ]
 [ "$(printf '%s\n' "$fixture_v3" | "$HERE/agent-provider-status.sh" anthropic)" = 'yes|yes|normal|eligible' ]
-[ "$(printf '%s\n' "$fixture_v3" | "$HERE/agent-provider-status.sh" openai)" = 'yes|yes|normal|eligible' ]
+[ "$(printf '%s\n' "$fixture_v3" | "$HERE/agent-provider-status.sh" openai)" = 'yes|yes|unknown|eligible' ]
 
 only_exhausted="$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets = [.providers[1].targets[0] | .id = "o-exhausted" | .authenticated = true | .available = true | .availabilityReason = "ready" | .routing = "exhausted" | .headroom = "exhausted"]')"
 [ "$(printf '%s\n' "$only_exhausted" | "$HERE/agent-provider-status.sh" openai)" = 'yes|yes|exhausted|exhausted' ]
@@ -93,8 +93,8 @@ assert_rejected 'v3 command-missing target marked installed' \
   "$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets[0].availabilityReason = "command_missing"')" openai
 assert_rejected 'v3 authentication-missing target marked authenticated' \
   "$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets[0].authenticated = true')" openai
-assert_rejected 'v3 authenticated target with unknown headroom' \
-  "$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets[1].headroom = "unknown"')" openai
+assert_rejected 'v3 unknown-headroom unavailable target marked authenticated' \
+  "$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets[0].authenticated = true | .providers[1].targets[0].headroom = "unknown"')" openai
 assert_rejected 'v3 duplicate target IDs across providers' \
   "$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets[0].id = .providers[0].targets[0].id')" openai
 assert_rejected 'v3 duplicate provider groups' \

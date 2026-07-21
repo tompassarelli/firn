@@ -50,7 +50,6 @@ jq -er --arg provider "$provider" '
     (.available | type) == "boolean" and
     (.availabilityReason | valid_availability_reason) and
     (.headroom | valid_headroom) and
-    ((.authenticated and .headroom == "unknown") | not) and
     valid_availability_tuple and
     .routing == expected_routing;
   def valid_v3_document:
