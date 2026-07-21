@@ -34,6 +34,7 @@
          racket/port
          racket/string
          racket/format
+         json
          beagle/private/parse        ; #29: the real beagle reader (read-beagle-syntax)
          "util.rkt")
 
@@ -221,7 +222,7 @@
 
 ;; ---------- host-side extraction ----------
 
-(struct host-tags (host enabled disabled) #:transparent)
+(struct host-tags (host enabled disabled platform) #:transparent)
 ;; enabled: list of (cons tag-string (list of edit-flag entries))
 ;;   each edit-flag is (cons 'plus modname-string) or (cons 'minus modname-string)
 ;; disabled: list of module-name strings
@@ -251,13 +252,13 @@
   ;; struct. Missing file → empty record (no tags enabled).
   (define path (in-repo "hosts" host "enabled-tags.bnix"))
   (cond
-    [(not (file-exists? path)) (host-tags host '() '())]
+    [(not (file-exists? path)) (host-tags host '() '() "linux")]
     [else
      (with-handlers ([exn:fail?
                       (λ (e)
                         (eprintf "tag-resolve: failed to read ~a: ~a\n"
                                  (relative-to-repo path) (exn-message e))
-                        (host-tags host '() '()))])
+                        (host-tags host '() '() "linux"))])
        (define forms (read-bnix-forms path))
        ;; Find the first map-shaped form: either bare (:enabled … :disabled …)
        ;; or (def NAME {map}) — accept both.
@@ -274,10 +275,14 @@
        (define h (map-datum->pairs raw-map))
        (define enabled-raw (hash-ref h "enabled" '()))
        (define disabled-raw (hash-ref h "disabled" '()))
+       (define platform-raw (hash-ref h "platform" 'linux))
        (host-tags host
                   (filter values (map parse-host-enabled-entry
                                       (if (list? enabled-raw) enabled-raw '())))
-                  (parse-symbol-list (if (list? disabled-raw) disabled-raw '()))))]))
+                  (parse-symbol-list (if (list? disabled-raw) disabled-raw '()))
+                  (if (symbol? platform-raw)
+                      (symbol->string platform-raw)
+                      "invalid")))]))
 
 ;; ---------- resolution ----------
 
@@ -328,13 +333,27 @@
   ;; Compute the resolution struct for `host` by reading the live repo.
   ;; Pure-ish — does not write files. Caller decides what to do with
   ;; the result. For tests, use (resolve module-index host-tags-record).
-  (resolve (get-module-index) (extract-host-tags host)))
+  (define ht (extract-host-tags host))
+  (define allowed
+    (case (string->symbol (host-tags-platform ht))
+      [(linux) #f]
+      [(darwin)
+       (define path (in-repo "config" "darwin-modules.json"))
+       (unless (file-exists? path)
+         (error 'resolve-host "Darwin module allowlist is missing: ~a" path))
+       (define value (call-with-input-file path read-json))
+       (unless (and (list? value) (andmap string? value))
+         (error 'resolve-host "Darwin module allowlist must be a JSON array of strings: ~a" path))
+       value]
+      [else #f]))
+  (resolve (get-module-index) ht #:allowed-modules allowed))
 
-(define (resolve module-index ht)
+(define (resolve module-index ht #:allowed-modules [allowed-modules #f])
   ;; Pure resolution kernel: takes a module-index (hash: name → module-tags)
   ;; and a host-tags struct, returns a resolution struct. No I/O.
   (define-values (defaults opt-in) (tag-universe module-index))
   (define host (host-tags-host ht))
+  (define platform (host-tags-platform ht))
   (define enabled-entries (host-tags-enabled ht))
   (define disabled (host-tags-disabled ht))
 
@@ -343,6 +362,15 @@
   (define per-tag (make-hash))
   (define active-set (make-hash))     ; modname → #t
   (define override-applies (make-hash)) ; modname → list of (tag . override-pairs)
+  (define allowed-set (and allowed-modules (list->hash-set allowed-modules)))
+
+  (unless (member platform '("linux" "darwin"))
+    (set! errors
+          (cons (tag-validation-error
+                 'unknown-platform #f #f
+                 (format "host '~a' declares unsupported platform '~a'"
+                         host platform))
+                errors)))
 
   (for ([entry (in-list enabled-entries)])
     (define tag (car entry))
@@ -391,9 +419,13 @@
     (define minus-set (list->hash-set minuses))
     (define defaults-here (hash-ref defaults tag '()))
     (define from-defaults
-      (filter (λ (m) (not (hash-has-key? minus-set m))) defaults-here))
+      (filter (λ (m) (and (not (hash-has-key? minus-set m))
+                          (or (not allowed-set) (hash-has-key? allowed-set m))))
+              defaults-here))
     (define from-pluses
-      (filter (λ (m) (hash-has-key? opt-in-set m)) pluses))
+      (filter (λ (m) (and (hash-has-key? opt-in-set m)
+                          (or (not allowed-set) (hash-has-key? allowed-set m))))
+              pluses))
     (define contribution (sort (remove-duplicates (append from-defaults from-pluses))
                                string<?))
     (hash-set! per-tag tag contribution)

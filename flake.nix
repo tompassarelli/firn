@@ -81,6 +81,7 @@
   };
   outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, fram, gaffer, gjoa, hermes-agent, north, nur, palefox, quickshell, walker, zen-browser, ... }: let
     firnModules = ./modules;
+    darwinModuleNames = builtins.fromJSON (builtins.readFile ./config/darwin-modules.json);
   in
   {
     lib.mkSystem = ({ hostname, hostConfig, hardwareConfig, system ? "x86_64-linux", extraModules ? [ ], extraOverlays ? [ ], extraSpecialArgs ? { }, ... }: nixpkgs.lib.nixosSystem {
@@ -309,48 +310,7 @@
         home-manager.darwinModules.home-manager
         hostConfig
         ({ config, lib, pkgs, ... }: {
-          imports = ((builtins.map (m: "${firnModules}/${m}") [
-            "agent-core"
-            "atuin"
-            "bash"
-            "bc"
-            "beagle"
-            "btop"
-            "claude"
-            "curl"
-            "delta"
-            "direnv"
-            "dust"
-            "eza"
-            "fastfetch"
-            "fd"
-            "forgejo-cli"
-            "fram"
-            "gh"
-            "ghostscript"
-            "ghostty"
-            "git"
-            "gitleaks"
-            "glow"
-            "imagemagick"
-            "jq"
-            "kitty"
-            "my-agents"
-            "north"
-            "opencode"
-            "procs"
-            "promptfoo"
-            "ripgrep"
-            "starship"
-            "tealdeer"
-            "tree"
-            "unrar"
-            "unzip"
-            "vim"
-            "wget"
-            "yazi"
-            "zoxide"
-          ]));
+          imports = ((builtins.map (m: "${firnModules}/${m}") darwinModuleNames));
           options.myConfig.modules.users.username = lib.mkOption {
             type = lib.types.str;
             default = "you";

@@ -60,7 +60,10 @@
      ;; --- END GENERATED MODULE ARGS ---
      ...]
     (let
-      [firnModules (p "./modules")]
+      [firnModules (p "./modules")
+       darwinModuleNames
+        (builtins.fromJSON
+          (builtins.readFile (p "./config/darwin-modules.json")))]
       {:lib.mkSystem
         (nix/module
           [hostname
@@ -314,46 +317,7 @@
                    {:imports
                      (++
                        (builtins.map (fn [m] (s firnModules "/" m))
-                         ["agent-core"
-                          "atuin"
-                          "bash"
-                          "bc"
-                          "beagle"
-                          "btop"
-                          "claude"
-                          "curl"
-                          "delta"
-                          "direnv"
-                          "dust"
-                          "eza"
-                          "fastfetch"
-                          "fd"
-                          "forgejo-cli"
-                          "fram"
-                          "gh"
-                          "ghostscript"
-                          "ghostty"
-                          "git"
-                          "gitleaks"
-                          "glow"
-                          "imagemagick"
-                          "jq"
-                          "kitty"
-                          "my-agents"
-                          "north"
-                          "opencode"
-                          "procs"
-                          "promptfoo"
-                          "ripgrep"
-                          "starship"
-                          "tealdeer"
-                          "tree"
-                          "unrar"
-                          "unzip"
-                          "vim"
-                          "wget"
-                          "yazi"
-                          "zoxide"]))
+                         darwinModuleNames))
                     :options.myConfig.modules.users.username
                      (lib.mkOption
                        {:type        lib.types.str

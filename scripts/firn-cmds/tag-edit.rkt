@@ -53,10 +53,11 @@
   ;; line under :enabled, inline :disabled if non-empty.
   (define enabled (host-tags-enabled ht))
   (define disabled (host-tags-disabled ht))
+  (define platform (host-tags-platform ht))
   (define out (open-output-string))
   (fprintf out "#lang beagle/nix\n\n")
   (fprintf out "(ns enabled-tags)\n\n")
-  (fprintf out "{:enabled\n")
+  (fprintf out "{:platform ~a\n :enabled\n" platform)
   (cond
     [(null? enabled)
      (fprintf out "  []")]
@@ -125,7 +126,8 @@
        [else
         (host-tags (host-tags-host ht)
                    (append enabled (list (cons tag '())))
-                   (host-tags-disabled ht))]))))
+                   (host-tags-disabled ht)
+                   (host-tags-platform ht))]))))
 
 (define (handle-tag-disable tag)
   (mutate-host-tags
@@ -133,7 +135,8 @@
    (λ (ht)
      (host-tags (host-tags-host ht)
                 (tag-entry-without (host-tags-enabled ht) tag)
-                (host-tags-disabled ht)))))
+                (host-tags-disabled ht)
+                (host-tags-platform ht)))))
 
 ;; ---------- tag opt-in / opt-out ----------
 
@@ -162,7 +165,8 @@
               [(equal? (car e) tag)
                (cons tag (append (cdr e) (list new-flag)))]
               [else e]))]))
-     (host-tags (host-tags-host ht) new-enabled (host-tags-disabled ht)))))
+     (host-tags (host-tags-host ht) new-enabled (host-tags-disabled ht)
+                (host-tags-platform ht)))))
 
 (define (handle-tag-opt-in leaf)
   (define-values (tag mod) (split-leaf-on-plus leaf))
@@ -186,6 +190,7 @@
     (exit 1))
   (define ht (extract-host-tags host))
   (printf "Host: ~a\n" host)
+  (printf "Platform: ~a\n" (host-tags-platform ht))
   (printf "Source: ~a\n\n" (relative-to-repo path))
   (printf ":enabled (~a):\n" (length (host-tags-enabled ht)))
   (cond
@@ -230,7 +235,8 @@
        [else
         (host-tags (host-tags-host ht)
                    (host-tags-enabled ht)
-                   (sort (cons name (host-tags-disabled ht)) string<?))]))))
+                   (sort (cons name (host-tags-disabled ht)) string<?)
+                   (host-tags-platform ht))]))))
 
 (define (handle-module-tag-enable name)
   ;; Two outcomes:
@@ -248,7 +254,8 @@
         (host-tags (host-tags-host ht2)
                    (host-tags-enabled ht2)
                    (filter (λ (m) (not (equal? m name)))
-                           (host-tags-disabled ht2)))))]
+                           (host-tags-disabled ht2))
+                   (host-tags-platform ht2))))]
     [else
      (eprintf "firn module enable: no module-level force-on in tag-driven hosts.\n")
      (eprintf "\n")

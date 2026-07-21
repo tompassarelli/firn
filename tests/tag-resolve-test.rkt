@@ -22,7 +22,8 @@
     (hash-set! h (car p) (cdr p)))
   h)
 
-(define (mk-host name #:enabled [enabled '()] #:disabled [disabled '()])
+(define (mk-host name #:enabled [enabled '()] #:disabled [disabled '()]
+                 #:platform [platform "linux"])
   ;; enabled is a list of either:
   ;;   "tagname"                                — bare-tag entry
   ;;   (cons "tagname" (list (cons 'minus "x") (cons 'plus "y") …))
@@ -32,7 +33,8 @@
              (for/list ([e (in-list enabled)])
                (cond [(string? e) (cons e '())]
                      [else e]))
-             disabled))
+             disabled
+             platform))
 
 (define (active-set res) (resolution-active res))
 (define (per-tag res tag) (sort (hash-ref (resolution-per-tag res) tag '()) string<?))
@@ -218,6 +220,19 @@
      (mod "firefox" #:tags '("browsers"))))
   (define res (resolve idx (mk-host "h" #:enabled '("dev" "browsers"))))
   (check-equal? (active-set res) '("firefox" "git" "ripgrep")))
+
+(test-case "Darwin resolution excludes tag members outside the canonical import allowlist"
+  (define idx
+    (mk-index
+     (mod "git" #:tags '("cli-tools"))
+     (mod "libsecret" #:tags '("cli-tools"))))
+  (define res
+    (resolve idx
+             (mk-host "ashashi" #:enabled '("cli-tools") #:platform "darwin")
+             #:allowed-modules '("git")))
+  (check-equal? (active-set res) '("git"))
+  (check-equal? (per-tag res "cli-tools") '("git"))
+  (check-false (regexp-match? #rx"libsecret" (emit-host-enables-bnix res))))
 
 ;; ---------- emitter ----------
 

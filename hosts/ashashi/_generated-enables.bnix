@@ -32,7 +32,6 @@
    :myConfig.modules.glow.enable (lib.mkDefault true)
    :myConfig.modules.imagemagick.enable (lib.mkDefault true)
    :myConfig.modules.jq.enable (lib.mkDefault true)
-   :myConfig.modules.libsecret.enable (lib.mkDefault true)
    :myConfig.modules.my-agents.enable (lib.mkDefault true)
    :myConfig.modules.north.enable (lib.mkDefault true)
    :myConfig.modules.opencode.enable (lib.mkDefault true)

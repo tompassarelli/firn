@@ -2,7 +2,8 @@
 
 (ns enabled-tags)
 
-{:enabled
+{:platform darwin
+ :enabled
   [terminal
    cli-tools
    development]

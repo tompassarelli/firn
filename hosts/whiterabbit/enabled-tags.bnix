@@ -2,7 +2,8 @@
 
 (ns enabled-tags)
 
-{:enabled
+{:platform linux
+ :enabled
   [terminal
    cli-tools
    [desktop -mako +river]
