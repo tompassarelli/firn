@@ -8,24 +8,157 @@
         set -euo pipefail
         # bench-shield on [N] — reserve the top N cores (default 8; measured:
         # control arm ~0.1 core avg, treatment gate bursts ~8 cores at p95).
-        NPROC=$(nproc)
-        N="''${2:-8}"
-        SYS_CORES="0-$((NPROC - N - 1))"; BENCH_CORES="$((NPROC - N))-$((NPROC - 1))"
-        units="system.slice user.slice init.scope"
-        case "''${1:-status}" in
+        COMMAND="''${1:-status}"
+        case "$COMMAND" in on|off|run|status) ;; *) echo "usage: bench-shield on [N] | off | run [N] -- command | status" >&2; exit 2 ;; esac
+        if [[ "$COMMAND" =~ ^(on|off)$ ]] && (( EUID != 0 )); then
+          exec sudo -- "$0" "$@"
+        fi
+        if [[ "$COMMAND" == run ]]; then
+          shift
+          N=8
+          if [[ "''${1:-}" != -- ]]; then N="''${1:-}"; shift || true; fi
+          if [[ "''${1:-}" != -- ]] || (( $# < 2 )); then
+            echo "usage: bench-shield run [N] -- command [args...]" >&2
+            exit 2
+          fi
+          shift
+          NPROC=$(nproc)
+          if [[ ! "$N" =~ ^[0-9]+$ ]] || (( N < 1 || N >= NPROC )); then
+            echo "bench-shield: reserved core count must be between 1 and $((NPROC - 1))" >&2
+            exit 2
+          fi
+          BENCH_CORES="$((NPROC - N))-$((NPROC - 1))"
+          RUN_SHIELDED=0
+          run_cleanup() {
+            local rc=$?
+            trap - EXIT INT TERM HUP
+            if (( RUN_SHIELDED )) && ! "$0" off; then rc=1; fi
+            exit "$rc"
+          }
+          trap run_cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          trap 'exit 129' HUP
+          "$0" on "$N"
+          RUN_SHIELDED=1
+          taskset -c "$BENCH_CORES" "$@"
+          exit 0
+        fi
+        units=(system.slice user.slice init.scope)
+        STATE_DIR=/run/bench-shield
+        STATUS_FILE=$STATE_DIR/status
+        RESTORE_ON_EXIT=0
+        reset_state() {
+          rm -rf /run/bench-shield
+        }
+        write_status() {
+          printf '%s\n' "$1" > "$STATE_DIR/status.new"
+          mv "$STATE_DIR/status.new" "$STATUS_FILE"
+        }
+        snapshot_path() {
+          printf '%s/%s.allowed-cpus' "$STATE_DIR" "$1"
+        }
+        restore_saved() {
+          local u value failed=0
+          for u in "''${units[@]}"; do
+            if [[ ! -f "$(snapshot_path "$u")" ]]; then
+              echo "bench-shield: missing AllowedCPUs snapshot for $u; refusing partial restore" >&2
+              return 1
+            fi
+          done
+          write_status restore-pending
+          for u in "''${units[@]}"; do
+            value="$(<"$(snapshot_path "$u")")"
+            if ! systemctl set-property --runtime "$u" "AllowedCPUs=$value"; then
+              echo "bench-shield: failed to restore AllowedCPUs for $u" >&2
+              failed=1
+            fi
+          done
+          if (( failed )); then
+            return 1
+          fi
+          reset_state
+          RESTORE_ON_EXIT=0
+        }
+        cleanup() {
+          local rc=$?
+          trap - EXIT INT TERM HUP
+          if (( RESTORE_ON_EXIT )); then
+            if ! restore_saved; then
+              echo "bench-shield: cleanup incomplete; snapshots retained for the next off" >&2
+              rc=1
+            fi
+          fi
+          exit "$rc"
+        }
+        trap cleanup EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        trap 'exit 129' HUP
+        recover_interrupted() {
+          local state
+          [[ -f "$STATUS_FILE" ]] || return 0
+          state="$(<"$STATUS_FILE")"
+          case "$state" in
+            active) return 0 ;;
+            snapshotting) reset_state ;;
+            pending|restore-pending)
+              RESTORE_ON_EXIT=1
+              if ! restore_saved; then
+                echo "bench-shield: could not recover interrupted state" >&2
+                return 1
+              fi
+              ;;
+            *) echo "bench-shield: invalid state '$state'; refusing mutation" >&2; return 1 ;;
+          esac
+        }
+        snapshot_original() {
+          local u
+          reset_state
+          install -d -m 0700 "$STATE_DIR"
+          write_status snapshotting
+          for u in "''${units[@]}"; do
+            if ! systemctl show --property=AllowedCPUs --value "$u" > "$(snapshot_path "$u")"; then
+              echo "bench-shield: could not snapshot AllowedCPUs for $u; no units changed" >&2
+              reset_state
+              return 1
+            fi
+          done
+        }
+        if [[ "$COMMAND" == status ]]; then
+          for u in "''${units[@]}"; do printf '%-14s AllowedCPUs=%s\n' "$u" "$(systemctl show --property=AllowedCPUs --value "$u")"; done
+          exit 0
+        fi
+        exec 9>/run/bench-shield.lock
+        flock 9
+        recover_interrupted
+        case "$COMMAND" in
           on)
-            for u in $units; do sudo systemctl set-property --runtime "$u" AllowedCPUs=$SYS_CORES; done
+            NPROC=$(nproc)
+            N="''${2:-8}"
+            if [[ ! "$N" =~ ^[0-9]+$ ]] || (( N < 1 || N >= NPROC )); then
+              echo "bench-shield: reserved core count must be between 1 and $((NPROC - 1))" >&2
+              exit 2
+            fi
+            SYS_CORES="0-$((NPROC - N - 1))"; BENCH_CORES="$((NPROC - N))-$((NPROC - 1))"
+            if [[ ! -f "$STATUS_FILE" ]]; then snapshot_original; fi
+            write_status pending
+            RESTORE_ON_EXIT=1
+            for u in "''${units[@]}"; do systemctl set-property --runtime "$u" "AllowedCPUs=$SYS_CORES"; done
+            write_status active
+            RESTORE_ON_EXIT=0
             echo "shield ON — everything else confined to $SYS_CORES."
             echo "run experiments with: taskset -c $BENCH_CORES <cmd>  (cores $BENCH_CORES are now exclusive)"
             ;;
           off)
-            for u in $units; do sudo systemctl set-property --runtime "$u" AllowedCPUs=""; done
-            echo "shield OFF — all cores shared again."
+            if [[ ! -f "$STATUS_FILE" ]]; then
+              echo "shield OFF — no saved allocation; nothing to restore."
+              exit 0
+            fi
+            RESTORE_ON_EXIT=1
+            restore_saved
+            echo "shield OFF — original AllowedCPUs restored."
             ;;
-          status)
-            for u in $units; do printf '%-14s AllowedCPUs=%s\n' "$u" "$(systemctl show -p AllowedCPUs --value "$u")"; done
-            ;;
-          *) echo "usage: bench-shield on|off|status" >&2; exit 2 ;;
         esac
 
       '')
