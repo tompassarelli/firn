@@ -34,7 +34,7 @@ lives in [beagle](https://github.com/tompassarelli/beagle).
 This repository is two things at once: the firn framework, and the
 author's real NixOS + nix-darwin config built on it. To use firn for
 your own machines, **start from [`template/`](template/)**. The full
-repo (`hosts/whiterabbit/`, ~166 modules) is here as a study
+repo (`hosts/whiterabbit/`, ~188 modules) is here as a study
 reference, not as something to fork wholesale.
 
 ## Quick start
@@ -72,8 +72,8 @@ full grid, or `firn <node>` for one entity's edges.
 
 [sops-nix](https://github.com/Mic92/sops-nix): encrypted `secrets/*.yaml` are
 committed, the private age key stays machine-local, `.sops.yaml` lists the
-public recipients. Only `awscli` and `clockify` use secrets — both opt-in, off
-by default, so the config builds clean without them.
+public recipients. Only the `awscli` and `clockify` modules use secrets — both
+opt-in, off by default, so the config builds clean without them.
 
 → **[docs/secrets.md](docs/secrets.md)** — key layout + bring-your-own-key fork recipe.
 
