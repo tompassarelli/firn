@@ -19,7 +19,7 @@
    doom-emacs
    [browsers +chrome +qutebrowser +zen-browser]
    gaming
-   [creative -blender -gimp -godot]
+   [creative -blender -godot]
    [media -youtube-music]
    communication
    [office -libreoffice]

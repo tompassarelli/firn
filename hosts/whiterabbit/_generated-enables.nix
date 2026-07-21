@@ -43,6 +43,7 @@
   myConfig.modules.gh.enable = lib.mkDefault true;
   myConfig.modules.ghostscript.enable = lib.mkDefault true;
   myConfig.modules.ghostty.enable = lib.mkDefault true;
+  myConfig.modules.gimp.enable = lib.mkDefault true;
   myConfig.modules.git.enable = lib.mkDefault true;
   myConfig.modules.gitleaks.enable = lib.mkDefault true;
   myConfig.modules.glow.enable = lib.mkDefault true;
