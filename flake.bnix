@@ -24,7 +24,7 @@
    :gaffer {:url "git+file:///home/tom/code/gaffer?ref=main" :flake false}
    :gjoa {:url "github:tompassarelli/gjoa"}
    :hermes-agent {:inputs.nixpkgs.follows "nixpkgs" :url "github:NousResearch/hermes-agent/244dabbd9c4b542bf5c1ad0159af512c2b5d6e08"}
-   :north {:inputs.gaffer.follows "gaffer" :url "git+file:///home/tom/code/north?ref=main" :inputs.fram.follows "fram" :inputs.beagle.follows "beagle"}
+   :north {:inputs.gaffer.follows "gaffer" :url "git+file:///home/tom/code/north?ref=main" :inputs.fram.follows "fram"}
    :nur {:url "github:nix-community/NUR"}
    :palefox {:url "github:tompassarelli/palefox"}
    :quickshell {:inputs.nixpkgs.follows "nixpkgs" :url "git+https://git.outfoxxed.me/outfoxxed/quickshell"}

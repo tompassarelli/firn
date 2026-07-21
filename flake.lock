@@ -78,11 +78,11 @@
         "zig-overlay": "zig-overlay"
       },
       "locked": {
-        "lastModified": 1784411240,
-        "narHash": "sha256-jK2TRKtWHrZ53iINQs/Jbd9DhULN+ra3Q5LiInzdYvU=",
+        "lastModified": 1784505799,
+        "narHash": "sha256-OY8OsCd159NmK/tV0hf+ZGqKnJmyei2uGovkFSkZPZM=",
         "ref": "main",
-        "rev": "e82305057bb5cf74edf74476776ff5b98c94071c",
-        "revCount": 927,
+        "rev": "c30a5145d39d15fd5776a8fcba22c9ccbc49c298",
+        "revCount": 947,
         "type": "git",
         "url": "file:///home/tom/code/beagle"
       },
@@ -394,11 +394,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1784441932,
-        "narHash": "sha256-TtgBoJPznX6M0lI3p9iJm/DffvQGJoIgyROAJvh5Cn4=",
+        "lastModified": 1784571846,
+        "narHash": "sha256-NpmhcSb07/Vwz+U5cUb4/up00KpRL2YPPdEDUIdDQkw=",
         "ref": "main",
-        "rev": "1447da8623928a07cec7cc0f4a10ab34aeaa2d67",
-        "revCount": 341,
+        "rev": "bbf4d29f3796e64954b3ec4e2d8579ba69631524",
+        "revCount": 356,
         "type": "git",
         "url": "file:///home/tom/code/fram"
       },
@@ -427,11 +427,11 @@
     "gaffer": {
       "flake": false,
       "locked": {
-        "lastModified": 1784430698,
-        "narHash": "sha256-sRgIxCAnbBC6nlx+o8hHSWCgyAIL8ddbW4iutv9QiIE=",
+        "lastModified": 1784492014,
+        "narHash": "sha256-f+o2fkxClYNIrX85YBfFe6Kx8uBgi0+Dpp7VbewHAw4=",
         "ref": "main",
-        "rev": "04452406cad81c08ccf99726b027301ed1fdeae7",
-        "revCount": 34,
+        "rev": "777809697bd33479042eabd55c028eca6c6f917a",
+        "revCount": 41,
         "type": "git",
         "url": "file:///home/tom/code/gaffer"
       },
@@ -700,6 +700,22 @@
         "type": "github"
       }
     },
+    "nixpkgs-master_2": {
+      "locked": {
+        "lastModified": 1784455419,
+        "narHash": "sha256-2z44y0h/p4vo6HoAhE+wrRS8MjJHS8foZrWXJO2LpPc=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "29480be57840ab0332f6ecc6523c52c40e04bdf2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "master",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "nixpkgs-unstable": {
       "locked": {
         "lastModified": 1784120854,
@@ -846,9 +862,6 @@
     },
     "north": {
       "inputs": {
-        "beagle": [
-          "beagle"
-        ],
         "flake-utils": "flake-utils_3",
         "fram": [
           "fram"
@@ -856,14 +869,15 @@
         "gaffer": [
           "gaffer"
         ],
-        "nixpkgs": "nixpkgs_5"
+        "nixpkgs": "nixpkgs_5",
+        "nixpkgs-master": "nixpkgs-master_2"
       },
       "locked": {
-        "lastModified": 1784442525,
-        "narHash": "sha256-x1GWZmXk0qBglDO31f4WxZHoOGiWb73djvsAwFStXeM=",
+        "lastModified": 1784578714,
+        "narHash": "sha256-3w/sJNv1N2MqrMhXCH8BiBqdVFfbKs/Sq6bNZw8LluY=",
         "ref": "main",
-        "rev": "55e254f54a09df66dd2900440f98808bf23eb8ef",
-        "revCount": 315,
+        "rev": "77d6bd589a75e05defd94296675e8b48a79a8e31",
+        "revCount": 423,
         "type": "git",
         "url": "file:///home/tom/code/north"
       },

@@ -224,8 +224,10 @@ record_live_hook_binding() {
 }
 
 # Classify the executable path from systemctl's structured ExecStart rendering.
-# A store path is positive evidence of the verified Fram closure; rejecting the
-# familiar checkout path alone would still accept arbitrary unpinned wrappers.
+# The unit owns one immutable launcher; that launcher owns the mutable, exact-
+# revision selector. A direct Fram executable would recreate the supervisor race
+# and bypass selector validation, even when that executable happens to be in the
+# Nix store.
 classify_north_coord_exec() {
   local exec_spec="$1" path=''
 
@@ -238,16 +240,176 @@ classify_north_coord_exec() {
   fi
   NORTH_COORD_EXEC_PATH="$path"
 
-  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*/bin/fram-daemon$ ]]; then
-    NORTH_COORD_EXEC_KIND='pinned-package'
+  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-north-coord-runtime/bin/north-coord-runtime$ ]]; then
+    NORTH_COORD_EXEC_KIND='runtime-selector'
     return 0
+  fi
+  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*/bin/fram-daemon$ ]]; then
+    NORTH_COORD_EXEC_KIND='direct-package'
+    return 1
   fi
   case "$path" in
     */code/fram/bin/fram-daemon)
-      NORTH_COORD_EXEC_KIND='checkout'
+      NORTH_COORD_EXEC_KIND='direct-checkout'
       ;;
   esac
   return 1
+}
+
+environment_lines_value() {
+  local environment="$1" key="$2" line value='' count=0
+
+  while IFS= read -r line; do
+    case "$line" in
+      "$key="*)
+        value=${line#*=}
+        count=$((count + 1))
+        ;;
+    esac
+  done <<<"$environment"
+  [ "$count" -eq 1 ] || return 1
+  printf '%s\n' "$value"
+}
+
+north_coord_runtime_identity_is_valid() {
+  local mode="$1" source="$2" revision="$3" tree="$4" origin="$5" daemon="$6" selector="$7"
+  local canonical_source canonical_selector canonical_daemon expected_source
+  local observed_revision observed_tree observed_common observed_origin top_level worktree_status
+
+  NORTH_COORD_RUNTIME_IDENTITY_REASON=''
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON='revision is not an exact Git SHA'
+    return 1
+  }
+  [ -L "$selector" ] || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON="stable selector is not a symlink: $selector"
+    return 1
+  }
+  [ "$(readlink "$selector")" = active/current ] || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON="stable selector target is substituted: $selector"
+    return 1
+  }
+  canonical_source="$(realpath -e "$source" 2>/dev/null)" || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON="runtime source is missing: $source"
+    return 1
+  }
+  canonical_selector="$(readlink -f "$selector" 2>/dev/null)" || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON="stable selector cannot be resolved: $selector"
+    return 1
+  }
+  [ "$canonical_source" = "$canonical_selector" ] || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON='runtime source and stable selector resolve differently'
+    return 1
+  }
+  [ -x "$canonical_source/bin/fram-daemon" ] || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON='selected Fram daemon is not executable'
+    return 1
+  }
+  canonical_daemon="$(realpath -e "$daemon" 2>/dev/null)" || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON="runtime daemon is missing: $daemon"
+    return 1
+  }
+  [ "$canonical_daemon" = "$canonical_source/bin/fram-daemon" ] || {
+    NORTH_COORD_RUNTIME_IDENTITY_REASON='runtime daemon is not the selected physical Fram daemon'
+    return 1
+  }
+
+  case "$mode" in
+    checkout)
+      expected_source="$(realpath -m "$(dirname "$selector")/deployments/$revision")"
+      [ "$canonical_source" = "$expected_source" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source is outside its revision-owned deployment path'
+        return 1
+      }
+      [ -d "$source" ] && [ ! -L "$source" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout deployment is not a real directory'
+        return 1
+      }
+      top_level="$(git -C "$canonical_source" rev-parse --show-toplevel 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source is not a Git worktree root'
+        return 1
+      }
+      [ "$(realpath -e "$top_level" 2>/dev/null)" = "$canonical_source" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source is not its Git worktree root'
+        return 1
+      }
+      if git -C "$canonical_source" symbolic-ref -q HEAD >/dev/null 2>&1; then
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source HEAD is attached to a mutable branch'
+        return 1
+      fi
+      observed_revision="$(git -C "$canonical_source" rev-parse --verify HEAD 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source has no readable Git HEAD'
+        return 1
+      }
+      [ "$observed_revision" = "$revision" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source HEAD differs from declared revision'
+        return 1
+      }
+      [[ "$tree" =~ ^[0-9a-f]{40}$ ]] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout tree is not an exact Git object ID'
+        return 1
+      }
+      observed_tree="$(git -C "$canonical_source" rev-parse --verify 'HEAD^{tree}' 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source tree is unreadable'
+        return 1
+      }
+      [ "$observed_tree" = "$tree" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source tree differs from declared tree'
+        return 1
+      }
+      observed_common="$(git -C "$canonical_source" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source origin is unreadable'
+        return 1
+      }
+      case "$observed_common" in
+        */.git) observed_origin=${observed_common%/.git} ;;
+        *) observed_origin=$observed_common ;;
+      esac
+      observed_origin="$(realpath -e "$observed_origin" 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source origin cannot be canonicalized'
+        return 1
+      }
+      [ "$observed_origin" = "$origin" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source origin differs from declared origin'
+        return 1
+      }
+      git -C "$canonical_source" diff --quiet --no-ext-diff -- || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source has modified tracked files'
+        return 1
+      }
+      git -C "$canonical_source" diff --cached --quiet --no-ext-diff -- || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source has staged tracked files'
+        return 1
+      }
+      worktree_status="$(git -C "$canonical_source" status --porcelain=v1 --untracked-files=all 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source cleanliness is unreadable'
+        return 1
+      }
+      [ -z "$worktree_status" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source has tracked or untracked worktree changes'
+        return 1
+      }
+      ;;
+    package)
+      [[ "$canonical_source" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*$ ]] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='package source is not a direct Fram Nix-store root'
+        return 1
+      }
+      [ "$tree" = "immutable:$revision" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='package tree marker does not bind its package revision'
+        return 1
+      }
+      [ "$origin" = "$canonical_source" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='package origin does not name its immutable store root'
+        return 1
+      }
+      ;;
+    *)
+      NORTH_COORD_RUNTIME_IDENTITY_REASON="unknown runtime mode: $mode"
+      return 1
+      ;;
+  esac
+  return 0
 }
 
 # North web must run the exact executable and working directory from one
@@ -297,6 +459,19 @@ classify_north_web_workdir() {
 systemd_environment_has() {
   local environment="$1" assignment="$2"
   [[ " $environment " == *" $assignment "* ]]
+}
+
+north_coord_listener_pids_from_ss() {
+  grep -oE 'pid=[0-9]+' |
+    cut -d= -f2 |
+    sort -nu
+}
+
+north_coord_listener_set_matches_mainpid() {
+  local main_pid=$1
+  shift
+
+  [[ "$main_pid" =~ ^[1-9][0-9]*$ && $# -eq 1 && "${1:-}" == "$main_pid" ]]
 }
 
 north_web_environment_is_canonical() {
@@ -489,6 +664,15 @@ print(sum(
 PY
 }
 
+canonical_link() {
+  local link="$1" expected="$2" label="$3"
+  local got want
+  got="$(readlink -f "$link" 2>/dev/null || true)"
+  want="$(readlink -f "$expected" 2>/dev/null || true)"
+  if [ -n "$got" ] && [ "$got" = "$want" ]; then ok_detail "$label → ${want#"$REPO"/}"
+  else bad "$label resolves to '${got:-missing}', expected '$want'"; fi
+}
+
 if [ "${1:-}" = "$AGENT_CONFIG_BOUNDED_CHILD_MODE" ]; then
   shift
   probe_child_main "$@"
@@ -503,6 +687,11 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHARED="$REPO/dotfiles/agents"
 CLAUDE="$REPO/dotfiles/claude"
 CODEX="$REPO/dotfiles/codex"
+LIVE_REPO="${AGENT_CONFIG_LIVE_REPO:-$HOME/code/nixos-config}"
+LIVE_SHARED="$LIVE_REPO/dotfiles/agents"
+LIVE_CLAUDE="$LIVE_REPO/dotfiles/claude"
+LIVE_CODEX="$LIVE_REPO/dotfiles/codex"
+LIVE_HERMES="$LIVE_REPO/dotfiles/hermes"
 CODEX_REQUIREMENTS="$REPO/modules/codex/requirements.toml"
 CODEX_LEGACY_HOOKS="${CODEX_LEGACY_HOOKS:-$CODEX/hooks.json}"
 HERMES="${AGENT_CONFIG_HERMES:-$REPO/dotfiles/hermes}"
@@ -583,15 +772,6 @@ need_yaml() {
     note "$label YAML strict-parse skipped (no PyYAML); structural checks apply"
   fi
 }
-canonical_link() {
-  local link="$1" expected="$2" label="$3"
-  local got want
-  got="$(readlink -f "$link" 2>/dev/null || true)"
-  want="$(readlink -f "$expected" 2>/dev/null || true)"
-  if [ -n "$got" ] && [ "$got" = "$want" ]; then ok_detail "$label → ${want#"$REPO"/}"
-  else bad "$label resolves to '${got:-missing}', expected '$want'"; fi
-}
-
 note_ignored_codex_legacy_manifest() {
   local manifest="$1"
   if [ ! -e "$manifest" ]; then
@@ -688,9 +868,9 @@ validate_hooks() {
       else note "$provider $ev uses external North hook ${first##*/} (local check deferred)"; fi
     elif [ "$declared_shared" -eq 1 ] && [ -x "$expected" ]; then
       if [ "$LOCAL" -eq 1 ]; then
-        expected_resolved="$(readlink -f "$expected" 2>/dev/null || true)"
+        expected_resolved="$(readlink -f "$LIVE_SHARED/hooks/$basename" 2>/dev/null || true)"
         if IFS=$'\t' read -r resolved hook_sha \
-          < <(hook_target_fingerprint "$first" /home/tom/code/nixos-config) &&
+          < <(hook_target_fingerprint "$first" "$LIVE_REPO") &&
            [ "$resolved" = "$expected_resolved" ]; then
           role="$basename:shared-adapter"
           if record_live_hook_binding "$role" "$resolved" "$hook_sha"; then
@@ -801,7 +981,7 @@ validate_codex_managed_policy() {
      grep -Fq ':environment.systemPackages [codexPkg]' "$module" &&
      grep -Fq '"codex/runtime"' "$module" &&
      grep -Fq '{:source codexPkg}' "$module"; then
-    ok_detail 'Interactive Codex and the managed runtime marker share inputs.north.packages.${system}.codex'
+    ok_detail 'Firn installs inputs.north.packages.${system}.codex and exposes that exact derivation as the managed runtime marker'
   else
     bad 'Codex module must install and expose the exact inputs.north packages.${system}.codex derivation'
   fi
@@ -876,11 +1056,18 @@ PY
     managed_codex="$(readlink -f /etc/codex/runtime/bin/codex 2>/dev/null || true)"
     interactive_codex="$(readlink -f "$interactive_codex" 2>/dev/null || true)"
     if [ -n "$managed_codex" ] && [[ "$managed_codex" = /nix/store/* ]] &&
-       [ -x "$managed_codex" ] && [ "$interactive_codex" = "$managed_codex" ]; then
-      ok_detail 'Interactive Codex is byte-identical to North managed Codex'
+       [ -x "$managed_codex" ]; then
+      ok_detail 'North managed Codex is an exact immutable executable'
     else
       generation_exact=0
-      bad 'Interactive Codex does not resolve to the exact North managed Codex runtime'
+      bad 'North managed Codex runtime marker is missing, mutable, or non-executable'
+    fi
+    if [ -n "$interactive_codex" ] && [ "$interactive_codex" = "$managed_codex" ]; then
+      ok_detail 'Interactive Codex directly resolves to the managed provider executable'
+    elif [ -n "$interactive_codex" ]; then
+      ok_detail 'Interactive Codex uses a distinct user launcher; managed provider authority remains the immutable runtime marker'
+    else
+      soft 'Interactive Codex is absent from PATH; managed provider authority remains independently attested'
     fi
     north_revision="$(
       jq -er '.nodes.north.locked.rev | select(test("^[0-9a-f]{40}$"))' \
@@ -968,11 +1155,11 @@ require_manifest_guard_count "$CLAUDE/settings.json" Claude Bash 1 'user Bash to
 claude_bindings="$HOOK_BINDINGS"
 claude_hook_provenance="$HOOK_PROVENANCE_SUMMARY"
 if [ "$LOCAL" -eq 1 ]; then
-  canonical_link "$HOME/.claude/settings.json" "$CLAUDE/settings.json" "$HOME/.claude/settings.json"
-  canonical_link "$HOME/.claude/skills" "$SHARED/skills" "$HOME/.claude/skills"
-  canonical_link "$HOME/.claude/hooks" "$SHARED/hooks" "$HOME/.claude/hooks"
-  canonical_link "$HOME/.claude/CLAUDE.md" "$SHARED/AGENTS.md" "$HOME/.claude/CLAUDE.md"
-  canonical_link "$HOME/.claude/commands" "$CLAUDE/commands" "$HOME/.claude/commands"
+  canonical_link "$HOME/.claude/settings.json" "$LIVE_CLAUDE/settings.json" "$HOME/.claude/settings.json"
+  canonical_link "$HOME/.claude/skills" "$LIVE_SHARED/skills" "$HOME/.claude/skills"
+  canonical_link "$HOME/.claude/hooks" "$LIVE_SHARED/hooks" "$HOME/.claude/hooks"
+  canonical_link "$HOME/.claude/CLAUDE.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.claude/CLAUDE.md"
+  canonical_link "$HOME/.claude/commands" "$LIVE_CLAUDE/commands" "$HOME/.claude/commands"
   if [ -f "$HOME/.claude.json" ]; then
     for server in fram north linear-mcp-msa-new; do
       jq -e --arg s "$server" '.mcpServers[$s]' "$HOME/.claude.json" >/dev/null || bad "Claude user MCP '$server' is missing"
@@ -1172,9 +1359,9 @@ codex_fram_threads="$(sed -n '3p' <<<"$codex_fram_paths")"
 [ "$codex_fram_telemetry_log" = "$CANONICAL_FRAM_TELEMETRY_LOG" ] || bad "Codex Fram FRAM_TELEMETRY_LOG is '${codex_fram_telemetry_log:-unset}', expected '$CANONICAL_FRAM_TELEMETRY_LOG'"
 [ "$codex_fram_threads" = "$CANONICAL_FRAM_THREADS" ] || bad "Codex Fram FRAM_THREADS is '${codex_fram_threads:-unset}', expected '$CANONICAL_FRAM_THREADS'"
 if [ "$LOCAL" -eq 1 ]; then
-  canonical_link "$HOME/.codex/config.toml" "$CODEX/config.toml" "$HOME/.codex/config.toml"
-  canonical_link "$HOME/.codex/AGENTS.md" "$SHARED/AGENTS.md" "$HOME/.codex/AGENTS.md"
-  canonical_link "$HOME/.agents/skills" "$SHARED/skills" "$HOME/.agents/skills"
+  canonical_link "$HOME/.codex/config.toml" "$LIVE_CODEX/config.toml" "$HOME/.codex/config.toml"
+  canonical_link "$HOME/.codex/AGENTS.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.codex/AGENTS.md"
+  canonical_link "$HOME/.agents/skills" "$LIVE_SHARED/skills" "$HOME/.agents/skills"
   if command -v codex >/dev/null 2>&1; then
     codex_mcp_status=0
     mcp_output="$(
@@ -1358,8 +1545,8 @@ else
   bad "flake.lock hermes-agent rev is '${hermes_locked_rev:-missing}', expected $HERMES_PINNED_REV"
 fi
 if [ "$LOCAL" -eq 1 ]; then
-  canonical_link "$HOME/.hermes/config.yaml" "$HERMES/config.yaml" "$HOME/.hermes/config.yaml"
-  canonical_link "$HOME/.hermes/SOUL.md" "$SHARED/AGENTS.md" "$HOME/.hermes/SOUL.md"
+  canonical_link "$HOME/.hermes/config.yaml" "$LIVE_HERMES/config.yaml" "$HOME/.hermes/config.yaml"
+  canonical_link "$HOME/.hermes/SOUL.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.hermes/SOUL.md"
   # The plugin is an IMMUTABLE nix-store source (so imports cannot write
   # __pycache__ into dotfiles) — assert it resolves into /nix/store, not the
   # mutable working tree.
@@ -1397,6 +1584,7 @@ if [ "$LOCAL" -eq 1 ]; then
   if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet north-coord; then
     north_coord_env="$(systemctl show north-coord -p Environment --value 2>/dev/null || true)"
     north_coord_exec="$(systemctl show north-coord -p ExecStart --value 2>/dev/null || true)"
+    north_coord_pid="$(systemctl show north-coord -p MainPID --value 2>/dev/null || true)"
     north_coord_ok=1
     systemd_environment_has "$north_coord_env" "FRAM_TELEMETRY_LOG=$CANONICAL_FRAM_TELEMETRY_LOG" || {
       north_coord_ok=0
@@ -1406,25 +1594,85 @@ if [ "$LOCAL" -eq 1 ]; then
       north_coord_ok=0
       bad "north-coord lacks FRAM_REQUIRE_LOG_FENCE=1 in its live environment"
     }
-    [[ "$north_coord_exec" == *" $CANONICAL_FRAM_LOG "* ]] || {
-      north_coord_ok=0
-      bad "north-coord does not serve canonical coordination.log: $north_coord_exec"
-    }
     if classify_north_coord_exec "$north_coord_exec"; then
-      ok_detail "north-coord executes pinned Fram package: $NORTH_COORD_EXEC_PATH"
-    elif [ "$NORTH_COORD_EXEC_KIND" = checkout ]; then
+      ok_detail "north-coord executes the system-owned runtime selector: $NORTH_COORD_EXEC_PATH"
+    elif [ "$NORTH_COORD_EXEC_KIND" = direct-checkout ]; then
       north_coord_ok=0
-      bad "north-coord is checkout-backed; expected the pinned Fram package: $NORTH_COORD_EXEC_PATH"
+      bad "north-coord directly executes a checkout and bypasses the system-owned selector: $NORTH_COORD_EXEC_PATH"
+    elif [ "$NORTH_COORD_EXEC_KIND" = direct-package ]; then
+      north_coord_ok=0
+      bad "north-coord directly executes a pinned package and bypasses runtime promotion: $NORTH_COORD_EXEC_PATH"
     else
       north_coord_ok=0
-      bad "north-coord does not execute a recognized pinned Fram package: ${NORTH_COORD_EXEC_PATH:-missing}"
+      bad "north-coord does not execute the recognized runtime selector: ${NORTH_COORD_EXEC_PATH:-missing}"
     fi
-    if [ "$north_coord_ok" -eq 1 ]; then
-      north_coord_runtime='pinned Fram · canonical coordination.log · fenced'
-    elif [ "$NORTH_COORD_EXEC_KIND" = checkout ]; then
-      north_coord_runtime='checkout-backed (invalid)'
+
+    if [[ "$north_coord_pid" =~ ^[1-9][0-9]*$ ]] &&
+       [ -r "/proc/$north_coord_pid/environ" ] &&
+       [ -r "/proc/$north_coord_pid/cmdline" ]; then
+      north_coord_process_env="$(tr '\0' '\n' <"/proc/$north_coord_pid/environ")"
+      north_coord_process_cmdline="$(tr '\0' '\n' <"/proc/$north_coord_pid/cmdline")"
+      north_coord_mode="$(environment_lines_value "$north_coord_process_env" NORTH_FRAM_RUNTIME 2>/dev/null || true)"
+      north_coord_source="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_SOURCE 2>/dev/null || true)"
+      north_coord_revision="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_REV 2>/dev/null || true)"
+      north_coord_tree="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_TREE 2>/dev/null || true)"
+      north_coord_origin="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_ORIGIN 2>/dev/null || true)"
+      north_coord_daemon="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_DAEMON 2>/dev/null || true)"
+      north_coord_selector="$HOME/.local/state/north/fram-runtime/current"
+      if ! grep -Fxq "$CANONICAL_FRAM_LOG" <<<"$north_coord_process_cmdline"; then
+        north_coord_ok=0
+        bad "north-coord process does not serve canonical coordination.log"
+      fi
+      if north_coord_runtime_identity_is_valid \
+           "$north_coord_mode" "$north_coord_source" "$north_coord_revision" \
+           "$north_coord_tree" "$north_coord_origin" "$north_coord_daemon" \
+           "$north_coord_selector"; then
+        ok_detail "north-coord runtime identity is exact: $north_coord_mode@$north_coord_revision ($north_coord_source)"
+      else
+        north_coord_ok=0
+        bad "north-coord runtime identity is invalid: ${NORTH_COORD_RUNTIME_IDENTITY_REASON:-missing identity}"
+      fi
+      if grep -q '^FRAM_RUNTIME_OWNER_TOKEN=' <<<"$north_coord_process_env"; then
+        north_coord_ok=0
+        bad "north-coord systemd service carries a direct-launch owner token"
+      fi
+      if [ ! -r "/proc/$north_coord_pid/cgroup" ] ||
+         ! grep -Eq '^[^:]*:[^:]*:/system\.slice/north-coord\.service(/|$)' "/proc/$north_coord_pid/cgroup"; then
+        north_coord_ok=0
+        bad "north-coord MainPID is not owned by system.slice/north-coord.service"
+      fi
+      if command -v ss >/dev/null 2>&1; then
+        mapfile -t north_coord_listener_pids < <(
+          ss -H -ltnp 'sport = :7977' 2>/dev/null |
+            north_coord_listener_pids_from_ss
+        )
+        if north_coord_listener_set_matches_mainpid \
+             "$north_coord_pid" "${north_coord_listener_pids[@]}"; then
+          ok_detail "north-coord systemd MainPID owns the :7977 listening socket"
+        else
+          north_coord_ok=0
+          north_coord_listener_detail=''
+          for north_coord_listener_pid in "${north_coord_listener_pids[@]}"; do
+            north_coord_listener_cgroup="$(tr '\n' ' ' <"/proc/$north_coord_listener_pid/cgroup" 2>/dev/null || printf unreadable)"
+            north_coord_listener_detail+=" pid=$north_coord_listener_pid cgroup=$north_coord_listener_cgroup"
+          done
+          bad "north-coord :7977 listener PID does not equal systemd MainPID (MainPID: $north_coord_pid; listeners:${north_coord_listener_detail:- missing})"
+        fi
+      else
+        north_coord_ok=0
+        bad "ss is required to verify north-coord MainPID socket ownership"
+      fi
     else
-      north_coord_runtime='deployment drift detected'
+      north_coord_ok=0
+      bad "north-coord MainPID is missing or its process identity is unreadable: ${north_coord_pid:-missing}"
+    fi
+
+    if [ "$north_coord_ok" -eq 1 ]; then
+      north_coord_runtime="$north_coord_mode ${north_coord_revision:0:12} · atomic selector · canonical coordination.log · fenced"
+    elif [[ "$NORTH_COORD_EXEC_KIND" == direct-* ]]; then
+      north_coord_runtime='direct runtime bypass (invalid)'
+    else
+      north_coord_runtime='deployment identity drift detected'
     fi
   else
     bad "north-coord systemd service is not active"
@@ -1526,18 +1774,20 @@ if [ "$LOCAL" -eq 1 ]; then
   anthropic_installed='unknown'
   anthropic_authenticated='unknown'
   anthropic_headroom='unknown'
+  anthropic_routing='unknown'
   openai_installed='unknown'
   openai_authenticated='unknown'
   openai_headroom='unknown'
+  openai_routing='unknown'
   if command -v "${NORTH_PACKAGED_BIN:-north-packaged}" >/dev/null 2>&1; then
     if provider_output="$(run_north_packaged providers --json 2>&1)"; then
       if anthropic_fields="$(printf '%s\n' "$provider_output" | "$REPO/scripts/agent-provider-status.sh" anthropic)"; then
-        IFS='|' read -r anthropic_installed anthropic_authenticated anthropic_headroom <<<"$anthropic_fields"
+        IFS='|' read -r anthropic_installed anthropic_authenticated anthropic_headroom anthropic_routing <<<"$anthropic_fields"
         [ "$anthropic_installed" = yes ] || bad "North reports Anthropic not installed"
         [ "$anthropic_authenticated" = yes ] || bad "North reports Anthropic not authenticated"
       else bad "North omitted or malformed Anthropic capability status:\n$provider_output"; fi
       if openai_fields="$(printf '%s\n' "$provider_output" | "$REPO/scripts/agent-provider-status.sh" openai)"; then
-        IFS='|' read -r openai_installed openai_authenticated openai_headroom <<<"$openai_fields"
+        IFS='|' read -r openai_installed openai_authenticated openai_headroom openai_routing <<<"$openai_fields"
         [ "$openai_installed" = yes ] || bad "North reports OpenAI/Codex not installed"
         [ "$openai_authenticated" = yes ] || bad "North reports OpenAI/Codex not authenticated"
       else bad "North omitted or malformed OpenAI capability status:\n$provider_output"; fi
@@ -1573,8 +1823,8 @@ if [ "$LOCAL" -eq 1 ]; then
     "Coordinator $north_coord_runtime" \
     "Web         $north_web_runtime" \
     "CLI/web     $north_cli_web_parity" \
-    "Anthropic   installed=$anthropic_installed · authenticated=$anthropic_authenticated · headroom=$anthropic_headroom" \
-    "OpenAI      installed=$openai_installed · authenticated=$openai_authenticated · headroom=$openai_headroom" \
+    "Anthropic   installed=$anthropic_installed · authenticated=$anthropic_authenticated · routing=$anthropic_routing · headroom=$anthropic_headroom" \
+    "OpenAI      installed=$openai_installed · authenticated=$openai_authenticated · routing=$openai_routing · headroom=$openai_headroom" \
     "Allocation  ${allocation_summary:-unknown}"
 else
   provider_group North "$before" \

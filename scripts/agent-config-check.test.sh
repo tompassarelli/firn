@@ -429,23 +429,84 @@ if codex_north_env_is_canonical "$scratch/codex-wrong-env.toml" >/dev/null 2>&1;
   exit 1
 fi
 
-# The live coordinator must positively identify the direct executable from the
-# pinned Fram derivation. A checkout path and a merely store-backed wrapper are
-# both rejected: the former bypasses promotion, the latter does not prove which
-# Fram closure actually runs.
+# The live coordinator must positively identify the immutable runtime-selector
+# launcher. Direct checkout and direct package execution both bypass atomic
+# promotion/rollback and are rejected.
 nix_hash='0123456789abcdfghijklmnpqrsvwxyz'
+selector_path="/nix/store/${nix_hash}-north-coord-runtime/bin/north-coord-runtime"
+selector_exec="{ path=$selector_path ; argv[]=$selector_path start ; ignore_errors=no ; }"
+classify_north_coord_exec "$selector_exec"
+[ "$NORTH_COORD_EXEC_KIND" = runtime-selector ]
+[ "$NORTH_COORD_EXEC_PATH" = "$selector_path" ]
+
 pinned_path="/nix/store/${nix_hash}-fram-0-unstable-2026-06-28/bin/fram-daemon"
 pinned_exec="{ path=$pinned_path ; argv[]=$pinned_path 7977 /home/tom/.local/state/north/coordination.log ; ignore_errors=no ; }"
-classify_north_coord_exec "$pinned_exec"
-[ "$NORTH_COORD_EXEC_KIND" = pinned-package ]
+if classify_north_coord_exec "$pinned_exec"; then
+  printf 'direct pinned north-coord package was accepted\n' >&2
+  exit 1
+fi
+[ "$NORTH_COORD_EXEC_KIND" = direct-package ]
 [ "$NORTH_COORD_EXEC_PATH" = "$pinned_path" ]
 
 checkout_path='/home/tom/code/fram/bin/fram-daemon'
 if classify_north_coord_exec "{ path=$checkout_path ; argv[]=$checkout_path 7977 /tmp/facts.log ; }"; then
-  printf 'checkout-backed north-coord was accepted as pinned\\n' >&2
+  printf 'direct checkout north-coord was accepted\n' >&2
   exit 1
 fi
-[ "$NORTH_COORD_EXEC_KIND" = checkout ]
+[ "$NORTH_COORD_EXEC_KIND" = direct-checkout ]
+
+mapfile -t parsed_coord_pids < <(
+  printf '%s\n' \
+    'LISTEN 0 50 127.0.0.1:7977 0.0.0.0:* users:(("java",pid=42,fd=16))' \
+    'LISTEN 0 50 [::1]:7977 [::]:* users:(("java",pid=42,fd=17))' \
+    'LISTEN 0 50 127.0.0.1:7977 0.0.0.0:* users:(("other",pid=99,fd=18))' |
+    north_coord_listener_pids_from_ss
+)
+[ "${parsed_coord_pids[*]}" = '42 99' ]
+north_coord_listener_set_matches_mainpid 42 42
+if north_coord_listener_set_matches_mainpid 42 99 ||
+   north_coord_listener_set_matches_mainpid 42 42 99 ||
+   north_coord_listener_set_matches_mainpid 42; then
+  printf 'foreign or ambiguous :7977 listener set matched systemd MainPID\n' >&2
+  exit 1
+fi
+
+# Interactive checkout-first wrappers delegate Fram selection and identity to
+# the same exact runtime transaction used by the system service.
+[ "$(grep -c 'exec /run/current-system/sw/bin/north-coord-runtime exec-checkout' \
+  "$REPO/modules/north/default.bnix")" -eq 2 ]
+[ "$(grep -c 'NORTH_MANAGED_CODEX_BIN=' \
+  "$REPO/modules/north/default.bnix")" -eq 2 ]
+grep -Fq '(get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :codex)' \
+  "$REPO/modules/north/default.bnix"
+if grep -q 'export FRAM_RUNTIME_SOURCE\|export FRAM_RUNTIME_REV' \
+  "$REPO/modules/north/default.bnix"; then
+  printf 'North wrapper duplicates selector identity instead of delegating it\n' >&2
+  exit 1
+fi
+
+# Local attestation follows the canonical live configuration root, not the
+# clean worktree whose source is being tested. Worktree location is never
+# runtime authority for the user's managed symlinks.
+live_root="$scratch/live-nixos-config"
+mkdir -p "$live_root/dotfiles/codex"
+printf 'live\n' >"$live_root/dotfiles/codex/config.toml"
+ln -s "$live_root/dotfiles/codex/config.toml" "$scratch/live-config-link"
+fail=0
+details=()
+ok_detail() { details+=("ok: $*"); }
+bad() { fail=$((fail + 1)); }
+canonical_link \
+  "$scratch/live-config-link" \
+  "$live_root/dotfiles/codex/config.toml" \
+  'worktree-independent live config'
+[ "$fail" -eq 0 ]
+grep -q ':ExecStartPre (s northCoordRuntime "/bin/north-coord-runtime initialize")' \
+  "$REPO/modules/north-coord/default.bnix"
+grep -q ':ExecCondition (s northCoordRuntime "/bin/north-coord-runtime preflight")' \
+  "$REPO/modules/north-coord/default.bnix"
+grep -q ':startLimitIntervalSec 60' "$REPO/modules/north-coord/default.bnix"
+grep -q ':startLimitBurst       3' "$REPO/modules/north-coord/default.bnix"
 
 wrapper_path="/nix/store/${nix_hash}-fram-daemon-packaged/bin/fram-daemon-packaged"
 if classify_north_coord_exec "{ path=$wrapper_path ; argv[]=$wrapper_path 7977 /tmp/facts.log ; }"; then
@@ -453,6 +514,66 @@ if classify_north_coord_exec "{ path=$wrapper_path ; argv[]=$wrapper_path 7977 /
   exit 1
 fi
 [ "$NORTH_COORD_EXEC_KIND" = unrecognized ]
+
+# Process identity must resolve through the stable selector to an exact, clean,
+# revision-owned deployment. SHA equality alone cannot bless a different root.
+identity_repo="$scratch/runtime-identity-repo"
+identity_state="$scratch/runtime-identity-state"
+mkdir -p "$identity_repo/bin" "$identity_state/deployments"
+git -C "$identity_repo" init -q
+git -C "$identity_repo" config user.email test@example.invalid
+git -C "$identity_repo" config user.name runtime-test
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$identity_repo/bin/fram-daemon"
+chmod +x "$identity_repo/bin/fram-daemon"
+git -C "$identity_repo" add bin/fram-daemon
+git -C "$identity_repo" commit -qm runtime
+identity_revision="$(git -C "$identity_repo" rev-parse HEAD)"
+identity_tree="$(git -C "$identity_repo" rev-parse 'HEAD^{tree}')"
+identity_deployment="$identity_state/deployments/$identity_revision"
+git -C "$identity_repo" worktree add --detach "$identity_deployment" "$identity_revision" >/dev/null
+mkdir -p "$identity_state/generations/g1"
+ln -s "$identity_deployment" "$identity_state/generations/g1/current"
+ln -s "$identity_deployment" "$identity_state/generations/g1/previous"
+ln -s generations/g1 "$identity_state/active"
+ln -s active/current "$identity_state/current"
+north_coord_runtime_identity_is_valid \
+  checkout "$identity_deployment" "$identity_revision" "$identity_tree" \
+  "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"
+if north_coord_runtime_identity_is_valid \
+   checkout "$identity_repo" "$identity_revision" "$identity_tree" \
+   "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"; then
+  printf 'same-revision runtime outside the selected deployment was accepted\n' >&2
+  exit 1
+fi
+if north_coord_runtime_identity_is_valid \
+   checkout "$identity_deployment" "$identity_revision" \
+   aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+   "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"; then
+  printf 'wrong checkout tree identity was accepted\n' >&2
+  exit 1
+fi
+if north_coord_runtime_identity_is_valid \
+   checkout "$identity_deployment" "$identity_revision" "$identity_tree" \
+   "$identity_repo" /bin/true "$identity_state/current"; then
+  printf 'wrong checkout daemon identity was accepted\n' >&2
+  exit 1
+fi
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$identity_deployment/UNTRACKED-EXECUTABLE"
+chmod +x "$identity_deployment/UNTRACKED-EXECUTABLE"
+if north_coord_runtime_identity_is_valid \
+   checkout "$identity_deployment" "$identity_revision" "$identity_tree" \
+   "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"; then
+  printf 'untracked selected runtime bytes were accepted\n' >&2
+  exit 1
+fi
+unlink "$identity_deployment/UNTRACKED-EXECUTABLE"
+printf 'drift\n' >>"$identity_deployment/bin/fram-daemon"
+if north_coord_runtime_identity_is_valid \
+   checkout "$identity_deployment" "$identity_revision" "$identity_tree" \
+   "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"; then
+  printf 'dirty selected runtime was accepted\n' >&2
+  exit 1
+fi
 
 # North web has two positive store identities (entrypoint + workdir) and one
 # exact runtime environment. Wrong corpus, missing loopback, explicit static

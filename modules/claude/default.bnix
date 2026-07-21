@@ -167,10 +167,11 @@
                      "  run timeout 30 $CLAUDE mcp remove fram -s user >/dev/null 2>&1 || true\n"
                      "  run timeout 30 $CLAUDE mcp add fram -s user -e FRAM_LOG=$WANT_FRAM_LOG -e FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG -e FRAM_THREADS=$WANT_FRAM_THREADS -- $HOME/code/fram/bin/fram-mcp || true\n"
                      "fi\n"
+                     "NORTH_MCP_BIN=${NORTH_CHECKOUT:-$HOME/code/north-routing-robustness-landing}/bin/north-mcp\n"
                      "NORTH_CFG=$($CLAUDE mcp get north 2>/dev/null || true)\n"
-                     "if ! grep -Fq \"Command: $HOME/code/north/bin/north-mcp\" <<<\"$NORTH_CFG\" || ! grep -Fq \"FRAM_LOG=$WANT_FRAM_LOG\" <<<\"$NORTH_CFG\" || ! grep -Fq \"FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG\" <<<\"$NORTH_CFG\" || ! grep -Fq \"FRAM_THREADS=$WANT_FRAM_THREADS\" <<<\"$NORTH_CFG\" || ! grep -Fq \"NORTH_PORT=$WANT_NORTH_PORT\" <<<\"$NORTH_CFG\"; then\n"
+                     "if ! grep -Fq \"Command: $NORTH_MCP_BIN\" <<<\"$NORTH_CFG\" || ! grep -Fq \"FRAM_LOG=$WANT_FRAM_LOG\" <<<\"$NORTH_CFG\" || ! grep -Fq \"FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG\" <<<\"$NORTH_CFG\" || ! grep -Fq \"FRAM_THREADS=$WANT_FRAM_THREADS\" <<<\"$NORTH_CFG\" || ! grep -Fq \"NORTH_PORT=$WANT_NORTH_PORT\" <<<\"$NORTH_CFG\"; then\n"
                      "  run timeout 30 $CLAUDE mcp remove north -s user >/dev/null 2>&1 || true\n"
-                     "  run timeout 30 $CLAUDE mcp add north -s user -e FRAM_LOG=$WANT_FRAM_LOG -e FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG -e FRAM_THREADS=$WANT_FRAM_THREADS -e NORTH_PORT=$WANT_NORTH_PORT -- $HOME/code/north/bin/north-mcp || true\n"
+                     "  run timeout 30 $CLAUDE mcp add north -s user -e FRAM_LOG=$WANT_FRAM_LOG -e FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG -e FRAM_THREADS=$WANT_FRAM_THREADS -e NORTH_PORT=$WANT_NORTH_PORT -- $NORTH_MCP_BIN || true\n"
                      "fi\n"
                      ;; Linear MSA workspace (HTTP/OAuth, no inline secret) — declared so
                      ;; the drift-checker treats it as known, not rot. Auth is per-machine.

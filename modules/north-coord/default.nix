@@ -4,16 +4,33 @@ let
   username = config.myConfig.modules.users.username;
   homeDir = config.myConfig.modules.users.homeDir;
   framPkg = inputs.fram.packages."${pkgs.stdenv.hostPlatform.system}".default;
+  framRev = inputs.fram.rev;
+  runtimeState = "${homeDir}/.local/state/north/fram-runtime";
+  northCoordRuntime = pkgs.writeShellApplication {
+    name = "north-coord-runtime";
+    runtimeInputs = with pkgs; [ bash coreutils git iproute2 util-linux ];
+    text = ''
+      export NORTH_COORD_RUNTIME_STATE=${runtimeState}
+      export NORTH_COORD_FRAM_PACKAGE=${framPkg}
+      export NORTH_COORD_FRAM_PACKAGE_REV=${framRev}
+      export NORTH_COORD_FRAM_CHECKOUT=${homeDir}/code/fram
+      export NORTH_COORD_FRAM_LOG=${homeDir}/.local/state/north/coordination.log
+      export NORTH_COORD_FRAM_PORT=7977
+      ${builtins.readFile ./north-coord-runtime}
+    '';
+  };
 in
 {
   options.myConfig.modules.north-coord.enable = lib.mkEnableOption "Personal North coordinator daemon (:7977) — sole-writer fact-graph service for Tom's canonical log";
   config = lib.mkIf config.myConfig.modules.north-coord.enable {
+    environment.systemPackages = [ northCoordRuntime ];
     systemd.services.north-coord = {
       description = "North coordinator — personal fact-graph daemon (:7977)";
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];
       path = with pkgs; [ clojure jdk bash coreutils git ];
-      startLimitIntervalSec = 0;
+      startLimitIntervalSec = 60;
+      startLimitBurst = 3;
       restartIfChanged = true;
       environment = {
         HOME = homeDir;
@@ -23,8 +40,10 @@ in
       serviceConfig = {
         Type = "simple";
         User = username;
-        WorkingDirectory = "${framPkg}/libexec/fram";
-        ExecStart = "${framPkg}/bin/fram-daemon 7977 ${homeDir}/.local/state/north/coordination.log";
+        WorkingDirectory = homeDir;
+        ExecCondition = "${northCoordRuntime}/bin/north-coord-runtime preflight";
+        ExecStartPre = "${northCoordRuntime}/bin/north-coord-runtime initialize";
+        ExecStart = "${northCoordRuntime}/bin/north-coord-runtime start";
         Restart = "always";
         RestartSec = 2;
       };

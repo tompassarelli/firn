@@ -5,14 +5,20 @@
 ;; Interactive development surfaces are checkout-first: the ordinary CLI, MCP,
 ;; and lifecycle hooks exercise ~/code/north so source/output iteration is
 ;; immediate. Explicit *-packaged commands probe the exact promoted closure.
-;; Long-lived north-coord and north-web services are separate deployment
-;; surfaces: they run immutable package paths from the verified flake inputs,
-;; never these checkout-first wrappers.
+;; The ordinary wrappers share north-coord's exact selected Fram deployment;
+;; direct source launch remains the distinct mutable development surface.
 (nix/module [config lib pkgs inputs ...]
   (let
     [northPkg
       (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)
+     codexPkg
+      (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :codex)
      liveInputs (nix/with pkgs [bash coreutils git babashka bun jq])
+     northRuntimeOwnerGuard
+      (pkgs.writeShellApplication
+        {:name "north-runtime-owner-guard"
+         :runtimeInputs (nix/with pkgs [bash coreutils])
+         :text (builtins.readFile (p "./north-runtime-owner-guard"))})
      northLive
       (pkgs.writeShellApplication
         {:name "north"
@@ -20,12 +26,14 @@
          :text
           (ms "checkout=${NORTH_CHECKOUT:-$HOME/code/north}"
               "target=$checkout/bin/north"
+              (s northRuntimeOwnerGuard "/bin/north-runtime-owner-guard \"$@\"")
               "if [ ! -x \"$target\" ]; then"
               "  echo \"north: live checkout executable missing: $target\" >&2"
               "  echo \"north: restore that checkout or use north-packaged for the pinned closure\" >&2"
               "  exit 127"
               "fi"
-              "exec \"$target\" \"$@\"")})
+              (s "export NORTH_MANAGED_CODEX_BIN='" codexPkg "/bin/codex'")
+              "exec /run/current-system/sw/bin/north-coord-runtime exec-checkout \"$target\" \"$@\"")})
      northMcpLive
       (pkgs.writeShellApplication
         {:name "north-mcp"
@@ -38,11 +46,14 @@
               "  echo \"north-mcp: restore that checkout or use north-mcp-packaged for the pinned closure\" >&2"
               "  exit 127"
               "fi"
-              "exec \"$target\" \"$@\"")})
+              (s "export NORTH_MANAGED_CODEX_BIN='" codexPkg "/bin/codex'")
+              "exec /run/current-system/sw/bin/north-coord-runtime exec-checkout \"$target\" \"$@\"")})
      northPackaged
       (pkgs.writeShellApplication
         {:name "north-packaged"
-         :text (ms (s "exec " northPkg "/bin/north \"$@\""))})
+         :text
+          (ms (s northRuntimeOwnerGuard "/bin/north-runtime-owner-guard \"$@\"")
+              (s "exec " northPkg "/bin/north \"$@\""))})
      northMcpPackaged
       (pkgs.writeShellApplication
         {:name "north-mcp-packaged"
@@ -52,7 +63,6 @@
       {:gaffer {:url "git+file:///home/tom/code/gaffer?ref=main"
                 :flake "false"}
        :north {:url "git+file:///home/tom/code/north?ref=main"
-               :inputs.beagle.follows "beagle"
                :inputs.fram.follows "fram"
                :inputs.gaffer.follows "gaffer"}}
      :options.myConfig.modules.north.enable

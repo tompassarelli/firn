@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+program=${NORTH_RUNTIME_OWNER_PROGRAM:-north}
+
+[[ "${1:-}" == up ]] || exit 0
+if [[ "${2:-}" == --check-runtime && $# -eq 2 ]]; then
+  exit 0
+fi
+
+printf '%s: coordinator lifecycle is owned by north-coord.service; refusing direct launch or restart\n' "$program" >&2
+printf '%s: use sudo systemctl restart north-coord.service after selecting a runtime\n' "$program" >&2
+exit 2

@@ -25,15 +25,19 @@ if $DARWIN; then
   HOST="${1:-ashashi}"
   TARGET="darwinConfigurations.$HOST.options"
   OUT="$REPO/.beagle-cache/schema-darwin.json"
+  HM_OUT=''
   FINGERPRINT_OUT="$REPO/.beagle-cache/schema-darwin.inputs.sha256"
   FINGERPRINT_MODE=darwin
 else
   HOST="${1:-whiterabbit}"
   TARGET="nixosConfigurations.$HOST.options"
   OUT="$REPO/.beagle-cache/schema.json"
+  HM_OUT="$REPO/.beagle-cache/schema-hm.json"
   FINGERPRINT_OUT="$REPO/.beagle-cache/schema.inputs.sha256"
   FINGERPRINT_MODE=nixos
 fi
+VALIDATOR_CONFIG_SOURCE="${FIRN_SCHEMA_CONFIG:-$REPO/config/beagle-validate.json}"
+VALIDATOR_CONFIG_OUT="$REPO/.beagle-cache/validate-config.json"
 
 if [[ ! -x "$BEAGLE_EXTRACT" ]]; then
   echo "firn-extract-schema: beagle-extract-schema not found at $BEAGLE_EXTRACT" >&2
@@ -47,23 +51,76 @@ if [[ ! -x "$FINGERPRINT_HELPER" ]]; then
   echo "firn-extract-schema: fingerprint helper missing at $FINGERPRINT_HELPER" >&2
   exit 2
 fi
+if [[ ! -f "$VALIDATOR_CONFIG_SOURCE" ]]; then
+  echo "firn-extract-schema: tracked validator policy missing at $VALIDATOR_CONFIG_SOURCE" >&2
+  exit 2
+fi
 
-before_fingerprint="$($FINGERPRINT_HELPER --mode "$FINGERPRINT_MODE" --lock "$REPO/flake.lock")"
+before_fingerprint="$($FINGERPRINT_HELPER --mode "$FINGERPRINT_MODE" --lock "$REPO/flake.lock" --beagle-path "$BEAGLE_PATH")"
+
+mkdir -p "$REPO/.beagle-cache"
+schema_tmp="$(mktemp "$REPO/.beagle-cache/schema.tmp.XXXXXX")"
+hm_tmp=''
+config_tmp="$(mktemp "$REPO/.beagle-cache/validate-config.tmp.XXXXXX")"
+fingerprint_tmp="$(mktemp "$REPO/.beagle-cache/schema-fingerprint.tmp.XXXXXX")"
+cleanup() {
+  rm -f "${schema_tmp:?}" "${config_tmp:?}" "${fingerprint_tmp:?}"
+  [[ -z "$hm_tmp" ]] || rm -f "${hm_tmp:?}"
+}
+trap cleanup EXIT
 
 "$BEAGLE_EXTRACT" \
   --target "$TARGET" \
-  --out "$OUT" \
+  --out "$schema_tmp" \
   --flake "$REPO"
 
-after_fingerprint="$($FINGERPRINT_HELPER --mode "$FINGERPRINT_MODE" --lock "$REPO/flake.lock")"
+if [[ -n "$HM_OUT" ]]; then
+  hm_tmp="$(mktemp "$REPO/.beagle-cache/schema-hm.tmp.XXXXXX")"
+  "$BEAGLE_EXTRACT" \
+    --hm \
+    --target "nixosConfigurations.$HOST.options.home-manager.users" \
+    --out "$hm_tmp" \
+    --flake "$REPO"
+fi
+
+python3 - "$schema_tmp" "$hm_tmp" "$VALIDATOR_CONFIG_SOURCE" <<'PY'
+import json
+import pathlib
+import sys
+
+schema_arg, hm_arg, config_arg = sys.argv[1:]
+for label, path_arg in (("schema", schema_arg), ("home-manager schema", hm_arg)):
+    if not path_arg:
+        continue
+    path = pathlib.Path(path_arg)
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise SystemExit(f"firn-extract-schema: {label} is not valid JSON: {error}")
+    if not isinstance(value, list) or not value:
+        raise SystemExit(f"firn-extract-schema: {label} must be a nonempty JSON array")
+try:
+    config_path = pathlib.Path(config_arg)
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+except (OSError, UnicodeError, json.JSONDecodeError) as error:
+    raise SystemExit(f"firn-extract-schema: validator policy is not valid JSON: {error}")
+if not isinstance(config, dict):
+    raise SystemExit("firn-extract-schema: validator policy must be a JSON object")
+PY
+
+after_fingerprint="$($FINGERPRINT_HELPER --mode "$FINGERPRINT_MODE" --lock "$REPO/flake.lock" --beagle-path "$BEAGLE_PATH")"
 if [[ "$before_fingerprint" != "$after_fingerprint" ]]; then
-  echo "firn-extract-schema: flake.lock changed during extraction; refusing a mismatched fingerprint" >&2
+  echo "firn-extract-schema: flake.lock or Beagle tool changed during extraction; refusing a mismatched fingerprint" >&2
   exit 1
 fi
 
-mkdir -p "$(dirname "$FINGERPRINT_OUT")"
-fingerprint_tmp="$(mktemp "${FINGERPRINT_OUT}.tmp.XXXXXX")"
-trap 'rm -f "$fingerprint_tmp"' EXIT
+cp "$VALIDATOR_CONFIG_SOURCE" "$config_tmp"
 printf '%s\n' "$after_fingerprint" >"$fingerprint_tmp"
-mv "$fingerprint_tmp" "$FINGERPRINT_OUT"
+mv -f "$schema_tmp" "$OUT"
+if [[ -n "$HM_OUT" ]]; then
+  mv -f "$hm_tmp" "$HM_OUT"
+  hm_tmp=''
+fi
+mv -f "$config_tmp" "$VALIDATOR_CONFIG_OUT"
+mv -f "$fingerprint_tmp" "$FINGERPRINT_OUT"
 trap - EXIT
