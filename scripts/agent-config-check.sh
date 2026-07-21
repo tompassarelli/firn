@@ -1774,18 +1774,20 @@ if [ "$LOCAL" -eq 1 ]; then
   anthropic_installed='unknown'
   anthropic_authenticated='unknown'
   anthropic_headroom='unknown'
+  anthropic_routing='unknown'
   openai_installed='unknown'
   openai_authenticated='unknown'
   openai_headroom='unknown'
+  openai_routing='unknown'
   if command -v "${NORTH_PACKAGED_BIN:-north-packaged}" >/dev/null 2>&1; then
     if provider_output="$(run_north_packaged providers --json 2>&1)"; then
       if anthropic_fields="$(printf '%s\n' "$provider_output" | "$REPO/scripts/agent-provider-status.sh" anthropic)"; then
-        IFS='|' read -r anthropic_installed anthropic_authenticated anthropic_headroom <<<"$anthropic_fields"
+        IFS='|' read -r anthropic_installed anthropic_authenticated anthropic_headroom anthropic_routing <<<"$anthropic_fields"
         [ "$anthropic_installed" = yes ] || bad "North reports Anthropic not installed"
         [ "$anthropic_authenticated" = yes ] || bad "North reports Anthropic not authenticated"
       else bad "North omitted or malformed Anthropic capability status:\n$provider_output"; fi
       if openai_fields="$(printf '%s\n' "$provider_output" | "$REPO/scripts/agent-provider-status.sh" openai)"; then
-        IFS='|' read -r openai_installed openai_authenticated openai_headroom <<<"$openai_fields"
+        IFS='|' read -r openai_installed openai_authenticated openai_headroom openai_routing <<<"$openai_fields"
         [ "$openai_installed" = yes ] || bad "North reports OpenAI/Codex not installed"
         [ "$openai_authenticated" = yes ] || bad "North reports OpenAI/Codex not authenticated"
       else bad "North omitted or malformed OpenAI capability status:\n$provider_output"; fi
@@ -1821,8 +1823,8 @@ if [ "$LOCAL" -eq 1 ]; then
     "Coordinator $north_coord_runtime" \
     "Web         $north_web_runtime" \
     "CLI/web     $north_cli_web_parity" \
-    "Anthropic   installed=$anthropic_installed · authenticated=$anthropic_authenticated · headroom=$anthropic_headroom" \
-    "OpenAI      installed=$openai_installed · authenticated=$openai_authenticated · headroom=$openai_headroom" \
+    "Anthropic   installed=$anthropic_installed · authenticated=$anthropic_authenticated · routing=$anthropic_routing · headroom=$anthropic_headroom" \
+    "OpenAI      installed=$openai_installed · authenticated=$openai_authenticated · routing=$openai_routing · headroom=$openai_headroom" \
     "Allocation  ${allocation_summary:-unknown}"
 else
   provider_group North "$before" \
