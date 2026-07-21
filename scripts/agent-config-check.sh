@@ -664,6 +664,15 @@ print(sum(
 PY
 }
 
+canonical_link() {
+  local link="$1" expected="$2" label="$3"
+  local got want
+  got="$(readlink -f "$link" 2>/dev/null || true)"
+  want="$(readlink -f "$expected" 2>/dev/null || true)"
+  if [ -n "$got" ] && [ "$got" = "$want" ]; then ok_detail "$label → ${want#"$REPO"/}"
+  else bad "$label resolves to '${got:-missing}', expected '$want'"; fi
+}
+
 if [ "${1:-}" = "$AGENT_CONFIG_BOUNDED_CHILD_MODE" ]; then
   shift
   probe_child_main "$@"
@@ -678,6 +687,11 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHARED="$REPO/dotfiles/agents"
 CLAUDE="$REPO/dotfiles/claude"
 CODEX="$REPO/dotfiles/codex"
+LIVE_REPO="${AGENT_CONFIG_LIVE_REPO:-$HOME/code/nixos-config}"
+LIVE_SHARED="$LIVE_REPO/dotfiles/agents"
+LIVE_CLAUDE="$LIVE_REPO/dotfiles/claude"
+LIVE_CODEX="$LIVE_REPO/dotfiles/codex"
+LIVE_HERMES="$LIVE_REPO/dotfiles/hermes"
 CODEX_REQUIREMENTS="$REPO/modules/codex/requirements.toml"
 CODEX_LEGACY_HOOKS="${CODEX_LEGACY_HOOKS:-$CODEX/hooks.json}"
 HERMES="${AGENT_CONFIG_HERMES:-$REPO/dotfiles/hermes}"
@@ -758,15 +772,6 @@ need_yaml() {
     note "$label YAML strict-parse skipped (no PyYAML); structural checks apply"
   fi
 }
-canonical_link() {
-  local link="$1" expected="$2" label="$3"
-  local got want
-  got="$(readlink -f "$link" 2>/dev/null || true)"
-  want="$(readlink -f "$expected" 2>/dev/null || true)"
-  if [ -n "$got" ] && [ "$got" = "$want" ]; then ok_detail "$label → ${want#"$REPO"/}"
-  else bad "$label resolves to '${got:-missing}', expected '$want'"; fi
-}
-
 note_ignored_codex_legacy_manifest() {
   local manifest="$1"
   if [ ! -e "$manifest" ]; then
@@ -863,9 +868,9 @@ validate_hooks() {
       else note "$provider $ev uses external North hook ${first##*/} (local check deferred)"; fi
     elif [ "$declared_shared" -eq 1 ] && [ -x "$expected" ]; then
       if [ "$LOCAL" -eq 1 ]; then
-        expected_resolved="$(readlink -f "$expected" 2>/dev/null || true)"
+        expected_resolved="$(readlink -f "$LIVE_SHARED/hooks/$basename" 2>/dev/null || true)"
         if IFS=$'\t' read -r resolved hook_sha \
-          < <(hook_target_fingerprint "$first" /home/tom/code/nixos-config) &&
+          < <(hook_target_fingerprint "$first" "$LIVE_REPO") &&
            [ "$resolved" = "$expected_resolved" ]; then
           role="$basename:shared-adapter"
           if record_live_hook_binding "$role" "$resolved" "$hook_sha"; then
@@ -976,7 +981,7 @@ validate_codex_managed_policy() {
      grep -Fq ':environment.systemPackages [codexPkg]' "$module" &&
      grep -Fq '"codex/runtime"' "$module" &&
      grep -Fq '{:source codexPkg}' "$module"; then
-    ok_detail 'Interactive Codex and the managed runtime marker share inputs.north.packages.${system}.codex'
+    ok_detail 'Firn installs inputs.north.packages.${system}.codex and exposes that exact derivation as the managed runtime marker'
   else
     bad 'Codex module must install and expose the exact inputs.north packages.${system}.codex derivation'
   fi
@@ -1051,11 +1056,18 @@ PY
     managed_codex="$(readlink -f /etc/codex/runtime/bin/codex 2>/dev/null || true)"
     interactive_codex="$(readlink -f "$interactive_codex" 2>/dev/null || true)"
     if [ -n "$managed_codex" ] && [[ "$managed_codex" = /nix/store/* ]] &&
-       [ -x "$managed_codex" ] && [ "$interactive_codex" = "$managed_codex" ]; then
-      ok_detail 'Interactive Codex is byte-identical to North managed Codex'
+       [ -x "$managed_codex" ]; then
+      ok_detail 'North managed Codex is an exact immutable executable'
     else
       generation_exact=0
-      bad 'Interactive Codex does not resolve to the exact North managed Codex runtime'
+      bad 'North managed Codex runtime marker is missing, mutable, or non-executable'
+    fi
+    if [ -n "$interactive_codex" ] && [ "$interactive_codex" = "$managed_codex" ]; then
+      ok_detail 'Interactive Codex directly resolves to the managed provider executable'
+    elif [ -n "$interactive_codex" ]; then
+      ok_detail 'Interactive Codex uses a distinct user launcher; managed provider authority remains the immutable runtime marker'
+    else
+      soft 'Interactive Codex is absent from PATH; managed provider authority remains independently attested'
     fi
     north_revision="$(
       jq -er '.nodes.north.locked.rev | select(test("^[0-9a-f]{40}$"))' \
@@ -1143,11 +1155,11 @@ require_manifest_guard_count "$CLAUDE/settings.json" Claude Bash 1 'user Bash to
 claude_bindings="$HOOK_BINDINGS"
 claude_hook_provenance="$HOOK_PROVENANCE_SUMMARY"
 if [ "$LOCAL" -eq 1 ]; then
-  canonical_link "$HOME/.claude/settings.json" "$CLAUDE/settings.json" "$HOME/.claude/settings.json"
-  canonical_link "$HOME/.claude/skills" "$SHARED/skills" "$HOME/.claude/skills"
-  canonical_link "$HOME/.claude/hooks" "$SHARED/hooks" "$HOME/.claude/hooks"
-  canonical_link "$HOME/.claude/CLAUDE.md" "$SHARED/AGENTS.md" "$HOME/.claude/CLAUDE.md"
-  canonical_link "$HOME/.claude/commands" "$CLAUDE/commands" "$HOME/.claude/commands"
+  canonical_link "$HOME/.claude/settings.json" "$LIVE_CLAUDE/settings.json" "$HOME/.claude/settings.json"
+  canonical_link "$HOME/.claude/skills" "$LIVE_SHARED/skills" "$HOME/.claude/skills"
+  canonical_link "$HOME/.claude/hooks" "$LIVE_SHARED/hooks" "$HOME/.claude/hooks"
+  canonical_link "$HOME/.claude/CLAUDE.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.claude/CLAUDE.md"
+  canonical_link "$HOME/.claude/commands" "$LIVE_CLAUDE/commands" "$HOME/.claude/commands"
   if [ -f "$HOME/.claude.json" ]; then
     for server in fram north linear-mcp-msa-new; do
       jq -e --arg s "$server" '.mcpServers[$s]' "$HOME/.claude.json" >/dev/null || bad "Claude user MCP '$server' is missing"
@@ -1347,9 +1359,9 @@ codex_fram_threads="$(sed -n '3p' <<<"$codex_fram_paths")"
 [ "$codex_fram_telemetry_log" = "$CANONICAL_FRAM_TELEMETRY_LOG" ] || bad "Codex Fram FRAM_TELEMETRY_LOG is '${codex_fram_telemetry_log:-unset}', expected '$CANONICAL_FRAM_TELEMETRY_LOG'"
 [ "$codex_fram_threads" = "$CANONICAL_FRAM_THREADS" ] || bad "Codex Fram FRAM_THREADS is '${codex_fram_threads:-unset}', expected '$CANONICAL_FRAM_THREADS'"
 if [ "$LOCAL" -eq 1 ]; then
-  canonical_link "$HOME/.codex/config.toml" "$CODEX/config.toml" "$HOME/.codex/config.toml"
-  canonical_link "$HOME/.codex/AGENTS.md" "$SHARED/AGENTS.md" "$HOME/.codex/AGENTS.md"
-  canonical_link "$HOME/.agents/skills" "$SHARED/skills" "$HOME/.agents/skills"
+  canonical_link "$HOME/.codex/config.toml" "$LIVE_CODEX/config.toml" "$HOME/.codex/config.toml"
+  canonical_link "$HOME/.codex/AGENTS.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.codex/AGENTS.md"
+  canonical_link "$HOME/.agents/skills" "$LIVE_SHARED/skills" "$HOME/.agents/skills"
   if command -v codex >/dev/null 2>&1; then
     codex_mcp_status=0
     mcp_output="$(
@@ -1533,8 +1545,8 @@ else
   bad "flake.lock hermes-agent rev is '${hermes_locked_rev:-missing}', expected $HERMES_PINNED_REV"
 fi
 if [ "$LOCAL" -eq 1 ]; then
-  canonical_link "$HOME/.hermes/config.yaml" "$HERMES/config.yaml" "$HOME/.hermes/config.yaml"
-  canonical_link "$HOME/.hermes/SOUL.md" "$SHARED/AGENTS.md" "$HOME/.hermes/SOUL.md"
+  canonical_link "$HOME/.hermes/config.yaml" "$LIVE_HERMES/config.yaml" "$HOME/.hermes/config.yaml"
+  canonical_link "$HOME/.hermes/SOUL.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.hermes/SOUL.md"
   # The plugin is an IMMUTABLE nix-store source (so imports cannot write
   # __pycache__ into dotfiles) — assert it resolves into /nix/store, not the
   # mutable working tree.

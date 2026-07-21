@@ -19,3 +19,46 @@ for invocation in 'up' 'up --restart' 'up --unexpected'; do
 done
 
 printf 'ok: Firn ordinary North wrapper rejects direct coordinator lifecycle before checkout execution\n'
+
+# Execute a built live wrapper through the real runtime selector. The probe uses
+# North's production trusted resolver, so this proves the wrapper overwrites any
+# ambient forgery with the exact immutable managed Codex executable before the
+# checkout receives control.
+if [ -n "${NORTH_LIVE_WRAPPER_BIN:-}" ]; then
+  [ -x "$NORTH_LIVE_WRAPPER_BIN" ] || {
+    printf 'built North live wrapper is not executable: %s\n' "$NORTH_LIVE_WRAPPER_BIN" >&2
+    exit 1
+  }
+  [ -x "${NORTH_TRUSTED_RUNTIME_BUN:-/run/current-system/sw/bin/bun}" ] || {
+    printf 'trusted-runtime probe Bun is unavailable\n' >&2
+    exit 1
+  }
+  [ -f "${NORTH_TRUSTED_RUNTIME_MODULE:-/home/tom/code/north/sdk/src/trusted-runtime.ts}" ] || {
+    printf 'trusted-runtime probe module is unavailable\n' >&2
+    exit 1
+  }
+  expected_managed_codex="${NORTH_EXPECTED_MANAGED_CODEX_BIN:-$(readlink -f /etc/codex/runtime/bin/codex)}"
+  [[ "$expected_managed_codex" = /nix/store/*/bin/codex ]] &&
+    [ -x "$expected_managed_codex" ] || {
+      printf 'expected managed Codex is not an immutable executable: %s\n' "$expected_managed_codex" >&2
+      exit 1
+    }
+
+  scratch="$(mktemp -d "${TMPDIR:-/tmp}/north-live-wrapper.XXXXXX")"
+  trap 'rm -rf "${scratch:?}"' EXIT
+  mkdir -p "$scratch/checkout/bin"
+  ln -s "${NORTH_TRUSTED_RUNTIME_BUN:-/run/current-system/sw/bin/bun}" \
+    "$scratch/checkout/bin/north"
+  probe_source='import { trustedManagedCodexExecutable } from "'"${NORTH_TRUSTED_RUNTIME_MODULE:-/home/tom/code/north/sdk/src/trusted-runtime.ts}"'"; console.log(trustedManagedCodexExecutable())'
+  observed="$({
+    NORTH_CHECKOUT="$scratch/checkout" \
+    NORTH_MANAGED_CODEX_BIN=/tmp/ambient-codex-forgery \
+      "$NORTH_LIVE_WRAPPER_BIN" -e "$probe_source"
+  })"
+  [ "$observed" = "$expected_managed_codex" ] || {
+    printf 'built North live wrapper resolved managed Codex to %s, expected %s\n' \
+      "$observed" "$expected_managed_codex" >&2
+    exit 1
+  }
+  printf 'ok: built North live wrapper passes exact managed OpenAI executable preflight\n'
+fi

@@ -11,6 +11,8 @@
   (let
     [northPkg
       (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)
+     codexPkg
+      (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :codex)
      liveInputs (nix/with pkgs [bash coreutils git babashka bun jq])
      northRuntimeOwnerGuard
       (pkgs.writeShellApplication
@@ -30,6 +32,7 @@
               "  echo \"north: restore that checkout or use north-packaged for the pinned closure\" >&2"
               "  exit 127"
               "fi"
+              (s "export NORTH_MANAGED_CODEX_BIN='" codexPkg "/bin/codex'")
               "exec /run/current-system/sw/bin/north-coord-runtime exec-checkout \"$target\" \"$@\"")})
      northMcpLive
       (pkgs.writeShellApplication
@@ -43,6 +46,7 @@
               "  echo \"north-mcp: restore that checkout or use north-mcp-packaged for the pinned closure\" >&2"
               "  exit 127"
               "fi"
+              (s "export NORTH_MANAGED_CODEX_BIN='" codexPkg "/bin/codex'")
               "exec /run/current-system/sw/bin/north-coord-runtime exec-checkout \"$target\" \"$@\"")})
      northPackaged
       (pkgs.writeShellApplication

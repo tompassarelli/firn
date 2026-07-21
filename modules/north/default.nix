@@ -2,6 +2,7 @@
 
 let
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
+  codexPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".codex;
   liveInputs = with pkgs; [ bash coreutils git babashka bun jq ];
   northRuntimeOwnerGuard = pkgs.writeShellApplication {
     name = "north-runtime-owner-guard";
@@ -20,6 +21,7 @@ let
         echo "north: restore that checkout or use north-packaged for the pinned closure" >&2
         exit 127
       fi
+      export NORTH_MANAGED_CODEX_BIN='${codexPkg}/bin/codex'
       exec /run/current-system/sw/bin/north-coord-runtime exec-checkout "$target" "$@"
     '';
   };
@@ -34,6 +36,7 @@ let
         echo "north-mcp: restore that checkout or use north-mcp-packaged for the pinned closure" >&2
         exit 127
       fi
+      export NORTH_MANAGED_CODEX_BIN='${codexPkg}/bin/codex'
       exec /run/current-system/sw/bin/north-coord-runtime exec-checkout "$target" "$@"
     '';
   };

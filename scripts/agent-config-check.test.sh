@@ -475,11 +475,32 @@ fi
 # the same exact runtime transaction used by the system service.
 [ "$(grep -c 'exec /run/current-system/sw/bin/north-coord-runtime exec-checkout' \
   "$REPO/modules/north/default.bnix")" -eq 2 ]
+[ "$(grep -c 'NORTH_MANAGED_CODEX_BIN=' \
+  "$REPO/modules/north/default.bnix")" -eq 2 ]
+grep -Fq '(get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :codex)' \
+  "$REPO/modules/north/default.bnix"
 if grep -q 'export FRAM_RUNTIME_SOURCE\|export FRAM_RUNTIME_REV' \
   "$REPO/modules/north/default.bnix"; then
   printf 'North wrapper duplicates selector identity instead of delegating it\n' >&2
   exit 1
 fi
+
+# Local attestation follows the canonical live configuration root, not the
+# clean worktree whose source is being tested. Worktree location is never
+# runtime authority for the user's managed symlinks.
+live_root="$scratch/live-nixos-config"
+mkdir -p "$live_root/dotfiles/codex"
+printf 'live\n' >"$live_root/dotfiles/codex/config.toml"
+ln -s "$live_root/dotfiles/codex/config.toml" "$scratch/live-config-link"
+fail=0
+details=()
+ok_detail() { details+=("ok: $*"); }
+bad() { fail=$((fail + 1)); }
+canonical_link \
+  "$scratch/live-config-link" \
+  "$live_root/dotfiles/codex/config.toml" \
+  'worktree-independent live config'
+[ "$fail" -eq 0 ]
 grep -q ':ExecStartPre (s northCoordRuntime "/bin/north-coord-runtime initialize")' \
   "$REPO/modules/north-coord/default.bnix"
 grep -q ':ExecCondition (s northCoordRuntime "/bin/north-coord-runtime preflight")' \
