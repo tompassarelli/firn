@@ -5,7 +5,9 @@
 # force/destructive pushes, then push the current branch to its upstream. Any guard
 # trip => nothing is pushed, nonzero exit. The secret scan — not a human — is the
 # guard, and it travels with this command, so it protects repos that have no
-# commit-time hook (north/fram/beagle today).
+# commit-time hook (north/fram/beagle today). The repository state that defines
+# the scan is captured first and must remain identical at publication; pushes
+# name the captured object ID and destination ref explicitly.
 #
 # Usage:  safe-push [--dry-run]
 #         safe-push [--dry-run] --tag NAME
@@ -68,48 +70,139 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-git rev-parse --show-toplevel >/dev/null 2>&1 || { echo "safe-push: not in a git repo"; exit 1; }
-branch=$(git rev-parse --abbrev-ref HEAD)
-[ "$branch" = "HEAD" ] && { echo "safe-push: detached HEAD — checkout a branch first"; exit 1; }
+state_changed() {
+  printf 'safe-push: repository state changed during secret scan (%s) — refusing; NOT pushed.\n' "$1" >&2
+  exit 1
+}
+
+capture_repository_state() {
+  repo_root=$(git rev-parse --show-toplevel 2>/dev/null) \
+    || { echo "safe-push: not in a git repo"; exit 1; }
+  git_dir=$(git rev-parse --absolute-git-dir 2>/dev/null) \
+    || { echo "safe-push: cannot identify this Git worktree"; exit 1; }
+  origin_url=$(git remote get-url --push origin 2>/dev/null) \
+    || { echo "safe-push: origin has no push URL"; exit 1; }
+  branch_ref=$(git symbolic-ref --quiet HEAD 2>/dev/null) \
+    || { echo "safe-push: detached HEAD — checkout a branch first"; exit 1; }
+  case "$branch_ref" in
+    refs/heads/*) branch=${branch_ref#refs/heads/} ;;
+    *) echo "safe-push: HEAD does not name a local branch"; exit 1 ;;
+  esac
+  head_oid=$(git rev-parse --verify "${branch_ref}^{commit}" 2>/dev/null) \
+    || { echo "safe-push: cannot resolve $branch_ref to a commit"; exit 1; }
+
+  upstream_ref=""
+  upstream_oid=""
+  if upstream_ref=$(git rev-parse --symbolic-full-name '@{upstream}' 2>/dev/null); then
+    case "$upstream_ref" in
+      refs/remotes/origin/*)
+        destination_ref="refs/heads/${upstream_ref#refs/remotes/origin/}"
+        ;;
+      *)
+        echo "safe-push: upstream '$upstream_ref' is not on origin — refusing" >&2
+        exit 1
+        ;;
+    esac
+    upstream_oid=$(git rev-parse --verify "${upstream_ref}^{commit}" 2>/dev/null) \
+      || { echo "safe-push: cannot resolve upstream $upstream_ref"; exit 1; }
+    scan_range="${upstream_oid}..${head_oid}"
+  else
+    upstream_ref=""
+    destination_ref="$branch_ref"
+    # A single commit-ish makes gitleaks traverse the exact captured history.
+    scan_range="$head_oid"
+  fi
+}
+
+revalidate_repository_state() {
+  local current_root current_git_dir current_origin_url current_branch_ref
+  local current_head_oid current_upstream_ref current_upstream_oid current_range
+
+  current_root=$(git rev-parse --show-toplevel 2>/dev/null) \
+    || state_changed 'repository unavailable'
+  [ "$current_root" = "$repo_root" ] || state_changed 'repository root/worktree changed'
+
+  current_git_dir=$(git rev-parse --absolute-git-dir 2>/dev/null) \
+    || state_changed 'Git worktree unavailable'
+  [ "$current_git_dir" = "$git_dir" ] || state_changed 'Git worktree changed'
+
+  current_origin_url=$(git remote get-url --push origin 2>/dev/null) \
+    || state_changed 'origin push URL unavailable'
+  [ "$current_origin_url" = "$origin_url" ] || state_changed 'origin push URL changed'
+
+  current_branch_ref=$(git symbolic-ref --quiet HEAD 2>/dev/null) \
+    || state_changed 'HEAD became detached'
+  [ "$current_branch_ref" = "$branch_ref" ] || state_changed 'current branch changed'
+
+  current_head_oid=$(git rev-parse --verify "${current_branch_ref}^{commit}" 2>/dev/null) \
+    || state_changed 'HEAD commit unavailable'
+  [ "$current_head_oid" = "$head_oid" ] || state_changed 'HEAD commit changed'
+
+  if [ -n "$upstream_ref" ]; then
+    current_upstream_ref=$(git rev-parse --symbolic-full-name '@{upstream}' 2>/dev/null) \
+      || state_changed 'upstream disappeared'
+    [ "$current_upstream_ref" = "$upstream_ref" ] || state_changed 'upstream changed'
+    current_upstream_oid=$(git rev-parse --verify "${current_upstream_ref}^{commit}" 2>/dev/null) \
+      || state_changed 'upstream commit unavailable'
+    [ "$current_upstream_oid" = "$upstream_oid" ] || state_changed 'upstream commit changed'
+    current_range="${current_upstream_oid}..${current_head_oid}"
+  else
+    if git rev-parse --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
+      state_changed 'upstream appeared'
+    fi
+    current_range="$current_head_oid"
+  fi
+  [ "$current_range" = "$scan_range" ] || state_changed 'outgoing range changed'
+}
 
 # --- tag mode: no new commit content may ride a tag push --------------------------
 # A tag ref carries only the tag object; the guard is (a) its target commit is
 # already on origin — meaning it went through a scanned branch push — and (b) the
 # annotation text itself is scanned (it is published content too).
 if [ -n "$tag" ]; then
-  git rev-parse -q --verify "refs/tags/$tag" >/dev/null || { echo "safe-push: no such tag '$tag'"; exit 1; }
-  target=$(git rev-list -n1 "$tag")
   git fetch -q origin
-  git branch -r --contains "$target" 2>/dev/null | grep -q . \
+  capture_repository_state
+  tag_ref="refs/tags/$tag"
+  tag_oid=$(git rev-parse -q --verify "$tag_ref" 2>/dev/null) \
+    || { echo "safe-push: no such tag '$tag'"; exit 1; }
+  target=$(git rev-list -n1 "$tag_oid")
+  git branch -r --contains "$target" 2>/dev/null | grep -Eq '(^|[[:space:]])origin/' \
     || { echo "safe-push: tag '$tag' targets $target which is NOT on origin — safe-push the branch first"; exit 1; }
   command -v gitleaks >/dev/null 2>&1 || { echo "safe-push: gitleaks not on PATH — refusing to push without a secret scan"; exit 1; }
-  tmpd=$(mktemp -d) && trap 'rm -rf "$tmpd"' EXIT
-  git tag -l --format='%(contents)' "$tag" > "$tmpd/tag-message.txt"
+  tmpd=$(mktemp -d) && trap 'rm -rf "${tmpd:?}"' EXIT
+  git cat-file -p "$tag_oid" > "$tmpd/tag-object.txt"
   # gitleaks CLI drift: 8.19+ uses `dir`, older uses `detect --no-git --source`
   gitleaks dir "$tmpd" --no-banner --redact >/dev/null 2>&1 \
     || gitleaks detect --no-git --source "$tmpd" --no-banner --redact >/dev/null 2>&1 \
     || { echo "safe-push: ✗ SECRET DETECTED in tag annotation — fix it; NOT pushed."; exit 1; }
+  revalidate_repository_state
+  current_tag_oid=$(git rev-parse -q --verify "$tag_ref" 2>/dev/null) \
+    || state_changed 'tag disappeared'
+  [ "$current_tag_oid" = "$tag_oid" ] || state_changed 'tag object changed'
+  current_target=$(git rev-list -n1 "$current_tag_oid")
+  [ "$current_target" = "$target" ] || state_changed 'tag target changed'
   if [ "$dry" = 1 ]; then echo "safe-push: ✓ clean (--dry-run) — would push tag $tag -> origin"; exit 0; fi
   echo "safe-push: ✓ clean — pushing tag $tag -> origin"
-  export SAFE_PUSH_ACTIVE=1
-  git push origin "refs/tags/$tag"
+  SAFE_PUSH_ACTIVE=1 git push "$origin_url" "${tag_oid}:${tag_ref}"
   exit 0
 fi
 
 # --- the load-bearing guard: secret scan of the commits about to be pushed -------
+capture_repository_state
 command -v gitleaks >/dev/null 2>&1 || { echo "safe-push: gitleaks not on PATH — refusing to push without a secret scan"; exit 1; }
-if up=$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null); then
-  range="${up}..HEAD"
-  [ -z "$(git rev-list "$range" 2>/dev/null)" ] && { echo "safe-push: nothing to push ($branch is up to date with $up)"; exit 0; }
-  echo "safe-push: scanning $range for secrets…"
-  gitleaks detect --no-banner --redact --log-opts="$range" \
+if [ -n "$upstream_ref" ]; then
+  [ -z "$(git rev-list "$scan_range" 2>/dev/null)" ] \
+    && { echo "safe-push: nothing to push ($branch is up to date with $upstream_ref)"; exit 0; }
+  echo "safe-push: scanning $scan_range for secrets…"
+  gitleaks detect --no-banner --redact --log-opts="$scan_range" \
     || { echo "safe-push: ✗ SECRET DETECTED — fix the leak; NOT pushed."; exit 1; }
 else
-  echo "safe-push: no upstream yet — scanning full history for secrets…"
-  gitleaks detect --no-banner --redact \
+  echo "safe-push: no upstream yet — scanning captured history $scan_range for secrets…"
+  gitleaks detect --no-banner --redact --log-opts="$scan_range" \
     || { echo "safe-push: ✗ SECRET DETECTED — fix the leak; NOT pushed."; exit 1; }
 fi
 
+revalidate_repository_state
 if [ "$dry" = 1 ]; then
   echo "safe-push: ✓ clean (--dry-run) — would push $branch -> origin"
   exit 0
@@ -117,5 +210,15 @@ fi
 echo "safe-push: ✓ clean — pushing $branch -> origin"
 # Marker for tripwire-guard.sh (PreToolUse deny-hook): raw `git push` is denied
 # estate-wide; this env var identifies the sanctioned inner push as safe-push's own.
-export SAFE_PUSH_ACTIVE=1
-git push -u origin "$branch"
+# The source is the immutable object that was scanned, never a mutable branch/HEAD.
+SAFE_PUSH_ACTIVE=1 git push "$origin_url" "${head_oid}:${destination_ref}"
+if [ -z "$upstream_ref" ]; then
+  tracking_ref="refs/remotes/origin/${destination_ref#refs/heads/}"
+  if git fetch -q "$origin_url" "${destination_ref}:${tracking_ref}" \
+      && git branch --set-upstream-to="origin/${destination_ref#refs/heads/}" "$branch" >/dev/null; then
+    :
+  else
+    printf 'safe-push: pushed successfully, but could not establish origin/%s tracking\n' \
+      "${destination_ref#refs/heads/}" >&2
+  fi
+fi
