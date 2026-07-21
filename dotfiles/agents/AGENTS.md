@@ -232,12 +232,29 @@ trade-offs, paths-not-taken only; if the code can say it, drop it.
 
 **Language bias: Beagle first for general-purpose programs.** New tools,
 scripts, and apps default to Beagle (`#lang beagle`; the beagle-authoring
-skill bootstraps the stack — language `~/code/beagle`, engine `~/code/fram`),
-with graph-native authoring (code-as-facts / fact-modeling skills) where the
-module is graph-adopted. Dogfood by default. Escape hatches, stated in one
-line when taken: the repo is already committed to another language; a
-platform boundary demands one (nix module, CI config, browser-only); or a
-one-liner where shell/python is objectively the smaller move.
+skill, `~/code/nixos-config/dotfiles/agents/skills/beagle-authoring/SKILL.md`,
+bootstraps the stack — language `~/code/beagle`, engine `~/code/fram`).
+Dogfood by default. Escape hatches, stated in one line when taken: the repo
+is already committed to another language; a platform boundary demands one
+(nix module, CI config, browser-only); or a one-liner where shell/python is
+objectively the smaller move.
+
+**Greenfield vs brownfield stewardship.** A wholly new Beagle program/module
+(greenfield) **starts graph-native at inception**. Follow the seed-only
+bootstrap in
+`~/code/nixos-config/dotfiles/agents/skills/beagle-authoring/SKILL.md`: run
+`~/code/fram/bin/fram-code-on ~/code/<repo>`, require flip level 3 in a fresh or
+restarted trusted-project harness session, then author substantive code only via
+the code-as-facts graph-edit verbs. A coordinator or session-wiring failure is a
+repair-loop problem, never permission to fall back to text authoring.
+
+A surface whose upstream is already Clojure/text (brownfield) never silently
+expands the bounded task into a migration. Surface exactly three choices to the
+human — (1) keep the current upstream/language for this bounded task, (2)
+migrate to text-upstream Beagle, or (3) migrate directly to graph-upstream
+Beagle — and wait for a pick before migrating. Deferred candidates go in a
+separate migration inventory, never a side-project expansion. Graph-native
+detail: `~/code/nixos-config/dotfiles/agents/skills/code-as-facts/SKILL.md`.
 
 ## Standing guards
 

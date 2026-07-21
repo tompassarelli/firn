@@ -36,6 +36,54 @@ known-bad **and** known-good inputs through syntax / type-check / suggestion→p
 so it catches a checker stuck "always-pass" or "always-fail" — exactly the silent
 degradation a process-exists check misses.
 
+## 0.5 Greenfield bootstrap — start graph-native before substantive code
+
+Starting a **wholly new** Beagle program/module (no existing file to edit)?
+Per `~/code/nixos-config/dotfiles/agents/AGENTS.md` "New code": greenfield
+**must start graph-native at inception**. First establish the compiler repair
+loop in section 0, then run this bootstrap sequence:
+
+1. **Seed only** — create the minimal seed/header, nothing more: the file's
+   leading comment block carrying the `;; @upstream:graph` sentinel (or its
+   path pre-registered in `$GRAPH_UPSTREAM_REGISTRY`, whose default is
+   `~/.config/fram/graph-upstream-files`) plus whatever the
+   `(define-target …)` header requires to exist on disk. No substantive form,
+   definition, or body (`def`, `defn`, `defrecord`, and so on) gets
+   text-authored here — the seed exists only to give the graph something to
+   adopt.
+2. **Flip the full repo** — run
+   `~/code/fram/bin/fram-code-on ~/code/<repo>` to ingest the source, write the
+   project wiring for both harnesses, and warm the coordinator.
+3. **Confirm flip level 3** —
+   `~/code/fram/bin/fram-code-status ~/code/<repo>` must report `level=3`
+   (warm coordinator alive, not just L2 flipped-but-cold). L2/L1 mean the
+   graph-edit loop is not live yet: re-run
+   `~/code/fram/bin/fram-code-on ~/code/<repo>`, then start or restart a
+   **trusted-project Claude Code or Codex session** in `~/code/<repo>` so its
+   SessionStart/project config can load the MCP server. Verify that the
+   `mcp__fram__*` graph-edit verbs are present before authoring.
+4. **Hand off** — all substantive authoring past the seed goes through the
+   **code-as-facts** skill
+   (`~/code/nixos-config/dotfiles/agents/skills/code-as-facts/SKILL.md`) via
+   the `mcp__fram__*` graph-edit verbs. Do not scaffold the module with
+   ordinary Edit/Write "temporarily" then adopt later — the seed-only step
+   above is the entire text-authored surface, permanently.
+
+If `mcp__fram__*` is unavailable or flip level won't reach 3, that is a
+**loop-repair problem** (revive the coordinator, restart the session), never
+license to fall back to text Edit/Write on a greenfield graph-native module.
+
+This skill (beagle-authoring, plain-text Edit/Write + the compiler loop) is for
+**brownfield/text-upstream** Beagle files — an existing file not yet
+graph-adopted, or one where the human chose text-upstream Beagle. Before any
+brownfield migration, surface exactly these three choices: (1) keep the current
+upstream/language for this bounded task, (2) migrate to text-upstream Beagle, or
+(3) migrate directly to graph-upstream Beagle. Wait for the human's pick; never
+start a migration side project automatically. If the decision is deferred,
+record the candidate in a separate migration inventory. If you're unsure
+whether the surface is greenfield or brownfield, that uncertainty itself is the
+three-choice moment — surface it, don't default silently.
+
 ## 1. Heartbeat — keep it alive while coding
 
 - The **PostToolUse hook** (installed by `beagle init --hooks`) is the only

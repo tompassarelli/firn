@@ -9,7 +9,7 @@ description: >-
   ordinary Beagle files or non-adopted modules.
 ---
 
-# Claim-canonical authoring — the graph is the editing surface
+# Graph-native authoring — the graph is the editing surface
 
 Most Beagle files are text-canonical: you Edit/Write the text and the compiler
 reads it. A **graph-upstream** file is the inverse (the move-3 flip): its source
@@ -22,15 +22,18 @@ author by **graph edit**.
 ## 0. Is this file graph-upstream? (when this skill applies)
 
 A file is graph-upstream iff EITHER:
-- its absolute path is listed in `$CLAIM_CANONICAL_REGISTRY`
+- its absolute path is listed in `$GRAPH_UPSTREAM_REGISTRY`
   (default `~/.config/fram/graph-upstream-files`) — the authoritative marker, OR
 - its **leading comment block** contains the sentinel `;; @upstream:graph`
   (the in-band, travels-with-the-file marker; it survives the lossless round-trip,
   landing just after the regenerated `(define-target clj)` header).
 
 If neither holds, this skill does NOT apply — use the **beagle-authoring** skill
-and ordinary Edit/Write. (Adoption is per-file and opt-in; there is no blanket
-"all .bclj" rule. The honest line: code *can* be graph-upstream — see
+and ordinary Edit/Write. (Adoption of a **brownfield/text-upstream** file is
+per-file and opt-in — there is no blanket "all .bclj" rule; **greenfield** new
+Beagle work defaults graph-native at inception per
+`~/code/nixos-config/dotfiles/agents/AGENTS.md` "New code", so opt-in language
+does not apply there. The honest line: code *can* be graph-upstream — see
 `~/code/beagle/bin/test/code-as-facts/README.md` "Capability vs adoption".)
 
 ## 1. The graph-edit verbs (use these instead of Edit/Write)
@@ -72,7 +75,7 @@ The CLI form the MCP tools wrap (for grounding / manual runs):
 ```sh
 # project the module to lossless AST-facts EDN
 racket ~/code/beagle/beagle-lib/private/facts-roundtrip.rkt --emit-edn <file.bclj> > a.edn
-# apply the edit as a CLAIM OP (writes the rendered projection to $RESOLVE_OUT)
+# apply the graph edit (writes the rendered projection to $RESOLVE_OUT)
 bb -cp ~/code/fram/out ~/code/fram/chartroom/src/resolve.clj set-body <name> <scope> <body.edn> a.edn
 # regenerate byte-stable text + recompile-gate (committed only if it builds)
 racket ~/code/beagle/beagle-lib/private/facts-roundtrip.rkt --render "$RESOLVE_OUT/resolved-<file>.edn"
@@ -84,11 +87,11 @@ The CI gate that proves all of this is GREEN:
 ## 3. If you genuinely must edit text
 
 Adoption is reversible and deliberate. To edit a graph-upstream file as text you
-must first **de-adopt** it (remove its path from `$CLAIM_CANONICAL_REGISTRY` and
+must first **de-adopt** it (remove its path from `$GRAPH_UPSTREAM_REGISTRY` and
 drop the `;; @upstream:graph` sentinel). That is a workflow decision, not a
 per-edit escape hatch — make it explicitly, then the guard allows text edits again.
 
 The family: Beagle text edits → beagle-authoring · graph-upstream files
-(graph edit channel) → graph-upstream-authoring · relational code queries
+(graph edit channel) → code-as-facts · relational code queries
 (blast zone / who-calls) → codegraph · building apps on the engine →
 fact-modeling. Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.
