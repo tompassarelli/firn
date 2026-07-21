@@ -7,9 +7,14 @@ umask 077
 
 NOOP='{"hookSpecificOutput":{"hookEventName":"PreToolUse"}}'
 UNAVAILABLE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"billable_clock_guard_unavailable"}}'
+STDIN_DRAINED=0
 
 drain_stdin() {
-  cat >/dev/null
+  [ "$STDIN_DRAINED" -eq 0 ] || return 0
+  while IFS= builtin read -r -N 65536; do
+    :
+  done
+  STDIN_DRAINED=1
 }
 
 noop() {
@@ -83,6 +88,7 @@ raise SystemExit(0 if total <= limit else 65)
 ' "$INPUT" 2>/dev/null; then
   deny_unavailable
 fi
+STDIN_DRAINED=1
 
 KILLSWITCH="$HERE/lib/authoring-killswitch.sh"
 [ -r "$KILLSWITCH" ] || deny_unavailable

@@ -4,6 +4,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/north-clock-codex-test.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
+TEST_PYTHON="$(readlink -f "$(command -v python3)")"
 HOOKS="$SCRATCH/hooks"
 mkdir -p "$HOOKS/lib" "$HOOKS/runtime"
 for dependency in bash cat env git mktemp python3 rm timeout; do
@@ -121,27 +122,31 @@ expect 'provider-neutral env bypass is an explicit no-op' "$NOOP" \
   invoke nonzero env AGENT_NO_AUTHORING_HOOKS=1
 printf '%s\n' 'guards=off' >"$SCRATCH/harness-off.conf"
 drain_probe() {
-  local mode="$1" result
-  result="$("$HOOKS/runtime/python3" - \
+  local mode="$1" expected="$2" result
+  result="$("$TEST_PYTHON" - \
     "$HOOKS/runtime/env" "$HOOKS/runtime/bash" \
     "$HOOKS/north-clock-guard-codex" "$STATE" \
-    "$SCRATCH/harness-off.conf" "$mode" <<'PY'
+    "$SCRATCH/harness-off.conf" "$mode" "$expected" <<'PY'
 import json
 import os
 import subprocess
 import sys
 import time
 
-env_bin, bash_bin, adapter, live_state, off_state, mode = sys.argv[1:]
+env_bin, bash_bin, adapter, live_state, off_state, mode, expected = sys.argv[1:]
 env = os.environ.copy()
 env.pop("AGENT_NO_AUTHORING_HOOKS", None)
 env.pop("CLAUDE_NO_AUTHORING_HOOKS", None)
-env.update({"CLOCK_STUB_MODE": "nonzero"})
+env.update({
+    "CLOCK_STUB_MODE": mode if mode in {"allow", "deny", "malformed"} else "nonzero",
+})
 if mode == "explicit":
     env["AGENT_NO_AUTHORING_HOOKS"] = "1"
     env["NORTH_HARNESS_STATE"] = live_state
-else:
+elif mode == "persistent":
     env["NORTH_HARNESS_STATE"] = off_state
+else:
+    env["NORTH_HARNESS_STATE"] = live_state
 payload = json.dumps({
     "tool_name": "Bash",
     "tool_input": {"command": "true", "padding": "x" * (512 * 1024)},
@@ -163,7 +168,10 @@ for offset in range(0, len(payload), 8192):
     except BrokenPipeError:
         broken = True
         break
-    time.sleep(0.001)
+    if mode == "input-timeout" and offset == 0:
+        time.sleep(1.2)
+    else:
+        time.sleep(0.002)
 try:
     process.stdin.close()
 except BrokenPipeError:
@@ -178,7 +186,6 @@ except subprocess.TimeoutExpired:
     process.kill()
     status = process.wait()
     broken = True
-expected = '{"hookSpecificOutput":{"hookEventName":"PreToolUse"}}'
 if broken or status != 0 or stdout != expected or stderr:
     print("DRAIN_FAILED")
 else:
@@ -187,54 +194,18 @@ PY
 )" || result=DRAIN_FAILED
   printf '%s\n' "$result"
 }
-
-pre_drain_failure_probe() {
-  local result
-  result="$("$HOOKS/runtime/python3" - \
-    "$HOOKS/runtime/env" "$HOOKS/runtime/bash" \
-    "$HOOKS/north-clock-guard-codex" <<'PY'
-import os
-import subprocess
-import sys
-import time
-
-env_bin, bash_bin, adapter = sys.argv[1:]
-payload = b'{"tool_input":{"padding":"' + b"x" * (512 * 1024) + b'"}}'
-process = subprocess.Popen(
-    [env_bin, "-u", "BASH_ENV", "-u", "ENV", bash_bin, adapter],
-    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=os.environ.copy()
-)
-broken = False
-for offset in range(0, len(payload), 8192):
-    try:
-        process.stdin.write(payload[offset : offset + 8192])
-        process.stdin.flush()
-    except BrokenPipeError:
-        broken = True
-        break
-    time.sleep(0.001)
-try:
-    process.stdin.close()
-except BrokenPipeError:
-    broken = True
-stdout = process.stdout.read().decode().strip()
-stderr = process.stderr.read()
-try:
-    status = process.wait(timeout=5)
-except subprocess.TimeoutExpired:
-    process.kill()
-    status = process.wait()
-    broken = True
-expected = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"billable_clock_guard_unavailable"}}'
-print("DRAIN_FAILED" if broken or status or stdout != expected or stderr else "DRAINED")
-PY
-)" || result=DRAIN_FAILED
-  test "$result" = DRAINED
-}
 expect 'env bypass drains a delayed large hook envelope before no-op' "$NOOP" \
-  drain_probe explicit
+  drain_probe explicit "$NOOP"
 expect 'persistent bypass drains a delayed large hook envelope before no-op' "$NOOP" \
-  drain_probe persistent
+  drain_probe persistent "$NOOP"
+expect 'allow drains a delayed larger-than-pipe envelope before no-op' "$NOOP" \
+  drain_probe allow "$NOOP"
+expect 'deny drains a delayed larger-than-pipe envelope before protocol output' \
+  "$VALID_DENY" drain_probe deny "$VALID_DENY"
+expect 'malformed core output follows a drained larger-than-pipe envelope' \
+  "$UNAVAILABLE" drain_probe malformed "$UNAVAILABLE"
+expect 'input-spool timeout drains the remaining delayed envelope before deny' \
+  "$UNAVAILABLE" drain_probe input-timeout "$UNAVAILABLE"
 printf '%s\n' 'guards=off' >"$STATE"
 expect 'persistent bypass is an explicit no-op' "$NOOP" invoke nonzero env
 expect 'force-live overrides persistent bypass' "$NOOP" \
@@ -242,17 +213,21 @@ expect 'force-live overrides persistent bypass' "$NOOP" \
 printf '%s\n' 'guards=on' >"$STATE"
 
 mv "$HOOKS/north-clock-guard.py" "$HOOKS/north-clock-guard.py.missing"
-expect 'missing core fails closed' "$UNAVAILABLE" invoke allow env
+expect 'missing core drains delayed larger-than-pipe stdin and fails closed' \
+  "$UNAVAILABLE" drain_probe missing-core "$UNAVAILABLE"
 mv "$HOOKS/north-clock-guard.py.missing" "$HOOKS/north-clock-guard.py"
 
 mv "$HOOKS/runtime/python3" "$HOOKS/runtime/python3.missing"
-expect 'missing pinned runtime dependency fails closed' "$UNAVAILABLE" invoke allow env
+expect 'missing pinned runtime drains delayed larger-than-pipe stdin and fails closed' \
+  "$UNAVAILABLE" drain_probe missing-runtime "$UNAVAILABLE"
 mv "$HOOKS/runtime/python3.missing" "$HOOKS/runtime/python3"
 
-mv "$HOOKS/runtime/git" "$HOOKS/runtime/git.missing"
-expect 'pre-drain dependency failure drains delayed pipe-buffer envelope' '' \
-  pre_drain_failure_probe
-mv "$HOOKS/runtime/git.missing" "$HOOKS/runtime/git"
+mv "$HOOKS/runtime/mktemp" "$HOOKS/runtime/mktemp.real"
+printf '%s\n' '#!/bin/sh' 'exit 1' >"$HOOKS/runtime/mktemp"
+chmod +x "$HOOKS/runtime/mktemp"
+expect 'mktemp preflight failure drains delayed larger-than-pipe stdin and denies' \
+  "$UNAVAILABLE" drain_probe mktemp-failure "$UNAVAILABLE"
+mv -f "$HOOKS/runtime/mktemp.real" "$HOOKS/runtime/mktemp"
 
 LATE="$SCRATCH/late"
 expect 'timeout with TERM-ignoring descendant fails closed' "$UNAVAILABLE" \

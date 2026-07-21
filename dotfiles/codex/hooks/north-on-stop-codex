@@ -3,11 +3,17 @@
 # still use North's listener-safety Stop hook.
 set -uo pipefail
 
+drain_stdin() {
+  while IFS= builtin read -r -N 65536; do
+    :
+  done
+}
+
 if [ "${NORTH_MANAGED_LANE:-}" = 1 ]; then
   case "${AGENT_TOPOLOGY:-}" in
     worker|orchestrator)
       if [[ "${AGENT_ID:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$ ]]; then
-        cat >/dev/null
+        drain_stdin
         exit 0
       fi
       ;;
@@ -17,11 +23,17 @@ fi
 HERE="$(
   CDPATH='' builtin cd -- "${BASH_SOURCE[0]%/*}" 2>/dev/null &&
     builtin pwd -P
-)" || exit 0
+)" || {
+  drain_stdin
+  exit 0
+}
 BASH_BIN="$HERE/runtime/bash"
 NORTH_HOME="$HERE/north"
 TARGET="$NORTH_HOME/bin/north-on-stop"
-[ -x "$BASH_BIN" ] && [ -x "$TARGET" ] || exit 0
+[ -x "$BASH_BIN" ] && [ -x "$TARGET" ] || {
+  drain_stdin
+  exit 0
+}
 
 unset AGENT_ID AGENT_TOPOLOGY NORTH_MANAGED_LANE
 export AGENT_PROVIDER=openai NORTH_HOME

@@ -4,6 +4,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/codex-lifecycle-test.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
+TEST_PYTHON="$(readlink -f "$(command -v python3)")"
 HOOKS="$SCRATCH/hooks"
 mkdir -p "$HOOKS/north/bin" "$HOOKS/runtime"
 ln -s "$(readlink -f "$(command -v bash)")" "$HOOKS/runtime/bash"
@@ -58,35 +59,35 @@ check() {
   fi
 }
 
-no_derived_session() {
-  ! grep -q '^@agent:session-' "$1"
-}
-
-record_has_no_managed_env() {
-  grep -Fxq 'agent_id=' "$1" &&
-    grep -Fxq 'topology=' "$1" &&
-    grep -Fxq 'managed_lane=' "$1"
-}
-
 drain_probe() {
-  local wrapper="$1" delay="$2" result
-  result="$(python3 - "$HOOKS/$wrapper" "$delay" <<'PY'
+  local wrapper="$1" mode="$2" result
+  result="$("$TEST_PYTHON" - "$HOOKS/$wrapper" "$mode" <<'PY'
 import os
 import subprocess
 import sys
 import time
 
-wrapper, delay = sys.argv[1:]
+adapter, mode = sys.argv[1:]
+env = os.environ.copy()
+env.pop("AGENT_ID", None)
+env.pop("AGENT_TOPOLOGY", None)
+env.pop("NORTH_MANAGED_LANE", None)
+if mode == "managed":
+    env.update({
+        "AGENT_ID": "lane-delayed-drain",
+        "AGENT_TOPOLOGY": "worker",
+        "NORTH_MANAGED_LANE": "1",
+    })
 payload = b'{"padding":"' + b"x" * (512 * 1024) + b'"}'
-env = os.environ | {
-    "NORTH_MANAGED_LANE": "1",
-    "AGENT_ID": "lane-123",
-    "AGENT_TOPOLOGY": "worker",
-}
 process = subprocess.Popen(
-    [wrapper], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env
+    [adapter],
+    stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    env=env,
 )
 broken = False
+assert process.stdin is not None
 for offset in range(0, len(payload), 8192):
     try:
         process.stdin.write(payload[offset : offset + 8192])
@@ -94,12 +95,13 @@ for offset in range(0, len(payload), 8192):
     except BrokenPipeError:
         broken = True
         break
-    if delay == "delayed":
-        time.sleep(0.001)
+    time.sleep(0.002)
 try:
     process.stdin.close()
 except BrokenPipeError:
     broken = True
+assert process.stdout is not None
+assert process.stderr is not None
 stdout = process.stdout.read()
 stderr = process.stderr.read()
 try:
@@ -108,10 +110,26 @@ except subprocess.TimeoutExpired:
     process.kill()
     status = process.wait()
     broken = True
-print("DRAIN_FAILED" if broken or status or stdout or stderr else "DRAINED")
+if broken or status != 0 or stdout or stderr:
+    print(
+        f"DRAIN_FAILED broken={broken} status={status} "
+        f"stdout={len(stdout)} stderr={len(stderr)}"
+    )
+else:
+    print("DRAINED")
 PY
 )" || result=DRAIN_FAILED
-  test "$result" = DRAINED
+  printf '%s\n' "$result"
+}
+
+no_derived_session() {
+  ! grep -q '^@agent:session-' "$1"
+}
+
+record_has_no_managed_env() {
+  grep -Fxq 'agent_id=' "$1" &&
+    grep -Fxq 'topology=' "$1" &&
+    grep -Fxq 'managed_lane=' "$1"
 }
 
 # This is the exact graph shape the managed branch must leave untouched: one
@@ -128,10 +146,8 @@ for wrapper in "${wrappers[@]}"; do
   )"
   check "$wrapper managed branch is output-silent" test -z "$output"
   check "$wrapper managed branch never delegates to native lifecycle" test ! -e "$record"
-  check "$wrapper managed branch drains a pipe-buffer payload" \
-    drain_probe "$wrapper" immediate
-  check "$wrapper managed branch drains delayed writer payload" \
-    drain_probe "$wrapper" delayed
+  check "$wrapper managed branch drains delayed larger-than-pipe stdin" \
+    test "$(drain_probe "$wrapper" managed)" = DRAINED
 done
 graph_after="$(sha256sum "$GRAPH")"
 check 'managed wrappers leave the sole kind=lane identity unchanged' \
@@ -143,8 +159,8 @@ check 'managed wrappers create no derived session row' \
 # suppression. Stale native residue must always take the native lifecycle path.
 record="$SCRATCH/stale-complete-tuple.native"
 printf '%s' '{"session_id":"native-with-stale-complete-tuple"}' |
-  env -u NORTH_MANAGED_LANE AGENT_ID=stale-id AGENT_TOPOLOGY=worker WRAPPER_TEST_RECORD="$record" \
-  "$HOOKS/north-on-spawn-codex" >/dev/null
+  env -u NORTH_MANAGED_LANE AGENT_ID=stale-id AGENT_TOPOLOGY=worker \
+    WRAPPER_TEST_RECORD="$record" "$HOOKS/north-on-spawn-codex" >/dev/null
 check 'AGENT_ID + topology without explicit managed marker follows native lifecycle' \
   grep -Fxq 'target=north-on-spawn' "$record"
 check 'stale complete tuple is scrubbed before native delegation' \
@@ -152,8 +168,8 @@ check 'stale complete tuple is scrubbed before native delegation' \
 
 record="$SCRATCH/stale-agent-id.native"
 printf '%s' '{"session_id":"native-with-stale-id"}' |
-  env -u NORTH_MANAGED_LANE AGENT_ID=stale-id WRAPPER_TEST_RECORD="$record" \
-  "$HOOKS/north-on-spawn-codex" >/dev/null
+  env -u AGENT_TOPOLOGY -u NORTH_MANAGED_LANE AGENT_ID=stale-id \
+    WRAPPER_TEST_RECORD="$record" "$HOOKS/north-on-spawn-codex" >/dev/null
 check 'AGENT_ID without managed topology follows native lifecycle' \
   grep -Fxq 'target=north-on-spawn' "$record"
 check 'stale native AGENT_ID is scrubbed before delegation' \
@@ -161,8 +177,8 @@ check 'stale native AGENT_ID is scrubbed before delegation' \
 
 record="$SCRATCH/topology-without-id.native"
 printf '%s' '{"session_id":"native-with-stale-topology"}' |
-  env -u AGENT_ID AGENT_TOPOLOGY=worker WRAPPER_TEST_RECORD="$record" \
-  "$HOOKS/north-on-spawn-codex" >/dev/null
+  env -u AGENT_ID -u NORTH_MANAGED_LANE AGENT_TOPOLOGY=worker \
+    WRAPPER_TEST_RECORD="$record" "$HOOKS/north-on-spawn-codex" >/dev/null
 check 'managed topology without AGENT_ID follows native lifecycle' \
   grep -Fxq 'target=north-on-spawn' "$record"
 check 'stale native topology is scrubbed before delegation' \
@@ -170,8 +186,8 @@ check 'stale native topology is scrubbed before delegation' \
 
 record="$SCRATCH/invalid-managed-id.native"
 printf '%s' '{"session_id":"native-with-invalid-id"}' |
-  AGENT_ID='../invalid' AGENT_TOPOLOGY=worker WRAPPER_TEST_RECORD="$record" \
-  "$HOOKS/north-on-spawn-codex" >/dev/null
+  env -u NORTH_MANAGED_LANE AGENT_ID='../invalid' AGENT_TOPOLOGY=worker \
+    WRAPPER_TEST_RECORD="$record" "$HOOKS/north-on-spawn-codex" >/dev/null
 check 'noncanonical AGENT_ID with managed topology follows native lifecycle' \
   grep -Fxq 'target=north-on-spawn' "$record"
 check 'incoherent managed residue is fully scrubbed before delegation' \
@@ -193,7 +209,8 @@ for index in "${!wrappers[@]}"; do
   payload='{"session_id":"native-session"}'
   output="$(
     printf '%s' "$payload" |
-      env -u AGENT_ID WRAPPER_TEST_RECORD="$record" "$HOOKS/$wrapper"
+      env -u AGENT_ID -u AGENT_TOPOLOGY -u NORTH_MANAGED_LANE \
+        WRAPPER_TEST_RECORD="$record" "$HOOKS/$wrapper"
   )"
   check "$wrapper native branch delegates to $target" \
     grep -Fxq "target=$target" "$record"
@@ -207,6 +224,15 @@ for index in "${!wrappers[@]}"; do
     grep -Fxq "input=$payload" "$record"
   check "$wrapper native branch preserves target output" \
     test "$output" = "{\"delegated\":\"$target\"}"
+done
+
+for index in "${!wrappers[@]}"; do
+  wrapper="${wrappers[$index]}"
+  target="${targets[$index]}"
+  mv "$HOOKS/north/bin/$target" "$HOOKS/north/bin/$target.missing"
+  check "$wrapper missing-target path drains delayed larger-than-pipe stdin" \
+    test "$(drain_probe "$wrapper" missing-target)" = DRAINED
+  mv "$HOOKS/north/bin/$target.missing" "$HOOKS/north/bin/$target"
 done
 
 printf '\n== result: %d passed, %d failed ==\n' "$pass" "$fail"
