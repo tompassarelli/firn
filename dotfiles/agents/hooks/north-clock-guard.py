@@ -225,10 +225,160 @@ def canonical_path(path: object, cwd: str) -> str:
     return os.path.realpath(os.path.abspath(expanded))
 
 
+def scan_shell_source(command: str) -> tuple[str, str, bool]:
+    """Preserve quoted newlines while retaining executable shell controls.
+
+    ``shlex`` removes quote provenance before returning tokens.  Protect only
+    newlines proven to be inside ordinary single or double quotes so they
+    remain argument data, and report substitutions that stay executable in
+    unquoted or double-quoted text.  Backslash-newline is deliberately outside
+    the supported grammar: Bash removes it before parsing, which can expose a
+    command shape different from the source inspected here.
+    """
+    used = set(command)
+    sentinel = next(
+        (
+            chr(codepoint)
+            for codepoint in range(0xE000, 0xF900)
+            if chr(codepoint) not in used
+        ),
+        None,
+    )
+    if sentinel is None:
+        raise AdmissionUnavailable("quoted-newline sentinel exhausted")
+
+    prepared: list[str] = []
+    quote = ""
+    active_substitution = False
+    index = 0
+    while index < len(command):
+        character = command[index]
+        following = command[index + 1] if index + 1 < len(command) else ""
+
+        if quote == "single":
+            if character == "'":
+                quote = ""
+            prepared.append(sentinel if character == "\n" else character)
+            index += 1
+            continue
+
+        if character == "\\":
+            if following == "\n" or (
+                following == "\r"
+                and index + 2 < len(command)
+                and command[index + 2] == "\n"
+            ):
+                raise AdmissionUnavailable("escaped newline continuation")
+            prepared.append(character)
+            if following:
+                prepared.append(following)
+                index += 2
+            else:
+                index += 1
+            continue
+
+        if quote == "double":
+            if character == '"':
+                quote = ""
+            elif character == "`" or (
+                character == "$" and following == "("
+            ):
+                active_substitution = True
+            prepared.append(sentinel if character == "\n" else character)
+            index += 1
+            continue
+
+        if character == "'":
+            if prepared and prepared[-1] == "$":
+                raise AdmissionUnavailable("unsupported ANSI-C shell quote")
+            quote = "single"
+        elif character == '"':
+            quote = "double"
+        elif character == "`" or (
+            character == "$" and following == "("
+        ):
+            active_substitution = True
+        prepared.append(character)
+        index += 1
+
+    return "".join(prepared), sentinel, active_substitution
+
+
+def command_is_exact_north_control_source(command: str) -> bool:
+    """Recognize one trusted North command in linear time from shell source."""
+    if os.environ.get("BASH_ENV") or os.environ.get("ENV"):
+        return False
+    _prepared, _quoted_newline, active_substitution = scan_shell_source(
+        command
+    )
+    if active_substitution:
+        return False
+
+    executable: list[str] = []
+    words = 0
+    word_started = False
+    quote = ""
+    index = 0
+    while index < len(command):
+        character = command[index]
+        following = command[index + 1] if index + 1 < len(command) else ""
+
+        if quote == "single":
+            if character == "'":
+                quote = ""
+            index += 1
+            continue
+
+        if character == "\\":
+            if not following or words == 0:
+                return False
+            word_started = True
+            index += 2
+            continue
+
+        if quote == "double":
+            if character == '"':
+                quote = ""
+            index += 1
+            continue
+
+        if character in {"'", '"'}:
+            if words == 0:
+                return False
+            quote = "single" if character == "'" else "double"
+            word_started = True
+            index += 1
+            continue
+        if character in " \t\r":
+            if word_started:
+                words += 1
+                word_started = False
+            index += 1
+            continue
+        if character in SHELL_PUNCTUATION:
+            return False
+        if words == 0:
+            executable.append(character)
+        word_started = True
+        index += 1
+
+    if quote:
+        return False
+    if word_started:
+        words += 1
+    token = "".join(executable)
+    return (
+        words >= 2
+        and os.path.basename(token) == "north"
+        and trusted_command_token(token)
+    )
+
+
 def shell_tokens(command: str) -> list[str]:
+    prepared, quoted_newline, _active_substitution = scan_shell_source(command)
     try:
         lexer = shlex.shlex(
-            command,
+            prepared,
             posix=True,
             punctuation_chars=SHELL_PUNCTUATION,
         )
@@ -248,7 +398,7 @@ def shell_tokens(command: str) -> list[str]:
         if not token or any(character not in punctuation for character in token):
             if "\n" in token:
                 raise AdmissionUnavailable("unsupported mixed newline token")
-            result.append(token)
+            result.append(token.replace(quoted_newline, "\n"))
             continue
 
         operator = ""
@@ -615,12 +765,17 @@ def segment_is_north_control(segment: list[str]) -> bool:
 def command_is_execution_free(command: str) -> bool:
     if os.environ.get("BASH_ENV") or os.environ.get("ENV"):
         return False
+    if command_is_exact_north_control_source(command):
+        return True
     stripped = re.sub(
         r"(?:\d*>\s*&\s*\d+|\d+>\s*/dev/null|>\s*&\s*\d+)",
         "",
         command,
     )
-    if "`" in stripped or "$(" in stripped:
+    _prepared, _quoted_newline, active_substitution = scan_shell_source(
+        stripped
+    )
+    if active_substitution:
         return False
     tokens = shell_tokens(stripped)
     redirect_targets, malformed_redirect = write_redirect_targets(tokens)
@@ -1264,6 +1419,8 @@ def classify_shell(tool_input: dict[str, object], cwd: str) -> tuple[str, str] |
     ):
         raise AdmissionUnavailable("invalid shell envelope")
     shell_cwd = canonical_path(input_cwd or cwd or os.getcwd(), os.getcwd())
+    if command_is_exact_north_control_source(command):
+        return None
     command = strip_quoted_heredoc_bodies(command)
     leading_scope = leading_nonclient_scope_target(command, shell_cwd)
     analysis_cwd = leading_scope or shell_cwd

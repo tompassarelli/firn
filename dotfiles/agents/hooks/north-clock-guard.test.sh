@@ -626,6 +626,84 @@ run na 'guard kill-switch command is itself always reachable' closed.log Bash \
   "north config guards off" "$CLIENT_DIR"
 run na 'capture can create missing traceability while an edit is denied' closed.log Bash \
   "north capture 'MSA-244 digest delivery' msa" "$CLIENT_DIR"
+multiline_single_quoted_report="$(cat <<'EOF'
+north tell 019f86a6-eeb9-7a2a-acdd-e03bfcc18617 body '## State of North
+
+- `north show` and `north tell` are Markdown, not substitutions.
+- /home/tom/code/client/msa is report data, not a mutation target.'
+EOF
+)"
+run na 'multiline single-quoted North report is inert without a corpus' \
+  nonexistent.log Bash "$multiline_single_quoted_report" "$CLIENT_DIR"
+multiline_steer_report="$(cat <<'EOF'
+north steer lane-example 'Please reconcile this report:
+`north show` is Markdown and /home/tom/code/client/msa is quoted context.'
+EOF
+)"
+run na 'multiline north steer recovery payload is inert without a corpus' \
+  nonexistent.log Bash "$multiline_steer_report" "$CLIENT_DIR"
+multiline_double_quoted_report="$(cat <<'EOF'
+north tell 019f86a6-eeb9-7a2a-acdd-e03bfcc18617 body "## State of North
+
+/home/tom/code/client/msa remains inert report data."
+EOF
+)"
+run na 'multiline double-quoted North report is inert without substitution' \
+  nonexistent.log Bash "$multiline_double_quoted_report" "$CLIENT_DIR"
+multiline_escaped_substitution_report="$(cat <<'EOF'
+north tell 019f86a6-eeb9-7a2a-acdd-e03bfcc18617 body "Literal multiline forms:
+\$(not-a-command) and \`not-a-command\`"
+EOF
+)"
+run na 'escaped double-quoted substitution forms stay literal report data' \
+  nonexistent.log Bash "$multiline_escaped_substitution_report" "$CLIENT_DIR"
+multiline_backtick_substitution="$(cat <<'EOF'
+north tell 019f86a6-eeb9-7a2a-acdd-e03bfcc18617 body "Unsafe multiline report:
+`touch /home/tom/code/client/msa/backtick-probe`"
+EOF
+)"
+run unavailable 'raw backticks in double quotes cannot claim North exemption' \
+  nonexistent.log Bash "$multiline_backtick_substitution" "$CLIENT_DIR"
+multiline_dollar_substitution="$(cat <<'EOF'
+north tell 019f86a6-eeb9-7a2a-acdd-e03bfcc18617 body "Unsafe multiline report:
+$(touch /home/tom/code/client/msa/dollar-probe)"
+EOF
+)"
+run unavailable 'raw dollar substitution in double quotes cannot claim North exemption' \
+  nonexistent.log Bash "$multiline_dollar_substitution" "$CLIENT_DIR"
+printf -v multiline_escaped_continuation '%s \\\n%s' \
+  'north tell 019f86a6-eeb9-7a2a-acdd-e03bfcc18617 body safe' \
+  'touch /home/tom/code/client/msa/continuation-probe'
+run unavailable 'escaped newline continuation cannot claim North exemption' \
+  nonexistent.log Bash "$multiline_escaped_continuation" "$CLIENT_DIR"
+large_report_json="$(python3 - "$CLIENT_DIR" <<'PY'
+import json
+import shlex
+import sys
+
+client = sys.argv[1]
+report = (
+    "# Large deterministic report\n"
+    "`Markdown ticks stay literal`\n"
+    "/home/tom/code/client/msa remains data\n"
+    + "x" * (900 * 1024)
+)
+payload = {
+    "tool_name": "Bash",
+    "tool_input": {
+        "command": "north tell 019f86a6-eeb9-7a2a-acdd-e03bfcc18617 body "
+        + shlex.quote(report)
+    },
+    "cwd": client,
+}
+encoded = json.dumps(payload)
+assert 900 * 1024 < len(encoded.encode()) < 1 << 20
+print(encoded)
+PY
+)"
+run_payload attest na 'under-1MiB multiline North envelope is handled exactly' \
+  nonexistent.log "$large_report_json"
+unset large_report_json
 # shellcheck disable=SC2329  # invoked after export by the hook's child Bash
 north() { :; }
 export -f north
