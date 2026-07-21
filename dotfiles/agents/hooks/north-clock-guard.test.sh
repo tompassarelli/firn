@@ -824,6 +824,82 @@ printf -v ambiguous_angle_redirect '%s\n' \
   'NORTH_HERE_STRING'
 run unavailable 'four-angle redirect remains unsupported and fail-closed' \
   closed.log Bash "$ambiguous_angle_redirect" "$NONCLIENT"
+
+echo "== maximal shell punctuation runs never become trusted-command arguments =="
+for operator in '&&' '||' ';' '|' '&'; do
+  printf -v adjacent_lf_command '%s%s\n%s' \
+    'cat /tmp/north-clock-guard-input ' "$operator" \
+    "touch $CLIENT_DIR/operator-lf-probe"
+  run deny "adjacent $operator + LF exposes the following command" \
+    closed.log Bash "$adjacent_lf_command" "$NONCLIENT"
+done
+printf -v here_string_and_lf '%s\n%s' \
+  'cat <<<literal &&' \
+  "touch $CLIENT_DIR/here-string-operator-lf-probe"
+run deny 'here-string remains atomic before an adjacent operator + LF' \
+  closed.log Bash "$here_string_and_lf" "$NONCLIENT"
+printf -v spaced_operator_lf '%s\n%s' \
+  'cat /tmp/north-clock-guard-input && ' \
+  "touch $CLIENT_DIR/spaced-operator-lf-probe"
+run deny 'spaced operator + LF control still exposes the following command' \
+  closed.log Bash "$spaced_operator_lf" "$NONCLIENT"
+printf -v plain_lf '%s\n%s' \
+  'cat /tmp/north-clock-guard-input' \
+  "touch $CLIENT_DIR/plain-lf-probe"
+run deny 'plain LF control still exposes the following command' \
+  closed.log Bash "$plain_lf" "$NONCLIENT"
+printf -v crlf_boundary '%s\r\n%s' \
+  'cat /tmp/north-clock-guard-input &&' \
+  "touch $CLIENT_DIR/crlf-probe"
+run deny 'CRLF operator boundary exposes the following command' \
+  closed.log Bash "$crlf_boundary" "$NONCLIENT"
+printf -v repeated_lf_boundary '%s\n\n%s' \
+  'cat /tmp/north-clock-guard-input &&' \
+  "touch $CLIENT_DIR/repeated-lf-probe"
+run deny 'repeated LF operator boundary exposes the following command' \
+  closed.log Bash "$repeated_lf_boundary" "$NONCLIENT"
+printf -v escaped_lf_continuation '%s \\\n%s' \
+  'cat /tmp/north-clock-guard-input &&' \
+  "touch $CLIENT_DIR/escaped-lf-continuation-probe"
+run unavailable 'escaped LF mixed into a word remains fail-closed' \
+  closed.log Bash "$escaped_lf_continuation" "$NONCLIENT"
+
+for operator in '&&' '||' ';' '|' '&'; do
+  printf -v forward_paren_command '%s%s%s' \
+    'cat /tmp/north-clock-guard-input ' "$operator" \
+    "(touch $CLIENT_DIR/forward-paren-probe)"
+  run deny "adjacent $operator + open paren exposes the grouped command" \
+    closed.log Bash "$forward_paren_command" "$NONCLIENT"
+  printf -v reverse_paren_command '%s%s%s' \
+    '(cat /tmp/north-clock-guard-input)' "$operator" \
+    "touch $CLIENT_DIR/reverse-paren-probe"
+  run deny "close paren + adjacent $operator exposes the following command" \
+    closed.log Bash "$reverse_paren_command" "$NONCLIENT"
+done
+printf -v grouped_lf_command '%s\n%s' \
+  '(cat /tmp/north-clock-guard-input)' \
+  "touch $CLIENT_DIR/grouped-lf-probe"
+run deny 'close paren + LF exposes the following command' \
+  closed.log Bash "$grouped_lf_command" "$NONCLIENT"
+printf -v operator_lf_group_command '%s\n%s' \
+  'cat /tmp/north-clock-guard-input &&' \
+  "(touch $CLIENT_DIR/operator-lf-group-probe)"
+run deny 'operator + LF + open paren exposes the grouped command' \
+  closed.log Bash "$operator_lf_group_command" "$NONCLIENT"
+run deny 'input process substitution cannot hide its grouped writer' \
+  closed.log Bash "cat <(touch $CLIENT_DIR/input-process-probe)" "$NONCLIENT"
+run deny 'output process substitution cannot hide its grouped writer' \
+  closed.log Bash "cat >(touch $CLIENT_DIR/output-process-probe)" "$NONCLIENT"
+run unavailable 'unsupported pipe-and token fails closed instead of becoming argv' \
+  closed.log Bash \
+  "cat /tmp/north-clock-guard-input |& touch $CLIENT_DIR/pipe-and-probe" \
+  "$NONCLIENT"
+printf -v pipe_and_lf_command '%s\n%s' \
+  'cat /tmp/north-clock-guard-input |&' \
+  "touch $CLIENT_DIR/pipe-and-lf-probe"
+run unavailable 'unsupported pipe-and + LF token remains fail-closed' \
+  closed.log Bash "$pipe_and_lf_command" "$NONCLIENT"
+
 run deny 'compound nonclient Git cannot hide a later client write' \
   closed.log Bash \
   "git -C $NONCLIENT status && printf x > $CLIENT_DIR/generated.txt" \

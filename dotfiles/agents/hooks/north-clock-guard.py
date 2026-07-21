@@ -165,8 +165,16 @@ GIT_MUTATORS = {
     "worktree",
 }
 PACKAGE_MUTATORS = {"npm", "pnpm", "yarn", "bun"}
+SHELL_PUNCTUATION = ";&|()<>\n"
 SEPARATORS = {";", "&&", "||", "|", "&", "(", ")", "\n"}
 WRITE_REDIRECTS = {">", ">>", ">|", "&>", "&>>", "<>", ">&"}
+READ_REDIRECTS = {"<", "<<", "<<<", "<&"}
+PUNCTUATION_BOUNDARIES = {"(", ")", "\n"}
+SUPPORTED_PUNCTUATION_OPERATORS = (
+    (SEPARATORS - PUNCTUATION_BOUNDARIES)
+    | WRITE_REDIRECTS
+    | READ_REDIRECTS
+)
 
 
 class AdmissionUnavailable(Exception):
@@ -222,14 +230,43 @@ def shell_tokens(command: str) -> list[str]:
         lexer = shlex.shlex(
             command,
             posix=True,
-            punctuation_chars=";&|()<>\n",
+            punctuation_chars=SHELL_PUNCTUATION,
         )
         lexer.whitespace = " \t\r"
         lexer.whitespace_split = True
         lexer.commenters = ""
-        return list(lexer)
+        raw_tokens = list(lexer)
     except ValueError as error:
         raise AdmissionUnavailable("malformed shell") from error
+
+    # shlex coalesces adjacent punctuation across newlines and parentheses.
+    # Split those unambiguous boundaries, then require every residual operator
+    # to be exact so executable grammar can never fall through as argv.
+    result: list[str] = []
+    punctuation = frozenset(SHELL_PUNCTUATION)
+    for token in raw_tokens:
+        if not token or any(character not in punctuation for character in token):
+            if "\n" in token:
+                raise AdmissionUnavailable("unsupported mixed newline token")
+            result.append(token)
+            continue
+
+        operator = ""
+        for character in token:
+            if character not in PUNCTUATION_BOUNDARIES:
+                operator += character
+                continue
+            if operator:
+                if operator not in SUPPORTED_PUNCTUATION_OPERATORS:
+                    raise AdmissionUnavailable("unsupported shell punctuation")
+                result.append(operator)
+                operator = ""
+            result.append(character)
+        if operator:
+            if operator not in SUPPORTED_PUNCTUATION_OPERATORS:
+                raise AdmissionUnavailable("unsupported shell punctuation")
+            result.append(operator)
+    return result
 
 
 def simple_commands(tokens: list[str]) -> Iterable[list[str]]:
