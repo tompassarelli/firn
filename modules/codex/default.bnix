@@ -87,4 +87,9 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/codex/hooks.json"))}}})}})}))
+                        "/code/nixos-config/dotfiles/codex/hooks.json"))}
+                 ".codex/prompts"
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/claude/commands"))}}})}})}))
