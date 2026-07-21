@@ -28,6 +28,27 @@ if [ -f "$BEAGLE_PATH/bin/_beagle-racket" ]; then
   source "$BEAGLE_PATH/bin/_beagle-racket"   # sets RACKET to beagle's dev-shell racket
 fi
 
+# Never load ignored `compiled/*.zo` beside Firn sources. Those files can be
+# internally inconsistent after a branch switch (for example list.rkt compiled
+# against an older tag-resolve.rkt export set). One private root per firn-build
+# keeps all transitive compilation coherent; the immutable Racket store root
+# remains available for the toolchain's own precompiled collections.
+RACKET_BIN="$(readlink -f "$(command -v "$RACKET")")"
+RACKET_PREFIX="$(dirname "$(dirname "$RACKET_BIN")")"
+RACKET_COMPILED_ROOT="$RACKET_PREFIX/lib/racket/compiled"
+FIRN_COMPILE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/firn-build-compiled.XXXXXX")"
+FIRN_COMPILED_ROOTS="$FIRN_COMPILE_ROOT"
+if [ -d "$RACKET_COMPILED_ROOT" ]; then
+  FIRN_COMPILED_ROOTS="$FIRN_COMPILED_ROOTS:$RACKET_COMPILED_ROOT"
+fi
+cleanup_compile_root() {
+  rm -rf "${FIRN_COMPILE_ROOT:?}"
+}
+trap cleanup_compile_root EXIT
+firn_racket() {
+  PLTCOMPILEDROOTS="$FIRN_COMPILED_ROOTS" "$RACKET" "$@"
+}
+
 BEAGLE_BUILD_ALL="$BEAGLE_PATH/bin/beagle-build-all"
 if [ ! -x "$BEAGLE_BUILD_ALL" ]; then
   echo "firn-build: beagle-build-all not found at $BEAGLE_BUILD_ALL" >&2
@@ -43,7 +64,7 @@ fi
 if [ "${FIRN_SKIP_TAG_RESOLVE:-}" != "1" ]; then
   shopt -s nullglob
   any_tag_host=""
-  for et in hosts/*/enabled-tags.bnix; do
+  for _ in hosts/*/enabled-tags.bnix; do
     any_tag_host="yes"
     break
   done
@@ -56,7 +77,7 @@ if [ "${FIRN_SKIP_TAG_RESOLVE:-}" != "1" ]; then
     # The ~500ms overhead vs the compiled binary is a one-shot cost
     # per firn-build invocation and stays below the beagle-build-all
     # cold-start anyway.
-    "$RACKET" ./scripts/firn.rkt tag resolve all+emit || {
+    firn_racket ./scripts/firn.rkt tag resolve all+emit || {
       echo "firn-build: tag resolution failed; aborting before .nix regeneration" >&2
       exit 1
     }
@@ -68,7 +89,7 @@ fi
 # the active module set) and before .nix regeneration (so the spliced
 # flake.bnix is what beagle-build compiles).
 if [ "${FIRN_SKIP_FLAKE_INPUTS:-}" != "1" ]; then
-  "$RACKET" ./scripts/firn.rkt flake-input resolve emit || {
+  firn_racket ./scripts/firn.rkt flake-input resolve emit || {
     echo "firn-build: flake-inputs resolution failed; aborting" >&2
     exit 1
   }

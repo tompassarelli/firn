@@ -5,7 +5,14 @@ ROOT="${FIRN_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 BEAGLE_PATH="${BEAGLE_PATH:-$ROOT/../beagle}"
 
 {
-  printf '%s\0' "$ROOT/scripts/firn.rkt"
+  # The artifact is a function of source AND compilation policy. Including the
+  # build recipe rotates the immutable key when isolation/publication rules
+  # change, so an image produced by an unsafe older recipe is never reused.
+  for path in "$ROOT/scripts/firn.rkt" \
+              "$ROOT/scripts/firn-build-bin" \
+              "$ROOT/scripts/firn-source-hash"; do
+    [ ! -f "$path" ] || printf '%s\0' "$path"
+  done
   find "$ROOT/scripts/firn-cmds" -type f -name '*.rkt' -print0 | sort -z
   # Firn's demod image embeds Beagle library code. Hash the linked library and
   # the pin/toolchain inputs that select its Racket, so dependency-only changes

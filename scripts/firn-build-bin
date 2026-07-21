@@ -15,8 +15,10 @@
 # hard way during the 9.1->9.2 bump; see git log.)
 #
 # Immutable cache: ~/.local/share/firn/<racket-store-hash>/<source-hash>/firn.zo.
-# Racket and exact source identity are independent cache dimensions: two
-# worktrees may build concurrently without sharing a mutable bytecode target.
+# Racket and exact source identity are independent cache dimensions. Every
+# compiler also gets a private compiled-file root, so ignored `compiled/*.zo`
+# beside transitive sources can neither override current source nor race with a
+# concurrent build.
 # `raco demod` (whole-program optimizer + DCE) yields a ~2 MB standalone .zo
 # (no runtime collection deps) that loads in ~80ms.
 
@@ -44,6 +46,8 @@ fi
 RACKET_BIN="$(readlink -f "$(command -v "$RACKET")")"
 RACKET_HASH="$(printf '%s' "$RACKET_BIN" | sha1sum | cut -c1-12)"
 RACKET_VERSION="$("$RACKET" --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo unknown)"
+RACKET_PREFIX="$(dirname "$(dirname "$RACKET_BIN")")"
+RACKET_COMPILED_ROOT="$RACKET_PREFIX/lib/racket/compiled"
 
 SOURCE_HASH="$("$PWD/scripts/firn-source-hash")"
 ZO_DIR="$SHARE_DIR/$RACKET_HASH/$SOURCE_HASH"
@@ -52,9 +56,11 @@ WRAPPER="$BIN_DIR/firn"
 mkdir -p "$ZO_DIR"
 ZO_TMP=''
 WRAPPER_TMP=''
+COMPILE_ROOT=''
 cleanup_publish_temps() {
   [ -z "$ZO_TMP" ] || rm -f "${ZO_TMP:?}"
   [ -z "$WRAPPER_TMP" ] || rm -f "${WRAPPER_TMP:?}"
+  [ -z "$COMPILE_ROOT" ] || rm -rf "${COMPILE_ROOT:?}"
 }
 trap cleanup_publish_temps EXIT
 
@@ -88,8 +94,13 @@ if [ -e "$ZO" ] && [ ! -s "$ZO" ]; then
 fi
 if [ ! -e "$ZO" ]; then
   ZO_TMP="$(mktemp "$ZO_DIR/.firn.zo.XXXXXX")"
+  COMPILE_ROOT="$(mktemp -d "$ZO_DIR/.compile.XXXXXX")"
+  COMPILED_ROOTS="$COMPILE_ROOT"
+  if [ -d "$RACKET_COMPILED_ROOT" ]; then
+    COMPILED_ROOTS="$COMPILED_ROOTS:$RACKET_COMPILED_ROOT"
+  fi
   echo "firn-build-bin: compiling scripts/firn.rkt → $ZO"
-  "$RACO" demod -o "$ZO_TMP" scripts/firn.rkt
+  PLTCOMPILEDROOTS="$COMPILED_ROOTS" "$RACO" demod -o "$ZO_TMP" scripts/firn.rkt
   SOURCE_HASH_AFTER="$("$PWD/scripts/firn-source-hash")"
   if [ "$SOURCE_HASH" != "$SOURCE_HASH_AFTER" ]; then
     echo "firn-build-bin: source changed during compilation; refusing to publish stale bytecode" >&2
@@ -100,6 +111,8 @@ if [ ! -e "$ZO" ]; then
   ln "$ZO_TMP" "$ZO" 2>/dev/null || [ -s "$ZO" ]
   rm -f "$ZO_TMP"
   ZO_TMP=''
+  rm -rf "${COMPILE_ROOT:?}"
+  COMPILE_ROOT=''
 else
   echo "firn-build-bin: cached scripts/firn.rkt → $ZO"
 fi

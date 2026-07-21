@@ -7,6 +7,8 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/scripts/firn-cmds"
 mkdir -p "$TMP/beagle/bin" "$TMP/beagle/beagle-lib/private"
 printf '#lang racket/base\n' >"$TMP/scripts/firn.rkt"
+printf '#!/usr/bin/env bash\n# recipe-v1\n' >"$TMP/scripts/firn-build-bin"
+cp "$SCRIPT" "$TMP/scripts/firn-source-hash"
 printf '#lang racket/base\n' >"$TMP/scripts/firn-cmds/a.rkt"
 printf '#lang racket/base\n' >"$TMP/beagle/beagle-lib/private/parse.rkt"
 printf 'toolchain-v1\n' >"$TMP/beagle/bin/_beagle-racket"
@@ -20,6 +22,13 @@ second="$(hash)"
 printf '(define changed #t)\n' >>"$TMP/scripts/firn-cmds/a.rkt"
 third="$(hash)"
 [ "$first" != "$third" ]
+
+# A changed compilation recipe must rotate the immutable cache key even when
+# the Racket source graph itself is unchanged.
+before_recipe="$(hash)"
+printf '# recipe-v2\n' >>"$TMP/scripts/firn-build-bin"
+after_recipe="$(hash)"
+[ "$before_recipe" != "$after_recipe" ]
 
 # Dependency-only source and toolchain changes must each invalidate Firn.
 before_dependency="$(hash)"

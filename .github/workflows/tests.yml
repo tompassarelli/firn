@@ -61,6 +61,7 @@ jobs:
           "$RACO" test scripts/firn-cmds/diff.rkt
           "$RACO" test tests/tag-resolve-test.rkt
           ./scripts/firn-build-bin.test.sh
+          ./scripts/firn-source-hash.test.sh
           ./scripts/firn-schema-input-fingerprint.test.sh
 
       - name: Test safe-push argument gate
