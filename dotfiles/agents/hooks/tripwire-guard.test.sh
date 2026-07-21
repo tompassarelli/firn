@@ -17,20 +17,35 @@ trap 'rm -rf "$SCRATCH"' EXIT
 pass=0 fail=0
 
 # run EXPECT DESC CMD [CWD] [EXTRA_ENV]
-#   EXPECT: allow | deny        EXTRA_ENV: single VAR=VAL for the hook env
+#   EXPECT: allow | deny | ask   EXTRA_ENV: single VAR=VAL for the hook env
+#   ask = exit 0 AND stdout parses as JSON with permissionDecision == "ask".
+#   Set permission_mode by prefixing a call with the PM env (PM=default run …)
+#   or via the runm helper below; empty/unset PM omits the field (old harness).
 run() {
   local expect="$1" desc="$2" c="$3" wd="${4:-$REPO_CWD}" extra="${5:-}"
-  local json rc want out
-  json="$(jq -n --arg c "$c" --arg d "$wd" \
-    '{tool_name:"Bash", tool_input:{command:$c}, cwd:$d}')"
+  local json rc want out ok=1
+  if [ -n "${PM:-}" ]; then
+    json="$(jq -n --arg c "$c" --arg d "$wd" --arg pm "$PM" \
+      '{tool_name:"Bash", tool_input:{command:$c}, cwd:$d, permission_mode:$pm}')"
+  else
+    json="$(jq -n --arg c "$c" --arg d "$wd" \
+      '{tool_name:"Bash", tool_input:{command:$c}, cwd:$d}')"
+  fi
   set -- env -u CLAUDE_NO_AUTHORING_HOOKS -u SAFE_PUSH_ACTIVE \
     TRIPWIRE_LOG_DIR="$SCRATCH" AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
     NORTH_BIN=/bin/true
   [ -n "$extra" ] && set -- "$@" "$extra"
   out="$(printf '%s' "$json" | "$@" "$HOOK" 2>&1)"
   rc=$?
-  case "$expect" in allow) want=0 ;; deny) want=2 ;; esac
-  if [ "$rc" = "$want" ]; then
+  case "$expect" in allow | ask) want=0 ;; deny) want=2 ;; esac
+  [ "$rc" = "$want" ] || ok=0
+  # ask must also emit the ask envelope on stdout (the merged out is JSON-only
+  # on the ask path — no stderr reason is printed when the guard asks).
+  if [ "$expect" = ask ]; then
+    printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecision == "ask"' \
+      >/dev/null 2>&1 || ok=0
+  fi
+  if [ "$ok" = 1 ]; then
     pass=$((pass + 1))
     printf 'PASS  %-5s  %s\n' "$expect" "$desc"
   else
@@ -38,6 +53,13 @@ run() {
     printf 'FAIL  %-5s  %s\n      cmd: %s\n      exit=%s want=%s  out=%s\n' \
       "$expect" "$desc" "$c" "$rc" "$want" "$out"
   fi
+}
+
+# runm MODE EXPECT DESC CMD [CWD] [EXTRA_ENV] — run with permission_mode=MODE.
+runm() {
+  local pm="$1"
+  shift
+  PM="$pm" run "$@"
 }
 
 # raw EXPECT DESC PAYLOAD — feed a raw (possibly non-JSON) payload
@@ -82,6 +104,39 @@ run allow 'find -delete inside repo' "find . -name '*.tmp' -delete"
 run allow 'find -delete under /tmp' 'find /tmp/claude-123 -type f -delete'
 run allow 'git clean -fdx in cwd repo' 'git clean -fdx'
 run allow 'echo mentioning rm -rf /' "echo 'rm -rf /'"
+
+echo "== class 1 mode-aware: interactive ask vs unattended deny =="
+# The no-permission_mode class-1 deny rows above (run without PM) ARE the
+# missing-field case (e): they must keep passing unchanged (fail-closed floor).
+runm default ask 'rm -rf outside repo -> ask (default)' 'rm -rf /home/tom/somedir'
+runm acceptEdits ask 'rm -rf outside repo -> ask (acceptEdits)' 'rm -rf /home/tom/somedir'
+runm plan ask 'rm -rf outside repo -> ask (plan)' 'rm -rf /home/tom/somedir'
+runm bypassPermissions deny 'rm -rf outside repo -> deny (bypassPermissions)' 'rm -rf /home/tom/somedir'
+runm default deny 'rm -rf / stays hard (never-list, default)' 'rm -rf /'
+runm default deny 'rm -rf $HOME stays hard (never-list, default)' 'rm -rf $HOME'
+runm default deny 'hard class wins over pending ask (rm ask + git push -f)' 'rm -rf /home/tom/x && git push -f'
+runm default ask 'find -delete outside roots -> ask (default)' "find /home/tom/Documents -name '*.o' -delete"
+runm default ask 'git -C clean -fdx outside repo -> ask (default)' 'git -C /home/tom/other clean -fdx'
+runm default deny 'git push --force unaffected by mode (class 2 hard)' 'git push --force'
+runm default allow 'rm -rf ./node_modules inside repo -> allow (no ask spam)' 'rm -rf ./node_modules'
+# case m: two outside-root targets ACCUMULATE into ONE ask envelope naming both.
+macc="$(jq -n --arg c 'rm -rf /home/tom/a /home/tom/b' --arg d "$REPO_CWD" --arg pm default \
+  '{tool_name:"Bash", tool_input:{command:$c}, cwd:$d, permission_mode:$pm}' |
+  env -u CLAUDE_NO_AUTHORING_HOOKS -u SAFE_PUSH_ACTIVE TRIPWIRE_LOG_DIR="$SCRATCH" \
+    AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" NORTH_BIN=/bin/true "$HOOK" 2>/dev/null)"
+mrc=$?
+if [ "$mrc" = 0 ] &&
+  [ "$(printf '%s' "$macc" | jq -s 'length' 2>/dev/null)" = 1 ] &&
+  printf '%s' "$macc" | jq -e '.hookSpecificOutput.permissionDecision == "ask"' >/dev/null 2>&1 &&
+  printf '%s' "$macc" |
+  jq -e '.hookSpecificOutput.permissionDecisionReason | test("/home/tom/a") and test("/home/tom/b")' \
+    >/dev/null 2>&1; then
+  pass=$((pass + 1))
+  echo 'PASS  ask    accumulation: two outside targets -> one ask naming both'
+else
+  fail=$((fail + 1))
+  printf 'FAIL  ask    accumulation: two outside targets in one ask (rc=%s out=%s)\n' "$mrc" "$macc"
+fi
 
 echo "== class 2: force-push / history rewrite / raw push =="
 run deny 'git push --force' 'git push --force origin main'

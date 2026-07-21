@@ -13,6 +13,17 @@
 #      /tmp, or /tmp/claude-*; rm -rf of /, /home, ~ denied outright. Also
 #      find … -delete with start paths outside those roots, and
 #      git -C <elsewhere> clean -f… (plain git clean in the cwd repo: allowed).
+#      MODE-AWARE: in an INTERACTIVE session (permission_mode ∈ default/
+#      acceptEdits/plan) the outside-safe-roots delete + the git -C clean deny
+#      become a permission ASK (stdout ask envelope, exit 0), NOT a hard exit-2 —
+#      the human decides. The root-ish outright denies (/, /home, /home/tom,
+#      $HOME) stay HARD in every mode. Unattended (bypassPermissions, or a
+#      missing/empty/unknown permission_mode — old harness or SDK-dispatched
+#      lane) fails CLOSED to the hard deny: the unattended safety floor never
+#      weakens. Asks ACCUMULATE, they do not exit — a later hard-deny class in
+#      the same command (e.g. `rm -rf ~/x && git push -f`) still wins (exit 2);
+#      the ask envelope emits only after the full walk with asks pending and no
+#      hard deny. Classes 2-5 below are hard denies in EVERY mode.
 #   2. Force-push / history rewrite: git push with -f/--force/--force-with-lease/
 #      --mirror/--delete/--prune; and raw `git push` (house policy: safe-push
 #      only). safe-push's inner push exports SAFE_PUSH_ACTIVE=1 → allowed.
@@ -56,6 +67,9 @@
 #     + source=tripwire — so the block is ATTRIBUTED (which agent) and queryable off the
 #     graph, not just a loose unattributed TSV line. Fire-and-forget + detached: a
 #     fact-write failure NEVER delays or breaks the DENY; the file line stays regardless.
+#   - The interactive class-1 ASK writes an "ask: <reason>" line to the same
+#     tripwire.log for audit but does NOT route through record_denial_fact — an
+#     ask is not a denial; the guard_denial graph idiom stays denial-only.
 #
 # Test matrix: sibling tripwire-guard.test.sh — run it after EVERY edit here.
 # Kill-switch: persistent `north config guards off` (state) OR env
@@ -164,6 +178,34 @@ deny() {
   exit 2
 }
 
+# Mode extraction — lazily read permission_mode ONLY when an ask-eligible class-1
+# violation fires (the allow fast-path must not pay an extra jq fork). Cached like
+# ensure_cwd. INTERACTIVE = permission_mode is exactly default/acceptEdits/plan;
+# anything else (bypassPermissions, empty/missing field, unknown value) is NOT
+# interactive — fail CLOSED to the hard deny so the unattended floor never weakens.
+PERM_MODE="" PM_SET=0 INTERACTIVE=0
+ensure_mode() {
+  [ "$PM_SET" = 1 ] && return 0
+  PERM_MODE="$(jq -r '.permission_mode // empty' <<<"$payload" 2>/dev/null || true)"
+  case "$PERM_MODE" in
+    default | acceptEdits | plan) INTERACTIVE=1 ;;
+    *) INTERACTIVE=0 ;;
+  esac
+  PM_SET=1
+}
+
+# ask_or_deny REASON : mode-aware class-1 terminal for the two ask-eligible deny
+# sites (outside-safe-roots delete + git -C clean). NON-interactive: byte-for-byte
+# the old hard deny() — exits 2 before the array is ever touched. INTERACTIVE:
+# accumulate the reason and RETURN so the segment walk continues; a later hard
+# class still wins. The ask envelope emits post-walk (see the tail below).
+ASK_REASONS=()
+ask_or_deny() {
+  ensure_mode
+  [ "$INTERACTIVE" = 1 ] || deny "$1"
+  ASK_REASONS+=("$1")
+}
+
 # ---- tokenize: normalize separators to standalone tokens, then word-split.
 # Two separator kinds, kept DISTINCT: hard boundaries (";" — from ; && || & $( ` \n)
 # end a command's stdin, a pipe ("|") does NOT. The segment walk treats both as
@@ -245,7 +287,7 @@ check_delete_target() {
   if [ -n "$REPO_ROOT" ] && { [ "$p" = "$REPO_ROOT" ] || [[ "$p" == "$REPO_ROOT"/* ]]; }; then
     return 0
   fi
-  deny "recursive delete outside safe roots (target: $p; safe: cwd repo, /tmp, /tmp/claude-*)"
+  ask_or_deny "recursive delete outside safe roots (target: $p; safe: cwd repo, /tmp, /tmp/claude-*)"
 }
 
 # is_secret_path: uses $S (post strip_g); return 0 if it looks like credential
@@ -406,7 +448,7 @@ handle_git() {
       if [ -n "$REPO_ROOT" ] && { [ "$RES" = "$REPO_ROOT" ] || [[ "$RES" == "$REPO_ROOT"/* ]]; }; then
         return 0
       fi
-      deny "git -C clean -f outside the cwd repo (target: $RES)"
+      ask_or_deny "git -C clean -f outside the cwd repo (target: $RES)"
       ;;
   esac
 }
@@ -635,5 +677,25 @@ while [ "$i" -lt "$n" ]; do
   esac
   i="$j"
 done
+
+# ---- ask tail: interactive class-1 violations accumulated and NO hard deny fired
+# during the walk (a hard deny would have exited 2 already). Emit the ask envelope
+# on stdout (exit 0). Audit line uses the "ask: " prefix — NOT record_denial_fact.
+if [ "${#ASK_REASONS[@]}" -gt 0 ]; then
+  ensure_cwd
+  ask_joined=""
+  for r in "${ASK_REASONS[@]}"; do
+    [ -n "$ask_joined" ] && ask_joined+="; "
+    ask_joined+="$r"
+  done
+  ask_head="${cmd//$'\n'/ }"
+  ask_head="${ask_head:0:200}"
+  mkdir -p "$LOGDIR" 2>/dev/null || true
+  printf '%s\t%s\t%s\t%s\n' "$(date -Is)" "$cwd" "ask: $ask_joined" "$ask_head" \
+    >>"$LOGDIR/tripwire.log" 2>/dev/null || true
+  jq -cn --arg r "tripwire: $ask_joined" \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+  exit 0
+fi
 
 exit 0
