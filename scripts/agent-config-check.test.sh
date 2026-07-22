@@ -7,8 +7,8 @@ trap 'rm -rf "$scratch"' EXIT
 
 assert_native_identity() {
   local manifest="$1" expected_provider="$2" label="$3"
-  local expected_spawn="AGENT_PROVIDER=$expected_provider /home/tom/code/north/bin/north-on-spawn"
-  local expected_repair="AGENT_PROVIDER=$expected_provider /home/tom/code/north/bin/north-on-tooluse"
+  local expected_spawn="AGENT_PROVIDER=$expected_provider /run/current-system/sw/bin/north-on-spawn"
+  local expected_repair="AGENT_PROVIDER=$expected_provider /run/current-system/sw/bin/north-on-tooluse"
   local event command spawn_count=0 repair_count=0
 
   while IFS=$'\t' read -r event command; do
@@ -51,6 +51,15 @@ assert_native_identity() {
 }
 
 assert_native_identity "$REPO/dotfiles/claude/settings.json" anthropic Claude
+if rg -n '/home/tom/code/(north|fram)/bin/(north-(on-|mark-|stream)|concern|fram-code-status)' \
+  "$REPO/dotfiles/claude/settings.json" \
+  "$REPO/dotfiles/codex/hooks.json" \
+  "$REPO/dotfiles/claude/statusline.sh" \
+  "$REPO/dotfiles/agents/hooks/beagle-session-start.sh" \
+  "$REPO/dotfiles/agents/hooks/north-session-end.sh"; then
+  printf 'authoritative lifecycle configuration still references a mutable checkout command\n' >&2
+  exit 1
+fi
 report="$("$REPO/scripts/agent-config-check.sh")"
 grep -Fq '17 managed authoritative bindings' <<<"$report"
 # shellcheck disable=SC2088  # report intentionally renders the literal user-facing alias
@@ -186,29 +195,19 @@ if managed_source_root_matches "$scratch/gaffer-logical" "$distinct_observed"; t
   exit 1
 fi
 
-# Checkout-first hooks carry explicit mutable provenance. Canonical targets
-# fingerprint cleanly; a split target/hash for one basename+role is rejected.
-IFS=$'\t' read -r north_spawn_target north_spawn_sha \
-  < <(hook_target_fingerprint \
-    /home/tom/code/north/bin/north-on-spawn \
-    /home/tom/code/north)
-[ "$north_spawn_target" = /home/tom/code/north/bin/north-on-spawn ]
-[[ "$north_spawn_sha" =~ ^[0-9a-f]{64}$ ]]
-if hook_target_fingerprint \
-  /home/tom/code/north/bin/north-on-spawn \
-  /home/tom/code/nixos-config >/dev/null; then
-  printf 'North checkout hook was accepted under the wrong canonical repo\n' >&2
+# Mutable checkout lifecycle bindings are rejected even when their provider
+# identity is otherwise correct.
+mutable_claude="$scratch/claude-mutable"
+cp -a "$REPO/dotfiles/claude" "$mutable_claude"
+sed -i 's#/run/current-system/sw/bin/north-on-spawn#/home/tom/code/north/bin/north-on-spawn#g' \
+  "$mutable_claude/settings.json"
+if AGENT_CONFIG_CLAUDE="$mutable_claude" \
+  "$REPO/scripts/agent-config-check.sh" >"$scratch/mutable-claude.out" 2>&1; then
+  printf 'mutable checkout North lifecycle hook was accepted\n' >&2
   exit 1
 fi
-record_live_hook_binding \
-  north-on-spawn:north-lifecycle "$north_spawn_target" "$north_spawn_sha"
-if record_live_hook_binding \
-  north-on-spawn:north-lifecycle "$north_spawn_target" \
-  0000000000000000000000000000000000000000000000000000000000000000; then
-  printf 'split bytes for one live hook role were accepted\n' >&2
-  exit 1
-fi
-grep -q 'north-on-spawn:north-lifecycle changed from' <<<"$HOOK_SPLIT_REASON"
+grep -Fq 'uses mutable checkout North lifecycle command' \
+  "$scratch/mutable-claude.out"
 
 # Deployed provider readiness goes through the packaged closure. The sourceable
 # seam makes the exact argv contract hermetic.
@@ -588,7 +587,7 @@ fi
 # simulates a relocated checkout; only --local may require live resolution.
 # The legacy user manifest is ignored by managed-only policy, but its state
 # coordinate parser remains deterministic for diagnostics and migration.
-expected_north_spawn='AGENT_PROVIDER=openai /home/tom/code/north/bin/north-on-spawn'
+expected_north_spawn='/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-spawn-codex'
 [ "$(jq -r '.hooks.SessionStart[0].hooks[1].command' "$REPO/dotfiles/codex/hooks.json")" = "$expected_north_spawn" ]
 disabled_fixture="$scratch/disabled-hook.toml"
 printf '%s\n' \

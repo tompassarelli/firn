@@ -14,6 +14,17 @@
         (nix/with pkgs [babashka clojure jdk coreutils bash gnused gnugrep git])
         (lib.optionals pkgs.stdenv.hostPlatform.isLinux
           (nix/with pkgs [iproute2])))
+     framCodeStatus
+      (pkgs.writeShellApplication
+        {:name "fram-code-status"
+         :runtimeInputs
+          (++
+            (nix/with pkgs
+              [bash coreutils findutils gawk git gnugrep procps])
+            (lib.optionals pkgs.stdenv.hostPlatform.isLinux
+              (nix/with pkgs [iproute2])))
+         :text
+          (builtins.readFile (s inputs.fram "/bin/fram-code-status"))})
      devCommandNames
       ["fram" "fram-daemon" "fram-mcp" "fram-primer" "fram-up"
        "fram-code-author"]
@@ -49,4 +60,4 @@
      :config
       (lib.mkIf config.myConfig.modules.fram.enable
         {:environment.systemPackages
-          (++ [framPkg] devCommands packagedCommands)})}))
+          (++ [framPkg framCodeStatus] devCommands packagedCommands)})}))

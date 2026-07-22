@@ -28,9 +28,13 @@ for file in "$source_file" "$generated_file"; do
   grep -Fq 'northDev' "$file"
   grep -Fq 'northMcpDev' "$file"
   grep -Fq 'provenance=checkout path=$target' "$file"
+  grep -Fq 'pinnedCommandNames' "$file"
+  grep -Fq 'pinnedCommands' "$file"
 done
 
 [ "$(grep -c 'exec /run/current-system/sw/bin/north-coord-runtime exec-checkout' "$source_file")" -eq 1 ]
 [ "$(grep -c '(s "exec " northPkg "/bin/north' "$source_file")" -eq 4 ]
+[ "$(grep -c 'unset NORTH_CHECKOUT' "$source_file")" -eq 5 ]
+grep -Fq '"north-on-stop" "concern" "north-stream-sync"' "$source_file"
 
-printf 'ok: ordinary North/MCP are package-bound and checkout execution is explicit *-dev provenance\n'
+printf 'ok: ordinary North/MCP and lifecycle commands are package-bound; checkout execution is explicit *-dev provenance\n'

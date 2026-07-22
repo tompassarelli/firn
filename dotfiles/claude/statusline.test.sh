@@ -4,10 +4,15 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP/home/code/north/bin" "$TMP/home/.claude" "$TMP/runtime"
+mkdir -p "$TMP/bin" "$TMP/home/.claude" "$TMP/runtime"
 printf 'lite\n' > "$TMP/home/.claude/.caveman-active"
 
-cat > "$TMP/home/code/north/bin/north" <<'FAKE'
+grep -Fqx '  local north="/run/current-system/sw/bin/north"' "$HERE/statusline.sh"
+! grep -Fq '/home/tom/code/north/bin/' "$HERE/statusline.sh"
+sed "s|/run/current-system/sw/bin/north|$TMP/bin/north|" \
+  "$HERE/statusline.sh" > "$TMP/statusline.sh"
+
+cat > "$TMP/bin/north" <<'FAKE'
 #!/usr/bin/env bash
 printf 'started\n' > "$STATUSLINE_STARTED"
 sleep 2
@@ -15,11 +20,11 @@ cat > "$STATUSLINE_CAPTURE"
 printf 'call\n' >> "$STATUSLINE_CALLS"
 printf 'observer output must stay hidden\n'
 FAKE
-chmod +x "$TMP/home/code/north/bin/north"
+chmod +x "$TMP/bin/north" "$TMP/statusline.sh"
 
 payload='{"cwd":"/private/project","rate_limits":{"five_hour":{"used_percentage":23.5,"resets_at":1738425600}}}'
 output="$(printf '%s' "$payload" | HOME="$TMP/home" XDG_RUNTIME_DIR="$TMP/runtime" STATUSLINE_STARTED="$TMP/started" \
-  STATUSLINE_CAPTURE="$TMP/capture.json" STATUSLINE_CALLS="$TMP/calls" bash "$HERE/statusline.sh")"
+  STATUSLINE_CAPTURE="$TMP/capture.json" STATUSLINE_CALLS="$TMP/calls" bash "$TMP/statusline.sh")"
 
 [[ "$output" == $'\033[38;5;172m[CAVEMAN:LITE]\033[0m' ]]
 for _ in {1..30}; do
@@ -42,7 +47,7 @@ rm -f "$TMP/calls" "$TMP/capture.json"
 for i in {1..20}; do
   printf '%s' "$payload" | HOME="$TMP/home" XDG_RUNTIME_DIR="$TMP/runtime" STATUSLINE_STARTED="$TMP/started" \
     STATUSLINE_CAPTURE="$TMP/capture.json" STATUSLINE_CALLS="$TMP/calls" \
-    bash "$HERE/statusline.sh" > "$TMP/output-$i" &
+    bash "$TMP/statusline.sh" > "$TMP/output-$i" &
 done
 wait
 for i in {1..20}; do

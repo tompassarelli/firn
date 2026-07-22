@@ -47,6 +47,9 @@ grep -Fq 'packagedCommands (builtins.map mkPackaged packagedCommandNames)' "$SOU
 grep -Fq 'devCommands = builtins.map mkDev devCommandNames;' "$GENERATED"
 grep -Fq 'packagedCommands = builtins.map mkPackaged packagedCommandNames;' "$GENERATED"
 grep -Fq 'provenance=checkout path=$target' "$SOURCE"
-grep -Fq '++ [framPkg] devCommands packagedCommands' "$SOURCE"
+grep -Fq '(builtins.readFile (s inputs.fram "/bin/fram-code-status"))' "$SOURCE"
+grep -Fq '++ [framPkg framCodeStatus] devCommands packagedCommands' "$SOURCE"
+grep -Fq 'framCodeStatus' "$GENERATED"
+grep -Fq 'builtins.readFile "${inputs.fram}/bin/fram-code-status"' "$GENERATED"
 
-printf 'ok: Fram ordinary core is packaged and six checkout commands are explicit *-dev surfaces\n'
+printf 'ok: Fram ordinary core and code status are input-locked; six checkout commands are explicit *-dev surfaces\n'

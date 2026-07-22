@@ -2,6 +2,7 @@
 
 let
   username = config.myConfig.modules.users.username;
+  northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
   codexPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".codex;
 in
 {
@@ -67,7 +68,7 @@ in
         source = "${pkgs.coreutils}/bin/timeout";
       };
       "codex/hooks/north" = {
-        source = inputs.north;
+        source = northPkg;
       };
     };
     home-manager.users.${username} = ({ config, ... }: {

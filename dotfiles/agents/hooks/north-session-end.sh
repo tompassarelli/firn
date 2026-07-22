@@ -4,7 +4,7 @@
 # `concern ls` is instant-clean the moment the terminal closes.
 #
 # WHY reconstruct the id instead of reading a pidfile: the registrar
-# (~/code/north/bin/north-on-spawn) does NOT persist the agent id — it derives it
+# The generation-owned north-on-spawn wrapper does NOT persist the agent id — it derives it
 # deterministically as ${NORTH_AGENT_ID:-cc-<repo>-<session_id[:8]>} from the
 # (NORTH_AGENT_ID primary; TERN_AGENT_ID accepted as transitional fallback)
 # session_id + cwd that Claude Code also hands this hook on stdin. We mirror that
@@ -16,7 +16,7 @@
 # CLEAN-exit case. Best-effort throughout: never block exit, never emit stdout.
 set -uo pipefail
 
-CONCERN="$HOME/code/north/bin/concern"
+CONCERN="/run/current-system/sw/bin/concern"
 [ -x "$CONCERN" ] || exit 0
 
 # Claude Code delivers a JSON event on stdin; pull flat string fields without jq
@@ -63,6 +63,6 @@ setsid bash -c '
 # user timer — catches the tail of this session immediately instead of
 # waiting up to 5min). Mechanical, zero-AI, budgeted at a few seconds; never
 # block or fail this hook's exit.
-timeout 5 "$HOME/code/north/bin/north-stream-sync" >/dev/null 2>&1 || true
+timeout 5 /run/current-system/sw/bin/north-stream-sync >/dev/null 2>&1 || true
 
 exit 0

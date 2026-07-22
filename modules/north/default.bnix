@@ -21,12 +21,26 @@
       (pkgs.writeShellApplication
         {:name "north"
          :text
-          (ms (s northRuntimeOwnerGuard "/bin/north-runtime-owner-guard \"$@\"")
+          (ms "unset NORTH_CHECKOUT"
+              (s northRuntimeOwnerGuard "/bin/north-runtime-owner-guard \"$@\"")
               (s "exec " northPkg "/bin/north \"$@\""))})
      northMcpProduction
       (pkgs.writeShellApplication
         {:name "north-mcp"
-         :text (ms (s "exec " northPkg "/bin/north-mcp \"$@\""))})
+         :text
+          (ms "unset NORTH_CHECKOUT"
+              (s "exec " northPkg "/bin/north-mcp \"$@\""))})
+     mkPinnedCommand
+      (fn [name]
+        (pkgs.writeShellApplication
+          {:name name
+           :text
+            (ms "unset NORTH_CHECKOUT"
+                (s "exec " northPkg "/bin/" name " \"$@\""))}))
+     pinnedCommandNames
+      ["north-on-spawn" "north-on-tooluse" "north-mark-delegated"
+       "north-on-stop" "concern" "north-stream-sync"]
+     pinnedCommands (builtins.map mkPinnedCommand pinnedCommandNames)
      mkDev
       (fn [name]
         (pkgs.writeShellApplication
@@ -48,12 +62,15 @@
       (pkgs.writeShellApplication
         {:name "north-packaged"
          :text
-          (ms (s northRuntimeOwnerGuard "/bin/north-runtime-owner-guard \"$@\"")
+          (ms "unset NORTH_CHECKOUT"
+              (s northRuntimeOwnerGuard "/bin/north-runtime-owner-guard \"$@\"")
               (s "exec " northPkg "/bin/north \"$@\""))})
      northMcpPackaged
       (pkgs.writeShellApplication
         {:name "north-mcp-packaged"
-         :text (ms (s "exec " northPkg "/bin/north-mcp \"$@\""))})]
+         :text
+          (ms "unset NORTH_CHECKOUT"
+              (s "exec " northPkg "/bin/north-mcp \"$@\""))})]
     {:tags [cli-tools]
      :flake-inputs
       {:gaffer {:url "git+file:///home/tom/code/gaffer?ref=main"
@@ -68,5 +85,6 @@
      :config
       (lib.mkIf config.myConfig.modules.north.enable
         {:environment.systemPackages
-          [northProduction northMcpProduction northDev northMcpDev
-           northPackaged northMcpPackaged]})}))
+          (++ [northProduction northMcpProduction northDev northMcpDev
+               northPackaged northMcpPackaged]
+              pinnedCommands)})}))

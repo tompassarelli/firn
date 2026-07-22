@@ -10,7 +10,7 @@
           },
           {
             "type": "command",
-            "command": "AGENT_PROVIDER=openai /home/tom/code/north/bin/north-on-spawn",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-spawn-codex",
             "timeout": 15
           }
         ]
@@ -21,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "AGENT_PROVIDER=openai /home/tom/code/north/bin/north-on-spawn",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-spawn-codex",
             "timeout": 15
           }
         ]
@@ -105,7 +105,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "AGENT_PROVIDER=openai /home/tom/code/north/bin/north-on-tooluse",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-tooluse-codex",
             "timeout": 10
           }
         ]
@@ -115,7 +115,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/north/bin/north-mark-delegated",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-mark-delegated-codex",
             "timeout": 10
           }
         ]
@@ -126,7 +126,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/north/bin/north-on-stop",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-stop-codex",
             "timeout": 10
           }
         ]

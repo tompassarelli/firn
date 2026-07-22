@@ -12,6 +12,7 @@ let
   northProduction = pkgs.writeShellApplication {
     name = "north";
     text = ''
+      unset NORTH_CHECKOUT
       ${northRuntimeOwnerGuard}/bin/north-runtime-owner-guard "$@"
       exec ${northPkg}/bin/north "$@"
     '';
@@ -19,9 +20,26 @@ let
   northMcpProduction = pkgs.writeShellApplication {
     name = "north-mcp";
     text = ''
+      unset NORTH_CHECKOUT
       exec ${northPkg}/bin/north-mcp "$@"
     '';
   };
+  mkPinnedCommand = name: pkgs.writeShellApplication {
+    name = name;
+    text = ''
+      unset NORTH_CHECKOUT
+      exec ${northPkg}/bin/${name} "$@"
+    '';
+  };
+  pinnedCommandNames = [
+    "north-on-spawn"
+    "north-on-tooluse"
+    "north-mark-delegated"
+    "north-on-stop"
+    "concern"
+    "north-stream-sync"
+  ];
+  pinnedCommands = builtins.map mkPinnedCommand pinnedCommandNames;
   mkDev = name: pkgs.writeShellApplication {
     name = "${name}-dev";
     runtimeInputs = liveInputs;
@@ -42,6 +60,7 @@ let
   northPackaged = pkgs.writeShellApplication {
     name = "north-packaged";
     text = ''
+      unset NORTH_CHECKOUT
       ${northRuntimeOwnerGuard}/bin/north-runtime-owner-guard "$@"
       exec ${northPkg}/bin/north "$@"
     '';
@@ -49,6 +68,7 @@ let
   northMcpPackaged = pkgs.writeShellApplication {
     name = "north-mcp-packaged";
     text = ''
+      unset NORTH_CHECKOUT
       exec ${northPkg}/bin/north-mcp "$@"
     '';
   };
@@ -56,13 +76,13 @@ in
 {
   options.myConfig.modules.north.enable = lib.mkEnableOption "immutable North CLI/MCP with explicit checkout-only development commands";
   config = lib.mkIf config.myConfig.modules.north.enable {
-    environment.systemPackages = [
+    environment.systemPackages = ([
       northProduction
       northMcpProduction
       northDev
       northMcpDev
       northPackaged
       northMcpPackaged
-    ];
+    ] ++ pinnedCommands);
   };
 }

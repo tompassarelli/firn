@@ -1,26 +1,32 @@
 # North delivery mode
 
-The personal NixOS profile deliberately runs North checkout-first. `north` and
-`north-mcp` execute `~/code/north/bin/north` and
-`~/code/north/bin/north-mcp`, matching the paths used by hooks and interactive
-MCP configuration. Before either entrypoint runs, the wrapper asks
-`/run/current-system/sw/bin/north-coord-runtime` to validate the selected Fram
-deployment and export its exact source, commit, tree, origin, and daemon path.
-The selection must be a real, detached, completely clean worktree at
-`~/.local/state/north/fram-runtime/deployments/<commit>`; package mode is not an
-implicit substitute for an ordinary checkout-first command.
+Ordinary North and Fram commands are generation-owned. `north`, `north-mcp`,
+the Claude lifecycle/status commands, and the Codex managed lifecycle adapters
+resolve immutable package or `/nix/store` executables selected by the active
+NixOS generation. They scrub inherited `NORTH_CHECKOUT`; ordinary launchers,
+hooks, MCP adapters, services, and status surfaces cannot select a development
+checkout implicitly.
+
+Mutable execution is an explicit development surface. `north-dev` and
+`north-mcp-dev` alone honor `NORTH_CHECKOUT` (defaulting to
+`~/code/north`), and the `fram-*-dev` commands alone honor `FRAM_CHECKOUT`
+(defaulting to `~/code/fram`). Every development command prints
+`provenance=checkout` with its exact target before execution. No ordinary name
+falls back to a checkout when its package command is unavailable.
 
 North's Beagle source boundary still applies: editing a `.bclj` file does not
-change the running Clojure under `~/code/north/out/`. Run the canonical
-`~/code/north/build.sh` repair/build loop to regenerate `out/`; the checkout-first
-wrapper then exercises that output immediately. Checkout-first removes the Nix
-promotion delay, not Beagle code generation.
+change generated Clojure under `~/code/north/out/`. Run the canonical
+`~/code/north/build.sh` repair/build loop, then use an explicitly named
+`north-dev` command to exercise that checkout. Ordinary commands change only
+after Firn verifies and activates a new generation.
 
-This is a development policy, not a claim that dirty North source is
-reproducible. A missing or non-executable North checkout fails clearly; a dirty
-(including untracked bytes), attached, missing, or path-substituted Fram
-deployment also fails closed. Set `NORTH_CHECKOUT` only when deliberately
-testing another North checkout.
+Claude's SessionStart/SubagentStart/PostToolUse/Stop hooks call exact
+`/run/current-system/sw/bin/north-*` package wrappers. Its statusline observer
+and SessionEnd concern/stream-sync paths use the same generation-owned surface.
+Codex's managed manifest calls `/etc/codex/hooks/*-codex` adapters through exact
+runtime interpreters; those adapters delegate to the North package installed at
+`/etc/codex/hooks/north`. Beagle SessionStart performs its project-context gate
+before invoking generation-owned `fram-code-status`.
 
 The coordinator on port 7977 is systemd-owned. Its `Type=simple` service uses
 the same selector to `exec` the physical `fram-daemon`, so systemd's `MainPID`
@@ -46,14 +52,13 @@ distinct initialization transaction. Once initialized, deleting the active
 selection is corruption and fails closed; status or startup never reconstructs
 package mode from a missing selector.
 
-The flake-pinned package remains part of the system closure behind
-`north-packaged` and `north-mcp-packaged`. Use those names to smoke-test what the
-current `flake.lock` would deploy. `firn rebuild` promotes committed local North,
-Fram, Gaffer, and Beagle revisions only after its build and validation gates.
-North's packaged input follows the root Gaffer pin, so the verified North
-closure and its routing contract always move together. That pinned promotion is
-the reproducible path for another machine or a release.
+`north-packaged`, `north-mcp-packaged`, and the `fram-*-packaged` aliases expose
+the same flake-selected package boundary for explicit smoke tests. `firn rebuild`
+promotes committed local North, Fram, Gaffer, and Beagle revisions only after
+its build and validation gates. North's packaged input follows the root Gaffer
+pin, so the verified North closure and its routing contract move together.
 
-In short: ordinary names optimize the personal workstation for live harness
-development, while the `*-packaged` names expose the pinned promotion candidate
-without making it an invisible fallback.
+In short: ordinary names are immutable production surfaces, explicit `*-dev`
+names are checkout surfaces with visible provenance, and `*-packaged` names are
+explicit package smoke aliases. The three modes never select one another
+silently.

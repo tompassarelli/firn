@@ -24,7 +24,7 @@ segments=()
 # first response. Hand them to North without an API call, credential read, model
 # turn, or statusline dependency: the detached observer is silent and fail-open.
 forward_rate_limits() {
-  local north="$HOME/code/north/bin/north"
+  local north="/run/current-system/sw/bin/north"
   [ -x "$north" ] || return
   case "$STDIN_JSON" in *'"rate_limits"'*) ;; *) return ;; esac
   local runtime="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"

@@ -635,7 +635,7 @@ fi
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHARED="$REPO/dotfiles/agents"
-CLAUDE="$REPO/dotfiles/claude"
+CLAUDE="${AGENT_CONFIG_CLAUDE:-$REPO/dotfiles/claude}"
 CODEX="$REPO/dotfiles/codex"
 LIVE_REPO="${AGENT_CONFIG_LIVE_REPO:-$HOME/code/nixos-config}"
 LIVE_SHARED="$LIVE_REPO/dotfiles/agents"
@@ -758,15 +758,15 @@ if [ -s "$SHARED/AGENTS.md" ]; then ok_detail "canonical AGENTS.md present"
 else bad "canonical AGENTS.md is missing or empty"; fi
 group shared "$hook_count hooks linted · $skill_count skills · canonical instructions" "$before"
 
-# Validate a provider hook manifest. In-repo commands must resolve to the shared
-# hook implementation. External North lifecycle hooks are strict on a local
-# machine and informational in repository-only/CI mode.
+# Validate a provider hook manifest. Shared adapter commands must resolve to the
+# canonical source tree. North lifecycle commands must use the immutable system
+# package surface; mutable checkout lifecycle bindings are never authoritative.
 validate_hooks() {
   local manifest="$1" provider="$2" expected_provider="$3"
   local count=0 ev command raw_command provider_marker identity_kind first resolved expected basename declared_shared interpreter
-  local hook_sha role provenance_manifest provenance_digest expected_resolved
+  local hook_sha role provenance_manifest provenance_digest expected_resolved immutable_north=0
   local -A provenance_seen=()
-  HOOK_PROVENANCE_SUMMARY='development checkout (mutable) · provenance deferred to --local'
+  HOOK_PROVENANCE_SUMMARY='immutable North package commands · static declaration'
   while IFS=$'\t' read -r ev command; do
     [ -n "$command" ] || continue
     count=$((count + 1))
@@ -785,8 +785,12 @@ validate_hooks() {
     basename="${first##*/}"
     identity_kind=''
     case "$first" in
-      /home/tom/code/north/bin/north-on-spawn) identity_kind='spawn' ;;
-      /home/tom/code/north/bin/north-on-tooluse) identity_kind='repair' ;;
+      /run/current-system/sw/bin/north-on-spawn|/home/tom/code/north/bin/north-on-spawn)
+        identity_kind='spawn'
+        ;;
+      /run/current-system/sw/bin/north-on-tooluse|/home/tom/code/north/bin/north-on-tooluse)
+        identity_kind='repair'
+        ;;
     esac
     expected="$SHARED/hooks/$basename"
     declared_shared=0
@@ -802,21 +806,14 @@ validate_hooks() {
       bad "$provider $ev sets AGENT_PROVIDER on an unrelated hook: $raw_command"
     elif [ -n "$identity_kind" ] && [ "$provider_marker" != "$expected_provider" ]; then
       bad "$provider $ev North identity $identity_kind must set AGENT_PROVIDER=$expected_provider: $raw_command"
+    elif [[ "$first" = /run/current-system/sw/bin/north-on-spawn ||
+            "$first" = /run/current-system/sw/bin/north-on-tooluse ||
+            "$first" = /run/current-system/sw/bin/north-mark-delegated ||
+            "$first" = /run/current-system/sw/bin/north-on-stop ]]; then
+      immutable_north=1
+      ok_detail "$provider $ev → immutable system package command $basename"
     elif [[ "$first" = /home/tom/code/north/bin/* ]]; then
-      if [ "$LOCAL" -eq 1 ]; then
-        if IFS=$'\t' read -r resolved hook_sha \
-          < <(hook_target_fingerprint "$first" /home/tom/code/north); then
-          role="$basename:north-lifecycle"
-          if record_live_hook_binding "$role" "$resolved" "$hook_sha"; then
-            provenance_seen["$resolved"$'\t'"$hook_sha"]=1
-            ok_detail "$provider $ev → North $basename · development checkout (mutable): $resolved · sha256=$hook_sha"
-          else
-            bad "$provider $ev split North hook binding: $HOOK_SPLIT_REASON"
-          fi
-        else
-          bad "$provider $ev North hook is missing/non-executable or resolves outside /home/tom/code/north: $first"
-        fi
-      else note "$provider $ev uses external North hook ${first##*/} (local check deferred)"; fi
+      bad "$provider $ev uses mutable checkout North lifecycle command $first; use /run/current-system/sw/bin/$basename"
     elif [ "$declared_shared" -eq 1 ] && [ -x "$expected" ]; then
       if [ "$LOCAL" -eq 1 ]; then
         expected_resolved="$(readlink -f "$LIVE_SHARED/hooks/$basename" 2>/dev/null || true)"
@@ -844,7 +841,11 @@ validate_hooks() {
         sort
     )"
     provenance_digest="$(printf '%s\n' "$provenance_manifest" | sha256sum | awk '{print $1}')"
-    HOOK_PROVENANCE_SUMMARY="development checkout (mutable) · ${#provenance_seen[@]} canonical targets · manifest sha256=$provenance_digest"
+    if [ "$immutable_north" -eq 1 ]; then
+      HOOK_PROVENANCE_SUMMARY="immutable North package commands · ${#provenance_seen[@]} mutable shared adapter targets · manifest sha256=$provenance_digest"
+    else
+      HOOK_PROVENANCE_SUMMARY="${#provenance_seen[@]} mutable shared adapter targets · manifest sha256=$provenance_digest"
+    fi
   fi
   HOOK_BINDINGS="$count"
 }
@@ -922,10 +923,12 @@ validate_codex_managed_policy() {
     else bad "Codex module does not bind exact runtime $runtime from $package"; fi
   done
   if grep -Fq '"codex/hooks/north"' "$module" &&
-     grep -Fq '{:source inputs.north}' "$module"; then
-    ok_detail 'Codex module pins the complete North hook runtime from inputs.north'
+     grep -Fq '{:source northPkg}' "$module" &&
+     grep -Fq '(get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)' "$module" &&
+     grep -Fq ':default)' "$module"; then
+    ok_detail 'Codex module pins the complete North hook runtime from the locked default package'
   else
-    bad 'Codex module does not install the exact inputs.north hook runtime'
+    bad 'Codex module does not install the exact locked North package hook runtime'
   fi
   if grep -Fq '(get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)' "$module" &&
      grep -Fq ':codex)' "$module" &&
@@ -1066,6 +1069,18 @@ else bad "Claude statusline is not wired to $CLAUDE/statusline.sh"; fi
 if bash "$CLAUDE/statusline.test.sh" >/dev/null; then
   ok_detail "Claude statusline observer is detached and output-safe"
 else bad "Claude statusline observer test failed"; fi
+if grep -Fqx '  local north="/run/current-system/sw/bin/north"' "$CLAUDE/statusline.sh" &&
+   ! grep -Fq '/home/tom/code/north/bin/' "$CLAUDE/statusline.sh"; then
+  ok_detail "Claude statusline observer uses the immutable North package command"
+else bad "Claude statusline observer must use /run/current-system/sw/bin/north"; fi
+if grep -Fqx 'CONCERN="/run/current-system/sw/bin/concern"' "$SHARED/hooks/north-session-end.sh" &&
+   grep -Fq 'timeout 5 /run/current-system/sw/bin/north-stream-sync' "$SHARED/hooks/north-session-end.sh" &&
+   ! grep -Fq '/home/tom/code/north/bin/' "$SHARED/hooks/north-session-end.sh"; then
+  ok_detail "Claude SessionEnd cleanup uses immutable North package commands"
+else bad "Claude SessionEnd cleanup must use immutable concern and north-stream-sync commands"; fi
+if bash "$SHARED/hooks/beagle-session-start.test.sh" >/dev/null; then
+  ok_detail "Beagle SessionStart gates its immutable Fram status probe behind project detection"
+else bad "Beagle SessionStart lifecycle test failed"; fi
 if command -v shellcheck >/dev/null 2>&1 && \
    shellcheck -S warning "$LAUNCHER_BIN/claude" "$LAUNCHER_BIN/codex" "$LAUNCHER_BIN/launcher.test.sh"; then
   ok_detail "Account launcher wrappers shellcheck"

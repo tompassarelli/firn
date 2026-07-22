@@ -109,6 +109,19 @@ context_of() {
   jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$1"
 }
 
+guard_line="$(grep -nF 'is_beagle || exit 0' "$HOOK" | cut -d: -f1)"
+status_line="$(grep -nF '_fcs="/run/current-system/sw/bin/fram-code-status"' "$HOOK" | cut -d: -f1)"
+if [ -n "$guard_line" ] && [ -n "$status_line" ] && [ "$guard_line" -lt "$status_line" ]; then
+  ok 'project-context guard precedes the immutable Fram status probe'
+else
+  not_ok "project-context guard precedes the immutable Fram status probe (guard=$guard_line status=$status_line)"
+fi
+if ! grep -Fq '$HOME/code/fram/bin/fram-code-status' "$HOOK"; then
+  ok 'SessionStart contains no checkout Fram status probe'
+else
+  not_ok 'SessionStart contains no checkout Fram status probe'
+fi
+
 first="$(run_hook_raw session-a startup "$PROJECT")"
 if jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' <<<"$first" >/dev/null 2>&1; then
   ok 'startup emits valid SessionStart JSON'

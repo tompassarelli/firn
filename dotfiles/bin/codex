@@ -118,38 +118,6 @@ if [ "${1:-}" = "as" ]; then
   exec "$REAL" "${FORCE_PERMS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
 fi
 
-# Discover the worktree of $HOME/code/north that currently holds
-# refs/heads/main, so a bare provider snapshot cannot silently pick up
-# routing logic from whatever feature branch the ordinary development
-# checkout happens to be on. Safe porcelain parsing: `git worktree list
-# --porcelain` emits one whole-line attribute per line ("worktree <path>",
-# "branch refs/heads/<name>", blank line between entries) with no shell
-# metacharacters to interpret and no quoting/splitting hazard — read it
-# line-by-line, never eval/word-split it. Prints the worktree path on
-# stdout and returns 0 only when a worktree is provably on main; any
-# ambiguity (no git, no checkout, no main anywhere) returns 1 so the
-# caller falls back to the ordinary, already-diagnosed north command
-# rather than guessing.
-discover_main_checkout() {
-  local base="$HOME/code/north"
-  command -v git >/dev/null 2>&1 || return 1
-  [ -d "$base" ] || return 1
-  local wt="" line
-  while IFS= read -r line; do
-    case "$line" in
-      "worktree "*) wt="${line#worktree }" ;;
-      "branch refs/heads/main")
-        if [ -n "$wt" ] && [ -d "$wt" ]; then
-          printf '%s\n' "$wt"
-          return 0
-        fi
-        ;;
-      "") wt="" ;;
-    esac
-  done < <(git -C "$base" worktree list --porcelain 2>/dev/null)
-  return 1
-}
-
 # 3. Auto-select greatest-headroom account from north's machine boundary.
 #    Rank: headroom class (plenty>low>other), then lowest used% on the binding
 #    window, then north's target listing order. Every failure mode fails OPEN
@@ -165,25 +133,12 @@ select_account() {
     return
   fi
 
-  # An explicit caller-supplied NORTH_CHECKOUT is authoritative and is left
-  # untouched. Only when the caller left it unset do we try to pin the
-  # snapshot to the checkout that provably holds main; if none can be
-  # proven, fall through to the ordinary north invocation (ambient
-  # checkout) and its existing, already-distinct fallback diagnostics.
-  local -a checkout_env=()
-  if [ -z "${NORTH_CHECKOUT+x}" ]; then
-    local main_checkout
-    if main_checkout="$(discover_main_checkout)" && [ -n "$main_checkout" ]; then
-      checkout_env=(env "NORTH_CHECKOUT=$main_checkout")
-    fi
-  fi
-
   local errfile json rc detail
   errfile="$(mktemp 2>/dev/null || true)"
   if [ -n "$errfile" ]; then
-    json="$("${checkout_env[@]}" north providers --json 2>"$errfile")"; rc=$?
+    json="$(env -u NORTH_CHECKOUT north providers --json 2>"$errfile")"; rc=$?
   else
-    json="$("${checkout_env[@]}" north providers --json 2>/dev/null)"; rc=$?
+    json="$(env -u NORTH_CHECKOUT north providers --json 2>/dev/null)"; rc=$?
   fi
 
   if [ "$rc" -ne 0 ]; then

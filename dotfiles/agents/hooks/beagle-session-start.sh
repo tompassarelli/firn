@@ -165,12 +165,16 @@ is_beagle() {
   return 1
 }
 
+# No Fram command may run before the cheap project-context gate. SessionStart
+# is global, so an ordinary non-Beagle checkout must remain a pure no-op.
+is_beagle || exit 0
+
 # --- graceful-degradation ladder (L0-L3): flip-level facts + announcement ----
 # fram-code-status is filesystem + a loopback port probe (<100ms, no racket).
 # GUARDED: any failure (helper missing, timeout, bad output) leaves ladder_ctx
 # empty and the hook proceeds exactly as before — this block can never fail it.
 ladder_ctx=""
-_fcs="$HOME/code/fram/bin/fram-code-status"
+_fcs="/run/current-system/sw/bin/fram-code-status"
 if [ -x "$_fcs" ]; then
   _facts="$(timeout 2 "$_fcs" "$dir" 2>/dev/null)" || _facts=""
   if [ -n "$_facts" ]; then
@@ -197,14 +201,6 @@ emit_ladder_ctx() {
   [ "$context_mode" != none ] || return 0
   python3 -c 'import json,sys; print(json.dumps({"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":sys.argv[1]}}))' "$ladder_ctx" || true
 }
-
-# Not a Beagle project by the precise root/src probe — but the ladder scan is
-# recursive, so a repo whose Beagle sources are all NESTED (or an already-flipped
-# repo) still gets its flip level announced. L0 stays silent (empty ladder_ctx).
-if ! is_beagle; then
-  emit_ladder_ctx
-  exit 0
-fi
 
 # Resolve the `beagle` CLI robustly — beagle tools are NOT on the global PATH;
 # they live in the checkout (direnv-activated) or are reached via $BEAGLE_PATH.

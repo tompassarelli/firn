@@ -12,6 +12,19 @@ let
     gnugrep
     git
   ]) ++ (lib.optionals pkgs.stdenv.hostPlatform.isLinux (with pkgs; [ iproute2 ])));
+  framCodeStatus = pkgs.writeShellApplication {
+    name = "fram-code-status";
+    runtimeInputs = ((with pkgs; [
+      bash
+      coreutils
+      findutils
+      gawk
+      git
+      gnugrep
+      procps
+    ]) ++ (lib.optionals pkgs.stdenv.hostPlatform.isLinux (with pkgs; [ iproute2 ])));
+    text = builtins.readFile "${inputs.fram}/bin/fram-code-status";
+  };
   devCommandNames = [ "fram" "fram-daemon" "fram-mcp" "fram-primer" "fram-up" "fram-code-author" ];
   packagedCommandNames = [ "fram" "fram-daemon" "fram-mcp" "fram-primer" ];
   mkDev = name: pkgs.writeShellApplication {
@@ -40,6 +53,6 @@ in
 {
   options.myConfig.modules.fram.enable = lib.mkEnableOption "immutable Fram core commands with explicit checkout-only development commands";
   config = lib.mkIf config.myConfig.modules.fram.enable {
-    environment.systemPackages = ([ framPkg ] ++ devCommands ++ packagedCommands);
+    environment.systemPackages = ([ framPkg framCodeStatus ] ++ devCommands ++ packagedCommands);
   };
 }
