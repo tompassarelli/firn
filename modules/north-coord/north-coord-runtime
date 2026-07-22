@@ -74,6 +74,36 @@ valid_revision() {
   [[ "$1" =~ ^[0-9a-f]{40}$ ]]
 }
 
+valid_record_value() {
+  [[ -n "$1" && "$1" != *$'\n'* && "$1" != *$'\r'* ]]
+}
+
+mint_owner_token() {
+  local token
+
+  [[ -r /proc/sys/kernel/random/uuid ]] ||
+    die "kernel UUID source is unavailable for runtime ownership"
+  token=$(</proc/sys/kernel/random/uuid)
+  [[ "$token" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] ||
+    die "kernel UUID source returned an invalid owner token"
+  printf '%s\n' "${token,,}"
+}
+
+process_birth_token() {
+  local pid=$1 stat_line remainder start_ticks
+  local -a fields
+
+  [[ "$pid" =~ ^[0-9]+$ && -r "/proc/$pid/stat" ]] ||
+    die "cannot inspect runtime process birth: $pid"
+  stat_line=$(<"/proc/$pid/stat")
+  remainder=${stat_line##*) }
+  read -r -a fields <<<"$remainder"
+  start_ticks=${fields[19]:-}
+  [[ "$start_ticks" =~ ^[0-9]+$ ]] ||
+    die "runtime process birth is malformed: $pid"
+  printf 'proc:%s\n' "$start_ticks"
+}
+
 crash_at() {
   [[ "${NORTH_COORD_SELECTOR_CRASH_AT:-}" == "$1" ]] || return 0
   kill -KILL "$$"
@@ -206,7 +236,7 @@ capture_runtime() {
 }
 
 require_initialized_layout() {
-  local active_target generation
+  local active_target generation canonical_generation
 
   [[ -f "$initialization_marker" && ! -L "$initialization_marker" ]] ||
     die "runtime selector is not initialized; run: $program initialize"
@@ -228,7 +258,9 @@ require_initialized_layout() {
     die "active runtime generation is not a real directory: $generation"
   [[ -L "$generation/current" && -L "$generation/previous" ]] ||
     die "active runtime generation is incomplete: $generation"
-  active_generation=$generation
+  canonical_generation=$(realpath -e "$generation") ||
+    die "cannot canonicalize active runtime generation: $generation"
+  active_generation=$canonical_generation
 }
 
 restore_runtime() {
@@ -518,15 +550,94 @@ show_status() {
 }
 
 export_runtime_identity() {
+  local generation_identity runtime_record
+
+  generation_identity=$active_generation/current.identity
+  runtime_record=$active_generation/active.runtime
   export NORTH_FRAM_RUNTIME=$runtime_mode
+  export NORTH_COORD_RUNTIME_GENERATION=$active_generation
+  export NORTH_COORD_RUNTIME_IDENTITY=$generation_identity
+  export NORTH_COORD_RUNTIME_FILE=$runtime_record
+  export NORTH_COORD_SYSTEMD_UNIT=$systemd_unit
   export FRAM_HOME=$runtime_source
   export FRAM_BIN=$runtime_source/bin
+  export FRAM_LOG=$NORTH_COORD_FRAM_LOG
+  export FRAM_TELEMETRY_LOG=$telemetry_log
+  export FRAM_PORT=$runtime_port
+  export FRAM_REQUIRE_LOG_FENCE=1
   export FRAM_RUNTIME_SOURCE=$runtime_source
   export FRAM_RUNTIME_REV=$runtime_revision
   export FRAM_RUNTIME_TREE=$runtime_tree
   export FRAM_RUNTIME_ORIGIN=$runtime_origin
   export FRAM_RUNTIME_DAEMON=$runtime_daemon
   unset FRAM_RUNTIME_OWNER_TOKEN
+}
+
+publish_active_runtime() {
+  local owner_token=$1 pid=$$ birth generation_identity identity_sha
+  local runtime_record record_temp line key value
+  local -a record_lines
+
+  generation_identity=$active_generation/current.identity
+  [[ -f "$generation_identity" && ! -L "$generation_identity" ]] ||
+    die "selected generation identity is missing or unsafe: $generation_identity"
+  [[ $(realpath -e "$generation_identity") == "$generation_identity" ]] ||
+    die "selected generation identity is not canonical: $generation_identity"
+  read -r identity_sha _ < <(sha256sum "$generation_identity")
+  [[ "$identity_sha" =~ ^[0-9a-f]{64}$ ]] ||
+    die "cannot hash selected generation identity: $generation_identity"
+  birth=$(process_birth_token "$pid")
+  runtime_record=$active_generation/active.runtime
+  record_temp=$active_generation/.active.runtime.next.$pid.$RANDOM
+
+  record_lines=(
+    'FORMAT=north-fram-active-runtime/v1'
+    "GENERATION=$active_generation"
+    "GENERATION_IDENTITY=$generation_identity"
+    "GENERATION_IDENTITY_SHA256=$identity_sha"
+    "NORTH_FRAM_RUNTIME=$runtime_mode"
+    "FRAM_RUNTIME_SOURCE=$runtime_source"
+    "FRAM_RUNTIME_REV=$runtime_revision"
+    "FRAM_RUNTIME_TREE=$runtime_tree"
+    "FRAM_RUNTIME_ORIGIN=$runtime_origin"
+    "FRAM_RUNTIME_DAEMON=$runtime_daemon"
+    "FRAM_PORT=$runtime_port"
+    "FRAM_LOG=$NORTH_COORD_FRAM_LOG"
+    "FRAM_TELEMETRY_LOG=$telemetry_log"
+    "PID=$pid"
+    "PID_BIRTH=$birth"
+    "OWNER_TOKEN=$owner_token"
+    "CONTROLLER_UNIT=$systemd_unit"
+    "CONTROLLER_MAIN_PID=$pid"
+  )
+  for line in "${record_lines[@]}"; do
+    key=${line%%=*}
+    value=${line#*=}
+    valid_record_value "$value" ||
+      die "active runtime record has an invalid $key value"
+  done
+
+  if ! (
+    set -o noclobber
+    umask 077
+    printf '%s\n' "${record_lines[@]}" >"$record_temp"
+  ); then
+    die "cannot stage active runtime identity: $record_temp"
+  fi
+  crash_at active-runtime-written
+  if ! sync -f "$record_temp"; then
+    rm -f -- "${record_temp:?}"
+    die "cannot sync staged active runtime identity: $record_temp"
+  fi
+  crash_at active-runtime-synced
+  if ! mv -T "$record_temp" "$runtime_record"; then
+    rm -f -- "${record_temp:?}"
+    die "cannot publish active runtime identity: $runtime_record"
+  fi
+  crash_at active-runtime-published
+  sync -f "$active_generation" ||
+    die "cannot sync active runtime generation: $active_generation"
+  crash_at active-runtime-generation-synced
 }
 
 run_corpus_transaction() {
@@ -542,8 +653,13 @@ run_corpus_transaction() {
 }
 
 start_runtime() {
+  local launcher_owner_token
+
   load_selected
   export_runtime_identity
+  launcher_owner_token=$(mint_owner_token)
+  export FRAM_RUNTIME_OWNER_TOKEN=$launcher_owner_token
+  publish_active_runtime "$launcher_owner_token"
   release_lock
   cd "$runtime_source"
   exec "$runtime_daemon" "$runtime_port" "$NORTH_COORD_FRAM_LOG"

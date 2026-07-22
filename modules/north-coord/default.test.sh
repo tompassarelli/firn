@@ -43,6 +43,8 @@ git -C "$repo" config user.name runtime-test
 
 write_daemon() {
   local path=$1 label=$2
+  # The single-quoted bodies are the generated daemon's process probes.
+  # shellcheck disable=SC2016
   printf '%s\n' \
     '#!/usr/bin/env bash' \
     "printf 'label=$label\\n'" \
@@ -53,6 +55,15 @@ write_daemon() {
     "printf 'origin=%s\\n' \"\$FRAM_RUNTIME_ORIGIN\"" \
     "printf 'daemon=%s\\n' \"\$FRAM_RUNTIME_DAEMON\"" \
     "printf 'owner=%s\\n' \"\${FRAM_RUNTIME_OWNER_TOKEN-unset}\"" \
+    "printf 'generation=%s\\n' \"\$NORTH_COORD_RUNTIME_GENERATION\"" \
+    "printf 'generation-identity=%s\\n' \"\$NORTH_COORD_RUNTIME_IDENTITY\"" \
+    "printf 'runtime-file=%s\\n' \"\$NORTH_COORD_RUNTIME_FILE\"" \
+    "printf 'coordination=%s\\n' \"\$FRAM_LOG\"" \
+    "printf 'telemetry=%s\\n' \"\$FRAM_TELEMETRY_LOG\"" \
+    "printf 'fence=%s\\n' \"\$FRAM_REQUIRE_LOG_FENCE\"" \
+    "printf 'unit=%s\\n' \"\$NORTH_COORD_SYSTEMD_UNIT\"" \
+    'printf '\''pid=%s\n'\'' "$$"' \
+    'stat_line=$(</proc/$$/stat); remainder=${stat_line##*) }; read -r -a stat_fields <<<"$remainder"; printf '\''birth=proc:%s\n'\'' "${stat_fields[19]}"' \
     "printf 'home=%s\\n' \"\$FRAM_HOME\"" \
     "printf 'bin=%s\\n' \"\$FRAM_BIN\"" \
     "printf 'args=%s|%s\\n' \"\$1\" \"\$2\"" \
@@ -101,6 +112,42 @@ read_pair() {
   printf '%s|%s\n' "$(readlink -f "$state/current")" "$(readlink -f "$state/previous")"
 }
 
+record_value() {
+  local record=$1 key=$2
+  sed -n "s/^${key}=//p" "$record"
+}
+
+assert_active_record() {
+  local generation=$1 expected_source=$2 expected_revision=$3 expected_tree=$4
+  local expected_origin=$5 expected_daemon=$6 record identity pid birth
+
+  record=$generation/active.runtime
+  identity=$generation/current.identity
+  [[ -f "$record" && ! -L "$record" ]]
+  [[ $(stat -c '%a' "$record") == 600 ]]
+  [[ $(wc -l <"$record") == 18 ]]
+  [[ $(record_value "$record" FORMAT) == north-fram-active-runtime/v1 ]]
+  [[ $(record_value "$record" GENERATION) == "$generation" ]]
+  [[ $(record_value "$record" GENERATION_IDENTITY) == "$identity" ]]
+  [[ $(record_value "$record" GENERATION_IDENTITY_SHA256) == "$(sha256sum "$identity" | cut -d' ' -f1)" ]]
+  [[ $(record_value "$record" NORTH_FRAM_RUNTIME) == "$(sed -n '2p' "$identity")" ]]
+  [[ $(record_value "$record" FRAM_RUNTIME_SOURCE) == "$expected_source" ]]
+  [[ $(record_value "$record" FRAM_RUNTIME_REV) == "$expected_revision" ]]
+  [[ $(record_value "$record" FRAM_RUNTIME_TREE) == "$expected_tree" ]]
+  [[ $(record_value "$record" FRAM_RUNTIME_ORIGIN) == "$expected_origin" ]]
+  [[ $(record_value "$record" FRAM_RUNTIME_DAEMON) == "$expected_daemon" ]]
+  [[ $(record_value "$record" FRAM_PORT) == "$test_port" ]]
+  [[ $(record_value "$record" FRAM_LOG) == "$log" ]]
+  [[ $(record_value "$record" FRAM_TELEMETRY_LOG) == "$telemetry_log" ]]
+  pid=$(record_value "$record" PID)
+  birth=$(record_value "$record" PID_BIRTH)
+  [[ "$pid" =~ ^[0-9]+$ ]]
+  [[ "$birth" =~ ^proc:[0-9]+$ ]]
+  [[ $(record_value "$record" OWNER_TOKEN) =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
+  [[ $(record_value "$record" CONTROLLER_UNIT) == north-coord.service ]]
+  [[ $(record_value "$record" CONTROLLER_MAIN_PID) == "$pid" ]]
+}
+
 assert_pair_is() {
   local actual allowed
   actual=$(read_pair)
@@ -127,6 +174,21 @@ grep -Fxq "tree=immutable:$package_revision" <<<"$fresh_status"
 [[ $(readlink "$state/previous") == active/previous ]]
 [[ $(readlink -f "$state/current") == "$package" ]]
 [[ $(readlink -f "$state/previous") == "$package" ]]
+
+# A symlinked state ancestor never leaks a lexical alias into generation-scoped
+# process authority. The record and exported discovery paths are canonical.
+canonical_state_parent=$scratch/canonical-state-parent
+state_parent_alias=$scratch/state-parent-alias
+mkdir "$canonical_state_parent"
+ln -s "$canonical_state_parent" "$state_parent_alias"
+aliased_state=$state_parent_alias/state
+run_runtime_in_state "$aliased_state" initialize
+aliased_start=$(run_runtime_in_state "$aliased_state" start)
+aliased_generation=$(readlink -f "$aliased_state/active")
+grep -Fxq "generation=$aliased_generation" <<<"$aliased_start"
+grep -Fxq "generation-identity=$aliased_generation/current.identity" <<<"$aliased_start"
+grep -Fxq "runtime-file=$aliased_generation/active.runtime" <<<"$aliased_start"
+assert_active_record "$aliased_generation" "$package" "$package_revision" "immutable:$package_revision" "$package" "$package/bin/fram-daemon"
 
 # The systemd preparation seam resolves any active corpus journal while the
 # coordinator is still offline; the post-start seam waits for the initiating
@@ -190,6 +252,8 @@ if git -C "$deployment_one" symbolic-ref -q HEAD >/dev/null 2>&1; then
 fi
 
 checkout_start=$(run_runtime start)
+generation_one=$(readlink -f "$state/active")
+runtime_record_one=$generation_one/active.runtime
 grep -Fxq 'label=checkout' <<<"$checkout_start"
 grep -Fxq 'mode=checkout' <<<"$checkout_start"
 grep -Fxq "source=$deployment_one" <<<"$checkout_start"
@@ -197,10 +261,41 @@ grep -Fxq "revision=$revision_one" <<<"$checkout_start"
 grep -Fxq "tree=$tree_one" <<<"$checkout_start"
 grep -Fxq "origin=$repo" <<<"$checkout_start"
 grep -Fxq "daemon=$deployment_one/bin/fram-daemon" <<<"$checkout_start"
-grep -Fxq 'owner=unset' <<<"$checkout_start"
+grep -Eq '^owner=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' <<<"$checkout_start"
+grep -Fxq "generation=$generation_one" <<<"$checkout_start"
+grep -Fxq "generation-identity=$generation_one/current.identity" <<<"$checkout_start"
+grep -Fxq "runtime-file=$runtime_record_one" <<<"$checkout_start"
+grep -Fxq "coordination=$log" <<<"$checkout_start"
+grep -Fxq "telemetry=$telemetry_log" <<<"$checkout_start"
+grep -Fxq 'fence=1' <<<"$checkout_start"
+grep -Fxq 'unit=north-coord.service' <<<"$checkout_start"
 grep -Fxq "home=$deployment_one" <<<"$checkout_start"
 grep -Fxq "bin=$deployment_one/bin" <<<"$checkout_start"
 grep -Fxq "args=$test_port|$log" <<<"$checkout_start"
+assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-daemon"
+[[ $(record_value "$runtime_record_one" PID) == "$(sed -n 's/^pid=//p' <<<"$checkout_start")" ]]
+[[ $(record_value "$runtime_record_one" PID_BIRTH) == "$(sed -n 's/^birth=//p' <<<"$checkout_start")" ]]
+first_pid=$(record_value "$runtime_record_one" PID)
+first_birth=$(record_value "$runtime_record_one" PID_BIRTH)
+first_owner=$(record_value "$runtime_record_one" OWNER_TOKEN)
+if kill -0 "$first_pid" 2>/dev/null; then
+  printf 'completed daemon left its recorded PID alive\n' >&2
+  exit 1
+fi
+
+# A same-generation restart replaces stale process authority without changing
+# the sealed generation or static identity.
+checkout_restart=$(run_runtime start)
+[[ $(readlink -f "$state/active") == "$generation_one" ]]
+assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-daemon"
+restart_pid=$(record_value "$runtime_record_one" PID)
+restart_birth=$(record_value "$runtime_record_one" PID_BIRTH)
+restart_owner=$(record_value "$runtime_record_one" OWNER_TOKEN)
+[[ "$restart_pid" != "$first_pid" ]]
+[[ "$restart_birth" != "$first_birth" ]]
+[[ "$restart_owner" != "$first_owner" ]]
+[[ "$restart_pid" == "$(sed -n 's/^pid=//p' <<<"$checkout_restart")" ]]
+[[ "$restart_birth" == "$(sed -n 's/^birth=//p' <<<"$checkout_restart")" ]]
 
 # Ordinary North launchers consume the same exact validation/export path.
 identity_probe=$scratch/identity-probe
@@ -208,11 +303,29 @@ identity_probe=$scratch/identity-probe
 # shellcheck disable=SC2016
 printf '%s\n' \
   '#!/usr/bin/env bash' \
-  'printf "%s|%s|%s|%s|%s|%s|%s\n" "$NORTH_FRAM_RUNTIME" "$FRAM_RUNTIME_SOURCE" "$FRAM_RUNTIME_REV" "$FRAM_RUNTIME_TREE" "$FRAM_RUNTIME_ORIGIN" "$FRAM_RUNTIME_DAEMON" "${FRAM_RUNTIME_OWNER_TOKEN-unset}"' \
+  'printf "%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n" "$NORTH_FRAM_RUNTIME" "$FRAM_RUNTIME_SOURCE" "$FRAM_RUNTIME_REV" "$FRAM_RUNTIME_TREE" "$FRAM_RUNTIME_ORIGIN" "$FRAM_RUNTIME_DAEMON" "${FRAM_RUNTIME_OWNER_TOKEN-unset}" "$NORTH_COORD_RUNTIME_GENERATION" "$NORTH_COORD_RUNTIME_IDENTITY" "$NORTH_COORD_RUNTIME_FILE" "$FRAM_LOG" "$FRAM_TELEMETRY_LOG" "$FRAM_REQUIRE_LOG_FENCE" "$NORTH_COORD_SYSTEMD_UNIT"' \
   >"$identity_probe"
 chmod +x "$identity_probe"
 probe_output=$(run_runtime exec-checkout "$identity_probe")
-[[ "$probe_output" == "checkout|$deployment_one|$revision_one|$tree_one|$repo|$deployment_one/bin/fram-daemon|unset" ]]
+[[ "$probe_output" == "checkout|$deployment_one|$revision_one|$tree_one|$repo|$deployment_one/bin/fram-daemon|unset|$generation_one|$generation_one/current.identity|$runtime_record_one|$log|$telemetry_log|1|north-coord.service" ]]
+
+# Selector publication immediately rebinds runtime-record discovery to the new
+# generation. Until that generation is started it has no active authority;
+# the previous generation's stale record is never reused.
+run_runtime promote "$repo" "$revision_two" >/dev/null
+deployment_two=$state/deployments/$revision_two
+generation_two=$(readlink -f "$state/active")
+runtime_record_two=$generation_two/active.runtime
+[[ "$generation_two" != "$generation_one" ]]
+[[ ! -e "$runtime_record_two" && ! -L "$runtime_record_two" ]]
+[[ -f "$runtime_record_one" && ! -L "$runtime_record_one" ]]
+probe_output=$(run_runtime exec-checkout "$identity_probe")
+tree_two=$(git -C "$deployment_two" rev-parse 'HEAD^{tree}')
+[[ "$probe_output" == "checkout|$deployment_two|$revision_two|$tree_two|$repo|$deployment_two/bin/fram-daemon|unset|$generation_two|$generation_two/current.identity|$runtime_record_two|$log|$telemetry_log|1|north-coord.service" ]]
+rebound_start=$(run_runtime start)
+assert_active_record "$generation_two" "$deployment_two" "$revision_two" "$tree_two" "$repo" "$deployment_two/bin/fram-daemon"
+[[ $(record_value "$runtime_record_two" PID) == "$(sed -n 's/^pid=//p' <<<"$rebound_start")" ]]
+run_runtime promote "$repo" "$revision_one" >/dev/null
 
 # A failed promotion cannot move the active generation.
 before_failed_promote=$(read_pair)
@@ -247,7 +360,6 @@ fi
 unlink "$deployment_one/bin/UNTRACKED-EXECUTABLE"
 
 run_runtime promote "$repo" "$revision_two" >/dev/null
-deployment_two=$state/deployments/$revision_two
 run_runtime promote "$repo" "$revision_three" >/dev/null
 deployment_three=$state/deployments/$revision_three
 
@@ -344,11 +456,13 @@ fi
 # Package mode is explicit, reversible, and cannot satisfy checkout launchers.
 run_runtime package >/dev/null
 package_start=$(run_runtime start)
+package_generation=$(readlink -f "$state/active")
 grep -Fxq 'label=package' <<<"$package_start"
 grep -Fxq 'mode=package' <<<"$package_start"
 grep -Fxq "source=$package" <<<"$package_start"
 grep -Fxq "revision=$package_revision" <<<"$package_start"
-grep -Fxq 'owner=unset' <<<"$package_start"
+grep -Eq '^owner=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' <<<"$package_start"
+assert_active_record "$package_generation" "$package" "$package_revision" "immutable:$package_revision" "$package" "$package/bin/fram-daemon"
 if run_runtime exec-checkout "$identity_probe" >/dev/null 2>&1; then
   printf 'checkout launcher accepted package selection\n' >&2
   exit 1
