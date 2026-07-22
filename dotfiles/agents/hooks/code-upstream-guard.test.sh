@@ -59,6 +59,60 @@ printf '%s\n' '(def note "see @upstream:graph in the docs")' >"$DECOY_BODY"
 DECOY_TRAILING="$SCRATCH/decoy-trailing.bclj"
 printf '%s\n' '(defn a [] 1)' ';; @upstream:graph' >"$DECOY_TRAILING"
 
+# --- independent counterexamples (verifier-mandated) -------------------------
+# valid sentinel far below the old 8-physical-line cap: a real leading comment
+# block runs 9 lines, the directive lands on physical line 10 -> must DENY.
+SENTINEL_LINE10="$SCRATCH/line10.bclj"
+{ printf '%s\n' '#lang beagle/clj'
+  for i in 1 2 3 4 5 6 7 8; do printf ';; preamble line %d\n' "$i"; done
+  printf '%s\n' ';; @upstream:graph' '(defn a [] 1)'; } >"$SENTINEL_LINE10"
+
+# a long license preamble (incl. a non-ASCII © byte) then the directive -> DENY:
+# proves the byte-cap scan reaches it and errors="replace" survives the © byte.
+SENTINEL_LICENSE="$SCRATCH/license.bclj"
+{ printf '%s\n' '#lang beagle/clj'
+  printf ';; Copyright \302\251 2026 Example. All rights reserved.\n'
+  for i in $(seq 1 40); do printf ';; license clause %d — redistribution permitted under terms.\n' "$i"; done
+  printf '%s\n' ';; @upstream:graph' '(defn a [] 1)'; } >"$SENTINEL_LICENSE"
+
+# the directive WITH optional suffix prose after the marker -> DENY (anchored,
+# whole-token match still fires when prose trails the marker).
+SENTINEL_SUFFIX="$SCRATCH/suffix.bclj"
+printf '%s\n' ';; @upstream:graph (managed by fram — do not edit as text)' '(defn a [] 1)' >"$SENTINEL_SUFFIX"
+
+# an explanatory MENTION of the marker inside a leading comment -> ALLOW: the
+# marker is not anchored at the start of the comment payload, so it is prose.
+DECOY_MENTION="$SCRATCH/mention.bclj"
+printf '%s\n' ';; see @upstream:graph in the code-as-facts skill for the rationale' '(defn a [] 1)' >"$DECOY_MENTION"
+
+# a form that PREFIX-matches a header keyword but is real code, then a trailing
+# marker -> ALLOW: exact-header matching must not skip real code and then honor a
+# marker that follows it.
+DECOY_HEADERISH="$SCRATCH/headerish.bclj"
+printf '%s\n' '(define-target-registry adopt)' ';; @upstream:graph' '(defn a [] 1)' >"$DECOY_HEADERISH"
+
+# a symlink alias pointing at an adopted registry file -> DENY: realpath identity
+# resolves the alias to the adopted target; no git needed.
+ALIAS="$SCRATCH/alias-schema.bclj"
+ln -s "$PRIMARY/mod/schema.bclj" "$ALIAS"
+
+# a hostile `git` planted early on PATH that lies about provenance.
+HOSTILE="$SCRATCH/hostile"
+mkdir -p "$HOSTILE"
+printf '%s\n' '#!/usr/bin/env bash' 'echo /hostile/attacker/.git; exit 0' >"$HOSTILE/git"
+chmod +x "$HOSTILE/git"
+
+run_hook_env() { # env_assignment guards_env payload   (one VAR=val override, e.g. PATH)
+  env GRAPH_UPSTREAM_REGISTRY="$REGISTRY" \
+    AGENT_NO_AUTHORING_HOOKS="$2" \
+    NORTH_HARNESS_STATE="$STATE" \
+    HOME="$SCRATCH/home" \
+    "$1" \
+    "$HOOK" >"$SCRATCH/out" 2>"$SCRATCH/err" <<<"$3"
+  RUN_STATUS=$?
+  RUN_OUT="$(<"$SCRATCH/out")"
+}
+
 # ---- harness ----------------------------------------------------------------
 event() { # tool_name file_path
   python3 -c 'import json,sys; print(json.dumps({"tool_name":sys.argv[1],"tool_input":{"file_path":sys.argv[2]}}))' "$1" "$2"
@@ -119,6 +173,13 @@ run_hook 0 "$(event Edit "$DECOY_TRAILING")";   assert_allow 'marker in a commen
 run_hook 0 "$(event Read "$SENTINEL_CANON")";   assert_allow 'Read of an adopted file is never denied'
 run_hook 1 "$(event Edit "$SENTINEL_CANON")";   assert_allow 'killswitch (AGENT_NO_AUTHORING_HOOKS=1) no-ops the guard'
 
+# ---- real leading-comment parser (empty registry, self-declared) ------------
+run_hook 0 "$(event Edit "$SENTINEL_LINE10")";  assert_deny  'sentinel on physical line 10 denies (no 8-line cap)'
+run_hook 0 "$(event Edit "$SENTINEL_LICENSE")"; assert_deny  'sentinel after a long non-ASCII license preamble denies'
+run_hook 0 "$(event Edit "$SENTINEL_SUFFIX")";  assert_deny  'directive with suffix prose after the marker denies'
+run_hook 0 "$(event Edit "$DECOY_MENTION")";    assert_allow 'explanatory mention of the marker in a comment does not self-adopt'
+run_hook 0 "$(event Edit "$DECOY_HEADERISH")";  assert_allow 'header-prefix real code + trailing marker does not self-adopt'
+
 # ---- registry-only adoption of the primary checkout -------------------------
 printf '%s\n' "$PRIMARY/mod/schema.bclj" >"$REGISTRY"
 run_hook 0 "$(event Edit "$PRIMARY/mod/schema.bclj")";  assert_deny  'registry-only primary path denies (exact match)'
@@ -129,6 +190,27 @@ run_hook 0 "$(event Edit "$PRIMARY/mod/plain.bclj")";   assert_allow 'unrelated 
 # file inside the linked worktree must still be denied — no worktree path listed.
 run_hook 0 "$(event Edit "$WORKTREE/mod/schema.bclj")"; assert_deny  'durable-worktree edit of the adopted file denies via provenance'
 run_hook 0 "$(event Edit "$WORKTREE/mod/plain.bclj")";  assert_allow 'unrelated worktree file (different repo-relative path) remains allowed'
+
+# a symlink alias to the adopted file must deny by realpath identity (no git).
+run_hook 0 "$(event Edit "$ALIAS")";                   assert_deny  'symlink alias to an adopted registry file denies (realpath)'
+
+# primary/worktree registry EQUIVALENCE: with the registry naming ONLY the
+# worktree path, editing the SAME file in the PRIMARY checkout must also deny.
+printf '%s\n' "$WORKTREE/mod/schema.bclj" >"$REGISTRY"
+run_hook 0 "$(event Edit "$PRIMARY/mod/schema.bclj")"; assert_deny  'registry names worktree; primary edit denies (equivalence, reverse)'
+run_hook 0 "$(event Edit "$PRIMARY/mod/plain.bclj")";  assert_allow 'registry names worktree; unrelated primary file allowed'
+
+# hostile git: a lying `git` planted early on PATH must be ignored (trusted git
+# resolution). Registry names the primary; the worktree edit still denies, and an
+# ordinary file is not falsely denied.
+printf '%s\n' "$PRIMARY/mod/schema.bclj" >"$REGISTRY"
+run_hook_env "PATH=$HOSTILE:$PATH" 0 "$(event Edit "$WORKTREE/mod/schema.bclj")"; assert_deny  'hostile PATH git ignored; worktree adopted edit still denies'
+run_hook_env "PATH=$HOSTILE:$PATH" 0 "$(event Edit "$ORDINARY")";               assert_allow 'hostile PATH git cannot falsely deny an ordinary file'
+
+# missing/hostile git cannot bypass an adopted file: a DIRECT edit of the adopted
+# primary file denies by realpath identity BEFORE any provenance call, so even a
+# lying git on PATH never gets consulted for the decision.
+run_hook_env "PATH=$HOSTILE:$PATH" 0 "$(event Edit "$PRIMARY/mod/schema.bclj")"; assert_deny  'hostile/missing git; direct adopted edit still denies via realpath'
 
 # a registry row naming a path in an UNRELATED repo must not leak by provenance.
 OTHER="$SCRATCH/other"

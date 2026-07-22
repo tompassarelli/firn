@@ -35,17 +35,20 @@
 #     (1) the file's path appears (one absolute path per line, blank/`#` lines
 #         ignored) in the registry file $GRAPH_UPSTREAM_REGISTRY
 #         (default: ~/.config/fram/graph-upstream-files). A row is matched by
-#         exact abspath OR by shared Git provenance (same `--git-common-dir` +
-#         repo-relative path), so a row naming only the primary checkout also
+#         REALPATH identity (so a symlink alias to an adopted file cannot bypass)
+#         OR by shared Git provenance from a TRUSTED git (same `--git-common-dir`
+#         + repo-relative path), so a row naming only the primary checkout also
 #         covers an edit of the same file reached through a durable linked
-#         worktree — no per-worktree paths are enumerated, OR
-#     (2) the file's LEADING COMMENT BLOCK contains the in-band sentinel
+#         worktree — no per-worktree paths are enumerated, and a missing/hostile
+#         git can never let a direct or aliased edit of an adopted file through, OR
+#     (2) the file's LEADING COMMENT BLOCK carries the in-band directive
 #         ;; @upstream:graph  (the canonical marker in code-as-facts SKILL.md;
 #         the legacy `;; @upstream-is-graph` / `;; @claim-canonical` spellings
 #         stay recognized for compatibility). It is a Beagle line comment, so it
 #         survives the lossless round-trip as a comment node and recompiles
-#         cleanly. Only a leading `;;` comment counts — marker-like text in a
-#         string or code body never self-adopts.
+#         cleanly. Only a leading `;;` comment whose payload IS the marker (with
+#         optional suffix prose) counts — an explanatory MENTION of the marker,
+#         or marker-like text in a string or code body, never self-adopts.
 #   (1) is the source of truth for the guard (cheap, no file read needed if absent);
 #   (2) lets a file self-declare and travels with the file. Adoption = add the path
 #   to the registry (and optionally stamp the sentinel). De-adoption = remove it.
@@ -111,7 +114,7 @@ EOF
 # hook's JSON envelope (sys.stdin must stay the harness's PreToolUse payload). Args
 # carry the registry path + deny reason so no shell interpolation lands inside python.
 read -r -d '' PY <<'PYEOF' || true
-import sys, json, os, subprocess
+import sys, json, os, re, subprocess, shutil, getpass, pwd
 
 registry_path = sys.argv[1]
 deny_reason   = sys.argv[2]
@@ -120,21 +123,65 @@ def fail_open():
     # No opinion -> allow. Empty stdout, exit 0.
     sys.exit(0)
 
+def _trusted_git():
+    # Resolve `git` from a fixed allow-list of MANAGED bin dirs, never the
+    # ambient inherited PATH. A per-session PATH entry or a `./git` planted in a
+    # repo working directory therefore cannot impersonate git and lie about
+    # provenance (hostile-Git). The real home comes from the uid via pwd, not the
+    # $HOME env (which a caller — or our own tests — may override), so the trusted
+    # location holds regardless of a spoofed HOME. Returns None when no managed
+    # git is found, so provenance fails OPEN rather than trusting an untrusted one.
+    try:
+        real_home = pwd.getpwuid(os.geteuid()).pw_dir
+    except Exception:
+        real_home = os.path.expanduser("~")
+    try:
+        user = getpass.getuser()
+    except Exception:
+        user = ""
+    candidates = [
+        "/run/wrappers/bin",
+        "/run/current-system/sw/bin",
+        os.path.join(real_home, ".nix-profile/bin"),
+        ("/etc/profiles/per-user/%s/bin" % user) if user else "",
+        "/nix/var/nix/profiles/default/bin",
+        "/usr/bin",
+        "/bin",
+    ]
+    trusted = os.pathsep.join(d for d in candidates if d and os.path.isdir(d))
+    return shutil.which("git", path=trusted) if trusted else None
+
+_GIT = _trusted_git()
+# Clean environment for git: strips any hostile GIT_DIR/GIT_COMMON_DIR/GIT_WORK_TREE
+# and the ambient PATH so discovery is driven only by `-C <dir>`.
+_GIT_ENV = {
+    "PATH": os.path.dirname(_GIT) if _GIT else "/bin",
+    "HOME": os.environ.get("HOME", ""),
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_TERMINAL_PROMPT": "0",
+}
+
 def git_provenance(path):
     # Identity a registry row and a target file share when they name the SAME
     # logical file, even across a durable Git worktree: (shared common git dir,
     # repo-relative path). `--git-common-dir` is shared by the primary checkout
     # and every linked worktree, so a registry row that names only the primary
     # checkout still matches an edit of the same file inside a worktree — with no
-    # per-worktree path enumeration. Returns None when the path is not inside a
-    # Git repo (or git is unavailable), so a bad probe fails OPEN, never denies.
-    d = os.path.dirname(os.path.abspath(path)) or "."
+    # per-worktree path enumeration. realpath() resolves symlink aliases so an
+    # alias to an adopted file shares provenance with its target. Returns None
+    # when git is untrusted/absent or the path is not inside a Git repo, so a bad
+    # probe fails OPEN, never denies (no false adoption outside Git).
+    if _GIT is None:
+        return None
+    rp = os.path.realpath(path)
+    d = os.path.dirname(rp) or "."
     if not os.path.isdir(d):
         return None
     def git(args):
         try:
-            r = subprocess.run(["git", "-C", d] + args,
-                               capture_output=True, text=True, timeout=5)
+            r = subprocess.run([_GIT, "-C", d] + args,
+                               capture_output=True, text=True, timeout=5,
+                               env=_GIT_ENV)
         except Exception:
             return None
         if r.returncode != 0:
@@ -147,7 +194,7 @@ def git_provenance(path):
     prefix = git(["rev-parse", "--show-prefix"])  # dir relative to toplevel
     if prefix is None:
         return None
-    rel = os.path.normpath(os.path.join(prefix, os.path.basename(path)))
+    rel = os.path.normpath(os.path.join(prefix, os.path.basename(rp)))
     return (common, rel)
 
 try:
@@ -168,17 +215,22 @@ if not fp:
 fp = os.path.abspath(fp)
 
 def in_registry(path):
-    fp_prov = "unset"  # computed lazily: only when an exact match misses
+    # Compare by realpath so a symlink alias to an adopted file (or an adopted
+    # path reached through a symlinked directory) resolves to the SAME identity
+    # and cannot silently bypass the guard. This match needs no git, so a missing
+    # or hostile git can never let a direct/aliased edit of an adopted file through.
+    target_real = os.path.realpath(path)
+    fp_prov = "unset"  # git provenance, computed lazily only when realpath misses
     try:
         with open(registry_path, "r") as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                entry = os.path.abspath(os.path.expanduser(line))
-                if entry == path:
+                entry = os.path.expanduser(line)
+                if os.path.realpath(entry) == target_real:
                     return True
-                # Exact string miss -> the registry row may still name the same
+                # realpath miss -> the registry row may still name the same
                 # logical file reached through a durable worktree. Compare Git
                 # provenance (shared common-dir + repo-relative path).
                 if fp_prov == "unset":
@@ -191,31 +243,50 @@ def in_registry(path):
         return False
     return False
 
+# Canonical marker (code-as-facts SKILL.md) is `;; @upstream:graph`; the two
+# legacy spellings stay recognized for deliberate backward compatibility.
+_MARKERS = ("@upstream:graph", "@upstream-is-graph", "@claim-canonical")
+# An adoption directive is a leading comment whose payload IS one of the markers,
+# optionally followed by whitespace + suffix prose (`;; @upstream:graph (managed
+# by fram)`). The marker must be anchored at the start of the comment payload and
+# be a whole token (followed by whitespace or end of line): an explanatory MENTION
+# (`;; see @upstream:graph for why`) is not a directive, and `@upstream:graphics`
+# does not match.
+_DIRECTIVE_RE = re.compile(
+    r';+\s*(?:' + '|'.join(re.escape(m) for m in _MARKERS) + r')(?:\s|$)')
+# Only EXACT standalone generated headers precede the leading comment block: a
+# `#lang <token>` line or a `(define-target <token>)` form (what the lossless
+# round-trip's --render emits). A prefix match here would wrongly treat real code
+# like `(define-target-registry ...)` as a header, skip it, and then honor a
+# marker that trails actual code — so match the whole line exactly.
+_HEADER_RE = re.compile(r'(?:#lang\s+\S+|\(define-target\s+\S+\))\Z')
+
+# Bytes of leading text scanned for the sentinel before giving up. A real leading
+# comment/license block can run well past the old 8 PHYSICAL-line cap, so scan to
+# the first actual form under a sane byte ceiling instead of a fixed line count.
+_SCAN_BYTE_CAP = 65536
+
 def self_declared(path):
-    # In-band sentinel in the file's LEADING comment block. The canonical marker
-    # (code-as-facts SKILL.md) is `;; @upstream:graph`; the two legacy spellings
-    # `@upstream-is-graph` / `@claim-canonical` stay recognized for deliberate
-    # backward compatibility. Scanned over the first few lines (not just line 1)
-    # because the lossless round-trip's --render emits a `(define-target clj)`
-    # header + blank line ahead of the source's leading comments, so a sentinel
-    # comment lands ~line 3 after a regenerate.
-    #
-    # The marker only counts on a leading COMMENT line (`;;`) within the header
-    # block: we stop at the first real form BEFORE testing it, so marker-like
-    # text in a string literal or code body cannot self-adopt a file.
-    markers = ("@upstream:graph", "@upstream-is-graph", "@claim-canonical")
+    # In-band sentinel in the file's LEADING comment block. The marker only counts
+    # on a leading COMMENT line (`;;`) that precedes the first real form: we stop at
+    # that form BEFORE testing, so marker-like text in a string literal, in code, or
+    # in a comment trailing real code cannot self-adopt a file.
     try:
-        with open(path, "r") as f:
-            for _ in range(8):
+        # errors="replace": a non-UTF-8 byte in a license preamble must not raise
+        # (that would fail OPEN and let an adopted file through).
+        with open(path, "r", errors="replace") as f:
+            scanned = 0
+            while scanned < _SCAN_BYTE_CAP:
                 line = f.readline()
                 if line == "":
                     break
+                scanned += len(line)
                 s = line.strip()
-                # header / lang line / blanks precede the comment block — skip.
-                if s == "" or s.startswith("#lang") or s.startswith("(define-target"):
+                # blanks + exact generated headers precede the comment block — skip.
+                if s == "" or _HEADER_RE.match(s):
                     continue
                 if s.startswith(";;"):
-                    if any(m in s for m in markers):
+                    if _DIRECTIVE_RE.match(s):
                         return True
                     continue  # ordinary leading comment — keep scanning
                 break  # first real form — sentinel must precede it
