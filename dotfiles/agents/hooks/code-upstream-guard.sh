@@ -34,14 +34,22 @@
 #   Adoption is recorded two redundant ways; a file is canonical if EITHER holds:
 #     (1) the file's path appears (one absolute path per line, blank/`#` lines
 #         ignored) in the registry file $GRAPH_UPSTREAM_REGISTRY
-#         (default: ~/.config/fram/graph-upstream-files), OR
-#     (2) the file's FIRST LINE contains the in-band sentinel  ;; @upstream:graph
-#         (a Beagle line comment, so it survives the lossless round-trip as a
-#         comment node and recompiles cleanly).
+#         (default: ~/.config/fram/graph-upstream-files). A row is matched by
+#         exact abspath OR by shared Git provenance (same `--git-common-dir` +
+#         repo-relative path), so a row naming only the primary checkout also
+#         covers an edit of the same file reached through a durable linked
+#         worktree — no per-worktree paths are enumerated, OR
+#     (2) the file's LEADING COMMENT BLOCK contains the in-band sentinel
+#         ;; @upstream:graph  (the canonical marker in code-as-facts SKILL.md;
+#         the legacy `;; @upstream-is-graph` / `;; @claim-canonical` spellings
+#         stay recognized for compatibility). It is a Beagle line comment, so it
+#         survives the lossless round-trip as a comment node and recompiles
+#         cleanly. Only a leading `;;` comment counts — marker-like text in a
+#         string or code body never self-adopts.
 #   (1) is the source of truth for the guard (cheap, no file read needed if absent);
 #   (2) lets a file self-declare and travels with the file. Adoption = add the path
-#   to the registry (and optionally stamp line 1). De-adoption = remove it. Nothing
-#   about the guard is implicit.
+#   to the registry (and optionally stamp the sentinel). De-adoption = remove it.
+#   Nothing about the guard is implicit.
 # ============================================================================
 set -uo pipefail
 
@@ -103,7 +111,7 @@ EOF
 # hook's JSON envelope (sys.stdin must stay the harness's PreToolUse payload). Args
 # carry the registry path + deny reason so no shell interpolation lands inside python.
 read -r -d '' PY <<'PYEOF' || true
-import sys, json, os
+import sys, json, os, subprocess
 
 registry_path = sys.argv[1]
 deny_reason   = sys.argv[2]
@@ -111,6 +119,36 @@ deny_reason   = sys.argv[2]
 def fail_open():
     # No opinion -> allow. Empty stdout, exit 0.
     sys.exit(0)
+
+def git_provenance(path):
+    # Identity a registry row and a target file share when they name the SAME
+    # logical file, even across a durable Git worktree: (shared common git dir,
+    # repo-relative path). `--git-common-dir` is shared by the primary checkout
+    # and every linked worktree, so a registry row that names only the primary
+    # checkout still matches an edit of the same file inside a worktree — with no
+    # per-worktree path enumeration. Returns None when the path is not inside a
+    # Git repo (or git is unavailable), so a bad probe fails OPEN, never denies.
+    d = os.path.dirname(os.path.abspath(path)) or "."
+    if not os.path.isdir(d):
+        return None
+    def git(args):
+        try:
+            r = subprocess.run(["git", "-C", d] + args,
+                               capture_output=True, text=True, timeout=5)
+        except Exception:
+            return None
+        if r.returncode != 0:
+            return None
+        return r.stdout.strip()
+    common = git(["rev-parse", "--git-common-dir"])
+    if not common:
+        return None
+    common = os.path.realpath(os.path.join(d, common))
+    prefix = git(["rev-parse", "--show-prefix"])  # dir relative to toplevel
+    if prefix is None:
+        return None
+    rel = os.path.normpath(os.path.join(prefix, os.path.basename(path)))
+    return (common, rel)
 
 try:
     data = json.load(sys.stdin)
@@ -130,13 +168,22 @@ if not fp:
 fp = os.path.abspath(fp)
 
 def in_registry(path):
+    fp_prov = "unset"  # computed lazily: only when an exact match misses
     try:
         with open(registry_path, "r") as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                if os.path.abspath(os.path.expanduser(line)) == path:
+                entry = os.path.abspath(os.path.expanduser(line))
+                if entry == path:
+                    return True
+                # Exact string miss -> the registry row may still name the same
+                # logical file reached through a durable worktree. Compare Git
+                # provenance (shared common-dir + repo-relative path).
+                if fp_prov == "unset":
+                    fp_prov = git_provenance(path)
+                if fp_prov is not None and git_provenance(entry) == fp_prov:
                     return True
     except FileNotFoundError:
         return False
@@ -145,12 +192,18 @@ def in_registry(path):
     return False
 
 def self_declared(path):
-    # In-band sentinel `;; @upstream:graph` in the file's LEADING comment block.
-    # Scanned over the first few lines (not just line 1) because the lossless
-    # round-trip's --render emits a `(define-target clj)` header + blank line ahead
-    # of the source's leading comments, so a sentinel comment lands ~line 3 after a
-    # regenerate. We stop at the first non-comment, non-blank, non-header line so the
-    # scan stays cheap and never reads code bodies.
+    # In-band sentinel in the file's LEADING comment block. The canonical marker
+    # (code-as-facts SKILL.md) is `;; @upstream:graph`; the two legacy spellings
+    # `@upstream-is-graph` / `@claim-canonical` stay recognized for deliberate
+    # backward compatibility. Scanned over the first few lines (not just line 1)
+    # because the lossless round-trip's --render emits a `(define-target clj)`
+    # header + blank line ahead of the source's leading comments, so a sentinel
+    # comment lands ~line 3 after a regenerate.
+    #
+    # The marker only counts on a leading COMMENT line (`;;`) within the header
+    # block: we stop at the first real form BEFORE testing it, so marker-like
+    # text in a string literal or code body cannot self-adopt a file.
+    markers = ("@upstream:graph", "@upstream-is-graph", "@claim-canonical")
     try:
         with open(path, "r") as f:
             for _ in range(8):
@@ -158,11 +211,13 @@ def self_declared(path):
                 if line == "":
                     break
                 s = line.strip()
-                if "@upstream-is-graph" in s or "@claim-canonical" in s:
-                    return True
-                # keep scanning through the header / lang line / comments / blanks
-                if s == "" or s.startswith(";;") or s.startswith("#lang") or s.startswith("(define-target"):
+                # header / lang line / blanks precede the comment block — skip.
+                if s == "" or s.startswith("#lang") or s.startswith("(define-target"):
                     continue
+                if s.startswith(";;"):
+                    if any(m in s for m in markers):
+                        return True
+                    continue  # ordinary leading comment — keep scanning
                 break  # first real form — sentinel must precede it
     except Exception:
         return False
