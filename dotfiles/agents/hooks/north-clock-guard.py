@@ -44,9 +44,13 @@ GUARDED_EMPTY_EXPANSION_RE = re.compile(
 LITERAL_ABSOLUTE_PATH_RE = re.compile(r"/[A-Za-z0-9._+,:=@%~/-]+")
 LITERAL_SCRATCH_ROOTS = ("/tmp", "/var/tmp")
 ASSIGNMENT_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", re.S)
+SAFE_SET_PREAMBLE_RE = re.compile(
+    r"\A[ \t]*set"
+    r"(?P<arguments>(?:[ \t]+(?:-[A-Za-z]+|[A-Za-z]+))+?)"
+    r"[ \t]*(?:;|\n)[ \t]*"
+)
 SAFE_MKTEMP_ASSIGNMENT_RE = re.compile(
-    r'\A(?P<leading>[ \t]*(?:set[ \t]+-euo[ \t]+pipefail'
-    r'[ \t]*(?:;|\n)[ \t]*)?)'
+    r'\A(?P<leading>[ \t]*)'
     r'(?P<name>[A-Za-z_][A-Za-z0-9_]*)='
     r'(?P<quote>"?)\$\([ \t]*mktemp[ \t]+'
     r'(?:-d|--directory)'
@@ -560,6 +564,34 @@ def literal_assignment_proves_nonclient_path(
     return False
 
 
+def safe_set_preamble_end(command: str) -> int:
+    """Accept only a bounded ``set`` preamble that enables pipefail.
+
+    ``-e`` and ``-u`` may be combined or separate, but no other option,
+    operand, expansion, or command may precede the proved assignment.
+    """
+    match = SAFE_SET_PREAMBLE_RE.match(command)
+    if match is None:
+        return 0
+    tokens = match.group("arguments").split()
+    seen: set[str] = set()
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if re.fullmatch(r"-[euo]+", token) is None:
+            return 0
+        for offset, option in enumerate(token[1:]):
+            if option in seen or (option == "o" and offset != len(token) - 2):
+                return 0
+            seen.add(option)
+            if option == "o":
+                index += 1
+                if index >= len(tokens) or tokens[index] != "pipefail":
+                    return 0
+        index += 1
+    return match.end() if "o" in seen else 0
+
+
 def _normalize_safe_mktemp_assignment(
     command: str,
     cwd: str,
@@ -570,7 +602,9 @@ def _normalize_safe_mktemp_assignment(
     therefore does not inherit ``TMPDIR``. Every option-bearing, relative, or
     expanded template stays outside this deliberately small proof.
     """
-    match = SAFE_MKTEMP_ASSIGNMENT_RE.match(command)
+    preamble_end = safe_set_preamble_end(command)
+    assignment_source = command[preamble_end:]
+    match = SAFE_MKTEMP_ASSIGNMENT_RE.match(assignment_source)
     if (
         not match
         or match.group("name") == "TMPDIR"
@@ -592,11 +626,11 @@ def _normalize_safe_mktemp_assignment(
         raise AdmissionUnavailable("client-scoped temporary directory")
     placeholder = os.path.join(temp_root, "north-clock-guard-mktemp")
     replacement = (
-        f"{match.group('leading')}{match.group('name')}="
+        f"{command[:preamble_end]}{match.group('leading')}{match.group('name')}="
         f"{shlex.quote(placeholder)}{match.group('separator')}"
     )
     return (
-        f"{replacement}{command[match.end():]}",
+        f"{replacement}{assignment_source[match.end():]}",
         (match.group("name"), placeholder),
     )
 

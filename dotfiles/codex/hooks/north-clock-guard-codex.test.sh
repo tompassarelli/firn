@@ -241,5 +241,109 @@ else
   printf 'FAIL  timeout descendant survived and wrote %s\n' "$LATE"
 fi
 
+cp "$HERE/../../agents/hooks/north-clock-guard.py" \
+  "$HOOKS/north-clock-guard.py"
+detached_matrix_command=''
+IFS= read -r -d '' detached_matrix_command <<'COMMAND' || true
+set -u -o pipefail
+snapshot_verify_root=$(mktemp -d /tmp/north-snapshot-detached.XXXXXX)
+trap 'rm -rf "${snapshot_verify_root:?}"' EXIT
+mkdir -p "$snapshot_verify_root/north" "$snapshot_verify_root/fram"
+git archive f3174bb | tar -x -C "$snapshot_verify_root/north"
+fram_rev=7f5bd88cc2cbfd3b74947eb205add75e76cc57bb
+fram_tree=$(git -C /home/tom/code/fram rev-parse "$fram_rev^{tree}")
+git -C /home/tom/code/fram archive "$fram_rev" | tar -x -C "$snapshot_verify_root/fram"
+(
+  FRAM_OUT="$snapshot_verify_root/fram/out" bb -cp "$snapshot_verify_root/fram/out" "$snapshot_verify_root/north/cli/tests/snapshot-test.clj"
+) >"$snapshot_verify_root/snapshot-owner.log" 2>&1 &
+p1=$!
+(
+  FRAM_PATH="$snapshot_verify_root/fram" FRAM_TEST_REV="$fram_rev" FRAM_TEST_TREE="$fram_tree" bash "$snapshot_verify_root/north/cli/tests/snapshot-cli-test.sh"
+) >"$snapshot_verify_root/snapshot-cli.log" 2>&1 &
+p2=$!
+(
+  bb "$snapshot_verify_root/north/cli/tests/pred-cli-test.clj"
+) >"$snapshot_verify_root/pred.log" 2>&1 &
+p3=$!
+(
+  bb "$snapshot_verify_root/north/cli/tests/pred-cli-lint-test.clj"
+) >"$snapshot_verify_root/pred-lint.log" 2>&1 &
+p4=$!
+(
+  FRAM_PATH="$snapshot_verify_root/fram" bb -cp "$snapshot_verify_root/fram/out" "$snapshot_verify_root/north/cli/tests/schema-migrate-integration-test.clj"
+) >"$snapshot_verify_root/schema-integration.log" 2>&1 &
+p5=$!
+(
+  FRAM_PATH="$snapshot_verify_root/fram" bash "$snapshot_verify_root/north/cli/tests/corpus-transaction-integration-test.sh"
+) >"$snapshot_verify_root/corpus-integration.log" 2>&1 &
+p6=$!
+names=(snapshot-owner snapshot-cli pred pred-lint schema-integration corpus-integration)
+pids=("$p1" "$p2" "$p3" "$p4" "$p5" "$p6")
+logs=(snapshot-owner.log snapshot-cli.log pred.log pred-lint.log schema-integration.log corpus-integration.log)
+status=0
+for i in "${!names[@]}"; do
+  if wait "${pids[$i]}"; then
+    printf '%s: PASS\n' "${names[$i]}"
+    tail -n 2 "$snapshot_verify_root/${logs[$i]}"
+  else
+    status=1
+    printf '%s: FAIL\n' "${names[$i]}"
+    sed -n '1,240p' "$snapshot_verify_root/${logs[$i]}"
+  fi
+done
+exit "$status"
+COMMAND
+
+invoke_real_core() {
+  local command="$1"
+  "$TEST_PYTHON" - "$HOOKS/runtime/bash" \
+    "$HOOKS/north-clock-guard-codex" "$STATE" "$command" <<'PY'
+import json
+import os
+import subprocess
+import sys
+
+bash, adapter, state, command = sys.argv[1:]
+env = os.environ.copy()
+for key in (
+    "AGENT_NO_AUTHORING_HOOKS",
+    "CLAUDE_NO_AUTHORING_HOOKS",
+    "BASH_ENV",
+    "ENV",
+    "TMPDIR",
+):
+    env.pop(key, None)
+env["NORTH_HARNESS_STATE"] = state
+payload = json.dumps({
+    "tool_name": "Bash",
+    "tool_input": {
+        "command": command,
+        "workdir": "/home/tom/code/north",
+    },
+    "cwd": "/home/tom/code/north",
+}).encode()
+result = subprocess.run(
+    [bash, adapter],
+    input=payload,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    env=env,
+    timeout=8,
+)
+stdout = result.stdout.decode().strip()
+stderr = result.stderr.decode().strip()
+if result.returncode or stderr:
+    print(f"REAL_CORE_FAILED rc={result.returncode} stderr={stderr}")
+else:
+    print(stdout)
+PY
+}
+
+expect 'real adapter admits the full detached matrix as proved nonclient' \
+  "$NOOP" invoke_real_core "$detached_matrix_command"
+unsafe_detached_matrix_command="set -x${detached_matrix_command#set}"
+expect 'real adapter rejects an unsafe detached-matrix set preamble' \
+  "$UNAVAILABLE" invoke_real_core "$unsafe_detached_matrix_command"
+
 printf '\n== result: %d passed, %d failed ==\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

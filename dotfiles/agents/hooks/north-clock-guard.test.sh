@@ -492,6 +492,50 @@ printf -v gaffer_mktemp_pipeline '%s\n' \
   "rg -F validation-error \"\$tmp/stderr\""
 TMPDIR='' run na 'exact Gaffer validation-shaped mktemp pipeline is nonclient' \
   closed.log Bash "$gaffer_mktemp_pipeline" "$NONCLIENT"
+printf -v detached_prefix '%s\n' \
+  'set -u -o pipefail' \
+  'snapshot_root=$(mktemp -d /tmp/north-snapshot-detached.XXXXXX)' \
+  'mkdir -p "$snapshot_root/north"' \
+  'printf x >"$snapshot_root/north/result.log"' \
+  'rm -rf "${snapshot_root:?}"'
+TMPDIR='' run na 'nounset plus pipefail preamble preserves explicit temp proof' \
+  closed.log Bash "$detached_prefix" "$NONCLIENT"
+TMPDIR='' run na 'standalone pipefail preamble preserves explicit temp proof' \
+  closed.log Bash \
+  $'set -o pipefail\nroot=$(mktemp -d /tmp/north-clock-proof.XXXXXX)\nmkdir -p "$root/tree"' \
+  "$NONCLIENT"
+TMPDIR='' run na 'split errexit nounset pipefail preamble is equivalent' \
+  closed.log Bash \
+  $'set -e -u -o pipefail\nroot=$(mktemp -d /tmp/north-clock-proof.XXXXXX)\nmkdir -p "$root/tree"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'unrelated set option cannot bless temp provenance' \
+  closed.log Bash \
+  $'set -x -u -o pipefail\nroot=$(mktemp -d /tmp/north-clock-proof.XXXXXX)\nmkdir -p "$root/tree"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'set operand cannot bless temp provenance' \
+  closed.log Bash \
+  $'set -u -o pipefail payload\nroot=$(mktemp -d /tmp/north-clock-proof.XXXXXX)\nmkdir -p "$root/tree"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'intermediate command cannot smuggle temp provenance' \
+  closed.log Bash \
+  $'set -u -o pipefail; true; root=$(mktemp -d /tmp/north-clock-proof.XXXXXX); mkdir -p "$root/tree"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'and-chain cannot smuggle temp provenance' \
+  closed.log Bash \
+  $'set -u -o pipefail && root=$(mktemp -d /tmp/north-clock-proof.XXXXXX); mkdir -p "$root/tree"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'accepted preamble cannot bless a client temp root' \
+  closed.log Bash \
+  "set -u -o pipefail; root=\$(mktemp -d $CLIENT_DIR/north-clock-proof.XXXXXX); mkdir -p \"\$root/tree\"" \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'accepted preamble cannot bless option-bearing mktemp' \
+  closed.log Bash \
+  $'set -u -o pipefail; root=$(mktemp -d --tmpdir=/tmp north-clock-proof.XXXXXX); mkdir -p "$root/tree"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'accepted preamble cannot preserve reassigned root' \
+  closed.log Bash \
+  $'set -u -o pipefail; root=$(mktemp -d /tmp/north-clock-proof.XXXXXX); root=/tmp/reassigned; mkdir -p "${root:?}/tree"' \
+  "$NONCLIENT"
 TMPDIR='' run na 'unquoted exact mktemp assignment feeds a nonclient cp' \
   closed.log Bash \
   "tmp=\$(mktemp -d); cp -a $NONCLIENT/. \"\$tmp/\"" \
