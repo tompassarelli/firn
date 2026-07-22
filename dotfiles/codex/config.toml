@@ -5,8 +5,8 @@ default_permissions = ":danger-full-access"
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
 approvals_reviewer = "user"
-model = "gpt-5.6-sol"
-model_reasoning_effort = "xhigh"
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
 
 [projects."/home/tom"]
 trust_level = "trusted"
@@ -30,7 +30,7 @@ trust_level = "trusted"
 trust_level = "trusted"
 
 [tui.model_availability_nux]
-"gpt-5.6-sol" = 1
+"gpt-5.6-terra" = 1
 
 [features]
 hooks = true

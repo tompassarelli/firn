@@ -78,6 +78,22 @@ check() {
 contains()     { grep -qF -- "$2" <<<"$1"; }
 not_contains() { ! grep -qF -- "$2" <<<"$1"; }
 
+codex_config_has_economical_defaults() {
+  python3 - "$HERE/../codex/config.toml" <<'PY'
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as handle:
+    config = tomllib.load(handle)
+
+assert config.get("model") == "gpt-5.6-terra"
+assert config.get("model_reasoning_effort") == "medium"
+availability = config.get("tui", {}).get("model_availability_nux", {})
+assert availability.get("gpt-5.6-terra") == 1
+assert "gpt-5.6-sol" not in availability
+PY
+}
+
 # Run one wrapper hermetically. Args: launcher, with_north(0/1), then k=v env
 # assignments, then `--` and the wrapper's own argv. Sets globals STDERR/RECORD.
 STDERR=""; RECORD=""
@@ -127,16 +143,19 @@ declare -A SUB=([claude]=anthropic [codex]=openai)
 declare -A PINVAR=([claude]=CLAUDE_CONFIG_DIR [codex]=CODEX_HOME)
 declare -A ROOT_DEFAULT_ARGS=(
   [claude]='--model claude-fable-5 --effort xhigh --disallowedTools Agent,Task,Workflow'
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c model="gpt-5.6-sol" -c model_reasoning_effort="xhigh" --disable multi_agent'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c model="gpt-5.6-terra" -c model_reasoning_effort="medium" --disable multi_agent'
 )
 declare -A WARN_DEFAULT_ARGS=(
   [claude]='--model claude-fable-5 --effort xhigh'
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c model="gpt-5.6-sol" -c model_reasoning_effort="xhigh"'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c model="gpt-5.6-terra" -c model_reasoning_effort="medium"'
 )
 declare -A PASSTHROUGH_ARGS=(
   [claude]=''
   [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access"'
 )
+
+check 'codex/global config defaults to economical terra/medium' \
+  codex_config_has_economical_defaults
 
 for launcher in claude codex; do
   prov="${PROV[$launcher]}"; limit="${LIMIT[$launcher]}"
@@ -246,12 +265,18 @@ JSON
   check "$launcher/explicit-unknown never exec'd the real CLI" test ! -f "$RECORD"
 
   # 9. already-pinned passthrough: env var set -> exec straight through, silent.
-  run "$launcher" 1 "$pinvar=$ROOT/acctA" "NORTH_JSON=$eligible" -- ; s="$STDERR"
+  managed_argv=()
+  managed_expected="$passthrough_args"
+  if [ "$launcher" = codex ]; then
+    managed_argv=(--model gpt-5.6-sol -c 'model_reasoning_effort="xhigh"')
+    managed_expected+=' --model gpt-5.6-sol -c model_reasoning_effort="xhigh"'
+  fi
+  run "$launcher" 1 "$pinvar=$ROOT/acctA" "NORTH_JSON=$eligible" -- "${managed_argv[@]}" ; s="$STDERR"
   check "$launcher/passthrough emits no banner" test -z "$s"
   check "$launcher/passthrough preserves the caller pin" \
     test "$(record_field _ "$pinvar")" = "$ROOT/acctA"
   check "$launcher/passthrough leaves managed argv unchanged" \
-    test "$(record_field _ args)" = "$passthrough_args"
+    test "$(record_field _ args)" = "$managed_expected"
 
   # 9b. The North-native defaults precede explicit user model/effort argv, so
   # the provider CLI's ordinary last-option-wins behavior remains available.
@@ -259,8 +284,8 @@ JSON
     override_argv=(--model claude-sonnet-5 --effort medium)
     override_suffix='--model claude-sonnet-5 --effort medium'
   else
-    override_argv=(--model gpt-5.6-terra -c 'model_reasoning_effort="medium"')
-    override_suffix='--model gpt-5.6-terra -c model_reasoning_effort="medium"'
+    override_argv=(--model gpt-5.6-sol -c 'model_reasoning_effort="xhigh"')
+    override_suffix='--model gpt-5.6-sol -c model_reasoning_effort="xhigh"'
   fi
   run "$launcher" 0 -- as acctA "${override_argv[@]}" ; s="$STDERR"
   check "$launcher/explicit model+effort override follows native defaults" \
@@ -346,10 +371,10 @@ REAL_CODEX_BIN="${REAL_CODEX_BIN:-/run/current-system/sw/bin/codex}"
 if [ -x "$REAL_CODEX_BIN" ]; then
   check 'codex/real parser accepts config default plus later --model' \
     bash -c '"$@" >/dev/null' _ "$REAL_CODEX_BIN" \
-      -c 'model="gpt-5.6-sol"' \
-      -c 'model_reasoning_effort="xhigh"' \
+      -c 'model="gpt-5.6-terra"' \
+      -c 'model_reasoning_effort="medium"' \
       --disable multi_agent \
-      --model gpt-5.6-terra \
+      --model gpt-5.6-sol \
       --help
 fi
 
