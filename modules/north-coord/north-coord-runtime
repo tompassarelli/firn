@@ -19,8 +19,11 @@ need_setting NORTH_COORD_RUNTIME_STATE
 need_setting NORTH_COORD_FRAM_PACKAGE
 need_setting NORTH_COORD_FRAM_PACKAGE_REV
 need_setting NORTH_COORD_FRAM_CHECKOUT
+need_setting NORTH_COORD_NORTH_PACKAGE
 need_setting NORTH_COORD_FRAM_LOG
+need_setting NORTH_COORD_TELEMETRY_LOG
 need_setting NORTH_COORD_FRAM_PORT
+need_setting NORTH_COORD_SYSTEMD_UNIT
 
 state_root=$NORTH_COORD_RUNTIME_STATE
 state_parent=${state_root%/*}
@@ -33,6 +36,12 @@ previous_link=$state_root/previous
 selector_lock=$state_parent/.${state_name}.lock
 initialization_marker=$state_parent/.${state_name}.initialized
 runtime_port=$NORTH_COORD_FRAM_PORT
+north_package=$(realpath -e "$NORTH_COORD_NORTH_PACKAGE") ||
+  die "packaged North root is missing: $NORTH_COORD_NORTH_PACKAGE"
+north_binary=$north_package/bin/north
+telemetry_log=$NORTH_COORD_TELEMETRY_LOG
+transaction_state=$state_parent/corpus-transactions
+systemd_unit=$NORTH_COORD_SYSTEMD_UNIT
 
 case "$state_root" in
   /*) ;;
@@ -40,6 +49,21 @@ case "$state_root" in
 esac
 [[ "$state_parent" != "$state_root" && -n "$state_name" ]] ||
   die "runtime state path must have a parent directory: $state_root"
+[[ "$north_package" == "$NORTH_COORD_NORTH_PACKAGE" ]] ||
+  die "packaged North root is not canonical: $NORTH_COORD_NORTH_PACKAGE"
+[[ -x "$north_binary" ]] || die "packaged North CLI is not executable: $north_binary"
+case "$NORTH_COORD_FRAM_LOG" in
+  /*) ;;
+  *) die "coordination log path must be absolute: $NORTH_COORD_FRAM_LOG" ;;
+esac
+case "$telemetry_log" in
+  /*) ;;
+  *) die "telemetry log path must be absolute: $telemetry_log" ;;
+esac
+[[ "$NORTH_COORD_FRAM_LOG" != "$telemetry_log" ]] ||
+  die "coordination and telemetry logs must be distinct"
+[[ "$systemd_unit" =~ ^[A-Za-z0-9_.@-]+\.service$ ]] ||
+  die "systemd unit name is invalid: $systemd_unit"
 if ! [[ "$runtime_port" =~ ^[0-9]+$ ]] ||
    (( 10#$runtime_port < 1 || 10#$runtime_port > 65535 )); then
   die "runtime port must be an integer from 1 through 65535: $runtime_port"
@@ -505,6 +529,18 @@ export_runtime_identity() {
   unset FRAM_RUNTIME_OWNER_TOKEN
 }
 
+run_corpus_transaction() {
+  env \
+    FRAM_LOG="$NORTH_COORD_FRAM_LOG" \
+    FRAM_TELEMETRY_LOG="$telemetry_log" \
+    FRAM_PORT="$runtime_port" \
+    NORTH_PORT="$runtime_port" \
+    NORTH_CORPUS_CONTROLLER=systemd \
+    NORTH_COORD_SYSTEMD_UNIT="$systemd_unit" \
+    NORTH_CORPUS_TRANSACTION_DIR="$transaction_state" \
+    "$north_binary" corpus-transaction "$@"
+}
+
 start_runtime() {
   load_selected
   export_runtime_identity
@@ -531,6 +567,15 @@ preflight_runtime() {
   fi
 }
 
+prepare_runtime() {
+  initialize_runtime
+  run_corpus_transaction recover --launcher
+}
+
+settle_runtime() {
+  run_corpus_transaction settle --wait --launcher
+}
+
 exec_checkout() {
   local target=$1
   shift
@@ -547,7 +592,9 @@ usage() {
   cat >&2 <<EOF
 usage: $program initialize
        $program preflight
+       $program prepare
        $program start
+       $program settle
        $program status
        $program promote [FRAM_CHECKOUT] [REVISION]
        $program package
@@ -561,7 +608,9 @@ prepare_lock
 case "${1:-}" in
   initialize) [[ $# -eq 1 ]] || usage; initialize_runtime ;;
   preflight) [[ $# -eq 1 ]] || usage; preflight_runtime ;;
+  prepare) [[ $# -eq 1 ]] || usage; prepare_runtime ;;
   start) [[ $# -eq 1 ]] || usage; start_runtime ;;
+  settle) [[ $# -eq 1 ]] || usage; settle_runtime ;;
   status) [[ $# -eq 1 ]] || usage; show_status ;;
   promote) shift; [[ $# -le 2 ]] || usage; promote_checkout "$@" ;;
   package) [[ $# -eq 1 ]] || usage; select_package ;;

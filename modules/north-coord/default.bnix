@@ -21,17 +21,23 @@
           (get (get inputs.fram.packages pkgs.stdenv.hostPlatform.system)
                :default)
         framRev inputs.fram.rev
+        northPkg
+          (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)
+               :default)
         runtimeState (s homeDir "/.local/state/north/fram-runtime")
         northCoordRuntime
           (pkgs.writeShellApplication
             {:name "north-coord-runtime"
-             :runtimeInputs (nix/with pkgs [bash coreutils git iproute2 util-linux])
+             :runtimeInputs (nix/with pkgs [bash coreutils git iproute2 systemd util-linux])
              :text
               (ms (s "export NORTH_COORD_RUNTIME_STATE=" runtimeState)
                   (s "export NORTH_COORD_FRAM_PACKAGE=" framPkg)
                   (s "export NORTH_COORD_FRAM_PACKAGE_REV=" framRev)
                   (s "export NORTH_COORD_FRAM_CHECKOUT=" homeDir "/code/fram")
+                  (s "export NORTH_COORD_NORTH_PACKAGE=" northPkg)
                   (s "export NORTH_COORD_FRAM_LOG=" homeDir "/.local/state/north/coordination.log")
+                  (s "export NORTH_COORD_TELEMETRY_LOG=" homeDir "/.local/state/north/telemetry.log")
+                  "export NORTH_COORD_SYSTEMD_UNIT=north-coord.service"
                   "export NORTH_COORD_FRAM_PORT=7977"
                   (builtins.readFile (p "./north-coord-runtime")))})]
     {:options.myConfig.modules.north-coord.enable
@@ -55,7 +61,8 @@
              :User             username
              :WorkingDirectory homeDir
              :ExecCondition (s northCoordRuntime "/bin/north-coord-runtime preflight")
-             :ExecStartPre (s northCoordRuntime "/bin/north-coord-runtime initialize")
+             :ExecStartPre (s northCoordRuntime "/bin/north-coord-runtime prepare")
              :ExecStart (s northCoordRuntime "/bin/north-coord-runtime start")
+             :ExecStartPost (s northCoordRuntime "/bin/north-coord-runtime settle")
              :Restart          "always"
              :RestartSec       2}}})}))

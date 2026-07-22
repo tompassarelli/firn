@@ -9,9 +9,33 @@ trap 'rm -rf "${scratch:?}"' EXIT
 state=$scratch/state
 repo=$scratch/fram
 package=$scratch/package
+north_package=$scratch/north-package
 log=$scratch/coordination.log
+telemetry_log=$scratch/telemetry.log
+north_calls=$scratch/north-calls
+north_fail=$scratch/north-fail
 test_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
-mkdir -p "$repo/bin" "$package/bin"
+mkdir -p "$repo/bin" "$package/bin" "$north_package/bin"
+export NORTH_COORD_TEST_CALLS=$north_calls
+export NORTH_COORD_TEST_FAIL=$north_fail
+
+cat >"$north_package/bin/north" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+{
+  printf 'args=%s\n' "$*"
+  printf 'coordination=%s\n' "$FRAM_LOG"
+  printf 'telemetry=%s\n' "$FRAM_TELEMETRY_LOG"
+  printf 'fram-port=%s\n' "$FRAM_PORT"
+  printf 'north-port=%s\n' "$NORTH_PORT"
+  printf 'controller=%s\n' "$NORTH_CORPUS_CONTROLLER"
+  printf 'unit=%s\n' "$NORTH_COORD_SYSTEMD_UNIT"
+  printf 'transaction-state=%s\n' "$NORTH_CORPUS_TRANSACTION_DIR"
+} >>"$NORTH_COORD_TEST_CALLS"
+[[ ! -e "$NORTH_COORD_TEST_FAIL" ]] || exit 17
+printf '{:result "clean"}\n'
+EOF
+chmod +x "$north_package/bin/north"
 
 git -C "$repo" init -q
 git -C "$repo" config user.email test@example.invalid
@@ -61,8 +85,11 @@ run_runtime_in_state() {
   NORTH_COORD_FRAM_PACKAGE=$package \
   NORTH_COORD_FRAM_PACKAGE_REV=$package_revision \
   NORTH_COORD_FRAM_CHECKOUT=$repo \
+  NORTH_COORD_NORTH_PACKAGE=$north_package \
   NORTH_COORD_FRAM_LOG=$log \
+  NORTH_COORD_TELEMETRY_LOG=$telemetry_log \
   NORTH_COORD_FRAM_PORT=$test_port \
+  NORTH_COORD_SYSTEMD_UNIT=north-coord.service \
     "$runtime" "$@"
 }
 
@@ -100,6 +127,31 @@ grep -Fxq "tree=immutable:$package_revision" <<<"$fresh_status"
 [[ $(readlink "$state/previous") == active/previous ]]
 [[ $(readlink -f "$state/current") == "$package" ]]
 [[ $(readlink -f "$state/previous") == "$package" ]]
+
+# The systemd preparation seam resolves any active corpus journal while the
+# coordinator is still offline; the post-start seam waits for the initiating
+# transaction and settles only after the real daemon is queryable.
+: >"$north_calls"
+run_runtime prepare >/dev/null
+grep -Fxq 'args=corpus-transaction recover --launcher' "$north_calls"
+grep -Fxq "coordination=$log" "$north_calls"
+grep -Fxq "telemetry=$telemetry_log" "$north_calls"
+grep -Fxq "fram-port=$test_port" "$north_calls"
+grep -Fxq "north-port=$test_port" "$north_calls"
+grep -Fxq 'controller=systemd' "$north_calls"
+grep -Fxq 'unit=north-coord.service' "$north_calls"
+grep -Fxq "transaction-state=$scratch/corpus-transactions" "$north_calls"
+
+: >"$north_calls"
+run_runtime settle >/dev/null
+grep -Fxq 'args=corpus-transaction settle --wait --launcher' "$north_calls"
+
+touch "$north_fail"
+if run_runtime prepare >/dev/null 2>&1; then
+  printf 'failed recovery was allowed to reach coordinator start\n' >&2
+  exit 1
+fi
+unlink "$north_fail"
 
 # A killed first-install transaction is distinguishable from lost initialized
 # state and can be safely retried; its partial tree is quarantined, not trusted.

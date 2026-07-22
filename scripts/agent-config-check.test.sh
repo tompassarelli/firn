@@ -493,7 +493,9 @@ canonical_link \
   "$live_root/dotfiles/codex/config.toml" \
   'worktree-independent live config'
 [ "$fail" -eq 0 ]
-grep -q ':ExecStartPre (s northCoordRuntime "/bin/north-coord-runtime initialize")' \
+grep -q ':ExecStartPre (s northCoordRuntime "/bin/north-coord-runtime prepare")' \
+  "$REPO/modules/north-coord/default.bnix"
+grep -q ':ExecStartPost (s northCoordRuntime "/bin/north-coord-runtime settle")' \
   "$REPO/modules/north-coord/default.bnix"
 grep -q ':ExecCondition (s northCoordRuntime "/bin/north-coord-runtime preflight")' \
   "$REPO/modules/north-coord/default.bnix"
