@@ -2,6 +2,44 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
+source_file="$repo/modules/bash/default.bnix"
+generated_file="$repo/modules/bash/default.nix"
+
+grep -Fq '{:source (s flakeRoot "/dotfiles/bin")}' "$source_file"
+grep -Fq 'home.file.".local/bin".source = "${flakeRoot}/dotfiles/bin";' "$generated_file"
+if rg -n 'mkOutOfStoreSymlink.*dotfiles/bin|code/nixos-config/dotfiles/bin' \
+  "$source_file" "$generated_file"; then
+  printf 'launcher directory still uses a mutable checkout source\n' >&2
+  exit 1
+fi
+
+if [ -n "${LOCAL_BIN_SOURCE:-}" ]; then
+  local_bin_source="$LOCAL_BIN_SOURCE"
+else
+  local_bin_source="$(
+    nix eval --raw \
+      "$repo#nixosConfigurations.whiterabbit.config.home-manager.users.tom.home.file.\".local/bin\".source"
+  )"
+fi
+local_bin_source="$(readlink -f "$local_bin_source")"
+case "$local_bin_source" in
+  /nix/store/*) ;;
+  *)
+    printf 'launcher directory is not store-backed: %s\n' "$local_bin_source" >&2
+    exit 1
+    ;;
+esac
+cmp -s \
+  <(find "$repo/dotfiles/bin" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort) \
+  <(find "$local_bin_source" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+while IFS= read -r name; do
+  if [ -x "$repo/dotfiles/bin/$name" ]; then
+    test -x "$local_bin_source/$name"
+  else
+    test ! -x "$local_bin_source/$name"
+  fi
+done < <(find "$repo/dotfiles/bin" -mindepth 1 -maxdepth 1 -printf '%f\n')
+"$local_bin_source/safe-push" --help | grep -Fq -- '--to BRANCH'
 
 if [ -n "${BASH_LOGOUT_SOURCE:-}" ]; then
   logout_source=$BASH_LOGOUT_SOURCE
@@ -83,3 +121,4 @@ if [ -n "$disabled_output" ]; then
 fi
 
 printf 'ok: generated bash_logout is nounset-safe, idempotent, and exit-status preserving\n'
+printf 'ok: ~/.local/bin preserves every launcher + executable bit in a generation-retained store path; safe-push exposes --to\n'

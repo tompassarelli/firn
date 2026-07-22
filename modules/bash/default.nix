@@ -25,7 +25,7 @@ in
     programs.bash.completion.enable = true;
     environment.systemPackages = with pkgs; [ fzf ];
     home-manager.users.${username} = ({ config, ... }: {
-      home.file.".local/bin".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/bin";
+      home.file.".local/bin".source = "${flakeRoot}/dotfiles/bin";
       programs.bash = {
         enable = true;
         shellAliases = {

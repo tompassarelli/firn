@@ -1088,6 +1088,20 @@ else bad "Account launcher wrappers shellcheck failed"; fi
 if bash "$LAUNCHER_BIN/launcher.test.sh" >/dev/null; then
   ok_detail "Account launcher fallbacks are diagnostic (missing/nonzero/empty/malformed north, no-eligible, absent dir, clean pick)"
 else bad "Account launcher diagnostics test failed"; fi
+if grep -Fq '{:source (s flakeRoot "/dotfiles/bin")}' "$REPO/modules/bash/default.bnix" &&
+   ! grep -Fq 'code/nixos-config/dotfiles/bin' "$REPO/modules/bash/default.bnix"; then
+  ok_detail "Account launcher directory is generation-owned store content"
+else bad "Account launcher directory must use the store-backed flake source"; fi
+if [ "$LOCAL" -eq 1 ]; then
+  live_safe_push="$(command -v safe-push 2>/dev/null || true)"
+  live_safe_push_resolved="$(readlink -f "$live_safe_push" 2>/dev/null || true)"
+  if [ -x "$live_safe_push" ] && [[ "$live_safe_push_resolved" = /nix/store/* ]] &&
+     "$live_safe_push" --help | grep -Fq -- '--to BRANCH'; then
+    ok_detail "Live safe-push is immutable and supports explicit --to destinations"
+  else
+    bad "Live safe-push must resolve into /nix/store and expose --to BRANCH"
+  fi
+fi
 if jq -e '.autoMemoryEnabled == false' "$CLAUDE/settings.json" >/dev/null; then ok_detail "auto-memory disabled"
 else bad "Claude autoMemoryEnabled must be false"; fi
 if jq -e '

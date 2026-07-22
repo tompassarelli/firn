@@ -477,6 +477,13 @@ ensure_initialized_for_mutation() {
   fi
 }
 
+ensure_default_runtime() {
+  # initialize_runtime is deliberately idempotent: only a pristine state gets
+  # the package default. Any initialized selection is fully validated and left
+  # untouched; missing or malformed sealed state fails closed.
+  initialize_runtime
+}
+
 select_target() {
   local target=$1 target_source current_source current_source_name=pair_current_source
 
@@ -738,6 +745,7 @@ exec_checkout() {
 usage() {
   cat >&2 <<EOF
 usage: $program initialize
+       $program ensure-default
        $program preflight
        $program prepare
        $program start
@@ -754,6 +762,7 @@ EOF
 prepare_lock
 case "${1:-}" in
   initialize) [[ $# -eq 1 ]] || usage; initialize_runtime ;;
+  ensure-default) [[ $# -eq 1 ]] || usage; ensure_default_runtime ;;
   preflight) [[ $# -eq 1 ]] || usage; preflight_runtime ;;
   prepare) [[ $# -eq 1 ]] || usage; prepare_runtime ;;
   start) [[ $# -eq 1 ]] || usage; start_runtime ;;

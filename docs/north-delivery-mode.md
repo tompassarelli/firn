@@ -7,6 +7,18 @@ NixOS generation. They scrub inherited `NORTH_CHECKOUT`; ordinary launchers,
 hooks, MCP adapters, services, and status surfaces cannot select a development
 checkout implicitly.
 
+`~/.local/bin` is itself a generation-owned link to the store-backed
+`dotfiles/bin` tree. The `claude`, `codex`, and `safe-push` launchers therefore
+change only with an activated Firn generation; live PATH never follows edits in
+the canonical checkout. The packaged `safe-push` exposes explicit `--to`
+destinations so a scanned commit cannot be published through an ambient branch
+mapping.
+
+Each retained system/Home Manager generation keeps its own launcher tree. A
+boot-menu or manual generation selection therefore restores that generation's
+exact `~/.local/bin` target without consulting the working checkout; there is
+no `firn rollback` command.
+
 Mutable execution is an explicit development surface. `north-dev` and
 `north-mcp-dev` alone honor `NORTH_CHECKOUT` (defaulting to
 `~/code/north`), and the `fram-*-dev` commands alone honor `FRAM_CHECKOUT`
@@ -30,10 +42,13 @@ before invoking generation-owned `fram-code-status`.
 
 The coordinator on port 7977 is systemd-owned. Its `Type=simple` service uses
 the same selector to `exec` the physical `fram-daemon`, so systemd's `MainPID`
-is the daemon rather than a backgrounding launcher. Promotions and rollbacks
-are serialized transactions that publish one complete current/previous
-generation through `~/.local/state/north/fram-runtime/active`. They do not
-restart the service. Apply a selection explicitly with
+is the daemon rather than a backgrounding launcher. Promotions and runtime
+rollbacks are serialized transactions that publish one complete
+current/previous generation through
+`~/.local/state/north/fram-runtime/active`. They do not restart the service.
+An ordinary service restart validates and preserves that sealed selection; it
+never silently resets an explicitly promoted development runtime. Apply a
+selection explicitly with
 `sudo systemctl restart north-coord.service`; a checkout-side `north up
 --restart` must not compete with the system service. The ordinary Firn `north`
 and `north-packaged` wrappers reject direct `north up` launch/restart commands
@@ -47,15 +62,18 @@ the listening socket. After removing a foreign listener, explicitly run
 `sudo systemctl restart north-coord.service`; a skipped condition does not poll
 the port or claim it later.
 
-On first installation, the unit runs `north-coord-runtime initialize` as a
-distinct initialization transaction. Once initialized, deleting the active
-selection is corruption and fails closed; status or startup never reconstructs
-package mode from a missing selector.
+Before startup, the unit runs `north-coord-runtime ensure-default`. On a
+pristine first installation it seals the generation's package as the default;
+afterward it validates and preserves the selected runtime. An explicit
+`north-coord-runtime package` resets the selection to package mode. Deleting or
+corrupting initialized active state fails closed; startup never reconstructs a
+missing selector.
 
 `north-packaged`, `north-mcp-packaged`, and the `fram-*-packaged` aliases expose
-the same flake-selected package boundary for explicit smoke tests. `firn rebuild`
-promotes committed local North, Fram, Gaffer, and Beagle revisions only after
-its build and validation gates. North's packaged input follows the root Gaffer
+the same flake-selected package boundary for explicit smoke tests. A Firn
+rebuild makes verified package revisions available but does not overwrite an
+explicit coordinator development selection; adopt the new Fram package with
+`north-coord-runtime package`. North's packaged input follows the root Gaffer
 pin, so the verified North closure and its routing contract move together.
 
 In short: ordinary names are immutable production surfaces, explicit `*-dev`

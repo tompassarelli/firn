@@ -3,6 +3,8 @@ set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 runtime=$here/north-coord-runtime
+source_module=$here/default.bnix
+generated_module=$here/default.nix
 scratch=$(mktemp -d)
 trap 'rm -rf "${scratch:?}"' EXIT
 
@@ -18,6 +20,16 @@ test_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0
 mkdir -p "$repo/bin" "$package/bin" "$north_package/bin"
 export NORTH_COORD_TEST_CALLS=$north_calls
 export NORTH_COORD_TEST_FAIL=$north_fail
+
+grep -Fq ':ExecStartPre [(s northCoordRuntime "/bin/north-coord-runtime ensure-default")' \
+  "$source_module"
+grep -Fq '${northCoordRuntime}/bin/north-coord-runtime ensure-default' \
+  "$generated_module"
+if rg -n 'ExecStartPre.*north-coord-runtime package' \
+  "$source_module" "$generated_module"; then
+  printf 'systemd startup still resets the sealed runtime to package mode\n' >&2
+  exit 1
+fi
 
 cat >"$north_package/bin/north" <<'EOF'
 #!/usr/bin/env bash
@@ -161,13 +173,13 @@ assert_pair_is() {
   exit 1
 }
 
-# Read-only operations never infer package mode from missing state. First
-# installation is an explicit, persistent transaction.
+# Read-only operations never infer package mode from missing state. The
+# service-facing ensure-default transition initializes only pristine state.
 if run_runtime status >/dev/null 2>&1; then
   printf 'missing selector silently initialized package mode\n' >&2
   exit 1
 fi
-run_runtime initialize
+run_runtime ensure-default
 fresh_status=$(run_runtime status)
 grep -Fxq 'mode=package' <<<"$fresh_status"
 grep -Fxq "source=$package" <<<"$fresh_status"
@@ -222,11 +234,11 @@ unlink "$north_fail"
 # state and can be safely retried; its partial tree is quarantined, not trusted.
 crash_init_state=$scratch/crash-init-state
 if NORTH_COORD_SELECTOR_CRASH_AT=previous-written \
-   run_runtime_in_state "$crash_init_state" initialize >/dev/null 2>&1; then
+   run_runtime_in_state "$crash_init_state" ensure-default >/dev/null 2>&1; then
   printf 'first-install crash injection reported success\n' >&2
   exit 1
 fi
-run_runtime_in_state "$crash_init_state" initialize
+run_runtime_in_state "$crash_init_state" ensure-default
 grep -Fxq mode=package < <(run_runtime_in_state "$crash_init_state" status)
 [[ -n $(find "$scratch" -maxdepth 1 -name '.crash-init-state.incomplete.*' -print -quit) ]]
 
@@ -238,8 +250,8 @@ if run_runtime_in_state "$missing_state" status >/dev/null 2>&1; then
   printf 'missing initialized selection silently fell back to package mode\n' >&2
   exit 1
 fi
-if run_runtime_in_state "$missing_state" initialize >/dev/null 2>&1; then
-  printf 'initialization repaired a lost active selection without evidence\n' >&2
+if run_runtime_in_state "$missing_state" ensure-default >/dev/null 2>&1; then
+  printf 'ensure-default repaired a lost active selection without evidence\n' >&2
   exit 1
 fi
 
@@ -253,6 +265,15 @@ if git -C "$deployment_one" symbolic-ref -q HEAD >/dev/null 2>&1; then
   printf 'promoted deployment is attached to a branch\n' >&2
   exit 1
 fi
+
+# The exact systemd restart prelude preserves an explicit development
+# transaction rather than silently resetting it to the package default.
+promoted_pair=$(read_pair)
+run_runtime ensure-default
+run_runtime prepare >/dev/null
+[[ $(read_pair) == "$promoted_pair" ]]
+grep -Fxq mode=checkout < <(run_runtime status)
+[[ $(readlink -f "$state/current") == "$deployment_one" ]]
 
 checkout_start=$(run_runtime start)
 generation_one=$(readlink -f "$state/active")
@@ -531,6 +552,12 @@ fi
 
 # Package mode is explicit, reversible, and cannot satisfy checkout launchers.
 run_runtime package >/dev/null
+package_pair=$(read_pair)
+run_runtime ensure-default
+run_runtime prepare >/dev/null
+[[ $(read_pair) == "$package_pair" ]]
+grep -Fxq mode=package < <(run_runtime status)
+[[ $(readlink -f "$state/current") == "$package" ]]
 package_start=$(run_runtime start)
 package_generation=$(readlink -f "$state/active")
 grep -Fxq 'label=package' <<<"$package_start"

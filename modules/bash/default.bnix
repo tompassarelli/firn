@@ -32,10 +32,7 @@
             (nix/module [config ...]
               {:home.file
                 {".local/bin"
-                  {:source
-                    (config.lib.file.mkOutOfStoreSymlink
-                      (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/bin"))}}
+                  {:source (s flakeRoot "/dotfiles/bin")}}
                :programs.bash
                 {:enable          true
                  :shellAliases

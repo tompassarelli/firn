@@ -66,6 +66,10 @@ grep -Fq '17 managed authoritative bindings' <<<"$report"
 grep -Fq '~/.codex/hooks.json ignored by managed-only policy (0 active bindings)' <<<"$report"
 "$REPO/dotfiles/codex/hooks/codex-lifecycle-wrappers.test.sh" >/dev/null
 "$REPO/dotfiles/codex/hooks/north-clock-guard-codex.test.sh" >/dev/null
+grep -Fq '{:source (s flakeRoot "/dotfiles/bin")}' \
+  "$REPO/modules/bash/default.bnix"
+grep -Fq 'Live safe-push is immutable and supports explicit --to destinations' \
+  "$REPO/scripts/agent-config-check.sh"
 
 # A deterministic route probe is diagnostic evidence, not provider preference.
 # The compact harness report must summarize the allocation policy itself.
@@ -492,7 +496,7 @@ canonical_link \
   "$live_root/dotfiles/codex/config.toml" \
   'worktree-independent live config'
 [ "$fail" -eq 0 ]
-grep -q ':ExecStartPre \[(s northCoordRuntime "/bin/north-coord-runtime package")' \
+grep -q ':ExecStartPre \[(s northCoordRuntime "/bin/north-coord-runtime ensure-default")' \
   "$REPO/modules/north-coord/default.bnix"
 grep -q ':ExecStartPost (s northCoordRuntime "/bin/north-coord-runtime settle")' \
   "$REPO/modules/north-coord/default.bnix"
