@@ -573,6 +573,36 @@ export_runtime_identity() {
   unset FRAM_RUNTIME_OWNER_TOKEN
 }
 
+acquire_generation_start_lock() {
+  local start_lock=$active_generation/.active-runtime.start.lock
+  local expected_identity
+
+  expected_identity="$EUID:600:1"
+  if [[ ! -e "$start_lock" && ! -L "$start_lock" ]]; then
+    if ! (
+      set -o noclobber
+      umask 077
+      : >"$start_lock"
+    ); then
+      die "cannot create generation start lock: $start_lock"
+    fi
+    sync -f "$active_generation" ||
+      die "cannot sync generation start lock: $active_generation"
+  fi
+  [[ -f "$start_lock" && ! -L "$start_lock" ]] ||
+    die "generation start lock is missing or unsafe: $start_lock"
+  [[ $(realpath -e "$start_lock") == "$start_lock" ]] ||
+    die "generation start lock is not canonical: $start_lock"
+  [[ $(stat -c '%u:%a:%h' "$start_lock") == "$expected_identity" ]] ||
+    die "generation start lock ownership, mode, or link count is unsafe: $start_lock"
+
+  exec 8<>"$start_lock" || die "cannot open generation start lock: $start_lock"
+  if ! flock -n 8; then
+    exec 8>&-
+    die "selected runtime generation already has an active start: $active_generation"
+  fi
+}
+
 publish_active_runtime() {
   local owner_token=$1 pid=$$ birth generation_identity identity_sha
   local runtime_record record_temp line key value
@@ -657,6 +687,7 @@ start_runtime() {
 
   load_selected
   export_runtime_identity
+  acquire_generation_start_lock
   launcher_owner_token=$(mint_owner_token)
   export FRAM_RUNTIME_OWNER_TOKEN=$launcher_owner_token
   publish_active_runtime "$launcher_owner_token"

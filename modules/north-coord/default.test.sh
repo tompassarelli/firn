@@ -67,6 +67,8 @@ write_daemon() {
     "printf 'home=%s\\n' \"\$FRAM_HOME\"" \
     "printf 'bin=%s\\n' \"\$FRAM_BIN\"" \
     "printf 'args=%s|%s\\n' \"\$1\" \"\$2\"" \
+    'if [[ -n "${NORTH_COORD_TEST_READY:-}" ]]; then : >"$NORTH_COORD_TEST_READY"; fi' \
+    'if [[ -n "${NORTH_COORD_TEST_RELEASE:-}" ]]; then IFS= read -r _ <"$NORTH_COORD_TEST_RELEASE"; fi' \
     >"$path"
   chmod +x "$path"
 }
@@ -125,6 +127,7 @@ assert_active_record() {
   identity=$generation/current.identity
   [[ -f "$record" && ! -L "$record" ]]
   [[ $(stat -c '%a' "$record") == 600 ]]
+  [[ $(stat -c '%h' "$record") == 1 ]]
   [[ $(wc -l <"$record") == 18 ]]
   [[ $(record_value "$record" FORMAT) == north-fram-active-runtime/v1 ]]
   [[ $(record_value "$record" GENERATION) == "$generation" ]]
@@ -296,6 +299,79 @@ restart_owner=$(record_value "$runtime_record_one" OWNER_TOKEN)
 [[ "$restart_owner" != "$first_owner" ]]
 [[ "$restart_pid" == "$(sed -n 's/^pid=//p' <<<"$checkout_restart")" ]]
 [[ "$restart_birth" == "$(sed -n 's/^birth=//p' <<<"$checkout_restart")" ]]
+
+# These direct starts test producer mechanics only. They do not acquire
+# systemd authority: the consumer must still require controller-unit/MainPID
+# equality before treating this record as live process evidence.
+hold_ready=$scratch/hold-ready
+hold_release=$scratch/hold-release
+hold_output=$scratch/hold-output
+mkfifo "$hold_release"
+NORTH_COORD_TEST_READY=$hold_ready NORTH_COORD_TEST_RELEASE=$hold_release \
+  run_runtime start >"$hold_output" & held_start_pid=$!
+for _ in $(seq 1 100); do
+  [[ -e "$hold_ready" ]] && break
+  sleep 0.01
+done
+if [[ ! -e "$hold_ready" ]]; then
+  printf 'held direct start did not reach the daemon\n' >&2
+  kill "$held_start_pid" 2>/dev/null || true
+  wait "$held_start_pid" 2>/dev/null || true
+  exit 1
+fi
+assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-daemon"
+held_record_sha=$(sha256sum "$runtime_record_one" | cut -d' ' -f1)
+held_record_pid=$(record_value "$runtime_record_one" PID)
+if competing_output=$(run_runtime start 2>&1); then
+  printf 'competing direct start replaced live generation authority\n' >&2
+  printf 'release\n' >"$hold_release"
+  wait "$held_start_pid"
+  exit 1
+fi
+grep -Fq 'selected runtime generation already has an active start' <<<"$competing_output"
+[[ $(sha256sum "$runtime_record_one" | cut -d' ' -f1) == "$held_record_sha" ]]
+[[ $(record_value "$runtime_record_one" PID) == "$held_record_pid" ]]
+printf 'release\n' >"$hold_release"
+wait "$held_start_pid"
+[[ $(record_value "$runtime_record_one" PID) == "$(sed -n 's/^pid=//p' "$hold_output")" ]]
+
+# Every active-record crash point leaves either the byte-exact prior record or
+# one complete new record. The killed process releases its generation lifetime
+# lock, and a subsequent start always converges to fresh valid authority.
+for boundary in active-runtime-written active-runtime-synced active-runtime-published active-runtime-generation-synced; do
+  prior_sha=$(sha256sum "$runtime_record_one" | cut -d' ' -f1)
+  prior_owner=$(record_value "$runtime_record_one" OWNER_TOKEN)
+  if NORTH_COORD_SELECTOR_CRASH_AT=$boundary run_runtime start >/dev/null 2>&1; then
+    printf 'active-record crash injection %s reported success\n' "$boundary" >&2
+    exit 1
+  else
+    crash_status=$?
+  fi
+  [[ "$crash_status" == 137 ]]
+  assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-daemon"
+  crashed_sha=$(sha256sum "$runtime_record_one" | cut -d' ' -f1)
+  case "$boundary" in
+    active-runtime-written|active-runtime-synced)
+      [[ "$crashed_sha" == "$prior_sha" ]]
+      [[ $(record_value "$runtime_record_one" OWNER_TOKEN) == "$prior_owner" ]]
+      ;;
+    active-runtime-published|active-runtime-generation-synced)
+      [[ "$crashed_sha" != "$prior_sha" ]]
+      [[ $(record_value "$runtime_record_one" OWNER_TOKEN) != "$prior_owner" ]]
+      ;;
+  esac
+  crashed_pid=$(record_value "$runtime_record_one" PID)
+  if kill -0 "$crashed_pid" 2>/dev/null; then
+    printf 'crash hook %s left its recorded PID alive\n' "$boundary" >&2
+    exit 1
+  fi
+  crashed_owner=$(record_value "$runtime_record_one" OWNER_TOKEN)
+  converged_start=$(run_runtime start)
+  assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-daemon"
+  [[ $(record_value "$runtime_record_one" OWNER_TOKEN) != "$crashed_owner" ]]
+  [[ $(record_value "$runtime_record_one" PID) == "$(sed -n 's/^pid=//p' <<<"$converged_start")" ]]
+  [[ $(record_value "$runtime_record_one" PID_BIRTH) == "$(sed -n 's/^birth=//p' <<<"$converged_start")" ]]
+done
 
 # Ordinary North launchers consume the same exact validation/export path.
 identity_probe=$scratch/identity-probe
