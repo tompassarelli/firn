@@ -2,26 +2,28 @@
 # safe-push — the standing-authorized way to push to GitHub without asking a human.
 # Encodes the global CLAUDE.md "push freely" policy as a MECHANICAL check so every
 # agent pushes identically-safe: scan the to-be-pushed commits for secrets, refuse
-# force/destructive pushes, then push the current branch to its upstream. Any guard
+# force/destructive pushes, then push HEAD to the same-named remote branch unless
+# an explicit --to destination is supplied. Any guard
 # trip => nothing is pushed, nonzero exit. The secret scan — not a human — is the
 # guard, and it travels with this command, so it protects repos that have no
 # commit-time hook (north/fram/beagle today). The repository state that defines
 # the scan is captured first and must remain identical at publication; pushes
 # name the captured object ID and destination ref explicitly.
 #
-# Usage:  safe-push [--dry-run]
+# Usage:  safe-push [--dry-run] [--to BRANCH]
 #         safe-push [--dry-run] --tag NAME
 set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: safe-push [--dry-run]
+Usage: safe-push [--dry-run] [--to BRANCH]
        safe-push [--dry-run] --tag NAME
 
 Scan outgoing content for secrets, then push the current branch or one tag.
 
 Options:
   --dry-run    run all safety checks without pushing
+  --to BRANCH  explicitly publish HEAD to another remote branch
   --tag NAME   push an existing tag whose target is already on origin
   -h, --help   print this help without inspecting a repository
 USAGE
@@ -36,10 +38,12 @@ argument_error() {
 dry=0
 tag=""
 tag_seen=0
+to=""
+to_seen=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -h|--help)
-      if [ "$#" -ne 1 ] || [ "$dry" -eq 1 ] || [ "$tag_seen" -eq 1 ]; then
+      if [ "$#" -ne 1 ] || [ "$dry" -eq 1 ] || [ "$tag_seen" -eq 1 ] || [ "$to_seen" -eq 1 ]; then
         argument_error '--help cannot be combined with other arguments'
       fi
       usage
@@ -60,6 +64,16 @@ while [ "$#" -gt 0 ]; do
       tag_seen=1
       shift 2
       ;;
+    --to)
+      [ "$to_seen" -eq 0 ] || argument_error 'duplicate --to'
+      [ "$#" -ge 2 ] || argument_error '--to needs a branch name'
+      case "$2" in
+        ''|-*) argument_error '--to needs a branch name' ;;
+      esac
+      to="$2"
+      to_seen=1
+      shift 2
+      ;;
     -f|--force|--force-with-lease|--mirror|--delete|--prune)
       printf "safe-push: refuses '%s' — force/destructive pushes are deliberate + manual, not automatic\n" "$1" >&2
       exit 1
@@ -69,6 +83,21 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+[ "$tag_seen" -eq 0 ] || [ "$to_seen" -eq 0 ] \
+  || argument_error '--to cannot be combined with --tag'
+
+validate_destination_name() {
+  case "$1" in
+    ''|-*|HEAD|refs/*|origin/*|*'..'*|*'@{'*|*\\*|*' '*|*'~'*|*'^'*|*':'*|*'?'*|*'*'*|*'['*)
+      argument_error "invalid destination branch '$1'"
+      ;;
+  esac
+  git check-ref-format "refs/heads/$1" >/dev/null 2>&1 \
+    || argument_error "invalid destination branch '$1'"
+}
+
+if [ "$to_seen" -eq 1 ]; then validate_destination_name "$to"; fi
 
 state_changed() {
   printf 'safe-push: repository state changed during secret scan (%s) — refusing; NOT pushed.\n' "$1" >&2
@@ -90,25 +119,52 @@ capture_repository_state() {
   esac
   head_oid=$(git rev-parse --verify "${branch_ref}^{commit}" 2>/dev/null) \
     || { echo "safe-push: cannot resolve $branch_ref to a commit"; exit 1; }
+}
 
-  upstream_ref=""
-  upstream_oid=""
-  if upstream_ref=$(git rev-parse --symbolic-full-name '@{upstream}' 2>/dev/null); then
-    case "$upstream_ref" in
-      refs/remotes/origin/*)
-        destination_ref="refs/heads/${upstream_ref#refs/remotes/origin/}"
-        ;;
-      *)
-        echo "safe-push: upstream '$upstream_ref' is not on origin — refusing" >&2
-        exit 1
+remote_destination_snapshot() {
+  local output value ref extra count=0 oid=""
+  output=$(git ls-remote --symref "$origin_url" "$destination_ref") \
+    || { echo "safe-push: cannot read origin destination $destination_ref" >&2; return 1; }
+  if [ -z "$output" ]; then
+    printf 'absent\n'
+    return 0
+  fi
+  while IFS=$'\t' read -r value ref extra; do
+    case "$value" in
+      'ref: '*)
+        echo "safe-push: origin destination $destination_ref is symbolic — refusing" >&2
+        return 1
         ;;
     esac
-    upstream_oid=$(git rev-parse --verify "${upstream_ref}^{commit}" 2>/dev/null) \
-      || { echo "safe-push: cannot resolve upstream $upstream_ref"; exit 1; }
-    scan_range="${upstream_oid}..${head_oid}"
+    if { [[ "$value" =~ ^[0-9a-f]{40}$ ]] || [[ "$value" =~ ^[0-9a-f]{64}$ ]]; } \
+        && [ "$ref" = "$destination_ref" ] && [ -z "$extra" ]; then
+      oid="$value"
+      count=$((count + 1))
+    else
+      echo "safe-push: origin destination $destination_ref is malformed or ambiguous — refusing" >&2
+      return 1
+    fi
+  done <<<"$output"
+  if [ "$count" -ne 1 ]; then
+    echo "safe-push: origin destination $destination_ref is malformed or ambiguous — refusing" >&2
+    return 1
+  fi
+  printf 'object:%s\n' "$oid"
+}
+
+capture_destination_state() {
+  destination_branch=${to:-$branch}
+  destination_ref="refs/heads/$destination_branch"
+  destination_snapshot=$(remote_destination_snapshot) || exit 1
+  destination_oid=""
+  if [[ "$destination_snapshot" == object:* ]]; then
+    destination_oid=${destination_snapshot#object:}
+    git cat-file -e "${destination_oid}^{commit}" 2>/dev/null \
+      || { echo "safe-push: origin $destination_ref is not available locally at $destination_oid — fetch it first" >&2; exit 1; }
+    git merge-base --is-ancestor "$destination_oid" "$head_oid" 2>/dev/null \
+      || { echo "safe-push: non-fast-forward $head_oid -> $destination_ref (origin at $destination_oid) — refusing" >&2; exit 1; }
+    scan_range="${destination_oid}..${head_oid}"
   else
-    upstream_ref=""
-    destination_ref="$branch_ref"
     # A single commit-ish makes gitleaks traverse the exact captured history.
     scan_range="$head_oid"
   fi
@@ -116,7 +172,7 @@ capture_repository_state() {
 
 revalidate_repository_state() {
   local current_root current_git_dir current_origin_url current_branch_ref
-  local current_head_oid current_upstream_ref current_upstream_oid current_range
+  local current_head_oid current_destination_snapshot current_range
 
   current_root=$(git rev-parse --show-toplevel 2>/dev/null) \
     || state_changed 'repository unavailable'
@@ -138,18 +194,15 @@ revalidate_repository_state() {
     || state_changed 'HEAD commit unavailable'
   [ "$current_head_oid" = "$head_oid" ] || state_changed 'HEAD commit changed'
 
-  if [ -n "$upstream_ref" ]; then
-    current_upstream_ref=$(git rev-parse --symbolic-full-name '@{upstream}' 2>/dev/null) \
-      || state_changed 'upstream disappeared'
-    [ "$current_upstream_ref" = "$upstream_ref" ] || state_changed 'upstream changed'
-    current_upstream_oid=$(git rev-parse --verify "${current_upstream_ref}^{commit}" 2>/dev/null) \
-      || state_changed 'upstream commit unavailable'
-    [ "$current_upstream_oid" = "$upstream_oid" ] || state_changed 'upstream commit changed'
-    current_range="${current_upstream_oid}..${current_head_oid}"
+  [ "${1:-branch}" = branch ] || return 0
+
+  current_destination_snapshot=$(remote_destination_snapshot) \
+    || state_changed 'origin destination became unavailable, symbolic, malformed, or ambiguous'
+  [ "$current_destination_snapshot" = "$destination_snapshot" ] \
+    || state_changed "origin destination $destination_ref changed"
+  if [[ "$current_destination_snapshot" == object:* ]]; then
+    current_range="${current_destination_snapshot#object:}..${current_head_oid}"
   else
-    if git rev-parse --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
-      state_changed 'upstream appeared'
-    fi
     current_range="$current_head_oid"
   fi
   [ "$current_range" = "$scan_range" ] || state_changed 'outgoing range changed'
@@ -175,7 +228,7 @@ if [ -n "$tag" ]; then
   gitleaks dir "$tmpd" --no-banner --redact >/dev/null 2>&1 \
     || gitleaks detect --no-git --source "$tmpd" --no-banner --redact >/dev/null 2>&1 \
     || { echo "safe-push: ✗ SECRET DETECTED in tag annotation — fix it; NOT pushed."; exit 1; }
-  revalidate_repository_state
+  revalidate_repository_state identity
   current_tag_oid=$(git rev-parse -q --verify "$tag_ref" 2>/dev/null) \
     || state_changed 'tag disappeared'
   [ "$current_tag_oid" = "$tag_oid" ] || state_changed 'tag object changed'
@@ -189,36 +242,39 @@ fi
 
 # --- the load-bearing guard: secret scan of the commits about to be pushed -------
 capture_repository_state
+capture_destination_state
 command -v gitleaks >/dev/null 2>&1 || { echo "safe-push: gitleaks not on PATH — refusing to push without a secret scan"; exit 1; }
-if [ -n "$upstream_ref" ]; then
-  [ -z "$(git rev-list "$scan_range" 2>/dev/null)" ] \
-    && { echo "safe-push: nothing to push ($branch is up to date with $upstream_ref)"; exit 0; }
-  echo "safe-push: scanning $scan_range for secrets…"
-  gitleaks detect --no-banner --redact --log-opts="$scan_range" \
-    || { echo "safe-push: ✗ SECRET DETECTED — fix the leak; NOT pushed."; exit 1; }
-else
-  echo "safe-push: no upstream yet — scanning captured history $scan_range for secrets…"
-  gitleaks detect --no-banner --redact --log-opts="$scan_range" \
-    || { echo "safe-push: ✗ SECRET DETECTED — fix the leak; NOT pushed."; exit 1; }
-fi
-
-revalidate_repository_state
-if [ "$dry" = 1 ]; then
-  echo "safe-push: ✓ clean (--dry-run) — would push $branch -> origin"
+if [ -n "$destination_oid" ] && [ "$destination_oid" = "$head_oid" ]; then
+  echo "safe-push: nothing to push ($head_oid already at origin $destination_ref)"
   exit 0
 fi
-echo "safe-push: ✓ clean — pushing $branch -> origin"
+
+echo "safe-push: scanning $scan_range for secrets ($branch_ref@$head_oid -> origin $destination_ref@${destination_oid:-absent})…"
+gitleaks detect --no-banner --redact --log-opts="$scan_range" \
+  || { echo "safe-push: ✗ SECRET DETECTED — fix the leak; NOT pushed."; exit 1; }
+
+revalidate_repository_state
+publication="${head_oid}:${destination_ref}"
+if [ "$dry" = 1 ]; then
+  echo "safe-push: ✓ clean (--dry-run) — would push $branch -> origin as $publication"
+  exit 0
+fi
+echo "safe-push: ✓ clean — pushing $branch -> origin as $publication"
 # Marker for tripwire-guard.sh (PreToolUse deny-hook): raw `git push` is denied
 # estate-wide; this env var identifies the sanctioned inner push as safe-push's own.
 # The source is the immutable object that was scanned, never a mutable branch/HEAD.
-SAFE_PUSH_ACTIVE=1 git push "$origin_url" "${head_oid}:${destination_ref}"
-if [ -z "$upstream_ref" ]; then
-  tracking_ref="refs/remotes/origin/${destination_ref#refs/heads/}"
+# The exact lease closes the final destination race. It cannot authorize a
+# non-fast-forward update: capture_destination_state proved ancestry first.
+SAFE_PUSH_ACTIVE=1 git push \
+  --force-with-lease="${destination_ref}:${destination_oid}" \
+  "$origin_url" "$publication"
+if [ "$to_seen" -eq 0 ]; then
+  tracking_ref="refs/remotes/origin/$destination_branch"
   if git fetch -q "$origin_url" "${destination_ref}:${tracking_ref}" \
-      && git branch --set-upstream-to="origin/${destination_ref#refs/heads/}" "$branch" >/dev/null; then
+      && git branch --set-upstream-to="origin/$destination_branch" "$branch" >/dev/null; then
     :
   else
     printf 'safe-push: pushed successfully, but could not establish origin/%s tracking\n' \
-      "${destination_ref#refs/heads/}" >&2
+      "$destination_branch" >&2
   fi
 fi
