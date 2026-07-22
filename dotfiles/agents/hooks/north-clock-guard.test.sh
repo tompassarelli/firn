@@ -542,6 +542,149 @@ TMPDIR='' run unavailable 'expanded mktemp template remains ambiguous' \
   closed.log Bash \
   'root=/tmp; probe_root="$(mktemp -d "$root/north-clock-proof-XXXXXX")"; mkdir -p "$probe_root/tree"' \
   "$NONCLIENT"
+
+echo "== guarded-empty expansion inherits only proved temp provenance =="
+printf -v guarded_stage_pipeline '%s\n' \
+  'stage=$(mktemp -d)' \
+  'git archive HEAD > "${stage:?}/tree.tar"' \
+  'GIT_INDEX_FILE="${stage:?}/index" git read-tree HEAD' \
+  'git checkout-index -a --prefix="${stage:?}/tree/"' \
+  'cd "${stage:?}"' \
+  'rm -rf "${stage:?}"'
+TMPDIR='' run na 'archive, staged index, prefix, cd, and guarded rm share proved root' \
+  closed.log Bash "$guarded_stage_pipeline" "$NONCLIENT"
+TMPDIR='' run na 'guarded temp filesystem chain ignores inherited client cwd' \
+  closed.log Bash \
+  'stage=$(mktemp -d); mkdir -p "${stage:?}/tree"; rm -rf "${stage:?}"' \
+  "$CLIENT_DIR"
+TMPDIR='' run unavailable 'guarded traversal cannot escape inherited client cwd' \
+  closed.log Bash \
+  'stage=$(mktemp -d); mkdir -p "${stage:?}/../tree"; rm -rf "${stage:?}"' \
+  "$CLIENT_DIR"
+TMPDIR='' run deny 'implicit cwd operand cannot borrow guarded provenance' \
+  closed.log Bash \
+  'stage=$(mktemp -d); mkdir -p tree; rm -rf "${stage:?}"' \
+  "$CLIENT_DIR"
+TMPDIR='' run unavailable 'guarded wildcard remains ambiguous from client cwd' \
+  closed.log Bash \
+  'stage=$(mktemp -d); rm -rf "${stage:?}"/*' \
+  "$CLIENT_DIR"
+TMPDIR='' run deny 'filesystem option injection cannot borrow guarded provenance' \
+  closed.log Bash \
+  'stage=$(mktemp -d); mkdir --mode=700 "${stage:?}/tree"; rm -rf "${stage:?}"' \
+  "$CLIENT_DIR"
+TMPDIR='' run deny 'unproved redirect prevents bounded filesystem escape' \
+  closed.log Bash \
+  'stage=$(mktemp -d); mkdir -p "${stage:?}/tree" > /tmp/north-clock-output; rm -rf "${stage:?}"' \
+  "$CLIENT_DIR"
+TMPDIR='' run deny 'mixed unknown command prevents bounded filesystem escape' \
+  closed.log Bash \
+  'stage=$(mktemp -d); mkdir -p "${stage:?}/tree"; chmod 700 "${stage:?}/tree"; rm -rf "${stage:?}"' \
+  "$CLIENT_DIR"
+TMPDIR='' run na 'assignment-only absolute nonclient literal is proved' \
+  closed.log Bash \
+  'stage=/tmp/north-clock-literal; mkdir -p "${stage:?}/tree"; rm -rf "${stage:?}"' \
+  "$NONCLIENT"
+TMPDIR='' run na 'literal scratch root ignores inherited client cwd' \
+  closed.log Bash \
+  'stage=/tmp/north-clock-literal; mkdir -p "${stage:?}/tree"; rm -rf "${stage:?}"' \
+  "$CLIENT_DIR"
+TMPDIR='' run unavailable 'filesystem root is never a literal scratch proof' \
+  closed.log Bash \
+  'stage=/; rm -rf "${stage:?}"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'scratch parent itself is never a literal proof' \
+  closed.log Bash \
+  'stage=/tmp; rm -rf "${stage:?}"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'arbitrary home path is not a literal scratch proof' \
+  closed.log Bash \
+  'stage=/home/tom; rm -rf "${stage:?}"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'unquoted guard cannot split inside client cwd' \
+  closed.log Bash \
+  'stage=$(mktemp -d); IFS=/; mkdir -p ${stage:?}/tree; rm -rf ${stage:?}' \
+  "$CLIENT_DIR"
+TMPDIR='' run unavailable 'single-quoted guard is inert shell data' \
+  closed.log Bash \
+  'stage=$(mktemp -d); mkdir -p '\''${stage:?}/tree'\''; rm -rf '\''${stage:?}'\''' \
+  "$CLIENT_DIR"
+TMPDIR='' run unavailable 'escaped guard is inert shell data' \
+  closed.log Bash \
+  'stage=$(mktemp -d); mkdir -p "\${stage:?}/tree"; rm -rf "\${stage:?}"' \
+  "$CLIENT_DIR"
+TMPDIR='' run unavailable 'ambient variable cannot mint guarded provenance' \
+  closed.log Bash \
+  'stage="$HOME/tmp/north-clock-ambient"; rm -rf "${stage:?}"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'ambient variable has no direct guarded provenance' \
+  closed.log Bash \
+  'rm -rf "${HOME:?}/tmp/north-clock-ambient"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'command-scoped assignment is not shell provenance' \
+  closed.log Bash \
+  'stage=/tmp/north-clock-command true; rm -rf "${stage:?}"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'plain alias does not mint guarded provenance' \
+  closed.log Bash \
+  'stage=$(mktemp -d); alias="$stage"; rm -rf "${alias:?}"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'later reassignment revokes guarded provenance' \
+  closed.log Bash \
+  'stage=$(mktemp -d); stage=/tmp/north-clock-reassigned; rm -rf "${stage:?}"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'second safe literal assignment is still a reassignment' \
+  closed.log Bash \
+  'stage=/tmp/north-clock-first; stage=/tmp/north-clock-second; rm -rf "${stage:?}"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'first client literal never gains guarded provenance' \
+  closed.log Bash \
+  "stage=$CLIENT_DIR; rm -rf \"\${stage:?}\"" \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'first symlinked-client literal never gains guarded provenance' \
+  closed.log Bash \
+  "stage=$CANON_LINK; rm -rf \"\${stage:?}\"" \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'later client reassignment cannot use guarded expansion' \
+  closed.log Bash \
+  "stage=\$(mktemp -d); stage=$CLIENT_DIR; rm -rf \"\${stage:?}\"" \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'later symlinked-client reassignment cannot use guarded expansion' \
+  closed.log Bash \
+  "stage=\$(mktemp -d); stage=$CANON_LINK; rm -rf \"\${stage:?}\"" \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'default-value expansion remains outside guarded proof' \
+  closed.log Bash \
+  'stage=$(mktemp -d); rm -rf "${stage:-/tmp/fallback}"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'assign-default expansion remains outside guarded proof' \
+  closed.log Bash \
+  'stage=$(mktemp -d); rm -rf "${stage:=/tmp/fallback}"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'guard message remains outside exact empty guard' \
+  closed.log Bash \
+  'stage=$(mktemp -d); rm -rf "${stage:?required}"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'nested guard expansion remains ambiguous' \
+  closed.log Bash \
+  'stage=$(mktemp -d); rm -rf "${stage:?${OTHER}}"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'arbitrary mixed token cannot borrow guarded provenance' \
+  closed.log Bash \
+  'stage=$(mktemp -d); rm -rf "prefix${stage:?}"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'multiple guarded expansions in one token stay ambiguous' \
+  closed.log Bash \
+  'stage=$(mktemp -d); rm -rf "${stage:?}${stage:?}"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'parent traversal cannot escape guarded temp provenance' \
+  closed.log Bash \
+  'stage=$(mktemp -d); rm -rf "${stage:?}/../outside"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'non-prefix Git option cannot borrow guarded provenance' \
+  closed.log Bash \
+  'stage=$(mktemp -d); git status "--git-dir=${stage:?}/repo"' \
+  "$NONCLIENT"
 TMPDIR="$CLIENT_DIR" \
   run unavailable 'client-scoped TMPDIR cannot bless a dynamic destination' \
     closed.log Bash \

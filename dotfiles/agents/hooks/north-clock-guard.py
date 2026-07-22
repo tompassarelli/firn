@@ -33,6 +33,16 @@ CLIENT_NAMESPACE_RE = re.compile(r"/code/client(?:/|$)")
 SIMPLE_VARIABLE_RE = re.compile(
     r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))"
 )
+GUARDED_NONCLIENT_PATH_WORD_RE = re.compile(
+    r"(?:(?P<option>--prefix=))?"
+    r"\$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*):\?\}"
+    r"(?P<suffix>(?:/[A-Za-z0-9._+,:=@%~-]+)*/?)"
+)
+GUARDED_EMPTY_EXPANSION_RE = re.compile(
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*:\?\}"
+)
+LITERAL_ABSOLUTE_PATH_RE = re.compile(r"/[A-Za-z0-9._+,:=@%~/-]+")
+LITERAL_SCRATCH_ROOTS = ("/tmp", "/var/tmp")
 ASSIGNMENT_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", re.S)
 SAFE_MKTEMP_ASSIGNMENT_RE = re.compile(
     r'\A(?P<leading>[ \t]*(?:set[ \t]+-euo[ \t]+pipefail'
@@ -79,9 +89,11 @@ STORE_COMMAND_FAMILIES = {
     "dirname": "coreutils",
     "head": "coreutils",
     "ls": "coreutils",
+    "mkdir": "coreutils",
     "mktemp": "coreutils",
     "readlink": "coreutils",
     "realpath": "coreutils",
+    "rm": "coreutils",
     "stat": "coreutils",
     "tail": "coreutils",
     "tr": "coreutils",
@@ -434,30 +446,124 @@ def simple_commands(tokens: list[str]) -> Iterable[list[str]]:
         yield current
 
 
+def guarded_expansions_are_double_quoted(command: str) -> bool:
+    """Require every exact guarded expansion to retain Bash word integrity."""
+    starts = {match.start() for match in GUARDED_EMPTY_EXPANSION_RE.finditer(command)}
+    if not starts:
+        return True
+
+    quote = ""
+    states: dict[int, tuple[str, bool]] = {}
+    index = 0
+    while index < len(command):
+        character = command[index]
+        states[index] = (quote, False)
+        if quote == "single":
+            if character == "'":
+                quote = ""
+            index += 1
+            continue
+        if character == "\\":
+            if index + 1 < len(command):
+                states[index + 1] = (quote, True)
+                index += 2
+            else:
+                index += 1
+            continue
+        if character == '"':
+            quote = "" if quote == "double" else "double"
+        elif not quote and character == "'":
+            quote = "single"
+        index += 1
+
+    return all(states.get(start) == ("double", False) for start in starts)
+
+
 def expand_shell_word(
     word: str,
-    variables: dict[str, tuple[str, bool]],
-) -> tuple[str, bool]:
+    variables: dict[str, tuple[str, bool, str | None]],
+    allow_guarded_expansion: bool,
+) -> tuple[str, bool, str | None]:
     ambiguous = False
+    provenance_root: str | None = None
     if word == "~" or word.startswith("~/"):
-        home, home_ambiguous = variables.get("HOME", ("", False))
+        home, home_ambiguous, _home_proven = variables.get(
+            "HOME", ("", False, None)
+        )
         word = f"{home}{word[1:]}"
         ambiguous = home_ambiguous
+
+    guarded = (
+        GUARDED_NONCLIENT_PATH_WORD_RE.fullmatch(word)
+        if allow_guarded_expansion
+        else None
+    )
+    if guarded is not None:
+        name = guarded.group("name")
+        value, value_ambiguous, proven_root = variables.get(
+            name, ("", True, None)
+        )
+        suffix = guarded.group("suffix")
+        suffix_components = [component for component in suffix.split("/") if component]
+        parent = os.path.realpath(os.path.dirname(value)) if value else ""
+        canonical_value = os.path.realpath(value) if value else ""
+        if (
+            value
+            and not value_ambiguous
+            and proven_root is not None
+            and os.path.isabs(value)
+            and os.path.isdir(parent)
+            and not CLIENT_NAMESPACE_RE.search(parent)
+            and not CLIENT_NAMESPACE_RE.search(canonical_value)
+            and not any(component in {".", ".."} for component in suffix_components)
+        ):
+            word = f"{guarded.group('option') or ''}{value}{suffix}"
+            provenance_root = proven_root
 
     def replace(match: re.Match[str]) -> str:
         nonlocal ambiguous
         name = match.group(1) or match.group(2)
-        value, value_ambiguous = variables.get(name, ("", False))
+        value, value_ambiguous, _proven_nonclient = variables.get(
+            name, ("", False, None)
+        )
         ambiguous = ambiguous or value_ambiguous
         return value
 
     expanded = SIMPLE_VARIABLE_RE.sub(replace, word)
     if "$" in expanded or "`" in expanded:
         ambiguous = True
-    return expanded, ambiguous
+    return expanded, ambiguous, provenance_root
 
 
-def normalize_safe_mktemp_assignment(command: str, cwd: str) -> str:
+def literal_assignment_proves_nonclient_path(
+    raw_value: str,
+    value: str,
+    uncertain: bool,
+    cwd: str,
+) -> bool:
+    """Prove one assignment-only absolute literal without laundering input."""
+    if (
+        uncertain
+        or raw_value != value
+        or LITERAL_ABSOLUTE_PATH_RE.fullmatch(raw_value) is None
+        or not os.path.isabs(value)
+        or any(component in {".", ".."} for component in value.split("/") if component)
+    ):
+        return False
+    canonical = canonical_path(value, cwd)
+    if CLIENT_NAMESPACE_RE.search(canonical):
+        return False
+    for raw_root in LITERAL_SCRATCH_ROOTS:
+        root = os.path.realpath(raw_root)
+        if canonical != root and os.path.commonpath([root, canonical]) == root:
+            return True
+    return False
+
+
+def _normalize_safe_mktemp_assignment(
+    command: str,
+    cwd: str,
+) -> tuple[str, tuple[str, str] | None]:
     """Replace one proved directory assignment with its non-client scope.
 
     A literal absolute template takes its scope from its canonical parent and
@@ -472,7 +578,7 @@ def normalize_safe_mktemp_assignment(command: str, cwd: str) -> str:
         or os.environ.get("ENV")
         or not trusted_command("mktemp")
     ):
-        return command
+        return command, None
     template = match.group("template")
     if template is not None:
         if not re.search(r"X{3,}", os.path.basename(template)):
@@ -489,7 +595,16 @@ def normalize_safe_mktemp_assignment(command: str, cwd: str) -> str:
         f"{match.group('leading')}{match.group('name')}="
         f"{shlex.quote(placeholder)}{match.group('separator')}"
     )
-    return f"{replacement}{command[match.end():]}"
+    return (
+        f"{replacement}{command[match.end():]}",
+        (match.group("name"), placeholder),
+    )
+
+
+def normalize_safe_mktemp_assignment(command: str, cwd: str) -> str:
+    """Return the shell source with one proved mktemp assignment normalized."""
+    normalized, _provenance = _normalize_safe_mktemp_assignment(command, cwd)
+    return normalized
 
 
 def strip_quoted_heredoc_bodies(command: str) -> str:
@@ -543,30 +658,77 @@ def expanded_commands(
     command: str,
     cwd: str,
 ) -> list[tuple[list[str], list[bool]]]:
-    command = normalize_safe_mktemp_assignment(command, cwd)
+    return [
+        (segment, ambiguity)
+        for segment, ambiguity, _provenance in expanded_commands_with_provenance(
+            command, cwd
+        )
+    ]
+
+
+def expanded_commands_with_provenance(
+    command: str,
+    cwd: str,
+) -> list[tuple[list[str], list[bool], list[str | None]]]:
+    command, mktemp_proof = _normalize_safe_mktemp_assignment(command, cwd)
+    allow_guarded_expansion = guarded_expansions_are_double_quoted(command)
     variables = {
-        name: (value, False)
+        name: (value, False, None)
         for name, value in os.environ.items()
         if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
     }
-    variables["PWD"] = (cwd, False)
-    result: list[tuple[list[str], list[bool]]] = []
+    variables["PWD"] = (cwd, False, None)
+    proof_pending = mktemp_proof is not None
+    assigned_names: set[str] = set()
+    result: list[tuple[list[str], list[bool], list[str | None]]] = []
     for segment in simple_commands(shell_tokens(command)):
+        assignment_only = bool(segment) and all(
+            ASSIGNMENT_RE.fullmatch(token) is not None for token in segment
+        )
         expanded: list[str] = []
         ambiguous: list[bool] = []
+        provenance: list[str | None] = []
         for word in segment:
             assignment = ASSIGNMENT_RE.fullmatch(word)
             if assignment:
                 name, raw_value = assignment.groups()
-                value, uncertain = expand_shell_word(raw_value, variables)
-                variables[name] = (value, uncertain)
+                value, uncertain, _value_provenance = expand_shell_word(
+                    raw_value, variables, allow_guarded_expansion
+                )
+                mktemp_proven = bool(
+                    proof_pending
+                    and mktemp_proof is not None
+                    and assignment_only
+                    and name == mktemp_proof[0]
+                    and raw_value == mktemp_proof[1]
+                    and value == mktemp_proof[1]
+                    and not uncertain
+                )
+                literal_proven = bool(
+                    assignment_only
+                    and name not in assigned_names
+                    and literal_assignment_proves_nonclient_path(
+                        raw_value, value, uncertain, cwd
+                    )
+                )
+                proven_root = value if mktemp_proven or literal_proven else None
+                if mktemp_proven:
+                    proof_pending = False
+                elif mktemp_proof is not None and name == mktemp_proof[0]:
+                    proof_pending = False
+                assigned_names.add(name)
+                variables[name] = (value, uncertain, proven_root)
                 expanded.append(f"{name}={value}")
                 ambiguous.append(uncertain)
+                provenance.append(None)
                 continue
-            value, uncertain = expand_shell_word(word, variables)
+            value, uncertain, provenance_root = expand_shell_word(
+                word, variables, allow_guarded_expansion
+            )
             expanded.append(value)
             ambiguous.append(uncertain)
-        result.append((expanded, ambiguous))
+            provenance.append(provenance_root)
+        result.append((expanded, ambiguous, provenance))
     return result
 
 
@@ -1276,34 +1438,45 @@ def git_segment_has_explicit_nonclient_scope(
 def filesystem_segment_has_explicit_nonclient_operands(
     segment: list[str],
     ambiguity: list[bool],
+    provenance: list[str | None],
     cwd: str,
 ) -> bool:
-    if (
-        not segment
-        or os.path.basename(segment[0])
-        not in {"rm", "mv", "cp", "touch", "mkdir", "ln"}
-        or not trusted_command_token(segment[0])
+    if not segment or not trusted_command_token(segment[0]):
+        return False
+    command = os.path.basename(segment[0])
+    allowed_options = {
+        "mkdir": {"-p", "--parents", "--"},
+        "rm": {"-f", "-r", "-R", "-fr", "-rf", "--force", "--recursive", "--"},
+    }
+    if command not in allowed_options or any(
+        token in WRITE_REDIRECTS for token in segment
     ):
         return False
-    redirect_indexes = {
-        index
-        for position, token in enumerate(segment)
-        if token in WRITE_REDIRECTS
-        for index in (position, position + 1)
-    }
-    operands = [
-        (argument, ambiguity[index])
-        for index, argument in enumerate(segment[1:], start=1)
-        if index not in redirect_indexes and not argument.startswith("-")
-    ]
-    if not operands or any(uncertain for _argument, uncertain in operands):
+
+    operands: list[tuple[str, bool, str | None]] = []
+    options_done = False
+    for index, argument in enumerate(segment[1:], start=1):
+        if not options_done and argument.startswith("-"):
+            if argument not in allowed_options[command]:
+                return False
+            options_done = options_done or argument == "--"
+            continue
+        operands.append((argument, ambiguity[index], provenance[index]))
+    if not operands:
         return False
-    if not all(argument.startswith(("/", "~")) for argument, _ in operands):
-        return False
-    return all(
-        not CLIENT_NAMESPACE_RE.search(canonical_path(argument, cwd))
-        for argument, _ in operands
-    )
+
+    for argument, uncertain, provenance_root in operands:
+        if uncertain or provenance_root is None or not os.path.isabs(argument):
+            return False
+        root = canonical_path(provenance_root, cwd)
+        target = canonical_path(argument, cwd)
+        if (
+            CLIENT_NAMESPACE_RE.search(root)
+            or CLIENT_NAMESPACE_RE.search(target)
+            or os.path.commonpath([root, target]) != root
+        ):
+            return False
+    return True
 
 
 def command_has_bounded_explicit_nonclient_effects(
@@ -1314,15 +1487,15 @@ def command_has_bounded_explicit_nonclient_effects(
 
     This is deliberately narrower than general shell interpretation. It covers
     the coordinator's isolated-workspace lifecycle: trusted Git calls with an
-    exact non-client ``-C``, explicit non-client filesystem operands, and inert
+    exact non-client ``-C``, guarded-root ``mkdir``/``rm`` operands, and inert
     data writers whose output redirects are exact non-client paths.
     """
-    command = normalize_safe_mktemp_assignment(command, cwd)
+    normalized_command = normalize_safe_mktemp_assignment(command, cwd)
     if os.environ.get("BASH_ENV") or os.environ.get("ENV"):
         return False
-    if "`" in command or "$(" in command:
+    if "`" in normalized_command or "$(" in normalized_command:
         return False
-    tokens = shell_tokens(command)
+    tokens = shell_tokens(normalized_command)
     if any(
         token in {"||", "|", "&", "(", ")"}
         for token in tokens
@@ -1330,7 +1503,9 @@ def command_has_bounded_explicit_nonclient_effects(
     ):
         return False
     proved_effect = False
-    for segment, ambiguity in expanded_commands(command, cwd):
+    for segment, ambiguity, provenance in expanded_commands_with_provenance(
+        command, cwd
+    ):
         command_name, _arguments = command_head(segment)
         if not command_name:
             if any(ambiguity):
@@ -1355,7 +1530,7 @@ def command_has_bounded_explicit_nonclient_effects(
             proved_effect = True
             continue
         if filesystem_segment_has_explicit_nonclient_operands(
-            segment, ambiguity, cwd
+            segment, ambiguity, provenance, cwd
         ):
             proved_effect = True
             continue
