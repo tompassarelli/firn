@@ -78,11 +78,11 @@
         "zig-overlay": "zig-overlay"
       },
       "locked": {
-        "lastModified": 1784505799,
-        "narHash": "sha256-OY8OsCd159NmK/tV0hf+ZGqKnJmyei2uGovkFSkZPZM=",
+        "lastModified": 1784634775,
+        "narHash": "sha256-TlixCHtuGCVmUmLElXUpWZtPf+XejxXeaWNerHgfGjk=",
         "ref": "main",
-        "rev": "c30a5145d39d15fd5776a8fcba22c9ccbc49c298",
-        "revCount": 947,
+        "rev": "989fff80824f0e5a8936ac0d7e0ceba33b810890",
+        "revCount": 969,
         "type": "git",
         "url": "file:///home/tom/code/beagle"
       },
@@ -394,11 +394,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1784571846,
-        "narHash": "sha256-NpmhcSb07/Vwz+U5cUb4/up00KpRL2YPPdEDUIdDQkw=",
+        "lastModified": 1784710142,
+        "narHash": "sha256-tFimO4mDeyKfwE3hI1/6NFidEgFI8I+mvYxOEQ6sZ/0=",
         "ref": "main",
-        "rev": "bbf4d29f3796e64954b3ec4e2d8579ba69631524",
-        "revCount": 356,
+        "rev": "1b940ae3798d8ea0a75b8cb5053e77df1c6effa6",
+        "revCount": 378,
         "type": "git",
         "url": "file:///home/tom/code/fram"
       },
@@ -427,11 +427,11 @@
     "gaffer": {
       "flake": false,
       "locked": {
-        "lastModified": 1784492014,
-        "narHash": "sha256-f+o2fkxClYNIrX85YBfFe6Kx8uBgi0+Dpp7VbewHAw4=",
+        "lastModified": 1784715171,
+        "narHash": "sha256-Eeu78noZhEP54wZGKV4FSFRfxzK1+mGQLMRKbNvfDKA=",
         "ref": "main",
-        "rev": "777809697bd33479042eabd55c028eca6c6f917a",
-        "revCount": 41,
+        "rev": "4cd05b556b0ac0cbf5fd6675abddc661a966c2b7",
+        "revCount": 49,
         "type": "git",
         "url": "file:///home/tom/code/gaffer"
       },
@@ -859,11 +859,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1784578714,
-        "narHash": "sha256-3w/sJNv1N2MqrMhXCH8BiBqdVFfbKs/Sq6bNZw8LluY=",
+        "lastModified": 1784713424,
+        "narHash": "sha256-GrFaR2YF/a/V7kgYKY43xtd8lxGjpt7DJAa/wsqDRWw=",
         "ref": "main",
-        "rev": "77d6bd589a75e05defd94296675e8b48a79a8e31",
-        "revCount": 423,
+        "rev": "cc6f1a74c55f0da43c78ba18ba273e4d99f5e1c6",
+        "revCount": 467,
         "type": "git",
         "url": "file:///home/tom/code/north"
       },
