@@ -125,6 +125,18 @@ declare -A PROV=([claude]=anthropic [codex]=openai)
 declare -A LIMIT=([claude]="claude:seven_day" [codex]="codex:primary")
 declare -A SUB=([claude]=anthropic [codex]=openai)
 declare -A PINVAR=([claude]=CLAUDE_CONFIG_DIR [codex]=CODEX_HOME)
+declare -A ROOT_DEFAULT_ARGS=(
+  [claude]='--model claude-fable-5 --effort xhigh --disallowedTools Agent,Task,Workflow'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c model="gpt-5.6-sol" -c model_reasoning_effort="xhigh" --disable multi_agent'
+)
+declare -A WARN_DEFAULT_ARGS=(
+  [claude]='--model claude-fable-5 --effort xhigh'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c model="gpt-5.6-sol" -c model_reasoning_effort="xhigh"'
+)
+declare -A PASSTHROUGH_ARGS=(
+  [claude]=''
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access"'
+)
 
 for launcher in claude codex; do
   prov="${PROV[$launcher]}"; limit="${LIMIT[$launcher]}"
@@ -134,6 +146,13 @@ for launcher in claude codex; do
   HOME_DIR="$SCRATCH/home-$launcher"
   ROOT="$HOME_DIR/.local/state/north/accounts/$sub"
   mkdir -p "$ROOT"
+  default_args="${ROOT_DEFAULT_ARGS[$launcher]}"
+  warn_args="${WARN_DEFAULT_ARGS[$launcher]}"
+  passthrough_args="${PASSTHROUGH_ARGS[$launcher]}"
+  if [ "$launcher" = codex ]; then
+    check 'codex/default model is config, never duplicate --model' \
+      not_contains "$default_args" '--model'
+  fi
 
   eligible="$SCRATCH/$launcher-eligible.json"
   cat >"$eligible" <<JSON
@@ -164,6 +183,8 @@ JSON
   check "$launcher/missing-north exec'd real CLI unpinned" \
     test -f "$RECORD" && check "$launcher/missing-north left pin unset" \
     test -z "$(record_field _ "$pinvar")"
+  check "$launcher/missing-north still applies dispatch=north native defaults" \
+    test "$(record_field _ args)" = "$default_args"
 
   # 2. north exits nonzero, with stderr to surface.
   run "$launcher" 1 "NORTH_RC=7" "NORTH_STDERR=backend socket exploded" -- ; s="$STDERR"
@@ -205,7 +226,7 @@ JSON
   check "$launcher/success exports the pin env" \
     test "$(record_field _ "$pinvar")" = "$ROOT/acctA"
   check "$launcher/success forwards argv" \
-    test "$(record_field _ args)" = "extra --flag"
+    test "$(record_field _ args)" = "$default_args extra --flag"
   if [ "$launcher" = codex ]; then
     check "codex/success also exports CODEX_SQLITE_HOME" \
       test "$(record_field _ CODEX_SQLITE_HOME)" = "$ROOT/acctA/sqlite"
@@ -216,7 +237,7 @@ JSON
   check "$launcher/explicit-pin exports the pin env" \
     test "$(record_field _ "$pinvar")" = "$ROOT/acctA"
   check "$launcher/explicit-pin forwards argv after id" \
-    test "$(record_field _ args)" = "hello"
+    test "$(record_field _ args)" = "$default_args hello"
   check "$launcher/explicit-pin prints no auto banner" not_contains "$s" "→ ambient]"
 
   # 8b. explicit `as <unknown>` errors, does not exec the real CLI.
@@ -229,6 +250,46 @@ JSON
   check "$launcher/passthrough emits no banner" test -z "$s"
   check "$launcher/passthrough preserves the caller pin" \
     test "$(record_field _ "$pinvar")" = "$ROOT/acctA"
+  check "$launcher/passthrough leaves managed argv unchanged" \
+    test "$(record_field _ args)" = "$passthrough_args"
+
+  # 9b. The North-native defaults precede explicit user model/effort argv, so
+  # the provider CLI's ordinary last-option-wins behavior remains available.
+  if [ "$launcher" = claude ]; then
+    override_argv=(--model claude-sonnet-5 --effort medium)
+    override_suffix='--model claude-sonnet-5 --effort medium'
+  else
+    override_argv=(--model gpt-5.6-terra -c 'model_reasoning_effort="medium"')
+    override_suffix='--model gpt-5.6-terra -c model_reasoning_effort="medium"'
+  fi
+  run "$launcher" 0 -- as acctA "${override_argv[@]}" ; s="$STDERR"
+  check "$launcher/explicit model+effort override follows native defaults" \
+    test "$(record_field _ args)" = "$default_args $override_suffix"
+
+  # 9c. dispatch=native is the deliberate rollback/escape: account selection
+  # and existing Codex permission flags remain, but North's native-root model
+  # and topology policy disappear. Flipping back to north restores it.
+  mkdir -p "$HOME_DIR/.local/state/north"
+  printf 'dispatch=native\nguards=off\n' >"$HOME_DIR/.local/state/north/harness.conf"
+  run "$launcher" 0 -- as acctA rollback-probe ; s="$STDERR"
+  native_rollback_args="$passthrough_args"
+  [ -z "$native_rollback_args" ] || native_rollback_args+=" "
+  native_rollback_args+='rollback-probe'
+  check "$launcher/dispatch=native removes native-root defaults" \
+    test "$(record_field _ args)" = "$native_rollback_args"
+  printf 'dispatch=warn\nguards=off\n' >"$HOME_DIR/.local/state/north/harness.conf"
+  run "$launcher" 0 -- as acctA warn-probe ; s="$STDERR"
+  check "$launcher/dispatch=warn keeps cost defaults without topology controls" \
+    test "$(record_field _ args)" = "$warn_args warn-probe"
+  printf 'dispatch=north\nguards=off\n' >"$HOME_DIR/.local/state/north/harness.conf"
+  run "$launcher" 0 -- as acctA restored-probe ; s="$STDERR"
+  check "$launcher/dispatch=north restores defaults even with guards=off" \
+    test "$(record_field _ args)" = "$default_args restored-probe"
+  printf 'dispatch=unrecognized\nguards=off\n' >"$HOME_DIR/.local/state/north/harness.conf"
+  run "$launcher" 0 -- as acctA malformed-state-probe ; s="$STDERR"
+  check "$launcher/unknown dispatch state fails closed to north defaults" \
+    test "$(record_field _ args)" = "$default_args malformed-state-probe"
+  printf 'dispatch=north\nguards=off\n' >"$HOME_DIR/.local/state/north/harness.conf"
 
   # --- NORTH_CHECKOUT / main-worktree discovery matrix ---
   checkout_record="$SCRATCH/$launcher-checkout-record"
@@ -277,6 +338,20 @@ JSON
   check "$launcher/no-north-checkout-dir leaves NORTH_CHECKOUT unset" \
     test "$(cat "$checkout_record" 2>/dev/null)" = "<unset>"
 done
+
+# Real parser smoke: a config-layer Codex default and a later user --model must
+# coexist. Repeating --model itself is rejected by current Codex, which is why
+# the wrapper's default deliberately uses -c model=... instead.
+REAL_CODEX_BIN="${REAL_CODEX_BIN:-/run/current-system/sw/bin/codex}"
+if [ -x "$REAL_CODEX_BIN" ]; then
+  check 'codex/real parser accepts config default plus later --model' \
+    bash -c '"$@" >/dev/null' _ "$REAL_CODEX_BIN" \
+      -c 'model="gpt-5.6-sol"' \
+      -c 'model_reasoning_effort="xhigh"' \
+      --disable multi_agent \
+      --model gpt-5.6-terra \
+      --help
+fi
 
 printf '\n== result: %d passed, %d failed ==\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

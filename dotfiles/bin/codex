@@ -41,11 +41,49 @@ FORCE_PERMS=(
   -c 'default_permissions=":danger-full-access"'
 )
 
+# Native provider roots are a coordination surface when North owns dispatch:
+# keep the listener capable, but do not let an ambient Codex session silently
+# become another agent orchestrator. These are launch defaults, deliberately
+# placed before caller argv so a later explicit model/reasoning choice wins.
+# Account-pinned managed lanes return through the passthrough guard below and
+# therefore never inherit this native-root policy.
+native_dispatch_args() {
+  local state mode="north" line enforce_topology=1
+  if [ -n "${NORTH_HARNESS_STATE:-}" ]; then
+    state="$NORTH_HARNESS_STATE"
+  elif [ -f "$HOME/.local/state/north/harness.conf" ]; then
+    state="$HOME/.local/state/north/harness.conf"
+  else
+    state="$HOME/.claude/my-config.state"
+  fi
+  if [ -r "$state" ]; then
+    while IFS= read -r line; do
+      case "$line" in dispatch=*) mode="${line#dispatch=}" ;; esac
+    done <"$state"
+    mode="${mode:-north}"
+  fi
+  case "$mode" in
+    native) return 0 ;;
+    warn) enforce_topology=0 ;;
+    north) ;;
+    *) mode="north" ;;
+  esac
+  printf '%s\0' \
+    '-c' 'model="gpt-5.6-sol"' \
+    '-c' 'model_reasoning_effort="xhigh"'
+  [ "$enforce_topology" -eq 0 ] || printf '%s\0' '--disable' 'multi_agent'
+}
+
 # 1. Passthrough guard: an account is already pinned (north's own lanes /
 #    app-server probes, or explicit user env). Do not recurse or re-route.
 if [ -n "${CODEX_HOME:-}" ]; then
   exec "$REAL" "${FORCE_PERMS[@]}" "$@"
 fi
+
+NATIVE_DISPATCH_ARGS=()
+while IFS= read -r -d '' arg; do
+  NATIVE_DISPATCH_ARGS+=("$arg")
+done < <(native_dispatch_args)
 
 list_accounts() {
   [ -d "$ACCOUNTS_ROOT" ] && \
@@ -77,7 +115,7 @@ if [ "${1:-}" = "as" ]; then
   fi
   export CODEX_HOME="$root"
   export CODEX_SQLITE_HOME="$root/sqlite"
-  exec "$REAL" "${FORCE_PERMS[@]}" "$@"
+  exec "$REAL" "${FORCE_PERMS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
 fi
 
 # Discover the worktree of $HOME/code/north that currently holds
@@ -228,4 +266,4 @@ else
   [ "$kind" = "ok" ] && reason="north returned an empty selection"
   printf '[%s → ambient] %s — %s\n' "$PROVIDER_WORD" "$reason" "$(recovery_hint)" >&2
 fi
-exec "$REAL" "${FORCE_PERMS[@]}" "$@"
+exec "$REAL" "${FORCE_PERMS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"

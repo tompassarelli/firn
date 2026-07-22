@@ -218,6 +218,7 @@ run deny 'dispatch=native does not waive worker topology' worker Bash 'north spa
 run allow 'dispatch=native preserves native Agent allowance' unset Agent 'native work'
 set_state warn on
 run warn 'dispatch=warn preserves native Agent nudge' unset Task 'native work'
+run deny 'dispatch=warn cannot waive managed worker topology' worker Bash 'north spawn implementer work'
 set_state north on
 run deny 'dispatch=north preserves native Agent redirect' unset Agent 'native work'
 
@@ -267,12 +268,16 @@ else
   fail=$((fail + 1)); echo 'FAIL  route  an invalid Gaffer marker produced a callable North envelope'
 fi
 
-echo '== shared kill-switch semantics =='
-run allow 'AGENT_NO_AUTHORING_HOOKS kills worker guard' worker Bash 'north spawn implementer work' AGENT_NO_AUTHORING_HOOKS=1
-run allow 'legacy Claude alias kills worker guard' worker Bash 'north spawn implementer work' CLAUDE_NO_AUTHORING_HOOKS=1
+echo '== topology policy is independent of authoring kill-switches =='
+run deny 'AGENT_NO_AUTHORING_HOOKS cannot disable worker topology' worker Bash 'north spawn implementer work' AGENT_NO_AUTHORING_HOOKS=1
+run deny 'legacy Claude alias cannot disable worker topology' worker Bash 'north spawn implementer work' CLAUDE_NO_AUTHORING_HOOKS=1
 set_state north off
-run allow 'persistent guards=off kills worker guard' worker Bash 'north spawn implementer work'
-run deny 'AGENT_NO_AUTHORING_HOOKS=0 forces live over state' worker Bash 'north spawn implementer work' AGENT_NO_AUTHORING_HOOKS=0
+run deny 'persistent guards=off cannot disable worker topology' worker Bash 'north spawn implementer work'
+run deny 'persistent guards=off cannot defeat dispatch=north redirect' unset Agent 'native work'
+run deny 'AGENT_NO_AUTHORING_HOOKS=0 leaves topology live' worker Bash 'north spawn implementer work' AGENT_NO_AUTHORING_HOOKS=0
+set_state native off
+run allow 'dispatch=native remains deliberate native-agent escape with guards=off' unset Agent 'native work'
+run deny 'dispatch=native still cannot waive managed worker topology' worker Bash 'north spawn implementer work'
 set_state north on
 
 echo '== Claude user hook + Codex managed-hook parity =='

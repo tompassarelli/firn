@@ -22,9 +22,9 @@
 # State:       ~/.local/state/north/harness.conf
 #              (legacy ~/.claude/my-config.state is read only if absent)
 #              flip via `north config dispatch <mode>`
-# Kill-switch: persistent `north config guards off` (state) OR env
-#              CLAUDE_NO_AUTHORING_HOOKS (any value but 0/false; 0/false forces
-#              guards live). Shared impl: lib/authoring-killswitch.sh.
+# Escape:      `north config dispatch native`. Agent topology is coordination
+#              policy, not an authoring guard, so the general guards=off switch
+#              and its session aliases do not disable this hook.
 # ============================================================================
 set -uo pipefail
 
@@ -49,16 +49,14 @@ capture_hook_stdin() {
 }
 capture_hook_stdin
 
-# Kill-switch: shared semantics in lib/authoring-killswitch.sh — persistent
-# `north config guards off` (state, live) or env CLAUDE_NO_AUTHORING_HOOKS
-# (any value but 0/false kills this session; 0/false forces guards live).
-# shellcheck disable=SC1090,SC1091
-. "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
-type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 [ "$payload_oversized" -eq 0 ] || exit 0
 
 STATE_PATH="$HOME/.local/state/north/harness.conf"
-type north_harness_state_path >/dev/null 2>&1 && STATE_PATH="$(north_harness_state_path)"
+if [ -n "${NORTH_HARNESS_STATE:-}" ]; then
+  STATE_PATH="$NORTH_HARNESS_STATE"
+elif [ ! -f "$STATE_PATH" ]; then
+  STATE_PATH="$HOME/.claude/my-config.state"
+fi
 MODE=$(grep -E '^dispatch=' "$STATE_PATH" 2>/dev/null | tail -1 | cut -d= -f2-)
 MODE="${MODE:-north}"
 export AGENT_SPAWN_GUARD_MODE="$MODE"
