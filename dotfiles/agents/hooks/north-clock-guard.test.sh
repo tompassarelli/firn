@@ -507,6 +507,42 @@ TMPDIR="$SCRATCH/safe-tmp-root" \
     "tmp=\"\$(mktemp -d)\"; cp -a $NONCLIENT/. \"\$tmp/\"" \
     "$NONCLIENT"
 TMPDIR="$CLIENT_DIR" \
+  run na 'literal absolute nonclient mktemp template determines provenance' \
+    closed.log Bash \
+    'probe_root="$(mktemp -d /tmp/north-clock-proof-XXXXXX)"; mkdir -p "$probe_root/one" "$probe_root/two"; printf "%s\n" "$probe_root"' \
+    "$NONCLIENT"
+TMPDIR="$CLIENT_DIR" \
+  run na 'proved template survives a nonclient archive-shaped pipeline' \
+    closed.log Bash \
+    "probe_root=\"\$(mktemp -d /tmp/north-clock-archive-XXXXXX)\"; mkdir -p \"\$probe_root/tree\"; git -C $NONCLIENT archive HEAD | tar -x -C \"\$probe_root/tree\"; printf '%s\\n' \"\$probe_root\"" \
+    "$NONCLIENT"
+ln -s "$CLIENT_DIR" "$SCRATCH/safe-tmp-root/north-clock-terminal-XXXXXX"
+TMPDIR='' run na 'template scope comes from its parent, not the literal X path' \
+  closed.log Bash \
+  "probe_root=\"\$(mktemp -d $SCRATCH/safe-tmp-root/north-clock-terminal-XXXXXX)\"; mkdir -p \"\$probe_root/tree\"" \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'relative mktemp template has no absolute provenance' \
+  closed.log Bash \
+  'probe_root="$(mktemp -d north-clock-proof-XXXXXX)"; mkdir -p "$probe_root/tree"' \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'literal client mktemp template fails closed' \
+  closed.log Bash \
+  "probe_root=\"\$(mktemp -d $CLIENT_DIR/north-clock-proof-XXXXXX)\"; mkdir -p \"\$probe_root/tree\"" \
+  "$NONCLIENT"
+ln -s "$NONCLIENT" "$CLIENT_DIR/north-clock-terminal-XXXXXX"
+TMPDIR='' run unavailable 'terminal symlink cannot hide a client template parent' \
+  closed.log Bash \
+  "probe_root=\"\$(mktemp -d $CLIENT_DIR/north-clock-terminal-XXXXXX)\"; mkdir -p \"\$probe_root/tree\"" \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'symlinked client mktemp template fails closed' \
+  closed.log Bash \
+  "probe_root=\"\$(mktemp -d $CANON_LINK/north-clock-proof-XXXXXX)\"; mkdir -p \"\$probe_root/tree\"" \
+  "$NONCLIENT"
+TMPDIR='' run unavailable 'expanded mktemp template remains ambiguous' \
+  closed.log Bash \
+  'root=/tmp; probe_root="$(mktemp -d "$root/north-clock-proof-XXXXXX")"; mkdir -p "$probe_root/tree"' \
+  "$NONCLIENT"
+TMPDIR="$CLIENT_DIR" \
   run unavailable 'client-scoped TMPDIR cannot bless a dynamic destination' \
     closed.log Bash \
     "tmp=\"\$(mktemp -d)\"; cp -a $NONCLIENT/. \"\$tmp/\"" \

@@ -39,7 +39,9 @@ SAFE_MKTEMP_ASSIGNMENT_RE = re.compile(
     r'[ \t]*(?:;|\n)[ \t]*)?)'
     r'(?P<name>[A-Za-z_][A-Za-z0-9_]*)='
     r'(?P<quote>"?)\$\([ \t]*mktemp[ \t]+'
-    r'(?:-d|--directory)[ \t]*\)(?P=quote)'
+    r'(?:-d|--directory)'
+    r'(?:[ \t]+(?P<template>/[A-Za-z0-9._+,:=@%~/-]+))?'
+    r'[ \t]*\)(?P=quote)'
     r'(?P<separator>[ \t]*(?:&&|;|\n)|[ \t]*\Z)',
 )
 QUOTED_HEREDOC_RE = re.compile(
@@ -456,6 +458,12 @@ def expand_shell_word(
 
 
 def normalize_safe_mktemp_assignment(command: str, cwd: str) -> str:
+    """Replace one proved directory assignment with its non-client scope.
+
+    A literal absolute template takes its scope from its canonical parent and
+    therefore does not inherit ``TMPDIR``. Every option-bearing, relative, or
+    expanded template stays outside this deliberately small proof.
+    """
     match = SAFE_MKTEMP_ASSIGNMENT_RE.match(command)
     if (
         not match
@@ -465,7 +473,15 @@ def normalize_safe_mktemp_assignment(command: str, cwd: str) -> str:
         or not trusted_command("mktemp")
     ):
         return command
-    temp_root = canonical_path(os.environ.get("TMPDIR") or "/tmp", cwd)
+    template = match.group("template")
+    if template is not None:
+        if not re.search(r"X{3,}", os.path.basename(template)):
+            raise AdmissionUnavailable("invalid mktemp template")
+        temp_root = canonical_path(os.path.dirname(template), cwd)
+        if not os.path.isdir(temp_root):
+            raise AdmissionUnavailable("missing mktemp template directory")
+    else:
+        temp_root = canonical_path(os.environ.get("TMPDIR") or "/tmp", cwd)
     if CLIENT_NAMESPACE_RE.search(temp_root):
         raise AdmissionUnavailable("client-scoped temporary directory")
     placeholder = os.path.join(temp_root, "north-clock-guard-mktemp")
