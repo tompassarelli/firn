@@ -36,8 +36,12 @@
 #         ignored) in the registry file $GRAPH_UPSTREAM_REGISTRY
 #         (default: ~/.config/fram/graph-upstream-files). A row is matched by
 #         REALPATH identity (so a symlink alias to an adopted file cannot bypass)
-#         OR by shared Git provenance from a TRUSTED git (same `--git-common-dir`
-#         + repo-relative path), so a row naming only the primary checkout also
+#         OR by shared Git provenance from a TRUSTED git — resolved off a managed
+#         bin allow-list and admitted only if its canonical identity is an
+#         immutable /nix/store binary or a root-owned non-writable system binary,
+#         and run with ambient global/system Git config suppressed — using the
+#         same `--git-common-dir` + repo-relative path, so a row naming only the
+#         primary checkout also
 #         covers an edit of the same file reached through a durable linked
 #         worktree — no per-worktree paths are enumerated, and a missing/hostile
 #         git can never let a direct or aliased edit of an adopted file through, OR
@@ -114,7 +118,7 @@ EOF
 # hook's JSON envelope (sys.stdin must stay the harness's PreToolUse payload). Args
 # carry the registry path + deny reason so no shell interpolation lands inside python.
 read -r -d '' PY <<'PYEOF' || true
-import sys, json, os, re, subprocess, shutil, getpass, pwd
+import sys, json, os, re, subprocess, getpass, pwd, stat
 
 registry_path = sys.argv[1]
 deny_reason   = sys.argv[2]
@@ -123,14 +127,43 @@ def fail_open():
     # No opinion -> allow. Empty stdout, exit 0.
     sys.exit(0)
 
+def _admit_git(cand):
+    # Canonicalize a candidate `git` executable and admit it ONLY if its FINAL
+    # on-disk identity is immutable: a /nix/store path (the store is a read-only
+    # mount — a store binary cannot be mutated or repointed in place) OR a
+    # root-owned regular file with no group/other write bit (a system binary no
+    # non-root principal can overwrite). A user-writable path, or a symlink a user
+    # can repoint (e.g. a per-user profile's ~/.nix-profile/bin/git aimed at a
+    # planted script), resolves OUTSIDE those and is refused — so it can never be
+    # trusted to speak for provenance. Returns the canonical path or None.
+    if not cand:
+        return None
+    real = os.path.realpath(cand)
+    try:
+        st = os.stat(real)
+    except OSError:
+        return None
+    if not stat.S_ISREG(st.st_mode) or not os.access(real, os.X_OK):
+        return None
+    if real == "/nix/store" or real.startswith("/nix/store/"):
+        return real
+    if st.st_uid == 0 and not (st.st_mode & (stat.S_IWGRP | stat.S_IWOTH)):
+        return real
+    return None
+
 def _trusted_git():
-    # Resolve `git` from a fixed allow-list of MANAGED bin dirs, never the
-    # ambient inherited PATH. A per-session PATH entry or a `./git` planted in a
-    # repo working directory therefore cannot impersonate git and lie about
-    # provenance (hostile-Git). The real home comes from the uid via pwd, not the
-    # $HOME env (which a caller — or our own tests — may override), so the trusted
-    # location holds regardless of a spoofed HOME. Returns None when no managed
-    # git is found, so provenance fails OPEN rather than trusting an untrusted one.
+    # Resolve `git` from a fixed allow-list of MANAGED bin dirs, never the ambient
+    # inherited PATH. A per-session PATH entry or a `./git` planted in a working
+    # directory therefore cannot impersonate git and lie about provenance
+    # (hostile-Git). The real home comes from the uid via pwd, not the $HOME env
+    # (which a caller — or our own tests — may override), so the trusted location
+    # holds regardless of a spoofed HOME. Each candidate is admitted only through
+    # _admit_git: an untrusted (e.g. user-repointed) EARLY candidate is SKIPPED —
+    # not trusted, not fatal — and resolution continues to an immutable git.
+    # GRAPH_UPSTREAM_GIT_BINDIRS prepends extra search dirs for non-Nix layouts;
+    # it cannot lower the bar (every candidate still passes _admit_git), so it is
+    # a portability seam, not an authority escape hatch. Returns None when no
+    # trusted git is found, so provenance fails OPEN rather than trusting one.
     try:
         real_home = pwd.getpwuid(os.geteuid()).pw_dir
     except Exception:
@@ -139,7 +172,8 @@ def _trusted_git():
         user = getpass.getuser()
     except Exception:
         user = ""
-    candidates = [
+    extra = [d for d in os.environ.get("GRAPH_UPSTREAM_GIT_BINDIRS", "").split(os.pathsep) if d]
+    candidates = extra + [
         "/run/wrappers/bin",
         "/run/current-system/sw/bin",
         os.path.join(real_home, ".nix-profile/bin"),
@@ -148,16 +182,27 @@ def _trusted_git():
         "/usr/bin",
         "/bin",
     ]
-    trusted = os.pathsep.join(d for d in candidates if d and os.path.isdir(d))
-    return shutil.which("git", path=trusted) if trusted else None
+    for d in candidates:
+        if not d or not os.path.isdir(d):
+            continue
+        g = _admit_git(os.path.join(d, "git"))
+        if g:
+            return g
+    return None
 
 _GIT = _trusted_git()
 # Clean environment for git: strips any hostile GIT_DIR/GIT_COMMON_DIR/GIT_WORK_TREE
-# and the ambient PATH so discovery is driven only by `-C <dir>`.
+# and the ambient PATH so discovery is driven only by `-C <dir>`, and suppresses
+# ambient SYSTEM and GLOBAL repository config so a hostile /etc/gitconfig or
+# ~/.gitconfig (malformed, or setting core.worktree/aliases) can neither error the
+# probe into a fail-open bypass nor perturb the reported provenance. Pointing
+# GIT_CONFIG_GLOBAL/SYSTEM at /dev/null neutralizes them regardless of $HOME.
 _GIT_ENV = {
     "PATH": os.path.dirname(_GIT) if _GIT else "/bin",
     "HOME": os.environ.get("HOME", ""),
     "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_SYSTEM": os.devnull,
+    "GIT_CONFIG_GLOBAL": os.devnull,
     "GIT_TERMINAL_PROMPT": "0",
 }
 

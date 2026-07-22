@@ -223,5 +223,38 @@ git -C "$OTHER" add -A && git -C "$OTHER" commit -qm init
 printf '%s\n' "$OTHER/mod/schema.bclj" >"$REGISTRY"
 run_hook 0 "$(event Edit "$WORKTREE/mod/schema.bclj")"; assert_allow 'same repo-relative path in a different repo does not match'
 
+# ---- adversarial: user-repointable profile candidate git is not trusted ------
+# A per-user profile bin dir (as ~/.nix-profile/bin would be) whose `git` is a
+# USER-WRITABLE symlink aimed at a hostile script. Prepended to the trusted-bin
+# search via GRAPH_UPSTREAM_GIT_BINDIRS, its canonical identity is neither an
+# immutable /nix/store git nor a root-owned system binary, so it must be SKIPPED
+# and resolution must fall through to the real immutable git — the registry-only
+# primary adoption still denies the worktree edit through provenance. If the
+# repointed git were trusted, its bogus provenance output would break the match
+# and silently ALLOW the adopted edit.
+printf '%s\n' "$PRIMARY/mod/schema.bclj" >"$REGISTRY"
+REPOINT="$SCRATCH/profile-bin"
+mkdir -p "$REPOINT"
+ln -s "$HOSTILE/git" "$REPOINT/git"   # user-repointable symlink -> hostile script
+run_hook_env "GRAPH_UPSTREAM_GIT_BINDIRS=$REPOINT" 0 "$(event Edit "$WORKTREE/mod/schema.bclj")"
+assert_deny  'user-repointable profile candidate git is skipped; provenance still denies via immutable git'
+run_hook_env "GRAPH_UPSTREAM_GIT_BINDIRS=$REPOINT" 0 "$(event Edit "$ORDINARY")"
+assert_allow 'user-repointable profile candidate git cannot falsely deny an ordinary file'
+
+# ---- adversarial: hostile ambient GLOBAL git config cannot perturb provenance -
+# A MALFORMED ~/.gitconfig (HOME=$SCRATCH/home here is the global-config home)
+# makes every ambient-config git invocation fail. If the guard let global config
+# load, provenance would error and fail OPEN, silently ALLOWING the adopted
+# worktree edit. The guard runs git with global/system config suppressed
+# (GIT_CONFIG_GLOBAL/SYSTEM=/dev/null), so the registry-only primary adoption
+# still denies the worktree edit and does not falsely deny an ordinary file.
+printf '%s\n' "$PRIMARY/mod/schema.bclj" >"$REGISTRY"
+printf '%s\n' 'this is not valid git config @@@' '[core' >"$SCRATCH/home/.gitconfig"
+run_hook 0 "$(event Edit "$WORKTREE/mod/schema.bclj")"
+assert_deny  'hostile global git config suppressed; worktree adopted edit still denies'
+run_hook 0 "$(event Edit "$ORDINARY")"
+assert_allow 'hostile global git config cannot falsely deny an ordinary file'
+rm -f "$SCRATCH/home/.gitconfig"
+
 printf '\n%d/%d passed\n' "$pass" "$((pass + fail))"
 [ "$fail" -eq 0 ]
