@@ -29,9 +29,22 @@ Lifecycle anatomy + failure debugging (patterns A–F, zombie forks, split-brain
 - **Concurrency is the engine's job** — fram owns write-serialization + OCC + the `lease`
   primitive (`acquire`/`release`/`fence`); apps express coordination as facts, never
   self-rolled locks. (`driver` = app intent; `lease` = DB mutual-exclusion — never conflate.)
-- Director and worker lanes coordinate through North. Workers report and
-  escalate upward; only the director owns fan-out and peer control. NEVER use
-  ultracode/Workflow as a recursive third tier.
+- Every managed orchestrator owns fan-out and control of its direct children.
+  It may recursively create workers or child orchestrators only through North;
+  workers report and escalate upward and never gain spawn or peer-control
+  authority. Provider-native Agent/Workflow spawning remains outside this
+  authority boundary and is never a substitute for managed recursion.
+- Each recursive child crosses the complete North admission boundary: a fresh
+  thread linked `part_of` its immediate parent, a fresh run and reservation, a
+  complete Gaffer request and resolved route, its own telemetry and resource
+  envelope, and settlement back to that immediate parent. Authority is fixed
+  for the run; splitting work creates children instead of mutating a worker in
+  place.
+- A lane that discovers new seams, budget pressure, or repeated no-progress
+  emits `north escalate needs-replan` with a structured checkpoint and proposed
+  decomposition. The nearest live supervisor in the declared parent chain
+  decides whether to continue, narrow, or split. If none is live, the checkpoint
+  remains on the work thread and the lane stops rather than broadening scope.
 - Verification attaches where the outcome lives. A self-contained worker
   returns local bar evidence; the director adds a context-carrying verifier
   sibling only when verdict leverage warrants one. An emergent aggregate always

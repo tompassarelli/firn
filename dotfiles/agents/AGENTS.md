@@ -79,6 +79,16 @@ and the coordination acts themselves (spawn/steer/capture/push). `/delegate
 forcing form for when the automatic behavior slips — its existence is a bug
 report against this paragraph.
 
+Managed recursion is explicit, not a special third role: an orchestrator may
+create workers or child orchestrators only through North, and owns settlement
+of its direct children. Every child receives a fresh `part_of` thread, run,
+reservation, complete Gaffer route, resource envelope, and telemetry. Workers
+never spawn or gain authority in place. When scope overruns, new seams, budget
+pressure, or repeated no-progress invalidate the plan, emit a structured
+`north escalate needs-replan` checkpoint; the nearest live supervisor in the
+declared parent chain chooses continue, narrow, or split. With no live parent,
+stop after checkpointing rather than silently broadening.
+
 ## Blocked ≠ stopped
 
 A denial is information about the path, not the goal: never retry verbatim,
