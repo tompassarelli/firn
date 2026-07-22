@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# List custom commands (in dotfiles/bin/) and shell aliases.
+# List active custom commands and shell aliases.
 set -u
 
-bindir="$HOME/code/nixos-config/dotfiles/bin"
+bindir="$HOME/.local/bin"
 
-echo "Commands (~/.local/bin → $bindir):"
+echo "Commands ($bindir):"
 for f in "$bindir"/*; do
   [ -f "$f" ] && [ -x "$f" ] || continue
   name=$(basename "$f")
