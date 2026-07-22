@@ -28,12 +28,34 @@
 # ============================================================================
 set -uo pipefail
 
+# Drain before every decision, including the kill-switch. Keep active-path input
+# memory-bounded; an oversized envelope follows the existing malformed fail-open.
+capture_hook_stdin() {
+  local chunk status keep
+  local LC_ALL=C
+  payload=""
+  payload_oversized=0
+  while :; do
+    chunk=""
+    IFS= read -r -N 65536 chunk
+    status=$?
+    if [ -n "$chunk" ]; then
+      keep=$((1048576 - ${#payload}))
+      [ "$keep" -le 0 ] || payload+="${chunk:0:$keep}"
+      [ "${#chunk}" -le "$keep" ] || payload_oversized=1
+    fi
+    [ "$status" -eq 0 ] || break
+  done
+}
+capture_hook_stdin
+
 # Kill-switch: shared semantics in lib/authoring-killswitch.sh — persistent
 # `north config guards off` (state, live) or env CLAUDE_NO_AUTHORING_HOOKS
 # (any value but 0/false kills this session; 0/false forces guards live).
 # shellcheck disable=SC1090,SC1091
 . "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
 type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
+[ "$payload_oversized" -eq 0 ] || exit 0
 
 STATE_PATH="$HOME/.local/state/north/harness.conf"
 type north_harness_state_path >/dev/null 2>&1 && STATE_PATH="$(north_harness_state_path)"
@@ -743,4 +765,4 @@ print(json.dumps(out))
 sys.exit(0)
 PYEOF
 
-exec python3 -c "$PY"
+printf '%s' "$payload" | python3 -c "$PY"

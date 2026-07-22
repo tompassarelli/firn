@@ -9,6 +9,27 @@
 # Outside a Beagle project it is a fast no-op (a few globs, no heavy work).
 set -uo pipefail
 
+# Drain before every decision, including the kill-switch. Keep active-path input
+# memory-bounded; an oversized envelope follows the existing malformed no-op.
+capture_hook_stdin() {
+  local chunk status keep
+  local LC_ALL=C
+  payload=""
+  payload_oversized=0
+  while :; do
+    chunk=""
+    IFS= read -r -N 65536 chunk
+    status=$?
+    if [ -n "$chunk" ]; then
+      keep=$((1048576 - ${#payload}))
+      [ "$keep" -le 0 ] || payload+="${chunk:0:$keep}"
+      [ "${#chunk}" -le "$keep" ] || payload_oversized=1
+    fi
+    [ "$status" -eq 0 ] || break
+  done
+}
+capture_hook_stdin
+
 # Clean-room / experiment kill-switch (opt-OUT; see code-upstream-guard.sh).
 # When guards are OFF this hook no-ops — no daemon revive, no authoring context
 # injected — so a controlled run keeps an identical neutral session surface
@@ -18,10 +39,10 @@ set -uo pipefail
 # shellcheck disable=SC1090,SC1091
 . "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
 type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
+[ "$payload_oversized" -eq 0 ] || exit 0
 
 # Both Claude Code and Codex pass a SessionStart JSON envelope on stdin. Parse
 # it opportunistically: malformed/missing input must never break startup.
-payload="$(cat 2>/dev/null || true)"
 event_cwd=""
 session_id=""
 session_source=""

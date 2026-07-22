@@ -21,12 +21,34 @@
 set -uo pipefail
 umask 077
 
+# Drain before every decision, including the supervisor and kill-switch. Keep
+# active-path input memory-bounded; oversized input remains an advisory no-op.
+capture_hook_stdin() {
+  local chunk status keep
+  local LC_ALL=C
+  payload=""
+  payload_oversized=0
+  while :; do
+    chunk=""
+    IFS= read -r -N 65536 chunk
+    status=$?
+    if [ -n "$chunk" ]; then
+      keep=$((1048576 - ${#payload}))
+      [ "$keep" -le 0 ] || payload+="${chunk:0:$keep}"
+      [ "${#chunk}" -le "$keep" ] || payload_oversized=1
+    fi
+    [ "$status" -eq 0 ] || break
+  done
+}
+capture_hook_stdin
+[ "$payload_oversized" -eq 0 ] || exit 0
+
 # Stay well inside the provider's 15s hook deadline. The inner process owns
 # project discovery, pin sourcing, version probes, and JSON encoding; this
 # supervisor buffers and validates its complete envelope. A slow pin script or
 # filesystem becomes a clean no-op, never a provider timeout or partial JSON.
 if [ "${RACKET_BUILD_GUARD_INNER:-0}" != 1 ]; then
-  json_payload="$(RACKET_BUILD_GUARD_INNER=1 \
+  json_payload="$(printf '%s' "$payload" | RACKET_BUILD_GUARD_INNER=1 \
     timeout --signal=TERM --kill-after=0.2s 4s "$0" 2>/dev/null || true)"
   if [ -n "$json_payload" ] &&
       printf '%s' "$json_payload" | timeout --signal=TERM --kill-after=0.1s 0.5s \
@@ -49,7 +71,6 @@ fi
 . "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
 type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
-payload="$(cat 2>/dev/null || true)"
 # Resolve either the ordinary provider file_path or Codex canonical apply_patch
 # target headers. Patch body text is never considered a target, so a comment
 # mentioning a .rkt path cannot trigger diagnostics.
