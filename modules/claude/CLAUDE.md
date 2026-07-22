@@ -7,10 +7,13 @@ generated.
 
 **Read before editing `default.bnix`:**
 → `~/code/nixos-config/dotfiles/agents/docs/nixos-module.md`
-(writable settings.json symlink + EROFS, caveman fork/pin/bump + recovery,
+(writable settings.json seed + EROFS, caveman fork/pin/bump + recovery,
 MCP idempotence, claim-canonical guard gap)
 
-Inline tripwire: `~/.claude/settings.json` must stay a DIRECT writable symlink
-(`linkClaudeSettings`), and `installCaveman` stays ordered after it — if it
-ever reverts to a `/nix/store/…` link, `claude plugin install` dies with
-`EROFS`.
+Inline tripwire: `~/.claude/settings.json` must stay a writable regular runtime
+file initialized by `seedClaudeSettings`, never a symlink into either the Nix
+store or `~/code/nixos-config`. The committed generation seed converges on
+every activation; Claude's `/effort` and plugin writes remain valid writable
+runtime state between activations. `installCaveman` stays ordered after the
+seed activation so supported plugin state is reconciled afterward — a
+store-backed runtime target makes `claude plugin install` die with `EROFS`.

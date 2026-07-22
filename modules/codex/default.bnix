@@ -82,15 +82,9 @@
                       (s config.home.homeDirectory
                         "/code/nixos-config/dotfiles/agents/AGENTS.md"))}
                  ".codex/config.toml"
-                  {:source
-                    (config.lib.file.mkOutOfStoreSymlink
-                      (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/codex/config.toml"))}
+                  {:source (s flakeRoot "/dotfiles/codex/config.toml")}
                  ".codex/hooks.json"
-                  {:source
-                    (config.lib.file.mkOutOfStoreSymlink
-                      (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/codex/hooks.json"))}
+                  {:source (s flakeRoot "/dotfiles/codex/hooks.json")}
                  ".codex/prompts"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink

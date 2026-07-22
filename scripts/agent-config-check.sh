@@ -292,6 +292,145 @@ environment_lines_value() {
   printf '%s\n' "$value"
 }
 
+north_coord_process_birth_token() {
+  local pid="$1" stat_line remainder start_ticks
+  local -a fields
+
+  [[ "$pid" =~ ^[1-9][0-9]*$ && -r "/proc/$pid/stat" ]] || return 1
+  stat_line="$(<"/proc/$pid/stat")"
+  remainder=${stat_line##*) }
+  read -r -a fields <<<"$remainder"
+  start_ticks=${fields[19]:-}
+  [[ "$start_ticks" =~ ^[0-9]+$ ]] || return 1
+  printf 'proc:%s\n' "$start_ticks"
+}
+
+north_coord_runtime_record_value() {
+  local record="$1" key="$2" line value='' count=0
+
+  while IFS= read -r line; do
+    case "$line" in
+      "$key="*)
+        value=${line#*=}
+        count=$((count + 1))
+        ;;
+    esac
+  done <"$record"
+  [ "$count" -eq 1 ] || return 1
+  printf '%s\n' "$value"
+}
+
+north_coord_runtime_record_owner_is_valid() {
+  local process_env="$1" main_pid="$2" active_generation_link="$3"
+  local owner_token generation runtime_file canonical_generation canonical_active
+  local canonical_runtime_file record_stat expected_birth record_value
+
+  NORTH_COORD_RUNTIME_OWNER_REASON=''
+  owner_token="$(environment_lines_value "$process_env" FRAM_RUNTIME_OWNER_TOKEN 2>/dev/null)" || {
+    NORTH_COORD_RUNTIME_OWNER_REASON='process owner token is missing or duplicated'
+    return 1
+  }
+  [[ "$owner_token" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || {
+    NORTH_COORD_RUNTIME_OWNER_REASON='process owner token is not a lowercase UUID'
+    return 1
+  }
+  [[ "$main_pid" =~ ^[1-9][0-9]*$ ]] || {
+    NORTH_COORD_RUNTIME_OWNER_REASON='systemd MainPID is invalid'
+    return 1
+  }
+  generation="$(environment_lines_value "$process_env" NORTH_COORD_RUNTIME_GENERATION 2>/dev/null)" || {
+    NORTH_COORD_RUNTIME_OWNER_REASON='process runtime generation is missing or duplicated'
+    return 1
+  }
+  runtime_file="$(environment_lines_value "$process_env" NORTH_COORD_RUNTIME_FILE 2>/dev/null)" || {
+    NORTH_COORD_RUNTIME_OWNER_REASON='process runtime record path is missing or duplicated'
+    return 1
+  }
+  canonical_generation="$(realpath -e "$generation" 2>/dev/null)" || {
+    NORTH_COORD_RUNTIME_OWNER_REASON="process runtime generation is missing: $generation"
+    return 1
+  }
+  [ "$generation" = "$canonical_generation" ] &&
+    [ -d "$generation" ] && [ ! -L "$generation" ] || {
+      NORTH_COORD_RUNTIME_OWNER_REASON='process runtime generation is not a canonical real directory'
+      return 1
+    }
+  [ -L "$active_generation_link" ] || {
+    NORTH_COORD_RUNTIME_OWNER_REASON="active generation selector is not a symlink: $active_generation_link"
+    return 1
+  }
+  canonical_active="$(readlink -f "$active_generation_link" 2>/dev/null)" || {
+    NORTH_COORD_RUNTIME_OWNER_REASON='active generation selector cannot be resolved'
+    return 1
+  }
+  [ "$canonical_generation" = "$canonical_active" ] || {
+    NORTH_COORD_RUNTIME_OWNER_REASON='process generation is not the active runtime generation'
+    return 1
+  }
+  [ "$runtime_file" = "$canonical_generation/active.runtime" ] &&
+    [ -f "$runtime_file" ] && [ ! -L "$runtime_file" ] || {
+      NORTH_COORD_RUNTIME_OWNER_REASON='process runtime record is not the active generation record'
+      return 1
+    }
+  canonical_runtime_file="$(realpath -e "$runtime_file" 2>/dev/null)" || {
+    NORTH_COORD_RUNTIME_OWNER_REASON='active runtime record cannot be resolved'
+    return 1
+  }
+  [ "$canonical_runtime_file" = "$runtime_file" ] || {
+    NORTH_COORD_RUNTIME_OWNER_REASON='active runtime record path is not canonical'
+    return 1
+  }
+  record_stat="$(stat -c '%u:%a:%h' "$runtime_file" 2>/dev/null)" || {
+    NORTH_COORD_RUNTIME_OWNER_REASON='active runtime record metadata is unreadable'
+    return 1
+  }
+  [ "$record_stat" = "$EUID:600:1" ] || {
+    NORTH_COORD_RUNTIME_OWNER_REASON="active runtime record ownership/mode/link-count is unsafe: $record_stat"
+    return 1
+  }
+  expected_birth="$(north_coord_process_birth_token "$main_pid")" || {
+    NORTH_COORD_RUNTIME_OWNER_REASON='systemd MainPID birth identity is unreadable'
+    return 1
+  }
+
+  record_value="$(north_coord_runtime_record_value "$runtime_file" FORMAT 2>/dev/null)" &&
+    [ "$record_value" = north-fram-active-runtime/v1 ] || {
+      NORTH_COORD_RUNTIME_OWNER_REASON='active runtime record format is invalid'
+      return 1
+    }
+  record_value="$(north_coord_runtime_record_value "$runtime_file" GENERATION 2>/dev/null)" &&
+    [ "$record_value" = "$canonical_generation" ] || {
+      NORTH_COORD_RUNTIME_OWNER_REASON='active runtime record generation does not match the process generation'
+      return 1
+    }
+  record_value="$(north_coord_runtime_record_value "$runtime_file" PID 2>/dev/null)" &&
+    [ "$record_value" = "$main_pid" ] || {
+      NORTH_COORD_RUNTIME_OWNER_REASON='active runtime record PID does not match systemd MainPID'
+      return 1
+    }
+  record_value="$(north_coord_runtime_record_value "$runtime_file" PID_BIRTH 2>/dev/null)" &&
+    [ "$record_value" = "$expected_birth" ] || {
+      NORTH_COORD_RUNTIME_OWNER_REASON='active runtime record process birth does not match systemd MainPID'
+      return 1
+    }
+  record_value="$(north_coord_runtime_record_value "$runtime_file" OWNER_TOKEN 2>/dev/null)" &&
+    [ "$record_value" = "$owner_token" ] || {
+      NORTH_COORD_RUNTIME_OWNER_REASON='process owner token does not match the active runtime record'
+      return 1
+    }
+  record_value="$(north_coord_runtime_record_value "$runtime_file" CONTROLLER_UNIT 2>/dev/null)" &&
+    [ "$record_value" = north-coord.service ] || {
+      NORTH_COORD_RUNTIME_OWNER_REASON='active runtime record controller unit is invalid'
+      return 1
+    }
+  record_value="$(north_coord_runtime_record_value "$runtime_file" CONTROLLER_MAIN_PID 2>/dev/null)" &&
+    [ "$record_value" = "$main_pid" ] || {
+      NORTH_COORD_RUNTIME_OWNER_REASON='active runtime record controller PID does not match systemd MainPID'
+      return 1
+    }
+  return 0
+}
+
 north_coord_runtime_identity_is_valid() {
   local mode="$1" source="$2" revision="$3" tree="$4" origin="$5" daemon="$6" selector="$7"
   local canonical_source canonical_selector canonical_daemon expected_source
@@ -623,6 +762,72 @@ canonical_link() {
   else bad "$label resolves to '${got:-missing}', expected '$want'"; fi
 }
 
+immutable_store_link_matches() {
+  local link="$1" expected="$2" label="$3" resolved
+
+  if [ ! -L "$link" ]; then
+    bad "$label must be a generation-owned symlink"
+    return 1
+  fi
+  resolved="$(readlink -f "$link" 2>/dev/null || true)"
+  case "$resolved" in
+    /nix/store/*) ;;
+    *)
+      bad "$label resolves outside /nix/store: ${resolved:-missing}"
+      return 1
+      ;;
+  esac
+  if cmp -s "$resolved" "$expected"; then
+    ok_detail "$label is an exact generation-owned store copy"
+  else
+    bad "$label differs from the committed generation source"
+    return 1
+  fi
+}
+
+writable_claude_settings_match_control_plane() {
+  local live="$1" baseline="$2" label="$3" link_count
+
+  if [ ! -f "$live" ] || [ -L "$live" ] || [ ! -O "$live" ] || [ ! -w "$live" ]; then
+    bad "$label must be a writable, user-owned regular file"
+    return 1
+  fi
+  link_count="$(stat -c '%h' "$live" 2>/dev/null || true)"
+  if [ "$link_count" != 1 ]; then
+    bad "$label must not share writable inode state (link count: ${link_count:-unknown})"
+    return 1
+  fi
+  if python3 - "$live" "$baseline" <<'PY'
+import json
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    live = json.load(handle)
+with open(sys.argv[2], encoding="utf-8") as handle:
+    baseline = json.load(handle)
+
+if live.get("hooks") != baseline.get("hooks"):
+    raise SystemExit("live hook control plane differs from the committed seed")
+if live.get("statusLine") != baseline.get("statusLine"):
+    raise SystemExit("live statusLine differs from the committed seed")
+
+checkout_command = re.compile(r"/home/tom/code/(?:north|fram)/bin/")
+for event_groups in live.get("hooks", {}).values():
+    for group in event_groups:
+        for hook in group.get("hooks", []):
+            command = hook.get("command")
+            if isinstance(command, str) and checkout_command.search(command):
+                raise SystemExit(f"live hook uses mutable checkout command: {command}")
+PY
+  then
+    ok_detail "$label is writable runtime state with the generation-owned hook control plane"
+  else
+    bad "$label does not preserve the committed immutable hook control plane"
+    return 1
+  fi
+}
+
 if [ "${1:-}" = "$AGENT_CONFIG_BOUNDED_CHILD_MODE" ]; then
   shift
   probe_child_main "$@"
@@ -640,7 +845,6 @@ CODEX="$REPO/dotfiles/codex"
 LIVE_REPO="${AGENT_CONFIG_LIVE_REPO:-$HOME/code/nixos-config}"
 LIVE_SHARED="$LIVE_REPO/dotfiles/agents"
 LIVE_CLAUDE="$LIVE_REPO/dotfiles/claude"
-LIVE_CODEX="$LIVE_REPO/dotfiles/codex"
 LIVE_HERMES="$LIVE_REPO/dotfiles/hermes"
 CODEX_REQUIREMENTS="$REPO/modules/codex/requirements.toml"
 CODEX_LEGACY_HOOKS="${CODEX_LEGACY_HOOKS:-$CODEX/hooks.json}"
@@ -777,6 +981,15 @@ validate_hooks() {
       provider_marker="${BASH_REMATCH[1]}"
       command="${BASH_REMATCH[2]}"
     fi
+    if [ "$command" = '/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-clock-guard.sh' ]; then
+      if [ -n "$provider_marker" ]; then
+        bad "$provider $ev sets AGENT_PROVIDER on an unrelated hook: $raw_command"
+      else
+        immutable_north=1
+        ok_detail "$provider $ev → immutable managed clock guard"
+      fi
+      continue
+    fi
     if [[ "$command" =~ ^/run/current-system/sw/bin/bash[[:space:]]+(.+)$ ]]; then
       interpreter='/run/current-system/sw/bin/bash'
       command="${BASH_REMATCH[1]}"
@@ -812,6 +1025,17 @@ validate_hooks() {
             "$first" = /run/current-system/sw/bin/north-on-stop ]]; then
       immutable_north=1
       ok_detail "$provider $ev → immutable system package command $basename"
+    elif [ "$first" = /run/current-system/sw/bin/north-session-end ]; then
+      immutable_north=1
+      if [ "$LOCAL" -eq 0 ] || {
+           resolved="$(readlink -f "$first" 2>/dev/null || true)" &&
+           [[ "$resolved" = /nix/store/* ]] &&
+           cmp -s "$SHARED/hooks/north-session-end.sh" "$first";
+         }; then
+        ok_detail "$provider $ev → immutable generation command $basename"
+      else
+        bad "$provider $ev north-session-end is not the exact store-backed generation command"
+      fi
     elif [[ "$first" = /home/tom/code/north/bin/* ]]; then
       bad "$provider $ev uses mutable checkout North lifecycle command $first; use /run/current-system/sw/bin/$basename"
     elif [ "$declared_shared" -eq 1 ] && [ -x "$expected" ]; then
@@ -1060,6 +1284,18 @@ claude_fram_topology='topology deferred'
 claude_linear='connection deferred to --local'
 claude_gaffer='cache freshness deferred to --local'
 need_json "$CLAUDE/settings.json" 'Claude settings'
+if grep -Fq '(pkgs.writeText "claude-settings.json"' \
+     "$REPO/modules/claude/default.bnix" &&
+   grep -Fq ':home.activation.seedClaudeSettings' \
+     "$REPO/modules/claude/default.bnix" &&
+   grep -Fq '["writeBoundary" "seedClaudeSettings"]' \
+     "$REPO/modules/claude/default.bnix" &&
+   ! rg -q 'linkClaudeSettings|/code/nixos-config/dotfiles/claude/settings\.json' \
+     "$REPO/modules/claude/default.bnix" "$REPO/modules/claude/default.nix"; then
+  ok_detail 'Claude settings are atomically reseeded from each committed generation into writable state'
+else
+  bad 'Claude settings delivery must atomically reseed from the committed generation without a checkout link'
+fi
 if command -v shellcheck >/dev/null 2>&1 && shellcheck -S warning "$CLAUDE/statusline.sh"; then
   ok_detail "Claude statusline shellcheck"
 else bad "Claude statusline shellcheck failed"; fi
@@ -1131,18 +1367,20 @@ if jq -e '
   | ($commands | length) == 2
     and all(
       $commands[];
-      . == "/run/current-system/sw/bin/bash /home/tom/code/nixos-config/dotfiles/claude/hooks/north-clock-guard.sh"
+      . == "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-clock-guard.sh"
     )
 ' "$CLAUDE/settings.json" >/dev/null; then
-  ok_detail 'Claude clock guard uses root-managed exact Bash for both bindings'
+  ok_detail 'Claude clock guard uses the immutable managed runtime for both bindings'
 else
-  bad 'Claude clock guard must use root-managed exact Bash for both bindings'
+  bad 'Claude clock guard must use the immutable /etc/codex managed runtime for both bindings'
 fi
 require_manifest_guard_count "$CLAUDE/settings.json" Claude Bash 1 'user Bash topology guard is bound once'
 claude_bindings="$HOOK_BINDINGS"
 claude_hook_provenance="$HOOK_PROVENANCE_SUMMARY"
 if [ "$LOCAL" -eq 1 ]; then
-  canonical_link "$HOME/.claude/settings.json" "$LIVE_CLAUDE/settings.json" "$HOME/.claude/settings.json"
+  writable_claude_settings_match_control_plane \
+    "$HOME/.claude/settings.json" "$CLAUDE/settings.json" \
+    "$HOME/.claude/settings.json"
   canonical_link "$HOME/.claude/skills" "$LIVE_SHARED/skills" "$HOME/.claude/skills"
   canonical_link "$HOME/.claude/hooks" "$LIVE_SHARED/hooks" "$HOME/.claude/hooks"
   canonical_link "$HOME/.claude/CLAUDE.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.claude/CLAUDE.md"
@@ -1189,7 +1427,8 @@ if [ "$LOCAL" -eq 1 ]; then
   if command -v claude >/dev/null 2>&1; then
     claude_mcp_status=0
     claude_mcp_output="$(
-      run_claude_probe "${MCP_PROBE_TIMEOUT_SECONDS:-20}" mcp list 2>&1
+      CLAUDE_CONFIG_DIR="$HOME/.claude" \
+        run_claude_probe "${MCP_PROBE_TIMEOUT_SECONDS:-20}" mcp list 2>&1
     )" || claude_mcp_status=$?
     if [ "$claude_mcp_status" -eq 0 ]; then
       claude_mcp_exact=1
@@ -1214,7 +1453,8 @@ if [ "$LOCAL" -eq 1 ]; then
     gaffer_expected="$(jq -er '.nodes.gaffer.locked.rev | select(test("^[0-9a-f]{40}$"))' "$REPO/flake.lock" 2>/dev/null || true)"
     gaffer_plugin_probe_status=0
     gaffer_plugins="$(
-      run_claude_probe "${PLUGIN_PROBE_TIMEOUT_SECONDS:-15}" plugin list --json 2>/dev/null
+      CLAUDE_CONFIG_DIR="$HOME/.claude" \
+        run_claude_probe "${PLUGIN_PROBE_TIMEOUT_SECONDS:-15}" plugin list --json 2>/dev/null
     )" || gaffer_plugin_probe_status=$?
     if [ "$gaffer_plugin_probe_status" -eq 0 ] &&
        gaffer_version="$(jq -er '
@@ -1320,6 +1560,20 @@ provider_group Claude "$before" \
 before=$fail
 note_ignored_codex_legacy_manifest "$CODEX_LEGACY_HOOKS"
 need_toml "$CODEX/config.toml" 'Codex config'
+if grep -Fq '{:source (s flakeRoot "/dotfiles/codex/config.toml")}' \
+     "$REPO/modules/codex/default.bnix" &&
+   grep -Fq '{:source (s flakeRoot "/dotfiles/codex/hooks.json")}' \
+     "$REPO/modules/codex/default.bnix" &&
+   grep -Fq '".codex/config.toml".source = "${flakeRoot}/dotfiles/codex/config.toml";' \
+     "$REPO/modules/codex/default.nix" &&
+   grep -Fq '".codex/hooks.json".source = "${flakeRoot}/dotfiles/codex/hooks.json";' \
+     "$REPO/modules/codex/default.nix" &&
+   ! rg -q 'code/nixos-config/dotfiles/codex/(config\.toml|hooks\.json)' \
+     "$REPO/modules/codex/default.bnix" "$REPO/modules/codex/default.nix"; then
+  ok_detail 'Codex config and legacy hook state are generation-owned store sources'
+else
+  bad 'Codex config and legacy hook state must use the committed flake sources'
+fi
 validate_codex_managed_policy
 codex_bindings="${CODEX_MANAGED_BINDINGS:-invalid}"
 codex_hook_provenance="${CODEX_HOOK_PROVENANCE:-declaration drift detected}"
@@ -1353,13 +1607,18 @@ codex_fram_threads="$(sed -n '3p' <<<"$codex_fram_paths")"
 [ "$codex_fram_telemetry_log" = "$CANONICAL_FRAM_TELEMETRY_LOG" ] || bad "Codex Fram FRAM_TELEMETRY_LOG is '${codex_fram_telemetry_log:-unset}', expected '$CANONICAL_FRAM_TELEMETRY_LOG'"
 [ "$codex_fram_threads" = "$CANONICAL_FRAM_THREADS" ] || bad "Codex Fram FRAM_THREADS is '${codex_fram_threads:-unset}', expected '$CANONICAL_FRAM_THREADS'"
 if [ "$LOCAL" -eq 1 ]; then
-  canonical_link "$HOME/.codex/config.toml" "$LIVE_CODEX/config.toml" "$HOME/.codex/config.toml"
+  immutable_store_link_matches \
+    "$HOME/.codex/config.toml" "$CODEX/config.toml" "$HOME/.codex/config.toml"
+  immutable_store_link_matches \
+    "$HOME/.codex/hooks.json" "$CODEX/hooks.json" "$HOME/.codex/hooks.json"
   canonical_link "$HOME/.codex/AGENTS.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.codex/AGENTS.md"
   canonical_link "$HOME/.agents/skills" "$LIVE_SHARED/skills" "$HOME/.agents/skills"
   if command -v codex >/dev/null 2>&1; then
     codex_mcp_status=0
     mcp_output="$(
-      run_codex_probe "${MCP_PROBE_TIMEOUT_SECONDS:-20}" mcp list 2>&1
+      CODEX_HOME="$HOME/.codex" \
+      CODEX_SQLITE_HOME="$HOME/.codex/sqlite" \
+        run_codex_probe "${MCP_PROBE_TIMEOUT_SECONDS:-20}" mcp list 2>&1
     )" || codex_mcp_status=$?
     if [ "$codex_mcp_status" -eq 0 ]; then
       for server in north fram linear-mcp-msa-new; do
@@ -1621,9 +1880,14 @@ if [ "$LOCAL" -eq 1 ]; then
         north_coord_ok=0
         bad "north-coord runtime identity is invalid: ${NORTH_COORD_RUNTIME_IDENTITY_REASON:-missing identity}"
       fi
-      if grep -q '^FRAM_RUNTIME_OWNER_TOKEN=' <<<"$north_coord_process_env"; then
+      north_coord_active_generation="$HOME/.local/state/north/fram-runtime/active"
+      if north_coord_runtime_record_owner_is_valid \
+           "$north_coord_process_env" "$north_coord_pid" \
+           "$north_coord_active_generation"; then
+        ok_detail "north-coord owner token matches the active runtime record for systemd MainPID"
+      else
         north_coord_ok=0
-        bad "north-coord systemd service carries a direct-launch owner token"
+        bad "north-coord runtime ownership record is invalid: ${NORTH_COORD_RUNTIME_OWNER_REASON:-missing identity}"
       fi
       if [ ! -r "/proc/$north_coord_pid/cgroup" ] ||
          ! grep -Eq '^[^:]*:[^:]*:/system\.slice/north-coord\.service(/|$)' "/proc/$north_coord_pid/cgroup"; then

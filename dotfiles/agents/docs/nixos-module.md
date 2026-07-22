@@ -14,20 +14,29 @@ Why everything routes through nixos-config (reproducibility rule, CI
 validation, hooks kill-switch):
 `~/code/nixos-config/dotfiles/agents/docs/nixos-config-rules.md`.
 
-## settings.json is a WRITABLE symlink — load-bearing
+## settings.json is WRITABLE runtime state seeded by the generation
 
-`linkClaudeSettings` points `~/.claude/settings.json` **directly** at
-`~/code/nixos-config/dotfiles/claude/settings.json`, bypassing the nix store,
-so Claude Code can atomic-write it (`settings.json.tmp` + rename). If it ever
-reverts to a `/nix/store/…` symlink, `claude plugin install` dies with
-`EROFS: read-only file system`. `installCaveman` is ordered
-`entryAfter ["writeBoundary" "linkClaudeSettings"]` for exactly this reason —
-settings must be writable before the plugin CLI touches it.
+`seedClaudeSettings` materializes the committed
+`~/code/nixos-config/dotfiles/claude/settings.json` snapshot from the evaluated
+generation into `~/.claude/settings.json` as a **regular writable file**. It
+atomically replaces missing, legacy-symlink, and existing regular targets on
+every activation. That makes future committed settings changes converge while
+removing the live dependency on a mutable checkout. Claude still owns a normal
+writable file between activations, so `/effort`, plugin enablement, and other
+atomic runtime writes continue to work.
 
-Cost of the writable symlink: every `claude plugin install/uninstall/enable`
-**reserializes** `~/code/nixos-config/dotfiles/claude/settings.json` (reorders
-keys) → a tracked diff. Pure reorder, no content change. Commit it or discard
-it; it recurs on the next plugin op. Not worth fighting.
+The initializer takes an adjacent process lock and stages a complete validated
+JSON file before one rename. A crash before rename leaves the old state intact;
+the next activation reclaims only its exact stage and retries. There is no
+sidecar seed marker or merge: the evaluated generation is authoritative at
+activation, then the regular runtime file belongs to Claude until the next
+generation activation. Plugin install and Gaffer reconciliation deliberately
+run after reseeding so supported plugin state is restored in the same DAG.
+
+If the runtime target ever becomes a `/nix/store/…` symlink, `claude plugin
+install` dies with `EROFS: read-only file system`. `installCaveman` is ordered
+`entryAfter ["writeBoundary" "seedClaudeSettings"]` so the writable regular
+file exists before the plugin CLI touches it.
 
 The statusLine is wired in **settings.json, not plugin.json** — Claude Code
 plugins cannot own `statusLine`. It points at
@@ -43,7 +52,7 @@ by default. Merely declaring a Gaffer directory marketplace in
 `~/code/nixos-config/dotfiles/claude/settings.json` therefore does not make a
 new Claude session consume a newer Gaffer commit.
 
-`syncGafferPlugin` runs after `linkClaudeSettings` on every `firn rebuild`. It
+`syncGafferPlugin` runs after `seedClaudeSettings` on every `firn rebuild`. It
 executes `~/code/nixos-config/scripts/claude-gaffer-plugin-sync.sh` from the
 evaluated snapshot and receives the exact `inputs.gaffer.rev` that entered the
 built closure. The script resolves that object from `~/code/gaffer` and

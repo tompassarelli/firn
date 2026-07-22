@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/claude/hooks/north-session-end.sh",
+            "command": "/run/current-system/sw/bin/north-session-end",
             "timeout": 15
           }
         ]
@@ -79,7 +79,7 @@
           },
           {
             "type": "command",
-            "command": "/run/current-system/sw/bin/bash /home/tom/code/nixos-config/dotfiles/claude/hooks/north-clock-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-clock-guard.sh",
             "timeout": 10
           }
         ]
@@ -104,7 +104,7 @@
           },
           {
             "type": "command",
-            "command": "/run/current-system/sw/bin/bash /home/tom/code/nixos-config/dotfiles/claude/hooks/north-clock-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-clock-guard.sh",
             "timeout": 10
           }
         ]

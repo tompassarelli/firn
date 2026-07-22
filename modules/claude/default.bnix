@@ -19,6 +19,18 @@
         framPkg
          (get (get inputs.fram.packages pkgs.stdenv.hostPlatform.system) :default)
         gafferRev inputs.gaffer.rev
+        claudeSettingsSeed
+         (pkgs.writeText "claude-settings.json"
+           (builtins.readFile
+             (s flakeRoot "/dotfiles/claude/settings.json")))
+        claudeSettingsSeeder
+         (pkgs.writeShellScript "claude-settings-seed"
+           (builtins.readFile
+             (s flakeRoot "/scripts/claude-settings-seed.sh")))
+        northSessionEnd
+         (pkgs.writeShellScriptBin "north-session-end"
+           (builtins.readFile
+             (s flakeRoot "/dotfiles/agents/hooks/north-session-end.sh")))
         gafferPluginSync
          (pkgs.writeShellScript "claude-gaffer-plugin-sync"
            (builtins.readFile
@@ -32,7 +44,7 @@
       (lib.mkEnableOption "Claude Code CLI configuration")
      :config
       (lib.mkIf config.myConfig.modules.claude.enable
-        {:environment.systemPackages [claudePackage]
+        {:environment.systemPackages [claudePackage northSessionEnd]
          :home-manager.users
           {username
             (nix/module [config ...]
@@ -76,24 +88,34 @@
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
                         "/code/nixos-config/dotfiles/caveman/config.json"))}}
-               ;; caveman plugin install: enablement lives in settings.json, but the
-               ;; on-disk cache (~/.claude/plugins/cache) is runtime state. Best-effort,
-               ;; timeout-bounded, || true so it never fails the rebuild.
-               ;; config.lib.dag = inner home-manager lib — NOT lib.hm: the 2026-05 HM
-               ;; bump stopped extending the outer NixOS lib with .hm (attribute 'hm' missing).
-               ;; Direct symlink — bypasses nix store intermediary so
-               ;; Claude Code can atomic-write (settings.json.tmp) next to the target.
-               :home.activation.linkClaudeSettings
+               ;; Atomically seed settings from this exact generation into a
+               ;; writable regular file. Claude may mutate it at runtime; the next
+               ;; generation converges it before plugin reconciliation runs.
+               :home.activation.seedClaudeSettings
                 (config.lib.dag.entryAfter ["writeBoundary"]
-                  (s "run ln -sfn "
-                     config.home.homeDirectory
-                     "/code/nixos-config/dotfiles/claude/settings.json"
+                  (s "run env INSTALL_BIN="
+                     pkgs.coreutils
+                     "/bin/install MKDIR_BIN="
+                     pkgs.coreutils
+                     "/bin/mkdir MV_BIN="
+                     pkgs.coreutils
+                     "/bin/mv REALPATH_BIN="
+                     pkgs.coreutils
+                     "/bin/realpath RM_BIN="
+                     pkgs.coreutils
+                     "/bin/rm FLOCK_BIN="
+                     pkgs.util-linux
+                     "/bin/flock JQ_BIN="
+                     pkgs.jq
+                     "/bin/jq "
+                     claudeSettingsSeeder
+                     " "
+                     claudeSettingsSeed
                      " $HOME/.claude/settings.json\n"))
-               ;; Runs AFTER linkClaudeSettings so settings.json is a writable
-               ;; symlink — `claude plugin install` atomic-writes it (EROFS if it
-               ;; still points at the read-only nix store).
+               ;; Runs AFTER seedClaudeSettings so settings.json is a writable
+               ;; regular file before `claude plugin install` atomically rewrites it.
                :home.activation.installCaveman
-                (config.lib.dag.entryAfter ["writeBoundary" "linkClaudeSettings"]
+                (config.lib.dag.entryAfter ["writeBoundary" "seedClaudeSettings"]
                   (s "CLAUDE=" claudePackage "/bin/claude\n"
                      ;; Bump WANT together with the fork's .claude-plugin/
                      ;; marketplace.json pin: it's the first 12 chars of the
@@ -129,7 +151,7 @@
                ;; supported update/install surface; never edit cache JSON.
                :home.activation.syncGafferPlugin
                 (config.lib.dag.entryAfter
-                  ["writeBoundary" "linkClaudeSettings" "installCaveman"]
+                  ["writeBoundary" "seedClaudeSettings" "installCaveman"]
                   (s "if ! run env CLAUDE_BIN="
                      claudePackage
                      "/bin/claude GIT_BIN="

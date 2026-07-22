@@ -466,6 +466,84 @@ if north_coord_listener_set_matches_mainpid 42 99 ||
   exit 1
 fi
 
+# A systemd-launched selector deliberately passes an owner token to Fram. The
+# token is valid only when it is UUID-shaped and bound to the active generation's
+# sealed runtime record, exact MainPID, process birth, and controller identity.
+owner_state="$scratch/runtime-owner-state"
+owner_generation="$owner_state/generations/g1"
+owner_record="$owner_generation/active.runtime"
+owner_token='00000000-0000-0000-0000-000000000001'
+owner_birth="$(north_coord_process_birth_token "$$")"
+mkdir -p "$owner_generation"
+ln -s generations/g1 "$owner_state/active"
+printf '%s\n' \
+  'FORMAT=north-fram-active-runtime/v1' \
+  "GENERATION=$owner_generation" \
+  "PID=$$" \
+  "PID_BIRTH=$owner_birth" \
+  "OWNER_TOKEN=$owner_token" \
+  'CONTROLLER_UNIT=north-coord.service' \
+  "CONTROLLER_MAIN_PID=$$" \
+  >"$owner_record"
+chmod 600 "$owner_record"
+owner_process_env="$(printf '%s\n' \
+  "FRAM_RUNTIME_OWNER_TOKEN=$owner_token" \
+  "NORTH_COORD_RUNTIME_GENERATION=$owner_generation" \
+  "NORTH_COORD_RUNTIME_FILE=$owner_record")"
+north_coord_runtime_record_owner_is_valid \
+  "$owner_process_env" "$$" "$owner_state/active"
+
+bad_owner_env="${owner_process_env/$owner_token/not-a-uuid}"
+if north_coord_runtime_record_owner_is_valid \
+   "$bad_owner_env" "$$" "$owner_state/active"; then
+  printf 'malformed coordinator owner token was accepted\n' >&2
+  exit 1
+fi
+grep -Fq 'not a lowercase UUID' <<<"$NORTH_COORD_RUNTIME_OWNER_REASON"
+
+mismatched_owner='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+bad_owner_env="${owner_process_env/$owner_token/$mismatched_owner}"
+if north_coord_runtime_record_owner_is_valid \
+   "$bad_owner_env" "$$" "$owner_state/active"; then
+  printf 'coordinator owner token outside the active record was accepted\n' >&2
+  exit 1
+fi
+grep -Fq 'does not match the active runtime record' \
+  <<<"$NORTH_COORD_RUNTIME_OWNER_REASON"
+
+cp "$owner_record" "$scratch/owner-record-good"
+sed -i "s/^CONTROLLER_MAIN_PID=.*/CONTROLLER_MAIN_PID=$(( $$ + 1 ))/" \
+  "$owner_record"
+if north_coord_runtime_record_owner_is_valid \
+   "$owner_process_env" "$$" "$owner_state/active"; then
+  printf 'runtime record owned by another controller PID was accepted\n' >&2
+  exit 1
+fi
+grep -Fq 'controller PID does not match systemd MainPID' \
+  <<<"$NORTH_COORD_RUNTIME_OWNER_REASON"
+mv "$scratch/owner-record-good" "$owner_record"
+chmod 600 "$owner_record"
+
+mkdir -p "$owner_state/generations/g2"
+ln -sfn generations/g2 "$owner_state/active"
+if north_coord_runtime_record_owner_is_valid \
+   "$owner_process_env" "$$" "$owner_state/active"; then
+  printf 'inactive coordinator runtime generation was accepted\n' >&2
+  exit 1
+fi
+grep -Fq 'not the active runtime generation' \
+  <<<"$NORTH_COORD_RUNTIME_OWNER_REASON"
+ln -sfn generations/g1 "$owner_state/active"
+
+printf '%s\n' "OWNER_TOKEN=$owner_token" >>"$owner_record"
+if north_coord_runtime_record_owner_is_valid \
+   "$owner_process_env" "$$" "$owner_state/active"; then
+  printf 'runtime record with duplicate owner identity was accepted\n' >&2
+  exit 1
+fi
+grep -Fq 'does not match the active runtime record' \
+  <<<"$NORTH_COORD_RUNTIME_OWNER_REASON"
+
 # Ordinary North/MCP execute the exact package. Only explicit *-dev wrappers
 # delegate checkout execution through the runtime selector.
 [ "$(grep -c 'exec /run/current-system/sw/bin/north-coord-runtime exec-checkout' \
@@ -496,6 +574,67 @@ canonical_link \
   "$live_root/dotfiles/codex/config.toml" \
   'worktree-independent live config'
 [ "$fail" -eq 0 ]
+
+store_target="$(readlink -f /run/current-system/sw/bin/true)"
+cp "$store_target" "$scratch/store-copy-expected"
+chmod u+w "$scratch/store-copy-expected"
+ln -s "$store_target" "$scratch/store-copy-link"
+immutable_store_link_matches \
+  "$scratch/store-copy-link" "$scratch/store-copy-expected" \
+  'generation-owned fixture'
+[ "$fail" -eq 0 ]
+printf 'drift\n' >>"$scratch/store-copy-expected"
+if immutable_store_link_matches \
+   "$scratch/store-copy-link" "$scratch/store-copy-expected" \
+   'generation-owned drift fixture' 2>/dev/null; then
+  printf 'store-backed copy drift was accepted\n' >&2
+  exit 1
+fi
+[ "$fail" -eq 1 ]
+fail=0
+details=()
+grep -Fq 'CODEX_HOME="$HOME/.codex"' "$REPO/scripts/agent-config-check.sh"
+grep -Fq 'CODEX_SQLITE_HOME="$HOME/.codex/sqlite"' \
+  "$REPO/scripts/agent-config-check.sh"
+
+claude_runtime_settings="$scratch/claude-runtime-settings.json"
+cp "$REPO/dotfiles/claude/settings.json" "$claude_runtime_settings"
+chmod 600 "$claude_runtime_settings"
+writable_claude_settings_match_control_plane \
+  "$claude_runtime_settings" "$REPO/dotfiles/claude/settings.json" \
+  'writable Claude fixture'
+[ "$fail" -eq 0 ]
+jq '.enabledPlugins["runtime-only@test"] = true' \
+  "$claude_runtime_settings" >"$scratch/claude-runtime-settings.next"
+mv "$scratch/claude-runtime-settings.next" "$claude_runtime_settings"
+writable_claude_settings_match_control_plane \
+  "$claude_runtime_settings" "$REPO/dotfiles/claude/settings.json" \
+  'mutated writable Claude fixture'
+[ "$fail" -eq 0 ]
+ln -s "$REPO/dotfiles/claude/settings.json" "$scratch/claude-settings-link"
+if writable_claude_settings_match_control_plane \
+   "$scratch/claude-settings-link" "$REPO/dotfiles/claude/settings.json" \
+   'symlinked Claude fixture' 2>/dev/null; then
+  printf 'symlinked writable Claude settings were accepted\n' >&2
+  exit 1
+fi
+[ "$fail" -eq 1 ]
+fail=0
+details=()
+jq '(.hooks.SessionEnd[0].hooks[0].command) = "/home/tom/code/north/bin/north-on-stop"' \
+  "$claude_runtime_settings" >"$scratch/claude-runtime-settings.next"
+mv "$scratch/claude-runtime-settings.next" "$claude_runtime_settings"
+if writable_claude_settings_match_control_plane \
+   "$claude_runtime_settings" "$REPO/dotfiles/claude/settings.json" \
+   'checkout-backed Claude fixture' 2>/dev/null; then
+  printf 'checkout-backed Claude hook control plane was accepted\n' >&2
+  exit 1
+fi
+[ "$fail" -eq 1 ]
+fail=0
+details=()
+grep -Fq 'CLAUDE_CONFIG_DIR="$HOME/.claude"' \
+  "$REPO/scripts/agent-config-check.sh"
 grep -q ':ExecStartPre \[(s northCoordRuntime "/bin/north-coord-runtime ensure-default")' \
   "$REPO/modules/north-coord/default.bnix"
 grep -q ':ExecStartPost (s northCoordRuntime "/bin/north-coord-runtime settle")' \
