@@ -1866,9 +1866,13 @@ def fold_facts(logs: list[str]) -> dict[tuple[str, str], tuple[str, int]]:
     # 1s p95 / 2s max budget. Replace it with an indexed coordinator query
     # before either threshold is reached; the Codex adapter's 3s child deadline
     # is an outer safety net, not a target.
-    events: list[tuple[int, str, str, str, str]] = []
-    seen_transactions: set[int] = set()
-    for path in logs:
+    events: list[tuple[int, int, str, str, str, str]] = []
+    for source_index, path in enumerate(logs):
+        # Transaction ids are ordered within one append log, not globally
+        # unique across the coordination/telemetry corpus.  Keep the source in
+        # the event order so equal ids retain the configured log order used by
+        # North's stable merge replay.
+        seen_transactions: set[int] = set()
         with open(path, encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, 1):
                 if not line.strip():
@@ -1905,6 +1909,7 @@ def fold_facts(logs: list[str]) -> dict[tuple[str, str], tuple[str, int]]:
                 events.append(
                     (
                         transaction,
+                        source_index,
                         subject_match.group(1),
                         predicate,
                         operation_match.group(1),
@@ -1912,7 +1917,7 @@ def fold_facts(logs: list[str]) -> dict[tuple[str, str], tuple[str, int]]:
                     )
                 )
     state: dict[tuple[str, str], tuple[str, int]] = {}
-    for transaction, subject, predicate, operation, value in sorted(events):
+    for transaction, _source, subject, predicate, operation, value in sorted(events):
         key = (subject, predicate)
         if operation == "assert":
             state[key] = (value, transaction)

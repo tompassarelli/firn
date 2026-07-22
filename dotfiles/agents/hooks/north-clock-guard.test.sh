@@ -1432,7 +1432,9 @@ run_default() {
   assert_fact 120 '@live-thread' title 'MSA-321 live'
 } > "$DEFAULT_STATE/coordination.log"
 {
-  assert_fact 103 '@live-client-session' kind client_session
+  # Transaction ids are scoped to their source log: tx 101 also exists in the
+  # coordination log and must not make the combined corpus unavailable.
+  assert_fact 101 '@live-client-session' kind client_session
   assert_fact 104 '@live-client-session' owner msa
   assert_fact 105 '@live-client-session' clocked_by user
   assert_fact 106 '@live-client-session' rate 175
