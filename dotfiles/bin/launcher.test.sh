@@ -22,13 +22,24 @@ trap 'rm -rf "$SCRATCH"' EXIT
 #     genuine rather than masked by the ambient system north on PATH. ---
 BIN="$SCRATCH/bin"      # coreutils + jq + fake real CLIs (always on PATH)
 NBIN="$SCRATCH/nbin"    # holds the stub `north` (added to PATH only when present)
+GIT_CALLS="$SCRATCH/git.calls"
 mkdir -p "$BIN" "$NBIN"
-for tool in env bash realpath jq find sort sed head mktemp paste rm cat git; do
+for tool in env bash realpath jq find sort sed head mktemp paste rm cat; do
   real="$(command -v "$tool" 2>/dev/null)" || { echo "missing host tool: $tool" >&2; exit 2; }
   # Link straight to the resolved command-v path; do NOT depend on `readlink`
   # (agent-config-check.test.sh runs this under a readlink-fails shim).
   ln -s "$real" "$BIN/$tool"
 done
+
+# Tripwire Git instead of omitting it: production launchers must not inspect a
+# checkout at all, even when Git is present and inherited state could tempt a
+# main-worktree discovery path.
+cat >"$BIN/git" <<'GIT'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${GIT_CALLS:?}"
+exit 97
+GIT
+chmod +x "$BIN/git"
 
 # Stub north: env-driven so one script covers every backend outcome.
 cat >"$NBIN/north" <<'NORTH'
@@ -106,6 +117,7 @@ run() {
   [ "$with_north" = 1 ] && path="$NBIN:$BIN"
   RECORD="$SCRATCH/record"; rm -f "$RECORD"
   STDERR="$(env -i "HOME=$HOME_DIR" "PATH=$path" "REAL_RECORD=$RECORD" \
+    "GIT_CALLS=$GIT_CALLS" \
     "${envv[@]}" bash "$HERE/$launcher" "${argv[@]}" 2>&1 1>/dev/null)"
 }
 record_field() { sed -n "s/^$2=//p" "$RECORD"; }
@@ -295,22 +307,26 @@ JSON
   checkout_record="$SCRATCH/$launcher-checkout-record"
 
   # 10. The default production snapshot carries no checkout selector.
-  rm -f "$checkout_record"
+  rm -f "$checkout_record" "$GIT_CALLS"
   run "$launcher" 1 "NORTH_JSON=$eligible" "NORTH_CHECKOUT_RECORD=$checkout_record" -- ; s="$STDERR"
   check "$launcher/ordinary snapshot leaves NORTH_CHECKOUT unset" \
     test "$(cat "$checkout_record" 2>/dev/null)" = "<unset>"
   check "$launcher/ordinary snapshot still selects an account" \
     contains "$s" "[$launcher → acctA]"
+  check "$launcher/ordinary snapshot performs no checkout discovery" \
+    test ! -e "$GIT_CALLS"
 
   # 11. Stale caller residue cannot steer an ordinary launcher into a checkout.
   explicit_checkout="/explicit/caller/checkout"
-  rm -f "$checkout_record"
+  rm -f "$checkout_record" "$GIT_CALLS"
   run "$launcher" 1 "NORTH_JSON=$eligible" "NORTH_CHECKOUT_RECORD=$checkout_record" \
     "NORTH_CHECKOUT=$explicit_checkout" -- ; s="$STDERR"
   check "$launcher/ordinary snapshot scrubs inherited NORTH_CHECKOUT" \
     test "$(cat "$checkout_record" 2>/dev/null)" = "<unset>"
   check "$launcher/scrubbed snapshot still selects an account" \
     contains "$s" "[$launcher → acctA]"
+  check "$launcher/scrubbed snapshot performs no checkout discovery" \
+    test ! -e "$GIT_CALLS"
 done
 
 # Real parser smoke: a config-layer Codex default and a later user --model must
