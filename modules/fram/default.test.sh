@@ -34,17 +34,19 @@ assert_list() {
   fi
 }
 
-live=$'fram\nfram-daemon\nfram-mcp\nfram-primer\nfram-up\nfram-code-author'
+dev=$'fram\nfram-daemon\nfram-mcp\nfram-primer\nfram-up\nfram-code-author'
 packaged=$'fram\nfram-daemon\nfram-mcp\nfram-primer'
 
 for file in "$SOURCE" "$GENERATED"; do
-  assert_list "$file" liveCommandNames "$live"
+  assert_list "$file" devCommandNames "$dev"
   assert_list "$file" packagedCommandNames "$packaged"
 done
 
-grep -Fq 'liveCommands (builtins.map mkLive liveCommandNames)' "$SOURCE"
+grep -Fq 'devCommands (builtins.map mkDev devCommandNames)' "$SOURCE"
 grep -Fq 'packagedCommands (builtins.map mkPackaged packagedCommandNames)' "$SOURCE"
-grep -Fq 'liveCommands = builtins.map mkLive liveCommandNames;' "$GENERATED"
+grep -Fq 'devCommands = builtins.map mkDev devCommandNames;' "$GENERATED"
 grep -Fq 'packagedCommands = builtins.map mkPackaged packagedCommandNames;' "$GENERATED"
+grep -Fq 'provenance=checkout path=$target' "$SOURCE"
+grep -Fq '++ [framPkg] devCommands packagedCommands' "$SOURCE"
 
-printf 'ok: Fram keeps six checkout commands and exposes four packaged core fallbacks\n'
+printf 'ok: Fram ordinary core is packaged and six checkout commands are explicit *-dev surfaces\n'

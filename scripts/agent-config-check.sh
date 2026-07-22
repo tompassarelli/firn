@@ -192,6 +192,27 @@ if actual != expected:
 PY
 }
 
+codex_mcp_commands_are_immutable() {
+  python3 - "$1" <<'PY'
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as handle:
+    config = tomllib.load(handle)
+
+expected = {
+    "north": "/run/current-system/sw/bin/north-mcp",
+    "fram": "/run/current-system/sw/bin/fram-mcp",
+}
+servers = config.get("mcp_servers", {})
+for name, command in expected.items():
+    actual = servers.get(name, {}).get("command")
+    if actual != command:
+        print(f"{name}: expected {command}, observed {actual!r}", file=sys.stderr)
+        raise SystemExit(1)
+PY
+}
+
 declare -A LIVE_HOOK_TARGET_BY_ROLE=()
 declare -A LIVE_HOOK_HASH_BY_ROLE=()
 
@@ -1280,6 +1301,13 @@ codex_linear='auth probe deferred to --local'
 grep -q '^\[mcp_servers\.north\]' "$CODEX/config.toml" || bad "Codex config does not declare North MCP"
 grep -q '^\[mcp_servers\.fram\]' "$CODEX/config.toml" || bad "Codex config does not declare Fram MCP"
 grep -q '^\[mcp_servers\.linear-mcp-msa-new\]' "$CODEX/config.toml" || bad "Codex config does not declare Linear MCP"
+if codex_mcp_command_error="$(codex_mcp_commands_are_immutable "$CODEX/config.toml" 2>&1)"; then
+  ok_detail "Codex North + Fram MCP commands use immutable system-generation executables"
+else
+  codex_north='declared; mutable command drift detected'
+  codex_fram='declared; mutable command drift detected'
+  bad "Codex MCP command is not immutable: $codex_mcp_command_error"
+fi
 codex_north_env_ok=0
 if codex_north_env_error="$(codex_north_env_is_canonical "$CODEX/config.toml" 2>&1)"; then
   codex_north_env_ok=1

@@ -2,13 +2,9 @@
 
 (ns default)
 
-;; Personal development mode is checkout-first for Fram's six live commands.
-;; Shell/Clojure/script edits are immediate; .bclj edits require
-;; ~/code/fram/build.sh to refresh out/ before the runtime changes. The pinned
-;; package remains at low priority for core runtime compatibility, while explicit
-;; *-packaged commands expose only the four hermetic core programs. Checkout-only
-;; authoring and process-control helpers never masquerade as packaged fallbacks.
-;; A missing checkout is an error, never an implicit stale fallback.
+;; Fram's ordinary core commands come directly from the exact flake package.
+;; Mutable checkout execution is available only through explicit *-dev names,
+;; which report their provenance before handing control to the checkout.
 (nix/module [config lib pkgs inputs ...]
   (let
     [framPkg
@@ -18,43 +14,39 @@
         (nix/with pkgs [babashka clojure jdk coreutils bash gnused gnugrep git])
         (lib.optionals pkgs.stdenv.hostPlatform.isLinux
           (nix/with pkgs [iproute2])))
-     liveCommandNames
+     devCommandNames
       ["fram" "fram-daemon" "fram-mcp" "fram-primer" "fram-up"
        "fram-code-author"]
      packagedCommandNames
       ["fram" "fram-daemon" "fram-mcp" "fram-primer"]
-     mkLive
+     mkDev
       (fn [name]
-        (lib.hiPrio
-          (pkgs.writeShellApplication
-            {:name name
+        (pkgs.writeShellApplication
+            {:name (s name "-dev")
              :runtimeInputs liveInputs
              :text
               (ms "checkout=${FRAM_CHECKOUT:-$HOME/code/fram}"
                   (s "target=$checkout/bin/" name)
                   "if [ ! -x \"$target\" ]; then"
-                  (s "  echo \"" name
-                     ": live checkout executable missing: $target\" >&2")
-                  (s "  echo \"" name
-                     ": restore that checkout; pinned fallbacks are limited to "
-                     "fram[-daemon|-mcp|-primer]-packaged\" >&2")
+                  (s "  echo \"" name "-dev: checkout executable missing: $target\" >&2")
                   "  exit 127"
                   "fi"
-                  "exec \"$target\" \"$@\"")})))
+                  (s "echo \"" name "-dev: provenance=checkout path=$target\" >&2")
+                  "exec \"$target\" \"$@\"")}))
      mkPackaged
       (fn [name]
         (pkgs.writeShellApplication
           {:name (s name "-packaged")
            :text (ms (s "exec " framPkg "/bin/" name " \"$@\""))}))
-     liveCommands (builtins.map mkLive liveCommandNames)
+     devCommands (builtins.map mkDev devCommandNames)
      packagedCommands (builtins.map mkPackaged packagedCommandNames)]
     {:tags [development]
      :flake-inputs
       {:fram {:url "git+file:///home/tom/code/fram?ref=main"}}
      :options.myConfig.modules.fram.enable
       (lib.mkEnableOption
-        "checkout-first Fram development commands with pinned core-command fallbacks")
+        "immutable Fram core commands with explicit checkout-only development commands")
      :config
       (lib.mkIf config.myConfig.modules.fram.enable
         {:environment.systemPackages
-          (++ liveCommands packagedCommands [(lib.lowPrio framPkg)])})}))
+          (++ [framPkg] devCommands packagedCommands)})}))

@@ -46,7 +46,10 @@ in
         User = username;
         WorkingDirectory = homeDir;
         ExecCondition = "${northCoordRuntime}/bin/north-coord-runtime preflight";
-        ExecStartPre = "${northCoordRuntime}/bin/north-coord-runtime prepare";
+        ExecStartPre = [
+          "${northCoordRuntime}/bin/north-coord-runtime package"
+          "${northCoordRuntime}/bin/north-coord-runtime prepare"
+        ];
         ExecStart = "${northCoordRuntime}/bin/north-coord-runtime start";
         ExecStartPost = "${northCoordRuntime}/bin/north-coord-runtime settle";
         Restart = "always";

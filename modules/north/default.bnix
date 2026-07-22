@@ -2,12 +2,9 @@
 
 (ns default)
 
-;; Interactive development surfaces are checkout-first: the ordinary CLI, MCP,
-;; and lifecycle hooks exercise ~/code/north so source/output iteration is
-;; immediate. Explicit *-packaged commands probe the exact promoted closure.
-;; The ordinary wrappers share north-coord's exact selected Fram deployment;
-;; direct source launch remains the distinct mutable development surface.
-;; North's retired web service is not part of this deployment surface.
+;; Ordinary North and MCP commands execute the exact flake package selected by
+;; the system generation. Mutable checkout execution is an explicit development
+;; surface with visible provenance; it never masquerades as a production name.
 (nix/module [config lib pkgs inputs ...]
   (let
     [northPkg
@@ -20,35 +17,33 @@
         {:name "north-runtime-owner-guard"
          :runtimeInputs (nix/with pkgs [bash coreutils])
          :text (builtins.readFile (p "./north-runtime-owner-guard"))})
-     northLive
+     northProduction
       (pkgs.writeShellApplication
         {:name "north"
-         :runtimeInputs liveInputs
          :text
-          (ms "checkout=${NORTH_CHECKOUT:-$HOME/code/north}"
-              "target=$checkout/bin/north"
-              (s northRuntimeOwnerGuard "/bin/north-runtime-owner-guard \"$@\"")
-              "if [ ! -x \"$target\" ]; then"
-              "  echo \"north: live checkout executable missing: $target\" >&2"
-              "  echo \"north: restore that checkout or use north-packaged for the pinned closure\" >&2"
-              "  exit 127"
-              "fi"
-              (s "export NORTH_MANAGED_CODEX_BIN='" codexPkg "/bin/codex'")
-              "exec /run/current-system/sw/bin/north-coord-runtime exec-checkout \"$target\" \"$@\"")})
-     northMcpLive
+          (ms (s northRuntimeOwnerGuard "/bin/north-runtime-owner-guard \"$@\"")
+              (s "exec " northPkg "/bin/north \"$@\""))})
+     northMcpProduction
       (pkgs.writeShellApplication
         {:name "north-mcp"
+         :text (ms (s "exec " northPkg "/bin/north-mcp \"$@\""))})
+     mkDev
+      (fn [name]
+        (pkgs.writeShellApplication
+          {:name (s name "-dev")
          :runtimeInputs liveInputs
          :text
           (ms "checkout=${NORTH_CHECKOUT:-$HOME/code/north}"
-              "target=$checkout/bin/north-mcp"
+              (s "target=$checkout/bin/" name)
               "if [ ! -x \"$target\" ]; then"
-              "  echo \"north-mcp: live checkout executable missing: $target\" >&2"
-              "  echo \"north-mcp: restore that checkout or use north-mcp-packaged for the pinned closure\" >&2"
+              (s "  echo \"" name "-dev: checkout executable missing: $target\" >&2")
               "  exit 127"
               "fi"
+              (s "echo \"" name "-dev: provenance=checkout path=$target\" >&2")
               (s "export NORTH_MANAGED_CODEX_BIN='" codexPkg "/bin/codex'")
-              "exec /run/current-system/sw/bin/north-coord-runtime exec-checkout \"$target\" \"$@\"")})
+              "exec /run/current-system/sw/bin/north-coord-runtime exec-checkout \"$target\" \"$@\"")}))
+     northDev (mkDev "north")
+     northMcpDev (mkDev "north-mcp")
      northPackaged
       (pkgs.writeShellApplication
         {:name "north-packaged"
@@ -69,8 +64,9 @@
                :inputs.nixpkgs-master.follows "nixpkgs-master"}}
      :options.myConfig.modules.north.enable
       (lib.mkEnableOption
-        "checkout-first North CLI/MCP with explicit packaged smoke commands")
+        "immutable North CLI/MCP with explicit checkout-only development commands")
      :config
       (lib.mkIf config.myConfig.modules.north.enable
         {:environment.systemPackages
-          [northLive northMcpLive northPackaged northMcpPackaged]})}))
+          [northProduction northMcpProduction northDev northMcpDev
+           northPackaged northMcpPackaged]})}))

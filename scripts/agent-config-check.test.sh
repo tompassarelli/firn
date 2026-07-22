@@ -463,12 +463,12 @@ if north_coord_listener_set_matches_mainpid 42 99 ||
   exit 1
 fi
 
-# Interactive checkout-first wrappers delegate Fram selection and identity to
-# the same exact runtime transaction used by the system service.
+# Ordinary North/MCP execute the exact package. Only explicit *-dev wrappers
+# delegate checkout execution through the runtime selector.
 [ "$(grep -c 'exec /run/current-system/sw/bin/north-coord-runtime exec-checkout' \
-  "$REPO/modules/north/default.bnix")" -eq 2 ]
+  "$REPO/modules/north/default.bnix")" -eq 1 ]
 [ "$(grep -c 'NORTH_MANAGED_CODEX_BIN=' \
-  "$REPO/modules/north/default.bnix")" -eq 2 ]
+  "$REPO/modules/north/default.bnix")" -eq 1 ]
 grep -Fq '(get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :codex)' \
   "$REPO/modules/north/default.bnix"
 if grep -q 'export FRAM_RUNTIME_SOURCE\|export FRAM_RUNTIME_REV' \
@@ -493,7 +493,7 @@ canonical_link \
   "$live_root/dotfiles/codex/config.toml" \
   'worktree-independent live config'
 [ "$fail" -eq 0 ]
-grep -q ':ExecStartPre (s northCoordRuntime "/bin/north-coord-runtime prepare")' \
+grep -q ':ExecStartPre \[(s northCoordRuntime "/bin/north-coord-runtime package")' \
   "$REPO/modules/north-coord/default.bnix"
 grep -q ':ExecStartPost (s northCoordRuntime "/bin/north-coord-runtime settle")' \
   "$REPO/modules/north-coord/default.bnix"
@@ -501,6 +501,14 @@ grep -q ':ExecCondition (s northCoordRuntime "/bin/north-coord-runtime preflight
   "$REPO/modules/north-coord/default.bnix"
 grep -q ':startLimitIntervalSec 60' "$REPO/modules/north-coord/default.bnix"
 grep -q ':startLimitBurst       3' "$REPO/modules/north-coord/default.bnix"
+grep -Fq 'command = "/run/current-system/sw/bin/north-mcp"' \
+  "$REPO/dotfiles/codex/config.toml"
+grep -Fq 'command = "/run/current-system/sw/bin/fram-mcp"' \
+  "$REPO/dotfiles/codex/config.toml"
+grep -Fq 'FRAM_MCP_BIN="${FRAM_MCP_BIN:-/run/current-system/sw/bin/fram-mcp}"' \
+  "$REPO/scripts/claude-mcp-register.sh"
+grep -Fq 'NORTH_MCP_BIN="${NORTH_MCP_BIN:-/run/current-system/sw/bin/north-mcp}"' \
+  "$REPO/scripts/claude-mcp-register.sh"
 
 wrapper_path="/nix/store/${nix_hash}-fram-daemon-packaged/bin/fram-daemon-packaged"
 if classify_north_coord_exec "{ path=$wrapper_path ; argv[]=$wrapper_path 7977 /tmp/facts.log ; }"; then

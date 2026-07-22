@@ -12,34 +12,34 @@ let
     gnugrep
     git
   ]) ++ (lib.optionals pkgs.stdenv.hostPlatform.isLinux (with pkgs; [ iproute2 ])));
-  liveCommandNames = [ "fram" "fram-daemon" "fram-mcp" "fram-primer" "fram-up" "fram-code-author" ];
+  devCommandNames = [ "fram" "fram-daemon" "fram-mcp" "fram-primer" "fram-up" "fram-code-author" ];
   packagedCommandNames = [ "fram" "fram-daemon" "fram-mcp" "fram-primer" ];
-  mkLive = name: lib.hiPrio (pkgs.writeShellApplication {
-    name = name;
+  mkDev = name: pkgs.writeShellApplication {
+    name = "${name}-dev";
     runtimeInputs = liveInputs;
     text = ''
       checkout=''${FRAM_CHECKOUT:-$HOME/code/fram}
       target=$checkout/bin/${name}
       if [ ! -x "$target" ]; then
-        echo "${name}: live checkout executable missing: $target" >&2
-        echo "${name}: restore that checkout; pinned fallbacks are limited to fram[-daemon|-mcp|-primer]-packaged" >&2
+        echo "${name}-dev: checkout executable missing: $target" >&2
         exit 127
       fi
+      echo "${name}-dev: provenance=checkout path=$target" >&2
       exec "$target" "$@"
     '';
-  });
+  };
   mkPackaged = name: pkgs.writeShellApplication {
     name = "${name}-packaged";
     text = ''
       exec ${framPkg}/bin/${name} "$@"
     '';
   };
-  liveCommands = builtins.map mkLive liveCommandNames;
+  devCommands = builtins.map mkDev devCommandNames;
   packagedCommands = builtins.map mkPackaged packagedCommandNames;
 in
 {
-  options.myConfig.modules.fram.enable = lib.mkEnableOption "checkout-first Fram development commands with pinned core-command fallbacks";
+  options.myConfig.modules.fram.enable = lib.mkEnableOption "immutable Fram core commands with explicit checkout-only development commands";
   config = lib.mkIf config.myConfig.modules.fram.enable {
-    environment.systemPackages = (liveCommands ++ packagedCommands ++ [ (lib.lowPrio framPkg) ]);
+    environment.systemPackages = ([ framPkg ] ++ devCommands ++ packagedCommands);
   };
 }

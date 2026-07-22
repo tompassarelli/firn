@@ -9,37 +9,36 @@ let
     runtimeInputs = with pkgs; [ bash coreutils ];
     text = builtins.readFile ./north-runtime-owner-guard;
   };
-  northLive = pkgs.writeShellApplication {
+  northProduction = pkgs.writeShellApplication {
     name = "north";
-    runtimeInputs = liveInputs;
     text = ''
-      checkout=''${NORTH_CHECKOUT:-$HOME/code/north}
-      target=$checkout/bin/north
       ${northRuntimeOwnerGuard}/bin/north-runtime-owner-guard "$@"
-      if [ ! -x "$target" ]; then
-        echo "north: live checkout executable missing: $target" >&2
-        echo "north: restore that checkout or use north-packaged for the pinned closure" >&2
-        exit 127
-      fi
-      export NORTH_MANAGED_CODEX_BIN='${codexPkg}/bin/codex'
-      exec /run/current-system/sw/bin/north-coord-runtime exec-checkout "$target" "$@"
+      exec ${northPkg}/bin/north "$@"
     '';
   };
-  northMcpLive = pkgs.writeShellApplication {
+  northMcpProduction = pkgs.writeShellApplication {
     name = "north-mcp";
+    text = ''
+      exec ${northPkg}/bin/north-mcp "$@"
+    '';
+  };
+  mkDev = name: pkgs.writeShellApplication {
+    name = "${name}-dev";
     runtimeInputs = liveInputs;
     text = ''
       checkout=''${NORTH_CHECKOUT:-$HOME/code/north}
-      target=$checkout/bin/north-mcp
+      target=$checkout/bin/${name}
       if [ ! -x "$target" ]; then
-        echo "north-mcp: live checkout executable missing: $target" >&2
-        echo "north-mcp: restore that checkout or use north-mcp-packaged for the pinned closure" >&2
+        echo "${name}-dev: checkout executable missing: $target" >&2
         exit 127
       fi
+      echo "${name}-dev: provenance=checkout path=$target" >&2
       export NORTH_MANAGED_CODEX_BIN='${codexPkg}/bin/codex'
       exec /run/current-system/sw/bin/north-coord-runtime exec-checkout "$target" "$@"
     '';
   };
+  northDev = mkDev "north";
+  northMcpDev = mkDev "north-mcp";
   northPackaged = pkgs.writeShellApplication {
     name = "north-packaged";
     text = ''
@@ -55,8 +54,15 @@ let
   };
 in
 {
-  options.myConfig.modules.north.enable = lib.mkEnableOption "checkout-first North CLI/MCP with explicit packaged smoke commands";
+  options.myConfig.modules.north.enable = lib.mkEnableOption "immutable North CLI/MCP with explicit checkout-only development commands";
   config = lib.mkIf config.myConfig.modules.north.enable {
-    environment.systemPackages = [ northLive northMcpLive northPackaged northMcpPackaged ];
+    environment.systemPackages = [
+      northProduction
+      northMcpProduction
+      northDev
+      northMcpDev
+      northPackaged
+      northMcpPackaged
+    ];
   };
 }

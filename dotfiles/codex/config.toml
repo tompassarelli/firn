@@ -36,7 +36,7 @@ trust_level = "trusted"
 hooks = true
 
 [mcp_servers.north]
-command = "/home/tom/code/north/bin/north-mcp"
+command = "/run/current-system/sw/bin/north-mcp"
 startup_timeout_sec = 15
 
 [mcp_servers.north.env]
@@ -46,7 +46,7 @@ FRAM_THREADS = "/home/tom/.local/state/north/threads"
 NORTH_PORT = "7977"
 
 [mcp_servers.fram]
-command = "/home/tom/code/fram/bin/fram-mcp"
+command = "/run/current-system/sw/bin/fram-mcp"
 startup_timeout_sec = 15
 
 [mcp_servers.fram.env]

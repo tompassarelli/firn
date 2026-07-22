@@ -15,12 +15,13 @@
 ;; here — the sweep is idempotent and writes its verdicts through :7977
 ;; (coord append!/put!), so a periodic one-shot fully covers the reap responsibility.
 ;;
-;; PATH carries babashka so both the ExecStart `bb` and the reactor's own
+;; The script itself comes from the exact North package. PATH carries babashka
+;; so both the ExecStart `bb` and the reactor's own
 ;; ping-coordinator shell-out (bare `bb msg-cli.clj` when a reaped lane names a
 ;; coordinator) resolve. Runs as the user: the sweep is a :7977 client, needs no root.
-(nix/module [config lib pkgs ...]
+(nix/module [config lib pkgs inputs ...]
   (let [username config.myConfig.modules.users.username
-        codeDir  config.myConfig.modules.users.codeDir]
+        northPkg (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)]
     {:options.myConfig.modules.north-reactor.enable
       (lib.mkEnableOption "North reactor sweep timer — periodic liveness reap of stale concerns + silently-dead lanes")
      :config
@@ -34,8 +35,8 @@
                  :Service
                   {:Type             "oneshot"
                    :Environment      [(s "PATH=" pkgs.babashka "/bin:" pkgs.coreutils "/bin")]
-                   :WorkingDirectory (s codeDir "/north")
-                   :ExecStart        (s pkgs.babashka "/bin/bb " codeDir "/north/cli/north-reactor.clj sweep-once")}}
+                   :WorkingDirectory northPkg
+                   :ExecStart        (s pkgs.babashka "/bin/bb " northPkg "/cli/north-reactor.clj sweep-once")}}
                :systemd.user.timers.north-reactor-sweep
                 {:Unit
                   {:Description "Run the north reactor liveness sweep periodically"}

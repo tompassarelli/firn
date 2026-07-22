@@ -1,8 +1,8 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, inputs, ... }:
 
 let
   username = config.myConfig.modules.users.username;
-  codeDir = config.myConfig.modules.users.codeDir;
+  northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
 in
 {
   options.myConfig.modules.north-reactor.enable = lib.mkEnableOption "North reactor sweep timer — periodic liveness reap of stale concerns + silently-dead lanes";
@@ -15,8 +15,8 @@ in
         Service = {
           Type = "oneshot";
           Environment = [ "PATH=${pkgs.babashka}/bin:${pkgs.coreutils}/bin" ];
-          WorkingDirectory = "${codeDir}/north";
-          ExecStart = "${pkgs.babashka}/bin/bb ${codeDir}/north/cli/north-reactor.clj sweep-once";
+          WorkingDirectory = northPkg;
+          ExecStart = "${pkgs.babashka}/bin/bb ${northPkg}/cli/north-reactor.clj sweep-once";
         };
       };
       systemd.user.timers.north-reactor-sweep = {

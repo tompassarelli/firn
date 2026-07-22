@@ -1,8 +1,8 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, inputs, ... }:
 
 let
   username = config.myConfig.modules.users.username;
-  codeDir = config.myConfig.modules.users.codeDir;
+  northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
 in
 {
   options.myConfig.modules.north-stream-sync.enable = lib.mkEnableOption "North stream-sync timer — periodic transcript log-shipping into streams/raw";
@@ -14,7 +14,7 @@ in
         };
         Service = {
           Type = "oneshot";
-          ExecStart = "${codeDir}/north/bin/north-stream-sync";
+          ExecStart = "${northPkg}/bin/north-stream-sync";
         };
       };
       systemd.user.timers.north-stream-sync = {

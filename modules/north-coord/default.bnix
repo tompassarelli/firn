@@ -9,10 +9,11 @@
 ;; and attention-coord (:7980): same coordinator family, different stores. JVM
 ;; runtime — long-lived server wants JIT throughput + real threads. Systemd owns
 ;; the one serving process so :7977 survives logout + reboot without racing a
-;; checkout-side supervisor. Runtime promotion is an independent transaction:
-;; north-coord-runtime serializes writers, materializes an exact detached Fram
-;; revision, and atomically publishes a complete current/previous generation.
-;; The pinned Fram input remains an explicit package-mode selection.
+;; checkout-side supervisor. The service reconciles to the pinned Fram package
+;; before every start. Runtime promotion remains an explicit development
+;; transaction: north-coord-runtime serializes writers, materializes an exact
+;; detached Fram revision, and atomically publishes a complete current/previous
+;; generation, but a managed service restart always restores package mode.
 
 (nix/module [config lib pkgs inputs ...]
   (let [username config.myConfig.modules.users.username
@@ -61,7 +62,8 @@
              :User             username
              :WorkingDirectory homeDir
              :ExecCondition (s northCoordRuntime "/bin/north-coord-runtime preflight")
-             :ExecStartPre (s northCoordRuntime "/bin/north-coord-runtime prepare")
+             :ExecStartPre [(s northCoordRuntime "/bin/north-coord-runtime package")
+                            (s northCoordRuntime "/bin/north-coord-runtime prepare")]
              :ExecStart (s northCoordRuntime "/bin/north-coord-runtime start")
              :ExecStartPost (s northCoordRuntime "/bin/north-coord-runtime settle")
              :Restart          "always"
