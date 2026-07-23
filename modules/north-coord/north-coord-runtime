@@ -139,23 +139,34 @@ checkout_origin() {
 }
 
 validate_package_target() {
-  local source=$1 canonical_package
+  local source=$1 canonical_package canonical_source canonical_daemon
 
   valid_revision "$NORTH_COORD_FRAM_PACKAGE_REV" ||
     die "packaged Fram revision is not an exact Git SHA"
   canonical_package=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") ||
     die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
-  [[ "$source" == "$canonical_package" ]] ||
+  canonical_source=$(realpath -e "$canonical_package/libexec/fram") ||
+    die "packaged Fram source is missing: $canonical_package/libexec/fram"
+  [[ -d "$canonical_source" ]] ||
+    die "packaged Fram source is not a directory: $canonical_source"
+  canonical_daemon=$(realpath -e "$canonical_package/bin/fram-daemon") ||
+    die "packaged Fram daemon is missing: $canonical_package/bin/fram-daemon"
+  [[ "$canonical_source" == "$canonical_package/libexec/fram" ]] ||
+    die "packaged Fram source escapes its immutable root"
+  [[ "$canonical_daemon" == "$canonical_package/bin/fram-daemon" ]] ||
+    die "packaged Fram daemon escapes its immutable root"
+  [[ "$source" == "$canonical_source" ]] ||
     die "selected package does not name this system generation's Fram package"
-  [[ -x "$source/bin/fram-daemon" ]] ||
-    die "packaged Fram daemon is not executable: $source/bin/fram-daemon"
+  [[ -x "$canonical_daemon" ]] ||
+    die "packaged Fram daemon is not executable: $canonical_daemon"
 
   runtime_mode=package
-  runtime_source=$canonical_package
+  runtime_source=$canonical_source
   runtime_revision=$NORTH_COORD_FRAM_PACKAGE_REV
   runtime_tree="immutable:$NORTH_COORD_FRAM_PACKAGE_REV"
   runtime_origin=$canonical_package
-  runtime_daemon=$canonical_package/bin/fram-daemon
+  runtime_daemon=$canonical_daemon
+  runtime_identity_migrated=0
 }
 
 validate_checkout_target() {
@@ -212,14 +223,17 @@ validate_checkout_target() {
   runtime_tree=$observed_tree
   runtime_origin=$observed_origin
   runtime_daemon=$canonical_source/bin/fram-daemon
+  runtime_identity_migrated=0
 }
 
 validate_target() {
-  local source=$1 canonical_package
+  local source=$1 canonical_package canonical_package_source
 
   canonical_package=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") ||
     die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
-  if [[ "$source" == "$canonical_package" ]]; then
+  canonical_package_source=$(realpath -e "$canonical_package/libexec/fram") ||
+    die "packaged Fram source is missing: $canonical_package/libexec/fram"
+  if [[ "$source" == "$canonical_package_source" ]]; then
     validate_package_target "$source"
   else
     validate_checkout_target "$source"
@@ -233,6 +247,7 @@ capture_runtime() {
     runtime_name=runtime_$name
     printf -v "${prefix}_${name}" '%s' "${!runtime_name}"
   done
+  printf -v "${prefix}_migrated" '%s' "${runtime_identity_migrated:-0}"
 }
 
 require_initialized_layout() {
@@ -270,13 +285,18 @@ restore_runtime() {
     prefixed_name=${prefix}_${name}
     printf -v "runtime_${name}" '%s' "${!prefixed_name}"
   done
+  prefixed_name=${prefix}_migrated
+  runtime_identity_migrated=${!prefixed_name:-0}
 }
 
 validate_declared_runtime() {
   local declared_mode=$runtime_mode declared_source=$runtime_source
   local declared_revision=$runtime_revision declared_tree=$runtime_tree
   local declared_origin=$runtime_origin declared_daemon=$runtime_daemon
-  local canonical_source canonical_daemon canonical_package
+  local canonical_source canonical_daemon canonical_origin canonical_package
+  local canonical_package_source legacy_package=0
+
+  runtime_identity_migrated=0
 
   valid_revision "$declared_revision" || die "declared runtime revision is not an exact Git SHA"
   canonical_source=$(realpath -e "$declared_source") ||
@@ -285,12 +305,12 @@ validate_declared_runtime() {
     die "declared runtime source is not canonical: $declared_source"
   canonical_daemon=$(realpath -e "$declared_daemon") ||
     die "declared runtime daemon is missing: $declared_daemon"
-  [[ "$canonical_daemon" == "$canonical_source/bin/fram-daemon" ]] ||
-    die "declared runtime daemon does not belong to its source: $declared_daemon"
   [[ -x "$canonical_daemon" ]] || die "declared runtime daemon is not executable: $declared_daemon"
 
   case "$declared_mode" in
     checkout)
+      [[ "$canonical_daemon" == "$canonical_source/bin/fram-daemon" ]] ||
+        die "declared checkout daemon does not belong to its source: $declared_daemon"
       validate_checkout_target "$canonical_source" "$declared_revision" "$declared_origin"
       [[ "$runtime_tree" == "$declared_tree" ]] ||
         die "checkout deployment tree differs from its generation identity"
@@ -298,15 +318,31 @@ validate_declared_runtime() {
     package)
       [[ "$declared_tree" == "immutable:$declared_revision" ]] ||
         die "package tree marker does not bind its declared revision"
-      [[ "$declared_origin" == "$canonical_source" ]] ||
-        die "package origin does not name its immutable root"
+      canonical_origin=$(realpath -e "$declared_origin") ||
+        die "package origin is missing: $declared_origin"
+      [[ "$canonical_origin" == "$declared_origin" ]] ||
+        die "package origin is not canonical: $declared_origin"
+      [[ "$canonical_daemon" == "$canonical_origin/bin/fram-daemon" ]] ||
+        die "package daemon does not belong to its immutable root"
       canonical_package=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") ||
         die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
-      if [[ "$canonical_source" == "$canonical_package" ]]; then
+      canonical_package_source=$(realpath -e "$canonical_package/libexec/fram") ||
+        die "packaged Fram source is missing: $canonical_package/libexec/fram"
+      if [[ "$canonical_source" == "$canonical_origin" ]]; then
+        [[ "$canonical_origin" == "$canonical_package" &&
+           "$declared_revision" == "$NORTH_COORD_FRAM_PACKAGE_REV" &&
+           "$canonical_daemon" == "$canonical_package/bin/fram-daemon" &&
+           "$canonical_package_source" == "$canonical_package/libexec/fram" ]] ||
+          die "legacy package identity does not match the current system package"
+        legacy_package=1
+      elif [[ "$canonical_source" != "$canonical_origin/libexec/fram" ]]; then
+        die "package source does not belong to its immutable root"
+      fi
+      if [[ "$canonical_origin" == "$canonical_package" ]]; then
         [[ "$declared_revision" == "$NORTH_COORD_FRAM_PACKAGE_REV" ]] ||
           die "current system package revision differs from its generation identity"
       else
-        [[ "$canonical_source" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*$ ]] ||
+        [[ "$canonical_origin" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*$ ]] ||
           die "historical package selection is not an immutable Fram store root"
       fi
       runtime_mode=$declared_mode
@@ -315,12 +351,16 @@ validate_declared_runtime() {
       runtime_tree=$declared_tree
       runtime_origin=$declared_origin
       runtime_daemon=$canonical_daemon
+      if [[ "$legacy_package" -eq 1 ]]; then
+        runtime_source=$canonical_package_source
+        runtime_identity_migrated=1
+      fi
       ;;
     *) die "unknown declared runtime mode: $declared_mode" ;;
   esac
 
   [[ "$runtime_mode" == "$declared_mode" &&
-      "$runtime_source" == "$declared_source" &&
+      ( "$runtime_source" == "$declared_source" || "$legacy_package" -eq 1 ) &&
       "$runtime_revision" == "$declared_revision" &&
       "$runtime_tree" == "$declared_tree" &&
       "$runtime_origin" == "$declared_origin" &&
@@ -452,7 +492,7 @@ initialize_runtime() {
 
   canonical_package=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") ||
     die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
-  validate_package_target "$canonical_package"
+  validate_package_target "$canonical_package/libexec/fram"
   mkdir "$state_root"
   mkdir "$deployments" "$generations"
   chmod 0700 "$state_root" "$deployments" "$generations"
@@ -486,6 +526,7 @@ ensure_default_runtime() {
 
 select_target() {
   local target=$1 target_source current_source current_source_name=pair_current_source
+  local current_migrated_name=pair_current_migrated
 
   load_pair
   validate_target "$target"
@@ -494,6 +535,8 @@ select_target() {
   current_source=${!current_source_name}
   if [[ "$target_source" != "$current_source" ]]; then
     commit_pair selected_target pair_current
+  elif [[ "${!current_migrated_name:-0}" -eq 1 ]]; then
+    commit_pair selected_target pair_previous
   fi
 }
 
@@ -532,7 +575,7 @@ select_package() {
   ensure_initialized_for_mutation
   canonical_package=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") ||
     die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
-  validate_package_target "$canonical_package"
+  validate_package_target "$canonical_package/libexec/fram"
   select_target "$runtime_source"
   load_selected
   print_restart_instruction
@@ -567,7 +610,11 @@ export_runtime_identity() {
   export NORTH_COORD_RUNTIME_FILE=$runtime_record
   export NORTH_COORD_SYSTEMD_UNIT=$systemd_unit
   export FRAM_HOME=$runtime_source
-  export FRAM_BIN=$runtime_source/bin
+  if [[ "$runtime_mode" == package ]]; then
+    export FRAM_BIN=$runtime_origin/bin
+  else
+    export FRAM_BIN=$runtime_source/bin
+  fi
   export FRAM_LOG=$NORTH_COORD_FRAM_LOG
   export FRAM_TELEMETRY_LOG=$telemetry_log
   export FRAM_PORT=$runtime_port

@@ -11,13 +11,15 @@ trap 'rm -rf "${scratch:?}"' EXIT
 state=$scratch/state
 repo=$scratch/fram
 package=$scratch/package
+package_source=$package/libexec/fram
+package_daemon=$package/bin/fram-daemon
 north_package=$scratch/north-package
 log=$scratch/coordination.log
 telemetry_log=$scratch/telemetry.log
 north_calls=$scratch/north-calls
 north_fail=$scratch/north-fail
 test_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
-mkdir -p "$repo/bin" "$package/bin" "$north_package/bin"
+mkdir -p "$repo/bin" "$package/bin" "$package_source/bin" "$north_package/bin"
 export NORTH_COORD_TEST_CALLS=$north_calls
 export NORTH_COORD_TEST_FAIL=$north_fail
 
@@ -100,7 +102,8 @@ printf 'three\n' >"$repo/revision.txt"
 git -C "$repo" commit -qam three
 revision_three=$(git -C "$repo" rev-parse HEAD)
 
-write_daemon "$package/bin/fram-daemon" package
+write_daemon "$package_daemon" package
+write_daemon "$package_source/bin/fram-daemon" package-inner-wrong
 package_revision=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 run_runtime_in_state() {
@@ -121,6 +124,16 @@ run_runtime_in_state() {
 run_runtime() {
   run_runtime_in_state "$state" "$@"
 }
+
+file_source_package=$scratch/file-source-package
+mkdir -p "$file_source_package/libexec" "$file_source_package/bin"
+: >"$file_source_package/libexec/fram"
+write_daemon "$file_source_package/bin/fram-daemon" file-source-package
+if package=$file_source_package \
+   run_runtime_in_state "$scratch/file-source-state" initialize >/dev/null 2>&1; then
+  printf 'regular-file package source was accepted\n' >&2
+  exit 1
+fi
 
 read_pair() {
   printf '%s|%s\n' "$(readlink -f "$state/current")" "$(readlink -f "$state/previous")"
@@ -182,13 +195,44 @@ fi
 run_runtime ensure-default
 fresh_status=$(run_runtime status)
 grep -Fxq 'mode=package' <<<"$fresh_status"
-grep -Fxq "source=$package" <<<"$fresh_status"
+grep -Fxq "source=$package_source" <<<"$fresh_status"
 grep -Fxq "revision=$package_revision" <<<"$fresh_status"
 grep -Fxq "tree=immutable:$package_revision" <<<"$fresh_status"
 [[ $(readlink "$state/current") == active/current ]]
 [[ $(readlink "$state/previous") == active/previous ]]
-[[ $(readlink -f "$state/current") == "$package" ]]
-[[ $(readlink -f "$state/previous") == "$package" ]]
+[[ $(readlink -f "$state/current") == "$package_source" ]]
+[[ $(readlink -f "$state/previous") == "$package_source" ]]
+
+# A persisted pre-upgrade package generation names the immutable outer package
+# as both source and origin. The explicit package selection recognizes only
+# that exact current-system shape, then atomically republishes the two-level
+# package identity while preserving the prior checkout as the rollback target.
+legacy_state=$scratch/legacy-state
+run_runtime_in_state "$legacy_state" initialize
+run_runtime_in_state "$legacy_state" promote "$repo" "$revision_one" >/dev/null
+run_runtime_in_state "$legacy_state" rollback >/dev/null
+legacy_seed_generation=$(readlink -f "$legacy_state/active")
+legacy_previous=$(readlink -f "$legacy_state/previous")
+[[ "$legacy_previous" == "$legacy_state/deployments/$revision_one" ]]
+unlink "$legacy_seed_generation/current"
+ln -s "$package" "$legacy_seed_generation/current"
+{
+  printf '%s\n' north-fram-runtime-v1 package "$package" "$package_revision"
+  printf '%s\n' "immutable:$package_revision" "$package" "$package_daemon"
+} >"$legacy_seed_generation/current.identity"
+run_runtime_in_state "$legacy_state" package >/dev/null
+legacy_migrated_generation=$(readlink -f "$legacy_state/active")
+[[ "$legacy_migrated_generation" != "$legacy_seed_generation" ]]
+[[ $(readlink -f "$legacy_state/current") == "$package_source" ]]
+[[ $(readlink -f "$legacy_state/previous") == "$legacy_previous" ]]
+[[ $(sed -n '3p' "$legacy_migrated_generation/current.identity") == "$package_source" ]]
+[[ $(sed -n '6p' "$legacy_migrated_generation/current.identity") == "$package" ]]
+[[ $(sed -n '7p' "$legacy_migrated_generation/current.identity") == "$package_daemon" ]]
+grep -Fxq "source=$package_source" < <(run_runtime_in_state "$legacy_state" status)
+run_runtime_in_state "$legacy_state" rollback >/dev/null
+[[ $(readlink -f "$legacy_state/current") == "$legacy_previous" ]]
+[[ $(readlink -f "$legacy_state/previous") == "$package_source" ]]
+grep -Fxq "source=$legacy_previous" < <(run_runtime_in_state "$legacy_state" status)
 
 # A symlinked state ancestor never leaks a lexical alias into generation-scoped
 # process authority. The record and exported discovery paths are canonical.
@@ -203,7 +247,7 @@ aliased_generation=$(readlink -f "$aliased_state/active")
 grep -Fxq "generation=$aliased_generation" <<<"$aliased_start"
 grep -Fxq "generation-identity=$aliased_generation/current.identity" <<<"$aliased_start"
 grep -Fxq "runtime-file=$aliased_generation/active.runtime" <<<"$aliased_start"
-assert_active_record "$aliased_generation" "$package" "$package_revision" "immutable:$package_revision" "$package" "$package/bin/fram-daemon"
+assert_active_record "$aliased_generation" "$package_source" "$package_revision" "immutable:$package_revision" "$package" "$package_daemon"
 
 # The systemd preparation seam resolves any active corpus journal while the
 # coordinator is still offline; the post-start seam waits for the initiating
@@ -480,8 +524,8 @@ for _ in $(seq 1 20); do
   wait "$promote_pid"
   wait "$package_pid"
   assert_pair_is \
-    "$deployment_one|$package" \
-    "$package|$deployment_one"
+    "$deployment_one|$package_source" \
+    "$package_source|$deployment_one"
 done
 
 for _ in $(seq 1 20); do
@@ -492,7 +536,7 @@ for _ in $(seq 1 20); do
   wait "$promote_pid"
   wait "$rollback_pid"
   assert_pair_is \
-    "$package|$deployment_one" \
+    "$package_source|$deployment_one" \
     "$deployment_one|$deployment_two"
 done
 
@@ -557,15 +601,19 @@ run_runtime ensure-default
 run_runtime prepare >/dev/null
 [[ $(read_pair) == "$package_pair" ]]
 grep -Fxq mode=package < <(run_runtime status)
-[[ $(readlink -f "$state/current") == "$package" ]]
+[[ $(readlink -f "$state/current") == "$package_source" ]]
 package_start=$(run_runtime start)
 package_generation=$(readlink -f "$state/active")
 grep -Fxq 'label=package' <<<"$package_start"
 grep -Fxq 'mode=package' <<<"$package_start"
-grep -Fxq "source=$package" <<<"$package_start"
+grep -Fxq "source=$package_source" <<<"$package_start"
 grep -Fxq "revision=$package_revision" <<<"$package_start"
+grep -Fxq "origin=$package" <<<"$package_start"
+grep -Fxq "daemon=$package_daemon" <<<"$package_start"
+grep -Fxq "home=$package_source" <<<"$package_start"
+grep -Fxq "bin=$package/bin" <<<"$package_start"
 grep -Eq '^owner=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' <<<"$package_start"
-assert_active_record "$package_generation" "$package" "$package_revision" "immutable:$package_revision" "$package" "$package/bin/fram-daemon"
+assert_active_record "$package_generation" "$package_source" "$package_revision" "immutable:$package_revision" "$package" "$package_daemon"
 if run_runtime exec-checkout "$identity_probe" >/dev/null 2>&1; then
   printf 'checkout launcher accepted package selection\n' >&2
   exit 1
