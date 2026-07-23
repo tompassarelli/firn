@@ -63,8 +63,9 @@ native_dispatch_args() {
 }
 
 # 1. Passthrough guard: an account is already pinned (north's own lanes /
-#    app-server probes, or explicit user env). Do not recurse or re-route.
-if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then
+#    app-server probes, or explicit user env), or North is probing the provider
+#    while this launcher is selecting an account. Do not recurse or re-route.
+if [ -n "${CLAUDE_CONFIG_DIR:-}" ] || [ "${NORTH_CLAUDE_LAUNCHER_BYPASS:-}" = "1" ]; then
   exec "$REAL" "$@"
 fi
 
@@ -123,9 +124,9 @@ select_account() {
   local errfile json rc detail
   errfile="$(mktemp 2>/dev/null || true)"
   if [ -n "$errfile" ]; then
-    json="$(env -u NORTH_CHECKOUT north providers --json 2>"$errfile")"; rc=$?
+    json="$(env -u NORTH_CHECKOUT NORTH_CLAUDE_LAUNCHER_BYPASS=1 north providers --json 2>"$errfile")"; rc=$?
   else
-    json="$(env -u NORTH_CHECKOUT north providers --json 2>/dev/null)"; rc=$?
+    json="$(env -u NORTH_CHECKOUT NORTH_CLAUDE_LAUNCHER_BYPASS=1 north providers --json 2>/dev/null)"; rc=$?
   fi
 
   if [ "$rc" -ne 0 ]; then

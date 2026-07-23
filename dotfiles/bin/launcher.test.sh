@@ -54,6 +54,10 @@ if [ -n "${NORTH_CHECKOUT_RECORD:-}" ]; then
     printf '<unset>' >"$NORTH_CHECKOUT_RECORD"
   fi
 fi
+if [ -n "${NORTH_CLAUDE_LAUNCHER_BYPASS_RECORD:-}" ]; then
+  printf '%s' "${NORTH_CLAUDE_LAUNCHER_BYPASS:-<unset>}" \
+    >"$NORTH_CLAUDE_LAUNCHER_BYPASS_RECORD"
+fi
 if [ -n "${NORTH_JSON:-}" ] && [ -f "$NORTH_JSON" ]; then
   cat "$NORTH_JSON"
 fi
@@ -264,6 +268,23 @@ JSON
     test "$(record_field _ "$pinvar")" = "$ROOT/acctA"
   check "$launcher/passthrough leaves managed argv unchanged" \
     test "$(record_field _ args)" = "$managed_expected"
+
+  # 9a. North's own provider probe can resolve back through the bootloader.
+  # The outer launcher marks its snapshot call, and a nested Claude launcher
+  # must immediately exec the real binary instead of selecting again.
+  if [ "$launcher" = claude ]; then
+    bypass_record="$SCRATCH/claude-bypass-record"
+    rm -f "$bypass_record"
+    run "$launcher" 1 "NORTH_JSON=$eligible" \
+      "NORTH_CLAUDE_LAUNCHER_BYPASS_RECORD=$bypass_record" -- ; s="$STDERR"
+    check "claude/selection marks nested North provider probes for bypass" \
+      test "$(cat "$bypass_record" 2>/dev/null)" = "1"
+
+    run "$launcher" 0 "NORTH_CLAUDE_LAUNCHER_BYPASS=1" -- --version ; s="$STDERR"
+    check "claude/nested provider probe emits no selection banner" test -z "$s"
+    check "claude/nested provider probe execs real CLI directly" \
+      test "$(record_field _ args)" = "--version"
+  fi
 
   # 9b. The North-native defaults precede explicit user model/effort argv, so
   # the provider CLI's ordinary last-option-wins behavior remains available.
