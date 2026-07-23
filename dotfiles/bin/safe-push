@@ -26,6 +26,10 @@ Options:
   --to BRANCH  explicitly publish HEAD to another remote branch
   --tag NAME   push an existing tag whose target is already on origin
   -h, --help   print this help without inspecting a repository
+
+On a non-default branch, plain "safe-push" (no --to/--tag) is refused —
+one-branch-main doctrine: origin carries the default branch only. Publish
+with --to main, or --to another branch as a deliberate escape hatch.
 USAGE
 }
 
@@ -207,6 +211,31 @@ revalidate_repository_state() {
   fi
   [ "$current_range" = "$scan_range" ] || state_changed 'outgoing range changed'
 }
+
+# --- one-branch-main doctrine: no silent default publish of a non-main branch -----
+# safe-push's own default (no --to) publishes HEAD under its CURRENT branch name —
+# exactly how feature-branch litter accumulates on origin from native sessions.
+# Refuse that default the moment the current branch isn't the repo's default
+# branch; an explicit --to (even to a non-main destination) is the deliberate
+# escape hatch and is left alone. Tag pushes are a different ref namespace and
+# are untouched by this guard.
+enforce_one_branch_main() {
+  local ref current default
+  ref=$(git symbolic-ref --quiet HEAD 2>/dev/null) || return 0
+  case "$ref" in
+    refs/heads/*) current=${ref#refs/heads/} ;;
+    *) return 0 ;;
+  esac
+  default=$(git symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null) || default=""
+  default=${default#refs/remotes/origin/}
+  [ -n "$default" ] || default=main
+  [ "$current" = "$default" ] && return 0
+  printf 'safe-push: non-main branch %s: publish with safe-push --to main (one-branch-main doctrine)\n' "$current" >&2
+  printf 'safe-push: pushing branch names to origin is disabled\n' >&2
+  exit 1
+}
+
+if [ "$tag_seen" -eq 0 ] && [ "$to_seen" -eq 0 ]; then enforce_one_branch_main; fi
 
 # --- tag mode: no new commit content may ride a tag push --------------------------
 # A tag ref carries only the tag object; the guard is (a) its target commit is

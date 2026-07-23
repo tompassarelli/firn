@@ -193,6 +193,9 @@ never `git commit && git push` chained (let the pre-commit hook run first).
 STOP only for: a flagged secret (FIX the leak, never push it), force-push or
 rewrite of published history, private→public exposure, or another agent's
 in-flight WIP. GitHub releases: version tag as the title, details in body.
+Branch hygiene: origin carries main only (plus tags). Worktree/lane branches
+are local and ephemeral — land by fetch + `safe-push --to main`, then delete
+the local branch. Never publish a feature branch name.
 
 ## External code — license first
 → `~/code/nixos-config/dotfiles/agents/docs/external-code.md`

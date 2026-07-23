@@ -68,7 +68,7 @@ shim_main() {
           ;;
         --verify)
           case "${3:-}" in
-            'refs/heads/main^{commit}')
+            "refs/heads/${SAFE_PUSH_TEST_BRANCH:-main}^{commit}")
               if [ "${SAFE_PUSH_TEST_RACE:-}" = commit ] && [ "$raced" -eq 1 ]; then
                 printf '%s\n' badc0de
               else
@@ -92,12 +92,20 @@ shim_main() {
       esac
       ;;
     git:symbolic-ref)
-      [ "${2:-}" = --quiet ] && [ "${3:-}" = HEAD ] || return 2
-      if [ "${SAFE_PUSH_TEST_RACE:-}" = branch ] && [ "$raced" -eq 1 ]; then
-        printf '%s\n' refs/heads/switched
-      else
-        printf '%s\n' refs/heads/main
-      fi
+      [ "${2:-}" = --quiet ] || return 2
+      case "${3:-}" in
+        HEAD)
+          if [ "${SAFE_PUSH_TEST_RACE:-}" = branch ] && [ "$raced" -eq 1 ]; then
+            printf '%s\n' refs/heads/switched
+          else
+            printf 'refs/heads/%s\n' "${SAFE_PUSH_TEST_BRANCH:-main}"
+          fi
+          ;;
+        refs/remotes/origin/HEAD)
+          printf '%s\n' refs/remotes/origin/main
+          ;;
+        *) return 2 ;;
+      esac
       ;;
     git:remote)
       [ "${2:-}" = get-url ] && [ "${3:-}" = --push ] && [ "${4:-}" = origin ] || return 2
@@ -171,6 +179,7 @@ case_output=''
 case_status=0
 case_race=''
 case_destination_shape='normal'
+case_branch='main'
 
 run_case() {
   : >"$trace"
@@ -184,6 +193,7 @@ run_case() {
       SAFE_PUSH_TEST_STATE="$state" \
       SAFE_PUSH_TEST_RACE="$case_race" \
       SAFE_PUSH_TEST_DESTINATION_SHAPE="$case_destination_shape" \
+      SAFE_PUSH_TEST_BRANCH="$case_branch" \
       PATH="$scratch/bin:$PATH" \
       "$TARGET" "$@" 2>&1
   )"
@@ -312,6 +322,28 @@ expect_output 'pushing main -> origin as deadbeef:refs/heads/other'
 grep -Fq 'git <push> <--force-with-lease=refs/heads/other:1111111111111111111111111111111111111111> <git@example.test:owner/repo.git> <deadbeef:refs/heads/other>' "$trace" \
   || fail '--to publication did not use the exact captured destination lease/refspec'
 
+# One-branch-main doctrine: a non-main branch with no explicit --to/--tag is
+# refused before any git/gitleaks call — the silent same-name default is exactly
+# how feature-branch litter accumulated on origin.
+case_branch='feature'
+run_case
+expect_status nonzero
+expect_output 'non-main branch feature: publish with safe-push --to main'
+expect_output 'pushing branch names to origin is disabled'
+if grep -Fq 'gitleaks' "$trace"; then fail 'non-main refusal reached the secret scan'; fi
+if grep -Fq '<push>' "$trace"; then fail 'non-main refusal reached a push'; fi
+
+run_case --dry-run
+expect_status nonzero
+expect_output 'non-main branch feature: publish with safe-push --to main'
+if grep -Fq 'gitleaks' "$trace"; then fail 'non-main refusal reached the secret scan'; fi
+
+# The escape hatch: explicit --to main from a non-main branch proceeds normally.
+run_case --to main
+expect_status zero
+expect_output 'pushing feature -> origin as deadbeef:refs/heads/main'
+case_branch='main'
+
 for destination_shape in symbolic ambiguous malformed; do
   case_destination_shape="$destination_shape"
   run_case --to other
@@ -439,50 +471,48 @@ expect_output 'pushing tag release-real -> origin'
   = "$("$real_git" --git-dir="$real_remote" rev-parse refs/tags/release-real)" ] \
   || fail 'normal tag publication did not update the remote to the captured tag object'
 
-# A new branch with no upstream scans the captured full history, pushes its
-# captured object, then establishes the expected tracking relationship.
+# A new branch with no upstream is off the default branch, so the one-branch-main
+# guard refuses the bare default before any scan or push — no same-name litter,
+# no tracking established.
 make_real_fixture no-upstream
 "$real_git" -C "$real_repo" switch -q -c topic
 "$real_git" -C "$real_repo" commit --allow-empty -qm topic
-topic_oid="$("$real_git" -C "$real_repo" rev-parse topic)"
+remote_before="$(real_remote_state)"
 run_real_case ''
-expect_status zero
-grep -Fq "<--log-opts=$topic_oid>" "$real_trace" \
-  || fail 'no-upstream scan did not use the captured topic history'
-[ "$("$real_git" -C "$real_repo" rev-parse topic)" \
-  = "$("$real_git" --git-dir="$real_remote" rev-parse refs/heads/topic)" ] \
-  || fail 'no-upstream publication did not push the captured topic object'
-[ "$("$real_git" -C "$real_repo" rev-parse --abbrev-ref '@{upstream}')" = origin/topic ] \
-  || fail 'no-upstream publication did not establish origin/topic tracking'
+expect_status nonzero
+expect_output 'non-main branch topic'
+[ "$(real_remote_state)" = "$remote_before" ] \
+  || fail 'non-main refusal mutated the remote'
+if "$real_git" -C "$real_repo" rev-parse --verify '@{upstream}' >/dev/null 2>&1; then
+  fail 'non-main refusal established local tracking'
+fi
 
 # A feature branch can inherit origin/main when it is created from that remote
-# ref. Default safe-push must publish the local branch name, never the inherited
-# upstream destination.
+# ref. The guard refuses the bare default regardless of inherited tracking —
+# it never reaches the code that would decide which remote ref to touch.
 make_real_fixture inherited-upstream
 remote_main_before="$("$real_git" --git-dir="$real_remote" rev-parse refs/heads/main)"
 "$real_git" -C "$real_repo" switch -q -c feature
 "$real_git" -C "$real_repo" commit --allow-empty -qm feature
-feature_oid="$("$real_git" -C "$real_repo" rev-parse feature)"
 "$real_git" -C "$real_repo" branch --set-upstream-to=origin/main feature >/dev/null
 run_real_case ''
-expect_status zero
+expect_status nonzero
+expect_output 'non-main branch feature'
 [ "$("$real_git" --git-dir="$real_remote" rev-parse refs/heads/main)" = "$remote_main_before" ] \
-  || fail 'inherited origin/main upstream redirected the default push to remote main'
-[ "$("$real_git" --git-dir="$real_remote" rev-parse refs/heads/feature)" = "$feature_oid" ] \
-  || fail 'default push did not advance the same-named remote feature ref'
-[ "$("$real_git" -C "$real_repo" rev-parse --abbrev-ref '@{upstream}')" = origin/feature ] \
-  || fail 'default push did not repair inherited tracking to origin/feature'
+  || fail 'inherited origin/main upstream let the refused default push touch remote main'
+if "$real_git" --git-dir="$real_remote" rev-parse --verify refs/heads/feature >/dev/null 2>&1; then
+  fail 'non-main refusal advanced a remote feature ref'
+fi
 
-# Dry-run names the immutable source object and exact same-named destination,
-# while leaving both the remote and local tracking configuration unchanged.
+# Dry-run is not an escape hatch: a non-main branch with no --to is refused even
+# under --dry-run, leaving the remote and local tracking configuration untouched.
 make_real_fixture dry-run-destination
 "$real_git" -C "$real_repo" switch -q -c feature
 "$real_git" -C "$real_repo" commit --allow-empty -qm feature
-feature_oid="$("$real_git" -C "$real_repo" rev-parse feature)"
 remote_before="$(real_remote_state)"
 run_real_case '' --dry-run
-expect_status zero
-expect_output "would push feature -> origin as $feature_oid:refs/heads/feature"
+expect_status nonzero
+expect_output 'non-main branch feature'
 [ "$(real_remote_state)" = "$remote_before" ] \
   || fail 'dry-run mutated the remote'
 if "$real_git" -C "$real_repo" rev-parse --verify '@{upstream}' >/dev/null 2>&1; then
