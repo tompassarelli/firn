@@ -579,33 +579,30 @@ north_coord_runtime_identity_is_valid() {
         NORTH_COORD_RUNTIME_IDENTITY_REASON="Nix store root is missing: $store_root"
         return 1
       }
-      package_name="${canonical_selector##*/}"
-      [ "$(dirname "$canonical_selector")" = "$canonical_store_root" ] &&
-        [[ "$package_name" =~ ^[a-z0-9]{32}-fram[^/]*$ ]] || {
-        NORTH_COORD_RUNTIME_IDENTITY_REASON='package selector is not a direct Fram Nix-store root'
-        return 1
-      }
-      [ -d "$canonical_selector" ] && [ ! -L "$canonical_selector" ] || {
-        NORTH_COORD_RUNTIME_IDENTITY_REASON='package selector does not resolve to a real directory'
-        return 1
-      }
-      expected_source="$canonical_selector/libexec/fram"
-      [ "$source" = "$expected_source" ] &&
-        [ "$canonical_source" = "$expected_source" ] &&
-        [ -d "$source" ] && [ ! -L "$source" ] || {
-        NORTH_COORD_RUNTIME_IDENTITY_REASON='package source is not the selected outer package libexec/fram directory'
-        return 1
-      }
       canonical_origin="$(realpath -e "$origin" 2>/dev/null)" || {
         NORTH_COORD_RUNTIME_IDENTITY_REASON="package origin is missing: $origin"
         return 1
       }
-      [ "$origin" = "$canonical_selector" ] &&
-        [ "$canonical_origin" = "$canonical_selector" ] || {
-        NORTH_COORD_RUNTIME_IDENTITY_REASON='package origin does not name the selected immutable outer package'
+      package_name="${canonical_origin##*/}"
+      [ "$(dirname "$canonical_origin")" = "$canonical_store_root" ] &&
+        [[ "$package_name" =~ ^[a-z0-9]{32}-fram[^/]*$ ]] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='package origin is not a direct Fram Nix-store root'
         return 1
       }
-      expected_daemon="$canonical_selector/bin/fram-daemon"
+      [ "$origin" = "$canonical_origin" ] &&
+        [ -d "$canonical_origin" ] && [ ! -L "$canonical_origin" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='package origin does not name a canonical immutable directory'
+        return 1
+      }
+      expected_source="$canonical_origin/libexec/fram"
+      [ "$source" = "$expected_source" ] &&
+        [ "$canonical_source" = "$expected_source" ] &&
+        [ "$canonical_selector" = "$expected_source" ] &&
+        [ -d "$source" ] && [ ! -L "$source" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='package selector and source do not name the exact outer-package libexec/fram directory'
+        return 1
+      }
+      expected_daemon="$canonical_origin/bin/fram-daemon"
       [ "$daemon" = "$expected_daemon" ] &&
         [ "$canonical_daemon" = "$expected_daemon" ] &&
         [ -f "$daemon" ] && [ ! -L "$daemon" ] && [ -x "$daemon" ] || {

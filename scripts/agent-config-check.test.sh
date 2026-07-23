@@ -817,8 +817,8 @@ fi
 [ "$NORTH_COORD_EXEC_KIND" = unrecognized ]
 
 # Package mode deliberately separates package authority from runtime source:
-# the selector and origin are the outer package, source is libexec/fram, and
-# the executed daemon is the outer package wrapper.
+# origin is the outer package, while selector and source are its libexec/fram
+# directory and the executed daemon is the outer package wrapper.
 package_state="$scratch/package-runtime-state"
 package_outer="$fixture_store/${nix_hash}-fram-0-unstable-2026-06-28"
 package_source="$package_outer/libexec/fram"
@@ -830,7 +830,7 @@ mkdir -p \
 printf '%s\n' '#!/bin/sh' 'exit 0' >"$package_daemon"
 printf '%s\n' '#!/bin/sh' 'exit 0' >"$package_source/bin/fram-daemon"
 chmod +x "$package_daemon" "$package_source/bin/fram-daemon"
-ln -s "$package_outer" "$package_state/generations/g1/current"
+ln -s "$package_source" "$package_state/generations/g1/current"
 ln -s generations/g1 "$package_state/active"
 ln -s active/current "$package_state/current"
 north_coord_runtime_identity_is_valid \
@@ -842,6 +842,18 @@ if north_coord_runtime_identity_is_valid \
    "immutable:$package_revision" "$package_outer" "$package_daemon" \
    "$package_state/current" "$fixture_store"; then
   printf 'legacy flat package source was accepted\n' >&2
+  exit 1
+fi
+legacy_package_state="$scratch/legacy-package-runtime-state"
+mkdir -p "$legacy_package_state/generations/g1"
+ln -s "$package_outer" "$legacy_package_state/generations/g1/current"
+ln -s generations/g1 "$legacy_package_state/active"
+ln -s active/current "$legacy_package_state/current"
+if north_coord_runtime_identity_is_valid \
+   package "$package_outer" "$package_revision" \
+   "immutable:$package_revision" "$package_outer" "$package_daemon" \
+   "$legacy_package_state/current" "$fixture_store"; then
+  printf 'legacy flat package selector was accepted\n' >&2
   exit 1
 fi
 if north_coord_runtime_identity_is_valid \
