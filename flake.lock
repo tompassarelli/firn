@@ -427,11 +427,11 @@
     "gaffer": {
       "flake": false,
       "locked": {
-        "lastModified": 1784715171,
-        "narHash": "sha256-Eeu78noZhEP54wZGKV4FSFRfxzK1+mGQLMRKbNvfDKA=",
+        "lastModified": 1784719908,
+        "narHash": "sha256-RQ2imJmtIkkesFuAWsuq90rEjivFAK9I8wNh7lxiIF8=",
         "ref": "main",
-        "rev": "4cd05b556b0ac0cbf5fd6675abddc661a966c2b7",
-        "revCount": 49,
+        "rev": "2f7ab9fa7b24ad23ad4321929a0ccfed792a47b7",
+        "revCount": 50,
         "type": "git",
         "url": "file:///home/tom/code/gaffer"
       },
@@ -859,11 +859,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1784713424,
-        "narHash": "sha256-GrFaR2YF/a/V7kgYKY43xtd8lxGjpt7DJAa/wsqDRWw=",
+        "lastModified": 1784766653,
+        "narHash": "sha256-jS8i5maOoyTLolcUbTwXz0sOKihQs+q6KdB8bIEj4fs=",
         "ref": "main",
-        "rev": "cc6f1a74c55f0da43c78ba18ba273e4d99f5e1c6",
-        "revCount": 467,
+        "rev": "06bbeec2c67c7604bf98da1d05427cb451c37199",
+        "revCount": 510,
         "type": "git",
         "url": "file:///home/tom/code/north"
       },
