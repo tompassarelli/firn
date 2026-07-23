@@ -57,7 +57,17 @@
            :restartIfChanged      true
            :environment           {:HOME homeDir
                                    :FRAM_REQUIRE_LOG_FENCE "1"
-                                   :FRAM_TELEMETRY_LOG (s homeDir "/.local/state/north/telemetry.log")}
+                                   :FRAM_TELEMETRY_LOG (s homeDir "/.local/state/north/telemetry.log")
+                                   ;; JDK launcher seam (java itself honors this env
+                                   ;; var since JDK 9, ahead of any app args) — applies
+                                   ;; identically whether north-coord-runtime execs the
+                                   ;; packaged $FRAM_JAVA classpath launch or the
+                                   ;; checkout's `clojure -M` (which itself invokes
+                                   ;; java), so it doesn't depend on fram-daemon's mode
+                                   ;; branch. Sizing per empirical live-set measurement
+                                   ;; (jcmd GC: 1.28GB live / 12MB log corpus): 6g is
+                                   ;; ~4.7x headroom.
+                                   :JDK_JAVA_OPTIONS "-Xmx6g"}
            :serviceConfig
             {:Type             "simple"
              :User             username
@@ -68,4 +78,10 @@
              :ExecStart (s northCoordRuntime "/bin/north-coord-runtime start")
              :ExecStartPost (s northCoordRuntime "/bin/north-coord-runtime settle")
              :Restart          "always"
-             :RestartSec       2}}})}))
+             :RestartSec       2
+             ;; Heap-adjacent RSS overhead (metaspace, native, mmapped log/index
+             ;; files) sits above -Xmx6g; 8G ceiling governs OOM behavior instead
+             ;; of leaving it uncapped (see thread progress: 18GB uncapped RSS
+             ;; observed pre-GC on this host before the leak-ruled-out finding).
+             :MemoryMax        "8G"
+             :MemorySwapMax    "0"}}})}))

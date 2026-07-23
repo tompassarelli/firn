@@ -40,6 +40,7 @@ in
         HOME = homeDir;
         FRAM_REQUIRE_LOG_FENCE = "1";
         FRAM_TELEMETRY_LOG = "${homeDir}/.local/state/north/telemetry.log";
+        JDK_JAVA_OPTIONS = "-Xmx6g";
       };
       serviceConfig = {
         Type = "simple";
@@ -54,6 +55,8 @@ in
         ExecStartPost = "${northCoordRuntime}/bin/north-coord-runtime settle";
         Restart = "always";
         RestartSec = 2;
+        MemoryMax = "8G";
+        MemorySwapMax = "0";
       };
     };
   };
