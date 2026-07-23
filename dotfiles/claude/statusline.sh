@@ -15,7 +15,6 @@
 # future: SEGMENT_MODEL, SEGMENT_CONTEXT, SEGMENT_GIT … (read the session JSON
 # Claude Code pipes on stdin — captured below for whoever needs it).
 
-CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 STDIN_JSON=$(cat 2>/dev/null)   # session payload; entitlement observer + future segments
 segments=()
 
