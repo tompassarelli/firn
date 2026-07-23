@@ -122,7 +122,32 @@ run_bounded_process() {
 run_claude_probe() {
   local duration="$1"
   shift
-  run_bounded_process "$duration" "${CLAUDE_BIN:-claude}" "$@"
+  run_bounded_process "$duration" \
+    /run/current-system/sw/bin/env -u CLAUDE_CONFIG_DIR \
+    "${CLAUDE_BIN:-/run/current-system/sw/bin/claude}" "$@"
+}
+
+claude_probe_binary_is_authoritative() {
+  local configured="${CLAUDE_BIN:-/run/current-system/sw/bin/claude}" resolved
+
+  [ -x "$configured" ] || return 1
+  if [ -n "${CLAUDE_BIN:-}" ]; then
+    return 0
+  fi
+  [ "$configured" = /run/current-system/sw/bin/claude ] || return 1
+  resolved="$(readlink -f "$configured" 2>/dev/null)" || return 1
+  [[ "$resolved" = /nix/store/* ]] && [ -x "$resolved" ]
+}
+
+claude_mcp_server_connected() {
+  local output="$1" server="$2"
+  local -a lines=()
+
+  mapfile -t lines < <(grep -F "${server}:" <<<"$output" || true)
+  [ "${#lines[@]}" -eq 1 ] || return 1
+  [[ "${lines[0]}" = "$server:"* ]] || return 1
+  [[ "${lines[0]}" = *'✔ Connected'* ]] || return 1
+  [[ "${lines[0]}" != *'! Connected'* ]]
 }
 
 run_codex_probe() {
@@ -433,7 +458,9 @@ north_coord_runtime_record_owner_is_valid() {
 
 north_coord_runtime_identity_is_valid() {
   local mode="$1" source="$2" revision="$3" tree="$4" origin="$5" daemon="$6" selector="$7"
-  local canonical_source canonical_selector canonical_daemon expected_source
+  local store_root="${8:-/nix/store}"
+  local canonical_source canonical_selector canonical_daemon canonical_origin
+  local canonical_store_root expected_source expected_daemon package_name
   local observed_revision observed_tree observed_common observed_origin top_level worktree_status
 
   NORTH_COORD_RUNTIME_IDENTITY_REASON=''
@@ -457,25 +484,22 @@ north_coord_runtime_identity_is_valid() {
     NORTH_COORD_RUNTIME_IDENTITY_REASON="stable selector cannot be resolved: $selector"
     return 1
   }
-  [ "$canonical_source" = "$canonical_selector" ] || {
-    NORTH_COORD_RUNTIME_IDENTITY_REASON='runtime source and stable selector resolve differently'
-    return 1
-  }
-  [ -x "$canonical_source/bin/fram-daemon" ] || {
-    NORTH_COORD_RUNTIME_IDENTITY_REASON='selected Fram daemon is not executable'
-    return 1
-  }
   canonical_daemon="$(realpath -e "$daemon" 2>/dev/null)" || {
     NORTH_COORD_RUNTIME_IDENTITY_REASON="runtime daemon is missing: $daemon"
-    return 1
-  }
-  [ "$canonical_daemon" = "$canonical_source/bin/fram-daemon" ] || {
-    NORTH_COORD_RUNTIME_IDENTITY_REASON='runtime daemon is not the selected physical Fram daemon'
     return 1
   }
 
   case "$mode" in
     checkout)
+      [ "$canonical_source" = "$canonical_selector" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source and stable selector resolve differently'
+        return 1
+      }
+      expected_daemon="$canonical_source/bin/fram-daemon"
+      [ -x "$expected_daemon" ] && [ "$canonical_daemon" = "$expected_daemon" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout daemon is not the selected physical Fram daemon'
+        return 1
+      }
       expected_source="$(realpath -m "$(dirname "$selector")/deployments/$revision")"
       [ "$canonical_source" = "$expected_source" ] || {
         NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source is outside its revision-owned deployment path'
@@ -551,16 +575,45 @@ north_coord_runtime_identity_is_valid() {
       }
       ;;
     package)
-      [[ "$canonical_source" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*$ ]] || {
-        NORTH_COORD_RUNTIME_IDENTITY_REASON='package source is not a direct Fram Nix-store root'
+      canonical_store_root="$(realpath -e "$store_root" 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON="Nix store root is missing: $store_root"
+        return 1
+      }
+      package_name="${canonical_selector##*/}"
+      [ "$(dirname "$canonical_selector")" = "$canonical_store_root" ] &&
+        [[ "$package_name" =~ ^[a-z0-9]{32}-fram[^/]*$ ]] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='package selector is not a direct Fram Nix-store root'
+        return 1
+      }
+      [ -d "$canonical_selector" ] && [ ! -L "$canonical_selector" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='package selector does not resolve to a real directory'
+        return 1
+      }
+      expected_source="$canonical_selector/libexec/fram"
+      [ "$source" = "$expected_source" ] &&
+        [ "$canonical_source" = "$expected_source" ] &&
+        [ -d "$source" ] && [ ! -L "$source" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='package source is not the selected outer package libexec/fram directory'
+        return 1
+      }
+      canonical_origin="$(realpath -e "$origin" 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON="package origin is missing: $origin"
+        return 1
+      }
+      [ "$origin" = "$canonical_selector" ] &&
+        [ "$canonical_origin" = "$canonical_selector" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='package origin does not name the selected immutable outer package'
+        return 1
+      }
+      expected_daemon="$canonical_selector/bin/fram-daemon"
+      [ "$daemon" = "$expected_daemon" ] &&
+        [ "$canonical_daemon" = "$expected_daemon" ] &&
+        [ -f "$daemon" ] && [ ! -L "$daemon" ] && [ -x "$daemon" ] || {
+        NORTH_COORD_RUNTIME_IDENTITY_REASON='package daemon is not the selected outer package wrapper'
         return 1
       }
       [ "$tree" = "immutable:$revision" ] || {
         NORTH_COORD_RUNTIME_IDENTITY_REASON='package tree marker does not bind its package revision'
-        return 1
-      }
-      [ "$origin" = "$canonical_source" ] || {
-        NORTH_COORD_RUNTIME_IDENTITY_REASON='package origin does not name its immutable store root'
         return 1
       }
       ;;
@@ -783,6 +836,112 @@ immutable_store_link_matches() {
     bad "$label differs from the committed generation source"
     return 1
   fi
+}
+
+write_shell_script_bin_matches_source() {
+  local live="$1" source="$2" store_root="${3:-/nix/store}"
+  local resolved canonical_store package_root interpreter interpreter_package first_line
+
+  [ -f "$source" ] || return 1
+  resolved="$(realpath -e "$live" 2>/dev/null)" || return 1
+  canonical_store="$(realpath -e "$store_root" 2>/dev/null)" || return 1
+  package_root="$(dirname "$(dirname "$resolved")")"
+  [ "$(dirname "$package_root")" = "$canonical_store" ] || return 1
+  [[ "${package_root##*/}" =~ ^[a-z0-9]{32}-north-session-end$ ]] || return 1
+  [ "$resolved" = "$package_root/bin/north-session-end" ] &&
+    [ -f "$resolved" ] && [ ! -L "$resolved" ] && [ -x "$resolved" ] || return 1
+
+  IFS= read -r first_line <"$resolved" || return 1
+  [[ "$first_line" = '#!'* ]] || return 1
+  interpreter="${first_line#\#!}"
+  [ -n "$interpreter" ] && [ "$first_line" = "#!$interpreter" ] || return 1
+  case "$interpreter" in
+    "$canonical_store"/*/bin/bash) ;;
+    *) return 1 ;;
+  esac
+  interpreter_package="${interpreter%/bin/bash}"
+  [ "$(dirname "$interpreter_package")" = "$canonical_store" ] &&
+    [[ "${interpreter_package##*/}" =~ ^[a-z0-9]{32}-bash[^/]*$ ]] || return 1
+  [ -x "$interpreter" ] || return 1
+
+  cmp -s \
+    <(tail -n +2 "$resolved") \
+    <({ command cat "$source"; printf '\n'; })
+}
+
+north_wrapped_runtime_matches_locked_source() {
+  local public="$1" source_repo="$2" revision="$3" relative="$4"
+  local store_root="${5:-/nix/store}"
+  local resolved canonical_store package_root wrapped wrapper_interpreter interpreter_package
+  local wrapper_header body_header locked_header expected_home expected_exec
+  local path_line path_entry path_package index=1 path_blocks=0
+  local -a wrapper_lines=()
+
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || return 1
+  git -C "$source_repo" cat-file -e "$revision:$relative" 2>/dev/null || return 1
+  resolved="$(realpath -e "$public" 2>/dev/null)" || return 1
+  canonical_store="$(realpath -e "$store_root" 2>/dev/null)" || return 1
+  [[ "$resolved" = */"$relative" ]] || return 1
+  package_root="${resolved%/"$relative"}"
+  [ "$(dirname "$package_root")" = "$canonical_store" ] || return 1
+  [[ "${package_root##*/}" =~ ^[a-z0-9]{32}-north[^/]*$ ]] || return 1
+  [ "$resolved" = "$package_root/$relative" ] &&
+    [ -f "$resolved" ] && [ ! -L "$resolved" ] && [ -x "$resolved" ] || return 1
+
+  wrapped="$package_root/${relative%/*}/.${relative##*/}-wrapped"
+  [ -f "$wrapped" ] && [ ! -L "$wrapped" ] && [ -x "$wrapped" ] || return 1
+  IFS= read -r wrapper_header <"$resolved" || return 1
+  [[ "$wrapper_header" = '#! '*' -e' ]] || return 1
+  wrapper_interpreter="${wrapper_header#\#! }"
+  wrapper_interpreter="${wrapper_interpreter% -e}"
+  case "$wrapper_interpreter" in
+    "$canonical_store"/*/bin/bash) ;;
+    *) return 1 ;;
+  esac
+  interpreter_package="${wrapper_interpreter%/bin/bash}"
+  [ "$(dirname "$interpreter_package")" = "$canonical_store" ] &&
+    [[ "${interpreter_package##*/}" =~ ^[a-z0-9]{32}-bash[^/]*$ ]] || return 1
+  [ -x "$wrapper_interpreter" ] || return 1
+
+  IFS= read -r body_header <"$wrapped" || return 1
+  [ "$body_header" = "#!$wrapper_interpreter" ] || return 1
+  locked_header="$(git -C "$source_repo" show "$revision:$relative" | head -n 1)" || return 1
+  [[ "$locked_header" = '#!'* ]] || return 1
+  cmp -s \
+    <(tail -n +2 "$wrapped") \
+    <(git -C "$source_repo" show "$revision:$relative" | tail -n +2) || return 1
+
+  expected_home="export NORTH_HOME='$package_root'"
+  expected_exec='exec -a "$0" "'"$wrapped"'"  "$@" '
+  mapfile -t wrapper_lines <"$resolved"
+  [ "${wrapper_lines[0]:-}" = "$wrapper_header" ] || return 1
+  while [ "$index" -lt "${#wrapper_lines[@]}" ] &&
+        [ "${wrapper_lines[$index]}" = "PATH=\${PATH:+':'\$PATH':'}" ]; do
+    [ $((index + 5)) -lt "${#wrapper_lines[@]}" ] || return 1
+    path_line="${wrapper_lines[$((index + 2))]}"
+    [ "${#path_line}" -gt 12 ] &&
+      [ "${path_line:0:6}" = "PATH='" ] &&
+      [ "${path_line: -6}" = "'\$PATH" ] || return 1
+    path_entry="${path_line:6:${#path_line}-12}"
+    case "$path_entry" in
+      "$canonical_store"/*/bin) ;;
+      *) return 1 ;;
+    esac
+    path_package="${path_entry%/bin}"
+    [ "$(dirname "$path_package")" = "$canonical_store" ] &&
+      [[ "${path_package##*/}" =~ ^[a-z0-9]{32}-[^/]+$ ]] &&
+      [ -d "$path_entry" ] || return 1
+    [ "${wrapper_lines[$((index + 1))]}" = "PATH=\${PATH/':''${path_entry}'':'/':'}" ] &&
+      [ "${wrapper_lines[$((index + 3))]}" = "PATH=\${PATH#':'}" ] &&
+      [ "${wrapper_lines[$((index + 4))]}" = "PATH=\${PATH%':'}" ] &&
+      [ "${wrapper_lines[$((index + 5))]}" = 'export PATH' ] || return 1
+    path_blocks=$((path_blocks + 1))
+    index=$((index + 6))
+  done
+  [ "$path_blocks" -gt 0 ] || return 1
+  [ "$index" -eq $((${#wrapper_lines[@]} - 2)) ] &&
+    [ "${wrapper_lines[$index]}" = "$expected_home" ] &&
+    [ "${wrapper_lines[$((index + 1))]}" = "$expected_exec" ]
 }
 
 writable_claude_settings_match_control_plane() {
@@ -1030,11 +1189,12 @@ validate_hooks() {
       if [ "$LOCAL" -eq 0 ] || {
            resolved="$(readlink -f "$first" 2>/dev/null || true)" &&
            [[ "$resolved" = /nix/store/* ]] &&
-           cmp -s "$SHARED/hooks/north-session-end.sh" "$first";
+           write_shell_script_bin_matches_source \
+             "$first" "$SHARED/hooks/north-session-end.sh";
          }; then
         ok_detail "$provider $ev → immutable generation command $basename"
       else
-        bad "$provider $ev north-session-end is not the exact store-backed generation command"
+        bad "$provider $ev north-session-end is not the exact deterministic store-backed generation command"
       fi
     elif [[ "$first" = /home/tom/code/north/bin/* ]]; then
       bad "$provider $ev uses mutable checkout North lifecycle command $first; use /run/current-system/sw/bin/$basename"
@@ -1257,12 +1417,12 @@ PY
       bin/north-mark-delegated \
       bin/north-on-stop; do
       if [ -n "$north_revision" ] &&
-         git -C "$HOME/code/north" cat-file -e "$north_revision:$relative" 2>/dev/null &&
-         cmp -s "/etc/codex/hooks/north/$relative" \
-           <(git -C "$HOME/code/north" show "$north_revision:$relative"); then :
+         north_wrapped_runtime_matches_locked_source \
+           "/etc/codex/hooks/north/$relative" "$HOME/code/north" \
+           "$north_revision" "$relative"; then :
       else
         generation_exact=0
-        bad "Codex North runtime $relative does not match locked revision ${north_revision:-missing}"
+        bad "Codex North runtime $relative is not an exact locked body with immutable package-wrapper provenance at ${north_revision:-missing}"
       fi
     done
     if [ "$generation_exact" -eq 1 ]; then
@@ -1424,16 +1584,20 @@ if [ "$LOCAL" -eq 1 ]; then
     note "$project_count project-scoped Claude MCP registrations (allowed)"
     ok_detail "Claude MCP declarations: North + canonical split Fram corpus + Linear"
   else bad "$HOME/.claude.json is missing"; fi
-  if command -v claude >/dev/null 2>&1; then
+  if claude_probe_binary_is_authoritative; then
+    if [ -n "${CLAUDE_BIN:-}" ]; then
+      ok_detail "Claude health probe uses explicit test override $CLAUDE_BIN"
+    else
+      ok_detail "Claude health probe uses immutable /run/current-system/sw/bin/claude with default user state"
+    fi
     claude_mcp_status=0
     claude_mcp_output="$(
-      CLAUDE_CONFIG_DIR="$HOME/.claude" \
-        run_claude_probe "${MCP_PROBE_TIMEOUT_SECONDS:-20}" mcp list 2>&1
+      run_claude_probe "${MCP_PROBE_TIMEOUT_SECONDS:-20}" mcp list 2>&1
     )" || claude_mcp_status=$?
     if [ "$claude_mcp_status" -eq 0 ]; then
       claude_mcp_exact=1
       for server in north fram linear-mcp-msa-new; do
-        grep -Eq "^${server}:.*Connected" <<<"$claude_mcp_output" || {
+        claude_mcp_server_connected "$claude_mcp_output" "$server" || {
           claude_mcp_exact=0
           bad "Claude MCP '$server' is missing or not connected:\n$claude_mcp_output"
         }
@@ -1453,8 +1617,7 @@ if [ "$LOCAL" -eq 1 ]; then
     gaffer_expected="$(jq -er '.nodes.gaffer.locked.rev | select(test("^[0-9a-f]{40}$"))' "$REPO/flake.lock" 2>/dev/null || true)"
     gaffer_plugin_probe_status=0
     gaffer_plugins="$(
-      CLAUDE_CONFIG_DIR="$HOME/.claude" \
-        run_claude_probe "${PLUGIN_PROBE_TIMEOUT_SECONDS:-15}" plugin list --json 2>/dev/null
+      run_claude_probe "${PLUGIN_PROBE_TIMEOUT_SECONDS:-15}" plugin list --json 2>/dev/null
     )" || gaffer_plugin_probe_status=$?
     if [ "$gaffer_plugin_probe_status" -eq 0 ] &&
        gaffer_version="$(jq -er '
@@ -1545,7 +1708,7 @@ if [ "$LOCAL" -eq 1 ]; then
       fi
       claude_gaffer='freshness unknown'
     fi
-  else bad "claude CLI is missing from PATH"; fi
+  else bad "Claude health probe binary is missing, non-executable, or not the immutable /run/current-system/sw/bin/claude"; fi
 fi
 provider_group Claude "$before" \
   "Hooks       $claude_bindings bindings" \

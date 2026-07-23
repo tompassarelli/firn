@@ -82,6 +82,34 @@ grep -Fq '"Allocation  ' \
 
 source "$REPO/scripts/agent-config-check.sh"
 
+claude_mcp_server_connected \
+  $'north: /run/current-system/sw/bin/north-mcp - ✔ Connected\nfram: ✔ Connected' \
+  north
+if claude_mcp_server_connected \
+   $'north: /run/current-system/sw/bin/north-mcp - ! Connected · failed\nfram: ✔ Connected' \
+   north; then
+  printf 'Claude MCP failure marker was accepted as connected\n' >&2
+  exit 1
+fi
+
+mkdir -p "$scratch/bin"
+cat >"$scratch/bin/claude-probe" <<'SH'
+#!/usr/bin/env bash
+printf 'CLAUDE_CONFIG_DIR=%s\n' "${CLAUDE_CONFIG_DIR-unset}" >"$CLAUDE_PROBE_CALLS"
+printf 'argv=%s\n' "$*" >>"$CLAUDE_PROBE_CALLS"
+SH
+chmod +x "$scratch/bin/claude-probe"
+(
+  export CLAUDE_CONFIG_DIR="$scratch/wrong-claude-state"
+  export CLAUDE_BIN="$scratch/bin/claude-probe"
+  export CLAUDE_PROBE_CALLS="$scratch/claude-probe-calls"
+  claude_probe_binary_is_authoritative
+  run_claude_probe 0.2 mcp list >/dev/null
+)
+diff -u \
+  <(printf '%s\n' 'CLAUDE_CONFIG_DIR=unset' 'argv=mcp list') \
+  "$scratch/claude-probe-calls"
+
 managed_policy="$REPO/modules/codex/requirements.toml"
 [ "$(codex_managed_policy_binding_count "$managed_policy")" = 17 ]
 cp "$managed_policy" "$scratch/managed-policy-failure-mode-missing.toml"
@@ -593,6 +621,128 @@ fi
 [ "$fail" -eq 1 ]
 fail=0
 details=()
+
+# Nix makeWrapper keeps the locked North body in a hidden sibling, patches
+# only its shebang, and exposes a generated public launcher. Attest both exact
+# body bytes and same-package dispatch provenance.
+fixture_store="$scratch/nix/store"
+fixture_bash_pkg="$fixture_store/${nix_hash}-bash-5.3p9"
+fixture_bash="$fixture_bash_pkg/bin/bash"
+fixture_north_repo="$scratch/locked-north"
+fixture_north_pkg="$fixture_store/${nix_hash}-north-0.1.0"
+fixture_public="$fixture_north_pkg/bin/north-on-spawn"
+fixture_wrapped="$fixture_north_pkg/bin/.north-on-spawn-wrapped"
+mkdir -p "$fixture_bash_pkg/bin" "$fixture_north_repo/bin" "$fixture_north_pkg/bin"
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$fixture_bash"
+chmod +x "$fixture_bash"
+printf '%s\n' '#!/usr/bin/env bash' 'printf locked-body\\n' \
+  >"$fixture_north_repo/bin/north-on-spawn"
+git -C "$fixture_north_repo" init -q
+git -C "$fixture_north_repo" config user.email test@example.invalid
+git -C "$fixture_north_repo" config user.name wrapper-test
+git -C "$fixture_north_repo" add bin/north-on-spawn
+git -C "$fixture_north_repo" commit -qm locked
+fixture_north_revision="$(git -C "$fixture_north_repo" rev-parse HEAD)"
+{
+  printf '#!%s\n' "$fixture_bash"
+  git -C "$fixture_north_repo" show \
+    "$fixture_north_revision:bin/north-on-spawn" | tail -n +2
+} >"$fixture_wrapped"
+printf '%s\n' \
+  "#! $fixture_bash -e" \
+  "PATH=\${PATH:+':'\$PATH':'}" \
+  "PATH=\${PATH/':''${fixture_bash_pkg}/bin'':'/':'}" \
+  "PATH='${fixture_bash_pkg}/bin'\$PATH" \
+  "PATH=\${PATH#':'}" \
+  "PATH=\${PATH%':'}" \
+  'export PATH' \
+  "export NORTH_HOME='$fixture_north_pkg'" \
+  'exec -a "$0" "'"$fixture_wrapped"'"  "$@" ' \
+  >"$fixture_public"
+chmod +x "$fixture_public" "$fixture_wrapped"
+north_wrapped_runtime_matches_locked_source \
+  "$fixture_public" "$fixture_north_repo" "$fixture_north_revision" \
+  bin/north-on-spawn "$fixture_store"
+printf 'drift\n' >>"$fixture_wrapped"
+if north_wrapped_runtime_matches_locked_source \
+   "$fixture_public" "$fixture_north_repo" "$fixture_north_revision" \
+   bin/north-on-spawn "$fixture_store"; then
+  printf 'tampered hidden North wrapper body was accepted\n' >&2
+  exit 1
+fi
+{
+  printf '#!%s\n' "$fixture_bash"
+  git -C "$fixture_north_repo" show \
+    "$fixture_north_revision:bin/north-on-spawn" | tail -n +2
+} >"$fixture_wrapped"
+cp "$fixture_public" "$scratch/good-public-wrapper"
+sed -i 's#/.north-on-spawn-wrapped#/.wrong-wrapped#' "$fixture_public"
+if north_wrapped_runtime_matches_locked_source \
+   "$fixture_public" "$fixture_north_repo" "$fixture_north_revision" \
+   bin/north-on-spawn "$fixture_store"; then
+  printf 'North public wrapper with wrong hidden-body dispatch was accepted\n' >&2
+  exit 1
+fi
+mv "$scratch/good-public-wrapper" "$fixture_public"
+chmod +x "$fixture_public"
+cp "$fixture_public" "$scratch/good-public-wrapper"
+sed -i "/^export NORTH_HOME=/i printf 'injected-before-exec\\n'" \
+  "$fixture_public"
+if north_wrapped_runtime_matches_locked_source \
+   "$fixture_public" "$fixture_north_repo" "$fixture_north_revision" \
+   bin/north-on-spawn "$fixture_store"; then
+  printf 'North public wrapper with injected pre-exec command was accepted\n' >&2
+  exit 1
+fi
+mv "$scratch/good-public-wrapper" "$fixture_public"
+chmod +x "$fixture_public"
+cp "$fixture_public" "$scratch/good-public-wrapper"
+grep -v '^export NORTH_HOME=' "$scratch/good-public-wrapper" \
+  >"$fixture_public"
+printf '%s\n' "export NORTH_HOME='$fixture_north_pkg'" >>"$fixture_public"
+chmod +x "$fixture_public"
+if north_wrapped_runtime_matches_locked_source \
+   "$fixture_public" "$fixture_north_repo" "$fixture_north_revision" \
+   bin/north-on-spawn "$fixture_store"; then
+  printf 'North public wrapper with NORTH_HOME reordered after exec was accepted\n' >&2
+  exit 1
+fi
+mv "$scratch/good-public-wrapper" "$fixture_public"
+chmod +x "$fixture_public"
+
+# writeShellScriptBin prepends one store Bash shebang to the complete source
+# and appends exactly one blank line. No other body normalization is allowed.
+session_source="$scratch/north-session-end.sh"
+session_pkg="$fixture_store/${nix_hash}-north-session-end"
+session_live="$session_pkg/bin/north-session-end"
+mkdir -p "$session_pkg/bin"
+printf '%s\n' '#!/usr/bin/env bash' 'printf session-end\\n' >"$session_source"
+{
+  printf '#!%s\n' "$fixture_bash"
+  cat "$session_source"
+  printf '\n'
+} >"$session_live"
+chmod +x "$session_live"
+write_shell_script_bin_matches_source \
+  "$session_live" "$session_source" "$fixture_store"
+printf 'drift\n' >>"$session_live"
+if write_shell_script_bin_matches_source \
+   "$session_live" "$session_source" "$fixture_store"; then
+  printf 'north-session-end generated body drift was accepted\n' >&2
+  exit 1
+fi
+{
+  printf '#!/bin/bash\n'
+  cat "$session_source"
+  printf '\n'
+} >"$session_live"
+chmod +x "$session_live"
+if write_shell_script_bin_matches_source \
+   "$session_live" "$session_source" "$fixture_store"; then
+  printf 'north-session-end non-store shebang was accepted\n' >&2
+  exit 1
+fi
+
 grep -Fq 'CODEX_HOME="$HOME/.codex"' "$REPO/scripts/agent-config-check.sh"
 grep -Fq 'CODEX_SQLITE_HOME="$HOME/.codex/sqlite"' \
   "$REPO/scripts/agent-config-check.sh"
@@ -633,7 +783,14 @@ fi
 [ "$fail" -eq 1 ]
 fail=0
 details=()
-grep -Fq 'CLAUDE_CONFIG_DIR="$HOME/.claude"' \
+if grep -Fq 'CLAUDE_CONFIG_DIR="$HOME/.claude"' \
+   "$REPO/scripts/agent-config-check.sh"; then
+  printf 'Claude health still forces the wrong config directory\n' >&2
+  exit 1
+fi
+grep -Fq '/run/current-system/sw/bin/env -u CLAUDE_CONFIG_DIR' \
+  "$REPO/scripts/agent-config-check.sh"
+grep -Fq '${CLAUDE_BIN:-/run/current-system/sw/bin/claude}' \
   "$REPO/scripts/agent-config-check.sh"
 grep -q ':ExecStartPre \[(s northCoordRuntime "/bin/north-coord-runtime ensure-default")' \
   "$REPO/modules/north-coord/default.bnix"
@@ -658,6 +815,63 @@ if classify_north_coord_exec "{ path=$wrapper_path ; argv[]=$wrapper_path 7977 /
   exit 1
 fi
 [ "$NORTH_COORD_EXEC_KIND" = unrecognized ]
+
+# Package mode deliberately separates package authority from runtime source:
+# the selector and origin are the outer package, source is libexec/fram, and
+# the executed daemon is the outer package wrapper.
+package_state="$scratch/package-runtime-state"
+package_outer="$fixture_store/${nix_hash}-fram-0-unstable-2026-06-28"
+package_source="$package_outer/libexec/fram"
+package_daemon="$package_outer/bin/fram-daemon"
+package_revision=1111111111111111111111111111111111111111
+mkdir -p \
+  "$package_source/bin" "$package_outer/bin" \
+  "$package_state/generations/g1"
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$package_daemon"
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$package_source/bin/fram-daemon"
+chmod +x "$package_daemon" "$package_source/bin/fram-daemon"
+ln -s "$package_outer" "$package_state/generations/g1/current"
+ln -s generations/g1 "$package_state/active"
+ln -s active/current "$package_state/current"
+north_coord_runtime_identity_is_valid \
+  package "$package_source" "$package_revision" \
+  "immutable:$package_revision" "$package_outer" "$package_daemon" \
+  "$package_state/current" "$fixture_store"
+if north_coord_runtime_identity_is_valid \
+   package "$package_outer" "$package_revision" \
+   "immutable:$package_revision" "$package_outer" "$package_daemon" \
+   "$package_state/current" "$fixture_store"; then
+  printf 'legacy flat package source was accepted\n' >&2
+  exit 1
+fi
+if north_coord_runtime_identity_is_valid \
+   package "$package_source" "$package_revision" \
+   "immutable:$package_revision" "$package_outer" \
+   "$package_source/bin/fram-daemon" "$package_state/current" \
+   "$fixture_store"; then
+  printf 'inner source daemon was accepted instead of the outer package wrapper\n' >&2
+  exit 1
+fi
+wrong_package_outer="$fixture_store/${nix_hash}-fram-wrong-origin"
+mkdir -p "$wrong_package_outer"
+if north_coord_runtime_identity_is_valid \
+   package "$package_source" "$package_revision" \
+   "immutable:$package_revision" "$wrong_package_outer" "$package_daemon" \
+   "$package_state/current" "$fixture_store"; then
+  printf 'wrong package origin was accepted\n' >&2
+  exit 1
+fi
+mv "$package_source" "$package_outer/libexec/fram-directory"
+printf 'not-a-directory\n' >"$package_source"
+if north_coord_runtime_identity_is_valid \
+   package "$package_source" "$package_revision" \
+   "immutable:$package_revision" "$package_outer" "$package_daemon" \
+   "$package_state/current" "$fixture_store"; then
+  printf 'non-directory package source was accepted\n' >&2
+  exit 1
+fi
+rm "${package_source:?}"
+mv "$package_outer/libexec/fram-directory" "$package_source"
 
 # Process identity must resolve through the stable selector to an exact, clean,
 # revision-owned deployment. SHA equality alone cannot bless a different root.
