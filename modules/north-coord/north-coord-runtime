@@ -294,7 +294,8 @@ validate_declared_runtime() {
   local declared_revision=$runtime_revision declared_tree=$runtime_tree
   local declared_origin=$runtime_origin declared_daemon=$runtime_daemon
   local canonical_source canonical_daemon canonical_origin canonical_package
-  local canonical_package_source legacy_package=0
+  local canonical_package_source canonical_store declared_package_source
+  local legacy_package=0
 
   runtime_identity_migrated=0
 
@@ -328,33 +329,41 @@ validate_declared_runtime() {
         die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
       canonical_package_source=$(realpath -e "$canonical_package/libexec/fram") ||
         die "packaged Fram source is missing: $canonical_package/libexec/fram"
+      [[ "$canonical_package_source" == "$canonical_package/libexec/fram" &&
+         -d "$canonical_package_source" && ! -L "$canonical_package_source" ]] ||
+        die "packaged Fram source escapes its immutable root"
+      canonical_store=$(realpath -e "$(dirname "$canonical_package")") ||
+        die "packaged Fram store root is missing: $(dirname "$canonical_package")"
+      if [[ "$canonical_origin" != "$canonical_package" ]]; then
+        [[ "$(dirname "$canonical_origin")" == "$canonical_store" &&
+           "${canonical_origin##*/}" =~ ^[0-9abcdfghijklmnpqrsvwxyz]{32}-fram[^/]*$ &&
+           -d "$canonical_origin" && ! -L "$canonical_origin" ]] ||
+          die "historical package selection is not a direct immutable Fram store root"
+      fi
       if [[ "$canonical_source" == "$canonical_origin" ]]; then
-        [[ "$canonical_origin" == "$canonical_package" &&
-           "$declared_revision" == "$NORTH_COORD_FRAM_PACKAGE_REV" &&
-           "$canonical_daemon" == "$canonical_package/bin/fram-daemon" &&
-           "$canonical_package_source" == "$canonical_package/libexec/fram" ]] ||
-          die "legacy package identity does not match the current system package"
+        declared_package_source=$(realpath -e "$canonical_origin/libexec/fram") ||
+          die "legacy package source is missing: $canonical_origin/libexec/fram"
+        [[ "$declared_package_source" == "$canonical_origin/libexec/fram" &&
+           -d "$declared_package_source" && ! -L "$declared_package_source" ]] ||
+          die "legacy package source escapes its immutable root"
         legacy_package=1
-      elif [[ "$canonical_source" != "$canonical_origin/libexec/fram" ]]; then
-        die "package source does not belong to its immutable root"
+      else
+        declared_package_source=$canonical_source
+        [[ "$declared_package_source" == "$canonical_origin/libexec/fram" &&
+           -d "$declared_package_source" && ! -L "$declared_package_source" ]] ||
+          die "package source does not belong to its immutable root"
       fi
       if [[ "$canonical_origin" == "$canonical_package" ]]; then
         [[ "$declared_revision" == "$NORTH_COORD_FRAM_PACKAGE_REV" ]] ||
           die "current system package revision differs from its generation identity"
-      else
-        [[ "$canonical_origin" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*$ ]] ||
-          die "historical package selection is not an immutable Fram store root"
       fi
       runtime_mode=$declared_mode
-      runtime_source=$canonical_source
+      runtime_source=$declared_package_source
       runtime_revision=$declared_revision
       runtime_tree=$declared_tree
       runtime_origin=$declared_origin
       runtime_daemon=$canonical_daemon
-      if [[ "$legacy_package" -eq 1 ]]; then
-        runtime_source=$canonical_package_source
-        runtime_identity_migrated=1
-      fi
+      runtime_identity_migrated=$legacy_package
       ;;
     *) die "unknown declared runtime mode: $declared_mode" ;;
   esac

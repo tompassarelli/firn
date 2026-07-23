@@ -234,6 +234,85 @@ run_runtime_in_state "$legacy_state" rollback >/dev/null
 [[ $(readlink -f "$legacy_state/previous") == "$package_source" ]]
 grep -Fxq "source=$legacy_previous" < <(run_runtime_in_state "$legacy_state" status)
 
+# A system upgrade must not strand the selector on the historical v1 package
+# shape. The old generation named its immutable outer package as both source
+# and origin; loading normalizes that identity to its own libexec/fram, then an
+# explicit package selection atomically publishes new-current/old-previous.
+historical_hash=0123456789abcdfghijklmnpqrsvwxyz
+historical_package=$scratch/${historical_hash}-fram-old
+historical_source=$historical_package/libexec/fram
+historical_daemon=$historical_package/bin/fram-daemon
+historical_revision=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+outside_package=$scratch/outside/${historical_hash}-fram-old
+outside_source=$outside_package/libexec/fram
+outside_daemon=$outside_package/bin/fram-daemon
+mkdir -p "$historical_source" "$historical_package/bin"
+mkdir -p "$outside_source" "$outside_package/bin"
+write_daemon "$historical_daemon" historical-package
+write_daemon "$outside_daemon" outside-package
+
+upgrade_state=$scratch/upgrade-state
+run_runtime_in_state "$upgrade_state" initialize
+run_runtime_in_state "$upgrade_state" promote "$repo" "$revision_one" >/dev/null
+run_runtime_in_state "$upgrade_state" rollback >/dev/null
+upgrade_seed_generation=$(readlink -f "$upgrade_state/active")
+unlink "$upgrade_seed_generation/current"
+ln -s "$historical_package" "$upgrade_seed_generation/current"
+
+# A legacy identity still has to bind tree, daemon, and the trusted immutable
+# store root before its source can be normalized.
+{
+  printf '%s\n' north-fram-runtime-v1 package "$historical_package" "$historical_revision"
+  printf '%s\n' "immutable:$package_revision" "$historical_package" "$historical_daemon"
+} >"$upgrade_seed_generation/current.identity"
+if run_runtime_in_state "$upgrade_state" package >/dev/null 2>&1; then
+  printf 'historical legacy package with a mismatched tree marker was accepted\n' >&2
+  exit 1
+fi
+[[ $(readlink -f "$upgrade_state/active") == "$upgrade_seed_generation" ]]
+
+{
+  printf '%s\n' north-fram-runtime-v1 package "$historical_package" "$historical_revision"
+  printf '%s\n' "immutable:$historical_revision" "$historical_package" "$package_daemon"
+} >"$upgrade_seed_generation/current.identity"
+if run_runtime_in_state "$upgrade_state" package >/dev/null 2>&1; then
+  printf 'historical legacy package with a foreign daemon was accepted\n' >&2
+  exit 1
+fi
+[[ $(readlink -f "$upgrade_state/active") == "$upgrade_seed_generation" ]]
+
+unlink "$upgrade_seed_generation/current"
+ln -s "$outside_package" "$upgrade_seed_generation/current"
+{
+  printf '%s\n' north-fram-runtime-v1 package "$outside_package" "$historical_revision"
+  printf '%s\n' "immutable:$historical_revision" "$outside_package" "$outside_daemon"
+} >"$upgrade_seed_generation/current.identity"
+if run_runtime_in_state "$upgrade_state" package >/dev/null 2>&1; then
+  printf 'historical legacy package outside the current package store root was accepted\n' >&2
+  exit 1
+fi
+[[ $(readlink -f "$upgrade_state/active") == "$upgrade_seed_generation" ]]
+
+unlink "$upgrade_seed_generation/current"
+ln -s "$historical_package" "$upgrade_seed_generation/current"
+{
+  printf '%s\n' north-fram-runtime-v1 package "$historical_package" "$historical_revision"
+  printf '%s\n' "immutable:$historical_revision" "$historical_package" "$historical_daemon"
+} >"$upgrade_seed_generation/current.identity"
+run_runtime_in_state "$upgrade_state" package >/dev/null
+upgrade_generation=$(readlink -f "$upgrade_state/active")
+[[ "$upgrade_generation" != "$upgrade_seed_generation" ]]
+[[ $(readlink -f "$upgrade_state/current") == "$package_source" ]]
+[[ $(readlink -f "$upgrade_state/previous") == "$historical_source" ]]
+[[ $(sed -n '3p' "$upgrade_generation/current.identity") == "$package_source" ]]
+[[ $(sed -n '6p' "$upgrade_generation/current.identity") == "$package" ]]
+[[ $(sed -n '3p' "$upgrade_generation/previous.identity") == "$historical_source" ]]
+[[ $(sed -n '4p' "$upgrade_generation/previous.identity") == "$historical_revision" ]]
+[[ $(sed -n '5p' "$upgrade_generation/previous.identity") == "immutable:$historical_revision" ]]
+[[ $(sed -n '6p' "$upgrade_generation/previous.identity") == "$historical_package" ]]
+[[ $(sed -n '7p' "$upgrade_generation/previous.identity") == "$historical_daemon" ]]
+grep -Fxq "source=$package_source" < <(run_runtime_in_state "$upgrade_state" status)
+
 # A symlinked state ancestor never leaks a lexical alias into generation-scoped
 # process authority. The record and exported discovery paths are canonical.
 canonical_state_parent=$scratch/canonical-state-parent
