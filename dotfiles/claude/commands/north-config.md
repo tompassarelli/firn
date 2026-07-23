@@ -1,5 +1,5 @@
 ---
-description: Personal stack settings, one report — caveman / dispatch / beagle / coord / guards
+description: Personal stack settings, one report — dispatch / beagle / coord / guards (caveman decommissioned 2026-07-23, Phase 2 removes the north-side dial)
 allowed-tools: Bash(north config:*)
 ---
 

@@ -285,7 +285,7 @@ const praxisDirMatch = harnessText.match(/const PRAXIS_DIR\s*=\s*`([^`]+)`/);
 const praxisDir = praxisDirMatch
   ? praxisDirMatch[1].replace("${process.env.HOME}", HOME)
   : null;
-const appendixFns = ["globalLawsAppendix", "cavemanAppendix", "esoAppendix", "praxisAppendix"]
+const appendixFns = ["globalLawsAppendix", "esoAppendix", "praxisAppendix"]
   .filter(fn => harnessText.includes(`function ${fn}(`));
 
 // ── rot audit data ──────────────────────────────────────────────────────────
@@ -540,7 +540,6 @@ emit(`  - personal residue: \`~/code/nixos-config/dotfiles/agents/docs/praxis/\`
 emit(`- appendix functions found in harness: ${appendixFns.join(", ")}`);
 emit(`  - globalLawsAppendix: injects global CLAUDE.md laws into every spawn`);
 emit(`  - praxisAppendix: reads role/posture/delta from PRAXIS_DIR per model`);
-emit(`  - cavemanAppendix: propagates caveman mode to subagents`);
 emit(`  - esoAppendix: injects ESO output format spec for dense handoffs`);
 emit("");
 
@@ -555,7 +554,6 @@ emit("  settingsNixos[\"settings.json source\\n~/code/nixos-config/dotfiles/clau
 emit("  claudeMdGlobal[\"CLAUDE.md (global)\\n~/.claude/CLAUDE.md\"]");
 emit("  claudeMdNixos[\"CLAUDE.md source\\n~/code/nixos-config/dotfiles/claude/CLAUDE.md\"]");
 emit("  pluginGaffer[\"plugin: gaffer\"]");
-emit("  pluginCaveman[\"plugin: caveman\"]");
 emit("  pluginRustLsp[\"plugin: rust-analyzer-lsp\"]");
 emit("  pluginTsLsp[\"plugin: typescript-lsp\"]");
 emit("  pluginLean[\"plugin: lean\"]");
@@ -572,7 +570,6 @@ emit("  session -->|loads| claudeMdGlobal");
 emit("  settingsJson -->|symlinks-to| settingsNixos");
 emit("  claudeMdGlobal -->|symlinks-to| claudeMdNixos");
 emit("  settingsJson -->|loads plugin| pluginGaffer");
-emit("  settingsJson -->|loads plugin| pluginCaveman");
 emit("  settingsJson -->|loads plugin| pluginRustLsp");
 emit("  settingsJson -->|loads plugin| pluginTsLsp");
 emit("  pluginGaffer -->|SessionStart injects| gafferDoctrine");

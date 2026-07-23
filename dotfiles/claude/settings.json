@@ -171,7 +171,6 @@
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
-    "caveman@caveman": true,
     "gaffer@gaffer": true
   },
   "extraKnownMarketplaces": {
@@ -185,12 +184,6 @@
       "source": {
         "source": "directory",
         "path": "/home/tom/.local/state/north/gaffer-plugin-source"
-      }
-    },
-    "caveman": {
-      "source": {
-        "source": "directory",
-        "path": "/home/tom/code/caveman"
       }
     }
   },

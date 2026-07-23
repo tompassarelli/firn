@@ -5,7 +5,6 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin" "$TMP/home/.claude" "$TMP/runtime"
-printf 'lite\n' > "$TMP/home/.claude/.caveman-active"
 
 grep -Fqx '  local north="/run/current-system/sw/bin/north"' "$HERE/statusline.sh"
 ! grep -Fq '/home/tom/code/north/bin/' "$HERE/statusline.sh"
@@ -26,7 +25,7 @@ payload='{"cwd":"/private/project","rate_limits":{"five_hour":{"used_percentage"
 output="$(printf '%s' "$payload" | HOME="$TMP/home" XDG_RUNTIME_DIR="$TMP/runtime" STATUSLINE_STARTED="$TMP/started" \
   STATUSLINE_CAPTURE="$TMP/capture.json" STATUSLINE_CALLS="$TMP/calls" bash "$TMP/statusline.sh")"
 
-[[ "$output" == $'\033[38;5;172m[CAVEMAN:LITE]\033[0m' ]]
+[[ "$output" == "" ]]
 for _ in {1..30}; do
   [[ -f "$TMP/started" ]] && break
   sleep 0.1
@@ -51,7 +50,7 @@ for i in {1..20}; do
 done
 wait
 for i in {1..20}; do
-  [[ "$(< "$TMP/output-$i")" == $'\033[38;5;172m[CAVEMAN:LITE]\033[0m' ]]
+  [[ "$(< "$TMP/output-$i")" == "" ]]
 done
 for _ in {1..30}; do
   [[ -f "$TMP/calls" ]] && break

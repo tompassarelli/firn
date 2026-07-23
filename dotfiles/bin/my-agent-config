@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 # my-agent-config — MOVED to `north config` (2026-07-10 fold: north is the settings surface).
 echo "my-agent-config → moved to: north config" >&2
-echo "  same verbs: north config [status|dispatch|caveman|coord|beagle|guards on|off|help]" >&2
+echo "  same verbs: north config [status|dispatch|coord|beagle|guards on|off|help]" >&2
 exit 1

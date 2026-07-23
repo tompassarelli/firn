@@ -121,6 +121,9 @@ verdict + probe + observed result. The coordinator consumes and reconciles
 those reports; it does not rerun completion probes wholesale, though it may
 spot-check at most one suspicious load-bearing claim before deciding.
 
+Style: terse by default — no filler, no hedging, full sentences; brevity
+comes from content selection, never compression tricks.
+
 ## Model + payload routing — per agent, both dials
 → `~/code/nixos-config/dotfiles/agents/docs/model-selection.md`
 → `~/code/nixos-config/dotfiles/agents/docs/praxis/` (spawn payload blocks; README = assembly)

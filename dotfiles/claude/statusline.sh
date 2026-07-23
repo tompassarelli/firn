@@ -12,7 +12,6 @@
 
 # ── segment switches (on|off) ───────────────────────────────────────────────
 # Each honors a same-named env override; the ${..:-default} is the baked default.
-SEGMENT_CAVEMAN="${SEGMENT_CAVEMAN:-on}"   # [CAVEMAN] / [CAVEMAN:MODE] mode chip
 # future: SEGMENT_MODEL, SEGMENT_CONTEXT, SEGMENT_GIT … (read the session JSON
 # Claude Code pipes on stdin — captured below for whoever needs it).
 
@@ -42,31 +41,6 @@ forward_rate_limits() {
   exec {lock_fd}>&-
 }
 forward_rate_limits
-
-# ── caveman: is caveman on, and in what mode ────────────────────────────────
-# Self-contained: reads caveman's own flag file directly, no plugin dependency,
-# and deliberately ignores the savings-suffix file (that number is a fixed
-# multiple of output tokens, not a measurement). Orange = active, grey =
-# installed-but-off, nothing = not installed.
-caveman_segment() {
-  local flag="$CLAUDE_DIR/.caveman-active"
-  [ -L "$flag" ] && return            # refuse symlink: blocks ANSI-escape injection via the flag
-  [ -f "$flag" ] || return            # absent → caveman not installed → render nothing
-  # Pure bash, no forks (this runs on every prompt render). || true, not || mode="":
-  # read returns 1 on a no-trailing-newline flag file but has already set mode.
-  local mode=""
-  IFS= read -r mode < "$flag" 2>/dev/null || true
-  mode=${mode,,}; mode=${mode//[^a-z0-9-]/}; mode=${mode:0:32}
-  case "$mode" in
-    off|lite|full|ultra|wenyan|wenyan-lite|wenyan-full|wenyan-ultra|commit|review|compress) ;;
-    *) return ;;                       # unknown/empty → render nothing, never echo raw bytes
-  esac
-  local color=172                      # orange = active
-  [ "$mode" = off ] && color=240       # grey = installed but off
-  printf '\033[38;5;%sm[CAVEMAN:%s]\033[0m' "$color" "${mode^^}"
-}
-
-[ "$SEGMENT_CAVEMAN" = on ] && { s=$(caveman_segment); [ -n "$s" ] && segments+=("$s"); }
 
 # ── render: join active segments with a single space ────────────────────────
 ( IFS=' '; printf '%s' "${segments[*]}" )
