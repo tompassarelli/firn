@@ -36,7 +36,7 @@ Lifecycle anatomy + failure debugging (patterns A–F, zombie forks, split-brain
   authority boundary and is never a substitute for managed recursion.
 - Each recursive child crosses the complete North admission boundary: a fresh
   thread linked `part_of` its immediate parent, a fresh run and reservation, a
-  complete Gaffer request and resolved route, its own telemetry and resource
+  complete Orchestration request and resolved route, its own telemetry and resource
   envelope, and settlement back to that immediate parent. Authority is fixed
   for the run; splitting work creates children instead of mutating a worker in
   place.

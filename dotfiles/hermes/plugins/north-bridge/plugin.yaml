@@ -2,7 +2,7 @@ name: north-bridge
 version: "0.1.0"
 kind: standalone
 description: >-
-  Nix-owned Hermes controller adapter for the North/Gaffer operating model.
+  Nix-owned Hermes controller adapter for the North/Orchestration operating model.
   pre_tool_call runs the provider-neutral authoring guard CHAINS from
   ~/.agents/hooks — code-upstream-guard + firn-guard + north-clock-guard for
   write_file/patch, tripwire-guard + firn-guard + north-clock-guard for

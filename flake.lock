@@ -424,23 +424,6 @@
         "type": "github"
       }
     },
-    "gaffer": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1784908112,
-        "narHash": "sha256-zwy6JVlcGqCWvM/VsLxvTvlbzqCN8xEarWEJe6JCBOc=",
-        "ref": "main",
-        "rev": "9c6acd66ff1d7160e40b4b07561b82ca1c037e65",
-        "revCount": 51,
-        "type": "git",
-        "url": "file:///home/tom/code/gaffer"
-      },
-      "original": {
-        "ref": "main",
-        "type": "git",
-        "url": "file:///home/tom/code/gaffer"
-      }
-    },
     "gjoa": {
       "inputs": {
         "flake-utils": "flake-utils_2",
@@ -850,20 +833,17 @@
         "fram": [
           "fram"
         ],
-        "gaffer": [
-          "gaffer"
-        ],
         "nixpkgs": "nixpkgs_5",
         "nixpkgs-master": [
           "nixpkgs-master"
         ]
       },
       "locked": {
-        "lastModified": 1784919408,
-        "narHash": "sha256-DS31mm5sXB16fEI+7DUxu+X1YS9pPhZt7cXKWFa4XVE=",
+        "lastModified": 1784927616,
+        "narHash": "sha256-td0xjbXiRe/Frj+ZK3lxd3WUvKPn23OEDb3aSF2J5OQ=",
         "ref": "main",
-        "rev": "0e9339fbcab1ff2934a0fc159f4c1055988d2e95",
-        "revCount": 552,
+        "rev": "733b038caa5740bda3e25128201adabf3b876a6c",
+        "revCount": 611,
         "type": "git",
         "url": "file:///home/tom/code/north"
       },
@@ -1031,7 +1011,6 @@
         "beagle": "beagle",
         "elephant": "elephant",
         "fram": "fram",
-        "gaffer": "gaffer",
         "gjoa": "gjoa",
         "glide": "glide",
         "hermes-agent": "hermes-agent",

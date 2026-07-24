@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Adversarial matrix for native-agent redirect + Gaffer worker topology.
+# Adversarial matrix for native-agent redirect + Orchestration worker topology.
 # Commands are hook payload fixtures only; this test never executes them.
 # shellcheck disable=SC2016,SC2088
 set -uo pipefail
@@ -10,15 +10,15 @@ HOOK="$HERE/agent-spawn-guard.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/agent-spawn-guard-test.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
 mkdir -p "$SCRATCH/home/.claude" "$SCRATCH/home/.local/state/north"
-mkdir -p "$SCRATCH/home/code/gaffer/agents"
-printf '%s\n' '<!-- GAFFER_ROUTING {"role":"integrator","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","reasoning":"high","posture":"deliver","composition":{"kind":"preset","id":"integrator","overrides":[]}} -->' \
-  >"$SCRATCH/home/code/gaffer/agents/integrator.md"
-printf '%s\n' '<!-- GAFFER_ROUTING {"role":"integrator","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","reasoning":"high","posture":"deliver","composition":{"kind":"preset","id":"integrator","overrides":[]}} -->' \
-  >"$SCRATCH/home/code/gaffer/agents/role-mismatch.md"
-printf '%s\n' '<!-- GAFFER_ROUTING {"role":"missing-reasoning","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","posture":"deliver","composition":{"kind":"preset","id":"missing-reasoning","overrides":[]}} -->' \
-  >"$SCRATCH/home/code/gaffer/agents/missing-reasoning.md"
-printf '%s\n' '<!-- GAFFER_ROUTING {"role":"researcher","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","reasoning":"high","posture":"deliver","composition":{"kind":"preset","id":"researcher","overrides":[]}} -->' \
-  >"$SCRATCH/home/code/gaffer/agents/researcher.md"
+mkdir -p "$SCRATCH/home/code/orchestration/agents"
+printf '%s\n' '<!-- ORCHESTRATION_ROUTING {"role":"integrator","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","reasoning":"high","posture":"deliver","composition":{"kind":"preset","id":"integrator","overrides":[]}} -->' \
+  >"$SCRATCH/home/code/orchestration/agents/integrator.md"
+printf '%s\n' '<!-- ORCHESTRATION_ROUTING {"role":"integrator","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","reasoning":"high","posture":"deliver","composition":{"kind":"preset","id":"integrator","overrides":[]}} -->' \
+  >"$SCRATCH/home/code/orchestration/agents/role-mismatch.md"
+printf '%s\n' '<!-- ORCHESTRATION_ROUTING {"role":"missing-reasoning","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","posture":"deliver","composition":{"kind":"preset","id":"missing-reasoning","overrides":[]}} -->' \
+  >"$SCRATCH/home/code/orchestration/agents/missing-reasoning.md"
+printf '%s\n' '<!-- ORCHESTRATION_ROUTING {"role":"researcher","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","reasoning":"high","posture":"deliver","composition":{"kind":"preset","id":"researcher","overrides":[]}} -->' \
+  >"$SCRATCH/home/code/orchestration/agents/researcher.md"
 
 pass=0 fail=0
 set_state() { printf 'dispatch=%s\nguards=%s\n' "$1" "$2" >"$SCRATCH/home/.local/state/north/harness.conf"; }
@@ -68,9 +68,9 @@ run deny 'tilde North wrapper' worker Bash '~/code/north/bin/north delegate "che
 run deny 'HOME North wrapper' worker Bash '$HOME/code/north/bin/north spawn verifier "check it"'
 run deny 'North wrapper behind Bash' worker Bash 'bash ~/code/north/bin/north spawn verifier "check it"'
 run deny 'native MCP command surface' worker Bash 'mcp__north__spawn "do work"'
-run deny 'direct Gaffer CLI spawn' worker Bash 'bb /home/tom/code/north/cli/agents-cli.clj spawn designer "design"'
-run deny 'repo-relative Gaffer CLI spawn' worker Bash 'bb cli/agents-cli.clj spawn designer "design"'
-run deny 'direct Gaffer CLI retask' worker Bash 'bb ~/code/north/cli/agents-cli.clj retask lane-1 "new goal"'
+run deny 'direct Orchestration CLI spawn' worker Bash 'bb /home/tom/code/north/cli/agents-cli.clj spawn designer "design"'
+run deny 'repo-relative Orchestration CLI spawn' worker Bash 'bb cli/agents-cli.clj spawn designer "design"'
+run deny 'direct Orchestration CLI retask' worker Bash 'bb ~/code/north/cli/agents-cli.clj retask lane-1 "new goal"'
 run deny 'direct SDK spawn entrypoint' worker Bash 'bun run /home/tom/code/north/sdk/src/spawn.ts "do work"'
 run deny 'direct SDK dispatch entrypoint' worker Bash 'bun /home/tom/code/north/sdk/src/dispatch.ts thread-1'
 run deny 'repo-relative SDK spawn entrypoint' worker Bash 'bun run sdk/src/spawn.ts "do work"'
@@ -222,10 +222,10 @@ run deny 'dispatch=warn cannot waive managed worker topology' worker Bash 'north
 set_state north on
 run deny 'dispatch=north preserves native Agent redirect' unset Agent 'native work'
 
-echo '== native Gaffer redirect preserves the complete routing contract =='
+echo '== native Orchestration redirect preserves the complete routing contract =='
 routing_input="$(jq -nc --arg d "$REPO" '{
   tool_name:"Agent",
-  tool_input:{subagent_type:"gaffer:integrator",prompt:"integrate the seam"},
+  tool_input:{subagent_type:"orchestration:integrator",prompt:"integrate the seam"},
   cwd:$d
 }')"
 routing_out="$(printf '%s' "$routing_input" | env \
@@ -248,14 +248,14 @@ if jq -e '
   .tier == "senior" and .reasoning == "high" and .posture == "deliver" and
   .composition == {kind:"preset",id:"integrator",overrides:[]}
 ' <<<"$routing_json" >/dev/null; then
-  pass=$((pass + 1)); echo 'PASS  route  generated Gaffer redirect carries all eight semantic fields'
+  pass=$((pass + 1)); echo 'PASS  route  generated Orchestration redirect carries all eight semantic fields'
 else
-  fail=$((fail + 1)); printf 'FAIL  route  generated Gaffer redirect dropped or changed routing fields\n      out=%s\n' "$routing_out"
+  fail=$((fail + 1)); printf 'FAIL  route  generated Orchestration redirect dropped or changed routing fields\n      out=%s\n' "$routing_out"
 fi
 
 invalid_routes_ok=1
 for invalid_role in role-mismatch missing-reasoning researcher ../integrator; do
-  invalid_input="$(jq -nc --arg d "$REPO" --arg r "gaffer:$invalid_role" '{
+  invalid_input="$(jq -nc --arg d "$REPO" --arg r "orchestration:$invalid_role" '{
     tool_name:"Agent", tool_input:{subagent_type:$r,prompt:"probe"}, cwd:$d
   }')"
   invalid_out="$(printf '%s' "$invalid_input" | env HOME="$SCRATCH/home" "$HOOK" 2>&1)"
@@ -263,9 +263,9 @@ for invalid_role in role-mismatch missing-reasoning researcher ../integrator; do
   [[ "$invalid_reason" != *'mcp__north__spawn {'* ]] || invalid_routes_ok=0
 done
 if [[ "$invalid_routes_ok" -eq 1 ]]; then
-  pass=$((pass + 1)); echo 'PASS  route  malformed, mismatched, retired, and hostile Gaffer IDs fail closed'
+  pass=$((pass + 1)); echo 'PASS  route  malformed, mismatched, retired, and hostile Orchestration IDs fail closed'
 else
-  fail=$((fail + 1)); echo 'FAIL  route  an invalid Gaffer marker produced a callable North envelope'
+  fail=$((fail + 1)); echo 'FAIL  route  an invalid Orchestration marker produced a callable North envelope'
 fi
 
 echo '== topology policy is independent of authoring kill-switches =='

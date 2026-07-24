@@ -1,4 +1,4 @@
-"""north-bridge — Nix-owned Hermes controller adapter for North/Gaffer.
+"""north-bridge — Nix-owned Hermes controller adapter for North/Orchestration.
 
 Hermes is a *controller host* over the North MCP, not a new North provider.
 This plugin is the standalone bridge that makes Hermes' own tool surface obey

@@ -483,7 +483,7 @@ run unavailable 'wildcard client identity fails closed' \
   closed.log Bash "rm $CANON_ROOT/client/*/out" "$NONCLIENT"
 
 echo "== exact trusted mktemp assignment can name only a proved nonclient destination =="
-printf -v gaffer_mktemp_pipeline '%s\n' \
+printf -v orchestration_mktemp_pipeline '%s\n' \
   'set -euo pipefail' \
   'tmp="$(mktemp -d)"' \
   'trap '\''rm -rf "$tmp"'\'' EXIT' \
@@ -493,8 +493,8 @@ printf -v gaffer_mktemp_pipeline '%s\n' \
   '  exit 1' \
   'fi' \
   "rg -F validation-error \"\$tmp/stderr\""
-TMPDIR='' run na 'exact Gaffer validation-shaped mktemp pipeline is nonclient' \
-  closed.log Bash "$gaffer_mktemp_pipeline" "$NONCLIENT"
+TMPDIR='' run na 'exact Orchestration validation-shaped mktemp pipeline is nonclient' \
+  closed.log Bash "$orchestration_mktemp_pipeline" "$NONCLIENT"
 printf -v detached_prefix '%s\n' \
   'set -u -o pipefail' \
   'snapshot_root=$(mktemp -d /tmp/north-snapshot-detached.XXXXXX)' \

@@ -162,7 +162,7 @@
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
-    "gaffer@gaffer": true
+    "orchestration@orchestration": true
   },
   "extraKnownMarketplaces": {
     "claude-code-plugins": {
@@ -171,10 +171,10 @@
         "repo": "anthropics/claude-code"
       }
     },
-    "gaffer": {
+    "orchestration": {
       "source": {
         "source": "directory",
-        "path": "/home/tom/.local/state/north/gaffer-plugin-source"
+        "path": "/home/tom/.local/state/north/orchestration-plugin-source"
       }
     }
   },

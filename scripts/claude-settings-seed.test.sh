@@ -29,7 +29,7 @@ assert_seeded "$fresh"
 
 # Runtime writes are permitted, but the next activation converges to its exact
 # committed generation before the ordered plugin reconciliation runs.
-printf '%s\n' '{"effortLevel":"medium","enabledPlugins":{"gaffer@gaffer":true}}' >"$fresh"
+printf '%s\n' '{"effortLevel":"medium","enabledPlugins":{"orchestration@orchestration":true}}' >"$fresh"
 run_seed "$fresh"
 assert_seeded "$fresh"
 

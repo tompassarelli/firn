@@ -6,7 +6,7 @@ doubling as the pipeline-debug spec.*
 > **Naming.** The stack as a whole has no settled name yet; a naming pass is
 > pending. Today the parts carry their own names and this doc uses them as
 > found in source: **fram** (fact engine), **north** (coordination substrate),
-> **gaffer** (staffing doctrine). The cockpit/dashboard folded into north
+> **orchestration** (staffing doctrine). The cockpit/dashboard folded into north
 > (2026-07-10): `north dashboard` / `north doctor` / bare `north` (the card). Any of
 > these names may change. Where this doc says "the stack" it means the whole;
 > where it names a part it means that part's code as it exists on 2026-07-09.
@@ -74,7 +74,7 @@ tells you which facts to expect:
 
 `mcp__north__spawn` and `mcp__north__dispatch` are the MCP tool faces of the SDK
 lineage (registered in `harness.ts`'s `NATIVE_TOOLS`). The CLI faces are
-`north spawn` / `north delegate` (in `cli/agents-cli.clj`), which resolve gaffer
+`north spawn` / `north delegate` (in `cli/agents-cli.clj`), which resolve orchestration
 dials and then `bun run sdk/src/spawn.ts`.
 
 ```mermaid
@@ -142,7 +142,7 @@ activity.
 **Lineage:** the slash command is an intelligent adapter over `north delegate`.
 It classifies dependency shape once: atomic work selects an exact stock
 template, an explicit template override, or a bespoke composition for its
-terminal Gaffer worker; composite work alone selects the director.
+terminal Orchestration worker; composite work alone selects the director.
 North then selects the provider, account, concrete model, and runtime control.
 Carrying context is BINARY (y/n), a trailing flag not a separate verb: bare =
 this session's concise context brief rides along by default; `--new` = a clean
@@ -160,10 +160,10 @@ sequenceDiagram
     R->>R: CLASSIFY dependency shape + terminal role/composition if atomic
     alt atomic
         R->>CLI: X --role worker [overrides or bespoke contract]<br/>+ context brief (default) or clean X (--new)
-        CLI->>SP: one complete worker-topology Gaffer request
+        CLI->>SP: one complete worker-topology Orchestration request
     else composite
         R->>CLI: X --composite<br/>+ context brief (default) or clean X (--new)
-        CLI->>SP: canonical director Gaffer request
+        CLI->>SP: canonical director Orchestration request
     end
     SP->>SP: FILTER capabilities/auth/usage → resolve provider/account/model
     SP->>SP: ID MINT — collision-safe lane id
@@ -259,7 +259,7 @@ is recorded.
 sequenceDiagram
     actor CA as caller
     participant CS as cmd-spawn
-    participant G as Gaffer catalog
+    participant G as Orchestration catalog
     participant R as North resolver
     participant SP as spawn.ts
     participant T as north :7977
@@ -282,9 +282,9 @@ sequenceDiagram
     Note over T: REAPING — TTL lapse
 ```
 
-Notes: this is the surface gaffer's doctrine actually routes to under
-`dispatch=north`. Template resolution consumes Gaffer's canonical provider-neutral
-contract in `~/code/gaffer/docs/routing.md`; this workflow map does not redefine
+Notes: this is the surface orchestration's doctrine actually routes to under
+`dispatch=north`. Template resolution consumes Orchestration's canonical provider-neutral
+contract in `~/code/orchestration/docs/routing.md`; this workflow map does not redefine
 the axes or infer one from another. `north templates` renders the stock catalog
 and its resolved routing defaults. Source gathering uses the `scout` template;
 novel hypothesis/experiment work uses `research-scientist` at frontier tier and
@@ -587,8 +587,8 @@ below are its rule set.
 | presence/lease | `~/code/north/cli/presence-cli.clj` | 30-min TTL, `presence` projection, `slackers`, `pin` |
 | mail/commands | `~/code/north/cli/msg-cli.clj` | `send`/`inbox`/`ack`/`send-cmd` (@cmd facts), derived inbox |
 | listener | `~/code/north/cli/north-listen.clj` | dormant-until-pinged pub/sub; role-addressing |
-| cockpit | `~/code/north/cli/dashboard-cli.clj` (`north dashboard`/`doctor`; bare `north` card in `bin/north`) | dashboard/doctor/profile; parse-don't-fork gaffer; ownership rule (folded from convoy 2026-07-10) |
-| staffing | `~/code/gaffer/doctrine.md` + `docs/adapters/north.md` | shapes→squad, laws, canonical dial table |
+| cockpit | `~/code/north/cli/dashboard-cli.clj` (`north dashboard`/`doctor`; bare `north` card in `bin/north`) | dashboard/doctor/profile; parse-don't-fork orchestration; ownership rule (folded from convoy 2026-07-10) |
+| staffing | `~/code/orchestration/doctrine.md` + `docs/adapters/north.md` | shapes→squad, laws, canonical dial table |
 | delegate intake | `~/code/nixos-config/dotfiles/claude/commands/delegate.md` | `/delegate` intelligent atomic/composite classifier (context is orthogonal) |
 | coordination-v2 | thread `019f4418-bed5-7625-b2ad-41abb6518269` | census, failure receipts, the specced reaping fix plan |
 ```

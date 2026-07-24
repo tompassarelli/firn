@@ -18,7 +18,6 @@
          (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)
         framPkg
          (get (get inputs.fram.packages pkgs.stdenv.hostPlatform.system) :default)
-        gafferRev inputs.gaffer.rev
         claudeSettingsSeed
          (pkgs.writeText "claude-settings.json"
            (builtins.readFile
@@ -31,10 +30,6 @@
          (pkgs.writeShellScriptBin "north-session-end"
            (builtins.readFile
              (s flakeRoot "/dotfiles/agents/hooks/north-session-end.sh")))
-        gafferPluginSync
-         (pkgs.writeShellScript "claude-gaffer-plugin-sync"
-           (builtins.readFile
-             (s flakeRoot "/scripts/claude-gaffer-plugin-sync.sh")))
         mcpRegister
          (pkgs.writeShellScript "claude-mcp-register"
            (builtins.readFile
@@ -144,43 +139,6 @@
                      "  run find $HOME/.claude/plugins/cache/caveman/caveman -mindepth 1 -maxdepth 1 ! -name \"$WANT\" -exec rm -rf {} + || true\n"
                      "fi\n"
                      "run rm -f \"$GITC\"\n"))
-               ;; Claude copies marketplace plugins into a versioned cache, and
-               ;; local/third-party marketplaces do not auto-update by default.
-               ;; Materialize the exact built Gaffer revision into our detached
-               ;; managed marketplace source, then reconcile through Claude's
-               ;; supported update/install surface; never edit cache JSON.
-               :home.activation.syncGafferPlugin
-                (config.lib.dag.entryAfter
-                  ["writeBoundary" "seedClaudeSettings" "installCaveman"]
-                  (s "if ! run env CLAUDE_BIN="
-                     claudePackage
-                     "/bin/claude GIT_BIN="
-                     pkgs.git
-                     "/bin/git JQ_BIN="
-                     pkgs.jq
-                     "/bin/jq TIMEOUT_BIN="
-                     pkgs.coreutils
-                     "/bin/timeout FLOCK_BIN="
-                     pkgs.util-linux
-                     "/bin/flock MV_BIN="
-                     pkgs.coreutils
-                     "/bin/mv SLEEP_BIN="
-                     pkgs.coreutils
-                     "/bin/sleep WC_BIN="
-                     pkgs.coreutils
-                     "/bin/wc REALPATH_BIN="
-                     pkgs.coreutils
-                     "/bin/realpath PS_BIN="
-                     psBin
-                     " GAFFER_HOME=$HOME/code/gaffer "
-                     "GAFFER_SOURCE=$HOME/.local/state/north/gaffer-plugin-source "
-                     "GAFFER_REV="
-                     gafferRev
-                     " "
-                     gafferPluginSync
-                     "; then\n"
-                     "  echo \"warning: Gaffer Claude plugin sync failed; agent-config-check --local will report the drift\" >&2\n"
-                     "fi\n"))
                ;; MCP server registration — reproducible, so a fresh rebuild wires the
                ;; North, FRAM, and Linear user-scope servers instead of relying on
                ;; loose `claude mcp add` state in ~/.claude.json. Presence and shape

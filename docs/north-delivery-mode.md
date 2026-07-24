@@ -73,7 +73,7 @@ missing selector.
 the same flake-selected package boundary for explicit smoke tests. A Firn
 rebuild makes verified package revisions available but does not overwrite an
 explicit coordinator development selection; adopt the new Fram package with
-`north-coord-runtime package`. North's packaged input follows the root Gaffer
+`north-coord-runtime package`. North's packaged input follows the root Orchestration
 pin, so the verified North closure and its routing contract move together.
 
 In short: ordinary names are immutable production surfaces, explicit `*-dev`

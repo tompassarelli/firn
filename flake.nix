@@ -43,10 +43,6 @@
     fram = {
       url = "git+file:///home/tom/code/fram?ref=main";
     };
-    gaffer = {
-      url = "git+file:///home/tom/code/gaffer?ref=main";
-      flake = false;
-    };
     gjoa = {
       url = "github:tompassarelli/gjoa";
     };
@@ -55,7 +51,6 @@
       url = "github:NousResearch/hermes-agent/244dabbd9c4b542bf5c1ad0159af512c2b5d6e08";
     };
     north = {
-      inputs.gaffer.follows = "gaffer";
       inputs.nixpkgs-master.follows = "nixpkgs-master";
       url = "git+file:///home/tom/code/north?ref=main";
       inputs.fram.follows = "fram";
@@ -79,7 +74,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, fram, gaffer, gjoa, hermes-agent, north, nur, palefox, quickshell, walker, zen-browser, ... }: let
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, fram, gjoa, hermes-agent, north, nur, palefox, quickshell, walker, zen-browser, ... }: let
     firnModules = ./modules;
     darwinModuleNames = builtins.fromJSON (builtins.readFile ./config/darwin-modules.json);
   in
@@ -91,7 +86,6 @@
           beagle = beagle;
           elephant = elephant;
           fram = fram;
-          gaffer = gaffer;
           gjoa = gjoa;
           hermes-agent = hermes-agent;
           north = north;
@@ -127,7 +121,6 @@
               beagle = beagle;
               elephant = elephant;
               fram = fram;
-              gaffer = gaffer;
               gjoa = gjoa;
               hermes-agent = hermes-agent;
               north = north;
@@ -294,7 +287,6 @@
           beagle = beagle;
           elephant = elephant;
           fram = fram;
-          gaffer = gaffer;
           gjoa = gjoa;
           hermes-agent = hermes-agent;
           north = north;
@@ -337,7 +329,6 @@
                 beagle = beagle;
                 elephant = elephant;
                 fram = fram;
-                gaffer = gaffer;
                 gjoa = gjoa;
                 hermes-agent = hermes-agent;
                 north = north;

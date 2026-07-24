@@ -632,7 +632,7 @@ if tool in ("Bash", "shell", "exec_command"):
     if not match:
         sys.exit(0)
     reason = (
-        "DENIED by Gaffer worker topology: worker lanes cannot spawn, delegate, "
+        "DENIED by Orchestration worker topology: worker lanes cannot spawn, delegate, "
         "dispatch, or command agents (matched " + match + "). Return the "
         "subtask, steering request, or escalation to the orchestrator; only an "
         "orchestrator owns fan-out and peer control. Emergency bypass is an "
@@ -649,15 +649,15 @@ if tool in ("Bash", "shell", "exec_command"):
 if tool not in ("Agent", "Task", "Workflow") or mode == "native":
     sys.exit(0)
 
-GAFFER_AGENTS = os.path.expanduser("~/code/gaffer/agents")
+ORCHESTRATION_AGENTS = os.path.expanduser("~/code/orchestration/agents")
 SAFE_ROLE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
-ROUTING_COMMENT = re.compile(r"<!--\s*GAFFER_ROUTING\s+(\{.*?\})\s*-->")
+ROUTING_COMMENT = re.compile(r"<!--\s*ORCHESTRATION_ROUTING\s+(\{.*?\})\s*-->")
 
 def routing_for(invoked_role):
     """Read the generated adapter contract; never infer provider dials here."""
     if not SAFE_ROLE.fullmatch(invoked_role):
         return None
-    path = os.path.join(GAFFER_AGENTS, invoked_role + ".md")
+    path = os.path.join(ORCHESTRATION_AGENTS, invoked_role + ".md")
     try:
         with open(path, encoding="utf-8") as handle:
             match = ROUTING_COMMENT.search(handle.read())
@@ -705,20 +705,20 @@ def north_call(d):
         envelope, separators=(",", ":"), ensure_ascii=False,
     )
 
-# Was this a gaffer squad pick? If so, translate it to the EXACT north call so
+# Was this a orchestration squad pick? If so, translate it to the EXACT north call so
 # recovery is a single paste — no re-deriving role->dials by hand every time.
 subagent = ""
 if tool in ("Agent", "Task"):
     subagent = ti.get("subagent_type") or ti.get("subagentType") or ""
-is_gaffer = subagent.lower().startswith("gaffer:")
-role_key = subagent.split(":", 1)[1].strip().lower() if is_gaffer else ""
+is_orchestration = subagent.lower().startswith("orchestration:")
+role_key = subagent.split(":", 1)[1].strip().lower() if is_orchestration else ""
 routing = routing_for(role_key) if role_key else None
 
 if routing:
     recipe = (
         "Native " + tool + " (" + subagent + ") is ephemeral — no claim trail, "
         "no steering, no observability. Re-issue the SAME work on north; dials are "
-        "read from canonical gaffer:" + role_key + " metadata — just paste your prompt in:\n"
+        "read from canonical orchestration:" + role_key + " metadata — just paste your prompt in:\n"
         "  " + north_call(routing) + "\n"
         "Fan-out? fire one mcp__north__spawn per lane in the same turn. "
         "Observe: north watch/agents/board. Deliberate bypass: north config dispatch warn|native."
@@ -729,7 +729,7 @@ else:
         "Native " + tool + " (" + where + ") is ephemeral — no claim trail, no "
         "steering, no observability. Do the SAME work on north:\n"
         "  1. Trivial lookup / single file? No agent at all — bash/grep/read inline.\n"
-        "  2. One job: inspect north templates, select a Gaffer template, then "
+        "  2. One job: inspect north templates, select a Orchestration template, then "
         "use its generated full "
         "eight-field routing request with mcp__north__spawn; the CLI forcing "
         "form is north spawn <template-id> <prompt>. Override only task grade, "

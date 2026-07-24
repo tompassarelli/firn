@@ -336,9 +336,9 @@ if (praxisDir) {
   flags.push("FLAG  north PRAXIS_DIR  →  not found in harness.ts");
 }
 
-// gaffer build-agents check
-const gafferCheck = (() => {
-  const script = `${HOME}/code/gaffer/scripts/build-agents.mjs`;
+// orchestration build-agents check
+const orchestrationCheck = (() => {
+  const script = `${HOME}/code/orchestration/scripts/build-agents.mjs`;
   if (!exists(script)) return { ok: false, reason: "script not found" };
   try {
     execSync(`node ${script} --check`, { stdio: "pipe", timeout: 15000 });
@@ -347,8 +347,8 @@ const gafferCheck = (() => {
     return { ok: false, reason: (e.stderr?.toString() || e.message || "nonzero exit").slice(0, 120) };
   }
 })();
-if (gafferCheck.ok) passes.push("PASS  gaffer build-agents --check");
-else flags.push(`FLAG  gaffer build-agents --check  →  ${gafferCheck.reason}`);
+if (orchestrationCheck.ok) passes.push("PASS  orchestration build-agents --check");
+else flags.push(`FLAG  orchestration build-agents --check  →  ${orchestrationCheck.reason}`);
 
 // Personal agents/skills dirs — broken symlink already flagged in symlinks loop above; skip redundant check
 if (agentsSym?.isLink && agentsSym.targetExists) {
@@ -535,7 +535,7 @@ emit("### h. Cross-repo spawn wiring (north harness)\n");
 
 emit(`- harness: \`${tilde(harnessPath)}\``);
 emit(`- PRAXIS_DIR: \`${praxisDir ? tilde(praxisDir) : "(not found)"}\``);
-emit(`  - north reads spawn blocks from: gaffer docs (single source of truth)`);
+emit(`  - north reads spawn blocks from: orchestration docs (single source of truth)`);
 emit(`  - personal residue: \`~/code/nixos-config/dotfiles/agents/docs/praxis/\``);
 emit(`- appendix functions found in harness: ${appendixFns.join(", ")}`);
 emit(`  - globalLawsAppendix: injects global CLAUDE.md laws into every spawn`);
@@ -553,13 +553,13 @@ emit("  settingsJson[\"settings.json\\n~/.claude/settings.json\"]");
 emit("  settingsNixos[\"settings.json source\\n~/code/nixos-config/dotfiles/claude/settings.json\"]");
 emit("  claudeMdGlobal[\"CLAUDE.md (global)\\n~/.claude/CLAUDE.md\"]");
 emit("  claudeMdNixos[\"CLAUDE.md source\\n~/code/nixos-config/dotfiles/claude/CLAUDE.md\"]");
-emit("  pluginGaffer[\"plugin: gaffer\"]");
+emit("  pluginOrchestration[\"plugin: orchestration\"]");
 emit("  pluginRustLsp[\"plugin: rust-analyzer-lsp\"]");
 emit("  pluginTsLsp[\"plugin: typescript-lsp\"]");
 emit("  pluginLean[\"plugin: lean\"]");
-emit("  gafferDoctrine[\"gaffer/doctrine.md\\n(routing doctrine)\"]");
+emit("  orchestrationDoctrine[\"orchestration/doctrine.md\\n(routing doctrine)\"]");
 emit("  ternHarness[\"north sdk/src/harness.ts\"]");
-emit("  gafferDocs[\"~/code/gaffer/docs\\n(PRAXIS_DIR: roles/postures/deltas)\"]");
+emit("  orchestrationDocs[\"~/code/orchestration/docs\\n(PRAXIS_DIR: roles/postures/deltas)\"]");
 emit("  praxisPersonal[\"personal praxis residue\\n~/code/nixos-config/dotfiles/agents/docs/praxis/\"]");
 emit("  nixosClaudeMd[\"nixos-config/CLAUDE.md\\n(per-project rules)\"]");
 emit("  ternOnSpawn[\"north-on-spawn\\n(SessionStart hook)\"]");
@@ -569,16 +569,16 @@ emit("  session -->|loads| settingsJson");
 emit("  session -->|loads| claudeMdGlobal");
 emit("  settingsJson -->|symlinks-to| settingsNixos");
 emit("  claudeMdGlobal -->|symlinks-to| claudeMdNixos");
-emit("  settingsJson -->|loads plugin| pluginGaffer");
+emit("  settingsJson -->|loads plugin| pluginOrchestration");
 emit("  settingsJson -->|loads plugin| pluginRustLsp");
 emit("  settingsJson -->|loads plugin| pluginTsLsp");
-emit("  pluginGaffer -->|SessionStart injects| gafferDoctrine");
-emit("  ternHarness -->|reads-at-spawn| gafferDocs");
+emit("  pluginOrchestration -->|SessionStart injects| orchestrationDoctrine");
+emit("  ternHarness -->|reads-at-spawn| orchestrationDocs");
 emit("  ternHarness -->|reads-at-spawn| praxisPersonal");
 emit("  settingsJson -->|SessionStart hook| ternOnSpawn");
 emit("  settingsJson -->|PostToolUse hook| ternOnTooluse");
 emit("  session -->|cwd loads| nixosClaudeMd");
-emit("  gafferDocs -->|contains| praxisPersonal");
+emit("  orchestrationDocs -->|contains| praxisPersonal");
 emit("```\n");
 
 // ── Section 3: Rot audit ────────────────────────────────────────────────────

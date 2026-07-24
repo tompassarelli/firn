@@ -156,7 +156,7 @@ run_codex_probe() {
   run_bounded_process "$duration" "${CODEX_BIN:-codex}" "$@"
 }
 
-gaffer_version_matches() {
+orchestration_version_matches() {
   local version="$1" commit="$2"
 
   [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || return 1
@@ -164,7 +164,7 @@ gaffer_version_matches() {
   [ "$version" = "$commit" ] || [ "$version" = "${commit:0:12}" ]
 }
 
-gaffer_revisions_converged() {
+orchestration_revisions_converged() {
   local intent="$1" source_head="$2" verified_input="$3"
 
   [[ "$intent" =~ ^[0-9a-f]{40}$ ]] &&
@@ -1007,7 +1007,7 @@ CODEX_LEGACY_HOOKS="${CODEX_LEGACY_HOOKS:-$CODEX/hooks.json}"
 HERMES="${AGENT_CONFIG_HERMES:-$REPO/dotfiles/hermes}"
 HERMES_BRIDGE="$HERMES/plugins/north-bridge"
 HERMES_MODULE="${AGENT_CONFIG_HERMES_MODULE:-$REPO/modules/hermes/default.bnix}"
-GAFFER_SYNC="$REPO/scripts/claude-gaffer-plugin-sync.sh"
+ORCHESTRATION_SYNC="$REPO/scripts/claude-orchestration-plugin-sync.sh"
 LAUNCHER_BIN="$REPO/dotfiles/bin"
 LOCAL=0
 VERBOSE=0
@@ -1439,7 +1439,7 @@ claude_north_topology='explicit corpus env deferred'
 claude_fram='connection deferred to --local'
 claude_fram_topology='topology deferred'
 claude_linear='connection deferred to --local'
-claude_gaffer='cache freshness deferred to --local'
+claude_orchestration='cache freshness deferred to --local'
 need_json "$CLAUDE/settings.json" 'Claude settings'
 if grep -Fq '(pkgs.writeText "claude-settings.json"' \
      "$REPO/modules/claude/default.bnix" &&
@@ -1498,19 +1498,19 @@ fi
 if jq -e '.autoMemoryEnabled == false' "$CLAUDE/settings.json" >/dev/null; then ok_detail "auto-memory disabled"
 else bad "Claude autoMemoryEnabled must be false"; fi
 if jq -e '
-  .enabledPlugins["gaffer@gaffer"] == true
-  and .extraKnownMarketplaces.gaffer.source == {
+  .enabledPlugins["orchestration@orchestration"] == true
+  and .extraKnownMarketplaces.orchestration.source == {
     "source": "directory",
-    "path": "/home/tom/.local/state/north/gaffer-plugin-source"
+    "path": "/home/tom/.local/state/north/orchestration-plugin-source"
   }
 ' "$CLAUDE/settings.json" >/dev/null; then
-  ok_detail "Gaffer plugin uses the managed exact-revision marketplace"
+  ok_detail "Orchestration plugin uses the managed exact-revision marketplace"
 else
-  bad "Claude Gaffer plugin must be enabled from /home/tom/.local/state/north/gaffer-plugin-source"
+  bad "Claude Orchestration plugin must be enabled from /home/tom/.local/state/north/orchestration-plugin-source"
 fi
-if command -v shellcheck >/dev/null 2>&1 && shellcheck -S warning "$GAFFER_SYNC"; then
-  ok_detail "Gaffer plugin sync shellcheck"
-else bad "Gaffer plugin sync shellcheck failed"; fi
+if command -v shellcheck >/dev/null 2>&1 && shellcheck -S warning "$ORCHESTRATION_SYNC"; then
+  ok_detail "Orchestration plugin sync shellcheck"
+else bad "Orchestration plugin sync shellcheck failed"; fi
 validate_hooks "$CLAUDE/settings.json" Claude anthropic
 if jq -e '
   [
@@ -1610,50 +1610,50 @@ if [ "$LOCAL" -eq 1 ]; then
     else
       bad "claude rejected its config while checking MCP health (exit $claude_mcp_status):\n$claude_mcp_output"
     fi
-    gaffer_source="$HOME/.local/state/north/gaffer-plugin-source"
-    gaffer_expected="$(jq -er '.nodes.gaffer.locked.rev | select(test("^[0-9a-f]{40}$"))' "$REPO/flake.lock" 2>/dev/null || true)"
-    gaffer_plugin_probe_status=0
-    gaffer_plugins="$(
+    orchestration_source="$HOME/.local/state/north/orchestration-plugin-source"
+    orchestration_expected="$(jq -er '.nodes.orchestration.locked.rev | select(test("^[0-9a-f]{40}$"))' "$REPO/flake.lock" 2>/dev/null || true)"
+    orchestration_plugin_probe_status=0
+    orchestration_plugins="$(
       run_claude_probe "${PLUGIN_PROBE_TIMEOUT_SECONDS:-15}" plugin list --json 2>/dev/null
-    )" || gaffer_plugin_probe_status=$?
-    if [ "$gaffer_plugin_probe_status" -eq 0 ] &&
-       gaffer_version="$(jq -er '
-         [.[] | select(.id == "gaffer@gaffer")]
-         | if length == 1 then .[0].version else error("expected one Gaffer plugin") end
-       ' <<<"$gaffer_plugins")" &&
-       [ -n "$gaffer_expected" ] &&
-       gaffer_source_head="$(git -C "$gaffer_source" rev-parse --verify HEAD 2>/dev/null)" &&
-       gaffer_source_top="$(git -C "$gaffer_source" rev-parse --path-format=absolute --show-toplevel 2>/dev/null)" &&
-       gaffer_source_common="$(git -C "$gaffer_source" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" &&
-       gaffer_home_common="$(git -C "$HOME/code/gaffer" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" &&
-       gaffer_source_git_dir="$(git -C "$gaffer_source" rev-parse --path-format=absolute --git-dir 2>/dev/null)" &&
-       gaffer_version_resolved="$(git -C "$gaffer_source" rev-parse --verify "$gaffer_version^{commit}" 2>/dev/null)"; then
-      gaffer_source_dirty="$(git -C "$gaffer_source" status --porcelain --untracked-files=all 2>/dev/null || printf status-unavailable)"
-      gaffer_source_ref="$(git -C "$gaffer_source" symbolic-ref --quiet HEAD 2>/dev/null || true)"
-      gaffer_marker=''
-      if [ -f "$gaffer_source_git_dir/north-managed-gaffer-plugin-source" ]; then
-        IFS= read -r gaffer_marker \
-          <"$gaffer_source_git_dir/north-managed-gaffer-plugin-source" || true
+    )" || orchestration_plugin_probe_status=$?
+    if [ "$orchestration_plugin_probe_status" -eq 0 ] &&
+       orchestration_version="$(jq -er '
+         [.[] | select(.id == "orchestration@orchestration")]
+         | if length == 1 then .[0].version else error("expected one Orchestration plugin") end
+       ' <<<"$orchestration_plugins")" &&
+       [ -n "$orchestration_expected" ] &&
+       orchestration_source_head="$(git -C "$orchestration_source" rev-parse --verify HEAD 2>/dev/null)" &&
+       orchestration_source_top="$(git -C "$orchestration_source" rev-parse --path-format=absolute --show-toplevel 2>/dev/null)" &&
+       orchestration_source_common="$(git -C "$orchestration_source" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" &&
+       orchestration_home_common="$(git -C "$HOME/code/orchestration" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" &&
+       orchestration_source_git_dir="$(git -C "$orchestration_source" rev-parse --path-format=absolute --git-dir 2>/dev/null)" &&
+       orchestration_version_resolved="$(git -C "$orchestration_source" rev-parse --verify "$orchestration_version^{commit}" 2>/dev/null)"; then
+      orchestration_source_dirty="$(git -C "$orchestration_source" status --porcelain --untracked-files=all 2>/dev/null || printf status-unavailable)"
+      orchestration_source_ref="$(git -C "$orchestration_source" symbolic-ref --quiet HEAD 2>/dev/null || true)"
+      orchestration_marker=''
+      if [ -f "$orchestration_source_git_dir/north-managed-orchestration-plugin-source" ]; then
+        IFS= read -r orchestration_marker \
+          <"$orchestration_source_git_dir/north-managed-orchestration-plugin-source" || true
       fi
-      gaffer_exact=1
-      managed_source_root_matches "$gaffer_source" "$gaffer_source_top" || {
-        gaffer_exact=0
-        bad "managed Gaffer source root mismatch: observed $gaffer_source_top, expected canonical identity of $gaffer_source"
+      orchestration_exact=1
+      managed_source_root_matches "$orchestration_source" "$orchestration_source_top" || {
+        orchestration_exact=0
+        bad "managed Orchestration source root mismatch: observed $orchestration_source_top, expected canonical identity of $orchestration_source"
       }
-      [ "$gaffer_source_common" = "$gaffer_home_common" ] || {
-        gaffer_exact=0
-        bad "managed Gaffer source is not a worktree of $HOME/code/gaffer"
+      [ "$orchestration_source_common" = "$orchestration_home_common" ] || {
+        orchestration_exact=0
+        bad "managed Orchestration source is not a worktree of $HOME/code/orchestration"
       }
-      [ "$gaffer_marker" = north-gaffer-plugin-source-v1 ] || {
-        gaffer_exact=0
-        bad "managed Gaffer source lacks the sync ownership marker"
+      [ "$orchestration_marker" = north-orchestration-plugin-source-v1 ] || {
+        orchestration_exact=0
+        bad "managed Orchestration source lacks the sync ownership marker"
       }
-      if gaffer_intent_revision="$(jq -er \
-        --arg source "$gaffer_source" \
-        --arg commonDir "$gaffer_home_common" '
+      if orchestration_intent_revision="$(jq -er \
+        --arg source "$orchestration_source" \
+        --arg commonDir "$orchestration_home_common" '
           if type == "object"
              and (keys | sort) == ["commonDir", "revision", "source", "version"]
-             and .version == "north-gaffer-plugin-source-intent-v1"
+             and .version == "north-orchestration-plugin-source-intent-v1"
              and .source == $source
              and .commonDir == $commonDir
              and (.revision | type) == "string"
@@ -1661,49 +1661,49 @@ if [ "$LOCAL" -eq 1 ]; then
           then .revision
           else error("invalid ownership intent")
           end
-        ' "$gaffer_source.intent" 2>/dev/null)" &&
-         git -C "$gaffer_source" cat-file -e "$gaffer_intent_revision^{commit}" 2>/dev/null; then
-        if ! gaffer_revisions_converged \
-          "$gaffer_intent_revision" "$gaffer_source_head" "$gaffer_expected"; then
-          gaffer_exact=0
-          bad "managed Gaffer intent is ${gaffer_intent_revision:0:12}; source/input are ${gaffer_source_head:0:12}/${gaffer_expected:0:12}"
+        ' "$orchestration_source.intent" 2>/dev/null)" &&
+         git -C "$orchestration_source" cat-file -e "$orchestration_intent_revision^{commit}" 2>/dev/null; then
+        if ! orchestration_revisions_converged \
+          "$orchestration_intent_revision" "$orchestration_source_head" "$orchestration_expected"; then
+          orchestration_exact=0
+          bad "managed Orchestration intent is ${orchestration_intent_revision:0:12}; source/input are ${orchestration_source_head:0:12}/${orchestration_expected:0:12}"
         fi
       else
-        gaffer_exact=0
-        bad "managed Gaffer source lacks a valid durable creation intent"
+        orchestration_exact=0
+        bad "managed Orchestration source lacks a valid durable creation intent"
       fi
-      [ -z "$gaffer_source_ref" ] || {
-        gaffer_exact=0
-        bad "managed Gaffer source is attached to $gaffer_source_ref, expected detached exact revision"
+      [ -z "$orchestration_source_ref" ] || {
+        orchestration_exact=0
+        bad "managed Orchestration source is attached to $orchestration_source_ref, expected detached exact revision"
       }
-      [ -z "$gaffer_source_dirty" ] || {
-        gaffer_exact=0
-        bad "managed Gaffer source has unexpected tracked or untracked changes"
+      [ -z "$orchestration_source_dirty" ] || {
+        orchestration_exact=0
+        bad "managed Orchestration source has unexpected tracked or untracked changes"
       }
-      [ "$gaffer_source_head" = "$gaffer_expected" ] || {
-        gaffer_exact=0
-        bad "managed Gaffer source is ${gaffer_source_head:0:12}, verified input is ${gaffer_expected:0:12}"
+      [ "$orchestration_source_head" = "$orchestration_expected" ] || {
+        orchestration_exact=0
+        bad "managed Orchestration source is ${orchestration_source_head:0:12}, verified input is ${orchestration_expected:0:12}"
       }
-      if ! gaffer_version_matches "$gaffer_version" "$gaffer_expected" ||
-         [ "$gaffer_version_resolved" != "$gaffer_expected" ]; then
-        gaffer_exact=0
-        bad "Claude Gaffer cache is $gaffer_version, verified input is ${gaffer_expected:0:12}"
+      if ! orchestration_version_matches "$orchestration_version" "$orchestration_expected" ||
+         [ "$orchestration_version_resolved" != "$orchestration_expected" ]; then
+        orchestration_exact=0
+        bad "Claude Orchestration cache is $orchestration_version, verified input is ${orchestration_expected:0:12}"
       fi
-      if [ "$gaffer_exact" -eq 1 ]; then
-        claude_gaffer="exact verified input ${gaffer_expected:0:12}"
-        ok_detail "Claude Gaffer cache + managed source match exact verified input $gaffer_expected"
+      if [ "$orchestration_exact" -eq 1 ]; then
+        claude_orchestration="exact verified input ${orchestration_expected:0:12}"
+        ok_detail "Claude Orchestration cache + managed source match exact verified input $orchestration_expected"
       else
-        claude_gaffer="exact-input drift detected"
+        claude_orchestration="exact-input drift detected"
       fi
       else
-      if [ "$gaffer_plugin_probe_status" -eq 124 ]; then
-        bad "Claude Gaffer plugin-list probe timed out after ${PLUGIN_PROBE_TIMEOUT_SECONDS:-15}s; its process group was reaped"
-      elif [ "$gaffer_plugin_probe_status" -eq 0 ]; then
-        bad "Claude Gaffer cache/managed-source exact revision could not be determined after the bounded plugin list succeeded"
+      if [ "$orchestration_plugin_probe_status" -eq 124 ]; then
+        bad "Claude Orchestration plugin-list probe timed out after ${PLUGIN_PROBE_TIMEOUT_SECONDS:-15}s; its process group was reaped"
+      elif [ "$orchestration_plugin_probe_status" -eq 0 ]; then
+        bad "Claude Orchestration cache/managed-source exact revision could not be determined after the bounded plugin list succeeded"
       else
-        bad "Claude Gaffer plugin/managed-source exact revision could not be determined (plugin-list exit $gaffer_plugin_probe_status)"
+        bad "Claude Orchestration plugin/managed-source exact revision could not be determined (plugin-list exit $orchestration_plugin_probe_status)"
       fi
-      claude_gaffer='freshness unknown'
+      claude_orchestration='freshness unknown'
     fi
   else bad "Claude health probe binary is missing, non-executable, or not the immutable /run/current-system/sw/bin/claude"; fi
 fi
@@ -1712,7 +1712,7 @@ provider_group Claude "$before" \
   'Identity    adapter-pinned native spawn + repair → anthropic' \
   'Topology    user Bash hook (loaded directly by Claude)' \
   "Hook source $claude_hook_provenance" \
-  "Bootstrap   static config parsed · Gaffer $claude_gaffer" \
+  "Bootstrap   static config parsed · Orchestration $claude_orchestration" \
   "MCP         North: $claude_north" \
   "            Fram: $claude_fram" \
   "            Linear: $claude_linear"

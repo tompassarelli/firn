@@ -211,19 +211,19 @@ grep -Fq 'ignored by managed-only policy (0 active bindings)' \
 # A logical state path may traverse symlinks before Git reports its physical
 # worktree root. Canonical identity must accept that alias, but never a distinct
 # repository merely because its lexical path looks related.
-mkdir -p "$scratch/gaffer-real" "$scratch/gaffer-distinct"
-git -C "$scratch/gaffer-real" init -q
-git -C "$scratch/gaffer-distinct" init -q
-ln -s "$scratch/gaffer-real" "$scratch/gaffer-logical"
-gaffer_observed="$(
-  git -C "$scratch/gaffer-logical" rev-parse --path-format=absolute --show-toplevel
+mkdir -p "$scratch/orchestration-real" "$scratch/orchestration-distinct"
+git -C "$scratch/orchestration-real" init -q
+git -C "$scratch/orchestration-distinct" init -q
+ln -s "$scratch/orchestration-real" "$scratch/orchestration-logical"
+orchestration_observed="$(
+  git -C "$scratch/orchestration-logical" rev-parse --path-format=absolute --show-toplevel
 )"
-managed_source_root_matches "$scratch/gaffer-logical" "$gaffer_observed"
+managed_source_root_matches "$scratch/orchestration-logical" "$orchestration_observed"
 distinct_observed="$(
-  git -C "$scratch/gaffer-distinct" rev-parse --path-format=absolute --show-toplevel
+  git -C "$scratch/orchestration-distinct" rev-parse --path-format=absolute --show-toplevel
 )"
-if managed_source_root_matches "$scratch/gaffer-logical" "$distinct_observed"; then
-  printf 'distinct managed Gaffer worktree root was accepted through a logical alias\n' >&2
+if managed_source_root_matches "$scratch/orchestration-logical" "$distinct_observed"; then
+  printf 'distinct managed Orchestration worktree root was accepted through a logical alias\n' >&2
   exit 1
 fi
 
@@ -426,11 +426,11 @@ fi
 # available: intent, managed HEAD, and verified flake input must be identical.
 verified_revision=1111111111111111111111111111111111111111
 stale_intent_revision=2222222222222222222222222222222222222222
-gaffer_revisions_converged \
+orchestration_revisions_converged \
   "$verified_revision" "$verified_revision" "$verified_revision"
-if gaffer_revisions_converged \
+if orchestration_revisions_converged \
   "$stale_intent_revision" "$verified_revision" "$verified_revision"; then
-  printf 'stale but valid Gaffer intent revision was accepted\n' >&2
+  printf 'stale but valid Orchestration intent revision was accepted\n' >&2
   exit 1
 fi
 
@@ -1089,5 +1089,5 @@ if AGENT_CONFIG_HERMES="$hermes_fixture2" \
   exit 1
 fi
 
-printf 'ok: Claude native identity + authoritative Codex managed policy + canonical Gaffer source identity are exact\n'
+printf 'ok: Claude native identity + authoritative Codex managed policy + canonical Orchestration source identity are exact\n'
 printf 'ok: Hermes controller adapter — fail-closed north-bridge, disabled native delegation, packaged North MCP\n'

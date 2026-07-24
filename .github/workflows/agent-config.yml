@@ -19,8 +19,6 @@ on:
       - 'scripts/agent-provider-status.sh'
       - 'scripts/agent-provider-status.test.sh'
       - 'scripts/claude-config-check.sh'
-      - 'scripts/claude-gaffer-plugin-sync.sh'
-      - 'scripts/claude-gaffer-plugin-sync.test.sh'
       - '.github/workflows/agent-config.yml'
   pull_request:
     branches: [main]
@@ -38,8 +36,6 @@ on:
       - 'scripts/agent-provider-status.sh'
       - 'scripts/agent-provider-status.test.sh'
       - 'scripts/claude-config-check.sh'
-      - 'scripts/claude-gaffer-plugin-sync.sh'
-      - 'scripts/claude-gaffer-plugin-sync.test.sh'
       - '.github/workflows/agent-config.yml'
 
 jobs:
@@ -60,8 +56,6 @@ jobs:
         run: ./scripts/agent-config-check.sh
       - name: Test provider identity boundaries
         run: bash ./scripts/agent-config-check.test.sh
-      - name: Test Gaffer plugin reconciliation
-        run: ./scripts/claude-gaffer-plugin-sync.test.sh
       - name: Test worker topology enforcement
         run: ./dotfiles/agents/hooks/agent-spawn-guard.test.sh
       - name: Test provider status contract

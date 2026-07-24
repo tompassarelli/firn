@@ -82,7 +82,7 @@ report against this paragraph.
 Managed recursion is explicit, not a special third role: an orchestrator may
 create workers or child orchestrators only through North, and owns settlement
 of its direct children. Every child receives a fresh `part_of` thread, run,
-reservation, complete Gaffer route, resource envelope, and telemetry. Workers
+reservation, complete Orchestration route, resource envelope, and telemetry. Workers
 never spawn or gain authority in place. When scope overruns, new seams, budget
 pressure, or repeated no-progress invalidate the plan, emit a structured
 `north escalate needs-replan` checkpoint; the nearest live supervisor in the
@@ -128,8 +128,8 @@ comes from content selection, never compression tricks.
 → `~/code/nixos-config/dotfiles/agents/docs/model-selection.md`
 → `~/code/nixos-config/dotfiles/agents/docs/praxis/` (spawn payload blocks; README = assembly)
 
-Shared routing laws are CANONICAL in `~/code/gaffer/doctrine.md`; the portable
-contract is `~/code/gaffer/docs/routing.md`. Keep its axes independent:
+Shared routing laws are CANONICAL in `~/code/orchestration/doctrine.md`; the portable
+contract is `~/code/orchestration/docs/routing.md`. Keep its axes independent:
 function/role (deliverable), `taskGrade` (work scope and judgment), domain
 requirements, topology (`worker`/`orchestrator`), semantic tier
 (`economy`, `standard`, `senior`, `frontier`), deliberation, and posture
@@ -164,26 +164,26 @@ adapter facts, never global doctrine. Use `provider:auto` unless the user or
 task requires a provider. North records the resolved provider/model/reason and
 may fall back only before side effects.
 
-**North is the spawn surface; Gaffer names the squad; provider adapters deliver
-it.** Translate a Gaffer pick to North's execution envelope containing the full
-eight-field Gaffer request (`role`, `taskGrade`, `domainRequirements`,
+**North is the spawn surface; Orchestration names the squad; provider adapters deliver
+it.** Translate a Orchestration pick to North's execution envelope containing the full
+eight-field Orchestration request (`role`, `taskGrade`, `domainRequirements`,
 `topology`, `tier`, `reasoning`, `posture`, `composition`) plus `prompt` and
 normally `provider:'auto'`. Managed North work fails closed without either an
 exact/overridden template composition or a complete bespoke composition.
 `domainRequirements` declares expertise and context the brief must load; it is
 not proof of connector capability, authentication, or pre-turn authority.
 Deterministic Linear operations remain a separate `north linear` surface.
-Display provenance as `gaffer:<template-id>`,
-`gaffer:<template-id>+override`, or
-`gaffer:bespoke:<id>`; `gaffer:not-selected` is native-only and
-`gaffer:legacy-debt` is migration-only. Never emit ambiguous `gaffer:none`.
+Display provenance as `orchestration:<template-id>`,
+`orchestration:<template-id>+override`, or
+`orchestration:bespoke:<id>`; `orchestration:not-selected` is native-only and
+`orchestration:legacy-debt` is migration-only. Never emit ambiguous `orchestration:none`.
 Examples:
 scout/source gathering → `economy`; implementer → `standard`; integrator →
 `senior`; designer → `frontier`; research-scientist/cutting-edge research →
 `frontier` with `taskGrade:research-grade`. These are template defaults, not
 inference rules between axes. A native-agent denial is a routing instruction,
 never a wall. Provider-specific model deltas are resolved from
-`~/code/gaffer/providers` and `~/code/gaffer/docs`; personal posture residue
+`~/code/orchestration/providers` and `~/code/orchestration/docs`; personal posture residue
 lives in `~/code/nixos-config/dotfiles/agents/docs/praxis/README.md`.
 
 ## Push freely — the scan is the guard, not a human

@@ -21,15 +21,15 @@ make_repo() {
 }
 
 make_repo "$TMP/firn"
-for input in beagle fram gaffer north; do make_repo "$TMP/$input"; done
+for input in beagle fram orchestration north; do make_repo "$TMP/$input"; done
 
-for input in beagle fram gaffer north; do
+for input in beagle fram orchestration north; do
   rev="$(git -C "$TMP/$input" rev-parse HEAD)"
   jq -n --arg input "$input" --arg rev "$rev" \
     '{nodes:{($input):{locked:{rev:$rev}}}}' >"$TMP/$input.json"
 done
 jq -s '{nodes:(map(.nodes)|add)}' \
-  "$TMP/beagle.json" "$TMP/fram.json" "$TMP/gaffer.json" "$TMP/north.json" \
+  "$TMP/beagle.json" "$TMP/fram.json" "$TMP/orchestration.json" "$TMP/north.json" \
   >"$TMP/firn/flake.lock"
 git -C "$TMP/firn" add flake.lock
 git -C "$TMP/firn" commit -qm lock
@@ -43,7 +43,7 @@ inputs=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --flake) root="$2"; shift 2 ;;
-    beagle|fram|gaffer|north) inputs+=("$1"); shift ;;
+    beagle|fram|orchestration|north) inputs+=("$1"); shift ;;
     *) shift ;;
   esac
 done
@@ -74,7 +74,7 @@ chmod +x "$TMP/bin/nix"
 export FIRN_REPO="$TMP/firn"
 export FIRN_BEAGLE_REPO="$TMP/beagle"
 export FIRN_FRAM_REPO="$TMP/fram"
-export FIRN_GAFFER_REPO="$TMP/gaffer"
+export FIRN_ORCHESTRATION_REPO="$TMP/orchestration"
 export FIRN_NORTH_REPO="$TMP/north"
 export PATH="$TMP/bin:$PATH"
 
@@ -104,22 +104,22 @@ if grep -q '^plan ' <<<"$output"; then
   exit 1
 fi
 
-# Gaffer is a first-class local input: committed main HEAD plans, verifies,
+# Orchestration is a first-class local input: committed main HEAD plans, verifies,
 # promotes, and leaves no provisional lock mutation behind.
-printf 'v2\n' >>"$TMP/gaffer/source"
-git -C "$TMP/gaffer" add source
-git -C "$TMP/gaffer" commit -qm update
-old_gaffer="$(lock_rev gaffer)"
-new_gaffer="$(git -C "$TMP/gaffer" rev-parse HEAD)"
+printf 'v2\n' >>"$TMP/orchestration/source"
+git -C "$TMP/orchestration" add source
+git -C "$TMP/orchestration" commit -qm update
+old_orchestration="$(lock_rev orchestration)"
+new_orchestration="$(git -C "$TMP/orchestration" rev-parse HEAD)"
 output="$($SCRIPT --plan)"
-grep -q "^plan gaffer $old_gaffer $new_gaffer $TMP/gaffer\$" <<<"$output"
+grep -q "^plan orchestration $old_orchestration $new_orchestration $TMP/orchestration\$" <<<"$output"
 lock_clean
-[ "$(lock_rev gaffer)" = "$old_gaffer" ]
+[ "$(lock_rev orchestration)" = "$old_orchestration" ]
 before_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
-output="$($SCRIPT --commit "gaffer=$new_gaffer")"
-grep -q 'gaffer promoted' <<<"$output"
+output="$($SCRIPT --commit "orchestration=$new_orchestration")"
+grep -q 'orchestration promoted' <<<"$output"
 [ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq $((before_count + 1)) ]
-[ "$(lock_rev gaffer)" = "$new_gaffer" ]
+[ "$(lock_rev orchestration)" = "$new_orchestration" ]
 lock_clean
 
 # A new commit on main plans a promotable move — and planning NEVER mutates.
@@ -144,28 +144,28 @@ lock_clean
 # An EXIT/TERM crash immediately after the mechanical commit must preserve the
 # exact promoted lock already in HEAD. The handler heals index/worktree to that
 # commit, removes its recovery files, and the next run sees a current pin.
-printf 'v3\n' >>"$TMP/gaffer/source"
-git -C "$TMP/gaffer" add source
-git -C "$TMP/gaffer" commit -qm post-commit-crash-target
-crash_gaffer="$(git -C "$TMP/gaffer" rev-parse HEAD)"
+printf 'v3\n' >>"$TMP/orchestration/source"
+git -C "$TMP/orchestration" add source
+git -C "$TMP/orchestration" commit -qm post-commit-crash-target
+crash_orchestration="$(git -C "$TMP/orchestration" rev-parse HEAD)"
 crash_count_before="$(git -C "$TMP/firn" rev-list --count HEAD)"
 mkdir "$TMP/recovery-tmp"
 if output="$(
   TMPDIR="$TMP/recovery-tmp" \
   FIRN_INJECT_CRASH_AFTER_COMMIT=1 \
-    "$SCRIPT" --commit "gaffer=$crash_gaffer" 2>&1
+    "$SCRIPT" --commit "orchestration=$crash_orchestration" 2>&1
 )"; then
   printf 'injected post-commit crash unexpectedly returned success\n' >&2
   exit 1
 fi
 [ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq $((crash_count_before + 1)) ]
-[ "$(lock_rev gaffer)" = "$crash_gaffer" ]
+[ "$(lock_rev orchestration)" = "$crash_orchestration" ]
 lock_clean
 [ -z "$(find "$TMP/recovery-tmp" -mindepth 1 -print -quit)" ]
 output="$($SCRIPT --plan)"
-grep -q "gaffer.*current at ${crash_gaffer:0:8}" <<<"$output"
-if grep -q '^plan gaffer ' <<<"$output"; then
-  printf 'post-commit crash recovery left Gaffer promotable\n' >&2
+grep -q "orchestration.*current at ${crash_orchestration:0:8}" <<<"$output"
+if grep -q '^plan orchestration ' <<<"$output"; then
+  printf 'post-commit crash recovery left Orchestration promotable\n' >&2
   exit 1
 fi
 
@@ -334,44 +334,44 @@ grep -q 'rewrote unrequested local input fram.*deferring' <<<"$output"
 lock_clean
 
 # Missing local main is an explicit hold, not a fallback to feature HEAD.
-gaffer_main="$(git -C "$TMP/gaffer" rev-parse 'refs/heads/main^{commit}')"
-git -C "$TMP/gaffer" checkout -qb missing-main-probe
-git -C "$TMP/gaffer" branch -D main >/dev/null
+orchestration_main="$(git -C "$TMP/orchestration" rev-parse 'refs/heads/main^{commit}')"
+git -C "$TMP/orchestration" checkout -qb missing-main-probe
+git -C "$TMP/orchestration" branch -D main >/dev/null
 output="$($SCRIPT --plan)"
-grep -q 'gaffer.*refs/heads/main is missing.*holding verified' <<<"$output"
-if grep -q '^plan gaffer ' <<<"$output"; then
+grep -q 'orchestration.*refs/heads/main is missing.*holding verified' <<<"$output"
+if grep -q '^plan orchestration ' <<<"$output"; then
   printf 'input with missing local main unexpectedly produced a plan\n' >&2
   exit 1
 fi
-git -C "$TMP/gaffer" branch main "$gaffer_main"
-git -C "$TMP/gaffer" checkout -q main
-git -C "$TMP/gaffer" branch -D missing-main-probe >/dev/null
+git -C "$TMP/orchestration" branch main "$orchestration_main"
+git -C "$TMP/orchestration" checkout -q main
+git -C "$TMP/orchestration" branch -D missing-main-probe >/dev/null
 
 # A rewound or divergent local main can never downgrade/replace the verified
 # pin. Prove both relationships while keeping the active checkout off main.
-locked_gaffer="$(lock_rev gaffer)"
-gaffer_parent="$(git -C "$TMP/gaffer" rev-parse "$locked_gaffer^")"
-git -C "$TMP/gaffer" checkout -qb non-ff-probe "$gaffer_parent"
-git -C "$TMP/gaffer" branch -f main "$gaffer_parent"
+locked_orchestration="$(lock_rev orchestration)"
+orchestration_parent="$(git -C "$TMP/orchestration" rev-parse "$locked_orchestration^")"
+git -C "$TMP/orchestration" checkout -qb non-ff-probe "$orchestration_parent"
+git -C "$TMP/orchestration" branch -f main "$orchestration_parent"
 output="$($SCRIPT --plan)"
-grep -q 'gaffer.*behind verified.*non-fast-forward not promoted' <<<"$output"
-if grep -q '^plan gaffer ' <<<"$output"; then
+grep -q 'orchestration.*behind verified.*non-fast-forward not promoted' <<<"$output"
+if grep -q '^plan orchestration ' <<<"$output"; then
   printf 'rewound local main unexpectedly produced a downgrade plan\n' >&2
   exit 1
 fi
-printf 'divergent\n' >>"$TMP/gaffer/source"
-git -C "$TMP/gaffer" add source
-git -C "$TMP/gaffer" commit -qm divergent
-git -C "$TMP/gaffer" branch -f main HEAD
+printf 'divergent\n' >>"$TMP/orchestration/source"
+git -C "$TMP/orchestration" add source
+git -C "$TMP/orchestration" commit -qm divergent
+git -C "$TMP/orchestration" branch -f main HEAD
 output="$($SCRIPT --plan)"
-grep -q 'gaffer.*diverged from verified.*non-fast-forward not promoted' <<<"$output"
-if grep -q '^plan gaffer ' <<<"$output"; then
+grep -q 'orchestration.*diverged from verified.*non-fast-forward not promoted' <<<"$output"
+if grep -q '^plan orchestration ' <<<"$output"; then
   printf 'divergent local main unexpectedly produced a plan\n' >&2
   exit 1
 fi
-git -C "$TMP/gaffer" branch -f main "$locked_gaffer"
-git -C "$TMP/gaffer" checkout -q main
-git -C "$TMP/gaffer" branch -D non-ff-probe >/dev/null
+git -C "$TMP/orchestration" branch -f main "$locked_orchestration"
+git -C "$TMP/orchestration" checkout -q main
+git -C "$TMP/orchestration" branch -D non-ff-probe >/dev/null
 
 # A foreign edit to the firn lock itself defers promotion, never blocks.
 new_north="$(git -C "$TMP/north" rev-parse 'refs/heads/main^{commit}')"

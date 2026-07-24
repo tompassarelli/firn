@@ -1,10 +1,10 @@
-# Praxis — personal residue (canonical blocks live in gaffer)
+# Praxis — personal residue (canonical blocks live in orchestration)
 
 The generic spawn-payload system — function/role, task grade, domain
 requirements, topology, semantic tier, deliberation, postures, model deltas,
-and the compose/elicit procedures — is CANONICAL in Gaffer:
-`~/code/gaffer/doctrine.md` and `~/code/gaffer/docs/routing.md` (supporting
-blocks live under `~/code/gaffer/docs/`). Templates are overridable defaults;
+and the compose/elicit procedures — is CANONICAL in Orchestration:
+`~/code/orchestration/doctrine.md` and `~/code/orchestration/docs/routing.md` (supporting
+blocks live under `~/code/orchestration/docs/`). Templates are overridable defaults;
 when none fits, use a fully specified bespoke composition with a reason and an
 explicit `promotionCandidate` decision (false by default). The compatibility
 wire keeps `composition.kind:"preset"` and `nearestPreset`. Select an exact
@@ -28,7 +28,7 @@ This directory holds only what is personal:
 | Infrastructure / config | `~/code/nixos-config`, dotfiles, CI | deliver, preserve-leaning | Reproducibility rules; blast radius = every future rebuild. |
 | Others' code | `~/code/reference/*` | read-only | Never edit; license check before leveraging. |
 
-Domain sets defaults; task shape can override a default; gaffer's escape
+Domain sets defaults; task shape can override a default; orchestration's escape
 hatch overrides everything.
 
 ## Fable self-report

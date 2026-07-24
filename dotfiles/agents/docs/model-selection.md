@@ -1,18 +1,18 @@
 # Model and payload selection
 
 This file is the personal adapter, not another routing doctrine. Normative
-semantics live in `~/code/gaffer/doctrine.md` and
-`~/code/gaffer/docs/routing.md`; provider/account allocation lives in
+semantics live in `~/code/orchestration/doctrine.md` and
+`~/code/orchestration/docs/routing.md`; provider/account allocation lives in
 `~/code/north/docs/provider-architecture.md`. If this file disagrees with
 either, those sources win.
 
 Shared policy never chooses a concrete provider model, account, SDK, or
-subscription pool. Gaffer describes the work; North resolves an executable
+subscription pool. Orchestration describes the work; North resolves an executable
 runtime and records both the request and the result.
 
 ## Compose the semantic request
 
-Decide each Gaffer axis independently:
+Decide each Orchestration axis independently:
 
 1. `role` names the responsibility and deliverable. Start with an exact stock
    template when its responsibility, deliverable, done criteria, report shape,
@@ -75,7 +75,7 @@ claim; rerunning completion probes wholesale is worker execution.
 
 ## Send the complete request
 
-The managed MCP envelope contains the eight Gaffer fields plus North-owned
+The managed MCP envelope contains the eight Orchestration fields plus North-owned
 execution controls and the prompt:
 
 ```json
@@ -111,7 +111,7 @@ an unchanged template, a template with explicit axis overrides and an
 `--override-reason`, or a fully specified bespoke role with rationale and a
 structured contract. Templates are defaults, not a closed vocabulary; repeated
 bespoke use is recorded for possible human promotion review, and North renders
-its provenance as `gaffer:bespoke:<id>` rather than a generic `custom` or
+its provenance as `orchestration:bespoke:<id>` rather than a generic `custom` or
 missing-composition label. Composite work alone hydrates the canonical director,
 which owns fan-out and reduction.
 Importance and difficulty do not substitute for two independently executable
@@ -133,15 +133,15 @@ Use `provider:"auto"` unless the user or task explicitly pins a provider or
 account. North filters for authentication and enforceable capabilities, reads
 provider subscription-usage signals, applies the configured balanced,
 preferential, or reserved allocation policy, and resolves tier+reasoning via
-Gaffer's provider catalogs. It may substitute provider/account/model only
+Orchestration's provider catalogs. It may substitute provider/account/model only
 before side effects and only while preserving tier, reasoning, and authority.
 Any degradation is explicit and recorded.
 
 Concrete model names, temporary availability windows, usage endpoint details,
-and per-provider calibration belong under `~/code/gaffer/providers/`,
-`~/code/gaffer/docs/`, and North's provider adapters. Never copy them into
+and per-provider calibration belong under `~/code/orchestration/providers/`,
+`~/code/orchestration/docs/`, and North's provider adapters. Never copy them into
 shared spawn policy, never route through API keys or API-credit balances, and
-never use native provider inheritance as a substitute for an explicit Gaffer
+never use native provider inheritance as a substitute for an explicit Orchestration
 request.
 
 Personal domain/posture defaults live in

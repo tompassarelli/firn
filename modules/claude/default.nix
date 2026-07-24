@@ -6,11 +6,9 @@ let
   psBin = if pkgs.stdenv.hostPlatform.isDarwin then "/bin/ps" else "${pkgs.procps}/bin/ps";
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
   framPkg = inputs.fram.packages."${pkgs.stdenv.hostPlatform.system}".default;
-  gafferRev = inputs.gaffer.rev;
   claudeSettingsSeed = pkgs.writeText "claude-settings.json" (builtins.readFile "${flakeRoot}/dotfiles/claude/settings.json");
   claudeSettingsSeeder = pkgs.writeShellScript "claude-settings-seed" (builtins.readFile "${flakeRoot}/scripts/claude-settings-seed.sh");
   northSessionEnd = pkgs.writeShellScriptBin "north-session-end" (builtins.readFile "${flakeRoot}/dotfiles/agents/hooks/north-session-end.sh");
-  gafferPluginSync = pkgs.writeShellScript "claude-gaffer-plugin-sync" (builtins.readFile "${flakeRoot}/scripts/claude-gaffer-plugin-sync.sh");
   mcpRegister = pkgs.writeShellScript "claude-mcp-register" (builtins.readFile "${flakeRoot}/scripts/claude-mcp-register.sh");
 in
 {
@@ -29,7 +27,6 @@ in
       };
       home.activation.seedClaudeSettings = config.lib.dag.entryAfter [ "writeBoundary" ] "run env INSTALL_BIN=${pkgs.coreutils}/bin/install MKDIR_BIN=${pkgs.coreutils}/bin/mkdir MV_BIN=${pkgs.coreutils}/bin/mv REALPATH_BIN=${pkgs.coreutils}/bin/realpath RM_BIN=${pkgs.coreutils}/bin/rm FLOCK_BIN=${pkgs.util-linux}/bin/flock JQ_BIN=${pkgs.jq}/bin/jq ${claudeSettingsSeeder} ${claudeSettingsSeed} $HOME/.claude/settings.json\n";
       home.activation.installCaveman = config.lib.dag.entryAfter [ "writeBoundary" "seedClaudeSettings" ] "CLAUDE=${claudePackage}/bin/claude\nWANT=37c28ebb1e0a\nGITC=$(run mktemp)\nrun ${pkgs.git}/bin/git config -f \"$GITC\" url.\"https://github.com/\".insteadOf \"git@github.com:\"\nif [ ! -e $HOME/.claude/plugins/cache/caveman ]; then\n  run timeout 90 $CLAUDE plugin marketplace add tompassarelli/caveman || true\n  run timeout 90 env GIT_CONFIG_GLOBAL=\"$GITC\" $CLAUDE plugin install caveman@caveman || true\nelif [ ! -e $HOME/.claude/plugins/cache/caveman/caveman/$WANT ]; then\n  run timeout 90 $CLAUDE plugin marketplace update caveman || true\n  run timeout 90 $CLAUDE plugin uninstall caveman@caveman || true\n  run timeout 90 env GIT_CONFIG_GLOBAL=\"$GITC\" $CLAUDE plugin install caveman@caveman || true\n  run find $HOME/.claude/plugins/cache/caveman/caveman -mindepth 1 -maxdepth 1 ! -name \"$WANT\" -exec rm -rf {} + || true\nfi\nrun rm -f \"$GITC\"\n";
-      home.activation.syncGafferPlugin = config.lib.dag.entryAfter [ "writeBoundary" "seedClaudeSettings" "installCaveman" ] "if ! run env CLAUDE_BIN=${claudePackage}/bin/claude GIT_BIN=${pkgs.git}/bin/git JQ_BIN=${pkgs.jq}/bin/jq TIMEOUT_BIN=${pkgs.coreutils}/bin/timeout FLOCK_BIN=${pkgs.util-linux}/bin/flock MV_BIN=${pkgs.coreutils}/bin/mv SLEEP_BIN=${pkgs.coreutils}/bin/sleep WC_BIN=${pkgs.coreutils}/bin/wc REALPATH_BIN=${pkgs.coreutils}/bin/realpath PS_BIN=${psBin} GAFFER_HOME=$HOME/code/gaffer GAFFER_SOURCE=$HOME/.local/state/north/gaffer-plugin-source GAFFER_REV=${gafferRev} ${gafferPluginSync}; then\n  echo \"warning: Gaffer Claude plugin sync failed; agent-config-check --local will report the drift\" >&2\nfi\n";
       home.activation.registerMcpServers = config.lib.dag.entryAfter [ "writeBoundary" ] "if ! run env CLAUDE_BIN=${claudePackage}/bin/claude JQ_BIN=${pkgs.jq}/bin/jq TIMEOUT_BIN=${pkgs.coreutils}/bin/timeout CLAUDE_JSON=$HOME/.claude.json LIFE=$HOME/.local/state/north FRAM_MCP_BIN=${framPkg}/bin/fram-mcp NORTH_MCP_BIN=${northPkg}/bin/north-mcp WANT_NORTH_PORT=7977 ${mcpRegister}; then\n  echo \"warning: MCP server registration failed; agent-config-check --local will report the drift\" >&2\nfi\n";
     });
   };
