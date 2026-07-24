@@ -25,8 +25,11 @@
                :home.activation.cloneDoomEmacs
                 (config.lib.dag.entryAfter ["writeBoundary"]
                   (ms (s "DOOM_DIR=\"" config.home.homeDirectory "/.config/emacs\"") "" "# Clone Doom if not present" "if [ ! -d \"$DOOM_DIR\" ]; then" (s "  $DRY_RUN_CMD " pkgs.git "/bin/git clone --depth 1 https://github.com/doomemacs/doomemacs \"$DOOM_DIR\"") "  echo \"Doom Emacs cloned to ~/.config/emacs\"" "  echo \"Run: ~/.config/emacs/bin/doom install\"" "fi" ""))
+               ;; Daemon disabled 2026-07-24: crash-looped since system-1028
+               ;; (4539 restarts, never reached active); unit masked live,
+               ;; diagnosis thread 019f94be. Re-enable only after root cause.
                :services.emacs
-                {:enable true
+                {:enable false
                  :package pkgs.emacs-pgtk
                  :startWithUserSession "graphical"}
                :home.file
