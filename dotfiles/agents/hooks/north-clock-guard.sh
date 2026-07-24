@@ -28,10 +28,18 @@ authoring_guards_off && exit 0
 # Dedicated clock-guard knob (tom, 2026-07-24): billing clock demoted to
 # opt-in. First line "off" in the state file disables ONLY this guard;
 # missing/other content leaves it active. Other guards unaffected.
+# SDK managed-guard calls set NORTH_CLOCK_GUARD_ATTEST=1 and require a
+# positive attestation — silence there is denied as unavailable, so the
+# off branch must still emit {"northClockGuard":"not-applicable"}.
 CLOCK_KNOB="${XDG_STATE_HOME:-${HOME:-}/.local/state}/north/clock-guard"
 if [ -r "$CLOCK_KNOB" ]; then
   IFS= read -r CLOCK_KNOB_STATE < "$CLOCK_KNOB" || CLOCK_KNOB_STATE=""
-  [ "$CLOCK_KNOB_STATE" = "off" ] && exit 0
+  if [ "$CLOCK_KNOB_STATE" = "off" ]; then
+    if [ "${NORTH_CLOCK_GUARD_ATTEST:-}" = "1" ]; then
+      builtin printf '%s\n' '{"northClockGuard":"not-applicable"}'
+    fi
+    exit 0
+  fi
 fi
 
 CORE="$SCRIPT_DIR/north-clock-guard.py"
