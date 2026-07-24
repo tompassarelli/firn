@@ -427,11 +427,11 @@
     "gaffer": {
       "flake": false,
       "locked": {
-        "lastModified": 1784908112,
-        "narHash": "sha256-zwy6JVlcGqCWvM/VsLxvTvlbzqCN8xEarWEJe6JCBOc=",
+        "lastModified": 1784920022,
+        "narHash": "sha256-9zgEIukONwrdN8sEX+8t4vM2IKSZdD+yBk8AjHLzv/o=",
         "ref": "main",
-        "rev": "9c6acd66ff1d7160e40b4b07561b82ca1c037e65",
-        "revCount": 51,
+        "rev": "3a4ce3d16c5cc7e2f80d209188dce986f94b835d",
+        "revCount": 52,
         "type": "git",
         "url": "file:///home/tom/code/gaffer"
       },
