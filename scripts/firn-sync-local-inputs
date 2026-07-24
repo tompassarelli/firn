@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Local development inputs (beagle/fram/orchestration/north) are git+file flake inputs pinned
+# Local development inputs (beagle/fram/north) are git+file flake inputs pinned
 # by flake.lock to committed revisions. `firn rebuild` builds a COMMIT snapshot
 # of this repo, so nothing in any working tree can enter a generation; this
 # script only decides which committed revs to PROMOTE.
@@ -27,7 +27,7 @@ set -euo pipefail
 
 ROOT="${FIRN_REPO:-$(git rev-parse --show-toplevel)}"
 LOCK="$ROOT/flake.lock"
-INPUTS=(beagle fram orchestration north)
+INPUTS=(beagle fram north)
 
 die() {
   printf 'firn rebuild: %s\n' "$*" >&2
@@ -168,7 +168,7 @@ for spec in "$@"; do
     *) die "--commit target '$spec' must be <input>=<verified-rev>" ;;
   esac
   case "$input" in
-    beagle|fram|orchestration|north) ;;
+    beagle|fram|north) ;;
     *) die "unknown local input '$input'" ;;
   esac
   if [[ -v "seen[$input]" ]]; then
