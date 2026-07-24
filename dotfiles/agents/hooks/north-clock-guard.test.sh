@@ -13,6 +13,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 HOOK="$HERE/north-clock-guard.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/clockguard-test.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
+XDG_STATE_HOME="$SCRATCH/xdg-state"
+export XDG_STATE_HOME
+mkdir -p "$XDG_STATE_HOME"
 
 CANON_ROOT="$SCRATCH/code"
 CANON_CLIENT="$CANON_ROOT/client/msa"
@@ -1531,6 +1534,78 @@ force_live_out="$(printf '%s' "$ks_json" | env AGENT_NO_AUTHORING_HOOKS=0 \
   AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" "$HOOK" 2>/dev/null)"
 check_output deny 'explicit force-live overrides persistent bypass' "$force_live_out"
 printf '%s\n' 'guards=on' >"$SCRATCH/killswitch.state"
+
+echo "== off-state clock-guard knob: SDK attestation vs native silence =="
+CLOCK_KNOB_STATE_DIR="$SCRATCH/xdg-state/north"
+mkdir -p "$CLOCK_KNOB_STATE_DIR"
+printf '%s\n' off >"$CLOCK_KNOB_STATE_DIR/clock-guard"
+knob_json="$(emit_json Edit "$CLIENT_DIR/api.py")"
+
+# Managed SDK authoring guard: off-knob + NORTH_CLOCK_GUARD_ATTEST=1 must emit
+# the exact not-applicable envelope on stdout, nothing on stderr, exit 0 —
+# otherwise the SDK's exact-attestation check reads the silence as
+# billable_clock_guard_unavailable (the bug this thread fixes).
+attest_out="$(printf '%s' "$knob_json" | env -u AGENT_NO_AUTHORING_HOOKS \
+  -u CLAUDE_NO_AUTHORING_HOOKS -u FRAM_TELEMETRY_LOG \
+  XDG_STATE_HOME="$SCRATCH/xdg-state" NORTH_CLOCK_GUARD_ATTEST=1 \
+  FRAM_LOG="$SCRATCH/closed.log" \
+  AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
+  "$HOOK" 2>"$SCRATCH/attest.err")"
+attest_status=$?
+attest_err="$(cat "$SCRATCH/attest.err")"
+attest_desc='off-state knob + NORTH_CLOCK_GUARD_ATTEST=1 emits exact not-applicable envelope, empty stderr, exit 0'
+if [ "$attest_status" = 0 ] && [ "$attest_out" = '{"northClockGuard":"not-applicable"}' ] &&
+  [ -z "$attest_err" ]; then
+  pass=$((pass + 1)); printf 'PASS  %-11s  %s\n' attest "$attest_desc"
+else
+  fail=$((fail + 1))
+  printf 'FAIL  %-11s  %s\n      status=%s out=%s err=%s\n' \
+    attest "$attest_desc" "$attest_status" "$attest_out" "$attest_err"
+fi
+
+# Native Claude/Codex invocation never sets NORTH_CLOCK_GUARD_ATTEST — the
+# off-knob path must stay byte-silent (empty stdout AND stderr) with exit 0,
+# unchanged from before this thread.
+native_out="$(printf '%s' "$knob_json" | env -u AGENT_NO_AUTHORING_HOOKS \
+  -u CLAUDE_NO_AUTHORING_HOOKS -u FRAM_TELEMETRY_LOG -u NORTH_CLOCK_GUARD_ATTEST \
+  XDG_STATE_HOME="$SCRATCH/xdg-state" \
+  FRAM_LOG="$SCRATCH/closed.log" \
+  AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
+  "$HOOK" 2>"$SCRATCH/native.err")"
+native_status=$?
+native_err="$(cat "$SCRATCH/native.err")"
+native_desc='off-state knob without attest stays byte-silent on stdout/stderr, exit 0'
+if [ "$native_status" = 0 ] && [ -z "$native_out" ] && [ -z "$native_err" ]; then
+  pass=$((pass + 1)); printf 'PASS  %-11s  %s\n' native "$native_desc"
+else
+  fail=$((fail + 1))
+  printf 'FAIL  %-11s  %s\n      status=%s out=%s err=%s\n' \
+    native "$native_desc" "$native_status" "$native_out" "$native_err"
+fi
+
+# knob explicitly "on" plus attest must NOT take the off short-circuit at
+# all — it must fall through into the normal decision core and return the
+# same deterministic result as the no-knob-file baseline (open-msa.log,
+# matching owner clock => exact CLOCK_ALLOW), proving the off-state branch
+# above is knob-off specific and not a blanket attest bypass.
+printf '%s\n' on >"$CLOCK_KNOB_STATE_DIR/clock-guard"
+onknob_out="$(printf '%s' "$knob_json" | env -u AGENT_NO_AUTHORING_HOOKS \
+  -u CLAUDE_NO_AUTHORING_HOOKS -u FRAM_TELEMETRY_LOG \
+  XDG_STATE_HOME="$SCRATCH/xdg-state" NORTH_CLOCK_GUARD_ATTEST=1 \
+  FRAM_LOG="$SCRATCH/open-msa.log" \
+  AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
+  "$HOOK" 2>"$SCRATCH/onknob.err")"
+onknob_status=$?
+onknob_err="$(cat "$SCRATCH/onknob.err")"
+onknob_desc='knob on + attest falls through to normal decision core: exact CLOCK_ALLOW, empty stderr, exit 0'
+if [ "$onknob_status" = 0 ] && [ "$onknob_out" = "$CLOCK_ALLOW" ] &&
+  [ -z "$onknob_err" ]; then
+  pass=$((pass + 1)); printf 'PASS  %-11s  %s\n' onknob "$onknob_desc"
+else
+  fail=$((fail + 1))
+  printf 'FAIL  %-11s  %s\n      status=%s out=%s err=%s\n' \
+    onknob "$onknob_desc" "$onknob_status" "$onknob_out" "$onknob_err"
+fi
 
 if [ "${CLOCK_GUARD_BENCHMARK:-0}" = 1 ]; then
   python3 - "$HOOK" "$SCRATCH/closed.log" "$SCRATCH/open-msa.log" \
