@@ -96,6 +96,15 @@ KILLSWITCH="$HERE/lib/authoring-killswitch.sh"
 builtin source "$KILLSWITCH" 2>/dev/null || deny_unavailable
 authoring_guards_off && noop
 
+# Dedicated clock-guard knob (tom, 2026-07-24): billing clock demoted to
+# opt-in. First line "off" disables ONLY this guard; missing/other content
+# leaves it active.
+CLOCK_KNOB="${XDG_STATE_HOME:-${HOME:-}/.local/state}/north/clock-guard"
+if [ -r "$CLOCK_KNOB" ]; then
+  IFS= builtin read -r CLOCK_KNOB_STATE < "$CLOCK_KNOB" || CLOCK_KNOB_STATE=""
+  [ "$CLOCK_KNOB_STATE" = "off" ] && noop
+fi
+
 CORE="$HERE/north-clock-guard.py"
 [ -r "$CORE" ] || deny_unavailable
 GIT_STORE="$("$PYTHON" -I -S -c \

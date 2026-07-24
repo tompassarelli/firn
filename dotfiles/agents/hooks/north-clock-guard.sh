@@ -25,6 +25,15 @@ builtin source "$SCRIPT_DIR/lib/authoring-killswitch.sh" 2>/dev/null ||
   deny_unavailable
 authoring_guards_off && exit 0
 
+# Dedicated clock-guard knob (tom, 2026-07-24): billing clock demoted to
+# opt-in. First line "off" in the state file disables ONLY this guard;
+# missing/other content leaves it active. Other guards unaffected.
+CLOCK_KNOB="${XDG_STATE_HOME:-${HOME:-}/.local/state}/north/clock-guard"
+if [ -r "$CLOCK_KNOB" ]; then
+  IFS= read -r CLOCK_KNOB_STATE < "$CLOCK_KNOB" || CLOCK_KNOB_STATE=""
+  [ "$CLOCK_KNOB_STATE" = "off" ] && exit 0
+fi
+
 CORE="$SCRIPT_DIR/north-clock-guard.py"
 [ -r "$CORE" ] || deny_unavailable
 
