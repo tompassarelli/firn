@@ -27,6 +27,13 @@
                   {:Description "North stream-sync — mirror Claude Code transcripts into streams/raw"}
                  :Service
                   {:Type      "oneshot"
+                   ;; Exit 2 means "mirrored, but at least one source was
+                   ;; quarantined" — a report about one diverged transcript, not
+                   ;; a failure of the sync. Without this the unit sits red
+                   ;; whenever any single transcript has diverged, which is how
+                   ;; a real outage learns to hide among the false alarms. Exit
+                   ;; 1 still fails the unit.
+                   :SuccessExitStatus "2"
                    :ExecStart (s northPkg "/bin/north-stream-sync-all")}}
                :systemd.user.timers.north-stream-sync
                 {:Unit

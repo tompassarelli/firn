@@ -14,6 +14,7 @@ in
         };
         Service = {
           Type = "oneshot";
+          SuccessExitStatus = "2";
           ExecStart = "${northPkg}/bin/north-stream-sync-all";
         };
       };
