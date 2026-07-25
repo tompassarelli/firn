@@ -14,7 +14,7 @@ in
         };
         Service = {
           Type = "oneshot";
-          ExecStart = "${northPkg}/bin/north-stream-sync";
+          ExecStart = "${northPkg}/bin/north-stream-sync-all";
         };
       };
       systemd.user.timers.north-stream-sync = {

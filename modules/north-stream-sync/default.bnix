@@ -3,7 +3,11 @@
 (ns default)
 
 ;; Periodic trigger for the exact packaged `north-stream-sync` — the zero-AI
-;; cursor-based mirror of Claude Code transcripts into streams/raw/. User-level timer (not a
+;; cursor-based mirror of Claude Code transcripts into streams/raw/. Runs the
+;; -all sweep, which covers EVERY per-account transcript root under
+;; ~/.local/state/north/accounts as well as the pre-account ~/.claude/projects;
+;; scanning only the latter silently froze the mirror at the account migration.
+;; User-level timer (not a
 ;; system service like north-coord): it only touches files under $HOME, needs
 ;; no privileges, and should not block boot. SessionEnd hook flush is a
 ;; second, complementary trigger (dotfiles/agents/hooks/north-session-end.sh) —
@@ -23,7 +27,7 @@
                   {:Description "North stream-sync — mirror Claude Code transcripts into streams/raw"}
                  :Service
                   {:Type      "oneshot"
-                   :ExecStart (s northPkg "/bin/north-stream-sync")}}
+                   :ExecStart (s northPkg "/bin/north-stream-sync-all")}}
                :systemd.user.timers.north-stream-sync
                 {:Unit
                   {:Description "Run north-stream-sync periodically"}
