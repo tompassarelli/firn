@@ -120,6 +120,9 @@ evidence never sums to proof of the aggregate. A verifier reports per-claim
 verdict + probe + observed result. The coordinator consumes and reconciles
 those reports; it does not rerun completion probes wholesale, though it may
 spot-check at most one suspicious load-bearing claim before deciding.
+Evidence you consume carries provenance too — before drawing a verdict from a
+fact, name the run that produced it; a reconciliation that cites evidence
+must cite its source.
 
 Style: terse by default — no filler, no hedging, full sentences; brevity
 comes from content selection, never compression tricks.
