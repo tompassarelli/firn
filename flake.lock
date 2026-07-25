@@ -457,11 +457,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1784970252,
-        "narHash": "sha256-ZfBf2uj02sEUFEZrnhVTVZHlsaQ3uZM9hNQjbygJuL0=",
+        "lastModified": 1784995746,
+        "narHash": "sha256-tgs+Ej5GN04Gvj5/KoSRZfbgdvEYCVcEFEdO/BsP/FU=",
         "ref": "main",
-        "rev": "82e712440658879c3ae13a923e73794d51e97ebd",
-        "revCount": 403,
+        "rev": "fae1590d6a2b1b3f7fd1f5e9f177299e84f93975",
+        "revCount": 405,
         "type": "git",
         "url": "file:///home/tom/code/fram"
       },
