@@ -39,7 +39,10 @@
                 (s "exec " northPkg "/bin/" name " \"$@\""))}))
      pinnedCommandNames
       ["north-on-spawn" "north-on-tooluse" "north-mark-delegated"
-       "north-on-stop" "concern" "north-stream-sync"]
+       "north-on-stop" "concern" "north-stream-sync"
+       ;; oversight surfaces: the pinned big-fish board and the per-thread
+       ;; effort rollup. Shipped but unexposed is the same as not shipped.
+       "north-pinned" "north-effort"]
      pinnedCommands (builtins.map mkPinnedCommand pinnedCommandNames)
      mkDev
       (fn [name]

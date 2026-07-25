@@ -38,6 +38,8 @@ let
     "north-on-stop"
     "concern"
     "north-stream-sync"
+    "north-pinned"
+    "north-effort"
   ];
   pinnedCommands = builtins.map mkPinnedCommand pinnedCommandNames;
   mkDev = name: pkgs.writeShellApplication {
