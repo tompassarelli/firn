@@ -1007,7 +1007,6 @@ CODEX_LEGACY_HOOKS="${CODEX_LEGACY_HOOKS:-$CODEX/hooks.json}"
 HERMES="${AGENT_CONFIG_HERMES:-$REPO/dotfiles/hermes}"
 HERMES_BRIDGE="$HERMES/plugins/north-bridge"
 HERMES_MODULE="${AGENT_CONFIG_HERMES_MODULE:-$REPO/modules/hermes/default.bnix}"
-ORCHESTRATION_SYNC="$REPO/scripts/claude-orchestration-plugin-sync.sh"
 LAUNCHER_BIN="$REPO/dotfiles/bin"
 LOCAL=0
 VERBOSE=0
@@ -1501,17 +1500,26 @@ if jq -e '
   .enabledPlugins["orchestration@orchestration"] == true
   and .extraKnownMarketplaces.orchestration.source == {
     "source": "directory",
-    "path": "/home/tom/.local/state/north/orchestration-plugin-source"
+    "path": "/home/tom/code/north/orchestration"
   }
 ' "$CLAUDE/settings.json" >/dev/null; then
-  ok_detail "Orchestration plugin uses the managed exact-revision marketplace"
+  ok_detail "Orchestration plugin resolves to the in-tree north/orchestration marketplace"
 else
-  bad "Claude Orchestration plugin must be enabled from /home/tom/.local/state/north/orchestration-plugin-source"
+  bad "Claude Orchestration plugin must be enabled from /home/tom/code/north/orchestration"
 fi
-if command -v shellcheck >/dev/null 2>&1 && shellcheck -S warning "$ORCHESTRATION_SYNC"; then
-  ok_detail "Orchestration plugin sync shellcheck"
-else bad "Orchestration plugin sync shellcheck failed"; fi
+if [ -f "$HOME/code/north/orchestration/.claude-plugin/marketplace.json" ] &&
+   [ -f "$HOME/code/north/orchestration/.claude-plugin/plugin.json" ]; then
+  ok_detail "in-tree Orchestration marketplace + plugin manifests present"
+else
+  bad "north/orchestration must carry .claude-plugin/marketplace.json and plugin.json"
+fi
 validate_hooks "$CLAUDE/settings.json" Claude anthropic
+# The billable clock guard was removed from CLAUDE hooks on tom order (659ed26,
+# billing clock demoted to an opt-in knob), so ZERO bindings is the expected
+# state and this must not demand two. The property still worth enforcing is
+# conditional: any binding that DOES exist must go through the immutable
+# /etc/codex runtime rather than a mutable user path. The Codex-side guard
+# checks are unaffected -- that removal was Claude-only.
 if jq -e '
   [
     .hooks.PreToolUse[]?.hooks[]?
@@ -1521,15 +1529,14 @@ if jq -e '
       )
     | .command
   ] as $commands
-  | ($commands | length) == 2
-    and all(
+  | all(
       $commands[];
       . == "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-clock-guard.sh"
     )
 ' "$CLAUDE/settings.json" >/dev/null; then
-  ok_detail 'Claude clock guard uses the immutable managed runtime for both bindings'
+  ok_detail 'every bound Claude clock guard uses the immutable managed runtime'
 else
-  bad 'Claude clock guard must use the immutable /etc/codex managed runtime for both bindings'
+  bad 'a bound Claude clock guard must use the immutable /etc/codex managed runtime'
 fi
 require_manifest_guard_count "$CLAUDE/settings.json" Claude Bash 1 'user Bash topology guard is bound once'
 claude_bindings="$HOOK_BINDINGS"
@@ -1610,101 +1617,12 @@ if [ "$LOCAL" -eq 1 ]; then
     else
       bad "claude rejected its config while checking MCP health (exit $claude_mcp_status):\n$claude_mcp_output"
     fi
-    orchestration_source="$HOME/.local/state/north/orchestration-plugin-source"
-    orchestration_expected="$(jq -er '.nodes.orchestration.locked.rev | select(test("^[0-9a-f]{40}$"))' "$REPO/flake.lock" 2>/dev/null || true)"
-    orchestration_plugin_probe_status=0
-    orchestration_plugins="$(
-      run_claude_probe "${PLUGIN_PROBE_TIMEOUT_SECONDS:-15}" plugin list --json 2>/dev/null
-    )" || orchestration_plugin_probe_status=$?
-    if [ "$orchestration_plugin_probe_status" -eq 0 ] &&
-       orchestration_version="$(jq -er '
-         [.[] | select(.id == "orchestration@orchestration")]
-         | if length == 1 then .[0].version else error("expected one Orchestration plugin") end
-       ' <<<"$orchestration_plugins")" &&
-       [ -n "$orchestration_expected" ] &&
-       orchestration_source_head="$(git -C "$orchestration_source" rev-parse --verify HEAD 2>/dev/null)" &&
-       orchestration_source_top="$(git -C "$orchestration_source" rev-parse --path-format=absolute --show-toplevel 2>/dev/null)" &&
-       orchestration_source_common="$(git -C "$orchestration_source" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" &&
-       orchestration_home_common="$(git -C "$HOME/code/orchestration" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" &&
-       orchestration_source_git_dir="$(git -C "$orchestration_source" rev-parse --path-format=absolute --git-dir 2>/dev/null)" &&
-       orchestration_version_resolved="$(git -C "$orchestration_source" rev-parse --verify "$orchestration_version^{commit}" 2>/dev/null)"; then
-      orchestration_source_dirty="$(git -C "$orchestration_source" status --porcelain --untracked-files=all 2>/dev/null || printf status-unavailable)"
-      orchestration_source_ref="$(git -C "$orchestration_source" symbolic-ref --quiet HEAD 2>/dev/null || true)"
-      orchestration_marker=''
-      if [ -f "$orchestration_source_git_dir/north-managed-orchestration-plugin-source" ]; then
-        IFS= read -r orchestration_marker \
-          <"$orchestration_source_git_dir/north-managed-orchestration-plugin-source" || true
-      fi
-      orchestration_exact=1
-      managed_source_root_matches "$orchestration_source" "$orchestration_source_top" || {
-        orchestration_exact=0
-        bad "managed Orchestration source root mismatch: observed $orchestration_source_top, expected canonical identity of $orchestration_source"
-      }
-      [ "$orchestration_source_common" = "$orchestration_home_common" ] || {
-        orchestration_exact=0
-        bad "managed Orchestration source is not a worktree of $HOME/code/orchestration"
-      }
-      [ "$orchestration_marker" = north-orchestration-plugin-source-v1 ] || {
-        orchestration_exact=0
-        bad "managed Orchestration source lacks the sync ownership marker"
-      }
-      if orchestration_intent_revision="$(jq -er \
-        --arg source "$orchestration_source" \
-        --arg commonDir "$orchestration_home_common" '
-          if type == "object"
-             and (keys | sort) == ["commonDir", "revision", "source", "version"]
-             and .version == "north-orchestration-plugin-source-intent-v1"
-             and .source == $source
-             and .commonDir == $commonDir
-             and (.revision | type) == "string"
-             and (.revision | test("^[0-9a-f]{40}$"))
-          then .revision
-          else error("invalid ownership intent")
-          end
-        ' "$orchestration_source.intent" 2>/dev/null)" &&
-         git -C "$orchestration_source" cat-file -e "$orchestration_intent_revision^{commit}" 2>/dev/null; then
-        if ! orchestration_revisions_converged \
-          "$orchestration_intent_revision" "$orchestration_source_head" "$orchestration_expected"; then
-          orchestration_exact=0
-          bad "managed Orchestration intent is ${orchestration_intent_revision:0:12}; source/input are ${orchestration_source_head:0:12}/${orchestration_expected:0:12}"
-        fi
-      else
-        orchestration_exact=0
-        bad "managed Orchestration source lacks a valid durable creation intent"
-      fi
-      [ -z "$orchestration_source_ref" ] || {
-        orchestration_exact=0
-        bad "managed Orchestration source is attached to $orchestration_source_ref, expected detached exact revision"
-      }
-      [ -z "$orchestration_source_dirty" ] || {
-        orchestration_exact=0
-        bad "managed Orchestration source has unexpected tracked or untracked changes"
-      }
-      [ "$orchestration_source_head" = "$orchestration_expected" ] || {
-        orchestration_exact=0
-        bad "managed Orchestration source is ${orchestration_source_head:0:12}, verified input is ${orchestration_expected:0:12}"
-      }
-      if ! orchestration_version_matches "$orchestration_version" "$orchestration_expected" ||
-         [ "$orchestration_version_resolved" != "$orchestration_expected" ]; then
-        orchestration_exact=0
-        bad "Claude Orchestration cache is $orchestration_version, verified input is ${orchestration_expected:0:12}"
-      fi
-      if [ "$orchestration_exact" -eq 1 ]; then
-        claude_orchestration="exact verified input ${orchestration_expected:0:12}"
-        ok_detail "Claude Orchestration cache + managed source match exact verified input $orchestration_expected"
-      else
-        claude_orchestration="exact-input drift detected"
-      fi
-      else
-      if [ "$orchestration_plugin_probe_status" -eq 124 ]; then
-        bad "Claude Orchestration plugin-list probe timed out after ${PLUGIN_PROBE_TIMEOUT_SECONDS:-15}s; its process group was reaped"
-      elif [ "$orchestration_plugin_probe_status" -eq 0 ]; then
-        bad "Claude Orchestration cache/managed-source exact revision could not be determined after the bounded plugin list succeeded"
-      else
-        bad "Claude Orchestration plugin/managed-source exact revision could not be determined (plugin-list exit $orchestration_plugin_probe_status)"
-      fi
-      claude_orchestration='freshness unknown'
-    fi
+    # Orchestration ships INSIDE north (nixos-config 57b0521), so there is no
+    # separate flake input to pin and no detached marketplace checkout to
+    # verify. The plugin is read straight from the north working tree, the
+    # same way every other agent-config surface is symlinked from a repo, so
+    # exact-revision drift is not a thing that can happen here any more.
+    claude_orchestration='in-tree (north/orchestration)'
   else bad "Claude health probe binary is missing, non-executable, or not the immutable /run/current-system/sw/bin/claude"; fi
 fi
 provider_group Claude "$before" \

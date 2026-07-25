@@ -174,7 +174,7 @@
     "orchestration": {
       "source": {
         "source": "directory",
-        "path": "/home/tom/.local/state/north/orchestration-plugin-source"
+        "path": "/home/tom/code/north/orchestration"
       }
     }
   },
