@@ -38,7 +38,7 @@ does not apply there. The honest line: code *can* be graph-upstream — see
 
 ## 1. The graph-edit verbs (use these instead of Edit/Write)
 
-The authoring engine is `~/code/fram/chartroom/src/resolve.clj` (modes
+The authoring engine is `~/code/fram/resolve.clj` (modes
 `upsert-form` / `set-body` / `rename` / `delete`), exposed AI-facing over the fram
 MCP server. Each is a genuine fact operation on the lossless AST projection,
 **recompile-gated and fail-closed** — an edit that the engine refuses, or that
@@ -76,7 +76,7 @@ The CLI form the MCP tools wrap (for grounding / manual runs):
 # project the module to lossless AST-facts EDN
 racket ~/code/beagle/beagle-lib/private/facts-roundtrip.rkt --emit-edn <file.bclj> > a.edn
 # apply the graph edit (writes the rendered projection to $RESOLVE_OUT)
-bb -cp ~/code/fram/out ~/code/fram/chartroom/src/resolve.clj set-body <name> <scope> <body.edn> a.edn
+bb -cp ~/code/fram/out ~/code/fram/resolve.clj set-body <name> <scope> <body.edn> a.edn
 # regenerate byte-stable text + recompile-gate (committed only if it builds)
 racket ~/code/beagle/beagle-lib/private/facts-roundtrip.rkt --render "$RESOLVE_OUT/resolved-<file>.edn"
 ```

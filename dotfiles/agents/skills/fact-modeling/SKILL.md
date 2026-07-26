@@ -59,7 +59,7 @@ fact-modeling task instead of guessing the API.
   — the gen-store CRUD seam, every op a fact op; the canonical add / update-as-supersede / tombstone / reaches gate.
 - **App-level blast radius (scope-correct closure):** `~/code/wake/web/spike/app-blast-radius/cascade.clj`.
 - **Stratified lifecycle (ready/blocked as rules) + the tax it can be:** `~/code/north/cnf_lifecycle_test.clj`.
-- **Reason/repair over code:** `~/code/fram/chartroom/src/resolve.clj` (refers_to, rename/delete/callgraph) — and the **codegraph** skill for querying.
+- **Reason/repair over code:** `~/code/fram/resolve.clj` (refers_to, rename/delete/callgraph) — and the **codegraph** skill for querying.
 
 ## 3. Discipline (the smell tests)
 - If you reach for a mutable map/atom of records as the app's data model, stop — that
