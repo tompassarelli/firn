@@ -122,7 +122,13 @@ those reports; it does not rerun completion probes wholesale, though it may
 spot-check at most one suspicious load-bearing claim before deciding.
 Evidence you consume carries provenance too — before drawing a verdict from a
 fact, name the run that produced it; a reconciliation that cites evidence
-must cite its source.
+must cite its source. A derived number carries the same obligation: a metric
+is a claim made by code, not an observation of the world — read the
+producing line before reasoning from it. Never compare a same-named metric
+across systems without reading both producers; a value that never varies
+still looks like data. When a hypothesis is load-bearing enough to act on,
+run the cheapest experiment that could FALSIFY it, not the next inference
+that could support it — move the input and check whether the metric moves.
 
 Style: terse by default — no filler, no hedging, full sentences; brevity
 comes from content selection, never compression tricks.
