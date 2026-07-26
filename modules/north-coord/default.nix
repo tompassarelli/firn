@@ -33,8 +33,7 @@ in
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];
       path = with pkgs; [ clojure jdk bash coreutils git ];
-      startLimitIntervalSec = 60;
-      startLimitBurst = 3;
+      startLimitIntervalSec = 0;
       restartIfChanged = true;
       environment = {
         HOME = homeDir;
@@ -46,8 +45,8 @@ in
         Type = "simple";
         User = username;
         WorkingDirectory = homeDir;
-        ExecCondition = "${northCoordRuntime}/bin/north-coord-runtime preflight";
         ExecStartPre = [
+          "${northCoordRuntime}/bin/north-coord-runtime preflight"
           "${northCoordRuntime}/bin/north-coord-runtime ensure-default"
           "${northCoordRuntime}/bin/north-coord-runtime prepare"
         ];

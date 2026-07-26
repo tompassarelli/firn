@@ -42,6 +42,20 @@ north_binary=$north_package/bin/north
 telemetry_log=$NORTH_COORD_TELEMETRY_LOG
 transaction_state=$state_parent/corpus-transactions
 systemd_unit=$NORTH_COORD_SYSTEMD_UNIT
+# Test seam: redirects ONLY the listener-cgroup lookup, so the occupied-port
+# window can be simulated without binding a real socket. Process-birth tokens
+# deliberately keep reading the real /proc — they are an anti-PID-reuse proof,
+# never something a fixture may forge.
+proc_root=${NORTH_COORD_PROC_ROOT:-/proc}
+# Bounded so a wedged listener cannot hold ExecStartPre until TimeoutStartSec;
+# 15s of polling covers a JVM coordinator's graceful SIGTERM shutdown.
+preflight_probe_timeout=${NORTH_COORD_PREFLIGHT_PROBE_TIMEOUT:-30}
+preflight_release_polls=${NORTH_COORD_PREFLIGHT_RELEASE_POLLS:-150}
+# Systemd retries a refused start at RestartSec (2s), but the canonical-log
+# probe is a JVM client (~6s CPU measured). Hold a refusal briefly so a
+# persistently squatted port costs one probe per ~12s instead of per ~2s,
+# without slowing the crash-restart path the same knob would.
+preflight_refusal_backoff=${NORTH_COORD_PREFLIGHT_REFUSAL_BACKOFF:-10}
 
 case "$state_root" in
   /*) ;;
@@ -531,6 +545,40 @@ ensure_default_runtime() {
   # the package default. Any initialized selection is fully validated and left
   # untouched; missing or malformed sealed state fails closed.
   initialize_runtime
+  align_package_selection
+}
+
+# ONE desired-mode rule per system generation, so identical code is never read
+# as divergence. Package mode is the steady state and is re-pointed at THIS
+# generation's pinned Fram package on every service start — a selection sealed
+# by an older generation is stale desire, not a second opinion. A checkout
+# promotion is an explicit development override: it is announced and left
+# alone until `north-coord-runtime package` (or `rollback`) clears it.
+align_package_selection() {
+  local canonical_package canonical_package_source previous_source previous_revision
+
+  load_selected
+  if [[ "$runtime_mode" != package ]]; then
+    printf '%s: keeping explicit %s@%s development override across this system generation; clear it with: %s package\n' \
+      "$program" "$runtime_mode" "$runtime_revision" "$program" >&2
+    return 0
+  fi
+
+  canonical_package=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") ||
+    die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
+  canonical_package_source=$(realpath -e "$canonical_package/libexec/fram") ||
+    die "packaged Fram source is missing: $canonical_package/libexec/fram"
+  if [[ "$runtime_source" == "$canonical_package_source" &&
+        "$runtime_revision" == "$NORTH_COORD_FRAM_PACKAGE_REV" ]]; then
+    return 0
+  fi
+
+  previous_source=$runtime_source
+  previous_revision=$runtime_revision
+  select_package_target
+  printf '%s: realigned package selection to this system generation: %s@%s -> %s@%s\n' \
+    "$program" "$previous_source" "$previous_revision" \
+    "$runtime_source" "$runtime_revision" >&2
 }
 
 select_target() {
@@ -578,7 +626,7 @@ promote_checkout() {
   print_restart_instruction
 }
 
-select_package() {
+select_package_target() {
   local canonical_package
 
   ensure_initialized_for_mutation
@@ -587,6 +635,10 @@ select_package() {
   validate_package_target "$canonical_package/libexec/fram"
   select_target "$runtime_source"
   load_selected
+}
+
+select_package() {
+  select_package_target
   print_restart_instruction
 }
 
@@ -759,22 +811,99 @@ start_runtime() {
   exec "$runtime_daemon" "$runtime_port" "$NORTH_COORD_FRAM_LOG"
 }
 
+# Every way preflight can decline the port. The message lands immediately —
+# the journal must show the cause on the same cadence as the retry — and the
+# backoff only paces the next attempt.
+refuse_takeover() {
+  printf '%s: %s\n' "$program" "$*" >&2
+  sleep "$preflight_refusal_backoff"
+  exit 2
+}
+
+# A user-scope listener is only superseded when the packaged Fram client
+# proves, over the wire, that it serves THIS unit's canonical log on this port.
+# Resolved lazily: no other subcommand needs the client, and a package without
+# one must not break status/promote/rollback.
+listener_serves_canonical_log() {
+  local fram_package fram_binary output first_line status=0
+
+  fram_package=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") ||
+    die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
+  [[ "$fram_package" == "$NORTH_COORD_FRAM_PACKAGE" ]] ||
+    die "packaged Fram root is not canonical: $NORTH_COORD_FRAM_PACKAGE"
+  fram_binary=$fram_package/bin/fram
+  [[ -x "$fram_binary" ]] || die "packaged Fram CLI is not executable: $fram_binary"
+
+  # A wedged listener must not hang ExecStartPre until TimeoutStartSec; a
+  # timed-out probe is simply an unproven listener, so preflight refuses.
+  output=$(
+    timeout "$preflight_probe_timeout" env \
+      FRAM_HOME="$fram_package/libexec/fram" \
+      FRAM_BIN="$fram_package/bin" \
+      FRAM_LOG="$NORTH_COORD_FRAM_LOG" \
+      FRAM_TELEMETRY_LOG="$telemetry_log" \
+      FRAM_PORT="$runtime_port" \
+      FRAM_REQUIRE_LOG_FENCE=1 \
+      "$fram_binary" doctor 2>&1
+  ) || status=$?
+  first_line=${output%%$'\n'*}
+  [[ "$status" -eq 0 &&
+     "$first_line" =~ ^coordinator\ UP\ on\ 127\.0\.0\.1:${runtime_port}\ \(v[0-9]+\)$ ]]
+}
+
 preflight_runtime() {
-  local listeners pid cgroup
+  local listeners refreshed pid birth refreshed_birth cgroup
+  local -a listener_pids refreshed_pids
 
   listeners=$(ss -H -ltnp "sport = :$runtime_port") ||
     die "cannot inspect coordinator socket before startup"
-  if [[ -n "$listeners" ]]; then
-    printf '%s: coordinator port %s is already occupied; skipping systemd startup before runtime load\n' \
-      "$program" "$runtime_port" >&2
-    printf '%s\n' "$listeners" >&2
-    while IFS= read -r pid; do
-      [[ -n "$pid" ]] || continue
-      cgroup=$(tr '\n' ' ' <"/proc/$pid/cgroup" 2>/dev/null || printf unreadable)
-      printf '%s: listener pid=%s cgroup=%s\n' "$program" "$pid" "$cgroup" >&2
-    done < <(grep -oE 'pid=[0-9]+' <<<"$listeners" | cut -d= -f2 | sort -nu)
-    return 1
+  [[ -n "$listeners" ]] || return 0
+
+  mapfile -t listener_pids < <(
+    grep -oE 'pid=[0-9]+' <<<"$listeners" | cut -d= -f2 | sort -nu
+  )
+  printf '%s\n' "$listeners" >&2
+  if [[ "${#listener_pids[@]}" -ne 1 ]]; then
+    refuse_takeover "coordinator port $runtime_port is occupied without one identifiable owner; $systemd_unit will retry"
   fi
+
+  pid=${listener_pids[0]}
+  cgroup=$(tr '\n' ' ' <"$proc_root/$pid/cgroup" 2>/dev/null || printf unreadable)
+  printf '%s: listener pid=%s cgroup=%s\n' "$program" "$pid" "$cgroup" >&2
+  [[ "$cgroup" == *"/user.slice/"* ]] ||
+    refuse_takeover "coordinator port $runtime_port is not owned by a user-scope process; refusing takeover; $systemd_unit will retry"
+  birth=$(process_birth_token "$pid")
+
+  listener_serves_canonical_log ||
+    refuse_takeover "user-scope listener on port $runtime_port did not prove the canonical North log; refusing takeover; $systemd_unit will retry"
+
+  refreshed=$(ss -H -ltnp "sport = :$runtime_port") ||
+    die "cannot re-inspect coordinator socket before takeover"
+  [[ -n "$refreshed" ]] || return 0
+  mapfile -t refreshed_pids < <(
+    grep -oE 'pid=[0-9]+' <<<"$refreshed" | cut -d= -f2 | sort -nu
+  )
+  [[ "${#refreshed_pids[@]}" -eq 1 && "${refreshed_pids[0]}" == "$pid" ]] ||
+    refuse_takeover "coordinator listener changed during canonical-log verification; refusing takeover; $systemd_unit will retry"
+  refreshed_birth=$(process_birth_token "$pid")
+  [[ "$refreshed_birth" == "$birth" ]] ||
+    refuse_takeover "coordinator listener PID was reused during canonical-log verification; refusing takeover; $systemd_unit will retry"
+
+  printf '%s: verified canonical user-scope coordinator pid=%s; terminating it so %s owns port %s\n' \
+    "$program" "$pid" "$systemd_unit" "$runtime_port" >&2
+  kill -TERM "$pid" ||
+    refuse_takeover "cannot terminate verified user-scope coordinator pid=$pid; $systemd_unit will retry"
+  for _ in $(seq 1 "$preflight_release_polls"); do
+    refreshed=$(ss -H -ltnp "sport = :$runtime_port") ||
+      die "cannot inspect coordinator socket during takeover"
+    if [[ -z "$refreshed" ]]; then
+      printf '%s: reclaimed coordinator port %s for %s\n' \
+        "$program" "$runtime_port" "$systemd_unit" >&2
+      return 0
+    fi
+    sleep 0.1
+  done
+  refuse_takeover "verified user-scope coordinator pid=$pid did not release port $runtime_port; $systemd_unit will retry"
 }
 
 prepare_runtime() {

@@ -10,11 +10,14 @@
 ;; runtime — long-lived server wants JIT throughput + real threads. Systemd owns
 ;; the one serving process so :7977 survives logout + reboot without racing a
 ;; checkout-side supervisor. Before every start, the service ensures that one
-;; valid sealed selection exists: a fresh install selects the pinned Fram
-;; package, while an explicit development promotion survives ordinary service
-;; restarts until an explicit package reset. north-coord-runtime serializes
-;; writers, materializes exact detached Fram revisions, and atomically publishes
-;; complete current/previous generations.
+;; valid sealed selection exists, under ONE desired-mode rule per system
+;; generation: package mode is the steady state and is re-pointed at this
+;; generation's pinned Fram package on every start, so identical code never
+;; reads as source-mode divergence after a switch; an explicit development
+;; promotion is an announced override that survives until an explicit package
+;; reset. north-coord-runtime serializes writers, materializes exact detached
+;; Fram revisions, and atomically publishes complete current/previous
+;; generations.
 
 (nix/module [config lib pkgs inputs ...]
   (let [username config.myConfig.modules.users.username
@@ -52,8 +55,10 @@
            :wantedBy              ["multi-user.target"]
            :after                 ["network.target"]
            :path                  (nix/with pkgs [clojure jdk bash coreutils git])
-           :startLimitIntervalSec 60
-           :startLimitBurst       3
+           ;; A foreign listener is a failed start, never a skipped unit. Keep
+           ;; retrying until preflight can either reclaim the canonical
+           ;; user-scope coordinator or the port becomes free.
+           :startLimitIntervalSec 0
            :restartIfChanged      true
            :environment           {:HOME homeDir
                                    :FRAM_REQUIRE_LOG_FENCE "1"
@@ -72,8 +77,13 @@
             {:Type             "simple"
              :User             username
              :WorkingDirectory homeDir
-             :ExecCondition (s northCoordRuntime "/bin/north-coord-runtime preflight")
-             :ExecStartPre [(s northCoordRuntime "/bin/north-coord-runtime ensure-default")
+             ;; preflight is ExecStartPre, never ExecCondition: a failed
+             ;; ExecCondition leaves the unit inactive/dead with Result=success
+             ;; and NO restart, so one lost port race becomes a silent
+             ;; permanent outage. As ExecStartPre it fails loudly and Restart=
+             ;; always retries it.
+             :ExecStartPre [(s northCoordRuntime "/bin/north-coord-runtime preflight")
+                            (s northCoordRuntime "/bin/north-coord-runtime ensure-default")
                             (s northCoordRuntime "/bin/north-coord-runtime prepare")]
              :ExecStart (s northCoordRuntime "/bin/north-coord-runtime start")
              :ExecStartPost (s northCoordRuntime "/bin/north-coord-runtime settle")

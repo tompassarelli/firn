@@ -792,14 +792,18 @@ grep -Fq '/run/current-system/sw/bin/env -u CLAUDE_CONFIG_DIR' \
   "$REPO/scripts/agent-config-check.sh"
 grep -Fq '${CLAUDE_BIN:-/run/current-system/sw/bin/claude}' \
   "$REPO/scripts/agent-config-check.sh"
-grep -q ':ExecStartPre \[(s northCoordRuntime "/bin/north-coord-runtime ensure-default")' \
+grep -q ':ExecStartPre \[(s northCoordRuntime "/bin/north-coord-runtime preflight")' \
+  "$REPO/modules/north-coord/default.bnix"
+grep -Fq '(s northCoordRuntime "/bin/north-coord-runtime ensure-default")' \
   "$REPO/modules/north-coord/default.bnix"
 grep -q ':ExecStartPost (s northCoordRuntime "/bin/north-coord-runtime settle")' \
   "$REPO/modules/north-coord/default.bnix"
-grep -q ':ExecCondition (s northCoordRuntime "/bin/north-coord-runtime preflight")' \
-  "$REPO/modules/north-coord/default.bnix"
-grep -q ':startLimitIntervalSec 60' "$REPO/modules/north-coord/default.bnix"
-grep -q ':startLimitBurst       3' "$REPO/modules/north-coord/default.bnix"
+if grep -q ':ExecCondition (s northCoordRuntime "/bin/north-coord-runtime preflight")' \
+   "$REPO/modules/north-coord/default.bnix"; then
+  printf 'north-coord preflight still silently skips occupied-port starts\n' >&2
+  exit 1
+fi
+grep -q ':startLimitIntervalSec 0' "$REPO/modules/north-coord/default.bnix"
 grep -Fq 'command = "/run/current-system/sw/bin/north-mcp"' \
   "$REPO/dotfiles/codex/config.toml"
 grep -Fq 'command = "/run/current-system/sw/bin/fram-mcp"' \

@@ -18,15 +18,31 @@ log=$scratch/coordination.log
 telemetry_log=$scratch/telemetry.log
 north_calls=$scratch/north-calls
 north_fail=$scratch/north-fail
+fram_calls=$scratch/fram-calls
+fram_fail=$scratch/fram-fail
+fram_down=$scratch/fram-down
 test_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
 mkdir -p "$repo/bin" "$package/bin" "$package_source/bin" "$north_package/bin"
 export NORTH_COORD_TEST_CALLS=$north_calls
 export NORTH_COORD_TEST_FAIL=$north_fail
+export NORTH_COORD_TEST_FRAM_CALLS=$fram_calls
+export NORTH_COORD_TEST_FRAM_FAIL=$fram_fail
+export NORTH_COORD_TEST_FRAM_DOWN=$fram_down
+# Refusals deliberately pace systemd's retry loop; the simulation asserts the
+# decision, not the wall clock.
+export NORTH_COORD_PREFLIGHT_REFUSAL_BACKOFF=0
 
-grep -Fq ':ExecStartPre [(s northCoordRuntime "/bin/north-coord-runtime ensure-default")' \
+grep -Fq ':ExecStartPre [(s northCoordRuntime "/bin/north-coord-runtime preflight")' \
+  "$source_module"
+grep -Fq '(s northCoordRuntime "/bin/north-coord-runtime ensure-default")' \
   "$source_module"
 grep -Fq '${northCoordRuntime}/bin/north-coord-runtime ensure-default' \
   "$generated_module"
+if rg -n 'ExecCondition.*north-coord-runtime preflight' \
+  "$source_module" "$generated_module"; then
+  printf 'occupied-port preflight still skips the unit through ExecCondition\n' >&2
+  exit 1
+fi
 if rg -n 'ExecStartPre.*north-coord-runtime package' \
   "$source_module" "$generated_module"; then
   printf 'systemd startup still resets the sealed runtime to package mode\n' >&2
@@ -50,6 +66,32 @@ set -euo pipefail
 printf '{:result "clean"}\n'
 EOF
 chmod +x "$north_package/bin/north"
+
+cat >"$package/bin/fram" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == doctor ]]
+{
+  printf 'log=%s\n' "$FRAM_LOG"
+  printf 'telemetry=%s\n' "$FRAM_TELEMETRY_LOG"
+  printf 'port=%s\n' "$FRAM_PORT"
+  printf 'fence=%s\n' "$FRAM_REQUIRE_LOG_FENCE"
+} >>"$NORTH_COORD_TEST_FRAM_CALLS"
+if [[ -e "$NORTH_COORD_TEST_FRAM_FAIL" ]]; then
+  printf 'REJECTED by coordinator: the daemon serves a different log\n'
+  exit 17
+fi
+# The real `fram doctor` is a REPORT, not a gate: it exits 0 even when the
+# listener is not a coordinator on the canonical log (verified 2026-07-26
+# against a foreign listener). The first line — never the exit status — is
+# what preflight is allowed to trust.
+if [[ -e "$NORTH_COORD_TEST_FRAM_DOWN" ]]; then
+  printf 'coordinator DOWN on 127.0.0.1:%s — start it with bin/fram-up\n' "$FRAM_PORT"
+  exit 0
+fi
+printf 'coordinator UP on 127.0.0.1:%s (v1)\n' "$FRAM_PORT"
+EOF
+chmod +x "$package/bin/fram"
 
 git -C "$repo" init -q
 git -C "$repo" config user.email test@example.invalid
@@ -698,22 +740,181 @@ if run_runtime exec-checkout "$identity_probe" >/dev/null 2>&1; then
   exit 1
 fi
 
-# Systemd's ExecCondition refuses an occupied port before loading the fact log.
-run_runtime preflight
-python3 -m http.server "$test_port" --bind 127.0.0.1 >/dev/null 2>&1 & listener_pid=$!
-for _ in $(seq 1 50); do
-  [[ -n $(ss -H -ltn "sport = :$test_port") ]] && break
-  sleep 0.02
-done
-if run_runtime preflight >/dev/null 2>&1; then
-  printf 'occupied coordinator port passed preflight\n' >&2
+# Simulate the rebuild activation window without a real socket: the ss fixture
+# reports one live process as :7977's owner. A foreign-log listener is never
+# signalled; a canonical user-scope Fram coordinator is terminated, and the
+# ordinary service prelude then reaches the selected package runtime.
+preflight_bin=$scratch/preflight-bin
+preflight_proc=$scratch/preflight-proc
+mkdir -p "$preflight_bin" "$preflight_proc"
+cat >"$preflight_bin/ss" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+pid=${NORTH_COORD_TEST_LISTENER_PID:-}
+if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+  printf 'LISTEN 0 50 127.0.0.1:%s 0.0.0.0:* users:(("java",pid=%s,fd=16))\n' \
+    "$NORTH_COORD_FRAM_PORT" "$pid"
+fi
+EOF
+chmod +x "$preflight_bin/ss"
+
+sleep 60 & listener_pid=$!
+mkdir -p "$preflight_proc/$listener_pid"
+printf '0::/user.slice/user-1000.slice/user@1000.service/app.slice/ghostty.scope\n' \
+  >"$preflight_proc/$listener_pid/cgroup"
+touch "$fram_fail"
+if foreign_output=$(
+  PATH="$preflight_bin:$PATH" \
+  NORTH_COORD_PROC_ROOT="$preflight_proc" \
+  NORTH_COORD_TEST_LISTENER_PID="$listener_pid" \
+    run_runtime preflight 2>&1
+); then
+  printf 'foreign-log user-scope listener passed preflight\n' >&2
   kill "$listener_pid"
   wait "$listener_pid" 2>/dev/null || true
   exit 1
 fi
-kill "$listener_pid"
+grep -Fq 'did not prove the canonical North log; refusing takeover; north-coord.service will retry' \
+  <<<"$foreign_output"
+kill -0 "$listener_pid"
+unlink "$fram_fail"
+
+# The probe's exit status is worthless on its own: the real client reports a
+# DOWN coordinator and still exits 0. Only the UP first line may authorize a
+# takeover, so a zero-exit non-proof must leave the listener alone.
+touch "$fram_down"
+if down_output=$(
+  PATH="$preflight_bin:$PATH" \
+  NORTH_COORD_PROC_ROOT="$preflight_proc" \
+  NORTH_COORD_TEST_LISTENER_PID="$listener_pid" \
+    run_runtime preflight 2>&1
+); then
+  printf 'zero-exit DOWN probe authorized a takeover\n' >&2
+  kill "$listener_pid"
+  wait "$listener_pid" 2>/dev/null || true
+  exit 1
+fi
+grep -Fq 'did not prove the canonical North log; refusing takeover; north-coord.service will retry' \
+  <<<"$down_output"
+kill -0 "$listener_pid"
+unlink "$fram_down"
+takeover_output=$(
+  PATH="$preflight_bin:$PATH" \
+  NORTH_COORD_PROC_ROOT="$preflight_proc" \
+  NORTH_COORD_TEST_LISTENER_PID="$listener_pid" \
+    run_runtime preflight 2>&1
+)
 wait "$listener_pid" 2>/dev/null || true
-run_runtime preflight
+grep -Fq "verified canonical user-scope coordinator pid=$listener_pid; terminating it so north-coord.service owns port $test_port" \
+  <<<"$takeover_output"
+grep -Fq "reclaimed coordinator port $test_port for north-coord.service" \
+  <<<"$takeover_output"
+grep -Fxq "log=$log" "$fram_calls"
+grep -Fxq "telemetry=$telemetry_log" "$fram_calls"
+grep -Fxq "port=$test_port" "$fram_calls"
+grep -Fxq 'fence=1' "$fram_calls"
+
+# A system-scope owner is never a takeover candidate, canonical log or not:
+# signalling another supervisor's process is the failure this guard prevents.
+sleep 60 & system_listener_pid=$!
+mkdir -p "$preflight_proc/$system_listener_pid"
+printf '0::/system.slice/some-peer-coordinator.service\n' \
+  >"$preflight_proc/$system_listener_pid/cgroup"
+if system_output=$(
+  PATH="$preflight_bin:$PATH" \
+  NORTH_COORD_PROC_ROOT="$preflight_proc" \
+  NORTH_COORD_TEST_LISTENER_PID="$system_listener_pid" \
+    run_runtime preflight 2>&1
+); then
+  printf 'system-scope listener passed preflight\n' >&2
+  kill "$system_listener_pid"
+  wait "$system_listener_pid" 2>/dev/null || true
+  exit 1
+fi
+grep -Fq "is not owned by a user-scope process; refusing takeover; north-coord.service will retry" \
+  <<<"$system_output"
+kill -0 "$system_listener_pid"
+kill "$system_listener_pid"
+wait "$system_listener_pid" 2>/dev/null || true
+
+PATH="$preflight_bin:$PATH" \
+NORTH_COORD_PROC_ROOT="$preflight_proc" \
+NORTH_COORD_TEST_LISTENER_PID="$listener_pid" \
+  run_runtime preflight
+run_runtime ensure-default
+run_runtime prepare >/dev/null
+plain_switch=$(run_runtime start)
+run_runtime settle >/dev/null
+grep -Fxq 'mode=package' <<<"$plain_switch"
+grep -Fxq "revision=$package_revision" <<<"$plain_switch"
+
+printf 'simulation: foreign user-scope listener remained alive and systemd start failed loudly for retry\n'
+printf 'simulation: zero-exit DOWN probe was refused (first line, not exit status, authorizes takeover)\n'
+printf 'simulation: system-scope listener was refused without a signal\n'
+printf 'simulation: canonical user-scope listener was terminated and port ownership reclaimed\n'
+printf 'simulation: plain service prelude selected package@%s\n' "$package_revision"
+
+# ONE desired-mode rule per system generation. Two store-shaped sibling Fram
+# roots stand in for two generations' pinned packages: a package selection
+# sealed by the previous generation is realigned by the ordinary service
+# prelude, while an explicit checkout promotion is announced and survives.
+fake_store=$scratch/fake-store
+old_package=$fake_store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-fram-old
+new_package=$fake_store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-fram-new
+old_package_revision=1111111111111111111111111111111111111111
+new_package_revision=2222222222222222222222222222222222222222
+mode_state=$scratch/mode-state
+mkdir -p "$old_package/bin" "$old_package/libexec/fram/bin" \
+         "$new_package/bin" "$new_package/libexec/fram/bin"
+write_daemon "$old_package/bin/fram-daemon" old-package
+write_daemon "$new_package/bin/fram-daemon" new-package
+
+run_mode_runtime() {
+  local selected_package=$1 selected_revision=$2
+  shift 2
+  package=$selected_package package_revision=$selected_revision \
+    run_runtime_in_state "$mode_state" "$@"
+}
+
+run_mode_runtime "$old_package" "$old_package_revision" ensure-default
+grep -Fxq "revision=$old_package_revision" \
+  <<<"$(run_mode_runtime "$old_package" "$old_package_revision" status)"
+
+# The generation moved: same selector state, a newer pinned Fram package.
+realign_output=$(run_mode_runtime "$new_package" "$new_package_revision" ensure-default 2>&1)
+grep -Fq "realigned package selection to this system generation: $old_package/libexec/fram@$old_package_revision -> $new_package/libexec/fram@$new_package_revision" \
+  <<<"$realign_output"
+mode_status=$(run_mode_runtime "$new_package" "$new_package_revision" status)
+grep -Fxq 'mode=package' <<<"$mode_status"
+grep -Fxq "revision=$new_package_revision" <<<"$mode_status"
+grep -Fxq "source=$new_package/libexec/fram" <<<"$mode_status"
+
+# Idempotent: a second prelude on the same generation reseals nothing.
+repeat_output=$(run_mode_runtime "$new_package" "$new_package_revision" ensure-default 2>&1)
+if grep -Fq 'realigned package selection' <<<"$repeat_output"; then
+  printf 'aligned package selection was resealed on an unchanged generation\n' >&2
+  exit 1
+fi
+[[ "$(readlink -f "$mode_state/current")" == "$new_package/libexec/fram" ]]
+
+# An explicit development override outlives the prelude and says so.
+run_mode_runtime "$new_package" "$new_package_revision" \
+  promote "$repo" "$revision_one" >/dev/null
+override_output=$(run_mode_runtime "$new_package" "$new_package_revision" ensure-default 2>&1)
+grep -Fq "keeping explicit checkout@$revision_one development override across this system generation" \
+  <<<"$override_output"
+grep -Fxq "revision=$revision_one" \
+  <<<"$(run_mode_runtime "$new_package" "$new_package_revision" status)"
+
+# ...until it is explicitly cleared, which is the only way back to package mode.
+run_mode_runtime "$new_package" "$new_package_revision" package >/dev/null
+grep -Fxq "revision=$new_package_revision" \
+  <<<"$(run_mode_runtime "$new_package" "$new_package_revision" status)"
+
+printf 'simulation: stale-generation package selection realigned %s -> %s by the ordinary prelude\n' \
+  "$old_package_revision" "$new_package_revision"
+printf 'simulation: checkout@%s override survived the prelude and was cleared only explicitly\n' \
+  "$revision_one"
 
 # Stable selectors and active generations themselves are protected from path
 # substitution rather than canonicalized into attacker-selected state.
