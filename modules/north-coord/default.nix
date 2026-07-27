@@ -64,7 +64,14 @@ in
           "${northCoordRuntime}/bin/north-coord-runtime ensure-default"
           "${northCoordRuntime}/bin/north-coord-runtime prepare"
         ];
-        ExecStart = "${northPkg}/bin/north-coord-sd-listen ${northCoordRuntime}/bin/north-coord-runtime start";
+        # The sd-listen wrapper ships in north GIT MAIN but not yet in the
+        # pinned nix package — wrapping unconditionally caused the 203/EXEC
+        # crash loop of 2026-07-28. Gate it with socketActivation, whose flip
+        # also requires a north flake-input bump that ships the wrapper.
+        ExecStart =
+          if config.myConfig.modules.north-coord.socketActivation
+          then "${northPkg}/bin/north-coord-sd-listen ${northCoordRuntime}/bin/north-coord-runtime start"
+          else "${northCoordRuntime}/bin/north-coord-runtime start";
         ExecStartPost = "${northCoordRuntime}/bin/north-coord-runtime settle";
         Restart = "always";
         RestartSec = 2;
