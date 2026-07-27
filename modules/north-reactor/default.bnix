@@ -32,11 +32,11 @@
               {:systemd.user.services.north-reactor-sweep
                 {:Unit
                   {:Description "North reactor sweep — reap stale concerns + silently-dead lanes"}
+                 ;; Home Manager applies unit changes synchronously. This periodic
+                 ;; reaper must wait for its timer instead of restarting mid-switch.
+                 :restartIfChanged false
                  :Service
                   {:Type             "oneshot"
-                   ;; Home Manager applies unit changes synchronously. This periodic
-                   ;; reaper must wait for its timer instead of restarting mid-switch.
-                   :restartIfChanged false
                    :Environment      [(s "PATH=" pkgs.babashka "/bin:" pkgs.coreutils "/bin:" pkgs.git "/bin")]
                    :WorkingDirectory northPkg
                    :ExecStart        (s pkgs.babashka "/bin/bb " northPkg "/cli/north-reactor.clj sweep-once")}}
