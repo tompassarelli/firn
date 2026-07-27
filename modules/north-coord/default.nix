@@ -28,10 +28,20 @@ in
   options.myConfig.modules.north-coord.enable = lib.mkEnableOption "Personal North coordinator daemon (:7977) — sole-writer fact-graph service for Tom's canonical log";
   config = lib.mkIf config.myConfig.modules.north-coord.enable {
     environment.systemPackages = [ northCoordRuntime ];
+    systemd.sockets.north-coord = {
+      description = "North coordinator activation socket (:7977)";
+      wantedBy = [ "sockets.target" ];
+      listenStreams = [ "127.0.0.1:7977" ];
+      socketConfig = {
+        Backlog = 4096;
+        FileDescriptorName = "north-coord";
+      };
+    };
     systemd.services.north-coord = {
       description = "North coordinator — personal fact-graph daemon (:7977)";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" ];
+      requires = [ "north-coord.socket" ];
+      after = [ "network.target" "north-coord.socket" ];
       path = with pkgs; [ clojure jdk bash coreutils git ];
       startLimitIntervalSec = 0;
       restartIfChanged = true;
@@ -46,11 +56,10 @@ in
         User = username;
         WorkingDirectory = homeDir;
         ExecStartPre = [
-          "${northCoordRuntime}/bin/north-coord-runtime preflight"
           "${northCoordRuntime}/bin/north-coord-runtime ensure-default"
           "${northCoordRuntime}/bin/north-coord-runtime prepare"
         ];
-        ExecStart = "${northCoordRuntime}/bin/north-coord-runtime start";
+        ExecStart = "${northPkg}/bin/north-coord-sd-listen ${northCoordRuntime}/bin/north-coord-runtime start";
         ExecStartPost = "${northCoordRuntime}/bin/north-coord-runtime settle";
         Restart = "always";
         RestartSec = 2;

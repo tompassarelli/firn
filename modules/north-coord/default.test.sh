@@ -18,13 +18,15 @@ log=$scratch/coordination.log
 telemetry_log=$scratch/telemetry.log
 north_calls=$scratch/north-calls
 north_fail=$scratch/north-fail
+systemctl_calls=$scratch/systemctl-calls
 fram_calls=$scratch/fram-calls
 fram_fail=$scratch/fram-fail
 fram_down=$scratch/fram-down
-test_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
+test_port=${NORTH_COORD_TEST_PORT:-$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')}
 mkdir -p "$repo/bin" "$package/bin" "$package_source/bin" "$north_package/bin"
 export NORTH_COORD_TEST_CALLS=$north_calls
 export NORTH_COORD_TEST_FAIL=$north_fail
+export NORTH_COORD_TEST_SYSTEMCTL_CALLS=$systemctl_calls
 export NORTH_COORD_TEST_FRAM_CALLS=$fram_calls
 export NORTH_COORD_TEST_FRAM_FAIL=$fram_fail
 export NORTH_COORD_TEST_FRAM_DOWN=$fram_down
@@ -32,12 +34,24 @@ export NORTH_COORD_TEST_FRAM_DOWN=$fram_down
 # decision, not the wall clock.
 export NORTH_COORD_PREFLIGHT_REFUSAL_BACKOFF=0
 
-grep -Fq ':ExecStartPre [(s northCoordRuntime "/bin/north-coord-runtime preflight")' \
-  "$source_module"
+grep -Fq ':systemd.sockets.north-coord' "$source_module"
+grep -Fq ':listenStreams ["127.0.0.1:7977"]' "$source_module"
+grep -Fq ':Backlog 4096' "$source_module"
+grep -Fq ':FileDescriptorName "north-coord"' "$source_module"
+grep -Fq 'listenStreams = [ "127.0.0.1:7977" ];' "$generated_module"
+grep -Fq 'Backlog = 4096;' "$generated_module"
+grep -Fq 'FileDescriptorName = "north-coord";' "$generated_module"
 grep -Fq '(s northCoordRuntime "/bin/north-coord-runtime ensure-default")' \
   "$source_module"
 grep -Fq '${northCoordRuntime}/bin/north-coord-runtime ensure-default' \
   "$generated_module"
+grep -Fq 'north-coord-sd-listen' "$source_module"
+grep -Fq 'north-coord-sd-listen' "$generated_module"
+if rg -n 'ExecStartPre.*north-coord-runtime preflight' \
+  "$source_module" "$generated_module"; then
+  printf 'socket-activated service still probes its systemd-owned listener as foreign\n' >&2
+  exit 1
+fi
 if rg -n 'ExecCondition.*north-coord-runtime preflight' \
   "$source_module" "$generated_module"; then
   printf 'occupied-port preflight still skips the unit through ExecCondition\n' >&2
@@ -166,6 +180,23 @@ run_runtime_in_state() {
 run_runtime() {
   run_runtime_in_state "$state" "$@"
 }
+
+restart_bin=$scratch/restart-bin
+restart_release=$scratch/restart-release
+restart_ready=$scratch/restart-ready
+mkdir -p "$restart_bin"
+cat >"$restart_bin/systemctl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"$NORTH_COORD_TEST_SYSTEMCTL_CALLS"
+if [[ -n "${NORTH_COORD_TEST_RESTART_READY:-}" ]]; then
+  : >"$NORTH_COORD_TEST_RESTART_READY"
+fi
+if [[ -n "${NORTH_COORD_TEST_RESTART_RELEASE:-}" ]]; then
+  IFS= read -r _ <"$NORTH_COORD_TEST_RESTART_RELEASE"
+fi
+EOF
+chmod +x "$restart_bin/systemctl"
 
 file_source_package=$scratch/file-source-package
 mkdir -p "$file_source_package/libexec" "$file_source_package/bin"
@@ -439,6 +470,52 @@ run_runtime prepare >/dev/null
 [[ $(read_pair) == "$promoted_pair" ]]
 grep -Fxq mode=checkout < <(run_runtime status)
 [[ $(readlink -f "$state/current") == "$deployment_one" ]]
+
+# A selected promotion that becomes unusable aborts an external service
+# restart with a stable named cause; package mode is never consulted.
+mv "$deployment_one/bin/fram-daemon" "$deployment_one/bin/fram-daemon.unavailable"
+if promotion_failure=$(run_runtime ensure-default 2>&1); then
+  printf 'unusable promotion silently reached the package default\n' >&2
+  exit 1
+fi
+grep -Fq 'promotion-selection-unusable:' <<<"$promotion_failure"
+mv "$deployment_one/bin/fram-daemon.unavailable" "$deployment_one/bin/fram-daemon"
+
+# The restart verb owns policy: one mutex covers broadcast, progress, stop, and
+# successful return. A concurrent attempt fails with the named mutex cause and
+# cannot send a second broadcast.
+mkfifo "$restart_release"
+PATH="$restart_bin:$PATH" \
+NORTH_COORD_TEST_RESTART_READY="$restart_ready" \
+NORTH_COORD_TEST_RESTART_RELEASE="$restart_release" \
+  run_runtime restart >"$scratch/restart-one.out" 2>"$scratch/restart-one.err" &
+restart_pid=$!
+for _ in $(seq 1 100); do
+  [[ -e "$restart_ready" ]] && break
+  sleep 0.01
+done
+if [[ ! -e "$restart_ready" ]]; then
+  printf 'restart command did not reach systemctl after its broadcast\n' >&2
+  kill "$restart_pid" 2>/dev/null || true
+  wait "$restart_pid" 2>/dev/null || true
+  exit 1
+fi
+if concurrent_restart=$(
+  PATH="$restart_bin:$PATH" NORTH_COORD_RESTART_LOCK_TIMEOUT=0 \
+    run_runtime restart 2>&1
+); then
+  printf 'concurrent restart bypassed the restart mutex\n' >&2
+  printf 'release\n' >"$restart_release"
+  wait "$restart_pid"
+  exit 1
+fi
+grep -Fq 'restart-mutex-busy:' <<<"$concurrent_restart"
+[[ $(grep -Fc 'args=msg send north-coord-runtime * coordinator-restart' "$north_calls") -eq 1 ]]
+grep -Fq 'args=tell 019fa1d6-dec8-7113-b333-812916f40548 progress' "$north_calls"
+[[ $(wc -l <"$systemctl_calls") -eq 1 ]]
+grep -Fxq 'restart north-coord.service' "$systemctl_calls"
+printf 'release\n' >"$restart_release"
+wait "$restart_pid"
 
 checkout_start=$(run_runtime start)
 generation_one=$(readlink -f "$state/active")

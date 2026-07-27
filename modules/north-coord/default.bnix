@@ -50,14 +50,21 @@
      :config
       (lib.mkIf config.myConfig.modules.north-coord.enable
         {:environment.systemPackages [northCoordRuntime]
+         :systemd.sockets.north-coord
+          {:description  "North coordinator activation socket (:7977)"
+           :wantedBy     ["sockets.target"]
+           :listenStreams ["127.0.0.1:7977"]
+           :socketConfig {:Backlog 4096
+                          :FileDescriptorName "north-coord"}}
          :systemd.services.north-coord
           {:description           "North coordinator — personal fact-graph daemon (:7977)"
            :wantedBy              ["multi-user.target"]
-           :after                 ["network.target"]
+           :requires              ["north-coord.socket"]
+           :after                 ["network.target" "north-coord.socket"]
            :path                  (nix/with pkgs [clojure jdk bash coreutils git])
-           ;; A foreign listener is a failed start, never a skipped unit. Keep
-           ;; retrying until preflight can either reclaim the canonical
-           ;; user-scope coordinator or the port becomes free.
+           ;; The socket unit owns :7977 across service restarts. A foreign
+           ;; listener therefore fails north-coord.socket itself; the service
+           ;; never mistakes its inherited system socket for a foreign owner.
            :startLimitIntervalSec 0
            :restartIfChanged      true
            :environment           {:HOME homeDir
@@ -77,15 +84,12 @@
             {:Type             "simple"
              :User             username
              :WorkingDirectory homeDir
-             ;; preflight is ExecStartPre, never ExecCondition: a failed
-             ;; ExecCondition leaves the unit inactive/dead with Result=success
-             ;; and NO restart, so one lost port race becomes a silent
-             ;; permanent outage. As ExecStartPre it fails loudly and Restart=
-             ;; always retries it.
-             :ExecStartPre [(s northCoordRuntime "/bin/north-coord-runtime preflight")
-                            (s northCoordRuntime "/bin/north-coord-runtime ensure-default")
+             ;; Socket ownership removes the old stop/bind race. The adapter
+             ;; validates LISTEN_FDS before the selected Fram runtime starts.
+             :ExecStartPre [(s northCoordRuntime "/bin/north-coord-runtime ensure-default")
                             (s northCoordRuntime "/bin/north-coord-runtime prepare")]
-             :ExecStart (s northCoordRuntime "/bin/north-coord-runtime start")
+             :ExecStart (s northPkg "/bin/north-coord-sd-listen "
+                           northCoordRuntime "/bin/north-coord-runtime start")
              :ExecStartPost (s northCoordRuntime "/bin/north-coord-runtime settle")
              :Restart          "always"
              :RestartSec       2

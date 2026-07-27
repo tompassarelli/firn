@@ -6,7 +6,13 @@ umask 077
 program=${0##*/}
 
 die() {
-  printf '%s: %s\n' "$program" "$*" >&2
+  if [[ "${named_promotion_failure:-0}" -eq 1 ]] &&
+     declare -F promotion_selection_hint >/dev/null &&
+     promotion_selection_hint; then
+    printf '%s: promotion-selection-unusable: %s\n' "$program" "$*" >&2
+  else
+    printf '%s: %s\n' "$program" "$*" >&2
+  fi
   exit 2
 }
 
@@ -34,6 +40,7 @@ active_link=$state_root/active
 current_link=$state_root/current
 previous_link=$state_root/previous
 selector_lock=$state_parent/.${state_name}.lock
+restart_lock=$state_parent/.${state_name}.restart.lock
 initialization_marker=$state_parent/.${state_name}.initialized
 runtime_port=$NORTH_COORD_FRAM_PORT
 north_package=$(realpath -e "$NORTH_COORD_NORTH_PACKAGE") ||
@@ -56,6 +63,7 @@ preflight_release_polls=${NORTH_COORD_PREFLIGHT_RELEASE_POLLS:-150}
 # persistently squatted port costs one probe per ~12s instead of per ~2s,
 # without slowing the crash-restart path the same knob would.
 preflight_refusal_backoff=${NORTH_COORD_PREFLIGHT_REFUSAL_BACKOFF:-10}
+restart_lock_timeout=${NORTH_COORD_RESTART_LOCK_TIMEOUT:-60}
 
 case "$state_root" in
   /*) ;;
@@ -83,6 +91,9 @@ if ! [[ "$runtime_port" =~ ^[0-9]+$ ]] ||
   die "runtime port must be an integer from 1 through 65535: $runtime_port"
 fi
 runtime_port=$((10#$runtime_port))
+if ! [[ "$restart_lock_timeout" =~ ^[0-9]+$ ]]; then
+  die "restart lock timeout must be a non-negative integer: $restart_lock_timeout"
+fi
 
 valid_revision() {
   [[ "$1" =~ ^[0-9a-f]{40}$ ]]
@@ -90,6 +101,20 @@ valid_revision() {
 
 valid_record_value() {
   [[ -n "$1" && "$1" != *$'\n'* && "$1" != *$'\r'* ]]
+}
+
+promotion_selection_hint() {
+  local generation identity
+  local -a fields
+
+  [[ -L "${active_link:-}" ]] || return 1
+  generation=$(realpath -e "$active_link" 2>/dev/null) || return 1
+  identity=$generation/current.identity
+  [[ -f "$identity" && ! -L "$identity" ]] || return 1
+  mapfile -t fields <"$identity"
+  [[ ${#fields[@]} -eq 7 &&
+     ${fields[0]} == north-fram-runtime-v1 &&
+     ${fields[1]} == checkout ]]
 }
 
 mint_owner_token() {
@@ -544,8 +569,10 @@ ensure_default_runtime() {
   # initialize_runtime is deliberately idempotent: only a pristine state gets
   # the package default. Any initialized selection is fully validated and left
   # untouched; missing or malformed sealed state fails closed.
+  named_promotion_failure=1
   initialize_runtime
   align_package_selection
+  named_promotion_failure=0
 }
 
 # ONE desired-mode rule per system generation, so identical code is never read
@@ -800,7 +827,9 @@ run_corpus_transaction() {
 start_runtime() {
   local launcher_owner_token
 
+  named_promotion_failure=1
   load_selected
+  named_promotion_failure=0
   export_runtime_identity
   acquire_generation_start_lock
   launcher_owner_token=$(mint_owner_token)
@@ -809,6 +838,53 @@ start_runtime() {
   release_lock
   cd "$runtime_source"
   exec "$runtime_daemon" "$runtime_port" "$NORTH_COORD_FRAM_LOG"
+}
+
+acquire_restart_lock() {
+  exec 7>"$restart_lock" || die "restart-mutex-open-failed: $restart_lock"
+  if ! flock -w "$restart_lock_timeout" 7; then
+    exec 7>&-
+    die "restart-mutex-busy: another coordinator restart still holds $restart_lock"
+  fi
+}
+
+broadcast_restart() {
+  local body
+  body="Coordinator restart beginning under mutex; live clients queue on north-coord.socket. Policy: thread 019fa1d6."
+  if ! env \
+    FRAM_LOG="$NORTH_COORD_FRAM_LOG" \
+    FRAM_TELEMETRY_LOG="$telemetry_log" \
+    FRAM_PORT="$runtime_port" \
+    NORTH_PORT="$runtime_port" \
+    NORTH_CORPUS_CONTROLLER=systemd \
+    NORTH_COORD_SYSTEMD_UNIT="$systemd_unit" \
+    NORTH_CORPUS_TRANSACTION_DIR="$transaction_state" \
+    "$north_binary" msg send north-coord-runtime '*' coordinator-restart "$body"; then
+    die "restart-broadcast-failed: live-roster broadcast was not committed"
+  fi
+  if ! env \
+    FRAM_LOG="$NORTH_COORD_FRAM_LOG" \
+    FRAM_TELEMETRY_LOG="$telemetry_log" \
+    FRAM_PORT="$runtime_port" \
+    NORTH_PORT="$runtime_port" \
+    NORTH_CORPUS_CONTROLLER=systemd \
+    NORTH_COORD_SYSTEMD_UNIT="$systemd_unit" \
+    NORTH_CORPUS_TRANSACTION_DIR="$transaction_state" \
+    "$north_binary" tell 019fa1d6-dec8-7113-b333-812916f40548 progress "$body"; then
+    die "restart-progress-failed: policy progress was not committed"
+  fi
+}
+
+restart_runtime() {
+  named_promotion_failure=1
+  load_selected
+  named_promotion_failure=0
+  acquire_restart_lock
+  broadcast_restart
+  release_lock
+  if ! systemctl restart "$systemd_unit"; then
+    die "restart-command-failed: systemctl restart $systemd_unit"
+  fi
 }
 
 # Every way preflight can decline the port. The message lands immediately —
@@ -939,6 +1015,7 @@ usage: $program initialize
        $program promote [FRAM_CHECKOUT] [REVISION]
        $program package
        $program rollback
+       $program restart
        $program exec-checkout EXECUTABLE [ARG ...]
 EOF
   exit 2
@@ -956,6 +1033,7 @@ case "${1:-}" in
   promote) shift; [[ $# -le 2 ]] || usage; promote_checkout "$@" ;;
   package) [[ $# -eq 1 ]] || usage; select_package ;;
   rollback) [[ $# -eq 1 ]] || usage; rollback_runtime ;;
+  restart) [[ $# -eq 1 ]] || usage; restart_runtime ;;
   exec-checkout) shift; [[ $# -ge 1 ]] || usage; exec_checkout "$@" ;;
   *) usage ;;
 esac
