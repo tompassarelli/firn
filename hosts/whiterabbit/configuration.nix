@@ -56,6 +56,7 @@
   myConfig.modules.nh.enable = true;
   myConfig.modules.babashka.enable = true;
   myConfig.modules.north-coord.enable = true;
+  myConfig.modules.north-coord.socketActivation = true;
   myConfig.modules.north-stream-sync.enable = true;
   myConfig.modules.north-reactor.enable = true;
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
