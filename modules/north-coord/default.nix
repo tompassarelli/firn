@@ -54,7 +54,7 @@ in
       after = ([ "network.target" ] ++ lib.optional config.myConfig.modules.north-coord.socketActivation "north-coord.socket");
       path = with pkgs; [ clojure jdk bash coreutils git ];
       startLimitIntervalSec = 0;
-      restartIfChanged = true;
+      restartIfChanged = false;
       environment = {
         HOME = homeDir;
         FRAM_REQUIRE_LOG_FENCE = "1";

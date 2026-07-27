@@ -89,7 +89,11 @@
            ;; listener therefore fails north-coord.socket itself; the service
            ;; never mistakes its inherited system socket for a foreign owner.
            :startLimitIntervalSec 0
-           :restartIfChanged      true
+           :restartIfChanged      false  ;; Decoupled 2026-07-28 (tom): the engine comes
+           ;; from the PROMOTED checkout, not the nix package - system rebuilds must
+           ;; not bounce the coordinator. Engine updates go through the explicit
+           ;; promote path (mutexed + broadcast). Unit changes that truly need a
+           ;; restart use the drill: systemctl restart after rebuild-intent.
            :environment           {:HOME homeDir
                                    :FRAM_REQUIRE_LOG_FENCE "1"
                                    :FRAM_TELEMETRY_LOG (s homeDir "/.local/state/north/telemetry.log")
