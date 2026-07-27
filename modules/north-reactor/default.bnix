@@ -16,7 +16,7 @@
 ;; (coord append!/put!), so a periodic one-shot fully covers the reap responsibility.
 ;;
 ;; The script itself comes from the exact North package. PATH carries babashka
-;; so both the ExecStart `bb` and the reactor's own
+;; so both the ExecStart `bb`, the reactor's worktree provenance `git` probes, and the reactor's own
 ;; ping-coordinator shell-out (bare `bb msg-cli.clj` when a reaped lane names a
 ;; coordinator) resolve. Runs as the user: the sweep is a :7977 client, needs no root.
 (nix/module [config lib pkgs inputs ...]
@@ -34,7 +34,10 @@
                   {:Description "North reactor sweep — reap stale concerns + silently-dead lanes"}
                  :Service
                   {:Type             "oneshot"
-                   :Environment      [(s "PATH=" pkgs.babashka "/bin:" pkgs.coreutils "/bin")]
+                   ;; Home Manager applies unit changes synchronously. This periodic
+                   ;; reaper must wait for its timer instead of restarting mid-switch.
+                   :restartIfChanged false
+                   :Environment      [(s "PATH=" pkgs.babashka "/bin:" pkgs.coreutils "/bin:" pkgs.git "/bin")]
                    :WorkingDirectory northPkg
                    :ExecStart        (s pkgs.babashka "/bin/bb " northPkg "/cli/north-reactor.clj sweep-once")}}
                :systemd.user.timers.north-reactor-sweep

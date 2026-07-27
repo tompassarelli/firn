@@ -14,7 +14,8 @@ in
         };
         Service = {
           Type = "oneshot";
-          Environment = [ "PATH=${pkgs.babashka}/bin:${pkgs.coreutils}/bin" ];
+          restartIfChanged = false;
+          Environment = [ "PATH=${pkgs.babashka}/bin:${pkgs.coreutils}/bin:${pkgs.git}/bin" ];
           WorkingDirectory = northPkg;
           ExecStart = "${pkgs.babashka}/bin/bb ${northPkg}/cli/north-reactor.clj sweep-once";
         };
