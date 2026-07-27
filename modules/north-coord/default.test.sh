@@ -2,6 +2,7 @@
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
+repo_root=$(cd "$here/../.." && pwd)
 runtime=$here/north-coord-runtime
 source_module=$here/default.bnix
 generated_module=$here/default.nix
@@ -43,10 +44,31 @@ grep -Fq 'Backlog = 4096;' "$generated_module"
 grep -Fq 'FileDescriptorName = "north-coord";' "$generated_module"
 grep -Fq '(s northCoordRuntime "/bin/north-coord-runtime ensure-default")' \
   "$source_module"
+# These assertions intentionally match literal Nix interpolation syntax.
+# shellcheck disable=SC2016
 grep -Fq '${northCoordRuntime}/bin/north-coord-runtime ensure-default' \
   "$generated_module"
-grep -Fq 'north-coord-sd-listen' "$source_module"
-grep -Fq 'north-coord-sd-listen' "$generated_module"
+grep -Fq ':options.myConfig.modules.north-coord.socketActivation' \
+  "$source_module"
+grep -Fq 'options.myConfig.modules.north-coord.socketActivation' \
+  "$generated_module"
+grep -Fq '(lib.mkIf config.myConfig.modules.north-coord.socketActivation' \
+  "$source_module"
+grep -Fq 'systemd.sockets.north-coord = lib.mkIf config.myConfig.modules.north-coord.socketActivation' \
+  "$generated_module"
+grep -Fq '(if config.myConfig.modules.north-coord.socketActivation' \
+  "$source_module"
+# shellcheck disable=SC2016
+grep -Fq 'else "${northCoordRuntime}/bin/north-coord-runtime start"' \
+  "$generated_module"
+# shellcheck disable=SC2016
+grep -Fq 'north-coord socketActivation requires executable $wrapper' \
+  "$source_module" "$generated_module"
+if rg -n 'ships in north GIT MAIN|ships in North main' \
+  "$source_module" "$generated_module"; then
+  printf 'north-coord still claims the unlanded wrapper is on North main\n' >&2
+  exit 1
+fi
 if rg -n 'ExecStartPre.*north-coord-runtime preflight' \
   "$source_module" "$generated_module"; then
   printf 'socket-activated service still probes its systemd-owned listener as foreign\n' >&2
@@ -61,6 +83,128 @@ if rg -n 'ExecStartPre.*north-coord-runtime package' \
   "$source_module" "$generated_module"; then
   printf 'systemd startup still resets the sealed runtime to package mode\n' >&2
   exit 1
+fi
+
+nix_expr=$scratch/module-eval.nix
+cat >"$nix_expr" <<'EOF'
+{ repoRoot, socketActivation, wrapperPresent }:
+
+let
+  flake = builtins.getFlake ("path:" + repoRoot);
+  system = builtins.currentSystem;
+  pkgs = import flake.inputs.nixpkgs { inherit system; };
+  lib = pkgs.lib;
+  framPkg = pkgs.runCommand "fram-fixture" { } ''
+    mkdir -p "$out/libexec/fram" "$out/bin"
+    printf '%s\n' '#!/bin/sh' 'exit 0' > "$out/bin/fram-daemon"
+    chmod +x "$out/bin/fram-daemon"
+  '';
+  northPkg = pkgs.runCommand "north-fixture" { } (''
+    mkdir -p "$out/bin"
+  '' + lib.optionalString wrapperPresent ''
+    printf '%s\n' '#!/bin/sh' 'exec "$@"' > "$out/bin/north-coord-sd-listen"
+    chmod +x "$out/bin/north-coord-sd-listen"
+  '');
+  inputs = {
+    fram = {
+      packages.${system}.default = framPkg;
+      rev = "1111111111111111111111111111111111111111";
+    };
+    north.packages.${system}.default = northPkg;
+  };
+  evaluated = lib.evalModules {
+    specialArgs = { inherit pkgs inputs; };
+    modules = [
+      (import (repoRoot + "/modules/north-coord/default.nix"))
+      ({ lib, ... }: {
+        options = {
+          environment.systemPackages = lib.mkOption {
+            type = lib.types.listOf lib.types.package;
+            default = [ ];
+          };
+          systemd.sockets = lib.mkOption {
+            type = lib.types.attrsOf lib.types.anything;
+            default = { };
+          };
+          systemd.services = lib.mkOption {
+            type = lib.types.attrsOf lib.types.anything;
+            default = { };
+          };
+          myConfig.modules.users.username = lib.mkOption {
+            type = lib.types.str;
+          };
+          myConfig.modules.users.homeDir = lib.mkOption {
+            type = lib.types.str;
+          };
+        };
+        config = {
+          myConfig.modules.users.username = "fixture";
+          myConfig.modules.users.homeDir = "/tmp/north-coord-fixture";
+          myConfig.modules.north-coord.enable = true;
+          myConfig.modules.north-coord.socketActivation = socketActivation;
+        };
+      })
+    ];
+  };
+  service = evaluated.config.systemd.services.north-coord;
+  execStart = service.serviceConfig.ExecStart;
+  socketDefined =
+    builtins.hasAttr "north-coord" evaluated.config.systemd.sockets;
+  requires = service.requires or [ ];
+in
+pkgs.writeText
+  ("north-coord-exec-start-" + (if socketActivation then "socket" else "direct"))
+  (lib.concatStringsSep "\n" [
+    "execStart=${execStart}"
+    "socketDefined=${lib.boolToString socketDefined}"
+    "requires=${lib.concatStringsSep "," requires}"
+    "after=${lib.concatStringsSep "," service.after}"
+  ])
+EOF
+
+nix_cache=$scratch/nix-cache
+mkdir -p "$nix_cache"
+build_module_mode() {
+  local socket_activation=$1 wrapper_present=$2
+  XDG_CACHE_HOME=$nix_cache nix build \
+    --impure --no-link --print-out-paths \
+    --expr "import $nix_expr { repoRoot = \"$repo_root\"; socketActivation = $socket_activation; wrapperPresent = $wrapper_present; }"
+}
+
+direct_result=$(build_module_mode false false)
+direct_exec=$(sed -n 's/^execStart=//p' "$direct_result")
+[[ "$direct_exec" == */bin/north-coord-runtime\ start ]]
+[[ "$direct_exec" != *north-coord-sd-listen* ]]
+grep -Fxq 'socketDefined=false' "$direct_result"
+grep -Fxq 'requires=' "$direct_result"
+grep -Fxq 'after=network.target' "$direct_result"
+
+socket_result=$(build_module_mode true true)
+socket_exec=$(sed -n 's/^execStart=//p' "$socket_result")
+socket_wrapper=${socket_exec%% *}
+checked_root=${socket_wrapper%/bin/north-coord-sd-listen}
+wrapper_target=$(readlink -f "$socket_wrapper")
+wrapper_root=${wrapper_target%/bin/north-coord-sd-listen}
+[[ -x "$socket_wrapper" ]]
+[[ -x "$wrapper_target" ]]
+nix-store -q --references "$socket_result" | grep -Fxq "$checked_root"
+nix-store -q --references "$checked_root" | grep -Fxq "$wrapper_root"
+grep -Fxq 'socketDefined=true' "$socket_result"
+grep -Fxq 'requires=north-coord.socket' "$socket_result"
+grep -Fxq 'after=network.target,north-coord.socket' "$socket_result"
+
+missing_wrapper_log=$scratch/missing-wrapper.log
+if build_module_mode true false >"$missing_wrapper_log" 2>&1; then
+  printf 'socket activation built without north-coord-sd-listen\n' >&2
+  exit 1
+fi
+grep -Fq 'north-coord socketActivation requires executable' \
+  "$missing_wrapper_log"
+printf 'simulation: direct mode omits socket ownership and starts north-coord-runtime directly\n'
+printf 'simulation: socket mode closes over an executable wrapper and missing wrappers fail during build\n'
+if [[ "${NORTH_COORD_TEST_SOCKET_ONLY:-0}" == 1 ]]; then
+  printf 'ok: north-coord socket activation modes and executable closure guard are build-safe\n'
+  exit 0
 fi
 
 cat >"$north_package/bin/north" <<'EOF'

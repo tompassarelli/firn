@@ -29,6 +29,17 @@
         northPkg
           (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)
                :default)
+        northCoordSdListenChecked
+          (pkgs.runCommand
+            "north-coord-sd-listen-checked"
+            {}
+            (ms (s "wrapper=" northPkg "/bin/north-coord-sd-listen")
+                "if [ ! -x \"$wrapper\" ]; then"
+                "  echo \"north-coord socketActivation requires executable $wrapper\" >&2"
+                "  exit 1"
+                "fi"
+                "mkdir -p \"$out/bin\""
+                "ln -s \"$wrapper\" \"$out/bin/north-coord-sd-listen\""))
         runtimeState (s homeDir "/.local/state/north/fram-runtime")
         northCoordRuntime
           (pkgs.writeShellApplication
@@ -47,20 +58,32 @@
                   (builtins.readFile (p "./north-coord-runtime")))})]
     {:options.myConfig.modules.north-coord.enable
       (lib.mkEnableOption "Personal North coordinator daemon (:7977) — sole-writer fact-graph service for Tom's canonical log")
+     ;; Socket activation is gated OFF until the Fram daemon consumes the
+     ;; inherited fd and the selected North package ships north-coord-sd-listen.
+     ;; The wrapper currently exists only on an unlanded North lane, not on
+     ;; North main or in the pinned package.
+     :options.myConfig.modules.north-coord.socketActivation
+      (lib.mkEnableOption "systemd socket activation for :7977 (requires the Fram fd-consumer and north-coord-sd-listen)")
      :config
       (lib.mkIf config.myConfig.modules.north-coord.enable
         {:environment.systemPackages [northCoordRuntime]
          :systemd.sockets.north-coord
-          {:description  "North coordinator activation socket (:7977)"
-           :wantedBy     ["sockets.target"]
-           :listenStreams ["127.0.0.1:7977"]
-           :socketConfig {:Backlog 4096
-                          :FileDescriptorName "north-coord"}}
+          (lib.mkIf config.myConfig.modules.north-coord.socketActivation
+            {:description  "North coordinator activation socket (:7977)"
+             :wantedBy     ["sockets.target"]
+             :listenStreams ["127.0.0.1:7977"]
+             :socketConfig {:Backlog 4096
+                            :FileDescriptorName "north-coord"}})
          :systemd.services.north-coord
           {:description           "North coordinator — personal fact-graph daemon (:7977)"
            :wantedBy              ["multi-user.target"]
-           :requires              ["north-coord.socket"]
-           :after                 ["network.target" "north-coord.socket"]
+           :requires
+             (lib.mkIf config.myConfig.modules.north-coord.socketActivation
+               ["north-coord.socket"])
+           :after
+             (concat ["network.target"]
+                     (lib.optional config.myConfig.modules.north-coord.socketActivation
+                                   "north-coord.socket"))
            :path                  (nix/with pkgs [clojure jdk bash coreutils git])
            ;; The socket unit owns :7977 across service restarts. A foreign
            ;; listener therefore fails north-coord.socket itself; the service
@@ -88,8 +111,14 @@
              ;; validates LISTEN_FDS before the selected Fram runtime starts.
              :ExecStartPre [(s northCoordRuntime "/bin/north-coord-runtime ensure-default")
                             (s northCoordRuntime "/bin/north-coord-runtime prepare")]
-             :ExecStart (s northPkg "/bin/north-coord-sd-listen "
-                           northCoordRuntime "/bin/north-coord-runtime start")
+             ;; Direct start is the safe default. Socket activation references a
+             ;; checked derivation, so a package without the wrapper fails while
+             ;; building the system closure instead of at activation with 203/EXEC.
+             :ExecStart
+               (if config.myConfig.modules.north-coord.socketActivation
+                 (s northCoordSdListenChecked "/bin/north-coord-sd-listen "
+                    northCoordRuntime "/bin/north-coord-runtime start")
+                 (s northCoordRuntime "/bin/north-coord-runtime start"))
              :ExecStartPost (s northCoordRuntime "/bin/north-coord-runtime settle")
              :Restart          "always"
              :RestartSec       2
