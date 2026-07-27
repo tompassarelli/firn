@@ -24,7 +24,11 @@
             (nix/module [config ...]
               {:systemd.user.services.north-stream-sync
                 {:Unit
-                  {:Description "North stream-sync — mirror Claude Code transcripts into streams/raw"}
+                  {:Description "North stream-sync — mirror Claude Code transcripts into streams/raw"
+                   ;; A sweep can outlive a Home Manager activation. Keep the
+                   ;; running one-shot: a later timer tick picks up this unit's
+                   ;; new definition without making activation wait for it.
+                   :X-SwitchMethod "keep-old"}
                  :Service
                   {:Type      "oneshot"
                    ;; Exit 2 means "mirrored, but at least one source was
