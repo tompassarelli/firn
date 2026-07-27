@@ -60,6 +60,10 @@
    ;; :7977; dark-room's attention log held only a bootstrap tx). Everything
    ;; coordinates on the canonical :7977.
    :myConfig.modules.north-coord.enable true
+   ;; systemd socket activation for :7977 — required live setting; keep this
+   ;; upstream explicit so clean Firn regeneration never drops it (was
+   ;; present only in the generated .nix, silently deletable on rebuild).
+   :myConfig.modules.north-coord.socketActivation true
    ;; user-level timer (~5min) for north-stream-sync — zero-AI transcript
    ;; mirroring into ~/code/north/streams/raw (streams/CLAUDE.md).
    :myConfig.modules.north-stream-sync.enable true
