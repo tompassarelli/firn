@@ -20,9 +20,13 @@ Paste everything below the rule into the brief, verbatim.
    for the declared claim contract. Derive the contract from the enumerated
    change surface — everything added, changed, or removed plus its direct
    dependents (callers/readers of what changed); every element maps to a
-   claim or a named waiver with a reason. A contract that cannot state its
-   enumeration is not complete. Adding items mid-flight is a defect, not
-   diligence.
+   claim or a named waiver with a reason. State HOW the enumeration was
+   derived (the command or source — the diff plus a named dependent search);
+   an enumeration that cannot cite its derivation is a guess, not an
+   enumeration. Commit the contract and its enumeration to your work thread
+   (`north tell`) as your FIRST act, before implementation begins. A contract
+   that cannot state its enumeration is not complete. Adding items mid-flight
+   is a defect, not diligence.
 2. Classify each newly observed fact exactly once: if it falsifies or narrows
    a declared claim, that claim FAILS now and you say so; if orthogonal, file
    it as a new work item. Never absorb it into the current pass; never file
@@ -41,7 +45,10 @@ Paste everything below the rule into the brief, verbatim.
    verifier is not a broken product — tool failure says nothing about the
    deliverable and never justifies inventing another verification method.
    An ambiguous observation is a defective probe: sharpen it once or exit
-   cannot-determine; ambiguity never generates new concerns.
+   cannot-determine; ambiguity never generates new concerns. Exception: your
+   brief MAY name known transients, each with its own bounded retry policy
+   (name, max retries, backoff) — those follow their declared policy. You
+   never promote a failure into the known-transient class yourself.
 6. One claim per verification pass. Bundled claims must be split before any
    probing starts. An aggregate deliverable gets its own separately declared
    whole-outcome claim; component passes never sum to it.

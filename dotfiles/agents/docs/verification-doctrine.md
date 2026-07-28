@@ -48,7 +48,14 @@ it — never personally retire it past the pre-declared bar.**
    every element maps to a claim or a named waiver with a reason. A contract
    that cannot state its enumeration is not complete. Coverage is an intake
    property earned by enumeration, never a verification property earned by
-   effort.
+   effort. **Derivation citation:** an enumeration states how it was derived
+   (the command or source — e.g. the diff plus a named dependent search); an
+   enumeration that cannot cite its derivation is a guess, not an
+   enumeration. **Intake visibility:** the contract and its enumeration are
+   committed to the work thread (`north tell`) as the lane's first act,
+   before implementation begins — on providers with no live-input channel
+   this is the supervisor's only pre-terminal window to correct a wrong
+   contract cheaply.
 2. **Verification is claim-shaped, not effort-shaped.** One verifier decides
    one claim: one probe, one observation. Evidence carries exact-commit/run
    provenance plus the observed result. Time, effort, confidence prose, and
@@ -140,6 +147,11 @@ Cross-cutting rules:
   cannot-determine for the blocked claim. **A broken verifier is not a broken
   product** — tool failure is evidence about the harness, never about the
   deliverable, and never a reason to invent another verification method.
+  **Known-transients channel:** the dispatch brief MAY declare named known
+  transients, each with a bounded retry policy (name, max retries, backoff) —
+  e.g. a coordinator restart window's connection refusals. Anything not named
+  gets the default one-retry rule; the lane never promotes a failure into the
+  known-transient class itself.
 - No verifier expands its own scope; Law 5 classifies every discovery.
 
 ## 5. Anti-pattern index (name the tarpit to exit it)
@@ -215,6 +227,24 @@ The same review independently observed that cannot-determine functions as a
 human-intervention window — confirmed as design intent: all three non-green
 exits (fail, cannot-determine, budget overrun) are built as legible human
 decision points.
+
+**Fourth refinement, 2026-07-28 (orchestration session, ~30 lanes of same-day
+field data):** three amendments grounded in observed failures. (a) Intake
+visibility (Law 1): a wrong contract on a no-live-input lane was only visible
+at terminal, costing full dispatch-fail-rediagnose cycles; posting the
+contract to the thread first gives the supervisor a pre-terminal kill/correct
+window. (b) Known-transients channel (cross-cutting): the bare one-retry rule
+under-retries infrastructure already characterized as transiently flaky
+(coordinator restart-window refusals), producing premature cannot-determines;
+the channel keeps scope authority with the brief, never the lane. (c)
+Derivation citation (Law 1): the enumeration is now the load-bearing element,
+so a confidently narrow list is the new failure mode; a cited derivation can
+be spot-checked mechanically (the day's concrete miss: an engine verb landed
+while its SDK toolset dependent went unenumerated — a dependent search would
+have caught it). The approval gate on coverage gaps was deliberately NOT
+relaxed despite its redispatch cost on no-live-input providers: pre-approving
+any self-added check class reopens the loop-engine door, and amendment (a)
+absorbs most of the cost at intake.
 
 **Corroboration, 2026-07-28 (second OpenAI lane, website-publish task):** an
 unprompted self-report confirmed the disease model ("I let evidence
