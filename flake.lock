@@ -457,11 +457,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1785270519,
-        "narHash": "sha256-YJ4FK53Wu4iwyNkZP0IudWFLHpQBCa1ReDE3fCP9bd8=",
+        "lastModified": 1785273334,
+        "narHash": "sha256-jS3Eb7ibDUUChyQHCMzv3tf6KH7tKu9cgZSw8Hb5duY=",
         "ref": "main",
-        "rev": "e45315a8af49f73210ff5cf707f7f3e10bb0fd78",
-        "revCount": 635,
+        "rev": "6ebeb15e6ae66733ff387fe2e353045113fc0ee1",
+        "revCount": 639,
         "type": "git",
         "url": "file:///home/tom/code/fram"
       },
@@ -902,11 +902,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1785271393,
-        "narHash": "sha256-7SYJjcng8n8zy3uKpGyQpSQutUrgnj+SqeFk4/Y4JRw=",
+        "lastModified": 1785272940,
+        "narHash": "sha256-VVJMFq0xbXtTY8RtRuDQwO4g/k2mYLDc5QvY/bl4xa8=",
         "ref": "main",
-        "rev": "53a87d2d5185fd9a43734ce1d43038e4108e8e75",
-        "revCount": 797,
+        "rev": "c8cd7113a22da30200669b7aea41e5d8e87cdfc3",
+        "revCount": 802,
         "type": "git",
         "url": "file:///home/tom/code/north"
       },
