@@ -101,6 +101,7 @@ let
   coordSocket = cfg.systemd.sockets.north-coord or { };
   telemetrySocket = cfg.systemd.sockets.north-telemetry-coord or { };
   pair = cfg.systemd.targets.north-coord-pair or { };
+  prepare = cfg.systemd.services.north-coord-pair-prepare or { };
   northWrapper =
     lib.findFirst (pkg: lib.getName pkg == "north") null
       cfg.environment.systemPackages;
@@ -124,6 +125,10 @@ pkgs.writeText "north-stage-a-${if stageA then "on" else "off"}" (
     "coord-stop-if-changed=${lib.boolToString coord.stopIfChanged}"
     "telemetry-restart-if-changed=${lib.boolToString (telemetry.restartIfChanged or false)}"
     "telemetry-stop-if-changed=${lib.boolToString (telemetry.stopIfChanged or false)}"
+    "prepare-restart-if-changed=${lib.boolToString (prepare.restartIfChanged or false)}"
+    "prepare-stop-if-changed=${lib.boolToString (prepare.stopIfChanged or false)}"
+    "coord-java-options=${coord.environment.JDK_JAVA_OPTIONS or "unset"}"
+    "telemetry-java-options=${telemetry.environment.JDK_JAVA_OPTIONS or "unset"}"
     "pair-wants=${lib.concatStringsSep "," (pair.wants or [ ])}"
     "coord-requires=${lib.concatStringsSep "," (coord.requires or [ ])}"
     "telemetry-requires=${lib.concatStringsSep "," (telemetry.requires or [ ])}"
@@ -180,6 +185,10 @@ grep -Fxq 'coord-restart-if-changed=false' "$on"
 grep -Fxq 'coord-stop-if-changed=false' "$on"
 grep -Fxq 'telemetry-restart-if-changed=false' "$on"
 grep -Fxq 'telemetry-stop-if-changed=false' "$on"
+grep -Fxq 'prepare-restart-if-changed=false' "$on"
+grep -Fxq 'prepare-stop-if-changed=false' "$on"
+grep -Fxq 'coord-java-options=-Xmx16g' "$on"
+grep -Fxq 'telemetry-java-options=-Xmx6g' "$on"
 grep -Fq 'north-coord.socket' "$on"
 grep -Fq 'north-telemetry-coord.socket' "$on"
 grep -Fq 'north-coord.service' "$on"

@@ -115,6 +115,8 @@ in
     };
     systemd.services.north-coord-pair-prepare = lib.mkIf stageA {
       description = "Prepare both North Stage-A writer runtimes";
+      restartIfChanged = false;
+      stopIfChanged = false;
       before = [ "north-coord.service" "north-telemetry-coord.service" ];
       serviceConfig = {
         Type = "oneshot";
@@ -149,7 +151,9 @@ in
       startLimitIntervalSec = 0;
       restartIfChanged = false;
       stopIfChanged = false;
-      environment = serviceEnvironment;
+      environment = (serviceEnvironment // {
+        JDK_JAVA_OPTIONS = "-Xmx16g";
+      });
       serviceConfig = (serviceConfigBase // {
         MemoryMax = "24G";
         ExecStartPre = if stageA then [ ] else [

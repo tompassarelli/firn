@@ -171,6 +171,12 @@
          :systemd.services.north-coord-pair-prepare
           (lib.mkIf stageA
             {:description "Prepare both North Stage-A writer runtimes"
+             ;; A system generation may stage a new Fram package, but staging
+             ;; is not a database cutover. Keep this required oneshot active so
+             ;; activation cannot cascade-stop either writer through Requires=.
+             ;; The explicit pair cutover restarts preparation deliberately.
+             :restartIfChanged false
+             :stopIfChanged false
              :before ["north-coord.service" "north-telemetry-coord.service"]
              :serviceConfig
               {:Type "oneshot"
@@ -220,14 +226,16 @@
            ;; socket above remains owned by systemd throughout either operation.
            :restartIfChanged      false
            :stopIfChanged         false
-           :environment           serviceEnvironment
+           :environment
+            (// serviceEnvironment
+                {:JDK_JAVA_OPTIONS "-Xmx16g"})
            :serviceConfig
             (//
              serviceConfigBase
              {
              ;; A merged coordination graph can transiently retain an old
              ;; immutable Store, a candidate Store, and query indexes together.
-             ;; Keep native/JVM overhead outside the -Xmx6g heap from tripping a
+             ;; Keep native/JVM overhead outside the -Xmx16g heap from tripping a
              ;; cgroup kill while the incremental reload path bounds that peak.
              :MemoryMax "24G"
              ;; Socket ownership removes the old stop/bind race. The adapter
