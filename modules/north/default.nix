@@ -1,6 +1,13 @@
 { config, lib, pkgs, inputs, ... }:
 
 let
+  homeDir = config.myConfig.modules.users.homeDir;
+  stageA = config.myConfig.modules.north-coord.stageATelemetryPartition;
+  clientEnvironment = if stageA then ''
+    export NORTH_TELEMETRY_PARTITION=1
+    export NORTH_TELEMETRY_PORT=7978
+    export FRAM_TELEMETRY_LOG=${homeDir}/.local/state/north/telemetry.log
+  '' else "";
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
   codexPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".codex;
   liveInputs = with pkgs; [ bash coreutils git babashka bun jq ];
@@ -12,6 +19,7 @@ let
   northProduction = pkgs.writeShellApplication {
     name = "north";
     text = ''
+      ${clientEnvironment}
       unset NORTH_CHECKOUT
       ${northRuntimeOwnerGuard}/bin/north-runtime-owner-guard "$@"
       exec ${northPkg}/bin/north "$@"
@@ -20,6 +28,7 @@ let
   northMcpProduction = pkgs.writeShellApplication {
     name = "north-mcp";
     text = ''
+      ${clientEnvironment}
       unset NORTH_CHECKOUT
       exec ${northPkg}/bin/north-mcp "$@"
     '';
@@ -27,6 +36,7 @@ let
   mkPinnedCommand = name: pkgs.writeShellApplication {
     name = name;
     text = ''
+      ${clientEnvironment}
       unset NORTH_CHECKOUT
       exec ${northPkg}/bin/${name} "$@"
     '';
@@ -46,6 +56,7 @@ let
     name = "${name}-dev";
     runtimeInputs = liveInputs;
     text = ''
+      ${clientEnvironment}
       checkout=''${NORTH_CHECKOUT:-$HOME/code/north}
       target=$checkout/bin/${name}
       if [ ! -x "$target" ]; then
@@ -62,6 +73,7 @@ let
   northPackaged = pkgs.writeShellApplication {
     name = "north-packaged";
     text = ''
+      ${clientEnvironment}
       unset NORTH_CHECKOUT
       ${northRuntimeOwnerGuard}/bin/north-runtime-owner-guard "$@"
       exec ${northPkg}/bin/north "$@"
@@ -70,6 +82,7 @@ let
   northMcpPackaged = pkgs.writeShellApplication {
     name = "north-mcp-packaged";
     text = ''
+      ${clientEnvironment}
       unset NORTH_CHECKOUT
       exec ${northPkg}/bin/north-mcp "$@"
     '';

@@ -7,7 +7,16 @@
 ;; surface with visible provenance; it never masquerades as a production name.
 (nix/module [config lib pkgs inputs ...]
   (let
-    [northPkg
+    [homeDir config.myConfig.modules.users.homeDir
+     stageA config.myConfig.modules.north-coord.stageATelemetryPartition
+     clientEnvironment
+      (if stageA
+        (ms "export NORTH_TELEMETRY_PARTITION=1"
+            "export NORTH_TELEMETRY_PORT=7978"
+            (s "export FRAM_TELEMETRY_LOG="
+               homeDir "/.local/state/north/telemetry.log"))
+        "")
+     northPkg
       (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)
      codexPkg
       (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :codex)
@@ -21,21 +30,24 @@
       (pkgs.writeShellApplication
         {:name "north"
          :text
-          (ms "unset NORTH_CHECKOUT"
+          (ms clientEnvironment
+              "unset NORTH_CHECKOUT"
               (s northRuntimeOwnerGuard "/bin/north-runtime-owner-guard \"$@\"")
               (s "exec " northPkg "/bin/north \"$@\""))})
      northMcpProduction
       (pkgs.writeShellApplication
         {:name "north-mcp"
          :text
-          (ms "unset NORTH_CHECKOUT"
+          (ms clientEnvironment
+              "unset NORTH_CHECKOUT"
               (s "exec " northPkg "/bin/north-mcp \"$@\""))})
      mkPinnedCommand
       (fn [name]
         (pkgs.writeShellApplication
           {:name name
            :text
-            (ms "unset NORTH_CHECKOUT"
+            (ms clientEnvironment
+                "unset NORTH_CHECKOUT"
                 (s "exec " northPkg "/bin/" name " \"$@\""))}))
      pinnedCommandNames
       ["north-on-spawn" "north-on-tooluse" "north-mark-delegated"
@@ -50,7 +62,8 @@
           {:name (s name "-dev")
          :runtimeInputs liveInputs
          :text
-          (ms "checkout=${NORTH_CHECKOUT:-$HOME/code/north}"
+          (ms clientEnvironment
+              "checkout=${NORTH_CHECKOUT:-$HOME/code/north}"
               (s "target=$checkout/bin/" name)
               "if [ ! -x \"$target\" ]; then"
               (s "  echo \"" name "-dev: checkout executable missing: $target\" >&2")
@@ -65,14 +78,16 @@
       (pkgs.writeShellApplication
         {:name "north-packaged"
          :text
-          (ms "unset NORTH_CHECKOUT"
+          (ms clientEnvironment
+              "unset NORTH_CHECKOUT"
               (s northRuntimeOwnerGuard "/bin/north-runtime-owner-guard \"$@\"")
               (s "exec " northPkg "/bin/north \"$@\""))})
      northMcpPackaged
       (pkgs.writeShellApplication
         {:name "north-mcp-packaged"
          :text
-          (ms "unset NORTH_CHECKOUT"
+          (ms clientEnvironment
+              "unset NORTH_CHECKOUT"
               (s "exec " northPkg "/bin/north-mcp \"$@\""))})]
     {:tags [cli-tools]
      :flake-inputs

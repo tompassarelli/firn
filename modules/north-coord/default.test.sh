@@ -122,11 +122,27 @@ let
             type = lib.types.listOf lib.types.package;
             default = [ ];
           };
+          environment.variables = lib.mkOption {
+            type = lib.types.attrsOf lib.types.str;
+            default = { };
+          };
+          assertions = lib.mkOption {
+            type = lib.types.listOf lib.types.anything;
+            default = [ ];
+          };
+          home-manager.users = lib.mkOption {
+            type = lib.types.attrsOf lib.types.anything;
+            default = { };
+          };
           systemd.sockets = lib.mkOption {
             type = lib.types.attrsOf lib.types.anything;
             default = { };
           };
           systemd.services = lib.mkOption {
+            type = lib.types.attrsOf lib.types.anything;
+            default = { };
+          };
+          systemd.targets = lib.mkOption {
             type = lib.types.attrsOf lib.types.anything;
             default = { };
           };

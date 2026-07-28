@@ -49,6 +49,12 @@ north_binary=$north_package/bin/north
 telemetry_log=$NORTH_COORD_TELEMETRY_LOG
 transaction_state=$state_parent/corpus-transactions
 systemd_unit=$NORTH_COORD_SYSTEMD_UNIT
+origin_name=${NORTH_COORD_ORIGIN:-coordination}
+single_origin=${NORTH_COORD_SINGLE_ORIGIN:-0}
+transaction_owner=${NORTH_COORD_TRANSACTION_OWNER:-1}
+corpus_systemd_unit=${NORTH_COORD_CORPUS_SYSTEMD_UNIT:-$systemd_unit}
+restart_systemd_unit=${NORTH_COORD_RESTART_SYSTEMD_UNIT:-$systemd_unit}
+telemetry_port=${NORTH_COORD_TELEMETRY_PORT:-7978}
 # Test seam: redirects ONLY the listener-cgroup lookup, so the occupied-port
 # window can be simulated without binding a real socket. Process-birth tokens
 # deliberately keep reading the real /proc — they are an anti-PID-reuse proof,
@@ -86,11 +92,26 @@ esac
   die "coordination and telemetry logs must be distinct"
 [[ "$systemd_unit" =~ ^[A-Za-z0-9_.@-]+\.service$ ]] ||
   die "systemd unit name is invalid: $systemd_unit"
+[[ "$corpus_systemd_unit" =~ ^[A-Za-z0-9_.@-]+\.(service|target)$ ]] ||
+  die "corpus controller unit name is invalid: $corpus_systemd_unit"
+[[ "$restart_systemd_unit" =~ ^[A-Za-z0-9_.@-]+\.(service|target)$ ]] ||
+  die "restart controller unit name is invalid: $restart_systemd_unit"
+[[ "$origin_name" =~ ^[a-z][a-z0-9-]*$ ]] ||
+  die "origin name is invalid: $origin_name"
+[[ "$single_origin" =~ ^[01]$ ]] ||
+  die "NORTH_COORD_SINGLE_ORIGIN must be 0 or 1"
+[[ "$transaction_owner" =~ ^[01]$ ]] ||
+  die "NORTH_COORD_TRANSACTION_OWNER must be 0 or 1"
 if ! [[ "$runtime_port" =~ ^[0-9]+$ ]] ||
    (( 10#$runtime_port < 1 || 10#$runtime_port > 65535 )); then
   die "runtime port must be an integer from 1 through 65535: $runtime_port"
 fi
 runtime_port=$((10#$runtime_port))
+if ! [[ "$telemetry_port" =~ ^[0-9]+$ ]] ||
+   (( 10#$telemetry_port < 1 || 10#$telemetry_port > 65535 )); then
+  die "telemetry port must be an integer from 1 through 65535: $telemetry_port"
+fi
+telemetry_port=$((10#$telemetry_port))
 if ! [[ "$restart_lock_timeout" =~ ^[0-9]+$ ]]; then
   die "restart lock timeout must be a non-negative integer: $restart_lock_timeout"
 fi
@@ -712,6 +733,12 @@ export_runtime_identity() {
   export FRAM_RUNTIME_TREE=$runtime_tree
   export FRAM_RUNTIME_ORIGIN=$runtime_origin
   export FRAM_RUNTIME_DAEMON=$runtime_daemon
+  if [[ "$single_origin" -eq 1 && "$transaction_owner" -eq 1 ]]; then
+    export NORTH_TELEMETRY_PARTITION=1
+    export NORTH_TELEMETRY_PORT=$telemetry_port
+  else
+    unset NORTH_TELEMETRY_PARTITION NORTH_TELEMETRY_PORT
+  fi
   unset FRAM_RUNTIME_OWNER_TOKEN
 }
 
@@ -813,13 +840,23 @@ publish_active_runtime() {
 }
 
 run_corpus_transaction() {
+  local -a partition_env=()
+  [[ "$transaction_owner" -eq 1 ]] ||
+    die "corpus transactions are owned by the coordination runtime"
+  if [[ "$single_origin" -eq 1 ]]; then
+    partition_env=(
+      "NORTH_TELEMETRY_PARTITION=1"
+      "NORTH_TELEMETRY_PORT=$telemetry_port"
+    )
+  fi
   env \
+    "${partition_env[@]}" \
     FRAM_LOG="$NORTH_COORD_FRAM_LOG" \
     FRAM_TELEMETRY_LOG="$telemetry_log" \
     FRAM_PORT="$runtime_port" \
     NORTH_PORT="$runtime_port" \
     NORTH_CORPUS_CONTROLLER=systemd \
-    NORTH_COORD_SYSTEMD_UNIT="$systemd_unit" \
+    NORTH_COORD_SYSTEMD_UNIT="$corpus_systemd_unit" \
     NORTH_CORPUS_TRANSACTION_DIR="$transaction_state" \
     "$north_binary" corpus-transaction "$@"
 }
@@ -834,6 +871,12 @@ start_runtime() {
   acquire_generation_start_lock
   launcher_owner_token=$(mint_owner_token)
   export FRAM_RUNTIME_OWNER_TOKEN=$launcher_owner_token
+  if [[ "$single_origin" -eq 1 ]]; then
+    # Stage A gives each daemon exactly one origin. The peer log remains
+    # available to client/transaction commands, but never enters the serving
+    # process that owns this socket.
+    unset FRAM_TELEMETRY_LOG NORTH_TELEMETRY_PARTITION NORTH_TELEMETRY_PORT
+  fi
   publish_active_runtime "$launcher_owner_token"
   release_lock
   cd "$runtime_source"
@@ -850,25 +893,36 @@ acquire_restart_lock() {
 
 broadcast_restart() {
   local body
+  local -a partition_env=()
+  [[ "$transaction_owner" -eq 1 ]] ||
+    die "restart broadcast is owned by the coordination runtime"
+  if [[ "$single_origin" -eq 1 ]]; then
+    partition_env=(
+      "NORTH_TELEMETRY_PARTITION=1"
+      "NORTH_TELEMETRY_PORT=$telemetry_port"
+    )
+  fi
   body="Coordinator restart beginning under mutex; live clients queue on north-coord.socket. Policy: thread 019fa1d6."
   if ! env \
+    "${partition_env[@]}" \
     FRAM_LOG="$NORTH_COORD_FRAM_LOG" \
     FRAM_TELEMETRY_LOG="$telemetry_log" \
     FRAM_PORT="$runtime_port" \
     NORTH_PORT="$runtime_port" \
     NORTH_CORPUS_CONTROLLER=systemd \
-    NORTH_COORD_SYSTEMD_UNIT="$systemd_unit" \
+    NORTH_COORD_SYSTEMD_UNIT="$corpus_systemd_unit" \
     NORTH_CORPUS_TRANSACTION_DIR="$transaction_state" \
     "$north_binary" msg send north-coord-runtime '*' coordinator-restart "$body"; then
     die "restart-broadcast-failed: live-roster broadcast was not committed"
   fi
   if ! env \
+    "${partition_env[@]}" \
     FRAM_LOG="$NORTH_COORD_FRAM_LOG" \
     FRAM_TELEMETRY_LOG="$telemetry_log" \
     FRAM_PORT="$runtime_port" \
     NORTH_PORT="$runtime_port" \
     NORTH_CORPUS_CONTROLLER=systemd \
-    NORTH_COORD_SYSTEMD_UNIT="$systemd_unit" \
+    NORTH_COORD_SYSTEMD_UNIT="$corpus_systemd_unit" \
     NORTH_CORPUS_TRANSACTION_DIR="$transaction_state" \
     "$north_binary" tell 019fa1d6-dec8-7113-b333-812916f40548 progress "$body"; then
     die "restart-progress-failed: policy progress was not committed"
@@ -876,14 +930,16 @@ broadcast_restart() {
 }
 
 restart_runtime() {
+  [[ "$transaction_owner" -eq 1 ]] ||
+    die "paired restart is owned by north-coord-runtime"
   named_promotion_failure=1
   load_selected
   named_promotion_failure=0
   acquire_restart_lock
   broadcast_restart
   release_lock
-  if ! systemctl restart "$systemd_unit"; then
-    die "restart-command-failed: systemctl restart $systemd_unit"
+  if ! systemctl restart "$restart_systemd_unit"; then
+    die "restart-command-failed: systemctl restart $restart_systemd_unit"
   fi
 }
 
@@ -902,6 +958,7 @@ refuse_takeover() {
 # one must not break status/promote/rollback.
 listener_serves_canonical_log() {
   local fram_package fram_binary output first_line status=0
+  local -a origin_env=()
 
   fram_package=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") ||
     die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
@@ -912,8 +969,12 @@ listener_serves_canonical_log() {
 
   # A wedged listener must not hang ExecStartPre until TimeoutStartSec; a
   # timed-out probe is simply an unproven listener, so preflight refuses.
+  if [[ "$single_origin" -eq 1 ]]; then
+    origin_env=(-u FRAM_TELEMETRY_LOG)
+  fi
   output=$(
     timeout "$preflight_probe_timeout" env \
+      "${origin_env[@]}" \
       FRAM_HOME="$fram_package/libexec/fram" \
       FRAM_BIN="$fram_package/bin" \
       FRAM_LOG="$NORTH_COORD_FRAM_LOG" \
@@ -994,6 +1055,8 @@ settle_runtime() {
 exec_checkout() {
   local target=$1
   shift
+  [[ "$transaction_owner" -eq 1 ]] ||
+    die "checkout execution is owned by north-coord-runtime"
   load_selected
   [[ "$runtime_mode" == checkout ]] ||
     die "selected Fram runtime is package mode; promote an exact checkout deployment"
