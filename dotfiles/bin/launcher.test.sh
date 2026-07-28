@@ -330,6 +330,16 @@ JSON
   check "$launcher/missing resume names the UUID" contains "$s" "$missing_id"
   check "$launcher/missing resume never launches provider" test ! -f "$RECORD"
 
+  run "$launcher" 0 -- --resume "$missing_id" --help ; s="$STDERR"
+  check "$launcher/help after missing UUID remains terminal" test "$STATUS" -eq 0
+  if [ "$launcher" = claude ]; then
+    missing_help_expected="$default_args --resume $missing_id --help"
+  else
+    missing_help_expected="$default_args resume $missing_id --help"
+  fi
+  check "$launcher/help after UUID reaches native CLI" \
+    test "$(record_field _ args)" = "$missing_help_expected"
+
   duplicate_id="12345678-1234-4234-8234-123456789abc"
   if [ "$launcher" = claude ]; then
     mkdir -p "$ROOT/acctA/projects/-duplicate" "$ROOT/acctB/projects/-duplicate"
@@ -358,6 +368,15 @@ JSON
     run "$launcher" 0 -- --resume "$mismatch_id" ; s="$STDERR"
     check "claude/mismatched transcript id is rejected" test "$STATUS" -ne 0
     check "claude/mismatched transcript never launches provider" test ! -f "$RECORD"
+
+    run "$launcher" 0 -- --help --resume "$missing_id" ; s="$STDERR"
+    check "claude/help stops resume owner parsing" test "$STATUS" -eq 0
+    check "claude/help reaches native CLI unchanged" \
+      test "$(record_field _ args)" = "$default_args --help --resume $missing_id"
+
+    run "$launcher" 0 -- -- --resume "$resume_id" ; s="$STDERR"
+    check "claude/double-dash prevents resume rewriting" \
+      test "$(record_field _ args)" = "$default_args -- --resume $resume_id"
   fi
 
   # Codex permits resume-subcommand options before SESSION_ID.
@@ -367,6 +386,16 @@ JSON
       test "$(record_field _ CODEX_HOME)" = "$owner"
     check "codex/native resume preserves option ordering" \
       test "$(record_field _ args)" = "$default_args resume --all $resume_id tail"
+
+    run "$launcher" 0 -- -C/tmp resume "$resume_id" tail ; s="$STDERR"
+    check "codex/attached global option still reaches resume owner lookup" \
+      test "$(record_field _ CODEX_HOME)" = "$owner"
+    check "codex/attached global option ordering is preserved" \
+      test "$(record_field _ args)" = "$default_args -C/tmp resume $resume_id tail"
+
+    run "$launcher" 0 -- resume -mgpt-5.6-terra "$resume_id" tail ; s="$STDERR"
+    check "codex/attached resume option still reaches owner lookup" \
+      test "$(record_field _ CODEX_HOME)" = "$owner"
 
     run "$launcher" 1 "NORTH_JSON=$eligible" -- \
       resume named-thread "$resume_id" ; s="$STDERR"
@@ -389,6 +418,21 @@ JSON
       -- --resume "$resume_id" ; s="$STDERR"
     check "codex/double-dash prevents friendly alias rewriting" \
       test "$(record_field _ args)" = "$default_args -- --resume $resume_id"
+
+    run "$launcher" 0 -- --help resume "$missing_id" ; s="$STDERR"
+    check "codex/top-level help stops resume owner parsing" test "$STATUS" -eq 0
+    check "codex/top-level help reaches native CLI unchanged" \
+      test "$(record_field _ args)" = "$default_args --help resume $missing_id"
+
+    run "$launcher" 0 -- resume --help "$missing_id" ; s="$STDERR"
+    check "codex/resume help stops session owner parsing" test "$STATUS" -eq 0
+    check "codex/resume help reaches native CLI unchanged" \
+      test "$(record_field _ args)" = "$default_args resume --help $missing_id"
+
+    run "$launcher" 0 -- resume "$missing_id" --help ; s="$STDERR"
+    check "codex/help after native resume UUID remains terminal" test "$STATUS" -eq 0
+    check "codex/help after native resume UUID reaches CLI unchanged" \
+      test "$(record_field _ args)" = "$default_args resume $missing_id --help"
   fi
 
   # 8f. Picker/search forms remain native. Codex's compatibility alias is

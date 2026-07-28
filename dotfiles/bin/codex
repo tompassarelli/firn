@@ -91,7 +91,8 @@ codex_option_has_attached_value() {
   case "$1" in
     --config=*|--enable=*|--disable=*|--remote=*|--remote-auth-token-env=*|\
     --image=*|--model=*|--local-provider=*|--profile=*|--sandbox=*|--cd=*|\
-    --add-dir=*|--ask-for-approval=*)
+    --add-dir=*|--ask-for-approval=*|\
+    -c?*|-i?*|-m?*|-p?*|-s?*|-C?*|-a?*)
       return 0
       ;;
     *)
@@ -103,7 +104,17 @@ codex_option_has_attached_value() {
 codex_known_flag() {
   case "$1" in
     --strict-config|--oss|--dangerously-bypass-approvals-and-sandbox|\
-    --dangerously-bypass-hook-trust|--search|--no-alt-screen|\
+    --dangerously-bypass-hook-trust|--search|--no-alt-screen)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+codex_terminal_flag() {
+  case "$1" in
     -h|--help|-V|--version)
       return 0
       ;;
@@ -129,8 +140,18 @@ if [ "${1:-}" != "as" ]; then
   resume_alias=0
   resume_equals=0
   resume_last=0
+  resume_terminal=0
   skip_value=0
   argv=("$@")
+  for entry in "${argv[@]}"; do
+    case "$entry" in
+      --) break ;;
+      -h|--help|-V|--version)
+        resume_terminal=1
+        break
+        ;;
+    esac
+  done
   for index in "${!argv[@]}"; do
     if [ "$skip_value" -eq 1 ]; then
       skip_value=0
@@ -168,6 +189,8 @@ if [ "${1:-}" != "as" ]; then
             *)
               if codex_option_takes_value "${argv[$next]}"; then
                 skip_resume_value=1
+              elif codex_terminal_flag "${argv[$next]}"; then
+                break
               elif codex_option_has_attached_value "${argv[$next]}" ||
                    codex_known_flag "${argv[$next]}"; then
                 :
@@ -208,6 +231,8 @@ if [ "${1:-}" != "as" ]; then
       *)
         if codex_option_takes_value "${argv[$index]}"; then
           skip_value=1
+        elif codex_terminal_flag "${argv[$index]}"; then
+          break
         elif codex_option_has_attached_value "${argv[$index]}" ||
              codex_known_flag "${argv[$index]}"; then
           :
@@ -235,7 +260,8 @@ if [ "${1:-}" != "as" ]; then
   fi
 
   uuid_re='^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
-  if [ "$resume_last" -eq 0 ] && [ "$resume_index" -ge 0 ] &&
+  if [ "$resume_terminal" -eq 0 ] && [ "$resume_last" -eq 0 ] &&
+     [ "$resume_index" -ge 0 ] &&
      [[ "$resume_id" =~ $uuid_re ]]; then
     resolver="$(dirname "$self")/north-session-resolve"
     if [ ! -x "$resolver" ]; then

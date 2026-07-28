@@ -86,9 +86,24 @@ if [ "${1:-}" != "as" ]; then
   resume_index=-1
   resume_id=""
   resume_equals=0
+  resume_terminal=0
   argv=("$@")
+  for entry in "${argv[@]}"; do
+    case "$entry" in
+      --) break ;;
+      -h|--help|-v|--version)
+        resume_terminal=1
+        break
+        ;;
+    esac
+  done
   for index in "${!argv[@]}"; do
     case "${argv[$index]}" in
+      --|-h|--help|-v|--version)
+        # Everything after `--` is prompt text; help/version are terminal.
+        # Neither may be reinterpreted as a later resume request.
+        break
+        ;;
       -r|--resume)
         next=$((index + 1))
         if [ "$next" -lt "${#argv[@]}" ]; then
@@ -107,7 +122,8 @@ if [ "${1:-}" != "as" ]; then
   done
 
   uuid_re='^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
-  if [ "$resume_index" -ge 0 ] && [[ "$resume_id" =~ $uuid_re ]]; then
+  if [ "$resume_terminal" -eq 0 ] && [ "$resume_index" -ge 0 ] &&
+     [[ "$resume_id" =~ $uuid_re ]]; then
     resolver="$(dirname "$self")/north-session-resolve"
     if [ ! -x "$resolver" ]; then
       echo "claude: cross-account resume resolver is unavailable: $resolver" >&2
