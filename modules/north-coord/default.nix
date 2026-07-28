@@ -85,7 +85,6 @@ in
     systemd.sockets.north-coord = lib.mkIf config.myConfig.modules.north-coord.socketActivation {
       description = "North coordinator activation socket (:7977)";
       wantedBy = [ "sockets.target" ];
-      stopIfChanged = false;
       listenStreams = [ "127.0.0.1:7977" ];
       socketConfig = {
         Backlog = 4096;
@@ -95,7 +94,6 @@ in
     systemd.sockets.north-telemetry-coord = lib.mkIf stageA {
       description = "North telemetry coordinator activation socket (:7978)";
       wantedBy = [ "sockets.target" ];
-      stopIfChanged = false;
       listenStreams = [ "127.0.0.1:7978" ];
       socketConfig = {
         Backlog = 4096;

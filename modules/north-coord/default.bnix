@@ -141,9 +141,9 @@
             {:description  "North coordinator activation socket (:7977)"
              ;; The public socket is infrastructure, not a member of one
              ;; database generation. Keep it bound across pair replacement and
-             ;; NixOS activation so clients queue instead of seeing ECONNREFUSED.
+             ;; ordinary NixOS activation so clients queue instead of seeing
+             ;; ECONNREFUSED.
              :wantedBy     ["sockets.target"]
-             :stopIfChanged false
              :listenStreams ["127.0.0.1:7977"]
              :socketConfig {:Backlog 4096
                             :FileDescriptorName "north-coord"}})
@@ -151,7 +151,6 @@
           (lib.mkIf stageA
             {:description  "North telemetry coordinator activation socket (:7978)"
              :wantedBy     ["sockets.target"]
-             :stopIfChanged false
              :listenStreams ["127.0.0.1:7978"]
              :socketConfig {:Backlog 4096
                             ;; north-coord-sd-listen validates the inherited
