@@ -30,3 +30,32 @@ Durable personal worktrees live under a project-scoped root:
   a tool creates and manages (temp build trees, harness scratch) stay wherever
   the tool puts them; this policy governs only durable human/agent worktrees.
 
+## Launch-critical repos — agents never edit the primary
+
+`~/code/fram`, `~/code/north`, and `~/code/beagle` are **launch-critical**: a
+running daemon or a rebuild reads them, so a half-finished edit in the primary
+checkout is not a private work-in-progress, it is a broken engine for everyone.
+
+**An agent editing any of these three works in a worktree, never in
+`~/code/<project>` itself.** Use `EnterWorktree`, or
+`git -C ~/code/<project> worktree add ~/code/worktrees/<project>/<slug>`.
+The human's own primary checkout is unaffected by this rule.
+
+The two repos fail differently, and both failures are real:
+
+- **fram — hard deadlock.** `north up` refuses to launch on a tracked-dirty Fram
+  checkout, on purpose: a coordinator serving a half-edited engine is worse than
+  one that refuses. Observed 2026-07-29 — an agent left ten modified files in
+  `~/code/fram`, so the coordinator could not be restarted, so a rebuilt closure
+  could not be adopted, so a measured 200x performance fix sat built-but-unused
+  while every `firn rebuild` reported failure *after the build had already
+  succeeded*. One dirty primary stalled the whole machine.
+- **north / beagle / nixos-config — silent exclusion.** `firn rebuild` builds a
+  COMMIT SNAPSHOT, so uncommitted work is simply not in the generation. Nothing
+  errors; the change just doesn't take, which reads as "the fix didn't work"
+  and sends the next agent debugging code that never shipped.
+
+The general rule the three repos are instances of: **if something launches from
+a checkout, that checkout is production.** Edit production in a worktree and
+land through a ref, the same as you would a deploy.
+
