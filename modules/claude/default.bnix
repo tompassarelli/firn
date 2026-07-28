@@ -75,14 +75,7 @@
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
                         "/code/nixos-config/dotfiles/code/CLAUDE.md"))}
-                 ;; caveman defaultMode — lives in the dotfile now, flipped by
-                 ;; `my-config caveman default <mode>`. Out-of-store symlink so
-                 ;; the flip takes effect without a rebuild.
-                 ".config/caveman/config.json"
-                  {:source
-                    (config.lib.file.mkOutOfStoreSymlink
-                      (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/caveman/config.json"))}}
+                 }
                ;; Atomically seed settings from this exact generation into a
                ;; writable regular file. Claude may mutate it at runtime; the next
                ;; generation converges it before plugin reconciliation runs.
@@ -107,38 +100,6 @@
                      " "
                      claudeSettingsSeed
                      " $HOME/.claude/settings.json\n"))
-               ;; Runs AFTER seedClaudeSettings so settings.json is a writable
-               ;; regular file before `claude plugin install` atomically rewrites it.
-               :home.activation.installCaveman
-                (config.lib.dag.entryAfter ["writeBoundary" "seedClaudeSettings"]
-                  (s "CLAUDE=" claudePackage "/bin/claude\n"
-                     ;; Bump WANT together with the fork's .claude-plugin/
-                     ;; marketplace.json pin: it's the first 12 chars of the
-                     ;; pinned commit sha = the on-disk cache dir name.
-                     "WANT=37c28ebb1e0a\n"
-                     ;; `claude plugin install` clones the plugin repo over SSH
-                     ;; (git@github.com); this host talks to GitHub over HTTPS,
-                     ;; so redirect that one clone with a throwaway git config
-                     ;; (public repo → no creds needed).
-                     ;; run-wrapped for dry-run purity ($(run mktemp), not `run GITC=…`
-                     ;; — an assignment word after `run` would be command-not-found).
-                     "GITC=$(run mktemp)\n"
-                     "run " pkgs.git "/bin/git config -f \"$GITC\" url.\"https://github.com/\".insteadOf \"git@github.com:\"\n"
-                     "if [ ! -e $HOME/.claude/plugins/cache/caveman ]; then\n"
-                     "  run timeout 90 $CLAUDE plugin marketplace add tompassarelli/caveman || true\n"
-                     "  run timeout 90 env GIT_CONFIG_GLOBAL=\"$GITC\" $CLAUDE plugin install caveman@caveman || true\n"
-                     "elif [ ! -e $HOME/.claude/plugins/cache/caveman/caveman/$WANT ]; then\n"
-                     ;; Pin moved. `install` no-ops when present and `update`
-                     ;; needs SSH, so the only reliable upgrade is uninstall +
-                     ;; install after refreshing the marketplace metadata.
-                     "  run timeout 90 $CLAUDE plugin marketplace update caveman || true\n"
-                     "  run timeout 90 $CLAUDE plugin uninstall caveman@caveman || true\n"
-                     "  run timeout 90 env GIT_CONFIG_GLOBAL=\"$GITC\" $CLAUDE plugin install caveman@caveman || true\n"
-                     ;; Reap stale pin dirs — uninstall+install leaves the old
-                     ;; $WANT cache behind forever otherwise.
-                     "  run find $HOME/.claude/plugins/cache/caveman/caveman -mindepth 1 -maxdepth 1 ! -name \"$WANT\" -exec rm -rf {} + || true\n"
-                     "fi\n"
-                     "run rm -f \"$GITC\"\n"))
                ;; MCP server registration — reproducible, so a fresh rebuild wires the
                ;; North, FRAM, and Linear user-scope servers instead of relying on
                ;; loose `claude mcp add` state in ~/.claude.json. Presence and shape

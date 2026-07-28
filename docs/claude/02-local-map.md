@@ -36,26 +36,18 @@ What the `~/code/nixos-config/modules/claude` module materializes into `~/.claud
 ## Layer 1 — LOCAL: runtime wiring (`settings.json` + plugin manifests)
 
 - **statusLine** → `bash "$HOME/code/nixos-config/dotfiles/claude/statusline.sh"`
-- **enabledPlugins** → `rust-analyzer-lsp@claude-plugins-official`, `typescript-lsp@claude-plugins-official`, `caveman@caveman`
 - **hooks** (Claude Code fires these at lifecycle points; `⟨src⟩` = settings.json or the plugin that contributes it):
-  - `SessionStart` → `beagle-session-start.sh` ⟨settings⟩, `north-on-spawn` ⟨settings⟩, `caveman-activate.js` ⟨caveman⟩
-  - `UserPromptSubmit` → `caveman-mode-tracker.js` ⟨caveman⟩
   - `PreToolUse` → `claim-canonical-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `tripwire-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩
   - `PostToolUse` → `racket-build-guard.sh` ⟨settings⟩, `north-on-tooluse` ⟨settings⟩
-  - `Stop` → `caveman-session-stats.js` ⟨caveman⟩
 
 ### Control flow (lifecycle spine)
 
 ```mermaid
 flowchart TD
   A[session start] --> B{SessionStart}
-  B -->|"beagle-session-start.sh · north-on-spawn · caveman-activate.js"| C[turn loop]
   C --> D{UserPromptSubmit}
-  D -->|"caveman-mode-tracker.js"| E["model responds + tools"]
   E -.->|"PreToolUse: claim-canonical-guard.sh · firn-guard.sh · tripwire-guard.sh"| E
   E --> F{Stop}
-  F -->|"caveman-session-stats.js"| C
-  G[statusLine] -.->|"every render"| Hs[(".caveman-active + suffix")]
 ```
 
 ## Layer 2 — SUBSTRATE: what the config points at
@@ -67,7 +59,6 @@ flowchart TD
 | `rust-analyzer-lsp@claude-plugins-official` | `1.0.0` | `~/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0` |
 | `typescript-lsp@claude-plugins-official` | `1.0.0` | `~/.claude/plugins/cache/claude-plugins-official/typescript-lsp/1.0.0` |
 | `lean@leanprover` | `0.1.0` | `~/.claude/plugins/cache/leanprover/lean/0.1.0` |
-| `caveman@caveman` | `37c28ebb1e0a` | `~/.claude/plugins/cache/caveman/caveman/37c28ebb1e0a` |
 
 **MCP servers** (user scope — where north plugs into Claude):
 

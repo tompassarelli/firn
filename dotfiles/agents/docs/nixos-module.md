@@ -7,9 +7,7 @@ out-of-store symlinks into `~/code/nixos-config/dotfiles/claude/`
 (`commands` / `skills` / `hooks` / `agents` / `CLAUDE.md`, plus the
 `~/code/CLAUDE.md` routing file), Orchestration's cached-plugin reconciliation, and MCP
 server registration (`fram`, `north`, `linear-mcp-msa-new`). All activation entries are best-effort
-(`timeout … || true`) so a network blip never fails a rebuild. (The caveman
 plugin install was decommissioned 2026-07-23 — see thread
-019f8ee2-22fe-7894-be59-697e56c1b55a; `dotfiles/caveman/config.json` remains
 as an untouched Phase 2 archive candidate.)
 
 Why everything routes through nixos-config (reproducibility rule, CI
@@ -70,17 +68,11 @@ Codex and North have no cache pointer: the shared
 `~/code/north/orchestration/staffing/catalog.json`, provider catalogs, and
 Orchestration prompt blocks directly.
 
-## caveman plugin — DECOMMISSIONED 2026-07-23
 
-The caveman plugin (fork `tompassarelli/caveman`, marketplace entry, statusline
-segment, `installCaveman`/`syncOrchestrationPlugin`-style activation) was unplugged
 from this repo's settings.json and statusline per North thread
 019f8ee2-22fe-7894-be59-697e56c1b55a — savings were unproven and the fork
-carried preservation debt. `dotfiles/caveman/config.json` is left in place,
 default off, as a Phase 2 archive candidate; the plugin install/marketplace
-wiring in `modules/claude/default.bnix` and the `~/code/caveman` repo itself
 are Phase 2 scope, not yet removed. See the thread for the full rationale and
-the remaining north-side dial (`north config caveman`, `AGENT_CAVEMAN`).
 
 ## MCP servers
 

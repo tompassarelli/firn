@@ -150,9 +150,8 @@ def basename(cmd):
 
 def gather_hooks():
     """Merge hooks from settings.json AND every enabled plugin's plugin.json,
-    keyed by lifecycle event. Plugin-contributed hooks (e.g. caveman's Stop
-    hook) are INVISIBLE in settings.json alone — they live in the plugin
-    manifest. Each entry is (hook-name, source) where source is 'settings' or
+    keyed by lifecycle event. Plugin-contributed hooks are INVISIBLE in
+    settings.json alone — they live in the plugin manifest. Each entry is (hook-name, source) where source is 'settings' or
     the plugin name."""
     s = load_settings()
     plugins = load_plugins()
@@ -291,7 +290,6 @@ def render():
         w(f'  E -.->|"PreToolUse: {pre}"| E')
     w('  E --> F{Stop}')
     w(f'  F -->|"{edge_label("Stop")}"| C')
-    w('  G[statusLine] -.->|"every render"| Hs[(".caveman-active + suffix")]')
     w("```")
     w("")
 

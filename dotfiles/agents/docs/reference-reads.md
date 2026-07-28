@@ -52,7 +52,6 @@ pointers worth returning to.
 - `~/code/reference/ponytail/benchmarks/` — real headless Claude Code sessions,
   fresh repo per arm, `git diff` LOC scoring, adversarial safety tier. The
   methodology to copy if we ever benchmark compression/ESO variants properly
-  (caveman itself decommissioned 2026-07-23, see 019f8ee2-22fe-7894-be59-697e56c1b55a).
 - `~/code/reference/honey-for-devs/bench/` — multi-model judge panel (4-model
   median), 3-tier task split (code / user-facing / agent-to-agent). Includes an
   honestly-documented negative result (prompt precompression: 2.5% real-world —

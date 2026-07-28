@@ -533,7 +533,7 @@ def north_config_mutation(args):
     if not rest or rest[0] in ("status", "help", "-h", "--help"):
         return None
     read_only = {
-        ("guards",), ("dispatch",), ("coord",), ("caveman",),
+        ("guards",), ("dispatch",), ("coord",),
         ("beagle",), ("beagle", "list"),
         ("routing",), ("routing", "show"),
     }
