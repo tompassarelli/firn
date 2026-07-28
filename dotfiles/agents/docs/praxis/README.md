@@ -38,6 +38,17 @@ payload and §12 compilation method + trial predictions). It is calibration
 evidence, not routing policy; current provider catalogs and North availability
 signals decide whether any concrete model is eligible.
 
+## Verification override — OpenAI lanes
+
+`verification-override-openai.md` — paste-able brief block binding the
+verification doctrine
+(`~/code/nixos-config/dotfiles/agents/docs/verification-doctrine.md`) as
+imperatives: terminal states per pass, claim contracts, tier fixed at intake,
+probe budgets, stop rule. Attach to every OpenAI-provider lane doing
+implementation or verification work. Demand provenance per the freeze rule:
+repeated verification tarpits in unsupervised OpenAI lanes (2026-07, fram
+cache work).
+
 ## Change policy — the freeze rule
 
 Edit this structure only after a real spawn hit a misfit **twice**. Never

@@ -130,6 +130,13 @@ still looks like data. When a hypothesis is load-bearing enough to act on,
 run the cheapest experiment that could FALSIFY it, not the next inference
 that could support it — move the input and check whether the metric moves.
 
+Full verification doctrine — claim contracts, paranoia tiers P0–P3, the
+one-sentence stop rule, anti-tarpit laws: →
+`~/code/nixos-config/dotfiles/agents/docs/verification-doctrine.md`
+Read when setting a bar/tier at intake, briefing a verifier, or a lane won't
+converge on done. OpenAI-lane brief override (paste-able): →
+`~/code/nixos-config/dotfiles/agents/docs/praxis/verification-override-openai.md`
+
 Style: terse by default — no filler, no hedging, full sentences; brevity
 comes from content selection, never compression tricks.
 
