@@ -25,7 +25,7 @@ in
         };
         Timer = {
           OnStartupSec = "2m";
-          OnUnitActiveSec = "5m";
+          OnUnitInactiveSec = "5m";
           Persistent = true;
         };
         Install = {

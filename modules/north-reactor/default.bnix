@@ -31,7 +31,8 @@
             (nix/module [config ...]
               {:systemd.user.services.north-reactor-sweep
                 {:Unit
-                  {:Description "North reactor sweep — reap stale concerns + silently-dead lanes"}
+                  {:Description "North reactor sweep — reap stale concerns + silently-dead lanes"
+                   :X-SwitchMethod "keep-old"}
                  ;; Home Manager applies unit changes synchronously. This periodic
                  ;; reaper must wait for its timer instead of restarting mid-switch.
                  :restartIfChanged false
@@ -45,6 +46,6 @@
                   {:Description "Run the north reactor liveness sweep periodically"}
                  :Timer
                   {:OnStartupSec    "3m"
-                   :OnUnitActiveSec "5m"
+                   :OnUnitInactiveSec "5m"
                    :Persistent      true}
                  :Install {:WantedBy ["timers.target"]}}})}})}))

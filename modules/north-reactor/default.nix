@@ -11,6 +11,7 @@ in
       systemd.user.services.north-reactor-sweep = {
         Unit = {
           Description = "North reactor sweep — reap stale concerns + silently-dead lanes";
+          X-SwitchMethod = "keep-old";
         };
         restartIfChanged = false;
         Service = {
@@ -26,7 +27,7 @@ in
         };
         Timer = {
           OnStartupSec = "3m";
-          OnUnitActiveSec = "5m";
+          OnUnitInactiveSec = "5m";
           Persistent = true;
         };
         Install = {
