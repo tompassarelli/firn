@@ -462,6 +462,18 @@ classify_north_coord_exec "$selector_exec"
 [ "$NORTH_COORD_EXEC_KIND" = runtime-selector ]
 [ "$NORTH_COORD_EXEC_PATH" = "$selector_path" ]
 
+socket_wrapper_path="/nix/store/${nix_hash}-north-coord-sd-listen-checked/bin/north-coord-sd-listen"
+socket_exec="{ path=$socket_wrapper_path ; argv[]=$socket_wrapper_path $selector_path start ; ignore_errors=no ; }"
+classify_north_coord_exec "$socket_exec"
+[ "$NORTH_COORD_EXEC_KIND" = socket-runtime-selector ]
+[ "$NORTH_COORD_EXEC_PATH" = "$socket_wrapper_path" ]
+
+if classify_north_coord_exec "{ path=$socket_wrapper_path ; argv[]=$socket_wrapper_path /bin/true ; }"; then
+  printf 'socket launcher without the runtime selector was accepted\n' >&2
+  exit 1
+fi
+[ "$NORTH_COORD_EXEC_KIND" = unrecognized ]
+
 pinned_path="/nix/store/${nix_hash}-fram-0-unstable-2026-06-28/bin/fram-daemon"
 pinned_exec="{ path=$pinned_path ; argv[]=$pinned_path 7977 /home/tom/.local/state/north/coordination.log ; ignore_errors=no ; }"
 if classify_north_coord_exec "$pinned_exec"; then

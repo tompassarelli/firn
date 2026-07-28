@@ -290,6 +290,14 @@ classify_north_coord_exec() {
     NORTH_COORD_EXEC_KIND='runtime-selector'
     return 0
   fi
+  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-north-coord-sd-listen-checked/bin/north-coord-sd-listen$ ]] &&
+     [[ "$exec_spec" =~ /nix/store/[a-z0-9]{32}-north-coord-runtime/bin/north-coord-runtime[[:space:]]+start ]]; then
+    # Socket activation deliberately inserts one immutable fd-validation
+    # launcher ahead of the same runtime selector. Accept only the complete
+    # wrapper -> selector chain; the wrapper by itself is not runtime authority.
+    NORTH_COORD_EXEC_KIND='socket-runtime-selector'
+    return 0
+  fi
   if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*/bin/fram-daemon$ ]]; then
     NORTH_COORD_EXEC_KIND='direct-package'
     return 1
