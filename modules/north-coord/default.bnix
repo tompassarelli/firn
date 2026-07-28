@@ -96,6 +96,14 @@
            ;; restart use the drill: systemctl restart after rebuild-intent.
            :environment           {:HOME homeDir
                                    :FRAM_REQUIRE_LOG_FENCE "1"
+                                   ;; Query wall-clock ceiling. The engine default
+                                   ;; (5s) fell below production agg-scan cost at
+                                   ;; ~100k facts (2026-07-28 read-path outage:
+                                   ;; concern ls, presence, spawn admission).
+                                   ;; Interim until the index/caching cuts land;
+                                   ;; clients can still lower it per-request,
+                                   ;; never raise it.
+                                   :FRAM_QUERY_TIMEOUT_MS "30000"
                                    :FRAM_TELEMETRY_LOG (s homeDir "/.local/state/north/telemetry.log")
                                    ;; JDK launcher seam (java itself honors this env
                                    ;; var since JDK 9, ahead of any app args) — applies

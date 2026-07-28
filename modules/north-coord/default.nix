@@ -58,6 +58,7 @@ in
       environment = {
         HOME = homeDir;
         FRAM_REQUIRE_LOG_FENCE = "1";
+        FRAM_QUERY_TIMEOUT_MS = "30000";
         FRAM_TELEMETRY_LOG = "${homeDir}/.local/state/north/telemetry.log";
         JDK_JAVA_OPTIONS = "-Xmx6g";
       };
