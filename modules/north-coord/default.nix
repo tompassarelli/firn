@@ -19,6 +19,7 @@ let
   telemetryRuntimeState = "${homeDir}/.local/state/north/fram-telemetry-runtime";
   stageA = config.myConfig.modules.north-coord.stageATelemetryPartition;
   pairTarget = "north-coord-pair.target";
+  pairPrepareUnit = "north-coord-pair-prepare.service";
   mkNorthCoordRuntime = name: state: primaryLog: peerLog: port: unit: transactionOwner: pkgs.writeShellApplication {
     name = name;
     runtimeInputs = with pkgs; [ bash coreutils git iproute2 systemd util-linux ];
@@ -37,6 +38,7 @@ let
       export NORTH_COORD_TRANSACTION_OWNER=${transactionOwner}
       export NORTH_COORD_CORPUS_SYSTEMD_UNIT=${if stageA then pairTarget else unit}
       export NORTH_COORD_RESTART_SYSTEMD_UNIT=${if stageA then pairTarget else unit}
+      export NORTH_COORD_RESTART_PREPARE_SYSTEMD_UNIT=${if stageA then pairPrepareUnit else ""}
       ${builtins.readFile ./north-coord-runtime}
     '';
   };

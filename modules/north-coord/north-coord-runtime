@@ -54,6 +54,7 @@ single_origin=${NORTH_COORD_SINGLE_ORIGIN:-0}
 transaction_owner=${NORTH_COORD_TRANSACTION_OWNER:-1}
 corpus_systemd_unit=${NORTH_COORD_CORPUS_SYSTEMD_UNIT:-$systemd_unit}
 restart_systemd_unit=${NORTH_COORD_RESTART_SYSTEMD_UNIT:-$systemd_unit}
+restart_prepare_systemd_unit=${NORTH_COORD_RESTART_PREPARE_SYSTEMD_UNIT:-}
 telemetry_port=${NORTH_COORD_TELEMETRY_PORT:-7978}
 # Test seam: redirects ONLY the listener-cgroup lookup, so the occupied-port
 # window can be simulated without binding a real socket. Process-birth tokens
@@ -96,6 +97,10 @@ esac
   die "corpus controller unit name is invalid: $corpus_systemd_unit"
 [[ "$restart_systemd_unit" =~ ^[A-Za-z0-9_.@-]+\.(service|target)$ ]] ||
   die "restart controller unit name is invalid: $restart_systemd_unit"
+if [[ -n "$restart_prepare_systemd_unit" ]]; then
+  [[ "$restart_prepare_systemd_unit" =~ ^[A-Za-z0-9_.@-]+\.service$ ]] ||
+    die "restart preparation unit name is invalid: $restart_prepare_systemd_unit"
+fi
 [[ "$origin_name" =~ ^[a-z][a-z0-9-]*$ ]] ||
   die "origin name is invalid: $origin_name"
 [[ "$single_origin" =~ ^[01]$ ]] ||
@@ -930,16 +935,20 @@ broadcast_restart() {
 }
 
 restart_runtime() {
+  local -a restart_units=("$restart_systemd_unit")
   [[ "$transaction_owner" -eq 1 ]] ||
     die "paired restart is owned by north-coord-runtime"
+  if [[ -n "$restart_prepare_systemd_unit" ]]; then
+    restart_units=("$restart_prepare_systemd_unit" "$restart_systemd_unit")
+  fi
   named_promotion_failure=1
   load_selected
   named_promotion_failure=0
   acquire_restart_lock
   broadcast_restart
   release_lock
-  if ! systemctl restart "$restart_systemd_unit"; then
-    die "restart-command-failed: systemctl restart $restart_systemd_unit"
+  if ! systemctl restart "${restart_units[@]}"; then
+    die "restart-command-failed: systemctl restart ${restart_units[*]}"
   fi
 }
 

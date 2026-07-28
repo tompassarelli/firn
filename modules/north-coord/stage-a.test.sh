@@ -198,6 +198,9 @@ grep -Fxq 'telemetry-port=7978' "$on"
 grep -Fq '/bin/north-coord-runtime start' "$on"
 grep -Fq '/bin/north-telemetry-coord-runtime start' "$on"
 on_wrapper=$(sed -n 's/^north-wrapper=//p' "$on")
+on_coord_command=$(sed -n 's/^coord-exec=\(.*\) start$/\1/p' "$on")
+on_coord=${on_coord_command##* }
+test -x "$on_coord"
 grep -Fq 'export NORTH_TELEMETRY_PARTITION=1' "$on_wrapper/bin/north"
 grep -Fq 'export NORTH_TELEMETRY_PORT=7978' "$on_wrapper/bin/north"
 grep -Fq 'FRAM_TELEMETRY_LOG=/tmp/north-stage-a-fixture/.local/state/north/telemetry.log' \
@@ -208,9 +211,12 @@ grep -Fxq 'assertion=false' "$invalid"
 
 grep -Fq 'unset FRAM_TELEMETRY_LOG NORTH_TELEMETRY_PARTITION NORTH_TELEMETRY_PORT' \
   "$here/north-coord-runtime"
-# Assert the literal runtime command.
+# Assert the literal pair-preparation wiring and runtime command.
 # shellcheck disable=SC2016
-grep -Fq 'systemctl restart "$restart_systemd_unit"' \
+grep -Fq 'export NORTH_COORD_RESTART_PREPARE_SYSTEMD_UNIT=north-coord-pair-prepare.service' \
+  "$on_coord"
+# shellcheck disable=SC2016
+grep -Fq 'systemctl restart "${restart_units[@]}"' \
   "$here/north-coord-runtime"
 # Assert the literal runtime assignment.
 # shellcheck disable=SC2016

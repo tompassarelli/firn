@@ -46,6 +46,7 @@
         stageA
           config.myConfig.modules.north-coord.stageATelemetryPartition
         pairTarget "north-coord-pair.target"
+        pairPrepareUnit "north-coord-pair-prepare.service"
         mkNorthCoordRuntime
           (fn [name state primaryLog peerLog port unit transactionOwner]
             (pkgs.writeShellApplication
@@ -68,6 +69,8 @@
                        (if stageA pairTarget unit))
                     (s "export NORTH_COORD_RESTART_SYSTEMD_UNIT="
                        (if stageA pairTarget unit))
+                    (s "export NORTH_COORD_RESTART_PREPARE_SYSTEMD_UNIT="
+                       (if stageA pairPrepareUnit ""))
                     (builtins.readFile (p "./north-coord-runtime")))}))
         northCoordRuntime
           (mkNorthCoordRuntime
