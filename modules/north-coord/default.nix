@@ -55,7 +55,6 @@ let
     WorkingDirectory = homeDir;
     Restart = "always";
     RestartSec = 2;
-    MemoryMax = "8G";
     MemorySwapMax = "0";
   };
 in
@@ -85,8 +84,7 @@ in
     });
     systemd.sockets.north-coord = lib.mkIf config.myConfig.modules.north-coord.socketActivation {
       description = "North coordinator activation socket (:7977)";
-      wantedBy = if stageA then [ ] else [ "sockets.target" ];
-      partOf = lib.optional stageA pairTarget;
+      wantedBy = [ "sockets.target" ];
       listenStreams = [ "127.0.0.1:7977" ];
       socketConfig = {
         Backlog = 4096;
@@ -95,7 +93,7 @@ in
     };
     systemd.sockets.north-telemetry-coord = lib.mkIf stageA {
       description = "North telemetry coordinator activation socket (:7978)";
-      partOf = [ pairTarget ];
+      wantedBy = [ "sockets.target" ];
       listenStreams = [ "127.0.0.1:7978" ];
       socketConfig = {
         Backlog = 4096;
@@ -149,10 +147,11 @@ in
       after = ([ "network.target" ] ++ lib.optional config.myConfig.modules.north-coord.socketActivation "north-coord.socket" ++ lib.optional stageA "north-coord-pair-prepare.service");
       path = with pkgs; [ clojure jdk bash coreutils git ];
       startLimitIntervalSec = 0;
-      restartIfChanged = true;
-      stopIfChanged = true;
+      restartIfChanged = false;
+      stopIfChanged = false;
       environment = serviceEnvironment;
       serviceConfig = (serviceConfigBase // {
+        MemoryMax = "24G";
         ExecStartPre = if stageA then [ ] else [
           "${northCoordRuntime}/bin/north-coord-runtime ensure-default"
           "${northCoordRuntime}/bin/north-coord-runtime prepare"
@@ -172,12 +171,13 @@ in
       ];
       path = with pkgs; [ clojure jdk bash coreutils git ];
       startLimitIntervalSec = 0;
-      restartIfChanged = true;
-      stopIfChanged = true;
+      restartIfChanged = false;
+      stopIfChanged = false;
       environment = (serviceEnvironment // {
         FRAM_TELEMETRY_LOG = "${homeDir}/.local/state/north/coordination.log";
       });
       serviceConfig = (serviceConfigBase // {
+        MemoryMax = "8G";
         ExecStart = "${northCoordSdListenChecked}/bin/north-coord-sd-listen ${northTelemetryCoordRuntime}/bin/north-telemetry-coord-runtime start";
       });
     };

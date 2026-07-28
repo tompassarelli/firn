@@ -99,7 +99,6 @@
            :WorkingDirectory homeDir
            :Restart          "always"
            :RestartSec       2
-           :MemoryMax        "8G"
            :MemorySwapMax    "0"}]
     {:options.myConfig.modules.north-coord.enable
       (lib.mkEnableOption "Personal North coordinator daemon (:7977) — sole-writer fact-graph service for Tom's canonical log")
@@ -140,15 +139,17 @@
          :systemd.sockets.north-coord
           (lib.mkIf config.myConfig.modules.north-coord.socketActivation
             {:description  "North coordinator activation socket (:7977)"
-             :wantedBy     (if stageA [] ["sockets.target"])
-             :partOf       (lib.optional stageA pairTarget)
+             ;; The public socket is infrastructure, not a member of one
+             ;; database generation. Keep it bound across pair replacement and
+             ;; NixOS activation so clients queue instead of seeing ECONNREFUSED.
+             :wantedBy     ["sockets.target"]
              :listenStreams ["127.0.0.1:7977"]
              :socketConfig {:Backlog 4096
                             :FileDescriptorName "north-coord"}})
          :systemd.sockets.north-telemetry-coord
           (lib.mkIf stageA
             {:description  "North telemetry coordinator activation socket (:7978)"
-             :partOf       [pairTarget]
+             :wantedBy     ["sockets.target"]
              :listenStreams ["127.0.0.1:7978"]
              :socketConfig {:Backlog 4096
                             ;; north-coord-sd-listen validates the inherited
@@ -212,18 +213,22 @@
            ;; listener therefore fails north-coord.socket itself; the service
            ;; never mistakes its inherited system socket for a foreign owner.
            :startLimitIntervalSec 0
-           ;; A configuration switch must retire the active process when its
-           ;; loaded unit changes. Otherwise socket activation can relaunch the
-           ;; stale ExecStart after daemon-reload, leaving the coordinator on
-           ;; the previous package revision. stopIfChanged also makes the NixOS
-           ;; switch quiesce the associated socket before loading the new unit.
-           :restartIfChanged      true
-           :stopIfChanged         true
+           ;; A system generation change is not a database cutover. Keep the
+           ;; serving process alive; an explicit, readiness-gated coordinator
+           ;; handoff promotes the new Fram runtime separately. The permanent
+           ;; socket above remains owned by systemd throughout either operation.
+           :restartIfChanged      false
+           :stopIfChanged         false
            :environment           serviceEnvironment
            :serviceConfig
             (//
              serviceConfigBase
              {
+             ;; A merged coordination graph can transiently retain an old
+             ;; immutable Store, a candidate Store, and query indexes together.
+             ;; Keep native/JVM overhead outside the -Xmx6g heap from tripping a
+             ;; cgroup kill while the incremental reload path bounds that peak.
+             :MemoryMax "24G"
              ;; Socket ownership removes the old stop/bind race. The adapter
              ;; validates LISTEN_FDS before the selected Fram runtime starts.
              :ExecStartPre
@@ -253,16 +258,17 @@
                      "north-coord-pair-prepare.service"]
              :path (nix/with pkgs [clojure jdk bash coreutils git])
              :startLimitIntervalSec 0
-             :restartIfChanged true
-             :stopIfChanged true
+             :restartIfChanged false
+             :stopIfChanged false
              :environment
               (// serviceEnvironment
                   {:FRAM_TELEMETRY_LOG
                     (s homeDir "/.local/state/north/coordination.log")})
              :serviceConfig
               (//
-               serviceConfigBase
-               {:ExecStart
+              serviceConfigBase
+               {:MemoryMax "8G"
+                :ExecStart
                  (s northCoordSdListenChecked "/bin/north-coord-sd-listen "
                     northTelemetryCoordRuntime
                     "/bin/north-telemetry-coord-runtime start")})})})}))
