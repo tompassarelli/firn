@@ -47,6 +47,21 @@ check allow "$HOME/code/worktrees/fram/topic/coord_daemon.clj" "durable worktree
 check allow "/tmp/north-lane-abc123/cli/x.clj"                 "managed lane worktree"
 check allow "/tmp/fram-indexed-show-lane/bin/fram-fast.clj"    "ad-hoc lane worktree"
 
+# --- 2b. gitignored paths are exempt ----------------------------------------
+# A gitignored file can never make the tree tracked-dirty, so it cannot cause
+# either failure this guard prevents (`north up` refusing a dirty Fram checkout,
+# `firn rebuild` snapshotting only committed state). Blocking them bought
+# nothing and stopped agents writing docs/private/ notes — which is exactly
+# where policy says internal notes belong.
+check allow "$HOME/code/north/docs/private/overnight-notes.md" \
+  "docs/private is gitignored: cannot dirty the tree, and policy REQUIRES notes there"
+check allow "$HOME/code/fram/docs/private/scratch.md" \
+  "same exemption in fram"
+
+# ...but a TRACKED file in the same repo is still denied.
+check deny "$HOME/code/north/cli/trace-cli.clj" \
+  "tracked source in a launch-critical primary stays denied"
+
 # --- 3. near-miss paths must not be swept in ---------------------------------
 # north-data is a SIBLING of north; a naive prefix test without a separator
 # check denies it and breaks all runtime-state writes.

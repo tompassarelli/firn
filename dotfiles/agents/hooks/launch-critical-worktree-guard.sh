@@ -74,6 +74,25 @@ case "$payload" in
   *) exit 0 ;;
 esac
 
+# A GITIGNORED path can never make the tree tracked-dirty, so it cannot cause
+# either failure this guard exists to prevent: `north up` refuses on a
+# tracked-dirty Fram checkout, and `firn rebuild` snapshots COMMITTED state.
+# Blocking them bought nothing and cost real work — an agent could not write
+# docs/private/ notes, which is where policy says internal notes must go.
+#
+# Runs only after the pre-filter has already matched one of the four repos, so
+# the git call is off the common path. Fail-open: if git is unavailable or
+# errors, fall through to the precise check below rather than admitting blindly.
+if command -v git >/dev/null 2>&1; then
+  _lc_path="$(printf '%s' "$payload" | python3 -c 'import json,sys
+try: print((json.load(sys.stdin).get("tool_input") or {}).get("file_path") or "")
+except Exception: print("")' 2>/dev/null)"
+  if [ -n "$_lc_path" ] && git -C "$(dirname "$_lc_path")" check-ignore -q "$_lc_path" 2>/dev/null; then
+    exit 0
+  fi
+  unset _lc_path
+fi
+
 command -v python3 >/dev/null 2>&1 || exit 0
 
 # A QUOTED heredoc, not PY='...': the deny text below contains single quotes
