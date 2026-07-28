@@ -57,6 +57,8 @@ let
     WorkingDirectory = homeDir;
     Restart = "always";
     RestartSec = 2;
+    TimeoutStopSec = "15s";
+    SendSIGKILL = true;
     MemorySwapMax = "0";
   };
 in
@@ -157,7 +159,7 @@ in
         JDK_JAVA_OPTIONS = "-Xmx16g";
       });
       serviceConfig = (serviceConfigBase // {
-        MemoryMax = "24G";
+        MemoryMax = "32G";
         ExecStartPre = if stageA then [ ] else [
           "${northCoordRuntime}/bin/north-coord-runtime ensure-default"
           "${northCoordRuntime}/bin/north-coord-runtime prepare"

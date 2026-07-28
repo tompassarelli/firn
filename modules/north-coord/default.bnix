@@ -102,6 +102,11 @@
            :WorkingDirectory homeDir
            :Restart          "always"
            :RestartSec       2
+           ;; Fram's coordinated shutdown has an internal eight-second bound.
+           ;; Preserve a small diagnostic margin, then let systemd terminate a
+           ;; wedged generation instead of holding the pair cutover for 90s.
+           :TimeoutStopSec   "15s"
+           :SendSIGKILL      true
            :MemorySwapMax    "0"}]
     {:options.myConfig.modules.north-coord.enable
       (lib.mkEnableOption "Personal North coordinator daemon (:7977) — sole-writer fact-graph service for Tom's canonical log")
@@ -240,7 +245,7 @@
              ;; immutable Store, a candidate Store, and query indexes together.
              ;; Keep native/JVM overhead outside the -Xmx16g heap from tripping a
              ;; cgroup kill while the incremental reload path bounds that peak.
-             :MemoryMax "24G"
+             :MemoryMax "32G"
              ;; Socket ownership removes the old stop/bind race. The adapter
              ;; validates LISTEN_FDS before the selected Fram runtime starts.
              :ExecStartPre
