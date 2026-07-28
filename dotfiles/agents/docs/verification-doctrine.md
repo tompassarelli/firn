@@ -49,7 +49,9 @@ it — never personally retire it past the pre-declared bar.**
 3. **Falsify, don't accumulate.** Run the cheapest experiment that could
    falsify the claim; when the falsifier fails to fire, stop. **Validity
    clause:** a falsifier that could not execute, or could not have failed
-   (non-discriminating), yields cannot-determine — never pass.
+   (non-discriminating), yields cannot-determine — never pass. An ambiguous
+   observation is a non-discriminating probe: sharpen the probe once or exit
+   cannot-determine; ambiguity never spawns new concerns.
 4. **Capability gaps exit immediately as cannot-determine**, naming the
    missing capability and where to route. The verifier may gather evidence
    relevant to a *different declared claim*, but may never substitute it for
@@ -127,6 +129,10 @@ Cross-cutting rules:
   N and stopping rule fixed at intake.
 - `cannot-determine` is a first-class *success of process* — it routes, it
   never broadens scope.
+- Verifier tooling gets at most ONE retry; a second failure yields
+  cannot-determine for the blocked claim. **A broken verifier is not a broken
+  product** — tool failure is evidence about the harness, never about the
+  deliverable, and never a reason to invent another verification method.
 - No verifier expands its own scope; Law 5 classifies every discovery.
 
 ## 5. Anti-pattern index (name the tarpit to exit it)
@@ -135,6 +141,7 @@ Cross-cutting rules:
 |---|---|---|
 | Effort-as-evidence | "I reviewed extensively…" with no observation | Demand probe + output or discard the claim |
 | Archaeology substitution | Source reading standing in for an unrunnable probe | `cannot-determine` + route to a capable environment |
+| Harness blame-shift | Verifier tool breaks → invent another verification method | One retry, then cannot-determine; a broken verifier is not a broken product |
 | Soak loop | N≥k reruns of a deterministic claim | One run; convert flakiness into one deterministic interleaving test |
 | Anxiety escalation | Tier grows mid-flight without a new fact | Restate the intake tier; escalate only by naming the new fact |
 | File-and-pass | Refuting fact filed as "future work" while the old bar passes | Law 5: the refuted claim FAILS now |
@@ -189,3 +196,12 @@ of declaring it in the child bar was process debt. Right tier, wrong process.
 philosophy — under a forced structure it produced sharp doctrine immediately.
 Its defaults lacked *binding* terminal conditions and intake-time tier
 fixation. The praxis override block makes those binding.
+
+**Corroboration, 2026-07-28 (second OpenAI lane, website-publish task):** an
+unprompted self-report confirmed the disease model ("I let evidence
+collection displace the actual objective") and mapped onto the existing laws
+point-for-point, adding two refinements absorbed above: the one-retry
+tooling budget with the "a broken verifier is not a broken product" maxim
+(Law 3/4 territory — it had been treating verifier-tool failures as reasons
+to invent new verification methods), and the ambiguous-observation rule
+(each ambiguous screenshot had recursively generated new concerns).

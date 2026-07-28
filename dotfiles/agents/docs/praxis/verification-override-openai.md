@@ -32,7 +32,12 @@ Paste everything below the rule into the brief, verbatim.
 5. A falsifier that could not execute, or could not have failed, yields
    cannot-determine — never pass. If your environment cannot run a named
    probe, emit cannot-determine immediately, name the missing capability, and
-   stop. Do not compensate with static analysis.
+   stop. Do not compensate with static analysis. Verifier tooling gets at
+   most ONE retry; a second failure yields cannot-determine. A broken
+   verifier is not a broken product — tool failure says nothing about the
+   deliverable and never justifies inventing another verification method.
+   An ambiguous observation is a defective probe: sharpen it once or exit
+   cannot-determine; ambiguity never generates new concerns.
 6. One claim per verification pass. Bundled claims must be split before any
    probing starts. An aggregate deliverable gets its own separately declared
    whole-outcome claim; component passes never sum to it.
