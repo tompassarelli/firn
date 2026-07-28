@@ -78,11 +78,11 @@
         "zig-overlay": "zig-overlay"
       },
       "locked": {
-        "lastModified": 1785262210,
-        "narHash": "sha256-HU8pcFMLATUaBwxNYAyJtSddBFrqJM9ouMQEVyslM1g=",
+        "lastModified": 1785262771,
+        "narHash": "sha256-OhU33SxCFoL3wrDFH9SHULnIDXgm9Mtge4KZIN4//J8=",
         "ref": "main",
-        "rev": "5766cac39ba416a3f355f711e8c691777d84f956",
-        "revCount": 1064,
+        "rev": "b8e462fba217dd711985e2d0bce7284b099f8ee8",
+        "revCount": 1065,
         "type": "git",
         "url": "file:///home/tom/code/beagle"
       },
@@ -457,11 +457,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1785261815,
-        "narHash": "sha256-90WHo990cc0Bweu932vVXV0iBMjHpGwg/hw0DgzFtco=",
+        "lastModified": 1785263100,
+        "narHash": "sha256-OJBglt4mZkaSMJgrMTP+JoxLH6pSydsfKhaVn2XvxZk=",
         "ref": "main",
-        "rev": "ce017b54563aacb4d653e09468f400c9b0e2eccf",
-        "revCount": 628,
+        "rev": "84c29c3303fed0b635468a2078db673ca91a4546",
+        "revCount": 629,
         "type": "git",
         "url": "file:///home/tom/code/fram"
       },
