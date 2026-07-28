@@ -209,11 +209,13 @@
            ;; listener therefore fails north-coord.socket itself; the service
            ;; never mistakes its inherited system socket for a foreign owner.
            :startLimitIntervalSec 0
-           :restartIfChanged      false  ;; Decoupled 2026-07-28 (tom): the engine comes
-           ;; from the PROMOTED checkout, not the nix package - system rebuilds must
-           ;; not bounce the coordinator. Engine updates go through the explicit
-           ;; promote path (mutexed + broadcast). Unit changes that truly need a
-           ;; restart use the drill: systemctl restart after rebuild-intent.
+           ;; A configuration switch must retire the active process when its
+           ;; loaded unit changes. Otherwise socket activation can relaunch the
+           ;; stale ExecStart after daemon-reload, leaving the coordinator on
+           ;; the previous package revision. stopIfChanged also makes the NixOS
+           ;; switch quiesce the associated socket before loading the new unit.
+           :restartIfChanged      true
+           :stopIfChanged         true
            :environment           serviceEnvironment
            :serviceConfig
             (//
@@ -248,7 +250,8 @@
                      "north-coord-pair-prepare.service"]
              :path (nix/with pkgs [clojure jdk bash coreutils git])
              :startLimitIntervalSec 0
-             :restartIfChanged false
+             :restartIfChanged true
+             :stopIfChanged true
              :environment
               (// serviceEnvironment
                   {:FRAM_TELEMETRY_LOG

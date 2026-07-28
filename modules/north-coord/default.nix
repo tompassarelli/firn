@@ -149,7 +149,8 @@ in
       after = ([ "network.target" ] ++ lib.optional config.myConfig.modules.north-coord.socketActivation "north-coord.socket" ++ lib.optional stageA "north-coord-pair-prepare.service");
       path = with pkgs; [ clojure jdk bash coreutils git ];
       startLimitIntervalSec = 0;
-      restartIfChanged = false;
+      restartIfChanged = true;
+      stopIfChanged = true;
       environment = serviceEnvironment;
       serviceConfig = (serviceConfigBase // {
         ExecStartPre = if stageA then [ ] else [
@@ -171,7 +172,8 @@ in
       ];
       path = with pkgs; [ clojure jdk bash coreutils git ];
       startLimitIntervalSec = 0;
-      restartIfChanged = false;
+      restartIfChanged = true;
+      stopIfChanged = true;
       environment = (serviceEnvironment // {
         FRAM_TELEMETRY_LOG = "${homeDir}/.local/state/north/coordination.log";
       });
