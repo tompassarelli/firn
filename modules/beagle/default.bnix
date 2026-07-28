@@ -8,15 +8,59 @@
 ;; skew. This replaces the ~/code/beagle/bin dev-checkout reliance on PATH.
 ;; Reads beagle main (where package/flake merged) via git+file?ref=main — robust
 ;; to whatever branch the local checkout sits on. Repoint to a github URL off-box.
+;;
+;; Mutable checkout execution is available only through explicit *-dev names,
+;; matching the north and fram delivery contract: ordinary names are immutable
+;; generation-owned surfaces, *-dev names are checkout surfaces that announce
+;; their provenance, and the two never select one another silently.
+;;
+;; The dev wrappers deliberately do NOT export _BEAGLE_RACKET. The checkout's
+;; own bin/_beagle-racket resolves racket through that checkout's direnv, which
+;; is the racket its .zo bytecode was compiled against. Injecting the package's
+;; pinned racket instead would reintroduce exactly the stale-bytecode skew the
+;; packaging exists to prevent ("body of .../raco.rkt"). A dev command runs the
+;; checkout on the checkout's own terms; direnv is supplied so that resolution
+;; works outside a direnv shell (dispatched agent, CI, cron, plain subshell).
 (nix/module [config lib pkgs inputs ...]
-  {:tags [development]
-   :flake-inputs
-    {:beagle {:url "git+file:///home/tom/code/beagle?ref=main"
-              :inputs.nixpkgs.follows "nixpkgs"}}
-   :options.myConfig.modules.beagle.enable
-    (lib.mkEnableOption "beagle compiler + CLI suite (racket-pinned, hermetic)")
-   :config
-    (lib.mkIf config.myConfig.modules.beagle.enable
-      {:environment.systemPackages
-        [(get (get inputs.beagle.packages pkgs.stdenv.hostPlatform.system)
-           :default)]})})
+  (let
+    [beaglePkg
+      (get (get inputs.beagle.packages pkgs.stdenv.hostPlatform.system) :default)
+     liveInputs
+      (nix/with pkgs [bash coreutils direnv findutils gawk git gnugrep gnused])
+     devCommandNames
+      ["beagle" "beagle-build" "beagle-check" "beagle-validate" "beagle-syntax"
+       "beagle-fix" "beagle-repair" "beagle-doctor" "beagle-daemon" "beagle-lsp"]
+     packagedCommandNames
+      ["beagle" "beagle-build" "beagle-check" "beagle-daemon" "beagle-lsp"]
+     mkDev
+      (fn [name]
+        (pkgs.writeShellApplication
+          {:name (s name "-dev")
+           :runtimeInputs liveInputs
+           :text
+            (ms "checkout=${BEAGLE_CHECKOUT:-$HOME/code/beagle}"
+                (s "target=$checkout/bin/" name)
+                "if [ ! -x \"$target\" ]; then"
+                (s "  echo \"" name "-dev: checkout executable missing: $target\" >&2")
+                "  exit 127"
+                "fi"
+                (s "echo \"" name "-dev: provenance=checkout path=$target\" >&2")
+                "exec \"$target\" \"$@\"")}))
+     mkPackaged
+      (fn [name]
+        (pkgs.writeShellApplication
+          {:name (s name "-packaged")
+           :text (ms (s "exec " beaglePkg "/bin/" name " \"$@\""))}))
+     devCommands (builtins.map mkDev devCommandNames)
+     packagedCommands (builtins.map mkPackaged packagedCommandNames)]
+    {:tags [development]
+     :flake-inputs
+      {:beagle {:url "git+file:///home/tom/code/beagle?ref=main"
+                :inputs.nixpkgs.follows "nixpkgs"}}
+     :options.myConfig.modules.beagle.enable
+      (lib.mkEnableOption
+        "beagle compiler + CLI suite (racket-pinned, hermetic) with explicit checkout-only development commands")
+     :config
+      (lib.mkIf config.myConfig.modules.beagle.enable
+        {:environment.systemPackages
+          (++ [beaglePkg] devCommands packagedCommands)})}))
