@@ -99,13 +99,58 @@ if [ ! -e "$ZO" ]; then
   if [ -d "$RACKET_COMPILED_ROOT" ]; then
     COMPILED_ROOTS="$COMPILED_ROOTS:$RACKET_COMPILED_ROOT"
   fi
-  echo "firn-build-bin: compiling scripts/firn.rkt → $ZO"
-  PLTCOMPILEDROOTS="$COMPILED_ROOTS" "$RACO" demod -o "$ZO_TMP" scripts/firn.rkt
-  SOURCE_HASH_AFTER="$("$PWD/scripts/firn-source-hash")"
-  if [ "$SOURCE_HASH" != "$SOURCE_HASH_AFTER" ]; then
-    echo "firn-build-bin: source changed during compilation; refusing to publish stale bytecode" >&2
-    exit 1
-  fi
+  # Retry, because on a machine with concurrent agents a single attempt can
+  # never win. The refusal below is CORRECT — publishing bytecode compiled from
+  # a tree that moved would cache a lie — but it used to exit immediately, so
+  # any agent committing to this repo during the ~20s compile failed the whole
+  # rebuild. Observed 2026-07-29: every `firn rebuild` returned rc 1 with five
+  # north commits and three fram commits stranded unbuilt, including a fix for
+  # a wholly broken write path.
+  #
+  # Each attempt re-reads the source hash, so a retry compiles the NEW tree
+  # rather than re-racing the old one. Bounded: if the tree never settles the
+  # honest answer is to say so, not to loop forever.
+  FIRN_COMPILE_ATTEMPTS="${FIRN_COMPILE_ATTEMPTS:-4}"
+  attempt=1
+  while :; do
+    echo "firn-build-bin: compiling scripts/firn.rkt → $ZO (attempt $attempt/$FIRN_COMPILE_ATTEMPTS)"
+    PLTCOMPILEDROOTS="$COMPILED_ROOTS" "$RACO" demod -o "$ZO_TMP" scripts/firn.rkt
+    SOURCE_HASH_AFTER="$("$PWD/scripts/firn-source-hash")"
+    [ "$SOURCE_HASH" = "$SOURCE_HASH_AFTER" ] && break
+
+    if [ "$attempt" -ge "$FIRN_COMPILE_ATTEMPTS" ]; then
+      {
+        echo "firn-build-bin: source changed during compilation $FIRN_COMPILE_ATTEMPTS time(s); refusing to publish stale bytecode"
+        echo "  Another process is editing $PWD while this compiles — on this box that is"
+        echo "  normally a concurrent agent landing commits."
+        echo "  Retry when the tree settles, raise FIRN_COMPILE_ATTEMPTS, or build from a"
+        echo "  quiet checkout:  git -C $PWD worktree add /tmp/firn-build <ref>"
+      } >&2
+      exit 1
+    fi
+
+    # Re-key to the tree as it NOW stands. The cache path is derived from the
+    # source hash, so a moved source belongs to a different cache entry;
+    # publishing the new compile under the old key would be exactly the
+    # staleness this check exists to prevent. Recompute ZO_DIR/ZO, not just the
+    # hash, and place the temp file inside the new directory so the final
+    # link(2) stays on one filesystem.
+    SOURCE_HASH="$SOURCE_HASH_AFTER"
+    ZO_DIR="$SHARE_DIR/$RACKET_HASH/$SOURCE_HASH"
+    ZO="$ZO_DIR/firn.zo"
+    mkdir -p "$ZO_DIR"
+    echo "firn-build-bin: tree moved mid-compile; re-keying to $SOURCE_HASH" >&2
+    rm -f "${ZO_TMP:?}"
+    ZO_TMP="$(mktemp "$ZO_DIR/.firn.zo.XXXXXX")"
+    # Another process may have published this exact key while we were busy.
+    if [ -s "$ZO" ]; then
+      echo "firn-build-bin: $SOURCE_HASH already published; using it" >&2
+      rm -f "${ZO_TMP:?}"
+      ZO_TMP=''
+      break
+    fi
+    attempt=$((attempt + 1))
+  done
   # link(2) publishes only one complete immutable image when identical builds
   # race. The loser discards its private completed temp file.
   ln "$ZO_TMP" "$ZO" 2>/dev/null || [ -s "$ZO" ]
