@@ -24,7 +24,7 @@ BIN="$SCRATCH/bin"      # coreutils + jq + fake real CLIs (always on PATH)
 NBIN="$SCRATCH/nbin"    # holds the stub `north` (added to PATH only when present)
 GIT_CALLS="$SCRATCH/git.calls"
 mkdir -p "$BIN" "$NBIN"
-for tool in env bash realpath jq find sort sed head mktemp paste rm cat; do
+for tool in env bash realpath jq find sort sed head mktemp paste rm cat grep dirname; do
   real="$(command -v "$tool" 2>/dev/null)" || { echo "missing host tool: $tool" >&2; exit 2; }
   # Link straight to the resolved command-v path; do NOT depend on `readlink`
   # (agent-config-check.test.sh runs this under a readlink-fails shim).
@@ -110,7 +110,7 @@ PY
 
 # Run one wrapper hermetically. Args: launcher, with_north(0/1), then k=v env
 # assignments, then `--` and the wrapper's own argv. Sets globals STDERR/RECORD.
-STDERR=""; RECORD=""
+STDERR=""; RECORD=""; STATUS=0
 run() {
   local launcher="$1" with_north="$2"; shift 2
   local -a envv=() argv=()
@@ -123,6 +123,7 @@ run() {
   STDERR="$(env -i "HOME=$HOME_DIR" "PATH=$path" "REAL_RECORD=$RECORD" \
     "GIT_CALLS=$GIT_CALLS" \
     "${envv[@]}" bash "$HERE/$launcher" "${argv[@]}" 2>&1 1>/dev/null)"
+  STATUS=$?
 }
 record_field() { sed -n "s/^$2=//p" "$RECORD"; }
 
@@ -254,6 +255,132 @@ JSON
   run "$launcher" 0 -- as ghost ; s="$STDERR"
   check "$launcher/explicit-unknown reports unknown account" contains "$s" "unknown account 'ghost'"
   check "$launcher/explicit-unknown never exec'd the real CLI" test ! -f "$RECORD"
+
+  # 8c. An exact resume UUID is routed by transcript ownership, not by the
+  # headroom winner.
+  resume_id="11111111-2222-4333-8444-555555555555"
+  owner="$ROOT/acctB"
+  if [ "$launcher" = claude ]; then
+    mkdir -p "$owner/projects/-work"
+    printf '{"sessionId":"%s"}\n' "$resume_id" >"$owner/projects/-work/$resume_id.jsonl"
+    resume_argv=(--resume "$resume_id" tail)
+    resume_expected="$default_args --resume $resume_id tail"
+  else
+    mkdir -p "$owner/sessions/2026/07/29"
+    printf '{"type":"session_meta","payload":{"id":"%s"}}\n' "$resume_id" \
+      >"$owner/sessions/2026/07/29/rollout-2026-07-29T00-00-00-$resume_id.jsonl"
+    resume_argv=(--resume "$resume_id" tail)
+    resume_expected="$default_args resume $resume_id tail"
+  fi
+  run "$launcher" 0 -- "${resume_argv[@]}" ; s="$STDERR"
+  check "$launcher/resume owner bypasses quota account selection" \
+    test "$(record_field _ "$pinvar")" = "$owner"
+  check "$launcher/resume owner is named" contains "$s" "resume → account:acctB"
+  check "$launcher/resume forwards canonical native argv" \
+    test "$(record_field _ args)" = "$resume_expected"
+  if [ "$launcher" = codex ]; then
+    check "codex/resume owner also switches sqlite authority" \
+      test "$(record_field _ CODEX_SQLITE_HOME)" = "$owner/sqlite"
+  fi
+
+  # A deliberate environment pin is stronger than automatic lookup. This is
+  # how managed lanes and one-off custom homes keep exact execution authority.
+  run "$launcher" 0 "$pinvar=$ROOT/acctA" -- "${resume_argv[@]}" ; s="$STDERR"
+  check "$launcher/resume preserves a deliberate environment pin" \
+    test "$(record_field _ "$pinvar")" = "$ROOT/acctA"
+  check "$launcher/pinned resume emits no ownership banner" \
+    not_contains "$s" "resume →"
+  if [ "$launcher" = codex ]; then
+    check "codex/pinned friendly alias still reaches native syntax" \
+      test "$(record_field _ args)" = "$passthrough_args resume $resume_id tail"
+  fi
+
+  # 8d. Ambient transcripts are first-class owners and must not be hidden by
+  # normal account auto-selection.
+  ambient_id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+  if [ "$launcher" = claude ]; then
+    ambient="$HOME_DIR/.claude"
+    mkdir -p "$ambient/projects/-ambient"
+    printf '{"sessionId":"%s"}\n' "$ambient_id" >"$ambient/projects/-ambient/$ambient_id.jsonl"
+    ambient_argv=(--resume="$ambient_id")
+    ambient_expected="$default_args --resume=$ambient_id"
+  else
+    ambient="$HOME_DIR/.codex"
+    mkdir -p "$ambient/sessions/2026/07/29"
+    printf '{"type":"session_meta","payload":{"id":"%s"}}\n' "$ambient_id" \
+      >"$ambient/sessions/2026/07/29/rollout-2026-07-29T00-00-01-$ambient_id.jsonl"
+    ambient_argv=(--resume="$ambient_id")
+    ambient_expected="$default_args resume $ambient_id"
+  fi
+  run "$launcher" 0 -- "${ambient_argv[@]}" ; s="$STDERR"
+  check "$launcher/ambient resume selects ambient home" \
+    test "$(record_field _ "$pinvar")" = "$ambient"
+  check "$launcher/ambient resume forwards native argv" \
+    test "$(record_field _ args)" = "$ambient_expected"
+  if [ "$launcher" = codex ]; then
+    check "codex/ambient resume uses root sqlite home" \
+      test "$(record_field _ CODEX_SQLITE_HOME)" = "$ambient"
+  fi
+
+  # 8e. Missing and cross-home ambiguous UUIDs fail closed without launching
+  # the provider under a guessed account.
+  missing_id="99999999-8888-4777-8666-555555555555"
+  run "$launcher" 0 -- --resume "$missing_id" ; s="$STDERR"
+  check "$launcher/missing resume exits nonzero" test "$STATUS" -ne 0
+  check "$launcher/missing resume names the UUID" contains "$s" "$missing_id"
+  check "$launcher/missing resume never launches provider" test ! -f "$RECORD"
+
+  duplicate_id="12345678-1234-4234-8234-123456789abc"
+  if [ "$launcher" = claude ]; then
+    mkdir -p "$ROOT/acctA/projects/-duplicate" "$ROOT/acctB/projects/-duplicate"
+    printf '{"sessionId":"%s"}\n' "$duplicate_id" >"$ROOT/acctA/projects/-duplicate/$duplicate_id.jsonl"
+    printf '{"sessionId":"%s"}\n' "$duplicate_id" >"$ROOT/acctB/projects/-duplicate/$duplicate_id.jsonl"
+  else
+    mkdir -p "$ROOT/acctA/sessions/2026/07/29" "$ROOT/acctB/sessions/2026/07/29"
+    printf '{"type":"session_meta","payload":{"id":"%s"}}\n' "$duplicate_id" \
+      >"$ROOT/acctA/sessions/2026/07/29/rollout-a-$duplicate_id.jsonl"
+    printf '{"type":"session_meta","payload":{"id":"%s"}}\n' "$duplicate_id" \
+      >"$ROOT/acctB/sessions/2026/07/29/rollout-b-$duplicate_id.jsonl"
+  fi
+  run "$launcher" 0 -- --resume "$duplicate_id" ; s="$STDERR"
+  check "$launcher/ambiguous resume exits distinctly" test "$STATUS" -eq 2
+  check "$launcher/ambiguous resume lists first authority" contains "$s" "account:acctA"
+  check "$launcher/ambiguous resume lists second authority" contains "$s" "account:acctB"
+  check "$launcher/ambiguous resume never launches provider" test ! -f "$RECORD"
+
+  # A filename alone is not Claude ownership evidence; reject a renamed or
+  # corrupt transcript whose embedded session id disagrees.
+  if [ "$launcher" = claude ]; then
+    mismatch_id="abcdefab-cdef-4abc-8def-abcdefabcdef"
+    mkdir -p "$ROOT/acctA/projects/-mismatch"
+    printf '{"sessionId":"00000000-0000-4000-8000-000000000000"}\n' \
+      >"$ROOT/acctA/projects/-mismatch/$mismatch_id.jsonl"
+    run "$launcher" 0 -- --resume "$mismatch_id" ; s="$STDERR"
+    check "claude/mismatched transcript id is rejected" test "$STATUS" -ne 0
+    check "claude/mismatched transcript never launches provider" test ! -f "$RECORD"
+  fi
+
+  # Codex permits resume-subcommand options before SESSION_ID.
+  if [ "$launcher" = codex ]; then
+    run "$launcher" 0 -- resume --all "$resume_id" tail ; s="$STDERR"
+    check "codex/native resume finds UUID after resume options" \
+      test "$(record_field _ CODEX_HOME)" = "$owner"
+    check "codex/native resume preserves option ordering" \
+      test "$(record_field _ args)" = "$default_args resume --all $resume_id tail"
+  fi
+
+  # 8f. Picker/search forms remain native. Codex's compatibility alias is
+  # normalized even when it carries no UUID to resolve.
+  run "$launcher" 1 "NORTH_JSON=$eligible" -- --resume ; s="$STDERR"
+  if [ "$launcher" = claude ]; then
+    picker_expected="$default_args --resume"
+  else
+    picker_expected="$default_args resume"
+  fi
+  check "$launcher/resume picker keeps normal account routing" \
+    test "$(record_field _ "$pinvar")" = "$ROOT/acctA"
+  check "$launcher/resume picker reaches native syntax" \
+    test "$(record_field _ args)" = "$picker_expected"
 
   # 9. already-pinned passthrough: env var set -> exec straight through, silent.
   managed_argv=()

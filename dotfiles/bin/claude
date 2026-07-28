@@ -62,10 +62,15 @@ native_dispatch_args() {
     printf '%s\0' '--disallowedTools' 'Agent,Task,Workflow'
 }
 
-# 1. Passthrough guard: an account is already pinned (north's own lanes /
-#    app-server probes, or explicit user env), or North is probing the provider
-#    while this launcher is selecting an account. Do not recurse or re-route.
-if [ -n "${CLAUDE_CONFIG_DIR:-}" ] || [ "${NORTH_CLAUDE_LAUNCHER_BYPASS:-}" = "1" ]; then
+# 1. North's own provider probe is an internal recursive launch. Never inspect
+#    or re-route it, even if a future probe happens to carry resume-shaped argv.
+if [ "${NORTH_CLAUDE_LAUNCHER_BYPASS:-}" = "1" ]; then
+  exec "$REAL" "$@"
+fi
+
+# A caller-supplied config home is an exact authority (managed North lane,
+# explicit shell pin, or custom profile). Never search outside it.
+if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then
   exec "$REAL" "$@"
 fi
 
@@ -74,12 +79,72 @@ while IFS= read -r -d '' arg; do
   NATIVE_DISPATCH_ARGS+=("$arg")
 done < <(native_dispatch_args)
 
+# 2. Exact UUID resume: resolve the transcript's owning authority before
+#    quota-based selection can send it to the wrong home.
+#    `claude as <id> ...` remains an explicit override and skips this lookup.
+if [ "${1:-}" != "as" ]; then
+  resume_index=-1
+  resume_id=""
+  resume_equals=0
+  argv=("$@")
+  for index in "${!argv[@]}"; do
+    case "${argv[$index]}" in
+      -r|--resume)
+        next=$((index + 1))
+        if [ "$next" -lt "${#argv[@]}" ]; then
+          resume_index="$next"
+          resume_id="${argv[$next]}"
+        fi
+        break
+        ;;
+      --resume=*)
+        resume_index="$index"
+        resume_id="${argv[$index]#--resume=}"
+        resume_equals=1
+        break
+        ;;
+    esac
+  done
+
+  uuid_re='^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
+  if [ "$resume_index" -ge 0 ] && [[ "$resume_id" =~ $uuid_re ]]; then
+    resolver="$(dirname "$self")/north-session-resolve"
+    if [ ! -x "$resolver" ]; then
+      echo "claude: cross-account resume resolver is unavailable: $resolver" >&2
+      exit 127
+    fi
+    resolved="$("$resolver" anthropic "$resume_id")"
+    resolve_status=$?
+    [ "$resolve_status" -eq 0 ] || exit "$resolve_status"
+    IFS=$'\t' read -r version resolved_provider authority_kind authority_name authority_home canonical_id <<<"$resolved"
+    if [ "$version" != "v1" ] || [ "$resolved_provider" != "anthropic" ] ||
+       [ -z "$authority_home" ] || [ -z "$canonical_id" ]; then
+      echo "claude: cross-account resume resolver returned an invalid result" >&2
+      exit 1
+    fi
+    if [ "$resume_equals" -eq 1 ]; then
+      argv[resume_index]="--resume=$canonical_id"
+    else
+      argv[resume_index]="$canonical_id"
+    fi
+    set -- "${argv[@]}"
+    printf '[claude resume → %s:%s]\n' "$authority_kind" "$authority_name" >&2
+    if [ "$authority_kind" = "profile" ] && [ "$authority_name" = "stock" ]; then
+      stock="$(dirname "$self")/claude-stock"
+      [ -x "$stock" ] || { echo "claude: stock launcher is unavailable: $stock" >&2; exit 127; }
+      exec "$stock" "$@"
+    fi
+    export CLAUDE_CONFIG_DIR="$authority_home"
+    exec "$REAL" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+  fi
+fi
+
 list_accounts() {
   [ -d "$ACCOUNTS_ROOT" ] && \
     find "$ACCOUNTS_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort
 }
 
-# 2. Explicit pin: `claude as <id> [args...]`.
+# 3. Explicit pin: `claude as <id> [args...]`.
 if [ "${1:-}" = "as" ]; then
   shift
   acct="${1:-}"
@@ -106,7 +171,7 @@ if [ "${1:-}" = "as" ]; then
   exec "$REAL" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
 fi
 
-# 3. Auto-select greatest-headroom account from north's machine boundary.
+# 4. Auto-select greatest-headroom account from north's machine boundary.
 #    Rank: headroom class (plenty>low>other), then lowest used% on the binding
 #    window, then north's target listing order. Every failure mode fails OPEN
 #    but is reported distinctly — the caller learns WHY it went ambient.

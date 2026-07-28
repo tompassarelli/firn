@@ -74,23 +74,133 @@ native_dispatch_args() {
   [ "$enforce_topology" -eq 0 ] || printf '%s\0' '--disable' 'multi_agent'
 }
 
-# 1. Passthrough guard: an account is already pinned (north's own lanes /
-#    app-server probes, or explicit user env). Do not recurse or re-route.
-if [ -n "${CODEX_HOME:-}" ]; then
-  exec "$REAL" "${FORCE_PERMS[@]}" "$@"
-fi
-
 NATIVE_DISPATCH_ARGS=()
 while IFS= read -r -d '' arg; do
   NATIVE_DISPATCH_ARGS+=("$arg")
 done < <(native_dispatch_args)
+
+# 1. Uniform resume syntax: upstream Codex uses `codex resume ID`; accept the
+#    requested `codex --resume ID` / `codex --resume=ID` aliases as well.
+#    Resolve exact UUIDs before quota selection can choose the wrong account.
+#    `codex as <id> ...` remains an explicit override.
+if [ "${1:-}" != "as" ]; then
+  resume_index=-1
+  resume_marker=-1
+  resume_id=""
+  resume_alias=0
+  resume_equals=0
+  argv=("$@")
+  for index in "${!argv[@]}"; do
+    case "${argv[$index]}" in
+      resume)
+        for ((next = index + 1; next < ${#argv[@]}; next++)); do
+          if [[ "${argv[$next]}" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$ ]]; then
+            resume_index="$next"
+            resume_id="${argv[$next]}"
+            break
+          fi
+        done
+        break
+        ;;
+      --resume)
+        resume_marker="$index"
+        resume_alias=1
+        next=$((index + 1))
+        if [ "$next" -lt "${#argv[@]}" ]; then
+          resume_index="$next"
+          resume_id="${argv[$next]}"
+        fi
+        break
+        ;;
+      --resume=*)
+        resume_marker="$index"
+        resume_index="$index"
+        resume_id="${argv[$index]#--resume=}"
+        resume_alias=1
+        resume_equals=1
+        break
+        ;;
+    esac
+  done
+
+  # A caller-supplied Codex home is an exact authority. Normalize the friendly
+  # alias, but never search outside a managed/custom/explicitly pinned home.
+  if [ -n "${CODEX_HOME:-}" ]; then
+    if [ "$resume_alias" -eq 1 ]; then
+      if [ "$resume_equals" -eq 1 ]; then
+        argv=("${argv[@]:0:$resume_marker}" resume "$resume_id" "${argv[@]:$((resume_marker + 1))}")
+      else
+        argv[resume_marker]=resume
+      fi
+      set -- "${argv[@]}"
+    fi
+    exec "$REAL" "${FORCE_PERMS[@]}" "$@"
+  fi
+
+  uuid_re='^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
+  if [ "$resume_index" -ge 0 ] && [[ "$resume_id" =~ $uuid_re ]]; then
+    resolver="$(dirname "$self")/north-session-resolve"
+    if [ ! -x "$resolver" ]; then
+      echo "codex: cross-account resume resolver is unavailable: $resolver" >&2
+      exit 127
+    fi
+    resolved="$("$resolver" openai "$resume_id")"
+    resolve_status=$?
+    [ "$resolve_status" -eq 0 ] || exit "$resolve_status"
+    IFS=$'\t' read -r version resolved_provider authority_kind authority_name authority_home canonical_id <<<"$resolved"
+    if [ "$version" != "v1" ] || [ "$resolved_provider" != "openai" ] ||
+       [ -z "$authority_home" ] || [ -z "$canonical_id" ]; then
+      echo "codex: cross-account resume resolver returned an invalid result" >&2
+      exit 1
+    fi
+    if [ "$resume_alias" -eq 1 ] && [ "$resume_equals" -eq 1 ]; then
+      argv=("${argv[@]:0:$resume_marker}" resume "$canonical_id" "${argv[@]:$((resume_marker + 1))}")
+    elif [ "$resume_alias" -eq 1 ]; then
+      argv[resume_marker]=resume
+      argv[resume_index]="$canonical_id"
+    else
+      argv[resume_index]="$canonical_id"
+    fi
+    set -- "${argv[@]}"
+    printf '[codex resume → %s:%s]\n' "$authority_kind" "$authority_name" >&2
+    if [ "$authority_kind" = "profile" ] && [ "$authority_name" = "codex-stock" ]; then
+      stock="$(dirname "$self")/codex-stock"
+      [ -x "$stock" ] || { echo "codex: stock launcher is unavailable: $stock" >&2; exit 127; }
+      exec "$stock" "$@"
+    fi
+    export CODEX_HOME="$authority_home"
+    if [ "$authority_kind" = "ambient" ]; then
+      export CODEX_SQLITE_HOME="$authority_home"
+    else
+      export CODEX_SQLITE_HOME="$authority_home/sqlite"
+    fi
+    exec "$REAL" "${FORCE_PERMS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+  fi
+
+  # Non-UUID aliases still map to the native subcommand (picker/session name)
+  # and then follow the existing pinned/automatic account routing.
+  if [ "$resume_alias" -eq 1 ]; then
+    if [ "$resume_equals" -eq 1 ]; then
+      argv=("${argv[@]:0:$resume_marker}" resume "$resume_id" "${argv[@]:$((resume_marker + 1))}")
+    else
+      argv[resume_marker]=resume
+    fi
+    set -- "${argv[@]}"
+  fi
+fi
+
+# 2. Passthrough guard for `codex as ...`, which intentionally skipped the
+#    automatic resume parser above.
+if [ -n "${CODEX_HOME:-}" ]; then
+  exec "$REAL" "${FORCE_PERMS[@]}" "$@"
+fi
 
 list_accounts() {
   [ -d "$ACCOUNTS_ROOT" ] && \
     find "$ACCOUNTS_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort
 }
 
-# 2. Explicit pin: `codex as <id> [args...]`.
+# 3. Explicit pin: `codex as <id> [args...]`.
 if [ "${1:-}" = "as" ]; then
   shift
   acct="${1:-}"
@@ -118,7 +228,7 @@ if [ "${1:-}" = "as" ]; then
   exec "$REAL" "${FORCE_PERMS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
 fi
 
-# 3. Auto-select greatest-headroom account from north's machine boundary.
+# 4. Auto-select greatest-headroom account from north's machine boundary.
 #    Rank: headroom class (plenty>low>other), then lowest used% on the binding
 #    window, then north's target listing order. Every failure mode fails OPEN
 #    but is reported distinctly — the caller learns WHY it went ambient.
