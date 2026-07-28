@@ -367,6 +367,28 @@ JSON
       test "$(record_field _ CODEX_HOME)" = "$owner"
     check "codex/native resume preserves option ordering" \
       test "$(record_field _ args)" = "$default_args resume --all $resume_id tail"
+
+    run "$launcher" 1 "NORTH_JSON=$eligible" -- \
+      resume named-thread "$resume_id" ; s="$STDERR"
+    check "codex/UUID-shaped prompt after a session name does not reroute" \
+      test "$(record_field _ CODEX_HOME)" = "$ROOT/acctA"
+    check "codex/named resume preserves its UUID-shaped prompt" \
+      test "$(record_field _ args)" = "$default_args resume named-thread $resume_id"
+
+    run "$launcher" 1 "NORTH_JSON=$eligible" -- \
+      resume --profile "$resume_id" named-thread ; s="$STDERR"
+    check "codex/UUID-valued resume option is not mistaken for session id" \
+      test "$(record_field _ CODEX_HOME)" = "$ROOT/acctA"
+
+    run "$launcher" 1 "NORTH_JSON=$eligible" -- \
+      resume --last "$resume_id" ; s="$STDERR"
+    check "codex/UUID-shaped prompt after --last does not reroute" \
+      test "$(record_field _ CODEX_HOME)" = "$ROOT/acctA"
+
+    run "$launcher" 1 "NORTH_JSON=$eligible" -- \
+      -- --resume "$resume_id" ; s="$STDERR"
+    check "codex/double-dash prevents friendly alias rewriting" \
+      test "$(record_field _ args)" = "$default_args -- --resume $resume_id"
   fi
 
   # 8f. Picker/search forms remain native. Codex's compatibility alias is
