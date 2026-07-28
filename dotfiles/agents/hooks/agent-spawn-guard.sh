@@ -649,7 +649,7 @@ if tool in ("Bash", "shell", "exec_command"):
 if tool not in ("Agent", "Task", "Workflow") or mode == "native":
     sys.exit(0)
 
-ORCHESTRATION_AGENTS = os.path.expanduser("~/code/orchestration/agents")
+ORCHESTRATION_AGENTS = os.path.expanduser("~/code/north/orchestration/agents")
 SAFE_ROLE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 ROUTING_COMMENT = re.compile(r"<!--\s*ORCHESTRATION_ROUTING\s+(\{.*?\})\s*-->")
 

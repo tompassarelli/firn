@@ -28,7 +28,7 @@ This catches things the validator can't: input mismatches, evaluation errors in 
 `firn rebuild` (the sanctioned wrapper) IS agent-runnable — policy change 2026-07-08, snapshot semantics 2026-07-16. It builds a **commit snapshot** (`git+file://<repo>?rev=HEAD`), never the working tree: uncommitted state — yours or any concurrent session's — can neither block a rebuild nor leak into a generation. The one gate that remains YOURS: **commit your own changes first**, or they simply won't be in the build (the pipeline prints exactly which in-flight files it excluded). Every generation maps to a commit by construction. `firn rollback` / the boot menu undo a switch.
 
 The pipeline: plan local-input pin moves for `~/code/beagle`, `~/code/fram`,
-`~/code/orchestration`, and `~/code/north` from each repo's committed local
+and `~/code/north` from each repo's committed local
 `refs/heads/main`. The active checkout may remain on a dirty feature branch:
 its HEAD and WIP are excluded, while committed local `main` remains eligible.
 A missing, rewound, or divergent local `main` holds the already-verified pin;

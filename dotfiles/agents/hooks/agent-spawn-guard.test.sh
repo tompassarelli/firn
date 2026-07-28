@@ -10,15 +10,15 @@ HOOK="$HERE/agent-spawn-guard.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/agent-spawn-guard-test.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
 mkdir -p "$SCRATCH/home/.claude" "$SCRATCH/home/.local/state/north"
-mkdir -p "$SCRATCH/home/code/orchestration/agents"
+mkdir -p "$SCRATCH/home/code/north/orchestration/agents"
 printf '%s\n' '<!-- ORCHESTRATION_ROUTING {"role":"integrator","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","reasoning":"high","posture":"deliver","composition":{"kind":"preset","id":"integrator","overrides":[]}} -->' \
-  >"$SCRATCH/home/code/orchestration/agents/integrator.md"
+  >"$SCRATCH/home/code/north/orchestration/agents/integrator.md"
 printf '%s\n' '<!-- ORCHESTRATION_ROUTING {"role":"integrator","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","reasoning":"high","posture":"deliver","composition":{"kind":"preset","id":"integrator","overrides":[]}} -->' \
-  >"$SCRATCH/home/code/orchestration/agents/role-mismatch.md"
+  >"$SCRATCH/home/code/north/orchestration/agents/role-mismatch.md"
 printf '%s\n' '<!-- ORCHESTRATION_ROUTING {"role":"missing-reasoning","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","posture":"deliver","composition":{"kind":"preset","id":"missing-reasoning","overrides":[]}} -->' \
-  >"$SCRATCH/home/code/orchestration/agents/missing-reasoning.md"
+  >"$SCRATCH/home/code/north/orchestration/agents/missing-reasoning.md"
 printf '%s\n' '<!-- ORCHESTRATION_ROUTING {"role":"researcher","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","reasoning":"high","posture":"deliver","composition":{"kind":"preset","id":"researcher","overrides":[]}} -->' \
-  >"$SCRATCH/home/code/orchestration/agents/researcher.md"
+  >"$SCRATCH/home/code/north/orchestration/agents/researcher.md"
 
 pass=0 fail=0
 set_state() { printf 'dispatch=%s\nguards=%s\n' "$1" "$2" >"$SCRATCH/home/.local/state/north/harness.conf"; }

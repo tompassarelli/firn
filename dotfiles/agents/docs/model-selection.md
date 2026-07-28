@@ -1,8 +1,8 @@
 # Model and payload selection
 
 This file is the personal adapter, not another routing doctrine. Normative
-semantics live in `~/code/orchestration/doctrine.md` and
-`~/code/orchestration/docs/routing.md`; provider/account allocation lives in
+semantics live in `~/code/north/orchestration/doctrine.md` and
+`~/code/north/orchestration/docs/routing.md`; provider/account allocation lives in
 `~/code/north/docs/provider-architecture.md`. If this file disagrees with
 either, those sources win.
 
@@ -138,8 +138,8 @@ before side effects and only while preserving tier, reasoning, and authority.
 Any degradation is explicit and recorded.
 
 Concrete model names, temporary availability windows, usage endpoint details,
-and per-provider calibration belong under `~/code/orchestration/providers/`,
-`~/code/orchestration/docs/`, and North's provider adapters. Never copy them into
+and per-provider calibration belong under `~/code/north/orchestration/providers/`,
+`~/code/north/orchestration/docs/`, and North's provider adapters. Never copy them into
 shared spawn policy, never route through API keys or API-credit balances, and
 never use native provider inheritance as a substitute for an explicit Orchestration
 request.

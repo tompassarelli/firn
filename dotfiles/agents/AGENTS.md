@@ -144,8 +144,8 @@ comes from content selection, never compression tricks.
 → `~/code/nixos-config/dotfiles/agents/docs/model-selection.md`
 → `~/code/nixos-config/dotfiles/agents/docs/praxis/` (spawn payload blocks; README = assembly)
 
-Shared routing laws are CANONICAL in `~/code/orchestration/doctrine.md`; the portable
-contract is `~/code/orchestration/docs/routing.md`. Keep its axes independent:
+Shared routing laws are CANONICAL in `~/code/north/orchestration/doctrine.md`; the portable
+contract is `~/code/north/orchestration/docs/routing.md`. Keep its axes independent:
 function/role (deliverable), `taskGrade` (work scope and judgment), domain
 requirements, topology (`worker`/`orchestrator`), semantic tier
 (`economy`, `standard`, `senior`, `frontier`), deliberation, and posture
@@ -199,7 +199,7 @@ scout/source gathering → `economy`; implementer → `standard`; integrator →
 `frontier` with `taskGrade:research-grade`. These are template defaults, not
 inference rules between axes. A native-agent denial is a routing instruction,
 never a wall. Provider-specific model deltas are resolved from
-`~/code/orchestration/providers` and `~/code/orchestration/docs`; personal posture residue
+`~/code/north/orchestration/providers` and `~/code/north/orchestration/docs`; personal posture residue
 lives in `~/code/nixos-config/dotfiles/agents/docs/praxis/README.md`.
 
 ## Push freely — the scan is the guard, not a human

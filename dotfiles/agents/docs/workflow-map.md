@@ -284,7 +284,7 @@ sequenceDiagram
 
 Notes: this is the surface orchestration's doctrine actually routes to under
 `dispatch=north`. Template resolution consumes Orchestration's canonical provider-neutral
-contract in `~/code/orchestration/docs/routing.md`; this workflow map does not redefine
+contract in `~/code/north/orchestration/docs/routing.md`; this workflow map does not redefine
 the axes or infer one from another. `north templates` renders the stock catalog
 and its resolved routing defaults. Source gathering uses the `scout` template;
 novel hypothesis/experiment work uses `research-scientist` at frontier tier and
@@ -588,7 +588,7 @@ below are its rule set.
 | mail/commands | `~/code/north/cli/msg-cli.clj` | `send`/`inbox`/`ack`/`send-cmd` (@cmd facts), derived inbox |
 | listener | `~/code/north/cli/north-listen.clj` | dormant-until-pinged pub/sub; role-addressing |
 | cockpit | `~/code/north/cli/dashboard-cli.clj` (`north dashboard`/`doctor`; bare `north` card in `bin/north`) | dashboard/doctor/profile; parse-don't-fork orchestration; ownership rule (folded from convoy 2026-07-10) |
-| staffing | `~/code/orchestration/doctrine.md` + `docs/adapters/north.md` | shapes→squad, laws, canonical dial table |
+| staffing | `~/code/north/orchestration/doctrine.md` + `docs/adapters/north.md` | shapes→squad, laws, canonical dial table |
 | delegate intake | `~/code/nixos-config/dotfiles/claude/commands/delegate.md` | `/delegate` intelligent atomic/composite classifier (context is orthogonal) |
 | coordination-v2 | thread `019f4418-bed5-7625-b2ad-41abb6518269` | census, failure receipts, the specced reaping fix plan |
 ```

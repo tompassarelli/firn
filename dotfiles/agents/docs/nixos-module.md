@@ -45,73 +45,30 @@ plugins cannot own `statusLine`. It points at
 `~/code/nixos-config/dotfiles/claude/statusline.sh`, a self-contained segment
 bus in this repo.
 
-## Orchestration plugin — exact-revision managed source + synchronized cache
+## Orchestration plugin — directory marketplace inside north
 
-Claude Code does not run marketplace plugins in place. It copies them to
-`~/.claude/plugins/cache`, and local/third-party marketplaces do not auto-update
-by default. Merely declaring a Orchestration directory marketplace in
-`~/code/nixos-config/dotfiles/claude/settings.json` therefore does not make a
-new Claude session consume a newer Orchestration commit.
-
-`syncOrchestrationPlugin` runs after `seedClaudeSettings` on every `firn rebuild`. It
-executes `~/code/nixos-config/scripts/claude-orchestration-plugin-sync.sh` from the
-evaluated snapshot and receives the exact `inputs.orchestration.rev` that entered the
-built closure. The script resolves that object from `~/code/orchestration` and
-materializes it at
-`~/.local/state/north/orchestration-plugin-source`, the stable directory marketplace
-declared in settings. That source is a marker-owned, detached Git worktree at
-the exact built revision. It is also Git-locked against prune/removal. Before
-creating it, the sync atomically publishes a durable sidecar intent naming the
-canonical Orchestration common directory, managed path, and exact selected revision.
-If activation dies after `git worktree add` but before the marker is finalized,
-the next activation validates that intent plus the clean detached worktree and
-completes ownership automatically. After later exact checkouts, it atomically
-converges the intent to the new managed HEAD before touching Claude. Crashes on
-either side of checkout/intent publication are recoverable on the next run; the
-checker requires intent, managed HEAD, cache, and verified input to agree.
-
-The developer's primary `~/code/orchestration` checkout is only the object database:
-its active branch, HEAD, dirty bytes, and the current shape of
-`refs/heads/main` never select plugin bytes. An unknown existing managed path,
-unexpected worktree changes, a foreign worktree/lock, or a missing exact object
-fails closed without clobbering anything.
-
-The script first reads Claude's supported marketplace registry. A fresh
-profile is registered with `plugin marketplace add`; the one recognized legacy
-state—the single `orchestration` directory marketplace at `~/code/orchestration`—is
-deterministically migrated to the managed source with the same supported
-command. Any duplicate or other same-name source fails closed before plugin
-mutation. The script then uses Claude's noninteractive `plugin update` command;
-on a fresh machine it uses `plugin install`. It never edits
-`~/.claude/plugins/installed_plugins.json`, deletes cache directories, or
-uninstalls the plugin. Both plugin manifests must omit an explicit version so
-Claude reports the Git revision. After an update/install, the script reads
-`claude plugin list --json` again and resolves Claude's 12-character (or full)
-version back to the exact 40-character built revision.
-
-A bounded process lock serializes the entire worktree + Claude transaction, so
-overlapping activations built from different revisions cannot interleave their
-checkout, update, and verification steps. Lock wait is capped at 45 seconds;
-marketplace/plugin list probes are capped at 10 seconds and marketplace
-registration/update/install calls at 30 seconds. Each CLI runs in a supervised
-process group: TERM at the deadline, KILL two seconds later, and immediate
-whole-group reap after a normal result, so a descendant cannot mutate after the
-lock is released. Stdout and stderr each inherit a 256 KiB file-size ceiling.
-Activation reports a warning on failure and
-`agent-config-check --local` compares the managed worktree and Claude cache
-against the exact verified `flake.lock` input revision.
-
-The operating loop stays one command after a Orchestration change lands on local
-`refs/heads/main`: `firn rebuild`. Firn verifies and promotes that exact commit
-without requiring the primary checkout to switch branches or become clean,
-then the activation reconciles Claude's cached copy. The next Claude session
-loads it; an already-running session retains the plugin snapshot it started
+Orchestration lives inside the north repo at `~/code/north/orchestration`
+(merged from the retired standalone checkout; the separate flake input is
+gone — the code rides the `north` input). Claude Code consumes it as a
+directory marketplace declared in
+`~/code/nixos-config/dotfiles/claude/settings.json`:
+`extraKnownMarketplaces.orchestration.source = { source = "directory"; path =
+"/home/tom/code/north/orchestration"; }` with the plugin enabled as
+`orchestration@orchestration`. Claude copies marketplace plugins into
+`~/.claude/plugins/cache`; a running session keeps the snapshot it started
 with until Claude reloads plugins or the session restarts.
 
-Codex and North have no corresponding cache pointer: the shared
+The previous machinery — the separate `inputs.orchestration` flake input, the
+`syncOrchestrationPlugin` activation step, and
+`scripts/claude-orchestration-plugin-sync.sh` materializing a managed
+detached worktree at `~/.local/state/north/orchestration-plugin-source` — was
+retired with the merge and no longer exists in this repo.
+
+Codex and North have no cache pointer: the shared
 `~/code/nixos-config/dotfiles/agents/AGENTS.md` routes Codex to
-`~/code/orchestration`, while North reads `~/code/orchestration/staffing/catalog.json`,
-provider catalogs, and Orchestration prompt blocks directly.
+`~/code/north/orchestration`, while North reads
+`~/code/north/orchestration/staffing/catalog.json`, provider catalogs, and
+Orchestration prompt blocks directly.
 
 ## caveman plugin — DECOMMISSIONED 2026-07-23
 

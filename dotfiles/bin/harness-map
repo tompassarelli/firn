@@ -338,7 +338,7 @@ if (praxisDir) {
 
 // orchestration build-agents check
 const orchestrationCheck = (() => {
-  const script = `${HOME}/code/orchestration/scripts/build-agents.mjs`;
+  const script = `${HOME}/code/north/orchestration/scripts/build-agents.mjs`;
   if (!exists(script)) return { ok: false, reason: "script not found" };
   try {
     execSync(`node ${script} --check`, { stdio: "pipe", timeout: 15000 });
@@ -559,7 +559,7 @@ emit("  pluginTsLsp[\"plugin: typescript-lsp\"]");
 emit("  pluginLean[\"plugin: lean\"]");
 emit("  orchestrationDoctrine[\"orchestration/doctrine.md\\n(routing doctrine)\"]");
 emit("  ternHarness[\"north sdk/src/harness.ts\"]");
-emit("  orchestrationDocs[\"~/code/orchestration/docs\\n(PRAXIS_DIR: roles/postures/deltas)\"]");
+emit("  orchestrationDocs[\"~/code/north/orchestration/docs\\n(PRAXIS_DIR: roles/postures/deltas)\"]");
 emit("  praxisPersonal[\"personal praxis residue\\n~/code/nixos-config/dotfiles/agents/docs/praxis/\"]");
 emit("  nixosClaudeMd[\"nixos-config/CLAUDE.md\\n(per-project rules)\"]");
 emit("  ternOnSpawn[\"north-on-spawn\\n(SessionStart hook)\"]");

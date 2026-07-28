@@ -3,8 +3,8 @@
 The generic spawn-payload system — function/role, task grade, domain
 requirements, topology, semantic tier, deliberation, postures, model deltas,
 and the compose/elicit procedures — is CANONICAL in Orchestration:
-`~/code/orchestration/doctrine.md` and `~/code/orchestration/docs/routing.md` (supporting
-blocks live under `~/code/orchestration/docs/`). Templates are overridable defaults;
+`~/code/north/orchestration/doctrine.md` and `~/code/north/orchestration/docs/routing.md` (supporting
+blocks live under `~/code/north/orchestration/docs/`). Templates are overridable defaults;
 when none fits, use a fully specified bespoke composition with a reason and an
 explicit `promotionCandidate` decision (false by default). The compatibility
 wire keeps `composition.kind:"preset"` and `nearestPreset`. Select an exact
