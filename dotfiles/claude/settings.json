@@ -132,7 +132,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "AGENT_PROVIDER=anthropic /run/current-system/sw/bin/north-on-tooluse",
+            "command": "AGENT_PROVIDER=anthropic /home/tom/code/nixos-config/dotfiles/agents/hooks/hook-detach.sh /run/current-system/sw/bin/north-on-tooluse",
             "timeout": 10
           }
         ]

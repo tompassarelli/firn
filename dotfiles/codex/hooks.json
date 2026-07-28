@@ -105,7 +105,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-tooluse-codex",
+            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/hook-detach.sh /etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-tooluse-codex",
             "timeout": 10
           }
         ]
