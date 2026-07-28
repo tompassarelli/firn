@@ -119,6 +119,30 @@ terminal disposition and every tier-required aggregate/canary observation is
 recorded; any load-bearing fail or cannot-determine routes out to
 correction/escalation rather than another verification pass.
 
+**Resumption rights — what a non-green exit permits next.** Stopping is
+claim-scoped, never work-scoped: a blocked claim halts its own path, not the
+lane's other independent claims and not the system. Independent claims never
+queue behind a blocked one — finish them and deliver one consolidated
+report. Exit classes carry typed resumption rights:
+
+- **fail** → a correction lane: auto-spawnable, own claim contract and
+  budget.
+- **cannot-determine (missing or broken capability)** → an infrastructure
+  repair lane: auto-spawnable when the fix is itself ≤P1 and inside existing
+  authority; above that — or on repeated failure of the same capability —
+  the human. Repeated cannot-determines on one capability are one defect
+  generating many halts: route the capability fix once, never per-lane
+  workarounds.
+- **waiver, tier escalation, budget overrun, risk acceptance** → the human
+  (or nearest live supervisor) only.
+
+**Meta-loop guard:** a resumed iteration must flip at least one claim's
+terminal state or retire one named blocker; two consecutive no-progress
+iterations is a hard stop routed to the human. This is Law 6's pass-level
+loop detector lifted one level: terminal passes make meta-progress
+measurable, so a looped execution either monotonically drains the claim
+vector or trips the detector within two cycles.
+
 ## 4. Paranoia profiles (consolidated ladder)
 
 Tier is chosen **once, at intake**, recorded on the thread, from blast-radius
@@ -245,6 +269,19 @@ have caught it). The approval gate on coverage gaps was deliberately NOT
 relaxed despite its redispatch cost on no-live-input providers: pre-approving
 any self-added check class reopens the loop-engine door, and amendment (a)
 absorbs most of the cost at intake.
+
+**Fifth refinement, 2026-07-28 (field data, both directions):** a lane
+correctly emitted cannot-determine on a broken verifier route
+(`route_unresolvable`, one retry honored), preserved the candidate — then
+over-read "stop" as ceasing all work rather than stopping the blocked path
+(its own correction on being asked: "that was too literal"). Concurrent
+human review named the dual risk: looped execution could meta-tarpit, while
+unlooped execution halts on a long tail of trivial blockers and throttles
+throughput. Both close under the resumption-rights rule (§3): stopping is
+claim-scoped; non-green exits carry typed resumption rights so trivial
+blockers become auto-spawnable bounded repairs instead of human halts; and
+the meta-loop guard makes looped execution provably convergent-or-halted —
+terminal passes are what make meta-progress measurable at all.
 
 **Corroboration, 2026-07-28 (second OpenAI lane, website-publish task):** an
 unprompted self-report confirmed the disease model ("I let evidence

@@ -78,5 +78,17 @@ Paste everything below the rule into the brief, verbatim.
     tier-required aggregate/canary observation is recorded. A load-bearing
     fail or cannot-determine routes to correction/escalation, never to
     another verification pass. After delivering your disposition, stop.
+    Stopping is claim-scoped, not work-scoped: a blocked claim halts its
+    own path only; independent claims never queue behind it — finish them
+    and deliver one consolidated report. Resumption rights by exit class:
+    fail → open a separate bounded correction unit (own contract, own
+    budget); cannot-determine on a missing/broken capability → open a
+    separate bounded infrastructure repair when that fix is ≤P1 and inside
+    your authority, otherwise escalate it (repeated failures of the same
+    capability are one defect — route one fix, never per-task workarounds);
+    waiver, tier escalation, budget overrun, risk acceptance → supervisor
+    only. Meta-loop guard: each resumed unit must flip at least one claim's
+    terminal state or retire one named blocker; two consecutive no-progress
+    units is a hard stop to your supervisor.
 11. Do not re-derive or restate verification policy in your output. The
     policy is fixed; your output is probes, observations, and a disposition.
