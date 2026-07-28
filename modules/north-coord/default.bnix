@@ -151,7 +151,10 @@
              :partOf       [pairTarget]
              :listenStreams ["127.0.0.1:7978"]
              :socketConfig {:Backlog 4096
-                            :FileDescriptorName "north-telemetry-coord"}})
+                            ;; north-coord-sd-listen validates the inherited
+                            ;; descriptor contract, not the unit name. Both
+                            ;; isolated writers use the same adapter contract.
+                            :FileDescriptorName "north-coord"}})
          :systemd.targets.north-coord-pair
           (lib.mkIf stageA
             {:description "North Stage-A coordination + telemetry writer pair"

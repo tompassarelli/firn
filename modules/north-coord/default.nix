@@ -99,7 +99,7 @@ in
       listenStreams = [ "127.0.0.1:7978" ];
       socketConfig = {
         Backlog = 4096;
-        FileDescriptorName = "north-telemetry-coord";
+        FileDescriptorName = "north-coord";
       };
     };
     systemd.targets.north-coord-pair = lib.mkIf stageA {

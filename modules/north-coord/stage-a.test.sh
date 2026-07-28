@@ -98,6 +98,8 @@ let
   attr = set: name: builtins.hasAttr name set;
   coord = cfg.systemd.services.north-coord;
   telemetry = cfg.systemd.services.north-telemetry-coord or { };
+  coordSocket = cfg.systemd.sockets.north-coord or { };
+  telemetrySocket = cfg.systemd.sockets.north-telemetry-coord or { };
   pair = cfg.systemd.targets.north-coord-pair or { };
   northWrapper =
     lib.findFirst (pkg: lib.getName pkg == "north") null
@@ -108,6 +110,8 @@ pkgs.writeText "north-stage-a-${if stageA then "on" else "off"}" (
     "assertion=${lib.boolToString (builtins.all (item: item.assertion) cfg.assertions)}"
     "coord-socket=${lib.boolToString (attr cfg.systemd.sockets "north-coord")}"
     "telemetry-socket=${lib.boolToString (attr cfg.systemd.sockets "north-telemetry-coord")}"
+    "coord-descriptor=${coordSocket.socketConfig.FileDescriptorName or "unset"}"
+    "telemetry-descriptor=${telemetrySocket.socketConfig.FileDescriptorName or "unset"}"
     "telemetry-service=${lib.boolToString (attr cfg.systemd.services "north-telemetry-coord")}"
     "pair-target=${lib.boolToString (attr cfg.systemd.targets "north-coord-pair")}"
     "coord-part-of=${lib.concatStringsSep "," (coord.partOf or [ ])}"
@@ -156,6 +160,8 @@ on=$(build_case true true)
 grep -Fxq 'assertion=true' "$on"
 grep -Fxq 'coord-socket=true' "$on"
 grep -Fxq 'telemetry-socket=true' "$on"
+grep -Fxq 'coord-descriptor=north-coord' "$on"
+grep -Fxq 'telemetry-descriptor=north-coord' "$on"
 grep -Fxq 'telemetry-service=true' "$on"
 grep -Fxq 'pair-target=true' "$on"
 grep -Fxq 'coord-part-of=north-coord-pair.target' "$on"
