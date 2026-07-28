@@ -9,6 +9,10 @@ and the OpenAI-driven `fram-reliability-supervisor`
 **Companion payload:** the paste-able brief override for OpenAI lanes lives at
 `~/code/nixos-config/dotfiles/agents/docs/praxis/verification-override-openai.md`
 — this doc is the why and the law; that file is what ships in a brief.
+**Public mirror:** the portable, provider-neutral form is published at
+https://github.com/tompassarelli/stop-the-loop (checkout:
+`~/code/stop-the-loop`, policy = `README.md`). When a refinement here changes
+the portable rules, mirror it there and safe-push.
 
 ---
 
