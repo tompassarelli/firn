@@ -143,7 +143,6 @@
              ;; database generation. Keep it bound across pair replacement and
              ;; NixOS activation so clients queue instead of seeing ECONNREFUSED.
              :wantedBy     ["sockets.target"]
-             :restartIfChanged false
              :stopIfChanged false
              :listenStreams ["127.0.0.1:7977"]
              :socketConfig {:Backlog 4096
@@ -152,7 +151,6 @@
           (lib.mkIf stageA
             {:description  "North telemetry coordinator activation socket (:7978)"
              :wantedBy     ["sockets.target"]
-             :restartIfChanged false
              :stopIfChanged false
              :listenStreams ["127.0.0.1:7978"]
              :socketConfig {:Backlog 4096
