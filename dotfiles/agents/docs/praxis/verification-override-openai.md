@@ -17,7 +17,11 @@ Paste everything below the rule into the brief, verbatim.
 **Verification policy — overrides your defaults.**
 
 1. Before your first probe, write the complete, finite verification checklist
-   for the declared claim contract. Adding items mid-flight is a defect, not
+   for the declared claim contract. Derive the contract from the enumerated
+   change surface — everything added, changed, or removed plus its direct
+   dependents (callers/readers of what changed); every element maps to a
+   claim or a named waiver with a reason. A contract that cannot state its
+   enumeration is not complete. Adding items mid-flight is a defect, not
    diligence.
 2. Classify each newly observed fact exactly once: if it falsifies or narrows
    a declared claim, that claim FAILS now and you say so; if orthogonal, file

@@ -42,6 +42,13 @@ it — never personally retire it past the pre-declared bar.**
    probe, expected observation, required capability/environment, paranoia
    tier, and any tier-required aggregate attestation or canary. Verification
    checks claims against that contract; it never invents bars mid-flight.
+   **Coverage obligation:** the contract is derived from an enumeration of
+   the change surface — everything added, changed, or removed plus its
+   direct dependents (callers/readers of what changed) — and must tile it:
+   every element maps to a claim or a named waiver with a reason. A contract
+   that cannot state its enumeration is not complete. Coverage is an intake
+   property earned by enumeration, never a verification property earned by
+   effort.
 2. **Verification is claim-shaped, not effort-shaped.** One verifier decides
    one claim: one probe, one observation. Evidence carries exact-commit/run
    provenance plus the observed result. Time, effort, confidence prose, and
@@ -146,6 +153,7 @@ Cross-cutting rules:
 | Anxiety escalation | Tier grows mid-flight without a new fact | Restate the intake tier; escalate only by naming the new fact |
 | File-and-pass | Refuting fact filed as "future work" while the old bar passes | Law 5: the refuted claim FAILS now |
 | Policy churn | Re-deriving the verification funnel each cycle | The funnel is fixed (this doc); execute the next probe |
+| Coverage theater | "One more check," sampling worries in anxiety order | Coverage comes from the intake enumeration tiling the change surface; verify against the contract |
 | Scope self-expansion | Verifier absorbs newly found risks into its pass | Law 5 classification: fail-now or new thread |
 | Dispositionless verification | Pass ends with "continuing to investigate" | Forbidden state; emit pass/fail/cannot-determine now |
 
@@ -196,6 +204,17 @@ of declaring it in the child bar was process debt. Right tier, wrong process.
 philosophy — under a forced structure it produced sharp doctrine immediately.
 Its defaults lacked *binding* terminal conditions and intake-time tier
 fixation. The praxis override block makes those binding.
+
+**Third refinement, 2026-07-28 (human review):** the artificial-restraint
+edge — a bar under-specified at intake goes green while missing in-scope
+work. Budget overrun was already a non-green exit (stop-and-report), so the
+silent case is only the under-specified bar; closed by Law 1's coverage
+obligation: the contract must tile the enumerated change surface, making a
+coverage gap a visible missing claim instead of a missing hour of effort.
+The same review independently observed that cannot-determine functions as a
+human-intervention window — confirmed as design intent: all three non-green
+exits (fail, cannot-determine, budget overrun) are built as legible human
+decision points.
 
 **Corroboration, 2026-07-28 (second OpenAI lane, website-publish task):** an
 unprompted self-report confirmed the disease model ("I let evidence
