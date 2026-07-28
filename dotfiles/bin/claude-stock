@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Launch Claude Code on the stock profile: no hooks, no plugins, no skills, no
+# north, no orchestration. The second configuration.
+#
+# Every north account dir symlinks one shared ~/.claude/settings.json, CLAUDE.md,
+# and hooks dir — seven accounts, one configuration, no fallback. That is why a
+# single bad change reads as total system failure. This is the fallback: a real
+# second config root, so there is always a rung to stand on.
+#
+# Profile: ~/.local/state/north/profiles/stock
+# Plain `claude` is untouched and still boots the full stack.
+set -u
+
+PROFILE="$HOME/.local/state/north/profiles/stock"
+REAL="/run/current-system/sw/bin/claude"
+
+[ -x "$REAL" ] || { echo "claude-stock: real claude not at $REAL" >&2; exit 127; }
+[ -f "$PROFILE/settings.json" ] || {
+  echo "claude-stock: no profile at $PROFILE" >&2; exit 1; }
+
+if [ ! -s "$PROFILE/.credentials.json" ]; then
+  echo "claude-stock: no credentials in the profile — run /login once inside." >&2
+fi
+
+# Drop the orchestration and plugin bins a parent session injected, so a stock
+# shell cannot reach back into the full stack by PATH alone.
+CLEAN_PATH="$(printf '%s' "$PATH" | tr ':' '\n' \
+  | grep -vE '/north/orchestration/bin|/plugins/cache/' \
+  | paste -sd: -)"
+
+exec env -u AGENT_PROVIDER \
+         -u AI_AGENT \
+         -u CLAUDECODE \
+         -u CLAUDE_CODE_CHILD_SESSION \
+         -u CLAUDE_CODE_SESSION_ID \
+         -u CLAUDE_CODE_ENTRYPOINT \
+         -u CLAUDE_CODE_EXECPATH \
+         -u CLAUDE_EFFORT \
+         -u CLAUDE_PID \
+         -u NORTH_HARNESS_STATE \
+         -u NORTH_THREAD \
+         -u NORTH_RUN_ID \
+         -u NORTH_AGENT_ID \
+     CLAUDE_CONFIG_DIR="$PROFILE" \
+     AGENT_NO_AUTHORING_HOOKS=1 \
+     PATH="$CLEAN_PATH" \
+     "$REAL" "$@"
