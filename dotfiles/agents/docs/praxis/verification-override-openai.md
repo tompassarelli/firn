@@ -92,3 +92,18 @@ Paste everything below the rule into the brief, verbatim.
     units is a hard stop to your supervisor.
 11. Do not re-derive or restate verification policy in your output. The
     policy is fixed; your output is probes, observations, and a disposition.
+12. The intake contract is standing authorization for its own probes:
+    executing or re-executing a declared probe never requires permission.
+    An interrupted or preempted run that produced no observation is simply
+    run again — not a tooling retry, not a mid-flight addition, never an
+    escalation (repeated interruption of the same probe is a capability
+    signal: route it as cannot-determine). Every escalation names its
+    decision type — waiver, scope extension, risk acceptance, tier
+    escalation, external action — and why that decision lies outside the
+    contract; if you cannot name that, it is not an escalation, it is work:
+    execute it. Capability is not authority: for a technical-judgment gap,
+    request (or, if you are an orchestrator, spawn) a frontier-tier
+    evaluator whose verdict you consume as evidence — a stronger model you
+    spawn is your child, never your supervisor, and authority flows only up
+    the spawn chain to the human. Your brief may pre-delegate named
+    decision classes with bounds; anything unnamed routes up.

@@ -143,6 +143,25 @@ loop detector lifted one level: terminal passes make meta-progress
 measurable, so a looped execution either monotonically drains the claim
 vector or trips the detector within two cycles.
 
+**Standing authorization & escalation typing.** The intake contract is the
+standing authorization for its own probes: executing — or re-executing — a
+declared probe never requires permission. An interrupted or preempted run
+that produced no observation is simply run again; it is not a tooling retry,
+not a mid-flight addition, and never an escalation (repeated interruption of
+the same probe is a capability signal and follows the cannot-determine
+route). Every escalation must name its decision type — waiver, scope
+extension, risk acceptance, tier escalation, or external action — and state
+why that decision lies outside the contract; an escalation that cannot is
+not an escalation, it is work, and the correct move is to execute.
+**Capability is not authority:** a technical-judgment gap is met by spawning
+a context-carrying frontier-tier evaluator as a *child*, whose verdict is
+evidence consumed by the decision-holder. Model tier never confers
+authority, a child never becomes its spawner's supervisor, and authority
+flows only up the spawn chain, terminating at the human — there is
+deliberately no promotion mechanism, because authority inversion turns a
+delegated child into a confused deputy. The brief may pre-delegate named
+decision classes with bounds; anything unnamed defaults up.
+
 ## 4. Paranoia profiles (consolidated ladder)
 
 Tier is chosen **once, at intake**, recorded on the thread, from blast-radius
@@ -192,6 +211,7 @@ Cross-cutting rules:
 | Coverage theater | "One more check," sampling worries in anxiety order | Coverage comes from the intake enumeration tiling the change surface; verify against the contract |
 | Scope self-expansion | Verifier absorbs newly found risks into its pass | Law 5 classification: fail-now or new thread |
 | Dispositionless verification | Pass ends with "continuing to investigate" | Forbidden state; emit pass/fail/cannot-determine now |
+| Authority laundering | Escalating for permission the contract already grants ("may I run the declared probe?") | Name the decision type outside the contract or execute; deference is not diligence |
 
 ## 6. OpenAI-lane override block
 
@@ -282,6 +302,21 @@ claim-scoped; non-green exits carry typed resumption rights so trivial
 blockers become auto-spawnable bounded repairs instead of human halts; and
 the meta-loop guard makes looped execution provably convergent-or-halted —
 terminal passes are what make meta-progress measurable at all.
+
+**Sixth refinement, 2026-07-28 (field data: the over-deference swing):** a
+lane correctly held a contract-extension decision for the human but also
+escalated re-execution of an interrupted, already-declared probe — asking
+permission to do what intake had already authorized, then describing its own
+state as "escalated" with no addressee ("escalated to who?" — "to you").
+The same exchange surfaced the escalation-hierarchy ambiguity, which the
+lane itself articulated correctly: a stronger model it spawns "is still my
+child, not my supervisor." Resolution (§3): standing authorization of the
+contract, typed escalations, the capability-vs-authority split (frontier
+consultation is evidence, never authority; no promotion mechanism, by
+design), and pre-delegable decision classes. New anti-pattern: authority
+laundering — the over-deference mirror of the original over-verification
+disease. Both replace executing the contract with something that feels
+safer; neither is diligence.
 
 **Corroboration, 2026-07-28 (second OpenAI lane, website-publish task):** an
 unprompted self-report confirmed the disease model ("I let evidence
