@@ -32,10 +32,10 @@
               {:systemd.user.services.north-reactor-sweep
                 {:Unit
                   {:Description "North reactor sweep — reap stale concerns + silently-dead lanes"
+                   ;; keep-old IS the HM mechanism for "don't restart me at
+                   ;; switch" — restartIfChanged is a NixOS system-service
+                   ;; option and fails HM's unit-section typecheck.
                    :X-SwitchMethod "keep-old"}
-                 ;; Home Manager applies unit changes synchronously. This periodic
-                 ;; reaper must wait for its timer instead of restarting mid-switch.
-                 :restartIfChanged false
                  :Service
                   {:Type             "oneshot"
                    :Environment      [(s "PATH=" pkgs.babashka "/bin:" pkgs.coreutils "/bin:" pkgs.git "/bin")]

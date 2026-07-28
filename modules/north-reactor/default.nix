@@ -13,7 +13,6 @@ in
           Description = "North reactor sweep — reap stale concerns + silently-dead lanes";
           X-SwitchMethod = "keep-old";
         };
-        restartIfChanged = false;
         Service = {
           Type = "oneshot";
           Environment = [ "PATH=${pkgs.babashka}/bin:${pkgs.coreutils}/bin:${pkgs.git}/bin" ];

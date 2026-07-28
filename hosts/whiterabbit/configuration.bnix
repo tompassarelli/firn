@@ -73,7 +73,8 @@
    :myConfig.modules.north-reactor.enable true
    ;; Home Manager activates this user service during a system switch. Bound
    ;; that activation independently of a periodic worker which may be hung.
-   :systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec "90s"
+   ;; mkForce: home-manager's nixos module pins its own 5m at equal priority.
+   :systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec (lib.mkForce "90s")
    :myConfig.modules.stylix.chosenTheme "everforest-dark-hard"
    ;; WireGuard client tunnel (wg0) to the Kea worker box. The wireguard module
    ;; (watchdog + wg tools) rides the `vpn` tag; this is just the host's interface
