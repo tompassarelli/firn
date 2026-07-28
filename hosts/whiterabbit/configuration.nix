@@ -57,6 +57,7 @@
   myConfig.modules.babashka.enable = true;
   myConfig.modules.north-coord.enable = true;
   myConfig.modules.north-coord.socketActivation = true;
+  myConfig.modules.north-coord.stageATelemetryPartition = true;
   myConfig.modules.north-stream-sync.enable = true;
   myConfig.modules.north-reactor.enable = true;
   systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";

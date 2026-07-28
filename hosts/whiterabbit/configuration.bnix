@@ -55,15 +55,14 @@
    :myConfig.modules.windows-vm.enable false
    :myConfig.modules.nh.enable true
    :myConfig.modules.babashka.enable true
-   ;; Daemon surface simplified 2026-07-09: agent-coord (:7978) and
-   ;; attention-coord (:7980) modules DELETED — zero live readers (web reads
-   ;; :7977; dark-room's attention log held only a bootstrap tx). Everything
-   ;; coordinates on the canonical :7977.
+   ;; Daemon surface simplified 2026-07-09: the old agent-coord and
+   ;; attention-coord modules remain deleted. Stage A now dedicates :7977 to
+   ;; coordination.log and reuses :7978 solely for telemetry.log; composed
+   ;; North clients retain one logical read surface.
    :myConfig.modules.north-coord.enable true
-   ;; systemd socket activation for :7977 — required live setting; keep this
-   ;; upstream explicit so clean Firn regeneration never drops it (was
-   ;; present only in the generated .nix, silently deletable on rebuild).
+   ;; systemd socket activation is required for both Stage-A writer sockets.
    :myConfig.modules.north-coord.socketActivation true
+   :myConfig.modules.north-coord.stageATelemetryPartition true
    ;; user-level timer (~5min) for north-stream-sync — zero-AI transcript
    ;; mirroring into ~/code/north/streams/raw (streams/CLAUDE.md).
    :myConfig.modules.north-stream-sync.enable true
