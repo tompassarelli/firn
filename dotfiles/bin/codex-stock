@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Launch Codex on the stock profile: no north hooks, no managed lifecycle, no
+# orchestration. The Codex counterpart to claude-stock.
+#
+# Managed Codex lanes carry the full hook manifest through /etc/codex/hooks and
+# run under a workspace sandbox. When that path stalls, this is the rung to
+# stand on: the plain codex CLI, its own CODEX_HOME, its own auth.
+#
+# Profile: ~/.local/state/north/profiles/codex-stock
+# Plain `codex` is untouched and still boots the managed stack.
+set -u
+
+PROFILE="$HOME/.local/state/north/profiles/codex-stock"
+REAL="/run/current-system/sw/bin/codex"
+
+[ -x "$REAL" ] || { echo "codex-stock: real codex not at $REAL" >&2; exit 127; }
+[ -f "$PROFILE/config.toml" ] || {
+  echo "codex-stock: no profile at $PROFILE" >&2; exit 1; }
+
+if [ ! -s "$PROFILE/auth.json" ]; then
+  echo "codex-stock: no auth.json in the profile — copy one from" >&2
+  echo "  ~/.local/state/north/accounts/openai/<target>/auth.json" >&2
+fi
+
+# Drop the orchestration and plugin bins a parent session injected, so a stock
+# shell cannot reach back into the managed stack by PATH alone.
+CLEAN_PATH="$(printf '%s' "$PATH" | tr ':' '\n' \
+  | grep -vE '/north/orchestration/bin|/plugins/cache/' \
+  | paste -sd: -)"
+
+exec env -u AGENT_PROVIDER \
+         -u AI_AGENT \
+         -u CODEX_MANAGED \
+         -u NORTH_HARNESS_STATE \
+         -u NORTH_THREAD \
+         -u NORTH_RUN_ID \
+         -u NORTH_AGENT_ID \
+         -u NORTH_BIN \
+     CODEX_HOME="$PROFILE" \
+     CODEX_SQLITE_HOME="$PROFILE/sqlite" \
+     AGENT_NO_AUTHORING_HOOKS=1 \
+     PATH="$CLEAN_PATH" \
+     "$REAL" "$@"

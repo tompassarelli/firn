@@ -1122,8 +1122,8 @@ group shared "$hook_count hooks linted · $skill_count skills · canonical instr
 # package surface; mutable checkout lifecycle bindings are never authoritative.
 validate_hooks() {
   local manifest="$1" provider="$2" expected_provider="$3"
-  local count=0 ev command raw_command provider_marker identity_kind first resolved expected basename declared_shared interpreter
-  local hook_sha role provenance_manifest provenance_digest expected_resolved immutable_north=0
+  local count=0 ev command raw_command provider_marker identity_kind first resolved expected basename declared_shared interpreter detach
+  local detach hook_sha role provenance_manifest provenance_digest expected_resolved immutable_north=0
   local -A provenance_seen=()
   HOOK_PROVENANCE_SUMMARY='immutable North package commands · static declaration'
   while IFS=$'\t' read -r ev command; do
@@ -1131,6 +1131,7 @@ validate_hooks() {
     count=$((count + 1))
     raw_command="$command"
     provider_marker=''
+    detach=''
     interpreter=''
     if [[ "$command" =~ ^AGENT_PROVIDER=([^[:space:]]+)[[:space:]]+(.+)$ ]]; then
       provider_marker="${BASH_REMATCH[1]}"
@@ -1147,6 +1148,14 @@ validate_hooks() {
     fi
     if [[ "$command" =~ ^/run/current-system/sw/bin/bash[[:space:]]+(.+)$ ]]; then
       interpreter='/run/current-system/sw/bin/bash'
+      command="${BASH_REMATCH[1]}"
+    fi
+    # hook-detach is a transparent telemetry wrapper: it drains the payload,
+    # re-execs the real hook detached, and returns. The wrapped command keeps
+    # the identity of the hook it carries, so unwrap before classifying — the
+    # same way the exact Bash interpreter above is unwrapped.
+    if [[ "$command" =~ ^$SHARED/hooks/hook-detach\.sh[[:space:]]+(.+)$ ]]; then
+      detach='hook-detach'
       command="${BASH_REMATCH[1]}"
     fi
     first="${command%% *}"
