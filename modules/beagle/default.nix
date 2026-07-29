@@ -1,7 +1,6 @@
-{ config, lib, pkgs, inputs, ... }:
+{ config, lib, pkgs, ... }:
 
 let
-  beaglePkg = inputs.beagle.packages."${pkgs.stdenv.hostPlatform.system}".default;
   liveInputs = with pkgs; [
     bash
     coreutils
@@ -24,7 +23,6 @@ let
     "beagle-daemon"
     "beagle-lsp"
   ];
-  packagedCommandNames = [ "beagle" "beagle-build" "beagle-check" "beagle-daemon" "beagle-lsp" ];
   mkDev = name: pkgs.writeShellApplication {
     name = "${name}-dev";
     runtimeInputs = liveInputs;
@@ -39,18 +37,11 @@ let
       exec "$target" "$@"
     '';
   };
-  mkPackaged = name: pkgs.writeShellApplication {
-    name = "${name}-packaged";
-    text = ''
-      exec ${beaglePkg}/bin/${name} "$@"
-    '';
-  };
   devCommands = builtins.map mkDev devCommandNames;
-  packagedCommands = builtins.map mkPackaged packagedCommandNames;
 in
 {
-  options.myConfig.modules.beagle.enable = lib.mkEnableOption "beagle compiler + CLI suite (racket-pinned, hermetic) with explicit checkout-only development commands";
+  options.myConfig.modules.beagle.enable = lib.mkEnableOption "beagle checkout-only development commands (no packaged build enters the system closure)";
   config = lib.mkIf config.myConfig.modules.beagle.enable {
-    environment.systemPackages = ([ beaglePkg ] ++ devCommands ++ packagedCommands);
+    environment.systemPackages = devCommands;
   };
 }

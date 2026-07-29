@@ -2,36 +2,32 @@
 
 (ns default)
 
-;; beagle CLI suite from the packaged flake. The /bin holds `beagle` plus every
-;; `beagle-*` tool, each wrapped with the pinned racket 9.1 baked in
-;; (_BEAGLE_RACKET + PATH + PLTCOLLECTS), so no ambient racket can cause .zo
-;; skew. This replaces the ~/code/beagle/bin dev-checkout reliance on PATH.
-;; Reads beagle main (where package/flake merged) via git+file?ref=main — robust
-;; to whatever branch the local checkout sits on. Repoint to a github URL off-box.
-;;
-;; Mutable checkout execution is available only through explicit *-dev names,
-;; matching the north and fram delivery contract: ordinary names are immutable
-;; generation-owned surfaces, *-dev names are checkout surfaces that announce
-;; their provenance, and the two never select one another silently.
+;; beagle is DEV-CHANNEL ONLY (two-speed step 5): the packaged flake build of
+;; beagle no longer enters environment.systemPackages, so it no longer enters
+;; the system closure. Only the checkout-execution `*-dev` shims below ship;
+;; each execs ~/code/beagle/main's own bin/<name> so the racket that runs is
+;; whatever that checkout's own direnv resolves — never a packaged racket, and
+;; never the packaged beagle. This matches the north and fram delivery
+;; contract: ordinary names are immutable generation-owned surfaces, *-dev
+;; names are checkout surfaces that announce their provenance, and the two
+;; never select one another silently. A missing checkout is a clear, loud
+;; failure (exit 127 + message), never a silent fallback to a packaged binary.
 ;;
 ;; The dev wrappers deliberately do NOT export _BEAGLE_RACKET. The checkout's
 ;; own bin/_beagle-racket resolves racket through that checkout's direnv, which
-;; is the racket its .zo bytecode was compiled against. Injecting the package's
+;; is the racket its .zo bytecode was compiled against. Injecting a package's
 ;; pinned racket instead would reintroduce exactly the stale-bytecode skew the
-;; packaging exists to prevent ("body of .../raco.rkt"). A dev command runs the
-;; checkout on the checkout's own terms; direnv is supplied so that resolution
-;; works outside a direnv shell (dispatched agent, CI, cron, plain subshell).
-(nix/module [config lib pkgs inputs ...]
+;; dev/prod split exists to prevent ("body of .../raco.rkt"). A dev command
+;; runs the checkout on the checkout's own terms; direnv is supplied so that
+;; resolution works outside a direnv shell (dispatched agent, CI, cron, plain
+;; subshell).
+(nix/module [config lib pkgs ...]
   (let
-    [beaglePkg
-      (get (get inputs.beagle.packages pkgs.stdenv.hostPlatform.system) :default)
-     liveInputs
+    [liveInputs
       (nix/with pkgs [bash coreutils direnv findutils gawk git gnugrep gnused])
      devCommandNames
       ["beagle" "beagle-build" "beagle-check" "beagle-validate" "beagle-syntax"
        "beagle-fix" "beagle-repair" "beagle-doctor" "beagle-daemon" "beagle-lsp"]
-     packagedCommandNames
-      ["beagle" "beagle-build" "beagle-check" "beagle-daemon" "beagle-lsp"]
      mkDev
       (fn [name]
         (pkgs.writeShellApplication
@@ -46,21 +42,11 @@
                 "fi"
                 (s "echo \"" name "-dev: provenance=checkout path=$target\" >&2")
                 "exec \"$target\" \"$@\"")}))
-     mkPackaged
-      (fn [name]
-        (pkgs.writeShellApplication
-          {:name (s name "-packaged")
-           :text (ms (s "exec " beaglePkg "/bin/" name " \"$@\""))}))
-     devCommands (builtins.map mkDev devCommandNames)
-     packagedCommands (builtins.map mkPackaged packagedCommandNames)]
+     devCommands (builtins.map mkDev devCommandNames)]
     {:tags [development]
-     :flake-inputs
-      {:beagle {:url "git+file:///home/tom/code/beagle/main?ref=main"
-                :inputs.nixpkgs.follows "nixpkgs"}}
      :options.myConfig.modules.beagle.enable
       (lib.mkEnableOption
-        "beagle compiler + CLI suite (racket-pinned, hermetic) with explicit checkout-only development commands")
+        "beagle checkout-only development commands (no packaged build enters the system closure)")
      :config
       (lib.mkIf config.myConfig.modules.beagle.enable
-        {:environment.systemPackages
-          (++ [beaglePkg] devCommands packagedCommands)})}))
+        {:environment.systemPackages devCommands})}))
