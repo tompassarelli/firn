@@ -49,11 +49,25 @@ native_dispatch_args() {
     done <"$state"
     mode="${mode:-north}"
   fi
+  # `north config dispatch` owns this vocabulary; this table must track it.
+  # Stripping the native spawn tools is correct ONLY when native dispatch is
+  # actually denied. Getting that backwards is not a degraded mode — it leaves
+  # a session with no dispatch surface at all, which is what `native-forced`
+  # falling through to the old `*)` catch-all did on 2026-07-30.
   case "$mode" in
+    # Current four-mode vocabulary.
+    native-forced|native-biased|managed-biased) enforce_topology=0 ;;
+    managed-forced) ;;
+    # Legacy values, honored exactly as before.
     native) return 0 ;;
     warn) enforce_topology=0 ;;
     north) ;;
-    *) mode="north" ;;
+    *)
+      # Fail closed, but never silently: an unreadable mode is a coupling bug
+      # between north and this launcher, and it must be visible the first time.
+      printf 'claude: unrecognized dispatch mode "%s" in %s; assuming managed-forced\n' \
+        "$mode" "$state" >&2
+      ;;
   esac
   printf '%s\0' \
     '--model' 'claude-fable-5' \

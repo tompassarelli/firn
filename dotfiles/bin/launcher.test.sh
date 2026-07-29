@@ -539,6 +539,30 @@ JSON
   run "$launcher" 0 -- as acctA malformed-state-probe ; s="$STDERR"
   check "$launcher/unknown dispatch state fails closed to north defaults" \
     test "$(record_field _ args)" = "$default_args malformed-state-probe"
+  check "$launcher/unknown dispatch state says so out loud" \
+    contains "$s" 'unrecognized dispatch mode "unrecognized"'
+
+  # 9d. The four-mode vocabulary owned by `north config dispatch`. Only
+  # managed-forced actually denies native dispatch, so only managed-forced may
+  # strip the native spawn tools. On 2026-07-30 every one of these fell through
+  # the unknown-value catch-all, so a `native-forced` session was launched with
+  # no dispatch surface at all — the exact inverse of what the mode requests.
+  for native_mode in native-forced native-biased managed-biased; do
+    printf 'dispatch=%s\nguards=off\n' "$native_mode" \
+      >"$HOME_DIR/.local/state/north/harness.conf"
+    run "$launcher" 0 -- as acctA "$native_mode-probe" ; s="$STDERR"
+    check "$launcher/dispatch=$native_mode keeps the native dispatch surface" \
+      test "$(record_field _ args)" = "$warn_args $native_mode-probe"
+    check "$launcher/dispatch=$native_mode is a recognized mode" \
+      not_contains "$s" 'unrecognized dispatch mode'
+  done
+  printf 'dispatch=managed-forced\nguards=off\n' >"$HOME_DIR/.local/state/north/harness.conf"
+  run "$launcher" 0 -- as acctA managed-forced-probe ; s="$STDERR"
+  check "$launcher/dispatch=managed-forced withholds the native dispatch surface" \
+    test "$(record_field _ args)" = "$default_args managed-forced-probe"
+  check "$launcher/dispatch=managed-forced is a recognized mode" \
+    not_contains "$s" 'unrecognized dispatch mode'
+
   printf 'dispatch=north\nguards=off\n' >"$HOME_DIR/.local/state/north/harness.conf"
 
   # --- immutable ordinary North selection ---

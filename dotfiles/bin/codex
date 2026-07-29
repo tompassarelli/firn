@@ -69,11 +69,24 @@ native_dispatch_args() {
     done <"$state"
     mode="${mode:-north}"
   fi
+  # `north config dispatch` owns this vocabulary; this table must track it.
+  # Disabling multi_agent is correct ONLY when native dispatch is actually
+  # denied. See the sibling note in dotfiles/bin/claude — the same catch-all
+  # left native-forced sessions with no dispatch surface at all.
   case "$mode" in
+    # Current four-mode vocabulary.
+    native-forced|native-biased|managed-biased) enforce_topology=0 ;;
+    managed-forced) ;;
+    # Legacy values, honored exactly as before.
     native) return 0 ;;
     warn) enforce_topology=0 ;;
     north) ;;
-    *) mode="north" ;;
+    *)
+      # Fail closed, but never silently: an unreadable mode is a coupling bug
+      # between north and this launcher, and it must be visible the first time.
+      printf 'codex: unrecognized dispatch mode "%s" in %s; assuming managed-forced\n' \
+        "$mode" "$state" >&2
+      ;;
   esac
   printf '%s\0' \
     '-c' 'model="gpt-5.6-terra"' \
