@@ -384,21 +384,22 @@
               (if stageA
                 [selector cutoverGate bootstrap]
                 []))
+         ;; FRAM_TELEMETRY_LOG must never be exported globally: the client
+         ;; log-selection veto (coord.clj expected-log) treats its presence as
+         ;; "pin telemetry", which redirected EVERY direct north/bb client to
+         ;; the wrong corpus on 2026-07-29. Daemons receive it unit-scoped;
+         ;; the north wrapper exports it per-invocation.
          :environment.variables
           (lib.mkIf stageA
             {:NORTH_TELEMETRY_PARTITION "1"
-             :NORTH_TELEMETRY_PORT "7978"
-             :FRAM_TELEMETRY_LOG
-              (s homeDir "/.local/state/north/telemetry.log")})
+             :NORTH_TELEMETRY_PORT "7978"})
          :home-manager.users
           {username
             (nix/module [config ...]
               {:home.sessionVariables
                 (lib.mkIf stageA
                   {:NORTH_TELEMETRY_PARTITION "1"
-                   :NORTH_TELEMETRY_PORT "7978"
-                   :FRAM_TELEMETRY_LOG
-                    (s homeDir "/.local/state/north/telemetry.log")})})}
+                   :NORTH_TELEMETRY_PORT "7978"})})}
          :systemd.sockets.north-coord
           (lib.mkIf config.myConfig.modules.north-coord.socketActivation
             {:description  "North coordinator activation socket (:7977)"

@@ -259,13 +259,11 @@ in
     environment.variables = lib.mkIf stageA {
       NORTH_TELEMETRY_PARTITION = "1";
       NORTH_TELEMETRY_PORT = "7978";
-      FRAM_TELEMETRY_LOG = "${homeDir}/.local/state/north/telemetry.log";
     };
     home-manager.users.${username} = ({ config, ... }: {
       home.sessionVariables = lib.mkIf stageA {
         NORTH_TELEMETRY_PARTITION = "1";
         NORTH_TELEMETRY_PORT = "7978";
-        FRAM_TELEMETRY_LOG = "${homeDir}/.local/state/north/telemetry.log";
       };
     });
     systemd.sockets.north-coord = lib.mkIf config.myConfig.modules.north-coord.socketActivation {
