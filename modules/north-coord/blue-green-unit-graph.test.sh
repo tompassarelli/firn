@@ -39,13 +39,15 @@ do
   }
 done
 
-# Ordinary activation must not reconfigure the permanent listeners or the
-# live legacy pair target. Proxy descriptor inheritance is an independent
-# [Service] Sockets= contract.
-cmp "$baseline_units/north-coord.socket" \
-  "$(unit north-coord.socket)"
-cmp "$baseline_units/north-telemetry-coord.socket" \
-  "$(unit north-telemetry-coord.socket)"
+# Ordinary activation preserves the permanent listener contract. The sole
+# intentional socket delta disables systemd's fatal trigger limit during HOLD;
+# PollLimit remains the non-fatal flood throttle.
+for name in north-coord.socket north-telemetry-coord.socket; do
+  grep -Fxq 'TriggerLimitIntervalSec=0' "$(unit "$name")"
+  diff -u \
+    "$baseline_units/$name" \
+    <(grep -Fvx 'TriggerLimitIntervalSec=0' "$(unit "$name")")
+done
 cmp "$baseline_units/north-coord-pair.target" \
   "$(unit north-coord-pair.target)"
 

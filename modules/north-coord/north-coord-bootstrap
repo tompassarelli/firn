@@ -37,6 +37,7 @@ owner=$NORTH_COORD_CUTOVER_USER
 group=$NORTH_COORD_CUTOVER_GROUP
 readiness_timeout_seconds=${NORTH_COORD_BOOTSTRAP_READY_TIMEOUT_SECONDS:-90}
 readiness_interval_seconds=${NORTH_COORD_BOOTSTRAP_READY_INTERVAL_SECONDS:-1}
+proxy_ready_timeout_seconds=${NORTH_COORD_PROXY_READY_TIMEOUT_SECONDS:-15}
 
 [[ "$readiness_timeout_seconds" =~ ^[1-9][0-9]*$ &&
    "$readiness_timeout_seconds" -le 600 ]] ||
@@ -44,6 +45,9 @@ readiness_interval_seconds=${NORTH_COORD_BOOTSTRAP_READY_INTERVAL_SECONDS:-1}
 [[ "$readiness_interval_seconds" =~ ^[1-9][0-9]*$ &&
    "$readiness_interval_seconds" -le 30 ]] ||
   die "readiness interval must be an integer from 1 through 30 seconds"
+[[ "$proxy_ready_timeout_seconds" =~ ^[1-9][0-9]*$ &&
+   "$proxy_ready_timeout_seconds" -le 120 ]] ||
+  die "proxy readiness timeout must be an integer from 1 through 120 seconds"
 
 coord_socket=north-coord.socket
 telemetry_socket=north-telemetry-coord.socket
@@ -154,6 +158,21 @@ wait_active() {
   local unit=$1 deadline=$((SECONDS + 30))
   until unit_active "$unit"; do
     (( SECONDS < deadline )) || die "$unit did not start within 30 seconds"
+    sleep 0.1
+  done
+}
+
+wait_selector_ready() {
+  local deadline=$((SECONDS + proxy_ready_timeout_seconds))
+  local selector_status=0 last_output=""
+  while :; do
+    if last_output=$("$selector" status 2>&1); then
+      return 0
+    else
+      selector_status=$?
+    fi
+    (( SECONDS < deadline )) ||
+      die "proxy selector did not become ready within ${proxy_ready_timeout_seconds}s; last status rc=$selector_status: ${last_output:-no selector output}"
     sleep 0.1
   done
 }
@@ -302,7 +321,7 @@ rollback_to_legacy() {
     die "blue/green bootstrap marker is absent"
   selected=$(read_route) || die "blue/green route is absent or malformed"
   "$gate" verify "$selected"
-  "$selector" status >/dev/null
+  wait_selector_ready
 
   # HOLD without changing either public socket. Arm the volatile condition
   # before durable blue/green state is removed so queued activation cannot
@@ -339,7 +358,7 @@ if [[ -f "$bootstrap_marker" && ! -L "$bootstrap_marker" ]]; then
   wait_pair_phase "$other" read-only
   systemctl start "$proxy"
   wait_active "$proxy"
-  "$selector" status >/dev/null
+  wait_selector_ready
   systemctl start north-coord-blue-green.target
   clear_legacy_hold ||
     die "legacy HOLD condition did not clear after blue/green resume"
@@ -400,7 +419,7 @@ wait_pair_phase blue active
 write_bootstrap_marker blue
 systemctl start "$proxy"
 wait_active "$proxy"
-"$selector" status >/dev/null
+wait_selector_ready
 
 systemctl start "$green_coord" "$green_telemetry"
 wait_pair_phase green standby

@@ -284,6 +284,9 @@
                   ;; finite readiness window.
                   "export NORTH_COORD_BOOTSTRAP_READY_TIMEOUT_SECONDS=90"
                   "export NORTH_COORD_BOOTSTRAP_READY_INTERVAL_SECONDS=1"
+                  ;; Type=simple also marks HAProxy active before its runtime
+                  ;; admin socket accepts selector probes.
+                  "export NORTH_COORD_PROXY_READY_TIMEOUT_SECONDS=15"
                   (builtins.readFile (p "./north-coord-bootstrap")))})
         serviceEnvironment
           {:HOME homeDir
@@ -382,14 +385,21 @@
              ;; ECONNREFUSED.
              :wantedBy     ["sockets.target"]
              :listenStreams ["127.0.0.1:7977"]
-             :socketConfig {:Backlog 4096
+             :socketConfig {;; HOLD deliberately leaves the permanent listener
+                            ;; open while neither legacy writer is eligible.
+                            ;; Keep PollLimit throttling, but disable systemd's
+                            ;; fatal activation limit so queued clients cannot
+                            ;; permanently fail the public socket.
+                            :TriggerLimitIntervalSec 0
+                            :Backlog 4096
                             :FileDescriptorName "north-coord"}})
          :systemd.sockets.north-telemetry-coord
           (lib.mkIf stageA
             {:description  "North telemetry coordinator activation socket (:7978)"
              :wantedBy     ["sockets.target"]
              :listenStreams ["127.0.0.1:7978"]
-             :socketConfig {:Backlog 4096
+             :socketConfig {:TriggerLimitIntervalSec 0
+                            :Backlog 4096
                             ;; north-coord-sd-listen validates the inherited
                             ;; descriptor contract, not the unit name. Both
                             ;; isolated writers use the same adapter contract.

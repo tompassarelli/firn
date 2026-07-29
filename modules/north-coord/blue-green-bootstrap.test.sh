@@ -177,6 +177,18 @@ cat >"$scratch/selector" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$NORTH_COORD_TEST_SELECTOR_LOG"
+if [[ "${1:-}" == status ]]; then
+  counter=$NORTH_COORD_TEST_READINESS_STATE/proxy.status.attempts
+  attempt=0
+  [[ ! -f "$counter" ]] || read -r attempt <"$counter"
+  attempt=$((attempt + 1))
+  printf '%s\n' "$attempt" >"$counter"
+  chmod 0644 "$counter"
+  if (( attempt <= ${NORTH_COORD_TEST_DELAY_SELECTOR_ATTEMPTS:-0} )); then
+    printf 'proxy admin socket is not ready (attempt %s)\n' "$attempt" >&2
+    exit 1
+  fi
+fi
 SH
 chmod 0700 "$scratch/gate" "$scratch/selector"
 
@@ -214,6 +226,7 @@ run_bootstrap() {
     NORTH_COORD_TELEMETRY_LOG="$telemetry_log" \
     NORTH_COORD_BOOTSTRAP_READY_TIMEOUT_SECONDS="${NORTH_COORD_BOOTSTRAP_READY_TIMEOUT_SECONDS:-8}" \
     NORTH_COORD_BOOTSTRAP_READY_INTERVAL_SECONDS=1 \
+    NORTH_COORD_PROXY_READY_TIMEOUT_SECONDS="${NORTH_COORD_PROXY_READY_TIMEOUT_SECONDS:-8}" \
     NORTH_COORD_TEST_SYSTEMD="$scratch/systemd" \
     NORTH_COORD_TEST_GATE_LOG="$scratch/gate.log" \
     NORTH_COORD_TEST_SELECTOR_LOG="$scratch/selector.log" \
@@ -221,6 +234,7 @@ run_bootstrap() {
     NORTH_COORD_TEST_DELAY_BLUE_STANDBY_ATTEMPTS="${NORTH_COORD_TEST_DELAY_BLUE_STANDBY_ATTEMPTS:-0}" \
     NORTH_COORD_TEST_DELAY_BLUE_ACTIVE_ATTEMPTS="${NORTH_COORD_TEST_DELAY_BLUE_ACTIVE_ATTEMPTS:-0}" \
     NORTH_COORD_TEST_DELAY_GREEN_STANDBY_ATTEMPTS="${NORTH_COORD_TEST_DELAY_GREEN_STANDBY_ATTEMPTS:-0}" \
+    NORTH_COORD_TEST_DELAY_SELECTOR_ATTEMPTS="${NORTH_COORD_TEST_DELAY_SELECTOR_ATTEMPTS:-0}" \
     NORTH_COORD_TEST_NEVER_READY="${NORTH_COORD_TEST_NEVER_READY:-}" \
     NORTH_COORD_TEST_FAIL_VERIFY="${NORTH_COORD_TEST_FAIL_VERIFY:-0}" \
     NORTH_COORD_TEST_CRASH_BLUE_ACTIVE="${NORTH_COORD_TEST_CRASH_BLUE_ACTIVE:-0}" \
@@ -241,12 +255,17 @@ run_bootstrap() {
 export NORTH_COORD_TEST_DELAY_BLUE_STANDBY_ATTEMPTS=2
 export NORTH_COORD_TEST_DELAY_BLUE_ACTIVE_ATTEMPTS=1
 export NORTH_COORD_TEST_DELAY_GREEN_STANDBY_ATTEMPTS=2
+export NORTH_COORD_TEST_DELAY_SELECTOR_ATTEMPTS=2
 export NORTH_COORD_TEST_SOCKET_REACTIVATE_ON_STOP=1
 run_bootstrap
 unset NORTH_COORD_TEST_DELAY_BLUE_STANDBY_ATTEMPTS
 unset NORTH_COORD_TEST_DELAY_BLUE_ACTIVE_ATTEMPTS
 unset NORTH_COORD_TEST_DELAY_GREEN_STANDBY_ATTEMPTS
+unset NORTH_COORD_TEST_DELAY_SELECTOR_ATTEMPTS
 unset NORTH_COORD_TEST_SOCKET_REACTIVATE_ON_STOP
+read -r proxy_status_attempts \
+  <"$scratch/readiness/proxy.status.attempts"
+(( proxy_status_attempts >= 3 ))
 if grep -q '^reactivated ' "$scratch/socket-race.log"; then
   echo "queued socket activation restarted a legacy writer during HOLD" >&2
   exit 1

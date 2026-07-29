@@ -187,6 +187,7 @@ let
       export NORTH_COORD_TELEMETRY_LOG=${telemetryLog}
       export NORTH_COORD_BOOTSTRAP_READY_TIMEOUT_SECONDS=90
       export NORTH_COORD_BOOTSTRAP_READY_INTERVAL_SECONDS=1
+      export NORTH_COORD_PROXY_READY_TIMEOUT_SECONDS=15
       ${builtins.readFile ./north-coord-bootstrap}
     '';
   };
@@ -261,6 +262,7 @@ in
       wantedBy = [ "sockets.target" ];
       listenStreams = [ "127.0.0.1:7977" ];
       socketConfig = {
+        TriggerLimitIntervalSec = 0;
         Backlog = 4096;
         FileDescriptorName = "north-coord";
       };
@@ -270,6 +272,7 @@ in
       wantedBy = [ "sockets.target" ];
       listenStreams = [ "127.0.0.1:7978" ];
       socketConfig = {
+        TriggerLimitIntervalSec = 0;
         Backlog = 4096;
         FileDescriptorName = "north-coord";
       };
