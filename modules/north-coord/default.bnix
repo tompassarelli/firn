@@ -327,7 +327,7 @@
            :SendSIGKILL      true
            :MemorySwapMax    "0"}
         mkSlotService
-          (fn [description slot runtimeCommand peerLog heapMax memoryMax]
+          (fn [description slot runtimeCommand peerLog stateDir port heapMax memoryMax]
             {:description description
              ;; Private generations are staged explicitly. Ordinary Firn
              ;; activation updates their definitions but never bounces a live
@@ -341,7 +341,10 @@
              :environment
               (// serviceEnvironment
                   {:FRAM_TELEMETRY_LOG peerLog
-                   :JDK_JAVA_OPTIONS heapMax
+                   :JDK_JAVA_OPTIONS
+                    (s heapMax
+                       " -Xlog:gc:file=" stateDir "/gc-" port
+                       ".log:time,uptime:filecount=3,filesize=10m")
                    :NORTH_COORD_SLOT slot
                    :NORTH_COORD_SELECTOR_MAP selectorMap
                    :NORTH_COORD_CUTOVER_TOKEN_FILE cutoverToken
@@ -591,8 +594,10 @@
               "blue"
               (s blueCoordRuntime "/bin/north-coord-blue-runtime")
               telemetryLog
-              "-Xmx16g"
-              "32G"))
+              (s runtimeState "-blue")
+              blueCoordPort
+              "-Xmx2g"
+              "3G"))
          :systemd.services.north-telemetry-coord-blue
           (lib.mkIf stageA
             (mkSlotService
@@ -601,8 +606,10 @@
               (s blueTelemetryRuntime
                  "/bin/north-telemetry-coord-blue-runtime")
               coordinationLog
-              "-Xmx6g"
-              "8G"))
+              (s telemetryRuntimeState "-blue")
+              blueTelemetryPort
+              "-Xmx1g"
+              "1500M"))
          :systemd.services.north-coord-green
           (lib.mkIf stageA
             (mkSlotService
@@ -610,8 +617,10 @@
               "green"
               (s greenCoordRuntime "/bin/north-coord-green-runtime")
               telemetryLog
-              "-Xmx16g"
-              "32G"))
+              (s runtimeState "-green")
+              greenCoordPort
+              "-Xmx2g"
+              "3G"))
          :systemd.services.north-telemetry-coord-green
           (lib.mkIf stageA
             (mkSlotService
@@ -620,8 +629,10 @@
               (s greenTelemetryRuntime
                  "/bin/north-telemetry-coord-green-runtime")
               coordinationLog
-              "-Xmx6g"
-              "8G"))
+              (s telemetryRuntimeState "-green")
+              greenTelemetryPort
+              "-Xmx1g"
+              "1500M"))
          :systemd.services.north-coord-proxy
           (lib.mkIf stageA
             {:description
