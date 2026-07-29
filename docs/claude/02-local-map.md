@@ -6,7 +6,7 @@
 > see [README.md](README.md) (start here), [01-canonical.md](01-canonical.md)
 > (how Claude Code works), [03-north.md](03-north.md) (the substrate).
 
-Repo: `~/code/nixos-config` · Claude config: `~/.claude`
+Repo: `~/code/nixos-config/main` · Claude config: `~/.claude`
 
 ## Layer 1 — LOCAL: CLAUDE.md precedence chain
 
@@ -15,39 +15,45 @@ first few load in any given session — the rest are per-repo context.
 
 | scope | loads | materialization | source-of-truth | lines |
 |---|---|---|---|---|
-| `global` | every session, lowest precedence | nix store → dotfiles (out-of-store) | `~/code/nixos-config/dotfiles/claude/CLAUDE.md` | 143 |
-| `code-root` | any repo under ~/code | nix store → dotfiles (out-of-store) | `~/code/nixos-config/dotfiles/code/CLAUDE.md` | 3 |
-| `repo` | this repo (nixos-config) | real file (is its own source) | `~/code/nixos-config/CLAUDE.md` | 135 |
-| `module:claude` | editing ~/code/nixos-config/modules/claude/ | real file (is its own source) | `~/code/nixos-config/modules/claude/CLAUDE.md` | 16 |
-| `module:containers` | editing ~/code/nixos-config/modules/containers/ | real file (is its own source) | `~/code/nixos-config/modules/containers/CLAUDE.md` | 7 |
+| `global` | every session, lowest precedence | direct → North profile | `~/code/north/main/profiles/tom/AGENTS.md` | 338 |
+| `code-root` | any repo under ~/code | unmanaged symlink | `~/code/nixos-config/main/dotfiles/code/AGENTS.md` | 106 |
+| `repo` | this repo (nixos-config) | unmanaged symlink | `~/code/nixos-config/main/AGENTS.md` | 135 |
+| `module:claude` | editing ~/code/nixos-config/main/modules/claude/ | real file (is its own source) | `~/code/nixos-config/main/modules/claude/CLAUDE.md` | 16 |
+| `module:containers` | editing ~/code/nixos-config/main/modules/containers/ | real file (is its own source) | `~/code/nixos-config/main/modules/containers/CLAUDE.md` | 7 |
 
 ## Layer 1 — LOCAL: `~/.claude` wired surface
 
-What the `~/code/nixos-config/modules/claude` module materializes into `~/.claude`. `runtime-writable` = claude-code can atomic-write it (the rest are repo-edit-then-it's-live).
+What the `~/code/nixos-config/main/modules/claude` module materializes into `~/.claude`. `runtime-writable` = claude-code can atomic-write it (the rest are repo-edit-then-it's-live).
 
 | path | kind | materialization | runtime-writable | source-of-truth |
 |---|---|---|---|---|
-| `~/.claude/CLAUDE.md` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/dotfiles/claude/CLAUDE.md` |
-| `~/.claude/settings.json` | symlink | direct → dotfiles | ✅ | `~/code/nixos-config/dotfiles/claude/settings.json` |
-| `~/.claude/commands` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/dotfiles/claude/commands` |
-| `~/.claude/skills` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/dotfiles/agents/skills` |
-| `~/.claude/hooks` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/dotfiles/agents/hooks` |
+| `~/.claude/CLAUDE.md` | symlink | direct → North profile | — | `~/code/north/main/profiles/tom/AGENTS.md` |
+| `~/.claude/settings.json` | file | real file (is its own source) | ✅ | `~/.claude/settings.json` |
+| `~/.claude/commands` | symlink | direct → dotfiles | ✅ | `~/code/nixos-config/main/dotfiles/claude/commands` |
+| `~/.claude/skills` | symlink | direct → North profile | — | `~/code/north/main/profiles/tom/skills` |
+| `~/.claude/hooks` | symlink | direct → North profile | — | `~/code/north/main/profiles/tom/hooks` |
 
 ## Layer 1 — LOCAL: runtime wiring (`settings.json` + plugin manifests)
 
 - **statusLine** → `bash "$HOME/code/nixos-config/dotfiles/claude/statusline.sh"`
+- **enabledPlugins** → `rust-analyzer-lsp@claude-plugins-official`, `typescript-lsp@claude-plugins-official`, `orchestration@orchestration`
 - **hooks** (Claude Code fires these at lifecycle points; `⟨src⟩` = settings.json or the plugin that contributes it):
-  - `PreToolUse` → `claim-canonical-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `tripwire-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩
-  - `PostToolUse` → `racket-build-guard.sh` ⟨settings⟩, `north-on-tooluse` ⟨settings⟩
+  - `SessionStart` → `beagle-session-start.sh` ⟨settings⟩, `north-on-spawn` ⟨settings⟩
+  - `PreToolUse` → `agent-spawn-guard.sh` ⟨settings⟩, `code-upstream-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩, `agent-spawn-guard.sh` ⟨settings⟩, `tripwire-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `git-blind-stage-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩
+  - `PostToolUse` → `logcompress-hook.js` ⟨settings⟩, `racket-build-guard.sh` ⟨settings⟩, `north-on-tooluse` ⟨settings⟩, `north-mark-delegated` ⟨settings⟩
+  - `Stop` → `north-on-stop` ⟨settings⟩
 
 ### Control flow (lifecycle spine)
 
 ```mermaid
 flowchart TD
   A[session start] --> B{SessionStart}
+  B -->|"beagle-session-start.sh · north-on-spawn"| C[turn loop]
   C --> D{UserPromptSubmit}
-  E -.->|"PreToolUse: claim-canonical-guard.sh · firn-guard.sh · tripwire-guard.sh"| E
+  D -->|"—"| E["model responds + tools"]
+  E -.->|"PreToolUse: agent-spawn-guard.sh · code-upstream-guard.sh · firn-guard.sh · launch-critical-worktree-guard.sh · tripwire-guard.sh · git-blind-stage-guard.sh"| E
   E --> F{Stop}
+  F -->|"north-on-stop"| C
 ```
 
 ## Layer 2 — SUBSTRATE: what the config points at
@@ -59,16 +65,17 @@ flowchart TD
 | `rust-analyzer-lsp@claude-plugins-official` | `1.0.0` | `~/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0` |
 | `typescript-lsp@claude-plugins-official` | `1.0.0` | `~/.claude/plugins/cache/claude-plugins-official/typescript-lsp/1.0.0` |
 | `lean@leanprover` | `0.1.0` | `~/.claude/plugins/cache/leanprover/lean/0.1.0` |
+| `orchestration@orchestration` | `9c6acd66ff1d` | `~/.claude/plugins/cache/orchestration/orchestration/9c6acd66ff1d` |
 
 **MCP servers** (user scope — where north plugs into Claude):
 
 | server | command |
 |---|---|
-| `fram` | `~/code/fram/bin/fram-mcp` |
 | `linear-mcp-msa-new` | `.` |
-| `north` | `~/code/north/bin/north-mcp` |
+| `fram` | `/nix/store/5nrs7044a8n6ygdylya0kgbam8awg2w4-fram-0-unstable-2026-07-29-72c1dcc/bin/fram-mcp` |
+| `north` | `/nix/store/kjnnkia40znpaavybln8mr9gnyls6j49-north-0.1.0/bin/north-mcp` |
 
 > Layer 3 (CANONICAL Anthropic contracts) is annotated inline above where
 > it governs a local choice. A fuller canonical corpus is the next phase —
-> see `~/code/nixos-config/docs/claude/01-canonical.md` and the `claude-code-guide` skill.
+> see `~/code/nixos-config/main/docs/claude/01-canonical.md` and the `claude-code-guide` skill.
 

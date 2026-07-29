@@ -228,7 +228,7 @@ const allSessionStartHooks = [
 ];
 
 // 1e. Skills registry
-const personalSkillsDir = `${HOME}/code/nixos-config/dotfiles/agents/skills`;
+const personalSkillsDir = `${HOME}/.agents/skills`;
 const nixSkillsDir = `${HOME}/.claude/skills`; // symlink
 const personalSkills = listDir(personalSkillsDir);
 const pluginSkills = pluginDetails.flatMap(p => p.skillNames.map(s => ({ plugin: p.key, name: s })));
@@ -536,7 +536,7 @@ emit("### h. Cross-repo spawn wiring (north harness)\n");
 emit(`- harness: \`${tilde(harnessPath)}\``);
 emit(`- PRAXIS_DIR: \`${praxisDir ? tilde(praxisDir) : "(not found)"}\``);
 emit(`  - north reads spawn blocks from: orchestration docs (single source of truth)`);
-emit(`  - personal residue: \`~/code/nixos-config/dotfiles/agents/docs/praxis/\``);
+emit(`  - personal residue: \`~/code/north/main/profiles/tom/docs/praxis/\``);
 emit(`- appendix functions found in harness: ${appendixFns.join(", ")}`);
 emit(`  - globalLawsAppendix: injects global CLAUDE.md laws into every spawn`);
 emit(`  - praxisAppendix: reads role/posture/delta from PRAXIS_DIR per model`);
@@ -552,7 +552,7 @@ emit("  session[\"Claude Code session\"]");
 emit("  settingsJson[\"settings.json\\n~/.claude/settings.json\"]");
 emit("  settingsNixos[\"settings.json source\\n~/code/nixos-config/dotfiles/claude/settings.json\"]");
 emit("  claudeMdGlobal[\"CLAUDE.md (global)\\n~/.claude/CLAUDE.md\"]");
-emit("  claudeMdNixos[\"CLAUDE.md source\\n~/code/nixos-config/dotfiles/claude/CLAUDE.md\"]");
+emit("  claudeMdNixos[\"CLAUDE.md source\\n~/code/north/main/profiles/tom/AGENTS.md\"]");
 emit("  pluginOrchestration[\"plugin: orchestration\"]");
 emit("  pluginRustLsp[\"plugin: rust-analyzer-lsp\"]");
 emit("  pluginTsLsp[\"plugin: typescript-lsp\"]");
@@ -560,7 +560,7 @@ emit("  pluginLean[\"plugin: lean\"]");
 emit("  orchestrationDoctrine[\"orchestration/doctrine.md\\n(routing doctrine)\"]");
 emit("  ternHarness[\"north sdk/src/harness.ts\"]");
 emit("  orchestrationDocs[\"~/code/north/main/orchestration/docs\\n(PRAXIS_DIR: roles/postures/deltas)\"]");
-emit("  praxisPersonal[\"personal praxis residue\\n~/code/nixos-config/dotfiles/agents/docs/praxis/\"]");
+emit("  praxisPersonal[\"personal praxis residue\\n~/code/north/main/profiles/tom/docs/praxis/\"]");
 emit("  nixosClaudeMd[\"nixos-config/CLAUDE.md\\n(per-project rules)\"]");
 emit("  ternOnSpawn[\"north-on-spawn\\n(SessionStart hook)\"]");
 emit("  ternOnTooluse[\"north-on-tooluse\\n(PostToolUse hook)\"]");

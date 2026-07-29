@@ -1,25 +1,26 @@
 # System / global config changes — nixos-config rules
 
-Any change to the machine's configuration **or** to a coding agent's global setup is made
-**idiomatically through `~/code/nixos-config`**, never ad-hoc in the live system.
-This covers shared agent config (`AGENTS.md`, `skills/`, `docs/`, `hooks/`),
-provider adapters (`dotfiles/claude/`, `dotfiles/codex/`), system packages,
-services, dotfiles, and any host / home-manager setting. The whole point is
-**reproducibility** — a fresh rebuild on any machine must reproduce the change.
+Any change to the machine's configuration or Firn-owned agent integration is
+made **idiomatically through `~/code/nixos-config`**, never ad-hoc in the live
+system. Personal agent policy is composed by
+`~/code/north/main/profiles/tom`; Firn owns only its Nix-specific fragments,
+provider adapters, system packages, services, dotfiles, and Home Manager
+wiring. A fresh rebuild must reproduce the integration.
 
 Mechanics of the nix module that does the wiring (writable settings.json
 symlink, Claude plugin reconciliation, MCP registration):
-`nixos-config:dotfiles/agents/docs/nixos-module.md`.
+`nixos-config:modules/agent-core/firn/docs/nixos-module.md`.
 
 ## Symlinks
 
-`~/.agents/{skills,docs,hooks}`, `~/.codex/{AGENTS.md,config.toml,hooks.json}`,
-and `~/.claude/{skills,CLAUDE.md,commands,settings.json,hooks,agents}` are
-`mkOutOfStoreSymlink`s into `nixos-config/dotfiles/` (see
-`modules/agent-core`, `modules/codex`, and `modules/claude`; generated `.nix`
-files are build targets). Editing them edits the repo *directly* and is live
-immediately — **but you MUST commit it to `nixos-config`**, or it isn't
-reproducible.
+`~/.agents/{AGENTS.md,skills,docs,hooks}` are `mkOutOfStoreSymlink`s into
+`~/code/north/main/profiles/tom`. Provider discovery paths such as
+`~/.claude/{skills,CLAUDE.md,hooks}`, `~/.codex/AGENTS.md`, and
+`~/.hermes/SOUL.md` compose through `~/.agents`; provider-specific adapters
+remain in `nixos-config`. Claude's writable `settings.json` is seeded from the
+generation rather than symlinked. The immutable managed Codex hook directory
+under `/etc/codex/hooks` is the deliberate security exception and sources each
+hook from its owning locked flake input.
 
 ## CI validation
 
@@ -35,8 +36,8 @@ compatibility entry point. This is the anti-rot gate; keep it green.
 ## Hooks kill-switch
 
 **Behavior-injecting hooks share one kill-switch** — semantics live in
-`dotfiles/agents/hooks/lib/authoring-killswitch.sh`, sourced by every guard
-AND by `north config`, so report and enforcement cannot disagree:
+`~/.agents/hooks/lib/authoring-killswitch.sh`, sourced by every guard and by
+`north config`, so report and enforcement cannot disagree:
 
 - **Persistent, live flip (all sessions):** `north config guards off` /
   `guards on` — writes `guards=on|off` to

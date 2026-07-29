@@ -14,7 +14,7 @@
 ;;     and Hermes' own `connect_timeout` key; shared external skills are wired to
 ;;     ~/.agents/skills. No credentials.
 ;;   * ~/.hermes/SOUL.md       — the stable shared global constitution (the same
-;;     provider-neutral dotfiles/agents/AGENTS.md every adapter obeys).
+;;     North-composed ~/.agents/AGENTS.md every adapter obeys).
 ;;   * ~/.hermes/plugins/north-bridge — the standalone fail-closed guard +
 ;;     North-lifecycle bridge, installed as an IMMUTABLE nix-store source so
 ;;     Python imports cannot write __pycache__ back into the dotfiles tree.
@@ -85,7 +85,7 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/agents/AGENTS.md"))}
+                        "/.agents/AGENTS.md"))}
                  ;; Immutable store copy — read-only, so `import north_bridge`
                  ;; cannot scribble __pycache__ into dotfiles/hermes.
                  ".hermes/plugins/north-bridge"

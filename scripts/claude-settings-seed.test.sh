@@ -121,22 +121,23 @@ jq -e '
 
 jq -e '
   .hooks.SessionEnd[0].hooks[0].command
-    == "/run/current-system/sw/bin/north-session-end"
+    == "/home/tom/.agents/hooks/north-session-end.sh"
   and ([
     .hooks.PreToolUse[]?.hooks[]?
     | select(.type == "command" and (.command | endswith("/north-clock-guard.sh")))
     | .command
-  ] == [
-    "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-clock-guard.sh",
-    "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-clock-guard.sh"
-  ])
+  ] == [])
 ' "$REPO/dotfiles/claude/settings.json" >/dev/null
 
 grep -Fq '(pkgs.writeText "claude-settings.json"' "$REPO/modules/claude/default.bnix"
 grep -Fq '(pkgs.writeShellScript "claude-settings-seed"' "$REPO/modules/claude/default.bnix"
 grep -Fq ':home.activation.seedClaudeSettings' "$REPO/modules/claude/default.bnix"
 grep -Fq '/bin/flock JQ_BIN=' "$REPO/modules/claude/default.bnix"
-grep -Fq '["writeBoundary" "seedClaudeSettings"]' "$REPO/modules/claude/default.bnix"
+grep -Fq '(config.lib.dag.entryAfter ["writeBoundary"]' "$REPO/modules/claude/default.bnix"
+if grep -Fq 'writeShellScriptBin "north-session-end"' "$REPO/modules/claude/default.bnix"; then
+  printf 'Claude module still packages the out-of-store profile SessionEnd hook\n' >&2
+  exit 1
+fi
 if grep -Fq 'linkClaudeSettings' "$REPO/modules/claude/default.bnix" ||
    grep -Fq '/code/nixos-config/dotfiles/claude/settings.json' \
      "$REPO/modules/claude/default.bnix"; then

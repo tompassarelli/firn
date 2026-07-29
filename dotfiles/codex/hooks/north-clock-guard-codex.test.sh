@@ -2,8 +2,10 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+AGENT_PROFILE="${AGENT_CONFIG_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/north-clock-codex-test.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
+export XDG_STATE_HOME="$SCRATCH/state"
 TEST_PYTHON="$(readlink -f "$(command -v python3)")"
 HOOKS="$SCRATCH/hooks"
 mkdir -p "$HOOKS/lib" "$HOOKS/runtime"
@@ -12,7 +14,7 @@ for dependency in bash cat env git mktemp python3 rm timeout; do
   ln -s "$resolved" "$HOOKS/runtime/$dependency"
 done
 cp "$HERE/north-clock-guard-codex" "$HOOKS/north-clock-guard-codex"
-cp "$HERE/../../agents/hooks/lib/authoring-killswitch.sh" \
+cp "$AGENT_PROFILE/hooks/lib/authoring-killswitch.sh" \
   "$HOOKS/lib/authoring-killswitch.sh"
 chmod +x "$HOOKS/north-clock-guard-codex"
 
@@ -241,7 +243,7 @@ else
   printf 'FAIL  timeout descendant survived and wrote %s\n' "$LATE"
 fi
 
-cp "$HERE/../../agents/hooks/north-clock-guard.py" \
+cp "$AGENT_PROFILE/hooks/north-clock-guard.py" \
   "$HOOKS/north-clock-guard.py"
 detached_matrix_command=''
 IFS= read -r -d '' detached_matrix_command <<'COMMAND' || true

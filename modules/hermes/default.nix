@@ -23,7 +23,7 @@ in
       home.sessionVariables.NORTH_HERMES_LIFECYCLE_DIR = northBin;
       home.file = {
         ".hermes/config.yaml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/hermes/config.yaml";
-        ".hermes/SOUL.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/agents/AGENTS.md";
+        ".hermes/SOUL.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/AGENTS.md";
         ".hermes/plugins/north-bridge".source = "${flakeRoot}/dotfiles/hermes/plugins/north-bridge";
       };
     });

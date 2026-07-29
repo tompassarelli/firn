@@ -21,27 +21,27 @@
            "codex/runtime"
             {:source codexPkg}
            "codex/hooks/beagle-session-start.sh"
-            {:source (s flakeRoot "/dotfiles/agents/hooks/beagle-session-start.sh")}
+            {:source (s inputs.beagle "/integrations/north/hooks/beagle-session-start.sh")}
            "codex/hooks/agent-spawn-guard.sh"
-            {:source (s flakeRoot "/dotfiles/agents/hooks/agent-spawn-guard.sh")}
+            {:source (s inputs.north "/profiles/tom/hooks/agent-spawn-guard.sh")}
            "codex/hooks/code-upstream-guard.sh"
-            {:source (s flakeRoot "/dotfiles/agents/hooks/code-upstream-guard.sh")}
+            {:source (s inputs.fram "/integrations/north/hooks/code-upstream-guard.sh")}
            "codex/hooks/firn-guard.sh"
-            {:source (s flakeRoot "/dotfiles/agents/hooks/firn-guard.sh")}
+            {:source (s flakeRoot "/modules/agent-core/firn/hooks/firn-guard.sh")}
            "codex/hooks/north-clock-guard.sh"
-            {:source (s flakeRoot "/dotfiles/agents/hooks/north-clock-guard.sh")}
+            {:source (s inputs.north "/profiles/tom/hooks/north-clock-guard.sh")}
            "codex/hooks/north-clock-guard.py"
-            {:source (s flakeRoot "/dotfiles/agents/hooks/north-clock-guard.py")}
+            {:source (s inputs.north "/profiles/tom/hooks/north-clock-guard.py")}
            "codex/hooks/tripwire-guard.sh"
-            {:source (s flakeRoot "/dotfiles/agents/hooks/tripwire-guard.sh")}
+            {:source (s inputs.north "/profiles/tom/hooks/tripwire-guard.sh")}
            "codex/hooks/logcompress-hook.js"
-            {:source (s flakeRoot "/dotfiles/agents/hooks/logcompress-hook.js")}
+            {:source (s inputs.north "/profiles/tom/hooks/logcompress-hook.js")}
            "codex/hooks/logcompress.js"
-            {:source (s flakeRoot "/dotfiles/agents/hooks/logcompress.js")}
+            {:source (s inputs.north "/profiles/tom/hooks/logcompress.js")}
            "codex/hooks/racket-build-guard.sh"
-            {:source (s flakeRoot "/dotfiles/agents/hooks/racket-build-guard.sh")}
+            {:source (s inputs.beagle "/integrations/north/hooks/racket-build-guard.sh")}
            "codex/hooks/lib/authoring-killswitch.sh"
-            {:source (s flakeRoot "/dotfiles/agents/hooks/lib/authoring-killswitch.sh")}
+            {:source (s inputs.north "/profiles/tom/hooks/lib/authoring-killswitch.sh")}
            "codex/hooks/north-on-spawn-codex"
             {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-spawn-codex")}
            "codex/hooks/north-on-tooluse-codex"
@@ -80,7 +80,7 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/agents/AGENTS.md"))}
+                        "/.agents/AGENTS.md"))}
                  ".codex/config.toml"
                   {:source (s flakeRoot "/dotfiles/codex/config.toml")}
                  ".codex/hooks.json"

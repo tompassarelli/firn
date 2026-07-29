@@ -2,8 +2,8 @@
 
 (ns default)
 
-;; Provider-neutral instructions, skills, documentation, and enforcement.
-;; Claude Code and Codex modules only adapt their own discovery/config paths.
+;; North owns the composed personal agent profile. Firn only materialises the
+;; stable discovery paths consumed by provider adapters.
 (nix/module [config lib ...]
   (let [username config.myConfig.modules.users.username]
     {:tags [development]
@@ -21,22 +21,22 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/agents/AGENTS.md"))}
+                        "/code/north/main/profiles/tom/AGENTS.md"))}
                  ".agents/skills"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/agents/skills"))}
+                        "/code/north/main/profiles/tom/skills"))}
                  ".agents/docs"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/agents/docs"))}
+                        "/code/north/main/profiles/tom/docs"))}
                  ".agents/hooks"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/agents/hooks"))}
+                        "/code/north/main/profiles/tom/hooks"))}
                  ;; Provider-neutral routing instructions for the ~/code root.
                  "code/AGENTS.md"
                   {:source

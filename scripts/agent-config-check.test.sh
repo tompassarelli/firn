@@ -2,13 +2,15 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+AGENT_PROFILE="${AGENT_CONFIG_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
+BEAGLE_INTEGRATION="${AGENT_CONFIG_BEAGLE_INTEGRATION:-$HOME/code/beagle/main/integrations/north}"
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/agent-config-check.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
 
 assert_native_identity() {
   local manifest="$1" expected_provider="$2" label="$3"
   local expected_spawn="AGENT_PROVIDER=$expected_provider /run/current-system/sw/bin/north-on-spawn"
-  local expected_repair="AGENT_PROVIDER=$expected_provider /run/current-system/sw/bin/north-on-tooluse"
+  local expected_repair="AGENT_PROVIDER=$expected_provider /home/tom/.agents/hooks/hook-detach.sh /run/current-system/sw/bin/north-on-tooluse"
   local event command spawn_count=0 repair_count=0
 
   while IFS=$'\t' read -r event command; do
@@ -55,11 +57,30 @@ if rg -n '/home/tom/code/(north|fram)/bin/(north-(on-|mark-|stream)|concern|fram
   "$REPO/dotfiles/claude/settings.json" \
   "$REPO/dotfiles/codex/hooks.json" \
   "$REPO/dotfiles/claude/statusline.sh" \
-  "$REPO/dotfiles/agents/hooks/beagle-session-start.sh" \
-  "$REPO/dotfiles/agents/hooks/north-session-end.sh"; then
+  "$BEAGLE_INTEGRATION/hooks/beagle-session-start.sh" \
+  "$AGENT_PROFILE/hooks/north-session-end.sh"; then
   printf 'authoritative lifecycle configuration still references a mutable checkout command\n' >&2
   exit 1
 fi
+if rg -n 'dotfiles/agents|dotfiles/claude/hooks' \
+  "$REPO/dotfiles/claude/settings.json" \
+  "$REPO/dotfiles/codex/hooks.json" \
+  "$REPO/modules/agent-core/default.bnix" \
+  "$REPO/modules/claude/default.bnix" \
+  "$REPO/modules/codex/default.bnix" \
+  "$REPO/modules/hermes/default.bnix"; then
+  printf 'active provider wiring still references the retired Firn agent tree\n' >&2
+  exit 1
+fi
+grep -Fq '"/code/north/main/profiles/tom/AGENTS.md"' \
+  "$REPO/modules/agent-core/default.bnix"
+grep -Fq '"/.agents/hooks"' "$REPO/modules/claude/default.bnix"
+grep -Fq '"/.agents/AGENTS.md"' "$REPO/modules/codex/default.bnix"
+grep -Fq '"/.agents/AGENTS.md"' "$REPO/modules/hermes/default.bnix"
+grep -Fq '"/home/tom/.agents/hooks/north-session-end.sh"' \
+  "$REPO/dotfiles/claude/settings.json"
+! grep -Fq 'writeShellScriptBin "north-session-end"' \
+  "$REPO/modules/claude/default.bnix"
 report="$("$REPO/scripts/agent-config-check.sh")"
 grep -Fq '17 managed authoritative bindings' <<<"$report"
 # shellcheck disable=SC2088  # report intentionally renders the literal user-facing alias
@@ -231,7 +252,7 @@ fi
 # identity is otherwise correct.
 mutable_claude="$scratch/claude-mutable"
 cp -a "$REPO/dotfiles/claude" "$mutable_claude"
-sed -i 's#/run/current-system/sw/bin/north-on-spawn#/home/tom/code/north/bin/north-on-spawn#g' \
+sed -i 's#/run/current-system/sw/bin/north-on-spawn#/home/tom/code/north/main/bin/north-on-spawn#g' \
   "$mutable_claude/settings.json"
 if AGENT_CONFIG_CLAUDE="$mutable_claude" \
   "$REPO/scripts/agent-config-check.sh" >"$scratch/mutable-claude.out" 2>&1; then
@@ -483,7 +504,7 @@ fi
 [ "$NORTH_COORD_EXEC_KIND" = direct-package ]
 [ "$NORTH_COORD_EXEC_PATH" = "$pinned_path" ]
 
-checkout_path='/home/tom/code/fram/bin/fram-daemon'
+checkout_path='/home/tom/code/fram/main/bin/fram-daemon'
 if classify_north_coord_exec "{ path=$checkout_path ; argv[]=$checkout_path 7977 /tmp/facts.log ; }"; then
   printf 'direct checkout north-coord was accepted\n' >&2
   exit 1

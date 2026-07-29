@@ -242,14 +242,17 @@ declare -A LIVE_HOOK_TARGET_BY_ROLE=()
 declare -A LIVE_HOOK_HASH_BY_ROLE=()
 
 hook_target_fingerprint() {
-  local declared="$1" canonical_root="$2" resolved hash
+  local declared="$1" resolved hash canonical_root allowed=0
+  shift
 
   [ -x "$declared" ] || return 1
   resolved="$(readlink -f "$declared" 2>/dev/null)" || return 1
-  case "$resolved" in
-    "$canonical_root"/*) ;;
-    *) return 1 ;;
-  esac
+  for canonical_root in "$@"; do
+    case "$resolved" in
+      "$canonical_root"/*) allowed=1; break ;;
+    esac
+  done
+  [ "$allowed" -eq 1 ] || return 1
   hash="$(sha256sum "$resolved" 2>/dev/null | awk '{print $1}')" || return 1
   [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || return 1
   printf '%s\t%s\n' "$resolved" "$hash"
@@ -1063,11 +1066,18 @@ if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
 fi
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SHARED="$REPO/dotfiles/agents"
+SHARED="${AGENT_CONFIG_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
+BEAGLE_INTEGRATION="${AGENT_CONFIG_BEAGLE_INTEGRATION:-$HOME/code/beagle/main/integrations/north}"
+FRAM_INTEGRATION="${AGENT_CONFIG_FRAM_INTEGRATION:-$HOME/code/fram/main/integrations/north}"
+FIRN_INTEGRATION="$REPO/modules/agent-core/firn"
 CLAUDE="${AGENT_CONFIG_CLAUDE:-$REPO/dotfiles/claude}"
 CODEX="$REPO/dotfiles/codex"
 LIVE_REPO="${AGENT_CONFIG_LIVE_REPO:-$HOME/code/nixos-config}"
-LIVE_SHARED="$LIVE_REPO/dotfiles/agents"
+LIVE_SHARED="${AGENT_CONFIG_LIVE_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
+LIVE_NORTH_ROOT="${AGENT_CONFIG_LIVE_NORTH_ROOT:-$HOME/code/north}"
+LIVE_BEAGLE_ROOT="${AGENT_CONFIG_LIVE_BEAGLE_ROOT:-$HOME/code/beagle}"
+LIVE_FRAM_ROOT="${AGENT_CONFIG_LIVE_FRAM_ROOT:-$HOME/code/fram}"
+LIVE_FIRN_ROOT="${AGENT_CONFIG_LIVE_FIRN_ROOT:-$HOME/code/nixos-config}"
 LIVE_CLAUDE="$LIVE_REPO/dotfiles/claude"
 LIVE_HERMES="$LIVE_REPO/dotfiles/hermes"
 CODEX_REQUIREMENTS="$REPO/modules/codex/requirements.toml"
@@ -1164,26 +1174,82 @@ note_ignored_codex_legacy_manifest() {
 
 printf 'agent harness check%s\n' "$([ "$LOCAL" -eq 1 ] && printf ' (local)' || true)"
 
-# Shared constitution, skills, and executable hook implementations.
+# North-composed constitution plus hook/skill implementations from each owner.
 before=$fail
 hook_count=0
 if command -v shellcheck >/dev/null 2>&1; then
-  while IFS= read -r hook; do
-    hook_count=$((hook_count + 1))
-    if output="$(shellcheck -S warning "$hook" 2>&1)"; then
-      ok_detail "shellcheck ${hook##*/}"
-    else bad "shellcheck ${hook##*/}:\n$output"; fi
-  done < <(find "$SHARED/hooks" -maxdepth 1 -type f -name '*.sh' -print | sort)
+  for hook_root in \
+    "$SHARED/hooks" \
+    "$BEAGLE_INTEGRATION/hooks" \
+    "$FRAM_INTEGRATION/hooks" \
+    "$FIRN_INTEGRATION/hooks"; do
+    if [ ! -d "$hook_root" ]; then
+      if [ "$LOCAL" -eq 1 ]; then
+        bad "composed hook owner root is missing: $hook_root"
+      else
+        note "external hook owner root unavailable in repository-only mode: $hook_root"
+      fi
+      continue
+    fi
+    while IFS= read -r hook; do
+      hook_count=$((hook_count + 1))
+      if output="$(shellcheck -S warning "$hook" 2>&1)"; then
+        ok_detail "shellcheck ${hook##*/}"
+      else bad "shellcheck ${hook##*/}:\n$output"; fi
+    done < <(find "$hook_root" -maxdepth 1 -type f -name '*.sh' -print | sort)
+  done
 else bad "shellcheck is required to lint shared hooks"; fi
 skill_count=0
-while IFS= read -r skill; do
-  skill_count=$((skill_count + 1))
-  if [ "$(head -n 1 "$skill")" = '---' ]; then ok_detail "${skill%/SKILL.md} has frontmatter"
-  else soft "${skill#"$REPO"/} lacks SKILL.md frontmatter"; fi
-done < <(find "$SHARED/skills" -mindepth 2 -maxdepth 2 -name SKILL.md -type f -print | sort)
-if [ -s "$SHARED/AGENTS.md" ]; then ok_detail "canonical AGENTS.md present"
-else bad "canonical AGENTS.md is missing or empty"; fi
-group shared "$hook_count hooks linted · $skill_count skills · canonical instructions" "$before"
+for skill_root in \
+  "$SHARED/skills" \
+  "$BEAGLE_INTEGRATION/skills" \
+    "$FRAM_INTEGRATION/skills" \
+    "$FIRN_INTEGRATION/skills"; do
+  if [ ! -d "$skill_root" ]; then
+    if [ "$LOCAL" -eq 1 ]; then
+      bad "composed skill owner root is missing: $skill_root"
+    else
+      note "external skill owner root unavailable in repository-only mode: $skill_root"
+    fi
+    continue
+  fi
+  while IFS= read -r skill; do
+    skill_count=$((skill_count + 1))
+    if [ "$(head -n 1 "$skill")" = '---' ]; then ok_detail "${skill%/SKILL.md} has frontmatter"
+    else soft "${skill#"$REPO"/} lacks SKILL.md frontmatter"; fi
+  done < <(find "$skill_root" -mindepth 2 -maxdepth 2 -name SKILL.md -type f -print | sort)
+done
+if [ -s "$SHARED/AGENTS.md" ]; then
+  ok_detail "canonical AGENTS.md present"
+elif [ "$LOCAL" -eq 1 ]; then
+  bad "canonical AGENTS.md is missing or empty"
+else
+  note "North-composed AGENTS.md unavailable in repository-only mode"
+fi
+agent_core_module="$REPO/modules/agent-core/default.bnix"
+for profile_member in AGENTS.md docs hooks skills; do
+  if grep -Fq "\"/code/north/main/profiles/tom/$profile_member\"" "$agent_core_module"; then
+    ok_detail "~/.agents/$profile_member is wired to the North-composed profile"
+  else
+    bad "~/.agents/$profile_member must be wired to ~/code/north/main/profiles/tom"
+  fi
+done
+if [ -e "$REPO/dotfiles/agents" ]; then
+  bad "retired Firn-owned dotfiles/agents tree still exists"
+fi
+if [ -e "$REPO/dotfiles/claude/CLAUDE.md" ] ||
+   [ -L "$REPO/dotfiles/claude/CLAUDE.md" ] ||
+   [ -e "$REPO/dotfiles/claude/hooks" ] ||
+   [ -L "$REPO/dotfiles/claude/hooks" ]; then
+  bad "obsolete Claude redirect sources still exist after Home Manager took ownership"
+fi
+if [ "$LOCAL" -eq 1 ]; then
+  canonical_link "$HOME/.agents/AGENTS.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.agents/AGENTS.md"
+  canonical_link "$HOME/.agents/docs" "$LIVE_SHARED/docs" "$HOME/.agents/docs"
+  canonical_link "$HOME/.agents/hooks" "$LIVE_SHARED/hooks" "$HOME/.agents/hooks"
+  canonical_link "$HOME/.agents/skills" "$LIVE_SHARED/skills" "$HOME/.agents/skills"
+fi
+group shared "$hook_count owner hooks linted · $skill_count owner skills · North-composed instructions" "$before"
 
 # Validate a provider hook manifest. Shared adapter commands must resolve to the
 # canonical source tree. North lifecycle commands must use the immutable system
@@ -1222,7 +1288,7 @@ validate_hooks() {
     # re-execs the real hook detached, and returns. The wrapped command keeps
     # the identity of the hook it carries, so unwrap before classifying — the
     # same way the exact Bash interpreter above is unwrapped.
-    if [[ "$command" =~ ^$SHARED/hooks/hook-detach\.sh[[:space:]]+(.+)$ ]]; then
+    if [[ "$command" =~ ^/home/tom/\.agents/hooks/hook-detach\.sh[[:space:]]+(.+)$ ]]; then
       detach='hook-detach'
       command="${BASH_REMATCH[1]}"
     fi
@@ -1240,7 +1306,7 @@ validate_hooks() {
     expected="$SHARED/hooks/$basename"
     declared_shared=0
     case "$first" in
-      "/home/tom/code/nixos-config/dotfiles/agents/hooks/$basename"|"/home/tom/code/nixos-config/dotfiles/claude/hooks/$basename"|"$expected"|"$basename")
+      "/home/tom/.agents/hooks/$basename"|"/home/tom/code/north/main/profiles/tom/hooks/$basename"|"$expected"|"$basename")
         declared_shared=1
         ;;
     esac
@@ -1257,25 +1323,15 @@ validate_hooks() {
             "$first" = /run/current-system/sw/bin/north-on-stop ]]; then
       immutable_north=1
       ok_detail "$provider $ev → immutable system package command $basename"
-    elif [ "$first" = /run/current-system/sw/bin/north-session-end ]; then
-      immutable_north=1
-      if [ "$LOCAL" -eq 0 ] || {
-           resolved="$(readlink -f "$first" 2>/dev/null || true)" &&
-           [[ "$resolved" = /nix/store/* ]] &&
-           write_shell_script_bin_matches_source \
-             "$first" "$SHARED/hooks/north-session-end.sh";
-         }; then
-        ok_detail "$provider $ev → immutable generation command $basename"
-      else
-        bad "$provider $ev north-session-end is not the exact deterministic store-backed generation command"
-      fi
     elif [[ "$first" = /home/tom/code/north/main/bin/* ]]; then
       bad "$provider $ev uses mutable checkout North lifecycle command $first; use /run/current-system/sw/bin/$basename"
-    elif [ "$declared_shared" -eq 1 ] && [ -x "$expected" ]; then
+    elif [ "$declared_shared" -eq 1 ]; then
       if [ "$LOCAL" -eq 1 ]; then
         expected_resolved="$(readlink -f "$LIVE_SHARED/hooks/$basename" 2>/dev/null || true)"
         if IFS=$'\t' read -r resolved hook_sha \
-          < <(hook_target_fingerprint "$first" "$LIVE_REPO") &&
+          < <(hook_target_fingerprint "$first" \
+                "$LIVE_NORTH_ROOT" "$LIVE_BEAGLE_ROOT" \
+                "$LIVE_FRAM_ROOT" "$LIVE_FIRN_ROOT") &&
            [ "$resolved" = "$expected_resolved" ]; then
           role="$basename:shared-adapter"
           if record_live_hook_binding "$role" "$resolved" "$hook_sha"; then
@@ -1290,7 +1346,7 @@ validate_hooks() {
       else
         ok_detail "$provider $ev declares canonical shared hook $basename"
       fi
-    else bad "$provider $ev hook is missing, non-executable, or outside canonical hooks: $raw_command"; fi
+    else bad "$provider $ev hook is outside the canonical composed profile: $raw_command"; fi
   done < <(jq -r '.hooks // {} | to_entries[] | .key as $event | .value[] | .hooks[]? | select(.type == "command") | [$event,.command] | @tsv' "$manifest")
   if [ "$LOCAL" -eq 1 ] && [ "${#provenance_seen[@]}" -gt 0 ]; then
     provenance_manifest="$(
@@ -1337,29 +1393,30 @@ validate_codex_managed_policy() {
   fi
 
   local module="$REPO/modules/codex/default.bnix"
-  local source relative live expected resolved north_revision
-  local -a sources=(
-    '/modules/codex/requirements.toml'
-    '/dotfiles/agents/hooks/beagle-session-start.sh'
-    '/dotfiles/agents/hooks/agent-spawn-guard.sh'
-    '/dotfiles/agents/hooks/code-upstream-guard.sh'
-    '/dotfiles/agents/hooks/firn-guard.sh'
-    '/dotfiles/agents/hooks/north-clock-guard.sh'
-    '/dotfiles/agents/hooks/north-clock-guard.py'
-    '/dotfiles/agents/hooks/tripwire-guard.sh'
-    '/dotfiles/agents/hooks/logcompress-hook.js'
-    '/dotfiles/agents/hooks/logcompress.js'
-    '/dotfiles/agents/hooks/racket-build-guard.sh'
-    '/dotfiles/agents/hooks/lib/authoring-killswitch.sh'
-    '/dotfiles/codex/hooks/north-on-spawn-codex'
-    '/dotfiles/codex/hooks/north-on-tooluse-codex'
-    '/dotfiles/codex/hooks/north-mark-delegated-codex'
-    '/dotfiles/codex/hooks/north-on-stop-codex'
-    '/dotfiles/codex/hooks/north-clock-guard-codex'
+  local spec relative source_expr live expected resolved north_revision
+  local -a source_specs=(
+    "requirements.toml|(s flakeRoot \"/modules/codex/requirements.toml\")|$CODEX_REQUIREMENTS"
+    "beagle-session-start.sh|(s inputs.beagle \"/integrations/north/hooks/beagle-session-start.sh\")|$BEAGLE_INTEGRATION/hooks/beagle-session-start.sh"
+    "agent-spawn-guard.sh|(s inputs.north \"/profiles/tom/hooks/agent-spawn-guard.sh\")|$SHARED/hooks/agent-spawn-guard.sh"
+    "code-upstream-guard.sh|(s inputs.fram \"/integrations/north/hooks/code-upstream-guard.sh\")|$FRAM_INTEGRATION/hooks/code-upstream-guard.sh"
+    "firn-guard.sh|(s flakeRoot \"/modules/agent-core/firn/hooks/firn-guard.sh\")|$FIRN_INTEGRATION/hooks/firn-guard.sh"
+    "north-clock-guard.sh|(s inputs.north \"/profiles/tom/hooks/north-clock-guard.sh\")|$SHARED/hooks/north-clock-guard.sh"
+    "north-clock-guard.py|(s inputs.north \"/profiles/tom/hooks/north-clock-guard.py\")|$SHARED/hooks/north-clock-guard.py"
+    "tripwire-guard.sh|(s inputs.north \"/profiles/tom/hooks/tripwire-guard.sh\")|$SHARED/hooks/tripwire-guard.sh"
+    "logcompress-hook.js|(s inputs.north \"/profiles/tom/hooks/logcompress-hook.js\")|$SHARED/hooks/logcompress-hook.js"
+    "logcompress.js|(s inputs.north \"/profiles/tom/hooks/logcompress.js\")|$SHARED/hooks/logcompress.js"
+    "racket-build-guard.sh|(s inputs.beagle \"/integrations/north/hooks/racket-build-guard.sh\")|$BEAGLE_INTEGRATION/hooks/racket-build-guard.sh"
+    "lib/authoring-killswitch.sh|(s inputs.north \"/profiles/tom/hooks/lib/authoring-killswitch.sh\")|$SHARED/hooks/lib/authoring-killswitch.sh"
+    "north-on-spawn-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-spawn-codex\")|$CODEX/hooks/north-on-spawn-codex"
+    "north-on-tooluse-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-tooluse-codex\")|$CODEX/hooks/north-on-tooluse-codex"
+    "north-mark-delegated-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-mark-delegated-codex\")|$CODEX/hooks/north-mark-delegated-codex"
+    "north-on-stop-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-stop-codex\")|$CODEX/hooks/north-on-stop-codex"
+    "north-clock-guard-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-clock-guard-codex\")|$CODEX/hooks/north-clock-guard-codex"
   )
-  for source in "${sources[@]}"; do
-    if grep -Fq "(s flakeRoot \"$source\")" "$module"; then :
-    else bad "Codex module does not install managed-hook source $source"; fi
+  for spec in "${source_specs[@]}"; do
+    IFS='|' read -r relative source_expr expected <<<"$spec"
+    if grep -Fq "$source_expr" "$module"; then :
+    else bad "Codex module does not install $relative from its owning source: $source_expr"; fi
   done
   local runtime package binary
   local -a runtimes=(
@@ -1412,7 +1469,9 @@ validate_codex_managed_policy() {
   else
     bad 'Codex managed lifecycle or clock adapter fails shellcheck'
   fi
-  if python3 - "$SHARED/hooks/north-clock-guard.py" <<'PY'
+  if [ ! -f "$SHARED/hooks/north-clock-guard.py" ] && [ "$LOCAL" -eq 0 ]; then
+    note "North-owned clock admission core unavailable in repository-only mode"
+  elif python3 - "$SHARED/hooks/north-clock-guard.py" <<'PY'
 import pathlib
 import sys
 source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -1431,13 +1490,9 @@ PY
       generation_exact=0
       bad 'Codex managed requirements are not the current /etc generation'
     fi
-    for source in "${sources[@]:1}"; do
-      relative="${source#/dotfiles/agents/hooks/}"
-      if [ "$relative" = "$source" ]; then
-        relative="${source#/dotfiles/codex/hooks/}"
-      fi
+    for spec in "${source_specs[@]:1}"; do
+      IFS='|' read -r relative source_expr expected <<<"$spec"
       live="/etc/codex/hooks/$relative"
-      expected="$REPO$source"
       resolved="$(readlink -f "$live" 2>/dev/null || true)"
       if [ -n "$resolved" ] && [[ "$resolved" = /nix/store/* ]] &&
          cmp -s "$expected" "$live"; then :
@@ -1521,7 +1576,7 @@ if grep -Fq '(pkgs.writeText "claude-settings.json"' \
      "$REPO/modules/claude/default.bnix" &&
    grep -Fq ':home.activation.seedClaudeSettings' \
      "$REPO/modules/claude/default.bnix" &&
-   grep -Fq '["writeBoundary" "seedClaudeSettings"]' \
+   grep -Fq '(config.lib.dag.entryAfter ["writeBoundary"]' \
      "$REPO/modules/claude/default.bnix" &&
    ! rg -q 'linkClaudeSettings|/code/nixos-config/dotfiles/claude/settings\.json' \
      "$REPO/modules/claude/default.bnix" "$REPO/modules/claude/default.nix"; then
@@ -1542,12 +1597,23 @@ if grep -Fqx '  local north="/run/current-system/sw/bin/north"' "$CLAUDE/statusl
    ! grep -Fq '/home/tom/code/north/main/bin/' "$CLAUDE/statusline.sh"; then
   ok_detail "Claude statusline observer uses the immutable North package command"
 else bad "Claude statusline observer must use /run/current-system/sw/bin/north"; fi
-if grep -Fqx 'CONCERN="/run/current-system/sw/bin/concern"' "$SHARED/hooks/north-session-end.sh" &&
+if [ ! -f "$SHARED/hooks/north-session-end.sh" ] && [ "$LOCAL" -eq 0 ]; then
+  note "North-owned SessionEnd hook unavailable in repository-only mode"
+elif jq -e '
+     .hooks.SessionEnd[0].hooks[0].command
+       == "/home/tom/.agents/hooks/north-session-end.sh"
+   ' "$CLAUDE/settings.json" >/dev/null &&
+   ! grep -Fq 'northSessionEnd' "$REPO/modules/claude/default.bnix" &&
+   ! grep -Fq 'writeShellScriptBin "north-session-end"' "$REPO/modules/claude/default.bnix" &&
+   grep -Fqx 'CONCERN="/run/current-system/sw/bin/concern"' "$SHARED/hooks/north-session-end.sh" &&
    grep -Fq 'timeout 5 /run/current-system/sw/bin/north-stream-sync' "$SHARED/hooks/north-session-end.sh" &&
    ! grep -Fq '/home/tom/code/north/main/bin/' "$SHARED/hooks/north-session-end.sh"; then
-  ok_detail "Claude SessionEnd cleanup uses immutable North package commands"
-else bad "Claude SessionEnd cleanup must use immutable concern and north-stream-sync commands"; fi
-if bash "$SHARED/hooks/beagle-session-start.test.sh" >/dev/null; then
+  ok_detail "Claude SessionEnd is profile-owned and calls immutable North package commands"
+else bad "Claude SessionEnd must use the composed profile hook with immutable North commands"; fi
+if [ ! -f "$BEAGLE_INTEGRATION/hooks/beagle-session-start.test.sh" ] &&
+   [ "$LOCAL" -eq 0 ]; then
+  note "Beagle-owned SessionStart lifecycle test unavailable in repository-only mode"
+elif bash "$BEAGLE_INTEGRATION/hooks/beagle-session-start.test.sh" >/dev/null; then
   ok_detail "Beagle SessionStart gates its immutable Fram status probe behind project detection"
 else bad "Beagle SessionStart lifecycle test failed"; fi
 if command -v shellcheck >/dev/null 2>&1 && \
@@ -1767,7 +1833,6 @@ if [ "$LOCAL" -eq 1 ]; then
   immutable_store_link_matches \
     "$HOME/.codex/hooks.json" "$CODEX/hooks.json" "$HOME/.codex/hooks.json"
   canonical_link "$HOME/.codex/AGENTS.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.codex/AGENTS.md"
-  canonical_link "$HOME/.agents/skills" "$LIVE_SHARED/skills" "$HOME/.agents/skills"
   if command -v codex >/dev/null 2>&1; then
     codex_mcp_status=0
     mcp_output="$(

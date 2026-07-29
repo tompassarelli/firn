@@ -14,17 +14,17 @@ in
       "codex/runtime" = {
         source = codexPkg;
       };
-      "codex/hooks/beagle-session-start.sh".source = "${flakeRoot}/dotfiles/agents/hooks/beagle-session-start.sh";
-      "codex/hooks/agent-spawn-guard.sh".source = "${flakeRoot}/dotfiles/agents/hooks/agent-spawn-guard.sh";
-      "codex/hooks/code-upstream-guard.sh".source = "${flakeRoot}/dotfiles/agents/hooks/code-upstream-guard.sh";
-      "codex/hooks/firn-guard.sh".source = "${flakeRoot}/dotfiles/agents/hooks/firn-guard.sh";
-      "codex/hooks/north-clock-guard.sh".source = "${flakeRoot}/dotfiles/agents/hooks/north-clock-guard.sh";
-      "codex/hooks/north-clock-guard.py".source = "${flakeRoot}/dotfiles/agents/hooks/north-clock-guard.py";
-      "codex/hooks/tripwire-guard.sh".source = "${flakeRoot}/dotfiles/agents/hooks/tripwire-guard.sh";
-      "codex/hooks/logcompress-hook.js".source = "${flakeRoot}/dotfiles/agents/hooks/logcompress-hook.js";
-      "codex/hooks/logcompress.js".source = "${flakeRoot}/dotfiles/agents/hooks/logcompress.js";
-      "codex/hooks/racket-build-guard.sh".source = "${flakeRoot}/dotfiles/agents/hooks/racket-build-guard.sh";
-      "codex/hooks/lib/authoring-killswitch.sh".source = "${flakeRoot}/dotfiles/agents/hooks/lib/authoring-killswitch.sh";
+      "codex/hooks/beagle-session-start.sh".source = "${inputs.beagle}/integrations/north/hooks/beagle-session-start.sh";
+      "codex/hooks/agent-spawn-guard.sh".source = "${inputs.north}/profiles/tom/hooks/agent-spawn-guard.sh";
+      "codex/hooks/code-upstream-guard.sh".source = "${inputs.fram}/integrations/north/hooks/code-upstream-guard.sh";
+      "codex/hooks/firn-guard.sh".source = "${flakeRoot}/modules/agent-core/firn/hooks/firn-guard.sh";
+      "codex/hooks/north-clock-guard.sh".source = "${inputs.north}/profiles/tom/hooks/north-clock-guard.sh";
+      "codex/hooks/north-clock-guard.py".source = "${inputs.north}/profiles/tom/hooks/north-clock-guard.py";
+      "codex/hooks/tripwire-guard.sh".source = "${inputs.north}/profiles/tom/hooks/tripwire-guard.sh";
+      "codex/hooks/logcompress-hook.js".source = "${inputs.north}/profiles/tom/hooks/logcompress-hook.js";
+      "codex/hooks/logcompress.js".source = "${inputs.north}/profiles/tom/hooks/logcompress.js";
+      "codex/hooks/racket-build-guard.sh".source = "${inputs.beagle}/integrations/north/hooks/racket-build-guard.sh";
+      "codex/hooks/lib/authoring-killswitch.sh".source = "${inputs.north}/profiles/tom/hooks/lib/authoring-killswitch.sh";
       "codex/hooks/north-on-spawn-codex" = {
         source = "${flakeRoot}/dotfiles/codex/hooks/north-on-spawn-codex";
       };
@@ -73,7 +73,7 @@ in
     };
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {
-        ".codex/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/agents/AGENTS.md";
+        ".codex/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/AGENTS.md";
         ".codex/config.toml".source = "${flakeRoot}/dotfiles/codex/config.toml";
         ".codex/hooks.json".source = "${flakeRoot}/dotfiles/codex/hooks.json";
         ".codex/prompts".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/claude/commands";

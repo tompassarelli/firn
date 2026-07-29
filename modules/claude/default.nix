@@ -8,19 +8,18 @@ let
   framPkg = inputs.fram.packages."${pkgs.stdenv.hostPlatform.system}".default;
   claudeSettingsSeed = pkgs.writeText "claude-settings.json" (builtins.readFile "${flakeRoot}/dotfiles/claude/settings.json");
   claudeSettingsSeeder = pkgs.writeShellScript "claude-settings-seed" (builtins.readFile "${flakeRoot}/scripts/claude-settings-seed.sh");
-  northSessionEnd = pkgs.writeShellScriptBin "north-session-end" (builtins.readFile "${flakeRoot}/dotfiles/agents/hooks/north-session-end.sh");
   mcpRegister = pkgs.writeShellScript "claude-mcp-register" (builtins.readFile "${flakeRoot}/scripts/claude-mcp-register.sh");
 in
 {
   options.myConfig.modules.claude.enable = lib.mkEnableOption "Claude Code CLI configuration";
   config = lib.mkIf config.myConfig.modules.claude.enable {
-    environment.systemPackages = [ claudePackage northSessionEnd ];
+    environment.systemPackages = [ claudePackage ];
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {
         ".claude/commands".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/claude/commands";
-        ".claude/skills".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/agents/skills";
-        ".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/claude/CLAUDE.md";
-        ".claude/hooks".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/agents/hooks";
+        ".claude/skills".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/skills";
+        ".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/AGENTS.md";
+        ".claude/hooks".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/hooks";
         ".claude/agents".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/claude/agents";
         "code/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/code/CLAUDE.md";
       };

@@ -3,16 +3,16 @@
 The module that wires Claude Code onto the system:
 `nixos-config:modules/claude/default.bnix` (edit the `.bnix`;
 `default.nix` is generated). It provides the `claude-code-latest` package,
-out-of-store symlinks into `nixos-config:dotfiles/claude/`
-(`commands` / `skills` / `hooks` / `agents` / `CLAUDE.md`, plus the
-`~/code/CLAUDE.md` routing file), Orchestration's cached-plugin reconciliation, and MCP
-server registration (`fram`, `north`, `linear-mcp-msa-new`). All activation entries are best-effort
+provider-specific files from `nixos-config:dotfiles/claude/`, composed
+`~/.agents` policy/skills/hooks from `north:profiles/tom`, the
+`~/code/CLAUDE.md` routing file, and MCP server registration (`fram`, `north`,
+`linear-mcp-msa-new`). All activation entries are best-effort
 plugin install was decommissioned 2026-07-23 — see thread
 as an untouched Phase 2 archive candidate.)
 
 Why everything routes through nixos-config (reproducibility rule, CI
 validation, hooks kill-switch):
-`nixos-config:dotfiles/agents/docs/nixos-config-rules.md`.
+`nixos-config:modules/agent-core/firn/docs/nixos-config-rules.md`.
 
 ## settings.json is WRITABLE runtime state seeded by the generation
 
@@ -62,8 +62,8 @@ The previous machinery — the separate `inputs.orchestration` flake input, the
 detached worktree at `~/.local/state/north/orchestration-plugin-source` — was
 retired with the merge and no longer exists in this repo.
 
-Codex and North have no cache pointer: the shared
-`nixos-config:dotfiles/agents/AGENTS.md` routes Codex to
+Codex and North have no cache pointer: the composed
+`north:profiles/tom/AGENTS.md` routes Codex to
 `north:orchestration/`, while North reads
 `north:orchestration/staffing/catalog.json`, provider catalogs, and
 Orchestration prompt blocks directly.

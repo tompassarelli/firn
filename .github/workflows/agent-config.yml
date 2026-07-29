@@ -1,5 +1,5 @@
 name: Agent harness config
-# Anti-rot gate for shared agent policy plus the Claude and Codex adapters.
+# Anti-rot gate for Firn-owned profile fragments plus provider adapters.
 # The Drift check (tests.yml) only governs .bnix<->.nix; this validates the
 # dotfile content that actually injects behavior into every agent session.
 on:
@@ -8,12 +8,13 @@ on:
     paths:
       - 'dotfiles/claude/**'
       - 'dotfiles/codex/**'
-      - 'dotfiles/agents/**'
       - 'dotfiles/bin/claude'
       - 'dotfiles/bin/codex'
       - 'dotfiles/bin/launcher.test.sh'
       - 'modules/claude/**'
       - 'modules/codex/**'
+      - 'modules/agent-core/**'
+      - 'modules/hermes/**'
       - 'scripts/agent-config-check.sh'
       - 'scripts/agent-config-check.test.sh'
       - 'scripts/agent-provider-status.sh'
@@ -25,12 +26,13 @@ on:
     paths:
       - 'dotfiles/claude/**'
       - 'dotfiles/codex/**'
-      - 'dotfiles/agents/**'
       - 'dotfiles/bin/claude'
       - 'dotfiles/bin/codex'
       - 'dotfiles/bin/launcher.test.sh'
       - 'modules/claude/**'
       - 'modules/codex/**'
+      - 'modules/agent-core/**'
+      - 'modules/hermes/**'
       - 'scripts/agent-config-check.sh'
       - 'scripts/agent-config-check.test.sh'
       - 'scripts/agent-provider-status.sh'
@@ -56,7 +58,5 @@ jobs:
         run: ./scripts/agent-config-check.sh
       - name: Test provider identity boundaries
         run: bash ./scripts/agent-config-check.test.sh
-      - name: Test worker topology enforcement
-        run: ./dotfiles/agents/hooks/agent-spawn-guard.test.sh
       - name: Test provider status contract
         run: ./scripts/agent-provider-status.test.sh

@@ -63,7 +63,7 @@ location: `~/.local/state/north/…`, `/var/lib/…`, `/nix/store/…`.
 
 ### Enforcement
 
-`dotfiles/agents/hooks/launch-critical-worktree-guard.sh` refuses writes into a
+`~/.agents/hooks/launch-critical-worktree-guard.sh` refuses writes into a
 protected checkout on `Edit|Write|MultiEdit` **and on `Bash`**. The Bash side is
 not optional: on 2026-07-29 an agent modified all three launch-critical
 primaries — `python3 - <<EOF` heredocs, `git add`/`commit`/`reset --hard`, and a
@@ -103,4 +103,3 @@ The two repos fail differently, and both failures are real:
 The general rule the three repos are instances of: **if something launches from
 a checkout, that checkout is production.** Edit production in a worktree and
 land through a ref, the same as you would a deploy.
-

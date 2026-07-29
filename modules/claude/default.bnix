@@ -26,10 +26,6 @@
          (pkgs.writeShellScript "claude-settings-seed"
            (builtins.readFile
              (s flakeRoot "/scripts/claude-settings-seed.sh")))
-        northSessionEnd
-         (pkgs.writeShellScriptBin "north-session-end"
-           (builtins.readFile
-             (s flakeRoot "/dotfiles/agents/hooks/north-session-end.sh")))
         mcpRegister
          (pkgs.writeShellScript "claude-mcp-register"
            (builtins.readFile
@@ -39,7 +35,7 @@
       (lib.mkEnableOption "Claude Code CLI configuration")
      :config
       (lib.mkIf config.myConfig.modules.claude.enable
-        {:environment.systemPackages [claudePackage northSessionEnd]
+        {:environment.systemPackages [claudePackage]
          :home-manager.users
           {username
             (nix/module [config ...]
@@ -53,17 +49,17 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/agents/skills"))}
+                        "/.agents/skills"))}
                  ".claude/CLAUDE.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/claude/CLAUDE.md"))}
+                        "/.agents/AGENTS.md"))}
                  ".claude/hooks"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/agents/hooks"))}
+                        "/.agents/hooks"))}
                  ".claude/agents"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink

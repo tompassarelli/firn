@@ -5,7 +5,7 @@ server registration. Source of truth is `default.bnix`; `default.nix` is
 generated.
 
 **Read before editing `default.bnix`:**
-→ `~/code/nixos-config/dotfiles/agents/docs/nixos-module.md`
+→ `~/code/nixos-config/modules/agent-core/firn/docs/nixos-module.md`
 MCP idempotence, claim-canonical guard gap)
 
 Inline tripwire: `~/.claude/settings.json` must stay a writable regular runtime

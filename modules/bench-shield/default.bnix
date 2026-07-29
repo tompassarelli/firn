@@ -11,7 +11,7 @@
 ;; cleanup. `status` shows both configured and effective masks.
 ;; Chosen over a DO box (shared-tenancy steal time is a worse timing confound
 ;; than local contention) and over isolcpus= (static; wastes half the box when
-;; no experiment is running). See ~/code/nixos-config/dotfiles/agents/docs/measure-load.md.
+;; no experiment is running). See ~/.agents/docs/measure-load.md.
 (nix/module [config lib pkgs ...]
   {:tags [development]
    :options.myConfig.modules.bench-shield.enable

@@ -27,6 +27,7 @@ HOME = Path.home()
 REPO = Path(os.environ.get("FIRN_REPO", HOME / "code" / "nixos-config")).resolve()
 CLAUDE = Path(os.environ.get("CLAUDE_CONFIG_DIR", HOME / ".claude"))
 DOTFILES = REPO / "dotfiles" / "claude"
+AGENT_PROFILE = HOME / "code" / "north" / "main" / "profiles" / "tom"
 DOCDIR = REPO / "docs" / "claude"
 DOC = DOCDIR / "02-local-map.md"
 
@@ -70,19 +71,27 @@ def classify(path):
         real = p
 
     under_dotfiles = str(real).startswith(str(REPO / "dotfiles"))
+    under_profile = str(real).startswith(str(AGENT_PROFILE))
     via_store = bool(immediate and "/nix/store/" in str(immediate))
 
-    if under_dotfiles:
+    if under_dotfiles or under_profile:
         out["managed"] = True
         out["sot"] = fullpath(real)
         if not via_store:
-            # direct symlink → dotfiles: claude-code can atomic-write through it
-            out["via"] = "direct → dotfiles"
-            out["runtime_writable"] = True
+            if under_profile:
+                out["via"] = "direct → North profile"
+            else:
+                # direct symlink → dotfiles: claude-code can atomic-write through it
+                out["via"] = "direct → dotfiles"
+                out["runtime_writable"] = True
         else:
-            # nix-store out-of-store symlink → dotfiles: live for repo edits,
-            # but the store-symlink layer blocks runtime atomic-writes
-            out["via"] = "nix store → dotfiles (out-of-store)"
+            # The store-owned symlink records the Home Manager declaration;
+            # its target remains mutable owner checkout content.
+            out["via"] = (
+                "nix store → North profile (out-of-store)"
+                if under_profile
+                else "nix store → dotfiles (out-of-store)"
+            )
     elif "/nix/store/" in str(real):
         out["managed"] = True
         out["via"] = "nix store COPY (rebuild to change)"

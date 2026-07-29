@@ -1,5 +1,5 @@
-# Provider-specific Codex settings. Shared operating instructions live in
-# ../agents/AGENTS.md and shared lifecycle policy lives in ../agents/hooks/.
+# Provider-specific Codex settings. Shared operating instructions and
+# lifecycle policy are composed by North and exposed through ~/.agents/.
 project_doc_fallback_filenames = ["CLAUDE.md"]
 default_permissions = ":danger-full-access"
 approval_policy = "never"
