@@ -5,9 +5,26 @@
 
 import { readFileSync, existsSync, readlinkSync, lstatSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 const HOME = process.env.HOME;
+const WORLD_BIN = process.env.WORLD_BIN || join(import.meta.dir, "world");
+
+function worldGet(key, fallback) {
+  if (!existsSync(WORLD_BIN)) return fallback;
+  const value = execFileSync(WORLD_BIN, ["get", key], {
+    encoding: "utf8",
+    timeout: 5000,
+  }).trim();
+  return value || fallback;
+}
+
+const CODE_ROOT = worldGet("code.root", join(HOME, "code"));
+const NIXOS_CONFIG_ROOT = worldGet(
+  "repo.nixos-config",
+  join(CODE_ROOT, "nixos-config", "main"),
+);
+const NORTH_ROOT = worldGet("repo.north", join(CODE_ROOT, "north", "main"));
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -115,8 +132,8 @@ const claudeMdSym = symTarget(claudeMdPath);
 const claudeMdLines = lineCount(claudeMdPath);
 
 const exampleClaudes = [
-  `${HOME}/code/CLAUDE.md`,
-  `${HOME}/code/nixos-config/CLAUDE.md`,
+  join(CODE_ROOT, "CLAUDE.md"),
+  join(NIXOS_CONFIG_ROOT, "CLAUDE.md"),
 ];
 
 // Breadcrumb paths from global CLAUDE.md
@@ -270,7 +287,7 @@ function collectMcpServers(obj) {
 const mcpFromSettings = collectMcpServers(settings);
 const mcpJsonPaths = [
   `${CLAUDE_DIR}/.mcp.json`,
-  `${HOME}/code/.mcp.json`,
+  join(CODE_ROOT, ".mcp.json"),
 ];
 const mcpServers = [...mcpFromSettings];
 for (const p of mcpJsonPaths) {
@@ -279,7 +296,7 @@ for (const p of mcpJsonPaths) {
 }
 
 // 1h. North harness constants
-const harnessPath = `${HOME}/code/north/sdk/src/harness.ts`;
+const harnessPath = join(NORTH_ROOT, "sdk/src/harness.ts");
 const harnessText = readText(harnessPath) || "";
 const praxisDirMatch = harnessText.match(/const PRAXIS_DIR\s*=\s*`([^`]+)`/);
 const praxisDir = praxisDirMatch
@@ -338,10 +355,10 @@ if (praxisDir) {
 
 // orchestration build-agents check
 const orchestrationCheck = (() => {
-  const script = `${HOME}/code/north/main/orchestration/scripts/build-agents.mjs`;
+  const script = join(NORTH_ROOT, "orchestration/scripts/build-agents.mjs");
   if (!exists(script)) return { ok: false, reason: "script not found" };
   try {
-    execSync(`node ${script} --check`, { stdio: "pipe", timeout: 15000 });
+    execFileSync("node", [script, "--check"], { stdio: "pipe", timeout: 15000 });
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: (e.stderr?.toString() || e.message || "nonzero exit").slice(0, 120) };
@@ -512,7 +529,7 @@ if (mcpServers.length > 0) {
   }
 } else {
   // Check project-level .mcp.json
-  const projectMcp = readJSON(`${HOME}/code/nixos-config/.mcp.json`);
+  const projectMcp = readJSON(join(NIXOS_CONFIG_ROOT, ".mcp.json"));
   if (projectMcp) {
     for (const [name, cfg] of Object.entries(projectMcp.mcpServers || {})) {
       emit(`- **${name}** (project-level)  →  \`${cfg.command || JSON.stringify(cfg)}\``);

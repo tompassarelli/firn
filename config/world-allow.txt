@@ -48,13 +48,14 @@ nixos-config/dotfiles/claude/settings.json
 nixos-config/dotfiles/claude/statusline.sh
 nixos-config/dotfiles/claude/statusline.test.sh
 nixos-config/dotfiles/codex/config.toml
-nixos-config/dotfiles/codex/hooks.json
 nixos-config/dotfiles/codex/hooks/north-clock-guard-codex.test.sh
 nixos-config/dotfiles/niri/config.kdl
 nixos-config/flake.bnix
 nixos-config/modules/beagle/default.bnix
+nixos-config/modules/codex/default.bnix
 nixos-config/modules/fram/default.bnix
 nixos-config/modules/north/default.bnix
+nixos-config/modules/north/default.test.sh
 nixos-config/modules/theme-switcher/default.bnix
 nixos-config/scripts/agent-config-check.sh
 nixos-config/scripts/agent-config-check.test.sh
@@ -67,10 +68,8 @@ nixos-config/scripts/firn-cmds/util.rkt
 nixos-config/scripts/firn-source-hash
 nixos-config/scripts/firn-validate
 nixos-config/scripts/firn-validate.test.sh
-nixos-config/tests/nix-equiv-batch.rkt
 north/.codex/config.toml
 north/.mcp.json
-north/bin/north
 north/bin/north-arm
 north/bin/north-clock-audit
 north/bin/north-commit-guard
@@ -95,6 +94,8 @@ north/generated_output_test.sh
 north/offline-migrate.clj
 north/profiles/tom/hooks/agent-spawn-guard.sh
 north/profiles/tom/hooks/agent-spawn-guard.test.sh
+north/profiles/tom/hooks/beagle-session-start.sh
+north/profiles/tom/hooks/beagle-session-start.test.sh
 north/profiles/tom/hooks/launch-critical-worktree-guard.test.py
 north/profiles/tom/hooks/launch-critical-worktree-guard.test.sh
 north/profiles/tom/hooks/lib/launch_critical_decide.py

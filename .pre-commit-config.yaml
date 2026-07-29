@@ -1,4 +1,14 @@
 repos:
+  - repo: local
+    hooks:
+      - id: world-topology-drift
+        name: world topology drift
+        entry: >-
+          bash -c 'roots="${WORLD_PRECOMMIT_LINT_ROOTS:-$PWD:$("$PWD/dotfiles/bin/world" get repo.north):$("$PWD/dotfiles/bin/world" get repo.fram):$("$PWD/dotfiles/bin/world" get repo.beagle)}";
+          WORLD_LINT_ROOTS="$roots" WORLD_LINT_FAIL=1 "$PWD/dotfiles/bin/world" check --lint'
+        language: system
+        pass_filenames: false
+        always_run: true
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.24.2
     hooks:

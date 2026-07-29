@@ -19,7 +19,9 @@
 (define err 0)
 (define fail-list '())
 
-(define all-bnix (sort (find-bnix-files "/home/tom/code/nixos-config/modules")
+(define-runtime-path test-dir ".")
+(define repo-root (simplify-path (build-path test-dir 'up)))
+(define all-bnix (sort (find-bnix-files (build-path repo-root "modules"))
                        string<? #:key path->string))
 
 (for ([bnix (in-list all-bnix)])
