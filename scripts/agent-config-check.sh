@@ -1413,6 +1413,8 @@ validate_codex_managed_policy() {
     "logcompress.js|(s inputs.north \"/agent-profile/hooks/logcompress.js\")|$SHARED/hooks/logcompress.js"
     "racket-build-guard.sh|(s inputs.beagle \"/integrations/north/hooks/racket-build-guard.sh\")|$BEAGLE_INTEGRATION/hooks/racket-build-guard.sh"
     "lib/authoring-killswitch.sh|(s inputs.north \"/agent-profile/hooks/lib/authoring-killswitch.sh\")|$SHARED/hooks/lib/authoring-killswitch.sh"
+    "lib/harness-dial.sh|(s inputs.north \"/agent-profile/hooks/lib/harness-dial.sh\")|$SHARED/hooks/lib/harness-dial.sh"
+    "registry.tsv|(s inputs.north \"/agent-profile/hooks/registry.tsv\")|$SHARED/hooks/registry.tsv"
     "north-on-spawn-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-spawn-codex\")|$CODEX/hooks/north-on-spawn-codex"
     "north-on-tooluse-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-tooluse-codex\")|$CODEX/hooks/north-on-tooluse-codex"
     "north-mark-delegated-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-mark-delegated-codex\")|$CODEX/hooks/north-mark-delegated-codex"

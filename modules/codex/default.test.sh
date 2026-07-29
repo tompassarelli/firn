@@ -9,11 +9,17 @@ hooks_file="$repo/dotfiles/codex/hooks.json"
 
 grep -Fq '{:source (s flakeRoot "/dotfiles/codex/config.toml")}' "$source_file"
 grep -Fq '{:source (s flakeRoot "/dotfiles/codex/hooks.json")}' "$source_file"
+grep -Fq '{:source (s inputs.north "/agent-profile/hooks/lib/harness-dial.sh")}' "$source_file"
+grep -Fq '{:source (s inputs.north "/agent-profile/hooks/registry.tsv")}' "$source_file"
 # These assertions intentionally match literal Nix interpolation syntax.
 # shellcheck disable=SC2016
 grep -Fq '".codex/config.toml".source = "${flakeRoot}/dotfiles/codex/config.toml";' "$generated_file"
 # shellcheck disable=SC2016
 grep -Fq '".codex/hooks.json".source = "${flakeRoot}/dotfiles/codex/hooks.json";' "$generated_file"
+# shellcheck disable=SC2016
+grep -Fq '"codex/hooks/lib/harness-dial.sh".source = "${inputs.north}/agent-profile/hooks/lib/harness-dial.sh";' "$generated_file"
+# shellcheck disable=SC2016
+grep -Fq '"codex/hooks/registry.tsv".source = "${inputs.north}/agent-profile/hooks/registry.tsv";' "$generated_file"
 if rg -n \
   'mkOutOfStoreSymlink.*(config\.toml|hooks\.json)|code/nixos-config/dotfiles/codex/(config\.toml|hooks\.json)' \
   "$source_file" "$generated_file"; then
@@ -58,6 +64,27 @@ assert_store_copy() {
 config_source=$(assert_store_copy 'Codex config.toml' "$config_file" "$config_source")
 hooks_source=$(assert_store_copy 'Codex hooks.json' "$hooks_file" "$hooks_source")
 
+managed_hook_sources=$(
+  nix eval --json \
+    "$repo#nixosConfigurations.whiterabbit.config.environment.etc" \
+    --apply 'etc: builtins.mapAttrs (_: value: builtins.toString value.source) {
+      authoring = etc."codex/hooks/lib/authoring-killswitch.sh";
+      harnessDial = etc."codex/hooks/lib/harness-dial.sh";
+      registry = etc."codex/hooks/registry.tsv";
+      spawnGuard = etc."codex/hooks/agent-spawn-guard.sh";
+    }'
+)
+python3 - "$managed_hook_sources" <<'PY'
+import json
+import pathlib
+import sys
+
+sources = {name: pathlib.Path(path) for name, path in json.loads(sys.argv[1]).items()}
+assert all(str(path).startswith("/nix/store/") for path in sources.values())
+assert sources["harnessDial"].parent == sources["authoring"].parent
+assert sources["registry"].parent == sources["spawnGuard"].parent
+PY
+
 python3 - "$config_source" <<'PY'
 import pathlib
 import sys
@@ -74,3 +101,4 @@ PY
 
 printf 'ok: Codex config.toml and legacy hooks.json are generation-retained store copies with no checkout delivery dependency\n'
 printf 'ok: Codex keeps Terra/medium and immutable North/Fram MCP command paths\n'
+printf 'ok: Codex hook dial resolver and registry are store-backed from the same North source as existing hooks\n'

@@ -25,6 +25,8 @@ in
       "codex/hooks/logcompress.js".source = "${inputs.north}/agent-profile/hooks/logcompress.js";
       "codex/hooks/racket-build-guard.sh".source = "${inputs.beagle}/integrations/north/hooks/racket-build-guard.sh";
       "codex/hooks/lib/authoring-killswitch.sh".source = "${inputs.north}/agent-profile/hooks/lib/authoring-killswitch.sh";
+      "codex/hooks/lib/harness-dial.sh".source = "${inputs.north}/agent-profile/hooks/lib/harness-dial.sh";
+      "codex/hooks/registry.tsv".source = "${inputs.north}/agent-profile/hooks/registry.tsv";
       "codex/hooks/north-on-spawn-codex" = {
         source = "${flakeRoot}/dotfiles/codex/hooks/north-on-spawn-codex";
       };
