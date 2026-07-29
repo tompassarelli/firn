@@ -19,6 +19,7 @@ for _bp in "$HOME/code/beagle/main" "$HOME/code/beagle" "$REPO/../beagle"; do
   [ -d "$_bp/bin" ] && { BEAGLE_PATH="${BEAGLE_PATH:-$_bp}"; break; }
 done
 BEAGLE_PATH="${BEAGLE_PATH:-$REPO/../beagle}"
+export BEAGLE_PATH
 BUILD_SCRIPT="$REPO/scripts/firn-build-bin"
 SOURCE_HASH_SCRIPT="$REPO/scripts/firn-source-hash"
 
