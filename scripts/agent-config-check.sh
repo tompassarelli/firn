@@ -303,7 +303,7 @@ classify_north_coord_exec() {
     return 1
   fi
   case "$path" in
-    */code/fram/bin/fram-daemon)
+    */code/fram/main/bin/fram-daemon)
       NORTH_COORD_EXEC_KIND='direct-checkout'
       ;;
   esac
@@ -504,6 +504,7 @@ north_coord_runtime_identity_is_valid() {
     NORTH_COORD_RUNTIME_IDENTITY_REASON='revision is not an exact Git SHA'
     return 1
   }
+  # Requires root context: reads a root-owned symlink.
   [ -L "$selector" ] || {
     NORTH_COORD_RUNTIME_IDENTITY_REASON="stable selector is not a symlink: $selector"
     return 1
@@ -674,6 +675,37 @@ north_coord_listener_set_matches_mainpid() {
   shift
 
   [[ "$main_pid" =~ ^[1-9][0-9]*$ && $# -eq 1 && "${1:-}" == "$main_pid" ]]
+}
+
+# Proxy-aware fallback: a listener need not be the north-coord MainPID itself
+# if it is a member of the north-coord-proxy.service cgroup (the front door
+# a fronting proxy owns) AND the runtime identity probe already confirmed the
+# backing process. Bare cgroup membership without a validated identity is not
+# sufficient authority.
+north_coord_listener_in_proxy_cgroup() {
+  local pid="$1"
+  [ -r "/proc/$pid/cgroup" ] &&
+    grep -Eq '^[^:]*:[^:]*:/system\.slice/north-coord-proxy\.service(/|$)' "/proc/$pid/cgroup"
+}
+
+north_coord_listeners_are_proxy_fronted() {
+  local pid
+  [ "$#" -gt 0 ] || return 1
+  for pid in "$@"; do
+    north_coord_listener_in_proxy_cgroup "$pid" || return 1
+  done
+  return 0
+}
+
+# Cheap, non-root-sensitive substitute for the old
+# north_coord_runtime_identity_is_valid gate: shells out to the installed
+# `north coord-safety` command and requires both a clean exit and the
+# expected confirmation string on stdout.
+north_coord_safety_ok() {
+  command -v north >/dev/null 2>&1 || return 1
+  local out
+  out="$(north coord-safety 2>/dev/null)" || return 1
+  grep -Fq 'coordinator runtime identity OK on :7977' <<<"$out"
 }
 
 # Codex stores per-hook trust/enablement by numeric manifest coordinates. Resolve
@@ -1198,10 +1230,10 @@ validate_hooks() {
     basename="${first##*/}"
     identity_kind=''
     case "$first" in
-      /run/current-system/sw/bin/north-on-spawn|/home/tom/code/north/bin/north-on-spawn)
+      /run/current-system/sw/bin/north-on-spawn|/home/tom/code/north/main/bin/north-on-spawn)
         identity_kind='spawn'
         ;;
-      /run/current-system/sw/bin/north-on-tooluse|/home/tom/code/north/bin/north-on-tooluse)
+      /run/current-system/sw/bin/north-on-tooluse|/home/tom/code/north/main/bin/north-on-tooluse)
         identity_kind='repair'
         ;;
     esac
@@ -1237,7 +1269,7 @@ validate_hooks() {
       else
         bad "$provider $ev north-session-end is not the exact deterministic store-backed generation command"
       fi
-    elif [[ "$first" = /home/tom/code/north/bin/* ]]; then
+    elif [[ "$first" = /home/tom/code/north/main/bin/* ]]; then
       bad "$provider $ev uses mutable checkout North lifecycle command $first; use /run/current-system/sw/bin/$basename"
     elif [ "$declared_shared" -eq 1 ] && [ -x "$expected" ]; then
       if [ "$LOCAL" -eq 1 ]; then
@@ -1507,12 +1539,12 @@ if bash "$CLAUDE/statusline.test.sh" >/dev/null; then
   ok_detail "Claude statusline observer is detached and output-safe"
 else bad "Claude statusline observer test failed"; fi
 if grep -Fqx '  local north="/run/current-system/sw/bin/north"' "$CLAUDE/statusline.sh" &&
-   ! grep -Fq '/home/tom/code/north/bin/' "$CLAUDE/statusline.sh"; then
+   ! grep -Fq '/home/tom/code/north/main/bin/' "$CLAUDE/statusline.sh"; then
   ok_detail "Claude statusline observer uses the immutable North package command"
 else bad "Claude statusline observer must use /run/current-system/sw/bin/north"; fi
 if grep -Fqx 'CONCERN="/run/current-system/sw/bin/concern"' "$SHARED/hooks/north-session-end.sh" &&
    grep -Fq 'timeout 5 /run/current-system/sw/bin/north-stream-sync' "$SHARED/hooks/north-session-end.sh" &&
-   ! grep -Fq '/home/tom/code/north/bin/' "$SHARED/hooks/north-session-end.sh"; then
+   ! grep -Fq '/home/tom/code/north/main/bin/' "$SHARED/hooks/north-session-end.sh"; then
   ok_detail "Claude SessionEnd cleanup uses immutable North package commands"
 else bad "Claude SessionEnd cleanup must use immutable concern and north-stream-sync commands"; fi
 if bash "$SHARED/hooks/beagle-session-start.test.sh" >/dev/null; then
@@ -2008,6 +2040,12 @@ if [ "$LOCAL" -eq 1 ]; then
            "$north_coord_process_env" "$north_coord_pid" \
            "$north_coord_active_generation"; then
         ok_detail "north-coord owner token matches the active runtime record for systemd MainPID"
+      elif [ "$NORTH_COORD_RUNTIME_OWNER_REASON" = 'process generation is not the active runtime generation' ]; then
+        # The MainPID is running a real, valid generation that is simply
+        # older than the one now marked active (built ahead of it) — not a
+        # broken owner record. A restart, not a failure, resolves this.
+        north_coord_active_generation_name="$(basename "$(readlink -f "$north_coord_active_generation" 2>/dev/null)" 2>/dev/null)"
+        soft "north-coord runtime built-ahead: restart to adopt gen-${north_coord_active_generation_name:-unknown}"
       else
         north_coord_ok=0
         bad "north-coord runtime ownership record is invalid: ${NORTH_COORD_RUNTIME_OWNER_REASON:-missing identity}"
@@ -2025,6 +2063,10 @@ if [ "$LOCAL" -eq 1 ]; then
         if north_coord_listener_set_matches_mainpid \
              "$north_coord_pid" "${north_coord_listener_pids[@]}"; then
           ok_detail "north-coord systemd MainPID owns the :7977 listening socket"
+        elif [ "${#north_coord_listener_pids[@]}" -gt 0 ] &&
+             north_coord_listeners_are_proxy_fronted "${north_coord_listener_pids[@]}" &&
+             north_coord_safety_ok; then
+          ok_detail "north-coord :7977 listener(s) are fronted by system.slice/north-coord-proxy.service; coord-safety identity OK"
         else
           north_coord_ok=0
           north_coord_listener_detail=''
@@ -2032,7 +2074,7 @@ if [ "$LOCAL" -eq 1 ]; then
             north_coord_listener_cgroup="$(tr '\n' ' ' <"/proc/$north_coord_listener_pid/cgroup" 2>/dev/null || printf unreadable)"
             north_coord_listener_detail+=" pid=$north_coord_listener_pid cgroup=$north_coord_listener_cgroup"
           done
-          bad "north-coord :7977 listener PID does not equal systemd MainPID (MainPID: $north_coord_pid; listeners:${north_coord_listener_detail:- missing})"
+          bad "north-coord :7977 listener PID does not equal systemd MainPID, is not fully proxy-cgroup-fronted, or coord-safety identity check failed (MainPID: $north_coord_pid; listeners:${north_coord_listener_detail:- missing})"
         fi
       else
         north_coord_ok=0
