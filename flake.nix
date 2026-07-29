@@ -34,7 +34,7 @@
       flake = false;
     };
     beagle = {
-      url = "github:tompassarelli/beagle";
+      url = "git+file:///home/tom/code/beagle/main?ref=main";
     };
     elephant = {
       url = "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73";
