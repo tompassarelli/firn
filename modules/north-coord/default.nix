@@ -117,7 +117,7 @@ let
   };
   selector = pkgs.writeShellApplication {
     name = "north-coord-selector";
-    runtimeInputs = with pkgs; [ bash coreutils socat util-linux ];
+    runtimeInputs = with pkgs; [ bash coreutils gawk socat util-linux ];
     text = ''
       export NORTH_COORD_SELECTOR_SOCKET=${proxyAdminSocket}
       export NORTH_COORD_SELECTOR_MAP=${selectorMap}

@@ -200,7 +200,8 @@
         selector
           (pkgs.writeShellApplication
             {:name "north-coord-selector"
-             :runtimeInputs (nix/with pkgs [bash coreutils socat util-linux])
+             :runtimeInputs
+              (nix/with pkgs [bash coreutils gawk socat util-linux])
              :text
               (ms (s "export NORTH_COORD_SELECTOR_SOCKET=" proxyAdminSocket)
                   (s "export NORTH_COORD_SELECTOR_MAP=" selectorMap)

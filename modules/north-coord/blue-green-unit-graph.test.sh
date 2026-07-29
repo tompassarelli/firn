@@ -104,6 +104,22 @@ if grep '^Requires=.*north-coord-blue.service' "$proxy_unit"; then
   exit 1
 fi
 
+# The selector parses HAProxy's CSV status with awk during every prestart and
+# cutover. Prove the packaged wrapper carries that runtime dependency instead
+# of accidentally borrowing it from an interactive host PATH.
+selector_prestart=$(
+  sed -n 's|^ExecStartPre=\([^ ]*/north-coord-selector\) prestart$|\1|p' \
+    "$proxy_unit"
+)
+[[ -x "$selector_prestart" ]] || {
+  echo "proxy selector prestart is not an executable package path" >&2
+  exit 1
+}
+grep -Eq '/nix/store/[a-z0-9]+-gawk-[^/]+/bin' "$selector_prestart" || {
+  echo "packaged proxy selector is missing its gawk runtime dependency" >&2
+  exit 1
+}
+
 # All four candidates use the dynamic launcher, have no corpus-level prepare,
 # and retain the agreed memory/stop bounds.
 for name in north-coord-blue.service north-coord-green.service; do
