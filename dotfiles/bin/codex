@@ -360,7 +360,7 @@ if [ "${1:-}" = "as" ]; then
 fi
 
 # 4. Auto-select greatest-headroom account from north's machine boundary.
-#    Rank: headroom class (plenty>low>other), then lowest used% on the binding
+#    Rank: headroom class (plenty>normal>low>other), then lowest used% on the binding
 #    window, then north's target listing order. Every failure mode fails OPEN
 #    but is reported distinctly — the caller learns WHY it went ambient.
 #
@@ -410,8 +410,9 @@ select_account() {
         id,
         order,
         hclass: (if .headroom=="plenty" then 0
-                 elif .headroom=="low" then 1
-                 else 2 end),
+                 elif .headroom=="normal" then 1
+                 elif .headroom=="low" then 2
+                 else 3 end),
         used: ([.usage.windows[]? | select(.limitId==$limit) | .usedPercent][0] // 999)
       })
     | sort_by(.hclass, .used, .order)

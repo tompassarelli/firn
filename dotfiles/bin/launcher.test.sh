@@ -178,6 +178,15 @@ for launcher in claude codex; do
       "s1": {"id":"acctB","authenticated":true,"routing":"eligible","headroom":"low","usage":{"windows":[{"limitId":"$limit","usedPercent":40}]}}
     } } ] }
 JSON
+  headroom_order="$SCRATCH/$launcher-headroom-order.json"
+  cat >"$headroom_order" <<JSON
+{ "providers": [
+  { "provider": "$prov",
+    "targets": {
+      "s0": {"id":"acctNormal","authenticated":true,"routing":"eligible","headroom":"normal","usage":{"windows":[{"limitId":"$limit","usedPercent":63}]}},
+      "s1": {"id":"acctLow","authenticated":true,"routing":"eligible","headroom":"low","usage":{"windows":[{"limitId":"$limit","usedPercent":92}]}}
+    } } ] }
+JSON
   ineligible="$SCRATCH/$launcher-ineligible.json"
   cat >"$ineligible" <<JSON
 { "providers": [
@@ -246,6 +255,14 @@ JSON
     check "codex/success also exports CODEX_SQLITE_HOME" \
       test "$(record_field _ CODEX_SQLITE_HOME)" = "$ROOT/acctA/sqlite"
   fi
+
+  # 7b. A normal account with lower usage has more headroom than a low account.
+  mkdir -p "$ROOT/acctNormal" "$ROOT/acctLow"
+  run "$launcher" 1 "NORTH_JSON=$headroom_order" -- ; s="$STDERR"
+  check "$launcher/headroom ranks normal ahead of low" \
+    contains "$s" "[$launcher → acctNormal]"
+  check "$launcher/headroom pin uses the normal account" \
+    test "$(record_field _ "$pinvar")" = "$ROOT/acctNormal"
 
   # 8. explicit `as <id>` pin bypasses north entirely (dir present).
   run "$launcher" 0 -- as acctA hello ; s="$STDERR"
