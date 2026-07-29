@@ -158,6 +158,22 @@ case "$command" in
         "$instance" "$version" "$cutover_id" >"$endpoint"
       exit 3
     fi
+    if [[ -n "${NORTH_COORD_TEST_DROP_PROMOTE_PORT:-}" &&
+          "$port" == "$NORTH_COORD_TEST_DROP_PROMOTE_PORT" ]]; then
+      exit 4
+    fi
+    if [[ -n "${NORTH_COORD_TEST_TIMEOUT_PROMOTE_PORT:-}" &&
+          "$port" == "$NORTH_COORD_TEST_TIMEOUT_PROMOTE_PORT" ]]; then
+      (
+        sleep "${NORTH_COORD_TEST_PRETRANSITION_DELAY_SECONDS:-0.15}"
+        printf 'promoting %s %s %s\n' \
+          "$instance" "$version" "$cutover_id" >"$endpoint"
+        sleep "${NORTH_COORD_TEST_DELAY_PROMOTE_SECONDS:-0.2}"
+        printf 'active %s %s %s\n' \
+          "$instance" "$version" "$cutover_id" >"$endpoint"
+      ) >/dev/null 2>&1 &
+      exit 4
+    fi
     if [[ -n "${NORTH_COORD_TEST_DELAY_PROMOTE_PORT:-}" &&
           "$port" == "$NORTH_COORD_TEST_DELAY_PROMOTE_PORT" ]]; then
       printf 'promoting %s %s %s\n' \
@@ -170,10 +186,6 @@ case "$command" in
     else
       printf 'active %s %s %s\n' \
         "$instance" "$version" "$cutover_id" >"$endpoint"
-    fi
-    if [[ -n "${NORTH_COORD_TEST_TIMEOUT_PROMOTE_PORT:-}" &&
-          "$port" == "$NORTH_COORD_TEST_TIMEOUT_PROMOTE_PORT" ]]; then
-      exit 124
     fi
     printf '{:ok true :protocol "fram-coordinator-cutover/v1"}\n'
     ;;
@@ -254,14 +266,56 @@ if "$here/north-coord-cutover-gate" promote blue green "$transaction"; then
   echo "stale-marker promotion unexpectedly succeeded" >&2
   exit 1
 fi
+cp -- "$gate_state/telemetry.old-demotion.edn" "$scratch/stale-marker.before"
+read -r _ _ stale_blue_version _ <"$fake_state/17978"
+read -r _ _ stale_green_version _ <"$fake_state/27978"
 if "$here/north-coord-cutover-gate" rollback green blue "$transaction"; then
   echo "stale-marker rollback unexpectedly resumed authority" >&2
   exit 1
 fi
+cmp "$scratch/stale-marker.before" "$gate_state/telemetry.old-demotion.edn"
 read -r blue_telemetry_phase _ <"$fake_state/17978"
 read -r green_telemetry_phase _ <"$fake_state/27978"
+read -r _ _ blue_telemetry_version _ <"$fake_state/17978"
+read -r _ _ green_telemetry_version _ <"$fake_state/27978"
 [[ "$blue_telemetry_phase" != active ]]
 [[ "$green_telemetry_phase" != active ]]
+[[ "$blue_telemetry_version" == "$stale_blue_version" ]]
+[[ "$green_telemetry_version" == "$stale_green_version" ]]
 unset NORTH_COORD_TEST_FAIL_PROMOTE_PORT NORTH_COORD_TEST_STALE_OLD_PORT
+
+# A transport timeout may happen before the server installs :promoting. Keep
+# polling the exact ID instead of sampling the old stable phase once.
+write_endpoint 17977 active blue-coord 50
+write_endpoint 17978 active blue-telemetry 60
+write_endpoint 27977 standby green-coord 50
+write_endpoint 27978 standby green-telemetry 60
+rm -f -- "$gate_state"/*.edn "$fake_state/failure.used"
+export NORTH_COORD_TEST_TIMEOUT_PROMOTE_PORT=27977
+"$here/north-coord-cutover-gate" promote blue green "$transaction"
+[[ ! -e "$gate_state/outcome.unknown" ]]
+unset NORTH_COORD_TEST_TIMEOUT_PROMOTE_PORT
+
+# If no terminal phase is ever observable, preserve the unresolved record and
+# refuse rollback. A late queued server request can therefore never race a
+# resumed frontend.
+write_endpoint 17977 active blue-coord 70
+write_endpoint 17978 active blue-telemetry 80
+write_endpoint 27977 standby green-coord 70
+write_endpoint 27978 standby green-telemetry 80
+rm -f -- "$gate_state"/*.edn "$fake_state/failure.used"
+export NORTH_COORD_TEST_DROP_PROMOTE_PORT=27978
+export NORTH_COORD_CUTOVER_SETTLE_TIMEOUT_MS=200
+if "$here/north-coord-cutover-gate" promote blue green "$transaction"; then
+  echo "unobservable promotion unexpectedly succeeded" >&2
+  exit 1
+fi
+[[ -f "$gate_state/outcome.unknown" ]]
+if "$here/north-coord-cutover-gate" rollback green blue "$transaction"; then
+  echo "rollback ignored an unresolved transport outcome" >&2
+  exit 1
+fi
+[[ -f "$gate_state/outcome.unknown" ]]
+unset NORTH_COORD_TEST_DROP_PROMOTE_PORT
 
 printf 'blue/green activation behavior: PASS\n'
