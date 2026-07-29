@@ -7,7 +7,17 @@ set -euo pipefail
 SHARE_DIR="/home/tom/.local/share/firn"
 BUILT_RACKET_BIN="/nix/store/67ixm62090fzccg1w9qy7wdlh3kk05r9-racket-9.1/bin/racket"
 BUILT_RACKET_HASH="a819fcdd72d0"
+if [ -z "${FIRN_REPO:-}" ]; then
+  for _repo in "$HOME/code/nixos-config/main" "$HOME/code/nixos-config"; do
+    [ -x "$_repo/scripts/firn-build-bin" ] && { FIRN_REPO="$_repo"; break; }
+  done
+  unset _repo
+fi
 REPO="${FIRN_REPO:-$HOME/code/nixos-config}"
+export FIRN_REPO="$REPO"
+for _bp in "$HOME/code/beagle/main" "$HOME/code/beagle" "$REPO/../beagle"; do
+  [ -d "$_bp/bin" ] && { BEAGLE_PATH="${BEAGLE_PATH:-$_bp}"; break; }
+done
 BEAGLE_PATH="${BEAGLE_PATH:-$REPO/../beagle}"
 BUILD_SCRIPT="$REPO/scripts/firn-build-bin"
 SOURCE_HASH_SCRIPT="$REPO/scripts/firn-source-hash"

@@ -4,6 +4,12 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -z "${BEAGLE_PATH:-}" ]; then
+  for _bp in "$HOME/code/beagle/main" "$HOME/code/beagle" "$REPO/../beagle"; do
+    if [ -x "$_bp/bin/beagle-validate" ]; then BEAGLE_PATH="$_bp"; break; fi
+  done
+  unset _bp
+fi
 BEAGLE_PATH="${BEAGLE_PATH:-$(cd "$REPO/.." && pwd)/beagle}"
 FIRN_VALIDATE="$REPO/scripts/firn-validate"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/firn-validate-test.XXXXXX")"

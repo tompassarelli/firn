@@ -161,7 +161,13 @@ fi
 # it even though the restored source exports it. Ordinary loading trusts the
 # ignored adjacent bytecode and dies with instantiate-linklet. Both Firn build
 # surfaces must ignore that poisoned sidecar tree and compile current sources.
-real_beagle="${BEAGLE_PATH:-$(cd "$HERE/../.." && pwd)/beagle}"
+if [ -z "${BEAGLE_PATH:-}" ]; then
+  for _bp in "$HOME/code/beagle/main" "$HOME/code/beagle" "$(cd "$HERE/../.." && pwd)/beagle"; do
+    if [ -f "$_bp/bin/_beagle-racket" ]; then real_beagle="$_bp"; break; fi
+  done
+  unset _bp
+fi
+real_beagle="${BEAGLE_PATH:-${real_beagle:-$(cd "$HERE/../.." && pwd)/beagle}}"
 # shellcheck disable=SC1091
 source "$real_beagle/bin/_beagle-racket"
 real_repo="$scratch/real-repro"
