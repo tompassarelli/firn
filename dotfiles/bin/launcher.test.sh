@@ -183,8 +183,8 @@ JSON
 { "providers": [
   { "provider": "$prov",
     "targets": {
-      "s0": {"id":"acctNormal","authenticated":true,"routing":"eligible","headroom":"normal","usage":{"windows":[{"limitId":"$limit","usedPercent":63}]}},
-      "s1": {"id":"acctLow","authenticated":true,"routing":"eligible","headroom":"low","usage":{"windows":[{"limitId":"$limit","usedPercent":92}]}}
+      "s0": {"id":"acctNormal","authenticated":true,"routing":"eligible","headroom":"normal","usage":{"windows":[{"limitId":"$limit","usedPercent":92}]}},
+      "s1": {"id":"acctLow","authenticated":true,"routing":"eligible","headroom":"low","usage":{"windows":[{"limitId":"$limit","usedPercent":63}]}}
     } } ] }
 JSON
   ineligible="$SCRATCH/$launcher-ineligible.json"
@@ -256,13 +256,13 @@ JSON
       test "$(record_field _ CODEX_SQLITE_HOME)" = "$ROOT/acctA/sqlite"
   fi
 
-  # 7b. A normal account with lower usage has more headroom than a low account.
+  # 7b. Measured usage outranks the coarse headroom label.
   mkdir -p "$ROOT/acctNormal" "$ROOT/acctLow"
   run "$launcher" 1 "NORTH_JSON=$headroom_order" -- ; s="$STDERR"
-  check "$launcher/headroom ranks normal ahead of low" \
-    contains "$s" "[$launcher → acctNormal]"
-  check "$launcher/headroom pin uses the normal account" \
-    test "$(record_field _ "$pinvar")" = "$ROOT/acctNormal"
+  check "$launcher/headroom ranks lower percentage ahead of label" \
+    contains "$s" "[$launcher → acctLow]"
+  check "$launcher/headroom pin uses the lower-percentage account" \
+    test "$(record_field _ "$pinvar")" = "$ROOT/acctLow"
 
   # 8. explicit `as <id>` pin bypasses north entirely (dir present).
   run "$launcher" 0 -- as acctA hello ; s="$STDERR"

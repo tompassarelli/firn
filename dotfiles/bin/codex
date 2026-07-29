@@ -360,8 +360,9 @@ if [ "${1:-}" = "as" ]; then
 fi
 
 # 4. Auto-select greatest-headroom account from north's machine boundary.
-#    Rank: headroom class (plenty>normal>low>other), then lowest used% on the binding
-#    window, then north's target listing order. Every failure mode fails OPEN
+#    Rank: lowest measured used% on the binding window. Headroom class
+#    (plenty>normal>low>other) only breaks a numeric tie; target order is final.
+#    Every failure mode fails OPEN
 #    but is reported distinctly — the caller learns WHY it went ambient.
 #
 #    Emits a single tab-separated verdict line on stdout:
@@ -415,7 +416,7 @@ select_account() {
                  else 3 end),
         used: ([.usage.windows[]? | select(.limitId==$limit) | .usedPercent][0] // 999)
       })
-    | sort_by(.hclass, .used, .order)
+    | sort_by(.used, .hclass, .order)
     | .[0].id // empty
   ' 2>/dev/null)"; then
     printf 'err\tnorth providers JSON was malformed\n'
