@@ -31,7 +31,7 @@ let
     name = "${name}-dev";
     runtimeInputs = liveInputs;
     text = ''
-      checkout=''${FRAM_CHECKOUT:-$HOME/code/fram}
+      checkout=''${FRAM_CHECKOUT:-$HOME/code/fram/main}
       target=$checkout/bin/${name}
       if [ ! -x "$target" ]; then
         echo "${name}-dev: checkout executable missing: $target" >&2

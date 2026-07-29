@@ -38,7 +38,7 @@
           {:name (s name "-dev")
            :runtimeInputs liveInputs
            :text
-            (ms "checkout=${BEAGLE_CHECKOUT:-$HOME/code/beagle}"
+            (ms "checkout=${BEAGLE_CHECKOUT:-$HOME/code/beagle/main}"
                 (s "target=$checkout/bin/" name)
                 "if [ ! -x \"$target\" ]; then"
                 (s "  echo \"" name "-dev: checkout executable missing: $target\" >&2")

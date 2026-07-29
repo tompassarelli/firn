@@ -63,7 +63,7 @@
          :runtimeInputs liveInputs
          :text
           (ms clientEnvironment
-              "checkout=${NORTH_CHECKOUT:-$HOME/code/north}"
+              "checkout=${NORTH_CHECKOUT:-$HOME/code/north/main}"
               (s "target=$checkout/bin/" name)
               "if [ ! -x \"$target\" ]; then"
               (s "  echo \"" name "-dev: checkout executable missing: $target\" >&2")

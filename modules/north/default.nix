@@ -57,7 +57,7 @@ let
     runtimeInputs = liveInputs;
     text = ''
       ${clientEnvironment}
-      checkout=''${NORTH_CHECKOUT:-$HOME/code/north}
+      checkout=''${NORTH_CHECKOUT:-$HOME/code/north/main}
       target=$checkout/bin/${name}
       if [ ! -x "$target" ]; then
         echo "${name}-dev: checkout executable missing: $target" >&2

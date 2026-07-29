@@ -27,7 +27,8 @@ set -euo pipefail
 
 ROOT="${FIRN_REPO:-$(git rev-parse --show-toplevel)}"
 LOCK="$ROOT/flake.lock"
-INPUTS=(beagle fram north)
+# Only the daemon engine auto-promotes; north/beagle are dev-channel.
+INPUTS=(fram)
 
 die() {
   printf 'firn rebuild: %s\n' "$*" >&2

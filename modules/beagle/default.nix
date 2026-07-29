@@ -29,7 +29,7 @@ let
     name = "${name}-dev";
     runtimeInputs = liveInputs;
     text = ''
-      checkout=''${BEAGLE_CHECKOUT:-$HOME/code/beagle}
+      checkout=''${BEAGLE_CHECKOUT:-$HOME/code/beagle/main}
       target=$checkout/bin/${name}
       if [ ! -x "$target" ]; then
         echo "${name}-dev: checkout executable missing: $target" >&2

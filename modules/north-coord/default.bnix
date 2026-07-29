@@ -56,7 +56,7 @@
                 (ms (s "export NORTH_COORD_RUNTIME_STATE=" state)
                     (s "export NORTH_COORD_FRAM_PACKAGE=" framPkg)
                     (s "export NORTH_COORD_FRAM_PACKAGE_REV=" framRev)
-                    (s "export NORTH_COORD_FRAM_CHECKOUT=" homeDir "/code/fram")
+                    (s "export NORTH_COORD_FRAM_CHECKOUT=" homeDir "/code/fram/main")
                     (s "export NORTH_COORD_NORTH_PACKAGE=" northPkg)
                     (s "export NORTH_COORD_FRAM_LOG=" primaryLog)
                     (s "export NORTH_COORD_TELEMETRY_LOG=" peerLog)

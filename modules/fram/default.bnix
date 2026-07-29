@@ -36,7 +36,7 @@
             {:name (s name "-dev")
              :runtimeInputs liveInputs
              :text
-              (ms "checkout=${FRAM_CHECKOUT:-$HOME/code/fram}"
+              (ms "checkout=${FRAM_CHECKOUT:-$HOME/code/fram/main}"
                   (s "target=$checkout/bin/" name)
                   "if [ ! -x \"$target\" ]; then"
                   (s "  echo \"" name "-dev: checkout executable missing: $target\" >&2")
