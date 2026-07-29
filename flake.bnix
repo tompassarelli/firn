@@ -25,7 +25,6 @@
    :hermes-agent {:inputs.nixpkgs.follows "nixpkgs" :url "github:NousResearch/hermes-agent/244dabbd9c4b542bf5c1ad0159af512c2b5d6e08"}
    :north {:inputs.nixpkgs-master.follows "nixpkgs-master" :url "git+file:///home/tom/code/north/main?ref=main" :inputs.fram.follows "fram"}
    :nur {:url "github:nix-community/NUR"}
-   :palefox {:url "github:tompassarelli/palefox"}
    :quickshell {:inputs.nixpkgs.follows "nixpkgs" :url "git+https://git.outfoxxed.me/outfoxxed/quickshell"}
    :walker {:inputs.elephant.follows "elephant" :url "github:abenz1267/walker"}
    :zen-browser {:inputs.nixpkgs.follows "nixpkgs" :url "github:0xc000022070/zen-browser-flake"}
@@ -51,7 +50,6 @@
      hermes-agent
      north
      nur
-     palefox
      quickshell
      walker
      zen-browser
@@ -85,7 +83,6 @@
                     :hermes-agent hermes-agent
                     :north north
                     :nur nur
-                    :palefox palefox
                     :quickshell quickshell
                     :walker walker
                     :zen-browser zen-browser
@@ -132,7 +129,6 @@
                     :hermes-agent hermes-agent
                     :north north
                     :nur nur
-                    :palefox palefox
                     :quickshell quickshell
                     :walker walker
                     :zen-browser zen-browser
@@ -296,7 +292,6 @@
                     :hermes-agent hermes-agent
                     :north north
                     :nur nur
-                    :palefox palefox
                     :quickshell quickshell
                     :walker walker
                     :zen-browser zen-browser
@@ -347,7 +342,6 @@
                     :hermes-agent hermes-agent
                     :north north
                     :nur nur
-                    :palefox palefox
                     :quickshell quickshell
                     :walker walker
                     :zen-browser zen-browser

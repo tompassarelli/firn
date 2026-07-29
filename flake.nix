@@ -58,9 +58,6 @@
     nur = {
       url = "github:nix-community/NUR";
     };
-    palefox = {
-      url = "github:tompassarelli/palefox";
-    };
     quickshell = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "git+https://git.outfoxxed.me/outfoxxed/quickshell";
@@ -74,7 +71,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, fram, gjoa, hermes-agent, north, nur, palefox, quickshell, walker, zen-browser, ... }: let
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, fram, gjoa, hermes-agent, north, nur, quickshell, walker, zen-browser, ... }: let
     firnModules = ./modules;
     darwinModuleNames = builtins.fromJSON (builtins.readFile ./config/darwin-modules.json);
   in
@@ -90,7 +87,6 @@
           hermes-agent = hermes-agent;
           north = north;
           nur = nur;
-          palefox = palefox;
           quickshell = quickshell;
           walker = walker;
           zen-browser = zen-browser;
@@ -125,7 +121,6 @@
               hermes-agent = hermes-agent;
               north = north;
               nur = nur;
-              palefox = palefox;
               quickshell = quickshell;
               walker = walker;
               zen-browser = zen-browser;
@@ -291,7 +286,6 @@
           hermes-agent = hermes-agent;
           north = north;
           nur = nur;
-          palefox = palefox;
           quickshell = quickshell;
           walker = walker;
           zen-browser = zen-browser;
@@ -333,7 +327,6 @@
                 hermes-agent = hermes-agent;
                 north = north;
                 nur = nur;
-                palefox = palefox;
                 quickshell = quickshell;
                 walker = walker;
                 zen-browser = zen-browser;

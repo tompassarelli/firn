@@ -60,7 +60,6 @@ input {
     }
 
     // Warp cursor to center of newly focused windows.
-    // Avoids unintentional sidebar activation in palefox when tiling.
     // warp-mouse-to-focus
 
     // Focus windows and outputs automatically when moving the mouse into them.

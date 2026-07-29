@@ -844,22 +844,6 @@
     },
     "nixpkgs_7": {
       "locked": {
-        "lastModified": 1773389992,
-        "narHash": "sha256-wvfdLLWJ2I9oEpDd9PfMA8osfIZicoQ5MT1jIwNs9Tk=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "c06b4ae3d6599a672a6210b7021d699c351eebda",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs_8": {
-      "locked": {
         "lastModified": 1780203844,
         "narHash": "sha256-K5sT4jTpGs15ADhviMKNBH38REpPf5Q6mM1+N6cArVE=",
         "owner": "NixOS",
@@ -874,7 +858,7 @@
         "type": "github"
       }
     },
-    "nixpkgs_9": {
+    "nixpkgs_8": {
       "locked": {
         "lastModified": 1775710090,
         "narHash": "sha256-ar3rofg+awPB8QXDaFJhJ2jJhu+KqN/PRCXeyuXR76E=",
@@ -981,24 +965,6 @@
         "type": "github"
       }
     },
-    "palefox": {
-      "inputs": {
-        "nixpkgs": "nixpkgs_7"
-      },
-      "locked": {
-        "lastModified": 1778294319,
-        "narHash": "sha256-8ZVLTPmcnDp44+KIQyXRQkAgxFRqUt036t4Yxo9k8N4=",
-        "owner": "tompassarelli",
-        "repo": "palefox",
-        "rev": "bf1012dc0adae7574447feb0260054ce844f4f68",
-        "type": "github"
-      },
-      "original": {
-        "owner": "tompassarelli",
-        "repo": "palefox",
-        "type": "github"
-      }
-    },
     "pyproject-build-systems": {
       "inputs": {
         "nixpkgs": [
@@ -1085,7 +1051,6 @@
         "nixpkgs-unstable": "nixpkgs-unstable",
         "north": "north",
         "nur": "nur",
-        "palefox": "palefox",
         "quickshell": "quickshell",
         "sops-nix": "sops-nix",
         "stylix": "stylix",
@@ -1122,7 +1087,7 @@
         "firefox-gnome-theme": "firefox-gnome-theme",
         "flake-parts": "flake-parts_5",
         "gnome-shell": "gnome-shell",
-        "nixpkgs": "nixpkgs_8",
+        "nixpkgs": "nixpkgs_7",
         "nur": "nur_2",
         "systems": "systems_8",
         "tinted-kitty": "tinted-kitty",
@@ -1376,7 +1341,7 @@
         "elephant": [
           "elephant"
         ],
-        "nixpkgs": "nixpkgs_9",
+        "nixpkgs": "nixpkgs_8",
         "systems": "systems_9"
       },
       "locked": {

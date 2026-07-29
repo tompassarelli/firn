@@ -24,7 +24,6 @@ jobs:
         # inputs (fast local iteration on the sibling repos). CI can't fetch a
         # path on the author's machine, so override each to its public github
         # mirror for the build. Local rebuilds keep using the file:// paths.
-        # (palefox is already a github input — no override needed.)
         env:
           # Authenticate nix's github fetches. Locking each --override-input below
           # (and reading its lastModified) hits api.github.com; on the shared CI

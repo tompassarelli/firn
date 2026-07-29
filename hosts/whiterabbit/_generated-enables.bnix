@@ -41,7 +41,6 @@
    :myConfig.modules.fd.enable (lib.mkDefault true)
    :myConfig.modules.ffmpeg.enable (lib.mkDefault true)
    :myConfig.modules.firefox.enable (lib.mkDefault true)
-   :myConfig.modules.firefox.palefox.enable (lib.mkDefault false)
    :myConfig.modules.firefox.default (lib.mkDefault true)
    :myConfig.modules.forgejo-cli.enable (lib.mkDefault true)
    :myConfig.modules.fram.enable (lib.mkDefault true)
