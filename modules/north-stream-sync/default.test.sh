@@ -9,5 +9,7 @@ generated_module=$here/default.nix
 # active unit alone while installing its replacement definition.
 grep -Fq ':X-SwitchMethod "keep-old"' "$source_module"
 grep -Fq 'X-SwitchMethod = "keep-old";' "$generated_module"
+grep -Fq 'mirror Claude and Codex transcripts into streams/raw' "$source_module"
+grep -Fq 'mirror Claude and Codex transcripts into streams/raw' "$generated_module"
 
-printf 'ok: north-stream-sync keeps an in-flight oneshot out of Home Manager activation\n'
+printf 'ok: north-stream-sync is provider-neutral and keeps an in-flight oneshot out of Home Manager activation\n'

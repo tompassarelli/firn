@@ -3,10 +3,10 @@
 (ns default)
 
 ;; Periodic trigger for the exact packaged `north-stream-sync` — the zero-AI
-;; cursor-based mirror of Claude Code transcripts into streams/raw/. Runs the
-;; -all sweep, which covers EVERY per-account transcript root under
-;; ~/.local/state/north/accounts as well as the pre-account ~/.claude/projects;
-;; scanning only the latter silently froze the mirror at the account migration.
+;; cursor-based mirror of Claude and Codex transcripts into streams/raw/. Runs
+;; the -all sweep across ambient, account, profile, and managed provider roots;
+;; scanning only pre-account ~/.claude/projects silently froze the mirror at the
+;; account migration and omitted Codex entirely.
 ;; User-level timer (not a
 ;; system service like north-coord): it only touches files under $HOME, needs
 ;; no privileges, and should not block boot. SessionEnd hook flush is a
@@ -24,7 +24,7 @@
             (nix/module [config ...]
               {:systemd.user.services.north-stream-sync
                 {:Unit
-                  {:Description "North stream-sync — mirror Claude Code transcripts into streams/raw"
+                  {:Description "North stream-sync — mirror Claude and Codex transcripts into streams/raw"
                    ;; A sweep can outlive a Home Manager activation. Keep the
                    ;; running one-shot: a later timer tick picks up this unit's
                    ;; new definition without making activation wait for it.

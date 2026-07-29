@@ -10,7 +10,7 @@ in
     home-manager.users.${username} = ({ config, ... }: {
       systemd.user.services.north-stream-sync = {
         Unit = {
-          Description = "North stream-sync — mirror Claude Code transcripts into streams/raw";
+          Description = "North stream-sync — mirror Claude and Codex transcripts into streams/raw";
           X-SwitchMethod = "keep-old";
         };
         Service = {
