@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch Claude Code on the stock profile: no hooks, no plugins, no skills, no
+# Launch Claude Code on the native profile: no hooks, no plugins, no skills, no
 # north, no orchestration. The second configuration.
 #
 # Every north account dir symlinks one shared ~/.claude/settings.json, CLAUDE.md,
@@ -7,22 +7,22 @@
 # single bad change reads as total system failure. This is the fallback: a real
 # second config root, so there is always a rung to stand on.
 #
-# Profile: ~/.local/state/north/profiles/stock
+# Profile: ~/.local/state/north/profiles/claude-native
 # Plain `claude` is untouched and still boots the full stack.
 set -u
 
-PROFILE="$HOME/.local/state/north/profiles/stock"
+PROFILE="$HOME/.local/state/north/profiles/claude-native"
 REAL="/run/current-system/sw/bin/claude"
 
-[ -x "$REAL" ] || { echo "claude-stock: real claude not at $REAL" >&2; exit 127; }
+[ -x "$REAL" ] || { echo "claude-native: real claude not at $REAL" >&2; exit 127; }
 [ -f "$PROFILE/settings.json" ] || {
-  echo "claude-stock: no profile at $PROFILE" >&2; exit 1; }
+  echo "claude-native: no profile at $PROFILE" >&2; exit 1; }
 
 if [ ! -s "$PROFILE/.credentials.json" ]; then
-  echo "claude-stock: no credentials in the profile — run /login once inside." >&2
+  echo "claude-native: no credentials in the profile — run /login once inside." >&2
 fi
 
-# Drop the orchestration and plugin bins a parent session injected, so a stock
+# Drop the orchestration and plugin bins a parent session injected, so a native
 # shell cannot reach back into the full stack by PATH alone.
 CLEAN_PATH="$(printf '%s' "$PATH" | tr ':' '\n' \
   | grep -vE '/north/orchestration/bin|/plugins/cache/' \

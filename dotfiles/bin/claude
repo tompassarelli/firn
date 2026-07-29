@@ -145,10 +145,10 @@ if [ "${1:-}" != "as" ]; then
     fi
     set -- "${argv[@]}"
     printf '[claude resume → %s:%s]\n' "$authority_kind" "$authority_name" >&2
-    if [ "$authority_kind" = "profile" ] && [ "$authority_name" = "stock" ]; then
-      stock="$(dirname "$self")/claude-stock"
-      [ -x "$stock" ] || { echo "claude: stock launcher is unavailable: $stock" >&2; exit 127; }
-      exec "$stock" "$@"
+    if [ "$authority_kind" = "profile" ] && [ "$authority_name" = "claude-native" ]; then
+      native="$(dirname "$self")/claude-native"
+      [ -x "$native" ] || { echo "claude: native launcher is unavailable: $native" >&2; exit 127; }
+      exec "$native" "$@"
     fi
     export CLAUDE_CONFIG_DIR="$authority_home"
     exec "$REAL" "${NATIVE_DISPATCH_ARGS[@]}" "$@"

@@ -100,9 +100,9 @@ if [ -d "$account_base" ]; then
   shopt -u nullglob
 fi
 
-# Stock profiles are real, independently authenticated provider homes. Include
+# Native profiles are real, independently authenticated provider homes. Include
 # them in lookup so a UUID remains resumable even when it was created through
-# claude-stock/codex-stock rather than an isolated subscription account.
+# claude-native/codex-native rather than an isolated subscription account.
 profiles_base="$HOME/.local/state/north/profiles"
 if [ -d "$profiles_base" ]; then
   shopt -s nullglob

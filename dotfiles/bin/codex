@@ -294,10 +294,10 @@ if [ "${1:-}" != "as" ]; then
     fi
     set -- "${argv[@]}"
     printf '[codex resume → %s:%s]\n' "$authority_kind" "$authority_name" >&2
-    if [ "$authority_kind" = "profile" ] && [ "$authority_name" = "codex-stock" ]; then
-      stock="$(dirname "$self")/codex-stock"
-      [ -x "$stock" ] || { echo "codex: stock launcher is unavailable: $stock" >&2; exit 127; }
-      exec "$stock" "$@"
+    if [ "$authority_kind" = "profile" ] && [ "$authority_name" = "codex-native" ]; then
+      native="$(dirname "$self")/codex-native"
+      [ -x "$native" ] || { echo "codex: native launcher is unavailable: $native" >&2; exit 127; }
+      exec "$native" "$@"
     fi
     export CODEX_HOME="$authority_home"
     if [ "$authority_kind" = "ambient" ]; then
