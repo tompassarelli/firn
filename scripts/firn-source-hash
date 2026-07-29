@@ -2,6 +2,15 @@
 set -euo pipefail
 
 ROOT="${FIRN_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+# beagle was a SIBLING of this checkout. Under the container layout the checkout
+# is <container>/main, so ../beagle no longer resolves. Probe the real
+# locations: container checkout, legacy flat checkout, then historical sibling.
+if [ -z "${BEAGLE_PATH:-}" ]; then
+  for _bp in "$HOME/code/beagle/main" "$HOME/code/beagle" "$ROOT/../beagle"; do
+    if [ -d "$_bp/bin" ]; then BEAGLE_PATH="$_bp"; break; fi
+  done
+  unset _bp
+fi
 BEAGLE_PATH="${BEAGLE_PATH:-$ROOT/../beagle}"
 
 {

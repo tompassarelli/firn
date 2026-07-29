@@ -25,6 +25,15 @@
 set -euo pipefail
 
 cd "${FIRN_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+# beagle was a SIBLING of this checkout. Under the container layout the checkout
+# is <container>/main, so ../beagle no longer resolves. Probe the real
+# locations: container checkout, legacy flat checkout, then historical sibling.
+if [ -z "${BEAGLE_PATH:-}" ]; then
+  for _bp in "$HOME/code/beagle/main" "$HOME/code/beagle" "$(cd .. && pwd)/beagle"; do
+    if [ -d "$_bp/bin" ]; then BEAGLE_PATH="$_bp"; break; fi
+  done
+  unset _bp
+fi
 BEAGLE_PATH="${BEAGLE_PATH:-$(cd .. && pwd)/beagle}"
 
 BIN_DIR="${BIN_DIR:-$PWD/dotfiles/bin}"
@@ -179,6 +188,9 @@ SHARE_DIR="$SHARE_DIR"
 BUILT_RACKET_BIN="$RACKET_BIN"
 BUILT_RACKET_HASH="$RACKET_HASH"
 REPO="\${FIRN_REPO:-\$HOME/code/nixos-config}"
+for _bp in "\$HOME/code/beagle/main" "\$HOME/code/beagle" "\$REPO/../beagle"; do
+  [ -d "\$_bp/bin" ] && { BEAGLE_PATH="\${BEAGLE_PATH:-\$_bp}"; break; }
+done
 BEAGLE_PATH="\${BEAGLE_PATH:-\$REPO/../beagle}"
 BUILD_SCRIPT="\$REPO/scripts/firn-build-bin"
 SOURCE_HASH_SCRIPT="\$REPO/scripts/firn-source-hash"
