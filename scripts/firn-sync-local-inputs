@@ -52,10 +52,17 @@ short_rev() {
 }
 
 repo_for() {
-  local input="$1" upper override
+  local input="$1" upper override default
   upper="$(printf '%s' "$input" | tr '[:lower:]' '[:upper:]')"
   override="FIRN_${upper}_REPO"
-  printf '%s' "${!override:-${HOME}/code/${input}}"
+  # ~/code/<input> is a CONTAINER holding main/ + wt-<slug>/; the checkout is
+  # <container>/main. Before that migration the container WAS the checkout, so
+  # both are probed and the container is used when it still holds a .git —
+  # otherwise this aborts every rebuild with "is not a Git checkout", which is
+  # exactly what happened on 2026-07-29 once the layout moved.
+  default="${HOME}/code/${input}"
+  [ -e "${default}/main/.git" ] && default="${default}/main"
+  printf '%s' "${!override:-$default}"
 }
 
 # Locked rev of an input as of the snapshot (HEAD's lock, not the worktree's —
