@@ -7,9 +7,13 @@
 # CLAUDE.md demonstrably does not hold. Fires on subagent tool calls too,
 # so nested native spawns are covered.
 #
-#   dispatch=north  -> DENY native Agent/Task/Workflow; hand back the north recipe
-#   dispatch=warn   -> allow, inject a nudge (additionalContext)
-#   dispatch=native -> allow silently
+#   dispatch = TYPE (native|managed) x ENFORCEMENT (forced|biased):
+#   dispatch=managed-forced  -> DENY native Agent/Task/Workflow; hand back the north recipe
+#   dispatch=managed-biased  -> allow, inject a nudge (additionalContext)
+#   dispatch=native-biased   -> allow, inject the same nudge (reminder pathway only)
+#   dispatch=native-forced   -> allow silently
+#   Legacy aliases still accepted: north->managed-forced, warn->managed-biased,
+#   native->native-forced.
 #
 # A separate topology invariant applies to Bash regardless of dispatch mode:
 #   AGENT_TOPOLOGY=worker -> DENY direct North/provider agent work + peer control
@@ -22,7 +26,7 @@
 # State:       ~/.local/state/north/harness.conf
 #              (legacy ~/.claude/my-config.state is read only if absent)
 #              flip via `north config dispatch <mode>`
-# Escape:      `north config dispatch native`. Agent topology is coordination
+# Escape:      `north config dispatch native-forced`. Agent topology is coordination
 #              policy, not an authoring guard, so the general guards=off switch
 #              and its session aliases do not disable this hook.
 # ============================================================================
@@ -58,7 +62,12 @@ elif [ ! -f "$STATE_PATH" ]; then
   STATE_PATH="$HOME/.claude/my-config.state"
 fi
 MODE=$(grep -E '^dispatch=' "$STATE_PATH" 2>/dev/null | tail -1 | cut -d= -f2-)
-MODE="${MODE:-north}"
+MODE="${MODE:-managed-forced}"
+case "$MODE" in
+  north)  MODE="managed-forced" ;;
+  warn)   MODE="managed-biased" ;;
+  native) MODE="native-forced" ;;
+esac
 export AGENT_SPAWN_GUARD_MODE="$MODE"
 
 read -r -d '' PY <<'PYEOF' || true
@@ -70,7 +79,7 @@ except Exception:
     sys.exit(0)
 
 tool = data.get("tool_name", "")
-mode = os.environ.get("AGENT_SPAWN_GUARD_MODE", "north")
+mode = os.environ.get("AGENT_SPAWN_GUARD_MODE", "managed-forced")
 ti = data.get("tool_input", {}) or {}
 
 CONTROL = {";", "&&", "||", "|", "|&", "&", "\n", "(", ")"}
@@ -646,7 +655,7 @@ if tool in ("Bash", "shell", "exec_command"):
     }}))
     sys.exit(0)
 
-if tool not in ("Agent", "Task", "Workflow") or mode == "native":
+if tool not in ("Agent", "Task", "Workflow") or mode == "native-forced":
     sys.exit(0)
 
 ORCHESTRATION_AGENTS = os.path.expanduser("~/code/north/main/orchestration/agents")
@@ -721,7 +730,8 @@ if routing:
         "read from canonical orchestration:" + role_key + " metadata — just paste your prompt in:\n"
         "  " + north_call(routing) + "\n"
         "Fan-out? fire one mcp__north__spawn per lane in the same turn. "
-        "Observe: north watch/agents/board. Deliberate bypass: north config dispatch warn|native."
+        "Observe: north watch/agents/board. Deliberate bypass: north config dispatch "
+        "native-biased|native-forced."
     )
 else:
     where = subagent or tool
@@ -743,20 +753,21 @@ else:
         "  3. Fan-out: N x mcp__north__spawn in parallel; message workers via "
         "bb ~/code/north/main/cli/msg-cli.clj 7977 send; observe via north watch/agents/board.\n"
         "  Provider resolution and concrete model selection belong to North.\n"
-        "Bypass deliberately: north config dispatch warn|native (or /north-config)."
+        "Bypass deliberately: north config dispatch native-biased|native-forced "
+        "(or /north-config)."
     )
 
-if mode == "warn":
+if mode in ("managed-biased", "native-biased"):
     out = {"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "allow",
-        "additionalContext": "north config dispatch = warn. " + recipe,
+        "additionalContext": "north config dispatch = " + mode + ". " + recipe,
     }}
 else:
     out = {"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
-        "permissionDecisionReason": "DENIED by north config dispatch setting (north). " + recipe,
+        "permissionDecisionReason": "DENIED by north config dispatch setting (" + mode + "). " + recipe,
     }}
 
 print(json.dumps(out))

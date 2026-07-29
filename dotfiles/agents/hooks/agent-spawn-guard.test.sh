@@ -47,7 +47,8 @@ run() {
   case "$expect" in
     deny)  [ "$decision" = deny ] && ok=1 ;;
     allow) [ "$decision" != deny ] && [ "$decision" != malformed ] && ok=1 ;;
-    warn)  [ "$decision" = allow ] && [[ "$context" == *'north config dispatch = warn'* ]] && ok=1 ;;
+    warn)  [ "$decision" = allow ] && [[ "$context" == *'north config dispatch = managed-biased'* ]] && ok=1 ;;
+    nudge) [ "$decision" = allow ] && [[ "$context" == *'north config dispatch = native-biased'* ]] && ok=1 ;;
   esac
   if [ "$ok" = 1 ]; then
     pass=$((pass + 1)); printf 'PASS  %-5s  %s\n' "$expect" "$desc"
@@ -214,13 +215,24 @@ run allow 'native/unmanaged session has no topology restriction' unset Bash 'nor
 run allow 'native/unmanaged session may open provider session' unset Bash 'codex'
 run allow 'non-Bash tool is not topology shell surface' worker Read 'north spawn implementer work'
 set_state native on
-run deny 'dispatch=native does not waive worker topology' worker Bash 'north spawn implementer work'
-run allow 'dispatch=native preserves native Agent allowance' unset Agent 'native work'
+run deny 'dispatch=native (legacy) does not waive worker topology' worker Bash 'north spawn implementer work'
+run allow 'dispatch=native (legacy) preserves native Agent allowance' unset Agent 'native work'
+set_state native-forced on
+run deny 'dispatch=native-forced does not waive worker topology' worker Bash 'north spawn implementer work'
+run allow 'dispatch=native-forced preserves native Agent allowance' unset Agent 'native work'
+set_state native-biased on
+run nudge 'dispatch=native-biased allows with reminder' unset Task 'native work'
+run deny 'dispatch=native-biased cannot waive managed worker topology' worker Bash 'north spawn implementer work'
 set_state warn on
-run warn 'dispatch=warn preserves native Agent nudge' unset Task 'native work'
-run deny 'dispatch=warn cannot waive managed worker topology' worker Bash 'north spawn implementer work'
+run warn 'dispatch=warn (legacy) preserves native Agent nudge' unset Task 'native work'
+run deny 'dispatch=warn (legacy) cannot waive managed worker topology' worker Bash 'north spawn implementer work'
+set_state managed-biased on
+run warn 'dispatch=managed-biased preserves native Agent nudge' unset Task 'native work'
+run deny 'dispatch=managed-biased cannot waive managed worker topology' worker Bash 'north spawn implementer work'
 set_state north on
-run deny 'dispatch=north preserves native Agent redirect' unset Agent 'native work'
+run deny 'dispatch=north (legacy) preserves native Agent redirect' unset Agent 'native work'
+set_state managed-forced on
+run deny 'dispatch=managed-forced preserves native Agent redirect' unset Agent 'native work'
 
 echo '== native Orchestration redirect preserves the complete routing contract =='
 routing_input="$(jq -nc --arg d "$REPO" '{
