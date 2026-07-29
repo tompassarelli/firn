@@ -8,7 +8,7 @@ body; refs are `@id`, literals EDN. Lifecycle is DERIVED from facts
 capture is committed. Relatedness is `relates_to @<thread>` (no string tags —
 former tags are `@topic-*` threads). ids: `2026-06-15-150040`. Time: `north clock`
 (fact-native sessions; Clockify is an on-demand projection via `clock sync`).
-Full spec: ~/code/north/docs/fact-native-redesign.md.
+Full spec: north:docs/fact-native-redesign.md.
 
 ## Done-bars — completion evidence on threads
 
@@ -29,7 +29,7 @@ north tell 2026-07-11-120000 done_when "north validate exits 0"
 north tell 2026-07-11-120000 bar_evidence "north validate exits 0 → exit 0, 2026-07-11"
 ```
 
-`north schema thread` shows `done_when` metadata once declared. Full spec: ~/code/north/docs/operating-manual.md §Done-bars.
+`north schema thread` shows `done_when` metadata once declared. Full spec: north:docs/operating-manual.md §Done-bars.
 
 ## Writing safely under concurrent agents
 

@@ -358,7 +358,7 @@ consumer-calibration hypothesis is wrong; if generic ≈ bare but compiled
 separates, calibration is most of the effect.
 
 The payload itself lives at
-`~/code/north/orchestration/docs/deltas/opus.md` (canonical
+`north:orchestration/docs/deltas/opus.md` (canonical
 copy — moved there so spawn assembly reads one file and the two copies can't
 drift). Composition with role/posture blocks:
-`~/code/north/orchestration/README.md`.
+`north:orchestration/README.md`.

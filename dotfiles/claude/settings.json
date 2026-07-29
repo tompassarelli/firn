@@ -189,7 +189,7 @@
     "orchestration": {
       "source": {
         "source": "directory",
-        "path": "/home/tom/code/north/orchestration"
+        "path": "/home/tom/code/north/main/orchestration"
       }
     }
   },

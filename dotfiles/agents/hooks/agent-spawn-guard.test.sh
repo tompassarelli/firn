@@ -10,15 +10,15 @@ HOOK="$HERE/agent-spawn-guard.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/agent-spawn-guard-test.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
 mkdir -p "$SCRATCH/home/.claude" "$SCRATCH/home/.local/state/north"
-mkdir -p "$SCRATCH/home/code/north/orchestration/agents"
+mkdir -p "$SCRATCH/home/code/north/main/orchestration/agents"
 printf '%s\n' '<!-- ORCHESTRATION_ROUTING {"role":"integrator","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","reasoning":"high","posture":"deliver","composition":{"kind":"preset","id":"integrator","overrides":[]}} -->' \
-  >"$SCRATCH/home/code/north/orchestration/agents/integrator.md"
+  >"$SCRATCH/home/code/north/main/orchestration/agents/integrator.md"
 printf '%s\n' '<!-- ORCHESTRATION_ROUTING {"role":"integrator","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","reasoning":"high","posture":"deliver","composition":{"kind":"preset","id":"integrator","overrides":[]}} -->' \
-  >"$SCRATCH/home/code/north/orchestration/agents/role-mismatch.md"
+  >"$SCRATCH/home/code/north/main/orchestration/agents/role-mismatch.md"
 printf '%s\n' '<!-- ORCHESTRATION_ROUTING {"role":"missing-reasoning","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","posture":"deliver","composition":{"kind":"preset","id":"missing-reasoning","overrides":[]}} -->' \
-  >"$SCRATCH/home/code/north/orchestration/agents/missing-reasoning.md"
+  >"$SCRATCH/home/code/north/main/orchestration/agents/missing-reasoning.md"
 printf '%s\n' '<!-- ORCHESTRATION_ROUTING {"role":"researcher","taskGrade":"senior","domainRequirements":[],"topology":"worker","tier":"senior","reasoning":"high","posture":"deliver","composition":{"kind":"preset","id":"researcher","overrides":[]}} -->' \
-  >"$SCRATCH/home/code/north/orchestration/agents/researcher.md"
+  >"$SCRATCH/home/code/north/main/orchestration/agents/researcher.md"
 
 pass=0 fail=0
 set_state() { printf 'dispatch=%s\nguards=%s\n' "$1" "$2" >"$SCRATCH/home/.local/state/north/harness.conf"; }
@@ -64,22 +64,22 @@ run deny 'PATH north delegate' worker Bash 'north delegate "do work"'
 run deny 'PATH north steer' worker Bash 'north steer lane-123 "change course"'
 run deny 'PATH north retask' worker Bash 'north retask lane-123 "new goal"'
 run deny 'absolute North wrapper' worker Bash '/home/tom/code/north/bin/north spawn verifier "check it"'
-run deny 'tilde North wrapper' worker Bash '~/code/north/bin/north delegate "check it"'
+run deny 'tilde North wrapper' worker Bash '~/code/north/main/bin/north delegate "check it"'
 run deny 'HOME North wrapper' worker Bash '$HOME/code/north/bin/north spawn verifier "check it"'
-run deny 'North wrapper behind Bash' worker Bash 'bash ~/code/north/bin/north spawn verifier "check it"'
+run deny 'North wrapper behind Bash' worker Bash 'bash ~/code/north/main/bin/north spawn verifier "check it"'
 run deny 'native MCP command surface' worker Bash 'mcp__north__spawn "do work"'
 run deny 'direct Orchestration CLI spawn' worker Bash 'bb /home/tom/code/north/cli/agents-cli.clj spawn designer "design"'
 run deny 'repo-relative Orchestration CLI spawn' worker Bash 'bb cli/agents-cli.clj spawn designer "design"'
-run deny 'direct Orchestration CLI retask' worker Bash 'bb ~/code/north/cli/agents-cli.clj retask lane-1 "new goal"'
+run deny 'direct Orchestration CLI retask' worker Bash 'bb ~/code/north/main/cli/agents-cli.clj retask lane-1 "new goal"'
 run deny 'direct SDK spawn entrypoint' worker Bash 'bun run /home/tom/code/north/sdk/src/spawn.ts "do work"'
 run deny 'direct SDK dispatch entrypoint' worker Bash 'bun /home/tom/code/north/sdk/src/dispatch.ts thread-1'
 run deny 'repo-relative SDK spawn entrypoint' worker Bash 'bun run sdk/src/spawn.ts "do work"'
-run deny 'direct command-envelope peer control' worker Bash 'bb ~/code/north/cli/msg-cli.clj 7977 send-cmd me lane-1 spawn "{:prompt \"x\"}"'
+run deny 'direct command-envelope peer control' worker Bash 'bb ~/code/north/main/cli/msg-cli.clj 7977 send-cmd me lane-1 spawn "{:prompt \"x\"}"'
 run deny 'worker cannot disable its own guards' worker Bash 'north config guards off'
 run deny 'worker cannot weaken dispatch policy' worker Bash 'env north config dispatch native'
 run deny 'worker cannot mutate routing policy' worker Bash 'north config routing mode preferential'
-run deny 'direct config CLI cannot disable guards' worker Bash 'bb ~/code/north/cli/config-cli.clj guards off'
-run allow 'ordinary North message remains available' worker Bash 'bb ~/code/north/cli/msg-cli.clj 7977 send me lane-1 progress "done"'
+run deny 'direct config CLI cannot disable guards' worker Bash 'bb ~/code/north/main/cli/config-cli.clj guards off'
+run allow 'ordinary North message remains available' worker Bash 'bb ~/code/north/main/cli/msg-cli.clj 7977 send me lane-1 progress "done"'
 run allow 'spawn dry-run composes but does not launch' worker Bash 'north spawn integrator "probe" --dry-run'
 run allow 'steer dry-run does not command peer' worker Bash 'north steer lane-1 "probe" --dry-run'
 run deny 'retask has no dry-run contract' worker Bash 'north retask lane-1 "probe" --dry-run'

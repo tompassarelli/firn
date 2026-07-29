@@ -1545,15 +1545,15 @@ if jq -e '
   .enabledPlugins["orchestration@orchestration"] == true
   and .extraKnownMarketplaces.orchestration.source == {
     "source": "directory",
-    "path": "/home/tom/code/north/orchestration"
+    "path": "/home/tom/code/north/main/orchestration"
   }
 ' "$CLAUDE/settings.json" >/dev/null; then
   ok_detail "Orchestration plugin resolves to the in-tree north/orchestration marketplace"
 else
-  bad "Claude Orchestration plugin must be enabled from /home/tom/code/north/orchestration"
+  bad "Claude Orchestration plugin must be enabled from /home/tom/code/north/main/orchestration"
 fi
-if [ -f "$HOME/code/north/orchestration/.claude-plugin/marketplace.json" ] &&
-   [ -f "$HOME/code/north/orchestration/.claude-plugin/plugin.json" ]; then
+if [ -f "$HOME/code/north/main/orchestration/.claude-plugin/marketplace.json" ] &&
+   [ -f "$HOME/code/north/main/orchestration/.claude-plugin/plugin.json" ]; then
   ok_detail "in-tree Orchestration marketplace + plugin manifests present"
 else
   bad "north/orchestration must carry .claude-plugin/marketplace.json and plugin.json"

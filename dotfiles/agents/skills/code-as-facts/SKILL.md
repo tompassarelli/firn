@@ -34,11 +34,11 @@ per-file and opt-in — there is no blanket "all .bclj" rule; **greenfield** new
 Beagle work defaults graph-native at inception per
 `~/code/nixos-config/dotfiles/agents/AGENTS.md` "New code", so opt-in language
 does not apply there. The honest line: code *can* be graph-upstream — see
-`~/code/beagle/bin/test/code-as-facts/README.md` "Capability vs adoption".)
+`beagle:bin/test/code-as-facts/README.md` "Capability vs adoption".)
 
 ## 1. The graph-edit verbs (use these instead of Edit/Write)
 
-The authoring engine is `~/code/fram/resolve.clj` (modes
+The authoring engine is `fram:resolve.clj` (modes
 `upsert-form` / `set-body` / `rename` / `delete`), exposed AI-facing over the fram
 MCP server. Each is a genuine fact operation on the lossless AST projection,
 **recompile-gated and fail-closed** — an edit that the engine refuses, or that
@@ -61,7 +61,7 @@ free (a later rename of a callee propagates into the code you just authored).
 
 > If the guard denies and the `mcp__fram__*` verbs are somehow absent, surface
 > the gap — never fall back to text Edit on a guarded file. (Server entry:
-> `~/code/fram/bin/fram-mcp`.)
+> `fram:bin/fram-mcp`.)
 
 ## 2. The loop (what each verb does under the hood)
 
@@ -74,15 +74,15 @@ The CLI form the MCP tools wrap (for grounding / manual runs):
 
 ```sh
 # project the module to lossless AST-facts EDN
-racket ~/code/beagle/beagle-lib/private/facts-roundtrip.rkt --emit-edn <file.bclj> > a.edn
+racket beagle:beagle-lib/private/facts-roundtrip.rkt --emit-edn <file.bclj> > a.edn
 # apply the graph edit (writes the rendered projection to $RESOLVE_OUT)
-bb -cp ~/code/fram/out ~/code/fram/resolve.clj set-body <name> <scope> <body.edn> a.edn
+bb -cp fram:out fram:resolve.clj set-body <name> <scope> <body.edn> a.edn
 # regenerate byte-stable text + recompile-gate (committed only if it builds)
-racket ~/code/beagle/beagle-lib/private/facts-roundtrip.rkt --render "$RESOLVE_OUT/resolved-<file>.edn"
+racket beagle:beagle-lib/private/facts-roundtrip.rkt --render "$RESOLVE_OUT/resolved-<file>.edn"
 ```
 
 The CI gate that proves all of this is GREEN:
-`~/code/beagle/bin/test/code-as-facts/authoring-verbs.sh`.
+`beagle:bin/test/code-as-facts/authoring-verbs.sh`.
 
 ## 3. If you genuinely must edit text
 
@@ -94,4 +94,4 @@ per-edit escape hatch — make it explicitly, then the guard allows text edits a
 The family: Beagle text edits → beagle-authoring · graph-upstream files
 (graph edit channel) → code-as-facts · relational code queries
 (blast zone / who-calls) → codegraph · building apps on the engine →
-fact-modeling. Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.
+fact-modeling. Loop vocabulary: `beagle:docs/authoring-loops.md`.

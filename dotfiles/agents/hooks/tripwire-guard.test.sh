@@ -213,7 +213,7 @@ run allow 'chown -R tom' 'chown -R tom:users /tmp/claude-x'
 
 echo "== estate hot paths (must never trip) =="
 run allow 'firn build + validate' 'firn build && firn validate'
-run allow 'north CLI' '~/code/north/bin/north show 019f2053 && ~/code/north/bin/north tell 019f2053 progress "done"'
+run allow 'north CLI' '~/code/north/main/bin/north show 019f2053 && ~/code/north/main/bin/north tell 019f2053 progress "done"'
 run allow 'beagle build' 'cd ~/code/beagle && source bin/_beagle-racket && "$RACO" make src/main.rkt'
 run allow 'nix build' 'nix build --no-link .#default'
 run allow 'plain ls' 'ls -la'

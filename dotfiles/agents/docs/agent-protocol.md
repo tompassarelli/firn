@@ -21,10 +21,10 @@ Lifecycle anatomy + failure debugging (patterns A–F, zombie forks, split-brain
   (`ready`/`next`/`leverage`; take work with `driver @agent`).
 - **Spawn**: `mcp__north__dispatch` (thread-driven) / `mcp__north__spawn` (ad-hoc)
   — dormant-until-pinged (~0 idle tokens).
-- **Footprint**: declare before editing — `~/code/north/bin/concern declare|overlap|status`
+- **Footprint**: declare before editing — `north:bin/concern declare|overlap|status`
   (`overlap <id>` marks likely-to-land work per line; alias: `shape`).
-- **Reach a live agent**: it arms `~/code/north/bin/north listen <id>` (alias: `north-arm`); ping with
-  `bb ~/code/north/cli/msg-cli.clj 7977 send <from> <to> "<subject>" "<msg>"` — a
+- **Reach a live agent**: it arms `north:bin/north listen <id>` (alias: `north-arm`); ping with
+  `bb north:cli/msg-cli.clj 7977 send <from> <to> "<subject>" "<msg>"` — a
   message IS the steer. Observe via north watch/agents/board; the CLI/MCP surface is authoritative.
 - **Concurrency is the engine's job** — fram owns write-serialization + OCC + the `lease`
   primitive (`acquire`/`release`/`fence`); apps express coordination as facts, never
@@ -54,5 +54,5 @@ Lifecycle anatomy + failure debugging (patterns A–F, zombie forks, split-brain
 
 Org brain: PLAYBOOK = north thread `2026-06-22-232740` (consult first; append
 learnings via `north tell 2026-06-22-232740 learning "…"`). How-to:
-`~/code/north/docs/operating-manual.md`. Per-repo surface:
-`~/code/north/AGENTS.md`.
+`north:docs/operating-manual.md`. Per-repo surface:
+`north:AGENTS.md`.

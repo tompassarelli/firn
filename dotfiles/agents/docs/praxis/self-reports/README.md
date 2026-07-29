@@ -1,9 +1,9 @@
 # Self-reports
 
 The opus and sonnet self-reports (and the deltas compiled from them) moved
-to the orchestration plugin — canonical copies: `~/code/north/orchestration/docs/self-reports/`
-and `~/code/north/orchestration/docs/deltas/`. Generation method (elicitation exercise,
-contamination guard, elicit → subtract → compile): `~/code/north/orchestration/docs/method.md`
+to the orchestration plugin — canonical copies: `north:orchestration/docs/self-reports/`
+and `north:orchestration/docs/deltas/`. Generation method (elicitation exercise,
+contamination guard, elicit → subtract → compile): `north:orchestration/docs/method.md`
 and the orchestration `elicit` skill.
 
 Only `fable.md` stays here — written by Fable 5 in an interactive session

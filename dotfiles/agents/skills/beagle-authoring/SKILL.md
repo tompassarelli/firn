@@ -52,13 +52,13 @@ loop in section 0, then run this bootstrap sequence:
    text-authored here — the seed exists only to give the graph something to
    adopt.
 2. **Flip the full repo** — run
-   `~/code/fram/bin/fram-code-on ~/code/<repo>` to ingest the source, write the
+   `fram:bin/fram-code-on ~/code/<repo>` to ingest the source, write the
    project wiring for both harnesses, and warm the coordinator.
 3. **Confirm flip level 3** —
-   `~/code/fram/bin/fram-code-status ~/code/<repo>` must report `level=3`
+   `fram:bin/fram-code-status ~/code/<repo>` must report `level=3`
    (warm coordinator alive, not just L2 flipped-but-cold). L2/L1 mean the
    graph-edit loop is not live yet: re-run
-   `~/code/fram/bin/fram-code-on ~/code/<repo>`, then start or restart a
+   `fram:bin/fram-code-on ~/code/<repo>`, then start or restart a
    **trusted-project Claude Code or Codex session** in `~/code/<repo>` so its
    SessionStart/project config can load the MCP server. Verify that the
    `mcp__fram__*` graph-edit verbs are present before authoring.
@@ -123,7 +123,7 @@ the *current* surface, **query the compiler**:
 For forms/types/stdlib themselves, **read the source** — never restate it:
 `parse.rkt` (forms), `types.rkt` (types), `stdlib-*.rkt` (externs),
 `extensions.rkt` (ext→target). The authoritative living anchor is
-**`~/code/beagle/CLAUDE.md`** — read it when you start Beagle work in a session;
+**`beagle:CLAUDE.md`** — read it when you start Beagle work in a session;
 if the surface looks different than you expect, `git log` it.
 
 > To *query* a Beagle codebase relationally (scope-correct callers, transitive
@@ -191,4 +191,4 @@ forced back to `Any`?" is the real one.)
 The family: Beagle text edits → beagle-authoring · graph-upstream files
 (graph edit channel) → code-as-facts · relational code queries
 (blast zone / who-calls) → codegraph · building apps on the engine →
-fact-modeling. Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.
+fact-modeling. Loop vocabulary: `beagle:docs/authoring-loops.md`.

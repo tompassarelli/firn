@@ -649,7 +649,7 @@ if tool in ("Bash", "shell", "exec_command"):
 if tool not in ("Agent", "Task", "Workflow") or mode == "native":
     sys.exit(0)
 
-ORCHESTRATION_AGENTS = os.path.expanduser("~/code/north/orchestration/agents")
+ORCHESTRATION_AGENTS = os.path.expanduser("~/code/north/main/orchestration/agents")
 SAFE_ROLE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 ROUTING_COMMENT = re.compile(r"<!--\s*ORCHESTRATION_ROUTING\s+(\{.*?\})\s*-->")
 
@@ -741,7 +741,7 @@ else:
         "contract. A captured "
         "thread may use mcp__north__dispatch with the same contract.\n"
         "  3. Fan-out: N x mcp__north__spawn in parallel; message workers via "
-        "bb ~/code/north/cli/msg-cli.clj 7977 send; observe via north watch/agents/board.\n"
+        "bb ~/code/north/main/cli/msg-cli.clj 7977 send; observe via north watch/agents/board.\n"
         "  Provider resolution and concrete model selection belong to North.\n"
         "Bypass deliberately: north config dispatch warn|native (or /north-config)."
     )

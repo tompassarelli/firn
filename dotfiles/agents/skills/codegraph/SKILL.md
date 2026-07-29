@@ -44,10 +44,10 @@ up for "find the string `foo`" or a single-file read — grep wins on cost there
 
 ```sh
 # 1. project a source tree → fact triples  (codegraph uses beagle's bin/beagle-facts)
-cd ~/code/fram/codegraph          # folded INTO fram (ADR 0001); was the standalone chartroom repo
+cd fram:codegraph          # folded INTO fram (ADR 0001); was the standalone chartroom repo
 bin/emit-corpus  ~/code/<proj>/src ~/code/<proj>/tools  build/<proj>.facts
 # 2. fold into Fram + derive the namespace-correct call graph / leverage
-bb -cp ~/code/fram/out  src/codegraph.clj  build/<proj>.facts
+bb -cp fram:out  src/codegraph.clj  build/<proj>.facts
 ```
 
 For ad-hoc relational queries beyond codegraph's built-in benchmarks, query the
@@ -78,5 +78,5 @@ relational questions; the graph is always current and answers them for free.
 The family: Beagle text edits → beagle-authoring · graph-upstream files
 (graph edit channel) → code-as-facts · relational code queries
 (blast zone / who-calls) → codegraph · building apps on the engine →
-fact-modeling (or `~/code/fram/bin/fram-primer` for the live cheatsheet).
-Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.
+fact-modeling (or `fram:bin/fram-primer` for the live cheatsheet).
+Loop vocabulary: `beagle:docs/authoring-loops.md`.

@@ -45,13 +45,13 @@ bus in this repo.
 
 ## Orchestration plugin — directory marketplace inside north
 
-Orchestration lives inside the north repo at `~/code/north/orchestration`
+Orchestration lives inside the north repo at `north:orchestration/`
 (merged from the retired standalone checkout; the separate flake input is
 gone — the code rides the `north` input). Claude Code consumes it as a
 directory marketplace declared in
 `~/code/nixos-config/dotfiles/claude/settings.json`:
 `extraKnownMarketplaces.orchestration.source = { source = "directory"; path =
-"/home/tom/code/north/orchestration"; }` with the plugin enabled as
+"<north-checkout>/orchestration"; }` with the plugin enabled as
 `orchestration@orchestration`. Claude copies marketplace plugins into
 `~/.claude/plugins/cache`; a running session keeps the snapshot it started
 with until Claude reloads plugins or the session restarts.
@@ -64,8 +64,8 @@ retired with the merge and no longer exists in this repo.
 
 Codex and North have no cache pointer: the shared
 `~/code/nixos-config/dotfiles/agents/AGENTS.md` routes Codex to
-`~/code/north/orchestration`, while North reads
-`~/code/north/orchestration/staffing/catalog.json`, provider catalogs, and
+`north:orchestration/`, while North reads
+`north:orchestration/staffing/catalog.json`, provider catalogs, and
 Orchestration prompt blocks directly.
 
 

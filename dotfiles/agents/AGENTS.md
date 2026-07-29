@@ -6,7 +6,7 @@ doc when its trigger fires, not preemptively.
 
 ## north — the coordination substrate
 
-Read `~/code/north/docs/operating-manual.md` before nontrivial work; where
+Read `north:docs/operating-manual.md` before nontrivial work; where
 anything contradicts it, the manual wins (trivial lookups exempt).
 **Session state lives on threads, not markdown dumps** — milestones → `tell
 <id> progress`, lessons → `learning`, done → `outcome`; the next session
@@ -144,8 +144,8 @@ comes from content selection, never compression tricks.
 → `~/code/nixos-config/dotfiles/agents/docs/model-selection.md`
 → `~/code/nixos-config/dotfiles/agents/docs/praxis/` (spawn payload blocks; README = assembly)
 
-Shared routing laws are CANONICAL in `~/code/north/orchestration/doctrine.md`; the portable
-contract is `~/code/north/orchestration/docs/routing.md`. Keep its axes independent:
+Shared routing laws are CANONICAL in `north:orchestration/doctrine.md`; the portable
+contract is `north:orchestration/docs/routing.md`. Keep its axes independent:
 function/role (deliverable), `taskGrade` (work scope and judgment), domain
 requirements, topology (`worker`/`orchestrator`), semantic tier
 (`economy`, `standard`, `senior`, `frontier`), deliberation, and posture
@@ -199,7 +199,7 @@ scout/source gathering → `economy`; implementer → `standard`; integrator →
 `frontier` with `taskGrade:research-grade`. These are template defaults, not
 inference rules between axes. A native-agent denial is a routing instruction,
 never a wall. Provider-specific model deltas are resolved from
-`~/code/north/orchestration/providers` and `~/code/north/orchestration/docs`; personal posture residue
+`north:orchestration/providers` and `north:orchestration/docs`; personal posture residue
 lives in `~/code/nixos-config/dotfiles/agents/docs/praxis/README.md`.
 
 ## Push freely — the scan is the guard, not a human
@@ -222,7 +222,7 @@ unlicensed sources to the user BEFORE building on them.
 ## Internal notes → docs/private/, never public docs/
 
 Every repo: agent notes, status, scratch, and handoffs go in gitignored
-`docs/private/` (`~/code/north/bin/ensure-private-docs` sets it up). Public
+`docs/private/` (`north:bin/ensure-private-docs` sets it up). Public
 `docs/` is end-user-facing only.
 
 ## Global agent config goes through nixos-config — ALWAYS
@@ -275,7 +275,7 @@ objectively the smaller move.
 (greenfield) **starts graph-native at inception**. Follow the seed-only
 bootstrap in
 `~/code/nixos-config/dotfiles/agents/skills/beagle-authoring/SKILL.md`: run
-`~/code/fram/bin/fram-code-on ~/code/<repo>`, require flip level 3 in a fresh or
+`fram:bin/fram-code-on ~/code/<repo>`, require flip level 3 in a fresh or
 restarted trusted-project harness session, then author substantive code only via
 the code-as-facts graph-edit verbs. A coordinator or session-wiring failure is a
 repair-loop problem, never permission to fall back to text authoring.

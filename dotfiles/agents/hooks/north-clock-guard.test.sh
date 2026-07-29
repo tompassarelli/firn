@@ -976,7 +976,7 @@ echo "== command-position anchoring: mutator words in FILENAMES never deny =="
 # The confirmed live defect: bare \b verb boundaries matched inside hyphen-/path-
 # delimited filename segments, so a pure read from a client cwd got DENIED.
 run na 'EXACT REPRO: pwd && ls mutator words only in filenames' closed.log Bash \
-  "pwd && ls -la ~/code/north/bin/north-commit-guard ~/code/north/bin/north-install-commit-guard 2>&1" "$CLIENT_DIR"
+  "pwd && ls -la ~/code/north/main/bin/north-commit-guard ~/code/north/main/bin/north-install-commit-guard 2>&1" "$CLIENT_DIR"
 run na 'ls path with install/rm/cp/dd/ln in NAMES'   closed.log Bash "ls -la any/path/with-install-rm-cp-dd-ln-in-names" "$CLIENT_DIR"
 run na 'cat file named my-cp-notes.txt'              closed.log Bash "cat ./my-cp-notes.txt" "$CLIENT_DIR"
 run na 'grep -rn pattern . (recursive read)'         closed.log Bash "grep -rn pattern ." "$CLIENT_DIR"

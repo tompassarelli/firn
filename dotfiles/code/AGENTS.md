@@ -47,6 +47,20 @@ the project directory holds everything about that project and nothing else does.
 - **Ephemeral / tool-owned trees keep their tool-owned locations** (temp build
   trees, harness scratch). This policy governs durable human/agent worktrees.
 
+### Referring to paths in docs — `repo:path`, not an absolute checkout path
+
+Write **`north:cli/msg-cli.clj`**, not `~/code/north/cli/msg-cli.clj`.
+
+An absolute checkout path is a hardcoded copy of the current layout, and it
+rots the instant the layout changes. On 2026-07-29 the containerisation broke
+65 such references across 13 agent docs at once — every one of them silently
+wrong, pointing at a location that no longer existed. The `repo:path` form
+names the repository and the path *inside* it, so it survives the checkout
+moving, being renamed, or being cloned somewhere else entirely.
+
+Absolute paths are still right for things that genuinely live at a fixed
+location: `~/.local/state/north/…`, `/var/lib/…`, `/nix/store/…`.
+
 ### Enforcement
 
 `dotfiles/agents/hooks/launch-critical-worktree-guard.sh` refuses writes into a

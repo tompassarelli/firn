@@ -10,7 +10,7 @@ description: >-
 
 # Claim modeling — building on the Fram engine (facts + Datalog)
 
-The thesis (ADR 0001 in `~/code/fram/docs/adr/`): **the program/app/work IS a fact
+The thesis (ADR 0001 in `fram:docs/adr/`): **the program/app/work IS a fact
 graph.** Data, logic, and structure live as facts, so each is *reasoned* (Datalog:
 blast radius, transitive closure) and *repaired* (graph edits) the same uniform way.
 Text and SQL are projections, never the truth. For **greenfield**, facts are the
@@ -23,7 +23,7 @@ Like beagle-authoring ("the compiler is the source of truth"), the Fram API chur
 any cheatsheet pasted here rots. Get the **live** surface + the canonical patterns:
 
 ```sh
-bb ~/code/fram/bin/fram-primer        # generated FROM src/fram/*.bclj — always current
+bb fram:bin/fram-primer        # generated FROM src/fram/*.bclj — always current
 ```
 
 It prints: the live `fram.cnf` / `fram.datalog` / `fram.schema` signatures, plus the
@@ -33,7 +33,7 @@ fact-modeling task instead of guessing the API.
 ## 1. The operating model (this does not churn)
 
 - **Rent the engine from bb:** `bb -cp "$FRAM_OUT" your.clj` (`FRAM_OUT` defaults to
-  `~/code/fram/out`); `(require '[fram.cnf :as c] '[fram.datalog :as d] '[fram.schema :as s])`.
+  `fram:out`); `(require '[fram.cnf :as c] '[fram.datalog :as d] '[fram.schema :as s])`.
 - **Append-only — never mutate.** You *assert* (`c/fact!`). An **update is a
   SUPERSEDING fact**: assert the new value, then a fact with the registered
   supersedes-pred pointing at the old fact id. The old value stays in the store
@@ -58,8 +58,8 @@ fact-modeling task instead of guessing the API.
 - **App data as facts (CRUD + history + reasoning):** `~/code/wake/web/spike/wake-on-facts/store.clj`
   — the gen-store CRUD seam, every op a fact op; the canonical add / update-as-supersede / tombstone / reaches gate.
 - **App-level blast radius (scope-correct closure):** `~/code/wake/web/spike/app-blast-radius/cascade.clj`.
-- **Stratified lifecycle (ready/blocked as rules) + the tax it can be:** `~/code/north/cnf_lifecycle_test.clj`.
-- **Reason/repair over code:** `~/code/fram/resolve.clj` (refers_to, rename/delete/callgraph) — and the **codegraph** skill for querying.
+- **Stratified lifecycle (ready/blocked as rules) + the tax it can be:** `north:cnf_lifecycle_test.clj`.
+- **Reason/repair over code:** `fram:resolve.clj` (refers_to, rename/delete/callgraph) — and the **codegraph** skill for querying.
 
 ## 3. Discipline (the smell tests)
 - If you reach for a mutable map/atom of records as the app's data model, stop — that
@@ -73,4 +73,4 @@ fact-modeling task instead of guessing the API.
 The family: Beagle text edits → beagle-authoring · graph-upstream files
 (graph edit channel) → code-as-facts · relational code queries
 (blast zone / who-calls) → codegraph · building apps on the engine →
-fact-modeling. Loop vocabulary: `~/code/beagle/docs/authoring-loops.md`.
+fact-modeling. Loop vocabulary: `beagle:docs/authoring-loops.md`.
