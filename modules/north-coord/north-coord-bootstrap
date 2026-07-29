@@ -33,6 +33,15 @@ gate=$NORTH_COORD_CUTOVER_GATE
 selector=$NORTH_COORD_SELECTOR
 owner=$NORTH_COORD_CUTOVER_USER
 group=$NORTH_COORD_CUTOVER_GROUP
+readiness_timeout_seconds=${NORTH_COORD_BOOTSTRAP_READY_TIMEOUT_SECONDS:-90}
+readiness_interval_seconds=${NORTH_COORD_BOOTSTRAP_READY_INTERVAL_SECONDS:-1}
+
+[[ "$readiness_timeout_seconds" =~ ^[1-9][0-9]*$ &&
+   "$readiness_timeout_seconds" -le 600 ]] ||
+  die "readiness timeout must be an integer from 1 through 600 seconds"
+[[ "$readiness_interval_seconds" =~ ^[1-9][0-9]*$ &&
+   "$readiness_interval_seconds" -le 30 ]] ||
+  die "readiness interval must be an integer from 1 through 30 seconds"
 
 coord_socket=north-coord.socket
 telemetry_socket=north-telemetry-coord.socket
@@ -121,6 +130,45 @@ wait_active() {
   until unit_active "$unit"; do
     (( SECONDS < deadline )) || die "$unit did not start within 30 seconds"
     sleep 0.1
+  done
+}
+
+wait_pair_phase() {
+  local slot=$1 expected=$2
+  local deadline remaining sleep_for gate_status=0 last_output=""
+  case "$slot" in blue|green) ;; *) die "invalid readiness slot: $slot" ;; esac
+  case "$expected" in active|standby|demoted|read-only) ;; *)
+    die "invalid readiness phase: $expected" ;;
+  esac
+
+  deadline=$((SECONDS + readiness_timeout_seconds))
+  while :; do
+    remaining=$((deadline - SECONDS))
+    if (( remaining <= 0 )); then
+      die "$slot pair did not reach $expected within ${readiness_timeout_seconds}s; last gate rc=$gate_status: ${last_output:-no gate output}"
+    fi
+
+    # systemd Type=simple reaches active before the coordinator finishes its
+    # whole-log fold and opens the private endpoint. Retrying the exact
+    # authority gate preserves all protocol, instance, phase, version, and
+    # writer-authority checks. `timeout` also bounds a wedged individual probe
+    # by the remaining end-to-end readiness budget.
+    if last_output=$(
+      timeout --kill-after=2s "${remaining}s" \
+        "$gate" verify-phase "$slot" "$expected" 2>&1
+    ); then
+      return 0
+    else
+      gate_status=$?
+    fi
+
+    remaining=$((deadline - SECONDS))
+    if (( remaining <= 0 )); then
+      die "$slot pair did not reach $expected within ${readiness_timeout_seconds}s; last gate rc=$gate_status: ${last_output:-no gate output}"
+    fi
+    sleep_for=$readiness_interval_seconds
+    (( sleep_for <= remaining )) || sleep_for=$remaining
+    sleep "$sleep_for"
   done
 }
 
@@ -250,11 +298,11 @@ if [[ -f "$bootstrap_marker" && ! -L "$bootstrap_marker" ]]; then
   systemctl start \
     "north-coord-$selected.service" \
     "north-telemetry-coord-$selected.service"
-  "$gate" verify "$selected"
+  wait_pair_phase "$selected" active
   systemctl start \
     "north-coord-$other.service" \
     "north-telemetry-coord-$other.service"
-  "$gate" verify-phase "$other" read-only
+  wait_pair_phase "$other" read-only
   systemctl start "$proxy"
   wait_active "$proxy"
   "$selector" status >/dev/null
@@ -273,7 +321,7 @@ unit_active "$telemetry_socket" || die "$telemetry_socket is not active"
 # Prewarm one complete candidate pair without writer authority.
 rm -f -- "$route" "$bootstrap_marker"
 systemctl start "$blue_coord" "$blue_telemetry"
-"$gate" verify-phase blue standby
+wait_pair_phase blue standby
 
 old_coord_pid=$(systemctl show --property=MainPID --value "$legacy_coord")
 old_telemetry_pid=$(systemctl show --property=MainPID --value "$legacy_telemetry")
@@ -303,7 +351,7 @@ prove_logs_quiescent
 systemctl stop "$blue_coord" "$blue_telemetry"
 write_route blue
 systemctl start "$blue_coord" "$blue_telemetry"
-"$gate" verify blue
+wait_pair_phase blue active
 
 # Only a fully verified active pair enables proxy startup. At this point a
 # socket-triggered start is safe; starting explicitly drains queued accepts.
@@ -313,7 +361,7 @@ wait_active "$proxy"
 "$selector" status >/dev/null
 
 systemctl start "$green_coord" "$green_telemetry"
-"$gate" verify-phase green standby
+wait_pair_phase green standby
 systemctl start north-coord-blue-green.target
 systemctl unmask --runtime "$legacy_coord" "$legacy_telemetry"
 

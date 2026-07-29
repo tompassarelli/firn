@@ -183,6 +183,8 @@ let
       export NORTH_COORD_SELECTOR=${selector}/bin/north-coord-selector
       export NORTH_COORD_COORD_LOG=${coordinationLog}
       export NORTH_COORD_TELEMETRY_LOG=${telemetryLog}
+      export NORTH_COORD_BOOTSTRAP_READY_TIMEOUT_SECONDS=90
+      export NORTH_COORD_BOOTSTRAP_READY_INTERVAL_SECONDS=1
       ${builtins.readFile ./north-coord-bootstrap}
     '';
   };

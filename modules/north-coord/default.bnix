@@ -275,6 +275,12 @@
                      "/bin/north-coord-selector")
                   (s "export NORTH_COORD_COORD_LOG=" coordinationLog)
                   (s "export NORTH_COORD_TELEMETRY_LOG=" telemetryLog)
+                  ;; Private JVMs become systemd-active before the initial
+                  ;; whole-log fold opens their cutover endpoints. Keep the
+                  ;; authority proof exact, but give each started pair a
+                  ;; finite readiness window.
+                  "export NORTH_COORD_BOOTSTRAP_READY_TIMEOUT_SECONDS=90"
+                  "export NORTH_COORD_BOOTSTRAP_READY_INTERVAL_SECONDS=1"
                   (builtins.readFile (p "./north-coord-bootstrap")))})
         serviceEnvironment
           {:HOME homeDir

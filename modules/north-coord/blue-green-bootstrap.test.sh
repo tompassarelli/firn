@@ -75,8 +75,38 @@ cat >"$scratch/gate" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$NORTH_COORD_TEST_GATE_LOG"
+command=$1
+slot=$2
+case "$command" in
+  verify) phase=active ;;
+  verify-phase) phase=$3 ;;
+  *) echo "unsupported fake gate command: $*" >&2; exit 2 ;;
+esac
+
+key=$slot:$phase
+counter=$NORTH_COORD_TEST_READINESS_STATE/${slot}.${phase}.attempts
+attempt=0
+[[ ! -f "$counter" ]] || read -r attempt <"$counter"
+attempt=$((attempt + 1))
+printf '%s\n' "$attempt" >"$counter"
+chmod 0644 "$counter"
+
+delay=0
+case "$key" in
+  blue:standby) delay=${NORTH_COORD_TEST_DELAY_BLUE_STANDBY_ATTEMPTS:-0} ;;
+  blue:active) delay=${NORTH_COORD_TEST_DELAY_BLUE_ACTIVE_ATTEMPTS:-0} ;;
+  green:standby) delay=${NORTH_COORD_TEST_DELAY_GREEN_STANDBY_ATTEMPTS:-0} ;;
+esac
+if (( attempt <= delay )); then
+  printf '%s is still folding (attempt %s)\n' "$key" "$attempt" >&2
+  exit 1
+fi
+if [[ "${NORTH_COORD_TEST_NEVER_READY:-}" == "$key" ]]; then
+  printf '%s never became ready\n' "$key" >&2
+  exit 1
+fi
 if [[ "${NORTH_COORD_TEST_FAIL_VERIFY:-0}" -eq 1 &&
-      "$1" == verify ]]; then
+      "$phase" == active ]]; then
   exit 1
 fi
 SH
@@ -99,6 +129,7 @@ telemetry_log=$scratch/telemetry.log
 printf 'coordination\n' >"$coord_log"
 printf 'telemetry\n' >"$telemetry_log"
 state=$scratch/cutover
+mkdir -p "$scratch/readiness"
 
 run_bootstrap() {
   sudo -n env \
@@ -113,16 +144,31 @@ run_bootstrap() {
     NORTH_COORD_SELECTOR="$scratch/selector" \
     NORTH_COORD_COORD_LOG="$coord_log" \
     NORTH_COORD_TELEMETRY_LOG="$telemetry_log" \
+    NORTH_COORD_BOOTSTRAP_READY_TIMEOUT_SECONDS="${NORTH_COORD_BOOTSTRAP_READY_TIMEOUT_SECONDS:-8}" \
+    NORTH_COORD_BOOTSTRAP_READY_INTERVAL_SECONDS=1 \
     NORTH_COORD_TEST_SYSTEMD="$scratch/systemd" \
     NORTH_COORD_TEST_GATE_LOG="$scratch/gate.log" \
     NORTH_COORD_TEST_SELECTOR_LOG="$scratch/selector.log" \
+    NORTH_COORD_TEST_READINESS_STATE="$scratch/readiness" \
+    NORTH_COORD_TEST_DELAY_BLUE_STANDBY_ATTEMPTS="${NORTH_COORD_TEST_DELAY_BLUE_STANDBY_ATTEMPTS:-0}" \
+    NORTH_COORD_TEST_DELAY_BLUE_ACTIVE_ATTEMPTS="${NORTH_COORD_TEST_DELAY_BLUE_ACTIVE_ATTEMPTS:-0}" \
+    NORTH_COORD_TEST_DELAY_GREEN_STANDBY_ATTEMPTS="${NORTH_COORD_TEST_DELAY_GREEN_STANDBY_ATTEMPTS:-0}" \
+    NORTH_COORD_TEST_NEVER_READY="${NORTH_COORD_TEST_NEVER_READY:-}" \
     NORTH_COORD_TEST_FAIL_VERIFY="${NORTH_COORD_TEST_FAIL_VERIFY:-0}" \
       "$here/north-coord-bootstrap" "$@"
 }
 
 # One bounded migration: public sockets remain active, legacy target retires,
-# selected pair/proxy start, and the shared token is owner-only.
+# selected pair/proxy start, and the shared token is owner-only. Type=simple
+# marks each private JVM active before its fold completes, so prove that every
+# post-start authority check waits for delayed readiness.
+export NORTH_COORD_TEST_DELAY_BLUE_STANDBY_ATTEMPTS=2
+export NORTH_COORD_TEST_DELAY_BLUE_ACTIVE_ATTEMPTS=1
+export NORTH_COORD_TEST_DELAY_GREEN_STANDBY_ATTEMPTS=2
 run_bootstrap
+unset NORTH_COORD_TEST_DELAY_BLUE_STANDBY_ATTEMPTS
+unset NORTH_COORD_TEST_DELAY_BLUE_ACTIVE_ATTEMPTS
+unset NORTH_COORD_TEST_DELAY_GREEN_STANDBY_ATTEMPTS
 [[ -f "$state/bootstrap-complete" ]]
 grep -Fxq 'active blue' "$state/route.map"
 [[ $(stat -Lc '%a' "$state/cutover.token") == 600 ]]
@@ -135,6 +181,9 @@ grep -Fxq 'active blue' "$state/route.map"
 [[ -e "$scratch/systemd/active/north-telemetry-coord-green.service" ]]
 [[ ! -e "$scratch/systemd/active/north-coord.service" ]]
 [[ ! -e "$scratch/systemd/active/north-telemetry-coord.service" ]]
+[[ $(<"$scratch/readiness/blue.standby.attempts") -ge 3 ]]
+[[ $(<"$scratch/readiness/blue.active.attempts") -ge 2 ]]
+[[ $(<"$scratch/readiness/green.standby.attempts") -ge 3 ]]
 
 # Idempotent resume starts/verifies candidates before proxy.
 run_bootstrap
@@ -153,14 +202,33 @@ run_bootstrap rollback-legacy
 [[ -e "$scratch/systemd/active/north-coord.socket" ]]
 [[ -e "$scratch/systemd/active/north-telemetry-coord.socket" ]]
 
+# A pair that never becomes active after HOLD exhausts the explicit readiness
+# budget and automatically restores both legacy writers. This is the live
+# failure boundary: no proxy or durable route may survive.
+export NORTH_COORD_TEST_NEVER_READY=blue:active
+export NORTH_COORD_BOOTSTRAP_READY_TIMEOUT_SECONDS=1
+if run_bootstrap; then
+  echo "bootstrap unexpectedly succeeded with a never-ready active pair" >&2
+  exit 1
+fi
+unset NORTH_COORD_TEST_NEVER_READY
+unset NORTH_COORD_BOOTSTRAP_READY_TIMEOUT_SECONDS
+[[ ! -e "$state/bootstrap-complete" ]]
+[[ ! -e "$state/route.map" ]]
+[[ -e "$scratch/systemd/active/north-coord.service" ]]
+[[ -e "$scratch/systemd/active/north-telemetry-coord.service" ]]
+[[ ! -e "$scratch/systemd/active/north-coord-proxy.service" ]]
+
 # A failed active-authority proof after HOLD automatically restores the legacy
 # pair and leaves no route/bootstrap marker.
 export NORTH_COORD_TEST_FAIL_VERIFY=1
+export NORTH_COORD_BOOTSTRAP_READY_TIMEOUT_SECONDS=1
 if run_bootstrap; then
   echo "bootstrap unexpectedly succeeded with failed authority proof" >&2
   exit 1
 fi
 unset NORTH_COORD_TEST_FAIL_VERIFY
+unset NORTH_COORD_BOOTSTRAP_READY_TIMEOUT_SECONDS
 [[ ! -e "$state/bootstrap-complete" ]]
 [[ ! -e "$state/route.map" ]]
 [[ -e "$scratch/systemd/active/north-coord.service" ]]
