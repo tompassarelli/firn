@@ -10,7 +10,9 @@
         codexPkg
          (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)
            :codex)]
-    {:options.myConfig.modules.codex.enable
+    {:flake-inputs
+      {:beagle {:url "github:tompassarelli/beagle"}}
+     :options.myConfig.modules.codex.enable
       (lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)")
      :config
       (lib.mkIf config.myConfig.modules.codex.enable
