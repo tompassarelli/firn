@@ -1,0 +1,320 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+umask 077
+
+program=${0##*/}
+
+die() {
+  printf '%s: %s\n' "$program" "$*" >&2
+  exit 2
+}
+
+for setting in \
+  NORTH_COORD_CUTOVER_USER \
+  NORTH_COORD_CUTOVER_GROUP \
+  NORTH_COORD_CUTOVER_STATE \
+  NORTH_COORD_CUTOVER_TOKEN_FILE \
+  NORTH_COORD_SELECTOR_MAP \
+  NORTH_COORD_BOOTSTRAP_MARKER \
+  NORTH_COORD_CUTOVER_GATE \
+  NORTH_COORD_SELECTOR \
+  NORTH_COORD_COORD_LOG \
+  NORTH_COORD_TELEMETRY_LOG
+do
+  [[ -n "${!setting:-}" ]] || die "missing setting: $setting"
+done
+
+state=$NORTH_COORD_CUTOVER_STATE
+token=$NORTH_COORD_CUTOVER_TOKEN_FILE
+route=$NORTH_COORD_SELECTOR_MAP
+bootstrap_marker=$NORTH_COORD_BOOTSTRAP_MARKER
+gate=$NORTH_COORD_CUTOVER_GATE
+selector=$NORTH_COORD_SELECTOR
+owner=$NORTH_COORD_CUTOVER_USER
+group=$NORTH_COORD_CUTOVER_GROUP
+
+coord_socket=north-coord.socket
+telemetry_socket=north-telemetry-coord.socket
+legacy_coord=north-coord.service
+legacy_telemetry=north-telemetry-coord.service
+proxy=north-coord-proxy.service
+legacy_pair=north-coord-pair.target
+blue_coord=north-coord-blue.service
+blue_telemetry=north-telemetry-coord-blue.service
+green_coord=north-coord-green.service
+green_telemetry=north-telemetry-coord-green.service
+
+action=${1:-bootstrap}
+[[ $# -le 1 ]] || die "usage: $program [bootstrap|rollback-legacy]"
+case "$action" in
+  bootstrap|rollback-legacy) ;;
+  *) die "usage: $program [bootstrap|rollback-legacy]" ;;
+esac
+
+[[ "$EUID" -eq 0 ]] || die "bootstrap must run as root"
+[[ "$state" == /* && "$token" == "$state"/* &&
+   "$route" == "$state"/* && "$bootstrap_marker" == "$state"/* ]] ||
+  die "bootstrap state paths are not contained by the absolute state root"
+[[ -x "$gate" && ! -L "$gate" ]] || die "cutover gate is unsafe"
+[[ -x "$selector" && ! -L "$selector" ]] || die "selector is unsafe"
+
+install -d -m 0700 -o "$owner" -g "$group" "$state"
+
+if [[ ! -e "$token" ]]; then
+  token_temp=$state/.cutover.token.next.$$
+  head -c 48 /dev/urandom | base64 -w0 >"$token_temp"
+  printf '\n' >>"$token_temp"
+  chown "$owner:$group" "$token_temp"
+  chmod 0600 "$token_temp"
+  sync -f "$token_temp"
+  mv -T "$token_temp" "$token"
+  sync -f "$state"
+fi
+[[ -f "$token" && ! -L "$token" && $(stat -Lc '%a' "$token") == 600 ]] ||
+  die "cutover token is not a mode-0600 regular file"
+
+read_route() {
+  local key slot extra
+  [[ -f "$route" && ! -L "$route" ]] || return 1
+  read -r key slot extra <"$route" || return 1
+  [[ "$key" == active && -z "${extra:-}" ]] || return 1
+  case "$slot" in blue|green) printf '%s\n' "$slot" ;; *) return 1 ;; esac
+}
+
+write_route() {
+  local slot=$1 temp=$state/.route.map.next.$$
+  case "$slot" in blue|green) ;; *) die "invalid bootstrap slot: $slot" ;; esac
+  printf 'active %s\n' "$slot" >"$temp"
+  chown "$owner:$group" "$temp"
+  chmod 0600 "$temp"
+  sync -f "$temp"
+  mv -T "$temp" "$route"
+  sync -f "$state"
+}
+
+write_bootstrap_marker() {
+  local temp=$state/.bootstrap-complete.next.$$
+  printf 'fram-coordinator-cutover/v1 active %s\n' "$1" >"$temp"
+  chown "$owner:$group" "$temp"
+  chmod 0600 "$temp"
+  sync -f "$temp"
+  mv -T "$temp" "$bootstrap_marker"
+  sync -f "$state"
+}
+
+unit_active() {
+  systemctl is-active --quiet "$1"
+}
+
+wait_inactive() {
+  local unit=$1 deadline=$((SECONDS + 20))
+  until ! unit_active "$unit"; do
+    (( SECONDS < deadline )) || die "$unit did not stop within 20 seconds"
+    sleep 0.1
+  done
+}
+
+wait_active() {
+  local unit=$1 deadline=$((SECONDS + 30))
+  until unit_active "$unit"; do
+    (( SECONDS < deadline )) || die "$unit did not start within 30 seconds"
+    sleep 0.1
+  done
+}
+
+log_fingerprint() {
+  local path=$1 stat_line tail_hash
+  [[ -f "$path" && ! -L "$path" ]] || die "canonical log is unsafe: $path"
+  stat_line=$(stat -Lc '%d:%i:%s:%Y' "$path")
+  tail_hash=$(tail -c 65536 "$path" | sha256sum | awk '{print $1}')
+  printf '%s:%s\n' "$stat_line" "$tail_hash"
+}
+
+prove_logs_quiescent() {
+  local coord_before telemetry_before coord_after telemetry_after
+  sync -f "$NORTH_COORD_COORD_LOG"
+  sync -f "$NORTH_COORD_TELEMETRY_LOG"
+  coord_before=$(log_fingerprint "$NORTH_COORD_COORD_LOG")
+  telemetry_before=$(log_fingerprint "$NORTH_COORD_TELEMETRY_LOG")
+  sleep 0.5
+  sync -f "$NORTH_COORD_COORD_LOG"
+  sync -f "$NORTH_COORD_TELEMETRY_LOG"
+  coord_after=$(log_fingerprint "$NORTH_COORD_COORD_LOG")
+  telemetry_after=$(log_fingerprint "$NORTH_COORD_TELEMETRY_LOG")
+  [[ "$coord_before" == "$coord_after" ]] ||
+    die "coordination log changed after legacy shutdown"
+  [[ "$telemetry_before" == "$telemetry_after" ]] ||
+    die "telemetry log changed after legacy shutdown"
+}
+
+restore_legacy() {
+  local status=0
+  systemctl stop north-coord-blue-green.target "$proxy" \
+    "$blue_coord" "$blue_telemetry" \
+    "$green_coord" "$green_telemetry" || status=1
+  rm -f -- "$bootstrap_marker" "$route"
+  sync -f "$state" || status=1
+  systemctl unmask --runtime "$legacy_coord" "$legacy_telemetry" ||
+    status=1
+  systemctl start "$legacy_pair" || status=1
+  unit_active "$legacy_coord" || status=1
+  unit_active "$legacy_telemetry" || status=1
+  return "$status"
+}
+
+bootstrap_succeeded=0
+rollback_armed=0
+on_exit() {
+  local original=$?
+  trap - EXIT
+  if [[ "$original" -ne 0 &&
+        "$rollback_armed" -eq 1 &&
+        "$bootstrap_succeeded" -eq 0 ]]; then
+    if ! restore_legacy; then
+      printf '%s: rollback could not re-establish both legacy writers; public sockets remain systemd-owned and authority is held for operator repair\n' \
+        "$program" >&2
+    fi
+  fi
+  exit "$original"
+}
+trap on_exit EXIT
+
+rollback_to_legacy() {
+  local selected
+  local -a private_units private_pids
+
+  [[ -f "$bootstrap_marker" && ! -L "$bootstrap_marker" ]] ||
+    die "blue/green bootstrap marker is absent"
+  selected=$(read_route) || die "blue/green route is absent or malformed"
+  "$gate" verify "$selected"
+  "$selector" status >/dev/null
+
+  private_units=(
+    "$blue_coord" "$blue_telemetry"
+    "$green_coord" "$green_telemetry"
+  )
+  private_pids=()
+  for unit in "${private_units[@]}"; do
+    private_pids+=("$(systemctl show --property=MainPID --value "$unit")")
+  done
+
+  # HOLD without changing either public socket. Mask the direct consumers
+  # before their Conditions are reopened so queued activation cannot race the
+  # legacy pair preparation transaction.
+  rollback_armed=1
+  systemctl mask --runtime "$legacy_coord" "$legacy_telemetry"
+  systemctl stop north-coord-blue-green.target "$proxy"
+  wait_inactive "$proxy"
+  systemctl stop "${private_units[@]}"
+  for unit in "${private_units[@]}"; do
+    wait_inactive "$unit"
+  done
+  for pid in "${private_pids[@]}"; do
+    if [[ "$pid" =~ ^[1-9][0-9]*$ ]]; then
+      ! kill -0 "$pid" 2>/dev/null ||
+        die "private coordinator PID survived rollback shutdown: $pid"
+    fi
+  done
+  unit_active "$coord_socket" || die "$coord_socket closed during rollback"
+  unit_active "$telemetry_socket" ||
+    die "$telemetry_socket closed during rollback"
+  prove_logs_quiescent
+
+  rm -f -- "$bootstrap_marker"
+  sync -f "$state"
+  systemctl unmask --runtime "$legacy_coord" "$legacy_telemetry"
+  systemctl start "$legacy_pair"
+  wait_active "$legacy_coord"
+  wait_active "$legacy_telemetry"
+
+  rm -f -- "$route" "$state/gate.current" \
+    "$state"/*.old-demotion.edn "$state"/*.rollback.edn
+  sync -f "$state"
+  bootstrap_succeeded=1
+  printf 'north coordinator rollback complete: active=legacy-direct\n'
+}
+
+if [[ "$action" == rollback-legacy ]]; then
+  rollback_to_legacy
+  exit 0
+fi
+
+# Idempotent success path. A completed marker is trusted only after the
+# selected pair and proxy are re-proven.
+if [[ -f "$bootstrap_marker" && ! -L "$bootstrap_marker" ]]; then
+  selected=$(read_route) || die "bootstrap marker exists without a valid route"
+  other=green
+  [[ "$selected" == green ]] && other=blue
+  systemctl start \
+    "north-coord-$selected.service" \
+    "north-telemetry-coord-$selected.service"
+  "$gate" verify "$selected"
+  systemctl start \
+    "north-coord-$other.service" \
+    "north-telemetry-coord-$other.service"
+  "$gate" verify-phase "$other" read-only
+  systemctl start "$proxy"
+  wait_active "$proxy"
+  "$selector" status >/dev/null
+  systemctl start north-coord-blue-green.target
+  systemctl unmask --runtime "$legacy_coord" "$legacy_telemetry"
+  bootstrap_succeeded=1
+  exit 0
+fi
+
+# Ordinary Firn activation installs these units but does not bounce the direct
+# database. The explicit bootstrap is the one bounded legacy transition.
+systemctl start "$coord_socket" "$telemetry_socket"
+unit_active "$coord_socket" || die "$coord_socket is not active"
+unit_active "$telemetry_socket" || die "$telemetry_socket is not active"
+
+# Prewarm one complete candidate pair without writer authority.
+rm -f -- "$route" "$bootstrap_marker"
+systemctl start "$blue_coord" "$blue_telemetry"
+"$gate" verify-phase blue standby
+
+old_coord_pid=$(systemctl show --property=MainPID --value "$legacy_coord")
+old_telemetry_pid=$(systemctl show --property=MainPID --value "$legacy_telemetry")
+[[ "$old_coord_pid" =~ ^[1-9][0-9]*$ ]] ||
+  die "legacy coordination PID is absent"
+[[ "$old_telemetry_pid" =~ ^[1-9][0-9]*$ ]] ||
+  die "legacy telemetry PID is absent"
+
+# HOLD: stop only direct consumers. The permanent socket units stay active and
+# queue new accepts. Runtime masks close the socket-activation race without
+# changing or restarting either permanent socket unit.
+rollback_armed=1
+systemctl mask --runtime "$legacy_coord" "$legacy_telemetry"
+systemctl stop "$legacy_pair" "$legacy_coord" "$legacy_telemetry"
+wait_inactive "$legacy_coord"
+wait_inactive "$legacy_telemetry"
+! kill -0 "$old_coord_pid" 2>/dev/null ||
+  die "legacy coordination PID survived shutdown"
+! kill -0 "$old_telemetry_pid" 2>/dev/null ||
+  die "legacy telemetry PID survived shutdown"
+unit_active "$coord_socket" || die "$coord_socket closed during HOLD"
+unit_active "$telemetry_socket" || die "$telemetry_socket closed during HOLD"
+prove_logs_quiescent
+
+# Bootstrap active authority from the exact quiescent logs. Dynamic role
+# selection is durable before either service starts.
+systemctl stop "$blue_coord" "$blue_telemetry"
+write_route blue
+systemctl start "$blue_coord" "$blue_telemetry"
+"$gate" verify blue
+
+# Only a fully verified active pair enables proxy startup. At this point a
+# socket-triggered start is safe; starting explicitly drains queued accepts.
+write_bootstrap_marker blue
+systemctl start "$proxy"
+wait_active "$proxy"
+"$selector" status >/dev/null
+
+systemctl start "$green_coord" "$green_telemetry"
+"$gate" verify-phase green standby
+systemctl start north-coord-blue-green.target
+systemctl unmask --runtime "$legacy_coord" "$legacy_telemetry"
+
+bootstrap_succeeded=1
+printf 'north coordinator blue/green bootstrap complete: active=blue standby=green\n'

@@ -90,6 +90,192 @@
             "7978"
             "north-telemetry-coord.service"
             "0")
+        coordinationLog (s homeDir "/.local/state/north/coordination.log")
+        telemetryLog (s homeDir "/.local/state/north/telemetry.log")
+        cutoverState "/var/lib/north-coord-cutover"
+        cutoverToken (s cutoverState "/cutover.token")
+        selectorMap (s cutoverState "/route.map")
+        selectorTransaction (s cutoverState "/selector.transaction")
+        selectorLock (s cutoverState "/selector.lock")
+        bootstrapMarker (s cutoverState "/bootstrap-complete")
+        proxyRuntime "/run/north-coord-proxy"
+        proxyAdminSocket (s proxyRuntime "/admin.sock")
+        proxyFrontend "north-public"
+        blueCoordPort "17977"
+        blueTelemetryPort "17978"
+        greenCoordPort "27977"
+        greenTelemetryPort "27978"
+        blueCoordRuntime
+          (mkNorthCoordRuntime
+            "north-coord-blue-runtime"
+            (s runtimeState "-blue")
+            coordinationLog
+            telemetryLog
+            blueCoordPort
+            "north-coord-blue.service"
+            "1")
+        blueTelemetryRuntime
+          (mkNorthCoordRuntime
+            "north-telemetry-coord-blue-runtime"
+            (s telemetryRuntimeState "-blue")
+            telemetryLog
+            coordinationLog
+            blueTelemetryPort
+            "north-telemetry-coord-blue.service"
+            "0")
+        greenCoordRuntime
+          (mkNorthCoordRuntime
+            "north-coord-green-runtime"
+            (s runtimeState "-green")
+            coordinationLog
+            telemetryLog
+            greenCoordPort
+            "north-coord-green.service"
+            "1")
+        greenTelemetryRuntime
+          (mkNorthCoordRuntime
+            "north-telemetry-coord-green-runtime"
+            (s telemetryRuntimeState "-green")
+            telemetryLog
+            coordinationLog
+            greenTelemetryPort
+            "north-telemetry-coord-green.service"
+            "0")
+        framCutoverChecked
+          (pkgs.runCommand
+            "fram-cutover-checked"
+            {}
+            (ms (s "cutover=" framPkg "/bin/fram-cutover")
+                "if [ ! -x \"$cutover\" ]; then"
+                "  echo \"pinned Fram lacks fram-cutover\" >&2"
+                "  exit 1"
+                "fi"
+                "mkdir -p \"$out/bin\""
+                "cp \"$cutover\" \"$out/bin/fram-cutover\""))
+        slotStart
+          (pkgs.writeShellApplication
+            {:name "north-coord-slot-start"
+             :runtimeInputs (nix/with pkgs [bash coreutils])
+             :text (builtins.readFile (p "./north-coord-slot-start"))})
+        cutoverGate
+          (pkgs.writeShellApplication
+            {:name "north-coord-cutover-gate"
+             :runtimeInputs (nix/with pkgs [babashka bash coreutils])
+             :text
+              (ms (s "export NORTH_COORD_CUTOVER_BIN="
+                     framCutoverChecked "/bin/fram-cutover")
+                  (s "export NORTH_COORD_CUTOVER_TOKEN_FILE=" cutoverToken)
+                  (s "export NORTH_COORD_CUTOVER_STATE=" cutoverState)
+                  (s "export NORTH_COORD_COORD_LOG=" coordinationLog)
+                  (s "export NORTH_COORD_TELEMETRY_LOG=" telemetryLog)
+                  (s "export NORTH_COORD_BLUE_COORD_PORT=" blueCoordPort)
+                  (s "export NORTH_COORD_BLUE_TELEMETRY_PORT="
+                     blueTelemetryPort)
+                  (s "export NORTH_COORD_GREEN_COORD_PORT=" greenCoordPort)
+                  (s "export NORTH_COORD_GREEN_TELEMETRY_PORT="
+                     greenTelemetryPort)
+                  (builtins.readFile (p "./north-coord-cutover-gate")))})
+        selectorPromote
+          (pkgs.writeShellApplication
+            {:name "north-coord-selector-promote"
+             :runtimeInputs [cutoverGate]
+             :text
+              (ms (s "exec " cutoverGate
+                     "/bin/north-coord-cutover-gate promote \"$@\""))})
+        selectorRollback
+          (pkgs.writeShellApplication
+            {:name "north-coord-selector-rollback"
+             :runtimeInputs [cutoverGate]
+             :text
+              (ms (s "exec " cutoverGate
+                     "/bin/north-coord-cutover-gate rollback \"$@\""))})
+        selectorVerify
+          (pkgs.writeShellApplication
+            {:name "north-coord-selector-verify"
+             :runtimeInputs [cutoverGate]
+             :text
+              (ms (s "exec " cutoverGate
+                     "/bin/north-coord-cutover-gate verify \"$@\""))})
+        selector
+          (pkgs.writeShellApplication
+            {:name "north-coord-selector"
+             :runtimeInputs (nix/with pkgs [bash coreutils socat util-linux])
+             :text
+              (ms (s "export NORTH_COORD_SELECTOR_SOCKET=" proxyAdminSocket)
+                  (s "export NORTH_COORD_SELECTOR_MAP=" selectorMap)
+                  (s "export NORTH_COORD_SELECTOR_FRONTEND=" proxyFrontend)
+                  (s "export NORTH_COORD_SELECTOR_LOCK=" selectorLock)
+                  (s "export NORTH_COORD_SELECTOR_TRANSACTION="
+                     selectorTransaction)
+                  (s "export NORTH_COORD_SELECTOR_PROMOTE_COMMAND="
+                     selectorPromote "/bin/north-coord-selector-promote")
+                  (s "export NORTH_COORD_SELECTOR_ROLLBACK_COMMAND="
+                     selectorRollback "/bin/north-coord-selector-rollback")
+                  (s "export NORTH_COORD_SELECTOR_VERIFY_COMMAND="
+                     selectorVerify "/bin/north-coord-selector-verify")
+                  "export NORTH_COORD_SELECTOR_DRAIN_TIMEOUT=15"
+                  (builtins.readFile (p "./north-coord-selector")))})
+        proxyConfig
+          (pkgs.writeText
+            "north-coord-haproxy.cfg"
+            (ms "global"
+                (s "  stats socket " proxyAdminSocket
+                   " mode 600 level admin")
+                "  maxconn 4096"
+                ""
+                "defaults"
+                "  mode tcp"
+                "  timeout connect 2s"
+                "  timeout client 30s"
+                "  timeout server 30s"
+                ""
+                (s "frontend " proxyFrontend)
+                "  bind fd@3"
+                "  bind fd@4"
+                "  acl is_coord dst_port 7977"
+                (s "  acl route_blue str(active),map(" selectorMap
+                   ") -m str blue")
+                "  use_backend coord-blue if is_coord route_blue"
+                "  use_backend coord-green if is_coord !route_blue"
+                "  use_backend telemetry-blue if !is_coord route_blue"
+                "  default_backend telemetry-green"
+                ""
+                "backend coord-blue"
+                (s "  server only 127.0.0.1:" blueCoordPort)
+                "backend coord-green"
+                (s "  server only 127.0.0.1:" greenCoordPort)
+                "backend telemetry-blue"
+                (s "  server only 127.0.0.1:" blueTelemetryPort)
+                "backend telemetry-green"
+                (s "  server only 127.0.0.1:" greenTelemetryPort)))
+        proxyStart
+          (pkgs.writeShellApplication
+            {:name "north-coord-proxy-start"
+             :runtimeInputs (nix/with pkgs [bash coreutils haproxy])
+             :text
+              (ms (s "export NORTH_COORD_HAPROXY=" pkgs.haproxy
+                     "/bin/haproxy")
+                  (s "export NORTH_COORD_HAPROXY_CONFIG=" proxyConfig)
+                  (builtins.readFile (p "./north-coord-proxy-start")))})
+        bootstrap
+          (pkgs.writeShellApplication
+            {:name "north-coord-bootstrap"
+             :runtimeInputs
+              (nix/with pkgs [bash coreutils procps systemd])
+             :text
+              (ms (s "export NORTH_COORD_CUTOVER_USER=" username)
+                  "export NORTH_COORD_CUTOVER_GROUP=users"
+                  (s "export NORTH_COORD_CUTOVER_STATE=" cutoverState)
+                  (s "export NORTH_COORD_CUTOVER_TOKEN_FILE=" cutoverToken)
+                  (s "export NORTH_COORD_SELECTOR_MAP=" selectorMap)
+                  (s "export NORTH_COORD_BOOTSTRAP_MARKER=" bootstrapMarker)
+                  (s "export NORTH_COORD_CUTOVER_GATE=" cutoverGate
+                     "/bin/north-coord-cutover-gate")
+                  (s "export NORTH_COORD_SELECTOR=" selector
+                     "/bin/north-coord-selector")
+                  (s "export NORTH_COORD_COORD_LOG=" coordinationLog)
+                  (s "export NORTH_COORD_TELEMETRY_LOG=" telemetryLog)
+                  (builtins.readFile (p "./north-coord-bootstrap")))})
         serviceEnvironment
           {:HOME homeDir
            :FRAM_REQUIRE_LOG_FENCE "1"
@@ -107,7 +293,38 @@
            ;; wedged generation instead of holding the pair cutover for 90s.
            :TimeoutStopSec   "15s"
            :SendSIGKILL      true
-           :MemorySwapMax    "0"}]
+           :MemorySwapMax    "0"}
+        mkSlotService
+          (fn [description slot runtimeCommand peerLog heapMax memoryMax]
+            {:description description
+             ;; Private generations are staged explicitly. Ordinary Firn
+             ;; activation updates their definitions but never bounces a live
+             ;; database or proxy process.
+             :restartIfChanged false
+             :stopIfChanged false
+             :after ["network.target"]
+             :path (nix/with pkgs [clojure jdk bash coreutils git])
+             :startLimitIntervalSec 0
+             :unitConfig {:ConditionPathExists cutoverToken}
+             :environment
+              (// serviceEnvironment
+                  {:FRAM_TELEMETRY_LOG peerLog
+                   :JDK_JAVA_OPTIONS heapMax
+                   :NORTH_COORD_SLOT slot
+                   :NORTH_COORD_SELECTOR_MAP selectorMap
+                   :NORTH_COORD_CUTOVER_TOKEN_FILE cutoverToken
+                   :NORTH_COORD_SLOT_RUNTIME runtimeCommand})
+             :serviceConfig
+              (// serviceConfigBase
+                  {:MemoryMax memoryMax
+                   ;; Private candidates fold and fence their own one-log
+                   ;; endpoint on start. The legacy pair-level `prepare`
+                   ;; transaction is coordination-owner-only and must never
+                   ;; run for telemetry or a private standby.
+                   :ExecStartPre
+                    [(s runtimeCommand " ensure-default")]
+                   :ExecStart
+                    (s slotStart "/bin/north-coord-slot-start")})})]
     {:options.myConfig.modules.north-coord.enable
       (lib.mkEnableOption "Personal North coordinator daemon (:7977) — sole-writer fact-graph service for Tom's canonical log")
      ;; Socket activation is gated OFF until the Fram daemon consumes the
@@ -128,7 +345,10 @@
              "north-coord.stageATelemetryPartition requires socketActivation so both writer ports remain systemd-owned"}]
          :environment.systemPackages
           (++ [northCoordRuntime]
-              (lib.optional stageA northTelemetryCoordRuntime))
+              (lib.optional stageA northTelemetryCoordRuntime)
+              (if stageA
+                [selector cutoverGate bootstrap]
+                []))
          :environment.variables
           (lib.mkIf stageA
             {:NORTH_TELEMETRY_PARTITION "1"
@@ -176,9 +396,28 @@
                      "north-coord.service"
                      "north-telemetry-coord.service"
                      "north-coord-pair-settle.service"]})
+         :systemd.targets.north-coord-blue-green
+          (lib.mkIf stageA
+            {:description "North durable blue/green coordinator pair"
+             :wantedBy ["multi-user.target"]
+             :unitConfig {:ConditionPathExists bootstrapMarker}
+             :requires ["north-coord.socket"
+                        "north-telemetry-coord.socket"]
+             :wants ["north-coord-blue.service"
+                     "north-telemetry-coord-blue.service"
+                     "north-coord-green.service"
+                     "north-telemetry-coord-green.service"
+                     "north-coord-proxy.service"]
+             :after ["north-coord-blue.service"
+                     "north-telemetry-coord-blue.service"
+                     "north-coord-green.service"
+                     "north-telemetry-coord-green.service"
+                     "north-coord-proxy.service"]})
          :systemd.services.north-coord-pair-prepare
           (lib.mkIf stageA
             {:description "Prepare both North Stage-A writer runtimes"
+             :unitConfig
+              {:ConditionPathExists (s "!" bootstrapMarker)}
              ;; A system generation may stage a new Fram package, but staging
              ;; is not a database cutover. Keep this required oneshot active so
              ;; activation cannot cascade-stop either writer through Requires=.
@@ -200,6 +439,10 @@
          :systemd.services.north-coord-pair-settle
           (lib.mkIf stageA
             {:description "Settle the North Stage-A pair after both writers start"
+             :unitConfig
+              {:ConditionPathExists (s "!" bootstrapMarker)}
+             :restartIfChanged false
+             :stopIfChanged false
              :requires ["north-coord.service" "north-telemetry-coord.service"]
              :after ["north-coord.service" "north-telemetry-coord.service"]
              :serviceConfig
@@ -211,6 +454,9 @@
          :systemd.services.north-coord
           {:description           "North coordinator — personal fact-graph daemon (:7977)"
            :wantedBy              (if stageA [] ["multi-user.target"])
+           :unitConfig
+            (lib.mkIf stageA
+              {:ConditionPathExists (s "!" bootstrapMarker)})
            :partOf                (lib.optional stageA pairTarget)
            :requires
              (concat
@@ -246,6 +492,10 @@
              ;; Keep native/JVM overhead outside the -Xmx16g heap from tripping a
              ;; cgroup kill while the incremental reload path bounds that peak.
              :MemoryMax "32G"
+             :Sockets
+              (lib.mkIf
+                config.myConfig.modules.north-coord.socketActivation
+                "north-coord.socket")
              ;; Socket ownership removes the old stop/bind race. The adapter
              ;; validates LISTEN_FDS before the selected Fram runtime starts.
              :ExecStartPre
@@ -267,6 +517,8 @@
          :systemd.services.north-telemetry-coord
           (lib.mkIf stageA
             {:description "North telemetry coordinator — sole writer (:7978)"
+             :unitConfig
+              {:ConditionPathExists (s "!" bootstrapMarker)}
              :partOf [pairTarget]
              :requires ["north-telemetry-coord.socket"
                         "north-coord-pair-prepare.service"]
@@ -285,7 +537,99 @@
               (//
               serviceConfigBase
                {:MemoryMax "8G"
+                :Sockets "north-telemetry-coord.socket"
                 :ExecStart
                  (s northCoordSdListenChecked "/bin/north-coord-sd-listen "
                     northTelemetryCoordRuntime
-                    "/bin/north-telemetry-coord-runtime start")})})})}))
+                    "/bin/north-telemetry-coord-runtime start")})})
+         :systemd.services.north-coord-blue
+          (lib.mkIf stageA
+            (mkSlotService
+              "North coordination private blue generation (:17977)"
+              "blue"
+              (s blueCoordRuntime "/bin/north-coord-blue-runtime")
+              telemetryLog
+              "-Xmx16g"
+              "32G"))
+         :systemd.services.north-telemetry-coord-blue
+          (lib.mkIf stageA
+            (mkSlotService
+              "North telemetry private blue generation (:17978)"
+              "blue"
+              (s blueTelemetryRuntime
+                 "/bin/north-telemetry-coord-blue-runtime")
+              coordinationLog
+              "-Xmx6g"
+              "8G"))
+         :systemd.services.north-coord-green
+          (lib.mkIf stageA
+            (mkSlotService
+              "North coordination private green generation (:27977)"
+              "green"
+              (s greenCoordRuntime "/bin/north-coord-green-runtime")
+              telemetryLog
+              "-Xmx16g"
+              "32G"))
+         :systemd.services.north-telemetry-coord-green
+          (lib.mkIf stageA
+            (mkSlotService
+              "North telemetry private green generation (:27978)"
+              "green"
+              (s greenTelemetryRuntime
+                 "/bin/north-telemetry-coord-green-runtime")
+              coordinationLog
+              "-Xmx6g"
+              "8G"))
+         :systemd.services.north-coord-proxy
+          (lib.mkIf stageA
+            {:description
+              "North permanent public selector for coordination + telemetry"
+             :requires ["north-coord.socket"
+                        "north-telemetry-coord.socket"]
+             :wants ["north-coord-blue.service"
+                     "north-telemetry-coord-blue.service"
+                     "north-coord-green.service"
+                     "north-telemetry-coord-green.service"]
+             :after ["north-coord.socket"
+                     "north-telemetry-coord.socket"
+                     "north-coord-blue.service"
+                     "north-telemetry-coord-blue.service"
+                     "north-coord-green.service"
+                     "north-telemetry-coord-green.service"]
+             ;; Installing or updating this definition is not a database
+             ;; cutover. The explicit selector/bootstrap commands own process
+             ;; replacement.
+             :restartIfChanged false
+             :stopIfChanged false
+             :unitConfig
+              {:ConditionPathExists bootstrapMarker}
+             :environment
+              {:NORTH_COORD_BOOTSTRAP_MARKER bootstrapMarker}
+             :path (nix/with pkgs [bash coreutils haproxy socat util-linux])
+             :serviceConfig
+              {:Type "simple"
+               :User username
+               :WorkingDirectory homeDir
+               :RuntimeDirectory "north-coord-proxy"
+               :RuntimeDirectoryMode "0700"
+               :Restart "always"
+               :RestartSec 1
+               :TimeoutStopSec "15s"
+               :SendSIGKILL true
+               :Sockets ["north-coord.socket"
+                         "north-telemetry-coord.socket"]
+               :ExecStartPre
+                [(s selector "/bin/north-coord-selector prestart")]
+               :ExecStart
+                (s proxyStart "/bin/north-coord-proxy-start")}})
+         :systemd.services.north-coord-bootstrap
+          (lib.mkIf stageA
+            {:description
+              "One-time bounded legacy-to-blue-green North migration"
+             ;; Explicit operator action only: `sudo north-coord-bootstrap`.
+             :restartIfChanged false
+             :stopIfChanged false
+             :serviceConfig
+              {:Type "oneshot"
+               :ExecStart
+                (s bootstrap "/bin/north-coord-bootstrap")}})})}))

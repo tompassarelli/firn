@@ -1,0 +1,292 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+umask 077
+
+program=${0##*/}
+
+die() {
+  printf '%s: %s\n' "$program" "$*" >&2
+  exit 2
+}
+
+for setting in \
+  NORTH_COORD_CUTOVER_BIN \
+  NORTH_COORD_CUTOVER_TOKEN_FILE \
+  NORTH_COORD_CUTOVER_STATE \
+  NORTH_COORD_COORD_LOG \
+  NORTH_COORD_TELEMETRY_LOG \
+  NORTH_COORD_BLUE_COORD_PORT \
+  NORTH_COORD_BLUE_TELEMETRY_PORT \
+  NORTH_COORD_GREEN_COORD_PORT \
+  NORTH_COORD_GREEN_TELEMETRY_PORT
+do
+  [[ -n "${!setting:-}" ]] || die "missing setting: $setting"
+done
+
+cutover=$NORTH_COORD_CUTOVER_BIN
+token_file=$NORTH_COORD_CUTOVER_TOKEN_FILE
+state=$NORTH_COORD_CUTOVER_STATE
+
+[[ "$cutover" == /* && -x "$cutover" && ! -L "$cutover" ]] ||
+  die "cutover command is not a safe executable"
+[[ "$token_file" == /* && -f "$token_file" && ! -L "$token_file" ]] ||
+  die "cutover token is missing or unsafe"
+[[ "$state" == /* ]] || die "cutover state path must be absolute"
+
+valid_slot() {
+  [[ "$1" == blue || "$1" == green ]]
+}
+
+valid_origin() {
+  [[ "$1" == coord || "$1" == telemetry ]]
+}
+
+port_for() {
+  case "$1:$2" in
+    blue:coord) printf '%s\n' "$NORTH_COORD_BLUE_COORD_PORT" ;;
+    blue:telemetry) printf '%s\n' "$NORTH_COORD_BLUE_TELEMETRY_PORT" ;;
+    green:coord) printf '%s\n' "$NORTH_COORD_GREEN_COORD_PORT" ;;
+    green:telemetry) printf '%s\n' "$NORTH_COORD_GREEN_TELEMETRY_PORT" ;;
+    *) die "invalid endpoint: $1/$2" ;;
+  esac
+}
+
+log_for() {
+  case "$1" in
+    coord) printf '%s\n' "$NORTH_COORD_COORD_LOG" ;;
+    telemetry) printf '%s\n' "$NORTH_COORD_TELEMETRY_LOG" ;;
+    *) die "invalid origin: $1" ;;
+  esac
+}
+
+status_file() {
+  local slot=$1 origin=$2 output=$3
+  "$cutover" status \
+    --port "$(port_for "$slot" "$origin")" \
+    --log "$(log_for "$origin")" \
+    --token-file "$token_file" \
+    --timeout-ms 15000 >"$output"
+}
+
+# Validate the complete status contract and print:
+#   phase
+#   instance
+#   logical version
+# A phase of "any" accepts active, standby, or demoted while retaining all
+# protocol and writer-authority checks.
+inspect_status() {
+  local input=$1 expected=$2
+  bb -e '
+    (require (quote [clojure.edn :as edn]))
+    (let [[path expected] *command-line-args*
+          m (edn/read-string (slurp path))
+          phase (:phase m)
+          authorized (get-in m [:writer-authority :write-authorized])
+          expected-authorized (= phase :active)]
+      (when-not (and (= true (:ok m))
+                     (= "fram-coordinator-cutover/v1" (:protocol m))
+                     (contains? #{:active :standby :demoted} phase)
+                     (or (= expected "any")
+                         (= expected (name phase)))
+                     (string? (:instance m))
+                     (not-empty (:instance m))
+                     (integer? (:version m))
+                     (not (neg? (:version m)))
+                     (= expected-authorized authorized))
+        (binding [*out* *err*]
+          (println "invalid cutover status" (pr-str m)))
+        (System/exit 1))
+      (println (name phase))
+      (println (:instance m))
+      (println (:version m)))' "$input" "$expected"
+}
+
+read_status() {
+  local slot=$1 origin=$2 expected=$3 output
+  output=$(mktemp "$state/status.XXXXXX")
+  if ! status_file "$slot" "$origin" "$output"; then
+    rm -f -- "$output"
+    return 1
+  fi
+  inspect_status "$output" "$expected"
+  rm -f -- "$output"
+}
+
+verify_pair() {
+  local slot=$1 expected=$2 origin phase
+  valid_slot "$slot" || die "invalid slot: $slot"
+  case "$expected" in active|standby|demoted|read-only) ;; *)
+    die "invalid expected phase: $expected" ;;
+  esac
+  for origin in coord telemetry; do
+    if [[ "$expected" == read-only ]]; then
+      phase=$(read_status "$slot" "$origin" any | sed -n '1p') ||
+        die "$slot/$origin has no valid cutover status"
+      [[ "$phase" == standby || "$phase" == demoted ]] ||
+        die "$slot/$origin is not read-only: $phase"
+    else
+      read_status "$slot" "$origin" "$expected" >/dev/null ||
+        die "$slot/$origin is not a valid $expected endpoint"
+    fi
+  done
+}
+
+demote_endpoint() {
+  local slot=$1 origin=$2 cutover_id=$3 marker=$4 status instance
+  status=$(read_status "$slot" "$origin" active) ||
+    die "$slot/$origin is not active before demotion"
+  instance=$(sed -n '2p' <<<"$status")
+  "$cutover" demote \
+    --port "$(port_for "$slot" "$origin")" \
+    --log "$(log_for "$origin")" \
+    --token-file "$token_file" \
+    --cutover-id "$cutover_id-$origin" \
+    --expected-instance "$instance" \
+    --marker-out "$marker" \
+    --timeout-ms 15000 >/dev/null
+  read_status "$slot" "$origin" demoted >/dev/null ||
+    die "$slot/$origin did not become demoted"
+}
+
+promote_endpoint() {
+  local slot=$1 origin=$2 cutover_id=$3 marker=$4
+  [[ -f "$marker" && ! -L "$marker" ]] ||
+    die "promotion marker is missing or unsafe: $marker"
+  "$cutover" promote \
+    --port "$(port_for "$slot" "$origin")" \
+    --log "$(log_for "$origin")" \
+    --token-file "$token_file" \
+    --cutover-id "$cutover_id-$origin" \
+    --marker-file "$marker" \
+    --timeout-ms 15000 >/dev/null
+  read_status "$slot" "$origin" active >/dev/null ||
+    die "$slot/$origin did not become active"
+}
+
+write_gate_state() {
+  local cutover_id=$1 old=$2 target=$3 temp
+  mkdir -p "$state"
+  temp=$state/gate.current.next.$$
+  printf '%s %s %s\n' "$cutover_id" "$old" "$target" >"$temp"
+  sync -f "$temp"
+  mv -T "$temp" "$state/gate.current"
+  sync -f "$state"
+}
+
+read_gate_state() {
+  local cutover_id old target extra
+  [[ -f "$state/gate.current" && ! -L "$state/gate.current" ]] ||
+    die "gate recovery state is missing"
+  read -r cutover_id old target extra <"$state/gate.current" ||
+    die "cannot read gate recovery state"
+  [[ "$cutover_id" =~ ^[A-Za-z0-9_.:-]+$ && -z "${extra:-}" ]] ||
+    die "gate recovery state is malformed"
+  valid_slot "$old" || die "gate state has invalid old slot"
+  valid_slot "$target" || die "gate state has invalid target slot"
+  printf '%s %s %s\n' "$cutover_id" "$old" "$target"
+}
+
+promote_pair() {
+  local old=$1 target=$2 transaction_file=$3 cutover_id origin marker
+  valid_slot "$old" || die "invalid old slot: $old"
+  valid_slot "$target" || die "invalid target slot: $target"
+  [[ "$old" != "$target" ]] || die "old and target slots are identical"
+  [[ "$transaction_file" == /* ]] ||
+    die "selector transaction path must be absolute"
+
+  mkdir -p "$state"
+  verify_pair "$old" active
+  # A never-promoted candidate is :standby; a previously active candidate is
+  # :demoted. Both are valid read-only successors. This is what makes repeated
+  # blue -> green -> blue cutovers possible without restarting either slot.
+  verify_pair "$target" read-only
+
+  cutover_id="selector-$(date -u +%Y%m%dT%H%M%S)-$$"
+  rm -f -- "$state"/*.old-demotion.edn "$state"/*.rollback.edn
+  write_gate_state "$cutover_id" "$old" "$target"
+
+  # Demote both logs before either target endpoint is promoted. If any turn
+  # fails, selector keeps the public frontend held and invokes rollback_pair.
+  for origin in coord telemetry; do
+    marker=$state/$origin.old-demotion.edn
+    demote_endpoint "$old" "$origin" "$cutover_id" "$marker"
+  done
+  for origin in coord telemetry; do
+    marker=$state/$origin.old-demotion.edn
+    promote_endpoint "$target" "$origin" "$cutover_id" "$marker"
+  done
+  verify_pair "$target" active
+}
+
+rollback_pair() {
+  local target_arg=$1 old_arg=$2 transaction_file=$3
+  local cutover_id old target origin old_status target_status marker
+  [[ "$transaction_file" == /* ]] ||
+    die "selector transaction path must be absolute"
+  if [[ ! -e "$state/gate.current" &&
+        ! -L "$state/gate.current" ]]; then
+    # Selector durably records gate-started immediately before invoking this
+    # program. A crash in that tiny pre-invocation window has no gate state
+    # and, crucially, no authority mutation. Prove the old pair is still
+    # active and treat rollback as an idempotent no-op.
+    valid_slot "$target_arg" || die "invalid rollback target: $target_arg"
+    valid_slot "$old_arg" || die "invalid rollback old slot: $old_arg"
+    verify_pair "$old_arg" active
+    return 0
+  fi
+  read -r cutover_id old target < <(read_gate_state)
+  [[ "$target_arg" == "$target" && "$old_arg" == "$old" ]] ||
+    die "selector rollback arguments disagree with gate state"
+
+  # Reconcile each log independently. This covers every partial boundary:
+  # one old endpoint demoted, one target promoted, or a retry after a prior
+  # rollback demotion. The public frontend remains held until both old
+  # endpoints are proven active.
+  for origin in coord telemetry; do
+    old_status=$(read_status "$old" "$origin" any) ||
+      die "cannot inspect old $origin endpoint during rollback"
+    if [[ $(sed -n '1p' <<<"$old_status") == active ]]; then
+      continue
+    fi
+
+    target_status=$(read_status "$target" "$origin" any) ||
+      die "cannot inspect target $origin endpoint during rollback"
+    if [[ $(sed -n '1p' <<<"$target_status") == active ]]; then
+      marker=$state/$origin.rollback.edn
+      demote_endpoint \
+        "$target" "$origin" "rollback-$cutover_id" "$marker"
+    elif [[ -f "$state/$origin.rollback.edn" ]]; then
+      marker=$state/$origin.rollback.edn
+    else
+      marker=$state/$origin.old-demotion.edn
+    fi
+
+    promote_endpoint "$old" "$origin" "rollback-$cutover_id" "$marker"
+  done
+  verify_pair "$old" active
+}
+
+mkdir -p "$state"
+
+case "${1:-}" in
+  verify)
+    [[ $# -eq 2 ]] || die "usage: $program verify SLOT"
+    verify_pair "$2" active
+    ;;
+  verify-phase)
+    [[ $# -eq 3 ]] || die "usage: $program verify-phase SLOT PHASE"
+    verify_pair "$2" "$3"
+    ;;
+  promote)
+    [[ $# -eq 4 ]] || die "usage: $program promote OLD TARGET TRANSACTION"
+    promote_pair "$2" "$3" "$4"
+    ;;
+  rollback)
+    [[ $# -eq 4 ]] || die "usage: $program rollback TARGET OLD TRANSACTION"
+    rollback_pair "$2" "$3" "$4"
+    ;;
+  *)
+    die "usage: $program {verify|verify-phase|promote|rollback} ..."
+    ;;
+esac
