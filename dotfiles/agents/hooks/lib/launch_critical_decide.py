@@ -93,7 +93,7 @@ def _strip_heredoc_bodies(command):
 
     A heredoc body is DATA, not shell syntax. Scanning it produced false
     denials: writing this guard's own test file, whose fixtures contain the
-    string `> /home/tom/code/north/cli/x.clj`, was refused as if that were a
+    string `> /home/tom/code/north/main/cli/x.clj`, was refused as if that were a
     real redirect. The `<<` itself is preserved because rule 4 still needs to
     know a heredoc was present.
     """
@@ -224,7 +224,7 @@ def decide(payload):
     # 4. an interpreter fed a heredoc, while cwd is a protected checkout. The
     #    written path lives inside the script and cannot be parsed out, and this
     #    is exactly the shape that patched three primaries on 2026-07-29
-    #    (`cd ~/code/north && python3 - <<'PYEOF'`). Refused on cwd alone;
+    #    (`cd ~/code/north/main && python3 - <<'PYEOF'`). Refused on cwd alone;
     #    running it from elsewhere with absolute paths is unaffected.
     hit = protected_project(eff)
     if hit and "<<" in command:

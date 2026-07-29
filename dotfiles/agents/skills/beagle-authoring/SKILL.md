@@ -39,7 +39,7 @@ degradation a process-exists check misses.
 ## 0.5 Greenfield bootstrap — start graph-native before substantive code
 
 Starting a **wholly new** Beagle program/module (no existing file to edit)?
-Per `~/code/nixos-config/dotfiles/agents/AGENTS.md` "New code": greenfield
+Per `nixos-config:dotfiles/agents/AGENTS.md` "New code": greenfield
 **must start graph-native at inception**. First establish the compiler repair
 loop in section 0, then run this bootstrap sequence:
 
@@ -64,7 +64,7 @@ loop in section 0, then run this bootstrap sequence:
    `mcp__fram__*` graph-edit verbs are present before authoring.
 4. **Hand off** — all substantive authoring past the seed goes through the
    **code-as-facts** skill
-   (`~/code/nixos-config/dotfiles/agents/skills/code-as-facts/SKILL.md`) via
+   (`nixos-config:dotfiles/agents/skills/code-as-facts/SKILL.md`) via
    the `mcp__fram__*` graph-edit verbs. Do not scaffold the module with
    ordinary Edit/Write "temporarily" then adopt later — the seed-only step
    above is the entire text-authored surface, permanently.

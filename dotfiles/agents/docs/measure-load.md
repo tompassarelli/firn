@@ -22,7 +22,7 @@ parallelize.
   wall-clock by pairing arms, which is also FAIRER: within-pair conditions are
   identical for the ratio metric.)
 - **The standard isolation tool on whiterabbit is `bench-shield`**
-  (`~/code/nixos-config/modules/bench-shield/`): `bench-shield on` confines
+  (`nixos-config:modules/bench-shield/`): `bench-shield on` confines
   everything else to cores 0-11 (runtime cgroup cpusets, reboot clears), then
   run the experiment with `taskset -c 12-23 <cmd>` — kernel-enforced exclusive
   cores, no root needed for the run itself. `off` releases. Prefer this over

@@ -7,7 +7,7 @@ and the OpenAI-driven `fram-reliability-supervisor`
 `@msg:20260728-145018`). Supersedes the session draft at
 `~/docs/private/verification-doctrine.md`.
 **Companion payload:** the paste-able brief override for OpenAI lanes lives at
-`~/code/nixos-config/dotfiles/agents/docs/praxis/verification-override-openai.md`
+`nixos-config:dotfiles/agents/docs/praxis/verification-override-openai.md`
 — this doc is the why and the law; that file is what ships in a brief.
 **Public mirror:** the portable, provider-neutral form is published at
 https://github.com/tompassarelli/stop-the-loop (checkout:
@@ -221,7 +221,7 @@ Cross-cutting rules:
 
 The paste-able brief payload (imperative form of this doctrine, self-contained
 with a compact tier table) is maintained at
-`~/code/nixos-config/dotfiles/agents/docs/praxis/verification-override-openai.md`.
+`nixos-config:dotfiles/agents/docs/praxis/verification-override-openai.md`.
 Attach it to any OpenAI-provider lane whose work includes implementation or
 verification. Do not fork its text — edit it there.
 

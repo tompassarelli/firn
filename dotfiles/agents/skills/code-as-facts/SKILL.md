@@ -32,7 +32,7 @@ If neither holds, this skill does NOT apply — use the **beagle-authoring** ski
 and ordinary Edit/Write. (Adoption of a **brownfield/text-upstream** file is
 per-file and opt-in — there is no blanket "all .bclj" rule; **greenfield** new
 Beagle work defaults graph-native at inception per
-`~/code/nixos-config/dotfiles/agents/AGENTS.md` "New code", so opt-in language
+`nixos-config:dotfiles/agents/AGENTS.md` "New code", so opt-in language
 does not apply there. The honest line: code *can* be graph-upstream — see
 `beagle:bin/test/code-as-facts/README.md` "Capability vs adoption".)
 

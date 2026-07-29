@@ -1,9 +1,9 @@
 # The Claude Code nix module — operational notes
 
 The module that wires Claude Code onto the system:
-`~/code/nixos-config/modules/claude/default.bnix` (edit the `.bnix`;
+`nixos-config:modules/claude/default.bnix` (edit the `.bnix`;
 `default.nix` is generated). It provides the `claude-code-latest` package,
-out-of-store symlinks into `~/code/nixos-config/dotfiles/claude/`
+out-of-store symlinks into `nixos-config:dotfiles/claude/`
 (`commands` / `skills` / `hooks` / `agents` / `CLAUDE.md`, plus the
 `~/code/CLAUDE.md` routing file), Orchestration's cached-plugin reconciliation, and MCP
 server registration (`fram`, `north`, `linear-mcp-msa-new`). All activation entries are best-effort
@@ -12,12 +12,12 @@ as an untouched Phase 2 archive candidate.)
 
 Why everything routes through nixos-config (reproducibility rule, CI
 validation, hooks kill-switch):
-`~/code/nixos-config/dotfiles/agents/docs/nixos-config-rules.md`.
+`nixos-config:dotfiles/agents/docs/nixos-config-rules.md`.
 
 ## settings.json is WRITABLE runtime state seeded by the generation
 
 `seedClaudeSettings` materializes the committed
-`~/code/nixos-config/dotfiles/claude/settings.json` snapshot from the evaluated
+`nixos-config:dotfiles/claude/settings.json` snapshot from the evaluated
 generation into `~/.claude/settings.json` as a **regular writable file**. It
 atomically replaces missing, legacy-symlink, and existing regular targets on
 every activation. That makes future committed settings changes converge while
@@ -40,7 +40,7 @@ writable regular file exists before the plugin CLI touches it.
 
 The statusLine is wired in **settings.json, not plugin.json** — Claude Code
 plugins cannot own `statusLine`. It points at
-`~/code/nixos-config/dotfiles/claude/statusline.sh`, a self-contained segment
+`nixos-config:dotfiles/claude/statusline.sh`, a self-contained segment
 bus in this repo.
 
 ## Orchestration plugin — directory marketplace inside north
@@ -49,7 +49,7 @@ Orchestration lives inside the north repo at `north:orchestration/`
 (merged from the retired standalone checkout; the separate flake input is
 gone — the code rides the `north` input). Claude Code consumes it as a
 directory marketplace declared in
-`~/code/nixos-config/dotfiles/claude/settings.json`:
+`nixos-config:dotfiles/claude/settings.json`:
 `extraKnownMarketplaces.orchestration.source = { source = "directory"; path =
 "<north-checkout>/orchestration"; }` with the plugin enabled as
 `orchestration@orchestration`. Claude copies marketplace plugins into
@@ -63,7 +63,7 @@ detached worktree at `~/.local/state/north/orchestration-plugin-source` — was
 retired with the merge and no longer exists in this repo.
 
 Codex and North have no cache pointer: the shared
-`~/code/nixos-config/dotfiles/agents/AGENTS.md` routes Codex to
+`nixos-config:dotfiles/agents/AGENTS.md` routes Codex to
 `north:orchestration/`, while North reads
 `north:orchestration/staffing/catalog.json`, provider catalogs, and
 Orchestration prompt blocks directly.

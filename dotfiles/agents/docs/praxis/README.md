@@ -42,7 +42,7 @@ signals decide whether any concrete model is eligible.
 
 `verification-override-openai.md` — paste-able brief block binding the
 verification doctrine
-(`~/code/nixos-config/dotfiles/agents/docs/verification-doctrine.md`) as
+(`nixos-config:dotfiles/agents/docs/verification-doctrine.md`) as
 imperatives: terminal states per pass, claim contracts, tier fixed at intake,
 probe budgets, stop rule. Attach to every OpenAI-provider lane doing
 implementation or verification work. Demand provenance per the freeze rule:

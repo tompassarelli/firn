@@ -7,7 +7,7 @@
 # switch. Flip a SEGMENT_* below to drop exactly one piece while the rest of the
 # line stays — the modularity the single-slot design otherwise lacks.
 #
-# Wired from ~/code/nixos-config/dotfiles/claude/settings.json (statusLine.command).
+# Wired from ~/code/nixos-config/main/dotfiles/claude/settings.json (statusLine.command).
 # Edit HERE, never in ~/.claude — settings.json there is a symlink to this repo.
 
 # ── segment switches (on|off) ───────────────────────────────────────────────

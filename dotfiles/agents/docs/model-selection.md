@@ -145,4 +145,4 @@ never use native provider inheritance as a substitute for an explicit Orchestrat
 request.
 
 Personal domain/posture defaults live in
-`~/code/nixos-config/dotfiles/agents/docs/praxis/README.md`.
+`nixos-config:dotfiles/agents/docs/praxis/README.md`.

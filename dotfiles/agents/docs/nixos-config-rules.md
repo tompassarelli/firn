@@ -9,7 +9,7 @@ services, dotfiles, and any host / home-manager setting. The whole point is
 
 Mechanics of the nix module that does the wiring (writable settings.json
 symlink, Claude plugin reconciliation, MCP registration):
-`~/code/nixos-config/dotfiles/agents/docs/nixos-module.md`.
+`nixos-config:dotfiles/agents/docs/nixos-module.md`.
 
 ## Symlinks
 
@@ -62,6 +62,6 @@ For anything NOT already wired (a new package, service, dotfile, or symlink), ad
 it to the appropriate nix module (+ `home.file` / `mkOutOfStoreSymlink`), then
 rebuild. Do not drop untracked files into the live system.
 
-After any such change: `git -C ~/code/nixos-config status` should have no stray
+After any such change: `git -C ~/code/nixos-config/main status` should have no stray
 untracked state, and the change must survive a fresh rebuild. When you make a
 global/system edit, say so and commit it — don't leave it dangling in `~`.

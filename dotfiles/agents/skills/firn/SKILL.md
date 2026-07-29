@@ -12,7 +12,7 @@ description: >-
 # firn — editing ~/code/nixos-config
 
 The **write interface is beagle/nix**: `.bnix` source compiles to `.nix`. Nix is
-the build target, **not** the source of truth. Read `~/code/nixos-config/AGENTS.md`
+the build target, **not** the source of truth. Read `nixos-config:AGENTS.md`
 for the complete contract — this skill is the operating loop. The `.bnix` language
 itself → beagle-authoring.
 

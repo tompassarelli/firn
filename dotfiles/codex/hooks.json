@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/beagle-session-start.sh",
+            "command": "/home/tom/code/nixos-config/main/dotfiles/agents/hooks/beagle-session-start.sh",
             "timeout": 30
           },
           {
@@ -33,7 +33,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/agent-spawn-guard.sh",
+            "command": "/home/tom/code/nixos-config/main/dotfiles/agents/hooks/agent-spawn-guard.sh",
             "timeout": 10
           }
         ]
@@ -43,22 +43,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/code-upstream-guard.sh",
+            "command": "/home/tom/code/nixos-config/main/dotfiles/agents/hooks/code-upstream-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/firn-guard.sh",
+            "command": "/home/tom/code/nixos-config/main/dotfiles/agents/hooks/firn-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/north-clock-guard.sh",
+            "command": "/home/tom/code/nixos-config/main/dotfiles/agents/hooks/north-clock-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.sh",
+            "command": "/home/tom/code/nixos-config/main/dotfiles/agents/hooks/launch-critical-worktree-guard.sh",
             "timeout": 10
           }
         ]
@@ -68,22 +68,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/tripwire-guard.sh",
+            "command": "/home/tom/code/nixos-config/main/dotfiles/agents/hooks/tripwire-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/firn-guard.sh",
+            "command": "/home/tom/code/nixos-config/main/dotfiles/agents/hooks/firn-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/north-clock-guard.sh",
+            "command": "/home/tom/code/nixos-config/main/dotfiles/agents/hooks/north-clock-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.sh",
+            "command": "/home/tom/code/nixos-config/main/dotfiles/agents/hooks/launch-critical-worktree-guard.sh",
             "timeout": 10
           }
         ]
@@ -95,7 +95,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/logcompress-hook.js",
+            "command": "/home/tom/code/nixos-config/main/dotfiles/agents/hooks/logcompress-hook.js",
             "timeout": 10
           }
         ]
@@ -105,7 +105,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/racket-build-guard.sh",
+            "command": "/home/tom/code/nixos-config/main/dotfiles/agents/hooks/racket-build-guard.sh",
             "timeout": 15
           }
         ]
@@ -115,7 +115,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/hook-detach.sh /etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-tooluse-codex",
+            "command": "/home/tom/code/nixos-config/main/dotfiles/agents/hooks/hook-detach.sh /etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-tooluse-codex",
             "timeout": 10
           }
         ]

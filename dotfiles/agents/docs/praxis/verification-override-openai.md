@@ -5,7 +5,7 @@ verification. Counteracts the observed default: open-ended "am I confident
 yet?" auditing with no terminal condition (bundled claims, archaeology in
 place of unrunnable probes, N≥5 soaks, mid-flight canary invention, policy
 churn). Doctrine, rationale, and provenance:
-`~/code/nixos-config/dotfiles/agents/docs/verification-doctrine.md`.
+`nixos-config:dotfiles/agents/docs/verification-doctrine.md`.
 Demand provenance (freeze rule): repeated verification tarpits in
 unsupervised OpenAI lanes, 2026-07, fram cache work — consolidated with
 `fram-reliability-supervisor` 2026-07-28.

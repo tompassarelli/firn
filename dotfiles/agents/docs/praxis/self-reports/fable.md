@@ -326,7 +326,7 @@ ALWAYS
 ## 12. The Opus-compiled payload
 
 §11 was consumer-blind. Then Opus wrote its own praxis
-(`~/code/nixos-config/dotfiles/agents/docs/praxis/self-reports/opus.md`) — which is a
+(`nixos-config:dotfiles/agents/docs/praxis/self-reports/opus.md`) — which is a
 gift: **a self-report of what the consumer already holds natively.** Pedagogy
 follows: don't teach the student what's in their own textbook; speak their
 vocabulary; patch, don't replace. This payload is built by *subtraction* —

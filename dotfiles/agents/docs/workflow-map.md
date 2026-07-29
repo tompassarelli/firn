@@ -589,6 +589,6 @@ below are its rule set.
 | listener | `north:cli/north-listen.clj` | dormant-until-pinged pub/sub; role-addressing |
 | cockpit | `north:cli/dashboard-cli.clj` (`north dashboard`/`doctor`; bare `north` card in `bin/north`) | dashboard/doctor/profile; parse-don't-fork orchestration; ownership rule (folded from convoy 2026-07-10) |
 | staffing | `north:orchestration/doctrine.md` + `docs/adapters/north.md` | shapes→squad, laws, canonical dial table |
-| delegate intake | `~/code/nixos-config/dotfiles/claude/commands/delegate.md` | `/delegate` intelligent atomic/composite classifier (context is orthogonal) |
+| delegate intake | `nixos-config:dotfiles/claude/commands/delegate.md` | `/delegate` intelligent atomic/composite classifier (context is orthogonal) |
 | coordination-v2 | thread `019f4418-bed5-7625-b2ad-41abb6518269` | census, failure receipts, the specced reaping fix plan |
 ```

@@ -12,8 +12,8 @@ anything contradicts it, the manual wins (trivial lookups exempt).
 <id> progress`, lessons → `learning`, done → `outcome`; the next session
 reads `north show <id>`, never a SESSION-DUMP file. SDK dispatch derives
 agent posture from thread facts.
-Thread format + concurrent write safety: → `~/code/nixos-config/dotfiles/agents/docs/north.md`
-Spawn/steer/observe/concurrency: → `~/code/nixos-config/dotfiles/agents/docs/agent-protocol.md`
+Thread format + concurrent write safety: → `nixos-config:dotfiles/agents/docs/north.md`
+Spawn/steer/observe/concurrency: → `nixos-config:dotfiles/agents/docs/agent-protocol.md`
 
 ## Client time and agent time — two orthogonal clocks
 
@@ -132,17 +132,17 @@ that could support it — move the input and check whether the metric moves.
 
 Full verification doctrine — claim contracts, paranoia tiers P0–P3, the
 one-sentence stop rule, anti-tarpit laws: →
-`~/code/nixos-config/dotfiles/agents/docs/verification-doctrine.md`
+`nixos-config:dotfiles/agents/docs/verification-doctrine.md`
 Read when setting a bar/tier at intake, briefing a verifier, or a lane won't
 converge on done. OpenAI-lane brief override (paste-able): →
-`~/code/nixos-config/dotfiles/agents/docs/praxis/verification-override-openai.md`
+`nixos-config:dotfiles/agents/docs/praxis/verification-override-openai.md`
 
 Style: terse by default — no filler, no hedging, full sentences; brevity
 comes from content selection, never compression tricks.
 
 ## Model + payload routing — per agent, both dials
-→ `~/code/nixos-config/dotfiles/agents/docs/model-selection.md`
-→ `~/code/nixos-config/dotfiles/agents/docs/praxis/` (spawn payload blocks; README = assembly)
+→ `nixos-config:dotfiles/agents/docs/model-selection.md`
+→ `nixos-config:dotfiles/agents/docs/praxis/` (spawn payload blocks; README = assembly)
 
 Shared routing laws are CANONICAL in `north:orchestration/doctrine.md`; the portable
 contract is `north:orchestration/docs/routing.md`. Keep its axes independent:
@@ -200,7 +200,7 @@ scout/source gathering → `economy`; implementer → `standard`; integrator →
 inference rules between axes. A native-agent denial is a routing instruction,
 never a wall. Provider-specific model deltas are resolved from
 `north:orchestration/providers` and `north:orchestration/docs`; personal posture residue
-lives in `~/code/nixos-config/dotfiles/agents/docs/praxis/README.md`.
+lives in `nixos-config:dotfiles/agents/docs/praxis/README.md`.
 
 ## Push freely — the scan is the guard, not a human
 
@@ -214,7 +214,7 @@ are local and ephemeral — land by fetch + `safe-push --to main`, then delete
 the local branch. Never publish a feature branch name.
 
 ## External code — license first
-→ `~/code/nixos-config/dotfiles/agents/docs/external-code.md`
+→ `nixos-config:dotfiles/agents/docs/external-code.md`
 Before leveraging ANY code you didn't write (`~/code/reference`, forks,
 vendored snippets): run the license protocol in the doc; flag copyleft or
 unlicensed sources to the user BEFORE building on them.
@@ -226,7 +226,7 @@ Every repo: agent notes, status, scratch, and handoffs go in gitignored
 `docs/` is end-user-facing only.
 
 ## Global agent config goes through nixos-config — ALWAYS
-→ `~/code/nixos-config/dotfiles/agents/docs/nixos-config-rules.md`
+→ `nixos-config:dotfiles/agents/docs/nixos-config-rules.md`
 Shared policy lives under `dotfiles/agents`; Claude Code and Codex config are
 thin adapters under `dotfiles/claude` and `dotfiles/codex`. Their live global
 files are symlinks into nixos-config, so every edit MUST be committed there.
@@ -247,7 +247,7 @@ not cwd'd into: read its root `AGENTS.md` first (the harness only auto-loads
 the cwd's).
 
 ## Racket / Beagle — the stale-bytecode trap
-→ `~/code/nixos-config/dotfiles/agents/docs/racket-beagle-bytecode.md`
+→ `nixos-config:dotfiles/agents/docs/racket-beagle-bytecode.md`
 Read on ANY Beagle/Racket work (`~/code/beagle`, `.rkt`, `raco`/`racket`),
 when a fix "doesn't take", or on `body of .../raco.rkt` deaths.
 
@@ -264,7 +264,7 @@ trade-offs, paths-not-taken only; if the code can say it, drop it.
 
 **Language bias: Beagle first for general-purpose programs.** New tools,
 scripts, and apps default to Beagle (`#lang beagle`; the beagle-authoring
-skill, `~/code/nixos-config/dotfiles/agents/skills/beagle-authoring/SKILL.md`,
+skill, `nixos-config:dotfiles/agents/skills/beagle-authoring/SKILL.md`,
 bootstraps the stack — language `~/code/beagle`, engine `~/code/fram`).
 Dogfood by default. Escape hatches, stated in one line when taken: the repo
 is already committed to another language; a platform boundary demands one
@@ -274,7 +274,7 @@ objectively the smaller move.
 **Greenfield vs brownfield stewardship.** A wholly new Beagle program/module
 (greenfield) **starts graph-native at inception**. Follow the seed-only
 bootstrap in
-`~/code/nixos-config/dotfiles/agents/skills/beagle-authoring/SKILL.md`: run
+`nixos-config:dotfiles/agents/skills/beagle-authoring/SKILL.md`: run
 `fram:bin/fram-code-on ~/code/<repo>`, require flip level 3 in a fresh or
 restarted trusted-project harness session, then author substantive code only via
 the code-as-facts graph-edit verbs. A coordinator or session-wiring failure is a
@@ -286,14 +286,14 @@ human — (1) keep the current upstream/language for this bounded task, (2)
 migrate to text-upstream Beagle, or (3) migrate directly to graph-upstream
 Beagle — and wait for a pick before migrating. Deferred candidates go in a
 separate migration inventory, never a side-project expansion. Graph-native
-detail: `~/code/nixos-config/dotfiles/agents/skills/code-as-facts/SKILL.md`.
+detail: `nixos-config:dotfiles/agents/skills/code-as-facts/SKILL.md`.
 
 ## Standing guards
 
 - **Never serialize "to protect the box"** — that thought is a reasoning
   bug: measure (`nproc`, `/proc/loadavg`) instead; agent work is
   network-bound. Benchmark/experiment isolation protocol:
-  → `~/code/nixos-config/dotfiles/agents/docs/measure-load.md`
+  → `nixos-config:dotfiles/agents/docs/measure-load.md`
 - **Desktop translucency is intentional** (niri per-window opacity): never
   flag, diagnose, or "fix" it. Judge screenshot colors by the CSS/config
   values and their base16 set, never by compositing over the wallpaper.
