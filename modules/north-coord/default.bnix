@@ -98,6 +98,7 @@
         selectorTransaction (s cutoverState "/selector.transaction")
         selectorLock (s cutoverState "/selector.lock")
         bootstrapMarker (s cutoverState "/bootstrap-complete")
+        legacyHoldMarker "/run/north-coord-legacy-hold"
         proxyRuntime "/run/north-coord-proxy"
         proxyAdminSocket (s proxyRuntime "/admin.sock")
         proxyFrontend "north-public"
@@ -269,6 +270,8 @@
                   (s "export NORTH_COORD_CUTOVER_TOKEN_FILE=" cutoverToken)
                   (s "export NORTH_COORD_SELECTOR_MAP=" selectorMap)
                   (s "export NORTH_COORD_BOOTSTRAP_MARKER=" bootstrapMarker)
+                  (s "export NORTH_COORD_LEGACY_HOLD_MARKER="
+                     legacyHoldMarker)
                   (s "export NORTH_COORD_CUTOVER_GATE=" cutoverGate
                      "/bin/north-coord-cutover-gate")
                   (s "export NORTH_COORD_SELECTOR=" selector
@@ -461,7 +464,9 @@
            :wantedBy              (if stageA [] ["multi-user.target"])
            :unitConfig
             (lib.mkIf stageA
-              {:ConditionPathExists (s "!" bootstrapMarker)})
+              {:ConditionPathExists
+                [(s "!" bootstrapMarker)
+                 (s "!" legacyHoldMarker)]})
            :partOf                (lib.optional stageA pairTarget)
            :requires
              (concat
@@ -523,7 +528,9 @@
           (lib.mkIf stageA
             {:description "North telemetry coordinator — sole writer (:7978)"
              :unitConfig
-              {:ConditionPathExists (s "!" bootstrapMarker)}
+              {:ConditionPathExists
+                [(s "!" bootstrapMarker)
+                 (s "!" legacyHoldMarker)]}
              :partOf [pairTarget]
              :requires ["north-telemetry-coord.socket"
                         "north-coord-pair-prepare.service"]

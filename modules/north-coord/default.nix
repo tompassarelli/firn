@@ -52,6 +52,7 @@ let
   selectorTransaction = "${cutoverState}/selector.transaction";
   selectorLock = "${cutoverState}/selector.lock";
   bootstrapMarker = "${cutoverState}/bootstrap-complete";
+  legacyHoldMarker = "/run/north-coord-legacy-hold";
   proxyRuntime = "/run/north-coord-proxy";
   proxyAdminSocket = "${proxyRuntime}/admin.sock";
   proxyFrontend = "north-public";
@@ -179,6 +180,7 @@ let
       export NORTH_COORD_CUTOVER_TOKEN_FILE=${cutoverToken}
       export NORTH_COORD_SELECTOR_MAP=${selectorMap}
       export NORTH_COORD_BOOTSTRAP_MARKER=${bootstrapMarker}
+      export NORTH_COORD_LEGACY_HOLD_MARKER=${legacyHoldMarker}
       export NORTH_COORD_CUTOVER_GATE=${cutoverGate}/bin/north-coord-cutover-gate
       export NORTH_COORD_SELECTOR=${selector}/bin/north-coord-selector
       export NORTH_COORD_COORD_LOG=${coordinationLog}
@@ -346,7 +348,7 @@ in
       description = "North coordinator — personal fact-graph daemon (:7977)";
       wantedBy = if stageA then [ ] else [ "multi-user.target" ];
       unitConfig = lib.mkIf stageA {
-        ConditionPathExists = "!${bootstrapMarker}";
+        ConditionPathExists = [ "!${bootstrapMarker}" "!${legacyHoldMarker}" ];
       };
       partOf = lib.optional stageA pairTarget;
       requires = (lib.optional config.myConfig.modules.north-coord.socketActivation "north-coord.socket" ++ lib.optional stageA "north-coord-pair-prepare.service");
@@ -372,7 +374,7 @@ in
     systemd.services.north-telemetry-coord = lib.mkIf stageA {
       description = "North telemetry coordinator — sole writer (:7978)";
       unitConfig = {
-        ConditionPathExists = "!${bootstrapMarker}";
+        ConditionPathExists = [ "!${bootstrapMarker}" "!${legacyHoldMarker}" ];
       };
       partOf = [ pairTarget ];
       requires = [ "north-telemetry-coord.socket" "north-coord-pair-prepare.service" ];

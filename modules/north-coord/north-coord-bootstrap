@@ -17,6 +17,7 @@ for setting in \
   NORTH_COORD_CUTOVER_TOKEN_FILE \
   NORTH_COORD_SELECTOR_MAP \
   NORTH_COORD_BOOTSTRAP_MARKER \
+  NORTH_COORD_LEGACY_HOLD_MARKER \
   NORTH_COORD_CUTOVER_GATE \
   NORTH_COORD_SELECTOR \
   NORTH_COORD_COORD_LOG \
@@ -29,6 +30,7 @@ state=$NORTH_COORD_CUTOVER_STATE
 token=$NORTH_COORD_CUTOVER_TOKEN_FILE
 route=$NORTH_COORD_SELECTOR_MAP
 bootstrap_marker=$NORTH_COORD_BOOTSTRAP_MARKER
+legacy_hold_marker=$NORTH_COORD_LEGACY_HOLD_MARKER
 gate=$NORTH_COORD_CUTOVER_GATE
 selector=$NORTH_COORD_SELECTOR
 owner=$NORTH_COORD_CUTOVER_USER
@@ -63,9 +65,12 @@ case "$action" in
 esac
 
 [[ "$EUID" -eq 0 ]] || die "bootstrap must run as root"
+export NORTH_COORD_BOOTSTRAP_PID=$$
 [[ "$state" == /* && "$token" == "$state"/* &&
    "$route" == "$state"/* && "$bootstrap_marker" == "$state"/* ]] ||
   die "bootstrap state paths are not contained by the absolute state root"
+[[ "$legacy_hold_marker" == /run/* ]] ||
+  die "legacy HOLD marker must be contained by /run"
 [[ -x "$gate" && ! -L "$gate" ]] || die "cutover gate is unsafe"
 [[ -x "$selector" && ! -L "$selector" ]] || die "selector is unsafe"
 
@@ -115,6 +120,26 @@ write_bootstrap_marker() {
 
 unit_active() {
   systemctl is-active --quiet "$1"
+}
+
+arm_legacy_hold() {
+  local temp=${legacy_hold_marker}.next.$$ marker_value marker_value_read
+  marker_value=north-coord-legacy-hold/v1
+  printf 'north-coord-legacy-hold/v1\n' >"$temp"
+  chmod 0600 "$temp"
+  sync -f "$temp"
+  mv -T "$temp" "$legacy_hold_marker"
+  sync -f "${legacy_hold_marker%/*}"
+  [[ -f "$legacy_hold_marker" && ! -L "$legacy_hold_marker" ]] ||
+    return 1
+  read -r marker_value_read <"$legacy_hold_marker" || return 1
+  [[ "$marker_value_read" == "$marker_value" ]]
+}
+
+clear_legacy_hold() {
+  rm -f -- "$legacy_hold_marker"
+  sync -f "${legacy_hold_marker%/*}"
+  [[ ! -e "$legacy_hold_marker" ]]
 }
 
 wait_inactive() {
@@ -197,19 +222,60 @@ prove_logs_quiescent() {
     die "telemetry log changed after legacy shutdown"
 }
 
+quiesce_all_writers_for_legacy() {
+  local status=0 unit pid
+  local -a writer_units writer_pids
+
+  writer_units=(
+    "$legacy_coord" "$legacy_telemetry"
+    "$blue_coord" "$blue_telemetry"
+    "$green_coord" "$green_telemetry"
+  )
+  writer_pids=()
+
+  arm_legacy_hold || return 1
+  for unit in "${writer_units[@]}"; do
+    pid=$(systemctl show --property=MainPID --value "$unit") || status=1
+    writer_pids+=("${pid:-0}")
+  done
+
+  systemctl stop \
+    "$resume" north-coord-blue-green.target "$proxy" "$legacy_pair" \
+    "${writer_units[@]}" || status=1
+  for unit in "$proxy" "${writer_units[@]}"; do
+    (wait_inactive "$unit") || status=1
+  done
+  for pid in "${writer_pids[@]}"; do
+    if [[ "$pid" =~ ^[1-9][0-9]*$ ]] && kill -0 "$pid" 2>/dev/null; then
+      printf '%s: writer PID survived HOLD quiescence: %s\n' \
+        "$program" "$pid" >&2
+      status=1
+    fi
+  done
+  unit_active "$coord_socket" || status=1
+  unit_active "$telemetry_socket" || status=1
+
+  (( status == 0 )) || return 1
+  (prove_logs_quiescent)
+}
+
 restore_legacy() {
-  local status=0
-  systemctl stop "$resume" north-coord-blue-green.target "$proxy" \
-    "$blue_coord" "$blue_telemetry" \
-    "$green_coord" "$green_telemetry" || status=1
+  if ! quiesce_all_writers_for_legacy; then
+    printf '%s: refusing to clear HOLD because one or more writers did not quiesce\n' \
+      "$program" >&2
+    return 1
+  fi
+
   rm -f -- "$bootstrap_marker" "$route"
-  sync -f "$state" || status=1
-  systemctl unmask --runtime "$legacy_coord" "$legacy_telemetry" ||
-    status=1
-  systemctl start "$legacy_pair" || status=1
-  unit_active "$legacy_coord" || status=1
-  unit_active "$legacy_telemetry" || status=1
-  return "$status"
+  sync -f "$state" || return 1
+  clear_legacy_hold || return 1
+  if ! systemctl start "$legacy_pair" ||
+     ! (wait_active "$legacy_coord") ||
+     ! (wait_active "$legacy_telemetry"); then
+    arm_legacy_hold || true
+    systemctl stop "$legacy_pair" "$legacy_coord" "$legacy_telemetry" || true
+    return 1
+  fi
 }
 
 bootstrap_succeeded=0
@@ -231,7 +297,6 @@ trap on_exit EXIT
 
 rollback_to_legacy() {
   local selected
-  local -a private_units private_pids
 
   [[ -f "$bootstrap_marker" && ! -L "$bootstrap_marker" ]] ||
     die "blue/green bootstrap marker is absent"
@@ -239,45 +304,14 @@ rollback_to_legacy() {
   "$gate" verify "$selected"
   "$selector" status >/dev/null
 
-  private_units=(
-    "$blue_coord" "$blue_telemetry"
-    "$green_coord" "$green_telemetry"
-  )
-  private_pids=()
-  for unit in "${private_units[@]}"; do
-    private_pids+=("$(systemctl show --property=MainPID --value "$unit")")
-  done
-
-  # HOLD without changing either public socket. Mask the direct consumers
-  # before their Conditions are reopened so queued activation cannot race the
-  # legacy pair preparation transaction.
+  # HOLD without changing either public socket. Arm the volatile condition
+  # before durable blue/green state is removed so queued activation cannot
+  # race the legacy pair preparation transaction.
   rollback_armed=1
-  systemctl mask --runtime "$legacy_coord" "$legacy_telemetry"
-  systemctl stop "$resume" north-coord-blue-green.target "$proxy"
-  wait_inactive "$proxy"
-  systemctl stop "${private_units[@]}"
-  for unit in "${private_units[@]}"; do
-    wait_inactive "$unit"
-  done
-  for pid in "${private_pids[@]}"; do
-    if [[ "$pid" =~ ^[1-9][0-9]*$ ]]; then
-      ! kill -0 "$pid" 2>/dev/null ||
-        die "private coordinator PID survived rollback shutdown: $pid"
-    fi
-  done
-  unit_active "$coord_socket" || die "$coord_socket closed during rollback"
-  unit_active "$telemetry_socket" ||
-    die "$telemetry_socket closed during rollback"
-  prove_logs_quiescent
+  restore_legacy ||
+    die "rollback could not safely quiesce private writers and restore legacy"
 
-  rm -f -- "$bootstrap_marker"
-  sync -f "$state"
-  systemctl unmask --runtime "$legacy_coord" "$legacy_telemetry"
-  systemctl start "$legacy_pair"
-  wait_active "$legacy_coord"
-  wait_active "$legacy_telemetry"
-
-  rm -f -- "$route" "$state/gate.current" \
+  rm -f -- "$state/gate.current" \
     "$state"/*.old-demotion.edn "$state"/*.rollback.edn
   sync -f "$state"
   bootstrap_succeeded=1
@@ -307,13 +341,20 @@ if [[ -f "$bootstrap_marker" && ! -L "$bootstrap_marker" ]]; then
   wait_active "$proxy"
   "$selector" status >/dev/null
   systemctl start north-coord-blue-green.target
-  systemctl unmask --runtime "$legacy_coord" "$legacy_telemetry"
+  clear_legacy_hold ||
+    die "legacy HOLD condition did not clear after blue/green resume"
   bootstrap_succeeded=1
   exit 0
 fi
 
 # Ordinary Firn activation installs these units but does not bounce the direct
 # database. The explicit bootstrap is the one bounded legacy transition.
+if [[ -e "$legacy_hold_marker" ]]; then
+  [[ -f "$legacy_hold_marker" && ! -L "$legacy_hold_marker" ]] ||
+    die "legacy HOLD marker is unsafe"
+  restore_legacy ||
+    die "stale HOLD recovery could not prove every writer quiescent"
+fi
 systemctl start "$coord_socket" "$telemetry_socket"
 unit_active "$coord_socket" || die "$coord_socket is not active"
 unit_active "$telemetry_socket" || die "$telemetry_socket is not active"
@@ -331,10 +372,11 @@ old_telemetry_pid=$(systemctl show --property=MainPID --value "$legacy_telemetry
   die "legacy telemetry PID is absent"
 
 # HOLD: stop only direct consumers. The permanent socket units stay active and
-# queue new accepts. Runtime masks close the socket-activation race without
-# changing or restarting either permanent socket unit.
+# queue new accepts. Both legacy units have a ConditionPathExists guard on the
+# volatile marker, so every queued socket-triggered start is skipped until the
+# proxy owns the inherited descriptors or rollback deliberately clears HOLD.
 rollback_armed=1
-systemctl mask --runtime "$legacy_coord" "$legacy_telemetry"
+arm_legacy_hold || die "could not arm the legacy HOLD condition"
 systemctl stop "$legacy_pair" "$legacy_coord" "$legacy_telemetry"
 wait_inactive "$legacy_coord"
 wait_inactive "$legacy_telemetry"
@@ -363,7 +405,8 @@ wait_active "$proxy"
 systemctl start "$green_coord" "$green_telemetry"
 wait_pair_phase green standby
 systemctl start north-coord-blue-green.target
-systemctl unmask --runtime "$legacy_coord" "$legacy_telemetry"
+clear_legacy_hold ||
+  die "legacy HOLD condition did not clear after blue/green bootstrap"
 
 bootstrap_succeeded=1
 printf 'north coordinator blue/green bootstrap complete: active=blue standby=green\n'

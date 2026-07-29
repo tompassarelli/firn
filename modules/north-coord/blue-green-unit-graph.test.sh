@@ -11,6 +11,7 @@ baseline_path=$2
 units=$system_path/etc/systemd/system
 baseline_units=$baseline_path/etc/systemd/system
 marker=/var/lib/north-coord-cutover/bootstrap-complete
+legacy_hold=/run/north-coord-legacy-hold
 
 unit() {
   printf '%s/%s\n' "$units" "$1"
@@ -58,6 +59,9 @@ for name in \
   north-coord-pair-settle.service
 do
   grep -Fxq "ConditionPathExists=!$marker" "$(unit "$name")"
+done
+for name in north-coord.service north-telemetry-coord.service; do
+  grep -Fxq "ConditionPathExists=!$legacy_hold" "$(unit "$name")"
 done
 grep -Fxq "ConditionPathExists=$marker" \
   "$(unit north-coord-blue-green.target)"
