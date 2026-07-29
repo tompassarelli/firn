@@ -9,6 +9,7 @@ let
     export FRAM_TELEMETRY_LOG=${homeDir}/.local/state/north/telemetry.log
   '' else "";
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
+  northEnv = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".north-env;
   codexPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".codex;
   liveInputs = with pkgs; [ bash coreutils git babashka bun jq ];
   northRuntimeOwnerGuard = pkgs.writeShellApplication {
@@ -16,21 +17,41 @@ let
     runtimeInputs = with pkgs; [ bash coreutils ];
     text = builtins.readFile ./north-runtime-owner-guard;
   };
-  northProduction = pkgs.writeShellApplication {
+  northCheckoutExec = pkgs.writeShellApplication {
+    name = "north-checkout-exec";
+    text = builtins.readFile ./north-checkout-exec;
+  };
+  checkoutPreamble = name: ''
+    export NORTH_CHECKOUT="''${NORTH_CHECKOUT:-$HOME/code/north/main}"
+    target="$NORTH_CHECKOUT/bin/${name}"
+    if [ ! -x "$target" ]; then
+      echo "${name}: checkout executable missing: $target" >&2
+      echo "${name}: ${name}-packaged runs the generation-pinned build" >&2
+      exit 127
+    fi
+  '';
+  checkoutHandoff = ''
+    export NORTH_CHECKOUT_TARGET="$target"
+    export NORTH_HOME="$NORTH_CHECKOUT"
+    export NORTH_BIN="${northCheckoutExec}/bin/north-checkout-exec"
+    export PATH="${northEnv}/bin:$PATH"
+    exec ${northEnv}/bin/north-env "$@"
+  '';
+  northCheckout = pkgs.writeShellApplication {
     name = "north";
     text = ''
       ${clientEnvironment}
-      unset NORTH_CHECKOUT
+      ${checkoutPreamble "north"}
       ${northRuntimeOwnerGuard}/bin/north-runtime-owner-guard "$@"
-      exec ${northPkg}/bin/north "$@"
+      ${checkoutHandoff}
     '';
   };
-  northMcpProduction = pkgs.writeShellApplication {
+  northMcpCheckout = pkgs.writeShellApplication {
     name = "north-mcp";
     text = ''
       ${clientEnvironment}
-      unset NORTH_CHECKOUT
-      exec ${northPkg}/bin/north-mcp "$@"
+      ${checkoutPreamble "north-mcp"}
+      ${checkoutHandoff}
     '';
   };
   mkPinnedCommand = name: pkgs.writeShellApplication {
@@ -89,11 +110,11 @@ let
   };
 in
 {
-  options.myConfig.modules.north.enable = lib.mkEnableOption "immutable North CLI/MCP with explicit checkout-only development commands";
+  options.myConfig.modules.north.enable = lib.mkEnableOption "checkout-executing North CLI/MCP on a generation-pinned runtime, with packaged escape hatches and packaged lifecycle hooks";
   config = lib.mkIf config.myConfig.modules.north.enable {
     environment.systemPackages = ([
-      northProduction
-      northMcpProduction
+      northCheckout
+      northMcpCheckout
       northDev
       northMcpDev
       northPackaged

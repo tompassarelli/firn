@@ -584,8 +584,10 @@ fi
 grep -Fq 'does not match the active runtime record' \
   <<<"$NORTH_COORD_RUNTIME_OWNER_REASON"
 
-# Ordinary North/MCP execute the exact package. Only explicit *-dev wrappers
-# delegate checkout execution through the runtime selector.
+# Ordinary North/MCP execute the checkout directly on the generation-pinned
+# north-env runtime. Only the legacy *-dev wrappers still delegate checkout
+# execution through the Fram runtime selector — routing the ordinary commands
+# there would recouple North's channel to Fram's.
 [ "$(grep -c 'exec /run/current-system/sw/bin/north-coord-runtime exec-checkout' \
   "$REPO/modules/north/default.bnix")" -eq 1 ]
 [ "$(grep -c 'NORTH_MANAGED_CODEX_BIN=' \

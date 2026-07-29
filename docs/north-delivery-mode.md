@@ -1,11 +1,23 @@
 # North delivery mode
 
-Ordinary North and Fram commands are generation-owned. `north`, `north-mcp`,
-the Claude lifecycle/status commands, and the Codex managed lifecycle adapters
+North is delivered on two channels. Its **application code** is the fast
+channel: `north` and `north-mcp` execute `$NORTH_CHECKOUT` (default
+`~/code/north/main`), so a fix is live when it is written. Their **runtime** is
+the slow channel — engine root, Fram classpath, and every tool selector come
+from the generation-pinned `north-env`, never from the checkout — and the
+wrapper exports `NORTH_PACKAGE_MODE=checkout` plus a `git describe --dirty`
+`NORTH_PACKAGE_REV` so `north doctor` shows exactly what ran. `north-packaged`
+and `north-mcp-packaged` are the escape hatch: the exact flake package, with
+inherited `NORTH_CHECKOUT` scrubbed.
+
+Fram commands and every North lifecycle surface stay generation-owned. The
+Claude lifecycle/status commands (`north-on-spawn`, `north-on-tooluse`,
+`north-on-stop`, `north-mark-delegated`, `north-session-end`,
+`north-stream-sync`, `concern`) and the Codex managed lifecycle adapters
 resolve immutable package or `/nix/store` executables selected by the active
-NixOS generation. They scrub inherited `NORTH_CHECKOUT`; ordinary launchers,
-hooks, MCP adapters, services, and status surfaces cannot select a development
-checkout implicitly.
+NixOS generation and scrub inherited `NORTH_CHECKOUT`. A hook fires inside
+another agent's turn, where a half-saved checkout is an outage rather than a
+fast loop.
 
 `~/.local/bin` is itself a generation-owned link to the store-backed
 `dotfiles/bin` tree. The `claude`, `codex`, and `safe-push` launchers therefore
@@ -19,12 +31,16 @@ boot-menu or manual generation selection therefore restores that generation's
 exact `~/.local/bin` target without consulting the working checkout; there is
 no `firn rollback` command.
 
-Mutable execution is an explicit development surface. `north-dev` and
-`north-mcp-dev` alone honor `NORTH_CHECKOUT` (defaulting to
-`~/code/north`), and the `fram-*-dev` commands alone honor `FRAM_CHECKOUT`
-(defaulting to `~/code/fram`). Every development command prints
-`provenance=checkout` with its exact target before execution. No ordinary name
-falls back to a checkout when its package command is unavailable.
+Fram's mutable execution remains an explicit development surface: the
+`fram-*-dev` commands alone honor `FRAM_CHECKOUT` (defaulting to
+`~/code/fram/main`) and print `provenance=checkout` with their exact target.
+`north-dev` and `north-mcp-dev` survive as the selector-mediated path — they
+route through `north-coord-runtime exec-checkout`, which refuses while the Fram
+runtime is package mode. Ordinary `north`/`north-mcp` deliberately do NOT use
+that path; coupling North's channel to Fram's is what the split removes. No
+name silently falls back across channels: a missing checkout executable makes
+`north` exit 127 naming `north-packaged`, and `north-packaged` never reads a
+checkout.
 
 North's Beagle source boundary still applies: editing a `.bclj` file does not
 change generated Clojure under `~/code/north/out/`. Run the canonical

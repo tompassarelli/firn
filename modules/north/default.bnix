@@ -2,9 +2,27 @@
 
 (ns default)
 
-;; Ordinary North and MCP commands execute the exact flake package selected by
-;; the system generation. Mutable checkout execution is an explicit development
-;; surface with visible provenance; it never masquerades as a production name.
+;; Two-speed channel split. North's APPLICATION code is the fast channel: the
+;; ordinary `north` and `north-mcp` commands execute the live checkout, so a fix
+;; is live the moment it is written, with no rebuild in the loop. The RUNTIME
+;; beneath it stays the slow channel — engine root, Fram classpath, and every
+;; tool selector come from the generation-pinned north-env — so application speed
+;; never costs runtime reproducibility.
+;;
+;; `north-packaged` / `north-mcp-packaged` are the escape hatch: the exact flake
+;; package, for bisecting a checkout against the pinned build and for anything
+;; that must not depend on a developer's working tree (agent-config-check already
+;; probes through north-packaged).
+;;
+;; The provider lifecycle hooks (north-on-spawn / north-on-tooluse /
+;; north-on-stop / north-mark-delegated) and the other pinned spokes stay
+;; PACKAGED, unchanged: a hook fires inside someone else's turn, where a
+;; half-saved checkout is an outage rather than a fast loop.
+;;
+;; Checkout execution deliberately does NOT route through
+;; `north-coord-runtime exec-checkout`. That path refuses whenever the selected
+;; Fram runtime is package mode, which would couple North's channel to Fram's —
+;; the exact coupling this split removes. The wrapper execs the checkout itself.
 (nix/module [config lib pkgs inputs ...]
   (let
     [homeDir config.myConfig.modules.users.homeDir
@@ -18,6 +36,11 @@
         "")
      northPkg
       (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)
+     ;; Runtime WITHOUT application code: the symlinked runtime PATH plus the
+     ;; exported engine/tool contract, ending in `exec "$NORTH_BIN"`. This is the
+     ;; single definition of North's runtime; the module never restates it.
+     northEnv
+      (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :north-env)
      codexPkg
       (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :codex)
      liveInputs (nix/with pkgs [bash coreutils git babashka bun jq])
@@ -26,21 +49,51 @@
         {:name "north-runtime-owner-guard"
          :runtimeInputs (nix/with pkgs [bash coreutils])
          :text (builtins.readFile (p "./north-runtime-owner-guard"))})
-     northProduction
+     ;; Restores checkout provenance and picks the checkout executable after
+     ;; north-env has exported the pinned runtime. See the script's own header
+     ;; for why this is a second stage instead of module-side env duplication.
+     northCheckoutExec
+      (pkgs.writeShellApplication
+        {:name "north-checkout-exec"
+         :text (builtins.readFile (p "./north-checkout-exec"))})
+     ;; Resolve the checkout and fail loudly rather than silently falling back to
+     ;; the package: a missing checkout is a broken development machine, and a
+     ;; silent downgrade is how you debug code that never ran.
+     checkoutPreamble
+      (fn [name]
+        (ms "export NORTH_CHECKOUT=\"${NORTH_CHECKOUT:-$HOME/code/north/main}\""
+            (s "target=\"$NORTH_CHECKOUT/bin/" name "\"")
+            "if [ ! -x \"$target\" ]; then"
+            (s "  echo \"" name ": checkout executable missing: $target\" >&2")
+            (s "  echo \"" name ": " name "-packaged runs the generation-pinned build\" >&2")
+            "  exit 127"
+            "fi"))
+     ;; north-env supplies the runtime PATH prefix and the exported contract, then
+     ;; execs NORTH_BIN — which is the provenance stage, not the target itself.
+     checkoutHandoff
+      (ms "export NORTH_CHECKOUT_TARGET=\"$target\""
+          "export NORTH_HOME=\"$NORTH_CHECKOUT\""
+          (s "export NORTH_BIN=\"" northCheckoutExec "/bin/north-checkout-exec\"")
+          (s "export PATH=\"" northEnv "/bin:$PATH\"")
+          (s "exec " northEnv "/bin/north-env \"$@\""))
+     northCheckout
       (pkgs.writeShellApplication
         {:name "north"
          :text
           (ms clientEnvironment
-              "unset NORTH_CHECKOUT"
+              (checkoutPreamble "north")
               (s northRuntimeOwnerGuard "/bin/north-runtime-owner-guard \"$@\"")
-              (s "exec " northPkg "/bin/north \"$@\""))})
-     northMcpProduction
+              checkoutHandoff)})
+     northMcpCheckout
       (pkgs.writeShellApplication
         {:name "north-mcp"
          :text
           (ms clientEnvironment
-              "unset NORTH_CHECKOUT"
-              (s "exec " northPkg "/bin/north-mcp \"$@\""))})
+              (checkoutPreamble "north-mcp")
+              checkoutHandoff)})
+     ;; Lifecycle hooks and spokes: PACKAGED, and staying that way. These fire
+     ;; inside another agent's turn, so they answer to the generation, never to
+     ;; whatever state a checkout happens to be in mid-edit.
      mkPinnedCommand
       (fn [name]
         (pkgs.writeShellApplication
@@ -74,6 +127,9 @@
               "exec /run/current-system/sw/bin/north-coord-runtime exec-checkout \"$target\" \"$@\"")}))
      northDev (mkDev "north")
      northMcpDev (mkDev "north-mcp")
+     ;; The escape hatch: byte-for-byte the wrapper `north`/`north-mcp` were
+     ;; before the flip. Clearing NORTH_CHECKOUT keeps an inherited checkout from
+     ;; leaking into a run whose whole point is the pinned package.
      northPackaged
       (pkgs.writeShellApplication
         {:name "north-packaged"
@@ -96,10 +152,10 @@
                :inputs.nixpkgs-master.follows "nixpkgs-master"}}
      :options.myConfig.modules.north.enable
       (lib.mkEnableOption
-        "immutable North CLI/MCP with explicit checkout-only development commands")
+        "checkout-executing North CLI/MCP on a generation-pinned runtime, with packaged escape hatches and packaged lifecycle hooks")
      :config
       (lib.mkIf config.myConfig.modules.north.enable
         {:environment.systemPackages
-          (++ [northProduction northMcpProduction northDev northMcpDev
+          (++ [northCheckout northMcpCheckout northDev northMcpDev
                northPackaged northMcpPackaged]
               pinnedCommands)})}))
