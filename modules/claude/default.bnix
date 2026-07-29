@@ -60,11 +60,6 @@
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
                         "/.agents/hooks"))}
-                 ".claude/agents"
-                  {:source
-                    (config.lib.file.mkOutOfStoreSymlink
-                      (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/claude/agents"))}
                  ;; ~/code root routing instruction — reproducible symlink.
                  "code/CLAUDE.md"
                   {:source
