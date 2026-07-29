@@ -64,7 +64,7 @@ EOF
 cmp "$scratch/roles.expected" "$scratch/roles"
 
 write_endpoint() {
-  printf '%s %s %s\n' "$2" "$3" "$4" >"$fake_state/$1"
+  printf '%s %s %s %s\n' "$2" "$3" "$4" "${5:-none}" >"$fake_state/$1"
 }
 write_endpoint 17977 active blue-coord 10
 write_endpoint 17978 active blue-telemetry 20
@@ -91,20 +91,40 @@ while [[ $# -gt 0 ]]; do
 done
 
 endpoint=$NORTH_COORD_TEST_FAKE_STATE/$port
-read -r phase instance version <"$endpoint"
+read -r phase instance version endpoint_cutover_id <"$endpoint"
+endpoint_cutover_id=${endpoint_cutover_id:-none}
 authorized=false
 [[ "$phase" == active ]] && authorized=true
 
 case "$command" in
   status)
-    printf '{:ok true :protocol "fram-coordinator-cutover/v1" :phase :%s :instance "%s" :version %s :writer-authority {:write-authorized %s}}\n' \
-      "$phase" "$instance" "$version" "$authorized"
+    outer_phase=$phase
+    cutover_phase=$phase
+    writer_role=$phase
+    if [[ "$phase" == demoted ]]; then
+      outer_phase=retired
+      cutover_phase=demoted
+      writer_role=retired
+    elif [[ "$phase" == rejected ]]; then
+      outer_phase=standby
+      cutover_phase=promotion-rejected
+      writer_role=standby
+    fi
+    if [[ "$endpoint_cutover_id" == none ]]; then
+      printf '{:ok true :protocol "fram-coordinator-cutover/v1" :phase :%s :instance "%s" :version %s :writer-authority {:role :%s :write-authorized %s} :cutover {:phase :%s}}\n' \
+        "$outer_phase" "$instance" "$version" "$writer_role" "$authorized" "$cutover_phase"
+    else
+      printf '{:ok true :protocol "fram-coordinator-cutover/v1" :phase :%s :instance "%s" :version %s :writer-authority {:role :%s :write-authorized %s} :cutover {:phase :%s :cutover-id "%s"}}\n' \
+        "$outer_phase" "$instance" "$version" "$writer_role" "$authorized" \
+        "$cutover_phase" "$endpoint_cutover_id"
+    fi
     ;;
   demote)
     [[ "$phase" == active && "$expected_instance" == "$instance" ]]
-    printf 'demoted %s %s\n' "$instance" "$version" >"$endpoint"
-    printf '{:protocol "fram-coordinator-cutover-marker/v1" :version %s :instance "%s"}\n' \
-      "$version" "$instance" >"$marker_out"
+    printf 'demoted %s %s %s\n' \
+      "$instance" "$version" "$cutover_id" >"$endpoint"
+    printf '{:format "fram-coordinator-cutover-marker/v1" :cutover-id "%s" :version %s :instance "%s"}\n' \
+      "$cutover_id" "$version" "$instance" >"$marker_out"
     chmod 0600 "$marker_out"
     printf '{:ok true :protocol "fram-coordinator-cutover/v1"}\n'
     ;;
@@ -113,11 +133,48 @@ case "$command" in
           "$port" == "$NORTH_COORD_TEST_FAIL_PROMOTE_PORT" &&
           ! -e "$NORTH_COORD_TEST_FAKE_STATE/failure.used" ]]; then
       : >"$NORTH_COORD_TEST_FAKE_STATE/failure.used"
+      printf 'rejected %s %s %s\n' \
+        "$instance" "$version" "$cutover_id" >"$endpoint"
+      if [[ -n "${NORTH_COORD_TEST_STALE_OLD_PORT:-}" ]]; then
+        old_endpoint=$NORTH_COORD_TEST_FAKE_STATE/$NORTH_COORD_TEST_STALE_OLD_PORT
+        read -r old_phase old_instance old_version old_cutover_id <"$old_endpoint"
+        printf '%s %s %s %s\n' \
+          "$old_phase" "$old_instance" "$((old_version + 1))" \
+          "$old_cutover_id" >"$old_endpoint"
+      fi
       exit 3
     fi
-    [[ "$phase" == standby || "$phase" == demoted ]]
+    [[ "$phase" == standby || "$phase" == demoted || "$phase" == rejected ]]
     [[ -f "$marker_file" ]]
-    printf 'active %s %s\n' "$instance" "$version" >"$endpoint"
+    read -r marker_cutover_id marker_version < <(
+      bb -e '(require (quote [clojure.edn :as edn]))
+             (let [m (edn/read-string (slurp (first *command-line-args*)))]
+               (println (:cutover-id m) (:version m)))' \
+        "$marker_file"
+    )
+    if [[ "$marker_cutover_id" != "$cutover_id" ||
+          "$marker_version" != "$version" ]]; then
+      printf 'rejected %s %s %s\n' \
+        "$instance" "$version" "$cutover_id" >"$endpoint"
+      exit 3
+    fi
+    if [[ -n "${NORTH_COORD_TEST_DELAY_PROMOTE_PORT:-}" &&
+          "$port" == "$NORTH_COORD_TEST_DELAY_PROMOTE_PORT" ]]; then
+      printf 'promoting %s %s %s\n' \
+        "$instance" "$version" "$cutover_id" >"$endpoint"
+      (
+        sleep "${NORTH_COORD_TEST_DELAY_PROMOTE_SECONDS:-0.2}"
+        printf 'active %s %s %s\n' \
+          "$instance" "$version" "$cutover_id" >"$endpoint"
+      ) >/dev/null 2>&1 &
+    else
+      printf 'active %s %s %s\n' \
+        "$instance" "$version" "$cutover_id" >"$endpoint"
+    fi
+    if [[ -n "${NORTH_COORD_TEST_TIMEOUT_PROMOTE_PORT:-}" &&
+          "$port" == "$NORTH_COORD_TEST_TIMEOUT_PROMOTE_PORT" ]]; then
+      exit 124
+    fi
     printf '{:ok true :protocol "fram-coordinator-cutover/v1"}\n'
     ;;
   *) exit 2 ;;
@@ -135,6 +192,9 @@ export NORTH_COORD_BLUE_TELEMETRY_PORT=17978
 export NORTH_COORD_GREEN_COORD_PORT=27977
 export NORTH_COORD_GREEN_TELEMETRY_PORT=27978
 export NORTH_COORD_TEST_FAKE_STATE=$fake_state
+export NORTH_COORD_CUTOVER_TIMEOUT_MS=3000
+export NORTH_COORD_CUTOVER_SETTLE_TIMEOUT_MS=3000
+export NORTH_COORD_CUTOVER_SETTLE_POLL_SECONDS=0.02
 : >"$NORTH_COORD_COORD_LOG"
 : >"$NORTH_COORD_TELEMETRY_LOG"
 
@@ -152,9 +212,13 @@ fi
 "$here/north-coord-cutover-gate" verify blue
 unset NORTH_COORD_TEST_FAIL_PROMOTE_PORT
 
-# Retired generations are :demoted, not :standby. Prove repeat cutovers in
-# both directions without restarting either generation.
+# A successful daemon demotion reports outer lifecycle :retired plus nested
+# cutover phase :demoted. Promotion may acknowledge while status is still
+# :promoting. Prove both real shapes settle without a false gate failure.
+export NORTH_COORD_TEST_DELAY_PROMOTE_PORT=27977
+export NORTH_COORD_TEST_TIMEOUT_PROMOTE_PORT=27977
 "$here/north-coord-cutover-gate" promote blue green "$transaction"
+unset NORTH_COORD_TEST_DELAY_PROMOTE_PORT NORTH_COORD_TEST_TIMEOUT_PROMOTE_PORT
 "$here/north-coord-cutover-gate" verify green
 "$here/north-coord-cutover-gate" promote green blue "$transaction"
 "$here/north-coord-cutover-gate" verify blue
@@ -175,5 +239,29 @@ if NORTH_COORD_HAPROXY=/bin/true \
   echo "proxy started without bootstrap authority marker" >&2
   exit 1
 fi
+
+# If an exact demotion marker goes stale before a never-active target can take
+# authority, rollback must remain fail-closed. It may not change the marker,
+# invent a version, or report the old pair restored.
+write_endpoint 17977 active blue-coord 30
+write_endpoint 17978 active blue-telemetry 40
+write_endpoint 27977 standby green-coord 30
+write_endpoint 27978 standby green-telemetry 40
+rm -f -- "$fake_state/failure.used" "$gate_state"/*.edn
+export NORTH_COORD_TEST_FAIL_PROMOTE_PORT=27978
+export NORTH_COORD_TEST_STALE_OLD_PORT=17978
+if "$here/north-coord-cutover-gate" promote blue green "$transaction"; then
+  echo "stale-marker promotion unexpectedly succeeded" >&2
+  exit 1
+fi
+if "$here/north-coord-cutover-gate" rollback green blue "$transaction"; then
+  echo "stale-marker rollback unexpectedly resumed authority" >&2
+  exit 1
+fi
+read -r blue_telemetry_phase _ <"$fake_state/17978"
+read -r green_telemetry_phase _ <"$fake_state/27978"
+[[ "$blue_telemetry_phase" != active ]]
+[[ "$green_telemetry_phase" != active ]]
+unset NORTH_COORD_TEST_FAIL_PROMOTE_PORT NORTH_COORD_TEST_STALE_OLD_PORT
 
 printf 'blue/green activation behavior: PASS\n'

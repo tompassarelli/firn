@@ -27,12 +27,19 @@ done
 cutover=$NORTH_COORD_CUTOVER_BIN
 token_file=$NORTH_COORD_CUTOVER_TOKEN_FILE
 state=$NORTH_COORD_CUTOVER_STATE
+control_timeout_ms=${NORTH_COORD_CUTOVER_TIMEOUT_MS:-120000}
+settle_timeout_ms=${NORTH_COORD_CUTOVER_SETTLE_TIMEOUT_MS:-120000}
+settle_poll_seconds=${NORTH_COORD_CUTOVER_SETTLE_POLL_SECONDS:-0.1}
 
 [[ "$cutover" == /* && -x "$cutover" && ! -L "$cutover" ]] ||
   die "cutover command is not a safe executable"
 [[ "$token_file" == /* && -f "$token_file" && ! -L "$token_file" ]] ||
   die "cutover token is missing or unsafe"
 [[ "$state" == /* ]] || die "cutover state path must be absolute"
+[[ "$control_timeout_ms" =~ ^[1-9][0-9]*$ ]] ||
+  die "cutover control timeout must be a positive integer"
+[[ "$settle_timeout_ms" =~ ^[1-9][0-9]*$ ]] ||
+  die "cutover settle timeout must be a positive integer"
 
 valid_slot() {
   [[ "$1" == blue || "$1" == green ]]
@@ -73,33 +80,76 @@ status_file() {
 #   phase
 #   instance
 #   logical version
-# A phase of "any" accepts active, standby, or demoted while retaining all
-# protocol and writer-authority checks.
+# Normalize the daemon lifecycle and nested cutover protocol into one controller
+# phase. Transitional phases own or retain the kernel authority lock even though
+# write-authorized is false; callers must wait for a terminal phase before
+# issuing another authority operation.
 inspect_status() {
   local input=$1 expected=$2
   bb -e '
     (require (quote [clojure.edn :as edn]))
     (let [[path expected] *command-line-args*
           m (edn/read-string (slurp path))
-          phase (:phase m)
+          outer-phase (:phase m)
+          cutover-phase (get-in m [:cutover :phase])
+          writer-role (get-in m [:writer-authority :role])
           authorized (get-in m [:writer-authority :write-authorized])
-          expected-authorized (= phase :active)]
+          phase (cond
+                  (and (= outer-phase :active)
+                       (= writer-role :active)
+                       (= authorized true))
+                  :active
+
+                  (and (= outer-phase :standby)
+                       (= writer-role :standby)
+                       (= authorized false)
+                       (not= cutover-phase :promotion-rejected))
+                  :standby
+
+                  (and (= outer-phase :retired)
+                       (= writer-role :retired)
+                       (= authorized false)
+                       (= cutover-phase :demoted))
+                  :demoted
+
+                  (and (= outer-phase :promoting)
+                       (= writer-role :promoting)
+                       (= authorized false)
+                       (= cutover-phase :promoting))
+                  :promoting
+
+                  (and (= outer-phase :demoting)
+                       (= writer-role :demoting)
+                       (= authorized false)
+                       (= cutover-phase :demoting))
+                  :demoting
+
+                  (and (contains? #{:standby :retired} outer-phase)
+                       (= authorized false)
+                       (= cutover-phase :promotion-rejected))
+                  :rejected
+
+                  :else :invalid)
+          cutover-id (get-in m [:cutover :cutover-id])]
       (when-not (and (= true (:ok m))
                      (= "fram-coordinator-cutover/v1" (:protocol m))
-                     (contains? #{:active :standby :demoted} phase)
+                     (contains? #{:active :standby :demoted
+                                  :promoting :demoting :rejected} phase)
                      (or (= expected "any")
                          (= expected (name phase)))
                      (string? (:instance m))
                      (not-empty (:instance m))
                      (integer? (:version m))
-                     (not (neg? (:version m)))
-                     (= expected-authorized authorized))
+                     (not (neg? (:version m))))
         (binding [*out* *err*]
           (println "invalid cutover status" (pr-str m)))
         (System/exit 1))
       (println (name phase))
       (println (:instance m))
-      (println (:version m)))' "$input" "$expected"
+      (println (:version m))
+      (println (if (keyword? cutover-phase) (name cutover-phase) "none"))
+      (println (if (string? cutover-id) cutover-id "none")))' \
+    "$input" "$expected"
 }
 
 read_status() {
@@ -113,6 +163,87 @@ read_status() {
   rm -f -- "$output"
 }
 
+await_status() {
+  local slot=$1 origin=$2 expected=$3 expected_cutover_id=${4:-}
+  local deadline now status phase observed_cutover_id
+  deadline=$(( $(date +%s%3N) + settle_timeout_ms ))
+  while :; do
+    if status=$(read_status "$slot" "$origin" any 2>/dev/null); then
+      phase=$(sed -n '1p' <<<"$status")
+      observed_cutover_id=$(sed -n '5p' <<<"$status")
+      if [[ -n "$expected_cutover_id" &&
+            "$observed_cutover_id" != "$expected_cutover_id" &&
+            "$observed_cutover_id" != none ]]; then
+        printf '%s/%s changed cutover identity: expected %s, observed %s\n' \
+          "$slot" "$origin" "$expected_cutover_id" \
+          "$observed_cutover_id" >&2
+        return 1
+      fi
+      if [[ "$phase" == rejected ]]; then
+        printf '%s/%s rejected cutover %s\n' \
+          "$slot" "$origin" "$observed_cutover_id" >&2
+        return 1
+      fi
+      if [[ "$phase" == "$expected" &&
+            ( -z "$expected_cutover_id" ||
+              "$observed_cutover_id" == "$expected_cutover_id" ) ]]; then
+        printf '%s\n' "$status"
+        return 0
+      fi
+    else
+      phase=invalid
+    fi
+    now=$(date +%s%3N)
+    if (( now >= deadline )); then
+      printf '%s/%s did not settle to %s (last phase: %s)\n' \
+        "$slot" "$origin" "$expected" "$phase" >&2
+      return 1
+    fi
+    sleep "$settle_poll_seconds"
+  done
+}
+
+await_terminal() {
+  local slot=$1 origin=$2
+  local deadline now status phase
+  deadline=$(( $(date +%s%3N) + settle_timeout_ms ))
+  while :; do
+    if status=$(read_status "$slot" "$origin" any 2>/dev/null); then
+      phase=$(sed -n '1p' <<<"$status")
+      if [[ "$phase" != promoting && "$phase" != demoting ]]; then
+        printf '%s\n' "$status"
+        return 0
+      fi
+    else
+      phase=invalid
+    fi
+    now=$(date +%s%3N)
+    if (( now >= deadline )); then
+      printf '%s/%s did not reach a terminal phase (last phase: %s)\n' \
+        "$slot" "$origin" "$phase" >&2
+      return 1
+    fi
+    sleep "$settle_poll_seconds"
+  done
+}
+
+transition_result_unknown() {
+  local slot=$1 origin=$2 transition=$3 cutover_id=$4
+  local status phase observed_cutover_id
+  status=$(read_status "$slot" "$origin" any 2>/dev/null) || return 1
+  phase=$(sed -n '1p' <<<"$status")
+  observed_cutover_id=$(sed -n '5p' <<<"$status")
+  [[ "$observed_cutover_id" == "$cutover_id" ]] || return 1
+  case "$transition:$phase" in
+    demote:demoting|demote:demoted|promote:promoting|promote:active)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 verify_pair() {
   local slot=$1 expected=$2 origin phase
   valid_slot "$slot" || die "invalid slot: $slot"
@@ -123,7 +254,8 @@ verify_pair() {
     if [[ "$expected" == read-only ]]; then
       phase=$(read_status "$slot" "$origin" any | sed -n '1p') ||
         die "$slot/$origin has no valid cutover status"
-      [[ "$phase" == standby || "$phase" == demoted ]] ||
+      [[ "$phase" == standby || "$phase" == demoted ||
+         "$phase" == rejected ]] ||
         die "$slot/$origin is not read-only: $phase"
     else
       read_status "$slot" "$origin" "$expected" >/dev/null ||
@@ -133,34 +265,44 @@ verify_pair() {
 }
 
 demote_endpoint() {
-  local slot=$1 origin=$2 cutover_id=$3 marker=$4 status instance
+  local slot=$1 origin=$2 cutover_id=$3 marker=$4 status instance operation_id
   status=$(read_status "$slot" "$origin" active) ||
     die "$slot/$origin is not active before demotion"
   instance=$(sed -n '2p' <<<"$status")
-  "$cutover" demote \
+  operation_id=$cutover_id-$origin
+  if ! "$cutover" demote \
     --port "$(port_for "$slot" "$origin")" \
     --log "$(log_for "$origin")" \
     --token-file "$token_file" \
-    --cutover-id "$cutover_id-$origin" \
+    --cutover-id "$operation_id" \
     --expected-instance "$instance" \
     --marker-out "$marker" \
-    --timeout-ms 15000 >/dev/null
-  read_status "$slot" "$origin" demoted >/dev/null ||
+    --timeout-ms "$control_timeout_ms" >/dev/null; then
+    transition_result_unknown \
+      "$slot" "$origin" demote "$operation_id" ||
+      die "$slot/$origin demotion failed before a valid transition"
+  fi
+  await_status "$slot" "$origin" demoted "$operation_id" >/dev/null ||
     die "$slot/$origin did not become demoted"
 }
 
 promote_endpoint() {
-  local slot=$1 origin=$2 cutover_id=$3 marker=$4
+  local slot=$1 origin=$2 cutover_id=$3 marker=$4 operation_id
   [[ -f "$marker" && ! -L "$marker" ]] ||
     die "promotion marker is missing or unsafe: $marker"
-  "$cutover" promote \
+  operation_id=$cutover_id-$origin
+  if ! "$cutover" promote \
     --port "$(port_for "$slot" "$origin")" \
     --log "$(log_for "$origin")" \
     --token-file "$token_file" \
-    --cutover-id "$cutover_id-$origin" \
+    --cutover-id "$operation_id" \
     --marker-file "$marker" \
-    --timeout-ms 15000 >/dev/null
-  read_status "$slot" "$origin" active >/dev/null ||
+    --timeout-ms "$control_timeout_ms" >/dev/null; then
+    transition_result_unknown \
+      "$slot" "$origin" promote "$operation_id" ||
+      die "$slot/$origin promotion failed before a valid transition"
+  fi
+  await_status "$slot" "$origin" active "$operation_id" >/dev/null ||
     die "$slot/$origin did not become active"
 }
 
@@ -221,7 +363,8 @@ promote_pair() {
 
 rollback_pair() {
   local target_arg=$1 old_arg=$2 transaction_file=$3
-  local cutover_id old target origin old_status target_status marker
+  local cutover_id old target origin old_status old_phase
+  local target_status target_phase marker marker_cutover_id
   [[ "$transaction_file" == /* ]] ||
     die "selector transaction path must be absolute"
   if [[ ! -e "$state/gate.current" &&
@@ -236,35 +379,76 @@ rollback_pair() {
     return 0
   fi
   read -r cutover_id old target < <(read_gate_state)
-  [[ "$target_arg" == "$target" && "$old_arg" == "$old" ]] ||
-    die "selector rollback arguments disagree with gate state"
+  if [[ "$target_arg" != "$target" || "$old_arg" != "$old" ]]; then
+    # A completed prior cutover intentionally leaves its gate proof available
+    # until the next gate invocation overwrites it. If the selector crashes
+    # after recording a new gate-started transaction but before this program
+    # writes new state, the prior state is stale. No authority mutation was
+    # possible in that window; prove the requested old pair still owns both
+    # logs and the target is read-only before treating rollback as a no-op.
+    verify_pair "$old_arg" active
+    verify_pair "$target_arg" read-only
+    return 0
+  fi
 
-  # Reconcile each log independently. This covers every partial boundary:
-  # one old endpoint demoted, one target promoted, or a retry after a prior
-  # rollback demotion. The public frontend remains held until both old
-  # endpoints are proven active.
+  # First settle every transition and demote every target that reached active.
+  # Never reacquire an old authority while another origin is still transitional.
   for origin in coord telemetry; do
     old_status=$(read_status "$old" "$origin" any) ||
       die "cannot inspect old $origin endpoint during rollback"
-    if [[ $(sed -n '1p' <<<"$old_status") == active ]]; then
-      continue
+    old_phase=$(sed -n '1p' <<<"$old_status")
+    if [[ "$old_phase" == demoting || "$old_phase" == promoting ]]; then
+      old_status=$(await_terminal "$old" "$origin") ||
+        die "old $origin transition did not settle during rollback"
+      old_phase=$(sed -n '1p' <<<"$old_status")
     fi
 
     target_status=$(read_status "$target" "$origin" any) ||
       die "cannot inspect target $origin endpoint during rollback"
-    if [[ $(sed -n '1p' <<<"$target_status") == active ]]; then
-      marker=$state/$origin.rollback.edn
-      demote_endpoint \
-        "$target" "$origin" "rollback-$cutover_id" "$marker"
-    elif [[ -f "$state/$origin.rollback.edn" ]]; then
-      marker=$state/$origin.rollback.edn
-    else
-      marker=$state/$origin.old-demotion.edn
+    target_phase=$(sed -n '1p' <<<"$target_status")
+    if [[ "$target_phase" == promoting || "$target_phase" == demoting ]]; then
+      target_status=$(await_terminal "$target" "$origin") ||
+        die "target $origin transition did not settle during rollback"
+      target_phase=$(sed -n '1p' <<<"$target_status")
     fi
 
-    promote_endpoint "$old" "$origin" "rollback-$cutover_id" "$marker"
+    [[ ! ( "$old_phase" == active && "$target_phase" == active ) ]] ||
+      die "split writer authority observed for $origin during rollback"
+
+    if [[ "$target_phase" == active ]]; then
+      marker=$state/$origin.rollback.edn
+      demote_endpoint "$target" "$origin" "rollback-$cutover_id" "$marker"
+    fi
+  done
+
+  # With every target terminal and read-only, restore each old authority.
+  for origin in coord telemetry; do
+    old_status=$(read_status "$old" "$origin" any) ||
+      die "cannot re-inspect old $origin endpoint during rollback"
+    old_phase=$(sed -n '1p' <<<"$old_status")
+    [[ "$old_phase" != active ]] || continue
+    [[ "$old_phase" == demoted || "$old_phase" == rejected ||
+       "$old_phase" == standby ]] ||
+      die "old $origin is not safely promotable: $old_phase"
+
+    if [[ -f "$state/$origin.rollback.edn" &&
+          ! -L "$state/$origin.rollback.edn" ]]; then
+      marker=$state/$origin.rollback.edn
+      marker_cutover_id=rollback-$cutover_id
+    else
+      marker=$state/$origin.old-demotion.edn
+      marker_cutover_id=$cutover_id
+    fi
+
+    # Marker and request retain the same transaction ID. If the exact prefix
+    # has advanced, Fram rejects the marker and the selector remains held for
+    # bounded durable-slot restart recovery.
+    promote_endpoint "$old" "$origin" "$marker_cutover_id" "$marker"
   done
   verify_pair "$old" active
+  rm -f -- "$state/gate.current" \
+    "$state"/*.old-demotion.edn "$state"/*.rollback.edn
+  sync -f "$state"
 }
 
 mkdir -p "$state"
