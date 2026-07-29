@@ -276,9 +276,9 @@
              (let ([old-repo (getenv "FIRN_REPO")]
                    [old-beagle (getenv "BEAGLE_PATH")])
                (putenv "FIRN_REPO" (path->string wt))
-               (putenv "BEAGLE_PATH"
-                       (or old-beagle
-                           (path->string (simplify-path (build-path ROOT 'up "beagle")))))
+               ;; Only forward a caller-pinned BEAGLE_PATH; firn-validate's own
+               ;; probe ladder handles the container layout (~/code/beagle/main).
+               (when old-beagle (putenv "BEAGLE_PATH" old-beagle))
                (begin0
                  (parameterize ([current-directory wt])
                    (sh (path->string (build-path wt "scripts" "firn-validate"))))
