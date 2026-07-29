@@ -9,7 +9,7 @@ in
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {
         ".agents/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/north/main/agent-profile/AGENTS.md";
-        ".agents/skills".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/north/main/agent-profile/skills";
+        ".agents/skills".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.local/state/north/skills";
         ".agents/docs".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/north/main/agent-profile/docs";
         ".agents/hooks".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/north/main/agent-profile/hooks";
         "code/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/code/AGENTS.md";

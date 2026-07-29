@@ -26,7 +26,7 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/north/main/agent-profile/skills"))}
+                        "/.local/state/north/skills"))}
                  ".agents/docs"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink

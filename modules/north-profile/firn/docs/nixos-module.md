@@ -4,7 +4,8 @@ The module that wires Claude Code onto the system:
 `nixos-config:modules/claude/default.bnix` (edit the `.bnix`;
 `default.nix` is generated). It provides the `claude-code-latest` package,
 provider-specific files from `nixos-config:dotfiles/claude/`, composed
-`~/.agents` policy/skills/hooks from `north:profiles/tom`, the
+`~/.agents` policy and hooks from `north:profiles/tom`, the atomic shared skill
+farm at `~/.local/state/north/skills`, the
 `~/code/CLAUDE.md` routing file, and MCP server registration (`fram`, `north`,
 `linear-mcp-msa-new`). All activation entries are best-effort
 plugin install was decommissioned 2026-07-23 — see thread

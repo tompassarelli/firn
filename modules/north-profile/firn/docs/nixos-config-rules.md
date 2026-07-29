@@ -13,14 +13,31 @@ symlink, Claude plugin reconciliation, MCP registration):
 
 ## Symlinks
 
-`~/.agents/{AGENTS.md,skills,docs,hooks}` are `mkOutOfStoreSymlink`s into
-`~/code/north/main/profiles/tom`. Provider discovery paths such as
+`~/.agents/{AGENTS.md,docs,hooks}` are `mkOutOfStoreSymlink`s into North's
+composed profile. `~/.agents/skills` instead points at the atomic runtime farm
+`~/.local/state/north/skills`; North inventories the complete source at
+`~/code/north/main/profiles/tom/skills` and publishes resolved immutable
+generations there. Provider discovery paths such as
 `~/.claude/{skills,CLAUDE.md,hooks}`, `~/.codex/AGENTS.md`, and
 `~/.hermes/SOUL.md` compose through `~/.agents`; provider-specific adapters
 remain in `nixos-config`. Claude's writable `settings.json` is seeded from the
 generation rather than symlinked. The immutable managed Codex hook directory
 under `/etc/codex/hooks` is the deliberate security exception and sources each
 hook from its owning locked flake input.
+
+## Shared skill dials
+
+`north config skills` is the only runtime control surface for the shared farm.
+It resolves item over category over all over default-on, stages a complete
+generation, and atomically replaces the farm pointer. `category:` is optional
+SKILL.md frontmatter; missing metadata is the `uncategorized` category. Firn's
+owned skill declares `category: nixos`. Provider/plugin-contributed skills
+remain outside this farm and are not toggled by North.
+
+Home Manager owns only the stable chain:
+`~/.claude/skills → ~/.agents/skills → ~/.local/state/north/skills`. It must
+never select individual skills or wire provider discovery directly back to the
+source profile.
 
 ## CI validation
 

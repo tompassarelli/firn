@@ -1069,11 +1069,12 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHARED="${AGENT_CONFIG_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
 BEAGLE_INTEGRATION="${AGENT_CONFIG_BEAGLE_INTEGRATION:-$HOME/code/beagle/main/integrations/north}"
 FRAM_INTEGRATION="${AGENT_CONFIG_FRAM_INTEGRATION:-$HOME/code/fram/main/integrations/north}"
-FIRN_INTEGRATION="$REPO/modules/agent-core/firn"
+FIRN_INTEGRATION="$REPO/modules/north-profile/firn"
 CLAUDE="${AGENT_CONFIG_CLAUDE:-$REPO/dotfiles/claude}"
 CODEX="$REPO/dotfiles/codex"
 LIVE_REPO="${AGENT_CONFIG_LIVE_REPO:-$HOME/code/nixos-config}"
 LIVE_SHARED="${AGENT_CONFIG_LIVE_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
+LIVE_SKILLS_FARM="${AGENT_CONFIG_LIVE_SKILLS_FARM:-$HOME/.local/state/north/skills}"
 LIVE_NORTH_ROOT="${AGENT_CONFIG_LIVE_NORTH_ROOT:-$HOME/code/north}"
 LIVE_BEAGLE_ROOT="${AGENT_CONFIG_LIVE_BEAGLE_ROOT:-$HOME/code/beagle}"
 LIVE_FRAM_ROOT="${AGENT_CONFIG_LIVE_FRAM_ROOT:-$HOME/code/fram}"
@@ -1226,14 +1227,19 @@ elif [ "$LOCAL" -eq 1 ]; then
 else
   note "North-composed AGENTS.md unavailable in repository-only mode"
 fi
-agent_core_module="$REPO/modules/agent-core/default.bnix"
-for profile_member in AGENTS.md docs hooks skills; do
-  if grep -Fq "\"/code/north/main/profiles/tom/$profile_member\"" "$agent_core_module"; then
+north_profile_module="$REPO/modules/north-profile/default.bnix"
+for profile_member in AGENTS.md docs hooks; do
+  if grep -Fq "\"/code/north/main/agent-profile/$profile_member\"" "$north_profile_module"; then
     ok_detail "~/.agents/$profile_member is wired to the North-composed profile"
   else
-    bad "~/.agents/$profile_member must be wired to ~/code/north/main/profiles/tom"
+    bad "~/.agents/$profile_member must be wired to ~/code/north/main/agent-profile"
   fi
 done
+if grep -Fq '"/.local/state/north/skills"' "$north_profile_module"; then
+  ok_detail '~/.agents/skills is wired to the atomic North skills farm'
+else
+  bad '~/.agents/skills must be wired to ~/.local/state/north/skills'
+fi
 if [ -e "$REPO/dotfiles/agents" ]; then
   bad "retired Firn-owned dotfiles/agents tree still exists"
 fi
@@ -1247,7 +1253,7 @@ if [ "$LOCAL" -eq 1 ]; then
   canonical_link "$HOME/.agents/AGENTS.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.agents/AGENTS.md"
   canonical_link "$HOME/.agents/docs" "$LIVE_SHARED/docs" "$HOME/.agents/docs"
   canonical_link "$HOME/.agents/hooks" "$LIVE_SHARED/hooks" "$HOME/.agents/hooks"
-  canonical_link "$HOME/.agents/skills" "$LIVE_SHARED/skills" "$HOME/.agents/skills"
+  canonical_link "$HOME/.agents/skills" "$LIVE_SKILLS_FARM" "$HOME/.agents/skills"
 fi
 group shared "$hook_count owner hooks linted · $skill_count owner skills · North-composed instructions" "$before"
 
@@ -1399,7 +1405,7 @@ validate_codex_managed_policy() {
     "beagle-session-start.sh|(s inputs.beagle \"/integrations/north/hooks/beagle-session-start.sh\")|$BEAGLE_INTEGRATION/hooks/beagle-session-start.sh"
     "agent-spawn-guard.sh|(s inputs.north \"/profiles/tom/hooks/agent-spawn-guard.sh\")|$SHARED/hooks/agent-spawn-guard.sh"
     "code-upstream-guard.sh|(s inputs.fram \"/integrations/north/hooks/code-upstream-guard.sh\")|$FRAM_INTEGRATION/hooks/code-upstream-guard.sh"
-    "firn-guard.sh|(s flakeRoot \"/modules/agent-core/firn/hooks/firn-guard.sh\")|$FIRN_INTEGRATION/hooks/firn-guard.sh"
+    "firn-guard.sh|(s flakeRoot \"/modules/north-profile/firn/hooks/firn-guard.sh\")|$FIRN_INTEGRATION/hooks/firn-guard.sh"
     "north-clock-guard.sh|(s inputs.north \"/profiles/tom/hooks/north-clock-guard.sh\")|$SHARED/hooks/north-clock-guard.sh"
     "north-clock-guard.py|(s inputs.north \"/profiles/tom/hooks/north-clock-guard.py\")|$SHARED/hooks/north-clock-guard.py"
     "tripwire-guard.sh|(s inputs.north \"/profiles/tom/hooks/tripwire-guard.sh\")|$SHARED/hooks/tripwire-guard.sh"
@@ -1688,7 +1694,7 @@ if [ "$LOCAL" -eq 1 ]; then
   writable_claude_settings_match_control_plane \
     "$HOME/.claude/settings.json" "$CLAUDE/settings.json" \
     "$HOME/.claude/settings.json"
-  canonical_link "$HOME/.claude/skills" "$LIVE_SHARED/skills" "$HOME/.claude/skills"
+  canonical_link "$HOME/.claude/skills" "$LIVE_SKILLS_FARM" "$HOME/.claude/skills"
   canonical_link "$HOME/.claude/hooks" "$LIVE_SHARED/hooks" "$HOME/.claude/hooks"
   canonical_link "$HOME/.claude/CLAUDE.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.claude/CLAUDE.md"
   canonical_link "$HOME/.claude/commands" "$LIVE_CLAUDE/commands" "$HOME/.claude/commands"

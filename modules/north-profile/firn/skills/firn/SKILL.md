@@ -1,5 +1,6 @@
 ---
 name: firn
+category: nixos
 description: >-
   Use whenever editing ~/code/nixos-config (firn): packages, modules, services,
   host config, hooks/skills, inputs, or any "install X system-wide" request.
