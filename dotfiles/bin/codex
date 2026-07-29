@@ -41,6 +41,13 @@ FORCE_PERMS=(
   -c 'default_permissions=":danger-full-access"'
 )
 
+# Direct user sessions may coordinate work across repositories beneath the
+# stable code root. Managed lanes arrive with CODEX_HOME already set and return
+# through the passthrough branches, so they retain their narrower workspace.
+DIRECT_WORKSPACE_ARGS=(
+  --add-dir /home/tom/code
+)
+
 # Native provider roots are a coordination surface when North owns dispatch:
 # keep the listener capable, but do not let an ambient Codex session silently
 # become another agent orchestrator. These are launch defaults, deliberately
@@ -298,7 +305,7 @@ if [ "${1:-}" != "as" ]; then
     else
       export CODEX_SQLITE_HOME="$authority_home/sqlite"
     fi
-    exec "$REAL" "${FORCE_PERMS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+    exec "$REAL" "${FORCE_PERMS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
   fi
 
   # Non-UUID aliases still map to the native subcommand (picker/session name)
@@ -349,7 +356,7 @@ if [ "${1:-}" = "as" ]; then
   fi
   export CODEX_HOME="$root"
   export CODEX_SQLITE_HOME="$root/sqlite"
-  exec "$REAL" "${FORCE_PERMS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+  exec "$REAL" "${FORCE_PERMS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
 fi
 
 # 4. Auto-select greatest-headroom account from north's machine boundary.
@@ -455,4 +462,4 @@ else
   [ "$kind" = "ok" ] && reason="north returned an empty selection"
   printf '[%s → ambient] %s — %s\n' "$PROVIDER_WORD" "$reason" "$(recovery_hint)" >&2
 fi
-exec "$REAL" "${FORCE_PERMS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+exec "$REAL" "${FORCE_PERMS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"

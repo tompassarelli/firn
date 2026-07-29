@@ -135,11 +135,11 @@ declare -A SUB=([claude]=anthropic [codex]=openai)
 declare -A PINVAR=([claude]=CLAUDE_CONFIG_DIR [codex]=CODEX_HOME)
 declare -A ROOT_DEFAULT_ARGS=(
   [claude]='--model claude-fable-5 --effort xhigh --disallowedTools Agent,Task,Workflow'
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c model="gpt-5.6-terra" -c model_reasoning_effort="medium" --disable multi_agent'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" --add-dir /home/tom/code -c model="gpt-5.6-terra" -c model_reasoning_effort="medium" --disable multi_agent'
 )
 declare -A WARN_DEFAULT_ARGS=(
   [claude]='--model claude-fable-5 --effort xhigh'
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c model="gpt-5.6-terra" -c model_reasoning_effort="medium"'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" --add-dir /home/tom/code -c model="gpt-5.6-terra" -c model_reasoning_effort="medium"'
 )
 declare -A PASSTHROUGH_ARGS=(
   [claude]=''
@@ -163,6 +163,10 @@ for launcher in claude codex; do
   if [ "$launcher" = codex ]; then
     check 'codex/default model is config, never duplicate --model' \
       not_contains "$default_args" '--model'
+    check 'codex/direct sessions receive the stable code root' \
+      contains "$default_args" '--add-dir /home/tom/code'
+    check 'codex/managed passthrough does not broaden workspace scope' \
+      not_contains "$passthrough_args" '--add-dir'
   fi
 
   eligible="$SCRATCH/$launcher-eligible.json"
@@ -499,6 +503,9 @@ JSON
   printf 'dispatch=native\nguards=off\n' >"$HOME_DIR/.local/state/north/harness.conf"
   run "$launcher" 0 -- as acctA rollback-probe ; s="$STDERR"
   native_rollback_args="$passthrough_args"
+  if [ "$launcher" = codex ]; then
+    native_rollback_args+=' --add-dir /home/tom/code'
+  fi
   [ -z "$native_rollback_args" ] || native_rollback_args+=" "
   native_rollback_args+='rollback-probe'
   check "$launcher/dispatch=native removes native-root defaults" \

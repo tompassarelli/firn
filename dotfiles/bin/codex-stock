@@ -40,4 +40,4 @@ exec env -u AGENT_PROVIDER \
      CODEX_SQLITE_HOME="$PROFILE/sqlite" \
      AGENT_NO_AUTHORING_HOOKS=1 \
      PATH="$CLEAN_PATH" \
-     "$REAL" "$@"
+     "$REAL" --add-dir /home/tom/code "$@"
