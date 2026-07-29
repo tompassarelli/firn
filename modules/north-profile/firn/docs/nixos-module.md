@@ -12,7 +12,7 @@ as an untouched Phase 2 archive candidate.)
 
 Why everything routes through nixos-config (reproducibility rule, CI
 validation, hooks kill-switch):
-`nixos-config:modules/agent-core/firn/docs/nixos-config-rules.md`.
+`nixos-config:modules/north-profile/firn/docs/nixos-config-rules.md`.
 
 ## settings.json is WRITABLE runtime state seeded by the generation
 

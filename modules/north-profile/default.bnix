@@ -7,10 +7,10 @@
 (nix/module [config lib ...]
   (let [username config.myConfig.modules.users.username]
     {:tags [development]
-     :options.myConfig.modules.agent-core.enable
-      (lib.mkEnableOption "Shared provider-neutral agent configuration")
+     :options.myConfig.modules.north-profile.enable
+      (lib.mkEnableOption "Publish North's agent profile at ~/.agents (see north:agent-profile contract)")
      :config
-      (lib.mkIf config.myConfig.modules.agent-core.enable
+      (lib.mkIf config.myConfig.modules.north-profile.enable
         {:home-manager.users
           {username
             (nix/module [config ...]
@@ -21,22 +21,22 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/north/main/profiles/tom/AGENTS.md"))}
+                        "/code/north/main/agent-profile/AGENTS.md"))}
                  ".agents/skills"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/north/main/profiles/tom/skills"))}
+                        "/code/north/main/agent-profile/skills"))}
                  ".agents/docs"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/north/main/profiles/tom/docs"))}
+                        "/code/north/main/agent-profile/docs"))}
                  ".agents/hooks"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/north/main/profiles/tom/hooks"))}
+                        "/code/north/main/agent-profile/hooks"))}
                  ;; Provider-neutral routing instructions for the ~/code root.
                  "code/AGENTS.md"
                   {:source

@@ -25,25 +25,25 @@
            "codex/hooks/beagle-session-start.sh"
             {:source (s inputs.beagle "/integrations/north/hooks/beagle-session-start.sh")}
            "codex/hooks/agent-spawn-guard.sh"
-            {:source (s inputs.north "/profiles/tom/hooks/agent-spawn-guard.sh")}
+            {:source (s inputs.north "/agent-profile/hooks/agent-spawn-guard.sh")}
            "codex/hooks/code-upstream-guard.sh"
             {:source (s inputs.fram "/integrations/north/hooks/code-upstream-guard.sh")}
            "codex/hooks/firn-guard.sh"
-            {:source (s flakeRoot "/modules/agent-core/firn/hooks/firn-guard.sh")}
+            {:source (s flakeRoot "/modules/north-profile/firn/hooks/firn-guard.sh")}
            "codex/hooks/north-clock-guard.sh"
-            {:source (s inputs.north "/profiles/tom/hooks/north-clock-guard.sh")}
+            {:source (s inputs.north "/agent-profile/hooks/north-clock-guard.sh")}
            "codex/hooks/north-clock-guard.py"
-            {:source (s inputs.north "/profiles/tom/hooks/north-clock-guard.py")}
+            {:source (s inputs.north "/agent-profile/hooks/north-clock-guard.py")}
            "codex/hooks/tripwire-guard.sh"
-            {:source (s inputs.north "/profiles/tom/hooks/tripwire-guard.sh")}
+            {:source (s inputs.north "/agent-profile/hooks/tripwire-guard.sh")}
            "codex/hooks/logcompress-hook.js"
-            {:source (s inputs.north "/profiles/tom/hooks/logcompress-hook.js")}
+            {:source (s inputs.north "/agent-profile/hooks/logcompress-hook.js")}
            "codex/hooks/logcompress.js"
-            {:source (s inputs.north "/profiles/tom/hooks/logcompress.js")}
+            {:source (s inputs.north "/agent-profile/hooks/logcompress.js")}
            "codex/hooks/racket-build-guard.sh"
             {:source (s inputs.beagle "/integrations/north/hooks/racket-build-guard.sh")}
            "codex/hooks/lib/authoring-killswitch.sh"
-            {:source (s inputs.north "/profiles/tom/hooks/lib/authoring-killswitch.sh")}
+            {:source (s inputs.north "/agent-profile/hooks/lib/authoring-killswitch.sh")}
            "codex/hooks/north-on-spawn-codex"
             {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-spawn-codex")}
            "codex/hooks/north-on-tooluse-codex"

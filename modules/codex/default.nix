@@ -15,16 +15,16 @@ in
         source = codexPkg;
       };
       "codex/hooks/beagle-session-start.sh".source = "${inputs.beagle}/integrations/north/hooks/beagle-session-start.sh";
-      "codex/hooks/agent-spawn-guard.sh".source = "${inputs.north}/profiles/tom/hooks/agent-spawn-guard.sh";
+      "codex/hooks/agent-spawn-guard.sh".source = "${inputs.north}/agent-profile/hooks/agent-spawn-guard.sh";
       "codex/hooks/code-upstream-guard.sh".source = "${inputs.fram}/integrations/north/hooks/code-upstream-guard.sh";
-      "codex/hooks/firn-guard.sh".source = "${flakeRoot}/modules/agent-core/firn/hooks/firn-guard.sh";
-      "codex/hooks/north-clock-guard.sh".source = "${inputs.north}/profiles/tom/hooks/north-clock-guard.sh";
-      "codex/hooks/north-clock-guard.py".source = "${inputs.north}/profiles/tom/hooks/north-clock-guard.py";
-      "codex/hooks/tripwire-guard.sh".source = "${inputs.north}/profiles/tom/hooks/tripwire-guard.sh";
-      "codex/hooks/logcompress-hook.js".source = "${inputs.north}/profiles/tom/hooks/logcompress-hook.js";
-      "codex/hooks/logcompress.js".source = "${inputs.north}/profiles/tom/hooks/logcompress.js";
+      "codex/hooks/firn-guard.sh".source = "${flakeRoot}/modules/north-profile/firn/hooks/firn-guard.sh";
+      "codex/hooks/north-clock-guard.sh".source = "${inputs.north}/agent-profile/hooks/north-clock-guard.sh";
+      "codex/hooks/north-clock-guard.py".source = "${inputs.north}/agent-profile/hooks/north-clock-guard.py";
+      "codex/hooks/tripwire-guard.sh".source = "${inputs.north}/agent-profile/hooks/tripwire-guard.sh";
+      "codex/hooks/logcompress-hook.js".source = "${inputs.north}/agent-profile/hooks/logcompress-hook.js";
+      "codex/hooks/logcompress.js".source = "${inputs.north}/agent-profile/hooks/logcompress.js";
       "codex/hooks/racket-build-guard.sh".source = "${inputs.beagle}/integrations/north/hooks/racket-build-guard.sh";
-      "codex/hooks/lib/authoring-killswitch.sh".source = "${inputs.north}/profiles/tom/hooks/lib/authoring-killswitch.sh";
+      "codex/hooks/lib/authoring-killswitch.sh".source = "${inputs.north}/agent-profile/hooks/lib/authoring-killswitch.sh";
       "codex/hooks/north-on-spawn-codex" = {
         source = "${flakeRoot}/dotfiles/codex/hooks/north-on-spawn-codex";
       };

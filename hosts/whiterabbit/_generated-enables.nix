@@ -1,7 +1,6 @@
 { config, lib, pkgs, ... }:
 
 {
-  myConfig.modules.agent-core.enable = lib.mkDefault true;
   myConfig.modules.anytype.enable = lib.mkDefault true;
   myConfig.modules.atuin.enable = lib.mkDefault true;
   myConfig.modules.bash.enable = lib.mkDefault true;
@@ -70,6 +69,7 @@
   myConfig.modules.niri.enable = lib.mkDefault true;
   myConfig.modules.nodejs.enable = lib.mkDefault true;
   myConfig.modules.north.enable = lib.mkDefault true;
+  myConfig.modules.north-profile.enable = lib.mkDefault true;
   myConfig.modules.obs-studio.enable = lib.mkDefault true;
   myConfig.modules.obsidian.enable = lib.mkDefault true;
   myConfig.modules.opencode.enable = lib.mkDefault true;

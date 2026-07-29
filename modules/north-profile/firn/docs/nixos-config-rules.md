@@ -9,7 +9,7 @@ wiring. A fresh rebuild must reproduce the integration.
 
 Mechanics of the nix module that does the wiring (writable settings.json
 symlink, Claude plugin reconciliation, MCP registration):
-`nixos-config:modules/agent-core/firn/docs/nixos-module.md`.
+`nixos-config:modules/north-profile/firn/docs/nixos-module.md`.
 
 ## Symlinks
 
