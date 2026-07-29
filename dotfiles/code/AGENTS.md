@@ -10,25 +10,56 @@
 - Data dirs (`north-data`, `agent-data`, ...) — runtime state, not projects.
   Tools hardcode these paths; do not move or reorganize them.
 
-## Worktrees
+## Repository layout — `~/code/<project>` is a CONTAINER, not a checkout
 
-Durable personal worktrees live under a project-scoped root:
-`~/code/worktrees/<project>/<slug>` (e.g. `~/code/worktrees/north/policy-graph`).
+```
+~/code/<project>/              container only — never itself a checkout
+~/code/<project>/main/         the clean main checkout
+~/code/<project>/wt-<slug>/    every working tree
+```
 
-- **Primary checkouts are unchanged** — `~/code/<project>` stays the main
-  working copy; only extra worktrees move under `~/code/worktrees/`.
-- **Don't repeat `<project>` or `-wt-` in the leaf.** The project dir already
-  names the project; the slug is just the branch/topic (`policy-graph`, not
-  `north-wt-policy-graph` or `north/north-policy-graph`).
-- **Billable-client worktrees stay guarded under their owner namespace**, with a
-  `worktrees/<project>/<slug>` suffix inside it:
-  `~/code/client/<owner>/worktrees/<project>/<slug>`. The client-confidentiality
-  and clock guards still apply — they never move out to the shared root.
+**`main/` is never dirty.** Nothing is edited there, by anyone, ever. All work
+happens in a `wt-<slug>` sibling and lands through a ref:
+
+```
+git -C ~/code/<project>/main worktree add ~/code/<project>/wt-<slug> -b <slug>
+# edit + commit in the worktree, then land it:
+git -C ~/code/<project>/main fetch ~/code/<project>/wt-<slug> <slug>:refs/heads/main
+```
+
+This replaces the earlier `~/code/worktrees/<project>/<slug>` layout, which put
+worktrees in a separate tree from their project and left `~/code/<project>`
+itself as a writable checkout — the exact thing that kept getting dirtied. There
+is no longer a `~/code/worktrees/` root; a worktree is a sibling of `main/`, so
+the project directory holds everything about that project and nothing else does.
+
+- **Name the leaf `wt-<slug>`.** The `wt-` prefix is load-bearing: it is what
+  the enforcement guard carves out, so a directory without it is treated as
+  part of the protected checkout.
+- **Don't repeat `<project>` in the slug** — the container already names it
+  (`wt-policy-graph`, not `wt-north-policy-graph`).
+- **Billable-client repos keep their owner namespace** and take the same shape
+  inside it: `~/code/client/<owner>/<project>/main` and
+  `~/code/client/<owner>/<project>/wt-<slug>`. Client-confidentiality and clock
+  guards still apply.
 - **Reference repos get no worktrees** — `~/code/reference/` is read-only
   context; check out nothing extra there.
-- **Ephemeral / system-owned worktrees keep their tool-owned locations** — those
-  a tool creates and manages (temp build trees, harness scratch) stay wherever
-  the tool puts them; this policy governs only durable human/agent worktrees.
+- **Ephemeral / tool-owned trees keep their tool-owned locations** (temp build
+  trees, harness scratch). This policy governs durable human/agent worktrees.
+
+### Enforcement
+
+`dotfiles/agents/hooks/launch-critical-worktree-guard.sh` refuses writes into a
+protected checkout on `Edit|Write|MultiEdit` **and on `Bash`**. The Bash side is
+not optional: on 2026-07-29 an agent modified all three launch-critical
+primaries — `python3 - <<EOF` heredocs, `git add`/`commit`/`reset --hard`, and a
+push from the primary — while the guard was live and wired, because it only
+inspected `tool_input.file_path` and a Bash call carries `tool_input.command`.
+Enforcement on one entrance is not enforcement.
+
+Reads from `main/` stay allowed, as do `git worktree add` and
+`git fetch <worktree> <branch>:refs/heads/main` — the guard must never trap a
+lane with no compliant move.
 
 ## Launch-critical repos — agents never edit the primary
 
@@ -38,7 +69,7 @@ checkout is not a private work-in-progress, it is a broken engine for everyone.
 
 **An agent editing any of these three works in a worktree, never in
 `~/code/<project>` itself.** Use `EnterWorktree`, or
-`git -C ~/code/<project> worktree add ~/code/worktrees/<project>/<slug>`.
+`git -C ~/code/<project>/main worktree add ~/code/<project>/wt-<slug>`.
 The human's own primary checkout is unaffected by this rule.
 
 The two repos fail differently, and both failures are real:

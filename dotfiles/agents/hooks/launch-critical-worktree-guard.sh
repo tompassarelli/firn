@@ -2,7 +2,14 @@
 # PreToolUse guard — agents edit launch-critical repos in a worktree, never the
 # primary checkout.
 # ============================================================================
-# STATUS: LIVE. Wired into settings.json (PreToolUse, Edit|Write|MultiEdit).
+# STATUS: LIVE. Wired into settings.json (PreToolUse, Edit|Write|MultiEdit|Bash).
+#
+# BASH IS THE ENTRANCE THAT MATTERED (2026-07-29)
+#   This guard was live and wired, and an agent still modified all three
+#   launch-critical primaries: patching .clj files with `python3 - <<EOF`
+#   heredocs, running git add/commit/reset --hard, and pushing from the primary.
+#   It never fired, because it only inspected tool_input.file_path and a Bash
+#   call carries tool_input.command. Enforcement on one door is not enforcement.
 #
 # WHY THIS EXISTS (observed 2026-07-29, not hypothetical)
 #   `north up` refuses to launch on a tracked-dirty Fram checkout, deliberately:
@@ -23,10 +30,9 @@
 #   the harness reads as "no opinion".
 #
 #   Worktrees are the sanctioned destination and must never be caught: a
-#   worktree of these repos lives OUTSIDE the primary directory (under
-#   ~/code/worktrees/<project>/<slug>, /tmp/north-lane-*, or a tool-owned root),
-#   so a prefix test against the primary path admits them automatically. No
-#   worktree enumeration, nothing to keep in sync.
+#   worktree lives at ~/code/<project>/wt-<slug> and is carved out by name, so
+#   the rule holds both today (checkout at ~/code/<project>) and after the move
+#   to ~/code/<project>/main. Nothing to keep in sync, nothing to sequence.
 #
 #   The human is unaffected: they edit through their editor, not through the
 #   harness's Edit/Write tools, so this code never runs for them.
@@ -95,84 +101,8 @@ fi
 
 command -v python3 >/dev/null 2>&1 || exit 0
 
-# A QUOTED heredoc, not PY='...': the deny text below contains single quotes
-# ('Launch-critical repos'), which silently terminate a single-quoted shell
-# assignment and hand the remainder to bash as commands. Command substitution is
-# safe here — unlike `python3 - <<EOF`, it never occupies python's stdin, which
-# must stay the harness payload.
-PY=$(cat <<'PYEOF'
-import json, os, sys
-
-# Primary checkouts only. A worktree of these lives outside these paths and is
-# admitted by the prefix test below without being enumerated anywhere.
-LAUNCH_CRITICAL = {
-    os.path.expanduser("~/code/fram"): (
-        "fram is the running coordinator engine. `north up` REFUSES to launch on a"
-        " tracked-dirty Fram checkout, so editing this checkout can leave the"
-        " daemon unrestartable and block every rebuild from being adopted."
-    ),
-    os.path.expanduser("~/code/north"): (
-        "north is launch-critical and `firn rebuild` builds a COMMIT SNAPSHOT, so"
-        " uncommitted work here is silently absent from the generation."
-    ),
-    os.path.expanduser("~/code/beagle"): (
-        "beagle compiles north and nixos-config; a half-edited primary breaks"
-        " builds for every other lane at once."
-    ),
-    os.path.expanduser("~/code/nixos-config"): (
-        "nixos-config is the system source and `firn rebuild` snapshots commits,"
-        " so uncommitted work here never reaches a generation."
-    ),
-}
-
-try:
-    data = json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-
-path = (data.get("tool_input") or {}).get("file_path")
-if not isinstance(path, str) or not path:
-    sys.exit(0)
-
-try:
-    real = os.path.realpath(path)
-except Exception:
-    sys.exit(0)
-
-for root, why in LAUNCH_CRITICAL.items():
-    try:
-        root_real = os.path.realpath(root)
-    except Exception:
-        continue
-    # Strict containment: the primary dir itself and anything under it. A
-    # sibling like ~/code/north-data must never match, hence the separator.
-    if real != root_real and not real.startswith(root_real + os.sep):
-        continue
-
-    project = os.path.basename(root_real)
-    slug = "<topic>"
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": (
-                f"{path} is inside the PRIMARY checkout of {project}, which is"
-                f" launch-critical. {why}\n\n"
-                f"Work in a worktree instead, then land through a ref:\n"
-                f"  git -C {root_real} worktree add ~/code/worktrees/{project}/{slug}\n"
-                f"  # edit there, commit, then from the primary:\n"
-                f"  git -C {root_real} fetch ~/code/worktrees/{project}/{slug} <branch>:refs/heads/main\n\n"
-                f"Policy: ~/code/AGENTS.md, 'Launch-critical repos'. If you have a"
-                f" deliberate reason to edit the primary, launch with"
-                f" AGENT_NO_AUTHORING_HOOKS=1."
-            ),
-        }
-    }))
-    sys.exit(0)
-
-sys.exit(0)
-PYEOF
-)
-
-printf '%s' "$payload" | python3 -c "$PY" 2>/dev/null || exit 0
+# The decision lives in lib/launch_critical_decide.py so it can be tested
+# directly (launch-critical-worktree-guard.test.py) rather than through a
+# heredoc. Fail-open on any error, as everywhere else in this guard.
+printf '%s' "$payload" | python3 "$(dirname "$0")/lib/launch_critical_decide.py" 2>/dev/null || exit 0
 exit 0

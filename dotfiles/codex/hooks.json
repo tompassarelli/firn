@@ -80,6 +80,11 @@
             "type": "command",
             "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/north-clock-guard.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/home/tom/code/nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.sh",
+            "timeout": 10
           }
         ]
       }
