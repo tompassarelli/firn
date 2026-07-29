@@ -110,7 +110,7 @@ inspect_status() {
                   (and (= outer-phase :retired)
                        (= writer-role :retired)
                        (= authorized false)
-                       (= cutover-phase :demoted))
+                       (contains? #{:demoted :prepared} cutover-phase))
                   :demoted
 
                   (and (= outer-phase :promoting)
@@ -151,6 +151,35 @@ inspect_status() {
       (println (if (keyword? cutover-phase) (name cutover-phase) "none"))
       (println (if (string? cutover-id) cutover-id "none")))' \
     "$input" "$expected"
+}
+
+inspect_prepare() {
+  local input=$1 expected_cutover_id=$2
+  bb -e '
+    (require (quote [clojure.edn :as edn]))
+    (let [[path expected-cutover-id] *command-line-args*
+          m (edn/read-string (slurp path))
+          role (:phase m)
+          writer-role (get-in m [:writer-authority :role])
+          authorized (get-in m [:writer-authority :write-authorized])]
+      (when-not
+       (and (= true (:ok m))
+            (= "fram-coordinator-cutover/v1" (:protocol m))
+            (= true (:prepared m))
+            (= expected-cutover-id (:cutover-id m))
+            (contains? #{:standby :retired} role)
+            (= role writer-role)
+            (= false authorized)
+            (string? (:instance m))
+            (not-empty (:instance m))
+            (integer? (:version m))
+            (not (neg? (:version m)))
+            (map? (:marker m))
+            (= true (get-in m [:sync :prewarmed])))
+        (binding [*out* *err*]
+          (println "invalid cutover prepare response" (pr-str m)))
+        (System/exit 1)))' \
+    "$input" "$expected_cutover_id"
 }
 
 read_status() {
@@ -305,6 +334,19 @@ reconcile_unknown_transition() {
             clear_unknown_state
             return 1
             ;;
+          promote:standby|promote:demoted)
+            # PREPARE deliberately uses the same per-origin operation ID as
+            # PROMOTE. A transport failure can therefore leave the endpoint in
+            # its exact-ID prepared/read-only state while the promotion request
+            # is still queued behind the control lock. Keep polling until that
+            # request installs :promoting or reaches a terminal result.
+            if [[ "$observed_cutover_phase" != prepared ]]; then
+              printf '%s/%s returned %s with unexpected cutover phase %s\n' \
+                "$slot" "$origin" "$phase" \
+                "$observed_cutover_phase" >&2
+              return 2
+            fi
+            ;;
           demote:active)
             if [[ "$observed_cutover_phase" == demotion-rolled-back ]]; then
               clear_unknown_state
@@ -447,6 +489,51 @@ promote_endpoint() {
   clear_unknown_state
 }
 
+verify_prepared_endpoint() {
+  local slot=$1 origin=$2 cutover_id=$3
+  local operation_id status phase cutover_phase observed_cutover_id
+  operation_id=$cutover_id-$origin
+  status=$(read_status "$slot" "$origin" any) ||
+    die "$slot/$origin has no valid status after preparation"
+  phase=$(sed -n '1p' <<<"$status")
+  cutover_phase=$(sed -n '4p' <<<"$status")
+  observed_cutover_id=$(sed -n '5p' <<<"$status")
+  [[ "$phase" == standby || "$phase" == demoted ]] ||
+    die "$slot/$origin gained authority during preparation: $phase"
+  [[ "$cutover_phase" == prepared &&
+     "$observed_cutover_id" == "$operation_id" ]] ||
+    die "$slot/$origin lacks preparation proof for $operation_id"
+}
+
+prepare_endpoint() {
+  local slot=$1 origin=$2 cutover_id=$3
+  local operation_id response rc
+  operation_id=$cutover_id-$origin
+  response=$(mktemp "$state/prepare.$origin.XXXXXX")
+  if "$cutover" prepare \
+    --port "$(port_for "$slot" "$origin")" \
+    --log "$(log_for "$origin")" \
+    --token-file "$token_file" \
+    --cutover-id "$operation_id" \
+    --timeout-ms "$control_timeout_ms" >"$response"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  if (( rc != 0 )); then
+    printf '%s/%s preparation failed with status %s\n' \
+      "$slot" "$origin" "$rc" >&2
+    rm -f -- "$response"
+    return 1
+  fi
+  if ! inspect_prepare "$response" "$operation_id"; then
+    rm -f -- "$response"
+    return 1
+  fi
+  rm -f -- "$response"
+  verify_prepared_endpoint "$slot" "$origin" "$cutover_id"
+}
+
 write_gate_state() {
   local cutover_id=$1 old=$2 target=$3 temp
   mkdir -p "$state"
@@ -470,8 +557,43 @@ read_gate_state() {
   printf '%s %s %s\n' "$cutover_id" "$old" "$target"
 }
 
+prepare_pair() {
+  local old=$1 target=$2 transaction_file=$3 cutover_id
+  local coord_pid telemetry_pid coord_ok=0 telemetry_ok=0
+  valid_slot "$old" || die "invalid old slot: $old"
+  valid_slot "$target" || die "invalid target slot: $target"
+  [[ "$old" != "$target" ]] || die "old and target slots are identical"
+  [[ "$transaction_file" == /* ]] ||
+    die "selector transaction path must be absolute"
+  [[ ! -e "$transaction_file" && ! -L "$transaction_file" ]] ||
+    die "selector transaction exists before standby preparation"
+
+  mkdir -p "$state"
+  settle_recorded_unknown ||
+    die "cannot prepare while a prior transport outcome is unresolved"
+  verify_pair "$old" active
+  verify_pair "$target" read-only
+
+  cutover_id="selector-$(date -u +%Y%m%dT%H%M%S)-$$"
+  prepare_endpoint "$target" coord "$cutover_id" &
+  coord_pid=$!
+  prepare_endpoint "$target" telemetry "$cutover_id" &
+  telemetry_pid=$!
+  if wait "$coord_pid"; then coord_ok=1; fi
+  if wait "$telemetry_pid"; then telemetry_ok=1; fi
+  if (( coord_ok != 1 || telemetry_ok != 1 )); then
+    die "target preparation failed; source authority was not changed"
+  fi
+
+  # This is written only after both explicit acknowledgements and status
+  # proofs. The selector still has no transaction and the frontend is still
+  # OPEN; a crash here is therefore a harmless, read-only prepared standby.
+  write_gate_state "$cutover_id" "$old" "$target"
+}
+
 promote_pair() {
-  local old=$1 target=$2 transaction_file=$3 cutover_id origin marker
+  local old=$1 target=$2 transaction_file=$3
+  local cutover_id prepared_old prepared_target origin marker
   valid_slot "$old" || die "invalid old slot: $old"
   valid_slot "$target" || die "invalid target slot: $target"
   [[ "$old" != "$target" ]] || die "old and target slots are identical"
@@ -487,9 +609,14 @@ promote_pair() {
   # blue -> green -> blue cutovers possible without restarting either slot.
   verify_pair "$target" read-only
 
-  cutover_id="selector-$(date -u +%Y%m%dT%H%M%S)-$$"
+  read -r cutover_id prepared_old prepared_target < <(read_gate_state)
+  [[ "$prepared_old" == "$old" && "$prepared_target" == "$target" ]] ||
+    die "prepared cutover state does not match $old -> $target"
+  for origin in coord telemetry; do
+    verify_prepared_endpoint "$target" "$origin" "$cutover_id"
+  done
+
   rm -f -- "$state"/*.old-demotion.edn "$state"/*.rollback.edn
-  write_gate_state "$cutover_id" "$old" "$target"
 
   # Demote both logs before either target endpoint is promoted. If any turn
   # fails, selector keeps the public frontend held and invokes rollback_pair.
@@ -599,6 +726,10 @@ rollback_pair() {
 mkdir -p "$state"
 
 case "${1:-}" in
+  prepare)
+    [[ $# -eq 4 ]] || die "usage: $program prepare OLD TARGET TRANSACTION"
+    prepare_pair "$2" "$3" "$4"
+    ;;
   verify)
     [[ $# -eq 2 ]] || die "usage: $program verify SLOT"
     verify_pair "$2" active
@@ -616,6 +747,6 @@ case "${1:-}" in
     rollback_pair "$2" "$3" "$4"
     ;;
   *)
-    die "usage: $program {verify|verify-phase|promote|rollback} ..."
+    die "usage: $program {prepare|verify|verify-phase|promote|rollback} ..."
     ;;
 esac

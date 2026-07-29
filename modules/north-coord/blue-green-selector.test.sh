@@ -20,10 +20,13 @@ grep -Fq 'timeout server 1h' "$generated_module"
 grep -Fq '(s "export NORTH_COORD_SELECTOR_OWNER=" username)' \
   "$source_module"
 grep -Fq '"export NORTH_COORD_SELECTOR_GROUP=users"' "$source_module"
+grep -Fq '(s "export NORTH_COORD_SELECTOR_PREPARE_COMMAND="' \
+  "$source_module"
 # shellcheck disable=SC2016
 grep -Fq 'export NORTH_COORD_SELECTOR_OWNER=${username}' \
   "$generated_module"
 grep -Fq 'export NORTH_COORD_SELECTOR_GROUP=users' "$generated_module"
+grep -Fq 'export NORTH_COORD_SELECTOR_PREPARE_COMMAND=' "$generated_module"
 if rg -n 'timeout (client|server) 30s' \
   "$source_module" "$generated_module"; then
   printf 'proxy still expires idle North subscriptions after 30 seconds\n' >&2
@@ -46,6 +49,7 @@ proxy_pid_file=$scratch/haproxy.pid
 restart_gate=$scratch/restart.allow
 admin_log=$scratch/admin.log
 admin_fail=$scratch/admin.fail
+event_log=$scratch/events.log
 
 printf 'active blue\n' >"$route_map"
 chmod 0666 "$route_map"
@@ -229,6 +233,7 @@ cat >"$scratch/admin-client" <<'SH'
 set -euo pipefail
 command=$(cat)
 printf '%s\n' "$command" >>"$NORTH_COORD_TEST_ADMIN_LOG"
+printf 'admin %s\n' "$command" >>"$NORTH_COORD_TEST_EVENT_LOG"
 if [[ -e "$NORTH_COORD_TEST_ADMIN_FAIL" &&
       "$command" == "shutdown sessions server "* ]]; then
   exit 17
@@ -240,6 +245,7 @@ chmod 0700 "$scratch/admin-client"
 export NORTH_COORD_SELECTOR_ADMIN_CLIENT=$scratch/admin-client
 export NORTH_COORD_TEST_ADMIN_LOG=$admin_log
 export NORTH_COORD_TEST_ADMIN_FAIL=$admin_fail
+export NORTH_COORD_TEST_EVENT_LOG=$event_log
 export NORTH_COORD_TEST_REAL_SOCAT=$real_socat
 
 probe() {
@@ -253,6 +259,14 @@ with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=5) as con
 PY
 }
 
+cat >"$scratch/prepare" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'prepare %s %s %s\n' "$1" "$2" "$3" \
+  >>"$NORTH_COORD_TEST_PROMOTION_LOG"
+printf 'prepare %s %s\n' "$1" "$2" >>"$NORTH_COORD_TEST_EVENT_LOG"
+[[ "${NORTH_COORD_TEST_PREPARE_FAIL:-0}" -eq 0 ]]
+SH
 cat >"$scratch/promote" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -271,7 +285,9 @@ set -euo pipefail
 printf 'verify %s\n' "$1" >>"$NORTH_COORD_TEST_PROMOTION_LOG"
 [[ "${NORTH_COORD_TEST_VERIFY_FAIL:-0}" -eq 0 ]]
 SH
-chmod 0700 "$scratch/promote" "$scratch/rollback" "$scratch/verify"
+chmod 0700 \
+  "$scratch/prepare" "$scratch/promote" "$scratch/rollback" "$scratch/verify"
+export NORTH_COORD_SELECTOR_PREPARE_COMMAND=$scratch/prepare
 export NORTH_COORD_SELECTOR_PROMOTE_COMMAND=$scratch/promote
 export NORTH_COORD_SELECTOR_ROLLBACK_COMMAND=$scratch/rollback
 export NORTH_COORD_SELECTOR_VERIFY_COMMAND=$scratch/verify
@@ -286,6 +302,29 @@ printf 'show stat\n' | socat -t 3 - "UNIX-CONNECT:$admin_socket" >"$scratch/show
 grep -Fxq frontend=OPEN < <("$selector" status)
 [[ $(probe "$coord_public" one) == coord-blue:one ]]
 [[ $(probe "$telemetry_public" one) == telemetry-blue:one ]]
+
+# A rejected standby preparation happens before HOLD. It leaves no selector
+# transaction, keeps the frontend OPEN, and continues serving the blue source.
+: >"$event_log"
+export NORTH_COORD_TEST_PREPARE_FAIL=1
+if "$selector" switch green \
+  >"$scratch/prepare-fail.out" 2>"$scratch/prepare-fail.err"; then
+  printf 'failed preparation unexpectedly switched the route\n' >&2
+  exit 1
+fi
+unset NORTH_COORD_TEST_PREPARE_FAIL
+[[ ! -e "$transaction" ]]
+grep -Fxq 'active blue' "$route_map"
+grep -Fxq frontend=OPEN < <("$selector" status)
+[[ $(probe "$coord_public" prepare-failed) == coord-blue:prepare-failed ]]
+[[ $(probe "$telemetry_public" prepare-failed) == telemetry-blue:prepare-failed ]]
+grep -Fxq 'prepare blue green' "$event_log"
+if rg -n '^admin disable frontend ' "$event_log"; then
+  printf 'selector held the frontend before preparation succeeded\n' >&2
+  exit 1
+fi
+rg -q 'standby preparation failed; blue remains active' \
+  "$scratch/prepare-fail.err"
 
 # One existing connection is allowed to drain on the old generation. The
 # switch waits for it while public sockets remain owned by the parent.
@@ -332,6 +371,7 @@ PY
   eval "loop_${port}_pid=$!"
 done
 
+: >"$event_log"
 "$selector" switch green
 coord_loop_var=loop_${coord_public}_pid
 telemetry_loop_var=loop_${telemetry_public}_pid
@@ -347,6 +387,12 @@ grep -Fxq 'active green' "$route_map"
 route_metadata=$(stat -c '%U:%G %a' "$route_map")
 [[ "$route_metadata" == "$NORTH_COORD_SELECTOR_OWNER:$NORTH_COORD_SELECTOR_GROUP 600" ]]
 grep -Fq 'promote blue green' "$promotion_log"
+prepare_line=$(rg -n '^prepare blue green$' "$event_log" |
+  head -n 1 | cut -d: -f1)
+hold_line=$(rg -n '^admin disable frontend north-public$' "$event_log" |
+  head -n 1 | cut -d: -f1)
+[[ -n "$prepare_line" && -n "$hold_line" ]]
+(( prepare_line < hold_line ))
 
 # Long-lived coordination and telemetry subscriptions cannot drain
 # voluntarily. The selector closes only the old green backend sessions after
@@ -571,6 +617,19 @@ if [[ "${NORTH_COORD_SELECTOR_SKIP_POWER_CHECKS:-0}" -eq 0 ]]; then
      bash "$0" >"$scratch/power-rollback.out" \
        2>"$scratch/power-rollback.err"; then
     printf 'selector test passed without pre-gate automatic rollback\n' >&2
+    exit 1
+  fi
+
+  missing_prepare=$scratch/selector.missing-prepare
+  # shellcheck disable=SC2016
+  sed 's/  if ! "$prepare_command" "$old" "$target" "$transaction_file"; then/  if false; then/' \
+    "$selector" >"$missing_prepare"
+  chmod 0700 "$missing_prepare"
+  if NORTH_COORD_SELECTOR_TEST_BINARY=$missing_prepare \
+     NORTH_COORD_SELECTOR_SKIP_POWER_CHECKS=1 \
+     bash "$0" >"$scratch/power-prepare.out" \
+       2>"$scratch/power-prepare.err"; then
+    printf 'selector test passed without standby preparation\n' >&2
     exit 1
   fi
 fi

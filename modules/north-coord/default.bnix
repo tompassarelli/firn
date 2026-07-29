@@ -183,6 +183,13 @@
              :text
               (ms (s "exec " cutoverGate
                      "/bin/north-coord-cutover-gate promote \"$@\""))})
+        selectorPrepare
+          (pkgs.writeShellApplication
+            {:name "north-coord-selector-prepare"
+             :runtimeInputs [cutoverGate]
+             :text
+              (ms (s "exec " cutoverGate
+                     "/bin/north-coord-cutover-gate prepare \"$@\""))})
         selectorRollback
           (pkgs.writeShellApplication
             {:name "north-coord-selector-rollback"
@@ -211,6 +218,8 @@
                   "export NORTH_COORD_SELECTOR_GROUP=users"
                   (s "export NORTH_COORD_SELECTOR_TRANSACTION="
                      selectorTransaction)
+                  (s "export NORTH_COORD_SELECTOR_PREPARE_COMMAND="
+                     selectorPrepare "/bin/north-coord-selector-prepare")
                   (s "export NORTH_COORD_SELECTOR_PROMOTE_COMMAND="
                      selectorPromote "/bin/north-coord-selector-promote")
                   (s "export NORTH_COORD_SELECTOR_ROLLBACK_COMMAND="

@@ -32,6 +32,7 @@ transaction_file=${NORTH_COORD_SELECTOR_TRANSACTION:-${route_map}.transaction}
 drain_grace_ms=${NORTH_COORD_SELECTOR_DRAIN_GRACE_MS:-1500}
 drain_timeout=${NORTH_COORD_SELECTOR_DRAIN_TIMEOUT:-5}
 admin_client=${NORTH_COORD_SELECTOR_ADMIN_CLIENT:-socat}
+prepare_command=${NORTH_COORD_SELECTOR_PREPARE_COMMAND:-}
 promote_command=${NORTH_COORD_SELECTOR_PROMOTE_COMMAND:-}
 rollback_command=${NORTH_COORD_SELECTOR_ROLLBACK_COMMAND:-}
 verify_command=${NORTH_COORD_SELECTOR_VERIFY_COMMAND:-}
@@ -320,6 +321,7 @@ switch_route() {
   local target=$1 old status sessions gate_started=0 succeeded=0
 
   valid_slot "$target" || die "invalid target slot: $target"
+  need_executable "$prepare_command" "preparation command"
   need_executable "$promote_command" "promotion command"
   need_executable "$rollback_command" "rollback command"
 
@@ -342,6 +344,21 @@ switch_route() {
   read -r status sessions < <(frontend_status)
   [[ "$status" == OPEN ]] ||
     die "frontend is not open before cutover: $status"
+
+  # Materialize both target caches while the old pair still owns authority and
+  # public traffic remains fully open. Preparation is read-only. A rejection or
+  # transport failure therefore exits before the selector records a
+  # transaction, pauses admission, drains sessions, or changes either route.
+  if ! "$prepare_command" "$old" "$target" "$transaction_file"; then
+    [[ ! -e "$transaction_file" && ! -L "$transaction_file" ]] ||
+      die "standby preparation failed after creating a transaction"
+    [[ $(read_route) == "$old" && $(runtime_route) == "$old" ]] ||
+      die "standby preparation failure changed the active route"
+    read -r status sessions < <(frontend_status)
+    [[ "$status" == OPEN ]] ||
+      die "standby preparation failure changed the frontend state: $status"
+    die "standby preparation failed; $old remains active"
+  fi
 
   write_transaction holding "$old" "$target"
   if ! (

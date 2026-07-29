@@ -101,6 +101,13 @@ let
       exec ${cutoverGate}/bin/north-coord-cutover-gate promote "$@"
     '';
   };
+  selectorPrepare = pkgs.writeShellApplication {
+    name = "north-coord-selector-prepare";
+    runtimeInputs = [ cutoverGate ];
+    text = ''
+      exec ${cutoverGate}/bin/north-coord-cutover-gate prepare "$@"
+    '';
+  };
   selectorRollback = pkgs.writeShellApplication {
     name = "north-coord-selector-rollback";
     runtimeInputs = [ cutoverGate ];
@@ -126,6 +133,7 @@ let
       export NORTH_COORD_SELECTOR_OWNER=${username}
       export NORTH_COORD_SELECTOR_GROUP=users
       export NORTH_COORD_SELECTOR_TRANSACTION=${selectorTransaction}
+      export NORTH_COORD_SELECTOR_PREPARE_COMMAND=${selectorPrepare}/bin/north-coord-selector-prepare
       export NORTH_COORD_SELECTOR_PROMOTE_COMMAND=${selectorPromote}/bin/north-coord-selector-promote
       export NORTH_COORD_SELECTOR_ROLLBACK_COMMAND=${selectorRollback}/bin/north-coord-selector-rollback
       export NORTH_COORD_SELECTOR_VERIFY_COMMAND=${selectorVerify}/bin/north-coord-selector-verify

@@ -9,6 +9,7 @@ token=$scratch/cutover.token
 route=$scratch/route.map
 gate_state=$scratch/gate
 fake_state=$scratch/fake
+cutover_log=$scratch/cutover.log
 mkdir -p "$gate_state" "$fake_state"
 printf 'test-secret\n' >"$token"
 chmod 0600 "$token"
@@ -109,6 +110,14 @@ case "$command" in
       outer_phase=standby
       cutover_phase=promotion-rejected
       writer_role=standby
+    elif [[ "$phase" == prepared-standby ]]; then
+      outer_phase=standby
+      cutover_phase=prepared
+      writer_role=standby
+    elif [[ "$phase" == prepared-demoted ]]; then
+      outer_phase=retired
+      cutover_phase=prepared
+      writer_role=retired
     fi
     if [[ "$endpoint_cutover_id" == none ]]; then
       printf '{:ok true :protocol "fram-coordinator-cutover/v1" :phase :%s :instance "%s" :version %s :writer-authority {:role :%s :write-authorized %s} :cutover {:phase :%s}}\n' \
@@ -119,7 +128,33 @@ case "$command" in
         "$cutover_phase" "$endpoint_cutover_id"
     fi
     ;;
+  prepare)
+    printf 'prepare %s %s\n' "$port" "$cutover_id" \
+      >>"$NORTH_COORD_TEST_CUTOVER_LOG"
+    if [[ -n "${NORTH_COORD_TEST_FAIL_PREPARE_PORT:-}" &&
+          "$port" == "$NORTH_COORD_TEST_FAIL_PREPARE_PORT" ]]; then
+      exit 3
+    fi
+    case "$phase" in
+      standby|rejected|prepared-standby)
+        phase=prepared-standby
+        response_phase=standby
+        ;;
+      demoted|prepared-demoted)
+        phase=prepared-demoted
+        response_phase=retired
+        ;;
+      *) exit 3 ;;
+    esac
+    printf '%s %s %s %s\n' \
+      "$phase" "$instance" "$version" "$cutover_id" >"$endpoint"
+    printf '{:ok true :protocol "fram-coordinator-cutover/v1" :phase :%s :prepared true :cutover-id "%s" :instance "%s" :version %s :marker {:version %s} :sync {:prewarmed true :elapsed-ms 1} :writer-authority {:role :%s :write-authorized false}}\n' \
+      "$response_phase" "$cutover_id" "$instance" "$version" "$version" \
+      "$response_phase"
+    ;;
   demote)
+    printf 'demote %s %s\n' "$port" "$cutover_id" \
+      >>"$NORTH_COORD_TEST_CUTOVER_LOG"
     [[ "$phase" == active && "$expected_instance" == "$instance" ]]
     printf 'demoted %s %s %s\n' \
       "$instance" "$version" "$cutover_id" >"$endpoint"
@@ -129,6 +164,8 @@ case "$command" in
     printf '{:ok true :protocol "fram-coordinator-cutover/v1"}\n'
     ;;
   promote)
+    printf 'promote %s %s\n' "$port" "$cutover_id" \
+      >>"$NORTH_COORD_TEST_CUTOVER_LOG"
     if [[ -n "${NORTH_COORD_TEST_FAIL_PROMOTE_PORT:-}" &&
           "$port" == "$NORTH_COORD_TEST_FAIL_PROMOTE_PORT" &&
           ! -e "$NORTH_COORD_TEST_FAKE_STATE/failure.used" ]]; then
@@ -144,7 +181,11 @@ case "$command" in
       fi
       exit 3
     fi
-    [[ "$phase" == standby || "$phase" == demoted || "$phase" == rejected ]]
+    [[ "$phase" == standby ||
+       "$phase" == demoted ||
+       "$phase" == prepared-standby ||
+       "$phase" == prepared-demoted ||
+       "$phase" == rejected ]]
     [[ -f "$marker_file" ]]
     read -r marker_cutover_id marker_version < <(
       bb -e '(require (quote [clojure.edn :as edn]))
@@ -204,6 +245,7 @@ export NORTH_COORD_BLUE_TELEMETRY_PORT=17978
 export NORTH_COORD_GREEN_COORD_PORT=27977
 export NORTH_COORD_GREEN_TELEMETRY_PORT=27978
 export NORTH_COORD_TEST_FAKE_STATE=$fake_state
+export NORTH_COORD_TEST_CUTOVER_LOG=$cutover_log
 export NORTH_COORD_CUTOVER_TIMEOUT_MS=3000
 export NORTH_COORD_CUTOVER_SETTLE_TIMEOUT_MS=3000
 export NORTH_COORD_CUTOVER_SETTLE_POLL_SECONDS=0.02
@@ -212,10 +254,29 @@ export NORTH_COORD_CUTOVER_SETTLE_POLL_SECONDS=0.02
 
 transaction=$scratch/selector.transaction
 
+# Preparation failure is entirely pre-transaction and read-only. Even when one
+# target endpoint acknowledged preparation, neither source endpoint is demoted.
+export NORTH_COORD_TEST_FAIL_PREPARE_PORT=27978
+if "$here/north-coord-cutover-gate" prepare blue green "$transaction"; then
+  echo "partial target preparation unexpectedly succeeded" >&2
+  exit 1
+fi
+unset NORTH_COORD_TEST_FAIL_PREPARE_PORT
+[[ ! -e "$transaction" ]]
+read -r blue_coord_phase _ <"$fake_state/17977"
+read -r blue_telemetry_phase _ <"$fake_state/17978"
+[[ "$blue_coord_phase" == active ]]
+[[ "$blue_telemetry_phase" == active ]]
+if rg -n '^demote ' "$cutover_log"; then
+  echo "preparation failure demoted a source endpoint" >&2
+  exit 1
+fi
+
 # A partial pair promotion must fail closed, then independently reconcile the
 # already-promoted coordination endpoint and the merely-demoted telemetry
 # endpoint back to the old pair.
 export NORTH_COORD_TEST_FAIL_PROMOTE_PORT=27978
+"$here/north-coord-cutover-gate" prepare blue green "$transaction"
 if "$here/north-coord-cutover-gate" promote blue green "$transaction"; then
   echo "partial promotion unexpectedly succeeded" >&2
   exit 1
@@ -229,9 +290,11 @@ unset NORTH_COORD_TEST_FAIL_PROMOTE_PORT
 # :promoting. Prove both real shapes settle without a false gate failure.
 export NORTH_COORD_TEST_DELAY_PROMOTE_PORT=27977
 export NORTH_COORD_TEST_TIMEOUT_PROMOTE_PORT=27977
+"$here/north-coord-cutover-gate" prepare blue green "$transaction"
 "$here/north-coord-cutover-gate" promote blue green "$transaction"
 unset NORTH_COORD_TEST_DELAY_PROMOTE_PORT NORTH_COORD_TEST_TIMEOUT_PROMOTE_PORT
 "$here/north-coord-cutover-gate" verify green
+"$here/north-coord-cutover-gate" prepare green blue "$transaction"
 "$here/north-coord-cutover-gate" promote green blue "$transaction"
 "$here/north-coord-cutover-gate" verify blue
 
@@ -262,6 +325,7 @@ write_endpoint 27978 standby green-telemetry 40
 rm -f -- "$fake_state/failure.used" "$gate_state"/*.edn
 export NORTH_COORD_TEST_FAIL_PROMOTE_PORT=27978
 export NORTH_COORD_TEST_STALE_OLD_PORT=17978
+"$here/north-coord-cutover-gate" prepare blue green "$transaction"
 if "$here/north-coord-cutover-gate" promote blue green "$transaction"; then
   echo "stale-marker promotion unexpectedly succeeded" >&2
   exit 1
@@ -292,6 +356,7 @@ write_endpoint 27977 standby green-coord 50
 write_endpoint 27978 standby green-telemetry 60
 rm -f -- "$gate_state"/*.edn "$fake_state/failure.used"
 export NORTH_COORD_TEST_TIMEOUT_PROMOTE_PORT=27977
+"$here/north-coord-cutover-gate" prepare blue green "$transaction"
 "$here/north-coord-cutover-gate" promote blue green "$transaction"
 [[ ! -e "$gate_state/outcome.unknown" ]]
 unset NORTH_COORD_TEST_TIMEOUT_PROMOTE_PORT
@@ -306,6 +371,7 @@ write_endpoint 27978 standby green-telemetry 80
 rm -f -- "$gate_state"/*.edn "$fake_state/failure.used"
 export NORTH_COORD_TEST_DROP_PROMOTE_PORT=27978
 export NORTH_COORD_CUTOVER_SETTLE_TIMEOUT_MS=200
+"$here/north-coord-cutover-gate" prepare blue green "$transaction"
 if "$here/north-coord-cutover-gate" promote blue green "$transaction"; then
   echo "unobservable promotion unexpectedly succeeded" >&2
   exit 1
