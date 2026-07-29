@@ -55,7 +55,7 @@
      packagedCommands (builtins.map mkPackaged packagedCommandNames)]
     {:tags [development]
      :flake-inputs
-      {:beagle {:url "git+file:///home/tom/code/beagle?ref=main"
+      {:beagle {:url "git+file:///home/tom/code/beagle/main?ref=main"
                 :inputs.nixpkgs.follows "nixpkgs"}}
      :options.myConfig.modules.beagle.enable
       (lib.mkEnableOption

@@ -35,13 +35,13 @@
     };
     beagle = {
       inputs.nixpkgs.follows = "nixpkgs";
-      url = "git+file:///home/tom/code/beagle?ref=main";
+      url = "git+file:///home/tom/code/beagle/main?ref=main";
     };
     elephant = {
       url = "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73";
     };
     fram = {
-      url = "git+file:///home/tom/code/fram?ref=main";
+      url = "git+file:///home/tom/code/fram/main?ref=main";
     };
     gjoa = {
       url = "github:tompassarelli/gjoa";
@@ -52,7 +52,7 @@
     };
     north = {
       inputs.nixpkgs-master.follows = "nixpkgs-master";
-      url = "git+file:///home/tom/code/north?ref=main";
+      url = "git+file:///home/tom/code/north/main?ref=main";
       inputs.fram.follows = "fram";
     };
     nur = {

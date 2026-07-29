@@ -114,6 +114,24 @@ check("a BARE merge into the primary is still denied (can conflict, can dirty)",
 check("a BARE pull into the primary is still denied",
       run(bash("git -C /home/tom/code/north/main pull")))
 
+# FALSE POSITIVES. Each of these was a real denial this guard produced against
+# legitimate work on 2026-07-29, and each one is a reason someone would switch
+# it off. A guard that cries wolf is worse than no guard.
+check("an arrow inside a quoted string is not a redirect",
+      run(bash('echo "north/bin -> needs compat"', cwd=NORTH)) is None)
+check("fd duplication (2>&1) opens no file",
+      run(bash("grep -rn foo cli/ 2>&1 | head", cwd=NORTH)) is None)
+check("a redirect inside a HEREDOC BODY is data, not shell syntax",
+      run(bash("cat > /tmp/t.py <<'EOF'\ncheck('echo x > /home/tom/code/north/cli/x.clj')\nEOF")) is None)
+check("sed -i inside a heredoc body is data, not a command",
+      run(bash("cat > /tmp/t.sh <<'EOF'\nsed -i s/a/b/ /home/tom/code/fram/coord_daemon.clj\nEOF")) is None)
+
+# ...while the real forms are still refused.
+check("a REAL redirect into a primary is still denied",
+      run(bash("echo x > /home/tom/code/north/cli/zz.clj")))
+check("a REAL sed -i on a primary is still denied",
+      run(bash("sed -i s/a/b/ /home/tom/code/fram/coord_daemon.clj")))
+
 check("redirect to /tmp while cwd is a primary is fine",
       run(bash("grep foo cli/x.clj > /tmp/out", cwd=NORTH)) is None)
 

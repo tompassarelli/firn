@@ -338,6 +338,34 @@ north_coord_process_birth_token() {
   printf 'proc:%s\n' "$start_ticks"
 }
 
+# The ACTIVE coordinator unit. Under blue/green the legacy `north-coord.service`
+# is deliberately inactive (gated on
+# ConditionPathExists=!/var/lib/north-coord-cutover/bootstrap-complete), so
+# testing that name reports "north-coord systemd service is not active" on a
+# perfectly healthy system — observed 2026-07-29 with blue and green both active
+# and `north show` answering in 107ms. A health check that fails green is worse
+# than no check, because the next real failure gets ignored.
+#
+# The route map names the live slot; the direct probes are the fallback, and the
+# legacy unit remains last so a pre-cutover system still resolves.
+resolve_north_coord_unit() {
+  local slot candidate
+  slot="$(awk 'NF>=2 && $1=="active" {print $2; exit}' \
+            /var/lib/north-coord-cutover/route.map 2>/dev/null || true)"
+  for candidate in ${slot:+"north-coord-${slot}.service"} \
+                   north-coord-green.service north-coord-blue.service \
+                   north-coord.service; do
+    if systemctl is-active --quiet "$candidate" 2>/dev/null; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+NORTH_COORD_UNIT="${NORTH_COORD_UNIT:-north-coord.service}"
+
+
+
 north_coord_runtime_record_value() {
   local record="$1" key="$2" line value='' count=0
 
@@ -452,7 +480,7 @@ north_coord_runtime_record_owner_is_valid() {
       return 1
     }
   record_value="$(north_coord_runtime_record_value "$runtime_file" CONTROLLER_UNIT 2>/dev/null)" &&
-    [ "$record_value" = north-coord.service ] || {
+    [ "$record_value" = "$NORTH_COORD_UNIT" ] || {
       NORTH_COORD_RUNTIME_OWNER_REASON='active runtime record controller unit is invalid'
       return 1
     }
@@ -1924,10 +1952,10 @@ before=$fail
 north_coord_runtime='live probe deferred'
 north_coord_ok=0
 if [ "$LOCAL" -eq 1 ]; then
-  if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet north-coord; then
-    north_coord_env="$(systemctl show north-coord -p Environment --value 2>/dev/null || true)"
-    north_coord_exec="$(systemctl show north-coord -p ExecStart --value 2>/dev/null || true)"
-    north_coord_pid="$(systemctl show north-coord -p MainPID --value 2>/dev/null || true)"
+  if command -v systemctl >/dev/null 2>&1 && NORTH_COORD_UNIT="$(resolve_north_coord_unit)"; then
+    north_coord_env="$(systemctl show "$NORTH_COORD_UNIT" -p Environment --value 2>/dev/null || true)"
+    north_coord_exec="$(systemctl show "$NORTH_COORD_UNIT" -p ExecStart --value 2>/dev/null || true)"
+    north_coord_pid="$(systemctl show "$NORTH_COORD_UNIT" -p MainPID --value 2>/dev/null || true)"
     north_coord_ok=1
     systemd_environment_has "$north_coord_env" "FRAM_TELEMETRY_LOG=$CANONICAL_FRAM_TELEMETRY_LOG" || {
       north_coord_ok=0
@@ -1985,9 +2013,9 @@ if [ "$LOCAL" -eq 1 ]; then
         bad "north-coord runtime ownership record is invalid: ${NORTH_COORD_RUNTIME_OWNER_REASON:-missing identity}"
       fi
       if [ ! -r "/proc/$north_coord_pid/cgroup" ] ||
-         ! grep -Eq '^[^:]*:[^:]*:/system\.slice/north-coord\.service(/|$)' "/proc/$north_coord_pid/cgroup"; then
+         ! grep -Eq "^[^:]*:[^:]*:/system\.slice/${NORTH_COORD_UNIT//./\\.}(/|\$)" "/proc/$north_coord_pid/cgroup"; then
         north_coord_ok=0
-        bad "north-coord MainPID is not owned by system.slice/north-coord.service"
+        bad "north-coord MainPID is not owned by system.slice/$NORTH_COORD_UNIT"
       fi
       if command -v ss >/dev/null 2>&1; then
         mapfile -t north_coord_listener_pids < <(
@@ -2023,7 +2051,7 @@ if [ "$LOCAL" -eq 1 ]; then
       north_coord_runtime='deployment identity drift detected'
     fi
   else
-    bad "north-coord systemd service is not active"
+    bad "no north-coord systemd unit is active (checked the route-map slot, then green/blue, then legacy north-coord.service)"
     north_coord_runtime='inactive'
   fi
   anthropic_installed='unknown'
@@ -2084,6 +2112,20 @@ else
   provider_group North "$before" \
     'Runtime     deployment identity/env/socket probes deferred to --local' \
     'Providers   readiness deferred to --local'
+fi
+
+# --- worktree layout -------------------------------------------------------
+# A rule with no detector silently stops being true. On 2026-07-29 a sweep found
+# 63 worktrees across FOUR conventions at once, plus seven clones of north at
+# ~/code root and orphaned trees whose gitdir no longer existed — after the
+# layout had been written down and restated repeatedly. This is the detector.
+if [ "$LOCAL" -eq 1 ] && command -v worktree-layout-check >/dev/null 2>&1; then
+  if worktree_layout_out="$(worktree-layout-check 2>&1)"; then
+    printf '\u2713 %s\n' "$worktree_layout_out"
+  else
+    bad "worktree layout drift — run worktree-layout-check for the list"
+    printf '%s\n' "$worktree_layout_out" >&2
+  fi
 fi
 
 if [ "$fail" -ne 0 ]; then printf 'agent-config-check: FAILED\n' >&2; exit 1; fi

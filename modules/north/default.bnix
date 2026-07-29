@@ -91,7 +91,7 @@
               (s "exec " northPkg "/bin/north-mcp \"$@\""))})]
     {:tags [cli-tools]
      :flake-inputs
-      {:north {:url "git+file:///home/tom/code/north?ref=main"
+      {:north {:url "git+file:///home/tom/code/north/main?ref=main"
                :inputs.fram.follows "fram"
                :inputs.nixpkgs-master.follows "nixpkgs-master"}}
      :options.myConfig.modules.north.enable

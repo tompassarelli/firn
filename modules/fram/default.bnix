@@ -53,7 +53,7 @@
      packagedCommands (builtins.map mkPackaged packagedCommandNames)]
     {:tags [development]
      :flake-inputs
-      {:fram {:url "git+file:///home/tom/code/fram?ref=main"}}
+      {:fram {:url "git+file:///home/tom/code/fram/main?ref=main"}}
      :options.myConfig.modules.fram.enable
       (lib.mkEnableOption
         "immutable Fram core commands with explicit checkout-only development commands")

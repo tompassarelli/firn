@@ -88,10 +88,38 @@ def _effective_cwd(command, cwd):
     return resolved or cwd
 
 
+def _strip_heredoc_bodies(command):
+    """The command with heredoc BODIES removed, keeping a `<<` marker.
+
+    A heredoc body is DATA, not shell syntax. Scanning it produced false
+    denials: writing this guard's own test file, whose fixtures contain the
+    string `> /home/tom/code/north/cli/x.clj`, was refused as if that were a
+    real redirect. The `<<` itself is preserved because rule 4 still needs to
+    know a heredoc was present.
+    """
+    out, i = [], 0
+    for m in re.finditer(r'<<-?\s*[\'"]?(\w+)[\'"]?', command):
+        tag = m.group(1)
+        out.append(command[i:m.end()])
+        end = re.search(r'^\s*%s\s*$' % re.escape(tag),
+                        command[m.end():], re.M)
+        i = m.end() + (end.end() if end else len(command) - m.end())
+    out.append(command[i:])
+    return "".join(out)
+
+
 def _redirect_targets(command):
-    """Files the shell would open for writing via > or >>."""
+    """Files the shell would open for writing via > or >>.
+
+    `->` is NOT a redirect: the naive pattern matched the '>' of an arrow inside
+    a quoted string and denied `echo "a -> b"` from a protected directory. `>&`
+    (fd duplication, e.g. 2>&1) opens no file either. False positives are how a
+    guard ends up switched off, so both are excluded.
+    """
     return [m.group(1).strip('"\'')
-            for m in re.finditer(r'>>?\s*("[^"]+"|\'[^\']+\'|[^\s;&|<>]+)', command)]
+            for m in re.finditer(
+                r'(?<![-&])>>?\s*(?!&)("[^"]+"|\'[^\']+\'|[^\s;&|<>]+)',
+                _strip_heredoc_bodies(command))]
 
 
 def _tokens(command):
@@ -155,7 +183,10 @@ def decide(payload):
         return None
     cwd = payload.get("cwd") or os.getcwd()
     eff = _effective_cwd(command, cwd)
-    tokens = _tokens(command)
+    # Tokenise the command WITHOUT heredoc bodies: a `sed -i /path` or
+    # `rm /path` appearing inside heredoc data is text being written, not a
+    # command being run, and treating it as one denies legitimate work.
+    tokens = _tokens(_strip_heredoc_bodies(command))
 
     def deny(path, project, why, what):
         return (f"This Bash command would {what} inside the PRIMARY checkout of "
