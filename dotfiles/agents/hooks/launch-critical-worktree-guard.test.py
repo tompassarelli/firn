@@ -46,8 +46,8 @@ def check(label, condition):
         print("  FAIL ", label)
 
 
-NORTH = "/home/tom/code/north"
-FRAM = "/home/tom/code/fram"
+NORTH = "/home/tom/code/north/main"
+FRAM = "/home/tom/code/fram/main"
 
 print("--- must DENY: what actually happened on 2026-07-29 ---")
 
@@ -61,7 +61,7 @@ check("git commit from inside the north primary",
       run(bash("git commit -q -m 'x'", cwd=NORTH)))
 
 check("git reset --hard against the fram primary via -C",
-      run(bash("git -C /home/tom/code/fram reset --hard origin/main")))
+      run(bash("git -C /home/tom/code/fram/main reset --hard origin/main")))
 
 check("git add of many paths from inside the fram primary",
       run(bash("FILES=$(cat list); git add $FILES", cwd=FRAM)))
@@ -70,19 +70,19 @@ check("git push from inside the primary",
       run(bash("git push origin main", cwd=NORTH)))
 
 check("redirection into a primary file",
-      run(bash("echo x > /home/tom/code/north/cli/x.clj")))
+      run(bash("echo x > /home/tom/code/north/main/cli/x.clj")))
 
 check("sed -i against a primary file",
-      run(bash("sed -i s/a/b/ /home/tom/code/fram/coord_daemon.clj")))
+      run(bash("sed -i s/a/b/ /home/tom/code/fram/main/coord_daemon.clj")))
 
 check("cp INTO a primary",
-      run(bash("cp /tmp/x.clj /home/tom/code/north/cli/x.clj")))
+      run(bash("cp /tmp/x.clj /home/tom/code/north/main/cli/x.clj")))
 
 check("rm inside a primary",
-      run(bash("rm /home/tom/code/beagle/bin/beagle")))
+      run(bash("rm /home/tom/code/beagle/main/bin/beagle")))
 
 check("cd into a primary then write, in one command",
-      run(bash("cd /home/tom/code/north && echo x > cli/x.clj")))
+      run(bash("cd /home/tom/code/north/main && echo x > cli/x.clj")))
 
 check("the deny names the project", "north" in (run(bash("git add .", cwd=NORTH)) or ""))
 check("the deny gives the worktree escape route",
@@ -90,16 +90,16 @@ check("the deny gives the worktree escape route",
 
 print("--- must ALLOW: reads, and the sanctioned way out ---")
 
-check("git log against a primary", run(bash("git -C /home/tom/code/north log --oneline -1")) is None)
+check("git log against a primary", run(bash("git -C /home/tom/code/north/main log --oneline -1")) is None)
 check("git status against a primary", run(bash("git status --porcelain", cwd=NORTH)) is None)
-check("git diff against a primary", run(bash("git -C /home/tom/code/fram diff --stat")) is None)
+check("git diff against a primary", run(bash("git -C /home/tom/code/fram/main diff --stat")) is None)
 check("grep inside a primary", run(bash("grep -rn foo cli/", cwd=NORTH)) is None)
-check("cat a primary file", run(bash("cat /home/tom/code/north/cli/coord.clj")) is None)
+check("cat a primary file", run(bash("cat /home/tom/code/north/main/cli/coord.clj")) is None)
 
 check("git worktree add FROM the primary is the escape route, never blocked",
-      run(bash("git -C /home/tom/code/north worktree add /home/tom/code/north/wt-x -b x")) is None)
+      run(bash("git -C /home/tom/code/north/main worktree add /home/tom/code/north/wt-x -b x")) is None)
 check("git fetch INTO the primary is allowed",
-      run(bash("git -C /home/tom/code/north fetch /home/tom/code/north/wt-x x:refs/heads/main")) is None)
+      run(bash("git -C /home/tom/code/north/main fetch /home/tom/code/north/wt-x x:refs/heads/main")) is None)
 
 # THE LANDING PATH MUST WORK. `fetch <wt> <branch>:refs/heads/main` fails when
 # main is checked out — which it always is under this layout — so --ff-only
@@ -122,15 +122,15 @@ check("an arrow inside a quoted string is not a redirect",
 check("fd duplication (2>&1) opens no file",
       run(bash("grep -rn foo cli/ 2>&1 | head", cwd=NORTH)) is None)
 check("a redirect inside a HEREDOC BODY is data, not shell syntax",
-      run(bash("cat > /tmp/t.py <<'EOF'\ncheck('echo x > /home/tom/code/north/cli/x.clj')\nEOF")) is None)
+      run(bash("cat > /tmp/t.py <<'EOF'\ncheck('echo x > /home/tom/code/north/main/cli/x.clj')\nEOF")) is None)
 check("sed -i inside a heredoc body is data, not a command",
-      run(bash("cat > /tmp/t.sh <<'EOF'\nsed -i s/a/b/ /home/tom/code/fram/coord_daemon.clj\nEOF")) is None)
+      run(bash("cat > /tmp/t.sh <<'EOF'\nsed -i s/a/b/ /home/tom/code/fram/main/coord_daemon.clj\nEOF")) is None)
 
 # ...while the real forms are still refused.
 check("a REAL redirect into a primary is still denied",
-      run(bash("echo x > /home/tom/code/north/cli/zz.clj")))
+      run(bash("echo x > /home/tom/code/north/main/cli/zz.clj")))
 check("a REAL sed -i on a primary is still denied",
-      run(bash("sed -i s/a/b/ /home/tom/code/fram/coord_daemon.clj")))
+      run(bash("sed -i s/a/b/ /home/tom/code/fram/main/coord_daemon.clj")))
 
 check("redirect to /tmp while cwd is a primary is fine",
       run(bash("grep foo cli/x.clj > /tmp/out", cwd=NORTH)) is None)
@@ -148,11 +148,19 @@ check("unrelated repos are untouched",
 check("a sibling like north-data must not match",
       run(bash("git add x", cwd="/home/tom/code/north-data")) is None)
 
+# The CONTAINER root is not a checkout: it holds only main/ and wt-*/, so a
+# symlink or scratch file there cannot dirty anything. Denying it left no
+# compliant way to place a compatibility symlink during the migration.
+check("the container root itself is writable",
+      run(bash("ln -s main/orchestration orchestration", cwd="/home/tom/code/north")) is None)
+check("but <project>/main is still protected",
+      run(bash("touch x", cwd="/home/tom/code/north/main")) is not False)
+
 print("--- Edit/Write behaviour is unchanged ---")
 
 check("Edit into a primary is denied",
       run({"tool_name": "Edit",
-           "tool_input": {"file_path": "/home/tom/code/north/cli/x.clj"}}))
+           "tool_input": {"file_path": "/home/tom/code/north/main/cli/x.clj"}}))
 check("Edit into a wt- worktree is allowed",
       run({"tool_name": "Edit",
            "tool_input": {"file_path": "/home/tom/code/north/wt-a/cli/x.clj"}}) is None)

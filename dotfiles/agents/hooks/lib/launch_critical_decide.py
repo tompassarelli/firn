@@ -211,7 +211,31 @@ def decide(payload):
             project, why = hit
             return deny(resolved, project, why, "write")
 
-    # 3. in-place / destination-taking commands
+    # 3. in-place / destination-taking commands, per SEGMENT.
+    #    `cp`/`mv`/`ln` take their destination as the LAST argument — but only
+    #    within their own command. Scanning to the end of a compound command
+    #    made `ln -s a b; echo "(none = clean)"` treat the echo's text as ln's
+    #    destination and deny it. Split on shell separators first.
+    for segment in re.split(r'\s*(?:&&|\|\||[;|&\n])\s*', _strip_heredoc_bodies(command)):
+        found = _scan_write_commands(_tokens(segment), eff, deny)
+        if found:
+            return found
+
+    # 4. an interpreter fed a heredoc, while cwd is a protected checkout. The
+    #    written path lives inside the script and cannot be parsed out, and this
+    #    is exactly the shape that patched three primaries on 2026-07-29
+    #    (`cd ~/code/north && python3 - <<'PYEOF'`). Refused on cwd alone;
+    #    running it from elsewhere with absolute paths is unaffected.
+    hit = protected_project(eff)
+    if hit and "<<" in command:
+        for tok in tokens:
+            if os.path.basename(tok) in INTERPRETERS:
+                return deny(eff, hit[0], hit[1],
+                            "run an interpreter script with its working directory")
+    return None
+
+
+def _scan_write_commands(tokens, eff, deny):
     for i, tok in enumerate(tokens):
         base = os.path.basename(tok)
         args = [a for a in tokens[i + 1:] if not a.startswith("-")]
@@ -230,18 +254,6 @@ def decide(payload):
             hit = protected_project(_resolve(os.path.expanduser(dest), eff))
             if hit:
                 return deny(dest, hit[0], hit[1], f"run `{base}` into")
-
-    # 4. an interpreter fed a heredoc, while cwd is a protected checkout.
-    #    The written path lives inside the script and cannot be parsed out, and
-    #    this is exactly the shape that patched three primaries on 2026-07-29
-    #    (`cd ~/code/north && python3 - <<'PYEOF'`). Refused on cwd alone;
-    #    running it from elsewhere with absolute paths is unaffected.
-    hit = protected_project(eff)
-    if hit and "<<" in command:
-        for tok in tokens:
-            if os.path.basename(tok) in INTERPRETERS:
-                return deny(eff, hit[0], hit[1],
-                            "run an interpreter script with its working directory")
     return None
 
 

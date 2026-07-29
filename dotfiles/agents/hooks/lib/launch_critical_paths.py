@@ -64,11 +64,22 @@ def protected_project(path):
         if not _within(real, container):
             continue
 
-        # Carve out worktrees: <container>/wt-<slug>/...
         rest = real[len(container):].lstrip(os.sep)
         first = rest.split(os.sep)[0] if rest else ""
+
+        # Worktrees are the sanctioned destination, always.
         if first.startswith("wt-"):
             return None
+
+        # After migration the CHECKOUT is <container>/main and the container
+        # itself holds only main/ and wt-*/ — writing a symlink or scratch file
+        # at the container root cannot dirty any checkout, so protecting it is
+        # over-broad and produces denials with no compliant alternative.
+        # Before migration the container IS the checkout and everything under
+        # it must be protected. Distinguish by where .git actually lives.
+        if os.path.isdir(os.path.join(container, "main", ".git")):
+            if first != "main":
+                return None
 
         return (project, why)
     return None
