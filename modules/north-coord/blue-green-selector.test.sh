@@ -2,7 +2,9 @@
 set -euo pipefail
 
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-selector=$here/north-coord-selector
+selector=${NORTH_COORD_SELECTOR_TEST_BINARY:-$here/north-coord-selector}
+source_module=$here/default.bnix
+generated_module=$here/default.nix
 
 for command in haproxy socat python3 timeout; do
   command -v "$command" >/dev/null || {
@@ -10,6 +12,23 @@ for command in haproxy socat python3 timeout; do
     exit 2
   }
 done
+
+grep -Fq '"  timeout client 1h"' "$source_module"
+grep -Fq '"  timeout server 1h"' "$source_module"
+grep -Fq 'timeout client 1h' "$generated_module"
+grep -Fq 'timeout server 1h' "$generated_module"
+grep -Fq '(s "export NORTH_COORD_SELECTOR_OWNER=" username)' \
+  "$source_module"
+grep -Fq '"export NORTH_COORD_SELECTOR_GROUP=users"' "$source_module"
+# shellcheck disable=SC2016
+grep -Fq 'export NORTH_COORD_SELECTOR_OWNER=${username}' \
+  "$generated_module"
+grep -Fq 'export NORTH_COORD_SELECTOR_GROUP=users' "$generated_module"
+if rg -n 'timeout (client|server) 30s' \
+  "$source_module" "$generated_module"; then
+  printf 'proxy still expires idle North subscriptions after 30 seconds\n' >&2
+  exit 1
+fi
 
 scratch=$(mktemp -d)
 trap '[[ ${NORTH_COORD_TEST_KEEP:-0} -eq 1 ]] || rm -rf -- "$scratch"' EXIT
@@ -25,8 +44,11 @@ public_ports=$scratch/public.ports
 backend_ports=$scratch/backend.ports
 proxy_pid_file=$scratch/haproxy.pid
 restart_gate=$scratch/restart.allow
+admin_log=$scratch/admin.log
+admin_fail=$scratch/admin.fail
 
 printf 'active blue\n' >"$route_map"
+chmod 0666 "$route_map"
 
 python3 - "$backend_ports" "$backend_log" <<'PY' &
 import socket
@@ -48,14 +70,21 @@ with open(ports_path, "w") as out:
 def serve(name, listener):
     while True:
         conn, _ = listener.accept()
-        with conn:
-            data = conn.recv(4096)
-            if data.startswith(b"hold"):
-                conn.sendall((name + ":held\n").encode())
+        try:
+            with conn:
                 data = conn.recv(4096)
-            conn.sendall((name + ":" + data.decode(errors="replace")).encode())
+                if data.startswith(b"hold"):
+                    conn.sendall((name + ":held\n").encode())
+                    data = conn.recv(4096)
+                if data:
+                    conn.sendall(
+                        (name + ":" + data.decode(errors="replace")).encode()
+                    )
+                with open(log_path, "a") as log:
+                    print(name, repr(data), file=log)
+        except (BrokenPipeError, ConnectionResetError):
             with open(log_path, "a") as log:
-                print(name, repr(data), file=log)
+                print(name, "session-reset", file=log)
 
 for item in listeners.items():
     threading.Thread(target=serve, args=item, daemon=True).start()
@@ -114,8 +143,8 @@ def write_config():
 defaults
   mode tcp
   timeout connect 2s
-  timeout client 30s
-  timeout server 30s
+  timeout client 1h
+  timeout server 1h
 
 frontend north-public
   bind fd@{listeners[0].fileno()}
@@ -186,8 +215,32 @@ export NORTH_COORD_SELECTOR_SOCKET=$admin_socket
 export NORTH_COORD_SELECTOR_MAP=$route_map
 export NORTH_COORD_SELECTOR_FRONTEND=north-public
 export NORTH_COORD_SELECTOR_LOCK=$selector_lock
+export NORTH_COORD_SELECTOR_OWNER
+NORTH_COORD_SELECTOR_OWNER=$(id -un)
+export NORTH_COORD_SELECTOR_GROUP
+NORTH_COORD_SELECTOR_GROUP=$(id -gn)
 export NORTH_COORD_SELECTOR_TRANSACTION=$transaction
-export NORTH_COORD_SELECTOR_DRAIN_TIMEOUT=5
+export NORTH_COORD_SELECTOR_DRAIN_GRACE_MS=250
+export NORTH_COORD_SELECTOR_DRAIN_TIMEOUT=1
+
+real_socat=$(command -v socat)
+cat >"$scratch/admin-client" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+command=$(cat)
+printf '%s\n' "$command" >>"$NORTH_COORD_TEST_ADMIN_LOG"
+if [[ -e "$NORTH_COORD_TEST_ADMIN_FAIL" &&
+      "$command" == "shutdown sessions server "* ]]; then
+  exit 17
+fi
+printf '%s\n' "$command" |
+  "$NORTH_COORD_TEST_REAL_SOCAT" "$@"
+SH
+chmod 0700 "$scratch/admin-client"
+export NORTH_COORD_SELECTOR_ADMIN_CLIENT=$scratch/admin-client
+export NORTH_COORD_TEST_ADMIN_LOG=$admin_log
+export NORTH_COORD_TEST_ADMIN_FAIL=$admin_fail
+export NORTH_COORD_TEST_REAL_SOCAT=$real_socat
 
 probe() {
   local port=$1 payload=$2
@@ -245,7 +298,7 @@ with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=5) as con
     response = conn.recv(4096)
     assert response == b"coord-blue:held\n", response
     open(sys.argv[2], "w").close()
-    time.sleep(0.35)
+    time.sleep(0.05)
     conn.sendall(b"drained")
     response = conn.recv(4096)
     assert response == b"coord-blue:drained", response
@@ -266,7 +319,7 @@ import sys
 import time
 port = int(sys.argv[1])
 with open(sys.argv[2], "w") as out:
-    for i in range(80):
+    for i in range(20):
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=5) as conn:
                 conn.sendall(f"loop-{i}\n".encode())
@@ -291,26 +344,152 @@ if rg -n '^error ' "$scratch"/results.*; then
   exit 1
 fi
 grep -Fxq 'active green' "$route_map"
+route_metadata=$(stat -c '%U:%G %a' "$route_map")
+[[ "$route_metadata" == "$NORTH_COORD_SELECTOR_OWNER:$NORTH_COORD_SELECTOR_GROUP 600" ]]
 grep -Fq 'promote blue green' "$promotion_log"
+
+# Long-lived coordination and telemetry subscriptions cannot drain
+# voluntarily. The selector closes only the old green backend sessions after
+# its grace period. Both clients reconnect through the still-bound public
+# sockets and are served by blue after RESUME.
+python3 - "$coord_public" "$scratch/persistent.coord.ready" \
+  "$scratch/persistent.coord.result" coord-green coord-blue <<'PY' &
+import socket
+import sys
+
+port, ready_path, result_path, old_backend, new_backend = sys.argv[1:]
+with socket.create_connection(("127.0.0.1", int(port)), timeout=5) as conn:
+    conn.sendall(b"hold")
+    response = conn.recv(4096)
+    assert response == (old_backend + ":held\n").encode(), response
+    open(ready_path, "w").close()
+    conn.settimeout(5)
+    try:
+        closed = conn.recv(4096)
+    except ConnectionResetError:
+        closed = b""
+    assert closed == b"", closed
+with socket.create_connection(("127.0.0.1", int(port)), timeout=5) as conn:
+    conn.settimeout(5)
+    conn.sendall(b"reconnected")
+    response = conn.recv(4096)
+    assert response == (new_backend + ":reconnected").encode(), response
+with open(result_path, "w") as out:
+    out.write(response.decode())
+PY
+persistent_coord_pid=$!
+python3 - "$telemetry_public" "$scratch/persistent.telemetry.ready" \
+  "$scratch/persistent.telemetry.result" telemetry-green telemetry-blue <<'PY' &
+import socket
+import sys
+
+port, ready_path, result_path, old_backend, new_backend = sys.argv[1:]
+with socket.create_connection(("127.0.0.1", int(port)), timeout=5) as conn:
+    conn.sendall(b"hold")
+    response = conn.recv(4096)
+    assert response == (old_backend + ":held\n").encode(), response
+    open(ready_path, "w").close()
+    conn.settimeout(5)
+    try:
+        closed = conn.recv(4096)
+    except ConnectionResetError:
+        closed = b""
+    assert closed == b"", closed
+with socket.create_connection(("127.0.0.1", int(port)), timeout=5) as conn:
+    conn.settimeout(5)
+    conn.sendall(b"reconnected")
+    response = conn.recv(4096)
+    assert response == (new_backend + ":reconnected").encode(), response
+with open(result_path, "w") as out:
+    out.write(response.decode())
+PY
+persistent_telemetry_pid=$!
+for _ in $(seq 1 100); do
+  [[ -e "$scratch/persistent.coord.ready" &&
+     -e "$scratch/persistent.telemetry.ready" ]] && break
+  sleep 0.01
+done
+[[ -e "$scratch/persistent.coord.ready" ]]
+[[ -e "$scratch/persistent.telemetry.ready" ]]
+
+"$selector" switch blue
+wait "$persistent_coord_pid" "$persistent_telemetry_pid"
+grep -Fxq 'coord-blue:reconnected' "$scratch/persistent.coord.result"
+grep -Fxq 'telemetry-blue:reconnected' \
+  "$scratch/persistent.telemetry.result"
+grep -Fxq 'shutdown sessions server coord-green/only' "$admin_log"
+grep -Fxq 'shutdown sessions server telemetry-green/only' "$admin_log"
+if rg -n 'shutdown sessions server (coord|telemetry)-blue/only' \
+  "$admin_log"; then
+  printf 'persistent handoff closed a target-generation session\n' >&2
+  exit 1
+fi
+grep -Fxq 'active blue' "$route_map"
+grep -Fq 'promote green blue' "$promotion_log"
+
+# A forced-close command failure occurs before the authority gate. It must
+# automatically restore the old blue route, remove the transaction, and
+# RESUME. The established old session remains usable.
+python3 - "$coord_public" "$scratch/force-fail.ready" \
+  "$scratch/force-fail.release" "$scratch/force-fail.result" <<'PY' &
+import os
+import socket
+import sys
+import time
+
+port, ready_path, release_path, result_path = sys.argv[1:]
+with socket.create_connection(("127.0.0.1", int(port)), timeout=5) as conn:
+    conn.sendall(b"hold")
+    response = conn.recv(4096)
+    assert response == b"coord-blue:held\n", response
+    open(ready_path, "w").close()
+    while not os.path.exists(release_path):
+        time.sleep(0.01)
+    conn.sendall(b"survived")
+    response = conn.recv(4096)
+    assert response == b"coord-blue:survived", response
+with open(result_path, "w") as out:
+    out.write(response.decode())
+PY
+force_fail_client_pid=$!
+for _ in $(seq 1 100); do
+  [[ -e "$scratch/force-fail.ready" ]] && break
+  sleep 0.01
+done
+[[ -e "$scratch/force-fail.ready" ]]
+: >"$admin_fail"
+if "$selector" switch green \
+  >"$scratch/force-fail.out" 2>"$scratch/force-fail.err"; then
+  printf 'failed session close unexpectedly switched the route\n' >&2
+  exit 1
+fi
+rm -f -- "$admin_fail"
+[[ ! -e "$transaction" ]]
+grep -Fxq 'active blue' "$route_map"
+grep -Fxq frontend=OPEN < <("$selector" status)
+rg -q 'pre-gate handoff failed; restored blue' "$scratch/force-fail.err"
+: >"$scratch/force-fail.release"
+wait "$force_fail_client_pid"
+grep -Fxq 'coord-blue:survived' "$scratch/force-fail.result"
 
 # A failed promotion never changes the map and always resumes the old pair.
 export NORTH_COORD_TEST_PROMOTION_FAIL=1
-if "$selector" switch blue >"$scratch/fail.out" 2>"$scratch/fail.err"; then
+if "$selector" switch green >"$scratch/fail.out" 2>"$scratch/fail.err"; then
   printf 'failed promotion unexpectedly switched the route\n' >&2
   exit 1
 fi
 unset NORTH_COORD_TEST_PROMOTION_FAIL
-grep -Fxq 'active green' "$route_map"
-grep -Fq 'rollback blue green' "$promotion_log"
-[[ $(probe "$coord_public" three) == coord-green:three ]]
-[[ $(probe "$telemetry_public" three) == telemetry-green:three ]]
+grep -Fxq 'active blue' "$route_map"
+grep -Fq 'rollback green blue' "$promotion_log"
+[[ $(probe "$coord_public" three) == coord-blue:three ]]
+[[ $(probe "$telemetry_public" three) == telemetry-blue:three ]]
 
 # A failed rollback is fail-closed: both public sockets remain bound and
 # connects queue instead of refusing. The prestart gate reconciles authority
 # and the durable map before a replacement proxy could receive those sockets.
 export NORTH_COORD_TEST_PROMOTION_FAIL=1
 export NORTH_COORD_TEST_ROLLBACK_FAIL=1
-if "$selector" switch blue >"$scratch/closed.out" 2>"$scratch/closed.err"; then
+if "$selector" switch green >"$scratch/closed.out" 2>"$scratch/closed.err"; then
   printf 'failed rollback unexpectedly completed\n' >&2
   exit 1
 fi
@@ -329,13 +508,13 @@ PY
 }
 "$selector" prestart
 [[ ! -e "$transaction" ]]
-grep -Fxq 'active green' "$route_map"
+grep -Fxq 'active blue' "$route_map"
 # prestart never opens a held live proxy; systemd invokes it before ExecStart.
 held_status=$("$selector" status || true)
 rg -q '^frontend=(STOP|PAUSED)$' <<<"$held_status"
 "$selector" recover
-[[ $(probe "$coord_public" recovered) == coord-green:recovered ]]
-[[ $(probe "$telemetry_public" recovered) == telemetry-green:recovered ]]
+[[ $(probe "$coord_public" recovered) == coord-blue:recovered ]]
+[[ $(probe "$telemetry_public" recovered) == telemetry-blue:recovered ]]
 
 # Restart HAProxy while the systemd-like parent retains both public listeners.
 # A connection opened during the proxy gap is accepted from the same permanent
@@ -367,6 +546,33 @@ done
 [[ -S "$admin_socket" ]]
 "$selector" recover
 wait "$restart_client_pid"
-grep -Fxq 'coord-green:restart' "$scratch/restart-result"
+grep -Fxq 'coord-blue:restart' "$scratch/restart-result"
+
+if [[ "${NORTH_COORD_SELECTOR_SKIP_POWER_CHECKS:-0}" -eq 0 ]]; then
+  missing_telemetry_close=$scratch/selector.missing-telemetry-close
+  # shellcheck disable=SC2016
+  sed '/cli_mutation "shutdown sessions server telemetry-\$old\/only"/d' \
+    "$selector" >"$missing_telemetry_close"
+  chmod 0700 "$missing_telemetry_close"
+  if NORTH_COORD_SELECTOR_TEST_BINARY=$missing_telemetry_close \
+     NORTH_COORD_SELECTOR_SKIP_POWER_CHECKS=1 \
+     bash "$0" >"$scratch/power-close.out" 2>"$scratch/power-close.err"; then
+    printf 'selector test passed without closing old telemetry sessions\n' >&2
+    exit 1
+  fi
+
+  missing_pregate_rollback=$scratch/selector.missing-pregate-rollback
+  # shellcheck disable=SC2016
+  sed 's/    rollback_to "$old" "$target" 0 ||/    false ||/' \
+    "$selector" >"$missing_pregate_rollback"
+  chmod 0700 "$missing_pregate_rollback"
+  if NORTH_COORD_SELECTOR_TEST_BINARY=$missing_pregate_rollback \
+     NORTH_COORD_SELECTOR_SKIP_POWER_CHECKS=1 \
+     bash "$0" >"$scratch/power-rollback.out" \
+       2>"$scratch/power-rollback.err"; then
+    printf 'selector test passed without pre-gate automatic rollback\n' >&2
+    exit 1
+  fi
+fi
 
 printf 'ok: permanent inherited sockets, pair-atomic routing, drain, rollback, and recovery are zero-refusal\n'

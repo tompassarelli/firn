@@ -123,11 +123,14 @@ let
       export NORTH_COORD_SELECTOR_MAP=${selectorMap}
       export NORTH_COORD_SELECTOR_FRONTEND=${proxyFrontend}
       export NORTH_COORD_SELECTOR_LOCK=${selectorLock}
+      export NORTH_COORD_SELECTOR_OWNER=${username}
+      export NORTH_COORD_SELECTOR_GROUP=users
       export NORTH_COORD_SELECTOR_TRANSACTION=${selectorTransaction}
       export NORTH_COORD_SELECTOR_PROMOTE_COMMAND=${selectorPromote}/bin/north-coord-selector-promote
       export NORTH_COORD_SELECTOR_ROLLBACK_COMMAND=${selectorRollback}/bin/north-coord-selector-rollback
       export NORTH_COORD_SELECTOR_VERIFY_COMMAND=${selectorVerify}/bin/north-coord-selector-verify
-      export NORTH_COORD_SELECTOR_DRAIN_TIMEOUT=15
+      export NORTH_COORD_SELECTOR_DRAIN_GRACE_MS=1500
+      export NORTH_COORD_SELECTOR_DRAIN_TIMEOUT=5
       ${builtins.readFile ./north-coord-selector}
     '';
   };
@@ -139,8 +142,8 @@ let
     defaults
       mode tcp
       timeout connect 2s
-      timeout client 30s
-      timeout server 30s
+      timeout client 1h
+      timeout server 1h
 
     frontend ${proxyFrontend}
       bind fd@3

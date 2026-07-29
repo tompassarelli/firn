@@ -19,13 +19,19 @@ need_setting NORTH_COORD_SELECTOR_SOCKET
 need_setting NORTH_COORD_SELECTOR_MAP
 need_setting NORTH_COORD_SELECTOR_FRONTEND
 need_setting NORTH_COORD_SELECTOR_LOCK
+need_setting NORTH_COORD_SELECTOR_OWNER
+need_setting NORTH_COORD_SELECTOR_GROUP
 
 admin_socket=$NORTH_COORD_SELECTOR_SOCKET
 route_map=$NORTH_COORD_SELECTOR_MAP
 frontend=$NORTH_COORD_SELECTOR_FRONTEND
 selector_lock=$NORTH_COORD_SELECTOR_LOCK
+state_owner=$NORTH_COORD_SELECTOR_OWNER
+state_group=$NORTH_COORD_SELECTOR_GROUP
 transaction_file=${NORTH_COORD_SELECTOR_TRANSACTION:-${route_map}.transaction}
-drain_timeout=${NORTH_COORD_SELECTOR_DRAIN_TIMEOUT:-15}
+drain_grace_ms=${NORTH_COORD_SELECTOR_DRAIN_GRACE_MS:-1500}
+drain_timeout=${NORTH_COORD_SELECTOR_DRAIN_TIMEOUT:-5}
+admin_client=${NORTH_COORD_SELECTOR_ADMIN_CLIENT:-socat}
 promote_command=${NORTH_COORD_SELECTOR_PROMOTE_COMMAND:-}
 rollback_command=${NORTH_COORD_SELECTOR_ROLLBACK_COMMAND:-}
 verify_command=${NORTH_COORD_SELECTOR_VERIFY_COMMAND:-}
@@ -37,9 +43,26 @@ verify_command=${NORTH_COORD_SELECTOR_VERIFY_COMMAND:-}
   die "transaction path must be absolute: $transaction_file"
 [[ "$frontend" =~ ^[A-Za-z0-9_.:-]+$ ]] ||
   die "frontend name is invalid: $frontend"
+[[ "$state_owner" =~ ^[A-Za-z0-9_.-]+$ ]] ||
+  die "selector state owner is invalid: $state_owner"
+[[ "$state_group" =~ ^[A-Za-z0-9_.-]+$ ]] ||
+  die "selector state group is invalid: $state_group"
 if ! [[ "$drain_timeout" =~ ^[0-9]+$ ]] ||
    (( 10#$drain_timeout < 1 )); then
   die "drain timeout must be a positive integer"
+fi
+if ! [[ "$drain_grace_ms" =~ ^[0-9]+$ ]] ||
+   (( 10#$drain_grace_ms < 1 )); then
+  die "drain grace must be a positive integer number of milliseconds"
+fi
+if [[ "$admin_client" == */* ]]; then
+  [[ "$admin_client" == /* && -x "$admin_client" && ! -L "$admin_client" ]] ||
+    die "admin client must be an absolute, non-symlink executable: $admin_client"
+else
+  [[ "$admin_client" =~ ^[A-Za-z0-9_.+-]+$ ]] ||
+    die "admin client command is invalid: $admin_client"
+  command -v "$admin_client" >/dev/null ||
+    die "admin client command is unavailable: $admin_client"
 fi
 
 route_parent=${route_map%/*}
@@ -74,6 +97,9 @@ write_one_line() {
   [[ ! -e "$temp" && ! -L "$temp" ]] ||
     die "temporary selector path already exists: $temp"
   printf '%s\n' "$line" >"$temp"
+  chmod 0600 "$temp"
+  chown "$state_owner:$state_group" "$temp" ||
+    die "cannot set selector state ownership on: $temp"
   sync_path "$temp"
   mv -T "$temp" "$path"
   sync_path "$parent"
@@ -99,7 +125,7 @@ persist_route() {
 cli() {
   local command=$1
   printf '%s\n' "$command" |
-    socat -t 3 - "UNIX-CONNECT:$admin_socket"
+    "$admin_client" -t 3 - "UNIX-CONNECT:$admin_socket"
 }
 
 cli_mutation() {
@@ -179,18 +205,49 @@ resume_frontend() {
     die "HAProxy frontend did not enter OPEN: $status"
 }
 
-wait_for_drain() {
-  local deadline status sessions
-  deadline=$((SECONDS + 10#$drain_timeout))
+now_millis() {
+  date +%s%3N
+}
+
+wait_for_drain_ms() {
+  local timeout_ms=$1 deadline status sessions
+  deadline=$(now_millis)
+  deadline=$((deadline + 10#$timeout_ms))
   while :; do
     read -r status sessions < <(frontend_status)
     [[ "$status" == STOP || "$status" == PAUSED ]] ||
       die "frontend resumed while waiting for drain: $status"
     (( sessions == 0 )) && return 0
-    (( SECONDS < deadline )) ||
-      die "frontend did not drain within ${drain_timeout}s: $sessions session(s)"
+    (( $(now_millis) < deadline )) || return 1
     sleep 0.05
   done
+}
+
+close_old_sessions() {
+  local old=$1
+  valid_slot "$old" || die "cannot close sessions for invalid slot: $old"
+
+  # HOLD stops admission but intentionally does not tear down established TCP
+  # subscriptions. Give ordinary requests a brief grace period, then close
+  # only the two old-generation backend sessions. Socket-owned public
+  # listeners remain bound; persistent North clients reconnect after RESUME.
+  cli_mutation "shutdown sessions server coord-$old/only"
+  cli_mutation "shutdown sessions server telemetry-$old/only"
+}
+
+drain_for_handoff() {
+  local old=$1 status sessions
+  if wait_for_drain_ms "$drain_grace_ms"; then
+    return 0
+  fi
+
+  close_old_sessions "$old"
+  if wait_for_drain_ms "$((10#$drain_timeout * 1000))"; then
+    return 0
+  fi
+
+  read -r status sessions < <(frontend_status)
+  die "frontend did not drain after closing old sessions within ${drain_timeout}s: $sessions session(s)"
 }
 
 set_runtime_route() {
@@ -287,9 +344,17 @@ switch_route() {
     die "frontend is not open before cutover: $status"
 
   write_transaction holding "$old" "$target"
-  hold_frontend
-  wait_for_drain
-  write_transaction gate-started "$old" "$target"
+  if ! (
+    hold_frontend
+    drain_for_handoff "$old"
+    write_transaction gate-started "$old" "$target"
+  ); then
+    # POWER_CHECK: a pre-gate drain/close failure must not strand PAUSED +
+    # holding. Authority is still old, so restoring its route is sufficient.
+    rollback_to "$old" "$target" 0 ||
+      die "pre-gate handoff failed and rollback could not restore $old"
+    die "pre-gate handoff failed; restored $old"
+  fi
   gate_started=1
 
   if "$promote_command" "$old" "$target" "$transaction_file"; then

@@ -206,6 +206,8 @@
                   (s "export NORTH_COORD_SELECTOR_MAP=" selectorMap)
                   (s "export NORTH_COORD_SELECTOR_FRONTEND=" proxyFrontend)
                   (s "export NORTH_COORD_SELECTOR_LOCK=" selectorLock)
+                  (s "export NORTH_COORD_SELECTOR_OWNER=" username)
+                  "export NORTH_COORD_SELECTOR_GROUP=users"
                   (s "export NORTH_COORD_SELECTOR_TRANSACTION="
                      selectorTransaction)
                   (s "export NORTH_COORD_SELECTOR_PROMOTE_COMMAND="
@@ -214,7 +216,12 @@
                      selectorRollback "/bin/north-coord-selector-rollback")
                   (s "export NORTH_COORD_SELECTOR_VERIFY_COMMAND="
                      selectorVerify "/bin/north-coord-selector-verify")
-                  "export NORTH_COORD_SELECTOR_DRAIN_TIMEOUT=15"
+                  ;; Long-lived listen/subscription sockets do not drain by
+                  ;; themselves. Preserve a short grace for ordinary requests,
+                  ;; then close only old-generation backend sessions and prove
+                  ;; the frontend drained before authority changes.
+                  "export NORTH_COORD_SELECTOR_DRAIN_GRACE_MS=1500"
+                  "export NORTH_COORD_SELECTOR_DRAIN_TIMEOUT=5"
                   (builtins.readFile (p "./north-coord-selector")))})
         proxyConfig
           (pkgs.writeText
@@ -227,8 +234,11 @@
                 "defaults"
                 "  mode tcp"
                 "  timeout connect 2s"
-                "  timeout client 30s"
-                "  timeout server 30s"
+                ;; North listeners are intentionally idle between peer
+                ;; messages. Keep those subscriptions stable in steady state;
+                ;; selector cutover explicitly closes old-backend sessions.
+                "  timeout client 1h"
+                "  timeout server 1h"
                 ""
                 (s "frontend " proxyFrontend)
                 "  bind fd@3"
