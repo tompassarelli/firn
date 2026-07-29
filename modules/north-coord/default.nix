@@ -27,6 +27,7 @@ let
       export NORTH_COORD_RUNTIME_STATE=${state}
       export NORTH_COORD_FRAM_PACKAGE=${framPkg}
       export NORTH_COORD_FRAM_PACKAGE_REV=${framRev}
+      export NORTH_COORD_FRAM_JAVA=${pkgs.jdk}/bin/java
       export NORTH_COORD_FRAM_CHECKOUT=${homeDir}/code/fram/main
       export NORTH_COORD_NORTH_PACKAGE=${northPkg}
       export NORTH_COORD_FRAM_LOG=${primaryLog}

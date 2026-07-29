@@ -71,6 +71,11 @@ preflight_release_polls=${NORTH_COORD_PREFLIGHT_RELEASE_POLLS:-150}
 # without slowing the crash-restart path the same knob would.
 preflight_refusal_backoff=${NORTH_COORD_PREFLIGHT_REFUSAL_BACKOFF:-10}
 restart_lock_timeout=${NORTH_COORD_RESTART_LOCK_TIMEOUT:-60}
+# The exact JDK this system generation pins for the Fram daemon. Only promoted
+# checkouts need it: the packaged daemon carries its own FRAM_JAVA through
+# makeWrapper. Kept out of need_setting so package-only deployments of an older
+# module generation still start.
+fram_java=${NORTH_COORD_FRAM_JAVA:-}
 
 case "$state_root" in
   /*) ;;
@@ -289,6 +294,85 @@ validate_checkout_target() {
   runtime_origin=$observed_origin
   runtime_daemon=$canonical_source/bin/fram-daemon
   runtime_identity_migrated=0
+}
+
+# Two speeds, one classpath. Application code moves at the pinned commit's
+# speed (the deployment's own out/); the JVM and its jars move at the system
+# generation's speed (the packaged, build-time-resolved store closure). The
+# composed file is what makes that split bootable: bin/fram-daemon takes the
+# sealed `$FRAM_JAVA -cp` branch only when FRAM_JAVA and
+# FRAM_DAEMON_CLASSPATH_FILE are both set, and otherwise falls back to
+# `clojure -M`, which resolves tools.deps against ~/.m2 and the network at
+# service start. Promote mode refuses to start without both, so that impure
+# fallback is unreachable here.
+#
+# The file deliberately lives BESIDE the deployment, not inside it: a
+# deployment is a detached worktree whose cleanliness (no tracked drift, no
+# untracked bytes) is revalidated on every load, so writing daemon.classpath
+# into it would fail the deployment's own identity check.
+deployment_classpath_file() {
+  local deployment=$1
+  printf '%s\n' "$deployments/${deployment##*/}.classpath"
+}
+
+compose_deployment_classpath() {
+  local deployment=$1
+  local canonical_package packaged_file packaged_out deployment_out
+  local target temp entry joined packaged_out_dropped=0
+  local -a entries=()
+
+  canonical_package=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") ||
+    die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
+  packaged_file=$canonical_package/libexec/fram/daemon.classpath
+  [[ -f "$packaged_file" && ! -L "$packaged_file" && -r "$packaged_file" ]] ||
+    die "packaged daemon classpath is missing: $packaged_file"
+  packaged_out=$canonical_package/libexec/fram/out
+  deployment_out=$deployment/out
+  [[ -d "$deployment_out" && ! -L "$deployment_out" ]] ||
+    die "checkout deployment has no daemon code root: $deployment_out"
+  [[ "$deployment_out" != *:* ]] ||
+    die "deployment code root cannot be a classpath entry: $deployment_out"
+
+  entries=("$deployment_out")
+  while IFS= read -r entry; do
+    [[ -n "$entry" ]] || continue
+    # The deployment's own code replaces the package's, one for one.
+    if [[ "$entry" == "$packaged_out" ]]; then
+      packaged_out_dropped=1
+      continue
+    fi
+    # Still closed: an inherited entry is a store path or nothing. The only
+    # non-store entry this file may name is this exact deployment's out/.
+    case "$entry" in
+      /nix/store/*) ;;
+      *) die "packaged daemon classpath entry is not a store path: $entry" ;;
+    esac
+    entries+=("$entry")
+  done < <(tr ':' '\n' <"$packaged_file")
+
+  [[ "$packaged_out_dropped" -eq 1 ]] ||
+    die "packaged daemon classpath does not name its own code root: $packaged_out"
+  [[ "${#entries[@]}" -ge 2 ]] ||
+    die "packaged daemon classpath supplies no store dependencies: $packaged_file"
+
+  printf -v joined '%s:' "${entries[@]}"
+  joined=${joined%:}
+  target=$(deployment_classpath_file "$deployment")
+  temp=$deployments/.${deployment##*/}.classpath.next.$$.$RANDOM
+  [[ ! -e "$temp" && ! -L "$temp" ]] ||
+    die "temporary deployment classpath already exists: $temp"
+  if ! (
+    set -o noclobber
+    umask 077
+    printf '%s\n' "$joined" >"$temp"
+  ); then
+    die "cannot stage deployment classpath: $temp"
+  fi
+  if ! mv -T "$temp" "$target"; then
+    rm -f -- "${temp:?}"
+    die "cannot publish deployment classpath: $target"
+  fi
+  sync -f "$deployments" || die "cannot sync deployment classpath: $target"
 }
 
 validate_target() {
@@ -674,6 +758,9 @@ promote_checkout() {
     sync -f "$deployments"
   fi
   validate_checkout_target "$deployment" "$revision" "$canonical_origin"
+  # Fail here, at the developer's terminal, rather than at service start: a
+  # deployment that cannot be given a sealed classpath is not promotable.
+  compose_deployment_classpath "$runtime_source"
   select_target "$runtime_source"
   load_selected
   print_restart_instruction
@@ -714,7 +801,7 @@ show_status() {
 }
 
 export_runtime_identity() {
-  local generation_identity runtime_record
+  local generation_identity runtime_record classpath_file
 
   generation_identity=$active_generation/current.identity
   runtime_record=$active_generation/active.runtime
@@ -726,8 +813,26 @@ export_runtime_identity() {
   export FRAM_HOME=$runtime_source
   if [[ "$runtime_mode" == package ]]; then
     export FRAM_BIN=$runtime_origin/bin
+    # The packaged daemon carries its own sealed pair through makeWrapper.
+    # Never hand it a half-set inherited one — bin/fram-daemon rejects that.
+    unset FRAM_JAVA FRAM_DAEMON_CLASSPATH_FILE
   else
     export FRAM_BIN=$runtime_source/bin
+    # Recomposed on every start, not just at promote: the pinned commit holds
+    # its code speed while the jars follow whichever system generation is
+    # actually starting this service.
+    compose_deployment_classpath "$runtime_source"
+    classpath_file=$(deployment_classpath_file "$runtime_source")
+    [[ -n "$fram_java" ]] ||
+      die "promoted runtimes require a pinned Java: NORTH_COORD_FRAM_JAVA is unset"
+    [[ "$fram_java" == /* && -x "$fram_java" ]] ||
+      die "pinned Java runtime is not an executable absolute path: $fram_java"
+    [[ -r "$classpath_file" ]] ||
+      die "composed deployment classpath is not readable: $classpath_file"
+    # Both, always, together: bin/fram-daemon only takes its sealed JVM branch
+    # when both are set, and the alternative is tools.deps at service start.
+    export FRAM_JAVA=$fram_java
+    export FRAM_DAEMON_CLASSPATH_FILE=$classpath_file
   fi
   export FRAM_LOG=$NORTH_COORD_FRAM_LOG
   export FRAM_TELEMETRY_LOG=$telemetry_log

@@ -56,6 +56,10 @@
                 (ms (s "export NORTH_COORD_RUNTIME_STATE=" state)
                     (s "export NORTH_COORD_FRAM_PACKAGE=" framPkg)
                     (s "export NORTH_COORD_FRAM_PACKAGE_REV=" framRev)
+                    ;; A promoted checkout boots on the packaged JVM + store
+                    ;; jars with only its own out/ swapped in, so the service
+                    ;; never resolves tools.deps (network, ~/.m2) at start.
+                    (s "export NORTH_COORD_FRAM_JAVA=" pkgs.jdk "/bin/java")
                     (s "export NORTH_COORD_FRAM_CHECKOUT=" homeDir "/code/fram/main")
                     (s "export NORTH_COORD_NORTH_PACKAGE=" northPkg)
                     (s "export NORTH_COORD_FRAM_LOG=" primaryLog)

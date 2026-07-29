@@ -15,6 +15,7 @@ package=$scratch/package
 package_source=$package/libexec/fram
 package_daemon=$package/bin/fram-daemon
 north_package=$scratch/north-package
+fram_java=$scratch/pinned-jdk/bin/java
 log=$scratch/coordination.log
 telemetry_log=$scratch/telemetry.log
 north_calls=$scratch/north-calls
@@ -24,7 +25,22 @@ fram_calls=$scratch/fram-calls
 fram_fail=$scratch/fram-fail
 fram_down=$scratch/fram-down
 test_port=${NORTH_COORD_TEST_PORT:-$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')}
-mkdir -p "$repo/bin" "$package/bin" "$package_source/bin" "$north_package/bin"
+mkdir -p "$repo/bin" "$repo/out" "$package/bin" "$package_source/bin" \
+  "$north_package/bin" "$(dirname "$fram_java")"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$fram_java"
+chmod +x "$fram_java"
+
+# Stand-ins for the jars fram's build resolves once, at build time, into the
+# store. Composition never opens them — it inherits them verbatim — so exact
+# store names are all the fixture owes.
+packaged_jars=/nix/store/00000000000000000000000000000001-clojure-1.12.4.jar:/nix/store/00000000000000000000000000000002-cheshire-5.13.0.jar
+write_packaged_classpath() {
+  local package_root=$1
+  mkdir -p "$package_root/libexec/fram"
+  printf '%s\n' "$package_root/libexec/fram/out:$packaged_jars" \
+    >"$package_root/libexec/fram/daemon.classpath"
+}
+write_packaged_classpath "$package"
 export NORTH_COORD_TEST_CALLS=$north_calls
 export NORTH_COORD_TEST_FAIL=$north_fail
 export NORTH_COORD_TEST_SYSTEMCTL_CALLS=$systemctl_calls
@@ -296,6 +312,8 @@ write_daemon() {
     'stat_line=$(</proc/$$/stat); remainder=${stat_line##*) }; read -r -a stat_fields <<<"$remainder"; printf '\''birth=proc:%s\n'\'' "${stat_fields[19]}"' \
     "printf 'home=%s\\n' \"\$FRAM_HOME\"" \
     "printf 'bin=%s\\n' \"\$FRAM_BIN\"" \
+    "printf 'java=%s\\n' \"\${FRAM_JAVA-unset}\"" \
+    "printf 'classpath-file=%s\\n' \"\${FRAM_DAEMON_CLASSPATH_FILE-unset}\"" \
     "printf 'args=%s|%s\\n' \"\$1\" \"\$2\"" \
     'if [[ -n "${NORTH_COORD_TEST_READY:-}" ]]; then : >"$NORTH_COORD_TEST_READY"; fi' \
     'if [[ -n "${NORTH_COORD_TEST_RELEASE:-}" ]]; then IFS= read -r _ <"$NORTH_COORD_TEST_RELEASE"; fi' \
@@ -305,7 +323,10 @@ write_daemon() {
 
 write_daemon "$repo/bin/fram-daemon" checkout
 printf 'one\n' >"$repo/revision.txt"
-git -C "$repo" add bin/fram-daemon revision.txt
+# out/ is the daemon's code root — the one classpath entry that must come from
+# the pinned commit rather than the store.
+printf '(ns coord-daemon-fixture)\n' >"$repo/out/coord_daemon_wire.clj"
+git -C "$repo" add bin/fram-daemon out/coord_daemon_wire.clj revision.txt
 git -C "$repo" commit -qm one
 revision_one=$(git -C "$repo" rev-parse HEAD)
 tree_one=$(git -C "$repo" rev-parse 'HEAD^{tree}')
@@ -328,6 +349,7 @@ run_runtime_in_state() {
   NORTH_COORD_RUNTIME_STATE=$selected_state \
   NORTH_COORD_FRAM_PACKAGE=$package \
   NORTH_COORD_FRAM_PACKAGE_REV=$package_revision \
+  NORTH_COORD_FRAM_JAVA=$fram_java \
   NORTH_COORD_FRAM_CHECKOUT=$repo \
   NORTH_COORD_NORTH_PACKAGE=$north_package \
   NORTH_COORD_FRAM_LOG=$log \
@@ -699,6 +721,76 @@ grep -Fxq "home=$deployment_one" <<<"$checkout_start"
 grep -Fxq "bin=$deployment_one/bin" <<<"$checkout_start"
 grep -Fxq "args=$test_port|$log" <<<"$checkout_start"
 assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-daemon"
+
+# Two speeds, one classpath: the pinned commit's code root, then this system
+# generation's store jars. The packaged code root is replaced, not appended,
+# and the deployment stays byte-identical to its commit — the composed file
+# lives beside the worktree, never inside it.
+classpath_one=$state/deployments/$revision_one.classpath
+grep -Fxq "java=$fram_java" <<<"$checkout_start"
+grep -Fxq "classpath-file=$classpath_one" <<<"$checkout_start"
+[[ -f "$classpath_one" && ! -L "$classpath_one" ]]
+[[ -z "$(git -C "$deployment_one" status --porcelain=v1 --untracked-files=all)" ]]
+composed_one=$(<"$classpath_one")
+[[ "$composed_one" == "$deployment_one/out:$packaged_jars" ]]
+mapfile -t composed_entries < <(tr ':' '\n' <"$classpath_one")
+[[ "${composed_entries[0]}" == "$deployment_one/out" ]]
+[[ "${#composed_entries[@]}" -eq 3 ]]
+for composed_entry in "${composed_entries[@]:1}"; do
+  case "$composed_entry" in
+    /nix/store/*) ;;
+    *)
+      printf 'composed classpath kept a non-store entry: %s\n' "$composed_entry" >&2
+      exit 1
+      ;;
+  esac
+done
+if grep -Fq "$package_source/out" "$classpath_one"; then
+  printf 'composed classpath still names the packaged code root\n' >&2
+  exit 1
+fi
+
+# Without a pinned Java the promoted daemon would silently fall back to
+# `clojure -M` — tools.deps, ~/.m2, and the network at service start. That is
+# a hard failure, not a fallback.
+if unpinned_start=$(
+  NORTH_COORD_RUNTIME_STATE=$state \
+  NORTH_COORD_FRAM_PACKAGE=$package \
+  NORTH_COORD_FRAM_PACKAGE_REV=$package_revision \
+  NORTH_COORD_FRAM_CHECKOUT=$repo \
+  NORTH_COORD_NORTH_PACKAGE=$north_package \
+  NORTH_COORD_FRAM_LOG=$log \
+  NORTH_COORD_TELEMETRY_LOG=$telemetry_log \
+  NORTH_COORD_FRAM_PORT=$test_port \
+  NORTH_COORD_SYSTEMD_UNIT=north-coord.service \
+    "$runtime" start 2>&1
+); then
+  printf 'promoted checkout started without a pinned Java\n' >&2
+  exit 1
+fi
+grep -Fq 'NORTH_COORD_FRAM_JAVA is unset' <<<"$unpinned_start"
+
+# A package that cannot supply a sealed classpath is not promotable, and the
+# refusal lands at promote rather than at service start.
+classpath_gap_state=$scratch/classpath-gap-state
+classpath_gap_package=$scratch/classpath-gap-package
+mkdir -p "$classpath_gap_package/bin" "$classpath_gap_package/libexec/fram/bin"
+write_daemon "$classpath_gap_package/bin/fram-daemon" classpath-gap-package
+package=$classpath_gap_package \
+  run_runtime_in_state "$classpath_gap_state" initialize
+gap_promote=$(
+  package=$classpath_gap_package \
+    run_runtime_in_state "$classpath_gap_state" \
+      promote "$repo" "$revision_one" 2>&1
+) && gap_promoted=1 || gap_promoted=0
+if [[ "$gap_promoted" -eq 1 ]]; then
+  printf 'deployment was promoted without a packaged daemon classpath\n' >&2
+  exit 1
+fi
+grep -Fq 'packaged daemon classpath is missing' <<<"$gap_promote"
+grep -Fxq mode=package \
+  < <(package=$classpath_gap_package \
+      run_runtime_in_state "$classpath_gap_state" status)
 [[ $(record_value "$runtime_record_one" PID) == "$(sed -n 's/^pid=//p' <<<"$checkout_start")" ]]
 [[ $(record_value "$runtime_record_one" PID_BIRTH) == "$(sed -n 's/^birth=//p' <<<"$checkout_start")" ]]
 first_pid=$(record_value "$runtime_record_one" PID)
@@ -970,6 +1062,10 @@ grep -Fxq "origin=$package" <<<"$package_start"
 grep -Fxq "daemon=$package_daemon" <<<"$package_start"
 grep -Fxq "home=$package_source" <<<"$package_start"
 grep -Fxq "bin=$package/bin" <<<"$package_start"
+# The packaged daemon wrapper seals its own FRAM_JAVA/classpath pair; handing
+# it an inherited one would only risk a half-set pair, which it rejects.
+grep -Fxq 'java=unset' <<<"$package_start"
+grep -Fxq 'classpath-file=unset' <<<"$package_start"
 grep -Eq '^owner=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' <<<"$package_start"
 assert_active_record "$package_generation" "$package_source" "$package_revision" "immutable:$package_revision" "$package" "$package_daemon"
 if run_runtime exec-checkout "$identity_probe" >/dev/null 2>&1; then
@@ -1105,6 +1201,8 @@ mkdir -p "$old_package/bin" "$old_package/libexec/fram/bin" \
          "$new_package/bin" "$new_package/libexec/fram/bin"
 write_daemon "$old_package/bin/fram-daemon" old-package
 write_daemon "$new_package/bin/fram-daemon" new-package
+write_packaged_classpath "$old_package"
+write_packaged_classpath "$new_package"
 
 run_mode_runtime() {
   local selected_package=$1 selected_revision=$2
