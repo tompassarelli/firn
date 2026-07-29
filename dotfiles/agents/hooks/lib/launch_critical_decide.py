@@ -42,9 +42,16 @@ MUTATING_GIT = {
     "clean", "rm", "mv", "gc", "prune", "filter-branch", "update-ref",
 }
 
-# Explicitly allowed from a primary — these are how you LEAVE the primary
-# correctly, so blocking them would trap the agent with no compliant move.
+# Explicitly allowed from a primary — these are how you LEAVE it and how work
+# LANDS in it. Blocking them would trap a lane with no compliant move, and a
+# guard with no compliant move is one the next person switches off.
 SANCTIONED_GIT = {"worktree", "fetch"}
+
+# merge/pull are mutations, but --ff-only cannot dirty the tree or invent a
+# commit: it either fast-forwards or refuses. `git fetch <wt> <b>:refs/heads/main`
+# — the other landing form — FAILS when main is checked out, which it always is
+# under this layout, so without these there is no way to land at all.
+FF_ONLY_GIT = {"merge", "pull"}
 
 # Commands whose job is to modify a file in place.
 WRITE_COMMANDS = {
@@ -116,6 +123,12 @@ def _git_decision(tokens, cwd):
             break
         if verb in SANCTIONED_GIT:
             return None
+        if verb in FF_ONLY_GIT:
+            # Only the fast-forward form is sanctioned; a bare merge/pull can
+            # conflict and leave the checkout dirty, which is the whole problem.
+            if "--ff-only" in rest:
+                return None
+            return (target, verb + " (without --ff-only)")
         if verb in MUTATING_GIT:
             return (target, verb)
     return None

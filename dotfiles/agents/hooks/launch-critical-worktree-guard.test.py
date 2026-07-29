@@ -98,8 +98,21 @@ check("cat a primary file", run(bash("cat /home/tom/code/north/cli/coord.clj")) 
 
 check("git worktree add FROM the primary is the escape route, never blocked",
       run(bash("git -C /home/tom/code/north worktree add /home/tom/code/north/wt-x -b x")) is None)
-check("git fetch INTO the primary is the sanctioned landing path",
+check("git fetch INTO the primary is allowed",
       run(bash("git -C /home/tom/code/north fetch /home/tom/code/north/wt-x x:refs/heads/main")) is None)
+
+# THE LANDING PATH MUST WORK. `fetch <wt> <branch>:refs/heads/main` fails when
+# main is checked out — which it always is under this layout — so --ff-only
+# merge/pull is the only way work can reach main. A guard that blocks the one
+# compliant landing move is a guard that gets switched off.
+check("merge --ff-only into the primary is the landing path",
+      run(bash("git -C /home/tom/code/north/main merge --ff-only feature")) is None)
+check("pull --ff-only into the primary is allowed",
+      run(bash("git -C /home/tom/code/north/main pull --ff-only")) is None)
+check("a BARE merge into the primary is still denied (can conflict, can dirty)",
+      run(bash("git -C /home/tom/code/north/main merge feature")))
+check("a BARE pull into the primary is still denied",
+      run(bash("git -C /home/tom/code/north/main pull")))
 
 check("redirect to /tmp while cwd is a primary is fine",
       run(bash("grep foo cli/x.clj > /tmp/out", cwd=NORTH)) is None)

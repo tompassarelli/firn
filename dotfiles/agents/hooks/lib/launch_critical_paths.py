@@ -81,5 +81,6 @@ def worktree_advice(project):
         "Work in a worktree, then land through a ref:\n"
         f"  git -C {container}/main worktree add {container}/wt-<slug> -b <slug>\n"
         f"  # edit + commit in {container}/wt-<slug>, then land it:\n"
-        f"  git -C {container}/main fetch {container}/wt-<slug> <slug>:refs/heads/main\n"
+        f"  git -C {container}/main merge --ff-only <slug>\n"
+        f"  # (plain `fetch <wt> <b>:refs/heads/main` cannot be used: main is checked out)\n"
     )
