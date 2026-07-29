@@ -84,12 +84,12 @@
         "rev": "25edb49f3571f7c354538389cebc4f6965d55e53",
         "revCount": 1067,
         "type": "git",
-        "url": "file:///home/tom/code/beagle"
+        "url": "file:///home/tom/code/beagle/main"
       },
       "original": {
         "ref": "main",
         "type": "git",
-        "url": "file:///home/tom/code/beagle"
+        "url": "file:///home/tom/code/beagle/main"
       }
     },
     "beagle_2": {
@@ -463,12 +463,12 @@
         "rev": "4f4bab6f8991c113d52433e0b368570f0ca1fcb0",
         "revCount": 654,
         "type": "git",
-        "url": "file:///home/tom/code/fram"
+        "url": "file:///home/tom/code/fram/main"
       },
       "original": {
         "ref": "main",
         "type": "git",
-        "url": "file:///home/tom/code/fram"
+        "url": "file:///home/tom/code/fram/main"
       }
     },
     "fromYaml": {
@@ -902,18 +902,18 @@
         ]
       },
       "locked": {
-        "lastModified": 1785300693,
-        "narHash": "sha256-ODczkKa0r/kt0DGPJcGRKnv2gtY/WbLHg0FdAjZ+s60=",
+        "lastModified": 1785306316,
+        "narHash": "sha256-BzxXeNJ+MJxXvbjJDrko7RC6U/2/hCEDMegHXEou5CE=",
         "ref": "main",
-        "rev": "6d20c86a8b032818886d688db2ce6f8d94ef5952",
-        "revCount": 824,
+        "rev": "3aa00eda89fc8914f5c777c58e6126735b268cd6",
+        "revCount": 825,
         "type": "git",
-        "url": "file:///home/tom/code/north"
+        "url": "file:///home/tom/code/north/main"
       },
       "original": {
         "ref": "main",
         "type": "git",
-        "url": "file:///home/tom/code/north"
+        "url": "file:///home/tom/code/north/main"
       }
     },
     "npm-lockfile-fix": {
