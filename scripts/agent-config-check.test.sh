@@ -65,15 +65,15 @@ fi
 if rg -n 'dotfiles/agents|dotfiles/claude/hooks' \
   "$REPO/dotfiles/claude/settings.json" \
   "$REPO/dotfiles/codex/hooks.json" \
-  "$REPO/modules/agent-core/default.bnix" \
+  "$REPO/modules/north-profile/default.bnix" \
   "$REPO/modules/claude/default.bnix" \
   "$REPO/modules/codex/default.bnix" \
   "$REPO/modules/hermes/default.bnix"; then
   printf 'active provider wiring still references the retired Firn agent tree\n' >&2
   exit 1
 fi
-grep -Fq '"/code/north/main/profiles/tom/AGENTS.md"' \
-  "$REPO/modules/agent-core/default.bnix"
+grep -Fq '"/code/north/main/agent-profile/AGENTS.md"' \
+  "$REPO/modules/north-profile/default.bnix"
 grep -Fq '"/.agents/hooks"' "$REPO/modules/claude/default.bnix"
 grep -Fq '"/.agents/AGENTS.md"' "$REPO/modules/codex/default.bnix"
 grep -Fq '"/.agents/AGENTS.md"' "$REPO/modules/hermes/default.bnix"
