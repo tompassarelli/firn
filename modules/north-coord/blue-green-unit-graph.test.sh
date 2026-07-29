@@ -25,6 +25,7 @@ for name in \
   north-coord-pair-prepare.service \
   north-coord-pair-settle.service \
   north-coord-blue-green.target \
+  north-coord-blue-green-resume.service \
   north-coord-blue.service \
   north-telemetry-coord-blue.service \
   north-coord-green.service \
@@ -61,7 +62,25 @@ done
 grep -Fxq "ConditionPathExists=$marker" \
   "$(unit north-coord-blue-green.target)"
 grep -Fxq "ConditionPathExists=$marker" \
+  "$(unit north-coord-blue-green-resume.service)"
+grep -Fxq "ConditionPathExists=$marker" \
   "$(unit north-coord-proxy.service)"
+
+# A target condition cannot conditionalize Wants=. Therefore the target is
+# never directly wanted at boot. The dependency-light resume oneshot is the
+# only boot entrypoint and runs the ordered, idempotent bootstrap command.
+if grep -q '^WantedBy=multi-user.target$' \
+  "$(unit north-coord-blue-green.target)"; then
+  echo "blue/green target is directly wanted at boot" >&2
+  exit 1
+fi
+resume_unit=$(unit north-coord-blue-green-resume.service)
+grep -Fxq \
+  'Requires=north-coord.socket north-telemetry-coord.socket' \
+  "$resume_unit"
+grep -Eq '^ExecStart=.*/north-coord-bootstrap$' "$resume_unit"
+[[ ! -e "$units/multi-user.target.wants/north-coord-blue-green.target" ]]
+[[ -e "$units/multi-user.target.wants/north-coord-blue-green-resume.service" ]]
 
 # The proxy starts after all candidate endpoints but does not Require a
 # standby: losing a standby cannot tear down a healthy selected pair.
@@ -112,6 +131,7 @@ systemd-analyze verify \
   "$(unit north-coord.service)" \
   "$(unit north-telemetry-coord.service)" \
   "$(unit north-coord-pair.target)" \
+  "$(unit north-coord-blue-green-resume.service)" \
   "$(unit north-coord-blue-green.target)" \
   "$(unit north-coord-blue.service)" \
   "$(unit north-telemetry-coord-blue.service)" \

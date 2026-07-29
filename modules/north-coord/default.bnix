@@ -399,7 +399,6 @@
          :systemd.targets.north-coord-blue-green
           (lib.mkIf stageA
             {:description "North durable blue/green coordinator pair"
-             :wantedBy ["multi-user.target"]
              :unitConfig {:ConditionPathExists bootstrapMarker}
              :requires ["north-coord.socket"
                         "north-telemetry-coord.socket"]
@@ -631,5 +630,27 @@
              :stopIfChanged false
              :serviceConfig
               {:Type "oneshot"
+               :ExecStart
+                (s bootstrap "/bin/north-coord-bootstrap")}})
+         :systemd.services.north-coord-blue-green-resume
+          (lib.mkIf stageA
+            {:description
+              "Resume the durable North blue/green pair after boot"
+             :wantedBy ["multi-user.target"]
+             ;; Conditions cannot conditionalize Wants=. Keep this boot unit
+             ;; dependency-free except for the permanent sockets; its ordered,
+             ;; idempotent bootstrap command starts and verifies the selected
+             ;; pair, then the read-only pair, then the proxy.
+             :unitConfig {:ConditionPathExists bootstrapMarker}
+             :requires ["north-coord.socket"
+                        "north-telemetry-coord.socket"]
+             :after ["network.target"
+                     "north-coord.socket"
+                     "north-telemetry-coord.socket"]
+             :restartIfChanged false
+             :stopIfChanged false
+             :serviceConfig
+              {:Type "oneshot"
+               :RemainAfterExit true
                :ExecStart
                 (s bootstrap "/bin/north-coord-bootstrap")}})})}))

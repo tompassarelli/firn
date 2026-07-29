@@ -39,6 +39,7 @@ telemetry_socket=north-telemetry-coord.socket
 legacy_coord=north-coord.service
 legacy_telemetry=north-telemetry-coord.service
 proxy=north-coord-proxy.service
+resume=north-coord-blue-green-resume.service
 legacy_pair=north-coord-pair.target
 blue_coord=north-coord-blue.service
 blue_telemetry=north-telemetry-coord-blue.service
@@ -150,7 +151,7 @@ prove_logs_quiescent() {
 
 restore_legacy() {
   local status=0
-  systemctl stop north-coord-blue-green.target "$proxy" \
+  systemctl stop "$resume" north-coord-blue-green.target "$proxy" \
     "$blue_coord" "$blue_telemetry" \
     "$green_coord" "$green_telemetry" || status=1
   rm -f -- "$bootstrap_marker" "$route"
@@ -204,7 +205,7 @@ rollback_to_legacy() {
   # legacy pair preparation transaction.
   rollback_armed=1
   systemctl mask --runtime "$legacy_coord" "$legacy_telemetry"
-  systemctl stop north-coord-blue-green.target "$proxy"
+  systemctl stop "$resume" north-coord-blue-green.target "$proxy"
   wait_inactive "$proxy"
   systemctl stop "${private_units[@]}"
   for unit in "${private_units[@]}"; do

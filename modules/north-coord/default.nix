@@ -285,7 +285,6 @@ in
     };
     systemd.targets.north-coord-blue-green = lib.mkIf stageA {
       description = "North durable blue/green coordinator pair";
-      wantedBy = [ "multi-user.target" ];
       unitConfig = {
         ConditionPathExists = bootstrapMarker;
       };
@@ -444,6 +443,22 @@ in
       stopIfChanged = false;
       serviceConfig = {
         Type = "oneshot";
+        ExecStart = "${bootstrap}/bin/north-coord-bootstrap";
+      };
+    };
+    systemd.services.north-coord-blue-green-resume = lib.mkIf stageA {
+      description = "Resume the durable North blue/green pair after boot";
+      wantedBy = [ "multi-user.target" ];
+      unitConfig = {
+        ConditionPathExists = bootstrapMarker;
+      };
+      requires = [ "north-coord.socket" "north-telemetry-coord.socket" ];
+      after = [ "network.target" "north-coord.socket" "north-telemetry-coord.socket" ];
+      restartIfChanged = false;
+      stopIfChanged = false;
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
         ExecStart = "${bootstrap}/bin/north-coord-bootstrap";
       };
     };
