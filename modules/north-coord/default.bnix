@@ -230,7 +230,7 @@
                   ;; themselves. Preserve a short grace for ordinary requests,
                   ;; then close only old-generation backend sessions and prove
                   ;; the frontend drained before authority changes.
-                  "export NORTH_COORD_SELECTOR_DRAIN_GRACE_MS=1500"
+                  "export NORTH_COORD_SELECTOR_DRAIN_GRACE_MS=100"
                   "export NORTH_COORD_SELECTOR_DRAIN_TIMEOUT=5"
                   (builtins.readFile (p "./north-coord-selector")))})
         proxyConfig

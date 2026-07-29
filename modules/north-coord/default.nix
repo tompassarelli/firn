@@ -137,7 +137,7 @@ let
       export NORTH_COORD_SELECTOR_PROMOTE_COMMAND=${selectorPromote}/bin/north-coord-selector-promote
       export NORTH_COORD_SELECTOR_ROLLBACK_COMMAND=${selectorRollback}/bin/north-coord-selector-rollback
       export NORTH_COORD_SELECTOR_VERIFY_COMMAND=${selectorVerify}/bin/north-coord-selector-verify
-      export NORTH_COORD_SELECTOR_DRAIN_GRACE_MS=1500
+      export NORTH_COORD_SELECTOR_DRAIN_GRACE_MS=100
       export NORTH_COORD_SELECTOR_DRAIN_TIMEOUT=5
       ${builtins.readFile ./north-coord-selector}
     '';
