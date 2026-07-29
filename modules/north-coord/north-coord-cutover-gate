@@ -30,6 +30,7 @@ state=$NORTH_COORD_CUTOVER_STATE
 control_timeout_ms=${NORTH_COORD_CUTOVER_TIMEOUT_MS:-120000}
 settle_timeout_ms=${NORTH_COORD_CUTOVER_SETTLE_TIMEOUT_MS:-120000}
 settle_poll_seconds=${NORTH_COORD_CUTOVER_SETTLE_POLL_SECONDS:-0.1}
+unknown_state=$state/outcome.unknown
 
 [[ "$cutover" == /* && -x "$cutover" && ! -L "$cutover" ]] ||
   die "cutover command is not a safe executable"
@@ -227,21 +228,135 @@ await_terminal() {
   done
 }
 
-transition_result_unknown() {
-  local slot=$1 origin=$2 transition=$3 cutover_id=$4
-  local status phase observed_cutover_id
-  status=$(read_status "$slot" "$origin" any 2>/dev/null) || return 1
-  phase=$(sed -n '1p' <<<"$status")
-  observed_cutover_id=$(sed -n '5p' <<<"$status")
-  [[ "$observed_cutover_id" == "$cutover_id" ]] || return 1
-  case "$transition:$phase" in
-    demote:demoting|demote:demoted|promote:promoting|promote:active)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+write_unknown_state() {
+  local transition=$1 slot=$2 origin=$3 cutover_id=$4 temp
+  temp=$unknown_state.next.$$
+  printf '%s %s %s %s\n' \
+    "$transition" "$slot" "$origin" "$cutover_id" >"$temp"
+  sync -f "$temp"
+  mv -T "$temp" "$unknown_state"
+  sync -f "$state"
+}
+
+clear_unknown_state() {
+  rm -f -- "$unknown_state"
+  sync -f "$state"
+}
+
+read_unknown_state() {
+  local transition slot origin cutover_id extra
+  [[ -f "$unknown_state" && ! -L "$unknown_state" ]] ||
+    return 1
+  read -r transition slot origin cutover_id extra <"$unknown_state" ||
+    die "cannot read unresolved cutover outcome"
+  [[ "$transition" == demote || "$transition" == promote ]] ||
+    die "unresolved cutover transition is malformed"
+  valid_slot "$slot" || die "unresolved cutover slot is malformed"
+  valid_origin "$origin" || die "unresolved cutover origin is malformed"
+  [[ "$cutover_id" =~ ^[A-Za-z0-9_.:-]+$ && -z "${extra:-}" ]] ||
+    die "unresolved cutover identity is malformed"
+  printf '%s %s %s %s\n' "$transition" "$slot" "$origin" "$cutover_id"
+}
+
+reconcile_unknown_transition() {
+  local transition=$1 slot=$2 origin=$3 cutover_id=$4
+  local deadline now status phase observed_cutover_phase
+  local observed_cutover_id observed_instance marker rc
+  deadline=$(( $(date +%s%3N) + settle_timeout_ms ))
+  while :; do
+    if status=$(read_status "$slot" "$origin" any 2>/dev/null); then
+      phase=$(sed -n '1p' <<<"$status")
+      observed_cutover_phase=$(sed -n '4p' <<<"$status")
+      observed_cutover_id=$(sed -n '5p' <<<"$status")
+      if [[ "$observed_cutover_id" == "$cutover_id" ]]; then
+        case "$transition:$phase" in
+          demote:demoted)
+            observed_instance=$(sed -n '2p' <<<"$status")
+            if [[ "$cutover_id" == rollback-* ]]; then
+              marker=$state/$origin.rollback.edn
+            else
+              marker=$state/$origin.old-demotion.edn
+            fi
+            # The timed-out client may not have received or published the
+            # daemon's marker. Once demotion is terminal, replaying the same ID
+            # is idempotent and safely materializes that exact marker.
+            if "$cutover" demote \
+              --port "$(port_for "$slot" "$origin")" \
+              --log "$(log_for "$origin")" \
+              --token-file "$token_file" \
+              --cutover-id "$cutover_id" \
+              --expected-instance "$observed_instance" \
+              --marker-out "$marker" \
+              --timeout-ms "$control_timeout_ms" >/dev/null; then
+              rc=0
+            else
+              rc=$?
+            fi
+            if (( rc == 0 )) && [[ -f "$marker" && ! -L "$marker" ]]; then
+              clear_unknown_state
+              return 0
+            fi
+            ;;
+          promote:active)
+            clear_unknown_state
+            return 0
+            ;;
+          promote:rejected)
+            clear_unknown_state
+            return 1
+            ;;
+          demote:active)
+            if [[ "$observed_cutover_phase" == demotion-rolled-back ]]; then
+              clear_unknown_state
+              return 1
+            fi
+            printf '%s/%s returned active with unexpected cutover phase %s\n' \
+              "$slot" "$origin" "$observed_cutover_phase" >&2
+            return 2
+            ;;
+          demote:demoting|promote:promoting)
+            ;;
+          *)
+            printf '%s/%s reached incompatible phase %s for %s\n' \
+              "$slot" "$origin" "$phase" "$cutover_id" >&2
+            return 2
+            ;;
+        esac
+      elif [[ "$observed_cutover_id" != none ]]; then
+        case "$transition:$phase" in
+          demote:active|promote:standby|promote:demoted|promote:rejected)
+            # The timed-out request may still be queued behind the prior
+            # terminal state. Keep the frontend held and continue observing.
+            ;;
+          *)
+            printf '%s/%s reports unrelated cutover %s while waiting for %s\n' \
+              "$slot" "$origin" "$observed_cutover_id" "$cutover_id" >&2
+            return 2
+            ;;
+        esac
+      fi
+    fi
+    now=$(date +%s%3N)
+    if (( now >= deadline )); then
+      printf '%s/%s transport outcome remains unknown for %s\n' \
+        "$slot" "$origin" "$cutover_id" >&2
+      return 2
+    fi
+    sleep "$settle_poll_seconds"
+  done
+}
+
+settle_recorded_unknown() {
+  local recorded transition slot origin cutover_id
+  [[ -e "$unknown_state" || -L "$unknown_state" ]] || return 0
+  recorded=$(read_unknown_state) ||
+    die "unresolved cutover outcome is unsafe"
+  # An unresolved transport outcome may still begin on the server after the
+  # client timed out. Never resume or issue competing authority operations
+  # until that exact request reaches a terminal, observable phase.
+  read -r transition slot origin cutover_id <<<"$recorded"
+  reconcile_unknown_transition \
+    "$transition" "$slot" "$origin" "$cutover_id"
 }
 
 verify_pair() {
@@ -265,12 +380,17 @@ verify_pair() {
 }
 
 demote_endpoint() {
-  local slot=$1 origin=$2 cutover_id=$3 marker=$4 status instance operation_id
+  local slot=$1 origin=$2 cutover_id=$3 marker=$4
+  local status instance operation_id rc
   status=$(read_status "$slot" "$origin" active) ||
     die "$slot/$origin is not active before demotion"
   instance=$(sed -n '2p' <<<"$status")
   operation_id=$cutover_id-$origin
-  if ! "$cutover" demote \
+  # Persist intent before the RPC. If this controller process dies at any point
+  # after the request can become visible to the daemon, selector rollback sees
+  # the intent and refuses to resume until the exact ID is terminal.
+  write_unknown_state demote "$slot" "$origin" "$operation_id"
+  if "$cutover" demote \
     --port "$(port_for "$slot" "$origin")" \
     --log "$(log_for "$origin")" \
     --token-file "$token_file" \
@@ -278,32 +398,53 @@ demote_endpoint() {
     --expected-instance "$instance" \
     --marker-out "$marker" \
     --timeout-ms "$control_timeout_ms" >/dev/null; then
-    transition_result_unknown \
-      "$slot" "$origin" demote "$operation_id" ||
-      die "$slot/$origin demotion failed before a valid transition"
+    rc=0
+  else
+    rc=$?
+  fi
+  if (( rc == 4 )); then
+    reconcile_unknown_transition demote "$slot" "$origin" "$operation_id" ||
+      die "$slot/$origin demotion transport outcome is unresolved"
+  elif (( rc == 3 )); then
+    clear_unknown_state
+    die "$slot/$origin demotion was rejected"
+  elif (( rc != 0 )); then
+    die "$slot/$origin demotion failed with unresolved local status $rc"
   fi
   await_status "$slot" "$origin" demoted "$operation_id" >/dev/null ||
     die "$slot/$origin did not become demoted"
+  clear_unknown_state
 }
 
 promote_endpoint() {
-  local slot=$1 origin=$2 cutover_id=$3 marker=$4 operation_id
+  local slot=$1 origin=$2 cutover_id=$3 marker=$4 operation_id rc
   [[ -f "$marker" && ! -L "$marker" ]] ||
     die "promotion marker is missing or unsafe: $marker"
   operation_id=$cutover_id-$origin
-  if ! "$cutover" promote \
+  write_unknown_state promote "$slot" "$origin" "$operation_id"
+  if "$cutover" promote \
     --port "$(port_for "$slot" "$origin")" \
     --log "$(log_for "$origin")" \
     --token-file "$token_file" \
     --cutover-id "$operation_id" \
     --marker-file "$marker" \
     --timeout-ms "$control_timeout_ms" >/dev/null; then
-    transition_result_unknown \
-      "$slot" "$origin" promote "$operation_id" ||
-      die "$slot/$origin promotion failed before a valid transition"
+    rc=0
+  else
+    rc=$?
+  fi
+  if (( rc == 4 )); then
+    reconcile_unknown_transition promote "$slot" "$origin" "$operation_id" ||
+      die "$slot/$origin promotion transport outcome is unresolved"
+  elif (( rc == 3 )); then
+    clear_unknown_state
+    die "$slot/$origin promotion was rejected"
+  elif (( rc != 0 )); then
+    die "$slot/$origin promotion failed with unresolved local status $rc"
   fi
   await_status "$slot" "$origin" active "$operation_id" >/dev/null ||
     die "$slot/$origin did not become active"
+  clear_unknown_state
 }
 
 write_gate_state() {
@@ -338,6 +479,8 @@ promote_pair() {
     die "selector transaction path must be absolute"
 
   mkdir -p "$state"
+  settle_recorded_unknown ||
+    die "cannot cut over while a prior transport outcome is unresolved"
   verify_pair "$old" active
   # A never-promoted candidate is :standby; a previously active candidate is
   # :demoted. Both are valid read-only successors. This is what makes repeated
@@ -367,6 +510,8 @@ rollback_pair() {
   local target_status target_phase marker marker_cutover_id
   [[ "$transaction_file" == /* ]] ||
     die "selector transaction path must be absolute"
+  settle_recorded_unknown ||
+    die "cannot rollback while a cutover transport outcome is unresolved"
   if [[ ! -e "$state/gate.current" &&
         ! -L "$state/gate.current" ]]; then
     # Selector durably records gate-started immediately before invoking this
