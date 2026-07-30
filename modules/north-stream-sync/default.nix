@@ -3,6 +3,11 @@
 let
   username = config.myConfig.modules.users.username;
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
+  northRuntimeExec = pkgs.writeShellApplication {
+    name = "north-runtime-exec";
+    runtimeInputs = with pkgs; [ coreutils ];
+    text = builtins.readFile ../north/north-runtime-exec;
+  };
 in
 {
   options.myConfig.modules.north-stream-sync.enable = lib.mkEnableOption "North stream-sync timer — periodic transcript log-shipping into streams/raw";
@@ -16,7 +21,7 @@ in
         Service = {
           Type = "oneshot";
           SuccessExitStatus = "2";
-          ExecStart = "${northPkg}/bin/north-stream-sync-all";
+          ExecStart = "${northRuntimeExec}/bin/north-runtime-exec ${northPkg} bin/north-stream-sync-all";
         };
       };
       systemd.user.timers.north-stream-sync = {

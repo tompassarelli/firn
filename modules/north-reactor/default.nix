@@ -3,6 +3,11 @@
 let
   username = config.myConfig.modules.users.username;
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
+  northRuntimeExec = pkgs.writeShellApplication {
+    name = "north-runtime-exec";
+    runtimeInputs = with pkgs; [ coreutils ];
+    text = builtins.readFile ../north/north-runtime-exec;
+  };
 in
 {
   options.myConfig.modules.north-reactor.enable = lib.mkEnableOption "North reactor — supervised reprojection/window-owner loop plus the periodic liveness sweep";
@@ -18,7 +23,7 @@ in
           Type = "simple";
           Environment = [ "PATH=${pkgs.systemd}/bin:${pkgs.git}/bin:${pkgs.coreutils}/bin" ];
           WorkingDirectory = "${config.home.homeDirectory}/code/north/main";
-          ExecStart = "${northPkg}/bin/north reactor 7977";
+          ExecStart = "${northRuntimeExec}/bin/north-runtime-exec ${northPkg} bin/north reactor 7977";
           Restart = "always";
           RestartSec = 5;
         };
@@ -36,8 +41,7 @@ in
           Environment = [
             "PATH=${pkgs.systemd}/bin:${pkgs.babashka}/bin:${pkgs.coreutils}/bin:${pkgs.git}/bin"
           ];
-          WorkingDirectory = northPkg;
-          ExecStart = "${pkgs.babashka}/bin/bb ${northPkg}/cli/north-reactor.clj sweep-once";
+          ExecStart = "${northRuntimeExec}/bin/north-runtime-exec --chdir --interp ${pkgs.babashka}/bin/bb ${northPkg} cli/north-reactor.clj sweep-once";
         };
       };
       systemd.user.timers.north-reactor-sweep = {

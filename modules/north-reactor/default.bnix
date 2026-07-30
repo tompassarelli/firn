@@ -16,17 +16,28 @@
 ;;
 ;; The loop runs the LIVE checkout through the packaged `north` wrapper, not the store
 ;; copy: its heal must be byte-identical to the `north heal` a human runs (north.clj
-;; derives its north-bin from its own repo root). The sweep one-shot stays store-pinned —
-;; it only writes verdicts through :7977. Both entry points call sweep!; the fixed
-;; systemd-run unit name is the double-fire mutex on the rebuild window.
+;; derives its north-bin from its own repo root). Both entry points call sweep!; the
+;; fixed systemd-run unit name is the double-fire mutex on the rebuild window.
 ;;
-;; The script itself comes from the exact North package. PATH carries babashka
+;; Both entry points resolve their code through north-runtime-exec: this unit is also
+;; the rebuild-window owner, so leaving it on the flake input made every north fix cost
+;; the rebuild it was queueing. The flake package stays the pre-first-promote fallback.
+;;
+;; PATH carries babashka
 ;; so both the ExecStart `bb`, the reactor's worktree provenance `git` probes, and the reactor's own
 ;; ping-coordinator shell-out (bare `bb msg-cli.clj` when a reaped lane names a
 ;; coordinator) resolve. Runs as the user: the sweep is a :7977 client, needs no root.
 (nix/module [config lib pkgs inputs ...]
   (let [username config.myConfig.modules.users.username
-        northPkg (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)]
+        northPkg (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)
+        ;; The modules/north script is the single definition of runtime
+        ;; resolution; both hot-loop modules launch through it rather than
+        ;; restating the promoted-channel path.
+        northRuntimeExec
+         (pkgs.writeShellApplication
+           {:name "north-runtime-exec"
+            :runtimeInputs (nix/with pkgs [coreutils])
+            :text (builtins.readFile (p "../north/north-runtime-exec"))})]
     {:options.myConfig.modules.north-reactor.enable
       (lib.mkEnableOption "North reactor — supervised reprojection/window-owner loop plus the periodic liveness sweep")
      :config
@@ -47,7 +58,7 @@
                    ;; git + coreutils serve the worktree-provenance probes.
                    :Environment [(s "PATH=" pkgs.systemd "/bin:" pkgs.git "/bin:" pkgs.coreutils "/bin")]
                    :WorkingDirectory (s config.home.homeDirectory "/code/north/main")
-                   :ExecStart  (s northPkg "/bin/north reactor 7977")
+                   :ExecStart  (s northRuntimeExec "/bin/north-runtime-exec " northPkg " bin/north reactor 7977")
                    :Restart    "always"
                    :RestartSec 5}
                  :Install {:WantedBy ["default.target"]}}
@@ -61,8 +72,10 @@
                  :Service
                   {:Type             "oneshot"
                    :Environment      [(s "PATH=" pkgs.systemd "/bin:" pkgs.babashka "/bin:" pkgs.coreutils "/bin:" pkgs.git "/bin")]
-                   :WorkingDirectory northPkg
-                   :ExecStart        (s pkgs.babashka "/bin/bb " northPkg "/cli/north-reactor.clj sweep-once")}}
+                   ;; --chdir replaces a static WorkingDirectory: bb resolves the
+                   ;; script's deps against the tree it was loaded from, so cwd
+                   ;; has to track whichever root won.
+                   :ExecStart        (s northRuntimeExec "/bin/north-runtime-exec --chdir --interp " pkgs.babashka "/bin/bb " northPkg " cli/north-reactor.clj sweep-once")}}
                :systemd.user.timers.north-reactor-sweep
                 {:Unit
                   {:Description "Run the north reactor liveness sweep periodically"}

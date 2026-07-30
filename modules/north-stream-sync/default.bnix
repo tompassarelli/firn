@@ -2,7 +2,8 @@
 
 (ns default)
 
-;; Periodic trigger for the exact packaged `north-stream-sync` — the zero-AI
+;; Periodic trigger for `north-stream-sync-all`, resolved through the promoted
+;; runtime channel with the flake package as fallback — the zero-AI
 ;; cursor-based mirror of Claude and Codex transcripts into streams/raw/. Runs
 ;; the -all sweep across ambient, account, profile, and managed provider roots;
 ;; scanning only pre-account ~/.claude/projects silently froze the mirror at the
@@ -14,7 +15,14 @@
 ;; the lock in the stream-sync script itself keeps the two from interleaving.
 (nix/module [config lib pkgs inputs ...]
   (let [username config.myConfig.modules.users.username
-        northPkg (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)]
+        northPkg (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)
+        ;; Shared with north-reactor; modules/north owns the one definition of
+        ;; promoted-channel resolution.
+        northRuntimeExec
+         (pkgs.writeShellApplication
+           {:name "north-runtime-exec"
+            :runtimeInputs (nix/with pkgs [coreutils])
+            :text (builtins.readFile (p "../north/north-runtime-exec"))})]
     {:options.myConfig.modules.north-stream-sync.enable
       (lib.mkEnableOption "North stream-sync timer — periodic transcript log-shipping into streams/raw")
      :config
@@ -38,7 +46,7 @@
                    ;; a real outage learns to hide among the false alarms. Exit
                    ;; 1 still fails the unit.
                    :SuccessExitStatus "2"
-                   :ExecStart (s northPkg "/bin/north-stream-sync-all")}}
+                   :ExecStart (s northRuntimeExec "/bin/north-runtime-exec " northPkg " bin/north-stream-sync-all")}}
                :systemd.user.timers.north-stream-sync
                 {:Unit
                   {:Description "Run north-stream-sync periodically"}
