@@ -30,8 +30,11 @@ LOCK="$ROOT/flake.lock"
 # No local input auto-promotes through the flake pin any more. Fram adopts a
 # reviewed revision through `north-coord-runtime promote`, and North/Beagle
 # enforcement through `north-enforcement-promote`; both are attested transactions
-# that do not spend a rebuild. The list stays so a future input can rejoin.
-INPUTS=()
+# that do not spend a rebuild.
+PLAN_INPUTS=()
+# Targeted settlement still supports every local input and must detect if nix
+# rewrites any unrequested one.
+LOCAL_INPUTS=(beagle fram north)
 
 die() {
   printf 'firn rebuild: %s\n' "$*" >&2
@@ -142,7 +145,7 @@ resolve_target() {
 command -v jq >/dev/null || die "jq is required to inspect flake.lock"
 
 if [ "$MODE" = plan ]; then
-  for input in "${INPUTS[@]}"; do
+  for input in "${PLAN_INPUTS[@]}"; do
     REPLY_TARGET=""
     resolve_target "$input"
     locked="$(locked_rev "$input")"
@@ -265,7 +268,7 @@ for input in "${inputs[@]}"; do
   fi
 done
 
-for input in "${INPUTS[@]}"; do
+for input in "${LOCAL_INPUTS[@]}"; do
   if [[ -v "seen[$input]" ]]; then
     continue
   fi

@@ -82,30 +82,32 @@ lock_clean() {
   git -C "$TMP/firn" diff --quiet -- flake.lock &&
   git -C "$TMP/firn" diff --cached --quiet -- flake.lock
 }
+assert_no_local_plan() {
+  local result="$1" context="$2"
+  if grep -Eq '^plan (beagle|fram|north) ' <<<"$result"; then
+    printf '%s unexpectedly produced a local-input plan\n' "$context" >&2
+    exit 1
+  fi
+}
 
-# The build consumes the exact planned object even if local main advances.
+# Explicit release builds consume the exact requested object even if local main
+# advances; ordinary planning contains no local inputs.
 grep -Fq '(format "git+file://~a?ref=main&rev=~a"' "$REBUILD"
-grep -Fxq 'INPUTS=(fram)' "$SCRIPT"
+grep -Fxq 'PLAN_INPUTS=()' "$SCRIPT"
+grep -Fxq 'LOCAL_INPUTS=(beagle fram north)' "$SCRIPT"
 
 # All current: no plan lines, nothing mutated.
 output="$($SCRIPT --plan)"
-grep -q 'current at' <<<"$output"
-if grep -q '^plan ' <<<"$output"; then
-  printf 'current inputs unexpectedly produced a plan\n' >&2
-  exit 1
-fi
+assert_no_local_plan "$output" "current inputs"
 lock_clean
 
 # Tool/editor state is not part of a Git input snapshot and must not matter.
 printf 'local state\n' >"$TMP/beagle/untracked"
 output="$($SCRIPT --plan)"
-if grep -q '^plan ' <<<"$output"; then
-  printf 'untracked input state unexpectedly produced a plan\n' >&2
-  exit 1
-fi
+assert_no_local_plan "$output" "untracked input state"
 
-# North and Beagle are dev-channel inputs: committed main moves never enter the
-# ordinary rebuild plan, and planning never mutates either lock.
+# Committed North and Beagle main moves never enter the ordinary rebuild plan,
+# and planning never mutates either lock.
 printf 'v2\n' >>"$TMP/north/source"
 git -C "$TMP/north" add source
 git -C "$TMP/north" commit -qm update
@@ -117,10 +119,7 @@ git -C "$TMP/beagle" commit -qm update
 old_beagle="$(lock_rev beagle)"
 new_beagle="$(git -C "$TMP/beagle" rev-parse HEAD)"
 output="$($SCRIPT --plan)"
-if grep -Eq '^plan (beagle|north) ' <<<"$output"; then
-  printf 'dev-channel input unexpectedly entered the ordinary rebuild plan\n' >&2
-  exit 1
-fi
+assert_no_local_plan "$output" "committed North and Beagle main advances"
 lock_clean
 [ "$(lock_rev north)" = "$old_north" ]
 [ "$(lock_rev beagle)" = "$old_beagle" ]
@@ -205,29 +204,20 @@ grep -q 'deferring' <<<"$output"
 lock_clean
 rm "$TMP/firn/.git/hooks/pre-commit"
 
-# Another session's WIP never blocks and never leaks. At the current pin it is
-# merely reported as excluded, while a pending Beagle release stays out of the
-# ordinary plan.
+# Another session's WIP never blocks or leaks, and a pending Beagle release
+# stays out of the ordinary plan.
 printf 'dirty\n' >>"$TMP/fram/source"
 output="$($SCRIPT --plan)"
-grep -q 'fram.*tracked WIP excluded' <<<"$output"
-if grep -q '^plan fram ' <<<"$output"; then
-  printf 'dirty worktree at the locked commit unexpectedly produced a plan\n' >&2
-  exit 1
-fi
-if grep -q '^plan beagle ' <<<"$output"; then
-  printf 'pending Beagle release unexpectedly entered the ordinary rebuild plan\n' >&2
-  exit 1
-fi
+assert_no_local_plan "$output" "dirty Fram checkout and pending Beagle release"
 
-# Dirty main whose local main moved ahead of the pin promotes committed main only.
+# With dirty Fram main ahead of the pin, ordinary planning remains empty while
+# explicit settlement promotes only the exact committed-main revision.
 git -C "$TMP/fram" add source
 git -C "$TMP/fram" commit -qm wip-base
 printf 'more wip\n' >>"$TMP/fram/source"
 new_fram="$(git -C "$TMP/fram" rev-parse 'refs/heads/main^{commit}')"
 output="$($SCRIPT --plan)"
-grep -q 'fram.*tracked WIP excluded' <<<"$output"
-grep -q "^plan fram .* $new_fram $TMP/fram\$" <<<"$output"
+assert_no_local_plan "$output" "advanced dirty Fram main"
 output="$($SCRIPT --commit "fram=$new_fram")"
 grep -q 'fram promoted' <<<"$output"
 [ "$(lock_rev fram)" = "$new_fram" ]
@@ -237,7 +227,8 @@ if git -C "$TMP/fram" show 'refs/heads/main:source' | grep -q 'more wip'; then
   exit 1
 fi
 
-# A feature-only commit is never eligible.
+# A feature-only commit never enters ordinary planning and is rejected by
+# explicit settlement because it is not the committed local main target.
 git -C "$TMP/fram" checkout -q -- source
 git -C "$TMP/fram" checkout -qb feature
 printf 'feature\n' >>"$TMP/fram/source"
@@ -245,15 +236,19 @@ git -C "$TMP/fram" add source
 git -C "$TMP/fram" commit -qm feature-only
 feature_fram="$(git -C "$TMP/fram" rev-parse HEAD)"
 output="$($SCRIPT --plan)"
-grep -q 'fram.*checkout feature' <<<"$output"
-if grep -q '^plan fram ' <<<"$output"; then
-  printf 'feature-branch input unexpectedly produced a plan\n' >&2
-  exit 1
-fi
+assert_no_local_plan "$output" "feature-only Fram commit"
+before_feature_lock="$(sha256sum "$TMP/firn/flake.lock")"
+before_feature_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
+output="$($SCRIPT --commit "fram=$feature_fram")"
+grep -q 'not built target.*deferring' <<<"$output"
+[ "$(sha256sum "$TMP/firn/flake.lock")" = "$before_feature_lock" ]
+[ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq "$before_feature_count" ]
+lock_clean
 
 # Another worktree may advance local main while the developer remains on a
-# dirty feature checkout. The new committed main plans and promotes; feature
-# HEAD and dirty bytes remain excluded.
+# dirty feature checkout. The new committed main remains absent from ordinary
+# planning and promotes only through explicit settlement; feature HEAD and dirty
+# bytes remain excluded.
 git -C "$TMP/fram" worktree add -q "$TMP/fram-main" main
 printf 'main-from-other-worktree\n' >>"$TMP/fram-main/source"
 git -C "$TMP/fram-main" add source
@@ -262,8 +257,7 @@ advanced_main_fram="$(git -C "$TMP/fram-main" rev-parse HEAD)"
 git -C "$TMP/fram" worktree remove "$TMP/fram-main"
 printf 'dirty-feature-only\n' >>"$TMP/fram/source"
 output="$($SCRIPT --plan)"
-grep -q 'fram.*checkout feature.*tracked WIP excluded' <<<"$output"
-grep -q "^plan fram .* $advanced_main_fram $TMP/fram\$" <<<"$output"
+assert_no_local_plan "$output" "advanced Fram main beside a dirty feature checkout"
 if grep -q "$feature_fram" <<<"$output"; then
   printf 'feature-only HEAD appeared in the local-main plan\n' >&2
   exit 1
@@ -278,10 +272,7 @@ grep -q '^ M source$' < <(git -C "$TMP/fram" status --short)
 git -C "$TMP/fram" checkout -q -- source
 git -C "$TMP/fram" checkout -q main
 output="$($SCRIPT --plan)"
-if grep -q '^plan fram ' <<<"$output"; then
-  printf 'already-promoted main input unexpectedly produced a plan\n' >&2
-  exit 1
-fi
+assert_no_local_plan "$output" "already-settled Fram main"
 output="$($SCRIPT --commit "beagle=$new_beagle")"
 grep -q 'beagle promoted' <<<"$output"
 [ "$(lock_rev fram)" = "$(git -C "$TMP/fram" rev-parse HEAD)" ]
@@ -295,10 +286,7 @@ git -C "$TMP/north" add source
 git -C "$TMP/north" commit -qm planned
 planned_north="$(git -C "$TMP/north" rev-parse HEAD)"
 output="$($SCRIPT --plan)"
-if grep -q '^plan north ' <<<"$output"; then
-  printf 'verified North target unexpectedly entered the ordinary rebuild plan\n' >&2
-  exit 1
-fi
+assert_no_local_plan "$output" "verified North target"
 printf 'v5\n' >>"$TMP/north/source"
 git -C "$TMP/north" add source
 git -C "$TMP/north" commit -qm raced
@@ -320,12 +308,14 @@ grep -Eq 'moved to|raced to' <<<"$output"
 [ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq "$before_resolution_race_count" ]
 lock_clean
 
-# A targeted update may not rewrite any part of an unrequested local pin.
+# A targeted update may not rewrite any part of an unrequested local pin. The
+# integrity set must dynamically catch Fram even though the planning set is empty.
 planned_north="$(git -C "$TMP/north" rev-parse 'refs/heads/main^{commit}')"
 before_unrequested_hash="$(sha256sum "$TMP/firn/flake.lock")"
 before_unrequested_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
-output="$(FAKE_NIX_REWRITE_UNREQUESTED=fram "$SCRIPT" --commit "north=$planned_north")"
-grep -q 'rewrote unrequested local input fram.*deferring' <<<"$output"
+unrequested_input=fram
+output="$(FAKE_NIX_REWRITE_UNREQUESTED="$unrequested_input" "$SCRIPT" --commit "north=$planned_north")"
+grep -q "rewrote unrequested local input $unrequested_input.*deferring" <<<"$output"
 [ "$(sha256sum "$TMP/firn/flake.lock")" = "$before_unrequested_hash" ]
 [ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq "$before_unrequested_count" ]
 lock_clean

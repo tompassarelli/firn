@@ -29,20 +29,17 @@ Agents ASK for a rebuild and never fire one — policy change 2026-07-30, supers
 
 That rebuild, whoever triggers it, builds a **commit snapshot** (`git+file://<repo>?rev=HEAD`), never the working tree: uncommitted state — yours or any concurrent session's — can neither block it nor leak into a generation. The one gate that remains YOURS: **commit your own changes first**, or they simply won't be in the build when the window fires (the pipeline prints exactly which in-flight files it excluded). Every generation maps to a commit by construction. `firn rollback` / the boot menu undo a switch.
 
-The pipeline auto-plans only the Fram pin from
-`~/code/fram/main`'s committed `refs/heads/main`. The active checkout may
-remain on a dirty feature branch: its HEAD and WIP are excluded, while
-committed local `main` remains eligible. A missing, rewound, or divergent local
-`main` holds the already-verified pin; only an ancestry-proven fast-forward can
-promote. Firn then regenerates `.nix` (stale committed outputs are self-healed
-with a mechanical commit; outputs downstream of in-flight WIP keep their
-committed versions), validates the snapshot in a detached temp worktree, builds
-the host closure with Fram's exact-revision `--override-input`, switches that
-**exact store path** without a second evaluation, and commits the verified
-`flake.lock` pointer.
+Ordinary rebuild planning auto-plans no local input. Firn regenerates `.nix`
+(stale committed outputs are self-healed with a mechanical commit; outputs
+downstream of in-flight WIP keep their committed versions), validates the
+snapshot in a detached temp worktree, builds the host closure with the committed
+lock, and switches that **exact store path** without a second evaluation. It
+does not rewrite or commit a local-input pin. Fram adopts a reviewed runtime
+revision through `north-coord-runtime promote`; North and Beagle enforcement
+adopt through `north-enforcement-promote`. Those attested runtime transactions
+do not spend a rebuild.
 
-North and Beagle are dev-channel inputs and never enter that ordinary rebuild
-plan. Deliberately moving either production pin is a separate two-step release:
+Deliberately moving a North or Beagle flake pin is a separate two-step release:
 first build and verify the host closure with an explicit exact-revision override
 for the intended 40-character SHA; only after that build succeeds, settle the
 same SHA with
@@ -53,15 +50,17 @@ dev-channel verification.
 
 Targeted settlement rechecks the locked ancestry and current local `main`, then
 requires the lock resolver to produce the exact built revision. A foreign lock
-or flake-source edit, raced input, unexpected rewrite of the unrequested Fram
-pin, or failed commit hook defers with a notice and exit 0. Recovery is
+or flake-source edit, raced input, unexpected rewrite of any unrequested Beagle,
+Fram, or North pin, or failed commit hook defers with a notice and exit 0.
+Recovery is
 commit-aware: if the mechanical commit lands immediately before an
 exit/signal, the handler preserves that exact promoted lock and heals the
 index/worktree to the new HEAD instead of restoring the obsolete pre-promotion
 backup.
 `--skip-checks` still builds and switches the HEAD snapshot with the committed
-lock; it only skips validation and pin planning. Untracked files are a printed
-warning ("not in this build"), no longer a hard stop.
+lock; it skips validation, while ordinary local-input planning remains empty.
+Untracked files are a printed warning ("not in this build"), no longer a hard
+stop.
 
 **Don't** run `nh` or `nixos-rebuild` directly — only the wrapper; the firn-guard hook denies the bypasses. `firn update` (wholesale input bumps) stays the user's.
 
