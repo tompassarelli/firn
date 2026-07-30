@@ -24,8 +24,13 @@ in
       "codex/hooks/logcompress-hook.js".source = "${inputs.north}/agent-profile/hooks/logcompress-hook.js";
       "codex/hooks/logcompress.js".source = "${inputs.north}/agent-profile/hooks/logcompress.js";
       "codex/hooks/racket-build-guard.sh".source = "${inputs.beagle}/integrations/north/hooks/racket-build-guard.sh";
+      "codex/hooks/launch-critical-worktree-guard.sh".source = "${inputs.north}/agent-profile/hooks/launch-critical-worktree-guard.sh";
       "codex/hooks/lib/authoring-killswitch.sh".source = "${inputs.north}/agent-profile/hooks/lib/authoring-killswitch.sh";
       "codex/hooks/lib/harness-dial.sh".source = "${inputs.north}/agent-profile/hooks/lib/harness-dial.sh";
+      # launch-critical-worktree-guard.sh resolves both of these through
+      # dirname "$0"; decide.py imports paths.py off its own directory.
+      "codex/hooks/lib/launch_critical_decide.py".source = "${inputs.north}/agent-profile/hooks/lib/launch_critical_decide.py";
+      "codex/hooks/lib/launch_critical_paths.py".source = "${inputs.north}/agent-profile/hooks/lib/launch_critical_paths.py";
       "codex/hooks/registry.tsv".source = "${inputs.north}/agent-profile/hooks/registry.tsv";
       "codex/hooks/north-on-spawn-codex" = {
         source = "${flakeRoot}/dotfiles/codex/hooks/north-on-spawn-codex";
