@@ -9,8 +9,10 @@ token=$scratch/cutover.token
 route=$scratch/route.map
 gate_state=$scratch/gate
 fake_state=$scratch/fake
+systemd_state=$scratch/systemd
+jcmd_state=$scratch/jcmd-state
 cutover_log=$scratch/cutover.log
-mkdir -p "$gate_state" "$fake_state"
+mkdir -p "$gate_state" "$fake_state" "$systemd_state" "$jcmd_state"
 printf 'test-secret\n' >"$token"
 chmod 0600 "$token"
 printf 'active blue\n' >"$route"
@@ -71,6 +73,92 @@ write_endpoint 17977 active blue-coord 10
 write_endpoint 17978 active blue-telemetry 20
 write_endpoint 27977 standby green-coord 10
 write_endpoint 27978 standby green-telemetry 20
+
+write_unit_health() {
+  local memory_current=${2:-1200000000}
+  local tasks_current=${3:-24}
+  local memory_max=${4:-6442450944}
+  local main_pid=4201
+  local invocation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  local exec_start=1000000
+  if [[ $1 == north-telemetry-coord-green.service ]]; then
+    main_pid=4202
+    invocation=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    exec_start=2000000
+  fi
+  cat >"$systemd_state/$1" <<EOF
+ActiveState=active
+SubState=running
+InvocationID=$invocation
+MainPID=$main_pid
+ExecMainStartTimestampMonotonic=$exec_start
+MemoryCurrent=$memory_current
+MemoryMax=$memory_max
+TasksCurrent=$tasks_current
+EOF
+}
+
+write_unit_health north-telemetry-coord-blue.service
+write_unit_health north-telemetry-coord-green.service
+
+cat >"$scratch/systemctl" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == show ]]
+cat "$NORTH_COORD_TEST_SYSTEMD_STATE/$2"
+SH
+chmod 0700 "$scratch/systemctl"
+
+cat >"$scratch/jcmd" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+pid=$1
+command=$2
+mode=$(<"$NORTH_COORD_TEST_JCMD_MODE_FILE")
+case "$command:$mode" in
+  VM.flags:healthy|VM.flags:heap-high)
+    printf '%s:\n-XX:+UseG1GC -XX:MaxHeapSize=4294967296\n' "$pid"
+    ;;
+  VM.flags:serial)
+    printf '%s:\n-XX:MaxHeapSize=1073741824 -XX:+UseSerialGC\n' "$pid"
+    ;;
+  VM.flags:missing)
+    exit 1
+    ;;
+  VM.flags:malformed)
+    printf '%s:\nnot-jvm-flags\n' "$pid"
+    ;;
+  GC.heap_info:healthy|GC.heap_info:serial)
+    printf '%s:\n garbage-first heap   total 4194304K, used 1200000K [0x0, 0x1)\n' "$pid"
+    ;;
+  GC.heap_info:heap-high)
+    printf '%s:\n garbage-first heap   total 4194304K, used 2097152K [0x0, 0x1)\n' "$pid"
+    ;;
+  GC.heap_info:missing)
+    exit 1
+    ;;
+  GC.heap_info:malformed)
+    printf '%s:\nunknown heap\n' "$pid"
+    ;;
+  *)
+    exit 2
+    ;;
+esac
+if [[ "$command" == GC.heap_info &&
+      -n "${NORTH_COORD_TEST_JCMD_ROLLOVER_UNIT:-}" ]]; then
+  cp -- "$NORTH_COORD_TEST_JCMD_ROLLOVER_STATE" \
+    "$NORTH_COORD_TEST_SYSTEMD_STATE/$NORTH_COORD_TEST_JCMD_ROLLOVER_UNIT"
+fi
+if [[ "$command" == GC.heap_info &&
+      -n "${NORTH_COORD_TEST_JCMD_FRAM_ROLLOVER_PORT:-}" ]]; then
+  endpoint=$NORTH_COORD_TEST_FAKE_STATE/$NORTH_COORD_TEST_JCMD_FRAM_ROLLOVER_PORT
+  read -r phase _ version cutover_id <"$endpoint"
+  printf '%s replacement-instance %s %s\n' \
+    "$phase" "$version" "$cutover_id" >"$endpoint"
+fi
+SH
+chmod 0700 "$scratch/jcmd"
+printf 'healthy\n' >"$jcmd_state/mode"
 
 cat >"$scratch/fram-cutover" <<'SH'
 #!/usr/bin/env bash
@@ -148,8 +236,10 @@ case "$command" in
     esac
     printf '%s %s %s %s\n' \
       "$phase" "$instance" "$version" "$cutover_id" >"$endpoint"
-    printf '{:ok true :protocol "fram-coordinator-cutover/v1" :phase :%s :prepared true :cutover-id "%s" :instance "%s" :version %s :marker {:version %s} :sync {:prewarmed true :elapsed-ms 1} :writer-authority {:role :%s :write-authorized false}}\n' \
-      "$response_phase" "$cutover_id" "$instance" "$version" "$version" \
+    prewarmed=${NORTH_COORD_TEST_PREWARMED:-true}
+    printf '{:ok true :protocol "fram-coordinator-cutover/v1" :phase :%s :prepared true :cutover-id "%s" :instance "%s" :version %s :marker {:format "fram-coordinator-cutover-marker/v1" :cutover-id "%s" :source-instance "%s" :version %s :logs [{:label :primary :path "%s" :bytes 0 :file-key "fake-%s" :identity "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" :boundary-sha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}]} :sync {:reload :unchanged :attempts 1 :prewarmed %s :elapsed-ms 1} :writer-authority {:role :%s :write-authorized false}}\n' \
+      "$response_phase" "$cutover_id" "$instance" "$version" \
+      "$cutover_id" "$instance" "$version" "$log" "$port" "$prewarmed" \
       "$response_phase"
     ;;
   demote)
@@ -228,6 +318,11 @@ case "$command" in
       printf 'active %s %s %s\n' \
         "$instance" "$version" "$cutover_id" >"$endpoint"
     fi
+    if [[ -n "${NORTH_COORD_TEST_POST_PROMOTE_HEALTH_PORT:-}" &&
+          "$port" == "$NORTH_COORD_TEST_POST_PROMOTE_HEALTH_PORT" ]]; then
+      printf '%s\n' "$NORTH_COORD_TEST_POST_PROMOTE_HEALTH_MODE" \
+        >"$NORTH_COORD_TEST_JCMD_MODE_FILE"
+    fi
     printf '{:ok true :protocol "fram-coordinator-cutover/v1"}\n'
     ;;
   *) exit 2 ;;
@@ -240,11 +335,17 @@ export NORTH_COORD_CUTOVER_TOKEN_FILE=$token
 export NORTH_COORD_CUTOVER_STATE=$gate_state
 export NORTH_COORD_COORD_LOG=$scratch/coordination.log
 export NORTH_COORD_TELEMETRY_LOG=$scratch/telemetry.log
+export NORTH_COORD_SYSTEMCTL_BIN=$scratch/systemctl
+export NORTH_COORD_JCMD_BIN=$scratch/jcmd
+export NORTH_COORD_BLUE_TELEMETRY_UNIT=north-telemetry-coord-blue.service
+export NORTH_COORD_GREEN_TELEMETRY_UNIT=north-telemetry-coord-green.service
 export NORTH_COORD_BLUE_COORD_PORT=17977
 export NORTH_COORD_BLUE_TELEMETRY_PORT=17978
 export NORTH_COORD_GREEN_COORD_PORT=27977
 export NORTH_COORD_GREEN_TELEMETRY_PORT=27978
 export NORTH_COORD_TEST_FAKE_STATE=$fake_state
+export NORTH_COORD_TEST_SYSTEMD_STATE=$systemd_state
+export NORTH_COORD_TEST_JCMD_MODE_FILE=$jcmd_state/mode
 export NORTH_COORD_TEST_CUTOVER_LOG=$cutover_log
 export NORTH_COORD_CUTOVER_TIMEOUT_MS=3000
 export NORTH_COORD_CUTOVER_SETTLE_TIMEOUT_MS=3000
@@ -253,6 +354,22 @@ export NORTH_COORD_CUTOVER_SETTLE_POLL_SECONDS=0.02
 : >"$NORTH_COORD_TELEMETRY_LOG"
 
 transaction=$scratch/selector.transaction
+
+assert_prepare_rejected() {
+  local label=$1 before_demotions after_demotions
+  before_demotions=$(rg -c '^demote ' "$cutover_log" 2>/dev/null || true)
+  if "$here/north-coord-cutover-gate" prepare blue green "$transaction"; then
+    echo "$label target unexpectedly prepared" >&2
+    exit 1
+  fi
+  [[ ! -e "$gate_state/gate.current" ]]
+  read -r blue_coord_phase _ <"$fake_state/17977"
+  read -r blue_telemetry_phase _ <"$fake_state/17978"
+  [[ "$blue_coord_phase" == active ]]
+  [[ "$blue_telemetry_phase" == active ]]
+  after_demotions=$(rg -c '^demote ' "$cutover_log" 2>/dev/null || true)
+  [[ "$after_demotions" == "$before_demotions" ]]
+}
 
 # Preparation failure is entirely pre-transaction and read-only. Even when one
 # target endpoint acknowledged preparation, neither source endpoint is demoted.
@@ -271,6 +388,87 @@ if rg -n '^demote ' "$cutover_log"; then
   echo "preparation failure demoted a source endpoint" >&2
   exit 1
 fi
+
+# Preparation must prove a current installed marker/cache and a live process
+# that already runs the exact recovery envelope. Every rejection remains before
+# selector transaction creation, frontend HOLD, or source authority mutation.
+export NORTH_COORD_TEST_PREWARMED=false
+assert_prepare_rejected missing-prewarm
+unset NORTH_COORD_TEST_PREWARMED
+
+printf 'serial\n' >"$jcmd_state/mode"
+assert_prepare_rejected serial-1g
+printf 'healthy\n' >"$jcmd_state/mode"
+
+write_unit_health north-telemetry-coord-green.service 1200000000 24 1572864000
+assert_prepare_rejected wrong-cgroup-limit
+write_unit_health north-telemetry-coord-green.service 3221225472
+assert_prepare_rejected memory-current-at-limit
+write_unit_health north-telemetry-coord-green.service 1200000000 129
+assert_prepare_rejected task-bound
+write_unit_health north-telemetry-coord-green.service
+
+printf 'heap-high\n' >"$jcmd_state/mode"
+assert_prepare_rejected heap-used-at-limit
+printf 'missing\n' >"$jcmd_state/mode"
+assert_prepare_rejected missing-jcmd-evidence
+printf 'malformed\n' >"$jcmd_state/mode"
+assert_prepare_rejected malformed-jcmd-evidence
+printf 'healthy\n' >"$jcmd_state/mode"
+
+cat >"$scratch/systemd-rollover" <<'EOF'
+ActiveState=active
+SubState=running
+InvocationID=cccccccccccccccccccccccccccccccc
+MainPID=5202
+ExecMainStartTimestampMonotonic=3000000
+MemoryCurrent=1200000000
+MemoryMax=6442450944
+TasksCurrent=24
+EOF
+export NORTH_COORD_TEST_JCMD_ROLLOVER_UNIT=north-telemetry-coord-green.service
+export NORTH_COORD_TEST_JCMD_ROLLOVER_STATE=$scratch/systemd-rollover
+assert_prepare_rejected systemd-invocation-rollover
+unset NORTH_COORD_TEST_JCMD_ROLLOVER_UNIT NORTH_COORD_TEST_JCMD_ROLLOVER_STATE
+write_unit_health north-telemetry-coord-green.service
+
+export NORTH_COORD_TEST_JCMD_FRAM_ROLLOVER_PORT=27978
+assert_prepare_rejected fram-instance-rollover
+unset NORTH_COORD_TEST_JCMD_FRAM_ROLLOVER_PORT
+write_endpoint 27978 standby green-telemetry 20
+
+# A process that was healthy during open preparation may not coast through a
+# bad live-envelope recheck immediately before source demotion.
+"$here/north-coord-cutover-gate" prepare blue green "$transaction"
+printf 'serial\n' >"$jcmd_state/mode"
+if "$here/north-coord-cutover-gate" promote blue green "$transaction"; then
+  echo "serial/1g target unexpectedly passed the pre-demotion recheck" >&2
+  exit 1
+fi
+if rg -n '^demote ' "$cutover_log"; then
+  echo "pre-demotion health rejection changed source authority" >&2
+  exit 1
+fi
+"$here/north-coord-cutover-gate" rollback green blue "$transaction"
+printf 'healthy\n' >"$jcmd_state/mode"
+
+# The same process is checked again after Fram has synchronized the final
+# marker and promoted it, while the selector still holds the frontend. A live
+# regression here returns failure so selector rollback restores the source.
+: >"$cutover_log"
+"$here/north-coord-cutover-gate" prepare blue green "$transaction"
+export NORTH_COORD_TEST_POST_PROMOTE_HEALTH_PORT=27978
+export NORTH_COORD_TEST_POST_PROMOTE_HEALTH_MODE=heap-high
+if "$here/north-coord-cutover-gate" promote blue green "$transaction"; then
+  echo "post-promotion heap regression unexpectedly passed" >&2
+  exit 1
+fi
+unset NORTH_COORD_TEST_POST_PROMOTE_HEALTH_PORT \
+  NORTH_COORD_TEST_POST_PROMOTE_HEALTH_MODE
+printf 'healthy\n' >"$jcmd_state/mode"
+grep -Eq '^demote (17977|17978) ' "$cutover_log"
+"$here/north-coord-cutover-gate" rollback green blue "$transaction"
+"$here/north-coord-cutover-gate" verify blue
 
 # A partial pair promotion must fail closed, then independently reconcile the
 # already-promoted coordination endpoint and the merely-demoted telemetry

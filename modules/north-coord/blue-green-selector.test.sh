@@ -266,12 +266,14 @@ printf 'prepare %s %s %s\n' "$1" "$2" "$3" \
   >>"$NORTH_COORD_TEST_PROMOTION_LOG"
 printf 'prepare %s %s\n' "$1" "$2" >>"$NORTH_COORD_TEST_EVENT_LOG"
 [[ "${NORTH_COORD_TEST_PREPARE_FAIL:-0}" -eq 0 ]]
+[[ "${NORTH_COORD_TEST_PREPARE_HEALTH_REJECT:-0}" -eq 0 ]]
 SH
 cat >"$scratch/promote" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'promote %s %s %s\n' "$1" "$2" "$3" >>"$NORTH_COORD_TEST_PROMOTION_LOG"
 [[ "${NORTH_COORD_TEST_PROMOTION_FAIL:-0}" -eq 0 ]]
+[[ "${NORTH_COORD_TEST_PROMOTE_HEALTH_REJECT:-0}" -eq 0 ]]
 SH
 cat >"$scratch/rollback" <<'SH'
 #!/usr/bin/env bash
@@ -303,16 +305,17 @@ grep -Fxq frontend=OPEN < <("$selector" status)
 [[ $(probe "$coord_public" one) == coord-blue:one ]]
 [[ $(probe "$telemetry_public" one) == telemetry-blue:one ]]
 
-# A rejected standby preparation happens before HOLD. It leaves no selector
-# transaction, keeps the frontend OPEN, and continues serving the blue source.
+# A live-health rejection from the standby preparation gate happens before
+# HOLD. It leaves no selector transaction, keeps the frontend OPEN, and
+# continues serving the blue source.
 : >"$event_log"
-export NORTH_COORD_TEST_PREPARE_FAIL=1
+export NORTH_COORD_TEST_PREPARE_HEALTH_REJECT=1
 if "$selector" switch green \
   >"$scratch/prepare-fail.out" 2>"$scratch/prepare-fail.err"; then
   printf 'failed preparation unexpectedly switched the route\n' >&2
   exit 1
 fi
-unset NORTH_COORD_TEST_PREPARE_FAIL
+unset NORTH_COORD_TEST_PREPARE_HEALTH_REJECT
 [[ ! -e "$transaction" ]]
 grep -Fxq 'active blue' "$route_map"
 grep -Fxq frontend=OPEN < <("$selector" status)
@@ -518,13 +521,14 @@ rg -q 'pre-gate handoff failed; restored blue' "$scratch/force-fail.err"
 wait "$force_fail_client_pid"
 grep -Fxq 'coord-blue:survived' "$scratch/force-fail.result"
 
-# A failed promotion never changes the map and always resumes the old pair.
-export NORTH_COORD_TEST_PROMOTION_FAIL=1
+# A pre-demotion or post-promotion live-health rejection from the authority gate
+# never changes the map and always rolls back/resumes the old pair.
+export NORTH_COORD_TEST_PROMOTE_HEALTH_REJECT=1
 if "$selector" switch green >"$scratch/fail.out" 2>"$scratch/fail.err"; then
   printf 'failed promotion unexpectedly switched the route\n' >&2
   exit 1
 fi
-unset NORTH_COORD_TEST_PROMOTION_FAIL
+unset NORTH_COORD_TEST_PROMOTE_HEALTH_REJECT
 grep -Fxq 'active blue' "$route_map"
 grep -Fq 'rollback green blue' "$promotion_log"
 [[ $(probe "$coord_public" three) == coord-blue:three ]]

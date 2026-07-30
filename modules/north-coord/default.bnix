@@ -165,7 +165,8 @@
         cutoverGate
           (pkgs.writeShellApplication
             {:name "north-coord-cutover-gate"
-             :runtimeInputs (nix/with pkgs [babashka bash coreutils])
+             :runtimeInputs
+              (nix/with pkgs [babashka bash coreutils gawk jdk systemd])
              :text
               (ms (s "export NORTH_COORD_CUTOVER_BIN="
                      framCutoverChecked "/bin/fram-cutover")
@@ -173,6 +174,12 @@
                   (s "export NORTH_COORD_CUTOVER_STATE=" cutoverState)
                   (s "export NORTH_COORD_COORD_LOG=" coordinationLog)
                   (s "export NORTH_COORD_TELEMETRY_LOG=" telemetryLog)
+                  (s "export NORTH_COORD_SYSTEMCTL_BIN="
+                     pkgs.systemd "/bin/systemctl")
+                  (s "export NORTH_COORD_JCMD_BIN="
+                     pkgs.jdk "/bin/jcmd")
+                  "export NORTH_COORD_BLUE_TELEMETRY_UNIT=north-telemetry-coord-blue.service"
+                  "export NORTH_COORD_GREEN_TELEMETRY_UNIT=north-telemetry-coord-green.service"
                   (s "export NORTH_COORD_BLUE_COORD_PORT=" blueCoordPort)
                   (s "export NORTH_COORD_BLUE_TELEMETRY_PORT="
                      blueTelemetryPort)
@@ -613,8 +620,8 @@
               coordinationLog
               (s telemetryRuntimeState "-blue")
               blueTelemetryPort
-              "-Xmx1g"
-              "1500M"))
+              "-XX:+UseG1GC -Xmx4g"
+              "6G"))
          :systemd.services.north-coord-green
           (lib.mkIf stageA
             (mkSlotService
@@ -636,8 +643,8 @@
               coordinationLog
               (s telemetryRuntimeState "-green")
               greenTelemetryPort
-              "-Xmx1g"
-              "1500M"))
+              "-XX:+UseG1GC -Xmx4g"
+              "6G"))
          :systemd.services.north-coord-proxy
           (lib.mkIf stageA
             {:description

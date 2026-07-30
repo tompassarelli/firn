@@ -16,6 +16,10 @@ for setting in \
   NORTH_COORD_CUTOVER_STATE \
   NORTH_COORD_COORD_LOG \
   NORTH_COORD_TELEMETRY_LOG \
+  NORTH_COORD_SYSTEMCTL_BIN \
+  NORTH_COORD_JCMD_BIN \
+  NORTH_COORD_BLUE_TELEMETRY_UNIT \
+  NORTH_COORD_GREEN_TELEMETRY_UNIT \
   NORTH_COORD_BLUE_COORD_PORT \
   NORTH_COORD_BLUE_TELEMETRY_PORT \
   NORTH_COORD_GREEN_COORD_PORT \
@@ -27,13 +31,27 @@ done
 cutover=$NORTH_COORD_CUTOVER_BIN
 token_file=$NORTH_COORD_CUTOVER_TOKEN_FILE
 state=$NORTH_COORD_CUTOVER_STATE
+systemctl_bin=$NORTH_COORD_SYSTEMCTL_BIN
+jcmd_bin=$NORTH_COORD_JCMD_BIN
 control_timeout_ms=${NORTH_COORD_CUTOVER_TIMEOUT_MS:-120000}
 settle_timeout_ms=${NORTH_COORD_CUTOVER_SETTLE_TIMEOUT_MS:-120000}
 settle_poll_seconds=${NORTH_COORD_CUTOVER_SETTLE_POLL_SECONDS:-0.1}
+readiness_systemctl_timeout_seconds=${NORTH_COORD_PROMOTION_SYSTEMCTL_TIMEOUT_SECONDS:-5}
+readiness_jcmd_timeout_seconds=${NORTH_COORD_PROMOTION_JCMD_TIMEOUT_SECONDS:-10}
+readiness_expected_memory_max_bytes=${NORTH_COORD_PROMOTION_EXPECTED_MEMORY_MAX_BYTES:-6442450944}
+readiness_max_memory_current_bytes=${NORTH_COORD_PROMOTION_MAX_MEMORY_CURRENT_BYTES:-3221225472}
+readiness_expected_max_heap_bytes=${NORTH_COORD_PROMOTION_EXPECTED_MAX_HEAP_BYTES:-4294967296}
+readiness_max_heap_used_bytes=${NORTH_COORD_PROMOTION_MAX_HEAP_USED_BYTES:-2147483648}
+readiness_max_tasks=${NORTH_COORD_PROMOTION_MAX_TASKS:-128}
 unknown_state=$state/outcome.unknown
 
 [[ "$cutover" == /* && -x "$cutover" && ! -L "$cutover" ]] ||
   die "cutover command is not a safe executable"
+[[ "$systemctl_bin" == /* && -x "$systemctl_bin" &&
+   ! -L "$systemctl_bin" ]] ||
+  die "systemctl command is not a safe executable"
+[[ "$jcmd_bin" == /* && -x "$jcmd_bin" ]] ||
+  die "jcmd command is not a safe executable"
 [[ "$token_file" == /* && -f "$token_file" && ! -L "$token_file" ]] ||
   die "cutover token is missing or unsafe"
 [[ "$state" == /* ]] || die "cutover state path must be absolute"
@@ -41,6 +59,22 @@ unknown_state=$state/outcome.unknown
   die "cutover control timeout must be a positive integer"
 [[ "$settle_timeout_ms" =~ ^[1-9][0-9]*$ ]] ||
   die "cutover settle timeout must be a positive integer"
+for setting in \
+  readiness_systemctl_timeout_seconds \
+  readiness_jcmd_timeout_seconds \
+  readiness_expected_memory_max_bytes \
+  readiness_max_memory_current_bytes \
+  readiness_expected_max_heap_bytes \
+  readiness_max_heap_used_bytes \
+  readiness_max_tasks
+do
+  [[ "${!setting}" =~ ^[1-9][0-9]*$ ]] ||
+    die "${setting#readiness_} must be a positive integer"
+done
+(( readiness_max_memory_current_bytes < readiness_expected_memory_max_bytes )) ||
+  die "maximum memory current must be below the expected cgroup limit"
+(( readiness_max_heap_used_bytes < readiness_expected_max_heap_bytes )) ||
+  die "maximum heap used must be below the expected JVM heap limit"
 
 valid_slot() {
   [[ "$1" == blue || "$1" == green ]]
@@ -65,6 +99,14 @@ log_for() {
     coord) printf '%s\n' "$NORTH_COORD_COORD_LOG" ;;
     telemetry) printf '%s\n' "$NORTH_COORD_TELEMETRY_LOG" ;;
     *) die "invalid origin: $1" ;;
+  esac
+}
+
+telemetry_unit_for() {
+  case "$1" in
+    blue) printf '%s\n' "$NORTH_COORD_BLUE_TELEMETRY_UNIT" ;;
+    green) printf '%s\n' "$NORTH_COORD_GREEN_TELEMETRY_UNIT" ;;
+    *) die "invalid telemetry slot: $1" ;;
   esac
 }
 
@@ -161,7 +203,23 @@ inspect_prepare() {
           m (edn/read-string (slurp path))
           role (:phase m)
           writer-role (get-in m [:writer-authority :role])
-          authorized (get-in m [:writer-authority :write-authorized])]
+          authorized (get-in m [:writer-authority :write-authorized])
+          marker (:marker m)
+          sync (:sync m)
+          logs (:logs marker)
+          valid-log?
+          (fn [proof]
+            (and (keyword? (:label proof))
+                 (string? (:path proof))
+                 (.startsWith ^String (:path proof) "/")
+                 (integer? (:bytes proof))
+                 (not (neg? (:bytes proof)))
+                 (string? (:file-key proof))
+                 (not-empty (:file-key proof))
+                 (string? (:identity proof))
+                 (not-empty (:identity proof))
+                 (string? (:boundary-sha proof))
+                 (re-matches #"[0-9a-f]{64}" (:boundary-sha proof))))]
       (when-not
        (and (= true (:ok m))
             (= "fram-coordinator-cutover/v1" (:protocol m))
@@ -174,11 +232,25 @@ inspect_prepare() {
             (not-empty (:instance m))
             (integer? (:version m))
             (not (neg? (:version m)))
-            (map? (:marker m))
-            (= true (get-in m [:sync :prewarmed])))
+            (= "fram-coordinator-cutover-marker/v1" (:format marker))
+            (= expected-cutover-id (:cutover-id marker))
+            (= (:version m) (:version marker))
+            (string? (:source-instance marker))
+            (not-empty (:source-instance marker))
+            (vector? logs)
+            (not-empty logs)
+            (every? valid-log? logs)
+            (= (count logs) (count (distinct (map :label logs))))
+            (= true (:prewarmed sync))
+            (contains? #{:unchanged :installed :superseded} (:reload sync))
+            (integer? (:attempts sync))
+            (pos? (:attempts sync))
+            (integer? (:elapsed-ms sync))
+            (not (neg? (:elapsed-ms sync))))
         (binding [*out* *err*]
           (println "invalid cutover prepare response" (pr-str m)))
-        (System/exit 1)))' \
+        (System/exit 1))
+      (println (:instance m) (:version m)))' \
     "$input" "$expected_cutover_id"
 }
 
@@ -506,8 +578,8 @@ verify_prepared_endpoint() {
 }
 
 prepare_endpoint() {
-  local slot=$1 origin=$2 cutover_id=$3
-  local operation_id response rc
+  local slot=$1 origin=$2 cutover_id=$3 identity_out=$4
+  local operation_id response rc prepared_identity
   operation_id=$cutover_id-$origin
   response=$(mktemp "$state/prepare.$origin.XXXXXX")
   if "$cutover" prepare \
@@ -526,40 +598,279 @@ prepare_endpoint() {
     rm -f -- "$response"
     return 1
   fi
-  if ! inspect_prepare "$response" "$operation_id"; then
+  if ! prepared_identity=$(inspect_prepare "$response" "$operation_id"); then
     rm -f -- "$response"
     return 1
   fi
   rm -f -- "$response"
-  verify_prepared_endpoint "$slot" "$origin" "$cutover_id"
+  if ! verify_prepared_endpoint "$slot" "$origin" "$cutover_id"; then
+    return 1
+  fi
+  printf '%s\n' "$prepared_identity" >"$identity_out"
+}
+
+sample_telemetry_unit() {
+  local unit=$1 properties rc
+  local active_state="" sub_state="" main_pid="" invocation_id=""
+  local exec_start="" memory_current="" memory_max="" tasks_current=""
+  local key value
+
+  if properties=$(
+    timeout --signal=TERM --kill-after=1s \
+      "${readiness_systemctl_timeout_seconds}s" \
+      "$systemctl_bin" show "$unit" --no-pager \
+      --property=ActiveState \
+      --property=SubState \
+      --property=MainPID \
+      --property=InvocationID \
+      --property=ExecMainStartTimestampMonotonic \
+      --property=MemoryCurrent \
+      --property=MemoryMax \
+      --property=TasksCurrent
+  ); then
+    :
+  else
+    rc=$?
+    printf 'systemd inspection exited %s\n' "$rc" >&2
+    return 1
+  fi
+  while IFS='=' read -r key value; do
+    case "$key" in
+      ActiveState) active_state=$value ;;
+      SubState) sub_state=$value ;;
+      MainPID) main_pid=$value ;;
+      InvocationID) invocation_id=$value ;;
+      ExecMainStartTimestampMonotonic) exec_start=$value ;;
+      MemoryCurrent) memory_current=$value ;;
+      MemoryMax) memory_max=$value ;;
+      TasksCurrent) tasks_current=$value ;;
+    esac
+  done <<<"$properties"
+
+  [[ "$active_state" == active && "$sub_state" == running &&
+     "$main_pid" =~ ^[1-9][0-9]*$ &&
+     "$invocation_id" =~ ^[0-9a-f]{32}$ &&
+     "$exec_start" =~ ^[1-9][0-9]*$ &&
+     "$memory_current" =~ ^[0-9]+$ &&
+     "$memory_max" =~ ^[1-9][0-9]*$ &&
+     "$tasks_current" =~ ^[0-9]+$ ]] || return 1
+  printf '%s %s %s %s %s %s\n' \
+    "$main_pid" "$invocation_id" "$exec_start" \
+    "$memory_current" "$memory_max" "$tasks_current"
+}
+
+sample_jvm_health() {
+  local main_pid=$1 flags heap max_heap heap_numbers
+  if ! flags=$(
+    timeout --signal=TERM --kill-after=1s \
+      "${readiness_jcmd_timeout_seconds}s" \
+      "$jcmd_bin" "$main_pid" VM.flags
+  ); then
+    return 1
+  fi
+  if ! max_heap=$(
+    gawk '
+      {
+        for (i = 1; i <= NF; i += 1) {
+          if ($i == "-XX:+UseG1GC") g1 += 1
+          if ($i == "-XX:+UseSerialGC") serial += 1
+          if (match($i, /^-XX:MaxHeapSize=([0-9]+)$/, m)) {
+            heaps += 1
+            max_heap = m[1]
+          }
+        }
+      }
+      END {
+        if (g1 != 1 || serial != 0 || heaps != 1) exit 1
+        print max_heap
+      }
+    ' <<<"$flags"
+  ); then
+    return 1
+  fi
+  if ! heap=$(
+    timeout --signal=TERM --kill-after=1s \
+      "${readiness_jcmd_timeout_seconds}s" \
+      "$jcmd_bin" "$main_pid" GC.heap_info
+  ); then
+    return 1
+  fi
+  if ! heap_numbers=$(
+    gawk '
+      function bytes(value, unit) {
+        if (unit == "G") return value * 1024 * 1024 * 1024
+        if (unit == "M") return value * 1024 * 1024
+        return value * 1024
+      }
+      match($0, /^[[:space:]]*garbage-first heap[[:space:]]+total[[:space:]]+([0-9]+)([KMG]),[[:space:]]+used[[:space:]]+([0-9]+)([KMG])[[:space:]]/, m) {
+        rows += 1
+        total = bytes(m[1], m[2])
+        used = bytes(m[3], m[4])
+      }
+      END {
+        if (rows != 1 || used < 0 || total <= 0 || used > total) exit 1
+        printf "%.0f %.0f\n", used, total
+      }
+    ' <<<"$heap"
+  ); then
+    return 1
+  fi
+  printf '%s %s\n' "$max_heap" "$heap_numbers"
+}
+
+verify_target_telemetry_readiness() {
+  local slot=$1 expected_phase=$2 expected_instance=$3 expected_version=$4
+  local expected_pid=$5 expected_invocation=$6 expected_start=$7
+  local expected_cutover_id=$8 unit status_before status_after
+  local phase instance version observed_cutover_id
+  local after_phase after_instance after_version after_cutover_id
+  local unit_before unit_after main_pid invocation_id exec_start
+  local memory_current memory_max tasks_current after_pid after_invocation
+  local after_start after_memory_current after_memory_max after_tasks_current
+  local jvm_health max_heap heap_used heap_total
+
+  valid_slot "$slot" || die "invalid telemetry readiness slot: $slot"
+  unit=$(telemetry_unit_for "$slot")
+  [[ "$unit" =~ ^[A-Za-z0-9_.@:-]+\.service$ ]] ||
+    die "$slot/telemetry readiness rejected: unsafe unit name"
+
+  status_before=$(read_status "$slot" telemetry any) ||
+    die "$slot/telemetry readiness rejected: cutover status is unavailable"
+  phase=$(sed -n '1p' <<<"$status_before")
+  instance=$(sed -n '2p' <<<"$status_before")
+  version=$(sed -n '3p' <<<"$status_before")
+  observed_cutover_id=$(sed -n '5p' <<<"$status_before")
+  case "$expected_phase" in
+    read-only)
+      [[ "$phase" == standby || "$phase" == demoted ]] ||
+        die "$slot/telemetry readiness rejected: endpoint is not read-only"
+      ;;
+    active)
+      [[ "$phase" == active ]] ||
+        die "$slot/telemetry readiness rejected: endpoint is not active"
+      ;;
+    *) die "invalid telemetry readiness phase: $expected_phase" ;;
+  esac
+  [[ "$expected_instance" == any || "$instance" == "$expected_instance" ]] ||
+    die "$slot/telemetry readiness rejected: prepared instance changed"
+  [[ "$expected_version" == any || "$version" == "$expected_version" ]] ||
+    die "$slot/telemetry readiness rejected: prepared version changed"
+  [[ "$observed_cutover_id" == "$expected_cutover_id" ]] ||
+    die "$slot/telemetry readiness rejected: cutover identity changed"
+
+  unit_before=$(sample_telemetry_unit "$unit") ||
+    die "$slot/telemetry readiness rejected: systemd evidence is unavailable or malformed"
+  read -r main_pid invocation_id exec_start \
+    memory_current memory_max tasks_current <<<"$unit_before"
+  [[ "$expected_pid" == any || "$main_pid" == "$expected_pid" ]] ||
+    die "$slot/telemetry readiness rejected: MainPID changed"
+  [[ "$expected_invocation" == any ||
+     "$invocation_id" == "$expected_invocation" ]] ||
+    die "$slot/telemetry readiness rejected: InvocationID changed"
+  [[ "$expected_start" == any || "$exec_start" == "$expected_start" ]] ||
+    die "$slot/telemetry readiness rejected: process start changed"
+  [[ "$memory_max" == "$readiness_expected_memory_max_bytes" ]] ||
+    die "$slot/telemetry readiness rejected: live MemoryMax is $memory_max, expected $readiness_expected_memory_max_bytes"
+  (( memory_current < readiness_max_memory_current_bytes )) ||
+    die "$slot/telemetry readiness rejected: MemoryCurrent $memory_current is not below $readiness_max_memory_current_bytes"
+  (( tasks_current <= readiness_max_tasks )) ||
+    die "$slot/telemetry readiness rejected: TasksCurrent $tasks_current exceeds $readiness_max_tasks"
+
+  jvm_health=$(sample_jvm_health "$main_pid") ||
+    die "$slot/telemetry readiness rejected: live G1/heap evidence is unavailable or malformed"
+  read -r max_heap heap_used heap_total <<<"$jvm_health"
+  [[ "$max_heap" == "$readiness_expected_max_heap_bytes" ]] ||
+    die "$slot/telemetry readiness rejected: live MaxHeapSize is $max_heap, expected $readiness_expected_max_heap_bytes"
+  (( heap_total <= max_heap )) ||
+    die "$slot/telemetry readiness rejected: committed heap exceeds MaxHeapSize"
+  (( heap_used < readiness_max_heap_used_bytes )) ||
+    die "$slot/telemetry readiness rejected: live heap used $heap_used is not below $readiness_max_heap_used_bytes"
+
+  unit_after=$(sample_telemetry_unit "$unit") ||
+    die "$slot/telemetry readiness rejected: post-jcmd systemd evidence is unavailable or malformed"
+  read -r after_pid after_invocation after_start \
+    after_memory_current after_memory_max after_tasks_current <<<"$unit_after"
+  [[ "$after_pid" == "$main_pid" &&
+     "$after_invocation" == "$invocation_id" &&
+     "$after_start" == "$exec_start" ]] ||
+    die "$slot/telemetry readiness rejected: process invocation changed during jcmd"
+  [[ "$after_memory_max" == "$readiness_expected_memory_max_bytes" ]] ||
+    die "$slot/telemetry readiness rejected: post-jcmd MemoryMax changed"
+  (( after_memory_current < readiness_max_memory_current_bytes )) ||
+    die "$slot/telemetry readiness rejected: post-jcmd MemoryCurrent is over the limit"
+  (( after_tasks_current <= readiness_max_tasks )) ||
+    die "$slot/telemetry readiness rejected: post-jcmd TasksCurrent is over the limit"
+
+  status_after=$(read_status "$slot" telemetry any) ||
+    die "$slot/telemetry readiness rejected: post-jcmd cutover status is unavailable"
+  after_phase=$(sed -n '1p' <<<"$status_after")
+  after_instance=$(sed -n '2p' <<<"$status_after")
+  after_version=$(sed -n '3p' <<<"$status_after")
+  after_cutover_id=$(sed -n '5p' <<<"$status_after")
+  [[ "$after_phase" == "$phase" &&
+     "$after_instance" == "$instance" &&
+     "$after_cutover_id" == "$observed_cutover_id" ]] ||
+    die "$slot/telemetry readiness rejected: prepared Fram instance changed during jcmd"
+  if [[ "$expected_phase" == read-only ]]; then
+    [[ "$after_version" == "$version" ]] ||
+      die "$slot/telemetry readiness rejected: prepared version changed during jcmd"
+  fi
+
+  printf '%s %s %s %s %s\n' \
+    "$instance" "$version" "$main_pid" "$invocation_id" "$exec_start"
 }
 
 write_gate_state() {
-  local cutover_id=$1 old=$2 target=$3 temp
+  local cutover_id=$1 old=$2 target=$3 instance=$4 version=$5
+  local main_pid=$6 invocation_id=$7 exec_start=$8 temp
   mkdir -p "$state"
   temp=$state/gate.current.next.$$
-  printf '%s %s %s\n' "$cutover_id" "$old" "$target" >"$temp"
+  printf '%s %s %s %s %s %s %s %s\n' \
+    "$cutover_id" "$old" "$target" "$instance" "$version" \
+    "$main_pid" "$invocation_id" "$exec_start" >"$temp"
   sync -f "$temp"
   mv -T "$temp" "$state/gate.current"
   sync -f "$state"
 }
 
 read_gate_state() {
-  local cutover_id old target extra
+  local cutover_id old target instance version main_pid invocation_id
+  local exec_start extra
   [[ -f "$state/gate.current" && ! -L "$state/gate.current" ]] ||
     die "gate recovery state is missing"
-  read -r cutover_id old target extra <"$state/gate.current" ||
+  read -r cutover_id old target instance version main_pid invocation_id \
+    exec_start extra <"$state/gate.current" ||
     die "cannot read gate recovery state"
   [[ "$cutover_id" =~ ^[A-Za-z0-9_.:-]+$ && -z "${extra:-}" ]] ||
     die "gate recovery state is malformed"
   valid_slot "$old" || die "gate state has invalid old slot"
   valid_slot "$target" || die "gate state has invalid target slot"
-  printf '%s %s %s\n' "$cutover_id" "$old" "$target"
+  if [[ -z "${instance:-}" ]]; then
+    instance=none
+    version=none
+    main_pid=none
+    invocation_id=none
+    exec_start=none
+  else
+    [[ "$instance" =~ ^[A-Za-z0-9_.:-]+$ &&
+       "$version" =~ ^[0-9]+$ &&
+       "$main_pid" =~ ^[1-9][0-9]*$ &&
+       "$invocation_id" =~ ^[0-9a-f]{32}$ &&
+       "$exec_start" =~ ^[1-9][0-9]*$ ]] ||
+      die "gate readiness identity is malformed"
+  fi
+  printf '%s %s %s %s %s %s %s %s\n' \
+    "$cutover_id" "$old" "$target" "$instance" "$version" \
+    "$main_pid" "$invocation_id" "$exec_start"
 }
 
 prepare_pair() {
   local old=$1 target=$2 transaction_file=$3 cutover_id
   local coord_pid telemetry_pid coord_ok=0 telemetry_ok=0
+  local coord_identity=$state/prepare.coord.identity
+  local telemetry_identity=$state/prepare.telemetry.identity
+  local prepared_instance prepared_version readiness_identity
+  local main_pid invocation_id exec_start
   valid_slot "$old" || die "invalid old slot: $old"
   valid_slot "$target" || die "invalid target slot: $target"
   [[ "$old" != "$target" ]] || die "old and target slots are identical"
@@ -574,26 +885,39 @@ prepare_pair() {
   verify_pair "$old" active
   verify_pair "$target" read-only
 
+  rm -f -- "$coord_identity" "$telemetry_identity"
   cutover_id="selector-$(date -u +%Y%m%dT%H%M%S)-$$"
-  prepare_endpoint "$target" coord "$cutover_id" &
+  prepare_endpoint "$target" coord "$cutover_id" "$coord_identity" &
   coord_pid=$!
-  prepare_endpoint "$target" telemetry "$cutover_id" &
+  prepare_endpoint "$target" telemetry "$cutover_id" "$telemetry_identity" &
   telemetry_pid=$!
   if wait "$coord_pid"; then coord_ok=1; fi
   if wait "$telemetry_pid"; then telemetry_ok=1; fi
   if (( coord_ok != 1 || telemetry_ok != 1 )); then
     die "target preparation failed; source authority was not changed"
   fi
+  read -r prepared_instance prepared_version <"$telemetry_identity" ||
+    die "telemetry preparation identity is missing"
+  readiness_identity=$(
+    verify_target_telemetry_readiness \
+      "$target" read-only "$prepared_instance" "$prepared_version" \
+      any any any "$cutover_id-telemetry"
+  )
+  read -r prepared_instance prepared_version main_pid invocation_id exec_start \
+    <<<"$readiness_identity"
 
   # This is written only after both explicit acknowledgements and status
   # proofs. The selector still has no transaction and the frontend is still
   # OPEN; a crash here is therefore a harmless, read-only prepared standby.
-  write_gate_state "$cutover_id" "$old" "$target"
+  write_gate_state \
+    "$cutover_id" "$old" "$target" "$prepared_instance" "$prepared_version" \
+    "$main_pid" "$invocation_id" "$exec_start"
 }
 
 promote_pair() {
   local old=$1 target=$2 transaction_file=$3
   local cutover_id prepared_old prepared_target origin marker
+  local prepared_instance prepared_version main_pid invocation_id exec_start
   valid_slot "$old" || die "invalid old slot: $old"
   valid_slot "$target" || die "invalid target slot: $target"
   [[ "$old" != "$target" ]] || die "old and target slots are identical"
@@ -609,12 +933,22 @@ promote_pair() {
   # blue -> green -> blue cutovers possible without restarting either slot.
   verify_pair "$target" read-only
 
-  read -r cutover_id prepared_old prepared_target < <(read_gate_state)
+  read -r cutover_id prepared_old prepared_target prepared_instance \
+    prepared_version main_pid invocation_id exec_start < <(read_gate_state)
   [[ "$prepared_old" == "$old" && "$prepared_target" == "$target" ]] ||
     die "prepared cutover state does not match $old -> $target"
+  [[ "$prepared_instance" != none ]] ||
+    die "prepared cutover lacks a process-bound readiness proof"
   for origin in coord telemetry; do
     verify_prepared_endpoint "$target" "$origin" "$cutover_id"
   done
+  # Preparation is a proof about a captured prefix, not a durable claim that
+  # the target remains operational. Recheck immediately before the first source
+  # demotion so a heap collapse during the selector drain cannot gain authority.
+  verify_target_telemetry_readiness \
+    "$target" read-only "$prepared_instance" "$prepared_version" \
+    "$main_pid" "$invocation_id" "$exec_start" \
+    "$cutover_id-telemetry" >/dev/null
 
   rm -f -- "$state"/*.old-demotion.edn "$state"/*.rollback.edn
 
@@ -629,6 +963,13 @@ promote_pair() {
     promote_endpoint "$target" "$origin" "$cutover_id" "$marker"
   done
   verify_pair "$target" active
+  # Promotion synchronizes the exact final marker under writer authority.
+  # Before the selector routes or resumes, prove that the same prepared process
+  # is still the active JVM and still satisfies the live capacity envelope.
+  verify_target_telemetry_readiness \
+    "$target" active "$prepared_instance" any \
+    "$main_pid" "$invocation_id" "$exec_start" \
+    "$cutover_id-telemetry" >/dev/null
 }
 
 rollback_pair() {
@@ -650,7 +991,7 @@ rollback_pair() {
     verify_pair "$old_arg" active
     return 0
   fi
-  read -r cutover_id old target < <(read_gate_state)
+  read -r cutover_id old target _ _ _ _ _ < <(read_gate_state)
   if [[ "$target_arg" != "$target" || "$old_arg" != "$old" ]]; then
     # A completed prior cutover intentionally leaves its gate proof available
     # until the next gate invocation overwrites it. If the selector crashes

@@ -81,13 +81,17 @@ let
   };
   cutoverGate = pkgs.writeShellApplication {
     name = "north-coord-cutover-gate";
-    runtimeInputs = with pkgs; [ babashka bash coreutils ];
+    runtimeInputs = with pkgs; [ babashka bash coreutils gawk jdk systemd ];
     text = ''
       export NORTH_COORD_CUTOVER_BIN=${framCutoverChecked}/bin/fram-cutover
       export NORTH_COORD_CUTOVER_TOKEN_FILE=${cutoverToken}
       export NORTH_COORD_CUTOVER_STATE=${cutoverState}
       export NORTH_COORD_COORD_LOG=${coordinationLog}
       export NORTH_COORD_TELEMETRY_LOG=${telemetryLog}
+      export NORTH_COORD_SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl
+      export NORTH_COORD_JCMD_BIN=${pkgs.jdk}/bin/jcmd
+      export NORTH_COORD_BLUE_TELEMETRY_UNIT=north-telemetry-coord-blue.service
+      export NORTH_COORD_GREEN_TELEMETRY_UNIT=north-telemetry-coord-green.service
       export NORTH_COORD_BLUE_COORD_PORT=${blueCoordPort}
       export NORTH_COORD_BLUE_TELEMETRY_PORT=${blueTelemetryPort}
       export NORTH_COORD_GREEN_COORD_PORT=${greenCoordPort}
@@ -410,9 +414,9 @@ in
       });
     };
     systemd.services.north-coord-blue = lib.mkIf stageA (mkSlotService "North coordination private blue generation (:17977)" "blue" "${blueCoordRuntime}/bin/north-coord-blue-runtime" telemetryLog "${runtimeState}-blue" blueCoordPort "-Xmx6g" "8G");
-    systemd.services.north-telemetry-coord-blue = lib.mkIf stageA (mkSlotService "North telemetry private blue generation (:17978)" "blue" "${blueTelemetryRuntime}/bin/north-telemetry-coord-blue-runtime" coordinationLog "${telemetryRuntimeState}-blue" blueTelemetryPort "-Xmx1g" "1500M");
+    systemd.services.north-telemetry-coord-blue = lib.mkIf stageA (mkSlotService "North telemetry private blue generation (:17978)" "blue" "${blueTelemetryRuntime}/bin/north-telemetry-coord-blue-runtime" coordinationLog "${telemetryRuntimeState}-blue" blueTelemetryPort "-XX:+UseG1GC -Xmx4g" "6G");
     systemd.services.north-coord-green = lib.mkIf stageA (mkSlotService "North coordination private green generation (:27977)" "green" "${greenCoordRuntime}/bin/north-coord-green-runtime" telemetryLog "${runtimeState}-green" greenCoordPort "-Xmx6g" "8G");
-    systemd.services.north-telemetry-coord-green = lib.mkIf stageA (mkSlotService "North telemetry private green generation (:27978)" "green" "${greenTelemetryRuntime}/bin/north-telemetry-coord-green-runtime" coordinationLog "${telemetryRuntimeState}-green" greenTelemetryPort "-Xmx1g" "1500M");
+    systemd.services.north-telemetry-coord-green = lib.mkIf stageA (mkSlotService "North telemetry private green generation (:27978)" "green" "${greenTelemetryRuntime}/bin/north-telemetry-coord-green-runtime" coordinationLog "${telemetryRuntimeState}-green" greenTelemetryPort "-XX:+UseG1GC -Xmx4g" "6G");
     systemd.services.north-coord-proxy = lib.mkIf stageA {
       description = "North permanent public selector for coordination + telemetry";
       requires = [ "north-coord.socket" "north-telemetry-coord.socket" ];

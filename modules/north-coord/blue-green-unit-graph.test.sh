@@ -45,7 +45,7 @@ done
 for name in north-coord.socket north-telemetry-coord.socket; do
   grep -Fxq 'TriggerLimitIntervalSec=0' "$(unit "$name")"
   diff -u \
-    "$baseline_units/$name" \
+    <(grep -Fvx 'TriggerLimitIntervalSec=0' "$baseline_units/$name") \
     <(grep -Fvx 'TriggerLimitIntervalSec=0' "$(unit "$name")")
 done
 cmp "$baseline_units/north-coord-pair.target" \
@@ -119,6 +119,30 @@ grep -Eq '/nix/store/[a-z0-9]+-gawk-[^/]+/bin' "$selector_prestart" || {
   echo "packaged proxy selector is missing its gawk runtime dependency" >&2
   exit 1
 }
+selector_prepare=$(
+  sed -n 's|^export NORTH_COORD_SELECTOR_PREPARE_COMMAND=||p' \
+    "$selector_prestart"
+)
+[[ -x "$selector_prepare" ]] || {
+  echo "selector prepare command is not an executable package path" >&2
+  exit 1
+}
+cutover_gate=$(
+  sed -n 's|^exec \([^ ]*/north-coord-cutover-gate\) prepare .*$|\1|p' \
+    "$selector_prepare"
+)
+[[ -x "$cutover_gate" ]] || {
+  echo "cutover gate is not an executable package path" >&2
+  exit 1
+}
+jcmd=$(
+  sed -n 's|^export NORTH_COORD_JCMD_BIN=||p' "$cutover_gate"
+)
+[[ "$jcmd" =~ ^/nix/store/[a-z0-9]+-[^/]+/bin/jcmd$ &&
+   -x "$jcmd" && ! -L "$jcmd" ]] || {
+  echo "cutover gate does not close over one exact packaged jcmd" >&2
+  exit 1
+}
 
 # All four candidates use the dynamic launcher, have no corpus-level prepare,
 # and retain the agreed memory/stop bounds.
@@ -143,6 +167,10 @@ for name in north-coord-blue.service north-coord-green.service; do
 done
 for name in north-telemetry-coord-blue.service north-telemetry-coord-green.service; do
   path=$(unit "$name")
+  slot=${name#north-telemetry-coord-}
+  slot=${slot%.service}
+  port=17978
+  [[ $slot == green ]] && port=27978
   grep -Eq '^ExecStart=.*/north-coord-slot-start$' "$path"
   grep -Eq '^ExecStartPre=.*/north-telemetry-coord-(blue|green)-runtime ensure-default$' \
     "$path"
@@ -150,7 +178,10 @@ for name in north-telemetry-coord-blue.service north-telemetry-coord-green.servi
     echo "private telemetry slot runs forbidden pair prepare: $name" >&2
     exit 1
   fi
-  grep -Fxq 'MemoryMax=1500M' "$path"
+  grep -Fxq 'MemoryMax=6G' "$path"
+  grep -Fxq \
+    "Environment=\"JDK_JAVA_OPTIONS=-XX:+UseG1GC -Xmx4g -Xlog:gc:file=/home/tom/.local/state/north/fram-telemetry-runtime-$slot/gc-$port.log:time,uptime:filecount=3,filesize=10m\"" \
+    "$path"
   grep -Fxq 'TimeoutStopSec=15s' "$path"
 done
 
