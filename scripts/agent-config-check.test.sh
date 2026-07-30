@@ -6,6 +6,7 @@ AGENT_PROFILE="${AGENT_CONFIG_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}
 BEAGLE_INTEGRATION="${AGENT_CONFIG_BEAGLE_INTEGRATION:-$HOME/code/beagle/main/integrations/north}"
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/agent-config-check.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
+trap 'status=$? line=$LINENO command=$BASH_COMMAND; trap - ERR; printf "agent-config-check.test.sh:%s: unhandled failure status=%s command=%s\n" "$line" "$status" "$command" >&2; exit "$status"' ERR
 
 run_quiet_child() {
   local label="$1"
@@ -55,6 +56,38 @@ run_quiet_child_regression() {
   grep -Fq 'fixture stdout' <<<"$output"
   grep -Fq 'fixture stderr' <<<"$output"
 }
+
+run_err_trap_regression() {
+  local expected_line output status
+
+  if output="$("$BASH" "$REPO/scripts/agent-config-check.test.sh" \
+    --err-trap-regression-child 2>&1)"; then
+    printf 'ERR trap regression child unexpectedly succeeded\n' >&2
+    return 1
+  else
+    status=$?
+  fi
+
+  expected_line="$(
+    rg -n '^  false # err-trap-regression-child$' \
+      "$REPO/scripts/agent-config-check.test.sh"
+  )"
+  expected_line="${expected_line%%:*}"
+  [ "$status" -eq 1 ]
+  grep -Fq \
+    "agent-config-check.test.sh:$expected_line: unhandled failure status=1 command=false" \
+    <<<"$output"
+}
+
+if [ "${1:-}" = '--err-trap-regression-child' ]; then
+  false # err-trap-regression-child
+fi
+
+if [ "${1:-}" = '--err-trap-regression-only' ]; then
+  run_err_trap_regression
+  printf 'ok: top-level ERR trap reports line, status, and command\n'
+  exit 0
+fi
 
 if [ "${1:-}" = '--quiet-child-regression-only' ]; then
   run_quiet_child_regression
