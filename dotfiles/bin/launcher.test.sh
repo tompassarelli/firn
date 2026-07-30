@@ -24,7 +24,7 @@ BIN="$SCRATCH/bin"      # coreutils + jq + fake real CLIs (always on PATH)
 NBIN="$SCRATCH/nbin"    # holds the stub `north` (added to PATH only when present)
 GIT_CALLS="$SCRATCH/git.calls"
 mkdir -p "$BIN" "$NBIN"
-for tool in env bash realpath jq find sort sed head mktemp paste rm cat grep dirname; do
+for tool in env bash realpath jq find sort sed head mktemp paste rm cat grep dirname mkdir; do
   real="$(command -v "$tool" 2>/dev/null)" || { echo "missing host tool: $tool" >&2; exit 2; }
   # Link straight to the resolved command-v path; do NOT depend on `readlink`
   # (agent-config-check.test.sh runs this under a readlink-fails shim).
@@ -564,6 +564,38 @@ JSON
     not_contains "$s" 'unrecognized dispatch mode'
 
   printf 'dispatch=north\nguards=off\n' >"$HOME_DIR/.local/state/north/harness.conf"
+
+  # 9e. Compute governance (agent.slice). systemd-run is deliberately absent
+  # from this harness's toolbox, so the FAIL-OPEN branch is what runs here:
+  # governance must never be able to cost a session. Each decision is recorded
+  # to a state file so a doctor lane can see a throttle-off estate.
+  slice_state="$HOME_DIR/.local/state/north/agent-slice.state"
+  slice_decision() { sed -n '1s/^[^\t]*\t\([^\t]*\)\t.*/\1/p' "$slice_state" 2>/dev/null; }
+
+  rm -f "$slice_state"
+  run "$launcher" 0 -- as acctA slice-open-probe ; s="$STDERR"
+  check "$launcher/absent systemd-run still launches the session" \
+    test "$(record_field _ args)" = "$default_args slice-open-probe"
+  check "$launcher/absent systemd-run is recorded, not silent" \
+    test "$(slice_decision)" = "off:no-systemd-run"
+  check "$launcher/slice fallback prints no banner of its own" \
+    not_contains "$s" "slice"
+
+  rm -f "$slice_state"
+  run "$launcher" 0 "NORTH_NO_SLICE=1" -- as acctA slice-escape-probe ; s="$STDERR"
+  check "$launcher/NORTH_NO_SLICE bypasses governance" \
+    test "$(slice_decision)" = "off:NORTH_NO_SLICE"
+  check "$launcher/NORTH_NO_SLICE still launches the session" \
+    test "$(record_field _ args)" = "$default_args slice-escape-probe"
+
+  # Already inside the scope: no second entry, and the launcher says so.
+  rm -f "$slice_state"
+  run "$launcher" 0 "NORTH_SLICE_ENTERED=1" -- as acctA slice-inside-probe ; s="$STDERR"
+  check "$launcher/an already-governed session is not re-entered" \
+    test "$(slice_decision)" = "on"
+  check "$launcher/an already-governed session still launches" \
+    test "$(record_field _ args)" = "$default_args slice-inside-probe"
+  rm -f "$slice_state"
 
   # --- immutable ordinary North selection ---
   checkout_record="$SCRATCH/$launcher-checkout-record"

@@ -29,6 +29,52 @@ if [ -z "$REAL" ]; then
   exit 127
 fi
 
+# Compute governance: run the session inside agent.slice so a lane and
+# everything it spawns yields to the desktop under contention. ONE chokepoint —
+# re-exec the launcher, and every downstream exec path plus every descendant
+# tool call inherits the cgroup. Weights live in nixos-config
+# modules/agent-slice; this only enters them. Fails OPEN like the account
+# selection below: absent systemd-run, no user manager, or a scope that never
+# started the payload all fall through. Mirrors dotfiles/bin/claude.
+NORTH_SLICE_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/north/agent-slice.state"
+slice_note() {
+  { mkdir -p "${NORTH_SLICE_STATE%/*}"; } 2>/dev/null || true
+  { printf '%s\t%s\t%s\t%s\n' \
+      "${EPOCHSECONDS:-0}" "$1" "$PROVIDER_WORD" "$$" >"$NORTH_SLICE_STATE"; } \
+    2>/dev/null || true
+}
+if [ "${NORTH_SLICE_ENTERED:-}" = "1" ]; then
+  [ -n "${NORTH_SLICE_MARK:-}" ] && { : >"$NORTH_SLICE_MARK"; } 2>/dev/null
+  slice_note on
+elif [ "${NORTH_NO_SLICE:-}" = "1" ]; then
+  slice_note off:NORTH_NO_SLICE
+elif ! command -v systemd-run >/dev/null 2>&1; then
+  slice_note off:no-systemd-run
+elif [ -z "${XDG_RUNTIME_DIR:-}" ] || [ ! -S "$XDG_RUNTIME_DIR/systemd/private" ]; then
+  slice_note off:no-user-manager
+else
+  # Without the marker a failed scope and a session that merely exited 1 look
+  # identical, and the retry would double-run the session.
+  slice_dir="$(mktemp -d 2>/dev/null || true)"
+  if [ -z "$slice_dir" ]; then
+    slice_note off:no-scratch
+  else
+    NORTH_SLICE_MARK="$slice_dir/ran"
+    export NORTH_SLICE_ENTERED=1 NORTH_SLICE_MARK
+    systemd-run --user --scope --quiet --slice=agent.slice --same-dir --collect \
+      -- "$self" "$@"
+    slice_rc=$?
+    slice_ran=1
+    [ -e "$NORTH_SLICE_MARK" ] || slice_ran=0
+    rm -rf "${slice_dir:?}"
+    if [ "$slice_ran" -eq 1 ]; then
+      exit "$slice_rc"
+    fi
+    unset NORTH_SLICE_ENTERED NORTH_SLICE_MARK
+    slice_note off:scope-failed
+  fi
+fi
+
 # Force full-permission mode on every standalone launch. This wrapper redirects
 # CODEX_HOME to a per-account state dir whose config.toml does NOT carry the
 # nixos-config full-access keys, so ~/.codex/config.toml is bypassed and codex

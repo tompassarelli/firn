@@ -60,6 +60,7 @@
   myConfig.modules.north-coord.stageATelemetryPartition = true;
   myConfig.modules.north-stream-sync.enable = true;
   myConfig.modules.north-reactor.enable = true;
+  myConfig.modules.agent-slice.enable = true;
   systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
   sops.secrets."wireguard-laptop".sopsFile = ../../secrets/wireguard.yaml;

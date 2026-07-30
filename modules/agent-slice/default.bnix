@@ -1,0 +1,31 @@
+#lang beagle/nix
+
+(ns default)
+
+;; User-level agent.slice: the launcher chokepoint (dotfiles/bin/claude,
+;; dotfiles/bin/codex) re-execs each provider session into it via
+;; `systemd-run --user --scope --slice=agent.slice`; descendants inherit.
+;; Weights only — no CPUQuota/AllowedCPUs/MemoryMax, so an idle box is never
+;; wasted and a fat build throttles instead of OOM-killing.
+;; The session.slice raise is not optional: a weight is a ratio among
+;; siblings, so lowering agent.slice alone measures nothing.
+;; Escapes: NORTH_NO_SLICE=1; `systemctl --user set-property agent.slice …`.
+(nix/module [config lib pkgs ...]
+  {:options.myConfig.modules.agent-slice.enable
+    (lib.mkEnableOption
+      "agent.slice compute governance — weight-based backpressure so agent lanes yield to the desktop")
+   :config
+    (lib.mkIf config.myConfig.modules.agent-slice.enable
+      {:systemd.user.slices.agent
+        {:description "Agent lanes — yielding compute class"
+         :sliceConfig
+          ;; 20 = just under systemd's own background.slice (30).
+          ;; MemoryHigh ~65% of 94G, aggregate over every lane at once.
+          {:CPUWeight  20
+           :IOWeight   20
+           :MemoryHigh "61G"}}
+       ;; Emitted as session.slice.d/overrides.conf (overrideStrategy defaults
+       ;; to asDropinIfExists and systemd ships this unit).
+       :systemd.user.slices.session
+        ;; 300 = 15x agent.slice, 3x app.slice.
+        {:sliceConfig {:CPUWeight 300 :IOWeight 300}}})})

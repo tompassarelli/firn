@@ -8,7 +8,7 @@
       experimental-features = [ "nix-command" "flakes" ];
       builders-use-substitutes = true;
       max-jobs = "auto";
-      cores = 16;
+      cores = 8;
       auto-optimise-store = true;
       trusted-users = [ "root" "@wheel" ];
       extra-substituters = [
@@ -26,6 +26,7 @@
         "quickshell.cachix.org-1:vBm3s5tZThc5KDLj6zhHVCMp8wX/AZJwle9wqdi81ts="
       ];
     };
+    systemd.services.nix-daemon.serviceConfig.CPUWeight = 50;
     nix.gc = {
       automatic = true;
       dates = "weekly";
