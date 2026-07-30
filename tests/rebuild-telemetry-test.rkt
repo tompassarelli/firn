@@ -5,6 +5,8 @@
          racket/file
          racket/list
          racket/port
+         racket/string
+         racket/system
          (submod "../scripts/firn-cmds/rebuild.rkt" test-support))
 
 (define (clock-from values)
@@ -151,6 +153,72 @@
        (activate-linux-system (path->string changed-target)
                               (path->string (build-path scratch "missing-system"))
                               record-command)))
-    (check-equal? (length (unbox activation-commands)) 2))
+    (check-equal? (length (unbox activation-commands)) 2)
+
+    (define blocking-checker (build-path scratch "blocking-checker"))
+    (call-with-output-file blocking-checker
+      #:exists 'truncate
+      (λ (out)
+        (display "#!/usr/bin/env bash\nsleep 30\n" out)))
+    (file-or-directory-permissions blocking-checker #o755)
+    (define job-gate (make-semaphore 0))
+    (define blocking-job #f)
+    (define schedule-command #f)
+    (define (mock-supervisor . command)
+      (set! schedule-command command)
+      (set! blocking-job
+            (thread (λ () (semaphore-wait job-gate))))
+      #t)
+    (define schedule-start (current-inexact-monotonic-milliseconds))
+    (parameterize ([current-environment-variables trace-env]
+                   [current-monotonic-clock (clock-from '(70.0))]
+                   [current-output-port (open-output-nowhere)])
+      (check-true
+       (schedule-drift-check blocking-checker
+                             mock-supervisor
+                             "firn-agent-config-check-test.service")))
+    (define schedule-elapsed
+      (- (current-inexact-monotonic-milliseconds) schedule-start))
+    (check-true (< schedule-elapsed 1000.0))
+    (check-false (thread-dead? blocking-job))
+    (check-not-false (member "--no-block" schedule-command))
+    (check-not-false (member "--collect" schedule-command))
+    (check-equal? (take-right schedule-command 2)
+                  (list "firn-agent-config-check"
+                        (path->string blocking-checker)))
+    (semaphore-post job-gate)
+    (thread-wait blocking-job)
+
+    (parameterize ([current-environment-variables trace-env]
+                   [current-monotonic-clock (clock-from '(71.0))]
+                   [current-output-port (open-output-nowhere)])
+      (check-true
+       (schedule-drift-check blocking-checker
+                             (λ _ #f)
+                             "firn-agent-config-check-error.service")))
+    (define advisory-events (drop (read-events trace-path) 8))
+    (check-equal? (map (λ (event) (hash-ref event 'event)) advisory-events)
+                  '("advisory_job" "advisory_job"))
+    (check-equal? (map (λ (event) (hash-ref event 'status)) advisory-events)
+                  '("scheduled" "schedule_error"))
+    (check-equal? (map (λ (event) (hash-ref event 'unit)) advisory-events)
+                  '("firn-agent-config-check-test.service"
+                    "firn-agent-config-check-error.service"))
+
+    (define failing-checker (build-path scratch "failing-checker"))
+    (call-with-output-file failing-checker
+      #:exists 'truncate
+      (λ (out)
+        (display "#!/usr/bin/env bash\nexit 19\n" out)))
+    (file-or-directory-permissions failing-checker #o755)
+    (define advisory-error (open-output-string))
+    (check-true
+     (parameterize ([current-error-port advisory-error])
+       (system* (find-executable-path "bash")
+                "-c" advisory-check-shell
+                "firn-agent-config-check"
+                (path->string failing-checker))))
+    (check-true (string-contains? (get-output-string advisory-error)
+                                  "agent harness drift (advisory)")))
   (λ ()
     (delete-directory/files scratch #:must-exist? #f)))

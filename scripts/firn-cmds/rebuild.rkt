@@ -148,11 +148,10 @@
 (define (host-needs-impure? host)
   (pair? (host-impure-modules host)))
 
-;; Post-activation machine-drift gate (firn: gate once per rebuild, never poll
-;; per session). The activation that just ran heals known drift (registerMcpServers
-;; etc.); this verifies the heal actually took. Advisory by design — the system has
-;; already switched, so a finding is surfaced loudly but never fails the rebuild.
-(define (run-drift-check)
+(define advisory-check-shell
+  "\"$1\" --local || printf 'firn: agent harness drift (advisory); see checker output above\\n' >&2")
+
+(define (run-drift-check-sync)
   (define checker (in-repo "scripts" "agent-config-check.sh"))
   (when (file-exists? checker)
     (printf "┌─ agent harness (--local)\n") (flush-output)
@@ -162,6 +161,44 @@
       [else
        (printf "└─ ⚠ agent harness drift (see above) — system already switched; fix config + re-run `firn rebuild`\n")])
     (flush-output)))
+
+(define (drift-check-unit-name)
+  (format "firn-agent-config-check-~a-~a.service"
+          (file-name-from-path (resolve-path "/proc/self"))
+          (exact-round (current-inexact-monotonic-milliseconds))))
+
+(define (schedule-drift-check
+         [checker (in-repo "scripts" "agent-config-check.sh")]
+         [run-command sh]
+         [unit (drift-check-unit-name)])
+  (when (file-exists? checker)
+    (define checker-command
+      (if (path? checker) (path->string checker) checker))
+    (define scheduled?
+      (with-handlers ([exn:fail? (λ (_) #f)])
+        (run-command
+         "systemd-run"
+         "--user"
+         "--no-block"
+         "--collect"
+         "--quiet"
+         "--unit" unit
+         "--description" "Firn agent harness advisory check"
+         "--property=Type=oneshot"
+         (find-exe "bash")
+         "-c" advisory-check-shell
+         "firn-agent-config-check" checker-command)))
+    (append-trace-event!
+     (hash 'event "advisory_job"
+           'name "agent harness"
+           'unit unit
+           'monotonic_ms ((current-monotonic-clock))
+           'status (if scheduled? "scheduled" "schedule_error")))
+    (if scheduled?
+        (printf "── agent harness check scheduled: ~a\n" unit)
+        (printf "── ⚠ agent harness check was not scheduled (advisory)\n"))
+    (flush-output))
+  #t)
 
 (define (handle-host-rebuild* host skip-checks?)
   ;; Line-buffer so step headers print before each child process writes
@@ -473,9 +510,9 @@
      (printf "\n  ✓ rebuild complete — total ~a~a\n\n"
              (fmt-elapsed total-elapsed)
              (if gen (format ", tagged gen-~a" gen) ""))])
-  ;; Both success paths (darwin + linux) fall through here; the failure branch
-  ;; exits above. Verify machine state once, now that activation has run.
-  (run-drift-check))
+  (if on-darwin?
+      (run-drift-check-sync)
+      (schedule-drift-check)))
 
 ;; firn host impact [<host>]  — dry-run rebuild impact prediction
 
@@ -498,6 +535,8 @@
 (module+ test-support
   (provide call-with-trace-span
            activate-linux-system
+           advisory-check-shell
            current-monotonic-clock
            nix-build-command
-           nix-log-shell))
+           nix-log-shell
+           schedule-drift-check))
