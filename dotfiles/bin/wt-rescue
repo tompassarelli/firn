@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+# wt-rescue — sanctioned remediation for a dirty main checkout: relocate the
+# dirty state INTACT into a sibling rescue worktree, verify it byte-for-byte,
+# THEN restore main to clean. Never uses stash — the relocated state is a
+# real, inspectable commit on a real branch, not a stash entry that can be
+# dropped or lost across a rebuild.
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: wt-rescue [path] [--dry-run]
+
+Relocate a dirty main checkout's tracked + untracked (non-ignored) changes
+into a new sibling worktree/branch, verify the relocation byte-for-byte,
+commit it there, then restore main to a clean working tree.
+
+  (no path)   operate on the container of the current directory
+  path        operate on the container reached from this path instead
+  --dry-run   print the plan (files, destination) without acting
+USAGE
+}
+
+argument_error() {
+  printf 'wt-rescue: %s\n' "$1" >&2
+  usage >&2
+  exit 2
+}
+
+dry_run=0
+path_arg=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --dry-run)
+      [ "$dry_run" -eq 0 ] || argument_error 'duplicate --dry-run'
+      dry_run=1
+      shift
+      ;;
+    -*) argument_error "unknown argument '$1'" ;;
+    *)
+      [ -z "$path_arg" ] || argument_error 'too many arguments'
+      path_arg="$1"
+      shift
+      ;;
+  esac
+done
+
+start_dir=$(cd "${path_arg:-$PWD}" 2>/dev/null && pwd) \
+  || argument_error "no such directory '${path_arg:-$PWD}'"
+
+# --- locate the container (the dir whose ./main is a git checkout) ---------
+find_container() {
+  local dir="$1"
+  while [ "$dir" != "/" ]; do
+    if [ -e "$dir/main/.git" ]; then
+      printf '%s\n' "$dir"
+      return 0
+    fi
+    dir=$(dirname "$dir")
+  done
+  return 1
+}
+
+container=$(find_container "$start_dir") \
+  || { echo "wt-rescue: no container found above $start_dir (no <dir>/main/.git)" >&2; exit 1; }
+main_dir="$container/main"
+
+status=$(git -C "$main_dir" status --porcelain)
+if [ -z "$status" ]; then
+  echo "clean, nothing to rescue"
+  exit 0
+fi
+
+# --- gather what needs rescuing, before anything is created -----------------
+name_status=$(git -C "$main_dir" diff --name-status HEAD)
+untracked=$(git -C "$main_dir" ls-files --others --exclude-standard)
+diff_text=$(git -C "$main_dir" diff HEAD)
+
+# tracked-path list for reporting/verification: p1 (and p2 for rename/copy)
+tracked_paths=()
+while IFS=$'\t' read -r st p1 p2; do
+  [ -n "$st" ] || continue
+  tracked_paths+=("$p1")
+  [ -z "$p2" ] || tracked_paths+=("$p2")
+done <<<"$name_status"
+
+untracked_paths=()
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  untracked_paths+=("$f")
+done <<<"$untracked"
+
+# --- pick a free destination name: <container>/wt-rescue-<UTC yyyymmdd-HHMM> ---
+ts=$(date -u +%Y%m%d-%H%M)
+branch="rescue-$ts"
+rescue_dir="$container/wt-rescue-$ts"
+suffix=2
+while [ -e "$rescue_dir" ] || git -C "$main_dir" show-ref --quiet --verify "refs/heads/$branch"; do
+  branch="rescue-${ts}-${suffix}"
+  rescue_dir="$container/wt-rescue-${ts}-${suffix}"
+  suffix=$((suffix + 1))
+done
+
+if [ "$dry_run" -eq 1 ]; then
+  echo "wt-rescue: DRY RUN — no changes made"
+  echo "container:   $container"
+  echo "destination: $rescue_dir (branch $branch)"
+  echo "tracked changes to rescue:"
+  for p in "${tracked_paths[@]}"; do printf '  %s\n' "$p"; done
+  echo "untracked files to rescue:"
+  for p in "${untracked_paths[@]}"; do printf '  %s\n' "$p"; done
+  exit 0
+fi
+
+# --- create the rescue worktree from main's current HEAD --------------------
+git -C "$main_dir" worktree add -q -b "$branch" "$rescue_dir" HEAD
+
+# --- relocate: apply the tracked diff, then copy untracked files ------------
+if [ -n "$diff_text" ]; then
+  printf '%s\n' "$diff_text" | git -C "$rescue_dir" apply -q -
+fi
+for f in "${untracked_paths[@]}"; do
+  mkdir -p "$(dirname "$rescue_dir/$f")"
+  cp -p "$main_dir/$f" "$rescue_dir/$f"
+done
+
+# --- VERIFY before touching main: byte-compare every rescued path ----------
+verify_failed=0
+for p in "${tracked_paths[@]}" "${untracked_paths[@]}"; do
+  main_exists=0; rescue_exists=0
+  [ -e "$main_dir/$p" ] && main_exists=1
+  [ -e "$rescue_dir/$p" ] && rescue_exists=1
+  if [ "$main_exists" -eq 1 ] && [ "$rescue_exists" -eq 1 ]; then
+    cmp -s "$main_dir/$p" "$rescue_dir/$p" || { echo "wt-rescue: VERIFY MISMATCH: $p" >&2; verify_failed=1; }
+  elif [ "$main_exists" -eq 0 ] && [ "$rescue_exists" -eq 0 ]; then
+    : # both absent (deleted tracked path) — consistent
+  else
+    echo "wt-rescue: VERIFY MISMATCH (presence): $p" >&2
+    verify_failed=1
+  fi
+done
+
+if [ "$verify_failed" -eq 1 ]; then
+  echo "wt-rescue: ABORTING — verification failed; main is UNTOUCHED; rescue worktree left at $rescue_dir for inspection" >&2
+  exit 1
+fi
+
+# --- commit the verified relocation in the rescue worktree ------------------
+git -C "$rescue_dir" add -A
+git -C "$rescue_dir" commit -q -m "rescued dirty state from $container main, $ts"
+
+# --- only now: restore main to clean ----------------------------------------
+while IFS=$'\t' read -r st p1 p2; do
+  [ -n "$st" ] || continue
+  case "$st" in
+    A*|C*)
+      newpath="${p2:-$p1}"
+      git -C "$main_dir" rm -f --cached -q -- "$newpath" >/dev/null 2>&1 || true
+      rm -f "$main_dir/$newpath"
+      ;;
+    D*)
+      git -C "$main_dir" checkout -q HEAD -- "$p1"
+      ;;
+    R*)
+      rm -f "$main_dir/$p2"
+      git -C "$main_dir" reset -q HEAD -- "$p2" >/dev/null 2>&1 || true
+      git -C "$main_dir" checkout -q HEAD -- "$p1"
+      ;;
+    *)
+      git -C "$main_dir" checkout -q HEAD -- "$p1"
+      ;;
+  esac
+done <<<"$name_status"
+
+for f in "${untracked_paths[@]}"; do
+  rm -f "$main_dir/$f"
+  rmdir -p "$(dirname "$main_dir/$f")" 2>/dev/null || true
+done
+
+final_status=$(git -C "$main_dir" status --porcelain)
+if [ -n "$final_status" ]; then
+  echo "wt-rescue: main did NOT end clean after restore — rescue worktree ($rescue_dir, branch $branch) still holds the verified copy" >&2
+  echo "$final_status" >&2
+  exit 1
+fi
+
+printf 'rescued -> %s (branch %s)\n' "$rescue_dir" "$branch"
