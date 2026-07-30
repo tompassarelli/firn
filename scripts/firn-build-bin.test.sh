@@ -225,6 +225,7 @@ grep -Fxq 'fresh-source' <<<"$fresh_output"
 
 printf ':enabled [test]\n' >"$real_repo/hosts/test/enabled-tags.bnix"
 FIRN_REPO="$real_repo" BEAGLE_PATH="$real_beagle" \
-  FIRN_SKIP_FLAKE_INPUTS=1 "$real_repo/scripts/firn-build" >/dev/null
+  FIRN_CLI="$real_bin/firn" FIRN_SKIP_FLAKE_INPUTS=1 \
+  "$real_repo/scripts/firn-build" >/dev/null
 
 printf 'ok: Firn bytecode cache isolates transitive dependencies and publishes atomically\n'
