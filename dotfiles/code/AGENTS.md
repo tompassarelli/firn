@@ -69,6 +69,12 @@ Reads from `main/` stay allowed, as do `git worktree add` and
 `git fetch <worktree> <branch>:refs/heads/main` — the guard must never trap a
 lane with no compliant move.
 
+Dirty state in any `main/` is human work-in-progress: agents never commit,
+stash, reset, or clean it, and the guard denies destructive git operations
+against a `main` checkout. Volatile personal preferences live on the `cfg`
+channel (mutable live copy; deliberate `cfg promote` back to the record) —
+live fiddling never dirties a checkout.
+
 ## Launch-critical repos — agents never edit the primary
 
 `~/code/fram`, `~/code/north`, and `~/code/beagle` are **launch-critical**: a
