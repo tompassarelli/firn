@@ -436,7 +436,13 @@ select_account() {
 
   local errfile json rc detail
   errfile="$(mktemp 2>/dev/null || true)"
-  if [ -n "$errfile" ]; then
+  if command -v timeout >/dev/null 2>&1; then
+    if [ -n "$errfile" ]; then
+      json="$(timeout --foreground 5s env -u NORTH_CHECKOUT north providers --json 2>"$errfile")"; rc=$?
+    else
+      json="$(timeout --foreground 5s env -u NORTH_CHECKOUT north providers --json 2>/dev/null)"; rc=$?
+    fi
+  elif [ -n "$errfile" ]; then
     json="$(env -u NORTH_CHECKOUT north providers --json 2>"$errfile")"; rc=$?
   else
     json="$(env -u NORTH_CHECKOUT north providers --json 2>/dev/null)"; rc=$?
@@ -446,7 +452,9 @@ select_account() {
     detail=""
     [ -n "$errfile" ] && detail="$(head -n1 "$errfile" 2>/dev/null)"
     [ -n "$errfile" ] && rm -f "$errfile"
-    if [ -n "$detail" ]; then
+    if [ "$rc" -eq 124 ]; then
+      printf 'err\tnorth providers timed out after 5s\n'
+    elif [ -n "$detail" ]; then
       printf 'err\tnorth providers exited %s: %s\n' "$rc" "$detail"
     else
       printf 'err\tnorth providers exited %s\n' "$rc"
