@@ -361,7 +361,8 @@
         system = "x86_64-linux";
         config.allowUnfree = true;
       };
-    in {
+    in
+    {
       claude-sandbox = import ./modules/containers/claude-sandbox.nix {
         pkgs = import nixpkgs-master {
           system = "x86_64-linux";
