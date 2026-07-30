@@ -301,6 +301,10 @@ classify_north_coord_exec() {
     NORTH_COORD_EXEC_KIND='socket-runtime-selector'
     return 0
   fi
+  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-north-coord-slot-start/bin/north-coord-slot-start$ ]]; then
+    NORTH_COORD_EXEC_KIND='slot-runtime-selector'
+    return 0
+  fi
   if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*/bin/fram-daemon$ ]]; then
     NORTH_COORD_EXEC_KIND='direct-package'
     return 1
@@ -326,6 +330,61 @@ environment_lines_value() {
   done <<<"$environment"
   [ "$count" -eq 1 ] || return 1
   printf '%s\n' "$value"
+}
+
+select_north_coord_runtime_state() {
+  local process_env="$1" unit="$2" exec_kind="$3"
+  local slot state slot_runtime
+
+  NORTH_COORD_RUNTIME_STATE_ROOT=''
+  NORTH_COORD_RUNTIME_STATE_REASON=''
+  case "$exec_kind" in
+    runtime-selector|socket-runtime-selector)
+      [ "$unit" = north-coord.service ] || {
+        NORTH_COORD_RUNTIME_STATE_REASON="legacy selector is attached to unexpected unit: $unit"
+        return 1
+      }
+      NORTH_COORD_RUNTIME_STATE_ROOT="$HOME/.local/state/north/fram-runtime"
+      ;;
+    slot-runtime-selector)
+      slot="$(environment_lines_value "$process_env" NORTH_COORD_SLOT 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_STATE_REASON='slot process identity is missing or duplicated'
+        return 1
+      }
+      case "$slot" in
+        blue|green) ;;
+        *)
+          NORTH_COORD_RUNTIME_STATE_REASON="slot process identity is invalid: ${slot:-missing}"
+          return 1
+          ;;
+      esac
+      [ "$unit" = "north-coord-$slot.service" ] || {
+        NORTH_COORD_RUNTIME_STATE_REASON="slot $slot does not match systemd unit $unit"
+        return 1
+      }
+      state="$(environment_lines_value "$process_env" NORTH_COORD_RUNTIME_STATE 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_STATE_REASON='slot runtime state is missing or duplicated'
+        return 1
+      }
+      [ "$state" = "$HOME/.local/state/north/fram-runtime-$slot" ] || {
+        NORTH_COORD_RUNTIME_STATE_REASON="slot $slot runtime state is noncanonical: ${state:-missing}"
+        return 1
+      }
+      slot_runtime="$(environment_lines_value "$process_env" NORTH_COORD_SLOT_RUNTIME 2>/dev/null)" || {
+        NORTH_COORD_RUNTIME_STATE_REASON='slot runtime executable is missing or duplicated'
+        return 1
+      }
+      [[ "$slot_runtime" =~ ^/nix/store/[a-z0-9]{32}-north-coord-${slot}-runtime/bin/north-coord-${slot}-runtime$ ]] || {
+        NORTH_COORD_RUNTIME_STATE_REASON="slot $slot runtime executable is not immutable and slot-scoped: ${slot_runtime:-missing}"
+        return 1
+      }
+      NORTH_COORD_RUNTIME_STATE_ROOT="$state"
+      ;;
+    *)
+      NORTH_COORD_RUNTIME_STATE_REASON="unsupported coordinator selector kind: ${exec_kind:-missing}"
+      return 1
+      ;;
+  esac
 }
 
 north_coord_process_birth_token() {
@@ -1554,7 +1613,7 @@ PY
       bin/north-on-stop; do
       if [ -n "$north_revision" ] &&
          north_wrapped_runtime_matches_locked_source \
-           "/etc/codex/hooks/north/$relative" "$HOME/code/north" \
+           "/etc/codex/hooks/north/$relative" "$HOME/code/north/main" \
            "$north_revision" "$relative"; then :
       else
         generation_exact=0
@@ -2094,32 +2153,44 @@ if [ "$LOCAL" -eq 1 ]; then
       north_coord_tree="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_TREE 2>/dev/null || true)"
       north_coord_origin="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_ORIGIN 2>/dev/null || true)"
       north_coord_daemon="$(environment_lines_value "$north_coord_process_env" FRAM_RUNTIME_DAEMON 2>/dev/null || true)"
-      north_coord_selector="$HOME/.local/state/north/fram-runtime/current"
+      north_coord_runtime_state=''
+      if select_north_coord_runtime_state \
+           "$north_coord_process_env" "$NORTH_COORD_UNIT" \
+           "$NORTH_COORD_EXEC_KIND"; then
+        north_coord_runtime_state="$NORTH_COORD_RUNTIME_STATE_ROOT"
+        north_coord_selector="$north_coord_runtime_state/current"
+        north_coord_active_generation="$north_coord_runtime_state/active"
+      else
+        north_coord_ok=0
+        bad "north-coord runtime selector state is invalid: ${NORTH_COORD_RUNTIME_STATE_REASON:-missing identity}"
+      fi
       if ! grep -Fxq "$CANONICAL_FRAM_LOG" <<<"$north_coord_process_cmdline"; then
         north_coord_ok=0
         bad "north-coord process does not serve canonical coordination.log"
       fi
-      if north_coord_runtime_identity_is_valid \
+      if [ -n "$north_coord_runtime_state" ] &&
+         north_coord_runtime_identity_is_valid \
            "$north_coord_mode" "$north_coord_source" "$north_coord_revision" \
            "$north_coord_tree" "$north_coord_origin" "$north_coord_daemon" \
            "$north_coord_selector"; then
         ok_detail "north-coord runtime identity is exact: $north_coord_mode@$north_coord_revision ($north_coord_source)"
-      else
+      elif [ -n "$north_coord_runtime_state" ]; then
         north_coord_ok=0
         bad "north-coord runtime identity is invalid: ${NORTH_COORD_RUNTIME_IDENTITY_REASON:-missing identity}"
       fi
-      north_coord_active_generation="$HOME/.local/state/north/fram-runtime/active"
-      if north_coord_runtime_record_owner_is_valid \
+      if [ -n "$north_coord_runtime_state" ] &&
+         north_coord_runtime_record_owner_is_valid \
            "$north_coord_process_env" "$north_coord_pid" \
            "$north_coord_active_generation"; then
         ok_detail "north-coord owner token matches the active runtime record for systemd MainPID"
-      elif [ "$NORTH_COORD_RUNTIME_OWNER_REASON" = 'process generation is not the active runtime generation' ]; then
+      elif [ -n "$north_coord_runtime_state" ] &&
+           [ "$NORTH_COORD_RUNTIME_OWNER_REASON" = 'process generation is not the active runtime generation' ]; then
         # The MainPID is running a real, valid generation that is simply
         # older than the one now marked active (built ahead of it) — not a
         # broken owner record. A restart, not a failure, resolves this.
         north_coord_active_generation_name="$(basename "$(readlink -f "$north_coord_active_generation" 2>/dev/null)" 2>/dev/null)"
         soft "north-coord runtime built-ahead: restart to adopt gen-${north_coord_active_generation_name:-unknown}"
-      else
+      elif [ -n "$north_coord_runtime_state" ]; then
         north_coord_ok=0
         bad "north-coord runtime ownership record is invalid: ${NORTH_COORD_RUNTIME_OWNER_REASON:-missing identity}"
       fi

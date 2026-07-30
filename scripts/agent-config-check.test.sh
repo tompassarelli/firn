@@ -489,6 +489,19 @@ classify_north_coord_exec "$socket_exec"
 [ "$NORTH_COORD_EXEC_KIND" = socket-runtime-selector ]
 [ "$NORTH_COORD_EXEC_PATH" = "$socket_wrapper_path" ]
 
+slot_wrapper_path="/nix/store/${nix_hash}-north-coord-slot-start/bin/north-coord-slot-start"
+slot_exec="{ path=$slot_wrapper_path ; argv[]=$slot_wrapper_path ; ignore_errors=no ; }"
+classify_north_coord_exec "$slot_exec"
+[ "$NORTH_COORD_EXEC_KIND" = slot-runtime-selector ]
+[ "$NORTH_COORD_EXEC_PATH" = "$slot_wrapper_path" ]
+
+if classify_north_coord_exec \
+   "{ path=/tmp/${nix_hash}-north-coord-slot-start/bin/north-coord-slot-start ; }"; then
+  printf 'mutable coordinator slot launcher spoof was accepted\n' >&2
+  exit 1
+fi
+[ "$NORTH_COORD_EXEC_KIND" = unrecognized ]
+
 if classify_north_coord_exec "{ path=$socket_wrapper_path ; argv[]=$socket_wrapper_path /bin/true ; }"; then
   printf 'socket launcher without the runtime selector was accepted\n' >&2
   exit 1
@@ -510,6 +523,35 @@ if classify_north_coord_exec "{ path=$checkout_path ; argv[]=$checkout_path 7977
   exit 1
 fi
 [ "$NORTH_COORD_EXEC_KIND" = direct-checkout ]
+
+for slot in blue green; do
+  slot_state="$HOME/.local/state/north/fram-runtime-$slot"
+  slot_runtime="/nix/store/${nix_hash}-north-coord-${slot}-runtime/bin/north-coord-${slot}-runtime"
+  slot_process_env="$(printf '%s\n' \
+    "NORTH_COORD_SLOT=$slot" \
+    "NORTH_COORD_RUNTIME_STATE=$slot_state" \
+    "NORTH_COORD_SLOT_RUNTIME=$slot_runtime")"
+  select_north_coord_runtime_state \
+    "$slot_process_env" "north-coord-$slot.service" slot-runtime-selector
+  [ "$NORTH_COORD_RUNTIME_STATE_ROOT" = "$slot_state" ]
+done
+
+if select_north_coord_runtime_state \
+   "$slot_process_env" north-coord-blue.service slot-runtime-selector; then
+  printf 'coordinator slot identity attached to the wrong unit was accepted\n' >&2
+  exit 1
+fi
+grep -Fq 'does not match systemd unit' \
+  <<<"$NORTH_COORD_RUNTIME_STATE_REASON"
+
+spoofed_slot_env="${slot_process_env/$slot_runtime/\/tmp\/north-coord-green-runtime}"
+if select_north_coord_runtime_state \
+   "$spoofed_slot_env" north-coord-green.service slot-runtime-selector; then
+  printf 'mutable coordinator slot runtime was accepted\n' >&2
+  exit 1
+fi
+grep -Fq 'is not immutable and slot-scoped' \
+  <<<"$NORTH_COORD_RUNTIME_STATE_REASON"
 
 mapfile -t parsed_coord_pids < <(
   printf '%s\n' \
@@ -698,6 +740,13 @@ chmod +x "$fixture_public" "$fixture_wrapped"
 north_wrapped_runtime_matches_locked_source \
   "$fixture_public" "$fixture_north_repo" "$fixture_north_revision" \
   bin/north-on-spawn "$fixture_store"
+grep -Fq '"$HOME/code/north/main" \' \
+  "$REPO/scripts/agent-config-check.sh"
+if grep -Fq '"$HOME/code/north" \' \
+   "$REPO/scripts/agent-config-check.sh"; then
+  printf 'managed North wrapper provenance still uses the non-repository container path\n' >&2
+  exit 1
+fi
 printf 'drift\n' >>"$fixture_wrapped"
 if north_wrapped_runtime_matches_locked_source \
    "$fixture_public" "$fixture_north_repo" "$fixture_north_revision" \
