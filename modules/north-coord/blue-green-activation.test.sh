@@ -398,6 +398,25 @@ export NORTH_COORD_CUTOVER_SETTLE_POLL_SECONDS=0.02
 
 transaction=$scratch/selector.transaction
 
+# Invalid authority evidence must survive read_status's temporary-file cleanup.
+write_endpoint 17978 standby blue-telemetry 20
+if "$here/north-coord-cutover-gate" verify blue \
+     >"$scratch/invalid-status.out" 2>"$scratch/invalid-status.err"; then
+  invalid_status_rc=0
+else
+  invalid_status_rc=$?
+fi
+write_endpoint 17978 active blue-telemetry 20
+if compgen -G "$gate_state/status.*" >/dev/null; then
+  echo "invalid status left a temporary status file" >&2
+  exit 1
+fi
+grep -q 'invalid cutover status' "$scratch/invalid-status.err"
+if (( invalid_status_rc == 0 )); then
+  echo "invalid telemetry authority status unexpectedly verified" >&2
+  exit 1
+fi
+
 assert_prepare_rejected() {
   local label=$1 before_demotions after_demotions
   before_demotions=$(rg -c '^demote ' "$cutover_log" 2>/dev/null || true)

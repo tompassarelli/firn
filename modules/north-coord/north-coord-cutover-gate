@@ -284,14 +284,18 @@ inspect_prepare() {
 }
 
 read_status() {
-  local slot=$1 origin=$2 expected=$3 output
+  local slot=$1 origin=$2 expected=$3 output inspect_rc=0 cleanup_rc=0
   output=$(mktemp "$state/status.XXXXXX")
   if ! status_file "$slot" "$origin" "$output"; then
     rm -f -- "$output"
     return 1
   fi
-  inspect_status "$output" "$expected"
-  rm -f -- "$output"
+  inspect_status "$output" "$expected" || inspect_rc=$?
+  rm -f -- "$output" || cleanup_rc=$?
+  if (( inspect_rc != 0 )); then
+    return "$inspect_rc"
+  fi
+  return "$cleanup_rc"
 }
 
 await_status() {
