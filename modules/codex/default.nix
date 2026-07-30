@@ -4,6 +4,8 @@ let
   username = config.myConfig.modules.users.username;
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
   codexPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".codex;
+  enforcement = "/var/lib/north-enforcement/active/current";
+  promoted = relative: source: "L+ /etc/codex/hooks/${relative} - - - - ${enforcement}/${source}";
 in
 {
   options.myConfig.modules.codex.enable = lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)";
@@ -14,24 +16,8 @@ in
       "codex/runtime" = {
         source = codexPkg;
       };
-      "codex/hooks/beagle-session-start.sh".source = "${inputs.beagle}/integrations/north/hooks/beagle-session-start.sh";
-      "codex/hooks/agent-spawn-guard.sh".source = "${inputs.north}/agent-profile/hooks/agent-spawn-guard.sh";
       "codex/hooks/code-upstream-guard.sh".source = "${inputs.fram}/integrations/north/hooks/code-upstream-guard.sh";
       "codex/hooks/firn-guard.sh".source = "${flakeRoot}/modules/north-profile/firn/hooks/firn-guard.sh";
-      "codex/hooks/north-clock-guard.sh".source = "${inputs.north}/agent-profile/hooks/north-clock-guard.sh";
-      "codex/hooks/north-clock-guard.py".source = "${inputs.north}/agent-profile/hooks/north-clock-guard.py";
-      "codex/hooks/tripwire-guard.sh".source = "${inputs.north}/agent-profile/hooks/tripwire-guard.sh";
-      "codex/hooks/logcompress-hook.js".source = "${inputs.north}/agent-profile/hooks/logcompress-hook.js";
-      "codex/hooks/logcompress.js".source = "${inputs.north}/agent-profile/hooks/logcompress.js";
-      "codex/hooks/racket-build-guard.sh".source = "${inputs.beagle}/integrations/north/hooks/racket-build-guard.sh";
-      "codex/hooks/launch-critical-worktree-guard.sh".source = "${inputs.north}/agent-profile/hooks/launch-critical-worktree-guard.sh";
-      "codex/hooks/lib/authoring-killswitch.sh".source = "${inputs.north}/agent-profile/hooks/lib/authoring-killswitch.sh";
-      "codex/hooks/lib/harness-dial.sh".source = "${inputs.north}/agent-profile/hooks/lib/harness-dial.sh";
-      # launch-critical-worktree-guard.sh resolves both of these through
-      # dirname "$0"; decide.py imports paths.py off its own directory.
-      "codex/hooks/lib/launch_critical_decide.py".source = "${inputs.north}/agent-profile/hooks/lib/launch_critical_decide.py";
-      "codex/hooks/lib/launch_critical_paths.py".source = "${inputs.north}/agent-profile/hooks/lib/launch_critical_paths.py";
-      "codex/hooks/registry.tsv".source = "${inputs.north}/agent-profile/hooks/registry.tsv";
       "codex/hooks/north-on-spawn-codex" = {
         source = "${flakeRoot}/dotfiles/codex/hooks/north-on-spawn-codex";
       };
@@ -78,6 +64,21 @@ in
         source = northPkg;
       };
     };
+    systemd.tmpfiles.rules = [
+      "d /var/lib/north-enforcement 0755 root root -"
+      "d /etc/codex/hooks/lib 0755 root root -"
+      (promoted "agent-spawn-guard.sh" "north/profiles/tom/hooks/agent-spawn-guard.sh")
+      (promoted "north-clock-guard.sh" "north/profiles/tom/hooks/north-clock-guard.sh")
+      (promoted "north-clock-guard.py" "north/profiles/tom/hooks/north-clock-guard.py")
+      (promoted "tripwire-guard.sh" "north/profiles/tom/hooks/tripwire-guard.sh")
+      (promoted "logcompress-hook.js" "north/profiles/tom/hooks/logcompress-hook.js")
+      (promoted "logcompress.js" "north/profiles/tom/hooks/logcompress.js")
+      (promoted "registry.tsv" "north/profiles/tom/hooks/registry.tsv")
+      (promoted "lib/authoring-killswitch.sh" "north/profiles/tom/hooks/lib/authoring-killswitch.sh")
+      (promoted "lib/harness-dial.sh" "north/profiles/tom/hooks/lib/harness-dial.sh")
+      (promoted "beagle-session-start.sh" "beagle/integrations/north/hooks/beagle-session-start.sh")
+      (promoted "racket-build-guard.sh" "beagle/integrations/north/hooks/racket-build-guard.sh")
+    ];
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {
         ".codex/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/AGENTS.md";

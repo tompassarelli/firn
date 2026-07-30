@@ -27,8 +27,11 @@ set -euo pipefail
 
 ROOT="${FIRN_REPO:-$(git rev-parse --show-toplevel)}"
 LOCK="$ROOT/flake.lock"
-# Only the daemon engine auto-promotes; north/beagle are dev-channel.
-INPUTS=(fram)
+# No local input auto-promotes through the flake pin any more. Fram adopts a
+# reviewed revision through `north-coord-runtime promote`, and North/Beagle
+# enforcement through `north-enforcement-promote`; both are attested transactions
+# that do not spend a rebuild. The list stays so a future input can rejoin.
+INPUTS=()
 
 die() {
   printf 'firn rebuild: %s\n' "$*" >&2

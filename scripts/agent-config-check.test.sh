@@ -350,6 +350,88 @@ grep -Fq '"Allocation  ' \
 source "$REPO/scripts/agent-config-check.sh"
 run_locked_hook_provenance_fixture
 
+# Sealed promotion replaces store residency as the immutability proof for the
+# North/Beagle managed hooks. Only a real promote can produce root-owned 0444
+# content, so the accepted shape is the live deployment; each rejection case
+# mutates exactly one clause of that shape.
+promoted_root="$scratch/enforcement"
+promoted_live="$scratch/live-promoted"
+promoted_relative='north/profiles/tom/hooks/agent-spawn-guard.sh'
+promoted_sibling='north/profiles/tom/hooks/north-clock-guard.sh'
+real_enforcement="${NORTH_ENFORCEMENT_STATE_ROOT:-/var/lib/north-enforcement}"
+mkdir -p "$promoted_root/active" "$promoted_live"
+if [ -d "$real_enforcement/deployments" ] && [ -r "$real_enforcement/active/record" ]; then
+  ln -s "$real_enforcement/deployments" "$promoted_root/deployments"
+  ln -s "$(readlink -f "$real_enforcement/active/current")" "$promoted_root/active/current"
+  cp "$real_enforcement/active/record" "$promoted_root/active/record"
+  NORTH_ENFORCEMENT_ROOT="$promoted_root"
+
+  [ "$(stat -c '%u:%a:%h' "$promoted_root/active/current/$promoted_relative")" = '0:444:1' ]
+  ln -s "$promoted_root/active/current/$promoted_relative" \
+    "$promoted_live/agent-spawn-guard.sh"
+  sealed_promoted_file "$promoted_live/agent-spawn-guard.sh" "$promoted_relative"
+  [[ "$(promote_record_revision north)" =~ ^[0-9a-f]{40}$ ]]
+  [[ "$(promote_record_revision beagle)" =~ ^[0-9a-f]{40}$ ]]
+
+  ln -s "$promoted_root/active/current/$promoted_sibling" \
+    "$promoted_live/wrong-target.sh"
+  if sealed_promoted_file "$promoted_live/wrong-target.sh" "$promoted_relative"; then
+    printf 'a sealed file from the wrong promoted path was accepted\n' >&2
+    exit 1
+  fi
+
+  sed -i "s|^FILE [0-9a-f]\{64\}  $promoted_relative\$|FILE $(printf 'f%.0s' {1..64})  $promoted_relative|" \
+    "$promoted_root/active/record"
+  if sealed_promoted_file "$promoted_live/agent-spawn-guard.sh" "$promoted_relative"; then
+    printf 'a promoted file that differs from its recorded digest was accepted\n' >&2
+    exit 1
+  fi
+
+  grep -v "  $promoted_relative\$" "$real_enforcement/active/record" \
+    >"$promoted_root/active/record"
+  if sealed_promoted_file "$promoted_live/agent-spawn-guard.sh" "$promoted_relative"; then
+    printf 'a promoted file absent from the promote record was accepted\n' >&2
+    exit 1
+  fi
+
+  sed 's/^NORTH_REV .*/NORTH_REV not-a-revision/' "$real_enforcement/active/record" \
+    >"$promoted_root/active/record"
+  if promote_record_revision north >/dev/null 2>&1; then
+    printf 'a malformed promote record revision was accepted\n' >&2
+    exit 1
+  fi
+
+  rm -f "$promoted_root/active/record"
+  if promote_record_revision north >/dev/null 2>&1; then
+    printf 'a missing promote record produced a revision\n' >&2
+    exit 1
+  fi
+  if sealed_promoted_file "$promoted_live/agent-spawn-guard.sh" "$promoted_relative"; then
+    printf 'a promoted file with no promote record was accepted\n' >&2
+    exit 1
+  fi
+else
+  printf 'note: no promoted enforcement deployment; sealed-promotion cases skipped\n' >&2
+fi
+NORTH_ENFORCEMENT_ROOT="$real_enforcement"
+
+# The generation must name the promoted payload, and the promoted hooks must no
+# longer be pinned to a flake input.
+grep -Fq '(promoted "agent-spawn-guard.sh" "north/profiles/tom/hooks/agent-spawn-guard.sh")' \
+  "$REPO/modules/codex/default.bnix"
+grep -Fq '(promoted "racket-build-guard.sh" "beagle/integrations/north/hooks/racket-build-guard.sh")' \
+  "$REPO/modules/codex/default.bnix"
+grep -Fq 'enforcement "/var/lib/north-enforcement/active/current"' \
+  "$REPO/modules/codex/default.bnix"
+if grep -Fq '(s inputs.north "/agent-profile/hooks/' "$REPO/modules/codex/default.bnix"; then
+  printf 'Codex module still pins a promoted North hook to the flake input\n' >&2
+  exit 1
+fi
+if grep -Fq '(s inputs.beagle "/integrations/north/hooks/' "$REPO/modules/codex/default.bnix"; then
+  printf 'Codex module still pins a promoted Beagle hook to the flake input\n' >&2
+  exit 1
+fi
+
 claude_mcp_server_connected \
   $'north: /run/current-system/sw/bin/north-mcp - ✔ Connected\nfram: ✔ Connected' \
   north

@@ -1023,6 +1023,54 @@ flake_locked_revision() {
   ' "$lock"
 }
 
+# North and Beagle enforcement is published by north-enforcement-promote, not by
+# the flake pin, so its attested revision comes from the active promote record.
+NORTH_ENFORCEMENT_ROOT="${NORTH_ENFORCEMENT_STATE_ROOT:-/var/lib/north-enforcement}"
+
+promote_record_path() {
+  printf '%s' "$NORTH_ENFORCEMENT_ROOT/active/record"
+}
+
+promote_record_revision() {
+  local node="$1" field value
+  case "$node" in
+    north) field=NORTH_REV ;;
+    beagle) field=BEAGLE_REV ;;
+    *) return 1 ;;
+  esac
+  value="$(sed -n "s/^$field //p" "$(promote_record_path)" 2>/dev/null | head -n 1)"
+  [[ "$value" =~ ^[0-9a-f]{40}$ ]] || return 1
+  printf '%s' "$value"
+}
+
+# The promoted replacement for store residency. A store path is immutable because
+# the store is; a promoted path has to prove the same thing about itself: it
+# resolves inside the active deployment, is root-owned and read-only, carries no
+# second hard link (which would be a writable back door into a sealed tree), and
+# hashes to what the promote record attested.
+sealed_promoted_file() {
+  local live="$1" relative="$2"
+  local resolved expected deployments observed recorded digest
+
+  resolved="$(readlink -f "$live" 2>/dev/null || true)"
+  expected="$(
+    readlink -f "$NORTH_ENFORCEMENT_ROOT/active/current/$relative" 2>/dev/null || true
+  )"
+  [ -n "$resolved" ] && [ "$resolved" = "$expected" ] || return 1
+  deployments="$(readlink -f "$NORTH_ENFORCEMENT_ROOT/deployments" 2>/dev/null || true)"
+  [ -n "$deployments" ] && [[ "$resolved" = "$deployments"/* ]] || return 1
+  [ -f "$resolved" ] && [ ! -L "$resolved" ] || return 1
+  observed="$(stat -c '%u:%a:%h' "$resolved" 2>/dev/null)" || return 1
+  [ "$observed" = '0:444:1' ] || return 1
+  recorded="$(
+    awk -v want="$relative" '$1 == "FILE" && $3 == want { print $2; exit }' \
+      "$(promote_record_path)" 2>/dev/null
+  )"
+  [[ "$recorded" =~ ^[0-9a-f]{64}$ ]] || return 1
+  digest="$(sha256sum <"$resolved" 2>/dev/null | cut -d' ' -f1)"
+  [ "$digest" = "$recorded" ]
+}
+
 write_shell_script_bin_matches_source() {
   local live="$1" source="$2" store_root="${3:-/nix/store}"
   local resolved canonical_store package_root interpreter interpreter_package first_line
@@ -1520,34 +1568,47 @@ validate_codex_managed_policy() {
 
   local module="$REPO/modules/codex/default.bnix"
   local spec relative source_expr expected_checkout authority git_blob_path
-  local live resolved
+  local promoted_path live resolved
+  # relative|module source expression|checkout|authority|blob path|promoted path.
+  # A promoted path is the enforcement-deployment-relative name the generation's
+  # tmpfiles link points at; it is empty for anything the generation still owns.
   local -a source_specs=(
-    "requirements.toml|(s flakeRoot \"/modules/codex/requirements.toml\")|$CODEX_REQUIREMENTS|self|modules/codex/requirements.toml"
-    "beagle-session-start.sh|(s inputs.beagle \"/integrations/north/hooks/beagle-session-start.sh\")|$BEAGLE_INTEGRATION/hooks/beagle-session-start.sh|beagle|integrations/north/hooks/beagle-session-start.sh"
-    "agent-spawn-guard.sh|(s inputs.north \"/agent-profile/hooks/agent-spawn-guard.sh\")|$SHARED/hooks/agent-spawn-guard.sh|north|profiles/tom/hooks/agent-spawn-guard.sh"
-    "code-upstream-guard.sh|(s inputs.fram \"/integrations/north/hooks/code-upstream-guard.sh\")|$FRAM_INTEGRATION/hooks/code-upstream-guard.sh|fram|integrations/north/hooks/code-upstream-guard.sh"
-    "firn-guard.sh|(s flakeRoot \"/modules/north-profile/firn/hooks/firn-guard.sh\")|$FIRN_INTEGRATION/hooks/firn-guard.sh|self|modules/north-profile/firn/hooks/firn-guard.sh"
-    "north-clock-guard.sh|(s inputs.north \"/agent-profile/hooks/north-clock-guard.sh\")|$SHARED/hooks/north-clock-guard.sh|north|profiles/tom/hooks/north-clock-guard.sh"
-    "north-clock-guard.py|(s inputs.north \"/agent-profile/hooks/north-clock-guard.py\")|$SHARED/hooks/north-clock-guard.py|north|profiles/tom/hooks/north-clock-guard.py"
-    "tripwire-guard.sh|(s inputs.north \"/agent-profile/hooks/tripwire-guard.sh\")|$SHARED/hooks/tripwire-guard.sh|north|profiles/tom/hooks/tripwire-guard.sh"
-    "logcompress-hook.js|(s inputs.north \"/agent-profile/hooks/logcompress-hook.js\")|$SHARED/hooks/logcompress-hook.js|north|profiles/tom/hooks/logcompress-hook.js"
-    "logcompress.js|(s inputs.north \"/agent-profile/hooks/logcompress.js\")|$SHARED/hooks/logcompress.js|north|profiles/tom/hooks/logcompress.js"
-    "racket-build-guard.sh|(s inputs.beagle \"/integrations/north/hooks/racket-build-guard.sh\")|$BEAGLE_INTEGRATION/hooks/racket-build-guard.sh|beagle|integrations/north/hooks/racket-build-guard.sh"
-    "lib/authoring-killswitch.sh|(s inputs.north \"/agent-profile/hooks/lib/authoring-killswitch.sh\")|$SHARED/hooks/lib/authoring-killswitch.sh|north|profiles/tom/hooks/lib/authoring-killswitch.sh"
-    "lib/harness-dial.sh|(s inputs.north \"/agent-profile/hooks/lib/harness-dial.sh\")|$SHARED/hooks/lib/harness-dial.sh|north|profiles/tom/hooks/lib/harness-dial.sh"
-    "registry.tsv|(s inputs.north \"/agent-profile/hooks/registry.tsv\")|$SHARED/hooks/registry.tsv|north|profiles/tom/hooks/registry.tsv"
-    "north-on-spawn-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-spawn-codex\")|$CODEX/hooks/north-on-spawn-codex|self|dotfiles/codex/hooks/north-on-spawn-codex"
-    "north-on-tooluse-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-tooluse-codex\")|$CODEX/hooks/north-on-tooluse-codex|self|dotfiles/codex/hooks/north-on-tooluse-codex"
-    "north-mark-delegated-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-mark-delegated-codex\")|$CODEX/hooks/north-mark-delegated-codex|self|dotfiles/codex/hooks/north-mark-delegated-codex"
-    "north-on-stop-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-stop-codex\")|$CODEX/hooks/north-on-stop-codex|self|dotfiles/codex/hooks/north-on-stop-codex"
-    "north-clock-guard-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-clock-guard-codex\")|$CODEX/hooks/north-clock-guard-codex|self|dotfiles/codex/hooks/north-clock-guard-codex"
+    "requirements.toml|(s flakeRoot \"/modules/codex/requirements.toml\")|$CODEX_REQUIREMENTS|self|modules/codex/requirements.toml|"
+    "beagle-session-start.sh|(promoted \"beagle-session-start.sh\"|$BEAGLE_INTEGRATION/hooks/beagle-session-start.sh|beagle|integrations/north/hooks/beagle-session-start.sh|beagle/integrations/north/hooks/beagle-session-start.sh"
+    "agent-spawn-guard.sh|(promoted \"agent-spawn-guard.sh\"|$SHARED/hooks/agent-spawn-guard.sh|north|profiles/tom/hooks/agent-spawn-guard.sh|north/profiles/tom/hooks/agent-spawn-guard.sh"
+    "code-upstream-guard.sh|(s inputs.fram \"/integrations/north/hooks/code-upstream-guard.sh\")|$FRAM_INTEGRATION/hooks/code-upstream-guard.sh|fram|integrations/north/hooks/code-upstream-guard.sh|"
+    "firn-guard.sh|(s flakeRoot \"/modules/north-profile/firn/hooks/firn-guard.sh\")|$FIRN_INTEGRATION/hooks/firn-guard.sh|self|modules/north-profile/firn/hooks/firn-guard.sh|"
+    "north-clock-guard.sh|(promoted \"north-clock-guard.sh\"|$SHARED/hooks/north-clock-guard.sh|north|profiles/tom/hooks/north-clock-guard.sh|north/profiles/tom/hooks/north-clock-guard.sh"
+    "north-clock-guard.py|(promoted \"north-clock-guard.py\"|$SHARED/hooks/north-clock-guard.py|north|profiles/tom/hooks/north-clock-guard.py|north/profiles/tom/hooks/north-clock-guard.py"
+    "tripwire-guard.sh|(promoted \"tripwire-guard.sh\"|$SHARED/hooks/tripwire-guard.sh|north|profiles/tom/hooks/tripwire-guard.sh|north/profiles/tom/hooks/tripwire-guard.sh"
+    "logcompress-hook.js|(promoted \"logcompress-hook.js\"|$SHARED/hooks/logcompress-hook.js|north|profiles/tom/hooks/logcompress-hook.js|north/profiles/tom/hooks/logcompress-hook.js"
+    "logcompress.js|(promoted \"logcompress.js\"|$SHARED/hooks/logcompress.js|north|profiles/tom/hooks/logcompress.js|north/profiles/tom/hooks/logcompress.js"
+    "racket-build-guard.sh|(promoted \"racket-build-guard.sh\"|$BEAGLE_INTEGRATION/hooks/racket-build-guard.sh|beagle|integrations/north/hooks/racket-build-guard.sh|beagle/integrations/north/hooks/racket-build-guard.sh"
+    "lib/authoring-killswitch.sh|(promoted \"lib/authoring-killswitch.sh\"|$SHARED/hooks/lib/authoring-killswitch.sh|north|profiles/tom/hooks/lib/authoring-killswitch.sh|north/profiles/tom/hooks/lib/authoring-killswitch.sh"
+    "lib/harness-dial.sh|(promoted \"lib/harness-dial.sh\"|$SHARED/hooks/lib/harness-dial.sh|north|profiles/tom/hooks/lib/harness-dial.sh|north/profiles/tom/hooks/lib/harness-dial.sh"
+    "registry.tsv|(promoted \"registry.tsv\"|$SHARED/hooks/registry.tsv|north|profiles/tom/hooks/registry.tsv|north/profiles/tom/hooks/registry.tsv"
+    "north-on-spawn-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-spawn-codex\")|$CODEX/hooks/north-on-spawn-codex|self|dotfiles/codex/hooks/north-on-spawn-codex|"
+    "north-on-tooluse-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-tooluse-codex\")|$CODEX/hooks/north-on-tooluse-codex|self|dotfiles/codex/hooks/north-on-tooluse-codex|"
+    "north-mark-delegated-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-mark-delegated-codex\")|$CODEX/hooks/north-mark-delegated-codex|self|dotfiles/codex/hooks/north-mark-delegated-codex|"
+    "north-on-stop-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-stop-codex\")|$CODEX/hooks/north-on-stop-codex|self|dotfiles/codex/hooks/north-on-stop-codex|"
+    "north-clock-guard-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-clock-guard-codex\")|$CODEX/hooks/north-clock-guard-codex|self|dotfiles/codex/hooks/north-clock-guard-codex|"
   )
   for spec in "${source_specs[@]}"; do
     IFS='|' read -r relative source_expr expected_checkout authority \
-      git_blob_path <<<"$spec"
+      git_blob_path promoted_path <<<"$spec"
     if grep -Fq "$source_expr" "$module"; then :
     else bad "Codex module does not install $relative from its owning source: $source_expr"; fi
+    if [ -n "$promoted_path" ] &&
+       ! grep -Fq "(promoted \"$relative\" \"$promoted_path\")" "$module"; then
+      bad "Codex module does not link $relative to the promoted enforcement payload $promoted_path"
+    fi
   done
+  if grep -Fq '"L+ /etc/codex/hooks/" relative " - - - - " enforcement "/" source' "$module" &&
+     grep -Fq 'enforcement "/var/lib/north-enforcement/active/current"' "$module"; then
+    ok_detail 'Codex promoted hooks resolve through the active enforcement deployment selector'
+  else
+    bad 'Codex module must bind promoted hooks to /var/lib/north-enforcement/active/current'
+  fi
   local runtime package binary
   local -a runtimes=(
     'bash|pkgs.bash|bash'
@@ -1616,17 +1677,26 @@ PY
   if [ "$LOCAL" -eq 1 ]; then
     local generation_exact=1
     local north_revision beagle_revision fram_revision source_repo source_revision
+    local immutable_source
     if cmp -s "$CODEX_REQUIREMENTS" /etc/codex/requirements.toml; then :
     else
       generation_exact=0
       bad 'Codex managed requirements are not the current /etc generation'
     fi
-    north_revision="$(flake_locked_revision "$REPO/flake.lock" north 2>/dev/null || true)"
-    beagle_revision="$(flake_locked_revision "$REPO/flake.lock" beagle 2>/dev/null || true)"
+    # North and Beagle enforcement is attested against the active promote record;
+    # everything else is still attested against the flake pin that built it.
+    north_revision="$(promote_record_revision north 2>/dev/null || true)"
+    beagle_revision="$(promote_record_revision beagle 2>/dev/null || true)"
     fram_revision="$(flake_locked_revision "$REPO/flake.lock" fram 2>/dev/null || true)"
+    if [ -n "$north_revision" ] && [ -n "$beagle_revision" ]; then
+      ok_detail "Enforcement promote record pins North@${north_revision:0:12} and Beagle@${beagle_revision:0:12}"
+    else
+      generation_exact=0
+      bad "Enforcement promote record is missing or malformed: $(promote_record_path)"
+    fi
     for spec in "${source_specs[@]:1}"; do
       IFS='|' read -r relative source_expr expected_checkout authority \
-        git_blob_path <<<"$spec"
+        git_blob_path promoted_path <<<"$spec"
       live="/etc/codex/hooks/$relative"
       resolved="$(readlink -f "$live" 2>/dev/null || true)"
       source_repo=''
@@ -1649,13 +1719,23 @@ PY
           source_revision="$fram_revision"
           ;;
       esac
-      if [ -n "$resolved" ] && [[ "$resolved" = /nix/store/* ]] &&
+      if [ -n "$promoted_path" ]; then
+        immutable_source=sealed_promoted
+        sealed_promoted_file "$live" "$promoted_path" && immutable_source=ok
+      else
+        immutable_source=store
+        [ -n "$resolved" ] && [[ "$resolved" = /nix/store/* ]] && immutable_source=ok
+      fi
+      if [ "$immutable_source" = ok ] &&
          managed_hook_source_matches \
            "$live" "$expected_checkout" "$authority" "$source_repo" \
            "$source_revision" "$git_blob_path"; then :
       elif [ "$authority" = self ]; then
         generation_exact=0
         bad "Codex managed hook $live is not the exact store-backed Firn source"
+      elif [ -n "$promoted_path" ]; then
+        generation_exact=0
+        bad "Codex managed hook $live is not a sealed promoted file exact to $authority@${source_revision:-missing}:$git_blob_path"
       else
         generation_exact=0
         bad "Codex managed hook $live is not exact to flake.lock $authority@${source_revision:-missing}:$git_blob_path"
@@ -1695,23 +1775,28 @@ PY
     else
       soft 'Interactive Codex is absent from PATH; managed provider authority remains independently attested'
     fi
+    # The lifecycle runtimes are executed out of the North package, which supplies
+    # their interpreter PATH and NORTH_HOME, so they remain pinned by flake.lock
+    # even though their bodies also ride the promoted payload.
+    local locked_north_revision
+    locked_north_revision="$(flake_locked_revision "$REPO/flake.lock" north 2>/dev/null || true)"
     for relative in \
       bin/north-on-spawn \
       bin/north-on-tooluse \
       bin/north-mark-delegated \
       bin/north-on-stop; do
-      if [ -n "$north_revision" ] &&
+      if [ -n "$locked_north_revision" ] &&
          north_wrapped_runtime_matches_locked_source \
            "/etc/codex/hooks/north/$relative" "$HOME/code/north/main" \
-           "$north_revision" "$relative"; then :
+           "$locked_north_revision" "$relative"; then :
       else
         generation_exact=0
-        bad "Codex North runtime $relative is not an exact locked body with immutable package-wrapper provenance at ${north_revision:-missing}"
+        bad "Codex North runtime $relative is not an exact locked body with immutable package-wrapper provenance at ${locked_north_revision:-missing}"
       fi
     done
     if [ "$generation_exact" -eq 1 ]; then
-      CODEX_HOOK_PROVENANCE='immutable /nix/store generation · exact Firn + locked North sources'
-      ok_detail 'Codex authoritative hook generation is exact, immutable, and store-backed'
+      CODEX_HOOK_PROVENANCE='sealed promoted enforcement · immutable /nix/store generation · exact Firn sources'
+      ok_detail 'Codex authoritative hook set is exact: sealed promoted enforcement over an immutable generation'
     else
       CODEX_HOOK_PROVENANCE='generation drift detected'
     fi
@@ -1779,6 +1864,14 @@ else bad "Account launcher wrappers shellcheck failed"; fi
 if bash "$LAUNCHER_BIN/launcher.test.sh" >/dev/null; then
   ok_detail "Account launcher fallbacks are diagnostic (missing/nonzero/empty/malformed north, no-eligible, absent dir, clean pick)"
 else bad "Account launcher diagnostics test failed"; fi
+if command -v shellcheck >/dev/null 2>&1 && \
+   shellcheck -S warning "$LAUNCHER_BIN/north-enforcement-promote" \
+     "$LAUNCHER_BIN/north-enforcement-promote.test.sh"; then
+  ok_detail "Enforcement promote command shellchecks"
+else bad "Enforcement promote command shellcheck failed"; fi
+if bash "$LAUNCHER_BIN/north-enforcement-promote.test.sh" >/dev/null; then
+  ok_detail "Enforcement promote seals, attests, retains previous, and rolls back"
+else bad "Enforcement promote transaction test failed"; fi
 if grep -Fq '{:source (s flakeRoot "/dotfiles/bin")}' "$REPO/modules/bash/default.bnix" &&
    ! grep -Fq 'code/nixos-config/dotfiles/bin' "$REPO/modules/bash/default.bnix"; then
   ok_detail "Account launcher directory is generation-owned store content"

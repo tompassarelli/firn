@@ -1,0 +1,420 @@
+#!/usr/bin/env bash
+# north-enforcement-promote — publish the North/Beagle enforcement payload as a
+# sealed, root-owned, revision-attested deployment, replacing flake.lock as the
+# revision source for the Codex managed hook set.
+#
+# Codex decides managed-hook trust from the provenance of the system config layer
+# (/etc/codex/requirements.toml) alone — no store residency, no ownership check —
+# so sealing is OUR invariant and nothing downstream re-checks it.
+#
+# Bash, not Beagle: dotfiles/bin is an existing bash surface, and this must run as
+# root with only coreutils+git.
+set -euo pipefail
+
+STATE_ROOT="${NORTH_ENFORCEMENT_STATE_ROOT:-/var/lib/north-enforcement}"
+DEPLOYMENTS="$STATE_ROOT/deployments"
+GENERATIONS="$STATE_ROOT/generations"
+ACTIVE_LINK="$STATE_ROOT/active"
+
+# The payload set. North's hook tree is taken wholesale (it is the enforcement
+# corpus); its per-file list is deliberately NOT enumerated here so a new hook
+# is promoted the moment North owns it. Symlinks inside the tree point at other
+# repositories' checkouts and are skipped: a sealed tree holds regular files
+# only, and a file North does not own is not North's to promote.
+NORTH_PAYLOAD_TREES=(profiles/tom/hooks)
+NORTH_PAYLOAD_FILES=(
+  bin/north-on-spawn
+  bin/north-on-tooluse
+  bin/north-on-stop
+  bin/north-mark-delegated
+)
+BEAGLE_PAYLOAD_FILES=(
+  integrations/north/hooks/beagle-session-start.sh
+  integrations/north/hooks/racket-build-guard.sh
+)
+
+RECORD_FORMAT=north-enforcement-promote/v1
+
+# Cleanup state is global on purpose: an EXIT trap fires after the promoting
+# function has returned, so a trap over function-locals cleans up nothing.
+CLEANUP_STAGING=''
+CLEANUP_MANIFEST=''
+
+cleanup_staging() {
+  if [ -n "$CLEANUP_STAGING" ]; then
+    chmod -R u+w -- "${CLEANUP_STAGING:?}" 2>/dev/null || true
+    rm -rf -- "${CLEANUP_STAGING:?}" 2>/dev/null || true
+  fi
+  if [ -n "$CLEANUP_MANIFEST" ]; then
+    rm -f -- "${CLEANUP_MANIFEST:?}" "${CLEANUP_MANIFEST:?}.raw" 2>/dev/null || true
+  fi
+}
+
+usage() {
+  cat <<'USAGE'
+Usage: north-enforcement-promote [REV] --why TEXT [options]
+       north-enforcement-promote rollback --why TEXT
+       north-enforcement-promote status
+
+Publish the North + Beagle enforcement payload as a sealed root-owned
+deployment and swap the active selector to it atomically.
+
+Arguments:
+  REV                 North revision to promote (default: HEAD of the North
+                      checkout). Any git revision spec.
+
+Options:
+  --why TEXT          why this promote is happening (recorded; required)
+  --beagle-rev REV    Beagle revision to promote (default: its HEAD)
+  --north-repo PATH   North checkout (default: the promoter's north:main)
+  --beagle-repo PATH  Beagle checkout (default: the promoter's beagle:main)
+  -h, --help          print this help
+
+Rollback is a promote of the retained previous deployment: the current/previous
+pair is swapped into a fresh generation, so rollback is itself rollback-able.
+USAGE
+}
+
+die() {
+  printf 'north-enforcement-promote: %s\n' "$1" >&2
+  exit 1
+}
+
+argument_error() {
+  printf 'north-enforcement-promote: %s\n' "$1" >&2
+  usage >&2
+  exit 2
+}
+
+# Ownership expectations relax for logic tests so the whole pipeline below —
+# revision resolution, extraction, manifest, record, transaction — is exercised
+# unprivileged. This cannot weaken a real deployment: /var/lib/north-enforcement
+# is root-owned, so an unprivileged caller cannot write a tree there at all, and
+# agent-config-check re-derives 0:444:1 from the live files independently.
+unprivileged_mode() {
+  [ "${NORTH_ENFORCEMENT_UNPRIVILEGED:-0}" = 1 ]
+}
+
+expected_uid() {
+  if unprivileged_mode; then printf '%s' "$EUID"; else printf '0'; fi
+}
+
+caller_identity() {
+  printf '%s' "${SUDO_USER:-$(id -un)}"
+}
+
+caller_home() {
+  local caller home
+  caller="$(caller_identity)"
+  home="$(getent passwd "$caller" | cut -d: -f6)"
+  [ -n "$home" ] || die "cannot resolve the home directory of $caller"
+  printf '%s' "$home"
+}
+
+resolve_rev() {
+  local repo="$1" rev="$2" resolved
+  resolved="$(git -C "$repo" rev-parse --verify --quiet "${rev}^{commit}" 2>/dev/null)" ||
+    die "not a commit in $repo: $rev"
+  [[ "$resolved" =~ ^[0-9a-f]{40}$ ]] || die "unresolvable revision in $repo: $rev"
+  printf '%s' "$resolved"
+}
+
+# Emit "path" for every regular blob of the payload set at REV. Symlinks (mode
+# 120000) and submodules (160000) are dropped; a payload entry that resolves to
+# neither is a promote-time error rather than a silently thinner deployment.
+payload_paths() {
+  local repo="$1" rev="$2"
+  shift 2
+  local spec mode path found
+  for spec in "$@"; do
+    found=0
+    while IFS=$'\t' read -r mode path; do
+      case "$mode" in
+        100644 | 100755)
+          found=1
+          printf '%s\n' "$path"
+          ;;
+        120000 | 160000) ;;
+        *) die "unsupported object mode $mode for $spec in $repo@$rev" ;;
+      esac
+    done < <(
+      git -C "$repo" ls-tree -r "$rev" --format='%(objectmode)%x09%(path)' -- "$spec"
+    )
+    [ "$found" = 1 ] || die "payload entry is absent or is not a file: $spec in $repo@$rev"
+  done
+}
+
+# Extract one repository's payload into the staging tree under its own label,
+# emitting "sha256<space><space>label/path" manifest lines. Provenance is kept in
+# the layout (label + repo-relative path) so every deployed file maps back to
+# exactly one (repository, revision, blob path) triple with no lookup table.
+stage_repo_payload() {
+  local staging="$1" label="$2" repo="$3" rev="$4"
+  shift 4
+  local path target digest paths
+  # Resolved before extraction, and never across a pipe or process substitution:
+  # a payload error must abort the promote, not quietly thin the deployment.
+  paths="$(payload_paths "$repo" "$rev" "$@")"
+  while IFS= read -r path; do
+    target="$staging/$label/$path"
+    mkdir -p "${target%/*}"
+    git -C "$repo" cat-file blob "$rev:$path" >"$target"
+    chmod 0444 "$target"
+    digest="$(sha256sum <"$target" | cut -d' ' -f1)"
+    printf '%s  %s/%s\n' "$digest" "$label" "$path"
+  done <<<"$paths"
+}
+
+seal_tree() {
+  local root="$1"
+  if ! unprivileged_mode; then
+    chown -R root:root "$root"
+  fi
+  find "$root" -type d -exec chmod 0555 {} +
+  find "$root" -type f -exec chmod 0444 {} +
+}
+
+# A deployment is only usable if every file in it still carries the sealed shape:
+# owned by the promoting authority, read-only, and unshared with any other name
+# (a second hard link is a writable back door into an otherwise immutable tree).
+verify_sealed() {
+  local root="$1" manifest="$2"
+  local digest relative want_uid observed
+  want_uid="$(expected_uid)"
+  while read -r digest relative; do
+    local file="$root/$relative"
+    [ -f "$file" ] && [ ! -L "$file" ] ||
+      die "deployment file is missing or is not a regular file: $file"
+    observed="$(stat -c '%u:%a:%h' "$file" 2>/dev/null)" ||
+      die "deployment file metadata is unreadable: $file"
+    [ "$observed" = "$want_uid:444:1" ] ||
+      die "deployment file is not sealed ($observed, want $want_uid:444:1): $file"
+    observed="$(sha256sum <"$file" | cut -d' ' -f1)"
+    [ "$observed" = "$digest" ] ||
+      die "deployment file content differs from its promote manifest: $file"
+  done <"$manifest"
+}
+
+require_layout() {
+  local dir
+  for dir in "$STATE_ROOT" "$DEPLOYMENTS" "$GENERATIONS"; do
+    if [ ! -d "$dir" ]; then
+      mkdir -p "$dir"
+      chmod 0755 "$dir"
+      if ! unprivileged_mode; then chown root:root "$dir"; fi
+    fi
+  done
+}
+
+active_generation() {
+  local resolved
+  resolved="$(readlink -f "$ACTIVE_LINK" 2>/dev/null || true)"
+  [ -n "$resolved" ] && [ -d "$resolved" ] || return 1
+  printf '%s' "$resolved"
+}
+
+member_id() {
+  local member="$1" generation resolved
+  generation="$(active_generation)" || return 1
+  resolved="$(readlink -f "$generation/$member" 2>/dev/null || true)"
+  [ -n "$resolved" ] && [ -d "$resolved" ] || return 1
+  printf '%s' "${resolved##*/}"
+}
+
+# Publish one (current, previous) pair. The generation directory is built and
+# synced in full before the selector moves, and the selector moves by rename, so
+# a crash leaves either the old pair or the new pair active and never a torn one.
+commit_pair() {
+  local current_id="$1" previous_id="$2" record="$3"
+  local generation_name generation active_temp
+
+  [ -d "$DEPLOYMENTS/$current_id" ] || die "deployment is absent: $current_id"
+  [ -d "$DEPLOYMENTS/$previous_id" ] || die "deployment is absent: $previous_id"
+
+  generation_name="$(date +%s%N)-$$-$RANDOM"
+  generation="$GENERATIONS/$generation_name"
+  [ ! -e "$generation" ] || die "generation already exists: $generation"
+  mkdir "$generation"
+  ln -s "../../deployments/$current_id" "$generation/current"
+  ln -s "../../deployments/$previous_id" "$generation/previous"
+  printf '%s' "$record" >"$generation/record"
+  chmod 0444 "$generation/record"
+  chmod 0555 "$generation"
+  if ! unprivileged_mode; then chown -R -h root:root "$generation"; fi
+  sync -f "$generation/record"
+  sync -f "$GENERATIONS"
+
+  active_temp="$STATE_ROOT/.active.next.$$"
+  [ ! -e "$active_temp" ] && [ ! -L "$active_temp" ] ||
+    die "temporary active selector already exists: $active_temp"
+  ln -s "generations/$generation_name" "$active_temp"
+  if ! unprivileged_mode; then chown -h root:root "$active_temp"; fi
+  mv -T "$active_temp" "$ACTIVE_LINK"
+  sync -f "$STATE_ROOT"
+}
+
+render_record() {
+  local id="$1" north_rev="$2" beagle_rev="$3" why="$4" manifest="$5" previous_id="$6"
+  printf 'FORMAT %s\n' "$RECORD_FORMAT"
+  printf 'ID %s\n' "$id"
+  printf 'NORTH_REV %s\n' "$north_rev"
+  printf 'BEAGLE_REV %s\n' "$beagle_rev"
+  printf 'PREVIOUS %s\n' "$previous_id"
+  printf 'WHO %s\n' "$(caller_identity)"
+  printf 'WHEN %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf 'WHY %s\n' "$why"
+  sed 's/^/FILE /' "$manifest"
+}
+
+cmd_promote() {
+  local north_rev="$1" beagle_rev="$2" why="$3" north_repo="$4" beagle_repo="$5"
+  local staging manifest id previous_id record
+
+  [ -n "$why" ] || argument_error 'a promote must record --why'
+  [ -d "$north_repo/.git" ] || [ -f "$north_repo/.git" ] ||
+    die "not a North checkout: $north_repo"
+  [ -d "$beagle_repo/.git" ] || [ -f "$beagle_repo/.git" ] ||
+    die "not a Beagle checkout: $beagle_repo"
+
+  north_rev="$(resolve_rev "$north_repo" "$north_rev")"
+  beagle_rev="$(resolve_rev "$beagle_repo" "$beagle_rev")"
+  id="north-$north_rev.beagle-$beagle_rev"
+
+  require_layout
+  staging="$DEPLOYMENTS/.staging.$$"
+  manifest="$staging.manifest"
+  CLEANUP_STAGING="$staging"
+  CLEANUP_MANIFEST="$manifest"
+  trap cleanup_staging EXIT
+  cleanup_staging
+  mkdir "$staging"
+
+  stage_repo_payload "$staging" north "$north_repo" "$north_rev" \
+    "${NORTH_PAYLOAD_TREES[@]}" "${NORTH_PAYLOAD_FILES[@]}" >>"$manifest.raw"
+  stage_repo_payload "$staging" beagle "$beagle_repo" "$beagle_rev" \
+    "${BEAGLE_PAYLOAD_FILES[@]}" >>"$manifest.raw"
+  LC_ALL=C sort "$manifest.raw" >"$manifest"
+  [ -s "$manifest" ] || die 'promote produced an empty payload'
+
+  if [ -d "$DEPLOYMENTS/$id" ]; then
+    # Same revisions, same content: reuse the existing sealed tree rather than
+    # rewriting an immutable directory. Divergence here is tampering, not drift.
+    verify_sealed "$DEPLOYMENTS/$id" "$manifest"
+  else
+    seal_tree "$staging"
+    verify_sealed "$staging" "$manifest"
+    mv -T "$staging" "$DEPLOYMENTS/$id"
+    sync -f "$DEPLOYMENTS"
+  fi
+
+  previous_id="$(member_id current || true)"
+  [ -n "$previous_id" ] || previous_id="$id"
+  record="$(render_record "$id" "$north_rev" "$beagle_rev" "$why" "$manifest" "$previous_id")"
+  commit_pair "$id" "$previous_id" "$record"
+  printf '%s\n' "$record"
+}
+
+cmd_rollback() {
+  local why="$1" current_id previous_id record manifest
+
+  [ -n "$why" ] || argument_error 'a rollback must record --why'
+  current_id="$(member_id current)" || die 'no active deployment to roll back from'
+  previous_id="$(member_id previous)" || die 'no retained previous deployment'
+  [ "$current_id" != "$previous_id" ] || die 'previous deployment is the active one'
+
+  manifest="$(mktemp)"
+  CLEANUP_MANIFEST="$manifest"
+  trap cleanup_staging EXIT
+  # Re-derive the rolled-back manifest from the tree it describes: the promote
+  # record that created it may predate any number of generations.
+  ( cd "$DEPLOYMENTS/$previous_id" && find . -type f -print0 |
+      LC_ALL=C sort -z |
+      xargs -0 sha256sum ) |
+    sed 's|  \./|  |' >"$manifest"
+  verify_sealed "$DEPLOYMENTS/$previous_id" "$manifest"
+
+  record="$(
+    render_record "$previous_id" \
+      "$(sed -n 's/^north-\([0-9a-f]\{40\}\)\..*/\1/p' <<<"$previous_id")" \
+      "$(sed -n 's/^.*\.beagle-\([0-9a-f]\{40\}\)$/\1/p' <<<"$previous_id")" \
+      "rollback: $why" "$manifest" "$current_id"
+  )"
+  commit_pair "$previous_id" "$current_id" "$record"
+  printf '%s\n' "$record"
+}
+
+cmd_status() {
+  local generation
+  generation="$(active_generation)" || die "no active enforcement deployment at $STATE_ROOT"
+  printf 'active generation: %s\n' "$generation"
+  printf 'current:           %s\n' "$(readlink -f "$ACTIVE_LINK/current")"
+  printf 'previous:          %s\n' "$(readlink -f "$ACTIVE_LINK/previous")"
+  printf '\n'
+  cat "$generation/record"
+}
+
+main() {
+  local command='' north_rev='' beagle_rev='' why='' north_repo='' beagle_repo=''
+  local -a invocation=("$@")
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        usage
+        return 0
+        ;;
+      --why)
+        [ "$#" -ge 2 ] || argument_error '--why requires a value'
+        why="$2"
+        shift 2
+        ;;
+      --beagle-rev)
+        [ "$#" -ge 2 ] || argument_error '--beagle-rev requires a value'
+        beagle_rev="$2"
+        shift 2
+        ;;
+      --north-repo)
+        [ "$#" -ge 2 ] || argument_error '--north-repo requires a value'
+        north_repo="$2"
+        shift 2
+        ;;
+      --beagle-repo)
+        [ "$#" -ge 2 ] || argument_error '--beagle-repo requires a value'
+        beagle_repo="$2"
+        shift 2
+        ;;
+      -*) argument_error "unknown option: $1" ;;
+      status | rollback | promote)
+        [ -z "$command" ] || argument_error "unexpected argument: $1"
+        command="$1"
+        shift
+        ;;
+      *)
+        [ -z "$north_rev" ] || argument_error "unexpected argument: $1"
+        north_rev="$1"
+        shift
+        ;;
+    esac
+  done
+
+  [ -n "$command" ] || command=promote
+  [ "$command" = promote ] || [ -z "$north_rev" ] ||
+    argument_error "$command takes no revision argument"
+
+  if [ "$command" != status ] && [ "$EUID" -ne 0 ] && ! unprivileged_mode; then
+    exec sudo -- "$0" "${invocation[@]}"
+  fi
+
+  case "$command" in
+    status) cmd_status ;;
+    rollback) cmd_rollback "$why" ;;
+    promote)
+      local home
+      home="$(caller_home)"
+      cmd_promote "${north_rev:-HEAD}" "${beagle_rev:-HEAD}" "$why" \
+        "${north_repo:-$home/code/north/main}" "${beagle_repo:-$home/code/beagle/main}"
+      ;;
+  esac
+}
+
+main "$@"

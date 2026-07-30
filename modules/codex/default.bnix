@@ -9,7 +9,14 @@
            :default)
         codexPkg
          (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)
-           :codex)]
+           :codex)
+        ;; Codex trusts a managed hook by the provenance of requirements.toml,
+        ;; never by the hook file's own residency — so North/Beagle enforcement
+        ;; can move at promote speed behind a stable /etc name.
+        enforcement "/var/lib/north-enforcement/active/current"
+        promoted
+         (fn [relative source]
+           (s "L+ /etc/codex/hooks/" relative " - - - - " enforcement "/" source))]
     {:flake-inputs
       {:beagle {:url "git+file:///home/tom/code/beagle/main?ref=main"}}
      :options.myConfig.modules.codex.enable
@@ -22,32 +29,10 @@
             {:source (s flakeRoot "/modules/codex/requirements.toml")}
            "codex/runtime"
             {:source codexPkg}
-           "codex/hooks/beagle-session-start.sh"
-            {:source (s inputs.beagle "/integrations/north/hooks/beagle-session-start.sh")}
-           "codex/hooks/agent-spawn-guard.sh"
-            {:source (s inputs.north "/agent-profile/hooks/agent-spawn-guard.sh")}
            "codex/hooks/code-upstream-guard.sh"
             {:source (s inputs.fram "/integrations/north/hooks/code-upstream-guard.sh")}
            "codex/hooks/firn-guard.sh"
             {:source (s flakeRoot "/modules/north-profile/firn/hooks/firn-guard.sh")}
-           "codex/hooks/north-clock-guard.sh"
-            {:source (s inputs.north "/agent-profile/hooks/north-clock-guard.sh")}
-           "codex/hooks/north-clock-guard.py"
-            {:source (s inputs.north "/agent-profile/hooks/north-clock-guard.py")}
-           "codex/hooks/tripwire-guard.sh"
-            {:source (s inputs.north "/agent-profile/hooks/tripwire-guard.sh")}
-           "codex/hooks/logcompress-hook.js"
-            {:source (s inputs.north "/agent-profile/hooks/logcompress-hook.js")}
-           "codex/hooks/logcompress.js"
-            {:source (s inputs.north "/agent-profile/hooks/logcompress.js")}
-           "codex/hooks/racket-build-guard.sh"
-            {:source (s inputs.beagle "/integrations/north/hooks/racket-build-guard.sh")}
-           "codex/hooks/lib/authoring-killswitch.sh"
-            {:source (s inputs.north "/agent-profile/hooks/lib/authoring-killswitch.sh")}
-           "codex/hooks/lib/harness-dial.sh"
-            {:source (s inputs.north "/agent-profile/hooks/lib/harness-dial.sh")}
-           "codex/hooks/registry.tsv"
-            {:source (s inputs.north "/agent-profile/hooks/registry.tsv")}
            "codex/hooks/north-on-spawn-codex"
             {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-spawn-codex")}
            "codex/hooks/north-on-tooluse-codex"
@@ -78,6 +63,20 @@
             {:source (s pkgs.coreutils "/bin/timeout")}
            "codex/hooks/north"
             {:source northPkg}}
+         :systemd.tmpfiles.rules
+          ["d /var/lib/north-enforcement 0755 root root -"
+           "d /etc/codex/hooks/lib 0755 root root -"
+           (promoted "agent-spawn-guard.sh" "north/profiles/tom/hooks/agent-spawn-guard.sh")
+           (promoted "north-clock-guard.sh" "north/profiles/tom/hooks/north-clock-guard.sh")
+           (promoted "north-clock-guard.py" "north/profiles/tom/hooks/north-clock-guard.py")
+           (promoted "tripwire-guard.sh" "north/profiles/tom/hooks/tripwire-guard.sh")
+           (promoted "logcompress-hook.js" "north/profiles/tom/hooks/logcompress-hook.js")
+           (promoted "logcompress.js" "north/profiles/tom/hooks/logcompress.js")
+           (promoted "registry.tsv" "north/profiles/tom/hooks/registry.tsv")
+           (promoted "lib/authoring-killswitch.sh" "north/profiles/tom/hooks/lib/authoring-killswitch.sh")
+           (promoted "lib/harness-dial.sh" "north/profiles/tom/hooks/lib/harness-dial.sh")
+           (promoted "beagle-session-start.sh" "beagle/integrations/north/hooks/beagle-session-start.sh")
+           (promoted "racket-build-guard.sh" "beagle/integrations/north/hooks/racket-build-guard.sh")]
          :home-manager.users
           {username
             (nix/module [config ...]

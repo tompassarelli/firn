@@ -12,14 +12,13 @@ firn repo upgrade dry-run  # underlying-graph form of `firn update --dry-run`
 
 The diff phase highlights any **removed** or **type-changed** option paths that this repo references — those are the actual breakage candidates, not the thousands of unrelated changes you'd see in a raw `nix flake update` log.
 
-**`firn update` moves every input forward; an ordinary `firn rebuild`
-auto-plans only the committed local Fram input.** A newer
-`~/code/fram/main` is eligible even when its checkout has tracked WIP, because
-the build pins the exact Git object and prints that the working-tree changes
-are excluded. A feature branch still holds the already-verified pin. The
-planned move rides the snapshot build as an `--override-input` flag; only after
-the host closure builds does Firn re-point `flake.lock` and mechanically commit
-`refresh verified local inputs`.
+**`firn update` moves every input forward; an ordinary `firn rebuild` no longer
+auto-plans any local input.** Fram adopts a reviewed revision through
+`north-coord-runtime promote`, which is an attested runtime transaction and does
+not spend a rebuild; North and Beagle enforcement adopts through
+`north-enforcement-promote`. The flake pin still records what a generation was
+built from, but it is no longer the way a verified local revision reaches the
+running system.
 
 North and Beagle are deliberate dev-channel inputs. Ordinary rebuild planning
 never advances them. A release operator must first build and verify the intended
@@ -34,7 +33,7 @@ settle only that verified pointer:
 `--commit` is settlement, not verification. It confirms that the requested
 revision is still the input's committed local `main`, remains a fast-forward
 from the locked revision, resolves exactly through the targeted lock update,
-and does not rewrite the unrequested auto-planned Fram pin. A moved input,
+and does not rewrite an unrequested pin. A moved input,
 foreign lock or flake-source edit, resolution race, or failed mechanical commit
 defers with a notice and exit 0; it never substitutes an unverified revision.
 Do not use `firn update` for a North or Beagle development release — that is the
