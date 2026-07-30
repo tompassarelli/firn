@@ -1,0 +1,896 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly CONTRACT_VERSION=rotation-memory/v1
+readonly CORPUS_FACTS=350701
+readonly BASE_PROCESS_STARTS=6
+readonly HARD_MAX_PROCESS_STARTS=8
+readonly WALL_TIMEOUT_SECONDS=2700
+readonly AGGREGATE_CEILING_BYTES=$((9 * 1024 * 1024 * 1024))
+readonly TELEMETRY_FLOOR_BYTES=$((1494 * 1024 * 1024))
+SCRIPT_PATH=$(readlink -f "$0")
+readonly SCRIPT_PATH
+readonly -a FORBIDDEN_PORTS=(7977 7978 17977 17978 27977 27978)
+
+die() {
+  printf 'rotation-memory-experiment: %s\n' "$*" >&2
+  exit 1
+}
+
+cannot_determine() {
+  printf 'rotation-memory-experiment: CANNOT-DETERMINE: %s\n' "$*" >&2
+  exit 2
+}
+
+usage() {
+  cat <<'EOF'
+usage:
+  rotation-memory-experiment plan
+  rotation-memory-experiment generate-fixture <new-or-empty-scratch-dir>
+  rotation-memory-experiment safety-check <scratch-root> <requested-port> <unit> <coord-log> <telemetry-log>
+  rotation-memory-experiment classify <case-dir>
+  rotation-memory-experiment report <receipt-dir>
+  rotation-memory-experiment mock-run <scratch-parent> <new-output-dir>
+  rotation-memory-experiment run --fram-rev <40-hex-sha> --fram-repo <existing-repo> [--scratch-parent </tmp|/var/tmp>]
+
+The real run is fixed at six base process starts, eight hard maximum, and
+45 minutes. It creates only scratch logs and transient user units. It never
+selects an operational memory margin.
+EOF
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 ||
+    cannot_determine "required command is unavailable: $1"
+}
+
+canonical_existing_dir() {
+  local path=$1
+  [[ -d "$path" ]] || die "directory does not exist: $path"
+  (cd "$path" && pwd -P)
+}
+
+path_within() {
+  local root=$1 path=$2
+  [[ "$path" == "$root" || "$path" == "$root/"* ]]
+}
+
+is_forbidden_port() {
+  local candidate=$1 port
+  for port in "${FORBIDDEN_PORTS[@]}"; do
+    [[ "$candidate" == "$port" ]] && return 0
+  done
+  return 1
+}
+
+validate_scratch_root() {
+  local scratch_root=$1 canonical
+  canonical=$(canonical_existing_dir "$scratch_root")
+  case "$canonical" in
+    /tmp/* | /var/tmp/*) ;;
+    *) die "scratch root must be a unique directory below /tmp or /var/tmp: $canonical" ;;
+  esac
+  case "$canonical" in
+    /tmp | /var/tmp | /home/tom/.local/state/north | /home/tom/.local/state/north/*)
+      die "refusing non-unique or canonical North state root: $canonical"
+      ;;
+  esac
+  printf '%s\n' "$canonical"
+}
+
+safety_check() {
+  local scratch_root=$1 requested_port=$2 unit=$3 coord_log=$4 telemetry_log=$5
+  local canonical_root canonical_coord canonical_telemetry
+  canonical_root=$(validate_scratch_root "$scratch_root")
+
+  [[ "$requested_port" =~ ^[0-9]+$ ]] || die "requested port is not numeric"
+  ((requested_port >= 0 && requested_port <= 65535)) ||
+    die "requested port is outside the TCP range"
+  is_forbidden_port "$requested_port" &&
+    die "refusing canonical or deployed North port: $requested_port"
+  [[ "$requested_port" == 0 ]] ||
+    die "real cases must request port 0 for kernel allocation"
+
+  [[ "$unit" =~ ^fram-rotmem-[a-z0-9]+-[a-z0-9-]+\.service$ ]] ||
+    die "unit is not a uniquely prefixed scratch service: $unit"
+  case "$unit" in
+    north-* | *selector* | *proxy*) die "refusing live North or selector unit: $unit" ;;
+  esac
+
+  [[ "$coord_log" = /* && "$telemetry_log" = /* ]] ||
+    die "scratch log paths must be absolute"
+  canonical_coord=$(readlink -m "$coord_log")
+  canonical_telemetry=$(readlink -m "$telemetry_log")
+  path_within "$canonical_root" "$canonical_coord" ||
+    die "coordination log escapes scratch root: $canonical_coord"
+  path_within "$canonical_root" "$canonical_telemetry" ||
+    die "telemetry log escapes scratch root: $canonical_telemetry"
+  [[ "$canonical_coord" != "$canonical_telemetry" ]] ||
+    die "coordination and telemetry logs must be distinct"
+  case "$canonical_coord:$canonical_telemetry" in
+    *"/.local/state/north/"*)
+      die "refusing canonical North logs"
+      ;;
+  esac
+}
+
+emit_plan() {
+  printf 'meta\tcontract\t%s\n' "$CONTRACT_VERSION"
+  printf 'meta\tcorpus_facts\t%s\n' "$CORPUS_FACTS"
+  printf 'meta\tbase_process_starts\t%s\n' "$BASE_PROCESS_STARTS"
+  printf 'meta\thard_max_process_starts\t%s\n' "$HARD_MAX_PROCESS_STARTS"
+  printf 'meta\twall_timeout_seconds\t%s\n' "$WALL_TIMEOUT_SECONDS"
+  printf 'meta\tmax_fallbacks_per_role\t1\n'
+  printf 'meta\taggregate_ceiling_bytes\t%s\n' "$AGGREGATE_CEILING_BYTES"
+  printf 'meta\ttelemetry_floor_bytes\t%s\n' "$TELEMETRY_FLOOR_BYTES"
+  printf 'meta\toperational_margin_selected\tfalse\n'
+  printf 'policy\tcontingency\tfallback-or-one-wave-a-retry\tmutually-exclusive\n'
+  printf 'run\tcoord-discovery\tbase\tA\tcoordination\tcoordination\t-Xmx2g\tinfinity\t12-17\t-\n'
+  printf 'run\ttelemetry-discovery\tbase\tA\ttelemetry\ttelemetry\t-Xmx1g\tinfinity\t18-23\t-\n'
+  printf 'run\tcoord-blue\tbase\tB\tcoordination\tcoordination\t-Xmx2g\t3G\t12-14\t-\n'
+  printf 'run\tcoord-green\tbase\tB\tcoordination\tcoordination\t-Xmx2g\t3G\t15-17\t-\n'
+  printf 'run\ttelemetry-blue\tbase\tB\ttelemetry\ttelemetry\t-Xmx1g\t1500M\t18-20\t-\n'
+  printf 'run\ttelemetry-green\tbase\tB\ttelemetry\ttelemetry\t-Xmx1g\t1500M\t21-23\t-\n'
+  printf 'run\tcoord-fallback\tfallback\tF\tcoordination\tcoordination\t-Xmx4g\tinfinity\t12-17\tcoord-discovery\n'
+  printf 'run\ttelemetry-fallback\tfallback\tF\ttelemetry\ttelemetry\t-Xmx2g\tinfinity\t18-23\ttelemetry-discovery\n'
+}
+
+generate_fixture() {
+  local output=$1 canonical_output
+  require_command bb
+  if [[ -e "$output" && ! -d "$output" ]]; then
+    die "fixture output exists and is not a directory: $output"
+  fi
+  mkdir -p "$output"
+  canonical_output=$(validate_scratch_root "$output")
+  if find "$canonical_output" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+    die "fixture output must be empty: $canonical_output"
+  fi
+
+  FIXTURE_OUTPUT="$canonical_output/coordination.log" bb -e '
+    (require (quote [clojure.java.io :as io]))
+    (defn corpus-triple [tx]
+      (if (= tx 350701)
+        ["@rotation-extra" "benchmark_pad" "rotation-outage"]
+        (let [subject (quot (dec tx) 3)
+              slot (mod (dec tx) 3)]
+          (case slot
+            0 [(str "@corpus-" subject) "kind"
+               (if (< subject 32) "agent" "thread")]
+            1 [(str "@corpus-" subject) "title" (str "title-" subject)]
+            2 (if (< subject 1623)
+                [(str "@corpus-" subject) "lead" "@tom_passarelli"]
+                [(str "@corpus-" subject) "owner"
+                 (str "@owner-" (mod subject 32))])))))
+    (with-open [w (io/writer (System/getenv "FIXTURE_OUTPUT"))]
+      (doseq [tx (range 1 350702)]
+        (let [[l p r] (corpus-triple tx)]
+          (.write w (pr-str {:tx tx :op "assert" :l l :p p :r r
+                             :ts "rotation-memory-fixture"
+                             :by "experiment/019fb03b"}))
+          (.write w "\n"))))' --
+  : >"$canonical_output/telemetry.log"
+
+  local fact_count title_count lead_count agent_count pad_count
+  fact_count=$(wc -l <"$canonical_output/coordination.log")
+  title_count=$(rg -c ':p "title"' "$canonical_output/coordination.log")
+  lead_count=$(rg -c ':p "lead"' "$canonical_output/coordination.log")
+  agent_count=$(rg -c ':p "kind", :r "agent"' "$canonical_output/coordination.log")
+  pad_count=$(rg -c ':p "benchmark_pad"' "$canonical_output/coordination.log")
+  [[ "$fact_count" == "$CORPUS_FACTS" ]] ||
+    die "fixture fact count is $fact_count, expected $CORPUS_FACTS"
+  [[ "$title_count" == 116900 && "$lead_count" == 1623 &&
+     "$agent_count" == 32 && "$pad_count" == 1 ]] ||
+    die "fixture shape differs from the committed 350701-fact contract"
+
+  sha256sum "$canonical_output/coordination.log" "$canonical_output/telemetry.log" \
+    >"$canonical_output/fixture.sha256"
+  {
+    printf 'contract=%s\n' "$CONTRACT_VERSION"
+    printf 'fact_count=%s\n' "$fact_count"
+    printf 'subject_count=116900\n'
+    printf 'title_count=%s\n' "$title_count"
+    printf 'lead_count=%s\n' "$lead_count"
+    printf 'agent_kind_count=%s\n' "$agent_count"
+    printf 'pad_count=%s\n' "$pad_count"
+    printf 'source=synthetic-only\n'
+  } >"$canonical_output/fixture.receipt"
+}
+
+event_value() {
+  local file=$1 key=$2
+  [[ -r "$file" ]] || return 1
+  awk -v key="$key" '$1 == key {print $2; found=1; exit} END {if (!found) exit 1}' "$file"
+}
+
+meta_value() {
+  local file=$1 key=$2
+  [[ -r "$file" ]] || return 1
+  sed -n "s/^${key}=//p" "$file" | tail -n 1
+}
+
+classify_case() {
+  local case_dir=$1 meta before after daemon_log
+  local exit_code signal ready work_complete systemd_result
+  local before_max before_oom before_kill after_max after_oom after_kill
+  local max_delta oom_delta kill_delta
+  meta=$case_dir/run.meta
+  before=$case_dir/memory.events.before
+  after=$case_dir/memory.events.after
+  daemon_log=$case_dir/daemon.log
+  for required in "$meta" "$before" "$after" "$daemon_log"; do
+    [[ -r "$required" ]] || {
+      printf 'cannot-determine\n'
+      return 0
+    }
+  done
+
+  exit_code=$(meta_value "$meta" exit_code || true)
+  signal=$(meta_value "$meta" signal || true)
+  ready=$(meta_value "$meta" ready || true)
+  work_complete=$(meta_value "$meta" work_complete || true)
+  systemd_result=$(meta_value "$meta" systemd_result || true)
+  before_max=$(event_value "$before" max || true)
+  before_oom=$(event_value "$before" oom || true)
+  before_kill=$(event_value "$before" oom_kill || true)
+  after_max=$(event_value "$after" max || true)
+  after_oom=$(event_value "$after" oom || true)
+  after_kill=$(event_value "$after" oom_kill || true)
+  if [[ ! "$exit_code" =~ ^[0-9]+$ || ! "$signal" =~ ^[0-9]+$ ||
+        ! "$ready" =~ ^[01]$ || ! "$work_complete" =~ ^[01]$ ||
+        ! "$before_max" =~ ^[0-9]+$ || ! "$before_oom" =~ ^[0-9]+$ ||
+        ! "$before_kill" =~ ^[0-9]+$ || ! "$after_max" =~ ^[0-9]+$ ||
+        ! "$after_oom" =~ ^[0-9]+$ || ! "$after_kill" =~ ^[0-9]+$ ]]; then
+    printf 'cannot-determine\n'
+    return 0
+  fi
+  ((after_max >= before_max && after_oom >= before_oom && after_kill >= before_kill)) || {
+    printf 'cannot-determine\n'
+    return 0
+  }
+  max_delta=$((after_max - before_max))
+  oom_delta=$((after_oom - before_oom))
+  kill_delta=$((after_kill - before_kill))
+
+  if ((oom_delta > 0 || kill_delta > 0)) || [[ "$systemd_result" == oom-kill ]]; then
+    printf 'cgroup-oom\n'
+  elif rg -q '(^|[^[:alnum:]_])OutOfMemoryError([^[:alnum:]_]|$)' "$daemon_log"; then
+    printf 'heap-oome\n'
+  elif ((max_delta > 0)); then
+    printf 'cgroup-max\n'
+  elif [[ "$exit_code" == 0 && "$signal" == 0 && "$ready" == 1 &&
+          "$work_complete" == 1 && "$systemd_result" == success ]]; then
+    printf 'pass\n'
+  else
+    printf 'cannot-determine\n'
+  fi
+}
+
+max_successful_peak() {
+  local role=$1 receipt_dir=$2 receipt receipt_role classification peak max=-1
+  shopt -s nullglob
+  for receipt in "$receipt_dir"/*.receipt; do
+    receipt_role=$(meta_value "$receipt" role || true)
+    classification=$(meta_value "$receipt" classification || true)
+    peak=$(meta_value "$receipt" memory_peak || true)
+    if [[ "$receipt_role" == "$role" && "$classification" == pass &&
+          "$peak" =~ ^[0-9]+$ ]] && ((peak > max)); then
+      max=$peak
+    fi
+  done
+  shopt -u nullglob
+  ((max >= 0)) || return 1
+  printf '%s\n' "$max"
+}
+
+report_receipts() {
+  local receipt_dir=$1 coord_peak telemetry_peak telemetry_lower aggregate residual
+  [[ -d "$receipt_dir" ]] || die "receipt directory does not exist: $receipt_dir"
+  coord_peak=$(max_successful_peak coordination "$receipt_dir") ||
+    cannot_determine "no successful coordination receipt"
+  telemetry_peak=$(max_successful_peak telemetry "$receipt_dir") ||
+    cannot_determine "no successful telemetry receipt"
+  telemetry_lower=$telemetry_peak
+  ((telemetry_lower >= TELEMETRY_FLOOR_BYTES)) ||
+    telemetry_lower=$TELEMETRY_FLOOR_BYTES
+  aggregate=$((2 * coord_peak + 2 * telemetry_lower))
+  residual=$((AGGREGATE_CEILING_BYTES - aggregate))
+  printf 'contract=%s\n' "$CONTRACT_VERSION"
+  printf 'aggregate_ceiling_bytes=%s\n' "$AGGREGATE_CEILING_BYTES"
+  printf 'coord_lower_bound_bytes=%s\n' "$coord_peak"
+  printf 'telemetry_measured_peak_bytes=%s\n' "$telemetry_peak"
+  printf 'telemetry_lower_bound_bytes=%s\n' "$telemetry_lower"
+  printf 'aggregate_lower_bound_bytes=%s\n' "$aggregate"
+  printf 'residual_headroom_bytes=%s\n' "$residual"
+  printf 'operational_margin_selected=false\n'
+}
+
+kernel_selected_port() {
+  python3 -c 'import socket
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+print(s.getsockname()[1])
+s.close()'
+}
+
+mock_run() {
+  local scratch_parent=$1 output=$2 parent root token case_id row port unit
+  local wave role orientation heap memory_max cpus fallback receipt
+  require_command python3
+  parent=$(canonical_existing_dir "$scratch_parent")
+  case "$parent" in /tmp/* | /var/tmp/*) ;; *) die "mock scratch parent must be below /tmp or /var/tmp" ;; esac
+  [[ ! -e "$output" ]] || die "mock output already exists: $output"
+  mkdir -p "$output/cases"
+  root=$(mktemp -d --tmpdir="$parent" north-rotation-memory.mock.XXXXXXXX)
+  token=$(basename "$root" | tr -cd '[:alnum:]' | tail -c 9)
+  declare -A seen_ports=()
+
+  while IFS=$'\t' read -r row case_id _kind wave role orientation heap memory_max cpus fallback; do
+    [[ "$row" == run && "$_kind" == base ]] || continue
+    for _ in $(seq 1 20); do
+      port=$(kernel_selected_port)
+      if [[ -z "${seen_ports[$port]:-}" ]] && ! is_forbidden_port "$port"; then
+        seen_ports[$port]=1
+        break
+      fi
+      port=
+    done
+    [[ -n "$port" ]] || die "mock could not obtain a unique kernel-selected port"
+    unit="fram-rotmem-${token}-${case_id}.service"
+    mkdir -p "$output/cases/$case_id"
+    receipt=$output/cases/$case_id/run.receipt
+    {
+      printf 'case=%s\n' "$case_id"
+      printf 'wave=%s\n' "$wave"
+      printf 'role=%s\n' "$role"
+      printf 'orientation=%s\n' "$orientation"
+      printf 'heap=%s\n' "$heap"
+      printf 'memory_max=%s\n' "$memory_max"
+      printf 'cpu_set=%s\n' "$cpus"
+      printf 'fallback_for=%s\n' "$fallback"
+      printf 'unit=%s\n' "$unit"
+      printf 'scratch_root=%s\n' "$root"
+      printf 'port=%s\n' "$port"
+      printf 'argv=mock-only:no-systemd-run\n'
+      printf 'exit_code=0\n'
+      printf 'signal=0\n'
+      printf 'heap_oome=0\n'
+      printf 'memory_peak=%s\n' "$((1000000000 + ${#case_id} * 1000000))"
+      printf 'memory_events_max_delta=0\n'
+      printf 'memory_events_oom_delta=0\n'
+      printf 'memory_events_oom_kill_delta=0\n'
+      printf 'ready=1\n'
+      printf 'work_complete=1\n'
+      printf 'classification=pass\n'
+      printf 'execution_mode=mock\n'
+    } >"$receipt"
+  done < <(emit_plan)
+
+  {
+    printf 'contract=%s\n' "$CONTRACT_VERSION"
+    printf 'execution_mode=mock\n'
+    printf 'scratch_root=%s\n' "$root"
+    printf 'process_starts=%s\n' "$BASE_PROCESS_STARTS"
+    printf 'hard_max_process_starts=%s\n' "$HARD_MAX_PROCESS_STARTS"
+    printf 'full_matrix_launched=false\n'
+  } >"$output/summary.receipt"
+}
+
+snapshot_events() {
+  local source=$1 target=$2
+  if [[ -r "$source" ]]; then
+    cp "$source" "$target"
+  else
+    : >"$target"
+  fi
+}
+
+case_runner() {
+  local scratch_root=$1 case_dir=$2 unit=$3 source=$4 primary_log=$5
+  local secondary_log=$6 heap=$7 cpus=$8
+  local cgroup_rel cgroup_dir child rc signal runner_rc
+  safety_check "$scratch_root" 0 "$unit" \
+    "$case_dir/coordination.log" "$case_dir/telemetry.log"
+  cgroup_rel=$(awk -F: '$1 == "0" {print $3; found=1} END {if (!found) exit 1}' /proc/self/cgroup) ||
+    cannot_determine "case runner cannot resolve its cgroup v2 path"
+  cgroup_dir=/sys/fs/cgroup$cgroup_rel
+  [[ -d "$cgroup_dir" && -r "$cgroup_dir/memory.events" &&
+     -r "$cgroup_dir/memory.peak" && -r "$cgroup_dir/memory.max" ]] ||
+    cannot_determine "transient service lacks required cgroup v2 memory metrics"
+  printf '%s\n' "$$" >"$case_dir/runner.pid"
+  printf '%s\n' "$cgroup_rel" >"$case_dir/control-group"
+  snapshot_events "$cgroup_dir/memory.events" "$case_dir/memory.events.before"
+  cp "$cgroup_dir/memory.max" "$case_dir/memory.max"
+  cp "$cgroup_dir/memory.swap.max" "$case_dir/memory.swap.max"
+
+  local -a argv=(
+    env
+    -u FRAM_LOG
+    -u FRAM_TELEMETRY_LOG
+    -u FRAM_SINGLE_VALUED
+    -u FRAM_THREADS
+    -u NORTH_PORT
+    -u NORTH_TELEMETRY_PORT
+    FRAM_COORD_ROLE=active
+    FRAM_REQUIRE_LOG_FENCE=1
+    FRAM_SNAPSHOT_BOOT=0
+    FRAM_MMAP_IMAGE=0
+    FRAM_ROTATION_COMPACT_MS=3600000
+    "FRAM_TELEMETRY_LOG=$secondary_log"
+    "JDK_JAVA_OPTIONS=$heap -XX:+ExitOnOutOfMemoryError -Xlog:gc*,safepoint:file=$case_dir/gc.log:time,uptime,level,tags:filecount=1,filesize=50m"
+    taskset -c "$cpus"
+    "$source/bin/fram-daemon"
+    serve-flat 0 "$primary_log"
+  )
+  printf '%q ' "${argv[@]}" >"$case_dir/argv"
+  printf '\n' >>"$case_dir/argv"
+  (
+    cd "$source"
+    exec "${argv[@]}"
+  ) >"$case_dir/daemon.log" 2>&1 &
+  child=$!
+  printf '%s\n' "$child" >"$case_dir/daemon.pid"
+  trap 'kill -TERM "$child" 2>/dev/null || true' TERM INT
+  set +e
+  wait "$child"
+  rc=$?
+  if kill -0 "$child" 2>/dev/null; then
+    wait "$child"
+    rc=$?
+  fi
+  set -e
+  signal=0
+  ((rc < 128)) || signal=$((rc - 128))
+  snapshot_events "$cgroup_dir/memory.events" "$case_dir/memory.events.after"
+  cp "$cgroup_dir/memory.peak" "$case_dir/memory.peak"
+  cp "$cgroup_dir/memory.current" "$case_dir/memory.current"
+  cp "$cgroup_dir/memory.stat" "$case_dir/memory.stat"
+  cp "$cgroup_dir/memory.swap.current" "$case_dir/memory.swap.current"
+  {
+    printf 'exit_code=%s\n' "$rc"
+    printf 'signal=%s\n' "$signal"
+    printf 'heap_oome=%s\n' "$(rg -q 'OutOfMemoryError' "$case_dir/daemon.log" && printf 1 || printf 0)"
+  } >"$case_dir/process.meta"
+  : >"$case_dir/runner.done"
+  runner_rc=$rc
+  [[ -e "$case_dir/stop.requested" ]] && runner_rc=0
+  exit "$runner_rc"
+}
+
+capture_host_state() {
+  local output=$1
+  {
+    printf 'nproc='
+    nproc
+    printf 'loadavg='
+    cat /proc/loadavg
+    awk '/MemAvailable:/ {print "mem_available_kib=" $2}' /proc/meminfo
+    printf 'memory_pressure='
+    tr '\n' ';' </proc/pressure/memory
+    printf '\n'
+  } >"$output"
+}
+
+prepare_case_logs() {
+  local fixture=$1 case_dir=$2 orientation=$3
+  mkdir -p "$case_dir"
+  if [[ "$orientation" == coordination ]]; then
+    cp "$fixture/coordination.log" "$case_dir/coordination.log"
+    cp "$fixture/telemetry.log" "$case_dir/telemetry.log"
+  else
+    cp "$fixture/telemetry.log" "$case_dir/coordination.log"
+    cp "$fixture/coordination.log" "$case_dir/telemetry.log"
+  fi
+  sync "$case_dir/coordination.log" "$case_dir/telemetry.log"
+  python3 - "$case_dir/coordination.log" "$case_dir/telemetry.log" <<'PY'
+import os
+import sys
+for path in sys.argv[1:]:
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        if hasattr(os, "posix_fadvise"):
+            os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+    finally:
+        os.close(fd)
+PY
+}
+
+memory_max_bytes() {
+  case "$1" in
+    infinity) printf 'max\n' ;;
+    3G) printf '%s\n' $((3 * 1024 * 1024 * 1024)) ;;
+    1500M) printf '%s\n' $((1500 * 1024 * 1024)) ;;
+    *) return 1 ;;
+  esac
+}
+
+declare -a ACTIVE_UNITS=()
+
+stop_active_units() {
+  local unit
+  for unit in "${ACTIVE_UNITS[@]:-}"; do
+    systemctl --user stop "$unit" >/dev/null 2>&1 || true
+    systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+  done
+}
+
+launch_case() {
+  local root=$1 source=$2 fixture=$3 token=$4 case_id=$5 role=$6
+  local orientation=$7 heap=$8 memory_max=$9 cpus=${10}
+  local case_dir=$root/cases/$case_id unit="fram-rotmem-${token}-${case_id}.service"
+  local primary_log secondary_log expected_max
+  prepare_case_logs "$fixture" "$case_dir" "$orientation"
+  if [[ "$orientation" == coordination ]]; then
+    primary_log=$case_dir/coordination.log
+    secondary_log=$case_dir/telemetry.log
+  else
+    primary_log=$case_dir/telemetry.log
+    secondary_log=$case_dir/coordination.log
+  fi
+  safety_check "$root" 0 "$unit" "$case_dir/coordination.log" "$case_dir/telemetry.log"
+  expected_max=$(memory_max_bytes "$memory_max") ||
+    die "unsupported MemoryMax in plan: $memory_max"
+  {
+    printf 'case=%s\n' "$case_id"
+    printf 'role=%s\n' "$role"
+    printf 'orientation=%s\n' "$orientation"
+    printf 'heap=%s\n' "$heap"
+    printf 'memory_max=%s\n' "$memory_max"
+    printf 'expected_memory_max=%s\n' "$expected_max"
+    printf 'cpu_set=%s\n' "$cpus"
+    printf 'unit=%s\n' "$unit"
+    printf 'primary_log=%s\n' "$primary_log"
+    printf 'secondary_log=%s\n' "$secondary_log"
+  } >"$case_dir/case.meta"
+
+  systemd-run --user --quiet \
+    --unit="$unit" \
+    --service-type=exec \
+    --property="MemoryMax=$memory_max" \
+    --property=MemorySwapMax=0 \
+    --property=OOMPolicy=stop \
+    --property=KillMode=control-group \
+    --property=TimeoutStopSec=15s \
+    --property="StandardOutput=append:$case_dir/runner.log" \
+    --property="StandardError=append:$case_dir/runner.log" \
+    --working-directory="$source" \
+    "$SCRIPT_PATH" case-runner "$root" "$case_dir" "$unit" "$source" \
+      "$primary_log" "$secondary_log" "$heap" "$cpus"
+  ACTIVE_UNITS+=("$unit")
+
+  local id main_pid control_group actual_max swap_max
+  id=$(systemctl --user show "$unit" --property=Id --value)
+  main_pid=$(systemctl --user show "$unit" --property=MainPID --value)
+  control_group=$(systemctl --user show "$unit" --property=ControlGroup --value)
+  [[ "$id" == "$unit" && "$main_pid" =~ ^[1-9][0-9]*$ &&
+     "$control_group" == */"$unit" ]] ||
+    cannot_determine "transient unit ownership cannot be proved for $unit"
+  for _ in $(seq 1 100); do
+    [[ -r "$case_dir/control-group" && -r "$case_dir/daemon.pid" ]] && break
+    sleep 0.1
+  done
+  [[ -r "$case_dir/control-group" && -r "$case_dir/daemon.pid" ]] ||
+    cannot_determine "case runner did not publish cgroup/process identity: $unit"
+  [[ "$(<"$case_dir/control-group")" == "$control_group" ]] ||
+    cannot_determine "case runner cgroup disagrees with systemd: $unit"
+  actual_max=$(<"/sys/fs/cgroup$control_group/memory.max")
+  swap_max=$(<"/sys/fs/cgroup$control_group/memory.swap.max")
+  [[ "$actual_max" == "$expected_max" && "$swap_max" == 0 ]] ||
+    cannot_determine "transient cgroup limits differ from the declared profile: $unit"
+}
+
+query_case_status() {
+  local source=$1 port=$2 primary_log=$3 output=$4
+  FRAM_PROBE_PORT="$port" FRAM_PROBE_LOG="$primary_log" \
+    timeout 15s bb -cp "$source/out" -e '
+      (require (quote [fram.rt :as rt]))
+      (let [port (Integer/parseInt (System/getenv "FRAM_PROBE_PORT"))
+            log (.getCanonicalPath
+                 (clojure.java.io/file (System/getenv "FRAM_PROBE_LOG")))
+            response (rt/coord-request-for-log port log {:op :status})
+            version (:version response)
+            complete (and (= 350701 (:facts response))
+                          (<= 1 (long (or (get-in response [:index :compactions]) 0)))
+                          (= (get-in response [:index :last-watermark]) version)
+                          (nil? (get-in response [:index :last-error])))]
+        (println (pr-str response))
+        (flush)
+        (System/exit (if complete 0 3)))' >"$output" 2>&1
+}
+
+observe_case() {
+  local root=$1 source=$2 case_id=$3 deadline_epoch=$4
+  local case_dir=$root/cases/$case_id meta unit role orientation heap memory_max
+  local primary_log daemon_pid port='' runner_pid control_group listener
+  local ready=0 work_complete=0 status_rc=3 systemd_result exit_code signal
+  local before_max before_oom before_kill after_max after_oom after_kill
+  local max_delta oom_delta kill_delta peak heap_oome classification expected_manifest
+  meta=$case_dir/case.meta
+  unit=$(meta_value "$meta" unit)
+  role=$(meta_value "$meta" role)
+  orientation=$(meta_value "$meta" orientation)
+  heap=$(meta_value "$meta" heap)
+  memory_max=$(meta_value "$meta" memory_max)
+  primary_log=$(meta_value "$meta" primary_log)
+  daemon_pid=$(<"$case_dir/daemon.pid")
+  runner_pid=$(<"$case_dir/runner.pid")
+  control_group=$(<"$case_dir/control-group")
+
+  while (( $(date +%s) < deadline_epoch )); do
+    port=$(sed -nE 's/.*reified coordinator listening on 127\.0\.0\.1:([0-9]+).*/\1/p' \
+      "$case_dir/daemon.log" | tail -n 1)
+    [[ -n "$port" ]] && break
+    kill -0 "$runner_pid" 2>/dev/null || break
+    sleep 1
+  done
+  if [[ -n "$port" ]]; then
+    local low high
+    read -r low high </proc/sys/net/ipv4/ip_local_port_range
+    if [[ "$port" =~ ^[0-9]+$ ]] && ((port >= low && port <= high)) &&
+       ! is_forbidden_port "$port"; then
+      listener=$(ss -H -ltnp "sport = :$port" || true)
+      if [[ "$listener" == *"pid=$daemon_pid,"* ]]; then
+        ready=1
+      fi
+    fi
+  fi
+
+  if [[ "$ready" == 1 ]]; then
+    while (( $(date +%s) < deadline_epoch )); do
+      set +e
+      query_case_status "$source" "$port" "$primary_log" "$case_dir/status.edn"
+      status_rc=$?
+      set -e
+      if [[ "$status_rc" == 0 ]]; then
+        expected_manifest=$primary_log.rotations/latest.edn
+        if [[ -r "$expected_manifest" ]] &&
+           FIXTURE_MANIFEST="$expected_manifest" bb -e '
+             (let [m (clojure.edn/read-string
+                       (slurp (System/getenv "FIXTURE_MANIFEST")))]
+               (System/exit (if (= 350701 (:fact-count m)) 0 1)))'; then
+          work_complete=1
+        fi
+        break
+      fi
+      kill -0 "$runner_pid" 2>/dev/null || break
+      sleep 1
+    done
+  fi
+
+  if kill -0 "$runner_pid" 2>/dev/null; then
+    : >"$case_dir/stop.requested"
+    systemctl --user stop "$unit" >/dev/null 2>&1 || true
+  fi
+  for _ in $(seq 1 100); do
+    [[ -e "$case_dir/runner.done" ]] && break
+    sleep 0.1
+  done
+  systemd_result=$(systemctl --user show "$unit" --property=Result --value 2>/dev/null || true)
+  [[ -n "$systemd_result" ]] || systemd_result=failed
+  exit_code=$(meta_value "$case_dir/process.meta" exit_code || true)
+  signal=$(meta_value "$case_dir/process.meta" signal || true)
+  peak=$(tr -d '\n' <"$case_dir/memory.peak" 2>/dev/null || true)
+  heap_oome=$(meta_value "$case_dir/process.meta" heap_oome || true)
+  {
+    printf 'exit_code=%s\n' "${exit_code:-1}"
+    printf 'signal=%s\n' "${signal:-0}"
+    printf 'ready=%s\n' "$ready"
+    printf 'work_complete=%s\n' "$work_complete"
+    printf 'systemd_result=%s\n' "$systemd_result"
+    printf 'memory_peak=%s\n' "${peak:-0}"
+  } >"$case_dir/run.meta"
+  classification=$(classify_case "$case_dir")
+  before_max=$(event_value "$case_dir/memory.events.before" max || printf 0)
+  before_oom=$(event_value "$case_dir/memory.events.before" oom || printf 0)
+  before_kill=$(event_value "$case_dir/memory.events.before" oom_kill || printf 0)
+  after_max=$(event_value "$case_dir/memory.events.after" max || printf 0)
+  after_oom=$(event_value "$case_dir/memory.events.after" oom || printf 0)
+  after_kill=$(event_value "$case_dir/memory.events.after" oom_kill || printf 0)
+  max_delta=$((after_max - before_max))
+  oom_delta=$((after_oom - before_oom))
+  kill_delta=$((after_kill - before_kill))
+  {
+    printf 'contract=%s\n' "$CONTRACT_VERSION"
+    printf 'fram_revision=%s\n' "$(<"$root/fram-revision")"
+    printf 'fixture_sha256=%s\n' "$(awk 'NR == 1 {print $1}' "$root/fixture/fixture.sha256")"
+    printf 'case=%s\n' "$case_id"
+    printf 'role=%s\n' "$role"
+    printf 'orientation=%s\n' "$orientation"
+    printf 'heap=%s\n' "$heap"
+    printf 'memory_max=%s\n' "$memory_max"
+    printf 'unit=%s\n' "$unit"
+    printf 'control_group=%s\n' "$control_group"
+    printf 'runner_pid=%s\n' "$runner_pid"
+    printf 'daemon_pid=%s\n' "$daemon_pid"
+    printf 'port=%s\n' "${port:-0}"
+    printf 'primary_log=%s\n' "$primary_log"
+    printf 'argv=%s\n' "$(<"$case_dir/argv")"
+    printf 'exit_code=%s\n' "${exit_code:-1}"
+    printf 'signal=%s\n' "${signal:-0}"
+    printf 'heap_oome=%s\n' "${heap_oome:-0}"
+    printf 'memory_peak=%s\n' "${peak:-0}"
+    printf 'memory_events_max_delta=%s\n' "$max_delta"
+    printf 'memory_events_oom_delta=%s\n' "$oom_delta"
+    printf 'memory_events_oom_kill_delta=%s\n' "$kill_delta"
+    printf 'ready=%s\n' "$ready"
+    printf 'work_complete=%s\n' "$work_complete"
+    printf 'classification=%s\n' "$classification"
+  } >"$root/receipts/$case_id.receipt"
+  systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+  printf '%s\n' "$classification"
+}
+
+run_experiment() {
+  local fram_rev='' fram_repo='' scratch_parent=/tmp
+  while (($#)); do
+    case "$1" in
+      --fram-rev) fram_rev=${2:-}; shift 2 ;;
+      --fram-repo) fram_repo=${2:-}; shift 2 ;;
+      --scratch-parent) scratch_parent=${2:-}; shift 2 ;;
+      *) die "unknown run argument: $1" ;;
+    esac
+  done
+  [[ "$fram_rev" =~ ^[0-9a-f]{40}$ ]] || die "--fram-rev must be an exact 40-hex SHA"
+  [[ -n "$fram_repo" ]] || die "--fram-repo is required"
+  fram_repo=$(canonical_existing_dir "$fram_repo")
+  scratch_parent=$(canonical_existing_dir "$scratch_parent")
+  case "$scratch_parent" in /tmp/* | /var/tmp/* | /tmp | /var/tmp) ;; *)
+    die "--scratch-parent must be /tmp, /var/tmp, or a child"
+  esac
+  for command in git tar bb python3 systemd-run systemctl ss timeout taskset rg sha256sum; do
+    require_command "$command"
+  done
+  [[ "$(findmnt -n -o FSTYPE /sys/fs/cgroup)" == cgroup2 ]] ||
+    cannot_determine "host is not using cgroup v2"
+  if [[ ! -r /sys/fs/cgroup/cgroup.controllers ]] ||
+     ! grep -qw memory /sys/fs/cgroup/cgroup.controllers; then
+    cannot_determine "cgroup v2 memory controller is unavailable"
+  fi
+  systemctl --user is-system-running >/dev/null 2>&1 ||
+    cannot_determine "user systemd manager is not running"
+  (( $(nproc) >= 24)) ||
+    cannot_determine "fixed disjoint CPU masks require at least 24 logical CPUs"
+  git -C "$fram_repo" cat-file -e "$fram_rev^{commit}" ||
+    cannot_determine "Fram revision is not available locally: $fram_rev"
+
+  local root source fixture token deadline starts=0
+  local coord_discovery telemetry_discovery classification case_id
+  root=$(mktemp -d --tmpdir="$scratch_parent" north-rotation-memory.XXXXXXXX)
+  source=$root/src
+  fixture=$root/fixture
+  token=$(basename "$root" | tr -cd '[:alnum:]' | tail -c 9)
+  deadline=$(( $(date +%s) + WALL_TIMEOUT_SECONDS ))
+  mkdir -p "$source" "$root/cases" "$root/receipts" "$root/results"
+  trap stop_active_units EXIT INT TERM
+  safety_check "$root" 0 "fram-rotmem-${token}-preflight.service" \
+    "$root/cases/preflight/coordination.log" "$root/cases/preflight/telemetry.log"
+  git -C "$fram_repo" archive "$fram_rev" | tar -x -C "$source"
+  printf '%s\n' "$fram_rev" >"$root/fram-revision"
+  generate_fixture "$fixture"
+  capture_host_state "$root/results/host-before"
+  emit_plan >"$root/results/plan.tsv"
+
+  launch_case "$root" "$source" "$fixture" "$token" coord-discovery \
+    coordination coordination -Xmx2g infinity 12-17
+  starts=$((starts + 1))
+  launch_case "$root" "$source" "$fixture" "$token" telemetry-discovery \
+    telemetry telemetry -Xmx1g infinity 18-23
+  starts=$((starts + 1))
+  coord_discovery=$(observe_case "$root" "$source" coord-discovery "$deadline")
+  telemetry_discovery=$(observe_case "$root" "$source" telemetry-discovery "$deadline")
+
+  if [[ "$coord_discovery" == heap-oome || "$telemetry_discovery" == heap-oome ]]; then
+    if [[ "$coord_discovery" == heap-oome ]]; then
+      launch_case "$root" "$source" "$fixture" "$token" coord-fallback \
+        coordination coordination -Xmx4g infinity 12-17
+      starts=$((starts + 1))
+      observe_case "$root" "$source" coord-fallback "$deadline" >/dev/null
+    fi
+    if [[ "$telemetry_discovery" == heap-oome ]]; then
+      launch_case "$root" "$source" "$fixture" "$token" telemetry-fallback \
+        telemetry telemetry -Xmx2g infinity 18-23
+      starts=$((starts + 1))
+      observe_case "$root" "$source" telemetry-fallback "$deadline" >/dev/null
+    fi
+  elif [[ "$coord_discovery" == pass && "$telemetry_discovery" == pass ]]; then
+    launch_case "$root" "$source" "$fixture" "$token" coord-blue \
+      coordination coordination -Xmx2g 3G 12-14
+    starts=$((starts + 1))
+    launch_case "$root" "$source" "$fixture" "$token" coord-green \
+      coordination coordination -Xmx2g 3G 15-17
+    starts=$((starts + 1))
+    launch_case "$root" "$source" "$fixture" "$token" telemetry-blue \
+      telemetry telemetry -Xmx1g 1500M 18-20
+    starts=$((starts + 1))
+    launch_case "$root" "$source" "$fixture" "$token" telemetry-green \
+      telemetry telemetry -Xmx1g 1500M 21-23
+    starts=$((starts + 1))
+    for case_id in coord-blue coord-green telemetry-blue telemetry-green; do
+      observe_case "$root" "$source" "$case_id" "$deadline" >/dev/null
+    done
+  fi
+  ((starts <= HARD_MAX_PROCESS_STARTS)) ||
+    die "internal error: process-start hard maximum exceeded"
+  capture_host_state "$root/results/host-after"
+  report_receipts "$root/receipts" >"$root/results/lower-bounds.txt" || true
+  {
+    printf 'contract=%s\n' "$CONTRACT_VERSION"
+    printf 'scratch_root=%s\n' "$root"
+    printf 'process_starts=%s\n' "$starts"
+    printf 'hard_max_process_starts=%s\n' "$HARD_MAX_PROCESS_STARTS"
+    printf 'deadline_epoch=%s\n' "$deadline"
+    printf 'operational_margin_selected=false\n'
+  } >"$root/results/summary.receipt"
+  sha256sum "$root"/receipts/*.receipt "$root"/results/* \
+    >"$root/results/evidence.sha256"
+  stop_active_units
+  trap - EXIT INT TERM
+
+  local overall=pass
+  shopt -s nullglob
+  for case_id in "$root"/receipts/*.receipt; do
+    classification=$(meta_value "$case_id" classification || true)
+    case "$classification" in
+      pass) ;;
+      heap-oome | cgroup-max | cgroup-oom) overall=fail ;;
+      *) [[ "$overall" == fail ]] || overall=cannot-determine ;;
+    esac
+  done
+  shopt -u nullglob
+  printf 'classification=%s\nscratch_root=%s\n' "$overall" "$root"
+  case "$overall" in
+    pass) return 0 ;;
+    fail) return 10 ;;
+    *) return 20 ;;
+  esac
+}
+
+main() {
+  local command=${1:-}
+  [[ -n "$command" ]] || {
+    usage
+    exit 2
+  }
+  shift
+  case "$command" in
+    plan)
+      (($# == 0)) || die "plan takes no arguments"
+      emit_plan
+      ;;
+    generate-fixture)
+      (($# == 1)) || die "generate-fixture requires one output directory"
+      generate_fixture "$1"
+      ;;
+    safety-check)
+      (($# == 5)) || die "safety-check requires five arguments"
+      safety_check "$@"
+      ;;
+    classify)
+      (($# == 1)) || die "classify requires one case directory"
+      classify_case "$1"
+      ;;
+    report)
+      (($# == 1)) || die "report requires one receipt directory"
+      report_receipts "$1"
+      ;;
+    mock-run)
+      (($# == 2)) || die "mock-run requires scratch parent and output directory"
+      mock_run "$1" "$2"
+      ;;
+    run)
+      run_experiment "$@"
+      ;;
+    case-runner)
+      (($# == 8)) || die "case-runner is an internal eight-argument command"
+      case_runner "$@"
+      ;;
+    -h | --help | help)
+      usage
+      ;;
+    *)
+      die "unknown command: $command"
+      ;;
+  esac
+}
+
+main "$@"
