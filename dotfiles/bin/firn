@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# firn — wrapper for compiled bytecode. Pinned to BEAGLE's racket, not system
-# racket (see scripts/firn-build-bin for why). A system racket bump must never
-# break or silently rebuild firn.
+# firn — dispatch native rebuilds, then use compiled Racket bytecode otherwise.
+# The Racket path is pinned to BEAGLE's runtime, not the system runtime.
 set -euo pipefail
 
 SHARE_DIR="/home/tom/.local/share/firn"
@@ -15,6 +14,17 @@ if [ -z "${FIRN_REPO:-}" ]; then
 fi
 REPO="${FIRN_REPO:-$HOME/code/nixos-config}"
 export FIRN_REPO="$REPO"
+
+NATIVE_BIN="${FIRN_NATIVE_BIN:-$REPO/firn-zig/zig-out/bin/firn}"
+if [ "${FIRN_DISABLE_NATIVE:-0}" != "1" ]; then
+  if [ "${1:-}" = "rebuild" ] \
+    || { [ "${1:-}" = "host" ] && [ "${2:-}" = "rebuild" ]; }; then
+    if [ -x "$NATIVE_BIN" ]; then
+      exec "$NATIVE_BIN" "$@"
+    fi
+  fi
+fi
+
 for _bp in "$HOME/code/beagle/main" "$HOME/code/beagle" "$REPO/../beagle"; do
   [ -d "$_bp/bin" ] && { BEAGLE_PATH="${BEAGLE_PATH:-$_bp}"; break; }
 done
