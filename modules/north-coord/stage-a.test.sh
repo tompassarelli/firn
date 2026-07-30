@@ -8,7 +8,7 @@ trap 'rm -rf "${scratch:?}"' EXIT
 
 expr=$scratch/stage-a-eval.nix
 cat >"$expr" <<'EOF'
-{ repoRoot, stageA, socketActivation }:
+{ repoRoot, stageA, socketActivation, northEnvPresent ? true }:
 
 let
   flake = builtins.getFlake ("path:" + repoRoot);
@@ -30,6 +30,11 @@ let
       chmod +x "$out/bin/$name"
     done
   '';
+  northEnvPkg = pkgs.runCommand "north-env-stage-a-fixture" { } ''
+    mkdir -p "$out/bin"
+    printf '%s\n' '#!/bin/sh' 'exit 0' > "$out/bin/north-env"
+    chmod +x "$out/bin/north-env"
+  '';
   codexPkg = pkgs.runCommand "codex-stage-a-fixture" { } ''
     mkdir -p "$out/bin"
     printf '%s\n' '#!/bin/sh' 'exit 0' > "$out/bin/codex"
@@ -43,6 +48,8 @@ let
     north.packages.${system} = {
       default = northPkg;
       codex = codexPkg;
+    } // lib.optionalAttrs northEnvPresent {
+      north-env = northEnvPkg;
     };
   };
   evaluated = lib.evalModules {
@@ -143,11 +150,17 @@ EOF
 cache=$scratch/cache
 mkdir -p "$cache"
 build_case() {
-  local stage_a=$1 socket_activation=$2
+  local stage_a=$1 socket_activation=$2 north_env_present=${3:-true}
   XDG_CACHE_HOME=$cache nix build \
     --impure --no-link --print-out-paths \
-    --expr "import $expr { repoRoot = \"$repo_root\"; stageA = $stage_a; socketActivation = $socket_activation; }"
+    --expr "import $expr { repoRoot = \"$repo_root\"; stageA = $stage_a; socketActivation = $socket_activation; northEnvPresent = $north_env_present; }"
 }
+
+if missing_output=$(build_case false true false 2>&1); then
+  echo "Stage-A fixture unexpectedly accepts a missing north-env input" >&2
+  exit 1
+fi
+grep -Fq "attribute 'north-env' missing" <<<"$missing_output"
 
 off=$(build_case false true)
 grep -Fxq 'assertion=true' "$off"
@@ -162,6 +175,8 @@ grep -Fxq 'coord-stop-if-changed=false' "$off"
 grep -Fxq 'partition=unset' "$off"
 grep -Fxq 'telemetry-port=unset' "$off"
 off_wrapper=$(sed -n 's/^north-wrapper=//p' "$off")
+grep -Fq -- '-north-env-stage-a-fixture/bin/north-env "$@"' \
+  "$off_wrapper/bin/north"
 if grep -Fq 'NORTH_TELEMETRY_PARTITION=1' "$off_wrapper/bin/north"; then
   echo "Stage-A option-off wrapper unexpectedly enables partition routing" >&2
   exit 1
