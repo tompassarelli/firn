@@ -6,3 +6,10 @@
 
 (defn index-accepted? [schema-version :- String root-hash :- String expected-root-hash :- String] :- Bool
   (and (= schema-version firn-schema-version) (= root-hash expected-root-hash)))
+
+(def semantic-index-schema-key :- String "schemaVersion")
+
+(defn semantic-index-accepted? [header :- (Map String String) expected-root-hash :- String] :- Bool
+  (index-accepted? (get header semantic-index-schema-key)
+    (get header "rootHash")
+    expected-root-hash))
