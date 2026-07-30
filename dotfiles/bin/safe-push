@@ -156,6 +156,23 @@ remote_destination_snapshot() {
   printf 'object:%s\n' "$oid"
 }
 
+report_reap_ready() {
+  local container ready=0 wt main_branch head dirty
+  [ "$(basename "$repo_root")" = main ] || return 0
+  container=$(dirname "$repo_root")
+  main_branch=$(git -C "$repo_root" symbolic-ref --quiet --short HEAD 2>/dev/null) || return 0
+  for wt in "$container"/wt-*; do
+    [ -e "$wt/.git" ] || continue
+    dirty=$(git -C "$wt" status --porcelain 2>/dev/null) || continue
+    [ -z "$dirty" ] || continue
+    head=$(git -C "$wt" rev-parse HEAD 2>/dev/null) || continue
+    if git -C "$repo_root" merge-base --is-ancestor "$head" "$main_branch" 2>/dev/null; then
+      ready=$((ready + 1))
+    fi
+  done
+  [ "$ready" -eq 0 ] || printf '%s reap-ready worktrees — run wt-reap\n' "$ready"
+}
+
 capture_destination_state() {
   destination_branch=${to:-$branch}
   destination_ref="refs/heads/$destination_branch"
@@ -307,3 +324,4 @@ if [ "$to_seen" -eq 0 ]; then
       "$destination_branch" >&2
   fi
 fi
+report_reap_ready

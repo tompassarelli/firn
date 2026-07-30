@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: wt-reap [--all]
+
+Sweep merged+clean sibling worktrees (never main) out of a container
+(<project>/main + <project>/wt-<slug> siblings).
+
+  (no flags)  operate on the container of the current directory
+  --all       operate on every ~/code/*/main container
+USAGE
+}
+
+all=0
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+  --all) all=1 ;;
+  '') ;;
+  *) echo "wt-reap: unknown argument '$1'" >&2; usage >&2; exit 2 ;;
+esac
+
+reaped=0
+kept_dirty=0
+kept_unmerged=0
+
+find_container() {
+  local dir="$PWD"
+  while [ "$dir" != "/" ]; do
+    if [ -e "$dir/main/.git" ]; then
+      printf '%s\n' "$dir"
+      return 0
+    fi
+    dir=$(dirname "$dir")
+  done
+  return 1
+}
+
+reap_container() {
+  local container="$1" main_dir wt main_branch head branch_ref branch_name dirty ahead
+  main_dir="$container/main"
+  [ -e "$main_dir/.git" ] || return 0
+
+  git -C "$main_dir" worktree prune
+
+  main_branch=$(git -C "$main_dir" symbolic-ref --quiet --short HEAD 2>/dev/null) || return 0
+
+  while IFS= read -r wt; do
+    [ -n "$wt" ] || continue
+    [ "$(basename "$wt")" != main ] || continue
+
+    dirty=$(git -C "$wt" status --porcelain 2>/dev/null) || continue
+    if [ -n "$dirty" ]; then
+      printf 'kept: dirty (%s)\n' "$wt"
+      kept_dirty=$((kept_dirty + 1))
+      continue
+    fi
+
+    head=$(git -C "$wt" rev-parse HEAD 2>/dev/null) || continue
+    branch_ref=$(git -C "$wt" symbolic-ref --quiet HEAD 2>/dev/null) || branch_ref=""
+    branch_name=${branch_ref#refs/heads/}
+    [ -n "$branch_name" ] || branch_name="(detached)"
+
+    if git -C "$main_dir" merge-base --is-ancestor "$head" "$main_branch" 2>/dev/null; then
+      git -C "$main_dir" worktree remove "$wt"
+      if [ "$branch_name" != "(detached)" ]; then
+        git -C "$main_dir" branch -d "$branch_name"
+      fi
+      printf 'reaped: %s (%s)\n' "$wt" "$branch_name"
+      reaped=$((reaped + 1))
+    else
+      ahead=$(git -C "$main_dir" rev-list --count "$main_branch..$head" 2>/dev/null) || ahead="?"
+      printf 'kept: unmerged (%s, %s commits ahead) (%s)\n' "$branch_name" "$ahead" "$wt"
+      kept_unmerged=$((kept_unmerged + 1))
+    fi
+  done < <(git -C "$main_dir" worktree list --porcelain | awk '/^worktree /{print substr($0, 10)}')
+}
+
+if [ "$all" -eq 1 ]; then
+  for main_dir in "$HOME"/code/*/main; do
+    [ -e "$main_dir/.git" ] || continue
+    reap_container "$(dirname "$main_dir")"
+  done
+else
+  container=$(find_container) || {
+    echo "wt-reap: no container found above $PWD (no <dir>/main/.git)" >&2
+    exit 1
+  }
+  reap_container "$container"
+fi
+
+printf 'reaped %d, kept dirty %d, kept unmerged %d\n' "$reaped" "$kept_dirty" "$kept_unmerged"
