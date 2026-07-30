@@ -38,6 +38,8 @@ fi
 SCHEMA_JSON="$REPO/.beagle-cache/schema.json"
 SCHEMA_HM="$REPO/.beagle-cache/schema-hm.json"
 SCHEMA_FP="$REPO/.beagle-cache/schema.inputs.sha256"
+SCHEMA_DARWIN="$REPO/.beagle-cache/schema-darwin.json"
+SCHEMA_DARWIN_FP="$REPO/.beagle-cache/schema-darwin.inputs.sha256"
 SCHEMA_CONFIG="$REPO/.beagle-cache/validate-config.json"
 SCHEMA_CONFIG_SOURCE="${FIRN_SCHEMA_CONFIG:-$REPO/config/beagle-validate.json}"
 FP_HELPER="$REPO/scripts/firn-schema-input-fingerprint"
@@ -94,6 +96,44 @@ PY
   return 0
 }
 
+darwin_schema_cache_is_current() {
+  local recorded_fp current_fp
+
+  DARWIN_SCHEMA_CACHE_REASON=''
+  for required in "$SCHEMA_DARWIN" "$SCHEMA_DARWIN_FP"; do
+    if [[ ! -f "$required" ]]; then
+      DARWIN_SCHEMA_CACHE_REASON="missing ${required#"$REPO"/}"
+      return 1
+    fi
+  done
+  if ! python3 - "$SCHEMA_DARWIN" <<'PY'
+import json
+import pathlib
+import sys
+
+try:
+    value = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+except (OSError, UnicodeError, json.JSONDecodeError):
+    raise SystemExit(1)
+if not isinstance(value, list) or not value:
+    raise SystemExit(1)
+PY
+  then
+    DARWIN_SCHEMA_CACHE_REASON='Darwin schema JSON is partial or malformed'
+    return 1
+  fi
+  recorded_fp="$(<"$SCHEMA_DARWIN_FP")"
+  current_fp="$("$FP_HELPER" --mode darwin --lock "$FLAKE_LOCK" --beagle-path "$BEAGLE_PATH" 2>/dev/null)" || {
+    DARWIN_SCHEMA_CACHE_REASON='cannot fingerprint flake.lock and Beagle schema tool inputs for Darwin'
+    return 1
+  }
+  if [[ "$recorded_fp" != "$current_fp" ]]; then
+    DARWIN_SCHEMA_CACHE_REASON='Darwin schema input fingerprint differs from flake.lock or Beagle tool identity'
+    return 1
+  fi
+  return 0
+}
+
 if [[ ! -x "$FP_HELPER" ]]; then
   echo "firn-validate: fingerprint helper missing at $FP_HELPER" >&2
   exit 2
@@ -117,6 +157,29 @@ if ! schema_cache_is_current; then
     "$SCHEMA_EXTRACT"
   if ! schema_cache_is_current; then
     echo "firn-validate: refreshed schema cache is not valid: $SCHEMA_CACHE_REASON" >&2
+    exit 1
+  fi
+fi
+
+NEED_DARWIN=false
+if (( $# > 0 )); then
+  for source in "$@"; do
+    if [[ "${source##*/}" == flake.bnix ]]; then
+      NEED_DARWIN=true
+      break
+    fi
+  done
+elif [[ -f "$REPO/flake.bnix" ]]; then
+  NEED_DARWIN=true
+fi
+
+if $NEED_DARWIN && ! darwin_schema_cache_is_current; then
+  refresh_reason=$DARWIN_SCHEMA_CACHE_REASON
+  echo "firn-validate: refreshing Darwin schema cache ($refresh_reason)..." >&2
+  FIRN_REPO="$REPO" BEAGLE_PATH="$BEAGLE_PATH" FIRN_SCHEMA_CONFIG="$SCHEMA_CONFIG_SOURCE" \
+    "$SCHEMA_EXTRACT" --darwin
+  if ! darwin_schema_cache_is_current; then
+    echo "firn-validate: refreshed Darwin schema cache is not valid: $DARWIN_SCHEMA_CACHE_REASON" >&2
     exit 1
   fi
 fi
