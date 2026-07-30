@@ -16,6 +16,8 @@ done
 cp "$HERE/north-clock-guard-codex" "$HOOKS/north-clock-guard-codex"
 cp "$AGENT_PROFILE/hooks/lib/authoring-killswitch.sh" \
   "$HOOKS/lib/authoring-killswitch.sh"
+cp "$AGENT_PROFILE/hooks/lib/harness-dial.sh" \
+  "$HOOKS/lib/harness-dial.sh"
 chmod +x "$HOOKS/north-clock-guard-codex"
 
 cat >"$HOOKS/north-clock-guard.py" <<'STUB'
