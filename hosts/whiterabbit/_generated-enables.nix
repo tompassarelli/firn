@@ -22,7 +22,6 @@
   myConfig.modules.dbeaver.enable = lib.mkDefault true;
   myConfig.modules.delta.enable = lib.mkDefault true;
   myConfig.modules.direnv.enable = lib.mkDefault true;
-  myConfig.modules.discord.enable = lib.mkDefault true;
   myConfig.modules.doom-emacs.enable = lib.mkDefault true;
   myConfig.modules.drracket.enable = lib.mkDefault true;
   myConfig.modules.dust.enable = lib.mkDefault true;
@@ -61,7 +60,6 @@
   myConfig.modules.libsecret.enable = lib.mkDefault true;
   myConfig.modules.libtool.enable = lib.mkDefault true;
   myConfig.modules.lutris.enable = lib.mkDefault true;
-  myConfig.modules.mail.enable = lib.mkDefault true;
   myConfig.modules.mpv.enable = lib.mkDefault true;
   myConfig.modules.my-agents.enable = lib.mkDefault true;
   myConfig.modules.nautilus.enable = lib.mkDefault true;
@@ -93,9 +91,7 @@
   myConfig.modules.rustfmt.enable = lib.mkDefault true;
   myConfig.modules.sbcl.enable = lib.mkDefault true;
   myConfig.modules.shellcheck.enable = lib.mkDefault true;
-  myConfig.modules.slack.enable = lib.mkDefault true;
   myConfig.modules.slurp.enable = lib.mkDefault true;
-  myConfig.modules.spotify.enable = lib.mkDefault true;
   myConfig.modules.sqlite.enable = lib.mkDefault true;
   myConfig.modules.starship.enable = lib.mkDefault true;
   myConfig.modules.steam.enable = lib.mkDefault true;
