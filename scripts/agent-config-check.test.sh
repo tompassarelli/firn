@@ -62,10 +62,97 @@ SH
   fi
 }
 
+run_locked_hook_provenance_fixture() {
+  local source_repo="$scratch/locked-hook-source"
+  local live="$scratch/locked-hook-live"
+  local post_lock_live="$scratch/post-lock-hook-live"
+  local relative='hooks/provider-hook.sh'
+  local post_lock_relative='hooks/post-lock-hook.sh'
+  local locked_revision
+  local firn_source="$scratch/firn-hook-source"
+  local firn_live="$scratch/firn-hook-live"
+
+  mkdir -p "$source_repo/hooks"
+  git -C "$source_repo" init -q
+  git -C "$source_repo" config user.email test@example.invalid
+  git -C "$source_repo" config user.name hook-provenance-test
+  printf '%s\n' '#!/usr/bin/env bash' 'printf locked\\n' \
+    >"$source_repo/$relative"
+  git -C "$source_repo" add "$relative"
+  git -C "$source_repo" commit -qm locked
+  locked_revision="$(git -C "$source_repo" rev-parse HEAD)"
+  cp "$source_repo/$relative" "$live"
+
+  printf '%s\n' '#!/usr/bin/env bash' 'printf checkout-ahead\\n' \
+    >"$source_repo/$relative"
+  printf '%s\n' '#!/usr/bin/env bash' 'printf post-lock\\n' \
+    >"$source_repo/$post_lock_relative"
+  git -C "$source_repo" add "$relative" "$post_lock_relative"
+  git -C "$source_repo" commit -qm checkout-ahead
+
+  managed_hook_source_matches \
+    "$live" "$source_repo/$relative" north "$source_repo" \
+    "$locked_revision" "$relative"
+
+  cp "$source_repo/$relative" "$live"
+  if managed_hook_source_matches \
+     "$live" "$source_repo/$relative" north "$source_repo" \
+     "$locked_revision" "$relative"; then
+    printf 'checkout-ahead provider bytes were accepted as locked bytes\n' >&2
+    exit 1
+  fi
+
+  cp "$source_repo/$post_lock_relative" "$post_lock_live"
+  if managed_hook_source_matches \
+     "$post_lock_live" "$source_repo/$post_lock_relative" north "$source_repo" \
+     "$locked_revision" "$post_lock_relative"; then
+    printf 'post-lock-added provider path was accepted at the locked revision\n' >&2
+    exit 1
+  fi
+
+  cp "$source_repo/$relative" "$live"
+  if managed_hook_source_matches \
+     "$live" "$source_repo/$relative" north "$source_repo" \
+     invalid "$relative"; then
+    printf 'invalid provider revision was accepted\n' >&2
+    exit 1
+  fi
+  if managed_hook_source_matches \
+     "$live" "$source_repo/$relative" north "$source_repo" \
+     '' "$relative"; then
+    printf 'missing provider revision was accepted\n' >&2
+    exit 1
+  fi
+  if managed_hook_source_matches \
+     "$live" "$source_repo/$relative" north "$source_repo" \
+     ffffffffffffffffffffffffffffffffffffffff "$relative"; then
+    printf 'unavailable provider revision was accepted\n' >&2
+    exit 1
+  fi
+
+  printf '%s\n' '#!/usr/bin/env bash' 'printf firn\\n' >"$firn_source"
+  cp "$firn_source" "$firn_live"
+  managed_hook_source_matches \
+    "$firn_live" "$firn_source" self '' '' 'unused'
+  printf '%s\n' '#!/usr/bin/env bash' 'printf mutated\\n' >"$firn_source"
+  if managed_hook_source_matches \
+     "$firn_live" "$firn_source" self '' '' 'unused'; then
+    printf 'Firn self-source mutation was accepted\n' >&2
+    exit 1
+  fi
+}
+
 if [ "${1:-}" = '--codex-mcp-inventory-only' ]; then
   source "$REPO/scripts/agent-config-check.sh"
   run_codex_mcp_inventory_fixture
   printf 'ok: Codex noninteractive MCP inventory excludes the credential-gated Linear server\n'
+  exit 0
+fi
+
+if [ "${1:-}" = '--locked-hook-provenance-only' ]; then
+  source "$REPO/scripts/agent-config-check.sh"
+  run_locked_hook_provenance_fixture
+  printf 'ok: managed hooks distinguish locked provider blobs from Firn self sources\n'
   exit 0
 fi
 
@@ -164,6 +251,7 @@ grep -Fq '"Allocation  ' \
   "$REPO/scripts/agent-config-check.sh"
 
 source "$REPO/scripts/agent-config-check.sh"
+run_locked_hook_provenance_fixture
 
 claude_mcp_server_connected \
   $'north: /run/current-system/sw/bin/north-mcp - ✔ Connected\nfram: ✔ Connected' \

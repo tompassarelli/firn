@@ -989,6 +989,38 @@ immutable_store_link_matches() {
   fi
 }
 
+locked_git_blob_matches_file() {
+  local live="$1" source_repo="$2" revision="$3" relative="$4"
+
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || return 1
+  git -C "$source_repo" cat-file -e "$revision:$relative" 2>/dev/null ||
+    return 1
+  [ -f "$live" ] || return 1
+  cmp -s "$live" <(git -C "$source_repo" show "$revision:$relative")
+}
+
+managed_hook_source_matches() {
+  local live="$1" expected_checkout="$2" authority="$3"
+  local source_repo="$4" revision="$5" git_blob_path="$6"
+
+  case "$authority" in
+    self) cmp -s "$live" "$expected_checkout" ;;
+    north|beagle|fram)
+      locked_git_blob_matches_file \
+        "$live" "$source_repo" "$revision" "$git_blob_path"
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+flake_locked_revision() {
+  local lock="$1" node="$2"
+
+  jq -er --arg node "$node" '
+    .nodes[$node].locked.rev | select(test("^[0-9a-f]{40}$"))
+  ' "$lock"
+}
+
 write_shell_script_bin_matches_source() {
   local live="$1" source="$2" store_root="${3:-/nix/store}"
   local resolved canonical_store package_root interpreter interpreter_package first_line
@@ -1482,30 +1514,32 @@ validate_codex_managed_policy() {
   fi
 
   local module="$REPO/modules/codex/default.bnix"
-  local spec relative source_expr live expected resolved north_revision
+  local spec relative source_expr expected_checkout authority git_blob_path
+  local live resolved
   local -a source_specs=(
-    "requirements.toml|(s flakeRoot \"/modules/codex/requirements.toml\")|$CODEX_REQUIREMENTS"
-    "beagle-session-start.sh|(s inputs.beagle \"/integrations/north/hooks/beagle-session-start.sh\")|$BEAGLE_INTEGRATION/hooks/beagle-session-start.sh"
-    "agent-spawn-guard.sh|(s inputs.north \"/agent-profile/hooks/agent-spawn-guard.sh\")|$SHARED/hooks/agent-spawn-guard.sh"
-    "code-upstream-guard.sh|(s inputs.fram \"/integrations/north/hooks/code-upstream-guard.sh\")|$FRAM_INTEGRATION/hooks/code-upstream-guard.sh"
-    "firn-guard.sh|(s flakeRoot \"/modules/north-profile/firn/hooks/firn-guard.sh\")|$FIRN_INTEGRATION/hooks/firn-guard.sh"
-    "north-clock-guard.sh|(s inputs.north \"/agent-profile/hooks/north-clock-guard.sh\")|$SHARED/hooks/north-clock-guard.sh"
-    "north-clock-guard.py|(s inputs.north \"/agent-profile/hooks/north-clock-guard.py\")|$SHARED/hooks/north-clock-guard.py"
-    "tripwire-guard.sh|(s inputs.north \"/agent-profile/hooks/tripwire-guard.sh\")|$SHARED/hooks/tripwire-guard.sh"
-    "logcompress-hook.js|(s inputs.north \"/agent-profile/hooks/logcompress-hook.js\")|$SHARED/hooks/logcompress-hook.js"
-    "logcompress.js|(s inputs.north \"/agent-profile/hooks/logcompress.js\")|$SHARED/hooks/logcompress.js"
-    "racket-build-guard.sh|(s inputs.beagle \"/integrations/north/hooks/racket-build-guard.sh\")|$BEAGLE_INTEGRATION/hooks/racket-build-guard.sh"
-    "lib/authoring-killswitch.sh|(s inputs.north \"/agent-profile/hooks/lib/authoring-killswitch.sh\")|$SHARED/hooks/lib/authoring-killswitch.sh"
-    "lib/harness-dial.sh|(s inputs.north \"/agent-profile/hooks/lib/harness-dial.sh\")|$SHARED/hooks/lib/harness-dial.sh"
-    "registry.tsv|(s inputs.north \"/agent-profile/hooks/registry.tsv\")|$SHARED/hooks/registry.tsv"
-    "north-on-spawn-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-spawn-codex\")|$CODEX/hooks/north-on-spawn-codex"
-    "north-on-tooluse-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-tooluse-codex\")|$CODEX/hooks/north-on-tooluse-codex"
-    "north-mark-delegated-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-mark-delegated-codex\")|$CODEX/hooks/north-mark-delegated-codex"
-    "north-on-stop-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-stop-codex\")|$CODEX/hooks/north-on-stop-codex"
-    "north-clock-guard-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-clock-guard-codex\")|$CODEX/hooks/north-clock-guard-codex"
+    "requirements.toml|(s flakeRoot \"/modules/codex/requirements.toml\")|$CODEX_REQUIREMENTS|self|modules/codex/requirements.toml"
+    "beagle-session-start.sh|(s inputs.beagle \"/integrations/north/hooks/beagle-session-start.sh\")|$BEAGLE_INTEGRATION/hooks/beagle-session-start.sh|beagle|integrations/north/hooks/beagle-session-start.sh"
+    "agent-spawn-guard.sh|(s inputs.north \"/agent-profile/hooks/agent-spawn-guard.sh\")|$SHARED/hooks/agent-spawn-guard.sh|north|profiles/tom/hooks/agent-spawn-guard.sh"
+    "code-upstream-guard.sh|(s inputs.fram \"/integrations/north/hooks/code-upstream-guard.sh\")|$FRAM_INTEGRATION/hooks/code-upstream-guard.sh|fram|integrations/north/hooks/code-upstream-guard.sh"
+    "firn-guard.sh|(s flakeRoot \"/modules/north-profile/firn/hooks/firn-guard.sh\")|$FIRN_INTEGRATION/hooks/firn-guard.sh|self|modules/north-profile/firn/hooks/firn-guard.sh"
+    "north-clock-guard.sh|(s inputs.north \"/agent-profile/hooks/north-clock-guard.sh\")|$SHARED/hooks/north-clock-guard.sh|north|profiles/tom/hooks/north-clock-guard.sh"
+    "north-clock-guard.py|(s inputs.north \"/agent-profile/hooks/north-clock-guard.py\")|$SHARED/hooks/north-clock-guard.py|north|profiles/tom/hooks/north-clock-guard.py"
+    "tripwire-guard.sh|(s inputs.north \"/agent-profile/hooks/tripwire-guard.sh\")|$SHARED/hooks/tripwire-guard.sh|north|profiles/tom/hooks/tripwire-guard.sh"
+    "logcompress-hook.js|(s inputs.north \"/agent-profile/hooks/logcompress-hook.js\")|$SHARED/hooks/logcompress-hook.js|north|profiles/tom/hooks/logcompress-hook.js"
+    "logcompress.js|(s inputs.north \"/agent-profile/hooks/logcompress.js\")|$SHARED/hooks/logcompress.js|north|profiles/tom/hooks/logcompress.js"
+    "racket-build-guard.sh|(s inputs.beagle \"/integrations/north/hooks/racket-build-guard.sh\")|$BEAGLE_INTEGRATION/hooks/racket-build-guard.sh|beagle|integrations/north/hooks/racket-build-guard.sh"
+    "lib/authoring-killswitch.sh|(s inputs.north \"/agent-profile/hooks/lib/authoring-killswitch.sh\")|$SHARED/hooks/lib/authoring-killswitch.sh|north|profiles/tom/hooks/lib/authoring-killswitch.sh"
+    "lib/harness-dial.sh|(s inputs.north \"/agent-profile/hooks/lib/harness-dial.sh\")|$SHARED/hooks/lib/harness-dial.sh|north|profiles/tom/hooks/lib/harness-dial.sh"
+    "registry.tsv|(s inputs.north \"/agent-profile/hooks/registry.tsv\")|$SHARED/hooks/registry.tsv|north|profiles/tom/hooks/registry.tsv"
+    "north-on-spawn-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-spawn-codex\")|$CODEX/hooks/north-on-spawn-codex|self|dotfiles/codex/hooks/north-on-spawn-codex"
+    "north-on-tooluse-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-tooluse-codex\")|$CODEX/hooks/north-on-tooluse-codex|self|dotfiles/codex/hooks/north-on-tooluse-codex"
+    "north-mark-delegated-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-mark-delegated-codex\")|$CODEX/hooks/north-mark-delegated-codex|self|dotfiles/codex/hooks/north-mark-delegated-codex"
+    "north-on-stop-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-stop-codex\")|$CODEX/hooks/north-on-stop-codex|self|dotfiles/codex/hooks/north-on-stop-codex"
+    "north-clock-guard-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-clock-guard-codex\")|$CODEX/hooks/north-clock-guard-codex|self|dotfiles/codex/hooks/north-clock-guard-codex"
   )
   for spec in "${source_specs[@]}"; do
-    IFS='|' read -r relative source_expr expected <<<"$spec"
+    IFS='|' read -r relative source_expr expected_checkout authority \
+      git_blob_path <<<"$spec"
     if grep -Fq "$source_expr" "$module"; then :
     else bad "Codex module does not install $relative from its owning source: $source_expr"; fi
   done
@@ -1576,20 +1610,50 @@ PY
 
   if [ "$LOCAL" -eq 1 ]; then
     local generation_exact=1
+    local north_revision beagle_revision fram_revision source_repo source_revision
     if cmp -s "$CODEX_REQUIREMENTS" /etc/codex/requirements.toml; then :
     else
       generation_exact=0
       bad 'Codex managed requirements are not the current /etc generation'
     fi
+    north_revision="$(flake_locked_revision "$REPO/flake.lock" north 2>/dev/null || true)"
+    beagle_revision="$(flake_locked_revision "$REPO/flake.lock" beagle 2>/dev/null || true)"
+    fram_revision="$(flake_locked_revision "$REPO/flake.lock" fram 2>/dev/null || true)"
     for spec in "${source_specs[@]:1}"; do
-      IFS='|' read -r relative source_expr expected <<<"$spec"
+      IFS='|' read -r relative source_expr expected_checkout authority \
+        git_blob_path <<<"$spec"
       live="/etc/codex/hooks/$relative"
       resolved="$(readlink -f "$live" 2>/dev/null || true)"
+      source_repo=''
+      source_revision=''
+      case "$authority" in
+        self) ;;
+        north)
+          source_repo="$(git -C "$(dirname "$expected_checkout")" \
+            rev-parse --show-toplevel 2>/dev/null || true)"
+          source_revision="$north_revision"
+          ;;
+        beagle)
+          source_repo="$(git -C "$(dirname "$expected_checkout")" \
+            rev-parse --show-toplevel 2>/dev/null || true)"
+          source_revision="$beagle_revision"
+          ;;
+        fram)
+          source_repo="$(git -C "$(dirname "$expected_checkout")" \
+            rev-parse --show-toplevel 2>/dev/null || true)"
+          source_revision="$fram_revision"
+          ;;
+      esac
       if [ -n "$resolved" ] && [[ "$resolved" = /nix/store/* ]] &&
-         cmp -s "$expected" "$live"; then :
-      else
+         managed_hook_source_matches \
+           "$live" "$expected_checkout" "$authority" "$source_repo" \
+           "$source_revision" "$git_blob_path"; then :
+      elif [ "$authority" = self ]; then
         generation_exact=0
         bad "Codex managed hook $live is not the exact store-backed Firn source"
+      else
+        generation_exact=0
+        bad "Codex managed hook $live is not exact to flake.lock $authority@${source_revision:-missing}:$git_blob_path"
       fi
     done
     for source in "${runtimes[@]}"; do
@@ -1626,10 +1690,6 @@ PY
     else
       soft 'Interactive Codex is absent from PATH; managed provider authority remains independently attested'
     fi
-    north_revision="$(
-      jq -er '.nodes.north.locked.rev | select(test("^[0-9a-f]{40}$"))' \
-        "$REPO/flake.lock" 2>/dev/null || true
-    )"
     for relative in \
       bin/north-on-spawn \
       bin/north-on-tooluse \
