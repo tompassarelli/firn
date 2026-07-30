@@ -2,10 +2,11 @@
 
 (ns default)
 
-;; beagle is DEV-CHANNEL ONLY (two-speed step 5): the packaged flake build of
+;; The Beagle compiler is DEV-CHANNEL ONLY: the packaged flake build of
 ;; beagle no longer enters environment.systemPackages, so it no longer enters
-;; the system closure. Only the checkout-execution `*-dev` shims below ship;
-;; each execs ~/code/beagle/main's own bin/<name> so the racket that runs is
+;; the system closure. Only the checkout-execution `*-dev` shims ship from
+;; Beagle; the generation-owned Firn native driver below remains installed.
+;; Each shim execs ~/code/beagle/main's own bin/<name> so the racket that runs is
 ;; whatever that checkout's own direnv resolves — never a packaged racket, and
 ;; never the packaged beagle. This matches the north and fram delivery
 ;; contract: ordinary names are immutable generation-owned surfaces, *-dev
@@ -21,9 +22,11 @@
 ;; runs the checkout on the checkout's own terms; direnv is supplied so that
 ;; resolution works outside a direnv shell (dispatched agent, CI, cron, plain
 ;; subshell).
-(nix/module [config lib pkgs ...]
+(nix/module [config flakeRoot lib pkgs ...]
   (let
-    [liveInputs
+    [firnNative
+      (get (get flakeRoot.packages pkgs.stdenv.hostPlatform.system) :firn-native)
+     liveInputs
       (nix/with pkgs [bash coreutils direnv findutils gawk git gnugrep gnused])
      devCommandNames
       ["beagle" "beagle-build" "beagle-check" "beagle-validate" "beagle-syntax"
@@ -46,7 +49,7 @@
     {:tags [development]
      :options.myConfig.modules.beagle.enable
       (lib.mkEnableOption
-        "beagle checkout-only development commands (no packaged build enters the system closure)")
+        "Beagle checkout development commands and the packaged Firn native driver")
      :config
       (lib.mkIf config.myConfig.modules.beagle.enable
-        {:environment.systemPackages devCommands})}))
+        {:environment.systemPackages (++ devCommands [firnNative])})}))

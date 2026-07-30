@@ -7,6 +7,7 @@ pkgs.stdenvNoCC.mkDerivation {
 
   nativeBuildInputs = [
     beagle
+    pkgs.binutils
     zig
   ];
 
@@ -27,7 +28,10 @@ pkgs.stdenvNoCC.mkDerivation {
     runHook preInstall
 
     install -Dm755 build/firn-native "$out/bin/firn-native"
+    strip --strip-debug "$out/bin/firn-native"
 
     runHook postInstall
   '';
+
+  disallowedReferences = [ zig ];
 }
