@@ -7,6 +7,68 @@ BEAGLE_INTEGRATION="${AGENT_CONFIG_BEAGLE_INTEGRATION:-$HOME/code/beagle/main/in
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/agent-config-check.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
 
+run_quiet_child() {
+  local label="$1"
+  local output status
+  shift
+
+  set +e
+  output="$("$@" 2>&1)"
+  status=$?
+  set -e
+
+  if [ "$status" -eq 0 ]; then
+    return 0
+  fi
+
+  printf '%s failed with rc=%s\n' "$label" "$status" >&2
+  [ -z "$output" ] || printf '%s\n' "$output" >&2
+  return "$status"
+}
+
+run_quiet_child_regression() {
+  local output status
+
+  output="$(
+    run_quiet_child 'successful fixture' \
+      bash -c 'printf "suppressed stdout\n"; printf "suppressed stderr\n" >&2' \
+      2>&1
+  )"
+  [ -z "$output" ] || {
+    printf 'successful quiet child leaked output: %s\n' "$output" >&2
+    return 1
+  }
+
+  if output="$(
+    run_quiet_child 'failing fixture' \
+      bash -c 'printf "fixture stdout\n"; printf "fixture stderr\n" >&2; exit 7' \
+      2>&1
+  )"; then
+    printf 'failing quiet child unexpectedly succeeded\n' >&2
+    return 1
+  else
+    status=$?
+  fi
+
+  [ "$status" -eq 7 ]
+  grep -Fq 'failing fixture failed with rc=7' <<<"$output"
+  grep -Fq 'fixture stdout' <<<"$output"
+  grep -Fq 'fixture stderr' <<<"$output"
+}
+
+if [ "${1:-}" = '--quiet-child-regression-only' ]; then
+  run_quiet_child_regression
+  printf 'ok: quiet child failures preserve status and diagnostics\n'
+  exit 0
+fi
+
+if [ "${1:-}" = '--lifecycle-child-only' ]; then
+  run_quiet_child 'Codex lifecycle wrapper tests' \
+    "$REPO/dotfiles/codex/hooks/codex-lifecycle-wrappers.test.sh"
+  printf 'ok: Codex lifecycle wrapper child is quiet and green\n'
+  exit 0
+fi
+
 run_codex_mcp_inventory_fixture() {
   local codex_inventory codex_inventory_elapsed_ms codex_inventory_start_ns
 
@@ -234,8 +296,10 @@ report="$("$REPO/scripts/agent-config-check.sh")"
 grep -Fq '19 managed authoritative bindings' <<<"$report"
 # shellcheck disable=SC2088  # report intentionally renders the literal user-facing alias
 grep -Fq '~/.codex/hooks.json ignored by managed-only policy (0 active bindings)' <<<"$report"
-"$REPO/dotfiles/codex/hooks/codex-lifecycle-wrappers.test.sh" >/dev/null
-"$REPO/dotfiles/codex/hooks/north-clock-guard-codex.test.sh" >/dev/null
+run_quiet_child 'Codex lifecycle wrapper tests' \
+  "$REPO/dotfiles/codex/hooks/codex-lifecycle-wrappers.test.sh"
+run_quiet_child 'Codex clock guard tests' \
+  "$REPO/dotfiles/codex/hooks/north-clock-guard-codex.test.sh"
 grep -Fq '{:source (s flakeRoot "/dotfiles/bin")}' \
   "$REPO/modules/bash/default.bnix"
 grep -Fq 'Live safe-push is immutable and supports explicit --to destinations' \
