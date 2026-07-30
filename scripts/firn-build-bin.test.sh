@@ -4,6 +4,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 scratch="$(mktemp -d)"
 trap 'rm -rf "${scratch:?}"' EXIT
+committed_wrapper="$HERE/../dotfiles/bin/firn"
 
 beagle="$scratch/beagle"
 bin_dir="$scratch/bin"
@@ -135,6 +136,24 @@ while IFS= read -r roots; do
 done <"$compiled_root_log"
 bash -n "$bin_dir/firn"
 
+extract_native_dispatch() {
+  awk '
+    /^NATIVE_BIN=/ { capture = 1 }
+    capture && NF == 0 { exit }
+    capture { print }
+  ' "$1"
+}
+
+expected_dispatch="$scratch/expected-native-dispatch"
+generated_dispatch="$scratch/generated-native-dispatch"
+extract_native_dispatch "$committed_wrapper" >"$expected_dispatch"
+extract_native_dispatch "$bin_dir/firn" >"$generated_dispatch"
+[ -s "$expected_dispatch" ]
+if ! cmp -s "$expected_dispatch" "$generated_dispatch"; then
+  printf 'generated Firn wrapper changed or removed native dispatch\n' >&2
+  exit 1
+fi
+
 # Switching worktree identity selects the matching immutable image without a
 # rebuild or mutation of the other worktree's cache entry.
 output_a="$(FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" "$bin_dir/firn")"
@@ -165,6 +184,16 @@ FIRN_NATIVE_BIN="$native" FIRN_NATIVE_CALLS="$native_calls" \
   FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" \
   "$repo_a/dotfiles/bin/firn" rebuild whiterabbit
 grep -Fxq 'rebuild whiterabbit' "$native_calls"
+FIRN_NATIVE_BIN="$native" FIRN_NATIVE_CALLS="$native_calls" \
+  FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" \
+  "$repo_a/dotfiles/bin/firn" host rebuild whiterabbit --skip-checks
+grep -Fxq 'host rebuild whiterabbit --skip-checks' "$native_calls"
+status_output="$(
+  FIRN_NATIVE_BIN="$native" FIRN_NATIVE_CALLS="$native_calls" \
+    FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" \
+    "$repo_a/dotfiles/bin/firn" status
+)"
+grep -Fxq 'source=source-a' <<<"$status_output"
 disabled_output="$(
   FIRN_DISABLE_NATIVE=1 FIRN_NATIVE_BIN="$native" \
     FIRN_NATIVE_CALLS="$native_calls" FIRN_REPO="$repo_a" \
@@ -172,7 +201,7 @@ disabled_output="$(
     "$repo_a/dotfiles/bin/firn" rebuild whiterabbit
 )"
 grep -Fxq 'source=source-a' <<<"$disabled_output"
-[ "$(wc -l <"$native_calls")" -eq 1 ]
+[ "$(wc -l <"$native_calls")" -eq 2 ]
 
 if find "$share_dir" "$bin_dir" \( -name '*.tmp' -o -name '.firn.*' -o -name '.compile.*' \) | grep -q .; then
   printf 'transactional Firn publication left a temporary file behind\n' >&2
