@@ -98,10 +98,19 @@ lint_roots() {
 }
 
 lint_git() {
-  # git commit exports a caller-local alternate index and repo pointers
-  # (GIT_INDEX_FILE, GIT_DIR, GIT_WORK_TREE) to hook subprocesses. Those must
-  # not follow git -C into the other repositories in the lint corpus.
-  env -u GIT_INDEX_FILE -u GIT_DIR -u GIT_WORK_TREE git "$@"
+  local local_env_vars variable
+  local -a unset_args=()
+
+  local_env_vars="$(command git rev-parse --local-env-vars)" || return 2
+  while IFS= read -r variable; do
+    [[ -n "$variable" ]] || continue
+    if [[ ! "$variable" =~ ^GIT_[A-Z0-9_]+$ ]]; then
+      printf 'world: invalid Git local environment name: %s\n' "$variable" >&2
+      return 2
+    fi
+    unset_args+=(-u "$variable")
+  done <<<"$local_env_vars"
+  env "${unset_args[@]}" git "$@"
 }
 
 lint_skip_path() {

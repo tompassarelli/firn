@@ -4,6 +4,18 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../.." && pwd)"
 readonly REPO_ROOT
 readonly WORLD="$REPO_ROOT/dotfiles/bin/world"
+expected_allowed="$(
+  sed -n '/^[[:space:]]*#/d; /^[[:space:]]*$/d; {
+    s/[[:space:]]//g
+    p
+    q
+  }' "$REPO_ROOT/config/world-lint-baseline"
+)"
+[[ "$expected_allowed" =~ ^[0-9]+$ ]] || {
+  printf 'FAIL: invalid world lint baseline: %s\n' "$expected_allowed" >&2
+  exit 1
+}
+readonly expected_allowed
 scratch="$(mktemp -d)"
 trap 'rm -rf "${scratch:?}"' EXIT
 
@@ -33,12 +45,23 @@ pre_commit="$(resolve_pre_commit)" || {
 }
 readonly pre_commit
 
-nixos_index="$(env -u GIT_INDEX_FILE git -C "$REPO_ROOT" rev-parse --git-path index)"
-cp "$nixos_index" "$scratch/nixos-index"
+caller_repo="$scratch/caller-repo"
+caller_linked="$scratch/caller-linked"
+mkdir -p "$caller_repo"
+git -C "$caller_repo" init -q
+git -C "$caller_repo" config user.name world-test
+git -C "$caller_repo" config user.email world-test@example.invalid
+printf 'caller\n' >"$caller_repo/tracked"
+git -C "$caller_repo" add tracked
+git -C "$caller_repo" commit -qm caller
+git -C "$caller_repo" worktree add -q -b linked-hook "$caller_linked"
+caller_git_dir="$(git -C "$caller_linked" rev-parse --absolute-git-dir)"
+caller_index="$(git -C "$caller_linked" rev-parse --git-path index)"
 canonical_roots="$REPO_ROOT:$("$WORLD" get repo.north):$("$WORLD" get repo.fram):$("$WORLD" get repo.beagle)" # world:allow
 set +e
 alternate_index_output="$(
-  GIT_INDEX_FILE="$scratch/nixos-index" \
+  GIT_DIR="$caller_git_dir" \
+  GIT_INDEX_FILE="$caller_index" \
   WORLD_MANIFEST_PATH="$scratch/missing-manifest.env" \
   WORLD_LINT_ROOTS="$canonical_roots" \
   WORLD_LINT_FAIL=1 \
@@ -48,17 +71,17 @@ alternate_index_status=$?
 set -e
 
 (( alternate_index_status == 0 )) || {
-  printf 'FAIL: caller alternate Git index narrowed the four-root lint corpus\n%s\n' \
+  printf 'FAIL: caller linked-worktree Git environment narrowed the four-root lint corpus\n%s\n' \
     "$alternate_index_output" >&2
   exit 1
 }
-grep -F 'topology-refs: 386 allowed, 0 new' \
+grep -F "topology-refs: $expected_allowed allowed, 0 new" \
   <<<"$alternate_index_output" >/dev/null || {
-  printf 'FAIL: alternate-index lint did not scan the canonical inventory\n%s\n' \
+  printf 'FAIL: linked-worktree Git environment did not scan the canonical inventory\n%s\n' \
     "$alternate_index_output" >&2
   exit 1
 }
-printf 'PASS: caller alternate Git index cannot narrow the four-root lint corpus\n'
+printf 'PASS: caller linked-worktree Git environment cannot narrow the four-root lint corpus\n'
 
 set +e
 hostile_output="$(
@@ -75,7 +98,8 @@ set -e
     "$hostile_output" >&2
   exit 1
 }
-grep -F 'topology-refs: 386 allowed, 0 new' <<<"$hostile_output" >/dev/null || {
+grep -F "topology-refs: $expected_allowed allowed, 0 new" \
+  <<<"$hostile_output" >/dev/null || {
   printf 'FAIL: production hook did not scan the four-root canonical inventory\n%s\n' \
     "$hostile_output" >&2
   exit 1
