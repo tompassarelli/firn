@@ -17,6 +17,7 @@ nix eval --raw --impure --expr "
       };
       pkgs = {
         stdenv.hostPlatform.system = \"test\";
+        systemd = \"/systemd\";
         babashka = \"/bb\";
         coreutils = \"/coreutils\";
         git = \"/git\";
@@ -26,10 +27,10 @@ nix eval --raw --impure --expr "
     home = module.config.home-manager.users.tom { config = {}; };
     sweep = home.systemd.user.services.north-reactor-sweep;
   in
-    assert sweep.restartIfChanged == false;
+    assert sweep.Unit.X-SwitchMethod == \"keep-old\";
     assert !(sweep.Service ? restartIfChanged);
-    assert builtins.head sweep.Service.Environment == \"PATH=/bb/bin:/coreutils/bin:/git/bin\";
+    assert builtins.head sweep.Service.Environment == \"PATH=/systemd/bin:/bb/bin:/coreutils/bin:/git/bin\";
     \"ok\"
 " | grep -Fxq ok
 
-printf 'ok: north-reactor-sweep does not restart on Home Manager unit changes and resolves git at runtime\n'
+printf 'ok: north-reactor-sweep keeps old runs and resolves systemd-run plus git at runtime\n'

@@ -60,7 +60,7 @@
                    :X-SwitchMethod "keep-old"}
                  :Service
                   {:Type             "oneshot"
-                   :Environment      [(s "PATH=" pkgs.babashka "/bin:" pkgs.coreutils "/bin:" pkgs.git "/bin")]
+                   :Environment      [(s "PATH=" pkgs.systemd "/bin:" pkgs.babashka "/bin:" pkgs.coreutils "/bin:" pkgs.git "/bin")]
                    :WorkingDirectory northPkg
                    :ExecStart        (s pkgs.babashka "/bin/bb " northPkg "/cli/north-reactor.clj sweep-once")}}
                :systemd.user.timers.north-reactor-sweep
