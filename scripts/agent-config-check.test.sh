@@ -231,7 +231,7 @@ grep -Fq '"/home/tom/.agents/hooks/north-session-end.sh"' \
 ! grep -Fq 'writeShellScriptBin "north-session-end"' \
   "$REPO/modules/claude/default.bnix"
 report="$("$REPO/scripts/agent-config-check.sh")"
-grep -Fq '17 managed authoritative bindings' <<<"$report"
+grep -Fq '19 managed authoritative bindings' <<<"$report"
 # shellcheck disable=SC2088  # report intentionally renders the literal user-facing alias
 grep -Fq '~/.codex/hooks.json ignored by managed-only policy (0 active bindings)' <<<"$report"
 "$REPO/dotfiles/codex/hooks/codex-lifecycle-wrappers.test.sh" >/dev/null
@@ -282,7 +282,7 @@ diff -u \
   "$scratch/claude-probe-calls"
 
 managed_policy="$REPO/modules/codex/requirements.toml"
-[ "$(codex_managed_policy_binding_count "$managed_policy")" = 17 ]
+[ "$(codex_managed_policy_binding_count "$managed_policy")" = 19 ]
 cp "$managed_policy" "$scratch/managed-policy-failure-mode-missing.toml"
 sed -i '/^managed_hook_failure_mode = "block"$/d' \
   "$scratch/managed-policy-failure-mode-missing.toml"
@@ -367,7 +367,7 @@ missing_legacy_report="$(
   CODEX_LEGACY_HOOKS="$missing_legacy" \
     "$REPO/scripts/agent-config-check.sh"
 )"
-grep -Fq '17 managed authoritative bindings' <<<"$missing_legacy_report"
+grep -Fq '19 managed authoritative bindings' <<<"$missing_legacy_report"
 grep -Fq 'ignored by managed-only policy (0 active bindings)' \
   <<<"$missing_legacy_report"
 printf '%s\n' '{not-json' >"$scratch/invalid-legacy-hooks.json"
@@ -375,7 +375,7 @@ invalid_legacy_report="$(
   CODEX_LEGACY_HOOKS="$scratch/invalid-legacy-hooks.json" \
     "$REPO/scripts/agent-config-check.sh"
 )"
-grep -Fq '17 managed authoritative bindings' <<<"$invalid_legacy_report"
+grep -Fq '19 managed authoritative bindings' <<<"$invalid_legacy_report"
 grep -Fq 'ignored by managed-only policy (0 active bindings)' \
   <<<"$invalid_legacy_report"
 
@@ -895,6 +895,34 @@ chmod +x "$fixture_public" "$fixture_wrapped"
 north_wrapped_runtime_matches_locked_source \
   "$fixture_public" "$fixture_north_repo" "$fixture_north_revision" \
   bin/north-on-spawn "$fixture_store"
+
+# A locked body larger than one pipe buffer: any shebang read that pipes
+# `git show` into a truncating reader dies of SIGPIPE under pipefail and
+# reports a byte-perfect wrapper as provenance drift.
+{
+  printf '%s\n' '#!/usr/bin/env bash'
+  seq 1 4000 | sed 's/^/# padding line /'
+} >"$fixture_north_repo/bin/north-on-spawn"
+[ "$(wc -c <"$fixture_north_repo/bin/north-on-spawn")" -gt 65536 ]
+git -C "$fixture_north_repo" add bin/north-on-spawn
+git -C "$fixture_north_repo" commit -qm 'locked body wider than a pipe buffer'
+fixture_wide_revision="$(git -C "$fixture_north_repo" rev-parse HEAD)"
+{
+  printf '#!%s\n' "$fixture_bash"
+  git -C "$fixture_north_repo" show \
+    "$fixture_wide_revision:bin/north-on-spawn" | tail -n +2
+} >"$fixture_wrapped"
+chmod +x "$fixture_wrapped"
+north_wrapped_runtime_matches_locked_source \
+  "$fixture_public" "$fixture_north_repo" "$fixture_wide_revision" \
+  bin/north-on-spawn "$fixture_store"
+{
+  printf '#!%s\n' "$fixture_bash"
+  git -C "$fixture_north_repo" show \
+    "$fixture_north_revision:bin/north-on-spawn" | tail -n +2
+} >"$fixture_wrapped"
+chmod +x "$fixture_wrapped"
+
 grep -Fq '"$HOME/code/north/main" \' \
   "$REPO/scripts/agent-config-check.sh"
 if grep -Fq '"$HOME/code/north" \' \

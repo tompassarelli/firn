@@ -898,6 +898,7 @@ expected = {
                     command("code-upstream-guard.sh", 10),
                     command("firn-guard.sh", 10),
                     command("north-clock-guard-codex", 10),
+                    command("launch-critical-worktree-guard.sh", 10),
                 ],
             },
             {
@@ -907,6 +908,7 @@ expected = {
                     command("tripwire-guard.sh", 10),
                     command("firn-guard.sh", 10),
                     command("north-clock-guard-codex", 10),
+                    command("launch-critical-worktree-guard.sh", 10),
                 ],
             },
         ],
@@ -1056,7 +1058,7 @@ north_wrapped_runtime_matches_locked_source() {
   local public="$1" source_repo="$2" revision="$3" relative="$4"
   local store_root="${5:-/nix/store}"
   local resolved canonical_store package_root wrapped wrapper_interpreter interpreter_package
-  local wrapper_header body_header locked_header expected_home expected_exec
+  local wrapper_header body_header locked_body locked_header expected_home expected_exec
   local path_line path_entry path_package index=1 path_blocks=0
   local -a wrapper_lines=()
 
@@ -1088,7 +1090,10 @@ north_wrapped_runtime_matches_locked_source() {
 
   IFS= read -r body_header <"$wrapped" || return 1
   [ "$body_header" = "#!$wrapper_interpreter" ] || return 1
-  locked_header="$(git -C "$source_repo" show "$revision:$relative" | head -n 1)" || return 1
+  # Slice the shebang in-shell: `| head -n 1` under pipefail reports SIGPIPE
+  # (141) and would flag a byte-perfect wrapper as provenance drift.
+  locked_body="$(git -C "$source_repo" show "$revision:$relative")" || return 1
+  locked_header="${locked_body%%$'\n'*}"
   [[ "$locked_header" = '#!'* ]] || return 1
   cmp -s \
     <(tail -n +2 "$wrapped") \
@@ -1507,8 +1512,8 @@ validate_codex_managed_policy() {
   CODEX_MANAGED_BINDINGS="$(
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
-  if [ "$CODEX_MANAGED_BINDINGS" = 17 ]; then
-    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 17-binding authoritative contract'
+  if [ "$CODEX_MANAGED_BINDINGS" = 19 ]; then
+    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 19-binding authoritative contract'
   else
     bad 'Codex managed requirements differ from the authoritative hook contract'
   fi
