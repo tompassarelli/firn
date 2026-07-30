@@ -27,23 +27,36 @@ This catches things the validator can't: input mismatches, evaluation errors in 
 
 `firn rebuild` (the sanctioned wrapper) IS agent-runnable — policy change 2026-07-08, snapshot semantics 2026-07-16. It builds a **commit snapshot** (`git+file://<repo>?rev=HEAD`), never the working tree: uncommitted state — yours or any concurrent session's — can neither block a rebuild nor leak into a generation. The one gate that remains YOURS: **commit your own changes first**, or they simply won't be in the build (the pipeline prints exactly which in-flight files it excluded). Every generation maps to a commit by construction. `firn rollback` / the boot menu undo a switch.
 
-The pipeline: plan local-input pin moves for `~/code/beagle`, `~/code/fram`,
-and `~/code/north` from each repo's committed local
-`refs/heads/main`. The active checkout may remain on a dirty feature branch:
-its HEAD and WIP are excluded, while committed local `main` remains eligible.
-A missing, rewound, or divergent local `main` holds the already-verified pin;
-only an ancestry-proven fast-forward can promote. Then regenerate `.nix`
-(stale committed outputs are self-healed with a mechanical commit; outputs
-downstream of in-flight WIP keep their committed versions); validate the
-snapshot in a detached temp worktree (a peer's mid-edit `.bnix` can't fail your
-rebuild); build the host closure from the snapshot with `--override-input` for
-planned pin moves; switch that **exact store path** (no second evaluation);
-then commit the verified `flake.lock` pointer — commit receives the exact built
-revision, and any non-promotable state (foreign lock edit, raced input, hook
-failure) defers with a notice, exit 0. Recovery is commit-aware: if the
-mechanical commit lands immediately before an exit/signal, the handler
-preserves that exact promoted lock and heals the index/worktree to the new HEAD
-instead of restoring the obsolete pre-promotion backup.
+The pipeline auto-plans only the Fram pin from
+`~/code/fram/main`'s committed `refs/heads/main`. The active checkout may
+remain on a dirty feature branch: its HEAD and WIP are excluded, while
+committed local `main` remains eligible. A missing, rewound, or divergent local
+`main` holds the already-verified pin; only an ancestry-proven fast-forward can
+promote. Firn then regenerates `.nix` (stale committed outputs are self-healed
+with a mechanical commit; outputs downstream of in-flight WIP keep their
+committed versions), validates the snapshot in a detached temp worktree, builds
+the host closure with Fram's exact-revision `--override-input`, switches that
+**exact store path** without a second evaluation, and commits the verified
+`flake.lock` pointer.
+
+North and Beagle are dev-channel inputs and never enter that ordinary rebuild
+plan. Deliberately moving either production pin is a separate two-step release:
+first build and verify the host closure with an explicit exact-revision override
+for the intended 40-character SHA; only after that build succeeds, settle the
+same SHA with
+`~/code/nixos-config/main/scripts/firn-sync-local-inputs --commit
+north=<verified-rev>` or the corresponding `beagle=<verified-rev>` target. Do
+not use `firn update`: it is the wholesale remote-input bump path, not local
+dev-channel verification.
+
+Targeted settlement rechecks the locked ancestry and current local `main`, then
+requires the lock resolver to produce the exact built revision. A foreign lock
+or flake-source edit, raced input, unexpected rewrite of the unrequested Fram
+pin, or failed commit hook defers with a notice and exit 0. Recovery is
+commit-aware: if the mechanical commit lands immediately before an
+exit/signal, the handler preserves that exact promoted lock and heals the
+index/worktree to the new HEAD instead of restoring the obsolete pre-promotion
+backup.
 `--skip-checks` still builds and switches the HEAD snapshot with the committed
 lock; it only skips validation and pin planning. Untracked files are a printed
 warning ("not in this build"), no longer a hard stop.

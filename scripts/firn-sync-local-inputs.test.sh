@@ -21,15 +21,15 @@ make_repo() {
 }
 
 make_repo "$TMP/firn"
-for input in beagle fram orchestration north; do make_repo "$TMP/$input"; done
+for input in beagle fram north; do make_repo "$TMP/$input"; done
 
-for input in beagle fram orchestration north; do
+for input in beagle fram north; do
   rev="$(git -C "$TMP/$input" rev-parse HEAD)"
   jq -n --arg input "$input" --arg rev "$rev" \
     '{nodes:{($input):{locked:{rev:$rev}}}}' >"$TMP/$input.json"
 done
 jq -s '{nodes:(map(.nodes)|add)}' \
-  "$TMP/beagle.json" "$TMP/fram.json" "$TMP/orchestration.json" "$TMP/north.json" \
+  "$TMP/beagle.json" "$TMP/fram.json" "$TMP/north.json" \
   >"$TMP/firn/flake.lock"
 git -C "$TMP/firn" add flake.lock
 git -C "$TMP/firn" commit -qm lock
@@ -43,7 +43,7 @@ inputs=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --flake) root="$2"; shift 2 ;;
-    beagle|fram|orchestration|north) inputs+=("$1"); shift ;;
+    beagle|fram|north) inputs+=("$1"); shift ;;
     *) shift ;;
   esac
 done
@@ -74,7 +74,6 @@ chmod +x "$TMP/bin/nix"
 export FIRN_REPO="$TMP/firn"
 export FIRN_BEAGLE_REPO="$TMP/beagle"
 export FIRN_FRAM_REPO="$TMP/fram"
-export FIRN_ORCHESTRATION_REPO="$TMP/orchestration"
 export FIRN_NORTH_REPO="$TMP/north"
 export PATH="$TMP/bin:$PATH"
 
@@ -86,6 +85,7 @@ lock_clean() {
 
 # The build consumes the exact planned object even if local main advances.
 grep -Fq '(format "git+file://~a?ref=main&rev=~a"' "$REBUILD"
+grep -Fxq 'INPUTS=(fram)' "$SCRIPT"
 
 # All current: no plan lines, nothing mutated.
 output="$($SCRIPT --plan)"
@@ -104,36 +104,29 @@ if grep -q '^plan ' <<<"$output"; then
   exit 1
 fi
 
-# Orchestration is a first-class local input: committed main HEAD plans, verifies,
-# promotes, and leaves no provisional lock mutation behind.
-printf 'v2\n' >>"$TMP/orchestration/source"
-git -C "$TMP/orchestration" add source
-git -C "$TMP/orchestration" commit -qm update
-old_orchestration="$(lock_rev orchestration)"
-new_orchestration="$(git -C "$TMP/orchestration" rev-parse HEAD)"
-output="$($SCRIPT --plan)"
-grep -q "^plan orchestration $old_orchestration $new_orchestration $TMP/orchestration\$" <<<"$output"
-lock_clean
-[ "$(lock_rev orchestration)" = "$old_orchestration" ]
-before_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
-output="$($SCRIPT --commit "orchestration=$new_orchestration")"
-grep -q 'orchestration promoted' <<<"$output"
-[ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq $((before_count + 1)) ]
-[ "$(lock_rev orchestration)" = "$new_orchestration" ]
-lock_clean
-
-# A new commit on main plans a promotable move — and planning NEVER mutates.
+# North and Beagle are dev-channel inputs: committed main moves never enter the
+# ordinary rebuild plan, and planning never mutates either lock.
 printf 'v2\n' >>"$TMP/north/source"
 git -C "$TMP/north" add source
 git -C "$TMP/north" commit -qm update
 old_north="$(lock_rev north)"
 new_north="$(git -C "$TMP/north" rev-parse HEAD)"
+printf 'v2\n' >>"$TMP/beagle/source"
+git -C "$TMP/beagle" add source
+git -C "$TMP/beagle" commit -qm update
+old_beagle="$(lock_rev beagle)"
+new_beagle="$(git -C "$TMP/beagle" rev-parse HEAD)"
 output="$($SCRIPT --plan)"
-grep -q "^plan north $old_north $new_north $TMP/north\$" <<<"$output"
+if grep -Eq '^plan (beagle|north) ' <<<"$output"; then
+  printf 'dev-channel input unexpectedly entered the ordinary rebuild plan\n' >&2
+  exit 1
+fi
 lock_clean
 [ "$(lock_rev north)" = "$old_north" ]
+[ "$(lock_rev beagle)" = "$old_beagle" ]
 
-# --commit promotes the verified target and makes the mechanical commit.
+# Explicit settlement promotes an exactly verified North target and makes the
+# mechanical commit even though --plan deliberately excluded it.
 before_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
 output="$($SCRIPT --commit "north=$new_north")"
 grep -q 'north promoted' <<<"$output"
@@ -144,30 +137,26 @@ lock_clean
 # An EXIT/TERM crash immediately after the mechanical commit must preserve the
 # exact promoted lock already in HEAD. The handler heals index/worktree to that
 # commit, removes its recovery files, and the next run sees a current pin.
-printf 'v3\n' >>"$TMP/orchestration/source"
-git -C "$TMP/orchestration" add source
-git -C "$TMP/orchestration" commit -qm post-commit-crash-target
-crash_orchestration="$(git -C "$TMP/orchestration" rev-parse HEAD)"
+printf 'v3\n' >>"$TMP/north/source"
+git -C "$TMP/north" add source
+git -C "$TMP/north" commit -qm post-commit-crash-target
+crash_north="$(git -C "$TMP/north" rev-parse HEAD)"
 crash_count_before="$(git -C "$TMP/firn" rev-list --count HEAD)"
 mkdir "$TMP/recovery-tmp"
 if output="$(
   TMPDIR="$TMP/recovery-tmp" \
   FIRN_INJECT_CRASH_AFTER_COMMIT=1 \
-    "$SCRIPT" --commit "orchestration=$crash_orchestration" 2>&1
+    "$SCRIPT" --commit "north=$crash_north" 2>&1
 )"; then
   printf 'injected post-commit crash unexpectedly returned success\n' >&2
   exit 1
 fi
 [ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq $((crash_count_before + 1)) ]
-[ "$(lock_rev orchestration)" = "$crash_orchestration" ]
+[ "$(lock_rev north)" = "$crash_north" ]
 lock_clean
 [ -z "$(find "$TMP/recovery-tmp" -mindepth 1 -print -quit)" ]
-output="$($SCRIPT --plan)"
-grep -q "orchestration.*current at ${crash_orchestration:0:8}" <<<"$output"
-if grep -q '^plan orchestration ' <<<"$output"; then
-  printf 'post-commit crash recovery left Orchestration promotable\n' >&2
-  exit 1
-fi
+output="$($SCRIPT --commit "north=$crash_north")"
+grep -q 'north no longer promotable; deferring' <<<"$output"
 
 # The internal commit contract is explicit and rejects malformed target specs
 # before any lock mutation.
@@ -217,7 +206,8 @@ lock_clean
 rm "$TMP/firn/.git/hooks/pre-commit"
 
 # Another session's WIP never blocks and never leaks. At the current pin it is
-# merely reported as excluded, while a clean input still plans its move.
+# merely reported as excluded, while a pending Beagle release stays out of the
+# ordinary plan.
 printf 'dirty\n' >>"$TMP/fram/source"
 output="$($SCRIPT --plan)"
 grep -q 'fram.*tracked WIP excluded' <<<"$output"
@@ -225,7 +215,10 @@ if grep -q '^plan fram ' <<<"$output"; then
   printf 'dirty worktree at the locked commit unexpectedly produced a plan\n' >&2
   exit 1
 fi
-grep -q '^plan beagle ' <<<"$output"
+if grep -q '^plan beagle ' <<<"$output"; then
+  printf 'pending Beagle release unexpectedly entered the ordinary rebuild plan\n' >&2
+  exit 1
+fi
 
 # Dirty main whose local main moved ahead of the pin promotes committed main only.
 git -C "$TMP/fram" add source
@@ -280,7 +273,8 @@ grep -q 'fram promoted' <<<"$output"
 [ "$(lock_rev fram)" = "$advanced_main_fram" ]
 grep -q '^ M source$' < <(git -C "$TMP/fram" status --short)
 
-# Back on clean main, only the pending clean input promotes.
+# Back on clean Fram main, explicit settlement accepts the exactly verified
+# Beagle target that ordinary planning excluded.
 git -C "$TMP/fram" checkout -q -- source
 git -C "$TMP/fram" checkout -q main
 output="$($SCRIPT --plan)"
@@ -294,14 +288,17 @@ grep -q 'beagle promoted' <<<"$output"
 [ "$(lock_rev beagle)" = "$(git -C "$TMP/beagle" rev-parse HEAD)" ]
 lock_clean
 
-# A commit landing after plan is not the revision that was built, so commit
-# defers before nix can rewrite the lock.
+# A commit landing after an exact-revision build is not the revision that was
+# verified, so settlement defers before nix can rewrite the lock.
 printf 'v4\n' >>"$TMP/north/source"
 git -C "$TMP/north" add source
 git -C "$TMP/north" commit -qm planned
 planned_north="$(git -C "$TMP/north" rev-parse HEAD)"
 output="$($SCRIPT --plan)"
-grep -q "^plan north .* $planned_north $TMP/north\$" <<<"$output"
+if grep -q '^plan north ' <<<"$output"; then
+  printf 'verified North target unexpectedly entered the ordinary rebuild plan\n' >&2
+  exit 1
+fi
 printf 'v5\n' >>"$TMP/north/source"
 git -C "$TMP/north" add source
 git -C "$TMP/north" commit -qm raced
@@ -333,45 +330,41 @@ grep -q 'rewrote unrequested local input fram.*deferring' <<<"$output"
 [ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq "$before_unrequested_count" ]
 lock_clean
 
-# Missing local main is an explicit hold, not a fallback to feature HEAD.
-orchestration_main="$(git -C "$TMP/orchestration" rev-parse 'refs/heads/main^{commit}')"
-git -C "$TMP/orchestration" checkout -qb missing-main-probe
-git -C "$TMP/orchestration" branch -D main >/dev/null
-output="$($SCRIPT --plan)"
-grep -q 'orchestration.*refs/heads/main is missing.*holding verified' <<<"$output"
-if grep -q '^plan orchestration ' <<<"$output"; then
-  printf 'input with missing local main unexpectedly produced a plan\n' >&2
-  exit 1
-fi
-git -C "$TMP/orchestration" branch main "$orchestration_main"
-git -C "$TMP/orchestration" checkout -q main
-git -C "$TMP/orchestration" branch -D missing-main-probe >/dev/null
+# Missing local main is an explicit settlement hold, not a fallback to feature
+# HEAD.
+printf 'v4\n' >>"$TMP/beagle/source"
+git -C "$TMP/beagle" add source
+git -C "$TMP/beagle" commit -qm missing-main-target
+missing_main_beagle="$(git -C "$TMP/beagle" rev-parse 'refs/heads/main^{commit}')"
+git -C "$TMP/beagle" checkout -qb missing-main-probe
+git -C "$TMP/beagle" branch -D main >/dev/null
+before_missing_hash="$(sha256sum "$TMP/firn/flake.lock")"
+before_missing_count="$(git -C "$TMP/firn" rev-list --count HEAD)"
+output="$($SCRIPT --commit "beagle=$missing_main_beagle")"
+grep -q 'beagle local refs/heads/main is missing.*built target.*not promotable, deferring' <<<"$output"
+[ "$(sha256sum "$TMP/firn/flake.lock")" = "$before_missing_hash" ]
+[ "$(git -C "$TMP/firn" rev-list --count HEAD)" -eq "$before_missing_count" ]
+git -C "$TMP/beagle" branch main "$missing_main_beagle"
+git -C "$TMP/beagle" checkout -q main
+git -C "$TMP/beagle" branch -D missing-main-probe >/dev/null
 
 # A rewound or divergent local main can never downgrade/replace the verified
 # pin. Prove both relationships while keeping the active checkout off main.
-locked_orchestration="$(lock_rev orchestration)"
-orchestration_parent="$(git -C "$TMP/orchestration" rev-parse "$locked_orchestration^")"
-git -C "$TMP/orchestration" checkout -qb non-ff-probe "$orchestration_parent"
-git -C "$TMP/orchestration" branch -f main "$orchestration_parent"
-output="$($SCRIPT --plan)"
-grep -q 'orchestration.*behind verified.*non-fast-forward not promoted' <<<"$output"
-if grep -q '^plan orchestration ' <<<"$output"; then
-  printf 'rewound local main unexpectedly produced a downgrade plan\n' >&2
-  exit 1
-fi
-printf 'divergent\n' >>"$TMP/orchestration/source"
-git -C "$TMP/orchestration" add source
-git -C "$TMP/orchestration" commit -qm divergent
-git -C "$TMP/orchestration" branch -f main HEAD
-output="$($SCRIPT --plan)"
-grep -q 'orchestration.*diverged from verified.*non-fast-forward not promoted' <<<"$output"
-if grep -q '^plan orchestration ' <<<"$output"; then
-  printf 'divergent local main unexpectedly produced a plan\n' >&2
-  exit 1
-fi
-git -C "$TMP/orchestration" branch -f main "$locked_orchestration"
-git -C "$TMP/orchestration" checkout -q main
-git -C "$TMP/orchestration" branch -D non-ff-probe >/dev/null
+locked_beagle="$(lock_rev beagle)"
+beagle_parent="$(git -C "$TMP/beagle" rev-parse "$locked_beagle^")"
+git -C "$TMP/beagle" checkout -qb non-ff-probe "$beagle_parent"
+git -C "$TMP/beagle" branch -f main "$beagle_parent"
+output="$($SCRIPT --commit "beagle=$missing_main_beagle")"
+grep -q 'beagle local main.*behind verified.*non-fast-forward not promoted.*built target.*not promotable, deferring' <<<"$output"
+printf 'divergent\n' >>"$TMP/beagle/source"
+git -C "$TMP/beagle" add source
+git -C "$TMP/beagle" commit -qm divergent
+git -C "$TMP/beagle" branch -f main HEAD
+output="$($SCRIPT --commit "beagle=$missing_main_beagle")"
+grep -q 'beagle local main.*diverged from verified.*non-fast-forward not promoted.*built target.*not promotable, deferring' <<<"$output"
+git -C "$TMP/beagle" branch -f main "$missing_main_beagle"
+git -C "$TMP/beagle" checkout -q main
+git -C "$TMP/beagle" branch -D non-ff-probe >/dev/null
 
 # A foreign edit to the firn lock itself defers promotion, never blocks.
 new_north="$(git -C "$TMP/north" rev-parse 'refs/heads/main^{commit}')"
