@@ -7,6 +7,68 @@ BEAGLE_INTEGRATION="${AGENT_CONFIG_BEAGLE_INTEGRATION:-$HOME/code/beagle/main/in
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/agent-config-check.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
 
+run_codex_mcp_inventory_fixture() {
+  local codex_inventory codex_inventory_elapsed_ms codex_inventory_start_ns
+
+  mkdir -p "$scratch/bin"
+  cat >"$scratch/bin/codex-credential-gate" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$CODEX_CREDENTIAL_GATE_CALLS"
+if [ "$*" != '-c mcp_servers.linear-mcp-msa-new.enabled=false mcp list --json' ]; then
+  printf 'credential backend entered\n' >"$CODEX_CREDENTIAL_GATE_MARKER"
+  trap 'exit 0' TERM
+  while :; do sleep 3600; done
+fi
+printf '%s\n' '[
+  {"name":"fram","enabled":true},
+  {"name":"linear-mcp-msa-new","enabled":false},
+  {"name":"north","enabled":true}
+]'
+SH
+  chmod +x "$scratch/bin/codex-credential-gate"
+  : >"$scratch/codex-credential-gate-calls"
+  if CODEX_CREDENTIAL_GATE_CALLS="$scratch/codex-credential-gate-calls" \
+     CODEX_CREDENTIAL_GATE_MARKER="$scratch/codex-credential-gate-marker" \
+     timeout --signal=TERM --kill-after=0.1 0.1 \
+       "$scratch/bin/codex-credential-gate" mcp list >/dev/null 2>&1; then
+    printf 'credential-gated Codex inventory unexpectedly succeeded\n' >&2
+    exit 1
+  else
+    [ "$?" -eq 124 ]
+  fi
+  [ -s "$scratch/codex-credential-gate-marker" ]
+  rm -f "$scratch/codex-credential-gate-marker"
+
+  codex_inventory_start_ns="$(date +%s%N)"
+  codex_inventory="$(
+    CODEX_BIN="$scratch/bin/codex-credential-gate" \
+    CODEX_CREDENTIAL_GATE_CALLS="$scratch/codex-credential-gate-calls" \
+    CODEX_CREDENTIAL_GATE_MARKER="$scratch/codex-credential-gate-marker" \
+      run_codex_mcp_inventory 0.5
+  )"
+  codex_inventory_elapsed_ms=$((($(date +%s%N) - codex_inventory_start_ns) / 1000000))
+  [ "$codex_inventory_elapsed_ms" -lt 1000 ]
+  [ ! -e "$scratch/codex-credential-gate-marker" ]
+  [ "$(tail -n 1 "$scratch/codex-credential-gate-calls")" = \
+    '-c mcp_servers.linear-mcp-msa-new.enabled=false mcp list --json' ]
+  codex_mcp_inventory_server_has_state "$codex_inventory" north true
+  codex_mcp_inventory_server_has_state "$codex_inventory" fram true
+  codex_mcp_inventory_server_has_state \
+    "$codex_inventory" linear-mcp-msa-new false
+  if codex_mcp_inventory_server_has_state \
+     "$codex_inventory" linear-mcp-msa-new true; then
+    printf 'disabled Linear OAuth server was accepted as enabled\n' >&2
+    exit 1
+  fi
+}
+
+if [ "${1:-}" = '--codex-mcp-inventory-only' ]; then
+  source "$REPO/scripts/agent-config-check.sh"
+  run_codex_mcp_inventory_fixture
+  printf 'ok: Codex noninteractive MCP inventory excludes the credential-gated Linear server\n'
+  exit 0
+fi
+
 assert_native_identity() {
   local manifest="$1" expected_provider="$2" label="$3"
   local expected_spawn="AGENT_PROVIDER=$expected_provider /run/current-system/sw/bin/north-on-spawn"
@@ -421,6 +483,11 @@ CODEX_BIN="$scratch/bin/hostile-probe" \
 NORTH_PACKAGED_BIN="$scratch/bin/hostile-probe" \
 NORTH_PROBE_TIMEOUT_SECONDS=0.1 \
   assert_hung_probe_reaped north run_north_packaged providers --json
+
+# The real Codex inventory consults Secret Service for enabled OAuth servers.
+# Model that credential backend as an indefinite wait: the checker must disable
+# only Linear while still requiring enabled North and Fram entries.
+run_codex_mcp_inventory_fixture
 
 # Per-stream RLIMIT_FSIZE prevents a hostile JSON producer from filling temp
 # storage before its whole-process deadline.

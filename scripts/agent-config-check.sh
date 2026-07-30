@@ -156,6 +156,30 @@ run_codex_probe() {
   run_bounded_process "$duration" "${CODEX_BIN:-codex}" "$@"
 }
 
+run_codex_mcp_inventory() {
+  local duration="$1"
+
+  run_codex_probe "$duration" \
+    -c 'mcp_servers.linear-mcp-msa-new.enabled=false' \
+    mcp list --json
+}
+
+codex_mcp_inventory_server_has_state() {
+  local inventory="$1" server="$2" expected_enabled="$3"
+
+  jq -e \
+    --arg server "$server" \
+    --argjson expected_enabled "$expected_enabled" \
+    '
+      if type != "array" then false
+      else
+        [.[] | select(.name? == $server)] as $matches
+        | ($matches | length) == 1
+          and $matches[0].enabled? == $expected_enabled
+      end
+    ' <<<"$inventory" >/dev/null
+}
+
 orchestration_version_matches() {
   local version="$1" commit="$2"
 
@@ -1868,7 +1892,7 @@ codex_hook_provenance="${CODEX_HOOK_PROVENANCE:-declaration drift detected}"
 ok_detail 'Codex legacy ~/.codex/hooks.json is intentionally ignored; it contributes zero active bindings'
 codex_north='declared; canonical explicit instance env; live probe deferred'
 codex_fram='declared; canonical split corpus; live probe deferred'
-codex_linear='auth probe deferred to --local'
+codex_linear='authentication deferred to an interactive credential check'
 grep -q '^\[mcp_servers\.north\]' "$CODEX/config.toml" || bad "Codex config does not declare North MCP"
 grep -q '^\[mcp_servers\.fram\]' "$CODEX/config.toml" || bad "Codex config does not declare Fram MCP"
 grep -q '^\[mcp_servers\.linear-mcp-msa-new\]' "$CODEX/config.toml" || bad "Codex config does not declare Linear MCP"
@@ -1905,28 +1929,37 @@ if [ "$LOCAL" -eq 1 ]; then
     mcp_output="$(
       CODEX_HOME="$HOME/.codex" \
       CODEX_SQLITE_HOME="$HOME/.codex/sqlite" \
-        run_codex_probe "${MCP_PROBE_TIMEOUT_SECONDS:-20}" mcp list 2>&1
+        run_codex_mcp_inventory "${MCP_PROBE_TIMEOUT_SECONDS:-20}" 2>&1
     )" || codex_mcp_status=$?
     if [ "$codex_mcp_status" -eq 0 ]; then
-      for server in north fram linear-mcp-msa-new; do
-        grep -Eq "^${server}[[:space:]]" <<<"$mcp_output" ||
-          bad "Codex MCP '$server' is missing/disabled"
+      codex_inventory_ok=1
+      for server in north fram; do
+        if ! codex_mcp_inventory_server_has_state \
+          "$mcp_output" "$server" true; then
+          bad "Codex MCP '$server' is missing, duplicated, or disabled"
+          codex_inventory_ok=0
+        fi
       done
-      linear_line="$(grep -E '^linear-mcp-msa-new[[:space:]]' <<<"$mcp_output" || true)"
-      if [[ "$linear_line" = *'Not logged in'* ]]; then codex_linear='not logged in'
-      elif [[ "$linear_line" = *OAuth* || "$linear_line" = *'Logged in'* ]]; then codex_linear='authenticated'
-      else codex_linear='auth unknown'; fi
-      ok_detail "Codex config parsed; North + Fram + Linear MCP listed"
-      if [ "$codex_north_env_ok" -eq 1 ]; then
-        codex_north='enabled; canonical explicit instance env'
-      else
-        codex_north='enabled; explicit instance env drift detected'
+      if ! codex_mcp_inventory_server_has_state \
+        "$mcp_output" linear-mcp-msa-new false; then
+        bad 'Codex noninteractive inventory did not exclude the Linear OAuth server'
+        codex_inventory_ok=0
       fi
-      codex_fram='enabled; canonical split corpus'
+      if [ "$codex_inventory_ok" -eq 1 ]; then
+        ok_detail "Codex config parsed; North + Fram enabled; Linear OAuth excluded from the noninteractive inventory"
+        if [ "$codex_north_env_ok" -eq 1 ]; then
+          codex_north='enabled; canonical explicit instance env'
+        else
+          codex_north='enabled; explicit instance env drift detected'
+        fi
+        codex_fram='enabled; canonical split corpus'
+      fi
+      codex_linear='authentication unverified; interactive credential check deferred'
+      soft 'Codex Linear OAuth authentication is not inspected noninteractively; when needed, run: codex mcp login linear-mcp-msa-new'
     elif [ "$codex_mcp_status" -eq 124 ]; then
-      bad "Codex MCP-list probe timed out after ${MCP_PROBE_TIMEOUT_SECONDS:-20}s; its process group was reaped"
+      bad "Codex noninteractive MCP inventory timed out after ${MCP_PROBE_TIMEOUT_SECONDS:-20}s; its process group was reaped"
     else
-      bad "codex rejected its config while listing MCPs (exit $codex_mcp_status):\n$mcp_output"
+      bad "codex rejected its noninteractive MCP inventory (exit $codex_mcp_status):\n$mcp_output"
     fi
   else bad "codex CLI is missing from PATH"; fi
 fi
