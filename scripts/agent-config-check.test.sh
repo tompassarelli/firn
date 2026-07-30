@@ -1156,23 +1156,22 @@ grep -Fq '/run/current-system/sw/bin/env -u CLAUDE_CONFIG_DIR' \
   "$REPO/scripts/agent-config-check.sh"
 grep -Fq '${CLAUDE_BIN:-/run/current-system/sw/bin/claude}' \
   "$REPO/scripts/agent-config-check.sh"
-grep -Fq ':systemd.sockets.north-coord' \
-  "$REPO/modules/north-coord/default.bnix"
-if rg -n 'ExecStartPre.*north-coord-runtime preflight' \
-   "$REPO/modules/north-coord/default.bnix"; then
+grep -Fq 'systemd.sockets.north-coord = lib.mkIf config.myConfig.modules.north-coord.socketActivation' \
+  "$REPO/modules/north-coord/default.nix"
+grep -Fq '"${northCoordRuntime}/bin/north-coord-runtime ensure-default"' \
+  "$REPO/modules/north-coord/default.nix"
+grep -Fq 'systemd.services.north-coord-pair-settle = lib.mkIf stageA' \
+  "$REPO/modules/north-coord/default.nix"
+grep -Fq 'ExecStart = "${northCoordRuntime}/bin/north-coord-runtime settle";' \
+  "$REPO/modules/north-coord/default.nix"
+if rg -nF 'north-coord-runtime preflight' \
+   "$REPO/modules/north-coord/default.bnix" \
+   "$REPO/modules/north-coord/default.nix"; then
   printf 'socket-activated service still probes its systemd-owned listener as foreign\n' >&2
   exit 1
 fi
-grep -Fq '(s northCoordRuntime "/bin/north-coord-runtime ensure-default")' \
-  "$REPO/modules/north-coord/default.bnix"
-grep -q ':ExecStartPost (s northCoordRuntime "/bin/north-coord-runtime settle")' \
-  "$REPO/modules/north-coord/default.bnix"
-if grep -q ':ExecCondition (s northCoordRuntime "/bin/north-coord-runtime preflight")' \
-   "$REPO/modules/north-coord/default.bnix"; then
-  printf 'north-coord preflight still silently skips occupied-port starts\n' >&2
-  exit 1
-fi
-grep -q ':startLimitIntervalSec 0' "$REPO/modules/north-coord/default.bnix"
+grep -Fq 'startLimitIntervalSec = 0;' \
+  "$REPO/modules/north-coord/default.nix"
 grep -Fq 'command = "/run/current-system/sw/bin/north-mcp"' \
   "$REPO/dotfiles/codex/config.toml"
 grep -Fq 'command = "/run/current-system/sw/bin/fram-mcp"' \
