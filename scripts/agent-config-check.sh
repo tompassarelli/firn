@@ -1260,6 +1260,8 @@ VERBOSE=0
 CANONICAL_FRAM_LOG="$HOME/.local/state/north/coordination.log"
 CANONICAL_FRAM_TELEMETRY_LOG="$HOME/.local/state/north/telemetry.log"
 CANONICAL_FRAM_THREADS="$HOME/.local/state/north/threads"
+# MCP servers whose live-connection health is advisory-only, not FAIL-worthy.
+CLIENT_SCOPED_MCP_SERVERS=(linear-mcp-msa-new)
 for arg in "$@"; do
   case "$arg" in
     --local) LOCAL=1 ;;
@@ -1992,17 +1994,24 @@ if [ "$LOCAL" -eq 1 ]; then
     )" || claude_mcp_status=$?
     if [ "$claude_mcp_status" -eq 0 ]; then
       claude_mcp_exact=1
-      for server in north fram linear-mcp-msa-new; do
+      for server in north fram; do
         claude_mcp_server_connected "$claude_mcp_output" "$server" || {
           claude_mcp_exact=0
           bad "Claude MCP '$server' is missing or not connected:\n$claude_mcp_output"
         }
       done
+      for server in "${CLIENT_SCOPED_MCP_SERVERS[@]}"; do
+        if claude_mcp_server_connected "$claude_mcp_output" "$server"; then
+          claude_linear='connected'
+        else
+          claude_linear='unauthenticated (advisory — client-scoped)'
+          soft "client MCP '$server': unauthenticated (advisory — client-scoped)"
+        fi
+      done
       if [ "$claude_mcp_exact" -eq 1 ]; then
         claude_north="connected; $claude_north_topology"
         claude_fram="connected; $claude_fram_topology"
-        claude_linear='connected'
-        ok_detail "Claude reports North + Fram + Linear MCP connected"
+        ok_detail "Claude reports North + Fram MCP connected"
       fi
     elif [ "$claude_mcp_status" -eq 124 ]; then
       bad "Claude MCP health probe timed out after ${MCP_PROBE_TIMEOUT_SECONDS:-20}s; its process group was reaped"

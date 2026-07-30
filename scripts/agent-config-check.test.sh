@@ -1239,6 +1239,19 @@ grep -Fq '/run/current-system/sw/bin/env -u CLAUDE_CONFIG_DIR' \
   "$REPO/scripts/agent-config-check.sh"
 grep -Fq '${CLAUDE_BIN:-/run/current-system/sw/bin/claude}' \
   "$REPO/scripts/agent-config-check.sh"
+
+# The client-scoped Linear MCP's live connection health must be advisory
+# (soft warn), never a FAIL, while North and Fram stay required. Its config
+# declaration still stays required, so the entry keeps working on clock-in.
+if grep -Fq 'for server in north fram linear-mcp-msa-new; do' \
+   "$REPO/scripts/agent-config-check.sh"; then
+  printf 'Linear MCP is still enforced through the required-connection loop\n' >&2
+  exit 1
+fi
+grep -Fq 'CLIENT_SCOPED_MCP_SERVERS=(linear-mcp-msa-new)' \
+  "$REPO/scripts/agent-config-check.sh"
+grep -Fq 'client MCP '"'"'$server'"'"': unauthenticated (advisory — client-scoped)' \
+  "$REPO/scripts/agent-config-check.sh"
 grep -Fq 'systemd.sockets.north-coord = lib.mkIf config.myConfig.modules.north-coord.socketActivation' \
   "$REPO/modules/north-coord/default.nix"
 grep -Fq '"${northCoordRuntime}/bin/north-coord-runtime ensure-default"' \
