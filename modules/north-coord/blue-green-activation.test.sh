@@ -237,10 +237,51 @@ case "$command" in
     printf '%s %s %s %s\n' \
       "$phase" "$instance" "$version" "$cutover_id" >"$endpoint"
     prewarmed=${NORTH_COORD_TEST_PREWARMED:-true}
-    printf '{:ok true :protocol "fram-coordinator-cutover/v1" :phase :%s :prepared true :cutover-id "%s" :instance "%s" :version %s :marker {:format "fram-coordinator-cutover-marker/v1" :cutover-id "%s" :source-instance "%s" :version %s :logs [{:label :primary :path "%s" :bytes 0 :file-key "fake-%s" :identity "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" :boundary-sha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}]} :sync {:reload :unchanged :attempts 1 :prewarmed %s :elapsed-ms 1} :writer-authority {:role :%s :write-authorized false}}\n' \
+    proof_mode=${NORTH_COORD_TEST_PREPARE_PROOF_MODE:-healthy}
+    source_instance=$instance
+    primary_log=$log
+    case "$port" in
+      17977|27977) peer_log=$NORTH_COORD_TELEMETRY_LOG ;;
+      17978|27978) peer_log=$NORTH_COORD_COORD_LOG ;;
+      *) exit 2 ;;
+    esac
+    primary_label=primary
+    peer_label=telemetry
+    case "$proof_mode" in
+      healthy) ;;
+      missing-peer) peer_log= ;;
+      duplicate-label) peer_label=primary ;;
+      duplicate-path) peer_log=$primary_log ;;
+      foreign-label) peer_label=foreign ;;
+      foreign-path) peer_log=/tmp/foreign-cutover-peer.log ;;
+      swapped-paths)
+        swapped=$primary_log
+        primary_log=$peer_log
+        peer_log=$swapped
+        ;;
+      instance-mismatch) source_instance=wrong-instance ;;
+      trailing|malformed) ;;
+      *) exit 2 ;;
+    esac
+    if [[ "$proof_mode" == malformed ]]; then
+      printf '{:ok true :protocol\n'
+      exit 0
+    fi
+    if [[ -n "$peer_log" ]]; then
+      printf -v log_proofs '[{:label :%s :path "%s" :bytes 0 :file-key "fake-%s-primary" :identity "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" :boundary-sha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"} {:label :%s :path "%s" :bytes 0 :file-key "fake-%s-peer" :identity "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" :boundary-sha "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]' \
+        "$primary_label" "$primary_log" "$port" \
+        "$peer_label" "$peer_log" "$port"
+    else
+      printf -v log_proofs '[{:label :%s :path "%s" :bytes 0 :file-key "fake-%s-primary" :identity "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" :boundary-sha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}]' \
+        "$primary_label" "$primary_log" "$port"
+    fi
+    printf '{:ok true :protocol "fram-coordinator-cutover/v1" :phase :%s :prepared true :cutover-id "%s" :instance "%s" :version %s :marker {:format "fram-coordinator-cutover-marker/v1" :cutover-id "%s" :source-instance "%s" :version %s :logs %s} :sync {:reload :unchanged :attempts 1 :prewarmed %s :elapsed-ms 1} :writer-authority {:role :%s :write-authorized false}}\n' \
       "$response_phase" "$cutover_id" "$instance" "$version" \
-      "$cutover_id" "$instance" "$version" "$log" "$port" "$prewarmed" \
+      "$cutover_id" "$source_instance" "$version" "$log_proofs" "$prewarmed" \
       "$response_phase"
+    if [[ "$proof_mode" == trailing ]]; then
+      printf '{:trailing true}\n'
+    fi
     ;;
   demote)
     printf 'demote %s %s\n' "$port" "$cutover_id" \
@@ -363,6 +404,7 @@ assert_prepare_rejected() {
     exit 1
   fi
   [[ ! -e "$gate_state/gate.current" ]]
+  [[ ! -e "$transaction" && ! -L "$transaction" ]]
   read -r blue_coord_phase _ <"$fake_state/17977"
   read -r blue_telemetry_phase _ <"$fake_state/17978"
   [[ "$blue_coord_phase" == active ]]
@@ -395,6 +437,22 @@ fi
 export NORTH_COORD_TEST_PREWARMED=false
 assert_prepare_rejected missing-prewarm
 unset NORTH_COORD_TEST_PREWARMED
+
+for proof_mode in \
+  missing-peer \
+  duplicate-label \
+  duplicate-path \
+  foreign-label \
+  foreign-path \
+  swapped-paths \
+  instance-mismatch \
+  trailing \
+  malformed
+do
+  export NORTH_COORD_TEST_PREPARE_PROOF_MODE=$proof_mode
+  assert_prepare_rejected "prepare-proof-$proof_mode"
+done
+unset NORTH_COORD_TEST_PREPARE_PROOF_MODE
 
 printf 'serial\n' >"$jcmd_state/mode"
 assert_prepare_rejected serial-1g

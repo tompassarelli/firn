@@ -196,62 +196,88 @@ inspect_status() {
 }
 
 inspect_prepare() {
-  local input=$1 expected_cutover_id=$2
+  local input=$1 expected_cutover_id=$2 origin=$3
   bb -e '
     (require (quote [clojure.edn :as edn]))
-    (let [[path expected-cutover-id] *command-line-args*
-          m (edn/read-string (slurp path))
-          role (:phase m)
-          writer-role (get-in m [:writer-authority :role])
-          authorized (get-in m [:writer-authority :write-authorized])
-          marker (:marker m)
-          sync (:sync m)
-          logs (:logs marker)
-          valid-log?
-          (fn [proof]
-            (and (keyword? (:label proof))
-                 (string? (:path proof))
-                 (.startsWith ^String (:path proof) "/")
-                 (integer? (:bytes proof))
-                 (not (neg? (:bytes proof)))
-                 (string? (:file-key proof))
-                 (not-empty (:file-key proof))
-                 (string? (:identity proof))
-                 (not-empty (:identity proof))
-                 (string? (:boundary-sha proof))
-                 (re-matches #"[0-9a-f]{64}" (:boundary-sha proof))))]
-      (when-not
-       (and (= true (:ok m))
-            (= "fram-coordinator-cutover/v1" (:protocol m))
-            (= true (:prepared m))
-            (= expected-cutover-id (:cutover-id m))
-            (contains? #{:standby :retired} role)
-            (= role writer-role)
-            (= false authorized)
-            (string? (:instance m))
-            (not-empty (:instance m))
-            (integer? (:version m))
-            (not (neg? (:version m)))
-            (= "fram-coordinator-cutover-marker/v1" (:format marker))
-            (= expected-cutover-id (:cutover-id marker))
-            (= (:version m) (:version marker))
-            (string? (:source-instance marker))
-            (not-empty (:source-instance marker))
-            (vector? logs)
-            (not-empty logs)
-            (every? valid-log? logs)
-            (= (count logs) (count (distinct (map :label logs))))
-            (= true (:prewarmed sync))
-            (contains? #{:unchanged :installed :superseded} (:reload sync))
-            (integer? (:attempts sync))
-            (pos? (:attempts sync))
-            (integer? (:elapsed-ms sync))
-            (not (neg? (:elapsed-ms sync))))
-        (binding [*out* *err*]
-          (println "invalid cutover prepare response" (pr-str m)))
-        (System/exit 1))
-      (println (:instance m) (:version m)))' \
-    "$input" "$expected_cutover_id"
+    (let [[path expected-cutover-id origin coord-log telemetry-log]
+          *command-line-args*
+          canonical (fn [p] (.getCanonicalPath (java.io.File. ^String p)))
+          coord-path (canonical coord-log)
+          telemetry-path (canonical telemetry-log)
+          expected-logs
+          (case origin
+            "coord" {:primary coord-path :telemetry telemetry-path}
+            "telemetry" {:primary telemetry-path :telemetry coord-path}
+            nil)]
+      (with-open [reader
+                  (java.io.PushbackReader.
+                   (java.io.BufferedReader.
+                    (java.io.FileReader. ^String path)))]
+        (let [m (edn/read {:eof ::eof} reader)
+              trailing (edn/read {:eof ::eof} reader)
+              role (:phase m)
+              writer-role (get-in m [:writer-authority :role])
+              authorized (get-in m [:writer-authority :write-authorized])
+              marker (:marker m)
+              sync (:sync m)
+              logs (:logs marker)
+              valid-log?
+              (fn [proof]
+                (and (map? proof)
+                     (keyword? (:label proof))
+                     (string? (:path proof))
+                     (.startsWith ^String (:path proof) "/")
+                     (integer? (:bytes proof))
+                     (not (neg? (:bytes proof)))
+                     (string? (:file-key proof))
+                     (not-empty (:file-key proof))
+                     (string? (:identity proof))
+                     (not-empty (:identity proof))
+                     (string? (:boundary-sha proof))
+                     (re-matches #"[0-9a-f]{64}"
+                                 (:boundary-sha proof))))]
+          (when-not
+           (and (= ::eof trailing)
+                (map? m)
+                (map? expected-logs)
+                (not= coord-path telemetry-path)
+                (= true (:ok m))
+                (= "fram-coordinator-cutover/v1" (:protocol m))
+                (= true (:prepared m))
+                (= expected-cutover-id (:cutover-id m))
+                (contains? #{:standby :retired} role)
+                (= role writer-role)
+                (= false authorized)
+                (string? (:instance m))
+                (not-empty (:instance m))
+                (integer? (:version m))
+                (not (neg? (:version m)))
+                (= "fram-coordinator-cutover-marker/v1" (:format marker))
+                (= expected-cutover-id (:cutover-id marker))
+                (= (:version m) (:version marker))
+                (= (:instance m) (:source-instance marker))
+                (vector? logs)
+                (= 2 (count logs))
+                (every? valid-log? logs)
+                (= #{:primary :telemetry} (set (map :label logs)))
+                (= 2 (count (distinct (map :path logs))))
+                (every?
+                 (fn [proof]
+                   (= (get expected-logs (:label proof)) (:path proof)))
+                 logs)
+                (= true (:prewarmed sync))
+                (contains? #{:unchanged :installed :superseded}
+                           (:reload sync))
+                (integer? (:attempts sync))
+                (pos? (:attempts sync))
+                (integer? (:elapsed-ms sync))
+                (not (neg? (:elapsed-ms sync))))
+            (binding [*out* *err*]
+              (println "invalid cutover prepare response" (pr-str m)))
+            (System/exit 1))
+          (println (:instance m) (:version m)))))' \
+    "$input" "$expected_cutover_id" "$origin" \
+    "$NORTH_COORD_COORD_LOG" "$NORTH_COORD_TELEMETRY_LOG"
 }
 
 read_status() {
@@ -598,7 +624,9 @@ prepare_endpoint() {
     rm -f -- "$response"
     return 1
   fi
-  if ! prepared_identity=$(inspect_prepare "$response" "$operation_id"); then
+  if ! prepared_identity=$(
+    inspect_prepare "$response" "$operation_id" "$origin"
+  ); then
     rm -f -- "$response"
     return 1
   fi
