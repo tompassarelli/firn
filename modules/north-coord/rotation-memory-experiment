@@ -8,7 +8,7 @@ readonly HARD_MAX_PROCESS_STARTS=8
 readonly WALL_TIMEOUT_SECONDS=2700
 readonly AGGREGATE_CEILING_BYTES=$((9 * 1024 * 1024 * 1024))
 readonly TELEMETRY_FLOOR_BYTES=$((1494 * 1024 * 1024))
-SCRIPT_PATH=$(readlink -f "$0")
+SCRIPT_PATH=$(readlink -f "${BASH_SOURCE[0]}")
 readonly SCRIPT_PATH
 readonly -a FORBIDDEN_PORTS=(7977 7978 17977 17978 27977 27978)
 
@@ -133,6 +133,8 @@ emit_plan() {
   printf 'run\ttelemetry-green\tbase\tB\ttelemetry\ttelemetry\t-Xmx1g\t1500M\t21-23\t-\n'
   printf 'run\tcoord-fallback\tfallback\tF\tcoordination\tcoordination\t-Xmx4g\tinfinity\t12-17\tcoord-discovery\n'
   printf 'run\ttelemetry-fallback\tfallback\tF\ttelemetry\ttelemetry\t-Xmx2g\tinfinity\t18-23\ttelemetry-discovery\n'
+  printf 'run\tcoord-discovery-retry\tretry\tR\tcoordination\tcoordination\t-Xmx2g\tinfinity\t12-17\tcoord-discovery\n'
+  printf 'run\ttelemetry-discovery-retry\tretry\tR\ttelemetry\ttelemetry\t-Xmx1g\tinfinity\t18-23\ttelemetry-discovery\n'
 }
 
 generate_fixture() {
@@ -207,6 +209,40 @@ meta_value() {
   local file=$1 key=$2
   [[ -r "$file" ]] || return 1
   sed -n "s/^${key}=//p" "$file" | tail -n 1
+}
+
+host_oom_kills() {
+  awk '$1 == "oom_kill" {print $2; found=1} END {if (!found) exit 1}' /proc/vmstat
+}
+
+wave_contamination() {
+  local root=$1 before=$2 after=$3 first=$4 second=$5
+  local exact
+  exact=$(meta_value "$root/receipts/$first.receipt" cgroup_members_exact || true)
+  exact+=$(meta_value "$root/receipts/$second.receipt" cgroup_members_exact || true)
+  if [[ ! "$before" =~ ^[0-9]+$ || ! "$after" =~ ^[0-9]+$ ||
+        "$exact" != [01][01] ]] || ((after < before)); then
+    printf 'cannot-determine\n'
+  elif ((after == before)) && [[ "$exact" == 11 ]]; then
+    printf 'clean\n'
+  else
+    printf 'contaminated\n'
+  fi
+}
+
+matrix_step() {
+  local coord=$1 telemetry=$2 contamination=$3 retried=$4
+  if ((retried == 0)) && [[ "$coord" == heap-oome || "$telemetry" == heap-oome ]]; then
+    printf 'fallback\n'
+  elif [[ "$coord" != pass || "$telemetry" != pass ]]; then
+    printf 'stop\n'
+  elif [[ "$contamination" == clean ]]; then
+    printf 'wave-b\n'
+  elif [[ "$contamination" == contaminated && "$retried" == 0 ]]; then
+    printf 'retry\n'
+  else
+    printf 'cannot-determine\n'
+  fi
 }
 
 classify_case() {
@@ -579,6 +615,12 @@ launch_case() {
     cannot_determine "transient cgroup limits differ from the declared profile: $unit"
 }
 
+launch_counted() {
+  ((starts < HARD_MAX_PROCESS_STARTS)) || die "process-start hard maximum exceeded"
+  launch_case "$@"
+  starts=$((starts + 1))
+}
+
 query_case_status() {
   local source=$1 port=$2 primary_log=$3 output=$4
   FRAM_PROBE_PORT="$port" FRAM_PROBE_LOG="$primary_log" \
@@ -605,6 +647,7 @@ observe_case() {
   local ready=0 work_complete=0 status_rc=3 systemd_result exit_code signal
   local before_max before_oom before_kill after_max after_oom after_kill
   local max_delta oom_delta kill_delta peak heap_oome classification expected_manifest
+  local actual_members expected_members cgroup_members_exact=unknown
   meta=$case_dir/case.meta
   unit=$(meta_value "$meta" unit)
   role=$(meta_value "$meta" role)
@@ -657,6 +700,13 @@ observe_case() {
     done
   fi
 
+  if [[ -r "/sys/fs/cgroup$control_group/cgroup.procs" ]]; then
+    actual_members=$(sort -n "/sys/fs/cgroup$control_group/cgroup.procs" | paste -sd, -)
+    expected_members=$(printf '%s\n%s\n' "$runner_pid" "$daemon_pid" |
+      sort -n | paste -sd, -)
+    cgroup_members_exact=0
+    [[ "$actual_members" == "$expected_members" ]] && cgroup_members_exact=1
+  fi
   if kill -0 "$runner_pid" 2>/dev/null; then
     : >"$case_dir/stop.requested"
     systemctl --user stop "$unit" >/dev/null 2>&1 || true
@@ -712,6 +762,7 @@ observe_case() {
     printf 'memory_events_max_delta=%s\n' "$max_delta"
     printf 'memory_events_oom_delta=%s\n' "$oom_delta"
     printf 'memory_events_oom_kill_delta=%s\n' "$kill_delta"
+    printf 'cgroup_members_exact=%s\n' "$cgroup_members_exact"
     printf 'ready=%s\n' "$ready"
     printf 'work_complete=%s\n' "$work_complete"
     printf 'classification=%s\n' "$classification"
@@ -755,6 +806,7 @@ run_experiment() {
 
   local root source fixture token deadline starts=0
   local coord_discovery telemetry_discovery classification case_id
+  local wave_oom_before wave_oom_after contamination step forced_overall=
   root=$(mktemp -d --tmpdir="$scratch_parent" north-rotation-memory.XXXXXXXX)
   source=$root/src
   fixture=$root/fixture
@@ -770,44 +822,58 @@ run_experiment() {
   capture_host_state "$root/results/host-before"
   emit_plan >"$root/results/plan.tsv"
 
-  launch_case "$root" "$source" "$fixture" "$token" coord-discovery \
+  wave_oom_before=$(host_oom_kills || true)
+  launch_counted "$root" "$source" "$fixture" "$token" coord-discovery \
     coordination coordination -Xmx2g infinity 12-17
-  starts=$((starts + 1))
-  launch_case "$root" "$source" "$fixture" "$token" telemetry-discovery \
+  launch_counted "$root" "$source" "$fixture" "$token" telemetry-discovery \
     telemetry telemetry -Xmx1g infinity 18-23
-  starts=$((starts + 1))
   coord_discovery=$(observe_case "$root" "$source" coord-discovery "$deadline")
   telemetry_discovery=$(observe_case "$root" "$source" telemetry-discovery "$deadline")
+  wave_oom_after=$(host_oom_kills || true)
+  contamination=$(wave_contamination "$root" "$wave_oom_before" "$wave_oom_after" \
+    coord-discovery telemetry-discovery)
+  step=$(matrix_step "$coord_discovery" "$telemetry_discovery" "$contamination" 0)
 
-  if [[ "$coord_discovery" == heap-oome || "$telemetry_discovery" == heap-oome ]]; then
+  if [[ "$step" == retry ]]; then
+    wave_oom_before=$(host_oom_kills || true)
+    launch_counted "$root" "$source" "$fixture" "$token" coord-discovery-retry \
+      coordination coordination -Xmx2g infinity 12-17
+    launch_counted "$root" "$source" "$fixture" "$token" telemetry-discovery-retry \
+      telemetry telemetry -Xmx1g infinity 18-23
+    coord_discovery=$(observe_case "$root" "$source" coord-discovery-retry "$deadline")
+    telemetry_discovery=$(observe_case \
+      "$root" "$source" telemetry-discovery-retry "$deadline")
+    wave_oom_after=$(host_oom_kills || true)
+    contamination=$(wave_contamination "$root" "$wave_oom_before" "$wave_oom_after" \
+      coord-discovery-retry telemetry-discovery-retry)
+    step=$(matrix_step "$coord_discovery" "$telemetry_discovery" "$contamination" 1)
+  fi
+
+  if [[ "$step" == fallback ]]; then
     if [[ "$coord_discovery" == heap-oome ]]; then
-      launch_case "$root" "$source" "$fixture" "$token" coord-fallback \
+      launch_counted "$root" "$source" "$fixture" "$token" coord-fallback \
         coordination coordination -Xmx4g infinity 12-17
-      starts=$((starts + 1))
       observe_case "$root" "$source" coord-fallback "$deadline" >/dev/null
     fi
     if [[ "$telemetry_discovery" == heap-oome ]]; then
-      launch_case "$root" "$source" "$fixture" "$token" telemetry-fallback \
+      launch_counted "$root" "$source" "$fixture" "$token" telemetry-fallback \
         telemetry telemetry -Xmx2g infinity 18-23
-      starts=$((starts + 1))
       observe_case "$root" "$source" telemetry-fallback "$deadline" >/dev/null
     fi
-  elif [[ "$coord_discovery" == pass && "$telemetry_discovery" == pass ]]; then
-    launch_case "$root" "$source" "$fixture" "$token" coord-blue \
+  elif [[ "$step" == wave-b ]]; then
+    launch_counted "$root" "$source" "$fixture" "$token" coord-blue \
       coordination coordination -Xmx2g 3G 12-14
-    starts=$((starts + 1))
-    launch_case "$root" "$source" "$fixture" "$token" coord-green \
+    launch_counted "$root" "$source" "$fixture" "$token" coord-green \
       coordination coordination -Xmx2g 3G 15-17
-    starts=$((starts + 1))
-    launch_case "$root" "$source" "$fixture" "$token" telemetry-blue \
+    launch_counted "$root" "$source" "$fixture" "$token" telemetry-blue \
       telemetry telemetry -Xmx1g 1500M 18-20
-    starts=$((starts + 1))
-    launch_case "$root" "$source" "$fixture" "$token" telemetry-green \
+    launch_counted "$root" "$source" "$fixture" "$token" telemetry-green \
       telemetry telemetry -Xmx1g 1500M 21-23
-    starts=$((starts + 1))
     for case_id in coord-blue coord-green telemetry-blue telemetry-green; do
       observe_case "$root" "$source" "$case_id" "$deadline" >/dev/null
     done
+  elif [[ "$step" == cannot-determine ]]; then
+    forced_overall=cannot-determine
   fi
   ((starts <= HARD_MAX_PROCESS_STARTS)) ||
     die "internal error: process-start hard maximum exceeded"
@@ -826,7 +892,7 @@ run_experiment() {
   stop_active_units
   trap - EXIT INT TERM
 
-  local overall=pass
+  local overall=${forced_overall:-pass}
   shopt -s nullglob
   for case_id in "$root"/receipts/*.receipt; do
     classification=$(meta_value "$case_id" classification || true)
@@ -893,4 +959,4 @@ main() {
   esac
 }
 
-main "$@"
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || main "$@"

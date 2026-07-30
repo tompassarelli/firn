@@ -70,6 +70,12 @@ check "telemetry fallback profile" \
   grep -Fxq $'run\ttelemetry-fallback\tfallback\tF\ttelemetry\ttelemetry\t-Xmx2g\tinfinity\t18-23\ttelemetry-discovery' "$plan"
 check "fallback and contamination retry are exclusive" \
   grep -Fxq $'policy\tcontingency\tfallback-or-one-wave-a-retry\tmutually-exclusive' "$plan"
+# shellcheck source=/dev/null
+source "$harness"
+check "clean Wave A advances to Wave B" test "$(matrix_step pass pass clean 0)" = wave-b
+check "contaminated Wave A retries once" test "$(matrix_step pass pass contaminated 0)" = retry
+check "second contamination is cannot-determine" test "$(matrix_step pass pass contaminated 1)" = cannot-determine
+check "retry cannot enter heap fallback" test "$(matrix_step heap-oome pass clean 1)" = stop
 
 mock_bin=$scratch/mock-bin
 mkdir -p "$mock_bin"
@@ -203,16 +209,20 @@ check "missing cgroup metric is cannot-determine" \
 
 receipts=$scratch/receipts
 mkdir -p "$receipts"
-printf '%s\n' role=coordination classification=pass memory_peak=2500000000 \
+printf '%s\n' role=coordination classification=pass memory_peak=2500000000 cgroup_members_exact=1 \
   >"$receipts/coord-blue.receipt"
 printf '%s\n' role=coordination classification=pass memory_peak=2600000000 \
   >"$receipts/coord-green.receipt"
-printf '%s\n' role=telemetry classification=pass memory_peak=1400000000 \
+printf '%s\n' role=telemetry classification=pass memory_peak=1400000000 cgroup_members_exact=1 \
   >"$receipts/telemetry-blue.receipt"
 printf '%s\n' role=telemetry classification=pass memory_peak=1500000000 \
   >"$receipts/telemetry-green.receipt"
 report=$scratch/report
 "$harness" report "$receipts" >"$report"
+check "zero host OOM delta and exact cgroups are clean" \
+  test "$(wave_contamination "$scratch" 7 7 coord-blue telemetry-blue)" = clean
+check "host OOM delta contaminates Wave A" \
+  test "$(wave_contamination "$scratch" 7 8 coord-blue telemetry-blue)" = contaminated
 check "coord lower bound math" grep -Fxq 'coord_lower_bound_bytes=2600000000' "$report"
 check "telemetry floor math" \
   grep -Fxq 'telemetry_lower_bound_bytes=1566572544' "$report"
