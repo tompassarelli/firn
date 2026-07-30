@@ -131,7 +131,7 @@ for name in north-coord-blue.service north-coord-green.service; do
     echo "private coordination slot runs forbidden pair prepare: $name" >&2
     exit 1
   fi
-  grep -Fxq 'MemoryMax=32G' "$path"
+  grep -Fxq 'MemoryMax=3G' "$path"
   grep -Fxq 'TimeoutStopSec=15s' "$path"
 done
 for name in north-telemetry-coord-blue.service north-telemetry-coord-green.service; do
@@ -143,7 +143,7 @@ for name in north-telemetry-coord-blue.service north-telemetry-coord-green.servi
     echo "private telemetry slot runs forbidden pair prepare: $name" >&2
     exit 1
   fi
-  grep -Fxq 'MemoryMax=8G' "$path"
+  grep -Fxq 'MemoryMax=1500M' "$path"
   grep -Fxq 'TimeoutStopSec=15s' "$path"
 done
 
