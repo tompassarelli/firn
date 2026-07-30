@@ -82,6 +82,11 @@
             "type": "command",
             "command": "/home/tom/.agents/hooks/launch-critical-worktree-guard.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/home/tom/.agents/hooks/comment-bloat-guard.sh",
+            "timeout": 10
           }
         ]
       },
