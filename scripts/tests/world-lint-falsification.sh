@@ -7,6 +7,54 @@ readonly WORLD="$REPO_ROOT/dotfiles/bin/world"
 scratch="$(mktemp -d)"
 trap 'rm -rf "${scratch:?}"' EXIT
 
+resolve_pre_commit() {
+  local hook candidate
+
+  if [[ -n "${PRE_COMMIT_BIN:-}" ]]; then
+    [[ -x "$PRE_COMMIT_BIN" ]] || return 1
+    printf '%s\n' "$PRE_COMMIT_BIN"
+    return
+  fi
+  if candidate="$(command -v pre-commit 2>/dev/null)" &&
+     [[ -x "$candidate" ]]; then
+    printf '%s\n' "$candidate"
+    return
+  fi
+  hook="$(git -C "$REPO_ROOT" rev-parse --git-common-dir)/hooks/pre-commit"
+  [[ -f "$hook" ]] || return 1
+  candidate="$(awk '/^exec .*[/]pre-commit / { print $2; exit }' "$hook")"
+  [[ -x "$candidate" ]] || return 1
+  printf '%s\n' "$candidate"
+}
+
+pre_commit="$(resolve_pre_commit)" || {
+  printf 'FAIL: pre-commit executable is unavailable\n' >&2
+  exit 1
+}
+readonly pre_commit
+
+set +e
+hostile_output="$(
+  cd "$REPO_ROOT"
+  WORLD_MANIFEST_PATH="$scratch/missing-manifest.env" \
+  WORLD_PRECOMMIT_LINT_ROOTS="$REPO_ROOT" \
+    "$pre_commit" run world-topology-drift --all-files --verbose 2>&1
+)"
+hostile_status=$?
+set -e
+
+(( hostile_status == 0 )) || {
+  printf 'FAIL: hostile one-root environment narrowed the production hook\n%s\n' \
+    "$hostile_output" >&2
+  exit 1
+}
+grep -F 'topology-refs: 386 allowed, 0 new' <<<"$hostile_output" >/dev/null || {
+  printf 'FAIL: production hook did not scan the four-root canonical inventory\n%s\n' \
+    "$hostile_output" >&2
+  exit 1
+}
+printf 'PASS: hostile one-root environment cannot narrow the production hook\n'
+
 mkdir -p "$scratch/canary/main"
 git -C "$scratch/canary/main" init -q
 git -C "$scratch/canary/main" config user.name world-test

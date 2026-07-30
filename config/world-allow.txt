@@ -19,7 +19,6 @@ beagle/runtime/src/scheduler/scheduler.clj
 beagle/runtime/src/scheduler/types.clj
 beagle/self-host/native/verify-native.sh
 beagle/self-host/verify-selfhost.sh
-fram/bench/beyond-ram/run.sh
 fram/bin/fram-code-on
 fram/bin/fram-defcheck
 fram/bin/fram-mcp
@@ -31,8 +30,6 @@ fram/codegraph/bin/emit-corpus
 fram/codegraph/bin/rename-demo
 fram/codegraph/bin/safe-rename
 fram/codegraph/test/comment-falsifier.sh
-fram/codegraph/test/faith.rkt
-fram/ksweep_run.sh
 fram/render_crdt_receipt.sh
 fram/tests/coord_defcheck_untyped_e2e_test.clj
 fram/tests/coord_editpath_defect_test.clj
@@ -94,8 +91,6 @@ north/generated_output_test.sh
 north/offline-migrate.clj
 north/profiles/tom/hooks/agent-spawn-guard.sh
 north/profiles/tom/hooks/agent-spawn-guard.test.sh
-north/profiles/tom/hooks/beagle-session-start.sh
-north/profiles/tom/hooks/beagle-session-start.test.sh
 north/profiles/tom/hooks/launch-critical-worktree-guard.test.py
 north/profiles/tom/hooks/launch-critical-worktree-guard.test.sh
 north/profiles/tom/hooks/lib/launch_critical_decide.py
