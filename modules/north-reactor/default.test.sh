@@ -27,10 +27,13 @@ nix eval --raw --impure --expr "
     home = module.config.home-manager.users.tom { config = {}; };
     sweep = home.systemd.user.services.north-reactor-sweep;
   in
+    assert !(builtins.hasAttr \"north-reactor\" home.systemd.user.services);
+    assert builtins.hasAttr \"north-reactor-sweep\" home.systemd.user.services;
+    assert builtins.hasAttr \"north-reactor-sweep\" home.systemd.user.timers;
     assert sweep.Unit.X-SwitchMethod == \"keep-old\";
     assert !(sweep.Service ? restartIfChanged);
     assert builtins.head sweep.Service.Environment == \"PATH=/systemd/bin:/bb/bin:/coreutils/bin:/git/bin\";
     \"ok\"
 " | grep -Fxq ok
 
-printf 'ok: north-reactor-sweep keeps old runs and resolves systemd-run plus git at runtime\n'
+printf 'ok: only north-reactor-sweep remains, with its timer and runtime dependencies\n'
