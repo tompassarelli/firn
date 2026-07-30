@@ -61,6 +61,17 @@ let
   blueTelemetryPort = "17978";
   greenCoordPort = "27977";
   greenTelemetryPort = "27978";
+  coordHeapOptions = "-XX:+UseG1GC -Xmx6g";
+  telemetryHeapOptions = "-XX:+UseG1GC -Xmx4g";
+  coordHeapBytes = "6442450944";
+  telemetryHeapBytes = "4294967296";
+  coordMemoryMax = "8G";
+  telemetryMemoryMax = "6G";
+  coordMemoryMaxBytes = "8589934592";
+  telemetryMemoryMaxBytes = "6442450944";
+  slotMemorySwapMaxBytes = "0";
+  slotCpuQuota = "infinity";
+  slotRestart = "always";
   blueCoordRuntime = mkNorthCoordRuntime "north-coord-blue-runtime" "${runtimeState}-blue" coordinationLog telemetryLog blueCoordPort "north-coord-blue.service" "1";
   blueTelemetryRuntime = mkNorthCoordRuntime "north-telemetry-coord-blue-runtime" "${telemetryRuntimeState}-blue" telemetryLog coordinationLog blueTelemetryPort "north-telemetry-coord-blue.service" "0";
   greenCoordRuntime = mkNorthCoordRuntime "north-coord-green-runtime" "${runtimeState}-green" coordinationLog telemetryLog greenCoordPort "north-coord-green.service" "1";
@@ -90,8 +101,17 @@ let
       export NORTH_COORD_TELEMETRY_LOG=${telemetryLog}
       export NORTH_COORD_SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl
       export NORTH_COORD_JCMD_BIN=${pkgs.jdk}/bin/jcmd
+      export NORTH_COORD_BLUE_COORD_UNIT=north-coord-blue.service
       export NORTH_COORD_BLUE_TELEMETRY_UNIT=north-telemetry-coord-blue.service
+      export NORTH_COORD_GREEN_COORD_UNIT=north-coord-green.service
       export NORTH_COORD_GREEN_TELEMETRY_UNIT=north-telemetry-coord-green.service
+      export NORTH_COORD_PROMOTION_COORD_EXPECTED_MEMORY_MAX_BYTES=${coordMemoryMaxBytes}
+      export NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_MEMORY_MAX_BYTES=${telemetryMemoryMaxBytes}
+      export NORTH_COORD_PROMOTION_COORD_EXPECTED_MAX_HEAP_BYTES=${coordHeapBytes}
+      export NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_MAX_HEAP_BYTES=${telemetryHeapBytes}
+      export NORTH_COORD_PROMOTION_EXPECTED_MEMORY_SWAP_MAX_BYTES=${slotMemorySwapMaxBytes}
+      export NORTH_COORD_PROMOTION_EXPECTED_CPU_QUOTA=${slotCpuQuota}
+      export NORTH_COORD_PROMOTION_EXPECTED_RESTART=${slotRestart}
       export NORTH_COORD_BLUE_COORD_PORT=${blueCoordPort}
       export NORTH_COORD_BLUE_TELEMETRY_PORT=${blueTelemetryPort}
       export NORTH_COORD_GREEN_COORD_PORT=${greenCoordPort}
@@ -218,7 +238,7 @@ let
     Type = "simple";
     User = username;
     WorkingDirectory = homeDir;
-    Restart = "always";
+    Restart = slotRestart;
     RestartSec = 2;
     TimeoutStopSec = "15s";
     SendSIGKILL = true;
@@ -413,10 +433,10 @@ in
         ExecStart = "${northCoordSdListenChecked}/bin/north-coord-sd-listen ${northTelemetryCoordRuntime}/bin/north-telemetry-coord-runtime start";
       });
     };
-    systemd.services.north-coord-blue = lib.mkIf stageA (mkSlotService "North coordination private blue generation (:17977)" "blue" "${blueCoordRuntime}/bin/north-coord-blue-runtime" telemetryLog "${runtimeState}-blue" blueCoordPort "-XX:+UseG1GC -Xmx6g" "8G");
-    systemd.services.north-telemetry-coord-blue = lib.mkIf stageA (mkSlotService "North telemetry private blue generation (:17978)" "blue" "${blueTelemetryRuntime}/bin/north-telemetry-coord-blue-runtime" coordinationLog "${telemetryRuntimeState}-blue" blueTelemetryPort "-XX:+UseG1GC -Xmx4g" "6G");
-    systemd.services.north-coord-green = lib.mkIf stageA (mkSlotService "North coordination private green generation (:27977)" "green" "${greenCoordRuntime}/bin/north-coord-green-runtime" telemetryLog "${runtimeState}-green" greenCoordPort "-XX:+UseG1GC -Xmx6g" "8G");
-    systemd.services.north-telemetry-coord-green = lib.mkIf stageA (mkSlotService "North telemetry private green generation (:27978)" "green" "${greenTelemetryRuntime}/bin/north-telemetry-coord-green-runtime" coordinationLog "${telemetryRuntimeState}-green" greenTelemetryPort "-XX:+UseG1GC -Xmx4g" "6G");
+    systemd.services.north-coord-blue = lib.mkIf stageA (mkSlotService "North coordination private blue generation (:17977)" "blue" "${blueCoordRuntime}/bin/north-coord-blue-runtime" telemetryLog "${runtimeState}-blue" blueCoordPort coordHeapOptions coordMemoryMax);
+    systemd.services.north-telemetry-coord-blue = lib.mkIf stageA (mkSlotService "North telemetry private blue generation (:17978)" "blue" "${blueTelemetryRuntime}/bin/north-telemetry-coord-blue-runtime" coordinationLog "${telemetryRuntimeState}-blue" blueTelemetryPort telemetryHeapOptions telemetryMemoryMax);
+    systemd.services.north-coord-green = lib.mkIf stageA (mkSlotService "North coordination private green generation (:27977)" "green" "${greenCoordRuntime}/bin/north-coord-green-runtime" telemetryLog "${runtimeState}-green" greenCoordPort coordHeapOptions coordMemoryMax);
+    systemd.services.north-telemetry-coord-green = lib.mkIf stageA (mkSlotService "North telemetry private green generation (:27978)" "green" "${greenTelemetryRuntime}/bin/north-telemetry-coord-green-runtime" coordinationLog "${telemetryRuntimeState}-green" greenTelemetryPort telemetryHeapOptions telemetryMemoryMax);
     systemd.services.north-coord-proxy = lib.mkIf stageA {
       description = "North permanent public selector for coordination + telemetry";
       requires = [ "north-coord.socket" "north-telemetry-coord.socket" ];

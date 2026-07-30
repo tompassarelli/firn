@@ -11,8 +11,9 @@ gate_state=$scratch/gate
 fake_state=$scratch/fake
 systemd_state=$scratch/systemd
 jcmd_state=$scratch/jcmd-state
+proc_root=$scratch/proc
 cutover_log=$scratch/cutover.log
-mkdir -p "$gate_state" "$fake_state" "$systemd_state" "$jcmd_state"
+mkdir -p "$gate_state" "$fake_state" "$systemd_state" "$jcmd_state" "$proc_root"
 printf 'test-secret\n' >"$token"
 chmod 0600 "$token"
 printf 'active blue\n' >"$route"
@@ -66,6 +67,8 @@ green active 1
 EOF
 cmp "$scratch/roles.expected" "$scratch/roles"
 
+printf 'active blue\n' >"$route"
+
 write_endpoint() {
   printf '%s %s %s %s\n' "$2" "$3" "$4" "${5:-none}" >"$fake_state/$1"
 }
@@ -74,20 +77,59 @@ write_endpoint 17978 active blue-telemetry 20
 write_endpoint 27977 standby green-coord 10
 write_endpoint 27978 standby green-telemetry 20
 
+write_process_identity() {
+  local unit=$1 main_pid=$2 port=$3 birth=$4
+  local revision=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  local origin=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-fram-test
+  mkdir -p "$proc_root/$main_pid"
+  {
+    printf '%s (java) S' "$main_pid"
+    for _ in {1..18}; do printf ' 0'; done
+    printf ' %s\n' "$birth"
+  } >"$proc_root/$main_pid/stat"
+  printf '%s\0' \
+    "NORTH_FRAM_RUNTIME=package" \
+    "FRAM_RUNTIME_SOURCE=$origin/libexec/fram" \
+    "FRAM_RUNTIME_REV=$revision" \
+    "FRAM_RUNTIME_TREE=immutable:$revision" \
+    "FRAM_RUNTIME_ORIGIN=$origin" \
+    "FRAM_RUNTIME_DAEMON=$origin/bin/fram-daemon" \
+    "NORTH_COORD_SYSTEMD_UNIT=$unit" \
+    "FRAM_PORT=$port" \
+    >"$proc_root/$main_pid/environ"
+}
+
 write_unit_health() {
   local memory_current=${2:-1200000000}
   local tasks_current=${3:-24}
-  local memory_max=${4:-6442450944}
+  local memory_max=${4:-}
   local memory_swap_max=${5:-0}
-  local main_pid=4201
+  local cpu_quota=${6:-infinity}
+  local n_restarts=${7:-0}
+  local drop_in_paths=${8:-}
+  local main_pid port runtime_name
   local invocation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   local exec_start=1000000
-  if [[ $1 == north-telemetry-coord-green.service ]]; then
-    main_pid=4202
-    invocation=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-    exec_start=2000000
-  fi
+  case "$1" in
+    north-coord-blue.service)
+      main_pid=4101; port=17977; memory_max=${memory_max:-8589934592} ;;
+    north-telemetry-coord-blue.service)
+      main_pid=4102; port=17978; memory_max=${memory_max:-6442450944}
+      invocation=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; exec_start=2000000 ;;
+    north-coord-green.service)
+      main_pid=4201; port=27977; memory_max=${memory_max:-8589934592}
+      invocation=cccccccccccccccccccccccccccccccc; exec_start=3000000 ;;
+    north-telemetry-coord-green.service)
+      main_pid=4202; port=27978; memory_max=${memory_max:-6442450944}
+      invocation=dddddddddddddddddddddddddddddddd; exec_start=4000000 ;;
+    *) return 2 ;;
+  esac
+  runtime_name=${1%.service}-runtime
   cat >"$systemd_state/$1" <<EOF
+LoadState=loaded
+FragmentPath=/etc/systemd/system/$1
+DropInPaths=$drop_in_paths
+NeedDaemonReload=no
 ActiveState=active
 SubState=running
 InvocationID=$invocation
@@ -96,11 +138,20 @@ ExecMainStartTimestampMonotonic=$exec_start
 MemoryCurrent=$memory_current
 MemoryMax=$memory_max
 MemorySwapMax=$memory_swap_max
+CPUQuotaPerSecUSec=$cpu_quota
 TasksCurrent=$tasks_current
+TasksMax=512
+NRestarts=$n_restarts
+Restart=always
+ExecStart={ path=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-north-coord-slot-start/bin/north-coord-slot-start ; argv[]=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-north-coord-slot-start/bin/north-coord-slot-start ; }
+ExecStartPre={ path=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-$runtime_name/bin/$runtime_name ; argv[]=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-$runtime_name/bin/$runtime_name ensure-default ; }
 EOF
+  write_process_identity "$1" "$main_pid" "$port" "$((exec_start + 10))"
 }
 
+write_unit_health north-coord-blue.service
 write_unit_health north-telemetry-coord-blue.service
+write_unit_health north-coord-green.service
 write_unit_health north-telemetry-coord-green.service
 
 cat >"$scratch/systemctl" <<'SH'
@@ -117,9 +168,24 @@ set -euo pipefail
 pid=$1
 command=$2
 mode=$(<"$NORTH_COORD_TEST_JCMD_MODE_FILE")
+if [[ -f "$NORTH_COORD_TEST_JCMD_MODE_FILE.$pid" ]]; then
+  mode=$(<"$NORTH_COORD_TEST_JCMD_MODE_FILE.$pid")
+fi
+if (( pid % 2 == 1 )); then
+  max_heap=6442450944
+  heap_total=6291456K
+  heap_high=3145728K
+else
+  max_heap=4294967296
+  heap_total=4194304K
+  heap_high=2097152K
+fi
 case "$command:$mode" in
   VM.flags:healthy|VM.flags:heap-high)
-    printf '%s:\n-XX:+UseG1GC -XX:MaxHeapSize=4294967296\n' "$pid"
+    printf '%s:\n-XX:+UseG1GC -XX:MaxHeapSize=%s\n' "$pid" "$max_heap"
+    ;;
+  VM.flags:oversized)
+    printf '%s:\n-XX:+UseG1GC -XX:MaxHeapSize=8589934592\n' "$pid"
     ;;
   VM.flags:serial)
     printf '%s:\n-XX:MaxHeapSize=1073741824 -XX:+UseSerialGC\n' "$pid"
@@ -130,11 +196,13 @@ case "$command:$mode" in
   VM.flags:malformed)
     printf '%s:\nnot-jvm-flags\n' "$pid"
     ;;
-  GC.heap_info:healthy|GC.heap_info:serial)
-    printf '%s:\n garbage-first heap   total 4194304K, used 1200000K [0x0, 0x1)\n' "$pid"
+  GC.heap_info:healthy|GC.heap_info:serial|GC.heap_info:oversized)
+    printf '%s:\n garbage-first heap   total %s, used 1200000K [0x0, 0x1)\n' \
+      "$pid" "$heap_total"
     ;;
   GC.heap_info:heap-high)
-    printf '%s:\n garbage-first heap   total 4194304K, used 2097152K [0x0, 0x1)\n' "$pid"
+    printf '%s:\n garbage-first heap   total %s, used %s [0x0, 0x1)\n' \
+      "$pid" "$heap_total" "$heap_high"
     ;;
   GC.heap_info:missing)
     exit 1
@@ -380,7 +448,10 @@ export NORTH_COORD_COORD_LOG=$scratch/coordination.log
 export NORTH_COORD_TELEMETRY_LOG=$scratch/telemetry.log
 export NORTH_COORD_SYSTEMCTL_BIN=$scratch/systemctl
 export NORTH_COORD_JCMD_BIN=$scratch/jcmd
+export NORTH_COORD_PROC_ROOT=$proc_root
+export NORTH_COORD_BLUE_COORD_UNIT=north-coord-blue.service
 export NORTH_COORD_BLUE_TELEMETRY_UNIT=north-telemetry-coord-blue.service
+export NORTH_COORD_GREEN_COORD_UNIT=north-coord-green.service
 export NORTH_COORD_GREEN_TELEMETRY_UNIT=north-telemetry-coord-green.service
 export NORTH_COORD_BLUE_COORD_PORT=17977
 export NORTH_COORD_BLUE_TELEMETRY_PORT=17978
@@ -425,7 +496,10 @@ assert_prepare_rejected() {
     exit 1
   fi
   [[ ! -e "$gate_state/gate.current" ]]
+  [[ ! -e "$gate_state/readiness.coord" ]]
+  [[ ! -e "$gate_state/readiness.telemetry" ]]
   [[ ! -e "$transaction" && ! -L "$transaction" ]]
+  grep -Fxq 'active blue' "$route"
   read -r blue_coord_phase _ <"$fake_state/17977"
   read -r blue_telemetry_phase _ <"$fake_state/17978"
   [[ "$blue_coord_phase" == active ]]
@@ -475,9 +549,33 @@ do
 done
 unset NORTH_COORD_TEST_PREPARE_PROOF_MODE
 
-printf 'serial\n' >"$jcmd_state/mode"
-assert_prepare_rejected serial-1g
-printf 'healthy\n' >"$jcmd_state/mode"
+# Healthy telemetry cannot hide a bad coordination process.
+printf 'oversized\n' >"$jcmd_state/mode.4201"
+assert_prepare_rejected oversized-coordination-heap
+rm -f -- "$jcmd_state/mode.4201"
+write_unit_health north-coord-green.service 1200000000 24 1572864000
+assert_prepare_rejected wrong-coordination-cgroup-limit
+write_unit_health north-coord-green.service 1200000000 24 8589934592 1073741824
+assert_prepare_rejected wrong-coordination-swap-limit
+write_unit_health north-coord-green.service 1200000000 24 8589934592 0 500000
+assert_prepare_rejected wrong-coordination-cpu-quota
+write_unit_health north-coord-green.service 1200000000 129
+assert_prepare_rejected coordination-task-bound
+write_unit_health north-coord-green.service 1200000000 24 8589934592 0 infinity 1
+assert_prepare_rejected coordination-restart
+write_unit_health north-coord-green.service 1200000000 24 8589934592 0 infinity 0 \
+  /run/systemd/system/north-coord-green.service.d/override.conf
+assert_prepare_rejected coordination-drop-in
+write_unit_health north-coord-green.service
+sed -i 's/^MainPID=4201$/MainPID=4999/' \
+  "$systemd_state/north-coord-green.service"
+assert_prepare_rejected stale-coordination-pid-identity
+write_unit_health north-coord-green.service
+
+# Healthy coordination cannot hide a bad telemetry process.
+printf 'serial\n' >"$jcmd_state/mode.4202"
+assert_prepare_rejected serial-telemetry-1g
+rm -f -- "$jcmd_state/mode.4202"
 
 write_unit_health north-telemetry-coord-green.service 1200000000 24 1572864000
 assert_prepare_rejected wrong-cgroup-limit

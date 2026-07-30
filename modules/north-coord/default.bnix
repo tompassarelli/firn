@@ -110,6 +110,17 @@
         blueTelemetryPort "17978"
         greenCoordPort "27977"
         greenTelemetryPort "27978"
+        coordHeapOptions "-XX:+UseG1GC -Xmx6g"
+        telemetryHeapOptions "-XX:+UseG1GC -Xmx4g"
+        coordHeapBytes "6442450944"
+        telemetryHeapBytes "4294967296"
+        coordMemoryMax "8G"
+        telemetryMemoryMax "6G"
+        coordMemoryMaxBytes "8589934592"
+        telemetryMemoryMaxBytes "6442450944"
+        slotMemorySwapMaxBytes "0"
+        slotCpuQuota "infinity"
+        slotRestart "always"
         blueCoordRuntime
           (mkNorthCoordRuntime
             "north-coord-blue-runtime"
@@ -178,8 +189,24 @@
                      pkgs.systemd "/bin/systemctl")
                   (s "export NORTH_COORD_JCMD_BIN="
                      pkgs.jdk "/bin/jcmd")
+                  "export NORTH_COORD_BLUE_COORD_UNIT=north-coord-blue.service"
                   "export NORTH_COORD_BLUE_TELEMETRY_UNIT=north-telemetry-coord-blue.service"
+                  "export NORTH_COORD_GREEN_COORD_UNIT=north-coord-green.service"
                   "export NORTH_COORD_GREEN_TELEMETRY_UNIT=north-telemetry-coord-green.service"
+                  (s "export NORTH_COORD_PROMOTION_COORD_EXPECTED_MEMORY_MAX_BYTES="
+                     coordMemoryMaxBytes)
+                  (s "export NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_MEMORY_MAX_BYTES="
+                     telemetryMemoryMaxBytes)
+                  (s "export NORTH_COORD_PROMOTION_COORD_EXPECTED_MAX_HEAP_BYTES="
+                     coordHeapBytes)
+                  (s "export NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_MAX_HEAP_BYTES="
+                     telemetryHeapBytes)
+                  (s "export NORTH_COORD_PROMOTION_EXPECTED_MEMORY_SWAP_MAX_BYTES="
+                     slotMemorySwapMaxBytes)
+                  (s "export NORTH_COORD_PROMOTION_EXPECTED_CPU_QUOTA="
+                     slotCpuQuota)
+                  (s "export NORTH_COORD_PROMOTION_EXPECTED_RESTART="
+                     slotRestart)
                   (s "export NORTH_COORD_BLUE_COORD_PORT=" blueCoordPort)
                   (s "export NORTH_COORD_BLUE_TELEMETRY_PORT="
                      blueTelemetryPort)
@@ -329,7 +356,7 @@
           {:Type             "simple"
            :User             username
            :WorkingDirectory homeDir
-           :Restart          "always"
+           :Restart          slotRestart
            :RestartSec       2
            ;; Fram's coordinated shutdown has an internal eight-second bound.
            ;; Preserve a small diagnostic margin, then let systemd terminate a
@@ -608,8 +635,8 @@
               telemetryLog
               (s runtimeState "-blue")
               blueCoordPort
-              "-XX:+UseG1GC -Xmx6g"
-              "8G"))
+              coordHeapOptions
+              coordMemoryMax))
          :systemd.services.north-telemetry-coord-blue
           (lib.mkIf stageA
             (mkSlotService
@@ -620,8 +647,8 @@
               coordinationLog
               (s telemetryRuntimeState "-blue")
               blueTelemetryPort
-              "-XX:+UseG1GC -Xmx4g"
-              "6G"))
+              telemetryHeapOptions
+              telemetryMemoryMax))
          :systemd.services.north-coord-green
           (lib.mkIf stageA
             (mkSlotService
@@ -631,8 +658,8 @@
               telemetryLog
               (s runtimeState "-green")
               greenCoordPort
-              "-XX:+UseG1GC -Xmx6g"
-              "8G"))
+              coordHeapOptions
+              coordMemoryMax))
          :systemd.services.north-telemetry-coord-green
           (lib.mkIf stageA
             (mkSlotService
@@ -643,8 +670,8 @@
               coordinationLog
               (s telemetryRuntimeState "-green")
               greenTelemetryPort
-              "-XX:+UseG1GC -Xmx4g"
-              "6G"))
+              telemetryHeapOptions
+              telemetryMemoryMax))
          :systemd.services.north-coord-proxy
           (lib.mkIf stageA
             {:description
