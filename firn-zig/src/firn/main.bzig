@@ -1,5 +1,7 @@
 #lang beagle/zig
 
+;; @upstream:graph
+
 (ns firn.main)
 
 (def firn-schema-version :- String "firn-index/v1")
