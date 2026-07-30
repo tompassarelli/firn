@@ -104,17 +104,17 @@
         "zig-overlay": "zig-overlay_2"
       },
       "locked": {
-        "lastModified": 1785355001,
-        "narHash": "sha256-3U5aJjPpA4UWMmqyYXsUdk4/oXP07Hpv6/aoVrGbe3A=",
+        "lastModified": 1785404312,
+        "narHash": "sha256-7Wi93DVASoVy6iji0y4ob9aoInGv/74TVwT7tvitbVU=",
         "owner": "tompassarelli",
         "repo": "beagle",
-        "rev": "76e7f9494a13616f379f9502ee04574f3fe9e38a",
+        "rev": "80e0c27409236a2cc4c7e7a33aafed25dc9fde7c",
         "type": "github"
       },
       "original": {
         "owner": "tompassarelli",
         "repo": "beagle",
-        "rev": "76e7f9494a13616f379f9502ee04574f3fe9e38a",
+        "rev": "80e0c27409236a2cc4c7e7a33aafed25dc9fde7c",
         "type": "github"
       }
     },
@@ -455,11 +455,11 @@
         "nixpkgs": "nixpkgs_3"
       },
       "locked": {
-        "lastModified": 1785398509,
-        "narHash": "sha256-AArr3A5LJJfCvHJM1dngLwVwFG4bbmWKziBy4o5Fd8s=",
+        "lastModified": 1785410703,
+        "narHash": "sha256-42qdL3+l44VUGmbp2VK8kluoCP0sCMzQypCH0Jglc7Y=",
         "ref": "main",
-        "rev": "2a340db300fe55abae2bef470e6bd94bbe97eab3",
-        "revCount": 698,
+        "rev": "0c5461b145b45f540aa95ba8344fc7c75fc8be48",
+        "revCount": 708,
         "type": "git",
         "url": "file:///home/tom/code/fram/main"
       },
