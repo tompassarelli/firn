@@ -1,7 +1,6 @@
 { config, lib, pkgs, ... }:
 
 {
-  myConfig.modules.anytype.enable = lib.mkDefault true;
   myConfig.modules.atuin.enable = lib.mkDefault true;
   myConfig.modules.bash.enable = lib.mkDefault true;
   myConfig.modules.bc.enable = lib.mkDefault true;
@@ -12,7 +11,6 @@
   myConfig.modules.bun.enable = lib.mkDefault true;
   myConfig.modules.cargo.enable = lib.mkDefault true;
   myConfig.modules.chrome.enable = lib.mkDefault true;
-  myConfig.modules.clang.enable = lib.mkDefault true;
   myConfig.modules.claude.enable = lib.mkDefault true;
   myConfig.modules.clippy.enable = lib.mkDefault true;
   myConfig.modules.clojure.enable = lib.mkDefault true;
@@ -59,7 +57,6 @@
   myConfig.modules.libnotify.enable = lib.mkDefault true;
   myConfig.modules.libsecret.enable = lib.mkDefault true;
   myConfig.modules.libtool.enable = lib.mkDefault true;
-  myConfig.modules.lutris.enable = lib.mkDefault true;
   myConfig.modules.mpv.enable = lib.mkDefault true;
   myConfig.modules.my-agents.enable = lib.mkDefault true;
   myConfig.modules.nautilus.enable = lib.mkDefault true;
@@ -68,7 +65,6 @@
   myConfig.modules.nodejs.enable = lib.mkDefault true;
   myConfig.modules.north.enable = lib.mkDefault true;
   myConfig.modules.north-profile.enable = lib.mkDefault true;
-  myConfig.modules.obs-studio.enable = lib.mkDefault true;
   myConfig.modules.obsidian.enable = lib.mkDefault true;
   myConfig.modules.opencode.enable = lib.mkDefault true;
   myConfig.modules.pandoc.enable = lib.mkDefault true;
@@ -76,7 +72,6 @@
   myConfig.modules.pkg-config.enable = lib.mkDefault true;
   myConfig.modules.polkit.enable = lib.mkDefault true;
   myConfig.modules.procs.enable = lib.mkDefault true;
-  myConfig.modules.promptfoo.enable = lib.mkDefault true;
   myConfig.modules.protonvpn-gui.enable = lib.mkDefault true;
   myConfig.modules.python.enable = lib.mkDefault true;
   myConfig.modules.quickshell.enable = lib.mkDefault true;

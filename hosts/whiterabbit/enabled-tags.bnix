@@ -26,5 +26,5 @@
    notes
    writing
    [vpn -protonvpn-cli]]
- :disabled [discord glide mail slack spotify wine wowup zoom]
+ :disabled [anytype clang discord glide lutris mail obs-studio promptfoo slack spotify wine wowup zoom]
 }

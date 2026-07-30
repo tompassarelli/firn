@@ -42,7 +42,6 @@
   myConfig.modules.awscli.enable = true;
   myConfig.modules.libsecret.enable = true;
   myConfig.modules.proton-autopurge.enable = true;
-  myConfig.modules.azure-cli.enable = true;
   myConfig.modules.clockify.enable = true;
   myConfig.modules.parted.enable = true;
   myConfig.modules.unixodbc.enable = true;
@@ -50,7 +49,6 @@
   myConfig.modules.appimage.enable = true;
   myConfig.modules.codex.enable = true;
   myConfig.modules.hermes.enable = true;
-  myConfig.modules.vscode.enable = true;
   myConfig.modules.zed.enable = true;
   myConfig.modules.windows-vm.enable = false;
   myConfig.modules.nh.enable = true;
