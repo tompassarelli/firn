@@ -151,6 +151,29 @@ FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" SHARE_DIR="$share_dir" \
 bash -n "$repo_a/dotfiles/bin/firn"
 [ "$(wc -l <"$build_log")" -eq 3 ]
 
+# The generated source-tree wrapper preserves the native rebuild dispatch.
+# FIRN_DISABLE_NATIVE remains the explicit route to the compiled Racket CLI.
+native="$scratch/firn-native"
+native_calls="$scratch/native-calls"
+cat >"$native" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${FIRN_NATIVE_CALLS:?}"
+SH
+chmod +x "$native"
+: >"$native_calls"
+FIRN_NATIVE_BIN="$native" FIRN_NATIVE_CALLS="$native_calls" \
+  FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" \
+  "$repo_a/dotfiles/bin/firn" rebuild whiterabbit
+grep -Fxq 'rebuild whiterabbit' "$native_calls"
+disabled_output="$(
+  FIRN_DISABLE_NATIVE=1 FIRN_NATIVE_BIN="$native" \
+    FIRN_NATIVE_CALLS="$native_calls" FIRN_REPO="$repo_a" \
+    BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" \
+    "$repo_a/dotfiles/bin/firn" rebuild whiterabbit
+)"
+grep -Fxq 'source=source-a' <<<"$disabled_output"
+[ "$(wc -l <"$native_calls")" -eq 1 ]
+
 if find "$share_dir" "$bin_dir" \( -name '*.tmp' -o -name '.firn.*' -o -name '.compile.*' \) | grep -q .; then
   printf 'transactional Firn publication left a temporary file behind\n' >&2
   exit 1
