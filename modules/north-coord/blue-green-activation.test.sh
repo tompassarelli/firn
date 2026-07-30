@@ -109,23 +109,44 @@ write_unit_health() {
   local tasks_current=${3:-24}
   local memory_max=${4:-}
   local memory_swap_max=${5:-0}
-  local cpu_quota=${6:-infinity}
+  local cpu_quota=${6:-}
   local n_restarts=${7:-0}
   local drop_in_paths=${8:-}
+  local memory_high=${9:-}
+  local tasks_max=${10:-128}
+  local restart=${11:-on-failure}
+  local restart_usec=${12:-5s}
+  local start_limit_interval_usec=${13:-1min}
+  local start_limit_burst=${14:-3}
+  local connection_workers=${15:-32}
+  local connection_queue=${16:-128}
+  local request_timeout_ms=${17:-30000}
   local main_pid port runtime_name
   local invocation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   local exec_start=1000000
   case "$1" in
     north-coord-blue.service)
-      main_pid=4101; port=17977; memory_max=${memory_max:-8589934592} ;;
+      main_pid=4101; port=17977
+      memory_high=${memory_high:-7516192768}
+      memory_max=${memory_max:-8589934592}
+      cpu_quota=${cpu_quota:-4s} ;;
     north-telemetry-coord-blue.service)
-      main_pid=4102; port=17978; memory_max=${memory_max:-6442450944}
+      main_pid=4102; port=17978
+      memory_high=${memory_high:-5368709120}
+      memory_max=${memory_max:-6442450944}
+      cpu_quota=${cpu_quota:-2s}
       invocation=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; exec_start=2000000 ;;
     north-coord-green.service)
-      main_pid=4201; port=27977; memory_max=${memory_max:-8589934592}
+      main_pid=4201; port=27977
+      memory_high=${memory_high:-7516192768}
+      memory_max=${memory_max:-8589934592}
+      cpu_quota=${cpu_quota:-4s}
       invocation=cccccccccccccccccccccccccccccccc; exec_start=3000000 ;;
     north-telemetry-coord-green.service)
-      main_pid=4202; port=27978; memory_max=${memory_max:-6442450944}
+      main_pid=4202; port=27978
+      memory_high=${memory_high:-5368709120}
+      memory_max=${memory_max:-6442450944}
+      cpu_quota=${cpu_quota:-2s}
       invocation=dddddddddddddddddddddddddddddddd; exec_start=4000000 ;;
     *) return 2 ;;
   esac
@@ -141,13 +162,18 @@ InvocationID=$invocation
 MainPID=$main_pid
 ExecMainStartTimestampMonotonic=$exec_start
 MemoryCurrent=$memory_current
+MemoryHigh=$memory_high
 MemoryMax=$memory_max
 MemorySwapMax=$memory_swap_max
 CPUQuotaPerSecUSec=$cpu_quota
 TasksCurrent=$tasks_current
-TasksMax=512
+TasksMax=$tasks_max
 NRestarts=$n_restarts
-Restart=always
+Restart=$restart
+RestartUSec=$restart_usec
+StartLimitIntervalUSec=$start_limit_interval_usec
+StartLimitBurst=$start_limit_burst
+Environment=FRAM_CONNECTION_WORKERS=$connection_workers FRAM_CONNECTION_QUEUE=$connection_queue FRAM_REQUEST_TIMEOUT_MS=$request_timeout_ms
 ExecStart={ path=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-north-coord-slot-start/bin/north-coord-slot-start ; argv[]=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-north-coord-slot-start/bin/north-coord-slot-start ; }
 ExecStartPre={ path=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-$runtime_name/bin/$runtime_name ; argv[]=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-$runtime_name/bin/$runtime_name ensure-default ; }
 EOF
@@ -560,15 +586,51 @@ assert_prepare_rejected oversized-coordination-heap
 rm -f -- "$jcmd_state/mode.4201"
 write_unit_health north-coord-green.service 1200000000 24 1572864000
 assert_prepare_rejected wrong-coordination-cgroup-limit
+write_unit_health north-coord-green.service
+sed -i 's/^MemoryHigh=7516192768$/MemoryHigh=6442450944/' \
+  "$systemd_state/north-coord-green.service"
+assert_prepare_rejected wrong-coordination-memory-high
 write_unit_health north-coord-green.service 1200000000 24 8589934592 1073741824
 assert_prepare_rejected wrong-coordination-swap-limit
 write_unit_health north-coord-green.service 1200000000 24 8589934592 0 500000
 assert_prepare_rejected wrong-coordination-cpu-quota
 write_unit_health north-coord-green.service 1200000000 129
 assert_prepare_rejected coordination-task-bound
-write_unit_health north-coord-green.service 1200000000 24 8589934592 0 infinity 1
+write_unit_health north-coord-green.service
+sed -i 's/^TasksMax=128$/TasksMax=512/' \
+  "$systemd_state/north-coord-green.service"
+assert_prepare_rejected wrong-coordination-tasks-max
+write_unit_health north-coord-green.service
+sed -i 's/^Restart=on-failure$/Restart=always/' \
+  "$systemd_state/north-coord-green.service"
+assert_prepare_rejected wrong-coordination-restart-policy
+write_unit_health north-coord-green.service
+sed -i 's/^RestartUSec=5s$/RestartUSec=2s/' \
+  "$systemd_state/north-coord-green.service"
+assert_prepare_rejected wrong-coordination-restart-delay
+write_unit_health north-coord-green.service
+sed -i 's/^StartLimitIntervalUSec=1min$/StartLimitIntervalUSec=0/' \
+  "$systemd_state/north-coord-green.service"
+assert_prepare_rejected wrong-coordination-start-limit-interval
+write_unit_health north-coord-green.service
+sed -i 's/^StartLimitBurst=3$/StartLimitBurst=5/' \
+  "$systemd_state/north-coord-green.service"
+assert_prepare_rejected wrong-coordination-start-limit-burst
+write_unit_health north-coord-green.service
+sed -i 's/FRAM_CONNECTION_WORKERS=32/FRAM_CONNECTION_WORKERS=31/' \
+  "$systemd_state/north-coord-green.service"
+assert_prepare_rejected wrong-coordination-worker-limit
+write_unit_health north-coord-green.service
+sed -i 's/FRAM_CONNECTION_QUEUE=128/FRAM_CONNECTION_QUEUE=127/' \
+  "$systemd_state/north-coord-green.service"
+assert_prepare_rejected wrong-coordination-queue-limit
+write_unit_health north-coord-green.service
+sed -i 's/FRAM_REQUEST_TIMEOUT_MS=30000/FRAM_REQUEST_TIMEOUT_MS=29999/' \
+  "$systemd_state/north-coord-green.service"
+assert_prepare_rejected wrong-coordination-request-deadline
+write_unit_health north-coord-green.service 1200000000 24 8589934592 0 4s 1
 assert_prepare_rejected coordination-restart
-write_unit_health north-coord-green.service 1200000000 24 8589934592 0 infinity 0 \
+write_unit_health north-coord-green.service 1200000000 24 8589934592 0 4s 0 \
   /run/systemd/system/north-coord-green.service.d/override.conf
 assert_prepare_rejected coordination-drop-in
 write_unit_health north-coord-green.service
@@ -584,8 +646,14 @@ rm -f -- "$jcmd_state/mode.4202"
 
 write_unit_health north-telemetry-coord-green.service 1200000000 24 1572864000
 assert_prepare_rejected wrong-cgroup-limit
+write_unit_health north-telemetry-coord-green.service
+sed -i 's/^MemoryHigh=5368709120$/MemoryHigh=4294967296/' \
+  "$systemd_state/north-telemetry-coord-green.service"
+assert_prepare_rejected wrong-telemetry-memory-high
 write_unit_health north-telemetry-coord-green.service 1200000000 24 6442450944 1073741824
 assert_prepare_rejected wrong-swap-limit
+write_unit_health north-telemetry-coord-green.service 1200000000 24 6442450944 0 4s
+assert_prepare_rejected wrong-telemetry-cpu-quota
 write_unit_health north-telemetry-coord-green.service 3221225472
 assert_prepare_rejected memory-current-at-limit
 write_unit_health north-telemetry-coord-green.service 1200000000 129

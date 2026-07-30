@@ -42,6 +42,8 @@ settle_poll_seconds=${NORTH_COORD_CUTOVER_SETTLE_POLL_SECONDS:-0.1}
 readiness_systemctl_timeout_seconds=${NORTH_COORD_PROMOTION_SYSTEMCTL_TIMEOUT_SECONDS:-5}
 readiness_jcmd_timeout_seconds=${NORTH_COORD_PROMOTION_JCMD_TIMEOUT_SECONDS:-10}
 readiness_expected_memory_swap_max_bytes=${NORTH_COORD_PROMOTION_EXPECTED_MEMORY_SWAP_MAX_BYTES:-0}
+readiness_coord_expected_memory_high_bytes=${NORTH_COORD_PROMOTION_COORD_EXPECTED_MEMORY_HIGH_BYTES:-7516192768}
+readiness_telemetry_expected_memory_high_bytes=${NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_MEMORY_HIGH_BYTES:-5368709120}
 readiness_coord_expected_memory_max_bytes=${NORTH_COORD_PROMOTION_COORD_EXPECTED_MEMORY_MAX_BYTES:-8589934592}
 readiness_telemetry_expected_memory_max_bytes=${NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_MEMORY_MAX_BYTES:-6442450944}
 readiness_coord_max_memory_current_bytes=${NORTH_COORD_PROMOTION_COORD_MAX_MEMORY_CURRENT_BYTES:-4294967296}
@@ -50,10 +52,17 @@ readiness_coord_expected_max_heap_bytes=${NORTH_COORD_PROMOTION_COORD_EXPECTED_M
 readiness_telemetry_expected_max_heap_bytes=${NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_MAX_HEAP_BYTES:-4294967296}
 readiness_coord_max_heap_used_bytes=${NORTH_COORD_PROMOTION_COORD_MAX_HEAP_USED_BYTES:-3221225472}
 readiness_telemetry_max_heap_used_bytes=${NORTH_COORD_PROMOTION_TELEMETRY_MAX_HEAP_USED_BYTES:-2147483648}
-readiness_expected_cpu_quota=${NORTH_COORD_PROMOTION_EXPECTED_CPU_QUOTA:-infinity}
-readiness_expected_restart=${NORTH_COORD_PROMOTION_EXPECTED_RESTART:-always}
+readiness_coord_expected_cpu_quota_usec=${NORTH_COORD_PROMOTION_COORD_EXPECTED_CPU_QUOTA_USEC:-4000000}
+readiness_telemetry_expected_cpu_quota_usec=${NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_CPU_QUOTA_USEC:-2000000}
+readiness_expected_tasks_max=${NORTH_COORD_PROMOTION_EXPECTED_TASKS_MAX:-128}
+readiness_expected_restart=${NORTH_COORD_PROMOTION_EXPECTED_RESTART:-on-failure}
+readiness_expected_restart_usec=${NORTH_COORD_PROMOTION_EXPECTED_RESTART_USEC:-5000000}
+readiness_expected_start_limit_interval_usec=${NORTH_COORD_PROMOTION_EXPECTED_START_LIMIT_INTERVAL_USEC:-60000000}
+readiness_expected_start_limit_burst=${NORTH_COORD_PROMOTION_EXPECTED_START_LIMIT_BURST:-3}
+readiness_expected_connection_workers=${NORTH_COORD_PROMOTION_EXPECTED_CONNECTION_WORKERS:-32}
+readiness_expected_connection_queue=${NORTH_COORD_PROMOTION_EXPECTED_CONNECTION_QUEUE:-128}
+readiness_expected_request_timeout_ms=${NORTH_COORD_PROMOTION_EXPECTED_REQUEST_TIMEOUT_MS:-30000}
 readiness_max_restarts=${NORTH_COORD_PROMOTION_MAX_RESTARTS:-0}
-readiness_max_tasks=${NORTH_COORD_PROMOTION_MAX_TASKS:-128}
 unknown_state=$state/outcome.unknown
 
 [[ "$cutover" == /* && -x "$cutover" && ! -L "$cutover" ]] ||
@@ -75,6 +84,8 @@ unknown_state=$state/outcome.unknown
 for setting in \
   readiness_systemctl_timeout_seconds \
   readiness_jcmd_timeout_seconds \
+  readiness_coord_expected_memory_high_bytes \
+  readiness_telemetry_expected_memory_high_bytes \
   readiness_coord_expected_memory_max_bytes \
   readiness_telemetry_expected_memory_max_bytes \
   readiness_coord_max_memory_current_bytes \
@@ -83,25 +94,33 @@ for setting in \
   readiness_telemetry_expected_max_heap_bytes \
   readiness_coord_max_heap_used_bytes \
   readiness_telemetry_max_heap_used_bytes \
-  readiness_max_tasks
+  readiness_coord_expected_cpu_quota_usec \
+  readiness_telemetry_expected_cpu_quota_usec \
+  readiness_expected_tasks_max \
+  readiness_expected_restart_usec \
+  readiness_expected_start_limit_interval_usec \
+  readiness_expected_start_limit_burst \
+  readiness_expected_connection_workers \
+  readiness_expected_connection_queue \
+  readiness_expected_request_timeout_ms
 do
   [[ "${!setting}" =~ ^[1-9][0-9]*$ ]] ||
     die "${setting#readiness_} must be a positive integer"
 done
 [[ "$readiness_expected_memory_swap_max_bytes" =~ ^[0-9]+$ ]] ||
   die "expected memory swap max must be a non-negative integer"
-[[ "$readiness_expected_cpu_quota" == infinity ||
-   "$readiness_expected_cpu_quota" =~ ^[1-9][0-9]*$ ]] ||
-  die "expected CPU quota is malformed"
 [[ "$readiness_expected_restart" =~ ^[A-Za-z-]+$ ]] ||
   die "expected restart policy is malformed"
 [[ "$readiness_max_restarts" =~ ^[0-9]+$ ]] ||
   die "maximum restart count must be a non-negative integer"
 for origin in coord telemetry; do
+  memory_high_name=readiness_${origin}_expected_memory_high_bytes
   memory_max_name=readiness_${origin}_expected_memory_max_bytes
   memory_current_name=readiness_${origin}_max_memory_current_bytes
   heap_max_name=readiness_${origin}_expected_max_heap_bytes
   heap_used_name=readiness_${origin}_max_heap_used_bytes
+  (( ${!memory_high_name} < ${!memory_max_name} )) ||
+    die "$origin memory high must be below its cgroup limit"
   (( ${!memory_current_name} < ${!memory_max_name} )) ||
     die "$origin maximum memory current must be below its cgroup limit"
   (( ${!heap_used_name} < ${!heap_max_name} )) ||
@@ -145,16 +164,35 @@ unit_for() {
 }
 
 contract_for() {
-  local origin=$1 name=$2 variable
+  local origin=$1 name=$2
   valid_origin "$origin" || die "invalid contract origin: $origin"
-  case "$name" in
-    memory-max) variable=readiness_${origin}_expected_memory_max_bytes ;;
-    memory-current) variable=readiness_${origin}_max_memory_current_bytes ;;
-    max-heap) variable=readiness_${origin}_expected_max_heap_bytes ;;
-    heap-used) variable=readiness_${origin}_max_heap_used_bytes ;;
+  case "$origin:$name" in
+    coord:memory-high)
+      printf '%s\n' "$readiness_coord_expected_memory_high_bytes" ;;
+    telemetry:memory-high)
+      printf '%s\n' "$readiness_telemetry_expected_memory_high_bytes" ;;
+    coord:memory-max)
+      printf '%s\n' "$readiness_coord_expected_memory_max_bytes" ;;
+    telemetry:memory-max)
+      printf '%s\n' "$readiness_telemetry_expected_memory_max_bytes" ;;
+    coord:memory-current)
+      printf '%s\n' "$readiness_coord_max_memory_current_bytes" ;;
+    telemetry:memory-current)
+      printf '%s\n' "$readiness_telemetry_max_memory_current_bytes" ;;
+    coord:cpu-quota-usec)
+      printf '%s\n' "$readiness_coord_expected_cpu_quota_usec" ;;
+    telemetry:cpu-quota-usec)
+      printf '%s\n' "$readiness_telemetry_expected_cpu_quota_usec" ;;
+    coord:max-heap)
+      printf '%s\n' "$readiness_coord_expected_max_heap_bytes" ;;
+    telemetry:max-heap)
+      printf '%s\n' "$readiness_telemetry_expected_max_heap_bytes" ;;
+    coord:heap-used)
+      printf '%s\n' "$readiness_coord_max_heap_used_bytes" ;;
+    telemetry:heap-used)
+      printf '%s\n' "$readiness_telemetry_max_heap_used_bytes" ;;
     *) die "invalid runtime contract field: $name" ;;
   esac
-  printf '%s\n' "${!variable}"
 }
 
 status_file() {
@@ -688,15 +726,55 @@ prepare_endpoint() {
   printf '%s\n' "$prepared_identity" >"$identity_out"
 }
 
+systemd_usec() {
+  local value=$1 number unit multiplier
+  if [[ "$value" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$value"
+    return
+  fi
+  [[ "$value" =~ ^([0-9]+)(us|ms|s|min|h)$ ]] || return 1
+  number=${BASH_REMATCH[1]}
+  unit=${BASH_REMATCH[2]}
+  case "$unit" in
+    us) multiplier=1 ;;
+    ms) multiplier=1000 ;;
+    s) multiplier=1000000 ;;
+    min) multiplier=60000000 ;;
+    h) multiplier=3600000000 ;;
+    *) return 1 ;;
+  esac
+  printf '%s\n' "$((number * multiplier))"
+}
+
+environment_has_exact_assignment() {
+  local environment=$1 key=$2 expected=$3
+  local rest=$environment count=0
+  while [[ "$rest" == *"$key="* ]]; do
+    ((++count))
+    rest=${rest#*"$key="}
+  done
+  (( count == 1 )) || return 1
+  [[ " $environment " == *" $key=$expected "* ||
+     " $environment " == *" \"$key=$expected\" "* ]]
+}
+
 sample_runtime_unit() {
-  local unit=$1 properties rc
+  local unit=$1 origin=$2 properties rc
   local load_state="" fragment_path="" drop_in_paths="" need_reload=""
   local active_state="" sub_state="" main_pid="" invocation_id=""
-  local exec_start="" memory_current="" memory_max="" memory_swap_max=""
+  local exec_start="" memory_current="" memory_high="" memory_max=""
+  local memory_swap_max=""
   local cpu_quota="" tasks_current="" tasks_max="" n_restarts="" restart=""
+  local restart_usec="" start_limit_interval_usec="" start_limit_burst=""
+  local environment=""
   local exec_command="" exec_start_pre="" runtime_name=${unit%.service}-runtime
+  local expected_memory_high expected_cpu_quota_usec cpu_quota_usec
+  local observed_restart_usec observed_start_limit_interval_usec
   local key value
 
+  valid_origin "$origin" || return 1
+  expected_memory_high=$(contract_for "$origin" memory-high)
+  expected_cpu_quota_usec=$(contract_for "$origin" cpu-quota-usec)
   if properties=$(
     timeout --signal=TERM --kill-after=1s \
       "${readiness_systemctl_timeout_seconds}s" \
@@ -711,6 +789,7 @@ sample_runtime_unit() {
       --property=InvocationID \
       --property=ExecMainStartTimestampMonotonic \
       --property=MemoryCurrent \
+      --property=MemoryHigh \
       --property=MemoryMax \
       --property=MemorySwapMax \
       --property=CPUQuotaPerSecUSec \
@@ -718,6 +797,10 @@ sample_runtime_unit() {
       --property=TasksMax \
       --property=NRestarts \
       --property=Restart \
+      --property=RestartUSec \
+      --property=StartLimitIntervalUSec \
+      --property=StartLimitBurst \
+      --property=Environment \
       --property=ExecStart \
       --property=ExecStartPre
   ); then
@@ -739,6 +822,7 @@ sample_runtime_unit() {
       InvocationID) invocation_id=$value ;;
       ExecMainStartTimestampMonotonic) exec_start=$value ;;
       MemoryCurrent) memory_current=$value ;;
+      MemoryHigh) memory_high=$value ;;
       MemoryMax) memory_max=$value ;;
       MemorySwapMax) memory_swap_max=$value ;;
       CPUQuotaPerSecUSec) cpu_quota=$value ;;
@@ -746,11 +830,20 @@ sample_runtime_unit() {
       TasksMax) tasks_max=$value ;;
       NRestarts) n_restarts=$value ;;
       Restart) restart=$value ;;
+      RestartUSec) restart_usec=$value ;;
+      StartLimitIntervalUSec) start_limit_interval_usec=$value ;;
+      StartLimitBurst) start_limit_burst=$value ;;
+      Environment) environment=$value ;;
       ExecStart) exec_command=$value ;;
       ExecStartPre) exec_start_pre=$value ;;
     esac
   done <<<"$properties"
 
+  cpu_quota_usec=$(systemd_usec "$cpu_quota") || return 1
+  observed_restart_usec=$(systemd_usec "$restart_usec") || return 1
+  observed_start_limit_interval_usec=$(
+    systemd_usec "$start_limit_interval_usec"
+  ) || return 1
   [[ "$load_state" == loaded &&
      "$fragment_path" == "/etc/systemd/system/$unit" &&
      -z "$drop_in_paths" &&
@@ -760,17 +853,29 @@ sample_runtime_unit() {
      "$invocation_id" =~ ^[0-9a-f]{32}$ &&
      "$exec_start" =~ ^[1-9][0-9]*$ &&
      "$memory_current" =~ ^[0-9]+$ &&
+     "$memory_high" == "$expected_memory_high" &&
      "$memory_max" =~ ^[1-9][0-9]*$ &&
      "$memory_swap_max" =~ ^[0-9]+$ &&
-     "$cpu_quota" == "$readiness_expected_cpu_quota" &&
+     "$cpu_quota_usec" == "$expected_cpu_quota_usec" &&
      "$tasks_current" =~ ^[0-9]+$ &&
-     ( "$tasks_max" == infinity || "$tasks_max" =~ ^[1-9][0-9]*$ ) &&
+     "$tasks_max" == "$readiness_expected_tasks_max" &&
      "$n_restarts" =~ ^[0-9]+$ &&
-     "$restart" == "$readiness_expected_restart" ]] || return 1
+     "$restart" == "$readiness_expected_restart" &&
+     "$observed_restart_usec" == "$readiness_expected_restart_usec" &&
+     "$observed_start_limit_interval_usec" == "$readiness_expected_start_limit_interval_usec" &&
+     "$start_limit_burst" == "$readiness_expected_start_limit_burst" ]] ||
+    return 1
   (( n_restarts <= readiness_max_restarts )) || return 1
-  if [[ "$tasks_max" != infinity ]]; then
-    (( tasks_current <= tasks_max )) || return 1
-  fi
+  (( tasks_current <= readiness_expected_tasks_max )) || return 1
+  environment_has_exact_assignment \
+    "$environment" FRAM_CONNECTION_WORKERS \
+    "$readiness_expected_connection_workers" || return 1
+  environment_has_exact_assignment \
+    "$environment" FRAM_CONNECTION_QUEUE \
+    "$readiness_expected_connection_queue" || return 1
+  environment_has_exact_assignment \
+    "$environment" FRAM_REQUEST_TIMEOUT_MS \
+    "$readiness_expected_request_timeout_ms" || return 1
   [[ "$exec_command" =~ path=/nix/store/[0-9a-z]{32}-north-coord-slot-start[^/]*/bin/north-coord-slot-start &&
      "$exec_start_pre" =~ path=/nix/store/[0-9a-z]{32}-${runtime_name}[^/]*/bin/${runtime_name} &&
      "$exec_start_pre" == *"/$runtime_name ensure-default "* ]] || return 1
@@ -900,11 +1005,9 @@ verify_target_runtime_readiness() {
   local phase instance version observed_cutover_id
   local after_phase after_instance after_version after_cutover_id
   local unit_before unit_after main_pid invocation_id exec_start
-  local memory_current memory_max memory_swap_max cpu_quota
-  local tasks_current tasks_max n_restarts restart
+  local memory_current memory_max memory_swap_max tasks_current
   local after_pid after_invocation after_start after_memory_current
-  local after_memory_max after_memory_swap_max after_cpu_quota
-  local after_tasks_current after_tasks_max after_n_restarts after_restart
+  local after_memory_max after_memory_swap_max after_tasks_current
   local jvm_health max_heap heap_used heap_total
   local process_identity after_process_identity birth revision tree
   local after_birth after_revision after_tree
@@ -945,11 +1048,11 @@ verify_target_runtime_readiness() {
   [[ "$observed_cutover_id" == "$expected_cutover_id" ]] ||
     die "$slot/$origin readiness rejected: cutover identity changed"
 
-  unit_before=$(sample_runtime_unit "$unit") ||
+  unit_before=$(sample_runtime_unit "$unit" "$origin") ||
     die "$slot/$origin readiness rejected: systemd evidence is unavailable or malformed"
   read -r main_pid invocation_id exec_start \
-    memory_current memory_max memory_swap_max cpu_quota \
-    tasks_current tasks_max n_restarts restart <<<"$unit_before"
+    memory_current memory_max memory_swap_max _ \
+    tasks_current _ _ _ <<<"$unit_before"
   [[ "$expected_pid" == any || "$main_pid" == "$expected_pid" ]] ||
     die "$slot/$origin readiness rejected: MainPID changed"
   [[ "$expected_invocation" == any ||
@@ -963,8 +1066,8 @@ verify_target_runtime_readiness() {
     die "$slot/$origin readiness rejected: live MemorySwapMax is $memory_swap_max, expected $readiness_expected_memory_swap_max_bytes"
   (( memory_current < max_memory_current )) ||
     die "$slot/$origin readiness rejected: MemoryCurrent $memory_current is not below $max_memory_current"
-  (( tasks_current <= readiness_max_tasks )) ||
-    die "$slot/$origin readiness rejected: TasksCurrent $tasks_current exceeds $readiness_max_tasks"
+  (( tasks_current <= readiness_expected_tasks_max )) ||
+    die "$slot/$origin readiness rejected: TasksCurrent $tasks_current exceeds $readiness_expected_tasks_max"
 
   jvm_health=$(sample_jvm_health "$main_pid") ||
     die "$slot/$origin readiness rejected: live G1/heap evidence is unavailable or malformed"
@@ -986,11 +1089,11 @@ verify_target_runtime_readiness() {
   [[ "$expected_tree" == any || "$tree" == "$expected_tree" ]] ||
     die "$slot/$origin readiness rejected: runtime tree changed"
 
-  unit_after=$(sample_runtime_unit "$unit") ||
+  unit_after=$(sample_runtime_unit "$unit" "$origin") ||
     die "$slot/$origin readiness rejected: post-jcmd systemd evidence is unavailable or malformed"
   read -r after_pid after_invocation after_start \
-    after_memory_current after_memory_max after_memory_swap_max after_cpu_quota \
-    after_tasks_current after_tasks_max after_n_restarts after_restart \
+    after_memory_current after_memory_max after_memory_swap_max _ \
+    after_tasks_current _ _ _ \
     <<<"$unit_after"
   [[ "$after_pid" == "$main_pid" &&
      "$after_invocation" == "$invocation_id" &&
@@ -1002,7 +1105,7 @@ verify_target_runtime_readiness() {
     die "$slot/$origin readiness rejected: post-jcmd MemorySwapMax changed"
   (( after_memory_current < max_memory_current )) ||
     die "$slot/$origin readiness rejected: post-jcmd MemoryCurrent is over the limit"
-  (( after_tasks_current <= readiness_max_tasks )) ||
+  (( after_tasks_current <= readiness_expected_tasks_max )) ||
     die "$slot/$origin readiness rejected: post-jcmd TasksCurrent is over the limit"
 
   after_process_identity=$(sample_process_identity "$unit" "$port" "$main_pid") ||

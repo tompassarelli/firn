@@ -65,13 +65,29 @@ let
   telemetryHeapOptions = "-XX:+UseG1GC -Xmx4g";
   coordHeapBytes = "6442450944";
   telemetryHeapBytes = "4294967296";
+  coordMemoryHigh = "7G";
+  telemetryMemoryHigh = "5G";
   coordMemoryMax = "8G";
   telemetryMemoryMax = "6G";
+  coordMemoryHighBytes = "7516192768";
+  telemetryMemoryHighBytes = "5368709120";
   coordMemoryMaxBytes = "8589934592";
   telemetryMemoryMaxBytes = "6442450944";
   slotMemorySwapMaxBytes = "0";
-  slotCpuQuota = "infinity";
-  slotRestart = "always";
+  coordCpuQuota = "400%";
+  telemetryCpuQuota = "200%";
+  coordCpuQuotaUsec = "4000000";
+  telemetryCpuQuotaUsec = "2000000";
+  slotTasksMax = 128;
+  slotTasksMaxText = "128";
+  slotRestart = "on-failure";
+  slotRestartUsec = "5000000";
+  slotStartLimitIntervalUsec = "60000000";
+  slotStartLimitBurst = 3;
+  slotStartLimitBurstText = "3";
+  slotConnectionWorkers = "32";
+  slotConnectionQueue = "128";
+  slotRequestTimeoutMs = "30000";
   blueCoordRuntime = mkNorthCoordRuntime "north-coord-blue-runtime" "${runtimeState}-blue" coordinationLog telemetryLog blueCoordPort "north-coord-blue.service" "1";
   blueTelemetryRuntime = mkNorthCoordRuntime "north-telemetry-coord-blue-runtime" "${telemetryRuntimeState}-blue" telemetryLog coordinationLog blueTelemetryPort "north-telemetry-coord-blue.service" "0";
   greenCoordRuntime = mkNorthCoordRuntime "north-coord-green-runtime" "${runtimeState}-green" coordinationLog telemetryLog greenCoordPort "north-coord-green.service" "1";
@@ -107,11 +123,21 @@ let
       export NORTH_COORD_GREEN_TELEMETRY_UNIT=north-telemetry-coord-green.service
       export NORTH_COORD_PROMOTION_COORD_EXPECTED_MEMORY_MAX_BYTES=${coordMemoryMaxBytes}
       export NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_MEMORY_MAX_BYTES=${telemetryMemoryMaxBytes}
+      export NORTH_COORD_PROMOTION_COORD_EXPECTED_MEMORY_HIGH_BYTES=${coordMemoryHighBytes}
+      export NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_MEMORY_HIGH_BYTES=${telemetryMemoryHighBytes}
       export NORTH_COORD_PROMOTION_COORD_EXPECTED_MAX_HEAP_BYTES=${coordHeapBytes}
       export NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_MAX_HEAP_BYTES=${telemetryHeapBytes}
       export NORTH_COORD_PROMOTION_EXPECTED_MEMORY_SWAP_MAX_BYTES=${slotMemorySwapMaxBytes}
-      export NORTH_COORD_PROMOTION_EXPECTED_CPU_QUOTA=${slotCpuQuota}
+      export NORTH_COORD_PROMOTION_COORD_EXPECTED_CPU_QUOTA_USEC=${coordCpuQuotaUsec}
+      export NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_CPU_QUOTA_USEC=${telemetryCpuQuotaUsec}
+      export NORTH_COORD_PROMOTION_EXPECTED_TASKS_MAX=${slotTasksMaxText}
       export NORTH_COORD_PROMOTION_EXPECTED_RESTART=${slotRestart}
+      export NORTH_COORD_PROMOTION_EXPECTED_RESTART_USEC=${slotRestartUsec}
+      export NORTH_COORD_PROMOTION_EXPECTED_START_LIMIT_INTERVAL_USEC=${slotStartLimitIntervalUsec}
+      export NORTH_COORD_PROMOTION_EXPECTED_START_LIMIT_BURST=${slotStartLimitBurstText}
+      export NORTH_COORD_PROMOTION_EXPECTED_CONNECTION_WORKERS=${slotConnectionWorkers}
+      export NORTH_COORD_PROMOTION_EXPECTED_CONNECTION_QUEUE=${slotConnectionQueue}
+      export NORTH_COORD_PROMOTION_EXPECTED_REQUEST_TIMEOUT_MS=${slotRequestTimeoutMs}
       export NORTH_COORD_BLUE_COORD_PORT=${blueCoordPort}
       export NORTH_COORD_BLUE_TELEMETRY_PORT=${blueTelemetryPort}
       export NORTH_COORD_GREEN_COORD_PORT=${greenCoordPort}
@@ -170,7 +196,7 @@ let
   proxyConfig = pkgs.writeText "north-coord-haproxy.cfg" ''
     global
       stats socket ${proxyAdminSocket} mode 600 level admin
-      maxconn 4096
+      maxconn 512
 
     defaults
       mode tcp
@@ -179,6 +205,7 @@ let
       timeout server 1h
 
     frontend ${proxyFrontend}
+      backlog 512
       bind fd@3
       bind fd@4
       acl is_coord dst_port 7977
@@ -244,18 +271,22 @@ let
     SendSIGKILL = true;
     MemorySwapMax = "0";
   };
-  mkSlotService = description: slot: runtimeCommand: peerLog: stateDir: port: heapMax: memoryMax: {
+  mkSlotService = description: slot: runtimeCommand: peerLog: stateDir: port: heapMax: memoryHigh: memoryMax: cpuQuota: {
     description = description;
     restartIfChanged = false;
     stopIfChanged = false;
     after = [ "network.target" ];
     path = with pkgs; [ clojure jdk bash coreutils git ];
-    startLimitIntervalSec = 0;
+    startLimitIntervalSec = 60;
+    startLimitBurst = slotStartLimitBurst;
     unitConfig = {
       ConditionPathExists = cutoverToken;
     };
     environment = (serviceEnvironment // {
       FRAM_TELEMETRY_LOG = peerLog;
+      FRAM_CONNECTION_WORKERS = slotConnectionWorkers;
+      FRAM_CONNECTION_QUEUE = slotConnectionQueue;
+      FRAM_REQUEST_TIMEOUT_MS = slotRequestTimeoutMs;
       JDK_JAVA_OPTIONS = "${heapMax} -Xlog:gc:file=${stateDir}/gc-${port}.log:time,uptime:filecount=3,filesize=10m";
       NORTH_COORD_SLOT = slot;
       NORTH_COORD_SELECTOR_MAP = selectorMap;
@@ -263,7 +294,12 @@ let
       NORTH_COORD_SLOT_RUNTIME = runtimeCommand;
     });
     serviceConfig = (serviceConfigBase // {
+      MemoryHigh = memoryHigh;
       MemoryMax = memoryMax;
+      CPUQuota = cpuQuota;
+      TasksMax = slotTasksMax;
+      Restart = slotRestart;
+      RestartSec = "5s";
       ExecStartPre = [ "${runtimeCommand} ensure-default" ];
       ExecStart = "${slotStart}/bin/north-coord-slot-start";
     });
@@ -433,10 +469,10 @@ in
         ExecStart = "${northCoordSdListenChecked}/bin/north-coord-sd-listen ${northTelemetryCoordRuntime}/bin/north-telemetry-coord-runtime start";
       });
     };
-    systemd.services.north-coord-blue = lib.mkIf stageA (mkSlotService "North coordination private blue generation (:17977)" "blue" "${blueCoordRuntime}/bin/north-coord-blue-runtime" telemetryLog "${runtimeState}-blue" blueCoordPort coordHeapOptions coordMemoryMax);
-    systemd.services.north-telemetry-coord-blue = lib.mkIf stageA (mkSlotService "North telemetry private blue generation (:17978)" "blue" "${blueTelemetryRuntime}/bin/north-telemetry-coord-blue-runtime" coordinationLog "${telemetryRuntimeState}-blue" blueTelemetryPort telemetryHeapOptions telemetryMemoryMax);
-    systemd.services.north-coord-green = lib.mkIf stageA (mkSlotService "North coordination private green generation (:27977)" "green" "${greenCoordRuntime}/bin/north-coord-green-runtime" telemetryLog "${runtimeState}-green" greenCoordPort coordHeapOptions coordMemoryMax);
-    systemd.services.north-telemetry-coord-green = lib.mkIf stageA (mkSlotService "North telemetry private green generation (:27978)" "green" "${greenTelemetryRuntime}/bin/north-telemetry-coord-green-runtime" coordinationLog "${telemetryRuntimeState}-green" greenTelemetryPort telemetryHeapOptions telemetryMemoryMax);
+    systemd.services.north-coord-blue = lib.mkIf stageA (mkSlotService "North coordination private blue generation (:17977)" "blue" "${blueCoordRuntime}/bin/north-coord-blue-runtime" telemetryLog "${runtimeState}-blue" blueCoordPort coordHeapOptions coordMemoryHigh coordMemoryMax coordCpuQuota);
+    systemd.services.north-telemetry-coord-blue = lib.mkIf stageA (mkSlotService "North telemetry private blue generation (:17978)" "blue" "${blueTelemetryRuntime}/bin/north-telemetry-coord-blue-runtime" coordinationLog "${telemetryRuntimeState}-blue" blueTelemetryPort telemetryHeapOptions telemetryMemoryHigh telemetryMemoryMax telemetryCpuQuota);
+    systemd.services.north-coord-green = lib.mkIf stageA (mkSlotService "North coordination private green generation (:27977)" "green" "${greenCoordRuntime}/bin/north-coord-green-runtime" telemetryLog "${runtimeState}-green" greenCoordPort coordHeapOptions coordMemoryHigh coordMemoryMax coordCpuQuota);
+    systemd.services.north-telemetry-coord-green = lib.mkIf stageA (mkSlotService "North telemetry private green generation (:27978)" "green" "${greenTelemetryRuntime}/bin/north-telemetry-coord-green-runtime" coordinationLog "${telemetryRuntimeState}-green" greenTelemetryPort telemetryHeapOptions telemetryMemoryHigh telemetryMemoryMax telemetryCpuQuota);
     systemd.services.north-coord-proxy = lib.mkIf stageA {
       description = "North permanent public selector for coordination + telemetry";
       requires = [ "north-coord.socket" "north-telemetry-coord.socket" ];
@@ -456,6 +492,8 @@ in
       ];
       restartIfChanged = false;
       stopIfChanged = false;
+      startLimitIntervalSec = 60;
+      startLimitBurst = 3;
       unitConfig = {
         ConditionPathExists = bootstrapMarker;
       };
@@ -469,8 +507,13 @@ in
         WorkingDirectory = homeDir;
         RuntimeDirectory = "north-coord-proxy";
         RuntimeDirectoryMode = "0700";
-        Restart = "always";
-        RestartSec = 1;
+        MemoryHigh = "192M";
+        MemoryMax = "256M";
+        MemorySwapMax = "0";
+        CPUQuota = "100%";
+        TasksMax = 64;
+        Restart = "on-failure";
+        RestartSec = "5s";
         TimeoutStopSec = "15s";
         SendSIGKILL = true;
         Sockets = [ "north-coord.socket" "north-telemetry-coord.socket" ];

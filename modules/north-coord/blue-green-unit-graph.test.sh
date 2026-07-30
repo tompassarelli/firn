@@ -103,6 +103,45 @@ if grep '^Requires=.*north-coord-blue.service' "$proxy_unit"; then
   echo "proxy incorrectly Requires a private standby" >&2
   exit 1
 fi
+for setting in \
+  'MemoryHigh=192M' \
+  'MemoryMax=256M' \
+  'MemorySwapMax=0' \
+  'CPUQuota=100%' \
+  'TasksMax=64' \
+  'Restart=on-failure' \
+  'RestartSec=5s' \
+  'StartLimitIntervalSec=60' \
+  'StartLimitBurst=3'
+do
+  grep -Fxq "$setting" "$proxy_unit"
+done
+proxy_start=$(
+  sed -n 's|^ExecStart=\([^ ]*/north-coord-proxy-start\)$|\1|p' \
+    "$proxy_unit"
+)
+[[ -x "$proxy_start" ]] || {
+  echo "proxy start is not an executable package path" >&2
+  exit 1
+}
+proxy_config=$(
+  sed -n 's|^export NORTH_COORD_HAPROXY_CONFIG=||p' "$proxy_start"
+)
+haproxy=$(
+  sed -n 's|^export NORTH_COORD_HAPROXY=||p' "$proxy_start"
+)
+[[ -f "$proxy_config" && ! -L "$proxy_config" && -x "$haproxy" ]] || {
+  echo "proxy start does not close over safe HAProxy inputs" >&2
+  exit 1
+}
+grep -Fxq '  maxconn 512' "$proxy_config"
+grep -Fxq '  backlog 512' "$proxy_config"
+"$haproxy" -c -f <(
+  sed \
+    -e 's/^  bind fd@3$/  bind 127.0.0.1:17995/' \
+    -e 's/^  bind fd@4$/  bind 127.0.0.1:17996/' \
+    "$proxy_config"
+) >/dev/null
 
 # The selector parses HAProxy's CSV status with awk during every prestart and
 # cutover. Prove the packaged wrapper carries that runtime dependency instead
@@ -143,9 +182,25 @@ jcmd=$(
   echo "cutover gate does not close over one exact packaged jcmd" >&2
   exit 1
 }
+for setting in \
+  'export NORTH_COORD_PROMOTION_COORD_EXPECTED_MEMORY_HIGH_BYTES=7516192768' \
+  'export NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_MEMORY_HIGH_BYTES=5368709120' \
+  'export NORTH_COORD_PROMOTION_COORD_EXPECTED_CPU_QUOTA_USEC=4000000' \
+  'export NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_CPU_QUOTA_USEC=2000000' \
+  'export NORTH_COORD_PROMOTION_EXPECTED_TASKS_MAX=128' \
+  'export NORTH_COORD_PROMOTION_EXPECTED_RESTART=on-failure' \
+  'export NORTH_COORD_PROMOTION_EXPECTED_RESTART_USEC=5000000' \
+  'export NORTH_COORD_PROMOTION_EXPECTED_START_LIMIT_INTERVAL_USEC=60000000' \
+  'export NORTH_COORD_PROMOTION_EXPECTED_START_LIMIT_BURST=3' \
+  'export NORTH_COORD_PROMOTION_EXPECTED_CONNECTION_WORKERS=32' \
+  'export NORTH_COORD_PROMOTION_EXPECTED_CONNECTION_QUEUE=128' \
+  'export NORTH_COORD_PROMOTION_EXPECTED_REQUEST_TIMEOUT_MS=30000'
+do
+  grep -Fxq "$setting" "$cutover_gate"
+done
 
 # All four candidates use the dynamic launcher, have no corpus-level prepare,
-# and retain the agreed memory/stop bounds.
+# and carry the exact admission/resource/restart envelope.
 for name in north-coord-blue.service north-coord-green.service; do
   path=$(unit "$name")
   slot=${name#north-coord-}
@@ -159,8 +214,18 @@ for name in north-coord-blue.service north-coord-green.service; do
     echo "private coordination slot runs forbidden pair prepare: $name" >&2
     exit 1
   fi
+  grep -Fxq 'Environment="FRAM_CONNECTION_WORKERS=32"' "$path"
+  grep -Fxq 'Environment="FRAM_CONNECTION_QUEUE=128"' "$path"
+  grep -Fxq 'Environment="FRAM_REQUEST_TIMEOUT_MS=30000"' "$path"
+  grep -Fxq 'MemoryHigh=7G' "$path"
   grep -Fxq 'MemoryMax=8G' "$path"
   grep -Fxq 'MemorySwapMax=0' "$path"
+  grep -Fxq 'CPUQuota=400%' "$path"
+  grep -Fxq 'TasksMax=128' "$path"
+  grep -Fxq 'Restart=on-failure' "$path"
+  grep -Fxq 'RestartSec=5s' "$path"
+  grep -Fxq 'StartLimitIntervalSec=60' "$path"
+  grep -Fxq 'StartLimitBurst=3' "$path"
   grep -Fxq \
     "Environment=\"JDK_JAVA_OPTIONS=-XX:+UseG1GC -Xmx6g -Xlog:gc:file=/home/tom/.local/state/north/fram-runtime-$slot/gc-$port.log:time,uptime:filecount=3,filesize=10m\"" \
     "$path"
@@ -179,8 +244,18 @@ for name in north-telemetry-coord-blue.service north-telemetry-coord-green.servi
     echo "private telemetry slot runs forbidden pair prepare: $name" >&2
     exit 1
   fi
+  grep -Fxq 'Environment="FRAM_CONNECTION_WORKERS=32"' "$path"
+  grep -Fxq 'Environment="FRAM_CONNECTION_QUEUE=128"' "$path"
+  grep -Fxq 'Environment="FRAM_REQUEST_TIMEOUT_MS=30000"' "$path"
+  grep -Fxq 'MemoryHigh=5G' "$path"
   grep -Fxq 'MemoryMax=6G' "$path"
   grep -Fxq 'MemorySwapMax=0' "$path"
+  grep -Fxq 'CPUQuota=200%' "$path"
+  grep -Fxq 'TasksMax=128' "$path"
+  grep -Fxq 'Restart=on-failure' "$path"
+  grep -Fxq 'RestartSec=5s' "$path"
+  grep -Fxq 'StartLimitIntervalSec=60' "$path"
+  grep -Fxq 'StartLimitBurst=3' "$path"
   grep -Fxq \
     "Environment=\"JDK_JAVA_OPTIONS=-XX:+UseG1GC -Xmx4g -Xlog:gc:file=/home/tom/.local/state/north/fram-telemetry-runtime-$slot/gc-$port.log:time,uptime:filecount=3,filesize=10m\"" \
     "$path"
