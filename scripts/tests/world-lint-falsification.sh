@@ -33,6 +33,33 @@ pre_commit="$(resolve_pre_commit)" || {
 }
 readonly pre_commit
 
+nixos_index="$(env -u GIT_INDEX_FILE git -C "$REPO_ROOT" rev-parse --git-path index)"
+cp "$nixos_index" "$scratch/nixos-index"
+canonical_roots="$REPO_ROOT:$("$WORLD" get repo.north):$("$WORLD" get repo.fram):$("$WORLD" get repo.beagle)" # world:allow
+set +e
+alternate_index_output="$(
+  GIT_INDEX_FILE="$scratch/nixos-index" \
+  WORLD_MANIFEST_PATH="$scratch/missing-manifest.env" \
+  WORLD_LINT_ROOTS="$canonical_roots" \
+  WORLD_LINT_FAIL=1 \
+    "$WORLD" check --lint 2>&1
+)"
+alternate_index_status=$?
+set -e
+
+(( alternate_index_status == 0 )) || {
+  printf 'FAIL: caller alternate Git index narrowed the four-root lint corpus\n%s\n' \
+    "$alternate_index_output" >&2
+  exit 1
+}
+grep -F 'topology-refs: 386 allowed, 0 new' \
+  <<<"$alternate_index_output" >/dev/null || {
+  printf 'FAIL: alternate-index lint did not scan the canonical inventory\n%s\n' \
+    "$alternate_index_output" >&2
+  exit 1
+}
+printf 'PASS: caller alternate Git index cannot narrow the four-root lint corpus\n'
+
 set +e
 hostile_output="$(
   cd "$REPO_ROOT"

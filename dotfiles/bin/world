@@ -97,6 +97,12 @@ lint_roots() {
   fi
 }
 
+lint_git() {
+  # git commit --only exports a caller-local alternate index. It must not
+  # follow git -C into the other repositories in the lint corpus.
+  env -u GIT_INDEX_FILE git "$@"
+}
+
 lint_skip_path() {
   local path="$1"
   [[ "$path" == "flake.lock" || "$path" == */flake.lock ]] && return 0
@@ -129,7 +135,8 @@ run_lint() {
   local file_count=0 root repo path full rule pattern hit line body
   while IFS= read -r root; do
     [[ -n "$root" ]] || continue
-    if [[ ! -d "$root" ]] || ! git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [[ ! -d "$root" ]] ||
+       ! lint_git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       printf 'world: lint root is not a git checkout: %s\n' "$root" >&2
       return 2
     fi
@@ -159,7 +166,7 @@ run_lint() {
           printf '%s\tR3\t%s\t%s\t%s\n' "$repo/$path" "$line" "$root" "$body" >>"$findings"
         done < <(rg -n --no-heading --color never "$r3" "$full" || true)
       fi
-    done < <(git -C "$root" ls-files -z)
+    done < <(lint_git -C "$root" ls-files -z)
   done < <(lint_roots)
 
   if (( file_count < 100 )); then
