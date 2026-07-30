@@ -95,4 +95,19 @@ set -e
 [ "$status" -eq 37 ] || fail "missing native rebuild fallback exit status was $status, expected 37"
 [ "$(wc -l < "$FALLBACK_LOG")" -eq 2 ] || fail "missing native rebuild did not reach the Racket fallback"
 
+rm -f "${ARGV_LOG:?}"
+set +e
+FIRN_REPO="$MOCK_REPO" \
+FIRN_NATIVE_BIN="$MOCK_NATIVE" \
+FIRN_NATIVE_ARGV_LOG="$ARGV_LOG" \
+FIRN_NATIVE_EXIT=23 \
+FIRN_DISABLE_NATIVE=1 \
+FIRN_FALLBACK_LOG="$FALLBACK_LOG" \
+"$WRAPPER" rebuild
+status=$?
+set -e
+[ "$status" -eq 37 ] || fail "disabled native rebuild fallback exit status was $status, expected 37"
+[ ! -e "$ARGV_LOG" ] || fail "FIRN_DISABLE_NATIVE=1 still invoked the native executable"
+[ "$(wc -l < "$FALLBACK_LOG")" -eq 3 ] || fail "disabled native rebuild did not reach the Racket fallback"
+
 printf 'firn native rebuild dispatch: ok\n'

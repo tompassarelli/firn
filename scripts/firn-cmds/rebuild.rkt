@@ -8,9 +8,64 @@
          racket/system
          racket/file
          racket/port
+         json
          "util.rkt")
 
 (provide node-edges)
+
+(define current-monotonic-clock
+  (make-parameter current-inexact-monotonic-milliseconds))
+
+(define (present-env name)
+  (define value (getenv name))
+  (and value (non-empty-string? value) value))
+
+(define (append-trace-event! fields)
+  (define trace-path (present-env "FIRN_TRACE_PATH"))
+  (when trace-path
+    (with-handlers ([exn:fail? (λ (_) (void))])
+      (call-with-output-file trace-path
+        #:exists 'append
+        (λ (out)
+          (write-json
+           (hash-set*
+            fields
+            'schema "firn.rebuild/v1"
+            'trace_id (or (present-env "FIRN_TRACE_ID") ""))
+           out)
+          (newline out))))))
+
+(define (call-with-trace-span name body)
+  (define start ((current-monotonic-clock)))
+  (append-trace-event!
+   (hash 'event "span_start"
+         'name name
+         'monotonic_ms start))
+  (define ok? (with-handlers ([exn:fail? (λ (_) #f)]) (body)))
+  (define end ((current-monotonic-clock)))
+  (append-trace-event!
+   (hash 'event "span_end"
+         'name name
+         'monotonic_ms end
+         'duration_ms (- end start)
+         'status (if ok? "ok" "error")))
+  ok?)
+
+(define nix-log-shell
+  "log=$1; shift; \"$@\" 2> >(tee \"$log\" >&2)")
+
+(define (nix-build-command command [log-path (present-env "FIRN_NIX_LOG_PATH")])
+  (cond
+    [log-path
+     (define logged-command
+       (append (take command 2)
+               (list "--log-format" "internal-json")
+               (drop command 2)))
+     (append
+      (list "bash" "-o" "pipefail" "-c" nix-log-shell
+            "firn-nix-log" log-path)
+      logged-command)]
+    [else command]))
 
 (define (handle-host-rebuild leaf)
   ;; leaf may be "current" or "<host>" or "<host>+skip" (legacy alias sentinel)
@@ -141,7 +196,7 @@
   (define (phase name body)
     (define start (current-inexact-milliseconds))
     (printf "┌─ ~a\n" name) (flush-output)
-    (define ok? (with-handlers ([exn:fail? (λ (_) #f)]) (body)))
+    (define ok? (call-with-trace-span name body))
     (define elapsed (- (current-inexact-milliseconds) start))
     (cond
       [ok? (printf "└─ ✓ ~a (~a)\n" name (fmt-elapsed elapsed))]
@@ -315,8 +370,11 @@
                 (if on-linux?
                     (format "nixosConfigurations.~a.config.system.build.toplevel" host)
                     (format "darwinConfigurations.~a.system" host))))
-      (define out (apply sh-out (append (list "nix" "build" "--no-link" "--print-out-paths" attr)
-                                        override-args extra)))
+      (define out
+        (apply sh-out
+               (nix-build-command
+                (append (list "nix" "build" "--no-link" "--print-out-paths" attr)
+                        override-args extra))))
       (set! built-path (and (regexp-match? #rx"^/nix/store/" out) out))
       (and built-path #t)))
   (when (and on-linux? built-path)
@@ -404,3 +462,9 @@
    (walk-edge "host" "impact" "[<host>]" 'current-host
               handle-host-impact
               "dry-run impact prediction (what will rebuild, estimated time)")))
+
+(module+ test-support
+  (provide call-with-trace-span
+           current-monotonic-clock
+           nix-build-command
+           nix-log-shell))

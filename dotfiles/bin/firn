@@ -16,10 +16,12 @@ REPO="${FIRN_REPO:-$HOME/code/nixos-config}"
 export FIRN_REPO="$REPO"
 
 NATIVE_BIN="${FIRN_NATIVE_BIN:-$REPO/firn-zig/zig-out/bin/firn}"
-if [ "${1:-}" = "rebuild" ] \
-  || { [ "${1:-}" = "host" ] && [ "${2:-}" = "rebuild" ]; }; then
-  if [ -x "$NATIVE_BIN" ]; then
-    exec "$NATIVE_BIN" "$@"
+if [ "${FIRN_DISABLE_NATIVE:-0}" != "1" ]; then
+  if [ "${1:-}" = "rebuild" ] \
+    || { [ "${1:-}" = "host" ] && [ "${2:-}" = "rebuild" ]; }; then
+    if [ -x "$NATIVE_BIN" ]; then
+      exec "$NATIVE_BIN" "$@"
+    fi
   fi
 fi
 
