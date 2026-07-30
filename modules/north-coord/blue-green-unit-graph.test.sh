@@ -124,6 +124,10 @@ grep -Eq '/nix/store/[a-z0-9]+-gawk-[^/]+/bin' "$selector_prestart" || {
 # and retain the agreed memory/stop bounds.
 for name in north-coord-blue.service north-coord-green.service; do
   path=$(unit "$name")
+  slot=${name#north-coord-}
+  slot=${slot%.service}
+  port=17977
+  [[ $slot == green ]] && port=27977
   grep -Eq '^ExecStart=.*/north-coord-slot-start$' "$path"
   grep -Eq '^ExecStartPre=.*/north-coord-(blue|green)-runtime ensure-default$' \
     "$path"
@@ -131,7 +135,10 @@ for name in north-coord-blue.service north-coord-green.service; do
     echo "private coordination slot runs forbidden pair prepare: $name" >&2
     exit 1
   fi
-  grep -Fxq 'MemoryMax=3G' "$path"
+  grep -Fxq 'MemoryMax=8G' "$path"
+  grep -Fxq \
+    "Environment=\"JDK_JAVA_OPTIONS=-Xmx6g -Xlog:gc:file=/home/tom/.local/state/north/fram-runtime-$slot/gc-$port.log:time,uptime:filecount=3,filesize=10m\"" \
+    "$path"
   grep -Fxq 'TimeoutStopSec=15s' "$path"
 done
 for name in north-telemetry-coord-blue.service north-telemetry-coord-green.service; do

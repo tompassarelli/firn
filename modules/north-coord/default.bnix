@@ -601,8 +601,8 @@
               telemetryLog
               (s runtimeState "-blue")
               blueCoordPort
-              "-Xmx2g"
-              "3G"))
+              "-Xmx6g"
+              "8G"))
          :systemd.services.north-telemetry-coord-blue
           (lib.mkIf stageA
             (mkSlotService
@@ -624,8 +624,8 @@
               telemetryLog
               (s runtimeState "-green")
               greenCoordPort
-              "-Xmx2g"
-              "3G"))
+              "-Xmx6g"
+              "8G"))
          :systemd.services.north-telemetry-coord-green
           (lib.mkIf stageA
             (mkSlotService
