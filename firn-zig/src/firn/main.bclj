@@ -1,0 +1,8 @@
+#lang beagle/zig
+
+(ns firn.main)
+
+(def firn-schema-version :- String "firn-index/v1")
+
+(defn index-accepted? [schema-version :- String root-hash :- String expected-root-hash :- String] :- Bool
+  (and (= schema-version firn-schema-version) (= root-hash expected-root-hash)))
