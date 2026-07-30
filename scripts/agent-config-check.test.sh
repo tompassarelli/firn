@@ -1156,8 +1156,13 @@ grep -Fq '/run/current-system/sw/bin/env -u CLAUDE_CONFIG_DIR' \
   "$REPO/scripts/agent-config-check.sh"
 grep -Fq '${CLAUDE_BIN:-/run/current-system/sw/bin/claude}' \
   "$REPO/scripts/agent-config-check.sh"
-grep -q ':ExecStartPre \[(s northCoordRuntime "/bin/north-coord-runtime preflight")' \
+grep -Fq ':systemd.sockets.north-coord' \
   "$REPO/modules/north-coord/default.bnix"
+if rg -n 'ExecStartPre.*north-coord-runtime preflight' \
+   "$REPO/modules/north-coord/default.bnix"; then
+  printf 'socket-activated service still probes its systemd-owned listener as foreign\n' >&2
+  exit 1
+fi
 grep -Fq '(s northCoordRuntime "/bin/north-coord-runtime ensure-default")' \
   "$REPO/modules/north-coord/default.bnix"
 grep -q ':ExecStartPost (s northCoordRuntime "/bin/north-coord-runtime settle")' \
