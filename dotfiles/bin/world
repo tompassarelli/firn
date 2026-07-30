@@ -98,9 +98,10 @@ lint_roots() {
 }
 
 lint_git() {
-  # git commit --only exports a caller-local alternate index. It must not
-  # follow git -C into the other repositories in the lint corpus.
-  env -u GIT_INDEX_FILE git "$@"
+  # git commit exports a caller-local alternate index and repo pointers
+  # (GIT_INDEX_FILE, GIT_DIR, GIT_WORK_TREE) to hook subprocesses. Those must
+  # not follow git -C into the other repositories in the lint corpus.
+  env -u GIT_INDEX_FILE -u GIT_DIR -u GIT_WORK_TREE git "$@"
 }
 
 lint_skip_path() {

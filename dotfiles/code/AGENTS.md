@@ -27,11 +27,9 @@ git -C ~/code/<project>/main worktree add ~/code/<project>/wt-<slug> -b <slug>
 git -C ~/code/<project>/main fetch ~/code/<project>/wt-<slug> <slug>:refs/heads/main
 ```
 
-This replaces the earlier `~/code/worktrees/<project>/<slug>` layout, which put
-worktrees in a separate tree from their project and left `~/code/<project>`
-itself as a writable checkout — the exact thing that kept getting dirtied. There
-is no longer a `~/code/worktrees/` root; a worktree is a sibling of `main/`, so
-the project directory holds everything about that project and nothing else does.
+There is no longer a `~/code/worktrees/` root; a worktree is a sibling of
+`main/`, so the project directory holds everything about that project and
+nothing else does.
 
 - **Name the leaf `wt-<slug>`.** The `wt-` prefix is load-bearing: it is what
   the enforcement guard carves out, so a directory without it is treated as
@@ -52,11 +50,9 @@ the project directory holds everything about that project and nothing else does.
 Write **`north:cli/msg-cli.clj`**, not `~/code/north/cli/msg-cli.clj`.
 
 An absolute checkout path is a hardcoded copy of the current layout, and it
-rots the instant the layout changes. On 2026-07-29 the containerisation broke
-65 such references across 13 agent docs at once — every one of them silently
-wrong, pointing at a location that no longer existed. The `repo:path` form
-names the repository and the path *inside* it, so it survives the checkout
-moving, being renamed, or being cloned somewhere else entirely.
+rots the instant the layout changes. The `repo:path` form names the
+repository and the path *inside* it, so it survives the checkout moving,
+being renamed, or being cloned somewhere else entirely.
 
 Absolute paths are still right for things that genuinely live at a fixed
 location: `~/.local/state/north/…`, `/var/lib/…`, `/nix/store/…`.
@@ -65,11 +61,9 @@ location: `~/.local/state/north/…`, `/var/lib/…`, `/nix/store/…`.
 
 `~/.agents/hooks/launch-critical-worktree-guard.sh` refuses writes into a
 protected checkout on `Edit|Write|MultiEdit` **and on `Bash`**. The Bash side is
-not optional: on 2026-07-29 an agent modified all three launch-critical
-primaries — `python3 - <<EOF` heredocs, `git add`/`commit`/`reset --hard`, and a
-push from the primary — while the guard was live and wired, because it only
-inspected `tool_input.file_path` and a Bash call carries `tool_input.command`.
-Enforcement on one entrance is not enforcement.
+not optional: the guard inspects Bash too — a Bash call carries
+`tool_input.command`, not `tool_input.file_path`; enforcement on one entrance
+is not enforcement.
 
 Reads from `main/` stay allowed, as do `git worktree add` and
 `git fetch <worktree> <branch>:refs/heads/main` — the guard must never trap a
@@ -90,11 +84,9 @@ The two repos fail differently, and both failures are real:
 
 - **fram — hard deadlock.** `north up` refuses to launch on a tracked-dirty Fram
   checkout, on purpose: a coordinator serving a half-edited engine is worse than
-  one that refuses. Observed 2026-07-29 — an agent left ten modified files in
-  `~/code/fram`, so the coordinator could not be restarted, so a rebuilt closure
-  could not be adopted, so a measured 200x performance fix sat built-but-unused
-  while every `firn rebuild` reported failure *after the build had already
-  succeeded*. One dirty primary stalled the whole machine.
+  one that refuses. A dirty fram primary blocks coordinator restarts, which
+  blocks adopting any rebuilt closure — one dirty primary stalls the whole
+  machine.
 - **north / beagle / nixos-config — silent exclusion.** `firn rebuild` builds a
   COMMIT SNAPSHOT, so uncommitted work is simply not in the generation. Nothing
   errors; the change just doesn't take, which reads as "the fix didn't work"

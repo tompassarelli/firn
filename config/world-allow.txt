@@ -93,7 +93,6 @@ north/profiles/tom/hooks/agent-spawn-guard.sh
 north/profiles/tom/hooks/agent-spawn-guard.test.sh
 north/profiles/tom/hooks/launch-critical-worktree-guard.test.py
 north/profiles/tom/hooks/launch-critical-worktree-guard.test.sh
-north/profiles/tom/hooks/lib/launch_critical_decide.py
 north/profiles/tom/hooks/north-clock-guard.test.sh
 north/profiles/tom/hooks/tripwire-guard.test.sh
 north/realize-the-model.sh
