@@ -1,7 +1,6 @@
 #lang beagle/zig
 
 ;; @upstream:graph
-
 (ns firn.main)
 
 (def firn-schema-version :- String "firn-index/v1")
@@ -15,3 +14,67 @@
   (index-accepted? (get header semantic-index-schema-key)
     (get header "rootHash")
     expected-root-hash))
+
+(defn rebuild-command? [tail :- (Vec String)] :- Bool
+  (or (and (>= (count tail) 1) (= (nth tail 0) "rebuild"))
+    (and (>= (count tail) 2) (= (nth tail 0) "host") (= (nth tail 1) "rebuild"))))
+
+(defn state-root [] :- String
+  (let [xdg :- String? (zig/getenv "XDG_STATE_HOME")]
+    (if (and (some? xdg) (not (= xdg "")))
+      xdg
+      (let [home :- String? (zig/getenv "HOME")]
+        (if (and (some? home) (not (= home "")))
+          (str home "/.local/state")
+          "/tmp")))))
+
+(defn run-start-event [trace-id :- String trace-path :- String nix-log-path :- String start-ms :- Int] :- String
+  (str "{\"schema\":\"firn.rebuild/v1\",\"event\":\"run_start\",\"trace_id\":\""
+    (zig/json-escape trace-id)
+    "\",\"trace_path\":\""
+    (zig/json-escape trace-path)
+    "\",\"nix_log_path\":\""
+    (zig/json-escape nix-log-path)
+    "\",\"monotonic_ms\":"
+    start-ms
+    "}"))
+
+(defn run-end-event [trace-id :- String start-ms :- Int end-ms :- Int exit-code :- Int] :- String
+  (str "{\"schema\":\"firn.rebuild/v1\",\"event\":\"run_end\",\"trace_id\":\""
+    (zig/json-escape trace-id)
+    "\",\"monotonic_ms\":"
+    end-ms
+    ",\"duration_ms\":"
+    (- end-ms start-ms)
+    ",\"status\":\""
+    (if (= exit-code 0) "ok" "error")
+    "\",\"exit_code\":"
+    exit-code
+    "}"))
+
+(defn write-trace-event? [run-dir :- String trace-path :- String nix-log-path :- String event :- String] :- Bool
+  (let [prefix :- (Vec String) ["/usr/bin/env" "sh" "-c" "mkdir -p \"$1\" && : >> \"$2\" && : >> \"$3\" && printf '%s\\n' \"$4\" >> \"$2\"" "firn-trace"] with-run-dir (conj prefix run-dir) with-trace-path (conj with-run-dir trace-path) with-nix-log-path (conj with-trace-path nix-log-path) command (conj with-nix-log-path event) result (zig/process-capture command nil)]
+    (= (zig/process-result-exit result) 0)))
+
+(defn backend-command [tail :- (Vec String) repo :- String tracing-enabled :- Bool trace-id :- String trace-path :- String nix-log-path :- String] :- (Vec String)
+  (let [base :- (Vec String) ["/usr/bin/env" "FIRN_DISABLE_NATIVE=1"] backend (str repo "/dotfiles/bin/firn")]
+    (if tracing-enabled
+      (let [with-id (conj base (str "FIRN_TRACE_ID=" trace-id)) with-trace (conj with-id (str "FIRN_TRACE_PATH=" trace-path)) with-log (conj with-trace (str "FIRN_NIX_LOG_PATH=" nix-log-path)) with-backend (conj with-log backend)]
+        (append-command with-backend tail))
+      (append-command (conj base backend) tail))))
+
+(defn main [] :- Nil
+  (let [argv (zig/args) tail :- (Vec String) (rest argv)]
+    (if (rebuild-command? tail)
+      (let [repo-value :- String? (zig/getenv "FIRN_REPO") repo (if (and (some? repo-value) (not (= repo-value ""))) repo-value "") trace-id (zig/unique-id) run-dir (str (state-root) "/firn/rebuild/" trace-id) trace-path (str run-dir "/trace.jsonl") nix-log-path (str run-dir "/nix.jsonl") start-ms (zig/monotonic-ms) tracing-enabled (write-trace-event? run-dir trace-path nix-log-path (run-start-event trace-id trace-path nix-log-path start-ms)) command (backend-command tail repo tracing-enabled trace-id trace-path nix-log-path) exit-code (zig/process-run command nil) end-ms (zig/monotonic-ms)]
+        (if tracing-enabled
+          (write-trace-event? run-dir
+            trace-path
+            nix-log-path
+            (run-end-event trace-id start-ms end-ms exit-code))
+          false)
+        (zig/exit exit-code))
+      (zig/exit 2))))
+
+(defn append-command [prefix :- (Vec String) tail :- (Vec String)] :- (Vec String)
+  (concat prefix tail))
