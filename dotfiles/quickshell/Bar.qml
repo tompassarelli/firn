@@ -48,7 +48,7 @@ PanelWindow {
                 running: true
                 repeat: true
                 triggeredOnStart: true
-                onTriggered: clock.text = Qt.formatDateTime(new Date(), "h:mm AP - ddd yyyy/MM/dd")
+                onTriggered: clock.text = Qt.formatDateTime(new Date(), "h:mm AP")
             }
         }
 
