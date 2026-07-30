@@ -77,16 +77,21 @@ write_endpoint 17978 active blue-telemetry 20
 write_endpoint 27977 standby green-coord 10
 write_endpoint 27978 standby green-telemetry 20
 
-write_process_identity() {
-  local unit=$1 main_pid=$2 port=$3 birth=$4
-  local revision=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-  local origin=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-fram-test
+write_process_birth() {
+  local main_pid=$1 birth=$2
   mkdir -p "$proc_root/$main_pid"
   {
     printf '%s (java) S' "$main_pid"
     for _ in {1..18}; do printf ' 0'; done
     printf ' %s\n' "$birth"
   } >"$proc_root/$main_pid/stat"
+}
+
+write_process_identity() {
+  local unit=$1 main_pid=$2 port=$3 birth=$4
+  local revision=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  local origin=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-fram-test
+  write_process_birth "$main_pid" "$birth"
   printf '%s\0' \
     "NORTH_FRAM_RUNTIME=package" \
     "FRAM_RUNTIME_SOURCE=$origin/libexec/fram" \
@@ -648,6 +653,29 @@ if rg -n '^demote ' "$cutover_log"; then
 fi
 "$here/north-coord-cutover-gate" rollback green blue "$transaction"
 printf 'healthy\n' >"$jcmd_state/mode"
+
+# A stable MainPID and systemd invocation cannot mask kernel process reuse.
+# The captured /proc start time is part of the prepared identity and must be
+# rechecked before either source origin is demoted.
+: >"$cutover_log"
+"$here/north-coord-cutover-gate" prepare blue green "$transaction"
+grep -Fxq 'MainPID=4201' "$systemd_state/north-coord-green.service"
+grep -Fxq \
+  'InvocationID=cccccccccccccccccccccccccccccccc' \
+  "$systemd_state/north-coord-green.service"
+write_process_birth 4201 9000010
+if "$here/north-coord-cutover-gate" promote blue green "$transaction"; then
+  echo "same-PID coordination birth drift unexpectedly passed" >&2
+  exit 1
+fi
+if rg -n '^demote ' "$cutover_log"; then
+  echo "same-PID birth rejection changed source authority" >&2
+  exit 1
+fi
+[[ ! -e "$transaction" && ! -L "$transaction" ]]
+grep -Fxq 'active blue' "$route"
+"$here/north-coord-cutover-gate" rollback green blue "$transaction"
+write_process_birth 4201 3000010
 
 # The same process is checked again after Fram has synchronized the final
 # marker and promoted it, while the selector still holds the frontend. A live
