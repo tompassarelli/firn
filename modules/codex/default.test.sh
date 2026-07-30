@@ -6,20 +6,75 @@ source_file="$repo/modules/codex/default.bnix"
 generated_file="$repo/modules/codex/default.nix"
 config_file="$repo/dotfiles/codex/config.toml"
 hooks_file="$repo/dotfiles/codex/hooks.json"
+requirements_file="$repo/modules/codex/requirements.toml"
 
 grep -Fq '{:source (s flakeRoot "/dotfiles/codex/config.toml")}' "$source_file"
 grep -Fq '{:source (s flakeRoot "/dotfiles/codex/hooks.json")}' "$source_file"
-grep -Fq '{:source (s inputs.north "/agent-profile/hooks/lib/harness-dial.sh")}' "$source_file"
-grep -Fq '{:source (s inputs.north "/agent-profile/hooks/registry.tsv")}' "$source_file"
 # These assertions intentionally match literal Nix interpolation syntax.
 # shellcheck disable=SC2016
 grep -Fq '".codex/config.toml".source = "${flakeRoot}/dotfiles/codex/config.toml";' "$generated_file"
 # shellcheck disable=SC2016
 grep -Fq '".codex/hooks.json".source = "${flakeRoot}/dotfiles/codex/hooks.json";' "$generated_file"
-# shellcheck disable=SC2016
-grep -Fq '"codex/hooks/lib/harness-dial.sh".source = "${inputs.north}/agent-profile/hooks/lib/harness-dial.sh";' "$generated_file"
-# shellcheck disable=SC2016
-grep -Fq '"codex/hooks/registry.tsv".source = "${inputs.north}/agent-profile/hooks/registry.tsv";' "$generated_file"
+
+python3 - "$requirements_file" "$source_file" "$generated_file" <<'PY'
+import pathlib
+import re
+import shlex
+import sys
+import tomllib
+
+requirements_path, *module_paths = map(pathlib.Path, sys.argv[1:])
+with requirements_path.open("rb") as handle:
+    requirements = tomllib.load(handle)
+
+managed_dir = requirements["hooks"]["managed_dir"].rstrip("/")
+
+
+def commands(value):
+    if isinstance(value, dict):
+        command = value.get("command")
+        if isinstance(command, str):
+            yield command
+        for nested in value.values():
+            yield from commands(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            yield from commands(nested)
+
+
+required_paths = {
+    token
+    for command in commands(requirements["hooks"])
+    for token in shlex.split(command)
+    if token.startswith(f"{managed_dir}/")
+}
+
+
+def declared_paths(path):
+    text = path.read_text()
+    relative_paths = set(re.findall(r'"codex/hooks/([^"]+)"', text))
+    relative_paths.update(
+        re.findall(r'\(promoted\s+"([^"]+)"\s+"[^"]+"\)', text)
+    )
+    return {f"{managed_dir}/{relative}" for relative in relative_paths}
+
+
+for module_path in module_paths:
+    missing = sorted(required_paths - declared_paths(module_path))
+    if missing:
+        print(
+            f"{module_path}: requirements reference unmanaged hook paths:",
+            *missing,
+            sep="\n  ",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+print(
+    f"ok: {len(required_paths)} requirements command paths have source and generated install declarations"
+)
+PY
+
 if rg -n \
   'mkOutOfStoreSymlink.*(config\.toml|hooks\.json)|code/nixos-config/dotfiles/codex/(config\.toml|hooks\.json)' \
   "$source_file" "$generated_file"; then
@@ -64,27 +119,6 @@ assert_store_copy() {
 config_source=$(assert_store_copy 'Codex config.toml' "$config_file" "$config_source")
 hooks_source=$(assert_store_copy 'Codex hooks.json' "$hooks_file" "$hooks_source")
 
-managed_hook_sources=$(
-  nix eval --json \
-    "$repo#nixosConfigurations.whiterabbit.config.environment.etc" \
-    --apply 'etc: builtins.mapAttrs (_: value: builtins.toString value.source) {
-      authoring = etc."codex/hooks/lib/authoring-killswitch.sh";
-      harnessDial = etc."codex/hooks/lib/harness-dial.sh";
-      registry = etc."codex/hooks/registry.tsv";
-      spawnGuard = etc."codex/hooks/agent-spawn-guard.sh";
-    }'
-)
-python3 - "$managed_hook_sources" <<'PY'
-import json
-import pathlib
-import sys
-
-sources = {name: pathlib.Path(path) for name, path in json.loads(sys.argv[1]).items()}
-assert all(str(path).startswith("/nix/store/") for path in sources.values())
-assert sources["harnessDial"].parent == sources["authoring"].parent
-assert sources["registry"].parent == sources["spawnGuard"].parent
-PY
-
 python3 - "$config_source" <<'PY'
 import pathlib
 import sys
@@ -101,4 +135,3 @@ PY
 
 printf 'ok: Codex config.toml and legacy hooks.json are generation-retained store copies with no checkout delivery dependency\n'
 printf 'ok: Codex keeps Terra/medium and immutable North/Fram MCP command paths\n'
-printf 'ok: Codex hook dial resolver and registry are store-backed from the same North source as existing hooks\n'

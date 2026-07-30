@@ -68,6 +68,7 @@ in
       "d /var/lib/north-enforcement 0755 root root -"
       "d /etc/codex/hooks/lib 0755 root root -"
       (promoted "agent-spawn-guard.sh" "north/profiles/tom/hooks/agent-spawn-guard.sh")
+      (promoted "launch-critical-worktree-guard.sh" "north/profiles/tom/hooks/launch-critical-worktree-guard.sh")
       (promoted "north-clock-guard.sh" "north/profiles/tom/hooks/north-clock-guard.sh")
       (promoted "north-clock-guard.py" "north/profiles/tom/hooks/north-clock-guard.py")
       (promoted "tripwire-guard.sh" "north/profiles/tom/hooks/tripwire-guard.sh")
