@@ -34,6 +34,10 @@ check_contains() {
   esac
 }
 
+resolve_dir() {
+  (cd -P -- "$1" && pwd -P)
+}
+
 WORK="$(mktemp -d)"
 trap 'chmod -R u+w "$WORK" 2>/dev/null || true; rm -rf -- "${WORK:?}"' EXIT
 
@@ -100,9 +104,9 @@ check_contains 'record carries why' "$record" 'WHY initial seed'
 check_contains 'record names who promoted' "$record" "WHO $(id -un)"
 
 check 'active/current resolves to the deployment' \
-  test "$(readlink -f "$CURRENT")" = "$(readlink -f "$DEPLOY")"
+  test "$(resolve_dir "$CURRENT")" = "$(resolve_dir "$DEPLOY")"
 check 'first promote makes previous the same deployment' \
-  test "$(readlink -f "$NORTH_ENFORCEMENT_STATE_ROOT/active/previous")" = "$(readlink -f "$DEPLOY")"
+  test "$(resolve_dir "$NORTH_ENFORCEMENT_STATE_ROOT/active/previous")" = "$(resolve_dir "$DEPLOY")"
 
 # --- payload selection --------------------------------------------------------
 check 'North hook tree is promoted' \
@@ -148,7 +152,7 @@ check_eq 'record covers exactly the deployed file set' \
 record_again="$(promote "$NORTH_V1" --beagle-rev "$BEAGLE_V1" --why 'same revisions again')"
 check_contains 're-promote of the same revisions reuses the deployment' "$record_again" "ID $ID"
 check 'reused deployment is still the active one' \
-  test "$(readlink -f "$CURRENT")" = "$(readlink -f "$DEPLOY")"
+  test "$(resolve_dir "$CURRENT")" = "$(resolve_dir "$DEPLOY")"
 
 # --- second promote retains the previous deployment ---------------------------
 printf 'guard v2\n' >"$NORTH/profiles/tom/hooks/agent-spawn-guard.sh"

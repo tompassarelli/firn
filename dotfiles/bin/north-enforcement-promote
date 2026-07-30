@@ -206,18 +206,23 @@ require_layout() {
   done
 }
 
-active_generation() {
+# Physical resolution by shell builtin, never by an external readlink: this
+# command has to work in a stripped or hostile PATH.
+resolve_dir() {
   local resolved
-  resolved="$(readlink -f "$ACTIVE_LINK" 2>/dev/null || true)"
-  [ -n "$resolved" ] && [ -d "$resolved" ] || return 1
+  resolved="$(cd -P -- "$1" 2>/dev/null && pwd -P)" || return 1
+  [ -n "$resolved" ] || return 1
   printf '%s' "$resolved"
+}
+
+active_generation() {
+  resolve_dir "$ACTIVE_LINK"
 }
 
 member_id() {
   local member="$1" generation resolved
   generation="$(active_generation)" || return 1
-  resolved="$(readlink -f "$generation/$member" 2>/dev/null || true)"
-  [ -n "$resolved" ] && [ -d "$resolved" ] || return 1
+  resolved="$(resolve_dir "$generation/$member")" || return 1
   printf '%s' "${resolved##*/}"
 }
 
@@ -347,8 +352,8 @@ cmd_status() {
   local generation
   generation="$(active_generation)" || die "no active enforcement deployment at $STATE_ROOT"
   printf 'active generation: %s\n' "$generation"
-  printf 'current:           %s\n' "$(readlink -f "$ACTIVE_LINK/current")"
-  printf 'previous:          %s\n' "$(readlink -f "$ACTIVE_LINK/previous")"
+  printf 'current:           %s\n' "$(resolve_dir "$ACTIVE_LINK/current")"
+  printf 'previous:          %s\n' "$(resolve_dir "$ACTIVE_LINK/previous")"
   printf '\n'
   cat "$generation/record"
 }

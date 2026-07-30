@@ -364,6 +364,7 @@ if [ -d "$real_enforcement/deployments" ] && [ -r "$real_enforcement/active/reco
   ln -s "$real_enforcement/deployments" "$promoted_root/deployments"
   ln -s "$(readlink -f "$real_enforcement/active/current")" "$promoted_root/active/current"
   cp "$real_enforcement/active/record" "$promoted_root/active/record"
+  chmod u+w "$promoted_root/active/record"
   NORTH_ENFORCEMENT_ROOT="$promoted_root"
 
   [ "$(stat -c '%u:%a:%h' "$promoted_root/active/current/$promoted_relative")" = '0:444:1' ]
