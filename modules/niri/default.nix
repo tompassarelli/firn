@@ -1,7 +1,8 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, flakeRoot, ... }:
 
 let
   username = config.myConfig.modules.users.username;
+  cfgTool = pkgs.writeShellScript "cfg" (builtins.readFile "${flakeRoot}/dotfiles/bin/cfg");
   niri-viewport-nav = pkgs.writers.writePython3Bin "niri-viewport-nav" {
     libraries = [ ];
   } ''
@@ -136,7 +137,7 @@ in
     environment.sessionVariables.NIXOS_OZONE_WL = "1";
     security.chromiumSuidSandbox.enable = true;
     home-manager.users.${username} = ({ config, ... }: {
-      xdg.configFile."niri/config.kdl".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/niri/config.kdl";
+      home.activation.materializeVolatileCfg = config.lib.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ] "if ! run env PATH=${pkgs.coreutils}/bin:$PATH ${cfgTool} materialize niri; then\n  echo \"warning: cfg materialize niri failed; run 'cfg status' to inspect\" >&2\nfi\n";
     });
   };
 }

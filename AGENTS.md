@@ -50,6 +50,13 @@ Multi-file modules (chrome, firefox, glide, kanata, nyxt, stylix, system, users)
 - Assume new modules only get added to whiterabbit host.
 - New files (both `.bnix` and `.nix`) must be git-added before nix can see them (flake uses git tree).
 
+## Volatile preferences (the cfg channel)
+
+Live-tunable preference files (niri's `config.kdl`, and anything added later) are **not** symlinked out of this checkout — they are plain user-owned copies in `$HOME`, seeded and detached by a home-manager activation step.
+Live fiddling therefore never dirties a checkout; the repo holds the *settled record*, not the running value.
+Promotion is deliberate and human-invoked: `cfg status` / `cfg diff <name>` to see drift, `cfg promote <name>` to settle live → record (it lands through a throwaway worktree, never editing main in place), `cfg reset <name> --yes` to go back.
+The registry — name → live path → record path — is the table at the top of `dotfiles/bin/cfg`; adding a future volatile file is one row.
+
 ## Shell scripts
 
 Custom command scripts live in `dotfiles/bin/` as plain executable shell scripts (one file per command); the `modules/bash/` module puts the directory on `PATH`. The fish→bash migration is complete.
