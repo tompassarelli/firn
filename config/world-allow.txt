@@ -83,7 +83,6 @@ north/build.sh
 north/cli/config-cli.clj
 north/cli/tests/agent-identity-publication-integration-test.clj
 north/cli/tests/concern-cli-validation-test.clj
-north/cli/tests/reactor-sweep-lifecycle-test.clj
 north/cli/tests/read-projection-churn-oracle.clj
 north/deploy/gateway/crosshost_test.sh
 north/deploy/gateway/smoke_test.sh
