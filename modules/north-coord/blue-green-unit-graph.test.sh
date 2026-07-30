@@ -160,8 +160,9 @@ for name in north-coord-blue.service north-coord-green.service; do
     exit 1
   fi
   grep -Fxq 'MemoryMax=8G' "$path"
+  grep -Fxq 'MemorySwapMax=0' "$path"
   grep -Fxq \
-    "Environment=\"JDK_JAVA_OPTIONS=-Xmx6g -Xlog:gc:file=/home/tom/.local/state/north/fram-runtime-$slot/gc-$port.log:time,uptime:filecount=3,filesize=10m\"" \
+    "Environment=\"JDK_JAVA_OPTIONS=-XX:+UseG1GC -Xmx6g -Xlog:gc:file=/home/tom/.local/state/north/fram-runtime-$slot/gc-$port.log:time,uptime:filecount=3,filesize=10m\"" \
     "$path"
   grep -Fxq 'TimeoutStopSec=15s' "$path"
 done
@@ -179,6 +180,7 @@ for name in north-telemetry-coord-blue.service north-telemetry-coord-green.servi
     exit 1
   fi
   grep -Fxq 'MemoryMax=6G' "$path"
+  grep -Fxq 'MemorySwapMax=0' "$path"
   grep -Fxq \
     "Environment=\"JDK_JAVA_OPTIONS=-XX:+UseG1GC -Xmx4g -Xlog:gc:file=/home/tom/.local/state/north/fram-telemetry-runtime-$slot/gc-$port.log:time,uptime:filecount=3,filesize=10m\"" \
     "$path"

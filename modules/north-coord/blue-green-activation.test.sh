@@ -78,6 +78,7 @@ write_unit_health() {
   local memory_current=${2:-1200000000}
   local tasks_current=${3:-24}
   local memory_max=${4:-6442450944}
+  local memory_swap_max=${5:-0}
   local main_pid=4201
   local invocation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   local exec_start=1000000
@@ -94,6 +95,7 @@ MainPID=$main_pid
 ExecMainStartTimestampMonotonic=$exec_start
 MemoryCurrent=$memory_current
 MemoryMax=$memory_max
+MemorySwapMax=$memory_swap_max
 TasksCurrent=$tasks_current
 EOF
 }
@@ -460,6 +462,8 @@ printf 'healthy\n' >"$jcmd_state/mode"
 
 write_unit_health north-telemetry-coord-green.service 1200000000 24 1572864000
 assert_prepare_rejected wrong-cgroup-limit
+write_unit_health north-telemetry-coord-green.service 1200000000 24 6442450944 1073741824
+assert_prepare_rejected wrong-swap-limit
 write_unit_health north-telemetry-coord-green.service 3221225472
 assert_prepare_rejected memory-current-at-limit
 write_unit_health north-telemetry-coord-green.service 1200000000 129
@@ -474,6 +478,23 @@ printf 'malformed\n' >"$jcmd_state/mode"
 assert_prepare_rejected malformed-jcmd-evidence
 printf 'healthy\n' >"$jcmd_state/mode"
 
+cat >"$scratch/systemd-swap-rollover" <<'EOF'
+ActiveState=active
+SubState=running
+InvocationID=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+MainPID=4202
+ExecMainStartTimestampMonotonic=2000000
+MemoryCurrent=1200000000
+MemoryMax=6442450944
+MemorySwapMax=1073741824
+TasksCurrent=24
+EOF
+export NORTH_COORD_TEST_JCMD_ROLLOVER_UNIT=north-telemetry-coord-green.service
+export NORTH_COORD_TEST_JCMD_ROLLOVER_STATE=$scratch/systemd-swap-rollover
+assert_prepare_rejected systemd-swap-limit-rollover
+unset NORTH_COORD_TEST_JCMD_ROLLOVER_UNIT NORTH_COORD_TEST_JCMD_ROLLOVER_STATE
+write_unit_health north-telemetry-coord-green.service
+
 cat >"$scratch/systemd-rollover" <<'EOF'
 ActiveState=active
 SubState=running
@@ -482,6 +503,7 @@ MainPID=5202
 ExecMainStartTimestampMonotonic=3000000
 MemoryCurrent=1200000000
 MemoryMax=6442450944
+MemorySwapMax=0
 TasksCurrent=24
 EOF
 export NORTH_COORD_TEST_JCMD_ROLLOVER_UNIT=north-telemetry-coord-green.service

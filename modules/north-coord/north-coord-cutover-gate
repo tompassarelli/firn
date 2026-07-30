@@ -39,6 +39,7 @@ settle_poll_seconds=${NORTH_COORD_CUTOVER_SETTLE_POLL_SECONDS:-0.1}
 readiness_systemctl_timeout_seconds=${NORTH_COORD_PROMOTION_SYSTEMCTL_TIMEOUT_SECONDS:-5}
 readiness_jcmd_timeout_seconds=${NORTH_COORD_PROMOTION_JCMD_TIMEOUT_SECONDS:-10}
 readiness_expected_memory_max_bytes=${NORTH_COORD_PROMOTION_EXPECTED_MEMORY_MAX_BYTES:-6442450944}
+readiness_expected_memory_swap_max_bytes=${NORTH_COORD_PROMOTION_EXPECTED_MEMORY_SWAP_MAX_BYTES:-0}
 readiness_max_memory_current_bytes=${NORTH_COORD_PROMOTION_MAX_MEMORY_CURRENT_BYTES:-3221225472}
 readiness_expected_max_heap_bytes=${NORTH_COORD_PROMOTION_EXPECTED_MAX_HEAP_BYTES:-4294967296}
 readiness_max_heap_used_bytes=${NORTH_COORD_PROMOTION_MAX_HEAP_USED_BYTES:-2147483648}
@@ -71,6 +72,8 @@ do
   [[ "${!setting}" =~ ^[1-9][0-9]*$ ]] ||
     die "${setting#readiness_} must be a positive integer"
 done
+[[ "$readiness_expected_memory_swap_max_bytes" =~ ^[0-9]+$ ]] ||
+  die "expected memory swap max must be a non-negative integer"
 (( readiness_max_memory_current_bytes < readiness_expected_memory_max_bytes )) ||
   die "maximum memory current must be below the expected cgroup limit"
 (( readiness_max_heap_used_bytes < readiness_expected_max_heap_bytes )) ||
@@ -640,7 +643,8 @@ prepare_endpoint() {
 sample_telemetry_unit() {
   local unit=$1 properties rc
   local active_state="" sub_state="" main_pid="" invocation_id=""
-  local exec_start="" memory_current="" memory_max="" tasks_current=""
+  local exec_start="" memory_current="" memory_max="" memory_swap_max=""
+  local tasks_current=""
   local key value
 
   if properties=$(
@@ -654,6 +658,7 @@ sample_telemetry_unit() {
       --property=ExecMainStartTimestampMonotonic \
       --property=MemoryCurrent \
       --property=MemoryMax \
+      --property=MemorySwapMax \
       --property=TasksCurrent
   ); then
     :
@@ -671,6 +676,7 @@ sample_telemetry_unit() {
       ExecMainStartTimestampMonotonic) exec_start=$value ;;
       MemoryCurrent) memory_current=$value ;;
       MemoryMax) memory_max=$value ;;
+      MemorySwapMax) memory_swap_max=$value ;;
       TasksCurrent) tasks_current=$value ;;
     esac
   done <<<"$properties"
@@ -681,10 +687,11 @@ sample_telemetry_unit() {
      "$exec_start" =~ ^[1-9][0-9]*$ &&
      "$memory_current" =~ ^[0-9]+$ &&
      "$memory_max" =~ ^[1-9][0-9]*$ &&
+     "$memory_swap_max" =~ ^[0-9]+$ &&
      "$tasks_current" =~ ^[0-9]+$ ]] || return 1
-  printf '%s %s %s %s %s %s\n' \
+  printf '%s %s %s %s %s %s %s\n' \
     "$main_pid" "$invocation_id" "$exec_start" \
-    "$memory_current" "$memory_max" "$tasks_current"
+    "$memory_current" "$memory_max" "$memory_swap_max" "$tasks_current"
 }
 
 sample_jvm_health() {
@@ -753,8 +760,9 @@ verify_target_telemetry_readiness() {
   local phase instance version observed_cutover_id
   local after_phase after_instance after_version after_cutover_id
   local unit_before unit_after main_pid invocation_id exec_start
-  local memory_current memory_max tasks_current after_pid after_invocation
-  local after_start after_memory_current after_memory_max after_tasks_current
+  local memory_current memory_max memory_swap_max tasks_current
+  local after_pid after_invocation after_start after_memory_current
+  local after_memory_max after_memory_swap_max after_tasks_current
   local jvm_health max_heap heap_used heap_total
 
   valid_slot "$slot" || die "invalid telemetry readiness slot: $slot"
@@ -789,7 +797,7 @@ verify_target_telemetry_readiness() {
   unit_before=$(sample_telemetry_unit "$unit") ||
     die "$slot/telemetry readiness rejected: systemd evidence is unavailable or malformed"
   read -r main_pid invocation_id exec_start \
-    memory_current memory_max tasks_current <<<"$unit_before"
+    memory_current memory_max memory_swap_max tasks_current <<<"$unit_before"
   [[ "$expected_pid" == any || "$main_pid" == "$expected_pid" ]] ||
     die "$slot/telemetry readiness rejected: MainPID changed"
   [[ "$expected_invocation" == any ||
@@ -799,6 +807,8 @@ verify_target_telemetry_readiness() {
     die "$slot/telemetry readiness rejected: process start changed"
   [[ "$memory_max" == "$readiness_expected_memory_max_bytes" ]] ||
     die "$slot/telemetry readiness rejected: live MemoryMax is $memory_max, expected $readiness_expected_memory_max_bytes"
+  [[ "$memory_swap_max" == "$readiness_expected_memory_swap_max_bytes" ]] ||
+    die "$slot/telemetry readiness rejected: live MemorySwapMax is $memory_swap_max, expected $readiness_expected_memory_swap_max_bytes"
   (( memory_current < readiness_max_memory_current_bytes )) ||
     die "$slot/telemetry readiness rejected: MemoryCurrent $memory_current is not below $readiness_max_memory_current_bytes"
   (( tasks_current <= readiness_max_tasks )) ||
@@ -817,13 +827,16 @@ verify_target_telemetry_readiness() {
   unit_after=$(sample_telemetry_unit "$unit") ||
     die "$slot/telemetry readiness rejected: post-jcmd systemd evidence is unavailable or malformed"
   read -r after_pid after_invocation after_start \
-    after_memory_current after_memory_max after_tasks_current <<<"$unit_after"
+    after_memory_current after_memory_max after_memory_swap_max \
+    after_tasks_current <<<"$unit_after"
   [[ "$after_pid" == "$main_pid" &&
      "$after_invocation" == "$invocation_id" &&
      "$after_start" == "$exec_start" ]] ||
     die "$slot/telemetry readiness rejected: process invocation changed during jcmd"
   [[ "$after_memory_max" == "$readiness_expected_memory_max_bytes" ]] ||
     die "$slot/telemetry readiness rejected: post-jcmd MemoryMax changed"
+  [[ "$after_memory_swap_max" == "$readiness_expected_memory_swap_max_bytes" ]] ||
+    die "$slot/telemetry readiness rejected: post-jcmd MemorySwapMax changed"
   (( after_memory_current < readiness_max_memory_current_bytes )) ||
     die "$slot/telemetry readiness rejected: post-jcmd MemoryCurrent is over the limit"
   (( after_tasks_current <= readiness_max_tasks )) ||
