@@ -35,21 +35,56 @@
            out)
           (newline out))))))
 
-(define (call-with-trace-span name body)
+(define (call-with-trace-span name body [fields (hash)])
   (define start ((current-monotonic-clock)))
   (append-trace-event!
-   (hash 'event "span_start"
-         'name name
-         'monotonic_ms start))
+   (hash-set* fields
+              'event "span_start"
+              'name name
+              'monotonic_ms start))
   (define ok? (with-handlers ([exn:fail? (λ (_) #f)]) (body)))
   (define end ((current-monotonic-clock)))
   (append-trace-event!
-   (hash 'event "span_end"
-         'name name
-         'monotonic_ms end
-         'duration_ms (- end start)
-         'status (if ok? "ok" "error")))
+   (hash-set* fields
+              'event "span_end"
+              'name name
+              'monotonic_ms end
+              'duration_ms (- end start)
+              'status (if ok? "ok" "error")))
   ok?)
+
+(define (canonical-system-path path)
+  (and path
+       (with-handlers ([exn:fail? (λ (_) #f)])
+         (define resolved (sh-out "readlink" "-f" path))
+         (and (non-empty-string? resolved) resolved))))
+
+(define (activate-linux-system built-path
+                               [active-path "/run/current-system"]
+                               [run-command sh])
+  (define already-active?
+    (let ([built-real (canonical-system-path built-path)]
+          [active-real (canonical-system-path active-path)])
+      (and built-real active-real (equal? built-real active-real))))
+  (define trace-fields
+    (if already-active?
+        (hash 'activation "skipped" 'reason "already-active")
+        (hash 'activation "run")))
+  (when already-active?
+    (printf "── activation skipped: built closure is already active\n")
+    (flush-output))
+  (call-with-trace-span
+   "activation"
+   (λ ()
+     (or already-active?
+         (and (run-command "sudo" "nix-env"
+                           "--profile" "/nix/var/nix/profiles/system"
+                           "--set" built-path)
+              (run-command
+               "sudo"
+               (string-append built-path "/bin/switch-to-configuration")
+               "switch"))))
+   trace-fields))
 
 (define nix-log-shell
   "log=$1; shift; \"$@\" 2> >(tee \"$log\" >&2)")
@@ -406,10 +441,7 @@
                          override-args extra))]
       [else
        (and built-path
-            (sh "sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
-                "--set" built-path)
-            (sh "sudo" (string-append built-path "/bin/switch-to-configuration")
-                "switch"))]))
+            (activate-linux-system built-path))]))
   (when sudo-keepalive (kill-thread sudo-keepalive))
   (define rebuild-elapsed (- (current-inexact-milliseconds) rebuild-start))
   (define total-elapsed (- (current-inexact-milliseconds) total-start))
@@ -465,6 +497,7 @@
 
 (module+ test-support
   (provide call-with-trace-span
+           activate-linux-system
            current-monotonic-clock
            nix-build-command
            nix-log-shell))

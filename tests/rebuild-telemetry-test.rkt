@@ -4,6 +4,7 @@
          rackunit
          racket/file
          racket/list
+         racket/port
          (submod "../scripts/firn-cmds/rebuild.rkt" test-support))
 
 (define (clock-from values)
@@ -89,6 +90,67 @@
      (drop logged-command 7)
      '("nix" "build" "--log-format" "internal-json"
        "--no-link" "--print-out-paths"
-       "flake#host;$(not-shell)")))
+       "flake#host;$(not-shell)"))
+
+    (define active-target (build-path scratch "active-system"))
+    (define changed-target (build-path scratch "changed-system"))
+    (make-directory active-target)
+    (make-directory changed-target)
+    (define active-link (build-path scratch "active-link"))
+    (define built-link (build-path scratch "built-link"))
+    (make-file-or-directory-link active-target active-link)
+    (make-file-or-directory-link active-link built-link)
+
+    (define activation-commands (box '()))
+    (define (record-command . command)
+      (set-box! activation-commands
+                (append (unbox activation-commands) (list command)))
+      #t)
+    (parameterize ([current-environment-variables trace-env]
+                   [current-monotonic-clock
+                    (clock-from '(40.0 40.25 50.0 51.0))]
+                   [current-output-port (open-output-nowhere)])
+      (check-true
+       (activate-linux-system (path->string built-link)
+                              (path->string active-link)
+                              record-command))
+      (check-equal? (unbox activation-commands) '())
+      (check-true
+       (activate-linux-system (path->string changed-target)
+                              (path->string active-link)
+                              record-command)))
+    (check-equal?
+     (unbox activation-commands)
+     (list
+      (list "sudo" "nix-env"
+            "--profile" "/nix/var/nix/profiles/system"
+            "--set" (path->string changed-target))
+      (list "sudo"
+            (string-append (path->string changed-target)
+                           "/bin/switch-to-configuration")
+            "switch")))
+
+    (define activation-events (drop (read-events trace-path) 4))
+    (check-equal? (map (λ (event) (hash-ref event 'name)) activation-events)
+                  (make-list 4 "activation"))
+    (check-equal? (map (λ (event) (hash-ref event 'activation))
+                       activation-events)
+                  '("skipped" "skipped" "run" "run"))
+    (check-equal? (map (λ (event) (hash-ref event 'reason))
+                       (take activation-events 2))
+                  '("already-active" "already-active"))
+    (check-false (hash-has-key? (third activation-events) 'reason))
+    (check-equal? (hash-ref (second activation-events) 'status) "ok")
+    (check-equal? (hash-ref (fourth activation-events) 'status) "ok")
+
+    (set-box! activation-commands '())
+    (parameterize ([current-environment-variables absent-env]
+                   [current-monotonic-clock (clock-from '(60.0 61.0))]
+                   [current-output-port (open-output-nowhere)])
+      (check-true
+       (activate-linux-system (path->string changed-target)
+                              (path->string (build-path scratch "missing-system"))
+                              record-command)))
+    (check-equal? (length (unbox activation-commands)) 2))
   (λ ()
     (delete-directory/files scratch #:must-exist? #f)))
