@@ -428,6 +428,7 @@ fi
 #      ok\t<account-id>     a rankable eligible account was chosen
 #      err\t<reason>        no id — <reason> is a concise, actionable cause
 #    Never touches account state; the caller decides how to act on the verdict.
+SELECT_TIMEOUT=10
 select_account() {
   if ! command -v north >/dev/null 2>&1; then
     printf 'err\tnorth not found on PATH\n'
@@ -438,9 +439,9 @@ select_account() {
   errfile="$(mktemp 2>/dev/null || true)"
   if command -v timeout >/dev/null 2>&1; then
     if [ -n "$errfile" ]; then
-      json="$(timeout --foreground 5s env -u NORTH_CHECKOUT north providers --json 2>"$errfile")"; rc=$?
+      json="$(timeout --foreground "${SELECT_TIMEOUT}s" env -u NORTH_CHECKOUT north providers --json 2>"$errfile")"; rc=$?
     else
-      json="$(timeout --foreground 5s env -u NORTH_CHECKOUT north providers --json 2>/dev/null)"; rc=$?
+      json="$(timeout --foreground "${SELECT_TIMEOUT}s" env -u NORTH_CHECKOUT north providers --json 2>/dev/null)"; rc=$?
     fi
   elif [ -n "$errfile" ]; then
     json="$(env -u NORTH_CHECKOUT north providers --json 2>"$errfile")"; rc=$?
@@ -453,7 +454,7 @@ select_account() {
     [ -n "$errfile" ] && detail="$(head -n1 "$errfile" 2>/dev/null)"
     [ -n "$errfile" ] && rm -f "$errfile"
     if [ "$rc" -eq 124 ]; then
-      printf 'err\tnorth providers timed out after 5s\n'
+      printf 'err\tnorth providers timed out after %ss\n' "$SELECT_TIMEOUT"
     elif [ -n "$detail" ]; then
       printf 'err\tnorth providers exited %s: %s\n' "$rc" "$detail"
     else
@@ -498,6 +499,47 @@ select_account() {
   printf 'ok\t%s\n' "$id"
 }
 
+# 4b. Same verdict, memoized: a cold `north providers` costs seconds, and a
+#     lookup slower than SELECT_TIMEOUT lands ambient. An err caches longer
+#     than it stalls, so a down north stalls once per window, not per call.
+#     NORTH_NO_SELECT_CACHE=1 forces a fresh lookup.
+SELECT_CACHE="${XDG_STATE_HOME:-$HOME/.local/state}/north/account-select.${NORTH_PROVIDER}"
+SELECT_CACHE_TTL_OK=180
+SELECT_CACHE_TTL_ERR=60
+
+cached_select_account() {
+  local now stamp kind value ttl age verdict tmp
+  now="${EPOCHSECONDS:-0}"
+
+  if [ "${NORTH_NO_SELECT_CACHE:-}" != "1" ] && [ "$now" -gt 0 ] && [ -r "$SELECT_CACHE" ] \
+     && IFS=$'\t' read -r stamp kind value <"$SELECT_CACHE" 2>/dev/null \
+     && [ -n "${kind:-}" ] && [ -n "${stamp:-}" ] && [ -z "${stamp//[0-9]/}" ]; then
+    case "$kind" in ok) ttl=$SELECT_CACHE_TTL_OK ;; *) ttl=$SELECT_CACHE_TTL_ERR ;; esac
+    age=$((now - stamp))
+    # A cached id whose account dir vanished re-selects now rather than
+    # repeating the caller's ambient fallback for the rest of the window.
+    if [ "$age" -ge 0 ] && [ "$age" -lt "$ttl" ] \
+       && { [ "$kind" != "ok" ] || [ -d "$ACCOUNTS_ROOT/$value" ]; }; then
+      printf '%s\t%s\n' "$kind" "$value"
+      return
+    fi
+  fi
+
+  verdict="$(select_account)"
+  if [ "$now" -gt 0 ]; then
+    { mkdir -p "${SELECT_CACHE%/*}"; } 2>/dev/null || true
+    tmp="$(mktemp "$SELECT_CACHE.XXXXXX" 2>/dev/null || true)"
+    if [ -n "$tmp" ]; then
+      if printf '%s\t%s\n' "$now" "$verdict" >"$tmp" 2>/dev/null; then
+        mv -f "$tmp" "$SELECT_CACHE" 2>/dev/null || rm -f "$tmp" 2>/dev/null
+      else
+        rm -f "$tmp" 2>/dev/null
+      fi
+    fi
+  fi
+  printf '%s\n' "$verdict"
+}
+
 # Concise recovery hint: prefer a real, known id; otherwise show the command
 # shape with any on-disk account ids, never inventing an account.
 recovery_hint() {
@@ -511,7 +553,7 @@ recovery_hint() {
   fi
 }
 
-verdict="$(select_account)"
+verdict="$(cached_select_account)"
 kind="${verdict%%$'\t'*}"
 value="${verdict#*$'\t'}"
 
