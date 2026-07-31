@@ -1,0 +1,16 @@
+#lang beagle/nix
+
+(ns default)
+
+;; Go has no config file: GOPATH is the only way to stop it creating ~/go, and it
+;; must be set even when go itself comes from a devshell rather than this config.
+(nix/module [config lib pkgs ...]
+  {:tags [development]
+   :options.myConfig.modules.go-env.enable
+    (lib.mkEnableOption "XDG paths for the Go toolchain")
+   :config
+    (lib.mkIf config.myConfig.modules.go-env.enable
+      {:environment.sessionVariables
+        {:GOPATH     "$HOME/.local/share/go"
+         :GOMODCACHE "$HOME/.cache/go/mod"
+         :GOBIN      "$HOME/.local/bin"}})})
