@@ -87,9 +87,11 @@ target_attr() { # <repo> — empty when this host has no configuration here
   fi
 }
 
-cmdline_of() {
+cmdline_of() { # NUL-delimited; read builtin avoids forking tr ~500x per scan
   [ -r "/proc/$1/cmdline" ] || return 0
-  tr '\0' ' ' 2>/dev/null <"/proc/$1/cmdline"
+  local arg out=""
+  while IFS= read -r -d '' arg; do out+="$arg "; done <"/proc/$1/cmdline" 2>/dev/null
+  printf '%s' "$out"
 }
 
 # A rebuild does this evaluation itself; a second cold eval alongside it is
