@@ -333,7 +333,7 @@ in
       listenStreams = [ "127.0.0.1:7977" ];
       socketConfig = {
         TriggerLimitIntervalSec = 0;
-        Backlog = 4096;
+        Backlog = 512;
         FileDescriptorName = "north-coord";
       };
     };
@@ -343,7 +343,7 @@ in
       listenStreams = [ "127.0.0.1:7978" ];
       socketConfig = {
         TriggerLimitIntervalSec = 0;
-        Backlog = 4096;
+        Backlog = 512;
         FileDescriptorName = "north-coord";
       };
     };

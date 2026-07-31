@@ -39,14 +39,18 @@ do
   }
 done
 
-# Ordinary activation preserves the permanent listener contract. The sole
-# intentional socket delta disables systemd's fatal trigger limit during HOLD;
-# PollLimit remains the non-fatal flood throttle.
+# Ordinary activation preserves the permanent listener contract. The intended
+# socket deltas disable the fatal trigger limit and bound both accept queues.
 for name in north-coord.socket north-telemetry-coord.socket; do
   grep -Fxq 'TriggerLimitIntervalSec=0' "$(unit "$name")"
+  grep -Fxq 'Backlog=512' "$(unit "$name")"
   diff -u \
-    <(grep -Fvx 'TriggerLimitIntervalSec=0' "$baseline_units/$name") \
-    <(grep -Fvx 'TriggerLimitIntervalSec=0' "$(unit "$name")")
+    <(sed -e '/^TriggerLimitIntervalSec=0$/d' \
+           -e 's/^Backlog=.*/Backlog=<normalized>/' \
+           "$baseline_units/$name") \
+    <(sed -e '/^TriggerLimitIntervalSec=0$/d' \
+           -e 's/^Backlog=.*/Backlog=<normalized>/' \
+           "$(unit "$name")")
 done
 cmp "$baseline_units/north-coord-pair.target" \
   "$(unit north-coord-pair.target)"

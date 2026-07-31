@@ -53,10 +53,10 @@ export NORTH_COORD_PREFLIGHT_REFUSAL_BACKOFF=0
 
 grep -Fq ':systemd.sockets.north-coord' "$source_module"
 grep -Fq ':listenStreams ["127.0.0.1:7977"]' "$source_module"
-grep -Fq ':Backlog 4096' "$source_module"
+[[ $(grep -Fc ':Backlog 512' "$source_module") -eq 2 ]]
 grep -Fq ':FileDescriptorName "north-coord"' "$source_module"
 grep -Fq 'listenStreams = [ "127.0.0.1:7977" ];' "$generated_module"
-grep -Fq 'Backlog = 4096;' "$generated_module"
+[[ $(grep -Fc 'Backlog = 512;' "$generated_module") -eq 2 ]]
 grep -Fq 'FileDescriptorName = "north-coord";' "$generated_module"
 grep -Fq '(s northCoordRuntime "/bin/north-coord-runtime ensure-default")' \
   "$source_module"

@@ -500,7 +500,7 @@
                             ;; fatal activation limit so queued clients cannot
                             ;; permanently fail the public socket.
                             :TriggerLimitIntervalSec 0
-                            :Backlog 4096
+                            :Backlog 512
                             :FileDescriptorName "north-coord"}})
          :systemd.sockets.north-telemetry-coord
           (lib.mkIf stageA
@@ -508,7 +508,7 @@
              :wantedBy     ["sockets.target"]
              :listenStreams ["127.0.0.1:7978"]
              :socketConfig {:TriggerLimitIntervalSec 0
-                            :Backlog 4096
+                            :Backlog 512
                             ;; north-coord-sd-listen validates the inherited
                             ;; descriptor contract, not the unit name. Both
                             ;; isolated writers use the same adapter contract.
