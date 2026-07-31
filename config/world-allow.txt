@@ -81,7 +81,10 @@ north/bin/tests/sdk-test-entrypoint-test.sh
 north/build.sh
 north/cli/config-cli.clj
 north/cli/tests/agent-identity-publication-integration-test.clj
+north/cli/tests/client-clock-authority-integration-test.sh
 north/cli/tests/concern-cli-validation-test.clj
+north/cli/tests/concern-offline-reconcile-integration-test.clj
+north/cli/tests/concern-offline-spool-integration-test.clj
 north/cli/tests/read-projection-churn-oracle.clj
 north/deploy/gateway/crosshost_test.sh
 north/deploy/gateway/smoke_test.sh
@@ -99,4 +102,5 @@ north/sdk/test/clock.test.ts
 north/sdk/test/codex-app-server.test.ts
 north/sdk/test/guard-log.test.ts
 north/sdk/test/provider-authority.test.ts
+north/sdk/test/session-hard-cap.test.ts
 north/sdk/test/worktree.test.ts
