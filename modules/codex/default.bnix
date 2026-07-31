@@ -68,6 +68,8 @@
            "d /etc/codex/hooks/lib 0755 root root -"
            (promoted "agent-spawn-guard.sh" "north/profiles/tom/hooks/agent-spawn-guard.sh")
            (promoted "launch-critical-worktree-guard.sh" "north/profiles/tom/hooks/launch-critical-worktree-guard.sh")
+           (promoted "lib/launch_critical_decide.py" "north/profiles/tom/hooks/lib/launch_critical_decide.py")
+           (promoted "lib/launch_critical_paths.py" "north/profiles/tom/hooks/lib/launch_critical_paths.py")
            (promoted "north-clock-guard.sh" "north/profiles/tom/hooks/north-clock-guard.sh")
            (promoted "north-clock-guard.py" "north/profiles/tom/hooks/north-clock-guard.py")
            (promoted "tripwire-guard.sh" "north/profiles/tom/hooks/tripwire-guard.sh")

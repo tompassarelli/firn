@@ -1578,6 +1578,10 @@ validate_codex_managed_policy() {
     "requirements.toml|(s flakeRoot \"/modules/codex/requirements.toml\")|$CODEX_REQUIREMENTS|self|modules/codex/requirements.toml|"
     "beagle-session-start.sh|(promoted \"beagle-session-start.sh\"|$BEAGLE_INTEGRATION/hooks/beagle-session-start.sh|beagle|integrations/north/hooks/beagle-session-start.sh|beagle/integrations/north/hooks/beagle-session-start.sh"
     "agent-spawn-guard.sh|(promoted \"agent-spawn-guard.sh\"|$SHARED/hooks/agent-spawn-guard.sh|north|profiles/tom/hooks/agent-spawn-guard.sh|north/profiles/tom/hooks/agent-spawn-guard.sh"
+    # launch_critical guard and its Python decision libraries deploy together.
+    "launch-critical-worktree-guard.sh|(promoted \"launch-critical-worktree-guard.sh\"|$SHARED/hooks/launch-critical-worktree-guard.sh|north|profiles/tom/hooks/launch-critical-worktree-guard.sh|north/profiles/tom/hooks/launch-critical-worktree-guard.sh"
+    "lib/launch_critical_decide.py|(promoted \"lib/launch_critical_decide.py\"|$SHARED/hooks/lib/launch_critical_decide.py|north|profiles/tom/hooks/lib/launch_critical_decide.py|north/profiles/tom/hooks/lib/launch_critical_decide.py"
+    "lib/launch_critical_paths.py|(promoted \"lib/launch_critical_paths.py\"|$SHARED/hooks/lib/launch_critical_paths.py|north|profiles/tom/hooks/lib/launch_critical_paths.py|north/profiles/tom/hooks/lib/launch_critical_paths.py"
     "code-upstream-guard.sh|(s inputs.fram \"/integrations/north/hooks/code-upstream-guard.sh\")|$FRAM_INTEGRATION/hooks/code-upstream-guard.sh|fram|integrations/north/hooks/code-upstream-guard.sh|"
     "firn-guard.sh|(s flakeRoot \"/modules/north-profile/firn/hooks/firn-guard.sh\")|$FIRN_INTEGRATION/hooks/firn-guard.sh|self|modules/north-profile/firn/hooks/firn-guard.sh|"
     "north-clock-guard.sh|(promoted \"north-clock-guard.sh\"|$SHARED/hooks/north-clock-guard.sh|north|profiles/tom/hooks/north-clock-guard.sh|north/profiles/tom/hooks/north-clock-guard.sh"
