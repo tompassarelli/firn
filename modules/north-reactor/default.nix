@@ -2,6 +2,7 @@
 
 let
   username = config.myConfig.modules.users.username;
+  eventOwnerEnabled = config.myConfig.modules.north-reactor.eventOwner.enable;
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
   runtimePath = "PATH=${pkgs.systemd}/bin:${pkgs.babashka}/bin:${pkgs.coreutils}/bin:${pkgs.git}/bin";
   northRuntimeExec = pkgs.writeShellApplication {
@@ -15,7 +16,7 @@ in
   options.myConfig.modules.north-reactor.eventOwner.enable = lib.mkEnableOption "North event-driven rebuild queue owner. OFF until cursor-only writes stop waking the watcher: it self-triggered at ~30 wakes/s on zero real events. A hand-placed /dev/null mask cannot express this — it collides with the unit HM writes and aborts activation";
   config = lib.mkIf config.myConfig.modules.north-reactor.enable {
     home-manager.users.${username} = ({ config, ... }: {
-      systemd.user.services.north-rebuild-queue-owner = lib.mkIf config.myConfig.modules.north-reactor.eventOwner.enable {
+      systemd.user.services.north-rebuild-queue-owner = lib.mkIf eventOwnerEnabled {
         Unit = {
           Description = "North event-driven rebuild queue owner";
         };
