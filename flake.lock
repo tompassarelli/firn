@@ -900,11 +900,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1785459223,
-        "narHash": "sha256-DFtgJlOHm2UDhhZKY5o1325W9ySNqzq5iw1JBnv/OYM=",
+        "lastModified": 1785502916,
+        "narHash": "sha256-BZQEK6/DKRhU/kkb025M1cN48koh7xqOlkqWrUEGD2o=",
         "ref": "main",
-        "rev": "105ac7a79d7ac0b973c7015e95c54d78f649a3de",
-        "revCount": 952,
+        "rev": "16e94513710d4008a0e8857a1f2f73bd6da846d9",
+        "revCount": 971,
         "type": "git",
         "url": "file:///home/tom/code/north/main"
       },
