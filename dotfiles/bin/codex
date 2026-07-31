@@ -334,6 +334,7 @@ if [ "${1:-}" != "as" ]; then
       echo "codex: cross-account resume resolver is unavailable: $resolver" >&2
       exit 127
     fi
+    printf '[codex] north launcher — resolving cross-account resume…\n' >&2
     resolved="$("$resolver" openai "$resume_id")"
     resolve_status=$?
     [ "$resolve_status" -eq 0 ] || exit "$resolve_status"
@@ -525,6 +526,8 @@ cached_select_account() {
     fi
   fi
 
+  printf '[%s] north launcher — probing %s accounts (north providers, up to %ss)…\n' \
+    "$PROVIDER_WORD" "$NORTH_PROVIDER" "$SELECT_TIMEOUT" >&2
   verdict="$(select_account)"
   if [ "$now" -gt 0 ]; then
     { mkdir -p "${SELECT_CACHE%/*}"; } 2>/dev/null || true
