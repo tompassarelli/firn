@@ -34,10 +34,11 @@ jobs:
           NIX_CONFIG: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
         run: |
-          nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel \
+          # --fallback: a cache returning 5xx must cost build time, not a red run.
+          nix build --fallback .#nixosConfigurations.whiterabbit.config.system.build.toplevel \
             --override-input beagle github:tompassarelli/beagle/1d01847795b8b7af8737a2d24bcc0c5d8209ff22 \
             --override-input fram github:tompassarelli/fram/0cbd4b64f8e5063f3e7358342ccdc954b10168fc \
-            --override-input north github:tompassarelli/north/8d1219d422707adc0af3a587a1fbfde7e78e7c2e
+            --override-input north github:tompassarelli/north/78798d68ec0c364862abcf08445429eae4e61f3a
           # Why these overrides:
           # - beagle/fram/north are authored as local git+file:///home/tom/...
           #   inputs (fast local iteration); CI can't fetch a path on the author's
