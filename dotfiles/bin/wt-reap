@@ -81,6 +81,9 @@ irreplaceable_ignored() { # print the ignored paths that are not disposable
   while IFS= read -r path; do
     case "$path" in
       .direnv/*|*/.direnv/*) continue ;;
+      # Every lane that runs firn-build regenerates this; keeping it would
+      # make each built lane permanently unreapable.
+      .beagle-cache/*|*/.beagle-cache/*) continue ;;
       result|result-*) case "$path" in */*) ;; *) continue ;; esac ;;
     esac
     printf '%s\n' "$path"
