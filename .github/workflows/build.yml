@@ -35,9 +35,9 @@ jobs:
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
         run: |
           nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel \
-            --override-input beagle github:tompassarelli/beagle/57d84af61b818be247c795d9ae027baefe13febe \
-            --override-input fram github:tompassarelli/fram/650e27604b4100b50d9c49a4d7ea82147fef0cb6 \
-            --override-input north github:tompassarelli/north/d234623ff446fb823ace3b609e180b1840d61932
+            --override-input beagle github:tompassarelli/beagle/1d01847795b8b7af8737a2d24bcc0c5d8209ff22 \
+            --override-input fram github:tompassarelli/fram/0cbd4b64f8e5063f3e7358342ccdc954b10168fc \
+            --override-input north github:tompassarelli/north/8d1219d422707adc0af3a587a1fbfde7e78e7c2e
           # Why these overrides:
           # - beagle/fram/north are authored as local git+file:///home/tom/...
           #   inputs (fast local iteration); CI can't fetch a path on the author's

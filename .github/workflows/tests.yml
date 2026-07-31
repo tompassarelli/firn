@@ -34,10 +34,12 @@ jobs:
         # or the collection lands in nixpkgs#racket's package DB and firn-build
         # dies under the pinned racket with "collection not found: beagle/private/*".
         # (nixpkgs#racket and beagle's pin are versioned independently — 9.2 vs 9.1.)
+        # _beagle-racket's PLTCOLLECTS scope aliases `beagle` onto `beagle-lib`;
+        # raco refuses both as one directory, so set up by package with it unset.
         run: |
           source "$GITHUB_WORKSPACE/beagle/bin/_beagle-racket"
-          "$RACO" pkg install --auto --batch --link --force "$GITHUB_WORKSPACE/beagle/beagle-lib"
-          "$RACO" setup beagle
+          PLTCOLLECTS= "$RACO" pkg install --auto --batch --link --force "$GITHUB_WORKSPACE/beagle/beagle-lib"
+          PLTCOLLECTS= "$RACO" setup --pkgs beagle-lib
 
       - name: Drift check (.bnix and .nix in sync)
         # Regenerates every .nix from its sibling .bnix and fails if any
