@@ -8,15 +8,18 @@ Usage: wt-reap [--all] [--dry-run]
 Sweep spent sibling worktrees (never main) out of a container
 (<project>/main + <project>/wt-<slug> siblings).
 
-A sibling is reaped when it is completely clean (including untracked) AND
-either:
+A sibling is reaped when it is completely clean (including untracked and
+non-disposable ignored files) AND either:
   merged  — its HEAD is an ancestor of main; or
   equiv   — every commit it is ahead by is patch-equivalent to something
             already on main (the rebase-landed lane), and none of the
             safety gates below hold it back.
 
-Equivalence reaping is held back by: a rescue-* branch, a locked worktree,
-a live process whose CWD is inside the tree, or an age under 2h.
+Every reap is held back by ignored files that are not disposable caches
+(.direnv/, result symlinks) — docs/private/ notes live there.
+Equivalence reaping is additionally held back by: a rescue-* branch, a
+locked worktree, a live process whose CWD is inside the tree, an age under
+2h, or any merge commit the lane is ahead by.
 
   (no flags)  operate on the container of the current directory
   --all       operate on every ~/code/*/main container
@@ -71,6 +74,19 @@ has_live_cwd() {
   return 1
 }
 
+# `status --porcelain` hides ignored files but `worktree remove` deletes them,
+# so docs/private/ notes need their own gate; only caches are safe to destroy.
+irreplaceable_ignored() { # print the ignored paths that are not disposable
+  local tree="$1" path
+  while IFS= read -r path; do
+    case "$path" in
+      .direnv/*|*/.direnv/*) continue ;;
+      result|result-*) case "$path" in */*) ;; *) continue ;; esac ;;
+    esac
+    printf '%s\n' "$path"
+  done < <(git -C "$tree" ls-files --others --ignored --exclude-standard 2>/dev/null)
+}
+
 younger_than_min_age() {
   local tree="$1" born now
   born=$(stat -c %Y "$tree/.git" 2>/dev/null) || return 1
@@ -81,15 +97,21 @@ younger_than_min_age() {
 # Zero '+' lines from `git cherry` means every commit this branch is ahead by
 # already has a patch-equivalent twin on main — the lane landed through some
 # other branch's rebase and its content is safe.
+# refs/heads/ throughout: a bare name resolves refs/tags first, so a tag
+# sharing the lane's name would answer for the branch.
 all_commits_equivalent() {
-  local main_dir="$1" main_branch="$2" branch="$3" out
-  out=$(git -C "$main_dir" cherry "$main_branch" "$branch" 2>/dev/null) || return 1
+  local main_dir="$1" main_branch="$2" branch="$3" out merges
+  local main_ref="refs/heads/$main_branch" branch_ref="refs/heads/$branch"
+  # cherry skips merges, so an evil merge's unique resolution has no patch-id.
+  merges=$(git -C "$main_dir" rev-list --merges "$main_ref..$branch_ref" 2>/dev/null) || return 1
+  [ -z "$merges" ] || return 1
+  out=$(git -C "$main_dir" cherry "$main_ref" "$branch_ref" 2>/dev/null) || return 1
   ! grep -q '^+' <<<"$out"
 }
 
 reap_container() {
   local container="$1" main_dir wt main_branch head branch_ref branch_name dirty ahead
-  local wt_list locked_paths keep_reason
+  local wt_list locked_paths keep_reason ignored ignored_count
   main_dir="$container/main"
   [ -e "$main_dir/.git" ] || return 0
 
@@ -111,12 +133,21 @@ reap_container() {
       continue
     fi
 
+    ignored=$(irreplaceable_ignored "$wt")
+    if [ -n "$ignored" ]; then
+      ignored_count=$(grep -c '' <<<"$ignored")
+      printf 'kept: ignored files (%s, %s total) (%s)\n' \
+        "$(head -n1 <<<"$ignored")" "$ignored_count" "$wt"
+      kept_protected=$((kept_protected + 1))
+      continue
+    fi
+
     head=$(git -C "$wt" rev-parse HEAD 2>/dev/null) || continue
     branch_ref=$(git -C "$wt" symbolic-ref --quiet HEAD 2>/dev/null) || branch_ref=""
     branch_name=${branch_ref#refs/heads/}
     [ -n "$branch_name" ] || branch_name="(detached)"
 
-    if git -C "$main_dir" merge-base --is-ancestor "$head" "$main_branch" 2>/dev/null; then
+    if git -C "$main_dir" merge-base --is-ancestor "$head" "refs/heads/$main_branch" 2>/dev/null; then
       if [ "$dry" -eq 1 ]; then
         printf 'would reap: %s (%s)\n' "$wt" "$branch_name"
       else
@@ -162,7 +193,7 @@ reap_container() {
       printf 'kept: %s (%s) (%s)\n' "$keep_reason" "$branch_name" "$wt"
       kept_protected=$((kept_protected + 1))
     else
-      ahead=$(git -C "$main_dir" rev-list --count "$main_branch..$head" 2>/dev/null) || ahead="?"
+      ahead=$(git -C "$main_dir" rev-list --count "refs/heads/$main_branch..$head" 2>/dev/null) || ahead="?"
       printf 'kept: unmerged (%s, %s commits ahead) (%s)\n' "$branch_name" "$ahead" "$wt"
       kept_unmerged=$((kept_unmerged + 1))
     fi

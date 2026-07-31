@@ -45,7 +45,9 @@ mkdir -p "$container"
 container="$(cd "$container" && pwd -P)"
 git init -q -b main "$container/main"
 printf 'base\n' >"$container/main/f.txt"
-git -C "$container/main" add f.txt
+# every lane inherits these ignores; the ignored-file gate is tested through them
+printf 'docs/private/\n.direnv/\nresult\nresult-*\n' >"$container/main/.gitignore"
+git -C "$container/main" add f.txt .gitignore
 git -C "$container/main" commit -qm base
 
 # 1. merged + clean -> reaped (the pre-existing ancestor path)
@@ -122,6 +124,58 @@ git -C "$container/wt-equiv-dry" add equiv-dry.txt
 git -C "$container/wt-equiv-dry" commit -qm 'equiv-dry work'
 land_equivalent equiv-dry
 aged "$container/wt-equiv-dry"
+
+# 10. equiv + aged, but carrying ignored files `git status` never shows.
+#     Disposable caches alongside them must not be what holds the tree.
+git -C "$container/main" worktree add -q -b equiv-ignored "$container/wt-equiv-ignored" main
+printf 'equiv-ignored payload\n' >"$container/wt-equiv-ignored/equiv-ignored.txt"
+git -C "$container/wt-equiv-ignored" add equiv-ignored.txt
+git -C "$container/wt-equiv-ignored" commit -qm 'equiv-ignored work'
+equiv_ignored_sha=$(git -C "$container/main" rev-parse equiv-ignored)
+land_equivalent equiv-ignored
+mkdir -p "$container/wt-equiv-ignored/docs/private" \
+         "$container/wt-equiv-ignored/.direnv/bin" \
+         "$container/wt-equiv-ignored/sub/.direnv"
+printf 'handoff notes\n' >"$container/wt-equiv-ignored/docs/private/note.md"
+printf 'cache\n' >"$container/wt-equiv-ignored/.direnv/bin/x"
+printf 'cache\n' >"$container/wt-equiv-ignored/sub/.direnv/y"
+ln -s /nix/store/nonexistent "$container/wt-equiv-ignored/result"
+ln -s /nix/store/nonexistent "$container/wt-equiv-ignored/result-2"
+aged "$container/wt-equiv-ignored"
+
+# 11. every non-merge commit is cherry-equivalent, but the lane also carries a
+#     merge whose conflict resolution exists nowhere else. `git cherry` is blind
+#     to merges, so only the merge gate can keep this tree.
+merge_lane_base=$(git -C "$container/main" rev-parse main)
+git -C "$container/main" worktree add -q -b merge-lane "$container/wt-merge-lane" main
+# merge-side edits the same file differently, so merging it conflicts
+git -C "$container/wt-merge-lane" checkout -q -b merge-side
+printf 'side version\n' >"$container/wt-merge-lane/f.txt"
+git -C "$container/wt-merge-lane" commit -qam 'side work'
+git -C "$container/wt-merge-lane" checkout -q merge-lane
+printf 'merge-lane payload\n' >"$container/wt-merge-lane/merge-lane.txt"
+printf 'lane version\n' >"$container/wt-merge-lane/f.txt"
+git -C "$container/wt-merge-lane" add merge-lane.txt f.txt
+git -C "$container/wt-merge-lane" commit -qm 'merge-lane work'
+# land both patches on main, restoring f.txt between them so each applies clean
+land_equivalent merge-lane
+git -C "$container/main" show "$merge_lane_base:f.txt" >"$container/main/f.txt"
+git -C "$container/main" commit -qam 'main restores f.txt'
+git -C "$container/main" cherry-pick "$(git -C "$container/main" rev-parse merge-side)" >/dev/null
+git -C "$container/wt-merge-lane" merge --no-ff --no-edit merge-side >/dev/null 2>&1 || true
+printf 'evil resolution found nowhere else\n' >"$container/wt-merge-lane/f.txt"
+git -C "$container/wt-merge-lane" add f.txt
+git -C "$container/wt-merge-lane" commit -qm 'merge merge-side (evil resolution)'
+aged "$container/wt-merge-lane"
+
+# 12. a tag whose name equals the lane's branch, pointing at main's tip: bare
+#     names resolve tags first, so an unqualified cherry would read "landed".
+git -C "$container/main" worktree add -q -b tag-shadow "$container/wt-tag-shadow" main
+printf 'tag-shadow unique\n' >"$container/wt-tag-shadow/tag-shadow.txt"
+git -C "$container/wt-tag-shadow" add tag-shadow.txt
+git -C "$container/wt-tag-shadow" commit -qm 'tag-shadow work'
+git -C "$container/main" tag tag-shadow main
+aged "$container/wt-tag-shadow"
 
 # --- case 9 first: --dry-run must not disturb the fixture ------------------
 dry_output="$(cd "$container" && "$TARGET" --dry-run 2>&1)"
@@ -245,6 +299,73 @@ if grep -Fq "kept: locked (equiv-locked)" <<<"$output"; then
 else
   printf '%s\n' "$output" >&2
   check "locked keep has its own reason string" 1
+fi
+
+# 10. equiv + aged, holding an ignored file
+[ -d "$container/wt-equiv-ignored" ] \
+  && check "equivalent lane with ignored files kept" 0 \
+  || check "equivalent lane with ignored files kept" 1
+assert_ok "equiv-ignored branch not deleted" \
+  git -C "$container/main" rev-parse --verify equiv-ignored
+if grep -Fq "kept: ignored files (docs/private/note.md, 1 total) ($container/wt-equiv-ignored)" <<<"$output"; then
+  check "ignored keep names the first survivor and the count" 0
+else
+  printf '%s\n' "$output" >&2
+  check "ignored keep names the first survivor and the count" 1
+fi
+
+# 11. cherry-equivalent commits plus an evil merge
+merge_lane_cherry_plus() {
+  git -C "$container/main" cherry refs/heads/main refs/heads/merge-lane | grep -q '^+'
+}
+assert_not_ok "merge-lane's non-merge commits are all cherry-equivalent (isolates the merge gate)" \
+  merge_lane_cherry_plus
+merge_lane_merges=$(git -C "$container/main" rev-list --merges refs/heads/main..refs/heads/merge-lane 2>/dev/null) \
+  || merge_lane_merges=""
+[ -n "$merge_lane_merges" ] \
+  && check "merge-lane is ahead by a merge commit" 0 \
+  || check "merge-lane is ahead by a merge commit" 1
+[ -d "$container/wt-merge-lane" ] \
+  && check "lane carrying a merge commit kept" 0 \
+  || check "lane carrying a merge commit kept" 1
+assert_ok "merge-lane branch not deleted" \
+  git -C "$container/main" rev-parse --verify refs/heads/merge-lane
+if grep -Fq 'kept: unmerged (merge-lane,' <<<"$output"; then
+  check "merge-carrying lane kept as unmerged" 0
+else
+  printf '%s\n' "$output" >&2
+  check "merge-carrying lane kept as unmerged" 1
+fi
+
+# 12. tag shadowing the lane's branch name
+[ -d "$container/wt-tag-shadow" ] \
+  && check "tag-shadowed lane kept" 0 \
+  || check "tag-shadowed lane kept" 1
+assert_ok "tag-shadow branch not deleted" \
+  git -C "$container/main" rev-parse --verify refs/heads/tag-shadow
+assert_ok "tag-shadow tag still present" \
+  git -C "$container/main" rev-parse --verify refs/tags/tag-shadow
+if grep -Fq 'kept: unmerged (tag-shadow,' <<<"$output"; then
+  check "tag-shadowed lane kept as unmerged" 0
+else
+  printf '%s\n' "$output" >&2
+  check "tag-shadowed lane kept as unmerged" 1
+fi
+
+# --- second sweep: only the irreplaceable ignored file was holding case 10 --
+rm "$container/wt-equiv-ignored/docs/private/note.md"
+rmdir "$container/wt-equiv-ignored/docs/private" "$container/wt-equiv-ignored/docs"
+second="$(cd "$container" && "$TARGET" 2>&1)"
+[ ! -d "$container/wt-equiv-ignored" ] \
+  && check "disposable ignored files alone do not block the reap" 0 \
+  || check "disposable ignored files alone do not block the reap" 1
+assert_not_ok "equiv-ignored branch deleted once the notes were gone" \
+  git -C "$container/main" rev-parse --verify equiv-ignored
+if grep -Fq "reaped (equiv): $container/wt-equiv-ignored (equiv-ignored was $equiv_ignored_sha)" <<<"$second"; then
+  check "second sweep reports the equiv reap" 0
+else
+  printf '%s\n' "$second" >&2
+  check "second sweep reports the equiv reap" 1
 fi
 
 # --- force discipline: -D is reachable only from the equivalence gate ------
