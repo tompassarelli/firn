@@ -88,6 +88,7 @@ north/cli/tests/concern-offline-spool-integration-test.clj
 north/cli/tests/read-projection-churn-oracle.clj
 north/deploy/gateway/crosshost_test.sh
 north/deploy/gateway/smoke_test.sh
+north/docs/building-and-testing.md
 north/generated_output_test.sh
 north/offline-migrate.clj
 north/profiles/tom/hooks/agent-spawn-guard.sh

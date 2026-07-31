@@ -50,7 +50,7 @@
   myConfig.modules.codex.enable = true;
   myConfig.modules.hermes.enable = true;
   myConfig.modules.zed.enable = true;
-  myConfig.modules.windows-vm.enable = false;
+  myConfig.modules.windows-vm.enable = true;
   myConfig.modules.nh.enable = true;
   myConfig.modules.babashka.enable = true;
   myConfig.modules.north-coord.enable = true;
