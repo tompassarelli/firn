@@ -71,9 +71,9 @@ lane with no compliant move.
 
 Dirty state in any `main/` is human work-in-progress: agents never commit,
 stash, reset, or clean it, and the guard denies destructive git operations
-against a `main` checkout. Volatile personal preferences live on the `cfg`
-channel (mutable live copy; deliberate `cfg promote` back to the record) —
-live fiddling never dirties a checkout.
+against a `main` checkout. A live-tuned preference file (niri's `config.kdl`)
+is symlinked out of the checkout on purpose, so the tool that writes it
+(`opacity`) commits its own one-file change instead of leaving dirt.
 
 ## Launch-critical repos — agents never edit the primary
 

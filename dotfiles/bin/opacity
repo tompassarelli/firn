@@ -2,11 +2,14 @@
 # Get or set niri window opacity.
 # Usage: opacity           # print current
 #        opacity 0.85      # set to 0.85
-# Must target the cfg-channel live copy, never the repo record; settle with
-# `cfg promote niri`.
+# The live config is a symlink into the checkout, so a set dirties the repo.
 set -u
-cfg="$HOME/.config/niri/config.kdl"
-[ -f "$cfg" ] || { echo "opacity: $cfg missing — run: cfg materialize niri" >&2; exit 1; }
+world="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/world"
+repo="$("$world" get repo.nixos-config)"
+[ -n "$repo" ] || { echo "opacity: cannot resolve the nixos-config checkout" >&2; exit 1; }
+rel="dotfiles/niri/config.kdl"
+cfg="$repo/$rel"
+[ -f "$cfg" ] || { echo "opacity: $cfg missing" >&2; exit 1; }
 current=$(grep -P '^\s+opacity' "$cfg" | grep -oP '[\d.]+' | head -1)
 
 if [ $# -eq 0 ]; then
@@ -17,3 +20,22 @@ fi
 [ -n "$current" ] || { echo "opacity: no opacity line found in $cfg" >&2; exit 1; }
 sed -i "/^[^\/]/s/opacity $current/opacity $1/" "$cfg"
 echo "Opacity: $1"
+
+git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
+
+dirty=$(git -C "$repo" status --porcelain)
+[ -n "$dirty" ] || exit 0
+if [ "$(printf '%s\n' "$dirty" | wc -l)" -ne 1 ] || [ "${dirty:3}" != "$rel" ]; then
+  echo "opacity: $1 set (repo has other uncommitted changes; commit when ready)"
+  exit 0
+fi
+
+git -C "$repo" add -- "$rel"
+amend=""
+case "$(git -C "$repo" log -1 --format=%s 2>/dev/null || true)" in
+  # Collapse a fiddling session into one commit, but only while it is unpushed.
+  "niri: opacity "*)
+    git -C "$repo" merge-base --is-ancestor HEAD origin/main >/dev/null 2>&1 || amend="--amend"
+    ;;
+esac
+git -C "$repo" commit ${amend:+"$amend"} -m "niri: opacity $1"

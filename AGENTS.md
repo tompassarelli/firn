@@ -50,12 +50,13 @@ Multi-file modules (chrome, firefox, glide, kanata, nyxt, stylix, system, users)
 - Assume new modules only get added to whiterabbit host.
 - New files (both `.bnix` and `.nix`) must be git-added before nix can see them (flake uses git tree).
 
-## Volatile preferences (the cfg channel)
+## Dotfiles — one copy, and it is in this repo
 
-Live-tunable preference files (niri's `config.kdl`, and anything added later) are **not** symlinked out of this checkout — they are plain user-owned copies in `$HOME`, seeded and detached by a home-manager activation step.
-Live fiddling therefore never dirties a checkout; the repo holds the *settled record*, not the running value.
-Promotion is deliberate and human-invoked: `cfg status` / `cfg diff <name>` to see drift, `cfg promote <name>` to settle live → record (it lands through a throwaway worktree, never editing main in place), `cfg reset <name> --yes` to go back.
-The registry — name → live path → record path — is the table at the top of `dotfiles/bin/cfg`; adding a future volatile file is one row.
+**Every dotfile lives in `dotfiles/`. There is no second live copy anywhere**, and no channel for maintaining one.
+
+A dotfile reaches `$HOME` one of two ways, chosen per module: a store-managed copy (`xdg.configFile`/`home.file` with a repo `source` — changing it needs a rebuild), or `config.lib.file.mkOutOfStoreSymlink` back into `~/code/nixos-config/main/dotfiles/…` (edits apply the moment they are written).
+
+niri's `config.kdl` is out-of-store, because niri re-reads it on write and it is tuned live. The cost is that a live tweak dirties the checkout, so the tool that makes one settles it: `opacity <value>` commits just `dotfiles/niri/config.kdl` as `niri: opacity <value>`, amending the previous such commit while it is still unpushed so a fiddling session collapses to one. If anything else is dirty it commits nothing and says so — unrelated work is never swept into a preference commit.
 
 ## Shell scripts
 
