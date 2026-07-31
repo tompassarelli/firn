@@ -36,6 +36,7 @@ prepare_command=${NORTH_COORD_SELECTOR_PREPARE_COMMAND:-}
 promote_command=${NORTH_COORD_SELECTOR_PROMOTE_COMMAND:-}
 rollback_command=${NORTH_COORD_SELECTOR_ROLLBACK_COMMAND:-}
 verify_command=${NORTH_COORD_SELECTOR_VERIFY_COMMAND:-}
+failover_command=${NORTH_COORD_SELECTOR_FAILOVER_COMMAND:-}
 
 [[ "$admin_socket" == /* ]] || die "admin socket path must be absolute: $admin_socket"
 [[ "$route_map" == /* ]] || die "route map path must be absolute: $route_map"
@@ -170,6 +171,24 @@ frontend_sample() {
         # the authoritative existence check and rejects a misspelled name.
         if (!found) print "STOP 0"
       }
+    '
+}
+
+backend_check_up() {
+  local backend=$1
+  [[ "$backend" =~ ^(coord|telemetry)-(blue|green)$ ]] ||
+    die "invalid backend name: $backend"
+  cli "show stat" |
+    awk -F, -v backend="$backend" '
+      NR == 1 {
+        sub(/^# /, "", $1)
+        for (i = 1; i <= NF; i++) column[$i] = i
+        next
+      }
+      $1 == backend && $2 == "only" && $(column["status"]) == "UP" {
+        found = 1
+      }
+      END { exit(found ? 0 : 1) }
     '
 }
 
@@ -344,6 +363,10 @@ switch_route() {
   read -r status sessions < <(frontend_status)
   [[ "$status" == OPEN ]] ||
     die "frontend is not open before cutover: $status"
+  if ! backend_check_up "coord-$target" ||
+     ! backend_check_up "telemetry-$target"; then
+    die "target $target is not passing haproxy health checks"
+  fi
 
   # Materialize both target caches while the old pair still owns authority and
   # public traffic remains fully open. Preparation is read-only. A rejection or
@@ -395,6 +418,47 @@ switch_route() {
   rollback_to "$old" "$target" "$gate_started" ||
     die "cutover failed and rollback could not restore $old"
   die "cutover to $target failed; restored $old"
+}
+
+failover_route() {
+  local target=$1 old
+
+  valid_slot "$target" || die "invalid target slot: $target"
+  need_executable "$failover_command" "failover command"
+
+  exec 9>"$selector_lock"
+  flock -x 9
+  [[ ! -e "$transaction_file" && ! -L "$transaction_file" ]] ||
+    die "unfinished cutover transaction exists; run '$program recover'"
+
+  old=$(read_route)
+  [[ $(other_slot "$old") == "$target" ]] ||
+    die "target is not the inactive slot: $target"
+  if ! backend_check_up "coord-$target" ||
+     ! backend_check_up "telemetry-$target"; then
+    die "target $target is not passing haproxy health checks"
+  fi
+
+  if ! (
+    set -e
+    write_transaction holding "$old" "$target"
+    hold_frontend
+    close_old_sessions "$old"
+    write_transaction gate-started "$old" "$target"
+    "$failover_command" "$old" "$target" "$transaction_file"
+    write_transaction promoted "$old" "$target"
+    set_runtime_route "$target"
+    write_transaction routed "$old" "$target"
+    persist_route "$target"
+    write_transaction committed "$old" "$target"
+    resume_frontend
+    remove_transaction
+  ); then
+    printf "%s: failover failed; frontend held; repair a pair then run '%s recover' or 'switch'\n" \
+      "$program" "$program" >&2
+    return 2
+  fi
+  printf 'active=%s\n' "$target"
 }
 
 recover_route() {
@@ -471,6 +535,10 @@ case "${1:-}" in
     [[ $# -eq 2 ]] || die "usage: $program switch <blue|green>"
     switch_route "$2"
     ;;
+  failover)
+    [[ $# -eq 2 ]] || die "usage: $program failover <blue|green>"
+    failover_route "$2"
+    ;;
   recover)
     [[ $# -eq 1 ]] || die "usage: $program recover"
     recover_route
@@ -484,6 +552,6 @@ case "${1:-}" in
     show_status
     ;;
   *)
-    die "usage: $program <switch <blue|green>|recover|prestart|status>"
+    die "usage: $program <switch <blue|green>|failover <blue|green>|recover|prestart|status>"
     ;;
 esac

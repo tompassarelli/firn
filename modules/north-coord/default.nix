@@ -152,6 +152,13 @@ let
       exec ${cutoverGate}/bin/north-coord-cutover-gate promote "$@"
     '';
   };
+  selectorFailover = pkgs.writeShellApplication {
+    name = "north-coord-selector-failover";
+    runtimeInputs = [ cutoverGate ];
+    text = ''
+      exec ${cutoverGate}/bin/north-coord-cutover-gate failover "$@"
+    '';
+  };
   selectorPrepare = pkgs.writeShellApplication {
     name = "north-coord-selector-prepare";
     runtimeInputs = [ cutoverGate ];
@@ -188,6 +195,7 @@ let
       export NORTH_COORD_SELECTOR_PROMOTE_COMMAND=${selectorPromote}/bin/north-coord-selector-promote
       export NORTH_COORD_SELECTOR_ROLLBACK_COMMAND=${selectorRollback}/bin/north-coord-selector-rollback
       export NORTH_COORD_SELECTOR_VERIFY_COMMAND=${selectorVerify}/bin/north-coord-selector-verify
+      export NORTH_COORD_SELECTOR_FAILOVER_COMMAND=${selectorFailover}/bin/north-coord-selector-failover
       export NORTH_COORD_SELECTOR_DRAIN_GRACE_MS=100
       export NORTH_COORD_SELECTOR_DRAIN_TIMEOUT=5
       ${builtins.readFile ./north-coord-selector}
@@ -201,6 +209,7 @@ let
     defaults
       mode tcp
       timeout connect 2s
+      timeout check 5s
       timeout client 1h
       timeout server 1h
 
@@ -216,13 +225,29 @@ let
       default_backend telemetry-green
 
     backend coord-blue
-      server only 127.0.0.1:${blueCoordPort}
+      option tcp-check
+      tcp-check send '{:op :for-log :expected-log "${coordinationLog}" :request {:op :version-free}}'
+      tcp-check send-binary 0a
+      tcp-check expect string :version
+      server only 127.0.0.1:${blueCoordPort} check inter 2s fastinter 500ms downinter 1s rise 2 fall 3
     backend coord-green
-      server only 127.0.0.1:${greenCoordPort}
+      option tcp-check
+      tcp-check send '{:op :for-log :expected-log "${coordinationLog}" :request {:op :version-free}}'
+      tcp-check send-binary 0a
+      tcp-check expect string :version
+      server only 127.0.0.1:${greenCoordPort} check inter 2s fastinter 500ms downinter 1s rise 2 fall 3
     backend telemetry-blue
-      server only 127.0.0.1:${blueTelemetryPort}
+      option tcp-check
+      tcp-check send '{:op :for-log :expected-log "${telemetryLog}" :request {:op :version-free}}'
+      tcp-check send-binary 0a
+      tcp-check expect string :version
+      server only 127.0.0.1:${blueTelemetryPort} check inter 2s fastinter 500ms downinter 1s rise 2 fall 3
     backend telemetry-green
-      server only 127.0.0.1:${greenTelemetryPort}
+      option tcp-check
+      tcp-check send '{:op :for-log :expected-log "${telemetryLog}" :request {:op :version-free}}'
+      tcp-check send-binary 0a
+      tcp-check expect string :version
+      server only 127.0.0.1:${greenTelemetryPort} check inter 2s fastinter 500ms downinter 1s rise 2 fall 3
   '';
   proxyStart = pkgs.writeShellApplication {
     name = "north-coord-proxy-start";
@@ -252,6 +277,29 @@ let
       export NORTH_COORD_BOOTSTRAP_READY_INTERVAL_SECONDS=1
       export NORTH_COORD_PROXY_READY_TIMEOUT_SECONDS=15
       ${builtins.readFile ./north-coord-bootstrap}
+    '';
+  };
+  healthController = pkgs.writeShellApplication {
+    name = "north-coord-health";
+    runtimeInputs = with pkgs; [ bash coreutils gawk socat systemd util-linux ];
+    text = ''
+      export NORTH_COORD_HEALTH_STATE=${cutoverState}/health
+      export NORTH_COORD_HEALTH_JOURNAL=${cutoverState}/health/journal.log
+      export NORTH_COORD_HEALTH_FAIL_THRESHOLD=3
+      export NORTH_COORD_HEALTH_LOCK=${cutoverState}/health/health.lock
+      export NORTH_COORD_SELECTOR_MAP=${selectorMap}
+      export NORTH_COORD_SELECTOR_TRANSACTION=${selectorTransaction}
+      export NORTH_COORD_SELECTOR_SOCKET=${proxyAdminSocket}
+      export NORTH_COORD_BOOTSTRAP_MARKER=${bootstrapMarker}
+      export NORTH_COORD_CUTOVER_GATE=${cutoverGate}/bin/north-coord-cutover-gate
+      export NORTH_COORD_SELECTOR=${selector}/bin/north-coord-selector
+      export NORTH_COORD_SELECTOR_FAILOVER_COMMAND=${selectorFailover}/bin/north-coord-selector-failover
+      export NORTH_COORD_SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl
+      export NORTH_COORD_BLUE_COORD_UNIT=north-coord-blue.service
+      export NORTH_COORD_BLUE_TELEMETRY_UNIT=north-telemetry-coord-blue.service
+      export NORTH_COORD_GREEN_COORD_UNIT=north-coord-green.service
+      export NORTH_COORD_GREEN_TELEMETRY_UNIT=north-telemetry-coord-green.service
+      ${builtins.readFile ./north-coord-health}
     '';
   };
   serviceEnvironment = {
@@ -316,7 +364,7 @@ in
         message = "north-coord.stageATelemetryPartition requires socketActivation so both writer ports remain systemd-owned";
       }
     ];
-    environment.systemPackages = ([ northCoordRuntime ] ++ (lib.optional stageA northTelemetryCoordRuntime) ++ (if stageA then [ selector cutoverGate bootstrap ] else [ ]));
+    environment.systemPackages = ([ northCoordRuntime ] ++ (lib.optional stageA northTelemetryCoordRuntime) ++ (if stageA then [ selector cutoverGate bootstrap healthController ] else [ ]));
     environment.variables = lib.mkIf stageA {
       NORTH_TELEMETRY_PARTITION = "1";
       NORTH_TELEMETRY_PORT = "7978";
@@ -528,6 +576,28 @@ in
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${bootstrap}/bin/north-coord-bootstrap";
+      };
+    };
+    systemd.services.north-coord-health = lib.mkIf stageA {
+      description = "Reconcile North blue/green coordinator health";
+      unitConfig = {
+        ConditionPathExists = bootstrapMarker;
+      };
+      restartIfChanged = false;
+      stopIfChanged = false;
+      serviceConfig = {
+        Type = "oneshot";
+        TimeoutStartSec = "120s";
+        ExecStart = "${healthController}/bin/north-coord-health reconcile";
+      };
+    };
+    systemd.timers.north-coord-health = lib.mkIf stageA {
+      description = "Reconcile North blue/green coordinator health";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "2min";
+        OnUnitActiveSec = "10s";
+        AccuracySec = "1s";
       };
     };
     systemd.services.north-coord-blue-green-resume = lib.mkIf stageA {

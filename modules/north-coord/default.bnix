@@ -257,6 +257,13 @@
              :text
               (ms (s "exec " cutoverGate
                      "/bin/north-coord-cutover-gate promote \"$@\""))})
+        selectorFailover
+          (pkgs.writeShellApplication
+            {:name "north-coord-selector-failover"
+             :runtimeInputs [cutoverGate]
+             :text
+              (ms (s "exec " cutoverGate
+                     "/bin/north-coord-cutover-gate failover \"$@\""))})
         selectorPrepare
           (pkgs.writeShellApplication
             {:name "north-coord-selector-prepare"
@@ -300,6 +307,8 @@
                      selectorRollback "/bin/north-coord-selector-rollback")
                   (s "export NORTH_COORD_SELECTOR_VERIFY_COMMAND="
                      selectorVerify "/bin/north-coord-selector-verify")
+                  (s "export NORTH_COORD_SELECTOR_FAILOVER_COMMAND="
+                     selectorFailover "/bin/north-coord-selector-failover")
                   ;; Long-lived listen/subscription sockets do not drain by
                   ;; themselves. Preserve a short grace for ordinary requests,
                   ;; then close only old-generation backend sessions and prove
@@ -318,6 +327,7 @@
                 "defaults"
                 "  mode tcp"
                 "  timeout connect 2s"
+                "  timeout check 5s"
                 ;; North listeners are intentionally idle between peer
                 ;; messages. Keep those subscriptions stable in steady state;
                 ;; selector cutover explicitly closes old-backend sessions.
@@ -337,13 +347,37 @@
                 "  default_backend telemetry-green"
                 ""
                 "backend coord-blue"
-                (s "  server only 127.0.0.1:" blueCoordPort)
+                "  option tcp-check"
+                (s "  tcp-check send '{:op :for-log :expected-log \""
+                   coordinationLog "\" :request {:op :version-free}}'")
+                "  tcp-check send-binary 0a"
+                "  tcp-check expect string :version"
+                (s "  server only 127.0.0.1:" blueCoordPort
+                   " check inter 2s fastinter 500ms downinter 1s rise 2 fall 3")
                 "backend coord-green"
-                (s "  server only 127.0.0.1:" greenCoordPort)
+                "  option tcp-check"
+                (s "  tcp-check send '{:op :for-log :expected-log \""
+                   coordinationLog "\" :request {:op :version-free}}'")
+                "  tcp-check send-binary 0a"
+                "  tcp-check expect string :version"
+                (s "  server only 127.0.0.1:" greenCoordPort
+                   " check inter 2s fastinter 500ms downinter 1s rise 2 fall 3")
                 "backend telemetry-blue"
-                (s "  server only 127.0.0.1:" blueTelemetryPort)
+                "  option tcp-check"
+                (s "  tcp-check send '{:op :for-log :expected-log \""
+                   telemetryLog "\" :request {:op :version-free}}'")
+                "  tcp-check send-binary 0a"
+                "  tcp-check expect string :version"
+                (s "  server only 127.0.0.1:" blueTelemetryPort
+                   " check inter 2s fastinter 500ms downinter 1s rise 2 fall 3")
                 "backend telemetry-green"
-                (s "  server only 127.0.0.1:" greenTelemetryPort)))
+                "  option tcp-check"
+                (s "  tcp-check send '{:op :for-log :expected-log \""
+                   telemetryLog "\" :request {:op :version-free}}'")
+                "  tcp-check send-binary 0a"
+                "  tcp-check expect string :version"
+                (s "  server only 127.0.0.1:" greenTelemetryPort
+                   " check inter 2s fastinter 500ms downinter 1s rise 2 fall 3")))
         proxyStart
           (pkgs.writeShellApplication
             {:name "north-coord-proxy-start"
@@ -383,6 +417,36 @@
                   ;; admin socket accepts selector probes.
                   "export NORTH_COORD_PROXY_READY_TIMEOUT_SECONDS=15"
                   (builtins.readFile (p "./north-coord-bootstrap")))})
+        healthController
+          (pkgs.writeShellApplication
+            {:name "north-coord-health"
+             :runtimeInputs
+              (nix/with pkgs [bash coreutils gawk socat systemd util-linux])
+             :text
+              (ms (s "export NORTH_COORD_HEALTH_STATE=" cutoverState "/health")
+                  (s "export NORTH_COORD_HEALTH_JOURNAL=" cutoverState
+                     "/health/journal.log")
+                  "export NORTH_COORD_HEALTH_FAIL_THRESHOLD=3"
+                  (s "export NORTH_COORD_HEALTH_LOCK=" cutoverState
+                     "/health/health.lock")
+                  (s "export NORTH_COORD_SELECTOR_MAP=" selectorMap)
+                  (s "export NORTH_COORD_SELECTOR_TRANSACTION="
+                     selectorTransaction)
+                  (s "export NORTH_COORD_SELECTOR_SOCKET=" proxyAdminSocket)
+                  (s "export NORTH_COORD_BOOTSTRAP_MARKER=" bootstrapMarker)
+                  (s "export NORTH_COORD_CUTOVER_GATE=" cutoverGate
+                     "/bin/north-coord-cutover-gate")
+                  (s "export NORTH_COORD_SELECTOR=" selector
+                     "/bin/north-coord-selector")
+                  (s "export NORTH_COORD_SELECTOR_FAILOVER_COMMAND="
+                     selectorFailover "/bin/north-coord-selector-failover")
+                  (s "export NORTH_COORD_SYSTEMCTL_BIN="
+                     pkgs.systemd "/bin/systemctl")
+                  "export NORTH_COORD_BLUE_COORD_UNIT=north-coord-blue.service"
+                  "export NORTH_COORD_BLUE_TELEMETRY_UNIT=north-telemetry-coord-blue.service"
+                  "export NORTH_COORD_GREEN_COORD_UNIT=north-coord-green.service"
+                  "export NORTH_COORD_GREEN_TELEMETRY_UNIT=north-telemetry-coord-green.service"
+                  (builtins.readFile (p "./north-coord-health")))})
         serviceEnvironment
           {:HOME homeDir
            :FRAM_REQUIRE_LOG_FENCE "1"
@@ -467,7 +531,7 @@
           (++ [northCoordRuntime]
               (lib.optional stageA northTelemetryCoordRuntime)
               (if stageA
-                [selector cutoverGate bootstrap]
+                [selector cutoverGate bootstrap healthController]
                 []))
          ;; FRAM_TELEMETRY_LOG must never be exported globally: the client
          ;; log-selection veto (coord.clj expected-log) treats its presence as
@@ -787,6 +851,25 @@
               {:Type "oneshot"
                :ExecStart
                 (s bootstrap "/bin/north-coord-bootstrap")}})
+         :systemd.services.north-coord-health
+          (lib.mkIf stageA
+            {:description "Reconcile North blue/green coordinator health"
+             :unitConfig {:ConditionPathExists bootstrapMarker}
+             :restartIfChanged false
+             :stopIfChanged false
+             :serviceConfig
+              {:Type "oneshot"
+               :TimeoutStartSec "120s"
+               :ExecStart
+                (s healthController "/bin/north-coord-health reconcile")}})
+         :systemd.timers.north-coord-health
+          (lib.mkIf stageA
+            {:description "Reconcile North blue/green coordinator health"
+             :wantedBy ["timers.target"]
+             :timerConfig
+              {:OnBootSec "2min"
+               :OnUnitActiveSec "10s"
+               :AccuracySec "1s"}})
          :systemd.services.north-coord-blue-green-resume
           (lib.mkIf stageA
             {:description

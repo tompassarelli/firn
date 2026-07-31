@@ -281,10 +281,10 @@ inspect_status() {
 }
 
 inspect_prepare() {
-  local input=$1 expected_cutover_id=$2 origin=$3
+  local input=$1 expected_cutover_id=$2 origin=$3 marker_out=${4:-}
   bb -e '
     (require (quote [clojure.edn :as edn]))
-    (let [[path expected-cutover-id origin coord-log telemetry-log]
+    (let [[path expected-cutover-id origin coord-log telemetry-log marker-out]
           *command-line-args*
           canonical (fn [p] (.getCanonicalPath (java.io.File. ^String p)))
           coord-path (canonical coord-log)
@@ -360,9 +360,11 @@ inspect_prepare() {
             (binding [*out* *err*]
               (println "invalid cutover prepare response" (pr-str m)))
             (System/exit 1))
+          (when (not-empty marker-out)
+            (spit marker-out (str (pr-str (:marker m)) "\n")))
           (println (:instance m) (:version m)))))' \
     "$input" "$expected_cutover_id" "$origin" \
-    "$NORTH_COORD_COORD_LOG" "$NORTH_COORD_TELEMETRY_LOG"
+    "$NORTH_COORD_COORD_LOG" "$NORTH_COORD_TELEMETRY_LOG" "$marker_out"
 }
 
 read_status() {
@@ -693,7 +695,7 @@ verify_prepared_endpoint() {
 }
 
 prepare_endpoint() {
-  local slot=$1 origin=$2 cutover_id=$3 identity_out=$4
+  local slot=$1 origin=$2 cutover_id=$3 identity_out=$4 marker_out=${5:-}
   local operation_id response rc prepared_identity
   operation_id=$cutover_id-$origin
   response=$(mktemp "$state/prepare.$origin.XXXXXX")
@@ -714,7 +716,7 @@ prepare_endpoint() {
     return 1
   fi
   if ! prepared_identity=$(
-    inspect_prepare "$response" "$operation_id" "$origin"
+    inspect_prepare "$response" "$operation_id" "$origin" "$marker_out"
   ); then
     rm -f -- "$response"
     return 1
@@ -1343,6 +1345,73 @@ promote_pair() {
   done
 }
 
+failover_pair() {
+  local old=$1 target=$2 transaction_file=$3 cutover_id
+  local origin old_status coord_phase=unavailable telemetry_phase=unavailable
+  local prepared_instance prepared_version readiness_identity
+  local coord_readiness telemetry_readiness
+  local main_pid invocation_id exec_start marker identity
+  local old_coord_unit old_telemetry_unit
+
+  valid_slot "$old" || die "invalid old slot: $old"
+  valid_slot "$target" || die "invalid target slot: $target"
+  [[ "$old" != "$target" ]] || die "old and target slots are identical"
+  [[ "$transaction_file" == /* ]] ||
+    die "selector transaction path must be absolute"
+
+  mkdir -p "$state"
+  settle_recorded_unknown ||
+    die "cannot fail over while a prior transport outcome is unresolved"
+  verify_pair "$target" read-only
+
+  for origin in coord telemetry; do
+    if old_status=$(read_status "$old" "$origin" any); then
+      printf -v "${origin}_phase" '%s' "$(sed -n '1p' <<<"$old_status")"
+    fi
+  done
+  [[ ! ( "$coord_phase" == active && "$telemetry_phase" == active ) ]] ||
+    die "old pair is healthy-active; use switch"
+
+  old_coord_unit=$(unit_for "$old" coord)
+  old_telemetry_unit=$(unit_for "$old" telemetry)
+  timeout 30s "$systemctl_bin" stop "$old_coord_unit" "$old_telemetry_unit" ||
+    die "old pair did not stop during failover"
+
+  cutover_id="failover-$(date -u +%Y%m%dT%H%M%S)-$$"
+  rm -f -- "$state/coord.failover-prepare.edn" \
+    "$state/telemetry.failover-prepare.edn" \
+    "$state/prepare.coord.identity" "$state/prepare.telemetry.identity" \
+    "$state/readiness.coord" "$state/readiness.telemetry"
+  for origin in coord telemetry; do
+    identity=$state/prepare.$origin.identity
+    marker=$state/$origin.failover-prepare.edn
+    prepare_endpoint "$target" "$origin" "$cutover_id" "$identity" "$marker" ||
+      die "$target/$origin failover preparation failed"
+    read -r prepared_instance prepared_version <"$identity" ||
+      die "$origin failover preparation identity is missing"
+    readiness_identity=$(
+      verify_target_runtime_readiness \
+        "$target" "$origin" read-only \
+        "$prepared_instance" "$prepared_version" \
+        any any any any any any "$cutover_id-$origin"
+    )
+    printf -v "${origin}_readiness" '%s' "$readiness_identity"
+  done
+  write_readiness_state coord "$coord_readiness"
+  write_readiness_state telemetry "$telemetry_readiness"
+  read -r prepared_instance prepared_version main_pid invocation_id exec_start \
+    _ _ _ < <(read_readiness_state telemetry)
+  write_gate_state \
+    "$cutover_id" "$old" "$target" "$prepared_instance" "$prepared_version" \
+    "$main_pid" "$invocation_id" "$exec_start"
+
+  for origin in coord telemetry; do
+    marker=$state/$origin.failover-prepare.edn
+    promote_endpoint "$target" "$origin" "$cutover_id" "$marker"
+  done
+  verify_pair "$target" active
+}
+
 rollback_pair() {
   local target_arg=$1 old_arg=$2 transaction_file=$3
   local cutover_id old target origin old_status old_phase
@@ -1455,11 +1524,15 @@ case "${1:-}" in
     [[ $# -eq 4 ]] || die "usage: $program promote OLD TARGET TRANSACTION"
     promote_pair "$2" "$3" "$4"
     ;;
+  failover)
+    [[ $# -eq 4 ]] || die "usage: $program failover OLD TARGET TRANSACTION"
+    failover_pair "$2" "$3" "$4"
+    ;;
   rollback)
     [[ $# -eq 4 ]] || die "usage: $program rollback TARGET OLD TRANSACTION"
     rollback_pair "$2" "$3" "$4"
     ;;
   *)
-    die "usage: $program {prepare|verify|verify-phase|promote|rollback} ..."
+    die "usage: $program {prepare|verify|verify-phase|promote|failover|rollback} ..."
     ;;
 esac

@@ -1,0 +1,393 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+umask 077
+
+program=${0##*/}
+
+die() {
+  printf '%s: %s\n' "$program" "$*" >&2
+  exit 2
+}
+
+for setting in \
+  NORTH_COORD_HEALTH_STATE \
+  NORTH_COORD_HEALTH_JOURNAL \
+  NORTH_COORD_HEALTH_LOCK \
+  NORTH_COORD_SELECTOR_MAP \
+  NORTH_COORD_SELECTOR_TRANSACTION \
+  NORTH_COORD_SELECTOR_SOCKET \
+  NORTH_COORD_BOOTSTRAP_MARKER \
+  NORTH_COORD_CUTOVER_GATE \
+  NORTH_COORD_SELECTOR \
+  NORTH_COORD_SYSTEMCTL_BIN \
+  NORTH_COORD_BLUE_COORD_UNIT \
+  NORTH_COORD_BLUE_TELEMETRY_UNIT \
+  NORTH_COORD_GREEN_COORD_UNIT \
+  NORTH_COORD_GREEN_TELEMETRY_UNIT
+do
+  [[ -n "${!setting:-}" ]] || die "missing setting: $setting"
+done
+
+health_state=$NORTH_COORD_HEALTH_STATE
+journal_file=$NORTH_COORD_HEALTH_JOURNAL
+health_lock=$NORTH_COORD_HEALTH_LOCK
+route_map=$NORTH_COORD_SELECTOR_MAP
+transaction_file=$NORTH_COORD_SELECTOR_TRANSACTION
+admin_socket=$NORTH_COORD_SELECTOR_SOCKET
+bootstrap_marker=$NORTH_COORD_BOOTSTRAP_MARKER
+cutover_gate=$NORTH_COORD_CUTOVER_GATE
+selector=$NORTH_COORD_SELECTOR
+systemctl_bin=$NORTH_COORD_SYSTEMCTL_BIN
+fail_threshold=${NORTH_COORD_HEALTH_FAIL_THRESHOLD:-3}
+
+for path in "$health_state" "$journal_file" "$health_lock" "$route_map" \
+  "$transaction_file" "$admin_socket" "$bootstrap_marker"; do
+  [[ "$path" == /* ]] || die "health path must be absolute: $path"
+done
+[[ "$fail_threshold" =~ ^[1-9][0-9]*$ ]] ||
+  die "failure threshold must be a positive integer"
+for command_path in "$cutover_gate" "$selector" "$systemctl_bin"; do
+  [[ "$command_path" == /* && -x "$command_path" && ! -L "$command_path" ]] ||
+    die "health command is not a safe executable: $command_path"
+done
+for unit in \
+  "$NORTH_COORD_BLUE_COORD_UNIT" \
+  "$NORTH_COORD_BLUE_TELEMETRY_UNIT" \
+  "$NORTH_COORD_GREEN_COORD_UNIT" \
+  "$NORTH_COORD_GREEN_TELEMETRY_UNIT"; do
+  [[ "$unit" =~ ^[A-Za-z0-9_.@:-]+\.service$ ]] ||
+    die "invalid health unit: $unit"
+done
+
+declare -A coord_unit=(
+  [blue]="$NORTH_COORD_BLUE_COORD_UNIT"
+  [green]="$NORTH_COORD_GREEN_COORD_UNIT"
+)
+declare -A telemetry_unit=(
+  [blue]="$NORTH_COORD_BLUE_TELEMETRY_UNIT"
+  [green]="$NORTH_COORD_GREEN_TELEMETRY_UNIT"
+)
+declare -A coord_active telemetry_active coord_sub telemetry_sub
+declare -A coord_result telemetry_result check_coord check_telemetry
+declare -A fails state auth_active
+declare -A action=([blue]=none [green]=none)
+
+read_route() {
+  local key slot extra
+  [[ -f "$route_map" && ! -L "$route_map" ]] ||
+    die "route map is missing or unsafe: $route_map"
+  read -r key slot extra <"$route_map" || die "cannot read route map"
+  [[ "$key" == active && ( "$slot" == blue || "$slot" == green ) &&
+     -z "${extra:-}" ]] || die "route map is malformed"
+  printf '%s\n' "$slot"
+}
+
+transaction_status() {
+  local phase old target extra
+  if [[ ! -e "$transaction_file" && ! -L "$transaction_file" ]]; then
+    printf '%s\n' none
+    return
+  fi
+  [[ -f "$transaction_file" && ! -L "$transaction_file" ]] ||
+    die "selector transaction is unsafe"
+  read -r phase old target extra <"$transaction_file" ||
+    die "cannot read selector transaction"
+  [[ "$phase" =~ ^(holding|gate-started|promoted|routed|committed)$ &&
+     ( "$old" == blue || "$old" == green ) &&
+     ( "$target" == blue || "$target" == green ) &&
+     "$old" != "$target" && -z "${extra:-}" ]] ||
+    die "selector transaction is malformed"
+  printf '%s %s %s\n' "$phase" "$old" "$target"
+}
+
+unit_property() {
+  local unit=$1 property=$2 value
+  if value=$("$systemctl_bin" show --property="$property" --value "$unit" 2>/dev/null) &&
+     [[ -n "$value" ]]; then
+    printf '%s\n' "$value"
+  else
+    printf '%s\n' unknown
+  fi
+}
+
+unit_enabled() {
+  local unit=$1 value
+  value=$("$systemctl_bin" is-enabled "$unit" 2>/dev/null || true)
+  printf '%s\n' "${value%%$'\n'*}"
+}
+
+backend_sample() {
+  local stats=$1 backend=$2
+  awk -F, -v backend="$backend" '
+    NR == 1 {
+      sub(/^# /, "", $1)
+      for (i = 1; i <= NF; i++) column[$i] = i
+      next
+    }
+    $1 == backend && $2 == "only" {
+      print $(column["status"]), $(column["check_status"])
+      found = 1
+      exit
+    }
+    END { if (!found) print "UNKNOWN UNKNOWN" }
+  ' <<<"$stats"
+}
+
+read_fails() {
+  local slot=$1 value=0 path
+  path=$health_state/$slot.fails
+  if [[ -f "$path" && ! -L "$path" ]]; then
+    read -r value <"$path" || value=0
+  fi
+  [[ "$value" =~ ^[0-9]+$ ]] || die "$slot failure counter is malformed"
+  printf '%s\n' "$value"
+}
+
+write_word() {
+  local path=$1 value=$2 temp
+  temp=$health_state/.${path##*/}.next.$$
+  printf '%s\n' "$value" >"$temp"
+  chmod 0644 "$temp"
+  sync -f "$temp"
+  mv -T "$temp" "$path"
+  sync -f "$health_state"
+}
+
+bound_journal() {
+  local temp size
+  size=$(stat -c %s "$journal_file")
+  if (( size > 1048576 )); then
+    temp=$health_state/.journal.next.$$
+    tail -c 65536 "$journal_file" >"$temp"
+    chmod 0644 "$temp"
+    sync -f "$temp"
+    mv -T "$temp" "$journal_file"
+    sync -f "$health_state"
+  fi
+}
+
+append_journal() {
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$journal_file"
+  bound_journal
+}
+
+unit_ready() {
+  [[ "$1" == active || "$1" == activating ]]
+}
+
+unit_crash_looping() {
+  [[ "$1" == failed || "$2" == start-limit-hit || "$3" == start-limit-hit ]]
+}
+
+sample_slot() {
+  local slot=$1 enabled_coord enabled_telemetry backend
+  local coord_check telemetry_check coord_detail telemetry_detail readonly=1
+
+  enabled_coord=$(unit_enabled "${coord_unit[$slot]}")
+  enabled_telemetry=$(unit_enabled "${telemetry_unit[$slot]}")
+  coord_active[$slot]=$(unit_property "${coord_unit[$slot]}" ActiveState)
+  telemetry_active[$slot]=$(unit_property "${telemetry_unit[$slot]}" ActiveState)
+  coord_sub[$slot]=$(unit_property "${coord_unit[$slot]}" SubState)
+  telemetry_sub[$slot]=$(unit_property "${telemetry_unit[$slot]}" SubState)
+  coord_result[$slot]=$(unit_property "${coord_unit[$slot]}" Result)
+  telemetry_result[$slot]=$(unit_property "${telemetry_unit[$slot]}" Result)
+  read -r coord_check coord_detail < <(
+    backend_sample "$stats" "coord-$slot"
+  )
+  read -r telemetry_check telemetry_detail < <(
+    backend_sample "$stats" "telemetry-$slot"
+  )
+  [[ -n "$coord_detail" ]] || coord_check=UNKNOWN
+  [[ -n "$telemetry_detail" ]] || telemetry_check=UNKNOWN
+  check_coord[$slot]=$coord_check
+  check_telemetry[$slot]=$telemetry_check
+  fails[$slot]=$(read_fails "$slot")
+  auth_active[$slot]=0
+
+  if [[ "$enabled_coord" == masked* || "$enabled_telemetry" == masked* ]]; then
+    state[$slot]=masked
+    return
+  fi
+  if unit_crash_looping "${coord_active[$slot]}" "${coord_sub[$slot]}" \
+       "${coord_result[$slot]}" ||
+     unit_crash_looping "${telemetry_active[$slot]}" "${telemetry_sub[$slot]}" \
+       "${telemetry_result[$slot]}"; then
+    state[$slot]=failed
+    return
+  fi
+  if "$cutover_gate" verify-phase "$slot" active >/dev/null 2>&1; then
+    auth_active[$slot]=1
+  fi
+  if [[ "${auth_active[$slot]}" -eq 0 && "$route" != "$slot" ]] &&
+     "$cutover_gate" verify-phase "$slot" read-only >/dev/null 2>&1; then
+    readonly=0
+  fi
+  if (( fails[$slot] >= fail_threshold )); then
+    state[$slot]=failed
+  elif unit_ready "${coord_active[$slot]}" &&
+       unit_ready "${telemetry_active[$slot]}"; then
+    if [[ "$route" == "$slot" && "${auth_active[$slot]}" -eq 1 ]]; then
+      state[$slot]=serving
+    elif [[ "$route" != "$slot" && "$readonly" -eq 0 ]]; then
+      state[$slot]=canary
+    else
+      state[$slot]=warming
+    fi
+  else
+    state[$slot]=warming
+  fi
+}
+
+sample_all() {
+  route=$(read_route)
+  if ! stats=$(printf 'show stat\n' |
+      socat -t 3 - "UNIX-CONNECT:$admin_socket" 2>/dev/null); then
+    stats=''
+  fi
+  sample_slot blue
+  sample_slot green
+}
+
+record_state_changes() {
+  local slot previous path
+  for slot in blue green; do
+    path=$health_state/$slot.state
+    previous=unknown
+    if [[ -f "$path" && ! -L "$path" ]]; then
+      read -r previous <"$path" || previous=unknown
+    fi
+    if [[ "$previous" != "${state[$slot]}" ]]; then
+      append_journal \
+        "slot=$slot $previous->${state[$slot]} action=${action[$slot]}"
+      write_word "$path" "${state[$slot]}"
+    fi
+  done
+}
+
+show_status() {
+  local transaction
+  sample_all
+  transaction=$(transaction_status)
+  printf 'slot=blue state=%s units=%s/%s checks=%s/%s fails=%s\n' \
+    "${state[blue]}" "${coord_active[blue]}" "${telemetry_active[blue]}" \
+    "${check_coord[blue]}" "${check_telemetry[blue]}" "${fails[blue]}"
+  printf 'slot=green state=%s units=%s/%s checks=%s/%s fails=%s\n' \
+    "${state[green]}" "${coord_active[green]}" "${telemetry_active[green]}" \
+    "${check_coord[green]}" "${check_telemetry[green]}" "${fails[green]}"
+  printf 'route=%s transaction=%s\n' "$route" "$transaction"
+  [[ "${state[$route]}" == serving && "$transaction" == none ]]
+}
+
+mask_slot() {
+  local slot=$1
+  "$systemctl_bin" mask --runtime \
+    "${coord_unit[$slot]}" "${telemetry_unit[$slot]}"
+  "$systemctl_bin" stop "${coord_unit[$slot]}" "${telemetry_unit[$slot]}"
+}
+
+reconcile() {
+  local peer count slot
+
+  exec 9>"$health_lock"
+  flock -n 9 || return 0
+  if [[ -e "$transaction_file" || -L "$transaction_file" ]]; then
+    return 0
+  fi
+  sample_all
+
+  if [[ "${auth_active[blue]}" -eq 1 && "${auth_active[green]}" -eq 1 ]]; then
+    append_journal "CRITICAL split-authority"
+    action[blue]=alert
+    action[green]=alert
+    record_state_changes
+    return 1
+  fi
+
+  if [[ "${state[$route]}" == serving ]]; then
+    fails[$route]=0
+    write_word "$health_state/$route.fails" 0
+  else
+    count=$((fails[$route] + 1))
+    fails[$route]=$count
+    write_word "$health_state/$route.fails" "$count"
+    if (( count >= fail_threshold )); then
+      state[$route]=failed
+      if [[ "${check_coord[$route]}" != UP ]]; then
+        if [[ "$route" == blue ]]; then peer=green; else peer=blue; fi
+        if [[ "${state[$peer]}" == canary ]]; then
+          append_journal "failover-start old=$route target=$peer"
+          if "$selector" failover "$peer"; then
+            if ! mask_slot "$route"; then
+              append_journal "failover-FAILED old=$route target=$peer stage=mask"
+              action[$route]=alert
+              record_state_changes
+              return 1
+            fi
+            append_journal "failover-done old=$route target=$peer"
+            action[$route]=failover
+            action[$peer]=failover
+            state[$route]=masked
+            state[$peer]=serving
+            fails[$peer]=0
+            write_word "$health_state/$peer.fails" 0
+            route=$peer
+          else
+            append_journal "failover-FAILED old=$route target=$peer stage=selector"
+            action[$route]=alert
+            record_state_changes
+            return 1
+          fi
+        else
+          append_journal "CRITICAL no-successor routed=$route peer=$peer"
+          action[$route]=alert
+        fi
+      fi
+    fi
+  fi
+
+  for slot in blue green; do
+    [[ "$slot" != "$route" ]] || continue
+    if [[ "${state[$slot]}" != masked ]] &&
+       { unit_crash_looping "${coord_active[$slot]}" "${coord_sub[$slot]}" \
+           "${coord_result[$slot]}" ||
+         unit_crash_looping "${telemetry_active[$slot]}" \
+           "${telemetry_sub[$slot]}" "${telemetry_result[$slot]}"; }; then
+      if ! mask_slot "$slot"; then
+        append_journal "auto-mask-FAILED slot=$slot"
+        action[$slot]=alert
+        record_state_changes
+        return 1
+      fi
+      append_journal "auto-mask slot=$slot"
+      action[$slot]=auto-mask
+      state[$slot]=masked
+    fi
+  done
+  record_state_changes
+  bound_journal
+}
+
+initialize_state() {
+  mkdir -p "$health_state"
+  [[ -d "$health_state" && ! -L "$health_state" ]] ||
+    die "health state directory is unsafe"
+  chmod 0755 "$health_state"
+  touch "$journal_file"
+  [[ -f "$journal_file" && ! -L "$journal_file" ]] ||
+    die "health journal is unsafe"
+  chmod 0644 "$journal_file"
+}
+
+case "${1:-}" in
+  status)
+    [[ $# -eq 1 ]] || die "usage: $program status"
+    show_status
+    ;;
+  reconcile)
+    [[ $# -eq 1 ]] || die "usage: $program reconcile"
+    initialize_state
+    reconcile
+    ;;
+  *) die "usage: $program {status|reconcile}" ;;
+esac
