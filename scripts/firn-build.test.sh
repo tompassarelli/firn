@@ -133,11 +133,11 @@ if [ "${1:-}" = --version ]; then
   printf 'Welcome to Racket v9.1 [test].\n'
   exit 0
 fi
-zo="$1"
+source_file="$1"
 shift
-source_identity="$(sed -n 's/^source=//p' "$zo")"
-printf 'zo=%s|source=%s|args=%s|disable=%s|repo=%s\n' \
-  "$zo" "$source_identity" "$*" "${FIRN_DISABLE_NATIVE:-}" "${FIRN_REPO:-}" \
+source_identity="$(<"$source_file")"
+printf 'source_file=%s|source=%s|args=%s|disable=%s|repo=%s\n' \
+  "$source_file" "$source_identity" "$*" "${FIRN_DISABLE_NATIVE:-}" "${FIRN_REPO:-}" \
   >>"$EXEC_LOG"
 SH
 chmod +x "$cache_beagle/fake-racket"
@@ -146,15 +146,8 @@ cat >"$cache_beagle/fake-raco" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 case "${1:-} ${2:-}" in
-  'pkg show')
-    printf ' beagle fixture-link\n'
-    ;;
-  'help demod')
-    ;;
-  'demod -o')
-    out="$3"
-    printf 'source=%s\n' "$(<scripts/firn.rkt)" >"$out"
-    printf '%s\n' "$out" >>"$BUILD_LOG"
+  'make scripts/firn.rkt')
+    printf '%s\n' "${PLTCOMPILEDROOTS%%:*}" >>"$BUILD_LOG"
     ;;
   *)
     printf 'unexpected fake raco invocation: %s\n' "$*" >&2
@@ -181,6 +174,7 @@ cache_env=(
   BEAGLE_PATH="$cache_beagle"
   BIN_DIR="$cache_repo/dotfiles/bin"
   SHARE_DIR="$cache_share"
+  FIRN_RUNTIME_SHARE_DIR="$cache_share"
   BUILD_LOG="$cache_builds"
   EXEC_LOG="$cache_execs"
   BEAGLE_BUILD_LOG="$cache_beagle_builds"
@@ -188,8 +182,8 @@ cache_env=(
 
 env "${cache_env[@]}" "$cache_repo/scripts/firn-build-bin" >/dev/null
 hash_v1="$(env "${cache_env[@]}" "$cache_repo/scripts/firn-source-hash")"
-zo_v1="$(find "$cache_share" -type f -name firn.zo -print -quit)"
-[ -s "$zo_v1" ]
+runtime_v1="$(find "$cache_share" -type l -name runtime -print -quit)"
+[ -f "$runtime_v1/.complete" ]
 [ "$(wc -l <"$cache_builds")" -eq 1 ]
 
 env "${cache_env[@]}" "$cache_repo/scripts/firn-build" >/dev/null
@@ -206,8 +200,8 @@ hash_v2="$(env "${cache_env[@]}" "$cache_repo/scripts/firn-source-hash")"
 env "${cache_env[@]}" "$cache_repo/scripts/firn-build" >/dev/null 2>&1
 [ "$(wc -l <"$cache_builds")" -eq 2 ]
 [ "$(wc -l <"$cache_execs")" -eq 4 ]
-zo_v2="$(find "$cache_share" -type f -name firn.zo ! -path "$zo_v1" -print -quit)"
-[ -s "$zo_v2" ]
+runtime_v2="$(find "$cache_share" -type l -name runtime ! -path "$runtime_v1" -print -quit)"
+[ -f "$runtime_v2/.complete" ]
 grep -Fq "|source=v2|args=tag resolve all+emit|disable=1|repo=$cache_repo" \
   "$cache_execs"
 grep -Fq "|source=v2|args=flake-input resolve emit|disable=1|repo=$cache_repo" \

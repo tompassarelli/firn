@@ -365,4 +365,5 @@
     [else
      (dispatch (maybe-legacy-rewrite argv))]))
 
+(r:finish-runtime-startup-span!)
 (main (vector->list (current-command-line-arguments)))

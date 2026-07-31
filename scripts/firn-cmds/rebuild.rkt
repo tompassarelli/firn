@@ -11,10 +11,16 @@
          json
          "util.rkt")
 
-(provide node-edges)
+(provide node-edges
+         finish-runtime-startup-span!)
+
+(define (system-monotonic-ms)
+  (with-handlers ([exn:fail? (λ (_) (current-inexact-monotonic-milliseconds))])
+    (call-with-input-file "/proc/uptime"
+      (λ (in) (* 1000.0 (read in))))))
 
 (define current-monotonic-clock
-  (make-parameter current-inexact-monotonic-milliseconds))
+  (make-parameter system-monotonic-ms))
 
 (define (present-env name)
   (define value (getenv name))
@@ -34,6 +40,19 @@
             'trace_id (or (present-env "FIRN_TRACE_ID") ""))
            out)
           (newline out))))))
+
+(define (finish-runtime-startup-span!)
+  (define start-text (present-env "FIRN_RUNTIME_START_MS"))
+  (define start (and start-text (string->number start-text)))
+  (when (real? start)
+    (define end ((current-monotonic-clock)))
+    (append-trace-event!
+     (hash 'event "span_end"
+           'name "racket startup"
+           'monotonic_ms end
+           'duration_ms (- end start)
+           'status "ok"
+           'cache (or (present-env "FIRN_RUNTIME_CACHE_STATE") "")))))
 
 (define (call-with-trace-span name body [fields (hash)])
   (define start ((current-monotonic-clock)))
@@ -537,6 +556,7 @@
            activate-linux-system
            advisory-check-shell
            current-monotonic-clock
+           finish-runtime-startup-span!
            nix-build-command
            nix-log-shell
            schedule-drift-check))

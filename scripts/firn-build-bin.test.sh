@@ -18,7 +18,9 @@ if [ "${1:-}" = --version ]; then
   printf 'Welcome to Racket v9.1 [test].\n'
   exit 0
 fi
-cat "$1"
+source_file="$1"
+shift
+printf 'source=%s\n' "$(<"$source_file")"
 SH
 chmod +x "$beagle/fake-racket"
 
@@ -26,23 +28,16 @@ cat >"$beagle/fake-raco" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 case "${1:-} ${2:-}" in
-  'pkg show')
-    printf ' beagle test-link\n'
-    ;;
-  'help demod')
-    ;;
-  'demod -o')
-    out="$3"
-    printf '%s\n' "$out" >>"$BUILD_LOG"
+  'make scripts/firn.rkt')
+    compiled_root="${PLTCOMPILEDROOTS%%:*}"
+    printf '%s\n' "$compiled_root" >>"$BUILD_LOG"
     printf '%s\n' "${PLTCOMPILEDROOTS:-}" >>"$COMPILED_ROOT_LOG"
-    marker="$BUILD_STARTED_DIR/$(basename "$out")"
+    marker="$BUILD_STARTED_DIR/$(basename "$(dirname "$compiled_root")")"
     : >"$marker"
     while [ "$(find "$BUILD_STARTED_DIR" -type f | wc -l)" -lt "$EXPECTED_CONCURRENT_BUILDS" ]; do
       sleep 0.05
     done
-    printf 'source=%s\n' "$(<scripts/firn.rkt)" >"$out"
     sleep 1
-    printf 'complete=yes\n' >>"$out"
     ;;
   *)
     printf 'unexpected fake raco invocation: %s\n' "$*" >&2
@@ -75,9 +70,11 @@ make_repo "$repo_b" source-b
 build_log="$scratch/build.log"
 compiled_root_log="$scratch/compiled-roots.log"
 build_started_dir="$scratch/build-started"
+trace_log="$scratch/trace.jsonl"
 mkdir -p "$build_started_dir"
 : >"$build_log"
 : >"$compiled_root_log"
+: >"$trace_log"
 
 run_build() {
   local repo="$1"
@@ -85,6 +82,7 @@ run_build() {
     SHARE_DIR="$share_dir" BUILD_LOG="$build_log" \
     COMPILED_ROOT_LOG="$compiled_root_log" \
     BUILD_STARTED_DIR="$build_started_dir" EXPECTED_CONCURRENT_BUILDS=3 \
+    FIRN_TRACE_ID=build-bin-test FIRN_TRACE_PATH="$trace_log" \
     "$repo/scripts/firn-build-bin" >/dev/null
 }
 
@@ -121,17 +119,19 @@ racket_hash="$(printf '%s' "$racket_bin" | sha1sum | cut -c1-12)"
 hash_a="$(FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" "$repo_a/scripts/firn-source-hash")"
 hash_b="$(FIRN_REPO="$repo_b" BEAGLE_PATH="$beagle" "$repo_b/scripts/firn-source-hash")"
 [ "$hash_a" != "$hash_b" ]
-zo_a="$share_dir/$racket_hash/$hash_a/firn.zo"
-zo_b="$share_dir/$racket_hash/$hash_b/firn.zo"
-grep -Fxq 'source=source-a' "$zo_a"
-grep -Fxq 'source=source-b' "$zo_b"
-grep -Fxq 'complete=yes' "$zo_a"
-grep -Fxq 'complete=yes' "$zo_b"
+runtime_a="$share_dir/$racket_hash/$hash_a/runtime"
+runtime_b="$share_dir/$racket_hash/$hash_b/runtime"
+[ -L "$runtime_a" ]
+[ -L "$runtime_b" ]
+[ -f "$runtime_a/.complete" ]
+[ -f "$runtime_b/.complete" ]
 [ "$(wc -l <"$build_log")" -eq 3 ]
 [ "$(wc -l <"$compiled_root_log")" -eq 3 ]
+[ "$(jq -s '[.[] | select(.event == "span_start" and .name == "firn revision cache build")] | length' "$trace_log")" -eq 3 ]
+[ "$(jq -s '[.[] | select(.event == "span_end" and .name == "firn revision cache build" and .status == "ok" and .cache == "miss" and .duration_ms >= 0)] | length' "$trace_log")" -eq 3 ]
 [ "$(sort -u "$compiled_root_log" | wc -l)" -eq 3 ]
 while IFS= read -r roots; do
-  grep -Fq '/.compile.' <<<"$roots"
+  grep -Fq '/generation.' <<<"$roots"
   ! grep -Eq '(^|:)same(:|$)' <<<"$roots"
 done <"$compiled_root_log"
 bash -n "$bin_dir/firn"
@@ -156,8 +156,10 @@ fi
 
 # Switching worktree identity selects the matching immutable image without a
 # rebuild or mutation of the other worktree's cache entry.
-output_a="$(FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" "$bin_dir/firn")"
-output_b="$(FIRN_REPO="$repo_b" BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" "$bin_dir/firn")"
+output_a="$(FIRN_RUNTIME_SHARE_DIR="$share_dir" FIRN_REPO="$repo_a" \
+  BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" "$bin_dir/firn")"
+output_b="$(FIRN_RUNTIME_SHARE_DIR="$share_dir" FIRN_REPO="$repo_b" \
+  BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" "$bin_dir/firn")"
 grep -Fxq 'source=source-a' <<<"$output_a"
 grep -Fxq 'source=source-b' <<<"$output_b"
 [ "$(wc -l <"$build_log")" -eq 3 ]
@@ -180,22 +182,26 @@ printf '%s\n' "$*" >>"${FIRN_NATIVE_CALLS:?}"
 SH
 chmod +x "$native"
 : >"$native_calls"
-FIRN_NATIVE_BIN="$native" FIRN_NATIVE_CALLS="$native_calls" \
+FIRN_RUNTIME_SHARE_DIR="$share_dir" \
+  FIRN_NATIVE_BIN="$native" FIRN_NATIVE_CALLS="$native_calls" \
   FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" \
   "$repo_a/dotfiles/bin/firn" rebuild whiterabbit
 grep -Fxq 'rebuild whiterabbit' "$native_calls"
-FIRN_NATIVE_BIN="$native" FIRN_NATIVE_CALLS="$native_calls" \
+FIRN_RUNTIME_SHARE_DIR="$share_dir" \
+  FIRN_NATIVE_BIN="$native" FIRN_NATIVE_CALLS="$native_calls" \
   FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" \
   "$repo_a/dotfiles/bin/firn" host rebuild whiterabbit --skip-checks
 grep -Fxq 'host rebuild whiterabbit --skip-checks' "$native_calls"
 status_output="$(
-  FIRN_NATIVE_BIN="$native" FIRN_NATIVE_CALLS="$native_calls" \
+  FIRN_RUNTIME_SHARE_DIR="$share_dir" \
+    FIRN_NATIVE_BIN="$native" FIRN_NATIVE_CALLS="$native_calls" \
     FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" \
     "$repo_a/dotfiles/bin/firn" status
 )"
 grep -Fxq 'source=source-a' <<<"$status_output"
 disabled_output="$(
-  FIRN_DISABLE_NATIVE=1 FIRN_NATIVE_BIN="$native" \
+  FIRN_RUNTIME_SHARE_DIR="$share_dir" \
+    FIRN_DISABLE_NATIVE=1 FIRN_NATIVE_BIN="$native" \
     FIRN_NATIVE_CALLS="$native_calls" FIRN_REPO="$repo_a" \
     BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" \
     "$repo_a/dotfiles/bin/firn" rebuild whiterabbit
@@ -203,7 +209,7 @@ disabled_output="$(
 grep -Fxq 'source=source-a' <<<"$disabled_output"
 [ "$(wc -l <"$native_calls")" -eq 2 ]
 
-if find "$share_dir" "$bin_dir" \( -name '*.tmp' -o -name '.firn.*' -o -name '.compile.*' \) | grep -q .; then
+if find "$share_dir" "$bin_dir" \( -name '*.tmp' -o -name '.firn.*' \) | grep -q .; then
   printf 'transactional Firn publication left a temporary file behind\n' >&2
   exit 1
 fi
@@ -271,12 +277,33 @@ grep -Fq 'not exported' <<<"$poisoned_output"
 
 FIRN_REPO="$real_repo" BEAGLE_PATH="$real_beagle" BIN_DIR="$real_bin" \
   SHARE_DIR="$real_share" "$real_repo/scripts/firn-build-bin" >/dev/null
-fresh_output="$(FIRN_REPO="$real_repo" BEAGLE_PATH="$real_beagle" \
+fresh_output="$(FIRN_RUNTIME_SHARE_DIR="$real_share" \
+  FIRN_REPO="$real_repo" BEAGLE_PATH="$real_beagle" \
   "$real_bin/firn")"
 grep -Fxq 'fresh-source' <<<"$fresh_output"
 
-printf ':enabled [test]\n' >"$real_repo/hosts/test/enabled-tags.bnix"
+# The installed pre-change wrapper resumes at firn.zo after invoking the new
+# recipe. The compatibility shim must hand that invocation to the new wrapper.
 FIRN_REPO="$real_repo" BEAGLE_PATH="$real_beagle" \
+  SHARE_DIR="$real_share" "$real_repo/scripts/firn-build-bin" >/dev/null
+real_hash="$(
+  FIRN_REPO="$real_repo" BEAGLE_PATH="$real_beagle" \
+    "$real_repo/scripts/firn-source-hash"
+)"
+real_racket_bin="$(readlink -f "$(command -v "$RACKET")")"
+real_racket_hash="$(printf '%s' "$real_racket_bin" | sha1sum | cut -c1-12)"
+compat_zo="$real_share/$real_racket_hash/$real_hash/firn.zo"
+[ -s "$compat_zo" ]
+adoption_output="$(
+  FIRN_RUNTIME_SHARE_DIR="$real_share" FIRN_DISABLE_NATIVE=1 \
+    FIRN_REPO="$real_repo" BEAGLE_PATH="$real_beagle" \
+    "$RACKET" "$compat_zo"
+)"
+grep -Fxq 'fresh-source' <<<"$adoption_output"
+
+printf ':enabled [test]\n' >"$real_repo/hosts/test/enabled-tags.bnix"
+FIRN_RUNTIME_SHARE_DIR="$real_share" \
+  FIRN_REPO="$real_repo" BEAGLE_PATH="$real_beagle" \
   FIRN_CLI="$real_bin/firn" FIRN_SKIP_FLAKE_INPUTS=1 \
   "$real_repo/scripts/firn-build" >/dev/null
 

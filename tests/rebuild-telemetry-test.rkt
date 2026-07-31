@@ -55,6 +55,23 @@
     (check-= (hash-ref (fourth events) 'duration_ms) 8.125 0.000001)
     (check-equal? (hash-ref (fourth events) 'status) "error")
 
+    (define startup-trace-path (build-path scratch "startup-trace.jsonl"))
+    (define startup-env
+      (environment-variables-copy (current-environment-variables)))
+    (environment-variables-set! startup-env #"FIRN_TRACE_ID" #"startup-test")
+    (environment-variables-set! startup-env #"FIRN_TRACE_PATH"
+                                (path->bytes startup-trace-path))
+    (environment-variables-set! startup-env #"FIRN_RUNTIME_START_MS" #"100.25")
+    (environment-variables-set! startup-env #"FIRN_RUNTIME_CACHE_STATE" #"miss")
+    (parameterize ([current-environment-variables startup-env]
+                   [current-monotonic-clock (clock-from '(108.75))])
+      (finish-runtime-startup-span!))
+    (define startup-event (car (read-events startup-trace-path)))
+    (check-equal? (hash-ref startup-event 'event) "span_end")
+    (check-equal? (hash-ref startup-event 'name) "racket startup")
+    (check-= (hash-ref startup-event 'duration_ms) 8.5 0.000001)
+    (check-equal? (hash-ref startup-event 'cache) "miss")
+
     (define absent-env
       (environment-variables-copy (current-environment-variables)))
     (environment-variables-set! absent-env #"FIRN_TRACE_PATH" #f)
