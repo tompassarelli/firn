@@ -161,13 +161,13 @@ frontend north-public
   default_backend telemetry-green
 
 backend coord-blue
-  server only 127.0.0.1:{coord_blue}
+  server only 127.0.0.1:{coord_blue} check inter 50ms rise 1 fall 1
 backend coord-green
-  server only 127.0.0.1:{coord_green}
+  server only 127.0.0.1:{coord_green} check inter 50ms rise 1 fall 1
 backend telemetry-blue
-  server only 127.0.0.1:{telemetry_blue}
+  server only 127.0.0.1:{telemetry_blue} check inter 50ms rise 1 fall 1
 backend telemetry-green
-  server only 127.0.0.1:{telemetry_green}
+  server only 127.0.0.1:{telemetry_green} check inter 50ms rise 1 fall 1
 """)
 
 write_config()
