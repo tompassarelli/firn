@@ -47,12 +47,18 @@ mkdir -p "$runtime" "$stub_bin"
 export XDG_RUNTIME_DIR="$runtime"
 export NIX_ARGS_LOG="$nix_log"
 export PATH="$stub_bin:$PATH"
+# Hook-spawned workers inherit the environment of whatever git command fired
+# them; both resolver rungs are pinned so none of them can reach the real repo.
+export FIRN_REPO="$container"
+export WORLD_REPO_NIXOS_CONFIG="$container"
 pidfile="$runtime/firn-prewarm-${UID:-0}.pid"
+stampfile="$runtime/firn-prewarm-${UID:-0}.warm"
 
 cat >"$stub_bin/nix" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$NIX_ARGS_LOG"
 [ -n "${FAKE_NIX_SLEEP:-}" ] && sleep "$FAKE_NIX_SLEEP"
+[ -n "${FAKE_NIX_FAIL:-}" ] && exit 1
 exit 0
 EOF
 chmod +x "$stub_bin/nix"
@@ -76,8 +82,32 @@ fresh_repo() {
   git -C "$container" add -A
   git -C "$container" commit -qm base
   : >"$nix_log"
-  rm -f "$pidfile"
+  rm -f "$pidfile" "$stampfile"
 }
+
+install_hooks() { # hook installation reads the repo from cwd
+  (cd "$container" && FIRN_REPO="$container" "$TARGET" --install-hook >/dev/null 2>&1)
+}
+ref_hook="$container/.git/hooks/reference-transaction"
+
+zero_oid=0000000000000000000000000000000000000000
+
+feed_hook() { # feed_hook <hook> <state> <transaction-line>... -> $hook_status $hook_elapsed
+  local hook="$1" state="$2" start line
+  shift 2
+  start="$(date +%s.%N)"
+  { for line in "$@"; do printf '%s\n' "$line"; done; } |
+    FIRN_REPO="$container" "$hook" "$state" >/dev/null 2>&1
+  hook_status=$?
+  hook_elapsed="$(awk -v a="$start" -v b="$(date +%s.%N)" 'BEGIN { printf "%.3f", b - a }')"
+}
+
+armed() { : >"$nix_log"; rm -f "$stampfile"; }
+# A worker spends seconds in rebuild_running's /proc scan before it decides, so
+# every assertion here waits on content and none infers "did not fire" from a
+# wall clock; the marker hook below is what tests the filter deterministically.
+fired() { wait_for 20 test -s "$nix_log"; }
+settle() { sleep 0.4; }
 
 run_prewarm() { # run_prewarm [args...] -> sets $out $status
   out="$(FIRN_REPO="$container" "$TARGET" "$@" 2>&1)"
@@ -236,26 +266,231 @@ run_prewarm --foreground
   && check "prewarm resumes once the rebuild is gone" 0 \
   || check "prewarm resumes once the rebuild is gone" 1
 
-# ── case 7: hook installation ─────────────────────────────────────────────
+# ── case 7: hook installation converges on reference-transaction ──────────
 fresh_repo
-hook="$container/.git/hooks/post-commit"
-(cd "$container" && FIRN_REPO="$container" "$TARGET" --install-hook >/dev/null 2>&1)
-[ -x "$hook" ] && check "install-hook writes an executable post-commit hook" 0 \
-  || check "install-hook writes an executable post-commit hook" 1
+hook="$ref_hook"
+stale="$container/.git/hooks/post-commit"
+printf '#!/usr/bin/env bash\n# firn-prewarm-hook v1 — generated\nexec /nowhere\n' >"$stale"
+chmod +x "$stale"
+install_hooks
+[ -x "$hook" ] && check "install-hook writes an executable reference-transaction hook" 0 \
+  || check "install-hook writes an executable reference-transaction hook" 1
 grep -Fq "$container/dotfiles/bin/firn-prewarm" "$hook" 2>/dev/null \
   && check "the hook calls the resolved checkout's firn-prewarm" 0 \
   || check "the hook calls the resolved checkout's firn-prewarm" 1
+[ ! -e "$stale" ] \
+  && check "install-hook retires the superseded post-commit hook it wrote" 0 \
+  || check "install-hook retires the superseded post-commit hook it wrote" 1
 before="$(cat "$hook" 2>/dev/null)"
-(cd "$container" && FIRN_REPO="$container" "$TARGET" --install-hook >/dev/null 2>&1)
+install_hooks
 [ "$(cat "$hook" 2>/dev/null)" = "$before" ] \
   && check "install-hook is idempotent" 0 \
   || check "install-hook is idempotent" 1
 printf '#!/usr/bin/env bash\n# someone else was here\n' >"$hook"
+printf '#!/usr/bin/env bash\n# someone else was here too\n' >"$stale"
 foreign="$(cat "$hook")"
-(cd "$container" && FIRN_REPO="$container" "$TARGET" --install-hook >/dev/null 2>&1)
+foreign_stale="$(cat "$stale")"
+install_hooks
 [ "$(cat "$hook")" = "$foreign" ] \
-  && check "install-hook never clobbers a foreign post-commit hook" 0 \
-  || check "install-hook never clobbers a foreign post-commit hook" 1
+  && check "install-hook never clobbers a foreign reference-transaction hook" 0 \
+  || check "install-hook never clobbers a foreign reference-transaction hook" 1
+[ "$(cat "$stale" 2>/dev/null)" = "$foreign_stale" ] \
+  && check "install-hook never deletes a foreign post-commit hook" 0 \
+  || check "install-hook never deletes a foreign post-commit hook" 1
+
+# ── case 9: what the reference-transaction hook does and does not act on ──
+fresh_repo
+install_hooks
+head_sha="$(git -C "$container" rev-parse HEAD)"
+armed
+feed_hook "$hook" committed "$zero_oid $head_sha refs/heads/main"
+fired \
+  && check "committed refs/heads/main update fires the prewarm" 0 \
+  || check "committed refs/heads/main update fires the prewarm" 1
+grep -Fq "rev=$head_sha" "$nix_log" \
+  && check "the fired prewarm carries the repo's current rev" 0 \
+  || { cat "$nix_log" >&2; check "the fired prewarm carries the repo's current rev" 1; }
+[ "$hook_status" -eq 0 ] && check "the hook exits 0 when it fires" 0 \
+  || check "the hook exits 0 when it fires" 1
+
+# "did not fire" is asserted against a barrier, never against a wall clock: the
+# candidate transaction is followed by one that must fire, so a late spawn is a
+# second marker line rather than a silently missed one.
+marker="$scratch/hook-fired.log"
+marker_hook="$scratch/hook-marker"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >>%q\n' "$marker" >"$scratch/marker-prewarm"
+chmod +x "$scratch/marker-prewarm"
+sed "s|^prewarm=.*|prewarm=$scratch/marker-prewarm|" "$hook" >"$marker_hook"
+chmod +x "$marker_hook"
+
+nonfire() { # nonfire <description> <state> <line>
+  local st fires
+  : >"$marker"
+  feed_hook "$marker_hook" "$2" "$3"
+  st=$hook_status
+  feed_hook "$marker_hook" committed "$zero_oid $head_sha refs/heads/main"
+  wait_for 5 test -s "$marker"
+  settle
+  fires="$(wc -l <"$marker")"
+  if [ "$fires" -eq 1 ] && [ "$st" -eq 0 ]; then
+    check "$1" 0
+  else
+    printf '  status=%s fires=%s (1 = only the barrier fired)\n' "$st" "$fires" >&2
+    check "$1" 1
+  fi
+}
+nonfire "a non-main ref never fires the prewarm" committed "$zero_oid $head_sha refs/heads/lane"
+nonfire "the prepared state never fires the prewarm" prepared "$zero_oid $head_sha refs/heads/main"
+nonfire "the aborted state never fires the prewarm" aborted "$zero_oid $head_sha refs/heads/main"
+nonfire "a refs/heads/main deletion never fires the prewarm" committed "$head_sha $zero_oid refs/heads/main"
+nonfire "a no-op refs/heads/main update never fires the prewarm" committed "$head_sha $head_sha refs/heads/main"
+
+# a real transaction carries several lines; only the main one may count
+armed
+feed_hook "$hook" committed "$zero_oid $head_sha ORIG_HEAD" \
+  "$zero_oid $head_sha refs/heads/main" "$zero_oid $zero_oid AUTO_MERGE"
+fired \
+  && check "a multi-line transaction containing refs/heads/main fires once" 0 \
+  || check "a multi-line transaction containing refs/heads/main fires once" 1
+[ "$(wc -l <"$nix_log")" -eq 1 ] \
+  && check "a multi-line transaction fires exactly one prewarm" 0 \
+  || { cat "$nix_log" >&2; check "a multi-line transaction fires exactly one prewarm" 1; }
+
+# ── case 10: a broken prewarm can never abort a git operation ─────────────
+missing_hook="$scratch/hook-missing"
+hang_hook="$scratch/hook-hang"
+mkdir -p "$scratch/hang"
+printf '#!/usr/bin/env bash\nsleep 30\n' >"$scratch/hang/firn-prewarm"
+chmod +x "$scratch/hang/firn-prewarm"
+sed "s|^prewarm=.*|prewarm=$scratch/nowhere/firn-prewarm|" "$hook" >"$missing_hook"
+sed "s|^prewarm=.*|prewarm=$scratch/hang/firn-prewarm|" "$hook" >"$hang_hook"
+chmod +x "$missing_hook" "$hang_hook"
+for broken in "$missing_hook" "$hang_hook"; do
+  what="missing"; [ "$broken" = "$hang_hook" ] && what="hanging"
+  feed_hook "$broken" committed "$zero_oid $head_sha refs/heads/main"
+  [ "$hook_status" -eq 0 ] \
+    && check "a $what prewarm still leaves the hook exiting 0" 0 \
+    || check "a $what prewarm still leaves the hook exiting 0" 1
+  awk -v e="$hook_elapsed" 'BEGIN { exit (e < 1.0) ? 0 : 1 }' \
+    && check "a $what prewarm still returns the hook in under 1s (${hook_elapsed}s)" 0 \
+    || check "a $what prewarm still returns the hook in under 1s (${hook_elapsed}s)" 1
+done
+pkill -f -- "$scratch/hang/firn-prewarm" 2>/dev/null
+
+# ── case 11: the landings that post-commit never saw ──────────────────────
+fresh_repo
+install_hooks
+lane="$scratch/lane"
+rm -rf "$lane"
+git -C "$container" worktree add -q "$lane" -b lane
+armed
+pre_merge="$(git -C "$container" rev-parse HEAD)"
+printf 'lane work\n' >"$lane/x"
+git -C "$lane" add -A
+git -C "$lane" commit -qm lane-one          # refs/heads/lane: must not fire
+git -C "$container" merge --ff-only -q lane # refs/heads/main: does fire
+fired && check "git merge --ff-only into main fires the prewarm" 0 \
+  || check "git merge --ff-only into main fires the prewarm" 1
+settle
+# only a lane-triggered prewarm could ever carry the pre-merge rev
+! grep -Fq "rev=$pre_merge" "$nix_log" \
+  && check "a commit on a lane branch does not prewarm main's snapshot" 0 \
+  || { cat "$nix_log" >&2; check "a commit on a lane branch does not prewarm main's snapshot" 1; }
+head_sha="$(git -C "$container" rev-parse HEAD)"
+grep -Fq "rev=$head_sha" "$nix_log" \
+  && check "the ff-merge prewarm carries the newly landed rev" 0 \
+  || { printf '  want rev=%s\n  got:  %s\n' "$head_sha" "$(cat "$nix_log")" >&2
+       check "the ff-merge prewarm carries the newly landed rev" 1; }
+
+# plain `fetch <src> <b>:refs/heads/main` is refused while main is checked out,
+# so the landing that reaches a live checkout carries --update-head-ok.
+printf 'more lane work\n' >"$lane/y"
+git -C "$lane" add -A
+git -C "$lane" commit -qm lane-two
+armed
+git -C "$container" fetch -q --update-head-ok "$lane" lane:refs/heads/main
+fired && check "git fetch into refs/heads/main fires the prewarm" 0 \
+  || check "git fetch into refs/heads/main fires the prewarm" 1
+head_sha="$(git -C "$container" rev-parse HEAD)"
+grep -Fq "rev=$head_sha" "$nix_log" \
+  && check "the fetch prewarm carries the newly landed rev" 0 \
+  || { printf '  want rev=%s\n  got:  %s\n' "$head_sha" "$(cat "$nix_log")" >&2
+       check "the fetch prewarm carries the newly landed rev" 1; }
+
+# and the same landing survives a hook whose prewarm is gone
+cp "$missing_hook" "$hook"
+printf 'still more\n' >"$lane/z"
+git -C "$lane" add -A
+git -C "$lane" commit -qm lane-three
+git -C "$container" fetch -q --update-head-ok "$lane" lane:refs/heads/main
+status=$?
+[ "$status" -eq 0 ] && [ "$(git -C "$container" rev-parse refs/heads/main)" = "$(git -C "$lane" rev-parse lane)" ] \
+  && check "a broken prewarm cannot abort the git operation that triggered it" 0 \
+  || check "a broken prewarm cannot abort the git operation that triggered it" 1
+install_hooks
+
+# ── case 12: an already-warm URI is never re-evaluated ────────────────────
+fresh_repo
+run_prewarm --foreground
+[ "$(wc -l <"$nix_log")" -eq 1 ] \
+  && check "the first prewarm of a rev evaluates it" 0 \
+  || check "the first prewarm of a rev evaluates it" 1
+run_prewarm --foreground
+[ "$(wc -l <"$nix_log")" -eq 1 ] \
+  && check "a second prewarm of an unchanged HEAD invokes no nix" 0 \
+  || { cat "$nix_log" >&2; check "a second prewarm of an unchanged HEAD invokes no nix" 1; }
+grep -Fq 'already warm' <<<"$out" \
+  && check "the skip says the snapshot is already warm" 0 \
+  || { printf '%s\n' "$out" >&2; check "the skip says the snapshot is already warm" 1; }
+printf 'change\n' >"$container/changed"
+git -C "$container" add -A
+git -C "$container" commit -qm changed
+run_prewarm --foreground
+[ "$(wc -l <"$nix_log")" -eq 2 ] \
+  && check "a moved HEAD evaluates again" 0 \
+  || { cat "$nix_log" >&2; check "a moved HEAD evaluates again" 1; }
+fresh_repo
+out="$(FIRN_REPO="$container" FAKE_NIX_FAIL=1 "$TARGET" --foreground 2>&1)"
+run_prewarm --foreground
+[ "$(wc -l <"$nix_log")" -eq 2 ] \
+  && check "a failed evaluation is not stamped warm" 0 \
+  || { cat "$nix_log" >&2; check "a failed evaluation is not stamped warm" 1; }
+
+# git reports old=000… for a real no-op update, so the ref filter cannot see it:
+# the stamp is what stops the re-evaluation. Barrier: the empty commit after it.
+install_hooks
+: >"$nix_log"
+warm_sha="$(git -C "$container" rev-parse HEAD)"
+git -C "$container" update-ref refs/heads/main HEAD
+git -C "$container" commit -q --allow-empty -m barrier
+fired && settle
+! grep -Fq "rev=$warm_sha" "$nix_log" \
+  && check "a real no-op ref update re-evaluates nothing" 0 \
+  || { cat "$nix_log" >&2; check "a real no-op ref update re-evaluates nothing" 1; }
+grep -Fq "rev=$(git -C "$container" rev-parse HEAD)" "$nix_log" \
+  && check "the barrier commit after a no-op does evaluate its new rev" 0 \
+  || { cat "$nix_log" >&2; check "the barrier commit after a no-op does evaluate its new rev" 1; }
+
+# ── case 13: a ref storm leaves at most one evaluation running ────────────
+fresh_repo
+install_hooks
+armed
+head_sha="$(git -C "$container" rev-parse HEAD)"
+live_evals() { pgrep -f -- "print-out-paths git.file://$container" 2>/dev/null | wc -l; }
+one_eval_at_most() { [ "$(live_evals)" -le 1 ]; }
+for _ in 1 2 3 4 5 6; do
+  printf '%s\n' "$zero_oid $head_sha refs/heads/main" |
+    FIRN_REPO="$container" FAKE_NIX_SLEEP=10 "$hook" committed >/dev/null 2>&1
+  rm -f "$stampfile"
+done
+fired && check "a ref storm does start an evaluation" 0 \
+  || check "a ref storm does start an evaluation" 1
+wait_for 8 one_eval_at_most \
+  && check "a ref storm leaves at most one evaluation running" 0 \
+  || { pgrep -af -- "print-out-paths git.file://$container" >&2
+       check "a ref storm leaves at most one evaluation running" 1; }
+pkill -f -- "print-out-paths git.file://$container" 2>/dev/null
+kill_tracked
 
 # ── case 8: an unusable environment is never a caller's problem ───────────
 out="$(FIRN_REPO="$scratch/not-a-repo" WORLD_MANIFEST_PATH="$scratch/none.env" \
