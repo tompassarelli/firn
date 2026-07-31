@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+# Prewarm Nix's flake evaluation cache for the commit snapshot `firn rebuild`
+# will evaluate. The cache key is the flake fingerprint (repo path, rev, ref),
+# so the URI built here must stay byte-identical to `snapshot-ref` in
+# scripts/firn-cmds/rebuild.rkt or the prewarm warms nothing.
+set -u
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+BIN_DIR="$(dirname "$SELF")"
+HOOK_MARKER="firn-prewarm-hook v1"
+STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+[ -d "$STATE_DIR" ] || STATE_DIR=/tmp
+PIDFILE="$STATE_DIR/firn-prewarm-${UID:-0}.pid"
+LOCKFILE="$STATE_DIR/firn-prewarm-${UID:-0}.lock"
+VERBOSE=0
+
+say() { [ "$VERBOSE" -eq 1 ] && printf 'firn-prewarm: %s\n' "$*"; return 0; }
+
+# Hooks run with GIT_DIR/GIT_INDEX_FILE exported, and those override `git -C`.
+# Every git call here targets a repo chosen by us, so the inherited ones go.
+git_clean() {
+  local var
+  local -a unset_args=()
+  while IFS= read -r var; do
+    [ -n "$var" ] || continue
+    case "$var" in GIT_[A-Z0-9_]*) unset_args+=(-u "$var") ;; esac
+  done < <(command git rev-parse --local-env-vars 2>/dev/null)
+  env "${unset_args[@]}" git "$@"
+}
+
+looks_like_firn_repo() { # mirrors looks-like-firn-repo? in firn-cmds/util.rkt
+  [ -d "$1" ] && [ -f "$1/scripts/firn-build" ] &&
+    { [ -f "$1/flake.bnix" ] || [ -f "$1/flake.rkt" ]; }
+}
+
+# Same ladder rebuild.rkt uses, with the world resolver standing in for its
+# hardcoded fallback: whatever `firn rebuild` evaluates is what we warm.
+resolve_repo() {
+  local candidate
+  candidate="${FIRN_REPO:-}"
+  if [ -n "$candidate" ] && looks_like_firn_repo "$candidate"; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  candidate="$("$BIN_DIR/world" get repo.nixos-config 2>/dev/null)" || candidate=""
+  if [ -n "$candidate" ] && looks_like_firn_repo "$candidate"; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  return 1
+}
+
+snapshot_uri() { # <repo> — the byte-identical twin of rebuild.rkt's snapshot-ref
+  local repo="$1" head branch
+  head="$(git_clean -C "$repo" rev-parse HEAD 2>/dev/null)" || return 1
+  [ -n "$head" ] || return 1
+  branch="$(git_clean -C "$repo" branch --show-current 2>/dev/null)" || branch=""
+  if [ -n "$branch" ]; then
+    printf 'git+file://%s?rev=%s&ref=%s\n' "$repo" "$head" "$branch"
+  else
+    printf 'git+file://%s?rev=%s\n' "$repo" "$head"
+  fi
+}
+
+local_host() {
+  local h
+  h="$(hostname 2>/dev/null)" || h=""
+  [ -n "$h" ] || h="$(uname -n 2>/dev/null)" || h=""
+  printf '%s\n' "${h%%$'\n'*}"
+}
+
+target_attr() { # <repo> — empty when this host has no configuration here
+  local repo="$1" host
+  host="$(local_host)"
+  if [ ! -d "$repo/hosts/$host" ] && [ -d "$repo/hosts/${host%%.*}" ]; then
+    host="${host%%.*}"
+  fi
+  [ -n "$host" ] && [ -d "$repo/hosts/$host" ] || return 1
+  if [ "$(uname -s 2>/dev/null)" = Darwin ]; then
+    printf 'darwinConfigurations.%s.system\n' "$host"
+  else
+    printf 'nixosConfigurations.%s.config.system.build.toplevel\n' "$host"
+  fi
+}
+
+cmdline_of() {
+  [ -r "/proc/$1/cmdline" ] || return 0
+  tr '\0' ' ' 2>/dev/null <"/proc/$1/cmdline"
+}
+
+# A rebuild does this evaluation itself; a second cold eval alongside it is
+# pure waste. Detection is deliberately over-eager — a false positive costs
+# only the optimization, a false negative costs a duplicated 30s eval.
+rebuild_running() {
+  local dir pid cmd
+  for dir in /proc/[0-9]*; do
+    pid="${dir#/proc/}"
+    [ "$pid" = "$$" ] && continue
+    cmd="$(cmdline_of "$pid")"
+    [ -n "$cmd" ] || continue
+    case "$cmd" in
+      *firn-prewarm*) continue ;;
+      *firn-rebuild-coordinated*) return 0 ;;
+      *firn-native*rebuild*) return 0 ;;
+      *firn.rkt*rebuild*) return 0 ;;
+      */firn\ rebuild*|*/firn\ host\ rebuild*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+is_prewarm_pid() { # never signal a recycled pid that is not one of ours
+  local cmd
+  cmd="$(cmdline_of "$1")"
+  case "$cmd" in
+    *firn-prewarm*) return 0 ;;
+    *"nix build --no-link --print-out-paths git+file:"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# An older rev's evaluation is worthless the moment HEAD moves on.
+supersede() {
+  local shell_pid nix_pid pid
+  [ -f "$PIDFILE" ] || return 0
+  read -r shell_pid nix_pid <"$PIDFILE" 2>/dev/null || return 0
+  for pid in "$shell_pid" "${nix_pid:-}"; do
+    case "$pid" in '' | *[!0-9]*) continue ;; esac
+    [ "$pid" = "$$" ] && continue
+    is_prewarm_pid "$pid" && kill -TERM "$pid" 2>/dev/null
+  done
+  return 0
+}
+
+release_pidfile() {
+  local shell_pid
+  [ -f "$PIDFILE" ] || return 0
+  read -r shell_pid _ <"$PIDFILE" 2>/dev/null || return 0
+  [ "$shell_pid" = "$$" ] && rm -f "$PIDFILE"
+  return 0
+}
+
+prewarm() {
+  local repo uri attr started nix_pid rc elapsed
+  repo="$(resolve_repo)" || { say "no nixos-config checkout resolved; nothing to warm"; return 0; }
+  uri="$(snapshot_uri "$repo")" || { say "cannot read HEAD in $repo"; return 0; }
+  attr="$(target_attr "$repo")" || { say "no host configuration for $(local_host) in $repo"; return 0; }
+
+  local -a build=(nix build --no-link --print-out-paths "$uri#$attr")
+  command -v ionice >/dev/null 2>&1 && build=(ionice -c3 "${build[@]}")
+  command -v nice >/dev/null 2>&1 && build=(nice -n 19 "${build[@]}")
+
+  if [ -w "$STATE_DIR" ] && command -v flock >/dev/null 2>&1; then
+    exec 9>"$LOCKFILE" && flock -w 5 9 2>/dev/null
+  fi
+  supersede
+  if rebuild_running; then
+    exec 9>&- 2>/dev/null || true
+    say "skipped: a firn rebuild is already evaluating this snapshot"
+    return 0
+  fi
+  say "$uri#$attr"
+  started="$(date +%s.%N)"
+  "${build[@]}" >/dev/null 2>&1 &
+  nix_pid=$!
+  printf '%s %s\n' "$$" "$nix_pid" >"$PIDFILE"
+  exec 9>&- 2>/dev/null || true
+
+  wait "$nix_pid"
+  rc=$?
+  release_pidfile
+  elapsed="$(awk -v a="$started" -v b="$(date +%s.%N)" 'BEGIN { printf "%.1f", b - a }')"
+  if [ "$rc" -eq 0 ]; then
+    say "eval cache warm after ${elapsed}s"
+  else
+    say "nix build exited $rc after ${elapsed}s"
+  fi
+  return "$rc"
+}
+
+spawn_detached() {
+  if command -v setsid >/dev/null 2>&1; then
+    setsid -f "$SELF" --worker </dev/null >/dev/null 2>&1
+  else
+    ("$SELF" --worker </dev/null >/dev/null 2>&1 &)
+  fi
+  return 0
+}
+
+install_hook() {
+  local repo hookdir hook content
+  repo="$(resolve_repo)" || return 0
+  [ -x "$repo/dotfiles/bin/firn-prewarm" ] || return 0
+  hookdir="$(git_clean rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 0
+  [ -n "$hookdir" ] && [ -d "$hookdir/hooks" ] || return 0
+  hook="$hookdir/hooks/post-commit"
+  content="$(
+    printf '#!/usr/bin/env bash\n'
+    printf '# %s — generated by `firn-prewarm --install-hook`; edits are overwritten.\n' "$HOOK_MARKER"
+    printf 'exec %q\n' "$repo/dotfiles/bin/firn-prewarm"
+  )"
+  if [ -e "$hook" ] && ! grep -Fq "$HOOK_MARKER" "$hook" 2>/dev/null; then
+    printf 'firn-prewarm: leaving the existing post-commit hook alone: %s\n' "$hook" >&2
+    return 0
+  fi
+  [ -f "$hook" ] && [ "$(cat "$hook" 2>/dev/null)" = "$content" ] && return 0
+  printf '%s\n' "$content" >"$hook" 2>/dev/null || return 0
+  chmod +x "$hook" 2>/dev/null || true
+  printf 'firn-prewarm: installed the post-commit eval-cache prewarm hook\n' >&2
+  return 0
+}
+
+usage() {
+  cat <<'EOF'
+usage: firn-prewarm                # detached and silent (git post-commit hook)
+       firn-prewarm --foreground   # synchronous; prints the URI and timing
+       firn-prewarm --install-hook # (re)install the post-commit hook
+EOF
+}
+
+case "${1:-}" in
+  '')
+    spawn_detached
+    exit 0
+    ;;
+  --worker)
+    prewarm >/dev/null 2>&1
+    exit 0
+    ;;
+  --foreground | -f)
+    VERBOSE=1
+    trap 'release_pidfile' EXIT
+    prewarm
+    exit $?
+    ;;
+  --install-hook)
+    install_hook
+    exit 0
+    ;;
+  --help | -h)
+    usage
+    exit 0
+    ;;
+  *)
+    printf 'firn-prewarm: unknown argument: %s\n' "$1" >&2
+    exit 0
+    ;;
+esac

@@ -9,6 +9,14 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      # Git hooks cannot be tracked, so the installer is: any verified commit
+      # (re)points .git/hooks/post-commit at the prewarm.
+      - id: firn-prewarm-hook
+        name: firn prewarm post-commit hook
+        entry: bash -c '"$PWD/dotfiles/bin/firn-prewarm" --install-hook'
+        language: system
+        pass_filenames: false
+        always_run: true
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.24.2
     hooks:
