@@ -215,6 +215,70 @@ else
   check "no opacity line message is clear" 1
 fi
 
+# --- case 9: round-trip back to the pre-set value drops the commit ---------
+fresh_repo
+before_count=$(commit_count)
+run_opacity 0.60
+run_opacity 0.88
+[ "$(commit_count)" -eq "$before_count" ] \
+  && check "round-trip to the pre-set value drops the opacity commit" 0 \
+  || check "round-trip to the pre-set value drops the opacity commit" 1
+grep -Fq 'opacity 0.88' "$(cfg)" \
+  && check "round-trip leaves the file at the original value" 0 \
+  || check "round-trip leaves the file at the original value" 1
+[ -z "$(git -C "$container" status --porcelain)" ] \
+  && check "round-trip leaves the working tree clean" 0 \
+  || check "round-trip leaves the working tree clean" 1
+[ "$status" -eq 0 ] \
+  && check "round-trip exits 0" 0 \
+  || check "round-trip exits 0" 1
+
+# --- case 10: round-trip is never dropped once published --------------------
+fresh_repo
+before_count=$(commit_count)
+run_opacity 0.60
+published_count=$(commit_count)
+remote_dir="$scratch/origin-roundtrip.git"
+rm -rf "$remote_dir"
+git clone --bare -q "$container" "$remote_dir"
+git -C "$container" remote add origin "$remote_dir"
+git -C "$container" fetch -q origin
+run_opacity 0.88
+[ "$(commit_count)" -eq $((published_count + 1)) ] \
+  && check "published round-trip creates a fresh commit rather than dropping" 0 \
+  || check "published round-trip creates a fresh commit rather than dropping" 1
+newest=$(git -C "$container" log -1 --format=%s)
+previous=$(git -C "$container" log -1 --format=%s --skip=1)
+[ "$newest" = "niri: opacity 0.88" ] \
+  && check "published round-trip's new commit carries the value" 0 \
+  || check "published round-trip's new commit carries the value" 1
+[ "$previous" = "niri: opacity 0.60" ] \
+  && check "published round-trip leaves the published commit intact" 0 \
+  || check "published round-trip leaves the published commit intact" 1
+
+# --- case 11: round-trip guard yields to the unrelated-dirty-path guard -----
+fresh_repo
+before_count=$(commit_count)
+run_opacity 0.60
+after_first_count=$(commit_count)
+printf 'unrelated local edit\n' >>"$container/README.md"
+run_opacity 0.88
+[ "$status" -eq 0 ] \
+  && check "round-trip with unrelated dirty path exits 0" 0 \
+  || check "round-trip with unrelated dirty path exits 0" 1
+grep -Fq 'opacity 0.88' "$(cfg)" \
+  && check "round-trip with unrelated dirty path still applies the value" 0 \
+  || check "round-trip with unrelated dirty path still applies the value" 1
+[ "$(commit_count)" -eq "$after_first_count" ] \
+  && check "round-trip with unrelated dirty path commits/resets nothing" 0 \
+  || check "round-trip with unrelated dirty path commits/resets nothing" 1
+if grep -Fq 'other uncommitted changes' <<<"$out"; then
+  check "round-trip with unrelated dirty path still names the guard" 0
+else
+  printf '%s\n' "$out" >&2
+  check "round-trip with unrelated dirty path still names the guard" 1
+fi
+
 if [ "$fail_count" -eq 0 ]; then
   printf 'opacity tests: PASS (%d checks)\n' "$pass"
 else

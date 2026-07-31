@@ -35,7 +35,18 @@ amend=""
 case "$(git -C "$repo" log -1 --format=%s 2>/dev/null || true)" in
   # Collapse a fiddling session into one commit, but only while it is unpushed.
   "niri: opacity "*)
-    git -C "$repo" merge-base --is-ancestor HEAD origin/main >/dev/null 2>&1 || amend="--amend"
+    if git -C "$repo" merge-base --is-ancestor HEAD origin/main >/dev/null 2>&1; then
+      : # already published; a fresh commit is fine, amending it is not
+    elif git -C "$repo" rev-parse --verify -q HEAD^ >/dev/null 2>&1 \
+         && git -C "$repo" diff --cached --quiet HEAD^; then
+      # the fiddling session round-tripped back to the pre-set state: an
+      # amend here would be empty, so drop the now-pointless commit instead.
+      git -C "$repo" reset --soft HEAD^
+      echo "opacity: round-tripped to the previous commit; that commit was dropped"
+      exit 0
+    else
+      amend="--amend"
+    fi
     ;;
 esac
 git -C "$repo" commit ${amend:+"$amend"} -m "niri: opacity $1"
