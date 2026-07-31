@@ -455,16 +455,16 @@
         "nixpkgs": "nixpkgs_3"
       },
       "locked": {
-        "lastModified": 1785410703,
-        "narHash": "sha256-42qdL3+l44VUGmbp2VK8kluoCP0sCMzQypCH0Jglc7Y=",
-        "ref": "main",
-        "rev": "0c5461b145b45f540aa95ba8344fc7c75fc8be48",
-        "revCount": 708,
+        "lastModified": 1785454409,
+        "narHash": "sha256-Jtc0NE/j3jHF79tDP6bta9/kWmPTptReZxSMAggRfcY=",
+        "ref": "control-plane-stability-2026-07-31.1",
+        "rev": "0cbd4b64f8e5063f3e7358342ccdc954b10168fc",
+        "revCount": 709,
         "type": "git",
         "url": "file:///home/tom/code/fram/main"
       },
       "original": {
-        "ref": "main",
+        "ref": "control-plane-stability-2026-07-31.1",
         "type": "git",
         "url": "file:///home/tom/code/fram/main"
       }

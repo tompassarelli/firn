@@ -40,7 +40,7 @@
       url = "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73";
     };
     fram = {
-      url = "git+file:///home/tom/code/fram/main?ref=main";
+      url = "git+file:///home/tom/code/fram/main?ref=control-plane-stability-2026-07-31.1";
     };
     gjoa = {
       url = "github:tompassarelli/gjoa";
