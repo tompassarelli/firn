@@ -157,7 +157,7 @@ remote_destination_snapshot() {
 }
 
 report_reap_ready() {
-  local container ready=0 wt main_branch head dirty
+  local container ready=0 wt main_branch head dirty ignored
   [ "$(basename "$repo_root")" = main ] || return 0
   container=$(dirname "$repo_root")
   main_branch=$(git -C "$repo_root" symbolic-ref --quiet --short HEAD 2>/dev/null) || return 0
@@ -166,6 +166,11 @@ report_reap_ready() {
     dirty=$(git -C "$wt" status --porcelain 2>/dev/null) || continue
     [ -z "$dirty" ] || continue
     head=$(git -C "$wt" rev-parse HEAD 2>/dev/null) || continue
+    # Mirror wt-reap's ignored-file keep: ignored paths beyond disposable
+    # caches (.direnv, result symlinks) make a tree not reap-ready.
+    ignored=$(git -C "$wt" ls-files --others --ignored --exclude-standard 2>/dev/null |
+      grep -v -E '(^|/)\.direnv/' | grep -v -E '^result(-[^/]*)?$') || true
+    [ -z "$ignored" ] || continue
     if git -C "$repo_root" merge-base --is-ancestor "$head" "$main_branch" 2>/dev/null; then
       ready=$((ready + 1))
     fi

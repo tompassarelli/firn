@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Get or set niri window opacity (edits niri config.kdl in place).
+# Get or set niri window opacity.
 # Usage: opacity           # print current
 #        opacity 0.85      # set to 0.85
+# Must target the cfg-channel live copy, never the repo record; settle with
+# `cfg promote niri`.
 set -u
-cfg="$HOME/code/nixos-config/dotfiles/niri/config.kdl"
+cfg="$HOME/.config/niri/config.kdl"
+[ -f "$cfg" ] || { echo "opacity: $cfg missing — run: cfg materialize niri" >&2; exit 1; }
 current=$(grep -P '^\s+opacity' "$cfg" | grep -oP '[\d.]+' | head -1)
 
 if [ $# -eq 0 ]; then
@@ -11,5 +14,6 @@ if [ $# -eq 0 ]; then
   exit 0
 fi
 
+[ -n "$current" ] || { echo "opacity: no opacity line found in $cfg" >&2; exit 1; }
 sed -i "/^[^\/]/s/opacity $current/opacity $1/" "$cfg"
 echo "Opacity: $1"

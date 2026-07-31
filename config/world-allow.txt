@@ -39,7 +39,6 @@ fram/tests/store_anchor_disambig_test.clj
 nixos-config/docs/claude/02-local-map.md
 nixos-config/dotfiles/bin/firn
 nixos-config/dotfiles/bin/harness-map
-nixos-config/dotfiles/bin/opacity
 nixos-config/dotfiles/bin/sandbox
 nixos-config/dotfiles/claude/settings.json
 nixos-config/dotfiles/claude/statusline.sh
