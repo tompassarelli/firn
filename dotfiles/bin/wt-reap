@@ -3,27 +3,47 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: wt-reap [--all]
+Usage: wt-reap [--all] [--dry-run]
 
-Sweep merged+clean sibling worktrees (never main) out of a container
+Sweep spent sibling worktrees (never main) out of a container
 (<project>/main + <project>/wt-<slug> siblings).
+
+A sibling is reaped when it is completely clean (including untracked) AND
+either:
+  merged  — its HEAD is an ancestor of main; or
+  equiv   — every commit it is ahead by is patch-equivalent to something
+            already on main (the rebase-landed lane), and none of the
+            safety gates below hold it back.
+
+Equivalence reaping is held back by: a rescue-* branch, a locked worktree,
+a live process whose CWD is inside the tree, or an age under 2h.
 
   (no flags)  operate on the container of the current directory
   --all       operate on every ~/code/*/main container
+  --dry-run   report what would be reaped or kept; change nothing
 USAGE
 }
 
 all=0
-case "${1:-}" in
-  -h|--help) usage; exit 0 ;;
-  --all) all=1 ;;
-  '') ;;
-  *) echo "wt-reap: unknown argument '$1'" >&2; usage >&2; exit 2 ;;
-esac
+dry=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --all) all=1; shift ;;
+    --dry-run) dry=1; shift ;;
+    *) echo "wt-reap: unknown argument '$1'" >&2; usage >&2; exit 2 ;;
+  esac
+done
 
 reaped=0
+reaped_equiv=0
 kept_dirty=0
 kept_unmerged=0
+kept_protected=0
+
+# Freshly created lanes have not started work yet; a worktree's .git file is
+# written once at creation, so its mtime is the lane's birth time.
+MIN_AGE_SECONDS=7200
 
 find_container() {
   local dir="$PWD"
@@ -37,14 +57,48 @@ find_container() {
   return 1
 }
 
+# A process cwd'd inside the tree is someone working there right now — removing
+# it out from under them is the one unrecoverable mistake this script can make.
+has_live_cwd() {
+  local tree="$1" pid cwd
+  for pid in /proc/[0-9]*; do
+    cwd=$(readlink "$pid/cwd" 2>/dev/null) || continue
+    [ -n "$cwd" ] || continue
+    if [ "$cwd" = "$tree" ] || [ "${cwd#"$tree"/}" != "$cwd" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+younger_than_min_age() {
+  local tree="$1" born now
+  born=$(stat -c %Y "$tree/.git" 2>/dev/null) || return 1
+  now=$(date +%s)
+  [ $((now - born)) -lt "$MIN_AGE_SECONDS" ]
+}
+
+# Zero '+' lines from `git cherry` means every commit this branch is ahead by
+# already has a patch-equivalent twin on main — the lane landed through some
+# other branch's rebase and its content is safe.
+all_commits_equivalent() {
+  local main_dir="$1" main_branch="$2" branch="$3" out
+  out=$(git -C "$main_dir" cherry "$main_branch" "$branch" 2>/dev/null) || return 1
+  ! grep -q '^+' <<<"$out"
+}
+
 reap_container() {
   local container="$1" main_dir wt main_branch head branch_ref branch_name dirty ahead
+  local wt_list locked_paths keep_reason
   main_dir="$container/main"
   [ -e "$main_dir/.git" ] || return 0
 
-  git -C "$main_dir" worktree prune
+  [ "$dry" -eq 1 ] || git -C "$main_dir" worktree prune
 
   main_branch=$(git -C "$main_dir" symbolic-ref --quiet --short HEAD 2>/dev/null) || return 0
+
+  wt_list=$(git -C "$main_dir" worktree list --porcelain)
+  locked_paths=$(awk '/^worktree /{p=substr($0, 10)} /^locked/{print p}' <<<"$wt_list")
 
   while IFS= read -r wt; do
     [ -n "$wt" ] || continue
@@ -63,18 +117,56 @@ reap_container() {
     [ -n "$branch_name" ] || branch_name="(detached)"
 
     if git -C "$main_dir" merge-base --is-ancestor "$head" "$main_branch" 2>/dev/null; then
-      git -C "$main_dir" worktree remove "$wt"
-      if [ "$branch_name" != "(detached)" ]; then
-        git -C "$main_dir" branch -d "$branch_name"
+      if [ "$dry" -eq 1 ]; then
+        printf 'would reap: %s (%s)\n' "$wt" "$branch_name"
+      else
+        git -C "$main_dir" worktree remove "$wt"
+        if [ "$branch_name" != "(detached)" ]; then
+          git -C "$main_dir" branch -d "$branch_name"
+        fi
+        printf 'reaped: %s (%s)\n' "$wt" "$branch_name"
       fi
-      printf 'reaped: %s (%s)\n' "$wt" "$branch_name"
       reaped=$((reaped + 1))
+      continue
+    fi
+
+    # --- equivalence path: landed content, different SHAs ---------------------
+    keep_reason=""
+    if [ "$branch_name" = "(detached)" ]; then
+      keep_reason=""
+    elif [[ "$branch_name" == rescue-* ]]; then
+      keep_reason="rescue"
+    elif grep -Fxq "$wt" <<<"$locked_paths"; then
+      keep_reason="locked"
+    elif all_commits_equivalent "$main_dir" "$main_branch" "$branch_name"; then
+      if has_live_cwd "$wt"; then
+        keep_reason="live cwd"
+      elif younger_than_min_age "$wt"; then
+        keep_reason="fresh"
+      else
+        if [ "$dry" -eq 1 ]; then
+          printf 'would reap (equiv): %s (%s was %s)\n' "$wt" "$branch_name" "$head"
+        else
+          git -C "$main_dir" worktree remove "$wt"
+          # -D, not -d: an equivalent branch is by definition not an ancestor,
+          # so -d refuses it. Only reachable once all_commits_equivalent passed.
+          git -C "$main_dir" branch -D "$branch_name" >/dev/null
+          printf 'reaped (equiv): %s (%s was %s)\n' "$wt" "$branch_name" "$head"
+        fi
+        reaped_equiv=$((reaped_equiv + 1))
+        continue
+      fi
+    fi
+
+    if [ -n "$keep_reason" ]; then
+      printf 'kept: %s (%s) (%s)\n' "$keep_reason" "$branch_name" "$wt"
+      kept_protected=$((kept_protected + 1))
     else
       ahead=$(git -C "$main_dir" rev-list --count "$main_branch..$head" 2>/dev/null) || ahead="?"
       printf 'kept: unmerged (%s, %s commits ahead) (%s)\n' "$branch_name" "$ahead" "$wt"
       kept_unmerged=$((kept_unmerged + 1))
     fi
-  done < <(git -C "$main_dir" worktree list --porcelain | awk '/^worktree /{print substr($0, 10)}')
+  done < <(awk '/^worktree /{print substr($0, 10)}' <<<"$wt_list")
 }
 
 if [ "$all" -eq 1 ]; then
@@ -90,4 +182,10 @@ else
   reap_container "$container"
 fi
 
-printf 'reaped %d, kept dirty %d, kept unmerged %d\n' "$reaped" "$kept_dirty" "$kept_unmerged"
+if [ "$dry" -eq 1 ]; then
+  printf 'dry-run: would reap %d, would reap equiv %d, kept dirty %d, kept unmerged %d, kept protected %d\n' \
+    "$reaped" "$reaped_equiv" "$kept_dirty" "$kept_unmerged" "$kept_protected"
+else
+  printf 'reaped %d, reaped equiv %d, kept dirty %d, kept unmerged %d, kept protected %d\n' \
+    "$reaped" "$reaped_equiv" "$kept_dirty" "$kept_unmerged" "$kept_protected"
+fi

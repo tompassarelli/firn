@@ -173,6 +173,41 @@ report_reap_ready() {
   [ "$ready" -eq 0 ] || printf '%s reap-ready worktrees — run wt-reap\n' "$ready"
 }
 
+# A landing is the moment spent lanes become collectable, and nothing else ever
+# triggers the sweep — a printed hint accumulated 13 stale trees. Best-effort by
+# construction: the reap can never change safe-push's exit status.
+auto_reap() {
+  local container wt_reap self_dir has_siblings=0 wt
+  [ "$(basename "$repo_root")" = main ] || return 0
+  container=$(dirname "$repo_root")
+  for wt in "$container"/wt-*; do
+    [ -e "$wt/.git" ] || continue
+    has_siblings=1
+    break
+  done
+  [ "$has_siblings" -eq 1 ] || return 0
+
+  if [ "${NORTH_NO_AUTOREAP:-0}" = 1 ]; then
+    report_reap_ready
+    return 0
+  fi
+
+  # The just-landed repo copy beside this script wins over a stale deployed one.
+  self_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || self_dir=""
+  if [ -n "$self_dir" ] && [ -x "$self_dir/wt-reap" ]; then
+    wt_reap="$self_dir/wt-reap"
+  else
+    wt_reap=$(command -v wt-reap 2>/dev/null) || wt_reap=""
+  fi
+  if [ -z "$wt_reap" ]; then
+    report_reap_ready
+    return 0
+  fi
+
+  (cd "$container" && "$wt_reap" 2>&1) | sed 's/^/auto-reap: /' || true
+  return 0
+}
+
 capture_destination_state() {
   destination_branch=${to:-$branch}
   destination_ref="refs/heads/$destination_branch"
@@ -324,4 +359,4 @@ if [ "$to_seen" -eq 0 ]; then
       "$destination_branch" >&2
   fi
 fi
-report_reap_ready
+auto_reap || true
