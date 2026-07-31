@@ -2,8 +2,9 @@
 
 (ns default)
 
-;; The user-level timer fires `north-reactor.clj sweep-once` every ~5min.
-;; Each one-shot owns liveness cleanup and rebuild-window coalescing, then exits.
+;; A dedicated user service subscribes to the rebuild queue singleton and wakes
+;; its owner immediately. The timer remains the durable periodic fallback and
+;; owns the broader liveness cleanup.
 ;;
 ;; Resolve code through north-runtime-exec so reactor fixes can be promoted without
 ;; first requiring the rebuild they queue. The flake package is the fallback.
@@ -13,6 +14,9 @@
 (nix/module [config lib pkgs inputs ...]
   (let [username config.myConfig.modules.users.username
         northPkg (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)
+        runtimePath
+          (s "PATH=" pkgs.systemd "/bin:" pkgs.babashka "/bin:"
+             pkgs.coreutils "/bin:" pkgs.git "/bin")
         ;; The modules/north script is the single definition of runtime
         ;; resolution; both hot-loop modules launch through it rather than
         ;; restating the promoted-channel path.
@@ -28,7 +32,21 @@
         {:home-manager.users
           {username
             (nix/module [config ...]
-              {:systemd.user.services.north-reactor-sweep
+              {:systemd.user.services.north-rebuild-queue-owner
+                {:Unit
+                  {:Description "North event-driven rebuild queue owner"}
+                 :Service
+                  {:Type        "simple"
+                   :Restart     "always"
+                   :RestartSec  "1s"
+                   :Environment [runtimePath]
+                   :ExecStart
+                    (s northRuntimeExec
+                       "/bin/north-runtime-exec --chdir --interp "
+                       pkgs.babashka "/bin/bb " northPkg
+                       " cli/rebuild-window-watch.clj")}
+                 :Install {:WantedBy ["default.target"]}}
+               :systemd.user.services.north-reactor-sweep
                 {:Unit
                   {:Description "North reactor sweep — reap stale concerns + silently-dead lanes"
                    ;; keep-old IS the HM mechanism for "don't restart me at
@@ -37,7 +55,7 @@
                    :X-SwitchMethod "keep-old"}
                  :Service
                   {:Type             "oneshot"
-                   :Environment      [(s "PATH=" pkgs.systemd "/bin:" pkgs.babashka "/bin:" pkgs.coreutils "/bin:" pkgs.git "/bin")]
+                   :Environment      [runtimePath]
                    ;; --chdir replaces a static WorkingDirectory: bb resolves the
                    ;; script's deps against the tree it was loaded from, so cwd
                    ;; has to track whichever root won.

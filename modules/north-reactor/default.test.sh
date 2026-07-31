@@ -21,19 +21,28 @@ nix eval --raw --impure --expr "
         babashka = \"/bb\";
         coreutils = \"/coreutils\";
         git = \"/git\";
+        writeShellApplication = _: \"/runtime\";
       };
       inputs.north.packages.test.default = \"/north\";
     };
     home = module.config.home-manager.users.tom { config = {}; };
+    owner = home.systemd.user.services.north-rebuild-queue-owner;
     sweep = home.systemd.user.services.north-reactor-sweep;
   in
     assert !(builtins.hasAttr \"north-reactor\" home.systemd.user.services);
+    assert builtins.hasAttr \"north-rebuild-queue-owner\" home.systemd.user.services;
     assert builtins.hasAttr \"north-reactor-sweep\" home.systemd.user.services;
     assert builtins.hasAttr \"north-reactor-sweep\" home.systemd.user.timers;
+    assert owner.Service.Type == \"simple\";
+    assert owner.Service.Restart == \"always\";
+    assert owner.Service.RestartSec == \"1s\";
+    assert owner.Install.WantedBy == [ \"default.target\" ];
+    assert builtins.match \".*cli/rebuild-window-watch.clj\" owner.Service.ExecStart != null;
     assert sweep.Unit.X-SwitchMethod == \"keep-old\";
     assert !(sweep.Service ? restartIfChanged);
+    assert builtins.head owner.Service.Environment == \"PATH=/systemd/bin:/bb/bin:/coreutils/bin:/git/bin\";
     assert builtins.head sweep.Service.Environment == \"PATH=/systemd/bin:/bb/bin:/coreutils/bin:/git/bin\";
     \"ok\"
 " | grep -Fxq ok
 
-printf 'ok: only north-reactor-sweep remains, with its timer and runtime dependencies\n'
+printf 'ok: event-driven rebuild owner and periodic reactor fallback are wired\n'
