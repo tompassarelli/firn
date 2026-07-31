@@ -70,6 +70,145 @@ check "telemetry fallback profile" \
   grep -Fxq $'run\ttelemetry-fallback\tfallback\tF\ttelemetry\ttelemetry\t-Xmx2g\tinfinity\t18-23\ttelemetry-discovery' "$plan"
 check "fallback and contamination retry are exclusive" \
   grep -Fxq $'policy\tcontingency\tfallback-or-one-wave-a-retry\tmutually-exclusive' "$plan"
+check "one Wave-A retry" grep -Fxq $'meta\tmax_wave_a_retries\t1' "$plan"
+check "host OOM contamination threshold is zero" \
+  grep -Fxq $'meta\thost_oom_kill_delta_max\t0' "$plan"
+check "unexpected cgroup PID threshold is zero" \
+  grep -Fxq $'meta\tunexpected_cgroup_pid_max\t0' "$plan"
+check "exact cgroup membership is runner plus daemon" \
+  grep -Fxq $'meta\texpected_cgroup_member_count\t2' "$plan"
+check "two enumerated retry rows" \
+  test "$(awk -F $'\t' '$1 == "run" && $3 == "retry" {n++} END {print n+0}' "$plan")" -eq 2
+check "coord retry reuses Wave-A profile" \
+  grep -Fxq $'run\tcoord-discovery-retry\tretry\tR\tcoordination\tcoordination\t-Xmx2g\tinfinity\t12-17\tcoord-discovery' "$plan"
+check "telemetry retry reuses Wave-A profile" \
+  grep -Fxq $'run\ttelemetry-discovery-retry\tretry\tR\ttelemetry\ttelemetry\t-Xmx1g\tinfinity\t18-23\ttelemetry-discovery' "$plan"
+check "host OOM producer is recorded" \
+  grep -Fxq $'producer\thost_oom_kill\t/proc/vmstat:oom_kill\tcumulative-system-oom-kills' "$plan"
+check "cgroup membership producer is recorded" \
+  grep -Fxq $'producer\tunexpected_cgroup_pid_count\tcgroup.procs\texact-runner-daemon-membership' "$plan"
+
+run_control_case() {
+  local label=$1 expected_rc=$2 expected_starts=$3 expected_forced=$4
+  local expected_exclusions=$5 expected_order=$6 outcomes=$7 contaminations=$8
+  local output=$scratch/control-output trace=$scratch/control-trace rc
+  : >"$trace"
+  set +e
+  # shellcheck disable=SC2016
+  env HARNESS_UNDER_TEST="$harness" ROTATION_MEMORY_CONTROL_TRACE="$trace" \
+    ROTATION_MEMORY_CONTROL_OUTCOMES="$outcomes" \
+    ROTATION_MEMORY_CONTROL_CONTAMINATIONS="$contaminations" \
+    bash -c '
+      set -euo pipefail
+      source "$HARNESS_UNDER_TEST"
+
+      launch_case() {
+        printf "%s\n" "$5" >>"$ROTATION_MEMORY_CONTROL_TRACE"
+      }
+      observe_case() {
+        local root=$1 wanted=$3 pair key value role=coordination
+        local -a pairs=()
+        IFS=, read -r -a pairs <<<"$ROTATION_MEMORY_CONTROL_OUTCOMES"
+        for pair in "${pairs[@]}"; do
+          key=${pair%%=*}
+          value=${pair#*=}
+          if [[ "$key" == "$wanted" ]]; then
+            [[ "$wanted" == telemetry-* ]] && role=telemetry
+            printf "%s\n" "role=$role" "classification=$value" \
+              "memory_peak=1000000000" "cgroup_members_exact=1" \
+              "cgroup_member_count=2" "unexpected_cgroup_pid_count=0" \
+              "decision_sample=eligible" \
+              >"$root/receipts/$wanted.receipt"
+            printf "%s\n" "$value"
+            return 0
+          fi
+        done
+        printf "cannot-determine\n"
+      }
+      capture_host_state() {
+        : >"$1"
+      }
+      host_oom_kills() {
+        printf "7\n"
+      }
+      # the harness calls wave_contamination in a command substitution, so the
+      # scripted verdicts must be popped from a file, not from a shell variable
+      wave_contamination() {
+        local next
+        next=$(head -n 1 "$contamination_queue")
+        tail -n +2 "$contamination_queue" >"$contamination_queue.rest"
+        mv "$contamination_queue.rest" "$contamination_queue"
+        printf "%s\n" "${next:-cannot-determine}"
+      }
+      root=$(mktemp -d)
+      trap "rm -rf \"${root:?}\"" EXIT
+      mkdir -p "$root/results" "$root/receipts"
+      contamination_queue=$root/contamination-queue
+      printf "%s" "$ROTATION_MEMORY_CONTROL_CONTAMINATIONS" |
+        tr , "\n" >"$contamination_queue"
+      run_matrix_control "$root" /source /fixture deadbeef 9999999999
+      excluded=0
+      for receipt in "$root"/receipts/*.receipt; do
+        if grep -q "^decision_sample=excluded-" "$receipt"; then
+          excluded=$((excluded + 1))
+        fi
+      done
+      printf "order=%s\n" "$(paste -sd, "$ROTATION_MEMORY_CONTROL_TRACE")"
+      printf "starts=%s\n" "$starts"
+      printf "forced=%s\n" "${MATRIX_FORCED_OVERALL:-none}"
+      printf "excluded_counter=%s\n" "$MATRIX_DECISION_EXCLUSIONS"
+      printf "excluded_receipts=%s\n" "$excluded"
+      [[ "$MATRIX_FORCED_OVERALL" == cannot-determine ]] && exit 20
+      exit 0
+    ' >"$output" 2>&1
+  rc=$?
+  set -e
+  if [[ "$rc" == "$expected_rc" ]] &&
+     grep -Fxq "order=$expected_order" "$output" &&
+     grep -Fxq "starts=$expected_starts" "$output" &&
+     grep -Fxq "forced=$expected_forced" "$output" &&
+     grep -Fxq "excluded_counter=$expected_exclusions" "$output" &&
+     grep -Fxq "excluded_receipts=$expected_exclusions" "$output"; then
+    passes=$((passes + 1))
+  else
+    printf 'FAIL: %s\n' "$label" >&2
+    printf 'expected rc=%s starts=%s forced=%s exclusions=%s order=%s\n' \
+      "$expected_rc" "$expected_starts" "$expected_forced" \
+      "$expected_exclusions" "$expected_order" >&2
+    sed 's/^/  /' "$output" >&2
+    exit 1
+  fi
+}
+
+run_control_case "one contaminated Wave A retries both arms then launches Wave B" 0 8 none 2 \
+  "coord-discovery,telemetry-discovery,coord-discovery-retry,telemetry-discovery-retry,coord-blue,coord-green,telemetry-blue,telemetry-green" \
+  "coord-discovery=pass,telemetry-discovery=pass,coord-discovery-retry=pass,telemetry-discovery-retry=pass,coord-blue=pass,coord-green=pass,telemetry-blue=pass,telemetry-green=pass" \
+  contaminated,clean
+run_control_case "clean Wave A launches six in order" 0 6 none 0 \
+  "coord-discovery,telemetry-discovery,coord-blue,coord-green,telemetry-blue,telemetry-green" \
+  "coord-discovery=pass,telemetry-discovery=pass,coord-blue=pass,coord-green=pass,telemetry-blue=pass,telemetry-green=pass" \
+  clean
+run_control_case "one heap OOME launches only its fallback" 0 3 none 0 \
+  "coord-discovery,telemetry-discovery,coord-fallback" \
+  "coord-discovery=heap-oome,telemetry-discovery=pass,coord-fallback=pass" \
+  contaminated
+run_control_case "two heap OOMEs launch both fallbacks and stop at four" 0 4 none 0 \
+  "coord-discovery,telemetry-discovery,coord-fallback,telemetry-fallback" \
+  "coord-discovery=heap-oome,telemetry-discovery=heap-oome,coord-fallback=pass,telemetry-fallback=pass" \
+  contaminated
+run_control_case "second contaminated Wave A is CANNOT at four starts" 20 4 cannot-determine 4 \
+  "coord-discovery,telemetry-discovery,coord-discovery-retry,telemetry-discovery-retry" \
+  "coord-discovery=pass,telemetry-discovery=pass,coord-discovery-retry=pass,telemetry-discovery-retry=pass" \
+  contaminated,contaminated
+run_control_case "undetermined Wave A contamination excludes without retrying" 20 2 cannot-determine 2 \
+  "coord-discovery,telemetry-discovery" \
+  "coord-discovery=pass,telemetry-discovery=pass" \
+  cannot-determine
+run_control_case "a failed Wave A arm stops before any contingency" 0 2 none 0 \
+  "coord-discovery,telemetry-discovery" \
+  "coord-discovery=pass,telemetry-discovery=cgroup-max" \
+  contaminated
+
 # shellcheck source=/dev/null
 source "$harness"
 check "clean Wave A advances to Wave B" test "$(matrix_step pass pass clean 0)" = wave-b
@@ -207,8 +346,52 @@ rm "$scratch/unknown/memory.events.after"
 check "missing cgroup metric is cannot-determine" \
   test "$("$harness" classify "$scratch/unknown")" = cannot-determine
 
+contamination_root=$scratch/contamination
+mkdir -p "$contamination_root/results" "$contamination_root/receipts"
+write_contamination_inputs() {
+  local first_exact=$1 first_members=$2 first_unexpected=$3
+  local second_exact=$4 second_members=$5 second_unexpected=$6
+  printf '%s\n' "cgroup_members_exact=$first_exact" \
+    "cgroup_member_count=$first_members" \
+    "unexpected_cgroup_pid_count=$first_unexpected" \
+    >"$contamination_root/receipts/coord.receipt"
+  printf '%s\n' "cgroup_members_exact=$second_exact" \
+    "cgroup_member_count=$second_members" \
+    "unexpected_cgroup_pid_count=$second_unexpected" \
+    >"$contamination_root/receipts/telemetry.receipt"
+}
+classify_contamination() {
+  wave_contamination "$contamination_root" test-wave "$1" "$2" coord telemetry
+}
+write_contamination_inputs 1 2 0 1 2 0
+check "unchanged host OOM counter and exact cgroups are clean" \
+  test "$(classify_contamination 10 10)" = clean
+check "one unrelated host OOM kill exceeds the zero threshold" \
+  test "$(classify_contamination 10 11)" = contaminated
+check "host OOM delta is recorded by the contamination producer" \
+  grep -Fxq 'host_oom_kill_delta=1' \
+    "$contamination_root/results/test-wave.contamination.receipt"
+check "contamination receipt records the observed membership" \
+  grep -Fxq 'first_cgroup_member_count=2' \
+    "$contamination_root/results/test-wave.contamination.receipt"
+check "contamination receipt records the zero thresholds" \
+  grep -Fxq 'unexpected_cgroup_pid_max=0' \
+    "$contamination_root/results/test-wave.contamination.receipt"
+write_contamination_inputs 0 3 1 1 2 0
+check "one unexpected cgroup PID contaminates Wave A" \
+  test "$(classify_contamination 10 10)" = contaminated
+write_contamination_inputs 0 1 0 1 2 0
+check "incomplete cgroup membership contaminates Wave A" \
+  test "$(classify_contamination 10 10)" = contaminated
+write_contamination_inputs unknown -1 -1 1 2 0
+check "unavailable cgroup membership is cannot-determine" \
+  test "$(classify_contamination 10 10)" = cannot-determine
+write_contamination_inputs 1 2 0 1 2 0
+check "a receding host OOM counter is cannot-determine" \
+  test "$(classify_contamination 11 10)" = cannot-determine
+
 receipts=$scratch/receipts
-mkdir -p "$receipts"
+mkdir -p "$receipts" "$scratch/results"
 printf '%s\n' role=coordination classification=pass memory_peak=2500000000 cgroup_members_exact=1 \
   >"$receipts/coord-blue.receipt"
 printf '%s\n' role=coordination classification=pass memory_peak=2600000000 \
@@ -217,12 +400,22 @@ printf '%s\n' role=telemetry classification=pass memory_peak=1400000000 cgroup_m
   >"$receipts/telemetry-blue.receipt"
 printf '%s\n' role=telemetry classification=pass memory_peak=1500000000 \
   >"$receipts/telemetry-green.receipt"
+printf '%s\n' role=coordination classification=pass memory_peak=9000000000 \
+  decision_sample=excluded-contamination \
+  >"$receipts/coord-discovery.receipt"
+printf '%s\n' role=telemetry classification=pass memory_peak=8000000000 \
+  decision_sample=excluded-contamination \
+  >"$receipts/telemetry-discovery.receipt"
 report=$scratch/report
 "$harness" report "$receipts" >"$report"
 check "zero host OOM delta and exact cgroups are clean" \
-  test "$(wave_contamination "$scratch" 7 7 coord-blue telemetry-blue)" = clean
+  test "$(wave_contamination "$scratch" inline-wave 7 7 coord-blue telemetry-blue)" = clean
 check "host OOM delta contaminates Wave A" \
-  test "$(wave_contamination "$scratch" 7 8 coord-blue telemetry-blue)" = contaminated
+  test "$(wave_contamination "$scratch" inline-wave 7 8 coord-blue telemetry-blue)" = contaminated
+check "contaminated Wave-A samples are excluded from decision math" \
+  grep -Fxq 'coord_lower_bound_bytes=2600000000' "$report"
+check "excluded telemetry sample does not raise the telemetry bound" \
+  grep -Fxq 'telemetry_measured_peak_bytes=1500000000' "$report"
 check "coord lower bound math" grep -Fxq 'coord_lower_bound_bytes=2600000000' "$report"
 check "telemetry floor math" \
   grep -Fxq 'telemetry_lower_bound_bytes=1566572544' "$report"
@@ -265,12 +458,16 @@ check "mock captures required receipt fields" \
     /^memory_peak=/{peak++}
     /^memory_events_oom_delta=/{oom++}
     /^memory_events_oom_kill_delta=/{kill++}
+    /^cgroup_member_count=/{members++}
+    /^unexpected_cgroup_pid_count=/{unexpected++}
     /^ready=/{ready++}
     /^work_complete=/{work++}
+    /^decision_sample=/{decision++}
     END {
       exit argv == 6 && role == 6 && heap == 6 && cap == 6 &&
            exit_code == 6 && signal == 6 && oome == 6 && peak == 6 &&
-           oom == 6 && kill == 6 && ready == 6 && work == 6 ? 0 : 1
+           oom == 6 && kill == 6 && members == 6 && unexpected == 6 &&
+           ready == 6 && work == 6 && decision == 6 ? 0 : 1
     }' "$mock_one"/cases/*/run.receipt
 check "mock never launches systemd" test ! -e "$mock_one/systemd-run.called"
 

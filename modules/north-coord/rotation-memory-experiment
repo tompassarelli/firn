@@ -6,6 +6,10 @@ readonly CORPUS_FACTS=350701
 readonly BASE_PROCESS_STARTS=6
 readonly HARD_MAX_PROCESS_STARTS=8
 readonly WALL_TIMEOUT_SECONDS=2700
+readonly MAX_WAVE_A_RETRIES=1
+readonly HOST_OOM_KILL_DELTA_MAX=0
+readonly UNEXPECTED_CGROUP_PID_MAX=0
+readonly EXPECTED_CGROUP_MEMBER_COUNT=2
 readonly AGGREGATE_CEILING_BYTES=$((9 * 1024 * 1024 * 1024))
 readonly TELEMETRY_FLOOR_BYTES=$((1494 * 1024 * 1024))
 SCRIPT_PATH=$(readlink -f "${BASH_SOURCE[0]}")
@@ -121,6 +125,10 @@ emit_plan() {
   printf 'meta\thard_max_process_starts\t%s\n' "$HARD_MAX_PROCESS_STARTS"
   printf 'meta\twall_timeout_seconds\t%s\n' "$WALL_TIMEOUT_SECONDS"
   printf 'meta\tmax_fallbacks_per_role\t1\n'
+  printf 'meta\tmax_wave_a_retries\t%s\n' "$MAX_WAVE_A_RETRIES"
+  printf 'meta\thost_oom_kill_delta_max\t%s\n' "$HOST_OOM_KILL_DELTA_MAX"
+  printf 'meta\tunexpected_cgroup_pid_max\t%s\n' "$UNEXPECTED_CGROUP_PID_MAX"
+  printf 'meta\texpected_cgroup_member_count\t%s\n' "$EXPECTED_CGROUP_MEMBER_COUNT"
   printf 'meta\taggregate_ceiling_bytes\t%s\n' "$AGGREGATE_CEILING_BYTES"
   printf 'meta\ttelemetry_floor_bytes\t%s\n' "$TELEMETRY_FLOOR_BYTES"
   printf 'meta\toperational_margin_selected\tfalse\n'
@@ -135,6 +143,8 @@ emit_plan() {
   printf 'run\ttelemetry-fallback\tfallback\tF\ttelemetry\ttelemetry\t-Xmx2g\tinfinity\t18-23\ttelemetry-discovery\n'
   printf 'run\tcoord-discovery-retry\tretry\tR\tcoordination\tcoordination\t-Xmx2g\tinfinity\t12-17\tcoord-discovery\n'
   printf 'run\ttelemetry-discovery-retry\tretry\tR\ttelemetry\ttelemetry\t-Xmx1g\tinfinity\t18-23\ttelemetry-discovery\n'
+  printf 'producer\thost_oom_kill\t/proc/vmstat:oom_kill\tcumulative-system-oom-kills\n'
+  printf 'producer\tunexpected_cgroup_pid_count\tcgroup.procs\texact-runner-daemon-membership\n'
 }
 
 generate_fixture() {
@@ -216,18 +226,49 @@ host_oom_kills() {
 }
 
 wave_contamination() {
-  local root=$1 before=$2 after=$3 first=$4 second=$5
-  local exact
-  exact=$(meta_value "$root/receipts/$first.receipt" cgroup_members_exact || true)
-  exact+=$(meta_value "$root/receipts/$second.receipt" cgroup_members_exact || true)
+  local root=$1 wave=$2 before=$3 after=$4 first=$5 second=$6
+  local exact first_exact second_exact classification oom_delta=unavailable
+  local first_receipt=$root/receipts/$first.receipt
+  local second_receipt=$root/receipts/$second.receipt
+  local first_members second_members first_unexpected second_unexpected
+  first_exact=$(meta_value "$first_receipt" cgroup_members_exact || true)
+  second_exact=$(meta_value "$second_receipt" cgroup_members_exact || true)
+  first_members=$(meta_value "$first_receipt" cgroup_member_count || true)
+  second_members=$(meta_value "$second_receipt" cgroup_member_count || true)
+  first_unexpected=$(meta_value "$first_receipt" unexpected_cgroup_pid_count || true)
+  second_unexpected=$(meta_value "$second_receipt" unexpected_cgroup_pid_count || true)
+  exact=$first_exact$second_exact
   if [[ ! "$before" =~ ^[0-9]+$ || ! "$after" =~ ^[0-9]+$ ||
         "$exact" != [01][01] ]] || ((after < before)); then
-    printf 'cannot-determine\n'
+    classification=cannot-determine
   elif ((after == before)) && [[ "$exact" == 11 ]]; then
-    printf 'clean\n'
+    classification=clean
   else
-    printf 'contaminated\n'
+    classification=contaminated
   fi
+  if [[ "$before" =~ ^[0-9]+$ && "$after" =~ ^[0-9]+$ ]] && ((after >= before)); then
+    oom_delta=$((after - before))
+  fi
+  {
+    printf 'contract=%s\n' "$CONTRACT_VERSION"
+    printf 'wave=%s\n' "$wave"
+    printf 'host_oom_kill_before=%s\n' "${before:-unavailable}"
+    printf 'host_oom_kill_after=%s\n' "${after:-unavailable}"
+    printf 'host_oom_kill_delta=%s\n' "$oom_delta"
+    printf 'host_oom_kill_delta_max=%s\n' "$HOST_OOM_KILL_DELTA_MAX"
+    printf 'first_case=%s\n' "$first"
+    printf 'first_cgroup_members_exact=%s\n' "${first_exact:-unavailable}"
+    printf 'first_cgroup_member_count=%s\n' "${first_members:-unavailable}"
+    printf 'first_unexpected_cgroup_pid_count=%s\n' "${first_unexpected:-unavailable}"
+    printf 'second_case=%s\n' "$second"
+    printf 'second_cgroup_members_exact=%s\n' "${second_exact:-unavailable}"
+    printf 'second_cgroup_member_count=%s\n' "${second_members:-unavailable}"
+    printf 'second_unexpected_cgroup_pid_count=%s\n' "${second_unexpected:-unavailable}"
+    printf 'expected_cgroup_member_count=%s\n' "$EXPECTED_CGROUP_MEMBER_COUNT"
+    printf 'unexpected_cgroup_pid_max=%s\n' "$UNEXPECTED_CGROUP_PID_MAX"
+    printf 'classification=%s\n' "$classification"
+  } >"$root/results/$wave.contamination.receipt"
+  printf '%s\n' "$classification"
 }
 
 matrix_step() {
@@ -303,14 +344,17 @@ classify_case() {
 }
 
 max_successful_peak() {
-  local role=$1 receipt_dir=$2 receipt receipt_role classification peak max=-1
+  local role=$1 receipt_dir=$2 receipt receipt_role classification peak
+  local decision_sample max=-1
   shopt -s nullglob
   for receipt in "$receipt_dir"/*.receipt; do
     receipt_role=$(meta_value "$receipt" role || true)
     classification=$(meta_value "$receipt" classification || true)
     peak=$(meta_value "$receipt" memory_peak || true)
+    decision_sample=$(meta_value "$receipt" decision_sample || true)
     if [[ "$receipt_role" == "$role" && "$classification" == pass &&
-          "$peak" =~ ^[0-9]+$ ]] && ((peak > max)); then
+          "$decision_sample" != excluded-* && "$peak" =~ ^[0-9]+$ ]] &&
+       ((peak > max)); then
       max=$peak
     fi
   done
@@ -395,9 +439,13 @@ mock_run() {
       printf 'memory_events_max_delta=0\n'
       printf 'memory_events_oom_delta=0\n'
       printf 'memory_events_oom_kill_delta=0\n'
+      printf 'cgroup_member_count=2\n'
+      printf 'unexpected_cgroup_pid_count=0\n'
+      printf 'cgroup_pids=1,2\n'
       printf 'ready=1\n'
       printf 'work_complete=1\n'
       printf 'classification=pass\n'
+      printf 'decision_sample=eligible\n'
       printf 'execution_mode=mock\n'
     } >"$receipt"
   done < <(emit_plan)
@@ -494,7 +542,9 @@ case_runner() {
 }
 
 capture_host_state() {
-  local output=$1
+  local output=$1 host_oom_kill
+  host_oom_kill=$(host_oom_kills 2>/dev/null || true)
+  [[ "$host_oom_kill" =~ ^[0-9]+$ ]] || host_oom_kill=unavailable
   {
     printf 'nproc='
     nproc
@@ -504,6 +554,7 @@ capture_host_state() {
     printf 'memory_pressure='
     tr '\n' ';' </proc/pressure/memory
     printf '\n'
+    printf 'host_oom_kill=%s\n' "$host_oom_kill"
   } >"$output"
 }
 
@@ -648,6 +699,9 @@ observe_case() {
   local before_max before_oom before_kill after_max after_oom after_kill
   local max_delta oom_delta kill_delta peak heap_oome classification expected_manifest
   local actual_members expected_members cgroup_members_exact=unknown
+  local cgroup_procs_file cgroup_pids_csv=unavailable
+  local cgroup_member_count=-1 unexpected_cgroup_pid_count=-1 pid
+  local -a cgroup_pids=()
   meta=$case_dir/case.meta
   unit=$(meta_value "$meta" unit)
   role=$(meta_value "$meta" role)
@@ -700,12 +754,26 @@ observe_case() {
     done
   fi
 
-  if [[ -r "/sys/fs/cgroup$control_group/cgroup.procs" ]]; then
-    actual_members=$(sort -n "/sys/fs/cgroup$control_group/cgroup.procs" | paste -sd, -)
+  cgroup_procs_file=/sys/fs/cgroup$control_group/cgroup.procs
+  if [[ -r "$cgroup_procs_file" ]]; then
+    mapfile -t cgroup_pids <"$cgroup_procs_file"
+    cgroup_member_count=${#cgroup_pids[@]}
+    unexpected_cgroup_pid_count=0
+    for pid in "${cgroup_pids[@]}"; do
+      if [[ "$pid" != "$runner_pid" && "$pid" != "$daemon_pid" ]]; then
+        unexpected_cgroup_pid_count=$((unexpected_cgroup_pid_count + 1))
+      fi
+    done
+    actual_members=$(sort -n "$cgroup_procs_file" | paste -sd, -)
     expected_members=$(printf '%s\n%s\n' "$runner_pid" "$daemon_pid" |
       sort -n | paste -sd, -)
     cgroup_members_exact=0
     [[ "$actual_members" == "$expected_members" ]] && cgroup_members_exact=1
+    if ((cgroup_member_count > 0)); then
+      cgroup_pids_csv=$(IFS=,; printf '%s' "${cgroup_pids[*]}")
+    else
+      cgroup_pids_csv=none
+    fi
   fi
   if kill -0 "$runner_pid" 2>/dev/null; then
     : >"$case_dir/stop.requested"
@@ -763,12 +831,133 @@ observe_case() {
     printf 'memory_events_oom_delta=%s\n' "$oom_delta"
     printf 'memory_events_oom_kill_delta=%s\n' "$kill_delta"
     printf 'cgroup_members_exact=%s\n' "$cgroup_members_exact"
+    printf 'cgroup_member_count=%s\n' "$cgroup_member_count"
+    printf 'unexpected_cgroup_pid_count=%s\n' "$unexpected_cgroup_pid_count"
+    printf 'cgroup_pids=%s\n' "$cgroup_pids_csv"
     printf 'ready=%s\n' "$ready"
     printf 'work_complete=%s\n' "$work_complete"
     printf 'classification=%s\n' "$classification"
+    printf 'decision_sample=eligible\n'
   } >"$root/receipts/$case_id.receipt"
   systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
   printf '%s\n' "$classification"
+}
+
+mark_decision_sample() {
+  local receipt=$1 disposition=$2 temporary
+  [[ -r "$receipt" ]] || die "missing decision receipt: $receipt"
+  temporary=$receipt.decision.$$
+  {
+    sed '/^decision_sample=/d' "$receipt"
+    printf 'decision_sample=%s\n' "$disposition"
+  } >"$temporary"
+  mv "$temporary" "$receipt"
+}
+
+mark_wave_decision_samples() {
+  local root=$1 disposition=$2
+  shift 2
+  local case_id
+  for case_id in "$@"; do
+    mark_decision_sample "$root/receipts/$case_id.receipt" "$disposition"
+  done
+}
+
+MATRIX_WAVE_A_RETRIES=0
+MATRIX_DECISION_EXCLUSIONS=0
+MATRIX_FORCED_OVERALL=
+
+# A Wave-A pair that was contaminated (or could not be proved clean) is evidence
+# about the host, not about memory: it must not reach the reported lower bound.
+exclude_wave_samples() {
+  local root=$1 disposition=$2
+  shift 2
+  mark_wave_decision_samples "$root" "$disposition" "$@"
+  MATRIX_DECISION_EXCLUSIONS=$((MATRIX_DECISION_EXCLUSIONS + $#))
+}
+
+run_matrix_control() {
+  local root=$1 source=$2 fixture=$3 token=$4 deadline=$5
+  local coord_discovery telemetry_discovery contamination step case_id
+  local wave_oom_before wave_oom_after
+  starts=0
+  MATRIX_WAVE_A_RETRIES=0
+  MATRIX_DECISION_EXCLUSIONS=0
+  MATRIX_FORCED_OVERALL=
+
+  capture_host_state "$root/results/wave-a-initial-before"
+  wave_oom_before=$(host_oom_kills || true)
+  launch_counted "$root" "$source" "$fixture" "$token" coord-discovery \
+    coordination coordination -Xmx2g infinity 12-17
+  launch_counted "$root" "$source" "$fixture" "$token" telemetry-discovery \
+    telemetry telemetry -Xmx1g infinity 18-23
+  coord_discovery=$(observe_case "$root" "$source" coord-discovery "$deadline")
+  telemetry_discovery=$(observe_case "$root" "$source" telemetry-discovery "$deadline")
+  wave_oom_after=$(host_oom_kills || true)
+  capture_host_state "$root/results/wave-a-initial-after"
+  contamination=$(wave_contamination "$root" wave-a-initial \
+    "$wave_oom_before" "$wave_oom_after" coord-discovery telemetry-discovery)
+  step=$(matrix_step "$coord_discovery" "$telemetry_discovery" "$contamination" 0)
+
+  if [[ "$step" == cannot-determine ]]; then
+    exclude_wave_samples "$root" excluded-contamination-undetermined \
+      coord-discovery telemetry-discovery
+  elif [[ "$step" == retry ]]; then
+    exclude_wave_samples "$root" excluded-contamination \
+      coord-discovery telemetry-discovery
+    MATRIX_WAVE_A_RETRIES=1
+    capture_host_state "$root/results/wave-a-retry-before"
+    wave_oom_before=$(host_oom_kills || true)
+    launch_counted "$root" "$source" "$fixture" "$token" coord-discovery-retry \
+      coordination coordination -Xmx2g infinity 12-17
+    launch_counted "$root" "$source" "$fixture" "$token" telemetry-discovery-retry \
+      telemetry telemetry -Xmx1g infinity 18-23
+    coord_discovery=$(observe_case "$root" "$source" coord-discovery-retry "$deadline")
+    telemetry_discovery=$(observe_case \
+      "$root" "$source" telemetry-discovery-retry "$deadline")
+    wave_oom_after=$(host_oom_kills || true)
+    capture_host_state "$root/results/wave-a-retry-after"
+    contamination=$(wave_contamination "$root" wave-a-retry \
+      "$wave_oom_before" "$wave_oom_after" \
+      coord-discovery-retry telemetry-discovery-retry)
+    step=$(matrix_step "$coord_discovery" "$telemetry_discovery" "$contamination" 1)
+    if [[ "$step" == cannot-determine ]]; then
+      if [[ "$contamination" == contaminated ]]; then
+        exclude_wave_samples "$root" excluded-contamination \
+          coord-discovery-retry telemetry-discovery-retry
+      else
+        exclude_wave_samples "$root" excluded-contamination-undetermined \
+          coord-discovery-retry telemetry-discovery-retry
+      fi
+    fi
+  fi
+
+  if [[ "$step" == fallback ]]; then
+    if [[ "$coord_discovery" == heap-oome ]]; then
+      launch_counted "$root" "$source" "$fixture" "$token" coord-fallback \
+        coordination coordination -Xmx4g infinity 12-17
+      observe_case "$root" "$source" coord-fallback "$deadline" >/dev/null
+    fi
+    if [[ "$telemetry_discovery" == heap-oome ]]; then
+      launch_counted "$root" "$source" "$fixture" "$token" telemetry-fallback \
+        telemetry telemetry -Xmx2g infinity 18-23
+      observe_case "$root" "$source" telemetry-fallback "$deadline" >/dev/null
+    fi
+  elif [[ "$step" == wave-b ]]; then
+    launch_counted "$root" "$source" "$fixture" "$token" coord-blue \
+      coordination coordination -Xmx2g 3G 12-14
+    launch_counted "$root" "$source" "$fixture" "$token" coord-green \
+      coordination coordination -Xmx2g 3G 15-17
+    launch_counted "$root" "$source" "$fixture" "$token" telemetry-blue \
+      telemetry telemetry -Xmx1g 1500M 18-20
+    launch_counted "$root" "$source" "$fixture" "$token" telemetry-green \
+      telemetry telemetry -Xmx1g 1500M 21-23
+    for case_id in coord-blue coord-green telemetry-blue telemetry-green; do
+      observe_case "$root" "$source" "$case_id" "$deadline" >/dev/null
+    done
+  elif [[ "$step" == cannot-determine ]]; then
+    MATRIX_FORCED_OVERALL=cannot-determine
+  fi
 }
 
 run_experiment() {
@@ -805,8 +994,7 @@ run_experiment() {
     cannot_determine "Fram revision is not available locally: $fram_rev"
 
   local root source fixture token deadline starts=0
-  local coord_discovery telemetry_discovery classification case_id
-  local wave_oom_before wave_oom_after contamination step forced_overall=
+  local classification case_id
   root=$(mktemp -d --tmpdir="$scratch_parent" north-rotation-memory.XXXXXXXX)
   source=$root/src
   fixture=$root/fixture
@@ -822,59 +1010,7 @@ run_experiment() {
   capture_host_state "$root/results/host-before"
   emit_plan >"$root/results/plan.tsv"
 
-  wave_oom_before=$(host_oom_kills || true)
-  launch_counted "$root" "$source" "$fixture" "$token" coord-discovery \
-    coordination coordination -Xmx2g infinity 12-17
-  launch_counted "$root" "$source" "$fixture" "$token" telemetry-discovery \
-    telemetry telemetry -Xmx1g infinity 18-23
-  coord_discovery=$(observe_case "$root" "$source" coord-discovery "$deadline")
-  telemetry_discovery=$(observe_case "$root" "$source" telemetry-discovery "$deadline")
-  wave_oom_after=$(host_oom_kills || true)
-  contamination=$(wave_contamination "$root" "$wave_oom_before" "$wave_oom_after" \
-    coord-discovery telemetry-discovery)
-  step=$(matrix_step "$coord_discovery" "$telemetry_discovery" "$contamination" 0)
-
-  if [[ "$step" == retry ]]; then
-    wave_oom_before=$(host_oom_kills || true)
-    launch_counted "$root" "$source" "$fixture" "$token" coord-discovery-retry \
-      coordination coordination -Xmx2g infinity 12-17
-    launch_counted "$root" "$source" "$fixture" "$token" telemetry-discovery-retry \
-      telemetry telemetry -Xmx1g infinity 18-23
-    coord_discovery=$(observe_case "$root" "$source" coord-discovery-retry "$deadline")
-    telemetry_discovery=$(observe_case \
-      "$root" "$source" telemetry-discovery-retry "$deadline")
-    wave_oom_after=$(host_oom_kills || true)
-    contamination=$(wave_contamination "$root" "$wave_oom_before" "$wave_oom_after" \
-      coord-discovery-retry telemetry-discovery-retry)
-    step=$(matrix_step "$coord_discovery" "$telemetry_discovery" "$contamination" 1)
-  fi
-
-  if [[ "$step" == fallback ]]; then
-    if [[ "$coord_discovery" == heap-oome ]]; then
-      launch_counted "$root" "$source" "$fixture" "$token" coord-fallback \
-        coordination coordination -Xmx4g infinity 12-17
-      observe_case "$root" "$source" coord-fallback "$deadline" >/dev/null
-    fi
-    if [[ "$telemetry_discovery" == heap-oome ]]; then
-      launch_counted "$root" "$source" "$fixture" "$token" telemetry-fallback \
-        telemetry telemetry -Xmx2g infinity 18-23
-      observe_case "$root" "$source" telemetry-fallback "$deadline" >/dev/null
-    fi
-  elif [[ "$step" == wave-b ]]; then
-    launch_counted "$root" "$source" "$fixture" "$token" coord-blue \
-      coordination coordination -Xmx2g 3G 12-14
-    launch_counted "$root" "$source" "$fixture" "$token" coord-green \
-      coordination coordination -Xmx2g 3G 15-17
-    launch_counted "$root" "$source" "$fixture" "$token" telemetry-blue \
-      telemetry telemetry -Xmx1g 1500M 18-20
-    launch_counted "$root" "$source" "$fixture" "$token" telemetry-green \
-      telemetry telemetry -Xmx1g 1500M 21-23
-    for case_id in coord-blue coord-green telemetry-blue telemetry-green; do
-      observe_case "$root" "$source" "$case_id" "$deadline" >/dev/null
-    done
-  elif [[ "$step" == cannot-determine ]]; then
-    forced_overall=cannot-determine
-  fi
+  run_matrix_control "$root" "$source" "$fixture" "$token" "$deadline"
   ((starts <= HARD_MAX_PROCESS_STARTS)) ||
     die "internal error: process-start hard maximum exceeded"
   capture_host_state "$root/results/host-after"
@@ -884,6 +1020,9 @@ run_experiment() {
     printf 'scratch_root=%s\n' "$root"
     printf 'process_starts=%s\n' "$starts"
     printf 'hard_max_process_starts=%s\n' "$HARD_MAX_PROCESS_STARTS"
+    printf 'wave_a_retries=%s\n' "$MATRIX_WAVE_A_RETRIES"
+    printf 'decision_samples_excluded=%s\n' "$MATRIX_DECISION_EXCLUSIONS"
+    printf 'forced_overall=%s\n' "${MATRIX_FORCED_OVERALL:-none}"
     printf 'deadline_epoch=%s\n' "$deadline"
     printf 'operational_margin_selected=false\n'
   } >"$root/results/summary.receipt"
@@ -892,7 +1031,7 @@ run_experiment() {
   stop_active_units
   trap - EXIT INT TERM
 
-  local overall=${forced_overall:-pass}
+  local overall=${MATRIX_FORCED_OVERALL:-pass}
   shopt -s nullglob
   for case_id in "$root"/receipts/*.receipt; do
     classification=$(meta_value "$case_id" classification || true)
