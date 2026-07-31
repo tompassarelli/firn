@@ -11,6 +11,9 @@ model_reasoning_effort = "medium"
 [projects."/home/tom"]
 trust_level = "trusted"
 
+[projects."/home/tom/code"]
+trust_level = "trusted"
+
 [projects."/home/tom/code/client/msa/kea"]
 trust_level = "trusted"
 
