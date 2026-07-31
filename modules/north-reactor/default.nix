@@ -3,6 +3,7 @@
 let
   username = config.myConfig.modules.users.username;
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
+  runtimePath = "PATH=${pkgs.systemd}/bin:${pkgs.babashka}/bin:${pkgs.coreutils}/bin:${pkgs.git}/bin";
   northRuntimeExec = pkgs.writeShellApplication {
     name = "north-runtime-exec";
     runtimeInputs = with pkgs; [ coreutils ];
@@ -13,6 +14,21 @@ in
   options.myConfig.modules.north-reactor.enable = lib.mkEnableOption "North reactor periodic liveness and rebuild-window sweep";
   config = lib.mkIf config.myConfig.modules.north-reactor.enable {
     home-manager.users.${username} = ({ config, ... }: {
+      systemd.user.services.north-rebuild-queue-owner = {
+        Unit = {
+          Description = "North event-driven rebuild queue owner";
+        };
+        Service = {
+          Type = "simple";
+          Restart = "always";
+          RestartSec = "1s";
+          Environment = [ runtimePath ];
+          ExecStart = "${northRuntimeExec}/bin/north-runtime-exec --chdir --interp ${pkgs.babashka}/bin/bb ${northPkg} cli/rebuild-window-watch.clj";
+        };
+        Install = {
+          WantedBy = [ "default.target" ];
+        };
+      };
       systemd.user.services.north-reactor-sweep = {
         Unit = {
           Description = "North reactor sweep — reap stale concerns + silently-dead lanes";
@@ -20,9 +36,7 @@ in
         };
         Service = {
           Type = "oneshot";
-          Environment = [
-            "PATH=${pkgs.systemd}/bin:${pkgs.babashka}/bin:${pkgs.coreutils}/bin:${pkgs.git}/bin"
-          ];
+          Environment = [ runtimePath ];
           ExecStart = "${northRuntimeExec}/bin/north-runtime-exec --chdir --interp ${pkgs.babashka}/bin/bb ${northPkg} cli/north-reactor.clj sweep-once";
         };
       };
