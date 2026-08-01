@@ -64,6 +64,7 @@ readiness_expected_connection_queue=${NORTH_COORD_PROMOTION_EXPECTED_CONNECTION_
 readiness_expected_request_timeout_ms=${NORTH_COORD_PROMOTION_EXPECTED_REQUEST_TIMEOUT_MS:-30000}
 readiness_max_restarts=${NORTH_COORD_PROMOTION_MAX_RESTARTS:-0}
 unknown_state=$state/outcome.unknown
+prepare_pending=$state/prepare.pending
 
 [[ "$cutover" == /* && -x "$cutover" && ! -L "$cutover" ]] ||
   die "cutover command is not a safe executable"
@@ -133,6 +134,61 @@ valid_slot() {
 
 valid_origin() {
   [[ "$1" == coord || "$1" == telemetry ]]
+}
+
+write_prepare_pending() {
+  local cutover_id=$1 old=$2 target=$3 transaction_file=$4
+  local coord_id=$cutover_id-coord
+  local telemetry_id=$cutover_id-telemetry
+  local temp
+  [[ ! -e "$prepare_pending" && ! -L "$prepare_pending" ]] ||
+    die "pair preparation is already pending"
+  temp=$(mktemp "$state/prepare.pending.next.XXXXXX")
+  printf 'pair-prepare-v1 %s %s %s %s %s %s\n' \
+    "$cutover_id" "$old" "$target" "$coord_id" "$telemetry_id" \
+    "$transaction_file" >"$temp"
+  sync -f "$temp"
+  if ! ln "$temp" "$prepare_pending"; then
+    rm -f -- "$temp"
+    die "cannot publish pair preparation intent"
+  fi
+  rm -f -- "$temp"
+  sync -f "$state"
+}
+
+read_prepare_pending() {
+  local format cutover_id old target coord_id telemetry_id transaction_file
+  local extra
+  [[ -f "$prepare_pending" && ! -L "$prepare_pending" ]] ||
+    die "pair preparation intent is missing or unsafe"
+  read -r format cutover_id old target coord_id telemetry_id \
+    transaction_file extra <"$prepare_pending" ||
+    die "cannot read pair preparation intent"
+  [[ "$format" == pair-prepare-v1 &&
+     "$cutover_id" =~ ^[A-Za-z0-9_.:-]+$ &&
+     "$coord_id" == "$cutover_id-coord" &&
+     "$telemetry_id" == "$cutover_id-telemetry" &&
+     "$transaction_file" == /* &&
+     -z "${extra:-}" ]] ||
+    die "pair preparation intent is malformed"
+  valid_slot "$old" || die "pair preparation has invalid old slot"
+  valid_slot "$target" || die "pair preparation has invalid target slot"
+  [[ "$old" != "$target" ]] ||
+    die "pair preparation has identical slots"
+  printf '%s %s %s %s %s %s\n' \
+    "$cutover_id" "$old" "$target" "$coord_id" "$telemetry_id" \
+    "$transaction_file"
+}
+
+clear_prepare_pending() {
+  local expected_cutover_id=$1 recorded observed_cutover_id
+  recorded=$(read_prepare_pending) ||
+    die "pair preparation intent cannot be cleared safely"
+  read -r observed_cutover_id _ <<<"$recorded"
+  [[ "$observed_cutover_id" == "$expected_cutover_id" ]] ||
+    die "pair preparation intent changed before acknowledgement"
+  rm -f -- "$prepare_pending"
+  sync -f "$state"
 }
 
 port_for() {
@@ -690,20 +746,75 @@ verify_prepared_endpoint() {
     die "$slot/$origin lacks preparation proof for $operation_id"
 }
 
-prepare_endpoint() {
-  local slot=$1 origin=$2 cutover_id=$3 identity_out=$4 marker_out=${5:-}
-  local operation_id response rc prepared_identity
-  operation_id=$cutover_id-$origin
-  response=$(mktemp "$state/prepare.$origin.XXXXXX")
-  if "$cutover" prepare \
+await_prepared_endpoint() {
+  local slot=$1 origin=$2 operation_id=$3
+  local deadline now status phase cutover_phase observed_cutover_id
+  deadline=$(( $(date +%s%3N) + settle_timeout_ms ))
+  while :; do
+    if status=$(read_status "$slot" "$origin" any 2>/dev/null); then
+      phase=$(sed -n '1p' <<<"$status")
+      cutover_phase=$(sed -n '4p' <<<"$status")
+      observed_cutover_id=$(sed -n '5p' <<<"$status")
+      if [[ "$observed_cutover_id" == "$operation_id" ]]; then
+        if [[ ( "$phase" == standby || "$phase" == demoted ) &&
+              "$cutover_phase" == prepared ]]; then
+          return 0
+        fi
+        if [[ "$phase" == active || "$phase" == rejected ]]; then
+          printf '%s/%s reached incompatible prepare phase %s\n' \
+            "$slot" "$origin" "$phase" >&2
+          return 1
+        fi
+      elif [[ "$observed_cutover_id" != none &&
+              "$phase" != standby && "$phase" != demoted &&
+              "$phase" != rejected ]]; then
+        printf '%s/%s reports incompatible cutover %s in phase %s while waiting for %s\n' \
+          "$slot" "$origin" "$observed_cutover_id" "$phase" \
+          "$operation_id" >&2
+        return 1
+      fi
+    fi
+    now=$(date +%s%3N)
+    if (( now >= deadline )); then
+      printf '%s/%s prepare outcome remains unresolved for %s\n' \
+        "$slot" "$origin" "$operation_id" >&2
+      return 1
+    fi
+    sleep "$settle_poll_seconds"
+  done
+}
+
+prepare_rpc() {
+  local slot=$1 origin=$2 operation_id=$3 response=$4
+  "$cutover" prepare \
     --port "$(port_for "$slot" "$origin")" \
     --log "$(log_for "$origin")" \
     --token-file "$token_file" \
     --cutover-id "$operation_id" \
-    --timeout-ms "$control_timeout_ms" >"$response"; then
+    --timeout-ms "$control_timeout_ms" >"$response"
+}
+
+prepare_endpoint() {
+  local slot=$1 origin=$2 cutover_id=$3 identity_out=$4 marker_out=${5:-}
+  local operation_id=${6:-$cutover_id-$origin}
+  local response rc prepared_identity
+  [[ "$operation_id" == "$cutover_id-$origin" ]] ||
+    die "$slot/$origin preparation operation identity is inconsistent"
+  response=$(mktemp "$state/prepare.$origin.XXXXXX")
+  if prepare_rpc "$slot" "$origin" "$operation_id" "$response"; then
     rc=0
   else
     rc=$?
+  fi
+  if (( rc == 4 )); then
+    if await_prepared_endpoint "$slot" "$origin" "$operation_id"; then
+      : >"$response"
+      if prepare_rpc "$slot" "$origin" "$operation_id" "$response"; then
+        rc=0
+      else
+        rc=$?
+      fi
+    fi
   fi
   if (( rc != 0 )); then
     printf '%s/%s preparation failed with status %s\n' \
@@ -1147,9 +1258,26 @@ write_gate_state() {
   sync -f "$state"
 }
 
+write_prepare_identity_state() {
+  local origin=$1 identity=$2 instance version extra temp
+  valid_origin "$origin" || die "invalid preparation identity origin: $origin"
+  read -r instance version extra <<<"$identity"
+  [[ "$instance" =~ ^[A-Za-z0-9_.:-]+$ &&
+     "$version" =~ ^[0-9]+$ &&
+     -z "${extra:-}" ]] ||
+    die "$origin preparation identity is malformed"
+  temp=$state/prepare.$origin.identity.next.$$
+  printf '%s %s\n' "$instance" "$version" >"$temp"
+  sync -f "$temp"
+  mv -T "$temp" "$state/prepare.$origin.identity"
+  sync -f "$state"
+}
+
 read_gate_state() {
   local cutover_id old target instance version main_pid invocation_id
   local exec_start extra
+  [[ ! -e "$prepare_pending" && ! -L "$prepare_pending" ]] ||
+    die "pair preparation acknowledgement is incomplete"
   [[ -f "$state/gate.current" && ! -L "$state/gate.current" ]] ||
     die "gate recovery state is missing"
   read -r cutover_id old target instance version main_pid invocation_id \
@@ -1215,11 +1343,14 @@ read_readiness_state() {
 }
 
 prepare_pair() {
-  local old=$1 target=$2 transaction_file=$3 cutover_id
+  local old=$1 target=$2 transaction_file=$3 cutover_id recorded
+  local pending_old pending_target coord_operation_id telemetry_operation_id
+  local pending_transaction
   local coord_pid telemetry_pid coord_ok=0 telemetry_ok=0
-  local coord_identity=$state/prepare.coord.identity
-  local telemetry_identity=$state/prepare.telemetry.identity
-  local origin prepared_instance prepared_version readiness_identity
+  local coord_result telemetry_result
+  local origin result_name result_file
+  local prepared_instance prepared_version readiness_identity
+  local coord_prepare telemetry_prepare
   local coord_readiness telemetry_readiness
   local main_pid invocation_id exec_start
   valid_slot "$old" || die "invalid old slot: $old"
@@ -1236,30 +1367,64 @@ prepare_pair() {
   verify_pair "$old" active
   verify_pair "$target" read-only
 
-  rm -f -- "$coord_identity" "$telemetry_identity" \
-    "$state/readiness.coord" "$state/readiness.telemetry"
-  cutover_id="selector-$(date -u +%Y%m%dT%H%M%S)-$$"
-  prepare_endpoint "$target" coord "$cutover_id" "$coord_identity" &
+  if [[ -e "$prepare_pending" || -L "$prepare_pending" ]]; then
+    recorded=$(read_prepare_pending) ||
+      die "pending pair preparation cannot be recovered safely"
+    read -r cutover_id pending_old pending_target coord_operation_id \
+      telemetry_operation_id pending_transaction <<<"$recorded"
+    [[ "$pending_old" == "$old" &&
+       "$pending_target" == "$target" &&
+       "$pending_transaction" == "$transaction_file" ]] ||
+      die "pending pair preparation does not match this request"
+  else
+    cutover_id="selector-$(date -u +%Y%m%dT%H%M%S)-$$"
+    coord_operation_id=$cutover_id-coord
+    telemetry_operation_id=$cutover_id-telemetry
+    write_prepare_pending "$cutover_id" "$old" "$target" "$transaction_file"
+  fi
+
+  coord_result=$(mktemp "$state/prepare.result.coord.XXXXXX")
+  telemetry_result=$(mktemp "$state/prepare.result.telemetry.XXXXXX")
+  prepare_endpoint \
+    "$target" coord "$cutover_id" "$coord_result" "" \
+    "$coord_operation_id" &
   coord_pid=$!
-  prepare_endpoint "$target" telemetry "$cutover_id" "$telemetry_identity" &
+  prepare_endpoint \
+    "$target" telemetry "$cutover_id" "$telemetry_result" "" \
+    "$telemetry_operation_id" &
   telemetry_pid=$!
   if wait "$coord_pid"; then coord_ok=1; fi
   if wait "$telemetry_pid"; then telemetry_ok=1; fi
   if (( coord_ok != 1 || telemetry_ok != 1 )); then
+    rm -f -- "$coord_result" "$telemetry_result"
     die "target preparation failed; source authority was not changed"
   fi
   for origin in coord telemetry; do
-    read -r prepared_instance prepared_version \
-      <"$state/prepare.$origin.identity" ||
+    result_name=${origin}_result
+    result_file=${!result_name}
+    if ! read -r prepared_instance prepared_version <"$result_file"; then
+      rm -f -- "$coord_result" "$telemetry_result"
       die "$origin preparation identity is missing"
-    readiness_identity=$(
+    fi
+    printf -v "${origin}_prepare" '%s %s' \
+      "$prepared_instance" "$prepared_version"
+    if ! readiness_identity=$(
       verify_target_runtime_readiness \
         "$target" "$origin" read-only \
         "$prepared_instance" "$prepared_version" \
         any any any any any any "$cutover_id-$origin"
-    )
+    ); then
+      rm -f -- "$coord_result" "$telemetry_result"
+      die "$origin runtime readiness proof failed"
+    fi
     printf -v "${origin}_readiness" '%s' "$readiness_identity"
   done
+  rm -f -- "$coord_result" "$telemetry_result"
+  [[ ! -e "$transaction_file" && ! -L "$transaction_file" ]] ||
+    die "selector transaction appeared during standby preparation"
+
+  write_prepare_identity_state coord "$coord_prepare"
+  write_prepare_identity_state telemetry "$telemetry_prepare"
   write_readiness_state coord "$coord_readiness"
   write_readiness_state telemetry "$telemetry_readiness"
   read -r prepared_instance prepared_version main_pid invocation_id exec_start \
@@ -1271,6 +1436,7 @@ prepare_pair() {
   write_gate_state \
     "$cutover_id" "$old" "$target" "$prepared_instance" "$prepared_version" \
     "$main_pid" "$invocation_id" "$exec_start"
+  clear_prepare_pending "$cutover_id"
 }
 
 promote_pair() {

@@ -324,19 +324,52 @@ case "$command" in
           "$port" == "$NORTH_COORD_TEST_FAIL_PREPARE_PORT" ]]; then
       exit 3
     fi
-    case "$phase" in
-      standby|rejected|prepared-standby)
+    fresh_prepare=true
+    case "$phase:$endpoint_cutover_id" in
+      prepared-standby:"$cutover_id")
+        fresh_prepare=false
+        response_phase=standby
+        ;;
+      prepared-demoted:"$cutover_id")
+        fresh_prepare=false
+        response_phase=retired
+        ;;
+      standby:*|rejected:*|prepared-standby:*)
         phase=prepared-standby
         response_phase=standby
         ;;
-      demoted|prepared-demoted)
+      demoted:*|prepared-demoted:*)
         phase=prepared-demoted
         response_phase=retired
         ;;
       *) exit 3 ;;
     esac
-    printf '%s %s %s %s\n' \
-      "$phase" "$instance" "$version" "$cutover_id" >"$endpoint"
+    if [[ "$fresh_prepare" == true ]]; then
+      printf '%s %s %s %s\n' \
+        "$phase" "$instance" "$version" "$cutover_id" >"$endpoint"
+      prewarm_count=0
+      if [[ -f "$NORTH_COORD_TEST_FAKE_STATE/prewarm.$port" ]]; then
+        prewarm_count=$(<"$NORTH_COORD_TEST_FAKE_STATE/prewarm.$port")
+      fi
+      printf '%s\n' "$((prewarm_count + 1))" \
+        >"$NORTH_COORD_TEST_FAKE_STATE/prewarm.$port"
+    fi
+    if [[ -n "${NORTH_COORD_TEST_PREPARE_ACK_BLOCK_FILE:-}" ]]; then
+      : >"$NORTH_COORD_TEST_PREPARE_ACK_BLOCK_FILE.$port.ready"
+      while [[ -e "$NORTH_COORD_TEST_PREPARE_ACK_BLOCK_FILE" ]]; do
+        sleep 0.02
+      done
+    fi
+    if [[ -n "${NORTH_COORD_TEST_DROP_PREPARE_RESPONSE_PORT:-}" &&
+          "$port" == "$NORTH_COORD_TEST_DROP_PREPARE_RESPONSE_PORT" &&
+          ! -e "$NORTH_COORD_TEST_FAKE_STATE/drop-prepare.$port.used" ]]; then
+      : >"$NORTH_COORD_TEST_FAKE_STATE/drop-prepare.$port.used"
+      exit 4
+    fi
+    if [[ -n "${NORTH_COORD_TEST_AMBIGUOUS_PREPARE_PORT:-}" &&
+          "$port" == "$NORTH_COORD_TEST_AMBIGUOUS_PREPARE_PORT" ]]; then
+      exit 4
+    fi
     prewarmed=${NORTH_COORD_TEST_PREWARMED:-true}
     proof_mode=${NORTH_COORD_TEST_PREPARE_PROOF_MODE:-healthy}
     source_instance=$instance
@@ -502,6 +535,166 @@ export NORTH_COORD_CUTOVER_SETTLE_POLL_SECONDS=0.02
 
 transaction=$scratch/selector.transaction
 
+reset_pair_prepare_fixture() {
+  rm -f -- \
+    "$gate_state/prepare.pending" \
+    "$gate_state/gate.current" \
+    "$gate_state/prepare.coord.identity" \
+    "$gate_state/prepare.telemetry.identity" \
+    "$gate_state/readiness.coord" \
+    "$gate_state/readiness.telemetry" \
+    "$fake_state/drop-prepare.27977.used" \
+    "$fake_state/drop-prepare.27978.used" \
+    "$fake_state/prewarm.27977" \
+    "$fake_state/prewarm.27978"
+  find "$gate_state" -maxdepth 1 -type f \
+    \( -name 'prepare.result.*' -o -name 'prepare.*.??????' \) -delete
+  write_endpoint 17977 active blue-coord 10
+  write_endpoint 17978 active blue-telemetry 20
+  write_endpoint 27977 standby green-coord 10
+  write_endpoint 27978 standby green-telemetry 20
+  printf 'active blue\n' >"$route"
+}
+
+assert_prepare_stayed_open() {
+  local blue_coord_phase blue_telemetry_phase
+  [[ ! -e "$transaction" && ! -L "$transaction" ]]
+  grep -Fxq 'active blue' "$route"
+  read -r blue_coord_phase _ <"$fake_state/17977"
+  read -r blue_telemetry_phase _ <"$fake_state/17978"
+  [[ "$blue_coord_phase" == active ]]
+  [[ "$blue_telemetry_phase" == active ]]
+}
+
+assert_no_pair_acceptance() {
+  [[ ! -e "$gate_state/gate.current" ]]
+  [[ ! -e "$gate_state/prepare.coord.identity" ]]
+  [[ ! -e "$gate_state/prepare.telemetry.identity" ]]
+  [[ ! -e "$gate_state/readiness.coord" ]]
+  [[ ! -e "$gate_state/readiness.telemetry" ]]
+  assert_prepare_stayed_open
+}
+
+assert_pending_rejected() {
+  local label=$1 before after
+  before=$(rg -c '^prepare ' "$cutover_log" 2>/dev/null || true)
+  if "$here/north-coord-cutover-gate" prepare blue green "$transaction";
+  then
+    echo "$label unsafe pending intent unexpectedly dispatched" >&2
+    exit 1
+  fi
+  after=$(rg -c '^prepare ' "$cutover_log" 2>/dev/null || true)
+  [[ "$after" == "$before" ]]
+  assert_no_pair_acceptance
+}
+
+# Normal pair preparation publishes both endpoint receipts and the aggregate
+# gate before removing its durable intent. It never starts the selector
+# transaction or changes source authority.
+reset_pair_prepare_fixture
+"$here/north-coord-cutover-gate" prepare blue green "$transaction"
+[[ ! -e "$gate_state/prepare.pending" &&
+   ! -L "$gate_state/prepare.pending" ]]
+[[ -f "$gate_state/prepare.coord.identity" ]]
+[[ -f "$gate_state/prepare.telemetry.identity" ]]
+[[ -f "$gate_state/readiness.coord" ]]
+[[ -f "$gate_state/readiness.telemetry" ]]
+[[ -f "$gate_state/gate.current" ]]
+assert_prepare_stayed_open
+
+# A server may finish after the client loses its response. The gate observes
+# the exact prepared ID and replays that ID only to recover the full receipt;
+# the fake's prewarm counter proves the replay performed no second prewarm.
+reset_pair_prepare_fixture
+export NORTH_COORD_TEST_DROP_PREPARE_RESPONSE_PORT=27977
+"$here/north-coord-cutover-gate" prepare blue green "$transaction"
+unset NORTH_COORD_TEST_DROP_PREPARE_RESPONSE_PORT
+read -r recovered_id _ <"$gate_state/gate.current"
+[[ "$(<"$fake_state/prewarm.27977")" == 1 ]]
+[[ "$(<"$fake_state/prewarm.27978")" == 1 ]]
+[[ "$(rg -c "^prepare 27977 $recovered_id-coord$" "$cutover_log")" == 2 ]]
+[[ ! -e "$gate_state/prepare.pending" ]]
+assert_prepare_stayed_open
+
+# One missing child receipt is not pair success. Preserve the one durable pair
+# intent, accept no child identity, and recover with the same two operation IDs
+# once that endpoint can replay its acknowledgement.
+reset_pair_prepare_fixture
+export NORTH_COORD_TEST_AMBIGUOUS_PREPARE_PORT=27978
+if "$here/north-coord-cutover-gate" prepare blue green "$transaction"; then
+  echo "one-child prepare ambiguity unexpectedly succeeded" >&2
+  exit 1
+fi
+unset NORTH_COORD_TEST_AMBIGUOUS_PREPARE_PORT
+[[ -f "$gate_state/prepare.pending" &&
+   ! -L "$gate_state/prepare.pending" ]]
+read -r _ ambiguous_id _ _ ambiguous_coord_id ambiguous_telemetry_id _ \
+  <"$gate_state/prepare.pending"
+[[ "$ambiguous_coord_id" == "$ambiguous_id-coord" ]]
+[[ "$ambiguous_telemetry_id" == "$ambiguous_id-telemetry" ]]
+assert_no_pair_acceptance
+"$here/north-coord-cutover-gate" prepare blue green "$transaction"
+read -r resumed_id _ <"$gate_state/gate.current"
+[[ "$resumed_id" == "$ambiguous_id" ]]
+[[ "$(<"$fake_state/prewarm.27977")" == 1 ]]
+[[ "$(<"$fake_state/prewarm.27978")" == 1 ]]
+[[ ! -e "$gate_state/prepare.pending" ]]
+
+# Kill the whole controller process group after both server operations install
+# their exact IDs but before either acknowledgement returns. A fresh controller
+# consumes the pending record and recovers both cached receipts without a new
+# prewarm.
+reset_pair_prepare_fixture
+prepare_ack_block=$scratch/prepare-ack.block
+: >"$prepare_ack_block"
+setsid env NORTH_COORD_TEST_PREPARE_ACK_BLOCK_FILE="$prepare_ack_block" \
+  "$here/north-coord-cutover-gate" prepare blue green "$transaction" \
+  >"$scratch/crash-prepare.out" 2>"$scratch/crash-prepare.err" &
+crash_prepare_pid=$!
+prepare_ack_deadline=$((SECONDS + 5))
+while [[ ! -e "$prepare_ack_block.27977.ready" ||
+         ! -e "$prepare_ack_block.27978.ready" ]]; do
+  if (( SECONDS >= prepare_ack_deadline )); then
+    echo "prepare crash fixture did not reach both acknowledgement seams" >&2
+    kill -TERM -- "-$crash_prepare_pid" 2>/dev/null || true
+    exit 1
+  fi
+  sleep 0.02
+done
+kill -TERM -- "-$crash_prepare_pid"
+if wait "$crash_prepare_pid"; then
+  echo "killed prepare controller unexpectedly exited successfully" >&2
+  exit 1
+fi
+rm -f -- "$prepare_ack_block" \
+  "$prepare_ack_block.27977.ready" "$prepare_ack_block.27978.ready"
+[[ -f "$gate_state/prepare.pending" ]]
+read -r _ crashed_id _ <"$gate_state/prepare.pending"
+assert_no_pair_acceptance
+"$here/north-coord-cutover-gate" prepare blue green "$transaction"
+read -r restarted_id _ <"$gate_state/gate.current"
+[[ "$restarted_id" == "$crashed_id" ]]
+[[ "$(<"$fake_state/prewarm.27977")" == 1 ]]
+[[ "$(<"$fake_state/prewarm.27978")" == 1 ]]
+[[ ! -e "$gate_state/prepare.pending" ]]
+
+# Pending state is executable intent, so malformed, stale, and symlinked forms
+# all fail before endpoint dispatch. None may resurrect partial pair receipts.
+reset_pair_prepare_fixture
+printf 'not-a-pair-intent\n' >"$gate_state/prepare.pending"
+assert_pending_rejected malformed-prepare-pending
+rm -f -- "$gate_state/prepare.pending"
+printf 'pair-prepare-v1 selector-stale green blue selector-stale-coord selector-stale-telemetry %s\n' \
+  "$transaction" >"$gate_state/prepare.pending"
+assert_pending_rejected stale-prepare-pending
+rm -f -- "$gate_state/prepare.pending"
+printf 'pair-prepare-v1 selector-linked blue green selector-linked-coord selector-linked-telemetry %s\n' \
+  "$transaction" >"$scratch/linked-prepare-pending"
+ln -s "$scratch/linked-prepare-pending" "$gate_state/prepare.pending"
+assert_pending_rejected symlink-prepare-pending
+rm -f -- "$gate_state/prepare.pending"
+reset_pair_prepare_fixture
+
 # Invalid authority evidence must survive read_status's temporary-file cleanup.
 write_endpoint 17978 standby blue-telemetry 20
 if "$here/north-coord-cutover-gate" verify blue \
@@ -531,6 +724,10 @@ assert_prepare_rejected() {
   [[ ! -e "$gate_state/gate.current" ]]
   [[ ! -e "$gate_state/readiness.coord" ]]
   [[ ! -e "$gate_state/readiness.telemetry" ]]
+  [[ ! -e "$gate_state/prepare.coord.identity" ]]
+  [[ ! -e "$gate_state/prepare.telemetry.identity" ]]
+  [[ -f "$gate_state/prepare.pending" &&
+     ! -L "$gate_state/prepare.pending" ]]
   [[ ! -e "$transaction" && ! -L "$transaction" ]]
   grep -Fxq 'active blue' "$route"
   read -r blue_coord_phase _ <"$fake_state/17977"
@@ -539,6 +736,7 @@ assert_prepare_rejected() {
   [[ "$blue_telemetry_phase" == active ]]
   after_demotions=$(rg -c '^demote ' "$cutover_log" 2>/dev/null || true)
   [[ "$after_demotions" == "$before_demotions" ]]
+  reset_pair_prepare_fixture
 }
 
 # Preparation failure is entirely pre-transaction and read-only. Even when one
@@ -550,6 +748,8 @@ if "$here/north-coord-cutover-gate" prepare blue green "$transaction"; then
 fi
 unset NORTH_COORD_TEST_FAIL_PREPARE_PORT
 [[ ! -e "$transaction" ]]
+[[ -f "$gate_state/prepare.pending" ]]
+assert_no_pair_acceptance
 read -r blue_coord_phase _ <"$fake_state/17977"
 read -r blue_telemetry_phase _ <"$fake_state/17978"
 [[ "$blue_coord_phase" == active ]]
@@ -558,6 +758,7 @@ if rg -n '^demote ' "$cutover_log"; then
   echo "preparation failure demoted a source endpoint" >&2
   exit 1
 fi
+reset_pair_prepare_fixture
 
 # Preparation must prove a current installed marker/cache and a live process
 # that already runs the exact recovery envelope. Every rejection remains before

@@ -45,6 +45,8 @@
           (s homeDir "/.local/state/north/fram-telemetry-runtime")
         stageA
           config.myConfig.modules.north-coord.stageATelemetryPartition
+        automaticFailover
+          config.myConfig.modules.north-coord.automaticFailover
         pairTarget "north-coord-pair.target"
         pairPrepareUnit "north-coord-pair-prepare.service"
         mkNorthCoordRuntime
@@ -525,6 +527,9 @@
      :options.myConfig.modules.north-coord.stageATelemetryPartition
       (lib.mkEnableOption
         "independent single-origin coordination (:7977) and telemetry (:7978) writers; option-off is the no-data-migration rollback")
+     :options.myConfig.modules.north-coord.automaticFailover
+      (lib.mkEnableOption
+        "automatic blue/green coordinator failover after the bounded health threshold")
      :config
       (lib.mkIf config.myConfig.modules.north-coord.enable
         {:assertions
@@ -870,7 +875,7 @@
          :systemd.timers.north-coord-health
           (lib.mkIf stageA
             {:description "Reconcile North blue/green coordinator health"
-             :wantedBy ["timers.target"]
+             :wantedBy (lib.optional automaticFailover "timers.target")
              ;; Must exceed a reconcile's own runtime (~16s), or back-to-back runs
              ;; exhaust coordinator request admission.
              :timerConfig
