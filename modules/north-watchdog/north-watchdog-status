@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+set -u
+
+export LC_ALL=C
+
+log_file=${NORTH_WATCHDOG_LOG_FILE:-/var/lib/north-watchdog/probe.log}
+now=$(date +%s)
+today=$(date --date='today 00:00' +%s)
+
+awk -v now="$now" -v today="$today" '
+function percentage(ok, total) {
+  return total ? sprintf("%.1f%% (%d/%d)", ok * 100 / total, ok, total) : "no data"
+}
+
+NF == 5 && $1 ~ /^[0-9]+$/ && ($2 == "blue" || $2 == "green") && \
+    ($4 == "ok" || $4 == "fail") {
+  if ($1 >= now - 3600 && $1 <= now) {
+    total_1h++
+    ok_1h += ($4 == "ok")
+  }
+  if ($1 >= now - 86400 && $1 <= now) {
+    total_24h++
+    ok_24h += ($4 == "ok")
+  }
+  if ($1 <= now && $1 >= current_time) {
+    current_time = $1
+    current_latency = $3
+    current_result = $4
+  }
+  next
+}
+
+$1 == "RESTART" && $2 ~ /^[0-9]+$/ {
+  if ($2 >= today && $2 <= now) restarts_today++
+  if ($2 <= now && $2 >= last_restart_time) {
+    last_restart_time = $2
+    last_restart_reason = $4
+  }
+}
+
+END {
+  print "Success 1h:  " percentage(ok_1h, total_1h)
+  print "Success 24h: " percentage(ok_24h, total_24h)
+  if (current_time) {
+    printf "Current latency: %s ms\n", current_latency
+  } else {
+    print "Current latency: no data"
+  }
+  printf "Restarts today: %d\n", restarts_today
+  printf "Last restart reason: %s\n", \
+    last_restart_time ? last_restart_reason : "no data"
+}
+' "$log_file" 2>/dev/null || awk 'BEGIN {
+  print "Success 1h:  no data"
+  print "Success 24h: no data"
+  print "Current latency: no data"
+  print "Restarts today: 0"
+  print "Last restart reason: no data"
+}'

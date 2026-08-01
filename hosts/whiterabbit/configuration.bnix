@@ -61,6 +61,7 @@
    ;; systemd socket activation is required for both Stage-A writer sockets.
    :myConfig.modules.north-coord.socketActivation true
    :myConfig.modules.north-coord.stageATelemetryPartition true
+   :myConfig.modules.north-watchdog.enable true
    ;; user-level timer (~5min) for north-stream-sync — zero-AI transcript
    ;; mirroring into ~/code/north/streams/raw (streams/CLAUDE.md).
    :myConfig.modules.north-stream-sync.enable true
