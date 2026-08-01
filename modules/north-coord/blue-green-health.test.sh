@@ -190,6 +190,13 @@ set_server_state() {
   wait_status "$backend" "$expected"
 }
 
+replace_route() {
+  local slot=$1 temp
+  temp=$scratch/.route.next.$$
+  printf 'active %s\n' "$slot" >"$temp"
+  mv -T "$temp" "$route_map"
+}
+
 wait_status coord-blue UP
 printf 'reject\n' >"$scratch/blue.mode"
 wait_status coord-blue DOWN
@@ -291,7 +298,9 @@ cat >"$scratch/health-selector" <<'SH'
 set -euo pipefail
 printf '%s\n' "$*" >>"$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG"
 [[ "$1" == failover ]]
-printf 'active %s\n' "$2" >"$NORTH_COORD_SELECTOR_MAP"
+temp=${NORTH_COORD_SELECTOR_MAP}.next.$$
+printf 'active %s\n' "$2" >"$temp"
+mv -T "$temp" "$NORTH_COORD_SELECTOR_MAP"
 SH
 chmod 0700 "$scratch/systemctl" "$scratch/gate" "$scratch/health-selector"
 phase_state=$scratch/phases
@@ -320,6 +329,34 @@ export NORTH_COORD_GREEN_COORD_UNIT=north-coord-green.service
 export NORTH_COORD_GREEN_TELEMETRY_UNIT=north-telemetry-coord-green.service
 : >"$NORTH_COORD_BOOTSTRAP_MARKER"
 
+# Current healthy evidence clears old standby-tenure history without invoking
+# the selector. This is symmetric with the blue-standby case below.
+printf '3402\n' >"$health_state/green.fails"
+"$health" reconcile
+[[ $(<"$health_state/green.fails") == 0 ]]
+[[ ! -e "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG" ]]
+
+# Corrupt or symlinked tenure state never becomes trusted counter history.
+tenure_saved=$(<"$health_state/route.tenure")
+printf 'not-a-tenure\n' >"$health_state/route.tenure"
+if "$health" reconcile >"$scratch/tenure-malformed.out" \
+    2>"$scratch/tenure-malformed.err"; then
+  printf 'malformed route tenure was accepted\n' >&2
+  exit 1
+fi
+grep -q 'route tenure is malformed' "$scratch/tenure-malformed.err"
+printf '%s\n' "$tenure_saved" >"$health_state/route.tenure"
+mv "$health_state/route.tenure" "$health_state/route.tenure.saved"
+ln -s route.tenure.saved "$health_state/route.tenure"
+if "$health" reconcile >"$scratch/tenure-symlink.out" \
+    2>"$scratch/tenure-symlink.err"; then
+  printf 'symlinked route tenure was accepted\n' >&2
+  exit 1
+fi
+grep -q 'route tenure is unsafe' "$scratch/tenure-symlink.err"
+unlink "$health_state/route.tenure"
+mv "$health_state/route.tenure.saved" "$health_state/route.tenure"
+
 printf '2\n' >"$health_state/blue.fails"
 "$health" reconcile
 [[ $(<"$health_state/blue.fails") == 0 ]]
@@ -333,49 +370,73 @@ printf '3\n' >"$health_state/blue.fails"
 # A missing HAProxy sample is unknown, never proof that the routed pair serves.
 NORTH_COORD_SELECTOR_SOCKET=$scratch/missing-admin.sock "$health" reconcile
 [[ $(<"$health_state/blue.fails") == 1 ]]
+[[ ! -e "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG" ]]
 "$health" reconcile
 [[ $(<"$health_state/blue.fails") == 0 ]]
 
-# Coordination and telemetry are equal members of the serving contract. A
-# telemetry-only failure must trip the same bounded failover path while the
-# coordination backend remains healthy.
+# Coordination and telemetry are equal members of the serving contract. An
+# ABA route-map replacement denotes a new blue tenure even though its slot is
+# unchanged, so old history cannot skip the first two failure observations.
+replace_route blue
 set_server_state telemetry-blue maint MAINT
 [[ $(backend_status coord-blue) == UP ]]
-printf '2\n' >"$health_state/blue.fails"
+printf '3402\n' >"$health_state/blue.fails"
+"$health" reconcile
+[[ $(<"$health_state/blue.fails") == 1 ]]
+[[ ! -e "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG" ]]
+"$health" reconcile
+[[ $(<"$health_state/blue.fails") == 2 ]]
+[[ ! -e "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG" ]]
 "$health" reconcile
 [[ $(<"$health_state/blue.fails") == 3 ]]
 [[ $(rg -c '^failover green$' "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG") -eq 1 ]]
 grep -Fxq 'active green' "$route_map"
 
-# Restore the initial topology for the existing coordination-failure case.
+# A healthy blue standby clears the production-shaped stale counter without an
+# action. Green then gets the same three-observation route-tenure proof, using
+# a coordination-only failure while its blue peer remains a canary.
 set_server_state telemetry-blue ready UP
-printf 'active blue\n' >"$route_map"
 printf 'enabled\n' >"$systemd_state/north-coord-blue.service.enabled"
 printf 'enabled\n' >"$systemd_state/north-telemetry-coord-blue.service.enabled"
 printf 'active\n' >"$systemd_state/north-coord-blue.service.ActiveState"
 printf 'active\n' >"$systemd_state/north-telemetry-coord-blue.service.ActiveState"
-printf '0\n' >"$health_state/blue.fails"
-rm -f -- "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG"
+printf 'read-only\n' >"$phase_state/blue.phase"
+printf 'active\n' >"$phase_state/green.phase"
+before=$(rg -c '^failover ' "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG")
+printf '3402\n' >"$health_state/blue.fails"
+"$health" reconcile
+after=$(rg -c '^failover ' "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG")
+[[ "$before" == "$after" ]]
+[[ $(<"$health_state/blue.fails") == 0 ]]
 
+replace_route green
+printf 'reject\n' >"$scratch/green.mode"
+printf 'down\n' >"$phase_state/green.phase"
+wait_status coord-green DOWN
+printf '3402\n' >"$health_state/green.fails"
+"$health" reconcile
+[[ $(<"$health_state/green.fails") == 1 ]]
+"$health" reconcile
+[[ $(<"$health_state/green.fails") == 2 ]]
+"$health" reconcile
+[[ $(<"$health_state/green.fails") == 3 ]]
+[[ $(rg -c '^failover blue$' "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG") -eq 1 ]]
+[[ $(rg -c '^failover ' "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG") -eq 2 ]]
+grep -Fxq 'active blue' "$route_map"
+rg -q '^mask --runtime north-coord-green.service north-telemetry-coord-green.service$' "$systemctl_log"
+rg -q '^stop north-coord-green.service north-telemetry-coord-green.service$' "$systemctl_log"
+
+# A masked successor produces an alert and leaves the durable route untouched.
+printf 'enabled\n' >"$systemd_state/north-coord-blue.service.enabled"
+printf 'enabled\n' >"$systemd_state/north-telemetry-coord-blue.service.enabled"
+printf 'active\n' >"$systemd_state/north-coord-blue.service.ActiveState"
+printf 'active\n' >"$systemd_state/north-telemetry-coord-blue.service.ActiveState"
+printf 'active\n' >"$phase_state/blue.phase"
+printf 'read-only\n' >"$phase_state/green.phase"
+"$health" reconcile
 printf 'reject\n' >"$scratch/blue.mode"
 printf 'down\n' >"$phase_state/blue.phase"
 wait_status coord-blue DOWN
-"$health" reconcile
-[[ $(<"$health_state/blue.fails") == 1 ]]
-"$health" reconcile
-[[ $(<"$health_state/blue.fails") == 2 ]]
-[[ ! -e "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG" ]]
-"$health" reconcile
-[[ $(rg -c '^failover green$' "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG") -eq 1 ]]
-rg -q '^mask --runtime north-coord-blue.service north-telemetry-coord-blue.service$' "$systemctl_log"
-rg -q '^stop north-coord-blue.service north-telemetry-coord-blue.service$' "$systemctl_log"
-
-# A masked successor produces an alert and leaves the durable route untouched.
-printf 'active blue\n' >"$route_map"
-printf 'enabled\n' >"$systemd_state/north-coord-blue.service.enabled"
-printf 'enabled\n' >"$systemd_state/north-telemetry-coord-blue.service.enabled"
-printf 'active\n' >"$systemd_state/north-coord-blue.service.ActiveState"
-printf 'active\n' >"$systemd_state/north-telemetry-coord-blue.service.ActiveState"
 printf 'masked-runtime\n' >"$systemd_state/north-coord-green.service.enabled"
 printf '2\n' >"$health_state/blue.fails"
 before=$(rg -c '^failover ' "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG")
@@ -387,14 +448,26 @@ grep -Fxq 'active blue' "$route_map"
 
 # An in-flight selector transaction suppresses every controller action.
 printf 'holding blue green\n' >"$NORTH_COORD_SELECTOR_TRANSACTION"
+tenure_before=$(<"$health_state/route.tenure")
+replace_route blue
+printf '2\n' >"$health_state/blue.fails"
 before=$(wc -l <"$systemctl_log")
+selector_before=$(wc -l <"$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG")
+journal_before=$(stat -c %s "$NORTH_COORD_HEALTH_JOURNAL")
 "$health" reconcile
 after=$(wc -l <"$systemctl_log")
+selector_after=$(wc -l <"$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG")
+journal_after=$(stat -c %s "$NORTH_COORD_HEALTH_JOURNAL")
 [[ "$before" == "$after" ]]
+[[ "$selector_before" == "$selector_after" ]]
+[[ "$journal_before" == "$journal_after" ]]
+[[ $(<"$health_state/blue.fails") == 2 ]]
+[[ $(<"$health_state/route.tenure") == "$tenure_before" ]]
 rm -f -- "$NORTH_COORD_SELECTOR_TRANSACTION"
 
 # Split authority is alert-only and returns nonzero.
 printf 'enabled\n' >"$systemd_state/north-coord-green.service.enabled"
+printf 'enabled\n' >"$systemd_state/north-telemetry-coord-green.service.enabled"
 printf 'active\n' >"$phase_state/blue.phase"
 printf 'active\n' >"$phase_state/green.phase"
 if "$health" reconcile; then
