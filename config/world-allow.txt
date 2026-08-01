@@ -71,6 +71,7 @@ north/bin/north-commit-guard
 north/bin/north-coord-up
 north/bin/north-install-commit-guard
 north/bin/north-invoice
+north/bin/north-lane-run
 north/bin/north-log-split
 north/bin/north-mine
 north/bin/north-timelog

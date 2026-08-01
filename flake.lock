@@ -730,11 +730,11 @@
     },
     "nixpkgs-master": {
       "locked": {
-        "lastModified": 1784186116,
-        "narHash": "sha256-4unZ/7YTgAqWju4z+Qp8VgXzTFRsrUbr2Ix89YFzUfQ=",
+        "lastModified": 1785601033,
+        "narHash": "sha256-aF8karr3YhrmMQ5xXsx9iQTc9YwFaIp/ydOXFTX2bys=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "3d3f563766954c89965b8661e31e3431a1217f7d",
+        "rev": "0ecfc75155995a6ebd1c75b0a857294e507d2ced",
         "type": "github"
       },
       "original": {
@@ -900,11 +900,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1785530717,
-        "narHash": "sha256-hXtj0im+quDAzBAqxvF5uRqMy2Njs3NLaQ5o34PVOBY=",
+        "lastModified": 1785601962,
+        "narHash": "sha256-dJxw/UTj3bK9b4eODvr8R/9vadaqlOJClxyAJYL4dDM=",
         "ref": "main",
-        "rev": "78798d68ec0c364862abcf08445429eae4e61f3a",
-        "revCount": 992,
+        "rev": "76531b7c7499a86d9bb15068501c93d7a3d29f46",
+        "revCount": 1001,
         "type": "git",
         "url": "file:///home/tom/code/north/main"
       },
