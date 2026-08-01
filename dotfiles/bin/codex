@@ -429,6 +429,8 @@ fi
 #      ok\t<account-id>     a rankable eligible account was chosen
 #      err\t<reason>        no id — <reason> is a concise, actionable cause
 #    Never touches account state; the caller decides how to act on the verdict.
+# Account selection reads staffing from file: the graph catalog projection
+# takes ~30s against the live corpus and falls back to file anyway.
 SELECT_TIMEOUT=10
 select_account() {
   if ! command -v north >/dev/null 2>&1; then
@@ -440,14 +442,14 @@ select_account() {
   errfile="$(mktemp 2>/dev/null || true)"
   if command -v timeout >/dev/null 2>&1; then
     if [ -n "$errfile" ]; then
-      json="$(timeout --foreground "${SELECT_TIMEOUT}s" env -u NORTH_CHECKOUT north providers --json 2>"$errfile")"; rc=$?
+      json="$(timeout --foreground "${SELECT_TIMEOUT}s" env -u NORTH_CHECKOUT NORTH_STAFFING_SOURCE=file north providers --json 2>"$errfile")"; rc=$?
     else
-      json="$(timeout --foreground "${SELECT_TIMEOUT}s" env -u NORTH_CHECKOUT north providers --json 2>/dev/null)"; rc=$?
+      json="$(timeout --foreground "${SELECT_TIMEOUT}s" env -u NORTH_CHECKOUT NORTH_STAFFING_SOURCE=file north providers --json 2>/dev/null)"; rc=$?
     fi
   elif [ -n "$errfile" ]; then
-    json="$(env -u NORTH_CHECKOUT north providers --json 2>"$errfile")"; rc=$?
+    json="$(env -u NORTH_CHECKOUT NORTH_STAFFING_SOURCE=file north providers --json 2>"$errfile")"; rc=$?
   else
-    json="$(env -u NORTH_CHECKOUT north providers --json 2>/dev/null)"; rc=$?
+    json="$(env -u NORTH_CHECKOUT NORTH_STAFFING_SOURCE=file north providers --json 2>/dev/null)"; rc=$?
   fi
 
   if [ "$rc" -ne 0 ]; then

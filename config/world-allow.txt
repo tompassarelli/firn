@@ -21,7 +21,6 @@ beagle/self-host/native/verify-native.sh
 beagle/self-host/verify-selfhost.sh
 fram/bin/fram-code-on
 fram/bin/fram-defcheck
-fram/bin/fram-mcp
 fram/bin/fram-primer
 fram/bin/fram-render-code-all
 fram/build.sh
