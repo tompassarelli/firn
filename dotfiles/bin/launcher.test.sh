@@ -91,6 +91,12 @@ check() {
 }
 contains()     { grep -qF -- "$2" <<<"$1"; }
 not_contains() { ! grep -qF -- "$2" <<<"$1"; }
+contains_once() {
+  local value=$1 needle=$2 remainder
+  [[ $value == *"$needle"* ]] || return 1
+  remainder=${value#*"$needle"}
+  [[ $remainder != *"$needle"* ]]
+}
 
 codex_config_has_economical_defaults() {
   python3 - "$HERE/../codex/config.toml" <<'PY'
@@ -133,21 +139,28 @@ declare -A PROV=([claude]=anthropic [codex]=openai)
 declare -A LIMIT=([claude]="claude:seven_day" [codex]="codex:primary")
 declare -A SUB=([claude]=anthropic [codex]=openai)
 declare -A PINVAR=([claude]=CLAUDE_CONFIG_DIR [codex]=CODEX_HOME)
+CODEX_THREAD_CEILING_ARG='-c agents.max_concurrent_threads_per_session=999'
 declare -A ROOT_DEFAULT_ARGS=(
   [claude]='--model claude-fable-5 --effort xhigh --disallowedTools Agent,Task,Workflow'
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" --add-dir /home/tom/code -c model="gpt-5.6-sol" -c model_reasoning_effort="high" --disable multi_agent'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=999 --add-dir /home/tom/code -c model="gpt-5.6-sol" -c model_reasoning_effort="high" --disable multi_agent'
 )
 declare -A WARN_DEFAULT_ARGS=(
   [claude]='--model claude-fable-5 --effort xhigh'
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" --add-dir /home/tom/code -c model="gpt-5.6-sol" -c model_reasoning_effort="high"'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=999 --add-dir /home/tom/code -c model="gpt-5.6-sol" -c model_reasoning_effort="high"'
 )
 declare -A PASSTHROUGH_ARGS=(
   [claude]=''
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access"'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=999'
 )
 
 check 'codex/global config defaults to economical terra/medium' \
   codex_config_has_economical_defaults
+check 'codex/root defaults set the subagent thread ceiling exactly once' \
+  contains_once "${ROOT_DEFAULT_ARGS[codex]}" "$CODEX_THREAD_CEILING_ARG"
+check 'codex/warn defaults set the subagent thread ceiling exactly once' \
+  contains_once "${WARN_DEFAULT_ARGS[codex]}" "$CODEX_THREAD_CEILING_ARG"
+check 'codex/passthrough defaults set the subagent thread ceiling exactly once' \
+  contains_once "${PASSTHROUGH_ARGS[codex]}" "$CODEX_THREAD_CEILING_ARG"
 
 for launcher in claude codex; do
   prov="${PROV[$launcher]}"; limit="${LIMIT[$launcher]}"

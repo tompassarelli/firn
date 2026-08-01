@@ -75,16 +75,17 @@ else
   fi
 fi
 
-# Force full-permission mode on every standalone launch. This wrapper redirects
+# Force launch-wide config on every standalone launch. This wrapper redirects
 # CODEX_HOME to a per-account state dir whose config.toml does NOT carry the
-# nixos-config full-access keys, so ~/.codex/config.toml is bypassed and codex
-# falls back to its restricted defaults (approval OnRequest, sandboxed fs/net).
-# Inject the overrides at exec time so approval/sandbox stay full-access no
-# matter which account config loads. `-c` values are parsed as TOML.
-FORCE_PERMS=(
+# nixos-config full-access and agent-thread keys, so ~/.codex/config.toml is
+# bypassed and codex falls back to its restricted defaults. Inject the overrides
+# at exec time so every account gets the same permissions and thread ceiling.
+# `-c` values are parsed as TOML.
+FORCE_CONFIG=(
   -c 'approval_policy="never"'
   -c 'sandbox_mode="danger-full-access"'
   -c 'default_permissions=":danger-full-access"'
+  -c 'agents.max_concurrent_threads_per_session=999'
 )
 
 # Direct user sessions may coordinate work across repositories beneath the
@@ -327,7 +328,7 @@ if [ "${1:-}" != "as" ]; then
       fi
       set -- "${argv[@]}"
     fi
-    exec "$REAL" "${FORCE_PERMS[@]}" "$@"
+    exec "$REAL" "${FORCE_CONFIG[@]}" "$@"
   fi
 
   uuid_re='^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
@@ -370,7 +371,7 @@ if [ "${1:-}" != "as" ]; then
     else
       export CODEX_SQLITE_HOME="$authority_home/sqlite"
     fi
-    exec "$REAL" "${FORCE_PERMS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+    exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
   fi
 
   # Non-UUID aliases still map to the native subcommand (picker/session name)
@@ -388,7 +389,7 @@ fi
 # 2. Passthrough guard for `codex as ...`, which intentionally skipped the
 #    automatic resume parser above.
 if [ -n "${CODEX_HOME:-}" ]; then
-  exec "$REAL" "${FORCE_PERMS[@]}" "$@"
+  exec "$REAL" "${FORCE_CONFIG[@]}" "$@"
 fi
 
 list_accounts() {
@@ -421,7 +422,7 @@ if [ "${1:-}" = "as" ]; then
   fi
   export CODEX_HOME="$root"
   export CODEX_SQLITE_HOME="$root/sqlite"
-  exec "$REAL" "${FORCE_PERMS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+  exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
 fi
 
 # 4. Auto-select greatest-headroom account from north's machine boundary.
@@ -621,4 +622,4 @@ else
     printf '[%s → ambient] %s — %s\n' "$PROVIDER_WORD" "$reason" "$(recovery_hint)" >&2
   fi
 fi
-exec "$REAL" "${FORCE_PERMS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
