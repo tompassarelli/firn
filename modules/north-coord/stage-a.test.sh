@@ -113,6 +113,10 @@ let
   telemetrySocket = cfg.systemd.sockets.north-telemetry-coord or { };
   pair = cfg.systemd.targets.north-coord-pair or { };
   prepare = cfg.systemd.services.north-coord-pair-prepare or { };
+  healthTimer = cfg.systemd.timers.north-coord-health or { };
+  crossSlotHealthTimers =
+    builtins.filter (name: lib.hasPrefix "north-coord-health" name)
+      (builtins.attrNames cfg.systemd.timers);
   northWrapper =
     lib.findFirst (pkg: lib.getName pkg == "north") null
       cfg.environment.systemPackages;
@@ -138,6 +142,8 @@ pkgs.writeText "north-stage-a-${if stageA then "on" else "off"}" (
     "telemetry-stop-if-changed=${lib.boolToString (telemetry.stopIfChanged or false)}"
     "prepare-restart-if-changed=${lib.boolToString (prepare.restartIfChanged or false)}"
     "prepare-stop-if-changed=${lib.boolToString (prepare.stopIfChanged or false)}"
+    "cross-slot-health-timers=${lib.concatStringsSep "," crossSlotHealthTimers}"
+    "health-timer-wanted-by=${lib.concatStringsSep "," (healthTimer.wantedBy or [ ])}"
     "coord-java-options=${coord.environment.JDK_JAVA_OPTIONS or "unset"}"
     "telemetry-java-options=${telemetry.environment.JDK_JAVA_OPTIONS or "unset"}"
     "pair-wants=${lib.concatStringsSep "," (pair.wants or [ ])}"
@@ -174,6 +180,8 @@ grep -Fxq 'coord-socket-part-of=' "$off"
 grep -Fxq 'coord-socket-wanted-by=sockets.target' "$off"
 grep -Fxq 'telemetry-service=false' "$off"
 grep -Fxq 'pair-target=false' "$off"
+grep -Fxq 'cross-slot-health-timers=' "$off"
+grep -Fxq 'health-timer-wanted-by=' "$off"
 grep -Fxq 'coord-restart-if-changed=false' "$off"
 grep -Fxq 'coord-stop-if-changed=false' "$off"
 grep -Fxq 'partition=unset' "$off"
@@ -198,6 +206,8 @@ grep -Fxq 'coord-socket-wanted-by=sockets.target' "$on"
 grep -Fxq 'telemetry-socket-wanted-by=sockets.target' "$on"
 grep -Fxq 'telemetry-service=true' "$on"
 grep -Fxq 'pair-target=true' "$on"
+grep -Fxq 'cross-slot-health-timers=north-coord-health' "$on"
+grep -Fxq 'health-timer-wanted-by=timers.target' "$on"
 grep -Fxq 'coord-part-of=north-coord-pair.target' "$on"
 grep -Fxq 'telemetry-part-of=north-coord-pair.target' "$on"
 grep -Fxq 'coord-restart-if-changed=false' "$on"

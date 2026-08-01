@@ -25,6 +25,8 @@ for name in \
   north-coord-pair.target \
   north-coord-pair-prepare.service \
   north-coord-pair-settle.service \
+  north-coord-health.service \
+  north-coord-health.timer \
   north-coord-blue-green.target \
   north-coord-blue-green-resume.service \
   north-coord-blue.service \
@@ -38,6 +40,26 @@ do
     exit 1
   }
 done
+
+# Cross-slot recovery has one owner. The health controller performs pair-level
+# reconciliation; no independent watchdog may race it with direct slot restarts.
+for name in north-watchdog.service north-watchdog.timer; do
+  [[ ! -e $(unit "$name") && ! -L $(unit "$name") ]] || {
+    echo "competing recovery unit remains: $name" >&2
+    exit 1
+  }
+done
+mapfile -t cross_slot_health_timers < <(
+  find -L "$units" -maxdepth 1 -name 'north-coord-health*.timer' -printf '%f\n' |
+    sort
+)
+[[ ${#cross_slot_health_timers[@]} -eq 1 &&
+   ${cross_slot_health_timers[0]} == north-coord-health.timer ]] || {
+  printf 'expected exactly one cross-slot health timer, found: %s\n' \
+    "${cross_slot_health_timers[*]:-none}" >&2
+  exit 1
+}
+grep -Fxq 'WantedBy=timers.target' "$(unit north-coord-health.timer)"
 
 # Ordinary activation preserves the permanent listener contract. The intended
 # socket deltas disable the fatal trigger limit and bound both accept queues.
