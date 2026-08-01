@@ -223,10 +223,10 @@ sample_slot() {
      "$cutover_gate" verify-phase "$slot" read-only >/dev/null 2>&1; then
     readonly=0
   fi
-  if (( fails[$slot] >= fail_threshold )); then
-    state[$slot]=failed
-  elif unit_ready "${coord_active[$slot]}" &&
-       unit_ready "${telemetry_active[$slot]}"; then
+  if unit_ready "${coord_active[$slot]}" &&
+     unit_ready "${telemetry_active[$slot]}" &&
+     [[ "${check_coord[$slot]}" == UP &&
+        "${check_telemetry[$slot]}" == UP ]]; then
     if [[ "$route" == "$slot" && "${auth_active[$slot]}" -eq 1 ]]; then
       state[$slot]=serving
     elif [[ "$route" != "$slot" && "$readonly" -eq 0 ]]; then
@@ -313,7 +313,8 @@ reconcile() {
     write_word "$health_state/$route.fails" "$count"
     if (( count >= fail_threshold )); then
       state[$route]=failed
-      if [[ "${check_coord[$route]}" != UP ]]; then
+      if [[ "${check_coord[$route]}" != UP ||
+            "${check_telemetry[$route]}" != UP ]]; then
         if [[ "$route" == blue ]]; then peer=green; else peer=blue; fi
         if [[ "${state[$peer]}" == canary ]]; then
           append_journal "failover-start old=$route target=$peer"

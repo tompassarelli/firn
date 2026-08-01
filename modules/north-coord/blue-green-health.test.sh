@@ -183,6 +183,13 @@ wait_status() {
   return 1
 }
 
+set_server_state() {
+  local backend=$1 state=$2 expected=$3
+  printf 'set server %s/only state %s\n' "$backend" "$state" |
+    socat -t 2 - "UNIX-CONNECT:$admin_socket"
+  wait_status "$backend" "$expected"
+}
+
 wait_status coord-blue UP
 printf 'reject\n' >"$scratch/blue.mode"
 wait_status coord-blue DOWN
@@ -316,6 +323,39 @@ export NORTH_COORD_GREEN_TELEMETRY_UNIT=north-telemetry-coord-green.service
 printf '2\n' >"$health_state/blue.fails"
 "$health" reconcile
 [[ $(<"$health_state/blue.fails") == 0 ]]
+
+# Current evidence wins over history: a fully healthy routed pair clears even
+# an already-latched counter instead of remaining permanently failed.
+printf '3\n' >"$health_state/blue.fails"
+"$health" reconcile
+[[ $(<"$health_state/blue.fails") == 0 ]]
+
+# A missing HAProxy sample is unknown, never proof that the routed pair serves.
+NORTH_COORD_SELECTOR_SOCKET=$scratch/missing-admin.sock "$health" reconcile
+[[ $(<"$health_state/blue.fails") == 1 ]]
+"$health" reconcile
+[[ $(<"$health_state/blue.fails") == 0 ]]
+
+# Coordination and telemetry are equal members of the serving contract. A
+# telemetry-only failure must trip the same bounded failover path while the
+# coordination backend remains healthy.
+set_server_state telemetry-blue maint MAINT
+[[ $(backend_status coord-blue) == UP ]]
+printf '2\n' >"$health_state/blue.fails"
+"$health" reconcile
+[[ $(<"$health_state/blue.fails") == 3 ]]
+[[ $(rg -c '^failover green$' "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG") -eq 1 ]]
+grep -Fxq 'active green' "$route_map"
+
+# Restore the initial topology for the existing coordination-failure case.
+set_server_state telemetry-blue ready UP
+printf 'active blue\n' >"$route_map"
+printf 'enabled\n' >"$systemd_state/north-coord-blue.service.enabled"
+printf 'enabled\n' >"$systemd_state/north-telemetry-coord-blue.service.enabled"
+printf 'active\n' >"$systemd_state/north-coord-blue.service.ActiveState"
+printf 'active\n' >"$systemd_state/north-telemetry-coord-blue.service.ActiveState"
+printf '0\n' >"$health_state/blue.fails"
+rm -f -- "$NORTH_COORD_TEST_HEALTH_SELECTOR_LOG"
 
 printf 'reject\n' >"$scratch/blue.mode"
 printf 'down\n' >"$phase_state/blue.phase"
