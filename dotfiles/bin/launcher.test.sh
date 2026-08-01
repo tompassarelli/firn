@@ -24,7 +24,7 @@ BIN="$SCRATCH/bin"      # coreutils + jq + fake real CLIs (always on PATH)
 NBIN="$SCRATCH/nbin"    # holds the stub `north` (added to PATH only when present)
 GIT_CALLS="$SCRATCH/git.calls"
 mkdir -p "$BIN" "$NBIN"
-for tool in env bash realpath jq find sort sed head mktemp paste rm cat grep dirname mkdir; do
+for tool in env bash realpath jq find sort sed head mktemp paste rm cat grep dirname mkdir tr; do
   real="$(command -v "$tool" 2>/dev/null)" || { echo "missing host tool: $tool" >&2; exit 2; }
   # Link straight to the resolved command-v path; do NOT depend on `readlink`
   # (agent-config-check.test.sh runs this under a readlink-fails shim).
@@ -78,6 +78,11 @@ for cli in claude codex; do
 CLI
   chmod +x "$BIN/$cli"
 done
+
+# Keep codex-native hermetic by replacing only its hardcoded real CLI path in a
+# scratch copy; every other byte remains the production launcher under test.
+NATIVE_LAUNCHER="$SCRATCH/codex-native"
+sed "s|^REAL=.*|REAL=\"$BIN/codex\"|" "$HERE/codex-native" >"$NATIVE_LAUNCHER"
 
 pass=0
 fail=0
@@ -161,6 +166,23 @@ check 'codex/warn defaults set the subagent thread ceiling exactly once' \
   contains_once "${WARN_DEFAULT_ARGS[codex]}" "$CODEX_THREAD_CEILING_ARG"
 check 'codex/passthrough defaults set the subagent thread ceiling exactly once' \
   contains_once "${PASSTHROUGH_ARGS[codex]}" "$CODEX_THREAD_CEILING_ARG"
+
+HOME_DIR="$SCRATCH/home-codex-native"
+mkdir -p "$HOME_DIR/.local/state/north/profiles/codex-native"
+: >"$HOME_DIR/.local/state/north/profiles/codex-native/config.toml"
+printf '{}\n' >"$HOME_DIR/.local/state/north/profiles/codex-native/auth.json"
+RECORD="$SCRATCH/native-record"
+STDERR="$(env -i "HOME=$HOME_DIR" "PATH=$BIN" "REAL_RECORD=$RECORD" \
+  bash "$NATIVE_LAUNCHER" --model probe 2>&1 1>/dev/null)"
+STATUS=$?
+check 'codex-native launches the real CLI' test "$STATUS" -eq 0
+check 'codex-native sets its isolated profile' \
+  test "$(record_field _ CODEX_HOME)" = "$HOME_DIR/.local/state/north/profiles/codex-native"
+check 'codex-native sets the subagent thread ceiling exactly once' \
+  contains_once "$(record_field _ args)" "$CODEX_THREAD_CEILING_ARG"
+check 'codex-native injects the ceiling before existing arguments' \
+  test "$(record_field _ args)" = \
+    "$CODEX_THREAD_CEILING_ARG --add-dir /home/tom/code --model probe"
 
 for launcher in claude codex; do
   prov="${PROV[$launcher]}"; limit="${LIMIT[$launcher]}"
