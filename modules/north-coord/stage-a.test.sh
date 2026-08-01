@@ -87,6 +87,10 @@ let
             type = lib.types.attrsOf lib.types.anything;
             default = { };
           };
+          systemd.timers = lib.mkOption {
+            type = lib.types.attrsOf lib.types.anything;
+            default = { };
+          };
           myConfig.modules.users.username = lib.mkOption { type = lib.types.str; };
           myConfig.modules.users.homeDir = lib.mkOption { type = lib.types.str; };
         };
@@ -203,7 +207,7 @@ grep -Fxq 'telemetry-stop-if-changed=false' "$on"
 grep -Fxq 'prepare-restart-if-changed=false' "$on"
 grep -Fxq 'prepare-stop-if-changed=false' "$on"
 grep -Fxq 'coord-java-options=-Xmx16g' "$on"
-grep -Fxq 'telemetry-java-options=-Xmx6g' "$on"
+grep -Fxq 'telemetry-java-options=-Xmx16g' "$on"
 grep -Fq 'north-coord.socket' "$on"
 grep -Fq 'north-telemetry-coord.socket' "$on"
 grep -Fq 'north-coord.service' "$on"

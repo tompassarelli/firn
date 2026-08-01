@@ -187,8 +187,8 @@ jcmd=$(
   exit 1
 }
 for setting in \
-  'export NORTH_COORD_PROMOTION_COORD_EXPECTED_MEMORY_HIGH_BYTES=7516192768' \
-  'export NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_MEMORY_HIGH_BYTES=5368709120' \
+  'export NORTH_COORD_PROMOTION_COORD_EXPECTED_MEMORY_HIGH_BYTES=19327352832' \
+  'export NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_MEMORY_HIGH_BYTES=10737418240' \
   'export NORTH_COORD_PROMOTION_COORD_EXPECTED_CPU_QUOTA_USEC=4000000' \
   'export NORTH_COORD_PROMOTION_TELEMETRY_EXPECTED_CPU_QUOTA_USEC=2000000' \
   'export NORTH_COORD_PROMOTION_EXPECTED_TASKS_MAX=128' \
@@ -221,8 +221,8 @@ for name in north-coord-blue.service north-coord-green.service; do
   grep -Fxq 'Environment="FRAM_CONNECTION_WORKERS=32"' "$path"
   grep -Fxq 'Environment="FRAM_CONNECTION_QUEUE=128"' "$path"
   grep -Fxq 'Environment="FRAM_REQUEST_TIMEOUT_MS=30000"' "$path"
-  grep -Fxq 'MemoryHigh=7G' "$path"
-  grep -Fxq 'MemoryMax=8G' "$path"
+  grep -Fxq 'MemoryHigh=18G' "$path"
+  grep -Fxq 'MemoryMax=20G' "$path"
   grep -Fxq 'MemorySwapMax=0' "$path"
   grep -Fxq 'CPUQuota=400%' "$path"
   grep -Fxq 'TasksMax=128' "$path"
@@ -231,7 +231,7 @@ for name in north-coord-blue.service north-coord-green.service; do
   grep -Fxq 'StartLimitIntervalSec=60' "$path"
   grep -Fxq 'StartLimitBurst=3' "$path"
   grep -Fxq \
-    "Environment=\"JDK_JAVA_OPTIONS=-XX:+UseG1GC -Xmx6g -Xlog:gc:file=/home/tom/.local/state/north/fram-runtime-$slot/gc-$port.log:time,uptime:filecount=3,filesize=10m\"" \
+    "Environment=\"JDK_JAVA_OPTIONS=-XX:+UseG1GC -Xmx16g -Xlog:gc:file=/home/tom/.local/state/north/fram-runtime-$slot/gc-$port.log:time,uptime:filecount=3,filesize=10m\"" \
     "$path"
   grep -Fxq 'TimeoutStopSec=15s' "$path"
 done
@@ -251,8 +251,8 @@ for name in north-telemetry-coord-blue.service north-telemetry-coord-green.servi
   grep -Fxq 'Environment="FRAM_CONNECTION_WORKERS=32"' "$path"
   grep -Fxq 'Environment="FRAM_CONNECTION_QUEUE=128"' "$path"
   grep -Fxq 'Environment="FRAM_REQUEST_TIMEOUT_MS=30000"' "$path"
-  grep -Fxq 'MemoryHigh=5G' "$path"
-  grep -Fxq 'MemoryMax=6G' "$path"
+  grep -Fxq 'MemoryHigh=10G' "$path"
+  grep -Fxq 'MemoryMax=12G' "$path"
   grep -Fxq 'MemorySwapMax=0' "$path"
   grep -Fxq 'CPUQuota=200%' "$path"
   grep -Fxq 'TasksMax=128' "$path"
@@ -261,7 +261,7 @@ for name in north-telemetry-coord-blue.service north-telemetry-coord-green.servi
   grep -Fxq 'StartLimitIntervalSec=60' "$path"
   grep -Fxq 'StartLimitBurst=3' "$path"
   grep -Fxq \
-    "Environment=\"JDK_JAVA_OPTIONS=-XX:+UseG1GC -Xmx4g -Xlog:gc:file=/home/tom/.local/state/north/fram-telemetry-runtime-$slot/gc-$port.log:time,uptime:filecount=3,filesize=10m\"" \
+    "Environment=\"JDK_JAVA_OPTIONS=-XX:+UseG1GC -Xmx8g -Xlog:gc:file=/home/tom/.local/state/north/fram-telemetry-runtime-$slot/gc-$port.log:time,uptime:filecount=3,filesize=10m\"" \
     "$path"
   grep -Fxq 'TimeoutStopSec=15s' "$path"
 done
