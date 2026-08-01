@@ -565,6 +565,36 @@ JSON
 
   printf 'dispatch=north\nguards=off\n' >"$HOME_DIR/.local/state/north/harness.conf"
 
+  # 9d-bis. The collapsed vocabulary (2026-08-02): native | north | auto.
+  # `auto` chooses the surface per dispatch, so it must KEEP native dispatch
+  # available. Omitting it from the table sent every auto session through the
+  # unknown-value catch-all and stripped its dispatch surface.
+  printf 'dispatch=auto\nguards=off\n' >"$HOME_DIR/.local/state/north/harness.conf"
+  run "$launcher" 0 -- as acctA auto-probe ; s="$STDERR"
+  check "$launcher/dispatch=auto keeps the native dispatch surface" \
+    test "$(record_field _ args)" = "$warn_args auto-probe"
+  check "$launcher/dispatch=auto is a recognized mode" \
+    not_contains "$s" 'unrecognized dispatch mode'
+
+  # A failed probe must land on a deterministic AUTHENTICATED account instead
+  # of an accountless ambient session (which cannot load a model at all). An
+  # account without its auth marker is never eligible for that fallback.
+  printf 'dispatch=north\nguards=off\n' >"$HOME_DIR/.local/state/north/harness.conf"
+  if [ "$launcher" = codex ]; then auth_marker="auth.json"; else auth_marker=".credentials.json"; fi
+  mkdir -p "$ROOT/acctA"
+  printf '{}\n' >"$ROOT/acctA/$auth_marker"
+  run "$launcher" 0 "NORTH_NO_SELECT_CACHE=1" -- fallback-probe ; s="$STDERR"
+  check "$launcher/failed probe falls back to an authenticated account" \
+    contains "$s" "→ acctA]"
+  check "$launcher/fallback says why and how to override" \
+    contains "$s" "fallback; override:"
+  check "$launcher/fallback pins that account home" \
+    test "$(record_field _ "$pinvar")" = "$ROOT/acctA"
+  rm -f "$ROOT/acctA/$auth_marker"
+  run "$launcher" 0 "NORTH_NO_SELECT_CACHE=1" -- ambient-probe ; s="$STDERR"
+  check "$launcher/unauthenticated accounts never win the fallback" \
+    contains "$s" "→ ambient]"
+
   # 9e. Compute governance (agent.slice). systemd-run is deliberately absent
   # from this harness's toolbox, so the FAIL-OPEN branch is what runs here:
   # governance must never be able to cost a session. Each decision is recorded
