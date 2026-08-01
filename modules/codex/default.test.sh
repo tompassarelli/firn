@@ -127,11 +127,11 @@ import tomllib
 with pathlib.Path(sys.argv[1]).open("rb") as handle:
     config = tomllib.load(handle)
 
-assert config["model"] == "gpt-5.6-terra"
-assert config["model_reasoning_effort"] == "medium"
+assert config["model"] == "gpt-5.6-sol"
+assert config["model_reasoning_effort"] == "high"
 assert config["mcp_servers"]["north"]["command"] == "/run/current-system/sw/bin/north-mcp"
 assert config["mcp_servers"]["fram"]["command"] == "/run/current-system/sw/bin/fram-mcp"
 PY
 
 printf 'ok: Codex config.toml and legacy hooks.json are generation-retained store copies with no checkout delivery dependency\n'
-printf 'ok: Codex keeps Terra/medium and immutable North/Fram MCP command paths\n'
+printf 'ok: Codex keeps Sol/high and immutable North/Fram MCP command paths\n'

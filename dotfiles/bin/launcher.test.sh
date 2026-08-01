@@ -100,11 +100,11 @@ import tomllib
 with open(sys.argv[1], "rb") as handle:
     config = tomllib.load(handle)
 
-assert config.get("model") == "gpt-5.6-terra"
-assert config.get("model_reasoning_effort") == "medium"
+assert config.get("model") == "gpt-5.6-sol"
+assert config.get("model_reasoning_effort") == "high"
 availability = config.get("tui", {}).get("model_availability_nux", {})
+assert availability.get("gpt-5.6-sol") == 1
 assert availability.get("gpt-5.6-terra") == 1
-assert "gpt-5.6-sol" not in availability
 PY
 }
 
@@ -135,11 +135,11 @@ declare -A SUB=([claude]=anthropic [codex]=openai)
 declare -A PINVAR=([claude]=CLAUDE_CONFIG_DIR [codex]=CODEX_HOME)
 declare -A ROOT_DEFAULT_ARGS=(
   [claude]='--model claude-fable-5 --effort xhigh --disallowedTools Agent,Task,Workflow'
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" --add-dir /home/tom/code -c model="gpt-5.6-terra" -c model_reasoning_effort="medium" --disable multi_agent'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" --add-dir /home/tom/code -c model="gpt-5.6-sol" -c model_reasoning_effort="high" --disable multi_agent'
 )
 declare -A WARN_DEFAULT_ARGS=(
   [claude]='--model claude-fable-5 --effort xhigh'
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" --add-dir /home/tom/code -c model="gpt-5.6-terra" -c model_reasoning_effort="medium"'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" --add-dir /home/tom/code -c model="gpt-5.6-sol" -c model_reasoning_effort="high"'
 )
 declare -A PASSTHROUGH_ARGS=(
   [claude]=''
@@ -506,8 +506,8 @@ JSON
     override_argv=(--model claude-sonnet-5 --effort medium)
     override_suffix='--model claude-sonnet-5 --effort medium'
   else
-    override_argv=(--model gpt-5.6-sol -c 'model_reasoning_effort="xhigh"')
-    override_suffix='--model gpt-5.6-sol -c model_reasoning_effort="xhigh"'
+    override_argv=(--model gpt-5.6-terra -c 'model_reasoning_effort="xhigh"')
+    override_suffix='--model gpt-5.6-terra -c model_reasoning_effort="xhigh"'
   fi
   run "$launcher" 0 -- as acctA "${override_argv[@]}" ; s="$STDERR"
   check "$launcher/explicit model+effort override follows native defaults" \
@@ -660,10 +660,10 @@ REAL_CODEX_BIN="${REAL_CODEX_BIN:-/run/current-system/sw/bin/codex}"
 if [ -x "$REAL_CODEX_BIN" ]; then
   check 'codex/real parser accepts config default plus later --model' \
     bash -c '"$@" >/dev/null' _ "$REAL_CODEX_BIN" \
-      -c 'model="gpt-5.6-terra"' \
-      -c 'model_reasoning_effort="medium"' \
+      -c 'model="gpt-5.6-sol"' \
+      -c 'model_reasoning_effort="high"' \
       --disable multi_agent \
-      --model gpt-5.6-sol \
+      --model gpt-5.6-terra \
       --help
 fi
 

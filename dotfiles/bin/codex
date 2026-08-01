@@ -140,8 +140,8 @@ native_dispatch_args() {
       ;;
   esac
   printf '%s\0' \
-    '-c' 'model="gpt-5.6-terra"' \
-    '-c' 'model_reasoning_effort="medium"'
+    '-c' 'model="gpt-5.6-sol"' \
+    '-c' 'model_reasoning_effort="high"'
   [ "$enforce_topology" -eq 0 ] || printf '%s\0' '--disable' 'multi_agent'
 }
 
