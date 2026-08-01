@@ -18,6 +18,7 @@ let
   runtimeState = "${homeDir}/.local/state/north/fram-runtime";
   telemetryRuntimeState = "${homeDir}/.local/state/north/fram-telemetry-runtime";
   stageA = config.myConfig.modules.north-coord.stageATelemetryPartition;
+  automaticFailover = config.myConfig.modules.north-coord.automaticFailover;
   pairTarget = "north-coord-pair.target";
   pairPrepareUnit = "north-coord-pair-prepare.service";
   mkNorthCoordRuntime = name: state: primaryLog: peerLog: port: unit: transactionOwner: pkgs.writeShellApplication {
@@ -357,6 +358,7 @@ in
   options.myConfig.modules.north-coord.enable = lib.mkEnableOption "Personal North coordinator daemon (:7977) — sole-writer fact-graph service for Tom's canonical log";
   options.myConfig.modules.north-coord.socketActivation = lib.mkEnableOption "systemd socket activation for :7977 (requires the Fram fd-consumer and north-coord-sd-listen)";
   options.myConfig.modules.north-coord.stageATelemetryPartition = lib.mkEnableOption "independent single-origin coordination (:7977) and telemetry (:7978) writers; option-off is the no-data-migration rollback";
+  options.myConfig.modules.north-coord.automaticFailover = lib.mkEnableOption "automatic blue/green coordinator failover after the bounded health threshold";
   config = lib.mkIf config.myConfig.modules.north-coord.enable {
     assertions = [
       {
@@ -593,7 +595,7 @@ in
     };
     systemd.timers.north-coord-health = lib.mkIf stageA {
       description = "Reconcile North blue/green coordinator health";
-      wantedBy = [ "timers.target" ];
+      wantedBy = lib.optional automaticFailover "timers.target";
       timerConfig = {
         OnBootSec = "2min";
         OnUnitActiveSec = "2min";

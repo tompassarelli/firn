@@ -8,7 +8,8 @@ trap 'rm -rf "${scratch:?}"' EXIT
 
 expr=$scratch/stage-a-eval.nix
 cat >"$expr" <<'EOF'
-{ repoRoot, stageA, socketActivation, northEnvPresent ? true }:
+{ repoRoot, stageA, socketActivation, automaticFailover ? false,
+  northEnvPresent ? true }:
 
 let
   flake = builtins.getFlake ("path:" + repoRoot);
@@ -101,6 +102,7 @@ let
           myConfig.modules.north-coord.enable = true;
           myConfig.modules.north-coord.socketActivation = socketActivation;
           myConfig.modules.north-coord.stageATelemetryPartition = stageA;
+          myConfig.modules.north-coord.automaticFailover = automaticFailover;
         };
       })
     ];
@@ -161,9 +163,10 @@ cache=$scratch/cache
 mkdir -p "$cache"
 build_case() {
   local stage_a=$1 socket_activation=$2 north_env_present=${3:-true}
+  local automatic_failover=${4:-false}
   XDG_CACHE_HOME=$cache nix build \
     --impure --no-link --print-out-paths \
-    --expr "import $expr { repoRoot = \"$repo_root\"; stageA = $stage_a; socketActivation = $socket_activation; northEnvPresent = $north_env_present; }"
+    --expr "import $expr { repoRoot = \"$repo_root\"; stageA = $stage_a; socketActivation = $socket_activation; automaticFailover = $automatic_failover; northEnvPresent = $north_env_present; }"
 }
 
 if missing_output=$(build_case false true false 2>&1); then
@@ -207,7 +210,7 @@ grep -Fxq 'telemetry-socket-wanted-by=sockets.target' "$on"
 grep -Fxq 'telemetry-service=true' "$on"
 grep -Fxq 'pair-target=true' "$on"
 grep -Fxq 'cross-slot-health-timers=north-coord-health' "$on"
-grep -Fxq 'health-timer-wanted-by=timers.target' "$on"
+grep -Fxq 'health-timer-wanted-by=' "$on"
 grep -Fxq 'coord-part-of=north-coord-pair.target' "$on"
 grep -Fxq 'telemetry-part-of=north-coord-pair.target' "$on"
 grep -Fxq 'coord-restart-if-changed=false' "$on"
@@ -234,6 +237,11 @@ grep -Fq 'export NORTH_TELEMETRY_PARTITION=1' "$on_wrapper/bin/north"
 grep -Fq 'export NORTH_TELEMETRY_PORT=7978' "$on_wrapper/bin/north"
 grep -Fq 'FRAM_TELEMETRY_LOG=/tmp/north-stage-a-fixture/.local/state/north/telemetry.log' \
   "$on_wrapper/bin/north"
+
+automatic=$(build_case true true true true)
+grep -Fxq 'assertion=true' "$automatic"
+grep -Fxq 'cross-slot-health-timers=north-coord-health' "$automatic"
+grep -Fxq 'health-timer-wanted-by=timers.target' "$automatic"
 
 invalid=$(build_case true false)
 grep -Fxq 'assertion=false' "$invalid"

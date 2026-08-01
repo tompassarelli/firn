@@ -59,7 +59,12 @@ mapfile -t cross_slot_health_timers < <(
     "${cross_slot_health_timers[*]:-none}" >&2
   exit 1
 }
-grep -Fxq 'WantedBy=timers.target' "$(unit north-coord-health.timer)"
+if grep -q '^WantedBy=' "$(unit north-coord-health.timer)"; then
+  echo "automatic health failover timer is unexpectedly enabled" >&2
+  exit 1
+fi
+[[ ! -e "$units/timers.target.wants/north-coord-health.timer" &&
+   ! -L "$units/timers.target.wants/north-coord-health.timer" ]]
 
 # Ordinary activation preserves the permanent listener contract. The intended
 # socket deltas disable the fatal trigger limit and bound both accept queues.
