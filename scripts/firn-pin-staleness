@@ -1,0 +1,244 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+warn_days=30
+failures=0
+hand_pins=0
+lock_inputs=0
+
+usage() {
+  cat <<'EOF'
+Usage: firn-pin-staleness [--warn-days DAYS]
+
+Inventory and verify hand-maintained external pins, then report the age of
+direct flake.lock inputs. Exits nonzero when a hand pin cannot be verified or a
+locked input is older than the warning threshold (default: 30 days).
+EOF
+}
+
+while (($#)); do
+  case "$1" in
+    --warn-days)
+      (($# >= 2)) || { printf 'error: --warn-days requires a value\n' >&2; exit 2; }
+      warn_days=$2
+      shift 2
+      ;;
+    --warn-days=*)
+      warn_days=${1#*=}
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'error: unknown argument: %s\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+[[ "$warn_days" =~ ^[0-9]+$ ]] || {
+  printf 'error: --warn-days must be a non-negative integer\n' >&2
+  exit 2
+}
+
+for command_name in curl git jq; do
+  command -v "$command_name" >/dev/null 2>&1 || {
+    printf 'error: required command not found: %s\n' "$command_name" >&2
+    exit 2
+  }
+done
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+  printf 'error: run this script from a Git checkout\n' >&2
+  exit 2
+}
+cd "$repo_root" || exit 2
+
+[[ -f flake.lock ]] || {
+  printf 'error: flake.lock not found at repository root\n' >&2
+  exit 2
+}
+jq -e '.root as $root | (.nodes[$root].inputs | type == "object")' flake.lock \
+  >/dev/null || {
+    printf 'error: flake.lock does not contain a readable root input set\n' >&2
+    exit 2
+  }
+
+declare -A verification_cache=()
+
+verify_url() {
+  local url=$1 status
+
+  if [[ -v 'verification_cache[$url]' ]]; then
+    return "${verification_cache[$url]}"
+  fi
+
+  if curl --silent --show-error --fail --location --head \
+    --retry 2 --connect-timeout 10 --max-time 30 "$url" >/dev/null; then
+    status=0
+  else
+    status=1
+  fi
+  verification_cache[$url]=$status
+  return "$status"
+}
+
+report_hand_pin() {
+  local kind=$1 location=$2 value=$3 verification_url=$4
+
+  ((hand_pins += 1))
+  if verify_url "$verification_url"; then
+    printf 'OK    hand-pin %-13s %-38s %s\n' "$kind" "$location" "$value"
+  else
+    printf 'ERROR hand-pin %-13s %-38s %s\n' "$kind" "$location" "$value"
+    printf 'REMEDY %s: verify the upstream ref or URL, then update the pin and any matching hash.\n' "$location"
+    ((failures += 1))
+  fi
+}
+
+printf 'Hand-maintained pins outside flake.lock\n'
+
+while IFS=: read -r file line text; do
+  [[ -n "$file" ]] || continue
+  if [[ "$text" =~ uses:[[:space:]]*([^/@[:space:]]+)/([^@[:space:]]+)@([^[:space:]#]+) ]]; then
+    owner=${BASH_REMATCH[1]}
+    repository=${BASH_REMATCH[2]}
+    ref=${BASH_REMATCH[3]}
+    report_hand_pin action "$file:$line" "$owner/$repository@$ref" \
+      "https://github.com/$owner/$repository/archive/$ref.tar.gz"
+  fi
+done < <(git grep -n -E 'uses:[[:space:]]*[^[:space:]]+@[^[:space:]#]+' -- '.github/workflows/*.yml' || true)
+
+precommit_repo=''
+precommit_line=''
+while IFS=: read -r line text; do
+  if [[ "$text" =~ repo:[[:space:]]*(https://github.com/([^/[:space:]]+)/([^[:space:]]+)) ]]; then
+    precommit_repo=${BASH_REMATCH[1]}
+    precommit_owner=${BASH_REMATCH[2]}
+    precommit_name=${BASH_REMATCH[3]}
+    precommit_line=$line
+  elif [[ -n "$precommit_repo" && "$text" =~ rev:[[:space:]]*([^[:space:]#]+) ]]; then
+    ref=${BASH_REMATCH[1]}
+    report_hand_pin pre-commit ".pre-commit-config.yaml:$precommit_line" \
+      "$precommit_repo@$ref" \
+      "https://github.com/$precommit_owner/$precommit_name/archive/$ref.tar.gz"
+    precommit_repo=''
+  fi
+done < <(grep -n -E 'repo:[[:space:]]*https://github.com/|rev:[[:space:]]*[^[:space:]]+' .pre-commit-config.yaml || true)
+
+while IFS=: read -r file line text; do
+  [[ -n "$file" ]] || continue
+  remaining=$text
+  while [[ "$remaining" =~ github:([^/\"[:space:]]+)/([^/\"[:space:]]+)/([0-9a-f]{40}) ]]; do
+    owner=${BASH_REMATCH[1]}
+    repository=${BASH_REMATCH[2]}
+    ref=${BASH_REMATCH[3]}
+    report_hand_pin github-rev "$file:$line" "$owner/$repository@$ref" \
+      "https://github.com/$owner/$repository/archive/$ref.tar.gz"
+    remaining=${remaining#*"${BASH_REMATCH[0]}"}
+  done
+done < <(git grep -n -E 'github:[^[:space:]"/]+/[^[:space:]"/]+/[0-9a-f]{40}' \
+  -- '*.bnix' '.github/workflows/*.yml' || true)
+
+while IFS=$'\t' read -r file line url hash; do
+  [[ -n "$file" ]] || continue
+  location="$file:$line"
+  if [[ ! "$hash" =~ ^sha256-[A-Za-z0-9+/]{43}=$ ]]; then
+    ((hand_pins += 1, failures += 1))
+    printf 'ERROR hand-pin %-13s %-38s %s (%s)\n' fixed-output "$location" "$url" "$hash"
+    printf 'REMEDY %s: replace the malformed hash with a valid sha256 SRI hash.\n' "$location"
+  else
+    report_hand_pin fixed-output "$location" "$url ($hash)" "$url"
+  fi
+done < <(
+  while IFS= read -r file; do
+    awk -v file="$file" '
+      match($0, /https:\/\/[^"[:space:]]+/) {
+        url = substr($0, RSTART, RLENGTH)
+        url_line = NR
+      }
+      match($0, /sha256-[A-Za-z0-9+\/=]+/) && url != "" && NR - url_line <= 5 {
+        print file "\t" url_line "\t" url "\t" substr($0, RSTART, RLENGTH)
+        url = ""
+      }
+    ' "$file"
+  done < <(git ls-files '*.bnix')
+)
+
+while IFS=$'\t' read -r file line owner repository tag hash; do
+  [[ -n "$file" ]] || continue
+  location="$file:$line"
+  if [[ ! "$hash" =~ ^sha256-[A-Za-z0-9+/]{43}=$ ]]; then
+    ((hand_pins += 1, failures += 1))
+    printf 'ERROR hand-pin %-13s %-38s %s/%s@%s (%s)\n' codeberg-tag "$location" \
+      "$owner" "$repository" "$tag" "$hash"
+    printf 'REMEDY %s: replace the malformed hash with a valid sha256 SRI hash.\n' "$location"
+  else
+    report_hand_pin codeberg-tag "$location" "$owner/$repository@$tag ($hash)" \
+      "https://codeberg.org/$owner/$repository/archive/$tag.tar.gz"
+  fi
+done < <(
+  while IFS= read -r file; do
+    awk -v file="$file" '
+      /fetchFromCodeberg/ { active = 1; start = NR; owner = repo = tag = hash = "" }
+      active && match($0, /:owner[[:space:]]+"[^"]+"/) {
+        owner = substr($0, RSTART, RLENGTH); sub(/^:owner[[:space:]]+"/, "", owner); sub(/"$/, "", owner)
+      }
+      active && match($0, /:repo[[:space:]]+"[^"]+"/) {
+        repo = substr($0, RSTART, RLENGTH); sub(/^:repo[[:space:]]+"/, "", repo); sub(/"$/, "", repo)
+      }
+      active && match($0, /:(tag|rev)[[:space:]]+"[^"]+"/) {
+        tag = substr($0, RSTART, RLENGTH); sub(/^:(tag|rev)[[:space:]]+"/, "", tag); sub(/"$/, "", tag)
+      }
+      active && match($0, /sha256-[A-Za-z0-9+\/=]+/) {
+        hash = substr($0, RSTART, RLENGTH)
+        if (owner != "" && repo != "" && tag != "") print file "\t" start "\t" owner "\t" repo "\t" tag "\t" hash
+        active = 0
+      }
+      active && NR - start > 12 { active = 0 }
+    ' "$file"
+  done < <(git ls-files '*.bnix')
+)
+
+printf '\nDirect flake.lock inputs (warn when older than %s days)\n' "$warn_days"
+now=$(date +%s)
+root_node=$(jq -r '.root' flake.lock)
+
+while IFS=$'\t' read -r input node; do
+  [[ -n "$input" && -n "$node" ]] || continue
+  rev=$(jq -r --arg node "$node" '.nodes[$node].locked.rev // empty' flake.lock)
+  [[ -n "$rev" ]] || continue
+  ((lock_inputs += 1))
+  modified=$(jq -r --arg node "$node" '.nodes[$node].locked.lastModified // empty' flake.lock)
+
+  if [[ ! "$modified" =~ ^[0-9]+$ ]]; then
+    printf 'ERROR flake-input %-22s rev %.12s age unverifiable\n' "$input" "$rev"
+    printf 'REMEDY flake.lock:%s: run firn update, review the lock diff, and commit the refreshed input.\n' "$input"
+    ((failures += 1))
+    continue
+  fi
+
+  age_seconds=$((now - modified))
+  ((age_seconds < 0)) && age_seconds=0
+  age_days=$((age_seconds / 86400))
+  if ((age_days > warn_days)); then
+    printf 'STALE flake-input %-22s rev %.12s age %dd\n' "$input" "$rev" "$age_days"
+    printf 'REMEDY flake.lock:%s: run firn update, review the lock diff, and commit the refreshed input.\n' "$input"
+    ((failures += 1))
+  else
+    printf 'OK    flake-input %-22s rev %.12s age %dd\n' "$input" "$rev" "$age_days"
+  fi
+done < <(jq -r --arg root "$root_node" '
+  .nodes[$root].inputs
+  | to_entries[]
+  | select(.value | type == "string")
+  | [.key, .value]
+  | @tsv
+' flake.lock | sort)
+
+printf '\nSummary: %d hand pins, %d direct locked inputs, %d issue(s)\n' \
+  "$hand_pins" "$lock_inputs" "$failures"
+((failures == 0))

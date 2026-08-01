@@ -6,6 +6,15 @@ on:
     branches: [main]
 
 jobs:
+  pin-staleness:
+    name: Pin staleness (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - name: Report stale hand pins and flake inputs
+        run: ./scripts/firn-pin-staleness
+
   tests:
     runs-on: ubuntu-latest
     steps:
@@ -38,8 +47,8 @@ jobs:
         # raco refuses both as one directory, so set up by package with it unset.
         run: |
           source "$GITHUB_WORKSPACE/beagle/bin/_beagle-racket"
-          PLTCOLLECTS= "$RACO" pkg install --auto --batch --link --force "$GITHUB_WORKSPACE/beagle/beagle-lib"
-          PLTCOLLECTS= "$RACO" setup --pkgs beagle-lib
+          PLTCOLLECTS='' "$RACO" pkg install --auto --batch --link --force "$GITHUB_WORKSPACE/beagle/beagle-lib"
+          PLTCOLLECTS='' "$RACO" setup --pkgs beagle-lib
 
       - name: Drift check (.bnix and .nix in sync)
         # Regenerates every .nix from its sibling .bnix and fails if any
