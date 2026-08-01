@@ -4,6 +4,8 @@ let
   username = config.myConfig.modules.users.username;
   eventOwnerEnabled = config.myConfig.modules.north-reactor.eventOwner.enable;
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
+  promotedRuntime = "%h/.local/state/north/runtime/current";
+  eventOwnerScript = "${promotedRuntime}/cli/rebuild-window-watch.clj";
   runtimePath = "PATH=${pkgs.systemd}/bin:${pkgs.babashka}/bin:${pkgs.coreutils}/bin:${pkgs.git}/bin";
   northRuntimeExec = pkgs.writeShellApplication {
     name = "north-runtime-exec";
@@ -13,19 +15,21 @@ let
 in
 {
   options.myConfig.modules.north-reactor.enable = lib.mkEnableOption "North reactor periodic liveness and rebuild-window sweep";
-  options.myConfig.modules.north-reactor.eventOwner.enable = lib.mkEnableOption "North event-driven rebuild queue owner. OFF until cursor-only writes stop waking the watcher: it self-triggered at ~30 wakes/s on zero real events. A hand-placed /dev/null mask cannot express this — it collides with the unit HM writes and aborts activation";
+  options.myConfig.modules.north-reactor.eventOwner.enable = lib.mkEnableOption "North event-driven rebuild queue owner with semantic filtering and reconnect catch-up";
   config = lib.mkIf config.myConfig.modules.north-reactor.enable {
     home-manager.users.${username} = ({ config, ... }: {
       systemd.user.services.north-rebuild-queue-owner = lib.mkIf eventOwnerEnabled {
         Unit = {
           Description = "North event-driven rebuild queue owner";
+          ConditionPathExists = eventOwnerScript;
         };
         Service = {
           Type = "simple";
           Restart = "always";
           RestartSec = "1s";
           Environment = [ runtimePath ];
-          ExecStart = "${northRuntimeExec}/bin/north-runtime-exec --chdir --interp ${pkgs.babashka}/bin/bb ${northPkg} cli/rebuild-window-watch.clj";
+          WorkingDirectory = promotedRuntime;
+          ExecStart = "${pkgs.babashka}/bin/bb ${eventOwnerScript}";
         };
         Install = {
           WantedBy = [ "default.target" ];

@@ -70,6 +70,9 @@
    ;; lanes. Was RUNNING NEVER (no unit started it). Sweep only; loop-mode
    ;; reprojection stays out of scope (see module).
    :myConfig.modules.north-reactor.enable true
+   ;; One event owner handles semantic queue changes immediately; the reactor
+   ;; timer remains the durable fallback.
+   :myConfig.modules.north-reactor.eventOwner.enable true
    ;; agent.slice + the session.slice mirror weight. Inert until a launcher
    ;; actually enters the scope; the slice itself costs nothing.
    :myConfig.modules.agent-slice.enable true

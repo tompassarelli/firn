@@ -59,6 +59,7 @@
   myConfig.modules.north-coord.automaticFailover = false;
   myConfig.modules.north-stream-sync.enable = true;
   myConfig.modules.north-reactor.enable = true;
+  myConfig.modules.north-reactor.eventOwner.enable = true;
   myConfig.modules.agent-slice.enable = true;
   systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
