@@ -31,6 +31,7 @@ NORTH_PAYLOAD_FILES=(
 BEAGLE_PAYLOAD_FILES=(
   integrations/north/hooks/beagle-session-start.sh
   integrations/north/hooks/racket-build-guard.sh
+  share/targets.sh
 )
 
 RECORD_FORMAT=north-enforcement-promote/v1

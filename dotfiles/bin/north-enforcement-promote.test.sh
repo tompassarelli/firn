@@ -45,7 +45,8 @@ export NORTH_ENFORCEMENT_UNPRIVILEGED=1
 export NORTH_ENFORCEMENT_STATE_ROOT="$WORK/state"
 
 NORTH="$WORK/north"
-BEAGLE="$WORK/beagle"
+BEAGLE_FIXTURE="$WORK/beagle"
+BEAGLE="${NORTH_ENFORCEMENT_TEST_BEAGLE_REPO:-$BEAGLE_FIXTURE}"
 
 git_init() {
   git init -q -b main "$1"
@@ -74,11 +75,37 @@ printf 'stop v1\n' >"$NORTH/bin/north-on-stop"
 printf 'delegated v1\n' >"$NORTH/bin/north-mark-delegated"
 NORTH_V1="$(commit_all "$NORTH" 'north v1')"
 
-git_init "$BEAGLE"
-mkdir -p "$BEAGLE/integrations/north/hooks"
-printf 'session v1\n' >"$BEAGLE/integrations/north/hooks/beagle-session-start.sh"
-printf 'racket v1\n' >"$BEAGLE/integrations/north/hooks/racket-build-guard.sh"
-BEAGLE_V1="$(commit_all "$BEAGLE" 'beagle v1')"
+if [ "$BEAGLE" = "$BEAGLE_FIXTURE" ]; then
+  git_init "$BEAGLE"
+  mkdir -p "$BEAGLE/integrations/north/hooks" "$BEAGLE/share"
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'set -euo pipefail' \
+    'dir="$PWD"' \
+    'hook_root="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../../.." && pwd)"' \
+    '. "$hook_root/share/targets.sh"' \
+    'for target in "${BEAGLE_TARGET_IDS[@]}"; do' \
+    '  extension="${BEAGLE_TARGET_SRC_EXT[$target]}"' \
+    '  for source in "$dir"/*."$extension" "$dir"/src/*."$extension"; do' \
+    '    [ -e "$source" ] || continue' \
+    '    printf "%s\\n" "Beagle authoring is active."' \
+    '    exit 0' \
+    '  done' \
+    'done' \
+    >"$BEAGLE/integrations/north/hooks/beagle-session-start.sh"
+  printf 'racket v1\n' >"$BEAGLE/integrations/north/hooks/racket-build-guard.sh"
+  printf '%s\n' \
+    'BEAGLE_TARGET_IDS=(nix zig)' \
+    'declare -A BEAGLE_TARGET_SRC_EXT=([nix]=bnix [zig]=bzig)' \
+    >"$BEAGLE/share/targets.sh"
+  BEAGLE_V1="$(commit_all "$BEAGLE" 'beagle v1')"
+else
+  BEAGLE_V1="$({ git -C "$BEAGLE" rev-parse --verify "${NORTH_ENFORCEMENT_TEST_BEAGLE_REV:-HEAD}^{commit}"; } 2>/dev/null)" || {
+    printf 'invalid committed Beagle source: %s@%s\n' \
+      "$BEAGLE" "${NORTH_ENFORCEMENT_TEST_BEAGLE_REV:-HEAD}" >&2
+    exit 1
+  }
+fi
 
 promote() {
   "$PROMOTE" "$@" --north-repo "$NORTH" --beagle-repo "$BEAGLE"
@@ -119,10 +146,31 @@ check 'lifecycle runtimes are promoted' \
   test -f "$CURRENT/north/bin/north-on-spawn"
 check 'Beagle Codex hooks are promoted under their own provenance' \
   test -f "$CURRENT/beagle/integrations/north/hooks/racket-build-guard.sh"
+check 'Beagle target metadata is promoted under the hook-relative root' \
+  test -f "$CURRENT/beagle/share/targets.sh"
 check 'a cross-repo symlink is not promoted' \
   test ! -e "$CURRENT/north/profiles/tom/hooks/code-upstream-guard.sh"
 check_eq 'promoted content is the committed blob' \
   "$(cat "$CURRENT/north/bin/north-on-spawn")" 'spawn v1'
+
+SOURCE_PROJECT="$WORK/beagle-source-project"
+BEAGLE_TOOLCHAIN="$WORK/beagle-toolchain"
+mkdir -p "$SOURCE_PROJECT" "$BEAGLE_TOOLCHAIN/bin" "$WORK/home" "$WORK/session-state"
+touch "$SOURCE_PROJECT/main.bzig"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$BEAGLE_TOOLCHAIN/bin/beagle"
+chmod +x "$BEAGLE_TOOLCHAIN/bin/beagle"
+check 'extension-only Beagle fixture has no marker directory' \
+  test ! -e "$SOURCE_PROJECT/.beagle"
+hook_output="$(
+  cd "$SOURCE_PROJECT" &&
+    env HOME="$WORK/home" \
+      BEAGLE_PATH="$BEAGLE_TOOLCHAIN" \
+      BEAGLE_SESSION_STATE_DIR="$WORK/session-state" \
+      AGENT_NO_AUTHORING_HOOKS=0 \
+      bash "$CURRENT/beagle/integrations/north/hooks/beagle-session-start.sh" </dev/null
+)"
+check_contains 'sealed SessionStart detects an extension-only Beagle project' \
+  "$hook_output" 'Beagle authoring is active.'
 
 # --- sealing ------------------------------------------------------------------
 unsealed=0
