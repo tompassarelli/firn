@@ -289,10 +289,10 @@ inspect_prepare() {
           canonical (fn [p] (.getCanonicalPath (java.io.File. ^String p)))
           coord-path (canonical coord-log)
           telemetry-path (canonical telemetry-log)
-          expected-logs
+          expected-log
           (case origin
-            "coord" {:primary coord-path :telemetry telemetry-path}
-            "telemetry" {:primary telemetry-path :telemetry coord-path}
+            "coord" coord-path
+            "telemetry" telemetry-path
             nil)]
       (with-open [reader
                   (java.io.PushbackReader.
@@ -324,7 +324,7 @@ inspect_prepare() {
           (when-not
            (and (= ::eof trailing)
                 (map? m)
-                (map? expected-logs)
+                (string? expected-log)
                 (not= coord-path telemetry-path)
                 (= true (:ok m))
                 (= "fram-coordinator-cutover/v1" (:protocol m))
@@ -342,14 +342,10 @@ inspect_prepare() {
                 (= (:version m) (:version marker))
                 (= (:instance m) (:source-instance marker))
                 (vector? logs)
-                (= 2 (count logs))
+                (= 1 (count logs))
                 (every? valid-log? logs)
-                (= #{:primary :telemetry} (set (map :label logs)))
-                (= 2 (count (distinct (map :path logs))))
-                (every?
-                 (fn [proof]
-                   (= (get expected-logs (:label proof)) (:path proof)))
-                 logs)
+                (= :primary (:label (first logs)))
+                (= expected-log (:path (first logs)))
                 (= true (:prewarmed sync))
                 (contains? #{:unchanged :installed :superseded}
                            (:reload sync))

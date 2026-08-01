@@ -342,24 +342,24 @@ case "$command" in
     source_instance=$instance
     primary_log=$log
     case "$port" in
-      17977|27977) peer_log=$NORTH_COORD_TELEMETRY_LOG ;;
-      17978|27978) peer_log=$NORTH_COORD_COORD_LOG ;;
+      17977|27977) other_log=$NORTH_COORD_TELEMETRY_LOG ;;
+      17978|27978) other_log=$NORTH_COORD_COORD_LOG ;;
       *) exit 2 ;;
     esac
     primary_label=primary
-    peer_label=telemetry
+    extra_proof=
     case "$proof_mode" in
       healthy) ;;
-      missing-peer) peer_log= ;;
-      duplicate-label) peer_label=primary ;;
-      duplicate-path) peer_log=$primary_log ;;
-      foreign-label) peer_label=foreign ;;
-      foreign-path) peer_log=/tmp/foreign-cutover-peer.log ;;
-      swapped-paths)
-        swapped=$primary_log
-        primary_log=$peer_log
-        peer_log=$swapped
+      empty) primary_log= ;;
+      missing-primary) primary_label=telemetry ;;
+      extra-proof) extra_proof=telemetry ;;
+      duplicate-proof) extra_proof=primary ;;
+      foreign-label) primary_label=foreign ;;
+      foreign-path) primary_log=/tmp/foreign-cutover-primary.log ;;
+      noncanonical-path)
+        primary_log=${primary_log%/*}/./${primary_log##*/}
         ;;
+      swapped-origin) primary_log=$other_log ;;
       instance-mismatch) source_instance=wrong-instance ;;
       trailing|malformed) ;;
       *) exit 2 ;;
@@ -368,10 +368,12 @@ case "$command" in
       printf '{:ok true :protocol\n'
       exit 0
     fi
-    if [[ -n "$peer_log" ]]; then
-      printf -v log_proofs '[{:label :%s :path "%s" :bytes 0 :file-key "fake-%s-primary" :identity "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" :boundary-sha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"} {:label :%s :path "%s" :bytes 0 :file-key "fake-%s-peer" :identity "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" :boundary-sha "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]' \
+    if [[ -z "$primary_log" ]]; then
+      log_proofs='[]'
+    elif [[ -n "$extra_proof" ]]; then
+      printf -v log_proofs '[{:label :%s :path "%s" :bytes 0 :file-key "fake-%s-primary" :identity "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" :boundary-sha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"} {:label :%s :path "%s" :bytes 0 :file-key "fake-%s-extra" :identity "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" :boundary-sha "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]' \
         "$primary_label" "$primary_log" "$port" \
-        "$peer_label" "$peer_log" "$port"
+        "$extra_proof" "$primary_log" "$port"
     else
       printf -v log_proofs '[{:label :%s :path "%s" :bytes 0 :file-key "fake-%s-primary" :identity "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" :boundary-sha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}]' \
         "$primary_label" "$primary_log" "$port"
@@ -565,12 +567,14 @@ assert_prepare_rejected missing-prewarm
 unset NORTH_COORD_TEST_PREWARMED
 
 for proof_mode in \
-  missing-peer \
-  duplicate-label \
-  duplicate-path \
+  empty \
+  missing-primary \
+  extra-proof \
+  duplicate-proof \
   foreign-label \
   foreign-path \
-  swapped-paths \
+  noncanonical-path \
+  swapped-origin \
   instance-mismatch \
   trailing \
   malformed
@@ -579,6 +583,11 @@ do
   assert_prepare_rejected "prepare-proof-$proof_mode"
 done
 unset NORTH_COORD_TEST_PREPARE_PROOF_MODE
+
+telemetry_log=$NORTH_COORD_TELEMETRY_LOG
+export NORTH_COORD_TELEMETRY_LOG=$NORTH_COORD_COORD_LOG
+assert_prepare_rejected configured-log-collision
+export NORTH_COORD_TELEMETRY_LOG=$telemetry_log
 
 # Healthy telemetry cannot hide a bad coordination process.
 printf 'oversized\n' >"$jcmd_state/mode.4201"
