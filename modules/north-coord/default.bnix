@@ -455,7 +455,9 @@
            :FRAM_REQUIRE_LOG_FENCE "1"
            :FRAM_QUERY_TIMEOUT_MS "30000"
            :FRAM_TELEMETRY_LOG (s homeDir "/.local/state/north/telemetry.log")
-           :JDK_JAVA_OPTIONS "-Xmx6g"}
+           ;; Emitted after the slot's own JDK_JAVA_OPTIONS, so this value is the
+           ;; one systemd keeps — it must not undercut coordHeapOptions.
+           :JDK_JAVA_OPTIONS "-Xmx16g"}
         serviceConfigBase
           {:Type             "simple"
            :User             username
