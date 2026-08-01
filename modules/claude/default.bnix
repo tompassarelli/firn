@@ -4,12 +4,9 @@
 
 (nix/module [config lib pkgs inputs flakeRoot ...]
   (let [username config.myConfig.modules.users.username
-        ;; Preserve the explicitly pinned native Linux binary while using the
-        ;; pinned nixpkgs-master package that actually supports aarch64-darwin.
-        claudePackage
-         (if pkgs.stdenv.hostPlatform.isDarwin
-           pkgs.master.claude-code
-           pkgs.claude-code-latest)
+        ;; nixpkgs-master already fetches the same native release binary, so the
+        ;; version moves with the input instead of a hand-maintained checksum.
+        claudePackage pkgs.master.claude-code
         psBin
          (if pkgs.stdenv.hostPlatform.isDarwin
            "/bin/ps"

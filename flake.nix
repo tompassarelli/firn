@@ -141,13 +141,6 @@
                 system = system;
                 config.allowUnfree = true;
               };
-              claude-code-latest = final.master.claude-code.overrideAttrs (old: {
-                version = "2.1.219";
-                src = final.fetchurl {
-                  url = "https://downloads.claude.ai/claude-code-releases/2.1.219/linux-x64/claude";
-                  sha256 = "22cfd6f5b3061c0391ba84e9cf8c9deaa37783aac18b004d42ec061e98f00691";
-                };
-              });
               kanata-git = final.unstable.kanata.overrideAttrs (old: {
                 src = kanata-git;
                 version = "git";

@@ -2,7 +2,7 @@
 
 let
   username = config.myConfig.modules.users.username;
-  claudePackage = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.master.claude-code else pkgs.claude-code-latest;
+  claudePackage = pkgs.master.claude-code;
   psBin = if pkgs.stdenv.hostPlatform.isDarwin then "/bin/ps" else "${pkgs.procps}/bin/ps";
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
   framPkg = inputs.fram.packages."${pkgs.stdenv.hostPlatform.system}".default;
