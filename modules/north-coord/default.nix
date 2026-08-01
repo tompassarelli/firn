@@ -596,8 +596,8 @@ in
       wantedBy = [ "timers.target" ];
       timerConfig = {
         OnBootSec = "2min";
-        OnUnitActiveSec = "10s";
-        AccuracySec = "1s";
+        OnUnitActiveSec = "2min";
+        AccuracySec = "5s";
       };
     };
     systemd.services.north-coord-blue-green-resume = lib.mkIf stageA {

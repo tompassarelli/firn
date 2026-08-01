@@ -866,10 +866,12 @@
           (lib.mkIf stageA
             {:description "Reconcile North blue/green coordinator health"
              :wantedBy ["timers.target"]
+             ;; Must exceed a reconcile's own runtime (~16s), or back-to-back runs
+             ;; exhaust coordinator request admission.
              :timerConfig
               {:OnBootSec "2min"
-               :OnUnitActiveSec "10s"
-               :AccuracySec "1s"}})
+               :OnUnitActiveSec "2min"
+               :AccuracySec "5s"}})
          :systemd.services.north-coord-blue-green-resume
           (lib.mkIf stageA
             {:description
