@@ -4,7 +4,8 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TARGET="$REPO/dotfiles/bin/wt-reap"
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/wt-reap-test.XXXXXX")"
-trap 'rm -rf "${scratch:?}"' EXIT
+live_pid=''
+trap 'if [ -n "${live_pid:-}" ]; then kill "$live_pid" 2>/dev/null || true; fi; rm -rf "${scratch:?}"' EXIT
 
 export GIT_AUTHOR_NAME=wt-reap-test
 export GIT_AUTHOR_EMAIL=wt-reap-test@example.invalid
@@ -50,11 +51,25 @@ printf 'docs/private/\n.direnv/\nresult\nresult-*\n' >"$container/main/.gitignor
 git -C "$container/main" add f.txt .gitignore
 git -C "$container/main" commit -qm base
 
-# 1. merged + clean -> reaped (the pre-existing ancestor path)
-git -C "$container/main" worktree add -q -b merged-clean "$container/wt-merged-clean" main
-printf 'merged\n' >>"$container/wt-merged-clean/f.txt"
-git -C "$container/wt-merged-clean" commit -qam 'merged change'
-git -C "$container/main" merge -q merged-clean
+# 1. fresh + clean + merged -> kept. This is the race guard for a just-created
+# worktree whose HEAD starts at main.
+git -C "$container/main" worktree add -q -b merged-fresh "$container/wt-merged-fresh" main
+
+# 2. aged + clean + merged -> reaped (the ordinary ancestor path).
+git -C "$container/main" worktree add -q -b merged-aged "$container/wt-merged-aged" main
+aged "$container/wt-merged-aged"
+
+# 3-5. Aged ordinary-merged lanes are still protected by rescue, lock, and a
+# live CWD, exactly as their patch-equivalent counterparts are.
+git -C "$container/main" worktree add -q -b rescue-merged "$container/wt-rescue-merged" main
+aged "$container/wt-rescue-merged"
+git -C "$container/main" worktree add -q -b merged-locked "$container/wt-merged-locked" main
+aged "$container/wt-merged-locked"
+git -C "$container/main" worktree lock "$container/wt-merged-locked"
+git -C "$container/main" worktree add -q -b merged-live "$container/wt-merged-live" main
+aged "$container/wt-merged-live"
+(cd "$container/wt-merged-live" && exec sleep 60) >/dev/null 2>&1 &
+live_pid=$!
 
 # The intervening commit is load-bearing: cherry-picking straight onto the
 # branch's own parent reproduces a byte-identical sha, i.e. a plain ancestor.
@@ -67,7 +82,7 @@ land_equivalent() { # land <branch>'s commit onto main under a different sha
   git -C "$container/main" cherry-pick "$sha" >/dev/null
 }
 
-# 2. patch-equivalent + aged -> reaped (equiv)
+# 6. patch-equivalent + aged -> reaped (equiv)
 git -C "$container/main" worktree add -q -b equiv-aged "$container/wt-equiv-aged" main
 printf 'equiv-aged payload\n' >"$container/wt-equiv-aged/equiv-aged.txt"
 git -C "$container/wt-equiv-aged" add equiv-aged.txt
@@ -76,7 +91,7 @@ equiv_aged_sha=$(git -C "$container/main" rev-parse equiv-aged)
 land_equivalent equiv-aged
 aged "$container/wt-equiv-aged"
 
-# 3. patch-equivalent but FRESH -> kept
+# 7. patch-equivalent but FRESH -> kept
 git -C "$container/main" worktree add -q -b equiv-fresh "$container/wt-equiv-fresh" main
 printf 'equiv-fresh payload\n' >"$container/wt-equiv-fresh/equiv-fresh.txt"
 git -C "$container/wt-equiv-fresh" add equiv-fresh.txt
@@ -84,31 +99,31 @@ git -C "$container/wt-equiv-fresh" commit -qm 'equiv-fresh work'
 land_equivalent equiv-fresh
 touch -h "$container/wt-equiv-fresh/.git"
 
-# 4. dirty tracked change -> kept
+# 8. dirty tracked change -> kept
 git -C "$container/main" worktree add -q -b dirty-branch "$container/wt-dirty" main
 printf 'uncommitted\n' >>"$container/wt-dirty/f.txt"
 aged "$container/wt-dirty"
 
-# 5. clean tracked, but an untracked file present -> kept
+# 9. clean tracked, but an untracked file present -> kept
 git -C "$container/main" worktree add -q -b untracked-branch "$container/wt-untracked" main
 printf 'untracked payload\n' >"$container/wt-untracked/scratch.txt"
 aged "$container/wt-untracked"
 
-# 6. rescue-* branch with a unique commit -> kept
+# 10. rescue-* branch with a unique commit -> kept
 git -C "$container/main" worktree add -q -b rescue-test "$container/wt-rescue-test" main
 printf 'rescued\n' >"$container/wt-rescue-test/rescue.txt"
 git -C "$container/wt-rescue-test" add rescue.txt
 git -C "$container/wt-rescue-test" commit -qm 'rescued work'
 aged "$container/wt-rescue-test"
 
-# 7. genuinely unique commit -> kept
+# 11. genuinely unique commit -> kept
 git -C "$container/main" worktree add -q -b unmerged-branch "$container/wt-unmerged" main
 printf 'unique\n' >"$container/wt-unmerged/unique.txt"
 git -C "$container/wt-unmerged" add unique.txt
 git -C "$container/wt-unmerged" commit -qm 'unique work'
 aged "$container/wt-unmerged"
 
-# 8. locked, otherwise equiv + aged -> kept
+# 12. locked, otherwise equiv + aged -> kept
 git -C "$container/main" worktree add -q -b equiv-locked "$container/wt-equiv-locked" main
 printf 'equiv-locked payload\n' >"$container/wt-equiv-locked/equiv-locked.txt"
 git -C "$container/wt-equiv-locked" add equiv-locked.txt
@@ -117,7 +132,7 @@ land_equivalent equiv-locked
 aged "$container/wt-equiv-locked"
 git -C "$container/main" worktree lock "$container/wt-equiv-locked"
 
-# 9. --dry-run subject: equiv + aged, must survive the dry run
+# 13. --dry-run subject: equiv + aged, must survive the dry run
 git -C "$container/main" worktree add -q -b equiv-dry "$container/wt-equiv-dry" main
 printf 'equiv-dry payload\n' >"$container/wt-equiv-dry/equiv-dry.txt"
 git -C "$container/wt-equiv-dry" add equiv-dry.txt
@@ -125,7 +140,7 @@ git -C "$container/wt-equiv-dry" commit -qm 'equiv-dry work'
 land_equivalent equiv-dry
 aged "$container/wt-equiv-dry"
 
-# 10. equiv + aged, but carrying ignored files `git status` never shows.
+# 14. equiv + aged, but carrying ignored files `git status` never shows.
 #     Disposable caches alongside them must not be what holds the tree.
 git -C "$container/main" worktree add -q -b equiv-ignored "$container/wt-equiv-ignored" main
 printf 'equiv-ignored payload\n' >"$container/wt-equiv-ignored/equiv-ignored.txt"
@@ -143,7 +158,7 @@ ln -s /nix/store/nonexistent "$container/wt-equiv-ignored/result"
 ln -s /nix/store/nonexistent "$container/wt-equiv-ignored/result-2"
 aged "$container/wt-equiv-ignored"
 
-# 11. every non-merge commit is cherry-equivalent, but the lane also carries a
+# 15. every non-merge commit is cherry-equivalent, but the lane also carries a
 #     merge whose conflict resolution exists nowhere else. `git cherry` is blind
 #     to merges, so only the merge gate can keep this tree.
 merge_lane_base=$(git -C "$container/main" rev-parse main)
@@ -168,7 +183,7 @@ git -C "$container/wt-merge-lane" add f.txt
 git -C "$container/wt-merge-lane" commit -qm 'merge merge-side (evil resolution)'
 aged "$container/wt-merge-lane"
 
-# 12. a tag whose name equals the lane's branch, pointing at main's tip: bare
+# 16. a tag whose name equals the lane's branch, pointing at main's tip: bare
 #     names resolve tags first, so an unqualified cherry would read "landed".
 git -C "$container/main" worktree add -q -b tag-shadow "$container/wt-tag-shadow" main
 printf 'tag-shadow unique\n' >"$container/wt-tag-shadow/tag-shadow.txt"
@@ -192,34 +207,72 @@ fi
   || check "--dry-run left the worktree in place" 1
 assert_ok "--dry-run left the branch in place" \
   git -C "$container/main" rev-parse --verify equiv-dry
-if grep -Fq 'would reap: ' <<<"$dry_output"; then
+if grep -Fq "would reap: $container/wt-merged-aged (merged-aged)" <<<"$dry_output"; then
   check "--dry-run reports would-reap for the merged lane" 0
 else
   check "--dry-run reports would-reap for the merged lane" 1
 fi
-[ -d "$container/wt-merged-clean" ] \
-  && check "--dry-run left the merged worktree in place" 0 \
-  || check "--dry-run left the merged worktree in place" 1
+[ -d "$container/wt-merged-aged" ] \
+  && check "--dry-run left the aged merged worktree in place" 0 \
+  || check "--dry-run left the aged merged worktree in place" 1
 
 # --- the real sweep --------------------------------------------------------
+set +e
 output="$(cd "$container" && "$TARGET" 2>&1)"
 status=$?
+set -e
+kill "$live_pid" 2>/dev/null || true
+wait "$live_pid" 2>/dev/null || true
+live_pid=''
 check "wt-reap exits 0" "$status"
 
-# 1. merged + clean
-[ ! -d "$container/wt-merged-clean" ] \
-  && check "merged+clean worktree reaped" 0 \
-  || check "merged+clean worktree reaped" 1
-assert_not_ok "merged-clean branch deleted" \
-  git -C "$container/main" rev-parse --verify merged-clean
-if grep -Fq "reaped: $container/wt-merged-clean (merged-clean)" <<<"$output"; then
+# 1. fresh merged tree is held before the ancestor reap path
+if [ -d "$container/wt-merged-fresh" ]; then
+  check "fresh merged worktree kept" 0
+else
+  check "fresh merged worktree kept" 1
+fi
+if grep -Fq "kept: fresh (merged-fresh) ($container/wt-merged-fresh)" <<<"$output"; then
+  check "fresh merged keep has its own reason string" 0
+else
+  printf '%s\n' "$output" >&2
+  check "fresh merged keep has its own reason string" 1
+fi
+
+# 2. aged merged + clean
+[ ! -d "$container/wt-merged-aged" ] \
+  && check "aged merged+clean worktree reaped" 0 \
+  || check "aged merged+clean worktree reaped" 1
+assert_not_ok "merged-aged branch deleted" \
+  git -C "$container/main" rev-parse --verify merged-aged
+if grep -Fq "reaped: $container/wt-merged-aged (merged-aged)" <<<"$output"; then
   check "merged reap reported in the original format" 0
 else
   printf '%s\n' "$output" >&2
   check "merged reap reported in the original format" 1
 fi
 
-# 2. patch-equivalent + aged
+# 3-5. ordinary merged protections
+for protected in rescue-merged merged-locked merged-live; do
+  if [ -d "$container/wt-$protected" ]; then
+    check "aged $protected worktree kept" 0
+  else
+    check "aged $protected worktree kept" 1
+  fi
+done
+for expectation in \
+  "kept: rescue (rescue-merged) ($container/wt-rescue-merged)" \
+  "kept: locked (merged-locked) ($container/wt-merged-locked)" \
+  "kept: live cwd (merged-live) ($container/wt-merged-live)"; do
+  if grep -Fq "$expectation" <<<"$output"; then
+    check "ordinary merged protection reported: ${expectation%% (*}" 0
+  else
+    printf '%s\n' "$output" >&2
+    check "ordinary merged protection reported: ${expectation%% (*}" 1
+  fi
+done
+
+# 6. patch-equivalent + aged
 [ ! -d "$container/wt-equiv-aged" ] \
   && check "equivalent+aged worktree reaped" 0 \
   || check "equivalent+aged worktree reaped" 1
@@ -234,7 +287,7 @@ fi
 assert_ok "reaped equiv tip sha still resolvable (recoverable)" \
   git -C "$container/main" cat-file -e "${equiv_aged_sha}^{commit}"
 
-# 3. equivalent but fresh
+# 7. equivalent but fresh
 [ -d "$container/wt-equiv-fresh" ] \
   && check "equivalent+fresh worktree kept" 0 \
   || check "equivalent+fresh worktree kept" 1
@@ -245,7 +298,7 @@ else
   check "fresh keep has its own reason string" 1
 fi
 
-# 4. dirty tracked change
+# 8. dirty tracked change
 [ -d "$container/wt-dirty" ] \
   && check "dirty worktree kept" 0 \
   || check "dirty worktree kept" 1
@@ -257,7 +310,7 @@ else
   check "dirty keep reported in the original format" 1
 fi
 
-# 5. untracked file present
+# 9. untracked file present
 [ -d "$container/wt-untracked" ] \
   && check "untracked-only worktree kept" 0 \
   || check "untracked-only worktree kept" 1
@@ -268,14 +321,14 @@ else
   check "untracked file counts as unclean" 1
 fi
 
-# 6. rescue-*
+# 10. rescue-*
 [ -d "$container/wt-rescue-test" ] \
   && check "rescue-* worktree kept" 0 \
   || check "rescue-* worktree kept" 1
 assert_ok "rescue-test branch not deleted" \
   git -C "$container/main" rev-parse --verify rescue-test
 
-# 7. genuinely unique commit
+# 11. genuinely unique commit
 [ -d "$container/wt-unmerged" ] \
   && check "unmerged worktree kept" 0 \
   || check "unmerged worktree kept" 1
@@ -288,7 +341,7 @@ else
   check "unmerged keep reported in the original format" 1
 fi
 
-# 8. locked
+# 12. locked
 [ -d "$container/wt-equiv-locked" ] \
   && check "locked equivalent worktree kept" 0 \
   || check "locked equivalent worktree kept" 1
@@ -301,7 +354,7 @@ else
   check "locked keep has its own reason string" 1
 fi
 
-# 10. equiv + aged, holding an ignored file
+# 14. equiv + aged, holding an ignored file
 [ -d "$container/wt-equiv-ignored" ] \
   && check "equivalent lane with ignored files kept" 0 \
   || check "equivalent lane with ignored files kept" 1
@@ -314,7 +367,7 @@ else
   check "ignored keep names the first survivor and the count" 1
 fi
 
-# 11. cherry-equivalent commits plus an evil merge
+# 15. cherry-equivalent commits plus an evil merge
 merge_lane_cherry_plus() {
   git -C "$container/main" cherry refs/heads/main refs/heads/merge-lane | grep -q '^+'
 }
@@ -337,7 +390,7 @@ else
   check "merge-carrying lane kept as unmerged" 1
 fi
 
-# 12. tag shadowing the lane's branch name
+# 16. tag shadowing the lane's branch name
 [ -d "$container/wt-tag-shadow" ] \
   && check "tag-shadowed lane kept" 0 \
   || check "tag-shadowed lane kept" 1
@@ -389,6 +442,7 @@ git -C "$all_root/code/projA/main" add f.txt
 git -C "$all_root/code/projA/main" commit -qm base
 git -C "$all_root/code/projA/main" worktree add -q -b done-branch "$all_root/code/projA/wt-done" main
 git -C "$all_root/code/projA/main" merge -q done-branch >/dev/null
+aged "$all_root/code/projA/wt-done"
 
 all_output="$(HOME="$all_root" bash -c 'cd "$1" && exec "$2" --all' _ "$all_root" "$TARGET" 2>&1)"
 if grep -Fq 'reaped: ' <<<"$all_output"; then

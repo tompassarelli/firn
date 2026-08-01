@@ -9,17 +9,17 @@ Sweep spent sibling worktrees (never main) out of a container
 (<project>/main + <project>/wt-<slug> siblings).
 
 A sibling is reaped when it is completely clean (including untracked and
-non-disposable ignored files) AND either:
+non-disposable ignored files), is at least two hours old, has no live process
+working inside it, is not locked or a rescue branch, AND either:
   merged  — its HEAD is an ancestor of main; or
   equiv   — every commit it is ahead by is patch-equivalent to something
-            already on main (the rebase-landed lane), and none of the
-            safety gates below hold it back.
+            already on main (the rebase-landed lane).
 
 Every reap is held back by ignored files that are not disposable caches
 (.direnv/, result symlinks) — docs/private/ notes live there.
-Equivalence reaping is additionally held back by: a rescue-* branch, a
-locked worktree, a live process whose CWD is inside the tree, an age under
-2h, or any merge commit the lane is ahead by.
+Both reap modes are held back by: a rescue-* branch, a locked worktree, a
+live process whose CWD is inside the tree, or an age under 2h. Equivalence
+reaping is also held back by any merge commit the lane is ahead by.
 
   (no flags)  operate on the container of the current directory
   --all       operate on every ~/code/*/main container
@@ -63,15 +63,11 @@ find_container() {
 # A process cwd'd inside the tree is someone working there right now — removing
 # it out from under them is the one unrecoverable mistake this script can make.
 has_live_cwd() {
-  local tree="$1" pid cwd
-  for pid in /proc/[0-9]*; do
-    cwd=$(readlink "$pid/cwd" 2>/dev/null) || continue
-    [ -n "$cwd" ] || continue
-    if [ "$cwd" = "$tree" ] || [ "${cwd#"$tree"/}" != "$cwd" ]; then
-      return 0
-    fi
-  done
-  return 1
+  local tree="$1" live
+  # `find -lname` examines the cwd links without spawning one readlink per PID.
+  live=$(find /proc/[0-9]*/cwd \( -lname "$tree" -o -lname "$tree"'/*' \) \
+    -print -quit 2>/dev/null)
+  [ -n "$live" ]
 }
 
 # `status --porcelain` hides ignored files but `worktree remove` deletes them,
@@ -95,6 +91,21 @@ younger_than_min_age() {
   born=$(stat -c %Y "$tree/.git" 2>/dev/null) || return 1
   now=$(date +%s)
   [ $((now - born)) -lt "$MIN_AGE_SECONDS" ]
+}
+
+safety_gate() { # print the reason that makes a clean tree unreapable
+  local tree="$1" branch_name="$2" locked_paths="$3"
+  if [[ "$branch_name" == rescue-* ]]; then
+    printf 'rescue\n'
+  elif grep -Fxq "$tree" <<<"$locked_paths"; then
+    printf 'locked\n'
+  elif has_live_cwd "$tree"; then
+    printf 'live cwd\n'
+  elif younger_than_min_age "$tree"; then
+    printf 'fresh\n'
+  else
+    return 1
+  fi
 }
 
 # Zero '+' lines from `git cherry` means every commit this branch is ahead by
@@ -150,6 +161,12 @@ reap_container() {
     branch_name=${branch_ref#refs/heads/}
     [ -n "$branch_name" ] || branch_name="(detached)"
 
+    if keep_reason=$(safety_gate "$wt" "$branch_name" "$locked_paths"); then
+      printf 'kept: %s (%s) (%s)\n' "$keep_reason" "$branch_name" "$wt"
+      kept_protected=$((kept_protected + 1))
+      continue
+    fi
+
     if git -C "$main_dir" merge-base --is-ancestor "$head" "refs/heads/$main_branch" 2>/dev/null; then
       if [ "$dry" -eq 1 ]; then
         printf 'would reap: %s (%s)\n' "$wt" "$branch_name"
@@ -166,30 +183,19 @@ reap_container() {
 
     # --- equivalence path: landed content, different SHAs ---------------------
     keep_reason=""
-    if [ "$branch_name" = "(detached)" ]; then
-      keep_reason=""
-    elif [[ "$branch_name" == rescue-* ]]; then
-      keep_reason="rescue"
-    elif grep -Fxq "$wt" <<<"$locked_paths"; then
-      keep_reason="locked"
-    elif all_commits_equivalent "$main_dir" "$main_branch" "$branch_name"; then
-      if has_live_cwd "$wt"; then
-        keep_reason="live cwd"
-      elif younger_than_min_age "$wt"; then
-        keep_reason="fresh"
+    if [ "$branch_name" != "(detached)" ] \
+      && all_commits_equivalent "$main_dir" "$main_branch" "$branch_name"; then
+      if [ "$dry" -eq 1 ]; then
+        printf 'would reap (equiv): %s (%s was %s)\n' "$wt" "$branch_name" "$head"
       else
-        if [ "$dry" -eq 1 ]; then
-          printf 'would reap (equiv): %s (%s was %s)\n' "$wt" "$branch_name" "$head"
-        else
-          git -C "$main_dir" worktree remove "$wt"
-          # -D, not -d: an equivalent branch is by definition not an ancestor,
-          # so -d refuses it. Only reachable once all_commits_equivalent passed.
-          git -C "$main_dir" branch -D "$branch_name" >/dev/null
-          printf 'reaped (equiv): %s (%s was %s)\n' "$wt" "$branch_name" "$head"
-        fi
-        reaped_equiv=$((reaped_equiv + 1))
-        continue
+        git -C "$main_dir" worktree remove "$wt"
+        # -D, not -d: an equivalent branch is by definition not an ancestor,
+        # so -d refuses it. Only reachable once all_commits_equivalent passed.
+        git -C "$main_dir" branch -D "$branch_name" >/dev/null
+        printf 'reaped (equiv): %s (%s was %s)\n' "$wt" "$branch_name" "$head"
       fi
+      reaped_equiv=$((reaped_equiv + 1))
+      continue
     fi
 
     if [ -n "$keep_reason" ]; then
