@@ -2,8 +2,8 @@
 # shellcheck disable=SC2016 # Dollar-prefixed names in single quotes are jq variables.
 #
 # Reconcile the user-scope MCP servers Claude should know about (North, FRAM,
-# Linear) from the GENERATED Claude state, deciding presence and shape purely
-# STRUCTURALLY from ~/.claude.json — never from a health probe.
+# Linear, DigitalOcean) from the GENERATED Claude state, deciding presence and
+# shape purely STRUCTURALLY from ~/.claude.json — never from a health probe.
 #
 # `claude mcp get`/`list` always connect to the server (a health check) and
 # have no config-only mode. A transiently-down server must therefore never read
@@ -22,6 +22,8 @@ FRAM_MCP_BIN="${FRAM_MCP_BIN:-/run/current-system/sw/bin/fram-mcp}"
 NORTH_MCP_BIN="${NORTH_MCP_BIN:-/run/current-system/sw/bin/north-mcp}"
 LINEAR_URL="${LINEAR_URL:-https://mcp.linear.app/mcp}"
 WANT_NORTH_PORT="${WANT_NORTH_PORT:-7977}"
+DIGITALOCEAN_MCP_BASH="${DIGITALOCEAN_MCP_BASH:-/run/current-system/sw/bin/bash}"
+DIGITALOCEAN_MCP_COMMAND='export DIGITALOCEAN_API_TOKEN="$(</home/tom/do-token.txt)"; exec /run/current-system/sw/bin/npx -y @digitalocean/mcp@1.0.67 --services accounts,droplets,networking,volumes'
 MUTATION_TIMEOUT_SECONDS="${MUTATION_TIMEOUT_SECONDS:-30}"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-15}"
 
@@ -68,7 +70,8 @@ reconcile_server() {
 }
 
 reconcile_declarations() {
-  local fram_json north_json linear_json fram_ok north_ok linear_ok
+  local fram_json north_json linear_json digitalocean_json
+  local fram_ok north_ok linear_ok digitalocean_ok
 
   fram_json="$(declared_server fram)"
   declaration_matches "$fram_json" \
@@ -118,13 +121,25 @@ reconcile_declarations() {
     linear_ok=1 || linear_ok=0
   reconcile_server linear-mcp-msa-new "$linear_json" "$linear_ok" \
     add --transport http linear-mcp-msa-new "$LINEAR_URL" -s user
+
+  digitalocean_json="$(declared_server digitalocean)"
+  declaration_matches "$digitalocean_json" \
+    --arg cmd "$DIGITALOCEAN_MCP_BASH" \
+    --arg shell_command "$DIGITALOCEAN_MCP_COMMAND" \
+    '((.type // "stdio") == "stdio")
+       and (.command == $cmd)
+       and (.args == ["-c", $shell_command])' &&
+    digitalocean_ok=1 || digitalocean_ok=0
+  reconcile_server digitalocean "$digitalocean_json" "$digitalocean_ok" \
+    add digitalocean -s user -- \
+    "$DIGITALOCEAN_MCP_BASH" -c "$DIGITALOCEAN_MCP_COMMAND"
 }
 
 # Bounded, report-only health. Kept strictly separate from declaration
 # reconciliation: a slow or failing probe is surfaced, never acted on.
 report_health() {
   local name status
-  for name in fram north linear-mcp-msa-new; do
+  for name in fram north linear-mcp-msa-new digitalocean; do
     "$TIMEOUT_BIN" "$HEALTH_TIMEOUT_SECONDS" \
       "$CLAUDE_BIN" mcp get "$name" >/dev/null 2>&1
     status=$?

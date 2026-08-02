@@ -89,8 +89,9 @@
                      claudeSettingsSeed
                      " $HOME/.claude/settings.json\n"))
                ;; MCP server registration — reproducible, so a fresh rebuild wires the
-               ;; North, FRAM, and Linear user-scope servers instead of relying on
-               ;; loose `claude mcp add` state in ~/.claude.json. Presence and shape
+               ;; North, FRAM, Linear, and DigitalOcean user-scope servers
+               ;; instead of relying on loose `claude mcp add` state in
+               ;; ~/.claude.json. Presence and shape
                ;; are decided STRUCTURALLY from the generated ~/.claude.json: the
                ;; `claude mcp get`/`list` surface always health-checks the server and
                ;; has no config-only mode, so a transiently-down server must never

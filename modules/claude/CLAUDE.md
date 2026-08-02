@@ -1,8 +1,9 @@
 # ~/code/nixos-config/modules/claude — Claude Code nix module
 
-Wires the Claude Code package, out-of-store symlinks into
+Wires the Claude Code package, out-of-store symlinks, and reproducible MCP
 server registration. Source of truth is `default.bnix`; `default.nix` is
-generated.
+generated. The registration set includes the scoped DigitalOcean server,
+which reads its token from `~/do-token.txt` only when the MCP starts.
 
 **Read before editing `default.bnix`:**
 → `~/code/nixos-config/modules/north-profile/firn/docs/nixos-module.md`

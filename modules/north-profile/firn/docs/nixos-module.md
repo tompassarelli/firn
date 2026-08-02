@@ -7,7 +7,7 @@ provider-specific files from `nixos-config:dotfiles/claude/`, composed
 `~/.agents` policy and hooks from `north:profiles/tom`, the atomic shared skill
 farm at `~/.local/state/north/skills`, the
 `~/code/CLAUDE.md` routing file, and MCP server registration (`fram`, `north`,
-`linear-mcp-msa-new`). All activation entries are best-effort
+`linear-mcp-msa-new`, `digitalocean`). All activation entries are best-effort
 plugin install was decommissioned 2026-07-23 — see thread
 as an untouched Phase 2 archive candidate.)
 
@@ -81,7 +81,8 @@ are Phase 2 scope, not yet removed. See the thread for the full rationale and
 `mcp get`). `fram` is the **generic** engine — its corpus is selected at
 deploy time via env (`FRAM_LOG` / `FRAM_THREADS`); never hardcode life-store
 paths into the engine itself. Also registers `linear-mcp-msa-new` (HTTP/OAuth,
-per-machine auth; msa-old retired 2026-06-30).
+per-machine auth; msa-old retired 2026-06-30) and `digitalocean` as a pinned,
+scoped stdio server that reads its API token from `~/do-token.txt` at runtime.
 
 ## graph-upstream guard — accepted gap (decision)
 

@@ -1727,6 +1727,7 @@ claude_north_topology='explicit corpus env deferred'
 claude_fram='connection deferred to --local'
 claude_fram_topology='topology deferred'
 claude_linear='connection deferred to --local'
+claude_digitalocean='connection deferred to --local'
 claude_orchestration='cache freshness deferred to --local'
 need_json "$CLAUDE/settings.json" 'Claude settings'
 if grep -Fq '(pkgs.writeText "claude-settings.json"' \
@@ -1858,10 +1859,10 @@ if [ "$LOCAL" -eq 1 ]; then
   canonical_link "$HOME/.claude/CLAUDE.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.claude/CLAUDE.md"
   canonical_link "$HOME/.claude/commands" "$LIVE_CLAUDE/commands" "$HOME/.claude/commands"
   if [ -f "$HOME/.claude.json" ]; then
-    for server in fram north linear-mcp-msa-new; do
+    for server in fram north linear-mcp-msa-new digitalocean; do
       jq -e --arg s "$server" '.mcpServers[$s]' "$HOME/.claude.json" >/dev/null || bad "Claude user MCP '$server' is missing"
     done
-    extra="$(jq -r '.mcpServers | keys[] | select(. != "fram" and . != "north" and . != "linear-mcp-msa-new")' "$HOME/.claude.json")"
+    extra="$(jq -r '.mcpServers | keys[] | select(. != "fram" and . != "north" and . != "linear-mcp-msa-new" and . != "digitalocean")' "$HOME/.claude.json")"
     [ -z "$extra" ] || bad "unexpected Claude user MCP server(s): ${extra//$'\n'/, }"
     fram_log="$(jq -r '.mcpServers.fram.env.FRAM_LOG // empty' "$HOME/.claude.json")"
     fram_telemetry_log="$(jq -r '.mcpServers.fram.env.FRAM_TELEMETRY_LOG // empty' "$HOME/.claude.json")"
@@ -1892,9 +1893,21 @@ if [ "$LOCAL" -eq 1 ]; then
     else
       claude_north_topology='stale/missing instance env'
     fi
+    digitalocean_shell_command='export DIGITALOCEAN_API_TOKEN="$(</home/tom/do-token.txt)"; exec /run/current-system/sw/bin/npx -y @digitalocean/mcp@1.0.67 --services accounts,droplets,networking,volumes'
+    if jq -e \
+      --arg cmd /run/current-system/sw/bin/bash \
+      --arg shell_command "$digitalocean_shell_command" \
+      '(.mcpServers.digitalocean.type // "stdio") == "stdio"
+       and .mcpServers.digitalocean.command == $cmd
+       and .mcpServers.digitalocean.args == ["-c", $shell_command]' \
+      "$HOME/.claude.json" >/dev/null; then
+      ok_detail 'Claude DigitalOcean MCP uses the pinned scoped token-file wrapper'
+    else
+      bad 'Claude DigitalOcean MCP declaration does not match the pinned scoped token-file wrapper'
+    fi
     project_count="$(jq '[.projects[]? | select(.mcpServers != null)] | length' "$HOME/.claude.json")"
     note "$project_count project-scoped Claude MCP registrations (allowed)"
-    ok_detail "Claude MCP declarations: North + canonical split Fram corpus + Linear"
+    ok_detail "Claude MCP declarations: North + canonical split Fram corpus + Linear + DigitalOcean"
   else bad "$HOME/.claude.json is missing"; fi
   if claude_probe_binary_is_authoritative; then
     if [ -n "${CLAUDE_BIN:-}" ]; then
@@ -1908,7 +1921,7 @@ if [ "$LOCAL" -eq 1 ]; then
     )" || claude_mcp_status=$?
     if [ "$claude_mcp_status" -eq 0 ]; then
       claude_mcp_exact=1
-      for server in north fram; do
+      for server in north fram digitalocean; do
         claude_mcp_server_connected "$claude_mcp_output" "$server" || {
           claude_mcp_exact=0
           bad "Claude MCP '$server' is missing or not connected:\n$claude_mcp_output"
@@ -1925,7 +1938,8 @@ if [ "$LOCAL" -eq 1 ]; then
       if [ "$claude_mcp_exact" -eq 1 ]; then
         claude_north="connected; $claude_north_topology"
         claude_fram="connected; $claude_fram_topology"
-        ok_detail "Claude reports North + Fram MCP connected"
+        claude_digitalocean='connected; scoped infrastructure services'
+        ok_detail "Claude reports North + Fram + DigitalOcean MCP connected"
       fi
     elif [ "$claude_mcp_status" -eq 124 ]; then
       bad "Claude MCP health probe timed out after ${MCP_PROBE_TIMEOUT_SECONDS:-20}s; its process group was reaped"
@@ -1948,7 +1962,8 @@ provider_group Claude "$before" \
   "Bootstrap   static config parsed · Orchestration $claude_orchestration" \
   "MCP         North: $claude_north" \
   "            Fram: $claude_fram" \
-  "            Linear: $claude_linear"
+  "            Linear: $claude_linear" \
+  "            DigitalOcean: $claude_digitalocean"
 
 before=$fail
 note_ignored_codex_legacy_manifest "$CODEX_LEGACY_HOOKS"
