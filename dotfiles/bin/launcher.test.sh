@@ -73,16 +73,19 @@ for cli in claude codex; do
   printf 'CLAUDE_CONFIG_DIR=%s\n' "${CLAUDE_CONFIG_DIR:-}"
   printf 'CODEX_HOME=%s\n' "${CODEX_HOME:-}"
   printf 'CODEX_SQLITE_HOME=%s\n' "${CODEX_SQLITE_HOME:-}"
+  printf 'PATH=%s\n' "$PATH"
   printf 'args=%s\n' "$*"
 } >"$REAL_RECORD"
 CLI
   chmod +x "$BIN/$cli"
 done
 
-# Keep codex-native hermetic by replacing only its hardcoded real CLI path in a
-# scratch copy; every other byte remains the production launcher under test.
-NATIVE_LAUNCHER="$SCRATCH/codex-native"
-sed "s|^REAL=.*|REAL=\"$BIN/codex\"|" "$HERE/codex-native" >"$NATIVE_LAUNCHER"
+# Keep the native launchers hermetic by replacing only their hardcoded real CLI
+# paths in scratch copies; every other byte remains production code under test.
+CODEX_NATIVE_LAUNCHER="$SCRATCH/codex-native"
+CLAUDE_NATIVE_LAUNCHER="$SCRATCH/claude-native"
+sed "s|^REAL=.*|REAL=\"$BIN/codex\"|" "$HERE/codex-native" >"$CODEX_NATIVE_LAUNCHER"
+sed "s|^REAL=.*|REAL=\"$BIN/claude\"|" "$HERE/claude-native" >"$CLAUDE_NATIVE_LAUNCHER"
 
 pass=0
 fail=0
@@ -172,17 +175,34 @@ mkdir -p "$HOME_DIR/.local/state/north/profiles/codex-native"
 : >"$HOME_DIR/.local/state/north/profiles/codex-native/config.toml"
 printf '{}\n' >"$HOME_DIR/.local/state/north/profiles/codex-native/auth.json"
 RECORD="$SCRATCH/native-record"
-STDERR="$(env -i "HOME=$HOME_DIR" "PATH=$BIN" "REAL_RECORD=$RECORD" \
-  bash "$NATIVE_LAUNCHER" --model probe 2>&1 1>/dev/null)"
+NATIVE_PATH="$BIN:$SCRATCH/north/main/orchestration/bin:$SCRATCH/plugins/cache/orchestration/bin:$SCRATCH/keep/bin"
+STDERR="$(env -i "HOME=$HOME_DIR" "PATH=$NATIVE_PATH" "REAL_RECORD=$RECORD" \
+  bash "$CODEX_NATIVE_LAUNCHER" --model probe 2>&1 1>/dev/null)"
 STATUS=$?
 check 'codex-native launches the real CLI' test "$STATUS" -eq 0
 check 'codex-native sets its isolated profile' \
   test "$(record_field _ CODEX_HOME)" = "$HOME_DIR/.local/state/north/profiles/codex-native"
+check 'codex-native removes managed orchestration and plugin bins from PATH' \
+  test "$(record_field _ PATH)" = "$BIN:$SCRATCH/keep/bin"
 check 'codex-native sets the subagent thread ceiling exactly once' \
   contains_once "$(record_field _ args)" "$CODEX_THREAD_CEILING_ARG"
 check 'codex-native injects the ceiling before existing arguments' \
   test "$(record_field _ args)" = \
     "$CODEX_THREAD_CEILING_ARG --add-dir /home/tom/code --model probe"
+
+HOME_DIR="$SCRATCH/home-claude-native"
+mkdir -p "$HOME_DIR/.local/state/north/profiles/claude-native"
+: >"$HOME_DIR/.local/state/north/profiles/claude-native/settings.json"
+printf '{}\n' >"$HOME_DIR/.local/state/north/profiles/claude-native/.credentials.json"
+RECORD="$SCRATCH/native-record"
+STDERR="$(env -i "HOME=$HOME_DIR" "PATH=$NATIVE_PATH" "REAL_RECORD=$RECORD" \
+  bash "$CLAUDE_NATIVE_LAUNCHER" --model probe 2>&1 1>/dev/null)"
+STATUS=$?
+check 'claude-native launches the real CLI' test "$STATUS" -eq 0
+check 'claude-native sets its isolated profile' \
+  test "$(record_field _ CLAUDE_CONFIG_DIR)" = "$HOME_DIR/.local/state/north/profiles/claude-native"
+check 'claude-native removes managed orchestration and plugin bins from PATH' \
+  test "$(record_field _ PATH)" = "$BIN:$SCRATCH/keep/bin"
 
 for launcher in claude codex; do
   prov="${PROV[$launcher]}"; limit="${LIMIT[$launcher]}"

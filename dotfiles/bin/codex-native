@@ -25,7 +25,7 @@ fi
 # Drop the orchestration and plugin bins a parent session injected, so a native
 # shell cannot reach back into the managed stack by PATH alone.
 CLEAN_PATH="$(printf '%s' "$PATH" | tr ':' '\n' \
-  | grep -vE '/north/orchestration/bin|/plugins/cache/' \
+  | grep -vE '/north/main/orchestration/bin|/plugins/cache/' \
   | paste -sd: -)"
 
 exec env -u AGENT_PROVIDER \
