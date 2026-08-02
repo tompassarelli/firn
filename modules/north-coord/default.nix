@@ -18,6 +18,7 @@ let
   runtimeState = "${homeDir}/.local/state/north/fram-runtime";
   telemetryRuntimeState = "${homeDir}/.local/state/north/fram-telemetry-runtime";
   stageA = config.myConfig.modules.north-coord.stageATelemetryPartition;
+  blueGreen = false;
   automaticFailover = config.myConfig.modules.north-coord.automaticFailover;
   pairTarget = "north-coord-pair.target";
   pairPrepareUnit = "north-coord-pair-prepare.service";
@@ -307,8 +308,10 @@ let
     HOME = homeDir;
     FRAM_REQUIRE_LOG_FENCE = "1";
     FRAM_QUERY_TIMEOUT_MS = "30000";
+    FRAM_CONNECTION_WORKERS = slotConnectionWorkers;
+    FRAM_CONNECTION_QUEUE = slotConnectionQueue;
+    FRAM_REQUEST_TIMEOUT_MS = slotRequestTimeoutMs;
     FRAM_TELEMETRY_LOG = "${homeDir}/.local/state/north/telemetry.log";
-    JDK_JAVA_OPTIONS = "-Xmx16g";
   };
   serviceConfigBase = {
     Type = "simple";
@@ -366,7 +369,7 @@ in
         message = "north-coord.stageATelemetryPartition requires socketActivation so both writer ports remain systemd-owned";
       }
     ];
-    environment.systemPackages = ([ northCoordRuntime ] ++ (lib.optional stageA northTelemetryCoordRuntime) ++ (if stageA then [ selector cutoverGate bootstrap healthController ] else [ ]));
+    environment.systemPackages = ([ northCoordRuntime ] ++ (lib.optional stageA northTelemetryCoordRuntime) ++ (if (stageA && blueGreen) then [ selector cutoverGate bootstrap healthController ] else [ ]));
     environment.variables = lib.mkIf stageA {
       NORTH_TELEMETRY_PARTITION = "1";
       NORTH_TELEMETRY_PORT = "7978";
@@ -410,7 +413,7 @@ in
         "north-coord-pair-settle.service"
       ];
     };
-    systemd.targets.north-coord-blue-green = lib.mkIf stageA {
+    systemd.targets.north-coord-blue-green = lib.mkIf (stageA && blueGreen) {
       description = "North durable blue/green coordinator pair";
       unitConfig = {
         ConditionPathExists = bootstrapMarker;
@@ -433,7 +436,7 @@ in
     };
     systemd.services.north-coord-pair-prepare = lib.mkIf stageA {
       description = "Prepare both North Stage-A writer runtimes";
-      unitConfig = {
+      unitConfig = lib.mkIf blueGreen {
         ConditionPathExists = "!${bootstrapMarker}";
       };
       restartIfChanged = false;
@@ -453,7 +456,7 @@ in
     };
     systemd.services.north-coord-pair-settle = lib.mkIf stageA {
       description = "Settle the North Stage-A pair after both writers start";
-      unitConfig = {
+      unitConfig = lib.mkIf blueGreen {
         ConditionPathExists = "!${bootstrapMarker}";
       };
       restartIfChanged = false;
@@ -470,7 +473,7 @@ in
     systemd.services.north-coord = {
       description = "North coordinator — personal fact-graph daemon (:7977)";
       wantedBy = if stageA then [ ] else [ "multi-user.target" ];
-      unitConfig = lib.mkIf stageA {
+      unitConfig = lib.mkIf (stageA && blueGreen) {
         ConditionPathExists = [ "!${bootstrapMarker}" "!${legacyHoldMarker}" ];
       };
       partOf = lib.optional stageA pairTarget;
@@ -481,10 +484,13 @@ in
       restartIfChanged = false;
       stopIfChanged = false;
       environment = (serviceEnvironment // {
-        JDK_JAVA_OPTIONS = "-Xmx16g";
+        JDK_JAVA_OPTIONS = coordHeapOptions;
       });
       serviceConfig = (serviceConfigBase // {
-        MemoryMax = "32G";
+        MemoryHigh = coordMemoryHigh;
+        MemoryMax = coordMemoryMax;
+        CPUQuota = coordCpuQuota;
+        TasksMax = slotTasksMax;
         Sockets = lib.mkIf config.myConfig.modules.north-coord.socketActivation "north-coord.socket";
         ExecStartPre = if stageA then [ ] else [
           "${northCoordRuntime}/bin/north-coord-runtime ensure-default"
@@ -496,7 +502,7 @@ in
     };
     systemd.services.north-telemetry-coord = lib.mkIf stageA {
       description = "North telemetry coordinator — sole writer (:7978)";
-      unitConfig = {
+      unitConfig = lib.mkIf blueGreen {
         ConditionPathExists = [ "!${bootstrapMarker}" "!${legacyHoldMarker}" ];
       };
       partOf = [ pairTarget ];
@@ -512,18 +518,22 @@ in
       stopIfChanged = false;
       environment = (serviceEnvironment // {
         FRAM_TELEMETRY_LOG = "${homeDir}/.local/state/north/coordination.log";
+        JDK_JAVA_OPTIONS = telemetryHeapOptions;
       });
       serviceConfig = (serviceConfigBase // {
-        MemoryMax = "8G";
+        MemoryHigh = telemetryMemoryHigh;
+        MemoryMax = telemetryMemoryMax;
+        CPUQuota = telemetryCpuQuota;
+        TasksMax = slotTasksMax;
         Sockets = "north-telemetry-coord.socket";
         ExecStart = "${northCoordSdListenChecked}/bin/north-coord-sd-listen ${northTelemetryCoordRuntime}/bin/north-telemetry-coord-runtime start";
       });
     };
-    systemd.services.north-coord-blue = lib.mkIf stageA (mkSlotService "North coordination private blue generation (:17977)" "blue" "${blueCoordRuntime}/bin/north-coord-blue-runtime" telemetryLog "${runtimeState}-blue" blueCoordPort coordHeapOptions coordMemoryHigh coordMemoryMax coordCpuQuota);
-    systemd.services.north-telemetry-coord-blue = lib.mkIf stageA (mkSlotService "North telemetry private blue generation (:17978)" "blue" "${blueTelemetryRuntime}/bin/north-telemetry-coord-blue-runtime" coordinationLog "${telemetryRuntimeState}-blue" blueTelemetryPort telemetryHeapOptions telemetryMemoryHigh telemetryMemoryMax telemetryCpuQuota);
-    systemd.services.north-coord-green = lib.mkIf stageA (mkSlotService "North coordination private green generation (:27977)" "green" "${greenCoordRuntime}/bin/north-coord-green-runtime" telemetryLog "${runtimeState}-green" greenCoordPort coordHeapOptions coordMemoryHigh coordMemoryMax coordCpuQuota);
-    systemd.services.north-telemetry-coord-green = lib.mkIf stageA (mkSlotService "North telemetry private green generation (:27978)" "green" "${greenTelemetryRuntime}/bin/north-telemetry-coord-green-runtime" coordinationLog "${telemetryRuntimeState}-green" greenTelemetryPort telemetryHeapOptions telemetryMemoryHigh telemetryMemoryMax telemetryCpuQuota);
-    systemd.services.north-coord-proxy = lib.mkIf stageA {
+    systemd.services.north-coord-blue = lib.mkIf (stageA && blueGreen) (mkSlotService "North coordination private blue generation (:17977)" "blue" "${blueCoordRuntime}/bin/north-coord-blue-runtime" telemetryLog "${runtimeState}-blue" blueCoordPort coordHeapOptions coordMemoryHigh coordMemoryMax coordCpuQuota);
+    systemd.services.north-telemetry-coord-blue = lib.mkIf (stageA && blueGreen) (mkSlotService "North telemetry private blue generation (:17978)" "blue" "${blueTelemetryRuntime}/bin/north-telemetry-coord-blue-runtime" coordinationLog "${telemetryRuntimeState}-blue" blueTelemetryPort telemetryHeapOptions telemetryMemoryHigh telemetryMemoryMax telemetryCpuQuota);
+    systemd.services.north-coord-green = lib.mkIf (stageA && blueGreen) (mkSlotService "North coordination private green generation (:27977)" "green" "${greenCoordRuntime}/bin/north-coord-green-runtime" telemetryLog "${runtimeState}-green" greenCoordPort coordHeapOptions coordMemoryHigh coordMemoryMax coordCpuQuota);
+    systemd.services.north-telemetry-coord-green = lib.mkIf (stageA && blueGreen) (mkSlotService "North telemetry private green generation (:27978)" "green" "${greenTelemetryRuntime}/bin/north-telemetry-coord-green-runtime" coordinationLog "${telemetryRuntimeState}-green" greenTelemetryPort telemetryHeapOptions telemetryMemoryHigh telemetryMemoryMax telemetryCpuQuota);
+    systemd.services.north-coord-proxy = lib.mkIf (stageA && blueGreen) {
       description = "North permanent public selector for coordination + telemetry";
       requires = [ "north-coord.socket" "north-telemetry-coord.socket" ];
       wants = [
@@ -571,7 +581,7 @@ in
         ExecStart = "${proxyStart}/bin/north-coord-proxy-start";
       };
     };
-    systemd.services.north-coord-bootstrap = lib.mkIf stageA {
+    systemd.services.north-coord-bootstrap = lib.mkIf (stageA && blueGreen) {
       description = "One-time bounded legacy-to-blue-green North migration";
       restartIfChanged = false;
       stopIfChanged = false;
@@ -580,7 +590,7 @@ in
         ExecStart = "${bootstrap}/bin/north-coord-bootstrap";
       };
     };
-    systemd.services.north-coord-health = lib.mkIf stageA {
+    systemd.services.north-coord-health = lib.mkIf (stageA && blueGreen) {
       description = "Reconcile North blue/green coordinator health";
       unitConfig = {
         ConditionPathExists = bootstrapMarker;
@@ -593,7 +603,7 @@ in
         ExecStart = "${healthController}/bin/north-coord-health reconcile";
       };
     };
-    systemd.timers.north-coord-health = lib.mkIf stageA {
+    systemd.timers.north-coord-health = lib.mkIf (stageA && blueGreen) {
       description = "Reconcile North blue/green coordinator health";
       wantedBy = lib.optional automaticFailover "timers.target";
       timerConfig = {
@@ -602,7 +612,7 @@ in
         AccuracySec = "5s";
       };
     };
-    systemd.services.north-coord-blue-green-resume = lib.mkIf stageA {
+    systemd.services.north-coord-blue-green-resume = lib.mkIf (stageA && blueGreen) {
       description = "Resume the durable North blue/green pair after boot";
       wantedBy = [ "multi-user.target" ];
       unitConfig = {

@@ -45,6 +45,7 @@
           (s homeDir "/.local/state/north/fram-telemetry-runtime")
         stageA
           config.myConfig.modules.north-coord.stageATelemetryPartition
+        blueGreen false
         automaticFailover
           config.myConfig.modules.north-coord.automaticFailover
         pairTarget "north-coord-pair.target"
@@ -456,10 +457,11 @@
           {:HOME homeDir
            :FRAM_REQUIRE_LOG_FENCE "1"
            :FRAM_QUERY_TIMEOUT_MS "30000"
+           :FRAM_CONNECTION_WORKERS slotConnectionWorkers
+           :FRAM_CONNECTION_QUEUE slotConnectionQueue
+           :FRAM_REQUEST_TIMEOUT_MS slotRequestTimeoutMs
            :FRAM_TELEMETRY_LOG (s homeDir "/.local/state/north/telemetry.log")
-           ;; Emitted after the slot's own JDK_JAVA_OPTIONS, so this value is the
-           ;; one systemd keeps — it must not undercut coordHeapOptions.
-           :JDK_JAVA_OPTIONS "-Xmx16g"}
+           }
         serviceConfigBase
           {:Type             "simple"
            :User             username
@@ -540,7 +542,7 @@
          :environment.systemPackages
           (++ [northCoordRuntime]
               (lib.optional stageA northTelemetryCoordRuntime)
-              (if stageA
+              (if (and stageA blueGreen)
                 [selector cutoverGate bootstrap healthController]
                 []))
          ;; FRAM_TELEMETRY_LOG must never be exported globally: the client
@@ -599,7 +601,7 @@
                      "north-telemetry-coord.service"
                      "north-coord-pair-settle.service"]})
          :systemd.targets.north-coord-blue-green
-          (lib.mkIf stageA
+          (lib.mkIf (and stageA blueGreen)
             {:description "North durable blue/green coordinator pair"
              :unitConfig {:ConditionPathExists bootstrapMarker}
              :requires ["north-coord.socket"
@@ -618,7 +620,8 @@
           (lib.mkIf stageA
             {:description "Prepare both North Stage-A writer runtimes"
              :unitConfig
-              {:ConditionPathExists (s "!" bootstrapMarker)}
+              (lib.mkIf blueGreen
+                {:ConditionPathExists (s "!" bootstrapMarker)})
              ;; A system generation may stage a new Fram package, but staging
              ;; is not a database cutover. Keep this required oneshot active so
              ;; activation cannot cascade-stop either writer through Requires=.
@@ -641,7 +644,8 @@
           (lib.mkIf stageA
             {:description "Settle the North Stage-A pair after both writers start"
              :unitConfig
-              {:ConditionPathExists (s "!" bootstrapMarker)}
+              (lib.mkIf blueGreen
+                {:ConditionPathExists (s "!" bootstrapMarker)})
              :restartIfChanged false
              :stopIfChanged false
              :requires ["north-coord.service" "north-telemetry-coord.service"]
@@ -656,7 +660,7 @@
           {:description           "North coordinator — personal fact-graph daemon (:7977)"
            :wantedBy              (if stageA [] ["multi-user.target"])
            :unitConfig
-            (lib.mkIf stageA
+            (lib.mkIf (and stageA blueGreen)
               {:ConditionPathExists
                 [(s "!" bootstrapMarker)
                  (s "!" legacyHoldMarker)]})
@@ -685,7 +689,7 @@
            :stopIfChanged         false
            :environment
             (// serviceEnvironment
-                {:JDK_JAVA_OPTIONS "-Xmx16g"})
+                {:JDK_JAVA_OPTIONS coordHeapOptions})
            :serviceConfig
             (//
              serviceConfigBase
@@ -694,7 +698,10 @@
              ;; immutable Store, a candidate Store, and query indexes together.
              ;; Keep native/JVM overhead outside the -Xmx16g heap from tripping a
              ;; cgroup kill while the incremental reload path bounds that peak.
-             :MemoryMax "32G"
+             :MemoryHigh coordMemoryHigh
+             :MemoryMax coordMemoryMax
+             :CPUQuota coordCpuQuota
+             :TasksMax slotTasksMax
              :Sockets
               (lib.mkIf
                 config.myConfig.modules.north-coord.socketActivation
@@ -721,9 +728,10 @@
           (lib.mkIf stageA
             {:description "North telemetry coordinator — sole writer (:7978)"
              :unitConfig
-              {:ConditionPathExists
-                [(s "!" bootstrapMarker)
-                 (s "!" legacyHoldMarker)]}
+              (lib.mkIf blueGreen
+                {:ConditionPathExists
+                  [(s "!" bootstrapMarker)
+                   (s "!" legacyHoldMarker)]})
              :partOf [pairTarget]
              :requires ["north-telemetry-coord.socket"
                         "north-coord-pair-prepare.service"]
@@ -737,18 +745,22 @@
              :environment
               (// serviceEnvironment
                   {:FRAM_TELEMETRY_LOG
-                    (s homeDir "/.local/state/north/coordination.log")})
+                    (s homeDir "/.local/state/north/coordination.log")
+                   :JDK_JAVA_OPTIONS telemetryHeapOptions})
              :serviceConfig
               (//
               serviceConfigBase
-               {:MemoryMax "8G"
+               {:MemoryHigh telemetryMemoryHigh
+                :MemoryMax telemetryMemoryMax
+                :CPUQuota telemetryCpuQuota
+                :TasksMax slotTasksMax
                 :Sockets "north-telemetry-coord.socket"
                 :ExecStart
                  (s northCoordSdListenChecked "/bin/north-coord-sd-listen "
                     northTelemetryCoordRuntime
                     "/bin/north-telemetry-coord-runtime start")})})
          :systemd.services.north-coord-blue
-          (lib.mkIf stageA
+          (lib.mkIf (and stageA blueGreen)
             (mkSlotService
               "North coordination private blue generation (:17977)"
               "blue"
@@ -761,7 +773,7 @@
               coordMemoryMax
               coordCpuQuota))
          :systemd.services.north-telemetry-coord-blue
-          (lib.mkIf stageA
+          (lib.mkIf (and stageA blueGreen)
             (mkSlotService
               "North telemetry private blue generation (:17978)"
               "blue"
@@ -775,7 +787,7 @@
               telemetryMemoryMax
               telemetryCpuQuota))
          :systemd.services.north-coord-green
-          (lib.mkIf stageA
+          (lib.mkIf (and stageA blueGreen)
             (mkSlotService
               "North coordination private green generation (:27977)"
               "green"
@@ -788,7 +800,7 @@
               coordMemoryMax
               coordCpuQuota))
          :systemd.services.north-telemetry-coord-green
-          (lib.mkIf stageA
+          (lib.mkIf (and stageA blueGreen)
             (mkSlotService
               "North telemetry private green generation (:27978)"
               "green"
@@ -802,7 +814,7 @@
               telemetryMemoryMax
               telemetryCpuQuota))
          :systemd.services.north-coord-proxy
-          (lib.mkIf stageA
+          (lib.mkIf (and stageA blueGreen)
             {:description
               "North permanent public selector for coordination + telemetry"
              :requires ["north-coord.socket"
@@ -851,7 +863,7 @@
                :ExecStart
                 (s proxyStart "/bin/north-coord-proxy-start")}})
          :systemd.services.north-coord-bootstrap
-          (lib.mkIf stageA
+          (lib.mkIf (and stageA blueGreen)
             {:description
               "One-time bounded legacy-to-blue-green North migration"
              ;; Explicit operator action only: `sudo north-coord-bootstrap`.
@@ -862,7 +874,7 @@
                :ExecStart
                 (s bootstrap "/bin/north-coord-bootstrap")}})
          :systemd.services.north-coord-health
-          (lib.mkIf stageA
+          (lib.mkIf (and stageA blueGreen)
             {:description "Reconcile North blue/green coordinator health"
              :unitConfig {:ConditionPathExists bootstrapMarker}
              :restartIfChanged false
@@ -873,7 +885,7 @@
                :ExecStart
                 (s healthController "/bin/north-coord-health reconcile")}})
          :systemd.timers.north-coord-health
-          (lib.mkIf stageA
+          (lib.mkIf (and stageA blueGreen)
             {:description "Reconcile North blue/green coordinator health"
              :wantedBy (lib.optional automaticFailover "timers.target")
              ;; Must exceed a reconcile's own runtime (~16s), or back-to-back runs
@@ -883,7 +895,7 @@
                :OnUnitActiveSec "2min"
                :AccuracySec "5s"}})
          :systemd.services.north-coord-blue-green-resume
-          (lib.mkIf stageA
+          (lib.mkIf (and stageA blueGreen)
             {:description
               "Resume the durable North blue/green pair after boot"
              :wantedBy ["multi-user.target"]
