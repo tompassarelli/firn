@@ -20,6 +20,7 @@
   myConfig.modules.dbeaver.enable = lib.mkDefault true;
   myConfig.modules.delta.enable = lib.mkDefault true;
   myConfig.modules.direnv.enable = lib.mkDefault true;
+  myConfig.modules.discord.enable = lib.mkDefault true;
   myConfig.modules.doom-emacs.enable = lib.mkDefault true;
   myConfig.modules.drracket.enable = lib.mkDefault true;
   myConfig.modules.dust.enable = lib.mkDefault true;
