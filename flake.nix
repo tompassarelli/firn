@@ -398,7 +398,7 @@
       pkgs = nixpkgs.legacyPackages.x86_64-linux;
     in
     pkgs.mkShell {
-      packages = [ pkgs.pre-commit pkgs.gitleaks pkgs.haproxy pkgs.socat ];
+      packages = [ pkgs.pre-commit pkgs.gitleaks ];
       shellHook = ''
         pre-commit install --allow-missing-config 2>/dev/null
 

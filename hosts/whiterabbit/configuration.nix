@@ -56,7 +56,6 @@
   myConfig.modules.north-coord.enable = true;
   myConfig.modules.north-coord.socketActivation = true;
   myConfig.modules.north-coord.stageATelemetryPartition = true;
-  myConfig.modules.north-coord.automaticFailover = false;
   myConfig.modules.north-stream-sync.enable = true;
   myConfig.modules.north-reactor.enable = true;
   myConfig.modules.north-reactor.eventOwner.enable = true;

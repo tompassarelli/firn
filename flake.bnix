@@ -397,6 +397,6 @@
        :devShells.x86_64-linux.default
         (let [pkgs nixpkgs.legacyPackages.x86_64-linux]
           (pkgs.mkShell
-            {:packages  [pkgs.pre-commit pkgs.gitleaks pkgs.haproxy pkgs.socat]
+            {:packages  [pkgs.pre-commit pkgs.gitleaks]
              :shellHook
               (ms "pre-commit install --allow-missing-config 2>/dev/null" "")}))}))}

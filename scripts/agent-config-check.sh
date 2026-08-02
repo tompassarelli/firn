@@ -325,10 +325,6 @@ classify_north_coord_exec() {
     NORTH_COORD_EXEC_KIND='socket-runtime-selector'
     return 0
   fi
-  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-north-coord-slot-start/bin/north-coord-slot-start$ ]]; then
-    NORTH_COORD_EXEC_KIND='slot-runtime-selector'
-    return 0
-  fi
   if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*/bin/fram-daemon$ ]]; then
     NORTH_COORD_EXEC_KIND='direct-package'
     return 1
@@ -358,7 +354,6 @@ environment_lines_value() {
 
 select_north_coord_runtime_state() {
   local process_env="$1" unit="$2" exec_kind="$3"
-  local slot state slot_runtime
 
   NORTH_COORD_RUNTIME_STATE_ROOT=''
   NORTH_COORD_RUNTIME_STATE_REASON=''
@@ -369,40 +364,6 @@ select_north_coord_runtime_state() {
         return 1
       }
       NORTH_COORD_RUNTIME_STATE_ROOT="$HOME/.local/state/north/fram-runtime"
-      ;;
-    slot-runtime-selector)
-      slot="$(environment_lines_value "$process_env" NORTH_COORD_SLOT 2>/dev/null)" || {
-        NORTH_COORD_RUNTIME_STATE_REASON='slot process identity is missing or duplicated'
-        return 1
-      }
-      case "$slot" in
-        blue|green) ;;
-        *)
-          NORTH_COORD_RUNTIME_STATE_REASON="slot process identity is invalid: ${slot:-missing}"
-          return 1
-          ;;
-      esac
-      [ "$unit" = "north-coord-$slot.service" ] || {
-        NORTH_COORD_RUNTIME_STATE_REASON="slot $slot does not match systemd unit $unit"
-        return 1
-      }
-      state="$(environment_lines_value "$process_env" NORTH_COORD_RUNTIME_STATE 2>/dev/null)" || {
-        NORTH_COORD_RUNTIME_STATE_REASON='slot runtime state is missing or duplicated'
-        return 1
-      }
-      [ "$state" = "$HOME/.local/state/north/fram-runtime-$slot" ] || {
-        NORTH_COORD_RUNTIME_STATE_REASON="slot $slot runtime state is noncanonical: ${state:-missing}"
-        return 1
-      }
-      slot_runtime="$(environment_lines_value "$process_env" NORTH_COORD_SLOT_RUNTIME 2>/dev/null)" || {
-        NORTH_COORD_RUNTIME_STATE_REASON='slot runtime executable is missing or duplicated'
-        return 1
-      }
-      [[ "$slot_runtime" =~ ^/nix/store/[a-z0-9]{32}-north-coord-${slot}-runtime/bin/north-coord-${slot}-runtime$ ]] || {
-        NORTH_COORD_RUNTIME_STATE_REASON="slot $slot runtime executable is not immutable and slot-scoped: ${slot_runtime:-missing}"
-        return 1
-      }
-      NORTH_COORD_RUNTIME_STATE_ROOT="$state"
       ;;
     *)
       NORTH_COORD_RUNTIME_STATE_REASON="unsupported coordinator selector kind: ${exec_kind:-missing}"
@@ -424,29 +385,9 @@ north_coord_process_birth_token() {
   printf 'proc:%s\n' "$start_ticks"
 }
 
-# The ACTIVE coordinator unit. Under blue/green the legacy `north-coord.service`
-# is deliberately inactive (gated on
-# ConditionPathExists=!/var/lib/north-coord-cutover/bootstrap-complete), so
-# testing that name reports "north-coord systemd service is not active" on a
-# perfectly healthy system — observed 2026-07-29 with blue and green both active
-# and `north show` answering in 107ms. A health check that fails green is worse
-# than no check, because the next real failure gets ignored.
-#
-# The route map names the live slot; the direct probes are the fallback, and the
-# legacy unit remains last so a pre-cutover system still resolves.
 resolve_north_coord_unit() {
-  local slot candidate
-  slot="$(awk 'NF>=2 && $1=="active" {print $2; exit}' \
-            /var/lib/north-coord-cutover/route.map 2>/dev/null || true)"
-  for candidate in ${slot:+"north-coord-${slot}.service"} \
-                   north-coord-green.service north-coord-blue.service \
-                   north-coord.service; do
-    if systemctl is-active --quiet "$candidate" 2>/dev/null; then
-      printf '%s' "$candidate"
-      return 0
-    fi
-  done
-  return 1
+  systemctl is-active --quiet north-coord.service 2>/dev/null || return 1
+  printf '%s' north-coord.service
 }
 NORTH_COORD_UNIT="${NORTH_COORD_UNIT:-north-coord.service}"
 
@@ -761,37 +702,6 @@ north_coord_listener_set_matches_mainpid() {
   shift
 
   [[ "$main_pid" =~ ^[1-9][0-9]*$ && $# -eq 1 && "${1:-}" == "$main_pid" ]]
-}
-
-# Proxy-aware fallback: a listener need not be the north-coord MainPID itself
-# if it is a member of the north-coord-proxy.service cgroup (the front door
-# a fronting proxy owns) AND the runtime identity probe already confirmed the
-# backing process. Bare cgroup membership without a validated identity is not
-# sufficient authority.
-north_coord_listener_in_proxy_cgroup() {
-  local pid="$1"
-  [ -r "/proc/$pid/cgroup" ] &&
-    grep -Eq '^[^:]*:[^:]*:/system\.slice/north-coord-proxy\.service(/|$)' "/proc/$pid/cgroup"
-}
-
-north_coord_listeners_are_proxy_fronted() {
-  local pid
-  [ "$#" -gt 0 ] || return 1
-  for pid in "$@"; do
-    north_coord_listener_in_proxy_cgroup "$pid" || return 1
-  done
-  return 0
-}
-
-# Cheap, non-root-sensitive substitute for the old
-# north_coord_runtime_identity_is_valid gate: shells out to the installed
-# `north coord-safety` command and requires both a clean exit and the
-# expected confirmation string on stdout.
-north_coord_safety_ok() {
-  command -v north >/dev/null 2>&1 || return 1
-  local out
-  out="$(north coord-safety 2>/dev/null)" || return 1
-  grep -Fq 'coordinator runtime identity OK on :7977' <<<"$out"
 }
 
 # Codex stores per-hook trust/enablement by numeric manifest coordinates. Resolve
@@ -2411,10 +2321,6 @@ if [ "$LOCAL" -eq 1 ]; then
         if north_coord_listener_set_matches_mainpid \
              "$north_coord_pid" "${north_coord_listener_pids[@]}"; then
           ok_detail "north-coord systemd MainPID owns the :7977 listening socket"
-        elif [ "${#north_coord_listener_pids[@]}" -gt 0 ] &&
-             north_coord_listeners_are_proxy_fronted "${north_coord_listener_pids[@]}" &&
-             north_coord_safety_ok; then
-          ok_detail "north-coord :7977 listener(s) are fronted by system.slice/north-coord-proxy.service; coord-safety identity OK"
         else
           north_coord_ok=0
           north_coord_listener_detail=''
@@ -2422,7 +2328,7 @@ if [ "$LOCAL" -eq 1 ]; then
             north_coord_listener_cgroup="$(tr '\n' ' ' <"/proc/$north_coord_listener_pid/cgroup" 2>/dev/null || printf unreadable)"
             north_coord_listener_detail+=" pid=$north_coord_listener_pid cgroup=$north_coord_listener_cgroup"
           done
-          bad "north-coord :7977 listener PID does not equal systemd MainPID, is not fully proxy-cgroup-fronted, or coord-safety identity check failed (MainPID: $north_coord_pid; listeners:${north_coord_listener_detail:- missing})"
+          bad "north-coord :7977 listener PID does not equal systemd MainPID (MainPID: $north_coord_pid; listeners:${north_coord_listener_detail:- missing})"
         fi
       else
         north_coord_ok=0
@@ -2441,7 +2347,7 @@ if [ "$LOCAL" -eq 1 ]; then
       north_coord_runtime='deployment identity drift detected'
     fi
   else
-    bad "no north-coord systemd unit is active (checked the route-map slot, then green/blue, then legacy north-coord.service)"
+    bad "north-coord.service is not active"
     north_coord_runtime='inactive'
   fi
   anthropic_installed='unknown'
