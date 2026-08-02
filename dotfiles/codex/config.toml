@@ -66,6 +66,13 @@ url = "https://mcp.linear.app/mcp"
 auth = "oauth"
 enabled_tools = ["get_issue", "list_issues", "save_issue", "list_comments", "save_comment"]
 
+[mcp_servers.digitalocean]
+command = "/run/current-system/sw/bin/bash"
+args = ["-c", 'export DIGITALOCEAN_API_TOKEN="$(</home/tom/do-token.txt)"; exec /run/current-system/sw/bin/npx -y @digitalocean/mcp@1.0.67 --services accounts,droplets,networking,volumes']
+startup_timeout_sec = 60
+tool_timeout_sec = 120
+default_tools_approval_mode = "prompt"
+
 [hooks.state]
 
 [hooks.state."/home/tom/.codex/hooks.json:pre_tool_use:0:0"]
