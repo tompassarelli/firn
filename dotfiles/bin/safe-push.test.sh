@@ -85,6 +85,9 @@ shim_main() {
           [ "${3:-}" = --verify ] || return 2
           case "${4:-}" in
             refs/tags/release-a) printf '%s\n' tagobject ;;
+            refs/safe-push-origin/*'^{commit}')
+              printf '%s\n' 1111111111111111111111111111111111111111
+              ;;
             *) return 1 ;;
           esac
           ;;
@@ -113,6 +116,10 @@ shim_main() {
       ;;
     git:check-ref-format) ;;
     git:ls-remote)
+      if [ "${2:-}" = --refs ] && [ "${3:-}" = git@example.test:owner/repo.git ]; then
+        printf '%s\t%s\n' 1111111111111111111111111111111111111111 refs/heads/main
+        return 0
+      fi
       [ "${2:-}" = --symref ] && [ "${3:-}" = git@example.test:owner/repo.git ] || return 2
       case "${SAFE_PUSH_TEST_DESTINATION_SHAPE:-normal}" in
         absent) ;;
@@ -139,12 +146,32 @@ shim_main() {
       [ "${2:-}" = --is-ancestor ] || return 2
       ;;
     git:rev-list)
-      if [ "${2:-}" = -n1 ]; then printf '%s\n' deadbeef; else printf '%s\n' deadbeef; fi
+      if [ "${2:-}" = -n1 ]; then
+        printf '%s\n' deadbeef
+      elif [ "${2:-}" = --count ]; then
+        printf '%s\n' 1
+      else
+        printf '%s\n' deadbeef
+      fi
       ;;
     git:branch) printf '%s\n' '  origin/main' ;;
+    git:for-each-ref)
+      case "${2:-}" in
+        '--format=%(objectname) %(refname)')
+          printf '%s %sheads/main\n' \
+            1111111111111111111111111111111111111111 "${3:?}"
+          ;;
+        '--format=%(refname)') printf '%sheads/main\n' "${3:?}" ;;
+        *) return 2 ;;
+      esac
+      ;;
     git:cat-file)
       case "${2:-}" in
         -e) ;;
+        -t)
+          [ "${3:-}" = tagobject ] || return 2
+          printf '%s\n' tag
+          ;;
         -p)
           [ "${3:-}" = tagobject ] || return 2
           printf '%s\n' 'release annotation'
@@ -152,7 +179,7 @@ shim_main() {
         *) return 2 ;;
       esac
       ;;
-    git:push|git:fetch) ;;
+    git:push|git:fetch|git:update-ref) ;;
     gitleaks:detect|gitleaks:dir) ;;
     *) return 2 ;;
   esac
@@ -368,6 +395,8 @@ for tag_args in '--dry-run --tag release-a' '--tag release-a --dry-run'; do
   expect_status zero
   expect_output 'would push tag release-a -> origin'
   expect_no_push
+  grep -Fq 'gitleaks <detect> <--no-banner> <--redact> <--log-opts=deadbeef ^1111111111111111111111111111111111111111>' "$trace" \
+    || fail 'tag dry-run skipped commit history absent from origin'
   grep -Fq 'gitleaks <dir>' "$trace" || fail 'tag dry-run skipped the annotation scan'
 done
 
@@ -470,6 +499,27 @@ expect_output 'pushing tag release-real -> origin'
 [ "$("$real_git" -C "$real_repo" rev-parse refs/tags/release-real)" \
   = "$("$real_git" --git-dir="$real_remote" rev-parse refs/tags/release-real)" ] \
   || fail 'normal tag publication did not update the remote to the captured tag object'
+
+# A support-only commit may be published by tag without adding a remote branch;
+# its commit history and annotation must both pass the secret scan first.
+make_real_fixture support-tag
+"$real_git" -C "$real_repo" tag -a release-support -m 'support release annotation'
+remote_main_before="$("$real_git" --git-dir="$real_remote" rev-parse refs/heads/main)"
+run_real_case '' --tag release-support
+expect_status zero
+expect_output 'pushing tag release-support -> origin'
+grep -Fq 'gitleaks <detect> <--no-banner> <--redact> <--log-opts=' "$real_trace" \
+  || fail 'support-only tag skipped its commit-history scan'
+grep -Fq 'gitleaks <dir>' "$real_trace" \
+  || fail 'support-only tag skipped its annotation scan'
+[ "$("$real_git" --git-dir="$real_remote" rev-parse refs/heads/main)" = "$remote_main_before" ] \
+  || fail 'support-only tag publication changed remote main'
+if "$real_git" --git-dir="$real_remote" rev-parse --verify refs/heads/support-tag >/dev/null 2>&1; then
+  fail 'support-only tag publication created a remote support branch'
+fi
+[ "$("$real_git" -C "$real_repo" rev-parse refs/tags/release-support)" \
+  = "$("$real_git" --git-dir="$real_remote" rev-parse refs/tags/release-support)" ] \
+  || fail 'support-only tag publication did not publish the captured tag object'
 
 # A new branch with no upstream is off the default branch, so the one-branch-main
 # guard refuses the bare default before any scan or push — no same-name litter,

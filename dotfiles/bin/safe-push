@@ -24,7 +24,7 @@ Scan outgoing content for secrets, then push the current branch or one tag.
 Options:
   --dry-run    run all safety checks without pushing
   --to BRANCH  explicitly publish HEAD to another remote branch
-  --tag NAME   push an existing tag whose target is already on origin
+  --tag NAME   push an existing annotated tag after scanning new content
   -h, --help   print this help without inspecting a repository
 
 On a non-default branch, plain "safe-push" (no --to/--tag) is refused —
@@ -294,21 +294,50 @@ enforce_one_branch_main() {
 
 if [ "$tag_seen" -eq 0 ] && [ "$to_seen" -eq 0 ]; then enforce_one_branch_main; fi
 
-# --- tag mode: no new commit content may ride a tag push --------------------------
-# A tag ref carries only the tag object; the guard is (a) its target commit is
-# already on origin — meaning it went through a scanned branch push — and (b) the
-# annotation text itself is scanned (it is published content too).
+# --- tag mode: scan the tag object and commit history absent from origin -----------
 if [ -n "$tag" ]; then
-  git fetch -q origin
   capture_repository_state
   tag_ref="refs/tags/$tag"
   tag_oid=$(git rev-parse -q --verify "$tag_ref" 2>/dev/null) \
     || { echo "safe-push: no such tag '$tag'"; exit 1; }
+  [ "$(git cat-file -t "$tag_oid" 2>/dev/null)" = tag ] \
+    || { echo "safe-push: tag '$tag' is not annotated — refusing"; exit 1; }
   target=$(git rev-list -n1 "$tag_oid")
-  git branch -r --contains "$target" 2>/dev/null | grep -Eq '(^|[[:space:]])origin/' \
-    || { echo "safe-push: tag '$tag' targets $target which is NOT on origin — safe-push the branch first"; exit 1; }
   command -v gitleaks >/dev/null 2>&1 || { echo "safe-push: gitleaks not on PATH — refusing to push without a secret scan"; exit 1; }
-  tmpd=$(mktemp -d) && trap 'rm -rf "${tmpd:?}"' EXIT
+  tmpd=$(mktemp -d)
+  origin_namespace="refs/safe-push-origin/$$-$RANDOM"
+  cleanup_tag_scan() {
+    local ref
+    while IFS= read -r ref; do git update-ref -d "$ref" || true; done \
+      < <(git for-each-ref --format='%(refname)' "$origin_namespace/")
+    rm -rf "${tmpd:?}"
+  }
+  trap cleanup_tag_scan EXIT
+
+  git fetch -q --no-tags --no-write-fetch-head "$origin_url" \
+    "+refs/*:${origin_namespace}/*"
+  fetched_origin_snapshot=$(
+    git for-each-ref --format='%(objectname) %(refname)' "$origin_namespace/" |
+      while read -r oid ref; do
+        printf '%s\trefs/%s\n' "$oid" "${ref#"$origin_namespace/"}"
+      done | LC_ALL=C sort
+  )
+  origin_snapshot=$(git ls-remote --refs "$origin_url" | LC_ALL=C sort)
+  [ "$origin_snapshot" = "$fetched_origin_snapshot" ] \
+    || state_changed 'origin refs changed while capturing tag scan base'
+
+  tag_scan_revs=("$target")
+  while IFS= read -r ref; do
+    if oid=$(git rev-parse -q --verify "${ref}^{commit}" 2>/dev/null); then
+      tag_scan_revs+=("^$oid")
+    fi
+  done < <(git for-each-ref --format='%(refname)' "$origin_namespace/")
+  tag_scan_range="${tag_scan_revs[*]}"
+  if [ "$(git rev-list --count "${tag_scan_revs[@]}")" -gt 0 ]; then
+    gitleaks detect --no-banner --redact --log-opts="$tag_scan_range" \
+      || { echo "safe-push: ✗ SECRET DETECTED in tag commit history — fix it; NOT pushed."; exit 1; }
+  fi
+
   git cat-file -p "$tag_oid" > "$tmpd/tag-object.txt"
   # gitleaks CLI drift: 8.19+ uses `dir`, older uses `detect --no-git --source`
   gitleaks dir "$tmpd" --no-banner --redact >/dev/null 2>&1 \
@@ -320,6 +349,9 @@ if [ -n "$tag" ]; then
   [ "$current_tag_oid" = "$tag_oid" ] || state_changed 'tag object changed'
   current_target=$(git rev-list -n1 "$current_tag_oid")
   [ "$current_target" = "$target" ] || state_changed 'tag target changed'
+  current_origin_snapshot=$(git ls-remote --refs "$origin_url" | LC_ALL=C sort)
+  [ "$current_origin_snapshot" = "$origin_snapshot" ] \
+    || state_changed 'origin refs changed'
   if [ "$dry" = 1 ]; then echo "safe-push: ✓ clean (--dry-run) — would push tag $tag -> origin"; exit 0; fi
   echo "safe-push: ✓ clean — pushing tag $tag -> origin"
   SAFE_PUSH_ACTIVE=1 git push "$origin_url" "${tag_oid}:${tag_ref}"
