@@ -36,10 +36,10 @@ nothing else does.
   part of the protected checkout.
 - **Don't repeat `<project>` in the slug** — the container already names it
   (`wt-policy-graph`, not `wt-north-policy-graph`).
-- **Billable-client repos keep their owner namespace** and take the same shape
+- **Client repos keep their owner namespace** and take the same shape
   inside it: `~/code/client/<owner>/<project>/main` and
-  `~/code/client/<owner>/<project>/wt-<slug>`. Client-confidentiality and clock
-  guards still apply.
+  `~/code/client/<owner>/<project>/wt-<slug>`. Client confidentiality still
+  applies.
 - **Reference repos get no worktrees** — `~/code/reference/` is read-only
   context; check out nothing extra there.
 - **Ephemeral / tool-owned trees keep their tool-owned locations** (temp build

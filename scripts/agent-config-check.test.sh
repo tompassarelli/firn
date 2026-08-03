@@ -326,13 +326,11 @@ grep -Fq '"/home/tom/.agents/hooks/north-session-end.sh"' \
 ! grep -Fq 'writeShellScriptBin "north-session-end"' \
   "$REPO/modules/claude/default.bnix"
 report="$("$REPO/scripts/agent-config-check.sh")"
-grep -Fq '19 managed authoritative bindings' <<<"$report"
+grep -Fq '17 managed authoritative bindings' <<<"$report"
 # shellcheck disable=SC2088  # report intentionally renders the literal user-facing alias
 grep -Fq '~/.codex/hooks.json ignored by managed-only policy (0 active bindings)' <<<"$report"
 run_quiet_child 'Codex lifecycle wrapper tests' \
   "$REPO/dotfiles/codex/hooks/codex-lifecycle-wrappers.test.sh"
-run_quiet_child 'Codex clock guard tests' \
-  "$REPO/dotfiles/codex/hooks/north-clock-guard-codex.test.sh"
 grep -Fq '{:source (s flakeRoot "/dotfiles/bin")}' \
   "$REPO/modules/bash/default.bnix"
 grep -Fq 'Live safe-push is immutable and supports explicit --to destinations' \
@@ -357,7 +355,7 @@ run_locked_hook_provenance_fixture
 promoted_root="$scratch/enforcement"
 promoted_live="$scratch/live-promoted"
 promoted_relative='north/profiles/tom/hooks/agent-spawn-guard.sh'
-promoted_sibling='north/profiles/tom/hooks/north-clock-guard.sh'
+promoted_sibling='north/profiles/tom/hooks/tripwire-guard.sh'
 real_enforcement="${NORTH_ENFORCEMENT_STATE_ROOT:-/var/lib/north-enforcement}"
 mkdir -p "$promoted_root/active" "$promoted_live"
 if [ -d "$real_enforcement/deployments" ] && [ -r "$real_enforcement/active/record" ]; then

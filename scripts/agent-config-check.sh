@@ -807,7 +807,6 @@ expected = {
                 "hooks": [
                     command("code-upstream-guard.sh", 10),
                     command("firn-guard.sh", 10),
-                    command("north-clock-guard-codex", 10),
                     command("launch-critical-worktree-guard.sh", 10),
                 ],
             },
@@ -817,7 +816,6 @@ expected = {
                     command("agent-spawn-guard.sh", 10),
                     command("tripwire-guard.sh", 10),
                     command("firn-guard.sh", 10),
-                    command("north-clock-guard-codex", 10),
                     command("launch-critical-worktree-guard.sh", 10),
                 ],
             },
@@ -1357,15 +1355,6 @@ validate_hooks() {
       provider_marker="${BASH_REMATCH[1]}"
       command="${BASH_REMATCH[2]}"
     fi
-    if [ "$command" = '/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-clock-guard.sh' ]; then
-      if [ -n "$provider_marker" ]; then
-        bad "$provider $ev sets AGENT_PROVIDER on an unrelated hook: $raw_command"
-      else
-        immutable_north=1
-        ok_detail "$provider $ev → immutable managed clock guard"
-      fi
-      continue
-    fi
     if [[ "$command" =~ ^/run/current-system/sw/bin/bash[[:space:]]+(.+)$ ]]; then
       interpreter='/run/current-system/sw/bin/bash'
       command="${BASH_REMATCH[1]}"
@@ -1472,8 +1461,8 @@ validate_codex_managed_policy() {
   CODEX_MANAGED_BINDINGS="$(
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
-  if [ "$CODEX_MANAGED_BINDINGS" = 19 ]; then
-    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 19-binding authoritative contract'
+  if [ "$CODEX_MANAGED_BINDINGS" = 17 ]; then
+    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 17-binding authoritative contract'
   else
     bad 'Codex managed requirements differ from the authoritative hook contract'
   fi
@@ -1494,8 +1483,6 @@ validate_codex_managed_policy() {
     "lib/launch_critical_paths.py|(promoted \"lib/launch_critical_paths.py\"|$SHARED/hooks/lib/launch_critical_paths.py|north|profiles/tom/hooks/lib/launch_critical_paths.py|north/profiles/tom/hooks/lib/launch_critical_paths.py"
     "code-upstream-guard.sh|(s inputs.fram \"/integrations/north/hooks/code-upstream-guard.sh\")|$FRAM_INTEGRATION/hooks/code-upstream-guard.sh|fram|integrations/north/hooks/code-upstream-guard.sh|"
     "firn-guard.sh|(s flakeRoot \"/modules/north-profile/firn/hooks/firn-guard.sh\")|$FIRN_INTEGRATION/hooks/firn-guard.sh|self|modules/north-profile/firn/hooks/firn-guard.sh|"
-    "north-clock-guard.sh|(promoted \"north-clock-guard.sh\"|$SHARED/hooks/north-clock-guard.sh|north|profiles/tom/hooks/north-clock-guard.sh|north/profiles/tom/hooks/north-clock-guard.sh"
-    "north-clock-guard.py|(promoted \"north-clock-guard.py\"|$SHARED/hooks/north-clock-guard.py|north|profiles/tom/hooks/north-clock-guard.py|north/profiles/tom/hooks/north-clock-guard.py"
     "tripwire-guard.sh|(promoted \"tripwire-guard.sh\"|$SHARED/hooks/tripwire-guard.sh|north|profiles/tom/hooks/tripwire-guard.sh|north/profiles/tom/hooks/tripwire-guard.sh"
     "logcompress-hook.js|(promoted \"logcompress-hook.js\"|$SHARED/hooks/logcompress-hook.js|north|profiles/tom/hooks/logcompress-hook.js|north/profiles/tom/hooks/logcompress-hook.js"
     "logcompress.js|(promoted \"logcompress.js\"|$SHARED/hooks/logcompress.js|north|profiles/tom/hooks/logcompress.js|north/profiles/tom/hooks/logcompress.js"
@@ -1507,7 +1494,6 @@ validate_codex_managed_policy() {
     "north-on-tooluse-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-tooluse-codex\")|$CODEX/hooks/north-on-tooluse-codex|self|dotfiles/codex/hooks/north-on-tooluse-codex|"
     "north-mark-delegated-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-mark-delegated-codex\")|$CODEX/hooks/north-mark-delegated-codex|self|dotfiles/codex/hooks/north-mark-delegated-codex|"
     "north-on-stop-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-stop-codex\")|$CODEX/hooks/north-on-stop-codex|self|dotfiles/codex/hooks/north-on-stop-codex|"
-    "north-clock-guard-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-clock-guard-codex\")|$CODEX/hooks/north-clock-guard-codex|self|dotfiles/codex/hooks/north-clock-guard-codex|"
   )
   for spec in "${source_specs[@]}"; do
     IFS='|' read -r relative source_expr expected_checkout authority \
@@ -1570,24 +1556,10 @@ validate_codex_managed_policy() {
        "$wrappers/north-on-spawn-codex" \
        "$wrappers/north-on-tooluse-codex" \
        "$wrappers/north-mark-delegated-codex" \
-       "$wrappers/north-on-stop-codex" \
-       "$wrappers/north-clock-guard-codex"; then
-    ok_detail 'Codex managed lifecycle + clock adapters pass shellcheck'
+       "$wrappers/north-on-stop-codex"; then
+    ok_detail 'Codex managed lifecycle adapters pass shellcheck'
   else
-    bad 'Codex managed lifecycle or clock adapter fails shellcheck'
-  fi
-  if [ ! -f "$SHARED/hooks/north-clock-guard.py" ] && [ "$LOCAL" -eq 0 ]; then
-    note "North-owned clock admission core unavailable in repository-only mode"
-  elif python3 - "$SHARED/hooks/north-clock-guard.py" <<'PY'
-import pathlib
-import sys
-source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-compile(source, sys.argv[1], "exec")
-PY
-  then
-    ok_detail 'Provider-neutral clock admission core compiles as Python'
-  else
-    bad 'Provider-neutral clock admission core fails Python compilation'
+    bad 'Codex managed lifecycle adapter fails shellcheck'
   fi
 
   if [ "$LOCAL" -eq 1 ]; then
@@ -1823,30 +1795,6 @@ else
   bad "north/orchestration must carry .claude-plugin/marketplace.json and plugin.json"
 fi
 validate_hooks "$CLAUDE/settings.json" Claude anthropic
-# The billable clock guard was removed from CLAUDE hooks on tom order (659ed26,
-# billing clock demoted to an opt-in knob), so ZERO bindings is the expected
-# state and this must not demand two. The property still worth enforcing is
-# conditional: any binding that DOES exist must go through the immutable
-# /etc/codex runtime rather than a mutable user path. The Codex-side guard
-# checks are unaffected -- that removal was Claude-only.
-if jq -e '
-  [
-    .hooks.PreToolUse[]?.hooks[]?
-    | select(
-        .type == "command"
-        and (.command | endswith("/north-clock-guard.sh"))
-      )
-    | .command
-  ] as $commands
-  | all(
-      $commands[];
-      . == "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-clock-guard.sh"
-    )
-' "$CLAUDE/settings.json" >/dev/null; then
-  ok_detail 'every bound Claude clock guard uses the immutable managed runtime'
-else
-  bad 'a bound Claude clock guard must use the immutable /etc/codex managed runtime'
-fi
 require_manifest_guard_count "$CLAUDE/settings.json" Claude Bash 1 'user Bash topology guard is bound once'
 claude_bindings="$HOOK_BINDINGS"
 claude_hook_provenance="$HOOK_PROVENANCE_SUMMARY"

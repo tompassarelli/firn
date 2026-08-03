@@ -123,7 +123,7 @@ class ChainMembershipTests(unittest.TestCase):
         self.assertEqual([c[0] for c in run.calls], list(nb.AUTHORING_CHAIN))
         self.assertEqual(
             list(nb.AUTHORING_CHAIN),
-            ["code-upstream-guard.sh", "firn-guard.sh", "north-clock-guard.sh"],
+            ["code-upstream-guard.sh", "firn-guard.sh"],
         )
 
     def test_patch_uses_authoring_chain(self):
@@ -138,7 +138,7 @@ class ChainMembershipTests(unittest.TestCase):
         self.assertEqual([c[0] for c in run.calls], list(nb.TERMINAL_CHAIN))
         self.assertEqual(
             list(nb.TERMINAL_CHAIN),
-            ["tripwire-guard.sh", "firn-guard.sh", "north-clock-guard.sh"],
+            ["tripwire-guard.sh", "firn-guard.sh"],
         )
 
     def test_process_uses_terminal_chain(self):
@@ -418,8 +418,7 @@ class PreVerifyTests(unittest.TestCase):
 
 
 class SelfCheckTests(unittest.TestCase):
-    CHAIN = ("code-upstream-guard.sh", "firn-guard.sh",
-             "north-clock-guard.sh", "tripwire-guard.sh")
+    CHAIN = ("code-upstream-guard.sh", "firn-guard.sh", "tripwire-guard.sh")
 
     def _make_guard_dir(self, tmp, include=None, include_support=True):
         include = self.CHAIN if include is None else include
@@ -429,7 +428,6 @@ class SelfCheckTests(unittest.TestCase):
             p.write_text("#!/usr/bin/env bash\nexit 0\n")
             p.chmod(p.stat().st_mode | stat.S_IXUSR)
         if include_support:
-            (gdir / "north-clock-guard.py").write_text("# core\n")
             libdir = gdir / "lib"
             libdir.mkdir(exist_ok=True)
             (libdir / "authoring-killswitch.sh").write_text("# shell lib\n")
@@ -445,18 +443,17 @@ class SelfCheckTests(unittest.TestCase):
     def test_degraded_when_a_chain_guard_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             gdir = self._make_guard_dir(
-                tmp, include=("code-upstream-guard.sh", "firn-guard.sh", "tripwire-guard.sh"))
+                tmp, include=("code-upstream-guard.sh", "firn-guard.sh"))
             ok, problems = nb.selfcheck(guard_dir=gdir, north_bin="/bin/sh")
             self.assertFalse(ok)
-            self.assertTrue(any("north-clock-guard.sh" in p for p in problems))
+            self.assertTrue(any("tripwire-guard.sh" in p for p in problems))
 
-    def test_degraded_when_clock_core_missing(self):
+    def test_degraded_when_killswitch_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             gdir = self._make_guard_dir(tmp, include_support=False)
             ok, problems = nb.selfcheck(guard_dir=gdir, north_bin="/bin/sh")
             self.assertFalse(ok)
-            self.assertTrue(any("north-clock-guard.py" in p for p in problems)
-                            or any("authoring-killswitch.sh" in p for p in problems))
+            self.assertTrue(any("authoring-killswitch.sh" in p for p in problems))
 
     def test_degraded_when_north_absent(self):
         with tempfile.TemporaryDirectory() as tmp:

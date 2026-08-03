@@ -122,11 +122,7 @@ jq -e '
 jq -e '
   .hooks.SessionEnd[0].hooks[0].command
     == "/home/tom/.agents/hooks/north-session-end.sh"
-  and ([
-    .hooks.PreToolUse[]?.hooks[]?
-    | select(.type == "command" and (.command | endswith("/north-clock-guard.sh")))
-    | .command
-  ] == [])
+  and true
 ' "$REPO/dotfiles/claude/settings.json" >/dev/null
 
 grep -Fq '(pkgs.writeText "claude-settings.json"' "$REPO/modules/claude/default.bnix"

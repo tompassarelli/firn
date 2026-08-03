@@ -5,9 +5,8 @@ encrypted `secrets/*.yaml` are committed (safe — they're encrypted), the
 private age key stays machine-local at `/var/lib/sops-nix/key.txt` (never in
 the repo), and `.sops.yaml` lists the public age recipients.
 
-Only two modules use secrets — `awscli` and `clockify` — both opt-in (off
-unless a host enables them) and both expose a `sopsFile` option so a fork
-points them at its own encrypted file.
+The `awscli` module is opt-in (off unless a host enables it) and exposes a
+`sopsFile` option so a fork points it at its own encrypted file.
 
 **Forking — bring your own:**
 
@@ -19,6 +18,6 @@ sops --encrypt --in-place secrets/aws.yaml           # encrypt to your key
 sudo install -Dm600 ~/.config/sops/age/keys.txt /var/lib/sops-nix/key.txt
 ```
 
-Or simplest: **don't enable `awscli`/`clockify`** — nothing else needs
-secrets, and the config builds clean without them. The
-`secrets/*.yaml.example` files document the cleartext structure of each.
+Or simplest: **don't enable `awscli`** — nothing else needs secrets, and the
+config builds clean without it. The `secrets/*.yaml.example` files document
+the cleartext structure of each.

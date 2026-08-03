@@ -30,9 +30,6 @@ in
       "codex/hooks/north-on-stop-codex" = {
         source = "${flakeRoot}/dotfiles/codex/hooks/north-on-stop-codex";
       };
-      "codex/hooks/north-clock-guard-codex" = {
-        source = "${flakeRoot}/dotfiles/codex/hooks/north-clock-guard-codex";
-      };
       "codex/hooks/runtime/bash" = {
         source = "${pkgs.bash}/bin/bash";
       };
@@ -71,8 +68,6 @@ in
       (promoted "launch-critical-worktree-guard.sh" "north/profiles/tom/hooks/launch-critical-worktree-guard.sh")
       (promoted "lib/launch_critical_decide.py" "north/profiles/tom/hooks/lib/launch_critical_decide.py")
       (promoted "lib/launch_critical_paths.py" "north/profiles/tom/hooks/lib/launch_critical_paths.py")
-      (promoted "north-clock-guard.sh" "north/profiles/tom/hooks/north-clock-guard.sh")
-      (promoted "north-clock-guard.py" "north/profiles/tom/hooks/north-clock-guard.py")
       (promoted "tripwire-guard.sh" "north/profiles/tom/hooks/tripwire-guard.sh")
       (promoted "logcompress-hook.js" "north/profiles/tom/hooks/logcompress-hook.js")
       (promoted "logcompress.js" "north/profiles/tom/hooks/logcompress.js")

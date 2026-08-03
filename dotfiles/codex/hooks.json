@@ -50,11 +50,6 @@
             "type": "command",
             "command": "/home/tom/.agents/hooks/firn-guard.sh",
             "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "/home/tom/.agents/hooks/north-clock-guard.sh",
-            "timeout": 10
           }
         ]
       },
@@ -69,11 +64,6 @@
           {
             "type": "command",
             "command": "/home/tom/.agents/hooks/firn-guard.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "/home/tom/.agents/hooks/north-clock-guard.sh",
             "timeout": 10
           }
         ]

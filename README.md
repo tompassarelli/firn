@@ -72,8 +72,8 @@ full grid, or `firn <node>` for one entity's edges.
 
 [sops-nix](https://github.com/Mic92/sops-nix): encrypted `secrets/*.yaml` are
 committed, the private age key stays machine-local, `.sops.yaml` lists the
-public recipients. Only the `awscli` and `clockify` modules use secrets — both
-opt-in, off by default, so the config builds clean without them.
+public recipients. The `awscli` module is opt-in, so the config builds clean
+without it.
 
 → **[docs/secrets.md](docs/secrets.md)** — key layout + bring-your-own-key fork recipe.
 

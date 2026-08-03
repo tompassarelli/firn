@@ -8,8 +8,8 @@ other provider uses — never a Hermes-specific fork.
 
 Guard chains (provider-neutral ~/.agents/hooks, run in order; ANY deny denies):
 
-    write_file / patch  -> code-upstream-guard.sh, firn-guard.sh, north-clock-guard.sh
-    terminal / process  -> tripwire-guard.sh,      firn-guard.sh, north-clock-guard.sh
+    write_file / patch  -> code-upstream-guard.sh, firn-guard.sh
+    terminal / process  -> tripwire-guard.sh,      firn-guard.sh
     delegate_task       -> DENY unconditionally (native delegation is disabled;
                            the `delegation` toolset is off and delegation is a
                            North lifecycle op). A blocked NATIVE delegate_task is
@@ -21,7 +21,7 @@ stdin. A guard may signal a denial two ways, BOTH honoured:
 
   * a non-zero exit code (tripwire's deny path), or
   * exit 0 with ``{"hookSpecificOutput":{"permissionDecision":"deny"}}`` on
-    stdout (firn/code-upstream/north-clock deny path).
+    stdout (firn/code-upstream deny path).
 
 Fail-closed contract — enforcement can never be skipped by breaking plumbing:
 a missing/non-executable script, a spawn error, a timeout, a malformed JSON
@@ -81,20 +81,19 @@ DELEGATION_MARK_TOOLS = frozenset({"mcp__north__spawn", "mcp__north__dispatch"})
 
 # Ordered guard chains. Authoring runs the upstream-code guard first (redirects
 # reference/fork edits to the graph), then the firn authoring guard, then the
-# billable-work clock guard. Terminal swaps the code guard for tripwire.
-AUTHORING_CHAIN = ("code-upstream-guard.sh", "firn-guard.sh", "north-clock-guard.sh")
-TERMINAL_CHAIN = ("tripwire-guard.sh", "firn-guard.sh", "north-clock-guard.sh")
+# Terminal swaps the code guard for tripwire.
+AUTHORING_CHAIN = ("code-upstream-guard.sh", "firn-guard.sh")
+TERMINAL_CHAIN = ("tripwire-guard.sh", "firn-guard.sh")
 
 # Everything the enforcement surface stands on. Absence of ANY means the guard
 # plumbing is not wired and authoring/terminal must fail closed.
 REQUIRED_GUARDS = (
     "code-upstream-guard.sh",
     "firn-guard.sh",
-    "north-clock-guard.sh",
     "tripwire-guard.sh",
 )
-# north-clock-guard.sh execs this core, and every guard sources the killswitch.
-REQUIRED_GUARD_SUPPORT = ("north-clock-guard.py", "lib/authoring-killswitch.sh")
+# Every guard sources the shared killswitch.
+REQUIRED_GUARD_SUPPORT = ("lib/authoring-killswitch.sh",)
 
 # North lifecycle hook scripts — the SAME scripts Claude/Codex drive, run with
 # the provider env UNSET (Hermes is a controller host, not a North provider).
