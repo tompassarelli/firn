@@ -33,7 +33,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/.agents/hooks/agent-spawn-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/agent-spawn-guard.sh",
             "timeout": 10
           }
         ]
@@ -43,12 +43,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/.agents/hooks/code-upstream-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/code-upstream-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/home/tom/.agents/hooks/firn-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/firn-guard.sh",
             "timeout": 10
           }
         ]
@@ -58,12 +58,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/.agents/hooks/tripwire-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/tripwire-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/home/tom/.agents/hooks/firn-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/firn-guard.sh",
             "timeout": 10
           }
         ]
