@@ -30,6 +30,9 @@ in
       "codex/hooks/north-on-stop-codex" = {
         source = "${flakeRoot}/dotfiles/codex/hooks/north-on-stop-codex";
       };
+      "codex/hooks/north-clock-guard-codex" = {
+        source = "${flakeRoot}/dotfiles/codex/hooks/north-clock-guard-codex";
+      };
       "codex/hooks/runtime/bash" = {
         source = "${pkgs.bash}/bin/bash";
       };

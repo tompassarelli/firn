@@ -2,7 +2,13 @@
 
 (ns default)
 
-(nix/module [config inputs lib pkgs flakeRoot ...]
+(nix/module
+  [config
+   inputs
+   lib
+   pkgs
+   flakeRoot
+   ...]
   (let [username config.myConfig.modules.users.username
         northPkg
          (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)
@@ -15,7 +21,9 @@
         ;; can move at promote speed behind a stable /etc name.
         enforcement "/var/lib/north-enforcement/active/current"
         promoted
-         (fn [relative source]
+         (fn
+           [relative
+            source]
            (s "L+ /etc/codex/hooks/" relative " - - - - " enforcement "/" source))]
     {:flake-inputs
       {:beagle {:url "git+file:///home/tom/code/beagle/main?ref=main"}}
@@ -41,6 +49,8 @@
             {:source (s flakeRoot "/dotfiles/codex/hooks/north-mark-delegated-codex")}
            "codex/hooks/north-on-stop-codex"
             {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-stop-codex")}
+           "codex/hooks/north-clock-guard-codex"
+            {:source (s flakeRoot "/dotfiles/codex/hooks/north-clock-guard-codex")}
            "codex/hooks/runtime/bash"
             {:source (s pkgs.bash "/bin/bash")}
            "codex/hooks/runtime/cat"
@@ -78,7 +88,9 @@
            (promoted "racket-build-guard.sh" "beagle/integrations/north/hooks/racket-build-guard.sh")]
          :home-manager.users
           {username
-            (nix/module [config ...]
+            (nix/module
+              [config
+               ...]
               {:home.file
                 {".codex/AGENTS.md"
                   {:source
