@@ -5,7 +5,12 @@
 ;; Fram's ordinary core commands come directly from the exact flake package.
 ;; Mutable checkout execution is available only through explicit *-dev names,
 ;; which report their provenance before handing control to the checkout.
-(nix/module [config lib pkgs inputs ...]
+(nix/module
+  [config
+   lib
+   pkgs
+   inputs
+   ...]
   (let
     [framPkg
       (get (get inputs.fram.packages pkgs.stdenv.hostPlatform.system) :default)

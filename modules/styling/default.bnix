@@ -2,7 +2,11 @@
 
 (ns default)
 
-(nix/module [config lib pkgs ...]
+(nix/module
+  [config
+   lib
+   pkgs
+   ...]
   (let
     [username    config.myConfig.modules.users.username
      chosenTheme config.myConfig.modules.stylix.chosenTheme
@@ -32,7 +36,9 @@
              :sizes     {:terminal 14}}}
          :home-manager.users
           {username
-            (nix/module [config ...]
+            (nix/module
+              [config
+               ...]
               {:stylix.targets.firefox
                 {:profileNames [username] :colorTheme.enable true}
                :xdg.configFile
