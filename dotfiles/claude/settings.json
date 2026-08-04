@@ -70,11 +70,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/tom/.agents/hooks/code-upstream-guard.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
             "command": "/home/tom/.agents/hooks/firn-guard.sh",
             "timeout": 10
           },

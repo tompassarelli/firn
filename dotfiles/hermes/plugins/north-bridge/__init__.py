@@ -8,7 +8,7 @@ other provider uses — never a Hermes-specific fork.
 
 Guard chains (provider-neutral ~/.agents/hooks, run in order; ANY deny denies):
 
-    write_file / patch  -> code-upstream-guard.sh, firn-guard.sh
+    write_file / patch  -> firn-guard.sh
     terminal / process  -> tripwire-guard.sh,      firn-guard.sh
     delegate_task       -> DENY unconditionally (native delegation is disabled;
                            the `delegation` toolset is off and delegation is a
@@ -21,7 +21,7 @@ stdin. A guard may signal a denial two ways, BOTH honoured:
 
   * a non-zero exit code (tripwire's deny path), or
   * exit 0 with ``{"hookSpecificOutput":{"permissionDecision":"deny"}}`` on
-    stdout (firn/code-upstream deny path).
+    stdout (firn deny path).
 
 Fail-closed contract — enforcement can never be skipped by breaking plumbing:
 a missing/non-executable script, a spawn error, a timeout, a malformed JSON
@@ -79,16 +79,13 @@ DELEGATION_TOOLS = frozenset({"delegate_task"})
 # a real North MCP spawn/dispatch. A blocked native delegate_task never counts.
 DELEGATION_MARK_TOOLS = frozenset({"mcp__north__spawn", "mcp__north__dispatch"})
 
-# Ordered guard chains. Authoring runs the upstream-code guard first (redirects
-# reference/fork edits to the graph), then the firn authoring guard, then the
-# Terminal swaps the code guard for tripwire.
-AUTHORING_CHAIN = ("code-upstream-guard.sh", "firn-guard.sh")
+# Ordered guard chains. Authoring runs the Firn guard; terminal adds tripwire.
+AUTHORING_CHAIN = ("firn-guard.sh",)
 TERMINAL_CHAIN = ("tripwire-guard.sh", "firn-guard.sh")
 
 # Everything the enforcement surface stands on. Absence of ANY means the guard
 # plumbing is not wired and authoring/terminal must fail closed.
 REQUIRED_GUARDS = (
-    "code-upstream-guard.sh",
     "firn-guard.sh",
     "tripwire-guard.sh",
 )

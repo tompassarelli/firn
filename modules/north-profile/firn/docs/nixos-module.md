@@ -83,9 +83,3 @@ deploy time via env (`FRAM_LOG` / `FRAM_THREADS`); never hardcode life-store
 paths into the engine itself. Also registers `linear-mcp-msa-new` (HTTP/OAuth,
 per-machine auth; msa-old retired 2026-06-30) and `digitalocean` as a pinned,
 scoped stdio server that reads its API token from `~/do-token.txt` at runtime.
-
-## graph-upstream guard — accepted gap (decision)
-
-`graph-upstream-guard` deliberately covers only Edit/Write/MultiEdit —
-Bash-mediated writes (`sed -i`, `tee`) to canonical files are out of contract;
-agents are steered by the `code-as-facts` skill.

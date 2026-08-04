@@ -76,7 +76,6 @@ north/.codex/config.toml
 north/.mcp.json
 north/bin/north-arm
 north/bin/north-coord-up
-north/bin/north-lane-run
 north/bin/north-log-split
 north/bin/north-mine
 north/bin/tests/arena-seed-test.sh

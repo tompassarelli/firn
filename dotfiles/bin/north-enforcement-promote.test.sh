@@ -67,8 +67,8 @@ mkdir -p "$NORTH/profiles/tom/hooks/lib" "$NORTH/bin"
 printf 'guard v1\n' >"$NORTH/profiles/tom/hooks/agent-spawn-guard.sh"
 printf 'registry v1\n' >"$NORTH/profiles/tom/hooks/registry.tsv"
 printf 'dial v1\n' >"$NORTH/profiles/tom/hooks/lib/harness-dial.sh"
-ln -s ../../../../../fram/main/integrations/north/hooks/code-upstream-guard.sh \
-  "$NORTH/profiles/tom/hooks/code-upstream-guard.sh"
+ln -s ../../../../../fram/main/integrations/north/hooks/external-guard.sh \
+  "$NORTH/profiles/tom/hooks/cross-repo-guard.sh"
 printf 'spawn v1\n' >"$NORTH/bin/north-on-spawn"
 printf 'tooluse v1\n' >"$NORTH/bin/north-on-tooluse"
 printf 'stop v1\n' >"$NORTH/bin/north-on-stop"
@@ -149,7 +149,7 @@ check 'Beagle Codex hooks are promoted under their own provenance' \
 check 'Beagle target metadata is promoted under the hook-relative root' \
   test -f "$CURRENT/beagle/share/targets.sh"
 check 'a cross-repo symlink is not promoted' \
-  test ! -e "$CURRENT/north/profiles/tom/hooks/code-upstream-guard.sh"
+  test ! -e "$CURRENT/north/profiles/tom/hooks/cross-repo-guard.sh"
 check_eq 'promoted content is the committed blob' \
   "$(cat "$CURRENT/north/bin/north-on-spawn")" 'spawn v1'
 

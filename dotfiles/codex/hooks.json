@@ -43,11 +43,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/code-upstream-guard.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
             "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/firn-guard.sh",
             "timeout": 10
           }

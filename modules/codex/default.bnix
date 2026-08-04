@@ -37,8 +37,6 @@
             {:source (s flakeRoot "/modules/codex/requirements.toml")}
            "codex/runtime"
             {:source codexPkg}
-           "codex/hooks/code-upstream-guard.sh"
-            {:source (s inputs.fram "/integrations/north/hooks/code-upstream-guard.sh")}
            "codex/hooks/firn-guard.sh"
             {:source (s flakeRoot "/modules/north-profile/firn/hooks/firn-guard.sh")}
            "codex/hooks/north-on-spawn-codex"

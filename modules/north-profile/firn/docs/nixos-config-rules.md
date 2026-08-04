@@ -71,8 +71,8 @@ compatibility entry point. This is the anti-rot gate; keep it green.
   alias.
 
 Killed = every authoring guard no-ops (beagle SessionStart handshake,
-code-upstream guard, firn guard, racket-build guard, agent-spawn-guard,
-tripwire, north-clock guard) — used to pin a neutral, confound-free session.
+firn guard, racket-build guard, agent-spawn-guard, tripwire, north-clock guard)
+— used to pin a neutral, confound-free session.
 
 ## Adding new wiring
 

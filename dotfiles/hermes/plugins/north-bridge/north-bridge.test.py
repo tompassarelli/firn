@@ -6,8 +6,8 @@ the pure policy core (``evaluate_tool``), the lifecycle translator, the
 additionalContext preservation path, the guard/lifecycle hook adapters, and the
 startup self-check. Proves, per the done-bar:
 
-  * every guard-CHAIN member is invoked in order (code-upstream/firn/north-clock
-    for authoring; tripwire/firn/north-clock for terminal),
+  * every guard-CHAIN member is invoked in order (firn for authoring;
+    tripwire/firn for terminal),
   * fail-closed guard DENY via a NON-ZERO exit,
   * fail-closed guard DENY via JSON on stdout (permissionDecision=deny, exit 0),
   * malformed-response DENY (non-empty non-JSON stdout),
@@ -123,7 +123,7 @@ class ChainMembershipTests(unittest.TestCase):
         self.assertEqual([c[0] for c in run.calls], list(nb.AUTHORING_CHAIN))
         self.assertEqual(
             list(nb.AUTHORING_CHAIN),
-            ["code-upstream-guard.sh", "firn-guard.sh"],
+            ["firn-guard.sh"],
         )
 
     def test_patch_uses_authoring_chain(self):
@@ -418,7 +418,7 @@ class PreVerifyTests(unittest.TestCase):
 
 
 class SelfCheckTests(unittest.TestCase):
-    CHAIN = ("code-upstream-guard.sh", "firn-guard.sh", "tripwire-guard.sh")
+    CHAIN = ("firn-guard.sh", "tripwire-guard.sh")
 
     def _make_guard_dir(self, tmp, include=None, include_support=True):
         include = self.CHAIN if include is None else include
@@ -443,7 +443,7 @@ class SelfCheckTests(unittest.TestCase):
     def test_degraded_when_a_chain_guard_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             gdir = self._make_guard_dir(
-                tmp, include=("code-upstream-guard.sh", "firn-guard.sh"))
+                tmp, include=("firn-guard.sh",))
             ok, problems = nb.selfcheck(guard_dir=gdir, north_bin="/bin/sh")
             self.assertFalse(ok)
             self.assertTrue(any("tripwire-guard.sh" in p for p in problems))

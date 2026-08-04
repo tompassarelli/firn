@@ -39,7 +39,7 @@ What the `~/code/nixos-config/main/modules/claude` module materializes into `~/.
 - **enabledPlugins** → `rust-analyzer-lsp@claude-plugins-official`, `typescript-lsp@claude-plugins-official`, `orchestration@orchestration`
 - **hooks** (Claude Code fires these at lifecycle points; `⟨src⟩` = settings.json or the plugin that contributes it):
   - `SessionStart` → `beagle-session-start.sh` ⟨settings⟩, `north-on-spawn` ⟨settings⟩
-  - `PreToolUse` → `agent-spawn-guard.sh` ⟨settings⟩, `code-upstream-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩, `agent-spawn-guard.sh` ⟨settings⟩, `tripwire-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `git-blind-stage-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩
+  - `PreToolUse` → `agent-spawn-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩, `agent-spawn-guard.sh` ⟨settings⟩, `tripwire-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `git-blind-stage-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩
   - `PostToolUse` → `logcompress-hook.js` ⟨settings⟩, `racket-build-guard.sh` ⟨settings⟩, `north-on-tooluse` ⟨settings⟩, `north-mark-delegated` ⟨settings⟩
   - `Stop` → `north-on-stop` ⟨settings⟩
 
@@ -51,7 +51,7 @@ flowchart TD
   B -->|"beagle-session-start.sh · north-on-spawn"| C[turn loop]
   C --> D{UserPromptSubmit}
   D -->|"—"| E["model responds + tools"]
-  E -.->|"PreToolUse: agent-spawn-guard.sh · code-upstream-guard.sh · firn-guard.sh · launch-critical-worktree-guard.sh · tripwire-guard.sh · git-blind-stage-guard.sh"| E
+  E -.->|"PreToolUse: agent-spawn-guard.sh · firn-guard.sh · launch-critical-worktree-guard.sh · tripwire-guard.sh · git-blind-stage-guard.sh"| E
   E --> F{Stop}
   F -->|"north-on-stop"| C
 ```
@@ -78,4 +78,3 @@ flowchart TD
 > Layer 3 (CANONICAL Anthropic contracts) is annotated inline above where
 > it governs a local choice. A fuller canonical corpus is the next phase —
 > see `~/code/nixos-config/main/docs/claude/01-canonical.md` and the `claude-code-guide` skill.
-

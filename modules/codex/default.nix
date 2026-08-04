@@ -16,7 +16,6 @@ in
       "codex/runtime" = {
         source = codexPkg;
       };
-      "codex/hooks/code-upstream-guard.sh".source = "${inputs.fram}/integrations/north/hooks/code-upstream-guard.sh";
       "codex/hooks/firn-guard.sh".source = "${flakeRoot}/modules/north-profile/firn/hooks/firn-guard.sh";
       "codex/hooks/north-on-spawn-codex" = {
         source = "${flakeRoot}/dotfiles/codex/hooks/north-on-spawn-codex";
