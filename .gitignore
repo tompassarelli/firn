@@ -8,7 +8,6 @@ result-*
 **/compiled/
 .firn-build/
 .beagle-cache/
-/firn-zig/zig-out/
 
 # sops age private keys — NEVER commit these
 *.age.key

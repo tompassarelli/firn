@@ -362,15 +362,6 @@
           config.allowUnfree = true;
         };
       };
-      firn-native = import ./firn-zig/package.nix {
-        inherit pkgs;
-        beagle = beagle.packages.x86_64-linux.beagle;
-        source = pkgs.lib.fileset.toSource {
-          root = ./.;
-          fileset = ./firn-zig/src;
-        };
-        zig = beagle.inputs.zig-overlay.packages.x86_64-linux.master;
-      };
     };
     nixosConfigurations = {
       whiterabbit = self.lib.mkSystem {

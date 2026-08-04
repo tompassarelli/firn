@@ -5,13 +5,9 @@
 ;; The Beagle compiler is DEV-CHANNEL ONLY: the packaged flake build of
 ;; beagle no longer enters environment.systemPackages, so it no longer enters
 ;; the system closure. Only the checkout-execution `*-dev` shims ship from
-;; Beagle; the generation-owned Firn native driver below remains installed.
-;; Each shim execs ~/code/beagle/main's own bin/<name> so the racket that runs is
-;; whatever that checkout's own direnv resolves — never a packaged racket, and
-;; never the packaged beagle. This matches the north and fram delivery
-;; contract: ordinary names are immutable generation-owned surfaces, *-dev
-;; names are checkout surfaces that announce their provenance, and the two
-;; never select one another silently. A missing checkout is a clear, loud
+;; Beagle. Each shim execs ~/code/beagle/main's own bin/<name> so the racket
+;; that runs is whatever that checkout's own direnv resolves — never a packaged
+;; racket, and never the packaged beagle. A missing checkout is a clear, loud
 ;; failure (exit 127 + message), never a silent fallback to a packaged binary.
 ;;
 ;; The dev wrappers deliberately do NOT export _BEAGLE_RACKET. The checkout's
@@ -24,9 +20,7 @@
 ;; subshell).
 (nix/module [config flakeRoot lib pkgs ...]
   (let
-    [firnNative
-      (get (get flakeRoot.packages pkgs.stdenv.hostPlatform.system) :firn-native)
-     liveInputs
+    [liveInputs
       (nix/with pkgs [bash coreutils direnv findutils gawk git gnugrep gnused])
      devCommandNames
       ["beagle" "beagle-build" "beagle-check" "beagle-validate" "beagle-syntax"
@@ -49,7 +43,7 @@
     {:tags [development]
      :options.myConfig.modules.beagle.enable
       (lib.mkEnableOption
-        "Beagle checkout development commands and the packaged Firn native driver")
+        "Beagle checkout development commands")
      :config
       (lib.mkIf config.myConfig.modules.beagle.enable
-        {:environment.systemPackages (++ devCommands [firnNative])})}))
+        {:environment.systemPackages devCommands})}))

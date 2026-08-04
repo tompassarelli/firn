@@ -365,17 +365,7 @@
             (import (p "./modules/containers/claude-sandbox.nix")
               {:pkgs
                 (import nixpkgs-master
-                  {:system "x86_64-linux" :config.allowUnfree true})})
-           :firn-native
-            (import (p "./firn-zig/package.nix")
-              {(inherit pkgs)
-               :beagle beagle.packages.x86_64-linux.beagle
-               :source
-                (pkgs.lib.fileset.toSource
-                  {:root (p "./.")
-                   :fileset (p "./firn-zig/src")})
-               :zig
-                beagle.inputs.zig-overlay.packages.x86_64-linux.master})})
+                  {:system "x86_64-linux" :config.allowUnfree true})})})
        :nixosConfigurations
         {:whiterabbit
           (self.lib.mkSystem

@@ -1,7 +1,6 @@
 { config, flakeRoot, lib, pkgs, ... }:
 
 let
-  firnNative = flakeRoot.packages."${pkgs.stdenv.hostPlatform.system}".firn-native;
   liveInputs = with pkgs; [
     bash
     coreutils
@@ -41,8 +40,8 @@ let
   devCommands = builtins.map mkDev devCommandNames;
 in
 {
-  options.myConfig.modules.beagle.enable = lib.mkEnableOption "Beagle checkout development commands and the packaged Firn native driver";
+  options.myConfig.modules.beagle.enable = lib.mkEnableOption "Beagle checkout development commands";
   config = lib.mkIf config.myConfig.modules.beagle.enable {
-    environment.systemPackages = (devCommands ++ [ firnNative ]);
+    environment.systemPackages = devCommands;
   };
 }

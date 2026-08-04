@@ -29,8 +29,8 @@ collects_root="${PLTCOLLECTS%%:*}"
 if [[ "$PLTCOMPILEDROOTS" =~ (^|:)same(:|$) ]]; then
   exit 74
 fi
-printf 'disable=%s|repo=%s|beagle=%s|cwd=%s|args=%s\n' \
-  "${FIRN_DISABLE_NATIVE:-}" "${FIRN_REPO:-}" "${BEAGLE_PATH:-}" "$PWD" "$*" \
+printf 'repo=%s|beagle=%s|cwd=%s|args=%s\n' \
+  "${FIRN_REPO:-}" "${BEAGLE_PATH:-}" "$PWD" "$*" \
   >>"$CALL_LOG"
 if [ "$*" = "${FAIL_MATCH:-}" ]; then
   exit "${FAIL_RC:-73}"
@@ -66,7 +66,7 @@ run_route() {
 success_output="$scratch/success-output"
 run_route >"$success_output" 2>&1
 expected_routes="$(printf \
-  'disable=1|repo=%s|beagle=%s|cwd=%s|args=tag resolve all+emit\ndisable=1|repo=%s|beagle=%s|cwd=%s|args=flake-input resolve emit' \
+  'repo=%s|beagle=%s|cwd=%s|args=tag resolve all+emit\nrepo=%s|beagle=%s|cwd=%s|args=flake-input resolve emit' \
   "$route_repo" "$route_beagle" "$route_repo" \
   "$route_repo" "$route_beagle" "$route_repo")"
 [ "$(<"$route_calls")" = "$expected_routes" ]
@@ -136,8 +136,8 @@ fi
 source_file="$1"
 shift
 source_identity="$(<"$source_file")"
-printf 'source_file=%s|source=%s|args=%s|disable=%s|repo=%s\n' \
-  "$source_file" "$source_identity" "$*" "${FIRN_DISABLE_NATIVE:-}" "${FIRN_REPO:-}" \
+printf 'source_file=%s|source=%s|args=%s|repo=%s\n' \
+  "$source_file" "$source_identity" "$*" "${FIRN_REPO:-}" \
   >>"$EXEC_LOG"
 SH
 chmod +x "$cache_beagle/fake-racket"
@@ -189,9 +189,9 @@ runtime_v1="$(find "$cache_share" -type l -name runtime -print -quit)"
 env "${cache_env[@]}" "$cache_repo/scripts/firn-build" >/dev/null
 [ "$(wc -l <"$cache_builds")" -eq 1 ]
 [ "$(wc -l <"$cache_execs")" -eq 2 ]
-grep -Fq "|source=v1|args=tag resolve all+emit|disable=1|repo=$cache_repo" \
+grep -Fq "|source=v1|args=tag resolve all+emit|repo=$cache_repo" \
   "$cache_execs"
-grep -Fq "|source=v1|args=flake-input resolve emit|disable=1|repo=$cache_repo" \
+grep -Fq "|source=v1|args=flake-input resolve emit|repo=$cache_repo" \
   "$cache_execs"
 
 printf 'v2\n' >"$cache_repo/scripts/firn.rkt"
@@ -202,9 +202,9 @@ env "${cache_env[@]}" "$cache_repo/scripts/firn-build" >/dev/null 2>&1
 [ "$(wc -l <"$cache_execs")" -eq 4 ]
 runtime_v2="$(find "$cache_share" -type l -name runtime ! -path "$runtime_v1" -print -quit)"
 [ -f "$runtime_v2/.complete" ]
-grep -Fq "|source=v2|args=tag resolve all+emit|disable=1|repo=$cache_repo" \
+grep -Fq "|source=v2|args=tag resolve all+emit|repo=$cache_repo" \
   "$cache_execs"
-grep -Fq "|source=v2|args=flake-input resolve emit|disable=1|repo=$cache_repo" \
+grep -Fq "|source=v2|args=flake-input resolve emit|repo=$cache_repo" \
   "$cache_execs"
 
 env "${cache_env[@]}" "$cache_repo/scripts/firn-build" >/dev/null

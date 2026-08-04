@@ -63,11 +63,11 @@ exit 0
 EOF
 chmod +x "$stub_bin/nix"
 
-cat >"$stub_bin/firn-native" <<'EOF'
+cat >"$stub_bin/firn.rkt" <<'EOF'
 #!/usr/bin/env bash
 sleep 30
 EOF
-chmod +x "$stub_bin/firn-native"
+chmod +x "$stub_bin/firn.rkt"
 
 host="$(hostname 2>/dev/null || uname -n)"
 fresh_repo() {
@@ -246,7 +246,7 @@ sleep 0.2
 
 # ── case 6: skip while a firn rebuild is already evaluating ───────────────
 fresh_repo
-"$stub_bin/firn-native" rebuild &
+"$stub_bin/firn.rkt" rebuild &
 fake_rebuild=$!
 tracked_pids="$tracked_pids $fake_rebuild"
 wait_for 5 bash -c '[ -r /proc/'"$fake_rebuild"'/cmdline ]' >/dev/null

@@ -107,7 +107,6 @@ rebuild_running() {
     case "$cmd" in
       *firn-prewarm*) continue ;;
       *firn-rebuild-coordinated*) return 0 ;;
-      *firn-native*rebuild*) return 0 ;;
       *firn.rkt*rebuild*) return 0 ;;
       */firn\ rebuild*|*/firn\ host\ rebuild*) return 0 ;;
     esac

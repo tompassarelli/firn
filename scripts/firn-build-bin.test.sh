@@ -4,7 +4,6 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 scratch="$(mktemp -d)"
 trap 'rm -rf "${scratch:?}"' EXIT
-committed_wrapper="$HERE/../dotfiles/bin/firn"
 
 beagle="$scratch/beagle"
 bin_dir="$scratch/bin"
@@ -136,24 +135,6 @@ while IFS= read -r roots; do
 done <"$compiled_root_log"
 bash -n "$bin_dir/firn"
 
-extract_native_dispatch() {
-  awk '
-    /^NATIVE_BIN=/ { capture = 1 }
-    capture && NF == 0 { exit }
-    capture { print }
-  ' "$1"
-}
-
-expected_dispatch="$scratch/expected-native-dispatch"
-generated_dispatch="$scratch/generated-native-dispatch"
-extract_native_dispatch "$committed_wrapper" >"$expected_dispatch"
-extract_native_dispatch "$bin_dir/firn" >"$generated_dispatch"
-[ -s "$expected_dispatch" ]
-if ! cmp -s "$expected_dispatch" "$generated_dispatch"; then
-  printf 'generated Firn wrapper changed or removed native dispatch\n' >&2
-  exit 1
-fi
-
 # Switching worktree identity selects the matching immutable image without a
 # rebuild or mutation of the other worktree's cache entry.
 output_a="$(FIRN_RUNTIME_SHARE_DIR="$share_dir" FIRN_REPO="$repo_a" \
@@ -171,43 +152,6 @@ FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" SHARE_DIR="$share_dir" \
 [ -x "$repo_a/dotfiles/bin/firn" ]
 bash -n "$repo_a/dotfiles/bin/firn"
 [ "$(wc -l <"$build_log")" -eq 3 ]
-
-# The generated source-tree wrapper preserves the native rebuild dispatch.
-# FIRN_DISABLE_NATIVE remains the explicit route to the compiled Racket CLI.
-native="$scratch/firn-native"
-native_calls="$scratch/native-calls"
-cat >"$native" <<'SH'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >>"${FIRN_NATIVE_CALLS:?}"
-SH
-chmod +x "$native"
-: >"$native_calls"
-FIRN_RUNTIME_SHARE_DIR="$share_dir" \
-  FIRN_NATIVE_BIN="$native" FIRN_NATIVE_CALLS="$native_calls" \
-  FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" \
-  "$repo_a/dotfiles/bin/firn" rebuild whiterabbit
-grep -Fxq 'rebuild whiterabbit' "$native_calls"
-FIRN_RUNTIME_SHARE_DIR="$share_dir" \
-  FIRN_NATIVE_BIN="$native" FIRN_NATIVE_CALLS="$native_calls" \
-  FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" \
-  "$repo_a/dotfiles/bin/firn" host rebuild whiterabbit --skip-checks
-grep -Fxq 'host rebuild whiterabbit --skip-checks' "$native_calls"
-status_output="$(
-  FIRN_RUNTIME_SHARE_DIR="$share_dir" \
-    FIRN_NATIVE_BIN="$native" FIRN_NATIVE_CALLS="$native_calls" \
-    FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" \
-    "$repo_a/dotfiles/bin/firn" status
-)"
-grep -Fxq 'source=source-a' <<<"$status_output"
-disabled_output="$(
-  FIRN_RUNTIME_SHARE_DIR="$share_dir" \
-    FIRN_DISABLE_NATIVE=1 FIRN_NATIVE_BIN="$native" \
-    FIRN_NATIVE_CALLS="$native_calls" FIRN_REPO="$repo_a" \
-    BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" \
-    "$repo_a/dotfiles/bin/firn" rebuild whiterabbit
-)"
-grep -Fxq 'source=source-a' <<<"$disabled_output"
-[ "$(wc -l <"$native_calls")" -eq 2 ]
 
 if find "$share_dir" "$bin_dir" \( -name '*.tmp' -o -name '.firn.*' \) | grep -q .; then
   printf 'transactional Firn publication left a temporary file behind\n' >&2
@@ -295,7 +239,7 @@ real_racket_hash="$(printf '%s' "$real_racket_bin" | sha1sum | cut -c1-12)"
 compat_zo="$real_share/$real_racket_hash/$real_hash/firn.zo"
 [ -s "$compat_zo" ]
 adoption_output="$(
-  FIRN_RUNTIME_SHARE_DIR="$real_share" FIRN_DISABLE_NATIVE=1 \
+  FIRN_RUNTIME_SHARE_DIR="$real_share" \
     FIRN_REPO="$real_repo" BEAGLE_PATH="$real_beagle" \
     "$RACKET" "$compat_zo"
 )"

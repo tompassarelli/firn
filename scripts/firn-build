@@ -67,7 +67,7 @@ cleanup_runtime_root() {
 trap cleanup_runtime_root EXIT
 
 firn_cli() {
-  FIRN_DISABLE_NATIVE=1 FIRN_REPO="$PWD" BEAGLE_PATH="$BEAGLE_PATH" \
+  FIRN_REPO="$PWD" BEAGLE_PATH="$BEAGLE_PATH" \
     PLTCOLLECTS="$FIRN_RUNTIME_ROOT/collects:${PLTCOLLECTS:-}" \
     PLTCOMPILEDROOTS="$FIRN_COMPILED_ROOTS" "$FIRN_CLI" "$@"
 }
