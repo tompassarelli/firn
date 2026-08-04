@@ -9,6 +9,7 @@ nix eval --raw --impure --expr "
     module = import $generated_module {
       config = {
         myConfig.modules.users.username = \"tom\";
+        myConfig.modules.users.homeDir = \"/home/tom\";
         myConfig.modules.north-coordination-workers.enable = true;
       };
       lib = {
@@ -41,8 +42,8 @@ nix eval --raw --impure --expr "
     assert rebuild.Service.ExecStart ==
       \"/bb/bin/bb %h/.local/state/north/runtime/current/cli/nix-rebuild-worker.clj\";
     assert rebuild.Service.Environment == [
-      \"PATH=/systemd/bin:/bb/bin:/coreutils/bin:/git/bin:/run/current-system/sw/bin\"
-      \"FIRN_BIN=%h/.local/bin/firn\"
+      \"PATH=/run/wrappers/bin:/run/current-system/sw/bin\"
+      \"FIRN_BIN=/home/tom/.local/bin/firn\"
     ];
     assert concerns.Service.ExecStart ==
       \"/bb/bin/bb %h/.local/state/north/runtime/current/cli/reconciliation-worker-host.clj concerns\";

@@ -4,6 +4,7 @@
 
 (nix/module [config lib pkgs inputs ...]
   (let [username config.myConfig.modules.users.username
+        homeDir config.myConfig.modules.users.homeDir
         northPkg
           (get
             (get inputs.north.packages pkgs.stdenv.hostPlatform.system)
@@ -20,9 +21,8 @@
         runtimePath
           (s "PATH=" pkgs.systemd "/bin:" pkgs.babashka "/bin:"
              pkgs.coreutils "/bin:" pkgs.git "/bin")
-        rebuildRuntimePath
-          (s runtimePath ":/run/current-system/sw/bin")
-        firnBin "FIRN_BIN=%h/.local/bin/firn"
+        rebuildRuntimePath "PATH=/run/wrappers/bin:/run/current-system/sw/bin"
+        firnBin (s "FIRN_BIN=" homeDir "/.local/bin/firn")
         northRuntimeExec
           (pkgs.writeShellApplication
             {:name "north-runtime-exec"

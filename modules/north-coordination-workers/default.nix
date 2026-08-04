@@ -2,6 +2,7 @@
 
 let
   username = config.myConfig.modules.users.username;
+  homeDir = config.myConfig.modules.users.homeDir;
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
   promotedRuntime = "%h/.local/state/north/runtime/current";
   rebuildWorker = "${promotedRuntime}/cli/nix-rebuild-worker.clj";
@@ -9,8 +10,8 @@ let
   projectionWorker = "${promotedRuntime}/cli/coordination-projection-worker-host.clj";
   maintenanceHost = "${promotedRuntime}/cli/coordination-maintenance-task-host.clj";
   runtimePath = "PATH=${pkgs.systemd}/bin:${pkgs.babashka}/bin:${pkgs.coreutils}/bin:${pkgs.git}/bin";
-  rebuildRuntimePath = "${runtimePath}:/run/current-system/sw/bin";
-  firnBin = "FIRN_BIN=%h/.local/bin/firn";
+  rebuildRuntimePath = "PATH=/run/wrappers/bin:/run/current-system/sw/bin";
+  firnBin = "FIRN_BIN=${homeDir}/.local/bin/firn";
   northRuntimeExec = pkgs.writeShellApplication {
     name = "north-runtime-exec";
     runtimeInputs = with pkgs; [ coreutils ];

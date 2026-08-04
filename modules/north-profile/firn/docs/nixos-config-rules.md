@@ -1,8 +1,10 @@
 # System / global config changes — nixos-config rules
 
-Any change to the machine's configuration or Firn-owned agent integration is
-made **idiomatically through `~/code/nixos-config`**, never ad-hoc in the live
-system. Personal agent policy is composed by
+Any durable change to the machine's configuration or Firn-owned agent
+integration is declared through `~/code/nixos-config`, never left as an
+unowned live-system tweak. Declaring the stable wiring does **not** mean putting
+every frequently changing byte or child command into a bespoke Nix closure.
+Personal agent policy is composed by
 `~/code/north/main/profiles/tom`; Firn owns only its Nix-specific fragments,
 provider adapters, system packages, services, dotfiles, and Home Manager
 wiring. A fresh rebuild must reproduce the integration.
@@ -10,6 +12,41 @@ wiring. A fresh rebuild must reproduce the integration.
 Mechanics of the nix module that does the wiring (writable settings.json
 symlink, Claude plugin reconciliation, MCP registration):
 `nixos-config:modules/north-profile/firn/docs/nixos-module.md`.
+
+## House style — Nix is the publication boundary, not the development loop
+
+This configuration intentionally optimizes for a machine whose tools and
+services change many times per day. Nix owns the stable system shell: boot and
+security configuration, accounts, the host package set, durable service
+wiring, and pointers to runtime-owned state. It does not own the edit-observe
+loop for live tools.
+
+- Classify by feedback loop first. If a change should become observable after
+  a reload, restart, or runtime promotion, keep the changing bytes in a live
+  checkout, an out-of-store symlink, or an atomic promoted-runtime selector.
+  Nix installs the stable pointer and supervision only.
+- A rebuild is for a real system-generation change. It is never the delivery
+  channel for North, Fram, Beagle, or another hot-loop checkout. A request whose
+  purpose is code adoption identifies a missing promotion/reload channel.
+- Purity applies when publishing a generation: the rebuild consumes a committed
+  snapshot and switches the exact verified closure. It does not require the
+  preceding development loop or every host-management subprocess to be pure.
+- Choose one execution boundary deliberately. A hermetic service gets packaged
+  runtime inputs. A live host-management adapter gets the root-owned host seam
+  `PATH=/run/wrappers/bin:/run/current-system/sw/bin` and names any user-owned
+  live entrypoint explicitly, never by searching a user-writable `PATH`. Do not
+  reconstruct the host toolchain one missing executable at a time.
+- The Nix rebuild request queue is Fram data, not a service. Exactly one Nix
+  rebuild worker consumes it and runs the rebuild synchronously. Child commands
+  are not additional coordinators.
+- A change to that worker's own unit, privilege seam, or launch command is a
+  bootstrap change. Land and verify it, quiesce the worker, and use one explicit
+  owner-run activation; never require a broken queue consumer to deploy its own
+  repair. Durable requests remain queued across that operation.
+
+The test is simple: if removing the Nix generation step would make the desired
+developer loop faster without weakening the eventual published generation,
+the generation step does not belong in that loop.
 
 ## Symlinks
 
