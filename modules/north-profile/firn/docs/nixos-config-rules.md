@@ -25,6 +25,10 @@ loop for live tools.
   a reload, restart, or runtime promotion, keep the changing bytes in a live
   checkout, an out-of-store symlink, or an atomic promoted-runtime selector.
   Nix installs the stable pointer and supervision only.
+- Prefer Nix-declared out-of-store references for user-owned, frequently edited
+  files. Nix owns the destination, wiring, and lifecycle; the live checkout owns
+  the bytes. An edit that can safely take effect through reload or restart must
+  not require a generation merely to copy those bytes into the store.
 - A rebuild is for a real system-generation change. It is never the delivery
   channel for North, Fram, Beagle, or another hot-loop checkout. A request whose
   purpose is code adoption identifies a missing promotion/reload channel.
@@ -32,10 +36,12 @@ loop for live tools.
   snapshot and switches the exact verified closure. It does not require the
   preceding development loop or every host-management subprocess to be pure.
 - Choose one execution boundary deliberately. A hermetic service gets packaged
-  runtime inputs. A live host-management adapter gets the root-owned host seam
-  `PATH=/run/wrappers/bin:/run/current-system/sw/bin` and names any user-owned
-  live entrypoint explicitly, never by searching a user-writable `PATH`. Do not
-  reconstruct the host toolchain one missing executable at a time.
+  runtime inputs. A live host-management adapter gets one declared operational
+  path: root-owned wrappers and system tools first, followed only by the user's
+  declared Nix package profile when the host package set does not carry a tool.
+  User-owned live entrypoints are named explicitly, never found through an
+  arbitrary interactive-shell `PATH`. Do not reconstruct the host toolchain one
+  missing executable at a time.
 - The Nix rebuild request queue is Fram data, not a service. Exactly one Nix
   rebuild worker consumes it and runs the rebuild synchronously. Child commands
   are not additional coordinators.
@@ -47,6 +53,11 @@ loop for live tools.
 The test is simple: if removing the Nix generation step would make the desired
 developer loop faster without weakening the eventual published generation,
 the generation step does not belong in that loop.
+
+When both designs are correct, out-of-store wins for the developer surface. A
+store-managed copy requires a named invariant: runtime immutability is
+load-bearing for boot or security code, root-owned enforcement, atomic version
+publication, or rollback that must restore those exact bytes.
 
 ## Symlinks
 

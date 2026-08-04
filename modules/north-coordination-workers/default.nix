@@ -10,7 +10,7 @@ let
   projectionWorker = "${promotedRuntime}/cli/coordination-projection-worker-host.clj";
   maintenanceHost = "${promotedRuntime}/cli/coordination-maintenance-task-host.clj";
   runtimePath = "PATH=${pkgs.systemd}/bin:${pkgs.babashka}/bin:${pkgs.coreutils}/bin:${pkgs.git}/bin";
-  rebuildRuntimePath = "PATH=/run/wrappers/bin:/run/current-system/sw/bin";
+  rebuildRuntimePath = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.nix-profile/bin";
   firnBin = "FIRN_BIN=${homeDir}/.local/bin/firn";
   northRuntimeExec = pkgs.writeShellApplication {
     name = "north-runtime-exec";

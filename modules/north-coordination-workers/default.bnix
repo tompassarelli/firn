@@ -21,7 +21,9 @@
         runtimePath
           (s "PATH=" pkgs.systemd "/bin:" pkgs.babashka "/bin:"
              pkgs.coreutils "/bin:" pkgs.git "/bin")
-        rebuildRuntimePath "PATH=/run/wrappers/bin:/run/current-system/sw/bin"
+        rebuildRuntimePath
+          (s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:"
+             homeDir "/.nix-profile/bin")
         firnBin (s "FIRN_BIN=" homeDir "/.local/bin/firn")
         northRuntimeExec
           (pkgs.writeShellApplication

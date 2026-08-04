@@ -42,7 +42,7 @@ nix eval --raw --impure --expr "
     assert rebuild.Service.ExecStart ==
       \"/bb/bin/bb %h/.local/state/north/runtime/current/cli/nix-rebuild-worker.clj\";
     assert rebuild.Service.Environment == [
-      \"PATH=/run/wrappers/bin:/run/current-system/sw/bin\"
+      \"PATH=/run/wrappers/bin:/run/current-system/sw/bin:/home/tom/.nix-profile/bin\"
       \"FIRN_BIN=/home/tom/.local/bin/firn\"
     ];
     assert concerns.Service.ExecStart ==

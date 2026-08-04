@@ -56,6 +56,12 @@ Multi-file modules (chrome, firefox, glide, kanata, nyxt, stylix, system, users)
 
 A dotfile reaches `$HOME` one of two ways, chosen per module: a store-managed copy (`xdg.configFile`/`home.file` with a repo `source` — changing it needs a rebuild), or `config.lib.file.mkOutOfStoreSymlink` back into `~/code/nixos-config/main/dotfiles/…` (edits apply the moment they are written).
 
+**Out-of-store is the default for user-owned dotfiles, scripts, and live tool
+entrypoints.** Nix still declares the destination and lifecycle; the checkout
+owns the bytes. A store-managed copy is an exception and must name the
+immutability, publication, security, or rollback invariant that needs exact
+generation-owned bytes. When both designs are correct, out-of-store wins.
+
 niri's `config.kdl` is out-of-store, because niri re-reads it on write and it is tuned live. The cost is that a live tweak dirties the checkout, so the tool that makes one settles it: `opacity <value>` commits just `dotfiles/niri/config.kdl` as `niri: opacity <value>`, amending the previous such commit while it is still unpushed so a fiddling session collapses to one. If anything else is dirty it commits nothing and says so — unrelated work is never swept into a preference commit.
 
 ## Shell scripts
