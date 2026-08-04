@@ -17,6 +17,7 @@ beagle/integrations/north/hooks/beagle-session-start.test.sh
 beagle/native-core/validation/slice-bodies/drive.sh
 beagle/native-core/validation/slice-fold/driver
 beagle/native-core/validation/slice-fold/typed.edn
+beagle/native-core/validation/slice-kernel-classify/drive.sh
 beagle/native-core/validation/slice-store/drive.sh
 beagle/native-core/validation/slice-types-full/drive.sh
 beagle/native-core/validation/slice-types/pipeline-evidence.txt
@@ -27,7 +28,6 @@ beagle/runtime/src/scheduler/scheduler.clj
 beagle/runtime/src/scheduler/types.clj
 beagle/self-host/native/verify-native.sh
 beagle/self-host/verify-selfhost.sh
-fram/REPORT.md
 fram/bin/fram-code-on
 fram/bin/fram-defcheck
 fram/bin/fram-primer
@@ -37,8 +37,9 @@ fram/codegraph/bin/emit-corpus
 fram/codegraph/bin/rename-demo
 fram/codegraph/bin/safe-rename
 fram/codegraph/test/comment-falsifier.sh
-fram/render_crdt_receipt.sh
 fram/docs/archive/codegraph-README.md
+fram/docs/archive/worlds-provider-v1-final-report.md
+fram/scripts/render_crdt_receipt.sh
 fram/scripts/native-core-reingest.sh
 fram/tests/coord_defcheck_untyped_e2e_test.clj
 fram/tests/coord_editpath_defect_test.clj
@@ -86,8 +87,6 @@ north/cli/config-cli.clj
 north/cli/framrpc-main.clj
 north/cli/tests/agent-identity-publication-integration-test.clj
 north/cli/tests/concern-cli-validation-test.clj
-north/cli/tests/concern-offline-reconcile-integration-test.clj
-north/cli/tests/concern-offline-spool-integration-test.clj
 north/cli/tests/framrpc-client-test.clj
 north/cli/tests/read-projection-churn-oracle.clj
 north/deploy/gateway/crosshost_test.sh

@@ -16,7 +16,7 @@
 (nix/module [config lib pkgs inputs ...]
   (let [username config.myConfig.modules.users.username
         northPkg (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)
-        ;; Shared with north-reactor; modules/north owns the one definition of
+        ;; Shared with North coordination workers; modules/north owns the one definition of
         ;; promoted-channel resolution.
         northRuntimeExec
          (pkgs.writeShellApplication

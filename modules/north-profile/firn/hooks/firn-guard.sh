@@ -76,7 +76,7 @@ DIGEST = (
     "the .bnix AND the generated .nix (the flake only sees git-tracked files).\n"
     "3. Agents QUEUE rebuilds, never fire them: once `firn build` + `firn validate` are "
     "green and your changes are COMMITTED, run `north rebuild request --why \"<reason>\"` "
-    "(returns at once; `--urgent \"<why>\"` when it cannot wait). The reactor's window "
+    "(returns at once; `--urgent \"<why>\"` when it cannot wait). The coordinated rebuild "
     "owner coalesces open asks into ONE coordinated rebuild. Direct `firn rebuild` / "
     "`firn-rebuild-coordinated` are denied; raw `nixos-rebuild switch` / `nh switch` / "
     "`firn update` stay USER-only.\n"
@@ -176,7 +176,7 @@ if tool == "Bash":
         deny(
             "BLOCKED: agents queue rebuilds, they never fire them. Compliant move — "
             'run `north rebuild request --why "<reason>"`: it records one durable ask '
-            "and returns at once (it never builds, never blocks). The reactor's window "
+            "and returns at once (it never builds, never blocks). The coordinated rebuild "
             "owner coalesces every open ask into ONE coordinated rebuild and closes "
             "your request against the generation that landed; `north rebuild list` "
             "shows the queue. If it genuinely cannot wait, add "

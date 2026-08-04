@@ -63,13 +63,9 @@
    ;; user-level timer (~5min) for north-stream-sync — zero-AI transcript
    ;; mirroring into ~/code/north/streams/raw (streams/CLAUDE.md).
    :myConfig.modules.north-stream-sync.enable true
-   ;; reactor liveness-sweep timer (~5min) — reaps stale concerns + silently-dead
-   ;; lanes. Was RUNNING NEVER (no unit started it). Sweep only; loop-mode
-   ;; reprojection stays out of scope (see module).
-   :myConfig.modules.north-reactor.enable true
-   ;; One event owner handles semantic queue changes immediately; the reactor
-   ;; timer remains the durable fallback.
-   :myConfig.modules.north-reactor.eventOwner.enable true
+   ;; Rebuild, reconciliation, projection, safety, and janitor responsibilities
+   ;; are independently supervised and cannot block one another.
+   :myConfig.modules.north-coordination-workers.enable true
    ;; agent.slice + the session.slice mirror weight. Inert until a launcher
    ;; actually enters the scope; the slice itself costs nothing.
    :myConfig.modules.agent-slice.enable true
