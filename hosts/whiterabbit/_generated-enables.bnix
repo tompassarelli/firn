@@ -63,6 +63,7 @@
    :myConfig.modules.imagemagick.enable (lib.mkDefault true)
    :myConfig.modules.imv.enable (lib.mkDefault true)
    :myConfig.modules.jq.enable (lib.mkDefault true)
+   :myConfig.modules.kooha.enable (lib.mkDefault true)
    :myConfig.modules.libnotify.enable (lib.mkDefault true)
    :myConfig.modules.libsecret.enable (lib.mkDefault true)
    :myConfig.modules.libtool.enable (lib.mkDefault true)

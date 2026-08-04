@@ -1,0 +1,11 @@
+#lang beagle/nix
+
+(ns default)
+
+(nix/module [config lib pkgs ...]
+  {:tags [desktop]
+   :options.myConfig.modules.kooha.enable
+    (lib.mkEnableOption "Kooha screen recorder")
+   :config
+    (lib.mkIf config.myConfig.modules.kooha.enable
+      {:environment.systemPackages [pkgs.kooha]})})
