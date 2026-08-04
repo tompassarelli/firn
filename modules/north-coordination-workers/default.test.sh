@@ -40,6 +40,10 @@ nix eval --raw --impure --expr "
     assert projection.Service.Type == \"simple\";
     assert rebuild.Service.ExecStart ==
       \"/bb/bin/bb %h/.local/state/north/runtime/current/cli/nix-rebuild-worker.clj\";
+    assert rebuild.Service.Environment == [
+      \"PATH=/systemd/bin:/bb/bin:/coreutils/bin:/git/bin:/run/current-system/sw/bin\"
+      \"FIRN_BIN=%h/.local/bin/firn\"
+    ];
     assert concerns.Service.ExecStart ==
       \"/bb/bin/bb %h/.local/state/north/runtime/current/cli/reconciliation-worker-host.clj concerns\";
     assert attention.Service.ExecStart ==

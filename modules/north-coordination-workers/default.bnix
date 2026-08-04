@@ -20,6 +20,9 @@
         runtimePath
           (s "PATH=" pkgs.systemd "/bin:" pkgs.babashka "/bin:"
              pkgs.coreutils "/bin:" pkgs.git "/bin")
+        rebuildRuntimePath
+          (s runtimePath ":/run/current-system/sw/bin")
+        firnBin "FIRN_BIN=%h/.local/bin/firn"
         northRuntimeExec
           (pkgs.writeShellApplication
             {:name "north-runtime-exec"
@@ -57,7 +60,7 @@
               {:Type "simple"
                :Restart "always"
                :RestartSec "1s"
-               :Environment [runtimePath]
+               :Environment [rebuildRuntimePath firnBin]
                :WorkingDirectory promotedRuntime
                :ExecStart (s pkgs.babashka "/bin/bb " rebuildWorker)}
               :Install {:WantedBy ["default.target"]}}
