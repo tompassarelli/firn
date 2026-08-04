@@ -4,7 +4,7 @@ let
   username = config.myConfig.modules.users.username;
   northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
   promotedRuntime = "%h/.local/state/north/runtime/current";
-  rebuildWorker = "${promotedRuntime}/cli/coordinated-nix-rebuild-worker-host.clj";
+  rebuildWorker = "${promotedRuntime}/cli/nix-rebuild-worker.clj";
   reconciliationWorker = "${promotedRuntime}/cli/reconciliation-worker-host.clj";
   projectionWorker = "${promotedRuntime}/cli/coordination-projection-worker-host.clj";
   maintenanceHost = "${promotedRuntime}/cli/coordination-maintenance-task-host.clj";
@@ -17,7 +17,7 @@ let
   restartRuntimeWorkers = pkgs.writeShellApplication {
     name = "north-restart-runtime-workers";
     runtimeInputs = with pkgs; [ systemd ];
-    text = "systemctl --user try-restart north-coordinated-nix-rebuild-worker.service north-concern-reconciliation-worker.service north-attention-reconciliation-worker.service north-coordination-projection-worker.service";
+    text = "systemctl --user try-restart north-nix-rebuild-worker.service north-concern-reconciliation-worker.service north-attention-reconciliation-worker.service north-coordination-projection-worker.service";
   };
   maintenanceExec = task: "${northRuntimeExec}/bin/north-runtime-exec --chdir --interp ${pkgs.babashka}/bin/bb ${northPkg} cli/coordination-maintenance-task-host.clj ${task}";
 in
@@ -25,10 +25,11 @@ in
   options.myConfig.modules.north-coordination-workers.enable = lib.mkEnableOption "independently supervised North coordination workers";
   config = lib.mkIf config.myConfig.modules.north-coordination-workers.enable {
     home-manager.users.${username} = ({ config, ... }: {
-      systemd.user.services.north-coordinated-nix-rebuild-worker = {
+      systemd.user.services.north-nix-rebuild-worker = {
         Unit = {
-          Description = "North coordinated Nix rebuild worker";
+          Description = "North Nix rebuild worker";
           ConditionPathExists = rebuildWorker;
+          X-SwitchMethod = "keep-old";
         };
         Service = {
           Type = "simple";

@@ -28,17 +28,18 @@ nix eval --raw --impure --expr "
     home = module.config.home-manager.users.tom { config = {}; };
     services = home.systemd.user.services;
     timers = home.systemd.user.timers;
-    rebuild = services.north-coordinated-nix-rebuild-worker;
+    rebuild = services.north-nix-rebuild-worker;
     concerns = services.north-concern-reconciliation-worker;
     attention = services.north-attention-reconciliation-worker;
     projection = services.north-coordination-projection-worker;
   in
     assert rebuild.Service.Type == \"simple\";
+    assert rebuild.Unit.X-SwitchMethod == \"keep-old\";
     assert concerns.Service.Type == \"simple\";
     assert attention.Service.Type == \"simple\";
     assert projection.Service.Type == \"simple\";
     assert rebuild.Service.ExecStart ==
-      \"/bb/bin/bb %h/.local/state/north/runtime/current/cli/coordinated-nix-rebuild-worker-host.clj\";
+      \"/bb/bin/bb %h/.local/state/north/runtime/current/cli/nix-rebuild-worker.clj\";
     assert concerns.Service.ExecStart ==
       \"/bb/bin/bb %h/.local/state/north/runtime/current/cli/reconciliation-worker-host.clj concerns\";
     assert attention.Service.ExecStart ==

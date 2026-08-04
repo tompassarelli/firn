@@ -10,7 +10,7 @@
             :default)
         promotedRuntime "%h/.local/state/north/runtime/current"
         rebuildWorker
-          (s promotedRuntime "/cli/coordinated-nix-rebuild-worker-host.clj")
+          (s promotedRuntime "/cli/nix-rebuild-worker.clj")
         reconciliationWorker
           (s promotedRuntime "/cli/reconciliation-worker-host.clj")
         projectionWorker
@@ -31,7 +31,7 @@
             {:name "north-restart-runtime-workers"
              :runtimeInputs (nix/with pkgs [systemd])
              :text
-               "systemctl --user try-restart north-coordinated-nix-rebuild-worker.service north-concern-reconciliation-worker.service north-attention-reconciliation-worker.service north-coordination-projection-worker.service"})
+               "systemctl --user try-restart north-nix-rebuild-worker.service north-concern-reconciliation-worker.service north-attention-reconciliation-worker.service north-coordination-projection-worker.service"})
         maintenanceExec
           (fn [task]
             (s northRuntimeExec
@@ -48,10 +48,11 @@
         {:home-manager.users
          {username
           (nix/module [config ...]
-            {:systemd.user.services.north-coordinated-nix-rebuild-worker
+            {:systemd.user.services.north-nix-rebuild-worker
              {:Unit
-              {:Description "North coordinated Nix rebuild worker"
-               :ConditionPathExists rebuildWorker}
+              {:Description "North Nix rebuild worker"
+               :ConditionPathExists rebuildWorker
+               :X-SwitchMethod "keep-old"}
               :Service
               {:Type "simple"
                :Restart "always"
