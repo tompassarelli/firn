@@ -23,9 +23,14 @@ happens in a `wt-<slug>` sibling and lands through a ref:
 
 ```
 git -C ~/code/<project>/main worktree add ~/code/<project>/wt-<slug> -b <slug>
-# edit + commit in the worktree, then land it:
-git -C ~/code/<project>/main fetch ~/code/<project>/wt-<slug> <slug>:refs/heads/main
+# edit + commit in the worktree, then land it (run FROM the worktree):
+safe-push --to main
+git -C ~/code/<project>/main pull --ff-only
 ```
+
+(`git -C ~/code/<project>/main fetch ~/code/<project>/wt-<slug>
+<slug>:refs/heads/main` no longer works: git >= 2.54 refuses to fetch into a
+branch that is checked out.)
 
 There is no longer a `~/code/worktrees/` root; a worktree is a sibling of
 `main/`, so the project directory holds everything about that project and
@@ -66,8 +71,8 @@ not optional: the guard inspects Bash too — a Bash call carries
 is not enforcement.
 
 Reads from `main/` stay allowed, as do `git worktree add` and
-`git fetch <worktree> <branch>:refs/heads/main` — the guard must never trap a
-lane with no compliant move.
+`git -C main pull --ff-only` — the guard must never trap a lane with no
+compliant move.
 
 Dirty state in any `main/` is human work-in-progress: agents never commit,
 stash, reset, or clean it, and the guard denies destructive git operations
