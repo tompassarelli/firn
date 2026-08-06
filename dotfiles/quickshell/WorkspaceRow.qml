@@ -49,7 +49,8 @@ Row {
         Row {
             property int ordinal: SpacesState.memberOrdinals[model.wsId] || 0
             property bool floating: SpacesState.floatingIds[model.wsId] || false
-            visible: !SpacesState.available || ordinal > 0 || floating
+            // The trailing empty workspace earns a pill only while you stand on it.
+            visible: !SpacesState.available || ordinal > 0 || (floating && model.isActive)
             spacing: 0
 
             Text {
