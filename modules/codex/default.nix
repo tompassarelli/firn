@@ -77,7 +77,6 @@ in
       (promoted "lib/authoring-killswitch.sh" "north/profiles/tom/hooks/lib/authoring-killswitch.sh")
       (promoted "lib/harness-dial.sh" "north/profiles/tom/hooks/lib/harness-dial.sh")
       (promoted "beagle-session-start.sh" "beagle/integrations/north/hooks/beagle-session-start.sh")
-      (promoted "racket-build-guard.sh" "beagle/integrations/north/hooks/racket-build-guard.sh")
     ];
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {

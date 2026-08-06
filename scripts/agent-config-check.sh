@@ -829,10 +829,7 @@ expected = {
             },
             {
                 "matcher": "^(Edit|Write|MultiEdit|apply_patch)$",
-                "hooks": [
-                    command("racket-build-guard.sh", 15),
-                    command("north-on-tooluse-codex", 10),
-                ],
+                "hooks": [command("north-on-tooluse-codex", 10)],
             },
             {
                 "matcher": "^(mcp__north__spawn|mcp__north__dispatch|Task|Agent)$",
@@ -1460,8 +1457,8 @@ validate_codex_managed_policy() {
   CODEX_MANAGED_BINDINGS="$(
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
-  if [ "$CODEX_MANAGED_BINDINGS" = 16 ]; then
-    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 16-binding authoritative contract'
+  if [ "$CODEX_MANAGED_BINDINGS" = 15 ]; then
+    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 15-binding authoritative contract'
   else
     bad 'Codex managed requirements differ from the authoritative hook contract'
   fi
@@ -1484,7 +1481,6 @@ validate_codex_managed_policy() {
     "tripwire-guard.sh|(promoted \"tripwire-guard.sh\"|$SHARED/hooks/tripwire-guard.sh|north|profiles/tom/hooks/tripwire-guard.sh|north/profiles/tom/hooks/tripwire-guard.sh"
     "logcompress-hook.js|(promoted \"logcompress-hook.js\"|$SHARED/hooks/logcompress-hook.js|north|profiles/tom/hooks/logcompress-hook.js|north/profiles/tom/hooks/logcompress-hook.js"
     "logcompress.js|(promoted \"logcompress.js\"|$SHARED/hooks/logcompress.js|north|profiles/tom/hooks/logcompress.js|north/profiles/tom/hooks/logcompress.js"
-    "racket-build-guard.sh|(promoted \"racket-build-guard.sh\"|$BEAGLE_INTEGRATION/hooks/racket-build-guard.sh|beagle|integrations/north/hooks/racket-build-guard.sh|beagle/integrations/north/hooks/racket-build-guard.sh"
     "lib/authoring-killswitch.sh|(promoted \"lib/authoring-killswitch.sh\"|$SHARED/hooks/lib/authoring-killswitch.sh|north|profiles/tom/hooks/lib/authoring-killswitch.sh|north/profiles/tom/hooks/lib/authoring-killswitch.sh"
     "lib/harness-dial.sh|(promoted \"lib/harness-dial.sh\"|$SHARED/hooks/lib/harness-dial.sh|north|profiles/tom/hooks/lib/harness-dial.sh|north/profiles/tom/hooks/lib/harness-dial.sh"
     "registry.tsv|(promoted \"registry.tsv\"|$SHARED/hooks/registry.tsv|north|profiles/tom/hooks/registry.tsv|north/profiles/tom/hooks/registry.tsv"

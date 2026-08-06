@@ -40,7 +40,7 @@ What the `~/code/nixos-config/main/modules/claude` module materializes into `~/.
 - **hooks** (Claude Code fires these at lifecycle points; `⟨src⟩` = settings.json or the plugin that contributes it):
   - `SessionStart` → `beagle-session-start.sh` ⟨settings⟩, `north-on-spawn` ⟨settings⟩
   - `PreToolUse` → `agent-spawn-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩, `agent-spawn-guard.sh` ⟨settings⟩, `tripwire-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `git-blind-stage-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩
-  - `PostToolUse` → `logcompress-hook.js` ⟨settings⟩, `racket-build-guard.sh` ⟨settings⟩, `north-on-tooluse` ⟨settings⟩, `north-mark-delegated` ⟨settings⟩
+  - `PostToolUse` → `logcompress-hook.js` ⟨settings⟩, `north-on-tooluse` ⟨settings⟩, `north-mark-delegated` ⟨settings⟩
   - `Stop` → `north-on-stop` ⟨settings⟩
 
 ### Control flow (lifecycle spine)

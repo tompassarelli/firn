@@ -30,7 +30,6 @@ NORTH_PAYLOAD_FILES=(
 )
 BEAGLE_PAYLOAD_FILES=(
   integrations/north/hooks/beagle-session-start.sh
-  integrations/north/hooks/racket-build-guard.sh
   share/targets.sh
 )
 

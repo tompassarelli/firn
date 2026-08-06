@@ -93,7 +93,6 @@ if [ "$BEAGLE" = "$BEAGLE_FIXTURE" ]; then
     '  done' \
     'done' \
     >"$BEAGLE/integrations/north/hooks/beagle-session-start.sh"
-  printf 'racket v1\n' >"$BEAGLE/integrations/north/hooks/racket-build-guard.sh"
   printf '%s\n' \
     'BEAGLE_TARGET_IDS=(nix zig)' \
     'declare -A BEAGLE_TARGET_SRC_EXT=([nix]=bnix [zig]=bzig)' \
@@ -145,7 +144,7 @@ check 'non-script hook data is promoted' \
 check 'lifecycle runtimes are promoted' \
   test -f "$CURRENT/north/bin/north-on-spawn"
 check 'Beagle Codex hooks are promoted under their own provenance' \
-  test -f "$CURRENT/beagle/integrations/north/hooks/racket-build-guard.sh"
+  test -f "$CURRENT/beagle/integrations/north/hooks/beagle-session-start.sh"
 check 'Beagle target metadata is promoted under the hook-relative root' \
   test -f "$CURRENT/beagle/share/targets.sh"
 check 'a cross-repo symlink is not promoted' \
@@ -247,12 +246,12 @@ BROKEN="$WORK/broken"
 git_init "$BROKEN"
 mkdir -p "$BROKEN/integrations/north/hooks"
 printf 'session\n' >"$BROKEN/integrations/north/hooks/beagle-session-start.sh"
-BROKEN_REV="$(commit_all "$BROKEN" 'missing racket-build-guard')"
+BROKEN_REV="$(commit_all "$BROKEN" 'missing share/targets.sh')"
 status=0
 out="$("$PROMOTE" "$NORTH_V1" --beagle-rev "$BROKEN_REV" --north-repo "$NORTH" \
   --beagle-repo "$BROKEN" --why 'incomplete payload' 2>&1)" || status=$?
 check_eq 'an absent payload entry fails the promote' "$status" 1
-check_contains 'the absent payload entry is named' "$out" 'racket-build-guard.sh'
+check_contains 'the absent payload entry is named' "$out" 'share/targets.sh'
 
 # --- an unknown revision is a promote error -----------------------------------
 status=0

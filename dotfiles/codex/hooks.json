@@ -76,16 +76,6 @@
         ]
       },
       {
-        "matcher": "Edit|Write|MultiEdit|apply_patch",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/home/tom/.agents/hooks/racket-build-guard.sh",
-            "timeout": 15
-          }
-        ]
-      },
-      {
         "matcher": "Bash|shell|exec_command|Edit|Write|MultiEdit|apply_patch",
         "hooks": [
           {

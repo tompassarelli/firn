@@ -418,7 +418,7 @@ NORTH_ENFORCEMENT_ROOT="$real_enforcement"
 # longer be pinned to a flake input.
 grep -Fq '(promoted "agent-spawn-guard.sh" "north/profiles/tom/hooks/agent-spawn-guard.sh")' \
   "$REPO/modules/codex/default.bnix"
-grep -Fq '(promoted "racket-build-guard.sh" "beagle/integrations/north/hooks/racket-build-guard.sh")' \
+grep -Fq '(promoted "beagle-session-start.sh" "beagle/integrations/north/hooks/beagle-session-start.sh")' \
   "$REPO/modules/codex/default.bnix"
 grep -Fq 'enforcement "/var/lib/north-enforcement/active/current"' \
   "$REPO/modules/codex/default.bnix"
