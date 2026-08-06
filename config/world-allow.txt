@@ -52,6 +52,7 @@ nixos-config/docs/claude/02-local-map.md
 nixos-config/dotfiles/bin/firn
 nixos-config/dotfiles/bin/harness-map
 nixos-config/dotfiles/bin/sandbox
+nixos-config/dotfiles/bin/spaces
 nixos-config/dotfiles/claude/settings.json
 nixos-config/dotfiles/claude/statusline.sh
 nixos-config/dotfiles/claude/statusline.test.sh
