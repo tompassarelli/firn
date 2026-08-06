@@ -31,6 +31,7 @@ in
         "quickshell/NiriListener.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/NiriListener.qml";
         "quickshell/BarState.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/BarState.qml";
         "quickshell/WorkspaceRow.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/WorkspaceRow.qml";
+        "quickshell/SpacesState.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/SpacesState.qml";
         "quickshell/WorkspacePopup.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/WorkspacePopup.qml";
         "quickshell/key-release-monitor.py".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/key-release-monitor.py";
         "quickshell/LayoutConfig.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/LayoutConfig.qml";

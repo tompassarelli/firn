@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# rofi chooser over spaces; --move sends the focused column instead.
+mode="${1:-goto}"
+choice="$(spaces list --menu | rofi -dmenu -p space)" || exit 0
+[ -n "$choice" ] || exit 0
+if [ "$mode" = "--move" ]; then
+  exec spaces move-to-space "$choice"
+else
+  exec spaces goto "$choice"
+fi

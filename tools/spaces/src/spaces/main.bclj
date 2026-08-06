@@ -1,0 +1,457 @@
+#lang beagle/clj
+(ns spaces.main
+  "Two-level activity layer over niri: spaces own workspaces. The daemon
+   subscribes to the niri event stream, adopts workspaces into spaces
+   (name/prefix bindings, else the current space), keeps each space's band
+   contiguous on the strip, and serves commands over a FIFO. State snapshots
+   to $XDG_STATE_HOME/spaces/state.json for the CLI and the quickshell bar.
+   niri workspace ids are runtime identity; names are only labels/bindings."
+  (:gen-class))
+
+(require babashka.fs :as fs)
+(require babashka.process :as proc)
+(require cheshire.core :as json)
+(require clojure.string :as str)
+(require clojure.edn :as edn)
+(require spaces.rt :as rt)
+
+(declare-extern spaces.rt/sleep-ms [Int -> Nil])
+(declare-extern spaces.rt/getenv-or [String String -> String])
+(declare-extern spaces.rt/parse-int-or [Any Int -> Int])
+(declare-extern spaces.rt/parse-json-safe [String -> Any])
+(declare-extern spaces.rt/my-pid [-> Int])
+(declare-extern spaces.rt/pid-alive [Int -> Any])
+(declare-extern spaces.rt/mkfifo [String -> Nil])
+(declare-extern spaces.rt/process-lines [Any Any -> Int])
+(declare-extern spaces.rt/fifo-lines [String Any -> Nil])
+(declare-extern spaces.rt/write-line-timeout [String String Int -> Bool])
+
+;; ---------- paths ----------
+
+(defn home [] -> String
+  (rt/getenv-or "HOME" "/tmp"))
+
+(defn runtime-dir [] -> String
+  (str (rt/getenv-or "XDG_RUNTIME_DIR" "/tmp") "/spaces"))
+
+(defn ctl-path [] -> String
+  (str (runtime-dir) "/ctl"))
+
+(defn pid-path [] -> String
+  (str (runtime-dir) "/pid"))
+
+(defn state-dir [] -> String
+  (str (rt/getenv-or "XDG_STATE_HOME" (str (home) "/.local/state")) "/spaces"))
+
+(defn state-path [] -> String
+  (str (state-dir) "/state.json"))
+
+(defn default-defs-path [] -> String
+  (str (rt/getenv-or "XDG_CONFIG_HOME" (str (home) "/.config"))
+       "/spaces/spaces.edn"))
+
+;; ---------- niri IPC ----------
+
+(defn niri-workspaces [] -> Any
+  (let [r: Any (proc/sh ["niri" "msg" "--json" "workspaces"])]
+    (if (= 0 (get r :exit))
+      (rt/parse-json-safe (str (get r :out)))
+      nil)))
+
+(defn niri-action [(args : Any)] -> Bool
+  (let [r: Any (proc/sh (vec (concat ["niri" "msg" "action"] args)))]
+    (= 0 (get r :exit))))
+
+(defn ws-id [(w : Any)] -> Any (get w "id"))
+(defn ws-name [(w : Any)] -> Any (get w "name"))
+(defn ws-idx [(w : Any)] -> Int (rt/parse-int-or (get w "idx") 0))
+(defn ws-output [(w : Any)] -> Any (get w "output"))
+
+(defn ws-ref [(w : Any)] -> String
+  (let [nm: Any (ws-name w)]
+    (if (string? nm) nm (str (ws-idx w)))))
+
+(defn focus-ws! [(w : Any)] -> Bool
+  (niri-action ["focus-workspace" (ws-ref w)]))
+
+;; ---------- space defs / membership ----------
+
+(defn space-rank [(st : Any) (sid : Any)] -> Int
+  (loop [ds: Any (get st :defs)
+         i: Int 0]
+    (cond
+      (empty? ds) 9999
+      (= (get (first ds) :id) sid) i
+      :else (recur (rest ds) (inc i)))))
+
+(defn match-binding [(defs : Any) (nm : Any)] -> Any
+  (if (string? nm)
+    (loop [ds: Any defs]
+      (if (empty? ds)
+        nil
+        (let [d: Any (first ds)
+              names: Any (get d :bind-names)
+              prefixes: Any (get d :bind-prefixes)]
+          (cond
+            (and names
+                 (some (fn [(x : Any)] -> Any (= x nm)) names))
+            (get d :id)
+            (and prefixes
+                 (some (fn [(p : Any)] -> Any (str/starts-with? nm p)) prefixes))
+            (get d :id)
+            :else (recur (rest ds))))))
+    nil))
+
+;; The trailing empty unnamed workspace niri maintains per output stays
+;; unadopted so it can seed whichever space claims it next.
+(defn floating? [(ws-list : Any) (w : Any)] -> Bool
+  (and (nil? (ws-name w))
+       (nil? (get w "active_window_id"))
+       (let [out: Any (ws-output w)
+             mx: Int (reduce (fn [(m : Int) (x : Any)] -> Int
+                               (if (= (ws-output x) out)
+                                 (max m (ws-idx x))
+                                 m))
+                             0
+                             ws-list)]
+         (= (ws-idx w) mx))))
+
+(defn adopt-all [(st : Any) (ws-list : Any)] -> Any
+  (let [live-ids: Any (set (mapv ws-id ws-list))
+        pruned: Any (reduce (fn [(m : Any) (k : Any)] -> Any
+                              (if (contains? live-ids k) m (dissoc m k)))
+                            (get st :members)
+                            (vec (keys (get st :members))))]
+    (reduce (fn [(m : Any) (w : Any)] -> Any
+              (let [id: Any (ws-id w)]
+                (cond
+                  (contains? m id) m
+                  (floating? ws-list w) m
+                  :else (assoc m id
+                               (or (match-binding (get st :defs) (ws-name w))
+                                   (get st :current)
+                                   (get st :default))))))
+            pruned
+            ws-list)))
+
+(defn focused-ws [(ws-list : Any)] -> Any
+  (first (filter (fn [(w : Any)] -> Any (get w "is_focused")) ws-list)))
+
+(defn members-of
+  [(st : Any)
+   (ws-list : Any)
+   (sid : Any)] -> Any
+  (sort-by (fn [(w : Any)] -> Int (ws-idx w))
+           (filter (fn [(w : Any)] -> Any
+                     (= sid (get (get st :members) (ws-id w))))
+                   ws-list)))
+
+(defn floats-of [(st : Any) (ws-list : Any)] -> Any
+  (sort-by (fn [(w : Any)] -> Int (ws-idx w))
+           (filter (fn [(w : Any)] -> Any
+                     (nil? (get (get st :members) (ws-id w))))
+                   ws-list)))
+
+;; ---------- snapshot ----------
+
+(defn ws-entry [(w : Any)] -> Any
+  {:id (ws-id w)
+   :idx (ws-idx w)
+   :name (ws-name w)
+   :output (ws-output w)
+   :focused (get w "is_focused")
+   :active (get w "is_active")
+   :urgent (get w "is_urgent")})
+
+(defn snapshot-json [(st : Any)] -> String
+  (let [ws-list: Any (get st :ws)]
+    (json/generate-string
+     {:current (get st :current)
+      :previous (get st :previous)
+      :generated_at (System/currentTimeMillis)
+      :spaces (mapv (fn [d: Any] -> Any
+                      (let [sid: Any (get d :id)]
+                        {:id sid
+                         :label (or (get d :label) sid)
+                         :last_active (get (get st :last-active) sid)
+                         :workspaces (mapv ws-entry
+                                           (members-of st ws-list sid))}))
+                    (get st :defs))
+      :floating (mapv ws-entry (floats-of st ws-list))})))
+
+(defn write-snapshot! [(st : Any)] -> Nil
+  (let [tmp: String (str (state-path) ".tmp")]
+    (spit tmp (snapshot-json st))
+    (fs/move tmp (state-path) {:replace-existing true})
+    nil))
+
+;; ---------- band ordering ----------
+
+(defn desired-order
+  [(st : Any)
+   (ws-list : Any)
+   (out : Any)] -> Any
+  (let [ows: Any (filter (fn [(w : Any)] -> Any (= (ws-output w) out)) ws-list)]
+    (sort-by (fn [(w : Any)] -> Any
+               (let [sid: Any (get (get st :members) (ws-id w))]
+                 [(if sid (space-rank st sid) 9999) (ws-idx w)]))
+             ows)))
+
+(defn first-misplaced [(want : Any)] -> Any
+  (loop [ws: Any want
+         pos: Int 1]
+    (cond
+      (empty? ws) nil
+      (not= (ws-idx (first ws)) pos) {:w (first ws) :target pos}
+      :else (recur (rest ws) (inc pos)))))
+
+(defn enforce-bands! [(state : Any)] -> Nil
+  (loop [n: Int 0]
+    (let [live: Any (niri-workspaces)]
+      (when (and live (< n 12))
+        (let [st: Any (deref state)
+              outs: Any (vec (distinct (mapv ws-output live)))
+              move: Any (loop [os: Any outs]
+                          (if (empty? os)
+                            nil
+                            (or (first-misplaced
+                                 (desired-order st live (first os)))
+                                (recur (rest os)))))]
+          (when move
+            (niri-action ["move-workspace-to-index"
+                          "--reference" (ws-ref (get move :w))
+                          (str (get move :target))])
+            (recur (inc n))))))))
+
+;; ---------- state transitions ----------
+
+(defn apply-workspaces [(st : Any) (ws-list : Any)] -> Any
+  (let [members: Any (adopt-all st ws-list)
+        st2: Any (assoc st :members members :ws ws-list)
+        f: Any (focused-ws ws-list)
+        fsid: Any (if f (get members (ws-id f)) nil)
+        st3: Any (if (and fsid (not= fsid (get st2 :current)))
+                   (assoc st2 :previous (get st2 :current) :current fsid)
+                   st2)]
+    (if (and f fsid)
+      (assoc st3 :last-active
+             (assoc (get st3 :last-active) fsid (ws-id f)))
+      st3)))
+
+(defn on-workspaces! [(state : Any) (ws-list : Any)] -> Nil
+  (swap! state (fn [(st : Any)] -> Any (apply-workspaces st ws-list)))
+  (enforce-bands! state)
+  (write-snapshot! (deref state))
+  nil)
+
+(defn rescan! [(state : Any)] -> Nil
+  (let [ws: Any (niri-workspaces)]
+    (when ws (on-workspaces! state ws))
+    nil))
+
+;; ---------- commands ----------
+
+(defn space-target-ws
+  [(st : Any)
+   (ws-list : Any)
+   (sid : Any)] -> Any
+  (let [la: Any (get (get st :last-active) sid)
+        ms: Any (members-of st ws-list sid)
+        alive: Any (first (filter (fn [(w : Any)] -> Any (= (ws-id w) la)) ms))]
+    (or alive (first ms))))
+
+(defn assign-ws!
+  [(state : Any)
+   (id : Any)
+   (sid : Any)] -> Nil
+  (swap! state (fn [(s : Any)] -> Any
+                 (assoc s :members (assoc (get s :members) id sid))))
+  (enforce-bands! state)
+  (write-snapshot! (deref state))
+  nil)
+
+(defn goto-target!
+  [(state : Any)
+   (sid : Any)
+   (move? : Bool)] -> Nil
+  (let [st: Any (deref state)
+        live: Any (niri-workspaces)]
+    (when live
+      (let [t: Any (space-target-ws st live sid)
+            t2: Any (or t
+                        (let [fl: Any (first (filter
+                                              (fn [(w : Any)] -> Any
+                                                (floating? live w))
+                                              live))]
+                          (when fl (assign-ws! state (ws-id fl) sid))
+                          fl))]
+        (when t2
+          (if move?
+            (niri-action ["move-column-to-workspace" (ws-ref t2)])
+            (focus-ws! t2)))))
+    nil))
+
+(defn nth-member [(st : Any) (n : Int)] -> Any
+  (let [live: Any (niri-workspaces)]
+    (if live
+      (let [ms: Any (vec (members-of st live (get st :current)))
+            cnt: Int (count ms)]
+        (if (= cnt 0)
+          nil
+          (get ms (min (max 0 (- n 1)) (- cnt 1)))))
+      nil)))
+
+(defn handle-command! [(state : Any) (line : String)] -> Nil
+  (let [m: Any (rt/parse-json-safe line)
+        cmd: Any (if m (get m "cmd") nil)]
+    (cond
+      (= cmd "goto") (goto-target! state (get m "space") false)
+      (= cmd "move-to-space") (goto-target! state (get m "space") true)
+      (= cmd "back") (goto-target! state (get (deref state) :previous) false)
+      (= cmd "here")
+      (let [t: Any (nth-member (deref state)
+                               (rt/parse-int-or (get m "n") 1))]
+        (when t (focus-ws! t))
+        nil)
+      (= cmd "move-here")
+      (let [t: Any (nth-member (deref state)
+                               (rt/parse-int-or (get m "n") 1))]
+        (when t (niri-action ["move-column-to-workspace" (ws-ref t)]))
+        nil)
+      (= cmd "assign")
+      (let [live: Any (niri-workspaces)
+            f: Any (if live (focused-ws live) nil)]
+        (when f (assign-ws! state (ws-id f) (get m "space")))
+        nil)
+      :else nil)))
+
+;; ---------- daemon ----------
+
+(defn load-defs [(path : String)] -> Any
+  (edn/read-string (slurp path)))
+
+(defn initial-state [(defs : Any)] -> Any
+  {:defs (get defs :spaces)
+   :default (get defs :default)
+   :members {}
+   :last-active {}
+   :current (get defs :default)
+   :previous (get defs :default)
+   :ws []})
+
+;; Newest instance wins: systemd is the eventual owner, so a unit (re)start
+;; must displace any bootstrap/probe instance instead of deferring to it.
+(defn guard-single-instance! [] -> Nil
+  (when (fs/exists? (pid-path))
+    (let [old: Int (rt/parse-int-or (str/trim (slurp (pid-path))) 0)]
+      (when (and (> old 0)
+                 (not= old (rt/my-pid))
+                 (rt/pid-alive old))
+        (println (str "spaced: taking over from pid " old))
+        (proc/sh ["kill" (str old)])
+        (rt/sleep-ms 500))))
+  (spit (pid-path) (str (rt/my-pid)))
+  nil)
+
+(defn handle-event! [(state : Any) (line : String)] -> Nil
+  (let [evt: Any (rt/parse-json-safe line)]
+    (cond
+      (nil? evt) nil
+      (get evt "WorkspacesChanged")
+      (on-workspaces! state
+                      (get (get evt "WorkspacesChanged") "workspaces"))
+      (get evt "WorkspaceActivated") (rescan! state)
+      (get evt "WorkspaceActiveWindowChanged") (rescan! state)
+      :else nil)))
+
+(defn run-daemon! [(defs-path : String)] -> Nil
+  (let [defs: Any (load-defs defs-path)
+        state: Any (atom (initial-state defs))]
+    (fs/create-dirs (runtime-dir))
+    (fs/create-dirs (state-dir))
+    (guard-single-instance!)
+    (when (not (fs/exists? (ctl-path)))
+      (rt/mkfifo (ctl-path)))
+    (rescan! state)
+    (println (str "spaced up: defs=" defs-path
+                  " spaces=" (count (get defs :spaces))))
+    (future
+      (loop []
+        (rt/fifo-lines (ctl-path)
+                       (fn [(l : String)] -> Nil (handle-command! state l)))
+        (recur)))
+    (loop []
+      (rt/process-lines ["niri" "msg" "--json" "event-stream"]
+                        (fn [(l : String)] -> Nil (handle-event! state l)))
+      (rt/sleep-ms 2000)
+      (recur))))
+
+;; ---------- CLI ----------
+
+(defn send! [(m : Any)] -> Nil
+  (if (and (fs/exists? (ctl-path))
+           (rt/write-line-timeout (ctl-path) (json/generate-string m) 500))
+    nil
+    (do (println "spaces: daemon not reachable (systemctl --user status spaces-daemon)")
+        (System/exit 1))))
+
+(defn read-state [] -> Any
+  (if (fs/exists? (state-path))
+    (rt/parse-json-safe (slurp (state-path)))
+    nil))
+
+(defn cmd-list! [(flag : Any)] -> Nil
+  (let [stj: Any (read-state)]
+    (cond
+      (nil? stj)
+      (do (println "spaces: no state yet (daemon not running?)")
+          (System/exit 1))
+      (= flag "--json") (println (str/trim (slurp (state-path))))
+      (= flag "--menu")
+      (do (mapv (fn [(s : Any)] -> Any (println (get s "id")))
+                (get stj "spaces"))
+          nil)
+      :else
+      (do (mapv (fn [(s : Any)] -> Any
+                  (println (str (if (= (get s "id") (get stj "current"))
+                                  "* "
+                                  "  ")
+                                (get s "id")
+                                "  (" (count (get s "workspaces")) ")")))
+                (get stj "spaces"))
+          nil))
+    nil))
+
+(defn usage [] -> Nil
+  (println "usage: spaces daemon [--defs PATH] | goto SPACE | back | here N | move-here N | move-to-space SPACE | assign SPACE | list [--menu|--json] | current")
+  nil)
+
+(defn -main [& args] -> Nil
+  (let [cmd: Any (first args)
+        a2: Any (second args)]
+    (cond
+      (= cmd "daemon")
+      (run-daemon! (if (= a2 "--defs")
+                     (str (nth args 2))
+                     (default-defs-path)))
+      (= cmd "goto") (if a2
+                       (send! {:cmd "goto" :space a2})
+                       (usage))
+      (= cmd "move-to-space") (if a2
+                                (send! {:cmd "move-to-space" :space a2})
+                                (usage))
+      (= cmd "back") (send! {:cmd "back"})
+      (= cmd "here") (send! {:cmd "here" :n (rt/parse-int-or a2 1)})
+      (= cmd "move-here") (send! {:cmd "move-here"
+                                  :n (rt/parse-int-or a2 1)})
+      (= cmd "assign") (if a2
+                         (send! {:cmd "assign" :space a2})
+                         (usage))
+      (= cmd "list") (cmd-list! a2)
+      (= cmd "current")
+      (let [stj: Any (read-state)]
+        (if stj
+          (println (get stj "current"))
+          (do (println "spaces: no state yet") (System/exit 1)))
+        nil)
+      :else (usage))))

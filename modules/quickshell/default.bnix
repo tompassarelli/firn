@@ -64,6 +64,11 @@
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
                         "/code/nixos-config/dotfiles/quickshell/WorkspaceRow.qml"))}
+                 "quickshell/SpacesState.qml"
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/dotfiles/quickshell/SpacesState.qml"))}
                  "quickshell/WorkspacePopup.qml"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink

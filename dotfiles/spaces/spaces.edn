@@ -1,0 +1,12 @@
+;; Space definitions for spaced (see tools/spaces/). Order here is band
+;; order on the strip. bind-names/bind-prefixes route rule-created and
+;; renamed workspaces to a space regardless of what space is current.
+{:default "home"
+ :spaces
+ [{:id "home" :label "home"}
+  {:id "gjoa" :label "gjoa"
+   :bind-names ["gjoa release" "render"]
+   :bind-prefixes ["gjoa"]}
+  {:id "msa" :label "msa"
+   :bind-names ["heist"]
+   :bind-prefixes ["msa"]}]}
