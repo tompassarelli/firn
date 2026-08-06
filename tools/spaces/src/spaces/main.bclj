@@ -179,9 +179,11 @@
                     (get st :defs))
       :floating (mapv ws-entry (floats-of st ws-list))})))
 
+;; Trailing newline is load-bearing: the bar tails this file and its
+;; line parser only emits on the delimiter.
 (defn write-snapshot! [(st : Any)] -> Nil
   (let [tmp: String (str (state-path) ".tmp")]
-    (spit tmp (snapshot-json st))
+    (spit tmp (str (snapshot-json st) "\n"))
     (fs/move tmp (state-path) {:replace-existing true})
     nil))
 
