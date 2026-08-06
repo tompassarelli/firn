@@ -8,6 +8,8 @@
 
 (defn sleep-ms [ms] (Thread/sleep ms) nil)
 
+(defn to-edn [m] (pr-str m))
+
 (defn getenv-or [k fallback]
   (or (System/getenv k) fallback))
 

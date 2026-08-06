@@ -605,6 +605,7 @@ binds {
     Mod+Grave hotkey-overlay-title="Previous Space" { spawn "spaces" "back"; }
     Mod+Semicolon hotkey-overlay-title="Space Chooser" { spawn "spaces-menu"; }
     Mod+Shift+Semicolon hotkey-overlay-title="Move Column to Space" { spawn "spaces-menu" "--move"; }
+    Mod+Ctrl+Semicolon hotkey-overlay-title="Assign Workspace to Space" { spawn "spaces-menu" "--assign"; }
 
     // The following binds move the focused window in and out of a column.
     // If the window is alone, they will consume it into the nearby column to the side.

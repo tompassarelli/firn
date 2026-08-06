@@ -25,6 +25,7 @@
 (declare-extern spaces.rt/process-lines [Any Any -> Int])
 (declare-extern spaces.rt/fifo-lines [String Any -> Nil])
 (declare-extern spaces.rt/write-line-timeout [String String Int -> Bool])
+(declare-extern spaces.rt/to-edn [Any -> String])
 
 ;; ---------- paths ----------
 
@@ -45,6 +46,9 @@
 
 (defn state-path [] -> String
   (str (state-dir) "/state.json"))
+
+(defn assignments-path [] -> String
+  (str (state-dir) "/assignments.edn"))
 
 (defn default-defs-path [] -> String
   (str (rt/getenv-or "XDG_CONFIG_HOME" (str (home) "/.config"))
@@ -128,7 +132,8 @@
                   (contains? m id) m
                   (floating? ws-list w) m
                   :else (assoc m id
-                               (or (match-binding (get st :defs) (ws-name w))
+                               (or (get (get st :assignments) (ws-name w))
+                                   (match-binding (get st :defs) (ws-name w))
                                    (get st :current)
                                    (get st :default))))))
             pruned
@@ -272,6 +277,22 @@
   (write-snapshot! (deref state))
   nil)
 
+;; Explicit assignments persist by workspace NAME (ids die with the
+;; compositor); unnamed workspaces stay session-scoped by design.
+(defn persist-assignment!
+  [(state : Any)
+   (nm : Any)
+   (sid : Any)] -> Nil
+  (when (string? nm)
+    (swap! state (fn [(s : Any)] -> Any
+                   (assoc s :assignments
+                          (assoc (get s :assignments) nm sid))))
+    (let [tmp: String (str (assignments-path) ".tmp")]
+      (spit tmp (str (rt/to-edn (get (deref state) :assignments)) "\n"))
+      (fs/move tmp (assignments-path) {:replace-existing true}))
+    (println (str "assign " nm " -> " sid " (persisted)")))
+  nil)
+
 (defn goto-target!
   [(state : Any)
    (sid : Any)
@@ -329,7 +350,9 @@
       (= cmd "assign")
       (let [live: Any (niri-workspaces)
             f: Any (if live (focused-ws live) nil)]
-        (when f (assign-ws! state (ws-id f) (get m "space")))
+        (when f
+          (assign-ws! state (ws-id f) (get m "space"))
+          (persist-assignment! state (ws-name f) (get m "space")))
         nil)
       :else nil)))
 
@@ -338,9 +361,15 @@
 (defn load-defs [(path : String)] -> Any
   (edn/read-string (slurp path)))
 
-(defn initial-state [(defs : Any)] -> Any
+(defn load-assignments [] -> Any
+  (if (fs/exists? (assignments-path))
+    (or (edn/read-string (slurp (assignments-path))) {})
+    {}))
+
+(defn initial-state [(defs : Any) (assignments : Any)] -> Any
   {:defs (get defs :spaces)
    :default (get defs :default)
+   :assignments assignments
    :members {}
    :last-active {}
    :current (get defs :default)
@@ -374,7 +403,7 @@
 
 (defn run-daemon! [(defs-path : String)] -> Nil
   (let [defs: Any (load-defs defs-path)
-        state: Any (atom (initial-state defs))]
+        state: Any (atom (initial-state defs (load-assignments)))]
     (fs/create-dirs (runtime-dir))
     (fs/create-dirs (state-dir))
     (guard-single-instance!)
