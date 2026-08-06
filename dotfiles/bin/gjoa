@@ -2,7 +2,7 @@
 # gjoa launcher + dev CLI
 set -u
 
-root="$HOME/code/gjoa"
+root="$HOME/code/gjoa/active"
 nix_bin="$root/result/bin/gjoa"
 mach_bin="$root/engine/obj-x86_64-pc-linux-gnu/dist/bin/gjoa"
 
