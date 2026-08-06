@@ -12,6 +12,7 @@
   myConfig.modules.cargo.enable = lib.mkDefault true;
   myConfig.modules.chrome.enable = lib.mkDefault true;
   myConfig.modules.claude.enable = lib.mkDefault true;
+  myConfig.modules.clipboard-tools.enable = lib.mkDefault true;
   myConfig.modules.clippy.enable = lib.mkDefault true;
   myConfig.modules.clojure.enable = lib.mkDefault true;
   myConfig.modules.cmake.enable = lib.mkDefault true;

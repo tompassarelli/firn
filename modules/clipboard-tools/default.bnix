@@ -1,0 +1,30 @@
+#lang beagle/nix
+
+(ns default)
+
+;; A Wayland selection dies with its source client; wl-clip-persist reowns it.
+(nix/module [config lib pkgs ...]
+  (let
+    [username config.myConfig.modules.users.username]
+    {:tags [desktop]
+     :options.myConfig.modules.clipboard-tools.enable
+      (lib.mkEnableOption "Clipboard persistence daemon and X selection diagnostics")
+     :config
+      (lib.mkIf config.myConfig.modules.clipboard-tools.enable
+        {:environment.systemPackages
+          (nix/with pkgs [wl-clip-persist xclip xsel xlsclients])
+         :home-manager.users
+          {username
+            (nix/module [config ...]
+              {:systemd.user.services.wl-clip-persist
+                {:Unit
+                  {:Description "Keep the Wayland clipboard after the source client exits"
+                   :PartOf      ["graphical-session.target"]
+                   :After       ["graphical-session.target"]
+                   :Requisite   ["graphical-session.target"]}
+                 :Service
+                  {:ExecStart
+                    (s pkgs.wl-clip-persist
+                      "/bin/wl-clip-persist --clipboard regular")
+                   :Restart "on-failure"}
+                 :Install {:WantedBy ["niri.service"]}}})}})}))
