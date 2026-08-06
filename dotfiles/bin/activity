@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# activity — CLI + daemon entry for the niri activity layer (tools/activity).
+# Live-checkout anchor required: ~/.local/bin serves this shim as a store
+# snapshot, where self-relative paths resolve read-only.
+d="$HOME/code/nixos-config/main/tools/activity"
+out="$d/build/activity/main.clj"
+if [ ! -f "$out" ] || [ "$d/src/activity/main.bclj" -nt "$out" ]; then
+  "$d/build.sh" >&2
+fi
+exec bb -cp "$d/build:$d/src" -m activity.main "$@"

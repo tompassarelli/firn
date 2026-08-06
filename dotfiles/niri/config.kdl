@@ -550,26 +550,26 @@ binds {
     // Mod+TouchpadScrollDown { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.02+"; }
     // Mod+TouchpadScrollUp   { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.02-"; }
 
-    // Numbers are space-relative: Mod+N is the Nth workspace of the current
-    // space (spaced resolves membership; see tools/spaces/).
-    Mod+1 { spawn "spaces" "here" "1"; }
-    Mod+2 { spawn "spaces" "here" "2"; }
-    Mod+3 { spawn "spaces" "here" "3"; }
-    Mod+4 { spawn "spaces" "here" "4"; }
-    Mod+5 { spawn "spaces" "here" "5"; }
-    Mod+6 { spawn "spaces" "here" "6"; }
-    Mod+7 { spawn "spaces" "here" "7"; }
-    Mod+8 { spawn "spaces" "here" "8"; }
-    Mod+9 { spawn "spaces" "here" "9"; }
-    Mod+Ctrl+1 { spawn "spaces" "move-here" "1"; }
-    Mod+Ctrl+2 { spawn "spaces" "move-here" "2"; }
-    Mod+Ctrl+3 { spawn "spaces" "move-here" "3"; }
-    Mod+Ctrl+4 { spawn "spaces" "move-here" "4"; }
-    Mod+Ctrl+5 { spawn "spaces" "move-here" "5"; }
-    Mod+Ctrl+6 { spawn "spaces" "move-here" "6"; }
-    Mod+Ctrl+7 { spawn "spaces" "move-here" "7"; }
-    Mod+Ctrl+8 { spawn "spaces" "move-here" "8"; }
-    Mod+Ctrl+9 { spawn "spaces" "move-here" "9"; }
+    // Numbers are activity-relative: Mod+N is the Nth workspace of the current
+    // space (the activity daemon resolves membership; see tools/activity/).
+    Mod+1 { spawn "activity" "here" "1"; }
+    Mod+2 { spawn "activity" "here" "2"; }
+    Mod+3 { spawn "activity" "here" "3"; }
+    Mod+4 { spawn "activity" "here" "4"; }
+    Mod+5 { spawn "activity" "here" "5"; }
+    Mod+6 { spawn "activity" "here" "6"; }
+    Mod+7 { spawn "activity" "here" "7"; }
+    Mod+8 { spawn "activity" "here" "8"; }
+    Mod+9 { spawn "activity" "here" "9"; }
+    Mod+Ctrl+1 { spawn "activity" "move-here" "1"; }
+    Mod+Ctrl+2 { spawn "activity" "move-here" "2"; }
+    Mod+Ctrl+3 { spawn "activity" "move-here" "3"; }
+    Mod+Ctrl+4 { spawn "activity" "move-here" "4"; }
+    Mod+Ctrl+5 { spawn "activity" "move-here" "5"; }
+    Mod+Ctrl+6 { spawn "activity" "move-here" "6"; }
+    Mod+Ctrl+7 { spawn "activity" "move-here" "7"; }
+    Mod+Ctrl+8 { spawn "activity" "move-here" "8"; }
+    Mod+Ctrl+9 { spawn "activity" "move-here" "9"; }
 
     // Column index addressability (positional): Mod+Alt+N focuses column N,
     // Mod+Alt+Shift+N moves the focused column to index N.
@@ -601,11 +601,11 @@ binds {
     // Peek at workspace indicator
     Mod+Tab { spawn "qs" "ipc" "call" "bar" "peek"; }
 
-    // Spaces: high-level contexts above workspaces (spaced daemon).
-    Mod+Grave hotkey-overlay-title="Previous Space" { spawn "spaces" "back"; }
-    Mod+Semicolon hotkey-overlay-title="Space Chooser" { spawn "spaces-menu"; }
-    Mod+Shift+Semicolon hotkey-overlay-title="Move Column to Space" { spawn "spaces-menu" "--move"; }
-    Mod+Ctrl+Semicolon hotkey-overlay-title="Assign Workspace to Space" { spawn "spaces-menu" "--assign"; }
+    // Activities: high-level contexts above workspaces (activity daemon).
+    Mod+Grave hotkey-overlay-title="Previous Activity" { spawn "activity" "back"; }
+    Mod+Semicolon hotkey-overlay-title="Activity Chooser" { spawn "activity-menu"; }
+    Mod+Shift+Semicolon hotkey-overlay-title="Move Column to Activity" { spawn "activity-menu" "--move"; }
+    Mod+Ctrl+Semicolon hotkey-overlay-title="Assign Workspace to Activity" { spawn "activity-menu" "--assign"; }
 
     // The following binds move the focused window in and out of a column.
     // If the window is alone, they will consume it into the nearby column to the side.

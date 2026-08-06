@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# rofi chooser over activities: goto (default), --move column, --assign workspace.
+mode="${1:-goto}"
+case "$mode" in
+  --move)   verb="move-to-activity"; prompt="move to activity" ;;
+  --assign) verb="assign";        prompt="assign to activity" ;;
+  *)        verb="goto";          prompt="activity" ;;
+esac
+choice="$(activity list --menu | rofi -dmenu -p "$prompt")" || exit 0
+[ -n "$choice" ] || exit 0
+exec activity "$verb" "$choice"

@@ -1,5 +1,5 @@
-(ns spaces.rt
-  "Untyped runtime edge for spaces.main: blocking IO loops and host calls
+(ns activity.rt
+  "Untyped runtime edge for activity.main: blocking IO loops and host calls
    the typed beagle/clj stdlib does not cover yet. Every function here is a
    typed-stdlib gap datum for the beagle upstream thread."
   (:require [babashka.process :as proc]
@@ -36,7 +36,7 @@
   (try
     (on-line line)
     (catch Exception e
-      (println "spaces handler error:" (.getMessage e)))))
+      (println "activity handler error:" (.getMessage e)))))
 
 (defn process-lines
   "Spawn cmd, feed each stdout line to on-line; returns the exit code."

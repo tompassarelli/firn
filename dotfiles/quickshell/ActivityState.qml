@@ -3,7 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Mirrors spaced's state snapshot. tail -F, not FileView: spaced replaces
+// Mirrors the activity daemon's state snapshot. tail -F, not FileView: the daemon replaces
 // state.json by atomic rename, which silently kills a file watch.
 Singleton {
     id: root
@@ -16,7 +16,7 @@ Singleton {
     Process {
         running: true
         command: ["tail", "-F", "-n", "1",
-                  Quickshell.env("HOME") + "/.local/state/spaces/state.json"]
+                  Quickshell.env("HOME") + "/.local/state/activity/state.json"]
         stdout: SplitParser {
             onRead: data => root.parse(data)
         }
@@ -28,7 +28,7 @@ Singleton {
             const ords = {}
             const floats = {}
             let label = st.current
-            for (const sp of st.spaces || []) {
+            for (const sp of st.activities || []) {
                 if (sp.id === st.current) {
                     label = sp.label || sp.id
                     let i = 1

@@ -1,6 +1,7 @@
 { config, lib, pkgs, ... }:
 
 {
+  myConfig.modules.activity.enable = lib.mkDefault true;
   myConfig.modules.atuin.enable = lib.mkDefault true;
   myConfig.modules.bash.enable = lib.mkDefault true;
   myConfig.modules.bc.enable = lib.mkDefault true;
@@ -91,7 +92,6 @@
   myConfig.modules.sbcl.enable = lib.mkDefault true;
   myConfig.modules.shellcheck.enable = lib.mkDefault true;
   myConfig.modules.slurp.enable = lib.mkDefault true;
-  myConfig.modules.spaces.enable = lib.mkDefault true;
   myConfig.modules.sqlite.enable = lib.mkDefault true;
   myConfig.modules.starship.enable = lib.mkDefault true;
   myConfig.modules.steam.enable = lib.mkDefault true;
