@@ -3,8 +3,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Mirrors spaced's state snapshot; when the daemon is down (no/stale file)
-// `available` stays false and the bar falls back to the plain workspace row.
+// Mirrors spaced's state snapshot. tail -F, not FileView: spaced replaces
+// state.json by atomic rename, which silently kills a file watch.
 Singleton {
     id: root
     property bool available: false
@@ -13,12 +13,13 @@ Singleton {
     property var memberOrdinals: ({})
     property var floatingIds: ({})
 
-    FileView {
-        id: stateFile
-        path: Quickshell.env("HOME") + "/.local/state/spaces/state.json"
-        watchChanges: true
-        onTextChanged: root.parse(text())
-        onLoaded: root.parse(text())
+    Process {
+        running: true
+        command: ["tail", "-F", "-n", "1",
+                  Quickshell.env("HOME") + "/.local/state/spaces/state.json"]
+        stdout: SplitParser {
+            onRead: data => root.parse(data)
+        }
     }
 
     function parse(raw) {
@@ -41,7 +42,7 @@ Singleton {
             root.floatingIds = floats
             root.available = true
         } catch (e) {
-            root.available = false
+            // partial line during a replace; next snapshot line corrects
         }
     }
 }

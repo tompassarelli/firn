@@ -276,7 +276,7 @@
    (move? : Bool)] -> Nil
   (let [st: Any (deref state)
         live: Any (niri-workspaces)]
-    (when live
+    (if live
       (let [t: Any (space-target-ws st live sid)
             t2: Any (or t
                         (let [fl: Any (first (filter
@@ -285,10 +285,15 @@
                                               live))]
                           (when fl (assign-ws! state (ws-id fl) sid))
                           fl))]
-        (when t2
-          (if move?
-            (niri-action ["move-column-to-workspace" (ws-ref t2)])
-            (focus-ws! t2)))))
+        (if t2
+          (let [ok: Bool (if move?
+                           (niri-action ["move-column-to-workspace"
+                                         (ws-ref t2)])
+                           (focus-ws! t2))]
+            (println (str "goto " sid " -> " (ws-ref t2)
+                          (if ok "" " FAILED"))))
+          (println (str "goto " sid " -> no target"))))
+      (println (str "goto " sid " -> niri query failed")))
     nil))
 
 (defn nth-member [(st : Any) (n : Int)] -> Any
@@ -302,6 +307,7 @@
       nil)))
 
 (defn handle-command! [(state : Any) (line : String)] -> Nil
+  (println (str "cmd: " line))
   (let [m: Any (rt/parse-json-safe line)
         cmd: Any (if m (get m "cmd") nil)]
     (cond

@@ -28,13 +28,21 @@
   (proc/shell "mkfifo" (str path))
   nil)
 
+(defn- safely
+  "A throwing handler must never kill its reader loop — log and continue."
+  [on-line line]
+  (try
+    (on-line line)
+    (catch Exception e
+      (println "spaces handler error:" (.getMessage e)))))
+
 (defn process-lines
   "Spawn cmd, feed each stdout line to on-line; returns the exit code."
   [cmd on-line]
   (let [p (proc/process cmd {:err :inherit})]
     (with-open [r (io/reader (:out p))]
       (doseq [line (line-seq r)]
-        (on-line line)))
+        (safely on-line line)))
     (:exit @p)))
 
 (defn fifo-lines
@@ -42,7 +50,7 @@
   [path on-line]
   (with-open [r (io/reader (str path))]
     (doseq [line (line-seq r)]
-      (on-line line)))
+      (safely on-line line)))
   nil)
 
 (defn write-line-timeout
