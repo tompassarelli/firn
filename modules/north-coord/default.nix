@@ -20,7 +20,8 @@ let
   stageA = config.myConfig.modules.north-coord.stageATelemetryPartition;
   pairTarget = "north-coord-pair.target";
   pairPrepareUnit = "north-coord-pair-prepare.service";
-  mkNorthCoordRuntime = name: state: primaryLog: peerLog: port: unit: transactionOwner: pkgs.writeShellApplication {
+  framrpcSelection = "${homeDir}/.local/state/north/framrpc.env";
+  mkNorthCoordRuntime = name: state: primaryLog: peerLog: port: unit: transactionOwner: framrpcRole: pkgs.writeShellApplication {
     name = name;
     runtimeInputs = with pkgs; [ bash coreutils git iproute2 systemd util-linux ];
     text = ''
@@ -40,11 +41,13 @@ let
       export NORTH_COORD_CORPUS_SYSTEMD_UNIT=${if stageA then pairTarget else unit}
       export NORTH_COORD_RESTART_SYSTEMD_UNIT=${if stageA then pairTarget else unit}
       export NORTH_COORD_RESTART_PREPARE_SYSTEMD_UNIT=${if stageA then pairPrepareUnit else ""}
+      export NORTH_COORD_FRAMRPC_SELECTION=${framrpcSelection}
+      export NORTH_COORD_FRAMRPC_ROLE=${framrpcRole}
       ${builtins.readFile ./north-coord-runtime}
     '';
   };
-  northCoordRuntime = mkNorthCoordRuntime "north-coord-runtime" runtimeState "${homeDir}/.local/state/north/coordination.log" "${homeDir}/.local/state/north/telemetry.log" "7977" "north-coord.service" "1";
-  northTelemetryCoordRuntime = mkNorthCoordRuntime "north-telemetry-coord-runtime" telemetryRuntimeState "${homeDir}/.local/state/north/telemetry.log" "${homeDir}/.local/state/north/coordination.log" "7978" "north-telemetry-coord.service" "0";
+  northCoordRuntime = mkNorthCoordRuntime "north-coord-runtime" runtimeState "${homeDir}/.local/state/north/coordination.log" "${homeDir}/.local/state/north/telemetry.log" "7977" "north-coord.service" "1" "coordination";
+  northTelemetryCoordRuntime = mkNorthCoordRuntime "north-telemetry-coord-runtime" telemetryRuntimeState "${homeDir}/.local/state/north/telemetry.log" "${homeDir}/.local/state/north/coordination.log" "7978" "north-telemetry-coord.service" "0" "telemetry";
   coordHeapOptions = "-XX:+UseG1GC -Xmx16g";
   telemetryHeapOptions = "-XX:+UseG1GC -Xmx8g";
   coordMemoryHigh = "18G";

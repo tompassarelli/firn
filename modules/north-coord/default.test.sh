@@ -1251,6 +1251,92 @@ printf 'simulation: stale-generation package selection realigned %s -> %s by the
 printf 'simulation: checkout@%s override survived the prelude and was cleared only explicitly\n' \
   "$revision_one"
 
+# The operator's published FRAMRPC selection makes the promoted-runtime selector
+# inert: each unit launches the native server the selection names, on its own
+# port, with the log and space id its own role names.
+framrpc_home=$scratch/framrpc-home
+framrpc_selection=$scratch/framrpc.env
+framrpc_artifact=$scratch/framrpc/artifact
+framrpc_coordination_log=$scratch/framrpc/coordination.framlog
+framrpc_telemetry_log=$scratch/framrpc/telemetry.framlog
+mkdir -p "$framrpc_home/bin" "$framrpc_artifact"
+# The single-quoted body is the native server's own environment probe.
+# shellcheck disable=SC2016
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'printf "argv=%s\n" "$*"' \
+  'printf "home=%s\n" "$FRAM_HOME"' \
+  'printf "log=%s\n" "$FRAM_LOG"' \
+  'printf "space=%s\n" "$FRAM_SPACE_ID"' \
+  'printf "port=%s\n" "$FRAM_PORT"' \
+  'printf "runtime=%s\n" "$FRAM_SERVER_RUNTIME"' \
+  'printf "artifact=%s\n" "$FRAM_NATIVE_ARTIFACT_DIR"' \
+  >"$framrpc_home/bin/fram-server"
+chmod +x "$framrpc_home/bin/fram-server"
+{
+  printf "export FRAM_HOME='%s'\n" "$framrpc_home"
+  printf "export FRAM_SERVER_RUNTIME='native'\n"
+  printf "export FRAM_NATIVE_ARTIFACT_DIR='%s'\n" "$framrpc_artifact"
+  printf "export FRAM_SPACE_ID='north-coordination'\n"
+  printf "export NORTH_TELEMETRY_SPACE_ID='north-telemetry'\n"
+  printf "export FRAM_SERVER_PORT='7977'\n"
+  printf "export FRAM_LOG='%s'\n" "$framrpc_coordination_log"
+  printf "export FRAM_TELEMETRY_LOG='%s'\n" "$framrpc_telemetry_log"
+} >"$framrpc_selection"
+
+run_framrpc_runtime() {
+  export NORTH_COORD_FRAMRPC_SELECTION=$framrpc_selection
+  export NORTH_COORD_FRAMRPC_ROLE=$1
+  shift
+  run_runtime "$@"
+}
+
+framrpc_start=$(run_framrpc_runtime coordination start)
+grep -Fxq "argv=$test_port $framrpc_coordination_log north-coordination" <<<"$framrpc_start"
+grep -Fxq "home=$framrpc_home" <<<"$framrpc_start"
+grep -Fxq "log=$framrpc_coordination_log" <<<"$framrpc_start"
+grep -Fxq 'space=north-coordination' <<<"$framrpc_start"
+grep -Fxq "port=$test_port" <<<"$framrpc_start"
+grep -Fxq 'runtime=native' <<<"$framrpc_start"
+grep -Fxq "artifact=$framrpc_artifact" <<<"$framrpc_start"
+
+framrpc_telemetry_start=$(run_framrpc_runtime telemetry start)
+grep -Fxq "argv=$test_port $framrpc_telemetry_log north-telemetry" <<<"$framrpc_telemetry_start"
+grep -Fxq "log=$framrpc_telemetry_log" <<<"$framrpc_telemetry_start"
+grep -Fxq 'space=north-telemetry' <<<"$framrpc_telemetry_start"
+
+for framrpc_inert in ensure-default prepare settle; do
+  framrpc_inert_output=$(run_framrpc_runtime coordination "$framrpc_inert" 2>&1)
+  grep -Fq "FRAMRPC selection is published ($framrpc_selection); $framrpc_inert needs no promoted runtime" \
+    <<<"$framrpc_inert_output"
+done
+
+if run_framrpc_runtime oracle start >/dev/null 2>&1; then
+  printf 'FRAMRPC launch accepted an unknown role\n' >&2
+  exit 1
+fi
+
+framrpc_intact_selection=$framrpc_selection
+framrpc_selection=$scratch/framrpc-broken.env
+printf "export FRAM_HOME='%s'\n" "$scratch/framrpc-missing" >"$framrpc_selection"
+if run_framrpc_runtime coordination start >/dev/null 2>&1; then
+  printf 'FRAMRPC launch accepted a selection with no Fram server\n' >&2
+  exit 1
+fi
+framrpc_selection=$framrpc_intact_selection
+
+# Absence of the published file — not absence of the setting — is the
+# pre-cutover machine, which keeps launching the promoted runtime.
+rm -f -- "${framrpc_intact_selection:?}" "${scratch:?}/framrpc-broken.env"
+export NORTH_COORD_FRAMRPC_SELECTION=$framrpc_selection
+export NORTH_COORD_FRAMRPC_ROLE=coordination
+pre_cutover_start=$(run_mode_runtime "$new_package" "$new_package_revision" start)
+grep -Fxq 'label=new-package' <<<"$pre_cutover_start"
+unset NORTH_COORD_FRAMRPC_SELECTION NORTH_COORD_FRAMRPC_ROLE
+
+printf 'simulation: published FRAMRPC selection launched the native server per role on this unit port\n'
+printf 'simulation: no published selection kept the promoted package runtime\n'
+
 # Stable selectors and active generations themselves are protected from path
 # substitution rather than canonicalized into attacker-selected state.
 unlink "$state/current"

@@ -71,6 +71,10 @@ preflight_release_polls=${NORTH_COORD_PREFLIGHT_RELEASE_POLLS:-150}
 # without slowing the crash-restart path the same knob would.
 preflight_refusal_backoff=${NORTH_COORD_PREFLIGHT_REFUSAL_BACKOFF:-10}
 restart_lock_timeout=${NORTH_COORD_RESTART_LOCK_TIMEOUT:-60}
+# Published only by the operator's cutover one-shot; absence is the pre-cutover
+# machine, which must keep launching the promoted runtime.
+framrpc_selection=${NORTH_COORD_FRAMRPC_SELECTION:-}
+framrpc_role=${NORTH_COORD_FRAMRPC_ROLE:-}
 # The exact JDK this system generation pins for the Fram daemon. Only promoted
 # checkouts need it: the packaged daemon carries its own FRAM_JAVA through
 # makeWrapper. Kept out of need_setting so package-only deployments of an older
@@ -1180,6 +1184,61 @@ exec_checkout() {
   exec "$target" "$@"
 }
 
+# While a selection is published the promoted-runtime selector is inert.
+framrpc_selected() {
+  [[ -n "$framrpc_selection" && -f "$framrpc_selection" && ! -L "$framrpc_selection" ]]
+}
+
+report_framrpc_inert() {
+  printf '%s: FRAMRPC selection is published (%s); %s needs no promoted runtime\n' \
+    "$program" "$framrpc_selection" "$1" >&2
+}
+
+# The selection names both sides of the pair and spells only the coordination
+# port; this unit takes the side its role names, on its own port.
+start_framrpc_runtime() {
+  local fram_home log space server
+
+  [[ "$framrpc_selection" == /* ]] ||
+    die "FRAMRPC selection path must be absolute: $framrpc_selection"
+  [[ -r "$framrpc_selection" ]] ||
+    die "FRAMRPC selection is not readable: $framrpc_selection"
+  # shellcheck source=/dev/null
+  . "$framrpc_selection"
+  fram_home=${FRAM_HOME:-}
+  case "$framrpc_role" in
+    coordination)
+      log=${FRAM_LOG:-}
+      space=${FRAM_SPACE_ID:-}
+      ;;
+    telemetry)
+      log=${FRAM_TELEMETRY_LOG:-}
+      space=${NORTH_TELEMETRY_SPACE_ID:-}
+      ;;
+    *) die "FRAMRPC role is not coordination or telemetry: $framrpc_role" ;;
+  esac
+  [[ "$fram_home" == /* && -d "$fram_home" ]] ||
+    die "FRAMRPC selection does not name a Fram source: $framrpc_selection"
+  server=$fram_home/bin/fram-server
+  [[ -x "$server" ]] || die "FRAMRPC Fram server is not executable: $server"
+  [[ "$log" == /* ]] ||
+    die "FRAMRPC selection has no absolute $framrpc_role log: $framrpc_selection"
+  [[ -n "$space" ]] ||
+    die "FRAMRPC selection has no $framrpc_role space id: $framrpc_selection"
+
+  export FRAM_HOME=$fram_home
+  export FRAM_BIN=$fram_home/bin
+  export FRAM_LOG=$log
+  export FRAM_SPACE_ID=$space
+  export FRAM_PORT=$runtime_port
+  if [[ "$single_origin" -eq 1 ]]; then
+    unset FRAM_TELEMETRY_LOG NORTH_TELEMETRY_PARTITION NORTH_TELEMETRY_PORT
+  fi
+  release_lock
+  cd "$fram_home"
+  exec "$server" "$runtime_port" "$log" "$space"
+}
+
 usage() {
   cat >&2 <<EOF
 usage: $program initialize
@@ -1199,6 +1258,16 @@ EOF
 }
 
 prepare_lock
+if framrpc_selected; then
+  case "${1:-}" in
+    start) [[ $# -eq 1 ]] || usage; start_framrpc_runtime ;;
+    ensure-default|prepare|settle)
+      [[ $# -eq 1 ]] || usage
+      report_framrpc_inert "$1"
+      exit 0
+      ;;
+  esac
+fi
 case "${1:-}" in
   initialize) [[ $# -eq 1 ]] || usage; initialize_runtime ;;
   ensure-default) [[ $# -eq 1 ]] || usage; ensure_default_runtime ;;

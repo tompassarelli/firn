@@ -57,8 +57,8 @@ runtime interpreters; those adapters delegate to the North package installed at
 before invoking generation-owned `fram-code-status`.
 
 The coordinator on port 7977 is systemd-owned. Its `Type=simple` service uses
-the same selector to `exec` the physical `fram-daemon`, so systemd's `MainPID`
-is the daemon rather than a backgrounding launcher. Promotions and runtime
+the same selector to `exec` the physical `fram-server`, so systemd's `MainPID`
+is the server rather than a backgrounding launcher. Promotions and runtime
 rollbacks are serialized transactions that publish one complete
 current/previous generation through
 `~/.local/state/north/fram-runtime/active`. They do not restart the service.

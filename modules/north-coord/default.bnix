@@ -47,8 +47,11 @@
           config.myConfig.modules.north-coord.stageATelemetryPartition
         pairTarget "north-coord-pair.target"
         pairPrepareUnit "north-coord-pair-prepare.service"
+        ;; Written by the operator's cutover one-shot, never by this module.
+        framrpcSelection (s homeDir "/.local/state/north/framrpc.env")
         mkNorthCoordRuntime
-          (fn [name state primaryLog peerLog port unit transactionOwner]
+          (fn [name state primaryLog peerLog port unit transactionOwner
+               framrpcRole]
             (pkgs.writeShellApplication
               {:name name
                :runtimeInputs (nix/with pkgs [bash coreutils git iproute2 systemd util-linux])
@@ -75,6 +78,8 @@
                        (if stageA pairTarget unit))
                     (s "export NORTH_COORD_RESTART_PREPARE_SYSTEMD_UNIT="
                        (if stageA pairPrepareUnit ""))
+                    (s "export NORTH_COORD_FRAMRPC_SELECTION=" framrpcSelection)
+                    (s "export NORTH_COORD_FRAMRPC_ROLE=" framrpcRole)
                     (builtins.readFile (p "./north-coord-runtime")))}))
         northCoordRuntime
           (mkNorthCoordRuntime
@@ -84,7 +89,8 @@
             (s homeDir "/.local/state/north/telemetry.log")
             "7977"
             "north-coord.service"
-            "1")
+            "1"
+            "coordination")
         northTelemetryCoordRuntime
           (mkNorthCoordRuntime
             "north-telemetry-coord-runtime"
@@ -93,7 +99,8 @@
             (s homeDir "/.local/state/north/coordination.log")
             "7978"
             "north-telemetry-coord.service"
-            "0")
+            "0"
+            "telemetry")
         ;; The coordination live set reached ~6.12G against the old 6g cap and
         ;; wedged in back-to-back Full GCs reclaiming ~11M each; keep headroom
         ;; above the working set, not merely above the corpus.
