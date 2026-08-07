@@ -891,20 +891,17 @@
     "north": {
       "inputs": {
         "flake-utils": "flake-utils_4",
-        "fram": [
-          "fram"
-        ],
         "nixpkgs": "nixpkgs_6",
         "nixpkgs-master": [
           "nixpkgs-master"
         ]
       },
       "locked": {
-        "lastModified": 1785601962,
-        "narHash": "sha256-dJxw/UTj3bK9b4eODvr8R/9vadaqlOJClxyAJYL4dDM=",
+        "lastModified": 1786143618,
+        "narHash": "sha256-ZVTYM3UPxAdXh3ejJPF9fdO6JKLga8+Dck/jg5lAh9k=",
         "ref": "main",
-        "rev": "76531b7c7499a86d9bb15068501c93d7a3d29f46",
-        "revCount": 1001,
+        "rev": "7f0b0b901ce45ee0ca7067cd8ee7cc7028634720",
+        "revCount": 1260,
         "type": "git",
         "url": "file:///home/tom/code/north/main"
       },
