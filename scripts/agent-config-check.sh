@@ -325,12 +325,12 @@ classify_north_coord_exec() {
     NORTH_COORD_EXEC_KIND='socket-runtime-selector'
     return 0
   fi
-  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*/bin/fram-daemon$ ]]; then
+  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*/bin/fram-server$ ]]; then
     NORTH_COORD_EXEC_KIND='direct-package'
     return 1
   fi
   case "$path" in
-    */code/fram/main/bin/fram-daemon)
+    */code/fram/main/bin/fram-server)
       NORTH_COORD_EXEC_KIND='direct-checkout'
       ;;
   esac
@@ -559,7 +559,7 @@ north_coord_runtime_identity_is_valid() {
         NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout source and stable selector resolve differently'
         return 1
       }
-      expected_daemon="$canonical_source/bin/fram-daemon"
+      expected_daemon="$canonical_source/bin/fram-server"
       [ -x "$expected_daemon" ] && [ "$canonical_daemon" = "$expected_daemon" ] || {
         NORTH_COORD_RUNTIME_IDENTITY_REASON='checkout daemon is not the selected physical Fram daemon'
         return 1
@@ -666,7 +666,7 @@ north_coord_runtime_identity_is_valid() {
         NORTH_COORD_RUNTIME_IDENTITY_REASON='package selector and source do not name the exact outer-package libexec/fram directory'
         return 1
       }
-      expected_daemon="$canonical_origin/bin/fram-daemon"
+      expected_daemon="$canonical_origin/bin/fram-server"
       [ "$daemon" = "$expected_daemon" ] &&
         [ "$canonical_daemon" = "$expected_daemon" ] &&
         [ -f "$daemon" ] && [ ! -L "$daemon" ] && [ -x "$daemon" ] || {

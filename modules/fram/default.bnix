@@ -31,10 +31,10 @@
          :text
           (builtins.readFile (s inputs.fram "/bin/fram-code-status"))})
      devCommandNames
-      ["fram" "fram-daemon" "fram-mcp" "fram-primer" "fram-up"
+      ["fram" "fram-server" "fram-mcp" "fram-primer" "fram-up"
        "fram-code-author"]
      packagedCommandNames
-      ["fram" "fram-daemon" "fram-mcp" "fram-primer"]
+      ["fram" "fram-server" "fram-mcp" "fram-primer"]
      mkDev
       (fn [name]
         (pkgs.writeShellApplication

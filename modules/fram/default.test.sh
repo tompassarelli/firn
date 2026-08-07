@@ -34,8 +34,8 @@ assert_list() {
   fi
 }
 
-dev=$'fram\nfram-daemon\nfram-mcp\nfram-primer\nfram-up\nfram-code-author'
-packaged=$'fram\nfram-daemon\nfram-mcp\nfram-primer'
+dev=$'fram\nfram-server\nfram-mcp\nfram-primer\nfram-up\nfram-code-author'
+packaged=$'fram\nfram-server\nfram-mcp\nfram-primer'
 
 for file in "$SOURCE" "$GENERATED"; do
   assert_list "$file" devCommandNames "$dev"

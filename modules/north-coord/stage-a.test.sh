@@ -17,9 +17,9 @@ let
   lib = pkgs.lib;
   framPkg = pkgs.runCommand "fram-stage-a-fixture" { } ''
     mkdir -p "$out/libexec/fram" "$out/bin"
-    printf '%s\n' '#!/bin/sh' 'exit 0' > "$out/bin/fram-daemon"
+    printf '%s\n' '#!/bin/sh' 'exit 0' > "$out/bin/fram-server"
     printf '%s\n' '#!/bin/sh' 'exit 0' > "$out/bin/fram"
-    chmod +x "$out/bin/fram-daemon" "$out/bin/fram"
+    chmod +x "$out/bin/fram-server" "$out/bin/fram"
   '';
   northPkg = pkgs.runCommand "north-stage-a-fixture" { } ''
     mkdir -p "$out/bin"

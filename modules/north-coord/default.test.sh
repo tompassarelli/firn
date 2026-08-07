@@ -13,7 +13,7 @@ state=$scratch/state
 repo=$scratch/fram
 package=$scratch/package
 package_source=$package/libexec/fram
-package_daemon=$package/bin/fram-daemon
+package_daemon=$package/bin/fram-server
 north_package=$scratch/north-package
 fram_java=$scratch/pinned-jdk/bin/java
 log=$scratch/coordination.log
@@ -112,8 +112,8 @@ let
   lib = pkgs.lib;
   framPkg = pkgs.runCommand "fram-fixture" { } ''
     mkdir -p "$out/libexec/fram" "$out/bin"
-    printf '%s\n' '#!/bin/sh' 'exit 0' > "$out/bin/fram-daemon"
-    chmod +x "$out/bin/fram-daemon"
+    printf '%s\n' '#!/bin/sh' 'exit 0' > "$out/bin/fram-server"
+    chmod +x "$out/bin/fram-server"
   '';
   northPkg = pkgs.runCommand "north-fixture" { } (''
     mkdir -p "$out/bin"
@@ -321,12 +321,12 @@ write_daemon() {
   chmod +x "$path"
 }
 
-write_daemon "$repo/bin/fram-daemon" checkout
+write_daemon "$repo/bin/fram-server" checkout
 printf 'one\n' >"$repo/revision.txt"
 # out/ is the daemon's code root — the one classpath entry that must come from
 # the pinned commit rather than the store.
 printf '(ns coord-daemon-fixture)\n' >"$repo/out/coord_daemon_wire.clj"
-git -C "$repo" add bin/fram-daemon out/coord_daemon_wire.clj revision.txt
+git -C "$repo" add bin/fram-server out/coord_daemon_wire.clj revision.txt
 git -C "$repo" commit -qm one
 revision_one=$(git -C "$repo" rev-parse HEAD)
 tree_one=$(git -C "$repo" rev-parse 'HEAD^{tree}')
@@ -340,7 +340,7 @@ git -C "$repo" commit -qam three
 revision_three=$(git -C "$repo" rev-parse HEAD)
 
 write_daemon "$package_daemon" package
-write_daemon "$package_source/bin/fram-daemon" package-inner-wrong
+write_daemon "$package_source/bin/fram-server" package-inner-wrong
 package_revision=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 run_runtime_in_state() {
@@ -383,7 +383,7 @@ chmod +x "$restart_bin/systemctl"
 file_source_package=$scratch/file-source-package
 mkdir -p "$file_source_package/libexec" "$file_source_package/bin"
 : >"$file_source_package/libexec/fram"
-write_daemon "$file_source_package/bin/fram-daemon" file-source-package
+write_daemon "$file_source_package/bin/fram-server" file-source-package
 if package=$file_source_package \
    run_runtime_in_state "$scratch/file-source-state" initialize >/dev/null 2>&1; then
   printf 'regular-file package source was accepted\n' >&2
@@ -496,11 +496,11 @@ grep -Fxq "source=$legacy_previous" < <(run_runtime_in_state "$legacy_state" sta
 historical_hash=0123456789abcdfghijklmnpqrsvwxyz
 historical_package=$scratch/${historical_hash}-fram-old
 historical_source=$historical_package/libexec/fram
-historical_daemon=$historical_package/bin/fram-daemon
+historical_daemon=$historical_package/bin/fram-server
 historical_revision=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 outside_package=$scratch/outside/${historical_hash}-fram-old
 outside_source=$outside_package/libexec/fram
-outside_daemon=$outside_package/bin/fram-daemon
+outside_daemon=$outside_package/bin/fram-server
 mkdir -p "$historical_source" "$historical_package/bin"
 mkdir -p "$outside_source" "$outside_package/bin"
 write_daemon "$historical_daemon" historical-package
@@ -655,13 +655,13 @@ grep -Fxq mode=checkout < <(run_runtime status)
 
 # A selected promotion that becomes unusable aborts an external service
 # restart with a stable named cause; package mode is never consulted.
-mv "$deployment_one/bin/fram-daemon" "$deployment_one/bin/fram-daemon.unavailable"
+mv "$deployment_one/bin/fram-server" "$deployment_one/bin/fram-server.unavailable"
 if promotion_failure=$(run_runtime ensure-default 2>&1); then
   printf 'unusable promotion silently reached the package default\n' >&2
   exit 1
 fi
 grep -Fq 'promotion-selection-unusable:' <<<"$promotion_failure"
-mv "$deployment_one/bin/fram-daemon.unavailable" "$deployment_one/bin/fram-daemon"
+mv "$deployment_one/bin/fram-server.unavailable" "$deployment_one/bin/fram-server"
 
 # The restart verb owns policy: one mutex covers broadcast, progress, stop, and
 # successful return. A concurrent attempt fails with the named mutex cause and
@@ -708,7 +708,7 @@ grep -Fxq "source=$deployment_one" <<<"$checkout_start"
 grep -Fxq "revision=$revision_one" <<<"$checkout_start"
 grep -Fxq "tree=$tree_one" <<<"$checkout_start"
 grep -Fxq "origin=$repo" <<<"$checkout_start"
-grep -Fxq "daemon=$deployment_one/bin/fram-daemon" <<<"$checkout_start"
+grep -Fxq "daemon=$deployment_one/bin/fram-server" <<<"$checkout_start"
 grep -Eq '^owner=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' <<<"$checkout_start"
 grep -Fxq "generation=$generation_one" <<<"$checkout_start"
 grep -Fxq "generation-identity=$generation_one/current.identity" <<<"$checkout_start"
@@ -720,7 +720,7 @@ grep -Fxq 'unit=north-coord.service' <<<"$checkout_start"
 grep -Fxq "home=$deployment_one" <<<"$checkout_start"
 grep -Fxq "bin=$deployment_one/bin" <<<"$checkout_start"
 grep -Fxq "args=$test_port|$log" <<<"$checkout_start"
-assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-daemon"
+assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-server"
 
 # Two speeds, one classpath: the pinned commit's code root, then this system
 # generation's store jars. The packaged code root is replaced, not appended,
@@ -775,7 +775,7 @@ grep -Fq 'NORTH_COORD_FRAM_JAVA is unset' <<<"$unpinned_start"
 classpath_gap_state=$scratch/classpath-gap-state
 classpath_gap_package=$scratch/classpath-gap-package
 mkdir -p "$classpath_gap_package/bin" "$classpath_gap_package/libexec/fram/bin"
-write_daemon "$classpath_gap_package/bin/fram-daemon" classpath-gap-package
+write_daemon "$classpath_gap_package/bin/fram-server" classpath-gap-package
 package=$classpath_gap_package \
   run_runtime_in_state "$classpath_gap_state" initialize
 gap_promote=$(
@@ -805,7 +805,7 @@ fi
 # the sealed generation or static identity.
 checkout_restart=$(run_runtime start)
 [[ $(readlink -f "$state/active") == "$generation_one" ]]
-assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-daemon"
+assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-server"
 restart_pid=$(record_value "$runtime_record_one" PID)
 restart_birth=$(record_value "$runtime_record_one" PID_BIRTH)
 restart_owner=$(record_value "$runtime_record_one" OWNER_TOKEN)
@@ -834,7 +834,7 @@ if [[ ! -e "$hold_ready" ]]; then
   wait "$held_start_pid" 2>/dev/null || true
   exit 1
 fi
-assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-daemon"
+assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-server"
 held_record_sha=$(sha256sum "$runtime_record_one" | cut -d' ' -f1)
 held_record_pid=$(record_value "$runtime_record_one" PID)
 if competing_output=$(run_runtime start 2>&1); then
@@ -863,7 +863,7 @@ for boundary in active-runtime-written active-runtime-synced active-runtime-publ
     crash_status=$?
   fi
   [[ "$crash_status" == 137 ]]
-  assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-daemon"
+  assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-server"
   crashed_sha=$(sha256sum "$runtime_record_one" | cut -d' ' -f1)
   case "$boundary" in
     active-runtime-written|active-runtime-synced)
@@ -882,7 +882,7 @@ for boundary in active-runtime-written active-runtime-synced active-runtime-publ
   fi
   crashed_owner=$(record_value "$runtime_record_one" OWNER_TOKEN)
   converged_start=$(run_runtime start)
-  assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-daemon"
+  assert_active_record "$generation_one" "$deployment_one" "$revision_one" "$tree_one" "$repo" "$deployment_one/bin/fram-server"
   [[ $(record_value "$runtime_record_one" OWNER_TOKEN) != "$crashed_owner" ]]
   [[ $(record_value "$runtime_record_one" PID) == "$(sed -n 's/^pid=//p' <<<"$converged_start")" ]]
   [[ $(record_value "$runtime_record_one" PID_BIRTH) == "$(sed -n 's/^birth=//p' <<<"$converged_start")" ]]
@@ -898,7 +898,7 @@ printf '%s\n' \
   >"$identity_probe"
 chmod +x "$identity_probe"
 probe_output=$(run_runtime exec-checkout "$identity_probe")
-[[ "$probe_output" == "checkout|$deployment_one|$revision_one|$tree_one|$repo|$deployment_one/bin/fram-daemon|unset|$generation_one|$generation_one/current.identity|$runtime_record_one|$log|$telemetry_log|1|north-coord.service" ]]
+[[ "$probe_output" == "checkout|$deployment_one|$revision_one|$tree_one|$repo|$deployment_one/bin/fram-server|unset|$generation_one|$generation_one/current.identity|$runtime_record_one|$log|$telemetry_log|1|north-coord.service" ]]
 
 # Selector publication immediately rebinds runtime-record discovery to the new
 # generation. Until that generation is started it has no active authority;
@@ -912,9 +912,9 @@ runtime_record_two=$generation_two/active.runtime
 [[ -f "$runtime_record_one" && ! -L "$runtime_record_one" ]]
 probe_output=$(run_runtime exec-checkout "$identity_probe")
 tree_two=$(git -C "$deployment_two" rev-parse 'HEAD^{tree}')
-[[ "$probe_output" == "checkout|$deployment_two|$revision_two|$tree_two|$repo|$deployment_two/bin/fram-daemon|unset|$generation_two|$generation_two/current.identity|$runtime_record_two|$log|$telemetry_log|1|north-coord.service" ]]
+[[ "$probe_output" == "checkout|$deployment_two|$revision_two|$tree_two|$repo|$deployment_two/bin/fram-server|unset|$generation_two|$generation_two/current.identity|$runtime_record_two|$log|$telemetry_log|1|north-coord.service" ]]
 rebound_start=$(run_runtime start)
-assert_active_record "$generation_two" "$deployment_two" "$revision_two" "$tree_two" "$repo" "$deployment_two/bin/fram-daemon"
+assert_active_record "$generation_two" "$deployment_two" "$revision_two" "$tree_two" "$repo" "$deployment_two/bin/fram-server"
 [[ $(record_value "$runtime_record_two" PID) == "$(sed -n 's/^pid=//p' <<<"$rebound_start")" ]]
 run_runtime promote "$repo" "$revision_one" >/dev/null
 
@@ -1199,8 +1199,8 @@ new_package_revision=2222222222222222222222222222222222222222
 mode_state=$scratch/mode-state
 mkdir -p "$old_package/bin" "$old_package/libexec/fram/bin" \
          "$new_package/bin" "$new_package/libexec/fram/bin"
-write_daemon "$old_package/bin/fram-daemon" old-package
-write_daemon "$new_package/bin/fram-daemon" new-package
+write_daemon "$old_package/bin/fram-server" old-package
+write_daemon "$new_package/bin/fram-server" new-package
 write_packaged_classpath "$old_package"
 write_packaged_classpath "$new_package"
 

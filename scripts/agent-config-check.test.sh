@@ -828,7 +828,7 @@ if classify_north_coord_exec "{ path=$socket_wrapper_path ; argv[]=$socket_wrapp
 fi
 [ "$NORTH_COORD_EXEC_KIND" = unrecognized ]
 
-pinned_path="/nix/store/${nix_hash}-fram-0-unstable-2026-06-28/bin/fram-daemon"
+pinned_path="/nix/store/${nix_hash}-fram-0-unstable-2026-06-28/bin/fram-server"
 pinned_exec="{ path=$pinned_path ; argv[]=$pinned_path 7977 /home/tom/.local/state/north/coordination.log ; ignore_errors=no ; }"
 if classify_north_coord_exec "$pinned_exec"; then
   printf 'direct pinned north-coord package was accepted\n' >&2
@@ -837,7 +837,7 @@ fi
 [ "$NORTH_COORD_EXEC_KIND" = direct-package ]
 [ "$NORTH_COORD_EXEC_PATH" = "$pinned_path" ]
 
-checkout_path='/home/tom/code/fram/main/bin/fram-daemon'
+checkout_path='/home/tom/code/fram/main/bin/fram-server'
 if classify_north_coord_exec "{ path=$checkout_path ; argv[]=$checkout_path 7977 /tmp/facts.log ; }"; then
   printf 'direct checkout north-coord was accepted\n' >&2
   exit 1
@@ -1233,7 +1233,7 @@ grep -Fq 'FRAM_MCP_BIN="${FRAM_MCP_BIN:-/run/current-system/sw/bin/fram-mcp}"' \
 grep -Fq 'NORTH_MCP_BIN="${NORTH_MCP_BIN:-/run/current-system/sw/bin/north-mcp}"' \
   "$REPO/scripts/claude-mcp-register.sh"
 
-wrapper_path="/nix/store/${nix_hash}-fram-daemon-packaged/bin/fram-daemon-packaged"
+wrapper_path="/nix/store/${nix_hash}-fram-server-packaged/bin/fram-server-packaged"
 if classify_north_coord_exec "{ path=$wrapper_path ; argv[]=$wrapper_path 7977 /tmp/facts.log ; }"; then
   printf 'indirect store wrapper was accepted as the pinned Fram package\\n' >&2
   exit 1
@@ -1246,14 +1246,14 @@ fi
 package_state="$scratch/package-runtime-state"
 package_outer="$fixture_store/${nix_hash}-fram-0-unstable-2026-06-28"
 package_source="$package_outer/libexec/fram"
-package_daemon="$package_outer/bin/fram-daemon"
+package_daemon="$package_outer/bin/fram-server"
 package_revision=1111111111111111111111111111111111111111
 mkdir -p \
   "$package_source/bin" "$package_outer/bin" \
   "$package_state/generations/g1"
 printf '%s\n' '#!/bin/sh' 'exit 0' >"$package_daemon"
-printf '%s\n' '#!/bin/sh' 'exit 0' >"$package_source/bin/fram-daemon"
-chmod +x "$package_daemon" "$package_source/bin/fram-daemon"
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$package_source/bin/fram-server"
+chmod +x "$package_daemon" "$package_source/bin/fram-server"
 ln -s "$package_source" "$package_state/generations/g1/current"
 ln -s generations/g1 "$package_state/active"
 ln -s active/current "$package_state/current"
@@ -1283,7 +1283,7 @@ fi
 if north_coord_runtime_identity_is_valid \
    package "$package_source" "$package_revision" \
    "immutable:$package_revision" "$package_outer" \
-   "$package_source/bin/fram-daemon" "$package_state/current" \
+   "$package_source/bin/fram-server" "$package_state/current" \
    "$fixture_store"; then
   printf 'inner source daemon was accepted instead of the outer package wrapper\n' >&2
   exit 1
@@ -1317,9 +1317,9 @@ mkdir -p "$identity_repo/bin" "$identity_state/deployments"
 git -C "$identity_repo" init -q
 git -C "$identity_repo" config user.email test@example.invalid
 git -C "$identity_repo" config user.name runtime-test
-printf '%s\n' '#!/bin/sh' 'exit 0' >"$identity_repo/bin/fram-daemon"
-chmod +x "$identity_repo/bin/fram-daemon"
-git -C "$identity_repo" add bin/fram-daemon
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$identity_repo/bin/fram-server"
+chmod +x "$identity_repo/bin/fram-server"
+git -C "$identity_repo" add bin/fram-server
 git -C "$identity_repo" commit -qm runtime
 identity_revision="$(git -C "$identity_repo" rev-parse HEAD)"
 identity_tree="$(git -C "$identity_repo" rev-parse 'HEAD^{tree}')"
@@ -1332,17 +1332,17 @@ ln -s generations/g1 "$identity_state/active"
 ln -s active/current "$identity_state/current"
 north_coord_runtime_identity_is_valid \
   checkout "$identity_deployment" "$identity_revision" "$identity_tree" \
-  "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"
+  "$identity_repo" "$identity_deployment/bin/fram-server" "$identity_state/current"
 if north_coord_runtime_identity_is_valid \
    checkout "$identity_repo" "$identity_revision" "$identity_tree" \
-   "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"; then
+   "$identity_repo" "$identity_deployment/bin/fram-server" "$identity_state/current"; then
   printf 'same-revision runtime outside the selected deployment was accepted\n' >&2
   exit 1
 fi
 if north_coord_runtime_identity_is_valid \
    checkout "$identity_deployment" "$identity_revision" \
    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-   "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"; then
+   "$identity_repo" "$identity_deployment/bin/fram-server" "$identity_state/current"; then
   printf 'wrong checkout tree identity was accepted\n' >&2
   exit 1
 fi
@@ -1356,15 +1356,15 @@ printf '%s\n' '#!/bin/sh' 'exit 0' >"$identity_deployment/UNTRACKED-EXECUTABLE"
 chmod +x "$identity_deployment/UNTRACKED-EXECUTABLE"
 if north_coord_runtime_identity_is_valid \
    checkout "$identity_deployment" "$identity_revision" "$identity_tree" \
-   "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"; then
+   "$identity_repo" "$identity_deployment/bin/fram-server" "$identity_state/current"; then
   printf 'untracked selected runtime bytes were accepted\n' >&2
   exit 1
 fi
 unlink "$identity_deployment/UNTRACKED-EXECUTABLE"
-printf 'drift\n' >>"$identity_deployment/bin/fram-daemon"
+printf 'drift\n' >>"$identity_deployment/bin/fram-server"
 if north_coord_runtime_identity_is_valid \
    checkout "$identity_deployment" "$identity_revision" "$identity_tree" \
-   "$identity_repo" "$identity_deployment/bin/fram-daemon" "$identity_state/current"; then
+   "$identity_repo" "$identity_deployment/bin/fram-server" "$identity_state/current"; then
   printf 'dirty selected runtime was accepted\n' >&2
   exit 1
 fi

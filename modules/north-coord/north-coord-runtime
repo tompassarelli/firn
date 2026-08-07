@@ -219,11 +219,11 @@ validate_package_target() {
     die "packaged Fram source is missing: $canonical_package/libexec/fram"
   [[ -d "$canonical_source" ]] ||
     die "packaged Fram source is not a directory: $canonical_source"
-  canonical_daemon=$(realpath -e "$canonical_package/bin/fram-daemon") ||
-    die "packaged Fram daemon is missing: $canonical_package/bin/fram-daemon"
+  canonical_daemon=$(realpath -e "$canonical_package/bin/fram-server") ||
+    die "packaged Fram daemon is missing: $canonical_package/bin/fram-server"
   [[ "$canonical_source" == "$canonical_package/libexec/fram" ]] ||
     die "packaged Fram source escapes its immutable root"
-  [[ "$canonical_daemon" == "$canonical_package/bin/fram-daemon" ]] ||
+  [[ "$canonical_daemon" == "$canonical_package/bin/fram-server" ]] ||
     die "packaged Fram daemon escapes its immutable root"
   [[ "$source" == "$canonical_source" ]] ||
     die "selected package does not name this system generation's Fram package"
@@ -254,8 +254,8 @@ validate_checkout_target() {
   lexical_source=$canonical_deployments/${source##*/}
   [[ "$canonical_source" == "$lexical_source" ]] ||
     die "checkout deployment path was substituted: $source resolves to $canonical_source"
-  [[ -x "$canonical_source/bin/fram-daemon" ]] ||
-    die "checkout Fram daemon is not executable: $canonical_source/bin/fram-daemon"
+  [[ -x "$canonical_source/bin/fram-server" ]] ||
+    die "checkout Fram daemon is not executable: $canonical_source/bin/fram-server"
   top_level=$(git -C "$canonical_source" rev-parse --show-toplevel 2>/dev/null) ||
     die "checkout deployment is not a Git worktree root: $canonical_source"
   [[ $(realpath -e "$top_level") == "$canonical_source" ]] ||
@@ -292,14 +292,14 @@ validate_checkout_target() {
   runtime_revision=$observed_revision
   runtime_tree=$observed_tree
   runtime_origin=$observed_origin
-  runtime_daemon=$canonical_source/bin/fram-daemon
+  runtime_daemon=$canonical_source/bin/fram-server
   runtime_identity_migrated=0
 }
 
 # Two speeds, one classpath. Application code moves at the pinned commit's
 # speed (the deployment's own out/); the JVM and its jars move at the system
 # generation's speed (the packaged, build-time-resolved store closure). The
-# composed file is what makes that split bootable: bin/fram-daemon takes the
+# composed file is what makes that split bootable: bin/fram-server takes the
 # sealed `$FRAM_JAVA -cp` branch only when FRAM_JAVA and
 # FRAM_DAEMON_CLASSPATH_FILE are both set, and otherwise falls back to
 # `clojure -M`, which resolves tools.deps against ~/.m2 and the network at
@@ -459,7 +459,7 @@ validate_declared_runtime() {
 
   case "$declared_mode" in
     checkout)
-      [[ "$canonical_daemon" == "$canonical_source/bin/fram-daemon" ]] ||
+      [[ "$canonical_daemon" == "$canonical_source/bin/fram-server" ]] ||
         die "declared checkout daemon does not belong to its source: $declared_daemon"
       validate_checkout_target "$canonical_source" "$declared_revision" "$declared_origin"
       [[ "$runtime_tree" == "$declared_tree" ]] ||
@@ -472,7 +472,7 @@ validate_declared_runtime() {
         die "package origin is missing: $declared_origin"
       [[ "$canonical_origin" == "$declared_origin" ]] ||
         die "package origin is not canonical: $declared_origin"
-      [[ "$canonical_daemon" == "$canonical_origin/bin/fram-daemon" ]] ||
+      [[ "$canonical_daemon" == "$canonical_origin/bin/fram-server" ]] ||
         die "package daemon does not belong to its immutable root"
       canonical_package=$(realpath -e "$NORTH_COORD_FRAM_PACKAGE") ||
         die "packaged Fram root is missing: $NORTH_COORD_FRAM_PACKAGE"
@@ -814,7 +814,7 @@ export_runtime_identity() {
   if [[ "$runtime_mode" == package ]]; then
     export FRAM_BIN=$runtime_origin/bin
     # The packaged daemon carries its own sealed pair through makeWrapper.
-    # Never hand it a half-set inherited one — bin/fram-daemon rejects that.
+    # Never hand it a half-set inherited one — bin/fram-server rejects that.
     unset FRAM_JAVA FRAM_DAEMON_CLASSPATH_FILE
   else
     export FRAM_BIN=$runtime_source/bin
@@ -829,7 +829,7 @@ export_runtime_identity() {
       die "pinned Java runtime is not an executable absolute path: $fram_java"
     [[ -r "$classpath_file" ]] ||
       die "composed deployment classpath is not readable: $classpath_file"
-    # Both, always, together: bin/fram-daemon only takes its sealed JVM branch
+    # Both, always, together: bin/fram-server only takes its sealed JVM branch
     # when both are set, and the alternative is tools.deps at service start.
     export FRAM_JAVA=$fram_java
     export FRAM_DAEMON_CLASSPATH_FILE=$classpath_file

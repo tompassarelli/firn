@@ -25,8 +25,8 @@ let
     ]) ++ (lib.optionals pkgs.stdenv.hostPlatform.isLinux (with pkgs; [ iproute2 ])));
     text = builtins.readFile "${inputs.fram}/bin/fram-code-status";
   };
-  devCommandNames = [ "fram" "fram-daemon" "fram-mcp" "fram-primer" "fram-up" "fram-code-author" ];
-  packagedCommandNames = [ "fram" "fram-daemon" "fram-mcp" "fram-primer" ];
+  devCommandNames = [ "fram" "fram-server" "fram-mcp" "fram-primer" "fram-up" "fram-code-author" ];
+  packagedCommandNames = [ "fram" "fram-server" "fram-mcp" "fram-primer" ];
   mkDev = name: pkgs.writeShellApplication {
     name = "${name}-dev";
     runtimeInputs = liveInputs;
