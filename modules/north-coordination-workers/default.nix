@@ -9,6 +9,7 @@ let
   reconciliationWorker = "${promotedRuntime}/cli/reconciliation-worker-host.clj";
   projectionWorker = "${promotedRuntime}/cli/coordination-projection-worker-host.clj";
   maintenanceHost = "${promotedRuntime}/cli/coordination-maintenance-task-host.clj";
+  docctl = "%h/code/north/main/bin/docctl";
   runtimePath = "PATH=${pkgs.systemd}/bin:${pkgs.babashka}/bin:${pkgs.coreutils}/bin:${pkgs.git}/bin";
   rebuildRuntimePath = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.nix-profile/bin";
   firnBin = "FIRN_BIN=${homeDir}/.local/bin/firn";
@@ -211,6 +212,31 @@ in
         Timer = {
           OnStartupSec = "45s";
           OnUnitInactiveSec = "1m";
+          Persistent = true;
+        };
+        Install = {
+          WantedBy = [ "timers.target" ];
+        };
+      };
+      systemd.user.services.north-docctl-invalidate = {
+        Unit = {
+          Description = "Refresh the North documentation freshness queue";
+          X-SwitchMethod = "keep-old";
+        };
+        Service = {
+          Type = "oneshot";
+          Environment = [ runtimePath ];
+          WorkingDirectory = "%h/code/north/main";
+          ExecStart = "${docctl} invalidate";
+        };
+      };
+      systemd.user.timers.north-docctl-invalidate = {
+        Unit = {
+          Description = "Refresh the North documentation freshness queue periodically";
+        };
+        Timer = {
+          OnStartupSec = "15m";
+          OnUnitInactiveSec = "1h";
           Persistent = true;
         };
         Install = {

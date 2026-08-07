@@ -18,6 +18,8 @@
           (s promotedRuntime "/cli/coordination-projection-worker-host.clj")
         maintenanceHost
           (s promotedRuntime "/cli/coordination-maintenance-task-host.clj")
+        docctl
+          "%h/code/north/main/bin/docctl" ;; world:allow — live North checkout is the hot-loop source
         runtimePath
           (s "PATH=" pkgs.systemd "/bin:" pkgs.babashka "/bin:"
              pkgs.coreutils "/bin:" pkgs.git "/bin")
@@ -180,6 +182,22 @@
               :Timer
               {:OnStartupSec "45s"
                :OnUnitInactiveSec "1m"
+               :Persistent true}
+              :Install {:WantedBy ["timers.target"]}}
+             :systemd.user.services.north-docctl-invalidate
+             {:Unit
+              {:Description "Refresh the North documentation freshness queue"
+               :X-SwitchMethod "keep-old"}
+              :Service
+              {:Type "oneshot"
+               :Environment [runtimePath]
+               :WorkingDirectory "%h/code/north/main" ;; world:allow — scan the live documentation checkout
+               :ExecStart (s docctl " invalidate")}}
+             :systemd.user.timers.north-docctl-invalidate
+             {:Unit {:Description "Refresh the North documentation freshness queue periodically"}
+              :Timer
+              {:OnStartupSec "15m"
+               :OnUnitInactiveSec "1h"
                :Persistent true}
               :Install {:WantedBy ["timers.target"]}}
              :systemd.user.services.north-runtime-worker-restart
