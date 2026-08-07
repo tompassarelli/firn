@@ -62,25 +62,25 @@
       (rt/parse-json-safe (str (get r :out)))
       nil)))
 
-(defn niri-action [(args : Any)] -> Bool
+(defn niri-action [args: Any] -> Bool
   (let [r: Any (proc/sh (vec (concat ["niri" "msg" "action"] args)))]
     (= 0 (get r :exit))))
 
-(defn ws-id [(w : Any)] -> Any (get w "id"))
-(defn ws-name [(w : Any)] -> Any (get w "name"))
-(defn ws-idx [(w : Any)] -> Int (rt/parse-int-or (get w "idx") 0))
-(defn ws-output [(w : Any)] -> Any (get w "output"))
+(defn ws-id [w: Any] -> Any (get w "id"))
+(defn ws-name [w: Any] -> Any (get w "name"))
+(defn ws-idx [w: Any] -> Int (rt/parse-int-or (get w "idx") 0))
+(defn ws-output [w: Any] -> Any (get w "output"))
 
-(defn ws-ref [(w : Any)] -> String
+(defn ws-ref [w: Any] -> String
   (let [nm: Any (ws-name w)]
     (if (string? nm) nm (str (ws-idx w)))))
 
-(defn focus-ws! [(w : Any)] -> Bool
+(defn focus-ws! [w: Any] -> Bool
   (niri-action ["focus-workspace" (ws-ref w)]))
 
 ;; ---------- activity defs / membership ----------
 
-(defn activity-rank [(st : Any) (sid : Any)] -> Int
+(defn activity-rank [st: Any sid: Any] -> Int
   (loop [ds: Any (get st :defs)
          i: Int 0]
     (cond
@@ -88,7 +88,7 @@
       (= (get (first ds) :id) sid) i
       :else (recur (rest ds) (inc i)))))
 
-(defn match-binding [(defs : Any) (nm : Any)] -> Any
+(defn match-binding [defs: Any nm: Any] -> Any
   (if (string? nm)
     (loop [ds: Any defs]
       (if (empty? ds)
@@ -98,21 +98,21 @@
               prefixes: Any (get d :bind-prefixes)]
           (cond
             (and names
-                 (some (fn [(x : Any)] -> Any (= x nm)) names))
+                 (some (fn [x: Any] -> Any (= x nm)) names))
             (get d :id)
             (and prefixes
-                 (some (fn [(p : Any)] -> Any (str/starts-with? nm p)) prefixes))
+                 (some (fn [p: Any] -> Any (str/starts-with? nm p)) prefixes))
             (get d :id)
             :else (recur (rest ds))))))
     nil))
 
 ;; The trailing empty unnamed workspace niri maintains per output stays
 ;; unadopted so it can seed whichever activity claims it next.
-(defn floating? [(ws-list : Any) (w : Any)] -> Bool
+(defn floating? [ws-list: Any w: Any] -> Bool
   (and (nil? (ws-name w))
        (nil? (get w "active_window_id"))
        (let [out: Any (ws-output w)
-             mx: Int (reduce (fn [(m : Int) (x : Any)] -> Int
+             mx: Int (reduce (fn [m: Int x: Any] -> Int
                                (if (= (ws-output x) out)
                                  (max m (ws-idx x))
                                  m))
@@ -120,13 +120,13 @@
                              ws-list)]
          (= (ws-idx w) mx))))
 
-(defn adopt-all [(st : Any) (ws-list : Any)] -> Any
+(defn adopt-all [st: Any ws-list: Any] -> Any
   (let [live-ids: Any (set (mapv ws-id ws-list))
-        pruned: Any (reduce (fn [(m : Any) (k : Any)] -> Any
+        pruned: Any (reduce (fn [m: Any k: Any] -> Any
                               (if (contains? live-ids k) m (dissoc m k)))
                             (get st :members)
                             (vec (keys (get st :members))))]
-    (reduce (fn [(m : Any) (w : Any)] -> Any
+    (reduce (fn [m: Any w: Any] -> Any
               (let [id: Any (ws-id w)]
                 (cond
                   (contains? m id) m
@@ -139,27 +139,27 @@
             pruned
             ws-list)))
 
-(defn focused-ws [(ws-list : Any)] -> Any
-  (first (filter (fn [(w : Any)] -> Any (get w "is_focused")) ws-list)))
+(defn focused-ws [ws-list: Any] -> Any
+  (first (filter (fn [w: Any] -> Any (get w "is_focused")) ws-list)))
 
 (defn members-of
-  [(st : Any)
-   (ws-list : Any)
-   (sid : Any)] -> Any
-  (sort-by (fn [(w : Any)] -> Int (ws-idx w))
-           (filter (fn [(w : Any)] -> Any
+  [st: Any
+   ws-list: Any
+   sid: Any] -> Any
+  (sort-by (fn [w: Any] -> Int (ws-idx w))
+           (filter (fn [w: Any] -> Any
                      (= sid (get (get st :members) (ws-id w))))
                    ws-list)))
 
-(defn floats-of [(st : Any) (ws-list : Any)] -> Any
-  (sort-by (fn [(w : Any)] -> Int (ws-idx w))
-           (filter (fn [(w : Any)] -> Any
+(defn floats-of [st: Any ws-list: Any] -> Any
+  (sort-by (fn [w: Any] -> Int (ws-idx w))
+           (filter (fn [w: Any] -> Any
                      (nil? (get (get st :members) (ws-id w))))
                    ws-list)))
 
 ;; ---------- snapshot ----------
 
-(defn ws-entry [(w : Any)] -> Any
+(defn ws-entry [w: Any] -> Any
   {:id (ws-id w)
    :idx (ws-idx w)
    :name (ws-name w)
@@ -168,7 +168,7 @@
    :active (get w "is_active")
    :urgent (get w "is_urgent")})
 
-(defn snapshot-json [(st : Any)] -> String
+(defn snapshot-json [st: Any] -> String
   (let [ws-list: Any (get st :ws)]
     (json/generate-string
      {:current (get st :current)
@@ -186,7 +186,7 @@
 
 ;; Trailing newline is load-bearing: the bar tails this file and its
 ;; line parser only emits on the delimiter.
-(defn write-snapshot! [(st : Any)] -> Nil
+(defn write-snapshot! [st: Any] -> Nil
   (let [tmp: String (str (state-path) ".tmp")]
     (spit tmp (str (snapshot-json st) "\n"))
     (fs/move tmp (state-path) {:replace-existing true})
@@ -195,16 +195,16 @@
 ;; ---------- band ordering ----------
 
 (defn desired-order
-  [(st : Any)
-   (ws-list : Any)
-   (out : Any)] -> Any
-  (let [ows: Any (filter (fn [(w : Any)] -> Any (= (ws-output w) out)) ws-list)]
-    (sort-by (fn [(w : Any)] -> Any
+  [st: Any
+   ws-list: Any
+   out: Any] -> Any
+  (let [ows: Any (filter (fn [w: Any] -> Any (= (ws-output w) out)) ws-list)]
+    (sort-by (fn [w: Any] -> Any
                (let [sid: Any (get (get st :members) (ws-id w))]
                  [(if sid (activity-rank st sid) 9999) (ws-idx w)]))
              ows)))
 
-(defn first-misplaced [(want : Any)] -> Any
+(defn first-misplaced [want: Any] -> Any
   (loop [ws: Any want
          pos: Int 1]
     (cond
@@ -212,7 +212,7 @@
       (not= (ws-idx (first ws)) pos) {:w (first ws) :target pos}
       :else (recur (rest ws) (inc pos)))))
 
-(defn enforce-bands! [(state : Any)] -> Nil
+(defn enforce-bands! [state: Any] -> Nil
   (loop [n: Int 0]
     (let [live: Any (niri-workspaces)]
       (when (and live (< n 12))
@@ -232,7 +232,7 @@
 
 ;; ---------- state transitions ----------
 
-(defn apply-workspaces [(st : Any) (ws-list : Any)] -> Any
+(defn apply-workspaces [st: Any ws-list: Any] -> Any
   (let [members: Any (adopt-all st ws-list)
         st2: Any (assoc st :members members :ws ws-list)
         f: Any (focused-ws ws-list)
@@ -245,13 +245,13 @@
              (assoc (get st3 :last-active) fsid (ws-id f)))
       st3)))
 
-(defn on-workspaces! [(state : Any) (ws-list : Any)] -> Nil
-  (swap! state (fn [(st : Any)] -> Any (apply-workspaces st ws-list)))
+(defn on-workspaces! [state: Any ws-list: Any] -> Nil
+  (swap! state (fn [st: Any] -> Any (apply-workspaces st ws-list)))
   (enforce-bands! state)
   (write-snapshot! (deref state))
   nil)
 
-(defn rescan! [(state : Any)] -> Nil
+(defn rescan! [state: Any] -> Nil
   (let [ws: Any (niri-workspaces)]
     (when ws (on-workspaces! state ws))
     nil))
@@ -259,19 +259,19 @@
 ;; ---------- commands ----------
 
 (defn activity-target-ws
-  [(st : Any)
-   (ws-list : Any)
-   (sid : Any)] -> Any
+  [st: Any
+   ws-list: Any
+   sid: Any] -> Any
   (let [la: Any (get (get st :last-active) sid)
         ms: Any (members-of st ws-list sid)
-        alive: Any (first (filter (fn [(w : Any)] -> Any (= (ws-id w) la)) ms))]
+        alive: Any (first (filter (fn [w: Any] -> Any (= (ws-id w) la)) ms))]
     (or alive (first ms))))
 
 (defn assign-ws!
-  [(state : Any)
-   (id : Any)
-   (sid : Any)] -> Nil
-  (swap! state (fn [(s : Any)] -> Any
+  [state: Any
+   id: Any
+   sid: Any] -> Nil
+  (swap! state (fn [s: Any] -> Any
                  (assoc s :members (assoc (get s :members) id sid))))
   (enforce-bands! state)
   (write-snapshot! (deref state))
@@ -280,11 +280,11 @@
 ;; Explicit assignments persist by workspace NAME (ids die with the
 ;; compositor); unnamed workspaces stay session-scoped by design.
 (defn persist-assignment!
-  [(state : Any)
-   (nm : Any)
-   (sid : Any)] -> Nil
+  [state: Any
+   nm: Any
+   sid: Any] -> Nil
   (when (string? nm)
-    (swap! state (fn [(s : Any)] -> Any
+    (swap! state (fn [s: Any] -> Any
                    (assoc s :assignments
                           (assoc (get s :assignments) nm sid))))
     (let [tmp: String (str (assignments-path) ".tmp")]
@@ -294,16 +294,16 @@
   nil)
 
 (defn goto-target!
-  [(state : Any)
-   (sid : Any)
-   (move? : Bool)] -> Nil
+  [state: Any
+   sid: Any
+   move?: Bool] -> Nil
   (let [st: Any (deref state)
         live: Any (niri-workspaces)]
     (if live
       (let [t: Any (activity-target-ws st live sid)
             t2: Any (or t
                         (let [fl: Any (first (filter
-                                              (fn [(w : Any)] -> Any
+                                              (fn [w: Any] -> Any
                                                 (floating? live w))
                                               live))]
                           (when fl (assign-ws! state (ws-id fl) sid))
@@ -319,7 +319,7 @@
       (println (str "goto " sid " -> niri query failed")))
     nil))
 
-(defn nth-member [(st : Any) (n : Int)] -> Any
+(defn nth-member [st: Any n: Int] -> Any
   (let [live: Any (niri-workspaces)]
     (if live
       (let [ms: Any (vec (members-of st live (get st :current)))
@@ -329,7 +329,7 @@
           (get ms (min (max 0 (- n 1)) (- cnt 1)))))
       nil)))
 
-(defn handle-command! [(state : Any) (line : String)] -> Nil
+(defn handle-command! [state: Any line: String] -> Nil
   (println (str "cmd: " line))
   (let [m: Any (rt/parse-json-safe line)
         cmd: Any (if m (get m "cmd") nil)]
@@ -338,14 +338,20 @@
       (= cmd "move-to-activity") (goto-target! state (get m "activity") true)
       (= cmd "back") (goto-target! state (get (deref state) :previous) false)
       (= cmd "here")
-      (let [t: Any (nth-member (deref state)
-                               (rt/parse-int-or (get m "n") 1))]
-        (when t (focus-ws! t))
+      (let [n: Int (rt/parse-int-or (get m "n") 1)
+            t: Any (nth-member (deref state) n)]
+        (if t
+          (do (focus-ws! t)
+              (println (str "here " n " -> " (ws-ref t))))
+          (println (str "here " n " -> no member")))
         nil)
       (= cmd "move-here")
-      (let [t: Any (nth-member (deref state)
-                               (rt/parse-int-or (get m "n") 1))]
-        (when t (niri-action ["move-column-to-workspace" (ws-ref t)]))
+      (let [n: Int (rt/parse-int-or (get m "n") 1)
+            t: Any (nth-member (deref state) n)]
+        (if t
+          (do (niri-action ["move-column-to-workspace" (ws-ref t)])
+              (println (str "move-here " n " -> " (ws-ref t))))
+          (println (str "move-here " n " -> no member")))
         nil)
       (= cmd "assign")
       (let [live: Any (niri-workspaces)
@@ -358,7 +364,7 @@
 
 ;; ---------- daemon ----------
 
-(defn load-defs [(path : String)] -> Any
+(defn load-defs [path: String] -> Any
   (edn/read-string (slurp path)))
 
 (defn load-assignments [] -> Any
@@ -366,7 +372,7 @@
     (or (edn/read-string (slurp (assignments-path))) {})
     {}))
 
-(defn initial-state [(defs : Any) (assignments : Any)] -> Any
+(defn initial-state [defs: Any assignments: Any] -> Any
   {:defs (get defs :activities)
    :default (get defs :default)
    :assignments assignments
@@ -390,7 +396,7 @@
   (spit (pid-path) (str (rt/my-pid)))
   nil)
 
-(defn handle-event! [(state : Any) (line : String)] -> Nil
+(defn handle-event! [state: Any line: String] -> Nil
   (let [evt: Any (rt/parse-json-safe line)]
     (cond
       (nil? evt) nil
@@ -401,7 +407,7 @@
       (get evt "WorkspaceActiveWindowChanged") (rescan! state)
       :else nil)))
 
-(defn run-daemon! [(defs-path : String)] -> Nil
+(defn run-daemon! [defs-path: String] -> Nil
   (let [defs: Any (load-defs defs-path)
         state: Any (atom (initial-state defs (load-assignments)))]
     (fs/create-dirs (runtime-dir))
@@ -415,17 +421,17 @@
     (future
       (loop []
         (rt/fifo-lines (ctl-path)
-                       (fn [(l : String)] -> Nil (handle-command! state l)))
+                       (fn [l: String] -> Nil (handle-command! state l)))
         (recur)))
     (loop []
       (rt/process-lines ["niri" "msg" "--json" "event-stream"]
-                        (fn [(l : String)] -> Nil (handle-event! state l)))
+                        (fn [l: String] -> Nil (handle-event! state l)))
       (rt/sleep-ms 2000)
       (recur))))
 
 ;; ---------- CLI ----------
 
-(defn send! [(m : Any)] -> Nil
+(defn send! [m: Any] -> Nil
   (if (and (fs/exists? (ctl-path))
            (rt/write-line-timeout (ctl-path) (json/generate-string m) 500))
     nil
@@ -437,7 +443,7 @@
     (rt/parse-json-safe (slurp (state-path)))
     nil))
 
-(defn cmd-list! [(flag : Any)] -> Nil
+(defn cmd-list! [flag: Any] -> Nil
   (let [stj: Any (read-state)]
     (cond
       (nil? stj)
@@ -445,11 +451,11 @@
           (System/exit 1))
       (= flag "--json") (println (str/trim (slurp (state-path))))
       (= flag "--menu")
-      (do (mapv (fn [(s : Any)] -> Any (println (get s "id")))
+      (do (mapv (fn [s: Any] -> Any (println (get s "id")))
                 (get stj "activities"))
           nil)
       :else
-      (do (mapv (fn [(s : Any)] -> Any
+      (do (mapv (fn [s: Any] -> Any
                   (println (str (if (= (get s "id") (get stj "current"))
                                   "* "
                                   "  ")
