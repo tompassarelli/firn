@@ -75,9 +75,21 @@ case "${1:-}" in
     sync_if_stale
     # Borrow the nix wrapper's runtime library paths (audio, GL, GTK, etc).
     # The mach binary is unwrapped so NixOS can't find these otherwise.
+    nix_libs=""
     if [ -r "$nix_bin" ]; then
       nix_libs=$(grep -oP "'/nix/store/[^']*'" "$nix_bin" | tr -d "'" | sort -u | tr '\n' ':')
-      export LD_LIBRARY_PATH="${nix_libs%:}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+      nix_libs="${nix_libs%:}"
+    fi
+    if [ -n "$nix_libs" ]; then
+      export LD_LIBRARY_PATH="$nix_libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    else
+      # Hardware WebRender needs BOTH the glvnd loader (modules/bash ships
+      # libglvnd into ~/.nix-profile/lib) and vendor mesa in /run/opengl-driver/lib.
+      echo "gjoa hotreload: nix result missing — using system GL fallback" >&2
+      if [ ! -r "$HOME/.nix-profile/lib/libEGL.so.1" ]; then
+        echo "gjoa hotreload: libEGL.so.1 not in ~/.nix-profile/lib — expect SOFTWARE rendering until the next rebuild lands libglvnd" >&2
+      fi
+      export LD_LIBRARY_PATH="$HOME/.nix-profile/lib:/run/opengl-driver/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     fi
     # Dev mode = load edited chrome from <install_root>/gjoa-dev/ (the symlink to
     # dist/chrome that `gjoa sync` / chrome:ensure maintains). GjoaLoader's F4

@@ -26,6 +26,9 @@ in
     environment.systemPackages = with pkgs; [ fzf ];
     home-manager.users.${username} = ({ config, ... }: {
       home.file.".local/bin".source = "${flakeRoot}/dotfiles/bin";
+      # glvnd loader at ~/.nix-profile/lib: /run/opengl-driver/lib has vendor
+      # mesa only, and dotfiles/bin/gjoa's GL fallback needs both halves.
+      home.packages = [ pkgs.libglvnd ];
       programs.bash = {
         enable = true;
         shellAliases = {
