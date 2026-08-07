@@ -40,7 +40,6 @@ fram/codegraph/bin/rename-demo
 fram/codegraph/bin/safe-rename
 fram/codegraph/test/comment-falsifier.sh
 fram/docs/archive/codegraph-README.md
-fram/docs/archive/worlds-provider-v1-final-report.md
 fram/scripts/native-core-reingest.sh
 fram/scripts/render_crdt_receipt.sh
 fram/tests/code_editpath_defect_test.clj

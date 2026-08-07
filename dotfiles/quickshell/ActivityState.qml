@@ -12,6 +12,7 @@ Singleton {
     property string currentLabel: ""
     property var memberOrdinals: ({})
     property var floatingIds: ({})
+    property int memberCount: 0
 
     Process {
         running: true
@@ -39,6 +40,7 @@ Singleton {
             root.current = st.current || ""
             root.currentLabel = label || ""
             root.memberOrdinals = ords
+            root.memberCount = Object.keys(ords).length
             root.floatingIds = floats
             root.available = true
         } catch (e) {

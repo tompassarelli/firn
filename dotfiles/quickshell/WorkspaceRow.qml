@@ -54,7 +54,7 @@ Row {
             spacing: 0
 
             Text {
-                visible: ActivityState.available ? ordinal > 1 : model.index > 0
+                visible: ActivityState.available ? (ordinal > 1 || (floating && ActivityState.memberCount > 0)) : model.index > 0
                 anchors.verticalCenter: parent.verticalCenter
                 color: colors.base03
                 font.family: colors.fontFamily
@@ -76,7 +76,8 @@ Row {
                     font.family: colors.fontFamily
                     font.pointSize: 10
                     text: {
-                        if (floating) return "+"
+                        // Floating = not yet adopted; show the ordinal it will take on adoption.
+                        if (floating) return String(ActivityState.memberCount + 1)
                         let label = String(ActivityState.available ? ordinal : model.idx)
                         if (model.name) label += "  " + model.name
                         return label
