@@ -32,7 +32,13 @@
             (nix/module [config ...]
               {:home.file
                 {".local/bin"
-                  {:source (s flakeRoot "/dotfiles/bin")}}
+                  ;; Live checkout, not a store copy: these are user-owned
+                  ;; hot-loop scripts; a per-generation snapshot silently
+                  ;; serves stale tools until the next rebuild.
+                  {:source
+                    (config.lib.file.mkOutOfStoreSymlink
+                      (s config.home.homeDirectory
+                        "/code/nixos-config/main/dotfiles/bin"))}}
                ;; glvnd loader at ~/.nix-profile/lib: /run/opengl-driver/lib has
                ;; vendor mesa only, and dotfiles/bin/gjoa's GL fallback needs both.
                ;; mkMerge only marks this as a partial definition — the validator
