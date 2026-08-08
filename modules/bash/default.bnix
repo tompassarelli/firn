@@ -30,7 +30,10 @@
          :home-manager.users
           {username
             (nix/module [config ...]
-              {:home.file
+              {;; Without sd-switch, user daemons keep serving the previous
+               ;; closure after a switch — staleness charter, law 1.
+               :systemd.user.startServices "sd-switch"
+               :home.file
                 {".local/bin"
                   ;; Live checkout, not a store copy: these are user-owned
                   ;; hot-loop scripts; a per-generation snapshot silently

@@ -50,8 +50,13 @@ fram/tests/store_anchor_disambig_test.clj
 nixos-config/docs/claude/02-local-map.md
 nixos-config/dotfiles/bin/activity
 nixos-config/dotfiles/bin/agents
+nixos-config/dotfiles/bin/beagle
+nixos-config/dotfiles/bin/concern
 nixos-config/dotfiles/bin/firn
+nixos-config/dotfiles/bin/fram
 nixos-config/dotfiles/bin/harness-map
+nixos-config/dotfiles/bin/north
+nixos-config/dotfiles/bin/north-mcp
 nixos-config/dotfiles/bin/sandbox
 nixos-config/dotfiles/claude/statusline.sh
 nixos-config/dotfiles/claude/statusline.test.sh

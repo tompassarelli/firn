@@ -5,11 +5,13 @@
 {:platform linux
  :enabled
   [terminal
-   cli-tools
+   ;; north/fram/beagle tools are live-linked from dotfiles/bin, never
+   ;; store-placed: a dev-loop tool in the closure is stale by construction.
+   [cli-tools -north]
    [desktop -mako +river]
    theming
    auth
-   development
+   [development -fram -beagle]
    javascript
    python
    [database -postgresql]

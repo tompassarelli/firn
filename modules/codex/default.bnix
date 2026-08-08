@@ -27,7 +27,13 @@
             source]
            (s "L+ /etc/codex/hooks/" relative " - - - - " enforcement "/" source))]
     {:flake-inputs
-      {:beagle {:url "git+file:///home/tom/code/beagle/main?ref=main"}}
+      {:beagle {:url "git+file:///home/tom/code/beagle/main?ref=main"}
+       ;; codexPkg builds from the north flake; owned here so the north
+       ;; module (tool placement, now evicted) is not load-bearing for it.
+       :fram {:url "git+file:///home/tom/code/fram/main?ref=control-plane-stability-2026-07-31.1"}
+       :north {:url "git+file:///home/tom/code/north/main?ref=main"
+               :inputs.fram.follows "fram"
+               :inputs.nixpkgs-master.follows "nixpkgs-master"}}
      :options.myConfig.modules.codex.enable
       (lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)")
      :config

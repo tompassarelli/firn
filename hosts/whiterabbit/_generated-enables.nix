@@ -5,7 +5,6 @@
   myConfig.modules.atuin.enable = lib.mkDefault true;
   myConfig.modules.bash.enable = lib.mkDefault true;
   myConfig.modules.bc.enable = lib.mkDefault true;
-  myConfig.modules.beagle.enable = lib.mkDefault true;
   myConfig.modules.bench-shield.enable = lib.mkDefault true;
   myConfig.modules.brightnessctl.enable = lib.mkDefault true;
   myConfig.modules.btop.enable = lib.mkDefault true;
@@ -35,7 +34,6 @@
   myConfig.modules.firefox.enable = lib.mkDefault true;
   myConfig.modules.firefox.default = lib.mkDefault true;
   myConfig.modules.forgejo-cli.enable = lib.mkDefault true;
-  myConfig.modules.fram.enable = lib.mkDefault true;
   myConfig.modules.freetds.enable = lib.mkDefault true;
   myConfig.modules.gcc.enable = lib.mkDefault true;
   myConfig.modules.gh.enable = lib.mkDefault true;
@@ -68,7 +66,6 @@
   myConfig.modules.nerd-fonts.enable = lib.mkDefault true;
   myConfig.modules.niri.enable = lib.mkDefault true;
   myConfig.modules.nodejs.enable = lib.mkDefault true;
-  myConfig.modules.north.enable = lib.mkDefault true;
   myConfig.modules.north-profile.enable = lib.mkDefault true;
   myConfig.modules.obsidian.enable = lib.mkDefault true;
   myConfig.modules.opencode.enable = lib.mkDefault true;
