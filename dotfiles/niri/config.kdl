@@ -394,7 +394,7 @@ binds {
     Alt+Tab { focus-window-previous; }
 
     // Suggested binds for running programs: terminal, app launcher, screen locker.
-    Mod+T hotkey-overlay-title="Terminal" { spawn "ghostty" "--working-directory=/home/tom"; }
+    Mod+T hotkey-overlay-title="Terminal" { spawn "ghostty"; }
     Super+Space hotkey-overlay-title="Window Switcher" { spawn "rofi" "-show" "window"; }
     Super+S hotkey-overlay-title="App Switcher" { spawn "rofi" "-show" "combi" "-combi-modes" "window,drun"; }
     Super+Ctrl+Space hotkey-overlay-title="App Launcher" { spawn "rofi" "-show" "drun"; }
