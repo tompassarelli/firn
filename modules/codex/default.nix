@@ -2,7 +2,8 @@
 
 let
   username = config.myConfig.modules.users.username;
-  northPkg = "/home/tom/code/north/main";
+  homeDir = config.myConfig.modules.users.homeDir;
+  northPkg = "${homeDir}/code/north/main";
   codexPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".codex;
   enforcement = "/var/lib/north-enforcement/active/current";
   promoted = relative: source: "L+ /etc/codex/hooks/${relative} - - - - ${enforcement}/${source}";

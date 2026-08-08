@@ -15,7 +15,10 @@
 ;; the lock in the stream-sync script itself keeps the two from interleaving.
 (nix/module [config lib pkgs inputs ...]
   (let [username config.myConfig.modules.users.username
-        northPkg (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)
+        homeDir config.myConfig.modules.users.homeDir
+        ;; Fallback root for the promoted runtime channel: the live checkout,
+        ;; never a built package.
+        northPkg (s homeDir "/code/north/main")
         ;; Shared with North coordination workers; modules/north owns the one definition of
         ;; promoted-channel resolution.
         northRuntimeExec

@@ -33,6 +33,12 @@
               {:home.file
                 {".local/bin"
                   {:source (s flakeRoot "/dotfiles/bin")}}
+               ;; glvnd loader at ~/.nix-profile/lib: /run/opengl-driver/lib has
+               ;; vendor mesa only, and dotfiles/bin/gjoa's GL fallback needs both.
+               ;; mkMerge only marks this as a partial definition — the validator
+               ;; cannot see through home-manager's submodule to the listOf type
+               ;; and would call the gtk module's home.packages a conflict.
+               :home.packages (lib.mkMerge [(nix/with pkgs [libglvnd])])
                :programs.bash
                 {:enable          true
                  :shellAliases

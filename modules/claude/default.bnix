@@ -4,6 +4,7 @@
 
 (nix/module [config lib pkgs inputs flakeRoot ...]
   (let [username config.myConfig.modules.users.username
+        homeDir config.myConfig.modules.users.homeDir
         ;; nixpkgs-master already fetches the same native release binary, so the
         ;; version moves with the input instead of a hand-maintained checksum.
         claudePackage pkgs.master.claude-code
@@ -11,10 +12,10 @@
          (if pkgs.stdenv.hostPlatform.isDarwin
            "/bin/ps"
            (s pkgs.procps "/bin/ps"))
-        northPkg
-         (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)
-        framPkg
-         (get (get inputs.fram.packages pkgs.stdenv.hostPlatform.system) :default)
+        ;; MCP entrypoints resolve from the live checkouts; registering a CLI
+        ;; must never drag North or Fram into the system closure.
+        northPkg (s homeDir "/code/north/main")
+        framPkg (s homeDir "/code/fram/main")
         claudeSettingsSeed
          (pkgs.writeText "claude-settings.json"
            (builtins.readFile

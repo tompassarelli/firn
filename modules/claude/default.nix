@@ -2,10 +2,11 @@
 
 let
   username = config.myConfig.modules.users.username;
+  homeDir = config.myConfig.modules.users.homeDir;
   claudePackage = pkgs.master.claude-code;
   psBin = if pkgs.stdenv.hostPlatform.isDarwin then "/bin/ps" else "${pkgs.procps}/bin/ps";
-  northPkg = "/home/tom/code/north/main";
-  framPkg = "/home/tom/code/fram/main";
+  northPkg = "${homeDir}/code/north/main";
+  framPkg = "${homeDir}/code/fram/main";
   claudeSettingsSeed = pkgs.writeText "claude-settings.json" (builtins.readFile "${flakeRoot}/dotfiles/claude/settings.json");
   claudeSettingsSeeder = pkgs.writeShellScript "claude-settings-seed" (builtins.readFile "${flakeRoot}/scripts/claude-settings-seed.sh");
   mcpRegister = pkgs.writeShellScript "claude-mcp-register" (builtins.readFile "${flakeRoot}/scripts/claude-mcp-register.sh");

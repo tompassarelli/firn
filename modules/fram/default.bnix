@@ -2,9 +2,9 @@
 
 (ns default)
 
-;; Fram's ordinary core commands come directly from the exact flake package.
-;; Mutable checkout execution is available only through explicit *-dev names,
-;; which report their provenance before handing control to the checkout.
+;; Fram's ordinary core commands launch the live checkout — the system closure
+;; must not compile Fram to put its CLIs on PATH. The explicit *-dev names keep
+;; announcing their provenance before handing control to the checkout.
 (nix/module
   [config
    lib
@@ -12,8 +12,8 @@
    inputs
    ...]
   (let
-    [framPkg
-      (get (get inputs.fram.packages pkgs.stdenv.hostPlatform.system) :default)
+    [homeDir config.myConfig.modules.users.homeDir
+     framPkg (s homeDir "/code/fram/main")
      liveInputs
       (++
         (nix/with pkgs [babashka clojure jdk coreutils bash gnused gnugrep git])
@@ -54,8 +54,15 @@
         (pkgs.writeShellApplication
           {:name (s name "-packaged")
            :text (ms (s "exec " framPkg "/bin/" name " \"$@\""))}))
+     mkLive
+      (fn [name]
+        (pkgs.writeShellApplication
+          {:name name
+           :runtimeInputs liveInputs
+           :text (ms (s "exec " framPkg "/bin/" name " \"$@\""))}))
      devCommands (builtins.map mkDev devCommandNames)
-     packagedCommands (builtins.map mkPackaged packagedCommandNames)]
+     packagedCommands (builtins.map mkPackaged packagedCommandNames)
+     liveCommands (builtins.map mkLive packagedCommandNames)]
     {:tags [development]
      :flake-inputs
       {:fram {:url "git+file:///home/tom/code/fram/main?ref=control-plane-stability-2026-07-31.1"}}
@@ -65,4 +72,4 @@
      :config
       (lib.mkIf config.myConfig.modules.fram.enable
         {:environment.systemPackages
-          (++ [framPkg framCodeStatus] devCommands packagedCommands)})}))
+          (++ [framCodeStatus] liveCommands devCommands packagedCommands)})}))

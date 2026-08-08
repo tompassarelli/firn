@@ -9,15 +9,10 @@
 ;; tool selector come from the generation-pinned north-env — so application speed
 ;; never costs runtime reproducibility.
 ;;
-;; `north-packaged` / `north-mcp-packaged` are the escape hatch: the exact flake
-;; package, for bisecting a checkout against the pinned build and for anything
-;; that must not depend on a developer's working tree (agent-config-check already
-;; probes through north-packaged).
-;;
-;; The provider lifecycle hooks (north-on-spawn / north-on-tooluse /
-;; north-on-stop / north-mark-delegated) and the other pinned spokes stay
-;; PACKAGED, unchanged: a hook fires inside someone else's turn, where a
-;; half-saved checkout is an outage rather than a fast loop.
+;; `north-packaged` / `north-mcp-packaged` and the lifecycle spokes keep their
+;; names and their env discipline but also resolve out of the checkout: nothing
+;; here may reference inputs.north's default package, because Nix cannot take
+;; one file out of a derivation without building all of it.
 ;;
 ;; Checkout execution deliberately does NOT route through
 ;; `north-coord-runtime exec-checkout`. That path refuses whenever the selected
@@ -34,8 +29,9 @@
             (s "export FRAM_TELEMETRY_LOG="
                homeDir "/.local/state/north/telemetry.log"))
         "")
-     northPkg
-      (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :default)
+     ;; Application code always comes from the live checkout; only the runtime
+     ;; (north-env) and the pinned third-party codex stay generation-pinned.
+     northPkg (s homeDir "/code/north/main")
      ;; Runtime WITHOUT application code: the symlinked runtime PATH plus the
      ;; exported engine/tool contract, ending in `exec "$NORTH_BIN"`. This is the
      ;; single definition of North's runtime; the module never restates it.

@@ -1,7 +1,8 @@
 { config, lib, pkgs, inputs, ... }:
 
 let
-  framPkg = "/home/tom/code/fram/main";
+  homeDir = config.myConfig.modules.users.homeDir;
+  framPkg = "${homeDir}/code/fram/main";
   liveInputs = ((with pkgs; [
     babashka
     clojure

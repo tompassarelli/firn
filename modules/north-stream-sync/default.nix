@@ -2,7 +2,8 @@
 
 let
   username = config.myConfig.modules.users.username;
-  northPkg = "/home/tom/code/north/main";
+  homeDir = config.myConfig.modules.users.homeDir;
+  northPkg = "${homeDir}/code/north/main";
   northRuntimeExec = pkgs.writeShellApplication {
     name = "north-runtime-exec";
     runtimeInputs = with pkgs; [ coreutils ];

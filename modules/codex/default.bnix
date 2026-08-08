@@ -10,9 +10,10 @@
    flakeRoot
    ...]
   (let [username config.myConfig.modules.users.username
-        northPkg
-         (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)
-           :default)
+        homeDir config.myConfig.modules.users.homeDir
+        ;; North's hook surface is delivered by its live checkout, so /etc points
+        ;; at the checkout instead of building the whole project.
+        northPkg (s homeDir "/code/north/main")
         codexPkg
          (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)
            :codex)

@@ -10,8 +10,6 @@
       max-jobs = "auto";
       cores = 8;
       auto-optimise-store = true;
-      # A rooted .drv keeps its build outputs alive: without these, GC collects a
-      # long-compile closure (gjoa/Firefox) the moment its result out-link goes.
       keep-outputs = true;
       keep-derivations = true;
       trusted-users = [ "root" "@wheel" ];

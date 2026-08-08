@@ -2,6 +2,7 @@
 
 let
   username = config.myConfig.modules.users.username;
+  homeDir = config.myConfig.modules.users.homeDir;
   minimalPkg = inputs.hermes-agent.packages."${pkgs.stdenv.hostPlatform.system}".minimal;
   hermesPkg = minimalPkg.override (prev: {
     callPackage = f: args: let
@@ -11,7 +12,7 @@ let
       src = inputs.hermes-agent;
     }) else drv;
   });
-  northPkg = "/home/tom/code/north/main";
+  northPkg = "${homeDir}/code/north/main";
   northBin = "${northPkg}/bin";
 in
 {
