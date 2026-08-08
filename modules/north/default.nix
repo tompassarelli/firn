@@ -8,7 +8,7 @@ let
     export NORTH_TELEMETRY_PORT=7978
     export FRAM_TELEMETRY_LOG=${homeDir}/.local/state/north/telemetry.log
   '' else "";
-  northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
+  northPkg = "/home/tom/code/north/main";
   northEnv = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".north-env;
   codexPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".codex;
   liveInputs = with pkgs; [ bash coreutils git babashka bun jq ];

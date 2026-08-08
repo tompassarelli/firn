@@ -43,15 +43,16 @@ fram/docs/archive/codegraph-README.md
 fram/scripts/native-core-reingest.sh
 fram/scripts/render_crdt_receipt.sh
 fram/tests/code_editpath_defect_test.clj
+fram/tests/codegraph_exec_test.sh
 fram/tests/fixtures/gen-fumbles.bb
 fram/tests/resolve_golden.sh
 fram/tests/server_defcheck_untyped_e2e_test.clj
 fram/tests/store_anchor_disambig_test.clj
 nixos-config/docs/claude/02-local-map.md
+nixos-config/dotfiles/bin/activity
 nixos-config/dotfiles/bin/firn
 nixos-config/dotfiles/bin/harness-map
 nixos-config/dotfiles/bin/sandbox
-nixos-config/dotfiles/bin/activity
 nixos-config/dotfiles/claude/settings.json
 nixos-config/dotfiles/claude/statusline.sh
 nixos-config/dotfiles/claude/statusline.test.sh
@@ -76,6 +77,7 @@ nixos-config/scripts/firn-source-hash
 nixos-config/scripts/firn-validate
 nixos-config/scripts/firn-validate.test.sh
 north/bin/arena-seed
+north/bin/north
 north/bin/north-mine
 north/bin/north-on-spawn
 north/bin/north-on-tooluse
@@ -86,9 +88,6 @@ north/bin/tests/package-purity-check-test.sh
 north/bin/tests/sdk-test-entrypoint-test.sh
 north/build.sh
 north/cli/config-cli.clj
-north/cli/dashboard-cli.clj
-north/cli/nix-rebuild-worker.clj
-north/cli/runtime-attestation.clj
 north/cli/tests/acquire-claim-integration-test.clj
 north/cli/tests/agent-identity-publication-integration-test.clj
 north/cli/tests/concern-cli-validation-test.clj

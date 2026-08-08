@@ -3,7 +3,7 @@
 let
   username = config.myConfig.modules.users.username;
   homeDir = config.myConfig.modules.users.homeDir;
-  northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
+  northPkg = "/home/tom/code/north/main";
   promotedRuntime = "%h/.local/state/north/runtime/current";
   rebuildWorker = "${promotedRuntime}/cli/nix-rebuild-worker.clj";
   reconciliationWorker = "${promotedRuntime}/cli/reconciliation-worker-host.clj";

@@ -11,7 +11,7 @@ let
       src = inputs.hermes-agent;
     }) else drv;
   });
-  northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
+  northPkg = "/home/tom/code/north/main";
   northBin = "${northPkg}/bin";
 in
 {

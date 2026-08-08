@@ -1,7 +1,7 @@
 { config, lib, pkgs, inputs, ... }:
 
 let
-  framPkg = inputs.fram.packages."${pkgs.stdenv.hostPlatform.system}".default;
+  framPkg = "/home/tom/code/fram/main";
   liveInputs = ((with pkgs; [
     babashka
     clojure
@@ -47,12 +47,20 @@ let
       exec ${framPkg}/bin/${name} "$@"
     '';
   };
+  mkLive = name: pkgs.writeShellApplication {
+    name = name;
+    runtimeInputs = liveInputs;
+    text = ''
+      exec ${framPkg}/bin/${name} "$@"
+    '';
+  };
   devCommands = builtins.map mkDev devCommandNames;
   packagedCommands = builtins.map mkPackaged packagedCommandNames;
+  liveCommands = builtins.map mkLive packagedCommandNames;
 in
 {
   options.myConfig.modules.fram.enable = lib.mkEnableOption "immutable Fram core commands with explicit checkout-only development commands";
   config = lib.mkIf config.myConfig.modules.fram.enable {
-    environment.systemPackages = ([ framPkg framCodeStatus ] ++ devCommands ++ packagedCommands);
+    environment.systemPackages = ([ framCodeStatus ] ++ liveCommands ++ devCommands ++ packagedCommands);
   };
 }

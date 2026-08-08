@@ -3,17 +3,14 @@
 let
   username = config.myConfig.modules.users.username;
   homeDir = config.myConfig.modules.users.homeDir;
-  framPkg = inputs.fram.packages."${pkgs.stdenv.hostPlatform.system}".default;
-  framRev = inputs.fram.rev;
-  northPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".default;
+  framPkg = "/home/tom/code/fram/main";
+  framRev = "live-checkout";
+  northPkg = "/home/tom/code/north/main";
+  # The entrypoint is delivered by the live checkout, so it cannot be verified in
+  # the build sandbox; a missing target surfaces as a unit start failure instead.
   northCoordSdListenChecked = pkgs.runCommand "north-coord-sd-listen-checked" { } ''
-    wrapper=${northPkg}/bin/north-coord-sd-listen
-    if [ ! -x "$wrapper" ]; then
-      echo "north-coord socketActivation requires executable $wrapper" >&2
-      exit 1
-    fi
     mkdir -p "$out/bin"
-    ln -s "$wrapper" "$out/bin/north-coord-sd-listen"
+    ln -s "${northPkg}/bin/north-coord-sd-listen" "$out/bin/north-coord-sd-listen"
   '';
   runtimeState = "${homeDir}/.local/state/north/fram-runtime";
   telemetryRuntimeState = "${homeDir}/.local/state/north/fram-telemetry-runtime";
