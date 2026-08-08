@@ -1,0 +1,17 @@
+{
+ "entries": [
+  {
+   "event": "PreToolUse",
+   "matcher": "Edit|Write|MultiEdit",
+   "hook": {
+    "type": "command",
+    "command": "/home/tom/.agents/hooks/comment-bloat-guard.sh",
+    "timeout": 10
+   }
+  }
+ ],
+ "tags": [
+  "style"
+ ],
+ "requires": []
+}

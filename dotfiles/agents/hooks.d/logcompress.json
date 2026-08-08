@@ -1,0 +1,17 @@
+{
+ "entries": [
+  {
+   "event": "PostToolUse",
+   "matcher": "Bash",
+   "hook": {
+    "type": "command",
+    "command": "/home/tom/.agents/hooks/logcompress-hook.js",
+    "timeout": 10
+   }
+  }
+ ],
+ "tags": [
+  "plumbing"
+ ],
+ "requires": []
+}

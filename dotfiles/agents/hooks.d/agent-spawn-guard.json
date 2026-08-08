@@ -1,0 +1,27 @@
+{
+ "entries": [
+  {
+   "event": "PreToolUse",
+   "matcher": "Agent|Task|Workflow",
+   "hook": {
+    "type": "command",
+    "command": "/home/tom/.agents/hooks/agent-spawn-guard.sh",
+    "timeout": 10
+   }
+  },
+  {
+   "event": "PreToolUse",
+   "matcher": "Bash",
+   "hook": {
+    "type": "command",
+    "command": "/home/tom/.agents/hooks/agent-spawn-guard.sh",
+    "timeout": 10
+   }
+  }
+ ],
+ "tags": [
+  "guards",
+  "dispatch"
+ ],
+ "requires": []
+}

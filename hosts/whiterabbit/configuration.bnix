@@ -47,7 +47,7 @@
    :myConfig.modules.nix-ld.enable true
    :myConfig.modules.appimage.enable true
    :myConfig.modules.codex.enable true
-   :myConfig.modules.hermes.enable true
+   :myConfig.modules.hermes.enable false
    :myConfig.modules.zed.enable true
    :myConfig.modules.windows-vm.enable true
    :myConfig.modules.nh.enable true
@@ -56,16 +56,16 @@
    ;; attention-coord modules remain deleted. Stage A now dedicates :7977 to
    ;; coordination.log and reuses :7978 solely for telemetry.log; composed
    ;; North clients retain one logical read surface.
-   :myConfig.modules.north-coord.enable true
+   :myConfig.modules.north-coord.enable false
    ;; systemd socket activation is required for both Stage-A writer sockets.
    :myConfig.modules.north-coord.socketActivation true
    :myConfig.modules.north-coord.stageATelemetryPartition true
    ;; user-level timer (~5min) for north-stream-sync — zero-AI transcript
    ;; mirroring into ~/code/north/streams/raw (streams/CLAUDE.md).
-   :myConfig.modules.north-stream-sync.enable true
+   :myConfig.modules.north-stream-sync.enable false
    ;; Rebuild, reconciliation, projection, safety, and janitor responsibilities
    ;; are independently supervised and cannot block one another.
-   :myConfig.modules.north-coordination-workers.enable true
+   :myConfig.modules.north-coordination-workers.enable false
    ;; agent.slice + the session.slice mirror weight. Inert until a launcher
    ;; actually enters the scope; the slice itself costs nothing.
    :myConfig.modules.agent-slice.enable true

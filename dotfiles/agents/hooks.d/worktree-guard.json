@@ -1,0 +1,27 @@
+{
+ "entries": [
+  {
+   "event": "PreToolUse",
+   "matcher": "Edit|Write|MultiEdit",
+   "hook": {
+    "type": "command",
+    "command": "/home/tom/.agents/hooks/launch-critical-worktree-guard.sh",
+    "timeout": 10
+   }
+  },
+  {
+   "event": "PreToolUse",
+   "matcher": "Bash",
+   "hook": {
+    "type": "command",
+    "command": "/home/tom/.agents/hooks/launch-critical-worktree-guard.sh",
+    "timeout": 10
+   }
+  }
+ ],
+ "tags": [
+  "guards",
+  "git-safety"
+ ],
+ "requires": []
+}

@@ -1,12 +1,11 @@
-# One repo-relative path per line. A path is allowed only while it still has topology references.
 beagle/beagle-lib/private/nixos-schema.rkt
 beagle/beagle-test/tests/levenshtein-benchmark.rkt
-beagle/bin/_beagle-racket
 beagle/bin/beagle-callgraph
 beagle/bin/beagle-ci
+beagle/bin/_beagle-racket
 beagle/bin/test/callgraph-xmodule/run.sh
-beagle/bin/test/code-as-facts/authoring-verbs.sh
 beagle/bin/test/code-as-facts/authoring.sh
+beagle/bin/test/code-as-facts/authoring-verbs.sh
 beagle/bin/test/code-as-facts/delete.sh
 beagle/bin/test/code-as-facts/rename.sh
 beagle/bin/test/code-as-facts/run.sh
@@ -50,10 +49,10 @@ fram/tests/server_defcheck_untyped_e2e_test.clj
 fram/tests/store_anchor_disambig_test.clj
 nixos-config/docs/claude/02-local-map.md
 nixos-config/dotfiles/bin/activity
+nixos-config/dotfiles/bin/agents
 nixos-config/dotfiles/bin/firn
 nixos-config/dotfiles/bin/harness-map
 nixos-config/dotfiles/bin/sandbox
-nixos-config/dotfiles/claude/settings.json
 nixos-config/dotfiles/claude/statusline.sh
 nixos-config/dotfiles/claude/statusline.test.sh
 nixos-config/dotfiles/codex/config.toml
@@ -67,6 +66,7 @@ nixos-config/modules/north/default.test.sh
 nixos-config/modules/theme-switcher/default.bnix
 nixos-config/scripts/agent-config-check.sh
 nixos-config/scripts/agent-config-check.test.sh
+nixos-config/scripts/claude-settings-seed.sh
 nixos-config/scripts/claude-settings-seed.test.sh
 nixos-config/scripts/firn-build
 nixos-config/scripts/firn-build-bin
@@ -135,3 +135,4 @@ north/sdk/test/run-ledger.test.ts
 north/sdk/test/session-hard-cap.test.ts
 north/sdk/test/worktree.test.ts
 north/tests/generated_output_test.sh
+# One repo-relative path per line. A path is allowed only while it still has topology references.

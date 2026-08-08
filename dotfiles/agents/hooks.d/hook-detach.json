@@ -1,0 +1,17 @@
+{
+ "entries": [
+  {
+   "event": "PostToolUse",
+   "matcher": "Bash|Edit|Write|MultiEdit",
+   "hook": {
+    "type": "command",
+    "command": "AGENT_PROVIDER=anthropic /home/tom/.agents/hooks/hook-detach.sh /run/current-system/sw/bin/north-on-tooluse",
+    "timeout": 10
+   }
+  }
+ ],
+ "tags": [
+  "plumbing"
+ ],
+ "requires": []
+}

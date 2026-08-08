@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# agents — context switchboard; `apply` is the ONLY writer of every injection surface.
+set -euo pipefail
+
+STATE="$HOME/.config/agents"
+MANIFEST="$STATE/manifest.conf"
+FRAGMENTS="${AGENTS_FRAGMENTS:-$HOME/code/nixos-config/main/dotfiles/agents/hooks.d}"
+SETTINGS="$HOME/.claude/settings.json"
+
+HOOKS=(agent-spawn-guard beagle-session-start comment-bloat-guard firn-guard
+  git-blind-stage-guard hook-detach logcompress north-session-lifecycle
+  tripwire-guard worktree-guard)
+SKILLS=(webdev beagle-authoring fram-modeling code-as-facts firn)
+SINGLETONS=(agents-md code-md statusline)
+
+skill_source() {
+  case "$1" in
+    webdev)          echo "$HOME/code/north/main/agent-profile/skills/webdev" ;;
+    beagle-authoring) echo "$HOME/code/beagle/main/integrations/north/skills/beagle-authoring" ;;
+    fram-modeling)   echo "$HOME/code/fram/main/integrations/north/skills/fram-modeling" ;;
+    code-as-facts)   echo "$HOME/code/fram/main/integrations/north/skills/code-as-facts" ;;
+    firn)            echo "$HOME/code/nixos-config/main/modules/north-profile/firn/skills/firn" ;;
+  esac
+}
+
+ensure_manifest() {
+  mkdir -p "$STATE" "$STATE/skills"
+  [ -f "$MANIFEST" ] && return
+  { for s in "${SINGLETONS[@]}"; do echo "item $s off"; done
+    for h in "${HOOKS[@]}"; do echo "hook $h off"; done
+    for s in "${SKILLS[@]}"; do echo "skill $s off"; done
+  } > "$MANIFEST"
+}
+
+state_of() { awk -v k="$1" -v n="$2" '$1==k && $2==n {print $3}' "$MANIFEST"; }
+
+set_state() { # kind name state
+  grep -q "^$1 $2 " "$MANIFEST" || { echo "agents: unknown: $1 $2" >&2; exit 2; }
+  local tmp="$MANIFEST.tmp.$$"
+  awk -v k="$1" -v n="$2" -v s="$3" '{if ($1==k && $2==n) $3=s; print}' "$MANIFEST" > "$tmp"
+  mv "$tmp" "$MANIFEST"
+}
+
+status() {
+  ensure_manifest
+  printf 'AGENTS.md            %s\n' "$(state_of item agents-md)"
+  printf 'code CLAUDE.md       %s\n' "$(state_of item code-md)"
+  printf 'statusline           %s\n' "$(state_of item statusline)"
+  echo "hooks"
+  for h in "${HOOKS[@]}"; do
+    printf '  %-22s %-4s %s\n' "$h" "$(state_of hook "$h")" \
+      "$(python3 -c "import json;d=json.load(open('$FRAGMENTS/$h.json'));print(' '.join(':'+t for t in d.get('tags',[])))")"
+  done
+  echo "skills"
+  for s in "${SKILLS[@]}"; do printf '  %-20s %s\n' "$s" "$(state_of skill "$s")"; done
+}
+
+apply() {
+  ensure_manifest
+  # AGENTS.md — global constitution: empty when off. Written to the claude
+  # config target and every account-scoped copy (the launcher redirects
+  # CLAUDE_CONFIG_DIR, so account copies are what sessions actually load).
+  local agents_target="$STATE/CLAUDE.md"
+  if [ "$(state_of item agents-md)" = on ]; then
+    cat "$HOME/code/north/main/agent-profile/AGENTS.md" > "$agents_target"
+  else
+    : > "$agents_target"
+  fi
+  local acct
+  for acct in "$HOME"/.local/state/north/accounts/*/*/CLAUDE.md; do
+    [ -e "$acct" ] && cat "$agents_target" > "$acct"
+  done
+  # ~/code routing note
+  if [ "$(state_of item code-md)" = on ]; then
+    cat "$HOME/code/nixos-config/main/dotfiles/code/CLAUDE.md" > "$STATE/code-CLAUDE.md"
+  else
+    : > "$STATE/code-CLAUDE.md"
+  fi
+  # skills — a farm of symlinks; only `on` skills exist
+  local s src
+  find "$STATE/skills" -maxdepth 1 -type l -delete
+  for s in "${SKILLS[@]}"; do
+    if [ "$(state_of skill "$s")" = on ]; then
+      src="$(skill_source "$s")"
+      [ -d "$src" ] && ln -sfn "$src" "$STATE/skills/$s"
+    fi
+  done
+  # hooks + statusline — rewrite exactly those keys in live settings.json
+  local on_hooks=()
+  for s in "${HOOKS[@]}"; do
+    [ "$(state_of hook "$s")" = on ] && on_hooks+=("$s")
+  done
+  STATUSLINE_STATE="$(state_of item statusline)" \
+  python3 - "$SETTINGS" "$FRAGMENTS" "${on_hooks[@]}" <<'PY'
+import json, os, sys
+settings_path, fragments_dir, *names = sys.argv[1:]
+settings = json.load(open(settings_path))
+hooks = {}
+for name in names:
+    frag = json.load(open(os.path.join(fragments_dir, f"{name}.json")))
+    for entry in frag["entries"]:
+        matchers = hooks.setdefault(entry["event"], [])
+        for m in matchers:
+            if m.get("matcher") == entry["matcher"]:
+                m["hooks"].append(entry["hook"]); break
+        else:
+            block = {"hooks": [entry["hook"]]}
+            if entry["matcher"] is not None: block["matcher"] = entry["matcher"]
+            matchers.append(block)
+settings["hooks"] = hooks
+if os.environ["STATUSLINE_STATE"] == "on":
+    settings["statusLine"] = {"type": "command",
+      "command": 'bash "$HOME/code/nixos-config/dotfiles/claude/statusline.sh"'}
+else:
+    settings.pop("statusLine", None)
+tmp = settings_path + ".next"
+json.dump(settings, open(tmp, "w"), indent=2)
+os.replace(tmp, settings_path)
+PY
+  echo "applied: $(state_of item agents-md) AGENTS.md, ${#on_hooks[@]} hooks, $(find "$STATE/skills" -maxdepth 1 -type l | wc -l) skills"
+}
+
+flip() { # on|off [--all | kind? name]
+  local target_state="$1"; shift
+  ensure_manifest
+  if [ "${1:-}" = "--all" ]; then
+    local tmp="$MANIFEST.tmp.$$"
+    awk -v s="$target_state" '{$3=s; print}' "$MANIFEST" > "$tmp"; mv "$tmp" "$MANIFEST"
+  else
+    local name="${1:?agents: name required}"
+    case " ${SKILLS[*]} " in *" $name "*)
+      set_state skill "$name" "$target_state"; apply; return ;;
+    esac
+    case " ${SINGLETONS[*]} " in *" $name "*)
+      set_state item "$name" "$target_state"; apply; return ;;
+    esac
+    # Hook or :tag — resolve requires-closure: `on` pulls requirements in,
+    # `off` cascades out through dependents.
+    local resolved h
+    resolved="$(python3 - "$FRAGMENTS" "$target_state" "$name" <<'PY'
+import json, os, sys, glob
+frag_dir, op, sel = sys.argv[1:]
+frags = {os.path.basename(p)[:-5]: json.load(open(p))
+         for p in glob.glob(os.path.join(frag_dir, "*.json"))}
+if sel.startswith(":"):
+    seeds = {n for n, d in frags.items() if sel[1:] in d.get("tags", [])}
+    if not seeds: sys.exit(f"agents: no hooks tagged {sel}")
+elif sel in frags:
+    seeds = {sel}
+else:
+    sys.exit(f"agents: unknown hook or tag: {sel}")
+result = set(seeds)
+changed = True
+while changed:
+    changed = False
+    for n, d in frags.items():
+        if op == "on" and n in result:
+            for req in d.get("requires", []):
+                if req not in result: result.add(req); changed = True
+        if op == "off" and n not in result:
+            if any(r in result for r in d.get("requires", [])):
+                result.add(n); changed = True
+print("\n".join(sorted(result)))
+PY
+)" || { echo "$resolved" >&2; exit 2; }
+    for h in $resolved; do set_state hook "$h" "$target_state"; done
+  fi
+  apply
+}
+
+case "${1:-status}" in
+  status) status ;;
+  on)  shift; flip on "$@"; ;;
+  off) shift; flip off "$@" ;;
+  apply) apply ;;
+  *) echo "usage: agents [status] | on|off <name>|--all | apply" >&2; exit 2 ;;
+esac

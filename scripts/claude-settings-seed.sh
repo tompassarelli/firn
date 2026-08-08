@@ -69,3 +69,7 @@ fi
 
 [ -f "$target" ] && [ ! -L "$target" ] && [ -w "$target" ] ||
   die "runtime settings did not become a writable regular file: $target"
+
+# The seed is the all-off baseline; the switchboard layers enabled items back.
+agents_cli="$HOME/code/nixos-config/main/dotfiles/bin/agents"
+[ -x "$agents_cli" ] && "$agents_cli" apply || true

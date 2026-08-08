@@ -1,0 +1,17 @@
+{
+ "entries": [
+  {
+   "event": "PreToolUse",
+   "matcher": "Bash",
+   "hook": {
+    "type": "command",
+    "command": "/home/tom/.agents/hooks/tripwire-guard.sh",
+    "timeout": 10
+   }
+  }
+ ],
+ "tags": [
+  "guards"
+ ],
+ "requires": []
+}

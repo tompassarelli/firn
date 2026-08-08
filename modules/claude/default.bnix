@@ -43,27 +43,28 @@
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
                         "/code/nixos-config/dotfiles/claude/commands"))}
+                 ;; Both surfaces are switchboard-owned: `agents apply` is the
+                 ;; sole writer under ~/.config/agents.
                  ".claude/skills"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/.agents/skills"))}
+                        "/.config/agents/skills"))}
                  ".claude/CLAUDE.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/.agents/AGENTS.md"))}
+                        "/.config/agents/CLAUDE.md"))}
                  ".claude/hooks"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
                         "/.agents/hooks"))}
-                 ;; ~/code root routing instruction — reproducible symlink.
                  "code/CLAUDE.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/code/CLAUDE.md"))}
+                        "/.config/agents/code-CLAUDE.md"))}
                  }
                ;; Atomically seed settings from this exact generation into a
                ;; writable regular file. Claude may mutate it at runtime; the next
