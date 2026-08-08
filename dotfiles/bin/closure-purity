@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Closure purity: personal project CODE never enters the system closure.
+set -euo pipefail
+target="${1:-/run/current-system}"
+hits=$(nix-store -qR "$target" | grep -E -- '-(north|fram|beagle)-[0-9]' \
+  | grep -v 'north-sdk-runtime-dependencies' || true)
+if [ -n "$hits" ]; then
+  printf 'closure-purity: FAIL — project builds inside %s:\n%s\n' "$target" "$hits" >&2
+  exit 1
+fi
+echo "closure-purity: ok — no project derivations in the $(basename "$target") closure"
