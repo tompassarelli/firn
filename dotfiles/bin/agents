@@ -59,10 +59,23 @@ status() {
   printf 'code CLAUDE.md       %s\n' "$(state_of item code-md)"
   printf 'statusline           %s\n' "$(state_of item statusline)"
   echo "hooks"
-  for h in "${HOOKS[@]}"; do
-    printf '  %-22s %-4s %s\n' "$h" "$(state_of hook "$h")" \
-      "$(python3 -c "import json;d=json.load(open('$FRAGMENTS/$h.json'));print(' '.join(':'+t for t in d.get('tags',[])))")"
-  done
+  # One interpreter for all rows; a python3 start per hook made status crawl.
+  python3 - "$FRAGMENTS" "$MANIFEST" <<'PY'
+import json, os, sys
+fragments_dir, manifest = sys.argv[1:]
+states = {}
+for line in open(manifest):
+    parts = line.split()
+    if len(parts) == 3 and parts[0] == "hook":
+        states[parts[1]] = parts[2]
+for name in sorted(states):
+    try:
+        frag = json.load(open(os.path.join(fragments_dir, f"{name}.json")))
+        tags = " ".join(":" + t for t in frag.get("tags", []))
+    except Exception:
+        tags = ""
+    print(f"  {name:<22} {states[name]:<4} {tags}")
+PY
   echo "skills"
   for s in "${SKILLS[@]}"; do printf '  %-20s %s\n' "$s" "$(state_of skill "$s")"; done
 }
