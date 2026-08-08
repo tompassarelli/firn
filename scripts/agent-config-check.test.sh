@@ -806,8 +806,8 @@ if codex_north_env_is_canonical "$scratch/codex-wrong-env.toml" >/dev/null 2>&1;
   exit 1
 fi
 
-# The live coordinator must positively identify the immutable runtime-selector
-# launcher. Direct checkout and direct package execution both bypass atomic
+# The live coordinator must positively identify the immutable runtime selector.
+# Direct checkout and direct package execution both bypass atomic
 # promotion/rollback and are rejected.
 nix_hash='0123456789abcdfghijklmnpqrsvwxyz'
 selector_path="/nix/store/${nix_hash}-north-coord-runtime/bin/north-coord-runtime"
@@ -815,18 +815,14 @@ selector_exec="{ path=$selector_path ; argv[]=$selector_path start ; ignore_erro
 classify_north_coord_exec "$selector_exec"
 [ "$NORTH_COORD_EXEC_KIND" = runtime-selector ]
 [ "$NORTH_COORD_EXEC_PATH" = "$selector_path" ]
-
-socket_wrapper_path="/nix/store/${nix_hash}-north-coord-sd-listen-checked/bin/north-coord-sd-listen"
-socket_exec="{ path=$socket_wrapper_path ; argv[]=$socket_wrapper_path $selector_path start ; ignore_errors=no ; }"
-classify_north_coord_exec "$socket_exec"
-[ "$NORTH_COORD_EXEC_KIND" = socket-runtime-selector ]
-[ "$NORTH_COORD_EXEC_PATH" = "$socket_wrapper_path" ]
-
-if classify_north_coord_exec "{ path=$socket_wrapper_path ; argv[]=$socket_wrapper_path /bin/true ; }"; then
-  printf 'socket launcher without the runtime selector was accepted\n' >&2
+systemd_environment_has \
+  'HOME=/home/tom FRAM_REQUIRE_LOG_FENCE=1 FRAM_LISTEN_FD=3' \
+  'FRAM_LISTEN_FD=3'
+if systemd_environment_has \
+   'HOME=/home/tom FRAM_REQUIRE_LOG_FENCE=1' 'FRAM_LISTEN_FD=3'; then
+  printf 'missing socket descriptor environment was accepted\n' >&2
   exit 1
 fi
-[ "$NORTH_COORD_EXEC_KIND" = unrecognized ]
 
 pinned_path="/nix/store/${nix_hash}-fram-0-unstable-2026-06-28/bin/fram-server"
 pinned_exec="{ path=$pinned_path ; argv[]=$pinned_path 7977 /home/tom/.local/state/north/coordination.log ; ignore_errors=no ; }"
@@ -1215,6 +1211,16 @@ grep -Fq '"${northCoordRuntime}/bin/north-coord-runtime ensure-default"' \
 grep -Fq 'systemd.services.north-coord-pair-settle = lib.mkIf stageA' \
   "$REPO/modules/north-coord/default.nix"
 grep -Fq 'ExecStart = "${northCoordRuntime}/bin/north-coord-runtime settle";' \
+  "$REPO/modules/north-coord/default.nix"
+grep -Fq 'lib.optionalAttrs config.myConfig.modules.north-coord.socketActivation {' \
+  "$REPO/modules/north-coord/default.nix"
+[[ $(grep -Fc 'FRAM_LISTEN_FD = "3";' \
+  "$REPO/modules/north-coord/default.nix") -eq 2 ]]
+# shellcheck disable=SC2016
+grep -Fq 'ExecStart = "${northCoordRuntime}/bin/north-coord-runtime start";' \
+  "$REPO/modules/north-coord/default.nix"
+# shellcheck disable=SC2016
+grep -Fq 'ExecStart = "${northTelemetryCoordRuntime}/bin/north-telemetry-coord-runtime start";' \
   "$REPO/modules/north-coord/default.nix"
 if rg -nF 'north-coord-runtime preflight' \
    "$REPO/modules/north-coord/default.bnix" \

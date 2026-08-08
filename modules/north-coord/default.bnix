@@ -19,27 +19,13 @@
 ;; Fram revisions, and atomically publishes complete current/previous
 ;; generations.
 
-(nix/module [config lib pkgs inputs ...]
+(nix/module [config lib pkgs ...]
   (let [username config.myConfig.modules.users.username
         homeDir  config.myConfig.modules.users.homeDir
-        framPkg
-          (get (get inputs.fram.packages pkgs.stdenv.hostPlatform.system)
-               :default)
-        framRev inputs.fram.rev
-        northPkg
-          (get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)
-               :default)
-        northCoordSdListenChecked
-          (pkgs.runCommand
-            "north-coord-sd-listen-checked"
-            {}
-            (ms (s "wrapper=" northPkg "/bin/north-coord-sd-listen")
-                "if [ ! -x \"$wrapper\" ]; then"
-                "  echo \"north-coord socketActivation requires executable $wrapper\" >&2"
-                "  exit 1"
-                "fi"
-                "mkdir -p \"$out/bin\""
-                "ln -s \"$wrapper\" \"$out/bin/north-coord-sd-listen\""))
+        ;; North and Fram publish hot-loop entrypoints from their live checkouts.
+        framPkg (s homeDir "/code/fram/main")
+        framRev "live-checkout"
+        northPkg (s homeDir "/code/north/main")
         runtimeState (s homeDir "/.local/state/north/fram-runtime")
         telemetryRuntimeState
           (s homeDir "/.local/state/north/fram-telemetry-runtime")
@@ -141,12 +127,8 @@
         ]
     {:options.myConfig.modules.north-coord.enable
       (lib.mkEnableOption "Personal North coordinator daemon (:7977) — sole-writer fact-graph service for Tom's canonical log")
-     ;; Socket activation is gated OFF until the Fram daemon consumes the
-     ;; inherited fd and the selected North package ships north-coord-sd-listen.
-     ;; The wrapper currently exists only on an unlanded North lane, not on
-     ;; North main or in the pinned package.
      :options.myConfig.modules.north-coord.socketActivation
-      (lib.mkEnableOption "systemd socket activation for :7977 (requires the Fram fd-consumer and north-coord-sd-listen)")
+      (lib.mkEnableOption "systemd socket activation for :7977 through Fram's inherited-fd consumer")
      :options.myConfig.modules.north-coord.stageATelemetryPartition
       (lib.mkEnableOption
         "independent single-origin coordination (:7977) and telemetry (:7978) writers; option-off is the no-data-migration rollback")
@@ -198,9 +180,8 @@
              :listenStreams ["127.0.0.1:7978"]
              :socketConfig {:TriggerLimitIntervalSec 0
                             :Backlog 512
-                            ;; north-coord-sd-listen validates the inherited
-                            ;; descriptor contract, not the unit name. Both
-                            ;; isolated writers use the same adapter contract.
+                            ;; Both isolated writers consume the same inherited
+                            ;; descriptor number regardless of their unit name.
                             :FileDescriptorName "north-coord"}})
          :systemd.targets.north-coord-pair
           (lib.mkIf stageA
@@ -273,8 +254,11 @@
            :restartIfChanged      false
            :stopIfChanged         false
            :environment
-            (// serviceEnvironment
-                {:JDK_JAVA_OPTIONS coordHeapOptions})
+            (// (// serviceEnvironment
+                    {:JDK_JAVA_OPTIONS coordHeapOptions})
+                (lib.optionalAttrs
+                  config.myConfig.modules.north-coord.socketActivation
+                  {:FRAM_LISTEN_FD "3"}))
            :serviceConfig
             (//
              serviceConfigBase
@@ -291,21 +275,15 @@
               (lib.mkIf
                 config.myConfig.modules.north-coord.socketActivation
                 "north-coord.socket")
-             ;; Socket ownership removes the old stop/bind race. The adapter
-             ;; validates LISTEN_FDS before the selected Fram runtime starts.
+             ;; Socket ownership removes the old stop/bind race. Fram consumes
+             ;; descriptor 3 directly when socket activation is enabled.
              :ExecStartPre
               (if stageA
                 []
                 [(s northCoordRuntime "/bin/north-coord-runtime ensure-default")
                  (s northCoordRuntime "/bin/north-coord-runtime prepare")])
-             ;; Direct start is the safe default. Socket activation references a
-             ;; checked derivation, so a package without the wrapper fails while
-             ;; building the system closure instead of at activation with 203/EXEC.
              :ExecStart
-               (if config.myConfig.modules.north-coord.socketActivation
-                 (s northCoordSdListenChecked "/bin/north-coord-sd-listen "
-                    northCoordRuntime "/bin/north-coord-runtime start")
-                 (s northCoordRuntime "/bin/north-coord-runtime start"))
+               (s northCoordRuntime "/bin/north-coord-runtime start")
              :ExecStartPost
               (lib.mkIf (not stageA)
                 (s northCoordRuntime "/bin/north-coord-runtime settle"))})}
@@ -324,7 +302,8 @@
              :stopIfChanged false
              :environment
               (// serviceEnvironment
-                  {:FRAM_TELEMETRY_LOG
+                  {:FRAM_LISTEN_FD "3"
+                   :FRAM_TELEMETRY_LOG
                     (s homeDir "/.local/state/north/coordination.log")
                    :JDK_JAVA_OPTIONS telemetryHeapOptions})
              :serviceConfig
@@ -336,6 +315,5 @@
                 :TasksMax serviceTasksMax
                 :Sockets "north-telemetry-coord.socket"
                 :ExecStart
-                 (s northCoordSdListenChecked "/bin/north-coord-sd-listen "
-                    northTelemetryCoordRuntime
+                 (s northTelemetryCoordRuntime
                     "/bin/north-telemetry-coord-runtime start")})})})}))

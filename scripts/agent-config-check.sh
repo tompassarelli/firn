@@ -297,10 +297,9 @@ record_live_hook_binding() {
 }
 
 # Classify the executable path from systemctl's structured ExecStart rendering.
-# The unit owns one immutable launcher; that launcher owns the mutable, exact-
-# revision selector. A direct Fram executable would recreate the supervisor race
-# and bypass selector validation, even when that executable happens to be in the
-# Nix store.
+# The unit executes one immutable runtime selector. A direct Fram executable
+# would recreate the supervisor race and bypass selector validation, even when
+# that executable happens to be in the Nix store.
 classify_north_coord_exec() {
   local exec_spec="$1" path=''
 
@@ -315,14 +314,6 @@ classify_north_coord_exec() {
 
   if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-north-coord-runtime/bin/north-coord-runtime$ ]]; then
     NORTH_COORD_EXEC_KIND='runtime-selector'
-    return 0
-  fi
-  if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-north-coord-sd-listen-checked/bin/north-coord-sd-listen$ ]] &&
-     [[ "$exec_spec" =~ /nix/store/[a-z0-9]{32}-north-coord-runtime/bin/north-coord-runtime[[:space:]]+start ]]; then
-    # Socket activation deliberately inserts one immutable fd-validation
-    # launcher ahead of the same runtime selector. Accept only the complete
-    # wrapper -> selector chain; the wrapper by itself is not runtime authority.
-    NORTH_COORD_EXEC_KIND='socket-runtime-selector'
     return 0
   fi
   if [[ "$path" =~ ^/nix/store/[a-z0-9]{32}-fram[^/]*/bin/fram-server$ ]]; then
@@ -358,9 +349,9 @@ select_north_coord_runtime_state() {
   NORTH_COORD_RUNTIME_STATE_ROOT=''
   NORTH_COORD_RUNTIME_STATE_REASON=''
   case "$exec_kind" in
-    runtime-selector|socket-runtime-selector)
+    runtime-selector)
       [ "$unit" = north-coord.service ] || {
-        NORTH_COORD_RUNTIME_STATE_REASON="legacy selector is attached to unexpected unit: $unit"
+        NORTH_COORD_RUNTIME_STATE_REASON="selector is attached to unexpected unit: $unit"
         return 1
       }
       NORTH_COORD_RUNTIME_STATE_ROOT="$HOME/.local/state/north/fram-runtime"
@@ -2199,6 +2190,10 @@ if [ "$LOCAL" -eq 1 ]; then
     systemd_environment_has "$north_coord_env" 'FRAM_REQUIRE_LOG_FENCE=1' || {
       north_coord_ok=0
       bad "north-coord lacks FRAM_REQUIRE_LOG_FENCE=1 in its live environment"
+    }
+    systemd_environment_has "$north_coord_env" 'FRAM_LISTEN_FD=3' || {
+      north_coord_ok=0
+      bad "north-coord lacks FRAM_LISTEN_FD=3 in its live environment"
     }
     if classify_north_coord_exec "$north_coord_exec"; then
       ok_detail "north-coord executes the system-owned runtime selector: $NORTH_COORD_EXEC_PATH"

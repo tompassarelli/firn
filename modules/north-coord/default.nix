@@ -1,17 +1,11 @@
-{ config, lib, pkgs, inputs, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   username = config.myConfig.modules.users.username;
   homeDir = config.myConfig.modules.users.homeDir;
-  framPkg = "/home/tom/code/fram/main";
+  framPkg = "${homeDir}/code/fram/main";
   framRev = "live-checkout";
-  northPkg = "/home/tom/code/north/main";
-  # The entrypoint is delivered by the live checkout, so it cannot be verified in
-  # the build sandbox; a missing target surfaces as a unit start failure instead.
-  northCoordSdListenChecked = pkgs.runCommand "north-coord-sd-listen-checked" { } ''
-    mkdir -p "$out/bin"
-    ln -s "${northPkg}/bin/north-coord-sd-listen" "$out/bin/north-coord-sd-listen"
-  '';
+  northPkg = "${homeDir}/code/north/main";
   runtimeState = "${homeDir}/.local/state/north/fram-runtime";
   telemetryRuntimeState = "${homeDir}/.local/state/north/fram-telemetry-runtime";
   stageA = config.myConfig.modules.north-coord.stageATelemetryPartition;
@@ -80,7 +74,7 @@ let
 in
 {
   options.myConfig.modules.north-coord.enable = lib.mkEnableOption "Personal North coordinator daemon (:7977) — sole-writer fact-graph service for Tom's canonical log";
-  options.myConfig.modules.north-coord.socketActivation = lib.mkEnableOption "systemd socket activation for :7977 (requires the Fram fd-consumer and north-coord-sd-listen)";
+  options.myConfig.modules.north-coord.socketActivation = lib.mkEnableOption "systemd socket activation for :7977 through Fram's inherited-fd consumer";
   options.myConfig.modules.north-coord.stageATelemetryPartition = lib.mkEnableOption "independent single-origin coordination (:7977) and telemetry (:7978) writers; option-off is the no-data-migration rollback";
   config = lib.mkIf config.myConfig.modules.north-coord.enable {
     assertions = [
@@ -173,9 +167,11 @@ in
       startLimitIntervalSec = 0;
       restartIfChanged = false;
       stopIfChanged = false;
-      environment = (serviceEnvironment // {
+      environment = ((serviceEnvironment // {
         JDK_JAVA_OPTIONS = coordHeapOptions;
-      });
+      }) // (lib.optionalAttrs config.myConfig.modules.north-coord.socketActivation {
+        FRAM_LISTEN_FD = "3";
+      }));
       serviceConfig = (serviceConfigBase // {
         MemoryHigh = coordMemoryHigh;
         MemoryMax = coordMemoryMax;
@@ -186,7 +182,7 @@ in
           "${northCoordRuntime}/bin/north-coord-runtime ensure-default"
           "${northCoordRuntime}/bin/north-coord-runtime prepare"
         ];
-        ExecStart = if config.myConfig.modules.north-coord.socketActivation then "${northCoordSdListenChecked}/bin/north-coord-sd-listen ${northCoordRuntime}/bin/north-coord-runtime start" else "${northCoordRuntime}/bin/north-coord-runtime start";
+        ExecStart = "${northCoordRuntime}/bin/north-coord-runtime start";
         ExecStartPost = lib.mkIf (!stageA) "${northCoordRuntime}/bin/north-coord-runtime settle";
       });
     };
@@ -204,6 +200,7 @@ in
       restartIfChanged = false;
       stopIfChanged = false;
       environment = (serviceEnvironment // {
+        FRAM_LISTEN_FD = "3";
         FRAM_TELEMETRY_LOG = "${homeDir}/.local/state/north/coordination.log";
         JDK_JAVA_OPTIONS = telemetryHeapOptions;
       });
@@ -213,7 +210,7 @@ in
         CPUQuota = telemetryCpuQuota;
         TasksMax = serviceTasksMax;
         Sockets = "north-telemetry-coord.socket";
-        ExecStart = "${northCoordSdListenChecked}/bin/north-coord-sd-listen ${northTelemetryCoordRuntime}/bin/north-telemetry-coord-runtime start";
+        ExecStart = "${northTelemetryCoordRuntime}/bin/north-telemetry-coord-runtime start";
       });
     };
   };

@@ -23,7 +23,7 @@ let
   '';
   northPkg = pkgs.runCommand "north-stage-a-fixture" { } ''
     mkdir -p "$out/bin"
-    for name in north north-mcp north-coord-sd-listen north-on-spawn \
+    for name in north north-mcp north-on-spawn \
       north-on-tooluse north-mark-delegated north-on-stop concern \
       north-stream-sync north-pinned north-effort; do
       printf '%s\n' '#!/bin/sh' 'exit 0' > "$out/bin/$name"
@@ -140,6 +140,8 @@ pkgs.writeText "north-stage-a-${if stageA then "on" else "off"}" (
     "prepare-stop-if-changed=${lib.boolToString (prepare.stopIfChanged or false)}"
     "coord-java-options=${coord.environment.JDK_JAVA_OPTIONS or "unset"}"
     "telemetry-java-options=${telemetry.environment.JDK_JAVA_OPTIONS or "unset"}"
+    "coord-listen-fd=${coord.environment.FRAM_LISTEN_FD or "unset"}"
+    "telemetry-listen-fd=${telemetry.environment.FRAM_LISTEN_FD or "unset"}"
     "pair-wants=${lib.concatStringsSep "," (pair.wants or [ ])}"
     "coord-requires=${lib.concatStringsSep "," (coord.requires or [ ])}"
     "telemetry-requires=${lib.concatStringsSep "," (telemetry.requires or [ ])}"
@@ -178,6 +180,8 @@ grep -Fxq 'coord-restart-if-changed=false' "$off"
 grep -Fxq 'coord-stop-if-changed=false' "$off"
 grep -Fxq 'partition=unset' "$off"
 grep -Fxq 'telemetry-port=unset' "$off"
+grep -Fxq 'coord-listen-fd=3' "$off"
+grep -Fxq 'telemetry-listen-fd=unset' "$off"
 off_wrapper=$(sed -n 's/^north-wrapper=//p' "$off")
 grep -Fq -- '-north-env-stage-a-fixture/bin/north-env "$@"' \
   "$off_wrapper/bin/north"
@@ -208,6 +212,8 @@ grep -Fxq 'prepare-restart-if-changed=false' "$on"
 grep -Fxq 'prepare-stop-if-changed=false' "$on"
 grep -Fxq 'coord-java-options=-XX:+UseG1GC -Xmx16g' "$on"
 grep -Fxq 'telemetry-java-options=-XX:+UseG1GC -Xmx8g' "$on"
+grep -Fxq 'coord-listen-fd=3' "$on"
+grep -Fxq 'telemetry-listen-fd=3' "$on"
 grep -Fq 'north-coord.socket' "$on"
 grep -Fq 'north-telemetry-coord.socket' "$on"
 grep -Fq 'north-coord.service' "$on"
@@ -216,6 +222,8 @@ grep -Fxq 'partition=1' "$on"
 grep -Fxq 'telemetry-port=7978' "$on"
 grep -Fq '/bin/north-coord-runtime start' "$on"
 grep -Fq '/bin/north-telemetry-coord-runtime start' "$on"
+grep -Eq '^coord-exec=/nix/store/[a-z0-9]{32}-north-coord-runtime/bin/north-coord-runtime start$' "$on"
+grep -Eq '^telemetry-exec=/nix/store/[a-z0-9]{32}-north-telemetry-coord-runtime/bin/north-telemetry-coord-runtime start$' "$on"
 on_wrapper=$(sed -n 's/^north-wrapper=//p' "$on")
 on_coord_command=$(sed -n 's/^coord-exec=\(.*\) start$/\1/p' "$on")
 on_coord=${on_coord_command##* }
