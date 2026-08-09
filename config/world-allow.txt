@@ -103,7 +103,7 @@ north/cli/tests/json-show-indexed-test.clj
 north/cli/tests/learning-assignment-integration-test.clj
 north/cli/tests/linear-reservation-integration-test.clj
 north/cli/tests/live-feed-integration-test.clj
-north/cli/tests/live-steer-admission-integration-test.clj
+north/cli/tests/live-msg-admission-integration-test.clj
 north/cli/tests/maintenance-large-corpus-test.clj
 north/cli/tests/message-audience-integration-test.clj
 north/cli/tests/message-routing-test.clj
