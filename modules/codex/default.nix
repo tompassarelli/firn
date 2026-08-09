@@ -1,10 +1,29 @@
-{ config, inputs, lib, pkgs, flakeRoot, ... }:
+{ config, lib, pkgs, flakeRoot, ... }:
 
 let
   username = config.myConfig.modules.users.username;
   homeDir = config.myConfig.modules.users.homeDir;
   northPkg = "${homeDir}/code/north/main";
-  codexPkg = inputs.north.packages."${pkgs.stdenv.hostPlatform.system}".codex;
+  codexExpectedIdentity = {
+    version = "0.146.0";
+    owner = "openai";
+    repo = "codex";
+    rev = "refs/tags/rust-v0.146.0";
+    tag = "rust-v0.146.0";
+    srcHash = "sha256-/kTIOX/klxm1nq2bJsBqS8f1jZZp2ilaTeULQFPJgDk=";
+    cargoHash = "sha256-N9jbH/cgAyu2QxneSnpkdaF0MgV3ZtDmN9q6rr9u+hE=";
+  };
+  codexUpstreamPkg = pkgs.master.codex;
+  codexObservedIdentity = {
+    version = codexUpstreamPkg.version or null;
+    owner = codexUpstreamPkg.src.owner or null;
+    repo = codexUpstreamPkg.src.repo or null;
+    rev = codexUpstreamPkg.src.rev or null;
+    tag = codexUpstreamPkg.src.tag or null;
+    srcHash = codexUpstreamPkg.src.outputHash or null;
+    cargoHash = codexUpstreamPkg.cargoHash or null;
+  };
+  codexPkg = lib.throwIfNot (codexObservedIdentity == codexExpectedIdentity) "codex: managed runtime identity drifted; expected ${builtins.toJSON codexExpectedIdentity}; observed ${builtins.toJSON codexObservedIdentity}" codexUpstreamPkg;
   enforcement = "/var/lib/north-enforcement/active/current";
   promoted = relative: source: "L+ /etc/codex/hooks/${relative} - - - - ${enforcement}/${source}";
 in

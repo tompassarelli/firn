@@ -18,7 +18,6 @@
    :kanata-git {:url "github:jtroo/kanata" :flake false}
    :glide {:url "github:tompassarelli/glide" :flake false}
    ;; --- GENERATED MODULE INPUTS (do not edit) ---
-   :beagle {:url "git+file:///home/tom/code/beagle/main?ref=main"}
    :elephant {:url "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73"}
    :fram {:url "git+file:///home/tom/code/fram/main?ref=control-plane-stability-2026-07-31.1"}
    :gjoa {:url "github:tompassarelli/gjoa"}
@@ -43,7 +42,6 @@
      kanata-git
      glide
      ;; --- GENERATED MODULE ARGS (do not edit) ---
-     beagle
      elephant
      fram
      gjoa
@@ -76,7 +74,6 @@
               (//
                 {:inputs
                   {;; --- GENERATED MODULE SPECIALARGS (do not edit) ---
-                    :beagle beagle
                     :elephant elephant
                     :fram fram
                     :gjoa gjoa
@@ -122,7 +119,6 @@
                      (//
                        {:inputs
                          {;; --- GENERATED HM SPECIALARGS (do not edit) ---
-                    :beagle beagle
                     :elephant elephant
                     :fram fram
                     :gjoa gjoa
@@ -272,7 +268,6 @@
              :specialArgs
               (//
                 {:inputs    {;; --- GENERATED DARWIN SPECIALARGS (do not edit) ---
-                    :beagle beagle
                     :elephant elephant
                     :fram fram
                     :gjoa gjoa
@@ -322,7 +317,6 @@
                       :home-manager.backupFileExtension "backup"
                       :home-manager.extraSpecialArgs
                        (// {:inputs {;; --- GENERATED DARWIN HM SPECIALARGS (do not edit) ---
-                    :beagle beagle
                     :elephant elephant
                     :fram fram
                     :gjoa gjoa

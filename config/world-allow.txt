@@ -64,7 +64,6 @@ nixos-config/dotfiles/codex/config.toml
 nixos-config/dotfiles/niri/config.kdl
 nixos-config/flake.bnix
 nixos-config/modules/beagle/default.bnix
-nixos-config/modules/codex/default.bnix
 nixos-config/modules/fram/default.bnix
 nixos-config/modules/north/default.bnix
 nixos-config/modules/north/default.test.sh

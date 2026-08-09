@@ -33,9 +33,6 @@
       url = "github:tompassarelli/glide";
       flake = false;
     };
-    beagle = {
-      url = "git+file:///home/tom/code/beagle/main?ref=main";
-    };
     elephant = {
       url = "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73";
     };
@@ -70,7 +67,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, fram, gjoa, hermes-agent, north, nur, quickshell, walker, zen-browser, ... }: let
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, fram, gjoa, hermes-agent, north, nur, quickshell, walker, zen-browser, ... }: let
     firnModules = ./modules;
     darwinModuleNames = builtins.fromJSON (builtins.readFile ./config/darwin-modules.json);
   in
@@ -79,7 +76,6 @@
       system = system;
       specialArgs = ({
         inputs = {
-          beagle = beagle;
           elephant = elephant;
           fram = fram;
           gjoa = gjoa;
@@ -113,7 +109,6 @@
           home-manager.backupFileExtension = "backup";
           home-manager.extraSpecialArgs = ({
             inputs = {
-              beagle = beagle;
               elephant = elephant;
               fram = fram;
               gjoa = gjoa;
@@ -271,7 +266,6 @@
       system = system;
       specialArgs = ({
         inputs = {
-          beagle = beagle;
           elephant = elephant;
           fram = fram;
           gjoa = gjoa;
@@ -312,7 +306,6 @@
             home-manager.backupFileExtension = "backup";
             home-manager.extraSpecialArgs = ({
               inputs = {
-                beagle = beagle;
                 elephant = elephant;
                 fram = fram;
                 gjoa = gjoa;
