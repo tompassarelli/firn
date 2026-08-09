@@ -160,6 +160,22 @@ migrate_row() { # old-kind old-name new-kind new-name
   mv "$tmp" "$MANIFEST"
 }
 
+sync_dir_paths() { # the 4th column: where the row's context file is triggered
+  # A `dir` row carries its directory past the state column, because the
+  # manifest is read directly by Northbridge and the panel renders anything
+  # past the state as that row's detail. The registry stays the truth: a row
+  # written before the column existed is backfilled, and a directory that moved
+  # in the registry is corrected here rather than drifting until someone flips.
+  local i tmp="$MANIFEST.tmp.$$"
+  for i in "${!DIRS[@]}"; do
+    awk -v n="${DIRS[$i]}" -v p="${DIR_PATHS[$i]}" \
+      '$1=="dir" && $2==n && (NF<4 || $4!=p) {f=1} END {exit !f}' "$MANIFEST" || continue
+    awk -v n="${DIRS[$i]}" -v p="${DIR_PATHS[$i]}" \
+      '$1=="dir" && $2==n {print $1, $2, $3, p; next} {print}' "$MANIFEST" > "$tmp"
+    mv "$tmp" "$MANIFEST"
+  done
+}
+
 ensure_manifest() {
   mkdir -p "$STATE" "$STATE/skills" "$DIR_TARGETS"
   [ -f "$MANIFEST" ] || : > "$MANIFEST"
@@ -169,11 +185,12 @@ ensure_manifest() {
   # name at `off` and the old row's state is lost.
   migrate_row item code-md dir code
   migrate_row item statusline item statusline-script
+  sync_dir_paths
   # Merge, don't just seed: an entry added to the arrays after the manifest
   # exists must still appear (off) or it is invisible to status/flip forever.
   # Plugins seed from reality instead of off: settings.json already enables
   # some, and seeding those off would silently disable them on first apply.
-  local enabled p k n
+  local enabled p k n i
   enabled=" $(enabled_plugins_now | tr '\n' ' ')"
   # Field-exact presence, not a regex: plugin names are marketplace strings
   # (`@`, `.`, `+`) and would otherwise be read as patterns.
@@ -186,12 +203,13 @@ ensure_manifest() {
     for s in "${SKILLS[@]}"; do echo "skill $s off"; done
     # A newly registered directory is inert until it is turned on: registering
     # is "a context file exists here", not "inject it".
-    for s in "${DIRS[@]}"; do echo "dir $s off"; done
+    for i in "${!DIRS[@]}"; do echo "dir ${DIRS[$i]} off ${DIR_PATHS[$i]}"; done
     for p in "${PLUGINS[@]}"; do
       case "$enabled" in *" $p "*) echo "plugin $p on" ;; *) echo "plugin $p off" ;; esac
     done
-  } | while read -r kind name default; do
-    [ -n "${have["$kind $name"]:-}" ] || echo "$kind $name $default" >> "$MANIFEST"
+  # `rest` is state plus, for a `dir` row, the directory column after it.
+  } | while read -r kind name rest; do
+    [ -n "${have["$kind $name"]:-}" ] || echo "$kind $name $rest" >> "$MANIFEST"
   done
 }
 
@@ -201,6 +219,8 @@ set_state() { # kind name state
   awk -v k="$1" -v n="$2" '$1==k && $2==n {f=1} END {exit !f}' "$MANIFEST" ||
     { echo "agents: unknown: $1 $2" >&2; exit 2; }
   local tmp="$MANIFEST.tmp.$$"
+  # Assigning $3 rebuilds the record, so a `dir` row's directory column rides
+  # through a flip untouched — only the state field is rewritten.
   awk -v k="$1" -v n="$2" -v s="$3" '{if ($1==k && $2==n) $3=s; print}' "$MANIFEST" > "$tmp"
   mv "$tmp" "$MANIFEST"
 }
