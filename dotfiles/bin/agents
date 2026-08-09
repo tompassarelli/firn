@@ -31,16 +31,36 @@ MODULES=(orchestration)
 MODULES_D="${AGENTS_MODULES:-$HOME/code/nixos-config/main/dotfiles/agents/modules.d}"
 MODULES_LOADED=
 
+# A module may also own INSTRUCTIONS: `"instructions": "<abs-path>"`, a file
+# appended to the global surfaces while the module is active. That is what
+# makes a module the equivalent of a plugin for code you own — context, skills
+# and hooks arriving together, live from the working tree, with no version to
+# pin and no copy to drift.
+declare -A MODULE_INSTRUCTIONS=()
+MODULE_INSTRUCTION_ORDER=()
+
 load_modules() {
   if [ -n "$MODULES_LOADED" ]; then return 0; fi
   MODULES_LOADED=1
-  local f n
-  for f in "$MODULES_D"/*.json; do
-    [ -e "$f" ] || continue
-    n="$(basename "$f" .json)"
-    case " ${MODULES[*]} " in *" $n "*) continue ;; esac
-    MODULES+=("$n")
-  done
+  local n f
+  # Filename order, and nothing cleverer: two modules that both append must land
+  # in the same order on every machine and every run, or the surfaces churn.
+  while IFS=$'\t' read -r n f; do
+    [ -n "${n:-}" ] || continue
+    case " ${MODULES[*]} " in *" $n "*) ;; *) MODULES+=("$n") ;; esac
+    if [ -n "${f:-}" ]; then
+      MODULE_INSTRUCTIONS["$n"]="$f"; MODULE_INSTRUCTION_ORDER+=("$n")
+    fi
+  done < <(python3 - "$MODULES_D" <<'PY'
+import glob, json, os, sys
+for p in sorted(glob.glob(os.path.join(sys.argv[1], "*.json"))):
+    try:
+        ins = (json.load(open(p)).get("instructions") or "").strip()
+    except Exception:
+        ins = ""  # activity() is where an unreadable module file is reported
+    print(f"{os.path.basename(p)[:-5]}\t{ins}")
+PY
+  )
 }
 # `other` is the honest triage drawer, not a kind with a story: a single toggle
 # whose activation reason is not a directory, a skill, a hook, a module, or a
@@ -368,6 +388,17 @@ unit_line() { # the state column for a non-hook row: both axes, when they differ
   fi
 }
 
+copy_surface() { # src dst — dst is ours, and must be a real file
+  # A symlink AT dst can resolve back to src: an old account copy pointed at
+  # ~/.claude/CLAUDE.md, which points here, so `> dst` truncated the master
+  # before `cat` could read it and the profile was zeroed on every apply. A
+  # copy that is a link is also not a copy — per-account isolation is the whole
+  # point of the account files — so the link is removed, not followed.
+  if [ -L "$2" ]; then rm -f "$2"; fi
+  cat "$1" > "$2" || echo "agents: could not write $2" >&2
+  return 0
+}
+
 dir_target_base() { # the <base>-CLAUDE.md / <base>-AGENTS.md stem a slug writes
   case "$1" in
     # Compat exception, not a pattern: ~/code/{CLAUDE,AGENTS}.md are
@@ -689,12 +720,30 @@ apply() {
     fi
     : > "$agents_target"
   fi
-  cat "$agents_target" > "$codex_target" ||
-    echo "agents: could not write $codex_target" >&2
-  local acct
-  for acct in "$HOME"/.local/state/north/accounts/*/*/CLAUDE.md; do
-    [ -e "$acct" ] || continue
-    cat "$agents_target" > "$acct" || echo "agents: could not write $acct" >&2
+  # An active module's instructions ride on the global surfaces, after the
+  # profile and behind a marker that says whose words these are. Inactive means
+  # absent: a bundle turned off leaves no trace in what a session reads.
+  local mname mfile
+  for mname in ${MODULE_INSTRUCTION_ORDER[@]+"${MODULE_INSTRUCTION_ORDER[@]}"}; do
+    is_active "$mname" || continue
+    mfile="${MODULE_INSTRUCTIONS[$mname]}"
+    if [ -f "$mfile" ]; then
+      printf '\n\n<!-- module: %s -->\n' "$mname" >> "$agents_target"
+      cat "$mfile" >> "$agents_target" ||
+        echo "agents: could not append $mfile" >&2
+    else
+      echo "agents: module $mname is active but $mfile is missing" \
+        "— not appended" >&2
+    fi
+  done
+  copy_surface "$agents_target" "$codex_target"
+  # Glob the account DIRECTORIES, not the files in them: a copy someone deleted,
+  # or one a new account never seeded, heals on the next apply instead of
+  # staying absent while status insists the profile is on.
+  local acctdir
+  for acctdir in "$HOME"/.local/state/north/accounts/*/*/; do
+    [ -d "$acctdir" ] || continue
+    copy_surface "$agents_target" "${acctdir}CLAUDE.md"
   done
   # directory instructions — one slot per registered directory, both
   # provider surfaces: <dir>/CLAUDE.md and <dir>/AGENTS.md resolve to the pair
@@ -713,8 +762,7 @@ apply() {
       fi
       : > "$base-CLAUDE.md"
     fi
-    cat "$base-CLAUDE.md" > "$base-AGENTS.md" ||
-      echo "agents: could not write $base-AGENTS.md" >&2
+    copy_surface "$base-CLAUDE.md" "$base-AGENTS.md"
     link_dir_context "$ddir" "$base"
   done
   # skills — a farm of symlinks; only ACTIVE skills exist

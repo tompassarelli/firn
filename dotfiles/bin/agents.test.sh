@@ -42,6 +42,12 @@ mod() { # name member...
   python3 -c 'import json,sys;json.dump({"members":sys.argv[2:]},open(sys.argv[1],"w"))' \
     "$MODS/$n.json" "$@"
 }
+mod_ins() { # name instructions-path member...
+  local n="$1" f="$2"; shift 2
+  python3 -c 'import json,sys;json.dump({"instructions":sys.argv[2],"members":sys.argv[3:]},open(sys.argv[1],"w"))' \
+    "$MODS/$n.json" "$f" "$@"
+}
+markers() { grep -o '<!-- module: [a-z-]* -->' "$SB/.config/agents/CLAUDE.md" | tr '\n' ' ' | sed 's/ $//'; }
 skilllinks() { find "$SB/.config/agents/skills" -maxdepth 1 -type l -printf '%f\n' | sort | tr '\n' ' ' | sed 's/ $//'; }
 
 ag() { HOME="$SB" AGENTS_FRAGMENTS="$FRAGS" AGENTS_MODULES="$MODS" bash "$BIN" "$@"; }
@@ -425,6 +431,69 @@ ag off docs-bundle > /dev/null
 chk "applied: a held dir counts as 0" "0/1" "$(ag apply | sed 's/.*, \([0-9]*\/[0-9]*\) dir contexts.*/\1/')"
 chk "manifest is untouched by all this gating" "dir proj on $SB/proj" "$(grep '^dir proj ' "$SB/.config/agents/manifest.conf")"
 chk "modules are idempotent across ensure" "" "$(cp "$SB/.config/agents/manifest.conf" "$SB/m3"; ag status > /dev/null; diff "$SB/m3" "$SB/.config/agents/manifest.conf")"
+
+echo
+echo "== 16. account copies are real files that never alias the master"
+fresh; ag status > /dev/null
+ag on global > /dev/null
+src="$SB/code/nixos-config/main/dotfiles/agents/AGENTS.md"
+# The live incident, exactly: an old account entry was a symlink resolving back
+# to the master, so `> acct` truncated the master before `cat` could read it.
+rm -f "$ACCT/CLAUDE.md"; ln -s "$SB/.config/agents/CLAUDE.md" "$ACCT/CLAUDE.md"
+ag apply > /dev/null
+chk "the master survives an aliasing account entry" "" "$(diff "$src" "$SB/.config/agents/CLAUDE.md")"
+chk "the aliasing link is replaced, not followed" "0" "$(test -L "$ACCT/CLAUDE.md" && echo 1 || echo 0)"
+chk "and the account copy is a real file with the content" "" "$(diff "$src" "$ACCT/CLAUDE.md")"
+chk "the codex surface is intact too" "" "$(diff "$src" "$SB/.config/agents/AGENTS.md")"
+# heal, don't skip: the loop globs account DIRECTORIES now
+rm -f "$ACCT/CLAUDE.md"
+ag apply > /dev/null
+chk "a deleted account copy heals on the next apply" "1" "$(test -f "$ACCT/CLAUDE.md" && echo 1 || echo 0)"
+chk "and heals with the content, not an empty file" "" "$(diff "$src" "$ACCT/CLAUDE.md")"
+mkdir -p "$SB/.local/state/north/accounts/anthropic/acct-two"
+ag apply > /dev/null
+chk "a never-seeded account is written for the first time" "1" "$(test -f "$SB/.local/state/north/accounts/anthropic/acct-two/CLAUDE.md" && echo 1 || echo 0)"
+chk "and it carries the profile" "" "$(diff "$src" "$SB/.local/state/north/accounts/anthropic/acct-two/CLAUDE.md")"
+ag off global > /dev/null
+chk "off still empties every account copy" "0" "$(stat -c %s "$ACCT/CLAUDE.md")"
+
+echo
+echo "== 17. a module's instructions ride on the global surfaces while it is active"
+fresh; mods
+echo "AAA-CONTEXT" > "$SB/a-ins.md"
+echo "ZZZ-CONTEXT" > "$SB/z-ins.md"
+mod_ins a-mod "$SB/a-ins.md" repo-safety
+mod_ins z-mod "$SB/z-ins.md"
+ag status > /dev/null
+ag on global > /dev/null
+src="$SB/code/nixos-config/main/dotfiles/agents/AGENTS.md"
+chk "an inactive module appends nothing" "" "$(diff "$src" "$SB/.config/agents/CLAUDE.md")"
+ag on a-mod > /dev/null
+chk "an active module appends its file" "1" "$(grep -c '^AAA-CONTEXT$' "$SB/.config/agents/CLAUDE.md")"
+chk "behind a marker naming it" "<!-- module: a-mod -->" "$(markers)"
+chk "the profile is still first, whole" "$(head -1 "$src")" "$(head -1 "$SB/.config/agents/CLAUDE.md")"
+chk "the codex surface carries the composed result" "" "$(diff "$SB/.config/agents/CLAUDE.md" "$SB/.config/agents/AGENTS.md")"
+chk "so does the account copy" "" "$(diff "$SB/.config/agents/CLAUDE.md" "$ACCT/CLAUDE.md")"
+ag on z-mod > /dev/null
+chk "two modules append in modules.d filename order" "<!-- module: a-mod --> <!-- module: z-mod -->" "$(markers)"
+chk "both contents are there" "2" "$(grep -c '^AAA-CONTEXT$\|^ZZZ-CONTEXT$' "$SB/.config/agents/CLAUDE.md")"
+ag off a-mod > /dev/null
+chk "turning one off leaves no trace of it" "<!-- module: z-mod -->" "$(markers)"
+chk "and drops its content" "0" "$(grep -c '^AAA-CONTEXT$' "$SB/.config/agents/CLAUDE.md" || true)"
+# a module held by a bundle is inactive, so its instructions do not ride either
+mod holding-bundle z-mod
+ag apply > /dev/null
+chk "a module held by a bundle appends nothing" "" "$(markers)"
+ag on holding-bundle > /dev/null
+chk "released, it appends again" "<!-- module: z-mod -->" "$(markers)"
+# per-item degradation: a missing instructions file must not cost the rest
+rm "$SB/z-ins.md"
+ag on a-mod 2>"$SB/errm" >/dev/null
+if grep -q 'module z-mod is active but .* is missing' "$SB/errm"; then ok "a missing instructions file warns"; else bad "missing instructions warns" "$(cat "$SB/errm")"; fi
+chk "the module that still has its file composes" "<!-- module: a-mod -->" "$(markers)"
+chk "and the profile survives the gap" "$(head -1 "$src")" "$(head -1 "$SB/.config/agents/CLAUDE.md")"
+chk "apply still reports" "1" "$(ag apply 2>/dev/null | grep -c '^applied:')"
+chk "instructions never touch the manifest" "module a-mod on" "$(grep '^module a-mod ' "$SB/.config/agents/manifest.conf")"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "ALL PASS"; else echo "$fails FAILURES"; fi
