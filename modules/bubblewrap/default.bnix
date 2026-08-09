@@ -1,0 +1,11 @@
+#lang beagle/nix
+
+(ns default)
+
+(nix/module [config lib pkgs ...]
+  {:tags [cli-tools]
+   :options.myConfig.modules.bubblewrap.enable
+    (lib.mkEnableOption "Enable bubblewrap sandbox (north readonly-shell requires bwrap)")
+   :config
+    (lib.mkIf config.myConfig.modules.bubblewrap.enable
+      {:environment.systemPackages (nix/with pkgs [bubblewrap])})})
