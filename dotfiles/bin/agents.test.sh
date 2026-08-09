@@ -313,7 +313,7 @@ echo
 echo "== 10. status section order"
 fresh; ag status > /dev/null
 # Dependency order: a hook's parenthetical can only name a row already read.
-chk "order" "directory instructions skills hooks modules plugins other" "$(ag status | grep -v '^ ' | tr '\n' ' ' | sed 's/ $//')"
+chk "order" "directory instructions modules skills hooks plugins other" "$(ag status | grep -v '^ ' | tr '\n' ' ' | sed 's/ $//')"
 chk "global heads the directory section, scope ~" "global off ~" "$(ag status | sed -n 2p | tr -s ' ' | sed 's/^ //')"
 
 echo

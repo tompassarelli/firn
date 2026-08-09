@@ -582,6 +582,7 @@ ensure_manifest() {
     # A newly registered directory is inert until it is turned on: registering
     # is "a context file exists here", not "inject it".
     for i in "${!DIRS[@]}"; do echo "dir ${DIRS[$i]} off ${DIR_PATHS[$i]}"; done
+    for m in "${MODULES[@]}"; do echo "module $m off"; done
     for s in "${SKILLS[@]}"; do echo "skill $s off"; done
     # A new hook seeds by its binding, not by a blanket off: bound means it
     # follows a unit that is off until asked for, unbound means nothing would
@@ -590,11 +591,10 @@ ensure_manifest() {
       if [ -n "${HOOK_FOLLOWS[$h]:-}" ]; then echo "hook $h enabled ${HOOK_FOLLOWS[$h]}"
       else echo "hook $h disabled"; fi
     done
-    for m in "${MODULES[@]}"; do echo "module $m off"; done
-    for o in "${OTHERS[@]}"; do echo "other $o off"; done
     for p in "${PLUGINS[@]}"; do
       case "$enabled" in *" $p "*) echo "plugin $p on" ;; *) echo "plugin $p off" ;; esac
     done
+    for o in "${OTHERS[@]}"; do echo "other $o off"; done
   # `rest` is state plus, for a `dir` row, the directory column after it.
   } | while read -r kind name rest; do
     [ -n "${have["$kind $name"]:-}" ] || echo "$kind $name $rest" >> "$MANIFEST"
@@ -614,9 +614,10 @@ set_state() { # kind name state
 status() {
   ensure_manifest
   load_activity
-  # Read in dependency order, not importance order: the units a hook can follow
-  # come before the hooks, so a "(x off)" parenthetical always names a row the
-  # eye has already passed. `other` is last because it is the drawer.
+  # Read in dependency order, not importance order: a container reads before
+  # what it holds, so every "(x off)" parenthetical names a row the eye has
+  # already passed. Modules gate everything below them, so they come first
+  # after the directory scopes; `other` is last because it is the drawer.
   # A `dir` row's file scopes to a SUBTREE — it fires for that directory and
   # everything under it — and the global profile is the root-of-tree case,
   # scope `~`, which is why it sorts first rather than living in a drawer.
@@ -627,6 +628,9 @@ status() {
   for i in "${!DIRS[@]}"; do
     printf '  %-20s %-24s %s\n' "${DIRS[$i]}" "$(unit_line "${DIRS[$i]}")" "${DIR_PATHS[$i]}"
   done
+  echo "modules"
+  local m o p
+  for m in "${MODULES[@]}"; do printf '  %-20s %s\n' "$m" "$(unit_line "$m")"; done
   echo "skills"
   for s in "${SKILLS[@]}"; do printf '  %-20s %s\n' "$s" "$(unit_line "$s")"; done
   # Each hook says both axes: the permission the user set, then whether that
@@ -647,9 +651,6 @@ status() {
     elif [ -n "${ACT_FOLLOWS[$name]}" ]; then line="$line (${ACT_FOLLOWS[$name]})"; fi
     printf '  %-22s %-28s %s\n' "$name" "$line" "${ACT_TAGS[$name]}"
   done
-  echo "modules"
-  local m o p
-  for m in "${MODULES[@]}"; do printf '  %-20s %s\n' "$m" "$(unit_line "$m")"; done
   echo "plugins"
   for p in "${PLUGINS[@]}"; do printf '  %-40s %s\n' "$p" "$(unit_line "$p")"; done
   echo "other"
