@@ -269,17 +269,28 @@ apply() {
   # load), and the codex target that ~/.codex/AGENTS.md resolves to.
   # The World-1 slim profile is the source; north's profiles/tom/AGENTS.md is
   # the World-2 constitution and is loaded by lab sessions, not by this slot.
+  # Every item below degrades on its own: a missing or unreadable source warns
+  # and writes empty, and apply keeps going. A source that vanished must not
+  # abort the run half-applied — the surfaces written after the failure would
+  # keep whatever the previous apply left there, which is a state no manifest
+  # describes.
   local agents_target="$STATE/CLAUDE.md"
   local codex_target="$STATE/AGENTS.md"
-  if [ "$(state_of item agents-md)" = on ]; then
-    cat "$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md" > "$agents_target"
+  local agents_src="$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md"
+  if [ "$(state_of item agents-md)" = on ] && [ -f "$agents_src" ]; then
+    cat "$agents_src" > "$agents_target"
   else
+    if [ "$(state_of item agents-md)" = on ]; then
+      echo "agents: agents-md is on but $agents_src is missing — wrote empty" >&2
+    fi
     : > "$agents_target"
   fi
-  cat "$agents_target" > "$codex_target"
+  cat "$agents_target" > "$codex_target" ||
+    echo "agents: could not write $codex_target" >&2
   local acct
   for acct in "$HOME"/.local/state/north/accounts/*/*/CLAUDE.md; do
-    [ -e "$acct" ] && cat "$agents_target" > "$acct"
+    [ -e "$acct" ] || continue
+    cat "$agents_target" > "$acct" || echo "agents: could not write $acct" >&2
   done
   # directory contexts — one slot per registered directory, both provider
   # surfaces: <dir>/CLAUDE.md and <dir>/AGENTS.md resolve to the pair written
@@ -289,14 +300,16 @@ apply() {
     slug="${DIRS[$i]}"; ddir="${DIR_PATHS[$i]}"
     base="$(dir_target_base "$slug")"; dsrc="$(dir_source "$slug")"
     if [ "$(state_of dir "$slug")" = on ] && [ -f "$dsrc" ]; then
-      cat "$dsrc" > "$base-CLAUDE.md"
+      cat "$dsrc" > "$base-CLAUDE.md" ||
+        { echo "agents: could not write $base-CLAUDE.md" >&2; continue; }
     else
       if [ "$(state_of dir "$slug")" = on ]; then
         echo "agents: $slug is on but $dsrc is missing — wrote empty" >&2
       fi
       : > "$base-CLAUDE.md"
     fi
-    cat "$base-CLAUDE.md" > "$base-AGENTS.md"
+    cat "$base-CLAUDE.md" > "$base-AGENTS.md" ||
+      echo "agents: could not write $base-AGENTS.md" >&2
     link_dir_context "$ddir" "$base"
   done
   # skills — a farm of symlinks; only `on` skills exist
@@ -305,7 +318,8 @@ apply() {
   for s in "${SKILLS[@]}"; do
     if [ "$(state_of skill "$s")" = on ]; then
       src="$(skill_source "$s")"
-      [ -d "$src" ] && ln -sfn "$src" "$STATE/skills/$s"
+      if [ -d "$src" ]; then ln -sfn "$src" "$STATE/skills/$s"
+      else echo "agents: skill $s is on but $src is missing — not linked" >&2; fi
     fi
   done
   # orchestration — one switch, two surfaces: the doctrine skill (skills farm,
@@ -340,15 +354,28 @@ apply() {
   for p in "${PLUGINS[@]}"; do
     [ "$(state_of plugin "$p")" = on ] && on_plugins+=("$p")
   done
-  STATUSLINE_STATE="$(state_of item statusline-script)" \
+  if ! STATUSLINE_STATE="$(state_of item statusline-script)" \
   ON_PLUGINS="$(printf '%s\n' ${on_plugins[@]+"${on_plugins[@]}"})" \
-  python3 - "$SETTINGS" "$FRAGMENTS" "${on_hooks[@]}" <<'PY'
+  python3 - "$SETTINGS" "$FRAGMENTS" ${on_hooks[@]+"${on_hooks[@]}"} <<'PY'
 import json, os, sys
 settings_path, fragments_dir, *names = sys.argv[1:]
-settings = json.load(open(settings_path))
+try:
+    settings = json.load(open(settings_path))
+except FileNotFoundError:
+    settings = {}
+except Exception as exc:
+    # A settings.json we cannot parse is somebody's live config in a state we
+    # do not understand. Rewriting it from {} would drop every key this
+    # switchboard does not own, so this item degrades to "did nothing".
+    sys.exit(f"agents: {settings_path} is unreadable ({exc}) — hooks/plugins/"
+             "statusline left as they are")
 hooks = {}
 for name in names:
-    frag = json.load(open(os.path.join(fragments_dir, f"{name}.json")))
+    try:
+        frag = json.load(open(os.path.join(fragments_dir, f"{name}.json")))
+    except Exception as exc:
+        print(f"agents: hook {name}: {exc} — not composed", file=sys.stderr)
+        continue
     for entry in frag["entries"]:
         matchers = hooks.setdefault(entry["event"], [])
         for m in matchers:
@@ -369,6 +396,9 @@ tmp = settings_path + ".next"
 json.dump(settings, open(tmp, "w"), indent=2)
 os.replace(tmp, settings_path)
 PY
+  then
+    echo "agents: hooks, plugins, and statusline are as $SETTINGS already had them" >&2
+  fi
   local on_dirs=0
   for i in "${!DIRS[@]}"; do
     [ "$(state_of dir "${DIRS[$i]}")" = on ] && on_dirs=$((on_dirs + 1))
