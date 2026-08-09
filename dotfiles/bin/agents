@@ -18,7 +18,7 @@ DIR_TARGETS="$STATE/dir"
 HOOKS=(agent-spawn-guard beagle-session-start comment-bloat-guard firn-guard
   git-blind-stage-guard hook-detach logcompress north-session-lifecycle
   tripwire-guard worktree-guard)
-SKILLS=(webdev beagle-authoring fram-modeling code-as-facts firn)
+SKILLS=(webdev beagle-authoring fram-modeling code-as-facts firn repo-safety)
 SINGLETONS=(agents-md statusline-script orchestration)
 
 # Plugins are not a hand-written list: the install ledger is the inventory, so
@@ -66,6 +66,116 @@ load_dirs() { # the registry is the inventory, same shape as the plugin ledger
 }
 
 dir_source() { echo "$CONTEXT_SOURCES/$1.md"; }
+
+# A hook may name ONE companion skill in its fragment (`"skill": "<name>"`,
+# same metadata level as tags/requires). Hooks are enforcement; skills are the
+# notice that makes enforcement comprehensible, so a supporting hook follows
+# its skill instead of being flipped by hand. A hook with no companion is
+# infrastructure and answers only to a direct flip.
+declare -A HOOK_SKILL=()
+HOOK_SKILLS_LOADED=
+
+load_hook_skills() {
+  if [ -n "$HOOK_SKILLS_LOADED" ]; then return 0; fi
+  HOOK_SKILLS_LOADED=1
+  local h s
+  while IFS=$'\t' read -r h s; do
+    [ -n "${h:-}" ] && HOOK_SKILL["$h"]="$s"
+  done < <(python3 - "$FRAGMENTS" <<'PY'
+import glob, json, os, sys
+for p in sorted(glob.glob(os.path.join(sys.argv[1], "*.json"))):
+    try:
+        skill = (json.load(open(p)).get("skill") or "").strip()
+    except Exception as exc:
+        print(f"agents: {p}: unreadable ({exc})", file=sys.stderr)
+        continue
+    if skill:
+        print(f"{os.path.basename(p)[:-5]}\t{skill}")
+PY
+  )
+}
+
+hook_activity() { # name|permission|skill|active|reason|tags, one per hook
+  # `|` and not a tab: read splits on runs of IFS WHITESPACE, so a hook with no
+  # companion (empty field) would shift every field after it left.
+  # ONE derivation, read by both status and apply, because a hook's activity is
+  # computed and never stored: permission (enabled/disabled) is the user's axis
+  # and lives in the manifest; activity is permission AND, for a bound hook,
+  # its companion skill being on. Nothing to keep in sync, so the manifest
+  # cannot disagree with itself.
+  python3 - "$FRAGMENTS" "$MANIFEST" <<'PY'
+import glob, json, os, sys
+frag_dir, manifest = sys.argv[1:]
+frags = {}
+for p in sorted(glob.glob(os.path.join(frag_dir, "*.json"))):
+    try:
+        frags[os.path.basename(p)[:-5]] = json.load(open(p))
+    except Exception as exc:
+        print(f"agents: {p}: unreadable ({exc}) — hook skipped", file=sys.stderr)
+perm, skills = {}, {}
+for line in open(manifest):
+    parts = line.split()
+    if len(parts) >= 3 and parts[0] == "hook":
+        perm[parts[1]] = parts[2]
+    elif len(parts) >= 3 and parts[0] == "skill":
+        skills[parts[1]] = parts[2]
+companion = {n: (d.get("skill") or "").strip() for n, d in frags.items()}
+enabled = {n for n in frags if perm.get(n) == "enabled"}
+requires = {n: [r for r in frags[n].get("requires", [])] for n in frags}
+
+# A chain is composed whole or not at all: a hook whose requirement the user
+# disabled cannot do its job, so it drops out loudly rather than running half
+# armed. Blockage is transitive — a dependent of a dropped hook is dropped too.
+blocked, why = {}, {}
+changed = True
+while changed:
+    changed = False
+    for n in frags:
+        if n in blocked:
+            continue
+        for r in requires[n]:
+            if r not in enabled or r in blocked:
+                blocked[n] = True
+                why[n] = r
+                changed = True
+                break
+
+def eligible(n):
+    s = companion[n]
+    return n in enabled and n not in blocked and (not s or skills.get(s) == "on")
+
+# Requirements ride in on their dependent: an enabled requirement is composed
+# because something active needs it, even when its own companion skill is off.
+composed, pulled_by = {n for n in frags if eligible(n)}, {}
+changed = True
+while changed:
+    changed = False
+    for n in list(composed):
+        for r in requires[n]:
+            if r not in composed:
+                composed.add(r)
+                pulled_by[r] = n
+                changed = True
+
+for n in sorted(frags):
+    p = perm.get(n, "disabled")
+    s = companion[n]
+    if n in composed:
+        reason = f"required by {pulled_by[n]}" if n in pulled_by and not eligible(n) else ""
+    elif p != "enabled":
+        reason = ""
+    elif n in blocked:
+        reason = f"needs {why[n]}, disabled"
+        print(f"agents: {n} is enabled but requires {why[n]}, which is disabled"
+              " — not composed", file=sys.stderr)
+    elif s:
+        reason = f"{s} off"
+    else:
+        reason = ""
+    tags = " ".join(":" + t for t in frags[n].get("tags", []))
+    print("|".join([n, p, s, "1" if n in composed else "0", reason, tags]))
+PY
+}
 
 dir_target_base() { # the <base>-CLAUDE.md / <base>-AGENTS.md stem a slug writes
   case "$1" in
@@ -125,6 +235,7 @@ skill_source() {
     fram-modeling)   echo "$HOME/code/fram/main/integrations/north/skills/fram-modeling" ;;
     code-as-facts)   echo "$HOME/code/fram/main/integrations/north/skills/code-as-facts" ;;
     firn)            echo "$HOME/code/nixos-config/main/modules/north-profile/firn/skills/firn" ;;
+    repo-safety)     echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/repo-safety" ;;
   esac
 }
 
@@ -176,16 +287,57 @@ sync_dir_paths() { # the 4th column: where the row's context file is triggered
   done
 }
 
+sync_hook_skills() { # the 4th column: the companion skill this hook follows
+  # Same contract as sync_dir_paths, and for the same reason: the manifest is
+  # read directly by Northbridge, which renders anything past the state as the
+  # row's detail. The fragment stays the truth — a row written before the
+  # column existed is backfilled, a re-pointed or removed binding is corrected
+  # here rather than drifting until someone flips the hook.
+  local h want tmp="$MANIFEST.tmp.$$"
+  for h in "${HOOKS[@]}"; do
+    want="${HOOK_SKILL[$h]:-}"
+    awk -v n="$h" -v s="$want" \
+      '$1=="hook" && $2==n && $4!=s {f=1} END {exit !f}' "$MANIFEST" || continue
+    awk -v n="$h" -v s="$want" '
+      $1=="hook" && $2==n {
+        if (s == "") print $1, $2, $3; else print $1, $2, $3, s
+        next
+      }
+      {print}' "$MANIFEST" > "$tmp"
+    mv "$tmp" "$MANIFEST"
+  done
+}
+
+migrate_hook_permissions() { # a hook's state column stopped meaning activity
+  # It now means permission: `enabled` (may run when its companion says so) or
+  # `disabled` (the user's pin). A pre-column `off` row must NOT become an
+  # active hook: a bound hook migrates to enabled, which is still inactive
+  # while its skill is off, and an unbound hook — nothing left to gate it —
+  # migrates to disabled, so a machine mid-blackout stays composing nothing.
+  awk '$1=="hook" && $3!="enabled" && $3!="disabled" {f=1} END {exit !f}' "$MANIFEST" || return 0
+  local tmp="$MANIFEST.tmp.$$"
+  awk -v bound=" ${!HOOK_SKILL[*]} " '
+    $1=="hook" && $3!="enabled" && $3!="disabled" {
+      if ($3 == "on") $3 = "enabled"
+      else $3 = (index(bound, " " $2 " ") ? "enabled" : "disabled")
+    }
+    {print}' "$MANIFEST" > "$tmp"
+  mv "$tmp" "$MANIFEST"
+}
+
 ensure_manifest() {
   mkdir -p "$STATE" "$STATE/skills" "$DIR_TARGETS"
   [ -f "$MANIFEST" ] || : > "$MANIFEST"
   load_plugins
   load_dirs
+  load_hook_skills
   # Rename migrations run before the merge below, or the merge re-seeds the new
   # name at `off` and the old row's state is lost.
   migrate_row item code-md dir code
   migrate_row item statusline item statusline-script
   sync_dir_paths
+  sync_hook_skills
+  migrate_hook_permissions
   # Merge, don't just seed: an entry added to the arrays after the manifest
   # exists must still appear (off) or it is invisible to status/flip forever.
   # Plugins seed from reality instead of off: settings.json already enables
@@ -199,7 +351,13 @@ ensure_manifest() {
     [ -n "${k:-}" ] && have["$k $n"]=1
   done < "$MANIFEST"
   { for s in "${SINGLETONS[@]}"; do echo "item $s off"; done
-    for h in "${HOOKS[@]}"; do echo "hook $h off"; done
+    # A new hook seeds by its binding, not by a blanket off: bound means it
+    # follows a skill that is off until asked for, unbound means nothing would
+    # gate it, so it stays the user's explicit call.
+    for h in "${HOOKS[@]}"; do
+      if [ -n "${HOOK_SKILL[$h]:-}" ]; then echo "hook $h enabled ${HOOK_SKILL[$h]}"
+      else echo "hook $h disabled"; fi
+    done
     for s in "${SKILLS[@]}"; do echo "skill $s off"; done
     # A newly registered directory is inert until it is turned on: registering
     # is "a context file exists here", not "inject it".
@@ -236,26 +394,26 @@ status() {
   for i in "${!DIRS[@]}"; do
     printf '  %-20s %-4s %s\n' "${DIRS[$i]}" "$(state_of dir "${DIRS[$i]}")" "${DIR_PATHS[$i]}"
   done
-  echo "hooks"
-  # One interpreter for all rows; a python3 start per hook made status crawl.
-  python3 - "$FRAGMENTS" "$MANIFEST" <<'PY'
-import json, os, sys
-fragments_dir, manifest = sys.argv[1:]
-states = {}
-for line in open(manifest):
-    parts = line.split()
-    if len(parts) == 3 and parts[0] == "hook":
-        states[parts[1]] = parts[2]
-for name in sorted(states):
-    try:
-        frag = json.load(open(os.path.join(fragments_dir, f"{name}.json")))
-        tags = " ".join(":" + t for t in frag.get("tags", []))
-    except Exception:
-        tags = ""
-    print(f"  {name:<22} {states[name]:<4} {tags}")
-PY
   echo "skills"
   for s in "${SKILLS[@]}"; do printf '  %-20s %s\n' "$s" "$(state_of skill "$s")"; done
+  # Hooks read after the skills they follow, and each says both axes: the
+  # permission the user set, then whether that adds up to running right now and
+  # why not. A hook that is enabled but silent is the case worth explaining.
+  echo "hooks"
+  local name perm skill active reason tags line
+  while IFS='|' read -r name perm skill active reason tags; do
+    [ -n "${name:-}" ] || continue
+    if [ "$perm" = enabled ]; then
+      line="enabled · $([ "$active" = 1 ] && echo on || echo off)"
+    else
+      line="disabled"
+    fi
+    # The parenthetical is provenance: which skill this hook follows, or, when
+    # that is not the whole story, why it is not running.
+    if [ -n "$reason" ]; then line="$line ($reason)"
+    elif [ -n "$skill" ]; then line="$line ($skill)"; fi
+    printf '  %-22s %-28s %s\n' "$name" "$line" "$tags"
+  done < <(hook_activity)
   echo "plugins"
   local p
   for p in "${PLUGINS[@]}"; do printf '  %-40s %s\n' "$p" "$(state_of plugin "$p")"; done
@@ -346,13 +504,15 @@ apply() {
     fi
   fi
   # hooks + statusline + plugins — rewrite exactly those keys in live settings.json
-  local on_hooks=()
-  for s in "${HOOKS[@]}"; do
-    [ "$(state_of hook "$s")" = on ] && on_hooks+=("$s")
-  done
+  # The composed set is derived, never read off the manifest: a hook runs when
+  # the user has it enabled AND its companion skill (if any) is on.
+  local on_hooks=() hname hactive
+  while IFS='|' read -r hname _ _ hactive _; do
+    if [ -n "${hname:-}" ] && [ "$hactive" = 1 ]; then on_hooks+=("$hname"); fi
+  done < <(hook_activity)
   local on_plugins=() p
   for p in "${PLUGINS[@]}"; do
-    [ "$(state_of plugin "$p")" = on ] && on_plugins+=("$p")
+    if [ "$(state_of plugin "$p")" = on ]; then on_plugins+=("$p"); fi
   done
   if ! STATUSLINE_STATE="$(state_of item statusline-script)" \
   ON_PLUGINS="$(printf '%s\n' ${on_plugins[@]+"${on_plugins[@]}"})" \
@@ -411,7 +571,14 @@ flip() { # on|off [--all | kind? name]
   ensure_manifest
   if [ "${1:-}" = "--all" ]; then
     local tmp="$MANIFEST.tmp.$$"
-    awk -v s="$target_state" '{$3=s; print}' "$MANIFEST" > "$tmp"; mv "$tmp" "$MANIFEST"
+    # Hooks speak permission, everything else speaks activity, so one sweep
+    # writes two vocabularies: `on --all` grants every hook and turns every
+    # skill on (so bound hooks go live too), `off --all` revokes every hook
+    # outright rather than leaving one armed behind a skill.
+    awk -v s="$target_state" '
+      $1=="hook" {$3 = (s=="on" ? "enabled" : "disabled"); print; next}
+      {$3=s; print}' "$MANIFEST" > "$tmp"
+    mv "$tmp" "$MANIFEST"
   else
     local name="${1:?agents: name required}"
     case " ${SKILLS[*]} " in *" $name "*)
@@ -426,14 +593,22 @@ flip() { # on|off [--all | kind? name]
     case " ${PLUGINS[*]} " in *" $name "*)
       set_state plugin "$name" "$target_state"; apply; return ;;
     esac
-    # Hook or :tag — resolve requires-closure: `on` pulls requirements in,
-    # `off` cascades out through dependents.
-    local resolved h
+    # Hook or :tag — a direct flip writes PERMISSION, the sticky axis: `off`
+    # is a pin no skill can undo, `on` grants the hook and everything it
+    # requires (asking for a hook is asking for what it needs to work). There
+    # is no off-cascade to write: a dependent of a revoked hook simply stops
+    # composing, and status says so.
+    local resolved h perm
+    perm="$([ "$target_state" = on ] && echo enabled || echo disabled)"
     resolved="$(python3 - "$FRAGMENTS" "$target_state" "$name" <<'PY'
 import json, os, sys, glob
 frag_dir, op, sel = sys.argv[1:]
-frags = {os.path.basename(p)[:-5]: json.load(open(p))
-         for p in glob.glob(os.path.join(frag_dir, "*.json"))}
+frags = {}
+for p in glob.glob(os.path.join(frag_dir, "*.json")):
+    try:
+        frags[os.path.basename(p)[:-5]] = json.load(open(p))
+    except Exception as exc:
+        print(f"agents: {p}: unreadable ({exc}) — skipped", file=sys.stderr)
 if sel.startswith(":"):
     seeds = {n for n, d in frags.items() if sel[1:] in d.get("tags", [])}
     if not seeds: sys.exit(f"agents: no hooks tagged {sel}")
@@ -449,13 +624,10 @@ while changed:
         if op == "on" and n in result:
             for req in d.get("requires", []):
                 if req not in result: result.add(req); changed = True
-        if op == "off" and n not in result:
-            if any(r in result for r in d.get("requires", [])):
-                result.add(n); changed = True
 print("\n".join(sorted(result)))
 PY
 )" || { echo "$resolved" >&2; exit 2; }
-    for h in $resolved; do set_state hook "$h" "$target_state"; done
+    for h in $resolved; do set_state hook "$h" "$perm"; done
   fi
   apply
 }

@@ -14,5 +14,6 @@
   "guards",
   "git-safety"
  ],
+ "skill": "repo-safety",
  "requires": []
 }
