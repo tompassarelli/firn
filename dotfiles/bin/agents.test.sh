@@ -501,10 +501,13 @@ fresh; ag status > /dev/null
 CX="$SB/.codex/skills"
 # The shape found live: Codex's vendor-managed built-ins, a hand-written skill
 # directory, and a symlink that is somebody else's.
-mkdir -p "$CX/.system" "$CX/hand-written" "$SB/elsewhere"
-: > "$CX/.system/.codex-system-skills.marker"
-: > "$CX/hand-written/SKILL.md"
-ln -s "$SB/elsewhere" "$CX/foreign-link"
+seed_codex_neighbours() {
+  mkdir -p "$CX/.system" "$CX/hand-written" "$SB/elsewhere"
+  : > "$CX/.system/.codex-system-skills.marker"
+  : > "$CX/hand-written/SKILL.md"
+  ln -sfn "$SB/elsewhere" "$CX/foreign-link"
+}
+seed_codex_neighbours
 survivors() { printf '%s %s %s' \
   "$(test -f "$CX/.system/.codex-system-skills.marker" && echo system || echo GONE)" \
   "$(test -f "$CX/hand-written/SKILL.md" && echo handwritten || echo GONE)" \
@@ -534,6 +537,22 @@ chk "a held skill is in neither surface" "0" "$(test -L "$CX/repo-safety" && ech
 chk "nor in the farm" "" "$(skilllinks)"
 ag on hold-bundle > /dev/null
 chk "released, it returns to both" "1" "$(test -L "$CX/repo-safety" && test -L "$SB/.config/agents/skills/repo-safety" && echo 1 || echo 0)"
+# orchestration's doctrine arrives as a skill, so it is governed like one
+seed_codex_neighbours   # the create-when-absent case above wiped the fixture
+ORCHSK="$SB/code/north/main/orchestration/skill"
+mkdir -p "$ORCHSK"; : > "$ORCHSK/SKILL.md"
+ag on orchestration > /dev/null
+chk "the doctrine skill reaches the claude farm" "1" "$(test -L "$SB/.config/agents/skills/orchestration" && echo 1 || echo 0)"
+chk "and the codex surface, same source" "$ORCHSK" "$(readlink "$CX/orchestration")"
+ag off orchestration > /dev/null
+chk "off clears the doctrine skill from the farm" "0" "$(test -L "$SB/.config/agents/skills/orchestration" && echo 1 || echo 0)"
+chk "and from the codex surface" "0" "$(test -L "$CX/orchestration" && echo 1 || echo 0)"
+chk "Codex's own survived the module flips" "system handwritten foreign" "$(survivors)"
+# a squatter under the orchestration name is not ours, so the sweep spares it
+ln -sfn "$SB/elsewhere" "$CX/orchestration"
+ag on repo-safety > /dev/null; ag off repo-safety > /dev/null
+chk "a foreign link under the orchestration name survives a sweep" "$SB/elsewhere" "$(readlink "$CX/orchestration")"
+rm -f "$CX/orchestration"
 # a real file at that path degrades to a warning, like every other apply item
 fresh; ag status > /dev/null
 mkdir -p "$SB/.codex"; : > "$SB/.codex/skills"

@@ -436,9 +436,19 @@ link_dir_context() { # dir base — the two provider links AT the directory itse
   done
 }
 
+governed_source() { # where this switchboard would point a link of this name
+  # The skills farm holds more than the SKILLS array: orchestration's doctrine
+  # arrives as a skill too. One answer to "is this ours", so the sweep and the
+  # write can never disagree about a name.
+  case "$1" in
+    orchestration) echo "$ORCH/skill" ;;
+    *)             skill_source "$1" ;;
+  esac
+}
+
 sweep_codex_skills() { # remove ONLY the links this switchboard writes
-  # Ownership is proven, not assumed: a link counts as ours when its name is a
-  # skill we know and it points exactly where we would have pointed it. Nothing
+  # Ownership is proven, not assumed: a link counts as ours when its name is one
+  # we govern and it points exactly where we would have pointed it. Nothing
   # else is touched — not `.system` (Codex's own, and a real directory anyway),
   # not a hand-written skill directory, not a symlink somebody else placed.
   # A blanket sweep here would delete a user's work on the first `agents off`.
@@ -446,7 +456,7 @@ sweep_codex_skills() { # remove ONLY the links this switchboard writes
   [ -d "$CODEX_SKILLS" ] || return 0
   for link in "$CODEX_SKILLS"/*; do
     [ -L "$link" ] || continue
-    src="$(skill_source "$(basename "$link")")"
+    src="$(governed_source "$(basename "$link")")"
     [ -n "$src" ] || continue
     tgt="$(readlink "$link")"
     if [ "$tgt" = "$src" ]; then rm -f "$link"; fi
@@ -832,7 +842,10 @@ apply() {
     done
   fi
   if is_active orchestration; then
-    [ -d "$ORCH/skill" ] && ln -sfn "$ORCH/skill" "$STATE/skills/orchestration"
+    if [ -d "$ORCH/skill" ]; then
+      ln -sfn "$ORCH/skill" "$STATE/skills/orchestration"
+      link_codex_skill orchestration "$ORCH/skill"
+    fi
     if [ -d "$ORCH/agents" ]; then
       mkdir -p "$CLAUDE_AGENTS"
       for tpl in "$ORCH"/agents/*.md; do
