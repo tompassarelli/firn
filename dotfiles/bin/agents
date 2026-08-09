@@ -25,7 +25,7 @@ skill_source() {
 
 path_of() { # the canonical source file to view or edit for an item
   case "$1" in
-    agents-md)  echo "$HOME/code/north/main/agent-profile/AGENTS.md" ;;
+    agents-md)  echo "$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md" ;;
     code-md)    echo "$HOME/code/nixos-config/main/dotfiles/code/CLAUDE.md" ;;
     statusline) echo "$HOME/code/nixos-config/main/dotfiles/claude/statusline.sh" ;;
     *)
@@ -85,9 +85,11 @@ apply() {
   # AGENTS.md — global constitution: empty when off. Written to the claude
   # config target and every account-scoped copy (the launcher redirects
   # CLAUDE_CONFIG_DIR, so account copies are what sessions actually load).
+  # The World-1 slim profile is the source; north's profiles/tom/AGENTS.md is
+  # the World-2 constitution and is loaded by lab sessions, not by this slot.
   local agents_target="$STATE/CLAUDE.md"
   if [ "$(state_of item agents-md)" = on ]; then
-    cat "$HOME/code/north/main/agent-profile/AGENTS.md" > "$agents_target"
+    cat "$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md" > "$agents_target"
   else
     : > "$agents_target"
   fi
