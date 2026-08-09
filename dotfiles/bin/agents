@@ -9,6 +9,13 @@ SETTINGS="$HOME/.claude/settings.json"
 PLUGINS_JSON="$HOME/.claude/plugins/installed_plugins.json"
 ORCH="$HOME/code/north/main/orchestration"
 CLAUDE_AGENTS="$HOME/.claude/agents"
+# Codex reads skills from its own directory, so a skill governed only in the
+# claude farm is a skill Codex loads on rules nobody set. This directory is NOT
+# ours the way the farm is: Codex ships `.system/` here (its vendor-managed
+# built-ins, marked with .codex-system-skills.marker) and a user may keep real
+# skill directories alongside. Everything below treats it as someone else's
+# space that we place links into.
+CODEX_SKILLS="$HOME/.codex/skills"
 # Which directories have a context file is user data, so the inventory lives in
 # north-data; this switchboard only decides whether each one has content.
 CONTEXT_REGISTRY="$HOME/code/north-data/context-dirs.conf"
@@ -429,6 +436,37 @@ link_dir_context() { # dir base — the two provider links AT the directory itse
   done
 }
 
+sweep_codex_skills() { # remove ONLY the links this switchboard writes
+  # Ownership is proven, not assumed: a link counts as ours when its name is a
+  # skill we know and it points exactly where we would have pointed it. Nothing
+  # else is touched — not `.system` (Codex's own, and a real directory anyway),
+  # not a hand-written skill directory, not a symlink somebody else placed.
+  # A blanket sweep here would delete a user's work on the first `agents off`.
+  local link src tgt
+  [ -d "$CODEX_SKILLS" ] || return 0
+  for link in "$CODEX_SKILLS"/*; do
+    [ -L "$link" ] || continue
+    src="$(skill_source "$(basename "$link")")"
+    [ -n "$src" ] || continue
+    tgt="$(readlink "$link")"
+    if [ "$tgt" = "$src" ]; then rm -f "$link"; fi
+  done
+}
+
+link_codex_skill() { # name source
+  # Created only when there is something to put in it, and never replaced: if
+  # that path is a real file, or cannot be made, this item degrades to a warning
+  # like every other item in apply.
+  [ -e "$CODEX_SKILLS" ] || mkdir -p "$CODEX_SKILLS" 2>/dev/null || true
+  if [ ! -d "$CODEX_SKILLS" ]; then
+    echo "agents: $CODEX_SKILLS is not a directory — $1 not linked for codex" >&2
+    return 0
+  fi
+  ln -sfn "$2" "$CODEX_SKILLS/$1" ||
+    echo "agents: could not link $1 into $CODEX_SKILLS" >&2
+  return 0
+}
+
 plugin_install_path() {
   local i
   for i in "${!PLUGINS[@]}"; do
@@ -765,13 +803,16 @@ apply() {
     copy_surface "$base-CLAUDE.md" "$base-AGENTS.md"
     link_dir_context "$ddir" "$base"
   done
-  # skills — a farm of symlinks; only ACTIVE skills exist
+  # skills — a farm of symlinks; only ACTIVE skills exist, in BOTH surfaces
   local s src
   find "$STATE/skills" -maxdepth 1 -type l -delete
+  sweep_codex_skills
   for s in "${SKILLS[@]}"; do
     if is_active "$s"; then
       src="$(skill_source "$s")"
-      if [ -d "$src" ]; then ln -sfn "$src" "$STATE/skills/$s"
+      if [ -d "$src" ]; then
+        ln -sfn "$src" "$STATE/skills/$s"
+        link_codex_skill "$s" "$src"
       else echo "agents: skill $s is on but $src is missing — not linked" >&2; fi
     fi
   done

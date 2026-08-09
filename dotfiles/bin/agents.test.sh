@@ -496,5 +496,52 @@ chk "apply still reports" "1" "$(ag apply 2>/dev/null | grep -c '^applied:')"
 chk "instructions never touch the manifest" "module a-mod on" "$(grep '^module a-mod ' "$SB/.config/agents/manifest.conf")"
 
 echo
+echo "== 18. skills reach Codex's surface, and nothing else there is touched"
+fresh; ag status > /dev/null
+CX="$SB/.codex/skills"
+# The shape found live: Codex's vendor-managed built-ins, a hand-written skill
+# directory, and a symlink that is somebody else's.
+mkdir -p "$CX/.system" "$CX/hand-written" "$SB/elsewhere"
+: > "$CX/.system/.codex-system-skills.marker"
+: > "$CX/hand-written/SKILL.md"
+ln -s "$SB/elsewhere" "$CX/foreign-link"
+survivors() { printf '%s %s %s' \
+  "$(test -f "$CX/.system/.codex-system-skills.marker" && echo system || echo GONE)" \
+  "$(test -f "$CX/hand-written/SKILL.md" && echo handwritten || echo GONE)" \
+  "$(test -L "$CX/foreign-link" && echo foreign || echo GONE)"; }
+ag on repo-safety > /dev/null
+chk "an active skill lands in the claude farm" "repo-safety" "$(skilllinks)"
+chk "and on the codex surface, at the same source" "$(readlink "$SB/.config/agents/skills/repo-safety")" "$(readlink "$CX/repo-safety")"
+chk "the codex entry is a link that resolves to the skill" "1" "$(test -L "$CX/repo-safety" && test -d "$CX/repo-safety" && echo 1 || echo 0)"
+chk "nothing of Codex's was disturbed" "system handwritten foreign" "$(survivors)"
+ag off repo-safety > /dev/null
+chk "off sweeps our codex link" "0" "$(test -L "$CX/repo-safety" && echo 1 || echo 0)"
+chk "and sweeps only ours" "system handwritten foreign" "$(survivors)"
+# a foreign link that happens to sit under a skill's NAME is still not ours
+ln -sfn "$SB/elsewhere" "$CX/webdev"
+ag on repo-safety > /dev/null; ag off repo-safety > /dev/null
+chk "a link with our name but not our target survives" "$SB/elsewhere" "$(readlink "$CX/webdev")"
+chk "Codex's own still survives repeated applies" "system handwritten foreign" "$(survivors)"
+# the directory is created when absent, never replaced
+rm -rf "$SB/.codex"
+ag on repo-safety > /dev/null
+chk "a missing ~/.codex/skills is created" "1" "$(test -d "$CX" && echo 1 || echo 0)"
+chk "and gets the link" "1" "$(test -L "$CX/repo-safety" && echo 1 || echo 0)"
+# activity, not raw state: a skill a bundle holds is linked in neither surface
+mods; mod hold-bundle repo-safety
+ag apply > /dev/null
+chk "a held skill is in neither surface" "0" "$(test -L "$CX/repo-safety" && echo 1 || echo 0)"
+chk "nor in the farm" "" "$(skilllinks)"
+ag on hold-bundle > /dev/null
+chk "released, it returns to both" "1" "$(test -L "$CX/repo-safety" && test -L "$SB/.config/agents/skills/repo-safety" && echo 1 || echo 0)"
+# a real file at that path degrades to a warning, like every other apply item
+fresh; ag status > /dev/null
+mkdir -p "$SB/.codex"; : > "$SB/.codex/skills"
+ag on repo-safety 2>"$SB/errcx" >/dev/null
+if grep -q 'is not a directory — repo-safety not linked for codex' "$SB/errcx"; then ok "a non-directory there warns"; else bad "non-directory warns" "$(cat "$SB/errcx")"; fi
+chk "the claude farm still got it" "repo-safety" "$(skilllinks)"
+chk "apply still reports" "1" "$(ag apply 2>/dev/null | grep -c '^applied:')"
+
+echo
 if [ "$fails" -eq 0 ]; then echo "ALL PASS"; else echo "$fails FAILURES"; fi
 exit "$fails"
