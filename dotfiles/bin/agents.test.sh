@@ -10,7 +10,7 @@ REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 BIN="$REPO/dotfiles/bin/agents"
 FRAG_SRC="$REPO/dotfiles/agents/hooks.d"
 SB="$(mktemp -d)"
-trap 'rm -rf "$SB" "$SB.frags"' EXIT
+trap 'rm -rf "$SB" "$SB.frags" "$SB.mods"' EXIT
 
 fails=0
 ok() { printf 'ok   %s\n' "$1"; }
@@ -31,9 +31,20 @@ fresh() { # [fragments-dir]
   # what is there and never creates the tree, so the fixture must.
   : > "$ACCT/CLAUDE.md"
   FRAGS="${1:-$FRAG_SRC}"
+  # No member lists unless a test writes some: the default is a directory that
+  # does not exist, which is also what a machine with no modules.d has.
+  MODS="$SB/no-modules"
 }
 
-ag() { HOME="$SB" AGENTS_FRAGMENTS="$FRAGS" bash "$BIN" "$@"; }
+mods() { MODS="$SB.mods"; rm -rf "$MODS"; mkdir -p "$MODS"; }
+mod() { # name member...
+  local n="$1"; shift
+  python3 -c 'import json,sys;json.dump({"members":sys.argv[2:]},open(sys.argv[1],"w"))' \
+    "$MODS/$n.json" "$@"
+}
+skilllinks() { find "$SB/.config/agents/skills" -maxdepth 1 -type l -printf '%f\n' | sort | tr '\n' ' ' | sed 's/ $//'; }
+
+ag() { HOME="$SB" AGENTS_FRAGMENTS="$FRAGS" AGENTS_MODULES="$MODS" bash "$BIN" "$@"; }
 hookrows() { grep '^hook ' "$SB/.config/agents/manifest.conf" | sort; }
 composed_files() { # every hook command settings.json currently carries
   python3 - "$SB/.claude/settings.json" <<'PY'
@@ -302,8 +313,118 @@ echo
 echo "== 10. status section order"
 fresh; ag status > /dev/null
 # Dependency order: a hook's parenthetical can only name a row already read.
-chk "order" "directory context skills hooks modules plugins other" "$(ag status | grep -v '^ ' | tr '\n' ' ' | sed 's/ $//')"
-chk "global heads the directory section" "  global               off  ~" "$(ag status | sed -n 2p)"
+chk "order" "directory instructions skills hooks modules plugins other" "$(ag status | grep -v '^ ' | tr '\n' ' ' | sed 's/ $//')"
+chk "global heads the directory section, scope ~" "global off ~" "$(ag status | sed -n 2p | tr -s ' ' | sed 's/^ //')"
+
+echo
+echo "== 11. module member lists: UNION, so a shared member outlives one bundle"
+fresh; mods
+mod ui-bundle repo-safety
+mod ml-bundle repo-safety
+ag status > /dev/null
+chk "a modules.d file seeds a module row" "module ui-bundle off" "$(grep '^module ui-bundle ' "$SB/.config/agents/manifest.conf")"
+chk "membership stays out of the manifest" "0" "$(grep -c 'repo-safety.*ui-bundle\|ui-bundle.*repo-safety' "$SB/.config/agents/manifest.conf" || true)"
+ag on repo-safety > /dev/null
+chk "own switch is still written" "skill repo-safety on" "$(grep '^skill repo-safety ' "$SB/.config/agents/manifest.conf")"
+chk "on but held by every bundle = not linked" "" "$(skilllinks)"
+if has_cmd worktree-guard; then bad "a hook following a held skill stays out" "$(composed_files)"; else ok "a hook following a held skill stays out"; fi
+ag on ui-bundle > /dev/null
+chk "one bundle on releases the member" "repo-safety" "$(skilllinks)"
+if has_cmd launch-critical-worktree-guard.sh; then ok "the following hook composes through the bundle"; else bad "hook composes through bundle" "$(composed_files)"; fi
+ag on ml-bundle > /dev/null
+chk "both bundles on is still one link" "repo-safety" "$(skilllinks)"
+ag off ui-bundle > /dev/null
+chk "UNION: the other bundle still wants it" "repo-safety" "$(skilllinks)"
+if has_cmd launch-critical-worktree-guard.sh; then ok "union keeps the hook composed too"; else bad "union keeps hook" "$(composed_files)"; fi
+ag off ml-bundle > /dev/null
+chk "last bundle off finally drops it" "" "$(skilllinks)"
+st="$(ag status)"
+case "$st" in *"repo-safety          on · off (ml-bundle off)"*) ok "status names a holding bundle" ;;
+  *) bad "status names bundle" "$(echo "$st" | grep repo-safety)" ;; esac
+chk "flipping a bundle never rewrites the member's own row" "skill repo-safety on" "$(grep '^skill repo-safety ' "$SB/.config/agents/manifest.conf")"
+
+echo
+echo "== 12. modules of modules: two deep, and the chain says the nearest cause"
+fresh; mods
+mod outer mid
+mod mid repo-safety
+ag status > /dev/null
+ag on repo-safety > /dev/null; ag on mid > /dev/null
+chk "an inner bundle held by an outer one composes nothing" "" "$(skilllinks)"
+st="$(ag status)"
+case "$st" in *"mid                  on · off (outer off)"*) ok "the inner bundle blames the outer" ;;
+  *) bad "inner blames outer" "$(echo "$st" | grep '^  mid')" ;; esac
+case "$st" in *"repo-safety          on · off (outer off)"*) ok "the member blames the NEAREST off ancestor, two up" ;;
+  *) bad "member blames nearest off ancestor" "$(echo "$st" | grep repo-safety)" ;; esac
+ag on outer > /dev/null
+chk "the outer bundle releases the whole chain" "repo-safety" "$(skilllinks)"
+ag off mid > /dev/null
+chk "breaking the middle drops the member again" "" "$(skilllinks)"
+st="$(ag status)"
+case "$st" in *"repo-safety          on · off (mid off)"*) ok "now the nearest cause is the middle" ;;
+  *) bad "nearest cause is middle" "$(echo "$st" | grep repo-safety)" ;; esac
+
+echo
+echo "== 13. payload-only modules are untouched by the member mechanism"
+fresh; mods
+mod outer mid
+ag status > /dev/null
+chk "orchestration needs no member file" "module orchestration off" "$(grep '^module orchestration ' "$SB/.config/agents/manifest.conf")"
+chk "path of a payload-only module is its payload" "$SB/code/north/main/orchestration/doctrine.md" "$(ag path orchestration)"
+chk "path of a member-list module is its list" "$MODS/outer.json" "$(ag path outer)"
+ag on orchestration > /dev/null
+chk "a payload module in no bundle answers only to itself" "module orchestration on" "$(grep '^module orchestration ' "$SB/.config/agents/manifest.conf")"
+if has_cmd agent-spawn-guard.sh; then ok "its follower composes, ungated"; else bad "follower composes" "$(composed_files)"; fi
+
+echo
+echo "== 14. a membership cycle is named, and everything in it derives inactive"
+fresh; mods
+mod loop-x loop-y
+mod loop-y loop-x repo-safety
+ag status > /dev/null
+ag on repo-safety > /dev/null
+warn="$(ag on loop-x 2>&1 >/dev/null)"
+case "$warn" in *"module cycle: loop-x -> loop-y -> loop-x"*) ok "the cycle is named, both hops" ;;
+  *) bad "cycle named" "$warn" ;; esac
+ag on loop-y > /dev/null 2>&1
+chk "both switches are on regardless" "2" "$(grep -c '^module loop-. on' "$SB/.config/agents/manifest.conf")"
+chk "a cycle composes nothing" "" "$(skilllinks)"
+st="$(ag status 2>/dev/null)"
+case "$st" in *"loop-x               on · off (module cycle)"*) ok "status calls it a cycle, not a mystery" ;;
+  *) bad "status names cycle" "$(echo "$st" | grep 'loop-x')" ;; esac
+case "$st" in *"repo-safety          on · off (loop-y off)"*) ok "a member of a cycle blames the cycle module" ;;
+  *) bad "member blames cycle module" "$(echo "$st" | grep repo-safety)" ;; esac
+chk "status still exits clean under a cycle" "1" "$(ag status >/dev/null 2>&1 && echo 1 || echo 0)"
+
+echo
+echo "== 15. apply composes by ACTIVITY: dirs, skills, hooks, all gated alike"
+fresh; mods
+mkdir -p "$SB/code/north-data/context-dirs" "$SB/proj"
+printf '%s proj\n' "$SB/proj" > "$SB/code/north-data/context-dirs.conf"
+echo "PROJECT CONTEXT" > "$SB/code/north-data/context-dirs/proj.md"
+mod docs-bundle proj global
+mod guard-bundle logcompress
+ag status > /dev/null
+ag on proj > /dev/null; ag on global > /dev/null; ag on logcompress > /dev/null
+chk "a held dir row writes an EMPTY context file" "0" "$(stat -c %s "$SB/.config/agents/dir/proj-CLAUDE.md")"
+chk "a held dir row writes an empty codex surface too" "0" "$(stat -c %s "$SB/.config/agents/dir/proj-AGENTS.md")"
+chk "a held global profile writes empty" "0" "$(stat -c %s "$SB/.config/agents/CLAUDE.md")"
+chk "a held global profile empties the account copy" "0" "$(stat -c %s "$ACCT/CLAUDE.md")"
+if has_cmd logcompress-hook.js; then bad "a held hook is not composed" "$(composed_files)"; else ok "a held hook is not composed"; fi
+st="$(ag status)"
+case "$st" in *"logcompress            enabled · off (guard-bundle off)"*) ok "status: a hook says which bundle holds it" ;;
+  *) bad "hook names bundle" "$(echo "$st" | grep logcompress)" ;; esac
+ag on docs-bundle > /dev/null
+chk "the bundle releases the dir context" "PROJECT CONTEXT" "$(cat "$SB/.config/agents/dir/proj-CLAUDE.md")"
+chk "and the global profile with it" "1" "$(test -s "$SB/.config/agents/CLAUDE.md" && echo 1 || echo 0)"
+if has_cmd comment-bloat-guard.sh; then ok "the hook following the released profile composes"; else bad "follower of released profile" "$(composed_files)"; fi
+ag on guard-bundle > /dev/null
+if has_cmd logcompress-hook.js; then ok "the released hook composes"; else bad "released hook composes" "$(composed_files)"; fi
+chk "applied: line counts active dirs, not on ones" "1/1" "$(ag apply | sed 's/.*, \([0-9]*\/[0-9]*\) dir contexts.*/\1/')"
+ag off docs-bundle > /dev/null
+chk "applied: a held dir counts as 0" "0/1" "$(ag apply | sed 's/.*, \([0-9]*\/[0-9]*\) dir contexts.*/\1/')"
+chk "manifest is untouched by all this gating" "dir proj on $SB/proj" "$(grep '^dir proj ' "$SB/.config/agents/manifest.conf")"
+chk "modules are idempotent across ensure" "" "$(cp "$SB/.config/agents/manifest.conf" "$SB/m3"; ag status > /dev/null; diff "$SB/m3" "$SB/.config/agents/manifest.conf")"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "ALL PASS"; else echo "$fails FAILURES"; fi

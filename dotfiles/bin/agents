@@ -19,15 +19,37 @@ HOOKS=(agent-spawn-guard beagle-session-start comment-bloat-guard firn-guard
   git-blind-stage-guard hook-detach logcompress north-session-lifecycle
   tripwire-guard worktree-guard)
 SKILLS=(webdev beagle-authoring fram-modeling code-as-facts firn repo-safety)
-# A module is one row that flips several units at once — the switch is the unit,
-# its surfaces are an implementation detail nobody flips individually.
+# A module is one row that flips several units at once. Two ways to be one, and
+# a module may be both: a PAYLOAD module owns surfaces of its own that `apply`
+# writes (orchestration's skill link and role templates), and a MEMBER-LIST
+# module names units it composes, in modules.d/<name>.json as
+# `{"members": ["<unit-name>", ...]}`. Members are bare names of ANY kind —
+# including other modules, which is how a bundle is built out of bundles.
+# Payload-only modules are listed here; member-list modules are discovered from
+# the directory, so writing a file is the whole act of adding one.
 MODULES=(orchestration)
+MODULES_D="${AGENTS_MODULES:-$HOME/code/nixos-config/main/dotfiles/agents/modules.d}"
+MODULES_LOADED=
+
+load_modules() {
+  if [ -n "$MODULES_LOADED" ]; then return 0; fi
+  MODULES_LOADED=1
+  local f n
+  for f in "$MODULES_D"/*.json; do
+    [ -e "$f" ] || continue
+    n="$(basename "$f" .json)"
+    case " ${MODULES[*]} " in *" $n "*) continue ;; esac
+    MODULES+=("$n")
+  done
+}
 # `other` is the honest triage drawer, not a kind with a story: a single toggle
 # whose activation reason is not a directory, a skill, a hook, a module, or a
 # plugin. A row here is a row nobody has found the right kind for yet.
 OTHERS=(statusline-script)
-# The global profile is a directory context like any other; its directory is the
-# root of everything, which is why it is built in rather than registry-backed.
+# A `dir` row is a directory instruction file: it fires for that directory and
+# everything under it. The global profile is that same thing scoped at the
+# root — `~`, the tree that contains every other — which is why it is built in
+# rather than registry-backed, and why it reads first.
 # It writes the global surfaces (the config-dir pair and the account copies) and
 # never a per-directory target or a link at a directory.
 GLOBAL_SLUG=global
@@ -83,7 +105,7 @@ dir_source() { echo "$CONTEXT_SOURCES/$1.md"; }
 # same metadata level as tags/requires). Hooks are enforcement; the unit is the
 # thing whose activation makes that enforcement wanted, so a supporting hook
 # follows it instead of being flipped by hand. The companion is named bare and
-# may be ANY unit that speaks on/off — a skill, a directory context, a module —
+# may be ANY unit that speaks on/off — a skill, a directory scope, a module —
 # because what makes a guard wanted is not always a skill. A hook with no
 # companion is infrastructure and answers only to a direct flip.
 declare -A HOOK_FOLLOWS=()
@@ -109,37 +131,133 @@ PY
   )
 }
 
-hook_activity() { # name|permission|follows|active|reason|tags, one per hook
-  # `|` and not a tab: read splits on runs of IFS WHITESPACE, so a hook with no
+activity() { # kind|name|own|active|reason|follows|tags — every unit, one line
+  # `|` and not a tab: read splits on runs of IFS WHITESPACE, so a unit with no
   # companion (empty field) would shift every field after it left.
-  # ONE derivation, read by both status and apply, because a hook's activity is
-  # computed and never stored: permission (enabled/disabled) is the user's axis
-  # and lives in the manifest; activity is permission AND, for a bound hook,
-  # its companion unit being on. Nothing to keep in sync, so the manifest
-  # cannot disagree with itself.
-  python3 - "$FRAGMENTS" "$MANIFEST" <<'PY'
+  # ONE derivation, read by both status and apply, because activity is computed
+  # and never stored. Two axes: the OWN SWITCH is the user's and lives in the
+  # manifest (`enabled`/`disabled` for a hook, `on`/`off` for everything else);
+  # ACTIVITY is what that adds up to right now, and it is
+  #
+  #   own switch  AND  (in no module  OR  some containing module is active)
+  #
+  # with a hook additionally following its companion. UNION over containing
+  # modules is deliberate: a unit two bundles both want survives one of them
+  # being turned off, because the other still wants it. The rule recurses —
+  # a module is gated by the modules that contain IT — so a bundle of bundles
+  # composes without a second mechanism. Nothing here is written back, so the
+  # manifest cannot disagree with itself.
+  python3 - "$FRAGMENTS" "$MANIFEST" "$MODULES_D" <<'PY'
 import glob, json, os, sys
-frag_dir, manifest = sys.argv[1:]
+frag_dir, manifest, modules_dir = sys.argv[1:]
 frags = {}
 for p in sorted(glob.glob(os.path.join(frag_dir, "*.json"))):
     try:
         frags[os.path.basename(p)[:-5]] = json.load(open(p))
     except Exception as exc:
         print(f"agents: {p}: unreadable ({exc}) — hook skipped", file=sys.stderr)
-perm, units = {}, {}
+members = {}
+for p in sorted(glob.glob(os.path.join(modules_dir, "*.json"))):
+    n = os.path.basename(p)[:-5]
+    try:
+        members[n] = [str(m).strip() for m in (json.load(open(p)).get("members") or [])
+                      if str(m).strip()]
+    except Exception as exc:
+        # A module whose list cannot be read composes nothing rather than
+        # guessing: its own payload, if it has one, still answers to its switch.
+        print(f"agents: {p}: unreadable ({exc}) — {n} composes no members",
+              file=sys.stderr)
+        members[n] = []
+
+kind, own, rows = {}, {}, []
 for line in open(manifest):
     parts = line.split()
     if len(parts) < 3:
         continue
-    if parts[0] == "hook":
-        perm[parts[1]] = parts[2]
-    else:
-        # Every other kind speaks on/off, so any of them can be followed. A dir
-        # row counts as on when its state says on: whether the user is standing
-        # in that directory is the runtime's question, not this formula's.
-        units[parts[1]] = parts[2]
+    kind[parts[1]] = parts[0]
+    own[parts[1]] = parts[2]
+    rows.append((parts[0], parts[1]))
+
+# Containment inverted: for a unit, which modules claim it. Sorted, so a unit
+# in two bundles always blames the same one when both are off.
+container = {}
+for m in sorted(members):
+    for u in members[m]:
+        container.setdefault(u, []).append(m)
+        if u not in own:
+            print(f"agents: module {m} lists {u}, which is no unit — ignored",
+                  file=sys.stderr)
+for u in container:
+    container[u].sort()
+
+# Mutual containment has no answer — each module would be waiting on the other
+# — so it is named and every module in it derives inactive. Fail loud, not
+# forever: the alternative is a recursion that never bottoms out.
+GREY = 1
+color, in_cycle = {}, set()
+
+def visit(m, stack):
+    color[m] = GREY
+    stack.append(m)
+    for c in container.get(m, []):
+        if c not in members:
+            continue
+        if color.get(c) == GREY:
+            cyc = stack[stack.index(c):]
+            in_cycle.update(cyc)
+            print("agents: module cycle: " + " -> ".join(cyc + [cyc[0]])
+                  + " — every module in it derives inactive", file=sys.stderr)
+        elif c not in color:
+            visit(c, stack)
+    stack.pop()
+    color[m] = 2
+
+for m in sorted(members):
+    if m not in color:
+        visit(m, [])
+
+def own_on(u):
+    return own.get(u) == ("enabled" if kind.get(u) == "hook" else "on")
+
+gated = {}
+
+def gated_active(u): # own switch, gated by the modules that contain it
+    if u in gated:
+        return gated[u]
+    gated[u] = False
+    if u in in_cycle:
+        return False
+    ok = own_on(u)
+    cs = container.get(u, [])
+    if ok and cs:
+        ok = any(gated_active(c) for c in cs)
+    gated[u] = ok
+    return ok
+
+def off_ancestor(u, seen=None): # the nearest module up the chain that is itself off
+    seen = set() if seen is None else seen
+    for c in container.get(u, []):
+        if c in seen:
+            continue
+        seen.add(c)
+        if c in in_cycle:
+            return c
+        if not gated_active(c):
+            if not own_on(c):
+                return c
+            a = off_ancestor(c, seen)
+            if a:
+                return a
+    return ""
+
+def blame(u): # why this unit is not active, in the words of the nearest cause
+    if u in in_cycle:
+        return "module cycle"
+    a = off_ancestor(u)
+    return f"{a} off" if a else ""
+
 companion = {n: (d.get("follows") or "").strip() for n, d in frags.items()}
-enabled = {n for n in frags if perm.get(n) == "enabled"}
+enabled = {n for n in frags if own.get(n) == "enabled"}
 requires = {n: [r for r in frags[n].get("requires", [])] for n in frags}
 
 # A chain is composed whole or not at all: a hook whose requirement the user
@@ -159,9 +277,18 @@ while changed:
                 changed = True
                 break
 
+def companion_active(s):
+    # A hook is nobody's companion: it speaks permission, not on/off, and
+    # hook-needs-hook is what `requires` is for.
+    if not s:
+        return True
+    if kind.get(s) == "hook":
+        return False
+    return gated_active(s)
+
 def eligible(n):
-    s = companion[n]
-    return n in enabled and n not in blocked and (not s or units.get(s) == "on")
+    return (n in enabled and n not in blocked and gated_active(n)
+            and companion_active(companion[n]))
 
 # Requirements ride in on their dependent: an enabled requirement is composed
 # because something active needs it, even when its own companion is off.
@@ -177,7 +304,7 @@ while changed:
                 changed = True
 
 for n in sorted(frags):
-    p = perm.get(n, "disabled")
+    p = own.get(n, "disabled")
     s = companion[n]
     if n in composed:
         reason = f"required by {pulled_by[n]}" if n in pulled_by and not eligible(n) else ""
@@ -187,13 +314,58 @@ for n in sorted(frags):
         reason = f"needs {why[n]}, disabled"
         print(f"agents: {n} is enabled but requires {why[n]}, which is disabled"
               " — not composed", file=sys.stderr)
-    elif s:
-        reason = f"{s} off"
+    elif not gated_active(n):
+        # The bundle this hook came in with is off — coarser than the companion
+        # and the thing to flip first, so it is named first.
+        reason = blame(n)
+    elif s and not companion_active(s):
+        # Name what the reader can act on: a companion held off by a bundle
+        # blames the bundle, not itself, or the row above would read `on`.
+        reason = f"{s} off" if not own_on(s) else blame(s)
     else:
         reason = ""
     tags = " ".join(":" + t for t in frags[n].get("tags", []))
-    print("|".join([n, p, s, "1" if n in composed else "0", reason, tags]))
+    print("|".join(["hook", n, p, "1" if n in composed else "0", reason, s, tags]))
+
+for k, n in rows:
+    if k == "hook":
+        continue
+    a = gated_active(n)
+    print("|".join([k, n, own[n], "1" if a else "0",
+                    "" if a or not own_on(n) else blame(n), "", ""]))
 PY
+}
+
+declare -A ACT_STATE=() ACT_ACTIVE=() ACT_REASON=() ACT_FOLLOWS=() ACT_TAGS=()
+ACT_HOOKS=()
+
+load_activity() { # the derivation, once, into name-keyed lookups
+  # Name-keyed and not kind-keyed on purpose: a companion and a member are both
+  # bare names, so this is the same namespace ensure_manifest polices.
+  ACT_STATE=(); ACT_ACTIVE=(); ACT_REASON=(); ACT_FOLLOWS=(); ACT_TAGS=(); ACT_HOOKS=()
+  local k n st a r f t
+  while IFS='|' read -r k n st a r f t; do
+    [ -n "${n:-}" ] || continue
+    ACT_STATE["$n"]="$st"; ACT_ACTIVE["$n"]="$a"; ACT_REASON["$n"]="$r"
+    ACT_FOLLOWS["$n"]="$f"; ACT_TAGS["$n"]="$t"
+    # `if`, not `&&`: a non-hook last row would make the loop — and so this
+    # function — exit non-zero under `set -e`.
+    if [ "$k" = hook ]; then ACT_HOOKS+=("$n"); fi
+  done < <(activity)
+}
+
+is_active() { [ "${ACT_ACTIVE[$1]:-0}" = 1 ]; }
+
+on_off() { is_active "$1" && echo on || echo off; }
+
+unit_line() { # the state column for a non-hook row: both axes, when they differ
+  local n="$1"
+  if [ "${ACT_STATE[$n]:-}" = on ] && ! is_active "$n"; then
+    if [ -n "${ACT_REASON[$n]:-}" ]; then echo "on · off (${ACT_REASON[$n]})"
+    else echo "on · off"; fi
+  else
+    echo "${ACT_STATE[$n]:-}"
+  fi
 }
 
 dir_target_base() { # the <base>-CLAUDE.md / <base>-AGENTS.md stem a slug writes
@@ -262,10 +434,14 @@ path_of() { # the canonical source file to view or edit for a unit
   case "$1" in
     "$GLOBAL_SLUG") echo "$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md" ;;
     statusline-script) echo "$HOME/code/nixos-config/main/dotfiles/claude/statusline.sh" ;;
+    # orchestration is payload-only: its source is what it injects, not a
+    # member list it does not have.
     orchestration) echo "$ORCH/doctrine.md" ;;
     *)
       case " ${HOOKS[*]} " in *" $1 "*) echo "$FRAGMENTS/$1.json"; return ;; esac
       case " ${SKILLS[*]} " in *" $1 "*) echo "$(skill_source "$1")/SKILL.md"; return ;; esac
+      # A member-list module's source is the list — that is the whole unit.
+      [ -f "$MODULES_D/$1.json" ] && { echo "$MODULES_D/$1.json"; return; }
       load_dirs
       case " ${DIRS[*]} " in *" $1 "*) dir_source "$1"; return ;; esac
       load_plugins
@@ -373,6 +549,7 @@ ensure_manifest() {
   [ -f "$MANIFEST" ] || : > "$MANIFEST"
   load_plugins
   load_dirs
+  load_modules
   load_hook_follows
   warn_duplicate_names
   # Rename migrations run before the merge below, or the merge re-seeds the new
@@ -424,8 +601,6 @@ ensure_manifest() {
   done
 }
 
-state_of() { awk -v k="$1" -v n="$2" '$1==k && $2==n {print $3}' "$MANIFEST"; }
-
 set_state() { # kind name state
   awk -v k="$1" -v n="$2" '$1==k && $2==n {f=1} END {exit !f}' "$MANIFEST" ||
     { echo "agents: unknown: $1 $2" >&2; exit 2; }
@@ -438,47 +613,56 @@ set_state() { # kind name state
 
 status() {
   ensure_manifest
+  load_activity
   # Read in dependency order, not importance order: the units a hook can follow
   # come before the hooks, so a "(x off)" parenthetical always names a row the
   # eye has already passed. `other` is last because it is the drawer.
-  echo "directory context"
+  # A `dir` row's file scopes to a SUBTREE — it fires for that directory and
+  # everything under it — and the global profile is the root-of-tree case,
+  # scope `~`, which is why it sorts first rather than living in a drawer.
+  echo "directory instructions"
   local i
-  printf '  %-20s %-4s %s\n' \
-    "$GLOBAL_SLUG" "$(state_of dir "$GLOBAL_SLUG")" "$GLOBAL_DIR"
+  printf '  %-20s %-24s %s\n' \
+    "$GLOBAL_SLUG" "$(unit_line "$GLOBAL_SLUG")" "$GLOBAL_DIR"
   for i in "${!DIRS[@]}"; do
-    printf '  %-20s %-4s %s\n' "${DIRS[$i]}" "$(state_of dir "${DIRS[$i]}")" "${DIR_PATHS[$i]}"
+    printf '  %-20s %-24s %s\n' "${DIRS[$i]}" "$(unit_line "${DIRS[$i]}")" "${DIR_PATHS[$i]}"
   done
   echo "skills"
-  for s in "${SKILLS[@]}"; do printf '  %-20s %s\n' "$s" "$(state_of skill "$s")"; done
+  for s in "${SKILLS[@]}"; do printf '  %-20s %s\n' "$s" "$(unit_line "$s")"; done
   # Each hook says both axes: the permission the user set, then whether that
   # adds up to running right now and why not. A hook that is enabled but silent
   # is the case worth explaining.
   echo "hooks"
-  local name perm follows active reason tags line
-  while IFS='|' read -r name perm follows active reason tags; do
-    [ -n "${name:-}" ] || continue
-    if [ "$perm" = enabled ]; then
-      line="enabled · $([ "$active" = 1 ] && echo on || echo off)"
+  local name reason line
+  for name in ${ACT_HOOKS[@]+"${ACT_HOOKS[@]}"}; do
+    if [ "${ACT_STATE[$name]}" = enabled ]; then
+      line="enabled · $(on_off "$name")"
     else
       line="disabled"
     fi
     # The parenthetical is provenance: which unit this hook follows, or, when
     # that is not the whole story, why it is not running.
+    reason="${ACT_REASON[$name]}"
     if [ -n "$reason" ]; then line="$line ($reason)"
-    elif [ -n "$follows" ]; then line="$line ($follows)"; fi
-    printf '  %-22s %-28s %s\n' "$name" "$line" "$tags"
-  done < <(hook_activity)
+    elif [ -n "${ACT_FOLLOWS[$name]}" ]; then line="$line (${ACT_FOLLOWS[$name]})"; fi
+    printf '  %-22s %-28s %s\n' "$name" "$line" "${ACT_TAGS[$name]}"
+  done
   echo "modules"
   local m o p
-  for m in "${MODULES[@]}"; do printf '  %-20s %s\n' "$m" "$(state_of module "$m")"; done
+  for m in "${MODULES[@]}"; do printf '  %-20s %s\n' "$m" "$(unit_line "$m")"; done
   echo "plugins"
-  for p in "${PLUGINS[@]}"; do printf '  %-40s %s\n' "$p" "$(state_of plugin "$p")"; done
+  for p in "${PLUGINS[@]}"; do printf '  %-40s %s\n' "$p" "$(unit_line "$p")"; done
   echo "other"
-  for o in "${OTHERS[@]}"; do printf '  %-20s %s\n' "$o" "$(state_of other "$o")"; done
+  for o in "${OTHERS[@]}"; do printf '  %-20s %s\n' "$o" "$(unit_line "$o")"; done
 }
 
 apply() {
   ensure_manifest
+  # Read once, up front: every composition below is decided by ACTIVITY, never
+  # by the raw state column. A unit a module holds off is a unit that does not
+  # get written, linked, or composed — otherwise the switchboard would say one
+  # thing and the surfaces would say another.
+  load_activity
   # the global profile — `dir global`, the context file scoped at the root:
   # empty when off. One slot, every provider surface: the claude config target,
   # every account-scoped copy (the launcher redirects CLAUDE_CONFIG_DIR, so
@@ -496,10 +680,10 @@ apply() {
   local agents_target="$STATE/CLAUDE.md"
   local codex_target="$STATE/AGENTS.md"
   local agents_src="$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md"
-  if [ "$(state_of dir "$GLOBAL_SLUG")" = on ] && [ -f "$agents_src" ]; then
+  if is_active "$GLOBAL_SLUG" && [ -f "$agents_src" ]; then
     cat "$agents_src" > "$agents_target"
   else
-    if [ "$(state_of dir "$GLOBAL_SLUG")" = on ]; then
+    if is_active "$GLOBAL_SLUG"; then
       echo "agents: $GLOBAL_SLUG is on but $agents_src is missing — wrote empty" >&2
     fi
     : > "$agents_target"
@@ -511,18 +695,19 @@ apply() {
     [ -e "$acct" ] || continue
     cat "$agents_target" > "$acct" || echo "agents: could not write $acct" >&2
   done
-  # directory contexts — one slot per registered directory, both provider
-  # surfaces: <dir>/CLAUDE.md and <dir>/AGENTS.md resolve to the pair written
-  # here, so off means neither provider picks anything up on entering <dir>.
+  # directory instructions — one slot per registered directory, both
+  # provider surfaces: <dir>/CLAUDE.md and <dir>/AGENTS.md resolve to the pair
+  # written here, and a provider walks up from wherever the session stands, so
+  # inactive means nothing is picked up anywhere in that subtree.
   local i slug ddir base dsrc
   for i in "${!DIRS[@]}"; do
     slug="${DIRS[$i]}"; ddir="${DIR_PATHS[$i]}"
     base="$(dir_target_base "$slug")"; dsrc="$(dir_source "$slug")"
-    if [ "$(state_of dir "$slug")" = on ] && [ -f "$dsrc" ]; then
+    if is_active "$slug" && [ -f "$dsrc" ]; then
       cat "$dsrc" > "$base-CLAUDE.md" ||
         { echo "agents: could not write $base-CLAUDE.md" >&2; continue; }
     else
-      if [ "$(state_of dir "$slug")" = on ]; then
+      if is_active "$slug"; then
         echo "agents: $slug is on but $dsrc is missing — wrote empty" >&2
       fi
       : > "$base-CLAUDE.md"
@@ -531,11 +716,11 @@ apply() {
       echo "agents: could not write $base-AGENTS.md" >&2
     link_dir_context "$ddir" "$base"
   done
-  # skills — a farm of symlinks; only `on` skills exist
+  # skills — a farm of symlinks; only ACTIVE skills exist
   local s src
   find "$STATE/skills" -maxdepth 1 -type l -delete
   for s in "${SKILLS[@]}"; do
-    if [ "$(state_of skill "$s")" = on ]; then
+    if is_active "$s"; then
       src="$(skill_source "$s")"
       if [ -d "$src" ]; then ln -sfn "$src" "$STATE/skills/$s"
       else echo "agents: skill $s is on but $src is missing — not linked" >&2; fi
@@ -556,7 +741,7 @@ apply() {
       case "$tgt" in "$ORCH"/*) rm -f "$link" ;; esac
     done
   fi
-  if [ "$(state_of module orchestration)" = on ]; then
+  if is_active orchestration; then
     [ -d "$ORCH/skill" ] && ln -sfn "$ORCH/skill" "$STATE/skills/orchestration"
     if [ -d "$ORCH/agents" ]; then
       mkdir -p "$CLAUDE_AGENTS"
@@ -568,15 +753,15 @@ apply() {
   # hooks + statusline + plugins — rewrite exactly those keys in live settings.json
   # The composed set is derived, never read off the manifest: a hook runs when
   # the user has it enabled AND its companion unit (if any) is on.
-  local on_hooks=() hname hactive
-  while IFS='|' read -r hname _ _ hactive _; do
-    if [ -n "${hname:-}" ] && [ "$hactive" = 1 ]; then on_hooks+=("$hname"); fi
-  done < <(hook_activity)
+  local on_hooks=() hname
+  for hname in ${ACT_HOOKS[@]+"${ACT_HOOKS[@]}"}; do
+    if is_active "$hname"; then on_hooks+=("$hname"); fi
+  done
   local on_plugins=() p
   for p in "${PLUGINS[@]}"; do
-    if [ "$(state_of plugin "$p")" = on ]; then on_plugins+=("$p"); fi
+    if is_active "$p"; then on_plugins+=("$p"); fi
   done
-  if ! STATUSLINE_STATE="$(state_of other statusline-script)" \
+  if ! STATUSLINE_STATE="$(on_off statusline-script)" \
   ON_PLUGINS="$(printf '%s\n' ${on_plugins[@]+"${on_plugins[@]}"})" \
   python3 - "$SETTINGS" "$FRAGMENTS" ${on_hooks[@]+"${on_hooks[@]}"} <<'PY'
 import json, os, sys
@@ -623,9 +808,9 @@ PY
   fi
   local on_dirs=0
   for i in "${!DIRS[@]}"; do
-    [ "$(state_of dir "${DIRS[$i]}")" = on ] && on_dirs=$((on_dirs + 1))
+    is_active "${DIRS[$i]}" && on_dirs=$((on_dirs + 1))
   done
-  echo "applied: $(state_of dir "$GLOBAL_SLUG") AGENTS.md, ${#on_hooks[@]} hooks, $(find "$STATE/skills" -maxdepth 1 -type l | wc -l) skills, ${#on_plugins[@]} plugins, $on_dirs/${#DIRS[@]} dir contexts, orchestration $(state_of module orchestration)"
+  echo "applied: $(on_off "$GLOBAL_SLUG") AGENTS.md, ${#on_hooks[@]} hooks, $(find "$STATE/skills" -maxdepth 1 -type l | wc -l) skills, ${#on_plugins[@]} plugins, $on_dirs/${#DIRS[@]} dir contexts, orchestration $(on_off orchestration)"
 }
 
 flip() { # on|off [--all | kind? name]
