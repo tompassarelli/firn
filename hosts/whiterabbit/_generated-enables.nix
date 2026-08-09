@@ -8,6 +8,7 @@
   myConfig.modules.bench-shield.enable = lib.mkDefault true;
   myConfig.modules.brightnessctl.enable = lib.mkDefault true;
   myConfig.modules.btop.enable = lib.mkDefault true;
+  myConfig.modules.bubblewrap.enable = lib.mkDefault true;
   myConfig.modules.bun.enable = lib.mkDefault true;
   myConfig.modules.cargo.enable = lib.mkDefault true;
   myConfig.modules.chrome.enable = lib.mkDefault true;
