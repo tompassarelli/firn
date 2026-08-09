@@ -82,17 +82,20 @@ PY
 
 apply() {
   ensure_manifest
-  # AGENTS.md — global constitution: empty when off. Written to the claude
-  # config target and every account-scoped copy (the launcher redirects
-  # CLAUDE_CONFIG_DIR, so account copies are what sessions actually load).
+  # AGENTS.md — global constitution: empty when off. One slot, every provider
+  # surface: the claude config target, every account-scoped copy (the launcher
+  # redirects CLAUDE_CONFIG_DIR, so account copies are what sessions actually
+  # load), and the codex target that ~/.codex/AGENTS.md resolves to.
   # The World-1 slim profile is the source; north's profiles/tom/AGENTS.md is
   # the World-2 constitution and is loaded by lab sessions, not by this slot.
   local agents_target="$STATE/CLAUDE.md"
+  local codex_target="$STATE/AGENTS.md"
   if [ "$(state_of item agents-md)" = on ]; then
     cat "$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md" > "$agents_target"
   else
     : > "$agents_target"
   fi
+  cat "$agents_target" > "$codex_target"
   local acct
   for acct in "$HOME"/.local/state/north/accounts/*/*/CLAUDE.md; do
     [ -e "$acct" ] && cat "$agents_target" > "$acct"

@@ -114,11 +114,17 @@
               [config
                ...]
               {:home.file
-                {".codex/AGENTS.md"
+                {;; Switchboard-owned, exactly like ~/.claude/CLAUDE.md: the
+                 ;; `agents-md` slot feeds both providers and `agents apply` is
+                 ;; the sole writer under ~/.config/agents. Pointing at
+                 ;; ~/.agents/AGENTS.md instead would resolve to North's
+                 ;; World-2 constitution on every session, outside the
+                 ;; blackout the switch exists to enforce.
+                 ".codex/AGENTS.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/.agents/AGENTS.md"))}
+                        "/.config/agents/AGENTS.md"))}
                  ".codex/config.toml"
                   {:source (s flakeRoot "/dotfiles/codex/config.toml")}
                  ".codex/hooks.json"

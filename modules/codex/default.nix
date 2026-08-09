@@ -100,7 +100,7 @@ in
     ];
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {
-        ".codex/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/AGENTS.md";
+        ".codex/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.config/agents/AGENTS.md";
         ".codex/config.toml".source = "${flakeRoot}/dotfiles/codex/config.toml";
         ".codex/hooks.json".source = "${flakeRoot}/dotfiles/codex/hooks.json";
         ".codex/prompts".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/claude/commands";

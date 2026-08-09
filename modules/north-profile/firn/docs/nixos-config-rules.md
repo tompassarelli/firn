@@ -65,10 +65,12 @@ publication, or rollback that must restore those exact bytes.
 composed profile. `~/.agents/skills` instead points at the atomic runtime farm
 `~/.local/state/north/skills`; North inventories the complete source at
 `~/code/north/main/profiles/tom/skills` and publishes resolved immutable
-generations there. Provider discovery paths such as
-`~/.claude/{skills,CLAUDE.md,hooks}`, `~/.codex/AGENTS.md`, and
-`~/.hermes/SOUL.md` compose through `~/.agents`; provider-specific adapters
-remain in `nixos-config`. Claude's writable `settings.json` is seeded from the
+generations there. Injected context surfaces are switchboard-owned instead:
+`~/.claude/{skills,CLAUDE.md}` and `~/.codex/AGENTS.md` point into
+`~/.config/agents`, which only `agents apply` writes, so one manifest slot
+decides what every provider loads. The remaining discovery paths
+(`~/.claude/hooks`, `~/.hermes/SOUL.md`) compose through `~/.agents`;
+provider-specific adapters remain in `nixos-config`. Claude's writable `settings.json` is seeded from the
 generation rather than symlinked. The immutable managed Codex hook directory
 under `/etc/codex/hooks` is the deliberate security exception and sources each
 hook from its owning locked flake input.
