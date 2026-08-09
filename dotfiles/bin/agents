@@ -37,11 +37,15 @@ path_of() { # the canonical source file to view or edit for an item
 
 ensure_manifest() {
   mkdir -p "$STATE" "$STATE/skills"
-  [ -f "$MANIFEST" ] && return
-  { for s in "${SINGLETONS[@]}"; do echo "item $s off"; done
-    for h in "${HOOKS[@]}"; do echo "hook $h off"; done
-    for s in "${SKILLS[@]}"; do echo "skill $s off"; done
-  } > "$MANIFEST"
+  [ -f "$MANIFEST" ] || : > "$MANIFEST"
+  # Merge, don't just seed: an entry added to the arrays after the manifest
+  # exists must still appear (off) or it is invisible to status/flip forever.
+  { for s in "${SINGLETONS[@]}"; do echo "item $s"; done
+    for h in "${HOOKS[@]}"; do echo "hook $h"; done
+    for s in "${SKILLS[@]}"; do echo "skill $s"; done
+  } | while read -r kind name; do
+    grep -q "^$kind $name " "$MANIFEST" || echo "$kind $name off" >> "$MANIFEST"
+  done
 }
 
 state_of() { awk -v k="$1" -v n="$2" '$1==k && $2==n {print $3}' "$MANIFEST"; }
