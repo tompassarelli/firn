@@ -986,11 +986,311 @@ PY
   apply
 }
 
+# ── export-plugin ─────────────────────────────────────────────────────────────
+# A module is the working tree: live symlinks into repos, governed by a switch,
+# edited in place. A plugin is the opposite kind of object — a sealed release
+# somebody else installs — so the export COPIES. Freezing is not a compromise
+# here, it is what a release IS: the artifact must not change when the source
+# repo moves on, and the receipt says exactly which revision it froze.
+PLUGIN_RELEASES="${AGENTS_PLUGIN_RELEASES:-$HOME/code/north-data/plugin-releases}"
+
+export_plugin() { # <module> [dest] [--force] [--description <text>]
+  local module="" dest="" force="" desc=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --force)       force=1 ;;
+      --description) shift; desc="${1:?agents: --description needs text}" ;;
+      -*)            echo "agents: unknown flag: $1" >&2; exit 2 ;;
+      *)             if [ -z "$module" ]; then module="$1"; else dest="$1"; fi ;;
+    esac
+    shift
+  done
+  [ -n "$module" ] || { echo "agents: export-plugin requires a module name" >&2; exit 2; }
+  ensure_manifest
+  case " ${MODULES[*]} " in
+    *" $module "*) ;;
+    *) echo "agents: not a module: $module" >&2; exit 2 ;;
+  esac
+  # Sources are resolved HERE, by the same function the sweep and the link use,
+  # so a plugin can never contain a skill from a path the switchboard would not
+  # have linked.
+  local sources=() n src
+  for n in "${SKILLS[@]}" "${MODULES[@]}"; do
+    src="$(governed_source "$n")"
+    if [ -n "$src" ]; then sources+=("$n=$src"); fi
+  done
+  AGENTS_PLUGIN_DESC="$desc" python3 - "$module" "$dest" "${force:-}" "$MODULES_D" \
+    "$FRAGMENTS" "$MANIFEST" "$PLUGIN_RELEASES" ${sources[@]+"${sources[@]}"} <<'PY'
+import hashlib, json, os, re, shutil, stat, subprocess, sys, tempfile, time
+
+module, dest_arg, force, modules_d, frag_dir, manifest, releases, *pairs = sys.argv[1:]
+sources = dict(p.split("=", 1) for p in pairs)
+desc_flag = os.environ.get("AGENTS_PLUGIN_DESC", "").strip()
+
+kind = {}
+for line in open(manifest):
+    parts = line.split()
+    if len(parts) >= 3:
+        kind[parts[1]] = parts[0]
+
+def module_file(name):
+    return os.path.join(modules_d, name + ".json")
+
+def module_decl(name):
+    p = module_file(name)
+    if not os.path.isfile(p):
+        return {}
+    try:
+        return json.load(open(p))
+    except Exception as exc:
+        sys.exit(f"agents: {p}: unreadable ({exc}) — nothing exported")
+
+# Flatten: a contained module is not a nested plugin, because a plugin has no
+# such thing. Its members join this one's, union, and the receipt records that
+# they arrived through their own module rather than being named here directly.
+skills, hooks, skipped, flattened = [], [], [], {}
+seen_modules, seen_units = [], set()
+
+def walk(name, via):
+    if name in seen_modules:
+        return
+    seen_modules.append(name)
+    if via:
+        flattened[name] = via
+    for raw in (module_decl(name).get("members") or []):
+        u = str(raw).strip()
+        if not u or u in seen_units:
+            continue
+        seen_units.add(u)
+        k = kind.get(u, "")
+        if k == "module":
+            walk(u, name)
+        elif k == "skill":
+            skills.append((u, name))
+        elif k == "hook":
+            hooks.append((u, name))
+        elif k:
+            skipped.append((u, k, name, f"{k} rows have no plugin equivalent"))
+        else:
+            skipped.append((u, "?", name, "names no unit in the manifest"))
+
+walk(module, "")
+
+stage = tempfile.mkdtemp(prefix="agents-plugin.")
+warnings, copied_scripts, unresolved, repos = [], [], [], {}
+
+def note(msg):
+    warnings.append(msg)
+    print("agents: " + msg, file=sys.stderr)
+
+def record_repo(path):
+    d = path if os.path.isdir(path) else os.path.dirname(path)
+    try:
+        top = subprocess.run(["git", "-C", d, "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=5)
+        rev = subprocess.run(["git", "-C", d, "rev-parse", "HEAD"],
+                             capture_output=True, text=True, timeout=5)
+        if top.returncode == 0 and rev.returncode == 0:
+            repos[top.stdout.strip()] = rev.stdout.strip()
+    except Exception:
+        pass
+
+def copy_tree(src, rel):
+    dst = os.path.join(stage, rel)
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    shutil.copytree(src, dst, symlinks=False, dirs_exist_ok=True)
+    record_repo(src)
+
+def rewrite_command(cmd, hook_name):
+    # A plugin runs from wherever it was installed, so a command naming this
+    # machine's paths is a command that works nowhere else. Every absolute path
+    # that IS a file rides along in hooks/bin and the command points at it
+    # through ${CLAUDE_PLUGIN_ROOT}; every one that is not gets named in the
+    # receipt rather than shipped broken and silent.
+    out = cmd
+    for tok in re.findall(r'/[^\s"\']+', cmd):
+        if os.path.isfile(tok):
+            base = os.path.basename(tok)
+            dst = os.path.join(stage, "hooks", "bin", base)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(tok, dst)
+            if (tok, "hooks/bin/" + base) not in copied_scripts:
+                copied_scripts.append((tok, "hooks/bin/" + base))
+            record_repo(tok)
+            out = out.replace(tok, "${CLAUDE_PLUGIN_ROOT}/hooks/bin/" + base)
+        else:
+            unresolved.append((hook_name, tok))
+            note(f"hook {hook_name}: {tok} is not a file on this machine"
+                 " — left as an absolute path in the plugin")
+    return out
+
+def guide_skill(name, path):
+    body = open(path).read()
+    head = ""
+    for line in body.splitlines():
+        if line.startswith("#"):
+            head = line.lstrip("#").strip()
+            break
+    head = head or f"Instructions carried by the {name} module."
+    d = os.path.join(stage, "skills", name + "-guide")
+    os.makedirs(d, exist_ok=True)
+    esc = head.replace("\\", "\\\\").replace('"', '\\"')
+    with open(os.path.join(d, "SKILL.md"), "w") as fh:
+        fh.write(f'---\nname: {name}-guide\ndescription: "{esc}"\n---\n\n{body}')
+    record_repo(path)
+    return head
+
+# Every module in the flattened set contributes its own payload and its own
+# instructions, not just its member list: a plugin has no global-context slot,
+# so instructions become a skill, which is the honest equivalent of "text every
+# session reads".
+first_head = ""
+for m in seen_modules:
+    decl = module_decl(m)
+    payload = sources.get(m, "")
+    if payload and os.path.isdir(payload):
+        copy_tree(payload, os.path.join("skills", m))
+    if payload:
+        tpl = os.path.join(os.path.dirname(payload), "agents")
+        if os.path.isdir(tpl):
+            for f in sorted(os.listdir(tpl)):
+                if f.endswith(".md"):
+                    os.makedirs(os.path.join(stage, "agents"), exist_ok=True)
+                    shutil.copy2(os.path.join(tpl, f), os.path.join(stage, "agents", f))
+            record_repo(tpl)
+    ins = (decl.get("instructions") or "").strip()
+    if ins and os.path.isfile(ins):
+        head = guide_skill(m, ins)
+        if m == module:
+            first_head = head
+    elif ins:
+        note(f"module {m}: instructions file {ins} is missing — no guide skill")
+
+for name, via in skills:
+    src = sources.get(name, "")
+    if src and os.path.isdir(src):
+        copy_tree(src, os.path.join("skills", name))
+    else:
+        skipped.append((name, "skill", via, f"source {src or '(unknown)'} is missing"))
+        note(f"skill {name}: source is missing — not exported")
+
+events = {}
+for name, via in hooks:
+    p = os.path.join(frag_dir, name + ".json")
+    try:
+        frag = json.load(open(p))
+    except Exception as exc:
+        skipped.append((name, "hook", via, f"fragment unreadable ({exc})"))
+        note(f"hook {name}: {p} unreadable ({exc}) — not exported")
+        continue
+    record_repo(p)
+    for entry in frag.get("entries", []):
+        hook = dict(entry.get("hook") or {})
+        hook["command"] = rewrite_command(hook.get("command", ""), name)
+        blocks = events.setdefault(entry["event"], [])
+        for b in blocks:
+            if b.get("matcher") == entry.get("matcher"):
+                b["hooks"].append(hook)
+                break
+        else:
+            block = {"hooks": [hook]}
+            if entry.get("matcher") is not None:
+                block["matcher"] = entry["matcher"]
+            blocks.append(block)
+
+if events:
+    os.makedirs(os.path.join(stage, "hooks"), exist_ok=True)
+    with open(os.path.join(stage, "hooks", "hooks.json"), "w") as fh:
+        json.dump({"description": f"Hooks composed by the {module} module.",
+                   "hooks": events}, fh, indent=2)
+        fh.write("\n")
+
+# The version is a fact about the CONTENT, computed before plugin.json and the
+# receipt exist so that neither can perturb it: identical sources always yield
+# the same version, and any change to any exported byte yields a new one.
+h = hashlib.sha256()
+for root, dirs, files in os.walk(stage):
+    dirs.sort()
+    for f in sorted(files):
+        p = os.path.join(root, f)
+        h.update(os.path.relpath(p, stage).encode())
+        h.update(b"\0")
+        h.update(open(p, "rb").read())
+        h.update(b"\0")
+version = time.strftime("%Y%m%d") + "-" + h.hexdigest()[:8]
+
+description = desc_flag or first_head or f"The {module} module, exported from the agents switchboard."
+os.makedirs(os.path.join(stage, ".claude-plugin"), exist_ok=True)
+with open(os.path.join(stage, ".claude-plugin", "plugin.json"), "w") as fh:
+    json.dump({"name": module, "version": version, "description": description,
+               "author": {"name": "Tom Passarelli",
+                          "url": "https://github.com/tompassarelli"}}, fh, indent=2)
+    fh.write("\n")
+
+dest = dest_arg or os.path.join(releases, f"{module}-{version}")
+if os.path.exists(dest):
+    if not force:
+        shutil.rmtree(stage)
+        sys.exit(f"agents: {dest} already exists and a release is sealed — "
+                 "pass --force to write a new version directory beside it")
+    n = 2
+    while os.path.exists(f"{dest}-{n}"):
+        n += 1
+    dest = f"{dest}-{n}"
+
+lines = ["format=north-agents-plugin/v1",
+         f"module={module}",
+         f"version={version}",
+         f"created={time.strftime('%Y-%m-%dT%H:%M:%S%z')}",
+         f"declaration={module_file(module)}"]
+for m in seen_modules[1:]:
+    lines.append(f"flattened={m} (members merged in, contained by {flattened[m]})")
+for name, via in skills:
+    lines.append(f"member=skill {name} {sources.get(name, '(unknown)')} via {via}")
+for name, via in hooks:
+    lines.append(f"member=hook {name} {os.path.join(frag_dir, name + '.json')} via {via}")
+for src, rel in copied_scripts:
+    lines.append(f"script={src} -> {rel}")
+for name, k, via, why in skipped:
+    lines.append(f"skipped={k} {name} (member of {via}) — {why}")
+for hookname, tok in unresolved:
+    lines.append(f"unresolved-path={hookname} {tok}")
+for root in sorted(repos):
+    lines.append(f"repo={root} {repos[root]}")
+if not unresolved:
+    lines.append("unresolved-path=(none)")
+with open(os.path.join(stage, "RELEASE"), "w") as fh:
+    fh.write("\n".join(lines) + "\n")
+
+os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+shutil.move(stage, dest)
+
+# Sealed, like every other release under north-data: an artifact somebody can
+# edit in place is an artifact whose receipt is a guess.
+for root, dirs, files in os.walk(dest, topdown=False):
+    for name in files + dirs:
+        p = os.path.join(root, name)
+        mode = os.lstat(p).st_mode
+        if not stat.S_ISLNK(mode):
+            os.chmod(p, stat.S_IMODE(mode) & ~0o222)
+# The staging directory was private (mkdtemp is 0700); a release is readable.
+os.chmod(dest, 0o555)
+
+for name, k, via, why in skipped:
+    print(f"agents: skipped {k} {name} — {why}", file=sys.stderr)
+print(f"exported: {module} {version} -> {dest} "
+      f"({len(skills)} skills, {len(hooks)} hooks, {len(seen_modules) - 1} flattened, "
+      f"{len(skipped)} skipped)")
+PY
+}
+
 case "${1:-status}" in
   status) status ;;
   on)  shift; flip on "$@"; ;;
   off) shift; flip off "$@" ;;
   apply) apply ;;
   path) shift; path_of "${1:?agents: path requires a name}" ;;
-  *) echo "usage: agents [status] | on|off <name>|--all | path <name> | apply" >&2; exit 2 ;;
+  export-plugin) shift; export_plugin "$@" ;;
+  *) echo "usage: agents [status] | on|off <name>|--all | path <name> | apply" \
+       "| export-plugin <module> [dest] [--force] [--description <text>]" >&2; exit 2 ;;
 esac

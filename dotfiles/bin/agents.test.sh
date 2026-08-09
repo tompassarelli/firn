@@ -10,7 +10,7 @@ REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 BIN="$REPO/dotfiles/bin/agents"
 FRAG_SRC="$REPO/dotfiles/agents/hooks.d"
 SB="$(mktemp -d)"
-trap 'rm -rf "$SB" "$SB.frags" "$SB.mods"' EXIT
+trap 'chmod -R u+w "$SB" 2>/dev/null; rm -rf "$SB" "$SB.frags" "$SB.mods"' EXIT
 
 fails=0
 ok() { printf 'ok   %s\n' "$1"; }
@@ -50,7 +50,8 @@ mod_ins() { # name instructions-path member...
 markers() { grep -o '<!-- module: [a-z-]* -->' "$SB/.config/agents/CLAUDE.md" | tr '\n' ' ' | sed 's/ $//'; }
 skilllinks() { find "$SB/.config/agents/skills" -maxdepth 1 -type l -printf '%f\n' | sort | tr '\n' ' ' | sed 's/ $//'; }
 
-ag() { HOME="$SB" AGENTS_FRAGMENTS="$FRAGS" AGENTS_MODULES="$MODS" bash "$BIN" "$@"; }
+ag() { HOME="$SB" AGENTS_FRAGMENTS="$FRAGS" AGENTS_MODULES="$MODS" \
+       AGENTS_PLUGIN_RELEASES="$SB/releases" bash "$BIN" "$@"; }
 hookrows() { grep '^hook ' "$SB/.config/agents/manifest.conf" | sort; }
 composed_files() { # every hook command settings.json currently carries
   python3 - "$SB/.claude/settings.json" <<'PY'
@@ -560,6 +561,98 @@ ag on repo-safety 2>"$SB/errcx" >/dev/null
 if grep -q 'is not a directory — repo-safety not linked for codex' "$SB/errcx"; then ok "a non-directory there warns"; else bad "non-directory warns" "$(cat "$SB/errcx")"; fi
 chk "the claude farm still got it" "repo-safety" "$(skilllinks)"
 chk "apply still reports" "1" "$(ag apply 2>/dev/null | grep -c '^applied:')"
+
+echo
+echo "== 19. export-plugin: a module compiled into a sealed release folder"
+# Fragments pointing at sandbox scripts, so the emitted tree is the same on any
+# machine — a hook command naming ~/.agents would make this test a machine test.
+rm -rf "$SB.frags"; mkdir -p "$SB.frags"; cp "$FRAG_SRC"/*.json "$SB.frags/"
+fresh "$SB.frags"; mods
+mkdir -p "$SB/bin"; printf '#!/bin/sh\nexit 0\n' > "$SB/bin/guard.sh"; chmod +x "$SB/bin/guard.sh"
+python3 - "$SB.frags" "$SB/bin/guard.sh" <<'PY'
+import json, os, sys
+d, script = sys.argv[1:]
+for name in ("worktree-guard", "tripwire-guard"):
+    p = os.path.join(d, name + ".json")
+    frag = json.load(open(p))
+    for e in frag["entries"]:
+        e["hook"]["command"] = script
+    open(p, "w").write(json.dumps(frag, indent=1))
+PY
+printf '# Team conventions\n\nUse the worktree flow.\n' > "$SB/guide.md"
+printf '# Inner rules\n\nNested text.\n' > "$SB/inner.md"
+mod_ins team "$SB/guide.md" repo-safety worktree-guard inner
+mod_ins inner "$SB/inner.md" tripwire-guard
+ag status > /dev/null
+out="$(ag export-plugin team 2>"$SB/xerr")"
+D="$(ls -d "$SB/releases"/team-*/ 2>/dev/null | head -1)"
+chk "one release directory, named <module>-<version>" "1" "$(ls -d "$SB/releases"/team-*/ 2>/dev/null | wc -l)"
+chk "the emitted layout, exactly" \
+  "./.claude-plugin ./.claude-plugin/plugin.json ./RELEASE ./hooks ./hooks/bin ./hooks/bin/guard.sh ./hooks/hooks.json ./skills ./skills/inner-guide ./skills/inner-guide/SKILL.md ./skills/repo-safety ./skills/repo-safety/SKILL.md ./skills/team-guide ./skills/team-guide/SKILL.md" \
+  "$(cd "$D" && find . -mindepth 1 | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
+chk "the exported skill is a byte-for-byte copy of its source" "" "$(diff -r "$REPO/dotfiles/agents/skills/repo-safety" "$D/skills/repo-safety")"
+chk "plugin.json parses and carries the schema's fields" "team|20260810|Team conventions|Tom Passarelli" \
+  "$(python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print("|".join([d["name"],d["version"][:8],d["description"],d["author"]["name"]]))' "$D/.claude-plugin/plugin.json" | sed 's/|[0-9]\{8\}|/|20260810|/')"
+chk "the version is a date and a content hash" "1" "$(python3 -c 'import json,re,sys;print(1 if re.fullmatch(r"[0-9]{8}-[0-9a-f]{8}", json.load(open(sys.argv[1]))["version"]) else 0)' "$D/.claude-plugin/plugin.json")"
+chk "the instructions became a guide skill, frontmatter and body" \
+  '---|name: team-guide|description: "Team conventions"|---||# Team conventions||Use the worktree flow.' \
+  "$(tr '\n' '|' < "$D/skills/team-guide/SKILL.md" | sed 's/|$//')"
+chk "a nested module's instructions become their own guide" "1" "$(grep -c '^name: inner-guide$' "$D/skills/inner-guide/SKILL.md")"
+# hooks: our fragment shape becomes the plugin's hooks.json, paths rewritten
+chk "hooks.json is the plugin shape, command via CLAUDE_PLUGIN_ROOT" \
+  'PreToolUse Bash ${CLAUDE_PLUGIN_ROOT}/hooks/bin/guard.sh' \
+  "$(python3 -c '
+import json,sys
+d=json.load(open(sys.argv[1]))["hooks"]
+ev=sorted(d)[0]; b=[x for x in d[ev] if x.get("matcher")=="Bash"][0]
+print(ev, b["matcher"], b["hooks"][0]["command"])' "$D/hooks/hooks.json")"
+chk "no machine path survives in hooks.json" "0" "$(grep -c '/home/tom' "$D/hooks/hooks.json" || true)"
+chk "the referenced script rode along" "" "$(diff "$SB/bin/guard.sh" "$D/hooks/bin/guard.sh")"
+# receipt
+chk "receipt declares its format" "format=north-agents-plugin/v1" "$(head -1 "$D/RELEASE")"
+chk "receipt names every member source" "3" "$(grep -c '^member=' "$D/RELEASE")"
+chk "receipt names the flattening" "1" "$(grep -c '^flattened=inner ' "$D/RELEASE")"
+chk "receipt names a repo and its rev" "1" "$(grep -cE '^repo=/.+ [0-9a-f]{40}$' "$D/RELEASE")"
+chk "receipt names the copied script" "1" "$(grep -c '^script=.*-> hooks/bin/guard.sh$' "$D/RELEASE")"
+chk "receipt says no path went unresolved" "unresolved-path=(none)" "$(grep '^unresolved-path=' "$D/RELEASE")"
+# sealed
+chk "the release is sealed: no write bit anywhere" "0" "$(find "$D" -perm -u+w | wc -l)"
+chk "and readable, like every release under north-data" "dr-xr-xr-x" "$(stat -c %A "$D" | sed 's|/$||')"
+# re-export
+err="$(ag export-plugin team 2>&1 >/dev/null || true)"
+case "$err" in *"already exists and a release is sealed"*) ok "a second export refuses rather than overwriting" ;;
+  *) bad "second export refuses" "$err" ;; esac
+chk "and left the sealed release alone" "1" "$(ls -d "$SB/releases"/team-*/ | wc -l)"
+ag export-plugin team --force > /dev/null
+chk "--force writes a NEW directory beside it" "2" "$(ls -d "$SB/releases"/team-*/ | wc -l)"
+chk "identical sources give the identical version" "1" "$(ls -d "$SB/releases"/team-*/ | sed 's|.*/team-||;s|-2/$||;s|/$||' | sort -u | wc -l)"
+
+echo
+echo "== 20. export-plugin: what cannot become a plugin says so, and the rest lands"
+fresh; mods
+mkdir -p "$SB/code/north-data/context-dirs" "$SB/proj"
+printf '%s proj\n' "$SB/proj" > "$SB/code/north-data/context-dirs.conf"
+echo "ctx" > "$SB/code/north-data/context-dirs/proj.md"
+# a payload module: skill + agent templates, no member file of its own
+ORCHD="$SB/code/north/main/orchestration"
+mkdir -p "$ORCHD/skill" "$ORCHD/agents"
+printf -- '---\nname: orchestration\n---\ndoctrine\n' > "$ORCHD/skill/SKILL.md"
+printf -- '---\nname: executor\n---\nrole\n' > "$ORCHD/agents/executor.md"
+mod mixed proj statusline-script orchestration ghost
+ag status > /dev/null
+out="$(ag export-plugin mixed --description "A mixed bag" 2>"$SB/xerr2")"
+D2="$(ls -d "$SB/releases"/mixed-*/ | head -1)"
+chk "a dir row is skipped, by name" "1" "$(grep -c 'skipped dir proj — dir rows have no plugin equivalent' "$SB/xerr2")"
+chk "an other row is skipped, by name" "1" "$(grep -c 'skipped other statusline-script' "$SB/xerr2")"
+chk "a member naming nothing is skipped, by name" "1" "$(grep -c 'skipped ? ghost — names no unit' "$SB/xerr2")"
+chk "the skips are in the receipt too" "3" "$(grep -c '^skipped=' "$D2/RELEASE")"
+chk "a payload module's skill exported" "1" "$(grep -c '^name: orchestration$' "$D2/skills/orchestration/SKILL.md")"
+chk "and its agent templates" "1" "$(ls "$D2/agents" | wc -l)"
+chk "--description wins over the instructions heading" "A mixed bag" "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["description"])' "$D2/.claude-plugin/plugin.json")"
+chk "the export reports what it did" "1" "$(echo "$out" | grep -c '^exported: mixed ')"
+chk "exporting a non-module is refused" "1" "$(ag export-plugin repo-safety 2>&1 >/dev/null | grep -c 'not a module')"
+chk "exporting nothing is refused" "1" "$(ag export-plugin 2>&1 >/dev/null | grep -c 'requires a module name')"
+chk "the manifest is untouched by an export" "" "$(cp "$SB/.config/agents/manifest.conf" "$SB/m4"; ag export-plugin mixed --force > /dev/null; diff "$SB/m4" "$SB/.config/agents/manifest.conf")"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "ALL PASS"; else echo "$fails FAILURES"; fi
