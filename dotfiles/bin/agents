@@ -9,12 +9,17 @@ SETTINGS="$HOME/.claude/settings.json"
 PLUGINS_JSON="$HOME/.claude/plugins/installed_plugins.json"
 ORCH="$HOME/code/north/main/orchestration"
 CLAUDE_AGENTS="$HOME/.claude/agents"
+# Which directories have a context file is user data, so the inventory lives in
+# north-data; this switchboard only decides whether each one has content.
+CONTEXT_REGISTRY="$HOME/code/north-data/context-dirs.conf"
+CONTEXT_SOURCES="$HOME/code/north-data/context-dirs"
+DIR_TARGETS="$STATE/dir"
 
 HOOKS=(agent-spawn-guard beagle-session-start comment-bloat-guard firn-guard
   git-blind-stage-guard hook-detach logcompress north-session-lifecycle
   tripwire-guard worktree-guard)
 SKILLS=(webdev beagle-authoring fram-modeling code-as-facts firn)
-SINGLETONS=(agents-md code-md statusline orchestration)
+SINGLETONS=(agents-md statusline-script orchestration)
 
 # Plugins are not a hand-written list: the install ledger is the inventory, so
 # an install/uninstall done outside this script is picked up on the next run
@@ -43,6 +48,53 @@ for name, installs in sorted((data.get("plugins") or {}).items()):
             break
 PY
   )
+}
+
+DIRS=(); DIR_PATHS=(); DIRS_LOADED=
+
+load_dirs() { # the registry is the inventory, same shape as the plugin ledger
+  if [ -n "$DIRS_LOADED" ]; then return 0; fi
+  DIRS_LOADED=1
+  [ -f "$CONTEXT_REGISTRY" ] || return 0
+  local d s
+  # `|| [ -n "$d" ]` — a registry saved without a trailing newline still counts.
+  while read -r d s _ || [ -n "${d:-}" ]; do
+    case "${d:-}" in ''|'#'*) continue ;; esac
+    [ -n "${s:-}" ] || { echo "agents: $CONTEXT_REGISTRY: no slug for $d" >&2; continue; }
+    DIRS+=("$s"); DIR_PATHS+=("$d")
+  done < "$CONTEXT_REGISTRY"
+}
+
+dir_source() { echo "$CONTEXT_SOURCES/$1.md"; }
+
+dir_target_base() { # the <base>-CLAUDE.md / <base>-AGENTS.md stem a slug writes
+  case "$1" in
+    # Compat exception, not a pattern: ~/code/{CLAUDE,AGENTS}.md are
+    # home-manager links to these exact paths. Moving them under dir/ would
+    # leave the live links dangling until the next rebuild.
+    code) echo "$STATE/code" ;;
+    *)    echo "$DIR_TARGETS/$1" ;;
+  esac
+}
+
+link_dir_context() { # dir base — the two provider links AT the directory itself
+  # `apply` owns the target files; the links at <dir> are usually someone
+  # else's (home-manager writes ~/code's). Create only what is missing, and
+  # never clobber a file already sitting there — a real CLAUDE.md at a
+  # registered directory is the user's, and overwriting it is unrecoverable.
+  local ddir="$1" base="$2" provider link want
+  [ -d "$ddir" ] || { echo "agents: $ddir does not exist — no links made" >&2; return 0; }
+  for provider in CLAUDE AGENTS; do
+    link="$ddir/$provider.md"; want="$base-$provider.md"
+    if [ -e "$link" ] || [ -L "$link" ]; then
+      # Already ours counts even through an indirection (home-manager points
+      # ~/code's links at a store path that points back here).
+      if [ "$(readlink -f "$link" 2>/dev/null)" = "$(readlink -f "$want")" ]; then continue; fi
+      echo "agents: $link is not this switchboard's — left alone" >&2
+      continue
+    fi
+    ln -s "$want" "$link"
+  done
 }
 
 plugin_install_path() {
@@ -79,22 +131,44 @@ skill_source() {
 path_of() { # the canonical source file to view or edit for an item
   case "$1" in
     agents-md)  echo "$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md" ;;
-    code-md)    echo "$HOME/code/nixos-config/main/dotfiles/code/CLAUDE.md" ;;
-    statusline) echo "$HOME/code/nixos-config/main/dotfiles/claude/statusline.sh" ;;
+    statusline-script) echo "$HOME/code/nixos-config/main/dotfiles/claude/statusline.sh" ;;
     orchestration) echo "$ORCH/doctrine.md" ;;
     *)
       case " ${HOOKS[*]} " in *" $1 "*) echo "$FRAGMENTS/$1.json"; return ;; esac
       case " ${SKILLS[*]} " in *" $1 "*) echo "$(skill_source "$1")/SKILL.md"; return ;; esac
+      load_dirs
+      case " ${DIRS[*]} " in *" $1 "*) dir_source "$1"; return ;; esac
       load_plugins
       case " ${PLUGINS[*]} " in *" $1 "*) plugin_install_path "$1"; return ;; esac
       echo "agents: unknown item: $1" >&2; exit 2 ;;
   esac
 }
 
+migrate_row() { # old-kind old-name new-kind new-name
+  # A renamed slot must carry its state across, in place. Leaving the old row
+  # behind is not harmless: status stops showing it, but the TUI reads the
+  # manifest directly and would keep rendering the ghost.
+  awk -v k="$1" -v n="$2" '$1==k && $2==n {f=1} END {exit !f}' "$MANIFEST" || return 0
+  local tmp="$MANIFEST.tmp.$$"
+  # Two passes over the same file: pass 1 asks whether the new row already
+  # exists, so a half-migrated manifest drops the old row instead of doubling.
+  awk -v ok="$1" -v oname="$2" -v nk="$3" -v nname="$4" '
+    NR==FNR { if ($1==nk && $2==nname) have=1; next }
+    $1==ok && $2==oname { if (!have) print nk " " nname " " $3; next }
+    { print }
+  ' "$MANIFEST" "$MANIFEST" > "$tmp"
+  mv "$tmp" "$MANIFEST"
+}
+
 ensure_manifest() {
-  mkdir -p "$STATE" "$STATE/skills"
+  mkdir -p "$STATE" "$STATE/skills" "$DIR_TARGETS"
   [ -f "$MANIFEST" ] || : > "$MANIFEST"
   load_plugins
+  load_dirs
+  # Rename migrations run before the merge below, or the merge re-seeds the new
+  # name at `off` and the old row's state is lost.
+  migrate_row item code-md dir code
+  migrate_row item statusline item statusline-script
   # Merge, don't just seed: an entry added to the arrays after the manifest
   # exists must still appear (off) or it is invisible to status/flip forever.
   # Plugins seed from reality instead of off: settings.json already enables
@@ -110,6 +184,9 @@ ensure_manifest() {
   { for s in "${SINGLETONS[@]}"; do echo "item $s off"; done
     for h in "${HOOKS[@]}"; do echo "hook $h off"; done
     for s in "${SKILLS[@]}"; do echo "skill $s off"; done
+    # A newly registered directory is inert until it is turned on: registering
+    # is "a context file exists here", not "inject it".
+    for s in "${DIRS[@]}"; do echo "dir $s off"; done
     for p in "${PLUGINS[@]}"; do
       case "$enabled" in *" $p "*) echo "plugin $p on" ;; *) echo "plugin $p off" ;; esac
     done
@@ -130,10 +207,15 @@ set_state() { # kind name state
 
 status() {
   ensure_manifest
-  printf 'AGENTS.md            %s\n' "$(state_of item agents-md)"
-  printf 'code CLAUDE.md       %s\n' "$(state_of item code-md)"
-  printf 'statusline           %s\n' "$(state_of item statusline)"
-  printf 'orchestration        %s\n' "$(state_of item orchestration)"
+  echo "globals"
+  printf '  %-20s %s\n' "AGENTS.md" "$(state_of item agents-md)"
+  printf '  %-20s %s\n' "statusline-script" "$(state_of item statusline-script)"
+  printf '  %-20s %s\n' "orchestration" "$(state_of item orchestration)"
+  echo "directory context"
+  local i
+  for i in "${!DIRS[@]}"; do
+    printf '  %-20s %-4s %s\n' "${DIRS[$i]}" "$(state_of dir "${DIRS[$i]}")" "${DIR_PATHS[$i]}"
+  done
   echo "hooks"
   # One interpreter for all rows; a python3 start per hook made status crawl.
   python3 - "$FRAGMENTS" "$MANIFEST" <<'PY'
@@ -179,15 +261,24 @@ apply() {
   for acct in "$HOME"/.local/state/north/accounts/*/*/CLAUDE.md; do
     [ -e "$acct" ] && cat "$agents_target" > "$acct"
   done
-  # ~/code routing note — one slot, both provider surfaces: ~/code/CLAUDE.md
-  # and ~/code/AGENTS.md resolve here, so off means neither provider picks up
-  # routing instructions when entering ~/code.
-  if [ "$(state_of item code-md)" = on ]; then
-    cat "$HOME/code/nixos-config/main/dotfiles/code/CLAUDE.md" > "$STATE/code-CLAUDE.md"
-  else
-    : > "$STATE/code-CLAUDE.md"
-  fi
-  cat "$STATE/code-CLAUDE.md" > "$STATE/code-AGENTS.md"
+  # directory contexts — one slot per registered directory, both provider
+  # surfaces: <dir>/CLAUDE.md and <dir>/AGENTS.md resolve to the pair written
+  # here, so off means neither provider picks anything up on entering <dir>.
+  local i slug ddir base dsrc
+  for i in "${!DIRS[@]}"; do
+    slug="${DIRS[$i]}"; ddir="${DIR_PATHS[$i]}"
+    base="$(dir_target_base "$slug")"; dsrc="$(dir_source "$slug")"
+    if [ "$(state_of dir "$slug")" = on ] && [ -f "$dsrc" ]; then
+      cat "$dsrc" > "$base-CLAUDE.md"
+    else
+      if [ "$(state_of dir "$slug")" = on ]; then
+        echo "agents: $slug is on but $dsrc is missing — wrote empty" >&2
+      fi
+      : > "$base-CLAUDE.md"
+    fi
+    cat "$base-CLAUDE.md" > "$base-AGENTS.md"
+    link_dir_context "$ddir" "$base"
+  done
   # skills — a farm of symlinks; only `on` skills exist
   local s src
   find "$STATE/skills" -maxdepth 1 -type l -delete
@@ -229,7 +320,7 @@ apply() {
   for p in "${PLUGINS[@]}"; do
     [ "$(state_of plugin "$p")" = on ] && on_plugins+=("$p")
   done
-  STATUSLINE_STATE="$(state_of item statusline)" \
+  STATUSLINE_STATE="$(state_of item statusline-script)" \
   ON_PLUGINS="$(printf '%s\n' ${on_plugins[@]+"${on_plugins[@]}"})" \
   python3 - "$SETTINGS" "$FRAGMENTS" "${on_hooks[@]}" <<'PY'
 import json, os, sys
@@ -258,7 +349,11 @@ tmp = settings_path + ".next"
 json.dump(settings, open(tmp, "w"), indent=2)
 os.replace(tmp, settings_path)
 PY
-  echo "applied: $(state_of item agents-md) AGENTS.md, ${#on_hooks[@]} hooks, $(find "$STATE/skills" -maxdepth 1 -type l | wc -l) skills, ${#on_plugins[@]} plugins, orchestration $(state_of item orchestration)"
+  local on_dirs=0
+  for i in "${!DIRS[@]}"; do
+    [ "$(state_of dir "${DIRS[$i]}")" = on ] && on_dirs=$((on_dirs + 1))
+  done
+  echo "applied: $(state_of item agents-md) AGENTS.md, ${#on_hooks[@]} hooks, $(find "$STATE/skills" -maxdepth 1 -type l | wc -l) skills, ${#on_plugins[@]} plugins, $on_dirs/${#DIRS[@]} dir contexts, orchestration $(state_of item orchestration)"
 }
 
 flip() { # on|off [--all | kind? name]
@@ -274,6 +369,9 @@ flip() { # on|off [--all | kind? name]
     esac
     case " ${SINGLETONS[*]} " in *" $name "*)
       set_state item "$name" "$target_state"; apply; return ;;
+    esac
+    case " ${DIRS[*]} " in *" $name "*)
+      set_state dir "$name" "$target_state"; apply; return ;;
     esac
     case " ${PLUGINS[*]} " in *" $name "*)
       set_state plugin "$name" "$target_state"; apply; return ;;

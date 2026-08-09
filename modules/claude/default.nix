@@ -21,6 +21,9 @@ in
         ".claude/skills".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.config/agents/skills";
         ".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.config/agents/CLAUDE.md";
         ".claude/hooks".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/hooks";
+        # ~/code is the `code` directory context (north-data:context-dirs.conf).
+        # Every other slug writes .config/agents/dir/<slug>-CLAUDE.md; `code`
+        # keeps this flat path so this link never dangles between rebuilds.
         "code/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.config/agents/code-CLAUDE.md";
       };
       home.activation.seedClaudeSettings = config.lib.dag.entryAfter [ "writeBoundary" ] "run env INSTALL_BIN=${pkgs.coreutils}/bin/install MKDIR_BIN=${pkgs.coreutils}/bin/mkdir MV_BIN=${pkgs.coreutils}/bin/mv REALPATH_BIN=${pkgs.coreutils}/bin/realpath RM_BIN=${pkgs.coreutils}/bin/rm FLOCK_BIN=${pkgs.util-linux}/bin/flock JQ_BIN=${pkgs.jq}/bin/jq ${claudeSettingsSeeder} ${claudeSettingsSeed} $HOME/.claude/settings.json\n";
