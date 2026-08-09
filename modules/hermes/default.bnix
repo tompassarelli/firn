@@ -13,8 +13,8 @@
 ;;     by absolute path with the shared coordinator port + split-corpus state env
 ;;     and Hermes' own `connect_timeout` key; shared external skills are wired to
 ;;     ~/.agents/skills. No credentials.
-;;   * ~/.hermes/SOUL.md       — the stable shared global constitution (the same
-;;     North-composed ~/.agents/AGENTS.md every adapter obeys).
+;;   * ~/.hermes/SOUL.md       — the switchboard-owned global constitution (the
+;;     same ~/.config/agents/AGENTS.md bytes Claude and Codex are given).
 ;;   * ~/.hermes/plugins/north-bridge — the standalone fail-closed guard +
 ;;     North-lifecycle bridge, installed as an IMMUTABLE nix-store source so
 ;;     Python imports cannot write __pycache__ back into the dotfiles tree.
@@ -80,11 +80,18 @@
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
                         "/code/nixos-config/dotfiles/hermes/config.yaml"))}
+                 ;; Switchboard-owned, exactly like ~/.claude/CLAUDE.md and
+                 ;; ~/.codex/AGENTS.md: the `agents-md` slot feeds every
+                 ;; provider and `agents apply` is the sole writer under
+                 ;; ~/.config/agents. Pointing at ~/.agents/AGENTS.md instead
+                 ;; would resolve to North's World-2 constitution on every
+                 ;; Hermes session, outside the blackout the switch exists to
+                 ;; enforce.
                  ".hermes/SOUL.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/.agents/AGENTS.md"))}
+                        "/.config/agents/AGENTS.md"))}
                  ;; Immutable store copy — read-only, so `import north_bridge`
                  ;; cannot scribble __pycache__ into dotfiles/hermes.
                  ".hermes/plugins/north-bridge"

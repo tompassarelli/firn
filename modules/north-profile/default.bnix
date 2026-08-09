@@ -38,8 +38,13 @@
                       (s config.home.homeDirectory
                         "/code/north/main/agent-profile/hooks"))}
                  ;; Provider-neutral routing instructions for the ~/code root.
+                 ;; Switchboard-owned, exactly like ~/code/CLAUDE.md: the
+                 ;; `code-md` slot feeds both surfaces and `agents apply` is the
+                 ;; sole writer under ~/.config/agents. Linking dotfiles/code
+                 ;; directly would inject the routing note on every session in
+                 ;; ~/code, outside the blackout the switch exists to enforce.
                  "code/AGENTS.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/code/AGENTS.md"))}}})}})}))
+                        "/.config/agents/code-AGENTS.md"))}}})}})}))

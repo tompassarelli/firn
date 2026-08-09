@@ -100,12 +100,15 @@ apply() {
   for acct in "$HOME"/.local/state/north/accounts/*/*/CLAUDE.md; do
     [ -e "$acct" ] && cat "$agents_target" > "$acct"
   done
-  # ~/code routing note
+  # ~/code routing note — one slot, both provider surfaces: ~/code/CLAUDE.md
+  # and ~/code/AGENTS.md resolve here, so off means neither provider picks up
+  # routing instructions when entering ~/code.
   if [ "$(state_of item code-md)" = on ]; then
     cat "$HOME/code/nixos-config/main/dotfiles/code/CLAUDE.md" > "$STATE/code-CLAUDE.md"
   else
     : > "$STATE/code-CLAUDE.md"
   fi
+  cat "$STATE/code-CLAUDE.md" > "$STATE/code-AGENTS.md"
   # skills — a farm of symlinks; only `on` skills exist
   local s src
   find "$STATE/skills" -maxdepth 1 -type l -delete
