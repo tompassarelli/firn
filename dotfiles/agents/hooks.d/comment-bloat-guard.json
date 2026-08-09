@@ -13,5 +13,6 @@
  "tags": [
   "style"
  ],
+ "follows": "global",
  "requires": []
 }

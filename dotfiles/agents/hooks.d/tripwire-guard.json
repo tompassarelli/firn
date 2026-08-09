@@ -13,6 +13,6 @@
  "tags": [
   "guards"
  ],
- "skill": "repo-safety",
+ "follows": "repo-safety",
  "requires": []
 }

@@ -2,7 +2,8 @@
 # agents.test.sh — the switchboard's semantics matrix, run against a sandbox
 # HOME so no assertion can touch the live config. Two axes are what this proves:
 # a hook's PERMISSION (enabled/disabled, stored, the user's) and its ACTIVITY
-# (derived: permission AND its companion skill being on, never stored).
+# (derived: permission AND its companion unit being on, never stored) — where
+# the companion may be a unit of ANY kind that speaks on/off.
 set -uo pipefail
 
 REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -18,12 +19,17 @@ chk() { # desc expected actual
   if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "want [$2] got [$3]"; fi
 }
 
+ACCT="$SB/.local/state/north/accounts/anthropic/acct-one"
+
 fresh() { # [fragments-dir]
   rm -rf "${SB:?}"
-  mkdir -p "$SB/.claude" "$SB/code/nixos-config/main/dotfiles/agents"
+  mkdir -p "$SB/.claude" "$SB/code/nixos-config/main/dotfiles/agents" "$ACCT"
   echo '{"model":"opus","otherKey":42}' > "$SB/.claude/settings.json"
   cp "$REPO/dotfiles/agents/AGENTS.md" "$SB/code/nixos-config/main/dotfiles/agents/AGENTS.md"
   ln -sfn "$REPO/dotfiles/agents/skills" "$SB/code/nixos-config/main/dotfiles/agents/skills"
+  # An account copy only exists once a session has made one; apply overwrites
+  # what is there and never creates the tree, so the fixture must.
+  : > "$ACCT/CLAUDE.md"
   FRAGS="${1:-$FRAG_SRC}"
 }
 
@@ -50,6 +56,12 @@ chk "firn-guard row" "hook firn-guard enabled firn" "$(grep '^hook firn-guard ' 
 chk "worktree-guard row" "hook worktree-guard enabled repo-safety" "$(grep '^hook worktree-guard ' "$SB/.config/agents/manifest.conf")"
 chk "logcompress row (unbound)" "hook logcompress disabled" "$(grep '^hook logcompress ' "$SB/.config/agents/manifest.conf")"
 chk "repo-safety skill seeded off" "skill repo-safety off" "$(grep '^skill repo-safety ' "$SB/.config/agents/manifest.conf")"
+chk "global seeds as a dir row at the root" "dir global off ~" "$(grep '^dir global ' "$SB/.config/agents/manifest.conf")"
+chk "orchestration seeds as a module" "module orchestration off" "$(grep '^module ' "$SB/.config/agents/manifest.conf")"
+chk "statusline-script seeds as other" "other statusline-script off" "$(grep '^other ' "$SB/.config/agents/manifest.conf")"
+chk "no item kind survives" "0" "$(grep -c '^item ' "$SB/.config/agents/manifest.conf" || true)"
+chk "hook bound to a dir row" "hook comment-bloat-guard enabled global" "$(grep '^hook comment-bloat-guard ' "$SB/.config/agents/manifest.conf")"
+chk "hook bound to a module" "hook agent-spawn-guard enabled orchestration" "$(grep '^hook agent-spawn-guard ' "$SB/.config/agents/manifest.conf")"
 st="$(ag status)"
 case "$st" in *"worktree-guard         enabled · off (repo-safety off)"*) ok "status: bound + skill off" ;;
   *) bad "status: bound + skill off" "$(echo "$st" | grep worktree-guard)" ;; esac
@@ -76,11 +88,89 @@ mkdir -p "$SB/.config/agents"
 } > "$SB/.config/agents/manifest.conf"
 ag status > /dev/null
 chk "legacy bound -> enabled + column" "hook tripwire-guard enabled repo-safety" "$(grep '^hook tripwire-guard ' "$SB/.config/agents/manifest.conf")"
-chk "legacy unbound -> disabled" "hook comment-bloat-guard disabled" "$(grep '^hook comment-bloat-guard ' "$SB/.config/agents/manifest.conf")"
+chk "legacy unbound -> disabled" "hook hook-detach disabled" "$(grep '^hook hook-detach ' "$SB/.config/agents/manifest.conf")"
 chk "legacy on -> enabled" "1" "$(grep -c '^hook .* enabled' "$SB/.config/agents/manifest.conf" > /dev/null; echo 1)"
 ag apply > /dev/null
 chk "migration composes nothing (blackout)" "" "$(composed_files)"
 chk "idempotent: second ensure changes nothing" "" "$(cp "$SB/.config/agents/manifest.conf" "$SB/m1"; ag status > /dev/null; diff "$SB/m1" "$SB/.config/agents/manifest.conf")"
+
+echo
+echo "== 2b. re-kinding off \`item\`: each row lands on a real kind, state intact"
+fresh
+mkdir -p "$SB/.config/agents"
+# Deliberately mixed states, and deliberately in place: the row a re-kinding
+# rewrites must keep both its state and its position, or a manifest read
+# directly (Northbridge) sees a row appear and another vanish.
+{ echo "item agents-md on"; echo "hook logcompress enabled"
+  echo "item statusline-script on"; echo "skill webdev on"
+  echo "item orchestration off"
+} > "$SB/.config/agents/manifest.conf"
+ag status > /dev/null
+m="$SB/.config/agents/manifest.conf"
+chk "item agents-md on -> dir global on ~" "dir global on ~" "$(grep '^dir global ' "$m")"
+chk "item statusline-script on -> other, state kept" "other statusline-script on" "$(grep '^other ' "$m")"
+chk "item orchestration off -> module, state kept" "module orchestration off" "$(grep '^module ' "$m")"
+chk "no item row left behind" "0" "$(grep -c '^item ' "$m" || true)"
+chk "re-kinding is in place (line 1 stays line 1)" "dir global on ~" "$(sed -n 1p "$m")"
+chk "unrelated rows untouched" "skill webdev on" "$(grep '^skill webdev ' "$m")"
+chk "re-kinding is idempotent" "" "$(cp "$m" "$SB/m2"; ag status > /dev/null; diff "$SB/m2" "$m")"
+# A half-migrated manifest (both rows present) collapses to one instead of
+# doubling: the row already carrying the new kind is the survivor, state and all.
+{ echo "item agents-md on"; echo "dir global off ~"; echo "skill webdev on"; } > "$m"
+ag status > /dev/null
+chk "half-migrated: exactly one dir global row" "1" "$(grep -c '^dir global ' "$m")"
+chk "half-migrated: the already-re-kinded row wins" "dir global off ~" "$(grep '^dir global ' "$m")"
+chk "half-migrated: item gone" "0" "$(grep -c '^item agents-md' "$m" || true)"
+
+echo
+echo "== 2c. the global profile writes the global surfaces and nothing per-directory"
+fresh; ag status > /dev/null
+ag on global > /dev/null
+src="$SB/code/nixos-config/main/dotfiles/agents/AGENTS.md"
+chk "config-dir CLAUDE.md is the profile, byte for byte" "" "$(diff "$src" "$SB/.config/agents/CLAUDE.md")"
+chk "codex AGENTS.md is the profile, byte for byte" "" "$(diff "$src" "$SB/.config/agents/AGENTS.md")"
+chk "the account copy is the profile too" "" "$(diff "$src" "$ACCT/CLAUDE.md")"
+chk "global writes no per-dir target pair" "0" "$(ls "$SB/.config/agents/dir" | wc -l)"
+chk "global hangs no link off a directory" "0" "$(test -e "$SB/CLAUDE.md" -o -L "$SB/CLAUDE.md" && echo 1 || echo 0)"
+ag off global > /dev/null
+chk "off empties the global surfaces" "0" "$(stat -c %s "$SB/.config/agents/CLAUDE.md")"
+chk "off empties the account copy" "0" "$(stat -c %s "$ACCT/CLAUDE.md")"
+chk "path global is the profile source" "$src" "$(ag path global)"
+
+echo
+echo "== 2d. a hook follows any kind: a dir row and a module both gate one"
+fresh; ag status > /dev/null
+chk "comment-bloat-guard follows the global dir row" "hook comment-bloat-guard enabled global" "$(grep '^hook comment-bloat-guard ' "$SB/.config/agents/manifest.conf")"
+if has_cmd comment-bloat-guard.sh; then bad "dir-bound hook waits for its row" "$(composed_files)"; else ok "dir-bound hook waits for its row"; fi
+ag on global > /dev/null
+if has_cmd comment-bloat-guard.sh; then ok "dir row on composes the hook that follows it"; else bad "dir row composes hook" "$(composed_files)"; fi
+if has_cmd agent-spawn-guard.sh; then bad "module still off keeps its hook out" "$(composed_files)"; else ok "module still off keeps its hook out"; fi
+ag on orchestration > /dev/null
+if has_cmd agent-spawn-guard.sh; then ok "module on composes the hook that follows it"; else bad "module composes hook" "$(composed_files)"; fi
+st="$(ag status)"
+case "$st" in *"agent-spawn-guard      enabled · on (orchestration)"*) ok "status names the module it follows" ;;
+  *) bad "status names module" "$(echo "$st" | grep agent-spawn)" ;; esac
+ag off global > /dev/null
+if has_cmd comment-bloat-guard.sh; then bad "dir row off decomposes" "$(composed_files)"; else ok "dir row off decomposes its hook"; fi
+st="$(ag status)"
+case "$st" in *"comment-bloat-guard    enabled · off (global off)"*) ok "status blames the dir row by name" ;;
+  *) bad "status blames dir row" "$(echo "$st" | grep comment-bloat)" ;; esac
+chk "a followed row's own state is untouched by the hook" "dir global off ~" "$(grep '^dir global ' "$SB/.config/agents/manifest.conf")"
+
+echo
+echo "== 2e. a name that means two units is called out, loudly, without dying"
+fresh
+# The collision is planted where inventories actually collide: a registry slug
+# that is also a skill name. Registry, not the arrays, because that is the one
+# inventory this switchboard does not own.
+mkdir -p "$SB/code/north-data/context-dirs"
+printf '%s\n' "$SB/somewhere firn" > "$SB/code/north-data/context-dirs.conf"
+mkdir -p "$SB/somewhere"
+warn="$(ag status 2>&1 >/dev/null)"
+case "$warn" in *"duplicate unit name across kinds: firn"*) ok "duplicate name warns" ;;
+  *) bad "duplicate name warns" "$warn" ;; esac
+chk "duplicate name does not kill status" "1" "$(ag status 2>/dev/null | grep -c '^skills$')"
+chk "no duplicate warning when names are unique" "" "$(rm "$SB/code/north-data/context-dirs.conf"; ag status 2>&1 >/dev/null)"
 
 echo
 echo "== 3. derivation: a skill flip changes activity with zero hook-row diffs"
@@ -147,7 +237,7 @@ chk "direct on grants the requirement too" "hook worktree-guard enabled repo-saf
 python3 - "$SB.frags" <<'PY'
 import json, os, sys
 p = os.path.join(sys.argv[1], "worktree-guard.json")
-frag = json.load(open(p)); frag["skill"] = "webdev"
+frag = json.load(open(p)); frag["follows"] = "webdev"
 open(p, "w").write(json.dumps(frag, indent=1))
 PY
 ag apply > /dev/null
@@ -160,7 +250,7 @@ echo "== 7. field-4 sync: backfill, correction, removal, preservation across fli
 python3 - "$SB.frags" <<'PY'
 import json, os, sys
 p = os.path.join(sys.argv[1], "worktree-guard.json")
-frag = json.load(open(p)); frag.pop("skill")
+frag = json.load(open(p)); frag.pop("follows")
 open(p, "w").write(json.dumps(frag, indent=1))
 PY
 ag status > /dev/null
@@ -187,9 +277,9 @@ echo "== 9. apply degrades per item when a source is missing"
 fresh; ag status > /dev/null
 rm "$SB/code/nixos-config/main/dotfiles/agents/AGENTS.md"
 ag on logcompress > /dev/null 2>"$SB/err1"
-out="$(ag on agents-md 2>"$SB/err" )"
+out="$(ag on global 2>"$SB/err" )"
 chk "apply still reports" "1" "$(echo "$out" | grep -c '^applied:')"
-if grep -q 'agents-md is on but .* is missing' "$SB/err"; then ok "missing source warns"; else bad "missing source warns" "$(cat "$SB/err")"; fi
+if grep -q 'global is on but .* is missing' "$SB/err"; then ok "missing source warns"; else bad "missing source warns" "$(cat "$SB/err")"; fi
 chk "wrote empty CLAUDE.md" "0" "$(stat -c %s "$SB/.config/agents/CLAUDE.md")"
 chk "codex surface still written" "0" "$(stat -c %s "$SB/.config/agents/AGENTS.md")"
 if has_cmd logcompress-hook.js; then ok "later items still applied (settings.json reached)"; else bad "later items applied" "$(composed_files)"; fi
@@ -211,7 +301,9 @@ if grep -q 'skill repo-safety is on but .* is missing' "$SB/err4"; then ok "miss
 echo
 echo "== 10. status section order"
 fresh; ag status > /dev/null
-chk "order" "globals directory context skills hooks plugins" "$(ag status | grep -v '^ ' | tr '\n' ' ' | sed 's/ $//')"
+# Dependency order: a hook's parenthetical can only name a row already read.
+chk "order" "directory context skills hooks modules plugins other" "$(ag status | grep -v '^ ' | tr '\n' ' ' | sed 's/ $//')"
+chk "global heads the directory section" "  global               off  ~" "$(ag status | sed -n 2p)"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "ALL PASS"; else echo "$fails FAILURES"; fi

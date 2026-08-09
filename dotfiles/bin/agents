@@ -19,7 +19,19 @@ HOOKS=(agent-spawn-guard beagle-session-start comment-bloat-guard firn-guard
   git-blind-stage-guard hook-detach logcompress north-session-lifecycle
   tripwire-guard worktree-guard)
 SKILLS=(webdev beagle-authoring fram-modeling code-as-facts firn repo-safety)
-SINGLETONS=(agents-md statusline-script orchestration)
+# A module is one row that flips several units at once — the switch is the unit,
+# its surfaces are an implementation detail nobody flips individually.
+MODULES=(orchestration)
+# `other` is the honest triage drawer, not a kind with a story: a single toggle
+# whose activation reason is not a directory, a skill, a hook, a module, or a
+# plugin. A row here is a row nobody has found the right kind for yet.
+OTHERS=(statusline-script)
+# The global profile is a directory context like any other; its directory is the
+# root of everything, which is why it is built in rather than registry-backed.
+# It writes the global surfaces (the config-dir pair and the account copies) and
+# never a per-directory target or a link at a directory.
+GLOBAL_SLUG=global
+GLOBAL_DIR="~"
 
 # Plugins are not a hand-written list: the install ledger is the inventory, so
 # an install/uninstall done outside this script is picked up on the next run
@@ -67,41 +79,43 @@ load_dirs() { # the registry is the inventory, same shape as the plugin ledger
 
 dir_source() { echo "$CONTEXT_SOURCES/$1.md"; }
 
-# A hook may name ONE companion skill in its fragment (`"skill": "<name>"`,
-# same metadata level as tags/requires). Hooks are enforcement; skills are the
-# notice that makes enforcement comprehensible, so a supporting hook follows
-# its skill instead of being flipped by hand. A hook with no companion is
-# infrastructure and answers only to a direct flip.
-declare -A HOOK_SKILL=()
-HOOK_SKILLS_LOADED=
+# A hook may name ONE companion unit in its fragment (`"follows": "<name>"`,
+# same metadata level as tags/requires). Hooks are enforcement; the unit is the
+# thing whose activation makes that enforcement wanted, so a supporting hook
+# follows it instead of being flipped by hand. The companion is named bare and
+# may be ANY unit that speaks on/off — a skill, a directory context, a module —
+# because what makes a guard wanted is not always a skill. A hook with no
+# companion is infrastructure and answers only to a direct flip.
+declare -A HOOK_FOLLOWS=()
+HOOK_FOLLOWS_LOADED=
 
-load_hook_skills() {
-  if [ -n "$HOOK_SKILLS_LOADED" ]; then return 0; fi
-  HOOK_SKILLS_LOADED=1
+load_hook_follows() {
+  if [ -n "$HOOK_FOLLOWS_LOADED" ]; then return 0; fi
+  HOOK_FOLLOWS_LOADED=1
   local h s
   while IFS=$'\t' read -r h s; do
-    [ -n "${h:-}" ] && HOOK_SKILL["$h"]="$s"
+    [ -n "${h:-}" ] && HOOK_FOLLOWS["$h"]="$s"
   done < <(python3 - "$FRAGMENTS" <<'PY'
 import glob, json, os, sys
 for p in sorted(glob.glob(os.path.join(sys.argv[1], "*.json"))):
     try:
-        skill = (json.load(open(p)).get("skill") or "").strip()
+        follows = (json.load(open(p)).get("follows") or "").strip()
     except Exception as exc:
         print(f"agents: {p}: unreadable ({exc})", file=sys.stderr)
         continue
-    if skill:
-        print(f"{os.path.basename(p)[:-5]}\t{skill}")
+    if follows:
+        print(f"{os.path.basename(p)[:-5]}\t{follows}")
 PY
   )
 }
 
-hook_activity() { # name|permission|skill|active|reason|tags, one per hook
+hook_activity() { # name|permission|follows|active|reason|tags, one per hook
   # `|` and not a tab: read splits on runs of IFS WHITESPACE, so a hook with no
   # companion (empty field) would shift every field after it left.
   # ONE derivation, read by both status and apply, because a hook's activity is
   # computed and never stored: permission (enabled/disabled) is the user's axis
   # and lives in the manifest; activity is permission AND, for a bound hook,
-  # its companion skill being on. Nothing to keep in sync, so the manifest
+  # its companion unit being on. Nothing to keep in sync, so the manifest
   # cannot disagree with itself.
   python3 - "$FRAGMENTS" "$MANIFEST" <<'PY'
 import glob, json, os, sys
@@ -112,14 +126,19 @@ for p in sorted(glob.glob(os.path.join(frag_dir, "*.json"))):
         frags[os.path.basename(p)[:-5]] = json.load(open(p))
     except Exception as exc:
         print(f"agents: {p}: unreadable ({exc}) — hook skipped", file=sys.stderr)
-perm, skills = {}, {}
+perm, units = {}, {}
 for line in open(manifest):
     parts = line.split()
-    if len(parts) >= 3 and parts[0] == "hook":
+    if len(parts) < 3:
+        continue
+    if parts[0] == "hook":
         perm[parts[1]] = parts[2]
-    elif len(parts) >= 3 and parts[0] == "skill":
-        skills[parts[1]] = parts[2]
-companion = {n: (d.get("skill") or "").strip() for n, d in frags.items()}
+    else:
+        # Every other kind speaks on/off, so any of them can be followed. A dir
+        # row counts as on when its state says on: whether the user is standing
+        # in that directory is the runtime's question, not this formula's.
+        units[parts[1]] = parts[2]
+companion = {n: (d.get("follows") or "").strip() for n, d in frags.items()}
 enabled = {n for n in frags if perm.get(n) == "enabled"}
 requires = {n: [r for r in frags[n].get("requires", [])] for n in frags}
 
@@ -142,10 +161,10 @@ while changed:
 
 def eligible(n):
     s = companion[n]
-    return n in enabled and n not in blocked and (not s or skills.get(s) == "on")
+    return n in enabled and n not in blocked and (not s or units.get(s) == "on")
 
 # Requirements ride in on their dependent: an enabled requirement is composed
-# because something active needs it, even when its own companion skill is off.
+# because something active needs it, even when its own companion is off.
 composed, pulled_by = {n for n in frags if eligible(n)}, {}
 changed = True
 while changed:
@@ -239,9 +258,9 @@ skill_source() {
   esac
 }
 
-path_of() { # the canonical source file to view or edit for an item
+path_of() { # the canonical source file to view or edit for a unit
   case "$1" in
-    agents-md)  echo "$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md" ;;
+    "$GLOBAL_SLUG") echo "$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md" ;;
     statusline-script) echo "$HOME/code/nixos-config/main/dotfiles/claude/statusline.sh" ;;
     orchestration) echo "$ORCH/doctrine.md" ;;
     *)
@@ -251,7 +270,7 @@ path_of() { # the canonical source file to view or edit for an item
       case " ${DIRS[*]} " in *" $1 "*) dir_source "$1"; return ;; esac
       load_plugins
       case " ${PLUGINS[*]} " in *" $1 "*) plugin_install_path "$1"; return ;; esac
-      echo "agents: unknown item: $1" >&2; exit 2 ;;
+      echo "agents: unknown unit: $1" >&2; exit 2 ;;
   esac
 }
 
@@ -271,23 +290,29 @@ migrate_row() { # old-kind old-name new-kind new-name
   mv "$tmp" "$MANIFEST"
 }
 
+sync_dir_path() { # slug directory — the 4th column of one `dir` row
+  local tmp="$MANIFEST.tmp.$$"
+  awk -v n="$1" -v p="$2" \
+    '$1=="dir" && $2==n && (NF<4 || $4!=p) {f=1} END {exit !f}' "$MANIFEST" || return 0
+  awk -v n="$1" -v p="$2" \
+    '$1=="dir" && $2==n {print $1, $2, $3, p; next} {print}' "$MANIFEST" > "$tmp"
+  mv "$tmp" "$MANIFEST"
+}
+
 sync_dir_paths() { # the 4th column: where the row's context file is triggered
   # A `dir` row carries its directory past the state column, because the
   # manifest is read directly by Northbridge and the panel renders anything
   # past the state as that row's detail. The registry stays the truth: a row
   # written before the column existed is backfilled, and a directory that moved
   # in the registry is corrected here rather than drifting until someone flips.
-  local i tmp="$MANIFEST.tmp.$$"
-  for i in "${!DIRS[@]}"; do
-    awk -v n="${DIRS[$i]}" -v p="${DIR_PATHS[$i]}" \
-      '$1=="dir" && $2==n && (NF<4 || $4!=p) {f=1} END {exit !f}' "$MANIFEST" || continue
-    awk -v n="${DIRS[$i]}" -v p="${DIR_PATHS[$i]}" \
-      '$1=="dir" && $2==n {print $1, $2, $3, p; next} {print}' "$MANIFEST" > "$tmp"
-    mv "$tmp" "$MANIFEST"
-  done
+  # The global row's directory is not in the registry and cannot move: it is
+  # the root, and it is written here so every `dir` row reads the same way.
+  local i
+  sync_dir_path "$GLOBAL_SLUG" "$GLOBAL_DIR"
+  for i in "${!DIRS[@]}"; do sync_dir_path "${DIRS[$i]}" "${DIR_PATHS[$i]}"; done
 }
 
-sync_hook_skills() { # the 4th column: the companion skill this hook follows
+sync_hook_follows() { # the 4th column: the companion unit this hook follows
   # Same contract as sync_dir_paths, and for the same reason: the manifest is
   # read directly by Northbridge, which renders anything past the state as the
   # row's detail. The fragment stays the truth — a row written before the
@@ -295,7 +320,7 @@ sync_hook_skills() { # the 4th column: the companion skill this hook follows
   # here rather than drifting until someone flips the hook.
   local h want tmp="$MANIFEST.tmp.$$"
   for h in "${HOOKS[@]}"; do
-    want="${HOOK_SKILL[$h]:-}"
+    want="${HOOK_FOLLOWS[$h]:-}"
     awk -v n="$h" -v s="$want" \
       '$1=="hook" && $2==n && $4!=s {f=1} END {exit !f}' "$MANIFEST" || continue
     awk -v n="$h" -v s="$want" '
@@ -312,11 +337,11 @@ migrate_hook_permissions() { # a hook's state column stopped meaning activity
   # It now means permission: `enabled` (may run when its companion says so) or
   # `disabled` (the user's pin). A pre-column `off` row must NOT become an
   # active hook: a bound hook migrates to enabled, which is still inactive
-  # while its skill is off, and an unbound hook — nothing left to gate it —
+  # while its companion is off, and an unbound hook — nothing left to gate it —
   # migrates to disabled, so a machine mid-blackout stays composing nothing.
   awk '$1=="hook" && $3!="enabled" && $3!="disabled" {f=1} END {exit !f}' "$MANIFEST" || return 0
   local tmp="$MANIFEST.tmp.$$"
-  awk -v bound=" ${!HOOK_SKILL[*]} " '
+  awk -v bound=" ${!HOOK_FOLLOWS[*]} " '
     $1=="hook" && $3!="enabled" && $3!="disabled" {
       if ($3 == "on") $3 = "enabled"
       else $3 = (index(bound, " " $2 " ") ? "enabled" : "disabled")
@@ -325,24 +350,48 @@ migrate_hook_permissions() { # a hook's state column stopped meaning activity
   mv "$tmp" "$MANIFEST"
 }
 
+warn_duplicate_names() {
+  # A companion is named bare, so one name meaning two units makes every
+  # binding to it ambiguous — and a name is also how `on`/`off`/`path` reach a
+  # unit, where the first matching kind silently wins. Warn, loudly, and keep
+  # going: the collision is in the inventories (a registry, a plugin ledger),
+  # and taking the whole switchboard down over it would strand the user with no
+  # way to look or flip.
+  local dup
+  dup="$(printf '%s\n' "$GLOBAL_SLUG" "${HOOKS[@]}" "${SKILLS[@]}" "${MODULES[@]}" \
+    "${OTHERS[@]}" ${DIRS[@]+"${DIRS[@]}"} ${PLUGINS[@]+"${PLUGINS[@]}"} | sort | uniq -d)"
+  [ -n "$dup" ] || return 0
+  local d
+  while read -r d; do
+    echo "agents: duplicate unit name across kinds: $d — companions naming it" \
+      "are ambiguous" >&2
+  done <<< "$dup"
+}
+
 ensure_manifest() {
   mkdir -p "$STATE" "$STATE/skills" "$DIR_TARGETS"
   [ -f "$MANIFEST" ] || : > "$MANIFEST"
   load_plugins
   load_dirs
-  load_hook_skills
+  load_hook_follows
+  warn_duplicate_names
   # Rename migrations run before the merge below, or the merge re-seeds the new
-  # name at `off` and the old row's state is lost.
+  # name at `off` and the old row's state is lost. `item` is gone as a kind:
+  # every row it held had a real kind waiting for it, and the state rides
+  # across so a re-kinding is never a silent flip.
   migrate_row item code-md dir code
   migrate_row item statusline item statusline-script
+  migrate_row item agents-md dir "$GLOBAL_SLUG"
+  migrate_row item orchestration module orchestration
+  migrate_row item statusline-script other statusline-script
   sync_dir_paths
-  sync_hook_skills
+  sync_hook_follows
   migrate_hook_permissions
   # Merge, don't just seed: an entry added to the arrays after the manifest
   # exists must still appear (off) or it is invisible to status/flip forever.
   # Plugins seed from reality instead of off: settings.json already enables
   # some, and seeding those off would silently disable them on first apply.
-  local enabled p k n i
+  local enabled p k n i m o s h
   enabled=" $(enabled_plugins_now | tr '\n' ' ')"
   # Field-exact presence, not a regex: plugin names are marketplace strings
   # (`@`, `.`, `+`) and would otherwise be read as patterns.
@@ -350,18 +399,22 @@ ensure_manifest() {
   while read -r k n _; do
     [ -n "${k:-}" ] && have["$k $n"]=1
   done < "$MANIFEST"
-  { for s in "${SINGLETONS[@]}"; do echo "item $s off"; done
-    # A new hook seeds by its binding, not by a blanket off: bound means it
-    # follows a skill that is off until asked for, unbound means nothing would
-    # gate it, so it stays the user's explicit call.
-    for h in "${HOOKS[@]}"; do
-      if [ -n "${HOOK_SKILL[$h]:-}" ]; then echo "hook $h enabled ${HOOK_SKILL[$h]}"
-      else echo "hook $h disabled"; fi
-    done
-    for s in "${SKILLS[@]}"; do echo "skill $s off"; done
+  # Seeded in the order status reads them, so a fresh manifest and the panel
+  # that renders it agree without either sorting the other's output.
+  { echo "dir $GLOBAL_SLUG off $GLOBAL_DIR"
     # A newly registered directory is inert until it is turned on: registering
     # is "a context file exists here", not "inject it".
     for i in "${!DIRS[@]}"; do echo "dir ${DIRS[$i]} off ${DIR_PATHS[$i]}"; done
+    for s in "${SKILLS[@]}"; do echo "skill $s off"; done
+    # A new hook seeds by its binding, not by a blanket off: bound means it
+    # follows a unit that is off until asked for, unbound means nothing would
+    # gate it, so it stays the user's explicit call.
+    for h in "${HOOKS[@]}"; do
+      if [ -n "${HOOK_FOLLOWS[$h]:-}" ]; then echo "hook $h enabled ${HOOK_FOLLOWS[$h]}"
+      else echo "hook $h disabled"; fi
+    done
+    for m in "${MODULES[@]}"; do echo "module $m off"; done
+    for o in "${OTHERS[@]}"; do echo "other $o off"; done
     for p in "${PLUGINS[@]}"; do
       case "$enabled" in *" $p "*) echo "plugin $p on" ;; *) echo "plugin $p off" ;; esac
     done
@@ -385,46 +438,54 @@ set_state() { # kind name state
 
 status() {
   ensure_manifest
-  echo "globals"
-  printf '  %-20s %s\n' "AGENTS.md" "$(state_of item agents-md)"
-  printf '  %-20s %s\n' "statusline-script" "$(state_of item statusline-script)"
-  printf '  %-20s %s\n' "orchestration" "$(state_of item orchestration)"
+  # Read in dependency order, not importance order: the units a hook can follow
+  # come before the hooks, so a "(x off)" parenthetical always names a row the
+  # eye has already passed. `other` is last because it is the drawer.
   echo "directory context"
   local i
+  printf '  %-20s %-4s %s\n' \
+    "$GLOBAL_SLUG" "$(state_of dir "$GLOBAL_SLUG")" "$GLOBAL_DIR"
   for i in "${!DIRS[@]}"; do
     printf '  %-20s %-4s %s\n' "${DIRS[$i]}" "$(state_of dir "${DIRS[$i]}")" "${DIR_PATHS[$i]}"
   done
   echo "skills"
   for s in "${SKILLS[@]}"; do printf '  %-20s %s\n' "$s" "$(state_of skill "$s")"; done
-  # Hooks read after the skills they follow, and each says both axes: the
-  # permission the user set, then whether that adds up to running right now and
-  # why not. A hook that is enabled but silent is the case worth explaining.
+  # Each hook says both axes: the permission the user set, then whether that
+  # adds up to running right now and why not. A hook that is enabled but silent
+  # is the case worth explaining.
   echo "hooks"
-  local name perm skill active reason tags line
-  while IFS='|' read -r name perm skill active reason tags; do
+  local name perm follows active reason tags line
+  while IFS='|' read -r name perm follows active reason tags; do
     [ -n "${name:-}" ] || continue
     if [ "$perm" = enabled ]; then
       line="enabled · $([ "$active" = 1 ] && echo on || echo off)"
     else
       line="disabled"
     fi
-    # The parenthetical is provenance: which skill this hook follows, or, when
+    # The parenthetical is provenance: which unit this hook follows, or, when
     # that is not the whole story, why it is not running.
     if [ -n "$reason" ]; then line="$line ($reason)"
-    elif [ -n "$skill" ]; then line="$line ($skill)"; fi
+    elif [ -n "$follows" ]; then line="$line ($follows)"; fi
     printf '  %-22s %-28s %s\n' "$name" "$line" "$tags"
   done < <(hook_activity)
+  echo "modules"
+  local m o p
+  for m in "${MODULES[@]}"; do printf '  %-20s %s\n' "$m" "$(state_of module "$m")"; done
   echo "plugins"
-  local p
   for p in "${PLUGINS[@]}"; do printf '  %-40s %s\n' "$p" "$(state_of plugin "$p")"; done
+  echo "other"
+  for o in "${OTHERS[@]}"; do printf '  %-20s %s\n' "$o" "$(state_of other "$o")"; done
 }
 
 apply() {
   ensure_manifest
-  # AGENTS.md — global constitution: empty when off. One slot, every provider
-  # surface: the claude config target, every account-scoped copy (the launcher
-  # redirects CLAUDE_CONFIG_DIR, so account copies are what sessions actually
-  # load), and the codex target that ~/.codex/AGENTS.md resolves to.
+  # the global profile — `dir global`, the context file scoped at the root:
+  # empty when off. One slot, every provider surface: the claude config target,
+  # every account-scoped copy (the launcher redirects CLAUDE_CONFIG_DIR, so
+  # account copies are what sessions actually load), and the codex target that
+  # ~/.codex/AGENTS.md resolves to. Being root-scoped is exactly why it is not
+  # in the per-directory loop below: it writes no <dir>-CLAUDE.md pair and hangs
+  # no links off a directory — its surfaces are these global ones.
   # The World-1 slim profile is the source; north's profiles/tom/AGENTS.md is
   # the World-2 constitution and is loaded by lab sessions, not by this slot.
   # Every item below degrades on its own: a missing or unreadable source warns
@@ -435,11 +496,11 @@ apply() {
   local agents_target="$STATE/CLAUDE.md"
   local codex_target="$STATE/AGENTS.md"
   local agents_src="$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md"
-  if [ "$(state_of item agents-md)" = on ] && [ -f "$agents_src" ]; then
+  if [ "$(state_of dir "$GLOBAL_SLUG")" = on ] && [ -f "$agents_src" ]; then
     cat "$agents_src" > "$agents_target"
   else
-    if [ "$(state_of item agents-md)" = on ]; then
-      echo "agents: agents-md is on but $agents_src is missing — wrote empty" >&2
+    if [ "$(state_of dir "$GLOBAL_SLUG")" = on ]; then
+      echo "agents: $GLOBAL_SLUG is on but $agents_src is missing — wrote empty" >&2
     fi
     : > "$agents_target"
   fi
@@ -480,10 +541,11 @@ apply() {
       else echo "agents: skill $s is on but $src is missing — not linked" >&2; fi
     fi
   done
-  # orchestration — one switch, two surfaces: the doctrine skill (skills farm,
-  # so it must be linked after the sweep above) and the role templates Claude
-  # Code loads as subagents. Both are live symlinks into north: editing a
-  # template there is immediately live, no frozen copies to drift.
+  # orchestration — a module: one switch, several units flipped as one. Two
+  # surfaces here, the doctrine skill (skills farm, so it must be linked after
+  # the sweep above) and the role templates Claude Code loads as subagents.
+  # Both are live symlinks into north: editing a template there is immediately
+  # live, no frozen copies to drift.
   local link tgt tpl
   if [ -d "$CLAUDE_AGENTS" ]; then
     # Sweep only what this switchboard owns. ~/.claude/agents is a user-visible
@@ -494,7 +556,7 @@ apply() {
       case "$tgt" in "$ORCH"/*) rm -f "$link" ;; esac
     done
   fi
-  if [ "$(state_of item orchestration)" = on ]; then
+  if [ "$(state_of module orchestration)" = on ]; then
     [ -d "$ORCH/skill" ] && ln -sfn "$ORCH/skill" "$STATE/skills/orchestration"
     if [ -d "$ORCH/agents" ]; then
       mkdir -p "$CLAUDE_AGENTS"
@@ -505,7 +567,7 @@ apply() {
   fi
   # hooks + statusline + plugins — rewrite exactly those keys in live settings.json
   # The composed set is derived, never read off the manifest: a hook runs when
-  # the user has it enabled AND its companion skill (if any) is on.
+  # the user has it enabled AND its companion unit (if any) is on.
   local on_hooks=() hname hactive
   while IFS='|' read -r hname _ _ hactive _; do
     if [ -n "${hname:-}" ] && [ "$hactive" = 1 ]; then on_hooks+=("$hname"); fi
@@ -514,7 +576,7 @@ apply() {
   for p in "${PLUGINS[@]}"; do
     if [ "$(state_of plugin "$p")" = on ]; then on_plugins+=("$p"); fi
   done
-  if ! STATUSLINE_STATE="$(state_of item statusline-script)" \
+  if ! STATUSLINE_STATE="$(state_of other statusline-script)" \
   ON_PLUGINS="$(printf '%s\n' ${on_plugins[@]+"${on_plugins[@]}"})" \
   python3 - "$SETTINGS" "$FRAGMENTS" ${on_hooks[@]+"${on_hooks[@]}"} <<'PY'
 import json, os, sys
@@ -563,7 +625,7 @@ PY
   for i in "${!DIRS[@]}"; do
     [ "$(state_of dir "${DIRS[$i]}")" = on ] && on_dirs=$((on_dirs + 1))
   done
-  echo "applied: $(state_of item agents-md) AGENTS.md, ${#on_hooks[@]} hooks, $(find "$STATE/skills" -maxdepth 1 -type l | wc -l) skills, ${#on_plugins[@]} plugins, $on_dirs/${#DIRS[@]} dir contexts, orchestration $(state_of item orchestration)"
+  echo "applied: $(state_of dir "$GLOBAL_SLUG") AGENTS.md, ${#on_hooks[@]} hooks, $(find "$STATE/skills" -maxdepth 1 -type l | wc -l) skills, ${#on_plugins[@]} plugins, $on_dirs/${#DIRS[@]} dir contexts, orchestration $(state_of module orchestration)"
 }
 
 flip() { # on|off [--all | kind? name]
@@ -573,7 +635,7 @@ flip() { # on|off [--all | kind? name]
     local tmp="$MANIFEST.tmp.$$"
     # Hooks speak permission, everything else speaks activity, so one sweep
     # writes two vocabularies: `on --all` grants every hook and turns every
-    # skill on (so bound hooks go live too), `off --all` revokes every hook
+    # other unit on (so bound hooks go live too), `off --all` revokes every hook
     # outright rather than leaving one armed behind a skill.
     awk -v s="$target_state" '
       $1=="hook" {$3 = (s=="on" ? "enabled" : "disabled"); print; next}
@@ -584,11 +646,15 @@ flip() { # on|off [--all | kind? name]
     case " ${SKILLS[*]} " in *" $name "*)
       set_state skill "$name" "$target_state"; apply; return ;;
     esac
-    case " ${SINGLETONS[*]} " in *" $name "*)
-      set_state item "$name" "$target_state"; apply; return ;;
-    esac
-    case " ${DIRS[*]} " in *" $name "*)
+    # The global profile answers to `on global`, same as any other dir row.
+    case " $GLOBAL_SLUG ${DIRS[*]} " in *" $name "*)
       set_state dir "$name" "$target_state"; apply; return ;;
+    esac
+    case " ${MODULES[*]} " in *" $name "*)
+      set_state module "$name" "$target_state"; apply; return ;;
+    esac
+    case " ${OTHERS[*]} " in *" $name "*)
+      set_state other "$name" "$target_state"; apply; return ;;
     esac
     case " ${PLUGINS[*]} " in *" $name "*)
       set_state plugin "$name" "$target_state"; apply; return ;;
