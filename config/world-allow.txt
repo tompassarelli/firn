@@ -62,11 +62,7 @@ nixos-config/dotfiles/claude/statusline.sh
 nixos-config/dotfiles/claude/statusline.test.sh
 nixos-config/dotfiles/codex/config.toml
 nixos-config/dotfiles/niri/config.kdl
-nixos-config/flake.bnix
 nixos-config/modules/beagle/default.bnix
-nixos-config/modules/fram/default.bnix
-nixos-config/modules/north/default.bnix
-nixos-config/modules/north/default.test.sh
 nixos-config/modules/theme-switcher/default.bnix
 nixos-config/scripts/agent-config-check.sh
 nixos-config/scripts/agent-config-check.test.sh

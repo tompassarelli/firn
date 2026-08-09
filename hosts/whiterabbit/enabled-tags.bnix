@@ -7,11 +7,12 @@
   [terminal
    ;; north/fram/beagle tools are live-linked from dotfiles/bin, never
    ;; store-placed: a dev-loop tool in the closure is stale by construction.
-   [cli-tools -north]
+   ;; north and fram have no module left to exclude — the modules are gone.
+   cli-tools
    [desktop -mako +river]
    theming
    auth
-   [development -fram -beagle]
+   [development -beagle]
    javascript
    python
    [database -postgresql]

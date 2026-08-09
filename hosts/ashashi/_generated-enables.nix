@@ -15,7 +15,6 @@
   myConfig.modules.fastfetch.enable = lib.mkDefault true;
   myConfig.modules.fd.enable = lib.mkDefault true;
   myConfig.modules.forgejo-cli.enable = lib.mkDefault true;
-  myConfig.modules.fram.enable = lib.mkDefault true;
   myConfig.modules.gh.enable = lib.mkDefault true;
   myConfig.modules.ghostscript.enable = lib.mkDefault true;
   myConfig.modules.ghostty.enable = lib.mkDefault true;
@@ -25,7 +24,6 @@
   myConfig.modules.imagemagick.enable = lib.mkDefault true;
   myConfig.modules.jq.enable = lib.mkDefault true;
   myConfig.modules.my-agents.enable = lib.mkDefault true;
-  myConfig.modules.north.enable = lib.mkDefault true;
   myConfig.modules.opencode.enable = lib.mkDefault true;
   myConfig.modules.procs.enable = lib.mkDefault true;
   myConfig.modules.promptfoo.enable = lib.mkDefault true;

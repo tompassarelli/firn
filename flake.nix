@@ -36,20 +36,12 @@
     elephant = {
       url = "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73";
     };
-    fram = {
-      url = "git+file:///home/tom/code/fram/main?ref=control-plane-stability-2026-07-31.1";
-    };
     gjoa = {
       url = "github:tompassarelli/gjoa";
     };
     hermes-agent = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:NousResearch/hermes-agent/244dabbd9c4b542bf5c1ad0159af512c2b5d6e08";
-    };
-    north = {
-      inputs.nixpkgs-master.follows = "nixpkgs-master";
-      url = "git+file:///home/tom/code/north/main?ref=main";
-      inputs.fram.follows = "fram";
     };
     nur = {
       url = "github:nix-community/NUR";
@@ -67,7 +59,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, fram, gjoa, hermes-agent, north, nur, quickshell, walker, zen-browser, ... }: let
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, gjoa, hermes-agent, nur, quickshell, walker, zen-browser, ... }: let
     firnModules = ./modules;
     darwinModuleNames = builtins.fromJSON (builtins.readFile ./config/darwin-modules.json);
   in
@@ -77,10 +69,8 @@
       specialArgs = ({
         inputs = {
           elephant = elephant;
-          fram = fram;
           gjoa = gjoa;
           hermes-agent = hermes-agent;
-          north = north;
           nur = nur;
           quickshell = quickshell;
           walker = walker;
@@ -110,10 +100,8 @@
           home-manager.extraSpecialArgs = ({
             inputs = {
               elephant = elephant;
-              fram = fram;
               gjoa = gjoa;
               hermes-agent = hermes-agent;
-              north = north;
               nur = nur;
               quickshell = quickshell;
               walker = walker;
@@ -267,10 +255,8 @@
       specialArgs = ({
         inputs = {
           elephant = elephant;
-          fram = fram;
           gjoa = gjoa;
           hermes-agent = hermes-agent;
-          north = north;
           nur = nur;
           quickshell = quickshell;
           walker = walker;
@@ -307,10 +293,8 @@
             home-manager.extraSpecialArgs = ({
               inputs = {
                 elephant = elephant;
-                fram = fram;
                 gjoa = gjoa;
                 hermes-agent = hermes-agent;
-                north = north;
                 nur = nur;
                 quickshell = quickshell;
                 walker = walker;
