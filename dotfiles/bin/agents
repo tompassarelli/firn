@@ -21,20 +21,38 @@ CODEX_SKILLS="$HOME/.codex/skills"
 CONTEXT_REGISTRY="$HOME/code/north-data/context-dirs.conf"
 CONTEXT_SOURCES="$HOME/code/north-data/context-dirs"
 DIR_TARGETS="$STATE/dir"
+# Per-project MEMORY lives in each account's Claude state, one directory per
+# project: a .md per fact, plus MEMORY.md — the INDEX the binary auto-loads at
+# session start. The index is the only thing this switchboard writes there. A
+# memory's content file is the model's and is never written, moved or deleted
+# here; governing memory means governing what the index lists.
+ACCOUNTS="$HOME/.local/state/north/accounts"
+# The index line ("- [Title](file.md) — hook") is the model's words, and
+# MEMORY.md is the only place they exist. Filtering a memory out of the index
+# would destroy that text, so the last line seen for every memory is kept here
+# and put back when the memory is turned on again. Derived, never authoritative:
+# a memory whose file is gone loses its entry on the next apply.
+MEM_INDEX_CACHE="$STATE/mem-index"
 
 HOOKS=(agent-spawn-guard beagle-session-start comment-bloat-guard firn-guard
   git-blind-stage-guard hook-detach logcompress north-session-lifecycle
   tripwire-guard worktree-guard)
-SKILLS=(webdev beagle-authoring fram-modeling code-as-facts firn repo-safety)
-# A module is one row that flips several units at once. Two ways to be one, and
-# a module may be both: a PAYLOAD module owns surfaces of its own that `apply`
-# writes (orchestration's skill link and role templates), and a MEMBER-LIST
-# module names units it composes, in modules.d/<name>.json as
+SKILLS=(webdev beagle-authoring fram-modeling code-as-facts firn repo-safety
+  orchestration)
+# A MODULE is a skill with declarations — a skill whose frontmatter names the
+# hooks its rules need (`hooks:`) or a directory of agent templates it ships
+# (`agents:`). It is not a kind: a module's name IS a skill's name, always, so
+# there is nothing to drift. Orchestration is the case that proves it — doctrine
+# skill, its spawn guard and its role templates, all declared in the one file
+# that ships them, with no special case anywhere in this script.
+#
+# A MODULE SET is the other thing, and the only distinctly-named one: a row that
+# names units it composes, in modules.d/<name>.json as
 # `{"members": ["<unit-name>", ...]}`. Members are bare names of ANY kind —
-# including other modules, which is how a bundle is built out of bundles.
-# Payload-only modules are listed here; member-list modules are discovered from
-# the directory, so writing a file is the whole act of adding one.
-MODULES=(orchestration)
+# including other sets, which is how a bundle is built out of bundles. Sets are
+# discovered from the directory, so writing a file is the whole act of adding
+# one, and this array starts empty.
+MODULES=()
 MODULES_D="${AGENTS_MODULES:-$HOME/code/nixos-config/main/dotfiles/agents/modules.d}"
 MODULES_LOADED=
 
@@ -128,6 +146,95 @@ load_dirs() { # the registry is the inventory, same shape as the plugin ledger
 
 dir_source() { echo "$CONTEXT_SOURCES/$1.md"; }
 
+dir_rows() { # slug<TAB>directory for every dir row, the root first
+  # One iteration for the whole subtree family: seeding, status and apply must
+  # walk the same directories in the same order, and the global row is a dir row
+  # at `~` rather than a special case with its own loop.
+  local i
+  printf '%s\t%s\n' "$GLOBAL_SLUG" "$GLOBAL_DIR"
+  load_dirs
+  for i in ${DIRS[@]+"${!DIRS[@]}"}; do
+    printf '%s\t%s\n' "${DIRS[$i]}" "${DIR_PATHS[$i]}"
+  done
+}
+
+dir_path_of() { # slug -> the directory that row gates
+  local i
+  if [ "$1" = "$GLOBAL_SLUG" ]; then echo "$GLOBAL_DIR"; return 0; fi
+  load_dirs
+  for i in ${DIRS[@]+"${!DIRS[@]}"}; do
+    if [ "${DIRS[$i]}" = "$1" ]; then echo "${DIR_PATHS[$i]}"; return 0; fi
+  done
+  return 1
+}
+
+project_slug() { # <directory> -> the projects/<name> directory holding its memory
+  # Claude Code names a project's state directory after the path with the
+  # separators turned into dashes: /home/tom/code -> -home-tom-code. The global
+  # row's scope is `~`, which is $HOME, and slugs the same way.
+  local p="$1"
+  if [ "$p" = "$GLOBAL_DIR" ]; then p="$HOME"; fi
+  echo "${p//\//-}"
+}
+
+mem_dirs() { # <directory> -> every account's memory directory for that project
+  # Every account keeps its own copy of a project's memories, so a scope has as
+  # many memory directories as there are accounts that have opened it. None is
+  # not an error: a directory nobody has stored a memory for simply has no
+  # memory rows.
+  local proj md
+  proj="$(project_slug "$1")"
+  for md in "$ACCOUNTS"/*/*/projects/"$proj"/memory; do
+    if [ -d "$md" ]; then echo "$md"; fi
+  done
+}
+
+mem_names() { # <directory> -> the memory FILES governed for that scope
+  # Union by name across accounts: the same fact carries the same filename in
+  # every account that has it, so one row governs it everywhere and an account
+  # that lacks it is simply not written.
+  local md f b
+  while IFS= read -r md; do
+    for f in "$md"/*.md; do
+      [ -f "$f" ] || continue
+      b="${f##*/}"
+      # The index is not a memory; it is what this switchboard composes.
+      if [ "$b" = MEMORY.md ]; then continue; fi
+      # The manifest is whitespace-delimited, so a name with a space in it has
+      # no row it could live on. Say so, and leave the file alone.
+      case "$b" in *[[:space:]]*)
+        echo "agents: memory $f: name contains whitespace — not governable" >&2
+        continue ;;
+      esac
+      # A directory's own rows are addressed as `<slug>/AGENTS.md` and
+      # `<slug>/memories`, so those two names are spoken for: a memory file
+      # called either has no address of its own. Ungoverned is not unread —
+      # apply leaves such a file's index line exactly where it found it.
+      case "$b" in AGENTS.md|memories)
+        echo "agents: memory $f: \`$b\` is how a directory's own row is" \
+          "addressed — this memory is left ungoverned" >&2
+        continue ;;
+      esac
+      echo "$b"
+    done
+  done < <(mem_dirs "$1") | sort -u
+}
+
+declare -A MEM_NAMES=()
+MEMS_LOADED=
+
+load_mems() { # the memory inventory, scanned like the plugin ledger
+  # Dynamic on purpose: a memory the model wrote between two runs is governable
+  # on the next one, without anybody registering it. Nothing is written back —
+  # the files are the inventory, the manifest only holds the switches.
+  if [ -n "$MEMS_LOADED" ]; then return 0; fi
+  MEMS_LOADED=1
+  local slug ddir
+  while IFS=$'\t' read -r slug ddir; do
+    MEM_NAMES["$slug"]="$(mem_names "$ddir")"
+  done < <(dir_rows)
+}
+
 # A hook may name ONE companion unit in its fragment (`"follows": "<name>"`,
 # same metadata level as tags/requires). Hooks are enforcement; the unit is the
 # thing whose activation makes that enforcement wanted, so a supporting hook
@@ -167,14 +274,28 @@ activity() { # kind|name|own|active|reason|follows|tags — every unit, one line
   # ACTIVITY is what that adds up to right now, and it is
   #
   #   own switch  AND  (in no module  OR  some containing module is active)
+  #                 AND every GATE above it in its directory subtree
   #
-  # with a hook additionally following its companion. UNION over containing
+  # with a hook additionally following its companion. A `dir` row is that gate:
+  # it governs the whole subtree scoped at its directory, so the instruction
+  # file (`ins`), the memories group (`memroot`) and each memory (`mem`) are all
+  # ANDed with it — and `mem` with `memroot` too. Gates are AND where modules are
+  # UNION, because a gate is containment in a place and a module is one of
+  # several parties that may want a unit. UNION over containing
   # modules is deliberate: a unit two bundles both want survives one of them
   # being turned off, because the other still wants it. The rule recurses —
   # a module is gated by the modules that contain IT — so a bundle of bundles
   # composes without a second mechanism. Nothing here is written back, so the
   # manifest cannot disagree with itself.
-  python3 - "$FRAGMENTS" "$MANIFEST" "$MODULES_D" <<'PY'
+  # Skill-side claims ride in on the environment rather than being re-read here:
+  # they come from files this script already knows how to find, and the
+  # derivation stays one python block with one input format.
+  load_skill_hooks
+  local cs ch claims=""
+  for cs in "${SKILLS[@]}"; do
+    for ch in ${SKILL_HOOKS[$cs]:-}; do claims+="$ch"$'\t'"$cs"$'\n'; done
+  done
+  AGENTS_CLAIMS="$claims" python3 - "$FRAGMENTS" "$MANIFEST" "$MODULES_D" <<'PY'
 import glob, json, os, sys
 frag_dir, manifest, modules_dir = sys.argv[1:]
 frags = {}
@@ -196,14 +317,34 @@ for p in sorted(glob.glob(os.path.join(modules_dir, "*.json"))):
               file=sys.stderr)
         members[n] = []
 
+# Three kinds are namespaced under a directory slug, so their names are not
+# unique on their own: `ins code`, `memroot code` and the `dir code` they hang
+# under would all be "code". They are keyed by kind here (and reported that way,
+# so bash keeps ONE lookup table), which also keeps them out of the bare-name
+# namespace a companion or a module member is written in.
+QUALIFIED = ("ins", "memroot", "mem")
+
+def keyof(k, n):
+    return f"{k}:{n}" if k in QUALIFIED else n
+
 kind, own, rows = {}, {}, []
 for line in open(manifest):
     parts = line.split()
     if len(parts) < 3:
         continue
-    kind[parts[1]] = parts[0]
-    own[parts[1]] = parts[2]
-    rows.append((parts[0], parts[1]))
+    key = keyof(parts[0], parts[1])
+    kind[key] = parts[0]
+    own[key] = parts[2]
+    rows.append((parts[0], parts[1], key))
+
+# The gates above a row, nearest first. A directory row gates its own subtree;
+# nothing gates a directory row but the modules that contain it.
+gates = {}
+for k, n, key in rows:
+    if k in ("ins", "memroot"):
+        gates[key] = [n]
+    elif k == "mem":
+        gates[key] = ["memroot:" + n.split("/", 1)[0], n.split("/", 1)[0]]
 
 # Containment inverted: for a unit, which modules claim it. Sorted, so a unit
 # in two bundles always blames the same one when both are off.
@@ -248,21 +389,40 @@ def own_on(u):
 
 gated = {}
 
-def gated_active(u): # own switch, gated by the modules that contain it
+def gate_open(g): # a gate whose row is gone gates nothing open
+    return g in own and gated_active(g)
+
+def gated_active(u): # own switch, gated by its subtree gates and its modules
     if u in gated:
         return gated[u]
     gated[u] = False
     if u in in_cycle:
         return False
     ok = own_on(u)
+    if ok:
+        ok = all(gate_open(g) for g in gates.get(u, []))
     cs = container.get(u, [])
     if ok and cs:
         ok = any(gated_active(c) for c in cs)
     gated[u] = ok
     return ok
 
-def off_ancestor(u, seen=None): # the nearest module up the chain that is itself off
+def off_ancestor(u, seen=None): # the nearest thing up the chain that is itself off
     seen = set() if seen is None else seen
+    # Gates before modules: the gate is the closer container, and it is the row
+    # sitting directly above this one in the directory the reader is looking at.
+    for g in gates.get(u, []):
+        if g in seen:
+            continue
+        seen.add(g)
+        if g not in own:
+            return g
+        if not gated_active(g):
+            if not own_on(g):
+                return g
+            a = off_ancestor(g, seen)
+            if a:
+                return a
     for c in container.get(u, []):
         if c in seen:
             continue
@@ -277,13 +437,39 @@ def off_ancestor(u, seen=None): # the nearest module up the chain that is itself
                 return a
     return ""
 
+def label(u): # what a reader calls this row — how status renders it, not its key
+    # KIND-PREFIXED, because a bare name in a hook's parenthetical reads as
+    # another hook: `(skill: firn off)` says which switchboard row to go flip.
+    # The rows nested under a directory say what they are already.
+    k = kind.get(u, "")
+    if k == "ins":
+        return "AGENTS.md"
+    if k == "memroot":
+        return "memories"
+    if k == "mem":
+        return u.split(":", 1)[1].split("/", 1)[1]
+    return f"{k}: {u}" if k else u
+
 def blame(u): # why this unit is not active, in the words of the nearest cause
     if u in in_cycle:
         return "module cycle"
     a = off_ancestor(u)
-    return f"{a} off" if a else ""
+    return f"{label(a)} off" if a else ""
 
 companion = {n: (d.get("follows") or "").strip() for n, d in frags.items()}
+# Who wants each hook: the unit its fragment follows, then the skills whose
+# frontmatter claims it. Deduped and order-stable, because this list is also the
+# provenance status prints — a hook must always blame the same row twice running.
+claims = {}
+for row in os.environ.get("AGENTS_CLAIMS", "").split("\n"):
+    if not row:
+        continue
+    h, _, s = row.partition("\t")
+    claims.setdefault(h, [])
+    if s and s not in claims[h]:
+        claims[h].append(s)
+for h in claims:
+    claims[h].sort()
 enabled = {n for n in frags if own.get(n) == "enabled"}
 requires = {n: [r for r in frags[n].get("requires", [])] for n in frags}
 
@@ -304,18 +490,29 @@ while changed:
                 changed = True
                 break
 
-def companion_active(s):
-    # A hook is nobody's companion: it speaks permission, not on/off, and
+def claimant_active(c):
+    # A hook is nobody's claimant: it speaks permission, not on/off, and
     # hook-needs-hook is what `requires` is for.
-    if not s:
-        return True
-    if kind.get(s) == "hook":
+    if kind.get(c) == "hook":
         return False
-    return gated_active(s)
+    return gated_active(c)
+
+def claimants(n): # every unit that wants this hook, nearest statement first
+    cs = []
+    s = companion.get(n) or ""
+    if s:
+        cs.append(s)
+    for c in claims.get(n, []):
+        if c not in cs:
+            cs.append(c)
+    return cs
+
+def wanted(n): # UNION: one active claimant is enough, and none means unbound
+    cs = claimants(n)
+    return not cs or any(claimant_active(c) for c in cs)
 
 def eligible(n):
-    return (n in enabled and n not in blocked and gated_active(n)
-            and companion_active(companion[n]))
+    return n in enabled and n not in blocked and gated_active(n) and wanted(n)
 
 # Requirements ride in on their dependent: an enabled requirement is composed
 # because something active needs it, even when its own companion is off.
@@ -332,7 +529,7 @@ while changed:
 
 for n in sorted(frags):
     p = own.get(n, "disabled")
-    s = companion[n]
+    cs = claimants(n)
     if n in composed:
         reason = f"required by {pulled_by[n]}" if n in pulled_by and not eligible(n) else ""
     elif p != "enabled":
@@ -345,21 +542,25 @@ for n in sorted(frags):
         # The bundle this hook came in with is off — coarser than the companion
         # and the thing to flip first, so it is named first.
         reason = blame(n)
-    elif s and not companion_active(s):
-        # Name what the reader can act on: a companion held off by a bundle
-        # blames the bundle, not itself, or the row above would read `on`.
-        reason = f"{s} off" if not own_on(s) else blame(s)
+    elif not wanted(n):
+        # Name what the reader can act on: a claimant held off by a bundle
+        # blames the bundle, not itself, or the row above would read `on`. Every
+        # claimant is named, because turning any ONE of them on is the fix.
+        reason = ", ".join(w for w in
+                           (("" if own_on(c) else f"{label(c)} off") or blame(c)
+                            for c in cs) if w)
     else:
         reason = ""
     tags = " ".join(":" + t for t in frags[n].get("tags", []))
-    print("|".join(["hook", n, p, "1" if n in composed else "0", reason, s, tags]))
+    print("|".join(["hook", n, p, "1" if n in composed else "0", reason,
+                    ", ".join(label(c) for c in cs), tags]))
 
-for k, n in rows:
+for k, n, key in rows:
     if k == "hook":
         continue
-    a = gated_active(n)
-    print("|".join([k, n, own[n], "1" if a else "0",
-                    "" if a or not own_on(n) else blame(n), "", ""]))
+    a = gated_active(key)
+    print("|".join([k, key, own[key], "1" if a else "0",
+                    "" if a or not own_on(key) else blame(key), "", ""]))
 PY
 }
 
@@ -436,16 +637,6 @@ link_dir_context() { # dir base — the two provider links AT the directory itse
   done
 }
 
-governed_source() { # where this switchboard would point a link of this name
-  # The skills farm holds more than the SKILLS array: orchestration's doctrine
-  # arrives as a skill too. One answer to "is this ours", so the sweep and the
-  # write can never disagree about a name.
-  case "$1" in
-    orchestration) echo "$ORCH/skill" ;;
-    *)             skill_source "$1" ;;
-  esac
-}
-
 sweep_codex_skills() { # remove ONLY the links this switchboard writes
   # Ownership is proven, not assumed: a link counts as ours when its name is one
   # we govern and it points exactly where we would have pointed it. Nothing
@@ -456,7 +647,7 @@ sweep_codex_skills() { # remove ONLY the links this switchboard writes
   [ -d "$CODEX_SKILLS" ] || return 0
   for link in "$CODEX_SKILLS"/*; do
     [ -L "$link" ] || continue
-    src="$(governed_source "$(basename "$link")")"
+    src="$(skill_source "$(basename "$link")")"
     [ -n "$src" ] || continue
     tgt="$(readlink "$link")"
     if [ "$tgt" = "$src" ]; then rm -f "$link"; fi
@@ -492,6 +683,8 @@ try:
     enabled = json.load(open(sys.argv[1])).get("enabledPlugins") or []
 except Exception:
     enabled = []
+# Both shapes are read: the record Claude Code writes today, and the array an
+# older file (or an older version of this script) left behind.
 if isinstance(enabled, dict):
     enabled = [k for k, v in enabled.items() if v]
 print("\n".join(enabled))
@@ -506,7 +699,140 @@ skill_source() {
     code-as-facts)   echo "$HOME/code/fram/main/integrations/north/skills/code-as-facts" ;;
     firn)            echo "$HOME/code/nixos-config/main/modules/north-profile/firn/skills/firn" ;;
     repo-safety)     echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/repo-safety" ;;
+    # The doctrine arrives as a skill like any other, and declares its guard and
+    # its role templates in its own frontmatter — which is the whole reason
+    # nothing below knows the word "orchestration".
+    orchestration)   echo "$ORCH/skill" ;;
   esac
+}
+
+subtree_row() { # <slug>/<leaf> -> the kind and name of the row it addresses
+  # Everything under a directory gate is addressed through it, because that is
+  # what it is: `code/AGENTS.md` is that directory's instruction file,
+  # `code/memories` the group, and any other leaf is a memory file by name. The
+  # slash is what keeps memory names out of the bare namespace a companion or a
+  # module member is written in — two directories may both remember `style.md`.
+  local slug="${1%%/*}" leaf="${1#*/}"
+  case " $GLOBAL_SLUG ${DIRS[*]} " in *" $slug "*) ;; *) return 1 ;; esac
+  case "$leaf" in
+    AGENTS.md) echo "ins $slug" ;;
+    memories)  echo "memroot $slug" ;;
+    *)         echo "mem $slug/$leaf" ;;
+  esac
+}
+
+# A skill may declare what it needs and what it ships, in its own SKILL.md
+# frontmatter — and a skill that declares either is what this switchboard calls
+# a MODULE:
+#
+#   hooks: [worktree-guard, tripwire-guard]     — or the dash-list form
+#   agents: ../agents                           — a directory of templates
+#
+# `hooks:` is the same statement a fragment's `follows` makes, from the other
+# and better end: the skill is what knows which enforcement its rules require,
+# so it ships that list in its own file instead of leaving it scattered across
+# fragments. A hook is active when it is enabled and ANY of its CLAIMANTS is
+# active — the skills that list it, plus the unit its fragment follows — so the
+# two mechanisms compose rather than compete, and a hook two skills both want
+# survives one of them being turned off, exactly as a set member does.
+# `agents:` is the same idea for payload: the templates ride on the skill's
+# switch, from the directory the skill names, with nothing about them written
+# here. Together they are why a module needs no kind of its own.
+declare -A SKILL_HOOKS=() SKILL_AGENTS=()
+SKILL_HOOKS_LOADED=
+
+skill_meta_of() { # SKILL.md -> `hooks <name>` and `agents <dir>` declarations
+  # Read by shape, not by a YAML parser: this is a list of bare names between
+  # two `---` lines, and a dependency to read it would be a dependency in the
+  # boot path of every surface. Anything that is not that shape is reported and
+  # claims nothing — a skill whose list cannot be read must not silently take
+  # its hooks down with it.
+  python3 - "$1" <<'PY'
+import re, sys
+path = sys.argv[1]
+try:
+    text = open(path).read()
+except OSError as exc:
+    print(f"agents: {path}: unreadable ({exc}) — no hooks claimed", file=sys.stderr)
+    raise SystemExit(0)
+m = re.match(r"^---\n(.*?)\n---\s*?\n", text, re.S)
+if not m:
+    raise SystemExit(0)
+names, agents, in_list = [], "", False
+for line in m.group(1).split("\n"):
+    if in_list:
+        item = re.match(r"\s+-\s*(\S+)\s*$", line)
+        if item:
+            names.append(item.group(1))
+            continue
+        in_list = False
+    key = re.match(r"(hooks|agents):\s*(.*)$", line)
+    if not key:
+        continue
+    field, rest = key.group(1), key.group(2).strip()
+    if field == "agents":
+        agents = rest.strip("\"'")
+        if not agents:
+            print(f"agents: {path}: agents: names no directory — none linked",
+                  file=sys.stderr)
+        continue
+    if rest.startswith("["):
+        if not rest.endswith("]"):
+            print(f"agents: {path}: hooks: list is not closed — no hooks claimed",
+                  file=sys.stderr)
+            raise SystemExit(0)
+        names += [n.strip().strip("\"'") for n in rest[1:-1].split(",")]
+    elif rest == "":
+        in_list = True
+    else:
+        print(f"agents: {path}: hooks: {rest} is not a list of names"
+              " — no hooks claimed", file=sys.stderr)
+        raise SystemExit(0)
+for n in names:
+    if n:
+        print("hooks", n)
+if agents:
+    print("agents", agents)
+PY
+}
+
+load_skill_hooks() { # every skill's declarations, read once from its own file
+  if [ -n "$SKILL_HOOKS_LOADED" ]; then return 0; fi
+  SKILL_HOOKS_LOADED=1
+  local s src field val
+  for s in "${SKILLS[@]}"; do
+    src="$(skill_source "$s")"
+    [ -n "$src" ] || continue
+    [ -f "$src/SKILL.md" ] || continue
+    while read -r field val; do
+      [ -n "${val:-}" ] || continue
+      case "$field" in
+        hooks)
+          case " ${HOOKS[*]} " in
+            *" $val "*) SKILL_HOOKS["$s"]="${SKILL_HOOKS[$s]:-}${SKILL_HOOKS[$s]:+ }$val" ;;
+            *) echo "agents: skill $s declares $val, which is no hook here" \
+              "— ignored" >&2 ;;
+          esac ;;
+        # Relative to the skill's own directory, and normalised here so the
+        # sweep in apply can recognise a link by where it points.
+        agents) SKILL_AGENTS["$s"]="$(realpath -m "$src/$val")" ;;
+      esac
+    done < <(skill_meta_of "$src/SKILL.md")
+  done
+}
+
+skill_is_module() { # a skill that declares anything is a module
+  load_skill_hooks
+  [ -n "${SKILL_HOOKS[$1]:-}${SKILL_AGENTS[$1]:-}" ]
+}
+
+hook_is_claimed() { # does any skill list this hook
+  local s
+  load_skill_hooks
+  for s in "${SKILLS[@]}"; do
+    case " ${SKILL_HOOKS[$s]:-} " in *" $1 "*) return 0 ;; esac
+  done
+  return 1
 }
 
 path_of() { # the canonical source file to view or edit for a unit
@@ -516,6 +842,23 @@ path_of() { # the canonical source file to view or edit for a unit
     # orchestration is payload-only: its source is what it injects, not a
     # member list it does not have.
     orchestration) echo "$ORCH/doctrine.md" ;;
+    */*)
+      # A row under a directory gate: the instruction file is the directory's
+      # source, the memories group is the directory that holds them, and a
+      # memory is its own file — in the first account that has it, because every
+      # account keeps the same project's memories and one of them is a place to
+      # look, not a claim about where it lives.
+      load_dirs
+      local slug="${1%%/*}" leaf="${1#*/}" md
+      case " $GLOBAL_SLUG ${DIRS[*]} " in *" $slug "*) ;;
+        *) echo "agents: unknown unit: $1" >&2; exit 2 ;;
+      esac
+      if [ "$leaf" = AGENTS.md ]; then path_of "$slug"; return; fi
+      while IFS= read -r md; do
+        if [ "$leaf" = memories ]; then echo "$md"; return; fi
+        if [ -f "$md/$leaf" ]; then echo "$md/$leaf"; return; fi
+      done < <(mem_dirs "$(dir_path_of "$slug")")
+      echo "agents: unknown unit: $1" >&2; exit 2 ;;
     *)
       case " ${HOOKS[*]} " in *" $1 "*) echo "$FRAGMENTS/$1.json"; return ;; esac
       case " ${SKILLS[*]} " in *" $1 "*) echo "$(skill_source "$1")/SKILL.md"; return ;; esac
@@ -588,15 +931,47 @@ sync_hook_follows() { # the 4th column: the companion unit this hook follows
   done
 }
 
+migrate_dir_subtrees() { # a dir row's state stopped meaning "this file has content"
+  # It now means GATE: the row governs everything scoped at that directory. The
+  # old meaning moved down to `ins <slug>`, which seeds from the dir row's state,
+  # so the instruction file this switchboard writes is byte-for-byte what it was.
+  # The gate itself is then OPENED wherever something else under it is already
+  # live: a directory whose memories the binary loads today keeps loading them,
+  # and a closed gate would empty their index on the next apply — a change to
+  # what sessions read, made by a migration, which is exactly what a migration
+  # must not do. Same shape as migrate_hook_permissions: a column whose meaning
+  # widened is migrated by state, not left to be read the new way by accident.
+  local slug ddir state tmp
+  while IFS=$'\t' read -r slug ddir; do
+    if awk -v n="$slug" '$1=="ins" && $2==n {f=1} END {exit !f}' "$MANIFEST"; then continue; fi
+    state="$(awk -v n="$slug" '$1=="dir" && $2==n {print $3; exit}' "$MANIFEST")"
+    # No dir row yet means a directory nobody has seen: it seeds off below, and
+    # its ins row seeds off with it, which is the same statement.
+    [ -n "$state" ] || continue
+    echo "ins $slug $state" >> "$MANIFEST"
+    if [ "$state" = off ] && [ -n "$(mem_dirs "$ddir")" ]; then
+      tmp="$MANIFEST.tmp.$$"
+      awk -v n="$slug" '$1=="dir" && $2==n {$3="on"} {print}' "$MANIFEST" > "$tmp"
+      mv "$tmp" "$MANIFEST"
+      echo "agents: dir $slug is now a subtree GATE — opened so the memories under" \
+        "it keep loading; its instruction file stays off as \`ins $slug\`" >&2
+    fi
+  done < <(dir_rows)
+}
+
 migrate_hook_permissions() { # a hook's state column stopped meaning activity
-  # It now means permission: `enabled` (may run when its companion says so) or
+  # It now means permission: `enabled` (may run when a claimant says so) or
   # `disabled` (the user's pin). A pre-column `off` row must NOT become an
   # active hook: a bound hook migrates to enabled, which is still inactive
-  # while its companion is off, and an unbound hook — nothing left to gate it —
-  # migrates to disabled, so a machine mid-blackout stays composing nothing.
+  # while everything that wants it is off, and an unbound hook — nothing left to
+  # gate it — migrates to disabled, so a machine mid-blackout composes nothing.
   awk '$1=="hook" && $3!="enabled" && $3!="disabled" {f=1} END {exit !f}' "$MANIFEST" || return 0
-  local tmp="$MANIFEST.tmp.$$"
-  awk -v bound=" ${!HOOK_FOLLOWS[*]} " '
+  local tmp="$MANIFEST.tmp.$$" s
+  # Bound means claimed by a skill as much as followed by a unit: both are a
+  # switch above this hook, and either is enough to keep it dark until asked.
+  local bound=" ${!HOOK_FOLLOWS[*]} "
+  for s in "${SKILLS[@]}"; do bound="$bound${SKILL_HOOKS[$s]:-} "; done
+  awk -v bound="$bound" '
     $1=="hook" && $3!="enabled" && $3!="disabled" {
       if ($3 == "on") $3 = "enabled"
       else $3 = (index(bound, " " $2 " ") ? "enabled" : "disabled")
@@ -628,8 +1003,10 @@ ensure_manifest() {
   [ -f "$MANIFEST" ] || : > "$MANIFEST"
   load_plugins
   load_dirs
+  load_mems
   load_modules
   load_hook_follows
+  load_skill_hooks
   warn_duplicate_names
   # Rename migrations run before the merge below, or the merge re-seeds the new
   # name at `off` and the old row's state is lost. `item` is gone as a kind:
@@ -640,14 +1017,22 @@ ensure_manifest() {
   migrate_row item agents-md dir "$GLOBAL_SLUG"
   migrate_row item orchestration module orchestration
   migrate_row item statusline-script other statusline-script
+  # A module was never a kind: it is a skill that declares hooks or templates,
+  # and orchestration is the one row that predated that. The state rides across,
+  # so a re-kinding is not a silent flip.
+  migrate_row module orchestration skill orchestration
   sync_dir_paths
   sync_hook_follows
   migrate_hook_permissions
+  # After the re-kindings, so the `dir` rows it reads are the migrated ones, and
+  # before the merge below, or the merge seeds `ins <slug> off` first and the
+  # old state is lost.
+  migrate_dir_subtrees
   # Merge, don't just seed: an entry added to the arrays after the manifest
   # exists must still appear (off) or it is invisible to status/flip forever.
   # Plugins seed from reality instead of off: settings.json already enables
   # some, and seeding those off would silently disable them on first apply.
-  local enabled p k n i m o s h
+  local enabled p k n i m o s h slug ddir mname
   enabled=" $(enabled_plugins_now | tr '\n' ' ')"
   # Field-exact presence, not a regex: plugin names are marketplace strings
   # (`@`, `.`, `+`) and would otherwise be read as patterns.
@@ -657,17 +1042,32 @@ ensure_manifest() {
   done < "$MANIFEST"
   # Seeded in the order status reads them, so a fresh manifest and the panel
   # that renders it agree without either sorting the other's output.
-  { echo "dir $GLOBAL_SLUG off $GLOBAL_DIR"
-    # A newly registered directory is inert until it is turned on: registering
-    # is "a context file exists here", not "inject it".
-    for i in "${!DIRS[@]}"; do echo "dir ${DIRS[$i]} off ${DIR_PATHS[$i]}"; done
+  { # Each directory seeds its whole subtree, in the order status renders it:
+    # the gate, then what hangs under it. A newly registered directory is inert
+    # until it is turned on — registering is "there is context here", not
+    # "inject it" — and its instruction file seeds with it, so one flip is not
+    # silently two.
+    while IFS=$'\t' read -r slug ddir; do
+      echo "dir $slug off $ddir"
+      echo "ins $slug off"
+      # The memories group seeds from REALITY, like a plugin does: a project
+      # with a memory directory is a project whose index the binary is already
+      # loading, and seeding that off would silently delete it on first apply.
+      if [ -n "$(mem_dirs "$ddir")" ]; then echo "memroot $slug on"
+      else echo "memroot $slug off"; fi
+      # And each memory on, for the same reason: what is in the index today
+      # stays in it until somebody says otherwise.
+      for mname in ${MEM_NAMES[$slug]:-}; do echo "mem $slug/$mname on"; done
+    done < <(dir_rows)
     for m in "${MODULES[@]}"; do echo "module $m off"; done
     for s in "${SKILLS[@]}"; do echo "skill $s off"; done
-    # A new hook seeds by its binding, not by a blanket off: bound means it
-    # follows a unit that is off until asked for, unbound means nothing would
-    # gate it, so it stays the user's explicit call.
+    # A new hook seeds by its binding, not by a blanket off: bound means
+    # something above it — a unit it follows, a skill that declares it — is off
+    # until asked for, and unbound means nothing would gate it, so it stays the
+    # user's explicit call.
     for h in "${HOOKS[@]}"; do
       if [ -n "${HOOK_FOLLOWS[$h]:-}" ]; then echo "hook $h enabled ${HOOK_FOLLOWS[$h]}"
+      elif hook_is_claimed "$h"; then echo "hook $h enabled"
       else echo "hook $h disabled"; fi
     done
     for p in "${PLUGINS[@]}"; do
@@ -690,50 +1090,80 @@ set_state() { # kind name state
   mv "$tmp" "$MANIFEST"
 }
 
+hook_line() { # the two-axis state column for one hook, wherever it is rendered
+  # Both axes, always: the permission the user set, then whether that adds up to
+  # running right now and why not. A hook that is enabled but silent is the case
+  # worth explaining. The parenthetical is provenance — who wants this hook, or,
+  # when that is not the whole story, why it is not running.
+  local name="$1" line reason
+  # A declared hook whose fragment is not here has no derivation to show, and a
+  # missing fragment is already loud where it is read.
+  if [ -z "${ACT_STATE[$name]:-}" ]; then echo "(no fragment)"; return 0; fi
+  if [ "${ACT_STATE[$name]}" = enabled ]; then line="enabled · $(on_off "$name")"
+  else line="disabled"; fi
+  reason="${ACT_REASON[$name]}"
+  if [ -n "$reason" ]; then line="$line ($reason)"
+  elif [ -n "${ACT_FOLLOWS[$name]}" ]; then line="$line (${ACT_FOLLOWS[$name]})"; fi
+  echo "$line"
+}
+
 status() {
   ensure_manifest
   load_activity
-  # Read in dependency order, not importance order: a container reads before
-  # what it holds, so every "(x off)" parenthetical names a row the eye has
-  # already passed. Modules gate everything below them, so they come first
-  # after the directory scopes; `other` is last because it is the drawer.
-  # A `dir` row's file scopes to a SUBTREE — it fires for that directory and
-  # everything under it — and the global profile is the root-of-tree case,
-  # scope `~`, which is why it sorts first rather than living in a drawer.
-  echo "directory instructions"
-  local i
-  printf '  %-20s %-24s %s\n' \
-    "$GLOBAL_SLUG" "$(unit_line "$GLOBAL_SLUG")" "$GLOBAL_DIR"
-  for i in "${!DIRS[@]}"; do
-    printf '  %-20s %-24s %s\n' "${DIRS[$i]}" "$(unit_line "${DIRS[$i]}")" "${DIR_PATHS[$i]}"
+  load_skill_hooks
+  # Read from the least specific to the most: a module set flips units of every
+  # kind, a module flips a skill's own hooks, a skill or a hook answers only for
+  # itself, and a directory's context is the narrowest thing here — it fires in
+  # one subtree and nowhere else — so it reads last. `other` is the drawer, and
+  # sits where the general things stop.
+  # A MODULE is not a sibling of a skill, it IS one — a skill that declares the
+  # hooks its rules need or the agent templates it ships — so modules read as
+  # the first thing inside `skills`, each with what it declares nested under it.
+  # A skill that declares nothing is a plain skill, and a hook nobody claims
+  # answers only to itself.
+  local m o p s h name slug ddir mname
+  echo "module sets"
+  for m in ${MODULES[@]+"${MODULES[@]}"}; do
+    printf '  %-20s %s\n' "$m" "$(unit_line "$m")"
   done
-  echo "modules"
-  local m o p
-  for m in "${MODULES[@]}"; do printf '  %-20s %s\n' "$m" "$(unit_line "$m")"; done
   echo "skills"
-  for s in "${SKILLS[@]}"; do printf '  %-20s %s\n' "$s" "$(unit_line "$s")"; done
-  # Each hook says both axes: the permission the user set, then whether that
-  # adds up to running right now and why not. A hook that is enabled but silent
-  # is the case worth explaining.
+  echo "  modules"
+  for s in "${SKILLS[@]}"; do
+    if ! skill_is_module "$s"; then continue; fi
+    printf '    %-20s %s\n' "$s" "$(unit_line "$s")"
+    for h in ${SKILL_HOOKS[$s]:-}; do
+      printf '      %-20s %-28s %s\n' "$h" "$(hook_line "$h")" "${ACT_TAGS[$h]:-}"
+    done
+  done
+  for s in "${SKILLS[@]}"; do
+    if skill_is_module "$s"; then continue; fi
+    printf '  %-20s %s\n' "$s" "$(unit_line "$s")"
+  done
   echo "hooks"
-  local name reason line
   for name in ${ACT_HOOKS[@]+"${ACT_HOOKS[@]}"}; do
-    if [ "${ACT_STATE[$name]}" = enabled ]; then
-      line="enabled · $(on_off "$name")"
-    else
-      line="disabled"
-    fi
-    # The parenthetical is provenance: which unit this hook follows, or, when
-    # that is not the whole story, why it is not running.
-    reason="${ACT_REASON[$name]}"
-    if [ -n "$reason" ]; then line="$line ($reason)"
-    elif [ -n "${ACT_FOLLOWS[$name]}" ]; then line="$line (${ACT_FOLLOWS[$name]})"; fi
-    printf '  %-22s %-28s %s\n' "$name" "$line" "${ACT_TAGS[$name]}"
+    if hook_is_claimed "$name"; then continue; fi
+    printf '  %-22s %-28s %s\n' "$name" "$(hook_line "$name")" "${ACT_TAGS[$name]}"
   done
   echo "plugins"
   for p in "${PLUGINS[@]}"; do printf '  %-40s %s\n' "$p" "$(unit_line "$p")"; done
   echo "other"
   for o in "${OTHERS[@]}"; do printf '  %-20s %s\n' "$o" "$(unit_line "$o")"; done
+  # A `dir` row is a SUBTREE GATE — it governs that directory and everything
+  # under it — and the global profile is the root-of-tree case, scope `~`, which
+  # is why it heads this section. Each reads as the subtree it is: the gate,
+  # then the instruction file, the memories group, and each memory, indented
+  # because that is the containment. The section says SCOPE, not content type:
+  # what hangs off a directory is an instruction file today and its memories now,
+  # and whatever else turns out to be scoped at a directory later.
+  echo "directory scoped"
+  while IFS=$'\t' read -r slug ddir; do
+    printf '  %-20s %-24s %s\n' "$slug" "$(unit_line "$slug")" "$ddir"
+    printf '    %-18s %s\n' "AGENTS.md" "$(unit_line "ins:$slug")"
+    printf '    %-18s %s\n' "memories" "$(unit_line "memroot:$slug")"
+    for mname in ${MEM_NAMES[$slug]:-}; do
+      printf '      %-16s %s\n' "$mname" "$(unit_line "mem:$slug/$mname")"
+    done
+  done < <(dir_rows)
 }
 
 apply() {
@@ -760,11 +1190,14 @@ apply() {
   local agents_target="$STATE/CLAUDE.md"
   local codex_target="$STATE/AGENTS.md"
   local agents_src="$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md"
-  if is_active "$GLOBAL_SLUG" && [ -f "$agents_src" ]; then
+  # `ins global`, not `dir global`: the dir row is the gate over the whole root
+  # subtree now, and the instruction file is the row under it. Activity already
+  # carries the gate — ins is own AND dir — so this reads one name and gets both.
+  if is_active "ins:$GLOBAL_SLUG" && [ -f "$agents_src" ]; then
     cat "$agents_src" > "$agents_target"
   else
-    if is_active "$GLOBAL_SLUG"; then
-      echo "agents: $GLOBAL_SLUG is on but $agents_src is missing — wrote empty" >&2
+    if is_active "ins:$GLOBAL_SLUG"; then
+      echo "agents: ins $GLOBAL_SLUG is on but $agents_src is missing — wrote empty" >&2
     fi
     : > "$agents_target"
   fi
@@ -801,18 +1234,166 @@ apply() {
   for i in "${!DIRS[@]}"; do
     slug="${DIRS[$i]}"; ddir="${DIR_PATHS[$i]}"
     base="$(dir_target_base "$slug")"; dsrc="$(dir_source "$slug")"
-    if is_active "$slug" && [ -f "$dsrc" ]; then
+    if is_active "ins:$slug" && [ -f "$dsrc" ]; then
       cat "$dsrc" > "$base-CLAUDE.md" ||
         { echo "agents: could not write $base-CLAUDE.md" >&2; continue; }
     else
-      if is_active "$slug"; then
-        echo "agents: $slug is on but $dsrc is missing — wrote empty" >&2
+      if is_active "ins:$slug"; then
+        echo "agents: ins $slug is on but $dsrc is missing — wrote empty" >&2
       fi
       : > "$base-CLAUDE.md"
     fi
     copy_surface "$base-CLAUDE.md" "$base-AGENTS.md"
     link_dir_context "$ddir" "$base"
   done
+  # memories — the INDEX, and only the index. Every account keeps its own copy
+  # of a project's memory directory (one .md per fact, plus MEMORY.md, which the
+  # binary auto-loads at session start), so this walks every account that has
+  # one and rewrites MEMORY.md to list exactly the ACTIVE memories, in the words
+  # the index already used for them. Content files are never written, never
+  # deleted, never moved: a memory turned off keeps its file and loses its line.
+  # A closed gate means an empty index — which is how a whole subtree goes quiet
+  # without a single fact being touched.
+  local mslug mdir mgate mname mactive mem_on=0 mem_all=0
+  while IFS=$'\t' read -r mslug mdir; do
+    mgate=0
+    if is_active "memroot:$mslug"; then mgate=1; fi
+    mactive=""
+    for mname in ${MEM_NAMES[$mslug]:-}; do
+      mem_all=$((mem_all + 1))
+      if is_active "mem:$mslug/$mname"; then
+        mactive="$mactive$mname"$'\n'
+        mem_on=$((mem_on + 1))
+      fi
+    done
+    if ! MEM_ACTIVE="$mactive" MEM_GOVERNED="${MEM_NAMES[$mslug]:-}" \
+      python3 - "$ACCOUNTS" "$(project_slug "$mdir")" \
+      "$MEM_INDEX_CACHE" "$mslug" "$mgate" <<'PY'
+import glob, os, re, sys
+accounts, proj, cache_root, slug, gate = sys.argv[1:]
+gate = gate == "1"
+active = {n for n in os.environ.get("MEM_ACTIVE", "").split("\n") if n}
+governed = {n for n in os.environ.get("MEM_GOVERNED", "").split("\n") if n}
+LINK = re.compile(r"\]\(([^)]+)\)")
+
+def listed(f): # what belongs in the index this run
+    # A memory with no row — a name this switchboard cannot address — is not
+    # this switchboard's to filter: its line stays exactly where it was.
+    return f in active or f not in governed
+
+def read(path):
+    try:
+        with open(path) as fh:
+            return fh.read()
+    except OSError:
+        return None
+
+for memdir in sorted(glob.glob(
+        os.path.join(accounts, "*", "*", "projects", proj, "memory"))):
+    if not os.path.isdir(memdir):
+        continue
+    parts = os.path.relpath(memdir, accounts).split(os.sep)  # provider/account/...
+    cache = os.path.join(cache_root, parts[0], parts[1], slug + ".tsv")
+    try:
+        files = {f for f in os.listdir(memdir)
+                 if f.endswith(".md") and f != "MEMORY.md"
+                 and os.path.isfile(os.path.join(memdir, f))}
+    except OSError as exc:
+        print(f"agents: {memdir}: unreadable ({exc}) — index left alone",
+              file=sys.stderr)
+        continue
+
+    # What the live index says, in its order: a line naming a memory that is
+    # gone goes with it, and a line naming nothing is somebody's prose, carried
+    # through untouched rather than rewritten into a shape we prefer.
+    index_path = os.path.join(memdir, "MEMORY.md")
+    raw = read(index_path)
+    preamble, live, live_order = [], {}, []
+    for line in (raw.splitlines() if raw else []):
+        m = LINK.search(line)
+        if not m:
+            preamble.append(line)
+            continue
+        f = os.path.basename(m.group(1))
+        if f in files:
+            if f not in live:
+                live_order.append(f)
+            live[f] = line
+
+    # and what an earlier apply filtered OUT of it. That line is the model's
+    # words about its own memory and MEMORY.md is the only place they exist, so
+    # dropping one would destroy it: the last line seen is kept here and put
+    # back in the neighbourhood it came from when the memory is on again.
+    cached, cache_order = {}, []
+    for row in (read(cache) or "").split("\n"):
+        if not row:
+            continue
+        f, _, line = row.partition("\t")
+        if f not in files:
+            continue
+        if f not in cached:
+            cache_order.append(f)
+        cached[f] = line
+
+    after, prev = {}, None
+    for f in cache_order:
+        if f in live:
+            prev = f
+        else:
+            after.setdefault(prev, []).append(f)
+    order, seen = [], set()
+
+    def emit(f):
+        if f not in seen:
+            seen.add(f)
+            order.append(f)
+
+    for f in after.get(None, []):
+        emit(f)
+    for f in live_order:
+        emit(f)
+        for g in after.get(f, []):
+            emit(g)
+    # A memory with no line in either place gets none invented: it is a fact
+    # nobody indexed, and writing a title for it would be this switchboard
+    # putting words in the model's mouth.
+    lines_of = dict(cached)
+    lines_of.update(live)
+
+    body = [lines_of[f] for f in order if f in lines_of and listed(f)]
+    text = ""
+    if gate and (preamble or body):
+        text = "\n".join(preamble + body) + "\n"
+    if raw is None and not text:
+        pass  # no index, nothing to list: create nothing
+    elif raw != text:
+        # A MEMORY.md that is a symlink is not a copy — writing through it would
+        # edit somebody else's file — so it is replaced, not followed.
+        if os.path.islink(index_path):
+            os.unlink(index_path)
+        try:
+            with open(index_path, "w") as fh:
+                fh.write(text)
+        except OSError as exc:
+            print(f"agents: could not write {index_path} ({exc})", file=sys.stderr)
+
+    keep = [f for f in order if f in lines_of]
+    try:
+        if keep:
+            os.makedirs(os.path.dirname(cache), exist_ok=True)
+            tmp = cache + ".next"
+            with open(tmp, "w") as fh:
+                fh.write("".join(f"{f}\t{lines_of[f]}\n" for f in keep))
+            os.replace(tmp, cache)
+        elif os.path.exists(cache):
+            os.remove(cache)
+    except OSError as exc:
+        print(f"agents: could not update {cache} ({exc})", file=sys.stderr)
+PY
+    then
+      echo "agents: the memory index for $mslug was left as it was" >&2
+    fi
+  done < <(dir_rows)
   # skills — a farm of symlinks; only ACTIVE skills exist, in BOTH surfaces
   local s src
   find "$STATE/skills" -maxdepth 1 -type l -delete
@@ -826,33 +1407,40 @@ apply() {
       else echo "agents: skill $s is on but $src is missing — not linked" >&2; fi
     fi
   done
-  # orchestration — a module: one switch, several units flipped as one. Two
-  # surfaces here, the doctrine skill (skills farm, so it must be linked after
-  # the sweep above) and the role templates Claude Code loads as subagents.
-  # Both are live symlinks into north: editing a template there is immediately
-  # live, no frozen copies to drift.
-  local link tgt tpl
+  # agent templates — a skill may ship a directory of them (`agents:` in its
+  # frontmatter), and they exist in ~/.claude/agents while that skill is active:
+  # live symlinks into the source, so editing a template there is immediately
+  # live and no frozen copy can drift. Nothing here names a particular skill —
+  # the declaration is the whole wiring.
+  local link tgt tpl adir
   if [ -d "$CLAUDE_AGENTS" ]; then
-    # Sweep only what this switchboard owns. ~/.claude/agents is a user-visible
-    # directory; hand-written agents there must survive an off.
+    # Sweep only what this switchboard owns, proven the same way as the codex
+    # farm: a link is ours when it points inside a directory some skill declared.
+    # ~/.claude/agents is user-visible, and a hand-written agent there must
+    # survive an off.
     for link in "$CLAUDE_AGENTS"/*; do
       [ -L "$link" ] || continue
       tgt="$(readlink "$link")"
-      case "$tgt" in "$ORCH"/*) rm -f "$link" ;; esac
+      for s in "${SKILLS[@]}"; do
+        adir="${SKILL_AGENTS[$s]:-}"
+        [ -n "$adir" ] || continue
+        case "$tgt" in "$adir"/*) rm -f "$link"; break ;; esac
+      done
     done
   fi
-  if is_active orchestration; then
-    if [ -d "$ORCH/skill" ]; then
-      ln -sfn "$ORCH/skill" "$STATE/skills/orchestration"
-      link_codex_skill orchestration "$ORCH/skill"
+  for s in "${SKILLS[@]}"; do
+    adir="${SKILL_AGENTS[$s]:-}"
+    [ -n "$adir" ] || continue
+    is_active "$s" || continue
+    if [ ! -d "$adir" ]; then
+      echo "agents: skill $s is on but $adir is missing — no templates linked" >&2
+      continue
     fi
-    if [ -d "$ORCH/agents" ]; then
-      mkdir -p "$CLAUDE_AGENTS"
-      for tpl in "$ORCH"/agents/*.md; do
-        [ -e "$tpl" ] && ln -sfn "$tpl" "$CLAUDE_AGENTS/$(basename "$tpl")"
-      done
-    fi
-  fi
+    mkdir -p "$CLAUDE_AGENTS"
+    for tpl in "$adir"/*.md; do
+      [ -e "$tpl" ] && ln -sfn "$tpl" "$CLAUDE_AGENTS/$(basename "$tpl")"
+    done
+  done
   # hooks + statusline + plugins — rewrite exactly those keys in live settings.json
   # The composed set is derived, never read off the manifest: a hook runs when
   # the user has it enabled AND its companion unit (if any) is on.
@@ -896,7 +1484,11 @@ for name in names:
             if entry["matcher"] is not None: block["matcher"] = entry["matcher"]
             matchers.append(block)
 settings["hooks"] = hooks
-settings["enabledPlugins"] = [p for p in os.environ["ON_PLUGINS"].split("\n") if p]
+# A RECORD, not a list: Claude Code validates this key strictly and rejects an
+# array outright — and one invalid key makes it skip the whole file, so a
+# session runs with no settings at all. A plugin that is off is absent rather
+# than false, which is what its own converter writes.
+settings["enabledPlugins"] = {p: True for p in os.environ["ON_PLUGINS"].split("\n") if p}
 if os.environ["STATUSLINE_STATE"] == "on":
     settings["statusLine"] = {"type": "command",
       "command": 'bash "$HOME/code/nixos-config/dotfiles/claude/statusline.sh"'}
@@ -911,9 +1503,9 @@ PY
   fi
   local on_dirs=0
   for i in "${!DIRS[@]}"; do
-    is_active "${DIRS[$i]}" && on_dirs=$((on_dirs + 1))
+    is_active "ins:${DIRS[$i]}" && on_dirs=$((on_dirs + 1))
   done
-  echo "applied: $(on_off "$GLOBAL_SLUG") AGENTS.md, ${#on_hooks[@]} hooks, $(find "$STATE/skills" -maxdepth 1 -type l | wc -l) skills, ${#on_plugins[@]} plugins, $on_dirs/${#DIRS[@]} dir contexts, orchestration $(on_off orchestration)"
+  echo "applied: $(on_off "ins:$GLOBAL_SLUG") AGENTS.md, ${#on_hooks[@]} hooks, $(find "$STATE/skills" -maxdepth 1 -type l | wc -l) skills, ${#on_plugins[@]} plugins, $on_dirs/${#DIRS[@]} dir contexts, $mem_on/$mem_all memories"
 }
 
 flip() { # on|off [--all | kind? name]
@@ -946,6 +1538,18 @@ flip() { # on|off [--all | kind? name]
     esac
     case " ${PLUGINS[*]} " in *" $name "*)
       set_state plugin "$name" "$target_state"; apply; return ;;
+    esac
+    # A row under a directory gate, addressed through it. Read after the flat
+    # kinds so a name that legitimately contains a slash — a marketplace plugin,
+    # say — is still found where it lives.
+    case "$name" in */*)
+      local row
+      row="$(subtree_row "$name")" ||
+        { echo "agents: unknown unit: $name" >&2; exit 2; }
+      # Word-split on purpose: subtree_row answers "kind name", and set_state
+      # says `unknown` for a memory that is not there.
+      # shellcheck disable=SC2086
+      set_state $row "$target_state"; apply; return ;;
     esac
     # Hook or :tag — a direct flip writes PERMISSION, the sticky axis: `off`
     # is a pin no skill can undo, `on` grants the hook and everything it
@@ -1013,24 +1617,38 @@ export_plugin() { # <module> [dest] [--force] [--description <text>]
   esac
   # Sources are resolved HERE, by the same function the sweep and the link use,
   # so a plugin can never contain a skill from a path the switchboard would not
-  # have linked.
+  # have linked. Agent templates ride the same way: a skill that declares them
+  # ships them, and the export learns that from the declaration rather than from
+  # a directory it went looking for.
   local sources=() n src
-  for n in "${SKILLS[@]}" "${MODULES[@]}"; do
-    src="$(governed_source "$n")"
+  load_skill_hooks
+  for n in "${SKILLS[@]}" ${MODULES[@]+"${MODULES[@]}"}; do
+    src="$(skill_source "$n")"
     if [ -n "$src" ]; then sources+=("$n=$src"); fi
   done
-  AGENTS_PLUGIN_DESC="$desc" python3 - "$module" "$dest" "${force:-}" "$MODULES_D" \
+  local templates=()
+  for n in "${SKILLS[@]}"; do
+    if [ -n "${SKILL_AGENTS[$n]:-}" ]; then templates+=("$n=${SKILL_AGENTS[$n]}"); fi
+  done
+  AGENTS_PLUGIN_DESC="$desc" AGENTS_PLUGIN_TEMPLATES="$(printf '%s\n' \
+    ${templates[@]+"${templates[@]}"})" \
+    python3 - "$module" "$dest" "${force:-}" "$MODULES_D" \
     "$FRAGMENTS" "$MANIFEST" "$PLUGIN_RELEASES" ${sources[@]+"${sources[@]}"} <<'PY'
 import hashlib, json, os, re, shutil, stat, subprocess, sys, tempfile, time
 
 module, dest_arg, force, modules_d, frag_dir, manifest, releases, *pairs = sys.argv[1:]
 sources = dict(p.split("=", 1) for p in pairs)
+templates = dict(t.split("=", 1) for t in
+                 os.environ.get("AGENTS_PLUGIN_TEMPLATES", "").split("\n") if "=" in t)
 desc_flag = os.environ.get("AGENTS_PLUGIN_DESC", "").strip()
 
 kind = {}
 for line in open(manifest):
     parts = line.split()
-    if len(parts) >= 3:
+    # The rows nested under a directory gate are namespaced by their slug, not
+    # named in the flat namespace a member is written in — and reading them here
+    # would shadow the `dir` row they hang under.
+    if len(parts) >= 3 and parts[0] not in ("ins", "memroot", "mem"):
         kind[parts[1]] = parts[0]
 
 def module_file(name):
@@ -1150,14 +1768,6 @@ for m in seen_modules:
     payload = sources.get(m, "")
     if payload and os.path.isdir(payload):
         copy_tree(payload, os.path.join("skills", m))
-    if payload:
-        tpl = os.path.join(os.path.dirname(payload), "agents")
-        if os.path.isdir(tpl):
-            for f in sorted(os.listdir(tpl)):
-                if f.endswith(".md"):
-                    os.makedirs(os.path.join(stage, "agents"), exist_ok=True)
-                    shutil.copy2(os.path.join(tpl, f), os.path.join(stage, "agents", f))
-            record_repo(tpl)
     ins = (decl.get("instructions") or "").strip()
     if ins and os.path.isfile(ins):
         head = guide_skill(m, ins)
@@ -1173,6 +1783,20 @@ for name, via in skills:
     else:
         skipped.append((name, "skill", via, f"source {src or '(unknown)'} is missing"))
         note(f"skill {name}: source is missing — not exported")
+        continue
+    # and the templates that skill declares, which are the other half of what a
+    # module ships — flattened into the plugin's own agents/ directory
+    tpl = templates.get(name, "")
+    if not tpl:
+        continue
+    if not os.path.isdir(tpl):
+        note(f"skill {name}: agents directory {tpl} is missing — no templates")
+        continue
+    for f in sorted(os.listdir(tpl)):
+        if f.endswith(".md"):
+            os.makedirs(os.path.join(stage, "agents"), exist_ok=True)
+            shutil.copy2(os.path.join(tpl, f), os.path.join(stage, "agents", f))
+    record_repo(tpl)
 
 events = {}
 for name, via in hooks:

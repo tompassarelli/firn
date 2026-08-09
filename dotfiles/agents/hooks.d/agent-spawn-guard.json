@@ -23,6 +23,5 @@
   "guards",
   "dispatch"
  ],
- "follows": "orchestration",
  "requires": []
 }

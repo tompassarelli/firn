@@ -6,6 +6,10 @@ description: >-
   agents may write (a worktree, never a `main` checkout), how work lands
   (safe-push, enumerated paths), and which commands are refused outright. The
   companion notice for the worktree, blind-stage, and tripwire guards.
+hooks:
+  - worktree-guard
+  - git-blind-stage-guard
+  - tripwire-guard
 ---
 
 # repo-safety — where agents may write, and how work lands
