@@ -1138,6 +1138,7 @@ CODEX="$REPO/dotfiles/codex"
 LIVE_REPO="${AGENT_CONFIG_LIVE_REPO:-$HOME/code/nixos-config}"
 LIVE_SHARED="${AGENT_CONFIG_LIVE_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
 LIVE_SKILLS_FARM="${AGENT_CONFIG_LIVE_SKILLS_FARM:-$HOME/.local/state/north/skills}"
+LIVE_AGENT_STATE="${AGENT_CONFIG_LIVE_AGENT_STATE:-$HOME/.config/agents}"
 LIVE_NORTH_ROOT="${AGENT_CONFIG_LIVE_NORTH_ROOT:-$HOME/code/north}"
 LIVE_BEAGLE_ROOT="${AGENT_CONFIG_LIVE_BEAGLE_ROOT:-$HOME/code/beagle}"
 LIVE_FRAM_ROOT="${AGENT_CONFIG_LIVE_FRAM_ROOT:-$HOME/code/fram}"
@@ -1285,15 +1286,18 @@ for skill_root in \
     else soft "${skill#"$REPO"/} lacks SKILL.md frontmatter"; fi
   done < <(find "$skill_root" -mindepth 2 -maxdepth 2 -name SKILL.md -type f -print | sort)
 done
-if [ -s "$SHARED/AGENTS.md" ]; then
-  ok_detail "canonical AGENTS.md present"
-elif [ "$LOCAL" -eq 1 ]; then
-  bad "canonical AGENTS.md is missing or empty"
+if [ -s "$REPO/dotfiles/agents/AGENTS.md" ]; then
+  ok_detail "switchboard global AGENTS.md source present"
 else
-  note "North-composed AGENTS.md unavailable in repository-only mode"
+  bad "switchboard global AGENTS.md source is missing or empty"
 fi
 north_profile_module="$REPO/modules/north-profile/default.bnix"
-for profile_member in AGENTS.md docs hooks; do
+if grep -Fq '"/.config/agents/AGENTS.md"' "$north_profile_module"; then
+  ok_detail "~/.agents/AGENTS.md is wired to switchboard-composed instructions"
+else
+  bad "~/.agents/AGENTS.md must be wired to ~/.config/agents/AGENTS.md"
+fi
+for profile_member in docs hooks; do
   if grep -Fq "\"/code/north/main/agent-profile/$profile_member\"" "$north_profile_module"; then
     ok_detail "~/.agents/$profile_member is wired to the North-composed profile"
   else
@@ -1305,9 +1309,6 @@ if grep -Fq '"/.local/state/north/skills"' "$north_profile_module"; then
 else
   bad '~/.agents/skills must be wired to ~/.local/state/north/skills'
 fi
-if [ -e "$REPO/dotfiles/agents" ]; then
-  bad "retired Firn-owned dotfiles/agents tree still exists"
-fi
 if [ -e "$REPO/dotfiles/claude/CLAUDE.md" ] ||
    [ -L "$REPO/dotfiles/claude/CLAUDE.md" ] ||
    [ -e "$REPO/dotfiles/claude/hooks" ] ||
@@ -1315,12 +1316,12 @@ if [ -e "$REPO/dotfiles/claude/CLAUDE.md" ] ||
   bad "obsolete Claude redirect sources still exist after Home Manager took ownership"
 fi
 if [ "$LOCAL" -eq 1 ]; then
-  canonical_link "$HOME/.agents/AGENTS.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.agents/AGENTS.md"
+  canonical_link "$HOME/.agents/AGENTS.md" "$LIVE_AGENT_STATE/AGENTS.md" "$HOME/.agents/AGENTS.md"
   canonical_link "$HOME/.agents/docs" "$LIVE_SHARED/docs" "$HOME/.agents/docs"
   canonical_link "$HOME/.agents/hooks" "$LIVE_SHARED/hooks" "$HOME/.agents/hooks"
   canonical_link "$HOME/.agents/skills" "$LIVE_SKILLS_FARM" "$HOME/.agents/skills"
 fi
-group shared "$hook_count owner hooks linted · $skill_count owner skills · North-composed instructions" "$before"
+group shared "$hook_count owner hooks linted · $skill_count owner skills · switchboard-composed instructions" "$before"
 
 # Validate a provider hook manifest. Shared adapter commands must resolve to the
 # canonical source tree. North lifecycle commands must use the immutable system
@@ -1763,21 +1764,15 @@ fi
 if jq -e '.autoMemoryEnabled == false' "$CLAUDE/settings.json" >/dev/null; then ok_detail "auto-memory disabled"
 else bad "Claude autoMemoryEnabled must be false"; fi
 if jq -e '
-  .enabledPlugins["orchestration@orchestration"] == true
-  and .extraKnownMarketplaces.orchestration.source == {
-    "source": "directory",
-    "path": "/home/tom/code/north/main/orchestration"
-  }
+  ((.enabledPlugins // []) |
+    if type == "array" then index("orchestration@orchestration") == null
+    else (.["orchestration@orchestration"] // false) == false
+    end)
+  and (.extraKnownMarketplaces.orchestration // null) == null
 ' "$CLAUDE/settings.json" >/dev/null; then
-  ok_detail "Orchestration plugin resolves to the in-tree north/orchestration marketplace"
+  ok_detail "retired Orchestration plugin cannot bypass the module-set switch"
 else
-  bad "Claude Orchestration plugin must be enabled from /home/tom/code/north/main/orchestration"
-fi
-if [ -f "$HOME/code/north/main/orchestration/.claude-plugin/marketplace.json" ] &&
-   [ -f "$HOME/code/north/main/orchestration/.claude-plugin/plugin.json" ]; then
-  ok_detail "in-tree Orchestration marketplace + plugin manifests present"
-else
-  bad "north/orchestration must carry .claude-plugin/marketplace.json and plugin.json"
+  bad "Claude settings must not enable the retired Orchestration plugin or marketplace"
 fi
 validate_hooks "$CLAUDE/settings.json" Claude anthropic
 require_manifest_guard_count "$CLAUDE/settings.json" Claude Bash 1 'user Bash topology guard is bound once'
@@ -1789,7 +1784,7 @@ if [ "$LOCAL" -eq 1 ]; then
     "$HOME/.claude/settings.json"
   canonical_link "$HOME/.claude/skills" "$LIVE_SKILLS_FARM" "$HOME/.claude/skills"
   canonical_link "$HOME/.claude/hooks" "$LIVE_SHARED/hooks" "$HOME/.claude/hooks"
-  canonical_link "$HOME/.claude/CLAUDE.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.claude/CLAUDE.md"
+  canonical_link "$HOME/.claude/CLAUDE.md" "$LIVE_AGENT_STATE/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
   canonical_link "$HOME/.claude/commands" "$LIVE_CLAUDE/commands" "$HOME/.claude/commands"
   if [ -f "$HOME/.claude.json" ]; then
     for server in fram north linear-mcp-msa-new digitalocean; do
@@ -1952,7 +1947,7 @@ if [ "$LOCAL" -eq 1 ]; then
     "$HOME/.codex/config.toml" "$CODEX/config.toml" "$HOME/.codex/config.toml"
   immutable_store_link_matches \
     "$HOME/.codex/hooks.json" "$CODEX/hooks.json" "$HOME/.codex/hooks.json"
-  canonical_link "$HOME/.codex/AGENTS.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.codex/AGENTS.md"
+  canonical_link "$HOME/.codex/AGENTS.md" "$LIVE_AGENT_STATE/AGENTS.md" "$HOME/.codex/AGENTS.md"
   if command -v codex >/dev/null 2>&1; then
     codex_mcp_status=0
     mcp_output="$(
@@ -2148,7 +2143,7 @@ else
 fi
 if [ "$LOCAL" -eq 1 ]; then
   canonical_link "$HOME/.hermes/config.yaml" "$LIVE_HERMES/config.yaml" "$HOME/.hermes/config.yaml"
-  canonical_link "$HOME/.hermes/SOUL.md" "$LIVE_SHARED/AGENTS.md" "$HOME/.hermes/SOUL.md"
+  canonical_link "$HOME/.hermes/SOUL.md" "$LIVE_AGENT_STATE/AGENTS.md" "$HOME/.hermes/SOUL.md"
   # The plugin is an IMMUTABLE nix-store source (so imports cannot write
   # __pycache__ into dotfiles) — assert it resolves into /nix/store, not the
   # mutable working tree.

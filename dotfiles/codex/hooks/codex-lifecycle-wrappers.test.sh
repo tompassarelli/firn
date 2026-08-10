@@ -6,8 +6,12 @@ SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/codex-lifecycle-test.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
 TEST_PYTHON="$(readlink -f "$(command -v python3)")"
 HOOKS="$SCRATCH/hooks"
-mkdir -p "$HOOKS/north/bin" "$HOOKS/runtime"
+mkdir -p "$HOOKS/north/bin" "$HOOKS/runtime" "$HOOKS/lib"
 ln -s "$(readlink -f "$(command -v bash)")" "$HOOKS/runtime/bash"
+cp "$HERE/../../agents/lib/switchboard-activity.sh" "$HOOKS/lib/"
+AGENTS_ACTIVITY_FILE="$SCRATCH/activity.conf"
+export AGENTS_ACTIVITY_FILE
+printf 'hook north-session-lifecycle on\n' > "$AGENTS_ACTIVITY_FILE"
 
 wrappers=(
   north-on-spawn-codex
@@ -225,6 +229,20 @@ for index in "${!wrappers[@]}"; do
   check "$wrapper native branch preserves target output" \
     test "$output" = "{\"delegated\":\"$target\"}"
 done
+
+printf 'hook north-session-lifecycle off\n' > "$AGENTS_ACTIVITY_FILE"
+for wrapper in "${wrappers[@]}"; do
+  record="$SCRATCH/$wrapper.switchboard-off"
+  output="$(
+    printf '%s' '{"session_id":"switchboard-off"}' |
+      WRAPPER_TEST_RECORD="$record" "$HOOKS/$wrapper"
+  )"
+  check "$wrapper is silent while lifecycle activity is off" test -z "$output"
+  check "$wrapper does not delegate while lifecycle activity is off" test ! -e "$record"
+  check "$wrapper drains delayed stdin while lifecycle activity is off" \
+    test "$(drain_probe "$wrapper" native)" = DRAINED
+done
+printf 'hook north-session-lifecycle on\n' > "$AGENTS_ACTIVITY_FILE"
 
 for index in "${!wrappers[@]}"; do
   wrapper="${wrappers[$index]}"

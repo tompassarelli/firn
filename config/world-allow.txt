@@ -47,7 +47,8 @@ fram/tests/fixtures/gen-fumbles.bb
 fram/tests/resolve_golden.sh
 fram/tests/server_defcheck_untyped_e2e_test.clj
 fram/tests/store_anchor_disambig_test.clj
-nixos-config/docs/claude/02-local-map.md
+nixos-config/dotfiles/agents/modules.d/coordination.json
+nixos-config/dotfiles/agents/modules.d/orchestration.json
 nixos-config/dotfiles/bin/activity
 nixos-config/dotfiles/bin/agents
 nixos-config/dotfiles/bin/beagle

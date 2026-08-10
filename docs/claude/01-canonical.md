@@ -37,28 +37,34 @@ binary — that is the whole game.
 
 > **Two materializations — this is the part that trips people up.** Most levers
 > nix owns **declaratively**: provider files in
-> `~/code/nixos-config/main/dotfiles/claude/` plus the composed
-> `~/code/north/main/profiles/tom` policy exposed through `~/.agents`; edit +
-> commit = reproducible. Two — **MCP servers** and
+> `~/code/nixos-config/main/dotfiles/claude/` plus switchboard composition under
+> `~/.config/agents`; North supplies shared hooks and docs under `~/.agents`.
+> Edit + commit = reproducible. Two — **MCP servers** and
 > **plugins** — are Claude-Code-owned **runtime** stores nix can't symlink, so
 > `~/code/nixos-config/modules/claude` reproduces them **imperatively** via an activation script.
-> Orchestration's local-directory marketplace needs an explicit cache-sync activation
-> (a plugin install isn't a file you can symlink).
+> Orchestration and coordination are switchboard module sets; no provider
+> plugin cache is an authority for them.
 
 | lever | lives in | how it's reproduced | pull it for |
 |---|---|---|---|
-| **CLAUDE.md** | `~/code/north/main/profiles/tom/AGENTS.md` + per-repo | declarative (composed profile symlink) | persistent rules/context that should ALWAYS be in mind |
+| **CLAUDE.md** | `~/code/nixos-config/main/dotfiles/agents/AGENTS.md` + active module-set instructions + per-repo | switchboard composition projected through `~/.config/agents/CLAUDE.md` | persistent rules/context that should ALWAYS be in mind |
 | **settings.json** | `~/code/nixos-config/main/dotfiles/claude/settings.json` | generation seed into writable runtime state | harness config: permissions, model/effort, statusLine, plugins, env |
-| **hooks** | `~/.agents/hooks/` (+ plugin manifests) | North-composed owner sources; plugin-supplied hooks ride the plugin | DETERMINISTIC behavior the model must not skip (enforce / inject / guard) |
+| **hooks** | `~/.agents/hooks/` + `~/code/nixos-config/main/dotfiles/agents/hooks.d/` | switchboard composition; static provider adapters obey the derived activity projection | DETERMINISTIC behavior the model must not skip (enforce / inject / guard) |
 | **skills** | `~/.agents/skills/` (+ plugins) | North-composed owner sources; plugin-supplied skills ride the plugin | ON-DEMAND procedural knowledge the model CHOOSES when relevant |
 | **slash commands** | `~/code/nixos-config/main/dotfiles/claude/commands/` | declarative (symlink) | user-typed shortcuts |
 | **subagents** | `~/code/nixos-config/main/dotfiles/claude/` (+ plugins) | declarative; or plugin-supplied | parallel / isolated work in a separate context |
 | **MCP servers** | `~/.claude.json` (runtime) | **imperative** — `registerMcpServers` activation re-adds them | external tools + data sources |
 
-Rule of thumb: **provider adapters stay in `~/code/nixos-config/main/dotfiles/`;
-composed personal policy lives in `~/code/north/main/profiles/tom`. In `~/.claude.json` /
+Rule of thumb: **provider adapters and switchboard composition stay in
+`~/code/nixos-config/main/dotfiles/`; optional consumer policy lives in its
+owning module or skill. In `~/.claude.json` /
 `~/.claude/plugins/` → Claude Code owns a runtime store; nix only pokes it via an
 activation script.**
+
+Provider surfaces that require a static hook manifest consult the derived
+`~/.config/agents/activity.conf`. It is rewritten by `agents apply` from the
+same activity calculation used to compose Claude hooks; it is not another
+switch or policy source.
 
 ## WHEN to use what — the decision that actually matters
 

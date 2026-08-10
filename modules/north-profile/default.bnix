@@ -2,26 +2,27 @@
 
 (ns default)
 
-;; North owns the composed personal agent profile. Firn only materialises the
-;; stable discovery paths consumed by provider adapters.
+;; Firn materialises stable provider-neutral discovery paths. The switchboard
+;; owns composed instructions; North continues to own shared docs and hooks.
 (nix/module [config lib ...]
   (let [username config.myConfig.modules.users.username]
     {:tags [development]
      :options.myConfig.modules.north-profile.enable
-      (lib.mkEnableOption "Publish North's agent profile at ~/.agents (see north:agent-profile contract)")
+      (lib.mkEnableOption "Publish shared agent surfaces at ~/.agents")
      :config
       (lib.mkIf config.myConfig.modules.north-profile.enable
         {:home-manager.users
           {username
             (nix/module [config ...]
               {:home.file
-                {;; The shared provider-neutral constitution, resolvable at the
-                 ;; canonical ~/.agents/AGENTS.md path every adapter can point to.
+                {;; Instructions have one authority: the switchboard-composed
+                 ;; target also used by Codex. Pointing this at North's personal
+                 ;; profile would bypass every module-set blackout.
                  ".agents/AGENTS.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/north/main/agent-profile/AGENTS.md"))}
+                        "/.config/agents/AGENTS.md"))}
                  ".agents/skills"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink

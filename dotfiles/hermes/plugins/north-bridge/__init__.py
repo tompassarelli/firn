@@ -140,6 +140,32 @@ def _bash_bin() -> str:
     return os.environ.get("NORTH_HERMES_BASH", "bash")
 
 
+def _switchboard_active(kind: str, name: str) -> bool:
+    """Read one derived switchboard activity row.
+
+    A missing projection preserves installations that do not use the personal
+    switchboard. Once present, an absent or inactive row is off.
+    """
+    configured = os.environ.get("AGENTS_ACTIVITY_FILE")
+    home = Path(os.environ.get("HOME", "~")).expanduser()
+    path = (
+        Path(configured).expanduser()
+        if configured
+        else home / ".config" / "agents" / "activity.conf"
+    )
+    try:
+        rows = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    for row in rows:
+        fields = row.split()
+        if len(fields) >= 3 and fields[0] == kind and fields[1] == name:
+            return fields[2] == "on"
+    return False
+
+
 def _guard_timeout() -> float:
     try:
         return float(os.environ.get("NORTH_HERMES_GUARD_TIMEOUT", "15"))
@@ -443,6 +469,8 @@ def run_lifecycle(
     script = LIFECYCLE_SCRIPTS.get(event)
     if script is None:
         return (False, "")
+    if runner is None and not _switchboard_active("hook", "north-session-lifecycle"):
+        return (True, "")
     run = runner if runner is not None else _real_lifecycle_runner
     try:
         result = run(script, dict(payload or {}), _lifecycle_env())

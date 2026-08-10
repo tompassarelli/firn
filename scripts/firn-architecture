@@ -28,6 +28,7 @@ REPO = Path(os.environ.get("FIRN_REPO", HOME / "code" / "nixos-config")).resolve
 CLAUDE = Path(os.environ.get("CLAUDE_CONFIG_DIR", HOME / ".claude"))
 DOTFILES = REPO / "dotfiles" / "claude"
 AGENT_PROFILE = HOME / "code" / "north" / "main" / "profiles" / "tom"
+AGENT_STATE = HOME / ".config" / "agents"
 DOCDIR = REPO / "docs" / "claude"
 DOC = DOCDIR / "02-local-map.md"
 
@@ -72,13 +73,16 @@ def classify(path):
 
     under_dotfiles = str(real).startswith(str(REPO / "dotfiles"))
     under_profile = str(real).startswith(str(AGENT_PROFILE))
+    under_agent_state = str(real).startswith(str(AGENT_STATE))
     via_store = bool(immediate and "/nix/store/" in str(immediate))
 
-    if under_dotfiles or under_profile:
+    if under_dotfiles or under_profile or under_agent_state:
         out["managed"] = True
         out["sot"] = fullpath(real)
         if not via_store:
-            if under_profile:
+            if under_agent_state:
+                out["via"] = "switchboard composition"
+            elif under_profile:
                 out["via"] = "direct → North profile"
             else:
                 # direct symlink → dotfiles: claude-code can atomic-write through it
@@ -87,11 +91,12 @@ def classify(path):
         else:
             # The store-owned symlink records the Home Manager declaration;
             # its target remains mutable owner checkout content.
-            out["via"] = (
-                "nix store → North profile (out-of-store)"
-                if under_profile
-                else "nix store → dotfiles (out-of-store)"
-            )
+            if under_agent_state:
+                out["via"] = "nix store → switchboard composition (out-of-store)"
+            elif under_profile:
+                out["via"] = "nix store → North profile (out-of-store)"
+            else:
+                out["via"] = "nix store → dotfiles (out-of-store)"
     elif "/nix/store/" in str(real):
         out["managed"] = True
         out["via"] = "nix store COPY (rebuild to change)"
@@ -332,7 +337,7 @@ def render():
     w("> it governs a local choice. A fuller canonical corpus is the next phase —")
     w(f"> see `{fullpath(REPO / 'docs' / 'claude' / '01-canonical.md')}` and the `claude-code-guide` skill.")
     w("")
-    return "\n".join(L) + "\n"
+    return "\n".join(L).rstrip() + "\n"
 
 
 def bundle():

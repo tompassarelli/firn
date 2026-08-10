@@ -1,17 +1,9 @@
 # Global agent instructions
 
 Durable machine law for every session and every provider. Self-contained: no
-rule below depends on a linked doc, a daemon, or a hook being present. Lab
-machinery — orchestration, dispatch, staffing, telemetry, coordination
-protocol — is World-2 material that lab sessions load explicitly; nothing here
-assumes it.
-
-## Coordination is optional, never load-bearing
-North may or may not be running. The pattern, everywhere it applies: if
-`north` answers within ~2 seconds, record the fact there (progress, lesson,
-outcome on the relevant thread); otherwise proceed with the work and note the
-skip once in your report. Never block on the daemon, never arm listeners,
-never poll, never treat a coordination step as a precondition for delivery.
+rule below depends on a linked document, daemon, hook, orchestration system, or
+coordination protocol. Optional behavior is supplied only by the switchboard
+module that owns it.
 
 ## Delivery
 For reversible work, make the best supported decision and act. Run the
@@ -62,9 +54,8 @@ WIP. Origin carries main only (plus tags); worktree branches are local and
 ephemeral; never publish a feature branch name.
 
 ## Rebuilds — queue or hand off, never fire
-Agents never run `firn rebuild`, `nixos-rebuild`, or `nh`. If `north`
-answers: `north rebuild request --why "<reason>"` queues the ask and returns.
-If it does not answer: hand the user the rebuild as ONE command and say why.
+Agents never run `firn rebuild`, `nixos-rebuild`, or `nh`. Hand the user the
+rebuild as ONE command and say why.
 A rebuild builds a COMMIT SNAPSHOT (`rev=HEAD`) — commit your own changes
 first or they will not be in the generation. Build-only verify:
 `nix build --no-link`.

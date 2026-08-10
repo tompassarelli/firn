@@ -15,10 +15,10 @@ first few load in any given session — the rest are per-repo context.
 
 | scope | loads | materialization | source-of-truth | lines |
 |---|---|---|---|---|
-| `global` | every session, lowest precedence | direct → North profile | `~/code/north/main/profiles/tom/AGENTS.md` | 338 |
-| `code-root` | any repo under ~/code | unmanaged symlink | `~/code/nixos-config/main/dotfiles/code/AGENTS.md` | 106 |
-| `repo` | this repo (nixos-config) | unmanaged symlink | `~/code/nixos-config/main/AGENTS.md` | 135 |
-| `module:claude` | editing ~/code/nixos-config/main/modules/claude/ | real file (is its own source) | `~/code/nixos-config/main/modules/claude/CLAUDE.md` | 16 |
+| `global` | every session, lowest precedence | nix store → switchboard composition (out-of-store) | `~/.config/agents/CLAUDE.md` | 142 |
+| `code-root` | any repo under ~/code | nix store → switchboard composition (out-of-store) | `~/.config/agents/code-CLAUDE.md` | 108 |
+| `repo` | this repo (nixos-config) | unmanaged symlink | `~/code/nixos-config/main/AGENTS.md` | 149 |
+| `module:claude` | editing ~/code/nixos-config/main/modules/claude/ | real file (is its own source) | `~/code/nixos-config/main/modules/claude/CLAUDE.md` | 17 |
 | `module:containers` | editing ~/code/nixos-config/main/modules/containers/ | real file (is its own source) | `~/code/nixos-config/main/modules/containers/CLAUDE.md` | 7 |
 
 ## Layer 1 — LOCAL: `~/.claude` wired surface
@@ -27,33 +27,31 @@ What the `~/code/nixos-config/main/modules/claude` module materializes into `~/.
 
 | path | kind | materialization | runtime-writable | source-of-truth |
 |---|---|---|---|---|
-| `~/.claude/CLAUDE.md` | symlink | direct → North profile | — | `~/code/north/main/profiles/tom/AGENTS.md` |
+| `~/.claude/CLAUDE.md` | symlink | nix store → switchboard composition (out-of-store) | — | `~/.config/agents/CLAUDE.md` |
 | `~/.claude/settings.json` | file | real file (is its own source) | ✅ | `~/.claude/settings.json` |
-| `~/.claude/commands` | symlink | direct → dotfiles | ✅ | `~/code/nixos-config/main/dotfiles/claude/commands` |
-| `~/.claude/skills` | symlink | direct → North profile | — | `~/code/north/main/profiles/tom/skills` |
-| `~/.claude/hooks` | symlink | direct → North profile | — | `~/code/north/main/profiles/tom/hooks` |
+| `~/.claude/commands` | symlink | nix store → dotfiles (out-of-store) | — | `~/code/nixos-config/main/dotfiles/claude/commands` |
+| `~/.claude/skills` | symlink | nix store → switchboard composition (out-of-store) | — | `~/.config/agents/skills` |
+| `~/.claude/hooks` | symlink | nix store → North profile (out-of-store) | — | `~/code/north/main/profiles/tom/hooks` |
 
 ## Layer 1 — LOCAL: runtime wiring (`settings.json` + plugin manifests)
 
-- **statusLine** → `bash "$HOME/code/nixos-config/dotfiles/claude/statusline.sh"`
-- **enabledPlugins** → `rust-analyzer-lsp@claude-plugins-official`, `typescript-lsp@claude-plugins-official`, `orchestration@orchestration`
+- **statusLine** → `—`
+- **enabledPlugins** → `rust-analyzer-lsp@claude-plugins-official`, `typescript-lsp@claude-plugins-official`
 - **hooks** (Claude Code fires these at lifecycle points; `⟨src⟩` = settings.json or the plugin that contributes it):
-  - `SessionStart` → `beagle-session-start.sh` ⟨settings⟩, `north-on-spawn` ⟨settings⟩
-  - `PreToolUse` → `agent-spawn-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩, `agent-spawn-guard.sh` ⟨settings⟩, `tripwire-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `git-blind-stage-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩
-  - `PostToolUse` → `logcompress-hook.js` ⟨settings⟩, `north-on-tooluse` ⟨settings⟩, `north-mark-delegated` ⟨settings⟩
-  - `Stop` → `north-on-stop` ⟨settings⟩
+  - `SessionStart` → `beagle-session-start.sh` ⟨settings⟩
+  - `PreToolUse` → `firn-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `git-blind-stage-guard.sh` ⟨settings⟩, `tripwire-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩
 
 ### Control flow (lifecycle spine)
 
 ```mermaid
 flowchart TD
   A[session start] --> B{SessionStart}
-  B -->|"beagle-session-start.sh · north-on-spawn"| C[turn loop]
+  B -->|"beagle-session-start.sh"| C[turn loop]
   C --> D{UserPromptSubmit}
   D -->|"—"| E["model responds + tools"]
-  E -.->|"PreToolUse: agent-spawn-guard.sh · firn-guard.sh · launch-critical-worktree-guard.sh · tripwire-guard.sh · git-blind-stage-guard.sh"| E
+  E -.->|"PreToolUse: firn-guard.sh · launch-critical-worktree-guard.sh · git-blind-stage-guard.sh · tripwire-guard.sh"| E
   E --> F{Stop}
-  F -->|"north-on-stop"| C
+  F -->|"—"| C
 ```
 
 ## Layer 2 — SUBSTRATE: what the config points at
@@ -65,15 +63,15 @@ flowchart TD
 | `rust-analyzer-lsp@claude-plugins-official` | `1.0.0` | `~/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0` |
 | `typescript-lsp@claude-plugins-official` | `1.0.0` | `~/.claude/plugins/cache/claude-plugins-official/typescript-lsp/1.0.0` |
 | `lean@leanprover` | `0.1.0` | `~/.claude/plugins/cache/leanprover/lean/0.1.0` |
-| `orchestration@orchestration` | `9c6acd66ff1d` | `~/.claude/plugins/cache/orchestration/orchestration/9c6acd66ff1d` |
 
 **MCP servers** (user scope — where north plugs into Claude):
 
 | server | command |
 |---|---|
 | `linear-mcp-msa-new` | `.` |
-| `fram` | `/nix/store/5nrs7044a8n6ygdylya0kgbam8awg2w4-fram-0-unstable-2026-07-29-72c1dcc/bin/fram-mcp` |
-| `north` | `/nix/store/kjnnkia40znpaavybln8mr9gnyls6j49-north-0.1.0/bin/north-mcp` |
+| `digitalocean` | `/run/current-system/sw/bin/bash -c export DIGITALOCEAN_API_TOKEN="$(</home/tom/do-token.txt)"; exec /run/current-system/sw/bin/npx -y @digitalocean/mcp@1.0.67 --services accounts,droplets,networking,volumes` |
+| `fram` | `~/code/fram/main/bin/fram-mcp` |
+| `north` | `~/code/north/main/bin/north-mcp` |
 
 > Layer 3 (CANONICAL Anthropic contracts) is annotated inline above where
 > it governs a local choice. A fuller canonical corpus is the next phase —

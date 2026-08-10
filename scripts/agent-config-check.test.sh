@@ -252,7 +252,7 @@ if [ "${1:-}" = '--locked-hook-provenance-only' ]; then
 fi
 
 assert_native_identity() {
-  local manifest="$1" expected_provider="$2" label="$3"
+  local lifecycle_fragment="$1" repair_fragment="$2" expected_provider="$3" label="$4"
   local expected_spawn="AGENT_PROVIDER=$expected_provider /run/current-system/sw/bin/north-on-spawn"
   local expected_repair="AGENT_PROVIDER=$expected_provider /home/tom/.agents/hooks/hook-detach.sh /run/current-system/sw/bin/north-on-tooluse"
   local event command spawn_count=0 repair_count=0
@@ -283,7 +283,7 @@ assert_native_identity() {
         }
         ;;
     esac
-  done < <(jq -r '.hooks | to_entries[] | .key as $event | .value[] | .hooks[]? | select(.type == "command" and ((.command | contains("/north-on-spawn")) or (.command | contains("/north-on-tooluse")))) | [$event,.command] | @tsv' "$manifest")
+  done < <(jq -sr '.[] | .entries[] | select(.hook.type == "command" and ((.hook.command | contains("/north-on-spawn")) or (.hook.command | contains("/north-on-tooluse")))) | [.event,.hook.command] | @tsv' "$lifecycle_fragment" "$repair_fragment")
 
   [ "$spawn_count" -eq 2 ] || {
     printf '%s has %s north-on-spawn bindings, expected 2\n' "$label" "$spawn_count" >&2
@@ -293,10 +293,13 @@ assert_native_identity() {
     printf '%s has %s north-on-tooluse bindings, expected 1\n' "$label" "$repair_count" >&2
     exit 1
   }
-  jq -e '[.hooks | to_entries[] | .value[] | .hooks[]? | select(.type == "command" and (.command | startswith("AGENT_PROVIDER=")) and ((.command | test("/north-on-(spawn|tooluse)$")) | not))] | length == 0' "$manifest" >/dev/null
+  jq -se '[.[] | .entries[] | .hook | select(.type == "command" and (.command | startswith("AGENT_PROVIDER=")) and ((.command | test("/north-on-(spawn|tooluse)$")) | not))] | length == 0' "$lifecycle_fragment" "$repair_fragment" >/dev/null
 }
 
-assert_native_identity "$REPO/dotfiles/claude/settings.json" anthropic Claude
+assert_native_identity \
+  "$REPO/dotfiles/agents/hooks.d/north-session-lifecycle.json" \
+  "$REPO/dotfiles/agents/hooks.d/hook-detach.json" \
+  anthropic "Claude switchboard fragments"
 if rg -n '/home/tom/code/(north|fram)/bin/(north-(on-|mark-|stream)|concern|fram-code-status)' \
   "$REPO/dotfiles/claude/settings.json" \
   "$REPO/dotfiles/codex/hooks.json" \
@@ -316,13 +319,13 @@ if rg -n 'dotfiles/agents|dotfiles/claude/hooks' \
   printf 'active provider wiring still references the retired Firn agent tree\n' >&2
   exit 1
 fi
-grep -Fq '"/code/north/main/agent-profile/AGENTS.md"' \
+grep -Fq '"/.config/agents/AGENTS.md"' \
   "$REPO/modules/north-profile/default.bnix"
 grep -Fq '"/.agents/hooks"' "$REPO/modules/claude/default.bnix"
-grep -Fq '"/.agents/AGENTS.md"' "$REPO/modules/codex/default.bnix"
-grep -Fq '"/.agents/AGENTS.md"' "$REPO/modules/hermes/default.bnix"
+grep -Fq '"/.config/agents/AGENTS.md"' "$REPO/modules/codex/default.bnix"
+grep -Fq '"/.config/agents/AGENTS.md"' "$REPO/modules/hermes/default.bnix"
 grep -Fq '"/home/tom/.agents/hooks/north-session-end.sh"' \
-  "$REPO/dotfiles/claude/settings.json"
+  "$REPO/dotfiles/agents/hooks.d/north-session-lifecycle.json"
 ! grep -Fq 'writeShellScriptBin "north-session-end"' \
   "$REPO/modules/claude/default.bnix"
 report="$("$REPO/scripts/agent-config-check.sh")"

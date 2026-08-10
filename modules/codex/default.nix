@@ -52,6 +52,7 @@ in
       "codex/hooks/north-clock-guard-codex" = {
         source = "${flakeRoot}/dotfiles/codex/hooks/north-clock-guard-codex";
       };
+      "codex/hooks/lib/switchboard-activity.sh".source = "${flakeRoot}/dotfiles/agents/lib/switchboard-activity.sh";
       "codex/hooks/runtime/bash" = {
         source = "${pkgs.bash}/bin/bash";
       };

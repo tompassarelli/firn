@@ -10,7 +10,8 @@ seed="$SCRATCH/seed.json"
 printf '%s\n' '{"effortLevel":"xhigh","hooks":{"SessionEnd":[]}}' >"$seed"
 
 run_seed() {
-  CLAUDE_SETTINGS_SEED_ALLOW_NONSTORE=1 "$SEEDER" "$seed" "$1"
+  HOME="$SCRATCH/home" CLAUDE_SETTINGS_SEED_ALLOW_NONSTORE=1 \
+    "$SEEDER" "$seed" "$1"
 }
 
 assert_seeded() {
@@ -120,10 +121,10 @@ jq -e '
 ' "$REPO/dotfiles/claude/settings.json" >/dev/null
 
 jq -e '
-  .hooks.SessionEnd[0].hooks[0].command
-    == "/home/tom/.agents/hooks/north-session-end.sh"
-  and true
-' "$REPO/dotfiles/claude/settings.json" >/dev/null
+  any(.entries[];
+    .event == "SessionEnd"
+    and .hook.command == "/home/tom/.agents/hooks/north-session-end.sh")
+' "$REPO/dotfiles/agents/hooks.d/north-session-lifecycle.json" >/dev/null
 
 grep -Fq '(pkgs.writeText "claude-settings.json"' "$REPO/modules/claude/default.bnix"
 grep -Fq '(pkgs.writeShellScript "claude-settings-seed"' "$REPO/modules/claude/default.bnix"

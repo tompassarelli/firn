@@ -80,13 +80,10 @@
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
                         "/code/nixos-config/dotfiles/hermes/config.yaml"))}
-                 ;; Switchboard-owned, exactly like ~/.claude/CLAUDE.md and
-                 ;; ~/.codex/AGENTS.md: the `agents-md` slot feeds every
-                 ;; provider and `agents apply` is the sole writer under
-                 ;; ~/.config/agents. Pointing at ~/.agents/AGENTS.md instead
-                 ;; would resolve to North's World-2 constitution on every
-                 ;; Hermes session, outside the blackout the switch exists to
-                 ;; enforce.
+                 ;; Switchboard-owned, exactly like ~/.claude/CLAUDE.md,
+                 ;; ~/.codex/AGENTS.md, and ~/.agents/AGENTS.md: `agents apply`
+                 ;; is the sole writer under ~/.config/agents, so every provider
+                 ;; sees the same module-set composition.
                  ".hermes/SOUL.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink

@@ -30,13 +30,23 @@ fresh() { # [fragments-dir]
   # An account copy only exists once a session has made one; apply overwrites
   # what is there and never creates the tree, so the fixture must.
   : > "$ACCT/CLAUDE.md"
-  # orchestration is a skill whose source lives in north, and it declares its
-  # guard and its templates in its own frontmatter — the sandbox carries the
-  # same shape the real file does, because nothing here special-cases it.
-  ORCHSK="$SB/code/north/main/orchestration/skill"
-  mkdir -p "$ORCHSK" "$SB/code/north/main/orchestration/agents"
-  printf -- '---\nname: orchestration\nhooks: [agent-spawn-guard]\nagents: ../agents\n---\n' \
-    > "$ORCHSK/SKILL.md"
+  # North's consumer surface is four skills. Staffing is the module that owns
+  # the spawn guard and template library; coordination's three leaves are
+  # plain skills. Module-set fixtures are still opt-in per test below.
+  NORTH="$SB/code/north/main"
+  STAFFSK="$NORTH/orchestration/staffing"
+  mkdir -p "$STAFFSK" "$NORTH/orchestration/agents" \
+    "$NORTH/coordination/messages" "$NORTH/coordination/threads" \
+    "$NORTH/coordination/assignments"
+  printf -- '---\nname: staffing\nhooks: [agent-spawn-guard]\nagents: ../agents\n---\n' \
+    > "$STAFFSK/SKILL.md"
+  for s in messages threads; do
+    printf -- '---\nname: %s\n---\n' "$s" > "$NORTH/coordination/$s/SKILL.md"
+  done
+  printf -- '---\nname: assignments\nhooks: [north-session-lifecycle]\n---\n' \
+    > "$NORTH/coordination/assignments/SKILL.md"
+  printf 'ORCHESTRATION ACTIVE\n' > "$NORTH/orchestration/doctrine.md"
+  printf 'COORDINATION ACTIVE\n' > "$NORTH/coordination/guide.md"
   : > "$SB/code/north/main/orchestration/agents/integrator.md"
   FRAGS="${1:-$FRAG_SRC}"
   # No member lists unless a test writes some: the default is a directory that
@@ -87,12 +97,14 @@ chk "worktree-guard row" "hook worktree-guard enabled repo-safety" "$(grep '^hoo
 chk "logcompress row (unbound)" "hook logcompress disabled" "$(grep '^hook logcompress ' "$SB/.config/agents/manifest.conf")"
 chk "repo-safety skill seeded off" "skill repo-safety off" "$(grep '^skill repo-safety ' "$SB/.config/agents/manifest.conf")"
 chk "global seeds as a dir row at the root" "dir global off ~" "$(grep '^dir global ' "$SB/.config/agents/manifest.conf")"
-chk "orchestration seeds as a skill, like every module" "skill orchestration off" "$(grep '^skill orchestration ' "$SB/.config/agents/manifest.conf")"
+chk "staffing seeds as the profile module" "skill staffing off" "$(grep '^skill staffing ' "$SB/.config/agents/manifest.conf")"
+chk "coordination leaves seed as skills" "3" "$(grep -Ec '^skill (messages|threads|assignments) off$' "$SB/.config/agents/manifest.conf")"
 chk "and no module-set row exists without a members file" "0" "$(grep -c '^module ' "$SB/.config/agents/manifest.conf" || true)"
 chk "statusline-script seeds as other" "other statusline-script off" "$(grep '^other ' "$SB/.config/agents/manifest.conf")"
 chk "no item kind survives" "0" "$(grep -c '^item ' "$SB/.config/agents/manifest.conf" || true)"
 chk "hook bound to a dir row" "hook comment-bloat-guard enabled global" "$(grep '^hook comment-bloat-guard ' "$SB/.config/agents/manifest.conf")"
-chk "a claimed hook names its claimant in the column, from frontmatter" "hook agent-spawn-guard enabled orchestration" "$(grep '^hook agent-spawn-guard ' "$SB/.config/agents/manifest.conf")"
+chk "a claimed hook names its claimant in the column, from frontmatter" "hook agent-spawn-guard enabled staffing" "$(grep '^hook agent-spawn-guard ' "$SB/.config/agents/manifest.conf")"
+chk "coordination lifecycle belongs to assignments" "hook north-session-lifecycle enabled assignments" "$(grep '^hook north-session-lifecycle ' "$SB/.config/agents/manifest.conf")"
 st="$(ag status)"
 case "$st" in *"hook · worktree-guard:        off (skill: repo-safety off)"*) ok "status: bound + skill off" ;;
   *) bad "status: bound + skill off" "$(echo "$st" | grep worktree-guard)" ;; esac
@@ -109,7 +121,7 @@ chk "settings.json foreign key survives" "42" "$(python3 -c 'import json;print(j
 
 echo
 echo "== 2. migration of legacy 3-field rows: blackout holds"
-fresh
+fresh; mods; mod orchestration staffing
 mkdir -p "$SB/.config/agents"
 { echo "item agents-md off"; echo "item statusline-script off"; echo "item orchestration off"
   for h in agent-spawn-guard beagle-session-start comment-bloat-guard firn-guard \
@@ -127,7 +139,7 @@ chk "idempotent: second ensure changes nothing" "" "$(cp "$SB/.config/agents/man
 
 echo
 echo "== 2b. re-kinding off \`item\`: each row lands on a real kind, state intact"
-fresh
+fresh; mods; mod orchestration staffing
 mkdir -p "$SB/.config/agents"
 # Deliberately mixed states, and deliberately in place: the row a re-kinding
 # rewrites must keep both its state and its position, or a manifest read
@@ -140,7 +152,7 @@ ag status > /dev/null
 m="$SB/.config/agents/manifest.conf"
 chk "item agents-md on -> dir global on ~" "dir global on ~" "$(grep '^dir global ' "$m")"
 chk "item statusline-script on -> other, state kept" "other statusline-script on" "$(grep '^other ' "$m")"
-chk "item orchestration off -> skill, state kept" "skill orchestration off" "$(grep '^skill orchestration ' "$m")"
+chk "item orchestration off -> module set, state kept" "module orchestration off" "$(grep '^module orchestration ' "$m")"
 chk "no item row left behind" "0" "$(grep -c '^item ' "$m" || true)"
 chk "re-kinding is in place (line 1 stays line 1)" "dir global on ~" "$(sed -n 1p "$m")"
 chk "unrelated rows untouched" "skill webdev on" "$(grep '^skill webdev ' "$m")"
@@ -152,6 +164,13 @@ ag status > /dev/null
 chk "half-migrated: exactly one dir global row" "1" "$(grep -c '^dir global ' "$m")"
 chk "half-migrated: the already-re-kinded row wins" "dir global off ~" "$(grep '^dir global ' "$m")"
 chk "half-migrated: item gone" "0" "$(grep -c '^item agents-md' "$m" || true)"
+
+# Orchestration also spent one release as a skill. Its remembered state moves
+# to the module-set row instead of seeding the new architecture off.
+{ echo "skill orchestration on"; echo "module orchestration off"; } > "$m"
+ag status > /dev/null
+chk "half-migrated orchestration keeps the module row" "module orchestration off" "$(grep '^module orchestration ' "$m")"
+chk "the retired skill row is removed" "0" "$(grep -c '^skill orchestration ' "$m" || true)"
 
 echo
 echo "== 2c. the global profile writes the global surfaces and nothing per-directory"
@@ -181,7 +200,7 @@ if has_cmd comment-bloat-guard.sh; then bad "dir-bound hook waits for its row" "
 ag on global > /dev/null
 if has_cmd comment-bloat-guard.sh; then ok "dir row on composes the hook that follows it"; else bad "dir row composes hook" "$(composed_files)"; fi
 if has_cmd agent-spawn-guard.sh; then bad "a skill still off keeps its claimed hook out" "$(composed_files)"; else ok "a skill still off keeps its claimed hook out"; fi
-ag on orchestration > /dev/null
+ag on staffing > /dev/null
 if has_cmd agent-spawn-guard.sh; then ok "the skill on composes the hook it declares"; else bad "declared hook composes" "$(composed_files)"; fi
 st="$(ag status)"
 case "$st" in *"hook · agent-spawn-guard:     on"*) ok "status names the skill that declared it" ;;
@@ -374,8 +393,8 @@ chk "global heads the directory section, scope ~" "global: off ~" "$(ag status |
 # the first thing inside skills, and a plain skill is a direct child.
 chk "modules read inside skills" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  modules$')"
 chk "a skill that declares is a module" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^    repo-safety:')"
-chk "a skill that declares templates too" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^    orchestration:')"
-chk "with what it declares nested under it" "4" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^      ')"
+chk "a skill that declares templates too" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^    staffing:')"
+chk "with what it declares nested under it" "5" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^      ')"
 chk "a skill that declares nothing is a plain child" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  webdev:')"
 chk "and a module is not a plain child too" "0" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  repo-safety:' || true)"
 chk "a claimed hook is not repeated under hooks" "0" "$(ag status | sed -n '/^hooks$/,/^plugins$/p' | grep -c '^  worktree-guard:' || true)"
@@ -430,16 +449,48 @@ case "$st" in *"repo-safety:        on · off (module: mid off)"*) ok "now the n
   *) bad "nearest cause is middle" "$(echo "$st" | grep repo-safety)" ;; esac
 
 echo
-echo "== 13. payload-only modules are untouched by the member mechanism"
+echo "== 13. skill-side modules are untouched by the member mechanism"
 fresh; mods
 mod outer mid
 ag status > /dev/null
-chk "a module needs no member file: it is a skill" "skill orchestration off" "$(grep '^skill orchestration ' "$SB/.config/agents/manifest.conf")"
-chk "path of a module is its payload" "$SB/code/north/main/orchestration/doctrine.md" "$(ag path orchestration)"
+chk "a module needs no member file: it is a skill" "skill staffing off" "$(grep '^skill staffing ' "$SB/.config/agents/manifest.conf")"
+chk "path of a skill-side module is its skill" "$STAFFSK/SKILL.md" "$(ag path staffing)"
 chk "path of a module set is its list" "$MODS/outer.json" "$(ag path outer)"
-ag on orchestration > /dev/null
-chk "a module in no set answers only to itself" "skill orchestration on" "$(grep '^skill orchestration ' "$SB/.config/agents/manifest.conf")"
+ag on staffing > /dev/null
+chk "a module in no set answers only to itself" "skill staffing on" "$(grep '^skill staffing ' "$SB/.config/agents/manifest.conf")"
 if has_cmd agent-spawn-guard.sh; then ok "the hook it declares composes, ungated"; else bad "declared hook composes" "$(composed_files)"; fi
+
+echo
+echo "== 13b. orchestration contains staffing and the complete coordination set"
+fresh; mods
+mod_ins coordination "$NORTH/coordination/guide.md" messages threads assignments
+mod_ins orchestration "$NORTH/orchestration/doctrine.md" staffing coordination
+ag status > /dev/null
+for s in staffing messages threads assignments coordination; do ag on "$s" > /dev/null; done
+chk "outer set off holds every child skill" "" "$(skilllinks)"
+chk "outer set off injects no module instructions" "" "$(markers)"
+if has_cmd agent-spawn-guard.sh; then bad "outer set off keeps staffing's hook out" "$(composed_files)"; else ok "outer set off keeps staffing's hook out"; fi
+if has_cmd north-on-spawn; then bad "outer set off keeps coordination lifecycle out" "$(composed_files)"; else ok "outer set off keeps coordination lifecycle out"; fi
+chk "provider activity projection holds lifecycle off" "hook north-session-lifecycle off" "$(grep '^hook north-session-lifecycle ' "$SB/.config/agents/activity.conf")"
+chk "provider activity projection holds staffing guard off" "hook agent-spawn-guard off" "$(grep '^hook agent-spawn-guard ' "$SB/.config/agents/activity.conf")"
+chk "outer set off links no agent profiles" "0" "$(test -e "$SB/.claude/agents/integrator.md" && echo 1 || echo 0)"
+ag on orchestration > /dev/null
+chk "outer set releases all four leaf skills" "assignments messages staffing threads" "$(skilllinks)"
+chk "nested instructions compose deterministically" "<!-- module: coordination --> <!-- module: orchestration -->" "$(markers)"
+if has_cmd agent-spawn-guard.sh; then ok "active staffing composes its hook"; else bad "active staffing composes its hook" "$(composed_files)"; fi
+if has_cmd north-on-spawn; then ok "active assignments compose coordination lifecycle"; else bad "active assignments compose coordination lifecycle" "$(composed_files)"; fi
+chk "provider activity projection releases lifecycle" "hook north-session-lifecycle on" "$(grep '^hook north-session-lifecycle ' "$SB/.config/agents/activity.conf")"
+chk "provider activity projection releases staffing guard" "hook agent-spawn-guard on" "$(grep '^hook agent-spawn-guard ' "$SB/.config/agents/activity.conf")"
+chk "active staffing links its profiles" "$NORTH/orchestration/agents/integrator.md" "$(readlink "$SB/.claude/agents/integrator.md")"
+ag off orchestration > /dev/null
+chk "one outer flip removes every leaf skill" "" "$(skilllinks)"
+chk "one outer flip removes every instruction" "" "$(markers)"
+if has_cmd north-on-spawn; then bad "one outer flip removes coordination lifecycle" "$(composed_files)"; else ok "one outer flip removes coordination lifecycle"; fi
+chk "provider activity projection follows the outer flip" "hook north-session-lifecycle off" "$(grep '^hook north-session-lifecycle ' "$SB/.config/agents/activity.conf")"
+chk "staffing guard projection follows the outer flip" "hook agent-spawn-guard off" "$(grep '^hook agent-spawn-guard ' "$SB/.config/agents/activity.conf")"
+chk "coordination remembers its own on switch" "module coordination on" "$(grep '^module coordination ' "$SB/.config/agents/manifest.conf")"
+chk "leaf switches remain remembered" "4" "$(grep -Ec '^skill (staffing|messages|threads|assignments) on$' "$SB/.config/agents/manifest.conf")"
+chk "the staffing profiles are swept with the outer set" "0" "$(test -e "$SB/.claude/agents/integrator.md" && echo 1 || echo 0)"
 
 echo
 echo "== 14. a membership cycle is named, and everything in it derives inactive"
@@ -597,28 +648,28 @@ chk "a held skill is in neither surface" "0" "$(test -L "$CX/repo-safety" && ech
 chk "nor in the farm" "" "$(skilllinks)"
 ag on hold-bundle > /dev/null
 chk "released, it returns to both" "1" "$(test -L "$CX/repo-safety" && test -L "$SB/.config/agents/skills/repo-safety" && echo 1 || echo 0)"
-# orchestration's doctrine arrives as a skill, so it is governed like one — and
-# by the same code, with no branch that knows its name.
+# Staffing's profiles arrive with its skill, governed by the same code as every
+# other skill-side module.
 seed_codex_neighbours   # the create-when-absent case above wiped the fixture
-ag on orchestration > /dev/null
-chk "the doctrine skill reaches the claude farm" "1" "$(test -L "$SB/.config/agents/skills/orchestration" && echo 1 || echo 0)"
-chk "and the codex surface, same source" "$ORCHSK" "$(readlink "$CX/orchestration")"
+ag on staffing > /dev/null
+chk "the staffing skill reaches the claude farm" "1" "$(test -L "$SB/.config/agents/skills/staffing" && echo 1 || echo 0)"
+chk "and the codex surface, same source" "$STAFFSK" "$(readlink "$CX/staffing")"
 # the templates it declares are the other half of the same switch
 chk "an active module links the templates it ships" "$SB/code/north/main/orchestration/agents/integrator.md" "$(readlink "$SB/.claude/agents/integrator.md")"
-ag off orchestration > /dev/null
+ag off staffing > /dev/null
 chk "off sweeps the templates it linked" "0" "$(test -e "$SB/.claude/agents/integrator.md" && echo 1 || echo 0)"
 : > "$SB/.claude/agents/hand-written.md"
-ag on orchestration > /dev/null; ag off orchestration > /dev/null
+ag on staffing > /dev/null; ag off staffing > /dev/null
 chk "and sweeps only what it linked" "1" "$(test -f "$SB/.claude/agents/hand-written.md" && echo 1 || echo 0)"
-ag off orchestration > /dev/null
-chk "off clears the doctrine skill from the farm" "0" "$(test -L "$SB/.config/agents/skills/orchestration" && echo 1 || echo 0)"
-chk "and from the codex surface" "0" "$(test -L "$CX/orchestration" && echo 1 || echo 0)"
+ag off staffing > /dev/null
+chk "off clears the staffing skill from the farm" "0" "$(test -L "$SB/.config/agents/skills/staffing" && echo 1 || echo 0)"
+chk "and from the codex surface" "0" "$(test -L "$CX/staffing" && echo 1 || echo 0)"
 chk "Codex's own survived the module flips" "system handwritten foreign" "$(survivors)"
-# a squatter under the orchestration name is not ours, so the sweep spares it
-ln -sfn "$SB/elsewhere" "$CX/orchestration"
+# a squatter under the staffing name is not ours, so the sweep spares it
+ln -sfn "$SB/elsewhere" "$CX/staffing"
 ag on repo-safety > /dev/null; ag off repo-safety > /dev/null
-chk "a foreign link under the orchestration name survives a sweep" "$SB/elsewhere" "$(readlink "$CX/orchestration")"
-rm -f "$CX/orchestration"
+chk "a foreign link under the staffing name survives a sweep" "$SB/elsewhere" "$(readlink "$CX/staffing")"
+rm -f "$CX/staffing"
 # a real file at that path degrades to a warning, like every other apply item
 fresh; ag status > /dev/null
 mkdir -p "$SB/.codex"; : > "$SB/.codex/skills"
@@ -699,11 +750,8 @@ mkdir -p "$SB/code/north-data/context-dirs" "$SB/proj"
 printf '%s proj\n' "$SB/proj" > "$SB/code/north-data/context-dirs.conf"
 echo "ctx" > "$SB/code/north-data/context-dirs/proj.md"
 # a payload module: skill + agent templates, no member file of its own
-ORCHD="$SB/code/north/main/orchestration"
-mkdir -p "$ORCHD/skill" "$ORCHD/agents"
-printf -- '---\nname: orchestration\nagents: ../agents\n---\ndoctrine\n' > "$ORCHD/skill/SKILL.md"
-printf -- '---\nname: executor\n---\nrole\n' > "$ORCHD/agents/executor.md"
-mod mixed proj statusline-script orchestration ghost
+printf -- '---\nname: executor\n---\nrole\n' > "$NORTH/orchestration/agents/executor.md"
+mod mixed proj statusline-script staffing ghost
 ag status > /dev/null
 out="$(ag export-plugin mixed --description "A mixed bag" 2>"$SB/xerr2")"
 D2="$(ls -d "$SB/releases"/mixed-*/ | head -1)"
@@ -711,7 +759,7 @@ chk "a dir row is skipped, by name" "1" "$(grep -c 'skipped dir proj — dir row
 chk "an other row is skipped, by name" "1" "$(grep -c 'skipped other statusline-script' "$SB/xerr2")"
 chk "a member naming nothing is skipped, by name" "1" "$(grep -c 'skipped ? ghost — names no unit' "$SB/xerr2")"
 chk "the skips are in the receipt too" "3" "$(grep -c '^skipped=' "$D2/RELEASE")"
-chk "a module's skill exported" "1" "$(grep -c '^name: orchestration$' "$D2/skills/orchestration/SKILL.md")"
+chk "a module's skill exported" "1" "$(grep -c '^name: staffing$' "$D2/skills/staffing/SKILL.md")"
 chk "and the templates it declares" "1" "$(test -f "$D2/agents/executor.md" && echo 1 || echo 0)"
 chk "--description wins over the instructions heading" "A mixed bag" "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["description"])' "$D2/.claude-plugin/plugin.json")"
 chk "the export reports what it did" "1" "$(echo "$out" | grep -c '^exported: mixed ')"

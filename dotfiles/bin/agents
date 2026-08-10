@@ -7,7 +7,7 @@ MANIFEST="$STATE/manifest.conf"
 FRAGMENTS="${AGENTS_FRAGMENTS:-$HOME/code/nixos-config/main/dotfiles/agents/hooks.d}"
 SETTINGS="$HOME/.claude/settings.json"
 PLUGINS_JSON="$HOME/.claude/plugins/installed_plugins.json"
-ORCH="$HOME/code/north/main/orchestration"
+NORTH="$HOME/code/north/main"
 CLAUDE_AGENTS="$HOME/.claude/agents"
 # Codex reads skills from its own directory, so a skill governed only in the
 # claude farm is a skill Codex loads on rules nobody set. This directory is NOT
@@ -38,13 +38,11 @@ HOOKS=(agent-spawn-guard beagle-session-start comment-bloat-guard firn-guard
   git-blind-stage-guard hook-detach logcompress north-session-lifecycle
   tripwire-guard worktree-guard)
 SKILLS=(webdev beagle-authoring fram-modeling code-as-facts firn repo-safety
-  orchestration)
+  staffing messages threads assignments)
 # A MODULE is a skill with declarations — a skill whose frontmatter names the
 # hooks its rules need (`hooks:`) or a directory of agent templates it ships
-# (`agents:`). It is not a kind: a module's name IS a skill's name, always, so
-# there is nothing to drift. Orchestration is the case that proves it — doctrine
-# skill, its spawn guard and its role templates, all declared in the one file
-# that ships them, with no special case anywhere in this script.
+# (`agents:`). It is not a kind: a module's name IS a skill's name. Staffing is
+# one: its spawn guard and role templates travel with the same switch.
 #
 # A MODULE SET is the other thing, and the only distinctly-named one: a row that
 # names units it composes, in modules.d/<name>.json as
@@ -586,6 +584,25 @@ is_active() { [ "${ACT_ACTIVE[$1]:-0}" = 1 ]; }
 
 on_off() { is_active "$1" && echo on || echo off; }
 
+write_activity_projection() {
+  # Provider adapters that cannot accept a dynamically composed hook manifest
+  # read this DERIVED projection. The manifest remains the user's authority;
+  # this file contains only the activity calculation apply is already using.
+  local target="$STATE/activity.conf" tmp="$STATE/activity.conf.tmp.$$"
+  local m s h
+  : > "$tmp"
+  for m in ${MODULES[@]+"${MODULES[@]}"}; do
+    printf 'module %s %s\n' "$m" "$(on_off "$m")" >> "$tmp"
+  done
+  for s in "${SKILLS[@]}"; do
+    printf 'skill %s %s\n' "$s" "$(on_off "$s")" >> "$tmp"
+  done
+  for h in "${HOOKS[@]}"; do
+    printf 'hook %s %s\n' "$h" "$(on_off "$h")" >> "$tmp"
+  done
+  mv "$tmp" "$target"
+}
+
 unit_line() { # the state column for a non-hook row: both axes, when they differ
   local n="$1"
   if [ "${ACT_STATE[$n]:-}" = on ] && ! is_active "$n"; then
@@ -699,10 +716,10 @@ skill_source() {
     code-as-facts)   echo "$HOME/code/fram/main/integrations/north/skills/code-as-facts" ;;
     firn)            echo "$HOME/code/nixos-config/main/modules/north-profile/firn/skills/firn" ;;
     repo-safety)     echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/repo-safety" ;;
-    # The doctrine arrives as a skill like any other, and declares its guard and
-    # its role templates in its own frontmatter — which is the whole reason
-    # nothing below knows the word "orchestration".
-    orchestration)   echo "$ORCH/skill" ;;
+    staffing)        echo "$NORTH/orchestration/staffing" ;;
+    messages)        echo "$NORTH/coordination/messages" ;;
+    threads)         echo "$NORTH/coordination/threads" ;;
+    assignments)     echo "$NORTH/coordination/assignments" ;;
   esac
 }
 
@@ -839,9 +856,6 @@ path_of() { # the canonical source file to view or edit for a unit
   case "$1" in
     "$GLOBAL_SLUG") echo "$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md" ;;
     statusline-script) echo "$HOME/code/nixos-config/main/dotfiles/claude/statusline.sh" ;;
-    # orchestration is payload-only: its source is what it injects, not a
-    # member list it does not have.
-    orchestration) echo "$ORCH/doctrine.md" ;;
     */*)
       # A row under a directory gate: the instruction file is the directory's
       # source, the memories group is the directory that holds them, and a
@@ -1030,12 +1044,11 @@ ensure_manifest() {
   migrate_row item code-md dir code
   migrate_row item statusline item statusline-script
   migrate_row item agents-md dir "$GLOBAL_SLUG"
-  migrate_row item orchestration module orchestration
+  if [ -f "$MODULES_D/orchestration.json" ]; then
+    migrate_row item orchestration module orchestration
+    migrate_row skill orchestration module orchestration
+  fi
   migrate_row item statusline-script other statusline-script
-  # A module was never a kind: it is a skill that declares hooks or templates,
-  # and orchestration is the one row that predated that. The state rides across,
-  # so a re-kinding is not a silent flip.
-  migrate_row module orchestration skill orchestration
   sync_dir_paths
   sync_hook_follows
   migrate_hook_permissions
@@ -1199,6 +1212,7 @@ apply() {
   # get written, linked, or composed — otherwise the switchboard would say one
   # thing and the surfaces would say another.
   load_activity
+  write_activity_projection
   # the global profile — `dir global`, the context file scoped at the root:
   # empty when off. One slot, every provider surface: the claude config target,
   # every account-scoped copy (the launcher redirects CLAUDE_CONFIG_DIR, so
@@ -1206,8 +1220,9 @@ apply() {
   # ~/.codex/AGENTS.md resolves to. Being root-scoped is exactly why it is not
   # in the per-directory loop below: it writes no <dir>-CLAUDE.md pair and hangs
   # no links off a directory — its surfaces are these global ones.
-  # The World-1 slim profile is the source; north's profiles/tom/AGENTS.md is
-  # the World-2 constitution and is loaded by lab sessions, not by this slot.
+  # The durable global profile is the source. Optional orchestration and
+  # coordination instructions are appended below only when their module sets
+  # derive active.
   # Every item below degrades on its own: a missing or unreadable source warns
   # and writes empty, and apply keeps going. A source that vanished must not
   # abort the run half-applied — the surfaces written after the failure would

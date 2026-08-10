@@ -27,6 +27,14 @@ HERE="$(
   drain_stdin
   exit 0
 }
+ACTIVITY_LIB="$HERE/lib/switchboard-activity.sh"
+# shellcheck disable=SC1090
+if [ ! -r "$ACTIVITY_LIB" ] ||
+   ! source "$ACTIVITY_LIB" ||
+   ! agents_switchboard_active hook north-session-lifecycle; then
+  drain_stdin
+  exit 0
+fi
 BASH_BIN="$HERE/runtime/bash"
 NORTH_HOME="$HERE/north"
 TARGET="$NORTH_HOME/bin/north-on-stop"

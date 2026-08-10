@@ -74,6 +74,8 @@
             {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-stop-codex")}
            "codex/hooks/north-clock-guard-codex"
             {:source (s flakeRoot "/dotfiles/codex/hooks/north-clock-guard-codex")}
+           "codex/hooks/lib/switchboard-activity.sh"
+            {:source (s flakeRoot "/dotfiles/agents/lib/switchboard-activity.sh")}
            "codex/hooks/runtime/bash"
             {:source (s pkgs.bash "/bin/bash")}
            "codex/hooks/runtime/cat"
@@ -114,12 +116,10 @@
               [config
                ...]
               {:home.file
-                {;; Switchboard-owned, exactly like ~/.claude/CLAUDE.md: the
-                 ;; `agents-md` slot feeds both providers and `agents apply` is
-                 ;; the sole writer under ~/.config/agents. Pointing at
-                 ;; ~/.agents/AGENTS.md instead would resolve to North's
-                 ;; World-2 constitution on every session, outside the
-                 ;; blackout the switch exists to enforce.
+                {;; Switchboard-owned, exactly like ~/.claude/CLAUDE.md and
+                 ;; ~/.agents/AGENTS.md: `agents apply` is the sole writer under
+                 ;; ~/.config/agents, so every provider sees the same module-set
+                 ;; composition.
                  ".codex/AGENTS.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
