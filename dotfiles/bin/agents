@@ -910,15 +910,30 @@ sync_dir_paths() { # the 4th column: where the row's context file is triggered
   for i in "${!DIRS[@]}"; do sync_dir_path "${DIRS[$i]}" "${DIR_PATHS[$i]}"; done
 }
 
-sync_hook_follows() { # the 4th column: the companion unit this hook follows
+hook_claimant() { # the unit a hook's manifest column names
+  # The nearest statement of who wants this hook: the unit its fragment follows
+  # if it has one, else the first skill whose frontmatter claims it — first
+  # ALPHABETICALLY, so two machines reading the same files write the same row.
+  local h="$1" s
+  if [ -n "${HOOK_FOLLOWS[$h]:-}" ]; then echo "${HOOK_FOLLOWS[$h]}"; return 0; fi
+  load_skill_hooks
+  for s in $(printf '%s\n' "${SKILLS[@]}" | sort); do
+    case " ${SKILL_HOOKS[$s]:-} " in *" $h "*) echo "$s"; return 0 ;; esac
+  done
+  return 0
+}
+
+sync_hook_follows() { # the 4th column: the unit that wants this hook
   # Same contract as sync_dir_paths, and for the same reason: the manifest is
   # read directly by Northbridge, which renders anything past the state as the
-  # row's detail. The fragment stays the truth — a row written before the
-  # column existed is backfilled, a re-pointed or removed binding is corrected
-  # here rather than drifting until someone flips the hook.
+  # row's detail — and derives from it which module a hook belongs to. The
+  # SOURCES stay the truth, both of them: a row written before the column
+  # existed is backfilled, and a re-pointed binding, a dropped `follows`, or a
+  # claim moved from one skill's frontmatter to another is corrected here rather
+  # than drifting until someone flips the hook.
   local h want tmp="$MANIFEST.tmp.$$"
   for h in "${HOOKS[@]}"; do
-    want="${HOOK_FOLLOWS[$h]:-}"
+    want="$(hook_claimant "$h")"
     awk -v n="$h" -v s="$want" \
       '$1=="hook" && $2==n && $4!=s {f=1} END {exit !f}' "$MANIFEST" || continue
     awk -v n="$h" -v s="$want" '
@@ -1066,8 +1081,8 @@ ensure_manifest() {
     # until asked for, and unbound means nothing would gate it, so it stays the
     # user's explicit call.
     for h in "${HOOKS[@]}"; do
-      if [ -n "${HOOK_FOLLOWS[$h]:-}" ]; then echo "hook $h enabled ${HOOK_FOLLOWS[$h]}"
-      elif hook_is_claimed "$h"; then echo "hook $h enabled"
+      n="$(hook_claimant "$h")"
+      if [ -n "$n" ]; then echo "hook $h enabled $n"
       else echo "hook $h disabled"; fi
     done
     for p in "${PLUGINS[@]}"; do

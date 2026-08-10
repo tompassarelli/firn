@@ -88,7 +88,7 @@ chk "and no module-set row exists without a members file" "0" "$(grep -c '^modul
 chk "statusline-script seeds as other" "other statusline-script off" "$(grep '^other ' "$SB/.config/agents/manifest.conf")"
 chk "no item kind survives" "0" "$(grep -c '^item ' "$SB/.config/agents/manifest.conf" || true)"
 chk "hook bound to a dir row" "hook comment-bloat-guard enabled global" "$(grep '^hook comment-bloat-guard ' "$SB/.config/agents/manifest.conf")"
-chk "a claimed hook needs no column: the skill's own file says it" "hook agent-spawn-guard enabled" "$(grep '^hook agent-spawn-guard ' "$SB/.config/agents/manifest.conf")"
+chk "a claimed hook names its claimant in the column, from frontmatter" "hook agent-spawn-guard enabled orchestration" "$(grep '^hook agent-spawn-guard ' "$SB/.config/agents/manifest.conf")"
 st="$(ag status)"
 case "$st" in *"worktree-guard       enabled · off (skill: repo-safety off)"*) ok "status: bound + skill off" ;;
   *) bad "status: bound + skill off" "$(echo "$st" | grep worktree-guard)" ;; esac
@@ -898,8 +898,19 @@ if has_cmd logcompress-hook.js; then bad "a claimed hook waits for its skill" "$
 st="$(ag status)"
 case "$st" in *"logcompress          enabled · off (skill: webdev off)"*) ok "and says whose claim holds it" ;;
   *) bad "claim provenance" "$(echo "$st" | grep logcompress)" ;; esac
+chk "the claim is backfilled into field 4, where the panel reads it" "hook logcompress enabled webdev" "$(grep '^hook logcompress ' "$m")"
 ag on webdev > /dev/null
 if has_cmd logcompress-hook.js; then ok "the claiming skill composes it"; else bad "claim composes" "$(composed_files)"; fi
+# two claimants: the column takes the first ALPHABETICALLY, so two machines
+# reading the same files write the same row
+claim "$FRAM_SKILL" logcompress
+ag status > /dev/null
+chk "two claimants: the column is deterministic" "hook logcompress enabled fram-modeling" "$(grep '^hook logcompress ' "$m")"
+rm -rf "$FRAM_SKILL"
+ag status > /dev/null
+chk "and follows the claim when one skill stops making it" "hook logcompress enabled webdev" "$(grep '^hook logcompress ' "$m")"
+# a fragment's own `follows` is the nearer statement and keeps the column
+chk "a followed hook keeps its fragment's binding" "hook git-blind-stage-guard enabled repo-safety" "$(grep '^hook git-blind-stage-guard ' "$m")"
 # two claimants: either one is enough, and both are named
 claim "$WEBDEV_SKILL" logcompress git-blind-stage-guard
 ag on repo-safety > /dev/null
@@ -927,6 +938,7 @@ warn="$(ag status 2>&1 >/dev/null)"
 case "$warn" in *"hooks: not-a-list is not a list of names"*) ok "an unreadable list is loud" ;;
   *) bad "unreadable list warns" "$warn" ;; esac
 if has_cmd logcompress-hook.js; then ok "and claims nothing, so an unbound hook is unbound again"; else bad "composes without claims" "$(composed_files)"; fi
+chk "an unreadable list drops the column too" "hook logcompress enabled" "$(grep '^hook logcompress ' "$m")"
 chk "apply still reports" "1" "$(ag apply 2>/dev/null | grep -c '^applied:')"
 
 echo
