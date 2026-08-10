@@ -1105,20 +1105,25 @@ set_state() { # kind name state
   mv "$tmp" "$MANIFEST"
 }
 
-hook_line() { # the two-axis state column for one hook, wherever it is rendered
-  # Both axes, always: the permission the user set, then whether that adds up to
-  # running right now and why not. A hook that is enabled but silent is the case
-  # worth explaining. The parenthetical is provenance — who wants this hook, or,
-  # when that is not the whole story, why it is not running.
-  local name="$1" line reason
+hook_line() { # name [nested] — ONE state token for one hook, and why if it diverges
+  # Both axes are still here; `enabled` is simply never spelled, because `on`
+  # already says it and a divergence says it louder — `off (skill: firn off)` is
+  # a hook that MAY run and is not running. Only `disabled`, the user's pin, is
+  # a word, because that one is a decision rather than a derivation.
+  # The parenthetical is why it is not running, or else provenance: who wants
+  # this hook. Nested under the skill that wants it, provenance is the row
+  # above, so it is not repeated.
+  local name="$1" nested="${2:-}" line reason
   # A declared hook whose fragment is not here has no derivation to show, and a
   # missing fragment is already loud where it is read.
   if [ -z "${ACT_STATE[$name]:-}" ]; then echo "(no fragment)"; return 0; fi
-  if [ "${ACT_STATE[$name]}" = enabled ]; then line="enabled · $(on_off "$name")"
+  if [ "${ACT_STATE[$name]}" = enabled ]; then line="$(on_off "$name")"
   else line="disabled"; fi
   reason="${ACT_REASON[$name]}"
   if [ -n "$reason" ]; then line="$line ($reason)"
-  elif [ -n "${ACT_FOLLOWS[$name]}" ]; then line="$line (${ACT_FOLLOWS[$name]})"; fi
+  elif [ -z "$nested" ] && [ -n "${ACT_FOLLOWS[$name]}" ]; then
+    line="$line (${ACT_FOLLOWS[$name]})"
+  fi
   echo "$line"
 }
 
@@ -1137,32 +1142,38 @@ status() {
   # A skill that declares nothing is a plain skill, and a hook nobody claims
   # answers only to itself.
   local m o p s h name slug ddir mname
+  # Every row reads NAME then STATE, separated by a colon: the name is what you
+  # came looking for and what you would type to flip it, so it is never behind
+  # a state token the eye has to step over.
   echo "module sets"
   for m in ${MODULES[@]+"${MODULES[@]}"}; do
-    printf '  %-20s %s\n' "$m" "$(unit_line "$m")"
+    printf '  %-21s %s\n' "$m:" "$(unit_line "$m")"
   done
   echo "skills"
   echo "  modules"
   for s in "${SKILLS[@]}"; do
     if ! skill_is_module "$s"; then continue; fi
-    printf '    %-20s %s\n' "$s" "$(unit_line "$s")"
+    printf '    %-19s %s\n' "$s:" "$(unit_line "$s")"
+    # The kind is tagged here and nowhere else: this is the only row that sits
+    # under a heading which does not already name its kind.
     for h in ${SKILL_HOOKS[$s]:-}; do
-      printf '      %-20s %-28s %s\n' "$h" "$(hook_line "$h")" "${ACT_TAGS[$h]:-}"
+      printf '      %-30s %-28s %s\n' "hook · $h:" "$(hook_line "$h" nested)" \
+        "${ACT_TAGS[$h]:-}"
     done
   done
   for s in "${SKILLS[@]}"; do
     if skill_is_module "$s"; then continue; fi
-    printf '  %-20s %s\n' "$s" "$(unit_line "$s")"
+    printf '  %-21s %s\n' "$s:" "$(unit_line "$s")"
   done
   echo "hooks"
   for name in ${ACT_HOOKS[@]+"${ACT_HOOKS[@]}"}; do
     if hook_is_claimed "$name"; then continue; fi
-    printf '  %-22s %-28s %s\n' "$name" "$(hook_line "$name")" "${ACT_TAGS[$name]}"
+    printf '  %-23s %-28s %s\n' "$name:" "$(hook_line "$name")" "${ACT_TAGS[$name]}"
   done
   echo "plugins"
-  for p in "${PLUGINS[@]}"; do printf '  %-40s %s\n' "$p" "$(unit_line "$p")"; done
+  for p in "${PLUGINS[@]}"; do printf '  %-41s %s\n' "$p:" "$(unit_line "$p")"; done
   echo "other"
-  for o in "${OTHERS[@]}"; do printf '  %-20s %s\n' "$o" "$(unit_line "$o")"; done
+  for o in "${OTHERS[@]}"; do printf '  %-21s %s\n' "$o:" "$(unit_line "$o")"; done
   # A `dir` row is a SUBTREE GATE — it governs that directory and everything
   # under it — and the global profile is the root-of-tree case, scope `~`, which
   # is why it heads this section. Each reads as the subtree it is: the gate,
@@ -1172,11 +1183,11 @@ status() {
   # and whatever else turns out to be scoped at a directory later.
   echo "directory scoped"
   while IFS=$'\t' read -r slug ddir; do
-    printf '  %-20s %-24s %s\n' "$slug" "$(unit_line "$slug")" "$ddir"
-    printf '    %-18s %s\n' "AGENTS.md" "$(unit_line "ins:$slug")"
-    printf '    %-18s %s\n' "memories" "$(unit_line "memroot:$slug")"
+    printf '  %-21s %-24s %s\n' "$slug:" "$(unit_line "$slug")" "$ddir"
+    printf '    %-19s %s\n' "AGENTS.md:" "$(unit_line "ins:$slug")"
+    printf '    %-19s %s\n' "memories:" "$(unit_line "memroot:$slug")"
     for mname in ${MEM_NAMES[$slug]:-}; do
-      printf '      %-16s %s\n' "$mname" "$(unit_line "mem:$slug/$mname")"
+      printf '      %-17s %s\n' "$mname:" "$(unit_line "mem:$slug/$mname")"
     done
   done < <(dir_rows)
 }

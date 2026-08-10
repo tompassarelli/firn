@@ -74,6 +74,10 @@ print(" ".join(sorted(cmds)))
 PY
 }
 has_cmd() { composed_files | grep -q -- "$1"; }
+hook_rows() { # every hook row status prints, nested under a skill or flat
+  ag status 2>/dev/null |
+    awk '/^hooks$/{f=1;next} /^plugins$/{f=0} f || /^ +hook · /'
+}
 
 echo "== 1. fresh seed: bound hooks enabled+companion, unbound disabled, nothing composes"
 fresh
@@ -90,13 +94,13 @@ chk "no item kind survives" "0" "$(grep -c '^item ' "$SB/.config/agents/manifest
 chk "hook bound to a dir row" "hook comment-bloat-guard enabled global" "$(grep '^hook comment-bloat-guard ' "$SB/.config/agents/manifest.conf")"
 chk "a claimed hook names its claimant in the column, from frontmatter" "hook agent-spawn-guard enabled orchestration" "$(grep '^hook agent-spawn-guard ' "$SB/.config/agents/manifest.conf")"
 st="$(ag status)"
-case "$st" in *"worktree-guard       enabled · off (skill: repo-safety off)"*) ok "status: bound + skill off" ;;
+case "$st" in *"hook · worktree-guard:        off (skill: repo-safety off)"*) ok "status: bound + skill off" ;;
   *) bad "status: bound + skill off" "$(echo "$st" | grep worktree-guard)" ;; esac
-case "$st" in *"hook-detach            disabled"*) ok "status: unbound infrastructure reads disabled" ;;
+case "$st" in *"hook-detach:            disabled"*) ok "status: unbound infrastructure reads disabled" ;;
   *) bad "status: unbound disabled" "$(echo "$st" | grep hook-detach)" ;; esac
 ag off worktree-guard > /dev/null
 st="$(ag status)"
-case "$st" in *"worktree-guard       disabled (skill: repo-safety)"*) ok "status: a pin still names its skill" ;;
+case "$st" in *"hook · worktree-guard:        disabled"*) ok "status: a pin still names its skill" ;;
   *) bad "status: pin names skill" "$(echo "$st" | grep worktree-guard)" ;; esac
 ag on worktree-guard > /dev/null
 ag apply > /dev/null
@@ -180,12 +184,12 @@ if has_cmd agent-spawn-guard.sh; then bad "a skill still off keeps its claimed h
 ag on orchestration > /dev/null
 if has_cmd agent-spawn-guard.sh; then ok "the skill on composes the hook it declares"; else bad "declared hook composes" "$(composed_files)"; fi
 st="$(ag status)"
-case "$st" in *"agent-spawn-guard    enabled · on (skill: orchestration)"*) ok "status names the skill that declared it" ;;
+case "$st" in *"hook · agent-spawn-guard:     on"*) ok "status names the skill that declared it" ;;
   *) bad "status names claimant" "$(echo "$st" | grep agent-spawn)" ;; esac
 ag off global > /dev/null
 if has_cmd comment-bloat-guard.sh; then bad "dir row off decomposes" "$(composed_files)"; else ok "dir row off decomposes its hook"; fi
 st="$(ag status)"
-case "$st" in *"comment-bloat-guard    enabled · off (dir: global off)"*) ok "status blames the dir row by name" ;;
+case "$st" in *"comment-bloat-guard:    off (dir: global off)"*) ok "status blames the dir row by name" ;;
   *) bad "status blames dir row" "$(echo "$st" | grep comment-bloat)" ;; esac
 chk "a followed row's own state is untouched by the hook" "dir global off ~" "$(grep '^dir global ' "$SB/.config/agents/manifest.conf")"
 
@@ -228,9 +232,9 @@ chk "skill on does not clear the pin" "hook firn-guard disabled firn" "$(grep '^
 ag on firn-guard > /dev/null
 chk "direct on clears the pin" "hook firn-guard enabled firn" "$(grep '^hook firn-guard ' "$SB/.config/agents/manifest.conf")"
 if has_cmd firn-guard.sh; then ok "cleared pin + skill on = composed"; else bad "cleared pin + skill on = composed" "$(composed_files)"; fi
-st="$(ag status)"; case "$st" in *"firn-guard             enabled · on"*) ok "status: enabled · on" ;; *) bad "status: enabled · on" "$(echo "$st" | grep firn-guard)" ;; esac
+st="$(ag status)"; case "$st" in *"firn-guard:             on"*) ok "status: enabled · on" ;; *) bad "status: enabled · on" "$(echo "$st" | grep firn-guard)" ;; esac
 ag off firn > /dev/null
-st="$(ag status)"; case "$st" in *"enabled · off (skill: firn off)"*) ok "status: enabled · off (skill: firn off)" ;; *) bad "status provenance" "$(echo "$st" | grep firn-guard)" ;; esac
+st="$(ag status)"; case "$st" in *"firn-guard:             off (skill: firn off)"*) ok "status: enabled · off (skill: firn off)" ;; *) bad "status provenance" "$(echo "$st" | grep firn-guard)" ;; esac
 
 echo
 echo "== 5. unbound + enabled = active with every skill off"
@@ -238,7 +242,7 @@ fresh; ag status > /dev/null
 ag on logcompress > /dev/null
 chk "unbound enabled row" "hook logcompress enabled" "$(grep '^hook logcompress ' "$SB/.config/agents/manifest.conf")"
 if has_cmd logcompress-hook.js; then ok "unbound enabled composes"; else bad "unbound enabled composes" "$(composed_files)"; fi
-st="$(ag status)"; case "$st" in *"logcompress            enabled · on"*) ok "status: unbound enabled · on" ;; *) bad "status unbound" "$(echo "$st" | grep logcompress)" ;; esac
+st="$(ag status)"; case "$st" in *"logcompress:            on"*) ok "status: unbound enabled · on" ;; *) bad "status unbound" "$(echo "$st" | grep logcompress)" ;; esac
 
 echo
 echo "== 6. requires chain: a disabled requirement drops dependents loudly"
@@ -260,7 +264,7 @@ warn="$(ag off worktree-guard 2>&1 >/dev/null)"
 if has_cmd tripwire-guard.sh; then bad "dependent dropped" "$(composed_files)"; else ok "dependent dropped when requirement disabled"; fi
 case "$warn" in *"tripwire-guard is enabled but requires worktree-guard, which is disabled"*)
   ok "drop is loud" ;; *) bad "drop is loud" "$warn" ;; esac
-st="$(ag status 2>/dev/null)"; case "$st" in *"enabled · off (needs worktree-guard, disabled)"*) ok "status names the blocking requirement" ;; *) bad "status names requirement" "$(echo "$st" | grep tripwire)" ;; esac
+st="$(ag status 2>/dev/null)"; case "$st" in *"hook · tripwire-guard:        off (needs worktree-guard, disabled)"*) ok "status names the blocking requirement" ;; *) bad "status names requirement" "$(echo "$st" | grep tripwire)" ;; esac
 if has_cmd git-blind-stage-guard.sh; then ok "unrelated sibling unaffected"; else bad "sibling unaffected" "$(composed_files)"; fi
 # direct `on` pulls its requirement's permission back
 ag on tripwire-guard > /dev/null
@@ -281,7 +285,7 @@ PY
 ag apply > /dev/null
 chk "re-pointed binding corrected in column" "hook worktree-guard enabled webdev" "$(grep '^hook worktree-guard ' "$SB/.config/agents/manifest.conf")"
 if has_cmd launch-critical-worktree-guard.sh; then ok "requirement pulled in despite its skill being off"; else bad "requirement pulled in" "$(composed_files)"; fi
-st="$(ag status 2>/dev/null)"; case "$st" in *"enabled · on (required by tripwire-guard)"*) ok "status explains the pull-in" ;; *) bad "status pull-in" "$(echo "$st" | grep worktree-guard)" ;; esac
+st="$(ag status 2>/dev/null)"; case "$st" in *"worktree-guard:         on (required by tripwire-guard)"*) ok "status explains the pull-in" ;; *) bad "status pull-in" "$(echo "$st" | grep worktree-guard)" ;; esac
 
 echo
 echo "== 7. field-4 sync: backfill, correction, removal, preservation across flips"
@@ -323,7 +327,7 @@ fresh; ag status > /dev/null
 ag on --all > /dev/null
 chk "on --all: no hook left disabled" "0" "$(grep -c '^hook .* disabled' "$SB/.config/agents/manifest.conf" || true)"
 chk "on --all: skills on" "0" "$(grep -c '^skill .* off' "$SB/.config/agents/manifest.conf" || true)"
-chk "on --all: every fragment composed" "10" "$(ag status 2>/dev/null | grep -c 'enabled · on')"
+chk "on --all: every fragment composed" "10" "$(hook_rows | grep -cE ': +on( |$)')"
 ag off --all > /dev/null
 chk "off --all: hooks disabled" "10" "$(grep -c '^hook .* disabled' "$SB/.config/agents/manifest.conf")"
 chk "off --all: nothing composed" "" "$(composed_files)"
@@ -363,19 +367,19 @@ fresh; ag status > /dev/null
 # Least specific first, most specific last: a module set flips units of every
 # kind; a directory's context fires in one subtree and nowhere else.
 chk "order" "module sets skills hooks plugins other directory scoped" "$(ag status | grep -v '^ ' | tr '\n' ' ' | sed 's/ $//')"
-chk "global heads the directory section, scope ~" "global off ~" "$(ag status | sed -n '/^directory scoped$/{n;p}' | tr -s ' ' | sed 's/^ //')"
+chk "global heads the directory section, scope ~" "global: off ~" "$(ag status | sed -n '/^directory scoped$/{n;p}' | tr -s ' ' | sed 's/^ //')"
 # Membership by shape: a skill that declares hooks is rendered as a module, with
 # what it claims nested under it, and is not repeated in the skills section.
 # A module is not a sibling of a skill, it IS one: the modules subsection is
 # the first thing inside skills, and a plain skill is a direct child.
 chk "modules read inside skills" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  modules$')"
-chk "a skill that declares is a module" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^    repo-safety ')"
-chk "a skill that declares templates too" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^    orchestration ')"
+chk "a skill that declares is a module" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^    repo-safety:')"
+chk "a skill that declares templates too" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^    orchestration:')"
 chk "with what it declares nested under it" "4" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^      ')"
-chk "a skill that declares nothing is a plain child" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  webdev ')"
-chk "and a module is not a plain child too" "0" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  repo-safety ' || true)"
-chk "a claimed hook is not repeated under hooks" "0" "$(ag status | sed -n '/^hooks$/,/^plugins$/p' | grep -c '^  worktree-guard ' || true)"
-chk "a hook nobody claims still lives there" "1" "$(ag status | sed -n '/^hooks$/,/^plugins$/p' | grep -c '^  hook-detach ')"
+chk "a skill that declares nothing is a plain child" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  webdev:')"
+chk "and a module is not a plain child too" "0" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  repo-safety:' || true)"
+chk "a claimed hook is not repeated under hooks" "0" "$(ag status | sed -n '/^hooks$/,/^plugins$/p' | grep -c '^  worktree-guard:' || true)"
+chk "a hook nobody claims still lives there" "1" "$(ag status | sed -n '/^hooks$/,/^plugins$/p' | grep -c '^  hook-detach:')"
 
 echo
 echo "== 11. module member lists: UNION, so a shared member outlives one bundle"
@@ -400,7 +404,7 @@ if has_cmd launch-critical-worktree-guard.sh; then ok "union keeps the hook comp
 ag off ml-bundle > /dev/null
 chk "last bundle off finally drops it" "" "$(skilllinks)"
 st="$(ag status)"
-case "$st" in *"repo-safety          on · off (module: ml-bundle off)"*) ok "status names a holding bundle" ;;
+case "$st" in *"repo-safety:        on · off (module: ml-bundle off)"*) ok "status names a holding bundle" ;;
   *) bad "status names bundle" "$(echo "$st" | grep repo-safety)" ;; esac
 chk "flipping a bundle never rewrites the member's own row" "skill repo-safety on" "$(grep '^skill repo-safety ' "$SB/.config/agents/manifest.conf")"
 
@@ -413,16 +417,16 @@ ag status > /dev/null
 ag on repo-safety > /dev/null; ag on mid > /dev/null
 chk "an inner bundle held by an outer one composes nothing" "" "$(skilllinks)"
 st="$(ag status)"
-case "$st" in *"mid                  on · off (module: outer off)"*) ok "the inner bundle blames the outer" ;;
+case "$st" in *"mid:                  on · off (module: outer off)"*) ok "the inner bundle blames the outer" ;;
   *) bad "inner blames outer" "$(echo "$st" | grep '^  mid')" ;; esac
-case "$st" in *"repo-safety          on · off (module: outer off)"*) ok "the member blames the NEAREST off ancestor, two up" ;;
+case "$st" in *"repo-safety:        on · off (module: outer off)"*) ok "the member blames the NEAREST off ancestor, two up" ;;
   *) bad "member blames nearest off ancestor" "$(echo "$st" | grep repo-safety)" ;; esac
 ag on outer > /dev/null
 chk "the outer bundle releases the whole chain" "repo-safety" "$(skilllinks)"
 ag off mid > /dev/null
 chk "breaking the middle drops the member again" "" "$(skilllinks)"
 st="$(ag status)"
-case "$st" in *"repo-safety          on · off (module: mid off)"*) ok "now the nearest cause is the middle" ;;
+case "$st" in *"repo-safety:        on · off (module: mid off)"*) ok "now the nearest cause is the middle" ;;
   *) bad "nearest cause is middle" "$(echo "$st" | grep repo-safety)" ;; esac
 
 echo
@@ -451,9 +455,9 @@ ag on loop-y > /dev/null 2>&1
 chk "both switches are on regardless" "2" "$(grep -c '^module loop-. on' "$SB/.config/agents/manifest.conf")"
 chk "a cycle composes nothing" "" "$(skilllinks)"
 st="$(ag status 2>/dev/null)"
-case "$st" in *"loop-x               on · off (module cycle)"*) ok "status calls it a cycle, not a mystery" ;;
+case "$st" in *"loop-x:               on · off (module cycle)"*) ok "status calls it a cycle, not a mystery" ;;
   *) bad "status names cycle" "$(echo "$st" | grep 'loop-x')" ;; esac
-case "$st" in *"repo-safety          on · off (module: loop-y off)"*) ok "a member of a cycle blames the cycle module" ;;
+case "$st" in *"repo-safety:        on · off (module: loop-y off)"*) ok "a member of a cycle blames the cycle module" ;;
   *) bad "member blames cycle module" "$(echo "$st" | grep repo-safety)" ;; esac
 chk "status still exits clean under a cycle" "1" "$(ag status >/dev/null 2>&1 && echo 1 || echo 0)"
 
@@ -474,7 +478,7 @@ chk "a held global profile writes empty" "0" "$(stat -c %s "$SB/.config/agents/C
 chk "a held global profile empties the account copy" "0" "$(stat -c %s "$ACCT/CLAUDE.md")"
 if has_cmd logcompress-hook.js; then bad "a held hook is not composed" "$(composed_files)"; else ok "a held hook is not composed"; fi
 st="$(ag status)"
-case "$st" in *"logcompress            enabled · off (module: guard-bundle off)"*) ok "status: a hook says which bundle holds it" ;;
+case "$st" in *"logcompress:            off (module: guard-bundle off)"*) ok "status: a hook says which bundle holds it" ;;
   *) bad "hook names bundle" "$(echo "$st" | grep logcompress)" ;; esac
 ag on docs-bundle > /dev/null
 chk "the bundle releases the dir context" "PROJECT CONTEXT" "$(cat "$SB/.config/agents/dir/proj-CLAUDE.md")"
@@ -783,26 +787,26 @@ ag off proj/memories > /dev/null 2>&1
 chk "the group gate empties the index" "0" "$(stat -c %s "$(memdir "$ACCT" "$SB/proj")/MEMORY.md")"
 chk "with every file still there" "2" "$(find "$(memdir "$ACCT" "$SB/proj")" -maxdepth 1 -name '*.md' ! -name MEMORY.md | wc -l)"
 st="$(ag status 2>/dev/null)"
-case "$st" in *"alpha.md         on · off (memories off)"*) ok "a memory blames the group above it" ;;
+case "$st" in *"alpha.md:         on · off (memories off)"*) ok "a memory blames the group above it" ;;
   *) bad "memory blames group" "$(echo "$st" | grep alpha)" ;; esac
 ag on proj/memories > /dev/null 2>&1
 chk "released, the whole index comes back" "$before_index" "$(index "$ACCT" "$SB/proj")"
 ag off proj > /dev/null 2>&1
 chk "the GATE empties it too" "0" "$(stat -c %s "$(memdir "$ACCT" "$SB/proj")/MEMORY.md")"
 st="$(ag status 2>/dev/null)"
-case "$st" in *"memories           on · off (dir: proj off)"*) ok "the group blames the gate" ;;
+case "$st" in *"memories:           on · off (dir: proj off)"*) ok "the group blames the gate" ;;
   *) bad "group blames gate" "$(echo "$st" | grep memories)" ;; esac
-case "$st" in *"alpha.md         on · off (dir: proj off)"*) ok "and so does a memory, naming the nearest cause it can act on" ;;
+case "$st" in *"alpha.md:         on · off (dir: proj off)"*) ok "and so does a memory, naming the nearest cause it can act on" ;;
   *) bad "memory blames gate" "$(echo "$st" | grep alpha)" ;; esac
 ag on proj > /dev/null 2>&1
 chk "the gate restores the index it emptied" "$before_index" "$(index "$ACCT" "$SB/proj")"
 # the nested render: gate, then what it gates
-st="$(ag status 2>/dev/null | sed -n '/^  proj /,/^  bare /p')"
-chk "status reads as a subtree" "  proj                 on                       $SB/proj
-    AGENTS.md          off
-    memories           on
-      alpha.md         on
-      beta.md          on" "$(echo "$st" | grep -v '^  bare')"
+st="$(ag status 2>/dev/null | sed -n '/^  proj:/,/^  bare:/p')"
+chk "status reads as a subtree" "  proj:                 on                       $SB/proj
+    AGENTS.md:          off
+    memories:           on
+      alpha.md:         on
+      beta.md:          on" "$(echo "$st" | grep -v '^  bare:')"
 
 echo
 echo "== 22. every account that has the project, and nothing it does not govern"
@@ -896,7 +900,7 @@ claim "$WEBDEV_SKILL" logcompress
 ag on logcompress > /dev/null
 if has_cmd logcompress-hook.js; then bad "a claimed hook waits for its skill" "$(composed_files)"; else ok "a claimed hook waits for its skill"; fi
 st="$(ag status)"
-case "$st" in *"logcompress          enabled · off (skill: webdev off)"*) ok "and says whose claim holds it" ;;
+case "$st" in *"hook · logcompress:           off (skill: webdev off)"*) ok "and says whose claim holds it" ;;
   *) bad "claim provenance" "$(echo "$st" | grep logcompress)" ;; esac
 chk "the claim is backfilled into field 4, where the panel reads it" "hook logcompress enabled webdev" "$(grep '^hook logcompress ' "$m")"
 ag on webdev > /dev/null
@@ -915,9 +919,9 @@ chk "a followed hook keeps its fragment's binding" "hook git-blind-stage-guard e
 claim "$WEBDEV_SKILL" logcompress git-blind-stage-guard
 ag on repo-safety > /dev/null
 st="$(ag status)"
-case "$st" in *"git-blind-stage-guard enabled · on (skill: repo-safety, skill: webdev)"*) ok "provenance names every claimant, deduped" ;;
+case "$st" in *"hook · git-blind-stage-guard: on"*) ok "provenance names every claimant, deduped" ;;
   *) bad "two claimants named" "$(echo "$st" | grep git-blind)" ;; esac
-chk "a hook two skills want is rendered under each" "2" "$(ag status | grep -c '^      git-blind-stage-guard ')"
+chk "a hook two skills want is rendered under each" "2" "$(ag status | grep -c '^      hook · git-blind-stage-guard:')"
 ag off repo-safety > /dev/null
 if has_cmd git-blind-stage-guard.sh; then ok "UNION: the other claimant still wants it"; else bad "union keeps it" "$(composed_files)"; fi
 if has_cmd tripwire-guard.sh; then bad "what only that skill wanted is gone" "$(composed_files)"; else ok "what only that skill wanted is gone"; fi
