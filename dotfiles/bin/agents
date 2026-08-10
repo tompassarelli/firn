@@ -38,7 +38,7 @@ HOOKS=(agent-spawn-guard beagle-session-start comment-bloat-guard firn-guard
   git-blind-stage-guard hook-detach logcompress north-session-lifecycle
   tripwire-guard worktree-guard)
 SKILLS=(webdev beagle-authoring fram-modeling code-as-facts firn repo-safety
-  staffing messages threads assignments)
+  staffing messages threads assignments todo)
 # A MODULE is a skill with declarations — a skill whose frontmatter names the
 # hooks its rules need (`hooks:`) or a directory of agent templates it ships
 # (`agents:`). It is not a kind: a module's name IS a skill's name. Staffing is
@@ -716,6 +716,7 @@ skill_source() {
     code-as-facts)   echo "$HOME/code/fram/main/integrations/north/skills/code-as-facts" ;;
     firn)            echo "$HOME/code/nixos-config/main/modules/north-profile/firn/skills/firn" ;;
     repo-safety)     echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/repo-safety" ;;
+    todo)            echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/todo" ;;
     staffing)        echo "$NORTH/orchestration/staffing" ;;
     messages)        echo "$NORTH/coordination/messages" ;;
     threads)         echo "$NORTH/coordination/threads" ;;
