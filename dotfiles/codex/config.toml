@@ -9,7 +9,7 @@ model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 
 [agents]
-max_concurrent_threads_per_session = 999
+max_concurrent_threads_per_session = 16
 
 [projects."/home/tom"]
 trust_level = "trusted"

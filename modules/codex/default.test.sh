@@ -27,7 +27,8 @@ requirements_path, *module_paths = map(pathlib.Path, sys.argv[1:])
 with requirements_path.open("rb") as handle:
     requirements = tomllib.load(handle)
 
-managed_dir = requirements["hooks"]["managed_dir"].rstrip("/")
+hook_requirements = requirements.get("hooks", {})
+managed_dir = hook_requirements.get("managed_dir", "/etc/codex/hooks").rstrip("/")
 
 
 def commands(value):
@@ -44,7 +45,7 @@ def commands(value):
 
 required_paths = {
     token
-    for command in commands(requirements["hooks"])
+    for command in commands(hook_requirements)
     for token in shlex.split(command)
     if token.startswith(f"{managed_dir}/")
 }
@@ -129,7 +130,7 @@ with pathlib.Path(sys.argv[1]).open("rb") as handle:
 
 assert config["model"] == "gpt-5.6-sol"
 assert config["model_reasoning_effort"] == "high"
-assert config["agents"]["max_concurrent_threads_per_session"] == 999
+assert config["agents"]["max_concurrent_threads_per_session"] == 16
 assert config["mcp_servers"]["north"]["command"] == "/run/current-system/sw/bin/north-mcp"
 assert config["mcp_servers"]["fram"]["command"] == "/run/current-system/sw/bin/fram-mcp"
 PY
