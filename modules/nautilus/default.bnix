@@ -8,4 +8,5 @@
     (lib.mkEnableOption "Nautilus file manager")
    :config
     (lib.mkIf config.myConfig.modules.nautilus.enable
-      {:environment.systemPackages (nix/with pkgs [nautilus])})})
+      {:environment.systemPackages (nix/with pkgs [nautilus])
+       :services.gvfs.enable true})})
