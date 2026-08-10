@@ -18,11 +18,18 @@ in
       home.activation.cloneDoomEmacs = config.lib.dag.entryAfter [ "writeBoundary" ] ''
         DOOM_DIR="${config.home.homeDirectory}/.config/emacs"
 
-        # Clone Doom if not present
-        if [ ! -d "$DOOM_DIR" ]; then
+        # A symlink is externally managed, even when its target is absent.
+        if [ -L "$DOOM_DIR" ]; then
+          if [ ! -d "$DOOM_DIR" ]; then
+            echo "warning: $DOOM_DIR is a broken or non-directory symlink; leaving it untouched" >&2
+          fi
+        elif [ ! -e "$DOOM_DIR" ]; then
           $DRY_RUN_CMD ${pkgs.git}/bin/git clone --depth 1 https://github.com/doomemacs/doomemacs "$DOOM_DIR"
           echo "Doom Emacs cloned to ~/.config/emacs"
           echo "Run: ~/.config/emacs/bin/doom install"
+        elif [ ! -d "$DOOM_DIR" ]; then
+          echo "error: $DOOM_DIR exists but is not a directory" >&2
+          exit 1
         fi
 
       '';

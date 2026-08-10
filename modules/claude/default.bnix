@@ -24,6 +24,13 @@
          (pkgs.writeShellScript "claude-settings-seed"
            (builtins.readFile
              (s flakeRoot "/scripts/claude-settings-seed.sh")))
+        agentsRuntimePath
+         (lib.makeBinPath
+           [pkgs.bash
+            pkgs.coreutils
+            pkgs.findutils
+            pkgs.gawk
+            pkgs.python3])
         mcpRegister
          (pkgs.writeShellScript "claude-mcp-register"
            (builtins.readFile
@@ -71,7 +78,11 @@
                ;; generation converges it before plugin reconciliation runs.
                :home.activation.seedClaudeSettings
                 (config.lib.dag.entryAfter ["writeBoundary"]
-                  (s "run env INSTALL_BIN="
+                  (s "run "
+                     pkgs.coreutils
+                     "/bin/env PATH="
+                     agentsRuntimePath
+                     ":$PATH INSTALL_BIN="
                      pkgs.coreutils
                      "/bin/install MKDIR_BIN="
                      pkgs.coreutils
