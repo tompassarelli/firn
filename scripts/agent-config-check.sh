@@ -772,7 +772,7 @@ def command(path, timeout):
         "timeout": timeout,
     }
 
-expected = {
+enabled = {
     "allow_managed_hooks_only": True,
     "allow_remote_control": False,
     "managed_hook_failure_mode": "block",
@@ -833,24 +833,29 @@ expected = {
     },
 }
 
+disabled = {
+    "allow_managed_hooks_only": True,
+    "allow_remote_control": False,
+    "features": {"hooks": False},
+}
+
 with open(sys.argv[1], "rb") as handle:
     policy = tomllib.load(handle)
 if type(policy.get("allow_managed_hooks_only")) is not bool:
     raise SystemExit("allow_managed_hooks_only must be a boolean")
 if type(policy.get("allow_remote_control")) is not bool:
     raise SystemExit("allow_remote_control must be a boolean")
-if type(policy.get("managed_hook_failure_mode")) is not str:
-    raise SystemExit("managed_hook_failure_mode must be a string")
-if policy["managed_hook_failure_mode"] != "block":
-    raise SystemExit("managed_hook_failure_mode must be block")
-if policy != expected:
-    raise SystemExit("managed Codex policy differs from the canonical contract")
-print(sum(
-    len(binding["hooks"])
-    for event, bindings in policy["hooks"].items()
-    if event != "managed_dir"
-    for binding in bindings
-))
+if policy == disabled:
+    print(0)
+elif policy == enabled:
+    print(sum(
+        len(binding["hooks"])
+        for event, bindings in policy["hooks"].items()
+        if event != "managed_dir"
+        for binding in bindings
+    ))
+else:
+    raise SystemExit("managed Codex policy differs from an authoritative enabled or disabled contract")
 PY
 }
 
@@ -1097,10 +1102,8 @@ with open(sys.argv[1], encoding="utf-8") as handle:
 with open(sys.argv[2], encoding="utf-8") as handle:
     baseline = json.load(handle)
 
-if live.get("hooks") != baseline.get("hooks"):
-    raise SystemExit("live hook control plane differs from the committed seed")
-if live.get("statusLine") != baseline.get("statusLine"):
-    raise SystemExit("live statusLine differs from the committed seed")
+if not isinstance(live, dict) or not isinstance(baseline, dict):
+    raise SystemExit("Claude settings must be JSON objects")
 
 checkout_command = re.compile(r"/home/tom/code/(?:north|fram)/bin/")
 for event_groups in live.get("hooks", {}).values():
@@ -1111,11 +1114,39 @@ for event_groups in live.get("hooks", {}).values():
                 raise SystemExit(f"live hook uses mutable checkout command: {command}")
 PY
   then
-    ok_detail "$label is writable runtime state with the generation-owned hook control plane"
+    ok_detail "$label is writable runtime state with no mutable-checkout lifecycle commands"
   else
-    bad "$label does not preserve the committed immutable hook control plane"
+    bad "$label contains an invalid runtime hook control plane"
     return 1
   fi
+}
+
+# Read the switchboard's derived activity projection without requiring the
+# switchboard CLI or any North service. A missing projection preserves legacy
+# behavior for live probes; once the projection exists, an absent row is off.
+switchboard_activity_state() {
+  local wanted_kind="$1" wanted_name="$2"
+  local activity_file="${AGENTS_ACTIVITY_FILE:-${AGENT_CONFIG_LIVE_AGENT_STATE:-$HOME/.config/agents}/activity.conf}"
+  local kind name state rest
+
+  if [ ! -r "$activity_file" ]; then
+    printf 'unknown\n'
+    return 0
+  fi
+  while read -r kind name state rest; do
+    if [ "$kind" = "$wanted_kind" ] && [ "$name" = "$wanted_name" ]; then
+      printf '%s\n' "$state"
+      return 0
+    fi
+  done < "$activity_file"
+  printf 'off\n'
+}
+
+switchboard_activity_is_active() {
+  case "$(switchboard_activity_state "$1" "$2")" in
+    on|unknown) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 if [ "${1:-}" = "$AGENT_CONFIG_BOUNDED_CHILD_MODE" ]; then
@@ -1173,6 +1204,11 @@ ok_detail() { details+=("ok: $*"); }
 note() { [ "$VERBOSE" -eq 0 ] || printf '  note: %s\n' "$*"; }
 bad() { printf '  FAIL: %s\n' "$*" >&2; fail=$((fail + 1)); }
 soft() { printf '  warn: %s\n' "$*" >&2; warn=$((warn + 1)); }
+COORDINATION_ACTIVITY="$(switchboard_activity_state module coordination)"
+AGENT_SPAWN_GUARD_ACTIVITY="$(switchboard_activity_state hook agent-spawn-guard)"
+NORTH_LIFECYCLE_ACTIVITY="$(switchboard_activity_state hook north-session-lifecycle)"
+COORDINATION_ACTIVE=0
+switchboard_activity_is_active module coordination && COORDINATION_ACTIVE=1
 group() {
   local name="$1" summary="$2" before="$3"
   if [ "$fail" -eq "$before" ]; then printf '✓ %-13s %s\n' "$name" "$summary"
@@ -1444,6 +1480,59 @@ require_manifest_guard_count() {
   else bad "$provider $contract: found $count matching guard binding(s), expected $expected"; fi
 }
 
+require_switchboard_guard_count() {
+  local manifest="$1" provider="$2" matcher_token="$3" activity="$4"
+  local count
+
+  case "$activity" in
+    on)
+      require_manifest_guard_count "$manifest" "$provider" "$matcher_token" 1 \
+        'user Bash topology guard is enabled and bound once'
+      ;;
+    off)
+      require_manifest_guard_count "$manifest" "$provider" "$matcher_token" 0 \
+        'user Bash topology guard is disabled and absent'
+      ;;
+    unknown)
+      count="$(manifest_guard_count "$manifest" "$matcher_token" 2>/dev/null || printf invalid)"
+      if [ "$count" = 0 ] || [ "$count" = 1 ]; then
+        ok_detail "$provider user Bash topology guard has no duplicate binding (switchboard projection unavailable)"
+      else
+        bad "$provider user Bash topology guard has $count bindings while the switchboard projection is unavailable"
+      fi
+      ;;
+    *) bad "$provider agent-spawn-guard switchboard state is invalid: $activity" ;;
+  esac
+}
+
+validate_claude_statusline_activity() {
+  local settings="$1" label="$2" activity="$3"
+  local canonical_command='bash "$HOME/code/nixos-config/dotfiles/claude/statusline.sh"'
+
+  case "$activity" in
+    on)
+      if jq -e --arg command "$canonical_command" \
+        '.statusLine.type == "command" and .statusLine.command == $command' \
+        "$settings" >/dev/null; then
+        ok_detail "$label statusline points at the canonical adapter"
+      else bad "$label statusline is not wired to the canonical adapter while coordination is enabled"; fi
+      ;;
+    off)
+      if jq -e '(.statusLine // null) == null' "$settings" >/dev/null; then
+        ok_detail "$label statusline is absent while coordination is disabled"
+      else bad "$label statusline must be absent while coordination is disabled"; fi
+      ;;
+    unknown)
+      if jq -e --arg command "$canonical_command" \
+        '(.statusLine // null) == null or (.statusLine.type == "command" and .statusLine.command == $command)' \
+        "$settings" >/dev/null; then
+        ok_detail "$label statusline has a valid optional shape (switchboard projection unavailable)"
+      else bad "$label statusline has an invalid command"; fi
+      ;;
+    *) bad "$label coordination switchboard state is invalid: $activity" ;;
+  esac
+}
+
 validate_codex_managed_policy() {
   if ! need_toml "$CODEX_REQUIREMENTS" 'Codex managed requirements'; then return; fi
   CODEX_MANAGED_BINDINGS="$(
@@ -1451,6 +1540,8 @@ validate_codex_managed_policy() {
   )" || CODEX_MANAGED_BINDINGS=''
   if [ "$CODEX_MANAGED_BINDINGS" = 15 ]; then
     ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 15-binding authoritative contract'
+  elif [ "$CODEX_MANAGED_BINDINGS" = 0 ]; then
+    ok_detail 'Codex managed hooks are authoritatively disabled; remote control remains disabled'
   else
     bad 'Codex managed requirements differ from the authoritative hook contract'
   fi
@@ -1515,22 +1606,20 @@ validate_codex_managed_policy() {
        grep -Fq "{:source (s $package \"/bin/$binary\")}" "$module"; then :
     else bad "Codex module does not bind exact runtime $runtime from $package"; fi
   done
-  if grep -Fq '"codex/hooks/north"' "$module" &&
-     grep -Fq '{:source northPkg}' "$module" &&
-     grep -Fq '(get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)' "$module" &&
-     grep -Fq ':default)' "$module"; then
-    ok_detail 'Codex module pins the complete North hook runtime from the locked default package'
+  if grep -Fq 'northPkg (s homeDir "/code/north/main")' "$module" &&
+     grep -Fq '"codex/hooks/north"' "$module" &&
+     grep -Fq '{:source northPkg}' "$module"; then
+    ok_detail 'Codex module exposes the complete North hook runtime from the live checkout'
   else
-    bad 'Codex module does not install the exact locked North package hook runtime'
+    bad 'Codex module must expose the complete North hook runtime from the live checkout'
   fi
-  if grep -Fq '(get (get inputs.north.packages pkgs.stdenv.hostPlatform.system)' "$module" &&
-     grep -Fq ':codex)' "$module" &&
+  if grep -Fq 'codexUpstreamPkg pkgs.master.codex' "$module" &&
      grep -Fq ':environment.systemPackages [codexPkg]' "$module" &&
      grep -Fq '"codex/runtime"' "$module" &&
      grep -Fq '{:source codexPkg}' "$module"; then
-    ok_detail 'Firn installs inputs.north.packages.${system}.codex and exposes that exact derivation as the managed runtime marker'
+    ok_detail 'Firn installs the identity-pinned nixpkgs Codex and exposes that exact derivation as the runtime marker'
   else
-    bad 'Codex module must install and expose the exact inputs.north packages.${system}.codex derivation'
+    bad 'Codex module must install and expose the identity-pinned nixpkgs Codex derivation'
   fi
   if grep -Fq ':mode ' "$module"; then
     bad 'Codex hook sources must remain /etc symlinks into /nix/store; explicit mode copies are forbidden'
@@ -1626,10 +1715,10 @@ validate_codex_managed_policy() {
       fi
     done
     resolved="$(readlink -f /etc/codex/hooks/north 2>/dev/null || true)"
-    if [ -n "$resolved" ] && [[ "$resolved" = /nix/store/* ]]; then :
+    if managed_source_root_matches "$HOME/code/north/main" "$resolved"; then :
     else
       generation_exact=0
-      bad 'Codex pinned North hook runtime is missing or not store-backed'
+      bad 'Codex North hook runtime does not resolve to the live North checkout'
     fi
     local interactive_codex managed_codex
     interactive_codex="$(command -v codex 2>/dev/null || true)"
@@ -1637,10 +1726,10 @@ validate_codex_managed_policy() {
     interactive_codex="$(readlink -f "$interactive_codex" 2>/dev/null || true)"
     if [ -n "$managed_codex" ] && [[ "$managed_codex" = /nix/store/* ]] &&
        [ -x "$managed_codex" ]; then
-      ok_detail 'North managed Codex is an exact immutable executable'
+      ok_detail 'Managed Codex is an exact immutable executable'
     else
       generation_exact=0
-      bad 'North managed Codex runtime marker is missing, mutable, or non-executable'
+      bad 'Managed Codex runtime marker is missing, mutable, or non-executable'
     fi
     if [ -n "$interactive_codex" ] && [ "$interactive_codex" = "$managed_codex" ]; then
       ok_detail 'Interactive Codex directly resolves to the managed provider executable'
@@ -1649,28 +1738,20 @@ validate_codex_managed_policy() {
     else
       soft 'Interactive Codex is absent from PATH; managed provider authority remains independently attested'
     fi
-    # The lifecycle runtimes are executed out of the North package, which supplies
-    # their interpreter PATH and NORTH_HOME, so they remain pinned by flake.lock
-    # even though their bodies also ride the promoted payload.
-    local locked_north_revision
-    locked_north_revision="$(flake_locked_revision "$REPO/flake.lock" north 2>/dev/null || true)"
     for relative in \
       bin/north-on-spawn \
       bin/north-on-tooluse \
       bin/north-mark-delegated \
       bin/north-on-stop; do
-      if [ -n "$locked_north_revision" ] &&
-         north_wrapped_runtime_matches_locked_source \
-           "/etc/codex/hooks/north/$relative" "$HOME/code/north/main" \
-           "$locked_north_revision" "$relative"; then :
+      if [ -x "/etc/codex/hooks/north/$relative" ]; then :
       else
         generation_exact=0
-        bad "Codex North runtime $relative is not an exact locked body with immutable package-wrapper provenance at ${locked_north_revision:-missing}"
+        bad "Codex North runtime $relative is missing or non-executable in the live checkout"
       fi
     done
     if [ "$generation_exact" -eq 1 ]; then
-      CODEX_HOOK_PROVENANCE='sealed promoted enforcement · immutable /nix/store generation · exact Firn sources'
-      ok_detail 'Codex authoritative hook set is exact: sealed promoted enforcement over an immutable generation'
+      CODEX_HOOK_PROVENANCE='sealed promoted enforcement · immutable Firn generation · live North runtime'
+      ok_detail 'Codex hook deployment is exact: sealed promoted enforcement plus the declared live North runtime'
     else
       CODEX_HOOK_PROVENANCE='generation drift detected'
     fi
@@ -1703,9 +1784,8 @@ fi
 if command -v shellcheck >/dev/null 2>&1 && shellcheck -S warning "$CLAUDE/statusline.sh"; then
   ok_detail "Claude statusline shellcheck"
 else bad "Claude statusline shellcheck failed"; fi
-if jq -e '.statusLine.type == "command" and .statusLine.command == "bash \"$HOME/code/nixos-config/dotfiles/claude/statusline.sh\""' "$CLAUDE/settings.json" >/dev/null; then
-  ok_detail "Claude statusline points at canonical adapter"
-else bad "Claude statusline is not wired to $CLAUDE/statusline.sh"; fi
+validate_claude_statusline_activity \
+  "$CLAUDE/settings.json" Claude "$COORDINATION_ACTIVITY"
 if bash "$CLAUDE/statusline.test.sh" >/dev/null; then
   ok_detail "Claude statusline observer is detached and output-safe"
 else bad "Claude statusline observer test failed"; fi
@@ -1713,7 +1793,16 @@ if grep -Fqx '  local north="/run/current-system/sw/bin/north"' "$CLAUDE/statusl
    ! grep -Fq '/home/tom/code/north/main/bin/' "$CLAUDE/statusline.sh"; then
   ok_detail "Claude statusline observer uses the immutable North package command"
 else bad "Claude statusline observer must use /run/current-system/sw/bin/north"; fi
-if [ ! -f "$SHARED/hooks/north-session-end.sh" ] && [ "$LOCAL" -eq 0 ]; then
+if [ "$NORTH_LIFECYCLE_ACTIVITY" = off ]; then
+  if jq -e '((.hooks // {}).SessionEnd // []) | length == 0' "$CLAUDE/settings.json" >/dev/null; then
+    ok_detail 'Claude SessionEnd lifecycle is absent while north-session-lifecycle is disabled'
+  else
+    bad 'Claude SessionEnd lifecycle must be absent while north-session-lifecycle is disabled'
+  fi
+elif [ "$NORTH_LIFECYCLE_ACTIVITY" = unknown ] &&
+     jq -e '((.hooks // {}).SessionEnd // []) | length == 0' "$CLAUDE/settings.json" >/dev/null; then
+  ok_detail 'Claude SessionEnd lifecycle is optionally absent (switchboard projection unavailable)'
+elif [ ! -f "$SHARED/hooks/north-session-end.sh" ] && [ "$LOCAL" -eq 0 ]; then
   note "North-owned SessionEnd hook unavailable in repository-only mode"
 elif jq -e '
      .hooks.SessionEnd[0].hooks[0].command
@@ -1747,18 +1836,19 @@ else bad "Enforcement promote command shellcheck failed"; fi
 if bash "$LAUNCHER_BIN/north-enforcement-promote.test.sh" >/dev/null; then
   ok_detail "Enforcement promote seals, attests, retains previous, and rolls back"
 else bad "Enforcement promote transaction test failed"; fi
-if grep -Fq '{:source (s flakeRoot "/dotfiles/bin")}' "$REPO/modules/bash/default.bnix" &&
-   ! grep -Fq 'code/nixos-config/dotfiles/bin' "$REPO/modules/bash/default.bnix"; then
-  ok_detail "Account launcher directory is generation-owned store content"
-else bad "Account launcher directory must use the store-backed flake source"; fi
+if grep -Fq '(config.lib.file.mkOutOfStoreSymlink' "$REPO/modules/bash/default.bnix" &&
+   grep -Fq '"/code/nixos-config/main/dotfiles/bin"' "$REPO/modules/bash/default.bnix"; then
+  ok_detail 'Account launcher directory follows the live Firn checkout'
+else bad 'Account launcher directory must follow the live Firn checkout'; fi
 if [ "$LOCAL" -eq 1 ]; then
   live_safe_push="$(command -v safe-push 2>/dev/null || true)"
   live_safe_push_resolved="$(readlink -f "$live_safe_push" 2>/dev/null || true)"
-  if [ -x "$live_safe_push" ] && [[ "$live_safe_push_resolved" = /nix/store/* ]] &&
+  if [ -x "$live_safe_push" ] &&
+     managed_source_root_matches "$LIVE_FIRN_ROOT/main/dotfiles/bin/safe-push" "$live_safe_push_resolved" &&
      "$live_safe_push" --help | grep -Fq -- '--to BRANCH'; then
-    ok_detail "Live safe-push is immutable and supports explicit --to destinations"
+    ok_detail 'Live safe-push follows the Firn checkout and supports explicit --to destinations'
   else
-    bad "Live safe-push must resolve into /nix/store and expose --to BRANCH"
+    bad 'Live safe-push must follow the Firn checkout and expose --to BRANCH'
   fi
 fi
 if jq -e '.autoMemoryEnabled == false' "$CLAUDE/settings.json" >/dev/null; then ok_detail "auto-memory disabled"
@@ -1775,14 +1865,27 @@ else
   bad "Claude settings must not enable the retired Orchestration plugin or marketplace"
 fi
 validate_hooks "$CLAUDE/settings.json" Claude anthropic
-require_manifest_guard_count "$CLAUDE/settings.json" Claude Bash 1 'user Bash topology guard is bound once'
+require_switchboard_guard_count \
+  "$CLAUDE/settings.json" Claude Bash "$AGENT_SPAWN_GUARD_ACTIVITY"
 claude_bindings="$HOOK_BINDINGS"
 claude_hook_provenance="$HOOK_PROVENANCE_SUMMARY"
 if [ "$LOCAL" -eq 1 ]; then
   writable_claude_settings_match_control_plane \
     "$HOME/.claude/settings.json" "$CLAUDE/settings.json" \
     "$HOME/.claude/settings.json"
-  canonical_link "$HOME/.claude/skills" "$LIVE_SKILLS_FARM" "$HOME/.claude/skills"
+  validate_claude_statusline_activity \
+    "$HOME/.claude/settings.json" 'Live Claude' "$COORDINATION_ACTIVITY"
+  validate_hooks "$HOME/.claude/settings.json" Claude anthropic
+  require_switchboard_guard_count \
+    "$HOME/.claude/settings.json" Claude Bash "$AGENT_SPAWN_GUARD_ACTIVITY"
+  if [ "$NORTH_LIFECYCLE_ACTIVITY" = off ]; then
+    if jq -e '((.hooks // {}).SessionEnd // []) | length == 0' "$HOME/.claude/settings.json" >/dev/null; then
+      ok_detail 'Live Claude SessionEnd lifecycle is absent while north-session-lifecycle is disabled'
+    else
+      bad 'Live Claude SessionEnd lifecycle must be absent while north-session-lifecycle is disabled'
+    fi
+  fi
+  canonical_link "$HOME/.claude/skills" "$LIVE_AGENT_STATE/skills" "$HOME/.claude/skills"
   canonical_link "$HOME/.claude/hooks" "$LIVE_SHARED/hooks" "$HOME/.claude/hooks"
   canonical_link "$HOME/.claude/CLAUDE.md" "$LIVE_AGENT_STATE/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
   canonical_link "$HOME/.claude/commands" "$LIVE_CLAUDE/commands" "$HOME/.claude/commands"
@@ -1837,7 +1940,12 @@ if [ "$LOCAL" -eq 1 ]; then
     note "$project_count project-scoped Claude MCP registrations (allowed)"
     ok_detail "Claude MCP declarations: North + canonical split Fram corpus + Linear + DigitalOcean"
   else bad "$HOME/.claude.json is missing"; fi
-  if claude_probe_binary_is_authoritative; then
+  if [ "$COORDINATION_ACTIVE" -eq 0 ]; then
+    claude_north='disabled by switchboard; not probed'
+    claude_fram='not probed while coordination is disabled'
+    claude_orchestration='disabled by switchboard'
+    ok_detail 'Claude MCP health probe skipped because coordination is disabled'
+  elif claude_probe_binary_is_authoritative; then
     if [ -n "${CLAUDE_BIN:-}" ]; then
       ok_detail "Claude health probe uses explicit test override $CLAUDE_BIN"
     else
@@ -1917,6 +2025,10 @@ ok_detail 'Codex legacy ~/.codex/hooks.json is intentionally ignored; it contrib
 codex_north='declared; canonical explicit instance env; live probe deferred'
 codex_fram='declared; canonical split corpus; live probe deferred'
 codex_linear='authentication deferred to an interactive credential check'
+if [ "$COORDINATION_ACTIVE" -eq 0 ]; then
+  codex_north='declared but disabled by switchboard; not probed'
+  codex_fram='declared; not probed while coordination is disabled'
+fi
 grep -q '^\[mcp_servers\.north\]' "$CODEX/config.toml" || bad "Codex config does not declare North MCP"
 grep -q '^\[mcp_servers\.fram\]' "$CODEX/config.toml" || bad "Codex config does not declare Fram MCP"
 grep -q '^\[mcp_servers\.linear-mcp-msa-new\]' "$CODEX/config.toml" || bad "Codex config does not declare Linear MCP"
@@ -1948,7 +2060,9 @@ if [ "$LOCAL" -eq 1 ]; then
   immutable_store_link_matches \
     "$HOME/.codex/hooks.json" "$CODEX/hooks.json" "$HOME/.codex/hooks.json"
   canonical_link "$HOME/.codex/AGENTS.md" "$LIVE_AGENT_STATE/AGENTS.md" "$HOME/.codex/AGENTS.md"
-  if command -v codex >/dev/null 2>&1; then
+  if [ "$COORDINATION_ACTIVE" -eq 0 ]; then
+    ok_detail 'Codex MCP inventory skipped because coordination is disabled'
+  elif command -v codex >/dev/null 2>&1; then
     codex_mcp_status=0
     mcp_output="$(
       CODEX_HOME="$HOME/.codex" \
@@ -2116,11 +2230,12 @@ if [ -f "$HERMES_MODULE" ]; then
   # The input URL must pin the exact reviewed MIT commit, not a floating branch.
   grep -qF "\"github:NousResearch/hermes-agent/$HERMES_PINNED_REV\"" "$HERMES_MODULE" ||
     bad "Hermes module must pin hermes-agent to the reviewed commit $HERMES_PINNED_REV"
-  # Lifecycle must drive the WRAPPED North package bin, never the source checkout.
-  grep -q 'inputs.north.packages' "$HERMES_MODULE" ||
-    bad 'Hermes module must resolve lifecycle scripts from inputs.north.packages.${system}.default'
-  if grep -qF '(s inputs.north "/bin")' "$HERMES_MODULE"; then
-    bad 'Hermes lifecycle dir must use the packaged North default/bin, not the raw inputs.north source'
+  # Lifecycle scripts intentionally follow North's live launch-critical checkout.
+  if grep -qF 'northPkg (s homeDir "/code/north/main")' "$HERMES_MODULE" &&
+     grep -qF 'northBin (s northPkg "/bin")' "$HERMES_MODULE"; then
+    ok_detail 'Hermes lifecycle scripts resolve from the live North checkout'
+  else
+    bad 'Hermes module must resolve lifecycle scripts from the live North checkout'
   fi
   grep -q 'NORTH_HERMES_LIFECYCLE_DIR' "$HERMES_MODULE" ||
     bad 'Hermes module must set NORTH_HERMES_LIFECYCLE_DIR for the bridge'
@@ -2141,7 +2256,14 @@ if [ "$hermes_locked_rev" = "$HERMES_PINNED_REV" ]; then
 else
   bad "flake.lock hermes-agent rev is '${hermes_locked_rev:-missing}', expected $HERMES_PINNED_REV"
 fi
-if [ "$LOCAL" -eq 1 ]; then
+hermes_local_enabled=0
+if command -v hermes >/dev/null 2>&1 ||
+   [ -e "$HOME/.hermes/config.yaml" ] || [ -L "$HOME/.hermes/config.yaml" ] ||
+   [ -e "$HOME/.hermes/SOUL.md" ] || [ -L "$HOME/.hermes/SOUL.md" ] ||
+   [ -e "$HOME/.hermes/plugins/north-bridge" ] || [ -L "$HOME/.hermes/plugins/north-bridge" ]; then
+  hermes_local_enabled=1
+fi
+if [ "$LOCAL" -eq 1 ] && [ "$hermes_local_enabled" -eq 1 ]; then
   canonical_link "$HOME/.hermes/config.yaml" "$LIVE_HERMES/config.yaml" "$HOME/.hermes/config.yaml"
   canonical_link "$HOME/.hermes/SOUL.md" "$LIVE_AGENT_STATE/AGENTS.md" "$HOME/.hermes/SOUL.md"
   # The plugin is an IMMUTABLE nix-store source (so imports cannot write
@@ -2158,6 +2280,9 @@ if [ "$LOCAL" -eq 1 ]; then
     hermes_link='config/constitution/plugin symlinks resolve; hermes CLI missing from PATH'
     bad 'hermes CLI is missing from PATH'
   fi
+elif [ "$LOCAL" -eq 1 ]; then
+  hermes_link='disabled; no live Hermes surface'
+  ok_detail 'Hermes is disabled; live config, plugin, and CLI checks are not applicable'
 fi
 provider_group Hermes "$before" \
   "Package     pinned upstream NousResearch/hermes-agent (minimal)" \
@@ -2172,7 +2297,19 @@ provider_group Hermes "$before" \
 before=$fail
 north_coord_runtime='live probe deferred'
 north_coord_ok=0
-if [ "$LOCAL" -eq 1 ]; then
+anthropic_installed='not probed'
+anthropic_authenticated='not probed'
+anthropic_headroom='not probed'
+anthropic_routing='not probed'
+openai_installed='not probed'
+openai_authenticated='not probed'
+openai_headroom='not probed'
+openai_routing='not probed'
+allocation_summary='not probed'
+if [ "$LOCAL" -eq 1 ] && [ "$COORDINATION_ACTIVE" -eq 0 ]; then
+  north_coord_runtime='disabled by switchboard; not probed'
+  ok_detail 'North coordinator and provider probes skipped because coordination is disabled'
+elif [ "$LOCAL" -eq 1 ]; then
   if command -v systemctl >/dev/null 2>&1 && NORTH_COORD_UNIT="$(resolve_north_coord_unit)"; then
     north_coord_env="$(systemctl show "$NORTH_COORD_UNIT" -p Environment --value 2>/dev/null || true)"
     north_coord_exec="$(systemctl show "$NORTH_COORD_UNIT" -p ExecStart --value 2>/dev/null || true)"

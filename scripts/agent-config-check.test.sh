@@ -237,6 +237,24 @@ run_locked_hook_provenance_fixture() {
   fi
 }
 
+run_switchboard_activity_fixture() {
+  local activity="$scratch/activity.conf"
+  local missing="$scratch/missing-activity.conf"
+
+  [ "$(AGENTS_ACTIVITY_FILE="$missing" switchboard_activity_state module coordination)" = unknown ]
+  AGENTS_ACTIVITY_FILE="$missing" switchboard_activity_is_active module coordination
+
+  printf '%s\n' \
+    'module coordination off' \
+    'hook agent-spawn-guard on' >"$activity"
+  [ "$(AGENTS_ACTIVITY_FILE="$activity" switchboard_activity_state module coordination)" = off ]
+  ! AGENTS_ACTIVITY_FILE="$activity" switchboard_activity_is_active module coordination
+  [ "$(AGENTS_ACTIVITY_FILE="$activity" switchboard_activity_state hook agent-spawn-guard)" = on ]
+  AGENTS_ACTIVITY_FILE="$activity" switchboard_activity_is_active hook agent-spawn-guard
+  [ "$(AGENTS_ACTIVITY_FILE="$activity" switchboard_activity_state hook absent-hook)" = off ]
+  ! AGENTS_ACTIVITY_FILE="$activity" switchboard_activity_is_active hook absent-hook
+}
+
 if [ "${1:-}" = '--codex-mcp-inventory-only' ]; then
   source "$REPO/scripts/agent-config-check.sh"
   run_codex_mcp_inventory_fixture
@@ -248,6 +266,13 @@ if [ "${1:-}" = '--locked-hook-provenance-only' ]; then
   source "$REPO/scripts/agent-config-check.sh"
   run_locked_hook_provenance_fixture
   printf 'ok: managed hooks distinguish locked provider blobs from Firn self sources\n'
+  exit 0
+fi
+
+if [ "${1:-}" = '--switchboard-activity-only' ]; then
+  source "$REPO/scripts/agent-config-check.sh"
+  run_switchboard_activity_fixture
+  printf 'ok: advisory follows the derived switchboard activity projection\n'
   exit 0
 fi
 
@@ -309,7 +334,7 @@ if rg -n '/home/tom/code/(north|fram)/bin/(north-(on-|mark-|stream)|concern|fram
   printf 'authoritative lifecycle configuration still references a mutable checkout command\n' >&2
   exit 1
 fi
-if rg -n 'dotfiles/agents|dotfiles/claude/hooks' \
+if rg -n 'dotfiles/claude/hooks' \
   "$REPO/dotfiles/claude/settings.json" \
   "$REPO/dotfiles/codex/hooks.json" \
   "$REPO/modules/north-profile/default.bnix" \
@@ -329,14 +354,14 @@ grep -Fq '"/home/tom/.agents/hooks/north-session-end.sh"' \
 ! grep -Fq 'writeShellScriptBin "north-session-end"' \
   "$REPO/modules/claude/default.bnix"
 report="$("$REPO/scripts/agent-config-check.sh")"
-grep -Fq '17 managed authoritative bindings' <<<"$report"
+grep -Fq '0 managed authoritative bindings' <<<"$report"
 # shellcheck disable=SC2088  # report intentionally renders the literal user-facing alias
 grep -Fq '~/.codex/hooks.json ignored by managed-only policy (0 active bindings)' <<<"$report"
 run_quiet_child 'Codex lifecycle wrapper tests' \
   "$REPO/dotfiles/codex/hooks/codex-lifecycle-wrappers.test.sh"
-grep -Fq '{:source (s flakeRoot "/dotfiles/bin")}' \
+grep -Fq '"/code/nixos-config/main/dotfiles/bin"' \
   "$REPO/modules/bash/default.bnix"
-grep -Fq 'Live safe-push is immutable and supports explicit --to destinations' \
+grep -Fq 'Live safe-push follows the Firn checkout and supports explicit --to destinations' \
   "$REPO/scripts/agent-config-check.sh"
 
 # A deterministic route probe is diagnostic evidence, not provider preference.
@@ -463,37 +488,13 @@ diff -u \
   "$scratch/claude-probe-calls"
 
 managed_policy="$REPO/modules/codex/requirements.toml"
-[ "$(codex_managed_policy_binding_count "$managed_policy")" = 19 ]
-cp "$managed_policy" "$scratch/managed-policy-failure-mode-missing.toml"
-sed -i '/^managed_hook_failure_mode = "block"$/d' \
-  "$scratch/managed-policy-failure-mode-missing.toml"
+[ "$(codex_managed_policy_binding_count "$managed_policy")" = 0 ]
+cp "$managed_policy" "$scratch/managed-policy-disabled-extra.toml"
+sed -i '/^allow_remote_control = false$/a managed_hook_failure_mode = "block"' \
+  "$scratch/managed-policy-disabled-extra.toml"
 if codex_managed_policy_binding_count \
-  "$scratch/managed-policy-failure-mode-missing.toml" >/dev/null 2>&1; then
-  printf 'Codex managed policy without a hook failure mode was accepted\n' >&2
-  exit 1
-fi
-cp "$managed_policy" "$scratch/managed-policy-failure-mode-continue.toml"
-sed -i 's/^managed_hook_failure_mode = "block"$/managed_hook_failure_mode = "continue"/' \
-  "$scratch/managed-policy-failure-mode-continue.toml"
-if codex_managed_policy_binding_count \
-  "$scratch/managed-policy-failure-mode-continue.toml" >/dev/null 2>&1; then
-  printf 'Codex managed policy with continuing hook failures was accepted\n' >&2
-  exit 1
-fi
-cp "$managed_policy" "$scratch/managed-policy-failure-mode-boolean.toml"
-sed -i 's/^managed_hook_failure_mode = "block"$/managed_hook_failure_mode = true/' \
-  "$scratch/managed-policy-failure-mode-boolean.toml"
-if codex_managed_policy_binding_count \
-  "$scratch/managed-policy-failure-mode-boolean.toml" >/dev/null 2>&1; then
-  printf 'Codex managed policy with a boolean hook failure mode was accepted\n' >&2
-  exit 1
-fi
-cp "$managed_policy" "$scratch/managed-policy-failure-mode-invalid.toml"
-sed -i 's/^managed_hook_failure_mode = "block"$/managed_hook_failure_mode = "BLOCK"/' \
-  "$scratch/managed-policy-failure-mode-invalid.toml"
-if codex_managed_policy_binding_count \
-  "$scratch/managed-policy-failure-mode-invalid.toml" >/dev/null 2>&1; then
-  printf 'Codex managed policy with an invalid hook failure mode was accepted\n' >&2
+  "$scratch/managed-policy-disabled-extra.toml" >/dev/null 2>&1; then
+  printf 'Codex disabled policy with an enabled-policy field was accepted\n' >&2
   exit 1
 fi
 cp "$managed_policy" "$scratch/managed-policy-not-exclusive.toml"
@@ -528,12 +529,12 @@ if codex_managed_policy_binding_count \
   printf 'Codex managed policy with a non-boolean remote-control setting was accepted\n' >&2
   exit 1
 fi
-cp "$managed_policy" "$scratch/managed-policy-timeout-drift.toml"
-sed -i '0,/^timeout = 10$/s//timeout = 11/' \
-  "$scratch/managed-policy-timeout-drift.toml"
+cp "$managed_policy" "$scratch/managed-policy-hooks-enabled.toml"
+sed -i 's/^hooks = false$/hooks = true/' \
+  "$scratch/managed-policy-hooks-enabled.toml"
 if codex_managed_policy_binding_count \
-  "$scratch/managed-policy-timeout-drift.toml" >/dev/null 2>&1; then
-  printf 'Codex managed hook timeout drift was accepted\n' >&2
+  "$scratch/managed-policy-hooks-enabled.toml" >/dev/null 2>&1; then
+  printf 'Codex policy enabled hooks without the authoritative hook table\n' >&2
   exit 1
 fi
 # shellcheck disable=SC2016  # match source text, not this test process environment
@@ -548,7 +549,7 @@ missing_legacy_report="$(
   CODEX_LEGACY_HOOKS="$missing_legacy" \
     "$REPO/scripts/agent-config-check.sh"
 )"
-grep -Fq '19 managed authoritative bindings' <<<"$missing_legacy_report"
+grep -Fq '0 managed authoritative bindings' <<<"$missing_legacy_report"
 grep -Fq 'ignored by managed-only policy (0 active bindings)' \
   <<<"$missing_legacy_report"
 printf '%s\n' '{not-json' >"$scratch/invalid-legacy-hooks.json"
@@ -556,7 +557,7 @@ invalid_legacy_report="$(
   CODEX_LEGACY_HOOKS="$scratch/invalid-legacy-hooks.json" \
     "$REPO/scripts/agent-config-check.sh"
 )"
-grep -Fq '19 managed authoritative bindings' <<<"$invalid_legacy_report"
+grep -Fq '0 managed authoritative bindings' <<<"$invalid_legacy_report"
 grep -Fq 'ignored by managed-only policy (0 active bindings)' \
   <<<"$invalid_legacy_report"
 
@@ -583,8 +584,14 @@ fi
 # identity is otherwise correct.
 mutable_claude="$scratch/claude-mutable"
 cp -a "$REPO/dotfiles/claude" "$mutable_claude"
-sed -i 's#/run/current-system/sw/bin/north-on-spawn#/home/tom/code/north/main/bin/north-on-spawn#g' \
-  "$mutable_claude/settings.json"
+jq '.hooks.SessionStart = [{
+      "hooks": [{
+        "type": "command",
+        "command": "AGENT_PROVIDER=anthropic /home/tom/code/north/main/bin/north-on-spawn",
+        "timeout": 15
+      }]
+    }]' "$mutable_claude/settings.json" >"$scratch/mutable-claude-settings.json"
+mv "$scratch/mutable-claude-settings.json" "$mutable_claude/settings.json"
 if AGENT_CONFIG_CLAUDE="$mutable_claude" \
   "$REPO/scripts/agent-config-check.sh" >"$scratch/mutable-claude.out" 2>&1; then
   printf 'mutable checkout North lifecycle hook was accepted\n' >&2
@@ -937,22 +944,6 @@ fi
 grep -Fq 'does not match the active runtime record' \
   <<<"$NORTH_COORD_RUNTIME_OWNER_REASON"
 
-# Ordinary North/MCP execute the checkout directly on the generation-pinned
-# north-env runtime. Only the legacy *-dev wrappers still delegate checkout
-# execution through the Fram runtime selector — routing the ordinary commands
-# there would recouple North's channel to Fram's.
-[ "$(grep -c 'exec /run/current-system/sw/bin/north-coord-runtime exec-checkout' \
-  "$REPO/modules/north/default.bnix")" -eq 1 ]
-[ "$(grep -c 'NORTH_MANAGED_CODEX_BIN=' \
-  "$REPO/modules/north/default.bnix")" -eq 1 ]
-grep -Fq '(get (get inputs.north.packages pkgs.stdenv.hostPlatform.system) :codex)' \
-  "$REPO/modules/north/default.bnix"
-if grep -q 'export FRAM_RUNTIME_SOURCE\|export FRAM_RUNTIME_REV' \
-  "$REPO/modules/north/default.bnix"; then
-  printf 'North wrapper duplicates selector identity instead of delegating it\n' >&2
-  exit 1
-fi
-
 # Local attestation follows the canonical live configuration root, not the
 # clean worktree whose source is being tested. Worktree location is never
 # runtime authority for the user's managed symlinks.
@@ -1058,7 +1049,7 @@ north_wrapped_runtime_matches_locked_source \
 } >"$fixture_wrapped"
 chmod +x "$fixture_wrapped"
 
-grep -Fq '"$HOME/code/north/main" \' \
+grep -Fq 'managed_source_root_matches "$HOME/code/north/main" "$resolved"' \
   "$REPO/scripts/agent-config-check.sh"
 if grep -Fq '"$HOME/code/north" \' \
    "$REPO/scripts/agent-config-check.sh"; then
@@ -1156,7 +1147,7 @@ writable_claude_settings_match_control_plane \
   "$claude_runtime_settings" "$REPO/dotfiles/claude/settings.json" \
   'writable Claude fixture'
 [ "$fail" -eq 0 ]
-jq '.enabledPlugins["runtime-only@test"] = true' \
+jq '.enabledPlugins += ["runtime-only@test"]' \
   "$claude_runtime_settings" >"$scratch/claude-runtime-settings.next"
 mv "$scratch/claude-runtime-settings.next" "$claude_runtime_settings"
 writable_claude_settings_match_control_plane \
@@ -1384,9 +1375,6 @@ if rg -n -- 'check-web|NORTH_WEB|north-web' "$REPO/scripts/agent-config-check.sh
   exit 1
 fi
 
-# Repository/CI mode validates canonical declarations against this checkout,
-# not whether Tom's absolute live path happens to exist. A failing readlink shim
-# simulates a relocated checkout; only --local may require live resolution.
 # The legacy user manifest is ignored by managed-only policy, but its state
 # coordinate parser remains deterministic for diagnostics and migration.
 expected_north_spawn='/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-spawn-codex'
@@ -1401,11 +1389,6 @@ printf '%s\n' \
   >"$disabled_fixture"
 [ "$(list_disabled_codex_hooks "$REPO/dotfiles/codex/hooks.json" "$disabled_fixture")" = \
   $'SessionStart\t0:1\t'"$expected_north_spawn" ]
-
-mkdir -p "$scratch/bin"
-printf '%s\n' '#!/bin/sh' 'exit 1' >"$scratch/bin/readlink"
-chmod +x "$scratch/bin/readlink"
-PATH="$scratch/bin:$PATH" "$REPO/scripts/agent-config-check.sh" >/dev/null
 
 # --- Hermes controller adapter coverage ------------------------------------
 # The compact report must surface the Hermes group and its fail-closed adapter.
@@ -1441,15 +1424,14 @@ if grep -qE '"AGENT_PROVIDER"[^#]*"hermes"' \
   printf 'north-bridge sets AGENT_PROVIDER=hermes (provider must stay unobserved)\n' >&2
   exit 1
 fi
-# The module must pin the exact reviewed hermes-agent commit and drive the
-# WRAPPED North package bin, never the raw source checkout.
+# The module must pin the exact reviewed hermes-agent commit and drive North's
+# lifecycle scripts from its live launch-critical checkout.
 grep -qF '"github:NousResearch/hermes-agent/244dabbd9c4b542bf5c1ad0159af512c2b5d6e08"' \
   "$REPO/modules/hermes/default.bnix"
-grep -qF 'inputs.north.packages' "$REPO/modules/hermes/default.bnix"
-if grep -qF '(s inputs.north "/bin")' "$REPO/modules/hermes/default.bnix"; then
-  printf 'Hermes lifecycle dir still points at the raw inputs.north source\n' >&2
-  exit 1
-fi
+grep -qF 'northPkg (s homeDir "/code/north/main")' \
+  "$REPO/modules/hermes/default.bnix"
+grep -qF 'northBin (s northPkg "/bin")' \
+  "$REPO/modules/hermes/default.bnix"
 
 # Regression: a Hermes module whose hermes-agent URL floats (no pinned rev) must
 # be REJECTED — the reviewed commit is load-bearing.

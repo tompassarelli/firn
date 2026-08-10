@@ -512,4 +512,9 @@ class ManifestTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    # Unit tests must not inherit the operator's live switchboard. Individual
+    # switchboard tests replace this path with their own projection fixture.
+    with tempfile.TemporaryDirectory() as tmp:
+        activity = str(Path(tmp) / "missing-activity.conf")
+        with mock.patch.dict(os.environ, {"AGENTS_ACTIVITY_FILE": activity}):
+            unittest.main(verbosity=2)
