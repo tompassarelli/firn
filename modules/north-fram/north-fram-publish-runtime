@@ -1,0 +1,58 @@
+selection="${NORTH_FRAM_SELECTION:?north-fram: NORTH_FRAM_SELECTION must name the FRAMRPC selection file}"
+unit="${NORTH_COORD_SYSTEMD_UNIT:?north-fram: NORTH_COORD_SYSTEMD_UNIT must name the controller unit}"
+main_pid="${1:?north-fram: the listener PID is required}"
+
+set -a
+# shellcheck disable=SC1090
+. "$selection"
+set +a
+
+receipt="$FRAM_HOME/RELEASE"
+[ -r "$receipt" ] || { echo "north-fram: sealed release has no receipt: $receipt" >&2; exit 1; }
+
+receipt_value() {
+  sed -n "s/^$1=//p" "$receipt" | head -n 1
+}
+
+revision="$(receipt_value revision)"
+tree="$(receipt_value tree)"
+[ -n "$revision" ] && [ -n "$tree" ] ||
+  { echo "north-fram: sealed release receipt lacks revision or tree" >&2; exit 1; }
+
+# Field 22 of /proc/<pid>/stat, counted after the parenthesised comm, is the
+# process start time in clock ticks. It is what distinguishes this listener
+# from a later process that reuses its PID.
+stat_line="$(cat "/proc/$main_pid/stat")" ||
+  { echo "north-fram: listener $main_pid is gone" >&2; exit 1; }
+after_comm="${stat_line##*) }"
+start_ticks="$(printf '%s\n' "$after_comm" | cut -d' ' -f20)"
+case "$start_ticks" in
+  ''|*[!0-9]*) echo "north-fram: cannot read listener birth for $main_pid" >&2; exit 1 ;;
+esac
+
+record_dir="${XDG_STATE_HOME:-$HOME/.local/state}/north/framrpc-runtime"
+record="$record_dir/north-fram.runtime"
+mkdir -p "$record_dir"
+
+# The attestation reads one 0600 regular file with an exact field order.
+temp="$record.next.$$"
+umask 077
+{
+  echo "FORMAT=north-framrpc-runtime/v1"
+  echo "FRAM_SOURCE=$FRAM_HOME"
+  echo "FRAM_REVISION=$revision"
+  echo "FRAM_TREE=$tree"
+  echo "FRAM_NATIVE_ARTIFACT_DIR=$FRAM_NATIVE_ARTIFACT_DIR"
+  echo "FRAM_NATIVE_CLOSURE_SHA256=$FRAM_NATIVE_CLOSURE_SHA256"
+  echo "FRAM_SERVER_ARTIFACT=$FRAM_SERVER_ARTIFACT"
+  echo "FRAM_SERVER_ARTIFACT_SHA256=$FRAM_SERVER_ARTIFACT_SHA256"
+  echo "FRAM_SPACE_ID=$FRAM_SPACE_ID"
+  echo "FRAM_PORT=$FRAM_SERVER_PORT"
+  echo "FRAM_LOG=$FRAM_LOG"
+  echo "PID=$main_pid"
+  echo "PID_BIRTH=proc:$start_ticks"
+  echo "CONTROLLER_UNIT=$unit"
+  echo "CONTROLLER_MAIN_PID=$main_pid"
+} >"$temp"
+chmod 600 "$temp"
+mv -f "$temp" "$record"

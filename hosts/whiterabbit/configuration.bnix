@@ -60,6 +60,10 @@
    ;; systemd socket activation is required for both Stage-A writer sockets.
    :myConfig.modules.north-coord.socketActivation true
    :myConfig.modules.north-coord.stageATelemetryPartition true
+   ;; The coordination engine's replacement: one user service, direct bind on
+   ;; :7977, no socket activation, no telemetry twin. Owns :7977 alone —
+   ;; north-coord above must stay off.
+   :myConfig.modules.north-fram.enable true
    ;; user-level timer (~5min) for north-stream-sync — zero-AI transcript
    ;; mirroring into ~/code/north/streams/raw (streams/CLAUDE.md).
    :myConfig.modules.north-stream-sync.enable false

@@ -1,0 +1,73 @@
+#lang beagle/nix
+
+(ns default)
+
+;; The North coordination engine as one user service on :7977.
+;;
+;; Deliberately narrow after the 2026-08-09 outage (north-data:incidents.md):
+;; no socket activation — the socket unit's backlog is what turned one outage
+;; into a 500-connection zombie flood the engine then died accepting — and no
+;; telemetry twin; :7978 stays down until something needs it. The engine binds
+;; its own listener, and a restart drops the queue with the process.
+;;
+;; The cgroup ceilings are sized for the empty store this revives onto, not for
+;; the 139 MB log it replaced. They are the blast radius, not a capacity plan:
+;; raise them deliberately when the store carries data. FRAM_MAX_ACTIVE_CLIENTS
+;; (64, from the selection file) must stay well under TasksMax, or the app's
+;; graceful over-cap refusal never engages before the fatal cgroup EAGAIN.
+(nix/module [config lib pkgs ...]
+  (let [username config.myConfig.modules.users.username
+        homeDir config.myConfig.modules.users.homeDir
+        ;; The one place the engine, FRAMLOG, port, and SpaceId are chosen.
+        ;; The unit follows the selection; it never restates it.
+        selectionEnv (s homeDir "/.local/state/north/framrpc.env")
+        unitName "north-fram.service"
+        launch
+          (pkgs.writeShellApplication
+            {:name "north-fram-launch"
+             :runtimeInputs (nix/with pkgs [coreutils])
+             :text (builtins.readFile (p "./north-fram-launch"))})
+        publishRuntime
+          (pkgs.writeShellApplication
+            {:name "north-fram-publish-runtime"
+             :runtimeInputs (nix/with pkgs [coreutils gnused])
+             :text (builtins.readFile (p "./north-fram-publish-runtime"))})]
+    {:options.myConfig.modules.north-fram.enable
+      (lib.mkEnableOption "North coordination engine (:7977) — sealed Fram release as one user service")
+     :config
+      (lib.mkIf config.myConfig.modules.north-fram.enable
+        {:home-manager.users
+          {username
+            (nix/module [config ...]
+              {:systemd.user.services.north-fram
+                {:Unit
+                  {:Description "North coordination engine — sealed Fram release on :7977"
+                   :ConditionPathExists selectionEnv
+                   :After ["network.target"]}
+                 :Service
+                  {;; v0.5.2 emits READY=1 only once it is answering and
+                   ;; STOPPING=1 on drain, so "active" means served, not bound.
+                   :Type "notify"
+                   :NotifyAccess "main"
+                   :Environment
+                     [(s "NORTH_FRAM_SELECTION=" selectionEnv)
+                      (s "NORTH_COORD_SYSTEMD_UNIT=" unitName)]
+                   :ExecStart (s launch "/bin/north-fram-launch")
+                   ;; The attestation's launcher-owned record. Non-fatal: a
+                   ;; coordinator that serves without publishing its identity
+                   ;; is worth more than one that refuses to start over it.
+                   :ExecStartPost
+                     (s "-" publishRuntime "/bin/north-fram-publish-runtime $MAINPID")
+                   :ExecStopPost
+                     (s "-" pkgs.coreutils "/bin/rm -f %S/north/framrpc-runtime/north-fram.runtime")
+                   :Restart "on-failure"
+                   :RestartSec "2s"
+                   ;; An empty store boots in well under a second; 120 s is the
+                   ;; ceiling for a replay that has to do real work, not an
+                   ;; expectation.
+                   :TimeoutStartSec "120"
+                   :CPUQuota "100%"
+                   :MemoryHigh "2G"
+                   :MemoryMax "3G"
+                   :TasksMax "128"}
+                 :Install {:WantedBy ["default.target"]}}})}})}))
