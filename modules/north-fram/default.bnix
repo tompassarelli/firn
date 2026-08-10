@@ -53,11 +53,13 @@
                      [(s "NORTH_FRAM_SELECTION=" selectionEnv)
                       (s "NORTH_COORD_SYSTEMD_UNIT=" unitName)]
                    :ExecStart (s launch "/bin/north-fram-launch")
-                   ;; The attestation's launcher-owned record. Non-fatal: a
-                   ;; coordinator that serves without publishing its identity
-                   ;; is worth more than one that refuses to start over it.
+                   ;; The attestation's launcher-owned record. Fatal on
+                   ;; purpose (staleness charter law 5): a coordinator that
+                   ;; serves without a runtime record is silent divergence —
+                   ;; attestation reads nothing while the engine answers — so
+                   ;; a broken publisher fails the start loudly instead.
                    :ExecStartPost
-                     (s "-" publishRuntime "/bin/north-fram-publish-runtime $MAINPID")
+                     (s publishRuntime "/bin/north-fram-publish-runtime $MAINPID")
                    :ExecStopPost
                      (s "-" pkgs.coreutils "/bin/rm -f %S/north/framrpc-runtime/north-fram.runtime")
                    :Restart "on-failure"
@@ -66,6 +68,13 @@
                    ;; ceiling for a replay that has to do real work, not an
                    ;; expectation.
                    :TimeoutStartSec "120"
+                   ;; Daily graceful recycle: the engine's arena floor
+                   ;; ratchets under sustained write load until the real
+                   ;; allocator fix lands. Restart is ~2.3 s with durable
+                   ;; state, so a bounded daily recycle converts an unbounded
+                   ;; ratchet into a bounded one; Type=notify makes the
+                   ;; recycle invisible to health checks.
+                   :RuntimeMaxSec "86400"
                    :CPUQuota "100%"
                    :MemoryHigh "2G"
                    :MemoryMax "3G"

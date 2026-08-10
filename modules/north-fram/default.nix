@@ -34,11 +34,12 @@ in
             "NORTH_COORD_SYSTEMD_UNIT=${unitName}"
           ];
           ExecStart = "${launch}/bin/north-fram-launch";
-          ExecStartPost = "-${publishRuntime}/bin/north-fram-publish-runtime $MAINPID";
+          ExecStartPost = "${publishRuntime}/bin/north-fram-publish-runtime $MAINPID";
           ExecStopPost = "-${pkgs.coreutils}/bin/rm -f %S/north/framrpc-runtime/north-fram.runtime";
           Restart = "on-failure";
           RestartSec = "2s";
           TimeoutStartSec = "120";
+          RuntimeMaxSec = "86400";
           CPUQuota = "100%";
           MemoryHigh = "2G";
           MemoryMax = "3G";
