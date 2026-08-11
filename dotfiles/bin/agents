@@ -37,8 +37,11 @@ MEM_INDEX_CACHE="$STATE/mem-index"
 HOOKS=(agent-spawn-guard beagle-session-start comment-bloat-guard firn-guard
   git-blind-stage-guard hook-detach logcompress north-session-lifecycle
   tripwire-guard worktree-guard)
-SKILLS=(webdev importing-skills beagle-authoring fram-modeling code-as-facts
-  firn repo-safety staffing messages threads assignments todo)
+SKILLS=(webdev importing-skills threejs-animation threejs-fundamentals
+  threejs-geometry threejs-interaction threejs-lighting threejs-loaders
+  threejs-materials threejs-postprocessing threejs-shaders threejs-textures
+  beagle-authoring fram-modeling code-as-facts firn repo-safety staffing
+  messages threads assignments todo)
 # A MODULE is a skill with declarations — a skill whose frontmatter names the
 # hooks its rules need (`hooks:`) or a directory of agent templates it ships
 # (`agents:`). It is not a kind: a module's name IS a skill's name. Staffing is
@@ -712,6 +715,16 @@ skill_source() {
   case "$1" in
     webdev)          echo "$HOME/code/north/main/agent-profile/skills/webdev" ;;
     importing-skills) echo "$HOME/code/north/main/agent-profile/skills/importing-skills" ;;
+    threejs-animation) echo "$HOME/code/north/main/agent-profile/skills/threejs-animation" ;;
+    threejs-fundamentals) echo "$HOME/code/north/main/agent-profile/skills/threejs-fundamentals" ;;
+    threejs-geometry) echo "$HOME/code/north/main/agent-profile/skills/threejs-geometry" ;;
+    threejs-interaction) echo "$HOME/code/north/main/agent-profile/skills/threejs-interaction" ;;
+    threejs-lighting) echo "$HOME/code/north/main/agent-profile/skills/threejs-lighting" ;;
+    threejs-loaders) echo "$HOME/code/north/main/agent-profile/skills/threejs-loaders" ;;
+    threejs-materials) echo "$HOME/code/north/main/agent-profile/skills/threejs-materials" ;;
+    threejs-postprocessing) echo "$HOME/code/north/main/agent-profile/skills/threejs-postprocessing" ;;
+    threejs-shaders) echo "$HOME/code/north/main/agent-profile/skills/threejs-shaders" ;;
+    threejs-textures) echo "$HOME/code/north/main/agent-profile/skills/threejs-textures" ;;
     beagle-authoring) echo "$HOME/code/beagle/main/integrations/north/skills/beagle-authoring" ;;
     fram-modeling)   echo "$HOME/code/fram/main/integrations/north/skills/fram-modeling" ;;
     code-as-facts)   echo "$HOME/code/fram/main/integrations/north/skills/code-as-facts" ;;

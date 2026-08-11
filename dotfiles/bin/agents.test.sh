@@ -37,6 +37,13 @@ fresh() { # [fragments-dir]
   mkdir -p "$NORTH/agent-profile/skills/importing-skills"
   printf -- '---\nname: importing-skills\n---\n' \
     > "$NORTH/agent-profile/skills/importing-skills/SKILL.md"
+  for s in threejs-animation threejs-fundamentals threejs-geometry \
+    threejs-interaction threejs-lighting threejs-loaders threejs-materials \
+    threejs-postprocessing threejs-shaders threejs-textures; do
+    mkdir -p "$NORTH/agent-profile/skills/$s"
+    printf -- '---\nname: %s\n---\n' "$s" \
+      > "$NORTH/agent-profile/skills/$s/SKILL.md"
+  done
   STAFFSK="$NORTH/orchestration/staffing"
   mkdir -p "$STAFFSK" "$NORTH/orchestration/agents" \
     "$NORTH/coordination/messages" "$NORTH/coordination/threads" \
@@ -634,6 +641,21 @@ ag on importing-skills > /dev/null
 chk "a North profile skill lands in both farms" "1" "$(test -L "$SB/.config/agents/skills/importing-skills" && test -L "$CX/importing-skills" && echo 1 || echo 0)"
 chk "its Codex link uses the tracked North profile" "$SB/code/north/main/agent-profile/skills/importing-skills" "$(readlink "$CX/importing-skills")"
 ag off importing-skills > /dev/null
+threejs_missing=()
+for s in threejs-animation threejs-fundamentals threejs-geometry \
+  threejs-interaction threejs-lighting threejs-loaders threejs-materials \
+  threejs-postprocessing threejs-shaders threejs-textures; do
+  ag on "$s" > /dev/null
+  if [ ! -L "$SB/.config/agents/skills/$s" ] || [ ! -L "$CX/$s" ]; then
+    threejs_missing+=("$s")
+  fi
+done
+chk "every Three.js skill lands in both farms" "" "${threejs_missing[*]}"
+for s in threejs-animation threejs-fundamentals threejs-geometry \
+  threejs-interaction threejs-lighting threejs-loaders threejs-materials \
+  threejs-postprocessing threejs-shaders threejs-textures; do
+  ag off "$s" > /dev/null
+done
 chk "nothing of Codex's was disturbed" "system handwritten foreign" "$(survivors)"
 ag off repo-safety > /dev/null
 chk "off sweeps our codex link" "0" "$(test -L "$CX/repo-safety" && echo 1 || echo 0)"
