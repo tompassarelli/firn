@@ -22,7 +22,7 @@
    doom-emacs
    [browsers +chrome +qutebrowser +zen-browser]
    gaming
-   [creative -blender -godot]
+   [creative -godot]
    [media -youtube-music]
    communication
    [office -libreoffice]
