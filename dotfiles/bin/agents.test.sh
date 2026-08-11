@@ -34,6 +34,9 @@ fresh() { # [fragments-dir]
   # the spawn guard and template library; coordination's three leaves are
   # plain skills. Module-set fixtures are still opt-in per test below.
   NORTH="$SB/code/north/main"
+  mkdir -p "$NORTH/agent-profile/skills/importing-skills"
+  printf -- '---\nname: importing-skills\n---\n' \
+    > "$NORTH/agent-profile/skills/importing-skills/SKILL.md"
   STAFFSK="$NORTH/orchestration/staffing"
   mkdir -p "$STAFFSK" "$NORTH/orchestration/agents" \
     "$NORTH/coordination/messages" "$NORTH/coordination/threads" \
@@ -627,6 +630,10 @@ ag on repo-safety > /dev/null
 chk "an active skill lands in the claude farm" "repo-safety" "$(skilllinks)"
 chk "and on the codex surface, at the same source" "$(readlink "$SB/.config/agents/skills/repo-safety")" "$(readlink "$CX/repo-safety")"
 chk "the codex entry is a link that resolves to the skill" "1" "$(test -L "$CX/repo-safety" && test -d "$CX/repo-safety" && echo 1 || echo 0)"
+ag on importing-skills > /dev/null
+chk "a North profile skill lands in both farms" "1" "$(test -L "$SB/.config/agents/skills/importing-skills" && test -L "$CX/importing-skills" && echo 1 || echo 0)"
+chk "its Codex link uses the tracked North profile" "$SB/code/north/main/agent-profile/skills/importing-skills" "$(readlink "$CX/importing-skills")"
+ag off importing-skills > /dev/null
 chk "nothing of Codex's was disturbed" "system handwritten foreign" "$(survivors)"
 ag off repo-safety > /dev/null
 chk "off sweeps our codex link" "0" "$(test -L "$CX/repo-safety" && echo 1 || echo 0)"
