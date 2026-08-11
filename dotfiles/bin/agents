@@ -657,34 +657,79 @@ link_dir_context() { # dir base — the two provider links AT the directory itse
   done
 }
 
-sweep_codex_skills() { # remove ONLY the links this switchboard writes
+sweep_state_skills() { # remove inactive or invalid links from our skill farm
+  local link name src
+  for link in "$STATE/skills"/*; do
+    [ -L "$link" ] || continue
+    name="$(basename "$link")"
+    src="$(skill_source "$name")"
+    if ! is_active "$name" || [ -z "$src" ] || [ ! -r "$src/SKILL.md" ]; then
+      rm -f "$link"
+    fi
+  done
+}
+
+sweep_codex_skills() { # remove ONLY inactive links this switchboard writes
   # Ownership is proven, not assumed: a link counts as ours when its name is one
   # we govern and it points exactly where we would have pointed it. Nothing
   # else is touched — not `.system` (Codex's own, and a real directory anyway),
   # not a hand-written skill directory, not a symlink somebody else placed.
   # A blanket sweep here would delete a user's work on the first `agents off`.
-  local link src tgt
+  local link name src tgt
   [ -d "$CODEX_SKILLS" ] || return 0
   for link in "$CODEX_SKILLS"/*; do
     [ -L "$link" ] || continue
-    src="$(skill_source "$(basename "$link")")"
+    name="$(basename "$link")"
+    src="$(skill_source "$name")"
     [ -n "$src" ] || continue
     tgt="$(readlink "$link")"
-    if [ "$tgt" = "$src" ]; then rm -f "$link"; fi
+    if [ "$tgt" = "$src" ] &&
+       { ! is_active "$name" || [ ! -r "$src/SKILL.md" ]; }; then
+      rm -f "$link"
+    fi
   done
 }
 
+link_skill_atomically() { # root name source surface
+  # A scanner must see the complete old link or the complete new one. Publishing
+  # through rename also makes an idempotent apply a true no-op: an already-correct
+  # link is never unlinked and recreated underneath a provider's startup scan.
+  local root="$1" name="$2" src="$3" surface="$4"
+  local link="$root/$name" tmp="$root/.agents-$name.next.$$" suffix=0
+  if [ -L "$link" ] && [ "$(readlink "$link")" = "$src" ] &&
+     [ -r "$link/SKILL.md" ]; then
+    return 0
+  fi
+  if { [ -e "$link" ] || [ -L "$link" ]; } && [ ! -L "$link" ]; then
+    echo "agents: $link is not a managed link — $name not linked for $surface" >&2
+    return 0
+  fi
+  while [ -e "$tmp" ] || [ -L "$tmp" ]; do
+    suffix=$((suffix + 1)); tmp="$root/.agents-$name.next.$$.$suffix"
+  done
+  if ! ln -s "$src" "$tmp"; then
+    echo "agents: could not stage $name for $surface" >&2
+    return 0
+  fi
+  if [ ! -r "$tmp/SKILL.md" ]; then
+    echo "agents: skill $name has no readable SKILL.md at $src — not linked for $surface" >&2
+    rm -f "$tmp"
+    return 0
+  fi
+  if ! mv -Tf "$tmp" "$link"; then
+    echo "agents: could not publish $name for $surface" >&2
+    rm -f "$tmp"
+  fi
+  return 0
+}
+
 link_codex_skill() { # name source
-  # Created only when there is something to put in it, and never replaced: if
-  # that path is a real file, or cannot be made, this item degrades to a warning
-  # like every other item in apply.
   [ -e "$CODEX_SKILLS" ] || mkdir -p "$CODEX_SKILLS" 2>/dev/null || true
   if [ ! -d "$CODEX_SKILLS" ]; then
     echo "agents: $CODEX_SKILLS is not a directory — $1 not linked for codex" >&2
     return 0
   fi
-  ln -sfn "$2" "$CODEX_SKILLS/$1" ||
-    echo "agents: could not link $1 into $CODEX_SKILLS" >&2
+  link_skill_atomically "$CODEX_SKILLS" "$1" "$2" codex
   return 0
 }
 
@@ -1450,19 +1495,22 @@ PY
       echo "agents: the memory index for $mslug was left as it was" >&2
     fi
   done < <(dir_rows)
-  # skills — a farm of symlinks; only ACTIVE skills exist, in BOTH surfaces
+  # skills — a farm of symlinks; only ACTIVE skills exist, in BOTH surfaces.
+  # Publish desired links before retiring inactive ones. In particular, never
+  # sweep an active link and recreate it: Codex may be reading SKILL.md at that
+  # exact moment and its startup scan does not retry an ENOENT.
   local s src
-  find "$STATE/skills" -maxdepth 1 -type l -delete
-  sweep_codex_skills
   for s in "${SKILLS[@]}"; do
     if is_active "$s"; then
       src="$(skill_source "$s")"
-      if [ -d "$src" ]; then
-        ln -sfn "$src" "$STATE/skills/$s"
+      if [ -r "$src/SKILL.md" ]; then
+        link_skill_atomically "$STATE/skills" "$s" "$src" agents
         link_codex_skill "$s" "$src"
-      else echo "agents: skill $s is on but $src is missing — not linked" >&2; fi
+      else echo "agents: skill $s is on but $src/SKILL.md is unreadable — not linked" >&2; fi
     fi
   done
+  sweep_state_skills
+  sweep_codex_skills
   # agent templates — a skill may ship a directory of them (`agents:` in its
   # frontmatter), and they exist in ~/.claude/agents while that skill is active:
   # live symlinks into the source, so editing a template there is immediately

@@ -387,7 +387,7 @@ chk "unparseable settings.json left alone" "{ not json" "$(cat "$SB/.claude/sett
 echo '{}' > "$SB/.claude/settings.json"
 rm "$SB/code/nixos-config/main/dotfiles/agents/skills"
 ag on repo-safety 2>"$SB/err4" >/dev/null
-if grep -q 'skill repo-safety is on but .* is missing' "$SB/err4"; then ok "missing skill source warns"; else bad "missing skill source warns" "$(cat "$SB/err4")"; fi
+if grep -q 'skill repo-safety is on but .*/SKILL.md is unreadable' "$SB/err4"; then ok "missing skill source warns"; else bad "missing skill source warns" "$(cat "$SB/err4")"; fi
 
 echo
 echo "== 10. status section order"
@@ -637,6 +637,15 @@ ag on repo-safety > /dev/null
 chk "an active skill lands in the claude farm" "repo-safety" "$(skilllinks)"
 chk "and on the codex surface, at the same source" "$(readlink "$SB/.config/agents/skills/repo-safety")" "$(readlink "$CX/repo-safety")"
 chk "the codex entry is a link that resolves to the skill" "1" "$(test -L "$CX/repo-safety" && test -d "$CX/repo-safety" && echo 1 || echo 0)"
+farm_inode="$(stat -c %i "$SB/.config/agents/skills/repo-safety")"
+codex_inode="$(stat -c %i "$CX/repo-safety")"
+ag apply > /dev/null
+chk "an idempotent apply does not replace the farm skill link" "$farm_inode" "$(stat -c %i "$SB/.config/agents/skills/repo-safety")"
+chk "an idempotent apply does not replace the Codex skill link" "$codex_inode" "$(stat -c %i "$CX/repo-safety")"
+ln -sfn "$SB/elsewhere" "$CX/repo-safety"
+ag apply > /dev/null
+chk "a stale Codex skill link is replaced with the active source" "$(readlink "$SB/.config/agents/skills/repo-safety")" "$(readlink "$CX/repo-safety")"
+chk "atomic publication leaves no staging link" "0" "$(find "$CX" -maxdepth 1 -name '.agents-*.next.*' | wc -l)"
 ag on importing-skills > /dev/null
 chk "a North profile skill lands in both farms" "1" "$(test -L "$SB/.config/agents/skills/importing-skills" && test -L "$CX/importing-skills" && echo 1 || echo 0)"
 chk "its Codex link uses the tracked North profile" "$SB/code/north/main/agent-profile/skills/importing-skills" "$(readlink "$CX/importing-skills")"
