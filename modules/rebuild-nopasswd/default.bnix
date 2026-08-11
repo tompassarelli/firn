@@ -7,9 +7,8 @@
 ;; password on nixos-rebuild is a speed bump, not a boundary — anything running
 ;; as tom can edit the user-owned flake and becomes root at the next legitimate
 ;; activation anyway. Scoping to the one binary keeps `sudo bash` etc. gated.
-;; The real discipline lives in the firn-guard hook (build+validate green,
-;; committed, clean build inputs). v2 refinement queued: fact-native rebuild
-;; lease + root broker (auditable, revocable) — coordination thread 019f4418.
+;; The real discipline lives in the firn-guard hook (build+validate green and
+;; committed build inputs). There is no rebuild broker or coordination layer.
 (nix/module [config lib pkgs ...]
   {:tags [cli-tools]
    :options.myConfig.modules.rebuild-nopasswd.enable

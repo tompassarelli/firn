@@ -11,8 +11,8 @@
 #      for "agent edited .nix by hand because it never read nixos-config/CLAUDE.md."
 #
 #   2. DENY bypasses around the sanctioned rebuild wrapper: nixos-rebuild / nh /
-#      darwin-rebuild switch and firn update stay the USER's. `firn rebuild` and
-#      firn-rebuild-coordinated remain agent-runnable.
+#      darwin-rebuild switch and firn update stay the USER's. `firn rebuild`
+#      remains agent-runnable.
 #
 # Kill-switch: persistent `north config guards off` (state) OR env
 # CLAUDE_NO_AUTHORING_HOOKS (any value but 0/false; 0/false forces guards live).
@@ -75,8 +75,7 @@ DIGEST = (
     "the .bnix AND the generated .nix (the flake only sees git-tracked files).\n"
     "3. `firn rebuild` is agent-runnable after `firn build` + `firn validate` are green "
     "and your changes are COMMITTED. It builds a commit snapshot, so concurrent "
-    "uncommitted work cannot enter the generation. `north rebuild request --why "
-    "\"<reason>\"` remains available for queued execution. Raw `nixos-rebuild switch` / "
+    "uncommitted work cannot enter the generation. Raw `nixos-rebuild switch` / "
     "`nh switch` / `firn update` stay USER-only.\n"
     "4. Secrets: sops-nix only (secrets/*.yaml). Never plaintext creds in the repo.\n"
     "5. New module = create modules/<name>/default.bnix, `firn build`, git add both files "

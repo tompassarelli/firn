@@ -24,27 +24,17 @@ nix eval --raw --impure --expr "
         git = \"/git\";
         writeShellApplication = _: \"/runtime\";
       };
-      inputs.north.packages.test.default = \"/north\";
     };
     home = module.config.home-manager.users.tom { config = {}; };
     services = home.systemd.user.services;
     timers = home.systemd.user.timers;
-    rebuild = services.north-nix-rebuild-worker;
     concerns = services.north-concern-reconciliation-worker;
     attention = services.north-attention-reconciliation-worker;
     projection = services.north-coordination-projection-worker;
   in
-    assert rebuild.Service.Type == \"simple\";
-    assert rebuild.Unit.X-SwitchMethod == \"keep-old\";
     assert concerns.Service.Type == \"simple\";
     assert attention.Service.Type == \"simple\";
     assert projection.Service.Type == \"simple\";
-    assert rebuild.Service.ExecStart ==
-      \"/bb/bin/bb %h/.local/state/north/runtime/current/cli/nix-rebuild-worker.clj\";
-    assert rebuild.Service.Environment == [
-      \"PATH=/run/wrappers/bin:/run/current-system/sw/bin:/home/tom/.nix-profile/bin\"
-      \"FIRN_BIN=/home/tom/.local/bin/firn\"
-    ];
     assert concerns.Service.ExecStart ==
       \"/bb/bin/bb %h/.local/state/north/runtime/current/cli/reconciliation-worker-host.clj concerns\";
     assert attention.Service.ExecStart ==
@@ -69,8 +59,8 @@ nix eval --raw --impure --expr "
       pkgs = {};
     };
   in
-    assert host.myConfig.modules.north-coordination-workers.enable;
+    assert ! host.myConfig.modules.north-coordination-workers.enable;
     \"ok\"
 " | grep -Fxq ok
 
-printf 'ok: North coordination responsibilities are independently supervised\n'
+printf 'ok: remaining North coordination workers stay explicitly disabled on whiterabbit\n'

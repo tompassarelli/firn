@@ -56,9 +56,8 @@ ephemeral; never publish a feature branch name.
 ## Rebuilds — use the sanctioned wrapper
 Agents may run `firn rebuild` after the relevant checks pass and their own
 changes are committed. It builds a COMMIT SNAPSHOT (`rev=HEAD`), so concurrent
-uncommitted work cannot enter the generation. `north rebuild request --why`
-remains available when queued, coalesced execution is preferable. Raw
-`nixos-rebuild`, `nh`, and `firn update` remain user-only. Build-only verify:
+uncommitted work cannot enter the generation. Raw `nixos-rebuild`, `nh`, and
+`firn update` remain user-only. Build-only verify:
 `nix build --no-link`.
 
 In `~/code/nixos-config`, `.bnix` is the write interface and `.nix` is

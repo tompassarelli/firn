@@ -1,18 +1,15 @@
-{ config, lib, pkgs, inputs, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   username = config.myConfig.modules.users.username;
   homeDir = config.myConfig.modules.users.homeDir;
   northPkg = "${homeDir}/code/north/main";
   promotedRuntime = "%h/.local/state/north/runtime/current";
-  rebuildWorker = "${promotedRuntime}/cli/nix-rebuild-worker.clj";
   reconciliationWorker = "${promotedRuntime}/cli/reconciliation-worker-host.clj";
   projectionWorker = "${promotedRuntime}/cli/coordination-projection-worker-host.clj";
   maintenanceHost = "${promotedRuntime}/cli/coordination-maintenance-task-host.clj";
   docctl = "%h/code/north/main/bin/docctl";
   runtimePath = "PATH=${pkgs.systemd}/bin:${pkgs.babashka}/bin:${pkgs.coreutils}/bin:${pkgs.git}/bin";
-  rebuildRuntimePath = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.nix-profile/bin";
-  firnBin = "FIRN_BIN=${homeDir}/.local/bin/firn";
   northRuntimeExec = pkgs.writeShellApplication {
     name = "north-runtime-exec";
     runtimeInputs = with pkgs; [ coreutils ];
@@ -21,7 +18,7 @@ let
   restartRuntimeWorkers = pkgs.writeShellApplication {
     name = "north-restart-runtime-workers";
     runtimeInputs = with pkgs; [ systemd ];
-    text = "systemctl --user try-restart north-nix-rebuild-worker.service north-concern-reconciliation-worker.service north-attention-reconciliation-worker.service north-coordination-projection-worker.service";
+    text = "systemctl --user try-restart north-concern-reconciliation-worker.service north-attention-reconciliation-worker.service north-coordination-projection-worker.service";
   };
   maintenanceExec = task: "${northRuntimeExec}/bin/north-runtime-exec --chdir --interp ${pkgs.babashka}/bin/bb ${northPkg} cli/coordination-maintenance-task-host.clj ${task}";
 in
@@ -29,24 +26,6 @@ in
   options.myConfig.modules.north-coordination-workers.enable = lib.mkEnableOption "independently supervised North coordination workers";
   config = lib.mkIf config.myConfig.modules.north-coordination-workers.enable {
     home-manager.users.${username} = ({ config, ... }: {
-      systemd.user.services.north-nix-rebuild-worker = {
-        Unit = {
-          Description = "North Nix rebuild worker";
-          ConditionPathExists = rebuildWorker;
-          X-SwitchMethod = "keep-old";
-        };
-        Service = {
-          Type = "simple";
-          Restart = "always";
-          RestartSec = "1s";
-          Environment = [ rebuildRuntimePath firnBin ];
-          WorkingDirectory = promotedRuntime;
-          ExecStart = "${pkgs.babashka}/bin/bb ${rebuildWorker}";
-        };
-        Install = {
-          WantedBy = [ "default.target" ];
-        };
-      };
       systemd.user.services.north-concern-reconciliation-worker = {
         Unit = {
           Description = "North durable concern reconciliation worker";

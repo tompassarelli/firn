@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# firn-guard Job 2: sanctioned rebuild wrappers stay allowed while raw bypasses
+# firn-guard Job 2: the sanctioned rebuild wrapper stays allowed while raw bypasses
 # remain denied. Every bypass denial names `firn rebuild` as the compliant move.
 set -uo pipefail
 
@@ -52,8 +52,6 @@ expect_allow 'firn rebuild is allowed'                          'firn rebuild'
 expect_allow 'firn rebuild <host> is allowed'                   'firn rebuild whiterabbit'
 expect_allow 'sudo firn rebuild is allowed'                     'sudo firn rebuild'
 expect_allow 'chained firn rebuild is allowed'                  'git commit -m x && firn rebuild'
-expect_allow 'firn-rebuild-coordinated is allowed'              'firn-rebuild-coordinated --why "x"'
-expect_allow 'path-prefixed coordinated wrapper is allowed'     '/opt/somewhere/bin/firn-rebuild-coordinated --why "x"'
 
 # --- raw bypasses stay denied and point back to the sanctioned wrapper ---
 expect_bypass_deny 'nixos-rebuild switch still denied'          'sudo nixos-rebuild switch --flake .'
@@ -62,9 +60,6 @@ expect_bypass_deny 'darwin-rebuild switch still denied'         'darwin-rebuild 
 expect_bypass_deny 'firn update still denied'                   'firn update'
 
 # --- the compliant move itself must never be denied ---
-expect_allow 'north rebuild request is allowed'                 'north rebuild request --why "flip probe"'
-expect_allow 'north rebuild request --urgent is allowed'        'north rebuild request --why "x" --urgent "cannot wait"'
-expect_allow 'north rebuild list is allowed'                    'north rebuild list'
 expect_allow 'firn build is allowed'                            'firn build'
 expect_allow 'firn validate is allowed'                         'firn validate'
 expect_allow 'firn update --dry-run is allowed'                 'firn update --dry-run'

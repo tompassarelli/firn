@@ -42,14 +42,6 @@ loop for live tools.
   User-owned live entrypoints are named explicitly, never found through an
   arbitrary interactive-shell `PATH`. Do not reconstruct the host toolchain one
   missing executable at a time.
-- The Nix rebuild request queue is Fram data, not a service. Exactly one Nix
-  rebuild worker consumes it and runs the rebuild synchronously. Child commands
-  are not additional coordinators.
-- A change to that worker's own unit, privilege seam, or launch command is a
-  bootstrap change. Land and verify it, quiesce the worker, and use one explicit
-  owner-run activation; never require a broken queue consumer to deploy its own
-  repair. Durable requests remain queued across that operation.
-
 The test is simple: if removing the Nix generation step would make the desired
 developer loop faster without weakening the eventual published generation,
 the generation step does not belong in that loop.
