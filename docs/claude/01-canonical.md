@@ -42,12 +42,12 @@ binary — that is the whole game.
 > Edit + commit = reproducible. Two — **MCP servers** and
 > **plugins** — are Claude-Code-owned **runtime** stores nix can't symlink, so
 > `~/code/nixos-config/modules/claude` reproduces them **imperatively** via an activation script.
-> Orchestration and coordination are switchboard module sets; no provider
+> Orchestration and coordination are switchboard sets; no provider
 > plugin cache is an authority for them.
 
 | lever | lives in | how it's reproduced | pull it for |
 |---|---|---|---|
-| **CLAUDE.md** | `~/code/nixos-config/main/dotfiles/agents/AGENTS.md` + active module-set instructions + per-repo | switchboard composition projected through `~/.config/agents/CLAUDE.md` | persistent rules/context that should ALWAYS be in mind |
+| **CLAUDE.md** | `~/code/nixos-config/main/dotfiles/agents/AGENTS.md` + active set instructions + per-repo | switchboard composition projected through `~/.config/agents/CLAUDE.md` | persistent rules/context that should ALWAYS be in mind |
 | **settings.json** | `~/code/nixos-config/main/dotfiles/claude/settings.json` | generation seed into writable runtime state | harness config: permissions, model/effort, statusLine, plugins, env |
 | **hooks** | `~/.agents/hooks/` + `~/code/nixos-config/main/dotfiles/agents/hooks.d/` | switchboard composition; static provider adapters obey the derived activity projection | DETERMINISTIC behavior the model must not skip (enforce / inject / guard) |
 | **skills** | `~/.agents/skills/` (+ plugins) | North-composed owner sources; plugin-supplied skills ride the plugin | ON-DEMAND procedural knowledge the model CHOOSES when relevant |

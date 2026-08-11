@@ -1860,7 +1860,7 @@ if jq -e '
     end)
   and (.extraKnownMarketplaces.orchestration // null) == null
 ' "$CLAUDE/settings.json" >/dev/null; then
-  ok_detail "retired Orchestration plugin cannot bypass the module-set switch"
+  ok_detail "retired Orchestration plugin cannot bypass the set switch"
 else
   bad "Claude settings must not enable the retired Orchestration plugin or marketplace"
 fi

@@ -17,7 +17,7 @@
               {:home.file
                 {;; Instructions have one authority: the switchboard-composed
                  ;; target also used by Codex. Pointing this at North's personal
-                 ;; profile would bypass every module-set blackout.
+                 ;; profile would bypass every set blackout.
                  ".agents/AGENTS.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink

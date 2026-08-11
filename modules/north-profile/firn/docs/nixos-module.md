@@ -42,7 +42,7 @@ plugins cannot own `statusLine`. It points at
 `nixos-config:dotfiles/claude/statusline.sh`, a self-contained segment
 bus in this repo.
 
-## Orchestration and coordination — switchboard module sets
+## Orchestration and coordination — switchboard sets
 
 The retired Claude plugin and local-directory marketplace are not active
 consumer surfaces. The `agents`

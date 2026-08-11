@@ -47,7 +47,7 @@ SKILLS=(webdev importing-skills threejs-animation threejs-fundamentals
 # (`agents:`). It is not a kind: a module's name IS a skill's name. Staffing is
 # one: its spawn guard and role templates travel with the same switch.
 #
-# A MODULE SET is the other thing, and the only distinctly-named one: a row that
+# A SET is the other thing, and the only distinctly-named one: a row that
 # names units it composes, in modules.d/<name>.json as
 # `{"members": ["<unit-name>", ...]}`. Members are bare names of ANY kind —
 # including other sets, which is how a bundle is built out of bundles. Sets are
@@ -1159,7 +1159,7 @@ status() {
   ensure_manifest
   load_activity
   load_skill_hooks
-  # Read from the least specific to the most: a module set flips units of every
+  # Read from the least specific to the most: a set flips units of every
   # kind, a module flips a skill's own hooks, a skill or a hook answers only for
   # itself, and a directory's context is the narrowest thing here — it fires in
   # one subtree and nowhere else — so it reads last. `other` is the drawer, and
@@ -1173,7 +1173,7 @@ status() {
   # Every row reads NAME then STATE, separated by a colon: the name is what you
   # came looking for and what you would type to flip it, so it is never behind
   # a state token the eye has to step over.
-  echo "module sets"
+  echo "sets"
   for m in ${MODULES[@]+"${MODULES[@]}"}; do
     printf '  %-21s %s\n' "$m:" "$(unit_line "$m")"
   done
@@ -1236,7 +1236,7 @@ apply() {
   # in the per-directory loop below: it writes no <dir>-CLAUDE.md pair and hangs
   # no links off a directory — its surfaces are these global ones.
   # The durable global profile is the source. Optional orchestration and
-  # coordination instructions are appended below only when their module sets
+  # coordination instructions are appended below only when their sets
   # derive active.
   # Every item below degrades on its own: a missing or unreadable source warns
   # and writes empty, and apply keeps going. A source that vanished must not

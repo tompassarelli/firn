@@ -83,7 +83,7 @@
                  ;; Switchboard-owned, exactly like ~/.claude/CLAUDE.md,
                  ;; ~/.codex/AGENTS.md, and ~/.agents/AGENTS.md: `agents apply`
                  ;; is the sole writer under ~/.config/agents, so every provider
-                 ;; sees the same module-set composition.
+                 ;; sees the same set composition.
                  ".hermes/SOUL.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink

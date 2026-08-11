@@ -573,7 +573,7 @@ emit("  claudeMdNixos[\"switchboard composition\\n~/.config/agents/CLAUDE.md\"]"
 emit("  pluginRustLsp[\"plugin: rust-analyzer-lsp\"]");
 emit("  pluginTsLsp[\"plugin: typescript-lsp\"]");
 emit("  pluginLean[\"plugin: lean\"]");
-emit("  orchestrationDoctrine[\"orchestration module set\\n(routing doctrine)\"]");
+emit("  orchestrationDoctrine[\"orchestration set\\n(routing doctrine)\"]");
 emit("  ternHarness[\"north sdk/src/harness.ts\"]");
 emit("  orchestrationDocs[\"~/code/north/main/orchestration/docs\\n(PRAXIS_DIR: roles/postures/deltas)\"]");
 emit("  praxisPersonal[\"personal praxis residue\\n~/code/north/main/profiles/tom/docs/praxis/\"]");
@@ -587,7 +587,7 @@ emit("  settingsJson -->|symlinks-to| settingsNixos");
 emit("  claudeMdGlobal -->|symlinks-to| claudeMdNixos");
 emit("  settingsJson -->|loads plugin| pluginRustLsp");
 emit("  settingsJson -->|loads plugin| pluginTsLsp");
-emit("  claudeMdNixos -->|when module set is active| orchestrationDoctrine");
+emit("  claudeMdNixos -->|when set is active| orchestrationDoctrine");
 emit("  ternHarness -->|reads-at-spawn| orchestrationDocs");
 emit("  ternHarness -->|reads-at-spawn| praxisPersonal");
 emit("  settingsJson -->|SessionStart hook| ternOnSpawn");

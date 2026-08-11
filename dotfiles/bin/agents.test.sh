@@ -32,7 +32,7 @@ fresh() { # [fragments-dir]
   : > "$ACCT/CLAUDE.md"
   # North's consumer surface is four skills. Staffing is the module that owns
   # the spawn guard and template library; coordination's three leaves are
-  # plain skills. Module-set fixtures are still opt-in per test below.
+  # plain skills. Set fixtures are still opt-in per test below.
   NORTH="$SB/code/north/main"
   mkdir -p "$NORTH/agent-profile/skills/importing-skills"
   printf -- '---\nname: importing-skills\n---\n' \
@@ -109,7 +109,7 @@ chk "repo-safety skill seeded off" "skill repo-safety off" "$(grep '^skill repo-
 chk "global seeds as a dir row at the root" "dir global off ~" "$(grep '^dir global ' "$SB/.config/agents/manifest.conf")"
 chk "staffing seeds as the profile module" "skill staffing off" "$(grep '^skill staffing ' "$SB/.config/agents/manifest.conf")"
 chk "coordination leaves seed as skills" "3" "$(grep -Ec '^skill (messages|threads|assignments) off$' "$SB/.config/agents/manifest.conf")"
-chk "and no module-set row exists without a members file" "0" "$(grep -c '^module ' "$SB/.config/agents/manifest.conf" || true)"
+chk "and no set row exists without a members file" "0" "$(grep -c '^module ' "$SB/.config/agents/manifest.conf" || true)"
 chk "statusline-script seeds as other" "other statusline-script off" "$(grep '^other ' "$SB/.config/agents/manifest.conf")"
 chk "no item kind survives" "0" "$(grep -c '^item ' "$SB/.config/agents/manifest.conf" || true)"
 chk "hook bound to a dir row" "hook comment-bloat-guard enabled global" "$(grep '^hook comment-bloat-guard ' "$SB/.config/agents/manifest.conf")"
@@ -162,7 +162,7 @@ ag status > /dev/null
 m="$SB/.config/agents/manifest.conf"
 chk "item agents-md on -> dir global on ~" "dir global on ~" "$(grep '^dir global ' "$m")"
 chk "item statusline-script on -> other, state kept" "other statusline-script on" "$(grep '^other ' "$m")"
-chk "item orchestration off -> module set, state kept" "module orchestration off" "$(grep '^module orchestration ' "$m")"
+chk "item orchestration off -> set, state kept" "module orchestration off" "$(grep '^module orchestration ' "$m")"
 chk "no item row left behind" "0" "$(grep -c '^item ' "$m" || true)"
 chk "re-kinding is in place (line 1 stays line 1)" "dir global on ~" "$(sed -n 1p "$m")"
 chk "unrelated rows untouched" "skill webdev on" "$(grep '^skill webdev ' "$m")"
@@ -176,7 +176,7 @@ chk "half-migrated: the already-re-kinded row wins" "dir global off ~" "$(grep '
 chk "half-migrated: item gone" "0" "$(grep -c '^item agents-md' "$m" || true)"
 
 # Orchestration also spent one release as a skill. Its remembered state moves
-# to the module-set row instead of seeding the new architecture off.
+# to the set row instead of seeding the new architecture off.
 { echo "skill orchestration on"; echo "module orchestration off"; } > "$m"
 ag status > /dev/null
 chk "half-migrated orchestration keeps the module row" "module orchestration off" "$(grep '^module orchestration ' "$m")"
@@ -393,9 +393,9 @@ echo
 echo "== 10. status section order"
 fresh; ag status > /dev/null
 # Dependency order: a hook's parenthetical can only name a row already read.
-# Least specific first, most specific last: a module set flips units of every
+# Least specific first, most specific last: a set flips units of every
 # kind; a directory's context fires in one subtree and nowhere else.
-chk "order" "module sets skills hooks plugins other directory scoped" "$(ag status | grep -v '^ ' | tr '\n' ' ' | sed 's/ $//')"
+chk "order" "sets skills hooks plugins other directory scoped" "$(ag status | grep -v '^ ' | tr '\n' ' ' | sed 's/ $//')"
 chk "global heads the directory section, scope ~" "global: off ~" "$(ag status | sed -n '/^directory scoped$/{n;p}' | tr -s ' ' | sed 's/^ //')"
 # Membership by shape: a skill that declares hooks is rendered as a module, with
 # what it claims nested under it, and is not repeated in the skills section.
@@ -465,7 +465,7 @@ mod outer mid
 ag status > /dev/null
 chk "a module needs no member file: it is a skill" "skill staffing off" "$(grep '^skill staffing ' "$SB/.config/agents/manifest.conf")"
 chk "path of a skill-side module is its skill" "$STAFFSK/SKILL.md" "$(ag path staffing)"
-chk "path of a module set is its list" "$MODS/outer.json" "$(ag path outer)"
+chk "path of a set is its list" "$MODS/outer.json" "$(ag path outer)"
 ag on staffing > /dev/null
 chk "a module in no set answers only to itself" "skill staffing on" "$(grep '^skill staffing ' "$SB/.config/agents/manifest.conf")"
 if has_cmd agent-spawn-guard.sh; then ok "the hook it declares composes, ungated"; else bad "declared hook composes" "$(composed_files)"; fi
