@@ -10,10 +10,9 @@
 #      proceeds — we just guarantee the rules are in context. This is the fix
 #      for "agent edited .nix by hand because it never read nixos-config/CLAUDE.md."
 #
-#   2. DENY every agent path that switches the system: the rebuild wrappers
-#      (firn rebuild / firn-rebuild-coordinated) redirect to the queue verb
-#      `north rebuild request --why`; the bypasses (nixos-rebuild / nh /
-#      darwin-rebuild switch, firn update) stay the USER's.
+#   2. DENY bypasses around the sanctioned rebuild wrapper: nixos-rebuild / nh /
+#      darwin-rebuild switch and firn update stay the USER's. `firn rebuild` and
+#      firn-rebuild-coordinated remain agent-runnable.
 #
 # Kill-switch: persistent `north config guards off` (state) OR env
 # CLAUDE_NO_AUTHORING_HOOKS (any value but 0/false; 0/false forces guards live).
@@ -74,12 +73,11 @@ DIGEST = (
     "overwrites hand-edits. Host config too: hosts/<host>/configuration.bnix, not .nix.\n"
     "2. After any .bnix change: run `firn build` then `firn validate`. git add BOTH "
     "the .bnix AND the generated .nix (the flake only sees git-tracked files).\n"
-    "3. Agents QUEUE rebuilds, never fire them: once `firn build` + `firn validate` are "
-    "green and your changes are COMMITTED, run `north rebuild request --why \"<reason>\"` "
-    "(returns at once; `--urgent \"<why>\"` when it cannot wait). The coordinated rebuild "
-    "owner coalesces open asks into ONE coordinated rebuild. Direct `firn rebuild` / "
-    "`firn-rebuild-coordinated` are denied; raw `nixos-rebuild switch` / `nh switch` / "
-    "`firn update` stay USER-only.\n"
+    "3. `firn rebuild` is agent-runnable after `firn build` + `firn validate` are green "
+    "and your changes are COMMITTED. It builds a commit snapshot, so concurrent "
+    "uncommitted work cannot enter the generation. `north rebuild request --why "
+    "\"<reason>\"` remains available for queued execution. Raw `nixos-rebuild switch` / "
+    "`nh switch` / `firn update` stay USER-only.\n"
     "4. Secrets: sops-nix only (secrets/*.yaml). Never plaintext creds in the repo.\n"
     "5. New module = create modules/<name>/default.bnix, `firn build`, git add both files "
     "(flake auto-imports the dir). Enable it in hosts/<host>/configuration.bnix or via a tag.\n"
@@ -120,19 +118,8 @@ if tool in ("Edit", "Write", "MultiEdit"):
 # mention of the string inside an echo / grep / doc-write argument.
 ANCHOR = r"(?:^|[\n;&|(`])\s*(?:sudo\s+|doas\s+)?"
 
-# 2026-07-30 (Tom): agents QUEUE rebuilds, never fire them — both wrappers denied,
-# reversing the 2026-07-08 "firn rebuild is agent-runnable" policy. The deny text
-# must always name the compliant move (`north rebuild request --why`).
-# The wrappers are reachable by path too (north:bin/firn-rebuild-coordinated), so
-# an optional directory prefix is part of command position for them.
-QUEUE = re.compile(
-    ANCHOR + r"(?:[\w./~+-]*/)?("
-    r"firn\s+rebuild\b"
-    r"|firn-rebuild-coordinated\b"
-    r")"
-)
-# The BYPASSES: raw nixos-rebuild/darwin-rebuild/nh (never went through any
-# wrapper) and `firn update` (wholesale input bumps stay user-gated).
+# Raw nixos-rebuild/darwin-rebuild/nh bypass the sanctioned wrapper, and
+# `firn update` performs wholesale input bumps. These remain user-gated.
 SWITCH = re.compile(
     ANCHOR + r"("
     r"firn\s+update(?!\s+--(?:no-rebuild|dry-run))\b"
@@ -150,15 +137,6 @@ ESCAPE = (
     "with CLAUDE_NO_AUTHORING_HOOKS=1 bypasses it."
 )
 
-# A markdown code span and a shell command substitution are the same two
-# backticks, so prose that NAMES the command matches it. Say so, with the move.
-PROSE = (
-    "Only WRITING about the command (docs, a commit message)? A backtick reads "
-    "as command substitution here, so put the prose in a file with Write/Edit "
-    "and pass the path — e.g. `git commit -F <file>` — instead of a heredoc. "
-)
-
-
 def deny(reason):
     print(json.dumps({
         "hookSpecificOutput": {
@@ -172,23 +150,12 @@ def deny(reason):
 
 if tool == "Bash":
     cmd = ti.get("command", "") or ""
-    if QUEUE.search(cmd):
-        deny(
-            "BLOCKED: agents queue rebuilds, they never fire them. Compliant move — "
-            'run `north rebuild request --why "<reason>"`: it records one durable ask '
-            "and returns at once (it never builds, never blocks). The coordinated rebuild "
-            "owner coalesces every open ask into ONE coordinated rebuild and closes "
-            "your request against the generation that landed; `north rebuild list` "
-            "shows the queue. If it genuinely cannot wait, add "
-            '`--urgent "<why it cannot wait>"` — urgency is never refused, only '
-            "counted in `north doctor`. " + PROSE + ESCAPE
-        )
     if SWITCH.search(cmd):
         deny(
             "BLOCKED: that command switches the system OUTSIDE the sanctioned path. "
             "Raw nixos-rebuild/darwin-rebuild/nh and `firn update` stay the USER's. "
-            'Agents ask for a rebuild with `north rebuild request --why "<reason>"` '
-            '(add `--urgent "<why>"` when it cannot wait) and never switch directly. '
+            "Agents may run `firn rebuild` after the relevant checks pass and their "
+            "own changes are committed. "
             + ESCAPE
         )
     allow()

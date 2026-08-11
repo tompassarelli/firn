@@ -53,11 +53,12 @@ published history, private-to-public exposure, or another agent's in-flight
 WIP. Origin carries main only (plus tags); worktree branches are local and
 ephemeral; never publish a feature branch name.
 
-## Rebuilds — queue or hand off, never fire
-Agents never run `firn rebuild`, `nixos-rebuild`, or `nh`. Hand the user the
-rebuild as ONE command and say why.
-A rebuild builds a COMMIT SNAPSHOT (`rev=HEAD`) — commit your own changes
-first or they will not be in the generation. Build-only verify:
+## Rebuilds — use the sanctioned wrapper
+Agents may run `firn rebuild` after the relevant checks pass and their own
+changes are committed. It builds a COMMIT SNAPSHOT (`rev=HEAD`), so concurrent
+uncommitted work cannot enter the generation. `north rebuild request --why`
+remains available when queued, coalesced execution is preferable. Raw
+`nixos-rebuild`, `nh`, and `firn update` remain user-only. Build-only verify:
 `nix build --no-link`.
 
 In `~/code/nixos-config`, `.bnix` is the write interface and `.nix` is

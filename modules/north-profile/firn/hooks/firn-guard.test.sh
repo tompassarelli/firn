@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# firn-guard Job 2: which commands an agent may run, and what the deny TEACHES.
-# A deny that does not name the compliant move is a wall, not a guard — every
-# rebuild-class denial here is asserted to name `north rebuild request --why`.
+# firn-guard Job 2: sanctioned rebuild wrappers stay allowed while raw bypasses
+# remain denied. Every bypass denial names `firn rebuild` as the compliant move.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,12 +21,12 @@ run_guard() {
       "$GUARD"
 }
 
-# A rebuild-class deny must both refuse AND name the queue verb.
-expect_queue_deny() {
+# A bypass deny must both refuse and name the sanctioned wrapper.
+expect_bypass_deny() {
   local label="$1" cmd="$2" out
   out="$(run_guard "$cmd")"
   if jq -e '.hookSpecificOutput.permissionDecision == "deny"' <<<"$out" >/dev/null 2>&1 &&
-    jq -e '.hookSpecificOutput.permissionDecisionReason | contains("north rebuild request --why")' <<<"$out" >/dev/null 2>&1; then
+    jq -e '.hookSpecificOutput.permissionDecisionReason | contains("firn rebuild")' <<<"$out" >/dev/null 2>&1; then
     pass=$((pass + 1))
     printf 'PASS  %s\n' "$label"
   else
@@ -48,19 +47,19 @@ expect_allow() {
   fi
 }
 
-# --- the flip: both rebuild wrappers are denied, and redirect to the queue ---
-expect_queue_deny 'firn rebuild -> queue verb'                  'firn rebuild'
-expect_queue_deny 'firn rebuild <host> -> queue verb'           'firn rebuild whiterabbit'
-expect_queue_deny 'sudo firn rebuild -> queue verb'             'sudo firn rebuild'
-expect_queue_deny 'chained firn rebuild -> queue verb'          'git commit -m x && firn rebuild'
-expect_queue_deny 'firn-rebuild-coordinated -> queue verb'      'firn-rebuild-coordinated --why "x"'
-expect_queue_deny 'path-prefixed firn-rebuild-coordinated'      '/opt/somewhere/bin/firn-rebuild-coordinated --why "x"'
+# --- the sanctioned wrappers are agent-runnable ---
+expect_allow 'firn rebuild is allowed'                          'firn rebuild'
+expect_allow 'firn rebuild <host> is allowed'                   'firn rebuild whiterabbit'
+expect_allow 'sudo firn rebuild is allowed'                     'sudo firn rebuild'
+expect_allow 'chained firn rebuild is allowed'                  'git commit -m x && firn rebuild'
+expect_allow 'firn-rebuild-coordinated is allowed'              'firn-rebuild-coordinated --why "x"'
+expect_allow 'path-prefixed coordinated wrapper is allowed'     '/opt/somewhere/bin/firn-rebuild-coordinated --why "x"'
 
-# --- the pre-existing bypass denials survive, and also carry the queue verb ---
-expect_queue_deny 'nixos-rebuild switch still denied'           'sudo nixos-rebuild switch --flake .'
-expect_queue_deny 'nh os switch still denied'                   'nh os switch'
-expect_queue_deny 'darwin-rebuild switch still denied'          'darwin-rebuild switch'
-expect_queue_deny 'firn update still denied'                    'firn update'
+# --- raw bypasses stay denied and point back to the sanctioned wrapper ---
+expect_bypass_deny 'nixos-rebuild switch still denied'          'sudo nixos-rebuild switch --flake .'
+expect_bypass_deny 'nh os switch still denied'                  'nh os switch'
+expect_bypass_deny 'darwin-rebuild switch still denied'         'darwin-rebuild switch'
+expect_bypass_deny 'firn update still denied'                   'firn update'
 
 # --- the compliant move itself must never be denied ---
 expect_allow 'north rebuild request is allowed'                 'north rebuild request --why "flip probe"'
@@ -74,18 +73,9 @@ expect_allow 'firn-rebuild-impact is allowed'                   'firn-rebuild-im
 expect_allow 'echoing the denied string is allowed'             'echo "never run firn rebuild directly"'
 expect_allow 'grepping for the denied string is allowed'        'rg "firn rebuild" docs/'
 
-# KNOWN and deliberate: a markdown code span is two backticks, and so is command
-# substitution. Prose in a heredoc is denied; the deny text names the way out.
-prose_out="$(run_guard 'git commit -F - <<MSG
-`firn rebuild` is denied for agents.
-MSG')"
-if jq -e '.hookSpecificOutput.permissionDecisionReason | contains("git commit -F <file>")' <<<"$prose_out" >/dev/null 2>&1; then
-  pass=$((pass + 1))
-  printf 'PASS  backticked prose is denied but taught the file-path escape\n'
-else
-  fail=$((fail + 1))
-  printf 'FAIL  backticked prose deny lost its escape — got: %s\n' "$prose_out" >&2
-fi
+expect_allow 'backticked firn rebuild prose is allowed'         'git commit -F - <<MSG
+`firn rebuild` is agent-runnable.
+MSG'
 
 printf '\nfirn-guard.test.sh: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

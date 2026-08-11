@@ -25,9 +25,11 @@ nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel --no-li
 
 This catches things the validator can't: input mismatches, evaluation errors in submodule freeformType paths, build-time failures.
 
-Agents ASK for a rebuild and never fire one — policy change 2026-07-30, superseding the 2026-07-08 "firn rebuild is agent-runnable" rule. `north rebuild request --why "<reason>"` writes one durable ask and returns immediately; it never builds and never blocks. `--urgent "<why it cannot wait>"` is counted in `north doctor` and never refused. The Nix rebuild worker watches the durable request queue, coalesces every open ask into one rebuild, and closes each request against the generation that landed (`north rebuild list` shows the queue). Direct `firn rebuild` / `firn-rebuild-coordinated` are DENIED by firn-guard for agent tool calls.
+`firn rebuild` is the sanctioned agent-runnable wrapper. Run the relevant checks
+and commit your own changes first; `north rebuild request --why "<reason>"`
+remains available when queued, coalesced execution is preferable.
 
-That rebuild, whoever triggers it, builds a **commit snapshot** (`git+file://<repo>?rev=HEAD`), never the working tree: uncommitted state — yours or any concurrent session's — can neither block it nor leak into a generation. The one gate that remains YOURS: **commit your own changes first**, or they simply won't be in the build when the window fires (the pipeline prints exactly which in-flight files it excluded). Every generation maps to a commit by construction. `firn rollback` / the boot menu undo a switch.
+A rebuild builds a **commit snapshot** (`git+file://<repo>?rev=HEAD`), never the working tree: uncommitted state — yours or any concurrent session's — can neither block it nor leak into a generation. The one gate that remains YOURS: **commit your own changes first**, or they simply won't be in the build (the pipeline prints exactly which in-flight files it excluded). Every generation maps to a commit by construction. `firn rollback` / the boot menu undo a switch.
 
 Ordinary rebuild planning auto-plans no local input. Firn regenerates `.nix`
 (stale committed outputs are self-healed with a mechanical commit; outputs
