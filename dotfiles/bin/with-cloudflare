@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  printf 'usage: with-cloudflare <gjoa|admin> -- <command> [args...]\n' >&2
+}
+
+die() {
+  printf 'with-cloudflare: %s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+read_secret() {
+  local path=$1 variable=$2 value= lines
+  [ -r "$path" ] || return 1
+  lines=$(awk 'END { print NR }' "$path")
+  [ "$lines" = 1 ] || die "$path must contain exactly one line"
+  IFS= read -r value < "$path" || [ -n "$value" ]
+  [ -n "$value" ] || die "$path is empty"
+  case "$value" in
+    *[[:space:]]*) die "$path contains whitespace" ;;
+  esac
+  printf -v "$variable" '%s' "$value"
+}
+
+[ "$#" -ge 3 ] || { usage; exit 64; }
+profile=$1
+[ "$2" = -- ] || { usage; exit 64; }
+shift 2
+
+secret_dir=${WITH_CLOUDFLARE_SECRET_DIR:-/run/secrets}
+global_key_file="$secret_dir/cloudflare-global-api-key"
+cloudflare_email=tom.passarelli@protonmail.com
+account_id=
+token_file=
+
+case "$profile" in
+  gjoa)
+    account_id=f6e67447d76e54e8d0837de3e6b08341
+    token_file="$secret_dir/cloudflare-gjoa-api-token"
+    ;;
+  admin)
+    token_file="$secret_dir/cloudflare-admin-api-token"
+    ;;
+  *)
+    die "unknown profile: $profile" 64
+    ;;
+esac
+
+unset CLOUDFLARE_API_TOKEN CLOUDFLARE_API_KEY CLOUDFLARE_EMAIL CLOUDFLARE_ACCOUNT_ID
+
+credential=
+if read_secret "$token_file" credential; then
+  export CLOUDFLARE_API_TOKEN=$credential
+elif read_secret "$global_key_file" credential; then
+  export CLOUDFLARE_API_KEY=$credential
+  export CLOUDFLARE_EMAIL=$cloudflare_email
+else
+  die "profile $profile has no credential; expected $token_file or $global_key_file" 66
+fi
+
+if [ -n "$account_id" ]; then
+  export CLOUDFLARE_ACCOUNT_ID=$account_id
+fi
+
+exec "$@"

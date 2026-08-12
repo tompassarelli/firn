@@ -21,3 +21,9 @@ sudo install -Dm600 ~/.config/sops/age/keys.txt /var/lib/sops-nix/key.txt
 Or simplest: **don't enable `awscli`** — nothing else needs secrets, and the
 config builds clean without it. The `secrets/*.yaml.example` files document
 the cleartext structure of each.
+
+Cloudflare deployment credentials live in the encrypted
+`nixos-config:secrets/cloudflare.yaml`. The `cloudflare-auth` module projects them as
+owner-only files under `/run/secrets`; commands consume them through
+`with-cloudflare <profile> -- <command>`. Do not put Cloudflare credentials in
+shell startup files, Wrangler configuration, or project repositories.

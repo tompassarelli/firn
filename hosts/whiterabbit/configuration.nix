@@ -40,6 +40,7 @@
   myConfig.modules.neovim.enable = true;
   myConfig.modules.mini-serve.enable = true;
   myConfig.modules.awscli.enable = true;
+  myConfig.modules.cloudflare-auth.enable = true;
   myConfig.modules.libsecret.enable = true;
   myConfig.modules.proton-autopurge.enable = true;
   myConfig.modules.parted.enable = true;

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cloudflare Deploy"
+  short_description: "Authenticate, deploy, and verify Cloudflare apps"
+  default_prompt: "Use $cloudflare-deploy to deploy this project to Cloudflare and verify production."
