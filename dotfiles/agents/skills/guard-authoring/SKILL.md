@@ -145,12 +145,10 @@ independent wirings and a guard present in one is genuinely absent from the
 others. The bridge case is the quiet one: `north:sdk/src/harness.ts` builds
 worker options with `settingSources: []`, so a north-dispatched worker never
 reads `~/.claude/settings.json` — it runs exactly the scripts named in
-`EDIT_GUARDS` / `BASH_GUARDS` / `WORKER_BASH_GUARDS` and nothing else. As of
-this writing those chains carry only `firn-guard`, `tripwire-guard`, and
-`agent-spawn-guard`; the worktree and blind-stage guards are wired for
-interactive sessions and *not* for workers. Do not read that as the pattern —
-it is the gap this skill exists to stop repeating. Check the arrays, don't
-assume them.
+`EDIT_GUARDS` / `BASH_GUARDS` / `WORKER_BASH_GUARDS` and nothing else. Check the
+arrays, don't assume them: `resolveManagedGuardChain` drops a name it cannot
+resolve and says nothing, so a chain can read complete in the source and be
+empty at runtime.
 
 ## Wiring, place by place
 
@@ -244,7 +242,18 @@ A Bash guard belongs in **both** Bash chains by default. They are not
 interactive-vs-worker: `BASH_GUARDS` is a lane allowed to orchestrate and
 `WORKER_BASH_GUARDS` is one that is not, and a plain worker is the lane least
 able to notice it is doing the expensive thing. Naming only one is a choice you
-should be able to justify out loud, not the safe default.
+should be able to justify out loud, not the safe default. The two chains differ
+by `agent-spawn-guard` alone — orchestration permission — because that is the
+only guard whose subject is the orchestration authority itself.
+
+Listing a name is not enforcement, so **exercise the composed chain**.
+`harnessOptions()` returns the real hook callbacks under
+`options.hooks.PreToolUse`; call one with a `{tool_name, tool_input, cwd}`
+payload and read back the decision. `north:sdk/test/harness-guard-chains.test.ts`
+is the shape to copy — it points the worktree guard at a fixture container tree
+via `LAUNCH_CRITICAL_CODE_ROOT` so no assertion depends on the live `~/code`,
+and it asserts the allow half (reads, `worktree add`, `pull --ff-only`,
+enumerated `git add`) beside the deny half.
 
 ### The inventory row
 
@@ -292,11 +301,10 @@ and nobody will notice until an agent is stuck.
 
 Two suites above the script:
 
-- `nixos-config:dotfiles/bin/agents.test.sh` — switchboard semantics. **It has
-  the hook count hardcoded twice** (`chk "on --all: every fragment composed"
-  "10"` and `chk "off --all: hooks disabled" "10"`); adding a fragment makes it
-  11 and both must be bumped. It is slow — run it in the background with output
-  to a log and a bounded wait, never a silent idle.
+- `nixos-config:dotfiles/bin/agents.test.sh` — switchboard semantics. Its
+  `--all` sweep assertions read `hook_count`, derived from the `HOOKS` array in
+  `agents`, so adding a fragment needs no edit here. It is slow — run it in the
+  background with output to a log and a bounded wait, never a silent idle.
 - `nixos-config:scripts/agent-config-check.sh` — the provider-neutral anti-rot
   check across the harness and its adapters.
 
@@ -335,5 +343,11 @@ The one guard that is wired everywhere, and the reference to read when in doubt:
   gitignored paths, and reads
 - tests `launch-critical-worktree-guard.test.sh` + `.test.py`
 
-Note what it is *not*: it is not in the harness worker chains. That is the
-known gap, not the pattern.
+- North Bridge: `EDIT_GUARDS` (a `main`-checkout write arrives as an Edit) and
+  **both** Bash chains (it also arrives as `sed -i`, a heredoc, or a redirect),
+  proven firing by `north:sdk/test/harness-guard-chains.test.ts`
+
+Its Bash-only sibling `git-blind-stage-guard` is the contrast worth holding:
+it returns early for any `tool_name` other than `Bash`, so it belongs in the
+two Bash chains and nowhere else. Entrance coverage follows what the script
+actually parses, not a habit of listing every chain.
