@@ -6,9 +6,12 @@
   {:tags [lisp]
    :options.myConfig.modules.clojure.enable
     (lib.mkEnableOption
-      "Clojure development (JDK, clj CLI, LSP, linting, formatting)")
+      "Clojure tooling — LSP, linting, formatting (native binaries, no JVM)")
    :config
+    ;; Every package here is a GraalVM-compiled native binary with an empty
+    ;; JVM closure. A JDK or the `clojure` CLI would put `java` back on the
+    ;; system PATH; work that needs one takes a dev shell (`init-clj`).
     (lib.mkIf config.myConfig.modules.clojure.enable
       {:environment.systemPackages
         (nix/with pkgs.unstable
-          [jdk21 clojure clj-kondo clojure-lsp neil jet cljfmt])})})
+          [clj-kondo clojure-lsp jet cljfmt])})})

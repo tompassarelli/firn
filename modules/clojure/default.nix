@@ -1,16 +1,8 @@
 { config, lib, pkgs, ... }:
 
 {
-  options.myConfig.modules.clojure.enable = lib.mkEnableOption "Clojure development (JDK, clj CLI, LSP, linting, formatting)";
+  options.myConfig.modules.clojure.enable = lib.mkEnableOption "Clojure tooling — LSP, linting, formatting (native binaries, no JVM)";
   config = lib.mkIf config.myConfig.modules.clojure.enable {
-    environment.systemPackages = with pkgs.unstable; [
-      jdk21
-      clojure
-      clj-kondo
-      clojure-lsp
-      neil
-      jet
-      cljfmt
-    ];
+    environment.systemPackages = with pkgs.unstable; [ clj-kondo clojure-lsp jet cljfmt ];
   };
 }
