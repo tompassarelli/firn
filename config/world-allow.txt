@@ -125,6 +125,7 @@ north/profiles/tom/hooks/launch-critical-worktree-guard.test.sh	12
 north/profiles/tom/hooks/tripwire-guard.test.sh	1
 north/scripts/framlog-cutover.clj	4
 north/sdk/bench/admission-worker.ts	1
+north/sdk/test/bridge-wire-ui.test.ts	2
 north/sdk/test/codex-app-server.test.ts	1
 north/sdk/test/guard-log.test.ts	2
 north/sdk/test/mcp-dispatch-contract.test.ts	1
