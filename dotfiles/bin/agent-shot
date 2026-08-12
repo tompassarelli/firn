@@ -85,10 +85,16 @@ cmd_normalize() {
 
 cmd_watch() {
   need wl-paste wl-copy magick
+  # wl-paste re-executes this script itself, from its own working directory, so
+  # the invoked name ("agent-shot", "./agent-shot") is not enough to find it.
+  local self
+  self=$(command -v -- "$0" 2>/dev/null) || self="$0"
+  self=$(readlink -f -- "$self" 2>/dev/null) || die "cannot resolve own path"
+  [ -x "$self" ] || die "cannot resolve own path"
   note "watching the clipboard; every image over ${MAX_EDGE}px becomes JPEG q${QUALITY}"
   # --watch fires on every clipboard change; cmd_normalize is a no-op for text
   # and for images already inside the bounds, including the ones it just wrote.
-  exec wl-paste --watch "$0" _watch_tick
+  exec wl-paste --watch "$self" _watch_tick
 }
 
 cmd_watch_tick() {
