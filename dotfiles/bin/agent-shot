@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+# agent-shot — make a screenshot agent-sized before it enters an agent context.
+#
+# A screenshot pasted into Codex or Claude Code is not stored once. It is
+# re-serialised into every compaction record and copied wholesale into every
+# subagent fork, so one pasted image is written to disk hundreds of times. The
+# only lever with leverage is the byte count at the moment the image enters the
+# context window; everything downstream multiplies whatever that number is.
+#
+# Measured on the 40 clipboard pastes of 2026-08-11/12: 66.89 MB of transcript
+# image payload becomes 3.91 MB at 1440px JPEG q80 — 17.1x — with every glyph
+# of body text still legible. Codex resizes to 2048px and re-encodes preserving
+# the source format, so a PNG stays a lossless RGBA PNG all the way in; a JPEG
+# that already fits the limits is passed through byte-for-byte untouched.
+#
+#   agent-shot              normalise the image on the clipboard, in place
+#   agent-shot watch        normalise every clipboard image as it arrives
+#   agent-shot capture      select a region, normalise it, put it on the clipboard
+#   agent-shot file IN [OUT]  normalise a file (OUT defaults to stdout)
+#
+# Env: AGENT_SHOT_MAX_EDGE (1440), AGENT_SHOT_QUALITY (80).
+set -uo pipefail
+
+MAX_EDGE="${AGENT_SHOT_MAX_EDGE:-1440}"
+QUALITY="${AGENT_SHOT_QUALITY:-80}"
+# An image already under both bounds costs less than re-encoding it would, and
+# leaving it alone is what stops watch mode from chasing its own output.
+SKIP_BYTES=$((256 * 1024))
+
+die() { printf 'agent-shot: %s\n' "$1" >&2; exit 1; }
+note() { [ -n "${AGENT_SHOT_QUIET:-}" ] || printf 'agent-shot: %s\n' "$1" >&2; }
+
+need() {
+  for c in "$@"; do
+    command -v "$c" >/dev/null 2>&1 || die "missing required command: $c"
+  done
+}
+
+# Long edge of an image file, or empty if it is not an image we can read.
+long_edge() {
+  magick identify -format '%[fx:max(w,h)]' "$1[0]" 2>/dev/null
+}
+
+# Re-encode $1 to $2 at the policy fidelity. Returns 1 if $1 needs no work.
+shrink() {
+  local src="$1" dst="$2" bytes edge
+  bytes=$(stat -c%s "$src" 2>/dev/null || echo 0)
+  edge=$(long_edge "$src")
+  [ -n "$edge" ] || die "not a readable image"
+  if [ "$edge" -le "$MAX_EDGE" ] && [ "$bytes" -le "$SKIP_BYTES" ]; then
+    return 1
+  fi
+  magick "$src[0]" -resize "${MAX_EDGE}x${MAX_EDGE}>" -quality "$QUALITY" \
+    -strip "jpg:$dst" 2>/dev/null || die "re-encode failed"
+}
+
+# Best image type the clipboard is offering, preferring lossless sources.
+clipboard_image_type() {
+  local types
+  types=$(wl-paste --list-types 2>/dev/null) || return 1
+  for t in image/png image/webp image/jpeg image/bmp image/tiff; do
+    grep -qx "$t" <<<"$types" && { printf '%s' "$t"; return 0; }
+  done
+  return 1
+}
+
+cmd_normalize() {
+  need wl-paste wl-copy magick
+  local t tmp out before after
+  t=$(clipboard_image_type) || die "no image on the clipboard"
+  tmp=$(mktemp -t agent-shot-in-XXXXXX) || die "mktemp failed"
+  out=$(mktemp -t agent-shot-out-XXXXXX.jpg) || die "mktemp failed"
+  trap 'rm -f "$tmp" "$out"' RETURN
+  wl-paste -t "$t" -n >"$tmp" 2>/dev/null || die "could not read the clipboard"
+  [ -s "$tmp" ] || die "clipboard image was empty"
+  before=$(stat -c%s "$tmp")
+  if ! shrink "$tmp" "$out"; then
+    note "clipboard image is already agent-sized ($((before / 1024)) KiB); left alone"
+    return 0
+  fi
+  after=$(stat -c%s "$out")
+  wl-copy -t image/jpeg <"$out" || die "could not write the clipboard"
+  note "$((before / 1024)) KiB -> $((after / 1024)) KiB ($(awk "BEGIN{printf \"%.1f\", $before/$after}")x), ${MAX_EDGE}px JPEG q${QUALITY}"
+}
+
+cmd_watch() {
+  need wl-paste wl-copy magick
+  note "watching the clipboard; every image over ${MAX_EDGE}px becomes JPEG q${QUALITY}"
+  # --watch fires on every clipboard change; cmd_normalize is a no-op for text
+  # and for images already inside the bounds, including the ones it just wrote.
+  exec wl-paste --watch "$0" _watch_tick
+}
+
+cmd_watch_tick() {
+  # Stdin carries the new clipboard content, which we deliberately ignore: the
+  # selection is re-read through wl-paste so type negotiation stays in one place.
+  cat >/dev/null 2>&1
+  AGENT_SHOT_QUIET=1 cmd_normalize 2>/dev/null || true
+}
+
+cmd_capture() {
+  need grim magick wl-copy
+  local geom="" out
+  case "${1:-region}" in
+    region|-r) need slurp; geom=$(slurp 2>/dev/null) || die "capture cancelled" ;;
+    output|-o) need slurp; geom=$(slurp -o 2>/dev/null) || die "capture cancelled" ;;
+    full|-f) geom="" ;;
+    *) die "capture takes region, output, or full" ;;
+  esac
+  local raw
+  raw=$(mktemp -t agent-shot-raw-XXXXXX.png) || die "mktemp failed"
+  out=$(mktemp -t agent-shot-cap-XXXXXX.jpg) || die "mktemp failed"
+  trap 'rm -f "$raw" "$out"' RETURN
+  if [ -n "$geom" ]; then grim -g "$geom" "$raw"; else grim "$raw"; fi
+  [ -s "$raw" ] || die "capture produced nothing"
+  if shrink "$raw" "$out"; then
+    wl-copy -t image/jpeg <"$out" || die "could not write the clipboard"
+    note "captured $(stat -c%s "$out" | awk '{printf "%d", $1/1024}') KiB to the clipboard"
+  else
+    wl-copy -t image/png <"$raw" || die "could not write the clipboard"
+    note "captured $(stat -c%s "$raw" | awk '{printf "%d", $1/1024}') KiB to the clipboard (already agent-sized)"
+  fi
+}
+
+cmd_file() {
+  need magick
+  local src="${1:-}" dst="${2:-}"
+  [ -n "$src" ] || die "usage: agent-shot file IN [OUT]"
+  [ -r "$src" ] || die "cannot read $src"
+  local out
+  out=$(mktemp -t agent-shot-file-XXXXXX.jpg) || die "mktemp failed"
+  trap 'rm -f "$out"' RETURN
+  if ! shrink "$src" "$out"; then
+    if [ -n "$dst" ]; then cp -- "$src" "$dst"; else cat -- "$src"; fi
+    note "already agent-sized; copied unchanged"
+    return 0
+  fi
+  if [ -n "$dst" ]; then mv -- "$out" "$dst"; else cat -- "$out"; fi
+}
+
+case "${1:-normalize}" in
+  normalize|clip) cmd_normalize ;;
+  watch) cmd_watch ;;
+  _watch_tick) cmd_watch_tick ;;
+  capture) shift; cmd_capture "$@" ;;
+  file) shift; cmd_file "$@" ;;
+  -h|--help|help) awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0" ;;
+  *) die "unknown command: $1 (try --help)" ;;
+esac
