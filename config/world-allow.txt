@@ -1,138 +1,138 @@
-beagle/beagle-lib/private/nixos-schema.rkt
-beagle/beagle-test/tests/levenshtein-benchmark.rkt
-beagle/bin/beagle-callgraph
-beagle/bin/beagle-ci
-beagle/bin/_beagle-racket
-beagle/bin/test/callgraph-xmodule/run.sh
-beagle/bin/test/code-as-facts/authoring.sh
-beagle/bin/test/code-as-facts/authoring-verbs.sh
-beagle/bin/test/code-as-facts/delete.sh
-beagle/bin/test/code-as-facts/rename.sh
-beagle/bin/test/code-as-facts/run.sh
-beagle/bin/test/engine-demo/run.sh
-beagle/integrations/north/hooks/beagle-session-start.sh
-beagle/native-core/bin/fram-native-demo
-beagle/native-core/validation/slice-bodies/drive.sh
-beagle/native-core/validation/slice-fold/driver
-beagle/native-core/validation/slice-fold/typed.edn
-beagle/native-core/validation/slice-kernel-capability/drive.sh
-beagle/native-core/validation/slice-kernel-classify/drive.sh
-beagle/native-core/validation/slice-main-capability/drive.sh
-beagle/native-core/validation/slice-rt-core/drive.sh
-beagle/native-core/validation/slice-store/drive.sh
-beagle/native-core/validation/slice-types-full/drive.sh
-beagle/native-core/validation/slice-types/pipeline-evidence.txt
-beagle/native-core/validation/slice-types/run.sh
-beagle/native-core/validation/slice-vec/drive.sh
-beagle/runtime/src/scheduler/matcher.clj
-beagle/runtime/src/scheduler/scheduler.clj
-beagle/runtime/src/scheduler/types.clj
-beagle/self-host/native/verify-native.sh
-beagle/self-host/verify-selfhost.sh
-fram/bin/fram-code-on
-fram/bin/fram-defcheck
-fram/bin/fram-render-code-all
-fram/build.sh
-fram/codegraph/bin/emit-corpus
-fram/codegraph/bin/rename-demo
-fram/codegraph/bin/safe-rename
-fram/codegraph/test/comment-falsifier.sh
-fram/docs/archive/codegraph-README.md
-fram/scripts/native-core-reingest.sh
-fram/scripts/render_crdt_receipt.sh
-fram/tests/code_editpath_defect_test.clj
-fram/tests/codegraph_exec_test.sh
-fram/tests/fixtures/gen-fumbles.bb
-fram/tests/resolve_golden.sh
-fram/tests/server_defcheck_untyped_e2e_test.clj
-fram/tests/store_anchor_disambig_test.clj
-nixos-config/dotfiles/agents/modules.d/coordination.json
-nixos-config/dotfiles/agents/modules.d/orchestration.json
-nixos-config/dotfiles/bin/activity
-nixos-config/dotfiles/bin/agents
-nixos-config/dotfiles/bin/beagle
-nixos-config/dotfiles/bin/concern
-nixos-config/dotfiles/bin/firn
-nixos-config/dotfiles/bin/fram
-nixos-config/dotfiles/bin/harness-map
-nixos-config/dotfiles/bin/north
-nixos-config/dotfiles/bin/north-mcp
-nixos-config/dotfiles/bin/sandbox
-nixos-config/dotfiles/claude/statusline.sh
-nixos-config/dotfiles/claude/statusline.test.sh
-nixos-config/dotfiles/codex/config.toml
-nixos-config/dotfiles/niri/config.kdl
-nixos-config/modules/beagle/default.bnix
-nixos-config/modules/theme-switcher/default.bnix
-nixos-config/scripts/agent-config-check.sh
-nixos-config/scripts/agent-config-check.test.sh
-nixos-config/scripts/claude-settings-seed.sh
-nixos-config/scripts/claude-settings-seed.test.sh
-nixos-config/scripts/firn-build
-nixos-config/scripts/firn-build-bin
-nixos-config/scripts/firn-build-bin.test.sh
-nixos-config/scripts/firn-cmds/diff.rkt
-nixos-config/scripts/firn-cmds/util.rkt
-nixos-config/scripts/firn-source-hash
-nixos-config/scripts/firn-validate
-nixos-config/scripts/firn-validate.test.sh
-north/bin/arena-seed
-north/bin/north
-north/bin/north-mine
-north/bin/north-on-spawn
-north/bin/north-on-tooluse
-north/bin/tests/arena-seed-test.sh
-north/bin/tests/ci-required-bars-test.sh
-north/bin/tests/north-on-tooluse-stress-test.sh
-north/bin/tests/package-purity-check-test.sh
-north/bin/tests/sdk-test-entrypoint-test.sh
-north/build.sh
-north/cli/config-cli.clj
-north/cli/tests/acquire-claim-integration-test.clj
-north/cli/tests/agent-identity-publication-integration-test.clj
-north/cli/tests/concern-cli-validation-test.clj
-north/cli/tests/concern-offline-reconcile-integration-test.clj
-north/cli/tests/concern-offline-spool-integration-test.clj
-north/cli/tests/context-replacement-test.clj
-north/cli/tests/coord-assert-after-read-integration-test.clj
-north/cli/tests/delivery-evidence-contention-integration-test.clj
-north/cli/tests/directed-attention-integration-test.clj
-north/cli/tests/framrpc-client-test.clj
-north/cli/tests/json-children-indexed-test.clj
-north/cli/tests/json-show-indexed-test.clj
-north/cli/tests/learning-assignment-integration-test.clj
-north/cli/tests/linear-reservation-integration-test.clj
-north/cli/tests/live-feed-integration-test.clj
-north/cli/tests/live-msg-admission-integration-test.clj
-north/cli/tests/maintenance-large-corpus-test.clj
-north/cli/tests/message-audience-integration-test.clj
-north/cli/tests/message-routing-test.clj
-north/cli/tests/native-listener-liveness-integration-test.clj
-north/cli/tests/north-listen-reconnect-test.clj
-north/cli/tests/peer-command-integration-test.clj
-north/cli/tests/pending-pagination-integration-test.clj
-north/cli/tests/presence-online-integration-test.clj
-north/cli/tests/read-projection-churn-oracle.clj
-north/cli/tests/run-fact-publication-integration-test.clj
-north/cli/tests/spend-breaker-test.clj
-north/cli/tests/spend-cli-test.clj
-north/cli/tests/subscription-policy-test.clj
-north/cli/tests/worktree-allocation-integration-test.clj
-north/cli/tests/worktree-janitor-integration-test.clj
-north/profiles/tom/hooks/agent-spawn-guard.sh
-north/profiles/tom/hooks/agent-spawn-guard.test.sh
-north/profiles/tom/hooks/launch-critical-worktree-guard.test.py
-north/profiles/tom/hooks/launch-critical-worktree-guard.test.sh
-north/profiles/tom/hooks/tripwire-guard.test.sh
-north/scripts/framlog-cutover.clj
-north/sdk/bench/admission-worker.ts
-north/sdk/test/codex-app-server.test.ts
-north/sdk/test/guard-log.test.ts
-north/sdk/test/mcp-dispatch-contract.test.ts
-north/sdk/test/mcp-driver-lifetime-integration.test.ts
-north/sdk/test/provider-authority.test.ts
-north/sdk/test/run-ledger.test.ts
-north/sdk/test/session-hard-cap.test.ts
-north/sdk/test/worktree.test.ts
-north/tests/generated_output_test.sh
-# One repo-relative path per line. A path is allowed only while it still has topology references.
+# Declared topology references: <repo-relative path><TAB><reference count>.
+# An entry is live only while the path still carries exactly that many
+# references. A stale entry and a changed count are both hard failures, so
+# this file is the entire inventory — there is no separate total to drift.
+# `world check --lint --write-allow` re-counts and prunes what is listed here.
+# It never adds a path: a brand-new coupling is declared by hand, on purpose.
+beagle/beagle-lib/private/nixos-schema.rkt	1
+beagle/beagle-test/tests/levenshtein-benchmark.rkt	2
+beagle/bin/_beagle-racket	2
+beagle/bin/beagle-callgraph	1
+beagle/bin/beagle-ci	1
+beagle/bin/test/callgraph-xmodule/run.sh	1
+beagle/bin/test/code-as-facts/authoring-verbs.sh	1
+beagle/bin/test/code-as-facts/authoring.sh	1
+beagle/bin/test/code-as-facts/delete.sh	1
+beagle/bin/test/code-as-facts/rename.sh	1
+beagle/bin/test/code-as-facts/run.sh	1
+beagle/bin/test/engine-demo/run.sh	1
+beagle/integrations/north/hooks/beagle-session-start.sh	1
+beagle/native-core/bin/fram-native-demo	2
+beagle/native-core/tests/fram_upstream_freshness.sh	2
+beagle/native-core/validation/slice-fold/driver	1
+beagle/native-core/validation/slice-fold/typed.edn	1
+beagle/native-core/validation/slice-types/pipeline-evidence.txt	1
+beagle/runtime/src/scheduler/matcher.clj	42
+beagle/runtime/src/scheduler/scheduler.clj	47
+beagle/runtime/src/scheduler/types.clj	37
+beagle/self-host/native/verify-native.sh	1
+beagle/self-host/verify-selfhost.sh	1
+fram/bin/fram-code-on	1
+fram/bin/fram-defcheck	1
+fram/bin/fram-render-code-all	1
+fram/build.sh	1
+fram/codegraph/bin/emit-corpus	1
+fram/codegraph/bin/rename-demo	1
+fram/codegraph/bin/safe-rename	1
+fram/codegraph/test/comment-falsifier.sh	1
+fram/docs/archive/codegraph-README.md	1
+fram/scripts/native-core-reingest.sh	2
+fram/scripts/render_crdt_receipt.sh	1
+fram/tests/code_editpath_defect_test.clj	1
+fram/tests/codegraph_exec_test.sh	1
+fram/tests/fixtures/gen-fumbles.bb	2
+fram/tests/resolve_golden.sh	1
+fram/tests/server_defcheck_untyped_e2e_test.clj	1
+fram/tests/store_anchor_disambig_test.clj	1
+nixos-config/dotfiles/agents/modules.d/coordination.json	1
+nixos-config/dotfiles/agents/modules.d/orchestration.json	1
+nixos-config/dotfiles/bin/activity	1
+nixos-config/dotfiles/bin/agents	29
+nixos-config/dotfiles/bin/beagle	1
+nixos-config/dotfiles/bin/concern	1
+nixos-config/dotfiles/bin/firn	3
+nixos-config/dotfiles/bin/fram	1
+nixos-config/dotfiles/bin/harness-map	4
+nixos-config/dotfiles/bin/north	1
+nixos-config/dotfiles/bin/north-mcp	1
+nixos-config/dotfiles/bin/sandbox	4
+nixos-config/dotfiles/claude/statusline.sh	1
+nixos-config/dotfiles/claude/statusline.test.sh	1
+nixos-config/dotfiles/codex/config.toml	5
+nixos-config/dotfiles/niri/config.kdl	7
+nixos-config/modules/beagle/default.bnix	1
+nixos-config/modules/theme-switcher/default.bnix	1
+nixos-config/scripts/agent-config-check.sh	19
+nixos-config/scripts/agent-config-check.test.sh	8
+nixos-config/scripts/claude-settings-seed.sh	1
+nixos-config/scripts/claude-settings-seed.test.sh	2
+nixos-config/scripts/firn-build	3
+nixos-config/scripts/firn-build-bin	4
+nixos-config/scripts/firn-build-bin.test.sh	1
+nixos-config/scripts/firn-cmds/diff.rkt	1
+nixos-config/scripts/firn-cmds/util.rkt	2
+nixos-config/scripts/firn-source-hash	1
+nixos-config/scripts/firn-validate	1
+nixos-config/scripts/firn-validate.test.sh	1
+north/bin/arena-seed	1
+north/bin/north	1
+north/bin/north-mine	1
+north/bin/north-on-spawn	1
+north/bin/north-on-tooluse	1
+north/bin/tests/arena-seed-test.sh	1
+north/bin/tests/ci-required-bars-test.sh	1
+north/bin/tests/north-on-tooluse-stress-test.sh	1
+north/bin/tests/package-purity-check-test.sh	1
+north/bin/tests/sdk-test-entrypoint-test.sh	1
+north/build.sh	2
+north/cli/config-cli.clj	1
+north/cli/tests/acquire-claim-integration-test.clj	1
+north/cli/tests/agent-identity-publication-integration-test.clj	4
+north/cli/tests/concern-cli-validation-test.clj	1
+north/cli/tests/concern-offline-reconcile-integration-test.clj	1
+north/cli/tests/concern-offline-spool-integration-test.clj	1
+north/cli/tests/context-replacement-test.clj	1
+north/cli/tests/coord-assert-after-read-integration-test.clj	1
+north/cli/tests/delivery-evidence-contention-integration-test.clj	1
+north/cli/tests/directed-attention-integration-test.clj	1
+north/cli/tests/framrpc-client-test.clj	1
+north/cli/tests/json-children-indexed-test.clj	1
+north/cli/tests/json-search-test.clj	1
+north/cli/tests/json-show-indexed-test.clj	1
+north/cli/tests/learning-assignment-integration-test.clj	1
+north/cli/tests/learning-compare-test.clj	1
+north/cli/tests/linear-reservation-integration-test.clj	1
+north/cli/tests/live-feed-integration-test.clj	1
+north/cli/tests/live-msg-admission-integration-test.clj	1
+north/cli/tests/maintenance-large-corpus-test.clj	1
+north/cli/tests/message-audience-integration-test.clj	1
+north/cli/tests/message-routing-test.clj	1
+north/cli/tests/native-listener-liveness-integration-test.clj	1
+north/cli/tests/north-listen-reconnect-test.clj	1
+north/cli/tests/peer-command-integration-test.clj	1
+north/cli/tests/pending-pagination-integration-test.clj	1
+north/cli/tests/presence-online-integration-test.clj	1
+north/cli/tests/read-projection-churn-oracle.clj	1
+north/cli/tests/run-fact-publication-integration-test.clj	1
+north/cli/tests/spend-breaker-test.clj	1
+north/cli/tests/spend-cli-test.clj	1
+north/cli/tests/subscription-policy-test.clj	1
+north/cli/tests/worktree-allocation-integration-test.clj	1
+north/cli/tests/worktree-janitor-integration-test.clj	1
+north/profiles/tom/hooks/agent-spawn-guard.sh	3
+north/profiles/tom/hooks/agent-spawn-guard.test.sh	12
+north/profiles/tom/hooks/launch-critical-worktree-guard.test.py	47
+north/profiles/tom/hooks/launch-critical-worktree-guard.test.sh	12
+north/profiles/tom/hooks/tripwire-guard.test.sh	2
+north/scripts/framlog-cutover.clj	4
+north/sdk/bench/admission-worker.ts	1
+north/sdk/test/codex-app-server.test.ts	1
+north/sdk/test/guard-log.test.ts	2
+north/sdk/test/mcp-dispatch-contract.test.ts	1
+north/sdk/test/mcp-driver-lifetime-integration.test.ts	1
+north/sdk/test/provider-authority.test.ts	1
+north/sdk/test/run-ledger.test.ts	1
+north/sdk/test/run-token-budget.test.ts	1
+north/sdk/test/session-hard-cap.test.ts	12
+north/sdk/test/worktree.test.ts	4
+north/tests/generated_output_test.sh	1

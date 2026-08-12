@@ -5,14 +5,20 @@ REPO_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../.." && pwd)"
 readonly REPO_ROOT
 readonly WORLD="$REPO_ROOT/dotfiles/bin/world"
 expected_allowed="$(
-  sed -n '/^[[:space:]]*#/d; /^[[:space:]]*$/d; {
-    s/[[:space:]]//g
-    p
-    q
-  }' "$REPO_ROOT/config/world-lint-baseline"
-)"
-[[ "$expected_allowed" =~ ^[0-9]+$ ]] || {
-  printf 'FAIL: invalid world lint baseline: %s\n' "$expected_allowed" >&2
+  awk -F'\t' '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*$/ { next }
+    $2 !~ /^[1-9][0-9]*$/ { exit 1 }
+    { total += $2 }
+    END { print total + 0 }
+  ' "$REPO_ROOT/config/world-allow.txt"
+)" || {
+  printf 'FAIL: malformed world lint allowlist: %s\n' \
+    "$REPO_ROOT/config/world-allow.txt" >&2
+  exit 1
+}
+[[ "$expected_allowed" =~ ^[1-9][0-9]*$ ]] || {
+  printf 'FAIL: world lint allowlist declares no references\n' >&2
   exit 1
 }
 readonly expected_allowed

@@ -121,9 +121,19 @@ lint_skip_path() {
   return 1
 }
 
+lint_allow_header() {
+  cat <<'EOF'
+# Declared topology references: <repo-relative path><TAB><reference count>.
+# An entry is live only while the path still carries exactly that many
+# references. A stale entry and a changed count are both hard failures, so
+# this file is the entire inventory — there is no separate total to drift.
+# `world check --lint --write-allow` re-counts and prunes what is listed here.
+# It never adds a path: a brand-new coupling is declared by hand, on purpose.
+EOF
+}
+
 run_lint() {
   local allow_file="${WORLD_LINT_ALLOW_FILE:-$WORLD_SOURCE_ROOT/config/world-allow.txt}"
-  local baseline_file="${WORLD_LINT_BASELINE_FILE:-$WORLD_SOURCE_ROOT/config/world-lint-baseline}"
   local scratch
   scratch="$(mktemp -d)"
   WORLD_LINT_SCRATCH="$scratch"
@@ -188,46 +198,73 @@ run_lint() {
     printf 'world: missing lint allowlist: %s\n' "$allow_file" >&2
     return 2
   }
-  [[ -f "$baseline_file" ]] || {
-    printf 'world: missing lint baseline: %s\n' "$baseline_file" >&2
-    return 2
-  }
 
-  declare -A allowed_paths=()
-  declare -A seen_paths=()
-  while IFS= read -r path; do
-    [[ -z "$path" || "$path" == \#* ]] && continue
-    allowed_paths["$path"]=1
+  declare -A declared=()
+  declare -A found=()
+  local entry count lineno=0
+  while IFS= read -r entry || [[ -n "$entry" ]]; do
+    ((lineno += 1))
+    [[ -z "$entry" || "$entry" == \#* ]] && continue
+    path="${entry%%$'\t'*}"
+    count="${entry#*$'\t'}"
+    if [[ "$path" == "$entry" || ! "$count" =~ ^[1-9][0-9]*$ ]]; then
+      printf 'world: malformed lint allowlist entry at %s:%d: %s\n' \
+        "$allow_file" "$lineno" "$entry" >&2
+      return 2
+    fi
+    if [[ -n "${declared[$path]:-}" ]]; then
+      printf 'world: duplicate lint allowlist entry: %s\n' "$path" >&2
+      return 2
+    fi
+    declared["$path"]="$count"
   done <"$allow_file"
 
   local allowed=0 new=0
   while IFS=$'\t' read -r path rule line root body; do
-    if [[ -n "${allowed_paths[$path]:-}" ]]; then
+    if [[ -n "${declared[$path]:-}" ]]; then
       ((allowed += 1))
-      seen_paths["$path"]=1
+      found["$path"]=$(( ${found[$path]:-0} + 1 ))
     else
       ((new += 1))
       printf 'WARN %s:%s [%s] %s\n' "$path" "$line" "$rule" "$body" >&2
     fi
   done <"$findings"
 
-  local dead=0
-  for path in "${!allowed_paths[@]}"; do
-    if [[ -z "${seen_paths[$path]:-}" ]]; then
+  # --write-allow re-counts and prunes only what is already declared. A path
+  # nobody declared stays a hard failure, so this cannot launder new drift.
+  if (( ${WORLD_LINT_WRITE_ALLOW:-0} == 1 )); then
+    local rewritten="$scratch/allow.txt"
+    lint_allow_header >"$rewritten"
+    for path in "${!declared[@]}"; do
+      (( ${found[$path]:-0} > 0 )) || continue
+      printf '%s\t%d\n' "$path" "${found[$path]}"
+    done | LC_ALL=C sort >>"$rewritten"
+    cat "$rewritten" >"$allow_file"
+    printf 'world: rewrote lint allowlist: %s\n' "$allow_file" >&2
+    for path in "${!declared[@]}"; do
+      if (( ${found[$path]:-0} == 0 )); then
+        unset 'declared[$path]'
+      else
+        declared["$path"]="${found[$path]}"
+      fi
+    done
+  fi
+
+  local dead=0 want got
+  for path in "${!declared[@]}"; do
+    want="${declared[$path]}"
+    got="${found[$path]:-0}"
+    if (( got == 0 )); then
       printf 'world: dead lint allowlist entry: %s\n' "$path" >&2
+      dead=1
+    elif (( got != want )); then
+      printf 'world: lint reference drift: %s: declared %d, found %d\n' \
+        "$path" "$want" "$got" >&2
       dead=1
     fi
   done
-
-  local baseline
-  baseline="$(sed -n '/^[[:space:]]*#/d; /^[[:space:]]*$/d; { s/[[:space:]]//g; p; q; }' "$baseline_file")"
-  if [[ ! "$baseline" =~ ^[0-9]+$ ]]; then
-    printf 'world: invalid lint baseline: %s\n' "$baseline_file" >&2
-    return 2
-  fi
-  if (( allowed != baseline )); then
-    printf 'world: lint baseline mismatch: expected %d allowed references, found %d\n' "$baseline" "$allowed" >&2
-    dead=1
+  if (( dead == 1 )); then
+    printf 'world: allowlist bookkeeping is stale — re-count and prune with: world check --lint --write-allow\n' >&2
   fi
 
   printf 'topology-refs: %d allowed, %d new\n' "$allowed" "$new"
@@ -240,14 +277,24 @@ run_lint() {
 
 world_check() {
   local lint=0 errors=0
-  if [[ "${1:-}" == --lint ]]; then
-    lint=1
+  # Local, so the ambient environment cannot ask a hook run to rewrite the
+  # allowlist: the rewrite is only ever an explicit argument.
+  local WORLD_LINT_WRITE_ALLOW=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --lint) lint=1 ;;
+      --write-allow) WORLD_LINT_WRITE_ALLOW=1 ;;
+      *)
+        printf 'usage: world check [--lint] [--write-allow]\n' >&2
+        return 2
+        ;;
+    esac
     shift
-  fi
-  [[ $# -eq 0 ]] || {
-    printf 'usage: world check [--lint]\n' >&2
+  done
+  if (( WORLD_LINT_WRITE_ALLOW == 1 && lint == 0 )); then
+    printf 'world: --write-allow requires --lint\n' >&2
     return 2
-  }
+  fi
 
   if [[ ! -e "$WORLD_MANIFEST_PATH" ]]; then
     printf 'WARN world manifest is missing: %s (using compiled defaults)\n' "$WORLD_MANIFEST_PATH" >&2
@@ -278,7 +325,7 @@ usage:
   world get <dotted.key|WORLD_KEY>
   world env
   world repo <name>
-  world check [--lint]
+  world check [--lint] [--write-allow]
 EOF
 }
 
