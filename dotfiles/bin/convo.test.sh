@@ -167,6 +167,17 @@ has "$("$CONVO" --color=never QUARKFISH -r user)" "user ·"
 out="$("$CONVO" --color=never QUARKFISH -r assistant)"
 hasnt "$out" "user ·"
 
+# ---- a foreign-schema index is named, not a traceback ---------------------
+# -u opens the index read-only and cannot rebuild it, so this is the one path
+# where a version skew has to be reported rather than repaired.
+python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(\"INSERT OR REPLACE INTO meta(k,v) VALUES('schema','0')\"); c.commit()" \
+  "$CONVO_STATE/index.db"
+out="$("$CONVO" -u --color=never QUARKFISH 2>&1 || true)"
+has "$out" "run \`convo index\`"
+hasnt "$out" Traceback
+"$CONVO" index >/dev/null   # rebuilds, because the read-write path may
+has "$("$CONVO" --color=never QUARKFISH -n 1)" QUARKFISH
+
 # ---- the index is self-sufficient: a vanished source still renders --------
 # This is the property every storage decision below rests on. If a snippet
 # still needed the transcript, no transcript could ever be compressed.

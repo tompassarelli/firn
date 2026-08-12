@@ -425,10 +425,24 @@ class Source:
         return ok
 
 
+class StaleIndex(Exception):
+    """The index on disk was written by a different schema version."""
+
+
 def connect(readonly=False):
     os.makedirs(STATE, exist_ok=True)
     if readonly and os.path.exists(DB):
         con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+        # A read-only connection cannot rebuild, and querying a foreign schema
+        # raises somewhere deep in a SELECT instead. Say what happened here,
+        # where the fix can be named.
+        try:
+            row = con.execute("SELECT v FROM meta WHERE k='schema'").fetchone()
+        except sqlite3.DatabaseError:
+            row = None
+        if row is None or row[0] != SCHEMA_VERSION:
+            con.close()
+            raise StaleIndex(row[0] if row else "unknown")
     else:
         con = sqlite3.connect(DB)
         con.executescript(SCHEMA)
@@ -1365,7 +1379,13 @@ def main(argv=None):
     if not os.path.exists(DB):
         sys.stderr.write("convo: no index yet; run `convo index`\n")
         return 1
-    con = connect(readonly=True)
+    try:
+        con = connect(readonly=True)
+    except StaleIndex as e:
+        sys.stderr.write(
+            f"convo: the index on disk is schema {e}, this convo speaks "
+            f"{SCHEMA_VERSION}; run `convo index` to rebuild it\n")
+        return 1
     try:
         if args.cmd == "status":
             return cmd_status(con, args)
