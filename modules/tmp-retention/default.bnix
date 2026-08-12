@@ -1,0 +1,38 @@
+#lang beagle/nix
+
+(ns default)
+
+;; /tmp retention that can actually fire.
+;;
+;; systemd-tmpfiles ages an entry on the NEWEST of atime/mtime/ctime (the
+;; age-by default is "abcmABM"). Agent lanes read /tmp constantly, so abandoned
+;; scratch carries today's atime and is never old enough to reap: the nightly
+;; janitor ran, succeeded, burned 15.8 GB of RSS and deleted nothing while /tmp
+;; reached 587 GiB across 23.9M entries. The `mM:` prefix pins the age check to
+;; mtime for files (m) and directories (M), which is the only timestamp that
+;; tracks whether anything still WRITES to a tree.
+;;
+;; These lines duplicate paths that systemd's own tmpfiles.d/tmp.conf declares.
+;; That resolves in our favour and not by luck: systemd-tmpfiles reads config
+;; files in lexicographic basename order and the FIRST line for a path wins, and
+;; systemd.tmpfiles.rules is emitted as /etc/tmpfiles.d/00-nixos.conf, which
+;; sorts ahead of tmp.conf. The losing file logs one "Duplicate line for path"
+;; notice per run; that notice is the confirmation the override took.
+(nix/module [config lib pkgs ...]
+  {:options.myConfig.modules.tmp-retention.enable
+    (lib.mkEnableOption
+      "mtime-pinned /tmp and /var/tmp retention (systemd-tmpfiles age-by override)")
+   :config
+    (lib.mkIf config.myConfig.modules.tmp-retention.enable
+      {:systemd.tmpfiles.rules
+        ;; 7d rather than the vendor 10d. Once ageing actually fires the window
+        ;; IS the steady state: at the measured ~7.7 GiB/day of lane scratch,
+        ;; 10d parks ~77 GiB and 7d parks ~54 GiB. The binding cost is inodes,
+        ;; not bytes — 23.9M entries is what drove 36 GiB of btrfs metadata
+        ;; (72 GiB at DUP) and the janitor's 15.8 GB peak — and that scales with
+        ;; the same window. A full week still covers a lane paused over a
+        ;; weekend, which is the shortest span that stays safe under mtime.
+        ;; /var/tmp keeps its 30d reboot-surviving contract; it only needed the
+        ;; same age-by fix, and it measures under 1 GiB.
+        ["q /tmp 1777 root root mM:7d"
+         "q /var/tmp 1777 root root mM:30d"]})})
