@@ -7,6 +7,9 @@ root="$container/active"
 if [ ! -d "$root" ] && [ -d "$container/wt-dev-runtime" ]; then
   root="$container/wt-dev-runtime"
 fi
+if [ -d "$root" ]; then
+  root="$(readlink -f "$root")"
+fi
 nix_bin="$container/result/bin/gjoa"
 mach_bin="$root/engine/obj-x86_64-pc-linux-gnu/dist/bin/gjoa"
 
