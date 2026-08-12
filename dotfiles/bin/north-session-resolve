@@ -40,17 +40,41 @@ canonical_home() {
   realpath -e -- "$1" 2>/dev/null || realpath -m -- "$1"
 }
 
+# A closed transcript may have been archived to <name>.jsonl.zst by
+# `convo compress`. Both readers below take the stream, not the file, so a
+# session stays resolvable however it is stored. pipefail is off inside the
+# subshell on purpose: a `-m 1`/`head` consumer closes the pipe and the
+# decompressor dies of SIGPIPE, which is success, not failure.
+transcript_grep() { # <file> <ere>
+  ( set +o pipefail
+    if [ "${1%.zst}" != "$1" ]; then
+      zstd -dcq -- "$1" 2>/dev/null | LC_ALL=C grep -m 1 -Eq -- "$2"
+    else
+      LC_ALL=C grep -m 1 -Eq -- "$2" "$1"
+    fi )
+}
+
+transcript_head() { # <file>
+  ( set +o pipefail
+    if [ "${1%.zst}" != "$1" ]; then
+      zstd -dcq -- "$1" 2>/dev/null | head -n 1
+    else
+      head -n 1 -- "$1" 2>/dev/null
+    fi )
+}
+
 home_has_claude_session() {
   local home="$1" candidate
   [ -d "$home/projects" ] || return 1
   while IFS= read -r candidate; do
     [ -n "$candidate" ] || continue
-    if LC_ALL=C grep -m 1 -Eq \
-       '"sessionId"[[:space:]]*:[[:space:]]*"'"$session_id"'"' "$candidate"; then
+    if transcript_grep "$candidate" \
+       '"sessionId"[[:space:]]*:[[:space:]]*"'"$session_id"'"'; then
       return 0
     fi
-  done < <(find "$home/projects" -mindepth 2 -maxdepth 2 \
-    -type f -name "$session_id.jsonl" -print 2>/dev/null)
+  done < <(find "$home/projects" -mindepth 2 -maxdepth 2 -type f \
+    \( -name "$session_id.jsonl" -o -name "$session_id.jsonl.zst" \) \
+    -print 2>/dev/null)
   return 1
 }
 
@@ -59,13 +83,15 @@ home_has_codex_session() {
   [ -d "$home/sessions" ] || return 1
   while IFS= read -r candidate; do
     [ -n "$candidate" ] || continue
-    first="$(head -n 1 -- "$candidate" 2>/dev/null)" || continue
-    if printf '%s\n' "$first" |
-       LC_ALL=C grep -Eq '"type"[[:space:]]*:[[:space:]]*"session_meta".*"id"[[:space:]]*:[[:space:]]*"'"$session_id"'"'; then
+    first="$(transcript_head "$candidate")" || continue
+    if LC_ALL=C grep -Eq \
+       '"type"[[:space:]]*:[[:space:]]*"session_meta".*"id"[[:space:]]*:[[:space:]]*"'"$session_id"'"' \
+       <<<"$first"; then
       return 0
     fi
-  done < <(find "$home/sessions" -mindepth 4 -maxdepth 4 \
-    -type f -name "rollout-*-$session_id.jsonl" -print 2>/dev/null)
+  done < <(find "$home/sessions" -mindepth 4 -maxdepth 4 -type f \
+    \( -name "rollout-*-$session_id.jsonl" \
+       -o -name "rollout-*-$session_id.jsonl.zst" \) -print 2>/dev/null)
   return 1
 }
 

@@ -4,9 +4,15 @@
 Indexes the JSONL transcripts under ~/code/north-data/accounts into a SQLite
 FTS5 index at ~/.local/state/convo/index.db, then searches it.
 
-The index stores postings and locations only, never transcript text: every hit
-is resolved by seeking to the recorded byte offset in the source JSONL. That
-keeps the index a fraction of the 75 GiB corpus and keeps snippets honest.
+The index is self-sufficient: it stores the extracted message text alongside
+the postings, so a query never opens a transcript. The whole indexable text of
+a 87 GiB corpus is under a gigabyte — the transcripts are base64 image payload
+and compaction replays, not conversation. Keeping the text here is what lets
+the sources be compressed, moved, or archived underneath it. The (file, offset)
+locator survives as provenance for the path:line each hit prints.
+
+`convo compress` is the other half: it rewrites closed transcripts as
+`.jsonl.zst`, which the indexer reads transparently.
 """
 
 from __future__ import annotations
@@ -17,7 +23,9 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import sqlite3
+import subprocess
 import sys
 import time
 
@@ -38,11 +46,31 @@ TEXT_CAP = 32 << 10
 CHUNK = 1 << 20
 COMMIT_EVERY = 20000
 
-SCHEMA_VERSION = "2"
+ZSTD = os.environ.get("CONVO_ZSTD", "zstd")
+# -3 with a 128 MiB window. The window is the whole story on this corpus: a
+# Codex rollout repeats its entire history in every compaction record, tens of
+# megabytes apart, so the default window finds 1.5x and this finds 19x. 2^27 is
+# exactly the standard decoder's maximum, so `zstd -d` reads it back with no
+# flags — anything larger would need --memory= at every read site forever.
+ZSTD_ARGS = ("-3", "--long=27")
+# A transcript is compressible once nothing can still be appending to it.
+CLOSED_AFTER_S = 48 * 3600
+# Ratios measured 2026-08-12 over a stratified 90-file sample at the settings
+# above, keyed by file size. Only ever used to project a --dry-run; a real run
+# reports the ratio it actually achieved.
+BAND_RATIOS = ((256 << 20, 15.83), (64 << 20, 7.13), (8 << 20, 5.70),
+               (1 << 20, 4.25), (0, 4.00))
+
+SCHEMA_VERSION = "3"
 # Bytes hashed from the head of a file to detect rewrite-in-place. An append
-# preserves the head; a truncate-and-rewrite almost never does.
+# preserves the head; a truncate-and-rewrite almost never does. The hash is
+# always of the *logical* (uncompressed) content, so it survives compression.
 HEAD_BYTES = 4096
 
+# `files.size`/`files.off` are logical byte counts of the uncompressed
+# transcript; `files.dsize` is what the file costs on disk. They differ only
+# for a compressed source, and keeping size logical is what lets
+# `off == size` mean "fully indexed" across a compress or a restore.
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS files(
@@ -50,6 +78,8 @@ CREATE TABLE IF NOT EXISTS files(
   path TEXT UNIQUE NOT NULL,
   dev INTEGER, ino INTEGER,
   size INTEGER NOT NULL DEFAULT 0,
+  dsize INTEGER NOT NULL DEFAULT 0,
+  zst INTEGER NOT NULL DEFAULT 0,
   mtime REAL,
   head TEXT,
   off INTEGER NOT NULL DEFAULT 0,
@@ -67,7 +97,8 @@ CREATE TABLE IF NOT EXISTS msg(
   line INTEGER NOT NULL,
   off INTEGER NOT NULL,
   blk INTEGER NOT NULL DEFAULT 0,
-  ts TEXT, role TEXT
+  ts TEXT, role TEXT,
+  content TEXT
 );
 CREATE INDEX IF NOT EXISTS msg_file ON msg(file_id);
 CREATE INDEX IF NOT EXISTS msg_ts ON msg(ts);
@@ -81,7 +112,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS ftx USING fts5(
 # ---------------------------------------------------------------- discovery
 
 def discover():
-    """Yield (path, provider, account, project_hint) for every transcript."""
+    """Yield (logical, disk, provider, account, project_hint) per transcript.
+
+    `logical` always names the `.jsonl`; `disk` is what actually exists, which
+    may be `<logical>.zst`. Identity is the logical path, so compressing a
+    transcript never forks it into two index entries. When both forms exist —
+    a sweep interrupted between writing the archive and unlinking the source —
+    the uncompressed one wins, because it is the one a writer could still be
+    appending to.
+    """
     if not os.path.isdir(ROOT):
         return
     for provider in sorted(os.listdir(ROOT)):
@@ -97,15 +136,22 @@ def discover():
                     continue
                 for dirpath, dirnames, filenames in os.walk(base):
                     dirnames.sort()
+                    here = set(filenames)
                     for fn in sorted(filenames):
-                        if not fn.endswith(".jsonl"):
+                        if fn.endswith(".jsonl"):
+                            logical = disk = os.path.join(dirpath, fn)
+                        elif fn.endswith(".jsonl.zst"):
+                            if fn[:-4] in here:
+                                continue
+                            logical = os.path.join(dirpath, fn[:-4])
+                            disk = os.path.join(dirpath, fn)
+                        else:
                             continue
-                        path = os.path.join(dirpath, fn)
                         hint = ""
                         if sub == "projects":
                             rel = os.path.relpath(dirpath, base)
                             hint = rel.split(os.sep)[0]
-                        yield path, provider, account, hint
+                        yield logical, disk, provider, account, hint
 
 
 # ------------------------------------------------------------- line reader
@@ -113,12 +159,15 @@ def discover():
 def scan_lines(fh, start):
     """Yield (line_start, line_end, line_bytes_or_None) for complete lines.
 
+    `fh` must already be positioned at `start`, which is only a base for the
+    offsets reported — the reader never seeks, so a decompressor pipe works
+    exactly like a file.
+
     Memory is bounded by LINE_CAP regardless of input: a 59 MB line is
     consumed and discarded without ever being materialised. Only lines
     terminated by a newline are yielded, so a session being appended to
     right now never produces a torn record.
     """
-    fh.seek(start)
     base = start
     line_start = start
     buf = bytearray()
@@ -322,6 +371,60 @@ def head_hash(path):
     return hashlib.sha256(b).hexdigest() if len(b) == HEAD_BYTES else None
 
 
+class Source:
+    """A transcript opened for reading, compressed or not.
+
+    A `.zst` source is a decompressor pipe: it can only be read forward from
+    zero, so it is never resumed mid-file. That costs nothing, because a
+    compressed transcript is closed by definition and is read exactly once.
+    The head fingerprint is taken from the decompressed bytes, so it means the
+    same thing before and after a sweep.
+    """
+
+    def __init__(self, disk, start):
+        self.proc = None
+        self._head = None
+        if disk.endswith(".zst"):
+            if start:
+                raise ValueError("a compressed transcript is read from zero")
+            self.proc = subprocess.Popen(
+                [ZSTD, "-dcq", "--", disk],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            self.fh = self.proc.stdout
+            self._head = bytearray()
+        else:
+            self.fh = open(disk, "rb", buffering=0)
+            self.fh.seek(start)
+
+    def read(self, n):
+        b = self.fh.read(n)
+        if self._head is not None and len(self._head) < HEAD_BYTES:
+            self._head += b[:HEAD_BYTES - len(self._head)]
+        return b
+
+    def head(self):
+        """Fingerprint of the logical head, or None if it was not captured."""
+        if self._head is None or len(self._head) < HEAD_BYTES:
+            return None
+        return hashlib.sha256(bytes(self._head)).hexdigest()
+
+    def advise(self, flag):
+        try:
+            os.posix_fadvise(self.fh.fileno(), 0, 0, flag)
+        except (AttributeError, OSError):
+            pass
+
+    def close(self):
+        """Close, returning False if a decompressor reported a bad archive."""
+        ok = True
+        if self.proc is not None:
+            self.fh.close()
+            ok = self.proc.wait() == 0
+        else:
+            self.fh.close()
+        return ok
+
+
 def connect(readonly=False):
     os.makedirs(STATE, exist_ok=True)
     if readonly and os.path.exists(DB):
@@ -393,36 +496,63 @@ def index(con, quiet=False, verbose=False):
 
     known = {}
     for r in con.execute(
-            "SELECT id,path,dev,ino,size,mtime,head,off,nline FROM files"):
+            "SELECT id,path,dev,ino,size,dsize,zst,mtime,head,off,nline "
+            "FROM files"):
         known[r["path"]] = r
+
+    def adopt(row, st, zst):
+        """Record a new on-disk form of an already fully-indexed transcript."""
+        con.execute(
+            "UPDATE files SET zst=?,dev=?,ino=?,dsize=?,mtime=? WHERE id=?",
+            (1 if zst else 0, st.st_dev, st.st_ino, st.st_size,
+             st.st_mtime, row["id"]))
 
     todo = []
     total_new = 0
-    for path, provider, account, hint in discover():
+    adopted = 0
+    for path, disk, provider, account, hint in discover():
         try:
-            st = os.stat(path)
+            st = os.stat(disk)
         except OSError:
             continue
+        is_zst = disk != path
         row = known.get(path)
         if row is not None:
-            if (row["ino"] == st.st_ino and row["dev"] == st.st_dev
-                    and st.st_size == row["size"]
+            if (bool(row["zst"]) == is_zst
+                    and row["ino"] == st.st_ino and row["dev"] == st.st_dev
+                    and st.st_size == row["dsize"]
                     and abs(st.st_mtime - (row["mtime"] or 0)) < 0.001):
                 continue  # untouched: not opened at all
+            # A transcript that was indexed to its last byte holds no more
+            # information, so changing how it is stored costs nothing: adopt
+            # the new form without re-reading it. This is what makes a sweep
+            # over the whole corpus free for the index rather than a rebuild.
+            complete = row["size"] > 0 and row["off"] == row["size"]
+            if is_zst != bool(row["zst"]) and complete:
+                if is_zst or st.st_size == row["size"]:
+                    adopt(row, st, is_zst)
+                    adopted += 1
+                    continue
+            if is_zst:
+                todo.append((path, disk, provider, account, hint, st, row, True))
+                total_new += row["size"] or st.st_size
+                continue
             # Size or mtime moved, so the file must be looked at. Anything but
             # a pure append invalidates every byte offset already recorded for
-            # it, and a stale offset silently resolves snippets against the
-            # wrong bytes — so re-read from zero unless the head still matches.
+            # it, and a stale offset silently misattributes a message — so
+            # re-read from zero unless the head still matches.
             h = head_hash(path)
             reset = (row["ino"] != st.st_ino or row["dev"] != st.st_dev
                      or st.st_size < row["off"]
                      or h is None or h != row["head"])
-            todo.append((path, provider, account, hint, st, row, reset))
+            todo.append((path, disk, provider, account, hint, st, row, reset))
             total_new += st.st_size if reset else max(0, st.st_size - row["off"])
         else:
-            todo.append((path, provider, account, hint, st, None, False))
+            todo.append((path, disk, provider, account, hint, st, None, False))
             total_new += st.st_size
 
+    if adopted:
+        con.commit()
     if not todo:
         return 0, 0, 0
 
@@ -431,10 +561,11 @@ def index(con, quiet=False, verbose=False):
     nbytes = 0
     next_id = con.execute("SELECT COALESCE(MAX(id),0)+1 FROM msg").fetchone()[0]
 
-    for path, provider, account, hint, st, row, reset in todo:
+    for path, disk, provider, account, hint, st, row, reset in todo:
         fid = row["id"] if row else None
-        start = 0 if (row is None or reset) else row["off"]
-        line_no = 0 if (row is None or reset) else row["nline"]
+        is_zst = disk != path
+        start = 0 if (row is None or reset or is_zst) else row["off"]
+        line_no = 0 if (row is None or reset or is_zst) else row["nline"]
 
         if reset and fid is not None:
             con.execute(
@@ -467,9 +598,10 @@ def index(con, quiet=False, verbose=False):
             nonlocal pend, added, next_id
             if pend:
                 con.executemany(
-                    "INSERT INTO msg(id,file_id,line,off,blk,ts,role) "
-                    "VALUES(?,?,?,?,?,?,?)",
-                    [(next_id + i,) + p[0] for i, p in enumerate(pend)])
+                    "INSERT INTO msg(id,file_id,line,off,blk,ts,role,content) "
+                    "VALUES(?,?,?,?,?,?,?,?)",
+                    [(next_id + i,) + p[0] + (p[1],)
+                     for i, p in enumerate(pend)])
                 con.executemany(
                     "INSERT INTO ftx(rowid,text) VALUES(?,?)",
                     [(next_id + i, p[1]) for i, p in enumerate(pend)])
@@ -481,15 +613,12 @@ def index(con, quiet=False, verbose=False):
             con.commit()
 
         try:
-            fh = open(path, "rb", buffering=0)
-        except OSError:
+            src = Source(disk, start)
+        except (OSError, ValueError):
             continue
         try:
-            try:
-                os.posix_fadvise(fh.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-            except (AttributeError, OSError):
-                pass
-            for ls, le, line in scan_lines(fh, start):
+            src.advise(os.POSIX_FADV_SEQUENTIAL)
+            for ls, le, line in scan_lines(src, start):
                 line_no += 1
                 off = le
                 nbytes += le - ls
@@ -535,22 +664,42 @@ def index(con, quiet=False, verbose=False):
                     prog.tick()
             prog.m += len(pend)
             flush(off)
-            try:
-                os.posix_fadvise(fh.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
-            except (AttributeError, OSError):
-                pass
+            src.advise(os.POSIX_FADV_DONTNEED)
         finally:
-            fh.close()
+            intact = src.close()
+
+        if not intact:
+            # A truncated or corrupt archive would otherwise be recorded as a
+            # complete transcript and never looked at again. Drop what it gave
+            # us and leave the row untouched, so the next pass retries it.
+            con.execute(
+                "DELETE FROM ftx WHERE rowid IN "
+                "(SELECT id FROM msg WHERE file_id=?)", (fid,))
+            con.execute("DELETE FROM msg WHERE file_id=?", (fid,))
+            con.execute(
+                "UPDATE files SET off=0,nline=0,nmsg=0,size=0,dsize=0 WHERE id=?",
+                (fid,))
+            con.commit()
+            sys.stderr.write(f"convo: unreadable archive, skipped: {disk}\n")
+            prog.f += 1
+            continue
 
         project = meta.get("cwd") and slug_of(meta["cwd"]) or hint
         con.execute(
-            "UPDATE files SET size=?,mtime=?,head=?,"
+            # dev/ino are refreshed here and not only at insert: a transcript
+            # replaced by rename gets a new inode, and a row still naming the
+            # old one reports "changed" on every pass and re-reads forever.
+            "UPDATE files SET size=?,dsize=?,zst=?,mtime=?,head=?,dev=?,ino=?,"
             "session_id=COALESCE(?,session_id),"
             "title=COALESCE(?,title),cwd=COALESCE(?,cwd),"
             "branch=COALESCE(?,branch),project=COALESCE(NULLIF(?,''),project),"
             "first_ts=COALESCE(first_ts,?),last_ts=COALESCE(?,last_ts),"
             "nmsg=nmsg+? WHERE id=?",
-            (st.st_size, st.st_mtime, head_hash(path),
+            # For an archive the logical size is what we actually consumed:
+            # a trailing partial line is not a record and never will be one.
+            (off if is_zst else st.st_size, st.st_size, 1 if is_zst else 0,
+             st.st_mtime, src.head() if is_zst else head_hash(path),
+             st.st_dev, st.st_ino,
              meta.get("session_id"),
              meta.get("title") or meta.get("slug"), meta.get("cwd"),
              meta.get("branch"), project, first_ts, last_ts, added, fid))
@@ -584,33 +733,6 @@ def with_lock(fn, *a, **kw):
 
 
 # ------------------------------------------------------------------ search
-
-def read_line_at(path, off):
-    try:
-        with open(path, "rb") as fh:
-            fh.seek(off)
-            data = fh.read(LINE_CAP + 1)
-    except OSError:
-        return None
-    nl = data.find(b"\n")
-    if nl >= 0:
-        data = data[:nl]
-    try:
-        return json.loads(data)
-    except Exception:
-        return None
-
-
-def message_text(path, off, blk, provider):
-    d = read_line_at(path, off)
-    if not isinstance(d, dict):
-        return None
-    msgs, _ = (extract_openai(d) if provider == "openai"
-               else extract_anthropic(d))
-    if 0 <= blk < len(msgs):
-        return msgs[blk][1]
-    return msgs[0][1] if msgs else None
-
 
 WORD = re.compile(r"[0-9A-Za-z_]+")
 
@@ -673,7 +795,7 @@ def cmd_search(con, args):
         where.append("f.session_id = ?")
         params.append(args.session)
     sql = (
-        "SELECT m.id, m.line, m.off, m.blk, m.ts, m.role, f.path, f.project, "
+        "SELECT m.id, m.line, m.content, m.ts, m.role, f.path, f.project, "
         "f.session_id, f.title, f.provider, f.branch, bm25(ftx) AS rank "
         "FROM ftx JOIN msg m ON m.id = ftx.rowid "
         "JOIN files f ON f.id = m.file_id "
@@ -698,10 +820,10 @@ def cmd_search(con, args):
         print(f"no matches for {q}")
         return 1
     terms = [t.lower() for t in WORD.findall(args.query)] or [args.query.lower()]
-    out = []
-    for r in rows:
-        text = message_text(r["path"], r["off"], r["blk"], r["provider"])
-        out.append((r, make_snippet(text, terms)))
+    # The snippet comes from the index, never from the transcript: rendering a
+    # page of results opens no files at all, so the sources are free to be
+    # compressed or archived.
+    out = [(r, make_snippet(r["content"], terms)) for r in rows]
     if args.json:
         print(json.dumps([{
             "ts": r["ts"], "role": r["role"], "project": r["project"],
@@ -768,15 +890,19 @@ def cmd_session(con, args):
 
 def cmd_status(con, args):
     f = con.execute(
-        "SELECT COUNT(*) n, SUM(size) b, SUM(nmsg) m FROM files").fetchone()
+        "SELECT COUNT(*) n, SUM(size) b, SUM(dsize) d, SUM(nmsg) m, "
+        "SUM(zst) z FROM files").fetchone()
     size = os.path.getsize(DB) if os.path.exists(DB) else 0
     wal = DB + "-wal"
     if os.path.exists(wal):
         size += os.path.getsize(wal)
     last = con.execute("SELECT v FROM meta WHERE k='last_index'").fetchone()
+    logical, disk = f["b"] or 0, f["d"] or 0
     print(f"index    {DB}")
     print(f"size     {size / 1048576:.1f} MiB")
-    print(f"corpus   {(f['b'] or 0) / 1073741824:.1f} GiB in {f['n']} transcripts")
+    print(f"corpus   {logical / 1073741824:.1f} GiB in {f['n']} transcripts")
+    print(f"on disk  {disk / 1073741824:.1f} GiB  ({f['z'] or 0} compressed"
+          + (f", {logical / disk:.2f}x)" if disk else ")"))
     print(f"messages {f['m'] or 0}")
     if last:
         age = time.time() - float(last["v"])
@@ -791,6 +917,323 @@ def cmd_status(con, args):
     return 0
 
 
+# ------------------------------------------------------------- compression
+
+UUID_RE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
+
+
+class Unsafe(Exception):
+    """Raised when closure cannot be proven. Never caught to continue a file."""
+
+
+def open_files():
+    """(paths, unseen): every transcript held open by a running process.
+
+    Reads /proc directly rather than shelling out, because the answer has to
+    be exact: this set is the difference between compressing a dead transcript
+    and corrupting a live session.
+
+    `unseen` is the honest hole: the names of THIS USER's processes that have
+    marked themselves non-dumpable — ssh-agent, sd-pam, a setuid helper — and
+    so hide their fd table from their own owner. No tool on the machine sees
+    past that, lsof included. They are named in the sweep's report rather than
+    assumed empty. Other users' hidden processes are counted, not named: they
+    are ordinary system noise, hundreds of them, and a line nobody reads is
+    not a safety check. The age window and the post-compression re-stat are
+    what actually stand between any of them and a lost write.
+    """
+    live = set()
+    unseen = []
+    others = 0
+    me = os.getuid()
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        fdd = os.path.join("/proc", pid, "fd")
+        try:
+            names = os.listdir(fdd)
+        except FileNotFoundError:
+            continue  # the process exited between listing and reading
+        except OSError:
+            if pid_uid(pid) == me:
+                unseen.append(pid_comm(pid))
+            else:
+                others += 1
+            continue
+        for n in names:
+            try:
+                t = os.readlink(os.path.join(fdd, n))
+            except OSError:
+                continue
+            if t.endswith(" (deleted)"):
+                t = t[:-10]
+            if t.startswith("/") and (t.endswith(".jsonl")
+                                      or t.endswith(".jsonl.zst")):
+                live.add(t)
+    return live, unseen, others
+
+
+def pid_comm(pid):
+    try:
+        with open(os.path.join("/proc", pid, "comm")) as fh:
+            return fh.read().strip() or pid
+    except OSError:
+        return pid
+
+
+def pid_uid(pid):
+    try:
+        with open(os.path.join("/proc", pid, "status")) as fh:
+            for ln in fh:
+                if ln.startswith("Uid:"):
+                    return int(ln.split()[1])
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def coordinator_ids():
+    """Session ids the coordinator currently accounts for.
+
+    A failure here is fatal to the sweep. The roster is one of the two pieces
+    of positive evidence that a transcript is closed; without it there is no
+    safe file, only unexamined ones.
+    """
+    cmd = shlex.split(os.environ.get("CONVO_ROSTER_CMD", "north agents --json"))
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise Unsafe(f"could not ask the coordinator which sessions are live: {e}")
+    if r.returncode != 0:
+        raise Unsafe("the coordinator refused to report live sessions: "
+                     + (r.stderr.strip().splitlines() or ["exit "
+                        + str(r.returncode)])[-1])
+    try:
+        d = json.loads(r.stdout)
+    except Exception as e:
+        raise Unsafe(f"the coordinator roster was not readable JSON: {e}")
+    if d.get("version") != "north:agent-roster:v1" or not isinstance(
+            d.get("agents"), list):
+        raise Unsafe("the coordinator roster is not north:agent-roster:v1")
+    ids = set()
+    for row in d["agents"]:
+        if isinstance(row, dict):
+            for v in row.values():
+                if isinstance(v, str):
+                    ids.update(m.lower() for m in UUID_RE.findall(v))
+    return ids
+
+
+def fsync_dir(path):
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def round_trips(archive, original):
+    """True when decompressing `archive` reproduces `original` byte for byte."""
+    d = subprocess.Popen([ZSTD, "-dcq", "--", archive],
+                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        c = subprocess.Popen(["cmp", "-s", "-", "--", original],
+                             stdin=d.stdout, stderr=subprocess.DEVNULL)
+    finally:
+        d.stdout.close()
+    return c.wait() == 0 and d.wait() == 0
+
+
+def compress_one(path, st):
+    """Replace `path` with `path`.zst. Returns the archive's size.
+
+    Order is: write, verify, prove the source never moved, publish, unlink.
+    An interruption anywhere leaves the original in place — the source is only
+    ever removed after its replacement has been read back and matched.
+    """
+    dst = path + ".zst"
+    tmp = f"{dst}.tmp{os.getpid()}"
+    try:
+        if os.path.exists(dst) and round_trips(dst, path):
+            # A previous run was interrupted after publishing the archive.
+            os.unlink(path)
+            return os.path.getsize(dst)
+        r = subprocess.run([ZSTD, *ZSTD_ARGS, "-q", "-f", "-o", tmp, "--", path],
+                           stderr=subprocess.PIPE, text=True)
+        if r.returncode != 0:
+            raise Unsafe(f"zstd failed: {r.stderr.strip()}")
+        if not round_trips(tmp, path):
+            raise Unsafe("round-trip did not reproduce the original")
+        now = os.stat(path)
+        if (now.st_ino, now.st_dev, now.st_size, now.st_mtime) != (
+                st.st_ino, st.st_dev, st.st_size, st.st_mtime):
+            raise Unsafe("the transcript was written during compression")
+        fd = os.open(tmp, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        # The archive stands in for the transcript, so it carries its mtime:
+        # everything that reasons about session age keeps working.
+        os.utime(tmp, (st.st_atime, st.st_mtime))
+        os.replace(tmp, dst)
+        fsync_dir(os.path.dirname(path))
+        os.unlink(path)
+        fsync_dir(os.path.dirname(path))
+        return os.path.getsize(dst)
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
+def projected(size):
+    for floor, ratio in BAND_RATIOS:
+        if size >= floor:
+            return size / ratio
+    return size
+
+
+def gib(n):
+    return f"{n / 1073741824:.2f} GiB"
+
+
+def cmd_compress(args):
+    root_note = f"{C.dim}{ROOT}{C.off}"
+    cutoff = time.time() - args.older_than * 3600
+    live, unseen, hidden_others = open_files()
+    roster = coordinator_ids()
+
+    eligible = []
+    skip_open = skip_live = skip_hot = 0
+    warm_bytes = 0
+    total = 0
+    for path, disk, _prov, _acct, _hint in discover():
+        if disk != path:
+            continue  # already an archive
+        total += 1
+        try:
+            st = os.stat(path)
+        except OSError:
+            continue
+        if path in live or path + ".zst" in live:
+            skip_open += 1
+            continue
+        if any(sid in path.lower() for sid in roster):
+            skip_live += 1
+            continue
+        if st.st_mtime > cutoff:
+            skip_hot += 1
+            warm_bytes += st.st_size
+            continue
+        eligible.append((path, st))
+
+    eligible.sort(key=lambda e: -e[1].st_size)
+    if args.max_files:
+        eligible = eligible[:args.max_files]
+    ebytes = sum(st.st_size for _, st in eligible)
+
+    print(f"corpus     {total} uncompressed transcripts under {root_note}")
+    print(f"eligible   {len(eligible)} files  {gib(ebytes)}  "
+          f"(untouched for {args.older_than}h, no open fd, not on the roster)")
+    print(f"held back  {skip_hot} still warm ({gib(warm_bytes)}) · "
+          f"{skip_open} open by a process · "
+          f"{skip_live} named by a coordinator lane")
+    if unseen:
+        names = sorted(set(unseen))
+        shown = ", ".join(names[:6]) + (f", +{len(names) - 6}" if len(names) > 6
+                                        else "")
+        print(f"unseen     {len(unseen)} of this user's processes hide their "
+              f"open files from every tool ({shown})")
+    if hidden_others:
+        print(f"           {hidden_others} more belong to other users")
+    if not eligible:
+        return 0
+    if args.dry_run:
+        after = sum(projected(st.st_size) for _, st in eligible)
+        print(f"projected  {gib(ebytes)} → {gib(after)}  "
+              f"saving {gib(ebytes - after)} "
+              f"({ebytes / after:.2f}x, from measured band ratios)")
+        return 0
+
+    t0 = time.time()
+    done = failed = 0
+    was = after = 0
+    for i, (path, st) in enumerate(eligible, 1):
+        try:
+            after += compress_one(path, st)
+            was += st.st_size
+            done += 1
+        except Unsafe as e:
+            failed += 1
+            sys.stderr.write(f"convo: left alone: {path}: {e}\n")
+        except OSError as e:
+            failed += 1
+            sys.stderr.write(f"convo: left alone: {path}: {e}\n")
+        if not args.quiet and sys.stderr.isatty():
+            sys.stderr.write(f"\r\033[Kcompressing {i}/{len(eligible)}  "
+                             f"{gib(after)} written")
+            sys.stderr.flush()
+    if not args.quiet and sys.stderr.isatty():
+        sys.stderr.write("\r\033[K")
+    print(f"compressed {done} files  {gib(was)} → {gib(after)}  "
+          f"saving {gib(was - after)}"
+          + (f" ({was / after:.2f}x)" if after else "")
+          + f"  in {time.time() - t0:.0f}s")
+    if failed:
+        print(f"{C.yellow}left alone {failed} file(s) — see above{C.off}")
+    return 0
+
+
+def cmd_restore(args):
+    """Turn `.jsonl.zst` back into `.jsonl`.
+
+    zstd frames carry a content checksum that `-d` verifies, so a decompression
+    that exits zero is the integrity proof here; the archive is only unlinked
+    after the transcript is back on disk and synced.
+    """
+    rc = 0
+    for name in args.query:
+        logical = name[:-4] if name.endswith(".jsonl.zst") else name
+        src = logical + ".zst"
+        if not os.path.exists(src):
+            sys.stderr.write(f"convo: no archive at {src}\n")
+            rc = 1
+            continue
+        if os.path.exists(logical):
+            sys.stderr.write(f"convo: {logical} already exists\n")
+            rc = 1
+            continue
+        tmp = f"{logical}.tmp{os.getpid()}"
+        try:
+            r = subprocess.run([ZSTD, "-dq", "-f", "-o", tmp, "--", src],
+                               stderr=subprocess.PIPE, text=True)
+            if r.returncode != 0:
+                sys.stderr.write(f"convo: {src}: {r.stderr.strip()}\n")
+                rc = 1
+                continue
+            st = os.stat(src)
+            os.utime(tmp, (st.st_atime, st.st_mtime))
+            fd = os.open(tmp, os.O_RDONLY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            os.replace(tmp, logical)
+            fsync_dir(os.path.dirname(logical))
+            os.unlink(src)
+            fsync_dir(os.path.dirname(logical))
+            print(f"restored {logical} ({gib(os.path.getsize(logical))})")
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+    return rc
+
+
 class C:
     bold = dim = cyan = yellow = off = ""
 
@@ -801,9 +1244,9 @@ class C:
             cls.cyan, cls.yellow = "\033[36m", "\033[33m"
 
 
-CMDS = ("index", "session", "status")
+CMDS = ("index", "session", "status", "compress", "restore")
 VALUE_OPTS = {"-n", "--limit", "-p", "--project", "-r", "--role", "--since",
-              "-s", "--session", "--color"}
+              "-s", "--session", "--color", "--older-than", "--max-files"}
 
 
 def split_cmd(argv):
@@ -854,11 +1297,20 @@ def main(argv=None):
     p.add_argument("--color", choices=("auto", "always", "never"), default="auto")
     p.add_argument("--full", action="store_true",
                    help="index: rebuild from scratch")
+    p.add_argument("--dry-run", action="store_true",
+                   help="compress: report what would be compressed, touch nothing")
+    p.add_argument("--older-than", type=float, metavar="HOURS",
+                   default=CLOSED_AFTER_S / 3600,
+                   help="compress: only transcripts untouched this long")
+    p.add_argument("--max-files", type=int, default=0, metavar="N",
+                   help="compress: stop after the N largest eligible files")
     p.epilog = ("subcommands: index [--full] | session <uuid> | status\n"
+                "             compress [--dry-run] | restore <file>…\n"
                 "examples:\n"
                 "  convo policy graph            search everything\n"
                 "  convo -x 'exact phrase'       literal match\n"
-                "  convo session <uuid>          locate one session, no grep\n")
+                "  convo session <uuid>          locate one session, no grep\n"
+                "  convo compress --dry-run      what a sweep would reclaim\n")
     p.formatter_class = argparse.RawDescriptionHelpFormatter
     args = p.parse_args(argv)
     args.cmd = cmd
@@ -869,6 +1321,21 @@ def main(argv=None):
 
     C.enable(args.color == "always"
              or (args.color == "auto" and sys.stdout.isatty()))
+
+    if args.cmd == "restore":
+        if not args.query:
+            p.error("restore needs at least one path")
+        return cmd_restore(args)
+
+    if args.cmd == "compress":
+        # Index before rewriting: a transcript the index has already read to
+        # its last byte is adopted in its compressed form for free, while one
+        # it has not must be decompressed in full to catch up.
+        if not (args.dry_run or args.no_update):
+            con = connect()
+            with_lock(index, con, quiet=args.quiet)
+            con.close()
+        return cmd_compress(args)
 
     if args.cmd == "index":
         if args.full and os.path.exists(DB):
@@ -919,6 +1386,9 @@ def main(argv=None):
 if __name__ == "__main__":
     try:
         sys.exit(main())
+    except Unsafe as e:
+        sys.stderr.write(f"convo: refusing to sweep: {e}\n")
+        sys.exit(3)
     except BrokenPipeError:
         os._exit(0)
     except KeyboardInterrupt:

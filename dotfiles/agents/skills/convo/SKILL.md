@@ -22,9 +22,12 @@ is the machine's memory of its own decisions — which is why the answer to
 "why did we do it that way" is usually in it, and why searching it naively is
 so expensive.
 
-`convo` maintains a SQLite full-text index (~240 MB, 0.3% of the corpus) that
-stores word positions and a byte offset per message, never a copy of the text.
-Snippets are read back from the original JSONL at query time.
+`convo` maintains a SQLite full-text index (~1 GB, ~1% of the corpus) holding
+the extracted message text — the actual conversation in 87 GiB of transcripts
+is under a gigabyte; the rest is base64 image payload and Codex compaction
+records replaying whole threads. A query is answered entirely from the index
+and opens no transcript at all, which is what lets closed transcripts be
+compressed underneath it. The recorded `path:line` stays exact.
 
 ## Why not just grep
 
@@ -52,9 +55,17 @@ non-transcript subtree of `north-data`, `find <root> -maxdepth 2`,
 convo <terms>                 full-text search (FTS5 syntax: AND OR NOT "phrase")
 convo -x '<literal>'          exact phrase — use for ids, error strings, paths
 convo session <uuid>          locate every transcript for a session
-convo status                  index size, corpus size, freshness
+convo status                  index size, corpus size on disk, freshness
 convo index --full            rebuild from scratch (rarely needed)
+convo compress --dry-run      what a sweep of closed transcripts would reclaim
+convo restore <file>          put one archived transcript back as .jsonl
 ```
+
+`convo compress` rewrites transcripts nothing has touched for 48 hours as
+`.jsonl.zst` (~8x on this corpus), skipping any file a process still holds
+open and any session the coordinator names. Searching is unaffected. A
+provider resuming its own thread is not: `codex resume <uuid>` needs the
+rollout as plain JSONL, so `convo restore` it first.
 
 Useful filters, combinable: `-r user|assistant|thinking|tool` (role),
 `--since 3d|2w|6m` (recency), `-p <project>`, `-n <limit>`, `--json`,
@@ -76,8 +87,8 @@ that session owns, including its subagents, with message counts and time span.
 vocabulary ("refuted", "landed", "ruling") beats searching the topic, because
 topics recur across sessions while verdicts are stated once.
 
-**Feeding results to other tooling** — `--json` emits structured hits with
-file paths and byte offsets, so a follow-up can read the exact message.
+**Feeding results to other tooling** — `--json` emits structured hits with the
+snippet and the `path`/`line` the message came from.
 
 ## How it stays current
 

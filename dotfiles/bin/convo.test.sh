@@ -167,4 +167,104 @@ has "$("$CONVO" --color=never QUARKFISH -r user)" "user ·"
 out="$("$CONVO" --color=never QUARKFISH -r assistant)"
 hasnt "$out" "user ·"
 
+# ---- the index is self-sufficient: a vanished source still renders --------
+# This is the property every storage decision below rests on. If a snippet
+# still needed the transcript, no transcript could ever be compressed.
+mkrec() { # <file> <token> <ts>
+  python3 - "$1" "$2" "$3" <<'PY'
+import json, sys
+path, token, ts = sys.argv[1:4]
+with open(path, "w") as f:
+    for i in range(3):
+        f.write(json.dumps({"type": "assistant", "sessionId":
+                            "cccccccc-0000-0000-0000-%012d" % i,
+                            "timestamp": ts, "cwd": "/synthetic/demo",
+                            "message": {"role": "assistant", "content": [
+                                {"type": "text",
+                                 "text": f"{token} record {i} " + "pad " * 30}]}})
+                + "\n")
+PY
+}
+
+mkrec "$adir/orphan.jsonl" ORPHANTOKEN 2026-08-05T10:00:00Z
+"$CONVO" index >/dev/null
+rm -f "$adir/orphan.jsonl"
+out="$("$CONVO" --color=never ORPHANTOKEN -n 1)"
+has "$out" "ORPHANTOKEN record"
+has "$out" "orphan.jsonl:1"
+
+# ---- compression ---------------------------------------------------------
+printf '%s\n' '{"version":"north:agent-roster:v1","agents":[]}' >"$fixture/roster.json"
+export CONVO_ROSTER_CMD="cat $fixture/roster.json"
+
+RSID=dddddddd-1111-2222-3333-444444444444
+cold="$adir/cold.jsonl"; warm="$adir/warm.jsonl"
+held="$adir/held.jsonl"; rostered="$adir/$RSID.jsonl"
+mkrec "$cold" COLDTOKEN 2026-08-05T10:00:00Z
+mkrec "$warm" WARMTOKEN 2026-08-05T10:00:00Z
+mkrec "$held" HELDTOKEN 2026-08-05T10:00:00Z
+mkrec "$rostered" ROSTEREDTOKEN 2026-08-05T10:00:00Z
+cp "$cold" "$fixture/cold.orig"
+touch -d '3 days ago' "$cold" "$held" "$rostered"
+
+# a file some process still holds open is not closed, whatever its mtime says
+sleep 120 9<"$held" &
+holder=$!
+# `|| true` is load-bearing: errexit is live inside an EXIT trap, so a kill of
+# an already-reaped holder would abandon the cleanup and exit 1 on a green run.
+trap 'kill "$holder" 2>/dev/null || true; rm -rf "${fixture:?}"' EXIT
+
+# ---- dry run reports and changes nothing ---------------------------------
+out="$("$CONVO" compress --dry-run --color=never)"
+has "$out" "projected"
+has "$out" "1 open by a process"
+[ -f "$cold" ] || fail "--dry-run compressed a file"
+[ ! -f "$cold.zst" ] || fail "--dry-run wrote an archive"
+
+# ---- the sweep compresses only what is provably closed -------------------
+printf '%s\n' "{\"version\":\"north:agent-roster:v1\",\"agents\":[{\"uuid\":\"$RSID\"}]}" \
+  >"$fixture/roster.json"
+"$CONVO" compress -q --color=never >/dev/null
+[ -f "$cold.zst" ] && [ ! -f "$cold" ] || fail "a closed transcript was not compressed"
+[ -f "$warm" ] && [ ! -f "$warm.zst" ] || fail "a warm transcript was compressed"
+[ -f "$held" ] && [ ! -f "$held.zst" ] || fail "an OPEN transcript was compressed"
+[ -f "$rostered" ] && [ ! -f "$rostered.zst" ] ||
+  fail "a transcript the coordinator names was compressed"
+kill "$holder" 2>/dev/null || true
+
+# the archive is the original, byte for byte
+zstd -dcq "$cold.zst" | cmp -s - "$fixture/cold.orig" || fail "archive lost bytes"
+
+# ---- a compressed source stays searchable, under its .jsonl provenance ---
+out="$("$CONVO" --color=never COLDTOKEN -n 1)"
+has "$out" "COLDTOKEN record"
+has "$out" "cold.jsonl:1"
+hasnt "$out" ".zst"
+
+# adopting a compressed source must not re-read it
+has "$("$CONVO" index)" "from 0 changed files"
+# and the sweep is idempotent
+out="$("$CONVO" compress --dry-run --color=never)"
+hasnt "$out" "cold.jsonl"
+
+# ---- an archive that was never seen uncompressed is indexed from scratch --
+mkrec "$adir/arch.jsonl" ARCHTOKEN 2026-08-06T10:00:00Z
+zstd -q --long=27 --rm "$adir/arch.jsonl"
+has "$("$CONVO" --color=never ARCHTOKEN)" "ARCHTOKEN record"
+
+# ---- when both forms exist the uncompressed one wins ---------------------
+mkrec "$adir/dual.jsonl" STALEZSTTOKEN 2026-08-06T10:00:00Z
+zstd -q --long=27 "$adir/dual.jsonl" && rm -f "$adir/dual.jsonl"
+mkrec "$adir/dual.jsonl" DUALTOKEN 2026-08-06T10:00:00Z
+"$CONVO" index >/dev/null
+has "$("$CONVO" --color=never DUALTOKEN)" "DUALTOKEN record"
+nomatch STALEZSTTOKEN "the archive shadowed the live transcript"
+
+# ---- restore puts the transcript back ------------------------------------
+"$CONVO" restore "$cold.zst" >/dev/null
+[ -f "$cold" ] && [ ! -f "$cold.zst" ] || fail "restore did not replace the archive"
+cmp -s "$cold" "$fixture/cold.orig" || fail "restore lost bytes"
+has "$("$CONVO" index)" "from 0 changed files"
+has "$("$CONVO" --color=never COLDTOKEN -n 1)" "COLDTOKEN record"
+
 echo "convo.test.sh: all assertions passed"
