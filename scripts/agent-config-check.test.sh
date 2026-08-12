@@ -354,7 +354,7 @@ grep -Fq '"/home/tom/.agents/hooks/north-session-end.sh"' \
 ! grep -Fq 'writeShellScriptBin "north-session-end"' \
   "$REPO/modules/claude/default.bnix"
 report="$("$REPO/scripts/agent-config-check.sh")"
-grep -Fq '0 managed authoritative bindings' <<<"$report"
+grep -Fq '15 managed authoritative bindings' <<<"$report"
 # shellcheck disable=SC2088  # report intentionally renders the literal user-facing alias
 grep -Fq '~/.codex/hooks.json ignored by managed-only policy (0 active bindings)' <<<"$report"
 run_quiet_child 'Codex lifecycle wrapper tests' \
@@ -488,15 +488,7 @@ diff -u \
   "$scratch/claude-probe-calls"
 
 managed_policy="$REPO/modules/codex/requirements.toml"
-[ "$(codex_managed_policy_binding_count "$managed_policy")" = 0 ]
-cp "$managed_policy" "$scratch/managed-policy-disabled-extra.toml"
-sed -i '/^allow_remote_control = false$/a managed_hook_failure_mode = "block"' \
-  "$scratch/managed-policy-disabled-extra.toml"
-if codex_managed_policy_binding_count \
-  "$scratch/managed-policy-disabled-extra.toml" >/dev/null 2>&1; then
-  printf 'Codex disabled policy with an enabled-policy field was accepted\n' >&2
-  exit 1
-fi
+[ "$(codex_managed_policy_binding_count "$managed_policy")" = 15 ]
 cp "$managed_policy" "$scratch/managed-policy-not-exclusive.toml"
 sed -i 's/^allow_managed_hooks_only = true$/allow_managed_hooks_only = false/' \
   "$scratch/managed-policy-not-exclusive.toml"
@@ -530,11 +522,20 @@ if codex_managed_policy_binding_count \
   exit 1
 fi
 cp "$managed_policy" "$scratch/managed-policy-hooks-enabled.toml"
-sed -i 's/^hooks = false$/hooks = true/' \
+sed -i '/^\[hooks\]$/,$d' "$scratch/managed-policy-hooks-enabled.toml"
+sed -i '/^managed_hook_failure_mode = "block"$/d' \
   "$scratch/managed-policy-hooks-enabled.toml"
 if codex_managed_policy_binding_count \
   "$scratch/managed-policy-hooks-enabled.toml" >/dev/null 2>&1; then
   printf 'Codex policy enabled hooks without the authoritative hook table\n' >&2
+  exit 1
+fi
+cp "$managed_policy" "$scratch/managed-policy-hooks-disabled.toml"
+sed -i 's/^hooks = true$/hooks = false/' \
+  "$scratch/managed-policy-hooks-disabled.toml"
+if codex_managed_policy_binding_count \
+  "$scratch/managed-policy-hooks-disabled.toml" >/dev/null 2>&1; then
+  printf 'Codex policy disabled hooks while retaining authoritative bindings\n' >&2
   exit 1
 fi
 # shellcheck disable=SC2016  # match source text, not this test process environment
