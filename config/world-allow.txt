@@ -19,7 +19,6 @@ beagle/bin/test/engine-demo/run.sh	1
 beagle/integrations/north/hooks/beagle-session-start.sh	1
 beagle/native-core/bin/fram-native-demo	2
 beagle/native-core/tests/fram_upstream_freshness.sh	2
-beagle/native-core/validation/slice-fold/driver	1
 beagle/native-core/validation/slice-fold/typed.edn	1
 beagle/native-core/validation/slice-types/pipeline-evidence.txt	1
 beagle/runtime/src/scheduler/matcher.clj	42
