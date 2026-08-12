@@ -354,7 +354,7 @@ grep -Fq '"/home/tom/.agents/hooks/north-session-end.sh"' \
 ! grep -Fq 'writeShellScriptBin "north-session-end"' \
   "$REPO/modules/claude/default.bnix"
 report="$("$REPO/scripts/agent-config-check.sh")"
-grep -Fq '15 managed authoritative bindings' <<<"$report"
+grep -Fq '16 managed authoritative bindings' <<<"$report"
 # shellcheck disable=SC2088  # report intentionally renders the literal user-facing alias
 grep -Fq '~/.codex/hooks.json ignored by managed-only policy (0 active bindings)' <<<"$report"
 run_quiet_child 'Codex lifecycle wrapper tests' \
@@ -488,7 +488,7 @@ diff -u \
   "$scratch/claude-probe-calls"
 
 managed_policy="$REPO/modules/codex/requirements.toml"
-[ "$(codex_managed_policy_binding_count "$managed_policy")" = 15 ]
+[ "$(codex_managed_policy_binding_count "$managed_policy")" = 16 ]
 cp "$managed_policy" "$scratch/managed-policy-not-exclusive.toml"
 sed -i 's/^allow_managed_hooks_only = true$/allow_managed_hooks_only = false/' \
   "$scratch/managed-policy-not-exclusive.toml"

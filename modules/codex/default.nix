@@ -92,6 +92,7 @@ in
       (promoted "lib/launch_critical_decide.py" "north/profiles/tom/hooks/lib/launch_critical_decide.py")
       (promoted "lib/launch_critical_paths.py" "north/profiles/tom/hooks/lib/launch_critical_paths.py")
       (promoted "tripwire-guard.sh" "north/profiles/tom/hooks/tripwire-guard.sh")
+      (promoted "corpus-scan-guard.sh" "north/profiles/tom/hooks/corpus-scan-guard.sh")
       (promoted "logcompress-hook.js" "north/profiles/tom/hooks/logcompress-hook.js")
       (promoted "logcompress.js" "north/profiles/tom/hooks/logcompress.js")
       (promoted "registry.tsv" "north/profiles/tom/hooks/registry.tsv")
