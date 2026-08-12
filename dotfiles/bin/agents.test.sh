@@ -114,6 +114,7 @@ chk "statusline-script seeds as other" "other statusline-script off" "$(grep '^o
 chk "no item kind survives" "0" "$(grep -c '^item ' "$SB/.config/agents/manifest.conf" || true)"
 chk "hook bound to a dir row" "hook comment-bloat-guard enabled global" "$(grep '^hook comment-bloat-guard ' "$SB/.config/agents/manifest.conf")"
 chk "a claimed hook names its claimant in the column, from frontmatter" "hook agent-spawn-guard enabled staffing" "$(grep '^hook agent-spawn-guard ' "$SB/.config/agents/manifest.conf")"
+chk "corpus-scan-guard row" "hook corpus-scan-guard enabled convo" "$(grep '^hook corpus-scan-guard ' "$SB/.config/agents/manifest.conf")"
 chk "coordination lifecycle belongs to assignments" "hook north-session-lifecycle enabled assignments" "$(grep '^hook north-session-lifecycle ' "$SB/.config/agents/manifest.conf")"
 st="$(ag status)"
 case "$st" in *"hook · worktree-guard:        off (skill: repo-safety off)"*) ok "status: bound + skill off" ;;
@@ -356,9 +357,9 @@ fresh; ag status > /dev/null
 ag on --all > /dev/null
 chk "on --all: no hook left disabled" "0" "$(grep -c '^hook .* disabled' "$SB/.config/agents/manifest.conf" || true)"
 chk "on --all: skills on" "0" "$(grep -c '^skill .* off' "$SB/.config/agents/manifest.conf" || true)"
-chk "on --all: every fragment composed" "10" "$(hook_rows | grep -cE ': +on( |$)')"
+chk "on --all: every fragment composed" "11" "$(hook_rows | grep -cE ': +on( |$)')"
 ag off --all > /dev/null
-chk "off --all: hooks disabled" "10" "$(grep -c '^hook .* disabled' "$SB/.config/agents/manifest.conf")"
+chk "off --all: hooks disabled" "11" "$(grep -c '^hook .* disabled' "$SB/.config/agents/manifest.conf")"
 chk "off --all: nothing composed" "" "$(composed_files)"
 chk "off --all: skills off" "0" "$(grep -c '^skill .* on' "$SB/.config/agents/manifest.conf" || true)"
 
@@ -404,7 +405,7 @@ chk "global heads the directory section, scope ~" "global: off ~" "$(ag status |
 chk "modules read inside skills" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  modules$')"
 chk "a skill that declares is a module" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^    repo-safety:')"
 chk "a skill that declares templates too" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^    staffing:')"
-chk "with what it declares nested under it" "5" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^      ')"
+chk "with what it declares nested under it" "6" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^      ')"
 chk "a skill that declares nothing is a plain child" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  webdev:')"
 chk "and a module is not a plain child too" "0" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  repo-safety:' || true)"
 chk "a claimed hook is not repeated under hooks" "0" "$(ag status | sed -n '/^hooks$/,/^plugins$/p' | grep -c '^  worktree-guard:' || true)"
@@ -1030,6 +1031,47 @@ case "$warn" in *"hooks: not-a-list is not a list of names"*) ok "an unreadable 
 if has_cmd logcompress-hook.js; then ok "and claims nothing, so an unbound hook is unbound again"; else bad "composes without claims" "$(composed_files)"; fi
 chk "an unreadable list drops the column too" "hook logcompress enabled" "$(grep '^hook logcompress ' "$m")"
 chk "apply still reports" "1" "$(ag apply 2>/dev/null | grep -c '^applied:')"
+
+echo
+echo "== 24. corpus-scan-guard: composed by convo, and refuses only the sweep"
+# Registration is half the contract; the other half is that the thing the
+# switch turns on says no to the expensive shape and yes to every narrow one.
+# The full adversarial matrix lives beside the script, in
+# north:profiles/tom/hooks/corpus-scan-guard.test.sh — these two directions are
+# here so a switchboard change can never quietly compose an inert guard.
+fresh; ag status > /dev/null
+ag on convo > /dev/null
+if has_cmd corpus-scan-guard.sh; then ok "convo composes its guard"; else bad "convo composes its guard" "$(composed_files)"; fi
+ag off convo > /dev/null
+if has_cmd corpus-scan-guard.sh; then bad "convo off decomposes it" "$(composed_files)"; else ok "convo off decomposes it"; fi
+
+# The script itself lives in North (every hook but firn-guard does); this suite
+# owns the switchboard, so the behaviour half runs only where North is checked
+# out beside this repo. Its full matrix is corpus-scan-guard.test.sh.
+CSG="${CORPUS_SCAN_GUARD:-$REPO/../../north/main/profiles/tom/hooks/corpus-scan-guard.sh}"
+CORPUS="$SB/code/north-data"
+if [ ! -x "$CSG" ]; then
+  ok "corpus-scan-guard behaviour (skipped: North not checked out beside this repo)"
+else
+DAY="$CORPUS/accounts/openai/acct/sessions/2026/08/12"
+mkdir -p "$DAY"; : > "$DAY/rollout-019ff47e.jsonl"
+csg() { # command -> the permission decision, or "allow"
+  python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":sys.argv[2],"tool_input":{"command":sys.argv[1]}}))' \
+    "$1" "$SB" |
+    env HOME="$SB" AGENT_NO_AUTHORING_HOOKS=0 "$CSG" |
+    python3 -c 'import json,sys
+raw=sys.stdin.read().strip()
+print(json.loads(raw)["hookSpecificOutput"].get("permissionDecision","allow") if raw else "allow")'
+}
+chk "the corpus-wide sweep is refused" "deny" "$(csg "rg -l --hidden needle $CORPUS")"
+chk "the symlink is the same tree" "deny" "$(csg "grep -rn needle $SB/.local/state/north")"
+chk "an unbounded find is refused" "deny" "$(csg "find $CORPUS -name '*.jsonl'")"
+chk "one named transcript is allowed" "allow" "$(csg "rg needle $DAY/rollout-019ff47e.jsonl")"
+chk "one day directory is allowed" "allow" "$(csg "rg needle $DAY")"
+chk "a bounded find is allowed" "allow" "$(csg "find $CORPUS -maxdepth 2 -type d")"
+chk "convo itself is allowed" "allow" "$(csg "convo session 019ff47e")"
+chk "a mention is not an invocation" "allow" "$(csg "echo 'never rg $CORPUS again'")"
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then echo "ALL PASS"; else echo "$fails FAILURES"; fi

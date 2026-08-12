@@ -10,6 +10,8 @@ description: >-
   ~/.local/state/north — those paths hold a 77 GiB transcript corpus and a
   single unscoped ripgrep there measured 3.5 GB of RSS and a quarter of a
   24-core machine, while the same lookup through convo costs 31 MB and 0.4 s.
+hooks:
+  - corpus-scan-guard
 ---
 
 # convo — search the conversation corpus
@@ -32,6 +34,17 @@ That is the 3.5 GB run. It is also usually the wrong instrument: transcripts
 are line-oriented JSON, so a grep hit gives you a 59 MB line, not an answer.
 
 Use `rg` for code. Use `convo` for conversations.
+
+`corpus-scan-guard` enforces exactly that boundary, so this is a refusal you
+will meet rather than a rule you must remember. It denies a recursive search
+(`rg`/`grep -r`/`find`/`fd`/`ag`) whose root is the corpus root, the symlink,
+or an interior container still holding tens of gigabytes — `accounts/`, a
+provider, an account, its `sessions/` or `projects/`, a sessions year or
+month, `archives/`. Everything narrower stays allowed: one named transcript,
+a single day directory or Claude project directory and deeper, any
+non-transcript subtree of `north-data`, `find <root> -maxdepth 2`,
+`rg --max-depth 2`, and any non-recursive `grep`. The intended sequence is
+`convo` to name the file, raw tools from there.
 
 ## The commands worth knowing
 
