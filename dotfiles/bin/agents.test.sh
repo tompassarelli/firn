@@ -1087,5 +1087,71 @@ chk "a mention is not an invocation" "allow" "$(csg "echo 'never rg $CORPUS agai
 fi
 
 echo
+echo "== 25. tripwire-guard: composed by repo-safety, and judges deletes by loss"
+# Same two halves as 24. The behaviour half is here because this guard's rule is
+# about the SHAPE OF THE ESTATE the switchboard configures — a main/ checkout,
+# a sibling lane's worktree, ~/code/*-data — so a sandbox HOME with that shape
+# in it is the only place the two directions can both be proven. The exhaustive
+# matrix is north:profiles/tom/hooks/tripwire-guard.test.sh.
+fresh; ag status > /dev/null
+ag on repo-safety > /dev/null
+if has_cmd tripwire-guard.sh; then ok "repo-safety composes its tripwire"; else bad "repo-safety composes its tripwire" "$(composed_files)"; fi
+ag off repo-safety > /dev/null
+if has_cmd tripwire-guard.sh; then bad "repo-safety off decomposes it" "$(composed_files)"; else ok "repo-safety off decomposes it"; fi
+
+TWG="${TRIPWIRE_GUARD:-$REPO/../../north/main/profiles/tom/hooks/tripwire-guard.sh}"
+if [ ! -x "$TWG" ] || ! command -v jq > /dev/null 2>&1; then
+  ok "tripwire-guard behaviour (skipped: North not checked out beside this repo, or no jq)"
+else
+MINE="$SB/code/proj/wt-mine"; OTHER="$SB/code/proj/wt-other"
+mkdir -p "$MINE" "$OTHER" "$SB/code/proj/main" "$SB/.cache/thumbnails" \
+  "$SB/Pictures/Screenshots" "$SB/code/north-data/accounts"
+git -C "$MINE" init -q 2>/dev/null; git -C "$OTHER" init -q 2>/dev/null
+: > "$SB/Pictures/Screenshots/old.png"
+twg() { # command -> "allow", or the deny reason. AGENT_NO_AUTHORING_HOOKS=0
+  # forces guards live, so the matrix cannot be silenced by ambient env.
+  local out rc
+  out="$(python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":sys.argv[2],"tool_input":{"command":sys.argv[1]}}))' \
+    "$1" "$MINE" |
+    env HOME="$SB" AGENT_NO_AUTHORING_HOOKS=0 TRIPWIRE_LOG_DIR="$SB/twlog" \
+      NORTH_BIN=/bin/true "$TWG" 2>&1)"
+  rc=$?
+  if [ "$rc" = 0 ]; then echo allow; else echo "$out"; fi
+}
+# Same call with the force-live override REMOVED, so stored state is what
+# decides — the only way to observe `north config guards off` doing its job.
+twg_state() {
+  local rc
+  python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":sys.argv[2],"tool_input":{"command":sys.argv[1]}}))' \
+    "$1" "$MINE" |
+    env -u AGENT_NO_AUTHORING_HOOKS -u CLAUDE_NO_AUTHORING_HOOKS HOME="$SB" \
+      TRIPWIRE_LOG_DIR="$SB/twlog" NORTH_BIN=/bin/true "$TWG" > /dev/null 2>&1
+  rc=$?
+  if [ "$rc" = 0 ]; then echo allow; else echo deny; fi
+}
+twv() { case "$(twg "$1")" in allow) echo allow ;; *) echo deny ;; esac; }
+chk "another lane's worktree is refused" "deny" "$(twv "rm -rf $OTHER")"
+chk "a .git is refused" "deny" "$(twv "rm -rf $MINE/.git")"
+chk "a main/ checkout is refused" "deny" "$(twv "rm -rf $SB/code/proj/main/x")"
+chk "the machine's own memory is refused" "deny" "$(twv "rm -rf $SB/code/north-data/accounts")"
+chk "an unguarded \$VAR target is refused" "deny" "$(twv 'rm -rf "$BUILD"/*')"
+chk "a bare-root delete is refused" "deny" "$(twv 'rm -rf /')"
+chk "the thumbnails cache is allowed" "allow" "$(twv "rm -rf $SB/.cache/thumbnails/*")"
+chk "the guarded \${VAR:?} form is allowed" "allow" "$(twv 'rm -rf "${BUILD:?}"/dist')"
+chk "a scratch path is allowed" "allow" "$(twv 'rm -rf /tmp/build-cache')"
+case "$(twg "find $SB/Pictures/Screenshots -type f -mtime +30 -delete")" in
+  *bounded*"north config guards off"*) ok "a bounded personal find is refused in proportion, and names the way through" ;;
+  *) bad "bounded personal find reason" "$(twg "find $SB/Pictures/Screenshots -type f -mtime +30 -delete")" ;;
+esac
+# The deliberate path IS the switchboard's own state file: turn guards off there
+# and the same refusal becomes the human's call.
+mkdir -p "$SB/.local/state/north"; printf 'guards=off\n' > "$SB/.local/state/north/harness.conf"
+chk "north config guards off lets the reviewed delete through" "allow" \
+  "$(twg_state "rm -rf $SB/Pictures/Screenshots")"
+printf 'guards=on\n' > "$SB/.local/state/north/harness.conf"
+chk "and back on, it is refused again" "deny" "$(twg_state "rm -rf $SB/Pictures/Screenshots")"
+fi
+
+echo
 if [ "$fails" -eq 0 ]; then echo "ALL PASS"; else echo "$fails FAILURES"; fi
 exit "$fails"

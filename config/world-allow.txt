@@ -122,7 +122,7 @@ north/profiles/tom/hooks/agent-spawn-guard.sh	3
 north/profiles/tom/hooks/agent-spawn-guard.test.sh	12
 north/profiles/tom/hooks/launch-critical-worktree-guard.test.py	47
 north/profiles/tom/hooks/launch-critical-worktree-guard.test.sh	12
-north/profiles/tom/hooks/tripwire-guard.test.sh	2
+north/profiles/tom/hooks/tripwire-guard.test.sh	1
 north/scripts/framlog-cutover.clj	4
 north/sdk/bench/admission-worker.ts	1
 north/sdk/test/codex-app-server.test.ts	1

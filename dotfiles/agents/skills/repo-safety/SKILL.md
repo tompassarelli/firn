@@ -42,10 +42,23 @@ work.
 rewrite of published history. Origin carries main plus tags; worktree branches
 stay local.
 
-**Destructive and credential commands.** Recursive deletes outside the cwd repo
-and `/tmp` are refused, `rm -rf` of `/`, `/home`, or `$HOME` always. Never write
-`rm … "$VAR"/glob` — an unset `$VAR` expands to a bare-root delete. Shell access
-to `.ssh/`, `.aws/`, `*.pem`, and key files is refused.
+**Destructive and credential commands.** A recursive delete is judged by what
+would be lost, not by where the path is. Refused outright, in every mode: `/`,
+`$HOME`, a system root, a personal category root like `~/Pictures`, a `main/`
+checkout, a project container, `~/code/*-data`, `~/.local/state/north`, any
+`.git` or checkout root, and any `wt-<slug>` worktree your session is not
+working in — another lane may be live in it. Never write `rm … "$VAR"/glob`
+either: an unset `$VAR` expands to a bare-root delete, so write the literal
+path or guard it as `"${VAR:?}"`.
+
+Deletes that lose nothing pass without friction: a path that does not exist,
+`~/.cache` and the temp hierarchy, `node_modules` and friends, anything git
+reports as ignored, and anything tracked and clean. In between — untracked work
+inside a repo, personal data, a path the guard cannot classify — the guard asks
+you in an interactive session and refuses in an unattended one; the reason names
+`north config guards off` for when the loss is reviewed and intended.
+
+Shell access to `.ssh/`, `.aws/`, `*.pem`, and key files is refused.
 
 A denial is information about the path, not the goal: take the worktree, name
 the paths, use `safe-push`. If a guard is genuinely wrong about your case, say
