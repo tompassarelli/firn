@@ -1,0 +1,926 @@
+#!/usr/bin/env python3
+"""convo — full-text search over local agent conversation transcripts.
+
+Indexes the JSONL transcripts under ~/code/north-data/accounts into a SQLite
+FTS5 index at ~/.local/state/convo/index.db, then searches it.
+
+The index stores postings and locations only, never transcript text: every hit
+is resolved by seeking to the recorded byte offset in the source JSONL. That
+keeps the index a fraction of the 75 GiB corpus and keeps snippets honest.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+import re
+import sqlite3
+import sys
+import time
+
+HOME = os.path.expanduser("~")
+# north-data is the canonical tree; ~/.local/state/north is a symlink to it.
+# Scanning both would read the same 75 GiB twice.
+ROOT = os.path.realpath(os.environ.get(
+    "CONVO_ROOT", os.path.join(HOME, "code/north-data/accounts")))
+STATE = os.environ.get("CONVO_STATE", os.path.join(HOME, ".local/state/convo"))
+DB = os.path.join(STATE, "index.db")
+LOCK = os.path.join(STATE, "index.lock")
+
+# A line longer than this is a compaction replay, a base64 image, or a dumped
+# build log. None of those are conversation, and all of them are unbounded.
+LINE_CAP = 1 << 20
+# Longest single extracted message kept. Anything past this is machine output.
+TEXT_CAP = 32 << 10
+CHUNK = 1 << 20
+COMMIT_EVERY = 20000
+
+SCHEMA_VERSION = "2"
+# Bytes hashed from the head of a file to detect rewrite-in-place. An append
+# preserves the head; a truncate-and-rewrite almost never does.
+HEAD_BYTES = 4096
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS files(
+  id INTEGER PRIMARY KEY,
+  path TEXT UNIQUE NOT NULL,
+  dev INTEGER, ino INTEGER,
+  size INTEGER NOT NULL DEFAULT 0,
+  mtime REAL,
+  head TEXT,
+  off INTEGER NOT NULL DEFAULT 0,
+  nline INTEGER NOT NULL DEFAULT 0,
+  provider TEXT, account TEXT, project TEXT, session_id TEXT,
+  title TEXT, cwd TEXT, branch TEXT,
+  first_ts TEXT, last_ts TEXT,
+  nmsg INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS files_session ON files(session_id);
+CREATE INDEX IF NOT EXISTS files_project ON files(project);
+CREATE TABLE IF NOT EXISTS msg(
+  id INTEGER PRIMARY KEY,
+  file_id INTEGER NOT NULL,
+  line INTEGER NOT NULL,
+  off INTEGER NOT NULL,
+  blk INTEGER NOT NULL DEFAULT 0,
+  ts TEXT, role TEXT
+);
+CREATE INDEX IF NOT EXISTS msg_file ON msg(file_id);
+CREATE INDEX IF NOT EXISTS msg_ts ON msg(ts);
+CREATE VIRTUAL TABLE IF NOT EXISTS ftx USING fts5(
+  text, content='', contentless_delete=1,
+  tokenize='unicode61 remove_diacritics 2'
+);
+"""
+
+
+# ---------------------------------------------------------------- discovery
+
+def discover():
+    """Yield (path, provider, account, project_hint) for every transcript."""
+    if not os.path.isdir(ROOT):
+        return
+    for provider in sorted(os.listdir(ROOT)):
+        pdir = os.path.join(ROOT, provider)
+        if not os.path.isdir(pdir):
+            continue
+        for account in sorted(os.listdir(pdir)):
+            adir = os.path.join(pdir, account)
+            # projects/ is Claude Code's layout, sessions/ is Codex's.
+            for sub in ("projects", "sessions"):
+                base = os.path.join(adir, sub)
+                if not os.path.isdir(base):
+                    continue
+                for dirpath, dirnames, filenames in os.walk(base):
+                    dirnames.sort()
+                    for fn in sorted(filenames):
+                        if not fn.endswith(".jsonl"):
+                            continue
+                        path = os.path.join(dirpath, fn)
+                        hint = ""
+                        if sub == "projects":
+                            rel = os.path.relpath(dirpath, base)
+                            hint = rel.split(os.sep)[0]
+                        yield path, provider, account, hint
+
+
+# ------------------------------------------------------------- line reader
+
+def scan_lines(fh, start):
+    """Yield (line_start, line_end, line_bytes_or_None) for complete lines.
+
+    Memory is bounded by LINE_CAP regardless of input: a 59 MB line is
+    consumed and discarded without ever being materialised. Only lines
+    terminated by a newline are yielded, so a session being appended to
+    right now never produces a torn record.
+    """
+    fh.seek(start)
+    base = start
+    line_start = start
+    buf = bytearray()
+    over = False
+    while True:
+        chunk = fh.read(CHUNK)
+        if not chunk:
+            return
+        pos = 0
+        while True:
+            nl = chunk.find(b"\n", pos)
+            if nl < 0:
+                seg = chunk[pos:]
+                if not over:
+                    if len(buf) + len(seg) > LINE_CAP:
+                        over = True
+                        buf = bytearray()
+                    else:
+                        buf += seg
+                break
+            seg = chunk[pos:nl]
+            if over or len(buf) + len(seg) > LINE_CAP:
+                line = None
+            else:
+                buf += seg
+                line = bytes(buf)
+            end = base + nl + 1
+            yield line_start, end, line
+            buf = bytearray()
+            over = False
+            pos = nl + 1
+            line_start = end
+        base += len(chunk)
+
+
+# -------------------------------------------------------------- extraction
+
+def _clip(s):
+    if not isinstance(s, str):
+        return ""
+    s = s.strip()
+    return s[:TEXT_CAP] if len(s) > TEXT_CAP else s
+
+
+def _tool_text(name, args):
+    """Compact rendering of a tool invocation: what was run, not what it printed."""
+    if isinstance(args, str):
+        body = args
+    elif isinstance(args, dict):
+        keep = ("command", "file_path", "path", "pattern", "query", "prompt",
+                "description", "old_string", "new_string", "url", "content")
+        parts = []
+        for k in keep:
+            v = args.get(k)
+            if isinstance(v, str) and v.strip():
+                parts.append(f"{k}={v}")
+        body = "\n".join(parts) if parts else json.dumps(args)[:2000]
+    else:
+        body = ""
+    return _clip(f"{name} {body}")
+
+
+def extract_anthropic(d):
+    """-> (list[(role, text)], meta_updates)"""
+    out = []
+    meta = {}
+    t = d.get("type")
+    if d.get("sessionId"):
+        meta["session_id"] = d["sessionId"]
+    if d.get("cwd"):
+        meta["cwd"] = d["cwd"]
+    if d.get("gitBranch"):
+        meta["branch"] = d["gitBranch"]
+    if t == "ai-title" and d.get("aiTitle"):
+        meta["title"] = d["aiTitle"]
+        return out, meta
+    if d.get("slug"):
+        meta.setdefault("slug", d["slug"])
+    if t not in ("user", "assistant"):
+        return out, meta
+    m = d.get("message")
+    if not isinstance(m, dict):
+        return out, meta
+    c = m.get("content")
+    if isinstance(c, str):
+        s = _clip(c)
+        if s:
+            out.append((t, s))
+        return out, meta
+    if not isinstance(c, list):
+        return out, meta
+    for b in c:
+        if not isinstance(b, dict):
+            continue
+        bt = b.get("type")
+        if bt == "text":
+            s = _clip(b.get("text"))
+            if s:
+                out.append((t, s))
+        elif bt == "thinking":
+            s = _clip(b.get("thinking"))
+            if s:
+                out.append(("thinking", s))
+        elif bt == "tool_use":
+            s = _tool_text(b.get("name", "tool"), b.get("input"))
+            if s:
+                out.append(("tool", s))
+        # tool_result and image are machine output: deliberately not indexed.
+    return out, meta
+
+
+def extract_openai(d):
+    out = []
+    meta = {}
+    t = d.get("type")
+    p = d.get("payload")
+    if not isinstance(p, dict):
+        return out, meta
+    if t == "session_meta":
+        for k, key in (("session_id", "session_id"), ("cwd", "cwd")):
+            if p.get(k):
+                meta[key] = p[k]
+        if p.get("id"):
+            meta.setdefault("session_id", p["id"])
+        if p.get("agent_nickname"):
+            meta["title"] = p["agent_nickname"]
+        return out, meta
+    # event_msg replays what response_item already holds; compacted replays the
+    # whole conversation. Indexing either double-counts.
+    if t != "response_item":
+        return out, meta
+    pt = p.get("type")
+    if pt == "message":
+        role = p.get("role") or "user"
+        if role == "developer":
+            return out, meta  # injected system boilerplate, identical every session
+        c = p.get("content")
+        if isinstance(c, str):
+            s = _clip(c)
+            if s:
+                out.append((role, s))
+        elif isinstance(c, list):
+            for b in c:
+                if isinstance(b, dict) and b.get("type") in (
+                        "input_text", "output_text", "text"):
+                    s = _clip(b.get("text"))
+                    if s:
+                        out.append((role, s))
+    elif pt == "reasoning":
+        for b in (p.get("summary") or []):
+            if isinstance(b, dict):
+                s = _clip(b.get("text"))
+                if s:
+                    out.append(("thinking", s))
+        c = p.get("content")
+        if isinstance(c, list):
+            for b in c:
+                if isinstance(b, dict):
+                    s = _clip(b.get("text"))
+                    if s:
+                        out.append(("thinking", s))
+    elif pt in ("function_call", "custom_tool_call"):
+        s = _tool_text(p.get("name") or "tool",
+                       p.get("arguments") if p.get("arguments") is not None
+                       else p.get("input"))
+        if s:
+            out.append(("tool", s))
+    # *_output payloads are command output: deliberately not indexed.
+    return out, meta
+
+
+def slug_of(cwd):
+    return cwd.replace("/", "-") if cwd else ""
+
+
+def short_project(project):
+    if not project:
+        return "?"
+    s = project
+    for pre in ("-home-tom-code-client-", "-home-tom-code-", "-home-tom-"):
+        if s.startswith(pre):
+            s = s[len(pre):]
+            break
+    return s.lstrip("-") or "home"
+
+
+# ----------------------------------------------------------------- indexing
+
+def head_hash(path):
+    """Fingerprint of a fixed-length prefix, or None if the file is shorter.
+
+    The length must not depend on the file's size: hashing "as much as there
+    is" would change on every append and make each append look like a rewrite.
+    A file below the window is re-read in full instead, which costs nothing.
+    """
+    try:
+        with open(path, "rb") as fh:
+            b = fh.read(HEAD_BYTES)
+    except OSError:
+        return None
+    return hashlib.sha256(b).hexdigest() if len(b) == HEAD_BYTES else None
+
+
+def connect(readonly=False):
+    os.makedirs(STATE, exist_ok=True)
+    if readonly and os.path.exists(DB):
+        con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    else:
+        con = sqlite3.connect(DB)
+        con.executescript(SCHEMA)
+        row = con.execute("SELECT v FROM meta WHERE k='schema'").fetchone()
+        if row is None or row[0] != SCHEMA_VERSION:
+            # The index is a derived artefact: rebuilding is always correct and
+            # always cheaper than a migration nobody will test.
+            for stmt in ("DROP TABLE IF EXISTS ftx", "DROP TABLE IF EXISTS msg",
+                         "DROP TABLE IF EXISTS files"):
+                con.execute(stmt)
+            con.commit()
+            con.executescript(SCHEMA)
+            con.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('schema',?)",
+                        (SCHEMA_VERSION,))
+            con.commit()
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA synchronous=NORMAL")
+    con.execute("PRAGMA temp_store=MEMORY")
+    con.execute("PRAGMA cache_size=-64000")
+    con.row_factory = sqlite3.Row
+    return con
+
+
+class Progress:
+    def __init__(self, total_files, total_bytes, quiet=False):
+        self.tf, self.tb = total_files, total_bytes
+        self.f = self.b = self.m = 0
+        self.t0 = time.time()
+        self.last = 0.0
+        self.quiet = quiet or not sys.stderr.isatty()
+        self.ever = False
+
+    def tick(self, force=False):
+        now = time.time()
+        if not force and now - self.last < 1.0:
+            return
+        self.last = now
+        el = now - self.t0
+        rate = self.b / el if el > 0 else 0
+        if self.quiet:
+            return
+        eta = ""
+        if rate > 0 and self.tb > self.b:
+            r = (self.tb - self.b) / rate
+            eta = f" eta {int(r // 60)}m{int(r % 60):02d}s"
+        sys.stderr.write(
+            f"\r\033[Kindexing {self.f}/{self.tf} files  "
+            f"{self.b / 1073741824:.1f}/{self.tb / 1073741824:.1f} GiB  "
+            f"{rate / 1048576:.0f} MiB/s  {self.m} msgs{eta}")
+        sys.stderr.flush()
+        self.ever = True
+
+    def done(self):
+        if self.ever and not self.quiet:
+            sys.stderr.write("\r\033[K")
+            sys.stderr.flush()
+
+
+def index(con, quiet=False, verbose=False):
+    """Incremental index pass. Returns (files_touched, msgs_added, bytes_read)."""
+    try:
+        os.nice(10)  # a cold build must not compete with the user's work
+    except OSError:
+        pass
+
+    known = {}
+    for r in con.execute(
+            "SELECT id,path,dev,ino,size,mtime,head,off,nline FROM files"):
+        known[r["path"]] = r
+
+    todo = []
+    total_new = 0
+    for path, provider, account, hint in discover():
+        try:
+            st = os.stat(path)
+        except OSError:
+            continue
+        row = known.get(path)
+        if row is not None:
+            if (row["ino"] == st.st_ino and row["dev"] == st.st_dev
+                    and st.st_size == row["size"]
+                    and abs(st.st_mtime - (row["mtime"] or 0)) < 0.001):
+                continue  # untouched: not opened at all
+            # Size or mtime moved, so the file must be looked at. Anything but
+            # a pure append invalidates every byte offset already recorded for
+            # it, and a stale offset silently resolves snippets against the
+            # wrong bytes — so re-read from zero unless the head still matches.
+            h = head_hash(path)
+            reset = (row["ino"] != st.st_ino or row["dev"] != st.st_dev
+                     or st.st_size < row["off"]
+                     or h is None or h != row["head"])
+            todo.append((path, provider, account, hint, st, row, reset))
+            total_new += st.st_size if reset else max(0, st.st_size - row["off"])
+        else:
+            todo.append((path, provider, account, hint, st, None, False))
+            total_new += st.st_size
+
+    if not todo:
+        return 0, 0, 0
+
+    prog = Progress(len(todo), total_new, quiet=quiet)
+    nmsg_total = 0
+    nbytes = 0
+    next_id = con.execute("SELECT COALESCE(MAX(id),0)+1 FROM msg").fetchone()[0]
+
+    for path, provider, account, hint, st, row, reset in todo:
+        fid = row["id"] if row else None
+        start = 0 if (row is None or reset) else row["off"]
+        line_no = 0 if (row is None or reset) else row["nline"]
+
+        if reset and fid is not None:
+            con.execute(
+                "DELETE FROM ftx WHERE rowid IN "
+                "(SELECT id FROM msg WHERE file_id=?)", (fid,))
+            con.execute("DELETE FROM msg WHERE file_id=?", (fid,))
+            con.execute("UPDATE files SET off=0,nline=0,nmsg=0 WHERE id=?", (fid,))
+            con.commit()
+
+        if fid is None:
+            project = hint or ""
+            cur = con.execute(
+                "INSERT INTO files(path,dev,ino,size,mtime,off,nline,"
+                "provider,account,project) VALUES(?,?,?,?,?,0,0,?,?,?)",
+                (path, st.st_dev, st.st_ino, 0, 0.0, provider, account, project))
+            fid = cur.lastrowid
+
+        meta = {}
+        pend = []
+        added = 0
+        off = start
+        first_ts = None
+        last_ts = None
+        is_openai = provider == "openai"
+
+        def flush(final_off):
+            # msg.id and ftx.rowid are the same number by construction — ids are
+            # assigned here rather than inferred from last_insert_rowid(), so a
+            # snippet can never be resolved against the wrong message.
+            nonlocal pend, added, next_id
+            if pend:
+                con.executemany(
+                    "INSERT INTO msg(id,file_id,line,off,blk,ts,role) "
+                    "VALUES(?,?,?,?,?,?,?)",
+                    [(next_id + i,) + p[0] for i, p in enumerate(pend)])
+                con.executemany(
+                    "INSERT INTO ftx(rowid,text) VALUES(?,?)",
+                    [(next_id + i, p[1]) for i, p in enumerate(pend)])
+                next_id += len(pend)
+                added += len(pend)
+                pend = []
+            con.execute("UPDATE files SET off=?,nline=? WHERE id=?",
+                        (final_off, line_no, fid))
+            con.commit()
+
+        try:
+            fh = open(path, "rb", buffering=0)
+        except OSError:
+            continue
+        try:
+            try:
+                os.posix_fadvise(fh.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+            except (AttributeError, OSError):
+                pass
+            for ls, le, line in scan_lines(fh, start):
+                line_no += 1
+                off = le
+                nbytes += le - ls
+                prog.b += le - ls
+                if line is None:
+                    continue
+                if is_openai:
+                    # Cheap prefix reject: drops compaction replays, token
+                    # counts, world_state and event_msg duplicates without ever
+                    # parsing them — that is what keeps a 75 GiB cold build
+                    # bounded. Matched loosely (no quotes/colon) so a producer
+                    # that pretty-prints its JSON does not silently index
+                    # nothing; extract_openai still checks the real type.
+                    head = line[:200]
+                    if (b"response_item" not in head
+                            and b"session_meta" not in head):
+                        continue
+                if not line.strip():
+                    continue
+                try:
+                    d = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(d, dict):
+                    continue
+                msgs, mu = (extract_openai(d) if is_openai
+                            else extract_anthropic(d))
+                for k, v in mu.items():
+                    if v:
+                        meta[k] = v
+                ts = d.get("timestamp")
+                if isinstance(ts, str) and ts:
+                    if first_ts is None:
+                        first_ts = ts
+                    last_ts = ts
+                for i, (role, text) in enumerate(msgs):
+                    pend.append((
+                        (fid, line_no, ls, i, ts if isinstance(ts, str) else None,
+                         role), text))
+                if len(pend) >= COMMIT_EVERY:
+                    prog.m += len(pend)
+                    flush(off)
+                    prog.tick()
+            prog.m += len(pend)
+            flush(off)
+            try:
+                os.posix_fadvise(fh.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+            except (AttributeError, OSError):
+                pass
+        finally:
+            fh.close()
+
+        project = meta.get("cwd") and slug_of(meta["cwd"]) or hint
+        con.execute(
+            "UPDATE files SET size=?,mtime=?,head=?,"
+            "session_id=COALESCE(?,session_id),"
+            "title=COALESCE(?,title),cwd=COALESCE(?,cwd),"
+            "branch=COALESCE(?,branch),project=COALESCE(NULLIF(?,''),project),"
+            "first_ts=COALESCE(first_ts,?),last_ts=COALESCE(?,last_ts),"
+            "nmsg=nmsg+? WHERE id=?",
+            (st.st_size, st.st_mtime, head_hash(path),
+             meta.get("session_id"),
+             meta.get("title") or meta.get("slug"), meta.get("cwd"),
+             meta.get("branch"), project, first_ts, last_ts, added, fid))
+        con.commit()
+        nmsg_total += added
+        prog.f += 1
+        if verbose and added:
+            sys.stderr.write(f"\r\033[K{added:6d} msgs  {path}\n")
+        prog.tick()
+
+    prog.tick(force=True)
+    prog.done()
+    con.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('last_index',?)",
+                (str(time.time()),))
+    con.commit()
+    return len(todo), nmsg_total, nbytes
+
+
+def with_lock(fn, *a, **kw):
+    """Run fn holding the index lock; return None if another run holds it."""
+    os.makedirs(STATE, exist_ok=True)
+    fd = os.open(LOCK, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return None
+        return fn(*a, **kw)
+    finally:
+        os.close(fd)
+
+
+# ------------------------------------------------------------------ search
+
+def read_line_at(path, off):
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(off)
+            data = fh.read(LINE_CAP + 1)
+    except OSError:
+        return None
+    nl = data.find(b"\n")
+    if nl >= 0:
+        data = data[:nl]
+    try:
+        return json.loads(data)
+    except Exception:
+        return None
+
+
+def message_text(path, off, blk, provider):
+    d = read_line_at(path, off)
+    if not isinstance(d, dict):
+        return None
+    msgs, _ = (extract_openai(d) if provider == "openai"
+               else extract_anthropic(d))
+    if 0 <= blk < len(msgs):
+        return msgs[blk][1]
+    return msgs[0][1] if msgs else None
+
+
+WORD = re.compile(r"[0-9A-Za-z_]+")
+
+
+def make_snippet(text, terms, width=220):
+    if not text:
+        return ""
+    flat = " ".join(text.split())
+    low = flat.lower()
+    pos = -1
+    for t in terms:
+        p = low.find(t)
+        if p >= 0 and (pos < 0 or p < pos):
+            pos = p
+    if pos < 0:
+        return flat[:width] + ("…" if len(flat) > width else "")
+    a = max(0, pos - width // 3)
+    b = min(len(flat), a + width)
+    s = flat[a:b]
+    return ("…" if a > 0 else "") + s + ("…" if b < len(flat) else "")
+
+
+def fts_query(args):
+    if args.exact:
+        esc = args.query.replace('"', '""')
+        return f'"{esc}"'
+    q = args.query.strip()
+    if args.all_terms:
+        toks = WORD.findall(q)
+        return " AND ".join(toks) if toks else q
+    return q
+
+
+def parse_since(s):
+    if not s:
+        return None
+    m = re.fullmatch(r"(\d+)([dwmy])", s.strip())
+    if m:
+        n = int(m.group(1))
+        days = {"d": 1, "w": 7, "m": 30, "y": 365}[m.group(2)] * n
+        return time.strftime("%Y-%m-%d", time.gmtime(time.time() - days * 86400))
+    return s
+
+
+def cmd_search(con, args):
+    q = fts_query(args)
+    where = ["ftx MATCH ?"]
+    params = [q]
+    if args.project:
+        where.append("f.project LIKE ?")
+        params.append(f"%{args.project}%")
+    if args.role:
+        where.append("m.role = ?")
+        params.append(args.role)
+    since = parse_since(args.since)
+    if since:
+        where.append("m.ts >= ?")
+        params.append(since)
+    if args.session:
+        where.append("f.session_id = ?")
+        params.append(args.session)
+    sql = (
+        "SELECT m.id, m.line, m.off, m.blk, m.ts, m.role, f.path, f.project, "
+        "f.session_id, f.title, f.provider, f.branch, bm25(ftx) AS rank "
+        "FROM ftx JOIN msg m ON m.id = ftx.rowid "
+        "JOIN files f ON f.id = m.file_id "
+        f"WHERE {' AND '.join(where)} ORDER BY rank LIMIT ?")
+    params.append(args.limit)
+    try:
+        rows = con.execute(sql, params).fetchall()
+    except sqlite3.OperationalError as e:
+        # People type questions, and a stray ':' or '(' is FTS5 syntax. Retry
+        # as a plain conjunction of words before giving up on them.
+        toks = WORD.findall(args.query)
+        if not toks:
+            sys.stderr.write(f"convo: bad query: {e}\n")
+            return 2
+        params[0] = " AND ".join(toks)
+        try:
+            rows = con.execute(sql, params).fetchall()
+        except sqlite3.OperationalError as e2:
+            sys.stderr.write(f"convo: bad query: {e2}\n")
+            return 2
+    if not rows:
+        print(f"no matches for {q}")
+        return 1
+    terms = [t.lower() for t in WORD.findall(args.query)] or [args.query.lower()]
+    out = []
+    for r in rows:
+        text = message_text(r["path"], r["off"], r["blk"], r["provider"])
+        out.append((r, make_snippet(text, terms)))
+    if args.json:
+        print(json.dumps([{
+            "ts": r["ts"], "role": r["role"], "project": r["project"],
+            "session": r["session_id"], "title": r["title"],
+            "path": r["path"], "line": r["line"], "snippet": s,
+        } for r, s in out], indent=1))
+        return 0
+    for i, (r, s) in enumerate(out, 1):
+        ts = (r["ts"] or "")[:16].replace("T", " ")
+        title = r["title"] or ""
+        sid = (r["session_id"] or "")[:8]
+        print(f"{C.dim}{i:3d}.{C.off} {C.bold}{ts}{C.off}  "
+              f"{C.cyan}{short_project(r['project']):<22}{C.off} "
+              f"{C.dim}{sid}{C.off}  {title}")
+        print(f"     {C.yellow}{r['role']}{C.off} · {s}")
+        print(f"     {C.dim}{r['path']}:{r['line']}{C.off}")
+    return 0
+
+
+def cmd_session(con, args):
+    sid = args.id.strip().lower()
+    rows = con.execute(
+        "SELECT * FROM files WHERE session_id = ? OR path LIKE ? "
+        "ORDER BY nmsg DESC, first_ts", (sid, f"%{sid}%")).fetchall()
+    # Sidecars (workflow journals, empty spool files) carry the id in their
+    # path but hold no conversation; they are noise unless asked for.
+    empty = [r for r in rows if not r["nmsg"]]
+    if not getattr(args, "verbose", False):
+        rows = [r for r in rows if r["nmsg"]]
+    mentions = []
+    try:
+        esc = sid.replace('"', '""')
+        mentions = con.execute(
+            "SELECT m.line, m.ts, m.role, f.path, f.project, f.session_id, "
+            "f.title FROM ftx JOIN msg m ON m.id = ftx.rowid "
+            "JOIN files f ON f.id = m.file_id "
+            "WHERE ftx MATCH ? LIMIT ?", (f'"{esc}"', args.limit)).fetchall()
+    except sqlite3.OperationalError:
+        pass
+    if not rows and not mentions:
+        print(f"no transcript or mention found for {sid}")
+        return 1
+    if rows:
+        print(f"{C.bold}transcripts owned by {sid}{C.off}")
+        for r in rows[:args.limit]:
+            span = f"{(r['first_ts'] or '')[:16]} → {(r['last_ts'] or '')[:16]}"
+            print(f"  {C.cyan}{short_project(r['project']):<22}{C.off} "
+                  f"{span.replace('T', ' ')}  {r['nmsg']} msgs  "
+                  f"{r['title'] or ''}")
+            print(f"    {C.dim}{r['path']}{C.off}")
+        if len(rows) > args.limit:
+            print(f"  {C.dim}… {len(rows) - args.limit} more{C.off}")
+        if empty:
+            print(f"  {C.dim}({len(empty)} sidecar file(s) with no "
+                  f"conversation; -v to list){C.off}")
+    if mentions:
+        print(f"\n{C.bold}mentioned in {len(mentions)} indexed message(s){C.off}")
+        for r in mentions:
+            ts = (r["ts"] or "")[:16].replace("T", " ")
+            print(f"  {ts}  {C.cyan}{short_project(r['project']):<22}{C.off}"
+                  f"{r['role']:<10} {C.dim}{r['path']}:{r['line']}{C.off}")
+    return 0
+
+
+def cmd_status(con, args):
+    f = con.execute(
+        "SELECT COUNT(*) n, SUM(size) b, SUM(nmsg) m FROM files").fetchone()
+    size = os.path.getsize(DB) if os.path.exists(DB) else 0
+    wal = DB + "-wal"
+    if os.path.exists(wal):
+        size += os.path.getsize(wal)
+    last = con.execute("SELECT v FROM meta WHERE k='last_index'").fetchone()
+    print(f"index    {DB}")
+    print(f"size     {size / 1048576:.1f} MiB")
+    print(f"corpus   {(f['b'] or 0) / 1073741824:.1f} GiB in {f['n']} transcripts")
+    print(f"messages {f['m'] or 0}")
+    if last:
+        age = time.time() - float(last["v"])
+        print(f"updated  {age:.0f}s ago")
+    print(f"ratio    {100 * size / (f['b'] or 1):.2f}% of corpus bytes")
+    top = con.execute(
+        "SELECT project, SUM(nmsg) m FROM files GROUP BY project "
+        "ORDER BY m DESC LIMIT 8").fetchall()
+    print("\ntop projects")
+    for r in top:
+        print(f"  {short_project(r['project']):<28} {r['m']}")
+    return 0
+
+
+class C:
+    bold = dim = cyan = yellow = off = ""
+
+    @classmethod
+    def enable(cls, on):
+        if on:
+            cls.bold, cls.dim, cls.off = "\033[1m", "\033[2m", "\033[0m"
+            cls.cyan, cls.yellow = "\033[36m", "\033[33m"
+
+
+CMDS = ("index", "session", "status")
+VALUE_OPTS = {"-n", "--limit", "-p", "--project", "-r", "--role", "--since",
+              "-s", "--session", "--color"}
+
+
+def split_cmd(argv):
+    """Pull out a leading subcommand, tolerating options before it.
+
+    argparse cannot have both an open positional and subparsers, so the
+    subcommand is removed here and the rest is parsed as a query.
+    """
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in VALUE_OPTS:
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        if a in CMDS:
+            return a, argv[:i] + argv[i + 1:]
+        break
+    return None, argv
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    cmd, argv = split_cmd(argv)
+
+    p = argparse.ArgumentParser(
+        prog="convo",
+        description="search local agent conversation transcripts")
+    p.add_argument("query", nargs="*", help="search terms (FTS5 syntax)")
+    p.add_argument("-s", "--session", metavar="UUID",
+                   help="restrict search to one session id")
+    p.add_argument("-x", "--exact", action="store_true",
+                   help="exact phrase match (use for ids and literal strings)")
+    p.add_argument("-a", "--all-terms", action="store_true",
+                   help="require every term (default: FTS5 syntax as given)")
+    p.add_argument("-p", "--project", metavar="NAME", help="filter by project")
+    p.add_argument("-r", "--role", metavar="ROLE",
+                   help="user|assistant|thinking|tool")
+    p.add_argument("--since", metavar="N[dwmy]", help="only newer than")
+    p.add_argument("-n", "--limit", type=int, default=20)
+    p.add_argument("--json", action="store_true")
+    p.add_argument("-u", "--no-update", action="store_true",
+                   help="skip the incremental index refresh")
+    p.add_argument("-q", "--quiet", action="store_true")
+    p.add_argument("-v", "--verbose", action="store_true")
+    p.add_argument("--color", choices=("auto", "always", "never"), default="auto")
+    p.add_argument("--full", action="store_true",
+                   help="index: rebuild from scratch")
+    p.epilog = ("subcommands: index [--full] | session <uuid> | status\n"
+                "examples:\n"
+                "  convo policy graph            search everything\n"
+                "  convo -x 'exact phrase'       literal match\n"
+                "  convo session <uuid>          locate one session, no grep\n")
+    p.formatter_class = argparse.RawDescriptionHelpFormatter
+    args = p.parse_args(argv)
+    args.cmd = cmd
+    if cmd == "session":
+        if not args.query:
+            p.error("session needs a session id")
+        args.id = args.query[0]
+
+    C.enable(args.color == "always"
+             or (args.color == "auto" and sys.stdout.isatty()))
+
+    if args.cmd == "index":
+        if args.full and os.path.exists(DB):
+            for suf in ("", "-wal", "-shm"):
+                try:
+                    os.unlink(DB + suf)
+                except OSError:
+                    pass
+        con = connect()
+        t0 = time.time()
+        r = with_lock(index, con, quiet=args.quiet, verbose=args.verbose)
+        if r is None:
+            sys.stderr.write("convo: another index run holds the lock\n")
+            return 0
+        nf, nm, nb = r
+        el = time.time() - t0
+        print(f"indexed {nm} messages from {nf} changed files "
+              f"({nb / 1073741824:.2f} GiB read) in {el:.1f}s")
+        return 0
+
+    # Query-time refresh: cheap when nothing changed, so no daemon or timer.
+    if not args.no_update:
+        con = connect()
+        with_lock(index, con, quiet=args.quiet)
+        con.close()
+
+    if not os.path.exists(DB):
+        sys.stderr.write("convo: no index yet; run `convo index`\n")
+        return 1
+    con = connect(readonly=True)
+    try:
+        if args.cmd == "status":
+            return cmd_status(con, args)
+        if args.cmd == "session":
+            return cmd_session(con, args)
+        if args.session and not args.query:
+            return cmd_session(con, argparse.Namespace(
+                id=args.session, limit=args.limit))
+        if not args.query:
+            p.print_help()
+            return 0
+        args.query = " ".join(args.query)
+        return cmd_search(con, args)
+    finally:
+        con.close()
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except BrokenPipeError:
+        os._exit(0)
+    except KeyboardInterrupt:
+        sys.stderr.write("\ninterrupted (index progress is committed)\n")
+        sys.exit(130)

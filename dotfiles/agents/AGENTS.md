@@ -90,6 +90,17 @@ expression is a licensing decision, not a style one.
 Agent notes, status, scratch, and handoffs go in gitignored `docs/private/`
 in the repo they concern. Public `docs/` is end-user-facing only.
 
+## Searching past conversations — `convo`, never a raw scan of north-data
+`convo <terms>` full-text-searches every transcript (both providers, every
+account) and prints when, which project, which session, a snippet, and the
+`path:line` to open. `convo session <uuid>` locates one session's transcripts;
+`convo -x '<literal>'` is exact match. It refreshes incrementally at query
+time, so it is never stale and costs ~0.1s when nothing changed.
+NEVER `rg`/`grep` across `~/code/north-data` or `~/.local/state/north`: they
+are the SAME ~99 GB tree behind a symlink, so naming both scans it twice, and
+`--hidden` walks the `.git` dirs on top. One such sweep measured 3.5 GB RSS
+and a quarter of the machine. Scan raw only after `convo` names the file.
+
 ## Paths — full and ~-anchored, always
 Every path you write (chat, docs, comments, output): full from `~`, never
 bare-relative. In docs, prefer `repo:path` over absolute checkout paths.
