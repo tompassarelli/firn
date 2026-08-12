@@ -52,9 +52,6 @@
   myConfig.modules.windows-vm.enable = true;
   myConfig.modules.nh.enable = true;
   myConfig.modules.babashka.enable = true;
-  myConfig.modules.north-coord.enable = false;
-  myConfig.modules.north-coord.socketActivation = true;
-  myConfig.modules.north-coord.stageATelemetryPartition = true;
   myConfig.modules.north-fram.enable = true;
   myConfig.modules.north-stream-sync.enable = false;
   myConfig.modules.north-coordination-workers.enable = false;
