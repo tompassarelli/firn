@@ -2,8 +2,12 @@
 # gjoa launcher + dev CLI
 set -u
 
-root="$HOME/code/gjoa/active"
-nix_bin="$root/result/bin/gjoa"
+container="$HOME/code/gjoa"
+root="$container/active"
+if [ ! -d "$root" ] && [ -d "$container/wt-dev-runtime" ]; then
+  root="$container/wt-dev-runtime"
+fi
+nix_bin="$container/result/bin/gjoa"
 mach_bin="$root/engine/obj-x86_64-pc-linux-gnu/dist/bin/gjoa"
 
 # ── auto-sync: keep the mach (dev) binary's loose chrome + toolkit overlays
@@ -77,8 +81,19 @@ case "${1:-}" in
     # The mach binary is unwrapped so NixOS can't find these otherwise.
     nix_libs=""
     if [ -r "$nix_bin" ]; then
-      nix_libs=$(grep -oP "'/nix/store/[^']*'" "$nix_bin" | tr -d "'" | sort -u | tr '\n' ':')
-      nix_libs="${nix_libs%:}"
+      nix_libs=$(
+        {
+          grep -oP "'/nix/store/[^']*'" "$nix_bin" | tr -d "'"
+          if command -v nix-store >/dev/null 2>&1 && [ -e "$container/result" ]; then
+            nix-store --query --requisites "$(readlink -f "$container/result")" 2>/dev/null |
+              while IFS= read -r store_path; do
+                if [ -d "$store_path/lib" ]; then
+                  printf '%s\n' "$store_path/lib"
+                fi
+              done
+          fi
+        } | awk 'NF && !seen[$0]++' | paste -sd: -
+      )
     fi
     if [ -n "$nix_libs" ]; then
       export LD_LIBRARY_PATH="$nix_libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
