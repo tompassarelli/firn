@@ -10,7 +10,6 @@ beagle/bin/test/code-as-facts/delete.sh
 beagle/bin/test/code-as-facts/rename.sh
 beagle/bin/test/code-as-facts/run.sh
 beagle/bin/test/engine-demo/run.sh
-beagle/docs/value-semantics-ownership.md
 beagle/integrations/north/hooks/beagle-session-start.sh
 beagle/native-core/bin/fram-native-demo
 beagle/native-core/validation/slice-bodies/drive.sh
