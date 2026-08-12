@@ -58,7 +58,10 @@ inside a repo, personal data, a path the guard cannot classify — the guard ask
 you in an interactive session and refuses in an unattended one; the reason names
 `north config guards off` for when the loss is reviewed and intended.
 
-Shell access to `.ssh/`, `.aws/`, `*.pem`, and key files is refused.
+Credential files may be passed to purpose-built authentication commands.
+In particular, `ssh-add <key>` may load any identity, and SSH-family identity
+options may name any key. Authentication is not disclosure: do not print,
+copy, upload, or pipe private-key contents into another process or tool output.
 
 A denial is information about the path, not the goal: take the worktree, name
 the paths, use `safe-push`. If a guard is genuinely wrong about your case, say
