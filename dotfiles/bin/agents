@@ -41,7 +41,7 @@ SKILLS=(webdev importing-skills threejs-animation threejs-fundamentals
   threejs-geometry threejs-interaction threejs-lighting threejs-loaders
   threejs-materials threejs-postprocessing threejs-shaders threejs-textures
   beagle-authoring fram-modeling code-as-facts firn repo-safety staffing
-  messages threads assignments todo)
+  messages threads assignments todo convo)
 # A MODULE is a skill with declarations — a skill whose frontmatter names the
 # hooks its rules need (`hooks:`) or a directory of agent templates it ships
 # (`agents:`). It is not a kind: a module's name IS a skill's name. Staffing is
@@ -776,6 +776,7 @@ skill_source() {
     firn)            echo "$HOME/code/nixos-config/main/modules/north-profile/firn/skills/firn" ;;
     repo-safety)     echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/repo-safety" ;;
     todo)            echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/todo" ;;
+    convo)           echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/convo" ;;
     staffing)        echo "$NORTH/orchestration/staffing" ;;
     messages)        echo "$NORTH/coordination/messages" ;;
     threads)         echo "$NORTH/coordination/threads" ;;
