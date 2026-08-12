@@ -98,6 +98,16 @@ hook_rows() { # every hook row status prints, nested under a skill or flat
   ag status 2>/dev/null |
     awk '/^hooks$/{f=1;next} /^plugins$/{f=0} f || /^ +hook · /'
 }
+hook_count() { # how many hooks the switchboard knows — read from the HOOKS
+  # array in `agents`, never a literal: a `--all` sweep covers whatever that
+  # array holds, so hardcoding the number makes adding a hook fail the suite.
+  local names
+  names="$(sed -n '/^HOOKS=(/,/)/p' "$BIN" | tr '\n' ' ')"
+  names="${names#*(}"; names="${names%%)*}"
+  set -- $names
+  echo "$#"
+}
+HOOK_COUNT="$(hook_count)"
 
 echo "== 1. fresh seed: bound hooks enabled+companion, unbound disabled, nothing composes"
 fresh
@@ -357,9 +367,12 @@ fresh; ag status > /dev/null
 ag on --all > /dev/null
 chk "on --all: no hook left disabled" "0" "$(grep -c '^hook .* disabled' "$SB/.config/agents/manifest.conf" || true)"
 chk "on --all: skills on" "0" "$(grep -c '^skill .* off' "$SB/.config/agents/manifest.conf" || true)"
-chk "on --all: every fragment composed" "11" "$(hook_rows | grep -cE ': +on( |$)')"
+if [ "${HOOK_COUNT:-0}" -gt 0 ] 2>/dev/null
+  then ok "hook count derives from the HOOKS array ($HOOK_COUNT)"
+  else bad "hook count derives from the HOOKS array" "got [$HOOK_COUNT]"; fi
+chk "on --all: every fragment composed" "$HOOK_COUNT" "$(hook_rows | grep -cE ': +on( |$)')"
 ag off --all > /dev/null
-chk "off --all: hooks disabled" "11" "$(grep -c '^hook .* disabled' "$SB/.config/agents/manifest.conf")"
+chk "off --all: hooks disabled" "$HOOK_COUNT" "$(grep -c '^hook .* disabled' "$SB/.config/agents/manifest.conf")"
 chk "off --all: nothing composed" "" "$(composed_files)"
 chk "off --all: skills off" "0" "$(grep -c '^skill .* on' "$SB/.config/agents/manifest.conf" || true)"
 
