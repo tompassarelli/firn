@@ -10,6 +10,7 @@ hooks:
   - worktree-guard
   - git-blind-stage-guard
   - tripwire-guard
+  - session-kill-guard
 ---
 
 # repo-safety — where agents may write, and how work lands
@@ -41,6 +42,17 @@ work.
 `git commit && git push` chain (pre-commit must run first), no force-push or
 rewrite of published history. Origin carries main plus tags; worktree branches
 stay local.
+
+**Signals stay scoped to processes you started.** Broadcast kill (`kill -1`),
+user-wide sweeps (`pkill -u`/`killall -u` with no pattern), compositor kills
+(`pkill niri`), and login-session teardown (`loginctl terminate-*`,
+`systemctl --user exit`, stopping `user@*`) are refused: one such call takes
+down the desktop session, the user manager, and every other agent at once.
+Signal a specific PID (`kill <pid>`) or a unique pattern
+(`pkill -f '<unique-pattern>'`); session teardown is the operator's call. Code
+that must reap a whole process subtree runs as PID 1 inside its own PID
+namespace (`unshare --user --map-current-user --pid --fork --kill-child`) —
+never `kill(-1)` in the caller's namespace.
 
 **Destructive and credential commands.** A recursive delete is judged by what
 would be lost, not by where the path is. Refused outright, in every mode: `/`,

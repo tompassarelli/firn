@@ -36,7 +36,7 @@ MEM_INDEX_CACHE="$STATE/mem-index"
 
 HOOKS=(agent-spawn-guard beagle-session-start comment-bloat-guard
   corpus-scan-guard firn-guard git-blind-stage-guard hook-detach logcompress
-  north-session-lifecycle tripwire-guard worktree-guard)
+  north-session-lifecycle session-kill-guard tripwire-guard worktree-guard)
 SKILLS=(webdev importing-skills threejs-animation threejs-fundamentals
   threejs-geometry threejs-interaction threejs-lighting threejs-loaders
   threejs-materials threejs-postprocessing threejs-shaders threejs-textures
