@@ -4,8 +4,11 @@ set -u
 
 container="$HOME/code/gjoa"
 root="$container/active"
-if [ ! -d "$root" ] && [ -d "$container/wt-dev-runtime" ]; then
-  root="$container/wt-dev-runtime"
+# The engine-hosting checkout is a pin: ~/code/gjoa/pins/dev-runtime, described
+# by pins/dev-runtime.pin and aliased as ~/code/gjoa/active. The alias is the
+# normal route; the pin path is the fallback when the alias is missing.
+if [ ! -d "$root" ] && [ -d "$container/pins/dev-runtime" ]; then
+  root="$container/pins/dev-runtime"
 fi
 if [ -d "$root" ]; then
   root="$(readlink -f "$root")"

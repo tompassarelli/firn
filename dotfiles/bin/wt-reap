@@ -5,10 +5,16 @@ usage() {
   cat <<'USAGE'
 Usage: wt-reap [--all] [--dry-run]
 
-Sweep spent sibling worktrees (never main) out of a container
-(<project>/main + <project>/wt-<slug> siblings).
+Sweep spent lanes out of a container's worktrees/ directory.
 
-A sibling is reaped when it is completely clean (including untracked and
+A container holds exactly three slots, and the directory IS the lifecycle
+policy:
+  <project>/main/               the clean checkout — never swept
+  <project>/worktrees/<slug>/   ephemeral lanes — the only thing this sweeps
+  <project>/pins/<name>/        externally consumed — never swept, never
+                                enumerated here
+
+A lane is reaped when it is completely clean (including untracked and
 non-disposable ignored files), is at least two hours old, has no live process
 working inside it, is not locked or a rescue branch, AND either:
   merged  — its HEAD is an ancestor of main; or
@@ -24,6 +30,10 @@ reaping is also held back by any merge commit the lane is ahead by.
   (no flags)  operate on the container of the current directory
   --all       operate on every ~/code/*/main container
   --dry-run   report what would be reaped or kept; change nothing
+
+Only <project>/worktrees/<slug> is swept. main/, pins/*, and any other shape
+are skipped by construction — a pin is externally consumed, so it is never a
+reap candidate no matter how clean, merged, detached, or old it is.
 USAGE
 }
 
@@ -126,7 +136,12 @@ all_commits_equivalent() {
 reap_container() {
   local container="$1" main_dir wt main_branch head branch_ref branch_name dirty ahead
   local wt_list locked_paths keep_reason ignored ignored_count
+  local sweep_dir
+  # `worktree list` reports resolved paths; the sweep test compares parents
+  # against this container, so resolve it the same way.
+  container=$(cd "$container" && pwd -P) || return 0
   main_dir="$container/main"
+  sweep_dir="$container/worktrees"
   [ -e "$main_dir/.git" ] || return 0
 
   [ "$dry" -eq 1 ] || git -C "$main_dir" worktree prune
@@ -138,7 +153,10 @@ reap_container() {
 
   while IFS= read -r wt; do
     [ -n "$wt" ] || continue
-    [ "$(basename "$wt")" != main ] || continue
+    # Positive opt-in, not a negative skip list: only a lane parked directly in
+    # <container>/worktrees is sweepable. main/, pins/*, and any future slot are
+    # skipped by construction — safe by default instead of deleted by default.
+    [ "$(dirname "$wt")" = "$sweep_dir" ] || continue
 
     dirty=$(git -C "$wt" status --porcelain 2>/dev/null) || continue
     if [ -n "$dirty" ]; then

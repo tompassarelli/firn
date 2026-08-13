@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # wt-rescue — sanctioned remediation for a dirty main checkout: relocate the
-# dirty state INTACT into a sibling rescue worktree, verify it byte-for-byte,
+# dirty state INTACT into <container>/worktrees/rescue-<ts>, verify it byte-for-byte,
 # THEN restore main to clean. Never uses stash — the relocated state is a
 # real, inspectable commit on a real branch, not a stash entry that can be
 # dropped or lost across a rebuild.
@@ -11,7 +11,7 @@ usage() {
 Usage: wt-rescue [path] [--dry-run]
 
 Relocate a dirty main checkout's tracked + untracked (non-ignored) changes
-into a new sibling worktree/branch, verify the relocation byte-for-byte,
+into a new worktree/branch under <container>/worktrees/, verify it byte-for-byte,
 commit it there, then restore main to a clean working tree.
 
   (no path)   operate on the container of the current directory
@@ -90,14 +90,16 @@ while IFS= read -r f; do
   untracked_paths+=("$f")
 done <<<"$untracked"
 
-# --- pick a free destination name: <container>/wt-rescue-<UTC yyyymmdd-HHMM> ---
+# --- pick a free destination: <container>/worktrees/rescue-<UTC yyyymmdd-HHMM> ---
+# The BRANCH name stays rescue-<ts> whatever the leaf is: wt-reap's safety gate
+# recognises a rescue tree by its branch, not by its path.
 ts=$(date -u +%Y%m%d-%H%M)
 branch="rescue-$ts"
-rescue_dir="$container/wt-rescue-$ts"
+rescue_dir="$container/worktrees/rescue-$ts"
 suffix=2
 while [ -e "$rescue_dir" ] || git -C "$main_dir" show-ref --quiet --verify "refs/heads/$branch"; do
   branch="rescue-${ts}-${suffix}"
-  rescue_dir="$container/wt-rescue-${ts}-${suffix}"
+  rescue_dir="$container/worktrees/rescue-${ts}-${suffix}"
   suffix=$((suffix + 1))
 done
 
@@ -113,6 +115,7 @@ if [ "$dry_run" -eq 1 ]; then
 fi
 
 # --- create the rescue worktree from main's current HEAD --------------------
+mkdir -p "$container/worktrees"
 git -C "$main_dir" worktree add -q -b "$branch" "$rescue_dir" HEAD
 
 # --- relocate: apply the tracked diff, then copy untracked files ------------

@@ -65,27 +65,37 @@ Verify a blocker's load-bearing assertion before accepting OR overriding it.
 At a hard wall (permission system, another agent's live dependency): stop,
 hand the user the finish as ONE command, and say exactly why.
 
-## Repository layout — container/worktree (safety-critical)
-`~/code/<project>/` is a container, never itself a checkout. `main/` is the
-clean checkout and is NEVER edited directly, by anyone. All work happens in a
-sibling worktree:
+## Repository layout — main / worktrees / pins (safety-critical)
+`~/code/<project>/` is a container, never itself a checkout. It holds three
+slots, and the DIRECTORY is the lifecycle policy:
 
-    git -C ~/code/<project>/main worktree add ~/code/<project>/wt-<slug> -b <slug>
-    # edit + commit in the worktree, then FROM the worktree:
+    main/              the clean checkout — read-only product, never edited
+    worktrees/<slug>/  ephemeral lanes — the only thing sweepers may delete
+    pins/<name>/       externally consumed checkouts — automation never
+                       touches them; `pins/<name>.pin` names the consumers
+
+All work happens in a lane:
+
+    git -C ~/code/<project>/main worktree add ~/code/<project>/worktrees/SLUG -b SLUG
+    # edit + commit in ~/code/<project>/worktrees/SLUG, then FROM the lane:
     safe-push --to main
     git -C ~/code/<project>/main pull --ff-only
 
-Then remove the worktree and delete the branch — a landed lane that leaves
-its worktree behind is not done. Name the leaf `wt-<slug>` (the prefix is
-what the enforcement guard carves out); don't repeat the project name in the
-slug. Dirty state in any `main/` is human work-in-progress: never commit,
-stash, reset, or clean it — `wt-rescue` relocates it intact if remediation
-is truly needed.
+Then remove the worktree and delete the branch — a landed lane that leaves its
+worktree behind is not done. That rule is scoped to `worktrees/`: a pin is
+never "done" and is never reaped. Name the leaf bare (`worktrees/policy-graph`,
+not `worktrees/north-policy-graph`) — the parent directory is what the
+enforcement guard carves out, so the leaf needs no prefix and never repeats the
+project name. Writes into `pins/` and into a `.pin` manifest are DENIED for
+agents; the one sanctioned mutation is re-pointing (`git -C <pin> checkout
+<ref>`). Dirty state in any `main/` is human work-in-progress: never commit,
+stash, reset, or clean it — `wt-rescue` relocates it intact into
+`worktrees/rescue-<ts>` if remediation is truly needed.
 
 ## Launch-critical repos — agents never edit the primary
 `~/code/fram`, `~/code/north`, and `~/code/beagle` are read live by daemons
 and rebuilds: a half-finished edit in the primary checkout is a broken engine
-for everyone. Agents editing these ALWAYS work in a `wt-<slug>` sibling.
+for everyone. Agents editing these ALWAYS work in a `worktrees/<slug>` lane.
 General rule: if something launches from a checkout, that checkout is
 production — edit it in a worktree and land through a ref.
 
@@ -95,8 +105,9 @@ never `git commit && git push` chained (the pre-commit hook must run first).
 Stage by enumerating paths; `git add -A` sweeps in other agents' work. STOP
 for: a flagged secret (fix the leak, never push it), force-push or rewrite of
 published history, private-to-public exposure, or another agent's in-flight
-WIP. Origin carries main only (plus tags); worktree branches are local and
-ephemeral; never publish a feature branch name.
+WIP. Origin carries main only (plus tags); lane branches are local and
+ephemeral; never publish a feature branch name. Pins are detached HEAD, not
+branches — "ephemeral branch" says nothing about them.
 
 ## Rebuilds — use the sanctioned wrapper
 Agents may run `firn rebuild` after the relevant checks pass and their own
@@ -127,7 +138,8 @@ vendored snippets): check for specified license terms first. If none are
 specified, treat the source as MIT-licensed. Flag copyleft or explicitly
 restrictive terms to the user BEFORE building on them. Attribution and license
 text travel with copied code. `~/code/reference/` is read-only context — never
-edit it, never build features there, and never take a worktree in it. Reading a
+edit it, never build features there, and take neither a worktree nor a pin in
+it. Reading a
 reference implementation to understand a protocol is always fine; copying its
 expression is a licensing decision, not a style one.
 

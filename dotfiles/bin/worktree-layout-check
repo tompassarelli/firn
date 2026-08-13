@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Every git worktree under ~/code lives at ~/code/<project>/wt-<slug>. Nothing else.
+# Every git worktree under ~/code lives at ~/code/<project>/worktrees/<slug>,
+# except an externally-consumed pin at ~/code/<project>/pins/<name>. Nothing else.
+# The directory IS the lifecycle policy: worktrees/ is what the sweepers may
+# delete, pins/ is what they must never see.
 #
 # WHY THIS IS A CHECK AND NOT A DOC
 #   The layout was written down and re-stated repeatedly, and on 2026-07-29 a
@@ -13,7 +16,8 @@
 #   silently stops being true.
 #
 # WHAT IS DELIBERATELY EXEMPT
-#   - the project's own checkout (~/code/<project>)
+#   - the project's own checkout (~/code/<project>/main)
+#   - pins (~/code/<project>/pins/<name>) — reported as pins, never strays
 #   - tool-owned runtimes: ~/code/north-data/fram-runtime/deployments/<rev>,
 #     created and owned by `north-coord-runtime promote`. Moving one breaks the
 #     running coordinator.
@@ -26,6 +30,7 @@ set -uo pipefail
 CODE="${CODE_ROOT:-$HOME/code}"
 strays=0
 checked=0
+pins=0
 
 exempt() {
   case "$1" in
@@ -40,12 +45,9 @@ repos_found=0
 for repo_dir in "$CODE"/*/; do
   container="${repo_dir%/}"
   repo="$(basename "$container")"
-  # The checkout is <container>/main under the canonical layout, and was
-  # <container> itself before the migration. Support both, or this check
-  # silently finds nothing and reports OK — the exact false green it exists to
-  # prevent.
-  if   [ -d "$container/main/.git" ]; then checkout="$container/main"
-  elif [ -d "$container/.git" ];      then checkout="$container"
+  # The checkout is <container>/main. One shape only: accepting a second one
+  # here is the compatibility machinery that lets drift read as clean.
+  if [ -d "$container/main/.git" ]; then checkout="$container/main"
   else continue
   fi
   repos_found=$((repos_found + 1))
@@ -53,7 +55,16 @@ for repo_dir in "$CODE"/*/; do
     [ -n "$wt" ] || continue
     checked=$((checked + 1))
     [ "$wt" = "$checkout" ] && continue               # the checkout itself
-    case "$wt" in "$container"/wt-*) continue ;; esac
+    case "$wt" in "$container"/worktrees/*) continue ;; esac
+    # A pin is legal but is NOT a lane: name it as itself so it is neither a
+    # stray nor silently swallowed into the lane count.
+    case "$wt" in
+      "$container"/pins/*)
+        printf 'PIN    %-14s %s\n' "$repo" "${wt/#$HOME/\~}"
+        pins=$((pins + 1))
+        continue
+        ;;
+    esac
     exempt "$wt" && continue
     printf 'STRAY  %-14s %s\n' "$repo" "${wt/#$HOME/\~}"
     strays=$((strays + 1))
@@ -69,7 +80,7 @@ if [ "$repos_found" -lt 5 ]; then
 fi
 
 if [ "$strays" -eq 0 ]; then
-  echo "worktree-layout: OK — $checked trees, all at ~/<project>/wt-<slug>"
+  echo "worktree-layout: OK — $checked trees, all at ~/<project>/main, /worktrees/<slug>, or /pins/<name> ($pins pin(s))"
   exit 0
 fi
 
@@ -78,16 +89,18 @@ cat >&2 <<EOF
 worktree-layout: $strays worktree(s) out of format.
 
 The layout is:
-  ~/code/<project>/main/       the clean checkout  (today: ~/code/<project>)
-  ~/code/<project>/wt-<slug>/  every working tree
+  ~/code/<project>/                  container only — never a checkout
+  ~/code/<project>/main/             the clean checkout — read-only product
+  ~/code/<project>/worktrees/<slug>/ ephemeral lanes — sweepable
+  ~/code/<project>/pins/<name>/      externally consumed — never automated
 
-Move one with:
-  git -C ~/code/<project> worktree move <old> ~/code/<project>/wt-<slug>
+Move a lane with:
+  git -C ~/code/<project>/main worktree move <old> ~/code/<project>/worktrees/<slug>
 
 If it is on a different filesystem (rename(2) cannot cross devices, which is
 why /tmp worktrees fail), copy and repair instead:
-  cp -a <old> ~/code/<project>/wt-<slug>
-  git -C ~/code/<project> worktree repair ~/code/<project>/wt-<slug>
-  git -C ~/code/<project> worktree prune
+  cp -a <old> ~/code/<project>/worktrees/<slug>
+  git -C ~/code/<project>/main worktree repair ~/code/<project>/worktrees/<slug>
+  git -C ~/code/<project>/main worktree prune
 EOF
 exit 1

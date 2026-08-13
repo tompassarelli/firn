@@ -1104,7 +1104,7 @@ TWG="${TRIPWIRE_GUARD:-$REPO/../../north/main/profiles/tom/hooks/tripwire-guard.
 if [ ! -x "$TWG" ] || ! command -v jq > /dev/null 2>&1; then
   ok "tripwire-guard behaviour (skipped: North not checked out beside this repo, or no jq)"
 else
-MINE="$SB/code/proj/wt-mine"; OTHER="$SB/code/proj/wt-other"
+MINE="$SB/code/proj/worktrees/mine"; OTHER="$SB/code/proj/worktrees/other"
 mkdir -p "$MINE" "$OTHER" "$SB/code/proj/main" "$SB/.cache/thumbnails" \
   "$SB/Pictures/Screenshots" "$SB/code/north-data/accounts"
 git -C "$MINE" init -q 2>/dev/null; git -C "$OTHER" init -q 2>/dev/null

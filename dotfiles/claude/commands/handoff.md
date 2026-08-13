@@ -16,9 +16,10 @@ The thread is the handoff; a repo-root dump is not.
 3. **Write the delta** — `north tell <id> <pred> "<value>"`, one item per fact;
    never re-summarize what the thread already holds:
    - `progress` — `STOPPED: <what is true now> · NEXT: <exact first command>`
-   - `progress` — where the work physically is: worktree path, branch, anything
-     unpushed or stashed. Dirty in a `main/`? `wt-rescue` first, then name the
-     rescue worktree. Never a diff in prose.
+   - `progress` — where the work physically is: lane path under
+     `<container>/worktrees/`, branch, anything unpushed or stashed. Dirty in a
+     `main/`? `wt-rescue` first, then name the rescue lane it created at
+     `<container>/worktrees/rescue-<ts>`. Never a diff in prose.
    - `learning` — each decision, rejected approach, constraint, misleading path
    - `done_when` — any completion bar the thread is still missing
    - `outcome` — only if the work is actually terminal

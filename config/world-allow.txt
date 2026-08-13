@@ -120,8 +120,8 @@ north/cli/tests/worktree-allocation-integration-test.clj	1
 north/cli/tests/worktree-janitor-integration-test.clj	1
 north/profiles/tom/hooks/agent-spawn-guard.sh	3
 north/profiles/tom/hooks/agent-spawn-guard.test.sh	12
-north/profiles/tom/hooks/launch-critical-worktree-guard.test.py	47
-north/profiles/tom/hooks/launch-critical-worktree-guard.test.sh	12
+north/profiles/tom/hooks/launch-critical-worktree-guard.test.py	55
+north/profiles/tom/hooks/launch-critical-worktree-guard.test.sh	14
 north/profiles/tom/hooks/tripwire-guard.test.sh	1
 north/scripts/framlog-cutover.clj	4
 north/sdk/bench/admission-worker.ts	1
@@ -134,5 +134,5 @@ north/sdk/test/provider-authority.test.ts	1
 north/sdk/test/run-ledger.test.ts	1
 north/sdk/test/run-token-budget.test.ts	1
 north/sdk/test/session-hard-cap.test.ts	12
-north/sdk/test/worktree.test.ts	4
+north/sdk/test/worktree.test.ts	9
 north/tests/generated_output_test.sh	1

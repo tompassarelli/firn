@@ -161,7 +161,8 @@ report_reap_ready() {
   [ "$(basename "$repo_root")" = main ] || return 0
   container=$(dirname "$repo_root")
   main_branch=$(git -C "$repo_root" symbolic-ref --quiet --short HEAD 2>/dev/null) || return 0
-  for wt in "$container"/wt-*; do
+  # worktrees/ only: pins/ is externally consumed and is never a reap candidate.
+  for wt in "$container"/worktrees/*; do
     [ -e "$wt/.git" ] || continue
     dirty=$(git -C "$wt" status --porcelain 2>/dev/null) || continue
     [ -z "$dirty" ] || continue
@@ -182,15 +183,16 @@ report_reap_ready() {
 # triggers the sweep — a printed hint accumulated 13 stale trees. Best-effort by
 # construction: the reap can never change safe-push's exit status.
 auto_reap() {
-  local container wt_reap self_dir has_siblings=0 wt
+  local container wt_reap self_dir has_lanes=0 wt
   [ "$(basename "$repo_root")" = main ] || return 0
   container=$(dirname "$repo_root")
-  for wt in "$container"/wt-*; do
+  # worktrees/ only: pins/ is externally consumed and is never swept.
+  for wt in "$container"/worktrees/*; do
     [ -e "$wt/.git" ] || continue
-    has_siblings=1
+    has_lanes=1
     break
   done
-  [ "$has_siblings" -eq 1 ] || return 0
+  [ "$has_lanes" -eq 1 ] || return 0
 
   if [ "${NORTH_NO_AUTOREAP:-0}" = 1 ]; then
     report_reap_ready

@@ -72,6 +72,16 @@ rescue_path="$(sed -E 's/^rescued -> ([^ ]+) .*/\1/' <<<"$rescue_line")"
 
 if [ -d "$rescue_path" ]; then ok; else fail "rescue worktree dir missing: $rescue_path"; fi
 if [ "$(cd "$rescue_path" && printf '%s\n' "$(basename "$rescue_path")")" ]; then ok; else fail "unreachable"; fi
+# The destination is a lane under worktrees/, and the branch keeps the bare
+# rescue-<ts> name wt-reap's safety gate matches on.
+case "$rescue_path" in
+  "$c1"/worktrees/rescue-*) ok ;;
+  *) fail "rescue destination is not <container>/worktrees/rescue-<ts>: $rescue_path" ;;
+esac
+case "$(git -C "$rescue_path" symbolic-ref --quiet --short HEAD)" in
+  rescue-*) ok ;;
+  *) fail "rescue branch is not rescue-<ts>: $(git -C "$rescue_path" symbolic-ref --quiet --short HEAD)" ;;
+esac
 
 if [ -n "$(git -C "$rescue_path" status --porcelain)" ]; then
   fail "rescue worktree not committed cleanly: $(git -C "$rescue_path" status --porcelain)"
@@ -103,7 +113,7 @@ if [ "$status2" -eq 0 ]; then ok; else fail "clean no-op exit status: got $statu
 if grep -Fq 'clean, nothing to rescue' <<<"$output2"; then ok; else fail "missing clean no-op message: $output2"; fi
 after_head="$(git -C "$c2/main" rev-parse HEAD)"
 if [ "$before_head" = "$after_head" ]; then ok; else fail "clean main HEAD moved"; fi
-if [ -z "$(find "$c2" -maxdepth 1 -name 'wt-rescue-*')" ]; then ok; else fail "clean no-op created a rescue worktree"; fi
+if [ -z "$(find "$c2/worktrees" -maxdepth 1 -name 'rescue-*' 2>/dev/null)" ]; then ok; else fail "clean no-op created a rescue worktree"; fi
 
 # =============================================================================
 # 3. --dry-run mutates nothing
@@ -122,7 +132,7 @@ if grep -Fq 'DRY RUN' <<<"$output3"; then ok; else fail "missing DRY RUN marker:
 if grep -Fq 'f.txt' <<<"$output3"; then ok; else fail "dry-run plan missing tracked file: $output3"; fi
 if grep -Fq 'loose.txt' <<<"$output3"; then ok; else fail "dry-run plan missing untracked file: $output3"; fi
 if [ "$before_status3" = "$after_status3" ]; then ok; else fail "--dry-run mutated main's status"; fi
-if [ -z "$(find "$c3" -maxdepth 1 -name 'wt-rescue-*')" ]; then ok; else fail "--dry-run created a rescue worktree"; fi
+if [ -z "$(find "$c3/worktrees" -maxdepth 1 -name 'rescue-*' 2>/dev/null)" ]; then ok; else fail "--dry-run created a rescue worktree"; fi
 
 # =============================================================================
 # 4. verify-mismatch abort leaves main untouched

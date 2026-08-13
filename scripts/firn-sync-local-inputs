@@ -62,11 +62,15 @@ repo_for() {
   local input="$1" upper override default
   upper="$(printf '%s' "$input" | tr '[:lower:]' '[:upper:]')"
   override="FIRN_${upper}_REPO"
-  # ~/code/<input> is a CONTAINER holding main/ + wt-<slug>/; the checkout is
+  # ~/code/<input> is a CONTAINER holding main/ (the checkout), worktrees/<slug>/
+  # (ephemeral lanes), and pins/<name>/ (externally consumed). The checkout is
   # <container>/main. Before that migration the container WAS the checkout, so
   # both are probed and the container is used when it still holds a .git —
   # otherwise this aborts every rebuild with "is not a Git checkout", which is
   # exactly what happened on 2026-07-29 once the layout moved.
+  # This function is itself a pin consumer in shape: whenever an input is served
+  # from a checkout rather than the lock, that checkout belongs under pins/ with
+  # a pins/<name>.pin manifest naming this script.
   default="${HOME}/code/${input}"
   [ -e "${default}/main/.git" ] && default="${default}/main"
   printf '%s' "${!override:-$default}"
