@@ -11,4 +11,4 @@
       ;; boto3 in the base runtime: ad-hoc AWS scripting (bucket purges, batch
       ;; ops the cli is clumsy at). Single python3 on the system → no PATH
       ;; collision (a second bare python3 elsewhere would shadow this one).
-      {:environment.systemPackages [(pkgs.python3.withPackages (fn [ps] (nix/with ps [boto3])))]})})
+      {:environment.systemPackages [(pkgs.python3.withPackages (fn [ps] Any (nix/with ps [boto3])))]})})

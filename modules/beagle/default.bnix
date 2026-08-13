@@ -26,7 +26,7 @@
       ["beagle" "beagle-build" "beagle-check" "beagle-validate" "beagle-syntax"
        "beagle-fix" "beagle-repair" "beagle-doctor" "beagle-daemon" "beagle-lsp"]
      mkDev
-      (fn [name]
+      (fn [name] Any
         (pkgs.writeShellApplication
           {:name (s name "-dev")
            :runtimeInputs liveInputs

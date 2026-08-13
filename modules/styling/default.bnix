@@ -16,7 +16,7 @@
       (let
         [lines       (lib.splitString "\n" schemeYaml)
          variantLine
-          (lib.findFirst (fn [line] (lib.hasPrefix "variant:" line)) "" lines)
+          (lib.findFirst (fn [line] Any (lib.hasPrefix "variant:" line)) "" lines)
          match       (builtins.match ".*variant: \"([^\"]+)\".*" variantLine)]
         (if (!= match nil) (builtins.head match) "dark"))]
     {:tags [theming]

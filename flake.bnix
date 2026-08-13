@@ -103,10 +103,10 @@
                        [moduleDirs
                          (builtins.attrNames
                            (nixpkgs.lib.filterAttrs
-                             (fn [n] (fn [v] (== v "directory")))
+                             (fn [n] Any (fn [v] Any (== v "directory")))
                              (builtins.readDir (p "./modules"))))]
                        (++
-                         (builtins.map (fn [m] (s firnModules "/" m))
+                         (builtins.map (fn [m] Any (s firnModules "/" m))
                            moduleDirs)))
                     :home-manager.backupFileExtension "backup"
                     :home-manager.extraSpecialArgs
@@ -130,8 +130,8 @@
                         :nixpkgs.config.allowUnfree true}}})
                  {:nixpkgs.overlays
                    (++
-                     [(fn [final]
-                        (fn [prev]
+                     [(fn [final] Any
+                        (fn [prev] Any
                           {:unstable
                             (import nixpkgs-unstable
                               {:system system :config.allowUnfree true})
@@ -140,7 +140,7 @@
                               {:system system :config.allowUnfree true})
                            :kanata-git
                             (final.unstable.kanata.overrideAttrs
-                              (fn [old]
+                              (fn [old] Any
                                 {:src            kanata-git
                                  :version        "git"
                                  :cargoDeps
@@ -186,7 +186,7 @@
                                 {:pname "nyxt"
                                  :version "4.0.0"
                                  :targetPkgs
-                                  (fn [p]
+                                  (fn [p] Any
                                     (nix/with p
                                       [nyxt-unwrapped
                                        glib
@@ -278,7 +278,7 @@
                  (nix/module [config lib pkgs ...]
                    {:imports
                      (++
-                       (builtins.map (fn [m] (s firnModules "/" m))
+                       (builtins.map (fn [m] Any (s firnModules "/" m))
                          darwinModuleNames))
                     :options.myConfig.modules.users.username
                      (lib.mkOption
@@ -328,8 +328,8 @@
                           :nixpkgs.config.allowUnfree true}}}})
                  {:nixpkgs.overlays
                    (++
-                     [(fn [final]
-                        (fn [prev]
+                     [(fn [final] Any
+                        (fn [prev] Any
                           {:unstable
                             (import nixpkgs-unstable
                               {:system system :config.allowUnfree true})

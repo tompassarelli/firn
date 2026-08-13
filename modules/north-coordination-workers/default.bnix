@@ -33,7 +33,7 @@
              :text
                "systemctl --user try-restart north-concern-reconciliation-worker.service north-attention-reconciliation-worker.service north-coordination-projection-worker.service"})
         maintenanceExec
-          (fn [task]
+          (fn [task] Any
             (s northRuntimeExec
                "/bin/north-runtime-exec --chdir --interp "
                pkgs.babashka "/bin/bb "

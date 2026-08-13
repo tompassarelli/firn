@@ -49,12 +49,12 @@
         :minimal)
      hermesPkg
       (minimalPkg.override
-        (fn [prev]
+        (fn [prev] Any
           {:callPackage
-            (fn [f args]
+            (fn [f args] Any
               (let [drv (prev.callPackage f args)]
                 (if (== (get-or drv pname nil) "hermes-tui")
-                  (drv.overrideAttrs (fn [o] {:src inputs.hermes-agent}))
+                  (drv.overrideAttrs (fn [o] Any {:src inputs.hermes-agent}))
                   drv)))}))
      ;; The lifecycle hooks come from North's live checkout; building the whole
      ;; project just to reach bin/ is what put North in the system closure.

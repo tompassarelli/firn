@@ -48,9 +48,7 @@
         ;; can move at promote speed behind a stable /etc name.
         enforcement "/var/lib/north-enforcement/active/current"
         promoted
-         (fn
-           [relative
-            source]
+         (fn [relative source] String
            (s "L+ /etc/codex/hooks/" relative " - - - - " enforcement "/" source))]
     {:options.myConfig.modules.codex.enable
       (lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)")
