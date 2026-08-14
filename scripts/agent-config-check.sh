@@ -409,6 +409,7 @@ enabled = {
                     command("firn-guard.sh", 10),
                     command("launch-critical-worktree-guard.sh", 10),
                     command("corpus-scan-guard.sh", 10),
+                    command("session-kill-guard.sh", 10),
                 ],
             },
         ],
@@ -1140,8 +1141,8 @@ validate_codex_managed_policy() {
   CODEX_MANAGED_BINDINGS="$(
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
-  if [ "$CODEX_MANAGED_BINDINGS" = 16 ]; then
-    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 16-binding authoritative contract'
+  if [ "$CODEX_MANAGED_BINDINGS" = 17 ]; then
+    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 17-binding authoritative contract'
   elif [ "$CODEX_MANAGED_BINDINGS" = 0 ]; then
     ok_detail 'Codex managed hooks are authoritatively disabled; remote control remains disabled'
   else

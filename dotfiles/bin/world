@@ -160,7 +160,11 @@ run_lint() {
       printf 'world: lint root is not a git checkout: %s\n' "$root" >&2
       return 2
     fi
-    repo="$(basename "$(dirname "$root")")"
+    repo_dir="$(dirname "$root")"
+    case "$(basename "$repo_dir")" in
+      worktrees|pins) repo_dir="$(dirname "$repo_dir")" ;;
+    esac
+    repo="$(basename "$repo_dir")"
     while IFS= read -r -d '' path; do
       lint_skip_path "$path" && continue
       full="$root/$path"
