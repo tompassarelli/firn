@@ -49,6 +49,7 @@ nixos-config/dotfiles/bin/beagle	1
 nixos-config/dotfiles/bin/concern	1
 nixos-config/dotfiles/bin/firn	3
 nixos-config/dotfiles/bin/fram	1
+nixos-config/dotfiles/bin/gjoa	1
 nixos-config/dotfiles/bin/harness-map	4
 nixos-config/dotfiles/bin/north	1
 nixos-config/dotfiles/bin/north-mcp	1
