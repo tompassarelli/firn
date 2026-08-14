@@ -5,26 +5,11 @@
 
 import { readFileSync, existsSync, readlinkSync, lstatSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { execFileSync } from "node:child_process";
 
 const HOME = process.env.HOME;
-const WORLD_BIN = process.env.WORLD_BIN || join(import.meta.dir, "world");
-
-function worldGet(key, fallback) {
-  if (!existsSync(WORLD_BIN)) return fallback;
-  const value = execFileSync(WORLD_BIN, ["get", key], {
-    encoding: "utf8",
-    timeout: 5000,
-  }).trim();
-  return value || fallback;
-}
-
-const CODE_ROOT = worldGet("code.root", join(HOME, "code"));
-const NIXOS_CONFIG_ROOT = worldGet(
-  "repo.nixos-config",
-  join(CODE_ROOT, "nixos-config", "main"),
-);
-const NORTH_ROOT = worldGet("repo.north", join(CODE_ROOT, "north", "main"));
+const CODE_ROOT = join(HOME, "code");
+const NIXOS_CONFIG_ROOT = join(CODE_ROOT, "nixos-config", "main");
+const NORTH_ROOT = join(CODE_ROOT, "north", "main");
 
 // ── helpers ────────────────────────────────────────────────────────────────
 

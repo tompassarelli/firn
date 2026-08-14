@@ -3,9 +3,7 @@ repos:
     hooks:
       - id: hardcoded-repo-path-check
         name: hard-coded repository path check
-        entry: >-
-          bash -c 'roots="$PWD:$("$PWD/dotfiles/bin/world" get repo.north):$("$PWD/dotfiles/bin/world" get repo.fram):$("$PWD/dotfiles/bin/world" get repo.beagle)";
-          WORLD_LINT_ROOTS="$roots" WORLD_LINT_FAIL=1 "$PWD/dotfiles/bin/world" check --lint'
+        entry: env -u HARDCODED_REPO_PATH_CHECK_ROOTS dotfiles/bin/hardcoded-repo-path-check
         language: system
         pass_filenames: false
         always_run: true

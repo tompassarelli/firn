@@ -16,7 +16,7 @@
         maintenanceHost
           (s promotedRuntime "/cli/coordination-maintenance-task-host.clj")
         docctl
-          "%h/code/north/main/bin/docctl" ;; world:allow — live North checkout is the hot-loop source
+          "%h/code/north/main/bin/docctl" ;; hardcoded-repo-path:allow — live North checkout is the hot-loop source
         runtimePath
           (s "PATH=" pkgs.systemd "/bin:" pkgs.babashka "/bin:"
              pkgs.coreutils "/bin:" pkgs.git "/bin")
@@ -171,7 +171,7 @@
               :Service
               {:Type "oneshot"
                :Environment [runtimePath]
-               :WorkingDirectory "%h/code/north/main" ;; world:allow — scan the live documentation checkout
+               :WorkingDirectory "%h/code/north/main" ;; hardcoded-repo-path:allow — scan the live documentation checkout
                :ExecStart (s docctl " invalidate")}}
              :systemd.user.timers.north-docctl-invalidate
              {:Unit {:Description "Refresh the North documentation freshness queue periodically"}

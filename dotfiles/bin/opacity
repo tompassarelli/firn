@@ -4,9 +4,8 @@
 #        opacity 0.85      # set to 0.85
 # The live config is a symlink into the checkout, so a set dirties the repo.
 set -u
-world="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/world"
-repo="$("$world" get repo.nixos-config)"
-[ -n "$repo" ] || { echo "opacity: cannot resolve the nixos-config checkout" >&2; exit 1; }
+script_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+repo="$(cd "$script_dir/../.." && pwd -P)"
 rel="dotfiles/niri/config.kdl"
 cfg="$repo/$rel"
 [ -f "$cfg" ] || { echo "opacity: $cfg missing" >&2; exit 1; }

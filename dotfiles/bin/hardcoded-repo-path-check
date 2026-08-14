@@ -1,0 +1,219 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CHECK_SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+readonly CHECK_SCRIPT_PATH
+CHECK_SOURCE_ROOT="$(cd "$(dirname "$CHECK_SCRIPT_PATH")/../.." && pwd)"
+readonly CHECK_SOURCE_ROOT
+readonly CHECK_ALLOWLIST="$CHECK_SOURCE_ROOT/config/hardcoded-repo-paths.tsv"
+
+check_roots() {
+  if [[ -n "${HARDCODED_REPO_PATH_CHECK_ROOTS:-}" ]]; then
+    tr ':' '\n' <<<"$HARDCODED_REPO_PATH_CHECK_ROOTS"
+    return
+  fi
+
+  local -a roots=(
+    "$CHECK_SOURCE_ROOT"
+    "$HOME/code/north/main" # hardcoded-repo-path:allow
+    "$HOME/code/fram/main" # hardcoded-repo-path:allow
+    "$HOME/code/beagle/main" # hardcoded-repo-path:allow
+  )
+  printf '%s\n' "${roots[@]}"
+}
+
+check_git() {
+  local local_env_vars variable
+  local -a unset_args=()
+
+  local_env_vars="$(command git rev-parse --local-env-vars)" || return 2
+  while IFS= read -r variable; do
+    [[ -n "$variable" ]] || continue
+    if [[ ! "$variable" =~ ^GIT_[A-Z0-9_]+$ ]]; then
+      printf 'hardcoded-repo-path-check: invalid Git local environment name: %s\n' \
+        "$variable" >&2
+      return 2
+    fi
+    unset_args+=(-u "$variable")
+  done <<<"$local_env_vars"
+  env "${unset_args[@]}" git "$@"
+}
+
+skip_path() {
+  local path="$1"
+  [[ "$path" == "flake.lock" || "$path" == */flake.lock ]] && return 0
+  [[ "$path" =~ (^|/)(out|\.beagle-cache|node_modules|\.direnv|docs/private)(/|$) ]] && return 0
+  [[ "$path" =~ (^|/)result[^/]*(/|$) ]] && return 0
+  return 1
+}
+
+allowlist_header() {
+  cat <<'EOF'
+# Declared hard-coded repository paths: <repo-relative path><TAB><reference count>.
+# An entry is live only while the path still carries exactly that many
+# references. A stale entry and a changed count are both hard failures, so
+# this file is the entire inventory — there is no separate total to drift.
+# `hardcoded-repo-path-check --write-allow` re-counts and prunes listed paths.
+# It never adds a path: a brand-new coupling is declared by hand, on purpose.
+EOF
+}
+
+run_check() {
+  local write_allow="$1"
+  local scratch
+  scratch="$(mktemp -d)"
+  CHECK_SCRATCH="$scratch"
+  trap 'rm -rf "${CHECK_SCRATCH:?}"' EXIT
+  local findings="$scratch/findings.tsv"
+  : >"$findings"
+
+  local r1='\$\{?HOME\}?/code/(nixos-config|north|fram|beagle)\b'
+  local r2='/home/[a-z][a-z0-9_-]*/code/'
+  # shellcheck disable=SC2088 # This is the literal repository-path form being checked.
+  local r3='~/code/(nixos-config|north|fram|beagle)/'
+  local canary_count
+  canary_count="$(printf '/home/pathcanary/code/north/\n' | rg -c "$r2" || true)" # hardcoded-repo-path:allow
+  if (( canary_count < 1 )); then
+    printf 'hardcoded-repo-path-check: scan canary did not self-match\n' >&2
+    return 2
+  fi
+
+  local file_count=0 root repo_dir repo path full rule pattern hit line body
+  while IFS= read -r root; do
+    [[ -n "$root" ]] || continue
+    if [[ ! -d "$root" ]] ||
+       ! check_git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      printf 'hardcoded-repo-path-check: root is not a Git checkout: %s\n' "$root" >&2
+      return 2
+    fi
+    repo_dir="$(dirname "$root")"
+    case "$(basename "$repo_dir")" in
+      worktrees|pins) repo_dir="$(dirname "$repo_dir")" ;;
+    esac
+    repo="$(basename "$repo_dir")"
+    while IFS= read -r -d '' path; do
+      skip_path "$path" && continue
+      full="$root/$path"
+      [[ -f "$full" ]] || continue
+      if [[ "$path" == *.nix && -f "${full%.nix}.bnix" ]]; then
+        continue
+      fi
+      ((file_count += 1))
+      for rule in R1 R2; do
+        [[ "$rule" == R1 ]] && pattern="$r1" || pattern="$r2"
+        while IFS= read -r hit; do
+          line="${hit%%:*}"
+          body="${hit#*:}"
+          [[ "$body" == *hardcoded-repo-path:allow* ]] && continue
+          printf '%s\t%s\t%s\t%s\t%s\n' \
+            "$repo/$path" "$rule" "$line" "$root" "$body" >>"$findings"
+        done < <(rg -n --no-heading --color never "$pattern" "$full" || true)
+      done
+      if [[ -x "$full" ]]; then
+        while IFS= read -r hit; do
+          line="${hit%%:*}"
+          body="${hit#*:}"
+          [[ "$body" == *hardcoded-repo-path:allow* ]] && continue
+          printf '%s\tR3\t%s\t%s\t%s\n' \
+            "$repo/$path" "$line" "$root" "$body" >>"$findings"
+        done < <(rg -n --no-heading --color never "$r3" "$full" || true)
+      fi
+    done < <(check_git -C "$root" ls-files -z)
+  done < <(check_roots)
+
+  if (( file_count < 100 )); then
+    printf 'hardcoded-repo-path-check: scanned only %d files (minimum 100)\n' \
+      "$file_count" >&2
+    return 2
+  fi
+
+  [[ -f "$CHECK_ALLOWLIST" ]] || {
+    printf 'hardcoded-repo-path-check: missing allowlist: %s\n' "$CHECK_ALLOWLIST" >&2
+    return 2
+  }
+
+  declare -A declared=()
+  declare -A found=()
+  local entry count lineno=0
+  while IFS= read -r entry || [[ -n "$entry" ]]; do
+    ((lineno += 1))
+    [[ -z "$entry" || "$entry" == \#* ]] && continue
+    path="${entry%%$'\t'*}"
+    count="${entry#*$'\t'}"
+    if [[ "$path" == "$entry" || ! "$count" =~ ^[1-9][0-9]*$ ]]; then
+      printf 'hardcoded-repo-path-check: malformed allowlist entry at %s:%d: %s\n' \
+        "$CHECK_ALLOWLIST" "$lineno" "$entry" >&2
+      return 2
+    fi
+    if [[ -n "${declared[$path]:-}" ]]; then
+      printf 'hardcoded-repo-path-check: duplicate allowlist entry: %s\n' "$path" >&2
+      return 2
+    fi
+    declared["$path"]="$count"
+  done <"$CHECK_ALLOWLIST"
+
+  local allowed=0 new=0
+  while IFS=$'\t' read -r path rule line root body; do
+    if [[ -n "${declared[$path]:-}" ]]; then
+      ((allowed += 1))
+      found["$path"]=$(( ${found[$path]:-0} + 1 ))
+    else
+      ((new += 1))
+      printf 'WARN %s:%s [%s] %s\n' "$path" "$line" "$rule" "$body" >&2
+    fi
+  done <"$findings"
+
+  if (( write_allow == 1 )); then
+    local rewritten="$scratch/allowlist.tsv"
+    allowlist_header >"$rewritten"
+    for path in "${!declared[@]}"; do
+      (( ${found[$path]:-0} > 0 )) || continue
+      printf '%s\t%d\n' "$path" "${found[$path]}"
+    done | LC_ALL=C sort >>"$rewritten"
+    cp "$rewritten" "$CHECK_ALLOWLIST"
+    printf 'hardcoded-repo-path-check: rewrote allowlist: %s\n' \
+      "$CHECK_ALLOWLIST" >&2
+    for path in "${!declared[@]}"; do
+      if (( ${found[$path]:-0} == 0 )); then
+        unset 'declared[$path]'
+      else
+        declared["$path"]="${found[$path]}"
+      fi
+    done
+  fi
+
+  local stale=0 want got
+  for path in "${!declared[@]}"; do
+    want="${declared[$path]}"
+    got="${found[$path]:-0}"
+    if (( got == 0 )); then
+      printf 'hardcoded-repo-path-check: dead allowlist entry: %s\n' "$path" >&2
+      stale=1
+    elif (( got != want )); then
+      printf 'hardcoded-repo-path-check: reference count changed: %s: declared %d, found %d\n' \
+        "$path" "$want" "$got" >&2
+      stale=1
+    fi
+  done
+  if (( stale == 1 )); then
+    printf 'hardcoded-repo-path-check: refresh listed paths with: hardcoded-repo-path-check --write-allow\n' >&2
+  fi
+
+  printf 'hardcoded-repo-path-check: %d allowed, %d new\n' "$allowed" "$new"
+  (( stale == 0 )) || return 2
+  (( new == 0 )) || return 1
+}
+
+write_allow=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --write-allow) write_allow=1 ;;
+    *)
+      printf 'usage: hardcoded-repo-path-check [--write-allow]\n' >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+run_check "$write_allow"

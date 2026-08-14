@@ -37,21 +37,13 @@ looks_like_firn_repo() { # mirrors looks-like-firn-repo? in firn-cmds/util.rkt
     { [ -f "$1/flake.bnix" ] || [ -f "$1/flake.rkt" ]; }
 }
 
-# Same ladder rebuild.rkt uses, with the world resolver standing in for its
-# hardcoded fallback: whatever `firn rebuild` evaluates is what we warm.
 resolve_repo() {
-  local candidate
-  candidate="${FIRN_REPO:-}"
-  if [ -n "$candidate" ] && looks_like_firn_repo "$candidate"; then
-    printf '%s\n' "$candidate"
-    return 0
+  local candidate="${FIRN_REPO:-}"
+  if [ -z "$candidate" ]; then
+    candidate="$(cd "$BIN_DIR/../.." 2>/dev/null && pwd -P)" || return 1
   fi
-  candidate="$("$BIN_DIR/world" get repo.nixos-config 2>/dev/null)" || candidate=""
-  if [ -n "$candidate" ] && looks_like_firn_repo "$candidate"; then
-    printf '%s\n' "$candidate"
-    return 0
-  fi
-  return 1
+  looks_like_firn_repo "$candidate" || return 1
+  printf '%s\n' "$candidate"
 }
 
 snapshot_uri() { # <repo> — the byte-identical twin of rebuild.rkt's snapshot-ref

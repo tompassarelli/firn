@@ -7,11 +7,10 @@ fixture="$(mktemp -d)"
 trap 'rm -rf "${fixture:?}"' EXIT
 
 home="$fixture/home"
-code_root="$fixture/world/code"
-nixos_root="$fixture/world/nixos"
-north_root="$fixture/world/north"
+code_root="$home/code"
+nixos_root="$code_root/nixos-config/main"
+north_root="$code_root/north/main"
 praxis_root="$north_root/orchestration/docs"
-manifest="$fixture/manifest.env"
 build_marker="$fixture/build-agents.marker"
 
 mkdir -p \
@@ -47,24 +46,16 @@ cat >"$code_root/.mcp.json" <<'EOF'
 {"mcpServers":{"selected-code":{"command":"selected-code-command"}}}
 EOF
 
-{
-  printf 'WORLD_CODE_ROOT=%q\n' "$code_root"
-  printf 'WORLD_REPO_NIXOS_CONFIG=%q\n' "$nixos_root"
-  printf 'WORLD_REPO_NORTH=%q\n' "$north_root"
-} >"$manifest"
-
 run_map() {
-  env -u WORLD_BIN \
-    HOME="$home" \
-    WORLD_MANIFEST_PATH="$manifest" \
+  env HOME="$home" \
     HARNESS_MAP_BUILD_MARKER="$build_marker" \
     "$MAP"
 }
 
 first="$(run_map)"
-grep -Fq "$code_root/CLAUDE.md" <<<"$first"
-grep -Fq "$nixos_root/CLAUDE.md" <<<"$first"
-grep -Fq "$north_root/sdk/src/harness.ts" <<<"$first"
+grep -Fq '~/code/CLAUDE.md' <<<"$first"
+grep -Fq '~/code/nixos-config/main/CLAUDE.md' <<<"$first" # hardcoded-repo-path:allow
+grep -Fq '~/code/north/main/sdk/src/harness.ts' <<<"$first" # hardcoded-repo-path:allow
 grep -Fq "selected-code-command" <<<"$first"
 grep -Fq "PASS  orchestration build-agents --check" <<<"$first"
 grep -Fxq -- "--check" "$build_marker"
@@ -73,4 +64,4 @@ rm -f "${code_root:?}/.mcp.json"
 second="$(run_map)"
 grep -Fq "selected-nixos-command" <<<"$second"
 
-echo "harness-map world manifest: PASS"
+echo "harness-map canonical roots: PASS"

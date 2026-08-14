@@ -180,12 +180,12 @@ EOF
   # Fresh pulls every call: version delta vs Mozilla/nixpkgs/Zen/LibreWolf,
   # CVE count against your pin, build state, weekly rebuild budget, what
   # command to run next. ~1-2 sec. No caching.
-  status) shift; direnv exec "$root" env -C "$root" bun tools/scripts/status.ts "$@" ;;
+  status) shift; direnv exec "$root" env -C "$root" bun run status -- "$@" ;;
 
   # ── preflight gate (mandatory before any nix/full-mach build) ───────────
   # Runs every gate mechanically. Exits non-zero if any fails. Claude must
   # show this output before proposing a rebuild — CLAUDE.md Rule #0.
-  preflight) shift; direnv exec "$root" env -C "$root" bun tools/scripts/preflight.ts "$@" ;;
+  preflight) shift; direnv exec "$root" env -C "$root" bun run preflight -- "$@" ;;
 
   # ── dev-loop verbs ──────────────────────────────────────────────────────
   build) shift; direnv exec "$root" env -C "$root/engine" ./mach build "$@" ;;

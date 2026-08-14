@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-TARGET="$REPO/dotfiles/bin/opacity"
+SOURCE="$REPO/dotfiles/bin/opacity"
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/opacity-test.XXXXXX")"
 trap 'rm -rf "${scratch:?}"' EXIT
 
@@ -24,16 +24,15 @@ check() { # check <description> <0|1 truth>
   fi
 }
 
-# never touch the real repo or ~/.config: point the `world` resolver at a
-# sandbox container and at a manifest path that cannot exist.
-manifest="$scratch/no-such-manifest.env"
 container="$scratch/repo"
+target="$container/dotfiles/bin/opacity"
 
 commit_count() { git -C "$container" log --oneline | wc -l | tr -d ' '; }
 
 fresh_repo() { # rebuild the sandbox container with a realistic niri config
   rm -rf "$container"
-  mkdir -p "$container/dotfiles/niri"
+  mkdir -p "$container/dotfiles/bin" "$container/dotfiles/niri"
+  cp "$SOURCE" "$target"
   git init -q -b main "$container"
   cat >"$container/dotfiles/niri/config.kdl" <<'EOF'
 layout {
@@ -56,7 +55,8 @@ EOF
 # config file with no opacity line at all (guard case 7)
 no_opacity_line_repo() {
   rm -rf "$container"
-  mkdir -p "$container/dotfiles/niri"
+  mkdir -p "$container/dotfiles/bin" "$container/dotfiles/niri"
+  cp "$SOURCE" "$target"
   git init -q -b main "$container"
   cat >"$container/dotfiles/niri/config.kdl" <<'EOF'
 layout {
@@ -71,7 +71,7 @@ EOF
 
 run_opacity() { # run_opacity [args...] -> sets $out $status
   set +e
-  out="$(WORLD_MANIFEST_PATH="$manifest" WORLD_REPO_NIXOS_CONFIG="$container" "$TARGET" "$@" 2>&1)"
+  out="$("$target" "$@" 2>&1)"
   status=$?
   set -e
 }

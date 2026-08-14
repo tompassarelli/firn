@@ -48,9 +48,8 @@ export XDG_RUNTIME_DIR="$runtime"
 export NIX_ARGS_LOG="$nix_log"
 export PATH="$stub_bin:$PATH"
 # Hook-spawned workers inherit the environment of whatever git command fired
-# them; both resolver rungs are pinned so none of them can reach the real repo.
+# them; the explicit repo interface keeps every worker inside the fixture.
 export FIRN_REPO="$container"
-export WORLD_REPO_NIXOS_CONFIG="$container"
 pidfile="$runtime/firn-prewarm-${UID:-0}.pid"
 stampfile="$runtime/firn-prewarm-${UID:-0}.warm"
 
@@ -77,7 +76,6 @@ fresh_repo() {
   chmod +x "$container/scripts/firn-build"
   printf ';; sandbox\n' >"$container/flake.bnix"
   cp "$TARGET" "$container/dotfiles/bin/firn-prewarm"
-  cp "$REPO/dotfiles/bin/world" "$container/dotfiles/bin/world"
   git init -q -b main "$container"
   git -C "$container" add -A
   git -C "$container" commit -qm base
@@ -161,9 +159,10 @@ expected_uri() { # expected_uri <repo> <head> <branch>
   && check "rebuild.rkt still exposes the snapshot-ref and attr templates" 0 \
   || check "rebuild.rkt still exposes the snapshot-ref and attr templates" 1
 
-# ── case 1: URI on a branch matches rebuild.rkt byte for byte ─────────────
+# ── case 1: the script's checkout supplies the on-branch snapshot ─────────
 fresh_repo
-run_prewarm --foreground
+out="$(env -u FIRN_REPO "$container/dotfiles/bin/firn-prewarm" --foreground 2>&1)"
+status=$?
 if grep -Fq 'skipped' <<<"$out"; then
   printf '%s\n' "$out" >&2
   check "no ambient firn rebuild is interfering with this suite" 1
@@ -493,8 +492,7 @@ pkill -f -- "print-out-paths git.file://$container" 2>/dev/null
 kill_tracked
 
 # ── case 8: an unusable environment is never a caller's problem ───────────
-out="$(FIRN_REPO="$scratch/not-a-repo" WORLD_MANIFEST_PATH="$scratch/none.env" \
-       WORLD_REPO_NIXOS_CONFIG="$scratch/not-a-repo" "$TARGET" --foreground 2>&1)"
+out="$(FIRN_REPO="$scratch/not-a-repo" "$TARGET" --foreground 2>&1)"
 status=$?
 [ "$status" -eq 0 ] \
   && check "an unresolvable repo exits 0 instead of disturbing the caller" 0 \
