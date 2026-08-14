@@ -39,8 +39,6 @@ fram/scripts/native-core-reingest.sh	2
 fram/scripts/render_crdt_receipt.sh	1
 fram/tests/code_editpath_defect_test.clj	1
 fram/tests/codegraph_exec_test.sh	1
-fram/tests/fixtures/gen-fumbles.bb	2
-fram/tests/resolve_golden.sh	1
 fram/tests/server_defcheck_untyped_e2e_test.clj	1
 fram/tests/store_anchor_disambig_test.clj	1
 nixos-config/dotfiles/agents/modules.d/coordination.json	1

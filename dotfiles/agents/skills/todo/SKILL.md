@@ -153,8 +153,17 @@ scratch do not belong here.
 Editing `agent-coord.md` does not itself notify another agent. When two agents
 coordinate through it, one named monitor must watch the file for the lifetime
 of the coordination window and deliver changes to the owning agent. Prefer a
-dedicated monitor agent; a named hash/mtime watcher with bounded polls is an
-acceptable fallback. The owner must be able to state and reap every watcher.
+dedicated monitor agent or product monitoring primitive. A hash/mtime shell is
+acceptable only when a live supervisor consumes its output on a bounded poll
+and can re-invoke or message the owning agent. A background shell whose output
+merely accumulates in an unread session is not delivery. The owner must be able
+to name the watcher, the supervisor, the delivery bound, and how both are
+reaped.
+
+Prove the route with one addressed `OPEN` -> `ACK` round trip before relying on
+it for work ownership. If the delivery bound elapses, the sender appends one
+explicit delivery retry and treats the request as unacknowledged; silence never
+transfers ownership or makes cleanup safe.
 
 Messages are append-only while a claim is live:
 
