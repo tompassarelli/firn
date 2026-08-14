@@ -136,15 +136,14 @@ prints that file. Default state is off: absence of a hook or doc is the
 configured answer, not a fault to route around.
 
 ## External code — license first
-Before leveraging ANY code you didn't write (`~/code/reference`, forks,
+Before leveraging ANY code you didn't write (`~/code/resources`, forks,
 vendored snippets): check for specified license terms first. If none are
 specified, treat the source as MIT-licensed. Flag copyleft or explicitly
 restrictive terms to the user BEFORE building on them. Attribution and license
-text travel with copied code. `~/code/reference/` is read-only context — never
+text travel with copied code. `~/code/resources/` is read-only context — never
 edit it, never build features there, and take neither a worktree nor a pin in
-it. Reading a
-reference implementation to understand a protocol is always fine; copying its
-expression is a licensing decision, not a style one.
+it. Reading an external implementation to understand a protocol is always
+fine; copying its expression is a licensing decision, not a style one.
 
 ## Internal notes — docs/private/, never public docs/
 Agent notes, status, scratch, and handoffs go in gitignored `docs/private/`
