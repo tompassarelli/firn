@@ -40,10 +40,12 @@ Then remove the worktree and delete the branch — a landed lane under
 `main/` is human work-in-progress: never commit, stash, reset, or clean it
 (`wt-rescue` relocates it intact into `worktrees/rescue-<ts>`).
 
-**Never write into `pins/`.** A pin is protected because something outside the
-repo consumes it — `pins/<name>.pin` names what — not because dirt in it is
-someone's WIP. Edits, writes, and deletes under `pins/` are refused, manifest
-included. Reads are fine, and so is the one sanctioned mutation: re-pointing
+**Never write into a pin's checkout.** A pin is protected because something
+outside the repo consumes it — `pins/<name>.pin` names what — not because dirt
+in it is someone's WIP. Edits, writes, and deletes under `pins/<name>/` are
+refused. The `pins/<name>.pin` MANIFEST is different: it is pin metadata
+agents administer — write it, keep it naming at least one real consumer.
+Reads are fine, and so is the one sanctioned checkout mutation: re-pointing
 the pin with `git -C ~/code/<project>/pins/<name> checkout <ref>`. If a pin
 looks wrong, ask the human; never cut a lane from it.
 
