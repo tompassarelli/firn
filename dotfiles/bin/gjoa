@@ -3,19 +3,7 @@
 set -u
 
 container="$HOME/code/gjoa"
-root="$container/active"
-expected_root="$container/worktrees/dev-runtime"
-# ~/code/gjoa/active is the stable consumer selector. It must resolve to an
-# intentionally mutable, locked runtime at ~/code/gjoa/worktrees/dev-runtime.
-# Frozen compiler and projector inputs belong in content-addressed pins; this
-# engine/build checkout does not.
-if [ -d "$root" ]; then
-  root="$(readlink -f "$root")"
-  if [ "$root" != "$expected_root" ]; then
-    echo "gjoa: $container/active must resolve to $expected_root (got $root)" >&2
-    exit 1
-  fi
-fi
+root="$container/worktrees/dev-runtime"
 nix_bin="$container/result/bin/gjoa"
 mach_bin="$root/engine/obj-x86_64-pc-linux-gnu/dist/bin/gjoa"
 
@@ -42,40 +30,8 @@ sync_if_stale() {
   fi
 }
 
-# ── TEMPORARY: in-process security gate suppression ──────────────────────
-# REMOVE AFTER 2026-06-02 REBUILD.
-#
-# The 2026-05-26 build pins Firefox 151.0.1; Mozilla shipped 151.0.2 the
-# next day. The in-process gate (src/gjoa/chrome/src/security/index.ts)
-# quits on any newer version. The TS file is now softened — patch-behind
-# is a warn, not a quit — but that change is sealed in omni.ja and only
-# takes effect after the next Sunday nix build (2026-06-02).
-#
-# Until then, set GJOA_ALLOW_INSECURE=1 here so daily launches don't hit
-# the modal. `gjoa status` will still flag the patch-behind state.
-export GJOA_ALLOW_INSECURE=1
-
 if [ ! -d "$root" ]; then
   echo "gjoa: $root not found" >&2
-  exit 1
-fi
-
-# The locked runtime predates content-addressed input paths, so provide its
-# canonical Beagle compiler root before direnv evaluates that checkout's
-# tracked .envrc. This is the configured input, never a legacy fallback.
-beagle_ref_file="$root/configs/beagle.ref"
-if [ ! -r "$beagle_ref_file" ]; then
-  echo "gjoa: $beagle_ref_file not found" >&2
-  exit 1
-fi
-beagle_ref="$(awk 'NF && $1 !~ /^#/ { print $1; exit }' "$beagle_ref_file")"
-if ! [[ "$beagle_ref" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "gjoa: $beagle_ref_file must contain one lowercase hexadecimal full object ID" >&2
-  exit 1
-fi
-export BEAGLE_PIN_ROOT="$HOME/code/beagle/pins/$beagle_ref"
-if [ ! -d "$BEAGLE_PIN_ROOT" ]; then
-  echo "gjoa: Beagle pin $BEAGLE_PIN_ROOT not found" >&2
   exit 1
 fi
 

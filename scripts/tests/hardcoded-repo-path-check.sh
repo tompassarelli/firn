@@ -13,12 +13,12 @@ expected_allowed="$(
     END { print total + 0 }
   ' "$REPO_ROOT/config/world-allow.txt"
 )" || {
-  printf 'FAIL: malformed world lint allowlist: %s\n' \
+  printf 'FAIL: malformed hard-coded repository path allowlist: %s\n' \
     "$REPO_ROOT/config/world-allow.txt" >&2
   exit 1
 }
 [[ "$expected_allowed" =~ ^[1-9][0-9]*$ ]] || {
-  printf 'FAIL: world lint allowlist declares no references\n' >&2
+  printf 'FAIL: hard-coded repository path allowlist declares no references\n' >&2
   exit 1
 }
 readonly expected_allowed
@@ -77,11 +77,11 @@ alternate_index_status=$?
 set -e
 
 (( alternate_index_status == 0 )) || {
-  printf 'FAIL: caller linked-worktree Git environment narrowed the four-root lint corpus\n%s\n' \
+  printf 'FAIL: caller linked-worktree Git environment narrowed the four-root path corpus\n%s\n' \
     "$alternate_index_output" >&2
   exit 1
 }
-grep -F "topology-refs: $expected_allowed allowed, 0 new" \
+grep -F "hardcoded-repo-paths: $expected_allowed allowed, 0 new" \
   <<<"$alternate_index_output" >/dev/null || {
   printf 'FAIL: linked-worktree Git environment did not scan the canonical inventory\n%s\n' \
     "$alternate_index_output" >&2
@@ -94,7 +94,7 @@ hostile_output="$(
   cd "$REPO_ROOT"
   WORLD_MANIFEST_PATH="$scratch/missing-manifest.env" \
   WORLD_PRECOMMIT_LINT_ROOTS="$REPO_ROOT" \
-    "$pre_commit" run world-topology-drift --all-files --verbose 2>&1
+    "$pre_commit" run hardcoded-repo-path-check --all-files --verbose 2>&1
 )"
 hostile_status=$?
 set -e
@@ -104,7 +104,7 @@ set -e
     "$hostile_output" >&2
   exit 1
 }
-grep -F "topology-refs: $expected_allowed allowed, 0 new" \
+grep -F "hardcoded-repo-paths: $expected_allowed allowed, 0 new" \
   <<<"$hostile_output" >/dev/null || {
   printf 'FAIL: production hook did not scan the four-root canonical inventory\n%s\n' \
     "$hostile_output" >&2
@@ -143,7 +143,7 @@ grep -F 'canary/violation' <<<"$output" >/dev/null || {
   printf 'FAIL: planted violation was not reported\n%s\n' "$output" >&2
   exit 1
 }
-grep -Eq 'topology-refs: [0-9]+ allowed, [1-9][0-9]* new' <<<"$output" || {
+grep -Eq 'hardcoded-repo-paths: [0-9]+ allowed, [1-9][0-9]* new' <<<"$output" || {
   printf 'FAIL: lint summary did not count the planted violation as new\n%s\n' "$output" >&2
   exit 1
 }

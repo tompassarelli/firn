@@ -1,4 +1,4 @@
-# Declared topology references: <repo-relative path><TAB><reference count>.
+# Declared hard-coded repository paths: <repo-relative path><TAB><reference count>.
 # An entry is live only while the path still carries exactly that many
 # references. A stale entry and a changed count are both hard failures, so
 # this file is the entire inventory — there is no separate total to drift.
@@ -34,7 +34,6 @@ fram/codegraph/bin/emit-corpus	1
 fram/codegraph/bin/rename-demo	1
 fram/codegraph/bin/safe-rename	1
 fram/codegraph/test/comment-falsifier.sh	1
-fram/docs/archive/codegraph-README.md	1
 fram/scripts/native-core-reingest.sh	2
 fram/scripts/render_crdt_receipt.sh	1
 fram/tests/code_editpath_defect_test.clj	1
@@ -49,7 +48,6 @@ nixos-config/dotfiles/bin/beagle	1
 nixos-config/dotfiles/bin/concern	1
 nixos-config/dotfiles/bin/firn	3
 nixos-config/dotfiles/bin/fram	1
-nixos-config/dotfiles/bin/gjoa	1
 nixos-config/dotfiles/bin/harness-map	4
 nixos-config/dotfiles/bin/north	1
 nixos-config/dotfiles/bin/north-mcp	1
