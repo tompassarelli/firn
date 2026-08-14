@@ -39,7 +39,6 @@ life = "active"
 updated_at = "2026-08-14T11:36:50+08:00"
 owners = ["codex:/root"]
 depends_on = []
-blocks = ["fram-structural-declarations"]
 conversation_ids = ["codex:019ffd07-c27b-7943-8a66-553dff2ae98b"]
 coordination = ["agent-coord.md#C007"]
 
@@ -104,10 +103,22 @@ Use the narrowest shape that is already true:
 - `resource`: a person, book, article, SaaS service, AI agent, or other thing
   useful to the tracked work.
 
-For a task, add root fields `realizes`, `assigned_to`, and `delegated_by`. For a
-project, add `plan`. Shape changes are recorded by updating `shape`, `life`, and
-the Current state/Decisions sections; history remains in its conversation and
-repository checkpoints.
+For a task, add root fields `realizes`, `assigned_to`, and `delegated_by`.
+`realizes` is the exact `id` of a tracked plan or project: a project remains a
+plan, now in execution. A project needs `plan` only when it starts a *distinct*
+tracked plan record; then `plan` is that record's exact `id`. When one record
+itself evolves from plan to project, preserve its identity and omit `plan`
+instead of manufacturing a self-reference or symbolic pseudo-ID.
+
+`depends_on` is the one stored direction of the work DAG. Its internal values
+are exact record IDs; an external prerequisite is explicitly prefixed
+`external:`. Derive reverse “blocks” views from `depends_on` rather than storing
+a second edge that can drift. The same exact-ID rule applies to `realizes`,
+`plan`, `supports`, and `relates_to` whenever those fields name tracked records.
+
+Shape changes are recorded by updating `shape`, `life`, and the Current
+state/Decisions sections; history remains in its conversation and repository
+checkpoints.
 
 `life` is shape-specific. Do not force every record through `done`. Resources,
 for example, can become `internalized`, `outdated`, `superseded`, or `archived`.
