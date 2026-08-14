@@ -11,8 +11,8 @@ A container holds exactly three slots, and the directory IS the lifecycle
 policy:
   <project>/main/               the clean checkout — never swept
   <project>/worktrees/<slug>/   ephemeral lanes — the only thing this sweeps
-  <project>/pins/<name>/        externally consumed — never swept, never
-                                enumerated here
+  <project>/pins/<full-object-id>/ externally consumed — never swept, never
+                                   enumerated here
 
 A lane is reaped when it is completely clean (including untracked and
 non-disposable ignored files), is at least two hours old, has no live process

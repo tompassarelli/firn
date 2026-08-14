@@ -4,12 +4,9 @@ set -u
 
 container="$HOME/code/gjoa"
 root="$container/active"
-# The engine-hosting checkout is a pin: ~/code/gjoa/pins/dev-runtime, described
-# by pins/dev-runtime.pin and aliased as ~/code/gjoa/active. The alias is the
-# normal route; the pin path is the fallback when the alias is missing.
-if [ ! -d "$root" ] && [ -d "$container/pins/dev-runtime" ]; then
-  root="$container/pins/dev-runtime"
-fi
+# ~/code/gjoa/active is the stable consumer selector. It must resolve to an
+# immutable ~/code/gjoa/pins/<full-object-id> checkout; there is no mutable
+# semantic-name fallback.
 if [ -d "$root" ]; then
   root="$(readlink -f "$root")"
 fi

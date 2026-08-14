@@ -41,7 +41,7 @@ aged() { # a worktree older than wt-reap's 2h freshness gate
 
 # --- fixture: one container, one lane per case -----------------------------
 # Layout under test: <container>/main, <container>/worktrees/<slug> (sweepable),
-# <container>/pins/<name> (externally consumed, never swept).
+# <container>/pins/<full-object-id> (externally consumed, never swept).
 container="$scratch/proj"
 mkdir -p "$container"
 # git records resolved paths in `worktree list`; compare against the same form.
@@ -196,9 +196,10 @@ aged "$container/worktrees/tag-shadow"
 
 # 17. a pin: clean, merged, detached, and aged — the exact shape the live pins
 #     have. Only its parent directory keeps it alive.
-git -C "$container/main" worktree add -q --detach "$container/pins/site" main
-aged "$container/pins/site"
-printf 'site — fixture pin. Consumers: this test.\n' >"$container/pins/site.pin"
+pin_oid="$(git -C "$container/main" rev-parse HEAD)"
+git -C "$container/main" worktree add -q --detach "$container/pins/$pin_oid" "$pin_oid"
+aged "$container/pins/$pin_oid"
+printf 'Consumers: this test.\n' >"$container/pins/$pin_oid.pin"
 
 # 18. the identical shape one directory over, under worktrees/ -> reaped.
 #     Together with 17 this isolates the parent directory as the whole rule.
@@ -419,16 +420,16 @@ else
 fi
 
 # 17. the pin is not reaped, and is never even enumerated as a candidate
-[ -d "$container/pins/site" ] \
+[ -d "$container/pins/$pin_oid" ] \
   && check "clean+merged+detached+aged tree under pins/ not reaped" 0 \
   || check "clean+merged+detached+aged tree under pins/ not reaped" 1
-if printf '%s\n%s\n' "$output" "$dry_output" | grep -Fq "$container/pins/site"; then
+if printf '%s\n%s\n' "$output" "$dry_output" | grep -Fq "$container/pins/$pin_oid"; then
   printf '%s\n' "$output" >&2
   check "pin never appears in wt-reap output, not even as a keep" 1
 else
   check "pin never appears in wt-reap output, not even as a keep" 0
 fi
-[ -f "$container/pins/site.pin" ] \
+[ -f "$container/pins/$pin_oid.pin" ] \
   && check "pin manifest untouched" 0 \
   || check "pin manifest untouched" 1
 

@@ -29,7 +29,7 @@ what the script may look like.
 Paths below are written `repo:path`, which resolves to
 `~/code/<repo>/main/<path>` — `~/code/<repo>` is a container, not a checkout,
 and you edit in a `worktrees/<slug>` lane, never in `main/` and never in a
-`pins/<name>` checkout.
+`pins/<full-object-id>` checkout.
 
 ## The four places
 
@@ -131,9 +131,9 @@ legal path, because a denial is information about the path, not about the goal.
 An agent with no way forward will route around the guard, stall, or spend a
 user's money rediscovering the exit. The worktree guard deliberately permits
 reads, `git worktree add`, `pull --ff-only`, and `wt-rescue` for exactly this
-reason — and for a pin it permits reads plus the one sanctioned mutation,
-`git -C <pin> checkout <ref>`, because sending a pin denial to `worktree add`
-would send the agent to break the thing being protected. Write the reason as an
+reason. For a pin it permits reads and directs the agent to create a new
+full-object-ID worktree from `main`; checkout and switch inside an existing pin
+are mutations of its identity and remain denied. Write the reason as an
 instruction ("enumerate the paths you intend to
 commit, e.g. `git add path/to/file`"), not as a verdict.
 
@@ -256,9 +256,9 @@ Listing a name is not enforcement, so **exercise the composed chain**.
 payload and read back the decision. `north:sdk/test/harness-guard-chains.test.ts`
 is the shape to copy — it points the worktree guard at a fixture container tree
 via `LAUNCH_CRITICAL_CODE_ROOT` so no assertion depends on the live `~/code`,
-and it asserts the allow half (reads, `worktree add`, `pull --ff-only`,
+and it asserts the allow half (reads, new hash-pin creation, `pull --ff-only`,
 enumerated `git add`) beside the deny half. Give the fixture container all
-three slots — `main/`, `worktrees/<slug>/`, `pins/<name>/` — or the layout the
+three slots — `main/`, `worktrees/<slug>/`, `pins/<full-object-id>/` — or the layout the
 guard actually classifies on is the one shape the test never builds.
 
 ### The inventory row
@@ -347,8 +347,9 @@ The one guard that is wired everywhere, and the reference to read when in doubt:
   `^Bash$`, `default.bnix` promote rule, `codex-managed-hooks.ts` entry
 - carve-outs so no lane is trapped: the `worktrees/` parent directory (a
   positional test, not a leaf-name prefix), `wt-rescue`, gitignored paths in a
-  checkout, and reads. The `pins/` parent is the opposite: a hit, with its own
-  reason and its own remedy — and the gitignore carve-out does not reach it
+  checkout, and reads. A `pins/<full-object-id>/` checkout is protected with
+  its own immutable-hash remedy, while the `pins/` parent and same-name `.pin`
+  metadata stay writable; the gitignore carve-out does not reach pin content
 - tests `launch-critical-worktree-guard.test.sh` + `.test.py`
 
 - North Bridge: `EDIT_GUARDS` (a `main`-checkout write arrives as an Edit) and

@@ -23,9 +23,10 @@ something else launches from.
 **Never edit a `main` checkout.** `~/code/<project>/` is a container holding
 three slots, and the directory is the lifecycle policy: `main/` is the clean
 checkout and is never edited directly; `worktrees/<slug>/` are the ephemeral
-lanes agents work in; `pins/<name>/` are checkouts something outside the repo
-consumes. Work in a lane — the `worktrees/` parent is exactly what the guard
-carves out, so the leaf is a bare slug:
+lanes agents work in; `pins/<full-object-id>/` are immutable checkouts something
+outside the repo consumes, named by their full commit object ID. Work in a lane
+— the `worktrees/` parent is exactly what the guard carves out, so the leaf is a
+bare slug:
 
 ```
 git -C ~/code/<project>/main worktree add ~/code/<project>/worktrees/SLUG -b SLUG
@@ -40,14 +41,22 @@ Then remove the worktree and delete the branch — a landed lane under
 `main/` is human work-in-progress: never commit, stash, reset, or clean it
 (`wt-rescue` relocates it intact into `worktrees/rescue-<ts>`).
 
-**Never write into a pin's checkout.** A pin is protected because something
-outside the repo consumes it — `pins/<name>.pin` names what — not because dirt
-in it is someone's WIP. Edits, writes, and deletes under `pins/<name>/` are
-refused. The `pins/<name>.pin` MANIFEST is different: it is pin metadata
-agents administer — write it, keep it naming at least one real consumer.
-Reads are fine, and so is the one sanctioned checkout mutation: re-pointing
-the pin with `git -C ~/code/<project>/pins/<name> checkout <ref>`. If a pin
-looks wrong, ask the human; never cut a lane from it.
+**Never write into or re-point a pin's checkout.** A pin is protected because
+something outside the repo consumes it — its same-name `.pin` sidecar names
+what — not because dirt in it is someone's WIP. Edits, writes, deletes,
+checkout, and switch under `pins/<full-object-id>/` are refused. The same-name
+`.pin` MANIFEST is different: it is pin metadata agents administer — write it,
+keep it naming at least one real consumer. Reads are fine. To advance a consumer, create a new
+detached pin from the clean checkout, then update the consumer:
+
+```
+PIN_OBJECT_ID=FULL_GIT_OBJECT_ID
+git -C ~/code/<project>/main worktree add --detach \
+  ~/code/<project>/pins/$PIN_OBJECT_ID $PIN_OBJECT_ID
+# write ~/code/<project>/pins/$PIN_OBJECT_ID.pin, then update the consumer
+```
+
+The old pin's path, contents, and HEAD remain immutable.
 
 **Stage by enumerating paths.** `git add -A`, `git add -u`, `git add .`, and
 `git commit -a` are refused: blind staging sweeps in another agent's in-flight

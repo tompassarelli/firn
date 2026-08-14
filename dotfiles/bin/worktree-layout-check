@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Every git worktree under ~/code lives at ~/code/<project>/worktrees/<slug>,
-# except an externally-consumed pin at ~/code/<project>/pins/<name>. Nothing else.
+# except an immutable externally-consumed pin at
+# ~/code/<project>/pins/<full-object-id>. Nothing else.
 # The directory IS the lifecycle policy: worktrees/ is what the sweepers may
 # delete, pins/ is what they must never see.
 #
@@ -17,7 +18,9 @@
 #
 # WHAT IS DELIBERATELY EXEMPT
 #   - the project's own checkout (~/code/<project>/main)
-#   - pins (~/code/<project>/pins/<name>) — reported as pins, never strays
+#   - pins (~/code/<project>/pins/<full-object-id>) — detached at exactly the commit
+#     named by the leaf, accompanied by a nonempty same-name `.pin` sidecar;
+#     reported as pins, never strays
 #   - tool-owned runtimes: ~/code/north-data/fram-runtime/deployments/<rev>,
 #     created and owned by `north-coord-runtime promote`. Moving one breaks the
 #     running coordinator.
@@ -56,10 +59,32 @@ for repo_dir in "$CODE"/*/; do
     checked=$((checked + 1))
     [ "$wt" = "$checkout" ] && continue               # the checkout itself
     case "$wt" in "$container"/worktrees/*) continue ;; esac
-    # A pin is legal but is NOT a lane: name it as itself so it is neither a
-    # stray nor silently swallowed into the lane count.
+    # A pin is legal but is NOT a lane. Its full object ID is its immutable
+    # address, HEAD must equal that address and be detached, and the same-name
+    # sidecar must identify at least one consumer.
     case "$wt" in
       "$container"/pins/*)
+        pin_leaf="${wt#"$container"/pins/}"
+        pin_problem=""
+        case "$pin_leaf" in
+          */*) pin_problem="pin must be directly under pins/" ;;
+        esac
+        if ! pin_head="$(git -C "$wt" rev-parse HEAD 2>/dev/null)"; then
+          pin_problem="checkout HEAD is unreadable"
+        elif [ "$pin_head" != "$pin_leaf" ]; then
+          pin_problem="leaf is not the checkout's full object ID (HEAD is $pin_head)"
+        elif git -C "$wt" symbolic-ref -q HEAD >/dev/null 2>&1; then
+          pin_problem="HEAD is attached to a branch"
+        elif [ ! -f "$container/pins/$pin_leaf.pin" ]; then
+          pin_problem="same-name consumer sidecar is missing"
+        elif ! grep -q '[^[:space:]]' "$container/pins/$pin_leaf.pin" 2>/dev/null; then
+          pin_problem="same-name consumer sidecar is empty"
+        fi
+        if [ -n "$pin_problem" ]; then
+          printf 'INVALID %-14s %s — %s\n' "$repo" "${wt/#$HOME/\~}" "$pin_problem"
+          strays=$((strays + 1))
+          continue
+        fi
         printf 'PIN    %-14s %s\n' "$repo" "${wt/#$HOME/\~}"
         pins=$((pins + 1))
         continue
@@ -80,7 +105,7 @@ if [ "$repos_found" -lt 5 ]; then
 fi
 
 if [ "$strays" -eq 0 ]; then
-  echo "worktree-layout: OK — $checked trees, all at ~/<project>/main, /worktrees/<slug>, or /pins/<name> ($pins pin(s))"
+  echo "worktree-layout: OK — $checked trees, all at ~/<project>/main, /worktrees/<slug>, or /pins/<full-object-id> ($pins pin(s))"
   exit 0
 fi
 
@@ -92,7 +117,8 @@ The layout is:
   ~/code/<project>/                  container only — never a checkout
   ~/code/<project>/main/             the clean checkout — read-only product
   ~/code/<project>/worktrees/<slug>/ ephemeral lanes — sweepable
-  ~/code/<project>/pins/<name>/      externally consumed — never automated
+  ~/code/<project>/pins/<full-object-id>/    immutable detached checkout
+  ~/code/<project>/pins/<full-object-id>.pin nonempty consumer metadata sidecar
 
 Move a lane with:
   git -C ~/code/<project>/main worktree move <old> ~/code/<project>/worktrees/<slug>
@@ -102,5 +128,11 @@ why /tmp worktrees fail), copy and repair instead:
   cp -a <old> ~/code/<project>/worktrees/<slug>
   git -C ~/code/<project>/main worktree repair ~/code/<project>/worktrees/<slug>
   git -C ~/code/<project>/main worktree prune
+
+Create a pin at its immutable content address:
+  PIN_OBJECT_ID=FULL_GIT_OBJECT_ID
+  git -C ~/code/<project>/main worktree add --detach \
+    ~/code/<project>/pins/\$PIN_OBJECT_ID \$PIN_OBJECT_ID
+  # write ~/code/<project>/pins/\$PIN_OBJECT_ID.pin, then update the consumer
 EOF
 exit 1

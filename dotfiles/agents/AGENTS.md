@@ -71,8 +71,8 @@ slots, and the DIRECTORY is the lifecycle policy:
 
     main/              the clean checkout — read-only product, never edited
     worktrees/<slug>/  ephemeral lanes — the only thing sweepers may delete
-    pins/<name>/       externally consumed checkouts — automation never
-                       touches them; `pins/<name>.pin` names the consumers
+    pins/<full-object-id>/ immutable externally consumed checkout; its leaf is
+                          the full Git object ID and same-name `.pin` names consumers
 
 All work happens in a lane:
 
@@ -83,12 +83,15 @@ All work happens in a lane:
 
 Then remove the worktree and delete the branch — a landed lane that leaves its
 worktree behind is not done. That rule is scoped to `worktrees/`: a pin is
-never "done" and is never reaped. Name the leaf bare (`worktrees/policy-graph`,
+never "done" and is never reaped. Name the lane leaf bare (`worktrees/policy-graph`,
 not `worktrees/north-policy-graph`) — the parent directory is what the
 enforcement guard carves out, so the leaf needs no prefix and never repeats the
-project name. Writes into `pins/` and into a `.pin` manifest are DENIED for
-agents; the one sanctioned mutation is re-pointing (`git -C <pin> checkout
-<ref>`). Dirty state in any `main/` is human work-in-progress: never commit,
+project name. A pin's tracked contents and HEAD are immutable. Its same-name
+`.pin` sidecar is agent-writable metadata and must name at least one real
+consumer. To advance a consumer, create a different detached hash-named
+worktree from `main`, write its sidecar, and update the consumer; never checkout
+another revision in place. Dirty state in any `main/` is human work-in-progress:
+never commit,
 stash, reset, or clean it — `wt-rescue` relocates it intact into
 `worktrees/rescue-<ts>` if remediation is truly needed.
 
