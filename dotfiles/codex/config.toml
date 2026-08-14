@@ -17,7 +17,7 @@ trust_level = "trusted"
 [projects."/home/tom/code"]
 trust_level = "trusted"
 
-[projects."/home/tom/code/client/msa/kea"]
+[projects."/home/tom/code/clients/msa/kea/main"]
 trust_level = "trusted"
 
 [projects."/home/tom/code/nixos-config"]
