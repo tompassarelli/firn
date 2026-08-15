@@ -21,7 +21,7 @@
 (auto-save-visited-mode +1)
 
 ;; Hide modeline by default
-(global-hide-mode-line-mode +1)
+(setq-default mode-line-format nil)
 
 ;; Uncomment to disable syntax highlighting globally (re-enable per mode as needed):
 ;; (global-font-lock-mode -1)

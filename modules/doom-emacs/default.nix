@@ -1,10 +1,6 @@
 { config, lib, pkgs, ... }:
 
-let
-  username = config.myConfig.modules.users.username;
-  chosenTheme = config.myConfig.modules.stylix.chosenTheme;
-in
-{
+((username: ((chosenTheme: {
   options.myConfig.modules.doom-emacs.enable = lib.mkEnableOption "Doom Emacs configuration (dotfiles, daemon, secrets)";
   config = lib.mkIf config.myConfig.modules.doom-emacs.enable {
     home-manager.users.${username} = ({ config, ... }: {
@@ -34,7 +30,7 @@ in
 
       '';
       services.emacs = {
-        enable = false;
+        enable = true;
         package = pkgs.emacs-pgtk;
         startWithUserSession = "graphical";
       };
@@ -66,4 +62,4 @@ in
       '';
     });
   };
-}
+}) config.myConfig.modules.stylix.chosenTheme)) config.myConfig.modules.users.username)

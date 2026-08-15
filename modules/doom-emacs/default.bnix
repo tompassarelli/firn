@@ -41,11 +41,8 @@
                     "  exit 1"
                     "fi"
                     ""))
-               ;; Daemon disabled 2026-07-24: crash-looped since system-1028
-               ;; (4539 restarts, never reached active); unit masked live,
-               ;; diagnosis thread 019f94be. Re-enable only after root cause.
                :services.emacs
-                {:enable false
+                {:enable true
                  :package pkgs.emacs-pgtk
                  :startWithUserSession "graphical"}
                :home.file
