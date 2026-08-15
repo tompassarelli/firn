@@ -1,0 +1,232 @@
+#!/usr/bin/env bash
+# Retire one verified-unused content-addressed pin. Raw pin deletion stays
+# forbidden; this command owns the integrity checks and removes the checkout
+# before its consumer sidecar.
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: pin-retire [--dry-run] --consumer-main PATH [--consumer-main PATH...] -- PIN_PATH
+
+Retire one clean detached pin after read-only checks prove every repository
+consumer named by PIN_PATH.pin has moved. The sidecar must contain one exact
+`consumer-main: ~/code/.../main` record per repository consumer, and the
+--consumer-main arguments must match that set. PIN_PATH must be
+~/code/.../pins/<40-hex-object-id>.
+
+  --consumer-main    name every consumer repository's clean, published main
+  --dry-run          validate and print the retirement without changing files
+USAGE
+}
+
+die() {
+  printf 'pin-retire: %s\n' "$1" >&2
+  exit 1
+}
+
+dry_run=0
+pin_arg=""
+consumer_args=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --consumer-main)
+      [ "$#" -ge 2 ] || die '--consumer-main needs a path'
+      consumer_args+=("$2")
+      shift
+      ;;
+    --dry-run) dry_run=1 ;;
+    --)
+      shift
+      [ "$#" -eq 1 ] || die 'exactly one pin path must follow --'
+      pin_arg="$1"
+      shift
+      break
+      ;;
+    -h|--help) usage; exit 0 ;;
+    -*) die "unknown argument '$1'" ;;
+    *)
+      [ -z "$pin_arg" ] || die 'exactly one pin path is required'
+      pin_arg="$1"
+      ;;
+  esac
+  shift
+done
+
+[ -n "$pin_arg" ] || die 'a pin path is required'
+[ "${#consumer_args[@]}" -gt 0 ] \
+  || die 'name every manifest consumer with --consumer-main'
+
+case "$pin_arg" in
+  \~/*) pin_arg="$HOME/${pin_arg#\~/}" ;;
+esac
+
+code_root="$(realpath -e -- "$HOME/code" 2>/dev/null)" \
+  || die "$HOME/code is unavailable"
+pin="$(realpath -e -- "$pin_arg" 2>/dev/null)" \
+  || die "pin does not exist: $pin_arg"
+case "$pin/" in
+  "$code_root"/*) ;;
+  *) die "pin is outside $code_root: $pin" ;;
+esac
+
+pins_dir="$(dirname "$pin")"
+[ "$(basename "$pins_dir")" = pins ] \
+  || die "path is not directly under a pins/ slot: $pin"
+container="$(dirname "$pins_dir")"
+main="$container/main"
+oid="$(basename "$pin")"
+[[ "$oid" =~ ^[0-9a-f]{40}$ ]] \
+  || die "pin leaf is not one lowercase full object ID: $oid"
+[ -e "$main/.git" ] || die "container has no main checkout: $container"
+[ "$(realpath -e -- "$main")" = "$main" ] \
+  || die "main checkout path is not canonical: $main"
+
+sidecar="$pins_dir/$oid.pin"
+[ -f "$sidecar" ] && [ ! -L "$sidecar" ] \
+  || die "pin needs a regular same-name consumer sidecar: $sidecar"
+grep -q '[^[:space:]]' "$sidecar" \
+  || die "consumer sidecar is empty: $sidecar"
+sidecar_digest="$(sha256sum "$sidecar" | sed 's/ .*//')"
+declared_count="$(grep -c '^consumer-main:' "$sidecar" || true)"
+mapfile -t declared_args < <(
+  sed -nE 's/^consumer-main:[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p' "$sidecar"
+)
+[ "$declared_count" -gt 0 ] \
+  || die "sidecar has no machine-readable consumer-main records: $sidecar"
+[ "$declared_count" -eq "${#declared_args[@]}" ] \
+  || die "sidecar has an empty or malformed consumer-main record: $sidecar"
+
+registered_head="$(git -C "$main" worktree list --porcelain | awk -v target="$pin" '
+  BEGIN { RS=""; FS="\n" }
+  {
+    path=""; head=""; detached=0
+    for (i=1; i<=NF; i++) {
+      if ($i ~ /^worktree /) path=substr($i, 10)
+      else if ($i ~ /^HEAD /) head=substr($i, 6)
+      else if ($i == "detached") detached=1
+    }
+    if (path == target && detached) print head
+  }
+')"
+[ "$registered_head" = "$oid" ] \
+  || die "pin is not a detached registered worktree at its named object: $pin"
+[ "$(git -C "$pin" rev-parse --verify HEAD)" = "$oid" ] \
+  || die "pin HEAD differs from its path: $pin"
+if git -C "$pin" symbolic-ref --quiet HEAD >/dev/null 2>&1; then
+  die "pin is attached to a branch: $pin"
+fi
+git -C "$main" cat-file -e "$oid^{commit}" \
+  || die "pin object is unavailable from main: $oid"
+
+status="$(git -C "$pin" status --porcelain --untracked-files=all)"
+[ -z "$status" ] || die "pin has tracked or untracked changes; refusing retirement: $pin"
+
+consumer_mains=()
+consumer_heads=()
+for raw_consumer in "${consumer_args[@]}"; do
+  case "$raw_consumer" in
+    \~/*) raw_consumer="$HOME/${raw_consumer#\~/}" ;;
+  esac
+  consumer="$(realpath -e -- "$raw_consumer" 2>/dev/null)" \
+    || die "consumer main does not exist: $raw_consumer"
+  case "$consumer/" in
+    "$code_root"/*/main/) ;;
+    *) die "consumer is not a canonical ~/code/.../main checkout: $consumer" ;;
+  esac
+  [ -e "$consumer/.git" ] || die "consumer is not a Git checkout: $consumer"
+  [ "$(git -C "$consumer" symbolic-ref --quiet HEAD 2>/dev/null)" = refs/heads/main ] \
+    || die "consumer is not its main branch checkout: $consumer"
+  [ -z "$(git -C "$consumer" status --porcelain)" ] \
+    || die "consumer main is dirty, so its moved state is not durable: $consumer"
+  consumer_head="$(git -C "$consumer" rev-parse --verify HEAD)"
+  consumer_origin="$(git -C "$consumer" rev-parse --verify refs/remotes/origin/main 2>/dev/null)" \
+    || die "consumer has no published origin/main: $consumer"
+  [ "$consumer_head" = "$consumer_origin" ] \
+    || die "consumer main does not match origin/main: $consumer"
+  grep_status=0
+  git -C "$consumer" grep -F -q -e "$oid" -e "$pin" "$consumer_head" -- . \
+    || grep_status=$?
+  if [ "$grep_status" -eq 0 ]; then
+    die "consumer still references the pin object or path: $consumer"
+  elif [ "$grep_status" -ne 1 ]; then
+    die "consumer reference check failed: $consumer"
+  fi
+  consumer_mains+=("$consumer")
+  consumer_heads+=("$consumer_head")
+done
+
+declared_mains=()
+for raw_declared in "${declared_args[@]}"; do
+  case "$raw_declared" in
+    \~/*) raw_declared="$HOME/${raw_declared#\~/}" ;;
+  esac
+  declared="$(realpath -e -- "$raw_declared" 2>/dev/null)" \
+    || die "sidecar consumer main does not exist: $raw_declared"
+  case "$declared/" in
+    "$code_root"/*/main/) ;;
+    *) die "sidecar consumer is not a canonical ~/code/.../main checkout: $declared" ;;
+  esac
+  declared_mains+=("$declared")
+done
+provided_set="$(printf '%s\n' "${consumer_mains[@]}" | LC_ALL=C sort -u)"
+declared_set="$(printf '%s\n' "${declared_mains[@]}" | LC_ALL=C sort -u)"
+[ "${#consumer_mains[@]}" -eq "$(printf '%s\n' "${consumer_mains[@]}" | LC_ALL=C sort -u | wc -l)" ] \
+  || die 'duplicate --consumer-main arguments are not allowed'
+[ "${#declared_mains[@]}" -eq "$(printf '%s\n' "${declared_mains[@]}" | LC_ALL=C sort -u | wc -l)" ] \
+  || die "duplicate consumer-main records in sidecar: $sidecar"
+[ "$provided_set" = "$declared_set" ] \
+  || die "--consumer-main arguments do not exactly match the sidecar: $sidecar"
+
+consumer_text="$(tr '\n\t' '  ' <"$sidecar")"
+if [ "$dry_run" -eq 1 ]; then
+  printf 'pin-retire: DRY RUN — verified clean detached pin\n'
+  printf 'pin: %s\nconsumers: %s\n' "$pin" "$consumer_text"
+  exit 0
+fi
+
+for i in "${!consumer_mains[@]}"; do
+  [ "$(git -C "${consumer_mains[$i]}" rev-parse --verify HEAD)" = "${consumer_heads[$i]}" ] \
+    || die "consumer HEAD changed during retirement proof: ${consumer_mains[$i]}"
+  [ -z "$(git -C "${consumer_mains[$i]}" status --porcelain)" ] \
+    || die "consumer main became dirty during retirement proof: ${consumer_mains[$i]}"
+  [ "${consumer_heads[$i]}" = "$(git -C "${consumer_mains[$i]}" rev-parse --verify refs/remotes/origin/main)" ] \
+    || die "consumer origin/main changed during retirement proof: ${consumer_mains[$i]}"
+done
+[ "$sidecar_digest" = "$(sha256sum "$sidecar" | sed 's/ .*//')" ] \
+  || die "consumer sidecar changed during retirement proof: $sidecar"
+[ "$(git -C "$pin" rev-parse --verify HEAD)" = "$oid" ] \
+  || die "pin HEAD changed during retirement proof: $pin"
+if git -C "$pin" symbolic-ref --quiet HEAD >/dev/null 2>&1; then
+  die "pin became attached during retirement proof: $pin"
+fi
+[ -z "$(git -C "$pin" status --porcelain --untracked-files=all)" ] \
+  || die "pin became dirty during retirement proof: $pin"
+registered_head="$(git -C "$main" worktree list --porcelain | awk -v target="$pin" '
+  BEGIN { RS=""; FS="\n" }
+  {
+    path=""; head=""; detached=0
+    for (i=1; i<=NF; i++) {
+      if ($i ~ /^worktree /) path=substr($i, 10)
+      else if ($i ~ /^HEAD /) head=substr($i, 6)
+      else if ($i == "detached") detached=1
+    }
+    if (path == target && detached) print head
+  }
+')"
+[ "$registered_head" = "$oid" ] \
+  || die "pin registration changed during retirement proof: $pin"
+
+git -C "$main" worktree remove "$pin"
+[ ! -e "$pin" ] && [ ! -L "$pin" ] \
+  || die "worktree removal left the pin path present: $pin"
+if git -C "$main" worktree list --porcelain | grep -Fqx "worktree $pin"; then
+  die "worktree removal left the pin registered: $pin"
+fi
+[ -f "$sidecar" ] && [ ! -L "$sidecar" ] \
+  || die "sidecar changed during worktree removal: $sidecar"
+[ "$sidecar_digest" = "$(sha256sum "$sidecar" | sed 's/ .*//')" ] \
+  || die "consumer sidecar changed during worktree removal: $sidecar"
+rm -- "$sidecar"
+[ ! -e "$sidecar" ] && [ ! -L "$sidecar" ] \
+  || die "sidecar removal failed: $sidecar"
+printf 'retired pin %s\n' "$pin"

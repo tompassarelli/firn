@@ -131,9 +131,12 @@ legal path, because a denial is information about the path, not about the goal.
 An agent with no way forward will route around the guard, stall, or spend a
 user's money rediscovering the exit. The worktree guard deliberately permits
 reads, `git worktree add`, `pull --ff-only`, and `wt-rescue` for exactly this
-reason. For a pin it permits reads and directs the agent to create a new
+reason. For a live pin it permits reads and directs the agent to create a new
 full-object-ID worktree from `main`; checkout and switch inside an existing pin
-are mutations of its identity and remain denied. Write the reason as an
+are mutations of its identity and remain denied. Once every named consumer has
+moved, the compliant route is `pin-retire`, which validates and removes the old
+checkout and sidecar together after its `--consumer-main` arguments exactly
+match the sidecar's machine-readable `consumer-main:` records. Write the reason as an
 instruction ("enumerate the paths you intend to
 commit, e.g. `git add path/to/file`"), not as a verdict.
 
@@ -348,8 +351,10 @@ The one guard that is wired everywhere, and the reference to read when in doubt:
 - carve-outs so no lane is trapped: the `worktrees/` parent directory (a
   positional test, not a leaf-name prefix), `wt-rescue`, gitignored paths in a
   checkout, and reads. A `pins/<full-object-id>/` checkout is protected with
-  its own immutable-hash remedy, while the `pins/` parent and same-name `.pin`
-  metadata stay writable; the gitignore carve-out does not reach pin content
+  its own immutable-hash remedy; `pin-retire` is the explicit verified-orphan
+  route. The `pins/` parent and same-name `.pin` metadata stay writable, but a
+  live sidecar cannot be deleted separately; the gitignore carve-out does not
+  reach pin content
 - tests `launch-critical-worktree-guard.test.sh` + `.test.py`
 
 - North Bridge: `EDIT_GUARDS` (a `main`-checkout write arrives as an Edit) and

@@ -419,7 +419,7 @@ chk "global heads the directory section, scope ~" "global: off ~" "$(ag status |
 chk "modules read inside skills" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  modules$')"
 chk "a skill that declares is a module" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^    repo-safety:')"
 chk "a skill that declares templates too" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^    staffing:')"
-chk "with what it declares nested under it" "6" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^      ')"
+chk "with what it declares nested under it" "7" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^      ')"
 chk "a skill that declares nothing is a plain child" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  webdev:')"
 chk "and a module is not a plain child too" "0" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  repo-safety:' || true)"
 chk "a claimed hook is not repeated under hooks" "0" "$(ag status | sed -n '/^hooks$/,/^plugins$/p' | grep -c '^  worktree-guard:' || true)"

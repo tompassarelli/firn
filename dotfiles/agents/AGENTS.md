@@ -89,15 +89,19 @@ All work happens in a lane:
     git -C ~/code/<project>/main pull --ff-only
 
 Then remove the worktree and delete the branch — a landed lane that leaves its
-worktree behind is not done. That rule is scoped to `worktrees/`: a pin is
-never "done" and is never reaped. Name the lane leaf bare (`worktrees/policy-graph`,
+worktree behind is not done. Automatic reaping is scoped to `worktrees/`: an
+active pin is never swept. Name the lane leaf bare (`worktrees/policy-graph`,
 not `worktrees/north-policy-graph`) — the parent directory is what the
 enforcement guard carves out, so the leaf needs no prefix and never repeats the
 project name. A pin's tracked contents and HEAD are immutable. Its same-name
 `.pin` sidecar is agent-writable metadata and must name at least one real
 consumer. To advance a consumer, create a different detached hash-named
 worktree from `main`, write its sidecar, and update the consumer; never checkout
-another revision in place. Dirty state in any `main/` is human work-in-progress:
+another revision in place. Once read-only checks prove every named consumer has
+moved, add one `consumer-main: ~/code/CONSUMER/main` sidecar record for each
+repository consumer and retire the clean detached old pin and sidecar explicitly with
+`pin-retire --consumer-main CONSUMER/main -- ~/code/<project>/pins/<full-object-id>`.
+Dirty state in any `main/` is human work-in-progress:
 never commit,
 stash, reset, or clean it — `wt-rescue` relocates it intact into
 `worktrees/rescue-<ts>` if remediation is truly needed.

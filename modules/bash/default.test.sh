@@ -36,8 +36,8 @@ case "$local_bin_source" in
 esac
 source_launcher_count="$(find "$repo/dotfiles/bin" -mindepth 1 -maxdepth 1 -printf '%f\n' | wc -l)"
 active_launcher_count="$(find "$local_bin_source" -mindepth 1 -maxdepth 1 -printf '%f\n' | wc -l)"
-if [ "$source_launcher_count" -ne 37 ] || [ "$active_launcher_count" -ne 37 ]; then
-  printf 'launcher count mismatch: source=%s active=%s expected=37\n' \
+if [ "$source_launcher_count" -ne 39 ] || [ "$active_launcher_count" -ne 39 ]; then
+  printf 'launcher count mismatch: source=%s active=%s expected=39\n' \
     "$source_launcher_count" "$active_launcher_count" >&2
   exit 1
 fi

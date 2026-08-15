@@ -36,12 +36,12 @@ git -C ~/code/<project>/main pull --ff-only
 ```
 
 Then remove the worktree and delete the branch — a landed lane under
-`worktrees/` that leaves its tree behind is not done. That rule stops at
-`worktrees/`: a pin is never "done" and is never swept. Dirty state in a
+`worktrees/` that leaves its tree behind is not done. Automatic sweeping stops
+at `worktrees/`: an active pin is never swept. Dirty state in a
 `main/` is human work-in-progress: never commit, stash, reset, or clean it
 (`wt-rescue` relocates it intact into `worktrees/rescue-<ts>`).
 
-**Never write into or re-point a pin's checkout.** A pin is protected because
+**Never write into or re-point a live pin's checkout.** A pin is protected because
 something outside the repo consumes it — its same-name `.pin` sidecar names
 what — not because dirt in it is someone's WIP. Edits, writes, deletes,
 checkout, and switch under `pins/<full-object-id>/` are refused. The same-name
@@ -56,7 +56,21 @@ git -C ~/code/<project>/main worktree add --detach \
 # write ~/code/<project>/pins/$PIN_OBJECT_ID.pin, then update the consumer
 ```
 
-The old pin's path, contents, and HEAD remain immutable.
+The old pin's path, contents, and HEAD remain immutable while any consumer names
+it. After checking every consumer named by the sidecar and landing each move,
+add one exact `consumer-main: ~/code/CONSUMER/main` sidecar record for every
+repository consumer, then retire the clean detached pin explicitly:
+
+```
+pin-retire --consumer-main ~/code/CONSUMER/main -- \
+  ~/code/<project>/pins/OLD_FULL_GIT_OBJECT_ID
+```
+
+Pass every recorded consumer with another `--consumer-main`; the argument set
+must exactly match the sidecar records. The helper refuses a dirty, attached,
+misnamed, unregistered, unpublished, consumer-mismatched, or still-referenced
+pin and removes the checkout before its sidecar. Raw `git worktree remove`,
+`rm`, sidecar deletion, and every recursive `pins/` deletion remain refused.
 
 **Stage by enumerating paths.** `git add -A`, `git add -u`, `git add .`, and
 `git commit -a` are refused: blind staging sweeps in another agent's in-flight
@@ -82,8 +96,8 @@ never `kill(-1)` in the caller's namespace.
 would be lost, not by where the path is. Refused outright, in every mode: `/`,
 `$HOME`, a system root, a personal category root like `~/Pictures`, a `main/`
 checkout, a project container, a container's `worktrees/` or `pins/` root,
-`~/code/*-data`, `~/.local/state/north`, any `.git` or checkout root, any pin
-under `pins/`, and any `worktrees/<slug>` lane your session is not working in —
+`~/code/*-data`, `~/.local/state/north`, any `.git` or checkout root, raw
+deletion of any pin under `pins/`, and any `worktrees/<slug>` lane your session is not working in —
 another lane may be live in it. Never write `rm … "$VAR"/glob`
 either: an unset `$VAR` expands to a bare-root delete, so write the literal
 path or guard it as `"${VAR:?}"`.
@@ -101,6 +115,7 @@ options may name any key. Authentication is not disclosure: do not print,
 copy, upload, or pipe private-key contents into another process or tool output.
 
 A denial is information about the path, not the goal: take the lane, name the
-paths, use `safe-push` — except for a pin, where the compliant move is asking
-the human, never cutting a lane from it. If a guard is genuinely wrong, say
-so to the user rather than routing around it.
+paths, and use `safe-push`. For a live pin, create a replacement and move its
+consumers; for a verified orphan, use `pin-retire`. Never cut a lane from a pin
+or mutate it in place. If a guard is genuinely wrong, say so rather than routing
+around it.
