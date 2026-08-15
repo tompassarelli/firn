@@ -1,0 +1,344 @@
+#lang beagle
+(ns firn.tag-resolve-driver-test
+  (:require [firn.tag-resolve :as r]
+            [firn.tag-resolve-driver :as d]))
+
+(defrecord TestResult [(name String) (passed Bool)])
+
+(defn make-module
+  [(name String)
+   (tags (Vec String))
+   (opt-in (Vec String))
+   (overrides (Vec r/TaggedOverrides))]
+  r/ModuleTags
+  (r/->ModuleTags name tags opt-in overrides))
+
+(defn enabled
+  [(tag String) (pluses (Vec String)) (minuses (Vec String))] r/EnabledTag
+  (r/->EnabledTag tag pluses minuses))
+
+(defn host-data
+  [(name String)
+   (enabled-tags (Vec r/EnabledTag))
+   (disabled (Vec String))
+   (platform String)
+   (tag-source-present Bool)
+   (generated-present Bool)
+   (generated-text String)]
+  d/TagResolveHostData
+  (d/->TagResolveHostData
+    (r/->HostTags name enabled-tags disabled platform false [])
+    tag-source-present
+    generated-present
+    generated-text))
+
+(defn parsed-action-matches?
+  [(argv (Vec String))
+   (default-host String)
+   (firn-tag-emit Bool)
+   (expected-host String)
+   (expected-all Bool)
+   (expected-emit Bool)]
+  Bool
+  (let [(parsed d/TagResolveArgv)
+        (d/parse-tag-resolve-argv argv default-host firn-tag-emit)]
+    (match parsed
+      [(ParsedTagResolve action)
+       (and (= (d/action-host action) expected-host)
+            (= (d/action-all? action) expected-all)
+            (= (d/action-emit? action) expected-emit))]
+      [(OtherFirnCommand other) false]
+      [(InvalidTagResolveArgv invalid) false])))
+
+(defn invalid-argv? [(argv (Vec String))] Bool
+  (let [(parsed d/TagResolveArgv)
+        (d/parse-tag-resolve-argv argv "default" false)]
+    (match parsed
+      [(ParsedTagResolve action) false]
+      [(OtherFirnCommand other) false]
+      [(InvalidTagResolveArgv invalid) true])))
+
+(defn other-command? [(argv (Vec String))] Bool
+  (let [(parsed d/TagResolveArgv)
+        (d/parse-tag-resolve-argv argv "default" false)]
+    (match parsed
+      [(ParsedTagResolve action) false]
+      [(OtherFirnCommand other) true]
+      [(InvalidTagResolveArgv invalid) false])))
+
+(defn one-write?
+  [(outcome d/TagResolveOutcome)
+   (expected-path String)
+   (expected-text String)]
+  Bool
+  (loop [(index Int) 0 (matches Int) 0]
+    (if (>= index (count (d/tagresolveoutcome-effects outcome)))
+      (= matches 1)
+      (let [(effect d/TagResolveEffect)
+            (nth (d/tagresolveoutcome-effects outcome) index)]
+        (match effect
+          [(StdoutText text) (recur (+ index 1) matches)]
+          [(StderrText text) (recur (+ index 1) matches)]
+          [(WriteGenerated path text)
+           (recur (+ index 1)
+             (if (and (= path expected-path) (= text expected-text))
+               (+ matches 1)
+               matches))])))))
+
+(defn case-argv-grammar [] Bool
+  (and
+    (parsed-action-matches?
+      ["tag" "resolve"] "whiterabbit" false "whiterabbit" false false)
+    (parsed-action-matches?
+      ["tag" "resolve" "ashashi"] "whiterabbit" false
+      "ashashi" false false)
+    (parsed-action-matches?
+      ["tag" "resolve" "ashashi+emit"] "whiterabbit" false
+      "ashashi" false true)
+    (parsed-action-matches?
+      ["tag" "resolve" "all"] "whiterabbit" false "all" true false)
+    (parsed-action-matches?
+      ["tag" "resolve" "all+emit"] "whiterabbit" false "all" true true)
+    (parsed-action-matches?
+      ["tag" "resolve"] "whiterabbit" true "whiterabbit" false true)
+    (parsed-action-matches?
+      ["tag" "resolve" "--emit"] "whiterabbit" false
+      "--emit" false false)
+    (invalid-argv? ["tag" "resolve" "all" "extra"])
+    (other-command? ["repo" "build"])))
+
+(defn pretty-modules [] (Vec r/ModuleTags)
+  [(make-module "git" ["terminal"] [] [])
+   (make-module
+     "firefox"
+     ["browsers"]
+     []
+     [(r/->TaggedOverrides
+        "browsers"
+        [(r/->OverrideValue "myConfig.modules.firefox.default" "true")])])
+   (make-module "experimental" [] ["browsers"] [])])
+
+(defn pretty-host [] d/TagResolveHostData
+  (host-data
+    "whiterabbit"
+    [(enabled "terminal" [] []) (enabled "browsers" ["experimental"] [])]
+    []
+    "linux"
+    true
+    false
+    ""))
+
+(defn case-pretty-layout [] Bool
+  (let [(resolution r/Resolution)
+        (r/resolve (pretty-modules) (d/tagresolvehostdata-tags (pretty-host)))]
+    (= (d/render-pretty-resolution resolution)
+       (str
+         "Host: whiterabbit\n\n"
+         "Per-tag contributions:\n"
+         "  browsers (2):\n"
+         "    experimental\n"
+         "    firefox\n"
+         "  terminal (1):\n"
+         "    git\n"
+         "\nActive modules (3):\n"
+         "  experimental\n"
+         "  firefox\n"
+         "      myConfig.modules.firefox.default = true\n"
+         "  git\n"))))
+
+(defn case-warning-before-pretty [] Bool
+  (let [(repository d/TagResolveRepositoryData)
+        (d/->TagResolveRepositoryData
+          [(make-module "firefox" ["browsers"] [] [])]
+          [(host-data
+             "warn"
+             [(enabled "browsers" [] ["ferefox"])]
+             [] "linux" true false "")])
+        (outcome d/TagResolveOutcome)
+        (d/run-tag-resolve-action repository (d/->ResolveOne "warn" false))]
+    (and
+      (= (d/tagresolveoutcome-status outcome) 0)
+      (= (d/outcome-effect-kinds outcome) ["stderr" "stdout"])
+      (= (d/outcome-stderr outcome)
+         (str
+           "tag-resolve: warning: host 'warn' tag 'browsers': -ferefox "
+           "but ferefox is not in this tag's default set\n"))
+      (= (d/outcome-stdout outcome)
+         (str
+           "Host: warn\n\n"
+           "Per-tag contributions:\n"
+           "  browsers (1):\n"
+           "    firefox\n"
+           "\nActive modules (1):\n"
+           "  firefox\n")))))
+
+(defn case-errors-ordered-and-warnings-suppressed [] Bool
+  (let [(repository d/TagResolveRepositoryData)
+        (d/->TagResolveRepositoryData
+          [(make-module "git" ["terminal"] [] [])
+           (make-module "qute" [] ["browsers"] [])]
+          [(host-data
+             "broken"
+             [(enabled "missing" ["qute"] [])
+              (enabled "terminal" ["qute"] ["typo"])]
+             ["ghost"] "plan9" true false "")])
+        (outcome d/TagResolveOutcome)
+        (d/run-tag-resolve-action repository (d/->ResolveOne "broken" false))]
+    (and
+      (= (d/tagresolveoutcome-status outcome) 1)
+      (= (d/outcome-effect-kinds outcome)
+         ["stderr" "stderr" "stderr" "stderr" "stderr"])
+      (= (d/outcome-stdout outcome) "")
+      (= (d/outcome-stderr outcome)
+         (str
+           "tag-resolve: host 'broken' declares unsupported platform 'plan9'\n"
+           "tag-resolve: host 'broken' enables tag 'missing' "
+           "but no module declares it\n"
+           "tag-resolve: host 'broken' tag 'missing': +qute but module 'qute' "
+           "does not list tag 'missing' in :tags-opt-in\n"
+           "tag-resolve: host 'broken' tag 'terminal': +qute but module 'qute' "
+           "does not list tag 'terminal' in :tags-opt-in\n"
+           "tag-resolve: host 'broken' :disabled lists 'ghost' "
+           "but no such module exists\n")))))
+
+(defn empty-host [(name String) (tag-source-present Bool)] d/TagResolveHostData
+  (host-data name [] [] "linux" tag-source-present false ""))
+
+(defn empty-pretty [(name String)] String
+  (str "Host: " name "\n\n"
+    "  (no tags enabled)\n\n"
+    "Active modules (0):\n"))
+
+(defn case-unknown-host-sorts-available [] Bool
+  (let [(repository d/TagResolveRepositoryData)
+        (d/->TagResolveRepositoryData
+          [] [(empty-host "zeta" true) (empty-host "alpha" true)])
+        (outcome d/TagResolveOutcome)
+        (d/run-tag-resolve-action repository (d/->ResolveOne "missing" false))]
+    (and
+      (= (d/tagresolveoutcome-status outcome) 1)
+      (= (d/outcome-effect-kinds outcome) ["stderr"])
+      (= (d/outcome-stdout outcome) "")
+      (= (d/outcome-stderr outcome)
+         "firn tag resolve: no such host 'missing' (have: alpha, zeta)\n"))))
+
+(defn case-all-hosts-sorted [] Bool
+  (let [(repository d/TagResolveRepositoryData)
+        (d/->TagResolveRepositoryData
+          [] [(empty-host "zeta" true) (empty-host "alpha" true)])
+        (outcome d/TagResolveOutcome)
+        (d/run-tag-resolve-action repository (d/->ResolveAll false))]
+    (and
+      (= (d/tagresolveoutcome-status outcome) 0)
+      (= (d/outcome-stderr outcome) "")
+      (= (d/outcome-effect-kinds outcome)
+         ["stdout" "stdout" "stdout" "stdout"])
+      (= (d/outcome-stdout outcome)
+         (str (empty-pretty "alpha") "\n" (empty-pretty "zeta") "\n")))))
+
+(defn case-all-stops-on-first-error [] Bool
+  (let [(repository d/TagResolveRepositoryData)
+        (d/->TagResolveRepositoryData
+          []
+          [(empty-host "zeta" true)
+           (host-data
+             "beta" [(enabled "missing" [] [])] [] "linux" true false "")
+           (empty-host "alpha" true)])
+        (outcome d/TagResolveOutcome)
+        (d/run-tag-resolve-action repository (d/->ResolveAll false))]
+    (and
+      (= (d/tagresolveoutcome-status outcome) 1)
+      (= (d/outcome-effect-kinds outcome) ["stdout" "stdout" "stderr"])
+      (= (d/outcome-stdout outcome) (str (empty-pretty "alpha") "\n"))
+      (= (d/outcome-stderr outcome)
+         (str
+           "tag-resolve: host 'beta' enables tag 'missing' "
+           "but no module declares it\n")))))
+
+(defn case-emit-write-and-up-to-date [] Bool
+  (let [(stale d/TagResolveHostData) (pretty-host)
+        (stale-repository d/TagResolveRepositoryData)
+        (d/->TagResolveRepositoryData (pretty-modules) [stale])
+        (stale-outcome d/TagResolveOutcome)
+        (d/run-tag-resolve-action
+          stale-repository (d/->ResolveOne "whiterabbit" true))
+        (resolution r/Resolution)
+        (r/resolve (pretty-modules) (d/tagresolvehostdata-tags stale))
+        (generated String) (r/emit-host-enables-bnix resolution)
+        (current d/TagResolveHostData)
+        (host-data
+          "whiterabbit"
+          [(enabled "terminal" [] [])
+           (enabled "browsers" ["experimental"] [])]
+          [] "linux" true true generated)
+        (current-outcome d/TagResolveOutcome)
+        (d/run-tag-resolve-action
+          (d/->TagResolveRepositoryData (pretty-modules) [current])
+          (d/->ResolveOne "whiterabbit" true))]
+    (and
+      (= (d/tagresolveoutcome-status stale-outcome) 0)
+      (= (d/outcome-effect-kinds stale-outcome) ["write" "stdout"])
+      (one-write?
+        stale-outcome "hosts/whiterabbit/_generated-enables.bnix" generated)
+      (= (d/outcome-stdout stale-outcome)
+         (str
+           "tag-resolve: wrote hosts/whiterabbit/_generated-enables.bnix "
+           "(3 modules)\n"))
+      (= (d/tagresolveoutcome-status current-outcome) 0)
+      (= (d/outcome-effect-kinds current-outcome) ["stdout"])
+      (= (d/outcome-stdout current-outcome)
+         (str
+           "tag-resolve: hosts/whiterabbit/_generated-enables.bnix "
+           "is up to date (3 modules)\n")))))
+
+(defn case-all-emit-skips-untagged [] Bool
+  (let [(tagged d/TagResolveHostData) (empty-host "zeta" true)
+        (untagged d/TagResolveHostData) (empty-host "alpha" false)
+        (repository d/TagResolveRepositoryData)
+        (d/->TagResolveRepositoryData [] [tagged untagged])
+        (outcome d/TagResolveOutcome)
+        (d/run-tag-resolve-action repository (d/->ResolveAll true))
+        (tagged-resolution r/Resolution)
+        (r/resolve [] (d/tagresolvehostdata-tags tagged))
+        (silent d/TagResolveOutcome)
+        (d/run-tag-resolve-action
+          (d/->TagResolveRepositoryData [] [untagged]) (d/->ResolveAll true))]
+    (and
+      (= (d/tagresolveoutcome-status outcome) 0)
+      (= (d/outcome-effect-kinds outcome) ["write" "stdout"])
+      (one-write?
+        outcome
+        "hosts/zeta/_generated-enables.bnix"
+        (r/emit-host-enables-bnix tagged-resolution))
+      (= (d/outcome-stdout outcome)
+         (str
+           "tag-resolve: wrote hosts/zeta/_generated-enables.bnix "
+           "(0 modules)\n"))
+      (= (d/tagresolveoutcome-status silent) 0)
+      (= (d/tagresolveoutcome-effects silent) []))))
+
+(defn cases [] (Vec TestResult)
+  [(->TestResult "argv-grammar" (case-argv-grammar))
+   (->TestResult "pretty-layout" (case-pretty-layout))
+   (->TestResult "warning-before-pretty" (case-warning-before-pretty))
+   (->TestResult
+     "errors-ordered-warnings-suppressed"
+     (case-errors-ordered-and-warnings-suppressed))
+   (->TestResult "unknown-host-sorts-available" (case-unknown-host-sorts-available))
+   (->TestResult "all-hosts-sorted" (case-all-hosts-sorted))
+   (->TestResult "all-stops-on-first-error" (case-all-stops-on-first-error))
+   (->TestResult "emit-write-and-up-to-date" (case-emit-write-and-up-to-date))
+   (->TestResult "all-emit-skips-untagged" (case-all-emit-skips-untagged))])
+
+(defn -main [(args (Vec String))] Int
+  (let [(results (Vec TestResult)) (cases)]
+    (loop [(index Int) 0 (failures Int) 0]
+      (if (>= index (count results))
+        failures
+        (let [(result TestResult) (nth results index)]
+          (do
+            (println
+              (str (if (testresult-passed result) "PASS " "FAIL ")
+                   (testresult-name result)))
+            (recur (+ index 1)
+              (if (testresult-passed result) failures (+ failures 1)))))))))

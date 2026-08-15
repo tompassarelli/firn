@@ -1,0 +1,309 @@
+#lang beagle
+(ns firn.tag-resolve-driver
+  (:require [firn.tag-resolve :as r]))
+
+;; `argv` below excludes argv[0]; `firn-tag-emit` is the injected boolean
+;; interpretation of FIRN_TAG_EMIT, never an environment read in this module.
+(defunion TagResolveAction
+  (ResolveOne [(host String) (emit Bool)])
+  (ResolveAll [(emit Bool)]))
+
+(defunion TagResolveArgv
+  (ParsedTagResolve [(action TagResolveAction)])
+  (OtherFirnCommand [(argv (Vec String))])
+  (InvalidTagResolveArgv [(argv (Vec String))]))
+
+(defrecord TagResolveHostData
+  [(tags r/HostTags)
+   (tag-source-present Bool)
+   (generated-present Bool)
+   (generated-text String)])
+
+(defrecord TagResolveRepositoryData
+  [(modules (Vec r/ModuleTags)) (hosts (Vec TagResolveHostData))])
+
+(defunion HostLookup
+  (FoundHost [(data TagResolveHostData)])
+  (MissingHost [(host String)]))
+
+(defunion TagResolveEffect
+  (StdoutText [(text String)])
+  (StderrText [(text String)])
+  (WriteGenerated [(path String) (text String)]))
+
+(defrecord TagResolveOutcome [(status Int) (effects (Vec TagResolveEffect))])
+
+(defn emit-suffix? [(leaf String)] Bool
+  (let [(length Int) (count leaf)]
+    (and (>= length 5) (= (subs leaf (- length 5) length) "+emit"))))
+
+(defn action-from-leaf [(leaf String) (firn-tag-emit Bool)] TagResolveAction
+  (let [(suffix Bool) (emit-suffix? leaf)
+        (target String)
+        (if suffix (subs leaf 0 (- (count leaf) 5)) leaf)
+        (emit Bool) (or suffix firn-tag-emit)]
+    (if (= target "all")
+      (->ResolveAll emit)
+      (->ResolveOne target emit))))
+
+(defn parse-tag-resolve-argv
+  [(argv (Vec String))
+   (default-host String)
+   (firn-tag-emit Bool)]
+  TagResolveArgv
+  (if (and (>= (count argv) 2)
+           (= (nth argv 0) "tag")
+           (= (nth argv 1) "resolve"))
+    (cond
+      [(= (count argv) 2)
+       (->ParsedTagResolve (action-from-leaf default-host firn-tag-emit))]
+      [(= (count argv) 3)
+       (->ParsedTagResolve (action-from-leaf (nth argv 2) firn-tag-emit))]
+      [:else (->InvalidTagResolveArgv argv)])
+    (->OtherFirnCommand argv)))
+
+(defn action-host [(action TagResolveAction)] String
+  (match action
+    [(ResolveOne host emit) host]
+    [(ResolveAll emit) "all"]))
+
+(defn action-emit? [(action TagResolveAction)] Bool
+  (match action
+    [(ResolveOne host emit) emit]
+    [(ResolveAll emit) emit]))
+
+(defn action-all? [(action TagResolveAction)] Bool
+  (match action
+    [(ResolveOne host emit) false]
+    [(ResolveAll emit) true]))
+
+(defn host-data-name [(data TagResolveHostData)] String
+  (r/hosttags-host (tagresolvehostdata-tags data)))
+
+(defn repository-host-names [(repository TagResolveRepositoryData)] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count (tagresolverepositorydata-hosts repository)))
+      (sort result)
+      (recur (+ index 1)
+        (conj result
+          (host-data-name
+            (nth (tagresolverepositorydata-hosts repository) index)))))))
+
+(defn find-host [(repository TagResolveRepositoryData) (host String)] HostLookup
+  (loop [(index Int) 0]
+    (if (>= index (count (tagresolverepositorydata-hosts repository)))
+      (->MissingHost host)
+      (let [(data TagResolveHostData)
+            (nth (tagresolverepositorydata-hosts repository) index)]
+        (if (= (host-data-name data) host)
+          (->FoundHost data)
+          (recur (+ index 1)))))))
+
+(defn join-host-names [(hosts (Vec String))] String
+  (loop [(index Int) 0 (result String) ""]
+    (if (>= index (count hosts))
+      result
+      (recur (+ index 1)
+        (str result (if (= index 0) "" ", ") (nth hosts index))))))
+
+(defn validation-error-hint [(error r/ValidationError)] String
+  (match error
+    [(UnknownPlatform host platform hint) hint]
+    [(UnknownTag host tag hint) hint]
+    [(OptInMismatch host tag module hint) hint]
+    [(UnknownDisabled host module hint) hint]))
+
+(defn error-effects [(errors (Vec r/ValidationError))] (Vec TagResolveEffect)
+  (loop [(index Int) 0 (result (Vec TagResolveEffect)) []]
+    (if (>= index (count errors))
+      result
+      (recur (+ index 1)
+        (conj result
+          (->StderrText
+            (str "tag-resolve: "
+              (validation-error-hint (nth errors index)) "\n")))))))
+
+(defn warning-effects [(warnings (Vec String))] (Vec TagResolveEffect)
+  (loop [(index Int) 0 (result (Vec TagResolveEffect)) []]
+    (if (>= index (count warnings))
+      result
+      (recur (+ index 1)
+        (conj result
+          (->StderrText
+            (str "tag-resolve: warning: " (nth warnings index) "\n")))))))
+
+(defn resolution-tags [(resolution r/Resolution)] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count (r/resolution-per-tag resolution)))
+      (sort result)
+      (recur (+ index 1)
+        (conj result
+          (r/tagcontribution-tag
+            (nth (r/resolution-per-tag resolution) index)))))))
+
+(defn render-module-lines [(modules (Vec String))] String
+  (loop [(index Int) 0 (result String) ""]
+    (if (>= index (count modules))
+      result
+      (recur (+ index 1) (str result "    " (nth modules index) "\n")))))
+
+(defn render-tag-contributions [(resolution r/Resolution)] String
+  (let [(tags (Vec String)) (resolution-tags resolution)]
+    (if (= (count tags) 0)
+      "  (no tags enabled)\n"
+      (loop [(index Int) 0 (result String) "Per-tag contributions:\n"]
+        (if (>= index (count tags))
+          result
+          (let [(tag String) (nth tags index)
+                (modules (Vec String)) (r/contribution-for resolution tag)]
+            (recur (+ index 1)
+              (str result "  " tag " (" (count modules) "):\n"
+                (if (= (count modules) 0)
+                  "    (none)\n"
+                  (render-module-lines modules))))))))))
+
+(defn render-override-lines [(values (Vec r/OverrideValue))] String
+  (loop [(index Int) 0 (result String) ""]
+    (if (>= index (count values))
+      result
+      (let [(value r/OverrideValue) (nth values index)]
+        (recur (+ index 1)
+          (str result "      " (r/overridevalue-path value) " = "
+            (r/overridevalue-literal value) "\n"))))))
+
+(defn render-active-modules [(resolution r/Resolution)] String
+  (let [(active (Vec String)) (r/resolution-active resolution)]
+    (loop [(index Int) 0
+           (result String) (str "Active modules (" (count active) "):\n")]
+      (if (>= index (count active))
+        result
+        (let [(module String) (nth active index)]
+          (recur (+ index 1)
+            (str result "  " module "\n"
+              (render-override-lines (r/overrides-for resolution module)))))))))
+
+(defn render-pretty-resolution [(resolution r/Resolution)] String
+  (str "Host: " (r/resolution-host resolution) "\n\n"
+    (render-tag-contributions resolution) "\n"
+    (render-active-modules resolution)))
+
+(defn generated-path [(host String)] String
+  (str "hosts/" host "/_generated-enables.bnix"))
+
+(defn emit-success-effects
+  [(data TagResolveHostData) (resolution r/Resolution)] (Vec TagResolveEffect)
+  (let [(host String) (r/resolution-host resolution)
+        (path String) (generated-path host)
+        (text String) (r/emit-host-enables-bnix resolution)
+        (count-active Int) (count (r/resolution-active resolution))]
+    (if (and (tagresolvehostdata-generated-present data)
+             (= (tagresolvehostdata-generated-text data) text))
+      [(->StdoutText
+         (str "tag-resolve: " path " is up to date (" count-active
+           " modules)\n"))]
+      [(->WriteGenerated path text)
+       (->StdoutText
+         (str "tag-resolve: wrote " path " (" count-active " modules)\n"))])))
+
+(defn resolve-one
+  [(modules (Vec r/ModuleTags))
+   (data TagResolveHostData)
+   (emit Bool)]
+  TagResolveOutcome
+  (let [(resolution r/Resolution)
+        (r/resolve modules (tagresolvehostdata-tags data))]
+    (if (> (count (r/resolution-errors resolution)) 0)
+      (->TagResolveOutcome 1 (error-effects (r/resolution-errors resolution)))
+      (->TagResolveOutcome
+        0
+        (into
+          (warning-effects (r/resolution-warnings resolution))
+          (if emit
+            (emit-success-effects data resolution)
+            [(->StdoutText (render-pretty-resolution resolution))]))))))
+
+(defn append-all-pretty-gap
+  [(effects (Vec TagResolveEffect)) (emit Bool)] (Vec TagResolveEffect)
+  (if emit effects (conj effects (->StdoutText "\n"))))
+
+(defn run-all
+  [(repository TagResolveRepositoryData)
+   (hosts (Vec String))
+   (index Int)
+   (emit Bool)
+   (effects (Vec TagResolveEffect))]
+  TagResolveOutcome
+  (if (>= index (count hosts))
+    (->TagResolveOutcome 0 effects)
+    (match (find-host repository (nth hosts index))
+      [(MissingHost host)
+       (->TagResolveOutcome 1 effects)]
+      [(FoundHost data)
+       (if (and emit (not (tagresolvehostdata-tag-source-present data)))
+         (run-all repository hosts (+ index 1) emit effects)
+         (let [(outcome TagResolveOutcome)
+               (resolve-one
+                 (tagresolverepositorydata-modules repository) data emit)
+               (next-effects (Vec TagResolveEffect))
+               (into effects (tagresolveoutcome-effects outcome))]
+           (if (= (tagresolveoutcome-status outcome) 0)
+             (run-all repository hosts (+ index 1) emit
+               (append-all-pretty-gap next-effects emit))
+             (->TagResolveOutcome
+               (tagresolveoutcome-status outcome) next-effects))))])))
+
+(defn unknown-host-outcome
+  [(repository TagResolveRepositoryData) (host String)] TagResolveOutcome
+  (->TagResolveOutcome
+    1
+    [(->StderrText
+       (str "firn tag resolve: no such host '" host "' (have: "
+         (join-host-names (repository-host-names repository)) ")\n"))]))
+
+(defn run-tag-resolve-action
+  [(repository TagResolveRepositoryData)
+   (action TagResolveAction)]
+  TagResolveOutcome
+  (match action
+    [(ResolveAll emit)
+     (run-all repository (repository-host-names repository) 0 emit [])]
+    [(ResolveOne host emit)
+     (match (find-host repository host)
+       [(MissingHost missing) (unknown-host-outcome repository missing)]
+       [(FoundHost data)
+        (resolve-one (tagresolverepositorydata-modules repository) data emit)])]))
+
+(defn outcome-stdout [(outcome TagResolveOutcome)] String
+  (loop [(index Int) 0 (result String) ""]
+    (if (>= index (count (tagresolveoutcome-effects outcome)))
+      result
+      (let [(effect TagResolveEffect)
+            (nth (tagresolveoutcome-effects outcome) index)]
+        (match effect
+          [(StdoutText text) (recur (+ index 1) (str result text))]
+          [(StderrText text) (recur (+ index 1) result)]
+          [(WriteGenerated path text) (recur (+ index 1) result)])))))
+
+(defn outcome-stderr [(outcome TagResolveOutcome)] String
+  (loop [(index Int) 0 (result String) ""]
+    (if (>= index (count (tagresolveoutcome-effects outcome)))
+      result
+      (let [(effect TagResolveEffect)
+            (nth (tagresolveoutcome-effects outcome) index)]
+        (match effect
+          [(StdoutText text) (recur (+ index 1) result)]
+          [(StderrText text) (recur (+ index 1) (str result text))]
+          [(WriteGenerated path text) (recur (+ index 1) result)])))))
+
+(defn outcome-effect-kinds [(outcome TagResolveOutcome)] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count (tagresolveoutcome-effects outcome)))
+      result
+      (let [(effect TagResolveEffect)
+            (nth (tagresolveoutcome-effects outcome) index)]
+        (recur (+ index 1)
+          (conj result
+            (match effect
+              [(StdoutText text) "stdout"]
+              [(StderrText text) "stderr"]
+              [(WriteGenerated path text) "write"])))))))
