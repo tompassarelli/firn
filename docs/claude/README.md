@@ -12,7 +12,7 @@ The map of how Claude Code is set up on this machine, split by **concern** and
 - **① canonical** — the stable model. What Claude Code *is*, the 80/20 levers
   (CLAUDE.md / settings / hooks / skills / MCP / plugins / subagents), and the
   hooks-vs-skills-vs-CLAUDE.md decision. Update only when the harness changes.
-- **② local map** — **NEVER hand-edit.** Run `firn architecture` (walks disk +
+- **② local map** — **NEVER hand-edit.** Run `firn repo architecture` (walks disk +
   settings + plugin manifests). A diff here means the system actually moved.
 - **③ north** — the substrate Claude points at, and the SDK dispatch model
   that coordinates agent work via thread-driven posture.
@@ -20,8 +20,8 @@ The map of how Claude Code is set up on this machine, split by **concern** and
 ## Reading the whole thing top-to-bottom
 
 ```bash
-firn architecture bundle   # canonical + (freshly-generated) local map + north, concatenated
-firn architecture          # just regenerate + print the local map (02)
+firn repo architecture bundle   # canonical + current local map + north, concatenated
+firn repo architecture          # regenerate + print the local map (02)
 ```
 
 Why split: a single hand-maintained mega-doc rots because it mixes stable

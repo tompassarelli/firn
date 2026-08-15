@@ -11,10 +11,9 @@
          in-repo
          sh sh-out find-exe
          list-dirs modules hosts
-         current-hostname host-config-rkt
+         current-hostname host-config-source
          grep-files relative-to-repo
          paths-referenced-in
-         find-name-kind
          resolve-default
          flake-input-purity-violations
          (struct-out walk-edge))
@@ -48,29 +47,17 @@
     [(string? default-leaf) default-leaf]
     [else #f]))
 
-(define (find-name-kind name)
-  ;; Return 'module, or #f. Bundles are gone (zero users) — kept the
-  ;; function so legacy callsites keep compiling.
-  (cond
-    [(directory-exists? (in-repo "modules" name)) 'module]
-    [else #f]))
-
 ;; ---------- repo discovery ----------
 
 (define (looks-like-firn-repo? p)
-  ;; flake.rkt is the pre-migration artifact; the repo's flake source is now
-  ;; flake.bnix (compiled to flake.nix). Checking flake.rkt made find-repo-root
-  ;; ALWAYS fall back to $HOME/code/nixos-config — so firn run from a git
-  ;; worktree silently operated on the main checkout. Accept either layout.
   (and (directory-exists? p)
        (file-exists? (build-path p "scripts" "firn-build"))
-       (or (file-exists? (build-path p "flake.bnix"))
-           (file-exists? (build-path p "flake.rkt")))))
+       (file-exists? (build-path p "flake.bnix"))))
 
 (define (find-repo-root)
   ;; Repo discovery, in order of preference:
   ;;   1. FIRN_REPO env var — explicit override, only accepted if it looks
-  ;;      like a firn repo (has scripts/firn-build + flake.rkt).
+  ;;      like a firn repo (has scripts/firn-build + flake.bnix).
   ;;   2. `git rev-parse --show-toplevel` from cwd, but ONLY if the result
   ;;      also looks like a firn repo. This keeps firn commands working
   ;;      when invoked from inside the nixos-config tree, but avoids
@@ -145,8 +132,7 @@
     (define s (sh-out "hostname"))
     (if (non-empty-string? s) s "whiterabbit")))
 
-(define (host-config-rkt host)
-  ;; Name kept for callsite compatibility; now points at the beagle/nix file.
+(define (host-config-source host)
   (in-repo "hosts" host "configuration.bnix"))
 
 (define (grep-files dir re)
@@ -169,30 +155,22 @@
 
 ;; ---------- flake input purity ----------
 ;;
-;; Returns a list of "flake.rkt:<line>: <text>" strings for every line
+;; Returns a list of "flake.bnix:<line>: <text>" strings for every line
 ;; that declares a flake input with an absolute path: URL (path:/...).
 ;; Such inputs trip Nix's pure-eval ("access to absolute path '/...' is
 ;; forbidden") as soon as anything reaches into `inputs.<name>`, even
 ;; transitively via flake-lock resolution. Empty list ⇒ pure-eval safe.
 (define (flake-input-purity-violations)
-  ;; Check the live flake source. Prefer flake.bnix (current source of
-  ;; truth); fall back to flake.rkt if present (legacy).
-  (define src
-    (cond
-      [(file-exists? (in-repo "flake.bnix")) (in-repo "flake.bnix")]
-      [(file-exists? (in-repo "flake.rkt")) (in-repo "flake.rkt")]
-      [else #f]))
+  (define src (and (file-exists? (in-repo "flake.bnix"))
+                   (in-repo "flake.bnix")))
   (cond
     [(not src) '()]
     [else
      (define lines (regexp-split #rx"\n" (file->string src)))
-     (define src-name
-       (cond [(equal? src (in-repo "flake.bnix")) "flake.bnix"]
-             [else "flake.rkt"]))
      (for/list ([line (in-list lines)]
                 [n (in-naturals 1)]
                 #:when (regexp-match? #px"\"path:/[^\"]+\"" line))
-       (format "~a:~a: ~a" src-name n (regexp-replace #rx"^\\s+" line "")))]))
+       (format "flake.bnix:~a: ~a" n (regexp-replace #rx"^\\s+" line "")))]))
 
 ;; ---------- option-path extraction from .rkt source ----------
 ;;

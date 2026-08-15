@@ -298,28 +298,6 @@ default-on memberships only.
 
 ---
 
-## Historical: bundle audit
-
-The pre-migration bundle audit (Phase A) counted every `mkDefault` in the now-
-deleted `bundles/*/default.bnix`:
-
-| metric                              | count |
-|-------------------------------------|------:|
-| Total `mkDefault` hits              |   141 |
-| Pure enable-wiring                  |   132 |
-| Value-overrides (non-`enable`)      |     9 |
-
-All 9 value-overrides clustered in two bundles (`browsers` x 8, `theming` x 1).
-The other 20 bundles were pure enable-wiring and collapsed into tag membership
-with zero overrides. The 9 surviving cases are the reason `:tag-overrides`
-exists in the schema rather than being deferred.
-
-The migration is complete: `bundles/` no longer exists, `firn bundle …` prints
-a pointed error pointing at the equivalent `firn tag …` form, and the
-underlying graph (`firn` with no args) has no `bundle` node.
-
----
-
 ## Editing host tags from the CLI
 
 ```bash
@@ -333,19 +311,18 @@ firn module enable  <module>      # remove <module> from :disabled (un-blacklist
 firn module disable <module>      # append <module> to :disabled (hard off)
 ```
 
-`firn enable <name>` / `firn disable <name>` is the daily shortcut: targets a
-tag by default; routes to `firn module enable/disable` when `<name>` matches a
-known module. All edits mutate `hosts/<current-host>/enabled-tags.bnix` in
-place via the tag-edit parser (AST-aware, idempotent round-trip).
+Tag edits mutate `hosts/<current-host>/enabled-tags.bnix` in place through the
+AST-aware, idempotent tag-edit parser. Module enable/disable edits the host's
+`:disabled` set directly.
 
 ---
 
 ## Validation
 
-- `firn validate` checks each module's `:tags` and `:tags-opt-in` entries are
+- `firn repo validate` checks each module's `:tags` and `:tags-opt-in` entries are
   bare symbols, that `:tag-overrides` paths exist in the schema, and that no
   module declares the same tag in both `:tags` and `:tags-opt-in`.
-- `firn validate` checks each host's `:enabled` flags reference real modules,
+- `firn repo validate` checks each host's `:enabled` flags reference real modules,
   that every `+name` flag matches a module whose `:tags-opt-in` lists this
   tag, and that every name in `:disabled` is a real module.
 - `firn tag resolve <host>` is the runtime debugger — it prints the per-tag

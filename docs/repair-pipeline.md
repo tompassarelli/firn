@@ -1,6 +1,6 @@
 # Repair pipeline (when validate alone isn't enough)
 
-`firn validate` catches most things in seconds. When a bug isn't pinned to one file or the validator says something's wrong but the fix isn't obvious, use the evidence-ranked repair tools. They take a **verify script** as argument — the oracle that decides whether a speculative fix actually worked. This repo ships one:
+`firn repo validate` catches most things in seconds. When a bug isn't pinned to one file or the validator says something's wrong but the fix isn't obvious, use the evidence-ranked repair tools. They take a **verify script** as argument — the oracle that decides whether a speculative fix actually worked. This repo ships one:
 
 ```bash
 # Confidence-ranked repair queue (does not modify files):

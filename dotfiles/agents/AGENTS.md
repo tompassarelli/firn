@@ -116,7 +116,7 @@ branches — "ephemeral branch" says nothing about them.
 Agents may run `firn rebuild` after the relevant checks pass and their own
 changes are committed. It builds a COMMIT SNAPSHOT (`rev=HEAD`), so concurrent
 uncommitted work cannot enter the generation. Raw `nixos-rebuild`, `nh`, and
-`firn update` remain user-only. Build-only verify:
+`firn repo upgrade now` remains user-only. Build-only verify:
 `nix build --no-link`.
 
 In `~/code/nixos-config`, `.bnix` is the write interface and `.nix` is

@@ -11,7 +11,7 @@
 #      for "agent edited .nix by hand because it never read nixos-config/CLAUDE.md."
 #
 #   2. DENY bypasses around the sanctioned rebuild wrapper: nixos-rebuild / nh /
-#      darwin-rebuild switch and firn update stay the USER's. `firn rebuild`
+#      darwin-rebuild switch and flake upgrades stay the USER's. `firn rebuild`
 #      remains agent-runnable.
 #
 # Kill-switch: persistent `north config guards off` (state) OR env
@@ -69,16 +69,16 @@ NIXOS = "/code/nixos-config/"
 DIGEST = (
     "⚠ You are editing the firn nixos-config repo (~/code/nixos-config). "
     "Follow its CLAUDE.md. Non-negotiable:\n"
-    "1. Edit .bnix sources, NEVER .nix. The .nix is GENERATED; `firn build` "
+    "1. Edit .bnix sources, NEVER .nix. The .nix is GENERATED; `firn repo build` "
     "overwrites hand-edits. Host config too: hosts/<host>/configuration.bnix, not .nix.\n"
-    "2. After any .bnix change: run `firn build` then `firn validate`. git add BOTH "
+    "2. After any .bnix change: run `firn repo build` then `firn repo validate`. git add BOTH "
     "the .bnix AND the generated .nix (the flake only sees git-tracked files).\n"
-    "3. `firn rebuild` is agent-runnable after `firn build` + `firn validate` are green "
+    "3. `firn rebuild` is agent-runnable after `firn repo build` + `firn repo validate` are green "
     "and your changes are COMMITTED. It builds a commit snapshot, so concurrent "
     "uncommitted work cannot enter the generation. Raw `nixos-rebuild switch` / "
-    "`nh switch` / `firn update` stay USER-only.\n"
+    "`nh switch` / `firn repo upgrade now` stay USER-only.\n"
     "4. Secrets: sops-nix only (secrets/*.yaml). Never plaintext creds in the repo.\n"
-    "5. New module = create modules/<name>/default.bnix, `firn build`, git add both files "
+    "5. New module = create modules/<name>/default.bnix, `firn repo build`, git add both files "
     "(flake auto-imports the dir). Enable it in hosts/<host>/configuration.bnix or via a tag.\n"
     "Invoke the `firn` skill for the full workflow."
 )
@@ -118,10 +118,10 @@ if tool in ("Edit", "Write", "MultiEdit"):
 ANCHOR = r"(?:^|[\n;&|(`])\s*(?:sudo\s+|doas\s+)?"
 
 # Raw nixos-rebuild/darwin-rebuild/nh bypass the sanctioned wrapper, and
-# `firn update` performs wholesale input bumps. These remain user-gated.
+# `firn repo upgrade now` performs wholesale input bumps and remains user-gated.
 SWITCH = re.compile(
     ANCHOR + r"("
-    r"firn\s+update(?!\s+--(?:no-rebuild|dry-run))\b"
+    r"firn\s+repo\s+upgrade\s+now\b"
     r"|nixos-rebuild\b[^\n]*\b(?:switch|boot|test)\b"
     r"|darwin-rebuild\b[^\n]*\b(?:switch|boot)\b"
     r"|nh\s+(?:os\s+)?(?:switch|boot)\b"
@@ -152,7 +152,7 @@ if tool == "Bash":
     if SWITCH.search(cmd):
         deny(
             "BLOCKED: that command switches the system OUTSIDE the sanctioned path. "
-            "Raw nixos-rebuild/darwin-rebuild/nh and `firn update` stay the USER's. "
+            "Raw nixos-rebuild/darwin-rebuild/nh and `firn repo upgrade now` stay the USER's. "
             "Agents may run `firn rebuild` after the relevant checks pass and their "
             "own changes are committed. "
             + ESCAPE

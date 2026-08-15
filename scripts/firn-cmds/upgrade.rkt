@@ -170,7 +170,7 @@
        (eprintf "firn upgrade: validation failed — check the schema diff above for clues\n")
        (exit 1))])
 
-  (printf "\nfirn upgrade: done. Test with `firn rebuild` (or `--skip-checks` if needed).\n"))
+  (printf "\nfirn upgrade: done. Apply the committed lock with `firn rebuild`.\n"))
 
 (define node-edges
   (list

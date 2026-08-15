@@ -51,22 +51,21 @@ cp /etc/nixos/hardware-configuration.nix .
 same way via `lib.mkDarwinSystem` and a `darwinConfigurations` entry —
 `firn rebuild` detects Darwin and dispatches to `darwin-rebuild`.
 
-## Daily commands
+## Commands
 
 ```bash
 firn rebuild          # build + validate + switch (current host)
-firn validate         # static check the .bnix tree
-firn impact           # preview what would build
-firn diff             # diff regenerated .nix vs committed
-firn enable <name>    # enable a tag (or un-blacklist a module)
-firn disable <name>   # disable a tag (or hard-off a module)
+firn repo validate    # static check the .bnix tree
+firn host impact      # preview what would build
+firn repo diff        # diff regenerated .nix vs committed
+firn tag enable <t>   # enable a tag
+firn tag disable <t>  # disable a tag
 ```
 
-These are first-class bare shortcuts — defaults are auto-detected
-(current host, `all` for aggregates). Every command is ultimately a
-`<node> <edge> [<leaf>]` triple (`firn tag enable terminal`,
-`firn host rebuild thinkpad-x1e`); run `firn` with no args for the
-full grid, or `firn <node>` for one entity's edges.
+Commands use a `<node> <edge> [<leaf>]` triple. Leaves default to the current
+host or `all` where the edge defines that default. `firn rebuild [host]` is the
+canonical build-and-switch shortcut; run `firn` with no args for the full grid
+or `firn <node>` for one entity's edges.
 
 ## Secrets
 

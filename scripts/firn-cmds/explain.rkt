@@ -5,8 +5,8 @@
 ;; paths if it doesn't exist, and where in this repo it's referenced.
 ;;
 ;; Usage:
-;;   firn explain services.openssh.enable
-;;   firn explain "modules/foo.bnix:6:7: unknown option services.opensh.enable"
+;;   firn schema explain services.openssh.enable
+;;   firn schema explain "modules/foo.bnix:6:7: unknown option services.opensh.enable"
 ;;     ^ paste a validator error directly; firn extracts the path
 
 (require racket/string

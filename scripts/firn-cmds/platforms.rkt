@@ -12,11 +12,11 @@
 ;;   ./scripts/firn-extract-schema --darwin  → .beagle-cache/schema-darwin.json
 ;;
 ;; Usage:
-;;   firn platforms                  full matrix
-;;   firn platforms darwin           list darwin-compatible only
-;;   firn platforms linux            list NixOS-only
-;;   firn platforms <name>           single module, with reason
-;;   firn platforms --safelist       suggested safelist for flake.rkt
+;;   firn platform list all          full matrix
+;;   firn platform list darwin       list darwin-compatible only
+;;   firn platform list linux        list NixOS-only
+;;   firn platform show <name>       single module, with reason
+;;   firn platform safelist all      suggested safelist for flake.bnix
 
 (require racket/file
          racket/list
@@ -284,4 +284,4 @@
               "compat report for one module")
    (walk-edge "platform" "safelist" "all" 'all
               handle-platform-safelist
-              "emit a darwin-safelist (lst …) snippet for flake.rkt")))
+              "emit a darwin-safelist (lst …) snippet for flake.bnix")))

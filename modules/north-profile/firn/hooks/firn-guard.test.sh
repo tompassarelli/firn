@@ -57,12 +57,12 @@ expect_allow 'chained firn rebuild is allowed'                  'git commit -m x
 expect_bypass_deny 'nixos-rebuild switch still denied'          'sudo nixos-rebuild switch --flake .'
 expect_bypass_deny 'nh os switch still denied'                  'nh os switch'
 expect_bypass_deny 'darwin-rebuild switch still denied'         'darwin-rebuild switch'
-expect_bypass_deny 'firn update still denied'                   'firn update'
+expect_bypass_deny 'flake upgrade stays user-only'              'firn repo upgrade now'
 
 # --- the compliant move itself must never be denied ---
-expect_allow 'firn build is allowed'                            'firn build'
-expect_allow 'firn validate is allowed'                         'firn validate'
-expect_allow 'firn update --dry-run is allowed'                 'firn update --dry-run'
+expect_allow 'firn repo build is allowed'                       'firn repo build'
+expect_allow 'firn repo validate is allowed'                    'firn repo validate'
+expect_allow 'upgrade preview is allowed'                       'firn repo upgrade dry-run'
 expect_allow 'firn-rebuild-impact is allowed'                   'firn-rebuild-impact'
 # Mentions are not invocations: the anchor is what keeps docs writable.
 expect_allow 'echoing the denied string is allowed'             'echo "never run firn rebuild directly"'

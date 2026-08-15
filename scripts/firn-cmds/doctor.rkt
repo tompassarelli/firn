@@ -159,11 +159,8 @@
                        "nixos" "firn-extract-schema"))
 
 (define (darwin-configured? [root ROOT])
-  (define source
-    (cond
-      [(file-exists? (build-path root "flake.bnix")) (build-path root "flake.bnix")]
-      [(file-exists? (build-path root "flake.rkt")) (build-path root "flake.rkt")]
-      [else #f]))
+  (define source (and (file-exists? (build-path root "flake.bnix"))
+                      (build-path root "flake.bnix")))
   (and source
        (with-handlers ([exn:fail? (λ (_) #f)])
          (regexp-match? #rx"darwinConfigurations" (file->string source)))))
@@ -265,10 +262,7 @@
   (list
    (walk-edge "repo" "doctor" "all" 'all
               handle-doctor
-              "repo health check (untracked, stale, schema, orphans, validator)")
-   (walk-edge "host" "doctor" "<host>" 'current-host
-              handle-doctor
-              "alias for repo doctor (host arg ignored)")))
+              "repo health check (untracked, stale, schema, orphans, validator)")))
 
 (module+ test
   (require rackunit)

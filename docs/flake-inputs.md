@@ -1,6 +1,6 @@
 # Flake inputs (codegen)
 
-Modules that need a flake input declare it **co-located** in their `default.bnix` via `:flake-inputs`. `firn build` collects all `:flake-inputs` from every module and splices them into `flake.bnix` between markers. **Never hand-edit the generated sections in `flake.bnix`** — the next `firn build` overwrites them.
+Modules that need a flake input declare it **co-located** in their `default.bnix` via `:flake-inputs`. `firn repo build` collects all `:flake-inputs` from every module and splices them into `flake.bnix` between markers. **Never hand-edit the generated sections in `flake.bnix`** — the next `firn repo build` overwrites them.
 
 Adding a module with a flake input = add the `:flake-inputs` clause. Removing = delete it. No flake.bnix edits needed.
 
@@ -21,7 +21,7 @@ Each key in `:flake-inputs` is an input name; the value is a map of flake input 
 
 ### What gets generated
 
-`firn build` splices into 6 marker-delimited sections of `flake.bnix`:
+`firn repo build` splices into 6 marker-delimited sections of `flake.bnix`:
 1. `:inputs` map — the input declarations
 2. Outputs arg list — binding names
 3. NixOS `specialArgs` — `:inputs` map entries

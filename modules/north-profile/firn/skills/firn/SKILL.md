@@ -24,10 +24,10 @@ itself → beagle-authoring.
 
 ## The five rules that bite
 
-1. **Edit `.bnix`, never `.nix`.** The `.nix` is generated; the next `firn build`
+1. **Edit `.bnix`, never `.nix`.** The `.nix` is generated; the next `firn repo build`
    overwrites any hand-edit. This applies to host config too —
    `hosts/<host>/configuration.bnix`, not `configuration.nix`.
-2. **After any `.bnix` change: `firn build` then `firn validate`.** Build
+2. **After any `.bnix` change: `firn repo build` then `firn repo validate`.** Build
    regenerates the `.nix`; validate is the schema/type/path check (~5s) and is the
    right verification for "enable X" / "set X to Y" edits.
 3. **`git add` BOTH the `.bnix` and the generated `.nix`.** Flakes only see
@@ -44,7 +44,7 @@ itself → beagle-authoring.
    rewound, or divergent local `main` holds the already-verified pin.
    It switches the system — sudo, new generation — and `firn rollback` / the
    boot menu undo it. Raw `nixos-rebuild switch` / `nh switch` and
-   `firn update` (wholesale input bumps) stay the USER's — the hook still
+   `firn repo upgrade now` (wholesale input bumps) stays the USER's — the hook still
    denies those. Build-only verification when validate isn't enough:
    `nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel --no-link`.
 5. **Secrets via sops-nix only.** Encrypted files in `secrets/`, referenced with
@@ -72,8 +72,8 @@ modules/<name>/default.bnix      # author this (clone an existing simple module,
 Then:
 
 ```bash
-firn build                       # generates modules/<name>/default.nix
-firn validate                    # 0 errors
+firn repo build                  # generates modules/<name>/default.nix
+firn repo validate               # 0 errors
 git add modules/<name>           # BOTH .bnix and .nix
 ```
 
@@ -113,11 +113,11 @@ freely at sensible checkpoints; the human is not a push gate). New files
 
 ## Verify, then switch
 
-`firn build` + `firn validate` is the default loop. `firn repo diff` re-emits and
+`firn repo build` + `firn repo validate` is the default loop. `firn repo diff` re-emits and
 diffs vs committed `.nix` (drift check). `nix build … --no-link` is full evaluation
 when the static checker can't see a build-time problem. The system switch
 (`firn rebuild`) is agent-runnable: it builds and switches a commit snapshot
 (`rev=HEAD`), so commit your own changes first — uncommitted state (anyone's)
 never blocks it and never enters the generation. `firn rollback` undoes.
-`firn update` (input bumps) stays the user's. Only verify `whiterabbit`;
+`firn repo upgrade now` (input bumps) stays the user's. Only verify `whiterabbit`;
 skip `thinkpad-x1e`.

@@ -55,7 +55,7 @@ nixos-config/scripts/firn-build	1
 nixos-config/scripts/firn-build-bin	3
 nixos-config/scripts/firn-build-bin.test.sh	1
 nixos-config/scripts/firn-cmds/diff.rkt	1
-nixos-config/scripts/firn-cmds/util.rkt	2
+nixos-config/scripts/firn-cmds/util.rkt	1
 nixos-config/scripts/firn-source-hash	1
 nixos-config/scripts/firn-validate	1
 nixos-config/scripts/firn-validate.test.sh	1
@@ -109,7 +109,6 @@ north/profiles/tom/hooks/agent-spawn-guard.test.sh	12
 north/profiles/tom/hooks/launch-critical-worktree-guard.test.py	55
 north/profiles/tom/hooks/launch-critical-worktree-guard.test.sh	14
 north/profiles/tom/hooks/tripwire-guard.test.sh	1
-north/scripts/framlog-cutover.clj	4
 north/sdk/bench/admission-worker.ts	1
 north/sdk/test/bridge-wire-ui.test.ts	2
 north/sdk/test/codex-app-server.test.ts	1

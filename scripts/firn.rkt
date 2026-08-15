@@ -23,8 +23,8 @@
 ;; help text auto-groups by node so it never drifts from registered
 ;; handlers.
 ;;
-;; Legacy shapes (firn status, firn rebuild, firn enable, ...) are
-;; rewritten into the new walk by LEGACY-ALIASES below.
+;; `firn rebuild [host]` is the canonical operator shortcut. Every other
+;; command uses the entity-first graph directly.
 
 (require racket/list
          racket/format
@@ -157,191 +157,37 @@
              ((walk-edge-handler e) leaf)
              (loop next-rest)])]))]))
 
-;; ---------- legacy aliases ----------
-;;
-;; Each entry: (old-first-token, rewrite-fn). The rewrite-fn takes the
-;; remaining argv (after the first token is consumed) and returns the
-;; new token list, or #f to fall through.
-
-(define LEGACY-ALIASES
-  (list
-    ;; firn status [host]
-    (cons "status"
-          (λ (args)
-            (define host (and (pair? args) (car args)))
-            (cond
-              [host (list "host" "status" host)]
-              [else (list "host" "status")])))
-    ;; firn enable <name>:
-    ;;   - tag-shaped name (the simple case): firn tag enable <name>
-    ;;   - module name that's currently in :disabled: firn module enable <name>
-    ;;     (un-blacklist) — picks this when the bare name is a known module.
-    ;;   - otherwise: tag enable (auto-creates the tag entry — tag-resolve
-    ;;     will validate against the universe).
-    (cons "enable"
-          (λ (args)
-            (cond
-              [(null? args) #f]
-              [else
-               (define name (car args))
-               (define kind (find-name-kind name))
-               (case kind
-                 [(module) (list "module" "enable" name)]
-                 [else (list "tag" "enable" name)])])))
-    (cons "disable"
-          (λ (args)
-            (cond
-              [(null? args) #f]
-              [else
-               (define name (car args))
-               (define kind (find-name-kind name))
-               (case kind
-                 [(module) (list "module" "disable" name)]
-                 [else (list "tag" "disable" name)])])))
-    ;; firn bundle ... — bundle node was removed (zero users); emit a
-    ;; pointed error so anyone with muscle memory gets the right hint.
-    (cons "bundle"
-          (λ (_)
-            (eprintf "firn: the 'bundle' node was removed (zero users).\n")
-            (eprintf "  Use the tag system instead:\n")
-            (eprintf "    firn tag enable  <tag>\n")
-            (eprintf "    firn tag disable <tag>\n")
-            (eprintf "    firn tag opt-in  <tag>+<module>\n")
-            (eprintf "    firn tag status\n")
-            (exit 1)))
-    ;; firn rebuild [host] [--skip-checks]
-    (cons "rebuild"
-          (λ (args)
-            ;; Pass --skip-checks through by appending after the leaf;
-            ;; host-rebuild handler reads it from its argv tail. Simplest:
-            ;; pack everything into the leaf via a sentinel join.
-            (cond
-              [(member "--skip-checks" args)
-               (define host (or (findf (λ (a) (not (equal? a "--skip-checks"))) args) "current"))
-               (list "host" "rebuild" (string-append host "+skip"))]
-              [else
-               (define host (if (pair? args) (car args) "current"))
-               (list "host" "rebuild" host)])))
-    (cons "doctor"  (λ (_) (list "host"   "doctor")))
-    (cons "architecture" (λ (args) (append (list "repo" "architecture") args)))
-    (cons "gen"     (λ (_) (list "host"   "gen")))
-    (cons "diff"    (λ (args)
-                      (define rest (filter (λ (a) (not (regexp-match? #rx"^--" a))) args))
-                      (define target (if (pair? rest) (car rest) "all"))
-                      (list "repo" "diff" target)))
-    (cons "upgrade" (λ (args) (cond [(member "--dry-run" args) (list "repo" "upgrade" "dry-run")]
-                                    [else                      (list "repo" "upgrade" "now")])))
-    ;; firn update [host] [--no-rebuild|--dry-run] — the headline "update
-    ;; my whole OS" verb: bump every flake input, then install. Chains the
-    ;; existing `repo upgrade now` + `host rebuild` edges; `repo upgrade`
-    ;; exits 1 on flake-update/validate failure, so a broken bump never
-    ;; reaches the rebuild. --no-rebuild = fetch only; --dry-run = preview.
-    (cons "update"
-          (λ (args)
-            (define positional (filter (λ (a) (not (regexp-match? #rx"^--" a))) args))
-            (define host (if (pair? positional) (car positional) "current"))
-            (cond
-              [(member "--dry-run" args)    (list "repo" "upgrade" "dry-run")]
-              [(member "--no-rebuild" args) (list "repo" "upgrade" "now")]
-              [else (list "repo" "upgrade" "now" "host" "rebuild" host)])))
-    (cons "watch"   (λ (_) (list "repo" "watch")))
-    (cons "list"    (λ (args)
-                      (cond
-                        [(member "--used" args)   (list "module" "list" "used")]
-                        [(member "--unused" args) (list "module" "list" "unused")]
-                        [else                     (list "module" "list" "all")])))
-    (cons "refs"    (λ (args)
-                      (cond
-                        [(null? args) #f]
-                        [else (list "module" "refs" (car args))])))
-    (cons "mod"     (λ (args)
-                      (cond [(null? args) #f]
-                            [else (list "module" "add" (car args))])))
-    (cons "scaffold" (λ (args)
-                       (cond [(< (length args) 2) #f]
-                             [else (list "template" (car args) (cadr args))])))
-    (cons "explain"  (λ (args)
-                       (cond [(null? args) #f]
-                             [else (list "schema" "explain" (string-join args " "))])))
-    (cons "secret"   (λ (args)
-                       (cond
-                         [(null? args) #f]
-                         [(equal? (car args) "list") (list "secret" "list" "all")]
-                         [(equal? (car args) "show")
-                          (cond [(null? (cdr args)) #f]
-                                [else (list "secret" "show" (cadr args))])]
-                         [else (list "secret" "edit" (car args))])))
-    (cons "tags"     (λ (args)
-                       (cond
-                         [(null? args) (list "tag" "list" "all")]
-                         [(equal? (car args) "--index")
-                          (cond [(member "--stdout" args) (list "tag" "index" "stdout")]
-                                [else                     (list "tag" "index" "repo")])]
-                         [(equal? (car args) "--filter")
-                          (cond [(null? (cdr args)) #f]
-                                [else (list "tag" "filter" (cadr args))])]
-                         [else (list "tag" "show" (car args))])))
-    (cons "platforms" (λ (args)
-                        (cond
-                          [(null? args) (list "platform" "list" "all")]
-                          [(equal? (car args) "darwin")     (list "platform" "list" "darwin")]
-                          [(equal? (car args) "linux")      (list "platform" "list" "linux")]
-                          [(equal? (car args) "--safelist") (list "platform" "safelist" "all")]
-                          [else (list "platform" "show" (car args))])))
-    (cons "build"    (λ (_) (list "repo" "build")))
-    (cons "validate" (λ (_) (list "repo" "validate")))
-    (cons "lint"     (λ (_) (list "repo" "lint")))
-    (cons "impact"   (λ (args)
-                       (define host (if (pair? args) (car args) "current"))
-                       (list "host" "impact" host)))))
-
-(define (maybe-legacy-rewrite tokens)
-  ;; Returns the rewritten token list if the first token is a legacy
-  ;; command name AND the second token is NOT a known edge of an entity
-  ;; named by the first token (which would mean the user is already
-  ;; using the entity-first shape).
+(define (dispatch-command argv)
   (cond
-    [(null? tokens) tokens]
-    [else
-     (define first (car tokens))
-     (define rest (cdr tokens))
+    [(equal? (car argv) "rebuild")
      (cond
-       ;; If first token is a registered node AND there's a 2nd token
-       ;; that's a known edge of it, don't rewrite — they're using the
-       ;; entity-first shape.
-       [(and (member first (nodes))
-             (pair? rest)
-             (lookup-edge first (car rest)))
-        tokens]
+       [(or (> (length argv) 2)
+            (and (pair? (cdr argv))
+                 (string-prefix? (cadr argv) "-")))
+        (eprintf "Usage: firn rebuild [host]\n")
+        (exit 1)]
        [else
-        (define alias (assoc first LEGACY-ALIASES))
-        (cond
-          [alias
-           (define rewritten ((cdr alias) rest))
-           (cond
-             [rewritten rewritten]
-             [else tokens])]
-          [else tokens])])]))
+        (dispatch (list "host" "rebuild"
+                        (if (pair? (cdr argv)) (cadr argv) "current")))])]
+    [else (dispatch argv)]))
 
 ;; ---------- help ----------
 
 (define (cmd-help _args)
   (printf "firn — config management\n\n")
   (printf "Usage:\n  firn <node> <edge> [<leaf>]  [<node> <edge> [<leaf>] ...]\n\n")
-  (printf "Common shortcuts (default host is auto-detected):\n")
-  (printf "  firn update           bump all flake inputs + rebuild (--no-rebuild = fetch only)\n")
+  (printf "Operator shortcut:\n")
   (printf "  firn rebuild          build + validate + switch (current host)\n")
-  (printf "  firn build            regenerate .nix from .bnix\n")
-  (printf "  firn validate         lint + type/package/path check\n")
-  (printf "  firn impact           what will rebuild, estimated time\n")
-  (printf "  firn doctor           repo health check\n")
-  (printf "  firn architecture     regenerate the local Claude-system map (docs/claude/02-local-map.md)\n")
-  (printf "  firn status           modules enabled directly in configuration.bnix\n")
+  (printf "\nCommon graph commands:\n")
+  (printf "  firn repo build       regenerate .nix from .bnix\n")
+  (printf "  firn repo validate    lint + type/package/path check\n")
+  (printf "  firn host impact      what will rebuild, estimated time\n")
+  (printf "  firn repo doctor      repo health check\n")
   (printf "  firn tag status       enabled-tags.bnix + resolved active modules\n")
   (printf "  firn tag enable <t>   add a tag to the current host\n")
   (printf "  firn tag opt-in <t>+<m>   add +<module> under tag <t>\n")
   (printf "  firn module disable <m>   add <m> to :disabled (hard off)\n")
-  (printf "  firn diff             re-emit and diff vs committed .nix\n")
+  (printf "  firn repo diff        re-emit and diff vs committed .nix\n")
   (printf "\nFull graph:\n\n")
   (for ([n (in-list (nodes))])
     (printf "~a\n" n)
@@ -363,7 +209,7 @@
     [(null? argv) (cmd-help argv)]
     [(member (car argv) '("help" "-h" "--help")) (cmd-help (cdr argv))]
     [else
-     (dispatch (maybe-legacy-rewrite argv))]))
+     (dispatch-command argv)]))
 
 (r:finish-runtime-startup-span!)
 (main (vector->list (current-command-line-arguments)))

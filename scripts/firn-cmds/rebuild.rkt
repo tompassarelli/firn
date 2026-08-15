@@ -122,19 +122,13 @@
     [else command]))
 
 (define (handle-host-rebuild leaf)
-  ;; leaf may be "current" or "<host>" or "<host>+skip" (legacy alias sentinel)
-  (define-values (host-token skip-checks?)
-    (cond
-      [(regexp-match #rx"^([^+]+)\\+skip$" leaf)
-       => (λ (m) (values (cadr m) #t))]
-      [else (values leaf #f)]))
-  (define host (cond [(equal? host-token "current") (current-hostname)]
-                     [else host-token]))
+  (define host (cond [(equal? leaf "current") (current-hostname)]
+                     [else leaf]))
 
   ;; cd to ROOT so subshells (firn-build, firn-validate, nh) see the repo
   ;; even when the user invoked `firn rebuild` from another directory.
   (parameterize ([current-directory ROOT])
-    (handle-host-rebuild* host skip-checks?)))
+    (handle-host-rebuild* host)))
 
 ;; Modules whose own flake.nix references an absolute path outside the
 ;; flake source tree (e.g. gjoa's gitignored 5GB engine/ dir) and so
@@ -219,7 +213,7 @@
     (flush-output))
   #t)
 
-(define (handle-host-rebuild* host skip-checks?)
+(define (handle-host-rebuild* host)
   ;; Line-buffer so step headers print before each child process writes
   ;; to fd1. Otherwise (block-buffered pipes) headers appear after their
   ;; child output, making the sequence hard to read.
@@ -247,8 +241,7 @@
     ;; (rebuild-nopasswd module), no credential cache is needed — skip the
     ;; interactive -v gate entirely so agent runs never cold-start on a prompt.
     (set! passwordless? (sh "sudo" "-n" "true" "2>/dev/null"))
-    ;; quiet probe: blanket NOPASSWD only; no stdout side effects (the old
-    ;; list-generations probe dumped 65 generations into the user's terminal).
+    ;; Quiet probe: blanket NOPASSWD only, with no stdout side effects.
     (unless passwordless?
       (set! passwordless?
         (parameterize ([current-output-port (open-output-nowhere)]
@@ -321,7 +314,7 @@
               (substring (git-head) 0 8) (length dirty))
       (for ([f (in-list dirty)]) (printf "     ~a\n" f))))
 
-  (unless skip-checks?
+  (begin
     ;; Step 1: regenerate any out-of-date .nix from .bnix sources, then
     ;; self-heal: regenerated outputs whose sources are committed-clean are
     ;; deterministic derivations of the commit — mechanically commit them so
@@ -416,7 +409,7 @@
                   #f))))))
 
   ;; Step 2c: build the exact host closure from the snapshot. Always runs
-  ;; (with --skip-checks too): the switch below activates THIS store path, so
+  ;; The switch below activates THIS store path, so
   ;; what was verified is byte-identical to what runs.
   (define on-darwin?
     (equal? "Darwin" (string-trim (sh-out "uname" "-s"))))
@@ -470,17 +463,13 @@
     [else
      (printf "└─ ✓ rebuild (~a)\n" (fmt-elapsed rebuild-elapsed))
      (define gens (sh-out "nixos-rebuild" "list-generations"))
-     ;; Current generation: modern `list-generations` marks it with a trailing
-     ;; True column ("Current" appears only in the header); the old format
-     ;; carried a lowercase "current" marker. Accept both — the old parser
-     ;; matched neither and silently stopped tagging at gen-783.
+     ;; Current generations carry a trailing True column.
      (define gen
        (for/or ([line (in-list (string-split gens "\n"))])
          (define t (string-trim line))
          (define m (regexp-match #px"^([0-9]+)\\s" t))
          (and m
-              (or (regexp-match? #px"\\bTrue\\s*$" t)
-                  (regexp-match? #rx"current" t))
+              (regexp-match? #px"\\bTrue\\s*$" t)
               (cadr m))))
      (when gen
        (sh "git" "-C" ROOT "tag" "-f" (string-append "gen-" gen) "HEAD"))

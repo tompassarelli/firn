@@ -33,8 +33,7 @@ git_clean() {
 }
 
 looks_like_firn_repo() { # mirrors looks-like-firn-repo? in firn-cmds/util.rkt
-  [ -d "$1" ] && [ -f "$1/scripts/firn-build" ] &&
-    { [ -f "$1/flake.bnix" ] || [ -f "$1/flake.rkt" ]; }
+  [ -d "$1" ] && [ -f "$1/scripts/firn-build" ] && [ -f "$1/flake.bnix" ]
 }
 
 resolve_repo() {

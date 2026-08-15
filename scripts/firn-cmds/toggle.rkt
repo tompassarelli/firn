@@ -10,7 +10,7 @@
 ;;   firn host status [<host>]   all enabled modules for a host
 ;;
 ;; "Enabled" here is read from the host's configuration.bnix —
-;; legacy direct toggles. The tag-driven enables live in
+;; Direct module toggles. Tag-driven enables live in
 ;; hosts/<host>/_generated-enables.bnix and reflect there too once
 ;; tag resolution has emitted them.
 
@@ -39,7 +39,7 @@
 (define (literal-bool? v) (or (eq? v #t) (eq? v #f)))
 
 (define (read-host-forms host)
-  (define raw (file->string (host-config-rkt host)))
+  (define raw (file->string (host-config-source host)))
   (define stripped (regexp-replace #rx"^#lang [^\n]*\n" raw ""))
   (with-handlers ([exn:fail? (λ (_) '())])
     (define port (open-input-string stripped))

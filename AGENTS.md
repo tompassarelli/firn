@@ -32,7 +32,7 @@ When adding a new file to this repo, always `git add` it before rebuilding. Nix 
 
 One namespace: `myConfig.modules.*` (atoms — one package or service per module). Modules use `(module [config lib pkgs] {:options... :config...})` to emit the standard `{ config, lib, pkgs, ... }: { options...; config = mkIf cfg.enable {...}; }` wrapper.
 
-**Composition is tag-driven**, not bundle-driven. Each module declares the tags it belongs to in its `.bnix` source; each host enables a set of tags. The active module set is computed by union-then-subtract: for every enabled tag, take the modules that declare it; then remove anything the host explicitly disabled (legacy `myConfig.bundles.*` is fully removed). See the "Tags" section below.
+**Composition is tag-driven.** Each module declares the tags it belongs to in its `.bnix` source; each host enables a set of tags. The active module set is computed by union-then-subtract: for every enabled tag, take the modules that declare it; then remove anything the host explicitly disabled. See the "Tags" section below.
 
 macOS works via nix-darwin (`lib.mkDarwinSystem`, `darwinConfigurations`); `firn rebuild` detects Darwin and dispatches to `darwin-rebuild`.
 
@@ -68,12 +68,15 @@ niri's `config.kdl` is out-of-store, because niri re-reads it on write and it is
 
 Custom command scripts live in `dotfiles/bin/` as plain executable shell scripts (one file per command); the `modules/bash/` module puts the directory on `PATH`. The fish→bash migration is complete.
 
-`firn` is the CLI for managing this NixOS config (modules, tags, secrets, rebuilds). It has two surfaces:
+`firn` is the CLI for managing this NixOS config (modules, tags, secrets,
+rebuilds). Its interface is the entity-first `<node> <edge> [<leaf>]` graph:
+`firn tag enable terminal`, `firn tag status`, `firn module disable piper`,
+`firn repo validate`, and `firn schema explain X`. Leaves default to `all` for
+aggregate views and the current hostname for host-scoped commands.
 
-- **Daily shortcuts** (what to suggest to the user). Single bare commands with auto-detected defaults: `firn rebuild`, `firn update`, `firn validate`, `firn build`, `firn status`, `firn doctor`, `firn impact`, `firn enable <tag>`, `firn disable <tag>`, `firn diff`. These are first-class, not deprecated — `scripts/firn.rkt` lists them in the help output as "Common shortcuts (default host is auto-detected)". `maybe-legacy-rewrite` rewrites them silently to the entity-first form; no deprecation pointer is ever printed. `firn enable <name>` / `firn disable <name>` target **tags** by default (mutating the current host's `enabled-tags.bnix`); when the name matches a known module, they route to `firn module enable/disable` instead (un-blacklisting / appending to `:disabled`).
-- **Underlying graph**. Every command is ultimately a `<node> <edge> [<leaf>]` triple (`firn host rebuild`, `firn tag enable terminal`, `firn tag opt-in browsers qutebrowser`, `firn tag status`, `firn module enable swap`, `firn module disable piper`, `firn schema explain X`). Useful when you need to disambiguate or scope to a non-default host. Leaves default to `all` for aggregate views and current-hostname for host-scoped commands. **The `bundle` node was removed** — `firn bundle …` prints a pointed error directing to the `firn tag …` form.
-
-**When telling the user what to run, prefer the bare daily shortcut.** Say `firn rebuild`, not `firn host rebuild`, unless there's a specific reason to scope (e.g. rebuilding `thinkpad-x1e` from `whiterabbit`).
+`firn rebuild [host]` is the one canonical operator shortcut because it is the
+machine's sanctioned build-and-switch command. The equivalent graph route is
+`firn host rebuild [host]`.
 
 Run `firn` with no args for the full grid; `firn <node>` for one entity's edges. The CLI should only contain subcommands that operate on the nixos-config repo itself — general-purpose tools like `sandbox`, `vpn`, `gif` etc. stay as standalone scripts in `dotfiles/bin/`.
 
@@ -98,7 +101,7 @@ Use the Edit tool directly on `.bnix` files. The source is beagle/nix s-expressi
 ## Repair pipeline (when validate alone isn't enough)
 → [`docs/repair-pipeline.md`](docs/repair-pipeline.md)
 Evidence-ranked repair tools driven by the `scripts/firn-verify` oracle.
-**Read when:** `firn validate` flags something but the fix isn't obvious, or a bug isn't pinned to one file (`beagle-repair` / `trace` / `cascade` / `blame` / `specfix`).
+**Read when:** `firn repo validate` flags something but the fix isn't obvious, or a bug isn't pinned to one file (`beagle-repair` / `trace` / `cascade` / `blame` / `specfix`).
 
 ## Diagnosing schema errors
 → [`docs/diagnosing-schema-errors.md`](docs/diagnosing-schema-errors.md)
@@ -115,7 +118,7 @@ Tags are the ONLY way modules get composed: modules declare `:tags`/`:tags-opt-i
 
 ## Flake inputs (codegen)
 → [`docs/flake-inputs.md`](docs/flake-inputs.md)
-Modules declare flake inputs co-located via `:flake-inputs`; `firn build` splices them into `flake.bnix` between markers. **Never hand-edit the generated sections.**
+Modules declare flake inputs co-located via `:flake-inputs`; `firn repo build` splices them into `flake.bnix` between markers. **Never hand-edit the generated sections.**
 **Read when:** a module needs a flake input (adding/removing `:flake-inputs`), or `flake.bnix`'s generated input sections look wrong.
 
 ## Discovering platform compatibility
@@ -124,8 +127,8 @@ Modules declare flake inputs co-located via `:flake-inputs`; `firn build` splice
 
 ## Bumping inputs
 → [`docs/bumping-inputs.md`](docs/bumping-inputs.md)
-`firn update` moves the lock forward then applies it; `firn rebuild` applies the lock you already have.
-**Read when:** bumping nixpkgs/flake inputs or surfacing upstream deprecations the schema-driven way (`firn update`, `firn repo upgrade`).
+`firn repo upgrade now` moves the lock forward; `firn rebuild` applies the lock you already have.
+**Read when:** bumping nixpkgs/flake inputs or surfacing upstream deprecations with `firn repo upgrade`.
 
 ## Auto-fixing typos
 
@@ -141,7 +144,7 @@ Rewrites unambiguous typos in place (best did-you-mean at edit distance ≤ 2 wi
 
 ## Verification
 → [`docs/verification.md`](docs/verification.md)
-Agents MAY run `firn rebuild` after the relevant checks pass and their own changes are committed. A rebuild builds a **commit snapshot** (`git+file?rev=HEAD`), never the working tree — no session's uncommitted state can block it or leak into a generation, so there is no "dirty tree" precondition to check. The one rule that is yours: **commit your own changes first**, or they won't be in the build (the pipeline prints what it excluded). The pipeline regenerates and validates the snapshot, builds from the committed `flake.lock`, and switches the exact verified closure. Never raw `nh`/nixos-rebuild`, never `firn update` (input bumps are the USER's). Build-only verification: `nix build --no-link`. Only verify whiterabbit; skip thinkpad-x1e.
+Agents MAY run `firn rebuild` after the relevant checks pass and their own changes are committed. A rebuild builds a **commit snapshot** (`git+file?rev=HEAD`), never the working tree — no session's uncommitted state can block it or leak into a generation, so there is no "dirty tree" precondition to check. The one rule that is yours: **commit your own changes first**, or they won't be in the build (the pipeline prints what it excluded). The pipeline regenerates and validates the snapshot, builds from the committed `flake.lock`, and switches the exact verified closure. Never raw `nh`/nixos-rebuild; `firn repo upgrade now` (input bumps) is the USER's. Build-only verification: `nix build --no-link`. Only verify whiterabbit; skip thinkpad-x1e.
 **Read when:** verifying a change — picking the right rung (firn-build + validate → repo diff → full `nix build`).
 
 ## Crash recovery (whiterabbit — silent reboots)

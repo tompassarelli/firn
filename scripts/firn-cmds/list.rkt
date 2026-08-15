@@ -28,7 +28,7 @@
 
 (define (host-modules host)
   ;; Direct module references in this host's configuration.bnix.
-  (define f (host-config-rkt host))
+  (define f (host-config-source host))
   (cond
     [(file-exists? f)
      (define paths (paths-referenced-in f))

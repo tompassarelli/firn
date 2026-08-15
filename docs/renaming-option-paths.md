@@ -5,7 +5,7 @@ To rename an option path across all `.bnix` files (e.g., refactoring `myConfig.m
 ```bash
 beagle-rename --dry-run myConfig.modules.foo myConfig.modules.bar   # preview
 beagle-rename myConfig.modules.foo myConfig.modules.bar             # apply
-firn validate                                                        # verify clean
+firn repo validate                                                   # verify clean
 ```
 
-Word-boundary matching prevents partial collisions; string literals are skipped. After applying, always re-run `firn validate`.
+Word-boundary matching prevents partial collisions; string literals are skipped. After applying, always re-run `firn repo validate`.
