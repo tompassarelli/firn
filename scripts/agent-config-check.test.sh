@@ -853,16 +853,18 @@ canonical_link \
   'worktree-independent live config'
 [ "$fail" -eq 0 ]
 
-store_target="$(readlink -f /run/current-system/sw/bin/true)"
+store_target="$scratch/nix/store/${nix_hash}-coreutils/bin/true"
+mkdir -p "${store_target%/*}"
+cp "$(type -P true)" "$store_target"
 cp "$store_target" "$scratch/store-copy-expected"
 chmod u+w "$scratch/store-copy-expected"
 ln -s "$store_target" "$scratch/store-copy-link"
-immutable_store_link_matches \
+NIX_STORE_PREFIX="$scratch/nix/store" immutable_store_link_matches \
   "$scratch/store-copy-link" "$scratch/store-copy-expected" \
   'generation-owned fixture'
 [ "$fail" -eq 0 ]
 printf 'drift\n' >>"$scratch/store-copy-expected"
-if immutable_store_link_matches \
+if NIX_STORE_PREFIX="$scratch/nix/store" immutable_store_link_matches \
    "$scratch/store-copy-link" "$scratch/store-copy-expected" \
    'generation-owned drift fixture' 2>/dev/null; then
   printf 'store-backed copy drift was accepted\n' >&2

@@ -473,6 +473,7 @@ canonical_link() {
 
 immutable_store_link_matches() {
   local link="$1" expected="$2" label="$3" resolved
+  local store_prefix="${NIX_STORE_PREFIX:-/nix/store}"
 
   if [ ! -L "$link" ]; then
     bad "$label must be a generation-owned symlink"
@@ -480,9 +481,9 @@ immutable_store_link_matches() {
   fi
   resolved="$(readlink -f "$link" 2>/dev/null || true)"
   case "$resolved" in
-    /nix/store/*) ;;
+    "$store_prefix"/*) ;;
     *)
-      bad "$label resolves outside /nix/store: ${resolved:-missing}"
+      bad "$label resolves outside $store_prefix: ${resolved:-missing}"
       return 1
       ;;
   esac
