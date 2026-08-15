@@ -1,0 +1,286 @@
+#lang beagle
+(ns firn.tag-resolve-test
+  (:require [firn.tag-resolve :as r]))
+
+(defrecord TestResult [(name String) (passed Bool)])
+
+(defn make-module
+  [(name String)
+   (tags (Vec String))
+   (opt-in (Vec String))
+   (overrides (Vec r/TaggedOverrides))]
+  r/ModuleTags
+  (r/->ModuleTags name tags opt-in overrides))
+
+(defn host [(enabled (Vec r/EnabledTag)) (disabled (Vec String))] r/HostTags
+  (r/->HostTags "h" enabled disabled "linux" false []))
+
+(defn enabled [(tag String)] r/EnabledTag
+  (r/->EnabledTag tag [] []))
+
+(defn override [(tag String) (path String) (literal String)] r/TaggedOverrides
+  (r/->TaggedOverrides tag [(r/->OverrideValue path literal)]))
+
+(defn case-kitchen-sink [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module "git" ["dev" "terminal"] [] [])
+         (make-module "ripgrep" ["dev" "terminal"] [] [])
+         (make-module "firefox" ["browsers" "gui-only"] [] [])]
+        (resolution r/Resolution)
+        (r/resolve modules
+          (host [(enabled "dev") (enabled "terminal") (enabled "browsers")]
+                []))]
+    (and
+      (= (r/resolution-active resolution) ["firefox" "git" "ripgrep"])
+      (= (r/contribution-for resolution "dev") ["git" "ripgrep"])
+      (= (r/contribution-for resolution "browsers") ["firefox"])
+      (= (count (r/resolution-errors resolution)) 0)
+      (= (count (r/resolution-warnings resolution)) 0))))
+
+(defn case-edited-minus [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module "git" ["dev" "terminal"] [] [])
+         (make-module "ripgrep" ["dev" "terminal"] [] [])
+         (make-module "firefox" ["browsers" "gui-only"] [] [])]
+        (resolution r/Resolution)
+        (r/resolve modules
+          (host [(enabled "dev")
+                 (r/enabled-tag-from-edit-texts "browsers" ["-firefox"])]
+                []))]
+    (and
+      (= (r/resolution-active resolution) ["git" "ripgrep"])
+      (= (r/contribution-for resolution "browsers") []))))
+
+(defn case-minus-is-tag-local [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module "firefox" ["browsers" "gui-only"] [] [])]
+        (resolution r/Resolution)
+        (r/resolve modules
+          (host [(r/enabled-tag-from-edit-texts "browsers" ["-firefox"])
+                 (enabled "gui-only")]
+                []))]
+    (= (r/resolution-active resolution) ["firefox"])))
+
+(defn case-opt-in-plus [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module "firefox" ["browsers"] [] [])
+         (make-module "qutebrowser-experimental" [] ["browsers"] [])]
+        (resolution r/Resolution)
+        (r/resolve modules
+          (host
+            [(r/enabled-tag-from-edit-texts
+               "browsers" ["+qutebrowser-experimental"])]
+            []))]
+    (= (r/resolution-active resolution)
+       ["firefox" "qutebrowser-experimental"])))
+
+(defn case-opt-in-not-default [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module "qutebrowser-experimental" [] ["browsers"] [])]
+        (resolution r/Resolution)
+        (r/resolve modules (host [(enabled "browsers")] []))]
+    (= (r/resolution-active resolution) [])))
+
+(defn case-opt-in-mismatch [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module "git" ["terminal"] [] [])
+         (make-module "qutebrowser-experimental" [] ["browsers"] [])]
+        (resolution r/Resolution)
+        (r/resolve modules
+          (host
+            [(r/enabled-tag-from-edit-texts
+               "terminal" ["+qutebrowser-experimental"])]
+            []))
+        (errors (Vec r/ValidationError)) (r/resolution-errors resolution)]
+    (and
+      (= (count errors) 1)
+      (= (r/validation-error-kind (nth errors 0)) "opt-in-mismatch")
+      (= (r/validation-error-module (nth errors 0))
+         "qutebrowser-experimental")
+      (= (r/validation-error-tag (nth errors 0)) "terminal"))))
+
+(defn case-hard-disable [] Bool
+  (let [(modules (Vec r/ModuleTags)) [(make-module "piper" ["dev"] [] [])]
+        (resolution r/Resolution)
+        (r/resolve modules (host [(enabled "dev")] ["piper"]))]
+    (and
+      (= (r/resolution-active resolution) [])
+      (= (count (r/resolution-warnings resolution)) 0))))
+
+(defn case-unknown-disabled [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module "firefox" ["browsers"] [] [])]
+        (resolution r/Resolution)
+        (r/resolve modules
+          (host [(enabled "browsers")] ["nonexistent-mod"]))
+        (errors (Vec r/ValidationError)) (r/resolution-errors resolution)]
+    (and
+      (= (count errors) 1)
+      (= (r/validation-error-kind (nth errors 0)) "unknown-disabled")
+      (= (r/validation-error-module (nth errors 0)) "nonexistent-mod"))))
+
+(defn case-default-override [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module
+           "firefox"
+           ["browsers"]
+           []
+           [(override "browsers"
+              "myConfig.modules.firefox.default" "true")])]
+        (resolution r/Resolution)
+        (r/resolve modules (host [(enabled "browsers")] []))
+        (values (Vec r/OverrideValue)) (r/overrides-for resolution "firefox")]
+    (and
+      (= (r/resolution-active resolution) ["firefox"])
+      (= (count values) 1)
+      (= (r/overridevalue-path (nth values 0))
+         "myConfig.modules.firefox.default")
+      (= (r/overridevalue-literal (nth values 0)) "true"))))
+
+(defn case-unrelated-tag-no-override [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module
+           "firefox"
+           ["browsers" "gui-only"]
+           []
+           [(override "browsers"
+              "myConfig.modules.firefox.default" "true")])]
+        (resolution r/Resolution)
+        (r/resolve modules (host [(enabled "gui-only")] []))]
+    (and
+      (= (r/resolution-active resolution) ["firefox"])
+      (= (r/overrides-for resolution "firefox") []))))
+
+(defn case-opt-in-no-override [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module
+           "firefox"
+           []
+           ["browsers"]
+           [(override "browsers"
+              "myConfig.modules.firefox.default" "true")])]
+        (resolution r/Resolution)
+        (r/resolve modules
+          (host [(r/enabled-tag-from-edit-texts "browsers" ["+firefox"])] []))]
+    (and
+      (= (r/resolution-active resolution) ["firefox"])
+      (= (r/overrides-for resolution "firefox") []))))
+
+(defn case-unknown-tag [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module "firefox" ["browsers"] [] [])]
+        (resolution r/Resolution)
+        (r/resolve modules (host [(enabled "nonexistent-tag")] []))
+        (errors (Vec r/ValidationError)) (r/resolution-errors resolution)]
+    (and
+      (= (count errors) 1)
+      (= (r/validation-error-kind (nth errors 0)) "unknown-tag")
+      (= (r/validation-error-tag (nth errors 0)) "nonexistent-tag"))))
+
+(defn case-minus-typo-warning [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module "firefox" ["browsers"] [] [])]
+        (resolution r/Resolution)
+        (r/resolve modules
+          (host
+            [(r/enabled-tag-from-edit-texts "browsers" ["-ferefox"])]
+            []))]
+    (and
+      (= (r/resolution-active resolution) ["firefox"])
+      (= (count (r/resolution-warnings resolution)) 1))))
+
+(defn case-union-across-tags [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module "git" ["dev"] [] [])
+         (make-module "ripgrep" ["dev" "terminal"] [] [])
+         (make-module "firefox" ["browsers"] [] [])]
+        (resolution r/Resolution)
+        (r/resolve modules (host [(enabled "dev") (enabled "browsers")] []))]
+    (= (r/resolution-active resolution) ["firefox" "git" "ripgrep"])))
+
+(defn case-darwin-allowlist [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module "git" ["cli-tools"] [] [])
+         (make-module "libsecret" ["cli-tools"] [] [])]
+        (darwin-host r/HostTags)
+        (r/->HostTags
+          "ashashi" [(enabled "cli-tools")] [] "darwin" true ["git"])
+        (resolution r/Resolution) (r/resolve modules darwin-host)]
+    (and
+      (= (r/resolution-active resolution) ["git"])
+      (= (r/contribution-for resolution "cli-tools") ["git"]))))
+
+(defn case-emits-enables [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module "git" ["dev"] [] [])
+         (make-module "ripgrep" ["dev"] [] [])]
+        (resolution r/Resolution)
+        (r/resolve modules
+          (r/->HostTags "whiterabbit" [(enabled "dev")] [] "linux" false []))]
+    (= (r/emit-host-enables-bnix resolution)
+       (str
+         "#lang beagle/nix\n\n"
+         ";; Auto-generated by `firn tag resolve whiterabbit --emit`.\n"
+         ";; Do not edit by hand. Source of truth:\n"
+         ";;   modules/*/default.bnix  (:tags, :tags-opt-in, :tag-overrides)\n"
+         ";;   hosts/whiterabbit/enabled-tags.bnix\n\n"
+         "(ns _generated-enables)\n\n"
+         "(nix/module [config lib pkgs ...]\n"
+         "  {:myConfig.modules.git.enable (lib.mkDefault true)\n"
+         "   :myConfig.modules.ripgrep.enable (lib.mkDefault true)})\n"))))
+
+(defn case-emits-overrides [] Bool
+  (let [(modules (Vec r/ModuleTags))
+        [(make-module
+           "firefox"
+           ["browsers"]
+           []
+           [(override "browsers"
+              "myConfig.modules.firefox.default" "true")])]
+        (resolution r/Resolution)
+        (r/resolve modules
+          (r/->HostTags
+            "whiterabbit" [(enabled "browsers")] [] "linux" false []))]
+    (= (r/emit-host-enables-bnix resolution)
+       (str
+         "#lang beagle/nix\n\n"
+         ";; Auto-generated by `firn tag resolve whiterabbit --emit`.\n"
+         ";; Do not edit by hand. Source of truth:\n"
+         ";;   modules/*/default.bnix  (:tags, :tags-opt-in, :tag-overrides)\n"
+         ";;   hosts/whiterabbit/enabled-tags.bnix\n\n"
+         "(ns _generated-enables)\n\n"
+         "(nix/module [config lib pkgs ...]\n"
+         "  {:myConfig.modules.firefox.enable (lib.mkDefault true)\n"
+         "   :myConfig.modules.firefox.default (lib.mkDefault true)})\n"))))
+
+(defn cases [] (Vec TestResult)
+  [(->TestResult "kitchen-sink" (case-kitchen-sink))
+   (->TestResult "edited-minus" (case-edited-minus))
+   (->TestResult "minus-is-tag-local" (case-minus-is-tag-local))
+   (->TestResult "opt-in-plus" (case-opt-in-plus))
+   (->TestResult "opt-in-not-default" (case-opt-in-not-default))
+   (->TestResult "opt-in-mismatch" (case-opt-in-mismatch))
+   (->TestResult "hard-disable" (case-hard-disable))
+   (->TestResult "unknown-disabled" (case-unknown-disabled))
+   (->TestResult "default-override" (case-default-override))
+   (->TestResult "unrelated-tag-no-override" (case-unrelated-tag-no-override))
+   (->TestResult "opt-in-no-override" (case-opt-in-no-override))
+   (->TestResult "unknown-tag" (case-unknown-tag))
+   (->TestResult "minus-typo-warning" (case-minus-typo-warning))
+   (->TestResult "union-across-tags" (case-union-across-tags))
+   (->TestResult "darwin-allowlist" (case-darwin-allowlist))
+   (->TestResult "emits-enables" (case-emits-enables))
+   (->TestResult "emits-overrides" (case-emits-overrides))])
+
+(defn -main [(args (Vec String))] Int
+  (let [(results (Vec TestResult)) (cases)]
+    (loop [(index Int) 0 (failures Int) 0]
+      (if (>= index (count results))
+        failures
+        (let [(result TestResult) (nth results index)]
+          (do
+            (println
+              (str (if (testresult-passed result) "PASS " "FAIL ")
+                   (testresult-name result)))
+            (recur (+ index 1)
+              (if (testresult-passed result) failures (+ failures 1)))))))))

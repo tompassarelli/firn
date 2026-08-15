@@ -1,0 +1,425 @@
+#lang beagle
+(ns firn.tag-resolve)
+
+(defrecord OverrideValue [(path String) (literal String)])
+
+(defrecord TaggedOverrides [(tag String) (values (Vec OverrideValue))])
+
+(defrecord ModuleTags
+  [(name String)
+   (tags (Vec String))
+   (opt-in (Vec String))
+   (overrides (Vec TaggedOverrides))])
+
+(defrecord EnabledTag
+  [(tag String) (pluses (Vec String)) (minuses (Vec String))])
+
+(defrecord HostTags
+  [(host String)
+   (enabled (Vec EnabledTag))
+   (disabled (Vec String))
+   (platform String)
+   (restrict-allowed Bool)
+   (allowed (Vec String))])
+
+(defrecord TagContribution [(tag String) (modules (Vec String))])
+
+(defrecord ModuleOverrides [(module String) (values (Vec OverrideValue))])
+
+(defunion ValidationError
+  (UnknownPlatform [(host String) (platform String) (hint String)])
+  (UnknownTag [(host String) (tag String) (hint String)])
+  (OptInMismatch [(host String) (tag String) (module String) (hint String)])
+  (UnknownDisabled [(host String) (module String) (hint String)]))
+
+(defrecord Resolution
+  [(host String)
+   (active (Vec String))
+   (per-tag (Vec TagContribution))
+   (overrides (Vec ModuleOverrides))
+   (errors (Vec ValidationError))
+   (warnings (Vec String))])
+
+(defunion TagEdit
+  (PlusEdit [(module String)])
+  (MinusEdit [(module String)])
+  (IgnoredEdit [(text String)]))
+
+(defn string-member? [(values (Vec String)) (candidate String)] Bool
+  (loop [(index Int) 0]
+    (if (>= index (count values))
+      false
+      (if (= (nth values index) candidate)
+        true
+        (recur (+ index 1))))))
+
+(defn append-unique [(values (Vec String)) (candidate String)] (Vec String)
+  (if (string-member? values candidate) values (conj values candidate)))
+
+(defn union-strings [(left (Vec String)) (right (Vec String))] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) left]
+    (if (>= index (count right))
+      result
+      (recur (+ index 1) (append-unique result (nth right index))))))
+
+(defn remove-strings [(values (Vec String)) (removed (Vec String))] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count values))
+      result
+      (let [(value String) (nth values index)]
+        (recur (+ index 1)
+          (if (string-member? removed value) result (conj result value)))))))
+
+(defn allowed-module? [(host HostTags) (module String)] Bool
+  (or (not (hosttags-restrict-allowed host))
+      (string-member? (hosttags-allowed host) module)))
+
+(defn modules-declaring-default
+  [(modules (Vec ModuleTags)) (tag String)] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count modules))
+      result
+      (let [(module ModuleTags) (nth modules index)]
+        (recur (+ index 1)
+          (if (string-member? (moduletags-tags module) tag)
+            (conj result (moduletags-name module))
+            result))))))
+
+(defn modules-declaring-opt-in
+  [(modules (Vec ModuleTags)) (tag String)] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count modules))
+      result
+      (let [(module ModuleTags) (nth modules index)]
+        (recur (+ index 1)
+          (if (string-member? (moduletags-opt-in module) tag)
+            (conj result (moduletags-name module))
+            result))))))
+
+(defn module-known? [(modules (Vec ModuleTags)) (name String)] Bool
+  (loop [(index Int) 0]
+    (if (>= index (count modules))
+      false
+      (if (= (moduletags-name (nth modules index)) name)
+        true
+        (recur (+ index 1))))))
+
+(defn parse-tag-edit [(text String)] TagEdit
+  (if (= (count text) 0)
+    (->IgnoredEdit text)
+    (let [(prefix String) (subs text 0 1)
+          (module String) (subs text 1)]
+      (cond
+        [(= prefix "+") (->PlusEdit module)]
+        [(= prefix "-") (->MinusEdit module)]
+        [:else (->IgnoredEdit text)]))))
+
+(defn enabled-tag-from-edit-texts [(tag String) (edits (Vec String))] EnabledTag
+  (loop [(index Int) 0
+         (pluses (Vec String)) []
+         (minuses (Vec String)) []]
+    (if (>= index (count edits))
+      (->EnabledTag tag pluses minuses)
+      (match (parse-tag-edit (nth edits index))
+        [(PlusEdit module)
+         (recur (+ index 1) (conj pluses module) minuses)]
+        [(MinusEdit module)
+         (recur (+ index 1) pluses (conj minuses module))]
+        [(IgnoredEdit text)
+         (recur (+ index 1) pluses minuses)]))))
+
+(defn filter-allowed [(host HostTags) (modules (Vec String))] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count modules))
+      result
+      (let [(module String) (nth modules index)]
+        (recur (+ index 1)
+          (if (allowed-module? host module) (conj result module) result))))))
+
+(defn valid-pluses
+  [(host HostTags) (pluses (Vec String)) (opt-ins (Vec String))] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count pluses))
+      result
+      (let [(module String) (nth pluses index)]
+        (recur (+ index 1)
+          (if (and (string-member? opt-ins module)
+                   (allowed-module? host module))
+            (conj result module)
+            result))))))
+
+(defn put-contribution
+  [(contributions (Vec TagContribution))
+   (replacement TagContribution)]
+  (Vec TagContribution)
+  (loop [(index Int) 0
+         (found Bool) false
+         (result (Vec TagContribution)) []]
+    (if (>= index (count contributions))
+      (if found result (conj result replacement))
+      (let [(current TagContribution) (nth contributions index)]
+        (if (= (tagcontribution-tag current)
+               (tagcontribution-tag replacement))
+          (recur (+ index 1) true (conj result replacement))
+          (recur (+ index 1) found (conj result current)))))))
+
+(defn append-module-overrides
+  [(overrides (Vec ModuleOverrides))
+   (module String)
+   (values (Vec OverrideValue))]
+  (Vec ModuleOverrides)
+  (loop [(index Int) 0
+         (found Bool) false
+         (result (Vec ModuleOverrides)) []]
+    (if (>= index (count overrides))
+      (if found result (conj result (->ModuleOverrides module values)))
+      (let [(current ModuleOverrides) (nth overrides index)]
+        (if (= (moduleoverrides-module current) module)
+          (recur (+ index 1) true
+            (conj result
+              (->ModuleOverrides module
+                (into values (moduleoverrides-values current)))))
+          (recur (+ index 1) found (conj result current)))))))
+
+(defn tagged-override-values
+  [(module ModuleTags) (tag String)] (Vec OverrideValue)
+  (loop [(index Int) 0]
+    (if (>= index (count (moduletags-overrides module)))
+      []
+      (let [(entry TaggedOverrides)
+            (nth (moduletags-overrides module) index)]
+        (if (= (taggedoverrides-tag entry) tag)
+          (taggedoverrides-values entry)
+          (recur (+ index 1)))))))
+
+(defn collect-default-overrides
+  [(modules (Vec ModuleTags))
+   (tag String)
+   (from-defaults (Vec String))
+   (overrides (Vec ModuleOverrides))]
+  (Vec ModuleOverrides)
+  (loop [(index Int) 0 (result (Vec ModuleOverrides)) overrides]
+    (if (>= index (count modules))
+      result
+      (let [(module ModuleTags) (nth modules index)
+            (name String) (moduletags-name module)
+            (values (Vec OverrideValue))
+            (tagged-override-values module tag)]
+        (recur (+ index 1)
+          (if (and (string-member? from-defaults name)
+                   (> (count values) 0))
+            (append-module-overrides result name values)
+            result))))))
+
+(defn tag-errors
+  [(host HostTags)
+   (tag String)
+   (known Bool)
+   (pluses (Vec String))
+   (opt-ins (Vec String))]
+  (Vec ValidationError)
+  (let [(unknown-errors (Vec ValidationError))
+        (if known
+          []
+          [(->UnknownTag
+             (hosttags-host host)
+             tag
+             (str "host '" (hosttags-host host) "' enables tag '" tag
+                  "' but no module declares it"))])]
+    (loop [(index Int) 0 (result (Vec ValidationError)) unknown-errors]
+      (if (>= index (count pluses))
+        result
+        (let [(module String) (nth pluses index)]
+          (recur (+ index 1)
+            (if (string-member? opt-ins module)
+              result
+              (conj result
+                (->OptInMismatch
+                  (hosttags-host host)
+                  tag
+                  module
+                  (str "host '" (hosttags-host host) "' tag '" tag
+                       "': +" module " but module '" module
+                       "' does not list tag '" tag "' in :tags-opt-in"))))))))))
+
+(defn tag-warnings
+  [(host HostTags)
+   (tag String)
+   (minuses (Vec String))
+   (defaults (Vec String))]
+  (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count minuses))
+      result
+      (let [(module String) (nth minuses index)]
+        (recur (+ index 1)
+          (if (string-member? defaults module)
+            result
+            (conj result
+              (str "host '" (hosttags-host host) "' tag '" tag "': -"
+                   module " but " module
+                   " is not in this tag's default set"))))))))
+
+(defn disabled-errors
+  [(modules (Vec ModuleTags)) (host HostTags)] (Vec ValidationError)
+  (loop [(index Int) 0 (result (Vec ValidationError)) []]
+    (if (>= index (count (hosttags-disabled host)))
+      result
+      (let [(module String) (nth (hosttags-disabled host) index)]
+        (recur (+ index 1)
+          (if (module-known? modules module)
+            result
+            (conj result
+              (->UnknownDisabled
+                (hosttags-host host)
+                module
+                (str "host '" (hosttags-host host) "' :disabled lists '"
+                     module "' but no such module exists")))))))))
+
+(defn remove-disabled-overrides
+  [(overrides (Vec ModuleOverrides))
+   (disabled (Vec String))]
+  (Vec ModuleOverrides)
+  (loop [(index Int) 0 (result (Vec ModuleOverrides)) []]
+    (if (>= index (count overrides))
+      result
+      (let [(entry ModuleOverrides) (nth overrides index)]
+        (recur (+ index 1)
+          (if (string-member? disabled (moduleoverrides-module entry))
+            result
+            (conj result entry)))))))
+
+(defn resolve [(modules (Vec ModuleTags)) (host HostTags)] Resolution
+  (let [(platform-errors (Vec ValidationError))
+        (if (or (= (hosttags-platform host) "linux")
+                (= (hosttags-platform host) "darwin"))
+          []
+          [(->UnknownPlatform
+             (hosttags-host host)
+             (hosttags-platform host)
+             (str "host '" (hosttags-host host)
+                  "' declares unsupported platform '"
+                  (hosttags-platform host) "'"))])]
+    (loop [(index Int) 0
+           (active (Vec String)) []
+           (per-tag (Vec TagContribution)) []
+           (overrides (Vec ModuleOverrides)) []
+           (errors (Vec ValidationError)) platform-errors
+           (warnings (Vec String)) []]
+      (if (>= index (count (hosttags-enabled host)))
+        (let [(without-disabled (Vec String))
+              (remove-strings active (hosttags-disabled host))]
+          (->Resolution
+            (hosttags-host host)
+            (sort without-disabled)
+            per-tag
+            (remove-disabled-overrides overrides (hosttags-disabled host))
+            (into errors (disabled-errors modules host))
+            warnings))
+        (let [(enabled EnabledTag) (nth (hosttags-enabled host) index)
+              (tag String) (enabledtag-tag enabled)
+              (defaults (Vec String)) (modules-declaring-default modules tag)
+              (opt-ins (Vec String)) (modules-declaring-opt-in modules tag)
+              (from-defaults (Vec String))
+              (filter-allowed host
+                (remove-strings defaults (enabledtag-minuses enabled)))
+              (from-pluses (Vec String))
+              (valid-pluses host (enabledtag-pluses enabled) opt-ins)
+              (contribution (Vec String))
+              (sort (union-strings from-defaults from-pluses))]
+          (recur
+            (+ index 1)
+            (union-strings active contribution)
+            (put-contribution per-tag (->TagContribution tag contribution))
+            (collect-default-overrides modules tag from-defaults overrides)
+            (into errors
+              (tag-errors host tag
+                (or (> (count defaults) 0) (> (count opt-ins) 0))
+                (enabledtag-pluses enabled)
+                opt-ins))
+            (into warnings
+              (tag-warnings host tag (enabledtag-minuses enabled) defaults))))))))
+
+(defn contribution-for [(resolution Resolution) (tag String)] (Vec String)
+  (loop [(index Int) 0]
+    (if (>= index (count (resolution-per-tag resolution)))
+      []
+      (let [(entry TagContribution)
+            (nth (resolution-per-tag resolution) index)]
+        (if (= (tagcontribution-tag entry) tag)
+          (tagcontribution-modules entry)
+          (recur (+ index 1)))))))
+
+(defn overrides-for
+  [(resolution Resolution) (module String)] (Vec OverrideValue)
+  (loop [(index Int) 0]
+    (if (>= index (count (resolution-overrides resolution)))
+      []
+      (let [(entry ModuleOverrides)
+            (nth (resolution-overrides resolution) index)]
+        (if (= (moduleoverrides-module entry) module)
+          (moduleoverrides-values entry)
+          (recur (+ index 1)))))))
+
+(defn validation-error-kind [(error ValidationError)] String
+  (match error
+    [(UnknownPlatform host platform hint) "unknown-platform"]
+    [(UnknownTag host tag hint) "unknown-tag"]
+    [(OptInMismatch host tag module hint) "opt-in-mismatch"]
+    [(UnknownDisabled host module hint) "unknown-disabled"]))
+
+(defn validation-error-tag [(error ValidationError)] String
+  (match error
+    [(UnknownPlatform host platform hint) ""]
+    [(UnknownTag host tag hint) tag]
+    [(OptInMismatch host tag module hint) tag]
+    [(UnknownDisabled host module hint) ""]))
+
+(defn validation-error-module [(error ValidationError)] String
+  (match error
+    [(UnknownPlatform host platform hint) ""]
+    [(UnknownTag host tag hint) ""]
+    [(OptInMismatch host tag module hint) module]
+    [(UnknownDisabled host module hint) module]))
+
+(defn override-lines-for [(resolution Resolution) (module String)] (Vec String)
+  (let [(values (Vec OverrideValue)) (overrides-for resolution module)]
+    (loop [(index Int) 0 (result (Vec String)) []]
+      (if (>= index (count values))
+        result
+        (let [(entry OverrideValue) (nth values index)]
+          (recur (+ index 1)
+            (conj result
+              (str ":" (overridevalue-path entry) " (lib.mkDefault "
+                   (overridevalue-literal entry) ")"))))))))
+
+(defn emission-lines [(resolution Resolution)] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count (resolution-active resolution)))
+      result
+      (let [(module String) (nth (resolution-active resolution) index)]
+        (recur (+ index 1)
+          (into
+            (conj result
+              (str ":myConfig.modules." module
+                   ".enable (lib.mkDefault true)"))
+            (override-lines-for resolution module)))))))
+
+(defn join-emission-lines [(lines (Vec String))] String
+  (loop [(index Int) 0 (result String) ""]
+    (if (>= index (count lines))
+      result
+      (recur (+ index 1)
+        (str result (if (= index 0) "" "\n   ") (nth lines index))))))
+
+(defn emit-host-enables-bnix [(resolution Resolution)] String
+  (let [(host String) (resolution-host resolution)]
+    (str
+      "#lang beagle/nix\n\n"
+      ";; Auto-generated by `firn tag resolve " host " --emit`.\n"
+      ";; Do not edit by hand. Source of truth:\n"
+      ";;   modules/*/default.bnix  (:tags, :tags-opt-in, :tag-overrides)\n"
+      ";;   hosts/" host "/enabled-tags.bnix\n\n"
+      "(ns _generated-enables)\n\n"
+      "(nix/module [config lib pkgs ...]\n"
+      "  {" (join-emission-lines (emission-lines resolution)) "})\n")))
