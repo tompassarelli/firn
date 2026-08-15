@@ -787,9 +787,11 @@ HERMES_MODULE="${AGENT_CONFIG_HERMES_MODULE:-$REPO/modules/hermes/default.bnix}"
 LAUNCHER_BIN="$REPO/dotfiles/bin"
 LOCAL=0
 VERBOSE=0
-CANONICAL_FRAM_LOG="$HOME/.local/state/north/coordination.log"
-CANONICAL_FRAM_TELEMETRY_LOG="$HOME/.local/state/north/telemetry.log"
-CANONICAL_FRAM_THREADS="$HOME/.local/state/north/threads"
+# This repository declares Tom's machine profile; CI's HOME is runner scratch.
+CANONICAL_PROFILE_HOME=/home/tom
+CANONICAL_FRAM_LOG="$CANONICAL_PROFILE_HOME/.local/state/north/coordination.log"
+CANONICAL_FRAM_TELEMETRY_LOG="$CANONICAL_PROFILE_HOME/.local/state/north/telemetry.log"
+CANONICAL_FRAM_THREADS="$CANONICAL_PROFILE_HOME/.local/state/north/threads"
 # MCP servers whose live-connection health is advisory-only, not FAIL-worthy.
 CLIENT_SCOPED_MCP_SERVERS=(linear-mcp-msa-new)
 for arg in "$@"; do

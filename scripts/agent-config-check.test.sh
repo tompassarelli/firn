@@ -354,7 +354,22 @@ grep -Fq '"/home/tom/.agents/hooks/north-session-end.sh"' \
 ! grep -Fq 'writeShellScriptBin "north-session-end"' \
   "$REPO/modules/claude/default.bnix"
 report="$("$REPO/scripts/agent-config-check.sh")"
-grep -Fq '16 managed authoritative bindings' <<<"$report"
+managed_binding_count="$(python3 - "$REPO/modules/codex/requirements.toml" <<'PY'
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as handle:
+    requirements = tomllib.load(handle)
+
+print(sum(
+    len(group.get("hooks", []))
+    for groups in requirements["hooks"].values()
+    if isinstance(groups, list)
+    for group in groups
+))
+PY
+)"
+grep -Fq "$managed_binding_count managed authoritative bindings" <<<"$report"
 # shellcheck disable=SC2088  # report intentionally renders the literal user-facing alias
 grep -Fq '~/.codex/hooks.json ignored by managed-only policy (0 active bindings)' <<<"$report"
 run_quiet_child 'Codex lifecycle wrapper tests' \
@@ -488,7 +503,7 @@ diff -u \
   "$scratch/claude-probe-calls"
 
 managed_policy="$REPO/modules/codex/requirements.toml"
-[ "$(codex_managed_policy_binding_count "$managed_policy")" = 16 ]
+[ "$(codex_managed_policy_binding_count "$managed_policy")" = "$managed_binding_count" ]
 cp "$managed_policy" "$scratch/managed-policy-not-exclusive.toml"
 sed -i 's/^allow_managed_hooks_only = true$/allow_managed_hooks_only = false/' \
   "$scratch/managed-policy-not-exclusive.toml"
@@ -550,7 +565,7 @@ missing_legacy_report="$(
   CODEX_LEGACY_HOOKS="$missing_legacy" \
     "$REPO/scripts/agent-config-check.sh"
 )"
-grep -Fq '0 managed authoritative bindings' <<<"$missing_legacy_report"
+grep -Fq "$managed_binding_count managed authoritative bindings" <<<"$missing_legacy_report"
 grep -Fq 'ignored by managed-only policy (0 active bindings)' \
   <<<"$missing_legacy_report"
 printf '%s\n' '{not-json' >"$scratch/invalid-legacy-hooks.json"
@@ -558,7 +573,7 @@ invalid_legacy_report="$(
   CODEX_LEGACY_HOOKS="$scratch/invalid-legacy-hooks.json" \
     "$REPO/scripts/agent-config-check.sh"
 )"
-grep -Fq '0 managed authoritative bindings' <<<"$invalid_legacy_report"
+grep -Fq "$managed_binding_count managed authoritative bindings" <<<"$invalid_legacy_report"
 grep -Fq 'ignored by managed-only policy (0 active bindings)' \
   <<<"$invalid_legacy_report"
 

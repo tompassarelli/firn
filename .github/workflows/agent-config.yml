@@ -50,6 +50,7 @@ jobs:
           missing=()
           command -v shellcheck >/dev/null 2>&1 || missing+=(shellcheck)
           command -v jq >/dev/null 2>&1 || missing+=(jq)
+          command -v rg >/dev/null 2>&1 || missing+=(ripgrep)
           if (( ${#missing[@]} )); then
             sudo apt-get update
             sudo apt-get install -y "${missing[@]}"
