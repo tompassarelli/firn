@@ -57,6 +57,16 @@ diagnostic retries stay visible and the result stays flaky. Demote a flaky gate
 until repaired; give ambiguity one bounded diagnostic pass, and do not lengthen
 a timeout without evidence that legitimate work changed.
 
+Before publishing a final SemVer tag, require the repository's non-publishing
+release gate to pass for the exact commit the tag will name. A successful CI run
+for that commit on the main branch or an explicit non-publishing preflight run
+qualifies; a tag-triggered run is too late. A failed candidate consumes no final
+version: repair it and retry the same version. Never publish a later final
+version while an earlier public final tag lacks a successful release for its
+exact commit. Deleting, moving, or recreating a published final tag, or otherwise
+repairing published release history, requires explicit operator authorization
+and must leave one chronological tag-to-release mapping.
+
 ## Bounded checks fail visibly
 Every bounded check has one accountable supervisor, explicit phase or case
 deadlines, and visible progress within its expected window. The supervisor owns
