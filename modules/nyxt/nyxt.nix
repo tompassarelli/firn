@@ -1,9 +1,6 @@
 { config, lib, pkgs, ... }:
 
-let
-  username = config.myConfig.modules.users.username;
-in
-{
+((username: {
   config = lib.mkIf config.myConfig.modules.nyxt.enable {
     environment.systemPackages = with pkgs; [ nyxt4 ];
     myConfig.modules.fuse.enable = lib.mkDefault true;
@@ -19,4 +16,4 @@ in
       xdg.configFile."nyxt/config.lisp".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/nyxt/config.lisp";
     });
   };
-}
+}) config.myConfig.modules.users.username)

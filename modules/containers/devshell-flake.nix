@@ -3,11 +3,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
   };
-  outputs = ({ nixpkgs, ... }: let
-    system = "x86_64-linux";
-    pkgs = builtins.getAttr system nixpkgs.legacyPackages;
-  in
-  {
+  outputs = ({ nixpkgs, ... }: ((system: ((pkgs: {
     devShells = {
       ${system} = {
         default = pkgs.mkShell {
@@ -15,5 +11,5 @@
         };
       };
     };
-  });
+  }) (builtins.getAttr system nixpkgs.legacyPackages))) "x86_64-linux"));
 }

@@ -1,10 +1,6 @@
 { config, lib, pkgs, ... }:
 
-let
-  username = config.myConfig.modules.users.username;
-  homeDir = config.myConfig.modules.users.homeDir;
-in
-{
+((username: ((homeDir: {
   options.myConfig.modules.users.enable = lib.mkEnableOption "Enable user configuration";
   options.myConfig.modules.users.username = lib.mkOption {
     type = lib.types.str;
@@ -50,4 +46,4 @@ in
       "d ${homeDir}/src 0755 ${username} users -"
     ];
   };
-}
+}) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)

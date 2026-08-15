@@ -2,7 +2,9 @@
 
 {
   config = lib.mkIf config.myConfig.modules.zen-browser.enable {
-    environment.systemPackages = [ inputs.zen-browser.packages."${pkgs.stdenv.hostPlatform.system}".default ];
+    environment.systemPackages = [
+      (inputs.zen-browser.packages."${pkgs.stdenv.hostPlatform.system}").default
+    ];
     xdg.mime.defaultApplications = lib.mkIf config.myConfig.modules.zen-browser.default {
       "text/html" = "zen.desktop";
       "x-scheme-handler/http" = "zen.desktop";

@@ -1,18 +1,6 @@
 { config, lib, pkgs, inputs, flakeRoot, ... }:
 
-let
-  username = config.myConfig.modules.users.username;
-  homeDir = config.myConfig.modules.users.homeDir;
-  claudePackage = pkgs.master.claude-code;
-  psBin = if pkgs.stdenv.hostPlatform.isDarwin then "/bin/ps" else "${pkgs.procps}/bin/ps";
-  northPkg = "${homeDir}/code/north/main";
-  framPkg = "${homeDir}/code/fram/main";
-  claudeSettingsSeed = pkgs.writeText "claude-settings.json" (builtins.readFile "${flakeRoot}/dotfiles/claude/settings.json");
-  claudeSettingsSeeder = pkgs.writeShellScript "claude-settings-seed" (builtins.readFile "${flakeRoot}/scripts/claude-settings-seed.sh");
-  agentsRuntimePath = lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.findutils pkgs.gawk pkgs.python3 ];
-  mcpRegister = pkgs.writeShellScript "claude-mcp-register" (builtins.readFile "${flakeRoot}/scripts/claude-mcp-register.sh");
-in
-{
+((username: ((homeDir: ((claudePackage: ((psBin: ((northPkg: ((framPkg: ((claudeSettingsSeed: ((claudeSettingsSeeder: ((agentsRuntimePath: ((mcpRegister: {
   options.myConfig.modules.claude.enable = lib.mkEnableOption "Claude Code CLI configuration";
   config = lib.mkIf config.myConfig.modules.claude.enable {
     environment.systemPackages = [ claudePackage ];
@@ -28,4 +16,4 @@ in
       home.activation.registerMcpServers = config.lib.dag.entryAfter [ "writeBoundary" ] "if ! run env CLAUDE_BIN=${claudePackage}/bin/claude JQ_BIN=${pkgs.jq}/bin/jq TIMEOUT_BIN=${pkgs.coreutils}/bin/timeout CLAUDE_JSON=$HOME/.claude.json LIFE=$HOME/.local/state/north FRAM_MCP_BIN=${framPkg}/bin/fram-mcp NORTH_MCP_BIN=${northPkg}/bin/north-mcp WANT_NORTH_PORT=7977 ${mcpRegister}; then\n  echo \"warning: MCP server registration failed; agent-config-check --local will report the drift\" >&2\nfi\n";
     });
   };
-}
+}) (pkgs.writeShellScript "claude-mcp-register" (builtins.readFile "${flakeRoot}/scripts/claude-mcp-register.sh")))) (lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.findutils pkgs.gawk pkgs.python3 ]))) (pkgs.writeShellScript "claude-settings-seed" (builtins.readFile "${flakeRoot}/scripts/claude-settings-seed.sh")))) (pkgs.writeText "claude-settings.json" (builtins.readFile "${flakeRoot}/dotfiles/claude/settings.json")))) "${homeDir}/code/fram/main")) "${homeDir}/code/north/main")) (if pkgs.stdenv.hostPlatform.isDarwin then "/bin/ps" else "${pkgs.procps}/bin/ps"))) pkgs.master.claude-code)) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)
