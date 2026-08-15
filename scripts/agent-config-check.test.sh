@@ -4,6 +4,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AGENT_PROFILE="${AGENT_CONFIG_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
 BEAGLE_INTEGRATION="${AGENT_CONFIG_BEAGLE_INTEGRATION:-$HOME/code/beagle/main/integrations/north}"
+export PROBE_ENV_BIN="${PROBE_ENV_BIN:-$(command -v env)}"
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/agent-config-check.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
 trap 'status=$? line=$LINENO command=$BASH_COMMAND; trap - ERR; printf "agent-config-check.test.sh:%s: unhandled failure status=%s command=%s\n" "$line" "$status" "$command" >&2; exit "$status"' ERR
@@ -1072,7 +1073,7 @@ if grep -Fq 'CLAUDE_CONFIG_DIR="$HOME/.claude"' \
   printf 'Claude health still forces the wrong config directory\n' >&2
   exit 1
 fi
-grep -Fq '/run/current-system/sw/bin/env -u CLAUDE_CONFIG_DIR' \
+grep -Fq '${PROBE_ENV_BIN:-/run/current-system/sw/bin/env}" -u CLAUDE_CONFIG_DIR' \
   "$REPO/scripts/agent-config-check.sh"
 grep -Fq '${CLAUDE_BIN:-/run/current-system/sw/bin/claude}' \
   "$REPO/scripts/agent-config-check.sh"

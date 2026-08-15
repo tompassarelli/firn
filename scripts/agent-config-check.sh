@@ -123,7 +123,7 @@ run_claude_probe() {
   local duration="$1"
   shift
   run_bounded_process "$duration" \
-    /run/current-system/sw/bin/env -u CLAUDE_CONFIG_DIR \
+    "${PROBE_ENV_BIN:-/run/current-system/sw/bin/env}" -u CLAUDE_CONFIG_DIR \
     "${CLAUDE_BIN:-/run/current-system/sw/bin/claude}" "$@"
 }
 
