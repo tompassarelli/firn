@@ -33,6 +33,9 @@
       url = "github:tompassarelli/glide";
       flake = false;
     };
+    beagle = {
+      url = "github:tompassarelli/beagle/0e4b7073e23e4336dc3d0269d31393a6e7da40c7";
+    };
     elephant = {
       url = "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73";
     };
@@ -59,7 +62,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, gjoa, hermes-agent, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: {
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, gjoa, hermes-agent, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: {
     lib.mkSystem = ({ hostname, hostConfig, hardwareConfig, system ? "x86_64-linux", extraModules ? [ ], extraOverlays ? [ ], extraSpecialArgs ? { }, ... }: nixpkgs.lib.nixosSystem {
       system = system;
       specialArgs = ({
@@ -313,6 +316,12 @@
     });
     modules = firnModules;
     packages.x86_64-linux = ((pkgs: {
+      firn-native = pkgs.runCommand "firn-native" {
+        nativeBuildInputs = [ beagle.packages.x86_64-linux.beagle pkgs.stdenv.cc ];
+      } ''
+        mkdir -p $out/bin
+        beagle native-exe --out $out/bin/firn --entry firn.main/-main ${self}/native/firn.bgl
+      '';
       claude-sandbox = import ./modules/containers/claude-sandbox.nix {
         pkgs = import nixpkgs-master {
           system = "x86_64-linux";

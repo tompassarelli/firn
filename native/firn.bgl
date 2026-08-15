@@ -1,0 +1,107 @@
+#lang beagle
+(ns firn.main)
+
+(def help-lines (Vec String)
+  ["firn — config management"
+   ""
+   "Usage:"
+   "  firn <node> <edge> [<leaf>]  [<node> <edge> [<leaf>] ...]"
+   ""
+   "Operator shortcut:"
+   "  firn rebuild          build + validate + switch (current host)"
+   ""
+   "Common graph commands:"
+   "  firn repo build       regenerate .nix from .bnix"
+   "  firn repo validate    lint + type/package/path check"
+   "  firn host impact      what will rebuild, estimated time"
+   "  firn repo doctor      repo health check"
+   "  firn tag status       enabled-tags.bnix + resolved active modules"
+   "  firn tag enable <t>   add a tag to the current host"
+   "  firn tag opt-in <t>+<m>   add +<module> under tag <t>"
+   "  firn module disable <m>   add <m> to :disabled (hard off)"
+   "  firn repo diff        re-emit and diff vs committed .nix"
+   ""
+   "Full graph:"
+   ""
+   "flake"
+   "  inputs all  List flake inputs: source, age, locked rev, follows, broken-path check."
+   ""
+   "flake-input"
+   "  resolve show|emit  collect :flake-inputs from active modules; emit splices into flake.bnix"
+   ""
+   "host"
+   "  rebuild <host>   plan pins → build+validate commit snapshot → switch verified closure → tag generation"
+   "  impact [<host>]  dry-run impact prediction (what will rebuild, estimated time)"
+   "  list all         list every host directory under hosts/"
+   "  status <host>    all modules enabled directly in a host's configuration.bnix"
+   "  gen <host>       current and next NixOS generation numbers"
+   ""
+   "module"
+   "  list all|used|unused  list modules (all, used = enabled somewhere, unused = orphan)"
+   "  refs <name>           show which hosts reference a module (direct + via tags)"
+   "  status all            list enabled modules on the default host (configuration.bnix)"
+   "  add <name>            scaffold a minimal module (.bnix + .nix)"
+   "  enable <name>         remove <name> from :disabled (no module-level force-on)"
+   "  disable <name>        append <name> to :disabled in enabled-tags.bnix"
+   ""
+   "platform"
+   "  list all|darwin|linux  platform compat overview (all = full matrix; others = filtered)"
+   "  show <name>            compat report for one module"
+   "  safelist all           emit a darwin-safelist (lst …) snippet for flake.bnix"
+   ""
+   "repo"
+   "  watch all                re-run validator on .rkt save (no external deps)"
+   "  diff <target>|all        re-emit Nix from .bnix and diff vs committed .nix"
+   "  doctor all               repo health check (untracked, stale, schema, orphans, validator)"
+   "  upgrade now|dry-run      flake update + schema diff + validate (use dry-run leaf to preview)"
+   "  build [all]              regenerate .nix from .bnix sources"
+   "  validate [all]           lint .nix syntax + validate option paths, types, packages"
+   "  lint [all]               syntax-check generated .nix files"
+   "  architecture all|bundle  regenerate the local Claude map (docs/claude/02-local-map.md); `bundle` prints the full read"
+   ""
+   "schema"
+   "  explain <path>    show schema entry + repo references for an option"
+   "  extract [<host>]  regenerate options schema cache from nix eval"
+   ""
+   "secret"
+   "  list all     list secret names under secrets/"
+   "  show <name>  decrypt and print a secret to stdout"
+   "  edit <name>  open a secret in $EDITOR via sops (creates if missing)"
+   ""
+   "tag"
+   "  list all                    tag universe (sourced from modules' :tags / :tags-opt-in)"
+   "  show <module>               show a module's :tags and :tags-opt-in"
+   "  filter <tag>                list modules carrying a tag"
+   "  index repo|stdout           write .beagle-cache/tags.jsonl (or 'stdout' to pipe)"
+   "  resolve <host>|all [+emit]  resolve enabled-tags → active module set; +emit writes _generated-enables.bnix"
+   "  enable <tag>                enable a tag in the current host's enabled-tags.bnix"
+   "  disable <tag>               remove a tag from the current host's enabled-tags.bnix"
+   "  opt-in <tag>+<module>       append +<module> under <tag> in enabled-tags.bnix"
+   "  opt-out <tag>+<module>      append -<module> under <tag> in enabled-tags.bnix"
+   "  status <host>               show enabled-tags.bnix + resolved active modules"
+   ""
+   "template"
+   "  service <name>    scaffold a NixOS service-wrapping module from schema"
+   "  submodule <name>  scaffold a module with an option-attrs submodule shape"
+   "  home <name>       scaffold a home-manager-only module"
+   "  host <name>       scaffold a new host's configuration.bnix"
+   ""])
+
+(defn print-help [] Nil
+  (loop [(index Int) 0]
+    (if (< index (count help-lines))
+      (do
+        (println (nth help-lines index))
+        (recur (+ index 1)))
+      nil)))
+
+(defn help-request? [(args (Vec String))] Bool
+  (or (= (count args) 0)
+      (= (nth args 0) "help")
+      (= (nth args 0) "-h")
+      (= (nth args 0) "--help")))
+
+(defn -main [(args (Vec String))] Int
+  (if (help-request? args)
+    (do (print-help) 0)
+    64))

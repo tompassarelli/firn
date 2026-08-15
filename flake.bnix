@@ -17,6 +17,9 @@
    :sops-nix {:url "github:Mic92/sops-nix" :inputs.nixpkgs.follows "nixpkgs"}
    :kanata-git {:url "github:jtroo/kanata" :flake false}
    :glide {:url "github:tompassarelli/glide" :flake false}
+   :beagle
+    {:url
+      "github:tompassarelli/beagle/0e4b7073e23e4336dc3d0269d31393a6e7da40c7"}
    ;; --- GENERATED MODULE INPUTS (do not edit) ---
    :elephant {:url "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73"}
    :gjoa {:url "github:tompassarelli/gjoa"}
@@ -39,6 +42,7 @@
      sops-nix
      kanata-git
      glide
+     beagle
      ;; --- GENERATED MODULE ARGS (do not edit) ---
      elephant
      gjoa
@@ -343,7 +347,17 @@
         (let [pkgs
               ((import nixpkgs)
                 {:system "x86_64-linux" :config.allowUnfree true})]
-          {:claude-sandbox
+          {:firn-native
+            (pkgs.runCommand "firn-native"
+              {:nativeBuildInputs
+                [beagle.packages.x86_64-linux.beagle pkgs.stdenv.cc]}
+              (ms
+                "mkdir -p $out/bin"
+                (s
+                  "beagle native-exe --out $out/bin/firn --entry firn.main/-main "
+                  self
+                  "/native/firn.bgl")))
+           :claude-sandbox
             ((import (p "./modules/containers/claude-sandbox.nix"))
               {:pkgs
                 ((import nixpkgs-master)
