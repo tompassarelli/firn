@@ -13,6 +13,13 @@ Never invent verification apparatus to make a report look stronger; report
 the check you ran and what it observed, or say plainly that none exists.
 Reports are plain sentences, outcome first — no schemas, no ceremony.
 
+During delivery, open-ended audits, adversarial reviews, cleanup campaigns,
+hardening, compatibility work, and follow-up improvements are prohibited unless
+explicitly requested. An observed non-blocking issue gets one short todo note
+and no further investigation. Only a reproducible failure blocking the
+predeclared acceptance criteria may expand the current task. Once the requested
+outcome and named check pass, stop immediately.
+
 ## Proportional verification
 Verification buys down a named risk; it is not a search for certainty. Before
 running checks, choose the smallest evidence that could change the delivery
