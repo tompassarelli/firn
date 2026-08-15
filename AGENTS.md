@@ -18,7 +18,7 @@ The *write interface* for this repo is **beagle/nix** — `#lang beagle/nix` fil
 
 Both `.bnix` and `.nix` are committed because the flake reads from the git tree.
 
-**beagle lives in a sibling repo**: `../beagle` — the compiler, validator, schema extractor, and emitters. firn-build / firn-validate / firn-extract-schema expect beagle cloned at `../beagle` by default — override with `BEAGLE_PATH`.
+**Beagle lives at `~/code/beagle/main`** — the compiler, validator, schema extractor, and emitters. Override `BEAGLE_PATH` only for an explicit alternate checkout.
 
 **Always run `./scripts/firn-build` before `nix build` / `nixos-rebuild` if any `.bnix` source changed.** Otherwise the rebuild uses stale `.nix`. Editing `.nix` directly is wrong — the next firn-build overwrites it.
 
@@ -141,7 +141,7 @@ Rewrites unambiguous typos in place (best did-you-mean at edit distance ≤ 2 wi
 
 ## Verification
 → [`docs/verification.md`](docs/verification.md)
-Agents MAY run `firn rebuild` after the relevant checks pass and their own changes are committed. A rebuild builds a **commit snapshot** (`git+file?rev=HEAD`), never the working tree — no session's uncommitted state can block it or leak into a generation, so there is no "dirty tree" precondition to check. The one rule that is yours: **commit your own changes first**, or they won't be in the build (the pipeline prints what it excluded). The pipeline regenerates + validates the snapshot and self-heals stale committed `.nix`. **It does NOT promote local inputs** — `firn-sync-local-inputs` ships an empty `PLAN_INPUTS`, so beagle/fram/north build at whatever `flake.lock` pins regardless of their local `main`. Landing a fix in one of those repos therefore does NOT reach a generation by itself: verify the rev with `nix build --override-input <input> ...`, then re-point the pin via `./scripts/firn-sync-local-inputs --commit <input>=<verified-rev>`. (Fram otherwise adopts revisions through `north-coord-runtime promote`, North/Beagle enforcement through `north-enforcement-promote`.) The exact verified closure is what switches. Never raw `nh`/nixos-rebuild`, never `firn update` (input bumps are the USER's). Build-only verification: `nix build --no-link`. Only verify whiterabbit; skip thinkpad-x1e.
+Agents MAY run `firn rebuild` after the relevant checks pass and their own changes are committed. A rebuild builds a **commit snapshot** (`git+file?rev=HEAD`), never the working tree — no session's uncommitted state can block it or leak into a generation, so there is no "dirty tree" precondition to check. The one rule that is yours: **commit your own changes first**, or they won't be in the build (the pipeline prints what it excluded). The pipeline regenerates and validates the snapshot, builds from the committed `flake.lock`, and switches the exact verified closure. Never raw `nh`/nixos-rebuild`, never `firn update` (input bumps are the USER's). Build-only verification: `nix build --no-link`. Only verify whiterabbit; skip thinkpad-x1e.
 **Read when:** verifying a change — picking the right rung (firn-build + validate → repo diff → full `nix build`).
 
 ## Crash recovery (whiterabbit — silent reboots)

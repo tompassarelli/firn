@@ -24,16 +24,7 @@
 set -euo pipefail
 
 cd "${FIRN_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-# beagle was a SIBLING of this checkout. Under the container layout the checkout
-# is <container>/main, so ../beagle no longer resolves. Probe the real
-# locations: container checkout, legacy flat checkout, then historical sibling.
-if [ -z "${BEAGLE_PATH:-}" ]; then
-  for _bp in "$HOME/code/beagle/main" "$HOME/code/beagle" "$(cd .. && pwd)/beagle"; do
-    if [ -d "$_bp/bin" ]; then BEAGLE_PATH="$_bp"; break; fi
-  done
-  unset _bp
-fi
-BEAGLE_PATH="${BEAGLE_PATH:-$(cd .. && pwd)/beagle}"
+BEAGLE_PATH="${BEAGLE_PATH:-$HOME/code/beagle/main}"
 
 BIN_DIR="${BIN_DIR:-$PWD/dotfiles/bin}"
 SHARE_DIR="${SHARE_DIR:-$HOME/.local/share/firn}"
@@ -60,15 +51,12 @@ RACKET_COMPILED_ROOT="$RACKET_PREFIX/lib/racket/compiled"
 SOURCE_HASH="$("$PWD/scripts/firn-source-hash")"
 CACHE_DIR="$SHARE_DIR/$RACKET_HASH/$SOURCE_HASH"
 RUNTIME="$CACHE_DIR/runtime"
-COMPAT_ZO="$CACHE_DIR/firn.zo"
 WRAPPER="$BIN_DIR/firn"
 mkdir -p "$CACHE_DIR"
 RUNTIME_BUILD=''
-COMPAT_TMP=''
 WRAPPER_TMP=''
 cleanup_publish_temps() {
   [ -z "$RUNTIME_BUILD" ] || rm -rf "${RUNTIME_BUILD:?}"
-  [ -z "$COMPAT_TMP" ] || rm -f "${COMPAT_TMP:?}"
   [ -z "$WRAPPER_TMP" ] || rm -f "${WRAPPER_TMP:?}"
 }
 trap cleanup_publish_temps EXIT
@@ -115,7 +103,6 @@ if [ ! -f "$RUNTIME/.complete" ]; then
   while :; do
     CACHE_DIR="$SHARE_DIR/$RACKET_HASH/$SOURCE_HASH"
     RUNTIME="$CACHE_DIR/runtime"
-    COMPAT_ZO="$CACHE_DIR/firn.zo"
     mkdir -p "$CACHE_DIR"
     if [ -f "$RUNTIME/.complete" ]; then
       echo "firn-build-bin: $SOURCE_HASH already published; using it" >&2
@@ -172,32 +159,6 @@ else
   echo "firn-build-bin: cached revision runtime → $RUNTIME"
 fi
 
-# The previously installed wrapper resumes here after invoking this newer build
-# recipe and still expects firn.zo. Its source shim hands that one in-flight
-# invocation to the newly published wrapper, which re-attests the source.
-if [ ! -s "$COMPAT_ZO" ]; then
-  COMPAT_TMP="$(mktemp "$CACHE_DIR/.firn.zo.XXXXXX")"
-  cat >"$COMPAT_TMP" <<'RKT'
-#lang racket/base
-(require racket/path racket/system)
-(define repo
-  (or (getenv "FIRN_REPO")
-      (error 'firn "FIRN_REPO is required for cache adoption")))
-(define wrapper (build-path repo "dotfiles" "bin" "firn"))
-(define bash
-  (or (find-executable-path "bash")
-      (error 'firn "bash is required for cache adoption")))
-(exit
- (apply system*/exit-code
-        bash
-        (path->string wrapper)
-        (vector->list (current-command-line-arguments))))
-RKT
-  ln "$COMPAT_TMP" "$COMPAT_ZO" 2>/dev/null || [ -s "$COMPAT_ZO" ]
-  rm -f "$COMPAT_TMP"
-  COMPAT_TMP=''
-fi
-
 # ---- wrapper ----
 # The fast path uses the exact pinned Racket and revision runtime without
 # direnv or per-call compilation. A moved Racket pin re-resolves once.
@@ -212,19 +173,10 @@ SHARE_DIR="\${FIRN_RUNTIME_SHARE_DIR:-\$HOME/.local/share/firn}"
 BUILT_RACKET_BIN="$RACKET_BIN"
 BUILT_RACKET_HASH="$RACKET_HASH"
 BUILT_RACKET_COMPILED_ROOT="$RACKET_COMPILED_ROOT"
-if [ -z "\${FIRN_REPO:-}" ]; then
-  for _repo in "\$HOME/code/nixos-config/main" "\$HOME/code/nixos-config"; do
-    [ -x "\$_repo/scripts/firn-build-bin" ] && { FIRN_REPO="\$_repo"; break; }
-  done
-  unset _repo
-fi
-REPO="\${FIRN_REPO:-\$HOME/code/nixos-config}"
+REPO="\${FIRN_REPO:-\$HOME/code/nixos-config/main}"
 export FIRN_REPO="\$REPO"
 
-for _bp in "\$HOME/code/beagle/main" "\$HOME/code/beagle" "\$REPO/../beagle"; do
-  [ -d "\$_bp/bin" ] && { BEAGLE_PATH="\${BEAGLE_PATH:-\$_bp}"; break; }
-done
-BEAGLE_PATH="\${BEAGLE_PATH:-\$REPO/../beagle}"
+BEAGLE_PATH="\${BEAGLE_PATH:-\$HOME/code/beagle/main}"
 export BEAGLE_PATH
 BUILD_SCRIPT="\$REPO/scripts/firn-build-bin"
 SOURCE_HASH_SCRIPT="\$REPO/scripts/firn-source-hash"
@@ -324,9 +276,6 @@ chmod +x "$WRAPPER_TMP"
 mv -f "$WRAPPER_TMP" "$WRAPPER"
 WRAPPER_TMP=''
 
-# one-time cleanup: drop the legacy single-marker file if present
-rm -f "${SHARE_DIR:?}/racket-version"
-
 # shellcheck disable=SC2012
-ls -ldh "$RUNTIME" "$COMPAT_ZO" "$WRAPPER" | awk '{print "  ", $5, $9}'
+ls -ldh "$RUNTIME" "$WRAPPER" | awk '{print "  ", $5, $9}'
 echo "firn-build-bin: done. Declarative wrapper published at $WRAPPER."

@@ -321,38 +321,6 @@
               (substring (git-head) 0 8) (length dirty))
       (for ([f (in-list dirty)]) (printf "     ~a\n" f))))
 
-  ;; Local input pins: plan-only (no lock mutation). Promotable moves become
-  ;; --override-input flags on the snapshot build; the lock is re-pointed and
-  ;; mechanically committed only after the closure verifies.
-  (define overrides '())   ; (list input target-rev repo)
-  (cond
-    [skip-checks?
-     (printf "── local inputs: committed lock as-is (--skip-checks never promotes pins)\n")]
-    [else
-     (phase "local inputs (plan)"
-       (λ ()
-         (define plan-file (make-temporary-file "firn-plan-~a"))
-         (define ok?
-           (sh "bash" "-c"
-               (format "'~a' --plan > '~a'"
-                       (path->string (in-repo "scripts" "firn-sync-local-inputs"))
-                       plan-file)))
-         (when ok?
-           (for ([line (in-list (string-split (file->string plan-file) "\n"))])
-             (define m (regexp-match #px"^plan (\\S+) ([0-9a-f]{40}) ([0-9a-f]{40}) (\\S+)$" line))
-             (if m
-                 (set! overrides (cons (list (list-ref m 1) (list-ref m 3) (list-ref m 4))
-                                       overrides))
-                 (when (non-empty-string? (string-trim line))
-                   (printf "~a\n" line)))))
-         (delete-file plan-file)
-         ok?))])
-  (define override-args
-    (append*
-     (for/list ([o (in-list overrides)])
-       (list "--override-input" (car o)
-             (format "git+file://~a?ref=main&rev=~a" (caddr o) (cadr o))))))
-
   (unless skip-checks?
     ;; Step 1: regenerate any out-of-date .nix from .bnix sources, then
     ;; self-heal: regenerated outputs whose sources are committed-clean are
@@ -465,22 +433,12 @@
         (apply sh-out
                (nix-build-command
                 (append (list "nix" "build" "--no-link" "--print-out-paths" attr)
-                        override-args extra))))
+                        extra))))
       (set! built-path (and (regexp-match? #rx"^/nix/store/" out) out))
       (and built-path #t)))
   (when (and on-linux? built-path)
     (printf "── closure diff vs running system:\n") (flush-output)
     (sh "nix" "store" "diff-closures" "/run/current-system" built-path))
-
-  ;; Only a verified pointer earns a mechanical lock commit; deferrals inside
-  ;; the script are notices, never failures.
-  (unless (or skip-checks? (null? overrides))
-    (phase "promote verified local inputs"
-      (λ () (apply sh
-                   (path->string (in-repo "scripts" "firn-sync-local-inputs"))
-                   "--commit"
-                   (for/list ([o (in-list overrides)])
-                     (format "~a=~a" (car o) (cadr o)))))))
 
   ;; Step 3: switch. On Linux, activate the EXACT store path the smoke build
   ;; produced (profile set + switch-to-configuration) — no second evaluation,
@@ -494,7 +452,7 @@
       [on-darwin?
        (apply sh (append (list "sudo" "darwin-rebuild" "switch" "--flake"
                                (format "~a#~a" (snapshot-ref) host))
-                         override-args extra))]
+                         extra))]
       [else
        (and built-path
             (activate-linux-system built-path))]))

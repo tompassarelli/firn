@@ -35,7 +35,7 @@ nixos-config/dotfiles/bin/activity	1
 nixos-config/dotfiles/bin/agents	31
 nixos-config/dotfiles/bin/beagle	1
 nixos-config/dotfiles/bin/concern	1
-nixos-config/dotfiles/bin/firn	3
+nixos-config/dotfiles/bin/firn	2
 nixos-config/dotfiles/bin/fram	1
 nixos-config/dotfiles/bin/harness-map	4
 nixos-config/dotfiles/bin/north	1
@@ -51,8 +51,8 @@ nixos-config/scripts/agent-config-check.sh	19
 nixos-config/scripts/agent-config-check.test.sh	7
 nixos-config/scripts/claude-settings-seed.sh	1
 nixos-config/scripts/claude-settings-seed.test.sh	2
-nixos-config/scripts/firn-build	3
-nixos-config/scripts/firn-build-bin	4
+nixos-config/scripts/firn-build	1
+nixos-config/scripts/firn-build-bin	3
 nixos-config/scripts/firn-build-bin.test.sh	1
 nixos-config/scripts/firn-cmds/diff.rkt	1
 nixos-config/scripts/firn-cmds/util.rkt	2
@@ -121,4 +121,4 @@ north/sdk/test/run-ledger.test.ts	1
 north/sdk/test/run-token-budget.test.ts	1
 north/sdk/test/session-hard-cap.test.ts	12
 north/sdk/test/worktree.test.ts	9
-north/tests/generated_output_test.sh	1
+north/tests/generated_output_test.sh	2

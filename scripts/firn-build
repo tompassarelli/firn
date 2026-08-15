@@ -10,24 +10,13 @@
 #   - tests/, scripts/, .firn-build/   (tooling, not config)
 #
 # Requires the beagle Racket package to be linked.
-# BEAGLE_PATH defaults to ../beagle (sibling clone).
+# BEAGLE_PATH defaults to the canonical checkout.
 
 set -euo pipefail
 
 cd "${FIRN_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
-# beagle was a SIBLING of this checkout (../beagle). Under the container layout
-# this checkout is ~/code/nixos-config/main, so ../beagle resolves to
-# ~/code/nixos-config/beagle — which does not exist, and every rebuild aborted
-# with "beagle-build-all not found". Probe the real locations in order:
-# container checkout, legacy flat checkout, then the historical sibling.
-if [ -z "${BEAGLE_PATH:-}" ]; then
-  for _bp in "$HOME/code/beagle/main" "$HOME/code/beagle" "$(cd .. && pwd)/beagle"; do
-    if [ -x "$_bp/bin/beagle-build-all" ]; then BEAGLE_PATH="$_bp"; break; fi
-  done
-  unset _bp
-fi
-BEAGLE_PATH="${BEAGLE_PATH:-$(cd .. && pwd)/beagle}"
+BEAGLE_PATH="${BEAGLE_PATH:-$HOME/code/beagle/main}"
 
 BEAGLE_BUILD_ALL="$BEAGLE_PATH/bin/beagle-build-all"
 if [ ! -x "$BEAGLE_BUILD_ALL" ]; then

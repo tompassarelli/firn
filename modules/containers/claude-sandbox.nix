@@ -1,6 +1,6 @@
 { pkgs, ... }:
 
-pkgs.dockerTools.buildLayeredImage {
+((buildLayeredImage: buildLayeredImage {
   name = "claude-sandbox";
   tag = "latest";
   contents = with pkgs; [
@@ -58,4 +58,4 @@ pkgs.dockerTools.buildLayeredImage {
       "NIX_CONF_DIR=/home/dev/.config/nix"
     ];
   };
-}
+}) pkgs.dockerTools.buildLayeredImage)

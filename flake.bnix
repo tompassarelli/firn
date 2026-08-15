@@ -133,10 +133,10 @@
                      [(fn [final] Any
                         (fn [prev] Any
                           {:unstable
-                            (import nixpkgs-unstable
+                            ((import nixpkgs-unstable)
                               {:system system :config.allowUnfree true})
                            :master
-                            (import nixpkgs-master
+                            ((import nixpkgs-master)
                               {:system system :config.allowUnfree true})
                            :kanata-git
                             (final.unstable.kanata.overrideAttrs
@@ -331,22 +331,22 @@
                      [(fn [final] Any
                         (fn [prev] Any
                           {:unstable
-                            (import nixpkgs-unstable
+                            ((import nixpkgs-unstable)
                               {:system system :config.allowUnfree true})
                            :master
-                            (import nixpkgs-master
+                            ((import nixpkgs-master)
                               {:system system :config.allowUnfree true})}))]
                      extraOverlays)}]
                 extraModules)}))
        :modules firnModules
        :packages.x86_64-linux
         (let [pkgs
-              (import nixpkgs
+              ((import nixpkgs)
                 {:system "x86_64-linux" :config.allowUnfree true})]
           {:claude-sandbox
-            (import (p "./modules/containers/claude-sandbox.nix")
+            ((import (p "./modules/containers/claude-sandbox.nix"))
               {:pkgs
-                (import nixpkgs-master
+                ((import nixpkgs-master)
                   {:system "x86_64-linux" :config.allowUnfree true})})})
        :nixosConfigurations
         {:whiterabbit

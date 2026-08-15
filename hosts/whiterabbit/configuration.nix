@@ -55,8 +55,6 @@
   myConfig.modules.nh.enable = true;
   myConfig.modules.babashka.enable = true;
   myConfig.modules.north-fram.enable = true;
-  myConfig.modules.north-stream-sync.enable = false;
-  myConfig.modules.north-coordination-workers.enable = false;
   myConfig.modules.agent-slice.enable = true;
   systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";

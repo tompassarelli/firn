@@ -226,25 +226,6 @@ fresh_output="$(FIRN_RUNTIME_SHARE_DIR="$real_share" \
   "$real_bin/firn")"
 grep -Fxq 'fresh-source' <<<"$fresh_output"
 
-# The installed pre-change wrapper resumes at firn.zo after invoking the new
-# recipe. The compatibility shim must hand that invocation to the new wrapper.
-FIRN_REPO="$real_repo" BEAGLE_PATH="$real_beagle" \
-  SHARE_DIR="$real_share" "$real_repo/scripts/firn-build-bin" >/dev/null
-real_hash="$(
-  FIRN_REPO="$real_repo" BEAGLE_PATH="$real_beagle" \
-    "$real_repo/scripts/firn-source-hash"
-)"
-real_racket_bin="$(readlink -f "$(command -v "$RACKET")")"
-real_racket_hash="$(printf '%s' "$real_racket_bin" | sha1sum | cut -c1-12)"
-compat_zo="$real_share/$real_racket_hash/$real_hash/firn.zo"
-[ -s "$compat_zo" ]
-adoption_output="$(
-  FIRN_RUNTIME_SHARE_DIR="$real_share" \
-    FIRN_REPO="$real_repo" BEAGLE_PATH="$real_beagle" \
-    "$RACKET" "$compat_zo"
-)"
-grep -Fxq 'fresh-source' <<<"$adoption_output"
-
 printf ':enabled [test]\n' >"$real_repo/hosts/test/enabled-tags.bnix"
 FIRN_RUNTIME_SHARE_DIR="$real_share" \
   FIRN_REPO="$real_repo" BEAGLE_PATH="$real_beagle" \

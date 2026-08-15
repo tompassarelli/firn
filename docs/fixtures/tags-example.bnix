@@ -56,7 +56,7 @@
 ;;
 ;; :disabled is a global hard-off list — wins over every tag.
 
-(def host-enabled-tags
+(def host-enabled-tags Any
   {:enabled
     [terminal                                          ;; bare tag, no edits
      [browsers -gjoa +qutebrowser-experimental]        ;; tag + edit flags

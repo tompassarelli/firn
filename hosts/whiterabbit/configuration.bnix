@@ -57,12 +57,6 @@
    ;; The coordination engine: one user service, direct bind on :7977, no
    ;; socket activation, no telemetry twin. Owns :7977 alone.
    :myConfig.modules.north-fram.enable true
-   ;; user-level timer (~5min) for north-stream-sync — zero-AI transcript
-   ;; mirroring into ~/code/north/streams/raw (streams/CLAUDE.md).
-   :myConfig.modules.north-stream-sync.enable false
-   ;; Rebuild, reconciliation, projection, safety, and janitor responsibilities
-   ;; are independently supervised and cannot block one another.
-   :myConfig.modules.north-coordination-workers.enable false
    ;; agent.slice + the session.slice mirror weight. Inert until a launcher
    ;; actually enters the scope; the slice itself costs nothing.
    :myConfig.modules.agent-slice.enable true

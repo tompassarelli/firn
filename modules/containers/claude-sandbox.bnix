@@ -3,7 +3,8 @@
 (ns claude-sandbox)
 
 (nix/module [pkgs]
-  (pkgs.dockerTools.buildLayeredImage
+  (let [(buildLayeredImage Any) pkgs.dockerTools.buildLayeredImage]
+    (buildLayeredImage
     {:name          "claude-sandbox"
      :tag           "latest"
      :contents
@@ -29,4 +30,4 @@
         ["HOME=/home/dev"
          "USER=dev"
          (s "SSL_CERT_FILE=" pkgs.cacert "/etc/ssl/certs/ca-bundle.crt")
-         "NIX_CONF_DIR=/home/dev/.config/nix"]}}))
+         "NIX_CONF_DIR=/home/dev/.config/nix"]}})))
