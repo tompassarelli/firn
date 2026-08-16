@@ -62,7 +62,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, gjoa, hermes-agent, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: {
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, gjoa, hermes-agent, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: ((makeFirnNative: {
     lib.mkSystem = ({ hostname, hostConfig, hardwareConfig, system ? "x86_64-linux", extraModules ? [ ], extraOverlays ? [ ], extraSpecialArgs ? { }, ... }: nixpkgs.lib.nixosSystem {
       system = system;
       specialArgs = ({
@@ -76,6 +76,7 @@
           zen-browser = zen-browser;
         };
         flakeRoot = self;
+        firnNative = builtins.getAttr "firn-native" (builtins.getAttr system self.packages);
       } // extraSpecialArgs);
       modules = ([
         hardwareConfig
@@ -252,6 +253,7 @@
           zen-browser = zen-browser;
         };
         flakeRoot = self;
+        firnNative = builtins.getAttr "firn-native" (builtins.getAttr system self.packages);
       } // extraSpecialArgs);
       modules = ([
         home-manager.darwinModules.home-manager
@@ -316,12 +318,7 @@
     });
     modules = firnModules;
     packages.x86_64-linux = ((pkgs: {
-      firn-native = pkgs.runCommand "firn-native" {
-        nativeBuildInputs = [ beagle.packages.x86_64-linux.beagle pkgs.stdenv.cc ];
-      } ''
-        mkdir -p $out/bin
-        beagle native-exe --out $out/bin/firn --entry firn.main/-main ${self}/native/firn.bgl
-      '';
+      firn-native = makeFirnNative "x86_64-linux";
       claude-sandbox = import ./modules/containers/claude-sandbox.nix {
         pkgs = import nixpkgs-master {
           system = "x86_64-linux";
@@ -332,6 +329,7 @@
         system = "x86_64-linux";
         config.allowUnfree = true;
       }));
+    packages.aarch64-darwin.firn-native = makeFirnNative "aarch64-darwin";
     nixosConfigurations = {
       whiterabbit = self.lib.mkSystem {
         hostname = "whiterabbit";
@@ -361,5 +359,11 @@
 
       '';
     }) nixpkgs.legacyPackages.x86_64-linux);
-  }) (builtins.fromJSON (builtins.readFile ./config/darwin-modules.json)))) ./modules));
+  }) (system: ((pkgs: ((beaglePackage: pkgs.runCommand "firn-native" {
+      nativeBuildInputs = [ beaglePackage pkgs.stdenv.cc ];
+    } ''
+      mkdir -p $out/bin
+      beagle native-exe --out $out/bin/firn-native --entry firn.main/-main ${self}/native/firn.bgl
+      beagle native-exe --out $out/bin/firn-tag-resolve --entry firn.tag-resolve-native/-main ${beagle}/native-core/src/beagle/datum_reader.bgl ${beagle}/native-core/src/native/json.bgl ${self}/native/tag_resolve.bgl ${self}/native/tag_inputs.bgl ${self}/native/tag_resolve_driver.bgl ${self}/native/tag_resolve_native.bgl
+    '') (builtins.getAttr "beagle" (builtins.getAttr system beagle.packages)))) (builtins.getAttr system nixpkgs.legacyPackages))))) (builtins.fromJSON (builtins.readFile ./config/darwin-modules.json)))) ./modules));
 }
