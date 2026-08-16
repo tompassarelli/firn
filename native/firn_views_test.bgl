@@ -1,0 +1,276 @@
+#lang beagle
+(ns firn.views-test
+  (:require [firn.views :as views]
+            [beagle.nix-schema-path :as paths]))
+
+(defrecord TestResult [(name String) (passed Bool)])
+
+(defn source [(id String) (text String)] paths/SourceDocument
+  (paths/->SourceDocument id text))
+
+(defn make-module [(name String) (id String) (text String)] views/ModuleSource
+  (views/->ModuleSource name [(source id text)]))
+
+(def lock-json String
+  (str
+    "{\"root\":\"root\",\"nodes\":{"
+    "\"root\":{\"inputs\":{"
+    "\"alpha\":\"alpha-node\","
+    "\"broken\":\"broken-node\","
+    "\"frozen\":\"frozen-node\","
+    "\"unknown-age\":\"unknown-node\"}},"
+    "\"alpha-node\":{"
+    "\"inputs\":{\"nixpkgs\":[\"nixpkgs\"]},"
+    "\"original\":{\"type\":\"github\",\"owner\":\"a\","
+    "\"repo\":\"alpha\"},"
+    "\"locked\":{\"lastModified\":1999940,"
+    "\"rev\":\"aaaaaaaa11111111\"}},"
+    "\"broken-node\":{\"original\":{\"type\":\"path\","
+    "\"path\":\"/tmp/broken\"},\"locked\":{\"lastModified\":1999999}},"
+    "\"frozen-node\":{\"original\":{\"type\":\"github\","
+    "\"owner\":\"f\",\"repo\":\"frozen\",\"rev\":\"deadbeef\"},"
+    "\"locked\":{\"lastModified\":1913600,\"rev\":\"bbbbbbbb2222\"}},"
+    "\"unknown-node\":{\"original\":{\"type\":\"gitlab\","
+    "\"owner\":\"u\",\"repo\":\"unknown\"},"
+    "\"locked\":{\"rev\":\"cccccccc3333\"}}}}"))
+
+(def schema-json String
+  (str
+    "[{\"name\":\"services.shared.enable\",\"t\":\"bool\","
+    "\"declarations\":[\"shared.nix\"]},"
+    "{\"name\":\"services.linux.enable\",\"t\":\"bool\"},"
+    "{\"name\":\"users.users.<name>.shell\",\"t\":\"str\"},"
+    "{\"name\":\"programs.dynamic\",\"t\":\"attrsOf\","
+    "\"inner\":{\"t\":\"anything\"}},"
+    "{\"name\":\"services.mode\",\"t\":\"nullOr\","
+    "\"inner\":{\"t\":\"enum\",\"enum\":[\"a\",\"b\"]}},"
+    "{\"p\":\"services.submodule.enable\",\"t\":\"bool\"}]"))
+
+(def darwin-schema-json String
+  (str
+    "[{\"name\":\"services.shared.enable\",\"t\":\"bool\"},"
+    "{\"name\":\"services.darwin.enable\",\"t\":\"bool\"},"
+    "{\"name\":\"users.users.<name>.shell\",\"t\":\"str\"},"
+    "{\"name\":\"programs.dynamic\",\"t\":\"attrsOf\"}]"))
+
+(defn schema-entries [(text String)] (Vec views/SchemaEntry)
+  (match (views/schema-from-json text)
+    [(SchemaLoaded entries) entries]
+    [(SchemaRejected message offset) []]))
+
+(defn row-name [(row views/FlakeRow)] String
+  (views/flakerow-name row))
+
+(defn case-age-boundaries [] Bool
+  (and (= (views/human-age 59) "59s")
+       (= (views/human-age 60) "1m")
+       (= (views/human-age 3600) "1h")
+       (= (views/human-age 86400) "1d")
+       (= (views/human-age 2592000) "1mo")
+       (= (views/human-age 31536000) "1y")))
+
+(defn case-lock-decode-render [] Bool
+  (match (views/flake-rows lock-json 2000000)
+    [(FlakeRowsRejected message) false]
+    [(FlakeRows rows)
+     (let [(plain String) (views/render-flake-rows rows false)
+           (tty String) (views/render-flake-rows rows true)]
+       (and (= (count rows) 4)
+            (= (row-name (nth rows 0)) "broken")
+            (= (row-name (nth rows 1)) "alpha")
+            (= (row-name (nth rows 2)) "frozen")
+            (= (row-name (nth rows 3)) "unknown-age")
+            (views/starts-with?
+              (views/flakerow-url (nth rows 0)) "path:/tmp/broken")
+            (views/flakerow-broken (nth rows 0))
+            (= (views/flakerow-age (nth rows 1)) "1m")
+            (views/flakerow-frozen (nth rows 2))
+            (= (views/flakerow-age (nth rows 3)) "?")
+            (= (views/follow-target
+                 (nth (views/flakerow-follows (nth rows 1)) 0))
+               "nixpkgs")
+            (not (views/starts-with? plain "\u001b["))
+            (>= (views/find-substring tty "\u001b[1mflake inputs") 0)
+            (>= (views/find-substring plain "would break the build") 0)))]))
+
+(defn case-schema-decode [] Bool
+  (match (views/schema-from-json schema-json)
+    [(SchemaRejected message offset) false]
+    [(SchemaLoaded entries)
+     (let [(mode (U views/SchemaEntry Nil))
+           (views/schema-entry-for entries "services.mode")]
+       (and (= (count entries) 6)
+            (some? (views/schema-entry-for entries
+                     "services.submodule.enable"))
+            (some? mode)
+            (= (views/describe-type mode) "nullOr (enum)")
+            (= (views/schemaentry-enum-values mode) ["a" "b"])))]))
+
+(defn case-schema-conflict-rejected [] Bool
+  (match (views/schema-from-json
+           "[{\"name\":\"a.b\",\"p\":\"a.c\",\"t\":\"bool\"}]")
+    [(SchemaLoaded entries) false]
+    [(SchemaRejected message offset) true]))
+
+(defn case-submodule-schema [] Bool
+  (match (views/submodule-schema-from-json
+           (str "{\"submodules\":{\"users.users\":["
+             "{\"p\":\"users.users.<name>.shell\",\"t\":\"path\"}]}}"))
+    [(SchemaRejected message offset) false]
+    [(SchemaLoaded entries)
+     (and (= (count entries) 1)
+          (= (views/schemaentry-path (nth entries 0))
+             "users.users.<name>.shell"))]))
+
+(defn platform-modules [] (Vec views/ModuleSource)
+  [(make-module "both" "modules/both/default.bnix"
+     "#lang beagle/nix\n{:services.shared.enable true}")
+   (make-module "linux" "modules/linux/default.bnix"
+     "#lang beagle/nix\n{:services.linux.enable true}")
+   (make-module "darwin" "modules/darwin/default.bnix"
+     "#lang beagle/nix\n{:services.darwin.enable true}")
+   (make-module "neither" "modules/neither/default.bnix"
+     "#lang beagle/nix\n{:boot.unknown.enable true}")
+   (make-module "wildcard" "modules/wildcard/default.bnix"
+     "#lang beagle/nix\n{:users.users.tom.shell pkg}")
+   (make-module "freeform" "modules/freeform/default.bnix"
+     "#lang beagle/nix\n{:programs.dynamic.custom true}")])
+
+(defn matrix [] (Vec views/PlatformVerdict)
+  (match (views/platform-matrix
+           (platform-modules)
+           (schema-entries schema-json)
+           (schema-entries darwin-schema-json))
+    [(PlatformRejected message) []]
+    [(PlatformLoaded verdicts) verdicts]))
+
+(defn verdict [(name String)] Keyword
+  (let [(found (U views/PlatformVerdict Nil))
+        (views/verdict-for (matrix) name)]
+    (if (nil? found) :missing (views/platformverdict-verdict found))))
+
+(defn case-platform-verdicts [] Bool
+  (and (= (verdict "both") :both)
+       (= (verdict "linux") :linux-only)
+       (= (verdict "darwin") :darwin-only)
+       (= (verdict "neither") :no-data)
+       (= (verdict "wildcard") :both)
+       (= (verdict "freeform") :both)))
+
+(defn case-platform-render [] Bool
+  (let [(verdicts (Vec views/PlatformVerdict)) (matrix)
+        (darwin views/CommandResult)
+        (views/render-platform-list "darwin" verdicts 6 4)
+        (show views/CommandResult)
+        (views/render-platform-show "linux" verdicts)
+        (safe views/CommandResult)
+        (views/render-platform-safelist verdicts)]
+    (and (= (views/commandresult-status darwin) 0)
+         (>= (views/find-substring (views/commandresult-stdout darwin)
+               "  darwin\n") 0)
+         (>= (views/find-substring (views/commandresult-stdout show)
+               "verdict: linux-only") 0)
+         (>= (views/find-substring (views/commandresult-stdout show)
+               "services.linux.enable") 0)
+         (>= (views/find-substring (views/commandresult-stdout safe)
+               "\"darwin\"") 0))))
+
+(def explain-documents (Vec paths/SourceDocument)
+  [(source "modules/example/default.bnix"
+     "#lang beagle/nix\n{:services.mode \"a\"}")
+   (source "modules/sub/default.bnix"
+     "#lang beagle/nix\n{:services.submodule.enable true}")])
+
+(defn case-schema-explain [] Bool
+  (let [(entries (Vec views/SchemaEntry)) (schema-entries schema-json)
+        (exact views/CommandResult)
+        (views/render-schema-explain
+          "module.bnix:4: unknown option services.mode" entries
+          explain-documents)
+        (missing views/CommandResult)
+        (views/render-schema-explain "services.modf" entries explain-documents)]
+    (and (= (views/commandresult-status exact) 0)
+         (>= (views/find-substring (views/commandresult-stdout exact)
+               "type:  nullOr (enum)") 0)
+         (>= (views/find-substring (views/commandresult-stdout exact)
+               "enum:  \"a\", \"b\"") 0)
+         (>= (views/find-substring (views/commandresult-stdout exact)
+               "modules/example/default.bnix") 0)
+         (= (views/commandresult-status missing) 1)
+         (>= (views/find-substring (views/commandresult-stderr missing)
+               "services.mode") 0))))
+
+(defn case-child-results [] Bool
+  (let [(generation views/CommandResult)
+        (views/render-host-generation
+          (views/->ChildResult 0 "41 2026 current\n" ""))
+        (missing views/CommandResult)
+        (views/render-host-generation (views/->ChildResult 0 "old\n" ""))
+        (failed views/CommandResult)
+        (views/render-host-generation (views/->ChildResult 7 "" "child-red\n"))
+        (extract views/CommandResult)
+        (views/render-schema-extract "host-a"
+          (views/->ChildResult 0 "made\n" "note\n"))]
+    (and (= (views/commandresult-stdout generation)
+            "current: 41\nnext:    42\n")
+         (= (views/commandresult-stdout missing) "(no generation info)\n")
+         (= (views/commandresult-status failed) 7)
+         (>= (views/find-substring (views/commandresult-stderr failed)
+               "generation listing failed") 0)
+         (= (views/commandresult-stdout extract)
+            ">> firn-extract-schema host-a\nmade\n")
+         (= (views/commandresult-stderr extract) "note\n"))))
+
+(defn action-kind [(action views/ViewsAction)] String
+  (match action
+    [(FlakeInputs) "flake"]
+    [(PlatformList selection) "platform-list"]
+    [(PlatformShow module) "platform-show"]
+    [(PlatformSafelist) "platform-safelist"]
+    [(SchemaExplain input) "schema-explain"]
+    [(SchemaExtract host) (str "schema-extract:" host)]
+    [(HostGeneration host) (str "host-gen:" host)]))
+
+(defn parsed-kind [(argv (Vec String))] String
+  (match (views/parse-views-argv argv "host-a")
+    [(InvalidViewsArgv invalid) "invalid"]
+    [(ParsedViews action) (action-kind action)]))
+
+(defn case-argv [] Bool
+  (and (= (parsed-kind ["flake" "inputs"]) "flake")
+       (= (parsed-kind ["platform" "list" "all"]) "platform-list")
+       (= (parsed-kind ["platform" "show" "linux"]) "platform-show")
+       (= (parsed-kind ["platform" "safelist" "all"])
+          "platform-safelist")
+       (= (parsed-kind ["schema" "explain" "services.mode"])
+          "schema-explain")
+       (= (parsed-kind ["schema" "extract"])
+          "schema-extract:host-a")
+       (= (parsed-kind ["host" "gen"]) "host-gen:host-a")
+       (= (parsed-kind ["stale"]) "invalid")))
+
+(def tests (Vec TestResult)
+  [(->TestResult "age-boundaries" (case-age-boundaries))
+   (->TestResult "lock-decode-render" (case-lock-decode-render))
+   (->TestResult "schema-decode" (case-schema-decode))
+   (->TestResult "schema-conflict-rejected" (case-schema-conflict-rejected))
+   (->TestResult "submodule-schema" (case-submodule-schema))
+   (->TestResult "platform-verdicts" (case-platform-verdicts))
+   (->TestResult "platform-render" (case-platform-render))
+   (->TestResult "schema-explain" (case-schema-explain))
+   (->TestResult "child-results" (case-child-results))
+   (->TestResult "argv" (case-argv))])
+
+(defn -main [(args (Vec String))] Int
+  (loop [(remaining (Vec TestResult)) tests]
+    (if (= (count remaining) 0)
+      0
+      (let [(test TestResult) (first remaining)]
+        (if (testresult-passed test)
+          (do
+            (print (str "PASS " (testresult-name test) "\n"))
+            (recur (rest remaining)))
+          (do
+            (host.stderr/write-text
+              (str "FAIL " (testresult-name test) "\n"))
+            1))))))

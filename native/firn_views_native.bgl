@@ -1,0 +1,417 @@
+#lang beagle
+(ns firn.views-native
+  (:require [firn.views :as views]
+            [beagle.nix-schema-path :as paths]))
+
+(def max-json-bytes Int 134217728)
+(def max-source-bytes Int 16777216)
+(def max-child-output Int 16777216)
+(def max-directory-entries Int 32768)
+
+(defunion TextLoadResult
+  (TextLoaded [(text String)])
+  (TextMissing [(path String)])
+  (TextLoadRejected [(message String)]))
+
+(defunion DocumentsLoadResult
+  (DocumentsLoaded [(documents (Vec paths/SourceDocument))])
+  (DocumentsLoadRejected [(message String)]))
+
+(defunion NamesLoadResult
+  (NamesLoaded [(names (Vec String))])
+  (NamesLoadRejected [(message String)]))
+
+(defunion ModulesLoadResult
+  (ModulesLoaded [(modules (Vec views/ModuleSource))])
+  (ModulesLoadRejected [(message String)]))
+
+(defunion SchemasLoadResult
+  (SchemasLoaded
+    [(nixos (Vec views/SchemaEntry)) (darwin (Vec views/SchemaEntry))])
+  (SchemasLoadRejected [(message String)]))
+
+(defunion EntriesLoadResult
+  (EntriesLoaded [(entries (Vec views/SchemaEntry))])
+  (EntriesLoadRejected [(message String)]))
+
+(defunion HostnameResult
+  (HostnameLoaded [(hostname String)])
+  (HostnameRejected [(message String)]))
+
+(defn path [(root String) (relative String)] String
+  (str root "/" relative))
+
+(defn errno-message [(operation String) (relative String) (errno Int)] String
+  (str "firn views: " operation " '" relative "': errno " errno "\n"))
+
+(defn repository-root [] (U String Nil)
+  (let [(explicit (U String Nil)) (System/getenv "FIRN_REPO")]
+    (if (some? explicit)
+      explicit
+      (let [(home (U String Nil)) (System/getenv "HOME")]
+        (if (nil? home) nil (str home "/code/nixos-config/main"))))))
+
+(defn current-hostname [] HostnameResult
+  (let [(configured (U String Nil)) (System/getenv "FIRN_HOST")]
+    (if (and (some? configured) (> (count configured) 0))
+      (->HostnameLoaded configured)
+      (match (host.system/hostname)
+        [(host.system/HostnameOk hostname)
+         (if (= hostname "")
+           (->HostnameRejected "firn views: hostname is empty\n")
+           (->HostnameLoaded hostname))]
+        [(host.system/HostnameError errno)
+         (->HostnameRejected
+           (str "firn views: cannot read hostname: errno " errno "\n"))]))))
+
+(defn read-text
+  [(root String) (relative String) (limit Int) (required Bool)] TextLoadResult
+  (let [(absolute String) (path root relative)]
+    (match (host.fs/path-kind absolute)
+      [(host.fs/PathKindError errno)
+       (if (= errno 2)
+         (if required
+           (->TextLoadRejected
+             (str "firn views: missing '" relative "'\n"))
+           (->TextMissing relative))
+         (->TextLoadRejected (errno-message "cannot inspect" relative errno)))]
+      [(host.fs/PathKindOk kind)
+       (if (not (or (= kind 1) (= kind 3)))
+         (->TextLoadRejected
+           (str "firn views: not a file '" relative "'\n"))
+         (match (host.fs/read-text-bounded absolute limit)
+           [(host.fs/ReadTextBoundedError errno)
+            (->TextLoadRejected (errno-message "cannot read" relative errno))]
+           [(host.fs/ReadTextBoundedOk text) (->TextLoaded text)]))])))
+
+(defn read-json-required [(root String) (relative String)] TextLoadResult
+  (read-text root relative max-json-bytes true))
+
+(defn directory-names [(root String) (relative String)] NamesLoadResult
+  (match (host.fs/list-directory-bounded
+           (path root relative) max-directory-entries)
+    [(host.fs/ListDirectoryBoundedError errno)
+     (if (or (= errno 2) (= errno 20))
+       (->NamesLoaded [])
+       (->NamesLoadRejected
+         (errno-message "cannot list" relative errno)))]
+    [(host.fs/ListDirectoryBoundedOk entries)
+     (->NamesLoaded (sort entries))]))
+
+(defn load-bnix-files
+  [(root String) (relative-directory String)] DocumentsLoadResult
+  (match (directory-names root relative-directory)
+    [(NamesLoadRejected message) (->DocumentsLoadRejected message)]
+    [(NamesLoaded names)
+     (loop [(remaining (Vec String)) names
+            (documents (Vec paths/SourceDocument)) []]
+       (if (= (count remaining) 0)
+         (->DocumentsLoaded documents)
+         (let [(name String) (first remaining)]
+           (if (not (views/ends-with? name ".bnix"))
+             (recur (rest remaining) documents)
+             (let [(relative String) (str relative-directory "/" name)]
+               (match (read-text root relative max-source-bytes true)
+                 [(TextLoaded text)
+                  (recur (rest remaining)
+                    (conj documents (paths/->SourceDocument relative text)))]
+                 [(TextMissing missing)
+                  (->DocumentsLoadRejected
+                    (str "firn views: source disappeared '" missing "'\n"))]
+                 [(TextLoadRejected message)
+                  (->DocumentsLoadRejected message)]))))))]))
+
+(defn load-module-sources-from
+  [(root String)
+   (names (Vec String))
+   (index Int)
+   (modules (Vec views/ModuleSource))]
+  ModulesLoadResult
+  (if (>= index (count names))
+    (->ModulesLoaded modules)
+    (let [(name String) (nth names index)
+          (relative String) (str "modules/" name)]
+      (match (host.fs/path-kind (path root relative))
+        [(host.fs/PathKindError errno)
+         (if (= errno 2)
+           (load-module-sources-from root names (+ index 1) modules)
+           (->ModulesLoadRejected
+             (errno-message "cannot inspect" relative errno)))]
+        [(host.fs/PathKindOk kind)
+         (if (not= kind 2)
+           (load-module-sources-from root names (+ index 1) modules)
+           (match (load-bnix-files root relative)
+             [(DocumentsLoadRejected message)
+              (->ModulesLoadRejected message)]
+             [(DocumentsLoaded documents)
+              (load-module-sources-from root names (+ index 1)
+                (conj modules (views/->ModuleSource name documents)))]))]))))
+
+(defn load-modules [(root String)] ModulesLoadResult
+  (match (directory-names root "modules")
+    [(NamesLoadRejected message) (->ModulesLoadRejected message)]
+    [(NamesLoaded names)
+     (load-module-sources-from root names 0 [])]))
+
+(defn append-documents
+  [(left (Vec paths/SourceDocument))
+   (right (Vec paths/SourceDocument))]
+  (Vec paths/SourceDocument)
+  (loop [(remaining (Vec paths/SourceDocument)) right
+         (result (Vec paths/SourceDocument)) left]
+    (if (= (count remaining) 0)
+      result
+      (recur (rest remaining) (conj result (first remaining))))))
+
+(defn module-documents
+  [(modules (Vec views/ModuleSource))] (Vec paths/SourceDocument)
+  (loop [(remaining (Vec views/ModuleSource)) modules
+         (documents (Vec paths/SourceDocument)) []]
+    (if (= (count remaining) 0)
+      documents
+      (recur (rest remaining)
+        (append-documents documents
+          (views/modulesource-documents (first remaining)))))))
+
+(defn load-named-directories
+  [(root String)
+   (parent String)
+   (names (Vec String))
+   (index Int)
+   (documents (Vec paths/SourceDocument))]
+  DocumentsLoadResult
+  (if (>= index (count names))
+    (->DocumentsLoaded documents)
+    (let [(relative String) (str parent "/" (nth names index))]
+      (match (host.fs/path-kind (path root relative))
+        [(host.fs/PathKindError errno)
+         (if (= errno 2)
+           (load-named-directories root parent names (+ index 1) documents)
+           (->DocumentsLoadRejected
+             (errno-message "cannot inspect" relative errno)))]
+        [(host.fs/PathKindOk kind)
+         (if (not= kind 2)
+           (load-named-directories root parent names (+ index 1) documents)
+           (match (load-bnix-files root relative)
+             [(DocumentsLoadRejected message)
+              (->DocumentsLoadRejected message)]
+             [(DocumentsLoaded nested)
+              (load-named-directories root parent names (+ index 1)
+                (append-documents documents nested))]))]))))
+
+(defn load-parent-documents [(root String) (parent String)] DocumentsLoadResult
+  (match (directory-names root parent)
+    [(NamesLoadRejected message) (->DocumentsLoadRejected message)]
+    [(NamesLoaded names)
+     (load-named-directories root parent names 0 [])]))
+
+(defn load-reference-documents [(root String)] DocumentsLoadResult
+  (match (load-modules root)
+    [(ModulesLoadRejected message) (->DocumentsLoadRejected message)]
+    [(ModulesLoaded modules)
+     (match (load-parent-documents root "hosts")
+       [(DocumentsLoadRejected message) (->DocumentsLoadRejected message)]
+       [(DocumentsLoaded hosts)
+        (match (read-text root "flake.bnix" max-source-bytes false)
+          [(TextLoadRejected message) (->DocumentsLoadRejected message)]
+          [(TextMissing missing)
+           (->DocumentsLoaded
+             (append-documents (module-documents modules) hosts))]
+          [(TextLoaded text)
+           (->DocumentsLoaded
+             (conj (append-documents (module-documents modules) hosts)
+               (paths/->SourceDocument "flake.bnix" text)))])])]))
+
+(defn schema-entries-from-text
+  [(relative String) (text String)] EntriesLoadResult
+  (match (views/schema-from-json text)
+    [(SchemaLoaded entries) (->EntriesLoaded entries)]
+    [(SchemaRejected message offset)
+     (->EntriesLoadRejected
+       (str "firn views: invalid '" relative "' at " offset ": " message "\n"))]))
+
+(defn load-platform-schemas [(root String)] SchemasLoadResult
+  (match (read-json-required root ".beagle-cache/schema.json")
+    [(TextMissing missing)
+     (->SchemasLoadRejected (str "firn views: missing '" missing "'\n"))]
+    [(TextLoadRejected message) (->SchemasLoadRejected message)]
+    [(TextLoaded nixos-text)
+     (match (read-json-required root ".beagle-cache/schema-darwin.json")
+       [(TextMissing missing)
+        (->SchemasLoadRejected (str "firn views: missing '" missing "'\n"))]
+       [(TextLoadRejected message) (->SchemasLoadRejected message)]
+       [(TextLoaded darwin-text)
+        (match (schema-entries-from-text
+                 ".beagle-cache/schema.json" nixos-text)
+          [(EntriesLoadRejected message) (->SchemasLoadRejected message)]
+          [(EntriesLoaded nixos)
+           (match (schema-entries-from-text
+                    ".beagle-cache/schema-darwin.json" darwin-text)
+             [(EntriesLoadRejected message) (->SchemasLoadRejected message)]
+             [(EntriesLoaded darwin) (->SchemasLoaded nixos darwin)])])])]))
+
+(defn load-explain-schema [(root String)] EntriesLoadResult
+  (match (read-json-required root ".beagle-cache/schema.json")
+    [(TextMissing missing)
+     (->EntriesLoadRejected (str "firn views: missing '" missing "'\n"))]
+    [(TextLoadRejected message) (->EntriesLoadRejected message)]
+    [(TextLoaded main-text)
+     (match (schema-entries-from-text ".beagle-cache/schema.json" main-text)
+       [(EntriesLoadRejected message) (->EntriesLoadRejected message)]
+       [(EntriesLoaded main)
+        (match (read-text root ".beagle-cache/schema-submodules.json"
+                 max-json-bytes false)
+          [(TextMissing missing) (->EntriesLoaded main)]
+          [(TextLoadRejected message) (->EntriesLoadRejected message)]
+          [(TextLoaded submodule-text)
+           (match (views/submodule-schema-from-json submodule-text)
+             [(SchemaRejected message offset)
+              (->EntriesLoadRejected
+                (str
+                  "firn views: invalid '.beagle-cache/schema-submodules.json' at "
+                  offset ": " message "\n"))]
+             [(SchemaLoaded nested)
+              (->EntriesLoaded
+                (views/append-schema-entries main nested))])])])]))
+
+(defn child-result [(argv (Vec String)) (stdin String)] views/ChildResult
+  (match (host.process/run-capture argv stdin max-child-output)
+    [(host.process/CaptureError errno)
+     (views/->ChildResult (- 0 errno) ""
+       (str "firn views: cannot run '" (nth argv 0) "': errno " errno "\n"))]
+    [(host.process/CaptureOk status stdout stderr)
+     (views/->ChildResult status stdout stderr)]))
+
+(defn emit-result [(result views/CommandResult)] Int
+  (do
+    (if (not= (views/commandresult-stdout result) "")
+      (print (views/commandresult-stdout result))
+      nil)
+    (if (not= (views/commandresult-stderr result) "")
+      (host.stderr/write-text (views/commandresult-stderr result))
+      nil)
+    (views/commandresult-status result)))
+
+(defn emit-error [(message String)] Int
+  (do (host.stderr/write-text message) 1))
+
+(defn run-flake-inputs [(root String)] Int
+  (match (read-json-required root "flake.lock")
+    [(TextMissing missing) (emit-error (str "firn views: missing '" missing "'\n"))]
+    [(TextLoadRejected message) (emit-error message)]
+    [(TextLoaded text)
+     (match (views/flake-rows text
+              (quot (host.clock/wall-nanoseconds) 1000000000))
+       [(FlakeRowsRejected message)
+        (emit-error (str "firn flake inputs: " message "\n"))]
+       [(FlakeRows rows)
+        (do
+          (print (views/render-flake-rows rows
+                   (host.terminal/stdout-tty?)))
+          0)])]))
+
+(defn run-platform [(root String) (action views/ViewsAction)] Int
+  (match (load-platform-schemas root)
+    [(SchemasLoadRejected message) (emit-error message)]
+    [(SchemasLoaded nixos darwin)
+     (match (load-modules root)
+       [(ModulesLoadRejected message) (emit-error message)]
+       [(ModulesLoaded modules)
+        (match (views/platform-matrix modules nixos darwin)
+          [(PlatformRejected message) (emit-error (str message "\n"))]
+          [(PlatformLoaded verdicts)
+           (match action
+             [(PlatformList selection)
+              (emit-result
+                (views/render-platform-list selection verdicts
+                  (count nixos) (count darwin)))]
+             [(PlatformShow module)
+              (emit-result (views/render-platform-show module verdicts))]
+             [(PlatformSafelist)
+              (emit-result (views/render-platform-safelist verdicts))]
+             [(FlakeInputs) (emit-error "firn views: invalid platform action\n")]
+             [(SchemaExplain input)
+              (emit-error "firn views: invalid platform action\n")]
+             [(SchemaExtract host)
+              (emit-error "firn views: invalid platform action\n")]
+             [(HostGeneration host)
+              (emit-error "firn views: invalid platform action\n")])])])]))
+
+(defn run-schema-explain [(root String) (input String)] Int
+  (match (load-explain-schema root)
+    [(EntriesLoadRejected message) (emit-error message)]
+    [(EntriesLoaded entries)
+     (match (load-reference-documents root)
+       [(DocumentsLoadRejected message) (emit-error message)]
+       [(DocumentsLoaded documents)
+        (emit-result (views/render-schema-explain input entries documents))])]))
+
+(defn run-schema-extract [(root String) (host String)] Int
+  (emit-result
+    (views/render-schema-extract host
+      (child-result [(path root "scripts/firn-extract-schema") host] ""))))
+
+(defn run-host-generation [(host String)] Int
+  (emit-result
+    (views/render-host-generation
+      (child-result ["nixos-rebuild" "list-generations"] ""))))
+
+(defn action-needs-current-host? [(action views/ViewsAction)] Bool
+  (match action
+    [(SchemaExtract host) (= host "")]
+    [(HostGeneration host) (= host "")]
+    [(FlakeInputs) false]
+    [(PlatformList selection) false]
+    [(PlatformShow module) false]
+    [(PlatformSafelist) false]
+    [(SchemaExplain input) false]))
+
+(defn action-with-host
+  [(action views/ViewsAction) (hostname String)] views/ViewsAction
+  (match action
+    [(SchemaExtract host)
+     (if (= host "") (views/->SchemaExtract hostname) action)]
+    [(HostGeneration host)
+     (if (= host "") (views/->HostGeneration hostname) action)]
+    [(FlakeInputs) action]
+    [(PlatformList selection) action]
+    [(PlatformShow module) action]
+    [(PlatformSafelist) action]
+    [(SchemaExplain input) action]))
+
+(defn usage-error [] Int
+  (do
+    (host.stderr/write-text
+      (str
+        "Usage: firn flake inputs [all]\n"
+        "       firn platform list [all|darwin|linux]\n"
+        "       firn platform show <module>\n"
+        "       firn platform safelist [all]\n"
+        "       firn schema explain <path-or-error>\n"
+        "       firn schema extract [host]\n"
+        "       firn host gen [host]\n"))
+    64))
+
+(defn dispatch [(root String) (action views/ViewsAction)] Int
+  (match action
+    [(FlakeInputs) (run-flake-inputs root)]
+    [(PlatformList selection) (run-platform root action)]
+    [(PlatformShow module) (run-platform root action)]
+    [(PlatformSafelist) (run-platform root action)]
+    [(SchemaExplain input) (run-schema-explain root input)]
+    [(SchemaExtract host) (run-schema-extract root host)]
+    [(HostGeneration host) (run-host-generation host)]))
+
+(defn -main [(argv (Vec String))] Int
+  (let [(root (U String Nil)) (repository-root)]
+    (if (nil? root)
+      (emit-error "firn views: FIRN_REPO and HOME are not set\n")
+      (match (views/parse-views-argv argv "")
+        [(InvalidViewsArgv invalid) (usage-error)]
+        [(ParsedViews action)
+         (if (not (action-needs-current-host? action))
+           (dispatch root action)
+           (match (current-hostname)
+             [(HostnameRejected message) (emit-error message)]
+             [(HostnameLoaded hostname)
+              (dispatch root (action-with-host action hostname))]))]))))
