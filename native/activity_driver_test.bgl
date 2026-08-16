@@ -1,0 +1,268 @@
+#lang beagle
+(ns activity.driver-test
+  (:require [activity.core :as a]
+            [activity.driver :as d]))
+
+(defrecord TestResult [(name String) (passed Bool)])
+
+(defn activity-defs [] (Vec a/ActivityDef)
+  [(a/->ActivityDef "home" "home" [] [])
+   (a/->ActivityDef "gjoa" nil ["render"] ["gjoa"])
+   (a/->ActivityDef "msa" "msa" ["heist"] ["msa"])])
+
+(defn state-of
+  [(assignments (Vec a/Assignment))
+   (members (Vec a/Membership))
+   (current String)
+   (previous String)]
+  a/ActivityState
+  (a/->ActivityState
+    (activity-defs) "home" assignments members [] current previous []))
+
+(defn workspace
+  [(id Int)
+   (idx Int)
+   (name (U String Nil))
+   (output String)
+   (focused Bool)
+   (urgent Bool)
+   (window (U Int Nil))]
+  a/Workspace
+  (a/->Workspace id idx name output focused focused urgent window))
+
+(defn idx-of [(workspaces (Vec a/Workspace)) (id Int)] Int
+  (loop [(index Int) 0]
+    (if (>= index (count workspaces))
+      -1
+      (let [(entry a/Workspace) (nth workspaces index)]
+        (if (= (a/workspace-id entry) id)
+          (a/workspace-idx entry)
+          (recur (+ index 1)))))))
+
+(defn move-ids [(moves (Vec a/WorkspaceMove))] (Vec Int)
+  (loop [(index Int) 0 (result (Vec Int)) []]
+    (if (>= index (count moves))
+      result
+      (let [(move a/WorkspaceMove) (nth moves index)]
+        (recur (+ index 1)
+          (conj result (a/workspace-id (a/workspacemove-workspace move))))))))
+
+(defn move-targets [(moves (Vec a/WorkspaceMove))] (Vec Int)
+  (mapv a/workspacemove-target-index moves))
+
+(defn step-snapshot
+  [(steps (Vec d/PlannedStep)) (position Int)] (U d/ActivitySnapshot Nil)
+  (let [(step d/PlannedStep) (nth steps position)]
+    (match step
+      [(FocusStep reference) nil]
+      [(MoveColumnStep reference) nil]
+      [(ReorderStep reference id target-index) nil]
+      [(SnapshotStep snapshot) snapshot]
+      [(PersistStep assignments) nil])))
+
+(defn step-assignments
+  [(steps (Vec d/PlannedStep)) (position Int)] (Vec a/Assignment)
+  (let [(step d/PlannedStep) (nth steps position)]
+    (match step
+      [(FocusStep reference) []]
+      [(MoveColumnStep reference) []]
+      [(ReorderStep reference id target-index) []]
+      [(SnapshotStep snapshot) []]
+      [(PersistStep assignments) assignments])))
+
+(defn band-state [] a/ActivityState
+  (state-of []
+    [(a/->Membership 10 "msa")
+     (a/->Membership 11 "home")
+     (a/->Membership 12 "gjoa")]
+    "home"
+    "home"))
+
+;; Bands run msa-last, so this output needs two moves to settle.
+(defn scrambled-band [] (Vec a/Workspace)
+  [(workspace 10 1 "msa" "DP-1" false false 1)
+   (workspace 11 2 "home" "DP-1" false false 2)
+   (workspace 12 3 "gjoa" "DP-1" false false 3)
+   (workspace 13 4 nil "DP-1" false false nil)])
+
+(defn case-fixpoint-converges [] Bool
+  (let [(state a/ActivityState) (band-state)
+        (workspaces (Vec a/Workspace)) (scrambled-band)
+        (outcome d/BandOutcome)
+        (d/reconcile-bands state workspaces
+          (d/default-band-limit workspaces))
+        (final (Vec a/Workspace)) (d/band-workspaces outcome)]
+    (and
+      (d/band-settled? outcome)
+      (= (move-ids (d/band-moves outcome)) [11 12])
+      (= (move-targets (d/band-moves outcome)) [1 2])
+      (= (idx-of final 11) 1)
+      (= (idx-of final 12) 2)
+      (= (idx-of final 10) 3)
+      (= (idx-of final 13) 4)
+      (nil? (a/first-misplaced (a/desired-order state final "DP-1"))))))
+
+(defn case-fixpoint-already-stable [] Bool
+  (let [(state a/ActivityState) (band-state)
+        (workspaces (Vec a/Workspace))
+        [(workspace 11 1 "home" "DP-1" false false 2)
+         (workspace 12 2 "gjoa" "DP-1" false false 3)
+         (workspace 10 3 "msa" "DP-1" false false 1)
+         (workspace 13 4 nil "DP-1" false false nil)]
+        (outcome d/BandOutcome)
+        (d/reconcile-bands state workspaces
+          (d/default-band-limit workspaces))]
+    (and
+      (d/band-settled? outcome)
+      (= (count (d/band-moves outcome)) 0)
+      (= (mapv a/workspace-id (d/band-workspaces outcome)) [11 12 10 13])
+      (= (mapv a/workspace-idx (d/band-workspaces outcome)) [1 2 3 4]))))
+
+(defn case-fixpoint-bound [] Bool
+  (let [(state a/ActivityState) (band-state)
+        (workspaces (Vec a/Workspace)) (scrambled-band)
+        (stopped d/BandOutcome) (d/reconcile-bands state workspaces 1)
+        (frozen d/BandOutcome) (d/reconcile-bands state workspaces 0)]
+    (and
+      (not (d/band-settled? stopped))
+      (= (move-ids (d/band-moves stopped)) [11])
+      (= (idx-of (d/band-workspaces stopped) 11) 1)
+      (not (d/band-settled? frozen))
+      (= (count (d/band-moves frozen)) 0)
+      (= (mapv a/workspace-idx (d/band-workspaces frozen)) [1 2 3 4]))))
+
+(defn case-fixpoint-per-output [] Bool
+  (let [(state a/ActivityState)
+        (state-of []
+          [(a/->Membership 10 "msa")
+           (a/->Membership 11 "home")
+           (a/->Membership 20 "gjoa")
+           (a/->Membership 21 "home")]
+          "home"
+          "home")
+        (workspaces (Vec a/Workspace))
+        [(workspace 10 1 "msa" "DP-1" false false 1)
+         (workspace 11 2 "home" "DP-1" false false 2)
+         (workspace 20 1 "gjoa" "HDMI-1" false false 3)
+         (workspace 21 2 "home" "HDMI-1" false false 4)]
+        (outcome d/BandOutcome)
+        (d/reconcile-bands state workspaces
+          (d/default-band-limit workspaces))
+        (final (Vec a/Workspace)) (d/band-workspaces outcome)]
+    (and
+      (d/band-settled? outcome)
+      (= (move-ids (d/band-moves outcome)) [11 21])
+      (= (idx-of final 11) 1)
+      (= (idx-of final 10) 2)
+      (= (idx-of final 21) 1)
+      (= (idx-of final 20) 2))))
+
+(defn case-plan-goto-reorders [] Bool
+  (let [(state a/ActivityState) (state-of [] [] "home" "home")
+        (workspaces (Vec a/Workspace))
+        [(workspace 1 1 "heist" "DP-1" false false 10)
+         (workspace 2 2 nil "DP-1" false false nil)]
+        (applied a/ActivityState) (a/apply-workspaces state workspaces)
+        (plan d/CommandPlan)
+        (d/plan-command applied workspaces (a/->Goto "gjoa"))
+        (steps (Vec d/PlannedStep)) (d/commandplan-steps plan)
+        (snapshot (U d/ActivitySnapshot Nil)) (step-snapshot steps 1)]
+    (and
+      (d/commandplan-settled plan)
+      (= (d/plan-step-kinds steps) ["reorder:2->1" "snapshot" "focus:2"])
+      (= (idx-of (d/commandplan-workspaces plan) 2) 1)
+      (= (idx-of (d/commandplan-workspaces plan) 1) 2)
+      (some? snapshot)
+      (= (d/activitysnapshot-current snapshot) "home")
+      (= (d/activitysnapshotentry-workspace-ids
+           (nth (d/activitysnapshot-entries snapshot) 1))
+         [2]))))
+
+(defn case-plan-goto-without-reorder [] Bool
+  (let [(state a/ActivityState) (state-of [] [] "home" "home")
+        (workspaces (Vec a/Workspace))
+        [(workspace 1 1 "notes" "DP-1" false false 10)
+         (workspace 2 2 nil "DP-1" false false nil)]
+        (applied a/ActivityState) (a/apply-workspaces state workspaces)
+        (plan d/CommandPlan)
+        (d/plan-command applied workspaces (a/->Goto "gjoa"))]
+    (and
+      (d/commandplan-settled plan)
+      (= (d/plan-step-kinds (d/commandplan-steps plan))
+         ["snapshot" "focus:2"]))))
+
+(defn case-plan-assign-persists-sorted [] Bool
+  (let [(state a/ActivityState)
+        (state-of [(a/->Assignment "forced" "msa")] [] "home" "home")
+        (workspaces (Vec a/Workspace))
+        [(workspace 1 1 "alpha" "DP-1" true false 10)]
+        (plan d/CommandPlan)
+        (d/plan-command state workspaces (a/->Assign "gjoa"))
+        (steps (Vec d/PlannedStep)) (d/commandplan-steps plan)
+        (persisted (Vec a/Assignment)) (step-assignments steps 1)]
+    (and
+      (= (d/plan-step-kinds steps) ["snapshot" "assignments"])
+      (= (mapv a/assignment-workspace-name persisted) ["alpha" "forced"])
+      (= (mapv a/assignment-activity persisted) ["gjoa" "msa"]))))
+
+(defn case-snapshot-content [] Bool
+  (let [(state a/ActivityState)
+        (state-of []
+          [(a/->Membership 1 "home")
+           (a/->Membership 2 "gjoa")
+           (a/->Membership 3 "gjoa")]
+          "gjoa"
+          "home")
+        (workspaces (Vec a/Workspace))
+        [(workspace 1 1 "notes" "DP-1" false false 10)
+         (workspace 3 3 "gjoa release" "DP-1" false true 12)
+         (workspace 2 2 "render" "DP-1" true false 11)
+         (workspace 4 4 nil "DP-1" false false nil)]
+        (snapshot d/ActivitySnapshot) (d/snapshot-of state workspaces)
+        (entries (Vec d/ActivitySnapshotEntry))
+        (d/activitysnapshot-entries snapshot)
+        (home d/ActivitySnapshotEntry) (nth entries 0)
+        (gjoa d/ActivitySnapshotEntry) (nth entries 1)
+        (msa d/ActivitySnapshotEntry) (nth entries 2)]
+    (and
+      (= (count entries) 3)
+      (= (d/activitysnapshot-current snapshot) "gjoa")
+      (= (d/activitysnapshot-previous snapshot) "home")
+      (= (d/activitysnapshot-floating-ids snapshot) [4])
+      (= (d/activitysnapshotentry-label home) "home")
+      (= (d/activitysnapshotentry-workspace-ids home) [1])
+      (not (d/activitysnapshotentry-current home))
+      (nil? (d/activitysnapshotentry-focused-workspace-id home))
+      (= (d/activitysnapshotentry-label gjoa) "gjoa")
+      (d/activitysnapshotentry-current gjoa)
+      (= (d/activitysnapshotentry-workspace-ids gjoa) [2 3])
+      (= (d/activitysnapshotentry-focused-workspace-id gjoa) 2)
+      (d/activitysnapshotentry-urgent gjoa)
+      (= (d/activitysnapshotentry-label msa) "msa")
+      (= (count (d/activitysnapshotentry-workspace-ids msa)) 0)
+      (not (d/activitysnapshotentry-urgent msa)))))
+
+(defn cases [] (Vec TestResult)
+  [(->TestResult "fixpoint-converges" (case-fixpoint-converges))
+   (->TestResult "fixpoint-already-stable" (case-fixpoint-already-stable))
+   (->TestResult "fixpoint-bound" (case-fixpoint-bound))
+   (->TestResult "fixpoint-per-output" (case-fixpoint-per-output))
+   (->TestResult "plan-goto-reorders" (case-plan-goto-reorders))
+   (->TestResult "plan-goto-without-reorder" (case-plan-goto-without-reorder))
+   (->TestResult
+     "plan-assign-persists-sorted"
+     (case-plan-assign-persists-sorted))
+   (->TestResult "snapshot-content" (case-snapshot-content))])
+
+(defn -main [(args (Vec String))] Int
+  (let [(results (Vec TestResult)) (cases)]
+    (loop [(index Int) 0 (failures Int) 0]
+      (if (>= index (count results))
+        failures
+        (let [(result TestResult) (nth results index)]
+          (do
+            (println
+              (str (if (testresult-passed result) "PASS " "FAIL ")
+                   (testresult-name result)))
+            (recur (+ index 1)
+              (if (testresult-passed result) failures (+ failures 1)))))))))

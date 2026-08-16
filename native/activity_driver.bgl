@@ -1,0 +1,382 @@
+#lang beagle
+(ns activity.driver
+  (:require [activity.core :as a]))
+
+;; Planning only. Every function here is total and effect-free: niri, the
+;; filesystem, the control channel, and the clock belong to the daemon above.
+;; A plan is a value, so the half that decides can ship before the half that
+;; acts exists.
+
+(defrecord ActivitySnapshotEntry
+  [(id String)
+   (label String)
+   (current Bool)
+   (workspace-ids (Vec Int))
+   (focused-workspace-id (U Int Nil))
+   (urgent Bool)])
+
+(defrecord ActivitySnapshot
+  [(current String)
+   (previous String)
+   (entries (Vec ActivitySnapshotEntry))
+   (floating-ids (Vec Int))])
+
+(defunion BandOutcome
+  (BandsSettled [(moves (Vec a/WorkspaceMove)) (workspaces (Vec a/Workspace))])
+  (BandsUnsettled
+    [(moves (Vec a/WorkspaceMove)) (workspaces (Vec a/Workspace)) (limit Int)]))
+
+;; FocusStep and MoveColumnStep carry the kernel's reference verbatim; the
+;; driver resolves no references of its own.
+(defunion PlannedStep
+  (FocusStep [(reference String)])
+  (MoveColumnStep [(reference String)])
+  (ReorderStep [(reference String) (id Int) (target-index Int)])
+  (SnapshotStep [(snapshot ActivitySnapshot)])
+  (PersistStep [(assignments (Vec a/Assignment))]))
+
+(defrecord CommandPlan
+  [(state a/ActivityState)
+   (workspaces (Vec a/Workspace))
+   (steps (Vec PlannedStep))
+   (settled Bool)])
+
+(defn workspace-with-index [(workspace a/Workspace) (idx Int)] a/Workspace
+  (a/->Workspace
+    (a/workspace-id workspace)
+    idx
+    (a/workspace-name workspace)
+    (a/workspace-output workspace)
+    (a/workspace-focused workspace)
+    (a/workspace-active workspace)
+    (a/workspace-urgent workspace)
+    (a/workspace-active-window-id workspace)))
+
+(defn workspaces-on-output
+  [(workspaces (Vec a/Workspace)) (output String)] (Vec a/Workspace)
+  (let [(selected (Vec a/Workspace))
+        (loop [(index Int) 0 (result (Vec a/Workspace)) []]
+          (if (>= index (count workspaces))
+            result
+            (let [(entry a/Workspace) (nth workspaces index)]
+              (recur (+ index 1)
+                (if (= (a/workspace-output entry) output)
+                  (conj result entry)
+                  result)))))]
+    (a/sort-workspaces-by-index selected)))
+
+(defn drop-workspace [(ordered (Vec a/Workspace)) (id Int)] (Vec a/Workspace)
+  (loop [(index Int) 0 (result (Vec a/Workspace)) []]
+    (if (>= index (count ordered))
+      result
+      (let [(entry a/Workspace) (nth ordered index)]
+        (recur (+ index 1)
+          (if (= (a/workspace-id entry) id) result (conj result entry)))))))
+
+(defn insert-workspace-at
+  [(ordered (Vec a/Workspace))
+   (position Int)
+   (workspace a/Workspace)]
+  (Vec a/Workspace)
+  (loop [(index Int) 0 (result (Vec a/Workspace)) []]
+    (let [(placed (Vec a/Workspace))
+          (if (= index position) (conj result workspace) result)]
+      (if (>= index (count ordered))
+        placed
+        (recur (+ index 1) (conj placed (nth ordered index)))))))
+
+(defn renumber-output [(ordered (Vec a/Workspace))] (Vec a/Workspace)
+  (loop [(index Int) 0 (result (Vec a/Workspace)) []]
+    (if (>= index (count ordered))
+      result
+      (recur (+ index 1)
+        (conj result
+          (workspace-with-index (nth ordered index) (+ index 1)))))))
+
+(defn index-in [(ordered (Vec a/Workspace)) (id Int) (fallback Int)] Int
+  (loop [(index Int) 0]
+    (if (>= index (count ordered))
+      fallback
+      (let [(entry a/Workspace) (nth ordered index)]
+        (if (= (a/workspace-id entry) id)
+          (a/workspace-idx entry)
+          (recur (+ index 1)))))))
+
+(defn merge-output
+  [(workspaces (Vec a/Workspace))
+   (output String)
+   (renumbered (Vec a/Workspace))]
+  (Vec a/Workspace)
+  (loop [(index Int) 0 (result (Vec a/Workspace)) []]
+    (if (>= index (count workspaces))
+      result
+      (let [(entry a/Workspace) (nth workspaces index)]
+        (recur (+ index 1)
+          (conj result
+            (if (= (a/workspace-output entry) output)
+              (workspace-with-index entry
+                (index-in renumbered
+                  (a/workspace-id entry)
+                  (a/workspace-idx entry)))
+              entry)))))))
+
+;; Niri renumbers an output's workspaces contiguously from 1 after a move, so
+;; the model renumbers too: without it the fixpoint would chase indices the
+;; compositor would never produce.
+(defn apply-move
+  [(workspaces (Vec a/Workspace)) (move a/WorkspaceMove)] (Vec a/Workspace)
+  (let [(moved a/Workspace) (a/workspacemove-workspace move)
+        (output String) (a/workspace-output moved)
+        (ordered (Vec a/Workspace)) (workspaces-on-output workspaces output)
+        (remaining (Vec a/Workspace))
+        (drop-workspace ordered (a/workspace-id moved))
+        (position Int)
+        (min (max 0 (- (a/workspacemove-target-index move) 1))
+             (count remaining))
+        (placed (Vec a/Workspace))
+        (insert-workspace-at remaining position moved)]
+    (merge-output workspaces output (renumber-output placed))))
+
+(defn band-moves [(outcome BandOutcome)] (Vec a/WorkspaceMove)
+  (match outcome
+    [(BandsSettled moves workspaces) moves]
+    [(BandsUnsettled moves workspaces limit) moves]))
+
+(defn band-workspaces [(outcome BandOutcome)] (Vec a/Workspace)
+  (match outcome
+    [(BandsSettled moves workspaces) workspaces]
+    [(BandsUnsettled moves workspaces limit) workspaces]))
+
+(defn band-settled? [(outcome BandOutcome)] Bool
+  (match outcome
+    [(BandsSettled moves workspaces) true]
+    [(BandsUnsettled moves workspaces limit) false]))
+
+;; The kernel decides one move at a time; the loop is the driver's. Each move
+;; is applied to a modelled workspace list rather than to niri, so the whole
+;; fixpoint is computed. `limit` bounds the iteration: reaching it yields
+;; BandsUnsettled with the moves found so far, never a longer loop.
+(defn reconcile-output
+  [(state a/ActivityState)
+   (workspaces (Vec a/Workspace))
+   (output String)
+   (limit Int)]
+  BandOutcome
+  (loop [(steps Int) 0
+         (current (Vec a/Workspace)) workspaces
+         (moves (Vec a/WorkspaceMove)) []]
+    (let [(misplaced (U a/WorkspaceMove Nil))
+          (a/first-misplaced (a/desired-order state current output))]
+      (if (nil? misplaced)
+        (->BandsSettled moves current)
+        (if (>= steps limit)
+          (->BandsUnsettled moves current limit)
+          (recur (+ steps 1)
+            (apply-move current misplaced)
+            (conj moves misplaced)))))))
+
+(defn outputs-of [(workspaces (Vec a/Workspace))] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count workspaces))
+      result
+      (let [(entry a/Workspace) (nth workspaces index)
+            (output String) (a/workspace-output entry)]
+        (recur (+ index 1)
+          (if (a/string-member? result output) result (conj result output)))))))
+
+;; One settling pass per output can need one move per workspace on it; the
+;; extra step lets a settled output prove itself without consuming budget.
+(defn default-band-limit [(workspaces (Vec a/Workspace))] Int
+  (+ (count workspaces) 1))
+
+(defn reconcile-bands
+  [(state a/ActivityState)
+   (workspaces (Vec a/Workspace))
+   (limit Int)]
+  BandOutcome
+  (let [(outputs (Vec String)) (outputs-of workspaces)]
+    (loop [(index Int) 0
+           (current (Vec a/Workspace)) workspaces
+           (moves (Vec a/WorkspaceMove)) []
+           (settled Bool) true]
+      (if (>= index (count outputs))
+        (if settled
+          (->BandsSettled moves current)
+          (->BandsUnsettled moves current limit))
+        (let [(outcome BandOutcome)
+              (reconcile-output state current (nth outputs index) limit)]
+          (recur (+ index 1)
+            (band-workspaces outcome)
+            (into moves (band-moves outcome))
+            (and settled (band-settled? outcome))))))))
+
+(defn reorder-steps [(moves (Vec a/WorkspaceMove))] (Vec PlannedStep)
+  (loop [(index Int) 0 (result (Vec PlannedStep)) []]
+    (if (>= index (count moves))
+      result
+      (let [(move a/WorkspaceMove) (nth moves index)
+            (moved a/Workspace) (a/workspacemove-workspace move)]
+        (recur (+ index 1)
+          (conj result
+            (->ReorderStep
+              (a/workspace-reference moved)
+              (a/workspace-id moved)
+              (a/workspacemove-target-index move))))))))
+
+(defn workspace-ids [(workspaces (Vec a/Workspace))] (Vec Int)
+  (loop [(index Int) 0 (result (Vec Int)) []]
+    (if (>= index (count workspaces))
+      result
+      (recur (+ index 1)
+        (conj result (a/workspace-id (nth workspaces index)))))))
+
+(defn focused-id [(workspaces (Vec a/Workspace))] (U Int Nil)
+  (let [(lookup a/WorkspaceLookup) (a/focused-workspace workspaces)]
+    (match lookup
+      [(WorkspaceFound workspace) (a/workspace-id workspace)]
+      [(WorkspaceMissing token) nil])))
+
+(defn any-urgent? [(workspaces (Vec a/Workspace))] Bool
+  (loop [(index Int) 0]
+    (if (>= index (count workspaces))
+      false
+      (let [(entry a/Workspace) (nth workspaces index)]
+        (if (a/workspace-urgent entry) true (recur (+ index 1)))))))
+
+;; An activity with no label renders under its id.
+(defn activity-label [(definition a/ActivityDef)] String
+  (let [(label (U String Nil)) (a/activitydef-label definition)]
+    (if (nil? label) (a/activitydef-id definition) label)))
+
+(defn snapshot-entry
+  [(state a/ActivityState)
+   (workspaces (Vec a/Workspace))
+   (definition a/ActivityDef)]
+  ActivitySnapshotEntry
+  (let [(activity String) (a/activitydef-id definition)
+        (members (Vec a/Workspace)) (a/members-of state workspaces activity)]
+    (->ActivitySnapshotEntry
+      activity
+      (activity-label definition)
+      (= (a/activitystate-current state) activity)
+      (workspace-ids members)
+      (focused-id members)
+      (any-urgent? members))))
+
+;; The value a PublishSnapshot effect is asking to have written.
+(defn snapshot-of
+  [(state a/ActivityState) (workspaces (Vec a/Workspace))] ActivitySnapshot
+  (let [(definitions (Vec a/ActivityDef)) (a/activitystate-defs state)]
+    (loop [(index Int) 0 (entries (Vec ActivitySnapshotEntry)) []]
+      (if (>= index (count definitions))
+        (->ActivitySnapshot
+          (a/activitystate-current state)
+          (a/activitystate-previous state)
+          entries
+          (workspace-ids (a/floats-of state workspaces)))
+        (recur (+ index 1)
+          (conj entries
+            (snapshot-entry state workspaces (nth definitions index))))))))
+
+(defn assignment-names [(assignments (Vec a/Assignment))] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count assignments))
+      result
+      (let [(entry a/Assignment) (nth assignments index)
+            (name String) (a/assignment-workspace-name entry)]
+        (recur (+ index 1)
+          (if (a/string-member? result name) result (conj result name)))))))
+
+(defn assignment-for-name
+  [(assignments (Vec a/Assignment)) (name String)] (U a/Assignment Nil)
+  (loop [(index Int) 0]
+    (if (>= index (count assignments))
+      nil
+      (let [(entry a/Assignment) (nth assignments index)]
+        (if (= (a/assignment-workspace-name entry) name)
+          entry
+          (recur (+ index 1)))))))
+
+;; The value a PersistAssignments effect is asking to have written: one record
+;; per workspace name, ordered by name so the written form is a function of the
+;; assignments alone and not of the order they happened to be learned in.
+(defn persist-payload [(assignments (Vec a/Assignment))] (Vec a/Assignment)
+  (let [(names (Vec String)) (sort (assignment-names assignments))]
+    (loop [(index Int) 0 (result (Vec a/Assignment)) []]
+      (if (>= index (count names))
+        result
+        (let [(found (U a/Assignment Nil))
+              (assignment-for-name assignments (nth names index))]
+          (recur (+ index 1)
+            (if (nil? found) result (conj result found))))))))
+
+(defn plan-effects
+  [(state a/ActivityState)
+   (workspaces (Vec a/Workspace))
+   (effects (Vec a/ActivityEffect))
+   (limit Int)]
+  CommandPlan
+  (loop [(index Int) 0
+         (current (Vec a/Workspace)) workspaces
+         (steps (Vec PlannedStep)) []
+         (settled Bool) true]
+    (if (>= index (count effects))
+      (->CommandPlan state current steps settled)
+      (let [(effect a/ActivityEffect) (nth effects index)]
+        (match effect
+          [(FocusWorkspace reference)
+           (recur (+ index 1) current
+             (conj steps (->FocusStep reference)) settled)]
+          [(MoveColumnToWorkspace reference)
+           (recur (+ index 1) current
+             (conj steps (->MoveColumnStep reference)) settled)]
+          [(ReconcileBands token)
+           (let [(outcome BandOutcome) (reconcile-bands state current limit)]
+             (recur (+ index 1)
+               (band-workspaces outcome)
+               (into steps (reorder-steps (band-moves outcome)))
+               (and settled (band-settled? outcome))))]
+          [(PublishSnapshot token)
+           (recur (+ index 1) current
+             (conj steps (->SnapshotStep (snapshot-of state current))) settled)]
+          [(PersistAssignments assignments)
+           (recur (+ index 1) current
+             (conj steps (->PersistStep (persist-payload assignments)))
+             settled)])))))
+
+(defn plan-command-bounded
+  [(state a/ActivityState)
+   (workspaces (Vec a/Workspace))
+   (command a/ActivityCommand)
+   (limit Int)]
+  CommandPlan
+  (let [(outcome a/CommandOutcome)
+        (a/apply-command state workspaces command)]
+    (plan-effects
+      (a/commandoutcome-state outcome)
+      workspaces
+      (a/commandoutcome-effects outcome)
+      limit)))
+
+(defn plan-command
+  [(state a/ActivityState)
+   (workspaces (Vec a/Workspace))
+   (command a/ActivityCommand)]
+  CommandPlan
+  (plan-command-bounded state workspaces command
+    (default-band-limit workspaces)))
+
+(defn plan-step-kinds [(steps (Vec PlannedStep))] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count steps))
+      result
+      (let [(step PlannedStep) (nth steps index)]
+        (recur (+ index 1)
+          (conj result
+            (match step
+              [(FocusStep reference) (str "focus:" reference)]
+              [(MoveColumnStep reference) (str "move:" reference)]
+              [(ReorderStep reference id target-index)
+               (str "reorder:" reference "->" target-index)]
+              [(SnapshotStep snapshot) "snapshot"]
+              [(PersistStep assignments) "assignments"])))))))
