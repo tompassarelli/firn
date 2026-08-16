@@ -10,6 +10,14 @@ BUILT_RACKET_COMPILED_ROOT="/nix/store/67ixm62090fzccg1w9qy7wdlh3kk05r9-racket-9
 REPO="${FIRN_REPO:-$HOME/code/nixos-config/main}"
 export FIRN_REPO="$REPO"
 
+case "$#:${1-}:${2-}" in
+  2:tag:resolve|3:tag:resolve)
+    FIRN_HOST="$(hostname)"
+    export FIRN_HOST
+    exec "${FIRN_TAG_RESOLVE_BIN:-firn-tag-resolve}" "$@"
+    ;;
+esac
+
 BEAGLE_PATH="${BEAGLE_PATH:-$HOME/code/beagle/main}"
 export BEAGLE_PATH
 BUILD_SCRIPT="$REPO/scripts/firn-build-bin"

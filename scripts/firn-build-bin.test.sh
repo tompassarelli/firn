@@ -53,6 +53,24 @@ SH
 printf '{}\n' >"$beagle/flake.nix"
 printf '{}\n' >"$beagle/flake.lock"
 
+native_helper="$scratch/firn-tag-resolve"
+native_log="$scratch/native.log"
+cat >"$native_helper" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'repo=%s\n' "${FIRN_REPO:?}"
+printf 'host=%s\n' "${FIRN_HOST:?}"
+if [ "${FIRN_TAG_EMIT+x}" = x ]; then
+  printf 'emit=present:%s\n' "$FIRN_TAG_EMIT"
+else
+  printf 'emit=absent\n'
+fi
+printf 'arg=%s\n' "$@"
+printf 'call\n' >>"${NATIVE_LOG:?}"
+SH
+chmod +x "$native_helper"
+: >"$native_log"
+
 make_repo() {
   local repo="$1" identity="$2"
   mkdir -p "$repo/scripts/firn-cmds" "$repo/dotfiles/bin"
@@ -145,6 +163,38 @@ grep -Fxq 'source=source-a' <<<"$output_a"
 grep -Fxq 'source=source-b' <<<"$output_b"
 [ "$(wc -l <"$build_log")" -eq 3 ]
 
+# Standalone tag resolution bypasses source attestation and replaces any
+# caller-provided host with the local hostname. An empty emit variable remains
+# present for the native command to interpret.
+native_repo="$scratch/native-only-repo"
+native_two_output="$(env -u FIRN_TAG_EMIT \
+  NATIVE_LOG="$native_log" FIRN_TAG_RESOLVE_BIN="$native_helper" \
+  FIRN_REPO="$native_repo" FIRN_HOST=caller-value \
+  "$bin_dir/firn" tag resolve)"
+grep -Fxq "repo=$native_repo" <<<"$native_two_output"
+grep -Fxq "host=$(hostname)" <<<"$native_two_output"
+grep -Fxq 'emit=absent' <<<"$native_two_output"
+grep -Fxq 'arg=tag' <<<"$native_two_output"
+grep -Fxq 'arg=resolve' <<<"$native_two_output"
+
+native_three_output="$(NATIVE_LOG="$native_log" \
+  FIRN_TAG_RESOLVE_BIN="$native_helper" FIRN_TAG_EMIT= \
+  FIRN_REPO="$native_repo" FIRN_HOST=caller-value \
+  "$bin_dir/firn" tag resolve all+emit)"
+grep -Fxq "repo=$native_repo" <<<"$native_three_output"
+grep -Fxq "host=$(hostname)" <<<"$native_three_output"
+grep -Fxq 'emit=present:' <<<"$native_three_output"
+grep -Fxq 'arg=all+emit' <<<"$native_three_output"
+[ "$(wc -l <"$native_log")" -eq 2 ]
+
+# A fourth token belongs to the hosted multi-command walk.
+hosted_walk_output="$(FIRN_RUNTIME_SHARE_DIR="$share_dir" \
+  FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" BUILD_LOG="$build_log" \
+  NATIVE_LOG="$native_log" FIRN_TAG_RESOLVE_BIN="$native_helper" \
+  "$bin_dir/firn" tag resolve all+emit next)"
+grep -Fxq 'source=source-a' <<<"$hosted_walk_output"
+[ "$(wc -l <"$native_log")" -eq 2 ]
+
 # The default wrapper target is the source tree, never the live Nix-managed
 # ~/.local/bin projection.
 FIRN_REPO="$repo_a" BEAGLE_PATH="$beagle" SHARE_DIR="$share_dir" \
@@ -230,6 +280,7 @@ printf ':enabled [test]\n' >"$real_repo/hosts/test/enabled-tags.bnix"
 FIRN_RUNTIME_SHARE_DIR="$real_share" \
   FIRN_REPO="$real_repo" BEAGLE_PATH="$real_beagle" \
   FIRN_CLI="$real_bin/firn" FIRN_SKIP_FLAKE_INPUTS=1 \
+  FIRN_TAG_RESOLVE_BIN="$native_helper" NATIVE_LOG="$native_log" \
   "$real_repo/scripts/firn-build" >/dev/null
 
 printf 'ok: Firn bytecode cache isolates transitive dependencies and publishes atomically\n'
