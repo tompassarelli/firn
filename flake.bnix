@@ -57,7 +57,36 @@
       [firnModules (p "./modules")
        darwinModuleNames
         (builtins.fromJSON
-          (builtins.readFile (p "./config/darwin-modules.json")))]
+          (builtins.readFile (p "./config/darwin-modules.json")))
+       makeFirnNative
+        (fn [system] Any
+          (let
+            [pkgs (builtins.getAttr system nixpkgs.legacyPackages)
+             beaglePackage
+              (builtins.getAttr "beagle"
+                (builtins.getAttr system beagle.packages))]
+            (pkgs.runCommand "firn-native"
+              {:nativeBuildInputs [beaglePackage pkgs.stdenv.cc]}
+              (ms
+                "mkdir -p $out/bin"
+                (s
+                  "beagle native-exe --out $out/bin/firn-native --entry firn.main/-main "
+                  self
+                  "/native/firn.bgl")
+                (s
+                  "beagle native-exe --out $out/bin/firn-tag-resolve --entry firn.tag-resolve-native/-main "
+                  beagle
+                  "/native-core/src/beagle/datum_reader.bgl "
+                  beagle
+                  "/native-core/src/native/json.bgl "
+                  self
+                  "/native/tag_resolve.bgl "
+                  self
+                  "/native/tag_inputs.bgl "
+                  self
+                  "/native/tag_resolve_driver.bgl "
+                  self
+                  "/native/tag_resolve_native.bgl")))))]
       {:lib.mkSystem
         (nix/module
           [hostname
@@ -83,7 +112,10 @@
                     :zen-browser zen-browser
                    ;; --- END GENERATED MODULE SPECIALARGS ---
                    }
-                 :flakeRoot self}
+                 :flakeRoot self
+                 :firnNative
+                  (builtins.getAttr "firn-native"
+                    (builtins.getAttr system self.packages))}
                 extraSpecialArgs)
              :modules
               (++
@@ -273,7 +305,10 @@
                     :zen-browser zen-browser
                              ;; --- END GENERATED DARWIN SPECIALARGS ---
                              }
-                 :flakeRoot self}
+                 :flakeRoot self
+                 :firnNative
+                  (builtins.getAttr "firn-native"
+                    (builtins.getAttr system self.packages))}
                 extraSpecialArgs)
              :modules
               (++
@@ -347,21 +382,14 @@
         (let [pkgs
               ((import nixpkgs)
                 {:system "x86_64-linux" :config.allowUnfree true})]
-          {:firn-native
-            (pkgs.runCommand "firn-native"
-              {:nativeBuildInputs
-                [beagle.packages.x86_64-linux.beagle pkgs.stdenv.cc]}
-              (ms
-                "mkdir -p $out/bin"
-                (s
-                  "beagle native-exe --out $out/bin/firn --entry firn.main/-main "
-                  self
-                  "/native/firn.bgl")))
+          {:firn-native (makeFirnNative "x86_64-linux")
            :claude-sandbox
             ((import (p "./modules/containers/claude-sandbox.nix"))
               {:pkgs
                 ((import nixpkgs-master)
                   {:system "x86_64-linux" :config.allowUnfree true})})})
+       :packages.aarch64-darwin
+        {:firn-native (makeFirnNative "aarch64-darwin")}
        :nixosConfigurations
         {:whiterabbit
           (self.lib.mkSystem
