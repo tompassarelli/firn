@@ -1,0 +1,595 @@
+#lang beagle
+(ns activity.core)
+
+(defrecord ActivityDef
+  [(id String)
+   (label (U String Nil))
+   (bind-names (Vec String))
+   (bind-prefixes (Vec String))])
+
+(defrecord Assignment [(workspace-name String) (activity String)])
+
+(defrecord Membership [(workspace-id Int) (activity String)])
+
+(defrecord LastActive [(activity String) (workspace-id Int)])
+
+(defrecord Workspace
+  [(id Int)
+   (idx Int)
+   (name (U String Nil))
+   (output String)
+   (focused Bool)
+   (active Bool)
+   (urgent Bool)
+   (active-window-id (U Int Nil))])
+
+(defrecord ActivityState
+  [(defs (Vec ActivityDef))
+   (default String)
+   (assignments (Vec Assignment))
+   (members (Vec Membership))
+   (last-active (Vec LastActive))
+   (current String)
+   (previous String)
+   (workspaces (Vec Workspace))])
+
+(defrecord WorkspaceMove [(workspace Workspace) (target-index Int)])
+
+(defunion WorkspaceLookup
+  (WorkspaceFound [(workspace Workspace)])
+  (WorkspaceMissing [(token Bool)]))
+
+(defunion ActivityCommand
+  (Goto [(activity String)])
+  (MoveToActivity [(activity String)])
+  (Back [(token Bool)])
+  (Here [(ordinal Int)])
+  (MoveHere [(ordinal Int)])
+  (Assign [(activity String)]))
+
+(defunion ActivityEffect
+  (FocusWorkspace [(reference String)])
+  (MoveColumnToWorkspace [(reference String)])
+  (ReconcileBands [(token Bool)])
+  (PublishSnapshot [(token Bool)])
+  (PersistAssignments [(assignments (Vec Assignment))]))
+
+(defrecord CommandOutcome [(state ActivityState) (effects (Vec ActivityEffect))])
+
+(defn starts-with? [(text String) (prefix String)] Bool
+  (and
+    (<= (count prefix) (count text))
+    (= (subs text 0 (count prefix)) prefix)))
+
+(defn string-member? [(values (Vec String)) (candidate String)] Bool
+  (loop [(index Int) 0]
+    (if (>= index (count values))
+      false
+      (if (= (nth values index) candidate)
+        true
+        (recur (+ index 1))))))
+
+(defn workspace-id-member? [(workspaces (Vec Workspace)) (candidate Int)] Bool
+  (loop [(index Int) 0]
+    (if (>= index (count workspaces))
+      false
+      (if (= (workspace-id (nth workspaces index)) candidate)
+        true
+        (recur (+ index 1))))))
+
+(defn activity-rank [(state ActivityState) (activity String)] Int
+  (loop [(index Int) 0]
+    (if (>= index (count (activitystate-defs state)))
+      9999
+      (if (= (activitydef-id (nth (activitystate-defs state) index))
+             activity)
+        index
+        (recur (+ index 1))))))
+
+(defn any-prefix-matches? [(prefixes (Vec String)) (workspace-name String)] Bool
+  (loop [(index Int) 0]
+    (if (>= index (count prefixes))
+      false
+      (if (starts-with? workspace-name (nth prefixes index))
+        true
+        (recur (+ index 1))))))
+
+(defn match-binding
+  [(defs (Vec ActivityDef)) (workspace-name (U String Nil))] (U String Nil)
+  (if (nil? workspace-name)
+    nil
+    (loop [(index Int) 0]
+      (if (>= index (count defs))
+        nil
+        (let [(definition ActivityDef) (nth defs index)]
+          (if (or
+                (string-member?
+                  (activitydef-bind-names definition) workspace-name)
+                (any-prefix-matches?
+                  (activitydef-bind-prefixes definition) workspace-name))
+            (activitydef-id definition)
+            (recur (+ index 1))))))))
+
+(defn assignment-for
+  [(assignments (Vec Assignment))
+   (workspace-name (U String Nil))]
+  (U String Nil)
+  (if (nil? workspace-name)
+    nil
+    (loop [(index Int) 0]
+      (if (>= index (count assignments))
+        nil
+        (let [(assignment Assignment) (nth assignments index)]
+          (if (= (assignment-workspace-name assignment) workspace-name)
+            (assignment-activity assignment)
+            (recur (+ index 1))))))))
+
+(defn membership-for
+  [(members (Vec Membership)) (workspace-id Int)] (U String Nil)
+  (loop [(index Int) 0]
+    (if (>= index (count members))
+      nil
+      (let [(membership Membership) (nth members index)]
+        (if (= (membership-workspace-id membership) workspace-id)
+          (membership-activity membership)
+          (recur (+ index 1)))))))
+
+(defn put-membership
+  [(members (Vec Membership))
+   (workspace-id Int)
+   (activity String)]
+  (Vec Membership)
+  (loop [(index Int) 0
+         (found Bool) false
+         (result (Vec Membership)) []]
+    (if (>= index (count members))
+      (if found
+        result
+        (conj result (->Membership workspace-id activity)))
+      (let [(membership Membership) (nth members index)]
+        (if (= (membership-workspace-id membership) workspace-id)
+          (recur (+ index 1) true
+            (conj result (->Membership workspace-id activity)))
+          (recur (+ index 1) found (conj result membership)))))))
+
+(defn prune-members
+  [(members (Vec Membership)) (workspaces (Vec Workspace))] (Vec Membership)
+  (loop [(index Int) 0 (result (Vec Membership)) []]
+    (if (>= index (count members))
+      result
+      (let [(membership Membership) (nth members index)]
+        (recur (+ index 1)
+          (if (workspace-id-member?
+                workspaces (membership-workspace-id membership))
+            (conj result membership)
+            result))))))
+
+(defn max-workspace-index-on-output
+  [(workspaces (Vec Workspace)) (output String)] Int
+  (loop [(index Int) 0 (maximum Int) 0]
+    (if (>= index (count workspaces))
+      maximum
+      (let [(workspace Workspace) (nth workspaces index)]
+        (recur (+ index 1)
+          (if (= (workspace-output workspace) output)
+            (max maximum (workspace-idx workspace))
+            maximum))))))
+
+;; Niri keeps one trailing empty unnamed workspace on each output. It stays
+;; unadopted so it can seed whichever activity claims it next.
+(defn floating? [(workspaces (Vec Workspace)) (workspace Workspace)] Bool
+  (and
+    (nil? (workspace-name workspace))
+    (nil? (workspace-active-window-id workspace))
+    (= (workspace-idx workspace)
+       (max-workspace-index-on-output
+         workspaces (workspace-output workspace)))))
+
+(defn adoption-activity [(state ActivityState) (workspace Workspace)] String
+  (let [(assigned (U String Nil))
+        (assignment-for
+          (activitystate-assignments state) (workspace-name workspace))]
+    (if (nil? assigned)
+      (let [(bound (U String Nil))
+            (match-binding
+              (activitystate-defs state) (workspace-name workspace))]
+        (if (nil? bound) (activitystate-current state) bound))
+      assigned)))
+
+(defn adopt-all
+  [(state ActivityState) (workspaces (Vec Workspace))] (Vec Membership)
+  (loop [(index Int) 0
+         (members (Vec Membership))
+         (prune-members (activitystate-members state) workspaces)]
+    (if (>= index (count workspaces))
+      members
+      (let [(workspace Workspace) (nth workspaces index)
+            (known (U String Nil))
+            (membership-for members (workspace-id workspace))]
+        (recur (+ index 1)
+          (if (or (some? known) (floating? workspaces workspace))
+            members
+            (put-membership
+              members
+              (workspace-id workspace)
+              (adoption-activity state workspace))))))))
+
+(defn insert-workspace-by-index
+  [(ordered (Vec Workspace)) (workspace Workspace)] (Vec Workspace)
+  (loop [(index Int) 0
+         (inserted Bool) false
+         (result (Vec Workspace)) []]
+    (if (>= index (count ordered))
+      (if inserted result (conj result workspace))
+      (let [(current Workspace) (nth ordered index)]
+        (if (and (not inserted)
+                 (< (workspace-idx workspace) (workspace-idx current)))
+          (recur (+ index 1) true
+            (conj (conj result workspace) current))
+          (recur (+ index 1) inserted (conj result current)))))))
+
+(defn sort-workspaces-by-index [(workspaces (Vec Workspace))] (Vec Workspace)
+  (loop [(index Int) 0 (ordered (Vec Workspace)) []]
+    (if (>= index (count workspaces))
+      ordered
+      (recur (+ index 1)
+        (insert-workspace-by-index ordered (nth workspaces index))))))
+
+(defn focused-workspace [(workspaces (Vec Workspace))] WorkspaceLookup
+  (loop [(index Int) 0]
+    (if (>= index (count workspaces))
+      (->WorkspaceMissing false)
+      (let [(workspace Workspace) (nth workspaces index)]
+        (if (workspace-focused workspace)
+          (->WorkspaceFound workspace)
+          (recur (+ index 1)))))))
+
+(defn members-of
+  [(state ActivityState)
+   (workspaces (Vec Workspace))
+   (activity String)]
+  (Vec Workspace)
+  (loop [(index Int) 0 (members (Vec Workspace)) []]
+    (if (>= index (count workspaces))
+      (sort-workspaces-by-index members)
+      (let [(workspace Workspace) (nth workspaces index)
+            (workspace-activity (U String Nil))
+            (membership-for
+              (activitystate-members state) (workspace-id workspace))]
+        (recur (+ index 1)
+          (if (= workspace-activity activity)
+            (conj members workspace)
+            members))))))
+
+(defn floats-of
+  [(state ActivityState) (workspaces (Vec Workspace))] (Vec Workspace)
+  (loop [(index Int) 0 (floats (Vec Workspace)) []]
+    (if (>= index (count workspaces))
+      (sort-workspaces-by-index floats)
+      (let [(workspace Workspace) (nth workspaces index)]
+        (recur (+ index 1)
+          (if (nil?
+                (membership-for
+                  (activitystate-members state) (workspace-id workspace)))
+            (conj floats workspace)
+            floats))))))
+
+(defn workspace-before?
+  [(state ActivityState) (left Workspace) (right Workspace)] Bool
+  (let [(left-activity (U String Nil))
+        (membership-for
+          (activitystate-members state) (workspace-id left))
+        (right-activity (U String Nil))
+        (membership-for
+          (activitystate-members state) (workspace-id right))
+        (left-rank Int)
+        (if (nil? left-activity) 9999 (activity-rank state left-activity))
+        (right-rank Int)
+        (if (nil? right-activity) 9999 (activity-rank state right-activity))]
+    (or
+      (< left-rank right-rank)
+      (and
+        (= left-rank right-rank)
+        (< (workspace-idx left) (workspace-idx right))))))
+
+(defn insert-workspace-by-band
+  [(state ActivityState)
+   (ordered (Vec Workspace))
+   (workspace Workspace)]
+  (Vec Workspace)
+  (loop [(index Int) 0
+         (inserted Bool) false
+         (result (Vec Workspace)) []]
+    (if (>= index (count ordered))
+      (if inserted result (conj result workspace))
+      (let [(current Workspace) (nth ordered index)]
+        (if (and (not inserted) (workspace-before? state workspace current))
+          (recur (+ index 1) true
+            (conj (conj result workspace) current))
+          (recur (+ index 1) inserted (conj result current)))))))
+
+(defn desired-order
+  [(state ActivityState)
+   (workspaces (Vec Workspace))
+   (output String)]
+  (Vec Workspace)
+  (loop [(index Int) 0 (ordered (Vec Workspace)) []]
+    (if (>= index (count workspaces))
+      ordered
+      (let [(workspace Workspace) (nth workspaces index)]
+        (recur (+ index 1)
+          (if (= (workspace-output workspace) output)
+            (insert-workspace-by-band state ordered workspace)
+            ordered))))))
+
+(defn first-misplaced [(desired (Vec Workspace))] (U WorkspaceMove Nil)
+  (loop [(index Int) 0 (target Int) 1]
+    (if (>= index (count desired))
+      nil
+      (let [(workspace Workspace) (nth desired index)]
+        (if (not= (workspace-idx workspace) target)
+          (->WorkspaceMove workspace target)
+          (recur (+ index 1) (+ target 1)))))))
+
+(defn last-active-for
+  [(last-active (Vec LastActive)) (activity String)] (U Int Nil)
+  (loop [(index Int) 0]
+    (if (>= index (count last-active))
+      nil
+      (let [(entry LastActive) (nth last-active index)]
+        (if (= (lastactive-activity entry) activity)
+          (lastactive-workspace-id entry)
+          (recur (+ index 1)))))))
+
+(defn put-last-active
+  [(last-active (Vec LastActive))
+   (activity String)
+   (workspace-id Int)]
+  (Vec LastActive)
+  (loop [(index Int) 0
+         (found Bool) false
+         (result (Vec LastActive)) []]
+    (if (>= index (count last-active))
+      (if found
+        result
+        (conj result (->LastActive activity workspace-id)))
+      (let [(entry LastActive) (nth last-active index)]
+        (if (= (lastactive-activity entry) activity)
+          (recur (+ index 1) true
+            (conj result (->LastActive activity workspace-id)))
+          (recur (+ index 1) found (conj result entry)))))))
+
+(defn state-with-workspaces
+  [(state ActivityState)
+   (members (Vec Membership))
+   (workspaces (Vec Workspace))]
+  ActivityState
+  (->ActivityState
+    (activitystate-defs state)
+    (activitystate-default state)
+    (activitystate-assignments state)
+    members
+    (activitystate-last-active state)
+    (activitystate-current state)
+    (activitystate-previous state)
+    workspaces))
+
+(defn state-with-focus
+  [(state ActivityState)
+   (current String)
+   (previous String)
+   (last-active (Vec LastActive))]
+  ActivityState
+  (->ActivityState
+    (activitystate-defs state)
+    (activitystate-default state)
+    (activitystate-assignments state)
+    (activitystate-members state)
+    last-active
+    current
+    previous
+    (activitystate-workspaces state)))
+
+(defn apply-workspaces
+  [(state ActivityState) (workspaces (Vec Workspace))] ActivityState
+  (let [(members (Vec Membership)) (adopt-all state workspaces)
+        (with-workspaces ActivityState)
+        (state-with-workspaces state members workspaces)]
+    (match (focused-workspace workspaces)
+      [(WorkspaceMissing token) with-workspaces]
+      [(WorkspaceFound focused)
+       (let [(focused-activity (U String Nil))
+             (membership-for members (workspace-id focused))]
+         (if (nil? focused-activity)
+           with-workspaces
+           (let [(changed Bool)
+                 (not= focused-activity
+                       (activitystate-current with-workspaces))]
+             (state-with-focus
+               with-workspaces
+               focused-activity
+               (if changed
+                 (activitystate-current with-workspaces)
+                 (activitystate-previous with-workspaces))
+               (put-last-active
+                 (activitystate-last-active with-workspaces)
+                 focused-activity
+                 (workspace-id focused))))))])))
+
+(defn activity-target
+  [(state ActivityState)
+   (workspaces (Vec Workspace))
+   (activity String)]
+  WorkspaceLookup
+  (let [(members (Vec Workspace)) (members-of state workspaces activity)
+        (last-id (U Int Nil))
+        (last-active-for (activitystate-last-active state) activity)]
+    (if (nil? last-id)
+      (if (= (count members) 0)
+        (->WorkspaceMissing false)
+        (->WorkspaceFound (nth members 0)))
+      (loop [(index Int) 0]
+        (if (>= index (count members))
+          (if (= (count members) 0)
+            (->WorkspaceMissing false)
+            (->WorkspaceFound (nth members 0)))
+          (let [(workspace Workspace) (nth members index)]
+            (if (= (workspace-id workspace) last-id)
+              (->WorkspaceFound workspace)
+              (recur (+ index 1)))))))))
+
+(defn nth-member
+  [(state ActivityState)
+   (workspaces (Vec Workspace))
+   (ordinal Int)]
+  WorkspaceLookup
+  (let [(members (Vec Workspace))
+        (members-of state workspaces (activitystate-current state))]
+    (if (= (count members) 0)
+      (->WorkspaceMissing false)
+      (let [(bounded Int)
+            (min (max 0 (- ordinal 1)) (- (count members) 1))]
+        (->WorkspaceFound (nth members bounded))))))
+
+(defn workspace-reference [(workspace Workspace)] String
+  (let [(name (U String Nil)) (workspace-name workspace)]
+    (if (nil? name)
+      (str (workspace-idx workspace))
+      name)))
+
+(defn put-assignment
+  [(assignments (Vec Assignment))
+   (workspace-name String)
+   (activity String)]
+  (Vec Assignment)
+  (loop [(index Int) 0
+         (found Bool) false
+         (result (Vec Assignment)) []]
+    (if (>= index (count assignments))
+      (if found
+        result
+        (conj result (->Assignment workspace-name activity)))
+      (let [(assignment Assignment) (nth assignments index)]
+        (if (= (assignment-workspace-name assignment) workspace-name)
+          (recur (+ index 1) true
+            (conj result (->Assignment workspace-name activity)))
+          (recur (+ index 1) found (conj result assignment)))))))
+
+(defn state-with-members
+  [(state ActivityState) (members (Vec Membership))] ActivityState
+  (->ActivityState
+    (activitystate-defs state)
+    (activitystate-default state)
+    (activitystate-assignments state)
+    members
+    (activitystate-last-active state)
+    (activitystate-current state)
+    (activitystate-previous state)
+    (activitystate-workspaces state)))
+
+(defn state-with-assignments
+  [(state ActivityState) (assignments (Vec Assignment))] ActivityState
+  (->ActivityState
+    (activitystate-defs state)
+    (activitystate-default state)
+    assignments
+    (activitystate-members state)
+    (activitystate-last-active state)
+    (activitystate-current state)
+    (activitystate-previous state)
+    (activitystate-workspaces state)))
+
+(defn assign-state
+  [(state ActivityState) (workspace Workspace) (activity String)] ActivityState
+  (let [(with-member ActivityState)
+        (state-with-members state
+          (put-membership
+            (activitystate-members state) (workspace-id workspace) activity))
+        (workspace-name (U String Nil)) (workspace-name workspace)]
+    (if (nil? workspace-name)
+      with-member
+      (state-with-assignments with-member
+        (put-assignment
+          (activitystate-assignments with-member)
+          workspace-name
+          activity)))))
+
+(defn first-floating
+  [(state ActivityState) (workspaces (Vec Workspace))] WorkspaceLookup
+  (loop [(index Int) 0]
+    (if (>= index (count workspaces))
+      (->WorkspaceMissing false)
+      (let [(workspace Workspace) (nth workspaces index)]
+        (if (and
+              (nil?
+                (membership-for
+                  (activitystate-members state) (workspace-id workspace)))
+              (floating? workspaces workspace))
+          (->WorkspaceFound workspace)
+          (recur (+ index 1)))))))
+
+(defn goto-outcome
+  [(state ActivityState)
+   (workspaces (Vec Workspace))
+   (activity String)
+   (move? Bool)]
+  CommandOutcome
+  (match (activity-target state workspaces activity)
+    [(WorkspaceFound workspace)
+     (->CommandOutcome state
+       [(if move?
+          (->MoveColumnToWorkspace (workspace-reference workspace))
+          (->FocusWorkspace (workspace-reference workspace)))])]
+    [(WorkspaceMissing token)
+     (match (first-floating state workspaces)
+       [(WorkspaceMissing nested-token) (->CommandOutcome state [])]
+       [(WorkspaceFound workspace)
+        (let [(assigned ActivityState)
+              (assign-state state workspace activity)]
+          (->CommandOutcome assigned
+            [(->ReconcileBands true)
+             (->PublishSnapshot true)
+             (if move?
+               (->MoveColumnToWorkspace (workspace-reference workspace))
+               (->FocusWorkspace (workspace-reference workspace)))]))])]))
+
+(defn assign-outcome
+  [(state ActivityState)
+   (workspaces (Vec Workspace))
+   (activity String)]
+  CommandOutcome
+  (match (focused-workspace workspaces)
+    [(WorkspaceMissing token) (->CommandOutcome state [])]
+    [(WorkspaceFound workspace)
+     (let [(assigned ActivityState) (assign-state state workspace activity)]
+       (if (nil? (workspace-name workspace))
+         (->CommandOutcome assigned
+           [(->ReconcileBands true) (->PublishSnapshot true)])
+         (->CommandOutcome assigned
+           [(->ReconcileBands true)
+            (->PublishSnapshot true)
+            (->PersistAssignments (activitystate-assignments assigned))])))]))
+
+(defn apply-command
+  [(state ActivityState)
+   (workspaces (Vec Workspace))
+   (command ActivityCommand)]
+  CommandOutcome
+  (match command
+    [(Goto activity) (goto-outcome state workspaces activity false)]
+    [(MoveToActivity activity) (goto-outcome state workspaces activity true)]
+    [(Back token)
+     (goto-outcome state workspaces (activitystate-previous state) false)]
+    [(Here ordinal)
+     (match (nth-member state workspaces ordinal)
+       [(WorkspaceMissing token) (->CommandOutcome state [])]
+       [(WorkspaceFound workspace)
+        (->CommandOutcome state
+          [(->FocusWorkspace (workspace-reference workspace))])])]
+    [(MoveHere ordinal)
+     (match (nth-member state workspaces ordinal)
+       [(WorkspaceMissing token) (->CommandOutcome state [])]
+       [(WorkspaceFound workspace)
+        (->CommandOutcome state
+          [(->MoveColumnToWorkspace (workspace-reference workspace))])])]
+    [(Assign activity) (assign-outcome state workspaces activity)]))

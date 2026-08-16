@@ -1,0 +1,234 @@
+#lang beagle
+(ns activity.core-test
+  (:require [activity.core :as a]))
+
+(defrecord TestResult [(name String) (passed Bool)])
+
+(defn definition
+  [(id String)
+   (label (U String Nil))
+   (names (Vec String))
+   (prefixes (Vec String))]
+  a/ActivityDef
+  (a/->ActivityDef id label names prefixes))
+
+(defn workspace
+  [(id Int)
+   (idx Int)
+   (name (U String Nil))
+   (output String)
+   (focused Bool)
+   (active-window-id (U Int Nil))]
+  a/Workspace
+  (a/->Workspace id idx name output focused focused false active-window-id))
+
+(defn base-state [] a/ActivityState
+  (a/->ActivityState
+    [(definition "home" "home" [] [])
+     (definition "gjoa" nil ["render"] ["gjoa"])
+     (definition "msa" "msa" ["heist"] ["msa"])]
+    "home"
+    [(a/->Assignment "forced" "msa")]
+    []
+    []
+    "home"
+    "home"
+    []))
+
+(defn lookup-id [(lookup a/WorkspaceLookup)] Int
+  (match lookup
+    [(WorkspaceFound workspace) (a/workspace-id workspace)]
+    [(WorkspaceMissing token) -1]))
+
+(defn effect-kinds [(effects (Vec a/ActivityEffect))] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count effects))
+      result
+      (recur (+ index 1)
+        (conj result
+          (match (nth effects index)
+            [(FocusWorkspace reference) (str "focus:" reference)]
+            [(MoveColumnToWorkspace reference) (str "move:" reference)]
+            [(ReconcileBands token) "bands"]
+            [(PublishSnapshot token) "snapshot"]
+            [(PersistAssignments assignments) "assignments"]))))))
+
+(defn case-binding-precedence [] Bool
+  (let [(state a/ActivityState) (base-state)]
+    (and
+      (= (a/match-binding (a/activitystate-defs state) "render") "gjoa")
+      (= (a/match-binding (a/activitystate-defs state) "gjoa release")
+         "gjoa")
+      (= (a/match-binding (a/activitystate-defs state) "heist") "msa")
+      (nil? (a/match-binding (a/activitystate-defs state) nil)))))
+
+(defn case-floating-per-output [] Bool
+  (let [(first a/Workspace) (workspace 1 1 nil "DP-1" false nil)
+        (trailing a/Workspace) (workspace 2 2 nil "DP-1" false nil)
+        (occupied a/Workspace) (workspace 3 3 nil "DP-1" false 77)
+        (other a/Workspace) (workspace 4 1 nil "HDMI-1" false nil)
+        (all (Vec a/Workspace)) [first trailing occupied other]]
+    (and
+      (not (a/floating? all first))
+      (not (a/floating? all trailing))
+      (not (a/floating? all occupied))
+      (a/floating? all other))))
+
+(defn case-adoption-prunes-and-routes [] Bool
+  (let [(old a/ActivityState) (base-state)
+        (state a/ActivityState)
+        (a/->ActivityState
+          (a/activitystate-defs old)
+          (a/activitystate-default old)
+          (a/activitystate-assignments old)
+          [(a/->Membership 90 "gjoa") (a/->Membership 1 "home")]
+          []
+          "home"
+          "home"
+          [])
+        (workspaces (Vec a/Workspace))
+        [(workspace 1 1 "notes" "DP-1" false 10)
+         (workspace 2 2 "forced" "DP-1" false 11)
+         (workspace 3 3 "gjoa release" "DP-1" false 12)
+         (workspace 4 4 "other" "DP-1" false 13)
+         (workspace 5 5 nil "DP-1" false nil)]
+        (members (Vec a/Membership)) (a/adopt-all state workspaces)]
+    (and
+      (= (count members) 4)
+      (= (a/membership-for members 1) "home")
+      (= (a/membership-for members 2) "msa")
+      (= (a/membership-for members 3) "gjoa")
+      (= (a/membership-for members 4) "home")
+      (nil? (a/membership-for members 5))
+      (nil? (a/membership-for members 90)))))
+
+(defn case-focus-transition [] Bool
+  (let [(state a/ActivityState) (base-state)
+        (workspaces (Vec a/Workspace))
+        [(workspace 1 1 "notes" "DP-1" false 10)
+         (workspace 2 2 "heist" "DP-1" true 11)
+         (workspace 3 3 nil "DP-1" false nil)]
+        (next a/ActivityState) (a/apply-workspaces state workspaces)]
+    (and
+      (= (a/activitystate-current next) "msa")
+      (= (a/activitystate-previous next) "home")
+      (= (a/last-active-for (a/activitystate-last-active next) "msa") 2)
+      (= (count (a/activitystate-members next)) 2))))
+
+(defn case-band-order [] Bool
+  (let [(base a/ActivityState) (base-state)
+        (state a/ActivityState)
+        (a/->ActivityState
+          (a/activitystate-defs base)
+          "home"
+          []
+          [(a/->Membership 10 "msa")
+           (a/->Membership 11 "home")
+           (a/->Membership 12 "gjoa")]
+          []
+          "home"
+          "home"
+          [])
+        (workspaces (Vec a/Workspace))
+        [(workspace 10 1 "msa" "DP-1" false 1)
+         (workspace 11 2 "home" "DP-1" false 2)
+         (workspace 12 3 "gjoa" "DP-1" false 3)
+         (workspace 13 4 nil "DP-1" false nil)]
+        (desired (Vec a/Workspace))
+        (a/desired-order state workspaces "DP-1")
+        (misplaced (U a/WorkspaceMove Nil)) (a/first-misplaced desired)]
+    (and
+      (= (mapv a/workspace-id desired) [11 12 10 13])
+      (some? misplaced)
+      (= (a/workspace-id (a/workspacemove-workspace misplaced)) 11)
+      (= (a/workspacemove-target-index misplaced) 1))))
+
+(defn case-target-prefers-last-active [] Bool
+  (let [(base a/ActivityState) (base-state)
+        (state a/ActivityState)
+        (a/->ActivityState
+          (a/activitystate-defs base)
+          "home"
+          []
+          [(a/->Membership 1 "home") (a/->Membership 2 "home")]
+          [(a/->LastActive "home" 2)]
+          "home"
+          "home"
+          [])
+        (workspaces (Vec a/Workspace))
+        [(workspace 2 2 "second" "DP-1" false 2)
+         (workspace 1 1 "first" "DP-1" false 1)]]
+    (and
+      (= (lookup-id (a/activity-target state workspaces "home")) 2)
+      (= (lookup-id (a/nth-member state workspaces 1)) 1)
+      (= (lookup-id (a/nth-member state workspaces 99)) 2))))
+
+(defn case-goto-adopts-floating [] Bool
+  (let [(state a/ActivityState) (base-state)
+        (workspaces (Vec a/Workspace))
+        [(workspace 1 1 "notes" "DP-1" false 1)
+         (workspace 2 2 nil "DP-1" false nil)]
+        (applied a/ActivityState) (a/apply-workspaces state workspaces)
+        (outcome a/CommandOutcome)
+        (a/apply-command applied workspaces (a/->Goto "gjoa"))]
+    (and
+      (= (a/membership-for
+           (a/activitystate-members (a/commandoutcome-state outcome)) 2)
+         "gjoa")
+      (= (effect-kinds (a/commandoutcome-effects outcome))
+         ["bands" "snapshot" "focus:2"]))))
+
+(defn case-first-floating-preserves-live-order [] Bool
+  (let [(state a/ActivityState) (base-state)
+        (workspaces (Vec a/Workspace))
+        [(workspace 1 1 nil "DP-1" false nil)
+         (workspace 2 9 nil "DP-1" false nil)
+         (workspace 3 2 nil "HDMI-1" false nil)]]
+    (= (lookup-id (a/first-floating state workspaces)) 2)))
+
+(defn case-assign-persists-named-only [] Bool
+  (let [(state a/ActivityState) (base-state)
+        (named (Vec a/Workspace))
+        [(workspace 1 1 "work" "DP-1" true 1)]
+        (named-outcome a/CommandOutcome)
+        (a/apply-command state named (a/->Assign "gjoa"))
+        (unnamed (Vec a/Workspace))
+        [(workspace 2 1 nil "DP-1" true 2)]
+        (unnamed-outcome a/CommandOutcome)
+        (a/apply-command state unnamed (a/->Assign "gjoa"))]
+    (and
+      (= (effect-kinds (a/commandoutcome-effects named-outcome))
+         ["bands" "snapshot" "assignments"])
+      (= (a/assignment-for
+           (a/activitystate-assignments
+             (a/commandoutcome-state named-outcome))
+           "work")
+         "gjoa")
+      (= (effect-kinds (a/commandoutcome-effects unnamed-outcome))
+         ["bands" "snapshot"]))))
+
+(defn cases [] (Vec TestResult)
+  [(->TestResult "binding-precedence" (case-binding-precedence))
+   (->TestResult "floating-per-output" (case-floating-per-output))
+   (->TestResult "adoption-prunes-and-routes" (case-adoption-prunes-and-routes))
+   (->TestResult "focus-transition" (case-focus-transition))
+   (->TestResult "band-order" (case-band-order))
+   (->TestResult "target-prefers-last-active" (case-target-prefers-last-active))
+   (->TestResult "goto-adopts-floating" (case-goto-adopts-floating))
+   (->TestResult
+     "first-floating-preserves-live-order"
+     (case-first-floating-preserves-live-order))
+   (->TestResult "assign-persists-named-only" (case-assign-persists-named-only))])
+
+(defn -main [(args (Vec String))] Int
+  (let [(results (Vec TestResult)) (cases)]
+    (loop [(index Int) 0 (failures Int) 0]
+      (if (>= index (count results))
+        failures
+        (let [(result TestResult) (nth results index)]
+          (do
+            (println
+              (str (if (testresult-passed result) "PASS " "FAIL ")
+                   (testresult-name result)))
+            (recur (+ index 1)
+              (if (testresult-passed result) failures (+ failures 1)))))))))
