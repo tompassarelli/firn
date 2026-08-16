@@ -1,0 +1,336 @@
+#lang beagle
+(ns firn.authoring-test
+  (:require [firn.authoring :as a]))
+
+(defrecord TestResult [(name String) (passed Bool)])
+
+(defn target-text [(plan a/AuthoringPlan) (index Int)] String
+  (a/authoringtarget-contents
+    (nth (a/authoringplan-targets plan) index)))
+
+(defn target-path [(plan a/AuthoringPlan) (index Int)] String
+  (a/authoringtarget-relative
+    (nth (a/authoringplan-targets plan) index)))
+
+(defn action-kind [(action a/AuthoringAction)] String
+  (match action
+    [(ModuleAdd name) "module-add"]
+    [(TemplateService name) "template-service"]
+    [(TemplateSubmodule name) "template-submodule"]
+    [(TemplateHome name) "template-home"]
+    [(TemplateHost name) "template-host"]
+    [(SecretList) "secret-list"]
+    [(SecretShow name) "secret-show"]
+    [(SecretEdit name) "secret-edit"]))
+
+(defn action-name [(action a/AuthoringAction)] String
+  (match action
+    [(ModuleAdd name) name]
+    [(TemplateService name) name]
+    [(TemplateSubmodule name) name]
+    [(TemplateHome name) name]
+    [(TemplateHost name) name]
+    [(SecretList) ""]
+    [(SecretShow name) name]
+    [(SecretEdit name) name]))
+
+(defn case-argv-grammar [] Bool
+  (and
+    (match (a/parse-authoring-argv ["module" "add" "sample-tool"])
+      [(ParsedAuthoring action)
+       (and (= (action-kind action) "module-add")
+            (= (action-name action) "sample-tool"))]
+      [(InvalidAuthoringArgv argv) false])
+    (match (a/parse-authoring-argv ["template" "service" "openssh"])
+      [(ParsedAuthoring action)
+       (and (= (action-kind action) "template-service")
+            (= (action-name action) "openssh"))]
+      [(InvalidAuthoringArgv argv) false])
+    (match (a/parse-authoring-argv ["template" "submodule" "sample"])
+      [(ParsedAuthoring action)
+       (and (= (action-kind action) "template-submodule")
+            (= (action-name action) "sample"))]
+      [(InvalidAuthoringArgv argv) false])
+    (match (a/parse-authoring-argv ["template" "home" "sample"])
+      [(ParsedAuthoring action)
+       (and (= (action-kind action) "template-home")
+            (= (action-name action) "sample"))]
+      [(InvalidAuthoringArgv argv) false])
+    (match (a/parse-authoring-argv ["template" "host" "sample-host"])
+      [(ParsedAuthoring action)
+       (and (= (action-kind action) "template-host")
+            (= (action-name action) "sample-host"))]
+      [(InvalidAuthoringArgv argv) false])
+    (match (a/parse-authoring-argv ["secret" "list"])
+      [(ParsedAuthoring action)
+       (= (action-kind action) "secret-list")]
+      [(InvalidAuthoringArgv argv) false])
+    (match (a/parse-authoring-argv ["secret" "list" "all"])
+      [(ParsedAuthoring action)
+       (= (action-kind action) "secret-list")]
+      [(InvalidAuthoringArgv argv) false])
+    (match (a/parse-authoring-argv ["secret" "show" "alpha"])
+      [(ParsedAuthoring action)
+       (and (= (action-kind action) "secret-show")
+            (= (action-name action) "alpha"))]
+      [(InvalidAuthoringArgv argv) false])
+    (match (a/parse-authoring-argv ["secret" "edit" "alpha"])
+      [(ParsedAuthoring action)
+       (and (= (action-kind action) "secret-edit")
+            (= (action-name action) "alpha"))]
+      [(InvalidAuthoringArgv argv) false])
+    (match (a/parse-authoring-argv ["secret" "list" "stale"])
+      [(ParsedAuthoring action) false]
+      [(InvalidAuthoringArgv argv) true])
+    (match (a/parse-authoring-argv ["host" "gen" "whiterabbit"])
+      [(ParsedAuthoring action) false]
+      [(InvalidAuthoringArgv argv) true])))
+
+(defn case-name-refusal [] Bool
+  (and
+    (a/safe-authoring-name? "sample-tool")
+    (a/safe-authoring-name? "g203-led")
+    (not (a/safe-authoring-name? ""))
+    (not (a/safe-authoring-name? "."))
+    (not (a/safe-authoring-name? ".."))
+    (not (a/safe-authoring-name? "../escape"))
+    (not (a/safe-authoring-name? "nested/name"))
+    (not (a/safe-authoring-name? "nested\\name"))
+    (not (a/safe-authoring-name? "Upper"))
+    (not (a/safe-authoring-name? "white space"))
+    (a/safe-secret-name? "alpha")
+    (a/safe-secret-name? "alpha beta")
+    (not (a/safe-secret-name? ""))
+    (not (a/safe-secret-name? "."))
+    (not (a/safe-secret-name? ".."))
+    (not (a/safe-secret-name? "/"))
+    (not (a/safe-secret-name? "a/b"))
+    (not (a/safe-secret-name? "\\"))
+    (not (a/safe-secret-name? "a\\b"))
+    (not (a/safe-secret-name? (utf8-decode [0])))
+    (match (a/plan-authoring (a/->ModuleAdd "../escape") [])
+      [(AuthoringPlanReady plan) false]
+      [(AuthoringPlanRejected message)
+       (= message "firn authoring: invalid name\n")])))
+
+(def module-expected String
+  (str
+    "#lang beagle/nix\n\n"
+    "(ns default)\n\n"
+    "(nix/module [config lib pkgs ...]\n"
+    "  {:options.myConfig.modules.sample-tool.enable\n"
+    "    (lib.mkEnableOption \"Enable sample-tool\")\n"
+    "   :config\n"
+    "    (lib.mkIf config.myConfig.modules.sample-tool.enable\n"
+    "      {:environment.systemPackages (nix/with pkgs [sample-tool])})})\n"))
+
+(defn case-module-exact [] Bool
+  (match (a/plan-authoring (a/->ModuleAdd "sample-tool") [])
+    [(AuthoringPlanRejected message) false]
+    [(AuthoringPlanReady plan)
+     (and (= 1 (count (a/authoringplan-targets plan)))
+          (= (target-path plan 0) "modules/sample-tool/default.bnix")
+          (= (target-text plan 0) module-expected)
+          (= (a/authoringplan-success-output plan)
+             "Created modules/sample-tool/default.bnix (git added)\n"))]))
+
+(def service-schema (Vec a/SchemaEntry)
+  [(a/->SchemaEntry "services.openssh.generateHostKeys" "bool")
+   (a/->SchemaEntry "services.openssh.enable" "bool")
+   (a/->SchemaEntry "services.openssh.authorizedKeysInHomedir" "bool")
+   (a/->SchemaEntry "services.openssh.nested.value" "str")
+   (a/->SchemaEntry "services.openssh.allowSFTP" "bool")
+   (a/->SchemaEntry "services.openssh.package" "package")
+   (a/->SchemaEntry "services.openssh.authorizedKeysCommandUser" "str")
+   (a/->SchemaEntry "services.openssh.extraConfig" "separatedString")
+   (a/->SchemaEntry "services.openssh.authorizedKeysFiles" "listOf")
+   (a/->SchemaEntry "services.openssh.enableRecommendedAlgorithms" "bool")
+   (a/->SchemaEntry "services.openssh.authorizedKeysCommand" "str")
+   (a/->SchemaEntry "services.openssh.settings" "attrsOf")
+   (a/->SchemaEntry "services.openssh.z-last" "str")])
+
+(def service-expected String
+  (str
+    "#lang beagle/nix\n\n"
+    "(ns default)\n\n"
+    "(nix/module [config lib pkgs ...]\n"
+    "  {:options.myConfig.modules.openssh.enable\n"
+    "    (lib.mkEnableOption \"openssh service\")\n"
+    "   :config\n"
+    "    (lib.mkIf config.myConfig.modules.openssh.enable\n"
+    "      {;; common options — uncomment to override:\n"
+    "       ;; :services.openssh.allowSFTP <value>   ; bool\n"
+    "       ;; :services.openssh.authorizedKeysCommand <value>   ; str\n"
+    "       ;; :services.openssh.authorizedKeysCommandUser <value>   ; str\n"
+    "       ;; :services.openssh.authorizedKeysFiles <value>   ; listOf\n"
+    "       ;; :services.openssh.authorizedKeysInHomedir <value>   ; bool\n"
+    "       ;; :services.openssh.enableRecommendedAlgorithms <value>   ; bool\n"
+    "       ;; :services.openssh.extraConfig <value>   ; separatedString\n"
+    "       ;; :services.openssh.generateHostKeys <value>   ; bool\n"
+    "       :services.openssh.enable true})})\n"))
+
+(defn case-service-exact [] Bool
+  (let [(selected (Vec a/SchemaEntry))
+        (a/selected-service-entries service-schema "openssh")]
+    (and (= 8 (count selected))
+         (= (a/schemaentry-name (nth selected 0))
+            "services.openssh.allowSFTP")
+         (= (a/schemaentry-name (nth selected 7))
+            "services.openssh.generateHostKeys")
+         (match (a/plan-authoring
+                  (a/->TemplateService "openssh") service-schema)
+           [(AuthoringPlanRejected message) false]
+           [(AuthoringPlanReady plan)
+            (and (= (target-path plan 0) "modules/openssh/default.bnix")
+                 (= (target-text plan 0) service-expected)
+                 (= (a/authoringplan-success-output plan)
+                    (str
+                      "Created modules/openssh/default.bnix (git added)\n"
+                      "  pre-filled 8 common options as commented stubs "
+                      "(from schema)\n")))]))))
+
+(def submodule-expected String
+  (str
+    "#lang beagle/nix\n\n"
+    "(ns default)\n\n"
+    "(nix/module [config lib pkgs ...]\n"
+    "  {:options.myConfig.modules.sample-submodule\n"
+    "    {:enable (lib.mkEnableOption \"sample-submodule configuration\")\n"
+    "     :extraConfig\n"
+    "      (lib.mkOption\n"
+    "        {:type        lib.types.lines\n"
+    "         :default     \"\"\n"
+    "         :description \"Extra config text.\"})}\n"
+    "   :config\n"
+    "    (lib.mkIf config.myConfig.modules.sample-submodule.enable\n"
+    "      {:environment.systemPackages\n"
+    "        (nix/with pkgs [sample-submodule])})})\n"))
+
+(def home-expected String
+  (str
+    "#lang beagle/nix\n\n"
+    "(ns default)\n\n"
+    "(nix/module [config lib pkgs ...]\n"
+    "  (let [username config.myConfig.modules.users.username]\n"
+    "    {:options.myConfig.modules.sample-home.enable\n"
+    "      (lib.mkEnableOption \"sample-home (home-manager)\")\n"
+    "     :config\n"
+    "      (lib.mkIf config.myConfig.modules.sample-home.enable\n"
+    "        {:home-manager.users\n"
+    "          {username\n"
+    "            {:programs.sample-home.enable true}}})}))\n"))
+
+(defn case-module-templates-exact [] Bool
+  (and
+    (match (a/plan-authoring
+             (a/->TemplateSubmodule "sample-submodule") [])
+      [(AuthoringPlanRejected message) false]
+      [(AuthoringPlanReady plan)
+       (= (target-text plan 0) submodule-expected)])
+    (match (a/plan-authoring (a/->TemplateHome "sample-home") [])
+      [(AuthoringPlanRejected message) false]
+      [(AuthoringPlanReady plan)
+       (= (target-text plan 0) home-expected)])))
+
+(def host-configuration-expected String
+  (str
+    "#lang beagle/nix\n\n"
+    "(ns configuration)\n\n"
+    "(nix/module [config lib pkgs ...]\n"
+    "  {:myConfig.modules.system.stateVersion \"25.11\"\n"
+    "   :myConfig.modules.users.username \"you\"\n"
+    "   :myConfig.modules.users.enable true\n"
+    "   :myConfig.modules.boot.enable true\n"
+    "   :myConfig.modules.networking.enable true\n"
+    "   :imports [(p \"./_generated-enables.nix\")]})\n"))
+
+(def host-tags-expected String
+  (str
+    "#lang beagle/nix\n\n"
+    "(ns enabled-tags)\n\n"
+    "{:platform linux\n"
+    " :enabled\n"
+    "  [terminal\n"
+    "   cli-tools\n"
+    "   development]\n"
+    " :disabled []}\n"))
+
+(defn case-host-exact [] Bool
+  (match (a/plan-authoring (a/->TemplateHost "sample-host") [])
+    [(AuthoringPlanRejected message) false]
+    [(AuthoringPlanReady plan)
+     (and (= 2 (count (a/authoringplan-targets plan)))
+          (= (target-path plan 0) "hosts/sample-host/configuration.bnix")
+          (= (target-text plan 0) host-configuration-expected)
+          (= (target-path plan 1) "hosts/sample-host/enabled-tags.bnix")
+          (= (target-text plan 1) host-tags-expected)
+          (= (a/authoringplan-success-output plan)
+             (str
+               "Created hosts/sample-host/configuration.bnix (git added)\n"
+               "Created hosts/sample-host/enabled-tags.bnix (git added)\n"
+               "Don't forget to add sample-host to flake.bnix's "
+               "nixosConfigurations.\n")))]))
+
+(defn case-schema-json-name-authority [] Bool
+  (match (a/schema-entries-from-json
+           (str
+             "[{\"inner\":{\"t\":\"submodule\"},"
+             "\"p\":\"services.openssh.stale\","
+             "\"name\":\"services.openssh.port\",\"t\":\"int\"},"
+             "{\"name\":\"services.openssh.banner\"}]") )
+    [(SchemaRejected message offset) false]
+    [(SchemaParsed entries)
+     (and (= 2 (count entries))
+          (= (a/schemaentry-name (nth entries 0))
+             "services.openssh.port")
+          (= (a/schemaentry-type (nth entries 0)) "int")
+          (= (a/schemaentry-name (nth entries 1))
+             "services.openssh.banner")
+          (= (a/schemaentry-type (nth entries 1)) "?"))]))
+
+(defn case-empty-schema-summary [] Bool
+  (match (a/plan-authoring (a/->TemplateService "openssh") [])
+    [(AuthoringPlanRejected message) false]
+    [(AuthoringPlanReady plan)
+     (and (= (target-text plan 0)
+             (str
+               "#lang beagle/nix\n\n"
+               "(ns default)\n\n"
+               "(nix/module [config lib pkgs ...]\n"
+               "  {:options.myConfig.modules.openssh.enable\n"
+               "    (lib.mkEnableOption \"openssh service\")\n"
+               "   :config\n"
+               "    (lib.mkIf config.myConfig.modules.openssh.enable\n"
+               "      {:services.openssh.enable true})})\n"))
+          (= (a/authoringplan-success-output plan)
+             (str
+               "Created modules/openssh/default.bnix (git added)\n"
+               "  (no schema entries found for services.openssh — schema "
+               "cache stale or service not in nixpkgs?)\n")))]))
+
+(defn cases [] (Vec TestResult)
+  [(->TestResult "argv-grammar" (case-argv-grammar))
+   (->TestResult "name-refusal" (case-name-refusal))
+   (->TestResult "module-exact" (case-module-exact))
+   (->TestResult "service-exact" (case-service-exact))
+   (->TestResult "module-templates-exact" (case-module-templates-exact))
+   (->TestResult "host-exact" (case-host-exact))
+   (->TestResult "schema-json-name-authority"
+     (case-schema-json-name-authority))
+   (->TestResult "empty-schema-summary" (case-empty-schema-summary))])
+
+(defn -main [(args (Vec String))] Int
+  (let [(results (Vec TestResult)) (cases)]
+    (loop [(index Int) 0
+           (failures Int) 0]
+      (if (>= index (count results))
+        failures
+        (let [(result TestResult) (nth results index)]
+          (do
+            (println
+              (str (if (testresult-passed result) "PASS " "FAIL ")
+                (testresult-name result)))
+            (recur (+ index 1)
+              (if (testresult-passed result)
+                failures
+                (+ failures 1)))))))))

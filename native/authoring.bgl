@@ -1,0 +1,496 @@
+#lang beagle
+(ns firn.authoring
+  (:require [native.json :as json]))
+
+(defrecord SchemaEntry [(name String) (type String)])
+
+(defunion AuthoringAction
+  (ModuleAdd [(name String)])
+  (TemplateService [(name String)])
+  (TemplateSubmodule [(name String)])
+  (TemplateHome [(name String)])
+  (TemplateHost [(name String)])
+  SecretList
+  (SecretShow [(name String)])
+  (SecretEdit [(name String)]))
+
+(defunion AuthoringArgv
+  (ParsedAuthoring [(action AuthoringAction)])
+  (InvalidAuthoringArgv [(argv (Vec String))]))
+
+(defrecord AuthoringTarget [(relative String) (contents String)])
+
+(defrecord AuthoringPlan
+  [(targets (Vec AuthoringTarget)) (success-output String)])
+
+(defunion AuthoringPlanResult
+  (AuthoringPlanReady [(plan AuthoringPlan)])
+  (AuthoringPlanRejected [(message String)]))
+
+(defunion SchemaParseResult
+  (SchemaParsed [(entries (Vec SchemaEntry))])
+  (SchemaRejected [(message String) (offset Int)]))
+
+(defrecord SchemaObjectScan [(name (U String Nil)) (type (U String Nil))])
+
+(defn parse-authoring-argv [(argv (Vec String))] AuthoringArgv
+  (cond
+    (and (= 3 (count argv))
+         (= "module" (nth argv 0))
+         (= "add" (nth argv 1)))
+    (->ParsedAuthoring (->ModuleAdd (nth argv 2)))
+
+    (and (= 3 (count argv))
+         (= "template" (nth argv 0))
+         (= "service" (nth argv 1)))
+    (->ParsedAuthoring (->TemplateService (nth argv 2)))
+
+    (and (= 3 (count argv))
+         (= "template" (nth argv 0))
+         (= "submodule" (nth argv 1)))
+    (->ParsedAuthoring (->TemplateSubmodule (nth argv 2)))
+
+    (and (= 3 (count argv))
+         (= "template" (nth argv 0))
+         (= "home" (nth argv 1)))
+    (->ParsedAuthoring (->TemplateHome (nth argv 2)))
+
+    (and (= 3 (count argv))
+         (= "template" (nth argv 0))
+         (= "host" (nth argv 1)))
+    (->ParsedAuthoring (->TemplateHost (nth argv 2)))
+
+    (and (or (= 2 (count argv)) (= 3 (count argv)))
+         (= "secret" (nth argv 0))
+         (= "list" (nth argv 1))
+         (or (= 2 (count argv)) (= "all" (nth argv 2))))
+    (->ParsedAuthoring (->SecretList))
+
+    (and (= 3 (count argv))
+         (= "secret" (nth argv 0))
+         (= "show" (nth argv 1)))
+    (->ParsedAuthoring (->SecretShow (nth argv 2)))
+
+    (and (= 3 (count argv))
+         (= "secret" (nth argv 0))
+         (= "edit" (nth argv 1)))
+    (->ParsedAuthoring (->SecretEdit (nth argv 2)))
+
+    :else
+    (->InvalidAuthoringArgv argv)))
+
+(defn ascii-lower? [(byte Int)] Bool
+  (and (>= byte 97) (<= byte 122)))
+
+(defn ascii-digit? [(byte Int)] Bool
+  (and (>= byte 48) (<= byte 57)))
+
+(defn safe-authoring-name? [(name String)] Bool
+  (let [(bytes (Vec Int)) (utf8-encode name)]
+    (and (> (count bytes) 0)
+         (ascii-lower? (nth bytes 0))
+         (loop [(index Int) 1]
+           (if (>= index (count bytes))
+             true
+             (let [(byte Int) (nth bytes index)]
+               (if (or (ascii-lower? byte)
+                       (ascii-digit? byte)
+                       (= byte 45))
+                 (recur (+ index 1))
+                 false)))))))
+
+(defn safe-secret-name? [(name String)] Bool
+  (let [(bytes (Vec Int)) (utf8-encode name)]
+    (and (> (count bytes) 0)
+         (not= name ".")
+         (not= name "..")
+         (loop [(index Int) 0]
+           (if (>= index (count bytes))
+             true
+             (let [(byte Int) (nth bytes index)]
+               (if (or (= byte 0) (= byte 47) (= byte 92))
+                 false
+                 (recur (+ index 1)))))))))
+
+(defn starts-with? [(text String) (prefix String)] Bool
+  (and (>= (count text) (count prefix))
+       (= (subs text 0 (count prefix)) prefix)))
+
+(defn ends-with? [(text String) (suffix String)] Bool
+  (and (>= (count text) (count suffix))
+       (= (subs text (- (count text) (count suffix)) (count text)) suffix)))
+
+(defn string-member? [(values (Vec String)) (candidate String)] Bool
+  (loop [(index Int) 0]
+    (if (>= index (count values))
+      false
+      (if (= candidate (nth values index))
+        true
+        (recur (+ index 1))))))
+
+(defn append-unique [(values (Vec String)) (candidate String)] (Vec String)
+  (if (string-member? values candidate) values (conj values candidate)))
+
+(defn excluded-service-type? [(type String)] Bool
+  (string-member?
+    ["submodule" "attrsOf" "lazyAttrsOf" "anything" "unspecified"
+     "package"]
+    type))
+
+(defn direct-service-child? [(service String) (path String)] Bool
+  (let [(prefix String) (str "services." service ".")]
+    (if (not (starts-with? path prefix))
+      false
+      (let [(leaf String) (subs path (count prefix) (count path))
+            (bytes (Vec Int)) (utf8-encode leaf)]
+        (and (> (count bytes) 0)
+             (loop [(index Int) 0]
+               (if (>= index (count bytes))
+                 true
+                 (if (= 46 (nth bytes index))
+                   false
+                   (recur (+ index 1))))))))))
+
+(defn service-entry-interesting? [(service String) (entry SchemaEntry)] Bool
+  (and (direct-service-child? service (schemaentry-name entry))
+       (not= (schemaentry-name entry) (str "services." service ".enable"))
+       (not (excluded-service-type? (schemaentry-type entry)))))
+
+(defn service-entry-type [(entries (Vec SchemaEntry)) (path String)] String
+  (loop [(index Int) 0]
+    (if (>= index (count entries))
+      "?"
+      (let [(entry SchemaEntry) (nth entries index)]
+        (if (= path (schemaentry-name entry))
+          (schemaentry-type entry)
+          (recur (+ index 1)))))))
+
+(defn service-entry-names
+  [(entries (Vec SchemaEntry)) (service String)] (Vec String)
+  (loop [(index Int) 0
+         (names (Vec String)) []]
+    (if (>= index (count entries))
+      (sort names)
+      (let [(entry SchemaEntry) (nth entries index)]
+        (recur (+ index 1)
+          (if (service-entry-interesting? service entry)
+            (conj names (schemaentry-name entry))
+            names))))))
+
+(defn selected-service-entries
+  [(entries (Vec SchemaEntry)) (service String)] (Vec SchemaEntry)
+  (let [(names (Vec String)) (service-entry-names entries service)
+        (limit Int) (min 8 (count names))]
+    (loop [(index Int) 0
+           (selected (Vec SchemaEntry)) []]
+      (if (>= index limit)
+        selected
+        (let [(path String) (nth names index)]
+          (recur (+ index 1)
+            (conj selected
+              (->SchemaEntry path (service-entry-type entries path)))))))))
+
+(defn schema-event-offset [(event json/JsonEvent)] Int
+  (match event
+    [(JsonObjectStart offset) offset]
+    [(JsonObjectEnd offset) offset]
+    [(JsonArrayStart offset) offset]
+    [(JsonArrayEnd offset) offset]
+    [(JsonKey offset value) offset]
+    [(JsonString offset value) offset]
+    [(JsonNumber offset lexeme) offset]
+    [(JsonBoolean offset value) offset]
+    [(JsonNull offset) offset]))
+
+(defn find-object-end [(events (Vec json/JsonEvent)) (start Int)] Int
+  (loop [(index Int) (+ start 1)
+         (depth Int) 0]
+    (if (>= index (count events))
+      -1
+      (match (nth events index)
+        [(JsonObjectStart offset) (recur (+ index 1) (+ depth 1))]
+        [(JsonArrayStart offset) (recur (+ index 1) (+ depth 1))]
+        [(JsonObjectEnd offset)
+         (if (= depth 0) index (recur (+ index 1) (- depth 1)))]
+        [(JsonArrayEnd offset) (recur (+ index 1) (- depth 1))]
+        [(JsonKey offset value) (recur (+ index 1) depth)]
+        [(JsonString offset value) (recur (+ index 1) depth)]
+        [(JsonNumber offset lexeme) (recur (+ index 1) depth)]
+        [(JsonBoolean offset value) (recur (+ index 1) depth)]
+        [(JsonNull offset) (recur (+ index 1) depth)]))))
+
+(defn scan-schema-object
+  [(events (Vec json/JsonEvent)) (start Int) (end Int)] SchemaObjectScan
+  (loop [(index Int) (+ start 1)
+         (depth Int) 0
+         (entry-name (U String Nil)) nil
+         (entry-type (U String Nil)) nil]
+    (if (>= index end)
+      (->SchemaObjectScan entry-name entry-type)
+      (match (nth events index)
+        [(JsonObjectStart offset)
+         (recur (+ index 1) (+ depth 1) entry-name entry-type)]
+        [(JsonArrayStart offset)
+         (recur (+ index 1) (+ depth 1) entry-name entry-type)]
+        [(JsonObjectEnd offset)
+         (recur (+ index 1) (- depth 1) entry-name entry-type)]
+        [(JsonArrayEnd offset)
+         (recur (+ index 1) (- depth 1) entry-name entry-type)]
+        [(JsonKey offset key)
+         (if (and (= depth 0) (< (+ index 1) end))
+           (match (nth events (+ index 1))
+             [(JsonString value-offset value)
+              (recur (+ index 1) depth
+                (if (= key "name") value entry-name)
+                (if (= key "t") value entry-type))]
+             [(JsonObjectStart value-offset)
+              (recur (+ index 1) depth entry-name entry-type)]
+             [(JsonObjectEnd value-offset)
+              (recur (+ index 1) depth entry-name entry-type)]
+             [(JsonArrayStart value-offset)
+              (recur (+ index 1) depth entry-name entry-type)]
+             [(JsonArrayEnd value-offset)
+              (recur (+ index 1) depth entry-name entry-type)]
+             [(JsonKey value-offset value)
+              (recur (+ index 1) depth entry-name entry-type)]
+             [(JsonNumber value-offset value)
+              (recur (+ index 1) depth entry-name entry-type)]
+             [(JsonBoolean value-offset value)
+              (recur (+ index 1) depth entry-name entry-type)]
+             [(JsonNull value-offset)
+              (recur (+ index 1) depth entry-name entry-type)])
+           (recur (+ index 1) depth entry-name entry-type))]
+        [(JsonString offset value)
+         (recur (+ index 1) depth entry-name entry-type)]
+        [(JsonNumber offset lexeme)
+         (recur (+ index 1) depth entry-name entry-type)]
+        [(JsonBoolean offset value)
+         (recur (+ index 1) depth entry-name entry-type)]
+        [(JsonNull offset)
+         (recur (+ index 1) depth entry-name entry-type)]))))
+
+(defn parse-schema-events [(events (Vec json/JsonEvent))] SchemaParseResult
+  (if (or (< (count events) 2)
+          (not (match (nth events 0)
+                 [(JsonArrayStart offset) true]
+                 [_ false])))
+    (->SchemaRejected "expected a JSON array" 0)
+    (loop [(index Int) 1
+           (entries (Vec SchemaEntry)) []]
+      (if (>= index (count events))
+        (->SchemaRejected "unterminated schema array" 0)
+        (match (nth events index)
+          [(JsonArrayEnd offset)
+           (if (= (+ index 1) (count events))
+             (->SchemaParsed entries)
+             (->SchemaRejected "unexpected events after schema array" offset))]
+          [(JsonObjectStart offset)
+           (let [(end Int) (find-object-end events index)]
+             (if (< end 0)
+               (->SchemaRejected "unterminated schema entry" offset)
+               (let [(fields SchemaObjectScan)
+                     (scan-schema-object events index end)
+                     (entry-name (U String Nil))
+                     (schemaobjectscan-name fields)
+                     (entry-type (U String Nil))
+                     (schemaobjectscan-type fields)]
+                 (if (nil? entry-name)
+                   (->SchemaRejected
+                     "schema entry requires a string name" offset)
+                   (recur (+ end 1)
+                     (conj entries
+                       (->SchemaEntry entry-name
+                         (if (nil? entry-type) "?" entry-type))))))))]
+          [(JsonObjectEnd offset)
+           (->SchemaRejected "schema entries must be objects" offset)]
+          [(JsonArrayStart offset)
+           (->SchemaRejected "schema entries must be objects" offset)]
+          [(JsonKey offset value)
+           (->SchemaRejected "schema entries must be objects" offset)]
+          [(JsonString offset value)
+           (->SchemaRejected "schema entries must be objects" offset)]
+          [(JsonNumber offset lexeme)
+           (->SchemaRejected "schema entries must be objects" offset)]
+          [(JsonBoolean offset value)
+           (->SchemaRejected "schema entries must be objects" offset)]
+          [(JsonNull offset)
+           (->SchemaRejected "schema entries must be objects" offset)])))))
+
+(defn schema-entries-from-json [(source String)] SchemaParseResult
+  (match (json/decode source)
+    [(JsonDecodeError offset message)
+     (->SchemaRejected message offset)]
+    [(JsonDecoded events) (parse-schema-events events)]))
+
+(defn module-body [(name String)] String
+  (str
+    "#lang beagle/nix\n\n"
+    "(ns default)\n\n"
+    "(nix/module [config lib pkgs ...]\n"
+    "  {:options.myConfig.modules." name ".enable\n"
+    "    (lib.mkEnableOption \"Enable " name "\")\n"
+    "   :config\n"
+    "    (lib.mkIf config.myConfig.modules." name ".enable\n"
+    "      {:environment.systemPackages (nix/with pkgs [" name "])})})\n"))
+
+(defn service-stub-lines [(entries (Vec SchemaEntry))] String
+  (if (empty? entries)
+    ""
+    (str
+      "      {;; common options — uncomment to override:\n"
+      (loop [(index Int) 0
+             (text String) ""]
+        (if (>= index (count entries))
+          text
+          (let [(entry SchemaEntry) (nth entries index)]
+            (recur (+ index 1)
+              (str text "       ;; :" (schemaentry-name entry)
+                " <value>   ; " (schemaentry-type entry) "\n"))))))))
+
+(defn service-body [(name String) (entries (Vec SchemaEntry))] String
+  (let [(selected (Vec SchemaEntry))
+        (selected-service-entries entries name)]
+    (str
+      "#lang beagle/nix\n\n"
+      "(ns default)\n\n"
+      "(nix/module [config lib pkgs ...]\n"
+      "  {:options.myConfig.modules." name ".enable\n"
+      "    (lib.mkEnableOption \"" name " service\")\n"
+      "   :config\n"
+      "    (lib.mkIf config.myConfig.modules." name ".enable\n"
+      (if (empty? selected)
+        (str "      {:services." name ".enable true})})\n")
+        (str (service-stub-lines selected)
+          "       :services." name ".enable true})})\n")))))
+
+(defn submodule-body [(name String)] String
+  (str
+    "#lang beagle/nix\n\n"
+    "(ns default)\n\n"
+    "(nix/module [config lib pkgs ...]\n"
+    "  {:options.myConfig.modules." name "\n"
+    "    {:enable (lib.mkEnableOption \"" name " configuration\")\n"
+    "     :extraConfig\n"
+    "      (lib.mkOption\n"
+    "        {:type        lib.types.lines\n"
+    "         :default     \"\"\n"
+    "         :description \"Extra config text.\"})}\n"
+    "   :config\n"
+    "    (lib.mkIf config.myConfig.modules." name ".enable\n"
+    "      {:environment.systemPackages\n"
+    "        (nix/with pkgs [" name "])})})\n"))
+
+(defn home-body [(name String)] String
+  (str
+    "#lang beagle/nix\n\n"
+    "(ns default)\n\n"
+    "(nix/module [config lib pkgs ...]\n"
+    "  (let [username config.myConfig.modules.users.username]\n"
+    "    {:options.myConfig.modules." name ".enable\n"
+    "      (lib.mkEnableOption \"" name " (home-manager)\")\n"
+    "     :config\n"
+    "      (lib.mkIf config.myConfig.modules." name ".enable\n"
+    "        {:home-manager.users\n"
+    "          {username\n"
+    "            {:programs." name ".enable true}}})}))\n"))
+
+(defn host-configuration-body [(name String)] String
+  (str
+    "#lang beagle/nix\n\n"
+    "(ns configuration)\n\n"
+    "(nix/module [config lib pkgs ...]\n"
+    "  {:myConfig.modules.system.stateVersion \"25.11\"\n"
+    "   :myConfig.modules.users.username \"you\"\n"
+    "   :myConfig.modules.users.enable true\n"
+    "   :myConfig.modules.boot.enable true\n"
+    "   :myConfig.modules.networking.enable true\n"
+    "   :imports [(p \"./_generated-enables.nix\")]})\n"))
+
+(defn host-tags-body [] String
+  (str
+    "#lang beagle/nix\n\n"
+    "(ns enabled-tags)\n\n"
+    "{:platform linux\n"
+    " :enabled\n"
+    "  [terminal\n"
+    "   cli-tools\n"
+    "   development]\n"
+    " :disabled []}\n"))
+
+(defn service-summary [(name String) (count Int)] String
+  (if (= count 0)
+    (str "  (no schema entries found for services." name
+      " — schema cache stale or service not in nixpkgs?)\n")
+    (str "  pre-filled " count
+      " common options as commented stubs (from schema)\n")))
+
+(defn single-plan
+  [(relative String) (contents String) (extra-output String)] AuthoringPlan
+  (->AuthoringPlan
+    [(->AuthoringTarget relative contents)]
+    (str "Created " relative " (git added)\n" extra-output)))
+
+(defn invalid-authoring-name [] AuthoringPlanResult
+  (->AuthoringPlanRejected "firn authoring: invalid name\n"))
+
+(defn plan-authoring
+  [(action AuthoringAction) (schema (Vec SchemaEntry))] AuthoringPlanResult
+  (match action
+    [(ModuleAdd name)
+     (if (safe-authoring-name? name)
+       (->AuthoringPlanReady
+         (single-plan
+           (str "modules/" name "/default.bnix")
+           (module-body name) ""))
+       (invalid-authoring-name))]
+    [(TemplateService name)
+     (if (safe-authoring-name? name)
+       (let [(selected (Vec SchemaEntry))
+             (selected-service-entries schema name)]
+         (->AuthoringPlanReady
+           (single-plan
+             (str "modules/" name "/default.bnix")
+             (service-body name schema)
+             (service-summary name (count selected)))))
+       (invalid-authoring-name))]
+    [(TemplateSubmodule name)
+     (if (safe-authoring-name? name)
+       (->AuthoringPlanReady
+         (single-plan
+           (str "modules/" name "/default.bnix")
+           (submodule-body name) ""))
+       (invalid-authoring-name))]
+    [(TemplateHome name)
+     (if (safe-authoring-name? name)
+       (->AuthoringPlanReady
+         (single-plan
+           (str "modules/" name "/default.bnix")
+           (home-body name) ""))
+       (invalid-authoring-name))]
+    [(TemplateHost name)
+     (if (safe-authoring-name? name)
+       (let [(configuration String)
+             (str "hosts/" name "/configuration.bnix")
+             (tags String) (str "hosts/" name "/enabled-tags.bnix")]
+         (->AuthoringPlanReady
+           (->AuthoringPlan
+             [(->AuthoringTarget configuration
+                (host-configuration-body name))
+              (->AuthoringTarget tags (host-tags-body))]
+             (str
+               "Created " configuration " (git added)\n"
+               "Created " tags " (git added)\n"
+               "Don't forget to add " name
+               " to flake.bnix's nixosConfigurations.\n"))))
+       (invalid-authoring-name))]
+    [(SecretList)
+     (->AuthoringPlanRejected "firn authoring: not a scaffold command\n")]
+    [(SecretShow name)
+     (->AuthoringPlanRejected "firn authoring: not a scaffold command\n")]
+    [(SecretEdit name)
+     (->AuthoringPlanRejected "firn authoring: not a scaffold command\n")]))
+
+(defn strip-yaml-suffix [(name String)] String
+  (if (ends-with? name ".yaml")
+    (subs name 0 (- (count name) 5))
+    name))
