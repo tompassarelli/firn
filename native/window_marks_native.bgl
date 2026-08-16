@@ -1,0 +1,350 @@
+#lang beagle
+(ns firn.window-marks-native
+  (:require [firn.window-marks :as marks]))
+
+(def max-log-bytes Int 16777216)
+(def max-command-output Int 16777216)
+
+(defunion LogLoadResult
+  (LogLoaded [(text String)])
+  (LogLoadRejected [(errno Int)]))
+
+(defunion ProcessResult
+  (ProcessCompleted [(status Int) (stdout String) (stderr String)])
+  (ProcessRejected [(errno Int)]))
+
+(defunion IsoValuesResult
+  (IsoValuesLoaded [(values (Vec String))])
+  (IsoValuesRejected [(errno Int)]))
+
+(defn stderr-line [(message String)] Nil
+  (host.stderr/write-text (str message "\n")))
+
+(defn marks-log-path [] (U String Nil)
+  (let [(explicit (U String Nil)) (System/getenv "MARKS_LOG")]
+    (if (some? explicit)
+      explicit
+      (let [(home (U String Nil)) (System/getenv "HOME")]
+        (if (nil? home)
+          nil
+          (str home "/.local/state/wm-world/marks.log"))))))
+
+(defn load-log [(path String)] LogLoadResult
+  (match (host.fs/read-text-bounded path max-log-bytes)
+    [(host.fs/ReadTextBoundedOk text) (->LogLoaded text)]
+    [(host.fs/ReadTextBoundedError errno)
+     (if (= errno 2)
+       (->LogLoaded "")
+       (->LogLoadRejected errno))]))
+
+(defn append-log [(path String) (text String)] Int
+  (match (host.fs/make-parent-directories path)
+    [(host.fs/MakeParentDirectoriesError errno)
+     (do (stderr-line (str "wm marks: cannot create state directory: errno " errno))
+       1)]
+    [(host.fs/MakeParentDirectoriesOk)
+     (match (host.fs/append-text path text)
+       [(host.fs/AppendTextOk) 0]
+       [(host.fs/AppendTextError errno)
+        (do (stderr-line (str "wm marks: cannot append log: errno " errno))
+          1)])]))
+
+(defn capture [(argv (Vec String)) (stdin String)] ProcessResult
+  (match (host.process/run-capture argv stdin max-command-output)
+    [(host.process/CaptureOk status stdout stderr)
+     (->ProcessCompleted status stdout stderr)]
+    [(host.process/CaptureError errno) (->ProcessRejected errno)]))
+
+(defn niri-windows [] marks/WindowsJsonResult
+  (match (capture ["niri" "msg" "-j" "windows"] "")
+    [(ProcessRejected errno)
+     (marks/->WindowsJsonRejected (str "cannot start niri: errno " errno))]
+    [(ProcessCompleted status stdout stderr)
+     (if (= status 0)
+       (marks/windows-json stdout)
+       (marks/->WindowsJsonRejected (str "niri exited " status)))]))
+
+(defn niri-focused-window [] marks/WindowJsonResult
+  (match (capture ["niri" "msg" "-j" "focused-window"] "")
+    [(ProcessRejected errno)
+     (marks/->WindowJsonRejected (str "cannot start niri: errno " errno))]
+    [(ProcessCompleted status stdout stderr)
+     (if (= status 0)
+       (marks/focused-window-json stdout)
+       (marks/->WindowJsonRejected (str "niri exited " status)))]))
+
+(defn iso-values [(count-needed Int)] IsoValuesResult
+  (loop [(index Int) 0
+         (values (Vec String)) []]
+    (if (>= index count-needed)
+      (->IsoValuesLoaded values)
+      (let [(now Int) (host.clock/wall-nanoseconds)]
+        (match (host.clock/format-iso8601 now)
+          [(host.clock/FormatIso8601Ok text)
+           (recur (+ index 1) (conj values text))]
+          [(host.clock/FormatIso8601Error errno)
+           (->IsoValuesRejected errno)])))))
+
+(defn tail-args [(args (Vec String))] (Vec String)
+  (loop [(index Int) 1
+         (result (Vec String)) []]
+    (if (>= index (count args))
+      result
+      (recur (+ index 1) (conj result (nth args index))))))
+
+(defn find-window [(windows (Vec marks/Window)) (id Int)] (U marks/Window Nil)
+  (loop [(index Int) 0]
+    (cond
+      (>= index (count windows)) nil
+      (= id (marks/window-id (nth windows index))) (nth windows index)
+      :else (recur (+ index 1)))))
+
+(defn persist-mark
+  [(path String) (letter String) (window marks/Window)] Int
+  (match (load-log path)
+    [(LogLoadRejected errno)
+     (do (stderr-line (str "wm-mark: cannot read marks log: errno " errno)) 1)]
+    [(LogLoaded log-text)
+     (match (iso-values 5)
+       [(IsoValuesRejected errno)
+        (do (stderr-line (str "wm-mark: cannot format timestamp: errno " errno))
+          1)]
+       [(IsoValuesLoaded values)
+        (let [(letter-lower String) (marks/normalize-letter letter)
+              (subject String) (marks/subject-for-letter letter)
+              (first-tx Int) (+ (marks/max-transaction log-text) 1)
+              (lines String)
+              (marks/mark-lines first-tx subject window (nth values 0)
+                [(nth values 1) (nth values 2) (nth values 3) (nth values 4)])
+              (status Int) (append-log path lines)]
+          (if (= status 0)
+            (do
+              (println
+                (str "marked " letter-lower " -> @w" (marks/window-id window)
+                  "  " (marks/window-app-id window) "  "
+                  (marks/window-title window)))
+              0)
+            status))])]))
+
+(defn mark-command [(args (Vec String))] Int
+  (let [(letter (U String Nil)) (if (empty? args) nil (nth args 0))
+        (id-arg (U String Nil)) (if (< (count args) 2) nil (nth args 1))]
+    (if (not (marks/valid-letter? letter))
+      (do
+        (stderr-line
+          "usage: wm-mark <letter> [id]  (letter = single alphanumeric)")
+        2)
+      (let [(path (U String Nil)) (marks-log-path)
+            (letter-value String) (or letter "")]
+        (if (nil? path)
+          (do (stderr-line "wm-mark: HOME and MARKS_LOG are not set") 1)
+          (if (some? id-arg)
+            (let [(parsed-id (U Int Nil)) (parse-long id-arg)]
+              (match (niri-windows)
+                [(WindowsJsonRejected message)
+                 (do (stderr-line (str "wm-mark: " message)) 1)]
+                [(WindowsJsonLoaded windows)
+                 (let [(window (U marks/Window Nil))
+                       (if (nil? parsed-id) nil (find-window windows parsed-id))]
+                   (if (nil? window)
+                     (do (stderr-line (str "no window with id " id-arg)) 1)
+                     (persist-mark path letter-value window))) ]))
+            (match (niri-focused-window)
+              [(WindowJsonRejected message)
+               (do (stderr-line (str "wm-mark: " message)) 1)]
+              [(WindowJsonMissing token)
+               (do (stderr-line "no focused window") 1)]
+              [(WindowJsonLoaded window)
+               (persist-mark path letter-value window)])))))))
+
+(defn unmark-command [(args (Vec String))] Int
+  (let [(letter (U String Nil)) (if (empty? args) nil (nth args 0))]
+    (if (not (marks/valid-letter? letter))
+      (do (stderr-line "usage: wm-unmark <letter>") 2)
+      (let [(path (U String Nil)) (marks-log-path)
+            (letter-value String) (or letter "")]
+        (if (nil? path)
+          (do (stderr-line "wm-unmark: HOME and MARKS_LOG are not set") 1)
+          (match (load-log path)
+            [(LogLoadRejected errno)
+             (do
+               (stderr-line (str "wm-unmark: cannot read marks log: errno " errno))
+               1)]
+            [(LogLoaded log-text)
+             (match (iso-values 1)
+               [(IsoValuesRejected errno)
+                (do
+                  (stderr-line
+                    (str "wm-unmark: cannot format timestamp: errno " errno))
+                  1)]
+               [(IsoValuesLoaded values)
+                (let [(letter-lower String) (marks/normalize-letter letter-value)
+                      (line String)
+                      (marks/retract-line (+ (marks/max-transaction log-text) 1)
+                        (marks/subject-for-letter letter-value) (nth values 0))
+                      (status Int) (append-log path line)]
+                  (if (= status 0)
+                    (do (println (str "unmarked " letter-lower)) 0)
+                    status))])]))))))
+
+(defn loaded-marks [(path String)] (U (Vec marks/Mark) Nil)
+  (match (load-log path)
+    [(LogLoadRejected errno)
+     (do (stderr-line (str "wm marks: cannot read marks log: errno " errno)) nil)]
+    [(LogLoaded text) (marks/fold-log text)]))
+
+(defn focus-window [(id Int)] Int
+  (host.process/run-inherit
+    ["niri" "msg" "action" "focus-window" "--id" (str id)]))
+
+(defn execute-jump
+  [(mark marks/Mark) (letter-lower String) (windows (Vec marks/Window))]
+  Int
+  (let [(marked-id (U Int Nil))
+        (marks/marked-window-id (marks/mark-window mark))]
+    (if (and (some? marked-id) (marks/window-live? windows marked-id))
+      (let [(status Int) (focus-window marked-id)]
+        (if (= status 0)
+          (do
+            (println
+              (str "exact -> @w" marked-id "  "
+                (or (marks/mark-app-id mark) "")))
+            0)
+          status))
+      (let [(best (U marks/Window Nil))
+            (marks/best-identity-window windows
+              (marks/mark-app-id mark) (marks/mark-title mark))]
+        (if (nil? best)
+          (do
+            (stderr-line
+              (str "unresolvable: mark " letter-lower " -> "
+                (or (marks/mark-app-id mark) "")
+                " (no live window of that app)"))
+            1)
+          (let [(status Int) (focus-window (marks/window-id best))]
+            (if (= status 0)
+              (do
+                (println
+                  (str "resolved-by-identity -> @w" (marks/window-id best)
+                    "  " (marks/window-app-id best) "  "
+                    (marks/window-title best)))
+                0)
+              status)))))))
+
+(defn jump-loaded
+  [(folded (Vec marks/Mark)) (letter String) (letter-lower String)] Int
+  (let [(index Int)
+        (marks/mark-index folded (marks/subject-for-letter letter))]
+    (if (< index 0)
+      (do (stderr-line (str "no mark " letter-lower)) 1)
+      (let [(mark marks/Mark) (nth folded index)]
+        (match (niri-windows)
+          [(WindowsJsonRejected message)
+           (do (stderr-line (str "wm-jump: " message)) 1)]
+          [(WindowsJsonLoaded windows)
+           (execute-jump mark letter-lower windows)])))))
+
+(defn jump-command [(args (Vec String))] Int
+  (let [(letter (U String Nil)) (if (empty? args) nil (nth args 0))]
+    (if (not (marks/valid-letter? letter))
+      (do (stderr-line "usage: wm-jump <letter>") 2)
+      (let [(path (U String Nil)) (marks-log-path)
+            (letter-value String) (or letter "")
+            (letter-lower String) (marks/normalize-letter letter-value)]
+        (if (nil? path)
+          (do (stderr-line "wm-jump: HOME and MARKS_LOG are not set") 1)
+          (let [(folded (U (Vec marks/Mark) Nil)) (loaded-marks path)]
+            (if (nil? folded)
+              1
+              (jump-loaded folded letter-value letter-lower))))))))
+
+(defn marks-command [(args (Vec String))] Int
+  (let [(path (U String Nil)) (marks-log-path)]
+    (if (nil? path)
+      (do (stderr-line "wm-marks: HOME and MARKS_LOG are not set") 1)
+      (let [(folded (U (Vec marks/Mark) Nil)) (loaded-marks path)]
+        (if (nil? folded)
+          1
+          (match (niri-windows)
+            [(WindowsJsonRejected message)
+             (do (stderr-line (str "wm-marks: " message)) 1)]
+            [(WindowsJsonLoaded windows)
+             (do (print (marks/marks-list-text folded windows)) 0)]))))))
+
+(defn mark-rofi-command [(args (Vec String))] Int
+  (match (niri-focused-window)
+    [(WindowJsonRejected message)
+     (do (stderr-line (str "wm-mark-rofi: " message)) 1)]
+    [(WindowJsonMissing token)
+     (do
+       (host.process/run-inherit ["rofi" "-e" "no focused window to mark"])
+       1)]
+    [(WindowJsonLoaded window)
+     (match (capture
+              ["rofi" "-dmenu" "-p"
+               (str "set mark for: " (marks/window-app-id window))]
+              "")
+       [(ProcessRejected errno)
+        (do (stderr-line (str "wm-mark-rofi: cannot start rofi: errno " errno))
+          1)]
+       [(ProcessCompleted status stdout stderr)
+        (if (not= status 0)
+          status
+          (let [(letter String) (str/trim stdout)]
+            (if (marks/valid-letter? letter)
+              (host.process/run-inherit
+                ["wm-mark" letter (str (marks/window-id window))])
+              0)))])]))
+
+(defn jump-rofi-command [(args (Vec String))] Int
+  (let [(path (U String Nil)) (marks-log-path)]
+    (if (nil? path)
+      (do (stderr-line "wm-jump-rofi: HOME and MARKS_LOG are not set") 1)
+      (let [(folded (U (Vec marks/Mark) Nil)) (loaded-marks path)]
+        (if (nil? folded)
+          1
+          (match (niri-windows)
+            [(WindowsJsonRejected message)
+             (do (stderr-line (str "wm-jump-rofi: " message)) 1)]
+            [(WindowsJsonLoaded windows)
+             (let [(ordered (Vec marks/Mark)) (marks/sorted-marks folded)]
+               (if (empty? ordered)
+                 (do
+                   (host.process/run-inherit ["rofi" "-e" "no marks set"])
+                   0)
+                 (match (capture
+                          ["rofi" "-dmenu" "-i" "-p" "jump to mark"]
+                          (marks/jump-menu-text folded windows))
+                   [(ProcessRejected errno)
+                    (do
+                      (stderr-line
+                        (str "wm-jump-rofi: cannot start rofi: errno " errno))
+                      1)]
+                   [(ProcessCompleted status stdout stderr)
+                    (if (not= status 0)
+                      status
+                      (let [(letter String) (marks/first-token stdout)]
+                        (if (= letter "")
+                          0
+                          (host.process/run-inherit ["wm-jump" letter]))))])))]))))))
+
+(defn usage [] Int
+  (do
+    (stderr-line
+      (str "usage: window-marks <wm-mark|wm-unmark|wm-jump|wm-marks|"
+        "wm-mark-rofi|wm-jump-rofi> [args...]"))
+    64))
+
+(defn -main [(args (Vec String))] Int
+  (if (empty? args)
+    (usage)
+    (let [(command String) (nth args 0)
+          (command-args (Vec String)) (tail-args args)]
+      (cond
+        (= command "wm-mark") (mark-command command-args)
+        (= command "wm-unmark") (unmark-command command-args)
+        (= command "wm-jump") (jump-command command-args)
+        (= command "wm-marks") (marks-command command-args)
+        (= command "wm-mark-rofi") (mark-rofi-command command-args)
+        (= command "wm-jump-rofi") (jump-rofi-command command-args)
+        :else (usage)))))

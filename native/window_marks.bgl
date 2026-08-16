@@ -1,0 +1,563 @@
+#lang beagle
+(ns firn.window-marks
+  (:require [native.edn :as edn]
+            [native.json :as json]))
+
+(defrecord Mark
+  [(subject String)
+   (window (U String Nil))
+   (app-id (U String Nil))
+   (title (U String Nil))
+   (marked-at (U String Nil))])
+
+(defrecord Window [(id Int) (app-id String) (title String)])
+
+(defrecord FactFields
+  [(tx (U Int Nil))
+   (op (U String Nil))
+   (subject (U String Nil))
+   (predicate (U String Nil))
+   (value (U String Nil))])
+
+(defunion FactFieldResult
+  (FactFieldAccepted [(fields FactFields)])
+  (FactFieldRejected [(token Bool)]))
+
+(defunion WindowsJsonResult
+  (WindowsJsonLoaded [(windows (Vec Window))])
+  (WindowsJsonRejected [(message String)]))
+
+(defunion WindowJsonResult
+  (WindowJsonLoaded [(window Window)])
+  (WindowJsonMissing [(token Bool)])
+  (WindowJsonRejected [(message String)]))
+
+(defn ascii-alphanumeric? [(character String)] Bool
+  (and (= (count character) 1)
+       (str/includes?
+         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+         character)))
+
+(defn valid-letter? [(letter (U String Nil))] Bool
+  (and (some? letter) (ascii-alphanumeric? letter)))
+
+(defn normalize-letter [(letter String)] String
+  (str/lower-case letter))
+
+(defn subject-for-letter [(letter String)] String
+  (str "@mark-" (normalize-letter letter)))
+
+(defn split-lines [(text String)] (Vec String)
+  (loop [(index Int) 0
+         (start Int) 0
+         (lines (Vec String)) []]
+    (if (>= index (count text))
+      (if (< start (count text))
+        (conj lines (subs text start (count text)))
+        lines)
+      (if (= (subs text index (+ index 1)) "\n")
+        (recur (+ index 1) (+ index 1) (conj lines (subs text start index)))
+        (recur (+ index 1) start lines)))))
+
+(defn empty-fact-fields [] FactFields
+  (->FactFields nil nil nil nil nil))
+
+(defn assign-fact-field
+  [(fields FactFields) (key Keyword) (event edn/EdnEvent)] FactFieldResult
+  (cond
+    (= key :tx)
+    (if (instance? EdnInteger event)
+      (let [(value Int) (edn/edninteger-value event)]
+       (->FactFieldAccepted
+         (with fields [:tx value])))
+      (->FactFieldRejected true))
+
+    (= key :op)
+    (if (instance? EdnString event)
+      (let [(value String) (edn/ednstring-value event)]
+       (->FactFieldAccepted
+         (with fields [:op value])))
+      (->FactFieldRejected true))
+
+    (= key :l)
+    (if (instance? EdnString event)
+      (let [(value String) (edn/ednstring-value event)]
+       (->FactFieldAccepted
+         (with fields [:subject value])))
+      (->FactFieldRejected true))
+
+    (= key :p)
+    (if (instance? EdnString event)
+      (let [(value String) (edn/ednstring-value event)]
+       (->FactFieldAccepted
+         (with fields [:predicate value])))
+      (->FactFieldRejected true))
+
+    (= key :r)
+    (if (instance? EdnString event)
+      (let [(value String) (edn/ednstring-value event)]
+       (->FactFieldAccepted
+         (with fields [:value value])))
+      (->FactFieldRejected true))
+
+    :else
+    (->FactFieldAccepted fields)))
+
+(defn scan-fact-events
+  [(events (Vec edn/EdnEvent))] (U FactFields Nil)
+  (if (or (< (count events) 2)
+          (not (instance? EdnMapStart (first events)))
+          (not (instance? EdnMapEnd (peek events))))
+    nil
+    (loop [(index Int) 1
+           (fields FactFields) (empty-fact-fields)]
+      (cond
+        (= index (- (count events) 1)) fields
+        (> (+ index 1) (- (count events) 2)) nil
+        :else
+        (let [(key-event edn/EdnEvent) (nth events index)]
+          (if (instance? EdnKeyword key-event)
+            (let [(key Keyword) (edn/ednkeyword-value key-event)]
+              (match (assign-fact-field fields key (nth events (+ index 1)))
+             [(FactFieldAccepted updated)
+              (recur (+ index 2) updated)]
+                [(FactFieldRejected token) nil]))
+            nil))))))
+
+(defn parse-fact-line [(line String)] (U FactFields Nil)
+  (if (= (str/trim line) "")
+    nil
+    (match (edn/decode line)
+      [(EdnDecoded events) (scan-fact-events events)]
+      [(EdnDecodeError offset message) nil])))
+
+(defn parsed-facts [(text String)] (Vec FactFields)
+  (let [(lines (Vec String)) (split-lines text)]
+    (loop [(index Int) 0
+           (facts (Vec FactFields)) []]
+      (if (>= index (count lines))
+        facts
+        (let [(parsed (U FactFields Nil))
+              (parse-fact-line (nth lines index))]
+          (recur (+ index 1)
+            (if (nil? parsed) facts (conj facts parsed))))))))
+
+(defn max-transaction [(text String)] Int
+  (let [(facts (Vec FactFields)) (parsed-facts text)]
+    (loop [(index Int) 0
+           (greatest Int) 0]
+      (if (>= index (count facts))
+        greatest
+        (let [(candidate (U Int Nil))
+              (factfields-tx (nth facts index))]
+          (recur (+ index 1)
+            (if (and (some? candidate) (> candidate greatest))
+              candidate
+              greatest)))))))
+
+(defn mark-index [(marks (Vec Mark)) (subject String)] Int
+  (loop [(index Int) 0]
+    (cond
+      (>= index (count marks)) -1
+      (= subject (mark-subject (nth marks index))) index
+      :else (recur (+ index 1)))))
+
+(defn remove-mark-at [(marks (Vec Mark)) (removed Int)] (Vec Mark)
+  (loop [(index Int) 0
+         (result (Vec Mark)) []]
+    (if (>= index (count marks))
+      result
+      (recur (+ index 1)
+        (if (= index removed)
+          result
+          (conj result (nth marks index)))))))
+
+(defn empty-mark [(subject String)] Mark
+  (->Mark subject nil nil nil nil))
+
+(defn set-mark-predicate
+  [(mark Mark) (predicate String) (value (U String Nil))] Mark
+  (cond
+    (= predicate "window") (with mark [:window value])
+    (= predicate "app_id") (with mark [:app-id value])
+    (= predicate "title") (with mark [:title value])
+    (= predicate "marked_at") (with mark [:marked-at value])
+    :else mark))
+
+(defn assert-mark
+  [(marks (Vec Mark)) (subject String) (predicate String) (value String)]
+  (Vec Mark)
+  (let [(index Int) (mark-index marks subject)]
+    (if (< index 0)
+      (conj marks (set-mark-predicate (empty-mark subject) predicate value))
+      (assoc marks index
+        (set-mark-predicate (nth marks index) predicate value)))))
+
+(defn retract-mark
+  [(marks (Vec Mark)) (subject String) (predicate (U String Nil))]
+  (Vec Mark)
+  (let [(index Int) (mark-index marks subject)]
+    (if (< index 0)
+      marks
+      (if (nil? predicate)
+        (remove-mark-at marks index)
+        (assoc marks index
+          (set-mark-predicate (nth marks index) predicate nil))))))
+
+(defn apply-fact [(marks (Vec Mark)) (fact FactFields)] (Vec Mark)
+  (let [(op (U String Nil)) (factfields-op fact)
+        (subject (U String Nil)) (factfields-subject fact)
+        (predicate (U String Nil)) (factfields-predicate fact)
+        (value (U String Nil)) (factfields-value fact)]
+    (cond
+      (and (= op "assert") (some? subject)
+           (some? predicate) (some? value))
+      (assert-mark marks subject predicate value)
+
+      (and (= op "retract") (some? subject))
+      (retract-mark marks subject predicate)
+
+      :else marks)))
+
+(defn fold-log [(text String)] (Vec Mark)
+  (let [(facts (Vec FactFields)) (parsed-facts text)]
+    (loop [(index Int) 0
+           (marks (Vec Mark)) []]
+      (if (>= index (count facts))
+        marks
+        (recur (+ index 1) (apply-fact marks (nth facts index)))))))
+
+(defn fact-prefix [(tx Int) (op String) (subject String)]
+  (Vec edn/EdnEvent)
+  [(edn/->EdnMapStart 0)
+   (edn/->EdnKeyword 0 :tx) (edn/->EdnInteger 0 tx)
+   (edn/->EdnKeyword 0 :op) (edn/->EdnString 0 op)
+   (edn/->EdnKeyword 0 :l) (edn/->EdnString 0 subject)])
+
+(defn encoded-line [(events (Vec edn/EdnEvent))] String
+  (match (edn/encode events)
+    [(EdnEncoded text) (str text "\n")]
+    [(EdnEncodeError event-index message) ""]))
+
+(defn assert-line
+  [(tx Int) (subject String) (predicate String) (value String) (timestamp String)]
+  String
+  (encoded-line
+    (conj
+      (conj
+        (conj
+          (conj
+            (conj (fact-prefix tx "assert" subject)
+              (edn/->EdnKeyword 0 :p))
+            (edn/->EdnString 0 predicate))
+          (edn/->EdnKeyword 0 :r))
+        (edn/->EdnString 0 value))
+      (edn/->EdnKeyword 0 :frame)
+      (edn/->EdnString 0 "wm-mark")
+      (edn/->EdnKeyword 0 :ts)
+      (edn/->EdnString 0 timestamp)
+      (edn/->EdnMapEnd 0))))
+
+(defn retract-line
+  [(tx Int) (subject String) (timestamp String)] String
+  (encoded-line
+    (conj
+      (fact-prefix tx "retract" subject)
+      (edn/->EdnKeyword 0 :frame)
+      (edn/->EdnString 0 "wm-mark")
+      (edn/->EdnKeyword 0 :ts)
+      (edn/->EdnString 0 timestamp)
+      (edn/->EdnMapEnd 0))))
+
+(defn mark-lines
+  [(first-tx Int)
+   (subject String)
+   (window Window)
+   (marked-at String)
+   (timestamps (Vec String))]
+  String
+  (str
+    (assert-line first-tx subject "window" (str "@w" (window-id window))
+      (nth timestamps 0))
+    (assert-line (+ first-tx 1) subject "app_id" (window-app-id window)
+      (nth timestamps 1))
+    (assert-line (+ first-tx 2) subject "title" (window-title window)
+      (nth timestamps 2))
+    (assert-line (+ first-tx 3) subject "marked_at" marked-at
+      (nth timestamps 3))))
+
+(defn decimal-digit? [(character String)] Bool
+  (and (= (count character) 1)
+       (str/includes? "0123456789" character)))
+
+(defn marked-window-id [(window (U String Nil))] (U Int Nil)
+  (if (nil? window)
+    nil
+    (loop [(index Int) 0]
+      (if (>= index (count window))
+        nil
+        (if (decimal-digit? (subs window index (+ index 1)))
+          (loop [(end Int) (+ index 1)]
+            (if (and (< end (count window))
+                     (decimal-digit? (subs window end (+ end 1))))
+              (recur (+ end 1))
+              (parse-long (subs window index end))))
+          (recur (+ index 1)))))))
+
+(defn integer-row [(length Int)] (Vec Int)
+  (loop [(value Int) 0
+         (result (Vec Int)) []]
+    (if (> value length)
+      result
+      (recur (+ value 1) (conj result value)))))
+
+(defn levenshtein [(left String) (right String)] Int
+  (let [(left-length Int) (count left)
+        (right-length Int) (count right)]
+    (loop [(left-index Int) 1
+           (previous (Vec Int)) (integer-row right-length)]
+      (if (> left-index left-length)
+        (peek previous)
+        (let [(row (Vec Int))
+              (loop [(right-index Int) 1
+                     (current (Vec Int)) [left-index]]
+                (if (> right-index right-length)
+                  current
+                  (let [(cost Int)
+                        (if (= (subs left (- left-index 1) left-index)
+                               (subs right (- right-index 1) right-index))
+                          0
+                          1)
+                        (next Int)
+                        (min
+                          (+ (nth current (- right-index 1)) 1)
+                          (+ (nth previous right-index) 1)
+                          (+ (nth previous (- right-index 1)) cost))]
+                    (recur (+ right-index 1) (conj current next)))))]
+          (recur (+ left-index 1) row))))))
+
+(defn similarity [(left (U String Nil)) (right (U String Nil))] Float
+  (let [(left-text String) (or left "")
+        (right-text String) (or right "")
+        (normalized-left String) (str/lower-case left-text)
+        (normalized-right String) (str/lower-case right-text)
+        (longest Int) (max (count normalized-left) (count normalized-right))]
+    (if (= longest 0)
+      1.0
+      (- 1.0
+        (/ (double (levenshtein normalized-left normalized-right))
+           (double longest))))))
+
+(defn window-live? [(windows (Vec Window)) (id Int)] Bool
+  (loop [(index Int) 0]
+    (cond
+      (>= index (count windows)) false
+      (= id (window-id (nth windows index))) true
+      :else (recur (+ index 1)))))
+
+(defn best-identity-window
+  [(windows (Vec Window)) (app-id (U String Nil)) (title (U String Nil))]
+  (U Window Nil)
+  (if (nil? app-id)
+    nil
+    (let [(initial-best (U Window Nil)) nil]
+      (loop [(index Int) 0
+             (best (U Window Nil)) initial-best
+             (best-score Float) -2.0]
+        (if (>= index (count windows))
+          best
+          (let [(window Window) (nth windows index)]
+            (if (= app-id (window-app-id window))
+              (let [(score Float) (similarity title (window-title window))]
+                (if (>= score best-score)
+                  (let [(next-best (U Window Nil)) window]
+                    (recur (+ index 1) next-best score))
+                  (recur (+ index 1) best best-score)))
+              (recur (+ index 1) best best-score))))))))
+
+(defn json-container-end
+  [(events (Vec json/JsonEvent)) (start Int)] Int
+  (loop [(index Int) start
+         (depth Int) 0]
+    (if (>= index (count events))
+      -1
+      (match (nth events index)
+        [(JsonObjectStart offset) (recur (+ index 1) (+ depth 1))]
+        [(JsonArrayStart offset) (recur (+ index 1) (+ depth 1))]
+        [(JsonObjectEnd offset)
+         (if (= depth 1) (+ index 1) (recur (+ index 1) (- depth 1)))]
+        [(JsonArrayEnd offset)
+         (if (= depth 1) (+ index 1) (recur (+ index 1) (- depth 1)))]
+        [scalar (recur (+ index 1) depth)]))))
+
+(defn json-value-end [(events (Vec json/JsonEvent)) (start Int)] Int
+  (if (or (< start 0) (>= start (count events)))
+    -1
+    (match (nth events start)
+      [(JsonObjectStart offset) (json-container-end events start)]
+      [(JsonArrayStart offset) (json-container-end events start)]
+      [(JsonObjectEnd offset) -1]
+      [(JsonArrayEnd offset) -1]
+      [scalar (+ start 1)])))
+
+(defn window-object
+  [(events (Vec json/JsonEvent)) (start Int)] (U Window Nil)
+  (if (or (< start 0)
+          (>= start (count events))
+          (not (instance? JsonObjectStart (nth events start))))
+    nil
+    (let [(end Int) (json-value-end events start)]
+      (if (< end 0)
+        nil
+        (loop [(index Int) (+ start 1)
+               (id (U Int Nil)) nil
+               (app-id String) ""
+               (title String) ""]
+          (if (= index (- end 1))
+            (if (nil? id) nil (->Window id app-id title))
+            (match (nth events index)
+              [(JsonKey offset key)
+               (let [(value-index Int) (+ index 1)
+                     (next Int) (json-value-end events value-index)]
+                 (if (or (< next 0) (> next (- end 1)))
+                   nil
+                   (cond
+                     (= key "id")
+                     (match (nth events value-index)
+                       [(JsonNumber number-offset lexeme)
+                        (recur next (parse-long lexeme) app-id title)]
+                       [other nil])
+
+                     (= key "app_id")
+                     (match (nth events value-index)
+                       [(JsonString string-offset value)
+                        (recur next id value title)]
+                       [(JsonNull null-offset)
+                        (recur next id "" title)]
+                       [other nil])
+
+                     (= key "title")
+                     (match (nth events value-index)
+                       [(JsonString string-offset value)
+                        (recur next id app-id value)]
+                       [(JsonNull null-offset)
+                        (recur next id app-id "")]
+                       [other nil])
+
+                     :else (recur next id app-id title))))]
+              [other nil])))))))
+
+(defn windows-json [(text String)] WindowsJsonResult
+  (match (json/decode text)
+    [(JsonDecodeError offset message)
+     (->WindowsJsonRejected (str offset ":" message))]
+    [(JsonDecoded events)
+     (if (or (empty? events)
+             (not (instance? JsonArrayStart (first events))))
+       (->WindowsJsonRejected "expected a JSON array")
+       (let [(end Int) (json-value-end events 0)]
+         (if (not= end (count events))
+           (->WindowsJsonRejected "invalid windows JSON")
+           (loop [(index Int) 1
+                  (windows (Vec Window)) []]
+             (if (= index (- end 1))
+               (->WindowsJsonLoaded windows)
+               (let [(next Int) (json-value-end events index)
+                     (window (U Window Nil)) (window-object events index)]
+                 (if (or (< next 0) (nil? window))
+                   (->WindowsJsonRejected "invalid window object")
+                   (recur next (conj windows window)))))))))]))
+
+(defn focused-window-json [(text String)] WindowJsonResult
+  (match (json/decode text)
+    [(JsonDecodeError offset message)
+     (->WindowJsonRejected (str offset ":" message))]
+    [(JsonDecoded events)
+     (cond
+       (and (= (count events) 1)
+            (instance? JsonNull (first events)))
+       (->WindowJsonMissing true)
+
+       :else
+       (let [(window (U Window Nil)) (window-object events 0)]
+         (if (nil? window)
+           (->WindowJsonMissing true)
+           (->WindowJsonLoaded window))))]))
+
+(defn sorted-marks [(marks (Vec Mark))] (Vec Mark)
+  (let [(subjects (Vec String))
+        (loop [(index Int) 0
+               (result (Vec String)) []]
+          (if (>= index (count marks))
+            (sort result)
+            (let [(subject String) (mark-subject (nth marks index))]
+              (recur (+ index 1)
+                (if (str/starts-with? subject "@mark-")
+                  (conj result subject)
+                  result)))))]
+    (loop [(index Int) 0
+           (result (Vec Mark)) []]
+      (if (>= index (count subjects))
+        result
+        (let [(mark-at Int) (mark-index marks (nth subjects index))]
+          (recur (+ index 1)
+            (if (< mark-at 0) result (conj result (nth marks mark-at)))))))))
+
+(defn pad-right [(text String) (width Int)] String
+  (loop [(result String) text]
+    (if (>= (count result) width)
+      result
+      (recur (str result " ")))))
+
+(defn mark-letter [(mark Mark)] String
+  (let [(subject String) (mark-subject mark)]
+    (if (str/starts-with? subject "@mark-")
+      (subs subject 6 (count subject))
+      subject)))
+
+(defn mark-list-row [(mark Mark) (windows (Vec Window))] String
+  (let [(id (U Int Nil)) (marked-window-id (mark-window mark))
+        (id-text String) (if (nil? id) "?" (str id))
+        (alive String)
+        (if (and (some? id) (window-live? windows id)) "alive" "dead ")]
+    (str (pad-right (mark-letter mark) 3)
+      " @w" (pad-right id-text 5) " " alive "  "
+      (pad-right (or (mark-app-id mark) "") 24) " "
+      (or (mark-title mark) ""))))
+
+(defn marks-list-text [(marks (Vec Mark)) (windows (Vec Window))] String
+  (let [(ordered (Vec Mark)) (sorted-marks marks)]
+    (if (empty? ordered)
+      "(no marks)\n"
+      (loop [(index Int) 0
+             (result String) ""]
+        (if (>= index (count ordered))
+          result
+          (recur (+ index 1)
+            (str result (mark-list-row (nth ordered index) windows) "\n")))))))
+
+(defn jump-menu-text [(marks (Vec Mark)) (windows (Vec Window))] String
+  (let [(ordered (Vec Mark)) (sorted-marks marks)]
+    (loop [(index Int) 0
+           (result String) ""]
+      (if (>= index (count ordered))
+        result
+        (let [(mark Mark) (nth ordered index)
+              (id (U Int Nil)) (marked-window-id (mark-window mark))
+              (alive String)
+              (if (and (some? id) (window-live? windows id)) "●" "○")]
+          (recur (+ index 1)
+            (str result (if (= index 0) "" "\n")
+              (mark-letter mark) "  " alive "  "
+              (or (mark-app-id mark) "") " — "
+              (or (mark-title mark) ""))))))))
+
+(defn first-token [(text String)] String
+  (let [(trimmed String) (str/trim text)]
+    (loop [(index Int) 0]
+      (if (>= index (count trimmed))
+        trimmed
+        (let [(character String) (subs trimmed index (+ index 1))]
+          (if (str/includes? " \t\r\n" character)
+            (subs trimmed 0 index)
+            (recur (+ index 1))))))))

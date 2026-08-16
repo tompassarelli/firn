@@ -1,0 +1,128 @@
+#lang beagle
+(ns firn.window-marks-test
+  (:require [firn.window-marks :as marks]))
+
+(defrecord TestResult [(name String) (passed Bool)])
+
+(defn fixed-mark-lines [] String
+  (marks/mark-lines 1 "@mark-a" (marks/->Window 42 "org.term" "Shell")
+    "2026-08-16T01:00:00Z"
+    ["2026-08-16T01:00:01Z"
+     "2026-08-16T01:00:02Z"
+     "2026-08-16T01:00:03Z"
+     "2026-08-16T01:00:04Z"]))
+
+(defn case-canonical-append-and-transaction [] Bool
+  (let [(text String) (fixed-mark-lines)]
+    (and
+      (= text
+        (str
+          "{:tx 1, :op \"assert\", :l \"@mark-a\", :p \"window\", "
+          ":r \"@w42\", :frame \"wm-mark\", :ts \"2026-08-16T01:00:01Z\"}\n"
+          "{:tx 2, :op \"assert\", :l \"@mark-a\", :p \"app_id\", "
+          ":r \"org.term\", :frame \"wm-mark\", :ts \"2026-08-16T01:00:02Z\"}\n"
+          "{:tx 3, :op \"assert\", :l \"@mark-a\", :p \"title\", "
+          ":r \"Shell\", :frame \"wm-mark\", :ts \"2026-08-16T01:00:03Z\"}\n"
+          "{:tx 4, :op \"assert\", :l \"@mark-a\", :p \"marked_at\", "
+          ":r \"2026-08-16T01:00:00Z\", :frame \"wm-mark\", "
+          ":ts \"2026-08-16T01:00:04Z\"}\n"))
+      (= (marks/max-transaction
+           (str "not-edn\n\n{:tx 91}\n" text "{:tx -2}\n"))
+         91))))
+
+(defn case-fold-and-retract [] Bool
+  (let [(base String) (fixed-mark-lines)
+        (predicate-retract String)
+        "{:tx 5, :op \"retract\", :l \"@mark-a\", :p \"title\"}\n"
+        (updated String)
+        "{:tx 6, :op \"assert\", :l \"@mark-a\", :p \"title\", :r \"New\"}\n"
+        (folded (Vec marks/Mark))
+        (marks/fold-log (str "garbage\n" base predicate-retract updated))
+        (removed (Vec marks/Mark))
+        (marks/fold-log
+          (str base (marks/retract-line 5 "@mark-a" "2026-08-16T02:00:00Z")))]
+    (and (= (count folded) 1)
+         (= (marks/mark-window (nth folded 0)) "@w42")
+         (= (marks/mark-app-id (nth folded 0)) "org.term")
+         (= (marks/mark-title (nth folded 0)) "New")
+         (= (count removed) 0))))
+
+(defn case-letter-and-identity [] Bool
+  (let [(windows (Vec marks/Window))
+        [(marks/->Window 10 "org.term" "Other")
+         (marks/->Window 11 "org.term" "SHELL")
+         (marks/->Window 12 "org.web" "Shell")]
+        (best (U marks/Window Nil))
+        (marks/best-identity-window windows "org.term" "shell")
+        (tie (U marks/Window Nil))
+        (marks/best-identity-window
+          [(marks/->Window 20 "org.term" "same")
+           (marks/->Window 21 "org.term" "same")]
+          "org.term" "same")]
+    (and (marks/valid-letter? "A")
+         (marks/valid-letter? "9")
+         (not (marks/valid-letter? ""))
+         (not (marks/valid-letter? "aa"))
+         (not (marks/valid-letter? "é"))
+         (= (marks/levenshtein "kitten" "sitting") 3)
+         (some? best)
+         (= (marks/window-id best) 11)
+         (some? tie)
+         (= (marks/window-id tie) 21))))
+
+(defn case-json-window-contract [] Bool
+  (and
+    (match (marks/windows-json
+             (str "[{\"id\":7,\"title\":\"Alpha\","
+               "\"app_id\":\"org.alpha\",\"ignored\":{\"x\":[1]}}]"))
+      [(WindowsJsonRejected message) false]
+      [(WindowsJsonLoaded windows)
+       (and (= (count windows) 1)
+            (= (marks/window-id (nth windows 0)) 7)
+            (= (marks/window-app-id (nth windows 0)) "org.alpha")
+            (= (marks/window-title (nth windows 0)) "Alpha"))])
+    (match (marks/focused-window-json "null")
+      [(WindowJsonRejected message) false]
+      [(WindowJsonLoaded window) false]
+      [(WindowJsonMissing token) true])))
+
+(defn case-list-and-menu-rendering [] Bool
+  (let [(marks-state (Vec marks/Mark))
+        [(marks/->Mark "@mark-b" "@w99" "org.web" "Browser" "time")
+         (marks/->Mark "@mark-a" "@w42" "org.term" "Shell" "time")]
+        (windows (Vec marks/Window))
+        [(marks/->Window 42 "org.term" "Shell")]]
+    (and
+      (= (marks/marks-list-text marks-state windows)
+        (str
+          "a   @w42    alive  org.term                 Shell\n"
+          "b   @w99    dead   org.web                  Browser\n"))
+      (= (marks/jump-menu-text marks-state windows)
+        (str
+          "a  ●  org.term — Shell\n"
+          "b  ○  org.web — Browser"))
+      (= (marks/first-token "  b  ○  org.web — Browser\n") "b"))))
+
+(defn cases [] (Vec TestResult)
+  [(->TestResult "canonical-append-and-transaction"
+     (case-canonical-append-and-transaction))
+   (->TestResult "fold-and-retract" (case-fold-and-retract))
+   (->TestResult "letter-and-identity" (case-letter-and-identity))
+   (->TestResult "json-window-contract" (case-json-window-contract))
+   (->TestResult "list-and-menu-rendering" (case-list-and-menu-rendering))])
+
+(defn -main [(args (Vec String))] Int
+  (let [(results (Vec TestResult)) (cases)]
+    (loop [(index Int) 0
+           (failures Int) 0]
+      (if (>= index (count results))
+        failures
+        (let [(result TestResult) (nth results index)]
+          (do
+            (println
+              (str (if (testresult-passed result) "PASS " "FAIL ")
+                (testresult-name result)))
+            (recur (+ index 1)
+              (if (testresult-passed result)
+                failures
+                (+ failures 1)))))))))
