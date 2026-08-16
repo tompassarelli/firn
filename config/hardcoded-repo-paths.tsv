@@ -89,6 +89,7 @@ north/cli/tests/linear-reservation-integration-test.clj	1
 north/cli/tests/live-feed-integration-test.clj	1
 north/cli/tests/live-msg-admission-integration-test.clj	1
 north/cli/tests/maintenance-large-corpus-test.clj	1
+north/cli/tests/maintenance-task-lifecycle-test.clj	1
 north/cli/tests/message-audience-integration-test.clj	1
 north/cli/tests/message-routing-test.clj	1
 north/cli/tests/native-listener-liveness-integration-test.clj	1

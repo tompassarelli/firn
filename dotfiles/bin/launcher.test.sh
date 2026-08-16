@@ -116,6 +116,7 @@ with open(sys.argv[1], "rb") as handle:
 
 assert config.get("model") == "gpt-5.6-sol"
 assert config.get("model_reasoning_effort") == "high"
+assert config.get("agents", {}).get("default_subagent_model") == "gpt-5.6-luna"
 availability = config.get("tui", {}).get("model_availability_nux", {})
 assert availability.get("gpt-5.6-sol") == 1
 assert availability.get("gpt-5.6-terra") == 1

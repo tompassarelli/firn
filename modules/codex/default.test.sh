@@ -131,6 +131,7 @@ with pathlib.Path(sys.argv[1]).open("rb") as handle:
 assert config["model"] == "gpt-5.6-sol"
 assert config["model_reasoning_effort"] == "high"
 assert config["agents"]["max_concurrent_threads_per_session"] == 16
+assert config["agents"]["default_subagent_model"] == "gpt-5.6-luna"
 assert config["mcp_servers"]["north"]["command"] == "/run/current-system/sw/bin/north-mcp"
 assert config["mcp_servers"]["fram"]["command"] == "/run/current-system/sw/bin/fram-mcp"
 PY
