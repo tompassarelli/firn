@@ -1,0 +1,163 @@
+#lang beagle
+(ns firn.inventory-test
+  (:require [firn.inventory :as i]
+            [firn.tag-resolve :as r]))
+
+(defrecord TestResult [(name String) (passed Bool)])
+
+(def alpha-source String
+  (str
+    "#lang beagle/nix\n\n"
+    "(ns configuration)\n\n"
+    "(nix/module [config lib pkgs ...]\n"
+    "  {:myConfig.modules.alpha.enable true\n"
+    "   :myConfig.modules.beta\n"
+    "    {:enable false\n"
+    "     :port 44}\n"
+    "   :myConfig.modules.gamma.someOption \"configured\"\n"
+    "   :sops.secrets {\"opaque\" {:enable true}}\n"
+    "   :imports [(p \"./_generated-enables.nix\")]})\n"))
+
+(def zeta-source String
+  (str
+    "#lang beagle/nix\n\n"
+    "(ns configuration)\n\n"
+    "(nix/module [config lib pkgs ...]\n"
+    "  {:myConfig.modules.beta.enable true})\n"))
+
+(defn make-module [(name String) (tags (Vec String))] r/ModuleTags
+  (r/->ModuleTags name tags [] []))
+
+(defn host-tags [(name String) (tag String)] r/HostTags
+  (r/->HostTags name [(r/->EnabledTag tag [] [])] [] "linux" false []))
+
+(defn parsed-config [(host String) (source String)] i/HostConfig
+  (match (i/host-config-from-source host source)
+    [(HostConfigParsed value) value]
+    [(HostConfigRejected message offset) (i/->HostConfig host [] [])]))
+
+(defn repository [] i/InventoryRepository
+  (i/->InventoryRepository
+    [(make-module "orphan" [])
+     (make-module "gamma" ["desktop"])
+     (make-module "alpha" [])
+     (make-module "beta" ["terminal"])]
+    [(i/->InventoryHost
+       (host-tags "zeta-host" "desktop")
+       (parsed-config "zeta-host" zeta-source))
+     (i/->InventoryHost
+       (host-tags "alpha-host" "terminal")
+       (parsed-config "alpha-host" alpha-source))]))
+
+(defn case-canonical-paths-and-states [] Bool
+  (match (i/host-config-from-source "alpha-host" alpha-source)
+    [(HostConfigRejected message offset) false]
+    [(HostConfigParsed config)
+     (and
+       (= (i/hostconfig-references config) ["alpha" "beta" "gamma"])
+       (= (i/state-paths config true) ["myConfig.modules.alpha"])
+       (= (i/state-paths config false) ["myConfig.modules.beta"]))]))
+
+(defn case-status-layout [] Bool
+  (= (i/render-host-status (parsed-config "alpha-host" alpha-source))
+     (str
+       "Enabled in alpha-host:\n"
+       "  myConfig.modules.alpha\n"
+       "\n"
+       "Explicitly disabled in alpha-host:\n"
+       "  myConfig.modules.beta\n")))
+
+(defn case-live-closure [] Bool
+  (let [(repo i/InventoryRepository) (repository)]
+    (and
+      (= (i/live-modules repo) ["alpha" "beta" "gamma"])
+      (= (i/unused-modules repo) ["orphan"])
+      (= (i/direct-hosts repo "beta") ["alpha-host" "zeta-host"])
+      (= (i/tag-hosts repo "beta") ["alpha-host"])
+      (= (i/direct-hosts repo "gamma") ["alpha-host"])
+      (= (i/tag-hosts repo "gamma") ["zeta-host"]))))
+
+(defn case-used-layout [] Bool
+  (= (i/render-module-list-used (repository))
+     (str
+       "Used modules (3):\n"
+       "  alpha  (alpha-host)\n"
+       "  beta  (alpha-host, zeta-host, via tag@alpha-host)\n"
+       "  gamma  (alpha-host, via tag@zeta-host)\n")))
+
+(defn case-refs-layout [] Bool
+  (= (i/render-module-refs (repository) "beta")
+     (str
+       "Hosts (direct, from configuration.bnix):\n"
+       "  alpha-host\n"
+       "  zeta-host\n"
+       "\n"
+       "Hosts (via tag resolution):\n"
+       "  alpha-host\n")))
+
+(defn module-list-all-action? [(action i/InventoryAction)] Bool
+  (match action
+    [(ModuleListAll) true]
+    [(ModuleListUsed) false]
+    [(ModuleListUnused) false]
+    [(ModuleRefs name) false]
+    [(ModuleStatus host) false]
+    [(HostList) false]
+    [(HostStatus host) false]))
+
+(defn module-status-host [(action i/InventoryAction)] String
+  (match action
+    [(ModuleListAll) ""]
+    [(ModuleListUsed) ""]
+    [(ModuleListUnused) ""]
+    [(ModuleRefs name) ""]
+    [(ModuleStatus host) host]
+    [(HostList) ""]
+    [(HostStatus host) ""]))
+
+(defn host-status-host [(action i/InventoryAction)] String
+  (match action
+    [(ModuleListAll) ""]
+    [(ModuleListUsed) ""]
+    [(ModuleListUnused) ""]
+    [(ModuleRefs name) ""]
+    [(ModuleStatus host) ""]
+    [(HostList) ""]
+    [(HostStatus host) host]))
+
+(defn case-argv-grammar [] Bool
+  (and
+    (match (i/parse-inventory-argv ["module" "list"] "alpha-host")
+      [(ParsedInventory action)
+       (module-list-all-action? action)]
+      [(InvalidInventoryArgv argv) false])
+    (match (i/parse-inventory-argv ["module" "status" "all"] "alpha-host")
+      [(ParsedInventory action)
+       (= (module-status-host action) "alpha-host")]
+      [(InvalidInventoryArgv argv) false])
+    (match (i/parse-inventory-argv ["host" "status" "zeta-host"] "alpha-host")
+      [(ParsedInventory action)
+       (= (host-status-host action) "zeta-host")]
+      [(InvalidInventoryArgv argv) false])
+    (match (i/parse-inventory-argv ["module" "list" "stale"] "alpha-host")
+      [(ParsedInventory action) false]
+      [(InvalidInventoryArgv argv) true])))
+
+(def tests (Vec TestResult)
+  [(->TestResult "canonical-paths-and-states" (case-canonical-paths-and-states))
+   (->TestResult "status-layout" (case-status-layout))
+   (->TestResult "live-closure" (case-live-closure))
+   (->TestResult "used-layout" (case-used-layout))
+   (->TestResult "refs-layout" (case-refs-layout))
+   (->TestResult "argv-grammar" (case-argv-grammar))])
+
+(defn -main [(args (Vec String))] Int
+  (loop [(index Int) 0]
+    (if (>= index (count tests))
+      0
+      (let [(test TestResult) (nth tests index)]
+        (if (testresult-passed test)
+          (recur (+ index 1))
+          (do
+            (print (str "FAIL: " (testresult-name test) "\n"))
+            1))))))

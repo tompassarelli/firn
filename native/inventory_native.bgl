@@ -1,0 +1,168 @@
+#lang beagle
+(ns firn.inventory-native
+  (:require [firn.inventory :as inventory]
+            [firn.tag-resolve-driver :as driver]
+            [firn.tag-resolve-native :as tag-native]))
+
+(def max-source-bytes Int 16777216)
+
+(defunion ConfigLoadResult
+  (ConfigLoaded [(config inventory/HostConfig)])
+  (ConfigRejected [(message String)]))
+
+(defunion InventoryHostLoadResult
+  (InventoryHostLoaded [(host inventory/InventoryHost)])
+  (InventoryHostRejected [(message String)]))
+
+(defunion InventoryHostsLoadResult
+  (InventoryHostsLoaded [(hosts (Vec inventory/InventoryHost))])
+  (InventoryHostsRejected [(message String)]))
+
+(defunion RepositoryLoadResult
+  (RepositoryLoaded [(repository inventory/InventoryRepository)])
+  (RepositoryRejected [(message String)]))
+
+(defn path [(root String) (relative String)] String
+  (str root "/" relative))
+
+(defn errno-message [(operation String) (relative String) (errno Int)] String
+  (str "firn inventory: " operation " '" relative "': errno " errno "\n"))
+
+(defn parse-message [(relative String) (message String) (offset Int)] String
+  (str "firn inventory: invalid configuration '" relative
+    "' at offset " offset ": " message "\n"))
+
+(defn load-config [(root String) (host String)] ConfigLoadResult
+  (let [(relative String) (str "hosts/" host "/configuration.bnix")
+        (absolute String) (path root relative)]
+    (match (host.fs/path-kind absolute)
+      [(host.fs/PathKindError errno)
+       (->ConfigRejected (errno-message "cannot inspect" relative errno))]
+      [(host.fs/PathKindOk kind)
+       (if (not (or (= kind 1) (= kind 3)))
+         (->ConfigRejected
+           (str "firn inventory: configuration is not a file '"
+             relative "'\n"))
+         (match (host.fs/read-text-bounded absolute max-source-bytes)
+           [(host.fs/ReadTextBoundedError errno)
+            (->ConfigRejected
+              (errno-message "cannot read" relative errno))]
+           [(host.fs/ReadTextBoundedOk source)
+            (match (inventory/host-config-from-source host source)
+              [(HostConfigParsed config) (->ConfigLoaded config)]
+              [(HostConfigRejected message offset)
+               (->ConfigRejected
+                 (parse-message relative message offset))])]))])))
+
+(defn load-inventory-host [(root String) (host String)] InventoryHostLoadResult
+  (match (tag-native/load-host root host false)
+    [(HostRejected message) (->InventoryHostRejected message)]
+    [(HostLoaded data)
+     (match (load-config root host)
+       [(ConfigRejected message) (->InventoryHostRejected message)]
+       [(ConfigLoaded config)
+        (->InventoryHostLoaded
+          (inventory/->InventoryHost
+            (driver/tagresolvehostdata-tags data) config))])]))
+
+(defn load-inventory-hosts-from
+  [(root String)
+   (names (Vec String))
+   (index Int)
+   (hosts (Vec inventory/InventoryHost))]
+  InventoryHostsLoadResult
+  (if (>= index (count names))
+    (->InventoryHostsLoaded hosts)
+    (match (load-inventory-host root (nth names index))
+      [(InventoryHostRejected message)
+       (->InventoryHostsRejected message)]
+      [(InventoryHostLoaded host)
+       (load-inventory-hosts-from root names (+ index 1)
+         (conj hosts host))])))
+
+(defn load-repository [(root String)] RepositoryLoadResult
+  (match (tag-native/load-modules root)
+    [(ModulesRejected message) (->RepositoryRejected message)]
+    [(ModulesLoaded modules)
+     (match (tag-native/directory-names root "hosts")
+       [(DirectoryNamesRejected message) (->RepositoryRejected message)]
+       [(DirectoryNamesLoaded names)
+        (match (load-inventory-hosts-from root names 0 [])
+          [(InventoryHostsRejected message) (->RepositoryRejected message)]
+          [(InventoryHostsLoaded hosts)
+           (->RepositoryLoaded
+             (inventory/->InventoryRepository modules hosts))])])]))
+
+(defn emit-error [(message String)] Int
+  (do (host.stderr/write-text message) 1))
+
+(defn print-config-status [(root String) (host String)] Int
+  (match (load-config root host)
+    [(ConfigRejected message) (emit-error message)]
+    [(ConfigLoaded config)
+     (do (print (inventory/render-host-status config)) 0)]))
+
+(defn print-directory-list [(root String) (relative String) (modules Bool)] Int
+  (match (tag-native/directory-names root relative)
+    [(DirectoryNamesRejected message) (emit-error message)]
+    [(DirectoryNamesLoaded names)
+     (do
+       (print
+         (if modules
+           (inventory/render-module-list-all names)
+           (inventory/render-host-list names)))
+       0)]))
+
+(defn print-repository-action
+  [(root String) (action inventory/InventoryAction)] Int
+  (match (load-repository root)
+    [(RepositoryRejected message) (emit-error message)]
+    [(RepositoryLoaded repository)
+     (match (inventory/render-action repository action)
+       [(InventoryRendered text) (do (print text) 0)]
+       [(InventoryHostMissing host)
+        (emit-error
+          (str "firn inventory: no such host '" host "'\n"))])]))
+
+(defn run-action [(root String) (action inventory/InventoryAction)] Int
+  (match action
+    [(ModuleListAll) (print-directory-list root "modules" true)]
+    [(ModuleListUsed) (print-repository-action root action)]
+    [(ModuleListUnused) (print-repository-action root action)]
+    [(ModuleRefs name) (print-repository-action root action)]
+    [(ModuleStatus host) (print-config-status root host)]
+    [(HostList) (print-directory-list root "hosts" false)]
+    [(HostStatus host) (print-config-status root host)]))
+
+(defn repository-root [] String?
+  (let [(explicit String?) (System/getenv "FIRN_REPO")]
+    (if (some? explicit)
+      explicit
+      (let [(home String?) (System/getenv "HOME")]
+        (if (some? home)
+          (str home "/code/nixos-config/main")
+          nil)))))
+
+(defn default-host [] String
+  (let [(host String?) (System/getenv "FIRN_HOST")]
+    (if (some? host) host "whiterabbit")))
+
+(defn usage-error [] Int
+  (do
+    (host.stderr/write-text
+      (str
+        "Usage: firn module list [all|used|unused]\n"
+        "       firn module refs <name>\n"
+        "       firn module status [all]\n"
+        "       firn host list [all]\n"
+        "       firn host status [<host>]\n"))
+    64))
+
+(defn -main [(args (Vec String))] Int
+  (match (inventory/parse-inventory-argv args (default-host))
+    [(InvalidInventoryArgv argv) (usage-error)]
+    [(ParsedInventory action)
+     (let [(root String?) (repository-root)]
+       (if (nil? root)
+         (emit-error "firn inventory: FIRN_REPO and HOME are not set\n")
+         (run-action root action)))]))
