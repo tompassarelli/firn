@@ -1,0 +1,148 @@
+#lang beagle
+(ns firn.flake-input-driver-test
+  (:require [firn.flake-input :as input]
+            [firn.flake-input-driver :as driver]))
+
+(defrecord TestResult [(name String) (passed Bool)])
+
+(def alpha-source String
+  (str "(nix/module [config] {:flake-inputs "
+    "{:zeta {:url \"github:zeta/project\"}}})\n"))
+
+(def beta-source String
+  (str "(nix/module [config] {:flake-inputs "
+    "{:alpha {:url \"github:alpha/project\"}}})\n"))
+
+(def conflict-source String
+  (str "(nix/module [config] {:flake-inputs "
+    "{:zeta {:url \"github:other/project\"}}})\n"))
+
+(defn empty-flake [] String
+  (str
+    input/input-begin-marker "\n" input/input-end-marker "\n"
+    input/args-begin-marker "\n" input/args-end-marker "\n"
+    input/special-begin-marker "\n" input/special-end-marker "\n"
+    input/hm-special-begin-marker "\n" input/hm-special-end-marker "\n"
+    input/darwin-special-begin-marker "\n"
+    input/darwin-special-end-marker "\n"
+    input/darwin-hm-begin-marker "\n" input/darwin-hm-end-marker "\n"))
+
+(defn repository
+  [(second-name String)
+   (second-source String)
+   (flake-text String)]
+  driver/FlakeInputRepositoryData
+  (driver/->FlakeInputRepositoryData
+    [(driver/->ModuleSource "alpha-module" alpha-source)
+     (driver/->ModuleSource second-name second-source)]
+    flake-text))
+
+(defn parsed? [(argv (Vec String))] Bool
+  (match (driver/parse-flake-input-argv argv)
+    [(ParsedFlakeInputEmit) true]
+    [(OtherFirnCommand other) false]
+    [(InvalidFlakeInputArgv invalid) false]))
+
+(defn invalid? [(argv (Vec String))] Bool
+  (match (driver/parse-flake-input-argv argv)
+    [(ParsedFlakeInputEmit) false]
+    [(OtherFirnCommand other) false]
+    [(InvalidFlakeInputArgv invalid) true]))
+
+(defn other? [(argv (Vec String))] Bool
+  (match (driver/parse-flake-input-argv argv)
+    [(ParsedFlakeInputEmit) false]
+    [(OtherFirnCommand other) true]
+    [(InvalidFlakeInputArgv invalid) false]))
+
+(defn case-argv-grammar [] Bool
+  (and (parsed? ["flake-input" "resolve" "emit"])
+       (invalid? ["flake-input" "resolve"])
+       (invalid? ["flake-input" "resolve" "show"])
+       (invalid? ["flake-input" "resolve" "emit" "extra"])
+       (other? ["tag" "resolve" "all"])))
+
+(defn written-text [(outcome driver/FlakeInputOutcome)] String
+  (loop [(index Int) 0]
+    (if (>= index (count (driver/flakeinputoutcome-effects outcome)))
+      ""
+      (match (nth (driver/flakeinputoutcome-effects outcome) index)
+        [(StdoutText text) (recur (+ index 1))]
+        [(StderrText text) (recur (+ index 1))]
+        [(WriteFlake path text) text]))))
+
+(defn case-emit-and-up-to-date [] Bool
+  (let [(first driver/FlakeInputOutcome)
+        (driver/run-flake-input-emit
+          (repository "beta-module" beta-source (empty-flake)))
+        (generated String) (written-text first)
+        (second driver/FlakeInputOutcome)
+        (driver/run-flake-input-emit
+          (repository "beta-module" beta-source generated))]
+    (and (= (driver/flakeinputoutcome-status first) 0)
+         (= (driver/outcome-effect-kinds first)
+            ["stdout" "write" "stdout"])
+         (= (driver/outcome-stderr first) "")
+         (= (driver/outcome-stdout first)
+            (str
+              "flake-inputs: 2 module inputs from 2 modules\n"
+              "  alpha (from beta-module)\n"
+              "  zeta (from alpha-module)\n"
+              "flake-inputs: updated flake.bnix\n"))
+         (> (count generated) (count (empty-flake)))
+         (= (driver/flakeinputoutcome-status second) 0)
+         (= (driver/outcome-effect-kinds second) ["stdout" "stdout"])
+         (= (driver/outcome-stderr second) "")
+         (= (driver/outcome-stdout second)
+            (str
+              "flake-inputs: 2 module inputs from 2 modules\n"
+              "  alpha (from beta-module)\n"
+              "  zeta (from alpha-module)\n"
+              "flake-inputs: flake.bnix is up to date\n")))))
+
+(defn case-conflict-before-summary [] Bool
+  (let [(outcome driver/FlakeInputOutcome)
+        (driver/run-flake-input-emit
+          (repository "beta-module" conflict-source (empty-flake)))]
+    (and (= (driver/flakeinputoutcome-status outcome) 1)
+         (= (driver/outcome-effect-kinds outcome) ["stderr"])
+         (= (driver/outcome-stdout outcome) "")
+         (= (driver/outcome-stderr outcome)
+            (str
+              "flake-inputs: conflict on 'zeta' — module 'beta-module' "
+              "declares url github:other/project but module 'alpha-module' "
+              "declares url github:zeta/project\n")))))
+
+(defn case-empty-summary [] Bool
+  (let [(outcome driver/FlakeInputOutcome)
+        (driver/run-flake-input-emit
+          (driver/->FlakeInputRepositoryData
+            [(driver/->ModuleSource "plain" "")]
+            (empty-flake)))]
+    (and (= (driver/flakeinputoutcome-status outcome) 0)
+         (= (driver/outcome-stdout outcome)
+            (str
+              "flake-inputs: no module inputs found\n"
+              "flake-inputs: updated flake.bnix\n")))))
+
+(defn cases [] (Vec TestResult)
+  [(->TestResult "argv-grammar" (case-argv-grammar))
+   (->TestResult "emit-and-up-to-date" (case-emit-and-up-to-date))
+   (->TestResult "conflict-before-summary" (case-conflict-before-summary))
+   (->TestResult "empty-summary" (case-empty-summary))])
+
+(defn -main [(args (Vec String))] Int
+  (let [(results (Vec TestResult)) (cases)]
+    (loop [(index Int) 0
+           (failures Int) 0]
+      (if (>= index (count results))
+        failures
+        (let [(result TestResult) (nth results index)]
+          (do
+            (println
+              (str (if (testresult-passed result) "PASS " "FAIL ")
+                (testresult-name result)))
+            (recur (+ index 1)
+              (if (testresult-passed result)
+                failures
+                (+ failures 1)))))))))

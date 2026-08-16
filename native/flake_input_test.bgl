@@ -1,0 +1,156 @@
+#lang beagle
+(ns firn.flake-input-test
+  (:require [firn.flake-input :as input]))
+
+(defrecord TestResult [(name String) (passed Bool)])
+
+(def alpha-source String
+  (str
+    "#lang beagle/nix\n"
+    "(ns default)\n"
+    "(nix/module [config lib pkgs ...]\n"
+    "  (let [name \"alpha\"]\n"
+    "    {:flake-inputs\n"
+    "      {:zeta {:url \"github:zeta/project\"\n"
+    "              :inputs.nixpkgs.follows \"nixpkgs\"}\n"
+    "       :alpha {:url \"github:alpha/project\"}}}))\n"))
+
+(def same-zeta-source String
+  (str
+    "(nix/module [config]\n"
+    "  {:flake-inputs\n"
+    "    {:zeta {:url \"github:zeta/project\" :ignored \"later\"}}})\n"))
+
+(def conflicting-zeta-source String
+  (str
+    "(nix/module [config]\n"
+    "  {:flake-inputs {:zeta {:url \"github:other/project\"}}})\n"))
+
+(defn parsed-inputs
+  [(module-name String) (source String)] (Vec input/FlakeInput)
+  (match (input/module-inputs-from-source module-name source)
+    [(ModuleInputsParsed inputs) inputs]
+    [(ModuleInputsRejected message offset) []]))
+
+(defn case-parse-and-render [] Bool
+  (let [(inputs (Vec input/FlakeInput))
+        (parsed-inputs "alpha-module" alpha-source)
+        (names (Vec String)) (input/sorted-input-names inputs)]
+    (and (= names ["alpha" "zeta"])
+         (= (input/format-input-decl (input/find-input inputs "alpha"))
+            "   :alpha {:url \"github:alpha/project\"}")
+         (= (input/format-input-decl (input/find-input inputs "zeta"))
+            (str "   :zeta {:inputs.nixpkgs.follows \"nixpkgs\" "
+              ":url \"github:zeta/project\"}")))))
+
+(defn case-duplicate-url-keeps-first [] Bool
+  (let [(collected input/CollectedInputs)
+        (input/collect
+          [(parsed-inputs "alpha-module" alpha-source)
+           (parsed-inputs "later-module" same-zeta-source)])
+        (zeta input/FlakeInput)
+        (input/find-input (input/collectedinputs-inputs collected) "zeta")]
+    (and (= (input/collectedinputs-errors collected) [])
+         (= (input/flakeinput-source-module zeta) "alpha-module")
+         (= (count (input/flakeinput-properties zeta)) 2))))
+
+(defn case-conflict-diagnostic [] Bool
+  (let [(collected input/CollectedInputs)
+        (input/collect
+          [(parsed-inputs "alpha-module" alpha-source)
+           (parsed-inputs "later-module" conflicting-zeta-source)])]
+    (= (input/collectedinputs-errors collected)
+       [(str "flake-inputs: conflict on 'zeta' — module 'later-module' "
+          "declares url github:other/project but module 'alpha-module' "
+          "declares url github:zeta/project")])))
+
+(defn marker-source [] String
+  (str
+    "prefix " input/input-begin-marker "\n"
+    "   :old {:url \"old\"}\n"
+    "   " input/input-end-marker " suffix\n"
+    "args " input/args-begin-marker "\n"
+    "     old\n"
+    "     " input/args-end-marker "\n"
+    "special " input/special-begin-marker "\n"
+    "                    :old old\n"
+    "  " input/special-end-marker "\n"
+    "hm " input/hm-special-begin-marker "\n"
+    " old\n"
+    "    " input/hm-special-end-marker "\n"
+    "darwin " input/darwin-special-begin-marker "\n"
+    " old\n"
+    "      " input/darwin-special-end-marker "\n"
+    "darwin-hm " input/darwin-hm-begin-marker "\n"
+    " old\n"
+    "        " input/darwin-hm-end-marker "\n"))
+
+(defn expected-splice [(inputs (Vec input/FlakeInput))] String
+  (str
+    "prefix " input/input-begin-marker "\n"
+    (input/input-block inputs)
+    "   " input/input-end-marker " suffix\n"
+    "args " input/args-begin-marker "\n"
+    (input/args-block inputs)
+    "     " input/args-end-marker "\n"
+    "special " input/special-begin-marker "\n"
+    (input/special-block inputs)
+    "  " input/special-end-marker "\n"
+    "hm " input/hm-special-begin-marker "\n"
+    (input/special-block inputs)
+    "    " input/hm-special-end-marker "\n"
+    "darwin " input/darwin-special-begin-marker "\n"
+    (input/special-block inputs)
+    "      " input/darwin-special-end-marker "\n"
+    "darwin-hm " input/darwin-hm-begin-marker "\n"
+    (input/special-block inputs)
+    "        " input/darwin-hm-end-marker "\n"))
+
+(defn case-six-marker-splice-and-idempotence [] Bool
+  (let [(inputs (Vec input/FlakeInput))
+        (parsed-inputs "alpha-module" alpha-source)
+        (first input/SpliceResult)
+        (input/splice-flake-inputs (marker-source) inputs)]
+    (match first
+      [(SpliceRejected message) false]
+      [(SpliceUnchanged text) false]
+      [(SpliceChanged text)
+       (and (= text (expected-splice inputs))
+            (match (input/splice-flake-inputs text inputs)
+              [(SpliceRejected message) false]
+              [(SpliceChanged changed) false]
+              [(SpliceUnchanged unchanged) (= unchanged text)]))])))
+
+(defn case-missing-marker-rejected [] Bool
+  (match (input/splice-flake-inputs "no markers\n" [])
+    [(SpliceRejected message)
+     (= message
+        (str "markers not found in flake.bnix: "
+          input/input-begin-marker " ... " input/input-end-marker))]
+    [(SpliceChanged text) false]
+    [(SpliceUnchanged text) false]))
+
+(defn cases [] (Vec TestResult)
+  [(->TestResult "parse-and-render" (case-parse-and-render))
+   (->TestResult "duplicate-url-keeps-first" (case-duplicate-url-keeps-first))
+   (->TestResult "conflict-diagnostic" (case-conflict-diagnostic))
+   (->TestResult
+     "six-marker-splice-and-idempotence"
+     (case-six-marker-splice-and-idempotence))
+   (->TestResult "missing-marker-rejected" (case-missing-marker-rejected))])
+
+(defn -main [(args (Vec String))] Int
+  (let [(results (Vec TestResult)) (cases)]
+    (loop [(index Int) 0
+           (failures Int) 0]
+      (if (>= index (count results))
+        failures
+        (let [(result TestResult) (nth results index)]
+          (do
+            (println
+              (str (if (testresult-passed result) "PASS " "FAIL ")
+                (testresult-name result)))
+            (recur (+ index 1)
+              (if (testresult-passed result)
+                failures
+                (+ failures 1)))))))))
