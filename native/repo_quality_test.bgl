@@ -1,0 +1,175 @@
+#lang beagle
+(ns firn.repo-quality-test
+  (:require [firn.repo-quality :as q]))
+
+(defrecord TestResult [(name String) (passed Bool)])
+
+(defn case-segment-exact-targets [] Bool
+  (=
+    (q/select-quality-targets
+      ["modules/zeta/default.bnix"
+       "result/cache/default.bnix"
+       "resultful/default.bnix"
+       "scripts/tool.bnix"
+       "tests/fixture.bnix"
+       "docs/fixtures/example.bnix"
+       ".direnv/flake-inputs/firn/flake.bnix"
+       ".git/worktrees/lane/config.bnix"
+       ".firn-build/generated.bnix"
+       "hosts/alpha/enabled-tags.bnix"
+       "modules/alpha/default.bnix"
+       "modules/alpha/default.nix"
+       "nested/scripts-like/default.bnix"])
+    ["modules/alpha/default.bnix"
+     "modules/zeta/default.bnix"
+     "nested/scripts-like/default.bnix"
+     "resultful/default.bnix"]))
+
+(def strip-source String
+  (str
+    "before = \"byte-for-byte\";\n"
+    "  tags = [ alpha beta ];\n"
+    "middle = { keep = true; };\n"
+    "  tags-opt-in = [\n"
+    "    gamma\n"
+    "  ];\n"
+    "  tag-overrides = {\n"
+    "    alpha = { enabled = true; }; # } ignored in a comment\n"
+    "    beta = \"{literal braces}\";\n"
+    "  };\n"
+    "tags-extra = [ must-stay ];\n"
+    "flake-inputs = { source.url = \"github:owner/repo\"; };\n"
+    "after = \"unchanged\";\n"))
+
+(def strip-expected String
+  (str
+    "before = \"byte-for-byte\";\n"
+    "middle = { keep = true; };\n"
+    "tags-extra = [ must-stay ];\n"
+    "after = \"unchanged\";\n"))
+
+(defn case-balanced-strip [] Bool
+  (match (q/strip-owned-authoring strip-source)
+    [(AuthoringStripped text) (= text strip-expected)]
+    [(AuthoringStripRejected offset message) false]))
+
+(defn case-unowned-byte-preservation [] Bool
+  (let [(source String)
+        (str
+          "α = \"preserve UTF-8\";\r\n"
+          "not-tags = [ one ];\n"
+          "omega = true;")]
+    (match (q/strip-owned-authoring source)
+      [(AuthoringStripped text) (= text source)]
+      [(AuthoringStripRejected offset message) false])))
+
+(defn strip-rejected? [(source String)] Bool
+  (match (q/strip-owned-authoring source)
+    [(AuthoringStripped text) false]
+    [(AuthoringStripRejected offset message) (>= offset 0)]))
+
+(defn case-malformed-strip-rejected [] Bool
+  (and
+    (strip-rejected?
+      (str "before = true;\n"
+           "tag-overrides = {\n"
+           "  alpha = { enabled = true; };\n"))
+    (strip-rejected?
+      (str "tags = [ alpha ]\n"
+           "after = true;\n"))
+    (strip-rejected?
+      (str "flake-inputs = wrong\n"
+           "after = true;\n"))))
+
+(defn freshness-kind [(freshness q/OutputFreshness)] Keyword
+  (match freshness
+    [(OutputMissing source-path output-path) :missing]
+    [(OutputStale source-path output-path source-revision output-revision)
+     :stale]
+    [(OutputCurrent source-path output-path) :current]))
+
+(defn case-typed-freshness [] Bool
+  (let [(missing q/OutputFreshness)
+        (q/classify-output
+          (q/->OutputMetadata "a.bnix" "a.nix" false 9 0))
+        (stale q/OutputFreshness)
+        (q/classify-output
+          (q/->OutputMetadata "b.bnix" "b.nix" true 12 11))
+        (current q/OutputFreshness)
+        (q/classify-output
+          (q/->OutputMetadata "c.bnix" "c.nix" true 12 12))]
+    (and
+      (= (freshness-kind missing) :missing)
+      (= (freshness-kind stale) :stale)
+      (= (freshness-kind current) :current)
+      (match stale
+        [(OutputMissing source-path output-path) false]
+        [(OutputCurrent source-path output-path) false]
+        [(OutputStale source-path output-path source-revision output-revision)
+         (and (= source-path "b.bnix")
+              (= output-path "b.nix")
+              (= source-revision 12)
+              (= output-revision 11))]))))
+
+(defn entry-key [(entry q/HealthEntry)] String
+  (str (q/healthentry-source entry) ":" (q/healthentry-kind entry)
+       ":" (q/healthentry-name entry)))
+
+(defn entry-keys [(entries (Vec q/HealthEntry))] (Vec String)
+  (loop [(index Int) 0
+         (keys (Vec String)) []]
+    (if (>= index (count entries))
+      keys
+      (recur (+ index 1) (conj keys (entry-key (nth entries index)))))))
+
+(defn case-health-order-and-severity [] Bool
+  (let [(report q/HealthReport)
+        (q/aggregate-health
+          (q/->HealthInputs
+            [(q/->HealthPassed "resolver")
+             (q/->HealthWarned "unused modules" "orphan")]
+            [(q/->HealthFailed "flake inputs" "conflict")]
+            [(q/->HealthPassed "inventory")]))]
+    (and
+      (= (entry-keys (q/healthreport-entries report))
+         [":f0::pass:resolver"
+          ":f0::warning:unused modules"
+          ":f1::failure:flake inputs"
+          ":f4::pass:inventory"])
+      (= (q/healthreport-passed report) 2)
+      (= (q/healthreport-failed report) 1)
+      (= (q/healthreport-warnings report) 1)
+      (= (q/healthreport-status report) 1))))
+
+(defn case-warning-is-not-pass [] Bool
+  (let [(report q/HealthReport)
+        (q/aggregate-health
+          (q/->HealthInputs
+            [(q/->HealthWarned "unused modules" "orphan")]
+            []
+            []))]
+    (and
+      (= (q/healthreport-passed report) 0)
+      (= (q/healthreport-failed report) 0)
+      (= (q/healthreport-warnings report) 1)
+      (= (q/healthreport-status report) 0))))
+
+(def tests (Vec TestResult)
+  [(->TestResult "segment-exact-targets" (case-segment-exact-targets))
+   (->TestResult "balanced-strip" (case-balanced-strip))
+   (->TestResult "unowned-byte-preservation" (case-unowned-byte-preservation))
+   (->TestResult "malformed-strip-rejected" (case-malformed-strip-rejected))
+   (->TestResult "typed-freshness" (case-typed-freshness))
+   (->TestResult "health-order-and-severity" (case-health-order-and-severity))
+   (->TestResult "warning-is-not-pass" (case-warning-is-not-pass))])
+
+(defn -main [(args (Vec String))] Int
+  (loop [(index Int) 0]
+    (if (>= index (count tests))
+      0
+      (let [(test TestResult) (nth tests index)]
+        (if (testresult-passed test)
+          (recur (+ index 1))
+          (do
+            (print (str "FAIL: " (testresult-name test) "\n"))
+            1))))))

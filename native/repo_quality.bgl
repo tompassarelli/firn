@@ -1,0 +1,325 @@
+#lang beagle
+(ns firn.repo-quality)
+
+(defunion OwnedStart
+  (OwnedAbsent [(token Bool)])
+  (OwnedFound [(opening Int) (open String) (close String)])
+  (OwnedMalformed [(offset Int) (message String)]))
+
+(defunion BlockScan
+  (BlockFinished [(after Int)])
+  (BlockMalformed [(offset Int) (message String)]))
+
+(defunion AuthoringStripResult
+  (AuthoringStripped [(text String)])
+  (AuthoringStripRejected [(offset Int) (message String)]))
+
+(defrecord OutputMetadata
+  [(source-path String)
+   (output-path String)
+   (output-present Bool)
+   (source-revision Int)
+   (output-revision Int)])
+
+(defunion OutputFreshness
+  (OutputMissing [(source-path String) (output-path String)])
+  (OutputStale
+    [(source-path String)
+     (output-path String)
+     (source-revision Int)
+     (output-revision Int)])
+  (OutputCurrent [(source-path String) (output-path String)]))
+
+(defunion HealthResult
+  (HealthPassed [(name String)])
+  (HealthFailed [(name String) (message String)])
+  (HealthWarned [(name String) (message String)]))
+
+(defrecord HealthInputs
+  [(f0 (Vec HealthResult)) (f1 (Vec HealthResult)) (f4 (Vec HealthResult))])
+
+(defrecord HealthEntry
+  [(source Keyword) (kind Keyword) (name String) (message String)])
+
+(defrecord HealthReport
+  [(entries (Vec HealthEntry))
+   (passed Int)
+   (failed Int)
+   (warnings Int)
+   (status Int)])
+
+(defn horizontal-space? [(character String)] Bool
+  (or (= character " ") (= character "\t")))
+
+(defn starts-with? [(text String) (prefix String)] Bool
+  (and (>= (count text) (count prefix))
+       (= (subs text 0 (count prefix)) prefix)))
+
+(defn ends-with? [(text String) (suffix String)] Bool
+  (and (>= (count text) (count suffix))
+       (= (subs text (- (count text) (count suffix)) (count text)) suffix)))
+
+(defn skip-horizontal [(text String) (cursor Int) (end Int)] Int
+  (if (and (< cursor end)
+           (horizontal-space? (subs text cursor (+ cursor 1))))
+    (skip-horizontal text (+ cursor 1) end)
+    cursor))
+
+(defn line-content-end [(text String) (start Int)] Int
+  (loop [(cursor Int) start]
+    (if (or (>= cursor (count text))
+            (= (subs text cursor (+ cursor 1)) "\n"))
+      cursor
+      (recur (+ cursor 1)))))
+
+(defn after-line [(text String) (start Int)] Int
+  (let [(end Int) (line-content-end text start)]
+    (if (< end (count text)) (+ end 1) end)))
+
+(defn token-at? [(text String) (offset Int) (end Int) (token String)] Bool
+  (and (<= (+ offset (count token)) end)
+       (= (subs text offset (+ offset (count token))) token)))
+
+(defn owned-token-at? [(text String) (offset Int) (end Int) (token String)] Bool
+  (and
+    (token-at? text offset end token)
+    (let [(after Int) (+ offset (count token))]
+      (or (= after end)
+          (= (subs text after (+ after 1)) "=")
+          (horizontal-space? (subs text after (+ after 1)))))))
+
+(defn parse-owned-start
+  [(text String)
+   (offset Int)
+   (end Int)
+   (name String)
+   (open String)
+   (close String)]
+  OwnedStart
+  (let [(after-name Int) (+ offset (count name))
+        (equals Int) (skip-horizontal text after-name end)]
+    (if (or (>= equals end)
+            (not= (subs text equals (+ equals 1)) "="))
+      (->OwnedMalformed equals
+        (str "owned authoring attribute is missing '=': " name))
+      (let [(opening Int) (skip-horizontal text (+ equals 1) end)]
+        (if (or (>= opening end)
+                (not= (subs text opening (+ opening 1)) open))
+          (->OwnedMalformed opening
+            (str "owned authoring attribute has invalid value: " name))
+          (->OwnedFound opening open close))))))
+
+(defn owned-start-at [(text String) (line-start Int) (line-end Int)] OwnedStart
+  (let [(offset Int) (skip-horizontal text line-start line-end)]
+    (cond
+      (owned-token-at? text offset line-end "tags-opt-in")
+      (parse-owned-start text offset line-end "tags-opt-in" "[" "]")
+
+      (owned-token-at? text offset line-end "tag-overrides")
+      (parse-owned-start text offset line-end "tag-overrides" "{" "}")
+
+      (owned-token-at? text offset line-end "flake-inputs")
+      (parse-owned-start text offset line-end "flake-inputs" "{" "}")
+
+      (owned-token-at? text offset line-end "tags")
+      (parse-owned-start text offset line-end "tags" "[" "]")
+
+      :else
+      (->OwnedAbsent false))))
+
+(defn finish-owned-block [(text String) (after-close Int)] BlockScan
+  (let [(line-end Int) (line-content-end text after-close)
+        (semicolon Int) (skip-horizontal text after-close line-end)]
+    (if (or (>= semicolon line-end)
+            (not= (subs text semicolon (+ semicolon 1)) ";"))
+      (->BlockMalformed semicolon
+        "owned authoring block is missing its semicolon")
+      (let [(tail Int) (skip-horizontal text (+ semicolon 1) line-end)]
+        (if (not= tail line-end)
+          (->BlockMalformed tail
+            "owned authoring block has trailing content")
+          (->BlockFinished (after-line text after-close)))))))
+
+(defn scan-owned-block
+  [(text String) (opening Int) (open String) (close String)] BlockScan
+  (loop [(cursor Int) opening
+         (depth Int) 0
+         (quoted Bool) false
+         (escaped Bool) false
+         (comment Bool) false]
+    (if (>= cursor (count text))
+      (->BlockMalformed opening "owned authoring block is unbalanced")
+      (let [(character String) (subs text cursor (+ cursor 1))]
+        (cond
+          comment
+          (recur (+ cursor 1) depth quoted false (not= character "\n"))
+
+          quoted
+          (cond
+            escaped (recur (+ cursor 1) depth true false false)
+            (= character "\\") (recur (+ cursor 1) depth true true false)
+            (= character "\"") (recur (+ cursor 1) depth false false false)
+            :else (recur (+ cursor 1) depth true false false))
+
+          (= character "#")
+          (recur (+ cursor 1) depth false false true)
+
+          (= character "\"")
+          (recur (+ cursor 1) depth true false false)
+
+          (= character open)
+          (recur (+ cursor 1) (+ depth 1) false false false)
+
+          (= character close)
+          (if (= depth 1)
+            (finish-owned-block text (+ cursor 1))
+            (if (> depth 1)
+              (recur (+ cursor 1) (- depth 1) false false false)
+              (->BlockMalformed cursor
+                "owned authoring block closes before it opens")))
+
+          :else
+          (recur (+ cursor 1) depth false false false))))))
+
+(defn strip-owned-authoring [(text String)] AuthoringStripResult
+  (loop [(line-start Int) 0
+         (kept String) ""]
+    (if (>= line-start (count text))
+      (->AuthoringStripped kept)
+      (let [(line-end Int) (line-content-end text line-start)
+            (next-line Int) (after-line text line-start)]
+        (match (owned-start-at text line-start line-end)
+          [(OwnedAbsent token)
+           (recur next-line (str kept (subs text line-start next-line)))]
+          [(OwnedMalformed offset message)
+           (->AuthoringStripRejected offset message)]
+          [(OwnedFound opening open close)
+           (match (scan-owned-block text opening open close)
+             [(BlockMalformed offset message)
+              (->AuthoringStripRejected offset message)]
+             [(BlockFinished after)
+              (recur after kept)])])))))
+
+(defn path-segments [(path String)] (Vec String)
+  (loop [(cursor Int) 0
+         (start Int) 0
+         (segments (Vec String)) []]
+    (if (>= cursor (count path))
+      (conj segments (subs path start (count path)))
+      (if (= (subs path cursor (+ cursor 1)) "/")
+        (recur (+ cursor 1) (+ cursor 1)
+          (conj segments (subs path start cursor)))
+        (recur (+ cursor 1) start segments)))))
+
+(defn string-member? [(values (Vec String)) (candidate String)] Bool
+  (loop [(index Int) 0]
+    (if (>= index (count values))
+      false
+      (if (= candidate (nth values index))
+        true
+        (recur (+ index 1))))))
+
+(defn excluded-quality-path? [(segments (Vec String))] Bool
+  (loop [(index Int) 0]
+    (if (>= index (count segments))
+      false
+      (let [(segment String) (nth segments index)]
+        (if (or
+              (= segment "")
+              (= segment ".")
+              (= segment "..")
+              (string-member?
+                [".git" ".direnv" ".firn-build" "result" "scripts" "tests"]
+                segment)
+              (and (= segment "docs")
+                   (< (+ index 1) (count segments))
+                   (= (nth segments (+ index 1)) "fixtures")))
+          true
+          (recur (+ index 1)))))))
+
+(defn path-basename [(segments (Vec String))] String
+  (if (= (count segments) 0) "" (nth segments (- (count segments) 1))))
+
+(defn quality-target? [(path String)] Bool
+  (let [(segments (Vec String)) (path-segments path)
+        (basename String) (path-basename segments)]
+    (and
+      (ends-with? path ".bnix")
+      (not (excluded-quality-path? segments))
+      (not= basename "enabled-tags.bnix"))))
+
+(defn select-quality-targets [(paths (Vec String))] (Vec String)
+  (loop [(index Int) 0
+         (selected (Vec String)) []]
+    (if (>= index (count paths))
+      (sort selected)
+      (let [(path String) (nth paths index)]
+        (recur (+ index 1)
+          (if (quality-target? path) (conj selected path) selected))))))
+
+(defn classify-output [(metadata OutputMetadata)] OutputFreshness
+  (cond
+    (not (outputmetadata-output-present metadata))
+    (->OutputMissing
+      (outputmetadata-source-path metadata)
+      (outputmetadata-output-path metadata))
+
+    (< (outputmetadata-output-revision metadata)
+       (outputmetadata-source-revision metadata))
+    (->OutputStale
+      (outputmetadata-source-path metadata)
+      (outputmetadata-output-path metadata)
+      (outputmetadata-source-revision metadata)
+      (outputmetadata-output-revision metadata))
+
+    :else
+    (->OutputCurrent
+      (outputmetadata-source-path metadata)
+      (outputmetadata-output-path metadata))))
+
+(defn health-entry [(source Keyword) (result HealthResult)] HealthEntry
+  (match result
+    [(HealthPassed name) (->HealthEntry source :pass name "")]
+    [(HealthFailed name message)
+     (->HealthEntry source :failure name message)]
+    [(HealthWarned name message)
+     (->HealthEntry source :warning name message)]))
+
+(defn append-health-source
+  [(entries (Vec HealthEntry))
+   (source Keyword)
+   (results (Vec HealthResult))]
+  (Vec HealthEntry)
+  (loop [(index Int) 0
+         (combined (Vec HealthEntry)) entries]
+    (if (>= index (count results))
+      combined
+      (recur (+ index 1)
+        (conj combined (health-entry source (nth results index)))))))
+
+(defn ordered-health-entries [(inputs HealthInputs)] (Vec HealthEntry)
+  (append-health-source
+    (append-health-source
+      (append-health-source [] :f0 (healthinputs-f0 inputs))
+      :f1 (healthinputs-f1 inputs))
+    :f4 (healthinputs-f4 inputs)))
+
+(defn aggregate-health [(inputs HealthInputs)] HealthReport
+  (let [(entries (Vec HealthEntry)) (ordered-health-entries inputs)]
+    (loop [(index Int) 0
+           (passed Int) 0
+           (failed Int) 0
+           (warnings Int) 0]
+      (if (>= index (count entries))
+        (->HealthReport entries passed failed warnings
+          (if (> failed 0) 1 0))
+        (let [(kind Keyword) (healthentry-kind (nth entries index))]
+          (cond
+            (= kind :pass)
+            (recur (+ index 1) (+ passed 1) failed warnings)
+
+            (= kind :failure)
+            (recur (+ index 1) passed (+ failed 1) warnings)
+
+            :else
+            (recur (+ index 1) passed failed (+ warnings 1))))))))
