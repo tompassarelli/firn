@@ -1,0 +1,217 @@
+#lang beagle
+(ns firn.tag-inputs-test
+  (:require [beagle.datum-reader :as reader]
+            [native.json :as json]
+            [firn.tag-resolve :as r]
+            [firn.tag-inputs :as inputs]))
+
+(def direct-module-source String
+  (str
+    "#lang beagle/nix\n"
+    "(ns default)\n"
+    "(nix/module [config lib pkgs ...]\n"
+    "  {:tags [theming desktop]\n"
+    "   :tags-opt-in [experimental]\n"
+    "   :tag-overrides\n"
+    "    {theming\n"
+    "      {:myConfig.modules.stylix.chosenTheme \"tokyo-night-dark\"}\n"
+    "     desktop {:myConfig.modules.stylix.enabled true}}\n"
+    "   :config {}})\n"))
+
+(def wrapped-module-source String
+  (str
+    "#lang beagle/nix\n"
+    "(ns default)\n"
+    ";; :tags [commented]\n"
+    "(nix/module [config lib pkgs ...]\n"
+    "  (let [builder (make-builder {:tags [nested]\n"
+    "                                :tags-opt-in [nested-opt]})]\n"
+    "    (lib.mkIf true\n"
+    "      {:tags [real]\n"
+    "       :tags-opt-in [optional]\n"
+    "       :config (call {:tags [also-nested]})})))\n"))
+
+(def darwin-host-source String
+  (str
+    "#lang beagle/nix\n"
+    "(ns enabled-tags)\n"
+    ";; :enabled [commented]\n"
+    "{:platform darwin\n"
+    " :enabled [terminal [browsers -gjoa +chrome]]\n"
+    " :disabled [piper]\n"
+    " :metadata {:enabled [nested] :disabled [nested]}}\n"))
+
+(def linux-host-source String
+  (str
+    "#lang beagle/nix\n"
+    "(ns enabled-tags)\n"
+    "(def enabled-tags\n"
+    "  {:platform linux\n"
+    "   :enabled [terminal]\n"
+    "   :disabled []})\n"))
+
+(defn module-rejected? [(source String)] Bool
+  (match (inputs/module-tags-from-source "bad" source)
+    [(ModuleSourceParsed value) false]
+    [(ModuleSourceRejected message offset) true]))
+
+(defn host-rejected? [(source String)] Bool
+  (match (inputs/host-tags-from-source "bad" source [])
+    [(HostSourceParsed value) false]
+    [(HostSourceRejected message offset) true]))
+
+(defn allowlist-rejected? [(source String)] Bool
+  (match (inputs/darwin-allowlist-from-json source)
+    [(DarwinAllowlistParsed modules) false]
+    [(DarwinAllowlistRejected message offset) true]))
+
+(defn compiler-codec-contract? [] Bool
+  (and
+    (reader/read-ok? (reader/read-events "{:tags [real]}"))
+    (match (json/decode "[\"real\"]")
+      [(JsonDecoded events) (= 3 (count events))]
+      [(JsonDecodeError offset message) false])))
+
+(defn direct-module-case [] Bool
+  (match (inputs/module-tags-from-source "stylix" direct-module-source)
+    [(ModuleSourceRejected message offset) false]
+    [(ModuleSourceParsed module)
+     (let [(overrides (Vec r/TaggedOverrides))
+           (r/moduletags-overrides module)
+           (theming (Vec r/OverrideValue))
+           (r/taggedoverrides-values (nth overrides 0))
+           (desktop (Vec r/OverrideValue))
+           (r/taggedoverrides-values (nth overrides 1))]
+       (and (= "stylix" (r/moduletags-name module))
+            (= ["theming" "desktop"] (r/moduletags-tags module))
+            (= ["experimental"] (r/moduletags-opt-in module))
+            (= 2 (count overrides))
+            (= "theming" (r/taggedoverrides-tag (nth overrides 0)))
+            (= "myConfig.modules.stylix.chosenTheme"
+               (r/overridevalue-path (nth theming 0)))
+            (= "\"tokyo-night-dark\""
+               (r/overridevalue-literal (nth theming 0)))
+            (= "desktop" (r/taggedoverrides-tag (nth overrides 1)))
+            (= "true" (r/overridevalue-literal (nth desktop 0)))))]))
+
+(defn wrapped-module-case [] Bool
+  (match (inputs/module-tags-from-source "wrapped" wrapped-module-source)
+    [(ModuleSourceRejected message offset) false]
+    [(ModuleSourceParsed module)
+     (and (= ["real"] (r/moduletags-tags module))
+          (= ["optional"] (r/moduletags-opt-in module))
+          (= [] (r/moduletags-overrides module)))]))
+
+(defn empty-module-case [] Bool
+  (match
+    (inputs/module-tags-from-source
+      "empty"
+      (str "#lang beagle/nix\n"
+           "(ns default)\n"
+           "(nix/module [config ...] {:config {}})\n"))
+    [(ModuleSourceRejected message offset) false]
+    [(ModuleSourceParsed module)
+     (and (= [] (r/moduletags-tags module))
+          (= [] (r/moduletags-opt-in module))
+          (= [] (r/moduletags-overrides module)))]))
+
+(defn malformed-module-case [] Bool
+  (and
+    (module-rejected?
+      "(nix/module [config ...] {:tags [broken})")
+    (module-rejected?
+      "(nix/module [config ...] {:tags {not-a-vector true}})")
+    (module-rejected?
+      (str "(nix/module [config ...]\n"
+           "  {:tag-overrides {desktop {:path [not-atomic]}}})"))
+    (module-rejected?
+      (str "(def nested {:tags [fake]})\n"
+           ";; (nix/module [x] {:tags [commented]})\n"))))
+
+(defn darwin-host-case [] Bool
+  (match
+    (inputs/host-tags-from-source
+      "ashashi"
+      darwin-host-source
+      ["stylix" "chrome"])
+    [(HostSourceRejected message offset) false]
+    [(HostSourceParsed host)
+     (let [(enabled (Vec r/EnabledTag)) (r/hosttags-enabled host)
+           (browsers r/EnabledTag) (nth enabled 1)]
+       (and (= "ashashi" (r/hosttags-host host))
+            (= "darwin" (r/hosttags-platform host))
+            (r/hosttags-restrict-allowed host)
+            (= ["stylix" "chrome"] (r/hosttags-allowed host))
+            (= ["piper"] (r/hosttags-disabled host))
+            (= 2 (count enabled))
+            (= "terminal" (r/enabledtag-tag (nth enabled 0)))
+            (= "browsers" (r/enabledtag-tag browsers))
+            (= ["chrome"] (r/enabledtag-pluses browsers))
+            (= ["gjoa"] (r/enabledtag-minuses browsers))))]))
+
+(defn linux-host-case [] Bool
+  (match
+    (inputs/host-tags-from-source
+      "whiterabbit"
+      linux-host-source
+      ["must-be-ignored"])
+    [(HostSourceRejected message offset) false]
+    [(HostSourceParsed host)
+     (and (= "linux" (r/hosttags-platform host))
+          (not (r/hosttags-restrict-allowed host))
+          (= [] (r/hosttags-allowed host))
+          (= "terminal"
+             (r/enabledtag-tag (nth (r/hosttags-enabled host) 0))))]))
+
+(defn malformed-host-case [] Bool
+  (and
+    (host-rejected? "{:platform linux :enabled [terminal}")
+    (host-rejected? "{:platform linux :enabled [[desktop river]]}")
+    (host-rejected? "{:platform \"linux\" :enabled []}")
+    (host-rejected?
+      (str "(def nested (call {:enabled [fake]}))\n"
+           ";; {:enabled [commented]}\n"))))
+
+(defn allowlist-case [] Bool
+  (match
+    (inputs/darwin-allowlist-from-json
+      "[\"atuin\", \"bash\", \"ghostty\"]")
+    [(DarwinAllowlistRejected message offset) false]
+    [(DarwinAllowlistParsed modules)
+     (= ["atuin" "bash" "ghostty"] modules)]))
+
+(defn malformed-allowlist-case [] Bool
+  (and
+    (allowlist-rejected? "[")
+    (allowlist-rejected? "{\"module\": \"atuin\"}")
+    (allowlist-rejected? "[[\"atuin\"]]")
+    (allowlist-rejected? "[\"atuin\", 1]")))
+
+(defn resolver-integration-case [] Bool
+  (match (inputs/module-tags-from-source "stylix" direct-module-source)
+    [(ModuleSourceRejected message offset) false]
+    [(ModuleSourceParsed module)
+     (match
+       (inputs/host-tags-from-source
+         "ashashi"
+         "{:platform darwin :enabled [theming] :disabled []}"
+         ["stylix"])
+       [(HostSourceRejected message offset) false]
+       [(HostSourceParsed host)
+        (= ["stylix"]
+           (r/resolution-active (r/resolve [module] host)))])]))
+
+(defn main [] Int
+  (if (and (compiler-codec-contract?)
+           (direct-module-case)
+           (wrapped-module-case)
+           (empty-module-case)
+           (malformed-module-case)
+           (darwin-host-case)
+           (linux-host-case)
+           (malformed-host-case)
+           (allowlist-case)
+           (malformed-allowlist-case)
+           (resolver-integration-case))
+    0
+    1))
