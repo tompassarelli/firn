@@ -8,4 +8,4 @@
     (lib.mkEnableOption "musl C compiler toolchain")
    :config
     (lib.mkIf config.myConfig.modules.musl.enable
-      {:environment.systemPackages (nix/with pkgs [musl])})})
+      {:environment.systemPackages (nix/with pkgs [musl.dev])})})
