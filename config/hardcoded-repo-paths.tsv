@@ -79,7 +79,7 @@ north/bin/tests/arena-seed-test.sh	1
 north/bin/tests/ci-required-bars-test.sh	1
 north/bin/tests/north-on-tooluse-stress-test.sh	1
 north/bin/tests/package-purity-check-test.sh	1
-north/build.sh	2
+north/build.sh	1
 north/cli/config-cli.clj	1
 north/cli/tests/acquire-claim-integration-test.clj	1
 north/cli/tests/agent-identity-publication-integration-test.clj	4
@@ -131,4 +131,4 @@ north/sdk/test/run-ledger.test.ts	1
 north/sdk/test/run-token-budget.test.ts	1
 north/sdk/test/session-hard-cap.test.ts	12
 north/sdk/test/worktree.test.ts	9
-north/tests/generated_output_test.sh	2
+north/tests/generated_output_test.sh	1

@@ -209,6 +209,24 @@ Terse by default — no filler, no hedging, full sentences; brevity comes from
 content selection, never compression tricks. Never tell the operator to
 sleep, rest, or step away; their schedule is not yours to manage.
 
+Standing executive delegation (operator ruling, 2026-08-18): in executive
+command the agent decides and acts on recorded evidence — including
+published-release history repairs — and notifies the operator AFTER in one
+plain sentence, never asking before. Preconditions: forcing evidence recorded
+on the coordination board before acting; published tag repairs preserve one
+chronological tag-to-release mapping; the chosen path is the best-supported
+option. This recorded standing grant satisfies any per-case "explicit
+operator authorization" requirement elsewhere in machine law.
+
+Operator-facing reports speak PLAIN LANGUAGE: name things by what they are
+(the game, the compiler, the release, the demo, the database engine), never
+by internal codenames — wave numbers, stage numbers, ticket codes, version
+tags — without an in-place plain explanation. Every report to the operator
+must be understandable with zero session context; a report that requires the
+reader to know the session's private vocabulary is a defect. Codenames stay
+in coordination boards, ledgers, and worker briefs, where precision needs
+them.
+
 ## Code — durable norms
 - Removal means absence: an asked-for removal deletes the entire live-tree
   surface — no tombstones, shims, "removed" errors, or commentary. Git
