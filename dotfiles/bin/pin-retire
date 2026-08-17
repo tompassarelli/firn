@@ -177,6 +177,38 @@ declared_set="$(printf '%s\n' "${declared_mains[@]}" | LC_ALL=C sort -u)"
 [ "$provided_set" = "$declared_set" ] \
   || die "--consumer-main arguments do not exactly match the sidecar: $sidecar"
 
+declare -A checked_consumer_worktrees=()
+check_consumer_worktree() {
+  local worktree="$1" reference_status
+  [ -n "${checked_consumer_worktrees[$worktree]+set}" ] && return 0
+  checked_consumer_worktrees["$worktree"]=1
+  [ -d "$worktree" ] || return 0
+  reference_status=0
+  rg -l --hidden --glob '!**/.git/**' --fixed-strings \
+    -e "$oid" -e "$pin" -- "$worktree" >/dev/null \
+    || reference_status=$?
+  if [ "$reference_status" -eq 0 ]; then
+    die "consumer worktree still references the pin: $worktree"
+  elif [ "$reference_status" -ne 1 ]; then
+    die "consumer worktree reference check failed: $worktree"
+  fi
+}
+
+for consumer in "${consumer_mains[@]}"; do
+  while IFS= read -r worktree; do
+    check_consumer_worktree "$worktree"
+  done < <(git -C "$consumer" worktree list --porcelain \
+    | sed -n 's/^worktree //p')
+
+  consumer_container="$(dirname "$(dirname "$consumer")")"
+  if [ -d "$consumer_container/worktrees" ]; then
+    while IFS= read -r worktree; do
+      check_consumer_worktree "$worktree"
+    done < <(find -P "$consumer_container/worktrees" -mindepth 1 -maxdepth 1 \
+      -type d -print)
+  fi
+done
+
 consumer_text="$(tr '\n\t' '  ' <"$sidecar")"
 if [ "$dry_run" -eq 1 ]; then
   printf 'pin-retire: DRY RUN — verified clean detached pin\n'

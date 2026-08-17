@@ -71,6 +71,21 @@ if HOME="$test_home" "$target" --consumer-main "$consumer" -- "$pin2" >/dev/null
 [ -d "$pin2" ] && [ -f "$pin2.pin" ] || fail 'unpublished-consumer refusal mutated the pin'
 git -C "$consumer" push -qu origin main
 
+lane="$test_home/code/consumer/worktrees/playable"
+git -C "$consumer" worktree add -q -b playable "$lane" main
+printf 'pin %s\n' "$pin2" >"$lane/pin.ref"
+git -C "$lane" add pin.ref
+git -C "$lane" commit -qm 'playable lane uses pin'
+if HOME="$test_home" "$target" --consumer-main "$consumer" -- "$pin2" \
+    2>"$scratch/lane-error"; then
+  fail 'consumer worktree reference was accepted'
+elif grep -Fq "consumer worktree still references the pin: $lane" "$scratch/lane-error"; then
+  ok
+else
+  fail 'consumer worktree refusal did not name the lane'
+fi
+git -C "$consumer" worktree remove "$lane"
+
 if HOME="$test_home" "$target" --dry-run --consumer-main "$consumer" -- "$pin2" | grep -Fq 'DRY RUN'; then ok; else fail 'dry-run did not report itself'; fi
 [ -d "$pin2" ] && [ -f "$pin2.pin" ] || fail 'dry-run mutated the pin'
 
