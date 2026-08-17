@@ -2,7 +2,7 @@
 
 (ns default)
 
-;; The North coordination engine as one user service on :7977.
+;; The North coordination store as one user service on :7977.
 ;;
 ;; Deliberately narrow after the 2026-08-09 outage (north-data:incidents.md):
 ;; no socket activation — the socket unit's backlog is what turned one outage
@@ -12,7 +12,7 @@
 ;;
 ;; The cgroup ceilings are sized for the empty store this revives onto, not for
 ;; the 139 MB log it replaced. They are the blast radius, not a capacity plan:
-;; raise them deliberately when the store carries data. FRAM_MAX_ACTIVE_CLIENTS
+;; raise them deliberately when the store carries data. BEAGLE_STORE_MAX_ACTIVE_CLIENTS
 ;; (64, from the selection file) must stay well under TasksMax, or the app's
 ;; graceful over-cap refusal never engages before the fatal cgroup EAGAIN.
 (nix/module [config lib pkgs ...]
@@ -20,7 +20,7 @@
         homeDir config.myConfig.modules.users.homeDir
         ;; The one place the engine, FRAMLOG, port, and SpaceId are chosen.
         ;; The unit follows the selection; it never restates it.
-        selectionEnv (s homeDir "/.local/state/north/framrpc.env")
+        selectionEnv (s homeDir "/.local/state/north/beagle-store.env")
         unitName "north-fram.service"
         launch
           (pkgs.writeShellApplication
@@ -33,7 +33,7 @@
              :runtimeInputs (nix/with pkgs [coreutils gnused])
              :text (builtins.readFile (p "./north-fram-publish-runtime"))})]
     {:options.myConfig.modules.north-fram.enable
-      (lib.mkEnableOption "North coordination engine (:7977) — sealed Fram release as one user service")
+      (lib.mkEnableOption "North coordination store (:7977) — sealed Beagle Store release as one user service")
      :config
       (lib.mkIf config.myConfig.modules.north-fram.enable
         {:home-manager.users
@@ -41,7 +41,7 @@
             (nix/module [config ...]
               {:systemd.user.services.north-fram
                 {:Unit
-                  {:Description "North coordination engine — sealed Fram release on :7977"
+                  {:Description "North coordination store — sealed Beagle Store release on :7977"
                    :ConditionPathExists selectionEnv
                    :After ["network.target"]}
                  :Service
@@ -50,7 +50,7 @@
                    :Type "notify"
                    :NotifyAccess "main"
                    :Environment
-                     [(s "NORTH_FRAM_SELECTION=" selectionEnv)
+                     [(s "NORTH_STORE_SELECTION=" selectionEnv)
                       (s "NORTH_COORD_SYSTEMD_UNIT=" unitName)]
                    :ExecStart (s launch "/bin/north-fram-launch")
                    ;; The attestation's launcher-owned record. Fatal on
@@ -61,7 +61,7 @@
                    :ExecStartPost
                      (s publishRuntime "/bin/north-fram-publish-runtime $MAINPID")
                    :ExecStopPost
-                     (s "-" pkgs.coreutils "/bin/rm -f %S/north/framrpc-runtime/north-fram.runtime")
+                     (s "-" pkgs.coreutils "/bin/rm -f %S/north/store-runtime/north-store.runtime")
                    :Restart "on-failure"
                    :RestartSec "2s"
                    ;; An empty store boots in well under a second; 120 s is the

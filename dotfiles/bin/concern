@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$HOME/.local/state/north/framrpc.env"
+source "$HOME/.local/state/north/beagle-store.env"
 exec "$HOME/code/north/main/bin/concern" "$@"

@@ -1,4 +1,3 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$HOME/.local/state/north/framrpc.env"
 exec "$HOME/code/fram/main/bin/fram" "$@"

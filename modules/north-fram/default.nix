@@ -1,28 +1,12 @@
 { config, lib, pkgs, ... }:
 
-let
-  username = config.myConfig.modules.users.username;
-  homeDir = config.myConfig.modules.users.homeDir;
-  selectionEnv = "${homeDir}/.local/state/north/framrpc.env";
-  unitName = "north-fram.service";
-  launch = pkgs.writeShellApplication {
-    name = "north-fram-launch";
-    runtimeInputs = with pkgs; [ coreutils ];
-    text = builtins.readFile ./north-fram-launch;
-  };
-  publishRuntime = pkgs.writeShellApplication {
-    name = "north-fram-publish-runtime";
-    runtimeInputs = with pkgs; [ coreutils gnused ];
-    text = builtins.readFile ./north-fram-publish-runtime;
-  };
-in
-{
-  options.myConfig.modules.north-fram.enable = lib.mkEnableOption "North coordination engine (:7977) — sealed Fram release as one user service";
+((username: ((homeDir: ((selectionEnv: ((unitName: ((launch: ((publishRuntime: {
+  options.myConfig.modules.north-fram.enable = lib.mkEnableOption "North coordination store (:7977) — sealed Beagle Store release as one user service";
   config = lib.mkIf config.myConfig.modules.north-fram.enable {
     home-manager.users.${username} = ({ config, ... }: {
       systemd.user.services.north-fram = {
         Unit = {
-          Description = "North coordination engine — sealed Fram release on :7977";
+          Description = "North coordination store — sealed Beagle Store release on :7977";
           ConditionPathExists = selectionEnv;
           After = [ "network.target" ];
         };
@@ -30,12 +14,12 @@ in
           Type = "notify";
           NotifyAccess = "main";
           Environment = [
-            "NORTH_FRAM_SELECTION=${selectionEnv}"
+            "NORTH_STORE_SELECTION=${selectionEnv}"
             "NORTH_COORD_SYSTEMD_UNIT=${unitName}"
           ];
           ExecStart = "${launch}/bin/north-fram-launch";
           ExecStartPost = "${publishRuntime}/bin/north-fram-publish-runtime $MAINPID";
-          ExecStopPost = "-${pkgs.coreutils}/bin/rm -f %S/north/framrpc-runtime/north-fram.runtime";
+          ExecStopPost = "-${pkgs.coreutils}/bin/rm -f %S/north/store-runtime/north-store.runtime";
           Restart = "on-failure";
           RestartSec = "2s";
           TimeoutStartSec = "120";
@@ -51,4 +35,12 @@ in
       };
     });
   };
-}
+}) (pkgs.writeShellApplication {
+    name = "north-fram-publish-runtime";
+    runtimeInputs = with pkgs; [ coreutils gnused ];
+    text = builtins.readFile ./north-fram-publish-runtime;
+  }))) (pkgs.writeShellApplication {
+    name = "north-fram-launch";
+    runtimeInputs = with pkgs; [ coreutils ];
+    text = builtins.readFile ./north-fram-launch;
+  }))) "north-fram.service")) "${homeDir}/.local/state/north/beagle-store.env")) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)

@@ -1,4 +1,4 @@
-selection="${NORTH_FRAM_SELECTION:?north-fram: NORTH_FRAM_SELECTION must name the FRAMRPC selection file}"
+selection="${NORTH_STORE_SELECTION:?north-fram: NORTH_STORE_SELECTION must name the FRAMRPC selection file}"
 unit="${NORTH_COORD_SYSTEMD_UNIT:?north-fram: NORTH_COORD_SYSTEMD_UNIT must name the controller unit}"
 main_pid="${1:?north-fram: the listener PID is required}"
 
@@ -7,7 +7,7 @@ set -a
 . "$selection"
 set +a
 
-receipt="$FRAM_HOME/RELEASE"
+receipt="$BEAGLE_STORE_HOME/RELEASE"
 [ -r "$receipt" ] || { echo "north-fram: sealed release has no receipt: $receipt" >&2; exit 1; }
 
 receipt_value() {
@@ -30,25 +30,25 @@ case "$start_ticks" in
   ''|*[!0-9]*) echo "north-fram: cannot read listener birth for $main_pid" >&2; exit 1 ;;
 esac
 
-record_dir="${XDG_STATE_HOME:-$HOME/.local/state}/north/framrpc-runtime"
-record="$record_dir/north-fram.runtime"
+record_dir="${XDG_STATE_HOME:-$HOME/.local/state}/north/store-runtime"
+record="$record_dir/north-store.runtime"
 mkdir -p "$record_dir"
 
 # The attestation reads one 0600 regular file with an exact field order.
 temp="$record.next.$$"
 umask 077
 {
-  echo "FORMAT=north-framrpc-runtime/v1"
-  echo "FRAM_SOURCE=$FRAM_HOME"
-  echo "FRAM_REVISION=$revision"
-  echo "FRAM_TREE=$tree"
-  echo "FRAM_NATIVE_ARTIFACT_DIR=$FRAM_NATIVE_ARTIFACT_DIR"
-  echo "FRAM_NATIVE_CLOSURE_SHA256=$FRAM_NATIVE_CLOSURE_SHA256"
-  echo "FRAM_SERVER_ARTIFACT=$FRAM_SERVER_ARTIFACT"
-  echo "FRAM_SERVER_ARTIFACT_SHA256=$FRAM_SERVER_ARTIFACT_SHA256"
-  echo "FRAM_SPACE_ID=$FRAM_SPACE_ID"
-  echo "FRAM_PORT=$FRAM_SERVER_PORT"
-  echo "FRAM_LOG=$FRAM_LOG"
+  echo "FORMAT=north-store-runtime/v1"
+  echo "BEAGLE_STORE_SOURCE=$BEAGLE_STORE_HOME"
+  echo "BEAGLE_STORE_REVISION=$revision"
+  echo "BEAGLE_STORE_TREE=$tree"
+  echo "BEAGLE_STORE_NATIVE_ARTIFACT_DIR=$BEAGLE_STORE_NATIVE_ARTIFACT_DIR"
+  echo "BEAGLE_STORE_NATIVE_CLOSURE_SHA256=$BEAGLE_STORE_NATIVE_CLOSURE_SHA256"
+  echo "BEAGLE_STORE_SERVER_ARTIFACT=$BEAGLE_STORE_SERVER_ARTIFACT"
+  echo "BEAGLE_STORE_SERVER_ARTIFACT_SHA256=$BEAGLE_STORE_SERVER_ARTIFACT_SHA256"
+  echo "BEAGLE_STORE_SPACE_ID=$BEAGLE_STORE_SPACE_ID"
+  echo "BEAGLE_STORE_PORT=$BEAGLE_STORE_SERVER_PORT"
+  echo "BEAGLE_STORE_LOG=$BEAGLE_STORE_LOG"
   echo "PID=$main_pid"
   echo "PID_BIRTH=proc:$start_ticks"
   echo "CONTROLLER_UNIT=$unit"

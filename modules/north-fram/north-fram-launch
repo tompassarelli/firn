@@ -1,7 +1,7 @@
-selection="${NORTH_FRAM_SELECTION:?north-fram: NORTH_FRAM_SELECTION must name the FRAMRPC selection file}"
+selection="${NORTH_STORE_SELECTION:?north-fram: NORTH_STORE_SELECTION must name the FRAMRPC selection file}"
 
 # systemd's EnvironmentFile parser accepts KEY=VALUE only; every line of
-# framrpc.env is `export KEY='value'`, so EnvironmentFile= imports nothing from
+# beagle-store.env is `export KEY='value'`, so EnvironmentFile= imports nothing from
 # it. Sourcing keeps the selection file the single place the engine, FRAMLOG,
 # port, and SpaceId are chosen.
 if [ ! -r "$selection" ]; then
@@ -13,16 +13,16 @@ set -a
 . "$selection"
 set +a
 
-: "${FRAM_HOME:?north-fram: the selection file must set FRAM_HOME}"
-launcher="$FRAM_HOME/bin/fram-server"
+: "${BEAGLE_STORE_HOME:?north-fram: the selection file must set BEAGLE_STORE_HOME}"
+launcher="$BEAGLE_STORE_HOME/bin/beagle-store-server"
 if [ ! -x "$launcher" ]; then
   echo "north-fram: sealed release has no executable launcher: $launcher" >&2
   exit 78
 fi
 
-# The port is passed, never inherited: fram-server assigns
-# FRAM_SERVER_PORT="${1:-7977}", overwriting whatever the selection file set,
+# The port is passed, never inherited: beagle-store-server assigns
+# BEAGLE_STORE_SERVER_PORT="${1:-7977}", overwriting whatever the selection file set,
 # so an unargumented launch silently ignores the selected port and binds 7977.
 # FRAMLOG and SpaceId do come from the environment. The launcher's own argv is
 # irrelevant to attestation, which reads the exec'd Native process.
-exec "$launcher" "${FRAM_SERVER_PORT:?north-fram: the selection file must set FRAM_SERVER_PORT}"
+exec "$launcher" "${BEAGLE_STORE_SERVER_PORT:?north-fram: the selection file must set BEAGLE_STORE_SERVER_PORT}"
