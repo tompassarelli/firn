@@ -359,40 +359,52 @@
 
     ;; Step 2: validate the SNAPSHOT, not the working tree — a peer's mid-edit
     ;; .bnix must not fail an unrelated rebuild. A detached temp worktree gives
-    ;; the validator the committed content.
-    (define wt-parent (make-temporary-file "firn-snapshot-~a" 'directory))
-    (define wt (build-path wt-parent "wt"))
-    (define (cleanup-worktree!)
-      (parameterize ([current-output-port (open-output-nowhere)]
-                     [current-error-port (open-output-nowhere)])
-        (sh "git" "-C" ROOT "worktree" "remove" "--force" (path->string wt)))
-      (when (directory-exists? wt-parent)
-        (delete-directory/files wt-parent #:must-exist? #f)))
-    (define old-exit (exit-handler))
-    (exit-handler (λ (c) (cleanup-worktree!) (old-exit c)))
-    (phase "firn-validate (snapshot)"
-      (λ ()
-        (and (sh "git" "-C" ROOT "worktree" "add" "--detach" (path->string wt) (git-head))
-             ;; The schema cache is untracked by design; share the live one.
-             (begin
-               (when (and (directory-exists? (build-path ROOT ".beagle-cache"))
-                          (not (directory-exists? (build-path wt ".beagle-cache"))))
-                 (make-file-or-directory-link (build-path ROOT ".beagle-cache")
-                                              (build-path wt ".beagle-cache")))
-               #t)
-             (let ([old-repo (getenv "FIRN_REPO")]
-                   [old-beagle (getenv "BEAGLE_PATH")])
-               (putenv "FIRN_REPO" (path->string wt))
-               ;; Only forward a caller-pinned BEAGLE_PATH; firn-validate's own
-               ;; probe ladder handles the container layout (~/code/beagle/main).
-               (when old-beagle (putenv "BEAGLE_PATH" old-beagle))
-               (begin0
-                 (parameterize ([current-directory wt])
-                   (sh (path->string (build-path wt "scripts" "firn-validate"))))
-                 (putenv "FIRN_REPO" (or old-repo ""))
-                 (unless old-beagle (putenv "BEAGLE_PATH" "")))))))
-    (cleanup-worktree!)
-    (exit-handler old-exit)
+    ;; the validator the committed content. When no build file differs from
+    ;; HEAD in either direction — nothing dirty, no untracked .bnix/.nix — the
+    ;; working tree already IS that content and the copy proves nothing.
+    (define snapshot-in-tree?
+      (and (null? (dirty-build-files))
+           (null? (filter (λ (p) (regexp-match? #rx"\\.(bnix|nix)$" p)) untracked))))
+    (cond
+      [snapshot-in-tree?
+       (printf "── snapshot: build files match HEAD; validating the tree in place\n")
+       (flush-output)
+       (phase "firn-validate (snapshot)"
+         (λ () (sh (path->string (in-repo "scripts" "firn-validate")))))]
+      [else
+       (define wt-parent (make-temporary-file "firn-snapshot-~a" 'directory))
+       (define wt (build-path wt-parent "wt"))
+       (define (cleanup-worktree!)
+         (parameterize ([current-output-port (open-output-nowhere)]
+                        [current-error-port (open-output-nowhere)])
+           (sh "git" "-C" ROOT "worktree" "remove" "--force" (path->string wt)))
+         (when (directory-exists? wt-parent)
+           (delete-directory/files wt-parent #:must-exist? #f)))
+       (define old-exit (exit-handler))
+       (exit-handler (λ (c) (cleanup-worktree!) (old-exit c)))
+       (phase "firn-validate (snapshot)"
+         (λ ()
+           (and (sh "git" "-C" ROOT "worktree" "add" "--detach" (path->string wt) (git-head))
+                ;; The schema cache is untracked by design; share the live one.
+                (begin
+                  (when (and (directory-exists? (build-path ROOT ".beagle-cache"))
+                             (not (directory-exists? (build-path wt ".beagle-cache"))))
+                    (make-file-or-directory-link (build-path ROOT ".beagle-cache")
+                                                 (build-path wt ".beagle-cache")))
+                  #t)
+                (let ([old-repo (getenv "FIRN_REPO")]
+                      [old-beagle (getenv "BEAGLE_PATH")])
+                  (putenv "FIRN_REPO" (path->string wt))
+                  ;; Only forward a caller-pinned BEAGLE_PATH; firn-validate's own
+                  ;; probe ladder handles the container layout (~/code/beagle/main).
+                  (when old-beagle (putenv "BEAGLE_PATH" old-beagle))
+                  (begin0
+                    (parameterize ([current-directory wt])
+                      (sh (path->string (build-path wt "scripts" "firn-validate"))))
+                    (putenv "FIRN_REPO" (or old-repo ""))
+                    (unless old-beagle (putenv "BEAGLE_PATH" "")))))))
+       (cleanup-worktree!)
+       (exit-handler old-exit)])
 
     ;; Step 2b: flake input purity.
     (if auto-impure?

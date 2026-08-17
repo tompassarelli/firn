@@ -24,13 +24,64 @@ if (( ${#FILES[@]} == 0 )); then
   exit 0
 fi
 
+JOBS="$(nproc 2>/dev/null || echo 4)"
+
+# `nix-instantiate --parse-only` is a pure function of one file's bytes: it
+# follows no imports and evaluates nothing, so no other file can change its
+# verdict. A file whose content hash is unchanged since its last clean parse
+# therefore cannot have become unparseable, and re-parsing it buys nothing.
+# The stamp records repo-relative paths so a snapshot worktree sharing this
+# cache hits on identical content. Delete it to force a full parse.
+STAMP="$REPO/.beagle-cache/lint.stamp"
+
+hash_lines() { # "<sha256>  <repo-relative path>", one per file
+  printf '%s\0' "${FILES[@]}" \
+    | xargs -0 -P "$JOBS" -n 64 sha256sum \
+    | awk -v prefix="$REPO/" '
+        { hash = $1
+          path = substr($0, index($0, "  ") + 2)
+          if (substr(path, 1, length(prefix)) == prefix)
+            path = substr(path, length(prefix) + 1)
+          print hash "  " path }'
+}
+
+current_stamp="$(hash_lines | LC_ALL=C sort)"
+if [[ -r "$STAMP" ]]; then
+  # Only-in-current lines are exactly the files whose content moved (or that
+  # are new); a deleted file is only-in-stamp and needs nothing.
+  mapfile -t TARGETS < <(
+    LC_ALL=C comm -13 <(LC_ALL=C sort "$STAMP") <(printf '%s\n' "$current_stamp") \
+      | awk -v repo="$REPO/" '{ print repo substr($0, index($0, "  ") + 2) }'
+  )
+else
+  TARGETS=("${FILES[@]}")
+fi
+
+write_stamp() {
+  local dir tmp
+  dir="$(dirname "$STAMP")"
+  mkdir -p "$dir" 2>/dev/null || return 0
+  tmp="$(mktemp "$dir/lint.stamp.XXXXXX" 2>/dev/null)" || return 0
+  if printf '%s\n' "$current_stamp" >"$tmp" 2>/dev/null; then
+    mv -f "$tmp" "$STAMP" 2>/dev/null || rm -f "$tmp"
+  else
+    rm -f "$tmp"
+  fi
+  return 0
+}
+
+if (( ${#TARGETS[@]} == 0 )); then
+  echo "firn-lint-nix: ${#FILES[@]} .nix files unchanged since their last clean parse."
+  exit 0
+fi
+
 # Parallel parse via xargs. nix-instantiate --parse is purely syntactic
 # (no network, no eval) so trivially parallelizable. -P = cores.
 errors_file="$(mktemp)"
 trap "rm -f $errors_file" EXIT
 
-printf '%s\0' "${FILES[@]}" \
-  | xargs -0 -P "$(nproc 2>/dev/null || echo 4)" -I {} \
+printf '%s\0' "${TARGETS[@]}" \
+  | xargs -0 -P "$JOBS" -I {} \
       bash -c '
         if ! out=$(nix-instantiate --parse-only "$1" 2>&1 >/dev/null); then
           {
@@ -45,8 +96,15 @@ printf '%s\0' "${FILES[@]}" \
 errors=$(wc -l < "$errors_file" 2>/dev/null || echo 0)
 
 if (( errors > 0 )); then
+  # A failed file keeps its old (or no) stamp entry, so the next run re-parses
+  # it rather than inheriting a clean verdict it never earned.
   echo "$errors file(s) with syntax errors." >&2
   exit 1
 fi
 
-echo "firn-lint-nix: ${#FILES[@]} .nix files parse cleanly."
+write_stamp
+if (( ${#TARGETS[@]} == ${#FILES[@]} )); then
+  echo "firn-lint-nix: ${#FILES[@]} .nix files parse cleanly."
+else
+  echo "firn-lint-nix: ${#TARGETS[@]} changed of ${#FILES[@]} .nix files parse cleanly."
+fi
