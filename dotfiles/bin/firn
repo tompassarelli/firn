@@ -44,6 +44,39 @@ trace_end() {
   printf '{"schema":"firn.rebuild/v1","event":"span_end","trace_id":"%s","monotonic_ms":%s,"duration_ms":%s,"name":"%s","status":"ok","cache":"%s"}\n'     "${FIRN_TRACE_ID:-}" "$now" "$duration" "$name" "$cache"     >>"$FIRN_TRACE_PATH" 2>/dev/null || true
 }
 
+# Rebuild telemetry. Every emitter below, in scripts/firn-build-bin, and in
+# scripts/firn-cmds/rebuild.rkt is a no-op unless FIRN_TRACE_PATH names a
+# writable file, so opening the run directory here is what makes them fire.
+# The retired native launcher used to do it; the trace schema is unchanged.
+rebuild_invocation() {
+  case "${1-}:${2-}" in
+    rebuild:*) return 0 ;;
+    host:rebuild) return 0 ;;
+  esac
+  return 1
+}
+
+open_trace_run() {
+  local state_root run_dir now
+  state_root="${XDG_STATE_HOME:-${HOME:-/tmp}/.local/state}"
+  FIRN_TRACE_ID="$(date +%s%3N)-$$"
+  run_dir="$state_root/firn/rebuild/$FIRN_TRACE_ID"
+  mkdir -p "$run_dir" 2>/dev/null || return 0
+  FIRN_TRACE_PATH="$run_dir/trace.jsonl"
+  FIRN_NIX_LOG_PATH="$run_dir/nix.jsonl"
+  : >>"$FIRN_TRACE_PATH" 2>/dev/null || return 0
+  : >>"$FIRN_NIX_LOG_PATH" 2>/dev/null || return 0
+  export FIRN_TRACE_ID FIRN_TRACE_PATH FIRN_NIX_LOG_PATH
+  now="$(trace_now_ms)" || now=0
+  printf '{"schema":"firn.rebuild/v1","event":"run_start","trace_id":"%s","trace_path":"%s","nix_log_path":"%s","monotonic_ms":%s}\n' \
+    "$FIRN_TRACE_ID" "$FIRN_TRACE_PATH" "$FIRN_NIX_LOG_PATH" "$now" \
+    >>"$FIRN_TRACE_PATH" 2>/dev/null || true
+}
+
+if [ -z "${FIRN_TRACE_PATH:-}" ] && rebuild_invocation "$@"; then
+  open_trace_run
+fi
+
 exec_runtime() {
   local racket_bin="$1" racket_compiled_root="$2" runtime="$3" cache_state="$4"
   local startup_start
