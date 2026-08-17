@@ -47,6 +47,7 @@
    :myConfig.modules.parted.enable true
    :myConfig.modules.unixodbc.enable true
    :myConfig.modules.nix-ld.enable true
+   :myConfig.modules.musl.enable true
    :myConfig.modules.appimage.enable true
    :myConfig.modules.codex.enable true
    :myConfig.modules.hermes.enable false

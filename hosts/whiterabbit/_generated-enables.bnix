@@ -70,6 +70,7 @@
    :myConfig.modules.libsecret.enable (lib.mkDefault true)
    :myConfig.modules.libtool.enable (lib.mkDefault true)
    :myConfig.modules.mpv.enable (lib.mkDefault true)
+   :myConfig.modules.musl.enable (lib.mkDefault true)
    :myConfig.modules.my-agents.enable (lib.mkDefault true)
    :myConfig.modules.nautilus.enable (lib.mkDefault true)
    :myConfig.modules.nerd-fonts.enable (lib.mkDefault true)
