@@ -223,3 +223,29 @@ sleep, rest, or step away; their schedule is not yours to manage.
   laddered away.
 - A comment states a constraint the code cannot say. Narrative (how found,
   outputs, dates) belongs in the commit message, not the code.
+
+## Fleet execution law (operator rulings, 2026-08-17)
+
+- **Verification latency**: no routine verification loop may exceed 2-3 minutes.
+  A slower loop is a defect to fix (5-10x), not a cost to schedule around.
+  Test architecture, caching, sharding, and CI topology all serve this number.
+  Never lengthen a timeout without evidence that legitimate work changed.
+- **Machine never pegged**: at most ONE heavy suite/gate/build per machine at a
+  time; heavy work runs `nice 19` (plus core caps where the runner supports
+  them); light work is unrestricted. The dispatcher owns the compute budget.
+- **Landing bar**: local supervised exact gate green + native CI green on the
+  exact commit. Remote full-suite CI is async confirmation and never serializes
+  a landing. Published-tag bars stay strict (all named workflows green).
+- **Staffing**: Codex capacity is plentiful, Claude capacity is limited. Deploy
+  gpt-5.6-luna/terra liberally, preferred over opus for bounded and mid-size
+  work; gpt-5.6-sol at medium-xhigh for the hardest closures; stochastically mix
+  comparable assignments and track outcomes in
+  `~/code/todo/model-assignment-ledger.md`. Fable oversees only the largest
+  streams.
+- **Codex dispatch**: direct CLI with full access
+  (`--dangerously-bypass-approvals-and-sandbox`); scope discipline lives in the
+  brief (explicit edit boundaries), never in a sandbox that breaks the work.
+- **Executive mode**: the orchestrator never codes; full parallel tilt within
+  the compute budget; no idle agents; every finished result consumed
+  immediately; every blocker owned; the next gate prepped before the current
+  one opens.
