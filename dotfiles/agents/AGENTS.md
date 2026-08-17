@@ -249,7 +249,19 @@ sleep, rest, or step away; their schedule is not yours to manage.
   gate is PUBLISHING: a tag or released binary artifact (beagle native
   release artifacts, gjoa binary builds, and their kin) requires its
   producing workflow green for the exact commit before the tag or artifact
-  ships — publish-time only, never landing-time.
+  ships — publish-time only, never landing-time. The qualifying release
+  preflight is LOCAL by default: the repository's own supervised gate run on
+  the exact commit, on this machine, with headroom. A GitHub run is never the
+  thing waited on — GitHub is a git mirror, an async second opinion, and (only
+  where it builds the shipped binary) a publish-time artifact factory. No
+  landing, release cycle, or agent workflow may poll, watch, or serialize on
+  a GitHub verdict. The qualifying release
+  preflight is LOCAL by default: the repository's own supervised gate run on
+  the exact commit, on this machine, with headroom. A GitHub run is never the
+  thing waited on — GitHub is a git mirror, an async second opinion, and (only
+  where it builds the shipped binary) a publish-time artifact factory. No
+  landing, release cycle, or agent workflow may poll, watch, or serialize on
+  a GitHub verdict.
 - **Staffing**: Codex capacity is plentiful, Claude capacity is limited. Deploy
   gpt-5.6-luna/terra liberally, preferred over opus for bounded and mid-size
   work; gpt-5.6-sol at medium-xhigh for the hardest closures; stochastically mix
