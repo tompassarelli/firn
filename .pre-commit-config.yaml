@@ -8,10 +8,12 @@ repos:
         pass_filenames: false
         always_run: true
       # Git hooks cannot be tracked, so the installer is: any verified commit
-      # (re)points .git/hooks/reference-transaction at the prewarm.
+      # (re)points .git/hooks/reference-transaction at the prewarm. A commit in
+      # a lane must install main's copy, not the lane's — the hook is shared
+      # through the common git dir and a lane path outlives the lane.
       - id: firn-prewarm-hook
         name: firn prewarm ref-transaction hook
-        entry: bash -c '"$PWD/dotfiles/bin/firn-prewarm" --install-hook'
+        entry: bash -c 'main=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)"); [ -x "$main/dotfiles/bin/firn-prewarm" ] && "$main/dotfiles/bin/firn-prewarm" --install-hook; exit 0'
         language: system
         pass_filenames: false
         always_run: true

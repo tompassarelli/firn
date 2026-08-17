@@ -415,13 +415,27 @@
     (equal? "Darwin" (string-trim (sh-out "uname" "-s"))))
   (define extra (if auto-impure? (list "--impure") '()))
   (define built-path #f)
+  (define attr
+    (format "~a#~a" (snapshot-ref)
+            (if on-linux?
+                (format "nixosConfigurations.~a.config.system.build.toplevel" host)
+                (format "darwinConfigurations.~a.system" host))))
+
+  ;; Advisory only. The prewarm's key and this snapshot ref are the same string
+  ;; by construction; when they diverge the eval cache was filled for another
+  ;; checkout and this build pays a cold evaluation it thinks it avoided.
+  (let* ([prewarm (in-repo "dotfiles" "bin" "firn-prewarm")]
+         [warm-key (and (file-exists? prewarm)
+                        (with-handlers ([exn:fail? (λ (_) "")])
+                          (sh-out (path->string prewarm) "--print-warm-key")))])
+    (when (and warm-key (non-empty-string? warm-key) (not (equal? warm-key attr)))
+      (printf "── ⚠ prewarm warms a different snapshot; expect a cold evaluation\n")
+      (printf "     prewarm: ~a\n" warm-key)
+      (printf "     rebuild: ~a\n" attr)
+      (flush-output)))
+
   (phase "build snapshot closure"
     (λ ()
-      (define attr
-        (format "~a#~a" (snapshot-ref)
-                (if on-linux?
-                    (format "nixosConfigurations.~a.config.system.build.toplevel" host)
-                    (format "darwinConfigurations.~a.system" host))))
       (define out
         (apply sh-out
                (nix-build-command

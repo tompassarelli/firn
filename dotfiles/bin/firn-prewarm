@@ -36,13 +36,50 @@ looks_like_firn_repo() { # mirrors looks-like-firn-repo? in firn-cmds/util.rkt
   [ -d "$1" ] && [ -f "$1/scripts/firn-build" ] && [ -f "$1/flake.bnix" ]
 }
 
+container_main() { # <checkout> — the main checkout sharing <checkout>'s object store
+  local checkout="$1" common main container
+  common="$(git_clean -C "$checkout" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || common=""
+  if [ -n "$common" ]; then
+    main="$(cd "$common/.." 2>/dev/null && pwd -P)" || main=""
+    if [ -n "$main" ] && looks_like_firn_repo "$main"; then
+      printf '%s\n' "$main"
+      return 0
+    fi
+  fi
+  # A lane that is a clone rather than a linked worktree still sits in the
+  # container layout, where the sibling `main` is the checkout rebuilds read.
+  case "$checkout" in
+    */worktrees/* | */pins/*)
+      container="${checkout%/worktrees/*}"
+      [ "$container" = "$checkout" ] && container="${checkout%/pins/*}"
+      if looks_like_firn_repo "$container/main"; then
+        printf '%s\n' "$container/main"
+        return 0
+      fi
+      ;;
+  esac
+  return 1
+}
+
+# The warm target is the container's main checkout, never the calling lane:
+# `firn rebuild` evaluates main's snapshot, so a fingerprint warmed for a lane
+# path is a cache nothing will ever read.
 resolve_repo() {
-  local candidate="${FIRN_REPO:-}"
+  local candidate="${FIRN_REPO:-}" main
   if [ -z "$candidate" ]; then
     candidate="$(cd "$BIN_DIR/../.." 2>/dev/null && pwd -P)" || return 1
   fi
+  main="$(container_main "$candidate")" || main=""
+  [ -n "$main" ] && candidate="$main"
   looks_like_firn_repo "$candidate" || return 1
   printf '%s\n' "$candidate"
+}
+
+warm_key() { # <repo> — the stamp key: exactly what an evaluation would warm
+  local repo="$1" uri attr
+  uri="$(snapshot_uri "$repo")" || return 1
+  attr="$(target_attr "$repo")" || return 1
+  printf '%s#%s\n' "$uri" "$attr"
 }
 
 snapshot_uri() { # <repo> — the byte-identical twin of rebuild.rkt's snapshot-ref
@@ -144,7 +181,7 @@ prewarm() {
   # Ref movement fires far more often than HEAD actually changes (lane refs,
   # no-op updates); the stamp is only written after an evaluation succeeded, so
   # a failed or superseded attempt still re-runs.
-  key="$uri#$attr"
+  key="$uri#$attr"  # identical by construction to warm_key "$repo"
   if [ "$(cat "$STAMPFILE" 2>/dev/null)" = "$key" ]; then
     say "already warm: $key"
     return 0
@@ -225,7 +262,7 @@ install_hook() {
   local repo hookdir hook stale content
   repo="$(resolve_repo)" || return 0
   [ -x "$repo/dotfiles/bin/firn-prewarm" ] || return 0
-  hookdir="$(git_clean rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 0
+  hookdir="$(git_clean -C "$repo" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 0
   [ -n "$hookdir" ] && [ -d "$hookdir/hooks" ] || return 0
 
   # A commit is itself a ref update, so the v1 post-commit hook is now a
@@ -251,9 +288,10 @@ install_hook() {
 
 usage() {
   cat <<'EOF'
-usage: firn-prewarm                # detached and silent (git hook entry point)
-       firn-prewarm --foreground   # synchronous; prints the URI and timing
-       firn-prewarm --install-hook # (re)install the reference-transaction hook
+usage: firn-prewarm                    # detached and silent (git hook entry point)
+       firn-prewarm --foreground       # synchronous; prints the URI and timing
+       firn-prewarm --install-hook     # (re)install the reference-transaction hook
+       firn-prewarm --print-warm-key   # the snapshot key this prewarm warms
 EOF
 }
 
@@ -274,6 +312,11 @@ case "${1:-}" in
     ;;
   --install-hook)
     install_hook
+    exit 0
+    ;;
+  --print-warm-key)
+    repo="$(resolve_repo)" || exit 1
+    warm_key "$repo" || exit 1
     exit 0
     ;;
   --help | -h)

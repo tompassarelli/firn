@@ -491,6 +491,47 @@ wait_for 8 one_eval_at_most \
 pkill -f -- "print-out-paths git.file://$container" 2>/dev/null
 kill_tracked
 
+# ── case 14: a lane warms the container's main, never its own path ────────
+# The stamp is one key per user, so a lane-targeted prewarm does not merely
+# miss — it claims the stamp and suppresses main's evaluation.
+lane_container="$scratch/container"
+rm -rf "$lane_container"
+mkdir -p "$lane_container/main/scripts" "$lane_container/main/dotfiles/bin" \
+  "$lane_container/main/hosts/$host"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$lane_container/main/scripts/firn-build"
+chmod +x "$lane_container/main/scripts/firn-build"
+printf ';; sandbox\n' >"$lane_container/main/flake.bnix"
+cp "$TARGET" "$lane_container/main/dotfiles/bin/firn-prewarm"
+git init -q -b main "$lane_container/main"
+git -C "$lane_container/main" add -A
+git -C "$lane_container/main" commit -qm base
+git -C "$lane_container/main" worktree add -q "$lane_container/worktrees/slug" -b slug
+main_head="$(git -C "$lane_container/main" rev-parse HEAD)"
+printf 'lane\n' >"$lane_container/worktrees/slug/lane-only"
+git -C "$lane_container/worktrees/slug" add -A
+git -C "$lane_container/worktrees/slug" commit -qm lane
+lane_key="$(env -u FIRN_REPO \
+  "$lane_container/worktrees/slug/dotfiles/bin/firn-prewarm" --print-warm-key 2>/dev/null)"
+[ "$lane_key" = "$(expected_uri "$lane_container/main" "$main_head" main)#$(subst "$attr_template" "$host")" ] \
+  && check "a lane's prewarm warms the container's main snapshot" 0 \
+  || { printf '  got: %s\n' "$lane_key" >&2
+       check "a lane's prewarm warms the container's main snapshot" 1; }
+: >"$nix_log"
+env -u FIRN_REPO "$lane_container/worktrees/slug/dotfiles/bin/firn-prewarm" --foreground >/dev/null 2>&1
+grep -Fq "rev=$main_head" "$nix_log" \
+  && check "a lane's evaluation carries main's rev, not the lane's" 0 \
+  || { cat "$nix_log" >&2; check "a lane's evaluation carries main's rev, not the lane's" 1; }
+[ "$(cat "$stampfile" 2>/dev/null)" = "$lane_key" ] \
+  && check "the warm stamp records the printed warm key" 0 \
+  || check "the warm stamp records the printed warm key" 1
+(cd "$lane_container/worktrees/slug" &&
+  env -u FIRN_REPO ./dotfiles/bin/firn-prewarm --install-hook >/dev/null 2>&1)
+grep -Fq "prewarm=$lane_container/main/dotfiles/bin/firn-prewarm" \
+  "$lane_container/main/.git/hooks/reference-transaction" 2>/dev/null \
+  && check "install-hook from a lane points the hook at main's firn-prewarm" 0 \
+  || { grep -n '^prewarm=' "$lane_container/main/.git/hooks/reference-transaction" >&2
+       check "install-hook from a lane points the hook at main's firn-prewarm" 1; }
+
 # ── case 8: an unusable environment is never a caller's problem ───────────
 out="$(FIRN_REPO="$scratch/not-a-repo" "$TARGET" --foreground 2>&1)"
 status=$?
