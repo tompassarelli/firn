@@ -60,6 +60,23 @@
     [(HostSourceParsed value) false]
     [(HostSourceRejected message offset) true]))
 
+(defn module-empty? [(source String)] Bool
+  (match (inputs/module-tags-from-source "empty" source)
+    [(ModuleSourceParsed value)
+     (and (= [] (r/moduletags-tags value))
+          (= [] (r/moduletags-opt-in value))
+          (= [] (r/moduletags-overrides value)))]
+    [(ModuleSourceRejected message offset) false]))
+
+(defn host-empty? [(source String)] Bool
+  (match (inputs/host-tags-from-source "empty" source [])
+    [(HostSourceParsed value)
+     (and (= "empty" (r/hosttags-host value))
+          (= "linux" (r/hosttags-platform value))
+          (= [] (r/hosttags-enabled value))
+          (= [] (r/hosttags-disabled value)))]
+    [(HostSourceRejected message offset) false]))
+
 (defn allowlist-rejected? [(source String)] Bool
   (match (inputs/darwin-allowlist-from-json source)
     [(DarwinAllowlistParsed modules) false]
@@ -168,9 +185,19 @@
     (host-rejected? "{:platform linux :enabled [terminal}")
     (host-rejected? "{:platform linux :enabled [[desktop river]]}")
     (host-rejected? "{:platform \"linux\" :enabled []}")
-    (host-rejected?
+    (host-empty?
       (str "(def nested (call {:enabled [fake]}))\n"
            ";; {:enabled [commented]}\n"))))
+
+(defn metadata-free-sources-are-empty-case [] Bool
+  (and
+    (module-empty?
+      (str "#lang beagle/nix\n"
+           "(ns default)\n"
+           "(def nested {:tags [incidental]})\n"))
+    (host-empty?
+      (str "#lang beagle/nix\n"
+           "(ns enabled-tags)\n"))))
 
 (defn allowlist-case [] Bool
   (match
@@ -210,6 +237,7 @@
            (darwin-host-case)
            (linux-host-case)
            (malformed-host-case)
+           (metadata-free-sources-are-empty-case)
            (allowlist-case)
            (malformed-allowlist-case)
            (resolver-integration-case))

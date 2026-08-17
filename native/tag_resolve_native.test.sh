@@ -159,6 +159,33 @@ make_no_tag_repo() {
   printf '{}\n' >"$root/flake.bnix"
 }
 
+make_metadata_free_repo() {
+  local root="$1"
+  mkdir -p \
+    "$root/scripts" \
+    "$root/modules/odd" \
+    "$root/hosts/odd" \
+    "$root/hosts/plain"
+  : >"$root/scripts/firn-build"
+  printf '{}\n' >"$root/flake.bnix"
+  cat >"$root/modules/odd/default.bnix" <<'EOF'
+#lang beagle/nix
+(ns default)
+(def nested {:tags [incidental]})
+EOF
+  cat >"$root/hosts/odd/enabled-tags.bnix" <<'EOF'
+#lang beagle/nix
+(ns enabled-tags)
+{:platform linux
+ :enabled []
+ :disabled []}
+EOF
+  cat >"$root/hosts/plain/enabled-tags.bnix" <<'EOF'
+#lang beagle/nix
+(ns enabled-tags)
+EOF
+}
+
 oracle_live="$scratch/oracle-live"
 native_live="$scratch/native-live"
 run_oracle "$repo" absent "$oracle_live" tag resolve all
@@ -255,5 +282,21 @@ assert_run_parity "all+emit without tag sources" "$oracle_no_tag" "$native_no_ta
 [[ ! -s "$native_no_tag.err" ]] || die "tagless all+emit wrote stderr"
 [[ ! -e "$native_no_tag_root/hosts/plain/_generated-enables.bnix" ]] \
   || die "tagless all+emit wrote generated source"
+
+oracle_metadata_root="$scratch/oracle-metadata-free"
+native_metadata_root="$scratch/native-metadata-free"
+make_metadata_free_repo "$oracle_metadata_root"
+make_metadata_free_repo "$native_metadata_root"
+for metadata_host in odd plain; do
+  oracle_metadata="$scratch/oracle-metadata-$metadata_host"
+  native_metadata="$scratch/native-metadata-$metadata_host"
+  run_oracle "$oracle_metadata_root" absent "$oracle_metadata" \
+    tag resolve "$metadata_host"
+  run_native "$native_metadata_root" absent "$native_metadata" \
+    tag resolve "$metadata_host"
+  assert_run_parity \
+    "metadata-free $metadata_host" \
+    "$oracle_metadata" "$native_metadata" 0
+done
 
 printf 'ok: native tag resolution matches the pinned Racket executable boundary\n'

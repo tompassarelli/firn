@@ -503,7 +503,11 @@
                                   (spanscan-offset module-form))
 
           (not (spanscan-found module-form))
-          (->ModuleSourceRejected "missing top-level nix/module form" -1)
+          ;; Match the Racket resolver: a source file that is not a
+          ;; nix/module is a module with no tag metadata.  This matters for
+          ;; valid helper/default sources containing incidental :tags data.
+          (->ModuleSourceParsed
+            (r/->ModuleTags name [] [] []))
 
           (not= 3
                 (container-child-count events (spanscan-start module-form)))
@@ -673,7 +677,11 @@
                                 (spanscan-offset host-map))
 
           (not (spanscan-found host-map))
-          (->HostSourceRejected "missing host tag map" -1)
+          ;; The Racket resolver treats a host source without its metadata
+          ;; map as an empty Linux host; preserve that source-selection
+          ;; behavior at the native boundary.
+          (->HostSourceParsed
+            (r/->HostTags host [] [] "linux" false []))
 
           :else
           (let [(map-start Int) (spanscan-start host-map)
