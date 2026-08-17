@@ -83,22 +83,24 @@ if rg -n \
   exit 1
 fi
 
-if [ -n "${CODEX_CONFIG_SOURCE:-}" ]; then
-  config_source=$CODEX_CONFIG_SOURCE
-else
-  config_source=$(
-    nix eval --raw \
-      "$repo#nixosConfigurations.whiterabbit.config.home-manager.users.tom.home.file.\".codex/config.toml\".source"
+# Both sources come out of one evaluation: two `nix eval` calls paid for the
+# whole home-manager configuration twice to read two strings out of the same
+# attrset. Store paths cannot contain whitespace, so one `read` splits them.
+evaluated_config=
+evaluated_hooks=
+if [ -z "${CODEX_CONFIG_SOURCE:-}" ] || [ -z "${CODEX_HOOKS_SOURCE:-}" ]; then
+  read -r evaluated_config evaluated_hooks < <(
+    nix eval --json \
+      "$repo#nixosConfigurations.whiterabbit.config.home-manager.users.tom.home.file" \
+      --apply 'files: {
+        config = files.".codex/config.toml".source;
+        hooks = files.".codex/hooks.json".source;
+      }' |
+      python3 -c 'import json, sys; s = json.load(sys.stdin); print(s["config"], s["hooks"])'
   )
 fi
-if [ -n "${CODEX_HOOKS_SOURCE:-}" ]; then
-  hooks_source=$CODEX_HOOKS_SOURCE
-else
-  hooks_source=$(
-    nix eval --raw \
-      "$repo#nixosConfigurations.whiterabbit.config.home-manager.users.tom.home.file.\".codex/hooks.json\".source"
-  )
-fi
+config_source=${CODEX_CONFIG_SOURCE:-$evaluated_config}
+hooks_source=${CODEX_HOOKS_SOURCE:-$evaluated_hooks}
 
 assert_store_copy() {
   local label=$1 expected=$2 actual
