@@ -59,13 +59,8 @@ nixos-config/scripts/firn-cmds/util.rkt	1
 nixos-config/scripts/firn-source-hash	1
 nixos-config/scripts/firn-validate	1
 nixos-config/scripts/firn-validate.test.sh	1
-north/bin/arena-seed	1
 north/bin/north-mine	1
-north/bin/north-on-spawn	1
-north/bin/north-on-tooluse	1
-north/bin/tests/arena-seed-test.sh	1
 north/bin/tests/ci-required-bars-test.sh	1
-north/bin/tests/north-on-tooluse-stress-test.sh	1
 north/bin/tests/package-purity-check-test.sh	1
 north/build.sh	1
 north/cli/config-cli.clj	1
