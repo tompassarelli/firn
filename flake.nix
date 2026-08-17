@@ -34,7 +34,7 @@
       flake = false;
     };
     beagle = {
-      url = "github:tompassarelli/beagle/0e4b7073e23e4336dc3d0269d31393a6e7da40c7";
+      url = "github:tompassarelli/beagle/4c05adc3315888e913b8b34a7cdf799ca808357c";
     };
     elephant = {
       url = "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73";
