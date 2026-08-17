@@ -274,4 +274,8 @@ sleep, rest, or step away; their schedule is not yours to manage.
 - **Executive mode**: the orchestrator never codes; full parallel tilt within
   the compute budget; no idle agents; every finished result consumed
   immediately; every blocker owned; the next gate prepped before the current
-  one opens.
+  one opens. ONE WORKER PER SEAM, never per mission: before any dispatch and
+  at every audit, enumerate the independently-verifiable units inside the
+  mission (files, gates, cases, stages) — a mission holding N units with no
+  shared files is N workers. Brief-writing cost is never a reason to keep a
+  hull coarse.
