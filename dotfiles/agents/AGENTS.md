@@ -230,9 +230,17 @@ sleep, rest, or step away; their schedule is not yours to manage.
   A slower loop is a defect to fix (5-10x), not a cost to schedule around.
   Test architecture, caching, sharding, and CI topology all serve this number.
   Never lengthen a timeout without evidence that legitimate work changed.
-- **Machine never pegged**: at most ONE heavy suite/gate/build per machine at a
-  time; heavy work runs `nice 19` (plus core caps where the runner supports
-  them); light work is unrestricted. The dispatcher owns the compute budget.
+- **USE THE HARDWARE.** If more of the machine makes work faster, use more of
+  the machine — every core busy is the intended operating point, and idle
+  cores while work queues is the defect. Never serialize, shrink, or defer
+  work to "protect" the box. The only line is falling over, and its guards
+  are bounds, not abstinence: 1-minute load stays under ~1.5× core count,
+  MemAvailable stays above ~8 GiB, no swap-thrash — past a bound, queue the
+  next job; under it, launch. Batch work runs at `nice 19` (ordering is free
+  and keeps the session responsive at 100% utilization). One narrow
+  exception: deadline-bounded checks and timing measurements whose verdicts
+  contention can falsify get headroom or visibly scaled deadlines — so a
+  kill means the work hung, never that the box was busy.
 - **Landing bar (all projects)**: landings to main are decided by LOCAL
   supervised gates only. No GitHub or remote CI run ever blocks, serializes,
   or gates a landing, in any repository — every remote workflow is async
