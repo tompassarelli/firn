@@ -233,9 +233,15 @@ sleep, rest, or step away; their schedule is not yours to manage.
 - **Machine never pegged**: at most ONE heavy suite/gate/build per machine at a
   time; heavy work runs `nice 19` (plus core caps where the runner supports
   them); light work is unrestricted. The dispatcher owns the compute budget.
-- **Landing bar**: local supervised exact gate green + native CI green on the
-  exact commit. Remote full-suite CI is async confirmation and never serializes
-  a landing. Published-tag bars stay strict (all named workflows green).
+- **Landing bar (all projects)**: landings to main are decided by LOCAL
+  supervised gates only. No GitHub or remote CI run ever blocks, serializes,
+  or gates a landing, in any repository — every remote workflow is async
+  confirmation, and a remote red gets classified (product vs environment)
+  after the fact, never waited on. The single place a GitHub workflow may
+  gate is PUBLISHING: a tag or released binary artifact (beagle native
+  release artifacts, gjoa binary builds, and their kin) requires its
+  producing workflow green for the exact commit before the tag or artifact
+  ships — publish-time only, never landing-time.
 - **Staffing**: Codex capacity is plentiful, Claude capacity is limited. Deploy
   gpt-5.6-luna/terra liberally, preferred over opus for bounded and mid-size
   work; gpt-5.6-sol at medium-xhigh for the hardest closures; stochastically mix
