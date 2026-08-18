@@ -273,7 +273,14 @@
   (if (or (< (count events) 2)
           (not (match (nth events 0)
                  [(JsonArrayStart offset) true]
-                 [_ false])))
+                 [(JsonObjectStart offset) false]
+                 [(JsonObjectEnd offset) false]
+                 [(JsonArrayEnd offset) false]
+                 [(JsonKey offset value) false]
+                 [(JsonString offset value) false]
+                 [(JsonNumber offset lexeme) false]
+                 [(JsonBoolean offset value) false]
+                 [(JsonNull offset) false])))
     (->SchemaRejected "expected a JSON array" 0)
     (loop [(index Int) 1
            (entries (Vec SchemaEntry)) []]
