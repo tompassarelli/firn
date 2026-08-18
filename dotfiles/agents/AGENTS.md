@@ -297,3 +297,38 @@ them.
   mission (files, gates, cases, stages) — a mission holding N units with no
   shared files is N workers. Brief-writing cost is never a reason to keep a
   hull coarse.
+
+## Decomposition and dispatch law
+
+- **Serial chains decompose link-by-link.** A chain is serial only where a
+  written reason holds per link: link N consumes link N-1's output. Anything
+  inside or beside a link that does not consume the pending output — diagnosis
+  of an independently named failure class, provisioning or cache warming for a
+  later link, verification prep — runs concurrently now, speculatively where
+  needed, with discard-on-repair accepted. A red gate naming N independent
+  failure classes authorizes up to N isolated diagnosticians immediately, each
+  in its own detached checkout, banking classification and a minimal patch to
+  a handoff file.
+- **Holds name their exact dependency.** Any hold, drain, or freeze names the
+  precise output it waits for; work not consuming that output is exempt by
+  default and dispatches now. Every steering pass re-audits blanket holds: a
+  held item that cannot name its awaited output fires this firing.
+- **Deadlines equal the authorized window.** Every dispatch deadline equals
+  the authorized supervisor window of the procedure it runs, plus margin —
+  never an invented tighter number. Tightening below the procedure's recorded
+  authorization is the same defect as lengthening without evidence, and it
+  kills healthy work.
+- **Terminal markers are round-unique and line-anchored.** Every retry round
+  gets fresh marker tokens; detection matches at line start with per-lane
+  exclusions for quoted history. Quoted or echoed history never aliases a
+  live verdict.
+- **Removals sweep their consumers in the same pass.** A removal landing
+  sweeps every consumer repository's references — allowlists, path checks,
+  pins, locks — in the same campaign pass, and the finishing token search
+  runs across consumers, not only the landing repository.
+- **Probes carry early-exit clauses; dead workers get tight closers.** A probe
+  into a possibly-infeasible seam names known capability gaps and exits
+  blocked in minutes when it hits one. A dead or looping worker is killed by
+  verified PID and working directory, then replaced by a closer with a
+  narrowed brief and a round-unique marker — never blindly relaunched with
+  the same brief.
