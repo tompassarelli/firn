@@ -171,7 +171,33 @@ if [ "$before_head4" = "$after_head4" ]; then ok; else fail "main HEAD changed a
 if [ "$(cat "$c4/main/f.txt")" = "$(printf 'base\ndirty\n')" ]; then ok; else fail "main's dirty file content changed after abort"; fi
 
 # =============================================================================
-# 5. shellcheck cleanliness of the tool itself (belt-and-suspenders local check)
+# 5. a REJECTING pre-commit hook must not defeat the rescue
+#    Regression: contribution hooks judge the whole tree, so a lint failure on
+#    files the rescue never touched (or a stale base predating a hook repair)
+#    used to abort the rescue and leave main dirty forever — the sanctioned
+#    remedy for a dirty main unable to remedy it.
+# =============================================================================
+c5="$scratch/proj5"
+new_container "$c5"
+mkdir -p "$c5/main/.git/hooks"
+cat >"$c5/main/.git/hooks/pre-commit" <<'HOOK'
+#!/usr/bin/env bash
+echo "pre-commit: refusing (unrelated tree lint)" >&2
+exit 1
+HOOK
+chmod +x "$c5/main/.git/hooks/pre-commit"
+printf 'base\ndirty\n' >"$c5/main/f.txt"
+output5="$(cd "$c5/main" && "$TARGET" 2>&1)" || true
+after_status5="$(git -C "$c5/main" status --porcelain)"
+
+if [ -z "$after_status5" ]; then ok; else fail "main left dirty despite rejecting hook: $after_status5"; fi
+rescued5="$(find "$c5/worktrees" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | head -1)"
+if [ -n "$rescued5" ]; then ok; else fail "no rescue worktree created: $output5"; fi
+if [ "$(cat "$rescued5/f.txt" 2>/dev/null)" = "$(printf 'base\ndirty\n')" ]; then ok; else fail "rescued content not preserved under rejecting hook"; fi
+if git -C "$rescued5" log -1 --format=%s 2>/dev/null | grep -Fq 'rescued dirty state'; then ok; else fail "rescue commit missing under rejecting hook"; fi
+
+# =============================================================================
+# 6. shellcheck cleanliness of the tool itself (belt-and-suspenders local check)
 # =============================================================================
 if command -v shellcheck >/dev/null 2>&1; then
   if shellcheck "$TARGET" >/dev/null 2>&1; then ok; else fail "shellcheck reported issues on $TARGET"; fi

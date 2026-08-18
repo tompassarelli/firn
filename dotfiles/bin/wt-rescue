@@ -149,8 +149,24 @@ if [ "$verify_failed" -eq 1 ]; then
 fi
 
 # --- commit the verified relocation in the rescue worktree ------------------
+# --no-verify is deliberate and load-bearing. This commit PRESERVES work; it does
+# not contribute it. Contribution hooks judge the whole tree, so a lint failure on
+# files this rescue never touched — or a stale base predating a hook repair that
+# has since landed upstream — would abort the rescue and leave main dirty forever,
+# with the sanctioned remedy for a dirty main unable to remedy it. Failing to
+# preserve is strictly worse than parking imperfect content on a quarantine
+# branch: the hooks run for real when this branch is reviewed and landed.
 git -C "$rescue_dir" add -A
-git -C "$rescue_dir" commit -q -m "rescued dirty state from $container main, $ts"
+if git -C "$rescue_dir" diff --cached --quiet; then
+  echo "wt-rescue: nothing differs from HEAD after relocation — main's changes are already committed content; main is UNTOUCHED" >&2
+  echo "wt-rescue: rescue worktree left at $rescue_dir (branch $branch) for inspection" >&2
+  exit 1
+fi
+if ! git -C "$rescue_dir" commit -q --no-verify -m "rescued dirty state from $container main, $ts"; then
+  echo "wt-rescue: ABORTING — could not commit the relocated copy; main is UNTOUCHED" >&2
+  echo "wt-rescue: rescue worktree left at $rescue_dir (branch $branch) holding the verified copy" >&2
+  exit 1
+fi
 
 # --- only now: restore main to clean ----------------------------------------
 while IFS=$'\t' read -r st p1 p2; do
