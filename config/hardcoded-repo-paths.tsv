@@ -7,6 +7,7 @@
 beagle/beagle-test/tests/levenshtein-benchmark.rkt	1
 beagle/bin/_beagle-racket	2
 beagle/bin/beagle-ci	1
+beagle/bin/test/core-lowering-materializer-native/run.sh	1
 beagle/integrations/north/hooks/beagle-session-start.sh	1
 beagle/store/bin/beagle-store-code-on	1
 beagle/store/bin/beagle-store-defcheck	1

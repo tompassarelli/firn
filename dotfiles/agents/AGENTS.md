@@ -133,6 +133,35 @@ WIP. Origin carries main only (plus tags); lane branches are local and
 ephemeral; never publish a feature branch name. Pins are detached HEAD, not
 branches — "ephemeral branch" says nothing about them.
 
+## Work is not done until it lands
+Uncommitted work is the only work that can actually be lost, and unlanded work
+is invisible to everyone but its author. Both are defects, not states.
+
+- **Never end a turn, task, or session with a lane you touched left dirty.**
+  Commit at coherent checkpoints as you go, staging by enumerated paths. If a
+  change is incoherent, commit the coherent part and say what you held back.
+- **Landing is its own step with its own owner, never the optional tail of a
+  task.** A task structured "do work → verify → land" drops the landing first
+  whenever time or a gate runs short, and the work then sits in a lane forever.
+  When work passes its checks, it gets landed — by its author if possible, by a
+  named successor if not.
+- **A gate that fails for environmental reasons does not orphan the work.**
+  Contention, an unreachable bound, a slow reference implementation, or main
+  moving mid-gate are all reasons to re-run or hand off, never reasons to
+  abandon a lane silently. Record the resume trigger with the evidence.
+- **Every parked lane carries a restart-grade record** naming what is done,
+  what remains, and what unblocks it. A lane nobody owns and nobody documented
+  is lost work that has not been noticed yet.
+- **Sweep periodically.** Lanes accumulate: duplicates, superseded work, and
+  stale branches hide the few that still matter. Prove a lane is superseded by
+  CONTENT before reaping it — the same fix can land under a different hash —
+  and when in doubt keep it, because a wrong reap destroys work while a wrong
+  keep costs only clutter.
+
+Corollary for slow gates: if landing is expensive enough that it gets deferred,
+the gate latency is the defect. Fix the gate rather than tolerating a growing
+backlog of finished-but-unlanded work.
+
 ## Rebuilds — use the sanctioned wrapper
 Agents may run `firn rebuild` after the relevant checks pass and their own
 changes are committed. It builds a COMMIT SNAPSHOT (`rev=HEAD`), so concurrent
