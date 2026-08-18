@@ -16,6 +16,12 @@ case "$#:${1-}:${2-}" in
     export FIRN_HOST
     exec "${FIRN_TAG_RESOLVE_BIN:-firn-tag-resolve}" "$@"
     ;;
+  2:module:list|3:module:list|3:module:refs|2:module:status|3:module:status|2:host:list|3:host:list|2:host:status|3:host:status)
+    exec "${FIRN_INVENTORY_BIN:-firn-inventory}" "$@"
+    ;;
+  3:module:add|3:template:service|3:template:submodule|3:template:home|3:template:host|2:secret:list|3:secret:list)
+    exec "${FIRN_AUTHORING_BIN:-firn-authoring}" "$@"
+    ;;
 esac
 
 BEAGLE_PATH="${BEAGLE_PATH:-$HOME/code/beagle/main}"

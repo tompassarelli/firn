@@ -71,6 +71,26 @@ SH
 chmod +x "$native_helper"
 : >"$native_log"
 
+inventory_helper="$scratch/firn-inventory"
+cat >"$inventory_helper" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'native=inventory\n'
+printf 'repo=%s\n' "${FIRN_REPO:?}"
+printf 'arg=%s\n' "$@"
+SH
+chmod +x "$inventory_helper"
+
+authoring_helper="$scratch/firn-authoring"
+cat >"$authoring_helper" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'native=authoring\n'
+printf 'repo=%s\n' "${FIRN_REPO:?}"
+printf 'arg=%s\n' "$@"
+SH
+chmod +x "$authoring_helper"
+
 make_repo() {
   local repo="$1" identity="$2"
   mkdir -p "$repo/scripts/firn-cmds" "$repo/dotfiles/bin"
@@ -186,6 +206,31 @@ grep -Fxq "host=$(hostname)" <<<"$native_three_output"
 grep -Fxq 'emit=present:' <<<"$native_three_output"
 grep -Fxq 'arg=all+emit' <<<"$native_three_output"
 [ "$(wc -l <"$native_log")" -eq 2 ]
+
+# Inventory and authoring command groups use their native helpers, while the
+# intentionally deferred secret show/edit boundary still enters the hosted
+# command path.
+inventory_output="$(FIRN_INVENTORY_BIN="$inventory_helper" \
+  FIRN_REPO="$native_repo" "$bin_dir/firn" module list all)"
+grep -Fxq 'native=inventory' <<<"$inventory_output"
+grep -Fxq "repo=$native_repo" <<<"$inventory_output"
+grep -Fxq 'arg=module' <<<"$inventory_output"
+grep -Fxq 'arg=list' <<<"$inventory_output"
+grep -Fxq 'arg=all' <<<"$inventory_output"
+
+authoring_output="$(FIRN_AUTHORING_BIN="$authoring_helper" \
+  FIRN_REPO="$native_repo" "$bin_dir/firn" template service openssh)"
+grep -Fxq 'native=authoring' <<<"$authoring_output"
+grep -Fxq "repo=$native_repo" <<<"$authoring_output"
+grep -Fxq 'arg=template' <<<"$authoring_output"
+grep -Fxq 'arg=service' <<<"$authoring_output"
+grep -Fxq 'arg=openssh' <<<"$authoring_output"
+
+hosted_secret_output="$(FIRN_AUTHORING_BIN="$authoring_helper" \
+  FIRN_RUNTIME_SHARE_DIR="$share_dir" FIRN_REPO="$repo_a" \
+  BEAGLE_PATH="$beagle" "$bin_dir/firn" secret show alpha)"
+grep -Fxq 'source=source-a' <<<"$hosted_secret_output"
+! grep -Fq 'native=authoring' <<<"$hosted_secret_output"
 
 # A fourth token belongs to the hosted multi-command walk.
 hosted_walk_output="$(FIRN_RUNTIME_SHARE_DIR="$share_dir" \

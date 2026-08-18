@@ -88,6 +88,32 @@
                   self
                   "/native/tag_resolve_native.bgl")
                 (s
+                  "beagle native-exe --out $out/bin/firn-inventory --entry firn.inventory-native/-main "
+                  beagle
+                  "/native-core/src/beagle/datum_reader.bgl "
+                  beagle
+                  "/native-core/src/native/json.bgl "
+                  self
+                  "/native/tag_resolve.bgl "
+                  self
+                  "/native/tag_inputs.bgl "
+                  self
+                  "/native/tag_resolve_driver.bgl "
+                  self
+                  "/native/tag_resolve_native.bgl "
+                  self
+                  "/native/inventory.bgl "
+                  self
+                  "/native/inventory_native.bgl")
+                (s
+                  "beagle native-exe --out $out/bin/firn-authoring --entry firn.authoring-native/-main "
+                  beagle
+                  "/native-core/src/native/json.bgl "
+                  self
+                  "/native/authoring.bgl "
+                  self
+                  "/native/authoring_native.bgl")
+                (s
                   "beagle native-exe --out $out/bin/firn-flake-input --entry firn.flake-input-native/-main "
                   beagle
                   "/native-core/src/beagle/datum_reader.bgl "
