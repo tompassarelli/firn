@@ -133,6 +133,38 @@ WIP. Origin carries main only (plus tags); lane branches are local and
 ephemeral; never publish a feature branch name. Pins are detached HEAD, not
 branches — "ephemeral branch" says nothing about them.
 
+## Expensive verification is batched, never per-change
+Where the verifying build or gate is slow, the loop "make one change, rebuild,
+look" is the single largest destroyer of throughput. It is banned as a default.
+
+- **Batch the changes, not the verification.** Make EVERY change you can before
+  paying for a slow verification, working from an inventory and from reading
+  the code rather than from build feedback. Then verify once, and let the
+  result speak about the whole batch at once.
+- **Never spend a slow build to check intermediate progress** — not to see
+  "where am I", not to confirm one fix, not for reassurance. If you want that
+  signal, get it from something cheap.
+- **Cheap checks are unlimited; slow checks are rationed.** Focused fixtures,
+  unit tests, type checks and targeted compiles cost seconds — use them
+  freely while you work. They are smoke checks, not acceptance.
+- **What must be serialized, and only this:** a change whose correctness
+  depends on an earlier change in the same batch actually working. If B is
+  meaningless unless A landed correctly, A gets verified first. Everything
+  else — independent files, disjoint failure classes, separate subsystems —
+  goes in one batch. Default to batching and justify serialization, never the
+  reverse.
+- **When a slow verification does run, mine it completely.** It is the most
+  expensive information you will get; extract the FULL inventory of what it
+  reveals, not just the first failure. Fix everything it exposed before
+  spending another one.
+- **A wave of failures is one inventory, not N discoveries.** Many symptoms
+  usually share few causes. Inventory them all, cluster by root cause, repair
+  the cause, and verify once — rather than discovering them one build at a
+  time. Discovering serially at slow-build latency is how a day disappears.
+
+Report the number of slow verifications a task consumed. That number is the
+metric; a task that got the same result in fewer of them did better work.
+
 ## Work is not done until it lands
 Uncommitted work is the only work that can actually be lost, and unlanded work
 is invisible to everyone but its author. Both are defects, not states.
