@@ -9,7 +9,6 @@ REAL_TIMEOUT="$(command -v timeout)"
 JQ="$(command -v jq)"
 
 LIFE="$SCRATCH/life"
-FRAM_MCP_BIN="$SCRATCH/fram-mcp"
 NORTH_MCP_BIN="$SCRATCH/north-mcp"
 LINEAR_URL="https://mcp.linear.app/mcp"
 WANT_NORTH_PORT="7977"
@@ -42,9 +41,8 @@ SH
 chmod +x "$SCRATCH/claude"
 
 write_claude_json() {
-  # $1: fram|north|linear|all-correct|empty markers via env overrides
+  # $1: north|linear|all-correct|empty markers via env overrides
   "$JQ" -n \
-    --arg fram_cmd "${FRAM_CMD:-$FRAM_MCP_BIN}" \
     --arg north_cmd "${NORTH_CMD:-$NORTH_MCP_BIN}" \
     --arg log "$WANT_FRAM_LOG" \
     --arg tel "$WANT_FRAM_TELEMETRY_LOG" \
@@ -52,8 +50,6 @@ write_claude_json() {
     --arg port "${NORTH_PORT_VAL:-$WANT_NORTH_PORT}" \
     --arg url "$LINEAR_URL" \
     '{mcpServers: {
-        fram: {type:"stdio", command:$fram_cmd, args:[],
-               env:{FRAM_LOG:$log, FRAM_TELEMETRY_LOG:$tel, FRAM_THREADS:$thr}},
         north: {type:"stdio", command:$north_cmd, args:[],
                 env:{FRAM_LOG:$log, FRAM_TELEMETRY_LOG:$tel, FRAM_THREADS:$thr, NORTH_PORT:$port}},
         "linear-mcp-msa-new": {type:"http", url:$url},
@@ -70,7 +66,6 @@ run_register() {
     TIMEOUT_BIN="$REAL_TIMEOUT" \
     CLAUDE_JSON="$CLAUDE_JSON" \
     LIFE="$LIFE" \
-    FRAM_MCP_BIN="$FRAM_MCP_BIN" \
     NORTH_MCP_BIN="$NORTH_MCP_BIN" \
     LINEAR_URL="$LINEAR_URL" \
     WANT_NORTH_PORT="$WANT_NORTH_PORT" \
@@ -129,14 +124,13 @@ assert_no_match '^mcp add' \
 # --- Missing declaration is genuinely added at user scope; healthy peers are
 # left untouched.
 write_claude_json
-"$JQ" 'del(.mcpServers.fram)' "$CLAUDE_JSON" >"$CLAUDE_JSON.tmp"
+"$JQ" 'del(.mcpServers.north)' "$CLAUDE_JSON" >"$CLAUDE_JSON.tmp"
 mv "$CLAUDE_JSON.tmp" "$CLAUDE_JSON"
 run_register
-assert_match "^mcp add fram -s user -e FRAM_LOG=$WANT_FRAM_LOG -e FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG -e FRAM_THREADS=$WANT_FRAM_THREADS -- $FRAM_MCP_BIN$" \
-  'a missing fram declaration was not added with the supported user-scope argv'
-assert_no_match '^mcp remove fram' \
+assert_match "^mcp add north -s user -e FRAM_LOG=$WANT_FRAM_LOG -e FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG -e FRAM_THREADS=$WANT_FRAM_THREADS -e NORTH_PORT=7977 -- $NORTH_MCP_BIN$" \
+  'a missing north declaration was not added with the supported user-scope argv'
+assert_no_match '^mcp remove north' \
   'a missing declaration was removed before being added'
-assert_no_match '^mcp (add|remove) north' 'a correct north declaration churned'
 assert_no_match '^mcp (add|remove) linear' 'a correct linear declaration churned'
 assert_no_match '^mcp (add|remove) digitalocean' \
   'a correct DigitalOcean declaration churned'
@@ -155,12 +149,12 @@ assert_no_match '^mcp remove digitalocean' \
 
 # --- A structurally WRONG declaration (drifted command) is removed then
 # re-added; the decision is structural, not health-driven.
-FRAM_CMD="$SCRATCH/stale-fram-mcp" write_claude_json
+NORTH_CMD="$SCRATCH/stale-north-mcp" write_claude_json
 GET_EXIT=0 run_register
-assert_match '^mcp remove fram -s user$' \
-  'a drifted fram declaration was not removed before re-add'
-assert_match "^mcp add fram -s user .* -- $FRAM_MCP_BIN$" \
-  'a drifted fram declaration was not re-registered at the intended command'
+assert_match '^mcp remove north -s user$' \
+  'a drifted north declaration was not removed before re-add'
+assert_match "^mcp add north -s user .* -- $NORTH_MCP_BIN$" \
+  'a drifted north declaration was not re-registered at the intended command'
 
 # --- A drifted NORTH_PORT is caught structurally (env value comparison).
 NORTH_PORT_VAL="6000" write_claude_json
@@ -190,7 +184,6 @@ elapsed_ms=$((($(date +%s%N) - start_ns) / 1000000))
   printf 'bounded health did not honor its per-probe deadline (%sms)\n' "$elapsed_ms" >&2
   exit 1
 }
-[ "$(calls_matching '^mcp get fram$')" -eq 1 ]
 [ "$(calls_matching '^mcp get north$')" -eq 1 ]
 [ "$(calls_matching '^mcp get linear-mcp-msa-new$')" -eq 1 ]
 [ "$(calls_matching '^mcp get digitalocean$')" -eq 1 ]

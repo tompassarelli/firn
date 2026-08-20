@@ -12,10 +12,9 @@
          (if pkgs.stdenv.hostPlatform.isDarwin
            "/bin/ps"
            (s pkgs.procps "/bin/ps"))
-        ;; MCP entrypoints resolve from the live checkouts; registering a CLI
-        ;; must never drag North or Fram into the system closure.
+        ;; MCP entrypoints resolve from the live checkout; registering a CLI
+        ;; must never drag North into the system closure.
         northPkg (s homeDir "/code/north/main")
-        framPkg (s homeDir "/code/fram/main")
         claudeSettingsSeed
          (pkgs.writeText "claude-settings.json"
            (builtins.readFile
@@ -102,7 +101,7 @@
                      claudeSettingsSeed
                      " $HOME/.claude/settings.json\n"))
                ;; MCP server registration — reproducible, so a fresh rebuild wires the
-               ;; North, FRAM, Linear, and DigitalOcean user-scope servers
+               ;; North, Linear, and DigitalOcean user-scope servers
                ;; instead of relying on loose `claude mcp add` state in
                ;; ~/.claude.json. Presence and shape
                ;; are decided STRUCTURALLY from the generated ~/.claude.json: the
@@ -110,10 +109,8 @@
                ;; has no config-only mode, so a transiently-down server must never
                ;; masquerade as a missing declaration and trigger a destructive
                ;; remove/add. Bounded health lives behind the script's separate
-               ;; `--health` mode; activation reconciles declarations only. fram is
-               ;; the GENERIC engine MCP: its corpus is selected at deployment via env
-               ;; (point it at the life store; never hardcode life paths into the
-               ;; engine itself). north's wrapper resolves XDG on its own.
+               ;; `--health` mode; activation reconciles declarations only. north's
+               ;; wrapper resolves XDG on its own.
                :home.activation.registerMcpServers
                 (config.lib.dag.entryAfter ["writeBoundary"]
                   (s "if ! run env CLAUDE_BIN="
@@ -124,7 +121,6 @@
                      pkgs.coreutils
                      "/bin/timeout CLAUDE_JSON=$HOME/.claude.json "
                      "LIFE=$HOME/.local/state/north "
-                     "FRAM_MCP_BIN=" framPkg "/bin/fram-mcp "
                      "NORTH_MCP_BIN=" northPkg "/bin/north-mcp "
                      "WANT_NORTH_PORT=7977 "
                      mcpRegister

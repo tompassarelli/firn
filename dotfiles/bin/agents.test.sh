@@ -148,7 +148,7 @@ mkdir -p "$SB/.config/agents"
   for h in agent-spawn-guard beagle-session-start comment-bloat-guard \
            git-blind-stage-guard hook-detach logcompress north-session-lifecycle \
            tripwire-guard worktree-guard; do echo "hook $h off"; done
-  for s in webdev beagle-authoring fram-modeling code-as-facts firn; do echo "skill $s off"; done
+  for s in webdev beagle-authoring firn; do echo "skill $s off"; done
 } > "$SB/.config/agents/manifest.conf"
 ag status > /dev/null
 chk "legacy bound -> enabled + column" "hook tripwire-guard enabled repo-safety" "$(grep '^hook tripwire-guard ' "$SB/.config/agents/manifest.conf")"
@@ -944,7 +944,7 @@ rm "$SKILLS_DIR"; cp -r "$REPO/dotfiles/agents/skills" "$SKILLS_DIR"
 # The other skills' sources live outside this repo, which is the point: a claim
 # is read from wherever that skill actually is.
 WEBDEV_SKILL="$SB/code/north/main/agent-profile/skills/webdev"
-FRAM_SKILL="$SB/code/fram/main/integrations/north/skills/fram-modeling"
+BEAGLE_SKILL="$SB/code/beagle/main/integrations/north/skills/beagle-authoring"
 FIRN_SKILL="$SB/code/nixos-config/main/modules/north-profile/firn/skills/firn"
 claim() { # skill-dir hook... — a frontmatter whose only claim is these hooks
   local d="$1"; shift; mkdir -p "$d"
@@ -973,10 +973,10 @@ ag on webdev > /dev/null
 if has_cmd logcompress-hook.js; then ok "the claiming skill composes it"; else bad "claim composes" "$(composed_files)"; fi
 # two claimants: the column takes the first ALPHABETICALLY, so two machines
 # reading the same files write the same row
-claim "$FRAM_SKILL" logcompress
+claim "$BEAGLE_SKILL" logcompress
 ag status > /dev/null
-chk "two claimants: the column is deterministic" "hook logcompress enabled fram-modeling" "$(grep '^hook logcompress ' "$m")"
-rm -rf "$FRAM_SKILL"
+chk "two claimants: the column is deterministic" "hook logcompress enabled beagle-authoring" "$(grep '^hook logcompress ' "$m")"
+rm -rf "$BEAGLE_SKILL"
 ag status > /dev/null
 chk "and follows the claim when one skill stops making it" "hook logcompress enabled webdev" "$(grep '^hook logcompress ' "$m")"
 # a fragment's own `follows` is the nearer statement and keeps the column
@@ -998,9 +998,9 @@ ag on webdev > /dev/null; ag off git-blind-stage-guard > /dev/null
 if has_cmd git-blind-stage-guard.sh; then bad "a pin outranks every claim" "$(composed_files)"; else ok "a pin outranks every claim"; fi
 ag on git-blind-stage-guard > /dev/null
 # a claim naming no hook, and a list that is not one
-claim "$FRAM_SKILL" no-such-hook
+claim "$BEAGLE_SKILL" no-such-hook
 warn="$(ag status 2>&1 >/dev/null)"
-case "$warn" in *"skill fram-modeling declares no-such-hook, which is no hook here"*) ok "a claim naming no hook is called out" ;;
+case "$warn" in *"skill beagle-authoring declares no-such-hook, which is no hook here"*) ok "a claim naming no hook is called out" ;;
   *) bad "unknown claim warns" "$warn" ;; esac
 chk "and does not kill status" "1" "$(ag status 2>/dev/null | grep -c '^hooks$')"
 sed -i 's/^hooks:$/hooks: not-a-list/' "$WEBDEV_SKILL/SKILL.md"

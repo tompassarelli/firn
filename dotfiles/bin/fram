@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-exec "$HOME/code/fram/main/bin/fram" "$@"

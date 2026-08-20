@@ -33,9 +33,6 @@ trust_level = "trusted"
 [projects."/home/tom/code/beagle"]
 trust_level = "trusted"
 
-[projects."/home/tom/code/fram"]
-trust_level = "trusted"
-
 [tui.model_availability_nux]
 "gpt-5.6-terra" = 1
 "gpt-5.6-sol" = 1
@@ -52,15 +49,6 @@ FRAM_LOG = "/home/tom/.local/state/north/coordination.log"
 FRAM_TELEMETRY_LOG = "/home/tom/.local/state/north/telemetry.log"
 FRAM_THREADS = "/home/tom/.local/state/north/threads"
 NORTH_PORT = "7977"
-
-[mcp_servers.fram]
-command = "/run/current-system/sw/bin/fram-mcp"
-startup_timeout_sec = 15
-
-[mcp_servers.fram.env]
-FRAM_LOG = "/home/tom/.local/state/north/coordination.log"
-FRAM_TELEMETRY_LOG = "/home/tom/.local/state/north/telemetry.log"
-FRAM_THREADS = "/home/tom/.local/state/north/threads"
 
 [mcp_servers.linear-mcp-msa-new]
 url = "https://mcp.linear.app/mcp"

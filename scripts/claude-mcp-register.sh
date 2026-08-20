@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016 # Dollar-prefixed names in single quotes are jq variables.
 #
-# Reconcile the user-scope MCP servers Claude should know about (North, FRAM,
-# Linear, DigitalOcean) from the GENERATED Claude state, deciding presence and
+# Reconcile the user-scope MCP servers Claude should know about (North, Linear,
+# DigitalOcean) from the GENERATED Claude state, deciding presence and
 # shape purely STRUCTURALLY from ~/.claude.json — never from a health probe.
 #
 # `claude mcp get`/`list` always connect to the server (a health check) and
@@ -18,7 +18,6 @@ JQ_BIN="${JQ_BIN:-jq}"
 TIMEOUT_BIN="${TIMEOUT_BIN:-timeout}"
 CLAUDE_JSON="${CLAUDE_JSON:-$HOME/.claude.json}"
 LIFE="${LIFE:-$HOME/.local/state/north}"
-FRAM_MCP_BIN="${FRAM_MCP_BIN:-/run/current-system/sw/bin/fram-mcp}"
 NORTH_MCP_BIN="${NORTH_MCP_BIN:-/run/current-system/sw/bin/north-mcp}"
 LINEAR_URL="${LINEAR_URL:-https://mcp.linear.app/mcp}"
 WANT_NORTH_PORT="${WANT_NORTH_PORT:-7977}"
@@ -70,27 +69,8 @@ reconcile_server() {
 }
 
 reconcile_declarations() {
-  local fram_json north_json linear_json digitalocean_json
-  local fram_ok north_ok linear_ok digitalocean_ok
-
-  fram_json="$(declared_server fram)"
-  declaration_matches "$fram_json" \
-    --arg cmd "$FRAM_MCP_BIN" \
-    --arg log "$WANT_FRAM_LOG" \
-    --arg tel "$WANT_FRAM_TELEMETRY_LOG" \
-    --arg thr "$WANT_FRAM_THREADS" \
-    '((.type // "stdio") == "stdio")
-       and (.command == $cmd)
-       and (.env.FRAM_LOG == $log)
-       and (.env.FRAM_TELEMETRY_LOG == $tel)
-       and (.env.FRAM_THREADS == $thr)' &&
-    fram_ok=1 || fram_ok=0
-  reconcile_server fram "$fram_json" "$fram_ok" \
-    add fram -s user \
-    -e "FRAM_LOG=$WANT_FRAM_LOG" \
-    -e "FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG" \
-    -e "FRAM_THREADS=$WANT_FRAM_THREADS" \
-    -- "$FRAM_MCP_BIN"
+  local north_json linear_json digitalocean_json
+  local north_ok linear_ok digitalocean_ok
 
   north_json="$(declared_server north)"
   declaration_matches "$north_json" \
@@ -139,7 +119,7 @@ reconcile_declarations() {
 # reconciliation: a slow or failing probe is surfaced, never acted on.
 report_health() {
   local name status
-  for name in fram north linear-mcp-msa-new digitalocean; do
+  for name in north linear-mcp-msa-new digitalocean; do
     "$TIMEOUT_BIN" "$HEALTH_TIMEOUT_SECONDS" \
       "$CLAUDE_BIN" mcp get "$name" >/dev/null 2>&1
     status=$?

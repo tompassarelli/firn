@@ -116,7 +116,6 @@ if [ "$*" != '-c mcp_servers.linear-mcp-msa-new.enabled=false mcp list --json' ]
   while :; do sleep 3600; done
 fi
 printf '%s\n' '[
-  {"name":"fram","enabled":true},
   {"name":"linear-mcp-msa-new","enabled":false},
   {"name":"north","enabled":true}
 ]'
@@ -148,7 +147,6 @@ SH
   [ "$(tail -n 1 "$scratch/codex-credential-gate-calls")" = \
     '-c mcp_servers.linear-mcp-msa-new.enabled=false mcp list --json' ]
   codex_mcp_inventory_server_has_state "$codex_inventory" north true
-  codex_mcp_inventory_server_has_state "$codex_inventory" fram true
   codex_mcp_inventory_server_has_state \
     "$codex_inventory" linear-mcp-msa-new false
   if codex_mcp_inventory_server_has_state \
@@ -326,7 +324,7 @@ assert_native_identity \
   "$REPO/dotfiles/agents/hooks.d/north-session-lifecycle.json" \
   "$REPO/dotfiles/agents/hooks.d/hook-detach.json" \
   anthropic "Claude switchboard fragments"
-if rg -n '/home/tom/code/(north|fram)/bin/(north-(on-|mark-|stream)|concern|fram-code-status)' \
+if rg -n '/home/tom/code/north/bin/(north-(on-|mark-|stream)|concern)' \
   "$REPO/dotfiles/claude/settings.json" \
   "$REPO/dotfiles/codex/hooks.json" \
   "$REPO/dotfiles/claude/statusline.sh" \
@@ -476,10 +474,10 @@ if grep -Fq '(s inputs.beagle "/integrations/north/hooks/' "$REPO/modules/codex/
 fi
 
 claude_mcp_server_connected \
-  $'north: /run/current-system/sw/bin/north-mcp - ✔ Connected\nfram: ✔ Connected' \
+  $'north: /run/current-system/sw/bin/north-mcp - ✔ Connected' \
   north
 if claude_mcp_server_connected \
-   $'north: /run/current-system/sw/bin/north-mcp - ! Connected · failed\nfram: ✔ Connected' \
+   $'north: /run/current-system/sw/bin/north-mcp - ! Connected · failed' \
    north; then
   printf 'Claude MCP failure marker was accepted as connected\n' >&2
   exit 1
@@ -779,7 +777,7 @@ NORTH_PROBE_TIMEOUT_SECONDS=0.1 \
 
 # The real Codex inventory consults Secret Service for enabled OAuth servers.
 # Model that credential backend as an indefinite wait: the checker must disable
-# only Linear while still requiring enabled North and Fram entries.
+# only Linear while still requiring an enabled North entry.
 run_codex_mcp_inventory_fixture
 
 # Per-stream RLIMIT_FSIZE prevents a hostile JSON producer from filling temp
@@ -1081,23 +1079,14 @@ grep -Fq '${CLAUDE_BIN:-/run/current-system/sw/bin/claude}' \
   "$REPO/scripts/agent-config-check.sh"
 
 # The client-scoped Linear MCP's live connection health must be advisory
-# (soft warn), never a FAIL, while North and Fram stay required. Its config
+# (soft warn), never a FAIL, while North stays required. Its config
 # declaration still stays required, so the entry keeps working on clock-in.
-if grep -Fq 'for server in north fram linear-mcp-msa-new; do' \
-   "$REPO/scripts/agent-config-check.sh"; then
-  printf 'Linear MCP is still enforced through the required-connection loop\n' >&2
-  exit 1
-fi
 grep -Fq 'CLIENT_SCOPED_MCP_SERVERS=(linear-mcp-msa-new)' \
   "$REPO/scripts/agent-config-check.sh"
 grep -Fq 'client MCP '"'"'$server'"'"': unauthenticated (advisory — client-scoped)' \
   "$REPO/scripts/agent-config-check.sh"
 grep -Fq 'command = "/run/current-system/sw/bin/north-mcp"' \
   "$REPO/dotfiles/codex/config.toml"
-grep -Fq 'command = "/run/current-system/sw/bin/fram-mcp"' \
-  "$REPO/dotfiles/codex/config.toml"
-grep -Fq 'FRAM_MCP_BIN="${FRAM_MCP_BIN:-/run/current-system/sw/bin/fram-mcp}"' \
-  "$REPO/scripts/claude-mcp-register.sh"
 grep -Fq 'NORTH_MCP_BIN="${NORTH_MCP_BIN:-/run/current-system/sw/bin/north-mcp}"' \
   "$REPO/scripts/claude-mcp-register.sh"
 

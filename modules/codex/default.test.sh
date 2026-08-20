@@ -135,8 +135,7 @@ assert config["model_reasoning_effort"] == "high"
 assert config["agents"]["max_concurrent_threads_per_session"] == 16
 assert config["agents"]["default_subagent_model"] == "gpt-5.6-luna"
 assert config["mcp_servers"]["north"]["command"] == "/run/current-system/sw/bin/north-mcp"
-assert config["mcp_servers"]["fram"]["command"] == "/run/current-system/sw/bin/fram-mcp"
 PY
 
 printf 'ok: Codex config.toml and legacy hooks.json are generation-retained store copies with no checkout delivery dependency\n'
-printf 'ok: Codex keeps Sol/high and immutable North/Fram MCP command paths\n'
+printf 'ok: Codex keeps Sol/high and its immutable North MCP command path\n'

@@ -117,7 +117,7 @@ stash, reset, or clean it — `wt-rescue` relocates it intact into
 `worktrees/rescue-<ts>` if remediation is truly needed.
 
 ## Launch-critical repos — agents never edit the primary
-`~/code/fram`, `~/code/north`, and `~/code/beagle` are read live by daemons
+`~/code/north` and `~/code/beagle` are read live by daemons
 and rebuilds: a half-finished edit in the primary checkout is a broken engine
 for everyone. Agents editing these ALWAYS work in a `worktrees/<slug>` lane.
 General rule: if something launches from a checkout, that checkout is

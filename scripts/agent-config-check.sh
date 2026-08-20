@@ -251,7 +251,6 @@ with open(sys.argv[1], "rb") as handle:
 
 expected = {
     "north": "/run/current-system/sw/bin/north-mcp",
-    "fram": "/run/current-system/sw/bin/fram-mcp",
 }
 servers = config.get("mcp_servers", {})
 for name, command in expected.items():
@@ -509,20 +508,12 @@ managed_hook_source_matches() {
 
   case "$authority" in
     self) cmp -s "$live" "$expected_checkout" ;;
-    north|beagle|fram)
+    north|beagle)
       locked_git_blob_matches_file \
         "$live" "$source_repo" "$revision" "$git_blob_path"
       ;;
     *) return 1 ;;
   esac
-}
-
-flake_locked_revision() {
-  local lock="$1" node="$2"
-
-  jq -er --arg node "$node" '
-    .nodes[$node].locked.rev | select(test("^[0-9a-f]{40}$"))
-  ' "$lock"
 }
 
 # North and Beagle enforcement is published by north-enforcement-promote, not by
@@ -707,7 +698,7 @@ with open(sys.argv[2], encoding="utf-8") as handle:
 if not isinstance(live, dict) or not isinstance(baseline, dict):
     raise SystemExit("Claude settings must be JSON objects")
 
-checkout_command = re.compile(r"/home/tom/code/(?:north|fram)/bin/")
+checkout_command = re.compile(r"/home/tom/code/north/bin/")
 for event_groups in live.get("hooks", {}).values():
     for group in event_groups:
         for hook in group.get("hooks", []):
@@ -764,7 +755,6 @@ fi
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHARED="${AGENT_CONFIG_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
 BEAGLE_INTEGRATION="${AGENT_CONFIG_BEAGLE_INTEGRATION:-$HOME/code/beagle/main/integrations/north}"
-FRAM_INTEGRATION="${AGENT_CONFIG_FRAM_INTEGRATION:-$HOME/code/fram/main/integrations/north}"
 FIRN_INTEGRATION="$REPO/modules/north-profile/firn"
 CLAUDE="${AGENT_CONFIG_CLAUDE:-$REPO/dotfiles/claude}"
 CODEX="$REPO/dotfiles/codex"
@@ -774,7 +764,6 @@ LIVE_SKILLS_FARM="${AGENT_CONFIG_LIVE_SKILLS_FARM:-$HOME/.local/state/north/skil
 LIVE_AGENT_STATE="${AGENT_CONFIG_LIVE_AGENT_STATE:-$HOME/.config/agents}"
 LIVE_NORTH_ROOT="${AGENT_CONFIG_LIVE_NORTH_ROOT:-$HOME/code/north}"
 LIVE_BEAGLE_ROOT="${AGENT_CONFIG_LIVE_BEAGLE_ROOT:-$HOME/code/beagle}"
-LIVE_FRAM_ROOT="${AGENT_CONFIG_LIVE_FRAM_ROOT:-$HOME/code/fram}"
 LIVE_FIRN_ROOT="${AGENT_CONFIG_LIVE_FIRN_ROOT:-$HOME/code/nixos-config}"
 LIVE_CLAUDE="$LIVE_REPO/dotfiles/claude"
 LIVE_HERMES="$LIVE_REPO/dotfiles/hermes"
@@ -888,7 +877,6 @@ if command -v shellcheck >/dev/null 2>&1; then
   for hook_root in \
     "$SHARED/hooks" \
     "$BEAGLE_INTEGRATION/hooks" \
-    "$FRAM_INTEGRATION/hooks" \
     "$FIRN_INTEGRATION/hooks"; do
     if [ ! -d "$hook_root" ]; then
       if [ "$LOCAL" -eq 1 ]; then
@@ -910,8 +898,7 @@ skill_count=0
 for skill_root in \
   "$SHARED/skills" \
   "$BEAGLE_INTEGRATION/skills" \
-    "$FRAM_INTEGRATION/skills" \
-    "$FIRN_INTEGRATION/skills"; do
+  "$FIRN_INTEGRATION/skills"; do
   if [ ! -d "$skill_root" ]; then
     if [ "$LOCAL" -eq 1 ]; then
       bad "composed skill owner root is missing: $skill_root"
@@ -1034,7 +1021,7 @@ validate_hooks() {
         if IFS=$'\t' read -r resolved hook_sha \
           < <(hook_target_fingerprint "$first" \
                 "$LIVE_NORTH_ROOT" "$LIVE_BEAGLE_ROOT" \
-                "$LIVE_FRAM_ROOT" "$LIVE_FIRN_ROOT") &&
+                "$LIVE_FIRN_ROOT") &&
            [ "$resolved" = "$expected_resolved" ]; then
           role="$basename:shared-adapter"
           if record_live_hook_binding "$role" "$resolved" "$hook_sha"; then
@@ -1242,18 +1229,16 @@ validate_codex_managed_policy() {
 
   if [ "$LOCAL" -eq 1 ]; then
     local generation_exact=1
-    local north_revision beagle_revision fram_revision source_repo source_revision
+    local north_revision beagle_revision source_repo source_revision
     local immutable_source
     if cmp -s "$CODEX_REQUIREMENTS" /etc/codex/requirements.toml; then :
     else
       generation_exact=0
       bad 'Codex managed requirements are not the current /etc generation'
     fi
-    # North and Beagle enforcement is attested against the active promote record;
-    # everything else is still attested against the flake pin that built it.
+    # North and Beagle enforcement is attested against the active promote record.
     north_revision="$(promote_record_revision north 2>/dev/null || true)"
     beagle_revision="$(promote_record_revision beagle 2>/dev/null || true)"
-    fram_revision="$(flake_locked_revision "$REPO/flake.lock" fram 2>/dev/null || true)"
     if [ -n "$north_revision" ] && [ -n "$beagle_revision" ]; then
       ok_detail "Enforcement promote record pins North@${north_revision:0:12} and Beagle@${beagle_revision:0:12}"
     else
@@ -1279,11 +1264,6 @@ validate_codex_managed_policy() {
             rev-parse --show-toplevel 2>/dev/null || true)"
           source_revision="$beagle_revision"
           ;;
-        fram)
-          source_repo="$(git -C "$(dirname "$expected_checkout")" \
-            rev-parse --show-toplevel 2>/dev/null || true)"
-          source_revision="$fram_revision"
-          ;;
       esac
       if [ -n "$promoted_path" ]; then
         immutable_source=sealed_promoted
@@ -1304,7 +1284,7 @@ validate_codex_managed_policy() {
         bad "Codex managed hook $live is not a sealed promoted file exact to $authority@${source_revision:-missing}:$git_blob_path"
       else
         generation_exact=0
-        bad "Codex managed hook $live is not exact to flake.lock $authority@${source_revision:-missing}:$git_blob_path"
+        bad "Codex managed hook $live is not exact to $authority@${source_revision:-missing}:$git_blob_path"
       fi
     done
     for source in "${runtimes[@]}"; do
@@ -1366,8 +1346,6 @@ validate_codex_managed_policy() {
 before=$fail
 claude_north='connection deferred to --local'
 claude_north_topology='explicit corpus env deferred'
-claude_fram='connection deferred to --local'
-claude_fram_topology='topology deferred'
 claude_linear='connection deferred to --local'
 claude_digitalocean='connection deferred to --local'
 claude_orchestration='cache freshness deferred to --local'
@@ -1422,7 +1400,7 @@ if [ ! -f "$BEAGLE_INTEGRATION/hooks/beagle-session-start.test.sh" ] &&
    [ "$LOCAL" -eq 0 ]; then
   note "Beagle-owned SessionStart lifecycle test unavailable in repository-only mode"
 elif bash "$BEAGLE_INTEGRATION/hooks/beagle-session-start.test.sh" >/dev/null; then
-  ok_detail "Beagle SessionStart gates its immutable Fram status probe behind project detection"
+  ok_detail "Beagle SessionStart gates its immutable status probe behind project detection"
 else bad "Beagle SessionStart lifecycle test failed"; fi
 if command -v shellcheck >/dev/null 2>&1 && \
    shellcheck -S warning "$LAUNCHER_BIN/claude" "$LAUNCHER_BIN/codex" "$LAUNCHER_BIN/launcher.test.sh"; then
@@ -1493,24 +1471,11 @@ if [ "$LOCAL" -eq 1 ]; then
   canonical_link "$HOME/.claude/CLAUDE.md" "$LIVE_AGENT_STATE/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
   canonical_link "$HOME/.claude/commands" "$LIVE_CLAUDE/commands" "$HOME/.claude/commands"
   if [ -f "$HOME/.claude.json" ]; then
-    for server in fram north linear-mcp-msa-new digitalocean; do
+    for server in north linear-mcp-msa-new digitalocean; do
       jq -e --arg s "$server" '.mcpServers[$s]' "$HOME/.claude.json" >/dev/null || bad "Claude user MCP '$server' is missing"
     done
-    extra="$(jq -r '.mcpServers | keys[] | select(. != "fram" and . != "north" and . != "linear-mcp-msa-new" and . != "digitalocean")' "$HOME/.claude.json")"
+    extra="$(jq -r '.mcpServers | keys[] | select(. != "north" and . != "linear-mcp-msa-new" and . != "digitalocean")' "$HOME/.claude.json")"
     [ -z "$extra" ] || bad "unexpected Claude user MCP server(s): ${extra//$'\n'/, }"
-    fram_log="$(jq -r '.mcpServers.fram.env.FRAM_LOG // empty' "$HOME/.claude.json")"
-    fram_telemetry_log="$(jq -r '.mcpServers.fram.env.FRAM_TELEMETRY_LOG // empty' "$HOME/.claude.json")"
-    fram_threads="$(jq -r '.mcpServers.fram.env.FRAM_THREADS // empty' "$HOME/.claude.json")"
-    [ "$fram_log" = "$CANONICAL_FRAM_LOG" ] || bad "Claude Fram FRAM_LOG is '${fram_log:-unset}', expected '$CANONICAL_FRAM_LOG'"
-    [ "$fram_telemetry_log" = "$CANONICAL_FRAM_TELEMETRY_LOG" ] || bad "Claude Fram FRAM_TELEMETRY_LOG is '${fram_telemetry_log:-unset}', expected '$CANONICAL_FRAM_TELEMETRY_LOG'"
-    [ "$fram_threads" = "$CANONICAL_FRAM_THREADS" ] || bad "Claude Fram FRAM_THREADS is '${fram_threads:-unset}', expected '$CANONICAL_FRAM_THREADS'"
-    if [ "$fram_log" = "$CANONICAL_FRAM_LOG" ] &&
-       [ "$fram_telemetry_log" = "$CANONICAL_FRAM_TELEMETRY_LOG" ] &&
-       [ "$fram_threads" = "$CANONICAL_FRAM_THREADS" ]; then
-      claude_fram_topology='canonical split corpus'
-    else
-      claude_fram_topology='stale corpus configuration'
-    fi
     north_log="$(jq -r '.mcpServers.north.env.FRAM_LOG // empty' "$HOME/.claude.json")"
     north_telemetry_log="$(jq -r '.mcpServers.north.env.FRAM_TELEMETRY_LOG // empty' "$HOME/.claude.json")"
     north_threads="$(jq -r '.mcpServers.north.env.FRAM_THREADS // empty' "$HOME/.claude.json")"
@@ -1541,11 +1506,10 @@ if [ "$LOCAL" -eq 1 ]; then
     fi
     project_count="$(jq '[.projects[]? | select(.mcpServers != null)] | length' "$HOME/.claude.json")"
     note "$project_count project-scoped Claude MCP registrations (allowed)"
-    ok_detail "Claude MCP declarations: North + canonical split Fram corpus + Linear + DigitalOcean"
+    ok_detail "Claude MCP declarations: North + Linear + DigitalOcean"
   else bad "$HOME/.claude.json is missing"; fi
   if [ "$COORDINATION_ACTIVE" -eq 0 ]; then
     claude_north='disabled by switchboard; not probed'
-    claude_fram='not probed while coordination is disabled'
     claude_orchestration='disabled by switchboard'
     ok_detail 'Claude MCP health probe skipped because coordination is disabled'
   elif claude_probe_binary_is_authoritative; then
@@ -1560,7 +1524,7 @@ if [ "$LOCAL" -eq 1 ]; then
     )" || claude_mcp_status=$?
     if [ "$claude_mcp_status" -eq 0 ]; then
       claude_mcp_exact=1
-      for server in north fram digitalocean; do
+      for server in north digitalocean; do
         claude_mcp_server_connected "$claude_mcp_output" "$server" || {
           claude_mcp_exact=0
           bad "Claude MCP '$server' is missing or not connected:\n$claude_mcp_output"
@@ -1576,9 +1540,8 @@ if [ "$LOCAL" -eq 1 ]; then
       done
       if [ "$claude_mcp_exact" -eq 1 ]; then
         claude_north="connected; $claude_north_topology"
-        claude_fram="connected; $claude_fram_topology"
         claude_digitalocean='connected; scoped infrastructure services'
-        ok_detail "Claude reports North + Fram + DigitalOcean MCP connected"
+        ok_detail "Claude reports North + DigitalOcean MCP connected"
       fi
     elif [ "$claude_mcp_status" -eq 124 ]; then
       bad "Claude MCP health probe timed out after ${MCP_PROBE_TIMEOUT_SECONDS:-20}s; its process group was reaped"
@@ -1600,7 +1563,6 @@ provider_group Claude "$before" \
   "Hook source $claude_hook_provenance" \
   "Bootstrap   static config parsed · Orchestration $claude_orchestration" \
   "MCP         North: $claude_north" \
-  "            Fram: $claude_fram" \
   "            Linear: $claude_linear" \
   "            DigitalOcean: $claude_digitalocean"
 
@@ -1626,20 +1588,16 @@ codex_bindings="${CODEX_MANAGED_BINDINGS:-invalid}"
 codex_hook_provenance="${CODEX_HOOK_PROVENANCE:-declaration drift detected}"
 ok_detail 'Codex legacy ~/.codex/hooks.json is intentionally ignored; it contributes zero active bindings'
 codex_north='declared; canonical explicit instance env; live probe deferred'
-codex_fram='declared; canonical split corpus; live probe deferred'
 codex_linear='authentication deferred to an interactive credential check'
 if [ "$COORDINATION_ACTIVE" -eq 0 ]; then
   codex_north='declared but disabled by switchboard; not probed'
-  codex_fram='declared; not probed while coordination is disabled'
 fi
 grep -q '^\[mcp_servers\.north\]' "$CODEX/config.toml" || bad "Codex config does not declare North MCP"
-grep -q '^\[mcp_servers\.fram\]' "$CODEX/config.toml" || bad "Codex config does not declare Fram MCP"
 grep -q '^\[mcp_servers\.linear-mcp-msa-new\]' "$CODEX/config.toml" || bad "Codex config does not declare Linear MCP"
 if codex_mcp_command_error="$(codex_mcp_commands_are_immutable "$CODEX/config.toml" 2>&1)"; then
-  ok_detail "Codex North + Fram MCP commands use immutable system-generation executables"
+  ok_detail "Codex North MCP command uses an immutable system-generation executable"
 else
   codex_north='declared; mutable command drift detected'
-  codex_fram='declared; mutable command drift detected'
   bad "Codex MCP command is not immutable: $codex_mcp_command_error"
 fi
 codex_north_env_ok=0
@@ -1650,13 +1608,6 @@ else
   codex_north='declared; explicit instance env drift detected'
   bad "Codex North MCP environment is not exact: $codex_north_env_error"
 fi
-codex_fram_paths="$(python3 -c 'import sys,tomllib; c=tomllib.load(open(sys.argv[1],"rb")); e=c.get("mcp_servers",{}).get("fram",{}).get("env",{}); print(e.get("FRAM_LOG","")); print(e.get("FRAM_TELEMETRY_LOG","")); print(e.get("FRAM_THREADS",""))' "$CODEX/config.toml" 2>/dev/null || true)"
-codex_fram_log="$(sed -n '1p' <<<"$codex_fram_paths")"
-codex_fram_telemetry_log="$(sed -n '2p' <<<"$codex_fram_paths")"
-codex_fram_threads="$(sed -n '3p' <<<"$codex_fram_paths")"
-[ "$codex_fram_log" = "$CANONICAL_FRAM_LOG" ] || bad "Codex Fram FRAM_LOG is '${codex_fram_log:-unset}', expected '$CANONICAL_FRAM_LOG'"
-[ "$codex_fram_telemetry_log" = "$CANONICAL_FRAM_TELEMETRY_LOG" ] || bad "Codex Fram FRAM_TELEMETRY_LOG is '${codex_fram_telemetry_log:-unset}', expected '$CANONICAL_FRAM_TELEMETRY_LOG'"
-[ "$codex_fram_threads" = "$CANONICAL_FRAM_THREADS" ] || bad "Codex Fram FRAM_THREADS is '${codex_fram_threads:-unset}', expected '$CANONICAL_FRAM_THREADS'"
 if [ "$LOCAL" -eq 1 ]; then
   immutable_store_link_matches \
     "$HOME/.codex/config.toml" "$CODEX/config.toml" "$HOME/.codex/config.toml"
@@ -1674,7 +1625,7 @@ if [ "$LOCAL" -eq 1 ]; then
     )" || codex_mcp_status=$?
     if [ "$codex_mcp_status" -eq 0 ]; then
       codex_inventory_ok=1
-      for server in north fram; do
+      for server in north; do
         if ! codex_mcp_inventory_server_has_state \
           "$mcp_output" "$server" true; then
           bad "Codex MCP '$server' is missing, duplicated, or disabled"
@@ -1687,13 +1638,12 @@ if [ "$LOCAL" -eq 1 ]; then
         codex_inventory_ok=0
       fi
       if [ "$codex_inventory_ok" -eq 1 ]; then
-        ok_detail "Codex config parsed; North + Fram enabled; Linear OAuth excluded from the noninteractive inventory"
+        ok_detail "Codex config parsed; North enabled; Linear OAuth excluded from the noninteractive inventory"
         if [ "$codex_north_env_ok" -eq 1 ]; then
           codex_north='enabled; canonical explicit instance env'
         else
           codex_north='enabled; explicit instance env drift detected'
         fi
-        codex_fram='enabled; canonical split corpus'
       fi
       codex_linear='authentication unverified; interactive credential check deferred'
       soft 'Codex Linear OAuth authentication is not inspected noninteractively; when needed, run: codex mcp login linear-mcp-msa-new'
@@ -1712,7 +1662,6 @@ provider_group Codex "$before" \
   "Hook source $codex_hook_provenance" \
   'Bootstrap   static config parsed' \
   "MCP         North: $codex_north" \
-  "            Fram: $codex_fram" \
   "            Linear: $codex_linear"
 
 # Hermes — controller host over the North MCP. The static surface (config,
