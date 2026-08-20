@@ -55,7 +55,7 @@
   myConfig.modules.windows-vm.enable = true;
   myConfig.modules.nh.enable = true;
   myConfig.modules.babashka.enable = true;
-  myConfig.modules.north-fram.enable = true;
+  myConfig.modules.north-store.enable = true;
   myConfig.modules.agent-slice.enable = true;
   systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
