@@ -303,25 +303,6 @@
         "type": "github"
       }
     },
-    "gjoa": {
-      "inputs": {
-        "flake-utils": "flake-utils_2",
-        "nixpkgs": "nixpkgs_3"
-      },
-      "locked": {
-        "lastModified": 1783786919,
-        "narHash": "sha256-y528aCpZ9nBmmy45LWRPv3qCKQKW7+YKFSRfX/CUL6U=",
-        "owner": "tompassarelli",
-        "repo": "gjoa",
-        "rev": "79480595decd76052c18852e0aa5ab43dedbb62f",
-        "type": "github"
-      },
-      "original": {
-        "owner": "tompassarelli",
-        "repo": "gjoa",
-        "type": "github"
-      }
-    },
     "glide": {
       "flake": false,
       "locked": {
@@ -778,7 +759,6 @@
       "inputs": {
         "beagle": "beagle",
         "elephant": "elephant",
-        "gjoa": "gjoa",
         "glide": "glide",
         "hermes-agent": "hermes-agent",
         "home-manager": "home-manager",

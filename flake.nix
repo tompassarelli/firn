@@ -39,9 +39,6 @@
     elephant = {
       url = "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73";
     };
-    gjoa = {
-      url = "github:tompassarelli/gjoa";
-    };
     hermes-agent = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:NousResearch/hermes-agent/244dabbd9c4b542bf5c1ad0159af512c2b5d6e08";
@@ -62,13 +59,12 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, gjoa, hermes-agent, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: ((makeFirnNative: {
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, hermes-agent, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: ((makeFirnNative: {
     lib.mkSystem = ({ hostname, hostConfig, hardwareConfig, system ? "x86_64-linux", extraModules ? [ ], extraOverlays ? [ ], extraSpecialArgs ? { }, ... }: nixpkgs.lib.nixosSystem {
       system = system;
       specialArgs = ({
         inputs = {
           elephant = elephant;
-          gjoa = gjoa;
           hermes-agent = hermes-agent;
           nur = nur;
           quickshell = quickshell;
@@ -97,7 +93,6 @@
           home-manager.extraSpecialArgs = ({
             inputs = {
               elephant = elephant;
-              gjoa = gjoa;
               hermes-agent = hermes-agent;
               nur = nur;
               quickshell = quickshell;
@@ -245,7 +240,6 @@
       specialArgs = ({
         inputs = {
           elephant = elephant;
-          gjoa = gjoa;
           hermes-agent = hermes-agent;
           nur = nur;
           quickshell = quickshell;
@@ -284,7 +278,6 @@
             home-manager.extraSpecialArgs = ({
               inputs = {
                 elephant = elephant;
-                gjoa = gjoa;
                 hermes-agent = hermes-agent;
                 nur = nur;
                 quickshell = quickshell;
