@@ -109,8 +109,7 @@ compatibility entry point. This is the anti-rot gate; keep it green.
   any value except `0`/`false`/empty engages the kill-switch for that session;
   `0`/`false` forces guards LIVE (beats the state file). The var must be in
   the provider CLI's own launch environment — exporting inside a running
-  session does nothing. `CLAUDE_NO_AUTHORING_HOOKS` remains a compatibility
-  alias.
+  session does nothing.
 
 Killed = every authoring guard no-ops (beagle SessionStart handshake,
 firn guard, racket-build guard, agent-spawn-guard, tripwire, north-clock guard)

@@ -188,17 +188,12 @@
       (->KillSwitchEnvDecision true))))
 
 (defn kill-switch-env [] KillSwitchEnv
-  (let [current (U String Nil) (System/getenv "AGENT_NO_AUTHORING_HOOKS")]
-    (if (some? current)
-      (env-kill-switch-value current)
-      (env-kill-switch-value (System/getenv "CLAUDE_NO_AUTHORING_HOOKS")))))
+  (env-kill-switch-value (System/getenv "AGENT_NO_AUTHORING_HOOKS")))
 
 (defn harness-state-path [] (U String Nil)
-  (let [explicit (U String Nil) (System/getenv "NORTH_HARNESS_STATE")
-        compat (U String Nil) (System/getenv "AUTHORING_KILLSWITCH_STATE")]
+  (let [explicit (U String Nil) (System/getenv "NORTH_HARNESS_STATE")]
     (cond
       (and (some? explicit) (not= explicit "")) explicit
-      (and (some? compat) (not= compat "")) compat
       :else
       (let [home (U String Nil) (System/getenv "HOME")]
         (if (or (nil? home) (= home ""))
@@ -217,8 +212,8 @@
 (defn state-setting
   [text String
    wanted String] (U String Nil)
-  (loop [(start Int) 0
-         (found (U String Nil)) nil]
+  (loop [start Int 0
+         found (U String Nil) nil]
     (if (>= start (count text))
       found
       (let [end Int (line-end text start)
@@ -231,7 +226,7 @@
             found))))))
 
 (defn stored-guards-off? [text String] Bool
-  (let [item (U String Nil) (state-setting text "hooks.hook.firn-guard")
+  (let [item (U String Nil) (state-setting text "hooks.hook.firn-system-policy")
         category (U String Nil) (state-setting text "guards")
         all (U String Nil) (state-setting text "hooks")]
     (cond
@@ -264,8 +259,8 @@
 (defn safe-session-id [session-id String] String
   (let [bytes (Vec Int) (utf8-encode session-id)]
     (utf8-decode
-      (loop [(index Int) 0
-             (result (Vec Int)) []]
+      (loop [index Int 0
+             result (Vec Int) []]
         (if (>= index (count bytes))
           result
           (let [byte Int (nth bytes index)]
@@ -275,7 +270,7 @@
 (defn marker-path [session-id String] String
   (let [runtime (U String Nil) (System/getenv "XDG_RUNTIME_DIR")
         directory String (if (or (nil? runtime) (= runtime "")) "/tmp" runtime)]
-    (str directory "/claude-firn-guard." (safe-session-id session-id))))
+    (str directory "/firn-system-policy." (safe-session-id session-id))))
 
 (defn intro-unseen? [session-id String] Bool
   (let [marker String (marker-path session-id)]
@@ -289,9 +284,9 @@
            [(host.fs/WriteTextAtomicError write-errno) true]))])))
 
 (defn canonical-hook-path [path String] String
-  (match (host.fs/realpath path)
-    [(host.fs/RealpathOk canonical) canonical]
-    [(host.fs/RealpathError errno) path]))
+  (match (host.fs/real-path path)
+    [(host.fs/RealPathOk canonical) canonical]
+    [(host.fs/RealPathError errno) path]))
 
 (defn additional-context-json [context String] String
   (str
@@ -332,4 +327,5 @@
 (defn -main [args (Vec String)] Int
   (match (host.stdin/read-text-bounded max-hook-bytes)
     [(host.stdin/ReadTextBoundedOk text) (handle-payload text)]
+    [(host.stdin/ReadTextBoundedOverflow) 0]
     [(host.stdin/ReadTextBoundedError errno) 0]))

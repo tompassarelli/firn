@@ -372,6 +372,9 @@ def command(path, timeout):
         "timeout": timeout,
     }
 
+def direct_command(path, timeout):
+    return {"type": "command", "command": path, "timeout": timeout}
+
 enabled = {
     "allow_managed_hooks_only": True,
     "allow_remote_control": False,
@@ -397,6 +400,7 @@ enabled = {
                 "matcher": "^(Edit|Write|MultiEdit|apply_patch)$",
                 "hooks": [
                     command("launch-critical-worktree-guard.sh", 10),
+                    direct_command("/run/current-system/sw/bin/firn-system-policy", 10),
                 ],
             },
             {
@@ -404,6 +408,7 @@ enabled = {
                 "hooks": [
                     command("agent-spawn-guard.sh", 10),
                     command("tripwire-guard.sh", 10),
+                    direct_command("/run/current-system/sw/bin/firn-system-policy", 10),
                     command("launch-critical-worktree-guard.sh", 10),
                     command("corpus-scan-guard.sh", 10),
                     command("session-kill-guard.sh", 10),
@@ -1129,8 +1134,8 @@ validate_codex_managed_policy() {
   CODEX_MANAGED_BINDINGS="$(
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
-  if [ "$CODEX_MANAGED_BINDINGS" = 17 ]; then
-    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 17-binding authoritative contract'
+  if [ "$CODEX_MANAGED_BINDINGS" = 19 ]; then
+    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 19-binding authoritative contract'
   elif [ "$CODEX_MANAGED_BINDINGS" = 0 ]; then
     ok_detail 'Codex managed hooks are authoritatively disabled; remote control remains disabled'
   else

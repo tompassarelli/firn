@@ -79,13 +79,14 @@ DELEGATION_TOOLS = frozenset({"delegate_task"})
 # a real North MCP spawn/dispatch. A blocked native delegate_task never counts.
 DELEGATION_MARK_TOOLS = frozenset({"mcp__north__spawn", "mcp__north__dispatch"})
 
-# Ordered guard chains. Terminal commands run the provider-neutral tripwire.
-AUTHORING_CHAIN = ()
-TERMINAL_CHAIN = ("tripwire-guard.sh",)
+# Ordered guard chains. Firn policy is a direct native system binary.
+AUTHORING_CHAIN = ("firn-system-policy",)
+TERMINAL_CHAIN = ("tripwire-guard.sh", "firn-system-policy")
 
 # Everything the enforcement surface stands on. Absence of ANY means the guard
 # plumbing is not wired and authoring/terminal must fail closed.
 REQUIRED_GUARDS = (
+    "firn-system-policy",
     "tripwire-guard.sh",
 )
 # Every guard sources the shared killswitch.
@@ -111,6 +112,12 @@ def _guard_dir() -> Path:
     if override:
         return Path(override).expanduser()
     return Path(os.environ.get("HOME", "~")).expanduser() / ".agents" / "hooks"
+
+
+def _guard_path(name: str, guard_dir: Optional[Path] = None) -> Path:
+    if guard_dir is None and name == "firn-system-policy":
+        return Path("/run/current-system/sw/bin/firn-system-policy")
+    return (guard_dir if guard_dir is not None else _guard_dir()) / name
 
 
 def _lifecycle_dir() -> Optional[Path]:
@@ -192,7 +199,7 @@ def selfcheck(
     problems: List[str] = []
 
     for name in REQUIRED_GUARDS + REQUIRED_GUARD_SUPPORT:
-        path = gdir / name
+        path = _guard_path(name, guard_dir)
         if not path.exists():
             problems.append(f"missing shared guard: {path}")
             continue
@@ -240,12 +247,14 @@ GuardRunner = Callable[[str, Dict[str, Any]], Tuple[int, str, bool]]
 
 def _real_guard_runner(script: str, payload: Dict[str, Any]) -> Tuple[int, str, bool]:
     """Execute a shared guard with the provider-neutral hook JSON on stdin."""
-    path = _guard_dir() / script
-    if not path.exists() or not os.access(path, os.R_OK):
+    path = _guard_path(script)
+    is_native = script == "firn-system-policy"
+    required_mode = os.X_OK if is_native else os.R_OK
+    if not path.exists() or not os.access(path, required_mode):
         return (0, "", False)
     try:
         proc = subprocess.run(
-            [_bash_bin(), str(path)],
+            [str(path)] if is_native else [_bash_bin(), str(path)],
             input=json.dumps(payload),
             text=True,
             capture_output=True,

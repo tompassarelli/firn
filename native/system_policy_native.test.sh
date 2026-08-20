@@ -74,7 +74,7 @@ printf 'guards=on\n' >"$scratch/harness.conf"
 export XDG_RUNTIME_DIR="$scratch/runtime"
 export HOME="$scratch/home"
 export NORTH_HARNESS_STATE="$scratch/harness.conf"
-unset AGENT_NO_AUTHORING_HOOKS CLAUDE_NO_AUTHORING_HOOKS
+unset AGENT_NO_AUTHORING_HOOKS
 
 run_case() {
   local name="$1" payload="$2"
@@ -102,7 +102,7 @@ expected_inject="$(printf \
   "$digest")"
 [[ "$(<"$scratch/inject.out")" == "${expected_inject%$'\n'}" ]] \
   || die "additionalContext JSON changed"
-[[ -f "$scratch/runtime/claude-firn-guard.inject_session" ]] \
+[[ -f "$scratch/runtime/firn-system-policy.inject_session" ]] \
   || die "session marker was not created"
 run_case inject-second "$inject_payload"
 [[ ! -s "$scratch/inject-second.out" ]] \

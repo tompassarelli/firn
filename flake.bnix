@@ -152,7 +152,15 @@
                 (s
                   "beagle native-exe --out $out/bin/activity-menu --entry activity.menu/-main "
                   self
-                  "/native/activity_menu.bgl")))))]
+                  "/native/activity_menu.bgl")
+                (s
+                  "beagle native-exe --out $out/bin/firn-system-policy --entry firn.system-policy-native/-main "
+                  beagle
+                  "/native-core/src/native/json.bgl "
+                  self
+                  "/native/system_policy.bgl "
+                  self
+                  "/native/system_policy_native.bgl")))))]
       {:lib.mkSystem
         (nix/module
           [hostname

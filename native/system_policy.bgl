@@ -105,7 +105,7 @@
   [text String
    offset Int]
   Int
-  (loop [(cursor Int) offset]
+  (loop [cursor Int offset]
     (if (and (< cursor (count text))
              (whitespace? (subs text cursor (+ cursor 1))))
       (recur (+ cursor 1))
@@ -115,7 +115,7 @@
   [text String
    offset Int]
   Int
-  (loop [(cursor Int) offset]
+  (loop [cursor Int offset]
     (if (or (>= cursor (count text))
             (separator? (subs text cursor (+ cursor 1))))
       cursor
@@ -127,7 +127,7 @@
    word String]
   Bool
   (and (starts-at? text offset word)
-       (let [(after Int) (+ offset (count word))]
+       (let [after Int (+ offset (count word))]
          (or (= after (count text))
              (separator? (subs text after (+ after 1)))))))
 
@@ -135,15 +135,15 @@
   [text String
    offset Int]
   Int
-  (let [(start Int) (skip-whitespace text offset)
-        (end Int) (token-end text start)]
+  (let [start Int (skip-whitespace text offset)
+        end Int (token-end text start)]
     (skip-whitespace text end)))
 
 (defn strip-privilege-prefix
   [text String
    offset Int]
   Int
-  (let [(start Int) (skip-whitespace text offset)]
+  (let [start Int (skip-whitespace text offset)]
     (if (or (word-at? text start "sudo") (word-at? text start "doas"))
       (next-word text start)
       start)))
@@ -153,7 +153,7 @@
    offset Int]
   Bool
   (or (= offset 0)
-      (let [(before String) (subs text (- offset 1) offset)]
+      (let [before String (subs text (- offset 1) offset)]
         (or (= before "\n")
             (= before ";")
             (= before "&")
@@ -176,7 +176,7 @@
    third String]
   Bool
   (and (word-at? text offset first)
-       (let [(next Int) (next-word text offset)]
+       (let [next Int (next-word text offset)]
          (and (word-at? text next second)
               (word-at? text (next-word text next) third)))))
 
@@ -185,13 +185,13 @@
    command-offset Int
    wanted String]
   Bool
-  (loop [(cursor Int) (next-word text command-offset)]
+  (loop [cursor Int (next-word text command-offset)]
     (if (or (>= cursor (count text))
             (command-anchor? text cursor))
       false
       (if (word-at? text cursor wanted)
         true
-        (let [(after Int) (token-end text cursor)]
+        (let [after Int (token-end text cursor)]
           (if (= after cursor)
             false
             (recur (next-word text cursor))))))))
@@ -202,7 +202,7 @@
   Bool
   (if (not (command-anchor? command offset))
     false
-    (let [(start Int) (strip-privilege-prefix command offset)]
+    (let [start Int (strip-privilege-prefix command offset)]
       (or
         (and (third-word-at? command start "firn" "repo" "upgrade")
              (nth-word-at? command (next-word command (next-word command start))
@@ -224,7 +224,7 @@
                             command (next-word command start) "boot")))))))))
 
 (defn refused-command? [command String] Bool
-  (loop [(offset Int) 0]
+  (loop [offset Int 0]
     (if (>= offset (count command))
       false
       (if (refusal-at? command offset)
@@ -232,21 +232,21 @@
         (recur (+ offset 1))))))
 
 (defn decode-hook-event [raw RawHookEvent] HookEvent
-  (let [(tool String) (rawhookevent-tool-name raw)]
+  (let [tool String (rawhookevent-tool-name raw)]
     (cond
       (= tool "Bash")
-      (let [(command (U String Nil)) (rawhookevent-command raw)]
+      (let [command (U String Nil) (rawhookevent-command raw)]
         (if (some? command) (->HookBash command) (->HookIgnored tool)))
 
       (or (= tool "Edit") (= tool "Write") (= tool "MultiEdit"))
-      (let [(path (U String Nil)) (rawhookevent-file-path raw)]
+      (let [path (U String Nil) (rawhookevent-file-path raw)]
         (if (some? path) (->HookEdit path) (->HookIgnored tool)))
 
       :else
       (->HookIgnored tool))))
 
 (defn firn-path? [path String] Bool
-  (loop [(offset Int) 0]
+  (loop [offset Int 0]
     (if (> (+ offset 18) (count path))
       false
       (if (starts-at? path offset "/code/nixos-config/")
@@ -287,33 +287,33 @@
 (defn decimal-value [text String] (U Int Nil)
   (if (= (count text) 0)
     nil
-    (loop [(offset Int) 0 (value Int) 0]
+    (loop [offset Int 0 value Int 0]
       (if (= offset (count text))
         value
-        (let [(digit Int) (digit-value (subs text offset (+ offset 1)))]
+        (let [digit Int (digit-value (subs text offset (+ offset 1)))]
           (if (< digit 0)
             nil
             (recur (+ offset 1) (+ (* value 10) digit))))))))
 
 (defn parse-pin-arguments [args (Vec String)] PinArguments
-  (loop [(index Int) 0 (warn-days Int) 30]
+  (loop [index Int 0 warn-days Int 30]
     (if (>= index (count args))
       (->PinArgumentsAccepted warn-days)
-      (let [(arg String) (nth args index)]
+      (let [arg String (nth args index)]
         (cond
           (or (= arg "-h") (= arg "--help")) (->PinArgumentsHelp true)
 
           (= arg "--warn-days")
           (if (>= (+ index 1) (count args))
             (->PinArgumentsRejected "error: --warn-days requires a value")
-            (let [(value (U Int Nil)) (decimal-value (nth args (+ index 1)))]
+            (let [value (U Int Nil) (decimal-value (nth args (+ index 1)))]
               (if (nil? value)
                 (->PinArgumentsRejected
                   "error: --warn-days must be a non-negative integer")
                 (recur (+ index 2) value))))
 
           (starts-at? arg 0 "--warn-days=")
-          (let [(value (U Int Nil))
+          (let [value (U Int Nil)
                 (decimal-value (subs arg 12 (count arg)))]
             (if (nil? value)
               (->PinArgumentsRejected
@@ -327,7 +327,7 @@
   [characters String
    character String]
   Bool
-  (loop [(offset Int) 0]
+  (loop [offset Int 0]
     (if (>= offset (count characters))
       false
       (if (= character (subs characters offset (+ offset 1)))
@@ -343,7 +343,7 @@
   (and (= (count checksum) 51)
        (starts-at? checksum 0 "sha256-")
        (= (subs checksum 50 51) "=")
-       (loop [(offset Int) 7]
+       (loop [offset Int 7]
          (if (= offset 50)
            true
            (if (base64-sri-character? (subs checksum offset (+ offset 1)))
@@ -355,7 +355,7 @@
 
 (defn valid-sha256? [checksum String] Bool
   (and (= (count checksum) 64)
-       (loop [(offset Int) 0]
+       (loop [offset Int 0]
          (if (= offset 64)
            true
            (if (hex-character? (subs checksum offset (+ offset 1)))
@@ -363,7 +363,7 @@
              false)))))
 
 (defn hand-pin-diagnostic [evidence PinEvidence] (U Diagnostic Nil)
-  (let [(checksum (U String Nil)) (pinevidence-checksum evidence)]
+  (let [checksum (U String Nil) (pinevidence-checksum evidence)]
     (cond
       (and (some? checksum) (not (valid-sri? checksum)))
       (->Diagnostic
@@ -381,10 +381,10 @@
       :else nil)))
 
 (defn hand-pin-diagnostics [evidence (Vec PinEvidence)] (Vec Diagnostic)
-  (loop [(index Int) 0 (result (Vec Diagnostic)) []]
+  (loop [index Int 0 result (Vec Diagnostic) []]
     (if (>= index (count evidence))
       result
-      (let [(diagnostic (U Diagnostic Nil))
+      (let [diagnostic (U Diagnostic Nil)
             (hand-pin-diagnostic (nth evidence index))]
         (recur (+ index 1)
           (if (some? diagnostic) (conj result diagnostic) result))))))
@@ -394,14 +394,14 @@
    warn-days Int
    input LockInput]
   (U Diagnostic Nil)
-  (let [(modified (U Int Nil)) (lockinput-modified input)]
+  (let [modified (U Int Nil) (lockinput-modified input)]
     (if (nil? modified)
       (->Diagnostic
         "error" "unverifiable-lock-input"
         (str "ERROR flake-input " (lockinput-name input) " rev "
           (lockinput-revision input) " age unverifiable"))
-      (let [(age-seconds Int) (max 0 (- now modified))
-            (age-days Int) (quot age-seconds 86400)]
+      (let [age-seconds Int (max 0 (- now modified))
+            age-days Int (quot age-seconds 86400)]
         (if (> age-days warn-days)
           (->Diagnostic
             "error" "stale-lock-input"
@@ -414,16 +414,16 @@
    warn-days Int
    inputs (Vec LockInput)]
   (Vec Diagnostic)
-  (loop [(index Int) 0 (result (Vec Diagnostic)) []]
+  (loop [index Int 0 result (Vec Diagnostic) []]
     (if (>= index (count inputs))
       result
-      (let [(diagnostic (U Diagnostic Nil))
+      (let [diagnostic (U Diagnostic Nil)
             (lock-input-diagnostic now warn-days (nth inputs index))]
         (recur (+ index 1)
           (if (some? diagnostic) (conj result diagnostic) result))))))
 
 (defn error-count [diagnostics (Vec Diagnostic)] Int
-  (loop [(index Int) 0 (total Int) 0]
+  (loop [index Int 0 total Int 0]
     (if (>= index (count diagnostics))
       total
       (recur (+ index 1)
@@ -442,10 +442,10 @@
     [(PinArgumentsRejected message)
      (->PolicyReport [(->Diagnostic "error" "invalid-arguments" message)] 2)]
     [(PinArgumentsAccepted warn-days)
-     (let [(diagnostics (Vec Diagnostic))
-           (loop [(index Int) 0
-                  (all (Vec Diagnostic)) (hand-pin-diagnostics evidence)]
-             (let [(locks (Vec Diagnostic))
+     (let [diagnostics (Vec Diagnostic)
+           (loop [index Int 0
+                  all (Vec Diagnostic) (hand-pin-diagnostics evidence)]
+             (let [locks (Vec Diagnostic)
                    (lock-input-diagnostics now warn-days inputs)]
                (if (>= index (count locks))
                  all
@@ -453,12 +453,12 @@
        (->PolicyReport diagnostics (if (= (error-count diagnostics) 0) 0 1)))]))
 
 (defn checksum-diagnostics [assertions (Vec ChecksumAssertion)] (Vec Diagnostic)
-  (loop [(index Int) 0 (result (Vec Diagnostic)) []]
+  (loop [index Int 0 result (Vec Diagnostic) []]
     (if (>= index (count assertions))
       result
-      (let [(assertion ChecksumAssertion) (nth assertions index)
-            (actual-valid Bool) (valid-sha256? (checksumassertion-actual assertion))
-            (matches Bool)
+      (let [assertion ChecksumAssertion (nth assertions index)
+            actual-valid Bool (valid-sha256? (checksumassertion-actual assertion))
+            matches Bool
             (= (checksumassertion-expected assertion)
                (checksumassertion-actual assertion))]
         (recur (+ index 1)
@@ -473,10 +473,10 @@
                   (checksumassertion-actual assertion) ")")))))))))
 
 (defn license-policy [evidence LicenseEvidence] PolicyReport
-  (let [(checks (Vec Diagnostic))
+  (let [checks (Vec Diagnostic)
         (checksum-diagnostics (licenseevidence-checksums evidence))
-        (readme (U String Nil)) (licenseevidence-readme-license evidence)
-        (diagnostics (Vec Diagnostic))
+        readme (U String Nil) (licenseevidence-readme-license evidence)
+        diagnostics (Vec Diagnostic)
         (if (nil? readme)
           (conj checks
             (->Diagnostic "error" "license-section"

@@ -147,7 +147,7 @@ class ChainMembershipTests(unittest.TestCase):
         self.assertEqual([c[0] for c in run.calls], list(nb.AUTHORING_CHAIN))
         self.assertEqual(
             list(nb.AUTHORING_CHAIN),
-            [],
+            ["firn-system-policy"],
         )
 
     def test_patch_uses_authoring_chain(self):
@@ -162,7 +162,7 @@ class ChainMembershipTests(unittest.TestCase):
         self.assertEqual([c[0] for c in run.calls], list(nb.TERMINAL_CHAIN))
         self.assertEqual(
             list(nb.TERMINAL_CHAIN),
-            ["tripwire-guard.sh"],
+            ["tripwire-guard.sh", "firn-system-policy"],
         )
 
     def test_process_uses_terminal_chain(self):
@@ -442,7 +442,7 @@ class PreVerifyTests(unittest.TestCase):
 
 
 class SelfCheckTests(unittest.TestCase):
-    CHAIN = ("tripwire-guard.sh",)
+    CHAIN = ("firn-system-policy", "tripwire-guard.sh")
 
     def _make_guard_dir(self, tmp, include=None, include_support=True):
         include = self.CHAIN if include is None else include

@@ -8,6 +8,8 @@ description: >-
   (firn rebuild) is agent-runnable; it builds a commit snapshot (rev=HEAD), so
   commit your own changes first — nobody's uncommitted state blocks or leaks.
   NOT general Nix in other repos.
+hooks:
+  - firn-system-policy
 ---
 
 # firn — editing ~/code/nixos-config
