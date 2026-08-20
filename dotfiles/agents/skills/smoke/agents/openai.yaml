@@ -1,4 +1,0 @@
-interface:
-  display_name: "Smoke Checks"
-  short_description: "Choose the smallest decision-changing check"
-  default_prompt: "Use $smoke to choose and supervise the smallest check that can change the next decision."

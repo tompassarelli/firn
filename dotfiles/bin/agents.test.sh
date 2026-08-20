@@ -127,6 +127,20 @@ if [ "${1:-}" = "--policy-skills" ]; then
   exit "$fails"
 fi
 
+if [ "${1:-}" = "--verification-skill" ]; then
+  echo "== focused verification-skill reachability"
+  fresh
+  ag status > /dev/null
+  chk "verification seeds off" "skill verification off" "$(grep '^skill verification ' "$SB/.config/agents/manifest.conf")"
+  chk "verification source path resolves" "$SB/code/nixos-config/main/dotfiles/agents/skills/verification/SKILL.md" "$(ag path verification)"
+  ag on verification > /dev/null
+  chk "verification reaches Claude and Codex" "1" "$(test -L "$SB/.config/agents/skills/verification" && test -L "$SB/.codex/skills/verification" && echo 1 || echo 0)"
+  ag off verification > /dev/null
+  chk "off removes both provider links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l -name verification | wc -l)"
+  if [ "$fails" -eq 0 ]; then echo "all focused verification-skill tests passed"; else echo "$fails focused verification-skill test(s) failed"; fi
+  exit "$fails"
+fi
+
 echo "== 1. fresh seed: bound hooks enabled+companion, unbound disabled, nothing composes"
 fresh
 ag status > /dev/null
@@ -134,7 +148,7 @@ chk "worktree-guard row" "hook worktree-guard enabled repo-safety" "$(grep '^hoo
 chk "logcompress row (unbound)" "hook logcompress disabled" "$(grep '^hook logcompress ' "$SB/.config/agents/manifest.conf")"
 chk "repo-safety skill seeded off" "skill repo-safety off" "$(grep '^skill repo-safety ' "$SB/.config/agents/manifest.conf")"
 chk "cloudflare-deploy skill seeded off" "skill cloudflare-deploy off" "$(grep '^skill cloudflare-deploy ' "$SB/.config/agents/manifest.conf")"
-chk "smoke skill seeded off" "skill smoke off" "$(grep '^skill smoke ' "$SB/.config/agents/manifest.conf")"
+chk "verification skill seeded off" "skill verification off" "$(grep '^skill verification ' "$SB/.config/agents/manifest.conf")"
 chk "policy skills seed off" "3" "$(grep -Ec '^skill (agent-policy|delegating-agents|external-code) off$' "$SB/.config/agents/manifest.conf")"
 chk "global seeds as a dir row at the root" "dir global off ~" "$(grep '^dir global ' "$SB/.config/agents/manifest.conf")"
 chk "staffing seeds as the profile module" "skill staffing off" "$(grep '^skill staffing ' "$SB/.config/agents/manifest.conf")"
@@ -587,10 +601,10 @@ ag on repo-safety > /dev/null
 chk "an active skill lands in the claude farm" "repo-safety" "$(skilllinks)"
 chk "and on the codex surface, at the same source" "$(readlink "$SB/.config/agents/skills/repo-safety")" "$(readlink "$CX/repo-safety")"
 chk "the codex entry is a link that resolves to the skill" "1" "$(test -L "$CX/repo-safety" && test -d "$CX/repo-safety" && echo 1 || echo 0)"
-ag on smoke > /dev/null
-chk "the smoke skill reaches both surfaces" "1" "$(test -L "$SB/.config/agents/skills/smoke" && test -L "$CX/smoke" && echo 1 || echo 0)"
-ag off smoke > /dev/null
-chk "turning smoke off clears both surfaces" "0" "$(if test -L "$SB/.config/agents/skills/smoke" || test -L "$CX/smoke"; then echo 1; else echo 0; fi)"
+ag on verification > /dev/null
+chk "the verification skill reaches both surfaces" "1" "$(test -L "$SB/.config/agents/skills/verification" && test -L "$CX/verification" && echo 1 || echo 0)"
+ag off verification > /dev/null
+chk "turning verification off clears both surfaces" "0" "$(if test -L "$SB/.config/agents/skills/verification" || test -L "$CX/verification"; then echo 1; else echo 0; fi)"
 for s in agent-policy delegating-agents; do ag on "$s" > /dev/null; done
 chk "policy skills reach both provider surfaces" "1" "$(test -L "$SB/.config/agents/skills/agent-policy" && test -L "$CX/agent-policy" && test -L "$SB/.config/agents/skills/delegating-agents" && test -L "$CX/delegating-agents" && echo 1 || echo 0)"
 chk "policy skill paths resolve to owned sources" "$SB/code/nixos-config/main/dotfiles/agents/skills/agent-policy/SKILL.md" "$(ag path agent-policy)"

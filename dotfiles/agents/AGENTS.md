@@ -53,7 +53,7 @@ wall, stop with the exact reason and one command that completes the handoff.
 ## Trigger the procedural owner
 
 - Repository edits, lanes, pins, commits, landing, or pushes → `repo-safety`.
-- Verification, CI, releases, or publishing evidence → `smoke`.
+- Tests, checks, debugging reproductions, bug validation, CI, release preflight, performance measurements, or proof claims → `verification`.
 - Work that can outlive the response, delegation, waiting, or handoff → `todo`.
 - Agent dispatch, model routing, supervision, or orchestration → `delegating-agents`.
 - NixOS configuration in `~/code/nixos-config` → `firn`.

@@ -54,7 +54,7 @@ crossed. Batch compute runs at low scheduling priority. Preserve headroom for
 deadline-sensitive checks and timing measurements whose verdict contention
 could falsify.
 
-Use smoke to select and interpret checks; do not duplicate its landing or
+Use `verification` to select and interpret checks; do not duplicate its landing or
 publication gate rules in worker briefs.
 
 ## Supervise every process and worker

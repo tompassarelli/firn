@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verification"
+  short_description: "Choose proportionate decision-changing evidence"
+  default_prompt: "Use $verification to choose and supervise the smallest evidence that can decide this work."
