@@ -162,7 +162,7 @@
 
 (defn find-host
   [(repository TagCommandRepository) (host String)] TagCommandHostLookup
-  (loop [(index Int) 0]
+  (loop [index Int 0]
     (if (>= index (count (tagcommandrepository-hosts repository)))
       (->TagCommandHostMissing host)
       (let [(document c/HostDocument)
@@ -346,8 +346,8 @@
     [(ModuleDisable host module) (run-host-mutation repository action)]))
 
 (defn outcome-stdout [(outcome TagCommandOutcome)] String
-  (loop [(index Int) 0
-         (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (>= index (count (tagcommandoutcome-effects outcome)))
       result
       (match (nth (tagcommandoutcome-effects outcome) index)
@@ -357,8 +357,8 @@
          (recur (+ index 1) result)]))))
 
 (defn outcome-stderr [(outcome TagCommandOutcome)] String
-  (loop [(index Int) 0
-         (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (>= index (count (tagcommandoutcome-effects outcome)))
       result
       (match (nth (tagcommandoutcome-effects outcome) index)
@@ -368,8 +368,8 @@
          (recur (+ index 1) result)]))))
 
 (defn outcome-effect-kinds [(outcome TagCommandOutcome)] (Vec String)
-  (loop [(index Int) 0
-         (result (Vec String)) []]
+  (loop [index Int 0
+         result (Vec String) []]
     (if (>= index (count (tagcommandoutcome-effects outcome)))
       result
       (match (nth (tagcommandoutcome-effects outcome) index)
