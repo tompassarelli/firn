@@ -46,7 +46,7 @@
 (def enable-suffix String ".enable")
 
 (defn string-member? [(values (Vec String)) (candidate String)] Bool
-  (loop [(index Int) 0]
+  (loop [index Int 0]
     (if (>= index (count values))
       false
       (if (= (nth values index) candidate)
@@ -68,7 +68,7 @@
   (if (not (starts-with? path module-prefix))
     ""
     (let [(start Int) (count module-prefix)]
-      (loop [(end Int) start]
+      (loop [end Int start]
         (if (or (= end (count path))
                 (= (subs path end (+ end 1)) "."))
           (subs path start end)
@@ -88,9 +88,9 @@
 
 (defn put-state
   [(states (Vec ModuleState)) (replacement ModuleState)] (Vec ModuleState)
-  (loop [(index Int) 0
-         (found Bool) false
-         (result (Vec ModuleState)) []]
+  (loop [index Int 0
+         found Bool false
+         result (Vec ModuleState) []]
     (if (>= index (count states))
       (if found result (conj result replacement))
       (let [(state ModuleState) (nth states index)]
@@ -117,9 +117,9 @@
                   (reader/readerevent-kind (nth events start))))
       (scan-error "expected configuration map"
                   (input/event-offset events start))
-      (loop [(cursor Int) (+ start 1)
-             (found-references (Vec String)) references
-             (found-states (Vec ModuleState)) states]
+      (loop [cursor Int (+ start 1)
+             found-references (Vec String) references
+             found-states (Vec ModuleState) states]
         (cond
           (= cursor (- end 1))
           (scan-ok found-references found-states)
@@ -233,8 +233,8 @@
   (r/hosttags-host (inventoryhost-tags host)))
 
 (defn module-names [(repository InventoryRepository)] (Vec String)
-  (loop [(index Int) 0
-         (names (Vec String)) []]
+  (loop [index Int 0
+         names (Vec String) []]
     (if (>= index (count (inventoryrepository-modules repository)))
       (sort names)
       (recur (+ index 1)
@@ -243,8 +243,8 @@
             (nth (inventoryrepository-modules repository) index)))))))
 
 (defn host-names [(repository InventoryRepository)] (Vec String)
-  (loop [(index Int) 0
-         (names (Vec String)) []]
+  (loop [index Int 0
+         names (Vec String) []]
     (if (>= index (count (inventoryrepository-hosts repository)))
       (sort names)
       (recur (+ index 1)
@@ -259,8 +259,8 @@
                (inventoryhost-tags host))))
 
 (defn live-modules [(repository InventoryRepository)] (Vec String)
-  (loop [(index Int) 0
-         (live (Vec String)) []]
+  (loop [index Int 0
+         live (Vec String) []]
     (if (>= index (count (inventoryrepository-hosts repository)))
       (sort live)
       (let [(host InventoryHost)
@@ -269,11 +269,11 @@
             (hostconfig-references (inventoryhost-config host))
             (tagged (Vec String)) (tag-active repository host)]
         (recur (+ index 1)
-          (loop [(direct-index Int) 0
-                 (combined (Vec String)) live]
+          (loop [direct-index Int 0
+                 combined (Vec String) live]
             (if (>= direct-index (count direct))
-              (loop [(tag-index Int) 0
-                     (tag-combined (Vec String)) combined]
+              (loop [tag-index Int 0
+                     tag-combined (Vec String) combined]
                 (if (>= tag-index (count tagged))
                   tag-combined
                   (recur (+ tag-index 1)
@@ -285,8 +285,8 @@
 (defn unused-modules [(repository InventoryRepository)] (Vec String)
   (let [(live (Vec String)) (live-modules repository)
         (all (Vec String)) (module-names repository)]
-    (loop [(index Int) 0
-           (unused (Vec String)) []]
+    (loop [index Int 0
+           unused (Vec String) []]
       (if (>= index (count all))
         unused
         (let [(name String) (nth all index)]
@@ -295,8 +295,8 @@
 
 (defn direct-hosts
   [(repository InventoryRepository) (module String)] (Vec String)
-  (loop [(index Int) 0
-         (hosts (Vec String)) []]
+  (loop [index Int 0
+         hosts (Vec String) []]
     (if (>= index (count (inventoryrepository-hosts repository)))
       (sort hosts)
       (let [(host InventoryHost)
@@ -308,8 +308,8 @@
             hosts))))))
 
 (defn tag-hosts [(repository InventoryRepository) (module String)] (Vec String)
-  (loop [(index Int) 0
-         (hosts (Vec String)) []]
+  (loop [index Int 0
+         hosts (Vec String) []]
     (if (>= index (count (inventoryrepository-hosts repository)))
       (sort hosts)
       (let [(host InventoryHost)
@@ -320,8 +320,8 @@
             hosts))))))
 
 (defn join-strings [(values (Vec String))] String
-  (loop [(index Int) 0
-         (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (>= index (count values))
       result
       (recur (+ index 1)
@@ -331,24 +331,24 @@
   [(repository InventoryRepository) (module String)] (Vec String)
   (let [(direct (Vec String)) (direct-hosts repository module)
         (tagged (Vec String)) (tag-hosts repository module)]
-    (loop [(index Int) 0
-           (labels (Vec String)) direct]
+    (loop [index Int 0
+           labels (Vec String) direct]
       (if (>= index (count tagged))
         labels
         (recur (+ index 1)
           (append-unique labels (str "via tag@" (nth tagged index))))))))
 
 (defn render-lines [(values (Vec String)) (prefix String)] String
-  (loop [(index Int) 0
-         (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (>= index (count values))
       result
       (recur (+ index 1)
         (str result prefix (nth values index) "\n")))))
 
 (defn render-module-list-all [(modules (Vec String))] String
-  (loop [(index Int) 0
-         (result String) (str "Modules (" (count modules) "):\n")]
+  (loop [index Int 0
+         result String (str "Modules (" (count modules) "):\n")]
     (if (>= index (count modules))
       result
       (recur (+ index 1)
@@ -356,8 +356,8 @@
 
 (defn render-module-list-used [(repository InventoryRepository)] String
   (let [(modules (Vec String)) (live-modules repository)]
-    (loop [(index Int) 0
-           (result String) (str "Used modules (" (count modules) "):\n")]
+    (loop [index Int 0
+           result String (str "Used modules (" (count modules) "):\n")]
       (if (>= index (count modules))
         result
         (let [(module String) (nth modules index)
@@ -387,8 +387,8 @@
     (render-host-section (tag-hosts repository module))))
 
 (defn state-paths [(config HostConfig) (enabled Bool)] (Vec String)
-  (loop [(index Int) 0
-         (paths (Vec String)) []]
+  (loop [index Int 0
+         paths (Vec String) []]
     (if (>= index (count (hostconfig-states config)))
       (sort paths)
       (let [(state ModuleState) (nth (hostconfig-states config) index)]
@@ -410,7 +410,7 @@
 
 (defn find-host-config
   [(repository InventoryRepository) (wanted String)] HostConfig?
-  (loop [(index Int) 0]
+  (loop [index Int 0]
     (if (>= index (count (inventoryrepository-hosts repository)))
       nil
       (let [(host InventoryHost)
