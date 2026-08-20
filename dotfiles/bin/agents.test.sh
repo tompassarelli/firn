@@ -109,6 +109,20 @@ hook_count() { # how many hooks the switchboard knows — read from the HOOKS
 }
 HOOK_COUNT="$(hook_count)"
 
+if [ "${1:-}" = "--policy-skills" ]; then
+  echo "== focused policy-skill activation"
+  fresh
+  ag status > /dev/null
+  chk "policy skills seed off" "2" "$(grep -Ec '^skill (agent-policy|delegating-agents) off$' "$SB/.config/agents/manifest.conf")"
+  chk "policy source path resolves" "$SB/code/nixos-config/main/dotfiles/agents/skills/agent-policy/SKILL.md" "$(ag path agent-policy)"
+  for s in agent-policy delegating-agents; do ag on "$s" > /dev/null; done
+  chk "policy skills reach Claude and Codex" "1" "$(test -L "$SB/.config/agents/skills/agent-policy" && test -L "$SB/.codex/skills/agent-policy" && test -L "$SB/.config/agents/skills/delegating-agents" && test -L "$SB/.codex/skills/delegating-agents" && echo 1 || echo 0)"
+  for s in agent-policy delegating-agents; do ag off "$s" > /dev/null; done
+  chk "off removes both provider links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l \( -name agent-policy -o -name delegating-agents \) | wc -l)"
+  if [ "$fails" -eq 0 ]; then echo "all focused policy-skill tests passed"; else echo "$fails focused policy-skill test(s) failed"; fi
+  exit "$fails"
+fi
+
 echo "== 1. fresh seed: bound hooks enabled+companion, unbound disabled, nothing composes"
 fresh
 ag status > /dev/null
@@ -117,6 +131,7 @@ chk "logcompress row (unbound)" "hook logcompress disabled" "$(grep '^hook logco
 chk "repo-safety skill seeded off" "skill repo-safety off" "$(grep '^skill repo-safety ' "$SB/.config/agents/manifest.conf")"
 chk "cloudflare-deploy skill seeded off" "skill cloudflare-deploy off" "$(grep '^skill cloudflare-deploy ' "$SB/.config/agents/manifest.conf")"
 chk "smoke skill seeded off" "skill smoke off" "$(grep '^skill smoke ' "$SB/.config/agents/manifest.conf")"
+chk "policy skills seed off" "2" "$(grep -Ec '^skill (agent-policy|delegating-agents) off$' "$SB/.config/agents/manifest.conf")"
 chk "global seeds as a dir row at the root" "dir global off ~" "$(grep '^dir global ' "$SB/.config/agents/manifest.conf")"
 chk "staffing seeds as the profile module" "skill staffing off" "$(grep '^skill staffing ' "$SB/.config/agents/manifest.conf")"
 chk "coordination leaves seed as skills" "3" "$(grep -Ec '^skill (messages|threads|assignments) off$' "$SB/.config/agents/manifest.conf")"
@@ -628,6 +643,10 @@ ag on smoke > /dev/null
 chk "the smoke skill reaches both surfaces" "1" "$(test -L "$SB/.config/agents/skills/smoke" && test -L "$CX/smoke" && echo 1 || echo 0)"
 ag off smoke > /dev/null
 chk "turning smoke off clears both surfaces" "0" "$(if test -L "$SB/.config/agents/skills/smoke" || test -L "$CX/smoke"; then echo 1; else echo 0; fi)"
+for s in agent-policy delegating-agents; do ag on "$s" > /dev/null; done
+chk "policy skills reach both provider surfaces" "1" "$(test -L "$SB/.config/agents/skills/agent-policy" && test -L "$CX/agent-policy" && test -L "$SB/.config/agents/skills/delegating-agents" && test -L "$CX/delegating-agents" && echo 1 || echo 0)"
+chk "policy skill paths resolve to owned sources" "$SB/code/nixos-config/main/dotfiles/agents/skills/agent-policy/SKILL.md" "$(ag path agent-policy)"
+for s in agent-policy delegating-agents; do ag off "$s" > /dev/null; done
 farm_inode="$(stat -c %i "$SB/.config/agents/skills/repo-safety")"
 codex_inode="$(stat -c %i "$CX/repo-safety")"
 ag apply > /dev/null

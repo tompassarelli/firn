@@ -23,7 +23,7 @@ itself → beagle-authoring.
 *.bnix  ──(firn build)──▶  *.nix  ──(firn rebuild)──▶  system
 ```
 
-## The five rules that bite
+## The four rules that bite
 
 1. **Edit `.bnix`, never `.nix`.** The `.nix` is generated; the next `firn repo build`
    overwrites any hand-edit. This applies to host config too —
@@ -48,9 +48,6 @@ itself → beagle-authoring.
    `firn repo upgrade now` (wholesale input bumps) stays the USER's — the hook still
    denies those. Build-only verification when validate isn't enough:
    `nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel --no-link`.
-5. **Secrets via sops-nix only.** Encrypted files in `secrets/`, referenced with
-   `sops.secrets."name"`. Never inline a plaintext credential anywhere in the repo
-   (a gitleaks pre-commit hook will catch it).
 
 ## Add a package / module
 
@@ -105,12 +102,20 @@ firn schema explain <path-or-validator-error> # decode an unknown-option error
 firn repo doctor                              # untracked/stale/orphan/validator checks
 ```
 
-## Commit discipline
+## Read a focused guide only when needed
 
-Never chain `git commit && git push`. Commit first and let the gitleaks pre-commit
-hook run; then push it yourself via `safe-push` — the global push rules apply (push
-freely at sensible checkpoints; the human is not a push gate). New files
-(`.bnix` + `.nix`) must be git-added before nix can see them.
+- Option existence or types: `nixos-config:docs/schema-introspection.md`.
+- Renaming option paths: `nixos-config:docs/renaming-option-paths.md`.
+- Compiler queries: `nixos-config:docs/compiler-queries.md`.
+- Non-obvious validation failures: `nixos-config:docs/repair-pipeline.md` and
+  `nixos-config:docs/diagnosing-schema-errors.md`.
+- Tag composition: `nixos-config:docs/tags-composition.md`.
+- Module flake inputs: `nixos-config:docs/flake-inputs.md`.
+- Darwin compatibility: `nixos-config:docs/platform-compatibility.md`.
+- Input bumps: `nixos-config:docs/bumping-inputs.md`.
+- Importing existing Nix: `nixos-config:docs/importing-nix.md`.
+- Verification rung selection: `nixos-config:docs/verification.md`.
+- A whiterabbit silent reboot: `nixos-config:docs/crash-recovery.md`.
 
 ## Verify, then switch
 

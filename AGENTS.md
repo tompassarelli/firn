@@ -1,152 +1,59 @@
 ## Security
 
-NEVER put plaintext passwords, secrets, API keys, or credentials anywhere in this repo.
-All secrets must go through sops-nix as encrypted files in secrets/.
-If you need a secret value in a module, use sops.secrets."name" — never inline it.
+Never put plaintext passwords, secrets, API keys, or credentials in this
+repository. Store encrypted values under `secrets/` with sops-nix and reference
+them through `sops.secrets."name"`. Let the gitleaks pre-commit hook finish
+before using `safe-push`; never chain commit and push.
 
-NEVER chain `git commit && git push`. Commit first and let the gitleaks
-pre-commit hook run; if it flags a secret, fix the leak. Then push yourself via
-`safe-push` (global push rules apply — do not wait for the user).
+## Source authority
 
-## Configuration interface: beagle/nix
+The write interface is beagle/nix: edit `#lang beagle/nix` `.bnix` sources and
+run `firn repo build` to regenerate their sibling `.nix` targets. Never edit a
+generated `.nix`. Both files are committed because the flake reads the Git
+tree. Run `firn repo build` before any Nix build after a `.bnix` change.
 
-The *write interface* for this repo is **beagle/nix** — `#lang beagle/nix` files (`.bnix`) that compile to Nix. Authors edit `.bnix` files; `firn repo build` regenerates the matching `.nix` next to each `.bnix` via `beagle-build`. **Nix is the build target, not the source-of-truth.**
+Beagle lives at `~/code/beagle/main`. Override `BEAGLE_PATH` only for an
+explicit alternate checkout. Query the compiler for forms, signatures, option
+paths, types, callers, exports, and targets; never trust a copied inventory.
 
-```
-*.bnix  ──(firn repo build)──▶  *.nix  ──(nixos-rebuild)──▶  system
-```
+## Configuration architecture
 
-Both `.bnix` and `.nix` are committed because the flake reads from the git tree.
+- Use the `myConfig.modules.*` namespace and keep one package or service per
+  module. Multi-file modules separate option declarations in `default.bnix`
+  from guarded configuration in `<name>.bnix`.
+- Compose modules only through declared `:tags`, `:tags-opt-in`, and
+  `:tag-overrides`. Hosts enable tags; explicit host disables subtract from the
+  union. Nothing proxies enablement through a bundle.
+- Add new modules to `whiterabbit` unless the operator names another host.
+- Let the flake's dynamic imports discover a new module directory; do not edit
+  the flake to register it.
+- Git-add every new `.bnix` and generated `.nix` before evaluation. Untracked
+  files are invisible to Nix flakes.
+- Co-locate flake inputs in module `:flake-inputs`; never hand-edit generated
+  input sections in `flake.bnix`.
 
-**Beagle lives at `~/code/beagle/main`** — the compiler, validator, schema extractor, and emitters. Override `BEAGLE_PATH` only for an explicit alternate checkout.
+## Dotfiles and commands
 
-**Always run `firn repo build` before `nix build` / `nixos-rebuild` if any `.bnix` source changed.** Otherwise the rebuild uses stale `.nix`. Editing `.nix` directly is wrong — the next repository build overwrites it.
+Every dotfile has one source under `dotfiles/`. Prefer an out-of-store symlink
+for user-owned dotfiles, scripts, and live entrypoints. Use a store-managed copy
+only for a named immutability, publication, security, or rollback invariant.
 
-Reference: the [beagle repo](https://github.com/tompassarelli/beagle) — DSL forms, the build/validate pipeline, and the schema toolchain.
+Custom commands are one executable shell file each under `dotfiles/bin/`.
+`firn` contains only commands that operate on this repository; general tools
+remain standalone commands. Its CLI is entity-first:
+`<node> <edge> [<leaf>]`.
 
-## Nix Flakes: New Files Must Be Git-Tracked
+## Authoring and verification
 
-When adding a new file to this repo, always `git add` it before rebuilding. Nix flakes only see git-tracked files — untracked files are invisible to `builtins.readDir` and other flake evaluation, so the build will silently skip them. This applies to both `.bnix` sources AND their generated `.nix` outputs.
+The `firn` and `beagle-authoring` skills own the operational loop and route to
+the focused project guides for schema queries, option renames, repairs, tags,
+flake inputs, platform compatibility, input bumps, imports, verification, and
+crash recovery. Use those skills when their trigger fires rather than loading
+the manuals preemptively.
 
-## Architecture (summary)
-
-One namespace: `myConfig.modules.*` (atoms — one package or service per module). Modules use `(module [config lib pkgs] {:options... :config...})` to emit the standard `{ config, lib, pkgs, ... }: { options...; config = mkIf cfg.enable {...}; }` wrapper.
-
-**Composition is tag-driven.** Each module declares the tags it belongs to in its `.bnix` source; each host enables a set of tags. The active module set is computed by union-then-subtract: for every enabled tag, take the modules that declare it; then remove anything the host explicitly disabled. See the "Tags" section below.
-
-macOS works via nix-darwin (`lib.mkDarwinSystem`, `darwinConfigurations`); `firn rebuild` detects Darwin and dispatches to `darwin-rebuild`.
-
-Multi-file modules (chrome, firefox, glide, kanata, nyxt, stylix, system, users) split `default.bnix` (option declarations) and `<name>.bnix` (mkIf config).
-
-**Full reference**: the [beagle repo](https://github.com/tompassarelli/beagle) — every DSL form, clause, and emitter. [`docs/TAGS.md`](docs/TAGS.md) — tag-driven composition model, worked examples, resolution algorithm.
-
-## Rules
-
-- 1 package = 1 module. No exceptions. Inseparable pairs do not exist.
-- Composition lives in tags, not bundles. A module joins a group by declaring `:tags [...]` (default-on) or `:tags-opt-in [...]` (opt-in-only). Hosts enable tags; nothing else proxies enable through.
-- **Edit `.bnix`, not `.nix`.** The `.nix` is regenerated by `firn repo build`; direct edits get overwritten.
-- **Run `firn repo build` before any `nix build` / `nixos-rebuild` if `.bnix` sources changed.**
-- Auto-import: create the directory + `.bnix` + run `firn repo build`, then `git add` both files. No flake edits — the flake's dynamic `imports` finds the generated `.nix` via `builtins.readDir`.
-- Assume new modules only get added to whiterabbit host.
-- New files (both `.bnix` and `.nix`) must be git-added before nix can see them (flake uses git tree).
-
-## Dotfiles — one copy, and it is in this repo
-
-**Every dotfile lives in `dotfiles/`. There is no second live copy anywhere**, and no channel for maintaining one.
-
-A dotfile reaches `$HOME` one of two ways, chosen per module: a store-managed copy (`xdg.configFile`/`home.file` with a repo `source` — changing it needs a rebuild), or `config.lib.file.mkOutOfStoreSymlink` back into `~/code/nixos-config/main/dotfiles/…` (edits apply the moment they are written).
-
-**Out-of-store is the default for user-owned dotfiles, scripts, and live tool
-entrypoints.** Nix still declares the destination and lifecycle; the checkout
-owns the bytes. A store-managed copy is an exception and must name the
-immutability, publication, security, or rollback invariant that needs exact
-generation-owned bytes. When both designs are correct, out-of-store wins.
-
-niri's `config.kdl` is out-of-store, because niri re-reads it on write and it is tuned live. The cost is that a live tweak dirties the checkout, so the tool that makes one settles it: `opacity <value>` commits just `dotfiles/niri/config.kdl` as `niri: opacity <value>`, amending the previous such commit while it is still unpushed so a fiddling session collapses to one. If anything else is dirty it commits nothing and says so — unrelated work is never swept into a preference commit.
-
-## Shell scripts
-
-Custom command scripts live in `dotfiles/bin/` as plain executable shell scripts (one file per command); the `modules/bash/` module puts the directory on `PATH`. The fish→bash migration is complete.
-
-`firn` is the CLI for managing this NixOS config (modules, tags, secrets,
-rebuilds). Its interface is the entity-first `<node> <edge> [<leaf>]` graph:
-`firn tag enable terminal`, `firn tag status`, `firn module disable piper`,
-`firn repo validate`, and `firn schema explain X`. Leaves default to `all` for
-aggregate views and the current hostname for host-scoped commands.
-
-`firn rebuild [host]` is the one canonical operator shortcut because it is the
-machine's sanctioned build-and-switch command. The equivalent graph route is
-`firn host rebuild [host]`.
-
-Run `firn` with no args for the full grid; `firn <node>` for one entity's edges. The CLI should only contain subcommands that operate on the nixos-config repo itself — general-purpose tools like `sandbox`, `vpn`, `gif` etc. stay as standalone scripts in `dotfiles/bin/`.
-
-## Schema introspection
-→ [`docs/schema-introspection.md`](docs/schema-introspection.md)
-**Read when:** adding or changing any `(set …)` option path, or answering "does option X exist / what type does it want?" — query the schema with `beagle-schema` instead of grepping `schema.json`.
-
-## Renaming option paths
-→ [`docs/renaming-option-paths.md`](docs/renaming-option-paths.md)
-**Read when:** refactoring an option path across `.bnix` files (e.g. `myConfig.modules.foo` → `bar`) with `beagle-rename`.
-
-## Editing .bnix source
-
-Use the Edit tool directly on `.bnix` files. The source is beagle/nix s-expressions — edits are straightforward keyword/value changes in maps.
-
-**Every Edit/Write to a `.bnix` file triggers `.claude/hooks/post-edit-check.sh`** automatically — it runs `beagle-syntax` (structural delimiter check) and `beagle-validate` (schema check) on the file and prints actionable hints to stderr. If the hook flags a syntax error, fix delimiters first before deeper edits.
-
-## Query the compiler instead of grep
-→ [`docs/compiler-queries.md`](docs/compiler-queries.md)
-**Read when:** you'd otherwise grep `.bnix`/`.rkt` for a signature, record fields, callers, exports, or call sites — use the daemon-backed `beagle-*` query tools (~100ms warm, never stale). Also covers daemon health/start.
-
-## Repair pipeline (when validate alone isn't enough)
-→ [`docs/repair-pipeline.md`](docs/repair-pipeline.md)
-Evidence-ranked repair tools driven by the native build and validation routes.
-**Read when:** `firn repo validate` flags something but the fix isn't obvious, or a bug isn't pinned to one file (`beagle-repair` / `trace` / `cascade` / `blame` / `specfix`).
-
-## Diagnosing schema errors
-→ [`docs/diagnosing-schema-errors.md`](docs/diagnosing-schema-errors.md)
-**Read when:** the validator reports an unknown option or type mismatch, or you're about to write a new `(set …)` — use `firn schema explain` (paste the validator error directly) instead of digging through `schema.json`.
-
-## Repo health
-
-`firn repo doctor` runs five checks: untracked `.bnix`/`.nix` (invisible to flake), stale `.nix` outputs (sibling `.bnix` newer), schema cache freshness vs `flake.lock`, orphaned modules (no host enables them directly or via a tag, ignoring `_generated-enables.bnix`), and validator clean. Exits 0 if all pass. Use this before committing if anything feels off.
-
-## Tags (composition model)
-→ [`docs/tags-composition.md`](docs/tags-composition.md) · full reference [`docs/TAGS.md`](docs/TAGS.md)
-Tags are the ONLY way modules get composed: modules declare `:tags`/`:tags-opt-in`/`:tag-overrides`; hosts enable tags in `enabled-tags.bnix`; the resolver unions memberships and subtracts a per-host disabled list.
-**Read when:** adding tag membership to a module, editing a host's `enabled-tags.bnix`, or debugging "why is module X enabled?" (`firn tag resolve`).
-
-## Flake inputs (codegen)
-→ [`docs/flake-inputs.md`](docs/flake-inputs.md)
-Modules declare flake inputs co-located via `:flake-inputs`; `firn repo build` splices them into `flake.bnix` between markers. **Never hand-edit the generated sections.**
-**Read when:** a module needs a flake input (adding/removing `:flake-inputs`), or `flake.bnix`'s generated input sections look wrong.
-
-## Discovering platform compatibility
-→ [`docs/platform-compatibility.md`](docs/platform-compatibility.md)
-**Read when:** asking "which modules work on darwin?" or porting config to nix-darwin (`firn platform list`). Pre-req: the NixOS + darwin schema caches.
-
-## Bumping inputs
-→ [`docs/bumping-inputs.md`](docs/bumping-inputs.md)
-`firn repo upgrade now` moves the lock forward; `firn rebuild` applies the lock you already have.
-**Read when:** bumping nixpkgs/flake inputs or surfacing upstream deprecations with `firn repo upgrade`.
-
-## Auto-fixing typos
-
-```bash
-beagle-validate --auto-fix
-```
-
-Rewrites unambiguous typos in place (best did-you-mean at edit distance ≤ 2 with a clear gap to the runner-up). Ambiguous cases are left for human review.
-
-## Importing existing Nix
-→ [`docs/importing-nix.md`](docs/importing-nix.md)
-**Read when:** converting hand-written `.nix` to beagle/nix (`beagle-import-nix`). Note: it refuses `flake-file` forms — the project flake is migrated by hand.
-
-## Verification
-→ [`docs/verification.md`](docs/verification.md)
-Agents MAY run `firn rebuild` after the relevant checks pass and their own changes are committed. A rebuild builds a **commit snapshot** (`git+file?rev=HEAD`), never the working tree — no session's uncommitted state can block it or leak into a generation, so there is no "dirty tree" precondition to check. The one rule that is yours: **commit your own changes first**, or they won't be in the build (the pipeline prints what it excluded). The pipeline regenerates and validates the snapshot, builds from the committed `flake.lock`, and switches the exact verified closure. Never raw `nh`/nixos-rebuild; `firn repo upgrade now` (input bumps) is the USER's. Build-only verification: `nix build --no-link`. Only verify whiterabbit; skip thinkpad-x1e.
-**Read when:** verifying a change — picking the right rung (`firn repo build` + validate → repo diff → full `nix build`).
-
-## Crash recovery (whiterabbit — silent reboots)
-→ [`docs/crash-recovery.md`](docs/crash-recovery.md)
-**Read when:** whiterabbit hard-crashed / silent-rebooted — classifying clean vs crash boots, reading pstore/journal, amdgpu CWSR hang diagnosis. Do NOT bump kernel/firmware or re-add `amdgpu.sg_display=0`; the mitigation is `amdgpu.cwsr_enable=0`.
+After a `.bnix` edit, trust the PostToolUse syntax/schema feedback, then run
+`firn repo build` and `firn repo validate`. Use `firn repo doctor` only for the
+specific untracked, stale-output, cache, orphan, or validation suspicion it can
+decide. Agents may run `firn rebuild` only after committing their own changes;
+it builds the exact commit snapshot. Never use raw `nixos-rebuild`, `nh`, or
+`firn repo upgrade now`. Verify only `whiterabbit`, never `thinkpad-x1e`.

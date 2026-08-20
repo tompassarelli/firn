@@ -83,38 +83,20 @@ At a hard wall (permission system, another agent's live dependency): stop,
 hand the user the finish as ONE command, and say exactly why.
 
 ## Repository layout — main / worktrees / pins (safety-critical)
-`~/code/<project>/` is a container, never itself a checkout. It holds three
-slots, and the DIRECTORY is the lifecycle policy:
+`~/code/<project>/` is a container: `main/` is clean read-only product,
+`worktrees/<slug>/` is the only editable and sweepable lane, and
+`pins/<full-object-id>/` is an immutable externally consumed checkout. Never
+edit a `main/` or pin, cut a lane from a pin, or recursively delete a checkout,
+container, `worktrees/` root, or `pins/` root. Dirty `main/` state is human WIP;
+never commit, stash, reset, or clean it. Use `wt-rescue` only when remediation
+is required.
 
-    main/              the clean checkout — read-only product, never edited
-    worktrees/<slug>/  ephemeral lanes — the only thing sweepers may delete
-    pins/<full-object-id>/ immutable externally consumed checkout; its leaf is
-                          the full Git object ID and same-name `.pin` names consumers
-
-All work happens in a lane:
-
-    git -C ~/code/<project>/main worktree add ~/code/<project>/worktrees/SLUG -b SLUG
-    # edit + commit in ~/code/<project>/worktrees/SLUG, then FROM the lane:
-    safe-push --to main
-    git -C ~/code/<project>/main pull --ff-only
-
-Then remove the worktree and delete the branch — a landed lane that leaves its
-worktree behind is not done. Automatic reaping is scoped to `worktrees/`: an
-active pin is never swept. Name the lane leaf bare (`worktrees/policy-graph`,
-not `worktrees/north-policy-graph`) — the parent directory is what the
-enforcement guard carves out, so the leaf needs no prefix and never repeats the
-project name. A pin's tracked contents and HEAD are immutable. Its same-name
-`.pin` sidecar is agent-writable metadata and must name at least one real
-consumer. To advance a consumer, create a different detached hash-named
-worktree from `main`, write its sidecar, and update the consumer; never checkout
-another revision in place. Once read-only checks prove every named consumer has
-moved, add one `consumer-main: ~/code/CONSUMER/main` sidecar record for each
-repository consumer and retire the clean detached old pin and sidecar explicitly with
-`pin-retire --consumer-main CONSUMER/main -- ~/code/<project>/pins/<full-object-id>`.
-Dirty state in any `main/` is human work-in-progress:
-never commit,
-stash, reset, or clean it — `wt-rescue` relocates it intact into
-`worktrees/rescue-<ts>` if remediation is truly needed.
+Create a bare-named lane from `main`, commit there, run `safe-push --to main`,
+fast-forward `main`, then remove the worktree and branch. A landed lane left
+behind is not done. Advance a pin by creating a different detached full-hash
+pin with a same-name `.pin` sidecar naming every real consumer, moving those
+consumers, and using `pin-retire` only after read-only checks prove none still
+references the old pin.
 
 ## Launch-critical repos — agents never edit the primary
 `~/code/north` and `~/code/beagle` are read live by daemons
@@ -166,33 +148,11 @@ Report the number of slow verifications a task consumed. That number is the
 metric; a task that got the same result in fewer of them did better work.
 
 ## Work is not done until it lands
-Uncommitted work is the only work that can actually be lost, and unlanded work
-is invisible to everyone but its author. Both are defects, not states.
-
-- **Never end a turn, task, or session with a lane you touched left dirty.**
-  Commit at coherent checkpoints as you go, staging by enumerated paths. If a
-  change is incoherent, commit the coherent part and say what you held back.
-- **Landing is its own step with its own owner, never the optional tail of a
-  task.** A task structured "do work → verify → land" drops the landing first
-  whenever time or a gate runs short, and the work then sits in a lane forever.
-  When work passes its checks, it gets landed — by its author if possible, by a
-  named successor if not.
-- **A gate that fails for environmental reasons does not orphan the work.**
-  Contention, an unreachable bound, a slow reference implementation, or main
-  moving mid-gate are all reasons to re-run or hand off, never reasons to
-  abandon a lane silently. Record the resume trigger with the evidence.
-- **Every parked lane carries a restart-grade record** naming what is done,
-  what remains, and what unblocks it. A lane nobody owns and nobody documented
-  is lost work that has not been noticed yet.
-- **Sweep periodically.** Lanes accumulate: duplicates, superseded work, and
-  stale branches hide the few that still matter. Prove a lane is superseded by
-  CONTENT before reaping it — the same fix can land under a different hash —
-  and when in doubt keep it, because a wrong reap destroys work while a wrong
-  keep costs only clutter.
-
-Corollary for slow gates: if landing is expensive enough that it gets deferred,
-the gate latency is the defect. Fix the gate rather than tolerating a growing
-backlog of finished-but-unlanded work.
+Commit coherent work in every lane you touch, staging enumerated paths. Land it
+when its relevant check passes, fast-forward `main`, and reap the lane and
+branch. If an environmental failure or moving dependency prevents landing,
+record an exact restart-grade checkpoint and name the successor; never orphan
+dirty or unowned work. Prove a lane is superseded by content before reaping it.
 
 ## Rebuilds — use the sanctioned wrapper
 Agents may run `firn rebuild` after the relevant checks pass and their own
@@ -208,14 +168,9 @@ direnv (`use flake` in `.envrc`) — never bare `nix develop` / `nix shell`.
 
 ## Agent config is projected, never hand-edited
 Everything under `~/.agents`, `~/.claude`, `~/.codex`, and `/etc/codex` is a
-PROJECTION. Nothing there is a policy source, and editing it is a change that
-the next activation silently reverts. Which pieces of context, hooks, and
-skills are live is decided by the `agents` switchboard (`agents status` to
-see, `agents on|off <name>` to change) — a session gets exactly what the
-switchboard turned on and nothing else. To change what a piece SAYS, edit the
-source file in its owning repository and commit it there; `agents path <name>`
-prints that file. Default state is off: absence of a hook or doc is the
-configured answer, not a fault to route around.
+projection, never a policy source. Use `agents status`, `agents path <name>`,
+and `agents on|off <name>`; edit only the reported source in its owning
+repository. Absence is configured state, not a fault to route around.
 
 ## External code — license first
 Before leveraging ANY code you didn't write (`~/code/resources`, forks,
@@ -232,15 +187,8 @@ Agent notes, status, scratch, and handoffs go in gitignored `docs/private/`
 in the repo they concern. Public `docs/` is end-user-facing only.
 
 ## Searching past conversations — `convo`, never a raw scan of north-data
-`convo <terms>` full-text-searches every transcript (both providers, every
-account) and prints when, which project, which session, a snippet, and the
-`path:line` to open. `convo session <uuid>` locates one session's transcripts;
-`convo -x '<literal>'` is exact match. It refreshes incrementally at query
-time, so it is never stale and costs ~0.1s when nothing changed.
-NEVER `rg`/`grep` across `~/code/north-data` or `~/.local/state/north`: they
-are the SAME ~99 GB tree behind a symlink, so naming both scans it twice, and
-`--hidden` walks the `.git` dirs on top. One such sweep measured 3.5 GB RSS
-and a quarter of the machine. Scan raw only after `convo` names the file.
+Use `convo` for transcript search. Never recursively scan `~/code/north-data`
+or `~/.local/state/north`; scan raw only after `convo` names a file.
 
 ## Paths — full and ~-anchored, always
 Every path you write (chat, docs, comments, output): full from `~`, never
@@ -256,14 +204,6 @@ adapters use the authenticated subscription surface of the provider.
 Never write `rm … "$VAR"/glob` — an unset `$VAR` expands to a bare-root
 delete. Use `rm -rf "${VAR:?}"/…`, or remove-and-recreate the scratch dir by
 its literal absolute path. Fix the command, not the guard.
-
-## Background shells — always accountable
-Every background shell or monitor you start has ONE named purpose you can
-state on demand; "what are my shells" is answerable from memory, never by
-archaeology. A bounded task silent past its expected window is presumed
-rotten — kill it and retry tighter rather than waiting longer. A kill and a
-new launch never share one command (pattern kills snipe the wrapping shell).
-Reap a finished lane's shell in the same cycle you consume its output.
 
 ## Tone
 Terse by default — no filler, no hedging, full sentences; brevity comes from
@@ -302,100 +242,3 @@ them.
   laddered away.
 - A comment states a constraint the code cannot say. Narrative (how found,
   outputs, dates) belongs in the commit message, not the code.
-
-## Fleet execution law (operator rulings, 2026-08-17)
-
-- **Verification latency**: no routine verification loop may exceed 2-3 minutes.
-  A slower loop is a defect to fix (5-10x), not a cost to schedule around.
-  Test architecture, caching, sharding, and CI topology all serve this number.
-  Never lengthen a timeout without evidence that legitimate work changed.
-- **USE THE HARDWARE.** If more of the machine makes work faster, use more of
-  the machine — every core busy is the intended operating point, and idle
-  cores while work queues is the defect. Never serialize, shrink, or defer
-  work to "protect" the box. The only line is falling over, and its guards
-  are bounds, not abstinence: 1-minute load stays under ~1.5× core count,
-  MemAvailable stays above ~8 GiB, no swap-thrash — past a bound, queue the
-  next job; under it, launch. Batch work runs at `nice 19` (ordering is free
-  and keeps the session responsive at 100% utilization). One narrow
-  exception: deadline-bounded checks and timing measurements whose verdicts
-  contention can falsify get headroom or visibly scaled deadlines — so a
-  kill means the work hung, never that the box was busy.
-- **Landing bar (all projects)**: landings to main are decided by LOCAL
-  supervised gates only. No GitHub or remote CI run ever blocks, serializes,
-  or gates a landing, in any repository — every remote workflow is async
-  confirmation, and a remote red gets classified (product vs environment)
-  after the fact, never waited on. The single place a GitHub workflow may
-  gate is PUBLISHING: a tag or released binary artifact (beagle native
-  release artifacts, gjoa binary builds, and their kin) requires its
-  producing workflow green for the exact commit before the tag or artifact
-  ships — publish-time only, never landing-time. The qualifying release
-  preflight is LOCAL by default: the repository's own supervised gate run on
-  the exact commit, on this machine, with headroom. A GitHub run is never the
-  thing waited on — GitHub is a git mirror, an async second opinion, and (only
-  where it builds the shipped binary) a publish-time artifact factory. No
-  landing, release cycle, or agent workflow may poll, watch, or serialize on
-  a GitHub verdict. The qualifying release
-  preflight is LOCAL by default: the repository's own supervised gate run on
-  the exact commit, on this machine, with headroom. A GitHub run is never the
-  thing waited on — GitHub is a git mirror, an async second opinion, and (only
-  where it builds the shipped binary) a publish-time artifact factory. No
-  landing, release cycle, or agent workflow may poll, watch, or serialize on
-  a GitHub verdict.
-- **Staffing**: Codex capacity is plentiful, Claude capacity is limited. Deploy
-  gpt-5.6-luna/terra liberally, preferred over opus for bounded and mid-size
-  work; gpt-5.6-sol at medium-xhigh for the hardest closures; stochastically mix
-  comparable assignments and track outcomes in
-  `~/code/todo/model-assignment-ledger.md`. Fable oversees only the largest
-  streams.
-- **Model routing evidence**: an omitted model in a live `spawn_agent` or
-  collaboration schema is route metadata, not evidence that the installed Codex
-  model is unavailable. Check installed Codex configuration and, when needed, a
-  fresh subscription-backed `codex exec` without API keys; if direct
-  `gpt-5.6-luna` succeeds, report Luna available and use that direct route for
-  bounded leaves.
-- **Codex dispatch**: direct CLI with full access
-  (`--dangerously-bypass-approvals-and-sandbox`); scope discipline lives in the
-  brief (explicit edit boundaries), never in a sandbox that breaks the work.
-- **Executive mode**: the orchestrator never codes; full parallel tilt within
-  the compute budget; no idle agents; every finished result consumed
-  immediately; every blocker owned; the next gate prepped before the current
-  one opens. ONE WORKER PER SEAM, never per mission: before any dispatch and
-  at every audit, enumerate the independently-verifiable units inside the
-  mission (files, gates, cases, stages) — a mission holding N units with no
-  shared files is N workers. Brief-writing cost is never a reason to keep a
-  hull coarse.
-
-## Decomposition and dispatch law
-
-- **Serial chains decompose link-by-link.** A chain is serial only where a
-  written reason holds per link: link N consumes link N-1's output. Anything
-  inside or beside a link that does not consume the pending output — diagnosis
-  of an independently named failure class, provisioning or cache warming for a
-  later link, verification prep — runs concurrently now, speculatively where
-  needed, with discard-on-repair accepted. A red gate naming N independent
-  failure classes authorizes up to N isolated diagnosticians immediately, each
-  in its own detached checkout, banking classification and a minimal patch to
-  a handoff file.
-- **Holds name their exact dependency.** Any hold, drain, or freeze names the
-  precise output it waits for; work not consuming that output is exempt by
-  default and dispatches now. Every steering pass re-audits blanket holds: a
-  held item that cannot name its awaited output fires this firing.
-- **Deadlines equal the authorized window.** Every dispatch deadline equals
-  the authorized supervisor window of the procedure it runs, plus margin —
-  never an invented tighter number. Tightening below the procedure's recorded
-  authorization is the same defect as lengthening without evidence, and it
-  kills healthy work.
-- **Terminal markers are round-unique and line-anchored.** Every retry round
-  gets fresh marker tokens; detection matches at line start with per-lane
-  exclusions for quoted history. Quoted or echoed history never aliases a
-  live verdict.
-- **Removals sweep their consumers in the same pass.** A removal landing
-  sweeps every consumer repository's references — allowlists, path checks,
-  pins, locks — in the same campaign pass, and the finishing token search
-  runs across consumers, not only the landing repository.
-- **Probes carry early-exit clauses; dead workers get tight closers.** A probe
-  into a possibly-infeasible seam names known capability gaps and exits
-  blocked in minutes when it hits one. A dead or looping worker is killed by
-  verified PID and working directory, then replaced by a closer with a
-  narrowed brief and a round-unique marker — never blindly relaunched with
-  the same brief.

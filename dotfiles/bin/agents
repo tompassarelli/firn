@@ -41,7 +41,8 @@ SKILLS=(webdev importing-skills threejs-animation threejs-fundamentals
   threejs-geometry threejs-interaction threejs-lighting threejs-loaders
   threejs-materials threejs-postprocessing threejs-shaders threejs-textures
   beagle-authoring firn repo-safety staffing
-  messages threads assignments todo convo guard-authoring cloudflare-deploy smoke estimate)
+  messages threads assignments todo convo guard-authoring cloudflare-deploy smoke estimate
+  agent-policy delegating-agents)
 # A MODULE is a skill with declarations — a skill whose frontmatter names the
 # hooks its rules need (`hooks:`) or a directory of agent templates it ships
 # (`agents:`). It is not a kind: a module's name IS a skill's name. Staffing is
@@ -779,6 +780,8 @@ skill_source() {
     cloudflare-deploy) echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/cloudflare-deploy" ;;
     smoke)           echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/smoke" ;;
     estimate)        echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/estimate" ;;
+    agent-policy)    echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/agent-policy" ;;
+    delegating-agents) echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/delegating-agents" ;;
     staffing)        echo "$NORTH/orchestration/staffing" ;;
     messages)        echo "$NORTH/coordination/messages" ;;
     threads)         echo "$NORTH/coordination/threads" ;;
