@@ -6,6 +6,8 @@ description: >-
   model or subscription account, running parallel seams, waiting on another
   actor, setting worker deadlines, replacing a stalled worker, or operating in
   executive orchestration mode.
+hooks:
+  - session-kill-guard
 ---
 
 # Delegating agents
@@ -65,6 +67,12 @@ immediately. Silence past the authorized window is a visible failure: verify
 the PID and working directory, stop the process, preserve its evidence, and
 replace it only with a narrower closer. Never relaunch the same brief blindly
 or combine a kill and replacement launch in one command.
+
+Agent Bash background work runs as `run-bounded <duration> -- <command>`, never
+as bare `nohup`, `setsid`, `disown`, or an unmanaged `&` job. The duration is
+explicit and cannot exceed 24 hours. `run-bounded` owns a transient cgroup and
+PID namespace, so owner death and timeout both reap every descendant; all such
+jobs share a 48 GiB hard ceiling without reducing compiler parallelism.
 
 Fresh retries use round-unique, line-anchored terminal markers so quoted
 history cannot impersonate a live verdict. A probe that reaches a known
