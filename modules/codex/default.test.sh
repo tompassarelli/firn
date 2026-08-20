@@ -5,16 +5,12 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 source_file="$repo/modules/codex/default.bnix"
 generated_file="$repo/modules/codex/default.nix"
 config_file="$repo/dotfiles/codex/config.toml"
-hooks_file="$repo/dotfiles/codex/hooks.json"
 requirements_file="$repo/modules/codex/requirements.toml"
 
 grep -Fq '{:source (s flakeRoot "/dotfiles/codex/config.toml")}' "$source_file"
-grep -Fq '{:source (s flakeRoot "/dotfiles/codex/hooks.json")}' "$source_file"
 # These assertions intentionally match literal Nix interpolation syntax.
 # shellcheck disable=SC2016
 grep -Fq '".codex/config.toml".source = "${flakeRoot}/dotfiles/codex/config.toml";' "$generated_file"
-# shellcheck disable=SC2016
-grep -Fq '".codex/hooks.json".source = "${flakeRoot}/dotfiles/codex/hooks.json";' "$generated_file"
 
 python3 - "$requirements_file" "$source_file" "$generated_file" <<'PY'
 import pathlib
@@ -77,31 +73,20 @@ print(
 PY
 
 if rg -n \
-  'mkOutOfStoreSymlink.*(config\.toml|hooks\.json)|code/nixos-config/dotfiles/codex/(config\.toml|hooks\.json)' \
+  'mkOutOfStoreSymlink.*config\.toml|code/nixos-config/dotfiles/codex/config\.toml' \
   "$source_file" "$generated_file"; then
   printf 'Codex config delivery still depends on a mutable checkout path\n' >&2
   exit 1
 fi
 
-# Both sources come out of one evaluation: two `nix eval` calls paid for the
-# whole home-manager configuration twice to read two strings out of the same
-# attrset. Store paths cannot contain whitespace, so one `read` splits them.
-evaluated_config=
-evaluated_hooks=
-if [ -z "${CODEX_CONFIG_SOURCE:-}" ] || [ -z "${CODEX_HOOKS_SOURCE:-}" ]; then
-  read -r evaluated_config evaluated_hooks < <(
-    nix eval --json \
-      "$repo#nixosConfigurations.whiterabbit.config.home-manager.users.tom.home.file" \
-      --apply 'files: {
-        config = files.".codex/config.toml".source;
-        hooks = files.".codex/hooks.json".source;
-      }' |
-      python3 -c 'import json, sys; s = json.load(sys.stdin); print(s["config"], s["hooks"])'
+if [ -n "${CODEX_CONFIG_SOURCE:-}" ]; then
+  config_source=$CODEX_CONFIG_SOURCE
+else
+  config_source=$( 
+    nix eval --raw \
+      "$repo#nixosConfigurations.whiterabbit.config.home-manager.users.tom.home.file.\".codex/config.toml\".source"
   )
 fi
-config_source=${CODEX_CONFIG_SOURCE:-$evaluated_config}
-hooks_source=${CODEX_HOOKS_SOURCE:-$evaluated_hooks}
-
 assert_store_copy() {
   local label=$1 expected=$2 actual
   actual=$(readlink -f "$3")
@@ -120,7 +105,6 @@ assert_store_copy() {
 }
 
 config_source=$(assert_store_copy 'Codex config.toml' "$config_file" "$config_source")
-hooks_source=$(assert_store_copy 'Codex hooks.json' "$hooks_file" "$hooks_source")
 
 python3 - "$config_source" <<'PY'
 import pathlib
@@ -137,5 +121,5 @@ assert config["agents"]["default_subagent_model"] == "gpt-5.6-luna"
 assert config["mcp_servers"]["north"]["command"] == "/run/current-system/sw/bin/north-mcp"
 PY
 
-printf 'ok: Codex config.toml and legacy hooks.json are generation-retained store copies with no checkout delivery dependency\n'
-printf 'ok: Codex keeps Sol/high and its immutable North MCP command path\n'
+printf 'ok: Codex config.toml is a generation-retained store copy with no checkout delivery dependency\n'
+printf 'ok: Codex keeps Sol/high and immutable North/Fram MCP command paths\n'

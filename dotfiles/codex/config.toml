@@ -62,52 +62,5 @@ startup_timeout_sec = 60
 tool_timeout_sec = 120
 default_tools_approval_mode = "prompt"
 
-[hooks.state]
-
-[hooks.state."/home/tom/.codex/hooks.json:pre_tool_use:0:0"]
-trusted_hash = "sha256:3b446567d70f0dce1a9d5342f3d95fe04821ba7a52480d11d73af536be5c0939"
-
-[hooks.state."/home/tom/.codex/hooks.json:pre_tool_use:1:0"]
-trusted_hash = "sha256:c2f9d5cfec2177943063a87464f298f91f2fb1ffa95030067b1cd701b40d3859"
-
-[hooks.state."/home/tom/.codex/hooks.json:pre_tool_use:1:1"]
-trusted_hash = "sha256:131ccf5d522f4dee43af0336570338a9fd87c641422952c5e53cc24d88c532f6"
-
-[hooks.state."/home/tom/.codex/hooks.json:pre_tool_use:1:2"]
-trusted_hash = "sha256:423b2201eeb7fc99762f99442f07b7160acedb912e14ab7a6bbfff88dbbdf361"
-
-[hooks.state."/home/tom/.codex/hooks.json:pre_tool_use:2:0"]
-trusted_hash = "sha256:16e553bb56a5436ac6aac8885def1579338fb50c57e384c71bc94c6b4478e4b3"
-
-[hooks.state."/home/tom/.codex/hooks.json:pre_tool_use:2:1"]
-trusted_hash = "sha256:6c89a451212aef760629086515cb4e2a1d94fa930ba73a982bc5e51c75e3f8f0"
-
-[hooks.state."/home/tom/.codex/hooks.json:pre_tool_use:2:2"]
-trusted_hash = "sha256:6bfa976f17f190966193fb657dd1a57b9ea28f2c3b29028261d971a2e8f4bf64"
-
-[hooks.state."/home/tom/.codex/hooks.json:post_tool_use:0:0"]
-trusted_hash = "sha256:dd325d59df5d65b2abfd4de32ffe674bb3270b1a72c45c66d37fb7824ac30099"
-
-[hooks.state."/home/tom/.codex/hooks.json:post_tool_use:1:0"]
-trusted_hash = "sha256:6bf0ac29dfb4cef8db3ddf027d74d309664e08286f00f44bd5aa4aad23fcd5bc"
-
-[hooks.state."/home/tom/.codex/hooks.json:post_tool_use:2:0"]
-trusted_hash = "sha256:d6984060912c12023a76ad6cd7cc35868cbe6b7c2889440a122660f4469585ed"
-
-[hooks.state."/home/tom/.codex/hooks.json:post_tool_use:3:0"]
-trusted_hash = "sha256:69827351c14082615844f2c7aa190350f921574c036a8997aeca3996b98a21db"
-
-[hooks.state."/home/tom/.codex/hooks.json:session_start:0:0"]
-trusted_hash = "sha256:5f14ba982e169ab020bfef61d233f45c5c9e764b082c45cd8e6b22901bb4cb7b"
-
-[hooks.state."/home/tom/.codex/hooks.json:session_start:0:1"]
-trusted_hash = "sha256:55e42d60a57a8eb8ae43fecc10f9cca1549e402d116e776eb09390a094c0dbe6"
-
-[hooks.state."/home/tom/.codex/hooks.json:subagent_start:0:0"]
-trusted_hash = "sha256:32e1ac375eff82bf035169460755bca4b4b2f77025e1169f52f354d040f2a5d9"
-
-[hooks.state."/home/tom/.codex/hooks.json:stop:0:0"]
-trusted_hash = "sha256:4d6d37141f7e42a6ccfebd7d5aab35228902278b9284b1643fd015c56a639bc6"
-
 [notice]
 hide_full_access_warning = true

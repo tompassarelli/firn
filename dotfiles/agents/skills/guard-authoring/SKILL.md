@@ -37,7 +37,7 @@ and you edit in a `worktrees/<slug>` lane, never in `main/` and never in a
 |---|---|---|
 | the script | `north:profiles/tom/hooks/<name>.sh` | live immediately |
 | Claude Code wiring | `nixos-config:dotfiles/agents/hooks.d/<name>.json` + `HOOKS` in `nixos-config:dotfiles/bin/agents` | `agents apply` |
-| Codex wiring | `nixos-config:modules/codex/requirements.toml`, `modules/codex/default.bnix`, `dotfiles/codex/hooks.json`, `north:sdk/src/providers/codex-managed-hooks.ts` | rebuild + enforcement promote |
+| Codex wiring | `nixos-config:modules/codex/requirements.toml`, `modules/codex/default.bnix`, `north:sdk/src/providers/codex-managed-hooks.ts` | rebuild + enforcement promote |
 | North Bridge wiring | `EDIT_GUARDS` / `BASH_GUARDS` / `WORKER_BASH_GUARDS` in `north:sdk/src/harness.ts` | live from the checkout |
 
 `~/.agents/hooks` is a home-manager out-of-store symlink to
@@ -209,7 +209,7 @@ the user's call.
 
 Codex trusts a hook by the provenance of `/etc/codex/requirements.toml`
 (`allow_managed_hooks_only = true`, `managed_hook_failure_mode = "block"`),
-never by where the file sits. Four edits:
+never by where the file sits. Three edits:
 
 1. `nixos-config:modules/codex/requirements.toml` — the matcher block. Matchers
    here are ANCHORED REGEXES, not Claude's alternation:
@@ -220,15 +220,13 @@ never by where the file sits. Four edits:
    "north/profiles/tom/hooks/<name>.sh"` tmpfiles rule, which is how the script
    appears at `/etc/codex/hooks/<name>.sh` out of the promoted enforcement
    snapshot rather than out of the store.
-3. `nixos-config:dotfiles/codex/hooks.json` — the user-level `~/.codex/hooks.json`,
-   kept in step so the two do not disagree.
-4. `north:sdk/src/providers/codex-managed-hooks.ts` — add the entry to
+3. `north:sdk/src/providers/codex-managed-hooks.ts` — add the entry to
    `PROMOTED_HOOK_SOURCES` and to `expectedManagedCodexHooks()`. North verifies
    the live install against this; drift makes the spawn doctor fail, naming
    both identities.
 
-The manifest rides a **rebuild** (hand the user the command — agents do not
-fire rebuilds); the script itself rides an **enforcement promote**. They land
+The requirements and install declarations ride a **rebuild**; the script itself
+rides an **enforcement promote**. They land
 separately, so expect a window where one is ahead of the other, and make sure
 the script's absence fails open rather than blocking.
 

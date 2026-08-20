@@ -1,33 +1,6 @@
 { config, lib, pkgs, flakeRoot, ... }:
 
-let
-  username = config.myConfig.modules.users.username;
-  homeDir = config.myConfig.modules.users.homeDir;
-  northPkg = "${homeDir}/code/north/main";
-  codexExpectedIdentity = {
-    version = "0.146.0";
-    owner = "openai";
-    repo = "codex";
-    rev = "refs/tags/rust-v0.146.0";
-    tag = "rust-v0.146.0";
-    srcHash = "sha256-/kTIOX/klxm1nq2bJsBqS8f1jZZp2ilaTeULQFPJgDk=";
-    cargoHash = "sha256-N9jbH/cgAyu2QxneSnpkdaF0MgV3ZtDmN9q6rr9u+hE=";
-  };
-  codexUpstreamPkg = pkgs.master.codex;
-  codexObservedIdentity = {
-    version = codexUpstreamPkg.version or null;
-    owner = codexUpstreamPkg.src.owner or null;
-    repo = codexUpstreamPkg.src.repo or null;
-    rev = codexUpstreamPkg.src.rev or null;
-    tag = codexUpstreamPkg.src.tag or null;
-    srcHash = codexUpstreamPkg.src.outputHash or null;
-    cargoHash = codexUpstreamPkg.cargoHash or null;
-  };
-  codexPkg = lib.throwIfNot (codexObservedIdentity == codexExpectedIdentity) "codex: managed runtime identity drifted; expected ${builtins.toJSON codexExpectedIdentity}; observed ${builtins.toJSON codexObservedIdentity}" codexUpstreamPkg;
-  enforcement = "/var/lib/north-enforcement/active/current";
-  promoted = relative: source: "L+ /etc/codex/hooks/${relative} - - - - ${enforcement}/${source}";
-in
-{
+((username: ((homeDir: ((northPkg: ((codexExpectedIdentity: ((codexUpstreamPkg: ((codexObservedIdentity: ((codexPkg: ((enforcement: ((promoted: {
   options.myConfig.modules.codex.enable = lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)";
   config = lib.mkIf config.myConfig.modules.codex.enable {
     environment.systemPackages = [ codexPkg ];
@@ -36,7 +9,6 @@ in
       "codex/runtime" = {
         source = codexPkg;
       };
-      "codex/hooks/firn-guard.sh".source = "${flakeRoot}/modules/north-profile/firn/hooks/firn-guard.sh";
       "codex/hooks/north-on-spawn-codex" = {
         source = "${flakeRoot}/dotfiles/codex/hooks/north-on-spawn-codex";
       };
@@ -105,9 +77,24 @@ in
       home.file = {
         ".codex/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.config/agents/AGENTS.md";
         ".codex/config.toml".source = "${flakeRoot}/dotfiles/codex/config.toml";
-        ".codex/hooks.json".source = "${flakeRoot}/dotfiles/codex/hooks.json";
         ".codex/prompts".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/claude/commands";
       };
     });
   };
-}
+}) (relative: source: "L+ /etc/codex/hooks/${relative} - - - - ${enforcement}/${source}"))) "/var/lib/north-enforcement/active/current")) (lib.throwIfNot (codexObservedIdentity == codexExpectedIdentity) "codex: managed runtime identity drifted; expected ${builtins.toJSON codexExpectedIdentity}; observed ${builtins.toJSON codexObservedIdentity}" codexUpstreamPkg))) {
+    version = codexUpstreamPkg.version or null;
+    owner = codexUpstreamPkg.src.owner or null;
+    repo = codexUpstreamPkg.src.repo or null;
+    rev = codexUpstreamPkg.src.rev or null;
+    tag = codexUpstreamPkg.src.tag or null;
+    srcHash = codexUpstreamPkg.src.outputHash or null;
+    cargoHash = codexUpstreamPkg.cargoHash or null;
+  })) pkgs.master.codex)) {
+    version = "0.146.0";
+    owner = "openai";
+    repo = "codex";
+    rev = "refs/tags/rust-v0.146.0";
+    tag = "rust-v0.146.0";
+    srcHash = "sha256-/kTIOX/klxm1nq2bJsBqS8f1jZZp2ilaTeULQFPJgDk=";
+    cargoHash = "sha256-N9jbH/cgAyu2QxneSnpkdaF0MgV3ZtDmN9q6rr9u+hE=";
+  })) "${homeDir}/code/north/main")) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)
