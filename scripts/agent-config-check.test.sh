@@ -257,15 +257,17 @@ run_switchboard_activity_fixture() {
 run_policy_contract_fixture() {
   local base="$scratch/policy-contract-base"
   local preamble='Provider-neutral bootstrap.'
-  local route='- Repository writes → `repo-safety`.'
+  local route='- Repository edits, lanes, pins, commits, landing, or pushes → `repo-safety`.'
+  local destination='Repository writes belong in a lane.'
   local credential='Never expose credentials.'
   local repo_claim='Use repository modules.'
-  local preamble_digest route_digest credential_digest repo_digest
+  local preamble_digest route_digest destination_digest credential_digest repo_digest
 
   "$REPO/scripts/agent-config-check.sh" --policy-only >/dev/null
 
   preamble_digest="$(printf %s "$preamble" | sha256sum | awk '{print $1}')"
   route_digest="$(printf %s "$route" | sha256sum | awk '{print $1}')"
+  destination_digest="$(printf %s "$destination" | sha256sum | awk '{print $1}')"
   credential_digest="$(printf %s "$credential" | sha256sum | awk '{print $1}')"
   repo_digest="$(printf %s "$repo_claim" | sha256sum | awk '{print $1}')"
   mkdir -p "$base/policy" "$base/fragments" "$base/north-profile/hooks" \
@@ -277,7 +279,7 @@ run_policy_contract_fixture() {
   printf '# Repository\n\n## Architecture\n\n%s\n' "$repo_claim" \
     >"$base/policy/REPO-AGENTS.md"
   printf '%s\n' '---' 'name: repo-safety' \
-    'description: Repository write safety.' '---' '' '# Repository safety' \
+    'description: Repository write safety.' '---' '' '# Repository safety' '' "$destination" \
     >"$base/skill-source/repo-safety/SKILL.md"
   cat >"$base/switchboard" <<'SH'
 HOOKS=(worktree-guard)
@@ -318,14 +320,17 @@ const WORKER_BASH_GUARDS = resolveManagedGuardChain(["launch-critical-worktree-g
 TS
   cat >"$base/manifest.toml" <<TOML
 version = 1
+approved_route = [
+  { key = "repository.write-route", owner = "skill:repo-safety", text = "$route", destination_section = "preamble", destination_digest = "$destination_digest" },
+]
 claim = [
   { key = "bootstrap.discovery", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "preamble", digest = "$preamble_digest" },
-  { key = "repository.write-route", owner = "skill:repo-safety", role = "route", scope = "machine", surface = "bootstrap", section = "Routes", digest = "$route_digest" },
+  { key = "repository.write-route", owner = "skill:repo-safety", role = "route", scope = "machine", surface = "bootstrap", section = "Routes", digest = "$route_digest", destination_section = "preamble", destination_digest = "$destination_digest" },
   { key = "credentials.boundary", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Credentials", digest = "$credential_digest" },
   { key = "repo.example.architecture", owner = "repo:example", role = "owner", scope = "repo:example", surface = "repo", section = "Architecture", digest = "$repo_digest" },
 ]
 guard = [
-  { key = "guard.worktree", switchboard = "worktree-guard", fragment = "worktree-guard.json", command = "launch-critical-worktree-guard.sh", claude = ["PreToolUse:Edit|Write|MultiEdit", "PreToolUse:Bash"], codex = ["PreToolUse:^(Edit|Write|MultiEdit|apply_patch)$", "PreToolUse:^Bash$"], north_registry = "launch-critical-worktree-guard", north_path = "launch-critical-worktree-guard.sh", north_events = "PreToolUse:Edit|Write|MultiEdit,PreToolUse:Bash", north_chains = ["EDIT_GUARDS", "BASH_GUARDS", "WORKER_BASH_GUARDS"] },
+  { key = "guard.worktree", switchboard = "worktree-guard", fragment = "worktree-guard.json", command = "launch-critical-worktree-guard.sh", claude_command = "/home/tom/.agents/hooks/launch-critical-worktree-guard.sh", codex_command = "/etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh", claude = ["PreToolUse:Edit|Write|MultiEdit", "PreToolUse:Bash"], codex = ["PreToolUse:^(Edit|Write|MultiEdit|apply_patch)$", "PreToolUse:^Bash$"], north_registry = "launch-critical-worktree-guard", north_path = "launch-critical-worktree-guard.sh", north_events = "PreToolUse:Edit|Write|MultiEdit,PreToolUse:Bash", north_chains = ["EDIT_GUARDS", "BASH_GUARDS", "WORKER_BASH_GUARDS"] },
 ]
 TOML
   printf '%s\n' 'skill repo-safety on' >"$base/activity.conf"
@@ -383,13 +388,19 @@ TOML
     sed -i 's/owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Credentials"/owner = "skill:repo-safety", role = "owner", scope = "machine", surface = "bootstrap", section = "Credentials"/' "$1/manifest.toml"
   }
   mutate_procedural_route() {
-    local old='- Repository writes → `repo-safety`.'
+    local old='- Repository edits, lanes, pins, commits, landing, or pushes → `repo-safety`.'
     local new='- Repository writes; create a lane and stage paths → `repo-safety`.'
     local old_digest new_digest
     old_digest="$(printf %s "$old" | sha256sum | awk '{print $1}')"
     new_digest="$(printf %s "$new" | sha256sum | awk '{print $1}')"
     sed -i "s|$old_digest|$new_digest|" "$1/manifest.toml"
-    sed -i 's/Repository writes →/Repository writes; create a lane and stage paths →/' "$1/policy/AGENTS.md"
+    sed -i 's/Repository edits, lanes, pins, commits, landing, or pushes →/Repository writes; create a lane and stage paths →/' "$1/policy/AGENTS.md"
+  }
+  mutate_wrong_destination() {
+    sed -i 's/destination_digest = "[0-9a-f]\{64\}"/destination_digest = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"/' "$1/manifest.toml"
+  }
+  mutate_missing_destination() {
+    sed -i 's/, destination_section = "preamble", destination_digest = "[0-9a-f]\{64\}"//' "$1/manifest.toml"
   }
   mutate_unreadable_skill() { rm "$1/skill-source/repo-safety/SKILL.md"; }
   mutate_projection() { printf 'drift\n' >>"$1/projections/codex"; }
@@ -397,6 +408,13 @@ TOML
   mutate_hook() {
     sed -i 's/const WORKER_BASH_GUARDS.*/const WORKER_BASH_GUARDS = resolveManagedGuardChain([]);/' "$1/harness.ts"
   }
+  mutate_claude_hook_path() {
+    sed -i 's#/home/tom/.agents/hooks/launch-critical-worktree-guard.sh#/tmp/launch-critical-worktree-guard.sh#' "$1/fragments/worktree-guard.json"
+  }
+  mutate_codex_hook_path() {
+    sed -i 's#/etc/codex/hooks/launch-critical-worktree-guard.sh#/tmp/launch-critical-worktree-guard.sh#' "$1/requirements.toml"
+  }
+  mutate_activity_state() { sed -i 's/ on$/ maybe/' "$1/activity.conf"; }
   mutate_repo_scope() {
     sed -i 's/scope = "repo:example", surface = "repo"/scope = "machine", surface = "repo"/' "$1/manifest.toml"
   }
@@ -405,11 +423,16 @@ TOML
   expect_policy_reject duplicate-owner 'multiple owners for policy key' mutate_duplicate_owner
   expect_policy_reject unmapped 'unmapped normative block' mutate_unmapped
   expect_policy_reject skill-procedure 'skill-owned procedure remains in bootstrap' mutate_skill_procedure
-  expect_policy_reject procedural-route 'route contains procedural text' mutate_procedural_route
+  expect_policy_reject procedural-route 'route differs from the closed approved-route catalog' mutate_procedural_route
+  expect_policy_reject wrong-destination 'destination skill block is absent' mutate_wrong_destination
+  expect_policy_reject missing-destination 'destination skill section or digest is invalid' mutate_missing_destination
   expect_policy_reject unreadable-skill 'active skill source is unreadable' mutate_unreadable_skill
   expect_policy_reject projection-drift 'projection digest mismatch' mutate_projection
   expect_policy_reject farm-drift 'Claude skill farm is missing active skill' mutate_farm
   expect_policy_reject hook-drift 'North worker guard reachability drift' mutate_hook
+  expect_policy_reject claude-hook-path 'Claude guard identity or reachability drift' mutate_claude_hook_path
+  expect_policy_reject codex-hook-path 'Codex guard identity or reachability drift' mutate_codex_hook_path
+  expect_policy_reject malformed-activity 'active skill projection has invalid state' mutate_activity_state
   expect_policy_reject repo-global 'owner role has invalid repository authority' mutate_repo_scope
 }
 
@@ -436,7 +459,7 @@ fi
 
 if [ "${1:-}" = '--policy-contract-only' ]; then
   run_policy_contract_fixture
-  printf 'ok: explicit policy ownership rejects all nine drift classes\n'
+  printf 'ok: explicit policy ownership rejects all fifteen drift classes\n'
   exit 0
 fi
 

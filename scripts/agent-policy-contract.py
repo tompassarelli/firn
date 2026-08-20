@@ -132,22 +132,25 @@ def event_bindings(fragment: Path) -> tuple[list[str], list[str]]:
     commands: list[str] = []
     for entry in data.get("entries", []):
         events.append(f"{entry.get('event', '')}:{entry.get('matcher', '')}")
-        commands.append(command_identity((entry.get("hook") or {}).get("command", "")))
+        commands.append((entry.get("hook") or {}).get("command", ""))
     return events, commands
 
 
-def codex_bindings(path: Path, identity: str) -> list[str]:
+def codex_bindings(path: Path, identity: str) -> tuple[list[str], list[str]]:
     data = tomllib.loads(path.read_text())
-    result: list[str] = []
+    events: list[str] = []
+    commands: list[str] = []
     for event, groups in (data.get("hooks") or {}).items():
         if event == "managed_dir" or not isinstance(groups, list):
             continue
         for group in groups:
             matcher = group.get("matcher", "")
             for hook in group.get("hooks", []):
-                if command_identity(hook.get("command", "")) == identity:
-                    result.append(f"{event}:{matcher}")
-    return result
+                command = hook.get("command", "")
+                if command_identity(command) == identity:
+                    events.append(f"{event}:{matcher}")
+                    commands.append(command)
+    return events, commands
 
 
 def registry_rows(path: Path) -> dict[str, dict[str, str]]:
@@ -180,6 +183,20 @@ def check_claims(contract: Contract, manifest: dict, surfaces: dict[str, Path]) 
     seen_keys: set[str] = set()
     mapped: dict[tuple[str, str], dict] = {}
     machine_digests: set[str] = set()
+    approved_routes: dict[str, dict] = {}
+
+    for route in manifest.get("approved_route", []):
+        key = route.get("key", "")
+        owner = route.get("owner", "")
+        text = route.get("text", "")
+        slug = owner.split(":", 1)[1] if owner.startswith("skill:") else ""
+        shape = re.fullmatch(r"- .{3,180} → `([a-z0-9-]+)`\.", text)
+        if not KEY.fullmatch(key) or key in approved_routes:
+            contract.reject(f"invalid or duplicate approved route key: {key!r}")
+        elif not shape or shape.group(1) != slug:
+            contract.reject(f"{key}: approved route has invalid owner or exact text")
+        else:
+            approved_routes[key] = route
 
     for claim in claims:
         key = claim.get("key", "")
@@ -201,6 +218,9 @@ def check_claims(contract: Contract, manifest: dict, surfaces: dict[str, Path]) 
         elif role == "route":
             if not owner.startswith("skill:") or scope != "machine" or surface != "bootstrap":
                 contract.reject(f"{key}: route role must route machine policy to one skill")
+            approved = approved_routes.get(key)
+            if not approved or approved.get("owner") != owner:
+                contract.reject(f"{key}: route is absent from the closed approved-route catalog")
         elif role == "owner":
             if owner.startswith("skill:"):
                 if surface == "bootstrap" or block_digest:
@@ -245,21 +265,58 @@ def check_claims(contract: Contract, manifest: dict, surfaces: dict[str, Path]) 
             if surface == "repo" and block_digest in machine_digests:
                 contract.reject(f"repo AGENTS.md duplicates machine-global claim {claim['key']}")
             if claim.get("role") == "route":
-                slug = claim["owner"].split(":", 1)[1]
-                route = re.fullmatch(r"- (.{3,140}) → `([a-z0-9-]+)`\.", text)
-                trigger = route.group(1) if route else ""
-                if (
-                    not route
-                    or route.group(2) != slug
-                    or len(trigger.split()) > 14
-                    or ";" in trigger
-                    or ". " in trigger
-                    or "→" in trigger
-                ):
-                    contract.reject(f"{claim['key']}: route contains procedural text or names the wrong skill")
+                approved = approved_routes.get(claim["key"])
+                if not approved or text != approved.get("text"):
+                    contract.reject(f"{claim['key']}: route differs from the closed approved-route catalog")
         for (mapped_surface, block_digest), claim in mapped.items():
             if mapped_surface == surface and block_digest not in observed:
                 contract.reject(f"{claim['key']}: mapped {surface} block is absent")
+
+
+def check_skill_evidence(contract: Contract, manifest: dict, switchboard: Path) -> None:
+    try:
+        text = switchboard.read_text()
+        inventory = set(parse_shell_array(text, "SKILLS"))
+        sources = parse_skill_sources(text, Path.home())
+    except (OSError, ValueError) as exc:
+        contract.reject(f"switchboard skill inventory is unreadable: {exc}")
+        return
+
+    evidence = [
+        entry
+        for entry in manifest.get("claim", [])
+        if entry.get("owner", "").startswith("skill:")
+    ] + list(manifest.get("approved_route", []))
+    for entry in evidence:
+        key = entry.get("key", "")
+        owner = entry.get("owner", "").split(":", 1)[1]
+        section = entry.get("destination_section")
+        block_digest = entry.get("destination_digest")
+        if owner not in inventory or owner not in sources:
+            contract.reject(f"{key}: destination skill is not registered: {owner}")
+            continue
+        if not isinstance(section, str) or not isinstance(block_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", block_digest):
+            contract.reject(f"{key}: destination skill section or digest is invalid")
+            continue
+        skill_file = sources[owner] / "SKILL.md"
+        try:
+            blocks = markdown_blocks(skill_file)
+        except OSError as exc:
+            contract.reject(f"{key}: destination skill is unreadable: {owner}: {exc}")
+            continue
+        if not any(observed_section == section and observed_digest == block_digest for observed_section, observed_digest, _ in blocks):
+            contract.reject(f"{key}: destination skill block is absent: {owner} [{section}]")
+
+        if entry in manifest.get("claim", []) and entry.get("role") == "route":
+            approved = next(
+                (route for route in manifest.get("approved_route", []) if route.get("key") == key),
+                None,
+            )
+            if approved and (
+                approved.get("destination_section") != section
+                or approved.get("destination_digest") != block_digest
+            ):
+                contract.reject(f"{key}: route destination differs from the approved catalog")
 
 
 def check_skills(
@@ -313,6 +370,8 @@ def check_skills(
             seen.add(name)
             if name not in inventory:
                 contract.reject(f"active skill is stale or absent from inventory: {name}")
+            if state not in {"on", "off"}:
+                contract.reject(f"active skill projection has invalid state for {name}: {state}")
             if state == "on":
                 active.add(name)
     for name in sorted(active | owners):
@@ -414,19 +473,23 @@ def check_guards(
             contract.reject(f"{key}: switchboard hook identity is absent: {switchboard_id}")
         fragment = fragments / guard.get("fragment", "")
         identity = guard.get("command", "")
+        claude_command = guard.get("claude_command", "")
+        codex_command = guard.get("codex_command", "")
         try:
             claude_events, commands = event_bindings(fragment)
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             contract.reject(f"{key}: Claude fragment is unreadable: {exc}")
             continue
-        if sorted(claude_events) != sorted(guard.get("claude", [])) or set(commands) != {identity}:
+        if sorted(claude_events) != sorted(guard.get("claude", [])) or set(commands) != {claude_command}:
             contract.reject(f"{key}: Claude guard identity or reachability drift")
         try:
-            actual_codex = codex_bindings(requirements, identity)
+            actual_codex, codex_commands = codex_bindings(requirements, identity)
         except (OSError, tomllib.TOMLDecodeError) as exc:
             contract.reject(f"{key}: Codex guard table is unreadable: {exc}")
             actual_codex = []
-        if sorted(actual_codex) != sorted(guard.get("codex", [])):
+        if sorted(actual_codex) != sorted(guard.get("codex", [])) or (
+            actual_codex and set(codex_commands) != {codex_command}
+        ):
             contract.reject(f"{key}: Codex guard identity or reachability drift")
         registry_id = guard.get("north_registry", "")
         mapped_registry.add(registry_id)
@@ -475,6 +538,7 @@ def main() -> int:
 
     contract = Contract()
     check_claims(contract, manifest, {"bootstrap": bootstrap, "repo": repo_agents})
+    check_skill_evidence(contract, manifest, switchboard)
     check_guards(
         contract,
         manifest,
