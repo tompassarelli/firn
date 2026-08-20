@@ -52,23 +52,20 @@
 
 (defn starts-with?
   [text String
-   prefix String]
-  Bool
+   prefix String] Bool
   (and (>= (count text) (count prefix))
        (= (subs text 0 (count prefix)) prefix)))
 
 (defn ends-with?
   [text String
-   suffix String]
-  Bool
+   suffix String] Bool
   (and (>= (count text) (count suffix))
        (= (subs text (- (count text) (count suffix)) (count text)) suffix)))
 
 (defn text-index-from
   [text String
    needle String
-   start Int]
-  Int
+   start Int] Int
   (cond
     (= needle "") start
     (> (+ start (count needle)) (count text)) -1
@@ -77,15 +74,13 @@
 
 (defn text-index
   [text String
-   needle String]
-  Int
+   needle String] Int
   (text-index-from text needle 0))
 
 (defn append-unique
   [values (Vec String)
-   candidate String]
-  (Vec String)
-  (loop [(index Int) 0]
+   candidate String] (Vec String)
+  (loop [index Int 0]
     (if (>= index (count values))
       (conj values candidate)
       (if (= (nth values index) candidate)
@@ -93,8 +88,8 @@
         (recur (+ index 1))))))
 
 (defn layout-main [checkout String] (U String Nil)
-  (let [(worktree-index Int) (text-index checkout "/worktrees/")
-        (pin-index Int) (text-index checkout "/pins/")]
+  (let [worktree-index Int (text-index checkout "/worktrees/")
+        pin-index Int (text-index checkout "/pins/")]
     (cond
       (>= worktree-index 0) (str (subs checkout 0 worktree-index) "/main")
       (>= pin-index 0) (str (subs checkout 0 pin-index) "/main")
@@ -107,23 +102,19 @@
 
 (defn container-main-candidates
   [checkout String
-   common-directory (U String Nil)]
-  (Vec String)
-  (let [(layout (U String Nil)) (layout-main checkout)
-        (with-layout (Vec String))
-          (if (some? layout) [layout] [])
-        (from-common (U String Nil))
-          (if (some? common-directory)
+   common-directory (U String Nil)] (Vec String)
+  (let [layout (U String Nil) (layout-main checkout)
+        with-layout (Vec String) (if (some? layout) [layout] [])
+        from-common (U String Nil) (if (some? common-directory)
             (common-main common-directory)
             nil)
-        (with-common (Vec String))
-          (if (some? from-common)
+        with-common (Vec String) (if (some? from-common)
             (append-unique with-layout from-common)
             with-layout)]
     (append-unique with-common checkout)))
 
 (defn trim-line-ending [text String] String
-  (loop [(end Int) (count text)]
+  (loop [end Int (count text)]
     (if (and (> end 0)
              (or (= (subs text (- end 1) end) "\n")
                  (= (subs text (- end 1) end) "\r")))
@@ -131,63 +122,58 @@
       (subs text 0 end))))
 
 (defn short-host [host String] String
-  (let [(dot Int) (text-index host ".")]
+  (let [dot Int (text-index host ".")]
     (if (< dot 0) host (subs host 0 dot))))
 
 (defn snapshot-uri
   [repository String
    revision String
-   branch (U String Nil)]
-  String
+   branch (U String Nil)] String
   (str "git+file://" repository "?rev=" revision
     (if (some? branch) (str "&ref=" branch) "")))
 
 (defn target-attribute
   [platform String
-   host String]
-  String
+   host String] String
   (if (= platform "darwin")
     (str "darwinConfigurations." host ".system")
     (str "nixosConfigurations." host
       ".config.system.build.toplevel")))
 
 (defn warm-spec [snapshot Snapshot] WarmSpec
-  (let [(uri String)
-          (snapshot-uri
+  (let [uri String (snapshot-uri
             (snapshot-repository snapshot)
             (snapshot-revision snapshot)
             (snapshot-branch snapshot))
-        (attribute String)
-          (target-attribute
+        attribute String (target-attribute
             (snapshot-platform snapshot)
             (snapshot-host snapshot))]
     (->WarmSpec uri attribute (str uri "#" attribute))))
 
 (defn split-delimited
   [text String
-   delimiter String]
-  (Vec String)
-  (loop [(start Int) 0
-         (parts (Vec String)) []]
+   delimiter String] (Vec String)
+  (loop [start Int 0
+         parts (Vec String) []]
     (if (>= start (count text))
       parts
-      (let [(end Int) (text-index-from text delimiter start)]
+      (let [end Int (text-index-from text delimiter start)]
         (if (< end 0)
           (conj parts (subs text start (count text)))
           (recur (+ end (count delimiter))
             (conj parts (subs text start end))))))))
 
 (defn parse-positive-int [text String] (U Int Nil)
-  (let [(parsed (U Int Nil)) (parse-long text)]
+  (let [parsed (U Int Nil) (parse-long text)]
     (if (and (some? parsed) (> parsed 0)) parsed nil)))
 
 (defn parse-lease-owner [text String] LeaseOwnerResult
-  (let [(lines (Vec String)) (split-delimited text "\n")]
+  (let [lines (Vec String) (split-delimited text "\n")]
     (if (not= (count lines) 3)
       (->LeaseOwnerInvalid "expected worker pid, child pid, and key")
-      (let [(worker (U Int Nil)) (parse-positive-int (nth lines 0))
-            (child (U Int Nil)) (parse-positive-int (nth lines 1))
-            (key String) (nth lines 2)]
+      (let [worker (U Int Nil) (parse-positive-int (nth lines 0))
+            child (U Int Nil) (parse-positive-int (nth lines 1))
+            key String (nth lines 2)]
         (if (and (some? worker) (some? child) (> (count key) 0))
           (->LeaseOwnerParsed (->LeaseOwner worker child key))
           (->LeaseOwnerInvalid "invalid worker pid, child pid, or key"))))))
@@ -205,11 +191,10 @@
 
 (defn argv-equal?
   [left (Vec String)
-   right (Vec String)]
-  Bool
+   right (Vec String)] Bool
   (if (not= (count left) (count right))
     false
-    (loop [(index Int) 0]
+    (loop [index Int 0]
       (if (>= index (count left))
         true
         (if (= (nth left index) (nth right index))
@@ -219,8 +204,7 @@
 (defn worker-argv
   [executable String
    repository String
-   key String]
-  (Vec String)
+   key String] (Vec String)
   [executable "--worker" executable repository key])
 
 (defn nix-build-argv [key String] (Vec String)
@@ -233,16 +217,14 @@
 (defn detached-worker-argv
   [executable String
    repository String
-   key String]
-  (Vec String)
+   key String] (Vec String)
   ["setsid" "-f" "nice" "-n" "19" "ionice" "-c" "3"
    executable "--worker" executable repository key])
 
 (defn identity-matches?
   [identity ProcessIdentity
    pid Int
-   expected (Vec String)]
-  Bool
+   expected (Vec String)] Bool
   (and (= (processidentity-pid identity) pid)
        (argv-equal? (processidentity-argv identity) expected)))
 
@@ -253,17 +235,14 @@
    repository String
    owner LeaseOwner
    worker ProcessIdentity
-   child ProcessIdentity]
-  SupersedePlan
-  (let [(worker-pid Int) (leaseowner-worker-pid owner)
-        (child-pid Int) (leaseowner-child-pid owner)
-        (worker-valid Bool)
-          (and (not= worker-pid current-pid)
+   child ProcessIdentity] SupersedePlan
+  (let [worker-pid Int (leaseowner-worker-pid owner)
+        child-pid Int (leaseowner-child-pid owner)
+        worker-valid Bool (and (not= worker-pid current-pid)
                (identity-matches? worker worker-pid
                  (worker-argv executable repository
                    (leaseowner-key owner))))
-        (child-valid Bool)
-          (identity-matches? child child-pid
+        child-valid Bool (identity-matches? child child-pid
             (nix-build-argv (leaseowner-key owner)))]
     (if (not (and worker-valid child-valid))
       (->LeaseContended (leaseowner-key owner))
@@ -276,20 +255,18 @@
 
 (defn stamp-current?
   [stamp String
-   key String]
-  Bool
+   key String] Bool
   (= (trim-line-ending stamp) key))
 
 (defn stamp-plan
   [key String
-   exit-status Int]
-  StampPlan
+   exit-status Int] StampPlan
   (if (= exit-status 0)
     (->StampWrite key)
     (->StampUnchanged exit-status)))
 
 (defn parse-ref-update [line String] RefUpdateResult
-  (let [(parts (Vec String)) (split-delimited line " ")]
+  (let [parts (Vec String) (split-delimited line " ")]
     (if (= (count parts) 3)
       (->RefUpdateParsed
         (->RefUpdate (nth parts 0) (nth parts 1) (nth parts 2)))
@@ -297,7 +274,7 @@
 
 (defn all-zero? [text String] Bool
   (and (> (count text) 0)
-       (loop [(index Int) 0]
+       (loop [index Int 0]
          (if (>= index (count text))
            true
            (if (= (subs text index (+ index 1)) "0")
@@ -311,11 +288,10 @@
 
 (defn transaction-fires?
   [state String
-   lines (Vec String)]
-  Bool
+   lines (Vec String)] Bool
   (if (not= state "committed")
     false
-    (loop [(index Int) 0]
+    (loop [index Int 0]
       (if (>= index (count lines))
         false
         (match (parse-ref-update (nth lines index))
@@ -330,22 +306,19 @@
    lines (Vec String)
    executable String
    repository String
-   key String]
-  HookPlan
+   key String] HookPlan
   (if (transaction-fires? state lines)
     (->HookLaunch (detached-worker-argv executable repository key))
     (->HookIgnored state)))
 
 (defn executable-leaf?
   [value String
-   leaf String]
-  Bool
+   leaf String] Bool
   (or (= value leaf) (ends-with? value (str "/" leaf))))
 
 (defn firn-rebuild-at?
   [argv (Vec String)
-   index Int]
-  Bool
+   index Int] Bool
   (and (< index (count argv))
        (executable-leaf? (nth argv index) "firn")
        (or
@@ -356,7 +329,7 @@
               (= (nth argv (+ index 2)) "rebuild")))))
 
 (defn rebuild-argv? [argv (Vec String)] Bool
-  (loop [(index Int) 0]
+  (loop [index Int 0]
     (if (>= index (count argv))
       false
       (if (firn-rebuild-at? argv index)
@@ -365,12 +338,11 @@
 
 (defn rebuild-running?
   [processes (Vec ProcessIdentity)
-   current-pid Int]
-  Bool
-  (loop [(index Int) 0]
+   current-pid Int] Bool
+  (loop [index Int 0]
     (if (>= index (count processes))
       false
-      (let [(process ProcessIdentity) (nth processes index)]
+      (let [process ProcessIdentity (nth processes index)]
         (if (and (not= (processidentity-pid process) current-pid)
                  (rebuild-argv? (processidentity-argv process)))
           true

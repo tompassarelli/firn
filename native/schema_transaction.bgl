@@ -172,7 +172,7 @@
       (if (and (>= object-start 0) (< object-start (count events)))
         (json-event-offset (nth events object-start))
         0))
-    (let [(end Int) (json-value-end events object-start)]
+    (let [end Int (json-value-end events object-start)]
       (if (< end 0)
         (->JsonFieldRejected "unterminated JSON object"
           (json-event-offset (nth events object-start)))
@@ -184,8 +184,8 @@
               (->JsonFieldFound found))
             (match (nth events index)
               [(JsonKey offset key)
-               (let [(value-start Int) (+ index 1)
-                     (next Int) (json-value-end events value-start)]
+               (let [value-start Int (+ index 1)
+                     next Int (json-value-end events value-start)]
                  (if (or (< next 0) (> next (- end 1)))
                    (->JsonFieldRejected "invalid JSON object value" offset)
                    (recur next (if (= key wanted) value-start found))))]
@@ -208,8 +208,7 @@
 
 (defn member-index
   [members (Vec JsonMember)
-   key String]
-  Int
+   key String] Int
   (loop [index Int 0]
     (if (>= index (count members))
       -1
@@ -220,8 +219,7 @@
 (defn replace-member
   [members (Vec JsonMember)
    index Int
-   member JsonMember]
-  (Vec JsonMember)
+   member JsonMember] (Vec JsonMember)
   (loop [cursor Int 0
          result (Vec JsonMember) []]
     (if (>= cursor (count members))
@@ -232,19 +230,17 @@
 (defn upsert-member
   [members (Vec JsonMember)
    key String
-   value String]
-  (Vec JsonMember)
-  (let [(index Int) (member-index members key)
-        (member JsonMember) (->JsonMember key value)]
+   value String] (Vec JsonMember)
+  (let [index Int (member-index members key)
+        member JsonMember (->JsonMember key value)]
     (if (< index 0)
       (conj members member)
       (replace-member members index member))))
 
 (defn member-value
   [members (Vec JsonMember)
-   key String]
-  String
-  (let [(index Int) (member-index members key)]
+   key String] String
+  (let [index Int (member-index members key)]
     (if (< index 0) "" (jsonmember-value (nth members index)))))
 
 (defn member-keys [members (Vec JsonMember)] (Vec String)
@@ -259,21 +255,21 @@
   [events (Vec json/JsonEvent)
    start Int]
   CanonicalJsonResult
-  (let [(end Int) (json-value-end events start)]
+  (let [end Int (json-value-end events start)]
     (if (< end 0)
       (->CanonicalJsonRejected "unterminated JSON object"
         (json-event-offset (nth events start)))
       (loop [index Int (+ start 1)
              members (Vec JsonMember) []]
         (if (= index (- end 1))
-          (let [(keys (Vec String)) (member-keys members)]
+          (let [keys (Vec String) (member-keys members)]
             (->CanonicalJson
               (str "{"
                 (loop [key-index Int 0
                        text String ""]
                   (if (>= key-index (count keys))
                     text
-                    (let [(key String) (nth keys key-index)]
+                    (let [key String (nth keys key-index)]
                       (recur (+ key-index 1)
                         (str text (if (= key-index 0) "" ",")
                           (json/encode-string key) ":"
@@ -281,8 +277,8 @@
                 "}")))
           (match (nth events index)
             [(JsonKey offset key)
-             (let [(value-start Int) (+ index 1)
-                   (next Int) (json-value-end events value-start)]
+             (let [value-start Int (+ index 1)
+                   next Int (json-value-end events value-start)]
                (if (or (< next 0) (> next (- end 1)))
                  (->CanonicalJsonRejected "invalid JSON object value" offset)
                  (match (canonical-json-value events value-start)
@@ -311,7 +307,7 @@
   [events (Vec json/JsonEvent)
    start Int]
   CanonicalJsonResult
-  (let [(end Int) (json-value-end events start)]
+  (let [end Int (json-value-end events start)]
     (if (< end 0)
       (->CanonicalJsonRejected "unterminated JSON array"
         (json-event-offset (nth events start)))
@@ -320,7 +316,7 @@
              first-value Bool true]
         (if (= index (- end 1))
           (->CanonicalJson (str "[" text "]"))
-          (let [(next Int) (json-value-end events index)]
+          (let [next Int (json-value-end events index)]
             (if (or (< next 0) (> next (- end 1)))
               (->CanonicalJsonRejected "invalid JSON array value"
                 (json-event-offset (nth events index)))
@@ -361,7 +357,7 @@
     [(JsonDecoded events)
      (if (empty? events)
        (->CanonicalJsonRejected "missing JSON value" 0)
-       (let [(end Int) (json-value-end events 0)]
+       (let [end Int (json-value-end events 0)]
          (if (not= end (count events))
            (->CanonicalJsonRejected "unexpected events after JSON value"
              (if (and (>= end 0) (< end (count events)))
@@ -514,7 +510,7 @@
          [(JsonFieldRejected message error-offset)
           (->NodeResolutionRejected message)])]
       [(JsonArrayStart offset)
-       (let [(end Int) (json-value-end events reference-start)]
+       (let [end Int (json-value-end events reference-start)]
          (if (or (< end 0) (= end (+ reference-start 2)))
            (->NodeResolutionRejected "invalid empty follows path")
            (loop [index Int (+ reference-start 1)
@@ -640,8 +636,7 @@
 
 (defn append-bytes
   [left (Vec Int)
-   right (Vec Int)]
-  (Vec Int)
+   right (Vec Int)] (Vec Int)
   (loop [index Int 0
          result (Vec Int) left]
     (if (>= index (count right))
@@ -650,8 +645,7 @@
 
 (defn tool-file-index
   [files (Vec ToolFile)
-   relative String]
-  Int
+   relative String] Int
   (loop [index Int 0]
     (if (>= index (count files))
       -1
@@ -668,19 +662,17 @@
         (conj paths (toolfile-relative (nth files index)))))))
 
 (defn tool-fingerprint [files (Vec ToolFile)] String
-  (let [(paths (Vec String)) (tool-file-paths files)
-        (domain (Vec Int))
-        (append-bytes (utf8-encode "firn-beagle-schema-tools-v1") [0])]
+  (let [paths (Vec String) (tool-file-paths files)
+        domain (Vec Int) (append-bytes (utf8-encode "firn-beagle-schema-tools-v1") [0])]
     (sha256-bytes
       (loop [index Int 0
              bytes (Vec Int) domain]
         (if (>= index (count paths))
           bytes
-          (let [(relative String) (nth paths index)
-                (file-index Int) (tool-file-index files relative)
-                (path-bytes (Vec Int)) (utf8-encode relative)
-                (contents-bytes (Vec Int))
-                (utf8-encode
+          (let [relative String (nth paths index)
+                file-index Int (tool-file-index files relative)
+                path-bytes (Vec Int) (utf8-encode relative)
+                contents-bytes (Vec Int) (utf8-encode
                   (toolfile-contents (nth files file-index)))]
             (recur (+ index 1)
               (append-bytes
@@ -696,17 +688,14 @@
    home-manager String
    nixpkgs String
    nix-darwin (U String Nil)
-   tool-sha String]
-  String
-  (let [(inputs String)
-        (if (nil? nix-darwin)
+   tool-sha String] String
+  (let [inputs String (if (nil? nix-darwin)
           (str "{\"home-manager\":" home-manager
             ",\"nixpkgs\":" nixpkgs "}")
           (str "{\"home-manager\":" home-manager
             ",\"nix-darwin\":" nix-darwin
             ",\"nixpkgs\":" nixpkgs "}"))
-        (payload String)
-        (str "{\"beagleToolSha256\":" (json/encode-string tool-sha)
+        payload String (str "{\"beagleToolSha256\":" (json/encode-string tool-sha)
           ",\"format\":\"firn-schema-inputs-v2\""
           ",\"inputs\":" inputs
           ",\"mode\":" (json/encode-string (mode-name mode)) "}")]
@@ -715,16 +704,15 @@
 (defn schema-input-fingerprint
   [lock-source String
    mode SchemaMode
-   tool-files (Vec ToolFile)]
-  FingerprintResult
-  (let [(events (U (Vec json/JsonEvent) Nil)) (decoded-lock lock-source)]
+   tool-files (Vec ToolFile)] FingerprintResult
+  (let [events (U (Vec json/JsonEvent) Nil) (decoded-lock lock-source)]
     (if (nil? events)
       (->FingerprintRejected "malformed flake.lock root or nodes")
-      (let [(root-nodes (U LockRoot Nil)) (root-and-nodes events)]
+      (let [root-nodes (U LockRoot Nil) (root-and-nodes events)]
         (if (nil? root-nodes)
           (->FingerprintRejected "malformed flake.lock root or nodes")
-          (let [(root-id String) (lockroot-root-id root-nodes)
-                (nodes-start Int) (lockroot-nodes-start root-nodes)]
+          (let [root-id String (lockroot-root-id root-nodes)
+                nodes-start Int (lockroot-nodes-start root-nodes)]
             (match (locked-source-json
                      events root-id nodes-start "home-manager")
               [(CanonicalJsonRejected message offset)
@@ -753,17 +741,12 @@
 
 (defn nixos-cache-assessment
   [snapshot NixosCacheSnapshot
-   current-fingerprint String]
-  CacheAssessment
-  (let [(schema (U String Nil)) (nixoscachesnapshot-schema snapshot)
-        (hm (U String Nil))
-        (nixoscachesnapshot-home-manager-schema snapshot)
-        (fingerprint (U String Nil))
-        (nixoscachesnapshot-fingerprint snapshot)
-        (cached-policy (U String Nil))
-        (nixoscachesnapshot-cached-policy snapshot)
-        (tracked-policy String)
-        (nixoscachesnapshot-tracked-policy snapshot)]
+   current-fingerprint String] CacheAssessment
+  (let [schema (U String Nil) (nixoscachesnapshot-schema snapshot)
+        hm (U String Nil) (nixoscachesnapshot-home-manager-schema snapshot)
+        fingerprint (U String Nil) (nixoscachesnapshot-fingerprint snapshot)
+        cached-policy (U String Nil) (nixoscachesnapshot-cached-policy snapshot)
+        tracked-policy String (nixoscachesnapshot-tracked-policy snapshot)]
     (cond
       (nil? schema) (->CacheStale "missing .beagle-cache/schema.json")
       (nil? hm) (->CacheStale "missing .beagle-cache/schema-hm.json")
@@ -787,11 +770,9 @@
 
 (defn darwin-cache-assessment
   [snapshot DarwinCacheSnapshot
-   current-fingerprint String]
-  CacheAssessment
-  (let [(schema (U String Nil)) (darwincachesnapshot-schema snapshot)
-        (fingerprint (U String Nil))
-        (darwincachesnapshot-fingerprint snapshot)]
+   current-fingerprint String] CacheAssessment
+  (let [schema (U String Nil) (darwincachesnapshot-schema snapshot)
+        fingerprint (U String Nil) (darwincachesnapshot-fingerprint snapshot)]
     (cond
       (nil? schema)
       (->CacheStale "missing .beagle-cache/schema-darwin.json")
@@ -806,17 +787,15 @@
 
 (defn path
   [root String
-   relative String]
-  String
+   relative String] String
   (str root "/" relative))
 
 (defn extraction-processes
   [beagle-path String
    root String
    mode SchemaMode
-   host String]
-  (Vec ProcessSpec)
-  (let [(extractor String) (path beagle-path "bin/beagle-extract-schema")]
+   host String] (Vec ProcessSpec)
+  (let [extractor String (path beagle-path "bin/beagle-extract-schema")]
     (match mode
       [(NixosSchema label)
        [(->ProcessSpec "NixOS schema"
@@ -836,14 +815,12 @@
 
 (defn starts-with?
   [text String
-   prefix String]
-  Bool
+   prefix String] Bool
   (str/starts-with? text prefix))
 
 (defn ends-with?
   [text String
-   suffix String]
-  Bool
+   suffix String] Bool
   (str/ends-with? text suffix))
 
 (defn excluded-source-path? [relative String] Bool
@@ -861,7 +838,7 @@
       (str/includes? relative "/.git/")))
 
 (defn file-name [path-value String] String
-  (let [(bytes (Vec Int)) (utf8-encode path-value)]
+  (let [bytes (Vec Int) (utf8-encode path-value)]
     (loop [index Int (- (count bytes) 1)]
       (cond
         (< index 0) path-value
@@ -882,7 +859,7 @@
          selected (Vec String) []]
     (if (>= index (count discovered))
       (sort selected)
-      (let [(relative String) (nth discovered index)]
+      (let [relative String (nth discovered index)]
         (recur (+ index 1)
           (if (implicit-bnix-input? relative)
             (conj selected relative)
@@ -893,7 +870,7 @@
          selected (Vec String) []]
     (if (>= index (count discovered))
       (sort selected)
-      (let [(relative String) (nth discovered index)]
+      (let [relative String (nth discovered index)]
         (recur (+ index 1)
           (if (implicit-nix-input? relative)
             (conj selected relative)
@@ -901,8 +878,7 @@
 
 (defn select-bnix-inputs
   [discovered (Vec String)
-   explicit (Vec String)]
-  (Vec String)
+   explicit (Vec String)] (Vec String)
   (if (empty? explicit) (filter-sorted-bnix discovered) explicit))
 
 (defn validation-needs-darwin? [inputs (Vec String)] Bool
@@ -933,10 +909,9 @@
     (and (>= (count argv) 2)
          (= "repo" (nth argv 0))
          (= "validate" (nth argv 1)))
-    (let [(tail (Vec String))
-          (loop [index Int 2
-                 result (Vec String) []]
-            (if (>= index (count argv))
+    (let [tail (Vec String) (loop [index Int 2
+                                   result (Vec String) []]
+                              (if (>= index (count argv))
               result
               (recur (+ index 1) (conj result (nth argv index)))))]
       (if (and (= (count tail) 1) (= "all" (nth tail 0)))
@@ -952,15 +927,13 @@
 (defn render-json-error
   [label String
    message String
-   offset Int]
-  String
+   offset Int] String
   (str "firn schema: " label " is not valid JSON at offset " offset
     ": " message "\n"))
 
 (defn render-process-error
   [label String
    status Int
-   stderr String]
-  String
+   stderr String] String
   (str "firn schema: " label " failed with status " status
     (if (empty? stderr) "\n" (str ":\n" stderr))))

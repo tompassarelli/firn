@@ -147,77 +147,71 @@
 
 (defn starts-with?
   [text String
-   prefix String]
-  Bool
+   prefix String] Bool
   (and (>= (count text) (count prefix))
        (= (subs text 0 (count prefix)) prefix)))
 
 (defn ends-with?
   [text String
-   suffix String]
-  Bool
+   suffix String] Bool
   (and (>= (count text) (count suffix))
        (= (subs text (- (count text) (count suffix)) (count text)) suffix)))
 
 (defn contains-at?
   [text String
    needle String
-   offset Int]
-  Bool
+   offset Int] Bool
   (and (<= (+ offset (count needle)) (count text))
        (= (subs text offset (+ offset (count needle))) needle)))
 
 (defn contains?
   [text String
-   needle String]
-  Bool
+   needle String] Bool
   (if (= (count needle) 0)
     true
-    (loop [(offset Int) 0]
+    (loop [offset Int 0]
       (cond
         (> (+ offset (count needle)) (count text)) false
         (contains-at? text needle offset) true
         :else (recur (+ offset 1))))))
 
 (defn trim-line-end [text String] String
-  (loop [(end Int) (count text)]
+  (loop [end Int (count text)]
     (if (and (> end 0)
-             (let [(character String) (subs text (- end 1) end)]
+             (let [character String (subs text (- end 1) end)]
                (or (= character "\n") (= character "\r"))))
       (recur (- end 1))
       (subs text 0 end))))
 
 (defn line-end
   [text String
-   start Int]
-  Int
-  (loop [(end Int) start]
+   start Int] Int
+  (loop [end Int start]
     (if (or (>= end (count text))
             (= (subs text end (+ end 1)) "\n"))
       end
       (recur (+ end 1)))))
 
 (defn split-lines [text String] (Vec String)
-  (loop [(start Int) 0
-         (lines (Vec String)) []]
+  (loop [start Int 0
+         lines (Vec String) []]
     (if (>= start (count text))
       lines
-      (let [(end Int) (line-end text start)
-            (next Int) (if (< end (count text)) (+ end 1) end)]
+      (let [end Int (line-end text start)
+            next Int (if (< end (count text)) (+ end 1) end)]
         (recur next (conj lines (subs text start end)))))))
 
 (defn join-lines [lines (Vec String)] String
-  (loop [(index Int) 0
-         (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (>= index (count lines))
       result
       (recur (+ index 1) (str result (nth lines index) "\n")))))
 
 (defn string-member?
   [values (Vec String)
-   candidate String]
-  Bool
-  (loop [(index Int) 0]
+   candidate String] Bool
+  (loop [index Int 0]
     (if (>= index (count values))
       false
       (if (= candidate (nth values index))
@@ -226,15 +220,14 @@
 
 (defn append-unique
   [values (Vec String)
-   candidate String]
-  (Vec String)
+   candidate String] (Vec String)
   (if (string-member? values candidate) values (conj values candidate)))
 
 (defn parse-repo-workflow-argv [argv (Vec String)] RepoWorkflowArgv
   (if (or (< (count argv) 2) (not= (nth argv 0) "repo"))
     (->InvalidRepoWorkflowArgv argv)
-    (let [(edge String) (nth argv 1)
-          (leaf-count Int) (- (count argv) 2)]
+    (let [edge String (nth argv 1)
+          leaf-count Int (- (count argv) 2)]
       (cond
         (= edge "validate")
         (if (or (= leaf-count 0)
@@ -293,18 +286,18 @@
         (->InvalidRepoWorkflowArgv argv)))))
 
 (defn nix-target? [path String] Bool
-  (let [(segments (Vec String)) (quality/path-segments path)
-        (basename String) (quality/path-basename segments)]
+  (let [segments (Vec String) (quality/path-segments path)
+        basename String (quality/path-basename segments)]
     (and
       (ends-with? path ".nix")
       (not= basename "hardware-configuration.nix")
       (not (quality/string-member?
              [".git" ".direnv" ".beagle-cache" "result"]
              basename))
-      (not (loop [(index Int) 0]
+      (not (loop [index Int 0]
              (if (>= index (count segments))
                false
-               (let [(segment String) (nth segments index)]
+               (let [segment String (nth segments index)]
                  (if (or
                        (= segment ".git")
                        (= segment ".direnv")
@@ -318,16 +311,16 @@
                    (recur (+ index 1))))))))))
 
 (defn select-lint-targets [paths (Vec String)] (Vec String)
-  (loop [(index Int) 0
-         (selected (Vec String)) []]
+  (loop [index Int 0
+         selected (Vec String) []]
     (if (>= index (count paths))
       (sort selected)
-      (let [(path String) (nth paths index)]
+      (let [path String (nth paths index)]
         (recur (+ index 1)
           (if (nix-target? path) (conj selected path) selected))))))
 
 (defn find-double-space [line String] Int
-  (loop [(index Int) 0]
+  (loop [index Int 0]
     (cond
       (>= (+ index 1) (count line)) -1
       (and (= (subs line index (+ index 1)) " ")
@@ -336,9 +329,8 @@
 
 (defn parse-lint-stamp-line
   [line String
-   line-number Int]
-  LintStampResult
-  (let [(separator Int) (find-double-space line)]
+   line-number Int] LintStampResult
+  (let [separator Int (find-double-space line)]
     (if (or (<= separator 0) (>= (+ separator 2) (count line)))
       (->LintStampRejected line-number "expected '<digest>  <path>'")
       (->LintStampParsed
@@ -347,12 +339,12 @@
            (subs line 0 separator))]))))
 
 (defn parse-lint-stamp [text String] LintStampResult
-  (let [(lines (Vec String)) (split-lines text)]
-    (loop [(index Int) 0
-           (entries (Vec LintFingerprint)) []]
+  (let [lines (Vec String) (split-lines text)]
+    (loop [index Int 0
+           entries (Vec LintFingerprint) []]
       (if (>= index (count lines))
         (->LintStampParsed entries)
-        (let [(line String) (nth lines index)]
+        (let [line String (nth lines index)]
           (if (= line "")
             (recur (+ index 1) entries)
             (match (parse-lint-stamp-line line (+ index 1))
@@ -362,38 +354,35 @@
                (recur (+ index 1) (conj entries (nth parsed 0)))])))))))
 
 (defn render-lint-stamp [entries (Vec LintFingerprint)] String
-  (loop [(index Int) 0
-         (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (>= index (count entries))
       result
-      (let [(entry LintFingerprint) (nth entries index)]
+      (let [entry LintFingerprint (nth entries index)]
         (recur (+ index 1)
           (str result (lintfingerprint-digest entry) "  "
             (lintfingerprint-path entry) "\n"))))))
 
 (defn find-lint-fingerprint
   [entries (Vec LintFingerprint)
-   path String]
-  (U LintFingerprint Nil)
-  (loop [(index Int) 0]
+   path String] (U LintFingerprint Nil)
+  (loop [index Int 0]
     (if (>= index (count entries))
       nil
-      (let [(entry LintFingerprint) (nth entries index)]
+      (let [entry LintFingerprint (nth entries index)]
         (if (= path (lintfingerprint-path entry))
           entry
           (recur (+ index 1)))))))
 
 (defn changed-lint-paths
   [previous (Vec LintFingerprint)
-   current (Vec LintFingerprint)]
-  (Vec String)
-  (loop [(index Int) 0
-         (changed (Vec String)) []]
+   current (Vec LintFingerprint)] (Vec String)
+  (loop [index Int 0
+         changed (Vec String) []]
     (if (>= index (count current))
       changed
-      (let [(entry LintFingerprint) (nth current index)
-            (old (U LintFingerprint Nil))
-            (find-lint-fingerprint previous (lintfingerprint-path entry))]
+      (let [entry LintFingerprint (nth current index)
+            old (U LintFingerprint Nil) (find-lint-fingerprint previous (lintfingerprint-path entry))]
         (recur (+ index 1)
           (if (or (nil? old)
                   (not= (lintfingerprint-digest old)
@@ -403,8 +392,7 @@
 
 (defn lint-success-text
   [total Int
-   changed Int]
-  String
+   changed Int] String
   (cond
     (= total 0)
     "firn repo lint: no .nix files to lint.\n"
@@ -428,14 +416,14 @@
     [(DiffErrored source-path output-path message) :error]))
 
 (defn summarize-diff [entries (Vec DiffEntry)] DiffReport
-  (loop [(index Int) 0
-         (unchanged Int) 0
-         (different Int) 0
-         (errors Int) 0]
+  (loop [index Int 0
+         unchanged Int 0
+         different Int 0
+         errors Int 0]
     (if (>= index (count entries))
       (->DiffReport entries unchanged different errors
         (if (or (> different 0) (> errors 0)) 1 0))
-      (let [(kind Keyword) (diff-entry-kind (nth entries index))]
+      (let [kind Keyword (diff-entry-kind (nth entries index))]
         (cond
           (= kind :same)
           (recur (+ index 1) (+ unchanged 1) different errors)
@@ -460,8 +448,8 @@
        "(error: " (trim-line-end message) ")\n")]))
 
 (defn render-diff-report [report DiffReport] String
-  (loop [(index Int) 0
-         (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (>= index (count (diffreport-entries report)))
       (str result "\nfirn diff: " (diffreport-unchanged report)
         " unchanged, " (diffreport-different report) " differ, "
@@ -472,16 +460,15 @@
             (nth (diffreport-entries report) index)))))))
 
 (defn render-health-entry [entry quality/HealthEntry] String
-  (let [(kind Keyword) (quality/healthentry-kind entry)
-        (mark String)
-        (cond (= kind :pass) "✓" (= kind :warning) "⚠" :else "✗")
-        (message String) (quality/healthentry-message entry)]
+  (let [kind Keyword (quality/healthentry-kind entry)
+        mark String (cond (= kind :pass) "✓" (= kind :warning) "⚠" :else "✗")
+        message String (quality/healthentry-message entry)]
     (str "  " mark " " (quality/healthentry-name entry) "\n"
       (if (= message "")
         ""
-        (loop [(index Int) 0
-               (lines (Vec String)) (split-lines message)
-               (result String) ""]
+        (loop [index Int 0
+               lines (Vec String) (split-lines message)
+               result String ""]
           (if (>= index (count lines))
             result
             (recur (+ index 1) lines
@@ -489,11 +476,9 @@
 
 (defn render-health-report
   [root String
-   report quality/HealthReport]
-  String
-  (loop [(index Int) 0
-         (result String)
-         (str "firn doctor: running checks on " root "\n\n")]
+   report quality/HealthReport] String
+  (loop [index Int 0
+         result String (str "firn doctor: running checks on " root "\n\n")]
     (if (>= index (count (quality/healthreport-entries report)))
       (str result "\nfirn doctor: "
         (quality/healthreport-passed report) " passed, "
@@ -510,19 +495,18 @@
 
 (defn find-schema-entry
   [entries (Vec SchemaEntry)
-   name String]
-  SchemaLookup
-  (loop [(index Int) 0]
+   name String] SchemaLookup
+  (loop [index Int 0]
     (if (>= index (count entries))
       (->SchemaAbsent)
-      (let [(entry SchemaEntry) (nth entries index)]
+      (let [entry SchemaEntry (nth entries index)]
         (if (= name (schemaentry-name entry))
           (->SchemaFound entry)
           (recur (+ index 1)))))))
 
 (defn schema-names [entries (Vec SchemaEntry)] (Vec String)
-  (loop [(index Int) 0
-         (names (Vec String)) []]
+  (loop [index Int 0
+         names (Vec String) []]
     (if (>= index (count entries))
       names
       (recur (+ index 1)
@@ -531,26 +515,24 @@
 
 (defn schema-diff
   [before (Vec SchemaEntry)
-   after (Vec SchemaEntry)]
-  SchemaDiff
-  (let [(names (Vec String))
-        (sort
-          (loop [(index Int) 0
-                 (combined (Vec String)) (schema-names before)]
+   after (Vec SchemaEntry)] SchemaDiff
+  (let [names (Vec String) (sort
+          (loop [index Int 0
+                 combined (Vec String) (schema-names before)]
             (if (>= index (count after))
               combined
               (recur (+ index 1)
                 (append-unique combined
                   (schemaentry-name (nth after index)))))))]
-    (loop [(index Int) 0
-           (removed (Vec SchemaEntry)) []
-           (added (Vec SchemaEntry)) []
-           (changed (Vec SchemaTypeChange)) []]
+    (loop [index Int 0
+           removed (Vec SchemaEntry) []
+           added (Vec SchemaEntry) []
+           changed (Vec SchemaTypeChange) []]
       (if (>= index (count names))
         (->SchemaDiff removed added changed)
-        (let [(name String) (nth names index)
-              (old SchemaLookup) (find-schema-entry before name)
-              (new SchemaLookup) (find-schema-entry after name)]
+        (let [name String (nth names index)
+              old SchemaLookup (find-schema-entry before name)
+              new SchemaLookup (find-schema-entry after name)]
           (match old
             [(SchemaAbsent)
              (match new
@@ -574,13 +556,12 @@
 
 (defn source-reference-paths
   [sources (Vec SourceText)
-   name String]
-  (Vec String)
-  (loop [(index Int) 0
-         (paths (Vec String)) []]
+   name String] (Vec String)
+  (loop [index Int 0
+         paths (Vec String) []]
     (if (>= index (count sources))
       paths
-      (let [(source SourceText) (nth sources index)]
+      (let [source SourceText (nth sources index)]
         (recur (+ index 1)
           (if (contains? (sourcetext-text source) name)
             (conj paths (sourcetext-path source))
@@ -588,16 +569,13 @@
 
 (defn schema-impact
   [diff SchemaDiff
-   sources (Vec SourceText)]
-  SchemaImpact
-  (let [(removed-references (Vec SchemaReference))
-        (loop [(index Int) 0
-               (references (Vec SchemaReference)) []]
-          (if (>= index (count (schemadiff-removed diff)))
+   sources (Vec SourceText)] SchemaImpact
+  (let [removed-references (Vec SchemaReference) (loop [index Int 0
+                                                        references (Vec SchemaReference) []]
+                                                   (if (>= index (count (schemadiff-removed diff)))
             references
-            (let [(entry SchemaEntry) (nth (schemadiff-removed diff) index)
-                  (paths (Vec String))
-                  (source-reference-paths sources (schemaentry-name entry))]
+            (let [entry SchemaEntry (nth (schemadiff-removed diff) index)
+                  paths (Vec String) (source-reference-paths sources (schemaentry-name entry))]
               (recur (+ index 1)
                 (if (= (count paths) 0)
                   references
@@ -607,15 +585,12 @@
                       (schemaentry-type-name entry)
                       ""
                       paths)))))))
-        (changed-references (Vec SchemaReference))
-        (loop [(index Int) 0
-               (references (Vec SchemaReference)) []]
-          (if (>= index (count (schemadiff-type-changed diff)))
+        changed-references (Vec SchemaReference) (loop [index Int 0
+                                                        references (Vec SchemaReference) []]
+                                                   (if (>= index (count (schemadiff-type-changed diff)))
             references
-            (let [(change SchemaTypeChange)
-                  (nth (schemadiff-type-changed diff) index)
-                  (paths (Vec String))
-                  (source-reference-paths sources
+            (let [change SchemaTypeChange (nth (schemadiff-type-changed diff) index)
+                  paths (Vec String) (source-reference-paths sources
                     (schematypechange-name change))]
               (recur (+ index 1)
                 (if (= (count paths) 0)
@@ -629,47 +604,40 @@
     (->SchemaImpact diff removed-references changed-references)))
 
 (defn render-reference-paths [paths (Vec String)] String
-  (loop [(index Int) 0
-         (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (>= index (count paths))
       result
       (recur (+ index 1)
         (str result "      → " (nth paths index) "\n")))))
 
 (defn render-schema-impact [impact SchemaImpact] String
-  (let [(diff SchemaDiff) (schemaimpact-diff impact)
-        (removed (Vec SchemaReference))
-        (schemaimpact-removed-references impact)
-        (changed (Vec SchemaReference))
-        (schemaimpact-type-changed-references impact)
-        (header String)
-        (str "  removed: " (count (schemadiff-removed diff))
+  (let [diff SchemaDiff (schemaimpact-diff impact)
+        removed (Vec SchemaReference) (schemaimpact-removed-references impact)
+        changed (Vec SchemaReference) (schemaimpact-type-changed-references impact)
+        header String (str "  removed: " (count (schemadiff-removed diff))
           "   added: " (count (schemadiff-added diff))
           "   type-changed: " (count (schemadiff-type-changed diff)) "\n")
-        (removed-text String)
-        (if (= (count removed) 0)
+        removed-text String (if (= (count removed) 0)
           "\n  ✓ no removed paths are referenced in this repo.\n"
-          (loop [(index Int) 0
-                 (result String)
-                 (str "\n  ✗ " (count removed)
+          (loop [index Int 0
+                 result String (str "\n  ✗ " (count removed)
                    " removed path(s) are referenced in this repo:\n")]
             (if (>= index (count removed))
               result
-              (let [(reference SchemaReference) (nth removed index)]
+              (let [reference SchemaReference (nth removed index)]
                 (recur (+ index 1)
                   (str result "    " (schemareference-name reference) "\n"
                     (render-reference-paths
                       (schemareference-paths reference))))))))
-        (changed-text String)
-        (if (= (count changed) 0)
+        changed-text String (if (= (count changed) 0)
           ""
-          (loop [(index Int) 0
-                 (result String)
-                 (str "\n  ⚠ " (count changed)
+          (loop [index Int 0
+                 result String (str "\n  ⚠ " (count changed)
                    " type-changed path(s) referenced in this repo:\n")]
             (if (>= index (count changed))
               result
-              (let [(reference SchemaReference) (nth changed index)]
+              (let [reference SchemaReference (nth changed index)]
                 (recur (+ index 1)
                   (str result "    " (schemareference-name reference) ": "
                     (schemareference-before-type reference) " → "
@@ -680,9 +648,8 @@
 
 (defn plan-watch
   [previous (Vec LintFingerprint)
-   current (Vec LintFingerprint)]
-  WatchPlan
-  (let [(changed (Vec String)) (changed-lint-paths previous current)]
+   current (Vec LintFingerprint)] WatchPlan
+  (let [changed (Vec String) (changed-lint-paths previous current)]
     (if (= (count changed) 0)
       (->WatchIdle true)
       (->WatchValidate changed))))
@@ -698,13 +665,12 @@
 
 (defn architecture-rows
   [tracked (Vec String)
-   kinds (Vec String)]
-  (Vec ArchitectureRow)
-  (loop [(index Int) 0
-         (rows (Vec ArchitectureRow)) []]
+   kinds (Vec String)] (Vec ArchitectureRow)
+  (loop [index Int 0
+         rows (Vec ArchitectureRow) []]
     (if (>= index (count tracked))
       rows
-      (let [(path String) (nth tracked index)]
+      (let [path String (nth tracked index)]
         (recur (+ index 1)
           (if (architecture-path? path)
             (conj rows
@@ -714,9 +680,8 @@
             rows))))))
 
 (defn render-architecture [snapshot ArchitectureSnapshot] String
-  (loop [(index Int) 0
-         (result String)
-         (str
+  (loop [index Int 0
+         result String (str
            "# 02 · Local map — how THIS system is wired (GENERATED)\n\n"
            "> GENERATED by `firn repo architecture` — do not hand-edit.\n"
            "> The native command inventories the tracked configuration surface;\n"
@@ -730,8 +695,7 @@
     (if (>= index (count (architecturesnapshot-rows snapshot)))
       (str result "\nTracked architecture entries: "
         (count (architecturesnapshot-rows snapshot)) "\n")
-      (let [(row ArchitectureRow)
-            (nth (architecturesnapshot-rows snapshot) index)]
+      (let [row ArchitectureRow (nth (architecturesnapshot-rows snapshot) index)]
         (recur (+ index 1)
           (str result "| `" (architecturerow-path row) "` | "
             (architecturerow-kind row) " | `"
@@ -755,10 +719,10 @@
     [(UpgradeValidate) "repository validation"]))
 
 (defn first-upgrade-failure [results (Vec UpgradePhaseResult)] UpgradeFailure
-  (loop [(index Int) 0]
+  (loop [index Int 0]
     (if (>= index (count results))
       (->UpgradeSucceeded)
-      (let [(result UpgradePhaseResult) (nth results index)]
+      (let [result UpgradePhaseResult (nth results index)]
         (if (= (upgradephaseresult-status result) 0)
           (recur (+ index 1))
           (->UpgradeStopped
@@ -774,8 +738,7 @@
 
 (defn root-path
   [root String
-   relative String]
-  String
+   relative String] String
   (str root "/" relative))
 
 (defn process-phase [process ProcessBoundary] String
@@ -792,14 +755,13 @@
 
 (defn lint-processes
   [root String
-   tracked (Vec String)]
-  (Vec ProcessBoundary)
-  (let [(targets (Vec String)) (select-lint-targets tracked)]
-    (loop [(index Int) 0
-           (processes (Vec ProcessBoundary)) []]
+   tracked (Vec String)] (Vec ProcessBoundary)
+  (let [targets (Vec String) (select-lint-targets tracked)]
+    (loop [index Int 0
+           processes (Vec ProcessBoundary) []]
       (if (>= index (count targets))
         processes
-        (let [(target String) (nth targets index)]
+        (let [target String (nth targets index)]
           (recur (+ index 1)
             (conj processes
               (->InheritProcess
@@ -808,8 +770,7 @@
 
 (defn upgrade-processes
   [root String
-   dry-run Bool]
-  (Vec ProcessBoundary)
+   dry-run Bool] (Vec ProcessBoundary)
   (if dry-run
     []
     [(->CaptureToFileProcess
@@ -835,8 +796,7 @@
 
 (defn watch-processes
   [root String
-   ownership WatchOwnership]
-  (Vec ProcessBoundary)
+   ownership WatchOwnership] (Vec ProcessBoundary)
   [(->InheritProcess
      "watch for repository change"
      ["timeout"
@@ -856,8 +816,7 @@
   [root String
    action RepoWorkflowAction
    tracked (Vec String)
-   ownership WatchOwnership]
-  RepoWorkflowPlan
+   ownership WatchOwnership] RepoWorkflowPlan
   (match action
     [(RepoValidate)
      (->RepoWorkflowPlan
@@ -901,13 +860,12 @@
 
 (defn first-process-failure
   [processes (Vec ProcessBoundary)
-   observations (Vec ProcessObservation)]
-  WorkflowCompletion
-  (loop [(index Int) 0]
+   observations (Vec ProcessObservation)] WorkflowCompletion
+  (loop [index Int 0]
     (if (or (>= index (count processes))
             (>= index (count observations)))
       (->WorkflowSucceeded)
-      (let [(observation ProcessObservation) (nth observations index)]
+      (let [observation ProcessObservation (nth observations index)]
         (if (= (processobservation-status observation) 0)
           (recur (+ index 1))
           (->WorkflowStopped

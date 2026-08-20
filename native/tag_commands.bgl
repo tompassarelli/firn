@@ -8,37 +8,53 @@
 ;; Resolution keeps pluses and minuses separately because their relative order
 ;; is semantically irrelevant. Hosted rewrites preserve that order, so the
 ;; editable document retains the original tokens alongside the F0 HostTags.
-(defrecord EditableEnabledTag [(tag String) (edits (Vec String))])
+(defrecord EditableEnabledTag
+  [tag String
+   edits (Vec String)])
 
-(defrecord HostDocument [(tags r/HostTags) (enabled (Vec EditableEnabledTag))])
+(defrecord HostDocument
+  [tags r/HostTags
+   enabled (Vec EditableEnabledTag)])
 
 (defunion EditableEntryResult
-  (EditableEntryParsed [(value EditableEnabledTag)])
-  (EditableEntryRejected [(message String) (offset Int)]))
+  (EditableEntryParsed [value EditableEnabledTag])
+  (EditableEntryRejected
+    [message String
+     offset Int]))
 
 (defunion EditableEnabledResult
-  (EditableEnabledParsed [(values (Vec EditableEnabledTag))])
-  (EditableEnabledRejected [(message String) (offset Int)]))
+  (EditableEnabledParsed [values (Vec EditableEnabledTag)])
+  (EditableEnabledRejected
+    [message String
+     offset Int]))
 
 (defunion HostDocumentResult
-  (HostDocumentParsed [(value HostDocument)])
-  (HostDocumentRejected [(message String) (offset Int)]))
+  (HostDocumentParsed [value HostDocument])
+  (HostDocumentRejected
+    [message String
+     offset Int]))
 
-(defrecord TagMutation [(changed Bool) (document HostDocument)])
+(defrecord TagMutation
+  [changed Bool
+   document HostDocument])
 
 (defunion TagModuleLeaf
-  (TagModuleParsed [(tag String) (module String)])
-  (TagModuleRejected [(leaf String)]))
+  (TagModuleParsed
+    [tag String
+     module String])
+  (TagModuleRejected [leaf String]))
 
 (defunion ModuleLookup
-  (ModuleFound [(value r/ModuleTags)])
-  (ModuleMissing [(name String)]))
+  (ModuleFound [value r/ModuleTags])
+  (ModuleMissing [name String]))
 
 (defunion TagIndexResult
-  (TagIndexRendered [(text String)])
-  (TagIndexRejected [(message String)]))
+  (TagIndexRendered [text String])
+  (TagIndexRejected [message String]))
 
-(defn string-join [(values (Vec String)) (separator String)] String
+(defn string-join
+  [values (Vec String)
+   separator String] String
   (loop [index Int 0
          result String ""]
     (if (>= index (count values))
@@ -46,17 +62,21 @@
       (recur (+ index 1)
         (str result (if (= index 0) "" separator) (nth values index))))))
 
-(defn spaces [(amount Int)] String
+(defn spaces [amount Int] String
   (loop [remaining Int amount
          result String ""]
     (if (<= remaining 0)
       result
       (recur (- remaining 1) (str result " ")))))
 
-(defn pad-right [(value String) (width Int)] String
+(defn pad-right
+  [value String
+   width Int] String
   (str value (spaces (- width (count value)))))
 
-(defn prefix-values [(prefix String) (values (Vec String))] (Vec String)
+(defn prefix-values
+  [prefix String
+   values (Vec String)] (Vec String)
   (loop [index Int 0
          result (Vec String) []]
     (if (>= index (count values))
@@ -64,7 +84,7 @@
       (recur (+ index 1)
         (conj result (str prefix (nth values index)))))))
 
-(defn editable-from-enabled [(enabled r/EnabledTag)] EditableEnabledTag
+(defn editable-from-enabled [enabled r/EnabledTag] EditableEnabledTag
   (->EditableEnabledTag
     (r/enabledtag-tag enabled)
     (into
@@ -72,22 +92,22 @@
       (prefix-values "-" (r/enabledtag-minuses enabled)))))
 
 (defn editable-entry
-  [(events (Vec reader/ReaderEvent)) (start Int)] EditableEntryResult
-  (let [(event reader/ReaderEvent) (nth events start)
-        (kind Keyword) (reader/readerevent-kind event)]
+  [events (Vec reader/ReaderEvent)
+   start Int] EditableEntryResult
+  (let [event reader/ReaderEvent (nth events start)
+        kind Keyword (reader/readerevent-kind event)]
     (cond
       (= kind :symbol)
       (->EditableEntryParsed
         (->EditableEnabledTag (reader/readerevent-value event) []))
 
       (= kind :vector/open)
-      (let [(children Int) (input/container-child-count events start)]
+      (let [children Int (input/container-child-count events start)]
         (if (< children 1)
           (->EditableEntryRejected "enabled tag vector cannot be empty"
             (reader/readerevent-offset event))
-          (let [(tag-start Int)
-                (input/container-child-start events start 0)
-                (tag-event reader/ReaderEvent) (nth events tag-start)]
+          (let [tag-start Int (input/container-child-start events start 0)
+                tag-event reader/ReaderEvent (nth events tag-start)]
             (if (not= :symbol (reader/readerevent-kind tag-event))
               (->EditableEntryRejected "enabled tag name must be a symbol"
                 (reader/readerevent-offset tag-event))
@@ -97,10 +117,9 @@
                   (->EditableEntryParsed
                     (->EditableEnabledTag
                       (reader/readerevent-value tag-event) edits))
-                  (let [(edit-start Int)
-                        (input/container-child-start events start child)
-                        (edit-event reader/ReaderEvent) (nth events edit-start)
-                        (edit String) (reader/readerevent-value edit-event)]
+                  (let [edit-start Int (input/container-child-start events start child)
+                        edit-event reader/ReaderEvent (nth events edit-start)
+                        edit String (reader/readerevent-value edit-event)]
                     (if (or (not= :symbol
                                   (reader/readerevent-kind edit-event))
                             (not (input/valid-edit-text? edit)))
@@ -115,9 +134,8 @@
         (reader/readerevent-offset event)))))
 
 (defn editable-enabled-from-events
-  [(events (Vec reader/ReaderEvent))
-   (field input/SpanScan)]
-  EditableEnabledResult
+  [events (Vec reader/ReaderEvent)
+   field input/SpanScan] EditableEnabledResult
   (cond
     (not (input/spanscan-ok field))
     (->EditableEnabledRejected (input/spanscan-message field)
@@ -127,12 +145,12 @@
     (->EditableEnabledParsed [])
 
     :else
-    (let [(start Int) (input/spanscan-start field)]
+    (let [start Int (input/spanscan-start field)]
       (if (not= :vector/open
                 (reader/readerevent-kind (nth events start)))
         (->EditableEnabledRejected ":enabled must be a vector"
           (input/event-offset events start))
-        (let [(end Int) (input/datum-end events start)]
+        (let [end Int (input/datum-end events start)]
           (loop [cursor Int (+ start 1)
                  values (Vec EditableEnabledTag) []]
             (if (= cursor (- end 1))
@@ -144,14 +162,14 @@
                  (recur (input/datum-end events cursor)
                    (conj values value))]))))))))
 
-(defn editable-enabled-from-source [(source String)] EditableEnabledResult
-  (let [(read reader/DatumRead) (reader/read-events source)
-        (read-error String?) (reader/datumread-error read)]
+(defn editable-enabled-from-source [source String] EditableEnabledResult
+  (let [read reader/DatumRead (reader/read-events source)
+        read-error String? (reader/datumread-error read)]
     (if (some? read-error)
       (->EditableEnabledRejected read-error
         (reader/datumread-error-offset read))
-      (let [(events (Vec reader/ReaderEvent)) (reader/datumread-events read)
-            (host-map input/SpanScan) (input/find-host-map events)]
+      (let [events (Vec reader/ReaderEvent) (reader/datumread-events read)
+            host-map input/SpanScan (input/find-host-map events)]
         (cond
           (not (input/spanscan-ok host-map))
           (->EditableEnabledRejected (input/spanscan-message host-map)
@@ -166,10 +184,9 @@
               ":enabled")))))))
 
 (defn host-document-from-source
-  [(host String)
-   (source String)
-   (darwin-allowed (Vec String))]
-  HostDocumentResult
+  [host String
+   source String
+   darwin-allowed (Vec String)] HostDocumentResult
   (match (input/host-tags-from-source host source darwin-allowed)
     [(HostSourceRejected message offset)
      (->HostDocumentRejected message offset)]
@@ -180,17 +197,20 @@
        [(EditableEnabledParsed enabled)
         (->HostDocumentParsed (->HostDocument tags enabled))])]))
 
-(defn find-module [(modules (Vec r/ModuleTags)) (name String)] ModuleLookup
+(defn find-module
+  [modules (Vec r/ModuleTags)
+   name String] ModuleLookup
   (loop [index Int 0]
     (if (>= index (count modules))
       (->ModuleMissing name)
-      (let [(module r/ModuleTags) (nth modules index)]
+      (let [module r/ModuleTags (nth modules index)]
         (if (= name (r/moduletags-name module))
           (->ModuleFound module)
           (recur (+ index 1)))))))
 
 (defn universe-add-all
-  [(universe (Vec String)) (values (Vec String))] (Vec String)
+  [universe (Vec String)
+   values (Vec String)] (Vec String)
   (loop [index Int 0
          result (Vec String) universe]
     (if (>= index (count values))
@@ -198,37 +218,38 @@
       (recur (+ index 1)
         (r/append-unique result (nth values index))))))
 
-(defn tag-universe [(modules (Vec r/ModuleTags))] (Vec String)
+(defn tag-universe [modules (Vec r/ModuleTags)] (Vec String)
   (loop [index Int 0
          result (Vec String) []]
     (if (>= index (count modules))
       (sort result)
-      (let [(module r/ModuleTags) (nth modules index)]
+      (let [module r/ModuleTags (nth modules index)]
         (recur (+ index 1)
           (universe-add-all
             (universe-add-all result (r/moduletags-tags module))
             (r/moduletags-opt-in module)))))))
 
 (defn tag-membership-count
-  [(modules (Vec r/ModuleTags)) (tag String) (opt-in Bool)] Int
+  [modules (Vec r/ModuleTags)
+   tag String
+   opt-in Bool] Int
   (loop [index Int 0
          total Int 0]
     (if (>= index (count modules))
       total
-      (let [(module r/ModuleTags) (nth modules index)
-            (values (Vec String))
-            (if opt-in
+      (let [module r/ModuleTags (nth modules index)
+            values (Vec String) (if opt-in
               (r/moduletags-opt-in module)
               (r/moduletags-tags module))]
         (recur (+ index 1)
           (+ total (if (r/string-member? values tag) 1 0)))))))
 
-(defn tagged-module-count [(modules (Vec r/ModuleTags))] Int
+(defn tagged-module-count [modules (Vec r/ModuleTags)] Int
   (loop [index Int 0
          total Int 0]
     (if (>= index (count modules))
       total
-      (let [(module r/ModuleTags) (nth modules index)]
+      (let [module r/ModuleTags (nth modules index)]
         (recur (+ index 1)
           (+ total
             (if (or (> (count (r/moduletags-tags module)) 0)
@@ -236,23 +257,19 @@
               1
               0)))))))
 
-(defn render-tag-list [(modules (Vec r/ModuleTags))] String
-  (let [(tags (Vec String)) (tag-universe modules)
-        (heading String)
-        (if (= (count tags) 0)
+(defn render-tag-list [modules (Vec r/ModuleTags)] String
+  (let [tags (Vec String) (tag-universe modules)
+        heading String (if (= (count tags) 0)
           (str "No tags found. Add :tags / :tags-opt-in clauses to "
             "modules' default.bnix.\n")
           (str "Tags (" (count tags) "):\n"))
-        (body String)
-        (loop [index Int 0
-               result String heading]
-          (if (>= index (count tags))
+        body String (loop [index Int 0
+                           result String heading]
+                      (if (>= index (count tags))
             result
-            (let [(tag String) (nth tags index)
-                  (defaults Int)
-                  (tag-membership-count modules tag false)
-                  (opt-ins Int)
-                  (tag-membership-count modules tag true)]
+            (let [tag String (nth tags index)
+                  defaults Int (tag-membership-count modules tag false)
+                  opt-ins Int (tag-membership-count modules tag true)]
               (recur (+ index 1)
                 (str result "  " (pad-right tag 18)
                   "  (" defaults " default"
@@ -261,10 +278,10 @@
     (str body "\nCoverage: " (tagged-module-count modules) " / "
       (count modules) " modules carry at least one tag.\n")))
 
-(defn render-tag-show [(module r/ModuleTags)] String
-  (let [(name String) (r/moduletags-name module)
-        (defaults (Vec String)) (r/moduletags-tags module)
-        (opt-ins (Vec String)) (r/moduletags-opt-in module)]
+(defn render-tag-show [module r/ModuleTags] String
+  (let [name String (r/moduletags-name module)
+        defaults (Vec String) (r/moduletags-tags module)
+        opt-ins (Vec String) (r/moduletags-opt-in module)]
     (str "module: " name "\n"
       ":tags         "
       (if (= (count defaults) 0)
@@ -277,33 +294,38 @@
         (string-join opt-ins ", "))
       "\n")))
 
-(defn modules-with-tag [(modules (Vec r/ModuleTags)) (tag String)] (Vec String)
+(defn modules-with-tag
+  [modules (Vec r/ModuleTags)
+   tag String] (Vec String)
   (loop [index Int 0
          result (Vec String) []]
     (if (>= index (count modules))
       (sort result)
-      (let [(module r/ModuleTags) (nth modules index)]
+      (let [module r/ModuleTags (nth modules index)]
         (recur (+ index 1)
           (if (or (r/string-member? (r/moduletags-tags module) tag)
                   (r/string-member? (r/moduletags-opt-in module) tag))
             (conj result (r/moduletags-name module))
             result))))))
 
-(defn module-tag-kind [(module r/ModuleTags) (tag String)] String
+(defn module-tag-kind
+  [module r/ModuleTags
+   tag String] String
   (if (r/string-member? (r/moduletags-tags module) tag)
     "default"
     "opt-in"))
 
-(defn render-tag-filter [(modules (Vec r/ModuleTags)) (tag String)] String
-  (let [(names (Vec String)) (modules-with-tag modules tag)]
+(defn render-tag-filter
+  [modules (Vec r/ModuleTags)
+   tag String] String
+  (let [names (Vec String) (modules-with-tag modules tag)]
     (if (= (count names) 0)
       (str "no modules tagged '" tag "'\n")
       (loop [index Int 0
-             result String
-             (str "modules tagged '" tag "' (" (count names) "):\n")]
+             result String (str "modules tagged '" tag "' (" (count names) "):\n")]
         (if (>= index (count names))
           result
-          (let [(name String) (nth names index)]
+          (let [name String (nth names index)]
             (match (find-module modules name)
               [(ModuleMissing missing) (recur (+ index 1) result)]
               [(ModuleFound module)
@@ -312,7 +334,8 @@
                    ")\n"))])))))))
 
 (defn append-json-strings
-  [(events (Vec json/JsonEvent)) (values (Vec String))] (Vec json/JsonEvent)
+  [events (Vec json/JsonEvent)
+   values (Vec String)] (Vec json/JsonEvent)
   (loop [index Int 0
          result (Vec json/JsonEvent) events]
     (if (>= index (count values))
@@ -320,31 +343,27 @@
       (recur (+ index 1)
         (conj result (json/->JsonString 0 (nth values index)))))))
 
-(defn module-index-events [(module r/ModuleTags)] (Vec json/JsonEvent)
-  (let [(with-name (Vec json/JsonEvent))
-        [(json/->JsonObjectStart 0)
+(defn module-index-events [module r/ModuleTags] (Vec json/JsonEvent)
+  (let [with-name (Vec json/JsonEvent) [(json/->JsonObjectStart 0)
          (json/->JsonKey 0 "name")
          (json/->JsonString 0 (r/moduletags-name module))
          (json/->JsonKey 0 "tags")
          (json/->JsonArrayStart 0)]
-        (with-tags (Vec json/JsonEvent))
-        (append-json-strings with-name (r/moduletags-tags module))
-        (with-opt-in-key (Vec json/JsonEvent))
-        (into with-tags
+        with-tags (Vec json/JsonEvent) (append-json-strings with-name (r/moduletags-tags module))
+        with-opt-in-key (Vec json/JsonEvent) (into with-tags
           [(json/->JsonArrayEnd 0)
            (json/->JsonKey 0 "tags_opt_in")
            (json/->JsonArrayStart 0)])
-        (with-opt-ins (Vec json/JsonEvent))
-        (append-json-strings with-opt-in-key (r/moduletags-opt-in module))]
+        with-opt-ins (Vec json/JsonEvent) (append-json-strings with-opt-in-key (r/moduletags-opt-in module))]
     (into with-opt-ins
       [(json/->JsonArrayEnd 0) (json/->JsonObjectEnd 0)])))
 
-(defn render-tag-index [(modules (Vec r/ModuleTags))] TagIndexResult
+(defn render-tag-index [modules (Vec r/ModuleTags)] TagIndexResult
   (loop [index Int 0
          result String ""]
     (if (>= index (count modules))
       (->TagIndexRendered result)
-      (let [(module r/ModuleTags) (nth modules index)]
+      (let [module r/ModuleTags (nth modules index)]
         (match (json/encode (module-index-events module))
           [(JsonEncodeError event-index message)
            (->TagIndexRejected
@@ -353,13 +372,13 @@
           [(JsonEncoded text)
            (recur (+ index 1) (str result text "\n"))])))))
 
-(defn editable-entry-string [(entry EditableEnabledTag)] String
+(defn editable-entry-string [entry EditableEnabledTag] String
   (if (= (count (editableenabledtag-edits entry)) 0)
     (editableenabledtag-tag entry)
     (str "[" (editableenabledtag-tag entry) " "
       (string-join (editableenabledtag-edits entry) " ") "]")))
 
-(defn enabled-lines [(enabled (Vec EditableEnabledTag))] String
+(defn enabled-lines [enabled (Vec EditableEnabledTag)] String
   (if (= (count enabled) 0)
     "  []"
     (loop [index Int 0
@@ -370,9 +389,9 @@
           (str result (if (= index 0) "" "\n   ")
             (editable-entry-string (nth enabled index))))))))
 
-(defn format-enabled-tags-bnix [(document HostDocument)] String
-  (let [(tags r/HostTags) (hostdocument-tags document)
-        (disabled (Vec String)) (r/hosttags-disabled tags)]
+(defn format-enabled-tags-bnix [document HostDocument] String
+  (let [tags r/HostTags (hostdocument-tags document)
+        disabled (Vec String) (r/hosttags-disabled tags)]
     (str "#lang beagle/nix\n\n"
       "(ns enabled-tags)\n\n"
       "{:platform " (r/hosttags-platform tags) "\n"
@@ -382,7 +401,7 @@
         "\n}\n"
         (str "\n :disabled [" (string-join disabled " ") "]\n}\n")))))
 
-(defn render-enabled-status [(enabled (Vec EditableEnabledTag))] String
+(defn render-enabled-status [enabled (Vec EditableEnabledTag)] String
   (if (= (count enabled) 0)
     "  (none)\n"
     (loop [index Int 0
@@ -393,7 +412,7 @@
           (str result "  " (editable-entry-string (nth enabled index))
             "\n"))))))
 
-(defn render-disabled-status [(disabled (Vec String))] String
+(defn render-disabled-status [disabled (Vec String)] String
   (if (= (count disabled) 0)
     "  (none)\n"
     (loop [index Int 0
@@ -403,14 +422,14 @@
         (recur (+ index 1)
           (str result "  " (nth disabled index) "\n"))))))
 
-(defn validation-error-hint [(error r/ValidationError)] String
+(defn validation-error-hint [error r/ValidationError] String
   (match error
     [(UnknownPlatform host platform hint) hint]
     [(UnknownTag host tag hint) hint]
     [(OptInMismatch host tag module hint) hint]
     [(UnknownDisabled host module hint) hint]))
 
-(defn render-resolution-errors [(errors (Vec r/ValidationError))] String
+(defn render-resolution-errors [errors (Vec r/ValidationError)] String
   (if (= (count errors) 0)
     ""
     (loop [index Int 0
@@ -421,8 +440,8 @@
           (str result "  " (validation-error-hint (nth errors index))
             "\n"))))))
 
-(defn render-active-status [(active (Vec String))] String
-  (let [(heading String) (str "Resolved active modules (" (count active)
+(defn render-active-status [active (Vec String)] String
+  (let [heading String (str "Resolved active modules (" (count active)
                            "):\n")]
     (if (= (count active) 0)
       (str heading "  (none)\n")
@@ -434,11 +453,12 @@
             (str result "  " (nth active index) "\n")))))))
 
 (defn render-tag-status
-  [(modules (Vec r/ModuleTags)) (document HostDocument)] String
-  (let [(tags r/HostTags) (hostdocument-tags document)
-        (enabled (Vec EditableEnabledTag)) (hostdocument-enabled document)
-        (disabled (Vec String)) (r/hosttags-disabled tags)
-        (resolution r/Resolution) (r/resolve modules tags)]
+  [modules (Vec r/ModuleTags)
+   document HostDocument] String
+  (let [tags r/HostTags (hostdocument-tags document)
+        enabled (Vec EditableEnabledTag) (hostdocument-enabled document)
+        disabled (Vec String) (r/hosttags-disabled tags)
+        resolution r/Resolution (r/resolve modules tags)]
     (str "Host: " (r/hosttags-host tags) "\n"
       "Platform: " (r/hosttags-platform tags) "\n"
       "Source: hosts/" (r/hosttags-host tags) "/enabled-tags.bnix\n\n"
@@ -451,10 +471,9 @@
       (render-active-status (r/resolution-active resolution)))))
 
 (defn host-with
-  [(tags r/HostTags)
-   (enabled (Vec r/EnabledTag))
-   (disabled (Vec String))]
-  r/HostTags
+  [tags r/HostTags
+   enabled (Vec r/EnabledTag)
+   disabled (Vec String)] r/HostTags
   (r/->HostTags
     (r/hosttags-host tags)
     enabled
@@ -463,7 +482,9 @@
     (r/hosttags-restrict-allowed tags)
     (r/hosttags-allowed tags)))
 
-(defn enabled-index [(enabled (Vec EditableEnabledTag)) (tag String)] Int
+(defn enabled-index
+  [enabled (Vec EditableEnabledTag)
+   tag String] Int
   (loop [index Int 0]
     (if (>= index (count enabled))
       -1
@@ -472,33 +493,37 @@
         (recur (+ index 1))))))
 
 (defn enabled-without-tag
-  [(enabled (Vec EditableEnabledTag)) (tag String)] (Vec EditableEnabledTag)
+  [enabled (Vec EditableEnabledTag)
+   tag String] (Vec EditableEnabledTag)
   (loop [index Int 0
          result (Vec EditableEnabledTag) []]
     (if (>= index (count enabled))
       result
-      (let [(entry EditableEnabledTag) (nth enabled index)]
+      (let [entry EditableEnabledTag (nth enabled index)]
         (recur (+ index 1)
           (if (= tag (editableenabledtag-tag entry))
             result
             (conj result entry)))))))
 
 (defn semantic-without-tag
-  [(enabled (Vec r/EnabledTag)) (tag String)] (Vec r/EnabledTag)
+  [enabled (Vec r/EnabledTag)
+   tag String] (Vec r/EnabledTag)
   (loop [index Int 0
          result (Vec r/EnabledTag) []]
     (if (>= index (count enabled))
       result
-      (let [(entry r/EnabledTag) (nth enabled index)]
+      (let [entry r/EnabledTag (nth enabled index)]
         (recur (+ index 1)
           (if (= tag (r/enabledtag-tag entry))
             result
             (conj result entry)))))))
 
-(defn enable-tag [(document HostDocument) (tag String)] TagMutation
+(defn enable-tag
+  [document HostDocument
+   tag String] TagMutation
   (if (>= (enabled-index (hostdocument-enabled document) tag) 0)
     (->TagMutation false document)
-    (let [(tags r/HostTags) (hostdocument-tags document)]
+    (let [tags r/HostTags (hostdocument-tags document)]
       (->TagMutation true
         (->HostDocument
           (host-with tags
@@ -508,11 +533,13 @@
           (conj (hostdocument-enabled document)
             (->EditableEnabledTag tag [])))))))
 
-(defn disable-tag [(document HostDocument) (tag String)] TagMutation
-  (let [(index Int) (enabled-index (hostdocument-enabled document) tag)]
+(defn disable-tag
+  [document HostDocument
+   tag String] TagMutation
+  (let [index Int (enabled-index (hostdocument-enabled document) tag)]
     (if (< index 0)
       (->TagMutation false document)
-      (let [(tags r/HostTags) (hostdocument-tags document)]
+      (let [tags r/HostTags (hostdocument-tags document)]
         (->TagMutation true
           (->HostDocument
             (host-with tags
@@ -520,19 +547,20 @@
               (r/hosttags-disabled tags))
             (enabled-without-tag (hostdocument-enabled document) tag)))))))
 
-(defn edit-member? [(edits (Vec String)) (wanted String)] Bool
+(defn edit-member?
+  [edits (Vec String)
+   wanted String] Bool
   (r/string-member? edits wanted))
 
 (defn replace-editable-tag
-  [(enabled (Vec EditableEnabledTag))
-   (tag String)
-   (edits (Vec String))]
-  (Vec EditableEnabledTag)
+  [enabled (Vec EditableEnabledTag)
+   tag String
+   edits (Vec String)] (Vec EditableEnabledTag)
   (loop [index Int 0
          result (Vec EditableEnabledTag) []]
     (if (>= index (count enabled))
       result
-      (let [(entry EditableEnabledTag) (nth enabled index)]
+      (let [entry EditableEnabledTag (nth enabled index)]
         (recur (+ index 1)
           (conj result
             (if (= tag (editableenabledtag-tag entry))
@@ -540,15 +568,14 @@
               entry)))))))
 
 (defn replace-semantic-tag
-  [(enabled (Vec r/EnabledTag))
-   (tag String)
-   (edits (Vec String))]
-  (Vec r/EnabledTag)
+  [enabled (Vec r/EnabledTag)
+   tag String
+   edits (Vec String)] (Vec r/EnabledTag)
   (loop [index Int 0
          result (Vec r/EnabledTag) []]
     (if (>= index (count enabled))
       result
-      (let [(entry r/EnabledTag) (nth enabled index)]
+      (let [entry r/EnabledTag (nth enabled index)]
         (recur (+ index 1)
           (conj result
             (if (= tag (r/enabledtag-tag entry))
@@ -556,9 +583,11 @@
               entry)))))))
 
 (defn add-tag-edit
-  [(document HostDocument) (tag String) (edit String)] TagMutation
-  (let [(index Int) (enabled-index (hostdocument-enabled document) tag)
-        (tags r/HostTags) (hostdocument-tags document)]
+  [document HostDocument
+   tag String
+   edit String] TagMutation
+  (let [index Int (enabled-index (hostdocument-enabled document) tag)
+        tags r/HostTags (hostdocument-tags document)]
     (if (< index 0)
       (->TagMutation true
         (->HostDocument
@@ -568,12 +597,11 @@
             (r/hosttags-disabled tags))
           (conj (hostdocument-enabled document)
             (->EditableEnabledTag tag [edit]))))
-      (let [(existing EditableEnabledTag)
-            (nth (hostdocument-enabled document) index)
-            (edits (Vec String)) (editableenabledtag-edits existing)]
+      (let [existing EditableEnabledTag (nth (hostdocument-enabled document) index)
+            edits (Vec String) (editableenabledtag-edits existing)]
         (if (edit-member? edits edit)
           (->TagMutation false document)
-          (let [(new-edits (Vec String)) (conj edits edit)]
+          (let [new-edits (Vec String) (conj edits edit)]
             (->TagMutation true
               (->HostDocument
                 (host-with tags
@@ -583,9 +611,11 @@
                 (replace-editable-tag
                   (hostdocument-enabled document) tag new-edits)))))))))
 
-(defn disable-module [(document HostDocument) (module String)] TagMutation
-  (let [(tags r/HostTags) (hostdocument-tags document)
-        (disabled (Vec String)) (r/hosttags-disabled tags)]
+(defn disable-module
+  [document HostDocument
+   module String] TagMutation
+  (let [tags r/HostTags (hostdocument-tags document)
+        disabled (Vec String) (r/hosttags-disabled tags)]
     (if (r/string-member? disabled module)
       (->TagMutation false document)
       (->TagMutation true
@@ -594,9 +624,11 @@
             (sort (conj disabled module)))
           (hostdocument-enabled document))))))
 
-(defn enable-module [(document HostDocument) (module String)] TagMutation
-  (let [(tags r/HostTags) (hostdocument-tags document)
-        (disabled (Vec String)) (r/hosttags-disabled tags)]
+(defn enable-module
+  [document HostDocument
+   module String] TagMutation
+  (let [tags r/HostTags (hostdocument-tags document)
+        disabled (Vec String) (r/hosttags-disabled tags)]
     (if (not (r/string-member? disabled module))
       (->TagMutation false document)
       (->TagMutation true
@@ -605,7 +637,7 @@
             (r/remove-strings disabled [module]))
           (hostdocument-enabled document))))))
 
-(defn split-tag-module [(leaf String)] TagModuleLeaf
+(defn split-tag-module [leaf String] TagModuleLeaf
   (loop [index Int 0]
     (if (>= index (count leaf))
       (->TagModuleRejected leaf)

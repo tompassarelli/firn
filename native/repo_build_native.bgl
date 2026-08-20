@@ -23,14 +23,12 @@
 
 (defn relative-child
   [parent String
-   name String]
-  String
+   name String] String
   (if (= parent "") name (str parent "/" name)))
 
 (defn absolute-path
   [root String
-   relative String]
-  String
+   relative String] String
   (str root "/" relative))
 
 (defn merge-inventory
@@ -45,9 +43,8 @@
 
 (defn output-mtime
   [root String
-   relative String]
-  OutputMtimeResult
-  (let [(absolute String) (absolute-path root relative)]
+   relative String] OutputMtimeResult
+  (let [absolute String (absolute-path root relative)]
     (match (host.fs/path-kind absolute)
       [(host.fs/PathKindError errno)
        (if (= errno 2)
@@ -69,15 +66,14 @@
 
 (defn load-source-state
   [root String
-   relative String]
-  SourceStateLoadResult
+   relative String] SourceStateLoadResult
   (match (host.fs/mtime-nanoseconds (absolute-path root relative))
     [(host.fs/MtimeNanosecondsError errno)
      (->SourceStateRejected
        (build/errno-message
          "cannot read modification time for" relative errno))]
     [(host.fs/MtimeNanosecondsOk source-nanoseconds)
-     (let [(output-relative String) (build/output-relative relative)]
+     (let [output-relative String (build/output-relative relative)]
        (match (output-mtime root output-relative)
          [(OutputMtimeRejected message) (->SourceStateRejected message)]
          [(OutputMtimeLoaded output-nanoseconds)
@@ -88,10 +84,8 @@
 
 (defn load-inventory-directory
   [root String
-   relative String]
-  InventoryLoadResult
-  (let [(absolute String)
-        (if (= relative "") root (absolute-path root relative))]
+   relative String] InventoryLoadResult
+  (let [absolute String (if (= relative "") root (absolute-path root relative))]
     (match (host.fs/list-directory-bounded
              absolute max-directory-entries)
       [(host.fs/ListDirectoryBoundedError errno)
@@ -99,14 +93,12 @@
          (build/errno-message "cannot list"
            (if (= relative "") "." relative) errno))]
       [(host.fs/ListDirectoryBoundedOk names)
-       (let [(sorted-names (Vec String)) (sort names)]
-         (loop [(index Int) 0
-                (inventory build/SourceInventory)
-                (build/->SourceInventory [] [])]
+       (let [sorted-names (Vec String) (sort names)]
+         (loop [index Int 0
+                inventory build/SourceInventory (build/->SourceInventory [] [])]
            (if (>= index (count sorted-names))
              (->InventoryLoaded inventory)
-             (let [(entry-relative String)
-                   (relative-child relative (nth sorted-names index))]
+             (let [entry-relative String (relative-child relative (nth sorted-names index))]
                (match (host.fs/path-kind
                         (absolute-path root entry-relative))
                  [(host.fs/PathKindError errno)
@@ -152,12 +144,11 @@
        (emit-error
          "firn-build: tag resolution failed; aborting before .nix regeneration\n"))]
     [(DirectoryNamesLoaded names)
-     (let [(tag-status Int)
-           (tag-native/run-action root names (tag-driver/->ResolveAll true))]
+     (let [tag-status Int (tag-native/run-action root names (tag-driver/->ResolveAll true))]
        (if (not (= tag-status 0))
          (emit-error
            "firn-build: tag resolution failed; aborting before .nix regeneration\n")
-         (let [(flake-status Int) (flake-native/run root)]
+         (let [flake-status Int (flake-native/run root)]
            (if (= flake-status 0)
              0
              (emit-error
@@ -165,8 +156,7 @@
 
 (defn cleanup-temporary
   [temporary String
-   relative String]
-  Int
+   relative String] Int
   (match (host.fs/remove-file temporary)
     [(host.fs/RemoveFileOk) 0]
     [(host.fs/RemoveFileError errno)
@@ -179,17 +169,15 @@
 (defn fail-after-cleanup
   [temporary String
    relative String
-   message String]
-  Int
-  (let [(cleanup-status Int) (cleanup-temporary temporary relative)]
+   message String] Int
+  (let [cleanup-status Int (cleanup-temporary temporary relative)]
     (do
       (host.stderr/write-text message)
       (if (= cleanup-status 0) 1 cleanup-status))))
 
 (defn emit-compiler-output
   [stdout String
-   stderr String]
-  Int
+   stderr String] Int
   (do
     (if (= stdout "") 0 (do (print stdout) 0))
     (if (= stderr "") 0 (do (host.stderr/write-text stderr) 0))
@@ -198,8 +186,7 @@
 (defn publish-compiled
   [temporary String
    destination String
-   relative String]
-  Int
+   relative String] Int
   (match (host.fs/read-text-bounded temporary max-generated-bytes)
     [(host.fs/ReadTextBoundedError errno)
      (fail-after-cleanup temporary relative
@@ -223,11 +210,9 @@
   [root String
    compiler String
    state build/SourceState
-   temporary String]
-  Int
-  (let [(process build/CompilerProcess)
-        (build/compiler-process compiler root state temporary)
-        (relative String) (build/compilerprocess-source-relative process)]
+   temporary String] Int
+  (let [process build/CompilerProcess (build/compiler-process compiler root state temporary)
+        relative String (build/compilerprocess-source-relative process)]
     (match (host.process/run-capture
              (build/compilerprocess-argv process)
              "" max-compiler-output-bytes)
@@ -248,11 +233,9 @@
 (defn compile-source
   [root String
    compiler String
-   state build/SourceState]
-  Int
-  (let [(destination-relative String)
-        (build/sourcestate-output-relative state)
-        (destination String) (absolute-path root destination-relative)]
+   state build/SourceState] Int
+  (let [destination-relative String (build/sourcestate-output-relative state)
+        destination String (absolute-path root destination-relative)]
     (match (host.fs/create-temporary-sibling destination)
       [(host.fs/CreateTemporarySiblingError errno)
        (emit-error
@@ -265,19 +248,17 @@
   [root String
    compiler String
    sources (Vec build/SourceState)
-   index Int]
-  Int
+   index Int] Int
   (if (>= index (count sources))
     0
-    (let [(status Int) (compile-source root compiler (nth sources index))]
+    (let [status Int (compile-source root compiler (nth sources index))]
       (if (= status 0)
         (compile-sources root compiler sources (+ index 1))
         status))))
 
 (defn remove-obsolete-output
   [root String
-   relative String]
-  Int
+   relative String] Int
   (match (host.fs/remove-file (absolute-path root relative))
     [(host.fs/RemoveFileOk) 0]
     [(host.fs/RemoveFileError errno)
@@ -290,11 +271,10 @@
 (defn remove-obsolete-outputs
   [root String
    paths (Vec String)
-   index Int]
-  Int
+   index Int] Int
   (if (>= index (count paths))
     0
-    (let [(status Int) (remove-obsolete-output root (nth paths index))]
+    (let [status Int (remove-obsolete-output root (nth paths index))]
       (if (= status 0)
         (remove-obsolete-outputs root paths (+ index 1))
         status))))
@@ -302,15 +282,12 @@
 (defn execute-plan
   [root String
    compiler String
-   plan build/RepoBuildPlan]
-  Int
-  (let [(sources (Vec build/SourceState))
-        (build/repobuildplan-stale-sources plan)
-        (compile-status Int) (compile-sources root compiler sources 0)]
+   plan build/RepoBuildPlan] Int
+  (let [sources (Vec build/SourceState) (build/repobuildplan-stale-sources plan)
+        compile-status Int (compile-sources root compiler sources 0)]
     (if (not (= compile-status 0))
       compile-status
-      (let [(cleanup-status Int)
-            (remove-obsolete-outputs root
+      (let [cleanup-status Int (remove-obsolete-outputs root
               (build/repobuildplan-obsolete-outputs plan) 0)]
         (if (not (= cleanup-status 0))
           cleanup-status
@@ -321,26 +298,25 @@
             0))))))
 
 (defn beagle-root [] (U String Nil)
-  (let [(explicit (U String Nil)) (System/getenv "BEAGLE_PATH")]
+  (let [explicit (U String Nil) (System/getenv "BEAGLE_PATH")]
     (if (some? explicit)
       explicit
-      (let [(home (U String Nil)) (System/getenv "HOME")]
+      (let [home (U String Nil) (System/getenv "HOME")]
         (if (some? home) (str home "/code/beagle/main") nil)))))
 
 (defn repository-root [] (U String Nil)
-  (let [(explicit (U String Nil)) (System/getenv "FIRN_REPO")]
+  (let [explicit (U String Nil) (System/getenv "FIRN_REPO")]
     (if (some? explicit)
       explicit
-      (let [(home (U String Nil)) (System/getenv "HOME")]
+      (let [home (U String Nil) (System/getenv "HOME")]
         (if (some? home)
           (str home "/code/nixos-config/main")
           nil)))))
 
 (defn run
   [root String
-   compiler String]
-  Int
-  (let [(preparation-status Int) (run-preparation root)]
+   compiler String] Int
+  (let [preparation-status Int (run-preparation root)]
     (if (not (= preparation-status 0))
       preparation-status
       (match (load-inventory-directory root "")
@@ -350,11 +326,10 @@
 
 (defn run-command
   [root String
-   compiler String]
-  Int
+   compiler String] Int
   (do
     (print ">> firn-build\n")
-    (let [(status Int) (run root compiler)]
+    (let [status Int (run root compiler)]
       (if (= status 0)
         0
         (do
@@ -371,8 +346,8 @@
     [(OtherRepoBuildCommand argv) (usage-error)]
     [(InvalidRepoBuildArgv argv) (usage-error)]
     [(ParsedRepoBuild token)
-     (let [(root (U String Nil)) (repository-root)
-           (beagle (U String Nil)) (beagle-root)]
+     (let [root (U String Nil) (repository-root)
+           beagle (U String Nil) (beagle-root)]
        (cond
          [(nil? root)
           (do

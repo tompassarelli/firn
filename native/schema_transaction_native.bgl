@@ -48,21 +48,18 @@
 
 (defn path
   [root String
-   relative String]
-  String
+   relative String] String
   (if (empty? relative) root (str root "/" relative)))
 
 (defn errno-message
   [operation String
    relative String
-   errno Int]
-  String
+   errno Int] String
   (str "firn schema: " operation " '" relative "': errno " errno "\n"))
 
 (defn read-text
   [root String
-   relative String]
-  TextLoadResult
+   relative String] TextLoadResult
   (match (host.fs/read-text-bounded (path root relative) max-text-bytes)
     [(host.fs/ReadTextBoundedOk text) (->TextLoaded text)]
     [(host.fs/ReadTextBoundedError errno)
@@ -72,8 +69,7 @@
 
 (defn read-required-text
   [root String
-   relative String]
-  TextLoadResult
+   relative String] TextLoadResult
   (match (read-text root relative)
     [(TextLoaded text) (->TextLoaded text)]
     [(TextLoadRejected message) (->TextLoadRejected message)]
@@ -83,8 +79,7 @@
 
 (defn append-paths
   [left (Vec String)
-   right (Vec String)]
-  (Vec String)
+   right (Vec String)] (Vec String)
   (loop [index Int 0
          result (Vec String) left]
     (if (>= index (count right))
@@ -92,7 +87,7 @@
       (recur (+ index 1) (conj result (nth right index))))))
 
 (defn repo-directory-excluded? [relative String] Bool
-  (let [(name String) (transaction/file-name relative)]
+  (let [name String (transaction/file-name relative)]
     (or (= name ".git")
         (= name ".direnv")
         (= name ".beagle-cache")
@@ -104,8 +99,7 @@
 (defn walk-files
   [root String
    relative String
-   tool-tree Bool]
-  PathsLoadResult
+   tool-tree Bool] PathsLoadResult
   (match (host.fs/list-directory-bounded
            (path root relative) max-directory-entries)
     [(host.fs/ListDirectoryBoundedError errno)
@@ -118,9 +112,8 @@
             result (Vec String) []]
        (if (>= index (count entries))
          (->PathsLoaded result)
-         (let [(name String) (nth entries index)
-               (child String)
-               (if (empty? relative) name (str relative "/" name))]
+         (let [name String (nth entries index)
+               child String (if (empty? relative) name (str relative "/" name))]
            (match (host.fs/path-kind (path root child))
              [(host.fs/PathKindError errno)
               (if (= errno 2)
@@ -154,11 +147,10 @@
   [beagle-path String
    paths (Vec String)
    index Int
-   files (Vec transaction/ToolFile)]
-  ToolFilesLoadResult
+   files (Vec transaction/ToolFile)] ToolFilesLoadResult
   (if (>= index (count paths))
     (->ToolFilesLoaded files)
-    (let [(relative String) (nth paths index)]
+    (let [relative String (nth paths index)]
       (match (read-required-text beagle-path relative)
         [(TextLoadRejected message) (->ToolFilesLoadRejected message)]
         [(TextMissing missing-relative)
@@ -170,13 +162,12 @@
            (conj files (transaction/->ToolFile relative contents)))]))))
 
 (defn optional-tool-root-paths [beagle-path String] PathsLoadResult
-  (let [(roots (Vec String))
-        ["bin/_beagle-racket" "flake.nix" "flake.lock"]]
+  (let [roots (Vec String) ["bin/_beagle-racket" "flake.nix" "flake.lock"]]
     (loop [index Int 0
            selected (Vec String) []]
       (if (>= index (count roots))
         (->PathsLoaded selected)
-        (let [(relative String) (nth roots index)]
+        (let [relative String (nth roots index)]
           (match (host.fs/path-kind (path beagle-path relative))
             [(host.fs/PathKindError errno)
              (if (= errno 2)
@@ -191,8 +182,7 @@
 
 (defn tool-tree-paths
   [beagle-path String
-   directory String]
-  PathsLoadResult
+   directory String] PathsLoadResult
   (match (host.fs/path-kind (path beagle-path directory))
     [(host.fs/PathKindError errno)
      (if (= errno 2)
@@ -208,7 +198,7 @@
                  selected (Vec String) []]
             (if (>= index (count paths))
               (->PathsLoaded selected)
-              (let [(relative String) (nth paths index)]
+              (let [relative String (nth paths index)]
                 (recur (+ index 1)
                   (if (tool-source-file? relative)
                     (conj selected relative)
@@ -216,8 +206,7 @@
        (->PathsLoaded []))]))
 
 (defn load-tool-files [beagle-path String] ToolFilesLoadResult
-  (let [(required (Vec String))
-        ["bin/beagle-extract-schema" "bin/beagle-validate"]]
+  (let [required (Vec String) ["bin/beagle-extract-schema" "bin/beagle-validate"]]
     (match (optional-tool-root-paths beagle-path)
       [(PathsLoadRejected message) (->ToolFilesLoadRejected message)]
       [(PathsLoaded optional)
@@ -239,8 +228,7 @@
 (defn current-fingerprint
   [root String
    beagle-path String
-   mode transaction/SchemaMode]
-  CurrentFingerprintResult
+   mode transaction/SchemaMode] CurrentFingerprintResult
   (match (read-required-text root "flake.lock")
     [(TextLoadRejected message) (->CurrentFingerprintRejected message)]
     [(TextMissing missing-relative)
@@ -339,8 +327,7 @@
 (defn write-atomic
   [root String
    relative String
-   contents String]
-  OperationResult
+   contents String] OperationResult
   (match (host.fs/write-text-atomic (path root relative) contents)
     [(host.fs/WriteTextAtomicOk)
      (->OperationOk (str "published " relative))]
@@ -352,8 +339,7 @@
    schema String
    hm String
    policy String
-   fingerprint String]
-  OperationResult
+   fingerprint String] OperationResult
   (match (ensure-cache-directory root)
     [(OperationRejected message) (->OperationRejected message)]
     [(OperationOk operation)
@@ -373,8 +359,7 @@
   [root String
    schema String
    policy String
-   fingerprint String]
-  OperationResult
+   fingerprint String] OperationResult
   (match (ensure-cache-directory root)
     [(OperationRejected message) (->OperationRejected message)]
     [(OperationOk operation)
@@ -388,11 +373,11 @@
              (str fingerprint "\n"))])])]))
 
 (defn validator-policy-relative [] String
-  (let [(configured (U String Nil)) (System/getenv "FIRN_SCHEMA_CONFIG")]
+  (let [configured (U String Nil) (System/getenv "FIRN_SCHEMA_CONFIG")]
     (if (nil? configured) "config/beagle-validate.json" configured)))
 
 (defn read-validator-policy [root String] TextLoadResult
-  (let [(configured String) (validator-policy-relative)]
+  (let [configured String (validator-policy-relative)]
     (if (transaction/starts-with? configured "/")
       (match (host.fs/read-text-bounded configured max-text-bytes)
         [(host.fs/ReadTextBoundedOk text) (->TextLoaded text)]
@@ -406,8 +391,7 @@
   [root String
    beagle-path String
    mode transaction/SchemaMode
-   host String]
-  OperationResult
+   host String] OperationResult
   (match (current-fingerprint root beagle-path mode)
     [(CurrentFingerprintRejected message) (->OperationRejected message)]
     [(CurrentFingerprint before)
@@ -417,8 +401,7 @@
         (->OperationRejected
           "firn schema: tracked validator policy is missing\n")]
        [(TextLoaded policy)
-        (let [(outputs ExtractionOutputsResult)
-              (run-extraction-processes
+        (let [outputs ExtractionOutputsResult (run-extraction-processes
                 (transaction/extraction-processes
                   beagle-path root mode host))]
           (match (validate-extraction-outputs mode outputs policy)
@@ -502,8 +485,7 @@
 
 (defn ensure-nixos-cache
   [root String
-   beagle-path String]
-  OperationResult
+   beagle-path String] OperationResult
   (match (current-fingerprint root beagle-path (transaction/nixos-mode))
     [(CurrentFingerprintRejected message) (->OperationRejected message)]
     [(CurrentFingerprint current)
@@ -541,8 +523,7 @@
 
 (defn ensure-darwin-cache
   [root String
-   beagle-path String]
-  OperationResult
+   beagle-path String] OperationResult
   (match (current-fingerprint root beagle-path (transaction/darwin-mode))
     [(CurrentFingerprintRejected message) (->OperationRejected message)]
     [(CurrentFingerprint current)
@@ -585,14 +566,12 @@
 
 (defn absolute-input
   [root String
-   value String]
-  String
+   value String] String
   (if (absolute-path? value) value (path root value)))
 
 (defn absolute-inputs
   [root String
-   inputs (Vec String)]
-  (Vec String)
+   inputs (Vec String)] (Vec String)
   (loop [index Int 0
          result (Vec String) []]
     (if (>= index (count inputs))
@@ -603,12 +582,11 @@
 (defn lint-nix-files
   [root String
    files (Vec String)
-   index Int]
-  OperationResult
+   index Int] OperationResult
   (if (>= index (count files))
     (->OperationOk "Nix syntax is clean")
-    (let [(relative String) (nth files index)
-          (absolute String) (absolute-input root relative)]
+    (let [relative String (nth files index)
+          absolute String (absolute-input root relative)]
       (match (host.process/run-capture
                ["nix-instantiate" "--parse-only" absolute]
                "" max-process-output)
@@ -626,13 +604,10 @@
 (defn run-validator
   [root String
    beagle-path String
-   inputs (Vec String)]
-  Int
-  (let [(argv (Vec String))
-        (loop [index Int 0
-               result (Vec String)
-               [(path beagle-path "bin/beagle-validate")]]
-          (if (>= index (count inputs))
+   inputs (Vec String)] Int
+  (let [argv (Vec String) (loop [index Int 0
+                                 result (Vec String) [(path beagle-path "bin/beagle-validate")]]
+                            (if (>= index (count inputs))
             result
             (recur (+ index 1)
               (conj result (absolute-input root (nth inputs index))))))]
@@ -652,16 +627,13 @@
 (defn run-validation
   [root String
    beagle-path String
-   explicit (Vec String)]
-  Int
+   explicit (Vec String)] Int
   (match (walk-files root "" false)
     [(PathsLoadRejected message)
      (do (host.stderr/write-text message) 1)]
     [(PathsLoaded discovered)
-     (let [(bnix-inputs (Vec String))
-           (transaction/select-bnix-inputs discovered explicit)
-           (nix-inputs (Vec String))
-           (transaction/filter-sorted-nix discovered)]
+     (let [bnix-inputs (Vec String) (transaction/select-bnix-inputs discovered explicit)
+           nix-inputs (Vec String) (transaction/filter-sorted-nix discovered)]
        (do
          (host.stderr/write-text
            "firn repo validate: [1/2] syntax-checking generated .nix files...\n")
@@ -690,10 +662,10 @@
                      (run-validator root beagle-path bnix-inputs))])))])))]))
 
 (defn repository-root [] (U String Nil)
-  (let [(explicit (U String Nil)) (System/getenv "FIRN_REPO")]
+  (let [explicit (U String Nil) (System/getenv "FIRN_REPO")]
     (if (some? explicit)
       explicit
-      (let [(home (U String Nil)) (System/getenv "HOME")]
+      (let [home (U String Nil) (System/getenv "HOME")]
         (if (some? home)
           (str home "/code/nixos-config/main")
           nil)))))
@@ -705,14 +677,14 @@
     [(host.fs/PathKindOk kind) (or (= kind 1) (= kind 3))]))
 
 (defn beagle-root [root String] (U String Nil)
-  (let [(explicit (U String Nil)) (System/getenv "BEAGLE_PATH")]
+  (let [explicit (U String Nil) (System/getenv "BEAGLE_PATH")]
     (if (some? explicit)
       explicit
-      (let [(home (U String Nil)) (System/getenv "HOME")]
+      (let [home (U String Nil) (System/getenv "HOME")]
         (if (nil? home)
           nil
-          (let [(main-candidate String) (str home "/code/beagle/main")
-                (container-candidate String) (str home "/code/beagle")]
+          (let [main-candidate String (str home "/code/beagle/main")
+                container-candidate String (str home "/code/beagle")]
             (cond
               (candidate-is-beagle? main-candidate) main-candidate
               (candidate-is-beagle? container-candidate) container-candidate
@@ -728,13 +700,13 @@
     64))
 
 (defn -main [args (Vec String)] Int
-  (let [(root (U String Nil)) (repository-root)]
+  (let [root (U String Nil) (repository-root)]
     (if (nil? root)
       (do
         (host.stderr/write-text
           "firn schema: FIRN_REPO and HOME are not set\n")
         1)
-      (let [(beagle-path (U String Nil)) (beagle-root root)]
+      (let [beagle-path (U String Nil) (beagle-root root)]
         (if (nil? beagle-path)
           (do
             (host.stderr/write-text

@@ -30,15 +30,13 @@
 
 (defn starts-with?
   [text String
-   prefix String]
-  Bool
+   prefix String] Bool
   (and (>= (count text) (count prefix))
        (= (subs text 0 (count prefix)) prefix)))
 
 (defn ends-with?
   [text String
-   suffix String]
-  Bool
+   suffix String] Bool
   (and (>= (count text) (count suffix))
        (= (subs text (- (count text) (count suffix)) (count text)) suffix)))
 
@@ -74,8 +72,7 @@
   (str (subs source-relative 0 (- (count source-relative) 5)) ".nix"))
 
 (defn cache-valid? [state SourceState] Bool
-  (let [(output (U Int Nil))
-        (sourcestate-output-modified-nanoseconds state)]
+  (let [output (U Int Nil) (sourcestate-output-modified-nanoseconds state)]
     (if (nil? output)
       false
       (> output
@@ -84,11 +81,10 @@
 (defn stale-sources
   [sources (Vec SourceState)
    index Int
-   result (Vec SourceState)]
-  (Vec SourceState)
+   result (Vec SourceState)] (Vec SourceState)
   (if (>= index (count sources))
     result
-    (let [(state SourceState) (nth sources index)]
+    (let [state SourceState (nth sources index)]
       (stale-sources sources (+ index 1)
         (if (cache-valid? state) result (conj result state))))))
 
@@ -99,20 +95,16 @@
 
 (defn absolute-path
   [root String
-   relative String]
-  String
+   relative String] String
   (str root "/" relative))
 
 (defn compiler-process
   [compiler String
    root String
    state SourceState
-   temporary String]
-  CompilerProcess
-  (let [(source-relative String)
-        (sourcekey-relative (sourcestate-key state))
-        (destination-relative String)
-        (sourcestate-output-relative state)]
+   temporary String] CompilerProcess
+  (let [source-relative String (sourcekey-relative (sourcestate-key state))
+        destination-relative String (sourcestate-output-relative state)]
     (->CompilerProcess source-relative destination-relative
       [compiler (absolute-path root source-relative) temporary])))
 
@@ -133,8 +125,7 @@
 (defn skip-horizontal
   [text String
    cursor Int
-   end Int]
-  Int
+   end Int] Int
   (if (and (< cursor end)
            (horizontal-space? (subs text cursor (+ cursor 1))))
     (skip-horizontal text (+ cursor 1) end)
@@ -142,9 +133,8 @@
 
 (defn line-end
   [text String
-   start Int]
-  Int
-  (loop [(cursor Int) start]
+   start Int] Int
+  (loop [cursor Int start]
     (if (or (>= cursor (count text))
             (= (subs text cursor (+ cursor 1)) "\n"))
       cursor
@@ -152,17 +142,15 @@
 
 (defn after-line
   [text String
-   start Int]
-  Int
-  (let [(end Int) (line-end text start)]
+   start Int] Int
+  (let [end Int (line-end text start)]
     (if (< end (count text)) (+ end 1) end)))
 
 (defn token-at?
   [text String
    cursor Int
    end Int
-   token String]
-  Bool
+   token String] Bool
   (and (<= (+ cursor (count token)) end)
        (= (subs text cursor (+ cursor (count token))) token)))
 
@@ -170,26 +158,24 @@
   [text String
    start Int
    end Int
-   name String]
-  (U String Nil)
-  (let [(cursor Int) (skip-horizontal text start end)]
+   name String] (U String Nil)
+  (let [cursor Int (skip-horizontal text start end)]
     (if (not (token-at? text cursor end name))
       nil
-      (let [(after-name Int) (+ cursor (count name))
-            (equals Int) (skip-horizontal text after-name end)]
+      (let [after-name Int (+ cursor (count name))
+            equals Int (skip-horizontal text after-name end)]
         (if (or (>= equals end)
                 (not (= (subs text equals (+ equals 1)) "=")))
           nil
-          (let [(opening Int) (skip-horizontal text (+ equals 1) end)]
+          (let [opening Int (skip-horizontal text (+ equals 1) end)]
             (if (>= opening end)
               nil
               (subs text opening (+ opening 1)))))))))
 
 (defn authoring-line-kind
   [text String
-   start Int]
-  Int
-  (let [(end Int) (line-end text start)]
+   start Int] Int
+  (let [end Int (line-end text start)]
     (cond
       [(= (assignment-opening text start end "tags") "[") 1]
       [(= (assignment-opening text start end "tags-opt-in") "[") 1]
@@ -200,12 +186,12 @@
 (defn brace-delta
   [text String
    start Int
-   end Int]
-  Int
-  (loop [(cursor Int) start (depth Int) 0]
+   end Int] Int
+  (loop [cursor Int start
+         depth Int 0]
     (if (>= cursor end)
       depth
-      (let [(character String) (subs text cursor (+ cursor 1))]
+      (let [character String (subs text cursor (+ cursor 1))]
         (recur (+ cursor 1)
           (+ depth
              (cond
@@ -215,22 +201,23 @@
 
 (defn after-brace-block
   [text String
-   start Int]
-  Int
-  (loop [(cursor Int) start (depth Int) 0]
-    (let [(end Int) (line-end text cursor)
-          (next-depth Int) (+ depth (brace-delta text cursor end))
-          (next Int) (after-line text cursor)]
+   start Int] Int
+  (loop [cursor Int start
+         depth Int 0]
+    (let [end Int (line-end text cursor)
+          next-depth Int (+ depth (brace-delta text cursor end))
+          next Int (after-line text cursor)]
       (if (or (<= next-depth 0) (>= next (count text)))
         next
         (recur next next-depth)))))
 
 (defn strip-authoring-attributes [text String] String
-  (loop [(cursor Int) 0 (result String) ""]
+  (loop [cursor Int 0
+         result String ""]
     (if (>= cursor (count text))
       result
-      (let [(kind Int) (authoring-line-kind text cursor)
-            (next Int) (after-line text cursor)]
+      (let [kind Int (authoring-line-kind text cursor)
+            next Int (after-line text cursor)]
         (cond
           [(= kind 1) (recur next result)]
           [(= kind 2) (recur (after-brace-block text cursor) result)]
@@ -239,20 +226,17 @@
 (defn errno-message
   [operation String
    relative String
-   errno Int]
-  String
+   errno Int] String
   (str "firn-build: " operation " '" relative "': errno " errno "\n"))
 
 (defn compiler-failure-message
   [relative String
-   status Int]
-  String
+   status Int] String
   (str "firn-build: compiler failed for '" relative
     "' with status " status "\n"))
 
 (defn compiler-spawn-message
   [relative String
-   errno Int]
-  String
+   errno Int] String
   (str "firn-build: cannot start compiler for '" relative
     "': errno " errno "\n"))

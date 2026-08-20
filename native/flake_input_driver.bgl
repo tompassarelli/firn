@@ -2,28 +2,35 @@
 (ns firn.flake-input-driver
   (:require [firn.flake-input :as input]))
 
-(defrecord ModuleSource [(name String) (source String)])
+(defrecord ModuleSource
+  [name String
+   source String])
 
 (defrecord FlakeInputRepositoryData
-  [(modules (Vec ModuleSource)) (flake-text String)])
+  [modules (Vec ModuleSource)
+   flake-text String])
 
 (defunion FlakeInputArgv
   ParsedFlakeInputEmit
-  (OtherFirnCommand [(argv (Vec String))])
-  (InvalidFlakeInputArgv [(argv (Vec String))]))
+  (OtherFirnCommand [argv (Vec String)])
+  (InvalidFlakeInputArgv [argv (Vec String)]))
 
 (defunion FlakeInputEffect
-  (StdoutText [(text String)])
-  (StderrText [(text String)])
-  (WriteFlake [(path String) (text String)]))
+  (StdoutText [text String])
+  (StderrText [text String])
+  (WriteFlake
+    [path String
+     text String]))
 
-(defrecord FlakeInputOutcome [(status Int) (effects (Vec FlakeInputEffect))])
+(defrecord FlakeInputOutcome
+  [status Int
+   effects (Vec FlakeInputEffect)])
 
 (defunion ParsedModulesResult
-  (ParsedModules [(groups (Vec (Vec input/FlakeInput)))])
-  (RejectedModule [(message String)]))
+  (ParsedModules [groups (Vec (Vec input/FlakeInput))])
+  (RejectedModule [message String]))
 
-(defn parse-flake-input-argv [(argv (Vec String))] FlakeInputArgv
+(defn parse-flake-input-argv [argv (Vec String)] FlakeInputArgv
   (if (and (>= (count argv) 2)
            (= (nth argv 0) "flake-input")
            (= (nth argv 1) "resolve"))
@@ -33,18 +40,19 @@
     (->OtherFirnCommand argv)))
 
 (defn module-parse-message
-  [(module-name String) (message String) (offset Int)] String
+  [module-name String
+   message String
+   offset Int] String
   (str "firn flake-input resolve: invalid module source 'modules/"
     module-name "/default.bnix' at offset " offset ": " message "\n"))
 
 (defn parse-modules
-  [(modules (Vec ModuleSource))
-   (index Int)
-   (groups (Vec (Vec input/FlakeInput)))]
-  ParsedModulesResult
+  [modules (Vec ModuleSource)
+   index Int
+   groups (Vec (Vec input/FlakeInput))] ParsedModulesResult
   (if (>= index (count modules))
     (->ParsedModules groups)
-    (let [(module ModuleSource) (nth modules index)]
+    (let [module ModuleSource (nth modules index)]
       (match (input/module-inputs-from-source
                (modulesource-name module) (modulesource-source module))
         [(ModuleInputsRejected message offset)
@@ -54,7 +62,7 @@
         [(ModuleInputsParsed inputs)
          (parse-modules modules (+ index 1) (conj groups inputs))]))))
 
-(defn error-effects [(errors (Vec String))] (Vec FlakeInputEffect)
+(defn error-effects [errors (Vec String)] (Vec FlakeInputEffect)
   (loop [index Int 0
          effects (Vec FlakeInputEffect) []]
     (if (>= index (count errors))
@@ -63,22 +71,28 @@
         (conj effects
           (->StderrText (str (nth errors index) "\n")))))))
 
-(defn source-module-line [(inputs (Vec input/FlakeInput)) (name String)] String
-  (let [(found input/FlakeInput) (input/find-input inputs name)]
+(defn source-module-line
+  [inputs (Vec input/FlakeInput)
+   name String] String
+  (let [found input/FlakeInput (input/find-input inputs name)]
     (str "  " name " (from " (input/flakeinput-source-module found) ")\n")))
 
 (defn source-module-lines
-  [(inputs (Vec input/FlakeInput)) (names (Vec String)) (index Int)] String
+  [inputs (Vec input/FlakeInput)
+   names (Vec String)
+   index Int] String
   (if (>= index (count names))
     ""
     (str (source-module-line inputs (nth names index))
       (source-module-lines inputs names (+ index 1)))))
 
-(defn plural-suffix [(count Int)] String
+(defn plural-suffix [count Int] String
   (if (= count 1) "" "s"))
 
-(defn summary-text [(inputs (Vec input/FlakeInput)) (module-count Int)] String
-  (let [(input-count Int) (count inputs)]
+(defn summary-text
+  [inputs (Vec input/FlakeInput)
+   module-count Int] String
+  (let [input-count Int (count inputs)]
     (if (= input-count 0)
       "flake-inputs: no module inputs found\n"
       (str "flake-inputs: " input-count " module input"
@@ -88,10 +102,9 @@
           inputs (input/sorted-input-names inputs) 0)))))
 
 (defn success-outcome
-  [(inputs (Vec input/FlakeInput))
-   (module-count Int)
-   (splice input/SpliceResult)]
-  FlakeInputOutcome
+  [inputs (Vec input/FlakeInput)
+   module-count Int
+   splice input/SpliceResult] FlakeInputOutcome
   (match splice
     [(SpliceRejected message)
      (->FlakeInputOutcome 1
@@ -106,26 +119,24 @@
         (->WriteFlake "flake.bnix" text)
         (->StdoutText "flake-inputs: updated flake.bnix\n")])]))
 
-(defn run-flake-input-emit
-  [(repository FlakeInputRepositoryData)] FlakeInputOutcome
+(defn run-flake-input-emit [repository FlakeInputRepositoryData] FlakeInputOutcome
   (match (parse-modules
            (flakeinputrepositorydata-modules repository) 0 [])
     [(RejectedModule message)
      (->FlakeInputOutcome 1 [(->StderrText message)])]
     [(ParsedModules groups)
-     (let [(collected input/CollectedInputs) (input/collect groups)
-           (errors (Vec String)) (input/collectedinputs-errors collected)]
+     (let [collected input/CollectedInputs (input/collect groups)
+           errors (Vec String) (input/collectedinputs-errors collected)]
        (if (> (count errors) 0)
          (->FlakeInputOutcome 1 (error-effects errors))
-         (let [(inputs (Vec input/FlakeInput))
-               (input/collectedinputs-inputs collected)]
+         (let [inputs (Vec input/FlakeInput) (input/collectedinputs-inputs collected)]
            (success-outcome inputs
              (count (flakeinputrepositorydata-modules repository))
              (input/splice-flake-inputs
                (flakeinputrepositorydata-flake-text repository)
                inputs)))))]))
 
-(defn outcome-stdout [(outcome FlakeInputOutcome)] String
+(defn outcome-stdout [outcome FlakeInputOutcome] String
   (loop [index Int 0
          result String ""]
     (if (>= index (count (flakeinputoutcome-effects outcome)))
@@ -135,7 +146,7 @@
         [(StderrText text) (recur (+ index 1) result)]
         [(WriteFlake path text) (recur (+ index 1) result)]))))
 
-(defn outcome-stderr [(outcome FlakeInputOutcome)] String
+(defn outcome-stderr [outcome FlakeInputOutcome] String
   (loop [index Int 0
          result String ""]
     (if (>= index (count (flakeinputoutcome-effects outcome)))
@@ -145,7 +156,7 @@
         [(StderrText text) (recur (+ index 1) (str result text))]
         [(WriteFlake path text) (recur (+ index 1) result)]))))
 
-(defn outcome-effect-kinds [(outcome FlakeInputOutcome)] (Vec String)
+(defn outcome-effect-kinds [outcome FlakeInputOutcome] (Vec String)
   (loop [index Int 0
          result (Vec String) []]
     (if (>= index (count (flakeinputoutcome-effects outcome)))

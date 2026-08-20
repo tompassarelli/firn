@@ -519,7 +519,7 @@
     (str (:edge command) " " (:leaf command))))
 
 (defn common-command-text [common CommonCommand] String
-  (let [(command FirnCommand) (:command common)]
+  (let [command FirnCommand (:command common)]
     (str "  firn " (:node command) " " (:usage common)
       (:common-gap command) (:common-summary command) "\n")))
 
@@ -528,24 +528,26 @@
     (:summary command) "\n"))
 
 (defn command-list-text [commands (Vec FirnCommand)] String
-  (loop [(index Int) 0 (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (< index (count commands))
-      (let [(command FirnCommand) (nth commands index)]
+      (let [command FirnCommand (nth commands index)]
         (recur (+ index 1) (str result (command-text command))))
       result)))
 
 (defn common-commands-text [] String
-  (loop [(index Int) 0 (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (< index (count common-commands))
-      (let [(common CommonCommand) (nth common-commands index)]
+      (let [common CommonCommand (nth common-commands index)]
         (recur (+ index 1) (str result (common-command-text common))))
       result)))
 
 (defn command-groups-text [] String
-  (loop [(index Int) 0 (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (< index (count command-groups))
-      (let [(commands (Vec FirnCommand))
-            (:commands (nth command-groups index))]
+      (let [commands (Vec FirnCommand) (:commands (nth command-groups index))]
         (recur (+ index 1)
           (str result (:node (nth commands 0)) "\n"
             (command-list-text commands) "\n")))
@@ -567,12 +569,11 @@
   (print (full-help-text)))
 
 (defn commands-for-node [node String] (Vec FirnCommand)
-  (loop [(index Int) 0]
+  (loop [index Int 0]
     (if (>= index (count command-groups))
       []
-      (let [(commands (Vec FirnCommand))
-            (:commands (nth command-groups index))
-            (first-command FirnCommand) (nth commands 0)]
+      (let [commands (Vec FirnCommand) (:commands (nth command-groups index))
+            first-command FirnCommand (nth commands 0)]
         (if (= node (:node first-command))
           commands
           (recur (+ index 1)))))))
@@ -582,58 +583,58 @@
 
 (defn find-command
   [node String
-   edge String]
-  CommandLookup
-  (let [(commands (Vec FirnCommand)) (commands-for-node node)]
-    (loop [(index Int) 0]
+   edge String] CommandLookup
+  (let [commands (Vec FirnCommand) (commands-for-node node)]
+    (loop [index Int 0]
       (if (>= index (count commands))
         (->CommandMissing false)
-        (let [(command FirnCommand) (nth commands index)]
+        (let [command FirnCommand (nth commands index)]
           (if (= edge (:edge command))
             (->CommandFound command)
             (recur (+ index 1))))))))
 
 (defn command-count [] Int
-  (loop [(group-index Int) 0 (result Int) 0]
+  (loop [group-index Int 0
+         result Int 0]
     (if (>= group-index (count command-groups))
       result
-      (let [(commands (Vec FirnCommand))
-            (:commands (nth command-groups group-index))]
+      (let [commands (Vec FirnCommand) (:commands (nth command-groups group-index))]
         (recur (+ group-index 1) (+ result (count commands)))))))
 
 (defn joined-node-names [] String
-  (loop [(index Int) 0 (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (>= index (count command-groups))
       result
-      (let [(commands (Vec FirnCommand))
-            (:commands (nth command-groups index))
-            (command FirnCommand) (nth commands 0)]
+      (let [commands (Vec FirnCommand) (:commands (nth command-groups index))
+            command FirnCommand (nth commands 0)]
         (recur (+ index 1)
           (str result (if (= index 0) "" ", ") (:node command)))))))
 
 (defn joined-edge-names [commands (Vec FirnCommand)] String
-  (loop [(index Int) 0 (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (>= index (count commands))
       result
-      (let [(command FirnCommand) (nth commands index)]
+      (let [command FirnCommand (nth commands index)]
         (recur (+ index 1)
           (str result (if (= index 0) "" ", ") (:edge command)))))))
 
 (defn node-help-text [node String] String
-  (let [(commands (Vec FirnCommand)) (commands-for-node node)]
-    (loop [(index Int) 0 (result String) (str "Edges on '" node "':\n")]
+  (let [commands (Vec FirnCommand) (commands-for-node node)]
+    (loop [index Int 0
+           result String (str "Edges on '" node "':\n")]
       (if (>= index (count commands))
         result
-        (let [(command FirnCommand) (nth commands index)]
+        (let [command FirnCommand (nth commands index)]
           (recur (+ index 1)
             (str result "  firn " (:node command) " "
               (command-usage command) "\n      " (:summary command) "\n")))))))
 
 (defn unknown-walk-text
   [node String
-   edge String]
-  String
-  (let [(commands (Vec FirnCommand)) (commands-for-node node)]
+   edge String] String
+  (let [commands (Vec FirnCommand) (commands-for-node node)]
     (if (= (count commands) 0)
       (str "firn: unknown walk '" node " " edge "'\n"
         "  no such node '" node "'\n"
@@ -654,19 +655,19 @@
 
 (defn tokens-from
   [tokens (Vec String)
-   start Int]
-  (Vec String)
-  (loop [(index Int) start (result (Vec String)) []]
+   start Int] (Vec String)
+  (loop [index Int start
+         result (Vec String) []]
     (if (>= index (count tokens))
       result
-      (let [(token String) (nth tokens index)]
+      (let [token String (nth tokens index)]
         (recur (+ index 1) (conj result token))))))
 
 (defn chained-next? [tokens (Vec String)] Bool
   (if (< (count tokens) 2)
     false
-    (let [(node String) (nth tokens 0)
-          (edge String) (nth tokens 1)]
+    (let [node String (nth tokens 0)
+          edge String (nth tokens 1)]
       (match (find-command node edge)
         [(CommandFound command) true]
         [(CommandMissing token) false]))))
@@ -674,8 +675,7 @@
 (defn append-step
   [steps (Vec DispatchStep)
    command FirnCommand
-   leaf DispatchLeaf]
-  (Vec DispatchStep)
+   leaf DispatchLeaf] (Vec DispatchStep)
   (conj steps
     (->DispatchStep
       (:id command) (:owner command) (:node command) (:edge command) leaf)))
@@ -688,8 +688,7 @@
 
 (defn parse-walk
   [tokens (Vec String)
-   steps (Vec DispatchStep)]
-  DispatchDecision
+   steps (Vec DispatchStep)] DispatchDecision
   (cond
     (= (count tokens) 0)
     (->DispatchPlanned (->DispatchPlan steps))
@@ -701,13 +700,13 @@
       1)
 
     :else
-    (let [(node String) (nth tokens 0)
-          (edge String) (nth tokens 1)]
+    (let [node String (nth tokens 0)
+          edge String (nth tokens 1)]
       (match (find-command node edge)
         [(CommandMissing token)
          (->DispatchError (unknown-walk-text node edge) 1)]
         [(CommandFound command)
-         (let [(remaining (Vec String)) (tokens-from tokens 2)]
+         (let [remaining (Vec String) (tokens-from tokens 2)]
            (match (command-default command)
              [(DefaultFound default-leaf)
               (cond
@@ -721,13 +720,13 @@
                     (append-step steps command default-leaf)))
 
                 :else
-                (let [(leaf String) (nth remaining 0)]
+                (let [leaf String (nth remaining 0)]
                   (parse-walk (tokens-from remaining 1)
                     (append-step steps command (->ExplicitLeaf leaf)))))]
              [(DefaultMissing token)
               (if (= (count remaining) 0)
                 (missing-leaf-decision command)
-                (let [(leaf String) (nth remaining 0)]
+                (let [leaf String (nth remaining 0)]
                   (parse-walk (tokens-from remaining 1)
                     (append-step steps command (->ExplicitLeaf leaf)))))]))]))))
 
@@ -771,7 +770,7 @@
     (parse-rebuild-alias args)
 
     (= (count args) 1)
-    (let [(node String) (nth args 0)]
+    (let [node String (nth args 0)]
       (if (node-known? node)
         (->DispatchHelp (node-help-text node) 0)
         (->DispatchError (incomplete-walk-text) 1)))
@@ -782,22 +781,22 @@
 (def max-impact-output Int 16777216)
 
 (defn repository-root [] (U String Nil)
-  (let [(explicit (U String Nil)) (System/getenv "FIRN_REPO")]
+  (let [explicit (U String Nil) (System/getenv "FIRN_REPO")]
     (if (some? explicit)
       explicit
-      (let [(home (U String Nil)) (System/getenv "HOME")]
+      (let [home (U String Nil) (System/getenv "HOME")]
         (if (some? home)
           (str home "/code/nixos-config/main")
           nil)))))
 
 (defn current-host [] String
-  (let [(configured (U String Nil)) (System/getenv "FIRN_HOST")]
+  (let [configured (U String Nil) (System/getenv "FIRN_HOST")]
     (if (some? configured)
       configured
       (match (host.process/run-capture ["hostname"] "" 4096)
         [(host.process/CaptureError errno) "whiterabbit"]
         [(host.process/CaptureOk status stdout stderr)
-         (let [(hostname String) (str/trim stdout)]
+         (let [hostname String (str/trim stdout)]
            (if (and (= status 0) (> (count hostname) 0))
              hostname
              "whiterabbit"))]))))
@@ -826,14 +825,13 @@
      (if (= status 0) (impact/split-lines stdout) [])]))
 
 (defn run-impact [host String] Int
-  (let [(root (U String Nil)) (repository-root)]
+  (let [root (U String Nil) (repository-root)]
     (if (nil? root)
       (do
         (host.stderr/write-text
           "firn impact: FIRN_REPO and HOME are not set\n")
         1)
-      (let [(attribute String)
-            (str root "#nixosConfigurations." host
+      (let [attribute String (str root "#nixosConfigurations." host
               ".config.system.build.toplevel")]
         (match (host.process/run-capture
                  ["nix" "build" attribute "--dry-run"]
@@ -854,9 +852,9 @@
               (do (print text) 0)])])))))
 
 (defn execute-step [step DispatchStep] Int
-  (let [(args (Vec String)) (step-argv step)
-        (node String) (dispatchstep-node step)
-        (edge String) (dispatchstep-edge step)]
+  (let [args (Vec String) (step-argv step)
+        node String (dispatchstep-node step)
+        edge String (dispatchstep-edge step)]
     (match (dispatchstep-owner step)
       [(NativeTagFamily token)
        (if (and (= node "tag") (= edge "resolve"))
@@ -878,11 +876,10 @@
 
 (defn execute-plan-from
   [steps (Vec DispatchStep)
-   index Int]
-  Int
+   index Int] Int
   (if (>= index (count steps))
     0
-    (let [(status Int) (execute-step (nth steps index))]
+    (let [status Int (execute-step (nth steps index))]
       (if (= status 0)
         (execute-plan-from steps (+ index 1))
         status))))
@@ -892,7 +889,7 @@
 
 (defn prewarm-request? [args (Vec String)] Bool
   (and (> (count args) 0)
-       (let [(mode String) (nth args 0)]
+       (let [mode String (nth args 0)]
          (or (= mode "--print-warm-key")
              (= mode "--plan-detached")
              (= mode "--plan-reference-transaction")

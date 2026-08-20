@@ -2,37 +2,53 @@
 (ns firn.flake-input
   (:require [beagle.datum-reader :as reader]))
 
-(defrecord FlakeInputProperty [(key String) (literal String) (display String)])
+(defrecord FlakeInputProperty
+  [key String
+   literal String
+   display String])
 
 (defrecord FlakeInput
-  [(name String) (source-module String) (properties (Vec FlakeInputProperty))])
+  [name String
+   source-module String
+   properties (Vec FlakeInputProperty)])
 
 (defunion ModuleInputsResult
-  (ModuleInputsParsed [(inputs (Vec FlakeInput))])
-  (ModuleInputsRejected [(message String) (offset Int)]))
+  (ModuleInputsParsed [inputs (Vec FlakeInput)])
+  (ModuleInputsRejected
+    [message String
+     offset Int]))
 
-(defrecord CollectedInputs [(inputs (Vec FlakeInput)) (errors (Vec String))])
+(defrecord CollectedInputs
+  [inputs (Vec FlakeInput)
+   errors (Vec String)])
 
 (defunion SpliceResult
-  (SpliceChanged [(text String)])
-  (SpliceUnchanged [(text String)])
-  (SpliceRejected [(message String)]))
+  (SpliceChanged [text String])
+  (SpliceUnchanged [text String])
+  (SpliceRejected [message String]))
 
 (defunion ReplacementResult
-  (ReplacementOk [(text String)])
-  (ReplacementRejected [(message String)]))
+  (ReplacementOk [text String])
+  (ReplacementRejected [message String]))
 
 (defrecord SpanScan
-  [(ok Bool) (found Bool) (start Int) (message String) (offset Int)])
+  [ok Bool
+   found Bool
+   start Int
+   message String
+   offset Int])
 
 (defrecord PropertyScan
-  [(ok Bool)
-   (properties (Vec FlakeInputProperty))
-   (message String)
-   (offset Int)])
+  [ok Bool
+   properties (Vec FlakeInputProperty)
+   message String
+   offset Int])
 
 (defrecord InputsScan
-  [(ok Bool) (inputs (Vec FlakeInput)) (message String) (offset Int)])
+  [ok Bool
+   inputs (Vec FlakeInput)
+   message String
+   offset Int])
 
 (def input-begin-marker String
   ";; --- GENERATED MODULE INPUTS (do not edit) ---")
@@ -59,43 +75,51 @@
 (def darwin-hm-end-marker String
   ";; --- END GENERATED DARWIN HM SPECIALARGS ---")
 
-(defn span-found [(start Int)] SpanScan
+(defn span-found [start Int] SpanScan
   (->SpanScan true true start "" -1))
 
 (defn span-missing [] SpanScan
   (->SpanScan true false -1 "" -1))
 
-(defn span-rejected [(message String) (offset Int)] SpanScan
+(defn span-rejected
+  [message String
+   offset Int] SpanScan
   (->SpanScan false false -1 message offset))
 
-(defn event-offset [(events (Vec reader/ReaderEvent)) (index Int)] Int
+(defn event-offset
+  [events (Vec reader/ReaderEvent)
+   index Int] Int
   (if (and (>= index 0) (< index (count events)))
     (reader/readerevent-offset (nth events index))
     -1))
 
-(defn open-kind? [(kind Keyword)] Bool
+(defn open-kind? [kind Keyword] Bool
   (or (= kind :list/open)
       (= kind :vector/open)
       (= kind :map/open)
       (= kind :set/open)))
 
-(defn close-kind? [(kind Keyword)] Bool
+(defn close-kind? [kind Keyword] Bool
   (or (= kind :list/close)
       (= kind :vector/close)
       (= kind :map/close)
       (= kind :set/close)))
 
-(defn matching-close-kind? [(opened Keyword) (closed Keyword)] Bool
+(defn matching-close-kind?
+  [opened Keyword
+   closed Keyword] Bool
   (or (and (= opened :list/open) (= closed :list/close))
       (and (= opened :vector/open) (= closed :vector/close))
       (and (= opened :map/open) (= closed :map/close))
       (and (= opened :set/open) (= closed :set/close))))
 
-(defn datum-end [(events (Vec reader/ReaderEvent)) (start Int)] Int
+(defn datum-end
+  [events (Vec reader/ReaderEvent)
+   start Int] Int
   (if (or (< start 0) (>= start (count events)))
     -1
-    (let [(opening reader/ReaderEvent) (nth events start)
-          (kind Keyword) (reader/readerevent-kind opening)]
+    (let [opening reader/ReaderEvent (nth events start)
+          kind Keyword (reader/readerevent-kind opening)]
       (cond
         (close-kind? kind) -1
 
@@ -106,7 +130,7 @@
         (loop [index Int (+ start 1)]
           (if (>= index (count events))
             -1
-            (let [(event reader/ReaderEvent) (nth events index)]
+            (let [event reader/ReaderEvent (nth events index)]
               (if (and (= (reader/readerevent-depth event)
                           (reader/readerevent-depth opening))
                        (matching-close-kind?
@@ -115,8 +139,10 @@
                 (+ index 1)
                 (recur (+ index 1))))))))))
 
-(defn container-child-count [(events (Vec reader/ReaderEvent)) (start Int)] Int
-  (let [(end Int) (datum-end events start)]
+(defn container-child-count
+  [events (Vec reader/ReaderEvent)
+   start Int] Int
+  (let [end Int (datum-end events start)]
     (if (or (< end 0)
             (not (open-kind?
                    (reader/readerevent-kind (nth events start)))))
@@ -127,14 +153,16 @@
           (= cursor (- end 1)) total
           (> cursor (- end 1)) -1
           :else
-          (let [(next Int) (datum-end events cursor)]
+          (let [next Int (datum-end events cursor)]
             (if (or (< next 0) (> next (- end 1)))
               -1
               (recur next (+ total 1)))))))))
 
 (defn container-child-start
-  [(events (Vec reader/ReaderEvent)) (start Int) (wanted Int)] Int
-  (let [(end Int) (datum-end events start)]
+  [events (Vec reader/ReaderEvent)
+   start Int
+   wanted Int] Int
+  (let [end Int (datum-end events start)]
     (if (or (< wanted 0)
             (< end 0)
             (not (open-kind?
@@ -147,30 +175,34 @@
           (> cursor (- end 1)) -1
           (= index wanted) cursor
           :else
-          (let [(next Int) (datum-end events cursor)]
+          (let [next Int (datum-end events cursor)]
             (if (or (< next 0) (> next (- end 1)))
               -1
               (recur next (+ index 1)))))))))
 
 (defn symbol-at?
-  [(events (Vec reader/ReaderEvent)) (index Int) (value String)] Bool
+  [events (Vec reader/ReaderEvent)
+   index Int
+   value String] Bool
   (and (>= index 0)
        (< index (count events))
        (= :symbol (reader/readerevent-kind (nth events index)))
        (= value (reader/readerevent-value (nth events index)))))
 
 (defn list-head?
-  [(events (Vec reader/ReaderEvent)) (start Int) (head String)] Bool
+  [events (Vec reader/ReaderEvent)
+   start Int
+   head String] Bool
   (and (>= start 0)
        (< start (count events))
        (= :list/open (reader/readerevent-kind (nth events start)))
        (symbol-at? events (container-child-start events start 0) head)))
 
-(defn find-module-form [(events (Vec reader/ReaderEvent))] SpanScan
+(defn find-module-form [events (Vec reader/ReaderEvent)] SpanScan
   (loop [cursor Int 0]
     (if (= cursor (count events))
       (span-missing)
-      (let [(next Int) (datum-end events cursor)]
+      (let [next Int (datum-end events cursor)]
         (if (< next 0)
           (span-rejected "invalid top-level datum" (event-offset events cursor))
           (if (list-head? events cursor "nix/module")
@@ -178,13 +210,13 @@
             (recur next)))))))
 
 (defn unwrap-module-body
-  [(events (Vec reader/ReaderEvent)) (start Int)] SpanScan
+  [events (Vec reader/ReaderEvent)
+   start Int] SpanScan
   (loop [current Int start
          wrappers Int 0]
     (if (or (< current 0) (>= current (count events)))
       (span-missing)
-      (let [(kind Keyword)
-            (reader/readerevent-kind (nth events current))]
+      (let [kind Keyword (reader/readerevent-kind (nth events current))]
         (cond
           (= kind :map/open)
           (span-found current)
@@ -200,25 +232,27 @@
           :else
           (span-missing))))))
 
-(defn find-module-body [(events (Vec reader/ReaderEvent))] SpanScan
-  (let [(form SpanScan) (find-module-form events)]
+(defn find-module-body [events (Vec reader/ReaderEvent)] SpanScan
+  (let [form SpanScan (find-module-form events)]
     (if (or (not (spanscan-ok form))
             (not (spanscan-found form)))
       form
-      (let [(start Int) (spanscan-start form)]
+      (let [start Int (spanscan-start form)]
         (if (< (container-child-count events start) 3)
           (span-missing)
           (unwrap-module-body
             events (container-child-start events start 2)))))))
 
 (defn map-field
-  [(events (Vec reader/ReaderEvent)) (start Int) (field String)] SpanScan
+  [events (Vec reader/ReaderEvent)
+   start Int
+   field String] SpanScan
   (if (or (< start 0)
           (>= start (count events))
           (not= :map/open
                 (reader/readerevent-kind (nth events start))))
     (span-missing)
-    (let [(end Int) (datum-end events start)]
+    (let [end Int (datum-end events start)]
       (loop [cursor Int (+ start 1)
              found Int -1]
         (cond
@@ -229,13 +263,12 @@
           (span-missing)
 
           :else
-          (let [(key reader/ReaderEvent) (nth events cursor)
-                (key-end Int) (datum-end events cursor)]
+          (let [key reader/ReaderEvent (nth events cursor)
+                key-end Int (datum-end events cursor)]
             (if (or (< key-end 0) (>= key-end (- end 1)))
               (span-missing)
-              (let [(value-end Int) (datum-end events key-end)
-                    (matches Bool)
-                    (and (= (+ cursor 1) key-end)
+              (let [value-end Int (datum-end events key-end)
+                    matches Bool (and (= (+ cursor 1) key-end)
                          (= :keyword (reader/readerevent-kind key))
                          (= field (reader/readerevent-value key)))]
                 (if (or (< value-end 0) (> value-end (- end 1)))
@@ -243,17 +276,16 @@
                   (recur value-end (if matches key-end found)))))))))))
 
 (defn render-children
-  [(events (Vec reader/ReaderEvent))
-   (start Int)
-   (end Int)
-   (separator String)]
-  String
+  [events (Vec reader/ReaderEvent)
+   start Int
+   end Int
+   separator String] String
   (loop [cursor Int start
          result String ""
          first-child Bool true]
     (if (>= cursor end)
       result
-      (let [(next Int) (datum-end events cursor)]
+      (let [next Int (datum-end events cursor)]
         (if (< next 0)
           result
           (recur next
@@ -261,10 +293,12 @@
               (render-datum events cursor))
             false))))))
 
-(defn render-datum [(events (Vec reader/ReaderEvent)) (start Int)] String
-  (let [(event reader/ReaderEvent) (nth events start)
-        (kind Keyword) (reader/readerevent-kind event)
-        (end Int) (datum-end events start)]
+(defn render-datum
+  [events (Vec reader/ReaderEvent)
+   start Int] String
+  (let [event reader/ReaderEvent (nth events start)
+        kind Keyword (reader/readerevent-kind event)
+        end Int (datum-end events start)]
     (cond
       (= kind :string)
       (reader/render-literal kind (reader/readerevent-value event))
@@ -284,17 +318,21 @@
       :else
       (reader/readerevent-literal event))))
 
-(defn display-datum [(events (Vec reader/ReaderEvent)) (start Int)] String
-  (let [(event reader/ReaderEvent) (nth events start)
-        (kind Keyword) (reader/readerevent-kind event)]
+(defn display-datum
+  [events (Vec reader/ReaderEvent)
+   start Int] String
+  (let [event reader/ReaderEvent (nth events start)
+        kind Keyword (reader/readerevent-kind event)]
     (if (= kind :string)
       (reader/readerevent-value event)
       (render-datum events start))))
 
-(defn emission-literal [(events (Vec reader/ReaderEvent)) (start Int)] String
-  (let [(event reader/ReaderEvent) (nth events start)
-        (kind Keyword) (reader/readerevent-kind event)
-        (value String) (reader/readerevent-value event)]
+(defn emission-literal
+  [events (Vec reader/ReaderEvent)
+   start Int] String
+  (let [event reader/ReaderEvent (nth events start)
+        kind Keyword (reader/readerevent-kind event)
+        value String (reader/readerevent-value event)]
     (cond
       (and (= kind :string)
            (or (= value "true") (= value "false")))
@@ -309,7 +347,9 @@
       :else
       (render-datum events start))))
 
-(defn property-index [(properties (Vec FlakeInputProperty)) (key String)] Int
+(defn property-index
+  [properties (Vec FlakeInputProperty)
+   key String] Int
   (loop [index Int 0]
     (if (>= index (count properties))
       -1
@@ -318,10 +358,9 @@
         (recur (+ index 1))))))
 
 (defn replace-property-at
-  [(properties (Vec FlakeInputProperty))
-   (wanted Int)
-   (replacement FlakeInputProperty)]
-  (Vec FlakeInputProperty)
+  [properties (Vec FlakeInputProperty)
+   wanted Int
+   replacement FlakeInputProperty] (Vec FlakeInputProperty)
   (loop [index Int 0
          result (Vec FlakeInputProperty) []]
     (if (>= index (count properties))
@@ -331,23 +370,22 @@
           (if (= index wanted) replacement (nth properties index)))))))
 
 (defn upsert-property
-  [(properties (Vec FlakeInputProperty))
-   (property FlakeInputProperty)]
-  (Vec FlakeInputProperty)
-  (let [(index Int)
-        (property-index properties (flakeinputproperty-key property))]
+  [properties (Vec FlakeInputProperty)
+   property FlakeInputProperty] (Vec FlakeInputProperty)
+  (let [index Int (property-index properties (flakeinputproperty-key property))]
     (if (< index 0)
       (conj properties property)
       (replace-property-at properties index property))))
 
 (defn read-properties
-  [(events (Vec reader/ReaderEvent)) (start Int)] PropertyScan
+  [events (Vec reader/ReaderEvent)
+   start Int] PropertyScan
   (if (or (< start 0)
           (>= start (count events))
           (not= :map/open
                 (reader/readerevent-kind (nth events start))))
     (->PropertyScan true [] "" -1)
-    (let [(end Int) (datum-end events start)]
+    (let [end Int (datum-end events start)]
       (loop [cursor Int (+ start 1)
              properties (Vec FlakeInputProperty) []]
         (cond
@@ -358,12 +396,12 @@
           (->PropertyScan true properties "" -1)
 
           :else
-          (let [(key reader/ReaderEvent) (nth events cursor)
-                (key-end Int) (datum-end events cursor)]
+          (let [key reader/ReaderEvent (nth events cursor)
+                key-end Int (datum-end events cursor)]
             (if (or (< key-end 0) (>= key-end (- end 1)))
               (->PropertyScan true properties "" -1)
-              (let [(value-start Int) key-end
-                    (value-end Int) (datum-end events value-start)]
+              (let [value-start Int key-end
+                    value-end Int (datum-end events value-start)]
                 (if (or (< value-end 0) (> value-end (- end 1)))
                   (->PropertyScan true properties "" -1)
                   (if (and (= (+ cursor 1) key-end)
@@ -376,7 +414,9 @@
                           (display-datum events value-start))))
                     (recur (+ cursor 1) properties)))))))))))
 
-(defn input-index [(inputs (Vec FlakeInput)) (name String)] Int
+(defn input-index
+  [inputs (Vec FlakeInput)
+   name String] Int
   (loop [index Int 0]
     (if (>= index (count inputs))
       -1
@@ -385,10 +425,9 @@
         (recur (+ index 1))))))
 
 (defn replace-input-at
-  [(inputs (Vec FlakeInput))
-   (wanted Int)
-   (replacement FlakeInput)]
-  (Vec FlakeInput)
+  [inputs (Vec FlakeInput)
+   wanted Int
+   replacement FlakeInput] (Vec FlakeInput)
   (loop [index Int 0
          result (Vec FlakeInput) []]
     (if (>= index (count inputs))
@@ -398,23 +437,23 @@
           (if (= index wanted) replacement (nth inputs index)))))))
 
 (defn upsert-input
-  [(inputs (Vec FlakeInput)) (input FlakeInput)] (Vec FlakeInput)
-  (let [(index Int) (input-index inputs (flakeinput-name input))]
+  [inputs (Vec FlakeInput)
+   input FlakeInput] (Vec FlakeInput)
+  (let [index Int (input-index inputs (flakeinput-name input))]
     (if (< index 0)
       (conj inputs input)
       (replace-input-at inputs index input))))
 
 (defn read-input-map
-  [(events (Vec reader/ReaderEvent))
-   (start Int)
-   (module-name String)]
-  InputsScan
+  [events (Vec reader/ReaderEvent)
+   start Int
+   module-name String] InputsScan
   (if (or (< start 0)
           (>= start (count events))
           (not= :map/open
                 (reader/readerevent-kind (nth events start))))
     (->InputsScan true [] "" -1)
-    (let [(end Int) (datum-end events start)]
+    (let [end Int (datum-end events start)]
       (loop [cursor Int (+ start 1)
              inputs (Vec FlakeInput) []]
         (cond
@@ -425,18 +464,17 @@
           (->InputsScan true inputs "" -1)
 
           :else
-          (let [(key reader/ReaderEvent) (nth events cursor)
-                (key-end Int) (datum-end events cursor)]
+          (let [key reader/ReaderEvent (nth events cursor)
+                key-end Int (datum-end events cursor)]
             (if (or (< key-end 0) (>= key-end (- end 1)))
               (->InputsScan true inputs "" -1)
-              (let [(value-start Int) key-end
-                    (value-end Int) (datum-end events value-start)]
+              (let [value-start Int key-end
+                    value-end Int (datum-end events value-start)]
                 (if (or (< value-end 0) (> value-end (- end 1)))
                   (->InputsScan true inputs "" -1)
                   (if (and (= (+ cursor 1) key-end)
                            (= :keyword (reader/readerevent-kind key)))
-                    (let [(properties PropertyScan)
-                          (read-properties events value-start)]
+                    (let [properties PropertyScan (read-properties events value-start)]
                       (if (propertyscan-ok properties)
                         (recur value-end
                           (upsert-input inputs
@@ -450,13 +488,14 @@
                     (recur (+ cursor 1) inputs)))))))))))
 
 (defn module-inputs-from-source
-  [(module-name String) (source String)] ModuleInputsResult
-  (let [(read reader/DatumRead) (reader/read-events source)
-        (read-error String?) (reader/datumread-error read)]
+  [module-name String
+   source String] ModuleInputsResult
+  (let [read reader/DatumRead (reader/read-events source)
+        read-error String? (reader/datumread-error read)]
     (if (some? read-error)
       (->ModuleInputsRejected read-error (reader/datumread-error-offset read))
-      (let [(events (Vec reader/ReaderEvent)) (reader/datumread-events read)
-            (body SpanScan) (find-module-body events)]
+      (let [events (Vec reader/ReaderEvent) (reader/datumread-events read)
+            body SpanScan (find-module-body events)]
         (cond
           (not (spanscan-ok body))
           (->ModuleInputsRejected
@@ -466,25 +505,27 @@
           (->ModuleInputsParsed [])
 
           :else
-          (let [(field SpanScan)
-                (map-field events (spanscan-start body) ":flake-inputs")]
+          (let [field SpanScan (map-field events (spanscan-start body) ":flake-inputs")]
             (if (or (not (spanscan-ok field))
                     (not (spanscan-found field)))
               (->ModuleInputsParsed [])
-              (let [(scan InputsScan)
-                    (read-input-map events (spanscan-start field) module-name)]
+              (let [scan InputsScan (read-input-map events (spanscan-start field) module-name)]
                 (if (inputsscan-ok scan)
                   (->ModuleInputsParsed (inputsscan-inputs scan))
                   (->ModuleInputsRejected
                     (inputsscan-message scan) (inputsscan-offset scan)))))))))))
 
-(defn property [(input FlakeInput) (key String)] (U FlakeInputProperty Nil)
-  (let [(index Int) (property-index (flakeinput-properties input) key)]
+(defn property
+  [input FlakeInput
+   key String] (U FlakeInputProperty Nil)
+  (let [index Int (property-index (flakeinput-properties input) key)]
     (if (< index 0) nil (nth (flakeinput-properties input) index))))
 
-(defn url-equal? [(incoming FlakeInput) (existing FlakeInput)] Bool
-  (let [(incoming-url (U FlakeInputProperty Nil)) (property incoming "url")
-        (existing-url (U FlakeInputProperty Nil)) (property existing "url")]
+(defn url-equal?
+  [incoming FlakeInput
+   existing FlakeInput] Bool
+  (let [incoming-url (U FlakeInputProperty Nil) (property incoming "url")
+        existing-url (U FlakeInputProperty Nil) (property existing "url")]
     (if (nil? incoming-url)
       false
       (= (flakeinputproperty-display incoming-url)
@@ -492,11 +533,15 @@
            ""
            (flakeinputproperty-display existing-url))))))
 
-(defn url-display [(input FlakeInput) (fallback String)] String
-  (let [(url (U FlakeInputProperty Nil)) (property input "url")]
+(defn url-display
+  [input FlakeInput
+   fallback String] String
+  (let [url (U FlakeInputProperty Nil) (property input "url")]
     (if (nil? url) fallback (flakeinputproperty-display url))))
 
-(defn conflict-message [(incoming FlakeInput) (existing FlakeInput)] String
+(defn conflict-message
+  [incoming FlakeInput
+   existing FlakeInput] String
   (str "flake-inputs: conflict on '" (flakeinput-name incoming)
     "' — module '" (flakeinput-source-module incoming) "' declares url "
     (url-display incoming "#f") " but module '"
@@ -504,20 +549,18 @@
     (url-display existing "") ))
 
 (defn collect-module-inputs
-  [(collected (Vec FlakeInput))
-   (errors (Vec String))
-   (incoming (Vec FlakeInput))
-   (index Int)]
-  CollectedInputs
+  [collected (Vec FlakeInput)
+   errors (Vec String)
+   incoming (Vec FlakeInput)
+   index Int] CollectedInputs
   (if (>= index (count incoming))
     (->CollectedInputs collected errors)
-    (let [(candidate FlakeInput) (nth incoming index)
-          (existing-index Int)
-          (input-index collected (flakeinput-name candidate))]
+    (let [candidate FlakeInput (nth incoming index)
+          existing-index Int (input-index collected (flakeinput-name candidate))]
       (if (< existing-index 0)
         (collect-module-inputs
           (conj collected candidate) errors incoming (+ index 1))
-        (let [(existing FlakeInput) (nth collected existing-index)]
+        (let [existing FlakeInput (nth collected existing-index)]
           (collect-module-inputs
             collected
             (if (url-equal? candidate existing)
@@ -526,20 +569,19 @@
             incoming
             (+ index 1)))))))
 
-(defn collect [(module-input-groups (Vec (Vec FlakeInput)))] CollectedInputs
+(defn collect [module-input-groups (Vec (Vec FlakeInput))] CollectedInputs
   (loop [index Int 0
          collected (Vec FlakeInput) []
          errors (Vec String) []]
     (if (>= index (count module-input-groups))
       (->CollectedInputs collected errors)
-      (let [(next CollectedInputs)
-            (collect-module-inputs
+      (let [next CollectedInputs (collect-module-inputs
               collected errors (nth module-input-groups index) 0)]
         (recur (+ index 1)
           (collectedinputs-inputs next)
           (collectedinputs-errors next))))))
 
-(defn sorted-input-names [(inputs (Vec FlakeInput))] (Vec String)
+(defn sorted-input-names [inputs (Vec FlakeInput)] (Vec String)
   (loop [index Int 0
          names (Vec String) []]
     (if (>= index (count inputs))
@@ -547,7 +589,7 @@
       (recur (+ index 1)
         (conj names (flakeinput-name (nth inputs index)))))))
 
-(defn sorted-property-keys [(properties (Vec FlakeInputProperty))] (Vec String)
+(defn sorted-property-keys [properties (Vec FlakeInputProperty)] (Vec String)
   (loop [index Int 0
          keys (Vec String) []]
     (if (>= index (count properties))
@@ -555,61 +597,74 @@
       (recur (+ index 1)
         (conj keys (flakeinputproperty-key (nth properties index)))))))
 
-(defn find-input [(inputs (Vec FlakeInput)) (name String)] FlakeInput
+(defn find-input
+  [inputs (Vec FlakeInput)
+   name String] FlakeInput
   (nth inputs (input-index inputs name)))
 
 (defn render-property-pairs
-  [(properties (Vec FlakeInputProperty)) (keys (Vec String)) (index Int)] String
+  [properties (Vec FlakeInputProperty)
+   keys (Vec String)
+   index Int] String
   (if (>= index (count keys))
     ""
-    (let [(key String) (nth keys index)
-          (property FlakeInputProperty)
-          (nth properties (property-index properties key))]
+    (let [key String (nth keys index)
+          property FlakeInputProperty (nth properties (property-index properties key))]
       (str (if (= index 0) "" " ") ":" key " "
         (flakeinputproperty-literal property)
         (render-property-pairs properties keys (+ index 1))))))
 
-(defn format-input-decl [(input FlakeInput)] String
-  (let [(properties (Vec FlakeInputProperty)) (flakeinput-properties input)]
+(defn format-input-decl [input FlakeInput] String
+  (let [properties (Vec FlakeInputProperty) (flakeinput-properties input)]
     (str "   :" (flakeinput-name input) " {"
       (render-property-pairs properties (sorted-property-keys properties) 0)
       "}")))
 
 (defn join-input-lines
-  [(inputs (Vec FlakeInput)) (names (Vec String)) (index Int)] String
+  [inputs (Vec FlakeInput)
+   names (Vec String)
+   index Int] String
   (if (>= index (count names))
     ""
     (str (if (= index 0) "" "\n")
       (format-input-decl (find-input inputs (nth names index)))
       (join-input-lines inputs names (+ index 1)))))
 
-(defn join-args-lines [(names (Vec String)) (index Int)] String
+(defn join-args-lines
+  [names (Vec String)
+   index Int] String
   (if (>= index (count names))
     ""
     (str (if (= index 0) "" "\n") "     " (nth names index)
       (join-args-lines names (+ index 1)))))
 
-(defn join-special-lines [(names (Vec String)) (index Int)] String
+(defn join-special-lines
+  [names (Vec String)
+   index Int] String
   (if (>= index (count names))
     ""
     (str (if (= index 0) "" "\n")
       "                    :" (nth names index) " " (nth names index)
       (join-special-lines names (+ index 1)))))
 
-(defn input-block [(inputs (Vec FlakeInput))] String
+(defn input-block [inputs (Vec FlakeInput)] String
   (str (join-input-lines inputs (sorted-input-names inputs) 0) "\n"))
 
-(defn args-block [(inputs (Vec FlakeInput))] String
+(defn args-block [inputs (Vec FlakeInput)] String
   (str (join-args-lines (sorted-input-names inputs) 0) "\n"))
 
-(defn special-block [(inputs (Vec FlakeInput))] String
+(defn special-block [inputs (Vec FlakeInput)] String
   (str (join-special-lines (sorted-input-names inputs) 0) "\n"))
 
-(defn find-text [(text String) (needle String)] Int
-  (let [(found (U Int Nil)) (str/index-of text needle)]
+(defn find-text
+  [text String
+   needle String] Int
+  (let [found (U Int Nil) (str/index-of text needle)]
     (if (nil? found) -1 found)))
 
-(defn indentation-before [(text String) (offset Int)] String
+(defn indentation-before
+  [text String
+   offset Int] String
   (loop [cursor Int (- offset 1)]
     (cond
       (< cursor 0) ""
@@ -619,41 +674,39 @@
       (recur (- cursor 1)))))
 
 (defn replace-between-markers
-  [(text String)
-   (begin-marker String)
-   (end-marker String)
-   (content String)]
-  ReplacementResult
-  (let [(begin Int) (find-text text begin-marker)
-        (end Int) (find-text text end-marker)]
+  [text String
+   begin-marker String
+   end-marker String
+   content String] ReplacementResult
+  (let [begin Int (find-text text begin-marker)
+        end Int (find-text text end-marker)]
     (if (or (< begin 0) (< end 0) (< end begin))
       (->ReplacementRejected
         (str "markers not found in flake.bnix: " begin-marker
           " ... " end-marker))
-      (let [(before-end Int) (+ begin (count begin-marker))
-            (indent String) (indentation-before text end)]
+      (let [before-end Int (+ begin (count begin-marker))
+            indent String (indentation-before text end)]
         (->ReplacementOk
           (str (subs text 0 before-end) "\n" content indent
             (subs text end (count text))))))))
 
 (defn replace-next
-  [(result ReplacementResult)
-   (begin-marker String)
-   (end-marker String)
-   (content String)]
-  ReplacementResult
+  [result ReplacementResult
+   begin-marker String
+   end-marker String
+   content String] ReplacementResult
   (match result
     [(ReplacementRejected message) result]
     [(ReplacementOk text)
      (replace-between-markers text begin-marker end-marker content)]))
 
 (defn splice-flake-inputs
-  [(original String) (inputs (Vec FlakeInput))] SpliceResult
-  (let [(inputs-text String) (input-block inputs)
-        (args-text String) (args-block inputs)
-        (special-text String) (special-block inputs)
-        (result ReplacementResult)
-        (replace-next
+  [original String
+   inputs (Vec FlakeInput)] SpliceResult
+  (let [inputs-text String (input-block inputs)
+        args-text String (args-block inputs)
+        special-text String (special-block inputs)
+        result ReplacementResult (replace-next
           (replace-next
             (replace-next
               (replace-next

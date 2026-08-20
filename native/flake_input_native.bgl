@@ -6,31 +6,36 @@
 (def max-directory-entries Int 16384)
 
 (defunion DirectoryNamesResult
-  (DirectoryNamesLoaded [(names (Vec String))])
-  (DirectoryNamesRejected [(message String)]))
+  (DirectoryNamesLoaded [names (Vec String)])
+  (DirectoryNamesRejected [message String]))
 
 (defunion ModuleLoadResult
-  (ModuleLoaded [(module driver/ModuleSource)])
-  (ModuleLoadRejected [(message String)]))
+  (ModuleLoaded [module driver/ModuleSource])
+  (ModuleLoadRejected [message String]))
 
 (defunion ModulesLoadResult
-  (ModulesLoaded [(modules (Vec driver/ModuleSource))])
-  (ModulesLoadRejected [(message String)]))
+  (ModulesLoaded [modules (Vec driver/ModuleSource)])
+  (ModulesLoadRejected [message String]))
 
 (defunion FlakeLoadResult
-  (FlakeLoaded [(text String)])
-  (FlakeLoadRejected [(message String)]))
+  (FlakeLoaded [text String])
+  (FlakeLoadRejected [message String]))
 
-(defn path [(root String) (relative String)] String
+(defn path
+  [root String
+   relative String] String
   (str root "/" relative))
 
-(defn errno-message [(operation String) (relative String) (errno Int)] String
+(defn errno-message
+  [operation String
+   relative String
+   errno Int] String
   (str "firn flake-input resolve: " operation " '" relative
     "': errno " errno "\n"))
 
-(defn directory-names [(root String)] DirectoryNamesResult
-  (let [(relative String) "modules"
-        (absolute String) (path root relative)]
+(defn directory-names [root String] DirectoryNamesResult
+  (let [relative String "modules"
+        absolute String (path root relative)]
     (match (host.fs/list-directory-bounded
              absolute max-directory-entries)
       [(host.fs/ListDirectoryBoundedError errno)
@@ -43,8 +48,8 @@
               names (Vec String) []]
          (if (>= index (count entries))
            (->DirectoryNamesLoaded (sort names))
-           (let [(name String) (nth entries index)
-                 (candidate String) (str absolute "/" name)]
+           (let [name String (nth entries index)
+                 candidate String (str absolute "/" name)]
              (match (host.fs/path-kind candidate)
                [(host.fs/PathKindOk kind)
                 (recur (+ index 1)
@@ -62,9 +67,11 @@
   )
 )
 
-(defn load-module [(root String) (name String)] ModuleLoadResult
-  (let [(relative String) (str "modules/" name "/default.bnix")
-        (absolute String) (path root relative)]
+(defn load-module
+  [root String
+   name String] ModuleLoadResult
+  (let [relative String (str "modules/" name "/default.bnix")
+        absolute String (path root relative)]
     (match (host.fs/path-kind absolute)
       [(host.fs/PathKindError errno)
        (if (= errno 2)
@@ -82,11 +89,10 @@
             (->ModuleLoaded (driver/->ModuleSource name source))]))])))
 
 (defn load-modules-from
-  [(root String)
-   (names (Vec String))
-   (index Int)
-   (modules (Vec driver/ModuleSource))]
-  ModulesLoadResult
+  [root String
+   names (Vec String)
+   index Int
+   modules (Vec driver/ModuleSource)] ModulesLoadResult
   (if (>= index (count names))
     (->ModulesLoaded modules)
     (match (load-module root (nth names index))
@@ -94,25 +100,27 @@
       [(ModuleLoaded module)
        (load-modules-from root names (+ index 1) (conj modules module))])))
 
-(defn load-modules [(root String)] ModulesLoadResult
+(defn load-modules [root String] ModulesLoadResult
   (match (directory-names root)
     [(DirectoryNamesRejected message) (->ModulesLoadRejected message)]
     [(DirectoryNamesLoaded names) (load-modules-from root names 0 [])]))
 
-(defn load-flake [(root String)] FlakeLoadResult
-  (let [(relative String) "flake.bnix"
-        (absolute String) (path root relative)]
+(defn load-flake [root String] FlakeLoadResult
+  (let [relative String "flake.bnix"
+        absolute String (path root relative)]
     (match (host.fs/read-text-bounded absolute max-source-bytes)
       [(host.fs/ReadTextBoundedError errno)
        (->FlakeLoadRejected
          (errno-message "cannot read" relative errno))]
       [(host.fs/ReadTextBoundedOk text) (->FlakeLoaded text)])))
 
-(defn emit-io-error [(message String)] Int
+(defn emit-io-error [message String] Int
   (do (host.stderr/write-text message) 1))
 
 (defn execute-effects
-  [(root String) (outcome driver/FlakeInputOutcome) (index Int)] Int
+  [root String
+   outcome driver/FlakeInputOutcome
+   index Int] Int
   (if (>= index (count (driver/flakeinputoutcome-effects outcome)))
     (driver/flakeinputoutcome-status outcome)
     (match (nth (driver/flakeinputoutcome-effects outcome) index)
@@ -128,7 +136,7 @@
          [(host.fs/WriteTextAtomicError errno)
           (emit-io-error (errno-message "cannot write" relative errno))])])))
 
-(defn run [(root String)] Int
+(defn run [root String] Int
   (match (load-modules root)
     [(ModulesLoadRejected message) (emit-io-error message)]
     [(ModulesLoaded modules)
@@ -141,10 +149,10 @@
           0)])]))
 
 (defn repository-root [] (U String Nil)
-  (let [(explicit (U String Nil)) (System/getenv "FIRN_REPO")]
+  (let [explicit (U String Nil) (System/getenv "FIRN_REPO")]
     (if (some? explicit)
       explicit
-      (let [(home (U String Nil)) (System/getenv "HOME")]
+      (let [home (U String Nil) (System/getenv "HOME")]
         (if (some? home)
           (str home "/code/nixos-config/main")
           nil)))))
@@ -155,12 +163,12 @@
       "Usage: firn flake-input resolve emit\n")
     64))
 
-(defn -main [(args (Vec String))] Int
+(defn -main [args (Vec String)] Int
   (match (driver/parse-flake-input-argv args)
     [(OtherFirnCommand argv) (usage-error)]
     [(InvalidFlakeInputArgv argv) (usage-error)]
     [(ParsedFlakeInputEmit)
-     (let [(root (U String Nil)) (repository-root)]
+     (let [root (U String Nil) (repository-root)]
        (if (nil? root)
          (do
            (host.stderr/write-text

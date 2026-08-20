@@ -3,77 +3,97 @@
   (:require [native.json :as json]
             [beagle.nix-schema-path :as paths]))
 
-(defrecord Follow [(input String) (target String)])
+(defrecord Follow
+  [input String
+   target String])
 
 (defrecord FlakeRow
-  [(name String)
-   (url String)
-   (age-seconds Int)
-   (age String)
-   (revision String)
-   (frozen Bool)
-   (broken Bool)
-   (follows (Vec Follow))])
+  [name String
+   url String
+   age-seconds Int
+   age String
+   revision String
+   frozen Bool
+   broken Bool
+   follows (Vec Follow)])
 
 (defunion FlakeRowsResult
-  (FlakeRows [(rows (Vec FlakeRow))])
-  (FlakeRowsRejected [(message String)]))
+  (FlakeRows [rows (Vec FlakeRow)])
+  (FlakeRowsRejected [message String]))
 
 (defrecord SchemaEntry
-  [(path String)
-   (type String)
-   (inner-type String)
-   (enum-values (Vec String))
-   (declarations (Vec String))])
+  [path String
+   type String
+   inner-type String
+   enum-values (Vec String)
+   declarations (Vec String)])
 
 (defunion SchemaResult
-  (SchemaLoaded [(entries (Vec SchemaEntry))])
-  (SchemaRejected [(message String) (offset Int)]))
+  (SchemaLoaded [entries (Vec SchemaEntry)])
+  (SchemaRejected
+    [message String
+     offset Int]))
 
-(defrecord ModuleSource [(name String) (documents (Vec paths/SourceDocument))])
+(defrecord ModuleSource
+  [name String
+   documents (Vec paths/SourceDocument)])
 
 (defunion ModulePathsResult
-  (ModulePaths [(paths (Vec String))])
-  (ModulePathsRejected [(message String)]))
+  (ModulePaths [paths (Vec String)])
+  (ModulePathsRejected [message String]))
 
 (defrecord PlatformVerdict
-  [(module String) (verdict Keyword) (blockers (Vec String))])
+  [module String
+   verdict Keyword
+   blockers (Vec String)])
 
 (defunion PlatformVerdictResult
-  (PlatformVerdictLoaded [(value PlatformVerdict)])
-  (PlatformVerdictRejected [(message String)]))
+  (PlatformVerdictLoaded [value PlatformVerdict])
+  (PlatformVerdictRejected [message String]))
 
 (defunion PlatformResult
-  (PlatformLoaded [(verdicts (Vec PlatformVerdict))])
-  (PlatformRejected [(message String)]))
+  (PlatformLoaded [verdicts (Vec PlatformVerdict)])
+  (PlatformRejected [message String]))
 
-(defrecord ChildResult [(status Int) (stdout String) (stderr String)])
+(defrecord ChildResult
+  [status Int
+   stdout String
+   stderr String])
 
-(defrecord CommandResult [(status Int) (stdout String) (stderr String)])
+(defrecord CommandResult
+  [status Int
+   stdout String
+   stderr String])
 
 (defunion ViewsAction
   FlakeInputs
-  (PlatformList [(selection String)])
-  (PlatformShow [(module String)])
+  (PlatformList [selection String])
+  (PlatformShow [module String])
   PlatformSafelist
-  (SchemaExplain [(input String)])
-  (SchemaExtract [(host String)])
-  (HostGeneration [(host String)]))
+  (SchemaExplain [input String])
+  (SchemaExtract [host String])
+  (HostGeneration [host String]))
 
 (defunion ViewsArgv
-  (ParsedViews [(action ViewsAction)])
-  (InvalidViewsArgv [(argv (Vec String))]))
+  (ParsedViews [action ViewsAction])
+  (InvalidViewsArgv [argv (Vec String)]))
 
-(defn starts-with? [(text String) (prefix String)] Bool
+(defn starts-with?
+  [text String
+   prefix String] Bool
   (and (>= (count text) (count prefix))
        (= prefix (subs text 0 (count prefix)))))
 
-(defn ends-with? [(text String) (suffix String)] Bool
+(defn ends-with?
+  [text String
+   suffix String] Bool
   (and (>= (count text) (count suffix))
        (= suffix
           (subs text (- (count text) (count suffix)) (count text)))))
 
-(defn string-member? [(values (Vec String)) (candidate String)] Bool
+(defn string-member?
+  [values (Vec String)
+   candidate String] Bool
   (loop [index Int 0]
     (if (>= index (count values))
       false
@@ -81,10 +101,14 @@
         true
         (recur (+ index 1))))))
 
-(defn append-unique [(values (Vec String)) (candidate String)] (Vec String)
+(defn append-unique
+  [values (Vec String)
+   candidate String] (Vec String)
   (if (string-member? values candidate) values (conj values candidate)))
 
-(defn split-on [(text String) (separator String)] (Vec String)
+(defn split-on
+  [text String
+   separator String] (Vec String)
   (if (= separator "")
     [text]
     (loop [start Int 0
@@ -99,14 +123,16 @@
             (conj parts (subs text start index)))
           (recur start (+ index 1) parts))))))
 
-(defn split-lines [(text String)] (Vec String)
-  (let [(lines (Vec String)) (split-on text "\n")]
+(defn split-lines [text String] (Vec String)
+  (let [lines (Vec String) (split-on text "\n")]
     (if (and (> (count lines) 0)
              (= "" (nth lines (- (count lines) 1))))
       (pop lines)
       lines)))
 
-(defn join-with [(values (Vec String)) (separator String)] String
+(defn join-with
+  [values (Vec String)
+   separator String] String
   (loop [index Int 0
          result String ""]
     (if (>= index (count values))
@@ -114,7 +140,7 @@
       (recur (+ index 1)
         (str result (if (= index 0) "" separator) (nth values index))))))
 
-(defn trim-spaces [(text String)] String
+(defn trim-spaces [text String] String
   (loop [start Int 0]
     (if (and (< start (count text))
              (or (= " " (subs text start (+ start 1)))
@@ -128,21 +154,30 @@
           (recur (- end 1))
           (subs text start end))))))
 
-(defn pad-right [(text String) (width Int)] String
+(defn pad-right
+  [text String
+   width Int] String
   (loop [result String text]
     (if (>= (count result) width)
       result
       (recur (str result " ")))))
 
-(defn truncate [(text String) (limit Int)] String
+(defn truncate
+  [text String
+   limit Int] String
   (if (<= (count text) limit)
     text
     (str (subs text 0 (- limit 1)) "…")))
 
-(defn ansi [(tty Bool) (code String) (text String)] String
+(defn ansi
+  [tty Bool
+   code String
+   text String] String
   (if tty (str "\u001b[" code "m" text "\u001b[0m") text))
 
-(defn json-container-end [(events (Vec json/JsonEvent)) (start Int)] Int
+(defn json-container-end
+  [events (Vec json/JsonEvent)
+   start Int] Int
   (loop [index Int start
          depth Int 0]
     (if (>= index (count events))
@@ -160,7 +195,9 @@
            (recur (+ index 1) (- depth 1)))]
         [scalar (recur (+ index 1) depth)]))))
 
-(defn json-value-end [(events (Vec json/JsonEvent)) (start Int)] Int
+(defn json-value-end
+  [events (Vec json/JsonEvent)
+   start Int] Int
   (if (or (< start 0) (>= start (count events)))
     -1
     (match (nth events start)
@@ -171,12 +208,14 @@
       [scalar (+ start 1)])))
 
 (defn object-field-start
-  [(events (Vec json/JsonEvent)) (start Int) (key String)] Int
+  [events (Vec json/JsonEvent)
+   start Int
+   key String] Int
   (if (or (< start 0)
           (>= start (count events))
           (not (instance? JsonObjectStart (nth events start))))
     -1
-    (let [(end Int) (json-value-end events start)]
+    (let [end Int (json-value-end events start)]
       (if (< end 0)
         -1
         (loop [index Int (+ start 1)]
@@ -184,8 +223,8 @@
             -1
             (match (nth events index)
               [(JsonKey offset candidate)
-               (let [(value-index Int) (+ index 1)
-                     (next Int) (json-value-end events value-index)]
+               (let [value-index Int (+ index 1)
+                     next Int (json-value-end events value-index)]
                  (if (< next 0)
                    -1
                    (if (= candidate key)
@@ -194,12 +233,13 @@
               [other -1])))))))
 
 (defn object-field-names
-  [(events (Vec json/JsonEvent)) (start Int)] (Vec String)
+  [events (Vec json/JsonEvent)
+   start Int] (Vec String)
   (if (or (< start 0)
           (>= start (count events))
           (not (instance? JsonObjectStart (nth events start))))
     []
-    (let [(end Int) (json-value-end events start)]
+    (let [end Int (json-value-end events start)]
       (if (< end 0)
         []
         (loop [index Int (+ start 1)
@@ -208,20 +248,24 @@
             names
             (match (nth events index)
               [(JsonKey offset key)
-               (let [(next Int) (json-value-end events (+ index 1))]
+               (let [next Int (json-value-end events (+ index 1))]
                  (if (< next 0)
                    []
                    (recur next (conj names key))))]
               [other []])))))))
 
-(defn string-at [(events (Vec json/JsonEvent)) (index Int)] (U String Nil)
+(defn string-at
+  [events (Vec json/JsonEvent)
+   index Int] (U String Nil)
   (if (or (< index 0) (>= index (count events)))
     nil
     (match (nth events index)
       [(JsonString offset value) value]
       [other nil])))
 
-(defn number-at [(events (Vec json/JsonEvent)) (index Int)] (U Int Nil)
+(defn number-at
+  [events (Vec json/JsonEvent)
+   index Int] (U Int Nil)
   (if (or (< index 0) (>= index (count events)))
     nil
     (match (nth events index)
@@ -229,47 +273,57 @@
       [other nil])))
 
 (defn object-string
-  [(events (Vec json/JsonEvent)) (start Int) (key String)] (U String Nil)
+  [events (Vec json/JsonEvent)
+   start Int
+   key String] (U String Nil)
   (string-at events (object-field-start events start key)))
 
 (defn object-number
-  [(events (Vec json/JsonEvent)) (start Int) (key String)] (U Int Nil)
+  [events (Vec json/JsonEvent)
+   start Int
+   key String] (U Int Nil)
   (number-at events (object-field-start events start key)))
 
-(defn string-or [(value (U String Nil)) (fallback String)] String
+(defn string-or
+  [value (U String Nil)
+   fallback String] String
   (if (nil? value) fallback value))
 
-(defn array-strings [(events (Vec json/JsonEvent)) (start Int)] (Vec String)
+(defn array-strings
+  [events (Vec json/JsonEvent)
+   start Int] (Vec String)
   (if (or (< start 0)
           (>= start (count events))
           (not (instance? JsonArrayStart (nth events start))))
     []
-    (let [(end Int) (json-value-end events start)]
+    (let [end Int (json-value-end events start)]
       (loop [index Int (+ start 1)
              values (Vec String) []]
         (if (>= index (- end 1))
           values
-          (let [(next Int) (json-value-end events index)
-                (value (U String Nil)) (string-at events index)]
+          (let [next Int (json-value-end events index)
+                value (U String Nil) (string-at events index)]
             (if (< next 0)
               []
               (recur next (if (nil? value) values (conj values value))))))))))
 
 (defn object-array-strings
-  [(events (Vec json/JsonEvent)) (start Int) (key String)] (Vec String)
+  [events (Vec json/JsonEvent)
+   start Int
+   key String] (Vec String)
   (array-strings events (object-field-start events start key)))
 
-(defn last-string [(values (Vec String))] String
+(defn last-string [values (Vec String)] String
   (if (= (count values) 0) "" (nth values (- (count values) 1))))
 
-(defn first-string [(values (Vec String))] String
+(defn first-string [values (Vec String)] String
   (if (= (count values) 0) "" (nth values 0)))
 
-(defn human-age [(seconds Int)] String
-  (let [(safe Int) (max seconds 0)
-        (minutes Int) (quot safe 60)
-        (hours Int) (quot minutes 60)
-        (days Int) (quot hours 24)]
+(defn human-age [seconds Int] String
+  (let [safe Int (max seconds 0)
+        minutes Int (quot safe 60)
+        hours Int (quot minutes 60)
+        days Int (quot hours 24)]
     (cond
       (< safe 60) (str safe "s")
       (< minutes 60) (str minutes "m")
@@ -278,19 +332,20 @@
       (< days 365) (str (quot days 30) "mo")
       :else (str (quot days 365) "y"))))
 
-(defn original-url [(events (Vec json/JsonEvent)) (original Int)] String
-  (let [(type String) (string-or (object-string events original "type") "")
-        (url (U String Nil)) (object-string events original "url")
-        (owner String) (string-or (object-string events original "owner") "")
-        (repo String) (string-or (object-string events original "repo") "")
-        (reference (U String Nil)) (object-string events original "ref")
-        (revision (U String Nil)) (object-string events original "rev")
-        (path String) (string-or (object-string events original "path") "")]
+(defn original-url
+  [events (Vec json/JsonEvent)
+   original Int] String
+  (let [type String (string-or (object-string events original "type") "")
+        url (U String Nil) (object-string events original "url")
+        owner String (string-or (object-string events original "owner") "")
+        repo String (string-or (object-string events original "repo") "")
+        reference (U String Nil) (object-string events original "ref")
+        revision (U String Nil) (object-string events original "rev")
+        path String (string-or (object-string events original "path") "")]
     (cond
       (some? url) url
       (= type "github")
-      (let [(suffix String)
-            (if (some? reference)
+      (let [suffix String (if (some? reference)
               reference
               (if (some? revision) revision ""))]
         (str "github:" owner "/" repo
@@ -300,56 +355,59 @@
       (= type "path") (str "path:" path)
       :else (str type ":?"))))
 
-(defn broken-original? [(events (Vec json/JsonEvent)) (original Int)] Bool
-  (let [(type String) (string-or (object-string events original "type") "")
-        (path String) (string-or (object-string events original "path") "")]
+(defn broken-original?
+  [events (Vec json/JsonEvent)
+   original Int] Bool
+  (let [type String (string-or (object-string events original "type") "")
+        path String (string-or (object-string events original "path") "")]
     (and (= type "path") (starts-with? path "/"))))
 
 (defn input-node-name
-  [(events (Vec json/JsonEvent)) (value-index Int) (fallback String)] String
-  (let [(direct (U String Nil)) (string-at events value-index)]
+  [events (Vec json/JsonEvent)
+   value-index Int
+   fallback String] String
+  (let [direct (U String Nil) (string-at events value-index)]
     (if (some? direct)
       direct
-      (let [(values (Vec String)) (array-strings events value-index)]
+      (let [values (Vec String) (array-strings events value-index)]
         (if (= (count values) 0) fallback (nth values 0))))))
 
-(defn follows-from-node [(events (Vec json/JsonEvent)) (node Int)] (Vec Follow)
-  (let [(inputs Int) (object-field-start events node "inputs")
-        (names (Vec String)) (object-field-names events inputs)]
+(defn follows-from-node
+  [events (Vec json/JsonEvent)
+   node Int] (Vec Follow)
+  (let [inputs Int (object-field-start events node "inputs")
+        names (Vec String) (object-field-names events inputs)]
     (loop [remaining (Vec String) names
            result (Vec Follow) []]
       (if (= (count remaining) 0)
         result
-        (let [(name String) (first remaining)
-              (value-index Int) (object-field-start events inputs name)
-              (values (Vec String)) (array-strings events value-index)]
+        (let [name String (first remaining)
+              value-index Int (object-field-start events inputs name)
+              values (Vec String) (array-strings events value-index)]
           (recur (rest remaining)
             (if (= (count values) 0)
               result
               (conj result (->Follow name (last-string values))))))))))
 
-(defn short-revision [(revision String)] String
+(defn short-revision [revision String] String
   (subs revision 0 (min 8 (count revision))))
 
 (defn flake-row
-  [(events (Vec json/JsonEvent))
-   (nodes Int)
-   (root-inputs Int)
-   (name String)
-   (now-seconds Int)]
-  (U FlakeRow Nil)
-  (let [(input-value Int) (object-field-start events root-inputs name)
-        (node-name String) (input-node-name events input-value name)
-        (node Int) (object-field-start events nodes node-name)
-        (original Int) (object-field-start events node "original")
-        (locked Int) (object-field-start events node "locked")]
+  [events (Vec json/JsonEvent)
+   nodes Int
+   root-inputs Int
+   name String
+   now-seconds Int] (U FlakeRow Nil)
+  (let [input-value Int (object-field-start events root-inputs name)
+        node-name String (input-node-name events input-value name)
+        node Int (object-field-start events nodes node-name)
+        original Int (object-field-start events node "original")
+        locked Int (object-field-start events node "locked")]
     (if (or (< node 0) (< original 0))
       nil
-      (let [(modified (U Int Nil)) (object-number events locked "lastModified")
-            (age-seconds Int)
-            (if (nil? modified) -1 (max 0 (- now-seconds modified)))
-            (revision String)
-            (string-or (object-string events locked "rev") "?")]
+      (let [modified (U Int Nil) (object-number events locked "lastModified")
+            age-seconds Int (if (nil? modified) -1 (max 0 (- now-seconds modified)))
+            revision String (string-or (object-string events locked "rev") "?")]
         (->FlakeRow
           name
           (original-url events original)
@@ -360,31 +418,35 @@
           (broken-original? events original)
           (follows-from-node events node))))))
 
-(defn row-before? [(left FlakeRow) (right FlakeRow)] Bool
-  (let [(left-age Int)
-        (if (< (flakerow-age-seconds left) 0)
+(defn row-before?
+  [left FlakeRow
+   right FlakeRow] Bool
+  (let [left-age Int (if (< (flakerow-age-seconds left) 0)
           315360000
           (flakerow-age-seconds left))
-        (right-age Int)
-        (if (< (flakerow-age-seconds right) 0)
+        right-age Int (if (< (flakerow-age-seconds right) 0)
           315360000
           (flakerow-age-seconds right))]
     (or (< left-age right-age)
         (and (= left-age right-age)
              (< (compare (flakerow-name left) (flakerow-name right)) 0)))))
 
-(defn insert-row [(rows (Vec FlakeRow)) (row FlakeRow)] (Vec FlakeRow)
+(defn insert-row
+  [rows (Vec FlakeRow)
+   row FlakeRow] (Vec FlakeRow)
   (loop [remaining (Vec FlakeRow) rows
          result (Vec FlakeRow) []
          inserted Bool false]
     (if (= (count remaining) 0)
       (if inserted result (conj result row))
-      (let [(current FlakeRow) (first remaining)]
+      (let [current FlakeRow (first remaining)]
         (if (and (not inserted) (row-before? row current))
           (recur remaining (conj result row) true)
           (recur (rest remaining) (conj result current) inserted))))))
 
-(defn flake-rows [(source String) (now-seconds Int)] FlakeRowsResult
+(defn flake-rows
+  [source String
+   now-seconds Int] FlakeRowsResult
   (match (json/decode source)
     [(JsonDecodeError offset message)
      (->FlakeRowsRejected (str "invalid flake.lock at " offset ": " message))]
@@ -392,20 +454,18 @@
      (if (or (= (count events) 0)
              (not (instance? JsonObjectStart (nth events 0))))
        (->FlakeRowsRejected "flake.lock must be a JSON object")
-       (let [(root-name String)
-             (string-or (object-string events 0 "root") "root")
-             (nodes Int) (object-field-start events 0 "nodes")
-             (root-node Int) (object-field-start events nodes root-name)
-             (root-inputs Int) (object-field-start events root-node "inputs")
-             (names (Vec String)) (sort (object-field-names events root-inputs))]
+       (let [root-name String (string-or (object-string events 0 "root") "root")
+             nodes Int (object-field-start events 0 "nodes")
+             root-node Int (object-field-start events nodes root-name)
+             root-inputs Int (object-field-start events root-node "inputs")
+             names (Vec String) (sort (object-field-names events root-inputs))]
          (if (or (< nodes 0) (< root-node 0) (< root-inputs 0))
            (->FlakeRowsRejected "flake.lock is missing root nodes/inputs")
            (loop [remaining (Vec String) names
                   rows (Vec FlakeRow) []]
              (if (= (count remaining) 0)
                (->FlakeRows rows)
-               (let [(row (U FlakeRow Nil))
-                     (flake-row events nodes root-inputs
+               (let [row (U FlakeRow Nil) (flake-row events nodes root-inputs
                        (first remaining) now-seconds)]
                  (if (nil? row)
                    (->FlakeRowsRejected
@@ -413,7 +473,7 @@
                        "' has no lock node"))
                    (recur (rest remaining) (insert-row rows row)))))))))]))
 
-(defn max-row-name [(rows (Vec FlakeRow))] Int
+(defn max-row-name [rows (Vec FlakeRow)] Int
   (loop [remaining (Vec FlakeRow) rows
          width Int 0]
     (if (= (count remaining) 0)
@@ -421,21 +481,22 @@
       (recur (rest remaining)
         (max width (count (flakerow-name (first remaining))))))))
 
-(defn follow-lines [(follows (Vec Follow)) (name-width Int)] String
+(defn follow-lines
+  [follows (Vec Follow)
+   name-width Int] String
   (loop [remaining (Vec Follow) follows
          text String ""]
     (if (= (count remaining) 0)
       text
-      (let [(follow Follow) (first remaining)]
+      (let [follow Follow (first remaining)]
         (recur (rest remaining)
           (str text "  " (pad-right "" name-width) "  └─ "
             (follow-input follow) " shares " (follow-target follow) "\n"))))))
 
-(defn broken-lines [(rows (Vec FlakeRow))] String
-  (let [(broken (Vec FlakeRow))
-        (loop [remaining (Vec FlakeRow) rows
-               result (Vec FlakeRow) []]
-          (if (= (count remaining) 0)
+(defn broken-lines [rows (Vec FlakeRow)] String
+  (let [broken (Vec FlakeRow) (loop [remaining (Vec FlakeRow) rows
+                                     result (Vec FlakeRow) []]
+                                (if (= (count remaining) 0)
             result
             (recur (rest remaining)
               (if (flakerow-broken (first remaining))
@@ -444,20 +505,19 @@
     (if (= (count broken) 0)
       ""
       (loop [remaining (Vec FlakeRow) broken
-             text String
-             (str "! " (count broken) " input"
+             text String (str "! " (count broken) " input"
                (if (= (count broken) 1) "" "s")
                " with absolute path"
                (if (= (count broken) 1) "" "s")
                " (would break the build):\n")]
         (if (= (count remaining) 0)
           (str text "\n")
-          (let [(row FlakeRow) (first remaining)]
+          (let [row FlakeRow (first remaining)]
             (recur (rest remaining)
               (str text "    " (flakerow-name row) ": "
                 (flakerow-url row) "\n"))))))))
 
-(defn rows-have-frozen? [(rows (Vec FlakeRow))] Bool
+(defn rows-have-frozen? [rows (Vec FlakeRow)] Bool
   (loop [remaining (Vec FlakeRow) rows]
     (if (= (count remaining) 0)
       false
@@ -465,7 +525,7 @@
         true
         (recur (rest remaining))))))
 
-(defn rows-have-follows? [(rows (Vec FlakeRow))] Bool
+(defn rows-have-follows? [rows (Vec FlakeRow)] Bool
   (loop [remaining (Vec FlakeRow) rows]
     (if (= (count remaining) 0)
       false
@@ -473,25 +533,24 @@
         true
         (recur (rest remaining))))))
 
-(defn render-flake-rows [(rows (Vec FlakeRow)) (tty Bool)] String
+(defn render-flake-rows
+  [rows (Vec FlakeRow)
+   tty Bool] String
   (if (= (count rows) 0)
     "No inputs in flake.lock.\n"
-    (let [(name-width Int) (max-row-name rows)
-          (has-frozen Bool) (rows-have-frozen? rows)
-          (has-follows Bool) (rows-have-follows? rows)
-          (body String)
-          (loop [remaining (Vec FlakeRow) rows
-                 text String
-                 (str (broken-lines rows)
+    (let [name-width Int (max-row-name rows)
+          has-frozen Bool (rows-have-frozen? rows)
+          has-follows Bool (rows-have-follows? rows)
+          body String (loop [remaining (Vec FlakeRow) rows
+                             text String (str (broken-lines rows)
                    (ansi tty "1" "flake inputs")
                    " (" (count rows) ", newest first)\n"
                    "  " (pad-right "name" name-width)
                    "  " (pad-right "source" 57) "  age    rev\n")]
-            (if (= (count remaining) 0)
+                        (if (= (count remaining) 0)
               text
-              (let [(row FlakeRow) (first remaining)
-                    (source String)
-                    (str (truncate (flakerow-url row) 48)
+              (let [row FlakeRow (first remaining)
+                    source String (str (truncate (flakerow-url row) 48)
                       (if (flakerow-frozen row) " [frozen]" ""))]
                 (recur (rest remaining)
                   (str text
@@ -511,73 +570,72 @@
           "")))))
 
 (defn parse-schema-entry
-  [(events (Vec json/JsonEvent)) (start Int)] (U SchemaEntry Nil)
+  [events (Vec json/JsonEvent)
+   start Int] (U SchemaEntry Nil)
   (if (or (< start 0)
           (>= start (count events))
           (not (instance? JsonObjectStart (nth events start))))
     nil
-    (let [(name (U String Nil)) (object-string events start "name")
-          (legacy (U String Nil)) (object-string events start "p")
-          (path String) (if (some? name) name (string-or legacy ""))
-          (type String) (string-or (object-string events start "t") "?")
-          (inner Int) (object-field-start events start "inner")
-          (inner-type String)
-          (if (< inner 0)
+    (let [name (U String Nil) (object-string events start "name")
+          legacy (U String Nil) (object-string events start "p")
+          path String (if (some? name) name (string-or legacy ""))
+          type String (string-or (object-string events start "t") "?")
+          inner Int (object-field-start events start "inner")
+          inner-type String (if (< inner 0)
             ""
             (string-or (object-string events inner "t") "?"))
-          (enum-values (Vec String))
-          (let [(direct (Vec String)) (object-array-strings events start "enum")]
+          enum-values (Vec String) (let [direct (Vec String) (object-array-strings events start "enum")]
             (if (> (count direct) 0)
               direct
               (if (< inner 0)
                 []
                 (object-array-strings events inner "enum"))))
-          (declarations (Vec String))
-          (object-array-strings events start "declarations")]
+          declarations (Vec String) (object-array-strings events start "declarations")]
       (if (or (= path "")
               (and (some? name) (some? legacy) (not= name legacy)))
         nil
         (->SchemaEntry path type inner-type enum-values declarations)))))
 
 (defn parse-schema-array
-  [(events (Vec json/JsonEvent)) (start Int)] SchemaResult
+  [events (Vec json/JsonEvent)
+   start Int] SchemaResult
   (if (or (< start 0)
           (>= start (count events))
           (not (instance? JsonArrayStart (nth events start))))
     (->SchemaRejected "expected a schema array" 0)
-    (let [(end Int) (json-value-end events start)]
+    (let [end Int (json-value-end events start)]
       (if (< end 0)
         (->SchemaRejected "unterminated schema array" 0)
         (loop [index Int (+ start 1)
                entries (Vec SchemaEntry) []]
           (if (>= index (- end 1))
             (->SchemaLoaded entries)
-            (let [(next Int) (json-value-end events index)
-                  (entry (U SchemaEntry Nil))
-                  (parse-schema-entry events index)]
+            (let [next Int (json-value-end events index)
+                  entry (U SchemaEntry Nil) (parse-schema-entry events index)]
               (if (or (< next 0) (nil? entry))
                 (->SchemaRejected "schema entries must name a path" index)
                 (recur next (conj entries entry))))))))))
 
-(defn schema-from-json [(source String)] SchemaResult
+(defn schema-from-json [source String] SchemaResult
   (match (json/decode source)
     [(JsonDecodeError offset message) (->SchemaRejected message offset)]
     [(JsonDecoded events) (parse-schema-array events 0)]))
 
 (defn append-schema-entries
-  [(left (Vec SchemaEntry)) (right (Vec SchemaEntry))] (Vec SchemaEntry)
+  [left (Vec SchemaEntry)
+   right (Vec SchemaEntry)] (Vec SchemaEntry)
   (loop [remaining (Vec SchemaEntry) right
          result (Vec SchemaEntry) left]
     (if (= (count remaining) 0)
       result
       (recur (rest remaining) (conj result (first remaining))))))
 
-(defn submodule-schema-from-json [(source String)] SchemaResult
+(defn submodule-schema-from-json [source String] SchemaResult
   (match (json/decode source)
     [(JsonDecodeError offset message) (->SchemaRejected message offset)]
     [(JsonDecoded events)
-     (let [(submodules Int) (object-field-start events 0 "submodules")
-           (names (Vec String)) (object-field-names events submodules)]
+     (let [submodules Int (object-field-start events 0 "submodules")
+           names (Vec String) (object-field-names events submodules)]
        (if (< submodules 0)
          (->SchemaRejected "expected a submodules object" 0)
          (loop [remaining (Vec String) names
@@ -592,7 +650,7 @@
                 (recur (rest remaining)
                   (append-schema-entries entries nested))])))))]))
 
-(defn schema-paths [(entries (Vec SchemaEntry))] (Vec String)
+(defn schema-paths [entries (Vec SchemaEntry)] (Vec String)
   (loop [remaining (Vec SchemaEntry) entries
          result (Vec String) []]
     (if (= (count remaining) 0)
@@ -601,39 +659,46 @@
         (append-unique result (schemaentry-path (first remaining)))))))
 
 (defn schema-entry-for
-  [(entries (Vec SchemaEntry)) (path String)] (U SchemaEntry Nil)
+  [entries (Vec SchemaEntry)
+   path String] (U SchemaEntry Nil)
   (loop [remaining (Vec SchemaEntry) entries]
     (if (= (count remaining) 0)
       nil
-      (let [(entry SchemaEntry) (first remaining)]
+      (let [entry SchemaEntry (first remaining)]
         (if (= path (schemaentry-path entry))
           entry
           (recur (rest remaining)))))))
 
-(defn freeform-type? [(type String)] Bool
+(defn freeform-type? [type String] Bool
   (or (= type "attrsOf")
       (= type "lazyAttrsOf")
       (= type "anything")
       (= type "unspecified")
       (= type "freeform")))
 
-(defn path-at-or-under? [(path String) (root String)] Bool
+(defn path-at-or-under?
+  [path String
+   root String] Bool
   (or (= path root)
       (and (> (count path) (count root))
            (starts-with? path root)
            (= "." (subs path (count root) (+ (count root) 1))))))
 
-(defn schema-prefix? [(entries (Vec SchemaEntry)) (path String)] Bool
+(defn schema-prefix?
+  [entries (Vec SchemaEntry)
+   path String] Bool
   (loop [remaining (Vec SchemaEntry) entries]
     (if (= (count remaining) 0)
       false
-      (let [(candidate String) (schemaentry-path (first remaining))]
+      (let [candidate String (schemaentry-path (first remaining))]
         (if (path-at-or-under? candidate path)
           true
           (recur (rest remaining)))))))
 
 (defn replace-segment
-  [(segments (Vec String)) (index Int) (replacement String)] String
+  [segments (Vec String)
+   index Int
+   replacement String] String
   (loop [cursor Int 0
          result (Vec String) []]
     (if (>= cursor (count segments))
@@ -642,8 +707,10 @@
         (conj result
           (if (= cursor index) replacement (nth segments cursor)))))))
 
-(defn wildcard-hit? [(entries (Vec SchemaEntry)) (path String)] Bool
-  (let [(segments (Vec String)) (split-on path ".")]
+(defn wildcard-hit?
+  [entries (Vec SchemaEntry)
+   path String] Bool
+  (let [segments (Vec String) (split-on path ".")]
     (loop [index Int 0]
       (if (>= index (count segments))
         false
@@ -652,25 +719,28 @@
           true
           (recur (+ index 1)))))))
 
-(defn freeform-hit? [(entries (Vec SchemaEntry)) (path String)] Bool
+(defn freeform-hit?
+  [entries (Vec SchemaEntry)
+   path String] Bool
   (loop [remaining (Vec SchemaEntry) entries]
     (if (= (count remaining) 0)
       false
-      (let [(entry SchemaEntry) (first remaining)]
+      (let [entry SchemaEntry (first remaining)]
         (if (and (freeform-type? (schemaentry-type entry))
                  (path-at-or-under? path (schemaentry-path entry)))
           true
           (recur (rest remaining)))))))
 
-(defn path-in-schema? [(entries (Vec SchemaEntry)) (path String)] Bool
+(defn path-in-schema?
+  [entries (Vec SchemaEntry)
+   path String] Bool
   (or (schema-prefix? entries path)
       (wildcard-hit? entries path)
       (freeform-hit? entries path)))
 
 (defn append-occurrence-paths
-  [(occurrences (Vec paths/OptionPathOccurrence))
-   (result (Vec String))]
-  (Vec String)
+  [occurrences (Vec paths/OptionPathOccurrence)
+   result (Vec String)] (Vec String)
   (loop [remaining (Vec paths/OptionPathOccurrence) occurrences
          combined (Vec String) result]
     (if (= (count remaining) 0)
@@ -679,13 +749,12 @@
         (append-unique combined
           (paths/optionpathoccurrence-path (first remaining)))))))
 
-(defn module-paths [(module ModuleSource)] ModulePathsResult
-  (loop [remaining (Vec paths/SourceDocument)
-         (modulesource-documents module)
+(defn module-paths [module ModuleSource] ModulePathsResult
+  (loop [remaining (Vec paths/SourceDocument) (modulesource-documents module)
          result (Vec String) []]
     (if (= (count remaining) 0)
       (->ModulePaths result)
-      (let [(document paths/SourceDocument) (first remaining)]
+      (let [document paths/SourceDocument (first remaining)]
         (match (paths/extract-nix-option-paths document
                  ["cfg" "config" "myConfig" "home-manager"])
           [(OptionPathError source-id offset message)
@@ -695,7 +764,8 @@
              (append-occurrence-paths occurrences result))])))))
 
 (defn missing-paths
-  [(paths (Vec String)) (schema (Vec SchemaEntry))] (Vec String)
+  [paths (Vec String)
+   schema (Vec SchemaEntry)] (Vec String)
   (loop [remaining (Vec String) paths
          missing (Vec String) []]
     (if (= (count remaining) 0)
@@ -705,7 +775,9 @@
           missing
           (conj missing (first remaining)))))))
 
-(defn combine-unique [(left (Vec String)) (right (Vec String))] (Vec String)
+(defn combine-unique
+  [left (Vec String)
+   right (Vec String)] (Vec String)
   (loop [remaining (Vec String) right
          result (Vec String) left]
     (if (= (count remaining) 0)
@@ -714,19 +786,16 @@
         (append-unique result (first remaining))))))
 
 (defn platform-verdict
-  [(module ModuleSource)
-   (nixos (Vec SchemaEntry))
-   (darwin (Vec SchemaEntry))]
-  PlatformVerdictResult
+  [module ModuleSource
+   nixos (Vec SchemaEntry)
+   darwin (Vec SchemaEntry)] PlatformVerdictResult
   (match (module-paths module)
     [(ModulePathsRejected message) (->PlatformVerdictRejected message)]
     [(ModulePaths system-paths)
-     (let [(linux-missing (Vec String))
-           (missing-paths system-paths nixos)
-           (darwin-missing (Vec String))
-           (missing-paths system-paths darwin)
-           (linux-ok Bool) (= (count linux-missing) 0)
-           (darwin-ok Bool) (= (count darwin-missing) 0)]
+     (let [linux-missing (Vec String) (missing-paths system-paths nixos)
+           darwin-missing (Vec String) (missing-paths system-paths darwin)
+           linux-ok Bool (= (count linux-missing) 0)
+           darwin-ok Bool (= (count darwin-missing) 0)]
        (cond
          (and linux-ok darwin-ok)
          (->PlatformVerdictLoaded
@@ -749,10 +818,9 @@
              (combine-unique linux-missing darwin-missing)))))]))
 
 (defn platform-matrix
-  [(modules (Vec ModuleSource))
-   (nixos (Vec SchemaEntry))
-   (darwin (Vec SchemaEntry))]
-  PlatformResult
+  [modules (Vec ModuleSource)
+   nixos (Vec SchemaEntry)
+   darwin (Vec SchemaEntry)] PlatformResult
   (loop [remaining (Vec ModuleSource) modules
          verdicts (Vec PlatformVerdict) []]
     (if (= (count remaining) 0)
@@ -762,7 +830,7 @@
         [(PlatformVerdictLoaded verdict)
          (recur (rest remaining) (conj verdicts verdict))]))))
 
-(defn verdict-label [(verdict Keyword)] String
+(defn verdict-label [verdict Keyword] String
   (cond
     (= verdict :both) "both"
     (= verdict :linux-only) "linux-only"
@@ -770,7 +838,8 @@
     :else "no-data"))
 
 (defn modules-with
-  [(verdicts (Vec PlatformVerdict)) (verdict Keyword)] (Vec String)
+  [verdicts (Vec PlatformVerdict)
+   verdict Keyword] (Vec String)
   (loop [remaining (Vec PlatformVerdict) verdicts
          modules (Vec String) []]
     (if (= (count remaining) 0)
@@ -780,7 +849,9 @@
           (conj modules (platformverdict-module (first remaining)))
           modules)))))
 
-(defn render-list [(label String) (modules (Vec String))] String
+(defn render-list
+  [label String
+   modules (Vec String)] String
   (if (= (count modules) 0)
     (str label " (0):  (none)\n")
     (loop [remaining (Vec String) modules
@@ -790,16 +861,15 @@
         (recur (rest remaining) (str text "  " (first remaining) "\n"))))))
 
 (defn render-platform-list
-  [(selection String)
-   (verdicts (Vec PlatformVerdict))
-   (nixos-count Int)
-   (darwin-count Int)]
-  CommandResult
-  (let [(both (Vec String)) (modules-with verdicts :both)
-        (linux (Vec String)) (modules-with verdicts :linux-only)
-        (darwin-only (Vec String)) (modules-with verdicts :darwin-only)
-        (darwin (Vec String)) (combine-unique both darwin-only)
-        (no-data (Vec String)) (modules-with verdicts :no-data)]
+  [selection String
+   verdicts (Vec PlatformVerdict)
+   nixos-count Int
+   darwin-count Int] CommandResult
+  (let [both (Vec String) (modules-with verdicts :both)
+        linux (Vec String) (modules-with verdicts :linux-only)
+        darwin-only (Vec String) (modules-with verdicts :darwin-only)
+        darwin (Vec String) (combine-unique both darwin-only)
+        no-data (Vec String) (modules-with verdicts :no-data)]
     (cond
       (= selection "darwin")
       (->CommandResult 0 (render-list "darwin-compatible modules" darwin) "")
@@ -835,16 +905,17 @@
           selection "'\n")))))
 
 (defn verdict-for
-  [(verdicts (Vec PlatformVerdict)) (module String)] (U PlatformVerdict Nil)
+  [verdicts (Vec PlatformVerdict)
+   module String] (U PlatformVerdict Nil)
   (loop [remaining (Vec PlatformVerdict) verdicts]
     (if (= (count remaining) 0)
       nil
-      (let [(verdict PlatformVerdict) (first remaining)]
+      (let [verdict PlatformVerdict (first remaining)]
         (if (= module (platformverdict-module verdict))
           verdict
           (recur (rest remaining)))))))
 
-(defn blocker-lines [(blockers (Vec String))] String
+(defn blocker-lines [blockers (Vec String)] String
   (loop [remaining (Vec String) blockers
          text String ""]
     (if (= (count remaining) 0)
@@ -852,8 +923,9 @@
       (recur (rest remaining) (str text "  " (first remaining) "\n")))))
 
 (defn render-platform-show
-  [(module String) (verdicts (Vec PlatformVerdict))] CommandResult
-  (let [(verdict (U PlatformVerdict Nil)) (verdict-for verdicts module)]
+  [module String
+   verdicts (Vec PlatformVerdict)] CommandResult
+  (let [verdict (U PlatformVerdict Nil) (verdict-for verdicts module)]
     (if (nil? verdict)
       (->CommandResult 1 ""
         (str "firn platform show: no module named '" module "'\n"))
@@ -866,14 +938,13 @@
               (blocker-lines (platformverdict-blockers verdict)))))
         ""))))
 
-(defn render-platform-safelist [(verdicts (Vec PlatformVerdict))] CommandResult
-  (let [(both (Vec String)) (modules-with verdicts :both)
-        (darwin-only (Vec String)) (modules-with verdicts :darwin-only)
-        (compatible (Vec String)) (combine-unique both darwin-only)]
+(defn render-platform-safelist [verdicts (Vec PlatformVerdict)] CommandResult
+  (let [both (Vec String) (modules-with verdicts :both)
+        darwin-only (Vec String) (modules-with verdicts :darwin-only)
+        compatible (Vec String) (combine-unique both darwin-only)]
     (->CommandResult 0
       (loop [remaining (Vec String) compatible
-             text String
-             (str ";; darwin-compatible modules (native Firn).\n"
+             text String (str ";; darwin-compatible modules (native Firn).\n"
                ";; " (count compatible) " entries.\n(lst")]
         (if (= (count remaining) 0)
           (str text ")\n")
@@ -881,7 +952,7 @@
             (str text "\n     \"" (first remaining) "\""))))
       "")))
 
-(defn allowed-path-character? [(character String)] Bool
+(defn allowed-path-character? [character String] Bool
   (or (and (>= (compare character "a") 0)
            (<= (compare character "z") 0))
       (and (>= (compare character "A") 0)
@@ -894,7 +965,9 @@
       (= character ">")
       (= character "-")))
 
-(defn find-substring [(text String) (needle String)] Int
+(defn find-substring
+  [text String
+   needle String] Int
   (if (= needle "")
     0
     (loop [index Int 0]
@@ -904,7 +977,9 @@
           index
           (recur (+ index 1)))))))
 
-(defn path-token-at [(text String) (start Int)] (U String Nil)
+(defn path-token-at
+  [text String
+   start Int] (U String Nil)
   (if (or (< start 0) (>= start (count text)))
     nil
     (loop [end Int start]
@@ -913,20 +988,20 @@
         (recur (+ end 1))
         (if (= end start) nil (subs text start end))))))
 
-(defn extract-option-path [(input String)] (U String Nil)
-  (let [(unknown String) "unknown option "
-        (mismatch String) "type mismatch at "
-        (unknown-at Int) (find-substring input unknown)
-        (mismatch-at Int) (find-substring input mismatch)]
+(defn extract-option-path [input String] (U String Nil)
+  (let [unknown String "unknown option "
+        mismatch String "type mismatch at "
+        unknown-at Int (find-substring input unknown)
+        mismatch-at Int (find-substring input mismatch)]
     (cond
       (>= unknown-at 0) (path-token-at input (+ unknown-at (count unknown)))
       (>= mismatch-at 0) (path-token-at input (+ mismatch-at (count mismatch)))
       :else
-      (let [(trimmed String) (trim-spaces input)
-            (candidate (U String Nil)) (path-token-at trimmed 0)]
+      (let [trimmed String (trim-spaces input)
+            candidate (U String Nil) (path-token-at trimmed 0)]
         (if (and (some? candidate) (= candidate trimmed)) candidate nil)))))
 
-(defn describe-type [(entry SchemaEntry)] String
+(defn describe-type [entry SchemaEntry] String
   (if (and (or (= (schemaentry-type entry) "listOf")
                (= (schemaentry-type entry) "nullOr")
                (= (schemaentry-type entry) "attrsOf")
@@ -935,7 +1010,7 @@
     (str (schemaentry-type entry) " (" (schemaentry-inner-type entry) ")")
     (schemaentry-type entry)))
 
-(defn quoted-values [(values (Vec String))] String
+(defn quoted-values [values (Vec String)] String
   (loop [remaining (Vec String) values
          text String ""]
     (if (= (count remaining) 0)
@@ -943,7 +1018,7 @@
       (recur (rest remaining)
         (str text (if (= text "") "" ", ") "\"" (first remaining) "\"")))))
 
-(defn declaration-lines [(values (Vec String))] String
+(defn declaration-lines [values (Vec String)] String
   (loop [remaining (Vec String) values
          text String ""]
     (if (= (count remaining) 0)
@@ -951,12 +1026,13 @@
       (recur (rest remaining) (str text "  " (first remaining) "\n")))))
 
 (defn references-for
-  [(path String) (documents (Vec paths/SourceDocument))] (Vec String)
+  [path String
+   documents (Vec paths/SourceDocument)] (Vec String)
   (loop [remaining (Vec paths/SourceDocument) documents
          result (Vec String) []]
     (if (= (count remaining) 0)
       (sort result)
-      (let [(document paths/SourceDocument) (first remaining)]
+      (let [document paths/SourceDocument (first remaining)]
         (match (paths/extract-nix-option-paths document [])
           [(OptionPathError source-id offset message)
            (recur (rest remaining) result)]
@@ -966,7 +1042,7 @@
                (append-unique result (paths/sourcedocument-source-id document))
                result))])))))
 
-(defn reference-lines [(references (Vec String))] String
+(defn reference-lines [references (Vec String)] String
   (if (= (count references) 0)
     "referenced in: (nowhere in this repo)\n"
     (loop [remaining (Vec String) references
@@ -975,7 +1051,7 @@
         text
         (recur (rest remaining) (str text "  " (first remaining) "\n"))))))
 
-(defn suggestion-lines [(suggestions (Vec paths/PathSuggestion))] String
+(defn suggestion-lines [suggestions (Vec paths/PathSuggestion)] String
   (if (= (count suggestions) 0)
     "  no similar option paths found.\n"
     (loop [remaining (Vec paths/PathSuggestion) suggestions
@@ -987,15 +1063,14 @@
             (paths/pathsuggestion-path (first remaining)) "\n"))))))
 
 (defn render-schema-explain
-  [(input String)
-   (entries (Vec SchemaEntry))
-   (documents (Vec paths/SourceDocument))]
-  CommandResult
-  (let [(path (U String Nil)) (extract-option-path input)]
+  [input String
+   entries (Vec SchemaEntry)
+   documents (Vec paths/SourceDocument)] CommandResult
+  (let [path (U String Nil) (extract-option-path input)]
     (if (nil? path)
       (->CommandResult 1 ""
         (str "firn explain: couldn't extract an option path from: " input "\n"))
-      (let [(entry (U SchemaEntry Nil)) (schema-entry-for entries path)]
+      (let [entry (U SchemaEntry Nil) (schema-entry-for entries path)]
         (if (nil? entry)
           (->CommandResult 1 ""
             (str "no exact match for " path "\n"
@@ -1015,12 +1090,12 @@
               (reference-lines (references-for path documents)))
             ""))))))
 
-(defn line-has-current? [(line String)] Bool
+(defn line-has-current? [line String] Bool
   (or (>= (find-substring line "current") 0)
       (ends-with? (trim-spaces line) "True")))
 
-(defn first-token [(line String)] String
-  (let [(trimmed String) (trim-spaces line)]
+(defn first-token [line String] String
+  (let [trimmed String (trim-spaces line)]
     (loop [end Int 0]
       (if (or (>= end (count trimmed))
               (= " " (subs trimmed end (+ end 1)))
@@ -1028,31 +1103,32 @@
         (subs trimmed 0 end)
         (recur (+ end 1))))))
 
-(defn current-generation [(text String)] (U Int Nil)
+(defn current-generation [text String] (U Int Nil)
   (loop [remaining (Vec String) (split-lines text)]
     (if (= (count remaining) 0)
       nil
-      (let [(line String) (first remaining)]
+      (let [line String (first remaining)]
         (if (line-has-current? line)
           (parse-long (first-token line))
           (recur (rest remaining)))))))
 
-(defn render-host-generation [(child ChildResult)] CommandResult
+(defn render-host-generation [child ChildResult] CommandResult
   (if (not= (childresult-status child) 0)
     (->CommandResult (childresult-status child)
       (childresult-stdout child)
       (str (childresult-stderr child)
         "firn host gen: generation listing failed.\n"))
-    (let [(generation (U Int Nil))
-          (current-generation (childresult-stdout child))]
+    (let [generation (U Int Nil) (current-generation (childresult-stdout child))]
       (if (nil? generation)
         (->CommandResult 0 "(no generation info)\n" "")
         (->CommandResult 0
           (str "current: " generation "\nnext:    " (+ generation 1) "\n")
           "")))))
 
-(defn render-schema-extract [(host String) (child ChildResult)] CommandResult
-  (let [(prefix String) (str ">> firn schema extract " host "\n")]
+(defn render-schema-extract
+  [host String
+   child ChildResult] CommandResult
+  (let [prefix String (str ">> firn schema extract " host "\n")]
     (if (= (childresult-status child) 0)
       (->CommandResult 0 (str prefix (childresult-stdout child))
         (childresult-stderr child))
@@ -1060,7 +1136,9 @@
         (str prefix (childresult-stdout child))
         (str (childresult-stderr child) "firn schema extract: failed.\n")))))
 
-(defn parse-views-argv [(argv (Vec String)) (current-host String)] ViewsArgv
+(defn parse-views-argv
+  [argv (Vec String)
+   current-host String] ViewsArgv
   (cond
     (= argv ["flake" "inputs"])
     (->ParsedViews (->FlakeInputs))

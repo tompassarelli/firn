@@ -4,48 +4,59 @@
             [firn.tag-inputs :as input]
             [firn.tag-resolve :as r]))
 
-(defrecord ModuleState [(path String) (enabled Bool)])
+(defrecord ModuleState
+  [path String
+   enabled Bool])
 
 (defrecord HostConfig
-  [(host String) (references (Vec String)) (states (Vec ModuleState))])
+  [host String
+   references (Vec String)
+   states (Vec ModuleState)])
 
 (defunion HostConfigResult
-  (HostConfigParsed [(value HostConfig)])
-  (HostConfigRejected [(message String) (offset Int)]))
+  (HostConfigParsed [value HostConfig])
+  (HostConfigRejected
+    [message String
+     offset Int]))
 
 (defrecord ConfigScan
-  [(ok Bool)
-   (references (Vec String))
-   (states (Vec ModuleState))
-   (message String)
-   (offset Int)])
+  [ok Bool
+   references (Vec String)
+   states (Vec ModuleState)
+   message String
+   offset Int])
 
-(defrecord InventoryHost [(tags r/HostTags) (config HostConfig)])
+(defrecord InventoryHost
+  [tags r/HostTags
+   config HostConfig])
 
 (defrecord InventoryRepository
-  [(modules (Vec r/ModuleTags)) (hosts (Vec InventoryHost))])
+  [modules (Vec r/ModuleTags)
+   hosts (Vec InventoryHost)])
 
 (defunion InventoryAction
   ModuleListAll
   ModuleListUsed
   ModuleListUnused
-  (ModuleRefs [(name String)])
-  (ModuleStatus [(host String)])
+  (ModuleRefs [name String])
+  (ModuleStatus [host String])
   HostList
-  (HostStatus [(host String)]))
+  (HostStatus [host String]))
 
 (defunion InventoryArgv
-  (ParsedInventory [(action InventoryAction)])
-  (InvalidInventoryArgv [(argv (Vec String))]))
+  (ParsedInventory [action InventoryAction])
+  (InvalidInventoryArgv [argv (Vec String)]))
 
 (defunion InventoryRenderResult
-  (InventoryRendered [(text String)])
-  (InventoryHostMissing [(host String)]))
+  (InventoryRendered [text String])
+  (InventoryHostMissing [host String]))
 
 (def module-prefix String "myConfig.modules.")
 (def enable-suffix String ".enable")
 
-(defn string-member? [(values (Vec String)) (candidate String)] Bool
+(defn string-member?
+  [values (Vec String)
+   candidate String] Bool
   (loop [index Int 0]
     (if (>= index (count values))
       false
@@ -53,65 +64,77 @@
         true
         (recur (+ index 1))))))
 
-(defn append-unique [(values (Vec String)) (candidate String)] (Vec String)
+(defn append-unique
+  [values (Vec String)
+   candidate String] (Vec String)
   (if (string-member? values candidate) values (conj values candidate)))
 
-(defn starts-with? [(text String) (prefix String)] Bool
+(defn starts-with?
+  [text String
+   prefix String] Bool
   (and (>= (count text) (count prefix))
        (= (subs text 0 (count prefix)) prefix)))
 
-(defn ends-with? [(text String) (suffix String)] Bool
+(defn ends-with?
+  [text String
+   suffix String] Bool
   (and (>= (count text) (count suffix))
        (= (subs text (- (count text) (count suffix)) (count text)) suffix)))
 
-(defn module-name-from-path [(path String)] String
+(defn module-name-from-path [path String] String
   (if (not (starts-with? path module-prefix))
     ""
-    (let [(start Int) (count module-prefix)]
+    (let [start Int (count module-prefix)]
       (loop [end Int start]
         (if (or (= end (count path))
                 (= (subs path end (+ end 1)) "."))
           (subs path start end)
           (recur (+ end 1)))))))
 
-(defn module-path? [(path String)] Bool
+(defn module-path? [path String] Bool
   (> (count (module-name-from-path path)) 0))
 
-(defn strip-enable-suffix [(path String)] String
+(defn strip-enable-suffix [path String] String
   (if (ends-with? path enable-suffix)
     (subs path 0 (- (count path) (count enable-suffix)))
     path))
 
-(defn keyword-path [(prefix String) (keyword String)] String
-  (let [(leaf String) (subs keyword 1)]
+(defn keyword-path
+  [prefix String
+   keyword String] String
+  (let [leaf String (subs keyword 1)]
     (if (= prefix "") leaf (str prefix "." leaf))))
 
 (defn put-state
-  [(states (Vec ModuleState)) (replacement ModuleState)] (Vec ModuleState)
+  [states (Vec ModuleState)
+   replacement ModuleState] (Vec ModuleState)
   (loop [index Int 0
          found Bool false
          result (Vec ModuleState) []]
     (if (>= index (count states))
       (if found result (conj result replacement))
-      (let [(state ModuleState) (nth states index)]
+      (let [state ModuleState (nth states index)]
         (if (= (modulestate-path state) (modulestate-path replacement))
           (recur (+ index 1) true (conj result replacement))
           (recur (+ index 1) found (conj result state)))))))
 
-(defn scan-ok [(references (Vec String)) (states (Vec ModuleState))] ConfigScan
+(defn scan-ok
+  [references (Vec String)
+   states (Vec ModuleState)] ConfigScan
   (->ConfigScan true references states "" -1))
 
-(defn scan-error [(message String) (offset Int)] ConfigScan
+(defn scan-error
+  [message String
+   offset Int] ConfigScan
   (->ConfigScan false [] [] message offset))
 
 (defn scan-map
-  [(events (Vec reader/ReaderEvent))
-   (start Int)
-   (prefix String)
-   (references (Vec String))
-   (states (Vec ModuleState))]
-  ConfigScan
-  (let [(end Int) (input/datum-end events start)]
+  [events (Vec reader/ReaderEvent)
+   start Int
+   prefix String
+   references (Vec String)
+   states (Vec ModuleState)] ConfigScan
+  (let [end Int (input/datum-end events start)]
     (if (or (< end 0)
             (not= :map/open
                   (reader/readerevent-kind (nth events start))))
@@ -129,30 +152,26 @@
                       (input/event-offset events start))
 
           :else
-          (let [(key reader/ReaderEvent) (nth events cursor)
-                (key-end Int) (input/datum-end events cursor)]
+          (let [key reader/ReaderEvent (nth events cursor)
+                key-end Int (input/datum-end events cursor)]
             (if (or (< key-end 0) (>= key-end (- end 1)))
               (scan-error "configuration map key is missing a value"
                           (reader/readerevent-offset key))
-              (let [(value-start Int) key-end
-                    (value-end Int) (input/datum-end events value-start)]
+              (let [value-start Int key-end
+                    value-end Int (input/datum-end events value-start)]
                 (if (or (< value-end 0) (> value-end (- end 1)))
                   (scan-error "malformed configuration map value"
                               (input/event-offset events value-start))
                   (if (and (= (+ cursor 1) key-end)
                            (= :keyword (reader/readerevent-kind key)))
-                    (let [(path String)
-                          (keyword-path prefix
+                    (let [path String (keyword-path prefix
                             (reader/readerevent-value key))
-                          (module String) (module-name-from-path path)
-                          (next-references (Vec String))
-                          (if (= module "")
+                          module String (module-name-from-path path)
+                          next-references (Vec String) (if (= module "")
                             found-references
                             (append-unique found-references module))
-                          (value reader/ReaderEvent)
-                          (nth events value-start)
-                          (next-states (Vec ModuleState))
-                          (if (and (not= module "")
+                          value reader/ReaderEvent (nth events value-start)
+                          next-states (Vec ModuleState) (if (and (not= module "")
                                    (ends-with? path enable-suffix)
                                    (= :boolean
                                       (reader/readerevent-kind value)))
@@ -164,8 +183,7 @@
                       (if (and (not= module "")
                                (= :map/open
                                   (reader/readerevent-kind value)))
-                        (let [(nested ConfigScan)
-                              (scan-map events value-start path
+                        (let [nested ConfigScan (scan-map events value-start path
                                 next-references next-states)]
                           (if (configscan-ok nested)
                             (recur value-end
@@ -175,14 +193,15 @@
                         (recur value-end next-references next-states)))
                     (recur value-end found-references found-states)))))))))))
 
-(defn host-config-from-source [(host String) (source String)] HostConfigResult
-  (let [(read reader/DatumRead) (reader/read-events source)
-        (read-error String?) (reader/datumread-error read)]
+(defn host-config-from-source
+  [host String
+   source String] HostConfigResult
+  (let [read reader/DatumRead (reader/read-events source)
+        read-error String? (reader/datumread-error read)]
     (if (some? read-error)
       (->HostConfigRejected read-error (reader/datumread-error-offset read))
-      (let [(events (Vec reader/ReaderEvent)) (reader/datumread-events read)
-            (module-form input/SpanScan)
-            (input/find-top-level-form events "nix/module")]
+      (let [events (Vec reader/ReaderEvent) (reader/datumread-events read)
+            module-form input/SpanScan (input/find-top-level-form events "nix/module")]
         (cond
           (not (input/spanscan-ok module-form))
           (->HostConfigRejected (input/spanscan-message module-form)
@@ -199,11 +218,9 @@
             (input/event-offset events (input/spanscan-start module-form)))
 
           :else
-          (let [(form-start Int) (input/spanscan-start module-form)
-                (parameters Int)
-                (input/container-child-start events form-start 1)
-                (body input/SpanScan)
-                (input/unwrap-module-body events
+          (let [form-start Int (input/spanscan-start module-form)
+                parameters Int (input/container-child-start events form-start 1)
+                body input/SpanScan (input/unwrap-module-body events
                   (input/container-child-start events form-start 2))]
             (cond
               (or (< parameters 0)
@@ -218,8 +235,7 @@
                                     (input/spanscan-offset body))
 
               :else
-              (let [(scan ConfigScan)
-                    (scan-map events (input/spanscan-start body) "" [] [])]
+              (let [scan ConfigScan (scan-map events (input/spanscan-start body) "" [] [])]
                 (if (configscan-ok scan)
                   (->HostConfigParsed
                     (->HostConfig host
@@ -229,10 +245,10 @@
                     (configscan-message scan)
                     (configscan-offset scan)))))))))))
 
-(defn inventory-host-name [(host InventoryHost)] String
+(defn inventory-host-name [host InventoryHost] String
   (r/hosttags-host (inventoryhost-tags host)))
 
-(defn module-names [(repository InventoryRepository)] (Vec String)
+(defn module-names [repository InventoryRepository] (Vec String)
   (loop [index Int 0
          names (Vec String) []]
     (if (>= index (count (inventoryrepository-modules repository)))
@@ -242,7 +258,7 @@
           (r/moduletags-name
             (nth (inventoryrepository-modules repository) index)))))))
 
-(defn host-names [(repository InventoryRepository)] (Vec String)
+(defn host-names [repository InventoryRepository] (Vec String)
   (loop [index Int 0
          names (Vec String) []]
     (if (>= index (count (inventoryrepository-hosts repository)))
@@ -253,21 +269,20 @@
             (nth (inventoryrepository-hosts repository) index)))))))
 
 (defn tag-active
-  [(repository InventoryRepository) (host InventoryHost)] (Vec String)
+  [repository InventoryRepository
+   host InventoryHost] (Vec String)
   (r/resolution-active
     (r/resolve (inventoryrepository-modules repository)
                (inventoryhost-tags host))))
 
-(defn live-modules [(repository InventoryRepository)] (Vec String)
+(defn live-modules [repository InventoryRepository] (Vec String)
   (loop [index Int 0
          live (Vec String) []]
     (if (>= index (count (inventoryrepository-hosts repository)))
       (sort live)
-      (let [(host InventoryHost)
-            (nth (inventoryrepository-hosts repository) index)
-            (direct (Vec String))
-            (hostconfig-references (inventoryhost-config host))
-            (tagged (Vec String)) (tag-active repository host)]
+      (let [host InventoryHost (nth (inventoryrepository-hosts repository) index)
+            direct (Vec String) (hostconfig-references (inventoryhost-config host))
+            tagged (Vec String) (tag-active repository host)]
         (recur (+ index 1)
           (loop [direct-index Int 0
                  combined (Vec String) live]
@@ -282,44 +297,45 @@
               (recur (+ direct-index 1)
                 (append-unique combined (nth direct direct-index))))))))))
 
-(defn unused-modules [(repository InventoryRepository)] (Vec String)
-  (let [(live (Vec String)) (live-modules repository)
-        (all (Vec String)) (module-names repository)]
+(defn unused-modules [repository InventoryRepository] (Vec String)
+  (let [live (Vec String) (live-modules repository)
+        all (Vec String) (module-names repository)]
     (loop [index Int 0
            unused (Vec String) []]
       (if (>= index (count all))
         unused
-        (let [(name String) (nth all index)]
+        (let [name String (nth all index)]
           (recur (+ index 1)
             (if (string-member? live name) unused (conj unused name))))))))
 
 (defn direct-hosts
-  [(repository InventoryRepository) (module String)] (Vec String)
+  [repository InventoryRepository
+   module String] (Vec String)
   (loop [index Int 0
          hosts (Vec String) []]
     (if (>= index (count (inventoryrepository-hosts repository)))
       (sort hosts)
-      (let [(host InventoryHost)
-            (nth (inventoryrepository-hosts repository) index)]
+      (let [host InventoryHost (nth (inventoryrepository-hosts repository) index)]
         (recur (+ index 1)
           (if (string-member?
                 (hostconfig-references (inventoryhost-config host)) module)
             (conj hosts (inventory-host-name host))
             hosts))))))
 
-(defn tag-hosts [(repository InventoryRepository) (module String)] (Vec String)
+(defn tag-hosts
+  [repository InventoryRepository
+   module String] (Vec String)
   (loop [index Int 0
          hosts (Vec String) []]
     (if (>= index (count (inventoryrepository-hosts repository)))
       (sort hosts)
-      (let [(host InventoryHost)
-            (nth (inventoryrepository-hosts repository) index)]
+      (let [host InventoryHost (nth (inventoryrepository-hosts repository) index)]
         (recur (+ index 1)
           (if (string-member? (tag-active repository host) module)
             (conj hosts (inventory-host-name host))
             hosts))))))
 
-(defn join-strings [(values (Vec String))] String
+(defn join-strings [values (Vec String)] String
   (loop [index Int 0
          result String ""]
     (if (>= index (count values))
@@ -328,9 +344,10 @@
         (str result (if (= index 0) "" ", ") (nth values index))))))
 
 (defn source-labels
-  [(repository InventoryRepository) (module String)] (Vec String)
-  (let [(direct (Vec String)) (direct-hosts repository module)
-        (tagged (Vec String)) (tag-hosts repository module)]
+  [repository InventoryRepository
+   module String] (Vec String)
+  (let [direct (Vec String) (direct-hosts repository module)
+        tagged (Vec String) (tag-hosts repository module)]
     (loop [index Int 0
            labels (Vec String) direct]
       (if (>= index (count tagged))
@@ -338,7 +355,9 @@
         (recur (+ index 1)
           (append-unique labels (str "via tag@" (nth tagged index))))))))
 
-(defn render-lines [(values (Vec String)) (prefix String)] String
+(defn render-lines
+  [values (Vec String)
+   prefix String] String
   (loop [index Int 0
          result String ""]
     (if (>= index (count values))
@@ -346,7 +365,7 @@
       (recur (+ index 1)
         (str result prefix (nth values index) "\n")))))
 
-(defn render-module-list-all [(modules (Vec String))] String
+(defn render-module-list-all [modules (Vec String)] String
   (loop [index Int 0
          result String (str "Modules (" (count modules) "):\n")]
     (if (>= index (count modules))
@@ -354,53 +373,56 @@
       (recur (+ index 1)
         (str result "  myConfig.modules." (nth modules index) "\n")))))
 
-(defn render-module-list-used [(repository InventoryRepository)] String
-  (let [(modules (Vec String)) (live-modules repository)]
+(defn render-module-list-used [repository InventoryRepository] String
+  (let [modules (Vec String) (live-modules repository)]
     (loop [index Int 0
            result String (str "Used modules (" (count modules) "):\n")]
       (if (>= index (count modules))
         result
-        (let [(module String) (nth modules index)
-              (labels (Vec String)) (source-labels repository module)]
+        (let [module String (nth modules index)
+              labels (Vec String) (source-labels repository module)]
           (recur (+ index 1)
             (str result "  " module "  ("
               (if (= (count labels) 0) "—" (join-strings labels)) ")\n")))))))
 
-(defn render-module-list-unused [(repository InventoryRepository)] String
-  (let [(modules (Vec String)) (unused-modules repository)]
+(defn render-module-list-unused [repository InventoryRepository] String
+  (let [modules (Vec String) (unused-modules repository)]
     (str "Unreferenced modules (" (count modules) "):\n"
       (render-lines modules "  "))))
 
-(defn render-host-list [(hosts (Vec String))] String
+(defn render-host-list [hosts (Vec String)] String
   (str "Hosts (" (count hosts) "):\n" (render-lines hosts "  ")))
 
-(defn render-host-section [(hosts (Vec String))] String
+(defn render-host-section [hosts (Vec String)] String
   (if (= (count hosts) 0)
     "  (none)\n"
     (render-lines hosts "  ")))
 
 (defn render-module-refs
-  [(repository InventoryRepository) (module String)] String
+  [repository InventoryRepository
+   module String] String
   (str "Hosts (direct, from configuration.bnix):\n"
     (render-host-section (direct-hosts repository module))
     "\nHosts (via tag resolution):\n"
     (render-host-section (tag-hosts repository module))))
 
-(defn state-paths [(config HostConfig) (enabled Bool)] (Vec String)
+(defn state-paths
+  [config HostConfig
+   enabled Bool] (Vec String)
   (loop [index Int 0
          paths (Vec String) []]
     (if (>= index (count (hostconfig-states config)))
       (sort paths)
-      (let [(state ModuleState) (nth (hostconfig-states config) index)]
+      (let [state ModuleState (nth (hostconfig-states config) index)]
         (recur (+ index 1)
           (if (= enabled (modulestate-enabled state))
             (conj paths (strip-enable-suffix (modulestate-path state)))
             paths))))))
 
-(defn render-host-status [(config HostConfig)] String
-  (let [(host String) (hostconfig-host config)
-        (enabled (Vec String)) (state-paths config true)
-        (disabled (Vec String)) (state-paths config false)]
+(defn render-host-status [config HostConfig] String
+  (let [host String (hostconfig-host config)
+        enabled (Vec String) (state-paths config true)
+        disabled (Vec String) (state-paths config false)]
     (str "Enabled in " host ":\n"
       (render-lines enabled "  ")
       (if (= (count disabled) 0)
@@ -409,18 +431,19 @@
           (render-lines disabled "  "))))))
 
 (defn find-host-config
-  [(repository InventoryRepository) (wanted String)] HostConfig?
+  [repository InventoryRepository
+   wanted String] HostConfig?
   (loop [index Int 0]
     (if (>= index (count (inventoryrepository-hosts repository)))
       nil
-      (let [(host InventoryHost)
-            (nth (inventoryrepository-hosts repository) index)]
+      (let [host InventoryHost (nth (inventoryrepository-hosts repository) index)]
         (if (= wanted (inventory-host-name host))
           (inventoryhost-config host)
           (recur (+ index 1)))))))
 
 (defn parse-inventory-argv
-  [(argv (Vec String)) (default-host String)] InventoryArgv
+  [argv (Vec String)
+   default-host String] InventoryArgv
   (cond
     (and (= (count argv) 2)
          (= (nth argv 0) "module")
@@ -477,9 +500,8 @@
     (->InvalidInventoryArgv argv)))
 
 (defn render-action
-  [(repository InventoryRepository)
-   (action InventoryAction)]
-  InventoryRenderResult
+  [repository InventoryRepository
+   action InventoryAction] InventoryRenderResult
   (match action
     [(ModuleListAll)
      (->InventoryRendered (render-module-list-all (module-names repository)))]
@@ -492,12 +514,12 @@
     [(HostList)
      (->InventoryRendered (render-host-list (host-names repository)))]
     [(ModuleStatus host)
-     (let [(config HostConfig?) (find-host-config repository host)]
+     (let [config HostConfig? (find-host-config repository host)]
        (if (some? config)
          (->InventoryRendered (render-host-status config))
          (->InventoryHostMissing host)))]
     [(HostStatus host)
-     (let [(config HostConfig?) (find-host-config repository host)]
+     (let [config HostConfig? (find-host-config repository host)]
        (if (some? config)
          (->InventoryRendered (render-host-status config))
          (->InventoryHostMissing host)))]))

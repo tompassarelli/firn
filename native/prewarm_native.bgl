@@ -35,16 +35,14 @@
 
 (defn path
   [root String
-   leaf String]
-  String
+   leaf String] String
   (str root "/" leaf))
 
 (defn append-argv
   [prefix (Vec String)
-   suffix (Vec String)]
-  (Vec String)
-  (loop [(index Int) 0
-         (result (Vec String)) prefix]
+   suffix (Vec String)] (Vec String)
+  (loop [index Int 0
+         result (Vec String) prefix]
     (if (>= index (count suffix))
       result
       (recur (+ index 1) (conj result (nth suffix index))))))
@@ -81,8 +79,7 @@
 
 (defn path-kind?
   [candidate String
-   expected Int]
-  Bool
+   expected Int] Bool
   (match (host.fs/path-kind candidate)
     [(host.fs/PathKindError errno) false]
     [(host.fs/PathKindOk kind) (= kind expected)]))
@@ -99,11 +96,10 @@
 
 (defn select-repository
   [candidates (Vec String)
-   index Int]
-  RepositoryResult
+   index Int] RepositoryResult
   (if (>= index (count candidates))
     (->RepositoryRejected "no Firn container main checkout resolved")
-    (let [(candidate String) (nth candidates index)]
+    (let [candidate String (nth candidates index)]
       (if (looks-like-firn-repository? candidate)
         (->RepositoryResolved candidate)
         (select-repository candidates (+ index 1))))))
@@ -118,16 +114,16 @@
     [(CaptureTextOk text) (if (= text "") nil text)]))
 
 (defn repository-candidate [] (U String Nil)
-  (let [(explicit (U String Nil)) (System/getenv "FIRN_REPO")]
+  (let [explicit (U String Nil) (System/getenv "FIRN_REPO")]
     (if (some? explicit)
       explicit
-      (let [(home (U String Nil)) (System/getenv "HOME")]
+      (let [home (U String Nil) (System/getenv "HOME")]
         (if (some? home)
           (str home "/code/nixos-config/main")
           nil)))))
 
 (defn resolve-repository [] RepositoryResult
-  (let [(candidate (U String Nil)) (repository-candidate)]
+  (let [candidate (U String Nil) (repository-candidate)]
     (if (nil? candidate)
       (->RepositoryRejected "FIRN_REPO and HOME are not set")
       (select-repository
@@ -137,18 +133,16 @@
 
 (defn git-value
   [repository String
-   arguments (Vec String)]
-  CaptureTextResult
+   arguments (Vec String)] CaptureTextResult
   (capture-text
     (git-argv (append-argv ["-C" repository] arguments))))
 
 (defn configured-host
   [repository String
-   hostname String]
-  (U String Nil)
+   hostname String] (U String Nil)
   (if (path-kind? (path repository (str "hosts/" hostname)) 2)
     hostname
-    (let [(short String) (policy/short-host hostname)]
+    (let [short String (policy/short-host hostname)]
       (if (path-kind? (path repository (str "hosts/" short)) 2)
         short
         nil))))
@@ -169,26 +163,22 @@
              [(host.system/HostnameError errno)
               (->WarmRejected "cannot read the local hostname")]
              [(host.system/HostnameOk hostname)
-              (let [(host (U String Nil))
-                      (configured-host repository hostname)]
+              (let [host (U String Nil) (configured-host repository hostname)]
                 (if (nil? host)
                   (->WarmRejected "this repository has no local host target")
-                  (let [(branch (U String Nil))
-                          (if (= branch-text "") nil branch-text)
-                        (snapshot policy/Snapshot)
-                          (policy/->Snapshot repository revision branch host
+                  (let [branch (U String Nil) (if (= branch-text "") nil branch-text)
+                        snapshot policy/Snapshot (policy/->Snapshot repository revision branch host
                             (host.system/platform))
-                        (spec policy/WarmSpec) (policy/warm-spec snapshot)]
+                        spec policy/WarmSpec (policy/warm-spec snapshot)]
                     (->WarmResolved repository snapshot spec))))])])])]))
 
 (defn runtime-directory [] (U String Nil)
-  (let [(runtime (U String Nil)) (System/getenv "XDG_RUNTIME_DIR")]
+  (let [runtime (U String Nil) (System/getenv "XDG_RUNTIME_DIR")]
     (if (and (some? runtime) (path-kind? runtime 2)) runtime nil)))
 
 (defn optional-text
   [candidate String
-   bound Int]
-  OptionalTextResult
+   bound Int] OptionalTextResult
   (match (host.fs/read-text-bounded candidate bound)
     [(host.fs/ReadTextBoundedOk text) (->OptionalTextLoaded text)]
     [(host.fs/ReadTextBoundedError errno)
@@ -210,11 +200,10 @@
 (defn collect-processes-from
   [names (Vec String)
    index Int
-   processes (Vec policy/ProcessIdentity)]
-  (Vec policy/ProcessIdentity)
+   processes (Vec policy/ProcessIdentity)] (Vec policy/ProcessIdentity)
   (if (>= index (count names))
     processes
-    (let [(pid (U Int Nil)) (policy/parse-positive-int (nth names index))]
+    (let [pid (U Int Nil) (policy/parse-positive-int (nth names index))]
       (collect-processes-from names (+ index 1)
         (if (some? pid)
           (conj processes (process-identity pid))
@@ -235,8 +224,7 @@
 (defn safe-signal
   [pid Int
    expected (Vec String)
-   current-pid Int]
-  Bool
+   current-pid Int] Bool
   (and (> pid 0)
        (not= pid current-pid)
        (policy/identity-matches?
@@ -246,13 +234,10 @@
 (defn settle-superseded-owner
   [executable String
    repository String
-   owner policy/LeaseOwner]
-  OwnerContentionResult
-  (let [(current-pid Int) (host.process/current-pid)
-        (worker policy/ProcessIdentity)
-          (process-identity (policy/leaseowner-worker-pid owner))
-        (child policy/ProcessIdentity)
-          (process-identity (policy/leaseowner-child-pid owner))]
+   owner policy/LeaseOwner] OwnerContentionResult
+  (let [current-pid Int (host.process/current-pid)
+        worker policy/ProcessIdentity (process-identity (policy/leaseowner-worker-pid owner))
+        child policy/ProcessIdentity (process-identity (policy/leaseowner-child-pid owner))]
     (match
       (policy/supersede-plan "" current-pid executable repository
         owner worker child)
@@ -261,25 +246,20 @@
       [(LeaseContended key)
        (->OwnerStillContended "recorded process identity is not signalable")]
       [(LeaseSupersede child-pid worker-pid)
-       (let [(child-signaled Bool)
-               (safe-signal child-pid
+       (let [child-signaled Bool (safe-signal child-pid
                  (policy/nix-build-argv (policy/leaseowner-key owner))
                  current-pid)
-             (child-dead Int)
-               (if child-signaled
+             child-dead Int (if child-signaled
                  (host.process/wait-not-alive child-pid 1000)
                  1)
-             (worker-dead Int)
-               (host.process/wait-not-alive worker-pid 1000)]
+             worker-dead Int (host.process/wait-not-alive worker-pid 1000)]
          (if (and (= child-dead 0) (= worker-dead 0))
            (->OwnerSuperseded (policy/leaseowner-key owner))
-           (let [(worker-signaled Bool)
-                   (safe-signal worker-pid
+           (let [worker-signaled Bool (safe-signal worker-pid
                      (policy/worker-argv executable repository
                        (policy/leaseowner-key owner))
                      current-pid)
-                 (settled Int)
-                   (if worker-signaled
+                 settled Int (if worker-signaled
                      (host.process/wait-not-alive worker-pid 250)
                      worker-dead)]
              (if (and (= child-dead 0) (= settled 0))
@@ -291,8 +271,7 @@
   [owner-path String
    desired-key String
    executable String
-   repository String]
-  OwnerContentionResult
+   repository String] OwnerContentionResult
   (match (optional-text owner-path max-process-output)
     [(OptionalTextRejected errno)
      (->OwnerStillContended "cannot read the lease owner")]
@@ -301,10 +280,8 @@
        [(LeaseOwnerInvalid message)
         (->OwnerStillContended message)]
        [(LeaseOwnerParsed owner)
-        (let [(worker policy/ProcessIdentity)
-                (process-identity (policy/leaseowner-worker-pid owner))
-              (child policy/ProcessIdentity)
-                (process-identity (policy/leaseowner-child-pid owner))]
+        (let [worker policy/ProcessIdentity (process-identity (policy/leaseowner-worker-pid owner))
+              child policy/ProcessIdentity (process-identity (policy/leaseowner-child-pid owner))]
           (match
             (policy/supersede-plan desired-key
               (host.process/current-pid) executable repository owner
@@ -334,8 +311,7 @@
 
 (defn write-warm-stamp
   [stamp-path String
-   key String]
-  Int
+   key String] Int
   (match (host.fs/write-text-atomic stamp-path (str key "\n"))
     [(host.fs/WriteTextAtomicOk) 0]
     [(host.fs/WriteTextAtomicError errno) (- 0 errno)]))
@@ -346,21 +322,17 @@
    stamp-path String
    key String
    child-pid Int
-   stdout-fd Int]
-  Int
-  (let [(owner policy/LeaseOwner)
-          (policy/->LeaseOwner (host.process/current-pid) child-pid key)
-        (owner-write Int)
-          (match
+   stdout-fd Int] Int
+  (let [owner policy/LeaseOwner (policy/->LeaseOwner (host.process/current-pid) child-pid key)
+        owner-write Int (match
             (host.fs/write-text-atomic owner-path
               (policy/render-lease-owner owner))
             [(host.fs/WriteTextAtomicOk) 0]
             [(host.fs/WriteTextAtomicError write-errno) (- 0 write-errno)])
-        (drain-status Int) (drain-output stdout-fd)
-        (close-status Int) (host.process/close stdout-fd)
-        (exit-status Int) (host.process/wait child-pid)
-        (stamp-status Int)
-          (if (and (= owner-write 0)
+        drain-status Int (drain-output stdout-fd)
+        close-status Int (host.process/close stdout-fd)
+        exit-status Int (host.process/wait child-pid)
+        stamp-status Int (if (and (= owner-write 0)
                    (= drain-status 0)
                    (= close-status 0)
                    (= exit-status 0))
@@ -375,8 +347,7 @@
   [descriptor Int
    owner-path String
    stamp-path String
-   key String]
-  Int
+   key String] Int
   (match (optional-text stamp-path max-process-output)
     [(OptionalTextRejected errno)
      (do (clear-owner owner-path) (release-lease descriptor) 0)]
@@ -401,13 +372,12 @@
    executable String
    repository String
    key String
-   attempt Int]
-  Int
+   attempt Int] Int
   (if (>= attempt lease-attempts)
     0
-    (let [(lease-path String) (path state-directory "firn-prewarm.lease")
-          (owner-path String) (path state-directory "firn-prewarm.owner")
-          (stamp-path String) (path state-directory "firn-prewarm.warm")]
+    (let [lease-path String (path state-directory "firn-prewarm.lease")
+          owner-path String (path state-directory "firn-prewarm.owner")
+          stamp-path String (path state-directory "firn-prewarm.warm")]
       (match (host.fs/lock-exclusive lease-path)
         [(host.fs/LockExclusiveOk descriptor)
          (run-owned-worker descriptor owner-path stamp-path key)]
@@ -431,25 +401,23 @@
 (defn run-worker
   [executable String
    repository String
-   key String]
-  Int
-  (let [(state-directory (U String Nil)) (runtime-directory)]
+   key String] Int
+  (let [state-directory (U String Nil) (runtime-directory)]
     (if (nil? state-directory)
       0
       (worker-attempt state-directory executable repository key 0))))
 
 (defn argument-tail
   [args (Vec String)
-   start Int]
-  (Vec String)
-  (loop [(index Int) start
-         (result (Vec String)) []]
+   start Int] (Vec String)
+  (loop [index Int start
+         result (Vec String) []]
     (if (>= index (count args))
       result
       (recur (+ index 1) (conj result (nth args index))))))
 
 (defn emit-argv [argv (Vec String)] Int
-  (loop [(index Int) 0]
+  (loop [index Int 0]
     (if (>= index (count argv))
       0
       (do
@@ -474,8 +442,7 @@
   [execute Bool
    executable String
    state String
-   lines (Vec String)]
-  Int
+   lines (Vec String)] Int
   (if (not (policy/transaction-fires? state lines))
     0
     (match (resolve-warm)

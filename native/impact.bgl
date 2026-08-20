@@ -27,9 +27,9 @@
   (ImpactFailed [text String]))
 
 (defn split-lines [text String] (Vec String)
-  (loop [(index Int) 0
-         (start Int) 0
-         (lines (Vec String)) []]
+  (loop [index Int 0
+         start Int 0
+         lines (Vec String) []]
     (if (>= index (count text))
       (if (< start (count text))
         (conj lines (subs text start (count text)))
@@ -40,22 +40,19 @@
 
 (defn starts-with?
   [text String
-   prefix String]
-  Bool
+   prefix String] Bool
   (and (>= (count text) (count prefix))
        (= (subs text 0 (count prefix)) prefix)))
 
 (defn text-contains?
   [text String
-   needle String]
-  Bool
+   needle String] Bool
   (some? (str/index-of text needle)))
 
 (defn string-member?
   [values (Vec String)
-   candidate String]
-  Bool
-  (loop [(index Int) 0]
+   candidate String] Bool
+  (loop [index Int 0]
     (if (>= index (count values))
       false
       (if (= candidate (nth values index))
@@ -74,8 +71,8 @@
       (text-contains? line "will be fetched")))
 
 (defn path-basename [path String] String
-  (loop [(index Int) 0
-         (start Int) 0]
+  (loop [index Int 0
+         start Int 0]
     (if (>= index (count path))
       (subs path start (count path))
       (if (= (subs path index (+ index 1)) "/")
@@ -84,28 +81,27 @@
 
 (defn drop-suffix
   [text String
-   suffix String]
-  String
+   suffix String] String
   (if (and (>= (count text) (count suffix))
            (= (subs text (- (count text) (count suffix)) (count text)) suffix))
     (subs text 0 (- (count text) (count suffix)))
     text))
 
 (defn store-name [path String] String
-  (let [(basename String) (drop-suffix (path-basename path) ".drv")
-        (dash (U Int Nil)) (str/index-of basename "-")]
+  (let [basename String (drop-suffix (path-basename path) ".drv")
+        dash (U Int Nil) (str/index-of basename "-")]
     (if (nil? dash) basename (subs basename (+ dash 1) (count basename)))))
 
 (defn planned-impact [output String] RebuildImpact
-  (let [(lines (Vec String)) (split-lines output)]
-    (loop [(index Int) 0
-           (section String) ""
-           (builds (Vec String)) []
-           (fetches (Vec String)) []]
+  (let [lines (Vec String) (split-lines output)]
+    (loop [index Int 0
+           section String ""
+           builds (Vec String) []
+           fetches (Vec String) []]
       (if (>= index (count lines))
         (->RebuildImpact builds fetches [] [])
-        (let [(line String) (nth lines index)
-              (cleaned String) (str/trim line)]
+        (let [line String (nth lines index)
+              cleaned String (str/trim line)]
           (cond
             (build-header? line)
             (recur (+ index 1) "build" builds fetches)
@@ -126,7 +122,7 @@
             (recur (+ index 1) section builds fetches)))))))
 
 (defn ascii-lower? [character String] Bool
-  (let [(bytes (Vec Int)) (utf8-encode character)]
+  (let [bytes (Vec Int) (utf8-encode character)]
     (and (= (count character) 1)
          (>= (nth bytes 0) 97)
          (<= (nth bytes 0) 122))))
@@ -148,12 +144,12 @@
     :else nil))
 
 (defn expensive-builds [builds (Vec String)] (Vec ExpensiveBuild)
-  (loop [(index Int) 0
-         (result (Vec ExpensiveBuild)) []]
+  (loop [index Int 0
+         result (Vec ExpensiveBuild) []]
     (if (>= index (count builds))
       result
-      (let [(name String) (store-name (nth builds index))
-            (estimate (U String Nil)) (expensive-estimate name)]
+      (let [name String (store-name (nth builds index))
+            estimate (U String Nil) (expensive-estimate name)]
         (recur (+ index 1)
           (if (nil? estimate)
             result
@@ -170,9 +166,8 @@
 
 (defn current-system-has?
   [derivations (Vec String)
-   name String]
-  Bool
-  (loop [(index Int) 0]
+   name String] Bool
+  (loop [index Int 0]
     (if (>= index (count derivations))
       false
       (if (text-contains? (nth derivations index) name)
@@ -181,13 +176,12 @@
 
 (defn new-packages
   [fetches (Vec String)
-   current-system-derivations (Vec String)]
-  (Vec String)
-  (loop [(index Int) 0
-         (packages (Vec String)) []]
+   current-system-derivations (Vec String)] (Vec String)
+  (loop [index Int 0
+         packages (Vec String) []]
     (if (>= index (count fetches))
       packages
-      (let [(name String) (store-name (nth fetches index))]
+      (let [name String (store-name (nth fetches index))]
         (recur (+ index 1)
           (if (and (> (count name) 0)
                    (ascii-lower? (subs name 0 1))
@@ -198,8 +192,7 @@
 
 (defn enrich-impact
   [impact RebuildImpact
-   current-system-derivations (Vec String)]
-  RebuildImpact
+   current-system-derivations (Vec String)] RebuildImpact
   (->RebuildImpact
     (rebuildimpact-builds impact)
     (rebuildimpact-fetches impact)
@@ -208,19 +201,17 @@
 
 (defn build-lines
   [builds (Vec ExpensiveBuild)
-   index Int]
-  String
+   index Int] String
   (if (>= index (count builds))
     ""
-    (let [(build ExpensiveBuild) (nth builds index)]
+    (let [build ExpensiveBuild (nth builds index)]
       (str "    " (expensivebuild-name build) " ("
         (expensivebuild-estimate build) ", local build)\n"
         (build-lines builds (+ index 1))))))
 
 (defn package-lines
   [packages (Vec String)
-   index Int]
-  String
+   index Int] String
   (if (>= index (count packages))
     ""
     (str "    " (nth packages index) " (binary cache hit)\n"
@@ -242,8 +233,7 @@
 
 (defn render-impact
   [host String
-   impact RebuildImpact]
-  String
+   impact RebuildImpact] String
   (if (and (= 0 (count (rebuildimpact-builds impact)))
            (= 0 (count (rebuildimpact-fetches impact))))
     (str "Rebuild impact (" host "):\n"
@@ -271,21 +261,20 @@
       (estimated-line impact))))
 
 (defn failure-tail [output String] String
-  (let [(lines (Vec String)) (split-lines output)
-        (start Int) (max 0 (- (count lines) 5))]
-    (loop [(index Int) start
-           (text String) ""]
+  (let [lines (Vec String) (split-lines output)
+        start Int (max 0 (- (count lines) 5))]
+    (loop [index Int start
+           text String ""]
       (if (>= index (count lines))
         text
         (recur (+ index 1) (str text (nth lines index) "\n"))))))
 
 (defn interpret [input ImpactInput] ImpactResult
-  (let [(dry-run DryRunResult) (impactinput-dry-run input)]
+  (let [dry-run DryRunResult (impactinput-dry-run input)]
     (if (not= 0 (dryrunresult-exit-status dry-run))
       (->ImpactFailed
         (str "firn impact: dry-run failed (eval error?)\n"
           (failure-tail (dryrunresult-output dry-run))))
-      (let [(planned RebuildImpact) (planned-impact (dryrunresult-output dry-run))
-            (impact RebuildImpact)
-            (enrich-impact planned (impactinput-current-system-derivations input))]
+      (let [planned RebuildImpact (planned-impact (dryrunresult-output dry-run))
+            impact RebuildImpact (enrich-impact planned (impactinput-current-system-derivations input))]
         (->ImpactReady impact (render-impact (impactinput-host input) impact))))))
