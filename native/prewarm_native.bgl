@@ -69,9 +69,15 @@
 (defn git-argv [arguments (Vec String)] (Vec String)
   (append-argv git-environment-prefix arguments))
 
+(defn host-error-status [errno Any] Int
+  (if (integer? errno)
+    (- 0 errno)
+    (throw "host error errno must be Int")))
+
 (defn capture-text [argv (Vec String)] CaptureTextResult
   (match (host.process/run-capture argv "" max-process-output)
-    [(host.process/CaptureError errno) (->CaptureTextError (- 0 errno))]
+    [(host.process/CaptureError errno)
+     (->CaptureTextError (host-error-status errno))]
     [(host.process/CaptureOk status stdout stderr)
      (if (= status 0)
        (->CaptureTextOk (policy/trim-line-ending stdout))
@@ -296,16 +302,16 @@
 (defn clear-owner [owner-path String] Int
   (match (host.fs/write-text-atomic owner-path "0\n0\n\n")
     [(host.fs/WriteTextAtomicOk) 0]
-    [(host.fs/WriteTextAtomicError errno) (- 0 errno)]))
+    [(host.fs/WriteTextAtomicError errno) (host-error-status errno)]))
 
 (defn release-lease [descriptor Int] Int
   (match (host.fs/unlock descriptor)
     [(host.fs/UnlockOk) 0]
-    [(host.fs/UnlockError errno) (- 0 errno)]))
+    [(host.fs/UnlockError errno) (host-error-status errno)]))
 
 (defn drain-output [descriptor Int] Int
   (match (host.process/read-line-bounded descriptor max-process-output)
-    [(host.process/ReadLineError errno) (- 0 errno)]
+    [(host.process/ReadLineError errno) (host-error-status errno)]
     [(host.process/ReadLineOk line eof)
      (if eof 0 (drain-output descriptor))]))
 
@@ -314,7 +320,7 @@
    key String] Int
   (match (host.fs/write-text-atomic stamp-path (str key "\n"))
     [(host.fs/WriteTextAtomicOk) 0]
-    [(host.fs/WriteTextAtomicError errno) (- 0 errno)]))
+    [(host.fs/WriteTextAtomicError errno) (host-error-status errno)]))
 
 (defn finish-owned-child
   [descriptor Int
@@ -328,7 +334,8 @@
             (host.fs/write-text-atomic owner-path
               (policy/render-lease-owner owner))
             [(host.fs/WriteTextAtomicOk) 0]
-            [(host.fs/WriteTextAtomicError write-errno) (- 0 write-errno)])
+            [(host.fs/WriteTextAtomicError write-errno)
+             (host-error-status write-errno)])
         drain-status Int (drain-output stdout-fd)
         close-status Int (host.process/close stdout-fd)
         exit-status Int (host.process/wait child-pid)
