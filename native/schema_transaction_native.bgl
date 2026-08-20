@@ -85,8 +85,8 @@
   [left (Vec String)
    right (Vec String)]
   (Vec String)
-  (loop [(index Int) 0
-         (result (Vec String)) left]
+  (loop [index Int 0
+         result (Vec String) left]
     (if (>= index (count right))
       result
       (recur (+ index 1) (conj result (nth right index))))))
@@ -114,8 +114,8 @@
        (->PathsLoadRejected
          (errno-message "cannot list" relative errno)))]
     [(host.fs/ListDirectoryBoundedOk entries)
-     (loop [(index Int) 0
-            (result (Vec String)) []]
+     (loop [index Int 0
+            result (Vec String) []]
        (if (>= index (count entries))
          (->PathsLoaded result)
          (let [(name String) (nth entries index)
@@ -172,8 +172,8 @@
 (defn optional-tool-root-paths [beagle-path String] PathsLoadResult
   (let [(roots (Vec String))
         ["bin/_beagle-racket" "flake.nix" "flake.lock"]]
-    (loop [(index Int) 0
-           (selected (Vec String)) []]
+    (loop [index Int 0
+           selected (Vec String) []]
       (if (>= index (count roots))
         (->PathsLoaded selected)
         (let [(relative String) (nth roots index)]
@@ -204,8 +204,8 @@
        (match (walk-files beagle-path directory true)
          [(PathsLoadRejected message) (->PathsLoadRejected message)]
          [(PathsLoaded paths)
-          (loop [(index Int) 0
-                 (selected (Vec String)) []]
+          (loop [index Int 0
+                 selected (Vec String) []]
             (if (>= index (count paths))
               (->PathsLoaded selected)
               (let [(relative String) (nth paths index)]
@@ -593,8 +593,8 @@
   [root String
    inputs (Vec String)]
   (Vec String)
-  (loop [(index Int) 0
-         (result (Vec String)) []]
+  (loop [index Int 0
+         result (Vec String) []]
     (if (>= index (count inputs))
       result
       (recur (+ index 1)
@@ -629,8 +629,8 @@
    inputs (Vec String)]
   Int
   (let [(argv (Vec String))
-        (loop [(index Int) 0
-               (result (Vec String))
+        (loop [index Int 0
+               result (Vec String)
                [(path beagle-path "bin/beagle-validate")]]
           (if (>= index (count inputs))
             result

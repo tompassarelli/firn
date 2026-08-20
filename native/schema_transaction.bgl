@@ -101,8 +101,8 @@
     -1
     (match (nth events start)
       [(JsonObjectStart offset)
-       (loop [(index Int) (+ start 1)
-              (depth Int) 1]
+       (loop [index Int (+ start 1)
+              depth Int 1]
          (if (>= index (count events))
            -1
            (match (nth events index)
@@ -127,8 +127,8 @@
              [(JsonNull scalar-offset)
               (recur (+ index 1) depth)])))]
       [(JsonArrayStart offset)
-       (loop [(index Int) (+ start 1)
-              (depth Int) 1]
+       (loop [index Int (+ start 1)
+              depth Int 1]
          (if (>= index (count events))
            -1
            (match (nth events index)
@@ -176,8 +176,8 @@
       (if (< end 0)
         (->JsonFieldRejected "unterminated JSON object"
           (json-event-offset (nth events object-start)))
-        (loop [(index Int) (+ object-start 1)
-               (found Int) -1]
+        (loop [index Int (+ object-start 1)
+               found Int -1]
           (if (= index (- end 1))
             (if (< found 0)
               (->JsonFieldMissing wanted)
@@ -210,7 +210,7 @@
   [members (Vec JsonMember)
    key String]
   Int
-  (loop [(index Int) 0]
+  (loop [index Int 0]
     (if (>= index (count members))
       -1
       (if (= key (jsonmember-key (nth members index)))
@@ -222,8 +222,8 @@
    index Int
    member JsonMember]
   (Vec JsonMember)
-  (loop [(cursor Int) 0
-         (result (Vec JsonMember)) []]
+  (loop [cursor Int 0
+         result (Vec JsonMember) []]
     (if (>= cursor (count members))
       result
       (recur (+ cursor 1)
@@ -248,8 +248,8 @@
     (if (< index 0) "" (jsonmember-value (nth members index)))))
 
 (defn member-keys [members (Vec JsonMember)] (Vec String)
-  (loop [(index Int) 0
-         (keys (Vec String)) []]
+  (loop [index Int 0
+         keys (Vec String) []]
     (if (>= index (count members))
       (sort keys)
       (recur (+ index 1)
@@ -263,14 +263,14 @@
     (if (< end 0)
       (->CanonicalJsonRejected "unterminated JSON object"
         (json-event-offset (nth events start)))
-      (loop [(index Int) (+ start 1)
-             (members (Vec JsonMember)) []]
+      (loop [index Int (+ start 1)
+             members (Vec JsonMember) []]
         (if (= index (- end 1))
           (let [(keys (Vec String)) (member-keys members)]
             (->CanonicalJson
               (str "{"
-                (loop [(key-index Int) 0
-                       (text String) ""]
+                (loop [key-index Int 0
+                       text String ""]
                   (if (>= key-index (count keys))
                     text
                     (let [(key String) (nth keys key-index)]
@@ -315,9 +315,9 @@
     (if (< end 0)
       (->CanonicalJsonRejected "unterminated JSON array"
         (json-event-offset (nth events start)))
-      (loop [(index Int) (+ start 1)
-             (text String) ""
-             (first-value Bool) true]
+      (loop [index Int (+ start 1)
+             text String ""
+             first-value Bool true]
         (if (= index (- end 1))
           (->CanonicalJson (str "[" text "]"))
           (let [(next Int) (json-value-end events index)]
@@ -517,8 +517,8 @@
        (let [(end Int) (json-value-end events reference-start)]
          (if (or (< end 0) (= end (+ reference-start 2)))
            (->NodeResolutionRejected "invalid empty follows path")
-           (loop [(index Int) (+ reference-start 1)
-                  (current String) root-id]
+           (loop [index Int (+ reference-start 1)
+                  current String root-id]
              (if (= index (- end 1))
                (->NodeResolved current)
                (match (nth events index)
@@ -624,15 +624,15 @@
                 (canonical-json-value events locked-start))])])])]))
 
 (defn pow256 [exponent Int] Int
-  (loop [(index Int) 0
-         (value Int) 1]
+  (loop [index Int 0
+         value Int 1]
     (if (>= index exponent)
       value
       (recur (+ index 1) (* value 256)))))
 
 (defn u64-bytes [value Int] (Vec Int)
-  (loop [(exponent Int) 7
-         (result (Vec Int)) []]
+  (loop [exponent Int 7
+         result (Vec Int) []]
     (if (< exponent 0)
       result
       (recur (- exponent 1)
@@ -642,8 +642,8 @@
   [left (Vec Int)
    right (Vec Int)]
   (Vec Int)
-  (loop [(index Int) 0
-         (result (Vec Int)) left]
+  (loop [index Int 0
+         result (Vec Int) left]
     (if (>= index (count right))
       result
       (recur (+ index 1) (conj result (nth right index))))))
@@ -652,7 +652,7 @@
   [files (Vec ToolFile)
    relative String]
   Int
-  (loop [(index Int) 0]
+  (loop [index Int 0]
     (if (>= index (count files))
       -1
       (if (= relative (toolfile-relative (nth files index)))
@@ -660,8 +660,8 @@
         (recur (+ index 1))))))
 
 (defn tool-file-paths [files (Vec ToolFile)] (Vec String)
-  (loop [(index Int) 0
-         (paths (Vec String)) []]
+  (loop [index Int 0
+         paths (Vec String) []]
     (if (>= index (count files))
       (sort paths)
       (recur (+ index 1)
@@ -672,8 +672,8 @@
         (domain (Vec Int))
         (append-bytes (utf8-encode "firn-beagle-schema-tools-v1") [0])]
     (sha256-bytes
-      (loop [(index Int) 0
-             (bytes (Vec Int)) domain]
+      (loop [index Int 0
+             bytes (Vec Int) domain]
         (if (>= index (count paths))
           bytes
           (let [(relative String) (nth paths index)
@@ -862,7 +862,7 @@
 
 (defn file-name [path-value String] String
   (let [(bytes (Vec Int)) (utf8-encode path-value)]
-    (loop [(index Int) (- (count bytes) 1)]
+    (loop [index Int (- (count bytes) 1)]
       (cond
         (< index 0) path-value
         (= 47 (nth bytes index)) (subs path-value (+ index 1) (count path-value))
@@ -878,8 +878,8 @@
        (not= (file-name relative) "hardware-configuration.nix")))
 
 (defn filter-sorted-bnix [discovered (Vec String)] (Vec String)
-  (loop [(index Int) 0
-         (selected (Vec String)) []]
+  (loop [index Int 0
+         selected (Vec String) []]
     (if (>= index (count discovered))
       (sort selected)
       (let [(relative String) (nth discovered index)]
@@ -889,8 +889,8 @@
             selected))))))
 
 (defn filter-sorted-nix [discovered (Vec String)] (Vec String)
-  (loop [(index Int) 0
-         (selected (Vec String)) []]
+  (loop [index Int 0
+         selected (Vec String) []]
     (if (>= index (count discovered))
       (sort selected)
       (let [(relative String) (nth discovered index)]
@@ -906,7 +906,7 @@
   (if (empty? explicit) (filter-sorted-bnix discovered) explicit))
 
 (defn validation-needs-darwin? [inputs (Vec String)] Bool
-  (loop [(index Int) 0]
+  (loop [index Int 0]
     (if (>= index (count inputs))
       false
       (if (= "flake.bnix" (file-name (nth inputs index)))
@@ -934,8 +934,8 @@
          (= "repo" (nth argv 0))
          (= "validate" (nth argv 1)))
     (let [(tail (Vec String))
-          (loop [(index Int) 2
-                 (result (Vec String)) []]
+          (loop [index Int 2
+                 result (Vec String) []]
             (if (>= index (count argv))
               result
               (recur (+ index 1) (conj result (nth argv index)))))]
