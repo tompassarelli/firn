@@ -356,6 +356,7 @@
       nativeBuildInputs = [ beaglePackage pkgs.stdenv.cc ];
     } ''
       mkdir -p $out/bin
+      export XDG_CACHE_HOME=$TMPDIR/firn-native-cache
       export BEAGLE_CHECKED_AST_STORE=$TMPDIR/firn-native-checked-ast.storelog
       sed '1s|^#!/usr/bin/env python3$|#!${pkgs.python3}/bin/python3|' ${beaglePackage}/native-core/bin/run-bounded > "$TMPDIR/firn-native-run-bounded"
       chmod +x "$TMPDIR/firn-native-run-bounded"

@@ -67,6 +67,7 @@
               {:nativeBuildInputs [beaglePackage pkgs.stdenv.cc]}
               (ms
                 "mkdir -p $out/bin"
+                "export XDG_CACHE_HOME=$TMPDIR/firn-native-cache"
                 "export BEAGLE_CHECKED_AST_STORE=$TMPDIR/firn-native-checked-ast.storelog"
                 (s
                   "sed '1s|^#!/usr/bin/env python3$|#!"
