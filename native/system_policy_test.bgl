@@ -1,0 +1,110 @@
+#lang beagle
+(ns firn.system-policy-test
+  (:require [firn.system-policy :as policy]))
+
+(defrecord TestResult
+  [name String
+   passed Bool])
+
+(defn raw-bash [command String] policy/RawHookEvent
+  (policy/->RawHookEvent "Bash" command nil "session" false false false))
+
+(defn case-event-decoding-and-refusal [] Bool
+  (and
+    (match (policy/decode-hook-event (raw-bash "nixos-rebuild switch"))
+      [(HookBash command) (= command "nixos-rebuild switch")]
+      [(HookEdit path) false]
+      [(HookIgnored name) false])
+    (match (policy/decide-hook (raw-bash "sudo nixos-rebuild test"))
+      [(HookRefuse reason) (= reason policy/blocked-command-reason)]
+      [(HookPass token) false]
+      [(HookInject context) false])
+    (match (policy/decide-hook (raw-bash "echo nixos-rebuild switch"))
+      [(HookPass token) token]
+      [(HookRefuse reason) false]
+      [(HookInject context) false])))
+
+(defn case-edit-introduction-and-exits [] Bool
+  (let [(event policy/RawHookEvent)
+        (policy/->RawHookEvent
+          "Edit" nil "/code/nixos-config/file.bnix" "session" false false true)]
+    (and
+      (match (policy/decide-hook event)
+        [(HookInject context) (= context policy/firn-digest)]
+        [(HookPass token) false]
+        [(HookRefuse reason) false])
+      (= (policy/hook-exit-code (policy/decide-hook event)) 0))))
+
+(defn case-pin-arguments-and-assertions [] Bool
+  (and
+    (match (policy/parse-pin-arguments ["--warn-days=7"])
+      [(PinArgumentsAccepted days) (= days 7)]
+      [(PinArgumentsHelp token) false]
+      [(PinArgumentsRejected message) false])
+    (match (policy/parse-pin-arguments ["--warn-days" "no"])
+      [(PinArgumentsRejected message)
+       (= message "error: --warn-days must be a non-negative integer")]
+      [(PinArgumentsAccepted days) false]
+      [(PinArgumentsHelp token) false])
+    (policy/valid-sri? "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+    (not (policy/valid-sri? "sha256-not-a-checksum"))))
+
+(defn case-pin-exit-decision [] Bool
+  (let [(arguments policy/PinArguments) (policy/parse-pin-arguments [])
+        (evidence (Vec policy/PinEvidence))
+        [(policy/->PinEvidence
+           "fixed-output" "module.bnix:4" "https://example.test/source"
+           "https://example.test/source" true "sha256-invalid")]
+        (inputs (Vec policy/LockInput))
+        [(policy/->LockInput "nixpkgs" "abcdef" 0)]
+        (report policy/PolicyReport)
+        (policy/pin-policy arguments 2678400 evidence inputs)]
+    (and (= (policy/policyreport-exit-code report) 1)
+         (= (count (policy/policyreport-diagnostics report)) 2)
+         (= (policy/diagnostic-code
+              (nth (policy/policyreport-diagnostics report) 0))
+            "malformed-checksum")
+         (= (policy/diagnostic-code
+              (nth (policy/policyreport-diagnostics report) 1))
+            "stale-lock-input"))))
+
+(defn canonical-check [path String] policy/ChecksumAssertion
+  (policy/->ChecksumAssertion
+    path
+    "f110de2d532584ec2c07e8b91be68b3ecaea74e6d3a100bf796665923d8d63a9"
+    "f110de2d532584ec2c07e8b91be68b3ecaea74e6d3a100bf796665923d8d63a9"))
+
+(defn case-license-assertions [] Bool
+  (let [(passing policy/PolicyReport)
+        (policy/license-policy
+          (policy/->LicenseEvidence
+            [(canonical-check "LICENSE-APACHE")] policy/expected-readme-license))
+        (failing policy/PolicyReport)
+        (policy/license-policy
+          (policy/->LicenseEvidence
+            [(policy/->ChecksumAssertion "LICENSE" "expected" "wrong")] nil))]
+    (and
+      (= (policy/policyreport-exit-code passing) 0)
+      (= (policy/diagnostic-code
+           (nth (policy/policyreport-diagnostics passing) 0))
+         "license-ok")
+      (= (policy/policyreport-exit-code failing) 1)
+      (= (count (policy/policyreport-diagnostics failing)) 2))))
+
+(defn cases [] (Vec TestResult)
+  [(->TestResult "event-decoding-and-refusal" (case-event-decoding-and-refusal))
+   (->TestResult "edit-introduction-and-exits" (case-edit-introduction-and-exits))
+   (->TestResult "pin-arguments-and-assertions" (case-pin-arguments-and-assertions))
+   (->TestResult "pin-exit-decision" (case-pin-exit-decision))
+   (->TestResult "license-assertions" (case-license-assertions))])
+
+(defn -main [args (Vec String)] Int
+  (loop [(index Int) 0]
+    (if (>= index (count (cases)))
+      0
+      (let [(result TestResult) (nth (cases) index)]
+        (if (testresult-passed result)
+          (recur (+ index 1))
+          (do
+            (println (str "FAIL: " (testresult-name result)))
+            1))))))

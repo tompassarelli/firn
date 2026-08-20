@@ -1,0 +1,494 @@
+#lang beagle
+(ns firn.system-policy)
+
+;; This module is intentionally effect-free. Its callers obtain stdin, argv,
+;; repository files, clocks, and network results, then pass typed facts here.
+
+(defrecord Diagnostic
+  [level String
+   code String
+   message String])
+
+(defrecord PolicyReport
+  [diagnostics (Vec Diagnostic)
+   exit-code Int])
+
+(defrecord RawHookEvent
+  [tool-name String
+   command (U String Nil)
+   file-path (U String Nil)
+   session-id String
+   payload-oversized Bool
+   guards-off Bool
+   intro-unseen Bool])
+
+(defunion HookEvent
+  (HookBash [command String])
+  (HookEdit [path String])
+  (HookIgnored [tool-name String]))
+
+(defunion HookDecision
+  (HookPass [token Bool])
+  (HookInject [context String])
+  (HookRefuse [reason String]))
+
+(defunion PinArguments
+  (PinArgumentsAccepted [warn-days Int])
+  (PinArgumentsHelp [token Bool])
+  (PinArgumentsRejected [message String]))
+
+(defrecord PinEvidence
+  [kind String
+   location String
+   value String
+   verification-url String
+   reachable Bool
+   checksum (U String Nil)])
+
+(defrecord LockInput
+  [name String
+   revision String
+   modified (U Int Nil)])
+
+(defrecord ChecksumAssertion
+  [path String
+   expected String
+   actual String])
+
+(defrecord LicenseEvidence
+  [checksums (Vec ChecksumAssertion)
+   readme-license (U String Nil)])
+
+(def firn-digest String
+  (str
+    "You are editing the Firn system configuration. Edit .bnix sources, never "
+    ".nix; run firn repo build and firn repo validate after .bnix changes. "
+    "Raw nixos-rebuild, darwin-rebuild, nh switching, and firn repo upgrade "
+    "now remain user-only. Secrets use sops-nix only."))
+
+(def blocked-command-reason String
+  (str
+    "BLOCKED: that command switches the system outside the sanctioned path. "
+    "Raw nixos-rebuild/darwin-rebuild/nh and `firn repo upgrade now` stay "
+    "the user's. Agents may run `firn rebuild` after the relevant checks pass "
+    "and their own changes are committed."))
+
+(def expected-readme-license String
+  (str
+    "## License\n\n"
+    "Firn is dual-licensed under either the [MIT License](LICENSE-MIT) or the\n"
+    "[Apache License, Version 2.0](LICENSE-APACHE), at your option\n"
+    "(`MIT OR Apache-2.0`)."))
+
+(defn starts-at?
+  [text String
+   offset Int
+   token String]
+  Bool
+  (and (>= offset 0)
+       (<= (+ offset (count token)) (count text))
+       (= (subs text offset (+ offset (count token))) token)))
+
+(defn whitespace? [character String] Bool
+  (or (= character " ") (= character "\t") (= character "\n")))
+
+(defn separator? [character String] Bool
+  (or (whitespace? character)
+      (= character ";")
+      (= character "&")
+      (= character "|")
+      (= character "(")
+      (= character "`")
+      (= character ")")))
+
+(defn skip-whitespace
+  [text String
+   offset Int]
+  Int
+  (loop [(cursor Int) offset]
+    (if (and (< cursor (count text))
+             (whitespace? (subs text cursor (+ cursor 1))))
+      (recur (+ cursor 1))
+      cursor)))
+
+(defn token-end
+  [text String
+   offset Int]
+  Int
+  (loop [(cursor Int) offset]
+    (if (or (>= cursor (count text))
+            (separator? (subs text cursor (+ cursor 1))))
+      cursor
+      (recur (+ cursor 1)))))
+
+(defn word-at?
+  [text String
+   offset Int
+   word String]
+  Bool
+  (and (starts-at? text offset word)
+       (let [(after Int) (+ offset (count word))]
+         (or (= after (count text))
+             (separator? (subs text after (+ after 1)))))))
+
+(defn next-word
+  [text String
+   offset Int]
+  Int
+  (let [(start Int) (skip-whitespace text offset)
+        (end Int) (token-end text start)]
+    (skip-whitespace text end)))
+
+(defn strip-privilege-prefix
+  [text String
+   offset Int]
+  Int
+  (let [(start Int) (skip-whitespace text offset)]
+    (if (or (word-at? text start "sudo") (word-at? text start "doas"))
+      (next-word text start)
+      start)))
+
+(defn command-anchor?
+  [text String
+   offset Int]
+  Bool
+  (or (= offset 0)
+      (let [(before String) (subs text (- offset 1) offset)]
+        (or (= before "\n")
+            (= before ";")
+            (= before "&")
+            (= before "|")
+            (= before "(")
+            (= before "`")))))
+
+(defn nth-word-at?
+  [text String
+   offset Int
+   word String]
+  Bool
+  (word-at? text (next-word text offset) word))
+
+(defn third-word-at?
+  [text String
+   offset Int
+   first String
+   second String
+   third String]
+  Bool
+  (and (word-at? text offset first)
+       (let [(next Int) (next-word text offset)]
+         (and (word-at? text next second)
+              (word-at? text (next-word text next) third)))))
+
+(defn command-has-word?
+  [text String
+   command-offset Int
+   wanted String]
+  Bool
+  (loop [(cursor Int) (next-word text command-offset)]
+    (if (or (>= cursor (count text))
+            (command-anchor? text cursor))
+      false
+      (if (word-at? text cursor wanted)
+        true
+        (let [(after Int) (token-end text cursor)]
+          (if (= after cursor)
+            false
+            (recur (next-word text cursor))))))))
+
+(defn refusal-at?
+  [command String
+   offset Int]
+  Bool
+  (if (not (command-anchor? command offset))
+    false
+    (let [(start Int) (strip-privilege-prefix command offset)]
+      (or
+        (and (third-word-at? command start "firn" "repo" "upgrade")
+             (nth-word-at? command (next-word command (next-word command start))
+               "now"))
+        (and (word-at? command start "nixos-rebuild")
+             (or (command-has-word? command start "switch")
+                 (command-has-word? command start "boot")
+                 (command-has-word? command start "test")))
+        (and (word-at? command start "darwin-rebuild")
+             (or (command-has-word? command start "switch")
+                 (command-has-word? command start "boot")))
+        (and (word-at? command start "nh")
+             (or (nth-word-at? command start "switch")
+                 (nth-word-at? command start "boot")
+                 (and (nth-word-at? command start "os")
+                      (or (nth-word-at?
+                            command (next-word command start) "switch")
+                          (nth-word-at?
+                            command (next-word command start) "boot")))))))))
+
+(defn refused-command? [command String] Bool
+  (loop [(offset Int) 0]
+    (if (>= offset (count command))
+      false
+      (if (refusal-at? command offset)
+        true
+        (recur (+ offset 1))))))
+
+(defn decode-hook-event [raw RawHookEvent] HookEvent
+  (let [(tool String) (rawhookevent-tool-name raw)]
+    (cond
+      (= tool "Bash")
+      (let [(command (U String Nil)) (rawhookevent-command raw)]
+        (if (some? command) (->HookBash command) (->HookIgnored tool)))
+
+      (or (= tool "Edit") (= tool "Write") (= tool "MultiEdit"))
+      (let [(path (U String Nil)) (rawhookevent-file-path raw)]
+        (if (some? path) (->HookEdit path) (->HookIgnored tool)))
+
+      :else
+      (->HookIgnored tool))))
+
+(defn firn-path? [path String] Bool
+  (loop [(offset Int) 0]
+    (if (> (+ offset 18) (count path))
+      false
+      (if (starts-at? path offset "/code/nixos-config/")
+        true
+        (recur (+ offset 1))))))
+
+(defn decide-hook [raw RawHookEvent] HookDecision
+  (if (or (rawhookevent-guards-off raw) (rawhookevent-payload-oversized raw))
+    (->HookPass true)
+    (match (decode-hook-event raw)
+      [(HookBash command)
+       (if (refused-command? command)
+         (->HookRefuse blocked-command-reason)
+         (->HookPass true))]
+      [(HookEdit path)
+       (if (and (rawhookevent-intro-unseen raw) (firn-path? path))
+         (->HookInject firn-digest)
+         (->HookPass true))]
+      [(HookIgnored tool-name) (->HookPass true)])))
+
+(defn hook-exit-code [decision HookDecision] Int
+  0)
+
+(defn digit-value [character String] Int
+  (cond
+    (= character "0") 0
+    (= character "1") 1
+    (= character "2") 2
+    (= character "3") 3
+    (= character "4") 4
+    (= character "5") 5
+    (= character "6") 6
+    (= character "7") 7
+    (= character "8") 8
+    (= character "9") 9
+    :else -1))
+
+(defn decimal-value [text String] (U Int Nil)
+  (if (= (count text) 0)
+    nil
+    (loop [(offset Int) 0 (value Int) 0]
+      (if (= offset (count text))
+        value
+        (let [(digit Int) (digit-value (subs text offset (+ offset 1)))]
+          (if (< digit 0)
+            nil
+            (recur (+ offset 1) (+ (* value 10) digit))))))))
+
+(defn parse-pin-arguments [args (Vec String)] PinArguments
+  (loop [(index Int) 0 (warn-days Int) 30]
+    (if (>= index (count args))
+      (->PinArgumentsAccepted warn-days)
+      (let [(arg String) (nth args index)]
+        (cond
+          (or (= arg "-h") (= arg "--help")) (->PinArgumentsHelp true)
+
+          (= arg "--warn-days")
+          (if (>= (+ index 1) (count args))
+            (->PinArgumentsRejected "error: --warn-days requires a value")
+            (let [(value (U Int Nil)) (decimal-value (nth args (+ index 1)))]
+              (if (nil? value)
+                (->PinArgumentsRejected
+                  "error: --warn-days must be a non-negative integer")
+                (recur (+ index 2) value))))
+
+          (starts-at? arg 0 "--warn-days=")
+          (let [(value (U Int Nil))
+                (decimal-value (subs arg 12 (count arg)))]
+            (if (nil? value)
+              (->PinArgumentsRejected
+                "error: --warn-days must be a non-negative integer")
+              (recur (+ index 1) value)))
+
+          :else
+          (->PinArgumentsRejected (str "error: unknown argument: " arg)))))))
+
+(defn character-member?
+  [characters String
+   character String]
+  Bool
+  (loop [(offset Int) 0]
+    (if (>= offset (count characters))
+      false
+      (if (= character (subs characters offset (+ offset 1)))
+        true
+        (recur (+ offset 1))))))
+
+(defn base64-sri-character? [character String] Bool
+  (character-member?
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    character))
+
+(defn valid-sri? [checksum String] Bool
+  (and (= (count checksum) 51)
+       (starts-at? checksum 0 "sha256-")
+       (= (subs checksum 50 51) "=")
+       (loop [(offset Int) 7]
+         (if (= offset 50)
+           true
+           (if (base64-sri-character? (subs checksum offset (+ offset 1)))
+             (recur (+ offset 1))
+             false)))))
+
+(defn hex-character? [character String] Bool
+  (character-member? "0123456789abcdef" character))
+
+(defn valid-sha256? [checksum String] Bool
+  (and (= (count checksum) 64)
+       (loop [(offset Int) 0]
+         (if (= offset 64)
+           true
+           (if (hex-character? (subs checksum offset (+ offset 1)))
+             (recur (+ offset 1))
+             false)))))
+
+(defn hand-pin-diagnostic [evidence PinEvidence] (U Diagnostic Nil)
+  (let [(checksum (U String Nil)) (pinevidence-checksum evidence)]
+    (cond
+      (and (some? checksum) (not (valid-sri? checksum)))
+      (->Diagnostic
+        "error" "malformed-checksum"
+        (str "ERROR hand-pin " (pinevidence-kind evidence) " "
+          (pinevidence-location evidence) " " (pinevidence-value evidence)
+          " (" checksum ")"))
+
+      (not (pinevidence-reachable evidence))
+      (->Diagnostic
+        "error" "unverified-pin"
+        (str "ERROR hand-pin " (pinevidence-kind evidence) " "
+          (pinevidence-location evidence) " " (pinevidence-value evidence)))
+
+      :else nil)))
+
+(defn hand-pin-diagnostics [evidence (Vec PinEvidence)] (Vec Diagnostic)
+  (loop [(index Int) 0 (result (Vec Diagnostic)) []]
+    (if (>= index (count evidence))
+      result
+      (let [(diagnostic (U Diagnostic Nil))
+            (hand-pin-diagnostic (nth evidence index))]
+        (recur (+ index 1)
+          (if (some? diagnostic) (conj result diagnostic) result))))))
+
+(defn lock-input-diagnostic
+  [now Int
+   warn-days Int
+   input LockInput]
+  (U Diagnostic Nil)
+  (let [(modified (U Int Nil)) (lockinput-modified input)]
+    (if (nil? modified)
+      (->Diagnostic
+        "error" "unverifiable-lock-input"
+        (str "ERROR flake-input " (lockinput-name input) " rev "
+          (lockinput-revision input) " age unverifiable"))
+      (let [(age-seconds Int) (max 0 (- now modified))
+            (age-days Int) (quot age-seconds 86400)]
+        (if (> age-days warn-days)
+          (->Diagnostic
+            "error" "stale-lock-input"
+            (str "STALE flake-input " (lockinput-name input) " rev "
+              (lockinput-revision input) " age " age-days "d"))
+          nil)))))
+
+(defn lock-input-diagnostics
+  [now Int
+   warn-days Int
+   inputs (Vec LockInput)]
+  (Vec Diagnostic)
+  (loop [(index Int) 0 (result (Vec Diagnostic)) []]
+    (if (>= index (count inputs))
+      result
+      (let [(diagnostic (U Diagnostic Nil))
+            (lock-input-diagnostic now warn-days (nth inputs index))]
+        (recur (+ index 1)
+          (if (some? diagnostic) (conj result diagnostic) result))))))
+
+(defn error-count [diagnostics (Vec Diagnostic)] Int
+  (loop [(index Int) 0 (total Int) 0]
+    (if (>= index (count diagnostics))
+      total
+      (recur (+ index 1)
+        (if (= (diagnostic-level (nth diagnostics index)) "error")
+          (+ total 1)
+          total)))))
+
+(defn pin-policy
+  [arguments PinArguments
+   now Int
+   evidence (Vec PinEvidence)
+   inputs (Vec LockInput)]
+  PolicyReport
+  (match arguments
+    [(PinArgumentsHelp token) (->PolicyReport [] 0)]
+    [(PinArgumentsRejected message)
+     (->PolicyReport [(->Diagnostic "error" "invalid-arguments" message)] 2)]
+    [(PinArgumentsAccepted warn-days)
+     (let [(diagnostics (Vec Diagnostic))
+           (loop [(index Int) 0
+                  (all (Vec Diagnostic)) (hand-pin-diagnostics evidence)]
+             (let [(locks (Vec Diagnostic))
+                   (lock-input-diagnostics now warn-days inputs)]
+               (if (>= index (count locks))
+                 all
+                 (recur (+ index 1) (conj all (nth locks index))))))]
+       (->PolicyReport diagnostics (if (= (error-count diagnostics) 0) 0 1)))]))
+
+(defn checksum-diagnostics [assertions (Vec ChecksumAssertion)] (Vec Diagnostic)
+  (loop [(index Int) 0 (result (Vec Diagnostic)) []]
+    (if (>= index (count assertions))
+      result
+      (let [(assertion ChecksumAssertion) (nth assertions index)
+            (actual-valid Bool) (valid-sha256? (checksumassertion-actual assertion))
+            (matches Bool)
+            (= (checksumassertion-expected assertion)
+               (checksumassertion-actual assertion))]
+        (recur (+ index 1)
+          (if (and actual-valid matches)
+            result
+            (conj result
+              (->Diagnostic
+                "error" "license-checksum"
+                (str (checksumassertion-path assertion)
+                  " differs from the canonical repository copy (expected "
+                  (checksumassertion-expected assertion) ", got "
+                  (checksumassertion-actual assertion) ")")))))))))
+
+(defn license-policy [evidence LicenseEvidence] PolicyReport
+  (let [(checks (Vec Diagnostic))
+        (checksum-diagnostics (licenseevidence-checksums evidence))
+        (readme (U String Nil)) (licenseevidence-readme-license evidence)
+        (diagnostics (Vec Diagnostic))
+        (if (nil? readme)
+          (conj checks
+            (->Diagnostic "error" "license-section"
+              "README.md has no License section"))
+          (if (= readme expected-readme-license)
+            checks
+            (conj checks
+              (->Diagnostic "error" "license-notice"
+                "README.md License section does not match the canonical dual-license notice"))))]
+    (if (= (error-count diagnostics) 0)
+      (->PolicyReport
+        [(->Diagnostic "ok" "license-ok"
+           "ok: Firn license files and README declare MIT OR Apache-2.0 consistently")]
+        0)
+      (->PolicyReport diagnostics 1))))
