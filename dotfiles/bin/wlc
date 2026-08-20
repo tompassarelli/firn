@@ -2,8 +2,11 @@
 # Copy file contents to Wayland clipboard.
 # Usage: wlc <file>
 if [ -f "${1:-}" ]; then
-  wl-copy < "$1"
-  echo "Copied $1 to clipboard"
+  if wl-copy < "$1"; then
+    echo "Copied $1 to clipboard"
+  else
+    exit 1
+  fi
 else
   echo "Error: file not found: ${1:-<no arg>}" >&2
   exit 1
