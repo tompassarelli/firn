@@ -5,75 +5,111 @@
             [firn.tag-resolve :as r]))
 
 (defunion ModuleSourceResult
-  (ModuleSourceParsed [(value r/ModuleTags)])
-  (ModuleSourceRejected [(message String) (offset Int)]))
+  (ModuleSourceParsed [value r/ModuleTags])
+  (ModuleSourceRejected
+    [message String
+     offset Int]))
 
 (defunion HostSourceResult
-  (HostSourceParsed [(value r/HostTags)])
-  (HostSourceRejected [(message String) (offset Int)]))
+  (HostSourceParsed [value r/HostTags])
+  (HostSourceRejected
+    [message String
+     offset Int]))
 
 (defunion DarwinAllowlistResult
-  (DarwinAllowlistParsed [(modules (Vec String))])
-  (DarwinAllowlistRejected [(message String) (offset Int)]))
+  (DarwinAllowlistParsed [modules (Vec String)])
+  (DarwinAllowlistRejected
+    [message String
+     offset Int]))
 
 (defrecord SpanScan
-  [(ok Bool) (found Bool) (start Int) (message String) (offset Int)])
+  [ok Bool
+   found Bool
+   start Int
+   message String
+   offset Int])
 
 (defrecord StringVectorScan
-  [(ok Bool) (values (Vec String)) (message String) (offset Int)])
+  [ok Bool
+   values (Vec String)
+   message String
+   offset Int])
 
 (defrecord OverrideValuesScan
-  [(ok Bool) (values (Vec r/OverrideValue)) (message String) (offset Int)])
+  [ok Bool
+   values (Vec r/OverrideValue)
+   message String
+   offset Int])
 
 (defrecord OverridesScan
-  [(ok Bool) (values (Vec r/TaggedOverrides)) (message String) (offset Int)])
+  [ok Bool
+   values (Vec r/TaggedOverrides)
+   message String
+   offset Int])
 
 (defrecord EnabledEntryScan
-  [(ok Bool) (value r/EnabledTag) (message String) (offset Int)])
+  [ok Bool
+   value r/EnabledTag
+   message String
+   offset Int])
 
 (defrecord EnabledVectorScan
-  [(ok Bool) (values (Vec r/EnabledTag)) (message String) (offset Int)])
+  [ok Bool
+   values (Vec r/EnabledTag)
+   message String
+   offset Int])
 
 (defrecord StringAtomScan
-  [(ok Bool) (value String) (message String) (offset Int)])
+  [ok Bool
+   value String
+   message String
+   offset Int])
 
-(defn span-found [(start Int)] SpanScan
+(defn span-found [start Int] SpanScan
   (->SpanScan true true start "" -1))
 
 (defn span-missing [] SpanScan
   (->SpanScan true false -1 "" -1))
 
-(defn span-rejected [(message String) (offset Int)] SpanScan
+(defn span-rejected
+  [message String
+   offset Int] SpanScan
   (->SpanScan false false -1 message offset))
 
-(defn event-offset [(events (Vec reader/ReaderEvent)) (index Int)] Int
+(defn event-offset
+  [events (Vec reader/ReaderEvent)
+   index Int] Int
   (if (and (>= index 0) (< index (count events)))
     (reader/readerevent-offset (nth events index))
     -1))
 
-(defn open-kind? [(kind Keyword)] Bool
+(defn open-kind? [kind Keyword] Bool
   (or (= kind :list/open)
       (= kind :vector/open)
       (= kind :map/open)
       (= kind :set/open)))
 
-(defn close-kind? [(kind Keyword)] Bool
+(defn close-kind? [kind Keyword] Bool
   (or (= kind :list/close)
       (= kind :vector/close)
       (= kind :map/close)
       (= kind :set/close)))
 
-(defn matching-close-kind? [(opened Keyword) (closed Keyword)] Bool
+(defn matching-close-kind?
+  [opened Keyword
+   closed Keyword] Bool
   (or (and (= opened :list/open) (= closed :list/close))
       (and (= opened :vector/open) (= closed :vector/close))
       (and (= opened :map/open) (= closed :map/close))
       (and (= opened :set/open) (= closed :set/close))))
 
-(defn datum-end [(events (Vec reader/ReaderEvent)) (start Int)] Int
+(defn datum-end
+  [events (Vec reader/ReaderEvent)
+   start Int] Int
   (if (or (< start 0) (>= start (count events)))
     -1
-    (let [(opening reader/ReaderEvent) (nth events start)
-          (kind Keyword) (reader/readerevent-kind opening)]
+    (let [opening reader/ReaderEvent (nth events start)
+          kind Keyword (reader/readerevent-kind opening)]
       (cond
         (close-kind? kind) -1
 
@@ -81,10 +117,10 @@
         (+ start 1)
 
         :else
-        (loop [(index Int) (+ start 1)]
+        (loop [index Int (+ start 1)]
           (if (>= index (count events))
             -1
-            (let [(event reader/ReaderEvent) (nth events index)]
+            (let [event reader/ReaderEvent (nth events index)]
               (if (and (= (reader/readerevent-depth event)
                           (reader/readerevent-depth opening))
                        (matching-close-kind?
@@ -93,64 +129,73 @@
                 (+ index 1)
                 (recur (+ index 1))))))))))
 
-(defn container-child-count [(events (Vec reader/ReaderEvent)) (start Int)] Int
-  (let [(end Int) (datum-end events start)]
+(defn container-child-count
+  [events (Vec reader/ReaderEvent)
+   start Int] Int
+  (let [end Int (datum-end events start)]
     (if (or (< end 0)
             (not (open-kind?
                    (reader/readerevent-kind (nth events start)))))
       -1
-      (loop [(cursor Int) (+ start 1)
-             (total Int) 0]
+      (loop [cursor Int (+ start 1)
+             total Int 0]
         (cond
           (= cursor (- end 1)) total
           (> cursor (- end 1)) -1
           :else
-          (let [(next Int) (datum-end events cursor)]
+          (let [next Int (datum-end events cursor)]
             (if (or (< next 0) (> next (- end 1)))
               -1
               (recur next (+ total 1)))))))))
 
 (defn container-child-start
-  [(events (Vec reader/ReaderEvent)) (start Int) (wanted Int)] Int
-  (let [(end Int) (datum-end events start)]
+  [events (Vec reader/ReaderEvent)
+   start Int
+   wanted Int] Int
+  (let [end Int (datum-end events start)]
     (if (or (< wanted 0)
             (< end 0)
             (not (open-kind?
                    (reader/readerevent-kind (nth events start)))))
       -1
-      (loop [(cursor Int) (+ start 1)
-             (index Int) 0]
+      (loop [cursor Int (+ start 1)
+             index Int 0]
         (cond
           (= cursor (- end 1)) -1
           (> cursor (- end 1)) -1
           (= index wanted) cursor
           :else
-          (let [(next Int) (datum-end events cursor)]
+          (let [next Int (datum-end events cursor)]
             (if (or (< next 0) (> next (- end 1)))
               -1
               (recur next (+ index 1)))))))))
 
 (defn symbol-at?
-  [(events (Vec reader/ReaderEvent)) (index Int) (value String)] Bool
+  [events (Vec reader/ReaderEvent)
+   index Int
+   value String] Bool
   (and (>= index 0)
        (< index (count events))
        (= :symbol (reader/readerevent-kind (nth events index)))
        (= value (reader/readerevent-value (nth events index)))))
 
 (defn list-head?
-  [(events (Vec reader/ReaderEvent)) (start Int) (head String)] Bool
+  [events (Vec reader/ReaderEvent)
+   start Int
+   head String] Bool
   (and (>= start 0)
        (< start (count events))
        (= :list/open (reader/readerevent-kind (nth events start)))
        (symbol-at? events (container-child-start events start 0) head)))
 
 (defn find-top-level-form
-  [(events (Vec reader/ReaderEvent)) (head String)] SpanScan
-  (loop [(cursor Int) 0
-         (found Int) -1]
+  [events (Vec reader/ReaderEvent)
+   head String] SpanScan
+  (loop [cursor Int 0
+         found Int -1]
     (if (= cursor (count events))
       (if (< found 0) (span-missing) (span-found found))
-      (let [(next Int) (datum-end events cursor)]
+      (let [next Int (datum-end events cursor)]
         (if (< next 0)
           (span-rejected "invalid top-level datum" (event-offset events cursor))
           (if (list-head? events cursor head)
@@ -161,12 +206,14 @@
               (recur next cursor))
             (recur next found)))))))
 
-(defn host-map-candidate [(events (Vec reader/ReaderEvent)) (start Int)] Int
+(defn host-map-candidate
+  [events (Vec reader/ReaderEvent)
+   start Int] Int
   (if (= :map/open (reader/readerevent-kind (nth events start)))
     start
     (if (and (list-head? events start "def")
              (= 3 (container-child-count events start)))
-      (let [(candidate Int) (container-child-start events start 2)]
+      (let [candidate Int (container-child-start events start 2)]
         (if (and (>= candidate 0)
                  (= :map/open
                     (reader/readerevent-kind (nth events candidate))))
@@ -174,13 +221,13 @@
           -1))
       -1)))
 
-(defn find-host-map [(events (Vec reader/ReaderEvent))] SpanScan
-  (loop [(cursor Int) 0
-         (found Int) -1]
+(defn find-host-map [events (Vec reader/ReaderEvent)] SpanScan
+  (loop [cursor Int 0
+         found Int -1]
     (if (= cursor (count events))
       (if (< found 0) (span-missing) (span-found found))
-      (let [(next Int) (datum-end events cursor)
-            (candidate Int) (host-map-candidate events cursor)]
+      (let [next Int (datum-end events cursor)
+            candidate Int (host-map-candidate events cursor)]
         (cond
           (< next 0)
           (span-rejected "invalid top-level datum" (event-offset events cursor))
@@ -196,13 +243,13 @@
           (recur next candidate))))))
 
 (defn unwrap-module-body
-  [(events (Vec reader/ReaderEvent)) (start Int)] SpanScan
-  (loop [(current Int) start
-         (wrappers Int) 0]
+  [events (Vec reader/ReaderEvent)
+   start Int] SpanScan
+  (loop [current Int start
+         wrappers Int 0]
     (if (or (< current 0) (>= current (count events)))
       (span-rejected "missing nix/module body" -1)
-      (let [(kind Keyword)
-            (reader/readerevent-kind (nth events current))]
+      (let [kind Keyword (reader/readerevent-kind (nth events current))]
         (cond
           (= kind :map/open)
           (span-found current)
@@ -235,15 +282,17 @@
                          (event-offset events current)))))))
 
 (defn map-field
-  [(events (Vec reader/ReaderEvent)) (start Int) (field String)] SpanScan
+  [events (Vec reader/ReaderEvent)
+   start Int
+   field String] SpanScan
   (if (or (< start 0)
           (>= start (count events))
           (not= :map/open
                 (reader/readerevent-kind (nth events start))))
     (span-rejected "expected map" (event-offset events start))
-    (let [(end Int) (datum-end events start)]
-      (loop [(cursor Int) (+ start 1)
-             (found Int) -1]
+    (let [end Int (datum-end events start)]
+      (loop [cursor Int (+ start 1)
+             found Int -1]
         (cond
           (= cursor (- end 1))
           (if (< found 0) (span-missing) (span-found found))
@@ -252,8 +301,8 @@
           (span-rejected "malformed map" (event-offset events start))
 
           :else
-          (let [(key reader/ReaderEvent) (nth events cursor)
-                (key-end Int) (datum-end events cursor)]
+          (let [key reader/ReaderEvent (nth events cursor)
+                key-end Int (datum-end events cursor)]
             (cond
               (or (not= (+ cursor 1) key-end)
                   (not= :keyword (reader/readerevent-kind key)))
@@ -265,10 +314,9 @@
                              (reader/readerevent-offset key))
 
               :else
-              (let [(value-start Int) key-end
-                    (value-end Int) (datum-end events value-start)
-                    (matches Bool)
-                    (= field (reader/readerevent-value key))]
+              (let [value-start Int key-end
+                    value-end Int (datum-end events value-start)
+                    matches Bool (= field (reader/readerevent-value key))]
                 (cond
                   (or (< value-end 0) (> value-end (- end 1)))
                   (span-rejected "malformed map value"
@@ -283,23 +331,22 @@
                   (recur value-end (if matches value-start found)))))))))))
 
 (defn read-symbol-vector
-  [(events (Vec reader/ReaderEvent))
-   (start Int)
-   (label String)]
-  StringVectorScan
+  [events (Vec reader/ReaderEvent)
+   start Int
+   label String] StringVectorScan
   (if (or (< start 0)
           (>= start (count events))
           (not= :vector/open
                 (reader/readerevent-kind (nth events start))))
     (->StringVectorScan false [] (str label " must be a vector")
                         (event-offset events start))
-    (let [(end Int) (datum-end events start)]
-      (loop [(cursor Int) (+ start 1)
-             (values (Vec String)) []]
+    (let [end Int (datum-end events start)]
+      (loop [cursor Int (+ start 1)
+             values (Vec String) []]
         (if (= cursor (- end 1))
           (->StringVectorScan true values "" -1)
-          (let [(event reader/ReaderEvent) (nth events cursor)
-                (next Int) (datum-end events cursor)]
+          (let [event reader/ReaderEvent (nth events cursor)
+                next Int (datum-end events cursor)]
             (if (or (not= (+ cursor 1) next)
                     (not= :symbol (reader/readerevent-kind event)))
               (->StringVectorScan
@@ -311,25 +358,26 @@
                      (conj values (reader/readerevent-value event))))))))))
 
 (defn read-symbol-field
-  [(events (Vec reader/ReaderEvent))
-   (field SpanScan)
-   (fallback String)]
-  StringAtomScan
+  [events (Vec reader/ReaderEvent)
+   field SpanScan
+   fallback String] StringAtomScan
   (if (not (spanscan-ok field))
     (->StringAtomScan false "" (spanscan-message field)
                       (spanscan-offset field))
     (if (not (spanscan-found field))
       (->StringAtomScan true fallback "" -1)
-      (let [(start Int) (spanscan-start field)
-            (event reader/ReaderEvent) (nth events start)]
+      (let [start Int (spanscan-start field)
+            event reader/ReaderEvent (nth events start)]
         (if (and (= (+ start 1) (datum-end events start))
                  (= :symbol (reader/readerevent-kind event)))
           (->StringAtomScan true (reader/readerevent-value event) "" -1)
           (->StringAtomScan false "" "field must be a symbol"
                             (reader/readerevent-offset event)))))))
 
-(defn override-path-member? [(values (Vec r/OverrideValue)) (path String)] Bool
-  (loop [(index Int) 0]
+(defn override-path-member?
+  [values (Vec r/OverrideValue)
+   path String] Bool
+  (loop [index Int 0]
     (if (>= index (count values))
       false
       (if (= path (r/overridevalue-path (nth values index)))
@@ -337,15 +385,16 @@
         (recur (+ index 1))))))
 
 (defn tagged-override-member?
-  [(values (Vec r/TaggedOverrides)) (tag String)] Bool
-  (loop [(index Int) 0]
+  [values (Vec r/TaggedOverrides)
+   tag String] Bool
+  (loop [index Int 0]
     (if (>= index (count values))
       false
       (if (= tag (r/taggedoverrides-tag (nth values index)))
         true
         (recur (+ index 1))))))
 
-(defn literal-atom? [(kind Keyword)] Bool
+(defn literal-atom? [kind Keyword] Bool
   (or (= kind :string)
       (= kind :boolean)
       (= kind :nil)
@@ -353,20 +402,21 @@
       (= kind :keyword)))
 
 (defn read-override-values
-  [(events (Vec reader/ReaderEvent)) (start Int)] OverrideValuesScan
+  [events (Vec reader/ReaderEvent)
+   start Int] OverrideValuesScan
   (if (or (< start 0)
           (>= start (count events))
           (not= :map/open
                 (reader/readerevent-kind (nth events start))))
     (->OverrideValuesScan false [] "tag override value must be a map"
                           (event-offset events start))
-    (let [(end Int) (datum-end events start)]
-      (loop [(cursor Int) (+ start 1)
-             (values (Vec r/OverrideValue)) []]
+    (let [end Int (datum-end events start)]
+      (loop [cursor Int (+ start 1)
+             values (Vec r/OverrideValue) []]
         (if (= cursor (- end 1))
           (->OverrideValuesScan true values "" -1)
-          (let [(key reader/ReaderEvent) (nth events cursor)
-                (key-end Int) (datum-end events cursor)]
+          (let [key reader/ReaderEvent (nth events cursor)
+                key-end Int (datum-end events cursor)]
             (cond
               (or (not= (+ cursor 1) key-end)
                   (not= :keyword (reader/readerevent-kind key)))
@@ -380,11 +430,10 @@
                 (reader/readerevent-offset key))
 
               :else
-              (let [(value-start Int) key-end
-                    (value-end Int) (datum-end events value-start)
-                    (value reader/ReaderEvent) (nth events value-start)
-                    (path String)
-                    (subs (reader/readerevent-value key) 1)]
+              (let [value-start Int key-end
+                    value-end Int (datum-end events value-start)
+                    value reader/ReaderEvent (nth events value-start)
+                    path String (subs (reader/readerevent-value key) 1)]
                 (cond
                   (or (not= (+ value-start 1) value-end)
                       (not (literal-atom?
@@ -406,20 +455,21 @@
                         (reader/readerevent-literal value)))))))))))))
 
 (defn read-overrides-map
-  [(events (Vec reader/ReaderEvent)) (start Int)] OverridesScan
+  [events (Vec reader/ReaderEvent)
+   start Int] OverridesScan
   (if (or (< start 0)
           (>= start (count events))
           (not= :map/open
                 (reader/readerevent-kind (nth events start))))
     (->OverridesScan false [] ":tag-overrides must be a map"
                      (event-offset events start))
-    (let [(end Int) (datum-end events start)]
-      (loop [(cursor Int) (+ start 1)
-             (values (Vec r/TaggedOverrides)) []]
+    (let [end Int (datum-end events start)]
+      (loop [cursor Int (+ start 1)
+             values (Vec r/TaggedOverrides) []]
         (if (= cursor (- end 1))
           (->OverridesScan true values "" -1)
-          (let [(key reader/ReaderEvent) (nth events cursor)
-                (key-end Int) (datum-end events cursor)]
+          (let [key reader/ReaderEvent (nth events cursor)
+                key-end Int (datum-end events cursor)]
             (cond
               (or (not= (+ cursor 1) key-end)
                   (not= :symbol (reader/readerevent-kind key)))
@@ -433,11 +483,10 @@
                 (reader/readerevent-offset key))
 
               :else
-              (let [(tag String) (reader/readerevent-value key)
-                    (value-start Int) key-end
-                    (value-end Int) (datum-end events value-start)
-                    (inner OverrideValuesScan)
-                    (read-override-values events value-start)]
+              (let [tag String (reader/readerevent-value key)
+                    value-start Int key-end
+                    value-end Int (datum-end events value-start)
+                    inner OverrideValuesScan (read-override-values events value-start)]
                 (cond
                   (or (< value-end 0) (> value-end (- end 1)))
                   (->OverridesScan false [] "malformed tag override value"
@@ -461,10 +510,9 @@
                         (overridevaluesscan-values inner)))))))))))))
 
 (defn optional-symbol-vector
-  [(events (Vec reader/ReaderEvent))
-   (field SpanScan)
-   (label String)]
-  StringVectorScan
+  [events (Vec reader/ReaderEvent)
+   field SpanScan
+   label String] StringVectorScan
   (cond
     (not (spanscan-ok field))
     (->StringVectorScan false [] (spanscan-message field)
@@ -477,7 +525,8 @@
     (read-symbol-vector events (spanscan-start field) label)))
 
 (defn optional-overrides
-  [(events (Vec reader/ReaderEvent)) (field SpanScan)] OverridesScan
+  [events (Vec reader/ReaderEvent)
+   field SpanScan] OverridesScan
   (cond
     (not (spanscan-ok field))
     (->OverridesScan false [] (spanscan-message field)
@@ -489,14 +538,15 @@
     :else
     (read-overrides-map events (spanscan-start field))))
 
-(defn module-tags-from-source [(name String) (source String)] ModuleSourceResult
-  (let [(read reader/DatumRead) (reader/read-events source)
-        (read-error String?) (reader/datumread-error read)]
+(defn module-tags-from-source
+  [name String
+   source String] ModuleSourceResult
+  (let [read reader/DatumRead (reader/read-events source)
+        read-error String? (reader/datumread-error read)]
     (if (some? read-error)
       (->ModuleSourceRejected read-error (reader/datumread-error-offset read))
-      (let [(events (Vec reader/ReaderEvent)) (reader/datumread-events read)
-            (module-form SpanScan)
-            (find-top-level-form events "nix/module")]
+      (let [events (Vec reader/ReaderEvent) (reader/datumread-events read)
+            module-form SpanScan (find-top-level-form events "nix/module")]
         (cond
           (not (spanscan-ok module-form))
           (->ModuleSourceRejected (spanscan-message module-form)
@@ -516,11 +566,9 @@
             (event-offset events (spanscan-start module-form)))
 
           :else
-          (let [(form-start Int) (spanscan-start module-form)
-                (parameters Int)
-                (container-child-start events form-start 1)
-                (body SpanScan)
-                (unwrap-module-body
+          (let [form-start Int (spanscan-start module-form)
+                parameters Int (container-child-start events form-start 1)
+                body SpanScan (unwrap-module-body
                   events
                   (container-child-start events form-start 2))]
             (cond
@@ -535,20 +583,14 @@
                                       (spanscan-offset body))
 
               :else
-              (let [(body-start Int) (spanscan-start body)
-                    (tags-field SpanScan)
-                    (map-field events body-start ":tags")
-                    (opt-in-field SpanScan)
-                    (map-field events body-start ":tags-opt-in")
-                    (overrides-field SpanScan)
-                    (map-field events body-start ":tag-overrides")
-                    (tags StringVectorScan)
-                    (optional-symbol-vector events tags-field ":tags")
-                    (opt-in StringVectorScan)
-                    (optional-symbol-vector
+              (let [body-start Int (spanscan-start body)
+                    tags-field SpanScan (map-field events body-start ":tags")
+                    opt-in-field SpanScan (map-field events body-start ":tags-opt-in")
+                    overrides-field SpanScan (map-field events body-start ":tag-overrides")
+                    tags StringVectorScan (optional-symbol-vector events tags-field ":tags")
+                    opt-in StringVectorScan (optional-symbol-vector
                       events opt-in-field ":tags-opt-in")
-                    (overrides OverridesScan)
-                    (optional-overrides events overrides-field)]
+                    overrides OverridesScan (optional-overrides events overrides-field)]
                 (cond
                   (not (stringvectorscan-ok tags))
                   (->ModuleSourceRejected
@@ -573,15 +615,16 @@
                       (stringvectorscan-values opt-in)
                       (overridesscan-values overrides))))))))))))
 
-(defn valid-edit-text? [(text String)] Bool
+(defn valid-edit-text? [text String] Bool
   (and (> (count text) 1)
-       (let [(prefix String) (subs text 0 1)]
+       (let [prefix String (subs text 0 1)]
          (or (= prefix "+") (= prefix "-")))))
 
 (defn read-enabled-entry
-  [(events (Vec reader/ReaderEvent)) (start Int)] EnabledEntryScan
-  (let [(event reader/ReaderEvent) (nth events start)
-        (kind Keyword) (reader/readerevent-kind event)]
+  [events (Vec reader/ReaderEvent)
+   start Int] EnabledEntryScan
+  (let [event reader/ReaderEvent (nth events start)
+        kind Keyword (reader/readerevent-kind event)]
     (cond
       (= kind :symbol)
       (->EnabledEntryScan true
@@ -591,19 +634,19 @@
                           -1)
 
       (= kind :vector/open)
-      (let [(children Int) (container-child-count events start)]
+      (let [children Int (container-child-count events start)]
         (if (< children 1)
           (->EnabledEntryScan false (r/->EnabledTag "" [] [])
                               "enabled tag vector cannot be empty"
                               (reader/readerevent-offset event))
-          (let [(tag-start Int) (container-child-start events start 0)
-                (tag-event reader/ReaderEvent) (nth events tag-start)]
+          (let [tag-start Int (container-child-start events start 0)
+                tag-event reader/ReaderEvent (nth events tag-start)]
             (if (not= :symbol (reader/readerevent-kind tag-event))
               (->EnabledEntryScan false (r/->EnabledTag "" [] [])
                                   "enabled tag name must be a symbol"
                                   (reader/readerevent-offset tag-event))
-              (loop [(child Int) 1
-                     (edits (Vec String)) []]
+              (loop [child Int 1
+                     edits (Vec String) []]
                 (if (= child children)
                   (->EnabledEntryScan
                     true
@@ -611,12 +654,9 @@
                       (reader/readerevent-value tag-event) edits)
                     ""
                     -1)
-                  (let [(edit-start Int)
-                        (container-child-start events start child)
-                        (edit-event reader/ReaderEvent)
-                        (nth events edit-start)
-                        (edit String)
-                        (reader/readerevent-value edit-event)]
+                  (let [edit-start Int (container-child-start events start child)
+                        edit-event reader/ReaderEvent (nth events edit-start)
+                        edit String (reader/readerevent-value edit-event)]
                     (if (or (not= :symbol
                                   (reader/readerevent-kind edit-event))
                             (not (valid-edit-text? edit)))
@@ -633,7 +673,8 @@
                           (reader/readerevent-offset event)))))
 
 (defn read-enabled-vector
-  [(events (Vec reader/ReaderEvent)) (field SpanScan)] EnabledVectorScan
+  [events (Vec reader/ReaderEvent)
+   field SpanScan] EnabledVectorScan
   (cond
     (not (spanscan-ok field))
     (->EnabledVectorScan false [] (spanscan-message field)
@@ -643,19 +684,18 @@
     (->EnabledVectorScan true [] "" -1)
 
     :else
-    (let [(start Int) (spanscan-start field)]
+    (let [start Int (spanscan-start field)]
       (if (not= :vector/open
                 (reader/readerevent-kind (nth events start)))
         (->EnabledVectorScan false [] ":enabled must be a vector"
                              (event-offset events start))
-        (let [(end Int) (datum-end events start)]
-          (loop [(cursor Int) (+ start 1)
-                 (values (Vec r/EnabledTag)) []]
+        (let [end Int (datum-end events start)]
+          (loop [cursor Int (+ start 1)
+                 values (Vec r/EnabledTag) []]
             (if (= cursor (- end 1))
               (->EnabledVectorScan true values "" -1)
-              (let [(entry EnabledEntryScan)
-                    (read-enabled-entry events cursor)
-                    (next Int) (datum-end events cursor)]
+              (let [entry EnabledEntryScan (read-enabled-entry events cursor)
+                    next Int (datum-end events cursor)]
                 (if (not (enabledentryscan-ok entry))
                   (->EnabledVectorScan false []
                     (enabledentryscan-message entry)
@@ -664,13 +704,15 @@
                     (conj values (enabledentryscan-value entry))))))))))))
 
 (defn host-tags-from-source
-  [(host String) (source String) (darwin-allowed (Vec String))] HostSourceResult
-  (let [(read reader/DatumRead) (reader/read-events source)
-        (read-error String?) (reader/datumread-error read)]
+  [host String
+   source String
+   darwin-allowed (Vec String)] HostSourceResult
+  (let [read reader/DatumRead (reader/read-events source)
+        read-error String? (reader/datumread-error read)]
     (if (some? read-error)
       (->HostSourceRejected read-error (reader/datumread-error-offset read))
-      (let [(events (Vec reader/ReaderEvent)) (reader/datumread-events read)
-            (host-map SpanScan) (find-host-map events)]
+      (let [events (Vec reader/ReaderEvent) (reader/datumread-events read)
+            host-map SpanScan (find-host-map events)]
         (cond
           (not (spanscan-ok host-map))
           (->HostSourceRejected (spanscan-message host-map)
@@ -684,19 +726,13 @@
             (r/->HostTags host [] [] "linux" false []))
 
           :else
-          (let [(map-start Int) (spanscan-start host-map)
-                (platform-field SpanScan)
-                (map-field events map-start ":platform")
-                (enabled-field SpanScan)
-                (map-field events map-start ":enabled")
-                (disabled-field SpanScan)
-                (map-field events map-start ":disabled")
-                (platform StringAtomScan)
-                (read-symbol-field events platform-field "linux")
-                (enabled EnabledVectorScan)
-                (read-enabled-vector events enabled-field)
-                (disabled StringVectorScan)
-                (optional-symbol-vector
+          (let [map-start Int (spanscan-start host-map)
+                platform-field SpanScan (map-field events map-start ":platform")
+                enabled-field SpanScan (map-field events map-start ":enabled")
+                disabled-field SpanScan (map-field events map-start ":disabled")
+                platform StringAtomScan (read-symbol-field events platform-field "linux")
+                enabled EnabledVectorScan (read-enabled-vector events enabled-field)
+                disabled StringVectorScan (optional-symbol-vector
                   events disabled-field ":disabled")]
             (cond
               (not (stringatomscan-ok platform))
@@ -715,8 +751,8 @@
                 (stringvectorscan-offset disabled))
 
               :else
-              (let [(platform-name String) (stringatomscan-value platform)
-                    (darwin Bool) (= platform-name "darwin")]
+              (let [platform-name String (stringatomscan-value platform)
+                    darwin Bool (= platform-name "darwin")]
                 (->HostSourceParsed
                   (r/->HostTags
                     host
@@ -726,7 +762,7 @@
                     darwin
                     (if darwin darwin-allowed [])))))))))))
 
-(defn json-event-offset [(event json/JsonEvent)] Int
+(defn json-event-offset [event json/JsonEvent] Int
   (match event
     [(JsonObjectStart offset) offset]
     [(JsonObjectEnd offset) offset]
@@ -738,7 +774,7 @@
     [(JsonBoolean offset value) offset]
     [(JsonNull offset) offset]))
 
-(defn darwin-allowlist-from-json [(source String)] DarwinAllowlistResult
+(defn darwin-allowlist-from-json [source String] DarwinAllowlistResult
   (match (json/decode source)
     [(JsonDecodeError offset message)
      (->DarwinAllowlistRejected message offset)]
@@ -747,11 +783,11 @@
        (->DarwinAllowlistRejected "expected a JSON array" 0)
        (match (first events)
          [(JsonArrayStart offset)
-          (loop [(index Int) 1
-                 (modules (Vec String)) []]
+          (loop [index Int 1
+                 modules (Vec String) []]
             (if (>= index (count events))
               (->DarwinAllowlistRejected "unterminated JSON array" offset)
-              (let [(event json/JsonEvent) (nth events index)]
+              (let [event json/JsonEvent (nth events index)]
                 (match event
                   [(JsonString item-offset value)
                    (recur (+ index 1) (conj modules value))]
