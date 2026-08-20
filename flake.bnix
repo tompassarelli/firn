@@ -69,6 +69,10 @@
                 "mkdir -p $out/bin"
                 "export BEAGLE_CHECKED_AST_STORE=$TMPDIR/firn-native-checked-ast.storelog"
                 (s
+                  "export BEAGLE_RUST_SUPERVISOR="
+                  beaglePackage
+                  "/native-core/bin/run-bounded")
+                (s
                   "beagle native-exe --out $out/bin/firn --entry firn.main/-main "
                   beagle
                   "/native-core/src/beagle/datum_reader.bgl "
