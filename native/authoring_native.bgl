@@ -158,8 +158,8 @@
 
 (defn git-add-argv
   [(root String) (targets (Vec authoring/AuthoringTarget))] (Vec String)
-  (loop [(index Int) 0
-         (argv (Vec String)) ["git" "-C" root "add" "--"]]
+  (loop [index Int 0
+         argv (Vec String) ["git" "-C" root "add" "--"]]
     (if (>= index (count targets))
       argv
       (recur (+ index 1)
@@ -244,8 +244,8 @@
        (load-secret-names-from root entries 0 [])])))
 
 (defn secret-lines [(names (Vec String))] String
-  (loop [(index Int) 0
-         (text String) ""]
+  (loop [index Int 0
+         text String ""]
     (if (>= index (count names))
       text
       (recur (+ index 1) (str text (nth names index) "\n")))))

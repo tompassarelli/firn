@@ -89,7 +89,7 @@
   (let [(bytes (Vec Int)) (utf8-encode name)]
     (and (> (count bytes) 0)
          (ascii-lower? (nth bytes 0))
-         (loop [(index Int) 1]
+         (loop [index Int 1]
            (if (>= index (count bytes))
              true
              (let [(byte Int) (nth bytes index)]
@@ -104,7 +104,7 @@
     (and (> (count bytes) 0)
          (not= name ".")
          (not= name "..")
-         (loop [(index Int) 0]
+         (loop [index Int 0]
            (if (>= index (count bytes))
              true
              (let [(byte Int) (nth bytes index)]
@@ -121,7 +121,7 @@
        (= (subs text (- (count text) (count suffix)) (count text)) suffix)))
 
 (defn string-member? [(values (Vec String)) (candidate String)] Bool
-  (loop [(index Int) 0]
+  (loop [index Int 0]
     (if (>= index (count values))
       false
       (if (= candidate (nth values index))
@@ -144,7 +144,7 @@
       (let [(leaf String) (subs path (count prefix) (count path))
             (bytes (Vec Int)) (utf8-encode leaf)]
         (and (> (count bytes) 0)
-             (loop [(index Int) 0]
+             (loop [index Int 0]
                (if (>= index (count bytes))
                  true
                  (if (= 46 (nth bytes index))
@@ -157,7 +157,7 @@
        (not (excluded-service-type? (schemaentry-type entry)))))
 
 (defn service-entry-type [(entries (Vec SchemaEntry)) (path String)] String
-  (loop [(index Int) 0]
+  (loop [index Int 0]
     (if (>= index (count entries))
       "?"
       (let [(entry SchemaEntry) (nth entries index)]
@@ -167,8 +167,8 @@
 
 (defn service-entry-names
   [(entries (Vec SchemaEntry)) (service String)] (Vec String)
-  (loop [(index Int) 0
-         (names (Vec String)) []]
+  (loop [index Int 0
+         names (Vec String) []]
     (if (>= index (count entries))
       (sort names)
       (let [(entry SchemaEntry) (nth entries index)]
@@ -181,8 +181,8 @@
   [(entries (Vec SchemaEntry)) (service String)] (Vec SchemaEntry)
   (let [(names (Vec String)) (service-entry-names entries service)
         (limit Int) (min 8 (count names))]
-    (loop [(index Int) 0
-           (selected (Vec SchemaEntry)) []]
+    (loop [index Int 0
+           selected (Vec SchemaEntry) []]
       (if (>= index limit)
         selected
         (let [(path String) (nth names index)]
@@ -203,8 +203,8 @@
     [(JsonNull offset) offset]))
 
 (defn find-object-end [(events (Vec json/JsonEvent)) (start Int)] Int
-  (loop [(index Int) (+ start 1)
-         (depth Int) 0]
+  (loop [index Int (+ start 1)
+         depth Int 0]
     (if (>= index (count events))
       -1
       (match (nth events index)
@@ -221,10 +221,10 @@
 
 (defn scan-schema-object
   [(events (Vec json/JsonEvent)) (start Int) (end Int)] SchemaObjectScan
-  (loop [(index Int) (+ start 1)
-         (depth Int) 0
-         (entry-name (U String Nil)) nil
-         (entry-type (U String Nil)) nil]
+  (loop [index Int (+ start 1)
+         depth Int 0
+         entry-name (U String Nil) nil
+         entry-type (U String Nil) nil]
     (if (>= index end)
       (->SchemaObjectScan entry-name entry-type)
       (match (nth events index)
@@ -282,8 +282,8 @@
                  [(JsonBoolean offset value) false]
                  [(JsonNull offset) false])))
     (->SchemaRejected "expected a JSON array" 0)
-    (loop [(index Int) 1
-           (entries (Vec SchemaEntry)) []]
+    (loop [index Int 1
+           entries (Vec SchemaEntry) []]
       (if (>= index (count events))
         (->SchemaRejected "unterminated schema array" 0)
         (match (nth events index)
@@ -345,8 +345,8 @@
     ""
     (str
       "      {;; common options — uncomment to override:\n"
-      (loop [(index Int) 0
-             (text String) ""]
+      (loop [index Int 0
+             text String ""]
         (if (>= index (count entries))
           text
           (let [(entry SchemaEntry) (nth entries index)]
