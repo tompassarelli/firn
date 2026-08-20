@@ -40,22 +40,18 @@ run_seed "$fresh"
 assert_seeded "$fresh"
 grep -Fq '"seedRevision":2' "$fresh"
 
-# The legacy mutable-checkout link and a dangling link both migrate to the seed.
-mkdir -p "$SCRATCH/checkout" "$SCRATCH/legacy/.claude" "$SCRATCH/dangling/.claude"
-printf '%s\n' '{"hooks":{"SessionEnd":[{"hooks":[{"command":"/home/tom/code/north/bin/north-on-stop"}]}]}}' \
-  >"$SCRATCH/checkout/settings.json"
-ln -s "$SCRATCH/checkout/settings.json" "$SCRATCH/legacy/.claude/settings.json"
-run_seed "$SCRATCH/legacy/.claude/settings.json"
-assert_seeded "$SCRATCH/legacy/.claude/settings.json"
-grep -Fq '/home/tom/code/north/bin/north-on-stop' "$SCRATCH/checkout/settings.json"
-
-ln -s "$SCRATCH/missing-settings.json" "$SCRATCH/dangling/.claude/settings.json"
-run_seed "$SCRATCH/dangling/.claude/settings.json"
-assert_seeded "$SCRATCH/dangling/.claude/settings.json"
+# A settings path is current runtime state, never an indirection.
+mkdir -p "$SCRATCH/symlink/.claude"
+ln -s "$SCRATCH/missing-settings.json" "$SCRATCH/symlink/.claude/settings.json"
+if run_seed "$SCRATCH/symlink/.claude/settings.json" >/dev/null 2>&1; then
+  printf 'symlink target unexpectedly succeeded\n' >&2
+  exit 1
+fi
+[ -L "$SCRATCH/symlink/.claude/settings.json" ]
 
 # Simulate SIGKILL after the complete stage write but before the atomic rename.
 mkdir -p "$SCRATCH/crash/.claude" "$SCRATCH/fake-bin"
-ln -s "$SCRATCH/checkout/settings.json" "$SCRATCH/crash/.claude/settings.json"
+cp "$seed" "$SCRATCH/crash/.claude/settings.json"
 fake_install="$SCRATCH/fake-bin/install-crash"
 printf '%s\n' \
   '#!/usr/bin/env bash' \
@@ -73,7 +69,8 @@ set +e
 } 2>/dev/null
 set -e
 [ "$crash_status" -ne 0 ]
-[ -L "$SCRATCH/crash/.claude/settings.json" ]
+[ -f "$SCRATCH/crash/.claude/settings.json" ]
+[ ! -L "$SCRATCH/crash/.claude/settings.json" ]
 [ -f "$SCRATCH/crash/.claude/.firn-settings-seed.tmp" ]
 run_seed "$SCRATCH/crash/.claude/settings.json"
 assert_seeded "$SCRATCH/crash/.claude/settings.json"
@@ -81,7 +78,7 @@ assert_seeded "$SCRATCH/crash/.claude/settings.json"
 
 # Concurrent retries serialize; exactly the same complete seed wins.
 mkdir -p "$SCRATCH/concurrent/.claude"
-ln -s "$SCRATCH/checkout/settings.json" "$SCRATCH/concurrent/.claude/settings.json"
+cp "$seed" "$SCRATCH/concurrent/.claude/settings.json"
 pids=()
 for _ in 1 2 3 4; do
   run_seed "$SCRATCH/concurrent/.claude/settings.json" &
@@ -93,14 +90,14 @@ assert_seeded "$SCRATCH/concurrent/.claude/settings.json"
 # Invalid seeds and non-file runtime targets fail without destructive repair.
 printf '%s\n' '{not-json' >"$SCRATCH/invalid.json"
 mkdir -p "$SCRATCH/invalid/.claude"
-ln -s "$SCRATCH/checkout/settings.json" "$SCRATCH/invalid/.claude/settings.json"
+cp "$seed" "$SCRATCH/invalid/.claude/settings.json"
 if CLAUDE_SETTINGS_SEED_ALLOW_NONSTORE=1 "$SEEDER" \
   "$SCRATCH/invalid.json" "$SCRATCH/invalid/.claude/settings.json" \
   >/dev/null 2>&1; then
   printf 'invalid seed unexpectedly succeeded\n' >&2
   exit 1
 fi
-[ -L "$SCRATCH/invalid/.claude/settings.json" ]
+assert_seeded "$SCRATCH/invalid/.claude/settings.json"
 
 mkdir -p "$SCRATCH/special/.claude/settings.json"
 if run_seed "$SCRATCH/special/.claude/settings.json" >/dev/null 2>&1; then

@@ -53,10 +53,12 @@ stage="$parent/.firn-settings-seed.tmp"
 exec 9>"$lock"
 "$FLOCK_BIN" 9
 
-# Symlinks (including the legacy checkout link) and regular runtime files are
-# replaceable. Directories/devices/FIFOs fail closed rather than being clobbered.
-if { [ -e "$target" ] || [ -L "$target" ]; } &&
-   [ ! -L "$target" ] && [ ! -f "$target" ]; then
+# Settings are either absent or a writable runtime file. Other filesystem
+# objects fail closed rather than being replaced.
+if [ -L "$target" ]; then
+  die "refusing to replace symlink target: $target"
+fi
+if [ -e "$target" ] && [ ! -f "$target" ]; then
   die "refusing to replace non-file target: $target"
 fi
 
