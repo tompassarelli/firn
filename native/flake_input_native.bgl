@@ -39,8 +39,8 @@
          (->DirectoryNamesRejected
            (errno-message "cannot list" relative errno)))]
       [(host.fs/ListDirectoryBoundedOk entries)
-       (loop [(index Int) 0
-              (names (Vec String)) []]
+       (loop [index Int 0
+              names (Vec String) []]
          (if (>= index (count entries))
            (->DirectoryNamesLoaded (sort names))
            (let [(name String) (nth entries index)

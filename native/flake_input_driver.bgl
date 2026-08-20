@@ -55,8 +55,8 @@
          (parse-modules modules (+ index 1) (conj groups inputs))]))))
 
 (defn error-effects [(errors (Vec String))] (Vec FlakeInputEffect)
-  (loop [(index Int) 0
-         (effects (Vec FlakeInputEffect)) []]
+  (loop [index Int 0
+         effects (Vec FlakeInputEffect) []]
     (if (>= index (count errors))
       effects
       (recur (+ index 1)
@@ -126,8 +126,8 @@
                inputs)))))]))
 
 (defn outcome-stdout [(outcome FlakeInputOutcome)] String
-  (loop [(index Int) 0
-         (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (>= index (count (flakeinputoutcome-effects outcome)))
       result
       (match (nth (flakeinputoutcome-effects outcome) index)
@@ -136,8 +136,8 @@
         [(WriteFlake path text) (recur (+ index 1) result)]))))
 
 (defn outcome-stderr [(outcome FlakeInputOutcome)] String
-  (loop [(index Int) 0
-         (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (>= index (count (flakeinputoutcome-effects outcome)))
       result
       (match (nth (flakeinputoutcome-effects outcome) index)
@@ -146,8 +146,8 @@
         [(WriteFlake path text) (recur (+ index 1) result)]))))
 
 (defn outcome-effect-kinds [(outcome FlakeInputOutcome)] (Vec String)
-  (loop [(index Int) 0
-         (result (Vec String)) []]
+  (loop [index Int 0
+         result (Vec String) []]
     (if (>= index (count (flakeinputoutcome-effects outcome)))
       result
       (match (nth (flakeinputoutcome-effects outcome) index)
