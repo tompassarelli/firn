@@ -1,5 +1,5 @@
 {
-  "_doc": "Tracked Firn validator policy; firn-extract-schema publishes it beside the generated schemas.",
+  "_doc": "Tracked Firn validator policy; firn schema extract publishes it beside the generated schemas.",
   "freeformKeyPrefixes": [
     "boot.kernel.sysctl",
     "services.samba.settings",

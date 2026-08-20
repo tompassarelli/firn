@@ -5,11 +5,11 @@ There's a tiered loop — pick the right rung for the change.
 **Rung 1 — fast (~5s, default for most edits):**
 
 ```bash
-./scripts/firn-build       # regenerate any .nix whose .bnix changed
-./scripts/firn-validate    # schema-driven path + type check
+firn repo build       # regenerate any .nix whose .bnix changed
+firn repo validate    # schema-driven path + type check
 ```
 
-`firn-validate` catches unknown option paths, type mismatches (bool/str/int/listOf/nullOr/enum/attrsOf-leaf), enum violations with did-you-mean — at file:line:col precision on the value. Almost every typo/wrong-type bug surfaces here in seconds. This is the right verification for module/tag/host edits where the change is "set X to Y" or "enable Z".
+`firn repo validate` catches unknown option paths, type mismatches (bool/str/int/listOf/nullOr/enum/attrsOf-leaf), enum violations with did-you-mean — at file:line:col precision on the value. Almost every typo/wrong-type bug surfaces here in seconds. This is the right verification for module/tag/host edits where the change is "set X to Y" or "enable Z".
 
 **Rung 2 — drift check (when refactoring beagle/nix itself, or sanity-checking that hand-edited `.nix` matches what beagle would emit):**
 
@@ -35,6 +35,6 @@ closure with the committed lock, and switches that **exact store path** without
 a second evaluation. Untracked files are reported and do not enter the committed
 build snapshot.
 
-**Don't** run `nh` or `nixos-rebuild` directly — only the wrapper; the firn-guard hook denies the bypasses. `firn repo upgrade now` (wholesale input bumps) stays the user's.
+**Don't** run `nh` or `nixos-rebuild` directly — only the wrapper. `firn repo upgrade now` (wholesale input bumps) stays the user's.
 
 Only verify whiterabbit. Skip thinkpad-x1e.

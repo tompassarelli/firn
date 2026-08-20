@@ -1,0 +1,150 @@
+#lang beagle
+(ns firn.repo-workflows-native
+  (:require [firn.repo-workflows :as workflow]))
+
+(def max-process-output Int 67108864)
+(def watch-ownership workflow/WatchOwnership
+  (workflow/->WatchOwnership 30 1))
+
+(defunion TrackedPathsResult
+  (TrackedPathsLoaded [paths (Vec String)])
+  (TrackedPathsRejected [message String]))
+
+(defn repository-root [] (U String Nil)
+  (let [(explicit (U String Nil)) (System/getenv "FIRN_REPO")]
+    (if (some? explicit)
+      explicit
+      (let [(home (U String Nil)) (System/getenv "HOME")]
+        (if (some? home)
+          (str home "/code/nixos-config/main")
+          nil)))))
+
+(defn usage-error [] Int
+  (do
+    (host.stderr/write-text
+      (str
+        "Usage: firn repo validate|lint|diff|doctor|watch|architecture"
+        "|upgrade [leaf]\n"))
+    64))
+
+(defn emit-captured [observation workflow/ProcessObservation] Int
+  (do
+    (if (not= (workflow/processobservation-stdout observation) "")
+      (print (workflow/processobservation-stdout observation))
+      0)
+    (if (not= (workflow/processobservation-stderr observation) "")
+      (host.stderr/write-text
+        (workflow/processobservation-stderr observation))
+      0)
+    (workflow/processobservation-status observation)))
+
+(defn execute-process [process workflow/ProcessBoundary] workflow/ProcessObservation
+  (match process
+    [(InheritProcess phase argv)
+     (let [(status Int) (host.process/run-inherit argv)]
+       (workflow/->ProcessObservation status "" ""))]
+    [(CaptureProcess phase argv stdin max-output)
+     (match (host.process/run-capture argv stdin max-output)
+       [(host.process/CaptureOk status stdout stderr)
+        (workflow/->ProcessObservation status stdout stderr)]
+       [(host.process/CaptureError errno)
+        (workflow/->ProcessObservation
+          1
+          ""
+          (str "firn repo: cannot run " (nth argv 0)
+            ": errno " errno "\n"))])]
+    [(CaptureToFileProcess phase argv stdin max-output output-path)
+     (match (host.process/run-capture argv stdin max-output)
+       [(host.process/CaptureError errno)
+        (workflow/->ProcessObservation
+          1
+          ""
+          (str "firn repo: cannot run " (nth argv 0)
+            ": errno " errno "\n"))]
+       [(host.process/CaptureOk status stdout stderr)
+        (if (not= status 0)
+          (workflow/->ProcessObservation status stdout stderr)
+          (match (host.fs/write-text-atomic output-path stdout)
+            [(host.fs/WriteTextAtomicOk)
+             (workflow/->ProcessObservation 0 "" stderr)]
+            [(host.fs/WriteTextAtomicError errno)
+             (workflow/->ProcessObservation
+               1
+               ""
+               (str "firn repo: cannot write " output-path
+                 ": errno " errno "\n"))]))])]))
+
+(defn execute-processes
+  [processes (Vec workflow/ProcessBoundary)
+   index Int]
+  Int
+  (if (>= index (count processes))
+    0
+    (let [(observation workflow/ProcessObservation)
+          (execute-process (nth processes index))
+          (status Int) (emit-captured observation)]
+      (if (= status 0)
+        (execute-processes processes (+ index 1))
+        status))))
+
+(defn tracked-paths [root String] TrackedPathsResult
+  (match (host.process/run-capture
+           ["git" "-C" root "ls-files"] "" max-process-output)
+    [(host.process/CaptureError errno)
+     (->TrackedPathsRejected
+       (str "firn repo: cannot run git: errno " errno "\n"))]
+    [(host.process/CaptureOk status stdout stderr)
+     (if (= status 0)
+       (->TrackedPathsLoaded (workflow/split-lines stdout))
+       (->TrackedPathsRejected
+         (if (= stderr "")
+           (str "firn repo: git ls-files failed with status " status "\n")
+           stderr)))]))
+
+(defn action-needs-tracked? [action workflow/RepoWorkflowAction] Bool
+  (match action
+    [(RepoValidate) false]
+    [(RepoLint) true]
+    [(RepoDiff target) false]
+    [(RepoDoctor) false]
+    [(RepoWatch) false]
+    [(RepoArchitecture bundle) true]
+    [(RepoUpgrade dry-run) false]))
+
+(defn execute-action
+  [root String
+   action workflow/RepoWorkflowAction]
+  Int
+  (let [(loaded TrackedPathsResult)
+        (if (action-needs-tracked? action)
+          (tracked-paths root)
+          (->TrackedPathsLoaded []))]
+    (match loaded
+      [(TrackedPathsRejected message)
+       (do (host.stderr/write-text message) 1)]
+      [(TrackedPathsLoaded tracked)
+       (let [(plan workflow/RepoWorkflowPlan)
+             (workflow/repo-workflow-plan
+               root action tracked watch-ownership)
+             (status Int)
+             (execute-processes
+               (workflow/repoworkflowplan-processes plan) 0)]
+         (if (= status 0)
+           (do
+             (if (not= (workflow/repoworkflowplan-success-output plan) "")
+               (print (workflow/repoworkflowplan-success-output plan))
+               0)
+             0)
+           status))])))
+
+(defn -main [args (Vec String)] Int
+  (match (workflow/parse-repo-workflow-argv args)
+    [(InvalidRepoWorkflowArgv argv) (usage-error)]
+    [(ParsedRepoWorkflow action)
+     (let [(root (U String Nil)) (repository-root)]
+       (if (nil? root)
+         (do
+           (host.stderr/write-text
+             "firn repo: FIRN_REPO and HOME are not set\n")
+           1)
+         (execute-action root action)))]))

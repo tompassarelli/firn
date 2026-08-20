@@ -39,26 +39,11 @@
         ]
       },
       {
-        "matcher": "Edit|Write|MultiEdit|apply_patch",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/firn-guard.sh",
-            "timeout": 10
-          }
-        ]
-      },
-      {
         "matcher": "Bash|shell|exec_command",
         "hooks": [
           {
             "type": "command",
             "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/tripwire-guard.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/firn-guard.sh",
             "timeout": 10
           },
           {

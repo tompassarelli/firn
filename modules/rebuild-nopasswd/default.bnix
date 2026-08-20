@@ -7,7 +7,7 @@
 ;; password on nixos-rebuild is a speed bump, not a boundary — anything running
 ;; as tom can edit the user-owned flake and becomes root at the next legitimate
 ;; activation anyway. Scoping to the one binary keeps `sudo bash` etc. gated.
-;; The real discipline lives in the firn-guard hook (build+validate green and
+;; The real discipline lives in native Firn policy (build+validate green and
 ;; committed build inputs). There is no rebuild broker or coordination layer.
 (nix/module [config lib pkgs ...]
   {:tags [cli-tools]
@@ -18,5 +18,5 @@
       ;; Blanket: activation sudo-execs PER-GENERATION store paths (nh, ng
       ;; internals) — unscopeable statically. Owner-decided 2026-07-09: the
       ;; password is a speed bump on this box (user owns the flake => eventual
-      ;; root anyway). Discipline stays in the firn-guard green gates.
+      ;; root anyway). Discipline stays in Firn's green gates.
       {:security.sudo.wheelNeedsPassword false})})

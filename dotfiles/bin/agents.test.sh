@@ -112,7 +112,6 @@ HOOK_COUNT="$(hook_count)"
 echo "== 1. fresh seed: bound hooks enabled+companion, unbound disabled, nothing composes"
 fresh
 ag status > /dev/null
-chk "firn-guard row" "hook firn-guard enabled firn" "$(grep '^hook firn-guard ' "$SB/.config/agents/manifest.conf")"
 chk "worktree-guard row" "hook worktree-guard enabled repo-safety" "$(grep '^hook worktree-guard ' "$SB/.config/agents/manifest.conf")"
 chk "logcompress row (unbound)" "hook logcompress disabled" "$(grep '^hook logcompress ' "$SB/.config/agents/manifest.conf")"
 chk "repo-safety skill seeded off" "skill repo-safety off" "$(grep '^skill repo-safety ' "$SB/.config/agents/manifest.conf")"
@@ -146,7 +145,7 @@ echo "== 2. migration of legacy 3-field rows: blackout holds"
 fresh; mods; mod orchestration staffing
 mkdir -p "$SB/.config/agents"
 { echo "item agents-md off"; echo "item statusline-script off"; echo "item orchestration off"
-  for h in agent-spawn-guard beagle-session-start comment-bloat-guard firn-guard \
+  for h in agent-spawn-guard beagle-session-start comment-bloat-guard \
            git-blind-stage-guard hook-detach logcompress north-session-lifecycle \
            tripwire-guard worktree-guard; do echo "hook $h off"; done
   for s in webdev beagle-authoring fram-modeling code-as-facts firn; do echo "skill $s off"; done
@@ -248,34 +247,6 @@ case "$warn" in *"duplicate unit name across kinds: firn"*) ok "duplicate name w
   *) bad "duplicate name warns" "$warn" ;; esac
 chk "duplicate name does not kill status" "1" "$(ag status 2>/dev/null | grep -c '^skills$')"
 chk "no duplicate warning when names are unique" "" "$(rm "$SB/code/north-data/context-dirs.conf"; ag status 2>&1 >/dev/null)"
-
-echo
-echo "== 3. derivation: a skill flip changes activity with zero hook-row diffs"
-fresh; ag status > /dev/null
-before="$(hookrows)"
-ag on firn > /dev/null
-chk "hook rows unchanged by skill flip" "" "$(diff <(echo "$before") <(hookrows))"
-chk "skill row on" "skill firn on" "$(grep '^skill firn ' "$SB/.config/agents/manifest.conf")"
-if has_cmd firn-guard.sh; then ok "firn-guard composed by its skill"; else bad "firn-guard composed by its skill" "$(composed_files)"; fi
-if has_cmd worktree-guard; then bad "other skills stay off" "$(composed_files)"; else ok "other skills stay off"; fi
-ag off firn > /dev/null
-chk "skill off decomposes" "" "$(composed_files)"
-chk "hook rows still unchanged" "" "$(diff <(echo "$before") <(hookrows))"
-
-echo
-echo "== 4. disabled immunity: a user pin survives skill flips"
-fresh; ag status > /dev/null
-ag off firn-guard > /dev/null
-chk "direct off writes disabled" "hook firn-guard disabled firn" "$(grep '^hook firn-guard ' "$SB/.config/agents/manifest.conf")"
-ag on firn > /dev/null
-chk "skill on does not compose a disabled hook" "" "$(composed_files)"
-chk "skill on does not clear the pin" "hook firn-guard disabled firn" "$(grep '^hook firn-guard ' "$SB/.config/agents/manifest.conf")"
-ag on firn-guard > /dev/null
-chk "direct on clears the pin" "hook firn-guard enabled firn" "$(grep '^hook firn-guard ' "$SB/.config/agents/manifest.conf")"
-if has_cmd firn-guard.sh; then ok "cleared pin + skill on = composed"; else bad "cleared pin + skill on = composed" "$(composed_files)"; fi
-st="$(ag status)"; case "$st" in *"firn-guard:             on"*) ok "status: enabled · on" ;; *) bad "status: enabled · on" "$(echo "$st" | grep firn-guard)" ;; esac
-ag off firn > /dev/null
-st="$(ag status)"; case "$st" in *"firn-guard:             off (skill: firn off)"*) ok "status: enabled · off (skill: firn off)" ;; *) bad "status provenance" "$(echo "$st" | grep firn-guard)" ;; esac
 
 echo
 echo "== 5. unbound + enabled = active with every skill off"
@@ -990,12 +961,6 @@ else bad "a skill's claims compose" "$(composed_files)"; fi
 chk "a claim writes nothing to the manifest" "hook worktree-guard enabled repo-safety" "$(grep '^hook worktree-guard ' "$m")"
 ag off repo-safety > /dev/null
 chk "and off takes them all back out" "" "$(composed_files)"
-# the inline form, in a skill whose source lives outside the farm above
-mkdir -p "$FIRN_SKILL"
-printf -- '---\nname: firn\nhooks: [firn-guard]\n---\n' > "$FIRN_SKILL/SKILL.md"
-ag on firn > /dev/null
-if has_cmd firn-guard.sh; then ok "the inline list form is read too"; else bad "inline list form" "$(composed_files)"; fi
-ag off firn > /dev/null
 # a claim BINDS: a hook nobody gated before now answers to the skill that wants it
 claim "$WEBDEV_SKILL" logcompress
 ag on logcompress > /dev/null
@@ -1059,7 +1024,7 @@ if has_cmd corpus-scan-guard.sh; then ok "convo composes its guard"; else bad "c
 ag off convo > /dev/null
 if has_cmd corpus-scan-guard.sh; then bad "convo off decomposes it" "$(composed_files)"; else ok "convo off decomposes it"; fi
 
-# The script itself lives in North (every hook but firn-guard does); this suite
+# The script itself lives in North; this suite
 # owns the switchboard, so the behaviour half runs only where North is checked
 # out beside this repo. Its full matrix is corpus-scan-guard.test.sh.
 CSG="${CORPUS_SCAN_GUARD:-$REPO/../../north/main/profiles/tom/hooks/corpus-scan-guard.sh}"

@@ -4,7 +4,7 @@ result-*
 /builds/
 .env
 
-# Racket compiled artifacts (regenerated on every firn-build)
+# Racket compiled artifacts (regenerated on every repository build)
 **/compiled/
 .firn-build/
 .beagle-cache/

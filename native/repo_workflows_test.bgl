@@ -1,0 +1,124 @@
+#lang beagle
+(ns firn.repo-workflows-test
+  (:require [firn.repo-workflows :as w]))
+
+(defrecord TestResult
+  [name String
+   passed Bool])
+
+(defn process-phases [processes (Vec w/ProcessBoundary)] (Vec String)
+  (loop [(index Int) 0
+         (phases (Vec String)) []]
+    (if (>= index (count processes))
+      phases
+      (recur (+ index 1)
+        (conj phases (w/process-phase (nth processes index)))))))
+
+(defn case-first-failure [] Bool
+  (let [(processes (Vec w/ProcessBoundary))
+        [(w/->InheritProcess "first" ["one"])
+         (w/->InheritProcess "second" ["two"])
+         (w/->InheritProcess "third" ["three"])]
+        (observations (Vec w/ProcessObservation))
+        [(w/->ProcessObservation 0 "one-out" "")
+         (w/->ProcessObservation 7 "" "two-error")
+         (w/->ProcessObservation 9 "" "must-not-win")]]
+    (match (w/first-process-failure processes observations)
+      [(WorkflowSucceeded) false]
+      [(WorkflowStopped phase status stdout stderr)
+       (and (= phase "second")
+            (= status 7)
+            (= stdout "")
+            (= stderr "two-error"))])))
+
+(defn case-bounded-watch-ownership [] Bool
+  (let [(ownership w/WatchOwnership) (w/->WatchOwnership 19 1)
+        (processes (Vec w/ProcessBoundary))
+        (w/watch-processes "/repo" ownership)]
+    (and (= (w/watchownership-max-events ownership) 1)
+         (= (count processes) 2)
+         (= (process-phases processes)
+            ["watch for repository change" "validate changed repository"])
+         (= (w/process-argv (nth processes 0))
+            ["timeout" "--foreground" "19" "inotifywait" "--quiet"
+             "--recursive" "--event" "close_write,create,delete,move"
+             "/repo"])
+         (= (w/process-argv (nth processes 1))
+            ["beagle" "validate" "/repo"]))))
+
+(defn schema-entry-names [entries (Vec w/SchemaEntry)] (Vec String)
+  (loop [(index Int) 0
+         (names (Vec String)) []]
+    (if (>= index (count entries))
+      names
+      (recur (+ index 1)
+        (conj names (w/schemaentry-name (nth entries index)))))))
+
+(defn type-change-names [entries (Vec w/SchemaTypeChange)] (Vec String)
+  (loop [(index Int) 0
+         (names (Vec String)) []]
+    (if (>= index (count entries))
+      names
+      (recur (+ index 1)
+        (conj names (w/schematypechange-name (nth entries index)))))))
+
+(defn case-schema-diff-and-upgrade-order [] Bool
+  (let [(diff w/SchemaDiff)
+        (w/schema-diff
+          [(w/->SchemaEntry "z.removed" "bool")
+           (w/->SchemaEntry "b.changed" "str")]
+          [(w/->SchemaEntry "a.added" "int")
+           (w/->SchemaEntry "b.changed" "path")])
+        (upgrade (Vec w/ProcessBoundary))
+        (w/upgrade-processes "/repo" false)]
+    (and (= (schema-entry-names (w/schemadiff-removed diff)) ["z.removed"])
+         (= (schema-entry-names (w/schemadiff-added diff)) ["a.added"])
+         (= (type-change-names (w/schemadiff-type-changed diff))
+            ["b.changed"])
+         (= (process-phases upgrade)
+            ["schema snapshot"
+             "nix flake update"
+             "Beagle schema extraction"
+             "schema comparison"
+             "repository validation"])
+         (= (count (w/upgrade-processes "/repo" true)) 0))))
+
+(defn case-deterministic-rendering [] Bool
+  (let [(snapshot w/ArchitectureSnapshot)
+        (w/->ArchitectureSnapshot
+          "/repo"
+          "/repo/dotfiles/agents"
+          [(w/->ArchitectureRow "AGENTS.md" "file" "repo:AGENTS.md")
+           (w/->ArchitectureRow
+             "modules/north-profile/default.bnix"
+             "file"
+             "repo:modules/north-profile/default.bnix")])
+        (first String) (w/render-architecture snapshot)
+        (second String) (w/render-architecture snapshot)]
+    (and (= first second)
+         (w/contains? first "Tracked architecture entries: 2\n")
+         (= (w/render-upgrade-dry-run) (w/render-upgrade-dry-run)))))
+
+(defn cases [] (Vec TestResult)
+  [(->TestResult "first-failure" (case-first-failure))
+   (->TestResult "bounded-watch-ownership" (case-bounded-watch-ownership))
+   (->TestResult
+     "schema-diff-and-upgrade-order"
+     (case-schema-diff-and-upgrade-order))
+   (->TestResult "deterministic-rendering" (case-deterministic-rendering))])
+
+(defn -main [args (Vec String)] Int
+  (let [(results (Vec TestResult)) (cases)]
+    (loop [(index Int) 0
+           (failures Int) 0]
+      (if (>= index (count results))
+        failures
+        (let [(result TestResult) (nth results index)]
+          (do
+            (println
+              (str (if (testresult-passed result) "PASS " "FAIL ")
+                (testresult-name result)))
+            (recur (+ index 1)
+              (if (testresult-passed result)
+                failures
+                (+ failures 1)))))))))

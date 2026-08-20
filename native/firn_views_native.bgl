@@ -349,7 +349,7 @@
 (defn run-schema-extract [(root String) (host String)] Int
   (emit-result
     (views/render-schema-extract host
-      (child-result [(path root "scripts/firn-extract-schema") host] ""))))
+      (child-result ["firn" "schema" "extract" host] ""))))
 
 (defn run-host-generation [(host String)] Int
   (emit-result

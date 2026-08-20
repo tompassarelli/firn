@@ -1,0 +1,917 @@
+#lang beagle
+(ns firn.repo-workflows
+  (:require [firn.repo-quality :as quality]))
+
+(defunion RepoWorkflowAction
+  RepoValidate
+  RepoLint
+  (RepoDiff [target String])
+  RepoDoctor
+  RepoWatch
+  (RepoArchitecture [bundle Bool])
+  (RepoUpgrade [dry-run Bool]))
+
+(defunion RepoWorkflowArgv
+  (ParsedRepoWorkflow [action RepoWorkflowAction])
+  (InvalidRepoWorkflowArgv [argv (Vec String)]))
+
+(defrecord ProcessObservation
+  [status Int
+   stdout String
+   stderr String])
+
+(defunion ProcessBoundary
+  (InheritProcess
+    [phase String
+     argv (Vec String)])
+  (CaptureProcess
+    [phase String
+     argv (Vec String)
+     stdin String
+     max-output Int])
+  (CaptureToFileProcess
+    [phase String
+     argv (Vec String)
+     stdin String
+     max-output Int
+     output-path String]))
+
+(defrecord RepoWorkflowPlan
+  [processes (Vec ProcessBoundary)
+   success-output String])
+
+(defrecord WatchOwnership
+  [timeout-seconds Int
+   max-events Int])
+
+(defunion WorkflowCompletion
+  WorkflowSucceeded
+  (WorkflowStopped
+    [phase String
+     status Int
+     stdout String
+     stderr String]))
+
+(defrecord LintFingerprint
+  [path String
+   digest String])
+
+(defunion LintStampResult
+  (LintStampParsed [entries (Vec LintFingerprint)])
+  (LintStampRejected
+    [line Int
+     message String]))
+
+(defunion DiffEntry
+  (DiffSame
+    [source-path String
+     output-path String])
+  (DiffDifferent
+    [source-path String
+     output-path String
+     detail String])
+  (DiffMissing
+    [source-path String
+     output-path String])
+  (DiffErrored
+    [source-path String
+     output-path String
+     message String]))
+
+(defrecord DiffReport
+  [entries (Vec DiffEntry)
+   unchanged Int
+   different Int
+   errors Int
+   status Int])
+
+(defrecord SchemaEntry
+  [name String
+   type-name String])
+
+(defrecord SchemaTypeChange
+  [name String
+   before-type String
+   after-type String])
+
+(defrecord SchemaDiff
+  [removed (Vec SchemaEntry)
+   added (Vec SchemaEntry)
+   type-changed (Vec SchemaTypeChange)])
+
+(defrecord SourceText
+  [path String
+   text String])
+
+(defrecord SchemaReference
+  [name String
+   before-type String
+   after-type String
+   paths (Vec String)])
+
+(defrecord SchemaImpact
+  [diff SchemaDiff
+   removed-references (Vec SchemaReference)
+   type-changed-references (Vec SchemaReference)])
+
+(defunion WatchPlan
+  (WatchIdle [token Bool])
+  (WatchValidate [paths (Vec String)]))
+
+(defrecord ArchitectureRow
+  [path String
+   kind String
+   source String])
+
+(defrecord ArchitectureSnapshot
+  [repo String
+   config-root String
+   rows (Vec ArchitectureRow)])
+
+(defunion UpgradePhase
+  UpgradeSnapshot
+  UpgradeLockUpdate
+  UpgradeSchemaExtract
+  UpgradeSchemaCompare
+  UpgradeValidate)
+
+(defrecord UpgradePhaseResult
+  [phase UpgradePhase
+   status Int])
+
+(defunion UpgradeFailure
+  UpgradeSucceeded
+  (UpgradeStopped
+    [phase UpgradePhase
+     status Int]))
+
+(defn starts-with?
+  [text String
+   prefix String]
+  Bool
+  (and (>= (count text) (count prefix))
+       (= (subs text 0 (count prefix)) prefix)))
+
+(defn ends-with?
+  [text String
+   suffix String]
+  Bool
+  (and (>= (count text) (count suffix))
+       (= (subs text (- (count text) (count suffix)) (count text)) suffix)))
+
+(defn contains-at?
+  [text String
+   needle String
+   offset Int]
+  Bool
+  (and (<= (+ offset (count needle)) (count text))
+       (= (subs text offset (+ offset (count needle))) needle)))
+
+(defn contains?
+  [text String
+   needle String]
+  Bool
+  (if (= (count needle) 0)
+    true
+    (loop [(offset Int) 0]
+      (cond
+        (> (+ offset (count needle)) (count text)) false
+        (contains-at? text needle offset) true
+        :else (recur (+ offset 1))))))
+
+(defn trim-line-end [text String] String
+  (loop [(end Int) (count text)]
+    (if (and (> end 0)
+             (let [(character String) (subs text (- end 1) end)]
+               (or (= character "\n") (= character "\r"))))
+      (recur (- end 1))
+      (subs text 0 end))))
+
+(defn line-end
+  [text String
+   start Int]
+  Int
+  (loop [(end Int) start]
+    (if (or (>= end (count text))
+            (= (subs text end (+ end 1)) "\n"))
+      end
+      (recur (+ end 1)))))
+
+(defn split-lines [text String] (Vec String)
+  (loop [(start Int) 0
+         (lines (Vec String)) []]
+    (if (>= start (count text))
+      lines
+      (let [(end Int) (line-end text start)
+            (next Int) (if (< end (count text)) (+ end 1) end)]
+        (recur next (conj lines (subs text start end)))))))
+
+(defn join-lines [lines (Vec String)] String
+  (loop [(index Int) 0
+         (result String) ""]
+    (if (>= index (count lines))
+      result
+      (recur (+ index 1) (str result (nth lines index) "\n")))))
+
+(defn string-member?
+  [values (Vec String)
+   candidate String]
+  Bool
+  (loop [(index Int) 0]
+    (if (>= index (count values))
+      false
+      (if (= candidate (nth values index))
+        true
+        (recur (+ index 1))))))
+
+(defn append-unique
+  [values (Vec String)
+   candidate String]
+  (Vec String)
+  (if (string-member? values candidate) values (conj values candidate)))
+
+(defn parse-repo-workflow-argv [argv (Vec String)] RepoWorkflowArgv
+  (if (or (< (count argv) 2) (not= (nth argv 0) "repo"))
+    (->InvalidRepoWorkflowArgv argv)
+    (let [(edge String) (nth argv 1)
+          (leaf-count Int) (- (count argv) 2)]
+      (cond
+        (= edge "validate")
+        (if (or (= leaf-count 0)
+                (and (= leaf-count 1) (= (nth argv 2) "all")))
+          (->ParsedRepoWorkflow (->RepoValidate))
+          (->InvalidRepoWorkflowArgv argv))
+
+        (= edge "lint")
+        (if (or (= leaf-count 0)
+                (and (= leaf-count 1) (= (nth argv 2) "all")))
+          (->ParsedRepoWorkflow (->RepoLint))
+          (->InvalidRepoWorkflowArgv argv))
+
+        (= edge "diff")
+        (if (<= leaf-count 1)
+          (->ParsedRepoWorkflow
+            (->RepoDiff (if (= leaf-count 0) "all" (nth argv 2))))
+          (->InvalidRepoWorkflowArgv argv))
+
+        (= edge "doctor")
+        (if (or (= leaf-count 0)
+                (and (= leaf-count 1) (= (nth argv 2) "all")))
+          (->ParsedRepoWorkflow (->RepoDoctor))
+          (->InvalidRepoWorkflowArgv argv))
+
+        (= edge "watch")
+        (if (or (= leaf-count 0)
+                (and (= leaf-count 1) (= (nth argv 2) "all")))
+          (->ParsedRepoWorkflow (->RepoWatch))
+          (->InvalidRepoWorkflowArgv argv))
+
+        (= edge "architecture")
+        (if (or (= leaf-count 0)
+                (and (= leaf-count 1)
+                     (or (= (nth argv 2) "all")
+                         (= (nth argv 2) "bundle")
+                         (= (nth argv 2) "--bundle"))))
+          (->ParsedRepoWorkflow
+            (->RepoArchitecture
+              (and (= leaf-count 1)
+                   (or (= (nth argv 2) "bundle")
+                       (= (nth argv 2) "--bundle")))))
+          (->InvalidRepoWorkflowArgv argv))
+
+        (= edge "upgrade")
+        (if (or (= leaf-count 0)
+                (and (= leaf-count 1)
+                     (or (= (nth argv 2) "now")
+                         (= (nth argv 2) "dry-run"))))
+          (->ParsedRepoWorkflow
+            (->RepoUpgrade
+              (and (= leaf-count 1) (= (nth argv 2) "dry-run"))))
+          (->InvalidRepoWorkflowArgv argv))
+
+        :else
+        (->InvalidRepoWorkflowArgv argv)))))
+
+(defn nix-target? [path String] Bool
+  (let [(segments (Vec String)) (quality/path-segments path)
+        (basename String) (quality/path-basename segments)]
+    (and
+      (ends-with? path ".nix")
+      (not= basename "hardware-configuration.nix")
+      (not (quality/string-member?
+             [".git" ".direnv" ".beagle-cache" "result"]
+             basename))
+      (not (loop [(index Int) 0]
+             (if (>= index (count segments))
+               false
+               (let [(segment String) (nth segments index)]
+                 (if (or
+                       (= segment ".git")
+                       (= segment ".direnv")
+                       (= segment ".beagle-cache")
+                       (= segment ".firn-build")
+                       (starts-with? segment "result")
+                       (and (or (= segment "docs") (= segment "tests"))
+                            (< (+ index 1) (count segments))
+                            (= (nth segments (+ index 1)) "fixtures")))
+                   true
+                   (recur (+ index 1))))))))))
+
+(defn select-lint-targets [paths (Vec String)] (Vec String)
+  (loop [(index Int) 0
+         (selected (Vec String)) []]
+    (if (>= index (count paths))
+      (sort selected)
+      (let [(path String) (nth paths index)]
+        (recur (+ index 1)
+          (if (nix-target? path) (conj selected path) selected))))))
+
+(defn find-double-space [line String] Int
+  (loop [(index Int) 0]
+    (cond
+      (>= (+ index 1) (count line)) -1
+      (and (= (subs line index (+ index 1)) " ")
+           (= (subs line (+ index 1) (+ index 2)) " ")) index
+      :else (recur (+ index 1)))))
+
+(defn parse-lint-stamp-line
+  [line String
+   line-number Int]
+  LintStampResult
+  (let [(separator Int) (find-double-space line)]
+    (if (or (<= separator 0) (>= (+ separator 2) (count line)))
+      (->LintStampRejected line-number "expected '<digest>  <path>'")
+      (->LintStampParsed
+        [(->LintFingerprint
+           (subs line (+ separator 2) (count line))
+           (subs line 0 separator))]))))
+
+(defn parse-lint-stamp [text String] LintStampResult
+  (let [(lines (Vec String)) (split-lines text)]
+    (loop [(index Int) 0
+           (entries (Vec LintFingerprint)) []]
+      (if (>= index (count lines))
+        (->LintStampParsed entries)
+        (let [(line String) (nth lines index)]
+          (if (= line "")
+            (recur (+ index 1) entries)
+            (match (parse-lint-stamp-line line (+ index 1))
+              [(LintStampRejected line message)
+               (->LintStampRejected line message)]
+              [(LintStampParsed parsed)
+               (recur (+ index 1) (conj entries (nth parsed 0)))])))))))
+
+(defn render-lint-stamp [entries (Vec LintFingerprint)] String
+  (loop [(index Int) 0
+         (result String) ""]
+    (if (>= index (count entries))
+      result
+      (let [(entry LintFingerprint) (nth entries index)]
+        (recur (+ index 1)
+          (str result (lintfingerprint-digest entry) "  "
+            (lintfingerprint-path entry) "\n"))))))
+
+(defn find-lint-fingerprint
+  [entries (Vec LintFingerprint)
+   path String]
+  (U LintFingerprint Nil)
+  (loop [(index Int) 0]
+    (if (>= index (count entries))
+      nil
+      (let [(entry LintFingerprint) (nth entries index)]
+        (if (= path (lintfingerprint-path entry))
+          entry
+          (recur (+ index 1)))))))
+
+(defn changed-lint-paths
+  [previous (Vec LintFingerprint)
+   current (Vec LintFingerprint)]
+  (Vec String)
+  (loop [(index Int) 0
+         (changed (Vec String)) []]
+    (if (>= index (count current))
+      changed
+      (let [(entry LintFingerprint) (nth current index)
+            (old (U LintFingerprint Nil))
+            (find-lint-fingerprint previous (lintfingerprint-path entry))]
+        (recur (+ index 1)
+          (if (or (nil? old)
+                  (not= (lintfingerprint-digest old)
+                        (lintfingerprint-digest entry)))
+            (conj changed (lintfingerprint-path entry))
+            changed))))))
+
+(defn lint-success-text
+  [total Int
+   changed Int]
+  String
+  (cond
+    (= total 0)
+    "firn repo lint: no .nix files to lint.\n"
+
+    (= changed 0)
+    (str "firn repo lint: " total
+      " .nix files unchanged since their last clean parse.\n")
+
+    (= total changed)
+    (str "firn repo lint: " total " .nix files parse cleanly.\n")
+
+    :else
+    (str "firn repo lint: " changed " changed of " total
+      " .nix files parse cleanly.\n")))
+
+(defn diff-entry-kind [entry DiffEntry] Keyword
+  (match entry
+    [(DiffSame source-path output-path) :same]
+    [(DiffDifferent source-path output-path detail) :different]
+    [(DiffMissing source-path output-path) :different]
+    [(DiffErrored source-path output-path message) :error]))
+
+(defn summarize-diff [entries (Vec DiffEntry)] DiffReport
+  (loop [(index Int) 0
+         (unchanged Int) 0
+         (different Int) 0
+         (errors Int) 0]
+    (if (>= index (count entries))
+      (->DiffReport entries unchanged different errors
+        (if (or (> different 0) (> errors 0)) 1 0))
+      (let [(kind Keyword) (diff-entry-kind (nth entries index))]
+        (cond
+          (= kind :same)
+          (recur (+ index 1) (+ unchanged 1) different errors)
+
+          (= kind :different)
+          (recur (+ index 1) unchanged (+ different 1) errors)
+
+          :else
+          (recur (+ index 1) unchanged different (+ errors 1)))))))
+
+(defn render-diff-entry [entry DiffEntry] String
+  (match entry
+    [(DiffSame source-path output-path) ""]
+    [(DiffDifferent source-path output-path detail)
+     (str "=== " output-path " ===\n" detail
+       (if (ends-with? detail "\n") "" "\n"))]
+    [(DiffMissing source-path output-path)
+     (str "=== " output-path " ===\n"
+       "(no committed .nix — would create)\n")]
+    [(DiffErrored source-path output-path message)
+     (str "=== " output-path " ===\n"
+       "(error: " (trim-line-end message) ")\n")]))
+
+(defn render-diff-report [report DiffReport] String
+  (loop [(index Int) 0
+         (result String) ""]
+    (if (>= index (count (diffreport-entries report)))
+      (str result "\nfirn diff: " (diffreport-unchanged report)
+        " unchanged, " (diffreport-different report) " differ, "
+        (diffreport-errors report) " error(s)\n")
+      (recur (+ index 1)
+        (str result
+          (render-diff-entry
+            (nth (diffreport-entries report) index)))))))
+
+(defn render-health-entry [entry quality/HealthEntry] String
+  (let [(kind Keyword) (quality/healthentry-kind entry)
+        (mark String)
+        (cond (= kind :pass) "✓" (= kind :warning) "⚠" :else "✗")
+        (message String) (quality/healthentry-message entry)]
+    (str "  " mark " " (quality/healthentry-name entry) "\n"
+      (if (= message "")
+        ""
+        (loop [(index Int) 0
+               (lines (Vec String)) (split-lines message)
+               (result String) ""]
+          (if (>= index (count lines))
+            result
+            (recur (+ index 1) lines
+              (str result "      " (nth lines index) "\n"))))))))
+
+(defn render-health-report
+  [root String
+   report quality/HealthReport]
+  String
+  (loop [(index Int) 0
+         (result String)
+         (str "firn doctor: running checks on " root "\n\n")]
+    (if (>= index (count (quality/healthreport-entries report)))
+      (str result "\nfirn doctor: "
+        (quality/healthreport-passed report) " passed, "
+        (quality/healthreport-warnings report) " warning(s), "
+        (quality/healthreport-failed report) " failed.\n")
+      (recur (+ index 1)
+        (str result
+          (render-health-entry
+            (nth (quality/healthreport-entries report) index)))))))
+
+(defunion SchemaLookup
+  SchemaAbsent
+  (SchemaFound [entry SchemaEntry]))
+
+(defn find-schema-entry
+  [entries (Vec SchemaEntry)
+   name String]
+  SchemaLookup
+  (loop [(index Int) 0]
+    (if (>= index (count entries))
+      (->SchemaAbsent)
+      (let [(entry SchemaEntry) (nth entries index)]
+        (if (= name (schemaentry-name entry))
+          (->SchemaFound entry)
+          (recur (+ index 1)))))))
+
+(defn schema-names [entries (Vec SchemaEntry)] (Vec String)
+  (loop [(index Int) 0
+         (names (Vec String)) []]
+    (if (>= index (count entries))
+      names
+      (recur (+ index 1)
+        (append-unique names
+          (schemaentry-name (nth entries index)))))))
+
+(defn schema-diff
+  [before (Vec SchemaEntry)
+   after (Vec SchemaEntry)]
+  SchemaDiff
+  (let [(names (Vec String))
+        (sort
+          (loop [(index Int) 0
+                 (combined (Vec String)) (schema-names before)]
+            (if (>= index (count after))
+              combined
+              (recur (+ index 1)
+                (append-unique combined
+                  (schemaentry-name (nth after index)))))))]
+    (loop [(index Int) 0
+           (removed (Vec SchemaEntry)) []
+           (added (Vec SchemaEntry)) []
+           (changed (Vec SchemaTypeChange)) []]
+      (if (>= index (count names))
+        (->SchemaDiff removed added changed)
+        (let [(name String) (nth names index)
+              (old SchemaLookup) (find-schema-entry before name)
+              (new SchemaLookup) (find-schema-entry after name)]
+          (match old
+            [(SchemaAbsent)
+             (match new
+               [(SchemaAbsent)
+                (recur (+ index 1) removed added changed)]
+               [(SchemaFound entry)
+                (recur (+ index 1) removed (conj added entry) changed)])]
+            [(SchemaFound old-entry)
+             (match new
+               [(SchemaAbsent)
+                (recur (+ index 1) (conj removed old-entry) added changed)]
+               [(SchemaFound new-entry)
+                (recur (+ index 1) removed added
+                  (if (= (schemaentry-type-name old-entry)
+                         (schemaentry-type-name new-entry))
+                    changed
+                    (conj changed
+                      (->SchemaTypeChange name
+                        (schemaentry-type-name old-entry)
+                        (schemaentry-type-name new-entry)))))])]))))))
+
+(defn source-reference-paths
+  [sources (Vec SourceText)
+   name String]
+  (Vec String)
+  (loop [(index Int) 0
+         (paths (Vec String)) []]
+    (if (>= index (count sources))
+      paths
+      (let [(source SourceText) (nth sources index)]
+        (recur (+ index 1)
+          (if (contains? (sourcetext-text source) name)
+            (conj paths (sourcetext-path source))
+            paths))))))
+
+(defn schema-impact
+  [diff SchemaDiff
+   sources (Vec SourceText)]
+  SchemaImpact
+  (let [(removed-references (Vec SchemaReference))
+        (loop [(index Int) 0
+               (references (Vec SchemaReference)) []]
+          (if (>= index (count (schemadiff-removed diff)))
+            references
+            (let [(entry SchemaEntry) (nth (schemadiff-removed diff) index)
+                  (paths (Vec String))
+                  (source-reference-paths sources (schemaentry-name entry))]
+              (recur (+ index 1)
+                (if (= (count paths) 0)
+                  references
+                  (conj references
+                    (->SchemaReference
+                      (schemaentry-name entry)
+                      (schemaentry-type-name entry)
+                      ""
+                      paths)))))))
+        (changed-references (Vec SchemaReference))
+        (loop [(index Int) 0
+               (references (Vec SchemaReference)) []]
+          (if (>= index (count (schemadiff-type-changed diff)))
+            references
+            (let [(change SchemaTypeChange)
+                  (nth (schemadiff-type-changed diff) index)
+                  (paths (Vec String))
+                  (source-reference-paths sources
+                    (schematypechange-name change))]
+              (recur (+ index 1)
+                (if (= (count paths) 0)
+                  references
+                  (conj references
+                    (->SchemaReference
+                      (schematypechange-name change)
+                      (schematypechange-before-type change)
+                      (schematypechange-after-type change)
+                      paths)))))))]
+    (->SchemaImpact diff removed-references changed-references)))
+
+(defn render-reference-paths [paths (Vec String)] String
+  (loop [(index Int) 0
+         (result String) ""]
+    (if (>= index (count paths))
+      result
+      (recur (+ index 1)
+        (str result "      → " (nth paths index) "\n")))))
+
+(defn render-schema-impact [impact SchemaImpact] String
+  (let [(diff SchemaDiff) (schemaimpact-diff impact)
+        (removed (Vec SchemaReference))
+        (schemaimpact-removed-references impact)
+        (changed (Vec SchemaReference))
+        (schemaimpact-type-changed-references impact)
+        (header String)
+        (str "  removed: " (count (schemadiff-removed diff))
+          "   added: " (count (schemadiff-added diff))
+          "   type-changed: " (count (schemadiff-type-changed diff)) "\n")
+        (removed-text String)
+        (if (= (count removed) 0)
+          "\n  ✓ no removed paths are referenced in this repo.\n"
+          (loop [(index Int) 0
+                 (result String)
+                 (str "\n  ✗ " (count removed)
+                   " removed path(s) are referenced in this repo:\n")]
+            (if (>= index (count removed))
+              result
+              (let [(reference SchemaReference) (nth removed index)]
+                (recur (+ index 1)
+                  (str result "    " (schemareference-name reference) "\n"
+                    (render-reference-paths
+                      (schemareference-paths reference))))))))
+        (changed-text String)
+        (if (= (count changed) 0)
+          ""
+          (loop [(index Int) 0
+                 (result String)
+                 (str "\n  ⚠ " (count changed)
+                   " type-changed path(s) referenced in this repo:\n")]
+            (if (>= index (count changed))
+              result
+              (let [(reference SchemaReference) (nth changed index)]
+                (recur (+ index 1)
+                  (str result "    " (schemareference-name reference) ": "
+                    (schemareference-before-type reference) " → "
+                    (schemareference-after-type reference) "\n"
+                    (render-reference-paths
+                      (schemareference-paths reference))))))))]
+    (str header removed-text changed-text)))
+
+(defn plan-watch
+  [previous (Vec LintFingerprint)
+   current (Vec LintFingerprint)]
+  WatchPlan
+  (let [(changed (Vec String)) (changed-lint-paths previous current)]
+    (if (= (count changed) 0)
+      (->WatchIdle true)
+      (->WatchValidate changed))))
+
+(defn architecture-path? [path String] Bool
+  (or
+    (= path "AGENTS.md")
+    (= path "CLAUDE.md")
+    (starts-with? path "docs/claude/")
+    (starts-with? path "dotfiles/agents/")
+    (starts-with? path "dotfiles/claude/")
+    (starts-with? path "modules/north-profile/")))
+
+(defn architecture-rows
+  [tracked (Vec String)
+   kinds (Vec String)]
+  (Vec ArchitectureRow)
+  (loop [(index Int) 0
+         (rows (Vec ArchitectureRow)) []]
+    (if (>= index (count tracked))
+      rows
+      (let [(path String) (nth tracked index)]
+        (recur (+ index 1)
+          (if (architecture-path? path)
+            (conj rows
+              (->ArchitectureRow path
+                (if (< index (count kinds)) (nth kinds index) "unknown")
+                (str "repo:" path)))
+            rows))))))
+
+(defn render-architecture [snapshot ArchitectureSnapshot] String
+  (loop [(index Int) 0
+         (result String)
+         (str
+           "# 02 · Local map — how THIS system is wired (GENERATED)\n\n"
+           "> GENERATED by `firn repo architecture` — do not hand-edit.\n"
+           "> The native command inventories the tracked configuration surface;\n"
+           "> a diff means the declared system moved.\n\n"
+           "Repo: `" (architecturesnapshot-repo snapshot)
+           "` · agent config: `" (architecturesnapshot-config-root snapshot)
+           "`\n\n"
+           "## Declared configuration surface\n\n"
+           "| tracked path | kind | source-of-truth |\n"
+           "|---|---|---|\n")]
+    (if (>= index (count (architecturesnapshot-rows snapshot)))
+      (str result "\nTracked architecture entries: "
+        (count (architecturesnapshot-rows snapshot)) "\n")
+      (let [(row ArchitectureRow)
+            (nth (architecturesnapshot-rows snapshot) index)]
+        (recur (+ index 1)
+          (str result "| `" (architecturerow-path row) "` | "
+            (architecturerow-kind row) " | `"
+            (architecturerow-source row) "` |\n"))))))
+
+(defn upgrade-phases [dry-run Bool] (Vec UpgradePhase)
+  (if dry-run
+    [(->UpgradeLockUpdate) (->UpgradeSchemaExtract)]
+    [(->UpgradeSnapshot)
+     (->UpgradeLockUpdate)
+     (->UpgradeSchemaExtract)
+     (->UpgradeSchemaCompare)
+     (->UpgradeValidate)]))
+
+(defn phase-name [phase UpgradePhase] String
+  (match phase
+    [(UpgradeSnapshot) "schema snapshot"]
+    [(UpgradeLockUpdate) "nix flake update"]
+    [(UpgradeSchemaExtract) "Beagle schema extraction"]
+    [(UpgradeSchemaCompare) "schema comparison"]
+    [(UpgradeValidate) "repository validation"]))
+
+(defn first-upgrade-failure [results (Vec UpgradePhaseResult)] UpgradeFailure
+  (loop [(index Int) 0]
+    (if (>= index (count results))
+      (->UpgradeSucceeded)
+      (let [(result UpgradePhaseResult) (nth results index)]
+        (if (= (upgradephaseresult-status result) 0)
+          (recur (+ index 1))
+          (->UpgradeStopped
+            (upgradephaseresult-phase result)
+            (upgradephaseresult-status result)))))))
+
+(defn render-upgrade-dry-run [] String
+  (str
+    ">> [dry-run] would run: nix flake update --flake <repo>\n"
+    ">> [dry-run] would run: beagle-extract-schema for NixOS"
+    " and configured Darwin schemas\n"
+    "firn upgrade: dry run complete; no files were changed.\n"))
+
+(defn root-path
+  [root String
+   relative String]
+  String
+  (str root "/" relative))
+
+(defn process-phase [process ProcessBoundary] String
+  (match process
+    [(InheritProcess phase argv) phase]
+    [(CaptureProcess phase argv stdin max-output) phase]
+    [(CaptureToFileProcess phase argv stdin max-output output-path) phase]))
+
+(defn process-argv [process ProcessBoundary] (Vec String)
+  (match process
+    [(InheritProcess phase argv) argv]
+    [(CaptureProcess phase argv stdin max-output) argv]
+    [(CaptureToFileProcess phase argv stdin max-output output-path) argv]))
+
+(defn lint-processes
+  [root String
+   tracked (Vec String)]
+  (Vec ProcessBoundary)
+  (let [(targets (Vec String)) (select-lint-targets tracked)]
+    (loop [(index Int) 0
+           (processes (Vec ProcessBoundary)) []]
+      (if (>= index (count targets))
+        processes
+        (let [(target String) (nth targets index)]
+          (recur (+ index 1)
+            (conj processes
+              (->InheritProcess
+                (str "lint " target)
+                ["nix-instantiate" "--parse" (root-path root target)]))))))))
+
+(defn upgrade-processes
+  [root String
+   dry-run Bool]
+  (Vec ProcessBoundary)
+  (if dry-run
+    []
+    [(->CaptureToFileProcess
+       "schema snapshot"
+       ["git" "-C" root "show" "HEAD:.beagle-cache/schema.json"]
+       ""
+       67108864
+       (root-path root ".beagle-cache/schema.before.json"))
+     (->InheritProcess
+       "nix flake update"
+       ["nix" "flake" "update" "--flake" root])
+     (->InheritProcess
+       "Beagle schema extraction"
+       ["beagle-extract-schema" "--repo" root])
+     (->InheritProcess
+       "schema comparison"
+       ["beagle-schema-diff"
+        (root-path root ".beagle-cache/schema.before.json")
+        (root-path root ".beagle-cache/schema.json")])
+     (->InheritProcess
+       "repository validation"
+       ["beagle" "validate" root])]))
+
+(defn watch-processes
+  [root String
+   ownership WatchOwnership]
+  (Vec ProcessBoundary)
+  [(->InheritProcess
+     "watch for repository change"
+     ["timeout"
+      "--foreground"
+      (str (watchownership-timeout-seconds ownership))
+      "inotifywait"
+      "--quiet"
+      "--recursive"
+      "--event"
+      "close_write,create,delete,move"
+      root])
+   (->InheritProcess
+     "validate changed repository"
+     ["beagle" "validate" root])])
+
+(defn repo-workflow-plan
+  [root String
+   action RepoWorkflowAction
+   tracked (Vec String)
+   ownership WatchOwnership]
+  RepoWorkflowPlan
+  (match action
+    [(RepoValidate)
+     (->RepoWorkflowPlan
+       [(->InheritProcess
+          "repository validation"
+          ["beagle" "validate" root])]
+       "")]
+    [(RepoLint)
+     (->RepoWorkflowPlan (lint-processes root tracked)
+       (lint-success-text
+         (count (select-lint-targets tracked))
+         (count (select-lint-targets tracked))))]
+    [(RepoDiff target)
+     (->RepoWorkflowPlan
+       [(->CaptureProcess
+          "repository diff"
+          ["git" "-C" root "diff" "--" target]
+          ""
+          67108864)]
+       "")]
+    [(RepoDoctor)
+     (->RepoWorkflowPlan
+       [(->InheritProcess "Beagle authoring doctor"
+          ["beagle" "doctor" "--deep"])
+        (->InheritProcess "repository validation"
+          ["beagle" "validate" root])]
+       "")]
+    [(RepoWatch)
+     (->RepoWorkflowPlan (watch-processes root ownership) "")]
+    [(RepoArchitecture bundle)
+     (->RepoWorkflowPlan []
+       (render-architecture
+         (->ArchitectureSnapshot
+           root
+           (root-path root "dotfiles/agents")
+           (architecture-rows tracked []))))]
+    [(RepoUpgrade dry-run)
+     (->RepoWorkflowPlan
+       (upgrade-processes root dry-run)
+       (if dry-run (render-upgrade-dry-run) ""))]))
+
+(defn first-process-failure
+  [processes (Vec ProcessBoundary)
+   observations (Vec ProcessObservation)]
+  WorkflowCompletion
+  (loop [(index Int) 0]
+    (if (or (>= index (count processes))
+            (>= index (count observations)))
+      (->WorkflowSucceeded)
+      (let [(observation ProcessObservation) (nth observations index)]
+        (if (= (processobservation-status observation) 0)
+          (recur (+ index 1))
+          (->WorkflowStopped
+            (process-phase (nth processes index))
+            (processobservation-status observation)
+            (processobservation-stdout observation)
+            (processobservation-stderr observation)))))))

@@ -1,8 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(./scripts/firn-build)",
-      "Bash(./scripts/firn-validate)"
+      "Bash(firn repo build)"
     ]
   },
   "hooks": {

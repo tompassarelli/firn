@@ -46,10 +46,6 @@ editing the script there is immediately live for everything that reads the
 directory — no rebuild. `~/.agents/hooks` is a PROJECTION: never author there,
 author in the checkout. Same for `~/.claude`, `~/.codex`, `/etc/codex`.
 
-A Firn-specific guard is the one exception to the script's home: it lives at
-`nixos-config:modules/north-profile/firn/hooks/firn-guard.sh` and is symlinked
-into the hooks directory. Follow the existing file rather than moving it.
-
 ## The script
 
 ### Preamble, in this order

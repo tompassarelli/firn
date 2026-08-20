@@ -1,0 +1,966 @@
+#lang beagle
+(ns firn.schema-transaction
+  (:require [clojure.string :as str]
+            [native.json :as json]))
+
+(defunion SchemaMode
+  (NixosSchema [label String])
+  (DarwinSchema [label String]))
+
+(defn nixos-mode [] SchemaMode
+  (->NixosSchema "nixos"))
+
+(defn darwin-mode [] SchemaMode
+  (->DarwinSchema "darwin"))
+
+(defrecord ToolFile
+  [relative String
+   contents String])
+(defrecord JsonMember
+  [key String
+   value String])
+(defrecord LockRoot
+  [root-id String
+   nodes-start Int])
+
+(defunion CanonicalJsonResult
+  (CanonicalJson [text String])
+  (CanonicalJsonRejected
+    [message String
+     offset Int]))
+
+(defunion JsonFieldResult
+  (JsonFieldFound [start Int])
+  (JsonFieldMissing [field String])
+  (JsonFieldRejected
+    [message String
+     offset Int]))
+
+(defunion NodeResolutionResult
+  (NodeResolved [id String])
+  (NodeResolutionRejected [message String]))
+
+(defunion FingerprintResult
+  (FingerprintReady [value String])
+  (FingerprintRejected [message String]))
+
+(defunion JsonPolicyResult
+  (JsonPolicyValid [kind String])
+  (JsonPolicyRejected
+    [message String
+     offset Int]))
+
+(defrecord NixosCacheSnapshot
+  [schema (U String Nil)
+   home-manager-schema (U String Nil)
+   fingerprint (U String Nil)
+   cached-policy (U String Nil)
+   tracked-policy String])
+
+(defrecord DarwinCacheSnapshot
+  [schema (U String Nil)
+   fingerprint (U String Nil)])
+
+(defunion CacheAssessment
+  (CacheCurrent [fingerprint String])
+  (CacheStale [reason String]))
+
+(defrecord ProcessSpec
+  [label String
+   argv (Vec String)])
+
+(defunion SchemaTransactionAction
+  (ExtractSchema
+    [mode SchemaMode
+     host String])
+  (ValidateSchema [explicit-inputs (Vec String)])
+  (InvalidSchemaTransaction [argv (Vec String)]))
+
+(defn mode-name [mode SchemaMode] String
+  (match mode
+    [(NixosSchema label) label]
+    [(DarwinSchema label) label]))
+
+(defn json-event-offset [event json/JsonEvent] Int
+  (match event
+    [(JsonObjectStart offset) offset]
+    [(JsonObjectEnd offset) offset]
+    [(JsonArrayStart offset) offset]
+    [(JsonArrayEnd offset) offset]
+    [(JsonKey offset value) offset]
+    [(JsonString offset value) offset]
+    [(JsonNumber offset lexeme) offset]
+    [(JsonBoolean offset value) offset]
+    [(JsonNull offset) offset]))
+
+(defn json-value-end
+  [events (Vec json/JsonEvent)
+   start Int]
+  Int
+  (if (or (< start 0) (>= start (count events)))
+    -1
+    (match (nth events start)
+      [(JsonObjectStart offset)
+       (loop [(index Int) (+ start 1)
+              (depth Int) 1]
+         (if (>= index (count events))
+           -1
+           (match (nth events index)
+             [(JsonObjectStart nested-offset)
+              (recur (+ index 1) (+ depth 1))]
+             [(JsonArrayStart nested-offset)
+              (recur (+ index 1) (+ depth 1))]
+             [(JsonObjectEnd end-offset)
+              (if (= depth 1)
+                (+ index 1)
+                (recur (+ index 1) (- depth 1)))]
+             [(JsonArrayEnd end-offset)
+              (recur (+ index 1) (- depth 1))]
+             [(JsonKey scalar-offset value)
+              (recur (+ index 1) depth)]
+             [(JsonString scalar-offset value)
+              (recur (+ index 1) depth)]
+             [(JsonNumber scalar-offset lexeme)
+              (recur (+ index 1) depth)]
+             [(JsonBoolean scalar-offset value)
+              (recur (+ index 1) depth)]
+             [(JsonNull scalar-offset)
+              (recur (+ index 1) depth)])))]
+      [(JsonArrayStart offset)
+       (loop [(index Int) (+ start 1)
+              (depth Int) 1]
+         (if (>= index (count events))
+           -1
+           (match (nth events index)
+             [(JsonObjectStart nested-offset)
+              (recur (+ index 1) (+ depth 1))]
+             [(JsonArrayStart nested-offset)
+              (recur (+ index 1) (+ depth 1))]
+             [(JsonObjectEnd end-offset)
+              (recur (+ index 1) (- depth 1))]
+             [(JsonArrayEnd end-offset)
+              (if (= depth 1)
+                (+ index 1)
+                (recur (+ index 1) (- depth 1)))]
+             [(JsonKey scalar-offset value)
+              (recur (+ index 1) depth)]
+             [(JsonString scalar-offset value)
+              (recur (+ index 1) depth)]
+             [(JsonNumber scalar-offset lexeme)
+              (recur (+ index 1) depth)]
+             [(JsonBoolean scalar-offset value)
+              (recur (+ index 1) depth)]
+             [(JsonNull scalar-offset)
+              (recur (+ index 1) depth)])))]
+      [(JsonObjectEnd offset) -1]
+      [(JsonArrayEnd offset) -1]
+      [(JsonKey offset value) (+ start 1)]
+      [(JsonString offset value) (+ start 1)]
+      [(JsonNumber offset lexeme) (+ start 1)]
+      [(JsonBoolean offset value) (+ start 1)]
+      [(JsonNull offset) (+ start 1)])))
+
+(defn object-field
+  [events (Vec json/JsonEvent)
+   object-start Int
+   wanted String]
+  JsonFieldResult
+  (if (or (< object-start 0)
+          (>= object-start (count events))
+          (not (instance? JsonObjectStart (nth events object-start))))
+    (->JsonFieldRejected "expected a JSON object"
+      (if (and (>= object-start 0) (< object-start (count events)))
+        (json-event-offset (nth events object-start))
+        0))
+    (let [(end Int) (json-value-end events object-start)]
+      (if (< end 0)
+        (->JsonFieldRejected "unterminated JSON object"
+          (json-event-offset (nth events object-start)))
+        (loop [(index Int) (+ object-start 1)
+               (found Int) -1]
+          (if (= index (- end 1))
+            (if (< found 0)
+              (->JsonFieldMissing wanted)
+              (->JsonFieldFound found))
+            (match (nth events index)
+              [(JsonKey offset key)
+               (let [(value-start Int) (+ index 1)
+                     (next Int) (json-value-end events value-start)]
+                 (if (or (< next 0) (> next (- end 1)))
+                   (->JsonFieldRejected "invalid JSON object value" offset)
+                   (recur next (if (= key wanted) value-start found))))]
+              [(JsonObjectStart offset)
+               (->JsonFieldRejected "expected a JSON object key" offset)]
+              [(JsonObjectEnd offset)
+               (->JsonFieldRejected "expected a JSON object key" offset)]
+              [(JsonArrayStart offset)
+               (->JsonFieldRejected "expected a JSON object key" offset)]
+              [(JsonArrayEnd offset)
+               (->JsonFieldRejected "expected a JSON object key" offset)]
+              [(JsonString offset value)
+               (->JsonFieldRejected "expected a JSON object key" offset)]
+              [(JsonNumber offset lexeme)
+               (->JsonFieldRejected "expected a JSON object key" offset)]
+              [(JsonBoolean offset value)
+               (->JsonFieldRejected "expected a JSON object key" offset)]
+              [(JsonNull offset)
+               (->JsonFieldRejected "expected a JSON object key" offset)])))))))
+
+(defn member-index
+  [members (Vec JsonMember)
+   key String]
+  Int
+  (loop [(index Int) 0]
+    (if (>= index (count members))
+      -1
+      (if (= key (jsonmember-key (nth members index)))
+        index
+        (recur (+ index 1))))))
+
+(defn replace-member
+  [members (Vec JsonMember)
+   index Int
+   member JsonMember]
+  (Vec JsonMember)
+  (loop [(cursor Int) 0
+         (result (Vec JsonMember)) []]
+    (if (>= cursor (count members))
+      result
+      (recur (+ cursor 1)
+        (conj result (if (= cursor index) member (nth members cursor)))))))
+
+(defn upsert-member
+  [members (Vec JsonMember)
+   key String
+   value String]
+  (Vec JsonMember)
+  (let [(index Int) (member-index members key)
+        (member JsonMember) (->JsonMember key value)]
+    (if (< index 0)
+      (conj members member)
+      (replace-member members index member))))
+
+(defn member-value
+  [members (Vec JsonMember)
+   key String]
+  String
+  (let [(index Int) (member-index members key)]
+    (if (< index 0) "" (jsonmember-value (nth members index)))))
+
+(defn member-keys [members (Vec JsonMember)] (Vec String)
+  (loop [(index Int) 0
+         (keys (Vec String)) []]
+    (if (>= index (count members))
+      (sort keys)
+      (recur (+ index 1)
+        (conj keys (jsonmember-key (nth members index)))))))
+
+(defn canonical-object
+  [events (Vec json/JsonEvent)
+   start Int]
+  CanonicalJsonResult
+  (let [(end Int) (json-value-end events start)]
+    (if (< end 0)
+      (->CanonicalJsonRejected "unterminated JSON object"
+        (json-event-offset (nth events start)))
+      (loop [(index Int) (+ start 1)
+             (members (Vec JsonMember)) []]
+        (if (= index (- end 1))
+          (let [(keys (Vec String)) (member-keys members)]
+            (->CanonicalJson
+              (str "{"
+                (loop [(key-index Int) 0
+                       (text String) ""]
+                  (if (>= key-index (count keys))
+                    text
+                    (let [(key String) (nth keys key-index)]
+                      (recur (+ key-index 1)
+                        (str text (if (= key-index 0) "" ",")
+                          (json/encode-string key) ":"
+                          (member-value members key))))))
+                "}")))
+          (match (nth events index)
+            [(JsonKey offset key)
+             (let [(value-start Int) (+ index 1)
+                   (next Int) (json-value-end events value-start)]
+               (if (or (< next 0) (> next (- end 1)))
+                 (->CanonicalJsonRejected "invalid JSON object value" offset)
+                 (match (canonical-json-value events value-start)
+                   [(CanonicalJsonRejected message error-offset)
+                    (->CanonicalJsonRejected message error-offset)]
+                   [(CanonicalJson value)
+                    (recur next (upsert-member members key value))])))]
+            [(JsonObjectStart offset)
+             (->CanonicalJsonRejected "expected a JSON object key" offset)]
+            [(JsonObjectEnd offset)
+             (->CanonicalJsonRejected "expected a JSON object key" offset)]
+            [(JsonArrayStart offset)
+             (->CanonicalJsonRejected "expected a JSON object key" offset)]
+            [(JsonArrayEnd offset)
+             (->CanonicalJsonRejected "expected a JSON object key" offset)]
+            [(JsonString offset value)
+             (->CanonicalJsonRejected "expected a JSON object key" offset)]
+            [(JsonNumber offset lexeme)
+             (->CanonicalJsonRejected "expected a JSON object key" offset)]
+            [(JsonBoolean offset value)
+             (->CanonicalJsonRejected "expected a JSON object key" offset)]
+            [(JsonNull offset)
+             (->CanonicalJsonRejected "expected a JSON object key" offset)]))))))
+
+(defn canonical-array
+  [events (Vec json/JsonEvent)
+   start Int]
+  CanonicalJsonResult
+  (let [(end Int) (json-value-end events start)]
+    (if (< end 0)
+      (->CanonicalJsonRejected "unterminated JSON array"
+        (json-event-offset (nth events start)))
+      (loop [(index Int) (+ start 1)
+             (text String) ""
+             (first-value Bool) true]
+        (if (= index (- end 1))
+          (->CanonicalJson (str "[" text "]"))
+          (let [(next Int) (json-value-end events index)]
+            (if (or (< next 0) (> next (- end 1)))
+              (->CanonicalJsonRejected "invalid JSON array value"
+                (json-event-offset (nth events index)))
+              (match (canonical-json-value events index)
+                [(CanonicalJsonRejected message error-offset)
+                 (->CanonicalJsonRejected message error-offset)]
+                [(CanonicalJson value)
+                 (recur next
+                   (str text (if first-value "" ",") value)
+                   false)]))))))))
+
+(defn canonical-json-value
+  [events (Vec json/JsonEvent)
+   start Int]
+  CanonicalJsonResult
+  (if (or (< start 0) (>= start (count events)))
+    (->CanonicalJsonRejected "missing JSON value" 0)
+    (match (nth events start)
+      [(JsonObjectStart offset) (canonical-object events start)]
+      [(JsonArrayStart offset) (canonical-array events start)]
+      [(JsonString offset value)
+       (->CanonicalJson (json/encode-string value))]
+      [(JsonNumber offset lexeme) (->CanonicalJson lexeme)]
+      [(JsonBoolean offset value)
+       (->CanonicalJson (if value "true" "false"))]
+      [(JsonNull offset) (->CanonicalJson "null")]
+      [(JsonObjectEnd offset)
+       (->CanonicalJsonRejected "unexpected JSON object close" offset)]
+      [(JsonArrayEnd offset)
+       (->CanonicalJsonRejected "unexpected JSON array close" offset)]
+      [(JsonKey offset key)
+       (->CanonicalJsonRejected "unexpected JSON key" offset)])))
+
+(defn canonical-json [source String] CanonicalJsonResult
+  (match (json/decode source)
+    [(JsonDecodeError offset message)
+     (->CanonicalJsonRejected message offset)]
+    [(JsonDecoded events)
+     (if (empty? events)
+       (->CanonicalJsonRejected "missing JSON value" 0)
+       (let [(end Int) (json-value-end events 0)]
+         (if (not= end (count events))
+           (->CanonicalJsonRejected "unexpected events after JSON value"
+             (if (and (>= end 0) (< end (count events)))
+               (json-event-offset (nth events end))
+               0))
+           (canonical-json-value events 0))))]))
+
+(defn json-array-nonempty [source String] JsonPolicyResult
+  (match (json/decode source)
+    [(JsonDecodeError offset message) (->JsonPolicyRejected message offset)]
+    [(JsonDecoded events)
+     (if (or (< (count events) 3)
+             (not (instance? JsonArrayStart (first events)))
+             (not= (json-value-end events 0) (count events))
+             (instance? JsonArrayEnd (nth events 1)))
+       (->JsonPolicyRejected "expected a nonempty JSON array" 0)
+       (->JsonPolicyValid "array"))]))
+
+(defn json-object-policy [source String] JsonPolicyResult
+  (match (json/decode source)
+    [(JsonDecodeError offset message) (->JsonPolicyRejected message offset)]
+    [(JsonDecoded events)
+     (if (or (empty? events)
+             (not (instance? JsonObjectStart (first events)))
+             (not= (json-value-end events 0) (count events)))
+       (->JsonPolicyRejected "expected a JSON object" 0)
+       (->JsonPolicyValid "object"))]))
+
+(defn decoded-lock [source String] (U (Vec json/JsonEvent) Nil)
+  (match (json/decode source)
+    [(JsonDecodeError offset message) nil]
+    [(JsonDecoded events)
+     (if (and (not (empty? events))
+              (instance? JsonObjectStart (first events))
+              (= (json-value-end events 0) (count events)))
+       events
+       nil)]))
+
+(defn required-string-field
+  [events (Vec json/JsonEvent)
+   start Int
+   field String]
+  NodeResolutionResult
+  (match (object-field events start field)
+    [(JsonFieldRejected message offset)
+     (->NodeResolutionRejected message)]
+    [(JsonFieldMissing missing-field)
+     (->NodeResolutionRejected (str "missing JSON field " field))]
+    [(JsonFieldFound value-start)
+     (match (nth events value-start)
+       [(JsonString offset value) (->NodeResolved value)]
+       [(JsonObjectStart offset)
+        (->NodeResolutionRejected
+          (str "JSON field " field " must be a string"))]
+       [(JsonObjectEnd offset)
+        (->NodeResolutionRejected
+          (str "JSON field " field " must be a string"))]
+       [(JsonArrayStart offset)
+        (->NodeResolutionRejected
+          (str "JSON field " field " must be a string"))]
+       [(JsonArrayEnd offset)
+        (->NodeResolutionRejected
+          (str "JSON field " field " must be a string"))]
+       [(JsonKey offset value)
+        (->NodeResolutionRejected
+          (str "JSON field " field " must be a string"))]
+       [(JsonNumber offset lexeme)
+        (->NodeResolutionRejected
+          (str "JSON field " field " must be a string"))]
+       [(JsonBoolean offset value)
+        (->NodeResolutionRejected
+          (str "JSON field " field " must be a string"))]
+       [(JsonNull offset)
+        (->NodeResolutionRejected
+          (str "JSON field " field " must be a string"))])]))
+
+(defn required-object-field
+  [events (Vec json/JsonEvent)
+   start Int
+   field String]
+  JsonFieldResult
+  (match (object-field events start field)
+    [(JsonFieldRejected message offset)
+     (->JsonFieldRejected message offset)]
+    [(JsonFieldMissing missing-field) (->JsonFieldMissing field)]
+    [(JsonFieldFound value-start)
+     (if (instance? JsonObjectStart (nth events value-start))
+       (->JsonFieldFound value-start)
+       (->JsonFieldRejected (str "JSON field " field " must be an object")
+         (json-event-offset (nth events value-start))))]))
+
+(defn node-object
+  [events (Vec json/JsonEvent)
+   nodes-start Int
+   node-id String]
+  JsonFieldResult
+  (match (object-field events nodes-start node-id)
+    [(JsonFieldRejected message offset)
+     (->JsonFieldRejected message offset)]
+    [(JsonFieldMissing missing-field) (->JsonFieldMissing node-id)]
+    [(JsonFieldFound start)
+     (if (instance? JsonObjectStart (nth events start))
+       (->JsonFieldFound start)
+       (->JsonFieldRejected (str "lock node " node-id " must be an object")
+         (json-event-offset (nth events start))))]))
+
+(defn node-input-reference
+  [events (Vec json/JsonEvent)
+   nodes-start Int
+   node-id String
+   input-name String]
+  JsonFieldResult
+  (match (node-object events nodes-start node-id)
+    [(JsonFieldRejected message offset)
+     (->JsonFieldRejected message offset)]
+    [(JsonFieldMissing missing-field)
+     (->JsonFieldRejected (str "lock node " node-id " is missing") 0)]
+    [(JsonFieldFound node-start)
+     (match (required-object-field events node-start "inputs")
+       [(JsonFieldRejected message offset)
+        (->JsonFieldRejected message offset)]
+       [(JsonFieldMissing missing-field)
+        (->JsonFieldRejected
+          (str "lock node " node-id " has no inputs") 0)]
+       [(JsonFieldFound inputs-start)
+        (match (object-field events inputs-start input-name)
+          [(JsonFieldRejected message offset)
+           (->JsonFieldRejected message offset)]
+          [(JsonFieldMissing missing-field)
+           (->JsonFieldRejected
+             (str "follows path cannot resolve " input-name) 0)]
+          [(JsonFieldFound reference-start)
+           (->JsonFieldFound reference-start)])])]))
+
+(defn resolve-reference
+  [events (Vec json/JsonEvent)
+   nodes-start Int
+   root-id String
+   reference-start Int
+   depth Int]
+  NodeResolutionResult
+  (if (> depth (count events))
+    (->NodeResolutionRejected "cyclic flake.lock input reference")
+    (match (nth events reference-start)
+      [(JsonString offset node-id)
+       (match (node-object events nodes-start node-id)
+         [(JsonFieldFound start) (->NodeResolved node-id)]
+         [(JsonFieldMissing missing-field)
+          (->NodeResolutionRejected (str "lock node " node-id " is missing"))]
+         [(JsonFieldRejected message error-offset)
+          (->NodeResolutionRejected message)])]
+      [(JsonArrayStart offset)
+       (let [(end Int) (json-value-end events reference-start)]
+         (if (or (< end 0) (= end (+ reference-start 2)))
+           (->NodeResolutionRejected "invalid empty follows path")
+           (loop [(index Int) (+ reference-start 1)
+                  (current String) root-id]
+             (if (= index (- end 1))
+               (->NodeResolved current)
+               (match (nth events index)
+                 [(JsonString item-offset input-name)
+                  (match (node-input-reference
+                           events nodes-start current input-name)
+                    [(JsonFieldRejected message error-offset)
+                     (->NodeResolutionRejected message)]
+                    [(JsonFieldMissing missing-field)
+                     (->NodeResolutionRejected
+                       (str "follows path cannot resolve " input-name))]
+                    [(JsonFieldFound nested-start)
+                     (match (resolve-reference events nodes-start root-id
+                              nested-start (+ depth 1))
+                       [(NodeResolutionRejected message)
+                        (->NodeResolutionRejected message)]
+                       [(NodeResolved resolved)
+                        (recur (+ index 1) resolved)])])]
+                 [(JsonObjectStart item-offset)
+                  (->NodeResolutionRejected
+                    "follows path entries must be strings")]
+                 [(JsonObjectEnd item-offset)
+                  (->NodeResolutionRejected
+                    "follows path entries must be strings")]
+                 [(JsonArrayStart item-offset)
+                  (->NodeResolutionRejected
+                    "follows path entries must be strings")]
+                 [(JsonArrayEnd item-offset)
+                  (->NodeResolutionRejected
+                    "follows path entries must be strings")]
+                 [(JsonKey item-offset value)
+                  (->NodeResolutionRejected
+                    "follows path entries must be strings")]
+                 [(JsonNumber item-offset lexeme)
+                  (->NodeResolutionRejected
+                    "follows path entries must be strings")]
+                 [(JsonBoolean item-offset value)
+                  (->NodeResolutionRejected
+                    "follows path entries must be strings")]
+                 [(JsonNull item-offset)
+                  (->NodeResolutionRejected
+                    "follows path entries must be strings")])))))]
+      [(JsonObjectStart offset)
+       (->NodeResolutionRejected "invalid flake.lock input reference")]
+      [(JsonObjectEnd offset)
+       (->NodeResolutionRejected "invalid flake.lock input reference")]
+      [(JsonArrayEnd offset)
+       (->NodeResolutionRejected "invalid flake.lock input reference")]
+      [(JsonKey offset value)
+       (->NodeResolutionRejected "invalid flake.lock input reference")]
+      [(JsonNumber offset lexeme)
+       (->NodeResolutionRejected "invalid flake.lock input reference")]
+      [(JsonBoolean offset value)
+       (->NodeResolutionRejected "invalid flake.lock input reference")]
+      [(JsonNull offset)
+       (->NodeResolutionRejected "invalid flake.lock input reference")])))
+
+(defn root-and-nodes [events (Vec json/JsonEvent)] (U LockRoot Nil)
+  (match (required-string-field events 0 "root")
+    [(NodeResolutionRejected message) nil]
+    [(NodeResolved root-id)
+     (match (required-object-field events 0 "nodes")
+       [(JsonFieldFound nodes-start) (->LockRoot root-id nodes-start)]
+       [(JsonFieldMissing missing-field) nil]
+       [(JsonFieldRejected message offset) nil])]))
+
+(defn locked-source-json
+  [events (Vec json/JsonEvent)
+   root-id String
+   nodes-start Int
+   input-name String]
+  CanonicalJsonResult
+  (match (node-input-reference events nodes-start root-id input-name)
+    [(JsonFieldRejected message offset)
+     (->CanonicalJsonRejected
+       (str "root input " input-name " is missing: " message) offset)]
+    [(JsonFieldMissing missing-field)
+     (->CanonicalJsonRejected
+       (str "root input " input-name " is missing") 0)]
+    [(JsonFieldFound reference-start)
+     (match (resolve-reference events nodes-start root-id reference-start 0)
+       [(NodeResolutionRejected message)
+        (->CanonicalJsonRejected message 0)]
+       [(NodeResolved node-id)
+        (match (node-object events nodes-start node-id)
+          [(JsonFieldRejected message offset)
+           (->CanonicalJsonRejected message offset)]
+          [(JsonFieldMissing missing-field)
+           (->CanonicalJsonRejected
+             (str "lock node " node-id " is missing") 0)]
+          [(JsonFieldFound node-start)
+           (match (object-field events node-start "locked")
+             [(JsonFieldRejected message offset)
+              (->CanonicalJsonRejected message offset)]
+             [(JsonFieldMissing missing-field)
+              (->CanonicalJsonRejected
+                (str "root input " input-name " has no locked source") 0)]
+             [(JsonFieldFound locked-start)
+              (if (not (instance? JsonObjectStart (nth events locked-start)))
+                (->CanonicalJsonRejected
+                  (str "root input " input-name " has no locked source")
+                  (json-event-offset (nth events locked-start)))
+                (canonical-json-value events locked-start))])])])]))
+
+(defn pow256 [exponent Int] Int
+  (loop [(index Int) 0
+         (value Int) 1]
+    (if (>= index exponent)
+      value
+      (recur (+ index 1) (* value 256)))))
+
+(defn u64-bytes [value Int] (Vec Int)
+  (loop [(exponent Int) 7
+         (result (Vec Int)) []]
+    (if (< exponent 0)
+      result
+      (recur (- exponent 1)
+        (conj result (mod (quot value (pow256 exponent)) 256))))))
+
+(defn append-bytes
+  [left (Vec Int)
+   right (Vec Int)]
+  (Vec Int)
+  (loop [(index Int) 0
+         (result (Vec Int)) left]
+    (if (>= index (count right))
+      result
+      (recur (+ index 1) (conj result (nth right index))))))
+
+(defn tool-file-index
+  [files (Vec ToolFile)
+   relative String]
+  Int
+  (loop [(index Int) 0]
+    (if (>= index (count files))
+      -1
+      (if (= relative (toolfile-relative (nth files index)))
+        index
+        (recur (+ index 1))))))
+
+(defn tool-file-paths [files (Vec ToolFile)] (Vec String)
+  (loop [(index Int) 0
+         (paths (Vec String)) []]
+    (if (>= index (count files))
+      (sort paths)
+      (recur (+ index 1)
+        (conj paths (toolfile-relative (nth files index)))))))
+
+(defn tool-fingerprint [files (Vec ToolFile)] String
+  (let [(paths (Vec String)) (tool-file-paths files)
+        (domain (Vec Int))
+        (append-bytes (utf8-encode "firn-beagle-schema-tools-v1") [0])]
+    (sha256-bytes
+      (loop [(index Int) 0
+             (bytes (Vec Int)) domain]
+        (if (>= index (count paths))
+          bytes
+          (let [(relative String) (nth paths index)
+                (file-index Int) (tool-file-index files relative)
+                (path-bytes (Vec Int)) (utf8-encode relative)
+                (contents-bytes (Vec Int))
+                (utf8-encode
+                  (toolfile-contents (nth files file-index)))]
+            (recur (+ index 1)
+              (append-bytes
+                (append-bytes
+                  (append-bytes
+                    (append-bytes bytes (u64-bytes (count path-bytes)))
+                    path-bytes)
+                  (u64-bytes (count contents-bytes)))
+                contents-bytes))))))))
+
+(defn payload-fingerprint
+  [mode SchemaMode
+   home-manager String
+   nixpkgs String
+   nix-darwin (U String Nil)
+   tool-sha String]
+  String
+  (let [(inputs String)
+        (if (nil? nix-darwin)
+          (str "{\"home-manager\":" home-manager
+            ",\"nixpkgs\":" nixpkgs "}")
+          (str "{\"home-manager\":" home-manager
+            ",\"nix-darwin\":" nix-darwin
+            ",\"nixpkgs\":" nixpkgs "}"))
+        (payload String)
+        (str "{\"beagleToolSha256\":" (json/encode-string tool-sha)
+          ",\"format\":\"firn-schema-inputs-v2\""
+          ",\"inputs\":" inputs
+          ",\"mode\":" (json/encode-string (mode-name mode)) "}")]
+    (sha256-bytes (utf8-encode payload))))
+
+(defn schema-input-fingerprint
+  [lock-source String
+   mode SchemaMode
+   tool-files (Vec ToolFile)]
+  FingerprintResult
+  (let [(events (U (Vec json/JsonEvent) Nil)) (decoded-lock lock-source)]
+    (if (nil? events)
+      (->FingerprintRejected "malformed flake.lock root or nodes")
+      (let [(root-nodes (U LockRoot Nil)) (root-and-nodes events)]
+        (if (nil? root-nodes)
+          (->FingerprintRejected "malformed flake.lock root or nodes")
+          (let [(root-id String) (lockroot-root-id root-nodes)
+                (nodes-start Int) (lockroot-nodes-start root-nodes)]
+            (match (locked-source-json
+                     events root-id nodes-start "home-manager")
+              [(CanonicalJsonRejected message offset)
+               (->FingerprintRejected message)]
+              [(CanonicalJson home-manager)
+               (match (locked-source-json
+                        events root-id nodes-start "nixpkgs")
+                 [(CanonicalJsonRejected message offset)
+                  (->FingerprintRejected message)]
+                 [(CanonicalJson nixpkgs)
+                  (match mode
+                    [(NixosSchema label)
+                     (->FingerprintReady
+                       (payload-fingerprint mode home-manager nixpkgs nil
+                         (tool-fingerprint tool-files)))]
+                    [(DarwinSchema label)
+                     (match (locked-source-json
+                              events root-id nodes-start "nix-darwin")
+                       [(CanonicalJsonRejected message offset)
+                        (->FingerprintRejected message)]
+                       [(CanonicalJson nix-darwin)
+                        (->FingerprintReady
+                          (payload-fingerprint mode home-manager nixpkgs
+                            nix-darwin
+                            (tool-fingerprint tool-files)))])])])])))))))
+
+(defn nixos-cache-assessment
+  [snapshot NixosCacheSnapshot
+   current-fingerprint String]
+  CacheAssessment
+  (let [(schema (U String Nil)) (nixoscachesnapshot-schema snapshot)
+        (hm (U String Nil))
+        (nixoscachesnapshot-home-manager-schema snapshot)
+        (fingerprint (U String Nil))
+        (nixoscachesnapshot-fingerprint snapshot)
+        (cached-policy (U String Nil))
+        (nixoscachesnapshot-cached-policy snapshot)
+        (tracked-policy String)
+        (nixoscachesnapshot-tracked-policy snapshot)]
+    (cond
+      (nil? schema) (->CacheStale "missing .beagle-cache/schema.json")
+      (nil? hm) (->CacheStale "missing .beagle-cache/schema-hm.json")
+      (nil? fingerprint)
+      (->CacheStale "missing .beagle-cache/schema.inputs.sha256")
+      (nil? cached-policy)
+      (->CacheStale "missing .beagle-cache/validate-config.json")
+      (not= tracked-policy cached-policy)
+      (->CacheStale
+        "validator policy differs from tracked config/beagle-validate.json")
+      (not (instance? JsonPolicyValid (json-array-nonempty schema)))
+      (->CacheStale "schema JSON is partial or malformed")
+      (not (instance? JsonPolicyValid (json-array-nonempty hm)))
+      (->CacheStale "schema JSON is partial or malformed")
+      (not (instance? JsonPolicyValid (json-object-policy cached-policy)))
+      (->CacheStale "schema JSON is partial or malformed")
+      (not= (str/trim fingerprint) current-fingerprint)
+      (->CacheStale
+        "schema input fingerprint differs from flake.lock or Beagle tool identity")
+      :else (->CacheCurrent current-fingerprint))))
+
+(defn darwin-cache-assessment
+  [snapshot DarwinCacheSnapshot
+   current-fingerprint String]
+  CacheAssessment
+  (let [(schema (U String Nil)) (darwincachesnapshot-schema snapshot)
+        (fingerprint (U String Nil))
+        (darwincachesnapshot-fingerprint snapshot)]
+    (cond
+      (nil? schema)
+      (->CacheStale "missing .beagle-cache/schema-darwin.json")
+      (nil? fingerprint)
+      (->CacheStale "missing .beagle-cache/schema-darwin.inputs.sha256")
+      (not (instance? JsonPolicyValid (json-array-nonempty schema)))
+      (->CacheStale "Darwin schema JSON is partial or malformed")
+      (not= (str/trim fingerprint) current-fingerprint)
+      (->CacheStale
+        "Darwin schema input fingerprint differs from flake.lock or Beagle tool identity")
+      :else (->CacheCurrent current-fingerprint))))
+
+(defn path
+  [root String
+   relative String]
+  String
+  (str root "/" relative))
+
+(defn extraction-processes
+  [beagle-path String
+   root String
+   mode SchemaMode
+   host String]
+  (Vec ProcessSpec)
+  (let [(extractor String) (path beagle-path "bin/beagle-extract-schema")]
+    (match mode
+      [(NixosSchema label)
+       [(->ProcessSpec "NixOS schema"
+          [extractor "--target"
+           (str "nixosConfigurations." host ".options")
+           "--out" "/dev/stdout" "--flake" root])
+        (->ProcessSpec "Home Manager schema"
+          [extractor "--hm" "--target"
+           (str "nixosConfigurations." host
+             ".options.home-manager.users")
+           "--out" "/dev/stdout" "--flake" root])]]
+      [(DarwinSchema label)
+       [(->ProcessSpec "Darwin schema"
+          [extractor "--target"
+           (str "darwinConfigurations." host ".options")
+           "--out" "/dev/stdout" "--flake" root])]])))
+
+(defn starts-with?
+  [text String
+   prefix String]
+  Bool
+  (str/starts-with? text prefix))
+
+(defn ends-with?
+  [text String
+   suffix String]
+  Bool
+  (str/ends-with? text suffix))
+
+(defn excluded-source-path? [relative String] Bool
+  (or (starts-with? relative "tests/fixtures/")
+      (starts-with? relative "docs/fixtures/")
+      (starts-with? relative "result/")
+      (starts-with? relative ".direnv/")
+      (starts-with? relative ".beagle-cache/")
+      (starts-with? relative ".git/")
+      (str/includes? relative "/tests/fixtures/")
+      (str/includes? relative "/docs/fixtures/")
+      (str/includes? relative "/result/")
+      (str/includes? relative "/.direnv/")
+      (str/includes? relative "/.beagle-cache/")
+      (str/includes? relative "/.git/")))
+
+(defn file-name [path-value String] String
+  (let [(bytes (Vec Int)) (utf8-encode path-value)]
+    (loop [(index Int) (- (count bytes) 1)]
+      (cond
+        (< index 0) path-value
+        (= 47 (nth bytes index)) (subs path-value (+ index 1) (count path-value))
+        :else (recur (- index 1))))))
+
+(defn implicit-bnix-input? [relative String] Bool
+  (and (ends-with? relative ".bnix")
+       (not (excluded-source-path? relative))))
+
+(defn implicit-nix-input? [relative String] Bool
+  (and (ends-with? relative ".nix")
+       (not (excluded-source-path? relative))
+       (not= (file-name relative) "hardware-configuration.nix")))
+
+(defn filter-sorted-bnix [discovered (Vec String)] (Vec String)
+  (loop [(index Int) 0
+         (selected (Vec String)) []]
+    (if (>= index (count discovered))
+      (sort selected)
+      (let [(relative String) (nth discovered index)]
+        (recur (+ index 1)
+          (if (implicit-bnix-input? relative)
+            (conj selected relative)
+            selected))))))
+
+(defn filter-sorted-nix [discovered (Vec String)] (Vec String)
+  (loop [(index Int) 0
+         (selected (Vec String)) []]
+    (if (>= index (count discovered))
+      (sort selected)
+      (let [(relative String) (nth discovered index)]
+        (recur (+ index 1)
+          (if (implicit-nix-input? relative)
+            (conj selected relative)
+            selected))))))
+
+(defn select-bnix-inputs
+  [discovered (Vec String)
+   explicit (Vec String)]
+  (Vec String)
+  (if (empty? explicit) (filter-sorted-bnix discovered) explicit))
+
+(defn validation-needs-darwin? [inputs (Vec String)] Bool
+  (loop [(index Int) 0]
+    (if (>= index (count inputs))
+      false
+      (if (= "flake.bnix" (file-name (nth inputs index)))
+        true
+        (recur (+ index 1))))))
+
+(defn parse-schema-transaction-argv [argv (Vec String)] SchemaTransactionAction
+  (cond
+    (and (>= (count argv) 2)
+         (<= (count argv) 4)
+         (= "schema" (nth argv 0))
+         (= "extract" (nth argv 1)))
+    (cond
+      (= (count argv) 2)
+      (->ExtractSchema (nixos-mode) "whiterabbit")
+      (and (= (count argv) 3) (= "--darwin" (nth argv 2)))
+      (->ExtractSchema (darwin-mode) "ashashi")
+      (= (count argv) 3)
+      (->ExtractSchema (nixos-mode) (nth argv 2))
+      (and (= (count argv) 4) (= "--darwin" (nth argv 2)))
+      (->ExtractSchema (darwin-mode) (nth argv 3))
+      :else (->InvalidSchemaTransaction argv))
+
+    (and (>= (count argv) 2)
+         (= "repo" (nth argv 0))
+         (= "validate" (nth argv 1)))
+    (let [(tail (Vec String))
+          (loop [(index Int) 2
+                 (result (Vec String)) []]
+            (if (>= index (count argv))
+              result
+              (recur (+ index 1) (conj result (nth argv index)))))]
+      (if (and (= (count tail) 1) (= "all" (nth tail 0)))
+        (->ValidateSchema [])
+        (->ValidateSchema tail)))
+
+    :else (->InvalidSchemaTransaction argv)))
+
+(defn render-fingerprint-error [message String] String
+  (str "firn schema: cannot fingerprint flake.lock and Beagle schema tool inputs: "
+    message "\n"))
+
+(defn render-json-error
+  [label String
+   message String
+   offset Int]
+  String
+  (str "firn schema: " label " is not valid JSON at offset " offset
+    ": " message "\n"))
+
+(defn render-process-error
+  [label String
+   status Int
+   stderr String]
+  String
+  (str "firn schema: " label " failed with status " status
+    (if (empty? stderr) "\n" (str ":\n" stderr))))

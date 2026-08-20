@@ -1,0 +1,135 @@
+#lang beagle
+(ns firn.repo-build-test
+  (:require [firn.repo-build :as build]))
+
+(defn assert!
+  [condition Bool
+   message String]
+  Int
+  (if condition
+    0
+    (do
+      (host.stderr/write-text (str "FAIL " message "\n"))
+      1)))
+
+(defn source
+  [relative String
+   source-time Int
+   output-time (U Int Nil)]
+  build/SourceState
+  (build/->SourceState
+    (build/->SourceKey relative source-time)
+    (build/output-relative relative)
+    output-time))
+
+(defn test-path-contract! [] Int
+  (assert!
+    (and
+      (build/source-path? "flake.bnix")
+      (build/source-path? "modules/alpha/default.bnix")
+      (not (build/source-path? "scripts/fixture.bnix"))
+      (not (build/source-path? "tests/fixture.bnix"))
+      (not (build/source-path? "docs/fixtures/example.bnix"))
+      (not (build/source-path? "hosts/alpha/enabled-tags.bnix"))
+      (not (build/source-path? "result-old/module.bnix"))
+      (not (build/source-path? ".direnv/cache/module.bnix"))
+      (build/obsolete-output-path? "hosts/alpha/enabled-tags.nix")
+      (= (build/output-relative "modules/alpha/default.bnix")
+         "modules/alpha/default.nix"))
+    "source inventory path contract"))
+
+(defn test-cache-contract! [] Int
+  (let [(missing build/SourceState) (source "a.bnix" 10 nil)
+        (equal build/SourceState) (source "b.bnix" 10 10)
+        (older build/SourceState) (source "c.bnix" 10 9)
+        (newer build/SourceState) (source "d.bnix" 10 11)
+        (plan build/RepoBuildPlan)
+        (build/build-plan
+          (build/->SourceInventory
+            [missing equal older newer]
+            ["hosts/a/enabled-tags.nix"]))]
+    (assert!
+      (and
+        (not (build/cache-valid? missing))
+        (not (build/cache-valid? equal))
+        (not (build/cache-valid? older))
+        (build/cache-valid? newer)
+        (= (count (build/repobuildplan-stale-sources plan)) 3)
+        (= (build/sourcekey-relative
+             (build/sourcestate-key
+               (nth (build/repobuildplan-stale-sources plan) 0)))
+           "a.bnix")
+        (= (build/sourcekey-relative
+             (build/sourcestate-key
+               (nth (build/repobuildplan-stale-sources plan) 2)))
+           "c.bnix")
+        (= (build/repobuildplan-obsolete-outputs plan)
+           ["hosts/a/enabled-tags.nix"]))
+      "nanosecond cache validity and stable plan")))
+
+(defn test-process-contract! [] Int
+  (let [(state build/SourceState)
+        (source "modules/alpha/default.bnix" 10 nil)
+        (process build/CompilerProcess)
+        (build/compiler-process "/beagle/bin/beagle-build" "/repo"
+          state "/repo/modules/alpha/.default.nix.tmp")]
+    (assert!
+      (and
+        (= (build/compilerprocess-source-relative process)
+           "modules/alpha/default.bnix")
+        (= (build/compilerprocess-destination-relative process)
+           "modules/alpha/default.nix")
+        (= (build/compilerprocess-argv process)
+           ["/beagle/bin/beagle-build"
+            "/repo/modules/alpha/default.bnix"
+            "/repo/modules/alpha/.default.nix.tmp"]))
+      "tokenized compiler process plan")))
+
+(defn test-cleanup-contract! [] Int
+  (let [(generated String)
+        (str
+          "{\n"
+          "  tags = [ desktop terminal ];\n"
+          "  tags-opt-in = [ optional ];\n"
+          "  tag-overrides = {\n"
+          "    desktop = {\n"
+          "      enable = [ alpha ];\n"
+          "    };\n"
+          "  };\n"
+          "  flake-inputs = { inline = { url = \"x\"; }; };\n"
+          "  tags-extra = [ keep ];\n"
+          "  config = { value = \"{keep}\"; };\n"
+          "}\n")
+        (expected String)
+        (str
+          "{\n"
+          "  tags-extra = [ keep ];\n"
+          "  config = { value = \"{keep}\"; };\n"
+          "}\n")]
+    (assert!
+      (= (build/strip-authoring-attributes generated) expected)
+      "authoring attribute cleanup")))
+
+(defn test-command-contract! [] Int
+  (assert!
+    (and
+      (instance? ParsedRepoBuild
+        (build/parse-repo-build-argv ["repo" "build"]))
+      (instance? ParsedRepoBuild
+        (build/parse-repo-build-argv ["repo" "build" "all"]))
+      (instance? InvalidRepoBuildArgv
+        (build/parse-repo-build-argv ["repo" "build" "host"]))
+      (instance? OtherRepoBuildCommand
+        (build/parse-repo-build-argv ["repo" "validate"])))
+    "repo build argv contract"))
+
+(defn -main [] Int
+  (let [(results (Vec Int))
+        [(test-path-contract!)
+         (test-cache-contract!)
+         (test-process-contract!)
+         (test-cleanup-contract!)
+         (test-command-contract!)]]
+    (if (= results [0 0 0 0 0])
+      0
+      1)))

@@ -1,0 +1,274 @@
+#lang beagle
+(ns firn.schema-transaction-test
+  (:require [clojure.string :as str]
+            [firn.schema-transaction :as transaction]))
+
+(defrecord TestResult
+  [name String
+   passed Bool])
+
+(def tool-files (Vec transaction/ToolFile)
+  [(transaction/->ToolFile "bin/beagle-extract-schema" "extract-v1\n")
+   (transaction/->ToolFile "bin/beagle-validate" "validate-v1\n")
+   (transaction/->ToolFile "beagle-lib/schema.rkt" "#lang racket/base\n")])
+
+(def changed-tool-files (Vec transaction/ToolFile)
+  [(transaction/->ToolFile "bin/beagle-extract-schema" "extract-v1\n")
+   (transaction/->ToolFile "bin/beagle-validate" "validate-v1\n")
+   (transaction/->ToolFile "beagle-lib/schema.rkt" "#lang racket/base\n2\n")])
+
+(defn lock-source
+  [nixpkgs-rev String
+   darwin-rev String
+   north-rev String]
+  String
+  (str
+    "{\"nodes\":{"
+    "\"north-node\":{\"locked\":{\"rev\":"
+    "\"" north-rev "\",\"narHash\":\"north\"}},"
+    "\"darwin-node\":{\"locked\":{\"rev\":"
+    "\"" darwin-rev "\",\"narHash\":\"darwin\"}},"
+    "\"hm-node\":{\"locked\":{\"rev\":\"hm-1\","
+    "\"narHash\":\"hm\"}},"
+    "\"nixpkgs-node\":{"
+    "\"inputs\":{\"home-manager\":\"hm-node\"},"
+    "\"locked\":{\"rev\":\"" nixpkgs-rev
+    "\",\"narHash\":\"nixpkgs\"}},"
+    "\"root\":{\"inputs\":{"
+    "\"north\":\"north-node\","
+    "\"nix-darwin\":\"darwin-node\","
+    "\"home-manager\":[\"nixpkgs\",\"home-manager\"],"
+    "\"nixpkgs\":\"nixpkgs-node\"}}},"
+    "\"root\":\"root\"}"))
+
+(defn fingerprint
+  [lock String
+   mode transaction/SchemaMode
+   files (Vec transaction/ToolFile)]
+  String
+  (match (transaction/schema-input-fingerprint lock mode files)
+    [(FingerprintRejected message) ""]
+    [(FingerprintReady value) value]))
+
+(defn case-sha256-and-canonical-json [] Bool
+  (and
+    (= (sha256-bytes (utf8-encode "abc"))
+       "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    (match (transaction/canonical-json
+             "{\"z\":2,\"a\":{\"y\":true,\"x\":null}}")
+      [(CanonicalJsonRejected message offset) false]
+      [(CanonicalJson text)
+       (= text "{\"a\":{\"x\":null,\"y\":true},\"z\":2}")]))
+  )
+
+(defn case-fingerprint-input-authority [] Bool
+  (let [(initial String)
+        (fingerprint (lock-source "nixpkgs-1" "darwin-1" "north-1")
+          (transaction/nixos-mode) tool-files)
+        (irrelevant String)
+        (fingerprint (lock-source "nixpkgs-1" "darwin-1" "north-2")
+          (transaction/nixos-mode) tool-files)
+        (nixpkgs-changed String)
+        (fingerprint (lock-source "nixpkgs-2" "darwin-1" "north-1")
+          (transaction/nixos-mode) tool-files)
+        (darwin-initial String)
+        (fingerprint (lock-source "nixpkgs-1" "darwin-1" "north-1")
+          (transaction/darwin-mode) tool-files)
+        (darwin-changed String)
+        (fingerprint (lock-source "nixpkgs-1" "darwin-2" "north-1")
+          (transaction/darwin-mode) tool-files)]
+    (and (= 64 (count initial))
+         (= initial irrelevant)
+         (not= initial nixpkgs-changed)
+         (not= darwin-initial darwin-changed))))
+
+(defn case-fingerprint-tool-authority [] Bool
+  (let [(lock String) (lock-source "nixpkgs-1" "darwin-1" "north-1")]
+    (not=
+      (fingerprint lock (transaction/nixos-mode) tool-files)
+      (fingerprint lock (transaction/nixos-mode) changed-tool-files))))
+
+(defn case-fingerprint-refusals [] Bool
+  (and
+    (match (transaction/schema-input-fingerprint
+             "{}" (transaction/nixos-mode) tool-files)
+      [(FingerprintRejected message)
+       (= message "malformed flake.lock root or nodes")]
+      [(FingerprintReady value) false])
+    (match (transaction/schema-input-fingerprint
+             (str/replace
+               (lock-source "nixpkgs-1" "darwin-1" "north-1")
+               "\"home-manager\":[\"nixpkgs\",\"home-manager\"],"
+               "")
+             (transaction/nixos-mode) tool-files)
+      [(FingerprintRejected message) true]
+      [(FingerprintReady value) false])))
+
+(defn case-schema-and-policy-validation [] Bool
+  (and
+    (instance? JsonPolicyValid
+      (transaction/json-array-nonempty "[{\"name\":\"x\"}]"))
+    (instance? JsonPolicyRejected
+      (transaction/json-array-nonempty "[]"))
+    (instance? JsonPolicyRejected
+      (transaction/json-array-nonempty "[{"))
+    (instance? JsonPolicyValid
+      (transaction/json-object-policy "{}"))
+    (instance? JsonPolicyRejected
+      (transaction/json-object-policy "[]"))))
+
+(defn current-nixos-cache [] transaction/NixosCacheSnapshot
+  (transaction/->NixosCacheSnapshot
+    "[{\"name\":\"x\"}]"
+    "[{\"name\":\"home.x\"}]"
+    "fingerprint\n"
+    "{\"freeformKeyPrefixes\":[]}\n"
+    "{\"freeformKeyPrefixes\":[]}\n"))
+
+(defn case-cache-authority [] Bool
+  (and
+    (instance? CacheCurrent
+      (transaction/nixos-cache-assessment
+        (current-nixos-cache) "fingerprint"))
+    (match (transaction/nixos-cache-assessment
+             (transaction/->NixosCacheSnapshot
+               "[{\"name\":\"x\"}]" nil "fingerprint\n" "{}" "{}")
+             "fingerprint")
+      [(CacheCurrent fingerprint) false]
+      [(CacheStale reason)
+       (= reason "missing .beagle-cache/schema-hm.json")])
+    (match (transaction/nixos-cache-assessment
+             (transaction/->NixosCacheSnapshot
+               "[{" "[]" "fingerprint\n" "{}" "{}")
+             "fingerprint")
+      [(CacheCurrent fingerprint) false]
+      [(CacheStale reason) (= reason "schema JSON is partial or malformed")])
+    (match (transaction/nixos-cache-assessment
+             (transaction/->NixosCacheSnapshot
+               "[{\"name\":\"x\"}]" "[{\"name\":\"home.x\"}]"
+               "old\n" "{}" "{}")
+             "fingerprint")
+      [(CacheCurrent fingerprint) false]
+      [(CacheStale reason)
+       (= reason
+          (str "schema input fingerprint differs from flake.lock or "
+            "Beagle tool identity"))])))
+
+(defn case-darwin-cache-authority [] Bool
+  (and
+    (instance? CacheCurrent
+      (transaction/darwin-cache-assessment
+        (transaction/->DarwinCacheSnapshot "[1]" "fingerprint\n")
+        "fingerprint"))
+    (match (transaction/darwin-cache-assessment
+             (transaction/->DarwinCacheSnapshot "[]" "fingerprint\n")
+             "fingerprint")
+      [(CacheCurrent fingerprint) false]
+      [(CacheStale reason)
+       (= reason "Darwin schema JSON is partial or malformed")])))
+
+(defn case-extraction-plans [] Bool
+  (let [(nixos (Vec transaction/ProcessSpec))
+        (transaction/extraction-processes
+          "/beagle" "/repo" (transaction/nixos-mode) "rabbit")
+        (darwin (Vec transaction/ProcessSpec))
+        (transaction/extraction-processes
+          "/beagle" "/repo" (transaction/darwin-mode) "mac")]
+    (and
+      (= 2 (count nixos))
+      (= (transaction/processspec-argv (nth nixos 0))
+         ["/beagle/bin/beagle-extract-schema" "--target"
+          "nixosConfigurations.rabbit.options" "--out" "/dev/stdout"
+          "--flake" "/repo"])
+      (= (transaction/processspec-argv (nth nixos 1))
+         ["/beagle/bin/beagle-extract-schema" "--hm" "--target"
+          "nixosConfigurations.rabbit.options.home-manager.users"
+          "--out" "/dev/stdout" "--flake" "/repo"])
+      (= 1 (count darwin))
+      (= (transaction/processspec-argv (nth darwin 0))
+         ["/beagle/bin/beagle-extract-schema" "--target"
+          "darwinConfigurations.mac.options" "--out" "/dev/stdout"
+          "--flake" "/repo"]))))
+
+(defn case-exact-input-selection [] Bool
+  (let [(discovered (Vec String))
+        ["z.bnix" "tests/fixtures/bad.bnix" "flake.bnix"
+         ".direnv/hidden.bnix" "modules/a/default.bnix"
+         "hardware-configuration.nix" "modules/a/default.nix"]]
+    (and
+      (= (transaction/select-bnix-inputs discovered [])
+         ["flake.bnix" "modules/a/default.bnix" "z.bnix"])
+      (= (transaction/select-bnix-inputs discovered ["z.bnix"])
+         ["z.bnix"])
+      (= (transaction/filter-sorted-nix discovered)
+         ["modules/a/default.nix"])
+      (transaction/validation-needs-darwin? ["flake.bnix"])
+      (not (transaction/validation-needs-darwin?
+             ["modules/a/default.bnix"])))))
+
+(defn case-argv-grammar [] Bool
+  (and
+    (match (transaction/parse-schema-transaction-argv
+             ["schema" "extract"])
+      [(ExtractSchema mode host)
+       (and (instance? NixosSchema mode) (= host "whiterabbit"))]
+      [(ValidateSchema inputs) false]
+      [(InvalidSchemaTransaction argv) false])
+    (match (transaction/parse-schema-transaction-argv
+             ["schema" "extract" "--darwin" "mac"])
+      [(ExtractSchema mode host)
+       (and (instance? DarwinSchema mode) (= host "mac"))]
+      [(ValidateSchema inputs) false]
+      [(InvalidSchemaTransaction argv) false])
+    (match (transaction/parse-schema-transaction-argv
+             ["repo" "validate" "a.bnix" "b.bnix"])
+      [(ValidateSchema inputs) (= inputs ["a.bnix" "b.bnix"])]
+      [(ExtractSchema mode host) false]
+      [(InvalidSchemaTransaction argv) false])
+    (match (transaction/parse-schema-transaction-argv
+             ["repo" "validate" "all"])
+      [(ValidateSchema inputs) (empty? inputs)]
+      [(ExtractSchema mode host) false]
+      [(InvalidSchemaTransaction argv) false])
+    (instance? InvalidSchemaTransaction
+      (transaction/parse-schema-transaction-argv ["schema" "extract" "x" "y"]))))
+
+(defn case-native-error-rendering [] Bool
+  (and
+    (= (transaction/render-json-error "schema" "bad token" 7)
+       "firn schema: schema is not valid JSON at offset 7: bad token\n")
+    (= (transaction/render-process-error "NixOS schema" 23 "boom\n")
+       "firn schema: NixOS schema failed with status 23:\nboom\n")))
+
+(defn cases [] (Vec TestResult)
+  [(->TestResult "sha256-and-canonical-json"
+     (case-sha256-and-canonical-json))
+   (->TestResult "fingerprint-input-authority"
+     (case-fingerprint-input-authority))
+   (->TestResult "fingerprint-tool-authority"
+     (case-fingerprint-tool-authority))
+   (->TestResult "fingerprint-refusals" (case-fingerprint-refusals))
+   (->TestResult "schema-and-policy-validation"
+     (case-schema-and-policy-validation))
+   (->TestResult "cache-authority" (case-cache-authority))
+   (->TestResult "darwin-cache-authority" (case-darwin-cache-authority))
+   (->TestResult "extraction-plans" (case-extraction-plans))
+   (->TestResult "exact-input-selection" (case-exact-input-selection))
+   (->TestResult "argv-grammar" (case-argv-grammar))
+   (->TestResult "native-error-rendering" (case-native-error-rendering))])
+
+(defn -main [args (Vec String)] Int
+  (let [(results (Vec TestResult)) (cases)]
+    (loop [(index Int) 0
+           (failures Int) 0]
+      (if (>= index (count results))
+        failures
+        (let [(result TestResult) (nth results index)]
+          (do
+            (println
+              (str (if (testresult-passed result) "PASS " "FAIL ")
+                (testresult-name result)))
+            (recur (+ index 1)
+              (if (testresult-passed result)
+                failures
+                (+ failures 1)))))))))

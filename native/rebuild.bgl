@@ -1,0 +1,259 @@
+#lang beagle
+(ns firn.rebuild)
+
+(defrecord Platform [name String])
+
+(defrecord Snapshot
+  [root String
+   revision String
+   branch String
+   uri String])
+
+(defrecord ArgvEffect
+  [phase String
+   argv (Vec String)
+   capture Bool])
+
+(defrecord TraceEvent
+  [event String
+   name String
+   status String
+   revision String])
+
+(defrecord Simulation
+  [status Int
+   executed (Vec ArgvEffect)
+   events (Vec TraceEvent)])
+
+(defunion PlatformResult
+  (PlatformSelected [platform Platform])
+  (PlatformRejected [name String]))
+
+(defn capture-effect
+  [phase String
+   argv (Vec String)]
+  ArgvEffect
+  (->ArgvEffect phase argv true))
+
+(defn inherit-effect
+  [phase String
+   argv (Vec String)]
+  ArgvEffect
+  (->ArgvEffect phase argv false))
+
+(defn snapshot-uri-for
+  [root String
+   revision String
+   branch String]
+  String
+  (str "git+file://" root "?rev=" revision
+    (if (= branch "") "" (str "&ref=" branch))))
+
+(defn make-snapshot
+  [root String
+   revision String
+   branch String]
+  Snapshot
+  (->Snapshot root revision branch (snapshot-uri-for root revision branch)))
+
+(defn platform-from-name [name String] PlatformResult
+  (cond
+    (= name "Linux") (->PlatformSelected (->Platform "Linux"))
+    (= name "Darwin") (->PlatformSelected (->Platform "Darwin"))
+    :else (->PlatformRejected name)))
+
+(defn linux-platform [] Platform
+  (->Platform "Linux"))
+
+(defn darwin-platform [] Platform
+  (->Platform "Darwin"))
+
+(defn linux? [platform Platform] Bool
+  (= (platform-name platform) "Linux"))
+
+(defn pin-effects [root String] (Vec ArgvEffect)
+  [(capture-effect "pin revision"
+     ["git" "-C" root "rev-parse" "HEAD"])
+   (capture-effect "pin branch"
+     ["git" "-C" root "branch" "--show-current"])
+   (capture-effect "select platform" ["uname" "-s"])])
+
+(defn system-attribute
+  [snapshot Snapshot
+   host String
+   platform Platform]
+  String
+  (str (snapshot-uri snapshot) "#"
+    (if (linux? platform)
+      (str "nixosConfigurations." host ".config.system.build.toplevel")
+      (str "darwinConfigurations." host ".system"))))
+
+(defn prebuild-effects
+  [snapshot Snapshot
+   host String
+   platform Platform
+   snapshot-directory String]
+  (Vec ArgvEffect)
+  [(capture-effect "pin committed snapshot"
+     ["git" "-C" (snapshot-root snapshot) "cat-file" "-e"
+      (str (snapshot-revision snapshot) "^{commit}")])
+   (inherit-effect "activation preflight" ["sudo" "-v"])
+   (capture-effect "materialize committed snapshot"
+     ["git" "-C" (snapshot-root snapshot) "worktree" "add" "--detach"
+      snapshot-directory (snapshot-revision snapshot)])
+   (inherit-effect "validate committed snapshot"
+     ["env" (str "FIRN_REPO=" snapshot-directory)
+      "firn" "repo" "validate"])
+   (capture-effect "retire validation snapshot"
+     ["git" "-C" (snapshot-root snapshot) "worktree" "remove" "--force"
+      snapshot-directory])
+   (capture-effect "build committed snapshot"
+     ["nix" "build" "--no-link" "--print-out-paths"
+      (system-attribute snapshot host platform)])])
+
+(defn activation-effects
+  [snapshot Snapshot
+   host String
+   platform Platform
+   built-path String]
+  (Vec ArgvEffect)
+  (if (linux? platform)
+    [(inherit-effect "activate system profile"
+       ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
+        "--set" built-path])
+     (inherit-effect "activate verified closure"
+       ["sudo" (str built-path "/bin/switch-to-configuration") "switch"])]
+    [(inherit-effect "activate verified closure"
+       ["sudo" "darwin-rebuild" "switch" "--flake"
+        (str (snapshot-uri snapshot) "#" host)])]))
+
+(defn generation-query-effect [platform Platform] ArgvEffect
+  (if (linux? platform)
+    (capture-effect "read active generation"
+      ["nixos-rebuild" "list-generations"])
+    (capture-effect "read active generation"
+      ["darwin-rebuild" "--list-generations"])))
+
+(defn generation-tag-effect
+  [snapshot Snapshot
+   generation String]
+  ArgvEffect
+  (capture-effect "tag active generation"
+    ["git" "-C" (snapshot-root snapshot) "tag" "-f"
+     (str "gen-" generation) (snapshot-revision snapshot)]))
+
+(defn advisory-effect [snapshot Snapshot] ArgvEffect
+  (inherit-effect "schedule agent configuration check"
+    ["systemd-run" "--user" "--no-block" "--collect" "--quiet"
+     "--unit" (str "firn-agent-config-check-"
+                (snapshot-revision snapshot) ".service")
+     "--description" "Firn agent configuration advisory check"
+     "--property=Type=oneshot"
+     (str (snapshot-root snapshot) "/scripts/agent-config-check.sh")
+     "--local"]))
+
+(defn starts-with?
+  [text String
+   prefix String]
+  Bool
+  (and (>= (count text) (count prefix))
+       (= (subs text 0 (count prefix)) prefix)))
+
+(defn store-path? [text String] Bool
+  (starts-with? (str/trim text) "/nix/store/"))
+
+(defn split-lines [text String] (Vec String)
+  (loop [(index Int) 0
+         (start Int) 0
+         (lines (Vec String)) []]
+    (if (>= index (count text))
+      (if (< start (count text))
+        (conj lines (subs text start (count text)))
+        lines)
+      (if (= (subs text index (+ index 1)) "\n")
+        (recur (+ index 1) (+ index 1)
+          (conj lines (subs text start index)))
+        (recur (+ index 1) start lines)))))
+
+(defn whitespace? [character String] Bool
+  (or (= character " ") (= character "\t")))
+
+(defn first-token [line String] String
+  (let [(trimmed String) (str/trim line)]
+    (loop [(index Int) 0]
+      (if (or (>= index (count trimmed))
+              (whitespace? (subs trimmed index (+ index 1))))
+        (subs trimmed 0 index)
+        (recur (+ index 1))))))
+
+(defn decimal-digit? [character String] Bool
+  (and (= (count character) 1)
+       (str/includes? "0123456789" character)))
+
+(defn decimal-string? [text String] Bool
+  (and (> (count text) 0)
+       (loop [(index Int) 0]
+         (if (>= index (count text))
+           true
+           (if (decimal-digit? (subs text index (+ index 1)))
+             (recur (+ index 1))
+             false)))))
+
+(defn current-generation-line? [line String] Bool
+  (or (str/includes? line "True")
+      (str/includes? (str/lower-case line) "current")))
+
+(defn current-generation [text String] (U String Nil)
+  (let [(lines (Vec String)) (split-lines text)]
+    (loop [(index Int) 0]
+      (if (>= index (count lines))
+        nil
+        (let [(line String) (nth lines index)
+              (generation String) (first-token line)]
+          (if (and (current-generation-line? line)
+                   (decimal-string? generation))
+            generation
+            (recur (+ index 1))))))))
+
+(defn start-event
+  [effect ArgvEffect
+   revision String]
+  TraceEvent
+  (->TraceEvent "span_start" (argveffect-phase effect) "started" revision))
+
+(defn end-event
+  [effect ArgvEffect
+   revision String
+   status Int]
+  TraceEvent
+  (->TraceEvent "span_end" (argveffect-phase effect)
+    (if (= status 0) "ok" "error") revision))
+
+(defn simulate
+  [effects (Vec ArgvEffect)
+   statuses (Vec Int)
+   revision String]
+  Simulation
+  (loop [(index Int) 0
+         (executed (Vec ArgvEffect)) []
+         (events (Vec TraceEvent)) []]
+    (if (>= index (count effects))
+      (->Simulation 0 executed events)
+      (if (>= index (count statuses))
+        (->Simulation 70 executed events)
+        (let [(effect ArgvEffect) (nth effects index)
+              (status Int) (nth statuses index)
+              (next-executed (Vec ArgvEffect)) (conj executed effect)
+              (next-events (Vec TraceEvent))
+              (conj (conj events (start-event effect revision))
+                (end-event effect revision status))]
+          (if (= status 0)
+            (recur (+ index 1) next-executed next-events)
+            (->Simulation status next-executed next-events)))))))
+
+(defn effect-phases [effects (Vec ArgvEffect)] (Vec String)
+  (loop [(index Int) 0 (phases (Vec String)) []]
+    (if (>= index (count effects))
+      phases
+      (recur (+ index 1)
+        (conj phases (argveffect-phase (nth effects index)))))))

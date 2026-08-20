@@ -26,7 +26,7 @@ Schema (locked during the bundle→tags audit — 132 enable-wiring hits collaps
 - `:tags-opt-in` — same shape, but the module is **not** enabled by the tag automatically. The host must opt in explicitly with `+<name>` in the tag's edit-flag list. Omit the clause when empty.
 - `:tag-overrides` — optional map of `tag => {option-path value, ...}`. When the resolver activates the module *because of* that tag, the listed value-overrides are applied as `mkDefault`. This replaces the small set of non-`enable` proxies the audit flagged (8 in `browsers` for `<browser>.default`, 1 in `theming` for `stylix.chosenTheme`). Omit when not needed.
 
-Tags live in the `.bnix` source only — `firn-build` strips them out, so the generated `.nix` is unchanged.
+Tags live in the `.bnix` source only — `firn repo build` strips them out, so the generated `.nix` is unchanged.
 
 ### Host-side: `hosts/<host>/enabled-tags.bnix`
 

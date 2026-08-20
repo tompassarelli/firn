@@ -218,7 +218,7 @@
          (>= (views/find-substring (views/commandresult-stderr failed)
                "generation listing failed") 0)
          (= (views/commandresult-stdout extract)
-            ">> firn-extract-schema host-a\nmade\n")
+            ">> firn schema extract host-a\nmade\n")
          (= (views/commandresult-stderr extract) "note\n"))))
 
 (defn action-kind [(action views/ViewsAction)] String

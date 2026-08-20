@@ -1,0 +1,751 @@
+#lang beagle
+(ns firn.schema-transaction-native
+  (:require [clojure.string :as str]
+            [firn.schema-transaction :as transaction]))
+
+(def max-text-bytes Int 134217728)
+(def max-process-output Int 134217728)
+(def max-directory-entries Int 65536)
+
+(defunion TextLoadResult
+  (TextLoaded [text String])
+  (TextMissing [relative String])
+  (TextLoadRejected [message String]))
+
+(defunion PathsLoadResult
+  (PathsLoaded [paths (Vec String)])
+  (PathsLoadRejected [message String]))
+
+(defunion ToolFilesLoadResult
+  (ToolFilesLoaded [files (Vec transaction/ToolFile)])
+  (ToolFilesLoadRejected [message String]))
+
+(defunion CurrentFingerprintResult
+  (CurrentFingerprint [value String])
+  (CurrentFingerprintRejected [message String]))
+
+(defunion ProcessOutputResult
+  (ProcessOutput [text String])
+  (ProcessOutputRejected [message String]))
+
+(defunion ExtractionOutputsResult
+  (ExtractionOutputs
+    [schema String
+     home-manager-schema (U String Nil)])
+  (ExtractionOutputsRejected [message String]))
+
+(defunion OperationResult
+  (OperationOk [operation String])
+  (OperationRejected [message String]))
+
+(defunion NixosCacheLoadResult
+  (NixosCacheLoaded [snapshot transaction/NixosCacheSnapshot])
+  (NixosCacheLoadRejected [message String]))
+
+(defunion DarwinCacheLoadResult
+  (DarwinCacheLoaded [snapshot transaction/DarwinCacheSnapshot])
+  (DarwinCacheLoadRejected [message String]))
+
+(defn path
+  [root String
+   relative String]
+  String
+  (if (empty? relative) root (str root "/" relative)))
+
+(defn errno-message
+  [operation String
+   relative String
+   errno Int]
+  String
+  (str "firn schema: " operation " '" relative "': errno " errno "\n"))
+
+(defn read-text
+  [root String
+   relative String]
+  TextLoadResult
+  (match (host.fs/read-text-bounded (path root relative) max-text-bytes)
+    [(host.fs/ReadTextBoundedOk text) (->TextLoaded text)]
+    [(host.fs/ReadTextBoundedError errno)
+     (if (= errno 2)
+       (->TextMissing relative)
+       (->TextLoadRejected (errno-message "cannot read" relative errno)))]))
+
+(defn read-required-text
+  [root String
+   relative String]
+  TextLoadResult
+  (match (read-text root relative)
+    [(TextLoaded text) (->TextLoaded text)]
+    [(TextLoadRejected message) (->TextLoadRejected message)]
+    [(TextMissing missing-relative)
+     (->TextLoadRejected
+       (str "firn schema: required file is missing: " relative "\n"))]))
+
+(defn append-paths
+  [left (Vec String)
+   right (Vec String)]
+  (Vec String)
+  (loop [(index Int) 0
+         (result (Vec String)) left]
+    (if (>= index (count right))
+      result
+      (recur (+ index 1) (conj result (nth right index))))))
+
+(defn repo-directory-excluded? [relative String] Bool
+  (let [(name String) (transaction/file-name relative)]
+    (or (= name ".git")
+        (= name ".direnv")
+        (= name ".beagle-cache")
+        (= name "result"))))
+
+(defn tool-directory-excluded? [relative String] Bool
+  (= "compiled" (transaction/file-name relative)))
+
+(defn walk-files
+  [root String
+   relative String
+   tool-tree Bool]
+  PathsLoadResult
+  (match (host.fs/list-directory-bounded
+           (path root relative) max-directory-entries)
+    [(host.fs/ListDirectoryBoundedError errno)
+     (if (or (= errno 2) (= errno 20))
+       (->PathsLoaded [])
+       (->PathsLoadRejected
+         (errno-message "cannot list" relative errno)))]
+    [(host.fs/ListDirectoryBoundedOk entries)
+     (loop [(index Int) 0
+            (result (Vec String)) []]
+       (if (>= index (count entries))
+         (->PathsLoaded result)
+         (let [(name String) (nth entries index)
+               (child String)
+               (if (empty? relative) name (str relative "/" name))]
+           (match (host.fs/path-kind (path root child))
+             [(host.fs/PathKindError errno)
+              (if (= errno 2)
+                (recur (+ index 1) result)
+                (->PathsLoadRejected
+                  (errno-message "cannot inspect" child errno)))]
+             [(host.fs/PathKindOk kind)
+              (cond
+                (= kind 2)
+                (if (if tool-tree
+                      (tool-directory-excluded? child)
+                      (repo-directory-excluded? child))
+                  (recur (+ index 1) result)
+                  (match (walk-files root child tool-tree)
+                    [(PathsLoadRejected message)
+                     (->PathsLoadRejected message)]
+                    [(PathsLoaded nested)
+                     (recur (+ index 1) (append-paths result nested))]))
+
+                (or (= kind 1) (= kind 3))
+                (recur (+ index 1) (conj result child))
+
+                :else (recur (+ index 1) result))]))))]))
+
+(defn tool-source-file? [relative String] Bool
+  (and (not (tool-directory-excluded? relative))
+       (or (transaction/ends-with? relative ".rkt")
+           (transaction/ends-with? relative ".scrbl"))))
+
+(defn read-tool-paths
+  [beagle-path String
+   paths (Vec String)
+   index Int
+   files (Vec transaction/ToolFile)]
+  ToolFilesLoadResult
+  (if (>= index (count paths))
+    (->ToolFilesLoaded files)
+    (let [(relative String) (nth paths index)]
+      (match (read-required-text beagle-path relative)
+        [(TextLoadRejected message) (->ToolFilesLoadRejected message)]
+        [(TextMissing missing-relative)
+         (->ToolFilesLoadRejected
+           (str "firn schema: required Beagle tool input is missing: "
+             relative "\n"))]
+        [(TextLoaded contents)
+         (read-tool-paths beagle-path paths (+ index 1)
+           (conj files (transaction/->ToolFile relative contents)))]))))
+
+(defn optional-tool-root-paths [beagle-path String] PathsLoadResult
+  (let [(roots (Vec String))
+        ["bin/_beagle-racket" "flake.nix" "flake.lock"]]
+    (loop [(index Int) 0
+           (selected (Vec String)) []]
+      (if (>= index (count roots))
+        (->PathsLoaded selected)
+        (let [(relative String) (nth roots index)]
+          (match (host.fs/path-kind (path beagle-path relative))
+            [(host.fs/PathKindError errno)
+             (if (= errno 2)
+               (recur (+ index 1) selected)
+               (->PathsLoadRejected
+                 (errno-message "cannot inspect" relative errno)))]
+            [(host.fs/PathKindOk kind)
+             (recur (+ index 1)
+               (if (or (= kind 1) (= kind 3))
+                 (conj selected relative)
+                 selected))]))))))
+
+(defn tool-tree-paths
+  [beagle-path String
+   directory String]
+  PathsLoadResult
+  (match (host.fs/path-kind (path beagle-path directory))
+    [(host.fs/PathKindError errno)
+     (if (= errno 2)
+       (->PathsLoaded [])
+       (->PathsLoadRejected
+         (errno-message "cannot inspect" directory errno)))]
+    [(host.fs/PathKindOk kind)
+     (if (= kind 2)
+       (match (walk-files beagle-path directory true)
+         [(PathsLoadRejected message) (->PathsLoadRejected message)]
+         [(PathsLoaded paths)
+          (loop [(index Int) 0
+                 (selected (Vec String)) []]
+            (if (>= index (count paths))
+              (->PathsLoaded selected)
+              (let [(relative String) (nth paths index)]
+                (recur (+ index 1)
+                  (if (tool-source-file? relative)
+                    (conj selected relative)
+                    selected)))))])
+       (->PathsLoaded []))]))
+
+(defn load-tool-files [beagle-path String] ToolFilesLoadResult
+  (let [(required (Vec String))
+        ["bin/beagle-extract-schema" "bin/beagle-validate"]]
+    (match (optional-tool-root-paths beagle-path)
+      [(PathsLoadRejected message) (->ToolFilesLoadRejected message)]
+      [(PathsLoaded optional)
+       (match (tool-tree-paths beagle-path "beagle")
+         [(PathsLoadRejected message) (->ToolFilesLoadRejected message)]
+         [(PathsLoaded beagle-files)
+          (match (tool-tree-paths beagle-path "beagle-lib")
+            [(PathsLoadRejected message) (->ToolFilesLoadRejected message)]
+            [(PathsLoaded library-files)
+             (read-tool-paths beagle-path
+               (sort
+                 (append-paths
+                   (append-paths
+                     (append-paths required optional)
+                     beagle-files)
+                   library-files))
+               0 [])])])])))
+
+(defn current-fingerprint
+  [root String
+   beagle-path String
+   mode transaction/SchemaMode]
+  CurrentFingerprintResult
+  (match (read-required-text root "flake.lock")
+    [(TextLoadRejected message) (->CurrentFingerprintRejected message)]
+    [(TextMissing missing-relative)
+     (->CurrentFingerprintRejected "flake.lock is missing")]
+    [(TextLoaded lock-source)
+     (match (load-tool-files beagle-path)
+       [(ToolFilesLoadRejected message)
+        (->CurrentFingerprintRejected message)]
+       [(ToolFilesLoaded files)
+        (match (transaction/schema-input-fingerprint
+                 lock-source mode files)
+          [(FingerprintRejected message)
+           (->CurrentFingerprintRejected
+             (transaction/render-fingerprint-error message))]
+          [(FingerprintReady value) (->CurrentFingerprint value)])])]))
+
+(defn run-process-spec [spec transaction/ProcessSpec] ProcessOutputResult
+  (match (host.process/run-capture
+           (transaction/processspec-argv spec) "" max-process-output)
+    [(host.process/CaptureError errno)
+     (->ProcessOutputRejected
+       (str "firn schema: cannot run "
+         (transaction/processspec-label spec) ": errno " errno "\n"))]
+    [(host.process/CaptureOk status stdout stderr)
+     (if (= status 0)
+       (->ProcessOutput stdout)
+       (->ProcessOutputRejected
+         (transaction/render-process-error
+           (transaction/processspec-label spec) status stderr)))]))
+
+(defn run-extraction-processes [specs (Vec transaction/ProcessSpec)] ExtractionOutputsResult
+  (if (empty? specs)
+    (->ExtractionOutputsRejected
+      "firn schema: extraction plan is empty\n")
+    (match (run-process-spec (nth specs 0))
+      [(ProcessOutputRejected message)
+       (->ExtractionOutputsRejected message)]
+      [(ProcessOutput schema)
+       (if (= (count specs) 1)
+         (->ExtractionOutputs schema nil)
+         (match (run-process-spec (nth specs 1))
+           [(ProcessOutputRejected message)
+            (->ExtractionOutputsRejected message)]
+           [(ProcessOutput hm) (->ExtractionOutputs schema hm)]))])))
+
+(defn validate-extraction-outputs
+  [mode transaction/SchemaMode
+   outputs ExtractionOutputsResult
+   policy String]
+  OperationResult
+  (match outputs
+    [(ExtractionOutputsRejected message) (->OperationRejected message)]
+    [(ExtractionOutputs schema hm)
+     (match (transaction/json-array-nonempty schema)
+       [(JsonPolicyRejected message offset)
+        (->OperationRejected
+          (transaction/render-json-error "schema" message offset))]
+       [(JsonPolicyValid kind)
+        (match mode
+          [(NixosSchema label)
+           (if (nil? hm)
+             (->OperationRejected
+               "firn schema: Home Manager extraction produced no output\n")
+             (match (transaction/json-array-nonempty (or hm ""))
+               [(JsonPolicyRejected message offset)
+                (->OperationRejected
+                  (transaction/render-json-error
+                    "Home Manager schema" message offset))]
+               [(JsonPolicyValid hm-kind)
+                (match (transaction/json-object-policy policy)
+                  [(JsonPolicyRejected message offset)
+                   (->OperationRejected
+                     (transaction/render-json-error
+                       "validator policy" message offset))]
+                  [(JsonPolicyValid policy-kind)
+                   (->OperationOk "validated NixOS extraction")])]))]
+          [(DarwinSchema label)
+           (match (transaction/json-object-policy policy)
+             [(JsonPolicyRejected message offset)
+              (->OperationRejected
+                (transaction/render-json-error
+                  "validator policy" message offset))]
+             [(JsonPolicyValid policy-kind)
+              (->OperationOk "validated Darwin extraction")])])])]))
+
+(defn ensure-cache-directory [root String] OperationResult
+  (match (host.fs/make-parent-directories
+           (path root ".beagle-cache/schema.json"))
+    [(host.fs/MakeParentDirectoriesOk)
+     (->OperationOk "created schema cache directory")]
+    [(host.fs/MakeParentDirectoriesError errno)
+     (->OperationRejected
+       (errno-message "cannot create parent for"
+         ".beagle-cache/schema.json" errno))]))
+
+(defn write-atomic
+  [root String
+   relative String
+   contents String]
+  OperationResult
+  (match (host.fs/write-text-atomic (path root relative) contents)
+    [(host.fs/WriteTextAtomicOk)
+     (->OperationOk (str "published " relative))]
+    [(host.fs/WriteTextAtomicError errno)
+     (->OperationRejected (errno-message "cannot publish" relative errno))]))
+
+(defn publish-nixos
+  [root String
+   schema String
+   hm String
+   policy String
+   fingerprint String]
+  OperationResult
+  (match (ensure-cache-directory root)
+    [(OperationRejected message) (->OperationRejected message)]
+    [(OperationOk operation)
+     (match (write-atomic root ".beagle-cache/schema.json" schema)
+       [(OperationRejected message) (->OperationRejected message)]
+       [(OperationOk operation)
+        (match (write-atomic root ".beagle-cache/schema-hm.json" hm)
+          [(OperationRejected message) (->OperationRejected message)]
+          [(OperationOk operation)
+           (match (write-atomic root ".beagle-cache/validate-config.json" policy)
+             [(OperationRejected message) (->OperationRejected message)]
+             [(OperationOk operation)
+              (write-atomic root ".beagle-cache/schema.inputs.sha256"
+                (str fingerprint "\n"))])])])]))
+
+(defn publish-darwin
+  [root String
+   schema String
+   policy String
+   fingerprint String]
+  OperationResult
+  (match (ensure-cache-directory root)
+    [(OperationRejected message) (->OperationRejected message)]
+    [(OperationOk operation)
+     (match (write-atomic root ".beagle-cache/schema-darwin.json" schema)
+       [(OperationRejected message) (->OperationRejected message)]
+       [(OperationOk operation)
+        (match (write-atomic root ".beagle-cache/validate-config.json" policy)
+          [(OperationRejected message) (->OperationRejected message)]
+          [(OperationOk operation)
+           (write-atomic root ".beagle-cache/schema-darwin.inputs.sha256"
+             (str fingerprint "\n"))])])]))
+
+(defn validator-policy-relative [] String
+  (let [(configured (U String Nil)) (System/getenv "FIRN_SCHEMA_CONFIG")]
+    (if (nil? configured) "config/beagle-validate.json" configured)))
+
+(defn read-validator-policy [root String] TextLoadResult
+  (let [(configured String) (validator-policy-relative)]
+    (if (transaction/starts-with? configured "/")
+      (match (host.fs/read-text-bounded configured max-text-bytes)
+        [(host.fs/ReadTextBoundedOk text) (->TextLoaded text)]
+        [(host.fs/ReadTextBoundedError errno)
+         (->TextLoadRejected
+           (str "firn schema: cannot read validator policy '"
+             configured "': errno " errno "\n"))])
+      (read-required-text root configured))))
+
+(defn extract-and-publish
+  [root String
+   beagle-path String
+   mode transaction/SchemaMode
+   host String]
+  OperationResult
+  (match (current-fingerprint root beagle-path mode)
+    [(CurrentFingerprintRejected message) (->OperationRejected message)]
+    [(CurrentFingerprint before)
+     (match (read-validator-policy root)
+       [(TextLoadRejected message) (->OperationRejected message)]
+       [(TextMissing missing-relative)
+        (->OperationRejected
+          "firn schema: tracked validator policy is missing\n")]
+       [(TextLoaded policy)
+        (let [(outputs ExtractionOutputsResult)
+              (run-extraction-processes
+                (transaction/extraction-processes
+                  beagle-path root mode host))]
+          (match (validate-extraction-outputs mode outputs policy)
+            [(OperationRejected message) (->OperationRejected message)]
+            [(OperationOk operation)
+             (match (current-fingerprint root beagle-path mode)
+               [(CurrentFingerprintRejected message)
+                (->OperationRejected message)]
+               [(CurrentFingerprint after)
+                (if (not= before after)
+                  (->OperationRejected
+                    (str "firn schema: flake.lock or Beagle tool changed "
+                      "during extraction; refusing a mismatched fingerprint\n"))
+                  (match outputs
+                    [(ExtractionOutputsRejected message)
+                     (->OperationRejected message)]
+                    [(ExtractionOutputs schema hm)
+                     (match mode
+                       [(NixosSchema label)
+                        (if (nil? hm)
+                          (->OperationRejected
+                            "firn schema: Home Manager schema is missing\n")
+                          (publish-nixos root schema (or hm "") policy after))]
+                       [(DarwinSchema label)
+                        (publish-darwin root schema policy after)])]))])]))])]))
+
+(defn load-nixos-cache [root String] NixosCacheLoadResult
+  (match (read-validator-policy root)
+    [(TextLoadRejected message) (->NixosCacheLoadRejected message)]
+    [(TextMissing missing-relative)
+     (->NixosCacheLoadRejected
+       "firn schema: tracked validator policy is missing\n")]
+    [(TextLoaded policy)
+     (match (read-text root ".beagle-cache/schema.json")
+       [(TextLoadRejected message) (->NixosCacheLoadRejected message)]
+       [(TextMissing missing-relative)
+        (->NixosCacheLoaded
+          (transaction/->NixosCacheSnapshot nil nil nil nil policy))]
+       [(TextLoaded schema)
+        (match (read-text root ".beagle-cache/schema-hm.json")
+          [(TextLoadRejected message) (->NixosCacheLoadRejected message)]
+          [(TextMissing missing-relative)
+           (->NixosCacheLoaded
+             (transaction/->NixosCacheSnapshot
+               schema nil nil nil policy))]
+          [(TextLoaded hm)
+           (match (read-text root ".beagle-cache/schema.inputs.sha256")
+             [(TextLoadRejected message) (->NixosCacheLoadRejected message)]
+             [(TextMissing missing-relative)
+              (->NixosCacheLoaded
+                (transaction/->NixosCacheSnapshot
+                  schema hm nil nil policy))]
+             [(TextLoaded fingerprint)
+              (match (read-text root ".beagle-cache/validate-config.json")
+                [(TextLoadRejected message)
+                 (->NixosCacheLoadRejected message)]
+                [(TextMissing missing-relative)
+                 (->NixosCacheLoaded
+                   (transaction/->NixosCacheSnapshot
+                     schema hm fingerprint nil policy))]
+                [(TextLoaded cached-policy)
+                 (->NixosCacheLoaded
+                   (transaction/->NixosCacheSnapshot
+                     schema hm fingerprint cached-policy policy))])])])])]))
+
+(defn load-darwin-cache [root String] DarwinCacheLoadResult
+  (match (read-text root ".beagle-cache/schema-darwin.json")
+    [(TextLoadRejected message) (->DarwinCacheLoadRejected message)]
+    [(TextMissing missing-relative)
+     (->DarwinCacheLoaded
+       (transaction/->DarwinCacheSnapshot nil nil))]
+    [(TextLoaded schema)
+     (match (read-text root ".beagle-cache/schema-darwin.inputs.sha256")
+       [(TextLoadRejected message) (->DarwinCacheLoadRejected message)]
+       [(TextMissing missing-relative)
+        (->DarwinCacheLoaded
+          (transaction/->DarwinCacheSnapshot schema nil))]
+       [(TextLoaded fingerprint)
+        (->DarwinCacheLoaded
+          (transaction/->DarwinCacheSnapshot schema fingerprint))])]))
+
+(defn ensure-nixos-cache
+  [root String
+   beagle-path String]
+  OperationResult
+  (match (current-fingerprint root beagle-path (transaction/nixos-mode))
+    [(CurrentFingerprintRejected message) (->OperationRejected message)]
+    [(CurrentFingerprint current)
+     (match (load-nixos-cache root)
+       [(NixosCacheLoadRejected message) (->OperationRejected message)]
+       [(NixosCacheLoaded snapshot)
+        (match (transaction/nixos-cache-assessment snapshot current)
+          [(CacheCurrent fingerprint)
+           (->OperationOk "NixOS schema cache is current")]
+          [(CacheStale reason)
+           (do
+             (host.stderr/write-text
+               (str "firn repo validate: refreshing schema cache (" reason ")...\n"))
+             (match (extract-and-publish root beagle-path
+                      (transaction/nixos-mode) "whiterabbit")
+               [(OperationRejected message) (->OperationRejected message)]
+               [(OperationOk operation)
+                (match (current-fingerprint root beagle-path
+                         (transaction/nixos-mode))
+                  [(CurrentFingerprintRejected message)
+                   (->OperationRejected message)]
+                  [(CurrentFingerprint refreshed)
+                   (match (load-nixos-cache root)
+                     [(NixosCacheLoadRejected message)
+                      (->OperationRejected message)]
+                     [(NixosCacheLoaded refreshed-snapshot)
+                      (match (transaction/nixos-cache-assessment
+                               refreshed-snapshot refreshed)
+                        [(CacheCurrent fingerprint)
+                         (->OperationOk "refreshed NixOS schema cache")]
+                        [(CacheStale refreshed-reason)
+                         (->OperationRejected
+                           (str "firn repo validate: refreshed schema cache is "
+                             "not valid: " refreshed-reason "\n"))])])])]))])])]))
+
+(defn ensure-darwin-cache
+  [root String
+   beagle-path String]
+  OperationResult
+  (match (current-fingerprint root beagle-path (transaction/darwin-mode))
+    [(CurrentFingerprintRejected message) (->OperationRejected message)]
+    [(CurrentFingerprint current)
+     (match (load-darwin-cache root)
+       [(DarwinCacheLoadRejected message) (->OperationRejected message)]
+       [(DarwinCacheLoaded snapshot)
+        (match (transaction/darwin-cache-assessment snapshot current)
+          [(CacheCurrent fingerprint)
+           (->OperationOk "Darwin schema cache is current")]
+          [(CacheStale reason)
+           (do
+             (host.stderr/write-text
+               (str "firn repo validate: refreshing Darwin schema cache ("
+                 reason ")...\n"))
+             (match (extract-and-publish root beagle-path
+                      (transaction/darwin-mode) "ashashi")
+               [(OperationRejected message) (->OperationRejected message)]
+               [(OperationOk operation)
+                (match (current-fingerprint root beagle-path
+                         (transaction/darwin-mode))
+                  [(CurrentFingerprintRejected message)
+                   (->OperationRejected message)]
+                  [(CurrentFingerprint refreshed)
+                   (match (load-darwin-cache root)
+                     [(DarwinCacheLoadRejected message)
+                      (->OperationRejected message)]
+                     [(DarwinCacheLoaded refreshed-snapshot)
+                      (match (transaction/darwin-cache-assessment
+                               refreshed-snapshot refreshed)
+                        [(CacheCurrent fingerprint)
+                         (->OperationOk "refreshed Darwin schema cache")]
+                        [(CacheStale refreshed-reason)
+                         (->OperationRejected
+                           (str "firn repo validate: refreshed Darwin schema "
+                             "cache is not valid: " refreshed-reason
+                             "\n"))])])])]))])])]))
+
+(defn absolute-path? [value String] Bool
+  (transaction/starts-with? value "/"))
+
+(defn absolute-input
+  [root String
+   value String]
+  String
+  (if (absolute-path? value) value (path root value)))
+
+(defn absolute-inputs
+  [root String
+   inputs (Vec String)]
+  (Vec String)
+  (loop [(index Int) 0
+         (result (Vec String)) []]
+    (if (>= index (count inputs))
+      result
+      (recur (+ index 1)
+        (conj result (absolute-input root (nth inputs index)))))))
+
+(defn lint-nix-files
+  [root String
+   files (Vec String)
+   index Int]
+  OperationResult
+  (if (>= index (count files))
+    (->OperationOk "Nix syntax is clean")
+    (let [(relative String) (nth files index)
+          (absolute String) (absolute-input root relative)]
+      (match (host.process/run-capture
+               ["nix-instantiate" "--parse-only" absolute]
+               "" max-process-output)
+        [(host.process/CaptureError errno)
+         (->OperationRejected
+           (str "firn repo validate: cannot run nix-instantiate: errno "
+             errno "\n"))]
+        [(host.process/CaptureOk status stdout stderr)
+         (if (= status 0)
+           (lint-nix-files root files (+ index 1))
+           (->OperationRejected
+             (str "SYNTAX ERROR: " absolute "\n" stderr
+               (if (str/ends-with? stderr "\n") "" "\n"))))]))))
+
+(defn run-validator
+  [root String
+   beagle-path String
+   inputs (Vec String)]
+  Int
+  (let [(argv (Vec String))
+        (loop [(index Int) 0
+               (result (Vec String))
+               [(path beagle-path "bin/beagle-validate")]]
+          (if (>= index (count inputs))
+            result
+            (recur (+ index 1)
+              (conj result (absolute-input root (nth inputs index))))))]
+    (match (host.process/run-capture argv "" max-process-output)
+      [(host.process/CaptureError errno)
+       (do
+         (host.stderr/write-text
+           (str "firn repo validate: cannot run beagle-validate: errno "
+             errno "\n"))
+         1)]
+      [(host.process/CaptureOk status stdout stderr)
+       (do
+         (if (empty? stdout) nil (print stdout))
+         (if (empty? stderr) nil (host.stderr/write-text stderr))
+         status)])))
+
+(defn run-validation
+  [root String
+   beagle-path String
+   explicit (Vec String)]
+  Int
+  (match (walk-files root "" false)
+    [(PathsLoadRejected message)
+     (do (host.stderr/write-text message) 1)]
+    [(PathsLoaded discovered)
+     (let [(bnix-inputs (Vec String))
+           (transaction/select-bnix-inputs discovered explicit)
+           (nix-inputs (Vec String))
+           (transaction/filter-sorted-nix discovered)]
+       (do
+         (host.stderr/write-text
+           "firn repo validate: [1/2] syntax-checking generated .nix files...\n")
+         (match (lint-nix-files root nix-inputs 0)
+           [(OperationRejected message)
+            (do (host.stderr/write-text message) 1)]
+           [(OperationOk operation)
+            (do
+              (host.stderr/write-text
+                "firn repo validate: [2/2] schema-validating .bnix sources...\n")
+              (if (empty? bnix-inputs)
+                (do
+                  (host.stderr/write-text
+                    "beagle-validate: no .bnix files found\n")
+                  2)
+                (match (ensure-nixos-cache root beagle-path)
+                  [(OperationRejected message)
+                   (do (host.stderr/write-text message) 1)]
+                  [(OperationOk operation)
+                   (if (transaction/validation-needs-darwin? bnix-inputs)
+                     (match (ensure-darwin-cache root beagle-path)
+                       [(OperationRejected message)
+                        (do (host.stderr/write-text message) 1)]
+                       [(OperationOk operation)
+                        (run-validator root beagle-path bnix-inputs)])
+                     (run-validator root beagle-path bnix-inputs))])))])))]))
+
+(defn repository-root [] (U String Nil)
+  (let [(explicit (U String Nil)) (System/getenv "FIRN_REPO")]
+    (if (some? explicit)
+      explicit
+      (let [(home (U String Nil)) (System/getenv "HOME")]
+        (if (some? home)
+          (str home "/code/nixos-config/main")
+          nil)))))
+
+(defn candidate-is-beagle? [candidate String] Bool
+  (match (host.fs/path-kind
+           (path candidate "bin/beagle-extract-schema"))
+    [(host.fs/PathKindError errno) false]
+    [(host.fs/PathKindOk kind) (or (= kind 1) (= kind 3))]))
+
+(defn beagle-root [root String] (U String Nil)
+  (let [(explicit (U String Nil)) (System/getenv "BEAGLE_PATH")]
+    (if (some? explicit)
+      explicit
+      (let [(home (U String Nil)) (System/getenv "HOME")]
+        (if (nil? home)
+          nil
+          (let [(main-candidate String) (str home "/code/beagle/main")
+                (container-candidate String) (str home "/code/beagle")]
+            (cond
+              (candidate-is-beagle? main-candidate) main-candidate
+              (candidate-is-beagle? container-candidate) container-candidate
+              :else nil)))))))
+
+(defn usage-error [] Int
+  (do
+    (host.stderr/write-text
+      (str
+        "Usage: firn schema extract [<host>]\n"
+        "       firn schema extract --darwin [<host>]\n"
+        "       firn repo validate [all|<file>...]\n"))
+    64))
+
+(defn -main [args (Vec String)] Int
+  (let [(root (U String Nil)) (repository-root)]
+    (if (nil? root)
+      (do
+        (host.stderr/write-text
+          "firn schema: FIRN_REPO and HOME are not set\n")
+        1)
+      (let [(beagle-path (U String Nil)) (beagle-root root)]
+        (if (nil? beagle-path)
+          (do
+            (host.stderr/write-text
+              "firn schema: cannot locate the Beagle checkout\n")
+            2)
+          (match (transaction/parse-schema-transaction-argv args)
+            [(InvalidSchemaTransaction argv) (usage-error)]
+            [(ExtractSchema mode host)
+             (match (extract-and-publish root beagle-path mode host)
+               [(OperationOk operation) 0]
+               [(OperationRejected message)
+                (do (host.stderr/write-text message) 1)])]
+            [(ValidateSchema explicit-inputs)
+             (run-validation root beagle-path explicit-inputs)]))))))

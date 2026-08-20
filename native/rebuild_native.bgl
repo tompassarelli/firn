@@ -1,0 +1,313 @@
+#lang beagle
+(ns firn.rebuild-native
+  (:require [firn.rebuild :as rebuild]
+            [native.json :as json]))
+
+(def max-command-output Int 16777216)
+
+(defunion EffectResult
+  (EffectSucceeded [stdout String])
+  (EffectFailed [status Int]))
+
+(defunion SequenceResult
+  (SequenceSucceeded [stdout String])
+  (SequenceFailed [status Int]))
+
+(defunion SnapshotResult
+  (SnapshotPinned [snapshot rebuild/Snapshot])
+  (SnapshotPinFailed [status Int]))
+
+(defunion TraceLineResult
+  (TraceLine [text String])
+  (TraceLineRejected [message String]))
+
+(defn stderr-text [text String] Nil
+  (host.stderr/write-text text))
+
+(defn stderr-line [text String] Nil
+  (stderr-text (str text "\n")))
+
+(defn trace-line
+  [event rebuild/TraceEvent
+   trace-id String]
+  TraceLineResult
+  (let [(events (Vec json/JsonEvent))
+        [(json/->JsonObjectStart 0)
+         (json/->JsonKey 0 "schema")
+         (json/->JsonString 0 "firn.rebuild/v1")
+         (json/->JsonKey 0 "trace_id")
+         (json/->JsonString 0 trace-id)
+         (json/->JsonKey 0 "event")
+         (json/->JsonString 0 (rebuild/traceevent-event event))
+         (json/->JsonKey 0 "name")
+         (json/->JsonString 0 (rebuild/traceevent-name event))
+         (json/->JsonKey 0 "status")
+         (json/->JsonString 0 (rebuild/traceevent-status event))
+         (json/->JsonKey 0 "revision")
+         (json/->JsonString 0 (rebuild/traceevent-revision event))
+         (json/->JsonObjectEnd 0)]]
+    (match (json/encode events)
+      [(JsonEncoded text) (->TraceLine (str text "\n"))]
+      [(JsonEncodeError event-index message)
+       (->TraceLineRejected
+         (str "trace encoding failed at event " event-index ": " message))])))
+
+(defn append-trace
+  [trace-path (U String Nil)
+   trace-id String
+   event rebuild/TraceEvent]
+  Bool
+  (if (nil? trace-path)
+    true
+    (match (trace-line event trace-id)
+      [(TraceLineRejected message)
+       (do (stderr-line (str "firn rebuild: " message)) false)]
+      [(TraceLine text)
+       (match (host.fs/append-text trace-path text)
+         [(host.fs/AppendTextOk) true]
+         [(host.fs/AppendTextError errno)
+          (do
+            (stderr-line
+              (str "firn rebuild: cannot append trace: errno " errno))
+            false)])])))
+
+(defn emit-output
+  [stdout String
+   stderr String]
+  Nil
+  (do
+    (if (= stdout "") nil (print stdout))
+    (if (= stderr "") nil (stderr-text stderr))))
+
+(defn finish-effect
+  [effect rebuild/ArgvEffect
+   trace-path (U String Nil)
+   trace-id String
+   revision String
+   status Int
+   stdout String]
+  EffectResult
+  (if (append-trace trace-path trace-id
+        (rebuild/end-event effect revision status))
+    (if (= status 0)
+      (->EffectSucceeded stdout)
+      (->EffectFailed status))
+    (->EffectFailed 74)))
+
+(defn execute-effect
+  [effect rebuild/ArgvEffect
+   trace-path (U String Nil)
+   trace-id String
+   revision String]
+  EffectResult
+  (if (not (append-trace trace-path trace-id
+             (rebuild/start-event effect revision)))
+    (->EffectFailed 74)
+    (if (rebuild/argveffect-capture effect)
+      (match (host.process/run-capture
+               (rebuild/argveffect-argv effect) "" max-command-output)
+        [(host.process/CaptureError errno)
+         (do
+           (stderr-line
+             (str "firn rebuild: cannot start "
+               (rebuild/argveffect-phase effect) ": errno " errno))
+           (finish-effect effect trace-path trace-id revision 126 ""))]
+        [(host.process/CaptureOk status stdout stderr)
+         (do
+           (emit-output stdout stderr)
+           (finish-effect effect trace-path trace-id revision status stdout))])
+      (let [(status Int)
+            (host.process/run-inherit (rebuild/argveffect-argv effect))]
+        (finish-effect effect trace-path trace-id revision status "")))))
+
+(defn execute-effects
+  [effects (Vec rebuild/ArgvEffect)
+   trace-path (U String Nil)
+   trace-id String
+   revision String]
+  SequenceResult
+  (loop [(index Int) 0 (last-stdout String) ""]
+    (if (>= index (count effects))
+      (->SequenceSucceeded last-stdout)
+      (match (execute-effect (nth effects index)
+               trace-path trace-id revision)
+        [(EffectFailed status) (->SequenceFailed status)]
+        [(EffectSucceeded stdout)
+         (recur (+ index 1)
+           (if (= stdout "") last-stdout stdout))]))))
+
+(defn pin-snapshot
+  [root String
+   trace-path (U String Nil)
+   trace-id String]
+  SnapshotResult
+  (let [(effects (Vec rebuild/ArgvEffect)) (rebuild/pin-effects root)]
+    (match (execute-effect (nth effects 0) trace-path trace-id "")
+      [(EffectFailed status) (->SnapshotPinFailed status)]
+      [(EffectSucceeded revision-output)
+       (let [(revision String) (str/trim revision-output)]
+         (if (= revision "")
+           (do
+             (stderr-line "firn rebuild: git returned an empty revision")
+             (->SnapshotPinFailed 65))
+           (match (execute-effect (nth effects 1)
+                    trace-path trace-id revision)
+             [(EffectFailed status) (->SnapshotPinFailed status)]
+             [(EffectSucceeded branch-output)
+              (->SnapshotPinned
+                (rebuild/make-snapshot
+                  root revision (str/trim branch-output)))])))])))
+
+(defn select-platform
+  [root String
+   revision String
+   trace-path (U String Nil)
+   trace-id String]
+  rebuild/PlatformResult
+  (let [(effect rebuild/ArgvEffect) (nth (rebuild/pin-effects root) 2)]
+    (match (execute-effect effect trace-path trace-id revision)
+      [(EffectFailed status) (rebuild/->PlatformRejected (str status))]
+      [(EffectSucceeded stdout)
+       (rebuild/platform-from-name (str/trim stdout))])))
+
+(defn fail-phase [status Int] Int
+  (do
+    (stderr-line (str "firn rebuild: stopped at first failure (status " status ")"))
+    status))
+
+(defn run-advisory
+  [snapshot rebuild/Snapshot
+   platform rebuild/Platform
+   trace-path (U String Nil)
+   trace-id String]
+  Int
+  (if (rebuild/linux? platform)
+    (match (execute-effect (rebuild/advisory-effect snapshot)
+             trace-path trace-id (rebuild/snapshot-revision snapshot))
+      [(EffectFailed status) (fail-phase status)]
+      [(EffectSucceeded stdout) 0])
+    0))
+
+(defn tag-generation
+  [snapshot rebuild/Snapshot
+   host String
+   platform rebuild/Platform
+   trace-path (U String Nil)
+   trace-id String]
+  Int
+  (match (execute-effect (rebuild/generation-query-effect platform)
+           trace-path trace-id (rebuild/snapshot-revision snapshot))
+    [(EffectFailed status) (fail-phase status)]
+    [(EffectSucceeded stdout)
+     (let [(generation (U String Nil)) (rebuild/current-generation stdout)]
+       (if (nil? generation)
+         (do
+           (stderr-line "firn rebuild: active generation was not reported")
+           65)
+         (match (execute-effect
+                  (rebuild/generation-tag-effect snapshot generation)
+                  trace-path trace-id (rebuild/snapshot-revision snapshot))
+           [(EffectFailed status) (fail-phase status)]
+           [(EffectSucceeded stdout)
+            (run-advisory snapshot platform trace-path trace-id)])))]))
+
+(defn activate
+  [snapshot rebuild/Snapshot
+   host String
+   platform rebuild/Platform
+   built-path String
+   trace-path (U String Nil)
+   trace-id String]
+  Int
+  (match (execute-effects
+           (rebuild/activation-effects snapshot host platform built-path)
+           trace-path trace-id (rebuild/snapshot-revision snapshot))
+    [(SequenceFailed status) (fail-phase status)]
+    [(SequenceSucceeded stdout)
+     (tag-generation snapshot host platform trace-path trace-id)]))
+
+(defn run-pinned
+  [snapshot rebuild/Snapshot
+   host String
+   platform rebuild/Platform
+   snapshot-directory String
+   trace-path (U String Nil)
+   trace-id String]
+  Int
+  (match (execute-effects
+           (rebuild/prebuild-effects
+             snapshot host platform snapshot-directory)
+           trace-path trace-id (rebuild/snapshot-revision snapshot))
+    [(SequenceFailed status) (fail-phase status)]
+    [(SequenceSucceeded stdout)
+     (let [(built-path String) (str/trim stdout)]
+       (if (rebuild/store-path? built-path)
+         (activate snapshot host platform built-path trace-path trace-id)
+         (do
+           (stderr-line
+             "firn rebuild: build did not return a Nix store path")
+           65)))]))
+
+(defn run
+  [root String
+   host String
+   snapshot-directory String
+   trace-path (U String Nil)
+   trace-id String]
+  Int
+  (match (pin-snapshot root trace-path trace-id)
+    [(SnapshotPinFailed status) (fail-phase status)]
+    [(SnapshotPinned snapshot)
+     (match (select-platform root (rebuild/snapshot-revision snapshot)
+              trace-path trace-id)
+       [(PlatformRejected name)
+        (do
+          (stderr-line (str "firn rebuild: unsupported platform '" name "'"))
+          69)]
+       [(PlatformSelected platform)
+        (run-pinned snapshot host platform snapshot-directory
+          trace-path trace-id)])]))
+
+(defn required-env [name String] (U String Nil)
+  (let [(value (U String Nil)) (System/getenv name)]
+    (if (and (some? value) (> (count value) 0)) value nil)))
+
+(defn repository-root [] (U String Nil)
+  (let [(explicit (U String Nil)) (required-env "FIRN_REPO")]
+    (if (some? explicit)
+      explicit
+      (let [(home (U String Nil)) (required-env "HOME")]
+        (if (some? home)
+          (str home "/code/nixos-config/main")
+          nil)))))
+
+(defn snapshot-directory [] String
+  (let [(configured (U String Nil)) (required-env "FIRN_SNAPSHOT_DIR")]
+    (if (some? configured)
+      configured
+      (let [(runtime (U String Nil)) (required-env "XDG_RUNTIME_DIR")
+            (parent String) (if (some? runtime) runtime "/tmp")]
+        (str parent "/firn-rebuild-snapshot-"
+          (host.process/current-pid))))))
+
+(defn usage-error [] Int
+  (do
+    (stderr-line "Usage: firn host rebuild <host>")
+    64))
+
+(defn -main [args (Vec String)] Int
+  (if (not (and (= (count args) 3)
+                (= (nth args 0) "host")
+                (= (nth args 1) "rebuild")))
+    (usage-error)
+    (let [(root (U String Nil)) (repository-root)
+          (snapshot-path String) (snapshot-directory)
+          (trace-path (U String Nil)) (required-env "FIRN_TRACE_PATH")
+          (trace-id-value (U String Nil)) (required-env "FIRN_TRACE_ID")]
+      (if (nil? root)
+        (do
+          (stderr-line
+            "firn rebuild: FIRN_REPO and HOME are not set")
+          64)
+        (run root (nth args 2) snapshot-path trace-path
+          (if (nil? trace-id-value) "" trace-id-value))))))

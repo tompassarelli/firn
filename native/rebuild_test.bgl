@@ -1,0 +1,157 @@
+#lang beagle
+(ns firn.rebuild-test
+  (:require [firn.rebuild :as rebuild]))
+
+(defrecord TestResult
+  [name String
+   passed Bool])
+
+(def revision String "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+
+(defn snapshot [] rebuild/Snapshot
+  (rebuild/make-snapshot "/repo" revision "native-rebuild-workflow"))
+
+(defn append-effects
+  [left (Vec rebuild/ArgvEffect)
+   right (Vec rebuild/ArgvEffect)]
+  (Vec rebuild/ArgvEffect)
+  (loop [(index Int) 0 (result (Vec rebuild/ArgvEffect)) left]
+    (if (>= index (count right))
+      result
+      (recur (+ index 1) (conj result (nth right index))))))
+
+(defn case-snapshot-identity [] Bool
+  (and
+    (= (rebuild/snapshot-uri (snapshot))
+       (str "git+file:///repo?rev=" revision
+         "&ref=native-rebuild-workflow"))
+    (= (rebuild/snapshot-uri-for "/repo" revision "")
+       (str "git+file:///repo?rev=" revision))))
+
+(defn case-pin-and-preflight-order [] Bool
+  (let [(effects (Vec rebuild/ArgvEffect))
+        (append-effects
+          (rebuild/pin-effects "/repo")
+          (rebuild/prebuild-effects
+            (snapshot) "whiterabbit" (rebuild/linux-platform) "/snapshot"))]
+    (= (rebuild/effect-phases effects)
+       ["pin revision"
+        "pin branch"
+        "select platform"
+        "pin committed snapshot"
+        "activation preflight"
+        "materialize committed snapshot"
+        "validate committed snapshot"
+        "retire validation snapshot"
+        "build committed snapshot"])))
+
+(defn case-committed-snapshot-build [] Bool
+  (let [(effects (Vec rebuild/ArgvEffect))
+        (rebuild/prebuild-effects
+          (snapshot) "whiterabbit" (rebuild/linux-platform) "/snapshot")
+        (build rebuild/ArgvEffect) (nth effects 5)]
+    (and
+      (= (rebuild/argveffect-argv (nth effects 0))
+         ["git" "-C" "/repo" "cat-file" "-e"
+          (str revision "^{commit}")])
+      (= (rebuild/argveffect-argv (nth effects 3))
+         ["env" "FIRN_REPO=/snapshot" "firn" "repo" "validate"])
+      (= (rebuild/argveffect-argv build)
+         ["nix" "build" "--no-link" "--print-out-paths"
+          (str "git+file:///repo?rev=" revision
+            "&ref=native-rebuild-workflow#nixosConfigurations."
+            "whiterabbit.config.system.build.toplevel")]))))
+
+(defn case-platform-activation [] Bool
+  (let [(linux (Vec rebuild/ArgvEffect))
+        (rebuild/activation-effects
+          (snapshot) "whiterabbit" (rebuild/linux-platform)
+          "/nix/store/system")
+        (darwin (Vec rebuild/ArgvEffect))
+        (rebuild/activation-effects
+          (snapshot) "workstation" (rebuild/darwin-platform)
+          "/nix/store/darwin-system")]
+    (and
+      (= (count linux) 2)
+      (= (rebuild/argveffect-argv (nth linux 0))
+         ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
+          "--set" "/nix/store/system"])
+      (= (rebuild/argveffect-argv (nth linux 1))
+         ["sudo" "/nix/store/system/bin/switch-to-configuration" "switch"])
+      (= (count darwin) 1)
+      (= (rebuild/argveffect-argv (nth darwin 0))
+         ["sudo" "darwin-rebuild" "switch" "--flake"
+          (str "git+file:///repo?rev=" revision
+            "&ref=native-rebuild-workflow#workstation")]))))
+
+(defn case-generation-tagging [] Bool
+  (let [(linux-generation (U String Nil))
+        (rebuild/current-generation
+          "40 2026-08-19 11:00:00\n42 2026-08-20 10:00:00 True\n")
+        (darwin-generation (U String Nil))
+        (rebuild/current-generation
+          "6 2026-08-19\n7 2026-08-20 current\n")]
+    (and
+      (= linux-generation "42")
+      (= darwin-generation "7")
+      (= (rebuild/argveffect-argv
+           (rebuild/generation-tag-effect (snapshot) "42"))
+         ["git" "-C" "/repo" "tag" "-f" "gen-42" revision]))))
+
+(defn workflow-effects [] (Vec rebuild/ArgvEffect)
+  (let [(snapshot-value rebuild/Snapshot) (snapshot)
+        (prebuild (Vec rebuild/ArgvEffect))
+        (rebuild/prebuild-effects snapshot-value "whiterabbit"
+          (rebuild/linux-platform) "/snapshot")
+        (activation (Vec rebuild/ArgvEffect))
+        (rebuild/activation-effects snapshot-value "whiterabbit"
+          (rebuild/linux-platform) "/nix/store/system")]
+    (append-effects
+      (append-effects prebuild activation)
+      [(rebuild/generation-query-effect (rebuild/linux-platform))
+       (rebuild/generation-tag-effect snapshot-value "42")
+       (rebuild/advisory-effect snapshot-value)])))
+
+(defn case-first-failure-stops [] Bool
+  (let [(result rebuild/Simulation)
+        (rebuild/simulate (workflow-effects)
+          [0 0 0 0 0 23 0 0 0 0 0] revision)
+        (executed (Vec rebuild/ArgvEffect))
+        (rebuild/simulation-executed result)
+        (events (Vec rebuild/TraceEvent))
+        (rebuild/simulation-events result)]
+    (and
+      (= (rebuild/simulation-status result) 23)
+      (= (count executed) 6)
+      (= (rebuild/argveffect-phase (nth executed 5))
+         "build committed snapshot")
+      (= (count events) 12)
+      (= (rebuild/traceevent-event (nth events 11)) "span_end")
+      (= (rebuild/traceevent-status (nth events 11)) "error")
+      (not (str/includes?
+             (str (rebuild/effect-phases executed)) "activate")))))
+
+(defn case-store-path-gate [] Bool
+  (and
+    (rebuild/store-path? " /nix/store/abc-system\n")
+    (not (rebuild/store-path? "warning only\n"))))
+
+(def tests (Vec TestResult)
+  [(->TestResult "snapshot-identity" (case-snapshot-identity))
+   (->TestResult "pin-and-preflight-order" (case-pin-and-preflight-order))
+   (->TestResult "committed-snapshot-build" (case-committed-snapshot-build))
+   (->TestResult "platform-activation" (case-platform-activation))
+   (->TestResult "generation-tagging" (case-generation-tagging))
+   (->TestResult "first-failure-stops" (case-first-failure-stops))
+   (->TestResult "store-path-gate" (case-store-path-gate))])
+
+(defn -main [args (Vec String)] Int
+  (loop [(index Int) 0]
+    (if (>= index (count tests))
+      0
+      (let [(test TestResult) (nth tests index)]
+        (if (testresult-passed test)
+          (recur (+ index 1))
+          (do
+            (print (str "FAIL: " (testresult-name test) "\n"))
+            1))))))

@@ -1052,7 +1052,7 @@
           "")))))
 
 (defn render-schema-extract [(host String) (child ChildResult)] CommandResult
-  (let [(prefix String) (str ">> firn-extract-schema " host "\n")]
+  (let [(prefix String) (str ">> firn schema extract " host "\n")]
     (if (= (childresult-status child) 0)
       (->CommandResult 0 (str prefix (childresult-stdout child))
         (childresult-stderr child))

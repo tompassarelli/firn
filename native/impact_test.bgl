@@ -1,0 +1,113 @@
+#lang beagle
+(ns firn.impact-test
+  (:require [firn.impact :as impact]))
+
+(defrecord TestResult
+  [name String
+   passed Bool])
+
+(def successful-plan String
+  (str
+    "these 3 derivations will be built:\n"
+    "  /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-firefox-131.0.drv\n"
+    "  /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-linux-6.10.drv\n"
+    "  /nix/store/cccccccccccccccccccccccccccccccc-hello-2.12.drv\n"
+    "\n"
+    "these paths will be fetched (12.34 MiB download, 56.78 MiB unpacked):\n"
+    "  /nix/store/dddddddddddddddddddddddddddddddd-ripgrep-14.1\n"
+    "  /nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-source\n"
+    "  /nix/store/ffffffffffffffffffffffffffffffff-already-1.0\n"
+    "\n"))
+
+(defn ready-text [result impact/ImpactResult] String
+  (match result
+    [(ImpactReady assessment text) text]
+    [(ImpactFailed text) text]))
+
+(defn case-plans-and-presents [] Bool
+  (= (ready-text
+       (impact/interpret
+         (impact/->ImpactInput
+           "whiterabbit"
+           (impact/->DryRunResult 0 successful-plan)
+           ["/nix/store/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-already-1.0.drv"])))
+     (str
+       "Rebuild impact (whiterabbit):\n"
+       "  * 3 derivation(s) to build\n"
+       "  * 3 path(s) to fetch from cache\n"
+       "\n"
+       "  Notable rebuilds:\n"
+       "    firefox-131.0 (~30-45 min, local build)\n"
+       "    linux-6.10 (~15-20 min, local build)\n"
+       "\n"
+       "  New packages:\n"
+       "    ripgrep-14.1 (binary cache hit)\n"
+       "\n"
+       "  Estimated: has expensive local builds — expect significant wait time\n")))
+
+(defn case-alternate-headers-and-small-estimate [] Bool
+  (= (ready-text
+       (impact/interpret
+         (impact/->ImpactInput
+           "darwin"
+           (impact/->DryRunResult
+             0
+             (str
+               "will be built:\n"
+               " /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-alpha-1.drv\n"
+               "\n"
+               "will be fetched:\n"
+               " /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-beta-1\n"))
+           [])))
+     (str
+       "Rebuild impact (darwin):\n"
+       "  * 1 derivation(s) to build\n"
+       "  * 1 path(s) to fetch from cache\n"
+       "\n"
+       "  New packages:\n"
+       "    beta-1 (binary cache hit)\n"
+       "\n"
+       "  Estimated: minor builds + cache hits, ~2-5 min wall time\n")))
+
+(defn case-up-to-date [] Bool
+  (= (ready-text
+       (impact/interpret
+         (impact/->ImpactInput
+           "whiterabbit" (impact/->DryRunResult 0 "") [])))
+     (str
+       "Rebuild impact (whiterabbit):\n"
+       "  System is up to date — nothing to build or fetch.\n")))
+
+(defn case-failure-tail [] Bool
+  (= (ready-text
+       (impact/interpret
+         (impact/->ImpactInput
+           "whiterabbit"
+           (impact/->DryRunResult
+             1 "first\nsecond\nthird\nfourth\nfifth\nsixth\n")
+           [])))
+     (str
+       "firn impact: dry-run failed (eval error?)\n"
+       "second\nthird\nfourth\nfifth\nsixth\n")))
+
+(defn cases [] (Vec TestResult)
+  [(->TestResult "plans-and-presents" (case-plans-and-presents))
+   (->TestResult
+     "alternate-headers-and-small-estimate"
+     (case-alternate-headers-and-small-estimate))
+   (->TestResult "up-to-date" (case-up-to-date))
+   (->TestResult "failure-tail" (case-failure-tail))])
+
+(defn -main [args (Vec String)] Int
+  (let [(results (Vec TestResult)) (cases)]
+    (loop [(index Int) 0
+           (failures Int) 0]
+      (if (>= index (count results))
+        failures
+        (let [(result TestResult) (nth results index)]
+          (do
+            (println
+              (str (if (testresult-passed result) "PASS " "FAIL ")
+                (testresult-name result)))
+            (recur (+ index 1)
+              (if (testresult-passed result) failures (+ failures 1)))))))))

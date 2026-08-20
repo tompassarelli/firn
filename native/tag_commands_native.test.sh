@@ -115,7 +115,6 @@ assert_empty "$scratch/pure.err" "pure command test stderr"
 make_fixture() {
   local root="$1" host="${2:-fixture}"
   mkdir -p \
-    "$root/scripts" \
     "$root/modules/alpha" \
     "$root/modules/beta" \
     "$root/modules/delta" \
@@ -123,7 +122,6 @@ make_fixture() {
     "$root/modules/gamma" \
     "$root/modules/plain" \
     "$root/hosts/$host"
-  : >"$root/scripts/firn-build"
   cat >"$root/flake.bnix" <<'EOF'
 #lang beagle/nix
 (ns flake)

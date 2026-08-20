@@ -158,11 +158,12 @@ cat >"$fixture/flake.bnix" <<'EOF'
 {:inputs {}}
 EOF
 
-cat >"$fixture/scripts/firn-extract-schema" <<'EOF'
+cat >"$fakebin/firn" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'schema-extract\t<%s>\n' "${1:-}" >>"${FIRN_FAKE_LOG:?}"
-printf 'schema-made:%s\n' "${1:-}"
+printf 'firn\t<%s>\t<%s>\t<%s>\n' \
+  "${1:-}" "${2:-}" "${3:-}" >>"${FIRN_FAKE_LOG:?}"
+printf 'schema-made:%s\n' "${3:-}"
 printf 'schema-note\n' >&2
 exit "${FIRN_FAKE_SCHEMA_STATUS:-0}"
 EOF
@@ -181,7 +182,7 @@ printf '40 old\n41 current\n'
 printf 'generation-note\n' >&2
 exit "${FIRN_FAKE_GEN_STATUS:-0}"
 EOF
-chmod +x "$fixture/scripts/firn-extract-schema" "$fakebin/nixos-rebuild"
+chmod +x "$fakebin/firn" "$fakebin/nixos-rebuild"
 
 last_status=0
 run_cli() {
@@ -259,7 +260,7 @@ expect_contains "$scratch/suggest.err" 'services.mode' 'schema suggestion'
 run_cli extract "$scratch/firn-views-native" schema extract fixture-host
 expect_status extract 0
 printf '%s\n' \
-  '>> firn-extract-schema fixture-host' \
+  '>> firn schema extract fixture-host' \
   'schema-made:fixture-host' >"$scratch/extract.expected.out"
 cmp -s "$scratch/extract.expected.out" "$scratch/extract.out" \
   || { diff -u "$scratch/extract.expected.out" "$scratch/extract.out" >&2 || true; \
@@ -267,7 +268,7 @@ cmp -s "$scratch/extract.expected.out" "$scratch/extract.out" \
 printf '%s\n' 'schema-note' >"$scratch/extract.expected.err"
 cmp -s "$scratch/extract.expected.err" "$scratch/extract.err" \
   || die 'schema extract stderr changed'
-printf '%s\n' 'schema-extract	<fixture-host>' >"$scratch/extract.expected.log"
+printf '%s\n' 'firn	<schema>	<extract>	<fixture-host>' >"$scratch/extract.expected.log"
 cmp -s "$scratch/extract.expected.log" "$scratch/fake.log" \
   || die 'schema extractor argv changed'
 

@@ -89,12 +89,10 @@ assert_status() {
 make_emit_repo() {
   local root="$1"
   mkdir -p \
-    "$root/scripts" \
     "$root/config" \
     "$root/modules/alpha" \
     "$root/modules/beta" \
     "$root/hosts/fixture"
-  : >"$root/scripts/firn-build"
   printf '{}\n' >"$root/flake.bnix"
   printf '[]\n' >"$root/config/darwin-modules.json"
   cat >"$root/modules/alpha/default.bnix" <<'EOF'
@@ -120,19 +118,16 @@ EOF
 
 make_no_tag_repo() {
   local root="$1"
-  mkdir -p "$root/scripts" "$root/hosts/plain"
-  : >"$root/scripts/firn-build"
+  mkdir -p "$root/hosts/plain"
   printf '{}\n' >"$root/flake.bnix"
 }
 
 make_metadata_free_repo() {
   local root="$1"
   mkdir -p \
-    "$root/scripts" \
     "$root/modules/odd" \
     "$root/hosts/odd" \
     "$root/hosts/plain"
-  : >"$root/scripts/firn-build"
   printf '{}\n' >"$root/flake.bnix"
   cat >"$root/modules/odd/default.bnix" <<'EOF'
 #lang beagle/nix

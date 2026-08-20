@@ -397,7 +397,6 @@ enabled = {
             {
                 "matcher": "^(Edit|Write|MultiEdit|apply_patch)$",
                 "hooks": [
-                    command("firn-guard.sh", 10),
                     command("launch-critical-worktree-guard.sh", 10),
                 ],
             },
@@ -406,7 +405,6 @@ enabled = {
                 "hooks": [
                     command("agent-spawn-guard.sh", 10),
                     command("tripwire-guard.sh", 10),
-                    command("firn-guard.sh", 10),
                     command("launch-critical-worktree-guard.sh", 10),
                     command("corpus-scan-guard.sh", 10),
                     command("session-kill-guard.sh", 10),
@@ -1166,7 +1164,6 @@ validate_codex_managed_policy() {
     "launch-critical-worktree-guard.sh|(promoted \"launch-critical-worktree-guard.sh\"|$SHARED/hooks/launch-critical-worktree-guard.sh|north|profiles/tom/hooks/launch-critical-worktree-guard.sh|north/profiles/tom/hooks/launch-critical-worktree-guard.sh"
     "lib/launch_critical_decide.py|(promoted \"lib/launch_critical_decide.py\"|$SHARED/hooks/lib/launch_critical_decide.py|north|profiles/tom/hooks/lib/launch_critical_decide.py|north/profiles/tom/hooks/lib/launch_critical_decide.py"
     "lib/launch_critical_paths.py|(promoted \"lib/launch_critical_paths.py\"|$SHARED/hooks/lib/launch_critical_paths.py|north|profiles/tom/hooks/lib/launch_critical_paths.py|north/profiles/tom/hooks/lib/launch_critical_paths.py"
-    "firn-guard.sh|(s flakeRoot \"/modules/north-profile/firn/hooks/firn-guard.sh\")|$FIRN_INTEGRATION/hooks/firn-guard.sh|self|modules/north-profile/firn/hooks/firn-guard.sh|"
     "tripwire-guard.sh|(promoted \"tripwire-guard.sh\"|$SHARED/hooks/tripwire-guard.sh|north|profiles/tom/hooks/tripwire-guard.sh|north/profiles/tom/hooks/tripwire-guard.sh"
     "logcompress-hook.js|(promoted \"logcompress-hook.js\"|$SHARED/hooks/logcompress-hook.js|north|profiles/tom/hooks/logcompress-hook.js|north/profiles/tom/hooks/logcompress-hook.js"
     "logcompress.js|(promoted \"logcompress.js\"|$SHARED/hooks/logcompress.js|north|profiles/tom/hooks/logcompress.js|north/profiles/tom/hooks/logcompress.js"

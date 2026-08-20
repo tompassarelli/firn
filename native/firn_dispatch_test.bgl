@@ -1,0 +1,258 @@
+#lang beagle
+(ns firn.dispatch-test
+  (:require [firn.main :as firn]))
+
+(defrecord TestResult
+  [name String
+   passed Bool])
+
+(defn family-name [family firn/CommandFamily] String
+  (match family
+    [(NativeTagFamily token) "tag"]
+    [(NativeFlakeInputFamily token) "flake-input"]
+    [(NativeInventoryFamily token) "inventory"]
+    [(NativeAuthoringFamily token) "authoring"]
+    [(NativeViewsFamily token) "views"]
+    [(NativeRepoBuildFamily token) "repo-build"]
+    [(NativeSchemaFamily token) "schema"]
+    [(NativeRepoWorkflowFamily token) "repo-workflow"]
+    [(NativeRebuildFamily token) "rebuild"]
+    [(NativeCiPolicyFamily token) "ci-policy"]))
+
+(defn owner-name
+  [node String
+   edge String]
+  String
+  (match (firn/find-command node edge)
+    [(CommandFound command)
+     (family-name (firn/firncommand-owner command))]
+    [(CommandMissing token) "missing"]))
+
+(defn leaf-kind [leaf firn/DispatchLeaf] String
+  (match leaf
+    [(ExplicitLeaf value) "explicit"]
+    [(DefaultLeaf value) "default"]
+    [(CurrentHostDefault token) "current-host"]))
+
+(defn leaf-value [leaf firn/DispatchLeaf] String
+  (match leaf
+    [(ExplicitLeaf value) value]
+    [(DefaultLeaf value) value]
+    [(CurrentHostDefault token) "current"]))
+
+(defn command-name [command firn/CommandId] String
+  (match command
+    [(FlakeInputsCommand token) "flake-inputs"]
+    [(FlakeInputResolveCommand token) "flake-input-resolve"]
+    [(HostRebuildCommand token) "host-rebuild"]
+    [(HostImpactCommand token) "host-impact"]
+    [(HostListCommand token) "host-list"]
+    [(HostStatusCommand token) "host-status"]
+    [(HostGenCommand token) "host-gen"]
+    [(ModuleListCommand token) "module-list"]
+    [(ModuleRefsCommand token) "module-refs"]
+    [(ModuleStatusCommand token) "module-status"]
+    [(ModuleAddCommand token) "module-add"]
+    [(ModuleEnableCommand token) "module-enable"]
+    [(ModuleDisableCommand token) "module-disable"]
+    [(PlatformListCommand token) "platform-list"]
+    [(PlatformShowCommand token) "platform-show"]
+    [(PlatformSafelistCommand token) "platform-safelist"]
+    [(RepoWatchCommand token) "repo-watch"]
+    [(RepoDiffCommand token) "repo-diff"]
+    [(RepoDoctorCommand token) "repo-doctor"]
+    [(RepoUpgradeCommand token) "repo-upgrade"]
+    [(RepoBuildCommand token) "repo-build"]
+    [(RepoValidateCommand token) "repo-validate"]
+    [(RepoLintCommand token) "repo-lint"]
+    [(RepoArchitectureCommand token) "repo-architecture"]
+    [(SchemaExplainCommand token) "schema-explain"]
+    [(SchemaExtractCommand token) "schema-extract"]
+    [(SecretListCommand token) "secret-list"]
+    [(SecretShowCommand token) "secret-show"]
+    [(SecretEditCommand token) "secret-edit"]
+    [(TagListCommand token) "tag-list"]
+    [(TagShowCommand token) "tag-show"]
+    [(TagFilterCommand token) "tag-filter"]
+    [(TagIndexCommand token) "tag-index"]
+    [(TagResolveCommand token) "tag-resolve"]
+    [(TagEnableCommand token) "tag-enable"]
+    [(TagDisableCommand token) "tag-disable"]
+    [(TagOptInCommand token) "tag-opt-in"]
+    [(TagOptOutCommand token) "tag-opt-out"]
+    [(TagStatusCommand token) "tag-status"]
+    [(TemplateServiceCommand token) "template-service"]
+    [(TemplateSubmoduleCommand token) "template-submodule"]
+    [(TemplateHomeCommand token) "template-home"]
+    [(TemplateHostCommand token) "template-host"]))
+
+(defn case-registry-and-owners [] Bool
+  (and
+    (= (firn/command-count) 43)
+    (= (owner-name "tag" "resolve") "tag")
+    (= (owner-name "flake-input" "resolve") "flake-input")
+    (= (owner-name "module" "refs") "inventory")
+    (= (owner-name "secret" "edit") "authoring")
+    (= (owner-name "platform" "show") "views")
+    (= (owner-name "repo" "build") "repo-build")
+    (= (owner-name "schema" "extract") "schema")
+    (= (owner-name "repo" "doctor") "repo-workflow")
+    (= (owner-name "host" "rebuild") "rebuild")
+    (= (family-name (firn/->NativeCiPolicyFamily false)) "ci-policy")
+    (= (owner-name "repo" "missing") "missing")
+    (= (firn/firncommand-summary firn/secret-edit)
+       "open an existing secret in $EDITOR via sops")))
+
+(defn case-defaults [] Bool
+  (and
+    (match (firn/parse-dispatch ["repo" "upgrade"])
+      [(DispatchPlanned plan)
+       (let [(steps (Vec firn/DispatchStep))
+             (firn/dispatchplan-steps plan)
+             (step firn/DispatchStep) (nth steps 0)]
+         (and (= (count steps) 1)
+              (= (command-name (firn/dispatchstep-command step))
+                 "repo-upgrade")
+              (= (leaf-kind (firn/dispatchstep-leaf step)) "default")
+              (= (leaf-value (firn/dispatchstep-leaf step)) "now")))]
+      [(DispatchHelp text status) false]
+      [(DispatchError text status) false])
+    (match (firn/parse-dispatch ["flake-input" "resolve"])
+      [(DispatchPlanned plan)
+       (= (leaf-value
+            (firn/dispatchstep-leaf
+              (nth (firn/dispatchplan-steps plan) 0)))
+          "emit")]
+      [(DispatchHelp text status) false]
+      [(DispatchError text status) false])
+    (match (firn/parse-dispatch ["host" "status"])
+      [(DispatchPlanned plan)
+       (= (leaf-kind
+            (firn/dispatchstep-leaf
+              (nth (firn/dispatchplan-steps plan) 0)))
+          "current-host")]
+      [(DispatchHelp text status) false]
+      [(DispatchError text status) false])
+    (match (firn/parse-dispatch ["tag" "index"])
+      [(DispatchPlanned plan)
+       (= (leaf-value
+            (firn/dispatchstep-leaf
+              (nth (firn/dispatchplan-steps plan) 0)))
+          "repo")]
+      [(DispatchHelp text status) false]
+      [(DispatchError text status) false])))
+
+(defn case-chained-walk [] Bool
+  (match
+    (firn/parse-dispatch
+      ["repo" "build"
+       "repo" "validate"
+       "tag" "enable" "terminal"
+       "module" "list" "used"])
+    [(DispatchPlanned plan)
+     (let [(steps (Vec firn/DispatchStep)) (firn/dispatchplan-steps plan)
+           (build firn/DispatchStep) (nth steps 0)
+           (validate firn/DispatchStep) (nth steps 1)
+           (enable firn/DispatchStep) (nth steps 2)
+           (listing firn/DispatchStep) (nth steps 3)]
+       (and
+         (= (count steps) 4)
+         (= (command-name (firn/dispatchstep-command build)) "repo-build")
+         (= (leaf-value (firn/dispatchstep-leaf build)) "all")
+         (= (command-name (firn/dispatchstep-command validate))
+            "repo-validate")
+         (= (leaf-value (firn/dispatchstep-leaf validate)) "all")
+         (= (command-name (firn/dispatchstep-command enable)) "tag-enable")
+         (= (leaf-kind (firn/dispatchstep-leaf enable)) "explicit")
+         (= (leaf-value (firn/dispatchstep-leaf enable)) "terminal")
+         (= (command-name (firn/dispatchstep-command listing)) "module-list")
+         (= (leaf-kind (firn/dispatchstep-leaf listing)) "explicit")
+         (= (leaf-value (firn/dispatchstep-leaf listing)) "used")))]
+    [(DispatchHelp text status) false]
+    [(DispatchError text status) false]))
+
+(defn case-aliases-and-help [] Bool
+  (and
+    (match (firn/parse-dispatch ["rebuild"])
+      [(DispatchPlanned plan)
+       (let [(step firn/DispatchStep)
+             (nth (firn/dispatchplan-steps plan) 0)]
+         (and (= (command-name (firn/dispatchstep-command step))
+                 "host-rebuild")
+              (= (leaf-kind (firn/dispatchstep-leaf step))
+                 "current-host")))]
+      [(DispatchHelp text status) false]
+      [(DispatchError text status) false])
+    (match (firn/parse-dispatch ["rebuild" "whiterabbit"])
+      [(DispatchPlanned plan)
+       (let [(leaf firn/DispatchLeaf)
+             (firn/dispatchstep-leaf
+               (nth (firn/dispatchplan-steps plan) 0))]
+         (and (= (leaf-kind leaf) "explicit")
+              (= (leaf-value leaf) "whiterabbit")))]
+      [(DispatchHelp text status) false]
+      [(DispatchError text status) false])
+    (match (firn/parse-dispatch ["rebuild" "--bad"])
+      [(DispatchPlanned plan) false]
+      [(DispatchHelp text status) false]
+      [(DispatchError text status)
+       (and (= status 1) (= text "Usage: firn rebuild [host]\n"))])
+    (match (firn/parse-dispatch ["--help" "ignored"])
+      [(DispatchPlanned plan) false]
+      [(DispatchHelp text status)
+       (and (= status 0) (= text (firn/full-help-text)))]
+      [(DispatchError text status) false])
+    (match (firn/parse-dispatch ["repo"])
+      [(DispatchPlanned plan) false]
+      [(DispatchHelp text status)
+       (and (= status 0) (= text (firn/node-help-text "repo")))]
+      [(DispatchError text status) false])))
+
+(defn case-errors [] Bool
+  (and
+    (match (firn/parse-dispatch ["tag" "enable"])
+      [(DispatchPlanned plan) false]
+      [(DispatchHelp text status) false]
+      [(DispatchError text status)
+       (and (= status 1)
+            (= text
+               (str "firn: 'tag enable' requires a leaf node\n"
+                 "Usage: firn tag enable <tag>\n"
+                 "  enable a tag in the current host's enabled-tags.bnix\n")))])
+    (match (firn/parse-dispatch ["repo" "missing"])
+      [(DispatchPlanned plan) false]
+      [(DispatchHelp text status) false]
+      [(DispatchError text status)
+       (and (= status 1)
+            (= text (firn/unknown-walk-text "repo" "missing")))])
+    (match (firn/parse-dispatch ["missing"])
+      [(DispatchPlanned plan) false]
+      [(DispatchHelp text status) false]
+      [(DispatchError text status)
+       (and (= status 1) (= text (firn/incomplete-walk-text)))])
+    (match (firn/parse-dispatch ["tag" "enable" "terminal" "loose"])
+      [(DispatchPlanned plan) false]
+      [(DispatchHelp text status) false]
+      [(DispatchError text status)
+       (and (= status 1)
+            (= text
+               "firn: dangling token after a complete walk: loose\n"))])))
+
+(defn cases [] (Vec TestResult)
+  [(->TestResult "registry-and-owners" (case-registry-and-owners))
+   (->TestResult "defaults" (case-defaults))
+   (->TestResult "chained-walk" (case-chained-walk))
+   (->TestResult "aliases-and-help" (case-aliases-and-help))
+   (->TestResult "errors" (case-errors))])
+
+(defn -main [args (Vec String)] Int
+  (let [(results (Vec TestResult)) (cases)]
+    (loop [(index Int) 0 (failures Int) 0]
+      (if (>= index (count results))
+        failures
+        (let [(result TestResult) (nth results index)]
+          (if (testresult-passed result)
+            (recur (+ index 1) failures)
+            (do
+              (print (str "FAIL: " (testresult-name result) "\n"))
+              (recur (+ index 1) (+ failures 1)))))))))

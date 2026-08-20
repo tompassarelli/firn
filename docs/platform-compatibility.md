@@ -10,6 +10,6 @@ firn platform show <name>       # single module, with blocking paths
 firn platform safelist          # safelist snippet for flake.bnix
 ```
 
-Pre-req: `./scripts/firn-extract-schema` and `./scripts/firn-extract-schema --darwin` (separate caches: `.beagle-cache/schema.json` and `.beagle-cache/schema-darwin.json`). `firn repo doctor` warns when the darwin cache is stale.
+Pre-req: `firn schema extract` and `firn schema extract --darwin` (separate caches: `.beagle-cache/schema.json` and `.beagle-cache/schema-darwin.json`). `firn repo doctor` warns when the darwin cache is stale.
 
 **Limitation**: this is a schema-compatibility check. Pure-pkg modules whose only setter is `environment.systemPackages` always pass — the option path exists on darwin even when the package has no darwin build. Use `darwin-rebuild build` to verify.

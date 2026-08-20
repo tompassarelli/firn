@@ -1,0 +1,387 @@
+#lang beagle
+(ns firn.repo-build-native
+  (:require [firn.repo-build :as build]
+            [firn.tag-resolve-driver :as tag-driver]
+            [firn.tag-resolve-native :as tag-native]
+            [firn.flake-input-native :as flake-native]))
+
+(def max-directory-entries Int 16384)
+(def max-generated-bytes Int 33554432)
+(def max-compiler-output-bytes Int 16777216)
+
+(defunion SourceStateLoadResult
+  (SourceStateLoaded [state build/SourceState])
+  (SourceStateRejected [message String]))
+
+(defunion OutputMtimeResult
+  (OutputMtimeLoaded [nanoseconds (U Int Nil)])
+  (OutputMtimeRejected [message String]))
+
+(defunion InventoryLoadResult
+  (InventoryLoaded [inventory build/SourceInventory])
+  (InventoryRejected [message String]))
+
+(defn relative-child
+  [parent String
+   name String]
+  String
+  (if (= parent "") name (str parent "/" name)))
+
+(defn absolute-path
+  [root String
+   relative String]
+  String
+  (str root "/" relative))
+
+(defn merge-inventory
+  [left build/SourceInventory
+   right build/SourceInventory]
+  build/SourceInventory
+  (build/->SourceInventory
+    (into (build/sourceinventory-sources left)
+      (build/sourceinventory-sources right))
+    (into (build/sourceinventory-obsolete-outputs left)
+      (build/sourceinventory-obsolete-outputs right))))
+
+(defn output-mtime
+  [root String
+   relative String]
+  OutputMtimeResult
+  (let [(absolute String) (absolute-path root relative)]
+    (match (host.fs/path-kind absolute)
+      [(host.fs/PathKindError errno)
+       (if (= errno 2)
+         (->OutputMtimeLoaded nil)
+         (->OutputMtimeRejected
+           (build/errno-message "cannot inspect" relative errno)))]
+      [(host.fs/PathKindOk kind)
+       (if (not (or (= kind 1) (= kind 3)))
+         (->OutputMtimeLoaded nil)
+         (match (host.fs/mtime-nanoseconds absolute)
+           [(host.fs/MtimeNanosecondsOk nanoseconds)
+            (->OutputMtimeLoaded nanoseconds)]
+           [(host.fs/MtimeNanosecondsError errno)
+            (if (= errno 2)
+              (->OutputMtimeLoaded nil)
+              (->OutputMtimeRejected
+                (build/errno-message
+                  "cannot read modification time for" relative errno)))]))])))
+
+(defn load-source-state
+  [root String
+   relative String]
+  SourceStateLoadResult
+  (match (host.fs/mtime-nanoseconds (absolute-path root relative))
+    [(host.fs/MtimeNanosecondsError errno)
+     (->SourceStateRejected
+       (build/errno-message
+         "cannot read modification time for" relative errno))]
+    [(host.fs/MtimeNanosecondsOk source-nanoseconds)
+     (let [(output-relative String) (build/output-relative relative)]
+       (match (output-mtime root output-relative)
+         [(OutputMtimeRejected message) (->SourceStateRejected message)]
+         [(OutputMtimeLoaded output-nanoseconds)
+          (->SourceStateLoaded
+            (build/->SourceState
+              (build/->SourceKey relative source-nanoseconds)
+              output-relative output-nanoseconds))]))]))
+
+(defn load-inventory-directory
+  [root String
+   relative String]
+  InventoryLoadResult
+  (let [(absolute String)
+        (if (= relative "") root (absolute-path root relative))]
+    (match (host.fs/list-directory-bounded
+             absolute max-directory-entries)
+      [(host.fs/ListDirectoryBoundedError errno)
+       (->InventoryRejected
+         (build/errno-message "cannot list"
+           (if (= relative "") "." relative) errno))]
+      [(host.fs/ListDirectoryBoundedOk names)
+       (let [(sorted-names (Vec String)) (sort names)]
+         (loop [(index Int) 0
+                (inventory build/SourceInventory)
+                (build/->SourceInventory [] [])]
+           (if (>= index (count sorted-names))
+             (->InventoryLoaded inventory)
+             (let [(entry-relative String)
+                   (relative-child relative (nth sorted-names index))]
+               (match (host.fs/path-kind
+                        (absolute-path root entry-relative))
+                 [(host.fs/PathKindError errno)
+                  (if (= errno 2)
+                    (recur (+ index 1) inventory)
+                    (->InventoryRejected
+                      (build/errno-message
+                        "cannot inspect" entry-relative errno)))]
+                 [(host.fs/PathKindOk kind)
+                  (cond
+                    [(and (= kind 2)
+                          (not (build/traversal-excluded? entry-relative)))
+                     (match (load-inventory-directory root entry-relative)
+                       [(InventoryRejected message)
+                        (->InventoryRejected message)]
+                       [(InventoryLoaded child-inventory)
+                        (recur (+ index 1)
+                          (merge-inventory inventory child-inventory))])]
+                    [(and (or (= kind 1) (= kind 3))
+                          (build/source-path? entry-relative))
+                     (match (load-source-state root entry-relative)
+                       [(SourceStateRejected message)
+                        (->InventoryRejected message)]
+                       [(SourceStateLoaded state)
+                        (recur (+ index 1)
+                          (merge-inventory inventory
+                            (build/->SourceInventory [state] [])))])]
+                    [(and (or (= kind 1) (= kind 3))
+                          (build/obsolete-output-path? entry-relative))
+                     (recur (+ index 1)
+                       (merge-inventory inventory
+                         (build/->SourceInventory [] [entry-relative])))]
+                    [:else (recur (+ index 1) inventory)])])))))])))
+
+(defn emit-error [message String] Int
+  (do (host.stderr/write-text message) 1))
+
+(defn run-preparation [root String] Int
+  (match (tag-native/directory-names root "hosts")
+    [(DirectoryNamesRejected message)
+     (do
+       (host.stderr/write-text message)
+       (emit-error
+         "firn-build: tag resolution failed; aborting before .nix regeneration\n"))]
+    [(DirectoryNamesLoaded names)
+     (let [(tag-status Int)
+           (tag-native/run-action root names (tag-driver/->ResolveAll true))]
+       (if (not (= tag-status 0))
+         (emit-error
+           "firn-build: tag resolution failed; aborting before .nix regeneration\n")
+         (let [(flake-status Int) (flake-native/run root)]
+           (if (= flake-status 0)
+             0
+             (emit-error
+               "firn-build: flake-inputs resolution failed; aborting\n")))))]))
+
+(defn cleanup-temporary
+  [temporary String
+   relative String]
+  Int
+  (match (host.fs/remove-file temporary)
+    [(host.fs/RemoveFileOk) 0]
+    [(host.fs/RemoveFileError errno)
+     (if (= errno 2)
+       0
+       (emit-error
+         (build/errno-message
+           "cannot remove temporary output for" relative errno)))]))
+
+(defn fail-after-cleanup
+  [temporary String
+   relative String
+   message String]
+  Int
+  (let [(cleanup-status Int) (cleanup-temporary temporary relative)]
+    (do
+      (host.stderr/write-text message)
+      (if (= cleanup-status 0) 1 cleanup-status))))
+
+(defn emit-compiler-output
+  [stdout String
+   stderr String]
+  Int
+  (do
+    (if (= stdout "") 0 (do (print stdout) 0))
+    (if (= stderr "") 0 (do (host.stderr/write-text stderr) 0))
+    0))
+
+(defn publish-compiled
+  [temporary String
+   destination String
+   relative String]
+  Int
+  (match (host.fs/read-text-bounded temporary max-generated-bytes)
+    [(host.fs/ReadTextBoundedError errno)
+     (fail-after-cleanup temporary relative
+       (build/errno-message
+         "cannot read temporary output for" relative errno))]
+    [(host.fs/ReadTextBoundedOk generated)
+     (match (host.fs/write-text-atomic temporary
+              (build/strip-authoring-attributes generated))
+       [(host.fs/WriteTextAtomicError errno)
+        (fail-after-cleanup temporary relative
+          (build/errno-message
+            "cannot clean temporary output for" relative errno))]
+       [(host.fs/WriteTextAtomicOk)
+        (match (host.fs/rename-file temporary destination)
+          [(host.fs/RenameFileOk) 0]
+          [(host.fs/RenameFileError errno)
+           (fail-after-cleanup temporary relative
+             (build/errno-message "cannot publish" relative errno))])])]))
+
+(defn run-compiler
+  [root String
+   compiler String
+   state build/SourceState
+   temporary String]
+  Int
+  (let [(process build/CompilerProcess)
+        (build/compiler-process compiler root state temporary)
+        (relative String) (build/compilerprocess-source-relative process)]
+    (match (host.process/run-capture
+             (build/compilerprocess-argv process)
+             "" max-compiler-output-bytes)
+      [(host.process/CaptureError errno)
+       (fail-after-cleanup temporary relative
+         (build/compiler-spawn-message relative errno))]
+      [(host.process/CaptureOk status stdout stderr)
+       (if (not (= status 0))
+         (do
+           (emit-compiler-output stdout stderr)
+           (fail-after-cleanup temporary relative
+             (build/compiler-failure-message relative status)))
+         (publish-compiled temporary
+           (absolute-path root
+             (build/compilerprocess-destination-relative process))
+           relative))])))
+
+(defn compile-source
+  [root String
+   compiler String
+   state build/SourceState]
+  Int
+  (let [(destination-relative String)
+        (build/sourcestate-output-relative state)
+        (destination String) (absolute-path root destination-relative)]
+    (match (host.fs/create-temporary-sibling destination)
+      [(host.fs/CreateTemporarySiblingError errno)
+       (emit-error
+         (build/errno-message
+           "cannot create temporary output for" destination-relative errno))]
+      [(host.fs/CreateTemporarySiblingOk temporary)
+       (run-compiler root compiler state temporary)])))
+
+(defn compile-sources
+  [root String
+   compiler String
+   sources (Vec build/SourceState)
+   index Int]
+  Int
+  (if (>= index (count sources))
+    0
+    (let [(status Int) (compile-source root compiler (nth sources index))]
+      (if (= status 0)
+        (compile-sources root compiler sources (+ index 1))
+        status))))
+
+(defn remove-obsolete-output
+  [root String
+   relative String]
+  Int
+  (match (host.fs/remove-file (absolute-path root relative))
+    [(host.fs/RemoveFileOk) 0]
+    [(host.fs/RemoveFileError errno)
+     (if (= errno 2)
+       0
+       (emit-error
+         (build/errno-message
+           "cannot remove obsolete output" relative errno)))]))
+
+(defn remove-obsolete-outputs
+  [root String
+   paths (Vec String)
+   index Int]
+  Int
+  (if (>= index (count paths))
+    0
+    (let [(status Int) (remove-obsolete-output root (nth paths index))]
+      (if (= status 0)
+        (remove-obsolete-outputs root paths (+ index 1))
+        status))))
+
+(defn execute-plan
+  [root String
+   compiler String
+   plan build/RepoBuildPlan]
+  Int
+  (let [(sources (Vec build/SourceState))
+        (build/repobuildplan-stale-sources plan)
+        (compile-status Int) (compile-sources root compiler sources 0)]
+    (if (not (= compile-status 0))
+      compile-status
+      (let [(cleanup-status Int)
+            (remove-obsolete-outputs root
+              (build/repobuildplan-obsolete-outputs plan) 0)]
+        (if (not (= cleanup-status 0))
+          cleanup-status
+          (do
+            (if (= (count sources) 0)
+              (print "firn-build: nothing to rebuild.\n")
+              0)
+            0))))))
+
+(defn beagle-root [] (U String Nil)
+  (let [(explicit (U String Nil)) (System/getenv "BEAGLE_PATH")]
+    (if (some? explicit)
+      explicit
+      (let [(home (U String Nil)) (System/getenv "HOME")]
+        (if (some? home) (str home "/code/beagle/main") nil)))))
+
+(defn repository-root [] (U String Nil)
+  (let [(explicit (U String Nil)) (System/getenv "FIRN_REPO")]
+    (if (some? explicit)
+      explicit
+      (let [(home (U String Nil)) (System/getenv "HOME")]
+        (if (some? home)
+          (str home "/code/nixos-config/main")
+          nil)))))
+
+(defn run
+  [root String
+   compiler String]
+  Int
+  (let [(preparation-status Int) (run-preparation root)]
+    (if (not (= preparation-status 0))
+      preparation-status
+      (match (load-inventory-directory root "")
+        [(InventoryRejected message) (emit-error message)]
+        [(InventoryLoaded inventory)
+         (execute-plan root compiler (build/build-plan inventory))]))))
+
+(defn run-command
+  [root String
+   compiler String]
+  Int
+  (do
+    (print ">> firn-build\n")
+    (let [(status Int) (run root compiler)]
+      (if (= status 0)
+        0
+        (do
+          (host.stderr/write-text "firn repo build: failed.\n")
+          1)))))
+
+(defn usage-error [] Int
+  (do
+    (host.stderr/write-text "Usage: firn repo build [all]\n")
+    64))
+
+(defn -main [args (Vec String)] Int
+  (match (build/parse-repo-build-argv args)
+    [(OtherRepoBuildCommand argv) (usage-error)]
+    [(InvalidRepoBuildArgv argv) (usage-error)]
+    [(ParsedRepoBuild token)
+     (let [(root (U String Nil)) (repository-root)
+           (beagle (U String Nil)) (beagle-root)]
+       (cond
+         [(nil? root)
+          (do
+            (host.stderr/write-text
+              "firn repo build: FIRN_REPO and HOME are not set\n")
+            1)]
+         [(nil? beagle)
+          (do
+            (host.stderr/write-text
+              "firn repo build: BEAGLE_PATH and HOME are not set\n")
+            1)]
+         [:else (run-command root (str beagle "/bin/beagle-build"))]))]))

@@ -8,8 +8,8 @@ other provider uses — never a Hermes-specific fork.
 
 Guard chains (provider-neutral ~/.agents/hooks, run in order; ANY deny denies):
 
-    write_file / patch  -> firn-guard.sh
-    terminal / process  -> tripwire-guard.sh,      firn-guard.sh
+    write_file / patch  -> no repository-specific guard
+    terminal / process  -> tripwire-guard.sh
     delegate_task       -> DENY unconditionally (native delegation is disabled;
                            the `delegation` toolset is off and delegation is a
                            North lifecycle op). A blocked NATIVE delegate_task is
@@ -79,14 +79,13 @@ DELEGATION_TOOLS = frozenset({"delegate_task"})
 # a real North MCP spawn/dispatch. A blocked native delegate_task never counts.
 DELEGATION_MARK_TOOLS = frozenset({"mcp__north__spawn", "mcp__north__dispatch"})
 
-# Ordered guard chains. Authoring runs the Firn guard; terminal adds tripwire.
-AUTHORING_CHAIN = ("firn-guard.sh",)
-TERMINAL_CHAIN = ("tripwire-guard.sh", "firn-guard.sh")
+# Ordered guard chains. Terminal commands run the provider-neutral tripwire.
+AUTHORING_CHAIN = ()
+TERMINAL_CHAIN = ("tripwire-guard.sh",)
 
 # Everything the enforcement surface stands on. Absence of ANY means the guard
 # plumbing is not wired and authoring/terminal must fail closed.
 REQUIRED_GUARDS = (
-    "firn-guard.sh",
     "tripwire-guard.sh",
 )
 # Every guard sources the shared killswitch.

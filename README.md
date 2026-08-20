@@ -44,7 +44,7 @@ nix flake init -t github:tompassarelli/firn     # drops template/ in cwd
 git clone https://github.com/tompassarelli/beagle ../beagle    # compiler + validator
 cp /etc/nixos/hardware-configuration.nix .
 # edit hosts/my-machine/configuration.bnix and hosts/my-machine/enabled-tags.bnix
-./scripts/firn-build && nixos-rebuild switch --flake .#my-machine
+firn repo build && nixos-rebuild switch --flake .#my-machine
 ```
 
 `BEAGLE_PATH` overrides the sibling-clone location. macOS works the

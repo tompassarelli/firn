@@ -110,6 +110,32 @@
                   self
                   "/native/firn_views_native.bgl "
                   self
+                  "/native/schema_transaction.bgl "
+                  self
+                  "/native/schema_transaction_native.bgl "
+                  self
+                  "/native/repo_quality.bgl "
+                  self
+                  "/native/repo_workflows.bgl "
+                  self
+                  "/native/repo_workflows_native.bgl "
+                  self
+                  "/native/impact.bgl "
+                  self
+                  "/native/rebuild.bgl "
+                  self
+                  "/native/rebuild_native.bgl "
+                  self
+                  "/native/repo_build.bgl "
+                  self
+                  "/native/repo_build_native.bgl "
+                  self
+                  "/native/prewarm.bgl "
+                  self
+                  "/native/prewarm_native.bgl "
+                  self
+                  "/native/system_policy.bgl "
+                  self
                   "/native/firn.bgl")))))]
       {:lib.mkSystem
         (nix/module

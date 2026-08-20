@@ -77,11 +77,9 @@ build_native flake-input-native firn.flake-input-native/-main \
 make_fixture() {
   local root="$1"
   mkdir -p \
-    "$root/scripts" \
     "$root/modules/alpha" \
     "$root/modules/beta" \
     "$root/modules/plain"
-  : >"$root/scripts/firn-build"
   cat >"$root/modules/alpha/default.bnix" <<'EOF'
 #lang beagle/nix
 (ns default)

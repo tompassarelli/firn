@@ -39,7 +39,7 @@ What the `~/code/nixos-config/main/modules/claude` module materializes into `~/.
 - **enabledPlugins** → `rust-analyzer-lsp@claude-plugins-official`, `typescript-lsp@claude-plugins-official`
 - **hooks** (Claude Code fires these at lifecycle points; `⟨src⟩` = settings.json or the plugin that contributes it):
   - `SessionStart` → `beagle-session-start.sh` ⟨settings⟩
-  - `PreToolUse` → `firn-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩, `firn-guard.sh` ⟨settings⟩, `git-blind-stage-guard.sh` ⟨settings⟩, `tripwire-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩
+  - `PreToolUse` → `launch-critical-worktree-guard.sh` ⟨settings⟩, `git-blind-stage-guard.sh` ⟨settings⟩, `tripwire-guard.sh` ⟨settings⟩, `launch-critical-worktree-guard.sh` ⟨settings⟩
 
 ### Control flow (lifecycle spine)
 
@@ -49,7 +49,7 @@ flowchart TD
   B -->|"beagle-session-start.sh"| C[turn loop]
   C --> D{UserPromptSubmit}
   D -->|"—"| E["model responds + tools"]
-  E -.->|"PreToolUse: firn-guard.sh · launch-critical-worktree-guard.sh · git-blind-stage-guard.sh · tripwire-guard.sh"| E
+  E -.->|"PreToolUse: launch-critical-worktree-guard.sh · git-blind-stage-guard.sh · tripwire-guard.sh"| E
   E --> F{Stop}
   F -->|"—"| C
 ```

@@ -17,7 +17,7 @@
 ;; ---------- module-side example ----------
 ;; Mirrors the shape modules/<name>/default.bnix will carry once migrated
 ;; off the bundle namespace. The :tags, :tags-opt-in, and :tag-overrides
-;; clauses are stripped by firn-build — they never appear in the
+;; clauses are stripped by `firn repo build` — they never appear in the
 ;; generated .nix.
 
 (nix/module [config lib pkgs ...]

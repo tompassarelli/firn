@@ -3,10 +3,9 @@ version: "0.1.0"
 kind: standalone
 description: >-
   Nix-owned Hermes controller adapter for the North/Orchestration operating model.
-  pre_tool_call runs the provider-neutral authoring guard CHAINS from
-  ~/.agents/hooks — firn-guard for write_file/patch,
-  tripwire-guard + firn-guard for
-  terminal/process — and DENIES the tool whenever any member denies (non-zero
+  pre_tool_call runs the provider-neutral authoring guard chains from
+  ~/.agents/hooks — tripwire-guard for terminal/process — and DENIES the tool
+  whenever any member denies (non-zero
   exit OR a permissionDecision=deny JSON envelope on stdout), is unavailable,
   times out, returns malformed output, or raises. Native delegate_task is
   refused outright (the delegation toolset is off; delegation flows through

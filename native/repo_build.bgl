@@ -1,0 +1,258 @@
+#lang beagle
+(ns firn.repo-build)
+
+(defrecord SourceKey
+  [relative String
+   modified-nanoseconds Int])
+
+(defrecord SourceState
+  [key SourceKey
+   output-relative String
+   output-modified-nanoseconds (U Int Nil)])
+
+(defrecord SourceInventory
+  [sources (Vec SourceState)
+   obsolete-outputs (Vec String)])
+
+(defrecord RepoBuildPlan
+  [stale-sources (Vec SourceState)
+   obsolete-outputs (Vec String)])
+
+(defrecord CompilerProcess
+  [source-relative String
+   destination-relative String
+   argv (Vec String)])
+
+(defunion RepoBuildArgv
+  (ParsedRepoBuild [token Bool])
+  (OtherRepoBuildCommand [argv (Vec String)])
+  (InvalidRepoBuildArgv [argv (Vec String)]))
+
+(defn starts-with?
+  [text String
+   prefix String]
+  Bool
+  (and (>= (count text) (count prefix))
+       (= (subs text 0 (count prefix)) prefix)))
+
+(defn ends-with?
+  [text String
+   suffix String]
+  Bool
+  (and (>= (count text) (count suffix))
+       (= (subs text (- (count text) (count suffix)) (count text)) suffix)))
+
+(defn root-result-path? [relative String] Bool
+  (starts-with? relative "result"))
+
+(defn traversal-excluded? [relative String] Bool
+  (or (= relative ".direnv")
+      (starts-with? relative ".direnv/")
+      (root-result-path? relative)))
+
+(defn source-excluded? [relative String] Bool
+  (or (traversal-excluded? relative)
+      (= relative "scripts")
+      (starts-with? relative "scripts/")
+      (= relative "tests")
+      (starts-with? relative "tests/")
+      (= relative "docs/fixtures")
+      (starts-with? relative "docs/fixtures/")
+      (= relative "enabled-tags.bnix")
+      (ends-with? relative "/enabled-tags.bnix")))
+
+(defn source-path? [relative String] Bool
+  (and (ends-with? relative ".bnix")
+       (not (source-excluded? relative))))
+
+(defn obsolete-output-path? [relative String] Bool
+  (and (not (traversal-excluded? relative))
+       (or (= relative "enabled-tags.nix")
+           (ends-with? relative "/enabled-tags.nix"))))
+
+(defn output-relative [source-relative String] String
+  (str (subs source-relative 0 (- (count source-relative) 5)) ".nix"))
+
+(defn cache-valid? [state SourceState] Bool
+  (let [(output (U Int Nil))
+        (sourcestate-output-modified-nanoseconds state)]
+    (if (nil? output)
+      false
+      (> output
+         (sourcekey-modified-nanoseconds (sourcestate-key state))))))
+
+(defn stale-sources
+  [sources (Vec SourceState)
+   index Int
+   result (Vec SourceState)]
+  (Vec SourceState)
+  (if (>= index (count sources))
+    result
+    (let [(state SourceState) (nth sources index)]
+      (stale-sources sources (+ index 1)
+        (if (cache-valid? state) result (conj result state))))))
+
+(defn build-plan [inventory SourceInventory] RepoBuildPlan
+  (->RepoBuildPlan
+    (stale-sources (sourceinventory-sources inventory) 0 [])
+    (sourceinventory-obsolete-outputs inventory)))
+
+(defn absolute-path
+  [root String
+   relative String]
+  String
+  (str root "/" relative))
+
+(defn compiler-process
+  [compiler String
+   root String
+   state SourceState
+   temporary String]
+  CompilerProcess
+  (let [(source-relative String)
+        (sourcekey-relative (sourcestate-key state))
+        (destination-relative String)
+        (sourcestate-output-relative state)]
+    (->CompilerProcess source-relative destination-relative
+      [compiler (absolute-path root source-relative) temporary])))
+
+(defn parse-repo-build-argv [argv (Vec String)] RepoBuildArgv
+  (if (and (>= (count argv) 2)
+           (= (nth argv 0) "repo")
+           (= (nth argv 1) "build"))
+    (cond
+      [(= (count argv) 2) (->ParsedRepoBuild true)]
+      [(and (= (count argv) 3) (= (nth argv 2) "all"))
+       (->ParsedRepoBuild true)]
+      [:else (->InvalidRepoBuildArgv argv)])
+    (->OtherRepoBuildCommand argv)))
+
+(defn horizontal-space? [character String] Bool
+  (or (= character " ") (= character "\t")))
+
+(defn skip-horizontal
+  [text String
+   cursor Int
+   end Int]
+  Int
+  (if (and (< cursor end)
+           (horizontal-space? (subs text cursor (+ cursor 1))))
+    (skip-horizontal text (+ cursor 1) end)
+    cursor))
+
+(defn line-end
+  [text String
+   start Int]
+  Int
+  (loop [(cursor Int) start]
+    (if (or (>= cursor (count text))
+            (= (subs text cursor (+ cursor 1)) "\n"))
+      cursor
+      (recur (+ cursor 1)))))
+
+(defn after-line
+  [text String
+   start Int]
+  Int
+  (let [(end Int) (line-end text start)]
+    (if (< end (count text)) (+ end 1) end)))
+
+(defn token-at?
+  [text String
+   cursor Int
+   end Int
+   token String]
+  Bool
+  (and (<= (+ cursor (count token)) end)
+       (= (subs text cursor (+ cursor (count token))) token)))
+
+(defn assignment-opening
+  [text String
+   start Int
+   end Int
+   name String]
+  (U String Nil)
+  (let [(cursor Int) (skip-horizontal text start end)]
+    (if (not (token-at? text cursor end name))
+      nil
+      (let [(after-name Int) (+ cursor (count name))
+            (equals Int) (skip-horizontal text after-name end)]
+        (if (or (>= equals end)
+                (not (= (subs text equals (+ equals 1)) "=")))
+          nil
+          (let [(opening Int) (skip-horizontal text (+ equals 1) end)]
+            (if (>= opening end)
+              nil
+              (subs text opening (+ opening 1)))))))))
+
+(defn authoring-line-kind
+  [text String
+   start Int]
+  Int
+  (let [(end Int) (line-end text start)]
+    (cond
+      [(= (assignment-opening text start end "tags") "[") 1]
+      [(= (assignment-opening text start end "tags-opt-in") "[") 1]
+      [(= (assignment-opening text start end "tag-overrides") "{") 2]
+      [(= (assignment-opening text start end "flake-inputs") "{") 2]
+      [:else 0])))
+
+(defn brace-delta
+  [text String
+   start Int
+   end Int]
+  Int
+  (loop [(cursor Int) start (depth Int) 0]
+    (if (>= cursor end)
+      depth
+      (let [(character String) (subs text cursor (+ cursor 1))]
+        (recur (+ cursor 1)
+          (+ depth
+             (cond
+               [(= character "{") 1]
+               [(= character "}") -1]
+               [:else 0])))))))
+
+(defn after-brace-block
+  [text String
+   start Int]
+  Int
+  (loop [(cursor Int) start (depth Int) 0]
+    (let [(end Int) (line-end text cursor)
+          (next-depth Int) (+ depth (brace-delta text cursor end))
+          (next Int) (after-line text cursor)]
+      (if (or (<= next-depth 0) (>= next (count text)))
+        next
+        (recur next next-depth)))))
+
+(defn strip-authoring-attributes [text String] String
+  (loop [(cursor Int) 0 (result String) ""]
+    (if (>= cursor (count text))
+      result
+      (let [(kind Int) (authoring-line-kind text cursor)
+            (next Int) (after-line text cursor)]
+        (cond
+          [(= kind 1) (recur next result)]
+          [(= kind 2) (recur (after-brace-block text cursor) result)]
+          [:else (recur next (str result (subs text cursor next)))])))))
+
+(defn errno-message
+  [operation String
+   relative String
+   errno Int]
+  String
+  (str "firn-build: " operation " '" relative "': errno " errno "\n"))
+
+(defn compiler-failure-message
+  [relative String
+   status Int]
+  String
+  (str "firn-build: compiler failed for '" relative
+    "' with status " status "\n"))
+
+(defn compiler-spawn-message
+  [relative String
+   errno Int]
+  String
+  (str "firn-build: cannot start compiler for '" relative
+    "': errno " errno "\n"))
