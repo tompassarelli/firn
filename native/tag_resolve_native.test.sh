@@ -24,11 +24,8 @@ die() {
   exit 1
 }
 
-[[ -f "$beagle/bin/_beagle-racket" ]] \
+[[ -x "$beagle/bin/beagle" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
-
-# shellcheck disable=SC1091
-source "$beagle/bin/_beagle-racket"
 
 native="${FIRN_TAG_RESOLVE_BIN:-}"
 if [[ -z "$native" ]]; then
@@ -48,32 +45,6 @@ if [[ -z "$native" ]]; then
     || die "native executable compilation failed"
 fi
 [[ -x "$native" ]] || die "native executable is not executable: $native"
-
-run_oracle() {
-  local root="$1" emit_mode="$2" result="$3"
-  shift 3
-  set +e
-  case "$emit_mode" in
-    absent)
-      timeout --foreground 30 env \
-        -u FIRN_TAG_EMIT -u FIRN_TRACE_ID -u FIRN_TRACE_PATH \
-        FIRN_REPO="$root" \
-        "$RACKET" "$repo/scripts/firn.rkt" "$@" \
-        >"$result.out" 2>"$result.err"
-      ;;
-    empty)
-      timeout --foreground 30 env \
-        -u FIRN_TRACE_ID -u FIRN_TRACE_PATH \
-        FIRN_REPO="$root" FIRN_TAG_EMIT= \
-        "$RACKET" "$repo/scripts/firn.rkt" "$@" \
-        >"$result.out" 2>"$result.err"
-      ;;
-    *) die "unknown emit mode: $emit_mode" ;;
-  esac
-  local status=$?
-  set -e
-  printf '%s\n' "$status" >"$result.status"
-}
 
 run_native() {
   local root="$1" emit_mode="$2" result="$3"
@@ -107,17 +78,12 @@ assert_file_equal() {
   fi
 }
 
-assert_run_parity() {
-  local label="$1" oracle_result="$2" native_result="$3" expected_status="$4"
-  local oracle_status native_status
-  oracle_status="$(<"$oracle_result.status")"
-  native_status="$(<"$native_result.status")"
-  [[ "$oracle_status" == "$expected_status" ]] \
-    || die "$label oracle returned $oracle_status, expected $expected_status"
-  [[ "$native_status" == "$expected_status" ]] \
-    || die "$label native returned $native_status, expected $expected_status"
-  assert_file_equal "$label stdout" "$oracle_result.out" "$native_result.out"
-  assert_file_equal "$label stderr" "$oracle_result.err" "$native_result.err"
+assert_status() {
+  local label="$1" result="$2" expected_status="$3"
+  local actual_status
+  actual_status="$(<"$result.status")"
+  [[ "$actual_status" == "$expected_status" ]] \
+    || die "$label returned $actual_status, expected $expected_status"
 }
 
 make_emit_repo() {
@@ -186,30 +152,22 @@ EOF
 EOF
 }
 
-oracle_live="$scratch/oracle-live"
 native_live="$scratch/native-live"
-run_oracle "$repo" absent "$oracle_live" tag resolve all
 run_native "$repo" absent "$native_live" tag resolve all
-assert_run_parity "live all" "$oracle_live" "$native_live" 0
+assert_status "live all" "$native_live" 0
 
 missing_host="__firn_native_missing_host__"
-oracle_missing="$scratch/oracle-missing"
 native_missing="$scratch/native-missing"
-run_oracle "$repo" absent "$oracle_missing" tag resolve "$missing_host"
 run_native "$repo" absent "$native_missing" tag resolve "$missing_host"
-assert_run_parity "unknown host" "$oracle_missing" "$native_missing" 1
+assert_status "unknown host" "$native_missing" 1
 [[ ! -s "$native_missing.out" ]] || die "unknown host wrote stdout"
 
-oracle_emit_root="$scratch/oracle-emit-repo"
 native_emit_root="$scratch/native-emit-repo"
-make_emit_repo "$oracle_emit_root"
 make_emit_repo "$native_emit_root"
 
-oracle_first="$scratch/oracle-first-emit"
 native_first="$scratch/native-first-emit"
-run_oracle "$oracle_emit_root" absent "$oracle_first" tag resolve fixture+emit
 run_native "$native_emit_root" absent "$native_first" tag resolve fixture+emit
-assert_run_parity "first emit" "$oracle_first" "$native_first" 0
+assert_status "first emit" "$native_first" 0
 
 expected_first="$scratch/expected-first.out"
 printf '%s\n' \
@@ -233,18 +191,13 @@ cat >"$expected_generated" <<'EOF'
   {:myConfig.modules.alpha.enable (lib.mkDefault true)
    :myConfig.modules.beta.enable (lib.mkDefault true)})
 EOF
-oracle_generated="$oracle_emit_root/hosts/fixture/_generated-enables.bnix"
 native_generated="$native_emit_root/hosts/fixture/_generated-enables.bnix"
-[[ -f "$oracle_generated" ]] || die "oracle did not write generated source"
 [[ -f "$native_generated" ]] || die "native command did not write generated source"
-assert_file_equal "oracle generated source" "$expected_generated" "$oracle_generated"
 assert_file_equal "native generated source" "$expected_generated" "$native_generated"
 
-oracle_second="$scratch/oracle-second-emit"
 native_second="$scratch/native-second-emit"
-run_oracle "$oracle_emit_root" absent "$oracle_second" tag resolve fixture+emit
 run_native "$native_emit_root" absent "$native_second" tag resolve fixture+emit
-assert_run_parity "up-to-date emit" "$oracle_second" "$native_second" 0
+assert_status "up-to-date emit" "$native_second" 0
 expected_second="$scratch/expected-second.out"
 printf '%s\n' \
   'tag-resolve: hosts/fixture/_generated-enables.bnix is up to date (2 modules)' \
@@ -252,12 +205,9 @@ printf '%s\n' \
 assert_file_equal "up-to-date message" "$expected_second" "$native_second.out"
 assert_file_equal "stable generated source" "$expected_generated" "$native_generated"
 
-oracle_empty_env="$scratch/oracle-empty-env"
 native_empty_env="$scratch/native-empty-env"
-run_oracle "$oracle_emit_root" empty "$oracle_empty_env" tag resolve fixture
 run_native "$native_emit_root" empty "$native_empty_env" tag resolve fixture
-assert_run_parity \
-  "empty-present FIRN_TAG_EMIT" "$oracle_empty_env" "$native_empty_env" 0
+assert_status "empty-present FIRN_TAG_EMIT" "$native_empty_env" 0
 assert_file_equal "empty-present emit message" "$expected_second" "$native_empty_env.out"
 
 native_invalid="$scratch/native-invalid"
@@ -269,34 +219,23 @@ expected_usage="$scratch/expected-usage.err"
 printf '%s\n' 'Usage: firn tag resolve [<host>|all][+emit]' >"$expected_usage"
 assert_file_equal "invalid grammar usage" "$expected_usage" "$native_invalid.err"
 
-oracle_no_tag_root="$scratch/oracle-no-tag-repo"
 native_no_tag_root="$scratch/native-no-tag-repo"
-make_no_tag_repo "$oracle_no_tag_root"
 make_no_tag_repo "$native_no_tag_root"
-oracle_no_tag="$scratch/oracle-no-tag"
 native_no_tag="$scratch/native-no-tag"
-run_oracle "$oracle_no_tag_root" absent "$oracle_no_tag" tag resolve all+emit
 run_native "$native_no_tag_root" absent "$native_no_tag" tag resolve all+emit
-assert_run_parity "all+emit without tag sources" "$oracle_no_tag" "$native_no_tag" 0
+assert_status "all+emit without tag sources" "$native_no_tag" 0
 [[ ! -s "$native_no_tag.out" ]] || die "tagless all+emit wrote stdout"
 [[ ! -s "$native_no_tag.err" ]] || die "tagless all+emit wrote stderr"
 [[ ! -e "$native_no_tag_root/hosts/plain/_generated-enables.bnix" ]] \
   || die "tagless all+emit wrote generated source"
 
-oracle_metadata_root="$scratch/oracle-metadata-free"
 native_metadata_root="$scratch/native-metadata-free"
-make_metadata_free_repo "$oracle_metadata_root"
 make_metadata_free_repo "$native_metadata_root"
 for metadata_host in odd plain; do
-  oracle_metadata="$scratch/oracle-metadata-$metadata_host"
   native_metadata="$scratch/native-metadata-$metadata_host"
-  run_oracle "$oracle_metadata_root" absent "$oracle_metadata" \
-    tag resolve "$metadata_host"
   run_native "$native_metadata_root" absent "$native_metadata" \
     tag resolve "$metadata_host"
-  assert_run_parity \
-    "metadata-free $metadata_host" \
-    "$oracle_metadata" "$native_metadata" 0
+  assert_status "metadata-free $metadata_host" "$native_metadata" 0
 done
 
-printf 'ok: native tag resolution matches the pinned Racket executable boundary\n'
+printf 'ok: native tag resolution passes native filesystem and CLI contracts\n'

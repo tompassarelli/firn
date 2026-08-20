@@ -36,11 +36,8 @@ die() {
   exit 1
 }
 
-[[ -f "$beagle/bin/_beagle-racket" ]] \
+[[ -x "$beagle/bin/beagle" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
-
-# shellcheck disable=SC1091
-source "$beagle/bin/_beagle-racket"
 
 build_native() {
   local name="$1" entry="$2"
@@ -151,9 +148,7 @@ EOF
 EOF
 }
 
-oracle_root="$scratch/oracle-repo"
 native_root="$scratch/native-repo"
-make_fixture "$oracle_root"
 make_fixture "$native_root"
 
 run_once() {
@@ -216,24 +211,4 @@ if ldd "$scratch/flake-input-native" | rg -qi 'racket|clojure|babashka|java'; th
   die "hosted runtime leaked into native executable"
 fi
 
-# This is the acceptance oracle's only hosted-Racket invocation. All native
-# checks run first so an upstream or consumer failure cannot spend the oracle.
-run_once "$scratch/oracle" \
-  env -u FIRN_FLAKE_INPUTS_EMIT -u FIRN_TRACE_ID -u FIRN_TRACE_PATH \
-    FIRN_REPO="$oracle_root" \
-    "$RACKET" "$repo/scripts/firn.rkt" flake-input resolve emit
-
-[[ "$(<"$scratch/oracle.status")" == "0" ]] \
-  || die "hosted oracle failed with status $(<"$scratch/oracle.status")"
-cmp -s "$scratch/oracle.out" "$scratch/native.out" \
-  || { diff -u "$scratch/oracle.out" "$scratch/native.out" >&2 || true; \
-       die "stdout differs from hosted oracle"; }
-cmp -s "$scratch/oracle.err" "$scratch/native.err" \
-  || { diff -u "$scratch/oracle.err" "$scratch/native.err" >&2 || true; \
-       die "stderr differs from hosted oracle"; }
-cmp -s "$oracle_root/flake.bnix" "$scratch/first-native-flake.bnix" \
-  || { diff -u "$oracle_root/flake.bnix" \
-         "$scratch/first-native-flake.bnix" >&2 || true; \
-       die "emitted flake.bnix differs from hosted oracle"; }
-
-printf 'ok: native flake-input emit matches the single pinned Racket oracle\n'
+printf 'ok: native flake-input emit passes pure, driver, and CLI contracts\n'

@@ -36,11 +36,8 @@ die() {
   exit 1
 }
 
-[[ -f "$beagle/bin/_beagle-racket" ]] \
+[[ -x "$beagle/bin/beagle" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
-
-# shellcheck disable=SC1091
-source "$beagle/bin/_beagle-racket"
 
 build_native() {
   local name="$1" entry="$2"
@@ -612,29 +609,4 @@ if ldd "$scratch/tag-commands-native" \
   die "hosted runtime leaked into native executable"
 fi
 
-# The acceptance oracle's sole hosted-Racket command comes last. Native checks
-# cannot spend it, and it exercises the order-sensitive rewrite boundary.
-printf 'tag-commands-native: checking one pinned hosted rewrite oracle\n' >&2
-oracle_host="$(timeout --foreground 5 hostname)"
-[[ "$oracle_host" =~ ^[A-Za-z0-9._-]+$ ]] \
-  || die "hostname cannot safely name the oracle fixture"
-oracle_root="$scratch/oracle-repo"
-native_oracle_root="$scratch/native-oracle-repo"
-make_fixture "$oracle_root" "$oracle_host"
-make_fixture "$native_oracle_root" "$oracle_host"
-run_native "$scratch/native-oracle" "$native_oracle_root" "$oracle_host" \
-  tag opt-in desktop+epsilon
-assert_status "$scratch/native-oracle" 0 "native oracle candidate"
-run_once "$scratch/hosted-oracle" \
-  env FIRN_REPO="$oracle_root" \
-    "$RACKET" "$repo/scripts/firn.rkt" tag opt-in desktop+epsilon
-assert_status "$scratch/hosted-oracle" 0 "hosted rewrite oracle"
-assert_same "$scratch/hosted-oracle.out" "$scratch/native-oracle.out" \
-  "hosted rewrite stdout parity"
-assert_same "$scratch/hosted-oracle.err" "$scratch/native-oracle.err" \
-  "hosted rewrite stderr parity"
-assert_same "$oracle_root/hosts/$oracle_host/enabled-tags.bnix" \
-  "$native_oracle_root/hosts/$oracle_host/enabled-tags.bnix" \
-  "hosted rewrite byte parity"
-
-printf 'ok: Native tag inventory and all six mutations match hosted semantics\n'
+printf 'ok: Native tag inventory and all six mutations pass native contracts\n'

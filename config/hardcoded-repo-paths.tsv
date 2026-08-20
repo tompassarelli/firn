@@ -36,7 +36,6 @@ nixos-config/dotfiles/bin/activity	1
 nixos-config/dotfiles/bin/agents	31
 nixos-config/dotfiles/bin/beagle	1
 nixos-config/dotfiles/bin/concern	1
-nixos-config/dotfiles/bin/firn	2
 nixos-config/dotfiles/bin/fram	1
 nixos-config/dotfiles/bin/harness-map	4
 nixos-config/dotfiles/bin/north	1
@@ -53,11 +52,8 @@ nixos-config/scripts/agent-config-check.test.sh	7
 nixos-config/scripts/claude-settings-seed.sh	1
 nixos-config/scripts/claude-settings-seed.test.sh	2
 nixos-config/scripts/firn-build	1
-nixos-config/scripts/firn-build-bin	3
-nixos-config/scripts/firn-build-bin.test.sh	1
 nixos-config/scripts/firn-cmds/diff.rkt	1
 nixos-config/scripts/firn-cmds/util.rkt	1
-nixos-config/scripts/firn-source-hash	1
 nixos-config/scripts/firn-validate	1
 nixos-config/scripts/firn-validate.test.sh	1
 north/bin/north-mine	1

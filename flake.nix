@@ -363,10 +363,6 @@
       nativeBuildInputs = [ beaglePackage pkgs.stdenv.cc ];
     } ''
       mkdir -p $out/bin
-      beagle native-exe --out $out/bin/firn-native --entry firn.main/-main ${self}/native/firn.bgl
-      beagle native-exe --out $out/bin/firn-tag-resolve --entry firn.tag-resolve-native/-main ${beagle}/native-core/src/beagle/datum_reader.bgl ${beagle}/native-core/src/native/json.bgl ${self}/native/tag_resolve.bgl ${self}/native/tag_inputs.bgl ${self}/native/tag_resolve_driver.bgl ${self}/native/tag_resolve_native.bgl
-      beagle native-exe --out $out/bin/firn-inventory --entry firn.inventory-native/-main ${beagle}/native-core/src/beagle/datum_reader.bgl ${beagle}/native-core/src/native/json.bgl ${self}/native/tag_resolve.bgl ${self}/native/tag_inputs.bgl ${self}/native/tag_resolve_driver.bgl ${self}/native/tag_resolve_native.bgl ${self}/native/inventory.bgl ${self}/native/inventory_native.bgl
-      beagle native-exe --out $out/bin/firn-authoring --entry firn.authoring-native/-main ${beagle}/native-core/src/native/json.bgl ${self}/native/authoring.bgl ${self}/native/authoring_native.bgl
-      beagle native-exe --out $out/bin/firn-flake-input --entry firn.flake-input-native/-main ${beagle}/native-core/src/beagle/datum_reader.bgl ${self}/native/flake_input.bgl ${self}/native/flake_input_driver.bgl ${self}/native/flake_input_native.bgl
+      beagle native-exe --out $out/bin/firn --entry firn.main/-main ${beagle}/native-core/src/beagle/datum_reader.bgl ${beagle}/native-core/src/native/json.bgl ${beagle}/native-core/src/beagle/nix_schema_path.bgl ${self}/native/tag_resolve.bgl ${self}/native/tag_inputs.bgl ${self}/native/tag_resolve_driver.bgl ${self}/native/tag_resolve_native.bgl ${self}/native/inventory.bgl ${self}/native/inventory_native.bgl ${self}/native/authoring.bgl ${self}/native/authoring_native.bgl ${self}/native/flake_input.bgl ${self}/native/flake_input_driver.bgl ${self}/native/flake_input_native.bgl ${self}/native/tag_commands.bgl ${self}/native/tag_commands_driver.bgl ${self}/native/tag_commands_native.bgl ${self}/native/firn_views.bgl ${self}/native/firn_views_native.bgl ${self}/native/firn.bgl
     '') (builtins.getAttr "beagle" (builtins.getAttr system beagle.packages)))) (builtins.getAttr system nixpkgs.legacyPackages))))) (builtins.fromJSON (builtins.readFile ./config/darwin-modules.json)))) ./modules));
 }

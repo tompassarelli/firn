@@ -1,366 +1,17 @@
 #lang beagle
-(ns firn.main)
+(ns firn.main
+  (:require [firn.authoring-native :as authoring]
+            [firn.flake-input-native :as flake-input]
+            [firn.inventory-native :as inventory]
+            [firn.tag-commands-native :as tag-commands]
+            [firn.tag-resolve-native :as tag-resolve]
+            [firn.views-native :as views]))
 
-(defrecord FirnCommand
-  [(node String)
-   (edge String)
-   (leaf String)
-   (detail-gap String)
-   (summary String)
-   (common-gap String)
-   (common-summary String)])
-
-(defrecord CommandGroup [(commands (Vec FirnCommand))])
-
-(defrecord CommonCommand [(command FirnCommand) (usage String)])
-
-(def flake-inputs FirnCommand
-  (->FirnCommand
-    "flake" "inputs" "all" "  "
-    "List flake inputs: source, age, locked rev, follows, broken-path check."
-    "" ""))
-
-(def flake-input-resolve FirnCommand
-  (->FirnCommand
-    "flake-input" "resolve" "show|emit" "  "
-    "collect :flake-inputs from active modules; emit splices into flake.bnix"
-    "" ""))
-
-(def host-rebuild FirnCommand
-  (->FirnCommand
-    "host" "rebuild" "<host>" "   "
-    "plan pins → build+validate commit snapshot → switch verified closure → tag generation"
-    "" ""))
-
-(def host-impact FirnCommand
-  (->FirnCommand
-    "host" "impact" "[<host>]" "  "
-    "dry-run impact prediction (what will rebuild, estimated time)"
-    "      " "what will rebuild, estimated time"))
-
-(def host-list FirnCommand
-  (->FirnCommand
-    "host" "list" "all" "         "
-    "list every host directory under hosts/"
-    "" ""))
-
-(def host-status FirnCommand
-  (->FirnCommand
-    "host" "status" "<host>" "    "
-    "all modules enabled directly in a host's configuration.bnix"
-    "" ""))
-
-(def host-gen FirnCommand
-  (->FirnCommand
-    "host" "gen" "<host>" "       "
-    "current and next NixOS generation numbers"
-    "" ""))
-
-(def module-list FirnCommand
-  (->FirnCommand
-    "module" "list" "all|used|unused" "  "
-    "list modules (all, used = enabled somewhere, unused = orphan)"
-    "" ""))
-
-(def module-refs FirnCommand
-  (->FirnCommand
-    "module" "refs" "<name>" "           "
-    "show which hosts reference a module (direct + via tags)"
-    "" ""))
-
-(def module-status FirnCommand
-  (->FirnCommand
-    "module" "status" "all" "            "
-    "list enabled modules on the default host (configuration.bnix)"
-    "" ""))
-
-(def module-add FirnCommand
-  (->FirnCommand
-    "module" "add" "<name>" "            "
-    "scaffold a minimal module (.bnix + .nix)"
-    "" ""))
-
-(def module-enable FirnCommand
-  (->FirnCommand
-    "module" "enable" "<name>" "         "
-    "remove <name> from :disabled (no module-level force-on)"
-    "" ""))
-
-(def module-disable FirnCommand
-  (->FirnCommand
-    "module" "disable" "<name>" "        "
-    "append <name> to :disabled in enabled-tags.bnix"
-    "   " "add <m> to :disabled (hard off)"))
-
-(def platform-list FirnCommand
-  (->FirnCommand
-    "platform" "list" "all|darwin|linux" "  "
-    "platform compat overview (all = full matrix; others = filtered)"
-    "" ""))
-
-(def platform-show FirnCommand
-  (->FirnCommand
-    "platform" "show" "<name>" "            "
-    "compat report for one module"
-    "" ""))
-
-(def platform-safelist FirnCommand
-  (->FirnCommand
-    "platform" "safelist" "all" "           "
-    "emit a darwin-safelist (lst …) snippet for flake.bnix"
-    "" ""))
-
-(def repo-watch FirnCommand
-  (->FirnCommand
-    "repo" "watch" "all" "                "
-    "re-run validator on .rkt save (no external deps)"
-    "" ""))
-
-(def repo-diff FirnCommand
-  (->FirnCommand
-    "repo" "diff" "<target>|all" "        "
-    "re-emit Nix from .bnix and diff vs committed .nix"
-    "        " "re-emit and diff vs committed .nix"))
-
-(def repo-doctor FirnCommand
-  (->FirnCommand
-    "repo" "doctor" "all" "               "
-    "repo health check (untracked, stale, schema, orphans, validator)"
-    "      " "repo health check"))
-
-(def repo-upgrade FirnCommand
-  (->FirnCommand
-    "repo" "upgrade" "now|dry-run" "      "
-    "flake update + schema diff + validate (use dry-run leaf to preview)"
-    "" ""))
-
-(def repo-build FirnCommand
-  (->FirnCommand
-    "repo" "build" "[all]" "              "
-    "regenerate .nix from .bnix sources"
-    "       " "regenerate .nix from .bnix"))
-
-(def repo-validate FirnCommand
-  (->FirnCommand
-    "repo" "validate" "[all]" "           "
-    "lint .nix syntax + validate option paths, types, packages"
-    "    " "lint + type/package/path check"))
-
-(def repo-lint FirnCommand
-  (->FirnCommand
-    "repo" "lint" "[all]" "               "
-    "syntax-check generated .nix files"
-    "" ""))
-
-(def repo-architecture FirnCommand
-  (->FirnCommand
-    "repo" "architecture" "all|bundle" "  "
-    "regenerate the local Claude map (docs/claude/02-local-map.md); `bundle` prints the full read"
-    "" ""))
-
-(def schema-explain FirnCommand
-  (->FirnCommand
-    "schema" "explain" "<path>" "    "
-    "show schema entry + repo references for an option"
-    "" ""))
-
-(def schema-extract FirnCommand
-  (->FirnCommand
-    "schema" "extract" "[<host>]" "  "
-    "regenerate options schema cache from nix eval"
-    "" ""))
-
-(def secret-list FirnCommand
-  (->FirnCommand
-    "secret" "list" "all" "     "
-    "list secret names under secrets/"
-    "" ""))
-
-(def secret-show FirnCommand
-  (->FirnCommand
-    "secret" "show" "<name>" "  "
-    "decrypt and print a secret to stdout"
-    "" ""))
-
-(def secret-edit FirnCommand
-  (->FirnCommand
-    "secret" "edit" "<name>" "  "
-    "open a secret in $EDITOR via sops (creates if missing)"
-    "" ""))
-
-(def tag-list FirnCommand
-  (->FirnCommand
-    "tag" "list" "all" "                    "
-    "tag universe (sourced from modules' :tags / :tags-opt-in)"
-    "" ""))
-
-(def tag-show FirnCommand
-  (->FirnCommand
-    "tag" "show" "<module>" "               "
-    "show a module's :tags and :tags-opt-in"
-    "" ""))
-
-(def tag-filter FirnCommand
-  (->FirnCommand
-    "tag" "filter" "<tag>" "                "
-    "list modules carrying a tag"
-    "" ""))
-
-(def tag-index FirnCommand
-  (->FirnCommand
-    "tag" "index" "repo|stdout" "           "
-    "write .beagle-cache/tags.jsonl (or 'stdout' to pipe)"
-    "" ""))
-
-(def tag-resolve FirnCommand
-  (->FirnCommand
-    "tag" "resolve" "<host>|all [+emit]" "  "
-    "resolve enabled-tags → active module set; +emit writes _generated-enables.bnix"
-    "" ""))
-
-(def tag-enable FirnCommand
-  (->FirnCommand
-    "tag" "enable" "<tag>" "                "
-    "enable a tag in the current host's enabled-tags.bnix"
-    "   " "add a tag to the current host"))
-
-(def tag-disable FirnCommand
-  (->FirnCommand
-    "tag" "disable" "<tag>" "               "
-    "remove a tag from the current host's enabled-tags.bnix"
-    "" ""))
-
-(def tag-opt-in FirnCommand
-  (->FirnCommand
-    "tag" "opt-in" "<tag>+<module>" "       "
-    "append +<module> under <tag> in enabled-tags.bnix"
-    "   " "add +<module> under tag <t>"))
-
-(def tag-opt-out FirnCommand
-  (->FirnCommand
-    "tag" "opt-out" "<tag>+<module>" "      "
-    "append -<module> under <tag> in enabled-tags.bnix"
-    "" ""))
-
-(def tag-status FirnCommand
-  (->FirnCommand
-    "tag" "status" "<host>" "               "
-    "show enabled-tags.bnix + resolved active modules"
-    "       " "enabled-tags.bnix + resolved active modules"))
-
-(def template-service FirnCommand
-  (->FirnCommand
-    "template" "service" "<name>" "    "
-    "scaffold a NixOS service-wrapping module from schema"
-    "" ""))
-
-(def template-submodule FirnCommand
-  (->FirnCommand
-    "template" "submodule" "<name>" "  "
-    "scaffold a module with an option-attrs submodule shape"
-    "" ""))
-
-(def template-home FirnCommand
-  (->FirnCommand
-    "template" "home" "<name>" "       "
-    "scaffold a home-manager-only module"
-    "" ""))
-
-(def template-host FirnCommand
-  (->FirnCommand
-    "template" "host" "<name>" "       "
-    "scaffold a new host's configuration.bnix"
-    "" ""))
-
-(def command-groups (Vec CommandGroup)
-  [(->CommandGroup [flake-inputs])
-   (->CommandGroup [flake-input-resolve])
-   (->CommandGroup
-     [host-rebuild host-impact host-list host-status host-gen])
-   (->CommandGroup
-     [module-list module-refs module-status module-add module-enable
-      module-disable])
-   (->CommandGroup [platform-list platform-show platform-safelist])
-   (->CommandGroup
-     [repo-watch repo-diff repo-doctor repo-upgrade repo-build repo-validate
-      repo-lint repo-architecture])
-   (->CommandGroup [schema-explain schema-extract])
-   (->CommandGroup [secret-list secret-show secret-edit])
-   (->CommandGroup
-     [tag-list tag-show tag-filter tag-index tag-resolve tag-enable tag-disable
-      tag-opt-in tag-opt-out tag-status])
-   (->CommandGroup
-     [template-service template-submodule template-home template-host])])
-
-(def common-commands (Vec CommonCommand)
-  [(->CommonCommand repo-build "build")
-   (->CommonCommand repo-validate "validate")
-   (->CommonCommand host-impact "impact")
-   (->CommonCommand repo-doctor "doctor")
-   (->CommonCommand tag-status "status")
-   (->CommonCommand tag-enable "enable <t>")
-   (->CommonCommand tag-opt-in "opt-in <t>+<m>")
-   (->CommonCommand module-disable "disable <m>")
-   (->CommonCommand repo-diff "diff")])
-
-(defn command-usage [(command FirnCommand)] String
-  (if (= (:leaf command) "")
-    (:edge command)
-    (str (:edge command) " " (:leaf command))))
-
-(defn print-common-command [(common CommonCommand)] Nil
-  (let [(command FirnCommand) (:command common)]
-    (println
-      (str "  firn " (:node command) " " (:usage common)
-        (:common-gap command) (:common-summary command)))))
-
-(defn print-command [(command FirnCommand)] Nil
-  (println
-    (str "  " (command-usage command) (:detail-gap command)
-      (:summary command))))
-
-(defn print-command-list [(commands (Vec FirnCommand))] Nil
-  (loop [(index Int) 0]
-    (if (< index (count commands))
-      (do
-        (print-command (nth commands index))
-        (recur (+ index 1)))
-      nil)))
-
-(defn print-common-commands [] Nil
-  (loop [(index Int) 0]
-    (if (< index (count common-commands))
-      (do
-        (print-common-command (nth common-commands index))
-        (recur (+ index 1)))
-      nil)))
-
-(defn print-command-groups [] Nil
-  (loop [(index Int) 0]
-    (if (< index (count command-groups))
-      (let [(commands (Vec FirnCommand))
-            (:commands (nth command-groups index))]
-        (println (:node (nth commands 0)))
-        (print-command-list commands)
-        (println "")
-        (recur (+ index 1)))
-      nil)))
-
-(defn print-help [] Nil
-  (println "firn — config management")
-  (println "")
-  (println "Usage:")
-  (println "  firn <node> <edge> [<leaf>]  [<node> <edge> [<leaf>] ...]")
-  (println "")
-  (println "Operator shortcut:")
-  (println "  firn rebuild          build + validate + switch (current host)")
-  (println "")
-  (println "Common graph commands:")
-  (print-common-commands)
-  (println "")
-  (println "Full graph:")
-  (println "")
-  (print-command-groups))
+(defn command?
+  [(args (Vec String)) (node String) (edge String)] Bool
+  (if (< (count args) 2)
+    false
+    (and (= (nth args 0) node) (= (nth args 1) edge))))
 
 (defn help-request? [(args (Vec String))] Bool
   (or (= (count args) 0)
@@ -368,7 +19,117 @@
       (= (nth args 0) "-h")
       (= (nth args 0) "--help")))
 
+(defn tag-command? [(args (Vec String))] Bool
+  (or (command? args "tag" "list")
+      (command? args "tag" "show")
+      (command? args "tag" "filter")
+      (command? args "tag" "index")
+      (command? args "tag" "status")
+      (command? args "tag" "enable")
+      (command? args "tag" "disable")
+      (command? args "tag" "opt-in")
+      (command? args "tag" "opt-out")
+      (command? args "module" "enable")
+      (command? args "module" "disable")))
+
+(defn inventory-command? [(args (Vec String))] Bool
+  (or (command? args "module" "list")
+      (command? args "module" "refs")
+      (command? args "module" "status")
+      (command? args "host" "list")
+      (command? args "host" "status")))
+
+(defn authoring-command? [(args (Vec String))] Bool
+  (or (command? args "module" "add")
+      (command? args "template" "service")
+      (command? args "template" "submodule")
+      (command? args "template" "home")
+      (command? args "template" "host")
+      (command? args "secret" "list")
+      (command? args "secret" "show")
+      (command? args "secret" "edit")))
+
+(defn views-command? [(args (Vec String))] Bool
+  (or (command? args "flake" "inputs")
+      (command? args "platform" "list")
+      (command? args "platform" "show")
+      (command? args "platform" "safelist")
+      (command? args "schema" "explain")
+      (command? args "host" "gen")))
+
+(defn print-help [] Nil
+  (println "firn — native configuration management")
+  (println "")
+  (println "Usage:")
+  (println "  firn <node> <edge> [<leaf>]")
+  (println "")
+  (println "flake")
+  (println "  inputs [all]")
+  (println "")
+  (println "flake-input")
+  (println "  resolve emit")
+  (println "")
+  (println "host")
+  (println "  gen [<host>]")
+  (println "  list [all]")
+  (println "  status [<host>]")
+  (println "")
+  (println "module")
+  (println "  add <name>")
+  (println "  disable <name>")
+  (println "  enable <name>")
+  (println "  list [all|used|unused]")
+  (println "  refs <name>")
+  (println "  status [all]")
+  (println "")
+  (println "platform")
+  (println "  list [all|darwin|linux]")
+  (println "  safelist [all]")
+  (println "  show <module>")
+  (println "")
+  (println "schema")
+  (println "  explain <path-or-error>")
+  (println "")
+  (println "secret")
+  (println "  edit <name>")
+  (println "  list [all]")
+  (println "  show <name>")
+  (println "")
+  (println "tag")
+  (println "  disable <tag>")
+  (println "  enable <tag>")
+  (println "  filter <tag>")
+  (println "  index [repo|stdout]")
+  (println "  list [all]")
+  (println "  opt-in <tag>+<module>")
+  (println "  opt-out <tag>+<module>")
+  (println "  resolve [<host>|all][+emit]")
+  (println "  show <module>")
+  (println "  status [<host>]")
+  (println "")
+  (println "template")
+  (println "  home <name>")
+  (println "  host <name>")
+  (println "  service <name>")
+  (println "  submodule <name>"))
+
+(defn usage-error [] Int
+  (do
+    (host.stderr/write-text
+      "Usage: firn <node> <edge> [<leaf>]\n")
+    64))
+
+(defn dispatch [(args (Vec String))] Int
+  (cond
+    (command? args "tag" "resolve") (tag-resolve/-main args)
+    (tag-command? args) (tag-commands/-main args)
+    (inventory-command? args) (inventory/-main args)
+    (authoring-command? args) (authoring/-main args)
+    (command? args "flake-input" "resolve") (flake-input/-main args)
+    (views-command? args) (views/-main args)
+    :else (usage-error)))
+
 (defn -main [(args (Vec String))] Int
   (if (help-request? args)
     (do (print-help) 0)
-    64))
+    (dispatch args)))
