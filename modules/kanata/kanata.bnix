@@ -17,13 +17,13 @@
           {:enable    true
            :package   pkgs.kanata-git
            :keyboards
-            (lib.mkIf (not= cfg.devices [])
+            (lib.mkIf (!= cfg.devices [])
               {:main
                 {:devices     cfg.devices
-                 :port        (lib.mkIf (not= cfg.port nil) cfg.port)
+                 :port        (lib.mkIf (!= cfg.port nil) cfg.port)
                  :extraDefCfg "process-unmapped-keys yes"
                  :extraArgs   cfg.extraArgs
                  :config      (builtins.readFile cfg.configFile)}})}
          :systemd.services.kanata-main.serviceConfig
-          (lib.mkIf (not= cfg.devices [])
+          (lib.mkIf (!= cfg.devices [])
             {:DynamicUser (lib.mkForce false) :User "kanata"})})}))

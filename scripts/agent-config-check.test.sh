@@ -824,7 +824,7 @@ if codex_north_env_is_canonical "$scratch/codex-extra-env.toml" >/dev/null 2>&1;
   exit 1
 fi
 cp "$REPO/dotfiles/codex/config.toml" "$scratch/codex-wrong-env.toml"
-sed -i 's#^FRAM_LOG = "/home/tom/.local/state/north/coordination.log"$#FRAM_LOG = "/tmp/wrong.log"#' \
+sed -i 's#^BEAGLE_STORE_LOG = "/home/tom/.local/state/north/coordination.log"$#BEAGLE_STORE_LOG = "/tmp/wrong.log"#' \
   "$scratch/codex-wrong-env.toml"
 if codex_north_env_is_canonical "$scratch/codex-wrong-env.toml" >/dev/null 2>&1; then
   printf 'wrong Codex North MCP coordination log was accepted\n' >&2
@@ -1215,9 +1215,9 @@ printf '%s\n' \
   '    startup_timeout_sec: 15' \
   '    env:' \
   '      NORTH_PORT: "7977"' \
-  '      FRAM_LOG: /home/tom/.local/state/north/coordination.log' \
-  '      FRAM_TELEMETRY_LOG: /home/tom/.local/state/north/telemetry.log' \
-  '      FRAM_THREADS: /home/tom/.local/state/north/threads' \
+  '      BEAGLE_STORE_LOG: /home/tom/.local/state/north/coordination.log' \
+  '      BEAGLE_STORE_TELEMETRY_LOG: /home/tom/.local/state/north/telemetry.log' \
+  '      BEAGLE_STORE_THREADS: /home/tom/.local/state/north/threads' \
   >"$hermes_fixture2/config.yaml"
 if AGENT_CONFIG_HERMES="$hermes_fixture2" \
    "$REPO/scripts/agent-config-check.sh" >/dev/null 2>&1; then

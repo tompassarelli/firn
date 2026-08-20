@@ -33,5 +33,5 @@ Both `.bnix` and `.nix` are committed because the flake reads from the
 git tree. **Edit the `.bnix`** — `firn repo build` overwrites direct `.nix`
 edits.
 
-The personal North module intentionally distinguishes live development from
-pinned promotion. See [north-delivery-mode.md](north-delivery-mode.md).
+The `north-store` module launches the sealed Beagle Store release selected by
+North; active configuration never resolves a standalone database checkout.

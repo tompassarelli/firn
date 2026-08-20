@@ -18,28 +18,28 @@
 (nix/module [config lib pkgs ...]
   (let [username config.myConfig.modules.users.username
         homeDir config.myConfig.modules.users.homeDir
-        ;; The one place the engine, FRAMLOG, port, and SpaceId are chosen.
+        ;; The one place the engine, Store transaction log, port, and SpaceId are chosen.
         ;; The unit follows the selection; it never restates it.
         selectionEnv (s homeDir "/.local/state/north/beagle-store.env")
-        unitName "north-fram.service"
+        unitName "north-store.service"
         launch
           (pkgs.writeShellApplication
-            {:name "north-fram-launch"
+            {:name "north-store-launch"
              :runtimeInputs (nix/with pkgs [coreutils])
-             :text (builtins.readFile (p "./north-fram-launch"))})
+             :text (builtins.readFile (p "./north-store-launch"))})
         publishRuntime
           (pkgs.writeShellApplication
-            {:name "north-fram-publish-runtime"
+            {:name "north-store-publish-runtime"
              :runtimeInputs (nix/with pkgs [coreutils gnused])
-             :text (builtins.readFile (p "./north-fram-publish-runtime"))})]
-    {:options.myConfig.modules.north-fram.enable
+             :text (builtins.readFile (p "./north-store-publish-runtime"))})]
+    {:options.myConfig.modules.north-store.enable
       (lib.mkEnableOption "North coordination store (:7977) — sealed Beagle Store release as one user service")
      :config
-      (lib.mkIf config.myConfig.modules.north-fram.enable
+      (lib.mkIf config.myConfig.modules.north-store.enable
         {:home-manager.users
           {username
             (nix/module [config ...]
-              {:systemd.user.services.north-fram
+              {:systemd.user.services.north-store
                 {:Unit
                   {:Description "North coordination store — sealed Beagle Store release on :7977"
                    :ConditionPathExists selectionEnv
@@ -52,14 +52,14 @@
                    :Environment
                      [(s "NORTH_STORE_SELECTION=" selectionEnv)
                       (s "NORTH_COORD_SYSTEMD_UNIT=" unitName)]
-                   :ExecStart (s launch "/bin/north-fram-launch")
+                   :ExecStart (s launch "/bin/north-store-launch")
                    ;; The attestation's launcher-owned record. Fatal on
                    ;; purpose (staleness charter law 5): a coordinator that
                    ;; serves without a runtime record is silent divergence —
                    ;; attestation reads nothing while the engine answers — so
                    ;; a broken publisher fails the start loudly instead.
                    :ExecStartPost
-                     (s publishRuntime "/bin/north-fram-publish-runtime $MAINPID")
+                     (s publishRuntime "/bin/north-store-publish-runtime $MAINPID")
                    :ExecStopPost
                      (s "-" pkgs.coreutils "/bin/rm -f %S/north/store-runtime/north-store.runtime")
                    :Restart "on-failure"

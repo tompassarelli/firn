@@ -37,7 +37,7 @@ itself → beagle-authoring.
    session's uncommitted state (yours or a peer's) can block the rebuild or
    leak into the generation; the pipeline prints exactly which in-flight files
    it excluded and validates the snapshot itself. For local inputs
-   (`~/code/beagle`, `~/code/fram`, `~/code/north`), the exact
+   (`~/code/beagle`, `~/code/north`), the exact
    committed local `refs/heads/main` remains promotable while the active checkout
    is dirty or off-main because only that Git object enters the build. A missing,
    rewound, or divergent local `main` holds the already-verified pin.

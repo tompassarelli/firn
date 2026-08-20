@@ -26,9 +26,9 @@ DIGITALOCEAN_MCP_COMMAND='export DIGITALOCEAN_API_TOKEN="$(</home/tom/do-token.t
 MUTATION_TIMEOUT_SECONDS="${MUTATION_TIMEOUT_SECONDS:-30}"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-15}"
 
-WANT_FRAM_LOG="$LIFE/coordination.log"
-WANT_FRAM_TELEMETRY_LOG="$LIFE/telemetry.log"
-WANT_FRAM_THREADS="$LIFE/threads"
+WANT_BEAGLE_STORE_LOG="$LIFE/coordination.log"
+WANT_BEAGLE_STORE_TELEMETRY_LOG="$LIFE/telemetry.log"
+WANT_BEAGLE_STORE_THREADS="$LIFE/threads"
 
 warn() {
   printf '%s\n' "$*" >&2
@@ -75,22 +75,22 @@ reconcile_declarations() {
   north_json="$(declared_server north)"
   declaration_matches "$north_json" \
     --arg cmd "$NORTH_MCP_BIN" \
-    --arg log "$WANT_FRAM_LOG" \
-    --arg tel "$WANT_FRAM_TELEMETRY_LOG" \
-    --arg thr "$WANT_FRAM_THREADS" \
+    --arg log "$WANT_BEAGLE_STORE_LOG" \
+    --arg tel "$WANT_BEAGLE_STORE_TELEMETRY_LOG" \
+    --arg thr "$WANT_BEAGLE_STORE_THREADS" \
     --arg port "$WANT_NORTH_PORT" \
     '((.type // "stdio") == "stdio")
        and (.command == $cmd)
-       and (.env.FRAM_LOG == $log)
-       and (.env.FRAM_TELEMETRY_LOG == $tel)
-       and (.env.FRAM_THREADS == $thr)
+       and (.env.BEAGLE_STORE_LOG == $log)
+       and (.env.BEAGLE_STORE_TELEMETRY_LOG == $tel)
+       and (.env.BEAGLE_STORE_THREADS == $thr)
        and (.env.NORTH_PORT == $port)' &&
     north_ok=1 || north_ok=0
   reconcile_server north "$north_json" "$north_ok" \
     add north -s user \
-    -e "FRAM_LOG=$WANT_FRAM_LOG" \
-    -e "FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG" \
-    -e "FRAM_THREADS=$WANT_FRAM_THREADS" \
+    -e "BEAGLE_STORE_LOG=$WANT_BEAGLE_STORE_LOG" \
+    -e "BEAGLE_STORE_TELEMETRY_LOG=$WANT_BEAGLE_STORE_TELEMETRY_LOG" \
+    -e "BEAGLE_STORE_THREADS=$WANT_BEAGLE_STORE_THREADS" \
     -e "NORTH_PORT=$WANT_NORTH_PORT" \
     -- "$NORTH_MCP_BIN"
 

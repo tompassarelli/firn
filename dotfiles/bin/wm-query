@@ -1,6 +1,6 @@
 #!/usr/bin/env bb
 ;; wm-query — read helper over the window-fact world written by wm-facts-daemon.
-;; Folds the fram world log (FRAM_LOG, newest assertion wins per subject/pred)
+;; Folds the Store world log (BEAGLE_STORE_LOG, newest assertion wins per subject/pred)
 ;; and answers questions about live windows.
 ;;
 ;;   wm-query recent-terminal
@@ -13,7 +13,7 @@
          '[clojure.string :as str])
 
 (def log-file
-  (or (System/getenv "FRAM_LOG")
+  (or (System/getenv "BEAGLE_STORE_LOG")
       (str (System/getenv "HOME") "/.local/state/wm-world/facts.log")))
 
 (def terminal-marks ["ghostty" "Alacritty" "foot"])

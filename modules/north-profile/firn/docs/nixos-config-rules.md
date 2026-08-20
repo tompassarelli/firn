@@ -30,7 +30,7 @@ loop for live tools.
   the bytes. An edit that can safely take effect through reload or restart must
   not require a generation merely to copy those bytes into the store.
 - A rebuild is for a real system-generation change. It is never the delivery
-  channel for North, Fram, Beagle, or another hot-loop checkout. A request whose
+  channel for North, Beagle, or another hot-loop checkout. A request whose
   purpose is code adoption identifies a missing promotion/reload channel.
 - Purity applies when publishing a generation: the rebuild consumes a committed
   snapshot and switches the exact verified closure. It does not require the

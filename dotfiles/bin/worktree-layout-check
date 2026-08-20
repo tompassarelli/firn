@@ -21,7 +21,7 @@
 #   - pins (~/code/<project>/pins/<full-object-id>) — detached at exactly the commit
 #     named by the leaf, accompanied by a nonempty same-name `.pin` sidecar;
 #     reported as pins, never strays
-#   - tool-owned runtimes: ~/code/north-data/fram-runtime/deployments/<rev>,
+#   - tool-owned runtimes: ~/code/north-data/store-runtime/deployments/<rev>,
 #     created and owned by `north-coord-runtime promote`. Moving one breaks the
 #     running coordinator.
 #   - third-party submodules under ~/code/resources (read-only context)
@@ -37,7 +37,7 @@ pins=0
 
 exempt() {
   case "$1" in
-    */fram-runtime/deployments/*) return 0 ;;
+    */store-runtime/deployments/*) return 0 ;;
     "$CODE"/resources/*)          return 0 ;;
     */experiments/*)              return 0 ;;
     *) return 1 ;;

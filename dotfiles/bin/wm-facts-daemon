@@ -1,7 +1,8 @@
 #!/usr/bin/env bb
 ;; wm-facts-daemon — subscribe to niri's event-stream and append window facts
-;; to a dedicated fram world (FRAM_LOG). Sole writer of that world: appends
-;; fram log lines directly (no coordinator dependency), which the fram fold
+;; to a dedicated Store world (BEAGLE_STORE_LOG). Sole writer of that world:
+;; appends Store transaction-log lines directly (no coordinator dependency),
+;; which the Store fold
 ;; reads back fact-identically.
 ;;
 ;; Vocabulary (seed, do not expand): subject @w<niri-id>; predicates
@@ -16,7 +17,7 @@
          '[clojure.string :as str])
 
 (def log-file
-  (or (System/getenv "FRAM_LOG")
+  (or (System/getenv "BEAGLE_STORE_LOG")
       (str (System/getenv "HOME") "/.local/state/wm-world/facts.log")))
 
 (io/make-parents log-file)

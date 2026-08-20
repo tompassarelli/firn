@@ -32,7 +32,7 @@ Each work record starts with TOML front matter and continues with Markdown:
 
 ```markdown
 +++
-id = "fram-proposition-boundary"
+id = "store-proposition-boundary"
 title = "Separate proposition identity from assertion identity"
 shape = "project"
 life = "active"
@@ -43,9 +43,9 @@ conversation_ids = ["codex:019ffd07-c27b-7943-8a66-553dff2ae98b"]
 coordination = ["agent-coord.md#C007"]
 
 [[lane]]
-repo = "fram"
-worktree = "~/code/fram/worktrees/proposition-boundary"
-branch = "proposition-boundary"
+repo = "beagle"
+worktree = "~/code/beagle/worktrees/store-proposition-boundary"
+branch = "store-proposition-boundary"
 owner = "codex:/root"
 state = "active"
 +++

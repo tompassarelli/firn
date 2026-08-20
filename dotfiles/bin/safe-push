@@ -6,7 +6,7 @@
 # an explicit --to destination is supplied. Any guard
 # trip => nothing is pushed, nonzero exit. The secret scan — not a human — is the
 # guard, and it travels with this command, so it protects repos that have no
-# commit-time hook (north/fram/beagle today). The repository state that defines
+# commit-time hook (north/beagle today). The repository state that defines
 # the scan is captured first and must remain identical at publication; pushes
 # name the captured object ID and destination ref explicitly.
 #

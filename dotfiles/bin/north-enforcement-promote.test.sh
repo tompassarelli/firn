@@ -67,7 +67,7 @@ mkdir -p "$NORTH/profiles/tom/hooks/lib" "$NORTH/bin"
 printf 'guard v1\n' >"$NORTH/profiles/tom/hooks/agent-spawn-guard.sh"
 printf 'registry v1\n' >"$NORTH/profiles/tom/hooks/registry.tsv"
 printf 'dial v1\n' >"$NORTH/profiles/tom/hooks/lib/harness-dial.sh"
-ln -s ../../../../../fram/main/integrations/north/hooks/external-guard.sh \
+ln -s ../../../../../external/main/integrations/north/hooks/external-guard.sh \
   "$NORTH/profiles/tom/hooks/cross-repo-guard.sh"
 printf 'spawn v1\n' >"$NORTH/bin/north-on-spawn"
 printf 'tooluse v1\n' >"$NORTH/bin/north-on-tooluse"

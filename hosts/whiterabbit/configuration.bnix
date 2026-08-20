@@ -57,7 +57,7 @@
    :myConfig.modules.babashka.enable true
    ;; The coordination engine: one user service, direct bind on :7977, no
    ;; socket activation, no telemetry twin. Owns :7977 alone.
-   :myConfig.modules.north-fram.enable true
+   :myConfig.modules.north-store.enable true
    ;; agent.slice + the session.slice mirror weight. Inert until a launcher
    ;; actually enters the scope; the slice itself costs nothing.
    :myConfig.modules.agent-slice.enable true

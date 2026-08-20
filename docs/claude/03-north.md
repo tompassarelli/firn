@@ -6,19 +6,20 @@
 
 ## What it is (one breath)
 
-- **fram** (`~/code/fram`) = the engine. Every claim is a `(subject predicate
-  object)` claim; lifecycle (committed / done / blocked / active) is DERIVED from
-  claims, never a stored status.
-- **north** = the app on fram: a durable thread / intent ledger, served by a
-  coordinator on **:7977** (data → `~/.local/state/north`).
+- **Beagle Store** = the database engine. Every claim is a `(subject predicate
+  object)` claim; lifecycle (committed / done / blocked / active) is derived
+  from claims, never a stored status.
+- **North** = the application on Beagle Store: a durable thread / intent
+  ledger, served by a coordinator on **:7977** (data →
+  `~/.local/state/north`).
 
-Claude Code is the **client**; north/fram is the **substrate**.
+Claude Code is the **client**; North and Beagle Store are the **substrate**.
 
 ## How it plugs into the harness
 
 Two touch-points (cross-ref the levers in `01-canonical.md`):
 
-1. **MCP servers** — lever ⑥. `fram-mcp` + `north-mcp`, user scope, registered
+1. **MCP server** — lever ⑥. `north-mcp`, user scope, registered
    in `~/.claude.json` by the `registerMcpServers` activation in `~/code/nixos-config/modules/claude`.
    Their instruction prose loads at session start; tool **schemas are deferred**
    (ToolSearch) → ≈0 context cost until used. This is how Claude reads/writes
@@ -33,7 +34,7 @@ Two touch-points (cross-ref the levers in `01-canonical.md`):
 ## The seam (why it's structured this way)
 
 Claude reaches the substrate through **MCP** (data) + **SDK dispatch**
-(coordination). Concurrency lives in the engine — fram's `lease` primitive
+(coordination). Concurrency lives in Beagle Store's `lease` primitive
 (`acquire`/`release`/`fence`) — never self-rolled in the app. (`driver` = app
 intent; `lease` = DB mutual-exclusion — don't conflate them.)
 

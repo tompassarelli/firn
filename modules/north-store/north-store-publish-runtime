@@ -1,6 +1,6 @@
-selection="${NORTH_STORE_SELECTION:?north-fram: NORTH_STORE_SELECTION must name the FRAMRPC selection file}"
-unit="${NORTH_COORD_SYSTEMD_UNIT:?north-fram: NORTH_COORD_SYSTEMD_UNIT must name the controller unit}"
-main_pid="${1:?north-fram: the listener PID is required}"
+selection="${NORTH_STORE_SELECTION:?north-store: NORTH_STORE_SELECTION must name the Store RPC selection file}"
+unit="${NORTH_COORD_SYSTEMD_UNIT:?north-store: NORTH_COORD_SYSTEMD_UNIT must name the controller unit}"
+main_pid="${1:?north-store: the listener PID is required}"
 
 set -a
 # shellcheck disable=SC1090
@@ -8,7 +8,7 @@ set -a
 set +a
 
 receipt="$BEAGLE_STORE_HOME/RELEASE"
-[ -r "$receipt" ] || { echo "north-fram: sealed release has no receipt: $receipt" >&2; exit 1; }
+[ -r "$receipt" ] || { echo "north-store: sealed release has no receipt: $receipt" >&2; exit 1; }
 
 receipt_value() {
   sed -n "s/^$1=//p" "$receipt" | head -n 1
@@ -17,17 +17,17 @@ receipt_value() {
 revision="$(receipt_value revision)"
 tree="$(receipt_value tree)"
 [ -n "$revision" ] && [ -n "$tree" ] ||
-  { echo "north-fram: sealed release receipt lacks revision or tree" >&2; exit 1; }
+  { echo "north-store: sealed release receipt lacks revision or tree" >&2; exit 1; }
 
 # Field 22 of /proc/<pid>/stat, counted after the parenthesised comm, is the
 # process start time in clock ticks. It is what distinguishes this listener
 # from a later process that reuses its PID.
 stat_line="$(cat "/proc/$main_pid/stat")" ||
-  { echo "north-fram: listener $main_pid is gone" >&2; exit 1; }
+  { echo "north-store: listener $main_pid is gone" >&2; exit 1; }
 after_comm="${stat_line##*) }"
 start_ticks="$(printf '%s\n' "$after_comm" | cut -d' ' -f20)"
 case "$start_ticks" in
-  ''|*[!0-9]*) echo "north-fram: cannot read listener birth for $main_pid" >&2; exit 1 ;;
+  ''|*[!0-9]*) echo "north-store: cannot read listener birth for $main_pid" >&2; exit 1 ;;
 esac
 
 record_dir="${XDG_STATE_HOME:-$HOME/.local/state}/north/store-runtime"

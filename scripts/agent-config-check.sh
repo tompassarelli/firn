@@ -223,9 +223,9 @@ with open(sys.argv[1], "rb") as handle:
     config = tomllib.load(handle)
 
 expected = {
-    "FRAM_LOG": "/home/tom/.local/state/north/coordination.log",
-    "FRAM_TELEMETRY_LOG": "/home/tom/.local/state/north/telemetry.log",
-    "FRAM_THREADS": "/home/tom/.local/state/north/threads",
+    "BEAGLE_STORE_LOG": "/home/tom/.local/state/north/coordination.log",
+    "BEAGLE_STORE_TELEMETRY_LOG": "/home/tom/.local/state/north/telemetry.log",
+    "BEAGLE_STORE_THREADS": "/home/tom/.local/state/north/threads",
     "NORTH_PORT": "7977",
 }
 actual = config.get("mcp_servers", {}).get("north", {}).get("env")
@@ -777,9 +777,9 @@ LOCAL=0
 VERBOSE=0
 # This repository declares Tom's machine profile; CI's HOME is runner scratch.
 CANONICAL_PROFILE_HOME=/home/tom
-CANONICAL_FRAM_LOG="$CANONICAL_PROFILE_HOME/.local/state/north/coordination.log"
-CANONICAL_FRAM_TELEMETRY_LOG="$CANONICAL_PROFILE_HOME/.local/state/north/telemetry.log"
-CANONICAL_FRAM_THREADS="$CANONICAL_PROFILE_HOME/.local/state/north/threads"
+CANONICAL_BEAGLE_STORE_LOG="$CANONICAL_PROFILE_HOME/.local/state/north/coordination.log"
+CANONICAL_BEAGLE_STORE_TELEMETRY_LOG="$CANONICAL_PROFILE_HOME/.local/state/north/telemetry.log"
+CANONICAL_BEAGLE_STORE_THREADS="$CANONICAL_PROFILE_HOME/.local/state/north/threads"
 # MCP servers whose live-connection health is advisory-only, not FAIL-worthy.
 CLIENT_SCOPED_MCP_SERVERS=(linear-mcp-msa-new)
 for arg in "$@"; do
@@ -1476,17 +1476,17 @@ if [ "$LOCAL" -eq 1 ]; then
     done
     extra="$(jq -r '.mcpServers | keys[] | select(. != "north" and . != "linear-mcp-msa-new" and . != "digitalocean")' "$HOME/.claude.json")"
     [ -z "$extra" ] || bad "unexpected Claude user MCP server(s): ${extra//$'\n'/, }"
-    north_log="$(jq -r '.mcpServers.north.env.FRAM_LOG // empty' "$HOME/.claude.json")"
-    north_telemetry_log="$(jq -r '.mcpServers.north.env.FRAM_TELEMETRY_LOG // empty' "$HOME/.claude.json")"
-    north_threads="$(jq -r '.mcpServers.north.env.FRAM_THREADS // empty' "$HOME/.claude.json")"
+    north_log="$(jq -r '.mcpServers.north.env.BEAGLE_STORE_LOG // empty' "$HOME/.claude.json")"
+    north_telemetry_log="$(jq -r '.mcpServers.north.env.BEAGLE_STORE_TELEMETRY_LOG // empty' "$HOME/.claude.json")"
+    north_threads="$(jq -r '.mcpServers.north.env.BEAGLE_STORE_THREADS // empty' "$HOME/.claude.json")"
     north_port="$(jq -r '.mcpServers.north.env.NORTH_PORT // empty' "$HOME/.claude.json")"
-    [ "$north_log" = "$CANONICAL_FRAM_LOG" ] || bad "Claude North FRAM_LOG is '${north_log:-unset}', expected '$CANONICAL_FRAM_LOG'"
-    [ "$north_telemetry_log" = "$CANONICAL_FRAM_TELEMETRY_LOG" ] || bad "Claude North FRAM_TELEMETRY_LOG is '${north_telemetry_log:-unset}', expected '$CANONICAL_FRAM_TELEMETRY_LOG'"
-    [ "$north_threads" = "$CANONICAL_FRAM_THREADS" ] || bad "Claude North FRAM_THREADS is '${north_threads:-unset}', expected '$CANONICAL_FRAM_THREADS'"
+    [ "$north_log" = "$CANONICAL_BEAGLE_STORE_LOG" ] || bad "Claude North BEAGLE_STORE_LOG is '${north_log:-unset}', expected '$CANONICAL_BEAGLE_STORE_LOG'"
+    [ "$north_telemetry_log" = "$CANONICAL_BEAGLE_STORE_TELEMETRY_LOG" ] || bad "Claude North BEAGLE_STORE_TELEMETRY_LOG is '${north_telemetry_log:-unset}', expected '$CANONICAL_BEAGLE_STORE_TELEMETRY_LOG'"
+    [ "$north_threads" = "$CANONICAL_BEAGLE_STORE_THREADS" ] || bad "Claude North BEAGLE_STORE_THREADS is '${north_threads:-unset}', expected '$CANONICAL_BEAGLE_STORE_THREADS'"
     [ "$north_port" = 7977 ] || bad "Claude North NORTH_PORT is '${north_port:-unset}', expected '7977'"
-    if [ "$north_log" = "$CANONICAL_FRAM_LOG" ] &&
-       [ "$north_telemetry_log" = "$CANONICAL_FRAM_TELEMETRY_LOG" ] &&
-       [ "$north_threads" = "$CANONICAL_FRAM_THREADS" ] &&
+    if [ "$north_log" = "$CANONICAL_BEAGLE_STORE_LOG" ] &&
+       [ "$north_telemetry_log" = "$CANONICAL_BEAGLE_STORE_TELEMETRY_LOG" ] &&
+       [ "$north_threads" = "$CANONICAL_BEAGLE_STORE_THREADS" ] &&
        [ "$north_port" = 7977 ]; then
       claude_north_topology='canonical explicit instance env'
     else
@@ -1693,12 +1693,12 @@ if grep -qiE '^\s*(api_key|provider|auth_mode|base_url|OPENROUTER_API_KEY|ANTHRO
 fi
 grep -qE '^\s*NORTH_PORT:\s*"?7977"?\s*$' "$HERMES/config.yaml" ||
   bad 'Hermes North MCP NORTH_PORT must be 7977'
-grep -qF "FRAM_LOG: $CANONICAL_FRAM_LOG" "$HERMES/config.yaml" ||
-  bad "Hermes North FRAM_LOG must be $CANONICAL_FRAM_LOG"
-grep -qF "FRAM_TELEMETRY_LOG: $CANONICAL_FRAM_TELEMETRY_LOG" "$HERMES/config.yaml" ||
-  bad "Hermes North FRAM_TELEMETRY_LOG must be $CANONICAL_FRAM_TELEMETRY_LOG"
-grep -qF "FRAM_THREADS: $CANONICAL_FRAM_THREADS" "$HERMES/config.yaml" ||
-  bad "Hermes North FRAM_THREADS must be $CANONICAL_FRAM_THREADS"
+grep -qF "BEAGLE_STORE_LOG: $CANONICAL_BEAGLE_STORE_LOG" "$HERMES/config.yaml" ||
+  bad "Hermes North BEAGLE_STORE_LOG must be $CANONICAL_BEAGLE_STORE_LOG"
+grep -qF "BEAGLE_STORE_TELEMETRY_LOG: $CANONICAL_BEAGLE_STORE_TELEMETRY_LOG" "$HERMES/config.yaml" ||
+  bad "Hermes North BEAGLE_STORE_TELEMETRY_LOG must be $CANONICAL_BEAGLE_STORE_TELEMETRY_LOG"
+grep -qF "BEAGLE_STORE_THREADS: $CANONICAL_BEAGLE_STORE_THREADS" "$HERMES/config.yaml" ||
+  bad "Hermes North BEAGLE_STORE_THREADS must be $CANONICAL_BEAGLE_STORE_THREADS"
 if grep -qE '^\s*-\s*~/\.agents/skills\s*$' "$HERMES/config.yaml"; then
   ok_detail 'Hermes shares provider-neutral ~/.agents/skills'
 else

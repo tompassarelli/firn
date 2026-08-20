@@ -5,9 +5,9 @@
 {:platform linux
  :enabled
   [terminal
-   ;; north/fram/beagle tools are live-linked from dotfiles/bin, never
+   ;; north/beagle tools are live-linked from dotfiles/bin, never
    ;; store-placed: a dev-loop tool in the closure is stale by construction.
-   ;; north and fram have no module left to exclude — the modules are gone.
+   ;; north has no module left to exclude — the module is gone.
    cli-tools
    [desktop -mako +river]
    theming

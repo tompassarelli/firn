@@ -70,7 +70,6 @@ flowchart TD
 |---|---|
 | `linear-mcp-msa-new` | `.` |
 | `digitalocean` | `/run/current-system/sw/bin/bash -c export DIGITALOCEAN_API_TOKEN="$(</home/tom/do-token.txt)"; exec /run/current-system/sw/bin/npx -y @digitalocean/mcp@1.0.67 --services accounts,droplets,networking,volumes` |
-| `fram` | `~/code/fram/main/bin/fram-mcp` |
 | `north` | `~/code/north/main/bin/north-mcp` |
 
 > Layer 3 (CANONICAL Anthropic contracts) is annotated inline above where

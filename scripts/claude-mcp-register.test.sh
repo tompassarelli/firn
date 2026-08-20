@@ -17,9 +17,9 @@ CALL_LOG="$SCRATCH/claude-calls"
 DIGITALOCEAN_MCP_BASH="/run/current-system/sw/bin/bash"
 DIGITALOCEAN_MCP_COMMAND='export DIGITALOCEAN_API_TOKEN="$(</home/tom/do-token.txt)"; exec /run/current-system/sw/bin/npx -y @digitalocean/mcp@1.0.67 --services accounts,droplets,networking,volumes'
 
-WANT_FRAM_LOG="$LIFE/coordination.log"
-WANT_FRAM_TELEMETRY_LOG="$LIFE/telemetry.log"
-WANT_FRAM_THREADS="$LIFE/threads"
+WANT_BEAGLE_STORE_LOG="$LIFE/coordination.log"
+WANT_BEAGLE_STORE_TELEMETRY_LOG="$LIFE/telemetry.log"
+WANT_BEAGLE_STORE_THREADS="$LIFE/threads"
 
 # Fake Claude: records every argv and simulates the two distinct surfaces —
 # `mcp get` is the health/connect probe (fails or hangs when the server is
@@ -44,14 +44,14 @@ write_claude_json() {
   # $1: north|linear|all-correct|empty markers via env overrides
   "$JQ" -n \
     --arg north_cmd "${NORTH_CMD:-$NORTH_MCP_BIN}" \
-    --arg log "$WANT_FRAM_LOG" \
-    --arg tel "$WANT_FRAM_TELEMETRY_LOG" \
-    --arg thr "$WANT_FRAM_THREADS" \
+    --arg log "$WANT_BEAGLE_STORE_LOG" \
+    --arg tel "$WANT_BEAGLE_STORE_TELEMETRY_LOG" \
+    --arg thr "$WANT_BEAGLE_STORE_THREADS" \
     --arg port "${NORTH_PORT_VAL:-$WANT_NORTH_PORT}" \
     --arg url "$LINEAR_URL" \
     '{mcpServers: {
         north: {type:"stdio", command:$north_cmd, args:[],
-                env:{FRAM_LOG:$log, FRAM_TELEMETRY_LOG:$tel, FRAM_THREADS:$thr, NORTH_PORT:$port}},
+                env:{BEAGLE_STORE_LOG:$log, BEAGLE_STORE_TELEMETRY_LOG:$tel, BEAGLE_STORE_THREADS:$thr, NORTH_PORT:$port}},
         "linear-mcp-msa-new": {type:"http", url:$url},
         digitalocean: {type:"stdio", command:"/run/current-system/sw/bin/bash",
                        args:["-c", "export DIGITALOCEAN_API_TOKEN=\"$(</home/tom/do-token.txt)\"; exec /run/current-system/sw/bin/npx -y @digitalocean/mcp@1.0.67 --services accounts,droplets,networking,volumes"]}
@@ -127,7 +127,7 @@ write_claude_json
 "$JQ" 'del(.mcpServers.north)' "$CLAUDE_JSON" >"$CLAUDE_JSON.tmp"
 mv "$CLAUDE_JSON.tmp" "$CLAUDE_JSON"
 run_register
-assert_match "^mcp add north -s user -e FRAM_LOG=$WANT_FRAM_LOG -e FRAM_TELEMETRY_LOG=$WANT_FRAM_TELEMETRY_LOG -e FRAM_THREADS=$WANT_FRAM_THREADS -e NORTH_PORT=7977 -- $NORTH_MCP_BIN$" \
+assert_match "^mcp add north -s user -e BEAGLE_STORE_LOG=$WANT_BEAGLE_STORE_LOG -e BEAGLE_STORE_TELEMETRY_LOG=$WANT_BEAGLE_STORE_TELEMETRY_LOG -e BEAGLE_STORE_THREADS=$WANT_BEAGLE_STORE_THREADS -e NORTH_PORT=7977 -- $NORTH_MCP_BIN$" \
   'a missing north declaration was not added with the supported user-scope argv'
 assert_no_match '^mcp remove north' \
   'a missing declaration was removed before being added'

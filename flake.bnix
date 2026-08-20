@@ -2,9 +2,6 @@
 
 (ns flake)
 
-(declare-extern ++ (forall (T) (Fn [(Vec T) & (Vec T)] (Vec T))))
-(declare-extern // (Fn [(Map Any Any) & (Map Any Any)] (Map Any Any)))
-
 {:description "firn — typed authoring layer for NixOS/nix-darwin; catches config typos and type errors at the source line, before rebuild"
  :inputs
   {:nixpkgs {:url "github:nixos/nixpkgs/nixos-26.05"}

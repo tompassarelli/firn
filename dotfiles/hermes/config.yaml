@@ -40,7 +40,7 @@ mcp_servers:
     command: /run/current-system/sw/bin/north-mcp-packaged
     connect_timeout: 15
     env:
-      FRAM_LOG: /home/tom/.local/state/north/coordination.log
-      FRAM_TELEMETRY_LOG: /home/tom/.local/state/north/telemetry.log
-      FRAM_THREADS: /home/tom/.local/state/north/threads
+      BEAGLE_STORE_LOG: /home/tom/.local/state/north/coordination.log
+      BEAGLE_STORE_TELEMETRY_LOG: /home/tom/.local/state/north/telemetry.log
+      BEAGLE_STORE_THREADS: /home/tom/.local/state/north/threads
       NORTH_PORT: "7977"

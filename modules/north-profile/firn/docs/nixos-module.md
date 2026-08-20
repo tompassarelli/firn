@@ -7,7 +7,7 @@ provider-specific files from `nixos-config:dotfiles/claude/`, composed
 instructions from the `agents` switchboard, shared `~/.agents` docs and hooks
 from `north:profiles/tom`, the atomic shared skill farm at
 `~/.local/state/north/skills`, the
-`~/code/CLAUDE.md` routing file, and MCP server registration (`fram`, `north`,
+`~/code/CLAUDE.md` routing file, and MCP server registration (`north`,
 `linear-mcp-msa-new`, `digitalocean`).
 
 Why everything routes through nixos-config (reproducibility rule, CI
@@ -55,9 +55,9 @@ provider catalogs, and prompt blocks directly for managed dispatch.
 
 ## MCP servers
 
-`registerMcpServers` adds `fram` + `north` idempotently (guarded on
-`mcp get`). `fram` is the **generic** engine — its corpus is selected at
-deploy time via env (`FRAM_LOG` / `FRAM_THREADS`); never hardcode life-store
-paths into the engine itself. Also registers `linear-mcp-msa-new` (HTTP/OAuth,
+`registerMcpServers` adds `north` idempotently and supplies its Beagle Store
+paths through `BEAGLE_STORE_LOG`, `BEAGLE_STORE_TELEMETRY_LOG`, and
+`BEAGLE_STORE_THREADS`; never hardcode Store paths into the engine itself. It
+also registers `linear-mcp-msa-new` (HTTP/OAuth,
 per-machine auth; msa-old retired 2026-06-30) and `digitalocean` as a pinned,
 scoped stdio server that reads its API token from `~/do-token.txt` at runtime.

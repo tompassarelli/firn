@@ -2,8 +2,8 @@
 # Closure purity: personal project CODE never enters the system closure.
 set -euo pipefail
 target="${1:-/run/current-system}"
-hits=$(nix-store -qR "$target" | grep -Ei -- '(north|fram|beagle)' \
-  | grep -Eiv 'framework|codex' || true)
+hits=$(nix-store -qR "$target" | grep -Ei -- '(north|beagle)' \
+  | grep -Eiv 'codex' || true)
 if [ -n "$hits" ]; then
   printf 'closure-purity: FAIL — project builds inside %s:\n%s\n' "$target" "$hits" >&2
   exit 1
