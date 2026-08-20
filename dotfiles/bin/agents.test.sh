@@ -141,6 +141,24 @@ if [ "${1:-}" = "--verification-skill" ]; then
   exit "$fails"
 fi
 
+if [ "${1:-}" = "--fact-normal-form-skill" ]; then
+  echo "== focused fact-normal-form reachability"
+  fresh
+  fact_root="$SB/code/beagle/main/store/integrations/north/skills"
+  mkdir -p "$fact_root/fact-normal-form"
+  printf -- '---\nname: fact-normal-form\n---\n' \
+    > "$fact_root/fact-normal-form/SKILL.md"
+  ag status > /dev/null
+  chk "fact-normal-form seeds off" "skill fact-normal-form off" "$(grep '^skill fact-normal-form ' "$SB/.config/agents/manifest.conf")"
+  chk "fact-normal-form source path resolves" "$fact_root/fact-normal-form/SKILL.md" "$(ag path fact-normal-form)"
+  ag on fact-normal-form > /dev/null
+  chk "fact-normal-form reaches Claude and Codex" "1" "$(test -L "$SB/.config/agents/skills/fact-normal-form" && test -L "$SB/.codex/skills/fact-normal-form" && echo 1 || echo 0)"
+  ag off fact-normal-form > /dev/null
+  chk "off removes both provider links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l -name fact-normal-form | wc -l)"
+  if [ "$fails" -eq 0 ]; then echo "all focused fact-normal-form tests passed"; else echo "$fails focused fact-normal-form test(s) failed"; fi
+  exit "$fails"
+fi
+
 echo "== 1. fresh seed: bound hooks enabled+companion, unbound disabled, nothing composes"
 fresh
 ag status > /dev/null
