@@ -67,6 +67,7 @@
               {:nativeBuildInputs [beaglePackage pkgs.stdenv.cc]}
               (ms
                 "mkdir -p $out/bin"
+                "export BEAGLE_CHECKED_AST_STORE=$TMPDIR/firn-native-checked-ast.storelog"
                 (s
                   "beagle native-exe --out $out/bin/firn --entry firn.main/-main "
                   beagle
