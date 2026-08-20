@@ -193,7 +193,11 @@
          (if (= depth 1)
            (+ index 1)
            (recur (+ index 1) (- depth 1)))]
-        [scalar (recur (+ index 1) depth)]))))
+        [(JsonKey offset value) (recur (+ index 1) depth)]
+        [(JsonString offset value) (recur (+ index 1) depth)]
+        [(JsonNumber offset lexeme) (recur (+ index 1) depth)]
+        [(JsonBoolean offset value) (recur (+ index 1) depth)]
+        [(JsonNull offset) (recur (+ index 1) depth)]))))
 
 (defn json-value-end
   [events (Vec json/JsonEvent)
@@ -205,7 +209,11 @@
       [(JsonArrayStart offset) (json-container-end events start)]
       [(JsonObjectEnd offset) -1]
       [(JsonArrayEnd offset) -1]
-      [scalar (+ start 1)])))
+      [(JsonKey offset value) (+ start 1)]
+      [(JsonString offset value) (+ start 1)]
+      [(JsonNumber offset lexeme) (+ start 1)]
+      [(JsonBoolean offset value) (+ start 1)]
+      [(JsonNull offset) (+ start 1)])))
 
 (defn object-field-start
   [events (Vec json/JsonEvent)
@@ -230,7 +238,14 @@
                    (if (= candidate key)
                      value-index
                      (recur next))))]
-              [other -1])))))))
+              [(JsonObjectStart offset) -1]
+              [(JsonObjectEnd offset) -1]
+              [(JsonArrayStart offset) -1]
+              [(JsonArrayEnd offset) -1]
+              [(JsonString offset value) -1]
+              [(JsonNumber offset lexeme) -1]
+              [(JsonBoolean offset value) -1]
+              [(JsonNull offset) -1])))))))
 
 (defn object-field-names
   [events (Vec json/JsonEvent)
@@ -252,7 +267,14 @@
                  (if (< next 0)
                    []
                    (recur next (conj names key))))]
-              [other []])))))))
+              [(JsonObjectStart offset) []]
+              [(JsonObjectEnd offset) []]
+              [(JsonArrayStart offset) []]
+              [(JsonArrayEnd offset) []]
+              [(JsonString offset value) []]
+              [(JsonNumber offset lexeme) []]
+              [(JsonBoolean offset value) []]
+              [(JsonNull offset) []])))))))
 
 (defn string-at
   [events (Vec json/JsonEvent)
@@ -261,7 +283,14 @@
     nil
     (match (nth events index)
       [(JsonString offset value) value]
-      [other nil])))
+      [(JsonObjectStart offset) nil]
+      [(JsonObjectEnd offset) nil]
+      [(JsonArrayStart offset) nil]
+      [(JsonArrayEnd offset) nil]
+      [(JsonKey offset value) nil]
+      [(JsonNumber offset lexeme) nil]
+      [(JsonBoolean offset value) nil]
+      [(JsonNull offset) nil])))
 
 (defn number-at
   [events (Vec json/JsonEvent)
@@ -270,7 +299,14 @@
     nil
     (match (nth events index)
       [(JsonNumber offset lexeme) (parse-long lexeme)]
-      [other nil])))
+      [(JsonObjectStart offset) nil]
+      [(JsonObjectEnd offset) nil]
+      [(JsonArrayStart offset) nil]
+      [(JsonArrayEnd offset) nil]
+      [(JsonKey offset value) nil]
+      [(JsonString offset value) nil]
+      [(JsonBoolean offset value) nil]
+      [(JsonNull offset) nil])))
 
 (defn object-string
   [events (Vec json/JsonEvent)
