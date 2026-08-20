@@ -156,60 +156,6 @@ ag apply > /dev/null
 chk "fresh composes nothing" "" "$(composed_files)"
 chk "settings.json foreign key survives" "42" "$(python3 -c 'import json;print(json.load(open("'"$SB"'/.claude/settings.json"))["otherKey"])')"
 
-echo
-echo "== 2. migration of legacy 3-field rows: blackout holds"
-fresh; mods; mod orchestration staffing
-mkdir -p "$SB/.config/agents"
-{ echo "item agents-md off"; echo "item statusline-script off"; echo "item orchestration off"
-  for h in agent-spawn-guard beagle-session-start comment-bloat-guard \
-           git-blind-stage-guard hook-detach logcompress north-session-lifecycle \
-           tripwire-guard worktree-guard; do echo "hook $h off"; done
-  for s in webdev beagle-authoring firn; do echo "skill $s off"; done
-} > "$SB/.config/agents/manifest.conf"
-ag status > /dev/null
-chk "legacy bound -> enabled + column" "hook tripwire-guard enabled repo-safety" "$(grep '^hook tripwire-guard ' "$SB/.config/agents/manifest.conf")"
-chk "legacy unbound -> disabled" "hook hook-detach disabled" "$(grep '^hook hook-detach ' "$SB/.config/agents/manifest.conf")"
-chk "legacy on -> enabled" "1" "$(grep -c '^hook .* enabled' "$SB/.config/agents/manifest.conf" > /dev/null; echo 1)"
-ag apply > /dev/null
-chk "migration composes nothing (blackout)" "" "$(composed_files)"
-chk "idempotent: second ensure changes nothing" "" "$(cp "$SB/.config/agents/manifest.conf" "$SB/m1"; ag status > /dev/null; diff "$SB/m1" "$SB/.config/agents/manifest.conf")"
-
-echo
-echo "== 2b. re-kinding off \`item\`: each row lands on a real kind, state intact"
-fresh; mods; mod orchestration staffing
-mkdir -p "$SB/.config/agents"
-# Deliberately mixed states, and deliberately in place: the row a re-kinding
-# rewrites must keep both its state and its position, or a manifest read
-# directly (Northbridge) sees a row appear and another vanish.
-{ echo "item agents-md on"; echo "hook logcompress enabled"
-  echo "item statusline-script on"; echo "skill webdev on"
-  echo "item orchestration off"
-} > "$SB/.config/agents/manifest.conf"
-ag status > /dev/null
-m="$SB/.config/agents/manifest.conf"
-chk "item agents-md on -> dir global on ~" "dir global on ~" "$(grep '^dir global ' "$m")"
-chk "item statusline-script on -> other, state kept" "other statusline-script on" "$(grep '^other ' "$m")"
-chk "item orchestration off -> set, state kept" "module orchestration off" "$(grep '^module orchestration ' "$m")"
-chk "no item row left behind" "0" "$(grep -c '^item ' "$m" || true)"
-chk "re-kinding is in place (line 1 stays line 1)" "dir global on ~" "$(sed -n 1p "$m")"
-chk "unrelated rows untouched" "skill webdev on" "$(grep '^skill webdev ' "$m")"
-chk "re-kinding is idempotent" "" "$(cp "$m" "$SB/m2"; ag status > /dev/null; diff "$SB/m2" "$m")"
-# A half-migrated manifest (both rows present) collapses to one instead of
-# doubling: the row already carrying the new kind is the survivor, state and all.
-{ echo "item agents-md on"; echo "dir global off ~"; echo "skill webdev on"; } > "$m"
-ag status > /dev/null
-chk "half-migrated: exactly one dir global row" "1" "$(grep -c '^dir global ' "$m")"
-chk "half-migrated: the already-re-kinded row wins" "dir global off ~" "$(grep '^dir global ' "$m")"
-chk "half-migrated: item gone" "0" "$(grep -c '^item agents-md' "$m" || true)"
-
-# Orchestration also spent one release as a skill. Its remembered state moves
-# to the set row instead of seeding the new architecture off.
-{ echo "skill orchestration on"; echo "module orchestration off"; } > "$m"
-ag status > /dev/null
-chk "half-migrated orchestration keeps the module row" "module orchestration off" "$(grep '^module orchestration ' "$m")"
-chk "the retired skill row is removed" "0" "$(grep -c '^skill orchestration ' "$m" || true)"
-
-echo
 echo "== 2c. the global profile writes the global surfaces and nothing per-directory"
 fresh; ag status > /dev/null
 ag on global > /dev/null
@@ -331,18 +277,16 @@ ag on git-blind-stage-guard > /dev/null
 chk "column rides back" "hook git-blind-stage-guard enabled repo-safety" "$(grep '^hook git-blind-stage-guard ' "$SB/.config/agents/manifest.conf")"
 
 echo
-echo "== 7b. enabledPlugins is a RECORD: an array makes Claude Code skip the file"
+echo "== 7b. enabledPlugins is a record"
 fresh
 mkdir -p "$SB/.claude/plugins"
 printf '%s' '{"plugins":{"demo@market":[{"scope":"user","installPath":"/tmp/demo"}]}}' \
   > "$SB/.claude/plugins/installed_plugins.json"
-# The legacy array form is still READ, so a machine mid-upgrade seeds from what
-# it already had rather than silently turning a plugin off.
-python3 -c 'import json,sys;p=sys.argv[1];d=json.load(open(p));d["enabledPlugins"]=["demo@market"];json.dump(d,open(p,"w"))' "$SB/.claude/settings.json"
+python3 -c 'import json,sys;p=sys.argv[1];d=json.load(open(p));d["enabledPlugins"]={"demo@market":True};json.dump(d,open(p,"w"))' "$SB/.claude/settings.json"
 ag status > /dev/null
-chk "a plugin enabled in the legacy array seeds on" "plugin demo@market on" "$(grep '^plugin demo@market ' "$SB/.config/agents/manifest.conf")"
+chk "an enabled plugin seeds on" "plugin demo@market on" "$(grep '^plugin demo@market ' "$SB/.config/agents/manifest.conf")"
 ag apply > /dev/null
-chk "and is rewritten as a record" '{"demo@market": true}' "$(python3 -c 'import json,sys;print(json.dumps(json.load(open(sys.argv[1]))["enabledPlugins"]))' "$SB/.claude/settings.json")"
+chk "and remains a record" '{"demo@market": true}' "$(python3 -c 'import json,sys;print(json.dumps(json.load(open(sys.argv[1]))["enabledPlugins"]))' "$SB/.claude/settings.json")"
 ag off demo@market > /dev/null
 chk "an off plugin is absent, not false" "{}" "$(python3 -c 'import json,sys;print(json.dumps(json.load(open(sys.argv[1]))["enabledPlugins"]))' "$SB/.claude/settings.json")"
 chk "an empty record is still a record" "dict" "$(python3 -c 'import json,sys;print(type(json.load(open(sys.argv[1]))["enabledPlugins"]).__name__)' "$SB/.claude/settings.json")"
@@ -816,10 +760,7 @@ chk "exporting nothing is refused" "1" "$(ag export-plugin 2>&1 >/dev/null | gre
 chk "the manifest is untouched by an export" "" "$(cp "$SB/.config/agents/manifest.conf" "$SB/m4"; ag export-plugin mixed --force > /dev/null; diff "$SB/m4" "$SB/.config/agents/manifest.conf")"
 
 echo
-echo "== 20. a dir row becomes a subtree GATE without moving a single surface"
-# The migration that widens `dir <slug>` from "this instruction file has
-# content" to "everything scoped at this directory": the old meaning moves down
-# to `ins <slug>`, and the gate opens wherever memories are already loading.
+echo "== 20. a dir row gates its current subtree"
 ACCT2="$SB/.local/state/north/accounts/anthropic/acct-two"
 projslug() { echo "${1//\//-}"; }   # the path with its separators dashed
 memdir() { echo "$1/projects/$(projslug "$2")/memory"; }   # acct-root scope
@@ -845,23 +786,22 @@ seed_index "$ACCT" "$SB/proj" "$LINE_A" "$LINE_B"
 before_index="$(index "$ACCT" "$SB/proj")"
 before_files="$(md5sum "$(memdir "$ACCT" "$SB/proj")"/alpha.md "$(memdir "$ACCT" "$SB/proj")"/beta.md)"
 mkdir -p "$SB/.config/agents"
-{ echo "dir global on ~"; echo "dir proj off $SB/proj"; echo "dir bare off $SB/bare"
-} > "$SB/.config/agents/manifest.conf"
+ag status > /dev/null
+ag on global > /dev/null
+ag on global/AGENTS.md > /dev/null
+ag on proj > /dev/null
 m="$SB/.config/agents/manifest.conf"
-warn="$(ag status 2>&1 >/dev/null)"
-chk "the old meaning moves down: ins carries the dir row's state" "ins global on" "$(grep '^ins global ' "$m")"
-chk "an off dir row's instruction file stays off" "ins proj off" "$(grep '^ins proj ' "$m")"
-chk "an open gate stays open" "dir global on ~" "$(grep '^dir global ' "$m")"
-chk "a gate is OPENED where memories are already loading" "dir proj on $SB/proj" "$(grep '^dir proj ' "$m")"
-chk "a gate with nothing live under it is left closed" "dir bare off $SB/bare" "$(grep '^dir bare ' "$m")"
-case "$warn" in *"dir proj is now a subtree GATE"*) ok "opening a gate says so" ;;
-  *) bad "gate migration is loud" "$warn" ;; esac
+chk "the root instruction row is on" "ins global on" "$(grep '^ins global ' "$m")"
+chk "the project instruction row stays off" "ins proj off" "$(grep '^ins proj ' "$m")"
+chk "the root gate is open" "dir global on ~" "$(grep '^dir global ' "$m")"
+chk "the project gate is open" "dir proj on $SB/proj" "$(grep '^dir proj ' "$m")"
+chk "an unused gate stays closed" "dir bare off $SB/bare" "$(grep '^dir bare ' "$m")"
 chk "memories seed on where they exist" "memroot proj on" "$(grep '^memroot proj ' "$m")"
 chk "and off where they do not" "memroot bare off" "$(grep '^memroot bare ' "$m")"
 chk "one row per memory, seeded on" "mem proj/alpha.md on
 mem proj/beta.md on" "$(grep '^mem ' "$m")"
 chk "the root has no memories here" "memroot global off" "$(grep '^memroot global ' "$m")"
-chk "the migration is idempotent" "" "$(cp "$m" "$SB/m19"; ag status > /dev/null 2>&1; diff "$SB/m19" "$m")"
+chk "the manifest is idempotent" "" "$(cp "$m" "$SB/m19"; ag status > /dev/null 2>&1; diff "$SB/m19" "$m")"
 ag apply > /dev/null 2>&1
 chk "byte-preserved: the index is what it was" "$before_index" "$(index "$ACCT" "$SB/proj")"
 chk "byte-preserved: the profile still writes" "" "$(diff "$SB/code/nixos-config/main/dotfiles/agents/AGENTS.md" "$SB/.config/agents/CLAUDE.md")"

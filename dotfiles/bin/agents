@@ -746,14 +746,12 @@ enabled_plugins_now() { # what settings.json already enables — the seed truth
   python3 - "$SETTINGS" <<'PY'
 import json, sys
 try:
-    enabled = json.load(open(sys.argv[1])).get("enabledPlugins") or []
+    enabled = json.load(open(sys.argv[1])).get("enabledPlugins") or {}
 except Exception:
-    enabled = []
-# Both shapes are read: the record Claude Code writes today, and the array an
-# older file (or an older version of this script) left behind.
-if isinstance(enabled, dict):
-    enabled = [k for k, v in enabled.items() if v]
-print("\n".join(enabled))
+    enabled = {}
+if not isinstance(enabled, dict):
+    enabled = {}
+print("\n".join(k for k, v in enabled.items() if v))
 PY
 }
 
@@ -952,22 +950,6 @@ path_of() { # the canonical source file to view or edit for a unit
   esac
 }
 
-migrate_row() { # old-kind old-name new-kind new-name
-  # A renamed slot must carry its state across, in place. Leaving the old row
-  # behind is not harmless: status stops showing it, but the TUI reads the
-  # manifest directly and would keep rendering the ghost.
-  awk -v k="$1" -v n="$2" '$1==k && $2==n {f=1} END {exit !f}' "$MANIFEST" || return 0
-  local tmp="$MANIFEST.tmp.$$"
-  # Two passes over the same file: pass 1 asks whether the new row already
-  # exists, so a half-migrated manifest drops the old row instead of doubling.
-  awk -v ok="$1" -v oname="$2" -v nk="$3" -v nname="$4" '
-    NR==FNR { if ($1==nk && $2==nname) have=1; next }
-    $1==ok && $2==oname { if (!have) print nk " " nname " " $3; next }
-    { print }
-  ' "$MANIFEST" "$MANIFEST" > "$tmp"
-  mv "$tmp" "$MANIFEST"
-}
-
 sync_dir_path() { # slug directory — the 4th column of one `dir` row
   local tmp="$MANIFEST.tmp.$$"
   awk -v n="$1" -v p="$2" \
@@ -980,9 +962,8 @@ sync_dir_path() { # slug directory — the 4th column of one `dir` row
 sync_dir_paths() { # the 4th column: where the row's context file is triggered
   # A `dir` row carries its directory past the state column, because the
   # manifest is read directly by Northbridge and the panel renders anything
-  # past the state as that row's detail. The registry stays the truth: a row
-  # written before the column existed is backfilled, and a directory that moved
-  # in the registry is corrected here rather than drifting until someone flips.
+  # past the state as that row's detail. The registry stays the truth, so a
+  # directory that moves is corrected here rather than drifting until a flip.
   # The global row's directory is not in the registry and cannot move: it is
   # the root, and it is written here so every `dir` row reads the same way.
   local i
@@ -1007,10 +988,9 @@ sync_hook_follows() { # the 4th column: the unit that wants this hook
   # Same contract as sync_dir_paths, and for the same reason: the manifest is
   # read directly by Northbridge, which renders anything past the state as the
   # row's detail — and derives from it which module a hook belongs to. The
-  # SOURCES stay the truth, both of them: a row written before the column
-  # existed is backfilled, and a re-pointed binding, a dropped `follows`, or a
-  # claim moved from one skill's frontmatter to another is corrected here rather
-  # than drifting until someone flips the hook.
+  # SOURCES stay the truth, both of them: a re-pointed binding, a dropped
+  # `follows`, or a changed skill claim is corrected here rather than drifting
+  # until someone flips the hook.
   local h want tmp="$MANIFEST.tmp.$$"
   for h in "${HOOKS[@]}"; do
     want="$(hook_claimant "$h")"
@@ -1024,55 +1004,6 @@ sync_hook_follows() { # the 4th column: the unit that wants this hook
       {print}' "$MANIFEST" > "$tmp"
     mv "$tmp" "$MANIFEST"
   done
-}
-
-migrate_dir_subtrees() { # a dir row's state stopped meaning "this file has content"
-  # It now means GATE: the row governs everything scoped at that directory. The
-  # old meaning moved down to `ins <slug>`, which seeds from the dir row's state,
-  # so the instruction file this switchboard writes is byte-for-byte what it was.
-  # The gate itself is then OPENED wherever something else under it is already
-  # live: a directory whose memories the binary loads today keeps loading them,
-  # and a closed gate would empty their index on the next apply — a change to
-  # what sessions read, made by a migration, which is exactly what a migration
-  # must not do. Same shape as migrate_hook_permissions: a column whose meaning
-  # widened is migrated by state, not left to be read the new way by accident.
-  local slug ddir state tmp
-  while IFS=$'\t' read -r slug ddir; do
-    if awk -v n="$slug" '$1=="ins" && $2==n {f=1} END {exit !f}' "$MANIFEST"; then continue; fi
-    state="$(awk -v n="$slug" '$1=="dir" && $2==n {print $3; exit}' "$MANIFEST")"
-    # No dir row yet means a directory nobody has seen: it seeds off below, and
-    # its ins row seeds off with it, which is the same statement.
-    [ -n "$state" ] || continue
-    echo "ins $slug $state" >> "$MANIFEST"
-    if [ "$state" = off ] && [ -n "$(mem_dirs "$ddir")" ]; then
-      tmp="$MANIFEST.tmp.$$"
-      awk -v n="$slug" '$1=="dir" && $2==n {$3="on"} {print}' "$MANIFEST" > "$tmp"
-      mv "$tmp" "$MANIFEST"
-      echo "agents: dir $slug is now a subtree GATE — opened so the memories under" \
-        "it keep loading; its instruction file stays off as \`ins $slug\`" >&2
-    fi
-  done < <(dir_rows)
-}
-
-migrate_hook_permissions() { # a hook's state column stopped meaning activity
-  # It now means permission: `enabled` (may run when a claimant says so) or
-  # `disabled` (the user's pin). A pre-column `off` row must NOT become an
-  # active hook: a bound hook migrates to enabled, which is still inactive
-  # while everything that wants it is off, and an unbound hook — nothing left to
-  # gate it — migrates to disabled, so a machine mid-blackout composes nothing.
-  awk '$1=="hook" && $3!="enabled" && $3!="disabled" {f=1} END {exit !f}' "$MANIFEST" || return 0
-  local tmp="$MANIFEST.tmp.$$" s
-  # Bound means claimed by a skill as much as followed by a unit: both are a
-  # switch above this hook, and either is enough to keep it dark until asked.
-  local bound=" ${!HOOK_FOLLOWS[*]} "
-  for s in "${SKILLS[@]}"; do bound="$bound${SKILL_HOOKS[$s]:-} "; done
-  awk -v bound="$bound" '
-    $1=="hook" && $3!="enabled" && $3!="disabled" {
-      if ($3 == "on") $3 = "enabled"
-      else $3 = (index(bound, " " $2 " ") ? "enabled" : "disabled")
-    }
-    {print}' "$MANIFEST" > "$tmp"
-  mv "$tmp" "$MANIFEST"
 }
 
 warn_duplicate_names() {
@@ -1103,25 +1034,8 @@ ensure_manifest() {
   load_hook_follows
   load_skill_hooks
   warn_duplicate_names
-  # Rename migrations run before the merge below, or the merge re-seeds the new
-  # name at `off` and the old row's state is lost. `item` is gone as a kind:
-  # every row it held had a real kind waiting for it, and the state rides
-  # across so a re-kinding is never a silent flip.
-  migrate_row item code-md dir code
-  migrate_row item statusline item statusline-script
-  migrate_row item agents-md dir "$GLOBAL_SLUG"
-  if [ -f "$MODULES_D/orchestration.json" ]; then
-    migrate_row item orchestration module orchestration
-    migrate_row skill orchestration module orchestration
-  fi
-  migrate_row item statusline-script other statusline-script
   sync_dir_paths
   sync_hook_follows
-  migrate_hook_permissions
-  # After the re-kindings, so the `dir` rows it reads are the migrated ones, and
-  # before the merge below, or the merge seeds `ins <slug> off` first and the
-  # old state is lost.
-  migrate_dir_subtrees
   # Merge, don't just seed: an entry added to the arrays after the manifest
   # exists must still appear (off) or it is invisible to status/flip forever.
   # Plugins seed from reality instead of off: settings.json already enables
