@@ -74,7 +74,7 @@
           (subs text (- (count text) (count suffix)) (count text)))))
 
 (defn string-member? [(values (Vec String)) (candidate String)] Bool
-  (loop [(index Int) 0]
+  (loop [index Int 0]
     (if (>= index (count values))
       false
       (if (= candidate (nth values index))
@@ -87,9 +87,9 @@
 (defn split-on [(text String) (separator String)] (Vec String)
   (if (= separator "")
     [text]
-    (loop [(start Int) 0
-           (index Int) 0
-           (parts (Vec String)) []]
+    (loop [start Int 0
+           index Int 0
+           parts (Vec String) []]
       (if (> (+ index (count separator)) (count text))
         (conj parts (subs text start (count text)))
         (if (= separator
@@ -107,20 +107,20 @@
       lines)))
 
 (defn join-with [(values (Vec String)) (separator String)] String
-  (loop [(index Int) 0
-         (result String) ""]
+  (loop [index Int 0
+         result String ""]
     (if (>= index (count values))
       result
       (recur (+ index 1)
         (str result (if (= index 0) "" separator) (nth values index))))))
 
 (defn trim-spaces [(text String)] String
-  (loop [(start Int) 0]
+  (loop [start Int 0]
     (if (and (< start (count text))
              (or (= " " (subs text start (+ start 1)))
                  (= "\t" (subs text start (+ start 1)))))
       (recur (+ start 1))
-      (loop [(end Int) (count text)]
+      (loop [end Int (count text)]
         (if (and (> end start)
                  (or (= " " (subs text (- end 1) end))
                      (= "\t" (subs text (- end 1) end))
@@ -129,7 +129,7 @@
           (subs text start end))))))
 
 (defn pad-right [(text String) (width Int)] String
-  (loop [(result String) text]
+  (loop [result String text]
     (if (>= (count result) width)
       result
       (recur (str result " ")))))
@@ -143,8 +143,8 @@
   (if tty (str "\u001b[" code "m" text "\u001b[0m") text))
 
 (defn json-container-end [(events (Vec json/JsonEvent)) (start Int)] Int
-  (loop [(index Int) start
-         (depth Int) 0]
+  (loop [index Int start
+         depth Int 0]
     (if (>= index (count events))
       -1
       (match (nth events index)
@@ -179,7 +179,7 @@
     (let [(end Int) (json-value-end events start)]
       (if (< end 0)
         -1
-        (loop [(index Int) (+ start 1)]
+        (loop [index Int (+ start 1)]
           (if (>= index (- end 1))
             -1
             (match (nth events index)
@@ -202,8 +202,8 @@
     (let [(end Int) (json-value-end events start)]
       (if (< end 0)
         []
-        (loop [(index Int) (+ start 1)
-               (names (Vec String)) []]
+        (loop [index Int (+ start 1)
+               names (Vec String) []]
           (if (>= index (- end 1))
             names
             (match (nth events index)
@@ -245,8 +245,8 @@
           (not (instance? JsonArrayStart (nth events start))))
     []
     (let [(end Int) (json-value-end events start)]
-      (loop [(index Int) (+ start 1)
-             (values (Vec String)) []]
+      (loop [index Int (+ start 1)
+             values (Vec String) []]
         (if (>= index (- end 1))
           values
           (let [(next Int) (json-value-end events index)
@@ -316,8 +316,8 @@
 (defn follows-from-node [(events (Vec json/JsonEvent)) (node Int)] (Vec Follow)
   (let [(inputs Int) (object-field-start events node "inputs")
         (names (Vec String)) (object-field-names events inputs)]
-    (loop [(remaining (Vec String)) names
-           (result (Vec Follow)) []]
+    (loop [remaining (Vec String) names
+           result (Vec Follow) []]
       (if (= (count remaining) 0)
         result
         (let [(name String) (first remaining)
@@ -374,9 +374,9 @@
              (< (compare (flakerow-name left) (flakerow-name right)) 0)))))
 
 (defn insert-row [(rows (Vec FlakeRow)) (row FlakeRow)] (Vec FlakeRow)
-  (loop [(remaining (Vec FlakeRow)) rows
-         (result (Vec FlakeRow)) []
-         (inserted Bool) false]
+  (loop [remaining (Vec FlakeRow) rows
+         result (Vec FlakeRow) []
+         inserted Bool false]
     (if (= (count remaining) 0)
       (if inserted result (conj result row))
       (let [(current FlakeRow) (first remaining)]
@@ -400,8 +400,8 @@
              (names (Vec String)) (sort (object-field-names events root-inputs))]
          (if (or (< nodes 0) (< root-node 0) (< root-inputs 0))
            (->FlakeRowsRejected "flake.lock is missing root nodes/inputs")
-           (loop [(remaining (Vec String)) names
-                  (rows (Vec FlakeRow)) []]
+           (loop [remaining (Vec String) names
+                  rows (Vec FlakeRow) []]
              (if (= (count remaining) 0)
                (->FlakeRows rows)
                (let [(row (U FlakeRow Nil))
@@ -414,16 +414,16 @@
                    (recur (rest remaining) (insert-row rows row)))))))))]))
 
 (defn max-row-name [(rows (Vec FlakeRow))] Int
-  (loop [(remaining (Vec FlakeRow)) rows
-         (width Int) 0]
+  (loop [remaining (Vec FlakeRow) rows
+         width Int 0]
     (if (= (count remaining) 0)
       width
       (recur (rest remaining)
         (max width (count (flakerow-name (first remaining))))))))
 
 (defn follow-lines [(follows (Vec Follow)) (name-width Int)] String
-  (loop [(remaining (Vec Follow)) follows
-         (text String) ""]
+  (loop [remaining (Vec Follow) follows
+         text String ""]
     (if (= (count remaining) 0)
       text
       (let [(follow Follow) (first remaining)]
@@ -433,8 +433,8 @@
 
 (defn broken-lines [(rows (Vec FlakeRow))] String
   (let [(broken (Vec FlakeRow))
-        (loop [(remaining (Vec FlakeRow)) rows
-               (result (Vec FlakeRow)) []]
+        (loop [remaining (Vec FlakeRow) rows
+               result (Vec FlakeRow) []]
           (if (= (count remaining) 0)
             result
             (recur (rest remaining)
@@ -443,8 +443,8 @@
                 result))))]
     (if (= (count broken) 0)
       ""
-      (loop [(remaining (Vec FlakeRow)) broken
-             (text String)
+      (loop [remaining (Vec FlakeRow) broken
+             text String
              (str "! " (count broken) " input"
                (if (= (count broken) 1) "" "s")
                " with absolute path"
@@ -458,7 +458,7 @@
                 (flakerow-url row) "\n"))))))))
 
 (defn rows-have-frozen? [(rows (Vec FlakeRow))] Bool
-  (loop [(remaining (Vec FlakeRow)) rows]
+  (loop [remaining (Vec FlakeRow) rows]
     (if (= (count remaining) 0)
       false
       (if (flakerow-frozen (first remaining))
@@ -466,7 +466,7 @@
         (recur (rest remaining))))))
 
 (defn rows-have-follows? [(rows (Vec FlakeRow))] Bool
-  (loop [(remaining (Vec FlakeRow)) rows]
+  (loop [remaining (Vec FlakeRow) rows]
     (if (= (count remaining) 0)
       false
       (if (> (count (flakerow-follows (first remaining))) 0)
@@ -480,8 +480,8 @@
           (has-frozen Bool) (rows-have-frozen? rows)
           (has-follows Bool) (rows-have-follows? rows)
           (body String)
-          (loop [(remaining (Vec FlakeRow)) rows
-                 (text String)
+          (loop [remaining (Vec FlakeRow) rows
+                 text String
                  (str (broken-lines rows)
                    (ansi tty "1" "flake inputs")
                    " (" (count rows) ", newest first)\n"
@@ -548,8 +548,8 @@
     (let [(end Int) (json-value-end events start)]
       (if (< end 0)
         (->SchemaRejected "unterminated schema array" 0)
-        (loop [(index Int) (+ start 1)
-               (entries (Vec SchemaEntry)) []]
+        (loop [index Int (+ start 1)
+               entries (Vec SchemaEntry) []]
           (if (>= index (- end 1))
             (->SchemaLoaded entries)
             (let [(next Int) (json-value-end events index)
@@ -566,8 +566,8 @@
 
 (defn append-schema-entries
   [(left (Vec SchemaEntry)) (right (Vec SchemaEntry))] (Vec SchemaEntry)
-  (loop [(remaining (Vec SchemaEntry)) right
-         (result (Vec SchemaEntry)) left]
+  (loop [remaining (Vec SchemaEntry) right
+         result (Vec SchemaEntry) left]
     (if (= (count remaining) 0)
       result
       (recur (rest remaining) (conj result (first remaining))))))
@@ -580,8 +580,8 @@
            (names (Vec String)) (object-field-names events submodules)]
        (if (< submodules 0)
          (->SchemaRejected "expected a submodules object" 0)
-         (loop [(remaining (Vec String)) names
-                (entries (Vec SchemaEntry)) []]
+         (loop [remaining (Vec String) names
+                entries (Vec SchemaEntry) []]
            (if (= (count remaining) 0)
              (->SchemaLoaded entries)
              (match (parse-schema-array events
@@ -593,8 +593,8 @@
                   (append-schema-entries entries nested))])))))]))
 
 (defn schema-paths [(entries (Vec SchemaEntry))] (Vec String)
-  (loop [(remaining (Vec SchemaEntry)) entries
-         (result (Vec String)) []]
+  (loop [remaining (Vec SchemaEntry) entries
+         result (Vec String) []]
     (if (= (count remaining) 0)
       result
       (recur (rest remaining)
@@ -602,7 +602,7 @@
 
 (defn schema-entry-for
   [(entries (Vec SchemaEntry)) (path String)] (U SchemaEntry Nil)
-  (loop [(remaining (Vec SchemaEntry)) entries]
+  (loop [remaining (Vec SchemaEntry) entries]
     (if (= (count remaining) 0)
       nil
       (let [(entry SchemaEntry) (first remaining)]
@@ -624,7 +624,7 @@
            (= "." (subs path (count root) (+ (count root) 1))))))
 
 (defn schema-prefix? [(entries (Vec SchemaEntry)) (path String)] Bool
-  (loop [(remaining (Vec SchemaEntry)) entries]
+  (loop [remaining (Vec SchemaEntry) entries]
     (if (= (count remaining) 0)
       false
       (let [(candidate String) (schemaentry-path (first remaining))]
@@ -634,8 +634,8 @@
 
 (defn replace-segment
   [(segments (Vec String)) (index Int) (replacement String)] String
-  (loop [(cursor Int) 0
-         (result (Vec String)) []]
+  (loop [cursor Int 0
+         result (Vec String) []]
     (if (>= cursor (count segments))
       (join-with result ".")
       (recur (+ cursor 1)
@@ -644,7 +644,7 @@
 
 (defn wildcard-hit? [(entries (Vec SchemaEntry)) (path String)] Bool
   (let [(segments (Vec String)) (split-on path ".")]
-    (loop [(index Int) 0]
+    (loop [index Int 0]
       (if (>= index (count segments))
         false
         (if (schema-prefix? entries
@@ -653,7 +653,7 @@
           (recur (+ index 1)))))))
 
 (defn freeform-hit? [(entries (Vec SchemaEntry)) (path String)] Bool
-  (loop [(remaining (Vec SchemaEntry)) entries]
+  (loop [remaining (Vec SchemaEntry) entries]
     (if (= (count remaining) 0)
       false
       (let [(entry SchemaEntry) (first remaining)]
@@ -671,8 +671,8 @@
   [(occurrences (Vec paths/OptionPathOccurrence))
    (result (Vec String))]
   (Vec String)
-  (loop [(remaining (Vec paths/OptionPathOccurrence)) occurrences
-         (combined (Vec String)) result]
+  (loop [remaining (Vec paths/OptionPathOccurrence) occurrences
+         combined (Vec String) result]
     (if (= (count remaining) 0)
       combined
       (recur (rest remaining)
@@ -680,9 +680,9 @@
           (paths/optionpathoccurrence-path (first remaining)))))))
 
 (defn module-paths [(module ModuleSource)] ModulePathsResult
-  (loop [(remaining (Vec paths/SourceDocument))
+  (loop [remaining (Vec paths/SourceDocument)
          (modulesource-documents module)
-         (result (Vec String)) []]
+         result (Vec String) []]
     (if (= (count remaining) 0)
       (->ModulePaths result)
       (let [(document paths/SourceDocument) (first remaining)]
@@ -696,8 +696,8 @@
 
 (defn missing-paths
   [(paths (Vec String)) (schema (Vec SchemaEntry))] (Vec String)
-  (loop [(remaining (Vec String)) paths
-         (missing (Vec String)) []]
+  (loop [remaining (Vec String) paths
+         missing (Vec String) []]
     (if (= (count remaining) 0)
       (sort missing)
       (recur (rest remaining)
@@ -706,8 +706,8 @@
           (conj missing (first remaining)))))))
 
 (defn combine-unique [(left (Vec String)) (right (Vec String))] (Vec String)
-  (loop [(remaining (Vec String)) right
-         (result (Vec String)) left]
+  (loop [remaining (Vec String) right
+         result (Vec String) left]
     (if (= (count remaining) 0)
       (sort result)
       (recur (rest remaining)
@@ -753,8 +753,8 @@
    (nixos (Vec SchemaEntry))
    (darwin (Vec SchemaEntry))]
   PlatformResult
-  (loop [(remaining (Vec ModuleSource)) modules
-         (verdicts (Vec PlatformVerdict)) []]
+  (loop [remaining (Vec ModuleSource) modules
+         verdicts (Vec PlatformVerdict) []]
     (if (= (count remaining) 0)
       (->PlatformLoaded verdicts)
       (match (platform-verdict (first remaining) nixos darwin)
@@ -771,8 +771,8 @@
 
 (defn modules-with
   [(verdicts (Vec PlatformVerdict)) (verdict Keyword)] (Vec String)
-  (loop [(remaining (Vec PlatformVerdict)) verdicts
-         (modules (Vec String)) []]
+  (loop [remaining (Vec PlatformVerdict) verdicts
+         modules (Vec String) []]
     (if (= (count remaining) 0)
       (sort modules)
       (recur (rest remaining)
@@ -783,8 +783,8 @@
 (defn render-list [(label String) (modules (Vec String))] String
   (if (= (count modules) 0)
     (str label " (0):  (none)\n")
-    (loop [(remaining (Vec String)) modules
-           (text String) (str label " (" (count modules) "):\n")]
+    (loop [remaining (Vec String) modules
+           text String (str label " (" (count modules) "):\n")]
       (if (= (count remaining) 0)
         text
         (recur (rest remaining) (str text "  " (first remaining) "\n"))))))
@@ -836,7 +836,7 @@
 
 (defn verdict-for
   [(verdicts (Vec PlatformVerdict)) (module String)] (U PlatformVerdict Nil)
-  (loop [(remaining (Vec PlatformVerdict)) verdicts]
+  (loop [remaining (Vec PlatformVerdict) verdicts]
     (if (= (count remaining) 0)
       nil
       (let [(verdict PlatformVerdict) (first remaining)]
@@ -845,8 +845,8 @@
           (recur (rest remaining)))))))
 
 (defn blocker-lines [(blockers (Vec String))] String
-  (loop [(remaining (Vec String)) blockers
-         (text String) ""]
+  (loop [remaining (Vec String) blockers
+         text String ""]
     (if (= (count remaining) 0)
       text
       (recur (rest remaining) (str text "  " (first remaining) "\n")))))
@@ -871,8 +871,8 @@
         (darwin-only (Vec String)) (modules-with verdicts :darwin-only)
         (compatible (Vec String)) (combine-unique both darwin-only)]
     (->CommandResult 0
-      (loop [(remaining (Vec String)) compatible
-             (text String)
+      (loop [remaining (Vec String) compatible
+             text String
              (str ";; darwin-compatible modules (native Firn).\n"
                ";; " (count compatible) " entries.\n(lst")]
         (if (= (count remaining) 0)
@@ -897,7 +897,7 @@
 (defn find-substring [(text String) (needle String)] Int
   (if (= needle "")
     0
-    (loop [(index Int) 0]
+    (loop [index Int 0]
       (if (> (+ index (count needle)) (count text))
         -1
         (if (= needle (subs text index (+ index (count needle))))
@@ -907,7 +907,7 @@
 (defn path-token-at [(text String) (start Int)] (U String Nil)
   (if (or (< start 0) (>= start (count text)))
     nil
-    (loop [(end Int) start]
+    (loop [end Int start]
       (if (and (< end (count text))
                (allowed-path-character? (subs text end (+ end 1))))
         (recur (+ end 1))
@@ -936,24 +936,24 @@
     (schemaentry-type entry)))
 
 (defn quoted-values [(values (Vec String))] String
-  (loop [(remaining (Vec String)) values
-         (text String) ""]
+  (loop [remaining (Vec String) values
+         text String ""]
     (if (= (count remaining) 0)
       text
       (recur (rest remaining)
         (str text (if (= text "") "" ", ") "\"" (first remaining) "\"")))))
 
 (defn declaration-lines [(values (Vec String))] String
-  (loop [(remaining (Vec String)) values
-         (text String) ""]
+  (loop [remaining (Vec String) values
+         text String ""]
     (if (= (count remaining) 0)
       text
       (recur (rest remaining) (str text "  " (first remaining) "\n")))))
 
 (defn references-for
   [(path String) (documents (Vec paths/SourceDocument))] (Vec String)
-  (loop [(remaining (Vec paths/SourceDocument)) documents
-         (result (Vec String)) []]
+  (loop [remaining (Vec paths/SourceDocument) documents
+         result (Vec String) []]
     (if (= (count remaining) 0)
       (sort result)
       (let [(document paths/SourceDocument) (first remaining)]
@@ -969,8 +969,8 @@
 (defn reference-lines [(references (Vec String))] String
   (if (= (count references) 0)
     "referenced in: (nowhere in this repo)\n"
-    (loop [(remaining (Vec String)) references
-           (text String) "referenced in this repo:\n"]
+    (loop [remaining (Vec String) references
+           text String "referenced in this repo:\n"]
       (if (= (count remaining) 0)
         text
         (recur (rest remaining) (str text "  " (first remaining) "\n"))))))
@@ -978,8 +978,8 @@
 (defn suggestion-lines [(suggestions (Vec paths/PathSuggestion))] String
   (if (= (count suggestions) 0)
     "  no similar option paths found.\n"
-    (loop [(remaining (Vec paths/PathSuggestion)) suggestions
-           (text String) "did you mean:\n"]
+    (loop [remaining (Vec paths/PathSuggestion) suggestions
+           text String "did you mean:\n"]
       (if (= (count remaining) 0)
         text
         (recur (rest remaining)
@@ -1021,7 +1021,7 @@
 
 (defn first-token [(line String)] String
   (let [(trimmed String) (trim-spaces line)]
-    (loop [(end Int) 0]
+    (loop [end Int 0]
       (if (or (>= end (count trimmed))
               (= " " (subs trimmed end (+ end 1)))
               (= "\t" (subs trimmed end (+ end 1))))
@@ -1029,7 +1029,7 @@
         (recur (+ end 1))))))
 
 (defn current-generation [(text String)] (U Int Nil)
-  (loop [(remaining (Vec String)) (split-lines text)]
+  (loop [remaining (Vec String) (split-lines text)]
     (if (= (count remaining) 0)
       nil
       (let [(line String) (first remaining)]

@@ -103,8 +103,8 @@
   (match (directory-names root relative-directory)
     [(NamesLoadRejected message) (->DocumentsLoadRejected message)]
     [(NamesLoaded names)
-     (loop [(remaining (Vec String)) names
-            (documents (Vec paths/SourceDocument)) []]
+     (loop [remaining (Vec String) names
+            documents (Vec paths/SourceDocument) []]
        (if (= (count remaining) 0)
          (->DocumentsLoaded documents)
          (let [(name String) (first remaining)]
@@ -157,16 +157,16 @@
   [(left (Vec paths/SourceDocument))
    (right (Vec paths/SourceDocument))]
   (Vec paths/SourceDocument)
-  (loop [(remaining (Vec paths/SourceDocument)) right
-         (result (Vec paths/SourceDocument)) left]
+  (loop [remaining (Vec paths/SourceDocument) right
+         result (Vec paths/SourceDocument) left]
     (if (= (count remaining) 0)
       result
       (recur (rest remaining) (conj result (first remaining))))))
 
 (defn module-documents
   [(modules (Vec views/ModuleSource))] (Vec paths/SourceDocument)
-  (loop [(remaining (Vec views/ModuleSource)) modules
-         (documents (Vec paths/SourceDocument)) []]
+  (loop [remaining (Vec views/ModuleSource) modules
+         documents (Vec paths/SourceDocument) []]
     (if (= (count remaining) 0)
       documents
       (recur (rest remaining)
