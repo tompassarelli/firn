@@ -1,0 +1,1391 @@
+#lang beagle
+(ns activity.native
+  (:require [activity.core :as a]
+            [activity.driver :as d]
+            [beagle.datum-reader :as reader]
+            [native.json :as json]))
+
+(def max-config-bytes Int 1048576)
+(def max-state-bytes Int 16777216)
+(def max-command-output Int 16777216)
+(def max-line-bytes Int 16777216)
+(def fifo-write-timeout-ms Int 500)
+(def poll-timeout-ms Int 250)
+(def child-stop-timeout-ms Int 500)
+(def reconnect-delay-ms Int 2000)
+(def lease-retry-delay-ms Int 25)
+(def lease-attempt-limit Int 80)
+
+(defrecord ActivityPaths
+  [runtime-dir String
+   ctl String
+   lease String
+   pid String
+   state-dir String
+   state String
+   assignments String
+   defs String])
+
+(defunion StringVectorResult
+  (StringVectorLoaded [values (Vec String)])
+  (StringVectorRejected [message String]))
+
+(defunion DefsResult
+  (DefsLoaded
+    [defs (Vec a/ActivityDef)
+     default String])
+  (DefsRejected [message String]))
+
+(defunion AssignmentsResult
+  (AssignmentsLoaded [assignments (Vec a/Assignment)])
+  (AssignmentsRejected [message String]))
+
+(defunion WorkspacesResult
+  (WorkspacesLoaded [workspaces (Vec a/Workspace)])
+  (WorkspacesRejected [message String]))
+
+(defunion ProcessResult
+  (ProcessCompleted
+    [status Int
+     stdout String
+     stderr String])
+  (ProcessRejected [errno Int]))
+
+(defunion ParsedCommand
+  (CommandLoaded [command a/ActivityCommand])
+  (CommandIgnored [token Bool]))
+
+(defunion ParsedEvent
+  (EventWorkspaces [workspaces (Vec a/Workspace)])
+  (EventRescan [token Bool])
+  (EventIgnored [token Bool])
+  (EventRejected [message String]))
+
+(defrecord ListEntry
+  [id String
+   workspace-count Int])
+
+(defrecord SnapshotView
+  [text String
+   current String
+   entries (Vec ListEntry)])
+
+(defunion SnapshotResult
+  (SnapshotLoaded [snapshot SnapshotView])
+  (SnapshotMissing [token Bool]))
+
+(defunion LeaseResult
+  (LeaseAcquired [descriptor Int])
+  (LeaseRejected [message String]))
+
+(defunion EventStreamResult
+  (EventStreamStarted
+    [pid Int
+     stdout-fd Int])
+  (EventStreamRejected [errno Int]))
+
+(defunion LineResult
+  (LineLoaded
+    [line String
+     eof Bool])
+  (LineRejected [errno Int]))
+
+(defn stderr-line [message String] Nil
+  (host.stderr/write-text (str message "\n")))
+
+(defn environment-or
+  [name String
+   fallback String]
+  String
+  (let [(value (U String Nil)) (System/getenv name)]
+    (if (nil? value) fallback value)))
+
+(defn activity-paths [defs-override (U String Nil)] ActivityPaths
+  (let [(home String) (environment-or "HOME" "/tmp")
+        (runtime-root String) (environment-or "XDG_RUNTIME_DIR" "/tmp")
+        (state-root String)
+        (environment-or "XDG_STATE_HOME" (str home "/.local/state"))
+        (config-root String)
+        (environment-or "XDG_CONFIG_HOME" (str home "/.config"))
+        (runtime-dir String) (str runtime-root "/activity")
+        (state-dir String) (str state-root "/activity")]
+    (->ActivityPaths
+      runtime-dir
+      (str runtime-dir "/ctl")
+      (str runtime-dir "/lease")
+      (str runtime-dir "/pid")
+      state-dir
+      (str state-dir "/state.json")
+      (str state-dir "/assignments.edn")
+      (if (nil? defs-override)
+        (str config-root "/activity/activities.edn")
+        defs-override))))
+
+(defn json-container-end
+  [events (Vec json/JsonEvent)
+   start Int]
+  Int
+  (loop [(index Int) start (depth Int) 0]
+    (if (>= index (count events))
+      -1
+      (let [(event json/JsonEvent) (nth events index)]
+        (cond
+          (or (instance? JsonObjectStart event)
+              (instance? JsonArrayStart event))
+          (recur (+ index 1) (+ depth 1))
+
+          (or (instance? JsonObjectEnd event)
+              (instance? JsonArrayEnd event))
+          (if (= depth 1)
+            (+ index 1)
+            (recur (+ index 1) (- depth 1)))
+
+          :else
+          (recur (+ index 1) depth))))))
+
+(defn json-value-end
+  [events (Vec json/JsonEvent)
+   start Int]
+  Int
+  (if (or (< start 0) (>= start (count events)))
+    -1
+    (let [(event json/JsonEvent) (nth events start)]
+      (cond
+        (or (instance? JsonObjectStart event)
+            (instance? JsonArrayStart event))
+        (json-container-end events start)
+
+        (or (instance? JsonObjectEnd event)
+            (instance? JsonArrayEnd event))
+        -1
+
+        :else
+        (+ start 1)))))
+
+(defn json-object-field-index
+  [events (Vec json/JsonEvent)
+   start Int
+   wanted String]
+  (U Int Nil)
+  (if (or (< start 0)
+          (>= start (count events))
+          (not (instance? JsonObjectStart (nth events start))))
+    nil
+    (let [(end Int) (json-value-end events start)]
+      (if (< end 0)
+        nil
+        (loop [(index Int) (+ start 1)]
+          (if (>= index (- end 1))
+            nil
+            (let [(event json/JsonEvent) (nth events index)]
+              (if (not (instance? JsonKey event))
+                nil
+               (let [(value-index Int) (+ index 1)
+                     (next Int) (json-value-end events value-index)
+                     (key String) (json/jsonkey-value event)]
+                 (if (< next 0)
+                   nil
+                   (if (= key wanted)
+                     value-index
+                     (recur next))))))))))))
+
+(defn json-string-at
+  [events (Vec json/JsonEvent)
+   index (U Int Nil)]
+  (U String Nil)
+  (if (nil? index)
+    nil
+    (let [(event json/JsonEvent) (nth events index)]
+      (if (instance? JsonString event)
+        (json/jsonstring-value event)
+        nil))))
+
+(defn json-int-at
+  [events (Vec json/JsonEvent)
+   index (U Int Nil)]
+  (U Int Nil)
+  (if (nil? index)
+    nil
+    (let [(event json/JsonEvent) (nth events index)]
+      (if (instance? JsonNumber event)
+        (parse-long (json/jsonnumber-lexeme event))
+        nil))))
+
+(defn json-bool-at
+  [events (Vec json/JsonEvent)
+   index (U Int Nil)
+   fallback Bool]
+  Bool
+  (if (nil? index)
+    fallback
+    (let [(event json/JsonEvent) (nth events index)]
+      (if (instance? JsonBoolean event)
+        (json/jsonboolean-value event)
+        fallback))))
+
+(defn json-nullable-string-at
+  [events (Vec json/JsonEvent)
+   index (U Int Nil)]
+  (U String Nil)
+  (if (nil? index)
+    nil
+    (let [(event json/JsonEvent) (nth events index)]
+      (if (instance? JsonString event)
+        (let [(value String) (json/jsonstring-value event)] value)
+        nil))))
+
+(defn workspace-object
+  [events (Vec json/JsonEvent)
+   start Int]
+  (U a/Workspace Nil)
+  (let [(id (U Int Nil))
+        (json-int-at events (json-object-field-index events start "id"))
+        (idx (U Int Nil))
+        (json-int-at events (json-object-field-index events start "idx"))
+        (output (U String Nil))
+        (json-string-at events (json-object-field-index events start "output"))]
+    (if (or (nil? id) (nil? idx) (nil? output))
+      nil
+      (a/->Workspace
+        id
+        idx
+        (json-nullable-string-at events
+          (json-object-field-index events start "name"))
+        output
+        (json-bool-at events
+          (json-object-field-index events start "is_focused") false)
+        (json-bool-at events
+          (json-object-field-index events start "is_active") false)
+        (json-bool-at events
+          (json-object-field-index events start "is_urgent") false)
+        (json-int-at events
+          (json-object-field-index events start "active_window_id"))))))
+
+(defn workspaces-array
+  [events (Vec json/JsonEvent)
+   start Int]
+  WorkspacesResult
+  (if (or (< start 0)
+          (>= start (count events))
+          (not (instance? JsonArrayStart (nth events start))))
+    (->WorkspacesRejected "expected a workspace array")
+    (let [(end Int) (json-value-end events start)]
+      (if (< end 0)
+        (->WorkspacesRejected "unterminated workspace array")
+        (loop [(index Int) (+ start 1)
+               (result (Vec a/Workspace)) []]
+          (if (= index (- end 1))
+            (->WorkspacesLoaded result)
+            (let [(next Int) (json-value-end events index)
+                  (workspace (U a/Workspace Nil))
+                  (workspace-object events index)]
+              (if (or (< next 0) (nil? workspace))
+                (->WorkspacesRejected "invalid workspace object")
+                (recur next (conj result workspace))))))))))
+
+(defn parse-workspaces-json [text String] WorkspacesResult
+  (match (json/decode text)
+    [(JsonDecodeError offset message)
+     (->WorkspacesRejected (str offset ":" message))]
+    [(JsonDecoded events)
+     (if (empty? events)
+       (->WorkspacesRejected "expected a workspace array")
+       (workspaces-array events 0))]))
+
+(defn parse-event-json [text String] ParsedEvent
+  (match (json/decode text)
+    [(JsonDecodeError offset message)
+     (->EventRejected (str offset ":" message))]
+    [(JsonDecoded events)
+     (if (or (empty? events)
+             (not (instance? JsonObjectStart (first events))))
+       (->EventRejected "expected an event object")
+       (let [(changed (U Int Nil))
+             (json-object-field-index events 0 "WorkspacesChanged")
+             (activated (U Int Nil))
+             (json-object-field-index events 0 "WorkspaceActivated")
+             (active-window (U Int Nil))
+             (json-object-field-index events 0 "WorkspaceActiveWindowChanged")]
+         (cond
+           (some? changed)
+           (let [(workspace-index (U Int Nil))
+                 (json-object-field-index events changed "workspaces")]
+             (if (nil? workspace-index)
+               (->EventRejected "WorkspacesChanged has no workspaces")
+               (match (workspaces-array events workspace-index)
+                 [(WorkspacesLoaded workspaces) (->EventWorkspaces workspaces)]
+                 [(WorkspacesRejected message) (->EventRejected message)])))
+
+           (or (some? activated) (some? active-window))
+           (->EventRescan true)
+
+           :else
+           (->EventIgnored true))))]))
+
+(defn edn-container-end
+  [events (Vec reader/ReaderEvent)
+   start Int]
+  Int
+  (loop [(index Int) start (depth Int) 0]
+    (if (>= index (count events))
+      -1
+      (let [(kind Keyword)
+            (reader/readerevent-kind (nth events index))]
+        (cond
+          (or (= kind :map/open) (= kind :vector/open))
+          (recur (+ index 1) (+ depth 1))
+
+          (or (= kind :map/close) (= kind :vector/close))
+          (if (= depth 1)
+            (+ index 1)
+            (recur (+ index 1) (- depth 1)))
+
+          :else
+          (recur (+ index 1) depth))))))
+
+(defn edn-value-end
+  [events (Vec reader/ReaderEvent)
+   start Int]
+  Int
+  (if (or (< start 0) (>= start (count events)))
+    -1
+    (let [(kind Keyword)
+          (reader/readerevent-kind (nth events start))]
+      (cond
+        (or (= kind :map/open) (= kind :vector/open))
+        (edn-container-end events start)
+
+        (or (= kind :map/close) (= kind :vector/close))
+        -1
+
+        :else
+        (+ start 1)))))
+
+(defn edn-map-keyword-index
+  [events (Vec reader/ReaderEvent)
+   start Int
+   wanted String]
+  (U Int Nil)
+  (if (or (< start 0)
+          (>= start (count events))
+          (not= (reader/readerevent-kind (nth events start)) :map/open))
+    nil
+    (let [(end Int) (edn-value-end events start)]
+      (if (< end 0)
+        nil
+        (loop [(index Int) (+ start 1)]
+          (if (>= index (- end 1))
+            nil
+            (let [(value-index Int) (+ index 1)
+                  (next Int) (edn-value-end events value-index)
+                  (event reader/ReaderEvent) (nth events index)]
+              (if (< next 0)
+                nil
+                (if (and (= (reader/readerevent-kind event) :keyword)
+                         (= (reader/readerevent-value event) wanted))
+                  value-index
+                  (recur next))))))))))
+
+(defn edn-string-at
+  [events (Vec reader/ReaderEvent)
+   index (U Int Nil)]
+  (U String Nil)
+  (if (nil? index)
+    nil
+    (let [(event reader/ReaderEvent) (nth events index)]
+      (if (= (reader/readerevent-kind event) :string)
+        (reader/readerevent-value event)
+        nil))))
+
+(defn edn-nullable-string-at
+  [events (Vec reader/ReaderEvent)
+   index (U Int Nil)]
+  (U String Nil)
+  (if (nil? index)
+    nil
+    (let [(event reader/ReaderEvent) (nth events index)]
+      (if (= (reader/readerevent-kind event) :string)
+        (reader/readerevent-value event)
+        nil))))
+
+(defn edn-string-vector-at
+  [events (Vec reader/ReaderEvent)
+   index (U Int Nil)]
+  StringVectorResult
+  (if (nil? index)
+    (->StringVectorLoaded [])
+    (if (not= (reader/readerevent-kind (nth events index)) :vector/open)
+      (->StringVectorRejected "expected a string vector")
+      (let [(end Int) (edn-value-end events index)]
+        (if (< end 0)
+          (->StringVectorRejected "unterminated string vector")
+          (loop [(at Int) (+ index 1) (result (Vec String)) []]
+            (if (= at (- end 1))
+              (->StringVectorLoaded result)
+              (let [(event reader/ReaderEvent) (nth events at)]
+                (if (= (reader/readerevent-kind event) :string)
+                  (recur (+ at 1)
+                    (conj result (reader/readerevent-value event)))
+                  (->StringVectorRejected
+                    "activity bindings must be strings"))))))))))
+
+(defn activity-definition
+  [events (Vec reader/ReaderEvent)
+   start Int]
+  (U a/ActivityDef Nil)
+  (let [(id (U String Nil))
+        (edn-string-at events (edn-map-keyword-index events start ":id"))
+        (label (U String Nil))
+        (edn-nullable-string-at events
+          (edn-map-keyword-index events start ":label"))]
+    (if (nil? id)
+      nil
+      (match (edn-string-vector-at events
+               (edn-map-keyword-index events start ":bind-names"))
+        [(StringVectorRejected message) nil]
+        [(StringVectorLoaded names)
+         (match (edn-string-vector-at events
+                  (edn-map-keyword-index events start ":bind-prefixes"))
+           [(StringVectorRejected message) nil]
+           [(StringVectorLoaded prefixes)
+            (a/->ActivityDef id label names prefixes)])]))))
+
+(defn activity-definitions
+  [events (Vec reader/ReaderEvent)
+   start Int]
+  DefsResult
+  (if (or (< start 0)
+          (>= start (count events))
+          (not= (reader/readerevent-kind (nth events start)) :vector/open))
+    (->DefsRejected ":activities must be a vector")
+    (let [(end Int) (edn-value-end events start)]
+      (if (< end 0)
+        (->DefsRejected "unterminated :activities vector")
+        (loop [(index Int) (+ start 1)
+               (result (Vec a/ActivityDef)) []]
+          (if (= index (- end 1))
+            (if (empty? result)
+              (->DefsRejected ":activities must not be empty")
+              (->DefsLoaded result ""))
+            (let [(next Int) (edn-value-end events index)
+                  (definition (U a/ActivityDef Nil))
+                  (activity-definition events index)]
+              (if (or (< next 0) (nil? definition))
+                (->DefsRejected "invalid activity definition")
+                (recur next (conj result definition))))))))))
+
+(defn definition-ids [defs (Vec a/ActivityDef)] (Vec String)
+  (loop [(index Int) 0 (result (Vec String)) []]
+    (if (>= index (count defs))
+      result
+      (recur (+ index 1)
+        (conj result (a/activitydef-id (nth defs index)))))))
+
+(defn parse-defs [text String] DefsResult
+  (let [(read reader/DatumRead) (reader/read-events text)
+        (error (U String Nil)) (reader/datumread-error read)
+        (events (Vec reader/ReaderEvent)) (reader/datumread-events read)]
+    (if (some? error)
+      (->DefsRejected
+        (str (reader/datumread-error-offset read) ":" error))
+      (if (or (empty? events)
+              (not= (reader/readerevent-kind (first events)) :map/open)
+              (not= (edn-value-end events 0) (count events)))
+       (->DefsRejected "expected an activity definition map")
+       (let [(default (U String Nil))
+             (edn-string-at events
+               (edn-map-keyword-index events 0 ":default"))
+             (definitions-index (U Int Nil))
+             (edn-map-keyword-index events 0 ":activities")]
+         (if (or (nil? default) (nil? definitions-index))
+           (->DefsRejected "activity definitions require :default and :activities")
+           (match (activity-definitions events definitions-index)
+             [(DefsRejected message) (->DefsRejected message)]
+             [(DefsLoaded defs ignored-default)
+              (if (a/string-member?
+                    (definition-ids defs) default)
+                (->DefsLoaded defs default)
+                (->DefsRejected ":default must name an activity"))])))))))
+
+(defn parse-assignments-events
+  [events (Vec reader/ReaderEvent)]
+  AssignmentsResult
+  (if (or (empty? events)
+          (not= (reader/readerevent-kind (first events)) :map/open))
+    (->AssignmentsRejected "expected an assignment map")
+    (let [(end Int) (edn-value-end events 0)]
+      (if (not= end (count events))
+        (->AssignmentsRejected "invalid assignment map")
+        (loop [(index Int) 1 (result (Vec a/Assignment)) []]
+          (if (= index (- end 1))
+            (->AssignmentsLoaded result)
+            (if (> (+ index 1) (- end 2))
+              (->AssignmentsRejected "assignment map has no value")
+              (let [(name-event reader/ReaderEvent) (nth events index)
+                    (activity-event reader/ReaderEvent)
+                    (nth events (+ index 1))]
+                (cond
+                  (not= (reader/readerevent-kind name-event) :string)
+                  (->AssignmentsRejected
+                    "assignment workspace name must be a string")
+
+                  (not= (reader/readerevent-kind activity-event) :string)
+                  (->AssignmentsRejected
+                    "assignment activity must be a string")
+
+                  :else
+                  (recur (+ index 2)
+                    (conj result
+                      (a/->Assignment
+                        (reader/readerevent-value name-event)
+                        (reader/readerevent-value activity-event)))))))))))))
+
+(defn parse-assignments [text String] AssignmentsResult
+  (let [(read reader/DatumRead) (reader/read-events text)
+        (error (U String Nil)) (reader/datumread-error read)]
+    (if (some? error)
+      (->AssignmentsRejected
+        (str (reader/datumread-error-offset read) ":" error))
+      (parse-assignments-events (reader/datumread-events read)))))
+
+(defn load-defs [path String] DefsResult
+  (let [loaded (host.fs/read-text-bounded path max-config-bytes)]
+    (if (instance? host.fs/ReadTextBoundedOk loaded)
+      (parse-defs (host.fs/readtextboundedok-text loaded))
+      (->DefsRejected
+        (str "cannot read definitions: errno "
+          (host.fs/readtextboundederror-errno loaded))))))
+
+(defn load-assignments [path String] AssignmentsResult
+  (let [loaded (host.fs/read-text-bounded path max-config-bytes)]
+    (if (instance? host.fs/ReadTextBoundedOk loaded)
+      (parse-assignments (host.fs/readtextboundedok-text loaded))
+      (let [(errno Int) (host.fs/readtextboundederror-errno loaded)]
+        (if (= errno 2)
+       (->AssignmentsLoaded [])
+       (->AssignmentsRejected
+            (str "cannot read assignments: errno " errno)))))))
+
+(defn assignment-text [assignments (Vec a/Assignment)] String
+  (loop [(index Int) 0 (result String) "{"]
+    (if (>= index (count assignments))
+      (str result "}\n")
+      (let [(assignment a/Assignment) (nth assignments index)]
+        (recur (+ index 1)
+          (str result
+            (if (= index 0) "" ", ")
+            (reader/render-string-literal
+              (a/assignment-workspace-name assignment))
+            " "
+            (reader/render-string-literal
+              (a/assignment-activity assignment))))))))
+
+(defn persist-assignments
+  [path String
+   assignments (Vec a/Assignment)]
+  Int
+  (let [written (host.fs/write-text-atomic path (assignment-text assignments))]
+    (if (instance? host.fs/WriteTextAtomicOk written)
+      0
+      (do
+        (stderr-line
+          (str "activity daemon: cannot write assignments: errno "
+            (host.fs/writetextatomicerror-errno written)))
+        1))))
+
+(defn workspace-json-events [workspace a/Workspace] (Vec json/JsonEvent)
+  (let [(name (U String Nil)) (a/workspace-name workspace)
+        (events (Vec json/JsonEvent)) []]
+    (conj events
+      (json/->JsonObjectStart 0)
+      (json/->JsonKey 0 "id")
+      (json/->JsonNumber 0 (str (a/workspace-id workspace)))
+      (json/->JsonKey 0 "idx")
+      (json/->JsonNumber 0 (str (a/workspace-idx workspace)))
+      (json/->JsonKey 0 "name")
+      (if (nil? name) (json/->JsonNull 0) (json/->JsonString 0 name))
+      (json/->JsonKey 0 "output")
+      (json/->JsonString 0 (a/workspace-output workspace))
+      (json/->JsonKey 0 "focused")
+      (json/->JsonBoolean 0 (a/workspace-focused workspace))
+      (json/->JsonKey 0 "active")
+      (json/->JsonBoolean 0 (a/workspace-active workspace))
+      (json/->JsonKey 0 "urgent")
+      (json/->JsonBoolean 0 (a/workspace-urgent workspace))
+      (json/->JsonObjectEnd 0))))
+
+(defn workspaces-json-events [workspaces (Vec a/Workspace)] (Vec json/JsonEvent)
+  (let [(empty-events (Vec json/JsonEvent)) []]
+    (loop [(index Int) 0
+           (events (Vec json/JsonEvent))
+           (conj empty-events (json/->JsonArrayStart 0))]
+      (if (>= index (count workspaces))
+        (conj events (json/->JsonArrayEnd 0))
+        (recur (+ index 1)
+          (into events (workspace-json-events (nth workspaces index))))))))
+
+(defn activity-json-events
+  [state a/ActivityState
+   workspaces (Vec a/Workspace)
+   definition a/ActivityDef]
+  (Vec json/JsonEvent)
+  (let [(id String) (a/activitydef-id definition)
+        (label (U String Nil)) (a/activitydef-label definition)
+        (last-active (U Int Nil))
+        (a/last-active-for (a/activitystate-last-active state) id)
+        (members (Vec a/Workspace)) (a/members-of state workspaces id)
+        (events (Vec json/JsonEvent)) []]
+    (into
+      (conj events
+        (json/->JsonObjectStart 0)
+        (json/->JsonKey 0 "id")
+        (json/->JsonString 0 id)
+        (json/->JsonKey 0 "label")
+        (json/->JsonString 0 (if (nil? label) id label))
+        (json/->JsonKey 0 "last_active")
+        (if (nil? last-active)
+          (json/->JsonNull 0)
+          (json/->JsonNumber 0 (str last-active)))
+        (json/->JsonKey 0 "workspaces"))
+      (conj (workspaces-json-events members) (json/->JsonObjectEnd 0)))))
+
+(defn activities-json-events
+  [state a/ActivityState
+  workspaces (Vec a/Workspace)]
+  (Vec json/JsonEvent)
+  (let [(definitions (Vec a/ActivityDef)) (a/activitystate-defs state)
+        (empty-events (Vec json/JsonEvent)) []]
+    (loop [(index Int) 0
+           (events (Vec json/JsonEvent))
+           (conj empty-events (json/->JsonArrayStart 0))]
+      (if (>= index (count definitions))
+        (conj events (json/->JsonArrayEnd 0))
+        (recur (+ index 1)
+          (into events
+            (activity-json-events state workspaces
+              (nth definitions index))))))))
+
+(defn snapshot-events
+  [state a/ActivityState
+   workspaces (Vec a/Workspace)]
+  (Vec json/JsonEvent)
+  (let [(generated-at Int)
+        (quot (host.clock/wall-nanoseconds) 1000000)
+        (events (Vec json/JsonEvent)) []
+        (prefix (Vec json/JsonEvent))
+        (conj events
+          (json/->JsonObjectStart 0)
+          (json/->JsonKey 0 "current")
+          (json/->JsonString 0 (a/activitystate-current state))
+          (json/->JsonKey 0 "previous")
+          (json/->JsonString 0 (a/activitystate-previous state))
+          (json/->JsonKey 0 "generated_at")
+          (json/->JsonNumber 0 (str generated-at))
+          (json/->JsonKey 0 "activities"))
+        (with-activities (Vec json/JsonEvent))
+        (into prefix (activities-json-events state workspaces))
+        (with-floating-key (Vec json/JsonEvent))
+        (conj with-activities (json/->JsonKey 0 "floating"))]
+    (into
+      with-floating-key
+      (conj
+        (workspaces-json-events (a/floats-of state workspaces))
+        (json/->JsonObjectEnd 0)))))
+
+(defn write-snapshot
+  [path String
+   state a/ActivityState
+   workspaces (Vec a/Workspace)]
+  Int
+  (let [encoded (json/encode (snapshot-events state workspaces))]
+    (if (instance? JsonEncodeError encoded)
+     (do
+       (stderr-line
+         (str "activity daemon: cannot encode snapshot: "
+           (json/jsonencodeerror-message encoded)))
+       1)
+     (let [written
+           (host.fs/write-text-atomic path
+             (str (json/jsonencoded-text encoded) "\n"))]
+       (if (instance? host.fs/WriteTextAtomicOk written)
+         0
+         (do
+           (stderr-line
+             (str "activity daemon: cannot write snapshot: errno "
+               (host.fs/writetextatomicerror-errno written)))
+           1))))))
+
+(defn capture [argv (Vec String)] ProcessResult
+  (let [captured (host.process/run-capture argv "" max-command-output)]
+    (if (instance? host.process/CaptureOk captured)
+      (->ProcessCompleted
+        (host.process/captureok-status captured)
+        (host.process/captureok-stdout captured)
+        (host.process/captureok-stderr captured))
+      (->ProcessRejected (host.process/captureerror-errno captured)))))
+
+(defn niri-workspaces [] WorkspacesResult
+  (match (capture ["niri" "msg" "--json" "workspaces"])
+    [(ProcessRejected errno)
+     (->WorkspacesRejected (str "cannot start niri: errno " errno))]
+    [(ProcessCompleted status stdout stderr)
+     (if (= status 0)
+       (parse-workspaces-json stdout)
+       (->WorkspacesRejected (str "niri exited " status))) ]))
+
+(defn niri-action [args (Vec String)] Bool
+  (match (capture (into ["niri" "msg" "action"] args))
+    [(ProcessRejected errno) false]
+    [(ProcessCompleted status stdout stderr) (= status 0)]))
+
+(defn execute-reorder-steps [moves (Vec a/WorkspaceMove)] Bool
+  (loop [(index Int) 0 (succeeded Bool) true]
+    (if (>= index (count moves))
+      succeeded
+      (let [(move a/WorkspaceMove) (nth moves index)
+            (workspace a/Workspace) (a/workspacemove-workspace move)
+            (ok Bool)
+            (niri-action
+              ["move-workspace-to-index"
+               "--reference"
+               (a/workspace-reference workspace)
+               (str (a/workspacemove-target-index move))])]
+        (recur (+ index 1) (and succeeded ok))))))
+
+(defn apply-workspace-record
+  [paths ActivityPaths
+   state a/ActivityState
+   workspaces (Vec a/Workspace)]
+  a/ActivityState
+  (let [(applied a/ActivityState) (a/apply-workspaces state workspaces)
+        (outcome d/BandOutcome)
+        (d/reconcile-bands applied workspaces
+          (d/default-band-limit workspaces))
+        (moves (Vec a/WorkspaceMove)) (d/band-moves outcome)
+        (modelled (Vec a/Workspace)) (d/band-workspaces outcome)
+        (moves-ok Bool) (execute-reorder-steps moves)
+        (recorded a/ActivityState) (a/apply-workspaces applied modelled)]
+    (do
+      (if (not (d/band-settled? outcome))
+        (stderr-line "activity daemon: band reconciliation limit reached")
+        nil)
+      (if (not moves-ok)
+        (stderr-line "activity daemon: niri workspace reorder failed")
+        nil)
+      (write-snapshot (activitypaths-state paths) recorded modelled)
+      recorded)))
+
+(defn rescan-state
+  [paths ActivityPaths
+   state a/ActivityState]
+  a/ActivityState
+  (match (niri-workspaces)
+    [(WorkspacesRejected message)
+     (do (stderr-line (str "activity daemon: " message)) state)]
+    [(WorkspacesLoaded workspaces)
+     (apply-workspace-record paths state workspaces)]))
+
+(defn parse-command-json [text String] ParsedCommand
+  (match (json/decode text)
+    [(JsonDecodeError offset message) (->CommandIgnored true)]
+    [(JsonDecoded events)
+     (if (or (empty? events)
+             (not (instance? JsonObjectStart (first events))))
+       (->CommandIgnored true)
+       (let [(command (U String Nil))
+             (json-string-at events
+               (json-object-field-index events 0 "cmd"))
+             (activity (U String Nil))
+             (json-string-at events
+               (json-object-field-index events 0 "activity"))
+             (ordinal (U Int Nil))
+             (json-int-at events (json-object-field-index events 0 "n"))]
+         (cond
+           (and (= command "goto") (some? activity))
+           (->CommandLoaded (a/->Goto activity))
+
+           (and (= command "move-to-activity") (some? activity))
+           (->CommandLoaded (a/->MoveToActivity activity))
+
+           (= command "back")
+           (->CommandLoaded (a/->Back true))
+
+           (= command "here")
+           (->CommandLoaded (a/->Here (if (nil? ordinal) 1 ordinal)))
+
+           (= command "move-here")
+           (->CommandLoaded (a/->MoveHere (if (nil? ordinal) 1 ordinal)))
+
+           (and (= command "assign") (some? activity))
+           (->CommandLoaded (a/->Assign activity))
+
+           :else
+           (->CommandIgnored true))))]))
+
+(defn execute-plan-steps
+  [paths ActivityPaths
+   plan d/CommandPlan]
+  Nil
+  (let [(steps (Vec d/PlannedStep)) (d/commandplan-steps plan)]
+    (loop [(index Int) 0]
+      (if (>= index (count steps))
+        nil
+        (let [(step d/PlannedStep) (nth steps index)]
+          (do
+            (match step
+              [(FocusStep reference)
+               (if (niri-action ["focus-workspace" reference])
+                 nil
+                 (stderr-line "activity daemon: niri focus failed"))]
+              [(MoveColumnStep reference)
+               (if (niri-action ["move-column-to-workspace" reference])
+                 nil
+                 (stderr-line "activity daemon: niri column move failed"))]
+              [(ReorderStep reference id target-index)
+               (if (niri-action
+                     ["move-workspace-to-index" "--reference" reference
+                      (str target-index)])
+                 nil
+                 (stderr-line "activity daemon: niri workspace reorder failed"))]
+              [(SnapshotStep snapshot)
+               (do
+                 (write-snapshot
+                   (activitypaths-state paths)
+                   (d/commandplan-state plan)
+                   (d/commandplan-workspaces plan))
+                 nil)]
+              [(PersistStep assignments)
+               (do
+                 (persist-assignments
+                   (activitypaths-assignments paths) assignments)
+                 nil)])
+            (recur (+ index 1))))))))
+
+(defn handle-command
+  [paths ActivityPaths
+   state a/ActivityState
+   line String]
+  a/ActivityState
+  (match (parse-command-json line)
+    [(CommandIgnored token) state]
+    [(CommandLoaded command)
+     (match (niri-workspaces)
+       [(WorkspacesRejected message)
+        (do (stderr-line (str "activity daemon: " message)) state)]
+       [(WorkspacesLoaded workspaces)
+        (let [(plan d/CommandPlan)
+              (d/plan-command state workspaces command)]
+          (do
+            (if (not (d/commandplan-settled plan))
+              (stderr-line "activity daemon: band reconciliation limit reached")
+              nil)
+            (execute-plan-steps paths plan)
+            (d/commandplan-state plan)))])]))
+
+(defn handle-event
+  [paths ActivityPaths
+   state a/ActivityState
+   line String]
+  a/ActivityState
+  (match (parse-event-json line)
+    [(EventWorkspaces workspaces)
+     (apply-workspace-record paths state workspaces)]
+    [(EventRescan token) (rescan-state paths state)]
+    [(EventIgnored token) state]
+    [(EventRejected message)
+     (do (stderr-line (str "activity daemon: invalid niri event: " message))
+       state)]))
+
+(defn make-parent [path String] Int
+  (let [made (host.fs/make-parent-directories path)]
+    (if (instance? host.fs/MakeParentDirectoriesOk made)
+      0
+      (- 0 (host.fs/makeparentdirectorieserror-errno made)))))
+
+(defn takeover-owner [pid-path String] Int
+  (let [loaded (host.fs/read-text-bounded pid-path 64)]
+    (if (instance? host.fs/ReadTextBoundedError loaded)
+      0
+      (let [(owner (U Int Nil))
+            (parse-long
+              (str/trim (host.fs/readtextboundedok-text loaded)))
+           (self Int) (host.process/current-pid)]
+        (if (or (nil? owner) (<= owner 1) (= owner self)
+                (not (host.process/alive? owner)))
+          0
+          (let [(term-status Int) (host.process/signal owner 15)
+                (term-wait Int)
+                (if (= term-status 0)
+                  (host.process/wait-not-alive owner child-stop-timeout-ms)
+                  term-status)]
+            (if (= term-wait 0)
+              0
+              (let [(kill-status Int) (host.process/signal owner 9)]
+                (if (not= kill-status 0)
+                  kill-status
+                  (host.process/wait-not-alive
+                    owner child-stop-timeout-ms))))))))))
+
+(defn install-owner-pid
+  [paths ActivityPaths
+   descriptor Int]
+  LeaseResult
+  (let [written
+        (host.fs/write-text-atomic
+          (activitypaths-pid paths)
+          (str (host.process/current-pid) "\n"))]
+    (if (instance? host.fs/WriteTextAtomicOk written)
+      (->LeaseAcquired descriptor)
+      (do
+        (host.fs/unlock descriptor)
+        (->LeaseRejected
+          (str "cannot write owner pid: errno "
+            (host.fs/writetextatomicerror-errno written)))))))
+
+(defn acquire-lease
+  [paths ActivityPaths
+   attempt Int]
+  LeaseResult
+  (let [locked (host.fs/lock-exclusive (activitypaths-lease paths))]
+    (if (instance? host.fs/LockExclusiveOk locked)
+      (install-owner-pid paths (host.fs/lockexclusiveok-descriptor locked))
+      (if (>= attempt lease-attempt-limit)
+        (->LeaseRejected
+          (str "cannot acquire sole-writer lease: errno "
+            (host.fs/lockexclusiveerror-errno locked)))
+        (do
+          (takeover-owner (activitypaths-pid paths))
+          (host.time/sleep-milliseconds lease-retry-delay-ms)
+          (acquire-lease paths (+ attempt 1)))))))
+
+(defn ensure-fifo [path String] Int
+  (let [kind-result (host.fs/path-kind path)]
+    (if (instance? host.fs/PathKindOk kind-result)
+      (if (= (host.fs/pathkindok-kind kind-result) 4) 0 -22)
+      (let [(errno Int) (host.fs/pathkinderror-errno kind-result)]
+        (if (= errno 2) (host.process/fifo-create path) (- 0 errno))))))
+
+(defn open-control [path String] Int
+  (let [(fifo-status Int) (ensure-fifo path)]
+    (if (= fifo-status 0)
+      (host.process/fifo-open-read path)
+      fifo-status)))
+
+(defn start-event-stream [] EventStreamResult
+  (let [started
+        (host.process/spawn-stdout
+          ["niri" "msg" "--json" "event-stream"])]
+    (if (instance? host.process/SpawnStdoutOk started)
+      (->EventStreamStarted
+        (host.process/spawnstdoutok-pid started)
+        (host.process/spawnstdoutok-stdout-fd started))
+      (->EventStreamRejected
+        (host.process/spawnstdouterror-errno started)))))
+
+(defn read-line [descriptor Int] LineResult
+  (let [read-result
+        (host.process/read-line-deadline
+          descriptor max-line-bytes poll-timeout-ms)]
+    (if (instance? host.process/ReadLineOk read-result)
+      (->LineLoaded
+        (host.process/readlineok-line read-result)
+        (host.process/readlineok-eof read-result))
+      (->LineRejected (host.process/readlineerror-errno read-result)))))
+
+(defn reap-child
+  [pid Int
+   stdout-fd Int]
+  Int
+  (let [(close-status Int) (host.process/close stdout-fd)
+        (first-wait Int)
+        (host.process/wait-not-alive pid child-stop-timeout-ms)
+        (stopped Int)
+        (if (= first-wait 0)
+          0
+          (let [(term-status Int) (host.process/signal pid 15)]
+            (if (not= term-status 0)
+              term-status
+              (let [(term-wait Int)
+                    (host.process/wait-not-alive
+                      pid child-stop-timeout-ms)]
+                (if (= term-wait 0)
+                  0
+                  (let [(kill-status Int) (host.process/signal pid 9)]
+                    (if (not= kill-status 0)
+                      kill-status
+                      (host.process/wait-not-alive
+                        pid child-stop-timeout-ms))))))))]
+    (if (= stopped 0)
+      (let [(wait-status Int) (host.process/wait pid)]
+        (if (= close-status 0) wait-status close-status))
+      stopped)))
+
+(defn reconnect-event-stream
+  [pid Int
+   stdout-fd Int]
+  EventStreamResult
+  (do
+    (reap-child pid stdout-fd)
+    (host.time/sleep-milliseconds reconnect-delay-ms)
+    (start-event-stream)))
+
+(defn reopen-control
+  [path String
+   descriptor Int]
+  Int
+  (do
+    (host.process/close descriptor)
+    (host.time/sleep-milliseconds lease-retry-delay-ms)
+    (host.process/fifo-open-read path)))
+
+(defn daemon-loop
+  [paths ActivityPaths
+   state a/ActivityState
+   control-fd Int
+   event-pid Int
+   event-fd Int]
+  Int
+  (let [(ready Int)
+        (host.process/poll-readable [event-fd control-fd] poll-timeout-ms)]
+    (cond
+      (= ready 0)
+      (match (read-line event-fd)
+        [(LineLoaded line eof)
+         (if eof
+           (match (reconnect-event-stream event-pid event-fd)
+             [(EventStreamRejected errno)
+              (do
+                (stderr-line
+                  (str "activity daemon: cannot reconnect niri: errno " errno))
+                (host.time/sleep-milliseconds reconnect-delay-ms)
+                (match (start-event-stream)
+                  [(EventStreamRejected second-errno) second-errno]
+                  [(EventStreamStarted next-pid next-fd)
+                   (daemon-loop paths state control-fd next-pid next-fd)]))]
+             [(EventStreamStarted next-pid next-fd)
+              (daemon-loop paths state control-fd next-pid next-fd)])
+           (daemon-loop paths (handle-event paths state line)
+             control-fd event-pid event-fd))]
+        [(LineRejected errno)
+         (match (reconnect-event-stream event-pid event-fd)
+           [(EventStreamRejected reconnect-errno) reconnect-errno]
+           [(EventStreamStarted next-pid next-fd)
+            (daemon-loop paths state control-fd next-pid next-fd)])])
+
+      (= ready 1)
+      (match (read-line control-fd)
+        [(LineLoaded line eof)
+         (if eof
+           (let [(next-control Int)
+                 (reopen-control (activitypaths-ctl paths) control-fd)]
+             (if (< next-control 0)
+               next-control
+               (daemon-loop paths state next-control event-pid event-fd)))
+           (daemon-loop paths (handle-command paths state line)
+             control-fd event-pid event-fd))]
+        [(LineRejected errno)
+         (let [(next-control Int)
+               (reopen-control (activitypaths-ctl paths) control-fd)]
+           (if (< next-control 0)
+             next-control
+             (daemon-loop paths state next-control event-pid event-fd)))])
+
+      :else
+      (daemon-loop paths state control-fd event-pid event-fd))))
+
+(defn initial-state
+  [defs (Vec a/ActivityDef)
+   default String
+   assignments (Vec a/Assignment)]
+  a/ActivityState
+  (a/->ActivityState defs default assignments [] [] default default []))
+
+(defn run-owned-daemon
+  [paths ActivityPaths
+   lease-descriptor Int
+   defs (Vec a/ActivityDef)
+   default String
+   assignments (Vec a/Assignment)]
+  Int
+  (let [(control-fd Int) (open-control (activitypaths-ctl paths))]
+    (if (< control-fd 0)
+      (do
+        (host.fs/unlock lease-descriptor)
+        (stderr-line
+          (str "activity daemon: cannot open control FIFO: errno "
+            (- 0 control-fd)))
+        1)
+      (let [(state a/ActivityState)
+            (rescan-state paths (initial-state defs default assignments))]
+        (match (start-event-stream)
+          [(EventStreamRejected errno)
+           (do
+             (host.process/close control-fd)
+             (host.fs/unlock lease-descriptor)
+             (stderr-line
+               (str "activity daemon: cannot start niri event stream: errno "
+                 errno))
+             1)]
+          [(EventStreamStarted pid stdout-fd)
+           (let [(status Int)
+                 (daemon-loop paths state control-fd pid stdout-fd)]
+             (do
+               (reap-child pid stdout-fd)
+               (host.process/close control-fd)
+               (host.fs/unlock lease-descriptor)
+               (if (= status 0) 0 1))) ])))))
+
+(defn run-daemon [defs-override (U String Nil)] Int
+  (let [(paths ActivityPaths) (activity-paths defs-override)]
+    (if (or (not= (make-parent (activitypaths-ctl paths)) 0)
+            (not= (make-parent (activitypaths-state paths)) 0))
+      (do (stderr-line "activity daemon: cannot create runtime directories") 1)
+      (match (load-defs (activitypaths-defs paths))
+        [(DefsRejected message)
+         (do (stderr-line (str "activity daemon: " message)) 1)]
+        [(DefsLoaded defs default)
+         (match (load-assignments (activitypaths-assignments paths))
+           [(AssignmentsRejected message)
+            (do (stderr-line (str "activity daemon: " message)) 1)]
+           [(AssignmentsLoaded assignments)
+            (match (acquire-lease paths 0)
+              [(LeaseRejected message)
+               (do (stderr-line (str "activity daemon: " message)) 1)]
+              [(LeaseAcquired descriptor)
+               (do
+                 (println
+                   (str "activity daemon up: defs=" (activitypaths-defs paths)
+                     " activities=" (count defs)))
+                 (run-owned-daemon
+                   paths descriptor defs default assignments))])])]))))
+
+(defn snapshot-list-entry
+  [events (Vec json/JsonEvent)
+   start Int]
+  (U ListEntry Nil)
+  (let [(id (U String Nil))
+        (json-string-at events (json-object-field-index events start "id"))
+        (workspaces-index (U Int Nil))
+        (json-object-field-index events start "workspaces")]
+    (if (or (nil? id) (nil? workspaces-index)
+            (not (instance? JsonArrayStart (nth events workspaces-index))))
+      nil
+      (let [(end Int) (json-value-end events workspaces-index)]
+        (if (< end 0)
+          nil
+          (loop [(index Int) (+ workspaces-index 1) (items Int) 0]
+            (if (= index (- end 1))
+              (->ListEntry id items)
+              (let [(next Int) (json-value-end events index)]
+                (if (< next 0)
+                  nil
+                  (recur next (+ items 1)))))))))))
+
+(defn snapshot-list-entries
+  [events (Vec json/JsonEvent)
+   start Int]
+  (U (Vec ListEntry) Nil)
+  (if (or (< start 0)
+          (>= start (count events))
+          (not (instance? JsonArrayStart (nth events start))))
+    nil
+    (let [(end Int) (json-value-end events start)
+          (empty-entries (Vec ListEntry)) []
+          (initial (U (Vec ListEntry) Nil)) empty-entries]
+      (if (< end 0)
+        nil
+        (loop [(index Int) (+ start 1) (result (U (Vec ListEntry) Nil)) initial]
+          (if (= index (- end 1))
+            result
+            (let [(entry (U ListEntry Nil))
+                  (snapshot-list-entry events index)
+                  (next Int) (json-value-end events index)]
+              (if (or (nil? result) (nil? entry) (< next 0))
+                nil
+                (recur next (conj result entry))))))))))
+
+(defn parse-snapshot [text String] SnapshotResult
+  (match (json/decode text)
+    [(JsonDecodeError offset message) (->SnapshotMissing true)]
+    [(JsonDecoded events)
+     (if (or (empty? events)
+             (not (instance? JsonObjectStart (first events))))
+       (->SnapshotMissing true)
+       (let [(current (U String Nil))
+             (json-string-at events
+               (json-object-field-index events 0 "current"))
+             (entries-index (U Int Nil))
+             (json-object-field-index events 0 "activities")
+             (entries (U (Vec ListEntry) Nil))
+             (if (nil? entries-index)
+               nil
+               (snapshot-list-entries events entries-index))]
+         (if (or (nil? current) (nil? entries))
+           (->SnapshotMissing true)
+           (->SnapshotLoaded (->SnapshotView text current entries)))))]))
+
+(defn read-snapshot [path String] SnapshotResult
+  (let [loaded (host.fs/read-text-bounded path max-state-bytes)]
+    (if (instance? host.fs/ReadTextBoundedOk loaded)
+      (parse-snapshot (host.fs/readtextboundedok-text loaded))
+      (->SnapshotMissing true))))
+
+(defn command-json-events
+  [command String
+   activity (U String Nil)
+   ordinal (U Int Nil)]
+  (Vec json/JsonEvent)
+  (let [(events (Vec json/JsonEvent)) []
+        (base (Vec json/JsonEvent))
+        (conj events
+          (json/->JsonObjectStart 0)
+          (json/->JsonKey 0 "cmd")
+          (json/->JsonString 0 command))
+        (with-activity (Vec json/JsonEvent))
+        (if (nil? activity)
+          base
+          (conj base
+            (json/->JsonKey 0 "activity")
+            (json/->JsonString 0 activity)))
+        (with-ordinal (Vec json/JsonEvent))
+        (if (nil? ordinal)
+          with-activity
+          (conj with-activity
+            (json/->JsonKey 0 "n")
+            (json/->JsonNumber 0 (str ordinal))))]
+    (conj with-ordinal (json/->JsonObjectEnd 0))))
+
+(defn send-command
+  [paths ActivityPaths
+   command String
+   activity (U String Nil)
+   ordinal (U Int Nil)]
+  Int
+  (let [encoded (json/encode
+                  (command-json-events command activity ordinal))]
+    (if (instance? JsonEncodeError encoded)
+      (do (println "activity: cannot encode command") 1)
+      (let [(status Int)
+            (host.process/fifo-write-deadline
+              (activitypaths-ctl paths)
+              (str (json/jsonencoded-text encoded) "\n")
+              fifo-write-timeout-ms)]
+        (if (= status 0)
+          0
+          (do
+            (println
+              "activity: daemon not reachable (systemctl --user status activity-daemon)")
+            1))))))
+
+(defn print-list
+  [snapshot SnapshotView
+   flag (U String Nil)]
+  Int
+  (cond
+    (= flag "--json")
+    (do (println (str/trim (snapshotview-text snapshot))) 0)
+
+    (= flag "--menu")
+    (let [(entries (Vec ListEntry)) (snapshotview-entries snapshot)]
+      (loop [(index Int) 0]
+        (if (>= index (count entries))
+          0
+          (do
+            (println (listentry-id (nth entries index)))
+            (recur (+ index 1))))))
+
+    :else
+    (let [(entries (Vec ListEntry)) (snapshotview-entries snapshot)]
+      (loop [(index Int) 0]
+        (if (>= index (count entries))
+          0
+          (let [(entry ListEntry) (nth entries index)]
+            (do
+              (println
+                (str
+                  (if (= (listentry-id entry)
+                         (snapshotview-current snapshot))
+                    "* "
+                    "  ")
+                  (listentry-id entry)
+                  "  (" (listentry-workspace-count entry) ")"))
+              (recur (+ index 1)))))))))
+
+(defn list-command
+  [paths ActivityPaths
+   flag (U String Nil)]
+  Int
+  (match (read-snapshot (activitypaths-state paths))
+    [(SnapshotMissing token)
+     (do (println "activity: no state yet (daemon not running?)") 1)]
+    [(SnapshotLoaded snapshot) (print-list snapshot flag)]))
+
+(defn current-command [paths ActivityPaths] Int
+  (match (read-snapshot (activitypaths-state paths))
+    [(SnapshotMissing token)
+     (do (println "activity: no state yet") 1)]
+    [(SnapshotLoaded snapshot)
+     (do (println (snapshotview-current snapshot)) 0)]))
+
+(defn parsed-ordinal [value (U String Nil)] Int
+  (if (nil? value)
+    1
+    (let [(parsed (U Int Nil)) (parse-long value)]
+      (if (nil? parsed) 1 parsed))))
+
+(defn usage [] Int
+  (do
+    (println
+      (str
+        "usage: activity daemon [--defs PATH] | goto ACTIVITY | back | here N | "
+        "move-here N | move-to-activity ACTIVITY | assign ACTIVITY | "
+        "list [--menu|--json] | current"))
+    0))
+
+(defn -main [args (Vec String)] Int
+  (if (empty? args)
+    (usage)
+    (let [(command String) (nth args 0)
+          (second (U String Nil))
+          (if (< 1 (count args)) (nth args 1) nil)
+          (third (U String Nil))
+          (if (< 2 (count args)) (nth args 2) nil)
+          (paths ActivityPaths) (activity-paths nil)]
+      (cond
+        (= command "daemon")
+        (run-daemon (if (= second "--defs") third nil))
+
+        (= command "goto")
+        (if (nil? second)
+          (usage)
+          (send-command paths "goto" second nil))
+
+        (= command "move-to-activity")
+        (if (nil? second)
+          (usage)
+          (send-command paths "move-to-activity" second nil))
+
+        (= command "back")
+        (send-command paths "back" nil nil)
+
+        (= command "here")
+        (let [(ordinal Int) (parsed-ordinal second)]
+          (send-command paths "here" nil ordinal))
+
+        (= command "move-here")
+        (let [(ordinal Int) (parsed-ordinal second)]
+          (send-command paths "move-here" nil ordinal))
+
+        (= command "assign")
+        (if (nil? second)
+          (usage)
+          (send-command paths "assign" second nil))
+
+        (= command "list")
+        (list-command paths second)
+
+        (= command "current")
+        (current-command paths)
+
+        :else
+        (usage)))))
