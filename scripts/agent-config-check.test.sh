@@ -326,7 +326,6 @@ assert_native_identity \
   anthropic "Claude switchboard fragments"
 if rg -n '/home/tom/code/north/bin/(north-(on-|mark-|stream)|concern)' \
   "$REPO/dotfiles/claude/settings.json" \
-  "$REPO/dotfiles/codex/hooks.json" \
   "$REPO/dotfiles/claude/statusline.sh" \
   "$BEAGLE_INTEGRATION/hooks/beagle-session-start.sh" \
   "$AGENT_PROFILE/hooks/north-session-end.sh"; then
@@ -335,7 +334,6 @@ if rg -n '/home/tom/code/north/bin/(north-(on-|mark-|stream)|concern)' \
 fi
 if rg -n 'dotfiles/claude/hooks' \
   "$REPO/dotfiles/claude/settings.json" \
-  "$REPO/dotfiles/codex/hooks.json" \
   "$REPO/modules/north-profile/default.bnix" \
   "$REPO/modules/claude/default.bnix" \
   "$REPO/modules/codex/default.bnix" \
@@ -369,8 +367,6 @@ print(sum(
 PY
 )"
 grep -Fq "$managed_binding_count managed authoritative bindings" <<<"$report"
-# shellcheck disable=SC2088  # report intentionally renders the literal user-facing alias
-grep -Fq '~/.codex/hooks.json ignored by managed-only policy (0 active bindings)' <<<"$report"
 run_quiet_child 'Codex lifecycle wrapper tests' \
   "$REPO/dotfiles/codex/hooks/codex-lifecycle-wrappers.test.sh"
 grep -Fq '"/code/nixos-config/main/dotfiles/bin"' \
@@ -552,30 +548,6 @@ if codex_managed_policy_binding_count \
   printf 'Codex policy disabled hooks while retaining authoritative bindings\n' >&2
   exit 1
 fi
-# shellcheck disable=SC2016  # match source text, not this test process environment
-if grep -Fq 'validate_hooks "$CODEX/hooks.json"' \
-  "$REPO/scripts/agent-config-check.sh"; then
-  printf 'ignored Codex user manifest is still counted as active policy\n' >&2
-  exit 1
-fi
-
-missing_legacy="$scratch/missing-legacy-hooks.json"
-missing_legacy_report="$(
-  CODEX_LEGACY_HOOKS="$missing_legacy" \
-    "$REPO/scripts/agent-config-check.sh"
-)"
-grep -Fq "$managed_binding_count managed authoritative bindings" <<<"$missing_legacy_report"
-grep -Fq 'ignored by managed-only policy (0 active bindings)' \
-  <<<"$missing_legacy_report"
-printf '%s\n' '{not-json' >"$scratch/invalid-legacy-hooks.json"
-invalid_legacy_report="$(
-  CODEX_LEGACY_HOOKS="$scratch/invalid-legacy-hooks.json" \
-    "$REPO/scripts/agent-config-check.sh"
-)"
-grep -Fq "$managed_binding_count managed authoritative bindings" <<<"$invalid_legacy_report"
-grep -Fq 'ignored by managed-only policy (0 active bindings)' \
-  <<<"$invalid_legacy_report"
-
 # A logical state path may traverse symlinks before Git reports its physical
 # worktree root. Canonical identity must accept that alias, but never a distinct
 # repository merely because its lexical path looks related.
@@ -1095,21 +1067,6 @@ if rg -n -- 'check-web|NORTH_WEB|north-web' "$REPO/scripts/agent-config-check.sh
   printf 'agent-config-check still carries retired North web health checks\n' >&2
   exit 1
 fi
-
-# The legacy user manifest is ignored by managed-only policy, but its state
-# coordinate parser remains deterministic for diagnostics and migration.
-expected_north_spawn='/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-spawn-codex'
-[ "$(jq -r '.hooks.SessionStart[0].hooks[1].command' "$REPO/dotfiles/codex/hooks.json")" = "$expected_north_spawn" ]
-disabled_fixture="$scratch/disabled-hook.toml"
-printf '%s\n' \
-  '[hooks.state]' \
-  '[hooks.state."/home/tom/.codex/hooks.json:session_start:0:1"]' \
-  'enabled = false' \
-  '[hooks.state."/tmp/plugin/hooks.json:session_start:0:0"]' \
-  'enabled = false' \
-  >"$disabled_fixture"
-[ "$(list_disabled_codex_hooks "$REPO/dotfiles/codex/hooks.json" "$disabled_fixture")" = \
-  $'SessionStart\t0:1\t'"$expected_north_spawn" ]
 
 # --- Hermes controller adapter coverage ------------------------------------
 # The compact report must surface the Hermes group and its fail-closed adapter.

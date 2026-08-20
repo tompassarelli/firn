@@ -89,8 +89,7 @@ and hooks plus both the Claude and Codex adapters. Run
 `scripts/agent-config-check.sh --local` to additionally verify live symlinks,
 both MCP registrations, external North lifecycle hooks, and installed North's
 Anthropic/OpenAI provider readiness. Normal output is a grouped summary;
-`--verbose` prints every assertion. `scripts/claude-config-check.sh` remains a
-compatibility entry point. This is the anti-rot gate; keep it green.
+`--verbose` prints every assertion. This is the anti-rot gate; keep it green.
 
 ## Hooks kill-switch
 

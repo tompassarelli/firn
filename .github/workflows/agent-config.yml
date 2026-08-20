@@ -19,7 +19,6 @@ on:
       - 'scripts/agent-config-check.test.sh'
       - 'scripts/agent-provider-status.sh'
       - 'scripts/agent-provider-status.test.sh'
-      - 'scripts/claude-config-check.sh'
       - '.github/workflows/agent-config.yml'
   pull_request:
     branches: [main]
@@ -37,7 +36,6 @@ on:
       - 'scripts/agent-config-check.test.sh'
       - 'scripts/agent-provider-status.sh'
       - 'scripts/agent-provider-status.test.sh'
-      - 'scripts/claude-config-check.sh'
       - '.github/workflows/agent-config.yml'
 
 jobs:

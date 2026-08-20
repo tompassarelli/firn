@@ -295,52 +295,6 @@ record_live_hook_binding() {
   LIVE_HOOK_HASH_BY_ROLE["$role"]="$hash"
 }
 
-# Codex stores per-hook trust/enablement by numeric manifest coordinates. Resolve
-# disabled entries back to their event and command so drift reports name the
-# behavior that was actually turned off instead of an opaque `0:1` key.
-list_disabled_codex_hooks() {
-  local manifest="$1" config="$2"
-  local state_manifest="${3:-/home/tom/.codex/hooks.json}"
-  python3 - "$manifest" "$config" "$state_manifest" <<'PY'
-import json
-import re
-import sys
-import tomllib
-
-with open(sys.argv[1], encoding="utf-8") as handle:
-    manifest = json.load(handle)
-with open(sys.argv[2], "rb") as handle:
-    config = tomllib.load(handle)
-
-hooks = manifest.get("hooks", {})
-
-def normalized(value):
-    return re.sub(r"[^a-z0-9]", "", value.lower())
-
-event_by_key = {normalized(name): name for name in hooks}
-states = config.get("hooks", {}).get("state", {})
-for key, state in states.items():
-    if not isinstance(state, dict) or state.get("enabled") is not False:
-        continue
-    manifest_path = "unknown"
-    event_key = "unknown"
-    group_raw = "?"
-    hook_raw = "?"
-    try:
-        manifest_path, event_key, group_raw, hook_raw = key.rsplit(":", 3)
-        if manifest_path not in (sys.argv[1], sys.argv[3]):
-            continue
-        group_index = int(group_raw)
-        hook_index = int(hook_raw)
-        event = event_by_key[normalized(event_key)]
-        command = hooks[event][group_index]["hooks"][hook_index]["command"]
-    except (KeyError, IndexError, TypeError, ValueError):
-        event = event_by_key.get(normalized(event_key), event_key)
-        command = "<unresolved manifest coordinate>"
-    print(f"{event}\t{group_raw}:{hook_raw}\t{command}")
-PY
-}
-
 canonical_existing_path() {
   local path="$1"
   [ -e "$path" ] || return 1
@@ -773,7 +727,6 @@ LIVE_FIRN_ROOT="${AGENT_CONFIG_LIVE_FIRN_ROOT:-$HOME/code/nixos-config}"
 LIVE_CLAUDE="$LIVE_REPO/dotfiles/claude"
 LIVE_HERMES="$LIVE_REPO/dotfiles/hermes"
 CODEX_REQUIREMENTS="$REPO/modules/codex/requirements.toml"
-CODEX_LEGACY_HOOKS="${CODEX_LEGACY_HOOKS:-$CODEX/hooks.json}"
 HERMES="${AGENT_CONFIG_HERMES:-$REPO/dotfiles/hermes}"
 HERMES_BRIDGE="$HERMES/plugins/north-bridge"
 HERMES_MODULE="${AGENT_CONFIG_HERMES_MODULE:-$REPO/modules/hermes/default.bnix}"
@@ -861,18 +814,6 @@ need_yaml() {
     note "$label YAML strict-parse skipped (no PyYAML); structural checks apply"
   fi
 }
-note_ignored_codex_legacy_manifest() {
-  local manifest="$1"
-  if [ ! -e "$manifest" ]; then
-    note "Codex legacy user hook manifest is absent (ignored by managed-only policy)"
-  elif jq -e . "$manifest" >/dev/null 2>&1; then
-    note "Codex legacy user hook manifest is present + valid JSON, but ignored"
-  else
-    note "Codex legacy user hook manifest is invalid JSON, but ignored"
-  fi
-  return 0
-}
-
 printf 'agent harness check%s\n' "$([ "$LOCAL" -eq 1 ] && printf ' (local)' || true)"
 
 # North-composed constitution plus hook/skill implementations from each owner.
@@ -1134,8 +1075,8 @@ validate_codex_managed_policy() {
   CODEX_MANAGED_BINDINGS="$(
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
-  if [ "$CODEX_MANAGED_BINDINGS" = 19 ]; then
-    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 19-binding authoritative contract'
+  if [ "$CODEX_MANAGED_BINDINGS" = 17 ]; then
+    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 17-binding authoritative contract'
   elif [ "$CODEX_MANAGED_BINDINGS" = 0 ]; then
     ok_detail 'Codex managed hooks are authoritatively disabled; remote control remains disabled'
   else
@@ -1572,26 +1513,20 @@ provider_group Claude "$before" \
   "            DigitalOcean: $claude_digitalocean"
 
 before=$fail
-note_ignored_codex_legacy_manifest "$CODEX_LEGACY_HOOKS"
 need_toml "$CODEX/config.toml" 'Codex config'
 if grep -Fq '{:source (s flakeRoot "/dotfiles/codex/config.toml")}' \
      "$REPO/modules/codex/default.bnix" &&
-   grep -Fq '{:source (s flakeRoot "/dotfiles/codex/hooks.json")}' \
-     "$REPO/modules/codex/default.bnix" &&
    grep -Fq '".codex/config.toml".source = "${flakeRoot}/dotfiles/codex/config.toml";' \
      "$REPO/modules/codex/default.nix" &&
-   grep -Fq '".codex/hooks.json".source = "${flakeRoot}/dotfiles/codex/hooks.json";' \
-     "$REPO/modules/codex/default.nix" &&
-   ! rg -q 'code/nixos-config/dotfiles/codex/(config\.toml|hooks\.json)' \
+   ! rg -q 'code/nixos-config/dotfiles/codex/config\.toml' \
      "$REPO/modules/codex/default.bnix" "$REPO/modules/codex/default.nix"; then
-  ok_detail 'Codex config and legacy hook state are generation-owned store sources'
+  ok_detail 'Codex config is a generation-owned store source'
 else
-  bad 'Codex config and legacy hook state must use the committed flake sources'
+  bad 'Codex config must use the committed flake source'
 fi
 validate_codex_managed_policy
 codex_bindings="${CODEX_MANAGED_BINDINGS:-invalid}"
 codex_hook_provenance="${CODEX_HOOK_PROVENANCE:-declaration drift detected}"
-ok_detail 'Codex legacy ~/.codex/hooks.json is intentionally ignored; it contributes zero active bindings'
 codex_north='declared; canonical explicit instance env; live probe deferred'
 codex_linear='authentication deferred to an interactive credential check'
 if [ "$COORDINATION_ACTIVE" -eq 0 ]; then
@@ -1616,8 +1551,6 @@ fi
 if [ "$LOCAL" -eq 1 ]; then
   immutable_store_link_matches \
     "$HOME/.codex/config.toml" "$CODEX/config.toml" "$HOME/.codex/config.toml"
-  immutable_store_link_matches \
-    "$HOME/.codex/hooks.json" "$CODEX/hooks.json" "$HOME/.codex/hooks.json"
   canonical_link "$HOME/.codex/AGENTS.md" "$LIVE_AGENT_STATE/AGENTS.md" "$HOME/.codex/AGENTS.md"
   if [ "$COORDINATION_ACTIVE" -eq 0 ]; then
     ok_detail 'Codex MCP inventory skipped because coordination is disabled'
@@ -1661,7 +1594,6 @@ if [ "$LOCAL" -eq 1 ]; then
 fi
 provider_group Codex "$before" \
   "Hooks       $codex_bindings managed authoritative bindings" \
-  'Legacy      ~/.codex/hooks.json ignored by managed-only policy (0 active bindings)' \
   'Identity    managed lanes harness-owned · pinned native fallback → openai' \
   'Topology    sole policy: managed /etc/codex/hooks' \
   "Hook source $codex_hook_provenance" \

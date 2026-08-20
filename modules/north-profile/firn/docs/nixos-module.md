@@ -19,8 +19,8 @@ validation, hooks kill-switch):
 `seedClaudeSettings` materializes the committed
 `nixos-config:dotfiles/claude/settings.json` snapshot from the evaluated
 generation into `~/.claude/settings.json` as a **regular writable file**. It
-atomically replaces missing, legacy-symlink, and existing regular targets on
-every activation. That makes future committed settings changes converge while
+atomically replaces missing and existing regular targets on every activation.
+That makes future committed settings changes converge while
 removing the live dependency on a mutable checkout. Claude still owns a normal
 writable file between activations, so `/effort`, plugin enablement, and other
 atomic runtime writes continue to work.
