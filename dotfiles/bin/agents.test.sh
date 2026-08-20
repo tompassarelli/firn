@@ -34,9 +34,12 @@ fresh() { # [fragments-dir]
   # the spawn guard and template library; coordination's three leaves are
   # plain skills. Set fixtures are still opt-in per test below.
   NORTH="$SB/code/north/main"
-  mkdir -p "$NORTH/agent-profile/skills/importing-skills"
+  mkdir -p "$NORTH/agent-profile/skills/importing-skills" \
+    "$NORTH/agent-profile/skills/external-code"
   printf -- '---\nname: importing-skills\n---\n' \
     > "$NORTH/agent-profile/skills/importing-skills/SKILL.md"
+  printf -- '---\nname: external-code\n---\n' \
+    > "$NORTH/agent-profile/skills/external-code/SKILL.md"
   for s in threejs-animation threejs-fundamentals threejs-geometry \
     threejs-interaction threejs-lighting threejs-loaders threejs-materials \
     threejs-postprocessing threejs-shaders threejs-textures; do
@@ -110,15 +113,16 @@ hook_count() { # how many hooks the switchboard knows — read from the HOOKS
 HOOK_COUNT="$(hook_count)"
 
 if [ "${1:-}" = "--policy-skills" ]; then
-  echo "== focused policy-skill activation"
+  echo "== focused policy-skill reachability"
   fresh
   ag status > /dev/null
-  chk "policy skills seed off" "2" "$(grep -Ec '^skill (agent-policy|delegating-agents) off$' "$SB/.config/agents/manifest.conf")"
+  chk "policy skills seed off" "3" "$(grep -Ec '^skill (agent-policy|delegating-agents|external-code) off$' "$SB/.config/agents/manifest.conf")"
   chk "policy source path resolves" "$SB/code/nixos-config/main/dotfiles/agents/skills/agent-policy/SKILL.md" "$(ag path agent-policy)"
-  for s in agent-policy delegating-agents; do ag on "$s" > /dev/null; done
-  chk "policy skills reach Claude and Codex" "1" "$(test -L "$SB/.config/agents/skills/agent-policy" && test -L "$SB/.codex/skills/agent-policy" && test -L "$SB/.config/agents/skills/delegating-agents" && test -L "$SB/.codex/skills/delegating-agents" && echo 1 || echo 0)"
-  for s in agent-policy delegating-agents; do ag off "$s" > /dev/null; done
-  chk "off removes both provider links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l \( -name agent-policy -o -name delegating-agents \) | wc -l)"
+  chk "external-code source path resolves" "$SB/code/north/main/agent-profile/skills/external-code/SKILL.md" "$(ag path external-code)"
+  for s in agent-policy delegating-agents external-code; do ag on "$s" > /dev/null; done
+  chk "policy skills reach Claude and Codex" "1" "$(test -L "$SB/.config/agents/skills/agent-policy" && test -L "$SB/.codex/skills/agent-policy" && test -L "$SB/.config/agents/skills/delegating-agents" && test -L "$SB/.codex/skills/delegating-agents" && test -L "$SB/.config/agents/skills/external-code" && test -L "$SB/.codex/skills/external-code" && echo 1 || echo 0)"
+  for s in agent-policy delegating-agents external-code; do ag off "$s" > /dev/null; done
+  chk "off removes both provider links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l \( -name agent-policy -o -name delegating-agents -o -name external-code \) | wc -l)"
   if [ "$fails" -eq 0 ]; then echo "all focused policy-skill tests passed"; else echo "$fails focused policy-skill test(s) failed"; fi
   exit "$fails"
 fi
@@ -131,7 +135,7 @@ chk "logcompress row (unbound)" "hook logcompress disabled" "$(grep '^hook logco
 chk "repo-safety skill seeded off" "skill repo-safety off" "$(grep '^skill repo-safety ' "$SB/.config/agents/manifest.conf")"
 chk "cloudflare-deploy skill seeded off" "skill cloudflare-deploy off" "$(grep '^skill cloudflare-deploy ' "$SB/.config/agents/manifest.conf")"
 chk "smoke skill seeded off" "skill smoke off" "$(grep '^skill smoke ' "$SB/.config/agents/manifest.conf")"
-chk "policy skills seed off" "2" "$(grep -Ec '^skill (agent-policy|delegating-agents) off$' "$SB/.config/agents/manifest.conf")"
+chk "policy skills seed off" "3" "$(grep -Ec '^skill (agent-policy|delegating-agents|external-code) off$' "$SB/.config/agents/manifest.conf")"
 chk "global seeds as a dir row at the root" "dir global off ~" "$(grep '^dir global ' "$SB/.config/agents/manifest.conf")"
 chk "staffing seeds as the profile module" "skill staffing off" "$(grep '^skill staffing ' "$SB/.config/agents/manifest.conf")"
 chk "coordination leaves seed as skills" "3" "$(grep -Ec '^skill (messages|threads|assignments) off$' "$SB/.config/agents/manifest.conf")"

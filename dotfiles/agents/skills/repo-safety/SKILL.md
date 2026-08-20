@@ -41,6 +41,13 @@ at `worktrees/`: an active pin is never swept. Dirty state in a
 `main/` is human work-in-progress: never commit, stash, reset, or clean it
 (`wt-rescue` relocates it intact into `worktrees/rescue-<ts>`).
 
+Commit coherent checkpoints in every lane you touch and land each checkpoint
+as soon as its relevant check passes. If an environmental failure or moving
+dependency prevents landing, leave an exact restart-grade record naming the
+commit, remaining check, resume trigger, and successor. Never orphan dirty or
+unowned work. Prove a lane is superseded by content, not merely by a similar
+branch name, before reaping it.
+
 **Never write into or re-point a live pin's checkout.** A pin is protected because
 something outside the repo consumes it — its same-name `.pin` sidecar names
 what — not because dirt in it is someone's WIP. Edits, writes, deletes,
@@ -79,7 +86,8 @@ work.
 **Push through `safe-push`, never raw.** No raw `git push`, no
 `git commit && git push` chain (pre-commit must run first), no force-push or
 rewrite of published history. Origin carries main plus tags; lane branches stay
-local (a pin has no branch — it is detached HEAD).
+local (a pin has no branch — it is detached HEAD). Stop rather than publish a
+flagged secret, private-to-public exposure, or another agent's in-flight work.
 
 **Signals stay scoped to processes you started.** Broadcast kill (`kill -1`),
 user-wide sweeps (`pkill -u`/`killall -u` with no pattern), compositor kills

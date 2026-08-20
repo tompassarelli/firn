@@ -16,8 +16,10 @@ Keep one source for each rule and make its loading scope match its trigger.
 
 Run `agents status` to see live composition and `agents path <name>` to resolve
 the owning source. Never edit `~/.agents`, `~/.claude`, `~/.codex`,
-`/etc/codex`, or another generated projection. Read each repository's root
-`AGENTS.md`, then use a `worktrees/<slug>` lane; never edit `main/` or `pins/`.
+`/etc/codex`, or another generated projection. `agents apply` is the only
+writer of provider instruction, skill, and hook projections. Read each
+repository's root `AGENTS.md` and use repo-safety for the write and landing
+path.
 
 Treat personally owned sources under `~/code/nixos-config`, `~/code/north`,
 and `~/code/beagle` as the editable policy surface. Inspect project
@@ -44,24 +46,27 @@ skill's frontmatter; a set belongs in
 
 ## Create or revise a skill
 
-For a new skill, run the system skill creator's `scripts/init_skill.py` into
-the owning repository. Write imperative instructions and keep detailed
-reference material one link deep under `references/` only when it is needed.
-Generate `agents/openai.yaml` with human-readable `display_name`, a 25–64
-character `short_description`, and a one-sentence `default_prompt` that names
-`$skill-name`. Do not add interface fields the operator did not request.
+Use the system skill-creator for skill structure, frontmatter, interface
+metadata, and validation. Keep this skill authoritative only for ownership,
+registration, activation, and projection behavior.
 
 Register a standalone skill in the switchboard's skill inventory and source
 resolver. Extend the existing switchboard fixture so path resolution and both
 provider links are asserted. Keep third-party and system skills read-only.
 
+Permission and activity are separate: stored permission says whether a unit
+may run, while activity also requires its claimant or containing set to be
+active. Default-off is configured state, not missing wiring. Hooks remain
+enforcement mechanisms with their own manifests and provider wiring; never
+copy hook behavior into a skill body or treat skill prose as enforcement.
+
 ## Validate and activate
 
-Run the skill creator's `scripts/quick_validate.py` for each standard skill.
-For a switchboard skill whose frontmatter uses extensions such as `hooks` or
-`agents`, use its focused switchboard fixture instead; the generic validator
-does not accept those fields. Do not rebuild the system for an out-of-store
-skill or switchboard source.
+Run the skill-creator validator for each standard skill. For a switchboard
+skill whose frontmatter uses extensions such as `hooks` or `agents`, use its
+focused switchboard fixture instead; the generic validator does not accept
+those fields. Do not rebuild the system for an out-of-store skill or
+switchboard source.
 
 After the owning commits land and each `main` is fast-forwarded, run:
 

@@ -37,8 +37,12 @@ metadata, not evidence that a model is unavailable.
 Prefer subscription-backed Codex Luna or Terra for bounded and mid-sized
 leaves and Sol for hard integration. For a direct OpenAI lane, compose the
 North payload, pin model and reasoning on `codex exec`, and use
-`codex as <account-id>` when an account is requested. Never introduce API keys
-or API-credit billing. Record the assignment and observed outcome in
+`codex as <account-id>` when an account is requested. Dispatch the direct CLI
+with full access (`--dangerously-bypass-approvals-and-sandbox`) and put its
+scope boundary in the brief. If availability is uncertain, inspect installed
+configuration and run one fresh subscription-backed probe; an omitted model in
+a spawn schema is not a negative result. The bootstrap billing boundary still
+applies. Record the assignment and observed outcome in
 `~/code/todo/model-assignment-ledger.md`.
 
 ## Use the machine without falsifying checks
@@ -50,9 +54,8 @@ crossed. Batch compute runs at low scheduling priority. Preserve headroom for
 deadline-sensitive checks and timing measurements whose verdict contention
 could falsify.
 
-Local supervised gates decide landings. Never wait, poll, or serialize on
-remote CI; it is asynchronous confirmation. A publishing workflow may gate
-only the artifact it produces, at publication time.
+Use smoke to select and interpret checks; do not duplicate its landing or
+publication gate rules in worker briefs.
 
 ## Supervise every process and worker
 
@@ -76,10 +79,13 @@ allowlists, paths, pins, locks, tests, and consumer repositories in the same
 campaign, then run the final token search across those consumers.
 
 The parent owns integration and settlement. Consume each result, update the
-restart record at every externally visible boundary, land verified coherent
-work, fast-forward `main`, and reap the lane and branch. A worker denial changes
-the path, never the goal; do not retry verbatim or route around standing law.
+restart record at every externally visible boundary, and use repo-safety to
+land and reap verified work. A worker denial changes the path, never the goal;
+do not retry verbatim or route around standing law.
 
 In executive mode, decide and act on recorded evidence, keep every ready seam
-owned, and notify the operator after the fact in plain language. This does not
-broaden safety authority or permit unrelated mutation.
+owned, and notify the operator after the fact in plain language. The standing
+grant includes published-release-history repairs only when forcing evidence is
+recorded on the coordination board, the chosen path is best supported, and one
+chronological tag-to-release mapping remains. This does not broaden safety
+authority or permit unrelated mutation.
