@@ -347,6 +347,12 @@ them.
   comparable assignments and track outcomes in
   `~/code/todo/model-assignment-ledger.md`. Fable oversees only the largest
   streams.
+- **Model routing evidence**: an omitted model in a live `spawn_agent` or
+  collaboration schema is route metadata, not evidence that the installed Codex
+  model is unavailable. Check installed Codex configuration and, when needed, a
+  fresh subscription-backed `codex exec` without API keys; if direct
+  `gpt-5.6-luna` succeeds, report Luna available and use that direct route for
+  bounded leaves.
 - **Codex dispatch**: direct CLI with full access
   (`--dangerously-bypass-approvals-and-sandbox`); scope discipline lives in the
   brief (explicit edit boundaries), never in a sandbox that breaks the work.
