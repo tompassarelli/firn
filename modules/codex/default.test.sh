@@ -122,4 +122,4 @@ assert config["mcp_servers"]["north"]["command"] == "/run/current-system/sw/bin/
 PY
 
 printf 'ok: Codex config.toml is a generation-retained store copy with no checkout delivery dependency\n'
-printf 'ok: Codex keeps Sol/high and immutable North/Fram MCP command paths\n'
+printf 'ok: Codex keeps Sol/high and immutable North MCP command path\n'
