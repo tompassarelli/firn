@@ -60,8 +60,7 @@ wall, stop with the exact reason and one command that completes the handoff.
 - Beagle source → `beagle-authoring`.
 - Past decisions or transcript search → `convo`.
 - New or changed enforcement hooks → `guard-authoring`.
-- General skill design or revision → `skill-creator`.
-- Agent policy, skills, switchboard, activation, or reachability → `agent-policy`.
+- Agent policy, skill ownership, registration, activation, or reachability → `agent-policy`.
 - External code use → `external-code`.
 - Installing external skills across providers → `importing-skills`.
 
