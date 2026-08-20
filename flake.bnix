@@ -69,9 +69,13 @@
                 "mkdir -p $out/bin"
                 "export BEAGLE_CHECKED_AST_STORE=$TMPDIR/firn-native-checked-ast.storelog"
                 (s
-                  "export BEAGLE_RUST_SUPERVISOR="
+                  "sed '1s|^#!/usr/bin/env python3$|#!"
+                  pkgs.python3
+                  "/bin/python3|' "
                   beaglePackage
-                  "/native-core/bin/run-bounded")
+                  "/native-core/bin/run-bounded > \"$TMPDIR/firn-native-run-bounded\"")
+                "chmod +x \"$TMPDIR/firn-native-run-bounded\""
+                "export BEAGLE_RUST_SUPERVISOR=$TMPDIR/firn-native-run-bounded"
                 (s
                   "beagle native-exe --out $out/bin/firn --entry firn.main/-main "
                   beagle
