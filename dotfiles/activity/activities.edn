@@ -1,5 +1,5 @@
 ;; Order = band order; bind-names/bind-prefixes route matching workspaces
-;; here regardless of the current activity (see tools/activity/).
+;; here regardless of the current activity.
 {:default "home"
  :activities
  [{:id "home" :label "home"}

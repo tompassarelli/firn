@@ -139,7 +139,23 @@
                   self
                   "/native/system_policy.bgl "
                   self
-                  "/native/firn.bgl")))))]
+                  "/native/firn.bgl")
+                (s
+                  "beagle native-exe --out $out/bin/activity --entry activity.native/-main "
+                  beagle
+                  "/native-core/src/beagle/datum_reader.bgl "
+                  beagle
+                  "/native-core/src/native/json.bgl "
+                  self
+                  "/native/activity_core.bgl "
+                  self
+                  "/native/activity_driver.bgl "
+                  self
+                  "/native/activity_native.bgl")
+                (s
+                  "beagle native-exe --out $out/bin/activity-menu --entry activity.menu/-main "
+                  self
+                  "/native/activity_menu.bgl")))))]
       {:lib.mkSystem
         (nix/module
           [hostname

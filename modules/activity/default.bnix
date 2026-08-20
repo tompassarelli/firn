@@ -2,7 +2,7 @@
 
 (ns default)
 
-(nix/module [config lib pkgs ...]
+(nix/module [config firnNative lib pkgs ...]
   (let
     [username config.myConfig.modules.users.username]
     {:tags [desktop]
@@ -21,7 +21,7 @@
                    :After       ["graphical-session.target"]
                    :Requisite   ["graphical-session.target"]}
                  :Service
-                  {:ExecStart "%h/code/nixos-config/dotfiles/bin/activity daemon"
+                  {:ExecStart (s firnNative "/bin/activity daemon")
                    :Restart    "on-failure"
                    :RestartSec 2}
                  :Install {:WantedBy ["niri.service"]}}

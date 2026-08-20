@@ -551,7 +551,7 @@ binds {
     // Mod+TouchpadScrollUp   { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.02-"; }
 
     // Numbers are activity-relative: Mod+N is the Nth workspace of the current
-    // space (the activity daemon resolves membership; see tools/activity/).
+    // space (the activity daemon resolves membership).
     Mod+1 { spawn "activity" "here" "1"; }
     Mod+2 { spawn "activity" "here" "2"; }
     Mod+3 { spawn "activity" "here" "3"; }
