@@ -12,6 +12,10 @@ mkdir -p "$container/pins"
 git init -q -b main "$main"
 git -C "$main" config user.name pin-retire-test
 git -C "$main" config user.email pin-retire-test@example.invalid
+project_remote="$test_home/remotes/proj.git"
+mkdir -p "$(dirname "$project_remote")"
+git init -q --bare "$project_remote"
+git -C "$main" remote add origin "$project_remote"
 
 pass=0
 fail_count=0
@@ -43,6 +47,43 @@ git -C "$consumer" add pin.ref
 git -C "$consumer" commit -qm current
 git -C "$consumer" remote add origin "$consumer_remote"
 git -C "$consumer" push -qu origin main
+
+same_repo_pin="$(new_pin same-repository-consumer)"
+git -C "$main" push -qu origin main
+printf 'consumer-main: %s\nConsumer: same repository fixture.\n' \
+  "$main" >"$same_repo_pin.pin"
+if HOME="$test_home" "$target" --dry-run --consumer-main "$main" -- \
+    "$same_repo_pin" | grep -Fq 'DRY RUN'; then
+  ok
+else
+  fail 'same-repository pin treated its own administrative pointer as a consumer'
+fi
+
+same_repo_lane="$container/worktrees/other"
+mkdir -p "$(dirname "$same_repo_lane")"
+git -C "$main" worktree add -q -b same-repository-reference \
+  "$same_repo_lane" main
+printf 'pin %s\n' "$same_repo_pin" >"$same_repo_lane/pin.ref"
+git -C "$same_repo_lane" add pin.ref
+git -C "$same_repo_lane" commit -qm 'other lane uses same-repository pin'
+if HOME="$test_home" "$target" --dry-run --consumer-main "$main" -- \
+    "$same_repo_pin" 2>"$scratch/same-repo-lane-error"; then
+  fail 'different same-repository worktree reference was accepted'
+elif grep -Fq "consumer worktree still references the pin: $same_repo_lane" \
+    "$scratch/same-repo-lane-error"; then
+  ok
+else
+  fail 'same-repository worktree refusal did not name the different lane'
+fi
+git -C "$main" worktree remove "$same_repo_lane"
+if HOME="$test_home" "$target" --consumer-main "$main" -- \
+    "$same_repo_pin" >/dev/null; then
+  ok
+else
+  fail 'same-repository retirement failed after the other reference moved'
+fi
+[ ! -e "$same_repo_pin" ] && [ ! -e "$same_repo_pin.pin" ] \
+  || fail 'same-repository retirement left pin or sidecar'
 
 pin1="$(new_pin valid)"
 if HOME="$test_home" "$target" --consumer-main "$consumer" -- "$pin1" >/dev/null; then ok; else fail 'valid retirement failed'; fi

@@ -182,6 +182,7 @@ check_consumer_worktree() {
   local worktree="$1" reference_status
   [ -n "${checked_consumer_worktrees[$worktree]+set}" ] && return 0
   checked_consumer_worktrees["$worktree"]=1
+  [ "$worktree" = "$pin" ] && return 0
   [ -d "$worktree" ] || return 0
   reference_status=0
   rg -l --hidden --glob '!**/.git/**' --fixed-strings \
