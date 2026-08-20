@@ -1,0 +1,4 @@
+interface:
+  display_name: "Beagle System Design"
+  short_description: "Keep Beagle architecture semantically coherent"
+  default_prompt: "Use $beagle-system-design to design a coherent Beagle compiler, Store, build, or effect architecture change."

@@ -159,6 +159,20 @@ if [ "${1:-}" = "--fact-normal-form-skill" ]; then
   exit "$fails"
 fi
 
+if [ "${1:-}" = "--beagle-system-design-skill" ]; then
+  echo "== focused beagle-system-design reachability"
+  fresh
+  ag status > /dev/null
+  chk "beagle-system-design seeds off" "skill beagle-system-design off" "$(grep '^skill beagle-system-design ' "$SB/.config/agents/manifest.conf")"
+  chk "beagle-system-design source path resolves" "$SB/code/nixos-config/main/dotfiles/agents/skills/beagle-system-design/SKILL.md" "$(ag path beagle-system-design)"
+  ag on beagle-system-design > /dev/null
+  chk "beagle-system-design reaches Claude/North and Codex" "1" "$(test -L "$SB/.config/agents/skills/beagle-system-design" && test -L "$SB/.codex/skills/beagle-system-design" && echo 1 || echo 0)"
+  ag off beagle-system-design > /dev/null
+  chk "off removes both provider links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l -name beagle-system-design | wc -l)"
+  if [ "$fails" -eq 0 ]; then echo "all focused beagle-system-design tests passed"; else echo "$fails focused beagle-system-design test(s) failed"; fi
+  exit "$fails"
+fi
+
 echo "== 1. fresh seed: bound hooks enabled+companion, unbound disabled, nothing composes"
 fresh
 ag status > /dev/null

@@ -9,6 +9,7 @@ SETTINGS="$HOME/.claude/settings.json"
 PLUGINS_JSON="$HOME/.claude/plugins/installed_plugins.json"
 NORTH="$HOME/code/north/main"
 BEAGLE="$HOME/code/beagle/main"
+NIXOS_CONFIG="$HOME/code/nixos-config/main"
 CLAUDE_AGENTS="$HOME/.claude/agents"
 # Codex reads skills from its own directory, so a skill governed only in the
 # claude farm is a skill Codex loads on rules nobody set. This directory is NOT
@@ -41,7 +42,7 @@ HOOKS=(agent-spawn-guard beagle-session-start comment-bloat-guard
 SKILLS=(webdev importing-skills threejs-animation threejs-fundamentals
   threejs-geometry threejs-interaction threejs-lighting threejs-loaders
   threejs-materials threejs-postprocessing threejs-shaders threejs-textures
-  beagle-authoring fact-normal-form firn repo-safety staffing
+  beagle-authoring beagle-system-design fact-normal-form firn repo-safety staffing
   messages threads assignments todo convo guard-authoring cloudflare-deploy verification estimate
   agent-policy delegating-agents external-code)
 # A MODULE is a skill with declarations — a skill whose frontmatter names the
@@ -771,8 +772,9 @@ skill_source() {
     threejs-shaders) echo "$HOME/code/north/main/agent-profile/skills/threejs-shaders" ;;
     threejs-textures) echo "$HOME/code/north/main/agent-profile/skills/threejs-textures" ;;
     beagle-authoring) echo "$BEAGLE/integrations/north/skills/beagle-authoring" ;;
+    beagle-system-design) echo "$NIXOS_CONFIG/dotfiles/agents/skills/beagle-system-design" ;;
     fact-normal-form) echo "$BEAGLE/store/integrations/north/skills/fact-normal-form" ;;
-    firn)            echo "$HOME/code/nixos-config/main/modules/north-profile/firn/skills/firn" ;;
+    firn)            echo "$NIXOS_CONFIG/modules/north-profile/firn/skills/firn" ;;
     repo-safety)     echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/repo-safety" ;;
     todo)            echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/todo" ;;
     convo)           echo "$HOME/code/nixos-config/main/dotfiles/agents/skills/convo" ;;
