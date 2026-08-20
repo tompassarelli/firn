@@ -1,0 +1,198 @@
+#lang beagle
+(ns firn.tag-commands-test
+  (:require [firn.tag-resolve :as r]
+            [firn.tag-commands :as c]
+            [firn.tag-commands-driver :as d]))
+
+(defrecord TestResult [(name String) (passed Bool)])
+
+(defn make-module
+  [(name String) (tags (Vec String)) (opt-in (Vec String))] r/ModuleTags
+  (r/->ModuleTags name tags opt-in []))
+
+(defn modules [] (Vec r/ModuleTags)
+  [(make-module "alpha" ["desktop" "terminal"] [])
+   (make-module "beta" ["desktop"] [])
+   (make-module "delta" [] ["desktop"])
+   (make-module "gamma" ["terminal"] [])])
+
+(defn source [] String
+  (str
+    "#lang beagle/nix\n\n"
+    "(ns enabled-tags)\n\n"
+    "{:platform linux\n"
+    " :enabled\n"
+    "  [[desktop -beta +delta]\n"
+    "   terminal]\n"
+    " :disabled [gamma]\n"
+    "}\n"))
+
+(defn parsed-document [] c/HostDocument
+  (match (c/host-document-from-source "fixture" (source) [])
+    [(HostDocumentRejected message offset)
+     (c/->HostDocument
+       (r/->HostTags "invalid" [] [] "linux" false []) [])]
+    [(HostDocumentParsed document) document]))
+
+(defn case-list-render [] Bool
+  (= (c/render-tag-list (modules))
+    (str
+      "Tags (2):\n"
+      "  desktop              (2 default, 1 opt-in)\n"
+      "  terminal             (2 default)\n"
+      "\n"
+      "Coverage: 4 / 4 modules carry at least one tag.\n")))
+
+(defn case-show-and-filter-render [] Bool
+  (and
+    (= (c/render-tag-show (make-module "beta" ["desktop"] []))
+      (str
+        "module: beta\n"
+        ":tags         desktop\n"
+        ":tags-opt-in  (none)\n"))
+    (= (c/render-tag-show (make-module "plain" [] []))
+      (str
+        "module: plain\n"
+        ":tags         (none — add a :tags clause to modules/plain/default.bnix)\n"
+        ":tags-opt-in  (none)\n"))
+    (= (c/render-tag-filter (modules) "desktop")
+      (str
+        "modules tagged 'desktop' (3):\n"
+        "  alpha  (default)\n"
+        "  beta  (default)\n"
+        "  delta  (opt-in)\n"))
+    (= (c/render-tag-filter (modules) "missing")
+      "no modules tagged 'missing'\n")))
+
+(defn expected-index [] String
+  (str
+    "{\"name\":\"alpha\",\"tags\":[\"desktop\",\"terminal\"],\"tags_opt_in\":[]}\n"
+    "{\"name\":\"beta\",\"tags\":[\"desktop\"],\"tags_opt_in\":[]}\n"
+    "{\"name\":\"delta\",\"tags\":[],\"tags_opt_in\":[\"desktop\"]}\n"
+    "{\"name\":\"gamma\",\"tags\":[\"terminal\"],\"tags_opt_in\":[]}\n"))
+
+(defn case-index-render [] Bool
+  (match (c/render-tag-index (modules))
+    [(TagIndexRejected message) false]
+    [(TagIndexRendered text) (= text (expected-index))]))
+
+(defn case-source-order-and-format [] Bool
+  (match (c/host-document-from-source "fixture" (source) [])
+    [(HostDocumentRejected message offset) false]
+    [(HostDocumentParsed document)
+     (let [(enabled (Vec c/EditableEnabledTag))
+           (c/hostdocument-enabled document)
+           (semantic (Vec r/EnabledTag))
+           (r/hosttags-enabled (c/hostdocument-tags document))]
+       (and
+         (= (c/format-enabled-tags-bnix document) (source))
+         (= (c/editableenabledtag-edits (nth enabled 0))
+           ["-beta" "+delta"])
+         (= (r/enabledtag-pluses (nth semantic 0)) ["delta"])
+         (= (r/enabledtag-minuses (nth semantic 0)) ["beta"])))]))
+
+(defn expected-status [] String
+  (str
+    "Host: fixture\n"
+    "Platform: linux\n"
+    "Source: hosts/fixture/enabled-tags.bnix\n\n"
+    ":enabled (2):\n"
+    "  [desktop -beta +delta]\n"
+    "  terminal\n"
+    "\n"
+    ":disabled (1):\n"
+    "  gamma\n"
+    "\n"
+    "Resolved active modules (2):\n"
+    "  alpha\n"
+    "  delta\n"))
+
+(defn case-status-re-resolves [] Bool
+  (= (c/render-tag-status (modules) (parsed-document)) (expected-status)))
+
+(defn case-mutation-core [] Bool
+  (let [(document c/HostDocument) (parsed-document)
+        (enabled c/TagMutation) (c/enable-tag document "creative")
+        (enabled-again c/TagMutation)
+        (c/enable-tag (c/tagmutation-document enabled) "creative")
+        (disabled-tag c/TagMutation) (c/disable-tag document "terminal")
+        (opt-in c/TagMutation) (c/add-tag-edit document "desktop" "+omega")
+        (opt-in-again c/TagMutation)
+        (c/add-tag-edit (c/tagmutation-document opt-in) "desktop" "+omega")
+        (disabled-module c/TagMutation) (c/disable-module document "alpha")
+        (enabled-module c/TagMutation) (c/enable-module document "gamma")]
+    (and
+      (c/tagmutation-changed enabled)
+      (not (c/tagmutation-changed enabled-again))
+      (c/tagmutation-changed disabled-tag)
+      (c/tagmutation-changed opt-in)
+      (not (c/tagmutation-changed opt-in-again))
+      (= (c/editableenabledtag-edits
+           (nth
+             (c/hostdocument-enabled (c/tagmutation-document opt-in)) 0))
+        ["-beta" "+delta" "+omega"])
+      (= (r/hosttags-disabled
+           (c/hostdocument-tags
+             (c/tagmutation-document disabled-module)))
+        ["alpha" "gamma"])
+      (= (r/hosttags-disabled
+           (c/hostdocument-tags
+             (c/tagmutation-document enabled-module)))
+        []))))
+
+(defn module-refusal [] String
+  (str
+    "firn module enable: no module-level force-on in tag-driven hosts.\n"
+    "\n"
+    "  alpha is not currently blacklisted in :disabled, so there is\n"
+    "  nothing to un-blacklist. To activate it on this host:\n"
+    "\n"
+    "    - opt in via a tag:    firn tag opt-in <tag>+alpha\n"
+    "      (where <tag> is one the module lists in :tags-opt-in)\n"
+    "    - or enable a tag the module already lists in :tags:\n"
+    "                            firn tag enable <tag>\n"
+    "    - or, only as a last resort, add :tags fixture-only to the module\n"
+    "      and enable that tag here.\n"))
+
+(defn case-driver-outcomes [] Bool
+  (let [(repository d/TagCommandRepository)
+        (d/->TagCommandRepository (modules) [(parsed-document)])
+        (index d/TagCommandOutcome)
+        (d/run-tag-command repository (d/->TagIndex true))
+        (refusal d/TagCommandOutcome)
+        (d/run-tag-command repository (d/->ModuleEnable "fixture" "alpha"))
+        (malformed d/TagCommandOutcome)
+        (d/run-tag-command repository
+          (d/->TagOptIn "fixture" "desktop-alpha"))]
+    (and
+      (= (d/tagcommandoutcome-status index) 0)
+      (= (d/outcome-effect-kinds index) ["stdout"])
+      (= (d/outcome-stdout index) (expected-index))
+      (= (d/tagcommandoutcome-status refusal) 1)
+      (= (d/outcome-effect-kinds refusal) ["stderr"])
+      (= (d/outcome-stderr refusal) (module-refusal))
+      (= (d/tagcommandoutcome-status malformed) 1)
+      (= (d/outcome-stderr malformed)
+        "firn: expected '<tag>+<module>', got 'desktop-alpha'\n"))))
+
+(defn cases [] (Vec TestResult)
+  [(->TestResult "list-render" (case-list-render))
+   (->TestResult "show-and-filter-render" (case-show-and-filter-render))
+   (->TestResult "index-render" (case-index-render))
+   (->TestResult "source-order-and-format" (case-source-order-and-format))
+   (->TestResult "status-re-resolves" (case-status-re-resolves))
+   (->TestResult "mutation-core" (case-mutation-core))
+   (->TestResult "driver-outcomes" (case-driver-outcomes))])
+
+(defn -main [(args (Vec String))] Int
+  (let [(results (Vec TestResult)) (cases)]
+    (loop [(index Int) 0 (failures Int) 0]
+      (if (>= index (count results))
+        failures
+        (let [(result TestResult) (nth results index)]
+          (do
+            (println
+              (str (if (testresult-passed result) "PASS " "FAIL ")
+                   (testresult-name result)))
+            (recur (+ index 1)
+              (if (testresult-passed result) failures (+ failures 1)))))))))

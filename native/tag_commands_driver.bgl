@@ -1,0 +1,381 @@
+#lang beagle
+(ns firn.tag-commands-driver
+  (:require [firn.tag-resolve :as r]
+            [firn.tag-commands :as c]))
+
+(defunion TagCommandAction
+  TagList
+  (TagShow [(module String)])
+  (TagFilter [(tag String)])
+  (TagIndex [(stdout Bool)])
+  (TagStatus [(host String)])
+  (TagEnable [(host String) (tag String)])
+  (TagDisable [(host String) (tag String)])
+  (TagOptIn [(host String) (leaf String)])
+  (TagOptOut [(host String) (leaf String)])
+  (ModuleEnable [(host String) (module String)])
+  (ModuleDisable [(host String) (module String)]))
+
+(defunion TagCommandArgv
+  (ParsedTagCommand [(action TagCommandAction)])
+  (OtherTagCommand [(argv (Vec String))])
+  (InvalidTagCommand [(argv (Vec String))]))
+
+(defrecord TagCommandRepository
+  [(modules (Vec r/ModuleTags)) (hosts (Vec c/HostDocument))])
+
+(defunion TagCommandHostLookup
+  (TagCommandHostFound [(document c/HostDocument)])
+  (TagCommandHostMissing [(host String)]))
+
+(defunion TagCommandEffect
+  (CommandStdout [(text String)])
+  (CommandStderr [(text String)])
+  (CommandWrite [(path String) (text String) (make-parents Bool) (label String)]))
+
+(defrecord TagCommandOutcome [(status Int) (effects (Vec TagCommandEffect))])
+
+(defunion TagCommandPreload
+  TagCommandLoad
+  (TagCommandRefusal [(outcome TagCommandOutcome)]))
+
+(defn parsed [(action TagCommandAction)] TagCommandArgv
+  (->ParsedTagCommand action))
+
+(defn invalid [(argv (Vec String))] TagCommandArgv
+  (->InvalidTagCommand argv))
+
+(defn parse-tag-action
+  [(argv (Vec String)) (default-host String)] TagCommandArgv
+  (let [(edge String) (nth argv 1)
+        (arity Int) (count argv)]
+    (cond
+      (= edge "list")
+      (if (or (= arity 2) (= arity 3))
+        (parsed (->TagList))
+        (invalid argv))
+
+      (= edge "show")
+      (if (= arity 3)
+        (parsed (->TagShow (nth argv 2)))
+        (invalid argv))
+
+      (= edge "filter")
+      (if (= arity 3)
+        (parsed (->TagFilter (nth argv 2)))
+        (invalid argv))
+
+      (= edge "index")
+      (cond
+        (= arity 2) (parsed (->TagIndex false))
+        (= arity 3) (parsed (->TagIndex (= "stdout" (nth argv 2))))
+        :else (invalid argv))
+
+      (= edge "status")
+      (cond
+        (= arity 2) (parsed (->TagStatus default-host))
+        (= arity 3)
+        (let [(leaf String) (nth argv 2)]
+          (parsed
+            (->TagStatus
+              (if (or (= leaf "current") (= leaf "all"))
+                default-host
+                leaf))))
+        :else (invalid argv))
+
+      (= edge "enable")
+      (if (= arity 3)
+        (parsed (->TagEnable default-host (nth argv 2)))
+        (invalid argv))
+
+      (= edge "disable")
+      (if (= arity 3)
+        (parsed (->TagDisable default-host (nth argv 2)))
+        (invalid argv))
+
+      (= edge "opt-in")
+      (if (= arity 3)
+        (parsed (->TagOptIn default-host (nth argv 2)))
+        (invalid argv))
+
+      (= edge "opt-out")
+      (if (= arity 3)
+        (parsed (->TagOptOut default-host (nth argv 2)))
+        (invalid argv))
+
+      :else
+      (invalid argv))))
+
+(defn parse-module-action
+  [(argv (Vec String)) (default-host String)] TagCommandArgv
+  (if (not= 3 (count argv))
+    (invalid argv)
+    (let [(edge String) (nth argv 1)
+          (module String) (nth argv 2)]
+      (cond
+        (= edge "enable")
+        (parsed (->ModuleEnable default-host module))
+
+        (= edge "disable")
+        (parsed (->ModuleDisable default-host module))
+
+        :else
+        (invalid argv)))))
+
+(defn parse-tag-command-argv
+  [(argv (Vec String)) (default-host String)] TagCommandArgv
+  (if (< (count argv) 2)
+    (->OtherTagCommand argv)
+    (let [(node String) (nth argv 0)]
+      (cond
+        (= node "tag") (parse-tag-action argv default-host)
+        (= node "module") (parse-module-action argv default-host)
+        :else (->OtherTagCommand argv)))))
+
+(defn action-needs-modules? [(action TagCommandAction)] Bool
+  (match action
+    [(TagList) true]
+    [(TagShow module) true]
+    [(TagFilter tag) true]
+    [(TagIndex stdout) true]
+    [(TagStatus host) true]
+    [(TagEnable host tag) false]
+    [(TagDisable host tag) false]
+    [(TagOptIn host leaf) false]
+    [(TagOptOut host leaf) false]
+    [(ModuleEnable host module) false]
+    [(ModuleDisable host module) false]))
+
+(defn action-host [(action TagCommandAction)] (U String Nil)
+  (match action
+    [(TagList) nil]
+    [(TagShow module) nil]
+    [(TagFilter tag) nil]
+    [(TagIndex stdout) nil]
+    [(TagStatus host) host]
+    [(TagEnable host tag) host]
+    [(TagDisable host tag) host]
+    [(TagOptIn host leaf) host]
+    [(TagOptOut host leaf) host]
+    [(ModuleEnable host module) host]
+    [(ModuleDisable host module) host]))
+
+(defn find-host
+  [(repository TagCommandRepository) (host String)] TagCommandHostLookup
+  (loop [(index Int) 0]
+    (if (>= index (count (tagcommandrepository-hosts repository)))
+      (->TagCommandHostMissing host)
+      (let [(document c/HostDocument)
+            (nth (tagcommandrepository-hosts repository) index)]
+        (if (= host
+               (r/hosttags-host (c/hostdocument-tags document)))
+          (->TagCommandHostFound document)
+          (recur (+ index 1)))))))
+
+(defn stdout-outcome [(text String)] TagCommandOutcome
+  (->TagCommandOutcome 0 [(->CommandStdout text)]))
+
+(defn stderr-outcome [(status Int) (text String)] TagCommandOutcome
+  (->TagCommandOutcome status [(->CommandStderr text)]))
+
+(defn missing-status-outcome [(host String)] TagCommandOutcome
+  (stderr-outcome 1
+    (str "firn tag status: no such file hosts/" host
+      "/enabled-tags.bnix\n")))
+
+(defn missing-mutation-outcome [(host String)] TagCommandOutcome
+  (stderr-outcome 1
+    (str "firn: no such file hosts/" host "/enabled-tags.bnix\n"
+      "  (create the host directory and an empty enabled-tags.bnix first)\n")))
+
+(defn mutation-outcome
+  [(host String) (mutation c/TagMutation)] TagCommandOutcome
+  (let [(relative String) (str "hosts/" host "/enabled-tags.bnix")]
+    (if (c/tagmutation-changed mutation)
+      (->TagCommandOutcome 0
+        [(->CommandWrite relative
+           (c/format-enabled-tags-bnix (c/tagmutation-document mutation))
+           false
+           "firn")
+         (->CommandStdout (str "updated " relative "\n"))])
+      (stdout-outcome (str "no change to " relative "\n")))))
+
+(defn malformed-tag-module-outcome [(leaf String)] TagCommandOutcome
+  (stderr-outcome 1
+    (str "firn: expected '<tag>+<module>', got '" leaf "'\n")))
+
+(defn preload-tag-command [(action TagCommandAction)] TagCommandPreload
+  (match action
+    [(TagOptIn host leaf)
+     (match (c/split-tag-module leaf)
+       [(TagModuleRejected invalid)
+        (->TagCommandRefusal (malformed-tag-module-outcome invalid))]
+       [(TagModuleParsed tag module) (->TagCommandLoad)])]
+    [(TagOptOut host leaf)
+     (match (c/split-tag-module leaf)
+       [(TagModuleRejected invalid)
+        (->TagCommandRefusal (malformed-tag-module-outcome invalid))]
+       [(TagModuleParsed tag module) (->TagCommandLoad)])]
+    [(TagList) (->TagCommandLoad)]
+    [(TagShow module) (->TagCommandLoad)]
+    [(TagFilter tag) (->TagCommandLoad)]
+    [(TagIndex stdout) (->TagCommandLoad)]
+    [(TagStatus host) (->TagCommandLoad)]
+    [(TagEnable host tag) (->TagCommandLoad)]
+    [(TagDisable host tag) (->TagCommandLoad)]
+    [(ModuleEnable host module) (->TagCommandLoad)]
+    [(ModuleDisable host module) (->TagCommandLoad)]))
+
+(defn module-enable-refusal [(host String) (module String)] TagCommandOutcome
+  (stderr-outcome 1
+    (str
+      "firn module enable: no module-level force-on in tag-driven hosts.\n"
+      "\n"
+      "  " module " is not currently blacklisted in :disabled, so there is\n"
+      "  nothing to un-blacklist. To activate it on this host:\n"
+      "\n"
+      "    - opt in via a tag:    firn tag opt-in <tag>+" module "\n"
+      "      (where <tag> is one the module lists in :tags-opt-in)\n"
+      "    - or enable a tag the module already lists in :tags:\n"
+      "                            firn tag enable <tag>\n"
+      "    - or, only as a last resort, add :tags " host "-only to the module\n"
+      "      and enable that tag here.\n")))
+
+(defn run-index [(modules (Vec r/ModuleTags)) (stdout Bool)] TagCommandOutcome
+  (match (c/render-tag-index modules)
+    [(TagIndexRejected message)
+     (stderr-outcome 1 (str "firn tag index: " message "\n"))]
+    [(TagIndexRendered text)
+     (if stdout
+       (stdout-outcome text)
+       (->TagCommandOutcome 0
+         [(->CommandWrite ".beagle-cache/tags.jsonl" text true
+            "firn tag index")
+          (->CommandStdout
+            (str "firn tag index: wrote " (count modules)
+              " entries → .beagle-cache/tags.jsonl\n"))]))]))
+
+(defn run-show [(modules (Vec r/ModuleTags)) (name String)] TagCommandOutcome
+  (match (c/find-module modules name)
+    [(ModuleMissing missing)
+     (stderr-outcome 1
+       (str "firn tag show: no module named '" missing "'\n"))]
+    [(ModuleFound module) (stdout-outcome (c/render-tag-show module))]))
+
+(defn run-status
+  [(repository TagCommandRepository) (host String)] TagCommandOutcome
+  (match (find-host repository host)
+    [(TagCommandHostMissing missing) (missing-status-outcome missing)]
+    [(TagCommandHostFound document)
+     (stdout-outcome
+       (c/render-tag-status
+         (tagcommandrepository-modules repository) document))]))
+
+(defn run-host-mutation
+  [(repository TagCommandRepository)
+   (action TagCommandAction)]
+  TagCommandOutcome
+  (let [(host-value (U String Nil)) (action-host action)]
+    (if (nil? host-value)
+      (stderr-outcome 1 "firn: internal missing host\n")
+      (let [(host String) host-value]
+        (match (find-host repository host)
+          [(TagCommandHostMissing missing)
+           (missing-mutation-outcome missing)]
+          [(TagCommandHostFound document)
+           (match action
+             [(TagEnable ignored tag)
+              (mutation-outcome host (c/enable-tag document tag))]
+             [(TagDisable ignored tag)
+              (mutation-outcome host (c/disable-tag document tag))]
+             [(TagOptIn ignored leaf)
+              (match (c/split-tag-module leaf)
+                [(TagModuleRejected invalid)
+                 (malformed-tag-module-outcome invalid)]
+                [(TagModuleParsed tag module)
+                 (mutation-outcome host
+                   (c/add-tag-edit document tag (str "+" module)))])]
+             [(TagOptOut ignored leaf)
+              (match (c/split-tag-module leaf)
+                [(TagModuleRejected invalid)
+                 (malformed-tag-module-outcome invalid)]
+                [(TagModuleParsed tag module)
+                 (mutation-outcome host
+                   (c/add-tag-edit document tag (str "-" module)))])]
+             [(ModuleDisable ignored module)
+              (mutation-outcome host (c/disable-module document module))]
+             [(ModuleEnable ignored module)
+              (if (r/string-member?
+                    (r/hosttags-disabled (c/hostdocument-tags document))
+                    module)
+                (mutation-outcome host (c/enable-module document module))
+                (module-enable-refusal host module))]
+             [(TagList)
+              (stderr-outcome 1 "firn: internal non-mutation action\n")]
+             [(TagShow module)
+              (stderr-outcome 1 "firn: internal non-mutation action\n")]
+             [(TagFilter tag)
+              (stderr-outcome 1 "firn: internal non-mutation action\n")]
+             [(TagIndex stdout)
+              (stderr-outcome 1 "firn: internal non-mutation action\n")]
+             [(TagStatus status-host)
+              (stderr-outcome 1 "firn: internal non-mutation action\n")])])))))
+
+(defn run-tag-command
+  [(repository TagCommandRepository)
+   (action TagCommandAction)]
+  TagCommandOutcome
+  (match action
+    [(TagList)
+     (stdout-outcome
+       (c/render-tag-list (tagcommandrepository-modules repository)))]
+    [(TagShow module)
+     (run-show (tagcommandrepository-modules repository) module)]
+    [(TagFilter tag)
+     (stdout-outcome
+       (c/render-tag-filter
+         (tagcommandrepository-modules repository) tag))]
+    [(TagIndex stdout)
+     (run-index (tagcommandrepository-modules repository) stdout)]
+    [(TagStatus host) (run-status repository host)]
+    [(TagEnable host tag) (run-host-mutation repository action)]
+    [(TagDisable host tag) (run-host-mutation repository action)]
+    [(TagOptIn host leaf) (run-host-mutation repository action)]
+    [(TagOptOut host leaf) (run-host-mutation repository action)]
+    [(ModuleEnable host module) (run-host-mutation repository action)]
+    [(ModuleDisable host module) (run-host-mutation repository action)]))
+
+(defn outcome-stdout [(outcome TagCommandOutcome)] String
+  (loop [(index Int) 0
+         (result String) ""]
+    (if (>= index (count (tagcommandoutcome-effects outcome)))
+      result
+      (match (nth (tagcommandoutcome-effects outcome) index)
+        [(CommandStdout text) (recur (+ index 1) (str result text))]
+        [(CommandStderr text) (recur (+ index 1) result)]
+        [(CommandWrite path text make-parents label)
+         (recur (+ index 1) result)]))))
+
+(defn outcome-stderr [(outcome TagCommandOutcome)] String
+  (loop [(index Int) 0
+         (result String) ""]
+    (if (>= index (count (tagcommandoutcome-effects outcome)))
+      result
+      (match (nth (tagcommandoutcome-effects outcome) index)
+        [(CommandStdout text) (recur (+ index 1) result)]
+        [(CommandStderr text) (recur (+ index 1) (str result text))]
+        [(CommandWrite path text make-parents label)
+         (recur (+ index 1) result)]))))
+
+(defn outcome-effect-kinds [(outcome TagCommandOutcome)] (Vec String)
+  (loop [(index Int) 0
+         (result (Vec String)) []]
+    (if (>= index (count (tagcommandoutcome-effects outcome)))
+      result
+      (match (nth (tagcommandoutcome-effects outcome) index)
+        [(CommandStdout text)
+         (recur (+ index 1) (conj result "stdout"))]
+        [(CommandStderr text)
+         (recur (+ index 1) (conj result "stderr"))]
+        [(CommandWrite path text make-parents label)
+         (recur (+ index 1) (conj result "write"))]))))
