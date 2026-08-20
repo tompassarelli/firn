@@ -24,7 +24,7 @@ BIN="$SCRATCH/bin"      # coreutils + jq + fake real CLIs (always on PATH)
 NBIN="$SCRATCH/nbin"    # holds the stub `north` (added to PATH only when present)
 GIT_CALLS="$SCRATCH/git.calls"
 mkdir -p "$BIN" "$NBIN"
-for tool in env bash realpath jq find sort sed head mktemp paste rm cat grep dirname mkdir tr; do
+for tool in env bash realpath jq find sort sed head mktemp paste rm mv cat grep dirname mkdir tr flock; do
   real="$(command -v "$tool" 2>/dev/null)" || { echo "missing host tool: $tool" >&2; exit 2; }
   # Link straight to the resolved command-v path; do NOT depend on `readlink`
   # (agent-config-check.test.sh runs this under a readlink-fails shim).
@@ -137,6 +137,7 @@ run() {
   RECORD="$SCRATCH/record"; rm -f "$RECORD"
   STDERR="$(env -i "HOME=$HOME_DIR" "PATH=$path" "REAL_RECORD=$RECORD" \
     "GIT_CALLS=$GIT_CALLS" \
+    "NORTH_NO_SELECT_CACHE=1" "NORTH_NO_SELECT_RESERVATIONS=1" \
     "${envv[@]}" bash "$HERE/$launcher" "${argv[@]}" 2>&1 1>/dev/null)"
   STATUS=$?
 }
@@ -319,6 +320,34 @@ JSON
     contains "$s" "[$launcher → acctLow]"
   check "$launcher/headroom pin uses the lower-percentage account" \
     test "$(record_field _ "$pinvar")" = "$ROOT/acctLow"
+
+  # 7c. A Codex burst reuses one cached provider snapshot but reserves each
+  # equal-usage winner before the next launch chooses. Routing-exhausted
+  # accounts remain outside the candidate set even when fully authenticated.
+  if [ "$launcher" = codex ]; then
+    burst="$SCRATCH/codex-balanced-burst.json"
+    cat >"$burst" <<JSON
+{ "allocationMode": "balanced", "providers": [
+  { "provider": "openai", "targets": [
+    {"id":"acctA","authenticated":true,"routing":"eligible","headroom":"plenty","usage":{"windows":[{"limitId":"codex:primary","usedPercent":10}]}},
+    {"id":"acctB","authenticated":true,"routing":"eligible","headroom":"plenty","usage":{"windows":[{"limitId":"codex:primary","usedPercent":10}]}},
+    {"id":"acctC","authenticated":true,"routing":"eligible","headroom":"plenty","usage":{"windows":[{"limitId":"codex:primary","usedPercent":10}]}},
+    {"id":"codex-personal-pm","authenticated":true,"routing":"exhausted","headroom":"exhausted","usage":{"windows":[{"limitId":"codex:primary","usedPercent":0}]}}
+  ] } ] }
+JSON
+    mkdir -p "$ROOT/acctB" "$ROOT/acctC" "$ROOT/codex-personal-pm"
+    burst_picks=()
+    for burst_index in 1 2 3; do
+      run codex 1 "NORTH_JSON=$burst" "NORTH_NO_SELECT_CACHE=0" \
+        "NORTH_NO_SELECT_RESERVATIONS=0" "NORTH_SELECT_NOW=1000" -- "burst-$burst_index"
+      selected="$(record_field _ CODEX_HOME)"
+      burst_picks+=("${selected##*/}")
+    done
+    check "codex/balanced burst reserves three equal eligible accounts" \
+      test "${burst_picks[*]}" = "acctA acctB acctC"
+    check "codex/balanced burst gives the exhausted -pm account zero selections" \
+      not_contains " ${burst_picks[*]} " " codex-personal-pm "
+  fi
 
   # 8. explicit `as <id>` pin bypasses north entirely (dir present).
   run "$launcher" 0 -- as acctA hello ; s="$STDERR"
