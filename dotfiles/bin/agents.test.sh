@@ -116,6 +116,7 @@ chk "worktree-guard row" "hook worktree-guard enabled repo-safety" "$(grep '^hoo
 chk "logcompress row (unbound)" "hook logcompress disabled" "$(grep '^hook logcompress ' "$SB/.config/agents/manifest.conf")"
 chk "repo-safety skill seeded off" "skill repo-safety off" "$(grep '^skill repo-safety ' "$SB/.config/agents/manifest.conf")"
 chk "cloudflare-deploy skill seeded off" "skill cloudflare-deploy off" "$(grep '^skill cloudflare-deploy ' "$SB/.config/agents/manifest.conf")"
+chk "smoke skill seeded off" "skill smoke off" "$(grep '^skill smoke ' "$SB/.config/agents/manifest.conf")"
 chk "global seeds as a dir row at the root" "dir global off ~" "$(grep '^dir global ' "$SB/.config/agents/manifest.conf")"
 chk "staffing seeds as the profile module" "skill staffing off" "$(grep '^skill staffing ' "$SB/.config/agents/manifest.conf")"
 chk "coordination leaves seed as skills" "3" "$(grep -Ec '^skill (messages|threads|assignments) off$' "$SB/.config/agents/manifest.conf")"
@@ -623,6 +624,10 @@ ag on repo-safety > /dev/null
 chk "an active skill lands in the claude farm" "repo-safety" "$(skilllinks)"
 chk "and on the codex surface, at the same source" "$(readlink "$SB/.config/agents/skills/repo-safety")" "$(readlink "$CX/repo-safety")"
 chk "the codex entry is a link that resolves to the skill" "1" "$(test -L "$CX/repo-safety" && test -d "$CX/repo-safety" && echo 1 || echo 0)"
+ag on smoke > /dev/null
+chk "the smoke skill reaches both surfaces" "1" "$(test -L "$SB/.config/agents/skills/smoke" && test -L "$CX/smoke" && echo 1 || echo 0)"
+ag off smoke > /dev/null
+chk "turning smoke off clears both surfaces" "0" "$(if test -L "$SB/.config/agents/skills/smoke" || test -L "$CX/smoke"; then echo 1; else echo 0; fi)"
 farm_inode="$(stat -c %i "$SB/.config/agents/skills/repo-safety")"
 codex_inode="$(stat -c %i "$CX/repo-safety")"
 ag apply > /dev/null
