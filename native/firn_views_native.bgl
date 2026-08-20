@@ -290,12 +290,16 @@
 (defn child-result
   [argv (Vec String)
    stdin String] views/ChildResult
-  (match (host.process/run-capture argv stdin max-child-output)
-    [(host.process/CaptureError errno)
-     (views/->ChildResult (- 0 errno) ""
-       (str "firn views: cannot run '" (nth argv 0) "': errno " errno "\n"))]
-    [(host.process/CaptureOk status stdout stderr)
-     (views/->ChildResult status stdout stderr)]))
+  (let [captured host.process/CaptureResult
+        (host.process/run-capture argv stdin max-child-output)]
+    (if (instance? host.process/CaptureError captured)
+      (let [errno Int (host.process/captureerror-errno captured)]
+        (views/->ChildResult (- 0 errno) ""
+          (str "firn views: cannot run '" (nth argv 0) "': errno " errno "\n")))
+      (views/->ChildResult
+        (host.process/captureok-status captured)
+        (host.process/captureok-stdout captured)
+        (host.process/captureok-stderr captured)))))
 
 (defn emit-result [result views/CommandResult] Int
   (do
