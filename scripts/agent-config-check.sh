@@ -701,6 +701,13 @@ switchboard_activity_is_active() {
   esac
 }
 
+run_agent_policy_contract() {
+  local repo="$1" local_mode="${2:-0}"
+  local -a args=(--repo "$repo")
+  [ "$local_mode" -eq 0 ] || args+=(--local)
+  python3 "$repo/scripts/agent-policy-contract.py" "${args[@]}"
+}
+
 if [ "${1:-}" = "$AGENT_CONFIG_BOUNDED_CHILD_MODE" ]; then
   shift
   probe_child_main "$@"
@@ -733,6 +740,7 @@ HERMES_MODULE="${AGENT_CONFIG_HERMES_MODULE:-$REPO/modules/hermes/default.bnix}"
 LAUNCHER_BIN="$REPO/dotfiles/bin"
 LOCAL=0
 VERBOSE=0
+POLICY_ONLY=0
 # This repository declares Tom's machine profile; CI's HOME is runner scratch.
 CANONICAL_PROFILE_HOME=/home/tom
 CANONICAL_BEAGLE_STORE_LOG="$CANONICAL_PROFILE_HOME/.local/state/north/coordination.log"
@@ -743,10 +751,16 @@ CLIENT_SCOPED_MCP_SERVERS=(linear-mcp-msa-new)
 for arg in "$@"; do
   case "$arg" in
     --local) LOCAL=1 ;;
+    --policy-only) POLICY_ONLY=1 ;;
     --verbose|-v) VERBOSE=1 ;;
-    *) printf 'usage: %s [--local] [--verbose]\n' "$0" >&2; exit 2 ;;
+    *) printf 'usage: %s [--local] [--policy-only] [--verbose]\n' "$0" >&2; exit 2 ;;
   esac
 done
+
+if [ "$POLICY_ONLY" -eq 1 ]; then
+  run_agent_policy_contract "$REPO" "$LOCAL"
+  exit $?
+fi
 
 fail=0
 warn=0
@@ -815,6 +829,14 @@ need_yaml() {
   fi
 }
 printf 'agent harness check%s\n' "$([ "$LOCAL" -eq 1 ] && printf ' (local)' || true)"
+
+before=$fail
+if policy_output="$(run_agent_policy_contract "$REPO" "$LOCAL" 2>&1)"; then
+  ok_detail "$policy_output"
+else
+  bad "$policy_output"
+fi
+group policy 'explicit ownership, skill reachability, projections, and guard identity' "$before"
 
 # North-composed constitution plus hook/skill implementations from each owner.
 before=$fail

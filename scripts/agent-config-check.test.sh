@@ -254,6 +254,165 @@ run_switchboard_activity_fixture() {
   ! AGENTS_ACTIVITY_FILE="$activity" switchboard_activity_is_active hook absent-hook
 }
 
+run_policy_contract_fixture() {
+  local base="$scratch/policy-contract-base"
+  local preamble='Provider-neutral bootstrap.'
+  local route='- Repository writes → `repo-safety`.'
+  local credential='Never expose credentials.'
+  local repo_claim='Use repository modules.'
+  local preamble_digest route_digest credential_digest repo_digest
+
+  "$REPO/scripts/agent-config-check.sh" --policy-only >/dev/null
+
+  preamble_digest="$(printf %s "$preamble" | sha256sum | awk '{print $1}')"
+  route_digest="$(printf %s "$route" | sha256sum | awk '{print $1}')"
+  credential_digest="$(printf %s "$credential" | sha256sum | awk '{print $1}')"
+  repo_digest="$(printf %s "$repo_claim" | sha256sum | awk '{print $1}')"
+  mkdir -p "$base/policy" "$base/fragments" "$base/north-profile/hooks" \
+    "$base/north-profile/skills" \
+    "$base/skill-source/repo-safety" "$base/farms/shared" \
+    "$base/farms/claude" "$base/farms/codex" "$base/projections"
+  printf '# Global\n\n%s\n\n## Routes\n\n%s\n\n## Credentials\n\n%s\n' \
+    "$preamble" "$route" "$credential" >"$base/policy/AGENTS.md"
+  printf '# Repository\n\n## Architecture\n\n%s\n' "$repo_claim" \
+    >"$base/policy/REPO-AGENTS.md"
+  printf '%s\n' '---' 'name: repo-safety' \
+    'description: Repository write safety.' '---' '' '# Repository safety' \
+    >"$base/skill-source/repo-safety/SKILL.md"
+  cat >"$base/switchboard" <<'SH'
+HOOKS=(worktree-guard)
+SKILLS=(repo-safety)
+skill_source() {
+  case "$1" in
+    repo-safety) echo "$HOME/skill-source/repo-safety" ;;
+  esac
+}
+SH
+  cat >"$base/fragments/worktree-guard.json" <<'JSON'
+{"entries":[
+  {"event":"PreToolUse","matcher":"Edit|Write|MultiEdit","hook":{"type":"command","command":"/home/tom/.agents/hooks/launch-critical-worktree-guard.sh"}},
+  {"event":"PreToolUse","matcher":"Bash","hook":{"type":"command","command":"/home/tom/.agents/hooks/launch-critical-worktree-guard.sh"}}
+],"tags":["guards"]}
+JSON
+  cat >"$base/requirements.toml" <<'TOML'
+[hooks]
+managed_dir = "/etc/codex/hooks"
+[[hooks.PreToolUse]]
+matcher = "^(Edit|Write|MultiEdit|apply_patch)$"
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "/etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh"
+[[hooks.PreToolUse]]
+matcher = "^Bash$"
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "/etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh"
+TOML
+  printf 'id\tcategory\tkind\tin_all\tttl_req\tpath\tevents\n%s\n' \
+    $'launch-critical-worktree-guard\tauthoring\tdeny\tyes\tyes\tlaunch-critical-worktree-guard.sh\tPreToolUse:Edit|Write|MultiEdit,PreToolUse:Bash' \
+    >"$base/north-profile/hooks/registry.tsv"
+  cat >"$base/harness.ts" <<'TS'
+const EDIT_GUARDS = resolveManagedGuardChain(["launch-critical-worktree-guard.sh"]);
+const BASH_GUARDS = resolveManagedGuardChain(["launch-critical-worktree-guard.sh"]);
+const WORKER_BASH_GUARDS = resolveManagedGuardChain(["launch-critical-worktree-guard.sh"]);
+TS
+  cat >"$base/manifest.toml" <<TOML
+version = 1
+claim = [
+  { key = "bootstrap.discovery", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "preamble", digest = "$preamble_digest" },
+  { key = "repository.write-route", owner = "skill:repo-safety", role = "route", scope = "machine", surface = "bootstrap", section = "Routes", digest = "$route_digest" },
+  { key = "credentials.boundary", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Credentials", digest = "$credential_digest" },
+  { key = "repo.example.architecture", owner = "repo:example", role = "owner", scope = "repo:example", surface = "repo", section = "Architecture", digest = "$repo_digest" },
+]
+guard = [
+  { key = "guard.worktree", switchboard = "worktree-guard", fragment = "worktree-guard.json", command = "launch-critical-worktree-guard.sh", claude = ["PreToolUse:Edit|Write|MultiEdit", "PreToolUse:Bash"], codex = ["PreToolUse:^(Edit|Write|MultiEdit|apply_patch)$", "PreToolUse:^Bash$"], north_registry = "launch-critical-worktree-guard", north_path = "launch-critical-worktree-guard.sh", north_events = "PreToolUse:Edit|Write|MultiEdit,PreToolUse:Bash", north_chains = ["EDIT_GUARDS", "BASH_GUARDS", "WORKER_BASH_GUARDS"] },
+]
+TOML
+  printf '%s\n' 'skill repo-safety on' >"$base/activity.conf"
+  for farm in shared claude codex; do
+    ln -s ../../skill-source/repo-safety "$base/farms/$farm/repo-safety"
+  done
+  ln -s ../../skill-source/repo-safety "$base/north-profile/skills/repo-safety"
+  for projection in state-agents state-claude agents claude codex; do
+    cp "$base/policy/AGENTS.md" "$base/projections/$projection"
+  done
+
+  run_policy_case() {
+    local root="$1"
+    HOME="$root" \
+    AGENT_POLICY_MANIFEST="$root/manifest.toml" \
+    AGENT_POLICY_BOOTSTRAP="$root/policy/AGENTS.md" \
+    AGENT_POLICY_REPO_AGENTS="$root/policy/REPO-AGENTS.md" \
+    AGENT_POLICY_SWITCHBOARD="$root/switchboard" \
+    AGENT_POLICY_FRAGMENTS="$root/fragments" \
+    AGENT_POLICY_CODEX_REQUIREMENTS="$root/requirements.toml" \
+    AGENT_POLICY_NORTH_PROFILE="$root/north-profile" \
+    AGENT_POLICY_NORTH_HARNESS="$root/harness.ts" \
+    AGENT_POLICY_ACTIVITY="$root/activity.conf" \
+    AGENT_POLICY_SHARED_SKILLS="$root/farms/shared" \
+    AGENT_POLICY_CLAUDE_SKILLS="$root/farms/claude" \
+    AGENT_POLICY_CODEX_SKILLS="$root/farms/codex" \
+    AGENT_POLICY_STATE_AGENTS="$root/projections/state-agents" \
+    AGENT_POLICY_STATE_CLAUDE="$root/projections/state-claude" \
+    AGENT_POLICY_AGENTS_PROJECTION="$root/projections/agents" \
+    AGENT_POLICY_CLAUDE_PROJECTION="$root/projections/claude" \
+    AGENT_POLICY_CODEX_PROJECTION="$root/projections/codex" \
+      "$REPO/scripts/agent-config-check.sh" --policy-only --local
+  }
+
+  expect_policy_reject() {
+    local name="$1" expected="$2" root="$scratch/policy-$1" output
+    cp -a "$base" "$root"
+    shift 2
+    "$@" "$root"
+    if output="$(run_policy_case "$root" 2>&1)"; then
+      printf 'policy fixture %s unexpectedly passed\n' "$name" >&2
+      return 1
+    fi
+    grep -Fq "$expected" <<<"$output" || {
+      printf 'policy fixture %s missed diagnostic %s:\n%s\n' "$name" "$expected" "$output" >&2
+      return 1
+    }
+  }
+
+  mutate_duplicate_owner() {
+    sed -i '0,/key = "bootstrap.discovery"/s//key = "credentials.boundary"/' "$1/manifest.toml"
+  }
+  mutate_unmapped() { printf '\nA newly unmapped rule.\n' >>"$1/policy/AGENTS.md"; }
+  mutate_skill_procedure() {
+    sed -i 's/owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Credentials"/owner = "skill:repo-safety", role = "owner", scope = "machine", surface = "bootstrap", section = "Credentials"/' "$1/manifest.toml"
+  }
+  mutate_procedural_route() {
+    local old='- Repository writes → `repo-safety`.'
+    local new='- Repository writes; create a lane and stage paths → `repo-safety`.'
+    local old_digest new_digest
+    old_digest="$(printf %s "$old" | sha256sum | awk '{print $1}')"
+    new_digest="$(printf %s "$new" | sha256sum | awk '{print $1}')"
+    sed -i "s|$old_digest|$new_digest|" "$1/manifest.toml"
+    sed -i 's/Repository writes →/Repository writes; create a lane and stage paths →/' "$1/policy/AGENTS.md"
+  }
+  mutate_unreadable_skill() { rm "$1/skill-source/repo-safety/SKILL.md"; }
+  mutate_projection() { printf 'drift\n' >>"$1/projections/codex"; }
+  mutate_farm() { rm "$1/farms/claude/repo-safety"; }
+  mutate_hook() {
+    sed -i 's/const WORKER_BASH_GUARDS.*/const WORKER_BASH_GUARDS = resolveManagedGuardChain([]);/' "$1/harness.ts"
+  }
+  mutate_repo_scope() {
+    sed -i 's/scope = "repo:example", surface = "repo"/scope = "machine", surface = "repo"/' "$1/manifest.toml"
+  }
+
+  run_policy_case "$base" >/dev/null
+  expect_policy_reject duplicate-owner 'multiple owners for policy key' mutate_duplicate_owner
+  expect_policy_reject unmapped 'unmapped normative block' mutate_unmapped
+  expect_policy_reject skill-procedure 'skill-owned procedure remains in bootstrap' mutate_skill_procedure
+  expect_policy_reject procedural-route 'route contains procedural text' mutate_procedural_route
+  expect_policy_reject unreadable-skill 'active skill source is unreadable' mutate_unreadable_skill
+  expect_policy_reject projection-drift 'projection digest mismatch' mutate_projection
+  expect_policy_reject farm-drift 'Claude skill farm is missing active skill' mutate_farm
+  expect_policy_reject hook-drift 'North worker guard reachability drift' mutate_hook
+  expect_policy_reject repo-global 'owner role has invalid repository authority' mutate_repo_scope
+}
+
 if [ "${1:-}" = '--codex-mcp-inventory-only' ]; then
   source "$REPO/scripts/agent-config-check.sh"
   run_codex_mcp_inventory_fixture
@@ -272,6 +431,12 @@ if [ "${1:-}" = '--switchboard-activity-only' ]; then
   source "$REPO/scripts/agent-config-check.sh"
   run_switchboard_activity_fixture
   printf 'ok: advisory follows the derived switchboard activity projection\n'
+  exit 0
+fi
+
+if [ "${1:-}" = '--policy-contract-only' ]; then
+  run_policy_contract_fixture
+  printf 'ok: explicit policy ownership rejects all nine drift classes\n'
   exit 0
 fi
 
