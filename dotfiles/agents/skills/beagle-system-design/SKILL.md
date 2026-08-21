@@ -30,6 +30,21 @@ boundary, not from conventional host machinery.
   domains, and external systems remain explicit even when one typed fact model
   explains them.
 
+## Separate visibility from authority
+
+- Model observation availability, persistence confirmation, and eligibility
+  for automated decisions or effects as independent properties. Never collapse
+  them into one health flag.
+- A read-only operator surface may retain a validated live observation when
+  persistence fails. Label its source, freshness, and unpersisted status, and
+  return an explicit degraded verdict rather than discarding useful evidence.
+- Routing, admission, scheduling, and effects consume only the admitted
+  authoritative form and fail closed when it is absent. Unpersisted operator
+  evidence must not enter caches, projections, or fallback paths that can
+  influence automation.
+- Prove both sides of the boundary: persistence failure preserves honest
+  visibility, while the same observation remains ineligible for automation.
+
 ## Find the missing fact
 
 Before proposing a file cache, daemon, wrapper, hosted sidecar, timestamp,
