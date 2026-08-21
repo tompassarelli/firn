@@ -51,16 +51,24 @@ Treat North presets as templates, not cages: compose a justified custom route
 when its model/deliberation and authority choices are recorded. Prefer
 subscription-backed Codex Luna or Terra for bounded and mid-sized leaves and
 Sol for hard integration. For a direct OpenAI lane, compose the North payload,
-pin model and reasoning on `codex exec`, and dispatch through
-`north account dispatch --assignment <id> -- exec ...`. The entry point
-refreshes subscription usage, combines headroom with live account assignments,
-records the selected account, and launches `codex as <account-id>` itself.
-Inspect the same decision without launching with
-`north account dispatch --dry-run --json`. Dispatch the direct CLI with full
-access (`--dangerously-bypass-approvals-and-sandbox`) and put its scope boundary
-in the brief. If availability is uncertain, inspect installed configuration
-and run one fresh subscription-backed probe. The bootstrap billing boundary
-still applies.
+pin model and reasoning on `codex exec`, give the workstream a positive integer
+estimated-token budget, and dispatch through `north account dispatch
+--assignment <id> --estimated-tokens <n> -- exec ...`. The entry point refreshes
+subscription usage, projects each eligible account's utilization from its
+observed percentage plus outstanding token reservations through a versioned
+per-account/window calibration, records the selected account, atomically
+reserves the estimate, and launches `codex as <account-id>` itself. Completion
+reconciles the reservation to observed actual tokens; cancellation releases it;
+stale reservations expire explicitly. Live agent count is a hard safety cap,
+not a substitute score. Round-robin breaks only near ties in projected usage.
+Inspect the same decision without launching with `north account dispatch
+--dry-run --estimated-tokens <n> --json`. Missing fresh usage, a usable
+calibration (including its labeled conservative fallback), the token estimate,
+or an eligible account fails closed. Dispatch the direct CLI with full access
+(`--dangerously-bypass-approvals-and-sandbox`) and put its scope boundary in the
+brief. If availability is uncertain, inspect installed configuration and run
+one fresh subscription-backed probe. The bootstrap billing boundary still
+applies.
 
 Raw `Agent`, `Task`, Workflow, or collaboration `spawn_agent` calls have no
 subscription-account selector and are not fleet-dispatch surfaces. A commander
