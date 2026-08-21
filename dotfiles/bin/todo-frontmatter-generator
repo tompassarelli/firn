@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""Prepend minimal TOML front matter to headerless todo records."""
+
+from __future__ import annotations
+
+import argparse
+import importlib.machinery
+import importlib.util
+import json
+import sys
+from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+EXCLUDED = {
+    "AGENTS.md": "reserved",
+    "agent-coord.md": "reserved",
+}
+
+
+def load_linter() -> Any:
+    path = Path(__file__).with_name("todo-lint")
+    loader = importlib.machinery.SourceFileLoader("todo_lint_for_generator", str(path))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load parser: {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def title_for(path: Path) -> str:
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("# "):
+            title = line[2:].strip()
+            if title:
+                return title
+    return path.stem.replace("-", " ").replace("_", " ").strip().title()
+
+
+def quote(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def header_for(path: Path) -> bytes:
+    updated_at = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat(timespec="seconds")
+    lines = [
+        "+++",
+        f"id = {quote(path.stem)}",
+        f"title = {quote(title_for(path))}",
+        'shape = "task"',
+        'life = "inactive"',
+        f"updated_at = {quote(updated_at)}",
+        'owners = ["unassigned"]',
+        "+++",
+        "",
+    ]
+    return ("\n".join(lines)).encode("utf-8")
+
+
+def classify(path: Path, content: bytes, parser: Any) -> str:
+    if path.name in EXCLUDED:
+        return EXCLUDED[path.name]
+    upper_name = path.name.upper()
+    if upper_name.startswith("COMMANDER-"):
+        return "commander"
+    if "LEDGER" in upper_name:
+        return "ledger"
+    if not content.strip():
+        return "non-record"
+    if content.splitlines() and content.splitlines()[0] == b"+++":
+        parser.parse_record(path)
+        return "existing-header"
+    return "headerless-record"
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("root", nargs="?", default="~/code/todo")
+    parser.add_argument("--dry-run", action="store_true", help="classify without changing files")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    root = Path(args.root).expanduser()
+    if not root.is_dir():
+        raise SystemExit(f"todo root is not a directory: {root}")
+    lint = load_linter()
+    parser = lint.Linter(root, datetime.now(timezone.utc), 172800)
+    counts: Counter[str] = Counter()
+    stamped = 0
+    for path in sorted(root.iterdir(), key=lambda item: item.name):
+        if not path.is_file() or path.suffix.lower() != ".md":
+            continue
+        content = path.read_bytes()
+        category = classify(path, content, parser)
+        counts[category] += 1
+        if category != "headerless-record":
+            continue
+        if not args.dry_run:
+            path.write_bytes(header_for(path) + content)
+        stamped += 1
+    result = {"dry_run": args.dry_run, "stamped": stamped, "classifications": dict(sorted(counts.items()))}
+    print(json.dumps(result, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
