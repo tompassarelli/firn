@@ -13,7 +13,8 @@ hooks:
 # Delegating agents
 
 Delegate only when independently verifiable work can progress concurrently.
-Keep tightly coupled work with one owner.
+Keep tightly coupled work with one closure owner, who owns the outcome rather
+than a serial list of defects.
 
 ## Establish continuity and seams
 
@@ -21,38 +22,63 @@ Create or update a restart-grade record in `~/code/todo/` before delegation.
 Enumerate the mission's independent units—files, gates, cases, or stages—and
 assign one worker per seam, not one worker per mission. A serial edge is valid
 only when the later seam consumes the earlier seam's output; write that exact
-dependency. Dispatch everything else now, including bounded diagnosis or
-preparation beside a held edge.
+dependency. Dispatch everything else now, including safe preparation beside a
+held edge. Explore and evaluate are read-only by default and need no lane;
+create one only when a write is admitted.
 
-Give every brief explicit read/write boundaries, a terminal deliverable, the
+State the closure posture and its terminal evidence: explore has an observation
+or capability gap, evaluate has a decision and its evidence, deliver has the
+owned change and named check, preserve has a named artifact/owner/recovery
+condition, and prune has proved absence from its named live consumers. Do not
+turn a posture into a universal ceremony.
+
+Give every brief explicit read/write boundaries, terminal evidence, the
 existing check it owns, an early-exit clause for known capability gaps, and the
-authorized supervisor window plus margin. Never invent a tighter deadline or
-lengthen one without evidence that legitimate work changed.
+authorized supervisor window plus margin. Capability and policy own standing
+prohibitions; a brief records only its scoped exception. Never invent a tighter
+deadline or lengthen one without evidence that legitimate work changed.
 
 ## Route models and accounts from evidence
 
 Honor a user-pinned provider, account, model, and reasoning level exactly.
-Otherwise use the live configured dispatch surface and provider catalog rather
-than remembered availability. An omitted model in a spawn schema is route
-metadata, not evidence that a model is unavailable.
+Otherwise choose model, tier, and deliberation from task difficulty; choose
+ceremony and authority separately from blast radius and reversibility. Use the
+live configured dispatch surface and provider catalog rather than remembered
+availability. An omitted model in a spawn schema is route metadata, not
+evidence that a model is unavailable.
 
-Prefer subscription-backed Codex Luna or Terra for bounded and mid-sized
-leaves and Sol for hard integration. For a direct OpenAI lane, compose the
-North payload, pin model and reasoning on `codex exec`, and use
-`codex as <account-id>` when an account is requested. Dispatch the direct CLI
-with full access (`--dangerously-bypass-approvals-and-sandbox`) and put its
-scope boundary in the brief. If availability is uncertain, inspect installed
-configuration and run one fresh subscription-backed probe; an omitted model in
-a spawn schema is not a negative result. The bootstrap billing boundary still
-applies. Record the assignment and observed outcome in
-`~/code/todo/model-assignment-ledger.md`.
+Treat North presets as templates, not cages: compose a justified custom route
+when its model/deliberation and authority choices are recorded. Prefer
+subscription-backed Codex Luna or Terra for bounded and mid-sized leaves and
+Sol for hard integration. For a direct OpenAI lane, compose the North payload,
+pin model and reasoning on `codex exec`, and use `codex as <account-id>` when
+an account is requested. Dispatch the direct CLI with full access
+(`--dangerously-bypass-approvals-and-sandbox`) and put its scope boundary in
+the brief. If availability is uncertain, inspect installed configuration and
+run one fresh subscription-backed probe. The bootstrap billing boundary still
+applies.
+
+Route accounts from fresh headroom, then balanced activity/round-robin; exclude
+an exhausted account. Live-only telemetry may guide a commander, but cannot
+grant automated write, routing, or publication authority. Record the assignment
+and observed outcome in `~/code/todo/model-assignment-ledger.md`.
+
+## Admit before dispatch
+
+Mechanically admit model, applicable policy, repository identity, entrypoint,
+environment, write authority, and a viable supervisor. A write needs an owned
+lane and no conflicting owner; an unadmitted item remains read-only or queued,
+not implicitly authorized.
 
 ## Use the machine without falsifying checks
 
-Run independent lanes concurrently while one-minute load stays below roughly
-1.5 times the core count, available memory stays above roughly 8 GiB, and the
-machine is not swap-thrashing. Queue the next lane only after a bound is
-crossed. Batch compute runs at low scheduling priority. Preserve headroom for
+The logical DAG says which independent seams may progress. Physical capacity is
+separate: use a named compute semaphore when concurrent work could falsify a
+timing or resource verdict. Start ready work with fresh CPU/memory headroom,
+balanced activity, and round-robin fairness; queue only the constrained compute
+edge. Keep one-minute load below roughly 1.5 times the core count, available
+memory above roughly 8 GiB, and avoid swap-thrashing. Batch compute runs at low
+scheduling priority. Preserve headroom for
 deadline-sensitive checks and timing measurements whose verdict contention
 could falsify.
 
@@ -78,6 +104,19 @@ Fresh retries use round-unique, line-anchored terminal markers so quoted
 history cannot impersonate a live verdict. A probe that reaches a known
 capability gap exits within minutes and reports the gap. The same result three
 times is a finding, not a polling target.
+
+If the supervisor fails before its child starts, classify infrastructure rather
+than a product verdict. When the user bus is unavailable, an explicitly approved
+child-free diagnostic may run foreground under `timeout <duration> -- command`;
+record that fallback and do not infer child supervision or product success.
+
+## Keep feature liveness safe
+
+Required feature liveness is fail-closed: do not automate feature work or
+activation from a missing, stale, or unadmitted signal. The escape is a bounded
+repair seam that restores the signal; direct human control may act on the
+classified evidence. Neither live-only data nor a failed liveness probe grants
+automated authority.
 
 ## Steer and settle
 
