@@ -1,6 +1,7 @@
 #lang beagle
 (ns firn.repo-workflows
-  (:require [firn.repo-quality :as quality]))
+  (:require [native.json :as json]
+            [firn.repo-quality :as quality]))
 
 (defunion RepoWorkflowAction
   RepoValidate
@@ -19,6 +20,15 @@
   [status Int
    stdout String
    stderr String])
+
+(defrecord FirstPartyInput
+  [name String
+   repo String
+   rev String])
+
+(defunion FirstPartyInputsResult
+  (FirstPartyInputsParsed [inputs (Vec FirstPartyInput)])
+  (FirstPartyInputsRejected [message String]))
 
 (defunion ProcessBoundary
   (InheritProcess
@@ -174,6 +184,189 @@
         (> (+ offset (count needle)) (count text)) false
         (contains-at? text needle offset) true
         :else (recur (+ offset 1))))))
+
+(defn json-value-end
+  [events (Vec json/JsonEvent)
+   start Int] Int
+  (if (or (< start 0) (>= start (count events)))
+    -1
+    (match (nth events start)
+      [(JsonObjectStart offset)
+       (loop [index Int (+ start 1)
+              depth Int 0]
+         (if (>= index (count events))
+           -1
+           (match (nth events index)
+             [(JsonObjectStart nested-offset)
+              (recur (+ index 1) (+ depth 1))]
+             [(JsonArrayStart nested-offset)
+              (recur (+ index 1) (+ depth 1))]
+             [(JsonObjectEnd nested-offset)
+              (if (= depth 0)
+                (+ index 1)
+                (recur (+ index 1) (- depth 1)))]
+             [(JsonArrayEnd nested-offset)
+              (recur (+ index 1) (- depth 1))]
+             [(JsonKey nested-offset value) (recur (+ index 1) depth)]
+             [(JsonString nested-offset value) (recur (+ index 1) depth)]
+             [(JsonNumber nested-offset lexeme) (recur (+ index 1) depth)]
+             [(JsonBoolean nested-offset value) (recur (+ index 1) depth)]
+             [(JsonNull nested-offset) (recur (+ index 1) depth)])))]
+      [(JsonArrayStart offset)
+       (loop [index Int (+ start 1)
+              depth Int 0]
+         (if (>= index (count events))
+           -1
+           (match (nth events index)
+             [(JsonObjectStart nested-offset)
+              (recur (+ index 1) (+ depth 1))]
+             [(JsonArrayStart nested-offset)
+              (recur (+ index 1) (+ depth 1))]
+             [(JsonArrayEnd nested-offset)
+              (if (= depth 0)
+                (+ index 1)
+                (recur (+ index 1) (- depth 1)))]
+             [(JsonObjectEnd nested-offset)
+              (recur (+ index 1) (- depth 1))]
+             [(JsonKey nested-offset value) (recur (+ index 1) depth)]
+             [(JsonString nested-offset value) (recur (+ index 1) depth)]
+             [(JsonNumber nested-offset lexeme) (recur (+ index 1) depth)]
+             [(JsonBoolean nested-offset value) (recur (+ index 1) depth)]
+             [(JsonNull nested-offset) (recur (+ index 1) depth)])))]
+      [(JsonObjectEnd offset) -1]
+      [(JsonArrayEnd offset) -1]
+      [(JsonKey offset value) -1]
+      [(JsonString offset value) (+ start 1)]
+      [(JsonNumber offset lexeme) (+ start 1)]
+      [(JsonBoolean offset value) (+ start 1)]
+      [(JsonNull offset) (+ start 1)])))
+
+(defn json-object-field-start
+  [events (Vec json/JsonEvent)
+   object-start Int
+   wanted String] Int
+  (let [end Int (json-value-end events object-start)]
+    (if (or (< end 0)
+            (not (match (nth events object-start)
+                   [(JsonObjectStart offset) true]
+                   [(JsonObjectEnd offset) false]
+                   [(JsonArrayStart offset) false]
+                   [(JsonArrayEnd offset) false]
+                   [(JsonKey offset value) false]
+                   [(JsonString offset value) false]
+                   [(JsonNumber offset lexeme) false]
+                   [(JsonBoolean offset value) false]
+                   [(JsonNull offset) false])))
+      -1
+      (loop [index Int (+ object-start 1)]
+        (if (>= index (- end 1))
+          -1
+          (match (nth events index)
+            [(JsonKey offset key)
+             (let [value-index Int (+ index 1)
+                   next Int (json-value-end events value-index)]
+               (if (< next 0)
+                 -1
+                 (if (= key wanted) value-index (recur next))))]
+            [(JsonObjectStart offset) -1]
+            [(JsonObjectEnd offset) -1]
+            [(JsonArrayStart offset) -1]
+            [(JsonArrayEnd offset) -1]
+            [(JsonString offset value) -1]
+            [(JsonNumber offset lexeme) -1]
+            [(JsonBoolean offset value) -1]
+            [(JsonNull offset) -1]))))))
+
+(defn json-object-string
+  [events (Vec json/JsonEvent)
+   object-start Int
+   wanted String] (U String Nil)
+  (let [value-index Int (json-object-field-start events object-start wanted)]
+    (if (< value-index 0)
+      nil
+      (match (nth events value-index)
+        [(JsonString offset value) value]
+        [(JsonObjectStart offset) nil]
+        [(JsonObjectEnd offset) nil]
+        [(JsonArrayStart offset) nil]
+        [(JsonArrayEnd offset) nil]
+        [(JsonKey offset value) nil]
+        [(JsonNumber offset lexeme) nil]
+        [(JsonBoolean offset value) nil]
+        [(JsonNull offset) nil]))))
+
+(defn first-party-input-at
+  [events (Vec json/JsonEvent)
+   name String
+   node-start Int] (U FirstPartyInput Nil)
+  (let [locked-start Int (json-object-field-start events node-start "locked")]
+    (if (< locked-start 0)
+      nil
+      (let [source-type (U String Nil) (json-object-string events locked-start "type")
+            owner (U String Nil) (json-object-string events locked-start "owner")
+            repo (U String Nil) (json-object-string events locked-start "repo")
+            rev (U String Nil) (json-object-string events locked-start "rev")]
+        (if (and (= source-type "github")
+                 (= owner "tompassarelli")
+                 (some? repo)
+                 (some? rev))
+          (->FirstPartyInput name repo rev)
+          nil)))))
+
+(defn first-party-inputs-from-lock [source String] FirstPartyInputsResult
+  (match (json/decode source)
+    [(JsonDecodeError offset message)
+     (->FirstPartyInputsRejected (str "invalid flake.lock: " message))]
+    [(JsonDecoded events)
+     (if (or (= (count events) 0)
+             (not= (json-value-end events 0) (count events)))
+       (->FirstPartyInputsRejected "invalid flake.lock: expected one JSON value")
+       (let [nodes-start Int (json-object-field-start events 0 "nodes")]
+         (if (< nodes-start 0)
+           (->FirstPartyInputsRejected "invalid flake.lock: missing nodes object")
+           (let [nodes-end Int (json-value-end events nodes-start)]
+             (if (or (< nodes-end 0)
+                     (not (match (nth events nodes-start)
+                            [(JsonObjectStart offset) true]
+                            [(JsonObjectEnd offset) false]
+                            [(JsonArrayStart offset) false]
+                            [(JsonArrayEnd offset) false]
+                            [(JsonKey offset value) false]
+                            [(JsonString offset value) false]
+                            [(JsonNumber offset lexeme) false]
+                            [(JsonBoolean offset value) false]
+                            [(JsonNull offset) false])))
+               (->FirstPartyInputsRejected "invalid flake.lock: nodes must be an object")
+               (loop [index Int (+ nodes-start 1)
+                      inputs (Vec FirstPartyInput) []]
+                 (if (>= index (- nodes-end 1))
+                   (->FirstPartyInputsParsed inputs)
+                   (match (nth events index)
+                     [(JsonKey offset name)
+                      (let [node-start Int (+ index 1)
+                            next Int (json-value-end events node-start)]
+                        (if (< next 0)
+                          (->FirstPartyInputsRejected
+                            "invalid flake.lock: invalid node value")
+                          (let [input (U FirstPartyInput Nil) (first-party-input-at events name node-start)]
+                            (recur next
+                              (if (some? input) (conj inputs input) inputs)))))]
+                     [(JsonObjectStart offset)
+                      (->FirstPartyInputsRejected "invalid flake.lock: invalid nodes object")]
+                     [(JsonObjectEnd offset)
+                      (->FirstPartyInputsRejected "invalid flake.lock: invalid nodes object")]
+                     [(JsonArrayStart offset)
+                      (->FirstPartyInputsRejected "invalid flake.lock: invalid nodes object")]
+                     [(JsonArrayEnd offset)
+                      (->FirstPartyInputsRejected "invalid flake.lock: invalid nodes object")]
+                     [(JsonString offset value)
+                      (->FirstPartyInputsRejected "invalid flake.lock: invalid nodes object")]
+                     [(JsonNumber offset lexeme)
+                      (->FirstPartyInputsRejected "invalid flake.lock: invalid nodes object")]
+                     [(JsonBoolean offset value)
+                      (->FirstPartyInputsRejected "invalid flake.lock: invalid nodes object")]
+                     [(JsonNull offset)
+                      (->FirstPartyInputsRejected "invalid flake.lock: invalid nodes object")]))))))))]))
 
 (defn trim-line-end [text String] String
   (loop [end Int (count text)]
