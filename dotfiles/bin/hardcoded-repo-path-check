@@ -3,7 +3,24 @@ set -euo pipefail
 
 CHECK_SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 readonly CHECK_SCRIPT_PATH
-CHECK_SOURCE_ROOT="$(cd "$(dirname "$CHECK_SCRIPT_PATH")/../.." && pwd)"
+
+# Operate on the checkout the caller is standing in, not on whichever copy of
+# this script won PATH. The installed entry point symlinks into main, so
+# resolving the root from the script location alone made every invocation from
+# a worktree scan and rewrite main's allowlist instead of the lane's.
+check_source_root() {
+  local dir="$PWD"
+  while [[ "$dir" != / ]]; do
+    if [[ -f "$dir/config/hardcoded-repo-paths.tsv" ]]; then
+      printf '%s\n' "$dir"
+      return
+    fi
+    dir="$(dirname "$dir")"
+  done
+  cd "$(dirname "$CHECK_SCRIPT_PATH")/../.." && pwd
+}
+
+CHECK_SOURCE_ROOT="${HARDCODED_REPO_PATH_CHECK_ROOT:-$(check_source_root)}"
 readonly CHECK_SOURCE_ROOT
 readonly CHECK_ALLOWLIST="$CHECK_SOURCE_ROOT/config/hardcoded-repo-paths.tsv"
 
