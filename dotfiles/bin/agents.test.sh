@@ -7,6 +7,8 @@
 set -uo pipefail
 
 REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+CODE_ROOT="$(dirname "$(dirname "$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)")")")"
+NORTH_HARNESS_SOURCE="$CODE_ROOT/north/main/sdk/src/harness.ts"
 BIN="$REPO/dotfiles/bin/agents"
 FRAG_SRC="$REPO/dotfiles/agents/hooks.d"
 SB="$(mktemp -d)"
@@ -23,9 +25,14 @@ ACCT="$SB/.local/state/north/accounts/anthropic/acct-one"
 
 fresh() { # [fragments-dir]
   rm -rf "${SB:?}"
-  mkdir -p "$SB/.claude" "$SB/code/nixos-config/main/dotfiles/agents" "$ACCT"
+  mkdir -p "$SB/.claude" "$SB/code/nixos-config/main/dotfiles/agents" \
+    "$SB/code/nixos-config/main/modules/codex" "$ACCT"
   echo '{"model":"opus","otherKey":42}' > "$SB/.claude/settings.json"
   cp "$REPO/dotfiles/agents/AGENTS.md" "$SB/code/nixos-config/main/dotfiles/agents/AGENTS.md"
+  cp "$REPO/dotfiles/agents/policy-owners.toml" \
+    "$SB/code/nixos-config/main/dotfiles/agents/policy-owners.toml"
+  cp "$REPO/modules/codex/requirements.toml" \
+    "$SB/code/nixos-config/main/modules/codex/requirements.toml"
   ln -sfn "$REPO/dotfiles/agents/skills" "$SB/code/nixos-config/main/dotfiles/agents/skills"
   # An account copy only exists once a session has made one; apply overwrites
   # what is there and never creates the tree, so the fixture must.
@@ -61,7 +68,28 @@ fresh() { # [fragments-dir]
   printf 'ORCHESTRATION ACTIVE\n' > "$NORTH/orchestration/doctrine.md"
   printf 'COORDINATION ACTIVE\n' > "$NORTH/coordination/guide.md"
   : > "$SB/code/north/main/orchestration/agents/integrator.md"
+  mkdir -p "$NORTH/sdk/src"
+  cp "$NORTH_HARNESS_SOURCE" "$NORTH/sdk/src/harness.ts"
   FRAGS="${1:-$FRAG_SRC}"
+  # The source fragments deliberately use production absolute paths. Mirror
+  # those targets below the sandbox so target admission is hermetic rather than
+  # an accidental assertion about the current system generation.
+  TARGETS="$SB/hook-targets"
+  python3 - "$FRAGS" "$TARGETS" <<'PY'
+import glob, json, os, re, shlex, sys
+frags, root = sys.argv[1:]
+for path in glob.glob(os.path.join(frags, "*.json")):
+    for entry in json.load(open(path)).get("entries", []):
+        words = shlex.split(entry.get("hook", {}).get("command", ""))
+        while words and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[0]):
+            words.pop(0)
+        if not words or not words[0].startswith("/"):
+            continue
+        target = os.path.join(root, words[0].lstrip("/"))
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        open(target, "w").write("#!/bin/sh\nexit 0\n")
+        os.chmod(target, 0o755)
+PY
   # No member lists unless a test writes some: the default is a directory that
   # does not exist, which is also what a machine with no modules.d has.
   MODS="$SB/no-modules"
@@ -82,6 +110,7 @@ markers() { grep -o '<!-- module: [a-z-]* -->' "$SB/.config/agents/CLAUDE.md" | 
 skilllinks() { find "$SB/.config/agents/skills" -maxdepth 1 -type l -printf '%f\n' | sort | tr '\n' ' ' | sed 's/ $//'; }
 
 ag() { HOME="$SB" AGENTS_FRAGMENTS="$FRAGS" AGENTS_MODULES="$MODS" \
+       AGENTS_HOOK_TARGET_ROOT="$TARGETS" \
        AGENTS_PLUGIN_RELEASES="$SB/releases" bash "$BIN" "$@"; }
 hookrows() { grep '^hook ' "$SB/.config/agents/manifest.conf" | sort; }
 composed_files() { # every hook command settings.json currently carries
@@ -124,6 +153,67 @@ if [ "${1:-}" = "--policy-skills" ]; then
   for s in agent-policy delegating-agents external-code; do ag off "$s" > /dev/null; done
   chk "off removes both provider links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l \( -name agent-policy -o -name delegating-agents -o -name external-code \) | wc -l)"
   if [ "$fails" -eq 0 ]; then echo "all focused policy-skill tests passed"; else echo "$fails focused policy-skill test(s) failed"; fi
+  exit "$fails"
+fi
+
+if [ "${1:-}" = "--hook-target-admission" ]; then
+  echo "== focused hook-target admission"
+  rm -rf "$SB.frags"; mkdir -p "$SB.frags"
+  cp "$FRAG_SRC"/*.json "$SB.frags/"
+  fresh "$SB.frags"
+  mkdir -p "$SB/code/nixos-config/main/modules/north-profile/firn/skills/firn"
+  printf -- '---\nname: firn\n---\n' \
+    > "$SB/code/nixos-config/main/modules/north-profile/firn/skills/firn/SKILL.md"
+  ag on firn > /dev/null
+  chk "a synchronized executable target projects to Claude settings" "1" \
+    "$(has_cmd /run/current-system/sw/bin/firn-system-policy && echo 1 || echo 0)"
+  before="$(sha256sum "$SB/.claude/settings.json" | awk '{print $1}')"
+  reject_apply() { # expected error needle; no provider surface may change
+    local needle="$1" status=0 after
+    ag apply >"$SB/admission.out" 2>"$SB/admission.err" || status=$?
+    chk "admission rejects $needle" "1" "$status"
+    if grep -Fq "$needle" "$SB/admission.err"; then ok "failure names $needle"; else bad "failure names $needle" "$(cat "$SB/admission.err")"; fi
+    after="$(sha256sum "$SB/.claude/settings.json" | awk '{print $1}')"
+    chk "rejection leaves Claude settings unchanged" "$before" "$after"
+  }
+
+  python3 - "$FRAGS/firn-system-policy.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+for entry in d["entries"]:
+    entry["hook"]["command"] = "/run/current-system/sw/bin/not-firn-system-policy"
+json.dump(d, open(p, "w"))
+PY
+  reject_apply "Claude settings fragment"
+  cp "$FRAG_SRC/firn-system-policy.json" "$FRAGS/firn-system-policy.json"
+
+  python3 - "$SB/code/nixos-config/main/modules/codex/requirements.toml" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read().replace("/run/current-system/sw/bin/firn-system-policy", "/run/current-system/sw/bin/not-firn-system-policy")
+open(p, "w").write(s)
+PY
+  reject_apply "Codex managed hooks"
+  cp "$REPO/modules/codex/requirements.toml" "$SB/code/nixos-config/main/modules/codex/requirements.toml"
+
+  python3 - "$NORTH/sdk/src/harness.ts" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p).read()
+s, count = re.subn(
+    r"(const WORKER_BASH_GUARDS = resolveManagedGuardChain\(\[.*?)(FIRN_SYSTEM_POLICY)(.*?\]\);)",
+    r'\1"omitted-system-policy"\3', s, count=1, flags=re.S,
+)
+assert count == 1
+open(p, "w").write(s)
+PY
+  reject_apply "North worker guard-chain WORKER_BASH_GUARDS omits"
+  cp "$NORTH_HARNESS_SOURCE" "$NORTH/sdk/src/harness.ts"
+
+  rm -f "$TARGETS/run/current-system/sw/bin/firn-system-policy"
+  reject_apply "/run/current-system/sw/bin/firn-system-policy is missing or non-executable"
+  if [ "$fails" -eq 0 ]; then echo "all focused hook-target admission tests passed"; else echo "$fails focused hook-target admission test(s) failed"; fi
   exit "$fails"
 fi
 

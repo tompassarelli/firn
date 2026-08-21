@@ -10,6 +10,9 @@ PLUGINS_JSON="$HOME/.claude/plugins/installed_plugins.json"
 NORTH="$HOME/code/north/main"
 BEAGLE="$HOME/code/beagle/main"
 NIXOS_CONFIG="$HOME/code/nixos-config/main"
+POLICY_OWNERS="${AGENTS_POLICY_OWNERS:-$NIXOS_CONFIG/dotfiles/agents/policy-owners.toml}"
+CODEX_REQUIREMENTS="${AGENTS_CODEX_REQUIREMENTS:-$NIXOS_CONFIG/modules/codex/requirements.toml}"
+NORTH_HARNESS="${AGENTS_NORTH_HARNESS:-$NORTH/sdk/src/harness.ts}"
 CLAUDE_AGENTS="$HOME/.claude/agents"
 # Codex reads skills from its own directory, so a skill governed only in the
 # claude farm is a skill Codex loads on rules nobody set. This directory is NOT
@@ -589,6 +592,118 @@ load_activity() { # the derivation, once, into name-keyed lookups
 is_active() { [ "${ACT_ACTIVE[$1]:-0}" = 1 ]; }
 
 on_off() { is_active "$1" && echo on || echo off; }
+
+admit_hook_targets() { # active hook names — no provider surface is written before this passes
+  # policy-owners.toml is the source-owned cross-provider contract. A hook
+  # target that cannot execute is not a degraded projection: publishing it
+  # makes every provider appear guarded while running no guard at all.
+  python3 - "$FRAGMENTS" "$POLICY_OWNERS" "$CODEX_REQUIREMENTS" "$NORTH_HARNESS" "$@" <<'PY'
+import json, os, re, shlex, sys
+
+fragments_dir, policy_path, codex_path, north_path, *names = sys.argv[1:]
+target_root = os.environ.get("AGENTS_HOOK_TARGET_ROOT", "").rstrip("/")
+errors, commands = [], {}
+
+def fail(message):
+    errors.append(f"agents: hook target admission failed: {message}")
+
+def executable_path(command):
+    try:
+        words = shlex.split(command)
+    except ValueError as exc:
+        fail(f"malformed command {command!r}: {exc}")
+        return None
+    while words and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[0]):
+        words.pop(0)
+    if not words:
+        fail(f"command {command!r} has no executable target")
+        return None
+    target = os.path.expandvars(os.path.expanduser(words[0]))
+    if not os.path.isabs(target):
+        fail(f"command {command!r} has non-absolute executable target {target!r}")
+        return None
+    checked = os.path.join(target_root, target.lstrip("/")) if target_root else target
+    if not os.path.isfile(checked) or not os.access(checked, os.X_OK):
+        fail(f"{target} is missing or non-executable"
+             + (f" (checked {checked})" if target_root else ""))
+    return target
+
+for name in names:
+    path = os.path.join(fragments_dir, f"{name}.json")
+    try:
+        fragment = json.load(open(path))
+        entries = fragment["entries"]
+        if not isinstance(entries, list):
+            raise TypeError("entries is not a list")
+    except Exception as exc:
+        fail(f"{name} fragment {path} is unreadable: {exc}")
+        continue
+    commands[name] = []
+    for entry in entries:
+        command = (entry.get("hook") or {}).get("command")
+        if not isinstance(command, str):
+            fail(f"{name} fragment has a hook without a command")
+            continue
+        commands[name].append(command)
+        executable_path(command)
+
+try:
+    import tomllib
+    policy = tomllib.load(open(policy_path, "rb"))
+    guards = policy.get("guard") or []
+except Exception as exc:
+    fail(f"cross-provider policy {policy_path} is unreadable: {exc}")
+    guards = []
+
+try:
+    codex_source = open(codex_path).read()
+except OSError as exc:
+    fail(f"Codex managed-hook source {codex_path} is unreadable: {exc}")
+    codex_source = ""
+try:
+    north_source = open(north_path).read()
+except OSError as exc:
+    fail(f"North worker guard-chain source {north_path} is unreadable: {exc}")
+    north_source = ""
+
+def north_chain_body(name):
+    match = re.search(
+        rf"const\s+{re.escape(name)}\s*=\s*resolveManagedGuardChain\(\s*\[(.*?)\]\s*\)",
+        north_source, re.S,
+    )
+    return match.group(1) if match else None
+
+for guard in guards:
+    name = guard.get("switchboard")
+    if name not in commands:
+        continue
+    expected = guard.get("claude_command", "")
+    if expected and any(command != expected for command in commands[name]):
+        fail(f"Claude settings fragment for {name} differs from policy-owned command {expected!r}")
+    codex_command = guard.get("codex_command", "")
+    if codex_command and codex_command not in codex_source:
+        fail(f"Codex managed hooks do not declare {codex_command!r} for {name}")
+    target = expected or executable_path(commands[name][0])
+    if not target:
+        continue
+    symbols = re.findall(
+        rf"const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[\"']{re.escape(target)}[\"']",
+        north_source,
+    )
+    forms = [target, *symbols]
+    for chain in guard.get("north_chains", []):
+        body = north_chain_body(chain)
+        if body is None:
+            fail(f"North worker guard-chain {chain} is absent for {name}")
+        elif not any(re.search(rf"(?<![A-Za-z0-9_]){re.escape(form)}(?![A-Za-z0-9_])", body)
+                     for form in forms):
+            fail(f"North worker guard-chain {chain} omits {target} for {name}")
+
+if errors:
+    print("\n".join(errors), file=sys.stderr)
+    raise SystemExit(1)
+PY
+}
 
 write_activity_projection() {
   # Provider adapters that cannot accept a dynamically composed hook manifest
@@ -1197,6 +1312,14 @@ apply() {
   # get written, linked, or composed — otherwise the switchboard would say one
   # thing and the surfaces would say another.
   load_activity
+  # Admission is before every provider projection. In particular, do not update
+  # ~/.claude/settings.json while a declared hook target is missing: that would
+  # publish a configuration that looks enforced but is not.
+  local on_hooks=() hname
+  for hname in ${ACT_HOOKS[@]+"${ACT_HOOKS[@]}"}; do
+    if is_active "$hname"; then on_hooks+=("$hname"); fi
+  done
+  admit_hook_targets "${on_hooks[@]}"
   write_activity_projection
   # the global profile — `dir global`, the context file scoped at the root:
   # empty when off. One slot, every provider surface: the claude config target,
@@ -1473,10 +1596,6 @@ PY
   # hooks + statusline + plugins — rewrite exactly those keys in live settings.json
   # The composed set is derived, never read off the manifest: a hook runs when
   # the user has it enabled AND its companion unit (if any) is on.
-  local on_hooks=() hname
-  for hname in ${ACT_HOOKS[@]+"${ACT_HOOKS[@]}"}; do
-    if is_active "$hname"; then on_hooks+=("$hname"); fi
-  done
   local on_plugins=() p
   for p in "${PLUGINS[@]}"; do
     if is_active "$p"; then on_plugins+=("$p"); fi
