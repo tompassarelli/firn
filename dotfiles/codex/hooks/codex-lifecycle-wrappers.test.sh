@@ -18,12 +18,14 @@ wrappers=(
   north-on-tooluse-codex
   north-mark-delegated-codex
   north-on-stop-codex
+  north-on-terminal-codex
 )
 targets=(
   north-on-spawn
   north-on-tooluse
   north-mark-delegated
   north-on-stop
+  north-on-terminal
 )
 for wrapper in "${wrappers[@]}"; do
   cp "$HERE/$wrapper" "$HOOKS/$wrapper"

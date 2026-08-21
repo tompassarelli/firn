@@ -20,12 +20,26 @@ type = "command"
 command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-spawn-codex"
 timeout = 15
 
+[[hooks.SessionEnd]]
+
+[[hooks.SessionEnd.hooks]]
+type = "command"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-terminal-codex"
+timeout = 3
+
 [[hooks.SubagentStart]]
 
 [[hooks.SubagentStart.hooks]]
 type = "command"
 command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-spawn-codex"
 timeout = 15
+
+[[hooks.SubagentStop]]
+
+[[hooks.SubagentStop.hooks]]
+type = "command"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-terminal-codex"
+timeout = 3
 
 [[hooks.PreToolUse]]
 matcher = "^(Agent|Task|Workflow)$"

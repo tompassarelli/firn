@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Managed lane completion is harness-owned. Provider-native root and subagent
+# terminals delegate to North's transcript-backed terminal publisher.
+set -uo pipefail
+
+drain_stdin() {
+  while IFS= builtin read -r -N 65536; do
+    :
+  done
+}
+
+if [ "${NORTH_MANAGED_LANE:-}" = 1 ]; then
+  case "${AGENT_TOPOLOGY:-}" in
+    worker|orchestrator)
+      if [[ "${AGENT_ID:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$ ]]; then
+        drain_stdin
+        exit 0
+      fi
+      ;;
+  esac
+fi
+
+HERE="$(
+  CDPATH='' builtin cd -- "${BASH_SOURCE[0]%/*}" 2>/dev/null &&
+    builtin pwd -P
+)" || {
+  drain_stdin
+  exit 0
+}
+ACTIVITY_LIB="$HERE/lib/switchboard-activity.sh"
+# shellcheck disable=SC1090
+if [ ! -r "$ACTIVITY_LIB" ] ||
+   ! source "$ACTIVITY_LIB" ||
+   ! agents_switchboard_active hook north-session-lifecycle; then
+  drain_stdin
+  exit 0
+fi
+BASH_BIN="$HERE/runtime/bash"
+NORTH_HOME="$HERE/north"
+TARGET="$NORTH_HOME/bin/north-on-terminal"
+[ -x "$BASH_BIN" ] && [ -x "$TARGET" ] || {
+  drain_stdin
+  exit 0
+}
+
+unset AGENT_ID AGENT_TOPOLOGY NORTH_MANAGED_LANE
+export AGENT_PROVIDER=openai NORTH_HOME
+exec "$BASH_BIN" "$TARGET" "$@"

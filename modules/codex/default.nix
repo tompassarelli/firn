@@ -21,6 +21,9 @@
       "codex/hooks/north-on-stop-codex" = {
         source = "${flakeRoot}/dotfiles/codex/hooks/north-on-stop-codex";
       };
+      "codex/hooks/north-on-terminal-codex" = {
+        source = "${flakeRoot}/dotfiles/codex/hooks/north-on-terminal-codex";
+      };
       "codex/hooks/north-clock-guard-codex" = {
         source = "${flakeRoot}/dotfiles/codex/hooks/north-clock-guard-codex";
       };

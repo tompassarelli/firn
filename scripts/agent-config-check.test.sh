@@ -554,6 +554,24 @@ print(sum(
 ))
 PY
 )"
+python3 - "$REPO/modules/codex/requirements.toml" <<'PY'
+import pathlib
+import sys
+import tomllib
+
+with pathlib.Path(sys.argv[1]).open("rb") as handle:
+    hooks = tomllib.load(handle)["hooks"]
+for event in ("SessionEnd", "SubagentStop"):
+    groups = hooks.get(event)
+    assert isinstance(groups, list) and len(groups) == 1
+    commands = groups[0].get("hooks")
+    assert isinstance(commands, list) and len(commands) == 1
+    command = commands[0]
+    assert command["timeout"] == 3
+    assert command["command"].endswith(
+        "/etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-terminal-codex"
+    )
+PY
 grep -Fq "$managed_binding_count managed authoritative bindings" <<<"$report"
 run_quiet_child 'Codex lifecycle wrapper tests' \
   "$REPO/dotfiles/codex/hooks/codex-lifecycle-wrappers.test.sh"

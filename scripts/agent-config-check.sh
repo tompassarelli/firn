@@ -345,6 +345,12 @@ enabled = {
         "SubagentStart": [{
             "hooks": [command("north-on-spawn-codex", 15)],
         }],
+        "SessionEnd": [{
+            "hooks": [command("north-on-terminal-codex", 3)],
+        }],
+        "SubagentStop": [{
+            "hooks": [command("north-on-terminal-codex", 3)],
+        }],
         "PreToolUse": [
             {
                 "matcher": "^(Agent|Task|Workflow)$",
@@ -1097,8 +1103,8 @@ validate_codex_managed_policy() {
   CODEX_MANAGED_BINDINGS="$(
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
-  if [ "$CODEX_MANAGED_BINDINGS" = 17 ]; then
-    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 17-binding authoritative contract'
+  if [ "$CODEX_MANAGED_BINDINGS" = 19 ]; then
+    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 19-binding authoritative contract'
   elif [ "$CODEX_MANAGED_BINDINGS" = 0 ]; then
     ok_detail 'Codex managed hooks are authoritatively disabled; remote control remains disabled'
   else
@@ -1129,6 +1135,7 @@ validate_codex_managed_policy() {
     "north-on-tooluse-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-tooluse-codex\")|$CODEX/hooks/north-on-tooluse-codex|self|dotfiles/codex/hooks/north-on-tooluse-codex|"
     "north-mark-delegated-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-mark-delegated-codex\")|$CODEX/hooks/north-mark-delegated-codex|self|dotfiles/codex/hooks/north-mark-delegated-codex|"
     "north-on-stop-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-stop-codex\")|$CODEX/hooks/north-on-stop-codex|self|dotfiles/codex/hooks/north-on-stop-codex|"
+    "north-on-terminal-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-terminal-codex\")|$CODEX/hooks/north-on-terminal-codex|self|dotfiles/codex/hooks/north-on-terminal-codex|"
   )
   for spec in "${source_specs[@]}"; do
     IFS='|' read -r relative source_expr expected_checkout authority \
@@ -1189,7 +1196,8 @@ validate_codex_managed_policy() {
        "$wrappers/north-on-spawn-codex" \
        "$wrappers/north-on-tooluse-codex" \
        "$wrappers/north-mark-delegated-codex" \
-       "$wrappers/north-on-stop-codex"; then
+       "$wrappers/north-on-stop-codex" \
+       "$wrappers/north-on-terminal-codex"; then
     ok_detail 'Codex managed lifecycle adapters pass shellcheck'
   else
     bad 'Codex managed lifecycle adapter fails shellcheck'
@@ -1293,7 +1301,8 @@ validate_codex_managed_policy() {
       bin/north-on-spawn \
       bin/north-on-tooluse \
       bin/north-mark-delegated \
-      bin/north-on-stop; do
+      bin/north-on-stop \
+      bin/north-on-terminal; do
       if [ -x "/etc/codex/hooks/north/$relative" ]; then :
       else
         generation_exact=0
