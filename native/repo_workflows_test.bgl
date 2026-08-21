@@ -96,14 +96,19 @@
 (def first-party-lock String
   (str
     "{\"nodes\":{"
+    "\"root\":{\"inputs\":{\"beagle\":\"beagle\","
+    "\"foreign\":\"foreign\",\"follows\":[\"parent\",\"foreign\"]}},"
     "\"beagle\":{\"locked\":{\"type\":\"github\","
     "\"owner\":\"tompassarelli\",\"repo\":\"beagle\","
-    "\"rev\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}},"
+    "\"rev\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\","
+    "\"narHash\":\"sha256-YWJjZA==\"}},"
     "\"foreign\":{\"locked\":{\"type\":\"github\","
     "\"owner\":\"someone-else\",\"repo\":\"other\","
     "\"rev\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}},"
-    "\"branch\":{\"locked\":{\"type\":\"github\","
-    "\"owner\":\"tompassarelli\",\"repo\":\"glide\"}}}}"))
+    "\"transitive\":{\"locked\":{\"type\":\"github\","
+    "\"owner\":\"tompassarelli\",\"repo\":\"glide\","
+    "\"rev\":\"cccccccccccccccccccccccccccccccccccccccc\","
+    "\"narHash\":\"sha256-YWJjZA==\"}}}}"))
 
 (defn case-first-party-lock-selection [] Bool
   (match (w/first-party-inputs-from-lock first-party-lock)
@@ -121,6 +126,18 @@
     [(FirstPartyInputsRejected message)
      (= message "invalid flake.lock: nodes must be an object")]))
 
+(defn case-invalid-first-party-pin-rejected [] Bool
+  (match (w/first-party-inputs-from-lock
+           (str
+             "{\"nodes\":{\"root\":{\"inputs\":{\"beagle\":\"beagle\"}},"
+             "\"beagle\":{\"locked\":{\"type\":\"github\","
+             "\"owner\":\"tompassarelli\",\"repo\":\"beagle\","
+             "\"rev\":\"main\",\"narHash\":\"sha256-YWJjZA==\"}}}}"))
+    [(FirstPartyInputsParsed inputs) false]
+    [(FirstPartyInputsRejected message)
+     (= message
+       "first-party input 'beagle' revision must be a full lowercase 40-hex commit")]))
+
 (defn cases [] (Vec TestResult)
   [(->TestResult "first-failure" (case-first-failure))
    (->TestResult "bounded-watch-ownership" (case-bounded-watch-ownership))
@@ -131,7 +148,9 @@
    (->TestResult "first-party-lock-selection" (case-first-party-lock-selection))
    (->TestResult
      "invalid-first-party-lock-rejected"
-     (case-invalid-first-party-lock-rejected))])
+     (case-invalid-first-party-lock-rejected))
+   (->TestResult "invalid-first-party-pin-rejected"
+     (case-invalid-first-party-pin-rejected))])
 
 (defn -main [args (Vec String)] Int
   (let [results (Vec TestResult) (cases)]

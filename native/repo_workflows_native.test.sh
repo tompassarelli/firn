@@ -66,7 +66,7 @@ build_native repo-workflows-native firn.repo-workflows-native/-main \
   "$repo/native/repo_workflows_native.bgl"
 
 "$scratch/repo-workflows-test" >"$scratch/pure.out"
-[[ "$(rg -c '^PASS ' "$scratch/pure.out")" == "6" ]] \
+[[ "$(rg -c '^PASS ' "$scratch/pure.out")" == "7" ]] \
   || die "focused pure cases did not all pass"
 
 set +e
@@ -102,7 +102,7 @@ independent_rev="$(
 write_lock() {
   local revision="$1"
   printf '%s\n' \
-    "{\"nodes\":{\"beagle\":{\"locked\":{\"type\":\"github\",\"owner\":\"tompassarelli\",\"repo\":\"beagle\",\"rev\":\"$revision\"}},\"glide\":{\"locked\":{\"type\":\"github\",\"owner\":\"tompassarelli\",\"repo\":\"glide\",\"rev\":\"$revision\"}}}}" \
+    "{\"nodes\":{\"root\":{\"inputs\":{\"beagle\":\"beagle\",\"glide\":\"glide\"}},\"beagle\":{\"locked\":{\"type\":\"github\",\"owner\":\"tompassarelli\",\"repo\":\"beagle\",\"rev\":\"$revision\",\"narHash\":\"sha256-YWJjZA==\"}},\"glide\":{\"locked\":{\"type\":\"github\",\"owner\":\"tompassarelli\",\"repo\":\"glide\",\"rev\":\"$revision\",\"narHash\":\"sha256-YWJjZA==\"}}}}" \
     >"$fixture_repo/flake.lock"
 }
 
