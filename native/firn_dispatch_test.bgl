@@ -238,12 +238,90 @@
             (= text
                "firn: dangling token after a complete walk: loose\n"))])))
 
+(defn documented-argv [command firn/FirnCommand] (Vec String)
+  (let [node String (firn/firncommand-node command)
+        edge String (firn/firncommand-edge command)]
+    (match (firn/firncommand-default-leaf command)
+      [(RequiredLeaf token) [node edge "fixture"]]
+      [(CurrentHostLeaf token) [node edge]]
+      [(LiteralLeaf value) [node edge]])))
+
+(defn documented-command-planned? [command firn/FirnCommand] Bool
+  (match (firn/parse-dispatch (documented-argv command))
+    [(DispatchPlanned plan) true]
+    [(DispatchHelp text status) false]
+    [(DispatchError text status) false]))
+
+(defn documented-group-planned? [group firn/CommandGroup] Bool
+  (let [commands (Vec firn/FirnCommand) (firn/commandgroup-commands group)]
+    (loop [(index Int) 0]
+      (if (>= index (count commands))
+        true
+        (if (documented-command-planned? (nth commands index))
+          (recur (+ index 1))
+          false)))))
+
+(defn usage-diagnostic? [command firn/FirnCommand] Bool
+  (let [node String (firn/firncommand-node command)
+        edge String (firn/firncommand-edge command)]
+    (match (firn/firncommand-default-leaf command)
+      [(RequiredLeaf token)
+       (match (firn/parse-dispatch [node edge])
+         [(DispatchPlanned plan) false]
+         [(DispatchHelp text status) false]
+         [(DispatchError text status)
+          (and (= status 1)
+               (str/includes? text (str "Usage: firn " node " " edge " ")))] )]
+      [(CurrentHostLeaf token) true]
+      [(LiteralLeaf value) true])))
+
+(defn required-leaves-diagnose? [group firn/CommandGroup] Bool
+  (let [commands (Vec firn/FirnCommand) (firn/commandgroup-commands group)]
+    (loop [(index Int) 0]
+      (if (>= index (count commands))
+        true
+        (if (usage-diagnostic? (nth commands index))
+          (recur (+ index 1))
+          false)))))
+
+(defn all-documented-commands-planned? [] Bool
+  (loop [(index Int) 0]
+    (if (>= index (count firn/command-groups))
+      true
+      (if (documented-group-planned? (nth firn/command-groups index))
+        (recur (+ index 1))
+        false))))
+
+(defn all-required-leaves-diagnose? [] Bool
+  (loop [(index Int) 0]
+    (if (>= index (count firn/command-groups))
+      true
+      (if (required-leaves-diagnose? (nth firn/command-groups index))
+        (recur (+ index 1))
+        false))))
+
+(defn error-diagnostic? [decision firn/DispatchDecision] Bool
+  (match decision
+    [(DispatchPlanned plan) false]
+    [(DispatchHelp text status) false]
+    [(DispatchError text status) (and (= status 1) (> (count text) 0))]))
+
+(defn case-documentation-and-diagnostics [] Bool
+  (and
+    (= (firn/command-count) 43)
+    (all-documented-commands-planned?)
+    (all-required-leaves-diagnose?)
+    (error-diagnostic? (firn/parse-dispatch ["unknown" "edge"]))
+    (error-diagnostic? (firn/parse-dispatch ["rebuild" "--bad"]))))
+
 (defn cases [] (Vec TestResult)
   [(->TestResult "registry-and-owners" (case-registry-and-owners))
    (->TestResult "defaults" (case-defaults))
    (->TestResult "chained-walk" (case-chained-walk))
    (->TestResult "aliases-and-help" (case-aliases-and-help))
-   (->TestResult "errors" (case-errors))])
+   (->TestResult "errors" (case-errors))
+   (->TestResult "documentation-and-diagnostics"
+     (case-documentation-and-diagnostics))])
 
 (defn -main [args (Vec String)] Int
   (let [(results (Vec TestResult)) (cases)]
