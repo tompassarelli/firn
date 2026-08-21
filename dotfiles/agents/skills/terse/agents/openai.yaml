@@ -1,0 +1,4 @@
+interface:
+  display_name: "Terse"
+  short_description: "Write the shortest report that still decides something"
+  default_prompt: "Use $terse to cut this to the verdict, the evidence, and what is still open."
