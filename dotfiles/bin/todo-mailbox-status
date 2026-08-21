@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+"""Report strict per-claim liveness for an agent-coord mailbox."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from collections import OrderedDict
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+VERBS = ("OPEN", "ACK", "UPDATE", "DONE")
+
+
+@dataclass
+class Claim:
+    claim: str
+    first_line: int
+    counts: dict[str, int] = field(
+        default_factory=lambda: {verb: 0 for verb in VERBS}
+    )
+    last_verb: str = ""
+    last_line: int = 0
+
+    def add(self, verb: str, line: int) -> None:
+        self.counts[verb] += 1
+        self.last_verb = verb
+        self.last_line = line
+
+    @property
+    def open_without_ack(self) -> bool:
+        return self.counts["OPEN"] > 0 and self.counts["ACK"] == 0
+
+    @property
+    def without_done(self) -> bool:
+        return self.counts["DONE"] == 0
+
+    @property
+    def state(self) -> str:
+        if self.counts["DONE"]:
+            return "done"
+        if self.open_without_ack:
+            return "open-unacknowledged"
+        if self.counts["ACK"]:
+            return "acknowledged-awaiting-done"
+        if self.counts["UPDATE"]:
+            return "updated-awaiting-done"
+        return "open-awaiting-ack"
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "claim": self.claim,
+            "state": self.state,
+            "first_line": self.first_line,
+            "last_line": self.last_line,
+            "last_verb": self.last_verb,
+            "messages": self.counts,
+            "open_without_ack": self.open_without_ack,
+            "nonterminal_without_done": self.without_done,
+        }
+
+
+def candidate(line: str) -> bool:
+    """A bracketed line is a possible mailbox message, not ordinary prose."""
+    stripped = line.lstrip()
+    return stripped.startswith("[") or stripped.startswith("- [")
+
+
+def parse_message(line: str) -> tuple[str, str] | str:
+    """Return (claim, verb), or the reason this bracketed line is malformed."""
+    text = line.lstrip()
+    if text.startswith("- "):
+        text = text[2:]
+
+    fields: list[str] = []
+    for _ in range(4):
+        if not text.startswith("["):
+            return "expected four adjacent bracketed fields"
+        end = text.find("]")
+        if end < 0:
+            return "unterminated bracketed field"
+        fields.append(text[1:end])
+        text = text[end + 1 :]
+    if not text.startswith(" ") or not text.strip():
+        return "missing message body after verb"
+    if any(not value.strip() for value in fields[:3]):
+        return "timestamp, claim, and route must be nonempty"
+    if fields[2].count(" -> ") != 1:
+        return "route must be sender -> receiver"
+    sender, separator, receiver = fields[2].partition(" -> ")
+    if separator != " -> " or not sender or not receiver:
+        return "route must be sender -> receiver"
+    if fields[3] not in VERBS:
+        return "verb must be one of OPEN, ACK, UPDATE, DONE"
+    return fields[1], fields[3]
+
+
+def inspect(path: Path) -> dict[str, object]:
+    claims: OrderedDict[str, Claim] = OrderedDict()
+    malformed: list[dict[str, object]] = []
+    valid_messages = 0
+
+    with path.open(encoding="utf-8") as mailbox:
+        for line_number, raw_line in enumerate(mailbox, start=1):
+            line = raw_line.rstrip("\n")
+            if not candidate(line):
+                continue
+            parsed = parse_message(line)
+            if isinstance(parsed, str):
+                malformed.append({"line": line_number, "reason": parsed})
+                continue
+            claim_id, verb = parsed
+            claim = claims.setdefault(claim_id, Claim(claim_id, line_number))
+            claim.add(verb, line_number)
+            valid_messages += 1
+
+    claim_rows = [claim.as_json() for claim in claims.values()]
+    open_without_ack = [
+        claim["claim"] for claim in claim_rows if claim["open_without_ack"]
+    ]
+    without_done = [
+        claim["claim"] for claim in claim_rows if claim["nonterminal_without_done"]
+    ]
+    return {
+        "mailbox": str(path),
+        "counts": {
+            "valid_messages": valid_messages,
+            "claims": len(claim_rows),
+            "malformed_bracketed_lines": len(malformed),
+            "open_without_ack": len(open_without_ack),
+            "nonterminal_without_done": len(without_done),
+        },
+        "claims": claim_rows,
+        "malformed": malformed,
+        "open_without_ack": open_without_ack,
+        "nonterminal_without_done": without_done,
+    }
+
+
+def print_human(report: dict[str, object]) -> None:
+    counts = report["counts"]
+    assert isinstance(counts, dict)
+    print(f"todo-mailbox-status: {report['mailbox']}")
+    print(
+        "messages={valid_messages} claims={claims} malformed={malformed_bracketed_lines} "
+        "open_without_ack={open_without_ack} without_done={nonterminal_without_done}".format(
+            **counts
+        )
+    )
+    for malformed in report["malformed"]:
+        assert isinstance(malformed, dict)
+        print(f"MALFORMED line={malformed['line']} reason={malformed['reason']}")
+    for claim in report["claims"]:
+        assert isinstance(claim, dict)
+        messages = claim["messages"]
+        assert isinstance(messages, dict)
+        print(
+            "CLAIM {claim} state={state} last={last_verb}@{last_line} "
+            "open={OPEN} ack={ACK} update={UPDATE} done={DONE}".format(
+                **claim, **messages
+            )
+        )
+    for claim in report["open_without_ack"]:
+        print(f"OPEN-WITHOUT-ACK {claim}")
+    for claim in report["nonterminal_without_done"]:
+        print(f"WITHOUT-DONE {claim}")
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        description="Report strict per-claim liveness for agent-coord.md."
+    )
+    parser.add_argument(
+        "--json", action="store_true", help="emit a machine-readable JSON report"
+    )
+    parser.add_argument(
+        "mailbox",
+        nargs="?",
+        default="~/code/todo/agent-coord.md",
+        help="mailbox to inspect (default: ~/code/todo/agent-coord.md)",
+    )
+    args = parser.parse_args(argv)
+    path = Path(args.mailbox).expanduser()
+    try:
+        report = inspect(path)
+    except OSError as error:
+        print(f"todo-mailbox-status: {path}: {error.strerror}", file=sys.stderr)
+        return 2
+
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        print_human(report)
+
+    counts = report["counts"]
+    assert isinstance(counts, dict)
+    return int(
+        counts["malformed_bracketed_lines"] > 0
+        or counts["open_without_ack"] > 0
+        or counts["nonterminal_without_done"] > 0
+    )
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
