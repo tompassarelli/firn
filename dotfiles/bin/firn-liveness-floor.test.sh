@@ -72,7 +72,18 @@ assert fact["freshness_seconds"] > 0
 PY
 test -s "$scratch/state-ok/delivery-liveness.json.sha256" \
   || die 'success did not write content identity'
+(cd "$scratch/state-ok" && sha256sum --check delivery-liveness.json.sha256) >/dev/null \
+  || die 'success content identity did not match the fact'
 ok success
+
+mkdir -p "$scratch/state-busy"
+exec 9>"$scratch/state-busy/delivery-liveness.json.lock"
+flock -n 9 || die 'fixture could not hold producer lock'
+run_case busy 75
+exec 9>&-
+test ! -e "$scratch/state-busy/delivery-liveness.json" \
+  || die 'overlapping producer replaced the current authority'
+ok overlapping-producer
 
 for case_name in missing-hook skew silent-cli build-failure; do
   run_case "$case_name" 1

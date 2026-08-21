@@ -3,7 +3,9 @@
 ((username: {
   options.myConfig.modules.delivery-liveness.enable = lib.mkEnableOption "periodically build the committed Firn toplevel without switching";
   config = lib.mkIf config.myConfig.modules.delivery-liveness.enable {
+    environment.etc."north/delivery-liveness-required".text = "1\n";
     home-manager.users.${username} = ({ config, ... }: {
+      home.sessionVariables.NORTH_DELIVERY_LIVENESS_REQUIRED = "1";
       systemd.user.services.firn-delivery-liveness = {
         Unit = {
           Description = "Firn delivery liveness floor (non-switching)";

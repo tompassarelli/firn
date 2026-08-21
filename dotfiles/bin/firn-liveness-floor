@@ -8,10 +8,17 @@ git_bin="${FIRN_LIVENESS_GIT:-git}"
 nix_bin="${FIRN_LIVENESS_NIX:-nix}"
 firn_bin="${FIRN_LIVENESS_CURRENT_FIRN:-/run/current-system/sw/bin/firn}"
 agents_bin="${FIRN_LIVENESS_AGENTS:-$HOME/.local/bin/agents}"
+flock_bin="${FIRN_LIVENESS_FLOCK:-flock}"
 system="${FIRN_LIVENESS_SYSTEM:-x86_64-linux}"
 state_dir="${FIRN_LIVENESS_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/firn}"
 state_file="$state_dir/delivery-liveness.json"
 freshness_seconds=3600
+mkdir -p "$state_dir"
+exec 9>"$state_file.lock"
+if ! "$flock_bin" -n 9; then
+  printf 'firn-liveness-floor: another floor check is already running\n' >&2
+  exit 75
+fi
 observed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 revision=""
 candidate_path=""
@@ -26,12 +33,10 @@ store_path_or_null() {
 current_path="$(store_path_or_null "$firn_bin")"
 
 write_fact() {
-  local status=$? tmp digest_tmp content_tmp
+  local status=$? tmp digest_tmp
   trap - EXIT
-  mkdir -p "$state_dir"
   tmp="$state_file.tmp.$$"
   digest_tmp="$state_file.sha256.tmp.$$"
-  content_tmp="$state_file.content.tmp.$$"
   LIVENESS_OBSERVED_AT="$observed_at" \
   LIVENESS_FRESHNESS_SECONDS="$freshness_seconds" \
   LIVENESS_BUILDABLE="$([[ "$status" == 0 ]] && printf true || printf false)" \
@@ -60,11 +65,9 @@ with open(sys.argv[1], "w") as fh:
     json.dump(payload, fh, sort_keys=True, separators=(",", ":"))
     fh.write("\n")
 PY
-  mv -f "$tmp" "$state_file"
-  sha256sum "$state_file" >"$content_tmp"
-  awk '{print $1 "  delivery-liveness.json"}' "$content_tmp" >"$digest_tmp"
+  sha256sum "$tmp" | awk '{print $1 "  delivery-liveness.json"}' >"$digest_tmp"
   mv -f "$digest_tmp" "$state_file.sha256"
-  rm -f "$content_tmp"
+  mv -f "$tmp" "$state_file"
   exit "$status"
 }
 trap write_fact EXIT
