@@ -46,6 +46,11 @@ that was not obtained. Use ordinary language, not unexplained internal names.
 Write paths in chat, documentation, comments, and output either full from `~`
 or as `repo:path`, never bare-relative.
 
+When work must stop for a decision, bring one recommendation, never a menu:
+the decision in one sentence, the recommended choice, why it needs the
+operator, and the cost of choosing wrong. Continue unrelated work rather than
+blocking the whole task on the answer.
+
 ## Preserve durable code rules
 
 - Removal means absence from the live tree: no tombstone, shim, compatibility
