@@ -102,7 +102,7 @@ def parse_shell_array(text: str, name: str) -> list[str]:
     return shlex.split(match.group(1), comments=True)
 
 
-def parse_skill_sources(text: str, home: Path) -> dict[str, Path]:
+def parse_skill_sources(text: str, home: Path, repo: Path) -> dict[str, Path]:
     start = text.find("\nskill_source()")
     end = text.find("\n}\n", start + 1)
     if start < 0 or end < 0:
@@ -113,7 +113,11 @@ def parse_skill_sources(text: str, home: Path) -> dict[str, Path]:
     for name, raw in re.findall(
         r'^\s*([a-z0-9-]+)\)\s+echo\s+"([^"]+)"\s*;;', body, re.M
     ):
-        value = raw.replace("$HOME", str(home)).replace("$NORTH", str(north))
+        value = (
+            raw.replace("$HOME", str(home))
+            .replace("$NORTH", str(north))
+            .replace("$NIXOS_CONFIG", str(repo))
+        )
         sources[name] = Path(value)
     return sources
 
@@ -273,11 +277,13 @@ def check_claims(contract: Contract, manifest: dict, surfaces: dict[str, Path]) 
                 contract.reject(f"{claim['key']}: mapped {surface} block is absent")
 
 
-def check_skill_evidence(contract: Contract, manifest: dict, switchboard: Path) -> None:
+def check_skill_evidence(
+    contract: Contract, manifest: dict, switchboard: Path, repo: Path
+) -> None:
     try:
         text = switchboard.read_text()
         inventory = set(parse_shell_array(text, "SKILLS"))
-        sources = parse_skill_sources(text, Path.home())
+        sources = parse_skill_sources(text, Path.home(), repo)
     except (OSError, ValueError) as exc:
         contract.reject(f"switchboard skill inventory is unreadable: {exc}")
         return
@@ -323,6 +329,7 @@ def check_skills(
     contract: Contract,
     manifest: dict,
     switchboard: Path,
+    repo: Path,
     activity: Path | None,
     north_catalog: Path | None,
     shared_farm: Path | None,
@@ -332,7 +339,7 @@ def check_skills(
     try:
         text = switchboard.read_text()
         inventory = parse_shell_array(text, "SKILLS")
-        sources = parse_skill_sources(text, Path.home())
+        sources = parse_skill_sources(text, Path.home(), repo)
     except (OSError, ValueError) as exc:
         contract.reject(f"switchboard skill inventory is unreadable: {exc}")
         return
@@ -538,7 +545,7 @@ def main() -> int:
 
     contract = Contract()
     check_claims(contract, manifest, {"bootstrap": bootstrap, "repo": repo_agents})
-    check_skill_evidence(contract, manifest, switchboard)
+    check_skill_evidence(contract, manifest, switchboard, repo)
     check_guards(
         contract,
         manifest,
@@ -559,6 +566,7 @@ def main() -> int:
             contract,
             manifest,
             switchboard,
+            repo,
             activity,
             north_profile / "skills",
             shared_farm,
@@ -574,7 +582,7 @@ def main() -> int:
         ]
         check_projections(contract, bootstrap, projections)
     else:
-        check_skills(contract, manifest, switchboard, None, None, None, [], False)
+        check_skills(contract, manifest, switchboard, repo, None, None, None, [], False)
 
     if contract.errors:
         for error in contract.errors:

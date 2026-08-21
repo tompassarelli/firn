@@ -259,20 +259,22 @@ run_policy_contract_fixture() {
   local preamble='Provider-neutral bootstrap.'
   local route='- Repository edits, lanes, pins, commits, landing, or pushes → `repo-safety`.'
   local destination='Repository writes belong in a lane.'
+  local firn_destination='Firn belongs to this repository.'
   local credential='Never expose credentials.'
   local repo_claim='Use repository modules.'
-  local preamble_digest route_digest destination_digest credential_digest repo_digest
+  local preamble_digest route_digest destination_digest firn_destination_digest credential_digest repo_digest
 
   "$REPO/scripts/agent-config-check.sh" --policy-only >/dev/null
 
   preamble_digest="$(printf %s "$preamble" | sha256sum | awk '{print $1}')"
   route_digest="$(printf %s "$route" | sha256sum | awk '{print $1}')"
   destination_digest="$(printf %s "$destination" | sha256sum | awk '{print $1}')"
+  firn_destination_digest="$(printf %s "$firn_destination" | sha256sum | awk '{print $1}')"
   credential_digest="$(printf %s "$credential" | sha256sum | awk '{print $1}')"
   repo_digest="$(printf %s "$repo_claim" | sha256sum | awk '{print $1}')"
   mkdir -p "$base/policy" "$base/fragments" "$base/north-profile/hooks" \
     "$base/north-profile/skills" \
-    "$base/skill-source/repo-safety" "$base/farms/shared" \
+    "$base/skill-source/repo-safety" "$base/modules/north-profile/firn/skills/firn" "$base/farms/shared" \
     "$base/farms/claude" "$base/farms/codex" "$base/projections"
   printf '# Global\n\n%s\n\n## Routes\n\n%s\n\n## Credentials\n\n%s\n' \
     "$preamble" "$route" "$credential" >"$base/policy/AGENTS.md"
@@ -281,12 +283,15 @@ run_policy_contract_fixture() {
   printf '%s\n' '---' 'name: repo-safety' \
     'description: Repository write safety.' '---' '' '# Repository safety' '' "$destination" \
     >"$base/skill-source/repo-safety/SKILL.md"
+  printf '%s\n' '---' 'name: firn' '---' '' '# Firn' '' "$firn_destination" \
+    >"$base/modules/north-profile/firn/skills/firn/SKILL.md"
   cat >"$base/switchboard" <<'SH'
 HOOKS=(worktree-guard)
-SKILLS=(repo-safety)
+SKILLS=(repo-safety firn)
 skill_source() {
   case "$1" in
     repo-safety) echo "$HOME/skill-source/repo-safety" ;;
+    firn) echo "$NIXOS_CONFIG/modules/north-profile/firn/skills/firn" ;;
   esac
 }
 SH
@@ -326,6 +331,7 @@ approved_route = [
 claim = [
   { key = "bootstrap.discovery", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "preamble", digest = "$preamble_digest" },
   { key = "repository.write-route", owner = "skill:repo-safety", role = "route", scope = "machine", surface = "bootstrap", section = "Routes", digest = "$route_digest", destination_section = "preamble", destination_digest = "$destination_digest" },
+  { key = "firn.source-root", owner = "skill:firn", role = "owner", scope = "machine", surface = "skill", destination_section = "preamble", destination_digest = "$firn_destination_digest" },
   { key = "credentials.boundary", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Credentials", digest = "$credential_digest" },
   { key = "repo.example.architecture", owner = "repo:example", role = "owner", scope = "repo:example", surface = "repo", section = "Architecture", digest = "$repo_digest" },
 ]
@@ -362,7 +368,7 @@ TOML
     AGENT_POLICY_AGENTS_PROJECTION="$root/projections/agents" \
     AGENT_POLICY_CLAUDE_PROJECTION="$root/projections/claude" \
     AGENT_POLICY_CODEX_PROJECTION="$root/projections/codex" \
-      "$REPO/scripts/agent-config-check.sh" --policy-only --local
+      python3 "$REPO/scripts/agent-policy-contract.py" --repo "$root" --local
   }
 
   expect_policy_reject() {
