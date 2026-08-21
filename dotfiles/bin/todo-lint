@@ -1,0 +1,370 @@
+#!/usr/bin/env python3
+"""Report structural problems in a flat todo record directory.
+
+The default deliberately exits successfully: it is the migration baseline for
+an inherited corpus.  --strict turns every reported finding into exit status 1
+once the corpus is ready to be ratcheted.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import tomllib
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+REQUIRED_FIELDS = ("id", "title", "shape", "life", "updated_at", "owners")
+REFERENCE_FIELDS = {
+    "realizes": "scalar",
+    "plan": "scalar",
+    "depends_on": "list",
+    "supports": "list",
+    "relates_to": "list",
+}
+LIVE_LANE_STATES = {"active", "live"}
+
+
+@dataclass(frozen=True)
+class Finding:
+    code: str
+    severity: str
+    path: str
+    message: str
+
+
+@dataclass
+class Record:
+    path: Path
+    data: dict[str, Any]
+
+
+class Linter:
+    def __init__(self, root: Path, now: datetime, drift_seconds: int) -> None:
+        self.root = root
+        self.now = now
+        self.drift_seconds = drift_seconds
+        self.findings: list[Finding] = []
+        self.records: list[Record] = []
+        self.worktrees: dict[str, dict[str, str | None]] = {}
+
+    def add(self, code: str, path: Path | str, message: str, severity: str = "error") -> None:
+        try:
+            shown = str(Path(path).relative_to(self.root))
+        except ValueError:
+            shown = str(path)
+        self.findings.append(Finding(code, severity, shown, message))
+
+    def run(self) -> list[Finding]:
+        if not self.root.is_dir():
+            self.add("TODO_ROOT_MISSING", self.root, "todo root is not a directory")
+            return self.sorted_findings()
+        self.check_top_level()
+        self.check_records()
+        self.check_references()
+        self.check_lanes()
+        return self.sorted_findings()
+
+    def sorted_findings(self) -> list[Finding]:
+        return sorted(self.findings, key=lambda item: (item.path, item.code, item.message))
+
+    def check_top_level(self) -> None:
+        for entry in sorted(self.root.iterdir(), key=lambda item: item.name):
+            if entry.name == ".git":
+                continue
+            if entry.is_dir():
+                self.add("TOP_LEVEL_SUBDIRECTORY", entry, "todo storage must stay flat")
+            elif not entry.is_file() or entry.suffix.lower() != ".md":
+                self.add("TOP_LEVEL_NON_MARKDOWN", entry, "only Markdown records belong at the todo root")
+
+    def check_records(self) -> None:
+        by_id: dict[str, list[Record]] = {}
+        for path in sorted(self.root.glob("*.md")):
+            if path.name in {"AGENTS.md", "agent-coord.md"}:
+                continue
+            record = self.parse_record(path)
+            if record is None:
+                continue
+            self.records.append(record)
+            record_id = record.data.get("id")
+            if isinstance(record_id, str) and record_id:
+                by_id.setdefault(record_id, []).append(record)
+                if record_id != path.stem:
+                    self.add(
+                        "ID_FILENAME_MISMATCH",
+                        path,
+                        f'id is "{record_id}", but filename stem is "{path.stem}"',
+                    )
+            self.check_record_fields(record)
+            self.check_timestamps(record)
+
+        for record_id, matches in by_id.items():
+            if len(matches) > 1:
+                for record in matches:
+                    self.add("DUPLICATE_ID", record.path, f'id "{record_id}" appears in {len(matches)} records')
+
+    def parse_record(self, path: Path) -> Record | None:
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except UnicodeDecodeError as error:
+            self.add("FRONT_MATTER_INVALID", path, f"record is not UTF-8: {error}")
+            return None
+        if not lines or lines[0] != "+++":
+            self.add("FRONT_MATTER_MISSING", path, "record must start with TOML front matter delimited by +++")
+            return None
+        try:
+            end = lines.index("+++", 1)
+        except ValueError:
+            self.add("FRONT_MATTER_INVALID", path, "opening +++ has no closing delimiter")
+            return None
+        try:
+            data = tomllib.loads("\n".join(lines[1:end]))
+        except tomllib.TOMLDecodeError as error:
+            self.add("FRONT_MATTER_INVALID", path, f"invalid TOML: {error}")
+            return None
+        if not isinstance(data, dict):
+            self.add("FRONT_MATTER_INVALID", path, "front matter must decode to a TOML table")
+            return None
+        return Record(path, data)
+
+    def check_record_fields(self, record: Record) -> None:
+        for field in REQUIRED_FIELDS:
+            if field not in record.data:
+                self.add("FRONT_MATTER_REQUIRED_FIELD", record.path, f'missing required field "{field}"')
+        if not isinstance(record.data.get("id"), str) or not record.data.get("id"):
+            self.add("ID_INVALID", record.path, 'id must be a non-empty string')
+        if "owners" in record.data and not self.is_string_list(record.data["owners"]):
+            self.add("FIELD_TYPE_INVALID", record.path, 'owners must be an array of strings')
+        for field, kind in REFERENCE_FIELDS.items():
+            if field not in record.data:
+                continue
+            value = record.data[field]
+            expected = "a string" if kind == "scalar" else "an array of strings"
+            valid = isinstance(value, str) and bool(value) if kind == "scalar" else self.is_string_list(value)
+            if not valid:
+                self.add("REFERENCE_TYPE_INVALID", record.path, f'{field} must be {expected}')
+
+    @staticmethod
+    def is_string_list(value: Any) -> bool:
+        return isinstance(value, list) and all(isinstance(item, str) and item for item in value)
+
+    def check_references(self) -> None:
+        known_ids = {
+            record.data["id"]
+            for record in self.records
+            if isinstance(record.data.get("id"), str) and record.data["id"]
+        }
+        for record in self.records:
+            for field, kind in REFERENCE_FIELDS.items():
+                value = record.data.get(field)
+                if value is None:
+                    continue
+                if kind == "scalar":
+                    values = [value] if isinstance(value, str) and value else []
+                else:
+                    values = value if self.is_string_list(value) else []
+                for reference in values:
+                    if field == "depends_on" and reference.startswith("external:"):
+                        continue
+                    if reference not in known_ids:
+                        self.add(
+                            "REFERENCE_UNRESOLVED",
+                            record.path,
+                            f'{field} references unknown record id "{reference}"',
+                        )
+
+    def check_timestamps(self, record: Record) -> None:
+        updated = self.parse_timestamp(record, "updated_at")
+        expires = self.parse_timestamp(record, "expires_at") if "expires_at" in record.data else None
+        if updated is not None:
+            if updated > self.now:
+                self.add("TIMESTAMP_FUTURE", record.path, "updated_at is in the future")
+            mtime = datetime.fromtimestamp(record.path.stat().st_mtime, tz=timezone.utc)
+            drift = abs((updated.astimezone(timezone.utc) - mtime).total_seconds())
+            if drift > self.drift_seconds:
+                self.add(
+                    "TIMESTAMP_MTIME_DRIFT",
+                    record.path,
+                    f"updated_at differs from file mtime by {int(drift)} seconds",
+                    severity="warning",
+                )
+        if record.data.get("life") == "active":
+            if "expires_at" not in record.data:
+                self.add("ACTIVE_EXPIRES_AT_MISSING", record.path, "active records must be reasserted with expires_at", "warning")
+            elif expires is not None and expires <= self.now:
+                self.add("ACTIVE_EXPIRES_AT_OVERDUE", record.path, "active record has an overdue expires_at", "warning")
+
+    def parse_timestamp(self, record: Record, field: str) -> datetime | None:
+        value = record.data.get(field)
+        if isinstance(value, datetime):
+            parsed = value
+        elif isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value)
+            except ValueError:
+                self.add("TIMESTAMP_INVALID", record.path, f'{field} is not an ISO 8601 timestamp')
+                return None
+        else:
+            self.add("TIMESTAMP_INVALID", record.path, f'{field} must be an ISO 8601 timestamp')
+            return None
+        if parsed.tzinfo is None:
+            self.add("TIMESTAMP_INVALID", record.path, f'{field} must include a UTC offset')
+            return None
+        return parsed
+
+    def check_lanes(self) -> None:
+        for record in self.records:
+            lanes = record.data.get("lane")
+            if lanes is None:
+                continue
+            if not isinstance(lanes, list):
+                self.add("LANE_TYPE_INVALID", record.path, "lane must be an array of tables")
+                continue
+            for index, lane in enumerate(lanes, 1):
+                self.check_lane(record.path, index, lane)
+
+    def check_lane(self, path: Path, index: int, lane: Any) -> None:
+        label = f"lane {index}"
+        if not isinstance(lane, dict):
+            self.add("LANE_TYPE_INVALID", path, f"{label} must be a TOML table")
+            return
+        missing = [field for field in ("repo", "worktree", "branch", "owner", "state") if not isinstance(lane.get(field), str) or not lane[field]]
+        if missing:
+            self.add("LANE_FIELD_INVALID", path, f"{label} needs non-empty {', '.join(missing)}")
+            return
+        state = lane["state"].strip().casefold()
+        if state not in LIVE_LANE_STATES and state != "reaped":
+            return
+        repo_main = self.code_root() / lane["repo"] / "main"
+        registered = self.registered_worktrees(repo_main, path, label)
+        if registered is None:
+            return
+        worktree = self.expand_path(lane["worktree"])
+        expected_path = os.path.realpath(worktree)
+        registered_entry = registered.get(expected_path)
+        expected_branch = lane["branch"]
+        expected_ref = expected_branch if expected_branch.startswith("refs/heads/") else f"refs/heads/{expected_branch}"
+        if state in LIVE_LANE_STATES:
+            if not worktree.is_dir():
+                self.add("LANE_WORKTREE_MISSING", path, f"{label} live worktree is absent: {worktree}")
+            if registered_entry is None:
+                self.add("LANE_WORKTREE_UNREGISTERED", path, f"{label} is not registered by {repo_main}")
+            elif registered_entry.get("branch") != expected_ref:
+                actual = registered_entry.get("branch") or "detached HEAD"
+                self.add("LANE_BRANCH_MISMATCH", path, f"{label} expects {expected_ref}, registered {actual}")
+            branch = self.git_branch_exists(repo_main, expected_ref)
+            if branch is False:
+                self.add("LANE_BRANCH_MISSING", path, f"{label} live branch is absent: {expected_ref}")
+        else:
+            if os.path.lexists(worktree) or registered_entry is not None:
+                self.add("LANE_REAPED_WORKTREE_PRESENT", path, f"{label} is marked reaped but its worktree remains")
+            branch = self.git_branch_exists(repo_main, expected_ref)
+            if branch is None:
+                return
+            if branch:
+                self.add("LANE_REAPED_BRANCH_PRESENT", path, f"{label} is marked reaped but {expected_ref} remains")
+
+    def code_root(self) -> Path:
+        return Path(os.environ.get("CODE_ROOT", str(Path.home() / "code"))).expanduser()
+
+    @staticmethod
+    def expand_path(value: str) -> Path:
+        return Path(value).expanduser()
+
+    def registered_worktrees(self, repo_main: Path, path: Path, label: str) -> dict[str, dict[str, str | None]] | None:
+        if not repo_main.is_dir():
+            self.add("LANE_REPOSITORY_UNAVAILABLE", path, f"{label} repository checkout is absent: {repo_main}")
+            return None
+        result = subprocess.run(
+            ["git", "-C", str(repo_main), "worktree", "list", "--porcelain"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.add("LANE_REPOSITORY_UNAVAILABLE", path, f"{label} cannot read Git worktree registration: {result.stderr.strip()}")
+            return None
+        entries: dict[str, dict[str, str | None]] = {}
+        current: dict[str, str | None] = {}
+        for line in [*result.stdout.splitlines(), ""]:
+            if not line:
+                if current.get("worktree"):
+                    entries[os.path.realpath(str(current["worktree"]))] = current
+                current = {}
+            elif " " in line:
+                key, value = line.split(" ", 1)
+                current[key] = value
+            else:
+                current[line] = None
+        return entries
+
+    def git_branch_exists(self, repo_main: Path, ref: str) -> bool | None:
+        result = subprocess.run(
+            ["git", "-C", str(repo_main), "show-ref", "--verify", "--quiet", ref],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if result.returncode in (0, 1):
+            return result.returncode == 0
+        return None
+
+
+def parse_now(value: str | None) -> datetime:
+    if value is None:
+        return datetime.now(timezone.utc)
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        raise argparse.ArgumentTypeError("--now must include a UTC offset")
+    return parsed
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="report structural todo-record problems")
+    parser.add_argument("root", nargs="?", default=os.environ.get("TODO_ROOT", str(Path.home() / "code" / "todo")))
+    parser.add_argument("--strict", action="store_true", help="exit 1 when findings are present")
+    parser.add_argument("--format", choices=("text", "json"), default="text")
+    parser.add_argument("--now", help="ISO 8601 timestamp for deterministic expiry checks")
+    parser.add_argument(
+        "--mtime-drift-seconds",
+        type=int,
+        default=172800,
+        help="report updated_at/file-mtime drift beyond this many seconds (default: 172800)",
+    )
+    args = parser.parse_args(argv)
+    if args.mtime_drift_seconds < 0:
+        parser.error("--mtime-drift-seconds must be non-negative")
+    try:
+        args.now = parse_now(args.now)
+    except (ValueError, argparse.ArgumentTypeError) as error:
+        parser.error(f"invalid --now: {error}")
+    return args
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    linter = Linter(Path(args.root).expanduser(), args.now, args.mtime_drift_seconds)
+    findings = linter.run()
+    if args.format == "json":
+        errors = sum(finding.severity == "error" for finding in findings)
+        warnings = len(findings) - errors
+        print(json.dumps({"root": str(linter.root), "findings": [asdict(finding) for finding in findings], "summary": {"findings": len(findings), "errors": errors, "warnings": warnings}}, sort_keys=True))
+    elif findings:
+        for finding in findings:
+            print(f"{finding.severity.upper():7} {finding.code:<30} {finding.path}: {finding.message}")
+        mode = "strict" if args.strict else "report-only"
+        print(f"todo-lint: {len(findings)} finding(s) ({mode})")
+    else:
+        print("todo-lint: clean")
+    return 1 if args.strict and findings else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
