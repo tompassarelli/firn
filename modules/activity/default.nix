@@ -1,9 +1,6 @@
-{ config, lib, pkgs, ... }:
+{ config, firnNative, lib, pkgs, ... }:
 
-let
-  username = config.myConfig.modules.users.username;
-in
-{
+((username: {
   options.myConfig.modules.activity.enable = lib.mkEnableOption "activity — activities own workspaces: two-level layer over niri (daemon + CLI)";
   config = lib.mkIf config.myConfig.modules.activity.enable {
     home-manager.users.${username} = ({ config, ... }: {
@@ -15,7 +12,7 @@ in
           Requisite = [ "graphical-session.target" ];
         };
         Service = {
-          ExecStart = "%h/code/nixos-config/dotfiles/bin/activity daemon";
+          ExecStart = "${firnNative}/bin/activity daemon";
           Restart = "on-failure";
           RestartSec = 2;
         };
@@ -26,4 +23,4 @@ in
       xdg.configFile."activity/activities.edn".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/activity/activities.edn";
     });
   };
-}
+}) config.myConfig.modules.users.username)

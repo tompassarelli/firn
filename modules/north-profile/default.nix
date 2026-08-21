@@ -1,7 +1,6 @@
 { config, lib, ... }:
 
 ((username: {
-  tags = [ development ];
   options.myConfig.modules.north-profile.enable = lib.mkEnableOption "Publish shared agent surfaces at ~/.agents";
   config = lib.mkIf config.myConfig.modules.north-profile.enable {
     home-manager.users.${username} = ({ config, ... }: {
