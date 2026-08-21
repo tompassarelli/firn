@@ -16,6 +16,9 @@ claim = [
   { key = "code.break-forward", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Preserve durable code rules", digest = "e859d692d2346fe4daab879197b570b64ad3ffded545fecbc70aedcafb58344a" },
   { key = "code.dependency-ladder", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Preserve durable code rules", digest = "29a45872c7a8d8c66827ae3a52bf9e65f0fe07d085b5833e84d72e2891280273" },
   { key = "code.comment-constraint", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Preserve durable code rules", digest = "bb44d78838ff67b0e77642b12c12f4feb9d74dbedde21db9c095e01fea4b9160" },
+  { key = "code.upstream-cause", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Preserve durable code rules", digest = "6e55b41573363e4d48fb8817f0e85bc79b4cc52f1f696d9d2bee131d959e0339" },
+  { key = "code.gate-integrity", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Preserve durable code rules", digest = "b89729fa918b291e85c80c1fd824becd31189c39588b7cccc985adca4480fd61" },
+  { key = "code.measured-cause", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Preserve durable code rules", digest = "349b252de4d373bedaf1577cb553c8aab3fc6d3f7b339e89f0d0e4929969292d" },
 
   # Removed bootstrap procedures remain named and are proven in their single
   # authoritative destination by exact skill, section, and normalized digest.

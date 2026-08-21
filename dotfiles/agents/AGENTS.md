@@ -58,3 +58,9 @@ or as `repo:path`, never bare-relative.
   correctness, error handling, or security.
 - A comment records a constraint the code cannot express. Investigation history,
   outputs, and chronology belong in the commit message or private handoff.
+- Fix causes upstream. A local workaround routes around a defect, leaves it in
+  place, and adds a second thing to maintain.
+- Never weaken a test, assertion, or gate to make it pass. Fix what it tests; a
+  gate lowered to go green no longer proves anything.
+- Measure before naming a cause, especially for performance. An unmeasured
+  cause that matches the symptom is a hypothesis, not a diagnosis.
