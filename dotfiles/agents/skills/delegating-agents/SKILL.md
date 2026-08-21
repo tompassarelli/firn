@@ -51,17 +51,28 @@ Treat North presets as templates, not cages: compose a justified custom route
 when its model/deliberation and authority choices are recorded. Prefer
 subscription-backed Codex Luna or Terra for bounded and mid-sized leaves and
 Sol for hard integration. For a direct OpenAI lane, compose the North payload,
-pin model and reasoning on `codex exec`, and use `codex as <account-id>` when
-an account is requested. Dispatch the direct CLI with full access
-(`--dangerously-bypass-approvals-and-sandbox`) and put its scope boundary in
-the brief. If availability is uncertain, inspect installed configuration and
-run one fresh subscription-backed probe. The bootstrap billing boundary still
-applies.
+pin model and reasoning on `codex exec`, and dispatch through
+`north account dispatch --assignment <id> -- exec ...`. The entry point
+refreshes subscription usage, combines headroom with live account assignments,
+records the selected account, and launches `codex as <account-id>` itself.
+Inspect the same decision without launching with
+`north account dispatch --dry-run --json`. Dispatch the direct CLI with full
+access (`--dangerously-bypass-approvals-and-sandbox`) and put its scope boundary
+in the brief. If availability is uncertain, inspect installed configuration
+and run one fresh subscription-backed probe. The bootstrap billing boundary
+still applies.
 
-Route accounts from fresh headroom, then balanced activity/round-robin; exclude
-an exhausted account. Live-only telemetry may guide a commander, but cannot
-grant automated write, routing, or publication authority. Record the assignment
-and observed outcome in `~/code/todo/model-assignment-ledger.md`.
+Raw `Agent`, `Task`, Workflow, or collaboration `spawn_agent` calls have no
+subscription-account selector and are not fleet-dispatch surfaces. A commander
+must not use them when an account is being allocated; use the account-dispatch
+entry point above. User-pinned single-account native work remains outside this
+fleet rule.
+
+The account-dispatch evidence is live-only commander/operator evidence. It
+never becomes Store-authoritative autonomous routing and grants no write or
+publication authority; the brief and lane admission still do that. Record the
+observed outcome in `~/code/todo/model-assignment-ledger.md`; the API's machine
+assignment already records the selected account.
 
 ## Admit before dispatch
 
