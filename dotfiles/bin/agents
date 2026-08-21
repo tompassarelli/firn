@@ -690,7 +690,7 @@ for guard in guards:
         rf"const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[\"']{re.escape(target)}[\"']",
         north_source,
     )
-    forms = [target, *symbols]
+    forms = [target, os.path.basename(target), *symbols]
     for chain in guard.get("north_chains", []):
         body = north_chain_body(chain)
         if body is None:

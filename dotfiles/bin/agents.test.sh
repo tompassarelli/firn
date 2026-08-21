@@ -165,6 +165,7 @@ if [ "${1:-}" = "--hook-target-admission" ]; then
   printf -- '---\nname: firn\n---\n' \
     > "$SB/code/nixos-config/main/modules/north-profile/firn/skills/firn/SKILL.md"
   ag on firn > /dev/null
+  ag on repo-safety > /dev/null
   chk "a synchronized executable target projects to Claude settings" "1" \
     "$(has_cmd /run/current-system/sw/bin/firn-system-policy && echo 1 || echo 0)"
   check_status=0
@@ -226,6 +227,20 @@ assert count == 1
 open(p, "w").write(s)
 PY
   reject_apply "North worker guard-chain WORKER_BASH_GUARDS omits"
+  cp "$NORTH_HARNESS_SOURCE" "$NORTH/sdk/src/harness.ts"
+
+  python3 - "$NORTH/sdk/src/harness.ts" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p).read()
+s, count = re.subn(
+    r'(const EDIT_GUARDS = resolveManagedGuardChain\(\[.*?)("launch-critical-worktree-guard\.sh",?\s*)(.*?\]\);)',
+    r'\1\3', s, count=1, flags=re.S,
+)
+assert count == 1
+open(p, "w").write(s)
+PY
+  reject_apply "North worker guard-chain EDIT_GUARDS omits"
   cp "$NORTH_HARNESS_SOURCE" "$NORTH/sdk/src/harness.ts"
 
   rm -f "$TARGETS/run/current-system/sw/bin/firn-system-policy"
