@@ -58,7 +58,7 @@ global hash, broad compatibility layer, or bespoke row schema, identify:
 
 Fix that semantic boundary first. Conventional machinery may remain as a
 derived physical projection or executor only after its key and invalidation
-rules are stated in those terms. Use `fact-normal-form` to design or admit the
+rules are stated in those terms. Use `fact-modeling` to design or admit the
 Triples; do not invent a parallel fact discipline here.
 
 ## Design the whole path

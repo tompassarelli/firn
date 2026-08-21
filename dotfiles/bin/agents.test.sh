@@ -263,21 +263,21 @@ if [ "${1:-}" = "--verification-skill" ]; then
   exit "$fails"
 fi
 
-if [ "${1:-}" = "--fact-normal-form-skill" ]; then
-  echo "== focused fact-normal-form reachability"
+if [ "${1:-}" = "--fact-modeling-skill" ]; then
+  echo "== focused fact-modeling reachability"
   fresh
   fact_root="$SB/code/beagle/main/store/integrations/north/skills"
-  mkdir -p "$fact_root/fact-normal-form"
-  printf -- '---\nname: fact-normal-form\n---\n' \
-    > "$fact_root/fact-normal-form/SKILL.md"
+  mkdir -p "$fact_root/fact-modeling"
+  printf -- '---\nname: fact-modeling\n---\n' \
+    > "$fact_root/fact-modeling/SKILL.md"
   ag status > /dev/null
-  chk "fact-normal-form seeds off" "skill fact-normal-form off" "$(grep '^skill fact-normal-form ' "$SB/.config/agents/manifest.conf")"
-  chk "fact-normal-form source path resolves" "$fact_root/fact-normal-form/SKILL.md" "$(ag path fact-normal-form)"
-  ag on fact-normal-form > /dev/null
-  chk "fact-normal-form reaches Claude and Codex" "1" "$(test -L "$SB/.config/agents/skills/fact-normal-form" && test -L "$SB/.codex/skills/fact-normal-form" && echo 1 || echo 0)"
-  ag off fact-normal-form > /dev/null
-  chk "off removes both provider links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l -name fact-normal-form | wc -l)"
-  if [ "$fails" -eq 0 ]; then echo "all focused fact-normal-form tests passed"; else echo "$fails focused fact-normal-form test(s) failed"; fi
+  chk "fact-modeling seeds off" "skill fact-modeling off" "$(grep '^skill fact-modeling ' "$SB/.config/agents/manifest.conf")"
+  chk "fact-modeling source path resolves" "$fact_root/fact-modeling/SKILL.md" "$(ag path fact-modeling)"
+  ag on fact-modeling > /dev/null
+  chk "fact-modeling reaches Claude and Codex" "1" "$(test -L "$SB/.config/agents/skills/fact-modeling" && test -L "$SB/.codex/skills/fact-modeling" && echo 1 || echo 0)"
+  ag off fact-modeling > /dev/null
+  chk "off removes both provider links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l -name fact-modeling | wc -l)"
+  if [ "$fails" -eq 0 ]; then echo "all focused fact-modeling tests passed"; else echo "$fails focused fact-modeling test(s) failed"; fi
   exit "$fails"
 fi
 
