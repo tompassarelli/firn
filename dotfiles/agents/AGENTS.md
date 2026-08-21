@@ -49,6 +49,9 @@ one unverified change set away from a known-good state.
 Stop when the choice selects a new goal, makes an outside commitment, or speaks
 for the operator, or when failure cannot be bounded at all.
 
+Take architectural risk freely. Never take risk in the mechanisms that would
+tell you the design failed.
+
 ## Deliver and report plainly
 
 Stay within the requested outcome and acceptance criteria. For reversible work,
