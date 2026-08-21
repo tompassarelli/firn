@@ -67,12 +67,15 @@
 (defn linux? [platform Platform] Bool
   (= (platform-name platform) "Linux"))
 
+(defn platform-effect [] ArgvEffect
+  (capture-effect "select platform" ["uname" "-s"]))
+
 (defn pin-effects [root String] (Vec ArgvEffect)
   [(capture-effect "pin revision"
      ["git" "-C" root "rev-parse" "HEAD"])
    (capture-effect "pin branch"
      ["git" "-C" root "branch" "--show-current"])
-   (capture-effect "select platform" ["uname" "-s"])])
+   (platform-effect)])
 
 (defn system-attribute
   [snapshot Snapshot
@@ -105,6 +108,10 @@
      ["nix" "build" "--no-link" "--print-out-paths"
       (system-attribute snapshot host platform)])])
 
+(defn activate-verified-closure-effect [built-path String] ArgvEffect
+  (inherit-effect "activate verified closure"
+    ["sudo" (str built-path "/bin/switch-to-configuration") "switch"]))
+
 (defn activation-effects
   [snapshot Snapshot
    host String
@@ -114,8 +121,7 @@
     [(inherit-effect "activate system profile"
        ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
         "--set" built-path])
-     (inherit-effect "activate verified closure"
-       ["sudo" (str built-path "/bin/switch-to-configuration") "switch"])]
+     (activate-verified-closure-effect built-path)]
     [(inherit-effect "activate verified closure"
        ["sudo" "darwin-rebuild" "switch" "--flake"
         (str (snapshot-uri snapshot) "#" host)])]))
@@ -126,6 +132,26 @@
       ["nixos-rebuild" "list-generations"])
     (capture-effect "read active generation"
       ["darwin-rebuild" "--list-generations"])))
+
+(defn generation-profile-link [generation String] String
+  (str "/nix/var/nix/profiles/system-" generation "-link"))
+
+(defn generation-resolve-effect [generation String] ArgvEffect
+  (capture-effect "resolve rollback generation"
+    ["readlink" "-e" (generation-profile-link generation)]))
+
+(defn generation-closure-check-effect [built-path String] ArgvEffect
+  (capture-effect "validate rollback closure"
+    ["test" "-x" (str built-path "/bin/switch-to-configuration")]))
+
+(defn rollback-activation-effects
+  [generation String
+   built-path String] (Vec ArgvEffect)
+  [(inherit-effect "activation preflight" ["sudo" "-v"])
+   (inherit-effect "select rollback generation"
+     ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
+      "--switch-generation" generation])
+   (activate-verified-closure-effect built-path)])
 
 (defn generation-tag-effect
   [snapshot Snapshot
@@ -190,6 +216,45 @@
              (recur (+ index 1))
              false)))))
 
+(defn generation-token? [text String] Bool
+  (and (decimal-string? text)
+       (not (= (subs text 0 1) "0"))))
+
+(defn digit-value [character String] Int
+  (cond
+    (= character "0") 0
+    (= character "1") 1
+    (= character "2") 2
+    (= character "3") 3
+    (= character "4") 4
+    (= character "5") 5
+    (= character "6") 6
+    (= character "7") 7
+    (= character "8") 8
+    (= character "9") 9
+    :else -1))
+
+(defn equal-width-decimal-less?
+  [left String
+   right String] Bool
+  (loop [index Int 0]
+    (if (>= index (count left))
+      false
+      (let [left-digit Int (digit-value (subs left index (+ index 1)))
+            right-digit Int (digit-value (subs right index (+ index 1)))]
+        (cond
+          (< left-digit right-digit) true
+          (> left-digit right-digit) false
+          :else (recur (+ index 1)))))))
+
+(defn generation-less?
+  [left String
+   right String] Bool
+  (cond
+    (< (count left) (count right)) true
+    (> (count left) (count right)) false
+    :else (equal-width-decimal-less? left right)))
+
 (defn current-generation-line? [line String] Bool
   (or (str/includes? line "True")
       (str/includes? (str/lower-case line) "current")))
@@ -205,6 +270,25 @@
                    (decimal-string? generation))
             generation
             (recur (+ index 1))))))))
+
+(defn generation-present?
+  [text String
+   generation String] Bool
+  (let [lines (Vec String) (split-lines text)]
+    (loop [index Int 0]
+      (if (>= index (count lines))
+        false
+        (if (= (first-token (nth lines index)) generation)
+          true
+          (recur (+ index 1)))))))
+
+(defn exact-store-path? [text String] Bool
+  (let [trimmed String (str/trim text)]
+    (and (store-path? trimmed)
+         (not (str/includes? trimmed "\n"))
+         (not (str/includes? trimmed "\r"))
+         (not (str/includes? trimmed "\t"))
+         (not (str/includes? trimmed " ")))))
 
 (defn start-event
   [effect ArgvEffect

@@ -155,11 +155,10 @@
                   root revision (str/trim branch-output)))])))])))
 
 (defn select-platform
-  [root String
-   revision String
+  [revision String
    trace-path (U String Nil)
    trace-id String] rebuild/PlatformResult
-  (let [effect rebuild/ArgvEffect (nth (rebuild/pin-effects root) 2)]
+  (let [effect rebuild/ArgvEffect (rebuild/platform-effect)]
     (match (execute-effect effect trace-path trace-id revision)
       [(EffectFailed status) (rebuild/->PlatformRejected (str status))]
       [(EffectSucceeded stdout)
@@ -252,7 +251,7 @@
   (match (pin-snapshot root trace-path trace-id)
     [(SnapshotPinFailed status) (fail-phase status)]
     [(SnapshotPinned snapshot)
-     (match (select-platform root (rebuild/snapshot-revision snapshot)
+     (match (select-platform (rebuild/snapshot-revision snapshot)
               trace-path trace-id)
        [(PlatformRejected name)
         (do
@@ -261,6 +260,135 @@
        [(PlatformSelected platform)
         (run-pinned snapshot host platform snapshot-directory
           trace-path trace-id)])]))
+
+(defn rollback-error
+  [message String
+   status Int] Int
+  (do
+    (stderr-line (str "firn rollback: " message))
+    status))
+
+(defn rollback-stopped
+  [generation String
+   status Int] Int
+  (rollback-error
+    (str "stopped at first failure (status " status ") while selecting generation "
+      generation "; verify the active generation before retrying")
+    status))
+
+(defn activate-generation
+  [generation String
+   built-path String
+   trace-path (U String Nil)
+   trace-id String] Int
+  (match (execute-effects
+           (rebuild/rollback-activation-effects generation built-path)
+           trace-path trace-id (str "generation-" generation))
+    [(SequenceFailed status) (rollback-stopped generation status)]
+    [(SequenceSucceeded stdout)
+     (do
+       (print
+         (str "firn rollback: activated generation " generation
+           " (" built-path ")\n"))
+       0)]))
+
+(defn validate-generation-closure
+  [generation String
+   built-path String
+   trace-path (U String Nil)
+   trace-id String] Int
+  (match (execute-effect (rebuild/generation-closure-check-effect built-path)
+           trace-path trace-id (str "generation-" generation))
+    [(EffectFailed status)
+     (rollback-error
+       (str "generation " generation
+         " does not contain an executable switch-to-configuration (status "
+         status "); no rollback was attempted")
+       status)]
+    [(EffectSucceeded stdout)
+     (activate-generation generation built-path trace-path trace-id)]))
+
+(defn resolve-generation
+  [generation String
+   trace-path (U String Nil)
+   trace-id String] Int
+  (match (execute-effect (rebuild/generation-resolve-effect generation)
+           trace-path trace-id (str "generation-" generation))
+    [(EffectFailed status)
+     (rollback-error
+       (str "generation " generation
+         " could not be resolved to an existing system profile (status "
+         status "); no rollback was attempted")
+       status)]
+    [(EffectSucceeded stdout)
+     (let [built-path String (str/trim stdout)]
+       (if (rebuild/exact-store-path? stdout)
+         (validate-generation-closure
+           generation built-path trace-path trace-id)
+         (rollback-error
+           (str "generation " generation
+             " resolved to an invalid Nix store path; no rollback was attempted")
+           65)))]))
+
+(defn validate-generation-listing
+  [generation String
+   listing String
+   trace-path (U String Nil)
+   trace-id String] Int
+  (let [current (U String Nil) (rebuild/current-generation listing)]
+    (cond
+      (nil? current)
+      (rollback-error
+        "the active generation was not reported; no rollback was attempted"
+        65)
+
+      (not (rebuild/generation-present? listing generation))
+      (rollback-error
+        (str "generation " generation
+          " is not present in the system profile; no rollback was attempted")
+        65)
+
+      (not (rebuild/generation-less? generation current))
+      (rollback-error
+        (str "generation " generation " is not older than active generation "
+          current "; no rollback was attempted")
+        65)
+
+      :else
+      (resolve-generation generation trace-path trace-id))))
+
+(defn run-rollback-linux
+  [generation String
+   trace-path (U String Nil)
+   trace-id String] Int
+  (match (execute-effect
+           (rebuild/generation-query-effect (rebuild/linux-platform))
+           trace-path trace-id (str "generation-" generation))
+    [(EffectFailed status) (rollback-stopped generation status)]
+    [(EffectSucceeded listing)
+     (validate-generation-listing generation listing trace-path trace-id)]))
+
+(defn run-rollback
+  [generation String
+   trace-path (U String Nil)
+   trace-id String] Int
+  (if (not (rebuild/generation-token? generation))
+    (rollback-error
+      "target must be an exact positive decimal generation (for example, 1200)"
+      64)
+    (match (execute-effect (rebuild/platform-effect)
+             trace-path trace-id (str "generation-" generation))
+      [(EffectFailed status) (rollback-stopped generation status)]
+      [(EffectSucceeded stdout)
+       (match (rebuild/platform-from-name (str/trim stdout))
+         [(PlatformRejected name)
+          (rollback-error (str "unsupported platform '" name "'") 69)]
+         [(PlatformSelected platform)
+          (if (rebuild/linux? platform)
+            (run-rollback-linux generation trace-path trace-id)
+            (rollback-error
+              "explicit-generation rollback is supported only on NixOS"
+              69))])])))
 
 (defn required-env [name String] (U String Nil)
   (let [value (U String Nil) (System/getenv name)]
@@ -286,22 +414,32 @@
 
 (defn usage-error [] Int
   (do
-    (stderr-line "Usage: firn host rebuild <host>")
+    (stderr-line
+      (str "Usage:\n"
+        "  firn host rebuild <host>\n"
+        "  firn host rollback <generation>"))
     64))
 
 (defn -main [args (Vec String)] Int
   (if (not (and (= (count args) 3)
-                (= (nth args 0) "host")
-                (= (nth args 1) "rebuild")))
+                (= (nth args 0) "host")))
     (usage-error)
-    (let [root (U String Nil) (repository-root)
-          snapshot-path String (snapshot-directory)
-          trace-path (U String Nil) (required-env "FIRN_TRACE_PATH")
-          trace-id-value (U String Nil) (required-env "FIRN_TRACE_ID")]
-      (if (nil? root)
-        (do
-          (stderr-line
-            "firn rebuild: FIRN_REPO and HOME are not set")
-          64)
-        (run root (nth args 2) snapshot-path trace-path
-          (if (nil? trace-id-value) "" trace-id-value))))))
+    (let [trace-path (U String Nil) (required-env "FIRN_TRACE_PATH")
+          trace-id-value (U String Nil) (required-env "FIRN_TRACE_ID")
+          trace-id String (if (nil? trace-id-value) "" trace-id-value)]
+      (cond
+        (= (nth args 1) "rollback")
+        (run-rollback (nth args 2) trace-path trace-id)
+
+        (= (nth args 1) "rebuild")
+        (let [root (U String Nil) (repository-root)
+              snapshot-path String (snapshot-directory)]
+          (if (nil? root)
+            (do
+              (stderr-line
+                "firn rebuild: FIRN_REPO and HOME are not set")
+              64)
+            (run root (nth args 2) snapshot-path trace-path trace-id)))
+
+        :else
+        (usage-error)))))

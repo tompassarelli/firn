@@ -98,6 +98,61 @@
            (rebuild/generation-tag-effect (snapshot) "42"))
          ["git" "-C" "/repo" "tag" "-f" "gen-42" revision]))))
 
+(defn case-explicit-prior-generation [] Bool
+  (let [(listing String)
+        "40 2026-08-19 11:00:00\n42 2026-08-20 10:00:00 True\n"]
+    (and
+      (rebuild/generation-token? "40")
+      (not (rebuild/generation-token? "latest"))
+      (not (rebuild/generation-token? "040"))
+      (not (rebuild/generation-token? "0"))
+      (rebuild/generation-present? listing "40")
+      (not (rebuild/generation-present? listing "41"))
+      (rebuild/generation-less? "40" "42")
+      (rebuild/generation-less? "999" "1000")
+      (not (rebuild/generation-less? "42" "42"))
+      (not (rebuild/generation-less? "43" "42")))))
+
+(defn case-rollback-invocation [] Bool
+  (let [(resolve rebuild/ArgvEffect)
+        (rebuild/generation-resolve-effect "40")
+        (effects (Vec rebuild/ArgvEffect))
+        (rebuild/rollback-activation-effects
+          "40" "/nix/store/rollback-system")]
+    (and
+      (= (rebuild/argveffect-argv resolve)
+         ["readlink" "-e" "/nix/var/nix/profiles/system-40-link"])
+      (= (rebuild/argveffect-argv
+           (rebuild/generation-closure-check-effect
+             "/nix/store/rollback-system"))
+         ["test" "-x"
+          "/nix/store/rollback-system/bin/switch-to-configuration"])
+      (= (rebuild/effect-phases effects)
+         ["activation preflight"
+          "select rollback generation"
+          "activate verified closure"])
+      (= (rebuild/argveffect-argv (nth effects 1))
+         ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
+          "--switch-generation" "40"])
+      (= (rebuild/argveffect-argv (nth effects 2))
+         ["sudo"
+          "/nix/store/rollback-system/bin/switch-to-configuration"
+          "switch"]))))
+
+(defn case-rollback-failure-propagates [] Bool
+  (let [(result rebuild/Simulation)
+        (rebuild/simulate
+          (rebuild/rollback-activation-effects
+            "40" "/nix/store/rollback-system")
+          [0 0 29]
+          "generation-40")]
+    (and
+      (= (rebuild/simulation-status result) 29)
+      (= (count (rebuild/simulation-executed result)) 3)
+      (= (rebuild/traceevent-status
+           (nth (rebuild/simulation-events result) 5))
+         "error"))))
+
 (defn workflow-effects [] (Vec rebuild/ArgvEffect)
   (let [(snapshot-value rebuild/Snapshot) (snapshot)
         (prebuild (Vec rebuild/ArgvEffect))
@@ -142,6 +197,11 @@
    (->TestResult "committed-snapshot-build" (case-committed-snapshot-build))
    (->TestResult "platform-activation" (case-platform-activation))
    (->TestResult "generation-tagging" (case-generation-tagging))
+   (->TestResult "explicit-prior-generation"
+     (case-explicit-prior-generation))
+   (->TestResult "rollback-invocation" (case-rollback-invocation))
+   (->TestResult "rollback-failure-propagates"
+     (case-rollback-failure-propagates))
    (->TestResult "first-failure-stops" (case-first-failure-stops))
    (->TestResult "store-path-gate" (case-store-path-gate))])
 

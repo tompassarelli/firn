@@ -28,7 +28,7 @@ This catches things the validator can't: input mismatches, evaluation errors in 
 `firn rebuild` is the sanctioned agent-runnable wrapper. Run the relevant checks
 and commit your own changes first.
 
-A rebuild builds a **commit snapshot** (`git+file://<repo>?rev=HEAD`), never the working tree: uncommitted state — yours or any concurrent session's — can neither block it nor leak into a generation. The one gate that remains YOURS: **commit your own changes first**, or they simply won't be in the build (the pipeline prints exactly which in-flight files it excluded). Every generation maps to a commit by construction. `firn rollback` / the boot menu undo a switch.
+A rebuild builds a **commit snapshot** (`git+file://<repo>?rev=HEAD`), never the working tree: uncommitted state — yours or any concurrent session's — can neither block it nor leak into a generation. The one gate that remains YOURS: **commit your own changes first**, or they simply won't be in the build (the pipeline prints exactly which in-flight files it excluded). Every generation maps to a commit by construction. `firn rollback <generation>` / the boot menu undo a switch. Rollback requires an exact positive generation number, verifies that it exists and is older than the active NixOS generation, resolves its immutable store path, then activates it through the same effect boundary as rebuild. It never guesses “previous” or “latest.”
 
 Firn regenerates `.nix`, validates the snapshot in a detached temp worktree, builds the host
 closure with the committed lock, and switches that **exact store path** without

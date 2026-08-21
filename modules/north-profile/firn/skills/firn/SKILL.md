@@ -43,8 +43,9 @@ itself → beagle-authoring.
    committed local `refs/heads/main` remains promotable while the active checkout
    is dirty or off-main because only that Git object enters the build. A missing,
    rewound, or divergent local `main` holds the already-verified pin.
-   It switches the system — sudo, new generation — and `firn rollback` / the
-   boot menu undo it. Raw `nixos-rebuild switch` / `nh switch` and
+   It switches the system — sudo, new generation — and the explicit rollback
+   command below / the boot menu undo it. Raw
+   `nixos-rebuild switch` / `nh switch` and
    `firn repo upgrade now` (wholesale input bumps) stays the USER's — the hook still
    denies those. Build-only verification when validate isn't enough:
    `nix build .#nixosConfigurations.whiterabbit.config.system.build.toplevel --no-link`.
@@ -124,6 +125,18 @@ diffs vs committed `.nix` (drift check). `nix build … --no-link` is full evalu
 when the static checker can't see a build-time problem. The system switch
 (`firn rebuild`) is agent-runnable: it builds and switches a commit snapshot
 (`rev=HEAD`), so commit your own changes first — uncommitted state (anyone's)
-never blocks it and never enters the generation. `firn rollback` undoes.
+never blocks it and never enters the generation.
 `firn repo upgrade now` (input bumps) stays the user's. Only verify `whiterabbit`;
 skip `thinkpad-x1e`.
+
+## Roll back one known NixOS generation
+
+Use `firn rollback <generation>` only with an exact positive decimal generation
+that is present and older than the active generation. Firn refuses before
+mutation unless that generation resolves to one Nix store path containing an
+executable `switch-to-configuration`; it never guesses “previous” or “latest.”
+
+Success prints the selected generation and resolved store path. Afterward, run
+`firn host gen` and require `current:` to equal the requested generation before
+treating recovery as complete. A failed activation preserves its status and
+warns that the profile may have changed; run the same check before retrying.

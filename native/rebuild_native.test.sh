@@ -116,13 +116,37 @@ case "$name" in
       '6 2026-08-19' \
       '7 2026-08-20 current'
     ;;
+  readlink)
+    if [[ "${1:-}" == -e \
+        && "${2:-}" == /nix/var/nix/profiles/system-40-link ]]; then
+      printf '%s\n' '/nix/store/controlled-rollback-system'
+    else
+      printf 'unresolved generation link: %s\n' "${2:-missing}" >&2
+      exit 1
+    fi
+    ;;
+  test)
+    if [[ "${1:-}" != -x \
+        || "${2:-}" != /nix/store/controlled-rollback-system/bin/switch-to-configuration ]]; then
+      printf 'invalid rollback closure check: %s %s\n' \
+        "${1:-missing}" "${2:-missing}" >&2
+      exit 1
+    fi
+    ;;
   firn)
     if [[ "${VALIDATE_FAIL:-0}" == 1 ]]; then
       printf 'controlled validation failure\n' >&2
       exit 17
     fi
     ;;
-  sudo|systemd-run)
+  sudo)
+    if [[ "${ROLLBACK_SWITCH_FAIL:-0}" == 1 \
+        && "${1:-}" == */bin/switch-to-configuration ]]; then
+      printf 'controlled rollback activation failure\n' >&2
+      exit 29
+    fi
+    ;;
+  systemd-run)
     ;;
   *)
     printf 'unexpected fake command: %s\n' "$name" >&2
@@ -131,7 +155,7 @@ case "$name" in
 esac
 EOF
 chmod +x "$fakebin/command-stub"
-for command in git uname nix nixos-rebuild darwin-rebuild firn sudo systemd-run; do
+for command in git uname nix nixos-rebuild darwin-rebuild readlink test firn sudo systemd-run; do
   ln -s command-stub "$fakebin/$command"
 done
 
@@ -224,6 +248,97 @@ if rg -q $'^nix\t|worktree\tremove|nix-env|switch-to-configuration' \
     "$scratch/validation-failure.commands"; then
   die "a later phase ran after failed validation"
 fi
+
+run_rollback_case() {
+  local name="$1" platform="$2" generation="$3"
+  shift 3
+  : >"$scratch/$name.commands"
+  rm -f "$scratch/$name.trace"
+  set +e
+  timeout --foreground 30 env \
+    PATH="$fakebin:$PATH" \
+    FIRN_TRACE_PATH="$scratch/$name.trace" \
+    FIRN_TRACE_ID="$name" \
+    FIRN_COMMAND_LOG="$scratch/$name.commands" \
+    CASE_PLATFORM="$platform" \
+    "$@" "$scratch/rebuild-native" host rollback "$generation" \
+    >"$scratch/$name.out" 2>"$scratch/$name.err"
+  local status=$?
+  set -e
+  printf '%s\n' "$status" >"$scratch/$name.status"
+}
+
+run_rollback_case rollback-invalid Linux latest env
+[[ "$(<"$scratch/rollback-invalid.status")" == 64 ]] \
+  || die "non-generation rollback target was accepted"
+[[ ! -s "$scratch/rollback-invalid.commands" ]] \
+  || die "invalid rollback target executed an effect"
+rg -Fq 'target must be an exact positive decimal generation' \
+  "$scratch/rollback-invalid.err" \
+  || die "invalid rollback target did not explain the required form"
+
+run_rollback_case rollback-missing Linux 41 env
+[[ "$(<"$scratch/rollback-missing.status")" == 65 ]] \
+  || die "missing rollback generation was accepted"
+if rg -q 'readlink|test|sudo|switch-generation|switch-to-configuration' \
+    "$scratch/rollback-missing.commands"; then
+  die "missing rollback generation reached resolution or activation"
+fi
+rg -Fq 'generation 41 is not present in the system profile' \
+  "$scratch/rollback-missing.err" \
+  || die "missing rollback generation was not actionable"
+
+run_rollback_case rollback-success Linux 40 env
+[[ "$(<"$scratch/rollback-success.status")" == 0 ]] \
+  || die "controlled rollback failed"
+cut -f1 "$scratch/rollback-success.commands" \
+  >"$scratch/rollback-success.names"
+cat >"$scratch/rollback-success.expected-names" <<'EOF'
+uname
+nixos-rebuild
+readlink
+test
+sudo
+sudo
+sudo
+EOF
+cmp -s "$scratch/rollback-success.expected-names" \
+  "$scratch/rollback-success.names" \
+  || {
+    diff -u "$scratch/rollback-success.expected-names" \
+      "$scratch/rollback-success.names" >&2 || true
+    die "rollback effect order changed"
+  }
+rg -Fq $'readlink\t-e\t/nix/var/nix/profiles/system-40-link' \
+  "$scratch/rollback-success.commands" \
+  || die "rollback did not resolve the exact generation link"
+rg -Fq $'sudo\tnix-env\t--profile\t/nix/var/nix/profiles/system\t--switch-generation\t40' \
+  "$scratch/rollback-success.commands" \
+  || die "rollback did not select the exact profile generation"
+rg -Fq $'sudo\t/nix/store/controlled-rollback-system/bin/switch-to-configuration\tswitch' \
+  "$scratch/rollback-success.commands" \
+  || die "rollback did not activate the resolved closure"
+rg -Fq 'firn rollback: activated generation 40 (/nix/store/controlled-rollback-system)' \
+  "$scratch/rollback-success.out" \
+  || die "rollback success receipt is missing"
+[[ "$(rg -c 'span_start' "$scratch/rollback-success.trace")" == 7 ]] \
+  || die "rollback trace start count changed"
+[[ "$(rg -c 'span_end' "$scratch/rollback-success.trace")" == 7 ]] \
+  || die "rollback trace end count changed"
+
+run_rollback_case rollback-failure Linux 40 env ROLLBACK_SWITCH_FAIL=1
+[[ "$(<"$scratch/rollback-failure.status")" == 29 ]] \
+  || die "rollback activation failure status was not preserved"
+if rg -q 'firn rollback: activated generation' \
+    "$scratch/rollback-failure.out"; then
+  die "failed rollback emitted a success receipt"
+fi
+rg -Fq 'verify the active generation before retrying' \
+  "$scratch/rollback-failure.err" \
+  || die "rollback failure did not report the uncertain active state"
+rg -Fq '"name":"activate verified closure","status":"error"' \
+  "$scratch/rollback-failure.trace" \
+  || die "rollback failure trace event is missing"
 
 if ldd "$scratch/rebuild-native" \
     | rg -qi 'racket|clojure|babashka|java'; then

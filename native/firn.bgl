@@ -17,6 +17,7 @@
   (FlakeInputsCommand [token Bool])
   (FlakeInputResolveCommand [token Bool])
   (HostRebuildCommand [token Bool])
+  (HostRollbackCommand [token Bool])
   (HostImpactCommand [token Bool])
   (HostListCommand [token Bool])
   (HostStatusCommand [token Bool])
@@ -148,6 +149,14 @@
     "" ""
     (->HostRebuildCommand false) (->NativeRebuildFamily false)
     (->CurrentHostLeaf false)))
+
+(def host-rollback FirnCommand
+  (->FirnCommand
+    "host" "rollback" "<generation>" "  "
+    "activate one exact prior NixOS system-profile generation"
+    "" ""
+    (->HostRollbackCommand false) (->NativeRebuildFamily false)
+    (->RequiredLeaf false)))
 
 (def host-impact FirnCommand
   (->FirnCommand
@@ -486,7 +495,7 @@
   [(->CommandGroup [flake-inputs])
    (->CommandGroup [flake-input-resolve])
    (->CommandGroup
-     [host-rebuild host-impact host-list host-status host-gen])
+     [host-rebuild host-rollback host-impact host-list host-status host-gen])
    (->CommandGroup
      [module-list module-refs module-status module-add module-enable
       module-disable])
@@ -558,8 +567,9 @@
     "firn — config management\n\n"
     "Usage:\n"
     "  firn <node> <edge> [<leaf>]  [<node> <edge> [<leaf>] ...]\n\n"
-    "Operator shortcut:\n"
-    "  firn rebuild          build + validate + switch (current host)\n\n"
+    "Operator shortcuts:\n"
+    "  firn rebuild [host]          build + validate + switch\n"
+    "  firn rollback <generation>  activate one exact prior generation\n\n"
     "Common graph commands:\n"
     (common-commands-text)
     "\nFull graph:\n\n"
@@ -742,6 +752,9 @@
 (defn rebuild-alias? [args (Vec String)] Bool
   (and (> (count args) 0) (= (nth args 0) "rebuild")))
 
+(defn rollback-alias? [args (Vec String)] Bool
+  (and (> (count args) 0) (= (nth args 0) "rollback")))
+
 (defn parse-rebuild-alias [args (Vec String)] DispatchDecision
   (if (or (> (count args) 2)
           (and (= (count args) 2) (starts-with-dash? (nth args 1))))
@@ -757,6 +770,19 @@
              (->ExplicitLeaf (nth args 1))
              (->CurrentHostDefault false)))]))))
 
+(defn parse-rollback-alias [args (Vec String)] DispatchDecision
+  (if (not (and (= (count args) 2)
+                (not (starts-with-dash? (nth args 1)))))
+    (->DispatchError "Usage: firn rollback <generation>\n" 1)
+    (->DispatchPlanned
+      (->DispatchPlan
+        [(->DispatchStep
+           (->HostRollbackCommand false)
+           (->NativeRebuildFamily false)
+           "host"
+           "rollback"
+           (->ExplicitLeaf (nth args 1)))]))))
+
 (defn incomplete-walk-text [] String
   (str "firn: incomplete walk; expected <node> <edge> [<leaf>]\n"
     "  available nodes: " (joined-node-names) "\n"))
@@ -768,6 +794,9 @@
 
     (rebuild-alias? args)
     (parse-rebuild-alias args)
+
+    (rollback-alias? args)
+    (parse-rollback-alias args)
 
     (= (count args) 1)
     (let [node String (nth args 0)]
@@ -868,8 +897,15 @@
       [(NativeSchemaFamily token) (schema/-main args)]
       [(NativeRepoWorkflowFamily token) (repo-workflows/-main args)]
       [(NativeRebuildFamily token)
-       (if (= edge "impact")
+       (cond
+         (= edge "impact")
          (run-impact (leaf-host (dispatchstep-leaf step)))
+
+         (= edge "rollback")
+         (rebuild/-main
+           ["host" "rollback" (leaf-host (dispatchstep-leaf step))])
+
+         :else
          (rebuild/-main
            ["host" "rebuild" (leaf-host (dispatchstep-leaf step))]))]
       [(NativeCiPolicyFamily token) 64])))

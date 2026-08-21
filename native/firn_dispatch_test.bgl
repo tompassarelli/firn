@@ -45,6 +45,7 @@
     [(FlakeInputsCommand token) "flake-inputs"]
     [(FlakeInputResolveCommand token) "flake-input-resolve"]
     [(HostRebuildCommand token) "host-rebuild"]
+    [(HostRollbackCommand token) "host-rollback"]
     [(HostImpactCommand token) "host-impact"]
     [(HostListCommand token) "host-list"]
     [(HostStatusCommand token) "host-status"]
@@ -88,7 +89,7 @@
 
 (defn case-registry-and-owners [] Bool
   (and
-    (= (firn/command-count) 43)
+    (= (firn/command-count) 44)
     (= (owner-name "tag" "resolve") "tag")
     (= (owner-name "flake-input" "resolve") "flake-input")
     (= (owner-name "module" "refs") "inventory")
@@ -98,6 +99,7 @@
     (= (owner-name "schema" "extract") "schema")
     (= (owner-name "repo" "doctor") "repo-workflow")
     (= (owner-name "host" "rebuild") "rebuild")
+    (= (owner-name "host" "rollback") "rebuild")
     (= (family-name (firn/->NativeCiPolicyFamily false)) "ci-policy")
     (= (owner-name "repo" "missing") "missing")
     (= (firn/firncommand-summary firn/secret-edit)
@@ -197,6 +199,22 @@
       [(DispatchHelp text status) false]
       [(DispatchError text status)
        (and (= status 1) (= text "Usage: firn rebuild [host]\n"))])
+    (match (firn/parse-dispatch ["rollback" "40"])
+      [(DispatchPlanned plan)
+       (let [(step firn/DispatchStep)
+             (nth (firn/dispatchplan-steps plan) 0)]
+         (and (= (command-name (firn/dispatchstep-command step))
+                 "host-rollback")
+              (= (leaf-kind (firn/dispatchstep-leaf step)) "explicit")
+              (= (leaf-value (firn/dispatchstep-leaf step)) "40")))]
+      [(DispatchHelp text status) false]
+      [(DispatchError text status) false])
+    (match (firn/parse-dispatch ["rollback"])
+      [(DispatchPlanned plan) false]
+      [(DispatchHelp text status) false]
+      [(DispatchError text status)
+       (and (= status 1)
+            (= text "Usage: firn rollback <generation>\n"))])
     (match (firn/parse-dispatch ["--help" "ignored"])
       [(DispatchPlanned plan) false]
       [(DispatchHelp text status)
@@ -308,11 +326,12 @@
 
 (defn case-documentation-and-diagnostics [] Bool
   (and
-    (= (firn/command-count) 43)
+    (= (firn/command-count) 44)
     (all-documented-commands-planned?)
     (all-required-leaves-diagnose?)
     (error-diagnostic? (firn/parse-dispatch ["unknown" "edge"]))
-    (error-diagnostic? (firn/parse-dispatch ["rebuild" "--bad"]))))
+    (error-diagnostic? (firn/parse-dispatch ["rebuild" "--bad"]))
+    (error-diagnostic? (firn/parse-dispatch ["rollback"]))))
 
 (defn cases [] (Vec TestResult)
   [(->TestResult "registry-and-owners" (case-registry-and-owners))
