@@ -167,6 +167,23 @@ if [ "${1:-}" = "--hook-target-admission" ]; then
   ag on firn > /dev/null
   chk "a synchronized executable target projects to Claude settings" "1" \
     "$(has_cmd /run/current-system/sw/bin/firn-system-policy && echo 1 || echo 0)"
+  check_status=0
+  ag check >"$SB/check.out" 2>"$SB/check.err" || check_status=$?
+  chk "read-only check accepts synchronized hook projections" "0" "$check_status"
+  python3 - "$SB/.claude/settings.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+d["hooks"] = {}
+json.dump(d, open(p, "w"))
+PY
+  check_status=0
+  ag check >"$SB/check-drift.out" 2>"$SB/check-drift.err" || check_status=$?
+  chk "read-only check rejects drifted hook projections" "1" "$check_status"
+  grep -Fq "Claude settings hooks drifted" "$SB/check-drift.err" \
+    && ok "drift names Claude hook projection" \
+    || bad "drift names Claude hook projection" "$(cat "$SB/check-drift.err")"
+  ag apply > /dev/null
   before="$(sha256sum "$SB/.claude/settings.json" | awk '{print $1}')"
   reject_apply() { # expected error needle; no provider surface may change
     local needle="$1" status=0 after

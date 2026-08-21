@@ -57,6 +57,7 @@
   myConfig.modules.babashka.enable = true;
   myConfig.modules.north-store.enable = true;
   myConfig.modules.agent-slice.enable = true;
+  myConfig.modules.delivery-liveness.enable = true;
   systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
   sops.secrets."wireguard-laptop".sopsFile = ../../secrets/wireguard.yaml;

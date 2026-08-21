@@ -1305,6 +1305,70 @@ status() {
   done < <(dir_rows)
 }
 
+check() {
+  # Read-only counterpart to `apply`: use exactly the same activity derivation
+  # and admission gate, then prove the hook projections still describe it.
+  # A periodic liveness check must not heal a broken projection invisibly.
+  ensure_manifest
+  load_activity
+  local on_hooks=() hname all_hook_lines active_hook_lines
+  for hname in ${ACT_HOOKS[@]+"${ACT_HOOKS[@]}"}; do
+    if is_active "$hname"; then on_hooks+=("$hname"); fi
+  done
+  admit_hook_targets "${on_hooks[@]}"
+  printf -v all_hook_lines '%s\n' "${HOOKS[@]}"
+  printf -v active_hook_lines '%s\n' "${on_hooks[@]}"
+  python3 - "$SETTINGS" "$STATE/activity.conf" "$FRAGMENTS" \
+    "$all_hook_lines" "$active_hook_lines" <<'PY'
+import json, os, sys
+
+settings_path, activity_path, fragments_dir, all_hooks, active_hooks = sys.argv[1:]
+all_hooks = [name for name in all_hooks.split("\n") if name]
+active_hooks = [name for name in active_hooks.split("\n") if name]
+
+try:
+    settings = json.load(open(settings_path))
+except Exception as exc:
+    raise SystemExit(f"agents: hook projection check failed: {settings_path}: {exc}")
+
+expected = {}
+for name in active_hooks:
+    try:
+        fragment = json.load(open(os.path.join(fragments_dir, name + ".json")))
+        entries = fragment["entries"]
+    except Exception as exc:
+        raise SystemExit(f"agents: hook projection check failed: {name}: {exc}")
+    for entry in entries:
+        event = entry["event"]
+        matcher = entry["matcher"]
+        blocks = expected.setdefault(event, [])
+        for block in blocks:
+            if block.get("matcher") == matcher:
+                block["hooks"].append(entry["hook"])
+                break
+        else:
+            block = {"hooks": [entry["hook"]]}
+            if matcher is not None:
+                block["matcher"] = matcher
+            blocks.append(block)
+
+if settings.get("hooks", {}) != expected:
+    raise SystemExit("agents: hook projection check failed: Claude settings hooks drifted")
+
+try:
+    rows = dict(line.split()[1:] for line in open(activity_path)
+                if line.startswith("hook "))
+except Exception as exc:
+    raise SystemExit(f"agents: hook projection check failed: {activity_path}: {exc}")
+expected_rows = {name: ("on" if name in active_hooks else "off")
+                 for name in all_hooks}
+if rows != expected_rows:
+    raise SystemExit("agents: hook projection check failed: activity projection drifted")
+
+print(f"checked: {len(active_hooks)} active hook targets and projections")
+PY
+}
+
 apply() {
   ensure_manifest
   # Read once, up front: every composition below is decided by ACTIVITY, never
@@ -2058,11 +2122,12 @@ PY
 
 case "${1:-status}" in
   status) status ;;
+  check) check ;;
   on)  shift; flip on "$@"; ;;
   off) shift; flip off "$@" ;;
   apply) apply ;;
   path) shift; path_of "${1:?agents: path requires a name}" ;;
   export-plugin) shift; export_plugin "$@" ;;
-  *) echo "usage: agents [status] | on|off <name>|--all | path <name> | apply" \
+  *) echo "usage: agents [status|check] | on|off <name>|--all | path <name> | apply" \
        "| export-plugin <module> [dest] [--force] [--description <text>]" >&2; exit 2 ;;
 esac
