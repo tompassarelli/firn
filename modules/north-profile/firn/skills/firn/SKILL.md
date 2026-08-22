@@ -3,11 +3,11 @@ name: firn
 category: nixos
 description: >-
   Use whenever editing ~/code/nixos-config (firn): packages, modules, services,
-  host config, hooks/skills, inputs, or any "install X system-wide" request.
-  Write interface is .bnix (compiled to .nix — never edit .nix). System switch
-  (firn rebuild) is agent-runnable; it builds a commit snapshot (rev=HEAD), so
-  commit your own changes first — nobody's uncommitted state blocks or leaks.
-  NOT general Nix in other repos.
+  host config, hooks/skills, inputs, live/out-of-store entrypoints, or any
+  "install X system-wide" request. Write interface is .bnix (compiled to .nix
+  — never edit .nix). System switch (firn rebuild) is agent-runnable; it builds
+  a commit snapshot (rev=HEAD), so commit your own changes first — nobody's
+  uncommitted state blocks or leaks. NOT general Nix in other repos.
 hooks:
   - firn-system-policy
 ---
@@ -22,6 +22,35 @@ itself → beagle-authoring.
 ```
 *.bnix  ──(firn build)──▶  *.nix  ──(firn rebuild)──▶  system
 ```
+
+## Keep live tools out of the store
+
+Beagle and Firn are high-churn development tools. Keep their normal authoring
+and activation commands outside Nix derivations:
+
+```text
+~/.local/bin/*  ──out-of-store──▶  nixos-config:dotfiles/bin/*
+beagle          ────────────────▶  ~/code/beagle/main/bin/beagle
+firn            ────────────────▶  current Firn source + live Beagle
+```
+
+`BEAGLE_PATH` may select an explicit alternate Beagle checkout. Reusing a local
+worktree must remain a direct process boundary; a `path:` flake input still
+copies that worktree into `/nix/store` and is not a live development path.
+
+Do not add Beagle as a Firn flake input or package, run `beagle` or
+`beagle native-exe` in `runCommand` or another derivation, introduce or extend
+`makeFirnNative`, or require a Beagle release, pin, lock update, or system
+rebuild to test a Beagle or Firn edit. Do not repair such wiring with writable
+store-build caches, package provenance, longer bounds, or more package tests;
+remove the store boundary from the normal loop.
+
+Nix may declare the out-of-store link or a tiny stable launcher that executes
+the live path. It may consume committed `.nix` configuration or an already
+proven materialized artifact, but it does not compile, pin, cache, or qualify
+the live Beagle/Firn toolchain. A separately invoked frozen package is valid
+only for a named release, CI, archival, or recovery requirement; it is never
+the default authoring or activation dependency and never blocks that loop.
 
 ## The four rules that bite
 
@@ -38,11 +67,10 @@ itself → beagle-authoring.
    tree — commit YOUR changes first or they won't be in the build.** No
    session's uncommitted state (yours or a peer's) can block the rebuild or
    leak into the generation; the pipeline prints exactly which in-flight files
-   it excluded and validates the snapshot itself. For local inputs
-   (`~/code/beagle`, `~/code/north`), the exact
-   committed local `refs/heads/main` remains promotable while the active checkout
-   is dirty or off-main because only that Git object enters the build. A missing,
-   rewound, or divergent local `main` holds the already-verified pin.
+   it excluded and validates the snapshot itself. This snapshots Firn's
+   committed configuration; it does not authorize turning live local tools
+   into flake inputs or store packages. `beagle` and `firn` must already resolve
+   through their out-of-store paths before the rebuild starts.
    It switches the system — sudo, new generation — and the explicit rollback
    command below / the boot menu undo it. Raw
    `nixos-rebuild switch` / `nh switch` and
