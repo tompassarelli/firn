@@ -94,7 +94,14 @@ run_check() {
     return 2
   fi
 
-  local file_count=0 root repo_dir repo path full rule pattern hit line body
+  local candidates="$scratch/candidates.zlist"
+  local matches="$scratch/matches.zlist"
+  : >"$candidates"
+  : >"$matches"
+  declare -A logical_by_full=()
+  declare -A root_by_full=()
+
+  local file_count=0 root repo_dir repo path full
   while IFS= read -r root; do
     [[ -n "$root" ]] || continue
     if [[ ! -d "$root" ]] ||
@@ -115,25 +122,9 @@ run_check() {
         continue
       fi
       ((file_count += 1))
-      for rule in R1 R2; do
-        [[ "$rule" == R1 ]] && pattern="$r1" || pattern="$r2"
-        while IFS= read -r hit; do
-          line="${hit%%:*}"
-          body="${hit#*:}"
-          [[ "$body" == *hardcoded-repo-path:allow* ]] && continue
-          printf '%s\t%s\t%s\t%s\t%s\n' \
-            "$repo/$path" "$rule" "$line" "$root" "$body" >>"$findings"
-        done < <(rg -n --no-heading --color never "$pattern" "$full" || true)
-      done
-      if [[ -x "$full" ]]; then
-        while IFS= read -r hit; do
-          line="${hit%%:*}"
-          body="${hit#*:}"
-          [[ "$body" == *hardcoded-repo-path:allow* ]] && continue
-          printf '%s\tR3\t%s\t%s\t%s\n' \
-            "$repo/$path" "$line" "$root" "$body" >>"$findings"
-        done < <(rg -n --no-heading --color never "$r3" "$full" || true)
-      fi
+      logical_by_full["$full"]="$repo/$path"
+      root_by_full["$full"]="$root"
+      printf '%s\0' "$full" >>"$candidates"
     done < <(check_git -C "$root" ls-files -z)
   done < <(check_roots)
 
@@ -142,6 +133,42 @@ run_check() {
       "$file_count" >&2
     return 2
   fi
+
+  # Discover matching files in a few argument-sized batches before inspecting
+  # their exact lines. Running ripgrep for every tracked file made the commit
+  # hook spend almost all of its time launching thousands of empty searches.
+  xargs -0 -r rg -l --null --no-heading --color never \
+    -e "$r1" -e "$r2" -e "$r3" -- <"$candidates" >"$matches" || true
+
+  local logical rule pattern hit line body
+  while IFS= read -r -d '' full; do
+    logical="${logical_by_full[$full]:-}"
+    root="${root_by_full[$full]:-}"
+    if [[ -z "$logical" || -z "$root" ]]; then
+      printf 'hardcoded-repo-path-check: candidate escaped tracked inventory: %s\n' \
+        "$full" >&2
+      return 2
+    fi
+    for rule in R1 R2; do
+      [[ "$rule" == R1 ]] && pattern="$r1" || pattern="$r2"
+      while IFS= read -r hit; do
+        line="${hit%%:*}"
+        body="${hit#*:}"
+        [[ "$body" == *hardcoded-repo-path:allow* ]] && continue
+        printf '%s\t%s\t%s\t%s\t%s\n' \
+          "$logical" "$rule" "$line" "$root" "$body" >>"$findings"
+      done < <(rg -n --no-heading --color never "$pattern" "$full" || true)
+    done
+    if [[ -x "$full" ]]; then
+      while IFS= read -r hit; do
+        line="${hit%%:*}"
+        body="${hit#*:}"
+        [[ "$body" == *hardcoded-repo-path:allow* ]] && continue
+        printf '%s\tR3\t%s\t%s\t%s\n' \
+          "$logical" "$line" "$root" "$body" >>"$findings"
+      done < <(rg -n --no-heading --color never "$r3" "$full" || true)
+    fi
+  done <"$matches"
 
   [[ -f "$CHECK_ALLOWLIST" ]] || {
     printf 'hardcoded-repo-path-check: missing allowlist: %s\n' "$CHECK_ALLOWLIST" >&2

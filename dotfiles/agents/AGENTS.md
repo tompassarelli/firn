@@ -21,6 +21,10 @@ Files under `~/.agents`, `~/.claude`, `~/.codex`, and `/etc/codex` are
 projections, not policy sources, and must not be hand-edited. Change the owning
 source in its repository and use its sanctioned projection mechanism.
 
+## Preserve development velocity
+
+- Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification`.
+
 ## Keep hard boundaries
 
 Never disclose credentials or introduce provider API keys, API-key helpers, or

@@ -1,11 +1,16 @@
 version = 1
 
+approved_route = [
+  { key = "verification.loop-roi-route", owner = "skill:verification", text = "- Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification`.", destination_section = "Price every development loop", destination_digest = "59767181bf6e236841f9584416af473e36a9152e1926b9375969bd2c231a8d93" },
+]
+
 # Every normative block has one explicit semantic key. Digests are over the
 # whitespace-normalized block text; headings and code blocks are not claims.
 claim = [
   { key = "bootstrap.layering", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "preamble", digest = "d8e8bfa2d5669d949482eaf9e478765d50700bf955640a9abf8d8d36283a4d6f" },
   { key = "instructions.repository-discovery", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Discover applicable instructions", digest = "5293878fb7670bee54af4c13a58494fc4e7f159cfbbfdcd5527c7f5477a1577b" },
   { key = "instructions.skill-loading", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Discover applicable instructions", digest = "dfc424b1fb34f862e2ac35177b6463b788c5c2656e40ac69dca204cf133a08be" },
+  { key = "verification.loop-roi-route", owner = "skill:verification", role = "route", scope = "machine", surface = "bootstrap", section = "Preserve development velocity", digest = "cfc8a317f7e2da76f0bcb5076554e85985ca0dd4b4018cf9b0ef7978894371c4", destination_section = "Price every development loop", destination_digest = "59767181bf6e236841f9584416af473e36a9152e1926b9375969bd2c231a8d93" },
   { key = "agent-policy.projection-authority", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Respect source authority", digest = "752d6ec2fea2b3306f1b1d3d376df4146f39d6146ff6f49209258ff3bbab984c" },
   { key = "credentials.subscription-only", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Keep hard boundaries", digest = "64f492f47e938cd57e61c721674cfa3315a1fee850ad2206b2b0ff2c71d599e7" },
   { key = "destructive.path-boundary", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Keep hard boundaries", digest = "3578506a32d644a21f022cce2bafdff702282cd23b6cd2b00dbffc1590e73906" },
@@ -29,6 +34,8 @@ claim = [
   # Removed bootstrap procedures remain named and are proven in their single
   # authoritative destination by exact skill, section, and normalized digest.
   { key = "verification.proportional-evidence", owner = "skill:verification", role = "owner", scope = "machine", surface = "skill", destination_section = "Choose the profile", destination_digest = "fb50336b404e35f0b9c53ad2cb206a4ad7fb4338545c92fd610cfef3fce6c6c0" },
+  { key = "verification.loop-roi", owner = "skill:verification", role = "owner", scope = "machine", surface = "skill", destination_section = "Price every development loop", destination_digest = "59767181bf6e236841f9584416af473e36a9152e1926b9375969bd2c231a8d93" },
+  { key = "verification.loop-telemetry", owner = "skill:verification", role = "owner", scope = "machine", surface = "skill", destination_section = "Record loop outcomes", destination_digest = "9e31e1e865d07774c366808490812df43b198537bcd93cb465e7c0bd10e738fc" },
   { key = "verification.hermeticity", owner = "skill:verification", role = "owner", scope = "machine", surface = "skill", destination_section = "Reject verification theatre", destination_digest = "b2906afa7487f7db559b58a73bd462cbc1d096cb0e4a1ae395f92cba3c70d6bb" },
   { key = "verification.proof-layer", owner = "skill:verification", role = "owner", scope = "machine", surface = "skill", destination_section = "Select a decision instrument", destination_digest = "4ba9b6ea16e87d03708a80afa1489ccb0dd2ddfc4de79bfc133045c24435d1c1" },
   { key = "release.gate-qualification", owner = "skill:verification", role = "owner", scope = "machine", surface = "skill", destination_section = "Choose the profile", destination_digest = "fb50336b404e35f0b9c53ad2cb206a4ad7fb4338545c92fd610cfef3fce6c6c0" },

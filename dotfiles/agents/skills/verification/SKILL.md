@@ -2,9 +2,9 @@
 name: verification
 description: >-
   Select, run, supervise, and interpret proportionate evidence. Use for tests,
-  checks, debugging reproductions, bug validation, CI, release preflight,
-  performance measurements, or any claim that work is proved, passing, fixed,
-  stable, or ready to publish.
+  checks, compile/build/format/generation loops, debugging reproductions, bug
+  validation, CI, release preflight, performance measurements, or any claim
+  that work is proved, passing, fixed, stable, or ready to publish.
 ---
 
 # Verification
@@ -12,6 +12,23 @@ description: >-
 Choose a profile before running a check. State the claim and what pass or fail
 changes. If both outcomes lead to the same action, do not run it. Stop as soon
 as the named decision is made.
+
+## Price every development loop
+
+Before each compile, test, build, format, generation, or equivalent development-loop invocation, including the first, state the decision it can change, expected wall time and its measured or explicit prior, remaining invocations `N >= 1`, smallest credible optimization cost `C`, expected saving per invocation `S`, break-even `ceil(C/S)`, and `run` or `optimize`. Count the current invocation in `N`; use a conservative estimate when history is absent. If no credible optimization is available, record `C=none`, `S=0`, and `break-even=never`. Optimize first when break-even fits within remaining uses or expected interactive latency is itself unacceptable. Optimization may eliminate repeated work but must preserve the decision instrument's evidence strength. Supervise the run and stop it at twice the expected duration; preserve output and diagnose the expectation, contention, infrastructure, or product cause before any retry or timeout change. Compare actual with expected and use the observation to price the next invocation.
+
+```text
+Loop preflight: id=I; class=K; expected=E; prior=P; remaining=N; decision=D; optimize-cost=C; save/run=S; break-even=B; action=run|optimize
+```
+
+## Record loop outcomes
+
+After every invocation, emit its actual wall time, actual-to-expected ratio, outcome, classified overrun cause, and measured saving under the same task-local loop ID. Keep these structured lines in the normal agent transcript; do not record raw commands, inputs, or secrets. At campaign handoff, aggregate each loop class's run count, p50 and p95 wall time when at least 20 observations exist, overrun count, optimization cost, gross saving, net saving, unchanged retries, timeout inflations, and weakened evidence. The policy succeeds only when every run was priced, every run over twice expectation was stopped and classified before retry, no unchanged retry or timeout inflation concealed a cause, no evidence was weakened, and no optimization was skipped when its break-even fit the remaining uses. Use the first observations as the baseline and require recurring loop latency and realized net saving to improve rather than merely producing more telemetry.
+
+```text
+Loop result: id=I; actual=A; ratio=R; outcome=pass|fail|stopped; overrun-cause=C; measured-save=S
+Loop campaign: class=K; runs=N; p50=P50; p95=P95; overruns=O; optimize-cost=C; gross-save=G; net-save=V; unchanged-retries=U; timeout-inflations=T; weakened-evidence=W
+```
 
 ## Choose the profile
 

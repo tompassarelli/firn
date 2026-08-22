@@ -252,6 +252,9 @@ fi
 if [ "${1:-}" = "--verification-skill" ]; then
   echo "== focused verification-skill reachability"
   fresh
+  chk "bootstrap routes development-loop pricing" "1" "$(grep -Fxc -- '- Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification`.' "$REPO/dotfiles/agents/AGENTS.md")"
+  chk "verification owns development-loop pricing" "1" "$(grep -Fxc -- '## Price every development loop' "$REPO/dotfiles/agents/skills/verification/SKILL.md")"
+  chk "verification records development-loop outcomes" "1" "$(grep -Fxc -- '## Record loop outcomes' "$REPO/dotfiles/agents/skills/verification/SKILL.md")"
   ag status > /dev/null
   chk "verification seeds off" "skill verification off" "$(grep '^skill verification ' "$SB/.config/agents/manifest.conf")"
   chk "verification source path resolves" "$SB/code/nixos-config/main/dotfiles/agents/skills/verification/SKILL.md" "$(ag path verification)"
