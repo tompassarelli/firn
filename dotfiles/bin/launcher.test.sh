@@ -149,18 +149,19 @@ declare -A PROV=([claude]=anthropic [codex]=openai)
 declare -A LIMIT=([claude]="claude:seven_day" [codex]="codex:primary")
 declare -A SUB=([claude]=anthropic [codex]=openai)
 declare -A PINVAR=([claude]=CLAUDE_CONFIG_DIR [codex]=CODEX_HOME)
-CODEX_THREAD_CEILING_ARG='-c agents.max_concurrent_threads_per_session=16'
+CODEX_THREAD_CEILING_ARG='-c agents.max_concurrent_threads_per_session=2147483647'
+CODEX_FULL_ACCESS_BYPASS='--dangerously-bypass-approvals-and-sandbox'
 declare -A ROOT_DEFAULT_ARGS=(
   [claude]='--model claude-fable-5 --effort xhigh --disallowedTools Agent,Task,Workflow'
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=16 --add-dir /home/tom/code -c model="gpt-5.6-sol" -c model_reasoning_effort="high" --disable multi_agent'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=2147483647 --add-dir /home/tom/code -c model="gpt-5.6-sol" -c model_reasoning_effort="high" --disable multi_agent'
 )
 declare -A WARN_DEFAULT_ARGS=(
   [claude]='--model claude-fable-5 --effort xhigh'
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=16 --add-dir /home/tom/code -c model="gpt-5.6-sol" -c model_reasoning_effort="high"'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=2147483647 --add-dir /home/tom/code -c model="gpt-5.6-sol" -c model_reasoning_effort="high"'
 )
 declare -A PASSTHROUGH_ARGS=(
   [claude]=''
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=16'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=2147483647'
 )
 
 check 'codex/global config defaults to economical terra/medium' \
@@ -217,7 +218,9 @@ for launcher in claude codex; do
   default_args="${ROOT_DEFAULT_ARGS[$launcher]}"
   warn_args="${WARN_DEFAULT_ARGS[$launcher]}"
   passthrough_args="${PASSTHROUGH_ARGS[$launcher]}"
+  execution_args="$default_args"
   if [ "$launcher" = codex ]; then
+    execution_args="$passthrough_args $CODEX_FULL_ACCESS_BYPASS ${default_args#"$passthrough_args "}"
     check 'codex/default model is config, never duplicate --model' \
       not_contains "$default_args" '--model'
     check 'codex/direct sessions receive the stable code root' \
@@ -357,6 +360,26 @@ JSON
     test "$(record_field _ args)" = "$default_args hello"
   check "$launcher/explicit-pin prints no auto banner" not_contains "$s" "→ ambient]"
 
+  if [ "$launcher" = codex ]; then
+    run codex 0 -- as acctA exec do-work ; s="$STDERR"
+    check "codex/explicit exec injects the full-access bypass" \
+      test "$(record_field _ args)" = "$execution_args exec do-work"
+    check "codex/explicit exec injects the bypass exactly once" \
+      contains_once "$(record_field _ args)" "$CODEX_FULL_ACCESS_BYPASS"
+
+    run codex 0 -- as acctA e do-work ; s="$STDERR"
+    check "codex/explicit exec alias injects the full-access bypass" \
+      test "$(record_field _ args)" = "$execution_args e do-work"
+
+    run codex 0 -- as acctA resume named-thread ; s="$STDERR"
+    check "codex/explicit resume injects the full-access bypass" \
+      test "$(record_field _ args)" = "$execution_args resume named-thread"
+
+    run codex 0 -- as acctA "$CODEX_FULL_ACCESS_BYPASS" exec do-work ; s="$STDERR"
+    check "codex/caller-supplied bypass is not duplicated" \
+      contains_once "$(record_field _ args)" "$CODEX_FULL_ACCESS_BYPASS"
+  fi
+
   # 8b. explicit `as <unknown>` errors, does not exec the real CLI.
   run "$launcher" 0 -- as ghost ; s="$STDERR"
   check "$launcher/explicit-unknown reports unknown account" contains "$s" "unknown account 'ghost'"
@@ -376,7 +399,7 @@ JSON
     printf '{"type":"session_meta","payload":{"id":"%s"}}\n' "$resume_id" \
       >"$owner/sessions/2026/07/29/rollout-2026-07-29T00-00-00-$resume_id.jsonl"
     resume_argv=(--resume "$resume_id" tail)
-    resume_expected="$default_args resume $resume_id tail"
+    resume_expected="$execution_args resume $resume_id tail"
   fi
   run "$launcher" 0 -- "${resume_argv[@]}" ; s="$STDERR"
   check "$launcher/resume owner bypasses quota account selection" \
@@ -416,7 +439,7 @@ JSON
     printf '{"type":"session_meta","payload":{"id":"%s"}}\n' "$ambient_id" \
       >"$ambient/sessions/2026/07/29/rollout-2026-07-29T00-00-01-$ambient_id.jsonl"
     ambient_argv=(--resume="$ambient_id")
-    ambient_expected="$default_args resume $ambient_id"
+    ambient_expected="$execution_args resume $ambient_id"
   fi
   run "$launcher" 0 -- "${ambient_argv[@]}" ; s="$STDERR"
   check "$launcher/ambient resume selects ambient home" \
@@ -491,13 +514,13 @@ JSON
     check "codex/native resume finds UUID after resume options" \
       test "$(record_field _ CODEX_HOME)" = "$owner"
     check "codex/native resume preserves option ordering" \
-      test "$(record_field _ args)" = "$default_args resume --all $resume_id tail"
+      test "$(record_field _ args)" = "$execution_args resume --all $resume_id tail"
 
     run "$launcher" 0 -- -C/tmp resume "$resume_id" tail ; s="$STDERR"
     check "codex/attached global option still reaches resume owner lookup" \
       test "$(record_field _ CODEX_HOME)" = "$owner"
     check "codex/attached global option ordering is preserved" \
-      test "$(record_field _ args)" = "$default_args -C/tmp resume $resume_id tail"
+      test "$(record_field _ args)" = "$execution_args -C/tmp resume $resume_id tail"
 
     run "$launcher" 0 -- resume -mgpt-5.6-terra "$resume_id" tail ; s="$STDERR"
     check "codex/attached resume option still reaches owner lookup" \
@@ -508,7 +531,7 @@ JSON
     check "codex/UUID-shaped prompt after a session name does not reroute" \
       test "$(record_field _ CODEX_HOME)" = "$ROOT/acctA"
     check "codex/named resume preserves its UUID-shaped prompt" \
-      test "$(record_field _ args)" = "$default_args resume named-thread $resume_id"
+      test "$(record_field _ args)" = "$execution_args resume named-thread $resume_id"
 
     run "$launcher" 1 "NORTH_JSON=$eligible" -- \
       resume --profile "$resume_id" named-thread ; s="$STDERR"
@@ -547,7 +570,7 @@ JSON
   if [ "$launcher" = claude ]; then
     picker_expected="$default_args --resume"
   else
-    picker_expected="$default_args resume"
+    picker_expected="$execution_args resume"
   fi
   check "$launcher/resume picker keeps normal account routing" \
     test "$(record_field _ "$pinvar")" = "$ROOT/acctA"

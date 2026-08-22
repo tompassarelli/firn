@@ -79,13 +79,15 @@ fi
 # CODEX_HOME to a per-account state dir whose config.toml does NOT carry the
 # nixos-config full-access and agent-thread keys, so ~/.codex/config.toml is
 # bypassed and codex falls back to its restricted defaults. Inject the overrides
-# at exec time so every account gets the same permissions and thread ceiling.
+# at exec time so every account gets the same permissions and a practical
+# no-ceiling concurrency value. Codex requires a positive integer here; leaving
+# the key unset restores its small built-in default.
 # `-c` values are parsed as TOML.
 FORCE_CONFIG=(
   -c 'approval_policy="never"'
   -c 'sandbox_mode="danger-full-access"'
   -c 'default_permissions=":danger-full-access"'
-  -c 'agents.max_concurrent_threads_per_session=16'
+  -c 'agents.max_concurrent_threads_per_session=2147483647'
 )
 
 # Direct user sessions may coordinate work across repositories beneath the
@@ -194,6 +196,56 @@ codex_terminal_flag() {
       return 1
       ;;
   esac
+}
+
+# `sandbox_mode="danger-full-access"` is only a config preference. Codex's
+# executable bypass is the no-sandbox boundary: without it, an account-pinned
+# worker can still resolve to workspace-write and enter bwrap. Detect native
+# exec/resume shapes after global options and inject the bypass exactly once.
+codex_execution_invocation() {
+  local skip_value=0 entry
+  for entry in "$@"; do
+    [ "$entry" = "--" ] && break
+    codex_terminal_flag "$entry" && return 1
+  done
+  for entry in "$@"; do
+    if [ "$skip_value" -eq 1 ]; then
+      skip_value=0
+      continue
+    fi
+    case "$entry" in
+      --) return 1 ;;
+      exec|e|resume) return 0 ;;
+      *)
+        if codex_option_takes_value "$entry"; then
+          skip_value=1
+        elif codex_option_has_attached_value "$entry" || codex_known_flag "$entry"; then
+          :
+        elif [[ "$entry" = -* ]]; then
+          :
+        else
+          return 1
+        fi
+        ;;
+    esac
+  done
+  return 1
+}
+
+direct_execution_args() {
+  local entry
+  codex_execution_invocation "$@" || return 0
+  for entry in "$@"; do
+    [ "$entry" = "--dangerously-bypass-approvals-and-sandbox" ] && return 0
+  done
+  printf '%s\0' '--dangerously-bypass-approvals-and-sandbox'
+}
+
+load_direct_execution_args() {
+  DIRECT_EXECUTION_ARGS=()
+  while IFS= read -r -d '' entry; do
+    DIRECT_EXECUTION_ARGS+=("$entry")
+  done < <(direct_execution_args "$@")
 }
 
 NATIVE_DISPATCH_ARGS=()
@@ -371,7 +423,8 @@ if [ "${1:-}" != "as" ]; then
     else
       export CODEX_SQLITE_HOME="$authority_home/sqlite"
     fi
-    exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+    load_direct_execution_args "$@"
+    exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_EXECUTION_ARGS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
   fi
 
   # Non-UUID aliases still map to the native subcommand (picker/session name)
@@ -422,7 +475,8 @@ if [ "${1:-}" = "as" ]; then
   fi
   export CODEX_HOME="$root"
   export CODEX_SQLITE_HOME="$root/sqlite"
-  exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+  load_direct_execution_args "$@"
+  exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_EXECUTION_ARGS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
 fi
 
 # 4. Auto-select greatest-headroom account from north's machine boundary.
@@ -716,4 +770,5 @@ else
     printf '[%s → ambient] %s — %s\n' "$PROVIDER_WORD" "$reason" "$(recovery_hint)" >&2
   fi
 fi
-exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+load_direct_execution_args "$@"
+exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_EXECUTION_ARGS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
