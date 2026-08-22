@@ -75,6 +75,58 @@ else
   fi
 fi
 
+# Codex v2 only advertises catalog entries tagged for its multi-agent protocol.
+# The local catalog still tags Luna as v1, so preserve the live catalog and
+# project the one corrected capability into this process at startup. A catalog
+# outage must never make the launcher unavailable.
+codex_luna_v2_catalog() {
+  local runtime_root="${XDG_RUNTIME_DIR:-}" catalog_dir raw patched final
+  [ -n "$runtime_root" ] || return 1
+  command -v curl >/dev/null 2>&1 || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+
+  catalog_dir="$runtime_root/codex"
+  mkdir -p "$catalog_dir" 2>/dev/null || return 1
+  raw="$(mktemp "$catalog_dir/model-catalog.raw.XXXXXX" 2>/dev/null)" || return 1
+  patched="$(mktemp "$catalog_dir/model-catalog.luna-v2.XXXXXX" 2>/dev/null)" || {
+    rm -f "$raw"
+    return 1
+  }
+
+  if ! curl -fsS --connect-timeout 0.25 --max-time 1 \
+      http://127.0.0.1:2455/backend-api/codex/models >"$raw" 2>/dev/null \
+    || ! jq -e '
+      ([.models[]? | select(.slug == "gpt-5.6-luna")] | length) as $matches
+      | if $matches == 1 then
+          .models |= map(
+            if .slug == "gpt-5.6-luna"
+            then .multi_agent_version = "v2"
+            else .
+            end
+          )
+        else
+          error("expected exactly one gpt-5.6-luna catalog entry")
+        end
+    ' "$raw" >"$patched" 2>/dev/null; then
+    rm -f "$raw" "$patched"
+    return 1
+  fi
+
+  final="$catalog_dir/model-catalog-luna-v2.json"
+  chmod 600 "$patched" 2>/dev/null || true
+  if ! mv -f "$patched" "$final" 2>/dev/null; then
+    rm -f "$raw" "$patched"
+    return 1
+  fi
+  rm -f "$raw"
+  printf '%s\n' "$final"
+}
+
+CODEX_MODEL_CATALOG_ARGS=()
+if codex_model_catalog="$(codex_luna_v2_catalog)"; then
+  CODEX_MODEL_CATALOG_ARGS=(-c "model_catalog_json=\"$codex_model_catalog\"")
+fi
+
 # Force launch-wide config on every standalone launch. This wrapper redirects
 # CODEX_HOME to a per-account state dir whose config.toml does NOT carry the
 # nixos-config full-access and agent-thread keys, so ~/.codex/config.toml is
@@ -88,6 +140,7 @@ FORCE_CONFIG=(
   -c 'sandbox_mode="danger-full-access"'
   -c 'default_permissions=":danger-full-access"'
   -c 'agents.max_concurrent_threads_per_session=64'
+  "${CODEX_MODEL_CATALOG_ARGS[@]}"
 )
 
 # Direct user sessions may coordinate work across repositories beneath the

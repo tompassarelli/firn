@@ -80,6 +80,15 @@ CLI
   chmod +x "$BIN/$cli"
 done
 
+# Local codex-lb catalog endpoint. It emits a caller-selected fixture and
+# otherwise behaves like an unavailable service.
+cat >"$BIN/curl" <<'CURL'
+#!/usr/bin/env bash
+[ -r "${CODEX_CATALOG_SOURCE:-}" ] || exit 7
+cat "$CODEX_CATALOG_SOURCE"
+CURL
+chmod +x "$BIN/curl"
+
 # Keep the native launchers hermetic by replacing only their hardcoded real CLI
 # paths in scratch copies; every other byte remains production code under test.
 CODEX_NATIVE_LAUNCHER="$SCRATCH/codex-native"
@@ -172,6 +181,51 @@ check 'codex/warn defaults set the subagent thread ceiling exactly once' \
   contains_once "${WARN_DEFAULT_ARGS[codex]}" "$CODEX_THREAD_CEILING_ARG"
 check 'codex/passthrough defaults set the subagent thread ceiling exactly once' \
   contains_once "${PASSTHROUGH_ARGS[codex]}" "$CODEX_THREAD_CEILING_ARG"
+
+# Codex v2 filters the spawn menu by multi_agent_version. The launcher keeps
+# every live catalog byte except Luna's protocol tag, passes the projection at
+# process startup, and never reuses it when the service later fails.
+HOME_DIR="$SCRATCH/home-codex-catalog"
+ROOT="$HOME_DIR/.local/state/north/accounts/openai"
+mkdir -p "$ROOT/acctA"
+catalog_source="$SCRATCH/codex-catalog.json"
+catalog_runtime="$SCRATCH/codex-runtime"
+mkdir -p "$catalog_runtime"
+cat >"$catalog_source" <<'JSON'
+{
+  "object": "list",
+  "models": [
+    {"slug":"gpt-5.6-sol","multi_agent_version":"v2","marker":"keep-sol"},
+    {"slug":"gpt-5.6-luna","multi_agent_version":"v1","marker":"keep-luna"},
+    {"slug":"gpt-5.6-terra","multi_agent_version":"v2","marker":"keep-terra"}
+  ],
+  "data": {"marker":"keep-root"}
+}
+JSON
+run codex 0 "XDG_RUNTIME_DIR=$catalog_runtime" \
+  "CODEX_CATALOG_SOURCE=$catalog_source" -- as acctA catalog-probe
+catalog_projection="$catalog_runtime/codex/model-catalog-luna-v2.json"
+check 'codex/Luna catalog projection still launches Codex' test "$STATUS" -eq 0
+check 'codex/Luna catalog projection is passed at startup' \
+  contains "$(record_field _ args)" \
+    "-c model_catalog_json=\"$catalog_projection\""
+check 'codex/Luna catalog projection changes only its protocol tag' \
+  jq -e --slurpfile source "$catalog_source" '
+    . == ($source[0] | .models |= map(
+      if .slug == "gpt-5.6-luna"
+      then .multi_agent_version = "v2"
+      else .
+      end
+    ))
+    and ([.models[] | select(
+      .slug == "gpt-5.6-luna" and .multi_agent_version == "v2"
+    )] | length) == 1
+  ' "$catalog_projection"
+
+run codex 0 "XDG_RUNTIME_DIR=$catalog_runtime" -- as acctA catalog-fallback-probe
+check 'codex/unavailable catalog service fails open' test "$STATUS" -eq 0
+check 'codex/unavailable catalog service does not reuse a stale projection' \
+  not_contains "$(record_field _ args)" 'model_catalog_json='
 
 HOME_DIR="$SCRATCH/home-codex-native"
 mkdir -p "$HOME_DIR/.local/state/north/profiles/codex-native"
