@@ -149,19 +149,19 @@ declare -A PROV=([claude]=anthropic [codex]=openai)
 declare -A LIMIT=([claude]="claude:seven_day" [codex]="codex:primary")
 declare -A SUB=([claude]=anthropic [codex]=openai)
 declare -A PINVAR=([claude]=CLAUDE_CONFIG_DIR [codex]=CODEX_HOME)
-CODEX_THREAD_CEILING_ARG='-c agents.max_concurrent_threads_per_session=2147483647'
+CODEX_THREAD_CEILING_ARG='-c agents.max_concurrent_threads_per_session=64'
 CODEX_FULL_ACCESS_BYPASS='--dangerously-bypass-approvals-and-sandbox'
 declare -A ROOT_DEFAULT_ARGS=(
   [claude]='--model claude-fable-5 --effort xhigh --disallowedTools Agent,Task,Workflow'
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=2147483647 --add-dir /home/tom/code -c model="gpt-5.6-sol" -c model_reasoning_effort="high" --disable multi_agent'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=64 --add-dir /home/tom/code -c model="gpt-5.6-sol" -c model_reasoning_effort="high" --disable multi_agent'
 )
 declare -A WARN_DEFAULT_ARGS=(
   [claude]='--model claude-fable-5 --effort xhigh'
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=2147483647 --add-dir /home/tom/code -c model="gpt-5.6-sol" -c model_reasoning_effort="high"'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=64 --add-dir /home/tom/code -c model="gpt-5.6-sol" -c model_reasoning_effort="high"'
 )
 declare -A PASSTHROUGH_ARGS=(
   [claude]=''
-  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=2147483647'
+  [codex]='-c approval_policy="never" -c sandbox_mode="danger-full-access" -c default_permissions=":danger-full-access" -c agents.max_concurrent_threads_per_session=64'
 )
 
 check 'codex/global config defaults to economical terra/medium' \

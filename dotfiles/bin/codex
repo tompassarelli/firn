@@ -87,7 +87,7 @@ FORCE_CONFIG=(
   -c 'approval_policy="never"'
   -c 'sandbox_mode="danger-full-access"'
   -c 'default_permissions=":danger-full-access"'
-  -c 'agents.max_concurrent_threads_per_session=2147483647'
+  -c 'agents.max_concurrent_threads_per_session=64'
 )
 
 # Direct user sessions may coordinate work across repositories beneath the
