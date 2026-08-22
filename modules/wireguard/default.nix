@@ -1,9 +1,7 @@
 { config, lib, pkgs, ... }:
 
-let
-  username = config.myConfig.modules.users.username;
-in
-{
+((username: {
+  tags = [ vpn ];
   options.myConfig.modules.wireguard.enable = lib.mkEnableOption "WireGuard VPN support";
   config = lib.mkIf config.myConfig.modules.wireguard.enable {
     security.sudo.extraRules = [
@@ -26,25 +24,31 @@ in
         Type = "simple";
         Restart = "always";
         RestartSec = 5;
-        ExecStart = let
-          watchdog = pkgs.writeShellScript "wg-watchdog" ''
-            export PATH="${lib.makeBinPath [ pkgs.wireguard-tools pkgs.iputils pkgs.gawk pkgs.coreutils ]}:$PATH"
+        ExecStart = ((watchdog: "${watchdog}") (pkgs.writeShellScript "wg-watchdog" ''
+            export PATH="${lib.makeBinPath [
+                        pkgs.wireguard-tools
+                        pkgs.iputils
+                        pkgs.gawk
+                        pkgs.coreutils
+                        pkgs.systemd
+                      ]}:$PATH"
 
             MISS_COUNT=0
             MISS_THRESHOLD=5
 
             while true; do
-              IFACE=$(wg show interfaces 2>/dev/null | head -1)
+              IFACE=wg0
 
-              if [ -z "$IFACE" ]; then
+              if ! wg show "$IFACE" >/dev/null 2>&1; then
                 sleep 5
                 continue
               fi
 
-              # Get gateway IP from the interface (first IP in allowed-ips, usually the VPN gateway)
-              GATEWAY=$(ip route show dev "$IFACE" 2>/dev/null | grep -oP '^\d+\.\d+\.\d+\.\d+' | head -1)
+              # Get gateway IP from the first peer's allowed IP.
+              GATEWAY=$(wg show "$IFACE" allowed-ips 2>/dev/null | awk 'NR == 1 { split($2, ips, ","); sub(/\/.*$/, "", ips[1]); print ips[1]; exit }')
               if [ -z "$GATEWAY" ]; then
-                GATEWAY="10.100.0.1"  # fallback
+                sleep 5
+                continue
               fi
 
               if ! ping -c 1 -W 1 -I "$IFACE" "$GATEWAY" >/dev/null 2>&1; then
@@ -54,10 +58,7 @@ in
                 if [ $MISS_COUNT -ge $MISS_THRESHOLD ]; then
                   echo "$(date): Connection dead on $IFACE, full restart"
 
-                  # Full teardown and recreate - new source port, fresh state
-                  wg-quick down "$IFACE" 2>/dev/null
-                  sleep 1
-                  wg-quick up "$IFACE"
+                  systemctl restart wireguard-wg0.service
                   echo "$(date): Interface $IFACE restarted"
 
                   MISS_COUNT=0
@@ -70,12 +71,10 @@ in
               sleep 1
             done
 
-          '';
-        in
-        "${watchdog}";
+          ''));
       };
       wantedBy = [ "multi-user.target" ];
     };
     environment.systemPackages = with pkgs; [ wireguard-tools ];
   };
-}
+}) config.myConfig.modules.users.username)

@@ -8,4 +8,4 @@
     (lib.mkEnableOption "ProtonVPN GUI client")
    :config
     (lib.mkIf config.myConfig.modules.protonvpn-gui.enable
-      {:environment.systemPackages (nix/with pkgs [proton-vpn])})})
+      {:environment.systemPackages [pkgs.unstable.proton-vpn]})})
