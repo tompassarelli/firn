@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
-exec "$HOME/code/beagle/main/bin/beagle" "$@"
+beagle_path="${BEAGLE_PATH:-$HOME/code/beagle/main}"
+exec "$beagle_path/bin/beagle" "$@"
