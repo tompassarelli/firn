@@ -76,6 +76,16 @@ must not use them when an account is being allocated; use the account-dispatch
 entry point above. User-pinned single-account native work remains outside this
 fleet rule.
 
+Every authorized delegated worker runs with unrestricted filesystem and network
+access and without an approval sandbox. For direct Codex lanes, always pass
+`--dangerously-bypass-approvals-and-sandbox`. Collaboration `spawn_agent` has no
+permission field and inherits the parent session, so admit it only after the
+parent permission profile is unrestricted. If an available dispatch surface
+cannot provide that authority, report the exact capability gap instead of
+silently launching a constrained worker. Full execution authority does not
+broaden the worker's brief, repository lane, publication authority, credential
+boundary, or standing safety rules.
+
 The account-dispatch evidence is live-only commander/operator evidence. It
 never becomes Store-authoritative autonomous routing and grants no write or
 publication authority; the brief and lane admission still do that. Record the
