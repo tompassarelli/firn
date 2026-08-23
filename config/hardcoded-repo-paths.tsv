@@ -39,7 +39,6 @@ north/bin/north-mine	1
 north/bin/tests/ci-required-bars-test.sh	1
 north/bin/tests/package-purity-check-test.sh	1
 north/build.sh	1
-north/cli/config-cli.clj	1
 north/cli/tests/acquire-claim-integration-test.clj	1
 north/cli/tests/agent-identity-publication-integration-test.clj	4
 north/cli/tests/concern-cli-validation-test.clj	1
