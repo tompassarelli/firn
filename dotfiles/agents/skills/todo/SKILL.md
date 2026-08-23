@@ -38,7 +38,7 @@ shape = "project"
 life = "active"
 updated_at = "2026-08-14T11:36:50+08:00"
 owners = ["codex:/root"]
-depends_on = []
+requires = []
 conversation_ids = ["codex:019ffd07-c27b-7943-8a66-553dff2ae98b"]
 coordination = ["agent-coord.md#C007"]
 
@@ -94,15 +94,17 @@ delegates) has one `[[attempt]]` before the work starts. This is the forecast
 and staffing join point; proposals, inactive threads, and resources do not
 invent estimates before they become execution. A non-delegated attempt still
 records `model = "self"` and `role = "owner"`.
+An `attempt` belongs only to a task or project, and a live lane makes that
+record active execution even if its `life` field has not yet caught up.
 
 ```toml
 [[attempt]]
 id = "A1"
 seam = "one independently verifiable outcome"
 class = "compiler-one-seam"
-forecast_wall = "8m"
-forecast_agent = "8m"
-evidence_samples = 3
+wall_time_estimate = "8m"
+agent_time_estimate = "8m"
+calibration_sample_count = 3
 started_at = "2026-08-23T16:15:34+08:00"
 model = "gpt-5.6-terra"
 reasoning = "high"
@@ -112,28 +114,38 @@ role = "worker"
 review_budget = "owner"
 ```
 
-`forecast_wall` is elapsed critical-path time; `forecast_agent` is the summed
-agent time expected to be consumed. They coincide for one uninterrupted worker
-but deliberately differ for queues, waits, and races. `evidence_samples` names
-the calibration sample count. `review_budget` is `none`, `owner`, or
+`wall_time_estimate` is elapsed critical-path time; `agent_time_estimate` is
+the summed agent execution time expected to be consumed. They coincide for one
+uninterrupted worker but deliberately differ for queues, waits, and races.
+An estimate may use a leading `~` or `under ` qualifier. Actual durations are
+unqualified compact numbers, and `ended_at` must not precede `started_at`, so
+the wall-time actual-to-estimate ratio remains derivable.
+`calibration_sample_count` is the count of completed observations supporting
+the estimate. `review_budget` is `none`, `owner`, or
 `independent`; it is a named spending and assurance choice, never an implied
 numeric craftsmanship score. A race has one `race` identifier on each attempt,
 and every candidate receives its own model, route, and outcome.
 
 At settlement, update the same attempt with `ended_at`, `outcome`,
-`actual_wall`, `actual_agent`, `queue_block`, `verification_wall`, and (for a
-race) `race_outcome`. These are overlapping explanatory measurements, not
-numbers to add together: wall time is the elapsed critical path, agent time is
-summed work, and queue/block and verification time explain portions of the
-path. Add `reviewed_commit`, `review_outcome` (`clean`, `findings`, or
-`not-run`), `reviewer_model`/`reviewer_reasoning` for an independent review,
-and `repair_wall` when review was budgeted or findings are repaired.
+`wall_time_actual`, `agent_time_actual`, `queue_block_time_actual`,
+`verification_time_actual`, and (for a race) `race_outcome`. These are
+overlapping explanatory measurements, not numbers to add together: wall time
+is the elapsed critical path, agent time is summed execution duration, and
+queue/block and verification time explain portions of the path. If a duration
+also records why the wait or verification occurred, split that text into
+optional `queue_block_cause` or `verification_summary` instead
+of storing prose in a time field. Add `reviewed_commit`, `review_outcome`
+(`clean`, `findings`, or `not-run`), optional `review_summary` for one compact
+result sentence,
+`reviewer_model`/`reviewer_reasoning` for an independent review, and
+`review_repair_time_actual` when review findings are repaired.
 Then put one compact terminal receipt in `~/code/todo/estimate-calibration.md`.
-That receipt carries the same forecast/actual fields plus model, reasoning,
+That receipt carries the same estimate/actual fields plus model, reasoning,
 route, role, assignment ID, outcome, and a concise overrun cause, so future
 staffing can compare like attempts without copying live state into another
-ledger. Record provider cost or token actuals only when an authoritative source
-already supplies them.
+ledger. Derive the wall-time actual-to-estimate ratio from the two stored
+values; do not duplicate that derivable value in the attempt. Record provider
+cost or token actuals only when an authoritative source already supplies them.
 
 Completion is not a vague quality certificate. An independent review consumes
 one exact commit and records concrete findings and their disposition. If a
@@ -166,10 +178,11 @@ tracked plan record; then `plan` is that record's exact `id`. When one record
 itself evolves from plan to project, preserve its identity and omit `plan`
 instead of manufacturing a self-reference or symbolic pseudo-ID.
 
-`depends_on` is the one stored direction of the work DAG. Its internal values
-are exact record IDs; an external prerequisite is explicitly prefixed
-`external:`. Derive reverse “blocks” views from `depends_on` rather than storing
-a second edge that can drift. The same exact-ID rule applies to `realizes`,
+`requires` is the one stored direction of the work DAG: dependent to
+prerequisite. Its internal values are exact record IDs; an external prerequisite
+is explicitly prefixed `external:`. Derive reverse `blocks` topology and the
+current unsatisfied `blocked_by` subset from `requires`; store neither. The same
+exact-ID rule applies to `realizes`,
 `plan`, `supports`, and `relates_to` whenever those fields name tracked records.
 
 Shape changes are recorded by updating `shape`, `life`, and the Current

@@ -82,7 +82,7 @@ invariants, and a finding/disposition boundary; choose its model from the same
 quality floor and task difficulty rules as any other assignment.
 
 When a reviewer finds a real defect, link the finding to the exact commit and
-record its repair time in the owning attempt. When a consciously deferred gap
+record its review-repair time actual in the owning attempt. When a consciously deferred gap
 matters, record a concrete path, invariant, severity, owner, and exit condition
 as `[[quality_debt]]` in the todo record. Do not reopen or re-polish settled
 code absent a changed commit, a new finding, or a named assurance reason.
@@ -208,8 +208,8 @@ allowlists, paths, pins, locks, tests, and consumer repositories in the same
 campaign, then run the final token search across those consumers.
 
 The parent owns integration and settlement. Consume each result, settle every
-attempt with elapsed wall time, summed agent time, queue/block and verification
-time, model/route outcome, race disposition, and any review/debt receipt, then
+attempt with wall and agent time actuals, queue/block and verification time
+actuals, model/route outcome, race disposition, and any review/debt receipt, then
 update the restart record at every externally visible boundary. Copy one compact
 terminal receipt to the estimate calibration ledger and use repo-safety to land
 and reap verified work. A worker denial changes the path, never the goal; do

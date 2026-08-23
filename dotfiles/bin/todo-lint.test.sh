@@ -37,6 +37,7 @@ record good.md \
   'life = "inactive"' \
   'updated_at = "2026-01-01T00:00:00+00:00"' \
   'owners = ["test"]' \
+  'mystery_root = true' \
   '+++' \
   '' \
   'Body.'
@@ -78,7 +79,7 @@ record refs.md \
   'owners = ["test"]' \
   'realizes = "missing-realizes"' \
   'plan = "missing-plan"' \
-  'depends_on = ["missing-dependency", "external:outside"]' \
+  'requires = ["missing-dependency", "external:outside"]' \
   'supports = ["missing-support"]' \
   'relates_to = ["missing-relation"]' \
   '+++'
@@ -166,6 +167,147 @@ record future.md \
   'updated_at = "2027-01-01T00:00:00+00:00"' \
   'owners = ["test"]' \
   '+++'
+record unknown-attempt.md \
+  '+++' \
+  'id = "unknown-attempt"' \
+  'title = "Unknown attempt field"' \
+  'shape = []' \
+  'life = "inactive"' \
+  'updated_at = "2026-01-01T00:00:00+00:00"' \
+  'owners = ["test"]' \
+  '[[attempt]]' \
+  'id = "A1"' \
+  'seam = "unknown"' \
+  'class = "test"' \
+  'wall_time_estimate = "1m"' \
+  'agent_time_estimate = "1m"' \
+  'calibration_sample_count = 1' \
+  'started_at = "2026-01-01T00:00:00+00:00"' \
+  'model = "self"' \
+  'reasoning = "high"' \
+  'route = "test"' \
+  'assignment_id = "none"' \
+  'role = "owner"' \
+  'review_budget = []' \
+  'review_outcome = []' \
+  'mystery_metric = "1m"' \
+  '+++'
+record invalid-attempt.md \
+  '+++' \
+  'id = "invalid-attempt"' \
+  'title = "Invalid attempt"' \
+  'shape = "project"' \
+  'life = "inactive"' \
+  'updated_at = "2026-01-01T00:00:00+00:00"' \
+  'owners = ["test"]' \
+  '[[attempt]]' \
+  'id = "A1"' \
+  'seam = "invalid"' \
+  'class = "test"' \
+  'wall_time_estimate = "about a minute"' \
+  'agent_time_estimate = "1m"' \
+  'calibration_sample_count = -1' \
+  'started_at = "2026-01-01T00:00:00"' \
+  'model = "self"' \
+  'reasoning = "high"' \
+  'route = "test"' \
+  'role = "owner"' \
+  'review_budget = "maximum"' \
+  'review_outcome = "not-run"' \
+  'reviewer_model = "gpt-5.6-sol"' \
+  '+++'
+record active-execution.md \
+  '+++' \
+  'id = "active-execution"' \
+  'title = "Active execution without attempt"' \
+  'shape = "project"' \
+  'life = "active"' \
+  'updated_at = "2026-01-01T00:00:00+00:00"' \
+  'owners = ["test"]' \
+  'attempt = []' \
+  '+++'
+record review-invalid.md \
+  '+++' \
+  'id = "review-invalid"' \
+  'title = "Invalid review receipt"' \
+  'shape = "project"' \
+  'life = "inactive"' \
+  'updated_at = "2026-01-01T00:00:00+00:00"' \
+  'owners = ["test"]' \
+  '[[attempt]]' \
+  'id = "A1"' \
+  'seam = "invalid review"' \
+  'class = "test"' \
+  'wall_time_estimate = "~1m"' \
+  'agent_time_estimate = "under 2m"' \
+  'calibration_sample_count = 1' \
+  'started_at = "2026-01-01T00:01:00+00:00"' \
+  'model = "self"' \
+  'reasoning = "high"' \
+  'route = "test"' \
+  'assignment_id = "none"' \
+  'role = "owner"' \
+  'review_budget = "independent"' \
+  'ended_at = "2026-01-01T00:00:00+00:00"' \
+  'outcome = "success"' \
+  'wall_time_actual = "~1m"' \
+  'agent_time_actual = "1m"' \
+  'queue_block_time_actual = "0s"' \
+  'verification_time_actual = "under 1s"' \
+  'review_outcome = "clean"' \
+  'reviewer_model = 7' \
+  'review_repair_time_actual = "1s"' \
+  '[[attempt]]' \
+  'id = "A2"' \
+  'seam = "missing review outcome"' \
+  'class = "test"' \
+  'wall_time_estimate = "1m"' \
+  'agent_time_estimate = "1m"' \
+  'calibration_sample_count = 1' \
+  'started_at = "2026-01-01T00:00:00+00:00"' \
+  'model = "self"' \
+  'reasoning = "high"' \
+  'route = "test"' \
+  'assignment_id = "none"' \
+  'role = "owner"' \
+  'review_budget = "owner"' \
+  'ended_at = "2026-01-01T00:01:00+00:00"' \
+  'outcome = "success"' \
+  'wall_time_actual = "1m"' \
+  'agent_time_actual = "1m"' \
+  'queue_block_time_actual = "0s"' \
+  'verification_time_actual = "1s"' \
+  '+++'
+record cycle-a.md \
+  '+++' \
+  'id = "cycle-a"' \
+  'title = "Cycle A"' \
+  'shape = "thread"' \
+  'life = "inactive"' \
+  'updated_at = "2026-01-01T00:00:00+00:00"' \
+  'owners = ["test"]' \
+  'requires = ["cycle-b"]' \
+  '+++'
+record cycle-b.md \
+  '+++' \
+  'id = "cycle-b"' \
+  'title = "Cycle B"' \
+  'shape = "thread"' \
+  'life = "inactive"' \
+  'updated_at = "2026-01-01T00:00:00+00:00"' \
+  'owners = ["test"]' \
+  'requires = ["cycle-a"]' \
+  '+++'
+record self-cycle.md \
+  '+++' \
+  'id = "self-cycle"' \
+  'title = "Self cycle"' \
+  'shape = "thread"' \
+  'life = "inactive"' \
+  'updated_at = "2026-01-01T00:00:00+00:00"' \
+  'owners = ["test"]' \
+  'requires = ["self-cycle"]' \
+  '+++'
 record no-frontmatter.md 'not a record'
 record invalid-toml.md '+++' 'id = [' '+++'
 
@@ -180,7 +322,12 @@ for code_name in \
   TOP_LEVEL_NON_MARKDOWN TOP_LEVEL_SUBDIRECTORY FRONT_MATTER_MISSING FRONT_MATTER_INVALID \
   DUPLICATE_ID ID_FILENAME_MISMATCH ACTIVE_EXPIRES_AT_MISSING ACTIVE_EXPIRES_AT_OVERDUE \
   REFERENCE_UNRESOLVED LANE_BRANCH_MISMATCH LANE_WORKTREE_MISSING LANE_WORKTREE_UNREGISTERED \
-  LANE_BRANCH_MISSING LANE_REAPED_WORKTREE_PRESENT LANE_REAPED_BRANCH_PRESENT TIMESTAMP_FUTURE; do
+  LANE_BRANCH_MISSING LANE_REAPED_WORKTREE_PRESENT LANE_REAPED_BRANCH_PRESENT TIMESTAMP_FUTURE \
+  ROOT_FIELD_UNKNOWN ACTIVE_EXECUTION_ATTEMPT_MISSING ATTEMPT_EMPTY ATTEMPT_RECORD_SHAPE_INVALID \
+  REQUIRES_CYCLE REQUIRES_SELF ATTEMPT_CHRONOLOGY_INVALID \
+  ATTEMPT_FIELD_UNKNOWN ATTEMPT_FIELD_REQUIRED ATTEMPT_FIELD_INVALID ATTEMPT_TIMESTAMP_INVALID \
+  ATTEMPT_REVIEW_BUDGET_INVALID ATTEMPT_REVIEW_OUTCOME_INVALID ATTEMPT_REVIEW_OUTCOME_REQUIRED \
+  ATTEMPT_REVIEW_INCOMPLETE ATTEMPT_REVIEW_REPAIR_INVALID; do
   grep -Fq "$code_name" "$scratch/text"
 done
 grep -Fq 'REFERENCE_UNRESOLVED' "$scratch/text"
@@ -200,6 +347,12 @@ report = json.load(open(sys.argv[1]))
 assert report["summary"]["findings"] > 0
 assert report["summary"]["errors"] > 0
 assert any(item["code"] == "ACTIVE_EXPIRES_AT_MISSING" and item["severity"] == "warning" for item in report["findings"])
+assert any(
+    item["code"] == "ATTEMPT_REVIEW_INCOMPLETE"
+    and item["path"] == "invalid-attempt.md"
+    and "reviewer_model and reviewer_reasoning must appear together" in item["message"]
+    for item in report["findings"]
+)
 PY
 
 clean="$scratch/clean"
@@ -209,10 +362,32 @@ record_clean() {
     '+++' \
     'id = "clean"' \
     'title = "Clean"' \
-    'shape = "thread"' \
+    'shape = "project"' \
     'life = "inactive"' \
     'updated_at = "2026-01-01T00:00:00+00:00"' \
     'owners = ["test"]' \
+    '[[attempt]]' \
+    'id = "A1"' \
+    'seam = "clean"' \
+    'class = "test"' \
+    'wall_time_estimate = "1m"' \
+    'agent_time_estimate = "1m"' \
+    'calibration_sample_count = 1' \
+    'started_at = "2026-01-01T00:00:00+00:00"' \
+    'model = "self"' \
+    'reasoning = "high"' \
+    'route = "test"' \
+    'assignment_id = "none"' \
+    'role = "owner"' \
+    'review_budget = "owner"' \
+    'ended_at = "2026-01-01T00:01:00+00:00"' \
+    'outcome = "success"' \
+    'wall_time_actual = "1m"' \
+    'agent_time_actual = "1m"' \
+    'queue_block_time_actual = "0s"' \
+    'verification_time_actual = "1s"' \
+    'reviewed_commit = "0123456789abcdef"' \
+    'review_outcome = "clean"' \
     '+++' >"$clean/clean.md"
 }
 record_clean

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tomllib
@@ -24,11 +25,71 @@ REQUIRED_FIELDS = ("id", "title", "shape", "life", "updated_at", "owners")
 REFERENCE_FIELDS = {
     "realizes": "scalar",
     "plan": "scalar",
-    "depends_on": "list",
+    "requires": "list",
     "supports": "list",
     "relates_to": "list",
 }
+ROOT_ALLOWED_FIELDS = set(REQUIRED_FIELDS) | set(REFERENCE_FIELDS) | {
+    "assigned_to",
+    "attempt",
+    "conversation_ids",
+    "coordination",
+    "delegated_by",
+    "expires_at",
+    "lane",
+    "quality_debt",
+}
 LIVE_LANE_STATES = {"active", "live"}
+ATTEMPT_REQUIRED_FIELDS = (
+    "id",
+    "seam",
+    "class",
+    "wall_time_estimate",
+    "agent_time_estimate",
+    "calibration_sample_count",
+    "started_at",
+    "model",
+    "reasoning",
+    "route",
+    "assignment_id",
+    "role",
+    "review_budget",
+)
+ATTEMPT_SETTLEMENT_FIELDS = (
+    "ended_at",
+    "outcome",
+    "wall_time_actual",
+    "agent_time_actual",
+    "queue_block_time_actual",
+    "verification_time_actual",
+)
+ATTEMPT_TIME_FIELDS = {
+    "wall_time_estimate",
+    "agent_time_estimate",
+    "wall_time_actual",
+    "agent_time_actual",
+    "queue_block_time_actual",
+    "verification_time_actual",
+    "review_repair_time_actual",
+}
+ATTEMPT_OPTIONAL_FIELDS = {
+    "queue_block_cause",
+    "verification_summary",
+    "race",
+    "race_outcome",
+    "reviewed_commit",
+    "review_outcome",
+    "review_summary",
+    "reviewer_model",
+    "reviewer_reasoning",
+    "review_repair_time_actual",
+}
+ATTEMPT_ALLOWED_FIELDS = set(ATTEMPT_REQUIRED_FIELDS) | set(ATTEMPT_SETTLEMENT_FIELDS) | ATTEMPT_OPTIONAL_FIELDS
+EXECUTION_SHAPES = {"project", "task"}
+REVIEW_BUDGETS = {"none", "owner", "independent"}
+REVIEW_OUTCOMES = {"clean", "findings", "not-run"}
+ESTIMATED_DURATION_PATTERN = re.compile(r"^(?:~|under )?(?:\d+(?:\.\d+)?(?:ms|s|m|h|d))+$")
+ACTUAL_DURATION_PATTERN = re.compile(r"^(?:\d+(?:\.\d+)?(?:ms|s|m|h|d))+$")
 
 
 @dataclass(frozen=True)
@@ -67,6 +128,7 @@ class Linter:
             return self.sorted_findings()
         self.check_top_level()
         self.check_records()
+        self.check_attempts()
         self.check_references()
         self.check_lanes()
         return self.sorted_findings()
@@ -134,6 +196,8 @@ class Linter:
         return Record(path, data)
 
     def check_record_fields(self, record: Record) -> None:
+        for field in sorted(set(record.data).difference(ROOT_ALLOWED_FIELDS)):
+            self.add("ROOT_FIELD_UNKNOWN", record.path, f'front matter has unknown root field "{field}"')
         for field in REQUIRED_FIELDS:
             if field not in record.data:
                 self.add("FRONT_MATTER_REQUIRED_FIELD", record.path, f'missing required field "{field}"')
@@ -155,11 +219,12 @@ class Linter:
         return isinstance(value, list) and all(isinstance(item, str) and item for item in value)
 
     def check_references(self) -> None:
-        known_ids = {
-            record.data["id"]
+        records_by_id = {
+            record.data["id"]: record
             for record in self.records
             if isinstance(record.data.get("id"), str) and record.data["id"]
         }
+        known_ids = set(records_by_id)
         for record in self.records:
             for field, kind in REFERENCE_FIELDS.items():
                 value = record.data.get(field)
@@ -170,7 +235,7 @@ class Linter:
                 else:
                     values = value if self.is_string_list(value) else []
                 for reference in values:
-                    if field == "depends_on" and reference.startswith("external:"):
+                    if field == "requires" and reference.startswith("external:"):
                         continue
                     if reference not in known_ids:
                         self.add(
@@ -178,6 +243,40 @@ class Linter:
                             record.path,
                             f'{field} references unknown record id "{reference}"',
                         )
+        self.check_requires_graph(records_by_id)
+
+    def check_requires_graph(self, records_by_id: dict[str, Record]) -> None:
+        graph: dict[str, list[str]] = {}
+        for record_id, record in records_by_id.items():
+            values = record.data.get("requires")
+            internal = [] if not self.is_string_list(values) else [value for value in values if value in records_by_id]
+            graph[record_id] = internal
+            if record_id in internal:
+                self.add("REQUIRES_SELF", record.path, f'requires contains its own record id "{record_id}"')
+
+        state: dict[str, int] = {}
+        reported: set[str] = set()
+
+        def visit(record_id: str, stack: list[str]) -> None:
+            state[record_id] = 1
+            stack.append(record_id)
+            for required_id in graph[record_id]:
+                if required_id == record_id:
+                    continue
+                if state.get(required_id, 0) == 0:
+                    visit(required_id, stack)
+                elif state.get(required_id) == 1:
+                    cycle = stack[stack.index(required_id):] + [required_id]
+                    key = " -> ".join(cycle)
+                    if key not in reported:
+                        reported.add(key)
+                        self.add("REQUIRES_CYCLE", records_by_id[record_id].path, f"requires cycle: {key}")
+            stack.pop()
+            state[record_id] = 2
+
+        for record_id in sorted(graph):
+            if state.get(record_id, 0) == 0:
+                visit(record_id, [])
 
     def check_timestamps(self, record: Record) -> None:
         updated = self.parse_timestamp(record, "updated_at")
@@ -215,6 +314,142 @@ class Linter:
             return None
         if parsed.tzinfo is None:
             self.add("TIMESTAMP_INVALID", record.path, f'{field} must include a UTC offset')
+            return None
+        return parsed
+
+    def check_attempts(self) -> None:
+        for record in self.records:
+            attempts = record.data.get("attempt")
+            lanes = record.data.get("lane")
+            owns_live_lane = isinstance(lanes, list) and any(
+                isinstance(lane, dict)
+                and isinstance(lane.get("state"), str)
+                and lane["state"].strip().casefold() in LIVE_LANE_STATES
+                for lane in lanes
+            )
+            shape = record.data.get("shape")
+            execution_record = isinstance(shape, str) and shape in EXECUTION_SHAPES
+            needs_attempt = execution_record and (record.data.get("life") == "active" or owns_live_lane)
+            if attempts is None:
+                if needs_attempt:
+                    self.add("ACTIVE_EXECUTION_ATTEMPT_MISSING", record.path, "an active task or project needs an attempt")
+                continue
+            if not execution_record:
+                self.add("ATTEMPT_RECORD_SHAPE_INVALID", record.path, "only task and project records may have attempts")
+            if not isinstance(attempts, list):
+                self.add("ATTEMPT_TYPE_INVALID", record.path, "attempt must be an array of tables")
+                continue
+            if not attempts:
+                self.add("ATTEMPT_EMPTY", record.path, "attempt must contain at least one table")
+                continue
+            seen_ids: set[str] = set()
+            for index, attempt in enumerate(attempts, 1):
+                self.check_attempt(record.path, index, attempt, seen_ids)
+
+    def check_attempt(self, path: Path, index: int, attempt: Any, seen_ids: set[str]) -> None:
+        label = f"attempt {index}"
+        if not isinstance(attempt, dict):
+            self.add("ATTEMPT_TYPE_INVALID", path, f"{label} must be a TOML table")
+            return
+        for field in sorted(set(attempt).difference(ATTEMPT_ALLOWED_FIELDS)):
+            self.add("ATTEMPT_FIELD_UNKNOWN", path, f'{label} has unknown field "{field}"')
+        missing = [field for field in ATTEMPT_REQUIRED_FIELDS if field not in attempt]
+        if missing:
+            self.add("ATTEMPT_FIELD_REQUIRED", path, f"{label} is missing {', '.join(missing)}")
+        attempt_id = attempt.get("id")
+        if isinstance(attempt_id, str) and attempt_id:
+            if attempt_id in seen_ids:
+                self.add("ATTEMPT_ID_DUPLICATE", path, f'{label} repeats id "{attempt_id}"')
+            seen_ids.add(attempt_id)
+        elif "id" in attempt:
+            self.add("ATTEMPT_FIELD_INVALID", path, f"{label} id must be a non-empty string")
+        for field in ATTEMPT_REQUIRED_FIELDS:
+            if field in {"calibration_sample_count", "id"} or field not in attempt:
+                continue
+            if not isinstance(attempt[field], str) or not attempt[field]:
+                self.add("ATTEMPT_FIELD_INVALID", path, f"{label} {field} must be a non-empty string")
+        sample_count = attempt.get("calibration_sample_count")
+        if sample_count is not None and (not isinstance(sample_count, int) or isinstance(sample_count, bool) or sample_count < 0):
+            self.add("ATTEMPT_FIELD_INVALID", path, f"{label} calibration_sample_count must be a non-negative integer")
+        for field in sorted(ATTEMPT_TIME_FIELDS.intersection(attempt)):
+            pattern = ESTIMATED_DURATION_PATTERN if field.endswith("_estimate") else ACTUAL_DURATION_PATTERN
+            if not isinstance(attempt[field], str) or pattern.fullmatch(attempt[field]) is None:
+                qualifier = "estimated " if field.endswith("_estimate") else "exact actual "
+                self.add("ATTEMPT_FIELD_INVALID", path, f"{label} {field} must be an {qualifier}compact duration")
+        settled = any(field in attempt for field in ATTEMPT_SETTLEMENT_FIELDS)
+        if settled:
+            missing_settlement = [field for field in ATTEMPT_SETTLEMENT_FIELDS if field not in attempt]
+            if missing_settlement:
+                self.add("ATTEMPT_SETTLEMENT_INCOMPLETE", path, f"{label} is missing {', '.join(missing_settlement)}")
+        review_budget = attempt.get("review_budget")
+        if not isinstance(review_budget, str) or review_budget not in REVIEW_BUDGETS:
+            self.add("ATTEMPT_REVIEW_BUDGET_INVALID", path, f"{label} review_budget must be none, owner, or independent")
+        review_outcome = attempt.get("review_outcome")
+        if "review_outcome" in attempt and (
+            not isinstance(review_outcome, str) or review_outcome not in REVIEW_OUTCOMES
+        ):
+            self.add("ATTEMPT_REVIEW_OUTCOME_INVALID", path, f"{label} review_outcome must be clean, findings, or not-run")
+        timestamps = {
+            field: self.check_attempt_timestamp(path, label, field, attempt[field])
+            for field in ("started_at", "ended_at")
+            if field in attempt
+        }
+        if timestamps.get("started_at") is not None and timestamps.get("ended_at") is not None:
+            if timestamps["ended_at"] < timestamps["started_at"]:
+                self.add("ATTEMPT_CHRONOLOGY_INVALID", path, f"{label} ended_at precedes started_at")
+        if "outcome" in attempt and (not isinstance(attempt["outcome"], str) or not attempt["outcome"]):
+            self.add("ATTEMPT_FIELD_INVALID", path, f"{label} outcome must be a non-empty string")
+        for field in (
+            "queue_block_cause",
+            "verification_summary",
+            "review_summary",
+            "reviewed_commit",
+            "reviewer_model",
+            "reviewer_reasoning",
+            "race",
+            "race_outcome",
+        ):
+            if field in attempt and (not isinstance(attempt[field], str) or not attempt[field]):
+                self.add("ATTEMPT_FIELD_INVALID", path, f"{label} {field} must be a non-empty string")
+        self.check_attempt_review(path, label, attempt, settled)
+
+    def check_attempt_review(self, path: Path, label: str, attempt: dict[str, Any], settled: bool) -> None:
+        review_outcome = attempt.get("review_outcome")
+        reviewer_fields = ("reviewer_model", "reviewer_reasoning")
+        if settled and "review_outcome" not in attempt:
+            self.add("ATTEMPT_REVIEW_OUTCOME_REQUIRED", path, f"{label} settled without review_outcome")
+        if isinstance(review_outcome, str) and review_outcome in {"clean", "findings"}:
+            if not isinstance(attempt.get("reviewed_commit"), str) or not attempt["reviewed_commit"]:
+                self.add("ATTEMPT_REVIEW_INCOMPLETE", path, f"{label} {review_outcome} review needs reviewed_commit")
+            if attempt.get("review_budget") == "independent" and any(field not in attempt for field in reviewer_fields):
+                self.add(
+                    "ATTEMPT_REVIEW_INCOMPLETE",
+                    path,
+                    f"{label} independent review needs reviewer_model and reviewer_reasoning",
+                )
+        if any(field in attempt for field in reviewer_fields) and any(field not in attempt for field in reviewer_fields):
+            self.add(
+                "ATTEMPT_REVIEW_INCOMPLETE",
+                path,
+                f"{label} reviewer_model and reviewer_reasoning must appear together",
+            )
+        if "review_repair_time_actual" in attempt and review_outcome != "findings":
+            self.add("ATTEMPT_REVIEW_REPAIR_INVALID", path, f"{label} review repair time requires findings")
+
+    def check_attempt_timestamp(self, path: Path, label: str, field: str, value: Any) -> datetime | None:
+        if isinstance(value, datetime):
+            parsed = value
+        elif isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value)
+            except ValueError:
+                self.add("ATTEMPT_TIMESTAMP_INVALID", path, f"{label} {field} is not an ISO 8601 timestamp")
+                return None
+        else:
+            self.add("ATTEMPT_TIMESTAMP_INVALID", path, f"{label} {field} must be an ISO 8601 timestamp")
+            return None
+        if parsed.tzinfo is None:
+            self.add("ATTEMPT_TIMESTAMP_INVALID", path, f"{label} {field} must include a UTC offset")
             return None
         return parsed
 

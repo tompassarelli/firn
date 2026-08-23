@@ -53,10 +53,11 @@ forecast before work begins, including a solo owner; inactive proposals and
 resources do not fabricate one.
 
 After every completion, settle the attempt and replace its in-flight pointer
-with one completed receipt: forecast and actual wall/agent time, queue/block
-and verification portions, forecast ratio, selected model/reasoning/route/role,
-race result where relevant, and concise overrun cause or `none`. Include exact
-commit review findings, repair time, and explicitly deferred quality debt when
+with one completed receipt: wall and agent time estimates and actuals,
+queue/block and verification time actuals, the derived wall-time
+actual-to-estimate ratio, selected model/reasoning/route/role, race result where
+relevant, and concise overrun cause or `none`. Include exact commit review
+findings, review-repair time actual, and explicitly deferred quality debt when
 they exist. The `todo` skill owns the shared field contract. Refresh the
 same-class calibration from settled receipts; use model-specific observations
 when enough exist, and otherwise retain the labeled cross-model fallback. Keep
