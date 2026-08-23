@@ -58,12 +58,23 @@ sources=(
   "$firn_repo/native/system_policy.bgl"
   "$firn_repo/native/firn.bgl"
 )
+entry="firn.main/-main"
+
+if [[ "$#" -eq 2 && "${1:-}" == repo && "${2:-}" == validate ]] ||
+   [[ "$#" -eq 3 && "${1:-}" == repo && "${2:-}" == validate && "${3:-}" == all ]]; then
+  entry="firn.schema-transaction-native/-main"
+  sources=(
+    "$beagle_path/native-core/src/native/json.bgl"
+    "$firn_repo/native/schema_transaction.bgl"
+    "$firn_repo/native/schema_transaction_native.bgl"
+  )
+fi
 
 set +e
 "$beagle" native-exe \
   --out "$stage/firn" \
   --artifacts "$stage/artifacts" \
-  --entry firn.main/-main \
+  --entry "$entry" \
   "${sources[@]}" \
   >"$stage/build.stdout" 2>"$stage/build.stderr"
 build_status=$?

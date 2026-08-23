@@ -19,7 +19,11 @@ printf 'alpha\n' >"$firn_repo/marker"
 cat >"$beagle_path/bin/beagle" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+printf 'BEAGLE_CALL\0' >>"$FAKE_BEAGLE_LOG"
 printf '%s\0' "$BEAGLE_PATH" "$FIRN_REPO" "$@" >>"$FAKE_BEAGLE_LOG"
+if [[ "${1:-}" != native-exe ]]; then
+  exit 0
+fi
 out=""
 while [[ "$#" -gt 0 ]]; do
   if [[ "$1" == --out ]]; then
@@ -33,6 +37,7 @@ marker="$(sed -n '1p' "$FIRN_REPO/marker")"
 cat >"$out" <<INNER
 #!/usr/bin/env bash
 printf 'compiled:%s\\n' '$marker'
+printf 'RUNTIME_CALL\\0' >>"\$FAKE_RUNTIME_LOG"
 printf '%s\\0' "\$BEAGLE_PATH" "\$FIRN_REPO" "\$@" >>"\$FAKE_RUNTIME_LOG"
 INNER
 chmod +x "$out"
@@ -59,25 +64,101 @@ run_live() {
     "$here/firn" repo validate
 }
 
+run_live_all() {
+  BEAGLE_PATH="$beagle_path" FIRN_REPO="$firn_repo" \
+    "$here/firn" repo validate all
+}
+
+run_live_explicit() {
+  BEAGLE_PATH="$beagle_path" FIRN_REPO="$firn_repo" \
+    "$here/firn" repo validate hosts/whiterabbit/configuration.bnix
+}
+
+run_live_chained() {
+  BEAGLE_PATH="$beagle_path" FIRN_REPO="$firn_repo" \
+    "$here/firn" repo validate tag enable terminal
+}
+
 [[ "$(run_live)" == "compiled:alpha" ]]
 printf 'beta\n' >"$firn_repo/marker"
 [[ "$(run_live)" == "compiled:beta" ]]
+[[ "$(run_live_all)" == "compiled:beta" ]]
+[[ "$(run_live_explicit)" == "compiled:beta" ]]
+[[ "$(run_live_chained)" == "compiled:beta" ]]
 
 python3 - "$scratch/beagle.log" "$scratch/runtime.log" "$beagle_path" "$firn_repo" <<'PY'
 import pathlib
 import sys
 
-beagle_log, runtime_log, beagle_path, firn_repo = map(pathlib.Path, sys.argv[1:])
-beagle_fields = beagle_log.read_bytes().split(b"\0")
-runtime_fields = runtime_log.read_bytes().split(b"\0")
-assert beagle_fields.count(str(beagle_path).encode()) == 2
-assert beagle_fields.count(str(firn_repo).encode()) == 2
-assert beagle_fields.count(b"native-exe") == 2
-assert beagle_fields.count(b"firn.main/-main") == 2
-assert runtime_fields.count(str(beagle_path).encode()) == 2
-assert runtime_fields.count(str(firn_repo).encode()) == 2
-assert runtime_fields.count(b"repo") == 2
-assert runtime_fields.count(b"validate") == 2
+beagle_log = pathlib.Path(sys.argv[1])
+runtime_log = pathlib.Path(sys.argv[2])
+beagle_path = pathlib.Path(sys.argv[3])
+firn_repo = pathlib.Path(sys.argv[4])
+
+
+def records(path, marker):
+    result = []
+    current = None
+    for field in path.read_bytes().split(b"\0"):
+        if field == marker:
+            current = []
+            result.append(current)
+        elif current is not None and field:
+            current.append(field)
+    return result
+
+
+beagle_calls = records(beagle_log, b"BEAGLE_CALL")
+runtime_calls = records(runtime_log, b"RUNTIME_CALL")
+assert len(beagle_calls) == 5
+assert len(runtime_calls) == 5
+
+beagle_prefix = str(beagle_path).encode()
+firn_prefix = str(firn_repo).encode()
+narrow_sources = [
+    str(beagle_path / "native-core/src/native/json.bgl").encode(),
+    str(firn_repo / "native/schema_transaction.bgl").encode(),
+    str(firn_repo / "native/schema_transaction_native.bgl").encode(),
+]
+
+for call in beagle_calls[:3]:
+    assert call[:3] == [beagle_prefix, firn_prefix, b"native-exe"]
+    entry_index = call.index(b"--entry")
+    assert call[entry_index + 1] == b"firn.schema-transaction-native/-main"
+    assert call[entry_index + 2:] == narrow_sources
+
+for call in beagle_calls[3:]:
+    assert call[:3] == [beagle_prefix, firn_prefix, b"native-exe"]
+    entry_index = call.index(b"--entry")
+    assert call[entry_index + 1] == b"firn.main/-main"
+    aggregate_sources = call[entry_index + 2:]
+    assert len(aggregate_sources) == 33
+    assert aggregate_sources[0] == str(
+        beagle_path / "native-core/src/beagle/datum_reader.bgl"
+    ).encode()
+    assert aggregate_sources[-1] == str(firn_repo / "native/firn.bgl").encode()
+
+assert runtime_calls == [
+    [beagle_prefix, firn_prefix, b"repo", b"validate"],
+    [beagle_prefix, firn_prefix, b"repo", b"validate"],
+    [beagle_prefix, firn_prefix, b"repo", b"validate", b"all"],
+    [
+        beagle_prefix,
+        firn_prefix,
+        b"repo",
+        b"validate",
+        b"hosts/whiterabbit/configuration.bnix",
+    ],
+    [
+        beagle_prefix,
+        firn_prefix,
+        b"repo",
+        b"validate",
+        b"tag",
+        b"enable",
+        b"terminal",
+    ],
+]
 PY
 
 [[ ! -e "$NIX_TRIPWIRE_LOG" ]]
@@ -100,7 +181,8 @@ import pathlib
 import sys
 
 fields = pathlib.Path(sys.argv[1]).read_bytes().split(b"\0")
-assert fields[0] == sys.argv[2].encode()
+assert fields[0] == b"BEAGLE_CALL"
+assert fields[1] == sys.argv[2].encode()
 assert b"check" in fields
 assert b"sentinel.bgl" in fields
 PY
