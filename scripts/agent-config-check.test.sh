@@ -340,9 +340,9 @@ TOML
 "providerSupport":[{"id":"activation-gate","owner":{"repo":"nixos-config","path":"support/harness-dial.sh"},"path":"lib/harness-dial.sh"}],
 "rootOrder":["repo-safety","firn"],
 "units":[
-{"id":"repo-safety","kind":"skill","category":"git","seedPermission":"on","owner":{"repo":"nixos-config","path":"skills/repo-safety/SKILL.md"},"distributions":[{"type":"skill","targets":["shared"]}]},
-{"id":"firn","kind":"skill","category":"nixos","seedPermission":"on","owner":{"repo":"nixos-config","path":"skills/firn/SKILL.md"},"distributions":[{"type":"skill","targets":["shared"]}]},
-{"id":"launch-critical-worktree-guard","kind":"hook","category":"authoring","title":"Worktree guard","triggerDescription":"Protect launch-critical checkouts.","seedPermission":"on","owner":{"repo":"nixos-config","path":"hooks/launch-critical-worktree-guard.sh"},"supports":["repo-safety"],"distributions":[{"type":"hook","targets":["codex"]}]}
+{"id":"repo-safety","kind":"skill","category":"git","owner":{"repo":"nixos-config","path":"skills/repo-safety/SKILL.md"},"distributions":[{"type":"skill","targets":["shared"]}]},
+{"id":"firn","kind":"skill","category":"nixos","owner":{"repo":"nixos-config","path":"skills/firn/SKILL.md"},"distributions":[{"type":"skill","targets":["shared"]}]},
+{"id":"launch-critical-worktree-guard","kind":"hook","category":"authoring","title":"Worktree guard","triggerDescription":"Protect launch-critical checkouts.","owner":{"repo":"nixos-config","path":"hooks/launch-critical-worktree-guard.sh"},"supports":["repo-safety"],"distributions":[{"type":"hook","targets":["codex"]}]}
 ]}
 JSON
 
@@ -364,10 +364,15 @@ JSON
       (load-file (first *command-line-args*))
       (let [load-catalog (ns-resolve (quote north.agent-catalog) (quote load-catalog))
             compile-activation (ns-resolve (quote north.agent-catalog) (quote compile-activation))
-            seed-permissions (ns-resolve (quote north.agent-catalog) (quote seed-permissions))
+            default-permissions (ns-resolve (quote north.agent-catalog) (quote default-permissions))
             catalog (load-catalog)]
         (print (json/generate-string
-                 (compile-activation catalog (seed-permissions catalog)))))' \
+                 (compile-activation
+                   catalog
+                   (assoc (default-permissions catalog)
+                          "repo-safety" "on"
+                          "firn" "on"
+                          "launch-critical-worktree-guard" "on")))))' \
       "$north_root/cli/agent-catalog.clj" >"$base/activation.json"
 
   run_policy_case() {
