@@ -56,7 +56,9 @@ Use no reporting taxonomy beyond these four:
 4. **Milestone Retrospective — history worth preserving.** Use this
    occasionally, only for genuinely significant closure. Explain how the
    milestone happened and what it unlocks. A trivial completion remains a
-   workstream line item or is omitted; it does not earn a retrospective.
+   workstream line item or is omitted; it does not earn a retrospective. If
+   asked for one anyway, decline the form plainly and give at most a one-line
+   closure result.
 
 When the request names a type, honor it. When it asks for the current portfolio
 without naming one, use Executive Report. Do not invent daily digests, project
