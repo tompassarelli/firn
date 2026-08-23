@@ -28,6 +28,7 @@ HERE="$(
   exit 0
 }
 ACTIVATION_LIB="$HERE/lib/north-agent-activation.sh"
+# shellcheck disable=SC2034  # Read by the sourced activation library.
 NORTH_AGENT_PYTHON="$HERE/runtime/python3"
 # shellcheck disable=SC1090
 if [ ! -r "$ACTIVATION_LIB" ] ||

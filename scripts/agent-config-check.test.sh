@@ -435,7 +435,7 @@ import tomllib
 
 with pathlib.Path(sys.argv[1]).open("rb") as handle:
     hooks = tomllib.load(handle)["hooks"]
-for event in ("SessionEnd", "SubagentStop"):
+for event in ("SubagentStop",):
     groups = hooks.get(event)
     assert isinstance(groups, list) and len(groups) == 1
     commands = groups[0].get("hooks")

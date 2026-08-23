@@ -314,9 +314,6 @@ enabled = {
         "SubagentStart": [{
             "hooks": [command("north-on-spawn-codex", 15)],
         }],
-        "SessionEnd": [{
-            "hooks": [command("north-on-terminal-codex", 3)],
-        }],
         "SubagentStop": [{
             "hooks": [command("north-on-terminal-codex", 3)],
         }],
