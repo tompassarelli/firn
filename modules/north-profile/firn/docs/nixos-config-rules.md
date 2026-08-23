@@ -54,10 +54,10 @@ composed profile. `~/.agents/skills` instead points at the atomic runtime farm
 `~/.local/state/north/skills`; North inventories the complete source at
 `~/code/north/main/profiles/tom/skills` and publishes resolved immutable
 generations there. Injected context surfaces are switchboard-owned instead:
-`~/.codex/AGENTS.md`, `~/.hermes/SOUL.md`, and `~/code/AGENTS.md` point into
-`~/.config/agents`, which only `agents apply` writes, so one manifest slot
-decides what every active interface loads. Provider-specific adapters remain
-in `nixos-config`. The immutable managed Codex hook directory
+`~/.codex/AGENTS.md` and `~/code/AGENTS.md` point into `~/.config/agents`,
+which only `agents apply` writes, so one manifest slot decides what every
+active interface loads. Provider-specific adapters remain in `nixos-config`.
+The immutable managed Codex hook directory
 under `/etc/codex/hooks` is the deliberate security exception and sources each
 hook from its owning locked flake input.
 

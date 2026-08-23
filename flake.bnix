@@ -22,7 +22,6 @@
       "github:tompassarelli/beagle/4aaf833c1edd27f155fbb744dfbbfa8ba9f1b55d"}
    ;; --- GENERATED MODULE INPUTS (do not edit) ---
    :elephant {:url "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73"}
-   :hermes-agent {:inputs.nixpkgs.follows "nixpkgs" :url "github:NousResearch/hermes-agent/244dabbd9c4b542bf5c1ad0159af512c2b5d6e08"}
    :nur {:url "github:nix-community/NUR"}
    :quickshell {:inputs.nixpkgs.follows "nixpkgs" :url "git+https://git.outfoxxed.me/outfoxxed/quickshell"}
    :walker {:inputs.elephant.follows "elephant" :url "github:abenz1267/walker"}
@@ -44,7 +43,6 @@
      beagle
      ;; --- GENERATED MODULE ARGS (do not edit) ---
      elephant
-     hermes-agent
      nur
      quickshell
      walker
@@ -186,7 +184,6 @@
                 {:inputs
                   {;; --- GENERATED MODULE SPECIALARGS (do not edit) ---
                     :elephant elephant
-                    :hermes-agent hermes-agent
                     :nur nur
                     :quickshell quickshell
                     :walker walker
@@ -231,7 +228,6 @@
                        {:inputs
                          {;; --- GENERATED HM SPECIALARGS (do not edit) ---
                     :elephant elephant
-                    :hermes-agent hermes-agent
                     :nur nur
                     :quickshell quickshell
                     :walker walker
@@ -377,7 +373,6 @@
               (//
                 {:inputs    {;; --- GENERATED DARWIN SPECIALARGS (do not edit) ---
                     :elephant elephant
-                    :hermes-agent hermes-agent
                     :nur nur
                     :quickshell quickshell
                     :walker walker
@@ -426,7 +421,6 @@
                       :home-manager.extraSpecialArgs
                        (// {:inputs {;; --- GENERATED DARWIN HM SPECIALARGS (do not edit) ---
                     :elephant elephant
-                    :hermes-agent hermes-agent
                     :nur nur
                     :quickshell quickshell
                     :walker walker
