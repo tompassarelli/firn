@@ -19,7 +19,7 @@ Before each compile, test, build, format, generation, or equivalent development-
 
 Routine pricing is internal. Do not serialize work or add visible structured preflight chatter solely to report it. Surface it when an overrun, optimization decision, or changed result affects the work, or when the user asks for it.
 
-## Capture loop outcomes
+## Record loop outcomes
 
 Capture each invocation's actual wall time, actual-to-expected ratio, outcome, classified overrun cause, and measured saving under the same task-local loop ID when available without serial work. Keep routine telemetry internal or opportunistic; do not record raw commands, inputs, or secrets. Surface and classify every run over twice expectation before any retry or timeout change. Surface an optimization when its break-even fits the remaining uses, and never weaken evidence to gain time.
 
@@ -52,16 +52,22 @@ preflight.
 
 Keep unrelated claims in separate instruments. Control owned clocks,
 randomness, state, versions, and dependencies where they affect the verdict.
+When verdict-sensitive, identify the actual producer, consumer, and artifact
+identity rather than inferring them from a name or path. If a route is blocked,
+use one independent evidence route or record the exact capability gap; do not
+substitute speculation for a verdict.
 For a performance claim, define the metric and decision threshold first and
-isolate contention that could falsify the measurement.
+isolate contention that could falsify the measurement. Before interpreting
+probe overhead, compare a matched uninstrumented A/B run; remove temporary
+instrumentation when the decision is made.
 
 ## Handle bugs once
 
 Reproduce once, minimize only enough to assign the failing layer, fix, run the
-reproducer or regression once, then stop. Treat timing, infrastructure,
-environment, and probe failures as diagnostic until isolated; they are not
-product verdicts. Preserve the diagnostic result rather than retrying it into
-proof.
+reproducer or regression once, then stop. Classify an observation as product,
+input, harness-or-probe, environment, provenance, cache-bootstrap, or
+external-wait. Treat non-product observations as diagnostic until isolated;
+preserve the result rather than retrying it into proof.
 
 ## Batch and supervise
 
