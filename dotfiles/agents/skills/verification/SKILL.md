@@ -15,20 +15,15 @@ as the named decision is made.
 
 ## Price every development loop
 
-Before each compile, test, build, format, generation, or equivalent development-loop invocation, including the first, state the decision it can change, expected wall time and its measured or explicit prior, remaining invocations `N >= 1`, smallest credible optimization cost `C`, expected saving per invocation `S`, break-even `ceil(C/S)`, and `run` or `optimize`. Count the current invocation in `N`; use a conservative estimate when history is absent. If no credible optimization is available, record `C=none`, `S=0`, and `break-even=never`. Optimize first when break-even fits within remaining uses or expected interactive latency is itself unacceptable. Optimization may eliminate repeated work but must preserve the decision instrument's evidence strength. Supervise the run and stop it at twice the expected duration; preserve output and diagnose the expectation, contention, infrastructure, or product cause before any retry or timeout change. Compare actual with expected and use the observation to price the next invocation.
+Before each compile, test, build, format, generation, or equivalent development-loop invocation, including the first, determine internally the decision it can change, expected wall time and its measured or explicit prior, remaining invocations `N >= 1`, smallest credible optimization cost `C`, expected saving per invocation `S`, break-even `ceil(C/S)`, and `run` or `optimize`. Count the current invocation in `N`; use a conservative estimate when history is absent. If no credible optimization is available, record `C=none`, `S=0`, and `break-even=never`. Optimize first when break-even fits within remaining uses or expected interactive latency is itself unacceptable. Optimization may eliminate repeated work but must preserve the decision instrument's evidence strength. Supervise the run and stop it at twice the expected duration; preserve output and diagnose the expectation, contention, infrastructure, or product cause before any retry or timeout change. Compare actual with expected and use the observation to price the next invocation.
 
-```text
-Loop preflight: id=I; class=K; expected=E; prior=P; remaining=N; decision=D; optimize-cost=C; save/run=S; break-even=B; action=run|optimize
-```
+Routine pricing is internal. Do not serialize work or add visible structured preflight chatter solely to report it. Surface it when an overrun, optimization decision, or changed result affects the work, or when the user asks for it.
 
-## Record loop outcomes
+## Capture loop outcomes
 
-After every invocation, emit its actual wall time, actual-to-expected ratio, outcome, classified overrun cause, and measured saving under the same task-local loop ID. Keep these structured lines in the normal agent transcript; do not record raw commands, inputs, or secrets. At campaign handoff, aggregate each loop class's run count, p50 and p95 wall time when at least 20 observations exist, overrun count, optimization cost, gross saving, net saving, unchanged retries, timeout inflations, and weakened evidence. The policy succeeds only when every run was priced, every run over twice expectation was stopped and classified before retry, no unchanged retry or timeout inflation concealed a cause, no evidence was weakened, and no optimization was skipped when its break-even fit the remaining uses. Use the first observations as the baseline and require recurring loop latency and realized net saving to improve rather than merely producing more telemetry.
+Capture each invocation's actual wall time, actual-to-expected ratio, outcome, classified overrun cause, and measured saving under the same task-local loop ID when available without serial work. Keep routine telemetry internal or opportunistic; do not record raw commands, inputs, or secrets. Surface and classify every run over twice expectation before any retry or timeout change. Surface an optimization when its break-even fits the remaining uses, and never weaken evidence to gain time.
 
-```text
-Loop result: id=I; actual=A; ratio=R; outcome=pass|fail|stopped; overrun-cause=C; measured-save=S
-Loop campaign: class=K; runs=N; p50=P50; p95=P95; overruns=O; optimize-cost=C; gross-save=G; net-save=V; unchanged-retries=U; timeout-inflations=T; weakened-evidence=W
-```
+At handoff, report at most a compact, meaningful aggregate when it changes the reader's understanding: loop class, run count, material overrun or optimization, and realized net saving. Include p50 and p95 only when at least 20 observations make them informative. Do not manufacture a campaign report for routine clean runs. Use the first observations as the baseline and require recurring loop latency and realized net saving to improve rather than merely producing more telemetry.
 
 ## Choose the profile
 
