@@ -113,11 +113,10 @@ Native Firn is installed by the system and binds directly as
 `/run/current-system/sw/bin/firn-system-policy`. Edit `.bnix`, never generated
 `.nix`, and regenerate through `firn repo build`.
 
-Provider lifecycle wrappers are separate. Register
-`north-session-lifecycle` as lifecycle telemetry and bind the existing spawn,
-tool-use, delegated, stop, and terminal wrappers to their actual Codex events.
-Those wrappers read North activity and preserve stdin; they are not fake
-`PreToolUse` enforcement.
+Provider lifecycle wrappers are separate. Register each spawn, tool-use,
+delegated, stop, and terminal source under its exact hook identity and bind its
+wrapper to the actual Codex event. Those wrappers read North activity and
+preserve stdin; they are not fake `PreToolUse` enforcement.
 
 ## Wire North workers
 

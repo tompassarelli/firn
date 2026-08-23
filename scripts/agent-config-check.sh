@@ -503,37 +503,6 @@ sealed_promoted_file() {
   [ "$digest" = "$recorded" ]
 }
 
-write_shell_script_bin_matches_source() {
-  local live="$1" source="$2" store_root="${3:-/nix/store}"
-  local resolved canonical_store package_root interpreter interpreter_package first_line
-
-  [ -f "$source" ] || return 1
-  resolved="$(realpath -e "$live" 2>/dev/null)" || return 1
-  canonical_store="$(realpath -e "$store_root" 2>/dev/null)" || return 1
-  package_root="$(dirname "$(dirname "$resolved")")"
-  [ "$(dirname "$package_root")" = "$canonical_store" ] || return 1
-  [[ "${package_root##*/}" =~ ^[a-z0-9]{32}-north-session-end$ ]] || return 1
-  [ "$resolved" = "$package_root/bin/north-session-end" ] &&
-    [ -f "$resolved" ] && [ ! -L "$resolved" ] && [ -x "$resolved" ] || return 1
-
-  IFS= read -r first_line <"$resolved" || return 1
-  [[ "$first_line" = '#!'* ]] || return 1
-  interpreter="${first_line#\#!}"
-  [ -n "$interpreter" ] && [ "$first_line" = "#!$interpreter" ] || return 1
-  case "$interpreter" in
-    "$canonical_store"/*/bin/bash) ;;
-    *) return 1 ;;
-  esac
-  interpreter_package="${interpreter%/bin/bash}"
-  [ "$(dirname "$interpreter_package")" = "$canonical_store" ] &&
-    [[ "${interpreter_package##*/}" =~ ^[a-z0-9]{32}-bash[^/]*$ ]] || return 1
-  [ -x "$interpreter" ] || return 1
-
-  cmp -s \
-    <(tail -n +2 "$resolved") \
-    <({ command cat "$source"; printf '\n'; })
-}
-
 north_wrapped_runtime_matches_locked_source() {
   local public="$1" source_repo="$2" revision="$3" relative="$4"
   local store_root="${5:-/nix/store}"
@@ -714,7 +683,6 @@ bad() { printf '  FAIL: %s\n' "$*" >&2; fail=$((fail + 1)); }
 soft() { printf '  warn: %s\n' "$*" >&2; warn=$((warn + 1)); }
 COORDINATION_ACTIVITY="$(north_unit_activity_state set coordination)"
 AGENT_SPAWN_GUARD_ACTIVITY="$(north_unit_activity_state hook agent-spawn-guard)"
-NORTH_LIFECYCLE_ACTIVITY="$(north_unit_activity_state hook north-session-lifecycle)"
 COORDINATION_ACTIVE=0
 north_unit_activity_is_active set coordination && COORDINATION_ACTIVE=1
 group() {

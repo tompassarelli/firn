@@ -32,7 +32,7 @@ NORTH_AGENT_PYTHON="$HERE/runtime/python3"
 # shellcheck disable=SC1090
 if [ ! -r "$ACTIVATION_LIB" ] ||
    ! source "$ACTIVATION_LIB" ||
-   ! north_agent_unit_active hook north-session-lifecycle; then
+   ! north_agent_unit_active hook north-on-stop; then
   drain_stdin
   exit 0
 fi

@@ -18,8 +18,8 @@ cat >"$state/current/activation.json" <<'JSON'
   "catalogDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "generationId": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "baselines": [],
-  "permissions": {"coordination":"on","build-vs-reuse":"off","north-session-lifecycle":"on"},
-  "rootOrder": ["coordination","build-vs-reuse","north-session-lifecycle"],
+  "permissions": {"coordination":"on","build-vs-reuse":"off","north-on-spawn":"on","north-on-tooluse":"on","north-mark-delegated":"on","north-on-stop":"on","north-on-terminal":"on"},
+  "rootOrder": ["coordination","build-vs-reuse","north-on-spawn","north-on-tooluse","north-mark-delegated","north-on-stop","north-on-terminal"],
   "units": [
     {
       "id": "coordination",
@@ -48,17 +48,41 @@ cat >"$state/current/activation.json" <<'JSON'
       "activationPaths": []
     },
     {
-      "id": "north-session-lifecycle",
+      "id": "north-on-spawn",
       "kind": "hook",
-      "title": "North session lifecycle",
-      "triggerDescription": "Publish provider lifecycle telemetry.",
+      "title": "North on spawn",
+      "triggerDescription": "Publish spawn telemetry.",
       "permission": "on",
       "active": true,
-      "owner": {"repo": "north", "path": "profiles/tom/hooks/north-session-end.sh"},
+      "owner": {"repo": "north", "path": "bin/north-on-spawn"},
       "members": [],
       "supports": ["assignments"],
       "distributions": [{"type":"providerAdapter","targets":["codex"],"owner":{"repo":"nixos-config","path":"dotfiles/codex/hooks/north-on-spawn-codex"},"adapterId":"north-on-spawn-codex"}],
       "activationPaths": []
+    },
+    {
+      "id": "north-on-tooluse", "kind": "hook", "title": "North on tool use",
+      "triggerDescription": "Publish tool-use telemetry.", "permission": "on", "active": true,
+      "owner": {"repo": "north", "path": "bin/north-on-tooluse"}, "members": [],
+      "supports": ["assignments"], "distributions": [{"type":"providerAdapter","targets":["codex"],"owner":{"repo":"nixos-config","path":"dotfiles/codex/hooks/north-on-tooluse-codex"},"adapterId":"north-on-tooluse-codex"}], "activationPaths": []
+    },
+    {
+      "id": "north-mark-delegated", "kind": "hook", "title": "North mark delegated",
+      "triggerDescription": "Publish delegation telemetry.", "permission": "on", "active": true,
+      "owner": {"repo": "north", "path": "bin/north-mark-delegated"}, "members": [],
+      "supports": ["assignments"], "distributions": [{"type":"providerAdapter","targets":["codex"],"owner":{"repo":"nixos-config","path":"dotfiles/codex/hooks/north-mark-delegated-codex"},"adapterId":"north-mark-delegated-codex"}], "activationPaths": []
+    },
+    {
+      "id": "north-on-stop", "kind": "hook", "title": "North on stop",
+      "triggerDescription": "Publish stop telemetry.", "permission": "on", "active": true,
+      "owner": {"repo": "north", "path": "bin/north-on-stop"}, "members": [],
+      "supports": ["assignments"], "distributions": [{"type":"providerAdapter","targets":["codex"],"owner":{"repo":"nixos-config","path":"dotfiles/codex/hooks/north-on-stop-codex"},"adapterId":"north-on-stop-codex"}], "activationPaths": []
+    },
+    {
+      "id": "north-on-terminal", "kind": "hook", "title": "North on terminal",
+      "triggerDescription": "Publish terminal telemetry.", "permission": "on", "active": true,
+      "owner": {"repo": "north", "path": "bin/north-on-terminal"}, "members": [],
+      "supports": ["assignments"], "distributions": [{"type":"providerAdapter","targets":["codex"],"owner":{"repo":"nixos-config","path":"dotfiles/codex/hooks/north-on-terminal-codex"},"adapterId":"north-on-terminal-codex"}], "activationPaths": []
     }
   ],
   "projectionPlan": {}
@@ -77,7 +101,7 @@ case "${1:-}" in
     if [[ "${2:-}" == --json ]]; then
       cat "$activation"
     else
-      printf '%s\n' 'Sets' '  coordination on' 'Skills' '  build-vs-reuse off' 'Hooks' '  north-session-lifecycle on'
+      printf '%s\n' 'Sets' '  coordination on' 'Skills' '  build-vs-reuse off' 'Hooks' '  north-on-spawn on'
     fi
     ;;
   inspect)

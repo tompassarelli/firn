@@ -998,39 +998,6 @@ fi
 mv "$scratch/good-public-wrapper" "$fixture_public"
 chmod +x "$fixture_public"
 
-# writeShellScriptBin prepends one store Bash shebang to the complete source
-# and appends exactly one blank line. No other body normalization is allowed.
-session_source="$scratch/north-session-end.sh"
-session_pkg="$fixture_store/${nix_hash}-north-session-end"
-session_live="$session_pkg/bin/north-session-end"
-mkdir -p "$session_pkg/bin"
-printf '%s\n' '#!/usr/bin/env bash' 'printf session-end\\n' >"$session_source"
-{
-  printf '#!%s\n' "$fixture_bash"
-  cat "$session_source"
-  printf '\n'
-} >"$session_live"
-chmod +x "$session_live"
-write_shell_script_bin_matches_source \
-  "$session_live" "$session_source" "$fixture_store"
-printf 'drift\n' >>"$session_live"
-if write_shell_script_bin_matches_source \
-   "$session_live" "$session_source" "$fixture_store"; then
-  printf 'north-session-end generated body drift was accepted\n' >&2
-  exit 1
-fi
-{
-  printf '#!/bin/bash\n'
-  cat "$session_source"
-  printf '\n'
-} >"$session_live"
-chmod +x "$session_live"
-if write_shell_script_bin_matches_source \
-   "$session_live" "$session_source" "$fixture_store"; then
-  printf 'north-session-end non-store shebang was accepted\n' >&2
-  exit 1
-fi
-
 grep -Fq 'CODEX_HOME="$HOME/.codex"' "$REPO/scripts/agent-config-check.sh"
 grep -Fq 'CODEX_SQLITE_HOME="$HOME/.codex/sqlite"' \
   "$REPO/scripts/agent-config-check.sh"

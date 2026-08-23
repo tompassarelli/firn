@@ -64,9 +64,8 @@ Provider adapters read that generation and never resolve activity themselves.
 
 Hooks remain enforcement or telemetry mechanisms with explicit provider
 wiring. A skill may claim a supporting hook, but never copy hook behavior into
-its prose or treat prose as enforcement. Lifecycle telemetry such as
-`north-session-lifecycle` is a hook identity without pretending to be a
-`PreToolUse` guard.
+its prose or treat prose as enforcement. Each provider lifecycle hook keeps
+its exact source identity and does not pretend to be a `PreToolUse` guard.
 
 ## Validate and activate
 
