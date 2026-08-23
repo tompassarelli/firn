@@ -144,6 +144,24 @@ if [ "${1:-}" = "--executive-orchestration-skill" ]; then
   exit "$fails"
 fi
 
+if [ "${1:-}" = "--rust-development-skill" ]; then
+  echo "== focused rust-development skill reachability"
+  fresh
+  skill_root="$REPO/dotfiles/agents/skills/rust-development"
+  chk "skill keeps the user-authored Rust contract" "1" "$(grep -Fq 'Do not add `clone`, `Arc`, or `Mutex` just to appease the compiler' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  chk "skill distinguishes module and crate boundaries" "1" "$(grep -Fq 'Modules are ownership/reasoning boundaries; crates are compilation and cache boundaries' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  chk "skill isolates concurrent target directories" "1" "$(grep -Fq 'Every concurrently written Rust worktree gets its own `CARGO_TARGET_DIR`' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  ag status > /dev/null
+  chk "rust-development seeds off" "skill rust-development off" "$(grep '^skill rust-development ' "$SB/.config/agents/manifest.conf")"
+  chk "rust-development source path resolves" "$SB/code/nixos-config/main/dotfiles/agents/skills/rust-development/SKILL.md" "$(ag path rust-development)"
+  ag on rust-development > /dev/null
+  chk "rust-development reaches shared and Codex skill surfaces" "1" "$(test -L "$SB/.config/agents/skills/rust-development" && test -L "$SB/.codex/skills/rust-development" && echo 1 || echo 0)"
+  ag off rust-development > /dev/null
+  chk "off removes both skill links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l -name rust-development | wc -l)"
+  if [ "$fails" -eq 0 ]; then echo "all focused rust-development skill tests passed"; else echo "$fails focused rust-development skill test(s) failed"; fi
+  exit "$fails"
+fi
+
 echo "== 1. fresh seed: bound hooks enabled+companion, unbound disabled, nothing composes"
 fresh
 ag status > /dev/null
