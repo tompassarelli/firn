@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Structure"
+  short_description: "Structure reproducible data-and-code projects"
+  default_prompt: "Use $project-structure to organize this data-and-code project for reproducibility and handoff."

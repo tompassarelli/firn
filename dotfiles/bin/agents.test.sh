@@ -162,6 +162,24 @@ if [ "${1:-}" = "--rust-development-skill" ]; then
   exit "$fails"
 fi
 
+if [ "${1:-}" = "--project-structure-skill" ]; then
+  echo "== focused project-structure skill reachability"
+  fresh
+  skill_root="$REPO/dotfiles/agents/skills/project-structure"
+  chk "skill avoids invented data ceremony" "1" "$(grep -Fq 'when the project has no' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  chk "skill requires real data provenance" "1" "$(grep -Fq 'Record enough provenance to reacquire or verify an input' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  chk "skill retains source-scoped Broad provenance" "1" "$(grep -Fq 'the cited source page is licensed CC BY-NC 4.0' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  ag status > /dev/null
+  chk "project-structure seeds off" "skill project-structure off" "$(grep '^skill project-structure ' "$SB/.config/agents/manifest.conf")"
+  chk "project-structure source path resolves" "$SB/code/nixos-config/main/dotfiles/agents/skills/project-structure/SKILL.md" "$(ag path project-structure)"
+  ag on project-structure > /dev/null
+  chk "project-structure reaches shared and Codex skill surfaces" "1" "$(test -L "$SB/.config/agents/skills/project-structure" && test -L "$SB/.codex/skills/project-structure" && echo 1 || echo 0)"
+  ag off project-structure > /dev/null
+  chk "off removes both skill links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l -name project-structure | wc -l)"
+  if [ "$fails" -eq 0 ]; then echo "all focused project-structure skill tests passed"; else echo "$fails focused project-structure skill test(s) failed"; fi
+  exit "$fails"
+fi
+
 echo "== 1. fresh seed: bound hooks enabled+companion, unbound disabled, nothing composes"
 fresh
 ag status > /dev/null
