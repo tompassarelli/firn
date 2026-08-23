@@ -19,7 +19,7 @@ beagle/store/tests/codegraph_exec_test.sh	1
 beagle/store/tests/store_anchor_disambig_test.clj	1
 nixos-config/dotfiles/agents/modules.d/coordination.json	1
 nixos-config/dotfiles/agents/modules.d/orchestration.json	1
-nixos-config/dotfiles/bin/agents	21
+nixos-config/dotfiles/bin/agents	26
 nixos-config/dotfiles/bin/beagle	1
 nixos-config/dotfiles/bin/concern	1
 nixos-config/dotfiles/bin/north	1

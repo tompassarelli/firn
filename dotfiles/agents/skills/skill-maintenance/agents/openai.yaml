@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill Maintenance"
+  short_description: "Ratchet strong feedback into policy"
+  default_prompt: "Use $skill-maintenance to turn this correction into scoped durable agent policy when justified."

@@ -42,6 +42,12 @@ fresh() {
     > "$NORTH/agent-profile/skills/importing-skills/SKILL.md"
   printf -- '---\nname: external-code\n---\n' \
     > "$NORTH/agent-profile/skills/external-code/SKILL.md"
+  for s in planning prior-art program-craftsmanship \
+    production-hardening program-stewardship; do
+    mkdir -p "$NORTH/agent-profile/skills/$s"
+    printf -- '---\nname: %s\n---\n' "$s" \
+      > "$NORTH/agent-profile/skills/$s/SKILL.md"
+  done
   for s in threejs-animation threejs-fundamentals threejs-geometry \
     threejs-interaction threejs-lighting threejs-loaders threejs-materials \
     threejs-postprocessing threejs-shaders threejs-textures; do
@@ -127,6 +133,35 @@ if [ "${1:-}" = "--policy-skills" ]; then
   for s in agent-policy delegating-agents external-code; do ag off "$s" > /dev/null; done
   chk "off removes both farm links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l \( -name agent-policy -o -name delegating-agents -o -name external-code \) | wc -l)"
   if [ "$fails" -eq 0 ]; then echo "all focused policy-skill tests passed"; else echo "$fails focused policy-skill test(s) failed"; fi
+  exit "$fails"
+fi
+
+if [ "${1:-}" = "--imported-maintenance-skills" ]; then
+  echo "== focused imported and maintenance skill reachability"
+  fresh
+  ag status > /dev/null
+  chk "imported and maintenance skills seed off" "6" "$(grep -Ec '^skill (planning|prior-art|program-craftsmanship|production-hardening|program-stewardship|skill-maintenance) off$' "$SB/.config/agents/manifest.conf")"
+  chk "planning source path resolves" "$SB/code/north/main/agent-profile/skills/planning/SKILL.md" "$(ag path planning)"
+  chk "prior-art source path resolves" "$SB/code/north/main/agent-profile/skills/prior-art/SKILL.md" "$(ag path prior-art)"
+  chk "program-craftsmanship source path resolves" "$SB/code/north/main/agent-profile/skills/program-craftsmanship/SKILL.md" "$(ag path program-craftsmanship)"
+  chk "production-hardening source path resolves" "$SB/code/north/main/agent-profile/skills/production-hardening/SKILL.md" "$(ag path production-hardening)"
+  chk "program-stewardship source path resolves" "$SB/code/north/main/agent-profile/skills/program-stewardship/SKILL.md" "$(ag path program-stewardship)"
+  chk "skill-maintenance source path resolves" "$SB/code/nixos-config/main/dotfiles/agents/skills/skill-maintenance/SKILL.md" "$(ag path skill-maintenance)"
+  skill_root="$REPO/dotfiles/agents/skills/skill-maintenance"
+  chk "skill maintenance distinguishes policy from memory" "1" "$(grep -Fq 'policy says' "$skill_root/SKILL.md" && grep -Fq 'while memory preserves useful facts' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  chk "skill maintenance amends an existing owner first" "1" "$(grep -Fq 'Amend that owner first' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  chk "skill maintenance refuses premature retention claims" "1" "$(grep -Fq 'The claim becomes true only after publication' "$skill_root/SKILL.md" && grep -Fq 'proof all succeed.' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  for s in planning prior-art program-craftsmanship production-hardening program-stewardship skill-maintenance; do
+    ag on "$s" > /dev/null
+    expected="$(readlink -f "$(dirname "$(ag path "$s")")")"
+    chk "$s shared link targets its source" "$expected" "$(readlink -f "$SB/.config/agents/skills/$s")"
+    chk "$s Codex link targets its source" "$expected" "$(readlink -f "$SB/.codex/skills/$s")"
+  done
+  for s in planning prior-art program-craftsmanship production-hardening program-stewardship skill-maintenance; do
+    ag off "$s" > /dev/null
+    chk "$s off removes both links" "1" "$([ ! -e "$SB/.config/agents/skills/$s" ] && [ ! -L "$SB/.config/agents/skills/$s" ] && [ ! -e "$SB/.codex/skills/$s" ] && [ ! -L "$SB/.codex/skills/$s" ] && echo 1 || echo 0)"
+  done
+  if [ "$fails" -eq 0 ]; then echo "all focused imported and maintenance skill tests passed"; else echo "$fails focused imported and maintenance skill test(s) failed"; fi
   exit "$fails"
 fi
 
