@@ -1,0 +1,4 @@
+interface:
+  display_name: "Executive Orchestration"
+  short_description: "Command fleets through self-managing workstreams"
+  default_prompt: "Use $executive-orchestration to keep this fleet delegated, coherent, and operator-visible."

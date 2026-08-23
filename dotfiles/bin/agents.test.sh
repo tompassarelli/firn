@@ -130,6 +130,20 @@ if [ "${1:-}" = "--policy-skills" ]; then
   exit "$fails"
 fi
 
+if [ "${1:-}" = "--executive-orchestration-skill" ]; then
+  echo "== focused executive-orchestration reachability"
+  fresh
+  ag status > /dev/null
+  chk "executive orchestration seeds off" "skill executive-orchestration off" "$(grep '^skill executive-orchestration ' "$SB/.config/agents/manifest.conf")"
+  chk "executive orchestration source path resolves" "$SB/code/nixos-config/main/dotfiles/agents/skills/executive-orchestration/SKILL.md" "$(ag path executive-orchestration)"
+  ag on executive-orchestration > /dev/null
+  chk "executive orchestration reaches the shared and Codex farms" "1" "$(test -L "$SB/.config/agents/skills/executive-orchestration" && test -L "$SB/.codex/skills/executive-orchestration" && echo 1 || echo 0)"
+  ag off executive-orchestration > /dev/null
+  chk "off removes both farm links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l -name executive-orchestration | wc -l)"
+  if [ "$fails" -eq 0 ]; then echo "all focused executive-orchestration tests passed"; else echo "$fails focused executive-orchestration test(s) failed"; fi
+  exit "$fails"
+fi
+
 echo "== 1. fresh seed: bound hooks enabled+companion, unbound disabled, nothing composes"
 fresh
 ag status > /dev/null

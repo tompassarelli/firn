@@ -64,7 +64,7 @@ SKILLS=(webdev importing-skills threejs-animation threejs-fundamentals
   threejs-materials threejs-postprocessing threejs-shaders threejs-textures
   beagle-authoring beagle-system-design fact-modeling firn repo-safety staffing
   messages threads assignments todo convo guard-authoring cloudflare-deploy verification estimate
-  agent-policy delegating-agents external-code terse greenfield)
+  agent-policy delegating-agents executive-orchestration external-code terse greenfield)
 # A MODULE is a skill with declarations — a skill whose frontmatter names the
 # hooks its rules need (`hooks:`) or a directory of agent templates it ships
 # (`agents:`). It is not a kind: a module's name IS a skill's name. Staffing is
@@ -721,6 +721,7 @@ skill_source() {
     estimate)        echo "$NIXOS_CONFIG/dotfiles/agents/skills/estimate" ;;
     agent-policy)    echo "$NIXOS_CONFIG/dotfiles/agents/skills/agent-policy" ;;
     delegating-agents) echo "$NIXOS_CONFIG/dotfiles/agents/skills/delegating-agents" ;;
+    executive-orchestration) echo "$NIXOS_CONFIG/dotfiles/agents/skills/executive-orchestration" ;;
     external-code)   echo "$HOME/code/north/main/agent-profile/skills/external-code" ;;
     staffing)        echo "$NORTH/orchestration/staffing" ;;
     messages)        echo "$NORTH/coordination/messages" ;;
