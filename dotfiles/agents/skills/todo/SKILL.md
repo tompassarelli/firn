@@ -87,6 +87,62 @@ paths. Recover one with `convo session <uuid>`. Paths use `repo:path` for files
 inside a repository and `~`-anchored paths for fixed runtime locations and live
 worktrees.
 
+## Attempt, review, and debt receipt
+
+An active execution record (a task or project that starts work, owns a lane, or
+delegates) has one `[[attempt]]` before the work starts. This is the forecast
+and staffing join point; proposals, inactive threads, and resources do not
+invent estimates before they become execution. A non-delegated attempt still
+records `model = "self"` and `role = "owner"`.
+
+```toml
+[[attempt]]
+id = "A1"
+seam = "one independently verifiable outcome"
+class = "compiler-one-seam"
+forecast_wall = "8m"
+forecast_agent = "8m"
+evidence_samples = 3
+started_at = "2026-08-23T16:15:34+08:00"
+model = "gpt-5.6-terra"
+reasoning = "high"
+route = "north:standard/high"
+assignment_id = "north-assignment-id-or-none"
+role = "worker"
+review_budget = "owner"
+```
+
+`forecast_wall` is elapsed critical-path time; `forecast_agent` is the summed
+agent time expected to be consumed. They coincide for one uninterrupted worker
+but deliberately differ for queues, waits, and races. `evidence_samples` names
+the calibration sample count. `review_budget` is `none`, `owner`, or
+`independent`; it is a named spending and assurance choice, never an implied
+numeric craftsmanship score. A race has one `race` identifier on each attempt,
+and every candidate receives its own model, route, and outcome.
+
+At settlement, update the same attempt with `ended_at`, `outcome`,
+`actual_wall`, `actual_agent`, `queue_block`, `verification_wall`, and (for a
+race) `race_outcome`. These are overlapping explanatory measurements, not
+numbers to add together: wall time is the elapsed critical path, agent time is
+summed work, and queue/block and verification time explain portions of the
+path. Add `reviewed_commit`, `review_outcome` (`clean`, `findings`, or
+`not-run`), `reviewer_model`/`reviewer_reasoning` for an independent review,
+and `repair_wall` when review was budgeted or findings are repaired.
+Then put one compact terminal receipt in `~/code/todo/estimate-calibration.md`.
+That receipt carries the same forecast/actual fields plus model, reasoning,
+route, role, assignment ID, outcome, and a concise overrun cause, so future
+staffing can compare like attempts without copying live state into another
+ledger. Record provider cost or token actuals only when an authoritative source
+already supplies them.
+
+Completion is not a vague quality certificate. An independent review consumes
+one exact commit and records concrete findings and their disposition. If a
+known quality gap is intentionally deferred, add a top-level `[[quality_debt]]`
+entry with `attempt`, `path`, `invariant`, `severity`, `owner`, and
+`exit_condition`. Remove it when the condition is proven. Do not use debt for
+unbounded “polish later,” and do not review a clean area again without a new
+change, finding, or named assurance reason.
+
 ## Shapes are semantic, not one universal state machine
 
 Use the narrowest shape that is already true:

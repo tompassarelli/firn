@@ -18,7 +18,8 @@ than a serial list of defects.
 
 ## Establish continuity and seams
 
-Create or update a restart-grade record in `~/code/todo/` before delegation.
+Create or update a restart-grade record in `~/code/todo/` before delegation and
+give every execution attempt its shared forecast/staffing receipt before launch.
 Enumerate the mission's independent units—files, gates, cases, or stages—and
 assign one worker per seam, not one worker per mission. A serial edge is valid
 only when the later seam consumes the earlier seam's output; write that exact
@@ -68,6 +69,23 @@ Candidate branches are hypotheses, not completed work. Consume the first
 verified winner, interrupt and reap every loser immediately, and preserve only
 useful unique evidence. De-escalate when risk drops. Never use a race to bypass
 serial semantic ownership, safety boundaries, or available machine headroom.
+
+## Budget review without losing deferred work
+
+At admission, choose the attempt's `review_budget`: `none` for a bounded,
+reversible seam whose owner evidence is sufficient; `owner` for ordinary
+deliverable review; or `independent` when the change, uncertainty, or requested
+assurance merits a separate reviewer. This is a proportional budget choice, not
+a promise that every completion receives a standing reviewer or a subjective
+quality score. An independent reviewer receives one exact commit, the intended
+invariants, and a finding/disposition boundary; choose its model from the same
+quality floor and task difficulty rules as any other assignment.
+
+When a reviewer finds a real defect, link the finding to the exact commit and
+record its repair time in the owning attempt. When a consciously deferred gap
+matters, record a concrete path, invariant, severity, owner, and exit condition
+as `[[quality_debt]]` in the todo record. Do not reopen or re-polish settled
+code absent a changed commit, a new finding, or a named assurance reason.
 
 ## Route models and accounts from evidence
 
@@ -121,7 +139,11 @@ The account-dispatch evidence is live-only commander/operator evidence. It
 never becomes Store-authoritative autonomous routing and grants no write or
 publication authority; the brief and lane admission still do that. Record the
 observed outcome in `~/code/todo/model-assignment-ledger.md`; the API's machine
-assignment already records the selected account.
+assignment already records the selected account. Also put the exact model,
+reasoning, route, role, and assignment ID on the owning attempt so its terminal
+receipt can improve model selection rather than merely preserve a dispatch log.
+Use settled samples to compare delivery, review findings, and repair tax by
+seam/model; do not pretend one receipt establishes an economic ranking.
 
 ## Admit before dispatch
 
@@ -185,10 +207,13 @@ awaits, release it. When a removal is delegated, sweep registrations,
 allowlists, paths, pins, locks, tests, and consumer repositories in the same
 campaign, then run the final token search across those consumers.
 
-The parent owns integration and settlement. Consume each result, update the
-restart record at every externally visible boundary, and use repo-safety to
-land and reap verified work. A worker denial changes the path, never the goal;
-do not retry verbatim or route around standing law.
+The parent owns integration and settlement. Consume each result, settle every
+attempt with elapsed wall time, summed agent time, queue/block and verification
+time, model/route outcome, race disposition, and any review/debt receipt, then
+update the restart record at every externally visible boundary. Copy one compact
+terminal receipt to the estimate calibration ledger and use repo-safety to land
+and reap verified work. A worker denial changes the path, never the goal; do
+not retry verbatim or route around standing law.
 
 In executive mode, decide and act on recorded evidence, keep every ready seam
 owned, and notify the operator after the fact in plain language. The standing

@@ -14,7 +14,9 @@ Estimate the agent's execution, never a human's effort.
 
 1. Classify the independently verifiable seam being estimated.
 2. Read `~/code/todo/estimate-calibration.md` and anchor to the most recent
-   same-class agent actuals. State how many matching samples support the point.
+   same-class, same-model agent actuals. If that sample is too small, use the
+   same-class cross-model actuals and label the sample scope. State how many
+   matching samples support the point.
 3. When no matching agent observation exists, use a coarse human prior divided
    by 20. Replace that prior immediately when an observed agent timing exists.
 4. Emit exactly one point ETA, the evidence sample count, and the next
@@ -43,9 +45,20 @@ seams and report when the next result becomes observable.
 
 ## Close the loop
 
-Before execution, add the prediction and start time to the flat restart-grade
-ledger at `~/code/todo/estimate-calibration.md`. After every completion, move
-it to the completed observations with the actual elapsed time, ratio, and a
-concise overrun cause or `none`; then refresh the same-class calibration. Keep
-the ledger as concise Markdown with TOML front matter, following the `todo`
-skill's storage contract.
+Before execution, create the `[[attempt]]` in the owning active todo record
+with its point forecast, sample count, and selected staffing; add only a terse
+in-flight pointer to the flat restart-grade ledger at
+`~/code/todo/estimate-calibration.md`. Every execution record gets this
+forecast before work begins, including a solo owner; inactive proposals and
+resources do not fabricate one.
+
+After every completion, settle the attempt and replace its in-flight pointer
+with one completed receipt: forecast and actual wall/agent time, queue/block
+and verification portions, forecast ratio, selected model/reasoning/route/role,
+race result where relevant, and concise overrun cause or `none`. Include exact
+commit review findings, repair time, and explicitly deferred quality debt when
+they exist. The `todo` skill owns the shared field contract. Refresh the
+same-class calibration from settled receipts; use model-specific observations
+when enough exist, and otherwise retain the labeled cross-model fallback. Keep
+the ledger as concise Markdown with TOML front matter; it is a learning record,
+not a second live-work tracker.
