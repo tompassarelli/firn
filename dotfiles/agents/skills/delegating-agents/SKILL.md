@@ -39,6 +39,16 @@ authorized supervisor window plus margin. Capability and policy own standing
 prohibitions; a brief records only its scoped exception. Never invent a tighter
 deadline or lengthen one without evidence that legitimate work changed.
 
+Budget inherited context as a dispatch input. For collaboration workers,
+default `fork_turns` to `none` or the smallest recent slice containing facts
+that authoritative artifacts do not already preserve; use `all` only when the
+task materially depends on uncaptured conversational decisions. Put task-local
+facts in the brief and reference restart records, exact commits, paths, and
+named skills instead of pasting instruction bodies or undifferentiated strategy
+packets. The worker still discovers and reads every applicable instruction,
+but loads the minimum applicable set completely through bounded sequential
+reads rather than one aggregated instruction-loading call.
+
 ## Stage research before synthesis
 
 For research that feeds one integrated artifact, name one closure writer before
