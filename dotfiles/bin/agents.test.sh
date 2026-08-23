@@ -144,6 +144,30 @@ if [ "${1:-}" = "--executive-orchestration-skill" ]; then
   exit "$fails"
 fi
 
+if [ "${1:-}" = "--executive-report-skill" ]; then
+  echo "== focused executive-report skill reachability"
+  fresh
+  skill_root="$REPO/dotfiles/agents/skills/executive-report"
+  chk "frontmatter names all four report triggers" "1" "$(grep -Fq '“executive report,” “weekly' "$skill_root/SKILL.md" && grep -Fq '“workstream brief,” or “milestone retrospective,”' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  chk "executive report is the current default" "1" "$(grep -Fq 'roughly the last 12–24 hours' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  chk "weekly review synthesizes instead of concatenating" "1" "$(grep -Fq 'never concatenate daily or executive reports' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  chk "workstream brief reacquires durable context" "1" "$(grep -Fq 'effectively timeless' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  chk "trivial work does not create a retrospective" "1" "$(grep -Fq 'it does not earn a retrospective' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  chk "reports share the semantic reporting unit" "1" "$(grep -Fq 'Goal → What changed → Current state → Next' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  chk "root consumes commander state cards" "1" "$(grep -Fq 'one current, compact state card from every substantive workstream' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  chk "authority stages remain distinct" "1" "$(grep -Fq 'candidate “done,”' "$skill_root/SKILL.md" && echo 1 || echo 0)"
+  chk "OpenAI metadata invokes the canonical name" "1" "$(grep -Fq 'Use $executive-report' "$skill_root/agents/openai.yaml" && echo 1 || echo 0)"
+  ag status > /dev/null
+  chk "executive-report seeds off" "skill executive-report off" "$(grep '^skill executive-report ' "$SB/.config/agents/manifest.conf")"
+  chk "executive-report source path resolves" "$SB/code/nixos-config/main/dotfiles/agents/skills/executive-report/SKILL.md" "$(ag path executive-report)"
+  ag on executive-report > /dev/null
+  chk "executive-report reaches shared and Codex skill surfaces" "1" "$(test -L "$SB/.config/agents/skills/executive-report" && test -L "$SB/.codex/skills/executive-report" && echo 1 || echo 0)"
+  ag off executive-report > /dev/null
+  chk "off removes both skill links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l -name executive-report | wc -l)"
+  if [ "$fails" -eq 0 ]; then echo "all focused executive-report skill tests passed"; else echo "$fails focused executive-report skill test(s) failed"; fi
+  exit "$fails"
+fi
+
 if [ "${1:-}" = "--rust-development-skill" ]; then
   echo "== focused rust-development skill reachability"
   fresh
