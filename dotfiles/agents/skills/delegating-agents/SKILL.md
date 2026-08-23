@@ -38,6 +38,37 @@ authorized supervisor window plus margin. Capability and policy own standing
 prohibitions; a brief records only its scoped exception. Never invent a tighter
 deadline or lengthen one without evidence that legitimate work changed.
 
+## Ratchet development speed
+
+Use a measured speed ratchet when uncertainty or critical-path risk makes
+speculation worth its cost. `verification` remains the sole owner of compile,
+test, and development-loop pricing; reuse its expected wall time and telemetry
+instead of inventing a second performance ritual. Choose the lowest level that
+can change the decision:
+
+0. **Closure owner** — one worker owns the implementation and acceptance gate.
+1. **Shadow** — parallel, read-only reconnaissance, review, or test design;
+   no competing implementation is written.
+2. **Race** — independent worktrees implement a critical-path seam, or a seam
+   whose implementation is high-variance, silent/overrun, or materially
+   uncertain.
+3. **Portfolio** — several lanes only for genuinely distinct algorithms or
+   architectures, not cosmetic rewrites of one approach.
+
+Escalate only when the expected critical-path saving exceeds duplicate setup,
+merge, review, and compute cost and the work advances that path. A compact
+heuristic is `net gain ≈ P(faster winner) × (owner finish − raced finish) −
+(setup + merge + review + compute)`; use evidence and a conservative range,
+not false precision. Inspect a nearly complete candidate before duplicating it;
+salvage or repair when that is faster than a fresh lane.
+
+Every race names its winner condition up front, uses independent worktrees and
+the same acceptance gate, and counts only verified integration as progress.
+Candidate branches are hypotheses, not completed work. Consume the first
+verified winner, interrupt and reap every loser immediately, and preserve only
+useful unique evidence. De-escalate when risk drops. Never use a race to bypass
+serial semantic ownership, safety boundaries, or available machine headroom.
+
 ## Route models and accounts from evidence
 
 Honor a user-pinned provider, account, model, and reasoning level exactly.
