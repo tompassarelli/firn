@@ -58,6 +58,21 @@ settlement; `todo` for restart continuity; `estimate` for forecasts and timing
 closure; `verification` for evidence; and `repo-safety` for repository lanes
 and publication. This skill owns the behavioral topology, not those procedures.
 
+## Load skills at the owning level
+
+At root, load only the skills needed for the current root-owned control-plane
+decision or action. Do not load workstream domain or implementation skills for
+awareness, repository inspection, or raw-output synthesis. Put those skills in
+the commander or leaf brief and let the actor that owns the matching work load
+them. If root appears to need a domain skill, request a compact state card or
+transfer the domain decision instead; loading more domain procedure does not
+expand root's execution authority. A direct, non-delegable root policy decision
+still loads its owning skill.
+
+Avoid one oversized multi-skill read or output. Bound and order reads by their
+value to the immediate control-plane decision, and give the operator a
+user-facing status before optional downstream research.
+
 ## Admit direct root action narrowly
 
 Default-deny root execution. Act directly only to communicate with the

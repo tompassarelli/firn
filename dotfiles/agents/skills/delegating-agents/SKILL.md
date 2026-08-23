@@ -39,6 +39,40 @@ authorized supervisor window plus margin. Capability and policy own standing
 prohibitions; a brief records only its scoped exception. Never invent a tighter
 deadline or lengthen one without evidence that legitimate work changed.
 
+## Stage research before synthesis
+
+For research that feeds one integrated artifact, name one closure writer before
+fan-out and start that writer immediately. Have the owner inventory and dedupe
+composite sources against their constituents, name the acceptance contract,
+and decompose only by independent decisions or artifacts. Never partition
+research by headings, line ranges, or an exhaustive-coverage matrix.
+
+Start with at most two read-only shadows. Every added worker must own one newly
+exposed independent decision or proof obligation, and its brief must state how
+that result changes or shortens the critical path. Require one compact decision
+card with exactly four fields: decision or proof, evidence, conflict, and
+recommendation. Bound each field to one short paragraph or list of exact
+references containing only closure-relevant content; raw narration and
+chronology are forbidden. Feed each card to the writer as it arrives; never
+wait for every scout without an exact dependency. Interrupt and reap a scout as
+soon as its evidence is consumed.
+
+Keep broad parallelism for genuinely independent deliverables. For one final
+synthesis, keep one closure writer through integration. Multiple writers are
+valid only for independent artifacts with separately verifiable acceptance
+gates.
+
+Before dispatch, set two non-substitutable admission budgets: elapsed
+critical-path wall time and summed agent execution time across the closure
+owner and every delegated worker. Admit a topology only when its forecast fits
+both; unused wall budget never pays for excess agent time. At each stage
+boundary, compare both actuals with forecast and widen only for a newly exposed
+independent obligation when the remaining plan still fits both budgets. At one
+times planned aggregate agent time without a closure candidate, stop adding
+workers and replan or consolidate. At two times either the wall or agent-time
+estimate, interrupt and rebrief; never extend the estimate in place. Settle both
+actuals through the existing attempt receipt.
+
 ## Ratchet development speed
 
 Use a measured speed ratchet when uncertainty or critical-path risk makes
