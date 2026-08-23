@@ -9,7 +9,6 @@
       "codex/runtime" = {
         source = codexPkg;
       };
-      "codex/hooks/lib/north-agent-activation.sh".source = "${flakeRoot}/dotfiles/agents/lib/north-agent-activation.sh";
       "codex/hooks/runtime/bash" = {
         source = "${pkgs.bash}/bin/bash";
       };
@@ -50,6 +49,7 @@
       (providerAdapter "north-on-stop-codex")
       (providerAdapter "north-on-terminal-codex")
       (providerAdapter "beagle-session-start.sh")
+      (providerAdapter "lib/north-agent-activation.sh")
       (promoted "agent-spawn-guard.sh" "north/profiles/tom/hooks/agent-spawn-guard.sh")
       (promoted "launch-critical-worktree-guard.sh" "north/profiles/tom/hooks/launch-critical-worktree-guard.sh")
       (promoted "lib/launch_critical_decide.py" "north/profiles/tom/hooks/lib/launch_critical_decide.py")
@@ -59,8 +59,8 @@
       (promoted "session-kill-guard.sh" "north/profiles/tom/hooks/session-kill-guard.sh")
       (promoted "logcompress-hook.js" "north/profiles/tom/hooks/logcompress-hook.js")
       (promoted "logcompress.js" "north/profiles/tom/hooks/logcompress.js")
-      (providerAdapter "lib/authoring-killswitch.sh")
-      (providerAdapter "lib/harness-dial.sh")
+      (promoted "lib/authoring-killswitch.sh" "north/profiles/tom/hooks/lib/authoring-killswitch.sh")
+      (promoted "lib/harness-dial.sh" "north/profiles/tom/hooks/lib/harness-dial.sh")
     ];
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {

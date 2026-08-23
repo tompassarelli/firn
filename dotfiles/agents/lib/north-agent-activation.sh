@@ -1,8 +1,7 @@
 # shellcheck shell=bash
 
 north_agent_activation_path() {
-  local state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
-  local state_root="${NORTH_AGENT_STATE_ROOT:-$state_home/north/agents}"
+  local state_root="${NORTH_AGENT_STATE_ROOT:-$HOME/.local/state/north/agents}"
   printf '%s\n' "$state_root/current/activation.json"
 }
 
@@ -28,9 +27,7 @@ except (OSError, UnicodeError, json.JSONDecodeError):
     raise SystemExit(1)
 
 digest = re.compile(r"^sha256:[0-9a-f]{64}$")
-permission = re.compile(
-    r"^(on|off|off:until=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$"
-)
+permission = re.compile(r"^(on|off)$")
 if (
     data.get("schema") != "north.agent-activation/v1"
     or not digest.fullmatch(data.get("catalogDigest", ""))
@@ -50,6 +47,7 @@ if (
     len(matches) != 1
     or not isinstance(matches[0].get("permission"), str)
     or not permission.fullmatch(matches[0]["permission"])
+    or matches[0]["permission"] != "on"
     or matches[0].get("active") is not True
 ):
     raise SystemExit(1)

@@ -253,6 +253,14 @@ JSON
   [ "$(AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_state hook absent-hook)" = off ]
   ! AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_is_active hook absent-hook
 
+  sed -i 's/"permission":"on"/"permission":"off:until=2099-01-01T00:00:00Z"/' "$activation"
+  [ "$(AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_state hook agent-spawn-guard)" = invalid ]
+  ! AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_is_active hook agent-spawn-guard
+
+  sed -i 's/"permission":"off:until=2099-01-01T00:00:00Z"/"permission":"off"/' "$activation"
+  [ "$(AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_state hook agent-spawn-guard)" = invalid ]
+  ! AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_is_active hook agent-spawn-guard
+
   sed -i 's#north.agent-activation/v1#north.agent-activation/invalid#' "$activation"
   [ "$(AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_state hook agent-spawn-guard)" = invalid ]
   ! AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_is_active hook agent-spawn-guard
@@ -260,6 +268,8 @@ JSON
 
 run_policy_contract_fixture() {
   local base="$scratch/policy-contract-base"
+  local north_root="${AGENT_PROFILE%/profiles/tom}"
+  local north_catalog="${NORTH_AGENT_CATALOG:-$north_root/agent-catalog/catalog.json}"
   local preamble='Provider-neutral bootstrap.'
   local route='- Repository edits, lanes, pins, commits, landing, or pushes → `repo-safety`.'
   local destination='Repository writes belong in a lane.'
@@ -268,7 +278,10 @@ run_policy_contract_fixture() {
   local repo_claim='Use repository modules.'
   local preamble_digest route_digest destination_digest firn_destination_digest credential_digest repo_digest
 
-  "$REPO/scripts/agent-config-check.sh" --policy-only >/dev/null
+  NORTH_AGENT_CATALOG="$north_catalog" \
+  NORTH_REPO_ROOTS="{\"nixos-config\":\"$REPO\",\"north\":\"$north_root\"}" \
+  AGENT_POLICY_NORTH_CATALOG_LIB="$north_root/cli/agent-catalog.clj" \
+    "$REPO/scripts/agent-config-check.sh" --policy-only >/dev/null
 
   preamble_digest="$(printf %s "$preamble" | sha256sum | awk '{print $1}')"
   route_digest="$(printf %s "$route" | sha256sum | awk '{print $1}')"
@@ -276,11 +289,21 @@ run_policy_contract_fixture() {
   firn_destination_digest="$(printf %s "$firn_destination" | sha256sum | awk '{print $1}')"
   credential_digest="$(printf %s "$credential" | sha256sum | awk '{print $1}')"
   repo_digest="$(printf %s "$repo_claim" | sha256sum | awk '{print $1}')"
-  mkdir -p "$base/policy"
+  mkdir -p "$base/policy" "$base/skills/repo-safety" "$base/skills/firn" \
+    "$base/hooks" "$base/support"
   printf '# Global\n\n%s\n\n## Routes\n\n%s\n\n## Credentials\n\n%s\n' \
     "$preamble" "$route" "$credential" >"$base/policy/AGENTS.md"
   printf '# Repository\n\n## Architecture\n\n%s\n' "$repo_claim" \
     >"$base/policy/REPO-AGENTS.md"
+  printf '%s\n' '---' 'name: repo-safety' 'category: git' \
+    'description: Protect repository work.' '---' '' '# Repo safety' '' "$destination" \
+    >"$base/skills/repo-safety/SKILL.md"
+  printf '%s\n' '---' 'name: firn' 'category: nixos' \
+    'description: Author Firn configuration.' '---' '' '# Firn' '' "$firn_destination" \
+    >"$base/skills/firn/SKILL.md"
+  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' \
+    >"$base/hooks/launch-critical-worktree-guard.sh"
+  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$base/support/harness-dial.sh"
   cat >"$base/requirements.toml" <<'TOML'
 [hooks]
 managed_dir = "/etc/codex/hooks"
@@ -311,9 +334,41 @@ guard = [
   { key = "guard.worktree", unit = "launch-critical-worktree-guard", command = "launch-critical-worktree-guard.sh", codex_command = "/etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh", codex = ["PreToolUse:^(Edit|Write|MultiEdit|apply_patch)$", "PreToolUse:^Bash$"] },
 ]
 TOML
-  cat >"$base/activation.json" <<'JSON'
-{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"launch-critical-worktree-guard","kind":"hook","title":"Worktree guard","triggerDescription":"Protect launch-critical checkouts.","permission":"on","active":true,"owner":{"repo":"north","path":"profiles/tom/hooks/launch-critical-worktree-guard.sh"},"members":[],"supports":["repo-safety"],"distributions":[],"activationPaths":[]}]}
+  cat >"$base/catalog.json" <<'JSON'
+{"schema":"north.agent-catalog/v1",
+"baselines":[{"id":"global-bootstrap","owner":{"repo":"nixos-config","path":"policy/AGENTS.md"},"targets":["shared"]}],
+"providerSupport":[{"id":"activation-gate","owner":{"repo":"nixos-config","path":"support/harness-dial.sh"},"path":"lib/harness-dial.sh"}],
+"rootOrder":["repo-safety","firn"],
+"units":[
+{"id":"repo-safety","kind":"skill","category":"git","seedPermission":"on","owner":{"repo":"nixos-config","path":"skills/repo-safety/SKILL.md"},"distributions":[{"type":"skill","targets":["shared"]}]},
+{"id":"firn","kind":"skill","category":"nixos","seedPermission":"on","owner":{"repo":"nixos-config","path":"skills/firn/SKILL.md"},"distributions":[{"type":"skill","targets":["shared"]}]},
+{"id":"launch-critical-worktree-guard","kind":"hook","category":"authoring","title":"Worktree guard","triggerDescription":"Protect launch-critical checkouts.","seedPermission":"on","owner":{"repo":"nixos-config","path":"hooks/launch-critical-worktree-guard.sh"},"supports":["repo-safety"],"distributions":[{"type":"hook","targets":["codex"]}]}
+]}
 JSON
+
+  chmod 0644 "$base/skills/repo-safety/SKILL.md" "$base/skills/firn/SKILL.md" \
+    "$base/hooks/launch-critical-worktree-guard.sh" "$base/support/harness-dial.sh"
+  git -C "$base" init -q
+  git -C "$base" config user.name 'Policy Fixture'
+  git -C "$base" config user.email 'policy-fixture@example.invalid'
+  git -C "$base" add policy/AGENTS.md policy/REPO-AGENTS.md \
+    skills/repo-safety/SKILL.md skills/firn/SKILL.md requirements.toml \
+    hooks/launch-critical-worktree-guard.sh support/harness-dial.sh \
+    manifest.toml catalog.json
+  git -C "$base" commit -qm 'Build policy fixture'
+
+  NORTH_AGENT_CATALOG="$base/catalog.json" \
+  NORTH_REPO_ROOTS="{\"nixos-config\":\"$base\"}" \
+    bb -e '
+      (require (quote [cheshire.core :as json]))
+      (load-file (first *command-line-args*))
+      (let [load-catalog (ns-resolve (quote north.agent-catalog) (quote load-catalog))
+            compile-activation (ns-resolve (quote north.agent-catalog) (quote compile-activation))
+            seed-permissions (ns-resolve (quote north.agent-catalog) (quote seed-permissions))
+            catalog (load-catalog)]
+        (print (json/generate-string
+                 (compile-activation catalog (seed-permissions catalog)))))' \
+      "$north_root/cli/agent-catalog.clj" >"$base/activation.json"
 
   run_policy_case() {
     local root="$1"
@@ -323,7 +378,23 @@ JSON
     AGENT_POLICY_REPO_AGENTS="$root/policy/REPO-AGENTS.md" \
     AGENT_POLICY_CODEX_REQUIREMENTS="$root/requirements.toml" \
     AGENT_POLICY_ACTIVATION="$root/activation.json" \
+    NORTH_AGENT_CATALOG="$root/catalog.json" \
+    NORTH_REPO_ROOTS="{\"nixos-config\":\"$root\"}" \
+    AGENT_POLICY_NORTH_CATALOG_LIB="$north_root/cli/agent-catalog.clj" \
       python3 "$REPO/scripts/agent-policy-contract.py" --repo "$root" --local
+  }
+
+  run_policy_source_case() {
+    local root="$1"
+    HOME="$root" \
+    AGENT_POLICY_MANIFEST="$root/manifest.toml" \
+    AGENT_POLICY_BOOTSTRAP="$root/policy/AGENTS.md" \
+    AGENT_POLICY_REPO_AGENTS="$root/policy/REPO-AGENTS.md" \
+    AGENT_POLICY_CODEX_REQUIREMENTS="$root/requirements.toml" \
+    NORTH_AGENT_CATALOG="$root/catalog.json" \
+    NORTH_REPO_ROOTS="{\"nixos-config\":\"$root\"}" \
+    AGENT_POLICY_NORTH_CATALOG_LIB="$north_root/cli/agent-catalog.clj" \
+      python3 "$REPO/scripts/agent-policy-contract.py" --repo "$root"
   }
 
   expect_policy_reject() {
@@ -337,6 +408,21 @@ JSON
     fi
     grep -Fq "$expected" <<<"$output" || {
       printf 'policy fixture %s missed diagnostic %s:\n%s\n' "$name" "$expected" "$output" >&2
+      return 1
+    }
+  }
+
+  expect_policy_source_reject() {
+    local name="$1" expected="$2" root="$scratch/policy-$1" output
+    cp -a "$base" "$root"
+    shift 2
+    "$@" "$root"
+    if output="$(run_policy_source_case "$root" 2>&1)"; then
+      printf 'policy source fixture %s unexpectedly passed\n' "$name" >&2
+      return 1
+    fi
+    grep -Fq "$expected" <<<"$output" || {
+      printf 'policy source fixture %s missed diagnostic %s:\n%s\n' "$name" "$expected" "$output" >&2
       return 1
     }
   }
@@ -366,13 +452,89 @@ JSON
   mutate_activation_permission() {
     sed -i 's/"permission":"on"/"permission":true/' "$1/activation.json"
   }
+  mutate_activation_ttl_permission() {
+    sed -i 's/"permission":"on"/"permission":"off:until=2099-01-01T00:00:00Z"/' "$1/activation.json"
+  }
+  mutate_activation_off_active() {
+    sed -i 's/"permission":"on"/"permission":"off"/' "$1/activation.json"
+  }
+  mutate_activation_catalog_digest() {
+    sed -i 's/"catalogDigest":"sha256:[0-9a-f]*"/"catalogDigest":"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/' "$1/activation.json"
+  }
   mutate_activation_missing_hook() {
-    sed -i 's/launch-critical-worktree-guard/another-hook/' "$1/activation.json"
+    jq '.units |= map(select(.id != "launch-critical-worktree-guard"))' \
+      "$1/activation.json" >"$1/activation.next"
+    mv "$1/activation.next" "$1/activation.json"
+  }
+  mutate_activation_missing_skill() {
+    jq '.units |= map(select(.id != "firn"))' \
+      "$1/activation.json" >"$1/activation.next"
+    mv "$1/activation.next" "$1/activation.json"
+  }
+  mutate_activation_duplicate_skill() {
+    jq '.units += [.units[] | select(.id == "firn")]' \
+      "$1/activation.json" >"$1/activation.next"
+    mv "$1/activation.next" "$1/activation.json"
+  }
+  mutate_activation_owner() {
+    jq '(.units[] | select(.id == "repo-safety") | .owner.path) = "skills/firn/SKILL.md"' \
+      "$1/activation.json" >"$1/activation.next"
+    mv "$1/activation.next" "$1/activation.json"
+  }
+  mutate_missing_owner_provenance() {
+    jq 'del(.units[] | select(.id == "repo-safety") | .ownerProvenance)' \
+      "$1/activation.json" >"$1/activation.next"
+    mv "$1/activation.next" "$1/activation.json"
+  }
+  mutate_wrong_provenance_owner() {
+    jq '(.units[] | select(.id == "repo-safety") | .ownerProvenance.owner.path) = "skills/firn/SKILL.md"' \
+      "$1/activation.json" >"$1/activation.next"
+    mv "$1/activation.next" "$1/activation.json"
+  }
+  mutate_wrong_provenance_revision() {
+    jq '(.units[] | select(.id == "repo-safety") | .ownerProvenance.revision) = "ffffffffffffffffffffffffffffffffffffffff"' \
+      "$1/activation.json" >"$1/activation.next"
+    mv "$1/activation.next" "$1/activation.json"
+  }
+  mutate_wrong_provenance_digest() {
+    jq '(.units[] | select(.id == "repo-safety") | .ownerProvenance.contentDigest) = "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"' \
+      "$1/activation.json" >"$1/activation.next"
+    mv "$1/activation.next" "$1/activation.json"
+  }
+  mutate_missing_destination_block() {
+    sed -i 's/Repository writes belong in a lane./A different procedure lives here./' \
+      "$1/skills/repo-safety/SKILL.md"
+  }
+  mutate_route_destination() {
+    sed -i '/role = "route"/s/destination_section = "preamble"/destination_section = "missing"/' \
+      "$1/manifest.toml"
+  }
+  mutate_missing_destination_metadata() {
+    sed -i '/key = "firn.source-root"/s/destination_section = "preamble", //' \
+      "$1/manifest.toml"
+  }
+  mutate_malformed_destination_digest() {
+    sed -i '/key = "firn.source-root"/s/[0-9a-f]\{64\}/not-a-digest/' \
+      "$1/manifest.toml"
+  }
+  mutate_wrong_destination_digest() {
+    sed -i '/key = "firn.source-root"/s/[0-9a-f]\{64\}/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/' \
+      "$1/manifest.toml"
+  }
+  mutate_stale_skill_source() {
+    printf '\nA stale unclaimed block.\n' >>"$1/skills/repo-safety/SKILL.md"
+  }
+  mutate_catalog_owner_escape() {
+    sed -i 's#skills/repo-safety/SKILL.md#../outside/SKILL.md#' "$1/catalog.json"
+  }
+  mutate_catalog_owner_swap() {
+    sed -i 's#skills/repo-safety/SKILL.md#skills/firn/SKILL.md#' "$1/catalog.json"
   }
   mutate_repo_scope() {
     sed -i 's/scope = "repo:example", surface = "repo"/scope = "machine", surface = "repo"/' "$1/manifest.toml"
   }
 
+  run_policy_source_case "$base" >/dev/null
   run_policy_case "$base" >/dev/null
   expect_policy_reject duplicate-owner 'multiple owners for policy key' mutate_duplicate_owner
   expect_policy_reject unmapped 'unmapped normative block' mutate_unmapped
@@ -381,7 +543,25 @@ JSON
   expect_policy_reject codex-hook-path 'Codex provider command drift' mutate_codex_hook_path
   expect_policy_reject activation-schema 'North activation schema is not' mutate_activation_schema
   expect_policy_reject activation-permission 'invalid permission' mutate_activation_permission
+  expect_policy_reject activation-ttl-permission 'invalid permission' mutate_activation_ttl_permission
+  expect_policy_reject activation-off-active 'active despite off permission' mutate_activation_off_active
+  expect_policy_reject activation-catalog-digest 'catalogDigest differs from the canonical catalog' mutate_activation_catalog_digest
   expect_policy_reject activation-missing-hook 'provider-bound hook is absent' mutate_activation_missing_hook
+  expect_policy_reject activation-missing-skill 'destination skill is absent from North activation' mutate_activation_missing_skill
+  expect_policy_reject activation-duplicate-skill 'duplicates global unit id' mutate_activation_duplicate_skill
+  expect_policy_reject activation-owner 'activation owner differs from the catalog owner' mutate_activation_owner
+  expect_policy_reject missing-owner-provenance 'lacks ownerProvenance' mutate_missing_owner_provenance
+  expect_policy_reject wrong-provenance-owner 'activation ownerProvenance differs from the North catalog' mutate_wrong_provenance_owner
+  expect_policy_reject wrong-provenance-revision 'activation ownerProvenance differs from the North catalog' mutate_wrong_provenance_revision
+  expect_policy_reject wrong-provenance-digest 'activation ownerProvenance differs from the North catalog' mutate_wrong_provenance_digest
+  expect_policy_reject stale-skill-source 'activation ownerProvenance differs from the North catalog' mutate_stale_skill_source
+  expect_policy_source_reject missing-destination-block 'destination skill block is absent' mutate_missing_destination_block
+  expect_policy_source_reject missing-destination-metadata 'destination skill section or digest is invalid' mutate_missing_destination_metadata
+  expect_policy_source_reject malformed-destination-digest 'destination skill section or digest is invalid' mutate_malformed_destination_digest
+  expect_policy_source_reject wrong-destination-digest 'destination skill block is absent' mutate_wrong_destination_digest
+  expect_policy_source_reject catalog-owner-escape 'owner escapes its repository' mutate_catalog_owner_escape
+  expect_policy_source_reject catalog-owner-swap 'source declares name' mutate_catalog_owner_swap
+  expect_policy_reject route-destination 'route destination differs from the approved catalog' mutate_route_destination
   expect_policy_reject repo-global 'owner role has invalid repository authority' mutate_repo_scope
 }
 
@@ -538,15 +718,21 @@ grep -Fq '(promoted "agent-spawn-guard.sh" "north/profiles/tom/hooks/agent-spawn
   "$REPO/modules/codex/default.bnix"
 grep -Fq '(providerAdapter "beagle-session-start.sh")' \
   "$REPO/modules/codex/default.bnix"
+grep -Fq '(providerAdapter "lib/north-agent-activation.sh")' \
+  "$REPO/modules/codex/default.bnix"
+grep -Fq '(promoted "lib/authoring-killswitch.sh" "north/profiles/tom/hooks/lib/authoring-killswitch.sh")' \
+  "$REPO/modules/codex/default.bnix"
+grep -Fq '(promoted "lib/harness-dial.sh" "north/profiles/tom/hooks/lib/harness-dial.sh")' \
+  "$REPO/modules/codex/default.bnix"
 grep -Fq 'enforcement "/var/lib/north-enforcement/active/current"' \
   "$REPO/modules/codex/default.bnix"
 if grep -Fq '(s inputs.north "/agent-profile/hooks/' "$REPO/modules/codex/default.bnix"; then
   printf 'Codex module still pins a promoted North hook to the flake input\n' >&2
   exit 1
 fi
-if grep -Eq 'promoted "beagle-session-start\.sh"|north-clock-guard-codex' \
+if grep -Eq 'promoted "beagle-session-start\.sh"' \
   "$REPO/modules/codex/default.bnix"; then
-  printf 'Codex module still bypasses activation or carries the retired clock guard\n' >&2
+  printf 'Codex module still bypasses activation\n' >&2
   exit 1
 fi
 

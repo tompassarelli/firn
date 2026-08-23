@@ -63,9 +63,10 @@ every projection into a private generation, and atomically advances `current`.
 Provider adapters read that generation and never resolve activity themselves.
 
 Hooks remain enforcement or telemetry mechanisms with explicit provider
-wiring. A skill may claim a supporting hook, but never copy hook behavior into
-its prose or treat prose as enforcement. Each provider lifecycle hook keeps
-its exact source identity and does not pretend to be a `PreToolUse` guard.
+wiring. The North catalog records which units a hook supports; skill
+frontmatter does not mirror that relation. Never copy hook behavior into skill
+prose or treat prose as enforcement. Each provider lifecycle hook keeps its
+exact source identity and does not pretend to be a `PreToolUse` guard.
 
 ## Validate and activate
 

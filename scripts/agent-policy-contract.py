@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import subprocess
 import sys
 import tomllib
 
@@ -18,9 +19,7 @@ KEY = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$")
 UNIT = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 ACTIVATION_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
-PERMISSION = re.compile(
-    r"^(on|off|off:until=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$"
-)
+PERMISSION = re.compile(r"^(on|off)$")
 ACTIVATION_SCHEMA = "north.agent-activation/v1"
 REQUIRED_UNIT_FIELDS = {
     "id",
@@ -268,27 +267,33 @@ def activation_path() -> Path:
     state_root = os.environ.get("NORTH_AGENT_STATE_ROOT")
     if state_root:
         return Path(state_root) / "current/activation.json"
-    state_home = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state")))
-    return state_home / "north/agents/current/activation.json"
+    return Path.home() / ".local/state/north/agents/current/activation.json"
 
 
-def check_activation(contract: Contract, policy: dict, repo: Path) -> None:
+def check_activation(
+    contract: Contract,
+    policy: dict,
+    repo: Path,
+    expected_catalog_digest: str,
+) -> dict[str, dict]:
     path = activation_path()
     try:
         data = json.loads(path.read_text())
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         contract.reject(f"North activation generation is unreadable: {path}: {exc}")
-        return
+        return {}
     if data.get("schema") != ACTIVATION_SCHEMA:
         contract.reject(f"North activation schema is not {ACTIVATION_SCHEMA}")
     if not ACTIVATION_DIGEST.fullmatch(data.get("catalogDigest", "")):
         contract.reject("North activation catalogDigest is invalid")
+    elif data.get("catalogDigest") != expected_catalog_digest:
+        contract.reject("North activation catalogDigest differs from the canonical catalog")
     if not ACTIVATION_DIGEST.fullmatch(data.get("generationId", "")):
         contract.reject("North activation generationId is invalid")
     units = data.get("units")
     if not isinstance(units, list):
         contract.reject("North activation units must be an array")
-        return
+        return {}
 
     by_id: dict[str, dict] = {}
     for unit in units:
@@ -316,6 +321,10 @@ def check_activation(contract: Contract, policy: dict, repo: Path) -> None:
             contract.reject(f"North activation unit {unit_id} has invalid permission")
         if type(unit.get("active")) is not bool:
             contract.reject(f"North activation unit {unit_id} has non-boolean activity")
+        elif permission == "off" and unit.get("active") is True:
+            contract.reject(
+                f"North activation unit {unit_id} is active despite off permission"
+            )
         for field in ("members", "supports", "distributions", "activationPaths"):
             if not isinstance(unit.get(field), list):
                 contract.reject(f"North activation unit {unit_id} has non-array {field}")
@@ -343,6 +352,146 @@ def check_activation(contract: Contract, policy: dict, repo: Path) -> None:
             contract.reject(f"provider-bound hook is absent from North activation: {unit_id}")
         elif by_id[unit_id].get("kind") != "hook":
             contract.reject(f"provider-bound unit is not a hook: {unit_id}")
+    return by_id
+
+
+def resolver_path() -> Path:
+    explicit = os.environ.get("AGENT_POLICY_NORTH_CATALOG_LIB")
+    if explicit:
+        return Path(explicit)
+    return Path.home() / "code/north/main/cli/agent-catalog.clj"
+
+
+def resolve_catalog(
+    contract: Contract, unit_ids: set[str]
+) -> tuple[str, dict[str, dict]]:
+    resolver = resolver_path()
+    if resolver.name != "agent-catalog.clj" or not resolver.is_file():
+        contract.reject(f"North catalog resolver is unreadable: {resolver}")
+        return "", {}
+    expression = r'''
+(require '[cheshire.core :as json])
+(load-file (first *command-line-args*))
+(let [load-catalog (ns-resolve 'north.agent-catalog 'load-catalog)
+      owner-path (ns-resolve 'north.agent-catalog 'owner-path)
+      wanted (json/parse-string (System/getenv "AGENT_POLICY_SKILL_IDS"))
+      loaded (load-catalog)
+      units (->> wanted
+                 (keep (fn [id]
+                         (when-let [unit (get (:by-id loaded) id)]
+                           (assoc unit "resolvedOwnerPath"
+                             (str (owner-path
+                                    (get unit "owner")
+                                    (str "policy destination " id)))))))
+                 vec)]
+  (println (json/generate-string
+             {"catalogDigest" (:digest loaded)
+              "units" units})))
+'''
+    environment = os.environ.copy()
+    environment["AGENT_POLICY_SKILL_IDS"] = json.dumps(sorted(unit_ids))
+    try:
+        result = subprocess.run(
+            ["bb", "-e", expression, str(resolver)],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+    except OSError as exc:
+        contract.reject(f"North catalog resolver could not run: {exc}")
+        return "", {}
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown failure"
+        contract.reject(f"North catalog resolver rejected its inputs: {detail}")
+        return "", {}
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        contract.reject(f"North catalog resolver returned invalid JSON: {exc}")
+        return "", {}
+    digest_value = payload.get("catalogDigest")
+    units = payload.get("units")
+    if not ACTIVATION_DIGEST.fullmatch(digest_value or "") or not isinstance(units, list):
+        contract.reject("North catalog resolver returned an invalid payload")
+        return "", {}
+    by_id: dict[str, dict] = {}
+    for unit in units:
+        if not isinstance(unit, dict) or not UNIT.fullmatch(unit.get("id", "")):
+            contract.reject("North catalog resolver returned an invalid unit")
+            continue
+        unit_id = unit["id"]
+        if unit_id in by_id:
+            contract.reject(f"North catalog resolver duplicated unit {unit_id}")
+            continue
+        by_id[unit_id] = unit
+    return digest_value, by_id
+
+
+def check_skill_evidence(
+    contract: Contract,
+    policy: dict,
+    catalog: dict[str, dict],
+    activation: dict[str, dict] | None = None,
+) -> None:
+    claims = policy.get("claim", [])
+    approved_routes = {route.get("key"): route for route in policy.get("approved_route", [])}
+    evidence = [
+        entry
+        for entry in claims
+        if entry.get("owner", "").startswith("skill:")
+    ] + list(policy.get("approved_route", []))
+
+    for entry in evidence:
+        key = entry.get("key", "")
+        unit_id = entry.get("owner", "").split(":", 1)[1]
+        catalog_unit = catalog.get(unit_id)
+        if not catalog_unit or catalog_unit.get("kind") != "skill":
+            contract.reject(f"{key}: destination skill is absent from the North catalog: {unit_id}")
+            continue
+        owner = catalog_unit.get("owner")
+        section = entry.get("destination_section")
+        block_digest = entry.get("destination_digest")
+        if not isinstance(section, str) or not isinstance(block_digest, str) or not DIGEST.fullmatch(block_digest):
+            contract.reject(f"{key}: destination skill section or digest is invalid")
+            continue
+        source_value = catalog_unit.get("resolvedOwnerPath")
+        if not isinstance(source_value, str):
+            contract.reject(f"{key}: North resolver omitted the destination source")
+            continue
+        source = Path(source_value)
+        try:
+            blocks = markdown_blocks(source)
+        except (OSError, UnicodeError) as exc:
+            contract.reject(f"{key}: destination skill is unreadable: {unit_id}: {exc}")
+            continue
+        if not any(
+            observed_section == section and observed_digest == block_digest
+            for observed_section, observed_digest, _ in blocks
+        ):
+            contract.reject(f"{key}: destination skill block is absent: {unit_id} [{section}]")
+
+        if entry in claims and entry.get("role") == "route":
+            approved = approved_routes.get(key)
+            if approved and (
+                approved.get("destination_section") != section
+                or approved.get("destination_digest") != block_digest
+            ):
+                contract.reject(f"{key}: route destination differs from the approved catalog")
+
+        if activation is None:
+            continue
+        activation_unit = activation.get(unit_id)
+        if not activation_unit or activation_unit.get("kind") != "skill":
+            contract.reject(f"{key}: destination skill is absent from North activation: {unit_id}")
+            continue
+        provenance = activation_unit.get("ownerProvenance")
+        if activation_unit.get("owner") != owner:
+            contract.reject(f"{key}: activation owner differs from the catalog owner")
+        if provenance is None:
+            contract.reject(f"{key}: destination skill lacks ownerProvenance")
+        elif provenance != catalog_unit.get("ownerProvenance"):
+            contract.reject(f"{key}: activation ownerProvenance differs from the North catalog")
 
 
 def env_path(name: str, default: Path) -> Path:
@@ -373,8 +522,16 @@ def main() -> int:
     contract = Contract()
     check_claims(contract, policy, {"bootstrap": bootstrap, "repo": repo_agents})
     check_provider_bindings(contract, policy, requirements)
+    skill_ids = {
+        entry.get("owner", "").split(":", 1)[1]
+        for entry in policy.get("claim", []) + policy.get("approved_route", [])
+        if entry.get("owner", "").startswith("skill:")
+    }
+    catalog_digest, catalog = resolve_catalog(contract, skill_ids)
+    activation = None
     if args.local:
-        check_activation(contract, policy, repo)
+        activation = check_activation(contract, policy, repo, catalog_digest)
+    check_skill_evidence(contract, policy, catalog, activation)
 
     if contract.errors:
         for error in contract.errors:

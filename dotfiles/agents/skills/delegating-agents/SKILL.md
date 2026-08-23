@@ -6,8 +6,6 @@ description: >-
   model or subscription account, running parallel seams, waiting on another
   actor, setting worker deadlines, replacing a stalled worker, or operating in
   executive orchestration mode.
-hooks:
-  - session-kill-guard
 ---
 
 # Delegating agents

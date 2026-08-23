@@ -1,7 +1,7 @@
 version = 1
 
 approved_route = [
-  { key = "verification.loop-roi-route", owner = "skill:verification", text = "- Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification`.", destination_section = "Price every development loop", destination_digest = "59767181bf6e236841f9584416af473e36a9152e1926b9375969bd2c231a8d93" },
+  { key = "verification.loop-roi-route", owner = "skill:verification", text = "- Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification`.", destination_section = "Price every development loop", destination_digest = "cc8b8a832dbd5abfb4e49ca7ec887452a67fc16b73fa8e65b63ddee051205e1f" },
 ]
 
 # Every normative block has one explicit semantic key. Digests are over the
@@ -10,7 +10,7 @@ claim = [
   { key = "bootstrap.layering", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "preamble", digest = "d8e8bfa2d5669d949482eaf9e478765d50700bf955640a9abf8d8d36283a4d6f" },
   { key = "instructions.repository-discovery", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Discover applicable instructions", digest = "5293878fb7670bee54af4c13a58494fc4e7f159cfbbfdcd5527c7f5477a1577b" },
   { key = "instructions.skill-loading", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Discover applicable instructions", digest = "dfc424b1fb34f862e2ac35177b6463b788c5c2656e40ac69dca204cf133a08be" },
-  { key = "verification.loop-roi-route", owner = "skill:verification", role = "route", scope = "machine", surface = "bootstrap", section = "Preserve development velocity", digest = "cfc8a317f7e2da76f0bcb5076554e85985ca0dd4b4018cf9b0ef7978894371c4", destination_section = "Price every development loop", destination_digest = "59767181bf6e236841f9584416af473e36a9152e1926b9375969bd2c231a8d93" },
+  { key = "verification.loop-roi-route", owner = "skill:verification", role = "route", scope = "machine", surface = "bootstrap", section = "Preserve development velocity", digest = "cfc8a317f7e2da76f0bcb5076554e85985ca0dd4b4018cf9b0ef7978894371c4", destination_section = "Price every development loop", destination_digest = "cc8b8a832dbd5abfb4e49ca7ec887452a67fc16b73fa8e65b63ddee051205e1f" },
   { key = "agent-policy.projection-authority", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Respect source authority", digest = "222496cd4ab4eaf02d3578571924ffae6a4fffa1a873b815bbda9d1da7e89c2f" },
   { key = "credentials.subscription-only", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Keep hard boundaries", digest = "64f492f47e938cd57e61c721674cfa3315a1fee850ad2206b2b0ff2c71d599e7" },
   { key = "destructive.path-boundary", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Keep hard boundaries", digest = "3578506a32d644a21f022cce2bafdff702282cd23b6cd2b00dbffc1590e73906" },
@@ -34,8 +34,8 @@ claim = [
   # Removed bootstrap procedures remain named and are proven in their single
   # authoritative destination by exact skill, section, and normalized digest.
   { key = "verification.proportional-evidence", owner = "skill:verification", role = "owner", scope = "machine", surface = "skill", destination_section = "Choose the profile", destination_digest = "fb50336b404e35f0b9c53ad2cb206a4ad7fb4338545c92fd610cfef3fce6c6c0" },
-  { key = "verification.loop-roi", owner = "skill:verification", role = "owner", scope = "machine", surface = "skill", destination_section = "Price every development loop", destination_digest = "59767181bf6e236841f9584416af473e36a9152e1926b9375969bd2c231a8d93" },
-  { key = "verification.loop-telemetry", owner = "skill:verification", role = "owner", scope = "machine", surface = "skill", destination_section = "Record loop outcomes", destination_digest = "9e31e1e865d07774c366808490812df43b198537bcd93cb465e7c0bd10e738fc" },
+  { key = "verification.loop-roi", owner = "skill:verification", role = "owner", scope = "machine", surface = "skill", destination_section = "Price every development loop", destination_digest = "cc8b8a832dbd5abfb4e49ca7ec887452a67fc16b73fa8e65b63ddee051205e1f" },
+  { key = "verification.loop-telemetry", owner = "skill:verification", role = "owner", scope = "machine", surface = "skill", destination_section = "Record loop outcomes", destination_digest = "b744ad41bf1afd50f7abe2be00bcbd005a9c55825e108ddafa1b8553fb7fcacd" },
   { key = "verification.hermeticity", owner = "skill:verification", role = "owner", scope = "machine", surface = "skill", destination_section = "Reject verification theatre", destination_digest = "b2906afa7487f7db559b58a73bd462cbc1d096cb0e4a1ae395f92cba3c70d6bb" },
   { key = "verification.proof-layer", owner = "skill:verification", role = "owner", scope = "machine", surface = "skill", destination_section = "Select a decision instrument", destination_digest = "4ba9b6ea16e87d03708a80afa1489ccb0dd2ddfc4de79bfc133045c24435d1c1" },
   { key = "release.gate-qualification", owner = "skill:verification", role = "owner", scope = "machine", surface = "skill", destination_section = "Choose the profile", destination_digest = "fb50336b404e35f0b9c53ad2cb206a4ad7fb4338545c92fd610cfef3fce6c6c0" },
@@ -62,7 +62,7 @@ claim = [
   { key = "firn.generated-source", owner = "skill:firn", role = "owner", scope = "machine", surface = "skill", destination_section = "preamble", destination_digest = "34e26690c98421d546d2be866117df2a070ef22685405be1476f06bb38aa5339" },
   { key = "external-code.license", owner = "skill:external-code", role = "owner", scope = "machine", surface = "skill", destination_section = "preamble", destination_digest = "9427ea52adb4b04ec40c116f25ed8d3af104090a367fa742e71d489264d7d078" },
   { key = "conversation.search-route", owner = "skill:convo", role = "owner", scope = "machine", surface = "skill", destination_section = "Why not just grep", destination_digest = "2bfaefe613acf4054221fc1ea4a6b717d95d0e373f784d5626e082eb46635322" },
-  { key = "delegation.executive-authority", owner = "skill:delegating-agents", role = "owner", scope = "machine", surface = "skill", destination_section = "Steer and settle", destination_digest = "fdc2609d3bfe9af6b73c9efd6216662e79faf80a901b88510c2e5b37f6e6794f" },
+  { key = "delegation.executive-authority", owner = "skill:delegating-agents", role = "owner", scope = "machine", surface = "skill", destination_section = "Steer and settle", destination_digest = "7631934c983414419e96333f1cdbb1a789a7507a0513a61d1161904a19d58b7b" },
   { key = "continuity.restart-record", owner = "skill:todo", role = "owner", scope = "machine", surface = "skill", destination_section = "preamble", destination_digest = "7c9fd90e2024a04f986e021526b21a4227880ae52cde159d9efc6ef7eb6b800f" },
   { key = "agent-policy.loading-layer", owner = "skill:agent-policy", role = "owner", scope = "machine", surface = "skill", destination_section = "Choose the loading layer", destination_digest = "622de30adb92ca4a98a4c5befc0a87f84de5393be316e0830e90a576e9505bcb" },
   { key = "agent-policy.registration", owner = "skill:agent-policy", role = "owner", scope = "machine", surface = "skill", destination_section = "Create or revise a skill", destination_digest = "280d7c4f8f76bc7d5a8b29285a2e3fd245aa835cec51755e0c079aab51fdaf84" },

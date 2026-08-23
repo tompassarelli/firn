@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Managed lane completion is harness-owned. Provider-native root and subagent
-# terminals delegate to North's transcript-backed terminal publisher.
+# Managed-lane SubagentStop is harness-owned. Provider-native SubagentStop
+# delegates to North's transcript-backed terminal publisher.
 set -uo pipefail
 
 drain_stdin() {

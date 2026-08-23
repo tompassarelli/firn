@@ -79,8 +79,11 @@ unset AGENT_NO_AUTHORING_HOOKS
 
 write_activation() {
   local active="$1" schema="${2:-north.agent-activation/v1}"
-  local permission=off
-  [ "$active" = true ] && permission=on
+  local permission="${3:-}"
+  if [ -z "$permission" ]; then
+    permission=off
+    [ "$active" = true ] && permission=on
+  fi
   cat >"$NORTH_AGENT_STATE_ROOT/current/activation.json" <<JSON
 {"schema":"$schema","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"firn-system-policy","kind":"hook","title":"Firn system policy","triggerDescription":"Protect Firn authoring and system switching.","permission":"$permission","active":$active,"owner":{"repo":"nixos-config","path":"native/system_policy_native.bgl"},"members":[],"supports":["firn"],"distributions":[{"type":"providerAdapter","targets":["firn","codex","bridge"],"owner":{"repo":"north","path":"profiles/tom/hooks/firn-system-policy.sh"},"adapterId":"firn-system-policy"}],"activationPaths":[["firn-system-policy"]]}]}
 JSON
@@ -159,6 +162,18 @@ run_case invalid-activation \
   '{"tool_name":"Bash","tool_input":{"command":"nixos-rebuild switch"},"session_id":"invalid-activation"}'
 [[ ! -s "$scratch/invalid-activation.out" ]] \
   || die "invalid activation schema did not fail inactive"
+
+write_activation true north.agent-activation/v1 'off:until=2099-01-01T00:00:00Z'
+run_case ttl-permission \
+  '{"tool_name":"Bash","tool_input":{"command":"nixos-rebuild switch"},"session_id":"ttl-permission"}'
+[[ ! -s "$scratch/ttl-permission.out" ]] \
+  || die "TTL activation permission did not fail inactive"
+
+write_activation true north.agent-activation/v1 off
+run_case off-active \
+  '{"tool_name":"Bash","tool_input":{"command":"nixos-rebuild switch"},"session_id":"off-active"}'
+[[ ! -s "$scratch/off-active.out" ]] \
+  || die "off permission with active activity did not fail inactive"
 
 write_activation false
 AGENT_NO_AUTHORING_HOOKS=0 run_case forced-live \

@@ -81,6 +81,9 @@ if rg -n '"\.codex/skills"|current/skills/codex' "$source_file" "$generated_file
 fi
 
 grep -Fq '(providerAdapter "beagle-session-start.sh")' "$source_file"
+grep -Fq '(providerAdapter "lib/north-agent-activation.sh")' "$source_file"
+grep -Fq '(promoted "lib/authoring-killswitch.sh" "north/profiles/tom/hooks/lib/authoring-killswitch.sh")' "$source_file"
+grep -Fq '(promoted "lib/harness-dial.sh" "north/profiles/tom/hooks/lib/harness-dial.sh")' "$source_file"
 if rg -n 'north-clock-guard-codex|promoted "beagle-session-start\.sh"' \
   "$source_file" "$generated_file"; then
   printf 'retired or activation-bypassing Codex hook wiring remains\n' >&2

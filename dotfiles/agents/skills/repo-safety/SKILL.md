@@ -7,11 +7,6 @@ description: >-
   never a `pins/` checkout), how work lands (safe-push, enumerated paths), and
   which commands are refused outright. The companion notice for the worktree,
   blind-stage, and tripwire guards.
-hooks:
-  - launch-critical-worktree-guard
-  - git-blind-stage-guard
-  - tripwire-guard
-  - session-kill-guard
 ---
 
 # repo-safety — where agents may write, and how work lands

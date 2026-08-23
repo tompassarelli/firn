@@ -202,17 +202,4 @@ $agents off build-vs-reuse >/dev/null
 expected_calls=$'config agents status --json\nconfig agents status\nconfig agents path build-vs-reuse\nconfig agents inspect coordination --json\nconfig agents on build-vs-reuse\nconfig agents off build-vs-reuse\nconfig agents sync'
 [[ "$(<"$log")" == "$expected_calls" ]]
 
-before="$(wc -l <"$log")"
-if "$agents" apply >/dev/null 2>"$scratch/apply.err"; then
-  printf 'legacy apply command unexpectedly succeeded\n' >&2
-  exit 1
-fi
-[[ "$(wc -l <"$log")" == "$before" ]]
-grep -Fq 'usage: agents' "$scratch/apply.err"
-
-if rg -q 'SKILLS=|HOOKS=|skill_source|modules[.]d|manifest[.]conf|activity[.]conf|apply[)]' "$agents"; then
-  printf 'thin client contains retired activation-engine vocabulary\n' >&2
-  exit 1
-fi
-
 printf 'agents thin client: North routing, set inspection, and build-vs-reuse projection PASS\n'

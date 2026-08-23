@@ -266,13 +266,10 @@
       (and (some? explicit) (not= explicit ""))
       (str explicit "/current/activation.json")
       :else
-      (let [state-home (U String Nil) (System/getenv "XDG_STATE_HOME")]
-        (if (and (some? state-home) (not= state-home ""))
-          (str state-home "/north/agents/current/activation.json")
-          (let [home (U String Nil) (System/getenv "HOME")]
-            (if (or (nil? home) (= home ""))
-              nil
-              (str home "/.local/state/north/agents/current/activation.json"))))))))
+      (let [home (U String Nil) (System/getenv "HOME")]
+        (if (or (nil? home) (= home ""))
+          nil
+          (str home "/.local/state/north/agents/current/activation.json"))))))
 
 (defn activation-unit-active-events?
   [events (Vec json/JsonEvent)
@@ -300,7 +297,7 @@
              (recur next
                (if matched true wanted)
                (if wanted
-                 (if (or (nil? permission) (nil? unit-active)) false unit-active)
+                 (and (= permission "on") (= unit-active true))
                  active)
                (if (or (and matched wanted)
                        (and wanted (or (nil? permission) (nil? unit-active))))

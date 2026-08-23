@@ -16,8 +16,11 @@ mkdir -p "$NORTH_AGENT_STATE_ROOT/current"
 
 write_activation() {
   local active="$1"
-  local permission=off
-  [ "$active" = true ] && permission=on
+  local permission="${2:-}"
+  if [ -z "$permission" ]; then
+    permission=off
+    [ "$active" = true ] && permission=on
+  fi
   cat >"$NORTH_AGENT_STATE_ROOT/current/activation.json" <<JSON
 {"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[
 {"id":"north-on-spawn","kind":"hook","title":"North on spawn","triggerDescription":"Publish spawn telemetry.","permission":"$permission","active":$active,"owner":{"repo":"north","path":"bin/north-on-spawn"},"members":[],"supports":["assignments"],"distributions":[{"type":"providerAdapter","targets":["codex"],"owner":{"repo":"nixos-config","path":"dotfiles/codex/hooks/north-on-spawn-codex"},"adapterId":"north-on-spawn-codex"}],"activationPaths":[]},
@@ -26,6 +29,16 @@ write_activation() {
 {"id":"north-on-stop","kind":"hook","title":"North on stop","triggerDescription":"Publish stop telemetry.","permission":"$permission","active":$active,"owner":{"repo":"north","path":"bin/north-on-stop"},"members":[],"supports":["assignments"],"distributions":[{"type":"providerAdapter","targets":["codex"],"owner":{"repo":"nixos-config","path":"dotfiles/codex/hooks/north-on-stop-codex"},"adapterId":"north-on-stop-codex"}],"activationPaths":[]},
 {"id":"north-on-terminal","kind":"hook","title":"North on terminal","triggerDescription":"Publish terminal telemetry.","permission":"$permission","active":$active,"owner":{"repo":"north","path":"bin/north-on-terminal"},"members":[],"supports":["assignments"],"distributions":[{"type":"providerAdapter","targets":["codex"],"owner":{"repo":"nixos-config","path":"dotfiles/codex/hooks/north-on-terminal-codex"},"adapterId":"north-on-terminal-codex"}],"activationPaths":[]}]}
 JSON
+}
+
+helper_reports_spawn_active() {
+  "$HOOKS/runtime/bash" -c \
+    'source "$1" && north_agent_unit_active hook north-on-spawn' \
+    lifecycle-helper "$HOOKS/lib/north-agent-activation.sh"
+}
+
+helper_rejects_spawn_active() {
+  ! helper_reports_spawn_active
 }
 
 write_activation true
@@ -261,6 +274,15 @@ for wrapper in "${wrappers[@]}"; do
   check "$wrapper drains delayed stdin while lifecycle activity is off" \
     test "$(drain_probe "$wrapper" native)" = DRAINED
 done
+
+write_activation true 'off:until=2099-01-01T00:00:00Z'
+check 'activation helper rejects TTL permission syntax' \
+  helper_rejects_spawn_active
+
+write_activation true off
+check 'activation helper rejects off permission with active activity' \
+  helper_rejects_spawn_active
+
 write_activation true
 
 mv "$NORTH_AGENT_STATE_ROOT/current/activation.json" \

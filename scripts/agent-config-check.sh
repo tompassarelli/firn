@@ -582,8 +582,7 @@ north_wrapped_runtime_matches_locked_source() {
 # does not resolve permissions, sets, claims, or kill switches independently.
 north_unit_activity_state() {
   local wanted_kind="$1" wanted_name="$2"
-  local state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
-  local state_root="${NORTH_AGENT_STATE_ROOT:-$state_home/north/agents}"
+  local state_root="${NORTH_AGENT_STATE_ROOT:-$HOME/.local/state/north/agents}"
   local activation_file="${AGENT_CONFIG_ACTIVATION_FILE:-$state_root/current/activation.json}"
 
   if [ ! -r "$activation_file" ]; then
@@ -601,9 +600,12 @@ north_unit_activity_state() {
     else [.units[] | select(.kind == $kind and .id == $id)] as $matches
       | if ($matches | length) != 1 then "off"
         elif (($matches[0].permission | type) != "string")
-             or (($matches[0].permission | test("^(on|off|off:until=)")) | not)
+             or (($matches[0].permission | test("^(on|off)$")) | not)
              or (($matches[0].active | type) != "boolean") then "invalid"
-        elif $matches[0].active == true then "on"
+        elif $matches[0].permission == "off" and $matches[0].active == true
+          then "invalid"
+        elif $matches[0].permission == "on" and $matches[0].active == true
+          then "on"
         else "off"
         end
     end
@@ -826,8 +828,8 @@ validate_codex_managed_policy() {
   CODEX_MANAGED_BINDINGS="$(
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
-  if [ "$CODEX_MANAGED_BINDINGS" = 19 ]; then
-    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 19-binding authoritative contract'
+  if [ "$CODEX_MANAGED_BINDINGS" = 18 ]; then
+    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 18-binding authoritative contract'
   elif [ "$CODEX_MANAGED_BINDINGS" = 0 ]; then
     ok_detail 'Codex managed hooks are authoritatively disabled; remote control remains disabled'
   else
@@ -842,7 +844,6 @@ validate_codex_managed_policy() {
   # tmpfiles link points at; it is empty for anything the generation still owns.
   local -a source_specs=(
     "requirements.toml|(s flakeRoot \"/modules/codex/requirements.toml\")|$CODEX_REQUIREMENTS|self|modules/codex/requirements.toml|"
-    "lib/north-agent-activation.sh|(s flakeRoot \"/dotfiles/agents/lib/north-agent-activation.sh\")|$REPO/dotfiles/agents/lib/north-agent-activation.sh|self|dotfiles/agents/lib/north-agent-activation.sh|"
     "agent-spawn-guard.sh|(promoted \"agent-spawn-guard.sh\"|$SHARED/hooks/agent-spawn-guard.sh|north|profiles/tom/hooks/agent-spawn-guard.sh|north/profiles/tom/hooks/agent-spawn-guard.sh"
     # launch_critical guard and its Python decision libraries deploy together.
     "launch-critical-worktree-guard.sh|(promoted \"launch-critical-worktree-guard.sh\"|$SHARED/hooks/launch-critical-worktree-guard.sh|north|profiles/tom/hooks/launch-critical-worktree-guard.sh|north/profiles/tom/hooks/launch-critical-worktree-guard.sh"
@@ -851,6 +852,8 @@ validate_codex_managed_policy() {
     "tripwire-guard.sh|(promoted \"tripwire-guard.sh\"|$SHARED/hooks/tripwire-guard.sh|north|profiles/tom/hooks/tripwire-guard.sh|north/profiles/tom/hooks/tripwire-guard.sh"
     "logcompress-hook.js|(promoted \"logcompress-hook.js\"|$SHARED/hooks/logcompress-hook.js|north|profiles/tom/hooks/logcompress-hook.js|north/profiles/tom/hooks/logcompress-hook.js"
     "logcompress.js|(promoted \"logcompress.js\"|$SHARED/hooks/logcompress.js|north|profiles/tom/hooks/logcompress.js|north/profiles/tom/hooks/logcompress.js"
+    "lib/authoring-killswitch.sh|(promoted \"lib/authoring-killswitch.sh\"|$SHARED/hooks/lib/authoring-killswitch.sh|north|profiles/tom/hooks/lib/authoring-killswitch.sh|north/profiles/tom/hooks/lib/authoring-killswitch.sh"
+    "lib/harness-dial.sh|(promoted \"lib/harness-dial.sh\"|$SHARED/hooks/lib/harness-dial.sh|north|profiles/tom/hooks/lib/harness-dial.sh|north/profiles/tom/hooks/lib/harness-dial.sh"
   )
   local -a provider_adapters=(
     north-on-spawn-codex
@@ -859,8 +862,7 @@ validate_codex_managed_policy() {
     north-on-stop-codex
     north-on-terminal-codex
     beagle-session-start.sh
-    lib/authoring-killswitch.sh
-    lib/harness-dial.sh
+    lib/north-agent-activation.sh
   )
   for spec in "${source_specs[@]}"; do
     IFS='|' read -r relative source_expr expected_checkout authority \

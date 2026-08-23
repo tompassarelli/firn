@@ -10,8 +10,6 @@ description: >-
   ~/.local/state/north — those paths hold a 77 GiB transcript corpus and a
   single unscoped ripgrep there measured 3.5 GB of RSS and a quarter of a
   24-core machine, while the same lookup through convo costs 31 MB and 0.4 s.
-hooks:
-  - corpus-scan-guard
 ---
 
 # convo — search the conversation corpus

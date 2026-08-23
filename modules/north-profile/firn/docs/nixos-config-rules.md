@@ -65,9 +65,10 @@ compatibility links inside the existing `~/.codex/skills` directory, but Firn
 never replaces that directory or its provider-owned `.system` entries. The
 `agents` command delegates directly to `north config agents`; it is not a
 second reader or writer.
-The immutable managed Codex hook directory
-under `/etc/codex/hooks` is the deliberate security exception and sources each
-hook from its owning locked flake input.
+The immutable managed Codex hook directory under `/etc/codex/hooks` is the
+deliberate security exception. Its runtime and requirements are store-pinned,
+enforcement payloads come from the sealed promotion, and provider adapters plus
+their support files link to North's current immutable agent generation.
 
 ## Shared skill dials
 
@@ -88,8 +89,8 @@ owner source.
 runs `scripts/agent-config-check.sh`: it checks the shared instructions, skills,
 and hooks plus the Codex adapter. Run
 `scripts/agent-config-check.sh --local` to additionally verify live symlinks,
-the MCP registration, external North lifecycle hooks, and installed North's
-OpenAI provider readiness. Normal output is a grouped summary;
+the MCP registration, North's SubagentStop provider adapter, and installed
+North's OpenAI provider readiness. Normal output is a grouped summary;
 `--verbose` prints every assertion. This is the anti-rot gate; keep it green.
 
 ## Hooks kill-switch
@@ -108,7 +109,7 @@ cannot disagree:
   session does nothing.
 
 Killed = every authoring guard no-ops (beagle SessionStart handshake,
-Firn system policy, agent-spawn guard, tripwire, and North clock guard)
+Firn system policy, agent-spawn guard, and tripwire)
 — used to pin a neutral, confound-free session.
 
 ## Adding new wiring
