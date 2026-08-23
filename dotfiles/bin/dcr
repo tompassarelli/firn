@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-# danger claude --resume
-exec danger claude --resume --model claude-opus-4-6 --effort max "$@"

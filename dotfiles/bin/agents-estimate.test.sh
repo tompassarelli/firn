@@ -5,14 +5,11 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 test_root=$(mktemp -d)
 trap 'rm -rf "${test_root:?}"' EXIT
 
-mkdir -p "$test_root/code/nixos-config" "$test_root/.claude/plugins"
+mkdir -p "$test_root/code/nixos-config"
 ln -s "$repo" "$test_root/code/nixos-config/main"
-printf '{}\n' > "$test_root/.claude/settings.json"
-printf '{"plugins": {}}\n' > "$test_root/.claude/plugins/installed_plugins.json"
 
 ag() {
   HOME=$test_root \
-    AGENTS_FRAGMENTS=$repo/dotfiles/agents/hooks.d \
     AGENTS_MODULES=$repo/dotfiles/agents/modules.d \
     "$repo/dotfiles/bin/agents" "$@"
 }

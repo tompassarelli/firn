@@ -460,12 +460,7 @@
         (let [pkgs
               ((import nixpkgs)
                 {:system "x86_64-linux" :config.allowUnfree true})]
-          {:firn-native (makeFirnNative "x86_64-linux")
-           :claude-sandbox
-            ((import (p "./modules/containers/claude-sandbox.nix"))
-              {:pkgs
-                ((import nixpkgs-master)
-                  {:system "x86_64-linux" :config.allowUnfree true})})})
+          {:firn-native (makeFirnNative "x86_64-linux")})
        :packages.aarch64-darwin
         {:firn-native (makeFirnNative "aarch64-darwin")}
        :nixosConfigurations

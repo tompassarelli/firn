@@ -39,8 +39,8 @@
                       (s config.home.homeDirectory
                         "/code/north/main/agent-profile/hooks"))}
                  ;; Provider-neutral routing instructions for the ~/code root.
-                 ;; Switchboard-owned, exactly like ~/code/CLAUDE.md: the
-                 ;; directory slot feeds both surfaces and `agents apply` is the
+                 ;; Switchboard-owned, exactly like ~/code/AGENTS.md: the
+                 ;; directory slot feeds the agent surface and `agents apply` is the
                  ;; sole writer under ~/.config/agents.
                  "code/AGENTS.md"
                   {:source

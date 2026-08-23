@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
-import json
 import os
 from pathlib import Path
 import re
@@ -128,16 +127,6 @@ def command_identity(command: str) -> str:
     except ValueError:
         words = command.split()
     return Path(words[-1]).name if words else ""
-
-
-def event_bindings(fragment: Path) -> tuple[list[str], list[str]]:
-    data = json.loads(fragment.read_text())
-    events: list[str] = []
-    commands: list[str] = []
-    for entry in data.get("entries", []):
-        events.append(f"{entry.get('event', '')}:{entry.get('matcher', '')}")
-        commands.append((entry.get("hook") or {}).get("command", ""))
-    return events, commands
 
 
 def codex_bindings(path: Path, identity: str) -> tuple[list[str], list[str]]:
@@ -455,7 +444,6 @@ def check_guards(
     contract: Contract,
     manifest: dict,
     switchboard: Path,
-    fragments: Path,
     requirements: Path,
     registry: Path,
     harness: Path,
@@ -478,17 +466,8 @@ def check_guards(
         switchboard_id = guard.get("switchboard", "")
         if switchboard_id not in switchboard_hooks:
             contract.reject(f"{key}: switchboard hook identity is absent: {switchboard_id}")
-        fragment = fragments / guard.get("fragment", "")
         identity = guard.get("command", "")
-        claude_command = guard.get("claude_command", "")
         codex_command = guard.get("codex_command", "")
-        try:
-            claude_events, commands = event_bindings(fragment)
-        except (OSError, ValueError, json.JSONDecodeError) as exc:
-            contract.reject(f"{key}: Claude fragment is unreadable: {exc}")
-            continue
-        if sorted(claude_events) != sorted(guard.get("claude", [])) or set(commands) != {claude_command}:
-            contract.reject(f"{key}: Claude guard identity or reachability drift")
         try:
             actual_codex, codex_commands = codex_bindings(requirements, identity)
         except (OSError, tomllib.TOMLDecodeError) as exc:
@@ -538,7 +517,6 @@ def main() -> int:
     bootstrap = env_path("AGENT_POLICY_BOOTSTRAP", repo / "dotfiles/agents/AGENTS.md")
     repo_agents = env_path("AGENT_POLICY_REPO_AGENTS", repo / "AGENTS.md")
     switchboard = env_path("AGENT_POLICY_SWITCHBOARD", repo / "dotfiles/bin/agents")
-    fragments = env_path("AGENT_POLICY_FRAGMENTS", repo / "dotfiles/agents/hooks.d")
     requirements = env_path("AGENT_POLICY_CODEX_REQUIREMENTS", repo / "modules/codex/requirements.toml")
     north_profile = env_path("AGENT_POLICY_NORTH_PROFILE", Path.home() / "code/north/main/profiles/tom")
     north_harness = env_path("AGENT_POLICY_NORTH_HARNESS", Path.home() / "code/north/main/sdk/src/harness.ts")
@@ -550,7 +528,6 @@ def main() -> int:
         contract,
         manifest,
         switchboard,
-        fragments,
         requirements,
         north_profile / "hooks/registry.tsv",
         north_harness,
@@ -559,7 +536,6 @@ def main() -> int:
         activity = env_path("AGENT_POLICY_ACTIVITY", Path.home() / ".config/agents/activity.conf")
         shared_farm = env_path("AGENT_POLICY_SHARED_SKILLS", Path.home() / ".agents/skills")
         provider_farms = [
-            ("Claude", env_path("AGENT_POLICY_CLAUDE_SKILLS", Path.home() / ".claude/skills")),
             ("Codex", env_path("AGENT_POLICY_CODEX_SKILLS", Path.home() / ".codex/skills")),
         ]
         check_skills(
@@ -575,9 +551,7 @@ def main() -> int:
         )
         projections = [
             env_path("AGENT_POLICY_STATE_AGENTS", Path.home() / ".config/agents/AGENTS.md"),
-            env_path("AGENT_POLICY_STATE_CLAUDE", Path.home() / ".config/agents/CLAUDE.md"),
             env_path("AGENT_POLICY_AGENTS_PROJECTION", Path.home() / ".agents/AGENTS.md"),
-            env_path("AGENT_POLICY_CLAUDE_PROJECTION", Path.home() / ".claude/CLAUDE.md"),
             env_path("AGENT_POLICY_CODEX_PROJECTION", Path.home() / ".codex/AGENTS.md"),
         ]
         check_projections(contract, bootstrap, projections)

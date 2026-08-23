@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # agent-shot — make a screenshot agent-sized before it enters an agent context.
 #
-# A screenshot pasted into Codex or Claude Code is not stored once. It is
+# A screenshot pasted into an agent interface is not stored once. It is
 # re-serialised into every compaction record and copied wholesale into every
 # subagent fork, so one pasted image is written to disk hundreds of times. The
 # only lever with leverage is the byte count at the moment the image enters the

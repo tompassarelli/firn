@@ -2,7 +2,7 @@
 
 Hermes is a *controller host* over the North MCP, not a new North provider.
 This plugin is the standalone bridge that makes Hermes' own tool surface obey
-the same provider-neutral authoring guards Claude Code and Codex already run,
+the same provider-neutral authoring guards Codex already runs,
 and routes session/tool lifecycle through the SAME North hook scripts every
 other provider uses — never a Hermes-specific fork.
 
@@ -16,7 +16,7 @@ Guard chains (provider-neutral ~/.agents/hooks, run in order; ANY deny denies):
                            NEVER marked delegated — only a real North MCP spawn/
                            dispatch is (see post_tool_call below).
 
-Every guard is a real subprocess fed the Claude/Codex-shaped hook JSON on
+Every guard is a real subprocess fed the shared hook JSON envelope on
 stdin. A guard may signal a denial two ways, BOTH honoured:
 
   * a non-zero exit code (tripwire's deny path), or
@@ -92,7 +92,7 @@ REQUIRED_GUARDS = (
 # Every guard sources the shared killswitch.
 REQUIRED_GUARD_SUPPORT = ("lib/authoring-killswitch.sh",)
 
-# North lifecycle hook scripts — the SAME scripts Claude/Codex drive, run with
+# North lifecycle hook scripts — the same scripts managed sessions drive, run with
 # the provider env UNSET (Hermes is a controller host, not a North provider).
 # Never a fabricated `north hermes-lifecycle`.
 LIFECYCLE_SCRIPTS = {
@@ -287,7 +287,7 @@ def _stdout_denies(stdout: str) -> Optional[bool]:
         decision = hso.get("permissionDecision")
         if isinstance(decision, str) and decision.strip().lower() == "deny":
             return True
-    # Some guards echo the Claude Stop shape at the top level.
+    # Some guards echo the stop decision at the top level.
     if str(data.get("permissionDecision", "")).strip().lower() == "deny":
         return True
     return False
@@ -306,7 +306,7 @@ def _guard_member_denies(status: int, stdout: str, available: bool) -> bool:
 
 
 def _authoring_payload(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-    """Build the Claude/Codex-shaped Edit/Write hook payload the guards read."""
+    """Build the shared Edit/Write hook payload the guards read."""
     args = args or {}
     file_path = args.get("path") or args.get("file_path") or args.get("filePath") or ""
     content = (
@@ -662,7 +662,7 @@ def _on_pre_llm_call(**kwargs: Any):
 def _on_pre_verify(session_id: str = "", **kwargs: Any):
     # Map north-on-stop's exact keep-going decision onto Hermes' verify gate: a
     # {"decision":"block","reason":…} block == "don't stop yet". pre_verify
-    # accepts that Claude Stop shape directly.
+    # accepts that stop shape directly.
     sid = str(session_id or os.environ.get("HERMES_SESSION_ID", "hermes"))
     ok, stdout = run_lifecycle("session_end", {"session_id": sid, "hook_event_name": "Stop"})
     if not ok:

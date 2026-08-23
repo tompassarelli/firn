@@ -10,9 +10,8 @@ REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 CODE_ROOT="$(dirname "$(dirname "$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)")")")"
 NORTH_HARNESS_SOURCE="$CODE_ROOT/north/main/sdk/src/harness.ts"
 BIN="$REPO/dotfiles/bin/agents"
-FRAG_SRC="$REPO/dotfiles/agents/hooks.d"
 SB="$(mktemp -d)"
-trap 'chmod -R u+w "$SB" 2>/dev/null; rm -rf "$SB" "$SB.frags" "$SB.mods"' EXIT
+trap 'chmod -R u+w "$SB" 2>/dev/null; rm -rf "$SB" "$SB.mods"' EXIT
 
 fails=0
 ok() { printf 'ok   %s\n' "$1"; }
@@ -21,22 +20,18 @@ chk() { # desc expected actual
   if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "want [$2] got [$3]"; fi
 }
 
-ACCT="$SB/.local/state/north/accounts/anthropic/acct-one"
+ACCT="$SB/.local/state/north/accounts/openai/acct-one"
 
-fresh() { # [fragments-dir]
+fresh() {
   rm -rf "${SB:?}"
-  mkdir -p "$SB/.claude" "$SB/code/nixos-config/main/dotfiles/agents" \
+  mkdir -p "$SB/code/nixos-config/main/dotfiles/agents" \
     "$SB/code/nixos-config/main/modules/codex" "$ACCT"
-  echo '{"model":"opus","otherKey":42}' > "$SB/.claude/settings.json"
   cp "$REPO/dotfiles/agents/AGENTS.md" "$SB/code/nixos-config/main/dotfiles/agents/AGENTS.md"
   cp "$REPO/dotfiles/agents/policy-owners.toml" \
     "$SB/code/nixos-config/main/dotfiles/agents/policy-owners.toml"
   cp "$REPO/modules/codex/requirements.toml" \
     "$SB/code/nixos-config/main/modules/codex/requirements.toml"
   ln -sfn "$REPO/dotfiles/agents/skills" "$SB/code/nixos-config/main/dotfiles/agents/skills"
-  # An account copy only exists once a session has made one; apply overwrites
-  # what is there and never creates the tree, so the fixture must.
-  : > "$ACCT/CLAUDE.md"
   # North's consumer surface is four skills. Staffing is the module that owns
   # the spawn guard and template library; coordination's three leaves are
   # plain skills. Set fixtures are still opt-in per test below.
@@ -63,33 +58,13 @@ fresh() { # [fragments-dir]
   for s in messages threads; do
     printf -- '---\nname: %s\n---\n' "$s" > "$NORTH/coordination/$s/SKILL.md"
   done
-  printf -- '---\nname: assignments\nhooks: [north-session-lifecycle]\n---\n' \
+  printf -- '---\nname: assignments\n---\n' \
     > "$NORTH/coordination/assignments/SKILL.md"
   printf 'ORCHESTRATION ACTIVE\n' > "$NORTH/orchestration/doctrine.md"
   printf 'COORDINATION ACTIVE\n' > "$NORTH/coordination/guide.md"
   : > "$SB/code/north/main/orchestration/agents/integrator.md"
   mkdir -p "$NORTH/sdk/src"
   cp "$NORTH_HARNESS_SOURCE" "$NORTH/sdk/src/harness.ts"
-  FRAGS="${1:-$FRAG_SRC}"
-  # The source fragments deliberately use production absolute paths. Mirror
-  # those targets below the sandbox so target admission is hermetic rather than
-  # an accidental assertion about the current system generation.
-  TARGETS="$SB/hook-targets"
-  python3 - "$FRAGS" "$TARGETS" <<'PY'
-import glob, json, os, re, shlex, sys
-frags, root = sys.argv[1:]
-for path in glob.glob(os.path.join(frags, "*.json")):
-    for entry in json.load(open(path)).get("entries", []):
-        words = shlex.split(entry.get("hook", {}).get("command", ""))
-        while words and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[0]):
-            words.pop(0)
-        if not words or not words[0].startswith("/"):
-            continue
-        target = os.path.join(root, words[0].lstrip("/"))
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        open(target, "w").write("#!/bin/sh\nexit 0\n")
-        os.chmod(target, 0o755)
-PY
   # No member lists unless a test writes some: the default is a directory that
   # does not exist, which is also what a machine with no modules.d has.
   MODS="$SB/no-modules"
@@ -106,29 +81,28 @@ mod_ins() { # name instructions-path member...
   python3 -c 'import json,sys;json.dump({"instructions":sys.argv[2],"members":sys.argv[3:]},open(sys.argv[1],"w"))' \
     "$MODS/$n.json" "$f" "$@"
 }
-markers() { grep -o '<!-- module: [a-z-]* -->' "$SB/.config/agents/CLAUDE.md" | tr '\n' ' ' | sed 's/ $//'; }
+markers() { grep -o '<!-- module: [a-z-]* -->' "$SB/.config/agents/AGENTS.md" | tr '\n' ' ' | sed 's/ $//'; }
 skilllinks() { find "$SB/.config/agents/skills" -maxdepth 1 -type l -printf '%f\n' | sort | tr '\n' ' ' | sed 's/ $//'; }
 
-ag() { HOME="$SB" AGENTS_FRAGMENTS="$FRAGS" AGENTS_MODULES="$MODS" \
-       AGENTS_HOOK_TARGET_ROOT="$TARGETS" \
-       AGENTS_PLUGIN_RELEASES="$SB/releases" bash "$BIN" "$@"; }
+ag() { HOME="$SB" AGENTS_MODULES="$MODS" bash "$BIN" "$@"; }
 hookrows() { grep '^hook ' "$SB/.config/agents/manifest.conf" | sort; }
-composed_files() { # every hook command settings.json currently carries
-  python3 - "$SB/.claude/settings.json" <<'PY'
-import json, sys
-s = json.load(open(sys.argv[1]))
-cmds = set()
-for event, blocks in (s.get("hooks") or {}).items():
-    for b in blocks:
-        for h in b["hooks"]:
-            cmds.add(h["command"])
-print(" ".join(sorted(cmds)))
-PY
+composed_files() {
+  [ -f "$SB/.config/agents/activity.conf" ] || return 0
+  awk '$1=="hook" && $3=="on" {print $2}' "$SB/.config/agents/activity.conf" |
+    tr '\n' ' ' | sed 's/ $//'
 }
-has_cmd() { composed_files | grep -q -- "$1"; }
+has_cmd() {
+  local name="$1"
+  case "$name" in
+    launch-critical-worktree-guard.sh) name=worktree-guard ;;
+    logcompress-hook.js) name=logcompress ;;
+    *.sh) name="${name%.sh}" ;;
+  esac
+  composed_files | tr ' ' '\n' | grep -qx -- "$name"
+}
 hook_rows() { # every hook row status prints, nested under a skill or flat
   ag status 2>/dev/null |
-    awk '/^hooks$/{f=1;next} /^plugins$/{f=0} f || /^ +hook · /'
+    awk '/^hooks$/{f=1;next} /^other$/{f=0} f || /^ +hook · /'
 }
 hook_count() { # how many hooks the switchboard knows — read from the HOOKS
   # array in `agents`, never a literal: a `--all` sweep covers whatever that
@@ -149,152 +123,10 @@ if [ "${1:-}" = "--policy-skills" ]; then
   chk "policy source path resolves" "$SB/code/nixos-config/main/dotfiles/agents/skills/agent-policy/SKILL.md" "$(ag path agent-policy)"
   chk "external-code source path resolves" "$SB/code/north/main/agent-profile/skills/external-code/SKILL.md" "$(ag path external-code)"
   for s in agent-policy delegating-agents external-code; do ag on "$s" > /dev/null; done
-  chk "policy skills reach Claude and Codex" "1" "$(test -L "$SB/.config/agents/skills/agent-policy" && test -L "$SB/.codex/skills/agent-policy" && test -L "$SB/.config/agents/skills/delegating-agents" && test -L "$SB/.codex/skills/delegating-agents" && test -L "$SB/.config/agents/skills/external-code" && test -L "$SB/.codex/skills/external-code" && echo 1 || echo 0)"
+  chk "policy skills reach the shared and Codex farms" "1" "$(test -L "$SB/.config/agents/skills/agent-policy" && test -L "$SB/.codex/skills/agent-policy" && test -L "$SB/.config/agents/skills/delegating-agents" && test -L "$SB/.codex/skills/delegating-agents" && test -L "$SB/.config/agents/skills/external-code" && test -L "$SB/.codex/skills/external-code" && echo 1 || echo 0)"
   for s in agent-policy delegating-agents external-code; do ag off "$s" > /dev/null; done
-  chk "off removes both provider links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l \( -name agent-policy -o -name delegating-agents -o -name external-code \) | wc -l)"
+  chk "off removes both farm links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l \( -name agent-policy -o -name delegating-agents -o -name external-code \) | wc -l)"
   if [ "$fails" -eq 0 ]; then echo "all focused policy-skill tests passed"; else echo "$fails focused policy-skill test(s) failed"; fi
-  exit "$fails"
-fi
-
-if [ "${1:-}" = "--hook-target-admission" ]; then
-  echo "== focused hook-target admission"
-  rm -rf "$SB.frags"; mkdir -p "$SB.frags"
-  cp "$FRAG_SRC"/*.json "$SB.frags/"
-  fresh "$SB.frags"
-  mkdir -p "$SB/code/nixos-config/main/modules/north-profile/firn/skills/firn"
-  printf -- '---\nname: firn\n---\n' \
-    > "$SB/code/nixos-config/main/modules/north-profile/firn/skills/firn/SKILL.md"
-  ag on firn > /dev/null
-  ag on repo-safety > /dev/null
-  chk "a synchronized executable target projects to Claude settings" "1" \
-    "$(has_cmd /run/current-system/sw/bin/firn-system-policy && echo 1 || echo 0)"
-  check_status=0
-  ag check >"$SB/check.out" 2>"$SB/check.err" || check_status=$?
-  chk "read-only check accepts synchronized hook projections" "0" "$check_status"
-  python3 - "$SB/.claude/settings.json" <<'PY'
-import json, sys
-p = sys.argv[1]
-d = json.load(open(p))
-d["hooks"] = {}
-json.dump(d, open(p, "w"))
-PY
-  check_status=0
-  ag check >"$SB/check-drift.out" 2>"$SB/check-drift.err" || check_status=$?
-  chk "read-only check rejects drifted hook projections" "1" "$check_status"
-  grep -Fq "Claude settings hooks drifted" "$SB/check-drift.err" \
-    && ok "drift names Claude hook projection" \
-    || bad "drift names Claude hook projection" "$(cat "$SB/check-drift.err")"
-  ag apply > /dev/null
-  before="$(sha256sum "$SB/.claude/settings.json" | awk '{print $1}')"
-  reject_apply() { # expected error needle; no provider surface may change
-    local needle="$1" status=0 after
-    ag apply >"$SB/admission.out" 2>"$SB/admission.err" || status=$?
-    chk "admission rejects $needle" "1" "$status"
-    if grep -Fq "$needle" "$SB/admission.err"; then ok "failure names $needle"; else bad "failure names $needle" "$(cat "$SB/admission.err")"; fi
-    after="$(sha256sum "$SB/.claude/settings.json" | awk '{print $1}')"
-    chk "rejection leaves Claude settings unchanged" "$before" "$after"
-  }
-
-  python3 - "$FRAGS/firn-system-policy.json" <<'PY'
-import json, sys
-p = sys.argv[1]
-d = json.load(open(p))
-for entry in d["entries"]:
-    entry["hook"]["command"] = "/run/current-system/sw/bin/not-firn-system-policy"
-json.dump(d, open(p, "w"))
-PY
-  reject_apply "Claude settings fragment"
-  cp "$FRAG_SRC/firn-system-policy.json" "$FRAGS/firn-system-policy.json"
-
-  python3 - "$SB/code/nixos-config/main/modules/codex/requirements.toml" <<'PY'
-import sys
-p = sys.argv[1]
-s = open(p).read().replace("/run/current-system/sw/bin/firn-system-policy", "/run/current-system/sw/bin/not-firn-system-policy")
-open(p, "w").write(s)
-PY
-  reject_apply "Codex managed hooks"
-  cp "$REPO/modules/codex/requirements.toml" "$SB/code/nixos-config/main/modules/codex/requirements.toml"
-
-  python3 - "$NORTH/sdk/src/harness.ts" <<'PY'
-import re, sys
-p = sys.argv[1]
-s = open(p).read()
-s, count = re.subn(
-    r"(const WORKER_BASH_GUARDS = resolveManagedGuardChain\(\[.*?)(FIRN_SYSTEM_POLICY)(.*?\]\);)",
-    r'\1"omitted-system-policy"\3', s, count=1, flags=re.S,
-)
-assert count == 1
-open(p, "w").write(s)
-PY
-  reject_apply "North worker guard-chain WORKER_BASH_GUARDS omits"
-  cp "$NORTH_HARNESS_SOURCE" "$NORTH/sdk/src/harness.ts"
-
-  python3 - "$NORTH/sdk/src/harness.ts" <<'PY'
-import re, sys
-p = sys.argv[1]
-s = open(p).read()
-s, count = re.subn(
-    r'(const EDIT_GUARDS = resolveManagedGuardChain\(\[.*?)("launch-critical-worktree-guard\.sh",?\s*)(.*?\]\);)',
-    r'\1\3', s, count=1, flags=re.S,
-)
-assert count == 1
-open(p, "w").write(s)
-PY
-  reject_apply "North worker guard-chain EDIT_GUARDS omits"
-  cp "$NORTH_HARNESS_SOURCE" "$NORTH/sdk/src/harness.ts"
-
-  rm -f "$TARGETS/run/current-system/sw/bin/firn-system-policy"
-  reject_apply "/run/current-system/sw/bin/firn-system-policy is missing or non-executable"
-  if [ "$fails" -eq 0 ]; then echo "all focused hook-target admission tests passed"; else echo "$fails focused hook-target admission test(s) failed"; fi
-  exit "$fails"
-fi
-
-if [ "${1:-}" = "--verification-skill" ]; then
-  echo "== focused verification-skill reachability"
-  fresh
-  chk "bootstrap routes development-loop pricing" "1" "$(grep -Fxc -- '- Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification`.' "$REPO/dotfiles/agents/AGENTS.md")"
-  chk "verification owns development-loop pricing" "1" "$(grep -Fxc -- '## Price every development loop' "$REPO/dotfiles/agents/skills/verification/SKILL.md")"
-  chk "verification records development-loop outcomes" "1" "$(grep -Fxc -- '## Record loop outcomes' "$REPO/dotfiles/agents/skills/verification/SKILL.md")"
-  ag status > /dev/null
-  chk "verification seeds off" "skill verification off" "$(grep '^skill verification ' "$SB/.config/agents/manifest.conf")"
-  chk "verification source path resolves" "$SB/code/nixos-config/main/dotfiles/agents/skills/verification/SKILL.md" "$(ag path verification)"
-  ag on verification > /dev/null
-  chk "verification reaches Claude and Codex" "1" "$(test -L "$SB/.config/agents/skills/verification" && test -L "$SB/.codex/skills/verification" && echo 1 || echo 0)"
-  ag off verification > /dev/null
-  chk "off removes both provider links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l -name verification | wc -l)"
-  if [ "$fails" -eq 0 ]; then echo "all focused verification-skill tests passed"; else echo "$fails focused verification-skill test(s) failed"; fi
-  exit "$fails"
-fi
-
-if [ "${1:-}" = "--fact-modeling-skill" ]; then
-  echo "== focused fact-modeling reachability"
-  fresh
-  fact_root="$SB/code/beagle/main/store/integrations/north/skills"
-  mkdir -p "$fact_root/fact-modeling"
-  printf -- '---\nname: fact-modeling\n---\n' \
-    > "$fact_root/fact-modeling/SKILL.md"
-  ag status > /dev/null
-  chk "fact-modeling seeds off" "skill fact-modeling off" "$(grep '^skill fact-modeling ' "$SB/.config/agents/manifest.conf")"
-  chk "fact-modeling source path resolves" "$fact_root/fact-modeling/SKILL.md" "$(ag path fact-modeling)"
-  ag on fact-modeling > /dev/null
-  chk "fact-modeling reaches Claude and Codex" "1" "$(test -L "$SB/.config/agents/skills/fact-modeling" && test -L "$SB/.codex/skills/fact-modeling" && echo 1 || echo 0)"
-  ag off fact-modeling > /dev/null
-  chk "off removes both provider links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l -name fact-modeling | wc -l)"
-  if [ "$fails" -eq 0 ]; then echo "all focused fact-modeling tests passed"; else echo "$fails focused fact-modeling test(s) failed"; fi
-  exit "$fails"
-fi
-
-if [ "${1:-}" = "--beagle-system-design-skill" ]; then
-  echo "== focused beagle-system-design reachability"
-  fresh
-  ag status > /dev/null
-  chk "beagle-system-design seeds off" "skill beagle-system-design off" "$(grep '^skill beagle-system-design ' "$SB/.config/agents/manifest.conf")"
-  chk "beagle-system-design source path resolves" "$SB/code/nixos-config/main/dotfiles/agents/skills/beagle-system-design/SKILL.md" "$(ag path beagle-system-design)"
-  ag on beagle-system-design > /dev/null
-  chk "beagle-system-design reaches Claude/North and Codex" "1" "$(test -L "$SB/.config/agents/skills/beagle-system-design" && test -L "$SB/.codex/skills/beagle-system-design" && echo 1 || echo 0)"
-  ag off beagle-system-design > /dev/null
-  chk "off removes both provider links" "0" "$(find "$SB/.config/agents/skills" "$SB/.codex/skills" -maxdepth 1 -type l -name beagle-system-design | wc -l)"
-  if [ "$fails" -eq 0 ]; then echo "all focused beagle-system-design tests passed"; else echo "$fails focused beagle-system-design test(s) failed"; fi
   exit "$fails"
 fi
 
@@ -311,17 +143,13 @@ chk "global seeds as a dir row at the root" "dir global off ~" "$(grep '^dir glo
 chk "staffing seeds as the profile module" "skill staffing off" "$(grep '^skill staffing ' "$SB/.config/agents/manifest.conf")"
 chk "coordination leaves seed as skills" "3" "$(grep -Ec '^skill (messages|threads|assignments) off$' "$SB/.config/agents/manifest.conf")"
 chk "and no set row exists without a members file" "0" "$(grep -c '^module ' "$SB/.config/agents/manifest.conf" || true)"
-chk "statusline-script seeds as other" "other statusline-script off" "$(grep '^other ' "$SB/.config/agents/manifest.conf")"
 chk "no item kind survives" "0" "$(grep -c '^item ' "$SB/.config/agents/manifest.conf" || true)"
 chk "hook bound to a dir row" "hook comment-bloat-guard enabled global" "$(grep '^hook comment-bloat-guard ' "$SB/.config/agents/manifest.conf")"
 chk "a claimed hook names its claimant in the column, from frontmatter" "hook agent-spawn-guard enabled staffing" "$(grep '^hook agent-spawn-guard ' "$SB/.config/agents/manifest.conf")"
 chk "corpus-scan-guard row" "hook corpus-scan-guard enabled convo" "$(grep '^hook corpus-scan-guard ' "$SB/.config/agents/manifest.conf")"
-chk "coordination lifecycle belongs to assignments" "hook north-session-lifecycle enabled assignments" "$(grep '^hook north-session-lifecycle ' "$SB/.config/agents/manifest.conf")"
 st="$(ag status)"
 case "$st" in *"hook · worktree-guard:        off (skill: repo-safety off)"*) ok "status: bound + skill off" ;;
   *) bad "status: bound + skill off" "$(echo "$st" | grep worktree-guard)" ;; esac
-case "$st" in *"hook-detach:            disabled"*) ok "status: unbound infrastructure reads disabled" ;;
-  *) bad "status: unbound disabled" "$(echo "$st" | grep hook-detach)" ;; esac
 ag off worktree-guard > /dev/null
 st="$(ag status)"
 case "$st" in *"hook · worktree-guard:        disabled"*) ok "status: a pin still names its skill" ;;
@@ -329,7 +157,6 @@ case "$st" in *"hook · worktree-guard:        disabled"*) ok "status: a pin sti
 ag on worktree-guard > /dev/null
 ag apply > /dev/null
 chk "fresh composes nothing" "" "$(composed_files)"
-chk "settings.json foreign key survives" "42" "$(python3 -c 'import json;print(json.load(open("'"$SB"'/.claude/settings.json"))["otherKey"])')"
 
 echo "== 2c. the global profile writes the global surfaces and nothing per-directory"
 fresh; ag status > /dev/null
@@ -337,16 +164,12 @@ ag on global > /dev/null
 src="$SB/code/nixos-config/main/dotfiles/agents/AGENTS.md"
 # The dir row is the GATE over the whole root subtree; the instruction file is
 # the row under it, so opening the gate alone injects nothing.
-chk "the gate alone writes no profile" "0" "$(stat -c %s "$SB/.config/agents/CLAUDE.md")"
+chk "the gate alone writes no profile" "0" "$(stat -c %s "$SB/.config/agents/AGENTS.md")"
 ag on global/AGENTS.md > /dev/null
-chk "config-dir CLAUDE.md is the profile, byte for byte" "" "$(diff "$src" "$SB/.config/agents/CLAUDE.md")"
-chk "codex AGENTS.md is the profile, byte for byte" "" "$(diff "$src" "$SB/.config/agents/AGENTS.md")"
-chk "the account copy is the profile too" "" "$(diff "$src" "$ACCT/CLAUDE.md")"
+chk "config-dir AGENTS.md is the profile, byte for byte" "" "$(diff "$src" "$SB/.config/agents/AGENTS.md")"
 chk "global writes no per-dir target pair" "0" "$(ls "$SB/.config/agents/dir" | wc -l)"
-chk "global hangs no link off a directory" "0" "$(test -e "$SB/CLAUDE.md" -o -L "$SB/CLAUDE.md" && echo 1 || echo 0)"
 ag off global > /dev/null
-chk "off empties the global surfaces" "0" "$(stat -c %s "$SB/.config/agents/CLAUDE.md")"
-chk "off empties the account copy" "0" "$(stat -c %s "$ACCT/CLAUDE.md")"
+chk "off empties the global surface" "0" "$(stat -c %s "$SB/.config/agents/AGENTS.md")"
 chk "path global is the profile source" "$src" "$(ag path global)"
 
 echo
@@ -394,79 +217,23 @@ if has_cmd logcompress-hook.js; then ok "unbound enabled composes"; else bad "un
 st="$(ag status)"; case "$st" in *"logcompress:            on"*) ok "status: unbound enabled · on" ;; *) bad "status unbound" "$(echo "$st" | grep logcompress)" ;; esac
 
 echo
-echo "== 6. requires chain: a disabled requirement drops dependents loudly"
-rm -rf "$SB.frags"; mkdir -p "$SB.frags"; cp "$FRAG_SRC"/*.json "$SB.frags/"
-python3 - "$SB.frags" <<'PY'
-import json, os, sys
-d = sys.argv[1]
-p = os.path.join(d, "tripwire-guard.json")
-frag = json.load(open(p)); frag["requires"] = ["worktree-guard"]
-open(p, "w").write(json.dumps(frag, indent=1))
-PY
-fresh "$SB.frags"
-ag status > /dev/null
-ag on repo-safety > /dev/null
-if has_cmd tripwire-guard.sh && has_cmd launch-critical-worktree-guard.sh; then
-  ok "whole chain composes when both enabled"
-else bad "whole chain composes" "$(composed_files)"; fi
-warn="$(ag off worktree-guard 2>&1 >/dev/null)"
-if has_cmd tripwire-guard.sh; then bad "dependent dropped" "$(composed_files)"; else ok "dependent dropped when requirement disabled"; fi
-case "$warn" in *"tripwire-guard is enabled but requires worktree-guard, which is disabled"*)
-  ok "drop is loud" ;; *) bad "drop is loud" "$warn" ;; esac
-st="$(ag status 2>/dev/null)"; case "$st" in *"hook · tripwire-guard:        off (needs worktree-guard, disabled)"*) ok "status names the blocking requirement" ;; *) bad "status names requirement" "$(echo "$st" | grep tripwire)" ;; esac
-if has_cmd git-blind-stage-guard.sh; then ok "unrelated sibling unaffected"; else bad "sibling unaffected" "$(composed_files)"; fi
-# direct `on` pulls its requirement's permission back
-ag on tripwire-guard > /dev/null
-chk "direct on grants the requirement too" "hook worktree-guard enabled repo-safety" "$(grep '^hook worktree-guard ' "$SB/.config/agents/manifest.conf")"
-# a requirement rides in even when its own companion skill is off. repo-safety
-# declares these hooks skill-side as well, and a claim would activate this one on
-# its own, so the claim moves out of the way in a private copy of the farm: what
-# is under test here is a requirement riding in on its DEPENDENT.
-rm "$SB/code/nixos-config/main/dotfiles/agents/skills"
-cp -r "$REPO/dotfiles/agents/skills" "$SB/code/nixos-config/main/dotfiles/agents/skills"
-sed -i '/^  - worktree-guard$/d' "$SB/code/nixos-config/main/dotfiles/agents/skills/repo-safety/SKILL.md"
-python3 - "$SB.frags" <<'PY'
-import json, os, sys
-p = os.path.join(sys.argv[1], "worktree-guard.json")
-frag = json.load(open(p)); frag["follows"] = "webdev"
-open(p, "w").write(json.dumps(frag, indent=1))
-PY
-ag apply > /dev/null
-chk "re-pointed binding corrected in column" "hook worktree-guard enabled webdev" "$(grep '^hook worktree-guard ' "$SB/.config/agents/manifest.conf")"
-if has_cmd launch-critical-worktree-guard.sh; then ok "requirement pulled in despite its skill being off"; else bad "requirement pulled in" "$(composed_files)"; fi
-st="$(ag status 2>/dev/null)"; case "$st" in *"worktree-guard:         on (required by tripwire-guard)"*) ok "status explains the pull-in" ;; *) bad "status pull-in" "$(echo "$st" | grep worktree-guard)" ;; esac
-
-echo
 echo "== 7. field-4 sync: backfill, correction, removal, preservation across flips"
-python3 - "$SB.frags" <<'PY'
-import json, os, sys
-p = os.path.join(sys.argv[1], "worktree-guard.json")
-frag = json.load(open(p)); frag.pop("follows")
-open(p, "w").write(json.dumps(frag, indent=1))
-PY
+fresh; ag status > /dev/null
+sed -i 's/^hook worktree-guard enabled repo-safety$/hook worktree-guard enabled webdev/' \
+  "$SB/.config/agents/manifest.conf"
 ag status > /dev/null
-chk "unbinding drops the column" "hook worktree-guard enabled" "$(grep '^hook worktree-guard ' "$SB/.config/agents/manifest.conf")"
+chk "a stale binding is corrected from switchboard metadata" \
+  "hook worktree-guard enabled repo-safety" \
+  "$(grep '^hook worktree-guard ' "$SB/.config/agents/manifest.conf")"
+sed -i 's/^hook logcompress disabled$/hook logcompress disabled webdev/' \
+  "$SB/.config/agents/manifest.conf"
+ag status > /dev/null
+chk "an unbound hook drops a stale column" "hook logcompress disabled" \
+  "$(grep '^hook logcompress ' "$SB/.config/agents/manifest.conf")"
 ag off git-blind-stage-guard > /dev/null
 chk "column rides through a flip" "hook git-blind-stage-guard disabled repo-safety" "$(grep '^hook git-blind-stage-guard ' "$SB/.config/agents/manifest.conf")"
 ag on git-blind-stage-guard > /dev/null
 chk "column rides back" "hook git-blind-stage-guard enabled repo-safety" "$(grep '^hook git-blind-stage-guard ' "$SB/.config/agents/manifest.conf")"
-
-echo
-echo "== 7b. enabledPlugins is a record"
-fresh
-mkdir -p "$SB/.claude/plugins"
-printf '%s' '{"plugins":{"demo@market":[{"scope":"user","installPath":"/tmp/demo"}]}}' \
-  > "$SB/.claude/plugins/installed_plugins.json"
-python3 -c 'import json,sys;p=sys.argv[1];d=json.load(open(p));d["enabledPlugins"]={"demo@market":True};json.dump(d,open(p,"w"))' "$SB/.claude/settings.json"
-ag status > /dev/null
-chk "an enabled plugin seeds on" "plugin demo@market on" "$(grep '^plugin demo@market ' "$SB/.config/agents/manifest.conf")"
-ag apply > /dev/null
-chk "and remains a record" '{"demo@market": true}' "$(python3 -c 'import json,sys;print(json.dumps(json.load(open(sys.argv[1]))["enabledPlugins"]))' "$SB/.claude/settings.json")"
-ag off demo@market > /dev/null
-chk "an off plugin is absent, not false" "{}" "$(python3 -c 'import json,sys;print(json.dumps(json.load(open(sys.argv[1]))["enabledPlugins"]))' "$SB/.claude/settings.json")"
-chk "an empty record is still a record" "dict" "$(python3 -c 'import json,sys;print(type(json.load(open(sys.argv[1]))["enabledPlugins"]).__name__)' "$SB/.claude/settings.json")"
-ag on demo@market > /dev/null
-chk "and back on is a truthy key again" "True" "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["enabledPlugins"]["demo@market"])' "$SB/.claude/settings.json")"
 
 echo
 echo "== 8. --all both ways"
@@ -477,7 +244,8 @@ chk "on --all: skills on" "0" "$(grep -c '^skill .* off' "$SB/.config/agents/man
 if [ "${HOOK_COUNT:-0}" -gt 0 ] 2>/dev/null
   then ok "hook count derives from the HOOKS array ($HOOK_COUNT)"
   else bad "hook count derives from the HOOKS array" "got [$HOOK_COUNT]"; fi
-chk "on --all: every fragment composed" "$HOOK_COUNT" "$(hook_rows | grep -cE ': +on( |$)')"
+chk "on --all: every hook active" "$HOOK_COUNT" \
+  "$(grep -c '^hook .* on$' "$SB/.config/agents/activity.conf")"
 ag off --all > /dev/null
 chk "off --all: hooks disabled" "$HOOK_COUNT" "$(grep -c '^hook .* disabled' "$SB/.config/agents/manifest.conf")"
 chk "off --all: nothing composed" "" "$(composed_files)"
@@ -492,20 +260,10 @@ ag on global > /dev/null 2>&1
 out="$(ag on global/AGENTS.md 2>"$SB/err" )"
 chk "apply still reports" "1" "$(echo "$out" | grep -c '^applied:')"
 if grep -q 'global is on but .* is missing' "$SB/err"; then ok "missing source warns"; else bad "missing source warns" "$(cat "$SB/err")"; fi
-chk "wrote empty CLAUDE.md" "0" "$(stat -c %s "$SB/.config/agents/CLAUDE.md")"
+chk "wrote empty AGENTS.md" "0" "$(stat -c %s "$SB/.config/agents/AGENTS.md")"
 chk "codex surface still written" "0" "$(stat -c %s "$SB/.config/agents/AGENTS.md")"
-if has_cmd logcompress-hook.js; then ok "later items still applied (settings.json reached)"; else bad "later items applied" "$(composed_files)"; fi
-rm -f "$SB/.claude/settings.json"
-out="$(ag apply 2>"$SB/err2")"
-chk "apply survives a missing settings.json" "1" "$(echo "$out" | grep -c '^applied:')"
-chk "settings.json recreated" "1" "$(test -f "$SB/.claude/settings.json" && echo 1 || echo 0)"
-echo '{ not json' > "$SB/.claude/settings.json"
-out="$(ag apply 2>"$SB/err3")"
-chk "apply survives an unparseable settings.json" "1" "$(echo "$out" | grep -c '^applied:')"
-if grep -q 'unreadable' "$SB/err3"; then ok "unparseable settings.json is loud"; else bad "unparseable loud" "$(cat "$SB/err3")"; fi
-chk "unparseable settings.json left alone" "{ not json" "$(cat "$SB/.claude/settings.json")"
+if has_cmd logcompress-hook.js; then ok "later items still applied"; else bad "later items applied" "$(composed_files)"; fi
 # a missing skill source
-echo '{}' > "$SB/.claude/settings.json"
 rm "$SB/code/nixos-config/main/dotfiles/agents/skills"
 ag on repo-safety 2>"$SB/err4" >/dev/null
 if grep -q 'skill repo-safety is on but .*/SKILL.md is unreadable' "$SB/err4"; then ok "missing skill source warns"; else bad "missing skill source warns" "$(cat "$SB/err4")"; fi
@@ -516,7 +274,7 @@ fresh; ag status > /dev/null
 # Dependency order: a hook's parenthetical can only name a row already read.
 # Least specific first, most specific last: a set flips units of every
 # kind; a directory's context fires in one subtree and nowhere else.
-chk "order" "sets skills hooks plugins other directory scoped" "$(ag status | grep -v '^ ' | tr '\n' ' ' | sed 's/ $//')"
+chk "order" "sets skills hooks other directory scoped" "$(ag status | grep -v '^ ' | tr '\n' ' ' | sed 's/ $//')"
 chk "global heads the directory section, scope ~" "global: off ~" "$(ag status | sed -n '/^directory scoped$/{n;p}' | tr -s ' ' | sed 's/^ //')"
 # Membership by shape: a skill that declares hooks is rendered as a module, with
 # what it claims nested under it, and is not repeated in the skills section.
@@ -528,8 +286,8 @@ chk "a skill that declares templates too" "1" "$(ag status | sed -n '/^skills$/,
 chk "with what it declares nested under it" "7" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^      ')"
 chk "a skill that declares nothing is a plain child" "1" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  webdev:')"
 chk "and a module is not a plain child too" "0" "$(ag status | sed -n '/^skills$/,/^hooks$/p' | grep -c '^  repo-safety:' || true)"
-chk "a claimed hook is not repeated under hooks" "0" "$(ag status | sed -n '/^hooks$/,/^plugins$/p' | grep -c '^  worktree-guard:' || true)"
-chk "a hook nobody claims still lives there" "1" "$(ag status | sed -n '/^hooks$/,/^plugins$/p' | grep -c '^  hook-detach:')"
+chk "a claimed hook is not repeated under hooks" "0" "$(ag status | sed -n '/^hooks$/,/^other$/p' | grep -c '^  worktree-guard:' || true)"
+chk "a hook nobody claims still lives there" "1" "$(ag status | sed -n '/^hooks$/,/^other$/p' | grep -c '^  logcompress:')"
 
 echo
 echo "== 11. module member lists: UNION, so a shared member outlives one bundle"
@@ -601,27 +359,18 @@ for s in staffing messages threads assignments coordination; do ag on "$s" > /de
 chk "outer set off holds every child skill" "" "$(skilllinks)"
 chk "outer set off injects no module instructions" "" "$(markers)"
 if has_cmd agent-spawn-guard.sh; then bad "outer set off keeps staffing's hook out" "$(composed_files)"; else ok "outer set off keeps staffing's hook out"; fi
-if has_cmd north-on-spawn; then bad "outer set off keeps coordination lifecycle out" "$(composed_files)"; else ok "outer set off keeps coordination lifecycle out"; fi
-chk "provider activity projection holds lifecycle off" "hook north-session-lifecycle off" "$(grep '^hook north-session-lifecycle ' "$SB/.config/agents/activity.conf")"
 chk "provider activity projection holds staffing guard off" "hook agent-spawn-guard off" "$(grep '^hook agent-spawn-guard ' "$SB/.config/agents/activity.conf")"
-chk "outer set off links no agent profiles" "0" "$(test -e "$SB/.claude/agents/integrator.md" && echo 1 || echo 0)"
 ag on orchestration > /dev/null
 chk "outer set releases all four leaf skills" "assignments messages staffing threads" "$(skilllinks)"
 chk "nested instructions compose deterministically" "<!-- module: coordination --> <!-- module: orchestration -->" "$(markers)"
 if has_cmd agent-spawn-guard.sh; then ok "active staffing composes its hook"; else bad "active staffing composes its hook" "$(composed_files)"; fi
-if has_cmd north-on-spawn; then ok "active assignments compose coordination lifecycle"; else bad "active assignments compose coordination lifecycle" "$(composed_files)"; fi
-chk "provider activity projection releases lifecycle" "hook north-session-lifecycle on" "$(grep '^hook north-session-lifecycle ' "$SB/.config/agents/activity.conf")"
 chk "provider activity projection releases staffing guard" "hook agent-spawn-guard on" "$(grep '^hook agent-spawn-guard ' "$SB/.config/agents/activity.conf")"
-chk "active staffing links its profiles" "$NORTH/orchestration/agents/integrator.md" "$(readlink "$SB/.claude/agents/integrator.md")"
 ag off orchestration > /dev/null
 chk "one outer flip removes every leaf skill" "" "$(skilllinks)"
 chk "one outer flip removes every instruction" "" "$(markers)"
-if has_cmd north-on-spawn; then bad "one outer flip removes coordination lifecycle" "$(composed_files)"; else ok "one outer flip removes coordination lifecycle"; fi
-chk "provider activity projection follows the outer flip" "hook north-session-lifecycle off" "$(grep '^hook north-session-lifecycle ' "$SB/.config/agents/activity.conf")"
 chk "staffing guard projection follows the outer flip" "hook agent-spawn-guard off" "$(grep '^hook agent-spawn-guard ' "$SB/.config/agents/activity.conf")"
 chk "coordination remembers its own on switch" "module coordination on" "$(grep '^module coordination ' "$SB/.config/agents/manifest.conf")"
 chk "leaf switches remain remembered" "4" "$(grep -Ec '^skill (staffing|messages|threads|assignments) on$' "$SB/.config/agents/manifest.conf")"
-chk "the staffing profiles are swept with the outer set" "0" "$(test -e "$SB/.claude/agents/integrator.md" && echo 1 || echo 0)"
 
 echo
 echo "== 14. a membership cycle is named, and everything in it derives inactive"
@@ -654,17 +403,16 @@ mod guard-bundle logcompress
 ag status > /dev/null
 ag on proj > /dev/null; ag on global > /dev/null; ag on logcompress > /dev/null
 ag on proj/AGENTS.md > /dev/null; ag on global/AGENTS.md > /dev/null
-chk "a held dir row writes an EMPTY context file" "0" "$(stat -c %s "$SB/.config/agents/dir/proj-CLAUDE.md")"
+chk "a held dir row writes an EMPTY context file" "0" "$(stat -c %s "$SB/.config/agents/dir/proj-AGENTS.md")"
 chk "a held dir row writes an empty codex surface too" "0" "$(stat -c %s "$SB/.config/agents/dir/proj-AGENTS.md")"
-chk "a held global profile writes empty" "0" "$(stat -c %s "$SB/.config/agents/CLAUDE.md")"
-chk "a held global profile empties the account copy" "0" "$(stat -c %s "$ACCT/CLAUDE.md")"
+chk "a held global profile writes empty" "0" "$(stat -c %s "$SB/.config/agents/AGENTS.md")"
 if has_cmd logcompress-hook.js; then bad "a held hook is not composed" "$(composed_files)"; else ok "a held hook is not composed"; fi
 st="$(ag status)"
 case "$st" in *"logcompress:            off (module: guard-bundle off)"*) ok "status: a hook says which bundle holds it" ;;
   *) bad "hook names bundle" "$(echo "$st" | grep logcompress)" ;; esac
 ag on docs-bundle > /dev/null
-chk "the bundle releases the dir context" "PROJECT CONTEXT" "$(cat "$SB/.config/agents/dir/proj-CLAUDE.md")"
-chk "and the global profile with it" "1" "$(test -s "$SB/.config/agents/CLAUDE.md" && echo 1 || echo 0)"
+chk "the bundle releases the dir context" "PROJECT CONTEXT" "$(cat "$SB/.config/agents/dir/proj-AGENTS.md")"
+chk "and the global profile with it" "1" "$(test -s "$SB/.config/agents/AGENTS.md" && echo 1 || echo 0)"
 if has_cmd comment-bloat-guard.sh; then ok "the hook following the released profile composes"; else bad "follower of released profile" "$(composed_files)"; fi
 ag on guard-bundle > /dev/null
 if has_cmd logcompress-hook.js; then ok "the released hook composes"; else bad "released hook composes" "$(composed_files)"; fi
@@ -673,31 +421,6 @@ ag off docs-bundle > /dev/null
 chk "applied: a held dir counts as 0" "0/1" "$(ag apply | sed 's/.*, \([0-9]*\/[0-9]*\) dir contexts.*/\1/')"
 chk "manifest is untouched by all this gating" "dir proj on $SB/proj" "$(grep '^dir proj ' "$SB/.config/agents/manifest.conf")"
 chk "modules are idempotent across ensure" "" "$(cp "$SB/.config/agents/manifest.conf" "$SB/m3"; ag status > /dev/null; diff "$SB/m3" "$SB/.config/agents/manifest.conf")"
-
-echo
-echo "== 16. account copies are real files that never alias the master"
-fresh; ag status > /dev/null
-ag on global > /dev/null; ag on global/AGENTS.md > /dev/null
-src="$SB/code/nixos-config/main/dotfiles/agents/AGENTS.md"
-# The live incident, exactly: an old account entry was a symlink resolving back
-# to the master, so `> acct` truncated the master before `cat` could read it.
-rm -f "$ACCT/CLAUDE.md"; ln -s "$SB/.config/agents/CLAUDE.md" "$ACCT/CLAUDE.md"
-ag apply > /dev/null
-chk "the master survives an aliasing account entry" "" "$(diff "$src" "$SB/.config/agents/CLAUDE.md")"
-chk "the aliasing link is replaced, not followed" "0" "$(test -L "$ACCT/CLAUDE.md" && echo 1 || echo 0)"
-chk "and the account copy is a real file with the content" "" "$(diff "$src" "$ACCT/CLAUDE.md")"
-chk "the codex surface is intact too" "" "$(diff "$src" "$SB/.config/agents/AGENTS.md")"
-# heal, don't skip: the loop globs account DIRECTORIES now
-rm -f "$ACCT/CLAUDE.md"
-ag apply > /dev/null
-chk "a deleted account copy heals on the next apply" "1" "$(test -f "$ACCT/CLAUDE.md" && echo 1 || echo 0)"
-chk "and heals with the content, not an empty file" "" "$(diff "$src" "$ACCT/CLAUDE.md")"
-mkdir -p "$SB/.local/state/north/accounts/anthropic/acct-two"
-ag apply > /dev/null
-chk "a never-seeded account is written for the first time" "1" "$(test -f "$SB/.local/state/north/accounts/anthropic/acct-two/CLAUDE.md" && echo 1 || echo 0)"
-chk "and it carries the profile" "" "$(diff "$src" "$SB/.local/state/north/accounts/anthropic/acct-two/CLAUDE.md")"
-ag off global > /dev/null
-chk "off still empties every account copy" "0" "$(stat -c %s "$ACCT/CLAUDE.md")"
 
 echo
 echo "== 17. a module's instructions ride on the global surfaces while it is active"
@@ -709,19 +432,17 @@ mod_ins z-mod "$SB/z-ins.md"
 ag status > /dev/null
 ag on global > /dev/null; ag on global/AGENTS.md > /dev/null
 src="$SB/code/nixos-config/main/dotfiles/agents/AGENTS.md"
-chk "an inactive module appends nothing" "" "$(diff "$src" "$SB/.config/agents/CLAUDE.md")"
+chk "an inactive module appends nothing" "" "$(diff "$src" "$SB/.config/agents/AGENTS.md")"
 ag on a-mod > /dev/null
-chk "an active module appends its file" "1" "$(grep -c '^AAA-CONTEXT$' "$SB/.config/agents/CLAUDE.md")"
+chk "an active module appends its file" "1" "$(grep -c '^AAA-CONTEXT$' "$SB/.config/agents/AGENTS.md")"
 chk "behind a marker naming it" "<!-- module: a-mod -->" "$(markers)"
-chk "the profile is still first, whole" "$(head -1 "$src")" "$(head -1 "$SB/.config/agents/CLAUDE.md")"
-chk "the codex surface carries the composed result" "" "$(diff "$SB/.config/agents/CLAUDE.md" "$SB/.config/agents/AGENTS.md")"
-chk "so does the account copy" "" "$(diff "$SB/.config/agents/CLAUDE.md" "$ACCT/CLAUDE.md")"
+chk "the profile is still first, whole" "$(head -1 "$src")" "$(head -1 "$SB/.config/agents/AGENTS.md")"
 ag on z-mod > /dev/null
 chk "two modules append in modules.d filename order" "<!-- module: a-mod --> <!-- module: z-mod -->" "$(markers)"
-chk "both contents are there" "2" "$(grep -c '^AAA-CONTEXT$\|^ZZZ-CONTEXT$' "$SB/.config/agents/CLAUDE.md")"
+chk "both contents are there" "2" "$(grep -c '^AAA-CONTEXT$\|^ZZZ-CONTEXT$' "$SB/.config/agents/AGENTS.md")"
 ag off a-mod > /dev/null
 chk "turning one off leaves no trace of it" "<!-- module: z-mod -->" "$(markers)"
-chk "and drops its content" "0" "$(grep -c '^AAA-CONTEXT$' "$SB/.config/agents/CLAUDE.md" || true)"
+chk "and drops its content" "0" "$(grep -c '^AAA-CONTEXT$' "$SB/.config/agents/AGENTS.md" || true)"
 # a module held by a bundle is inactive, so its instructions do not ride either
 mod holding-bundle z-mod
 ag apply > /dev/null
@@ -733,7 +454,7 @@ rm "$SB/z-ins.md"
 ag on a-mod 2>"$SB/errm" >/dev/null
 if grep -q 'module z-mod is active but .* is missing' "$SB/errm"; then ok "a missing instructions file warns"; else bad "missing instructions warns" "$(cat "$SB/errm")"; fi
 chk "the module that still has its file composes" "<!-- module: a-mod -->" "$(markers)"
-chk "and the profile survives the gap" "$(head -1 "$src")" "$(head -1 "$SB/.config/agents/CLAUDE.md")"
+chk "and the profile survives the gap" "$(head -1 "$src")" "$(head -1 "$SB/.config/agents/AGENTS.md")"
 chk "apply still reports" "1" "$(ag apply 2>/dev/null | grep -c '^applied:')"
 chk "instructions never touch the manifest" "module a-mod on" "$(grep '^module a-mod ' "$SB/.config/agents/manifest.conf")"
 
@@ -755,15 +476,15 @@ survivors() { printf '%s %s %s' \
   "$(test -f "$CX/hand-written/SKILL.md" && echo handwritten || echo GONE)" \
   "$(test -L "$CX/foreign-link" && echo foreign || echo GONE)"; }
 ag on repo-safety > /dev/null
-chk "an active skill lands in the claude farm" "repo-safety" "$(skilllinks)"
+chk "an active skill lands in the shared farm" "repo-safety" "$(skilllinks)"
 chk "and on the codex surface, at the same source" "$(readlink "$SB/.config/agents/skills/repo-safety")" "$(readlink "$CX/repo-safety")"
 chk "the codex entry is a link that resolves to the skill" "1" "$(test -L "$CX/repo-safety" && test -d "$CX/repo-safety" && echo 1 || echo 0)"
 ag on verification > /dev/null
-chk "the verification skill reaches both surfaces" "1" "$(test -L "$SB/.config/agents/skills/verification" && test -L "$CX/verification" && echo 1 || echo 0)"
+chk "the verification skill reaches both farms" "1" "$(test -L "$SB/.config/agents/skills/verification" && test -L "$CX/verification" && echo 1 || echo 0)"
 ag off verification > /dev/null
-chk "turning verification off clears both surfaces" "0" "$(if test -L "$SB/.config/agents/skills/verification" || test -L "$CX/verification"; then echo 1; else echo 0; fi)"
+chk "turning verification off clears both farms" "0" "$(if test -L "$SB/.config/agents/skills/verification" || test -L "$CX/verification"; then echo 1; else echo 0; fi)"
 for s in agent-policy delegating-agents; do ag on "$s" > /dev/null; done
-chk "policy skills reach both provider surfaces" "1" "$(test -L "$SB/.config/agents/skills/agent-policy" && test -L "$CX/agent-policy" && test -L "$SB/.config/agents/skills/delegating-agents" && test -L "$CX/delegating-agents" && echo 1 || echo 0)"
+chk "policy skills reach both farms" "1" "$(test -L "$SB/.config/agents/skills/agent-policy" && test -L "$CX/agent-policy" && test -L "$SB/.config/agents/skills/delegating-agents" && test -L "$CX/delegating-agents" && echo 1 || echo 0)"
 chk "policy skill paths resolve to owned sources" "$SB/code/nixos-config/main/dotfiles/agents/skills/agent-policy/SKILL.md" "$(ag path agent-policy)"
 for s in agent-policy delegating-agents; do ag off "$s" > /dev/null; done
 farm_inode="$(stat -c %i "$SB/.config/agents/skills/repo-safety")"
@@ -819,15 +540,8 @@ chk "released, it returns to both" "1" "$(test -L "$CX/repo-safety" && test -L "
 # other skill-side module.
 seed_codex_neighbours   # the create-when-absent case above wiped the fixture
 ag on staffing > /dev/null
-chk "the staffing skill reaches the claude farm" "1" "$(test -L "$SB/.config/agents/skills/staffing" && echo 1 || echo 0)"
+chk "the staffing skill reaches the shared farm" "1" "$(test -L "$SB/.config/agents/skills/staffing" && echo 1 || echo 0)"
 chk "and the codex surface, same source" "$STAFFSK" "$(readlink "$CX/staffing")"
-# the templates it declares are the other half of the same switch
-chk "an active module links the templates it ships" "$SB/code/north/main/orchestration/agents/integrator.md" "$(readlink "$SB/.claude/agents/integrator.md")"
-ag off staffing > /dev/null
-chk "off sweeps the templates it linked" "0" "$(test -e "$SB/.claude/agents/integrator.md" && echo 1 || echo 0)"
-: > "$SB/.claude/agents/hand-written.md"
-ag on staffing > /dev/null; ag off staffing > /dev/null
-chk "and sweeps only what it linked" "1" "$(test -f "$SB/.claude/agents/hand-written.md" && echo 1 || echo 0)"
 ag off staffing > /dev/null
 chk "off clears the staffing skill from the farm" "0" "$(test -L "$SB/.config/agents/skills/staffing" && echo 1 || echo 0)"
 chk "and from the codex surface" "0" "$(test -L "$CX/staffing" && echo 1 || echo 0)"
@@ -842,101 +556,12 @@ fresh; ag status > /dev/null
 mkdir -p "$SB/.codex"; : > "$SB/.codex/skills"
 ag on repo-safety 2>"$SB/errcx" >/dev/null
 if grep -q 'is not a directory — repo-safety not linked for codex' "$SB/errcx"; then ok "a non-directory there warns"; else bad "non-directory warns" "$(cat "$SB/errcx")"; fi
-chk "the claude farm still got it" "repo-safety" "$(skilllinks)"
+chk "the shared farm still got it" "repo-safety" "$(skilllinks)"
 chk "apply still reports" "1" "$(ag apply 2>/dev/null | grep -c '^applied:')"
 
 echo
-echo "== 19. export-plugin: a module compiled into a sealed release folder"
-# Fragments pointing at sandbox scripts, so the emitted tree is the same on any
-# machine — a hook command naming ~/.agents would make this test a machine test.
-rm -rf "$SB.frags"; mkdir -p "$SB.frags"; cp "$FRAG_SRC"/*.json "$SB.frags/"
-fresh "$SB.frags"; mods
-mkdir -p "$SB/bin"; printf '#!/bin/sh\nexit 0\n' > "$SB/bin/guard.sh"; chmod +x "$SB/bin/guard.sh"
-python3 - "$SB.frags" "$SB/bin/guard.sh" <<'PY'
-import json, os, sys
-d, script = sys.argv[1:]
-for name in ("worktree-guard", "tripwire-guard"):
-    p = os.path.join(d, name + ".json")
-    frag = json.load(open(p))
-    for e in frag["entries"]:
-        e["hook"]["command"] = script
-    open(p, "w").write(json.dumps(frag, indent=1))
-PY
-printf '# Team conventions\n\nUse the worktree flow.\n' > "$SB/guide.md"
-printf '# Inner rules\n\nNested text.\n' > "$SB/inner.md"
-mod_ins team "$SB/guide.md" repo-safety worktree-guard inner
-mod_ins inner "$SB/inner.md" tripwire-guard
-ag status > /dev/null
-out="$(ag export-plugin team 2>"$SB/xerr")"
-D="$(ls -d "$SB/releases"/team-*/ 2>/dev/null | head -1)"
-chk "one release directory, named <module>-<version>" "1" "$(ls -d "$SB/releases"/team-*/ 2>/dev/null | wc -l)"
-chk "the emitted layout, exactly" \
-  "./.claude-plugin ./.claude-plugin/plugin.json ./RELEASE ./hooks ./hooks/bin ./hooks/bin/guard.sh ./hooks/hooks.json ./skills ./skills/inner-guide ./skills/inner-guide/SKILL.md ./skills/repo-safety ./skills/repo-safety/SKILL.md ./skills/team-guide ./skills/team-guide/SKILL.md" \
-  "$(cd "$D" && find . -mindepth 1 | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
-chk "the exported skill is a byte-for-byte copy of its source" "" "$(diff -r "$REPO/dotfiles/agents/skills/repo-safety" "$D/skills/repo-safety")"
-chk "plugin.json parses and carries the schema's fields" "team|20260810|Team conventions|Tom Passarelli" \
-  "$(python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print("|".join([d["name"],d["version"][:8],d["description"],d["author"]["name"]]))' "$D/.claude-plugin/plugin.json" | sed 's/|[0-9]\{8\}|/|20260810|/')"
-chk "the version is a date and a content hash" "1" "$(python3 -c 'import json,re,sys;print(1 if re.fullmatch(r"[0-9]{8}-[0-9a-f]{8}", json.load(open(sys.argv[1]))["version"]) else 0)' "$D/.claude-plugin/plugin.json")"
-chk "the instructions became a guide skill, frontmatter and body" \
-  '---|name: team-guide|description: "Team conventions"|---||# Team conventions||Use the worktree flow.' \
-  "$(tr '\n' '|' < "$D/skills/team-guide/SKILL.md" | sed 's/|$//')"
-chk "a nested module's instructions become their own guide" "1" "$(grep -c '^name: inner-guide$' "$D/skills/inner-guide/SKILL.md")"
-# hooks: our fragment shape becomes the plugin's hooks.json, paths rewritten
-chk "hooks.json is the plugin shape, command via CLAUDE_PLUGIN_ROOT" \
-  'PreToolUse Bash ${CLAUDE_PLUGIN_ROOT}/hooks/bin/guard.sh' \
-  "$(python3 -c '
-import json,sys
-d=json.load(open(sys.argv[1]))["hooks"]
-ev=sorted(d)[0]; b=[x for x in d[ev] if x.get("matcher")=="Bash"][0]
-print(ev, b["matcher"], b["hooks"][0]["command"])' "$D/hooks/hooks.json")"
-chk "no machine path survives in hooks.json" "0" "$(grep -c '/home/tom' "$D/hooks/hooks.json" || true)"
-chk "the referenced script rode along" "" "$(diff "$SB/bin/guard.sh" "$D/hooks/bin/guard.sh")"
-# receipt
-chk "receipt declares its format" "format=north-agents-plugin/v1" "$(head -1 "$D/RELEASE")"
-chk "receipt names every member source" "3" "$(grep -c '^member=' "$D/RELEASE")"
-chk "receipt names the flattening" "1" "$(grep -c '^flattened=inner ' "$D/RELEASE")"
-chk "receipt names a repo and its rev" "1" "$(grep -cE '^repo=/.+ [0-9a-f]{40}$' "$D/RELEASE")"
-chk "receipt names the copied script" "1" "$(grep -c '^script=.*-> hooks/bin/guard.sh$' "$D/RELEASE")"
-chk "receipt says no path went unresolved" "unresolved-path=(none)" "$(grep '^unresolved-path=' "$D/RELEASE")"
-# sealed
-chk "the release is sealed: no write bit anywhere" "0" "$(find "$D" -perm -u+w | wc -l)"
-chk "and readable, like every release under north-data" "dr-xr-xr-x" "$(stat -c %A "$D" | sed 's|/$||')"
-# re-export
-err="$(ag export-plugin team 2>&1 >/dev/null || true)"
-case "$err" in *"already exists and a release is sealed"*) ok "a second export refuses rather than overwriting" ;;
-  *) bad "second export refuses" "$err" ;; esac
-chk "and left the sealed release alone" "1" "$(ls -d "$SB/releases"/team-*/ | wc -l)"
-ag export-plugin team --force > /dev/null
-chk "--force writes a NEW directory beside it" "2" "$(ls -d "$SB/releases"/team-*/ | wc -l)"
-chk "identical sources give the identical version" "1" "$(ls -d "$SB/releases"/team-*/ | sed 's|.*/team-||;s|-2/$||;s|/$||' | sort -u | wc -l)"
-
-echo
-echo "== 20. export-plugin: what cannot become a plugin says so, and the rest lands"
-fresh; mods
-mkdir -p "$SB/code/north-data/context-dirs" "$SB/proj"
-printf '%s proj\n' "$SB/proj" > "$SB/code/north-data/context-dirs.conf"
-echo "ctx" > "$SB/code/north-data/context-dirs/proj.md"
-# a payload module: skill + agent templates, no member file of its own
-printf -- '---\nname: executor\n---\nrole\n' > "$NORTH/orchestration/agents/executor.md"
-mod mixed proj statusline-script staffing ghost
-ag status > /dev/null
-out="$(ag export-plugin mixed --description "A mixed bag" 2>"$SB/xerr2")"
-D2="$(ls -d "$SB/releases"/mixed-*/ | head -1)"
-chk "a dir row is skipped, by name" "1" "$(grep -c 'skipped dir proj — dir rows have no plugin equivalent' "$SB/xerr2")"
-chk "an other row is skipped, by name" "1" "$(grep -c 'skipped other statusline-script' "$SB/xerr2")"
-chk "a member naming nothing is skipped, by name" "1" "$(grep -c 'skipped ? ghost — names no unit' "$SB/xerr2")"
-chk "the skips are in the receipt too" "3" "$(grep -c '^skipped=' "$D2/RELEASE")"
-chk "a module's skill exported" "1" "$(grep -c '^name: staffing$' "$D2/skills/staffing/SKILL.md")"
-chk "and the templates it declares" "1" "$(test -f "$D2/agents/executor.md" && echo 1 || echo 0)"
-chk "--description wins over the instructions heading" "A mixed bag" "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["description"])' "$D2/.claude-plugin/plugin.json")"
-chk "the export reports what it did" "1" "$(echo "$out" | grep -c '^exported: mixed ')"
-chk "exporting a non-module is refused" "1" "$(ag export-plugin repo-safety 2>&1 >/dev/null | grep -c 'not a module')"
-chk "exporting nothing is refused" "1" "$(ag export-plugin 2>&1 >/dev/null | grep -c 'requires a module name')"
-chk "the manifest is untouched by an export" "" "$(cp "$SB/.config/agents/manifest.conf" "$SB/m4"; ag export-plugin mixed --force > /dev/null; diff "$SB/m4" "$SB/.config/agents/manifest.conf")"
-
-echo
 echo "== 20. a dir row gates its current subtree"
-ACCT2="$SB/.local/state/north/accounts/anthropic/acct-two"
+ACCT2="$SB/.local/state/north/accounts/openai/acct-two"
 projslug() { echo "${1//\//-}"; }   # the path with its separators dashed
 memdir() { echo "$1/projects/$(projslug "$2")/memory"; }   # acct-root scope
 seed_mem() { # acct-root scope name content
@@ -979,8 +604,8 @@ chk "the root has no memories here" "memroot global off" "$(grep '^memroot globa
 chk "the manifest is idempotent" "" "$(cp "$m" "$SB/m19"; ag status > /dev/null 2>&1; diff "$SB/m19" "$m")"
 ag apply > /dev/null 2>&1
 chk "byte-preserved: the index is what it was" "$before_index" "$(index "$ACCT" "$SB/proj")"
-chk "byte-preserved: the profile still writes" "" "$(diff "$SB/code/nixos-config/main/dotfiles/agents/AGENTS.md" "$SB/.config/agents/CLAUDE.md")"
-chk "byte-preserved: the raised gate injects no context file" "0" "$(stat -c %s "$SB/.config/agents/dir/proj-CLAUDE.md")"
+chk "byte-preserved: the profile still writes" "" "$(diff "$SB/code/nixos-config/main/dotfiles/agents/AGENTS.md" "$SB/.config/agents/AGENTS.md")"
+chk "byte-preserved: the raised gate injects no context file" "0" "$(stat -c %s "$SB/.config/agents/dir/proj-AGENTS.md")"
 chk "content files are not apply's to touch" "$before_files" "$(md5sum "$(memdir "$ACCT" "$SB/proj")"/alpha.md "$(memdir "$ACCT" "$SB/proj")"/beta.md)"
 chk "and none were added or removed" "MEMORY.md alpha.md beta.md" "$(ls "$(memdir "$ACCT" "$SB/proj")" | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
 
@@ -1119,7 +744,7 @@ rm -rf "$BEAGLE_SKILL"
 ag status > /dev/null
 chk "and follows the claim when one skill stops making it" "hook logcompress enabled webdev" "$(grep '^hook logcompress ' "$m")"
 # a fragment's own `follows` is the nearer statement and keeps the column
-chk "a followed hook keeps its fragment's binding" "hook git-blind-stage-guard enabled repo-safety" "$(grep '^hook git-blind-stage-guard ' "$m")"
+chk "a followed hook keeps its switchboard binding" "hook git-blind-stage-guard enabled repo-safety" "$(grep '^hook git-blind-stage-guard ' "$m")"
 # two claimants: either one is enough, and both are named
 claim "$WEBDEV_SKILL" logcompress git-blind-stage-guard
 ag on repo-safety > /dev/null
@@ -1166,7 +791,7 @@ if has_cmd corpus-scan-guard.sh; then bad "convo off decomposes it" "$(composed_
 # The script itself lives in North; this suite
 # owns the switchboard, so the behaviour half runs only where North is checked
 # out beside this repo. Its full matrix is corpus-scan-guard.test.sh.
-CSG="${CORPUS_SCAN_GUARD:-$REPO/../../north/main/profiles/tom/hooks/corpus-scan-guard.sh}"
+CSG="${CORPUS_SCAN_GUARD:-$CODE_ROOT/north/main/profiles/tom/hooks/corpus-scan-guard.sh}"
 CORPUS="$SB/code/north-data"
 if [ ! -x "$CSG" ]; then
   ok "corpus-scan-guard behaviour (skipped: North not checked out beside this repo)"
@@ -1204,7 +829,7 @@ if has_cmd tripwire-guard.sh; then ok "repo-safety composes its tripwire"; else 
 ag off repo-safety > /dev/null
 if has_cmd tripwire-guard.sh; then bad "repo-safety off decomposes it" "$(composed_files)"; else ok "repo-safety off decomposes it"; fi
 
-TWG="${TRIPWIRE_GUARD:-$REPO/../../north/main/profiles/tom/hooks/tripwire-guard.sh}"
+TWG="${TRIPWIRE_GUARD:-$CODE_ROOT/north/main/profiles/tom/hooks/tripwire-guard.sh}"
 if [ ! -x "$TWG" ] || ! command -v jq > /dev/null 2>&1; then
   ok "tripwire-guard behaviour (skipped: North not checked out beside this repo, or no jq)"
 else
@@ -1229,7 +854,7 @@ twg_state() {
   local rc
   python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":sys.argv[2],"tool_input":{"command":sys.argv[1]}}))' \
     "$1" "$MINE" |
-    env -u AGENT_NO_AUTHORING_HOOKS -u CLAUDE_NO_AUTHORING_HOOKS HOME="$SB" \
+    env -u AGENT_NO_AUTHORING_HOOKS HOME="$SB" \
       TRIPWIRE_LOG_DIR="$SB/twlog" NORTH_BIN=/bin/true "$TWG" > /dev/null 2>&1
   rc=$?
   if [ "$rc" = 0 ]; then echo allow; else echo deny; fi

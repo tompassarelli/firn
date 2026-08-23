@@ -312,12 +312,6 @@
     modules = firnModules;
     packages.x86_64-linux = ((pkgs: {
       firn-native = makeFirnNative "x86_64-linux";
-      claude-sandbox = import ./modules/containers/claude-sandbox.nix {
-        pkgs = import nixpkgs-master {
-          system = "x86_64-linux";
-          config.allowUnfree = true;
-        };
-      };
     }) (import nixpkgs {
         system = "x86_64-linux";
         config.allowUnfree = true;

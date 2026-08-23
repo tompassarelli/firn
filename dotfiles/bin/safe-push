@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # safe-push — the standing-authorized way to push to GitHub without asking a human.
-# Encodes the global CLAUDE.md "push freely" policy as a MECHANICAL check so every
+# Encodes the global AGENTS.md push policy as a mechanical check so every
 # agent pushes identically-safe: scan the to-be-pushed commits for secrets, refuse
 # force/destructive pushes, then push HEAD to the same-named remote branch unless
 # an explicit --to destination is supplied. Any guard

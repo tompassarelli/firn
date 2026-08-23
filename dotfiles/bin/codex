@@ -35,7 +35,7 @@ fi
 # tool call inherits the cgroup. Weights live in nixos-config
 # modules/agent-slice; this only enters them. Fails OPEN like the account
 # selection below: absent systemd-run, no user manager, or a scope that never
-# started the payload all fall through. Mirrors dotfiles/bin/claude.
+# started the payload all fall through.
 NORTH_SLICE_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/north/agent-slice.state"
 slice_note() {
   { mkdir -p "${NORTH_SLICE_STATE%/*}"; } 2>/dev/null || true
@@ -163,7 +163,7 @@ native_dispatch_args() {
   elif [ -f "$HOME/.local/state/north/harness.conf" ]; then
     state="$HOME/.local/state/north/harness.conf"
   else
-    state="$HOME/.claude/my-config.state"
+    state="$HOME/.local/state/north/harness.conf"
   fi
   if [ -r "$state" ]; then
     while IFS= read -r line; do
@@ -173,8 +173,8 @@ native_dispatch_args() {
   fi
   # `north config dispatch` owns this vocabulary; this table must track it.
   # Disabling multi_agent is correct ONLY when native dispatch is actually
-  # denied. See the sibling note in dotfiles/bin/claude — the same catch-all
-  # left native-forced sessions with no dispatch surface at all.
+  # denied. A catch-all here once left native-forced sessions with no dispatch
+  # surface at all.
   case "$mode" in
     # Current vocabulary (`north config dispatch`): native | north | auto.
     # `auto` chooses per dispatch, so native dispatch stays available; only a

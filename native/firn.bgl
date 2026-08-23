@@ -331,7 +331,7 @@
 (def repo-architecture FirnCommand
   (->FirnCommand
     "repo" "architecture" "all|bundle" "  "
-    "regenerate the local Claude map (docs/claude/02-local-map.md); `bundle` prints the full read"
+    "render the tracked agent-configuration map; `bundle` prints the full read"
     "" ""
     (->RepoArchitectureCommand false)
     (->NativeRepoWorkflowFamily false)

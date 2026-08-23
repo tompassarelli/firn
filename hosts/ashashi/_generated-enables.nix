@@ -6,7 +6,6 @@
   myConfig.modules.bc.enable = lib.mkDefault true;
   myConfig.modules.beagle.enable = lib.mkDefault true;
   myConfig.modules.btop.enable = lib.mkDefault true;
-  myConfig.modules.claude.enable = lib.mkDefault true;
   myConfig.modules.curl.enable = lib.mkDefault true;
   myConfig.modules.delta.enable = lib.mkDefault true;
   myConfig.modules.direnv.enable = lib.mkDefault true;

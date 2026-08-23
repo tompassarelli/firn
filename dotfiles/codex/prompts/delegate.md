@@ -7,7 +7,7 @@ description: Delegate this request through North; current context rides by defau
 North owns staffing, provider/account allocation, lifecycle, identity, and
 observability. Leave provider and account on North's automatic policy by
 default; honor and forward an explicit user/task pin, but never infer one from
-the current Claude session. Do not select a concrete model or native Claude
+the current session. Do not select a concrete model or native provider
 agent here. Orchestration describes the work; North resolves the runtime.
 
 Parse `$ARGUMENTS` as one task plus an optional trailing `--new`, then make one
@@ -53,7 +53,7 @@ north delegate "<task text without --new>" --composite
 
 Omit `--provider` and `--target` by default. Forward them only when the user or
 task explicitly pins a provider/account; an account pin is exceptional, never
-an allocation guess. Never derive a concrete model from the current Claude
+an allocation guess. Never derive a concrete model from the current
 session. Concrete model selection remains provider-catalog/North-owned unless a
 supported explicit override contract says otherwise. Semantic Orchestration options
 such as tier and reasoning remain valid worker options; they do not name a

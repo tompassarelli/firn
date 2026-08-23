@@ -1,21 +1,12 @@
 { config, lib, pkgs, inputs, flakeRoot, ... }:
 
-let
-  username = config.myConfig.modules.users.username;
-  homeDir = config.myConfig.modules.users.homeDir;
-  minimalPkg = inputs.hermes-agent.packages."${pkgs.stdenv.hostPlatform.system}".minimal;
-  hermesPkg = minimalPkg.override (prev: {
-    callPackage = f: args: let
-      drv = prev.callPackage f args;
-    in
-    if ((drv.pname or null) == "hermes-tui") then drv.overrideAttrs (o: {
-      src = inputs.hermes-agent;
-    }) else drv;
-  });
-  northPkg = "${homeDir}/code/north/main";
-  northBin = "${northPkg}/bin";
-in
-{
+((username: ((homeDir: ((minimalPkg: ((hermesPkg: ((northPkg: ((northBin: {
+  flake-inputs = {
+    hermes-agent = {
+      url = "github:NousResearch/hermes-agent/244dabbd9c4b542bf5c1ad0159af512c2b5d6e08";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
   options.myConfig.modules.hermes.enable = lib.mkEnableOption "Hermes controller host over the North MCP with the fail-closed north-bridge adapter";
   config = lib.mkIf config.myConfig.modules.hermes.enable {
     environment.systemPackages = [ hermesPkg ];
@@ -29,4 +20,8 @@ in
       };
     });
   };
-}
+}) "${northPkg}/bin")) "${homeDir}/code/north/main")) (minimalPkg.override (prev: {
+    callPackage = f: args: ((drv: if ((drv.pname or null) == "hermes-tui") then drv.overrideAttrs (o: {
+      src = inputs.hermes-agent;
+    }) else drv) (prev.callPackage f args));
+  })))) (inputs.hermes-agent.packages."${pkgs.stdenv.hostPlatform.system}").minimal)) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)

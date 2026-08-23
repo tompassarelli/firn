@@ -9,10 +9,6 @@ Personal agent policy is composed by
 provider adapters, system packages, services, dotfiles, and Home Manager
 wiring. A fresh rebuild must reproduce the integration.
 
-Mechanics of the nix module that does the wiring (writable settings.json
-symlink, Claude plugin reconciliation, MCP registration):
-`nixos-config:modules/north-profile/firn/docs/nixos-module.md`.
-
 ## House style — Nix is the publication boundary, not the development loop
 
 This configuration intentionally optimizes for a machine whose tools and
@@ -58,12 +54,10 @@ composed profile. `~/.agents/skills` instead points at the atomic runtime farm
 `~/.local/state/north/skills`; North inventories the complete source at
 `~/code/north/main/profiles/tom/skills` and publishes resolved immutable
 generations there. Injected context surfaces are switchboard-owned instead:
-`~/.claude/{skills,CLAUDE.md}`, `~/.codex/AGENTS.md`, `~/.hermes/SOUL.md`, and
-`~/code/{CLAUDE.md,AGENTS.md}` point into `~/.config/agents`, which only
-`agents apply` writes, so one manifest slot decides what every provider loads.
-The remaining discovery path `~/.claude/hooks` composes through `~/.agents`;
-provider-specific adapters remain in `nixos-config`. Claude's writable `settings.json` is seeded from the
-generation rather than symlinked. The immutable managed Codex hook directory
+`~/.codex/AGENTS.md`, `~/.hermes/SOUL.md`, and `~/code/AGENTS.md` point into
+`~/.config/agents`, which only `agents apply` writes, so one manifest slot
+decides what every active interface loads. Provider-specific adapters remain
+in `nixos-config`. The immutable managed Codex hook directory
 under `/etc/codex/hooks` is the deliberate security exception and sources each
 hook from its owning locked flake input.
 
@@ -77,7 +71,7 @@ owned skill declares `category: nixos`. Provider/plugin-contributed skills
 remain outside this farm and are not toggled by North.
 
 Home Manager owns only the stable chain:
-`~/.claude/skills → ~/.agents/skills → ~/.local/state/north/skills`. It must
+`~/.agents/skills → ~/.local/state/north/skills`. It must
 never select individual skills or wire provider discovery directly back to the
 source profile.
 
@@ -85,10 +79,10 @@ source profile.
 
 **The agent config is CI-validated** — `.github/workflows/agent-config.yml`
 runs `scripts/agent-config-check.sh`: it checks the shared instructions, skills,
-and hooks plus both the Claude and Codex adapters. Run
+and hooks plus the Codex adapter. Run
 `scripts/agent-config-check.sh --local` to additionally verify live symlinks,
-both MCP registrations, external North lifecycle hooks, and installed North's
-Anthropic/OpenAI provider readiness. Normal output is a grouped summary;
+the MCP registration, external North lifecycle hooks, and installed North's
+OpenAI provider readiness. Normal output is a grouped summary;
 `--verbose` prints every assertion. This is the anti-rot gate; keep it green.
 
 ## Hooks kill-switch
@@ -100,11 +94,8 @@ Anthropic/OpenAI provider readiness. Normal output is a grouped summary;
 - **Persistent, live flip (all sessions):** `north config guards off` /
   `guards on` — writes `guards=on|off` to
   `~/.local/state/north/harness.conf`; hooks re-read it on every call, so it
-  takes effect immediately, no relaunch. A pre-migration
-  `~/.claude/my-config.state` is a read-only fallback only while the canonical
-  file is absent.
-- **Per-session override at launch:** `AGENT_NO_AUTHORING_HOOKS=1 claude` (or
-  `AGENT_NO_AUTHORING_HOOKS=1 codex`) —
+  takes effect immediately, no relaunch.
+- **Per-session override at launch:** `AGENT_NO_AUTHORING_HOOKS=1 codex` —
   any value except `0`/`false`/empty engages the kill-switch for that session;
   `0`/`false` forces guards LIVE (beats the state file). The var must be in
   the provider CLI's own launch environment — exporting inside a running

@@ -25,8 +25,8 @@ agent:
     - delegation
 
 skills:
-  # Shared, read-only external skills — the same provider-neutral set Claude
-  # Code and Codex resolve. Skill creation still writes to ~/.hermes/skills.
+  # Shared, read-only external skills — the same provider-neutral set Codex
+  # resolves. Skill creation still writes to ~/.hermes/skills.
   external_dirs:
     - ~/.agents/skills
 

@@ -2,8 +2,8 @@
 
 (ns default)
 
-;; User-level agent.slice: the launcher chokepoint (dotfiles/bin/claude,
-;; dotfiles/bin/codex) re-execs each provider session into it via
+;; User-level agent.slice: the Codex launcher chokepoint re-execs each
+;; provider session into it via
 ;; `systemd-run --user --scope --slice=agent.slice`; descendants inherit.
 ;; Weights only — no CPUQuota/AllowedCPUs/MemoryMax, so an idle box is never
 ;; wasted and a fat build throttles instead of OOM-killing.

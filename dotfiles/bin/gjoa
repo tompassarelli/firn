@@ -183,8 +183,7 @@ EOF
   status) shift; direnv exec "$root" env -C "$root" bun run status -- "$@" ;;
 
   # ── preflight gate (mandatory before any nix/full-mach build) ───────────
-  # Runs every gate mechanically. Exits non-zero if any fails. Claude must
-  # show this output before proposing a rebuild — CLAUDE.md Rule #0.
+  # Runs every gate mechanically and exits non-zero if any fails.
   preflight) shift; direnv exec "$root" env -C "$root" bun run preflight -- "$@" ;;
 
   # ── dev-loop verbs ──────────────────────────────────────────────────────

@@ -935,10 +935,7 @@
 (defn architecture-path? [path String] Bool
   (or
     (= path "AGENTS.md")
-    (= path "CLAUDE.md")
-    (starts-with? path "docs/claude/")
     (starts-with? path "dotfiles/agents/")
-    (starts-with? path "dotfiles/claude/")
     (starts-with? path "modules/north-profile/")))
 
 (defn architecture-rows

@@ -4,19 +4,14 @@ set -euo pipefail
 
 STATE="$HOME/.config/agents"
 MANIFEST="$STATE/manifest.conf"
-FRAGMENTS="${AGENTS_FRAGMENTS:-$HOME/code/nixos-config/main/dotfiles/agents/hooks.d}"
-SETTINGS="$HOME/.claude/settings.json"
-PLUGINS_JSON="$HOME/.claude/plugins/installed_plugins.json"
 NORTH="$HOME/code/north/main"
 BEAGLE="$HOME/code/beagle/main"
 NIXOS_CONFIG="$HOME/code/nixos-config/main"
 POLICY_OWNERS="${AGENTS_POLICY_OWNERS:-$NIXOS_CONFIG/dotfiles/agents/policy-owners.toml}"
 CODEX_REQUIREMENTS="${AGENTS_CODEX_REQUIREMENTS:-$NIXOS_CONFIG/modules/codex/requirements.toml}"
 NORTH_HARNESS="${AGENTS_NORTH_HARNESS:-$NORTH/sdk/src/harness.ts}"
-CLAUDE_AGENTS="$HOME/.claude/agents"
-# Codex reads skills from its own directory, so a skill governed only in the
-# claude farm is a skill Codex loads on rules nobody set. This directory is NOT
-# ours the way the farm is: Codex ships `.system/` here (its vendor-managed
+# Codex reads skills from its own directory. This directory is not wholly ours:
+# Codex ships `.system/` here (its vendor-managed
 # built-ins, marked with .codex-system-skills.marker) and a user may keep real
 # skill directories alongside. Everything below treats it as someone else's
 # space that we place links into.
@@ -26,7 +21,7 @@ CODEX_SKILLS="$HOME/.codex/skills"
 CONTEXT_REGISTRY="$HOME/code/north-data/context-dirs.conf"
 CONTEXT_SOURCES="$HOME/code/north-data/context-dirs"
 DIR_TARGETS="$STATE/dir"
-# Per-project MEMORY lives in each account's Claude state, one directory per
+# Per-project memory lives in provider state, one directory per
 # project: a .md per fact, plus MEMORY.md — the INDEX the binary auto-loads at
 # session start. The index is the only thing this switchboard writes there. A
 # memory's content file is the model's and is never written, moved or deleted
@@ -40,8 +35,30 @@ ACCOUNTS="$HOME/.local/state/north/accounts"
 MEM_INDEX_CACHE="$STATE/mem-index"
 
 HOOKS=(agent-spawn-guard beagle-session-start comment-bloat-guard
-  corpus-scan-guard firn-system-policy git-blind-stage-guard hook-detach logcompress
-  north-session-lifecycle session-kill-guard tripwire-guard worktree-guard)
+  corpus-scan-guard firn-system-policy git-blind-stage-guard logcompress
+  session-kill-guard tripwire-guard worktree-guard)
+declare -A HOOK_FOLLOWS=(
+  [beagle-session-start]=beagle-authoring
+  [comment-bloat-guard]=global
+  [corpus-scan-guard]=convo
+  [firn-system-policy]=firn
+  [git-blind-stage-guard]=repo-safety
+  [session-kill-guard]=repo-safety
+  [tripwire-guard]=repo-safety
+  [worktree-guard]=repo-safety
+)
+declare -A HOOK_PATHS=(
+  [agent-spawn-guard]="$NORTH/profiles/tom/hooks/agent-spawn-guard.sh"
+  [beagle-session-start]="$BEAGLE/integrations/north/hooks/beagle-session-start.sh"
+  [comment-bloat-guard]="$NORTH/profiles/tom/hooks/comment-bloat-guard.sh"
+  [corpus-scan-guard]="$NORTH/profiles/tom/hooks/corpus-scan-guard.sh"
+  [firn-system-policy]="$NIXOS_CONFIG/native/system_policy_native.bgl"
+  [git-blind-stage-guard]="$NORTH/profiles/tom/hooks/git-blind-stage-guard.sh"
+  [logcompress]="$NORTH/profiles/tom/hooks/logcompress.js"
+  [session-kill-guard]="$NORTH/profiles/tom/hooks/session-kill-guard.sh"
+  [tripwire-guard]="$NORTH/profiles/tom/hooks/tripwire-guard.sh"
+  [worktree-guard]="$NORTH/profiles/tom/hooks/launch-critical-worktree-guard.sh"
+)
 SKILLS=(webdev importing-skills threejs-animation threejs-fundamentals
   threejs-geometry threejs-interaction threejs-lighting threejs-loaders
   threejs-materials threejs-postprocessing threejs-shaders threejs-textures
@@ -94,47 +111,16 @@ for p in sorted(glob.glob(os.path.join(sys.argv[1], "*.json"))):
 PY
   )
 }
-# `other` is the honest triage drawer, not a kind with a story: a single toggle
-# whose activation reason is not a directory, a skill, a hook, a module, or a
-# plugin. A row here is a row nobody has found the right kind for yet.
-OTHERS=(statusline-script)
+# `other` is the honest triage drawer for rows outside the declared kinds.
+OTHERS=()
 # A `dir` row is a directory instruction file: it fires for that directory and
 # everything under it. The global profile is that same thing scoped at the
 # root — `~`, the tree that contains every other — which is why it is built in
 # rather than registry-backed, and why it reads first.
-# It writes the global surfaces (the config-dir pair and the account copies) and
+# It writes the global surface and
 # never a per-directory target or a link at a directory.
 GLOBAL_SLUG=global
 GLOBAL_DIR="~"
-
-# Plugins are not a hand-written list: the install ledger is the inventory, so
-# an install/uninstall done outside this script is picked up on the next run
-# rather than rotting in an array here.
-PLUGINS=(); PLUGIN_PATHS=(); PLUGINS_LOADED=
-
-load_plugins() {
-  if [ -n "$PLUGINS_LOADED" ]; then return 0; fi
-  PLUGINS_LOADED=1
-  local name path
-  while IFS=$'\t' read -r name path; do
-    PLUGINS+=("$name"); PLUGIN_PATHS+=("$path")
-  done < <(python3 - "$PLUGINS_JSON" <<'PY'
-import json, sys
-try:
-    data = json.load(open(sys.argv[1]))
-except Exception:
-    sys.exit(0)
-for name, installs in sorted((data.get("plugins") or {}).items()):
-    # Project-scoped installs are owned by that project's own config; the key
-    # this switchboard writes (settings.json enabledPlugins) is user-global, so
-    # governing a project plugin from here would enable it everywhere.
-    for i in installs:
-        if i.get("scope") == "user":
-            print(f"{name}\t{i.get('installPath', '')}")
-            break
-PY
-  )
-}
 
 DIRS=(); DIR_PATHS=(); DIRS_LOADED=
 
@@ -176,7 +162,7 @@ dir_path_of() { # slug -> the directory that row gates
 }
 
 project_slug() { # <directory> -> the projects/<name> directory holding its memory
-  # Claude Code names a project's state directory after the path with the
+  # Provider project state names a directory after the path with the
   # separators turned into dashes: /home/tom/code -> -home-tom-code. The global
   # row's scope is `~`, which is $HOME, and slugs the same way.
   local p="$1"
@@ -242,36 +228,6 @@ load_mems() { # the memory inventory, scanned like the plugin ledger
   done < <(dir_rows)
 }
 
-# A hook may name ONE companion unit in its fragment (`"follows": "<name>"`,
-# same metadata level as tags/requires). Hooks are enforcement; the unit is the
-# thing whose activation makes that enforcement wanted, so a supporting hook
-# follows it instead of being flipped by hand. The companion is named bare and
-# may be ANY unit that speaks on/off — a skill, a directory scope, a module —
-# because what makes a guard wanted is not always a skill. A hook with no
-# companion is infrastructure and answers only to a direct flip.
-declare -A HOOK_FOLLOWS=()
-HOOK_FOLLOWS_LOADED=
-
-load_hook_follows() {
-  if [ -n "$HOOK_FOLLOWS_LOADED" ]; then return 0; fi
-  HOOK_FOLLOWS_LOADED=1
-  local h s
-  while IFS=$'\t' read -r h s; do
-    [ -n "${h:-}" ] && HOOK_FOLLOWS["$h"]="$s"
-  done < <(python3 - "$FRAGMENTS" <<'PY'
-import glob, json, os, sys
-for p in sorted(glob.glob(os.path.join(sys.argv[1], "*.json"))):
-    try:
-        follows = (json.load(open(p)).get("follows") or "").strip()
-    except Exception as exc:
-        print(f"agents: {p}: unreadable ({exc})", file=sys.stderr)
-        continue
-    if follows:
-        print(f"{os.path.basename(p)[:-5]}\t{follows}")
-PY
-  )
-}
-
 activity() { # kind|name|own|active|reason|follows|tags — every unit, one line
   # `|` and not a tab: read splits on runs of IFS WHITESPACE, so a unit with no
   # companion (empty field) would shift every field after it left.
@@ -302,15 +258,19 @@ activity() { # kind|name|own|active|reason|follows|tags — every unit, one line
   for cs in "${SKILLS[@]}"; do
     for ch in ${SKILL_HOOKS[$cs]:-}; do claims+="$ch"$'\t'"$cs"$'\n'; done
   done
-  AGENTS_CLAIMS="$claims" python3 - "$FRAGMENTS" "$MANIFEST" "$MODULES_D" <<'PY'
+  local follows="" h
+  for h in "${HOOKS[@]}"; do
+    follows+="$h"$'\t'"${HOOK_FOLLOWS[$h]:-}"$'\n'
+  done
+  AGENTS_CLAIMS="$claims" AGENTS_HOOKS="${HOOKS[*]}" AGENTS_HOOK_FOLLOWS="$follows" \
+    python3 - "$MANIFEST" "$MODULES_D" <<'PY'
 import glob, json, os, sys
-frag_dir, manifest, modules_dir = sys.argv[1:]
-frags = {}
-for p in sorted(glob.glob(os.path.join(frag_dir, "*.json"))):
-    try:
-        frags[os.path.basename(p)[:-5]] = json.load(open(p))
-    except Exception as exc:
-        print(f"agents: {p}: unreadable ({exc}) — hook skipped", file=sys.stderr)
+manifest, modules_dir = sys.argv[1:]
+frags = {name: {} for name in os.environ.get("AGENTS_HOOKS", "").split()}
+for row in os.environ.get("AGENTS_HOOK_FOLLOWS", "").splitlines():
+    name, _, follows = row.partition("\t")
+    if name and follows:
+        frags[name]["follows"] = follows
 members = {}
 for p in sorted(glob.glob(os.path.join(modules_dir, "*.json"))):
     n = os.path.basename(p)[:-5]
@@ -593,118 +553,6 @@ is_active() { [ "${ACT_ACTIVE[$1]:-0}" = 1 ]; }
 
 on_off() { is_active "$1" && echo on || echo off; }
 
-admit_hook_targets() { # active hook names — no provider surface is written before this passes
-  # policy-owners.toml is the source-owned cross-provider contract. A hook
-  # target that cannot execute is not a degraded projection: publishing it
-  # makes every provider appear guarded while running no guard at all.
-  python3 - "$FRAGMENTS" "$POLICY_OWNERS" "$CODEX_REQUIREMENTS" "$NORTH_HARNESS" "$@" <<'PY'
-import json, os, re, shlex, sys
-
-fragments_dir, policy_path, codex_path, north_path, *names = sys.argv[1:]
-target_root = os.environ.get("AGENTS_HOOK_TARGET_ROOT", "").rstrip("/")
-errors, commands = [], {}
-
-def fail(message):
-    errors.append(f"agents: hook target admission failed: {message}")
-
-def executable_path(command):
-    try:
-        words = shlex.split(command)
-    except ValueError as exc:
-        fail(f"malformed command {command!r}: {exc}")
-        return None
-    while words and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[0]):
-        words.pop(0)
-    if not words:
-        fail(f"command {command!r} has no executable target")
-        return None
-    target = os.path.expandvars(os.path.expanduser(words[0]))
-    if not os.path.isabs(target):
-        fail(f"command {command!r} has non-absolute executable target {target!r}")
-        return None
-    checked = os.path.join(target_root, target.lstrip("/")) if target_root else target
-    if not os.path.isfile(checked) or not os.access(checked, os.X_OK):
-        fail(f"{target} is missing or non-executable"
-             + (f" (checked {checked})" if target_root else ""))
-    return target
-
-for name in names:
-    path = os.path.join(fragments_dir, f"{name}.json")
-    try:
-        fragment = json.load(open(path))
-        entries = fragment["entries"]
-        if not isinstance(entries, list):
-            raise TypeError("entries is not a list")
-    except Exception as exc:
-        fail(f"{name} fragment {path} is unreadable: {exc}")
-        continue
-    commands[name] = []
-    for entry in entries:
-        command = (entry.get("hook") or {}).get("command")
-        if not isinstance(command, str):
-            fail(f"{name} fragment has a hook without a command")
-            continue
-        commands[name].append(command)
-        executable_path(command)
-
-try:
-    import tomllib
-    policy = tomllib.load(open(policy_path, "rb"))
-    guards = policy.get("guard") or []
-except Exception as exc:
-    fail(f"cross-provider policy {policy_path} is unreadable: {exc}")
-    guards = []
-
-try:
-    codex_source = open(codex_path).read()
-except OSError as exc:
-    fail(f"Codex managed-hook source {codex_path} is unreadable: {exc}")
-    codex_source = ""
-try:
-    north_source = open(north_path).read()
-except OSError as exc:
-    fail(f"North worker guard-chain source {north_path} is unreadable: {exc}")
-    north_source = ""
-
-def north_chain_body(name):
-    match = re.search(
-        rf"const\s+{re.escape(name)}\s*=\s*resolveManagedGuardChain\(\s*\[(.*?)\]\s*\)",
-        north_source, re.S,
-    )
-    return match.group(1) if match else None
-
-for guard in guards:
-    name = guard.get("switchboard")
-    if name not in commands:
-        continue
-    expected = guard.get("claude_command", "")
-    if expected and any(command != expected for command in commands[name]):
-        fail(f"Claude settings fragment for {name} differs from policy-owned command {expected!r}")
-    codex_command = guard.get("codex_command", "")
-    if codex_command and codex_command not in codex_source:
-        fail(f"Codex managed hooks do not declare {codex_command!r} for {name}")
-    target = expected or executable_path(commands[name][0])
-    if not target:
-        continue
-    symbols = re.findall(
-        rf"const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[\"']{re.escape(target)}[\"']",
-        north_source,
-    )
-    forms = [target, os.path.basename(target), *symbols]
-    for chain in guard.get("north_chains", []):
-        body = north_chain_body(chain)
-        if body is None:
-            fail(f"North worker guard-chain {chain} is absent for {name}")
-        elif not any(re.search(rf"(?<![A-Za-z0-9_]){re.escape(form)}(?![A-Za-z0-9_])", body)
-                     for form in forms):
-            fail(f"North worker guard-chain {chain} omits {target} for {name}")
-
-if errors:
-    print("\n".join(errors), file=sys.stderr)
-    raise SystemExit(1)
-PY
-}
-
 write_activity_projection() {
   # Provider adapters that cannot accept a dynamically composed hook manifest
   # read this DERIVED projection. The manifest remains the user's authority;
@@ -735,44 +583,37 @@ unit_line() { # the state column for a non-hook row: both axes, when they differ
 }
 
 copy_surface() { # src dst — dst is ours, and must be a real file
-  # A symlink AT dst can resolve back to src: an old account copy pointed at
-  # ~/.claude/CLAUDE.md, which points here, so `> dst` truncated the master
-  # before `cat` could read it and the profile was zeroed on every apply. A
-  # copy that is a link is also not a copy — per-account isolation is the whole
-  # point of the account files — so the link is removed, not followed.
+  # The target is a real derived file. Remove a stale symlink first so a write
+  # cannot accidentally truncate its source through an old indirection.
   if [ -L "$2" ]; then rm -f "$2"; fi
   cat "$1" > "$2" || echo "agents: could not write $2" >&2
   return 0
 }
 
-dir_target_base() { # the <base>-CLAUDE.md / <base>-AGENTS.md stem a slug writes
+dir_target_base() { # the <base>-AGENTS.md stem a slug writes
   case "$1" in
-    # Compat exception, not a pattern: ~/code/{CLAUDE,AGENTS}.md are
-    # home-manager links to these exact paths. Moving them under dir/ would
-    # leave the live links dangling until the next rebuild.
+    # ~/code/AGENTS.md is a home-manager link to this exact path. Moving it
+    # under dir/ would leave the live link dangling until the next rebuild.
     code) echo "$STATE/code" ;;
     *)    echo "$DIR_TARGETS/$1" ;;
   esac
 }
 
-link_dir_context() { # dir base — the two provider links AT the directory itself
+link_dir_context() { # dir base — the AGENTS.md link AT the directory itself
   # `apply` owns the target files; the links at <dir> are usually someone
   # else's (home-manager writes ~/code's). Create only what is missing, and
-  # never clobber a file already sitting there — a real CLAUDE.md at a
-  # registered directory is the user's, and overwriting it is unrecoverable.
-  local ddir="$1" base="$2" provider link want
+  # never clobber a file already sitting there.
+  local ddir="$1" base="$2" link want
   [ -d "$ddir" ] || { echo "agents: $ddir does not exist — no links made" >&2; return 0; }
-  for provider in CLAUDE AGENTS; do
-    link="$ddir/$provider.md"; want="$base-$provider.md"
-    if [ -e "$link" ] || [ -L "$link" ]; then
-      # Already ours counts even through an indirection (home-manager points
-      # ~/code's links at a store path that points back here).
-      if [ "$(readlink -f "$link" 2>/dev/null)" = "$(readlink -f "$want")" ]; then continue; fi
-      echo "agents: $link is not this switchboard's — left alone" >&2
-      continue
-    fi
-    ln -s "$want" "$link"
-  done
+  link="$ddir/AGENTS.md"; want="$base-AGENTS.md"
+  if [ -e "$link" ] || [ -L "$link" ]; then
+    # Already ours counts even through an indirection (home-manager points
+    # ~/code's link at a store path that points back here).
+    if [ "$(readlink -f "$link" 2>/dev/null)" = "$(readlink -f "$want")" ]; then return 0; fi
+    echo "agents: $link is not this switchboard's — left alone" >&2
+    return 0
+  fi
+  ln -s "$want" "$link"
 }
 
 sweep_state_skills() { # remove inactive or invalid links from our skill farm
@@ -849,27 +690,6 @@ link_codex_skill() { # name source
   fi
   link_skill_atomically "$CODEX_SKILLS" "$1" "$2" codex
   return 0
-}
-
-plugin_install_path() {
-  local i
-  for i in "${!PLUGINS[@]}"; do
-    if [ "${PLUGINS[$i]}" = "$1" ]; then echo "${PLUGIN_PATHS[$i]}"; return 0; fi
-  done
-  return 1
-}
-
-enabled_plugins_now() { # what settings.json already enables — the seed truth
-  python3 - "$SETTINGS" <<'PY'
-import json, sys
-try:
-    enabled = json.load(open(sys.argv[1])).get("enabledPlugins") or {}
-except Exception:
-    enabled = {}
-if not isinstance(enabled, dict):
-    enabled = {}
-print("\n".join(k for k, v in enabled.items() if v))
-PY
 }
 
 skill_source() {
@@ -1041,7 +861,6 @@ hook_is_claimed() { # does any skill list this hook
 path_of() { # the canonical source file to view or edit for a unit
   case "$1" in
     "$GLOBAL_SLUG") echo "$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md" ;;
-    statusline-script) echo "$HOME/code/nixos-config/main/dotfiles/claude/statusline.sh" ;;
     */*)
       # A row under a directory gate: the instruction file is the directory's
       # source, the memories group is the directory that holds them, and a
@@ -1060,14 +879,12 @@ path_of() { # the canonical source file to view or edit for a unit
       done < <(mem_dirs "$(dir_path_of "$slug")")
       echo "agents: unknown unit: $1" >&2; exit 2 ;;
     *)
-      case " ${HOOKS[*]} " in *" $1 "*) echo "$FRAGMENTS/$1.json"; return ;; esac
+      case " ${HOOKS[*]} " in *" $1 "*) echo "${HOOK_PATHS[$1]}"; return ;; esac
       case " ${SKILLS[*]} " in *" $1 "*) echo "$(skill_source "$1")/SKILL.md"; return ;; esac
       # A member-list module's source is the list — that is the whole unit.
       [ -f "$MODULES_D/$1.json" ] && { echo "$MODULES_D/$1.json"; return; }
       load_dirs
       case " ${DIRS[*]} " in *" $1 "*) dir_source "$1"; return ;; esac
-      load_plugins
-      case " ${PLUGINS[*]} " in *" $1 "*) plugin_install_path "$1"; return ;; esac
       echo "agents: unknown unit: $1" >&2; exit 2 ;;
   esac
 }
@@ -1132,12 +949,12 @@ warn_duplicate_names() {
   # A companion is named bare, so one name meaning two units makes every
   # binding to it ambiguous — and a name is also how `on`/`off`/`path` reach a
   # unit, where the first matching kind silently wins. Warn, loudly, and keep
-  # going: the collision is in the inventories (a registry, a plugin ledger),
+  # going: the collision is in the inventories,
   # and taking the whole switchboard down over it would strand the user with no
   # way to look or flip.
   local dup
   dup="$(printf '%s\n' "$GLOBAL_SLUG" "${HOOKS[@]}" "${SKILLS[@]}" "${MODULES[@]}" \
-    "${OTHERS[@]}" ${DIRS[@]+"${DIRS[@]}"} ${PLUGINS[@]+"${PLUGINS[@]}"} | sort | uniq -d)"
+    "${OTHERS[@]}" ${DIRS[@]+"${DIRS[@]}"} | sort | uniq -d)"
   [ -n "$dup" ] || return 0
   local d
   while read -r d; do
@@ -1149,23 +966,16 @@ warn_duplicate_names() {
 ensure_manifest() {
   mkdir -p "$STATE" "$STATE/skills" "$DIR_TARGETS"
   [ -f "$MANIFEST" ] || : > "$MANIFEST"
-  load_plugins
   load_dirs
   load_mems
   load_modules
-  load_hook_follows
   load_skill_hooks
   warn_duplicate_names
   sync_dir_paths
   sync_hook_follows
   # Merge, don't just seed: an entry added to the arrays after the manifest
   # exists must still appear (off) or it is invisible to status/flip forever.
-  # Plugins seed from reality instead of off: settings.json already enables
-  # some, and seeding those off would silently disable them on first apply.
-  local enabled p k n i m o s h slug ddir mname
-  enabled=" $(enabled_plugins_now | tr '\n' ' ')"
-  # Field-exact presence, not a regex: plugin names are marketplace strings
-  # (`@`, `.`, `+`) and would otherwise be read as patterns.
+  local k n i m o s h slug ddir mname
   local -A have=()
   while read -r k n _; do
     [ -n "${k:-}" ] && have["$k $n"]=1
@@ -1199,9 +1009,6 @@ ensure_manifest() {
       n="$(hook_claimant "$h")"
       if [ -n "$n" ]; then echo "hook $h enabled $n"
       else echo "hook $h disabled"; fi
-    done
-    for p in "${PLUGINS[@]}"; do
-      case "$enabled" in *" $p "*) echo "plugin $p on" ;; *) echo "plugin $p off" ;; esac
     done
     for o in "${OTHERS[@]}"; do echo "other $o off"; done
   # `rest` is state plus, for a `dir` row, the directory column after it.
@@ -1256,7 +1063,7 @@ status() {
   # the first thing inside `skills`, each with what it declares nested under it.
   # A skill that declares nothing is a plain skill, and a hook nobody claims
   # answers only to itself.
-  local m o p s h name slug ddir mname
+  local m o s h name slug ddir mname
   # Every row reads NAME then STATE, separated by a colon: the name is what you
   # came looking for and what you would type to flip it, so it is never behind
   # a state token the eye has to step over.
@@ -1285,8 +1092,6 @@ status() {
     if hook_is_claimed "$name"; then continue; fi
     printf '  %-23s %-28s %s\n' "$name:" "$(hook_line "$name")" "${ACT_TAGS[$name]}"
   done
-  echo "plugins"
-  for p in "${PLUGINS[@]}"; do printf '  %-41s %s\n' "$p:" "$(unit_line "$p")"; done
   echo "other"
   for o in "${OTHERS[@]}"; do printf '  %-21s %s\n' "$o:" "$(unit_line "$o")"; done
   # A `dir` row is a SUBTREE GATE — it governs that directory and everything
@@ -1308,69 +1113,31 @@ status() {
 }
 
 check() {
-  # Read-only counterpart to `apply`: use exactly the same activity derivation
-  # and admission gate, then prove the hook projections still describe it.
-  # A periodic liveness check must not heal a broken projection invisibly.
   ensure_manifest
   load_activity
   local on_hooks=() hname all_hook_lines active_hook_lines
   for hname in ${ACT_HOOKS[@]+"${ACT_HOOKS[@]}"}; do
     if is_active "$hname"; then on_hooks+=("$hname"); fi
   done
-  admit_hook_targets "${on_hooks[@]}"
   printf -v all_hook_lines '%s\n' "${HOOKS[@]}"
   printf -v active_hook_lines '%s\n' "${on_hooks[@]}"
-  python3 - "$SETTINGS" "$STATE/activity.conf" "$FRAGMENTS" \
-    "$all_hook_lines" "$active_hook_lines" <<'PY'
-import json, os, sys
+  python3 - "$STATE/activity.conf" "$all_hook_lines" "$active_hook_lines" <<'PY'
+import sys
 
-settings_path, activity_path, fragments_dir, all_hooks, active_hooks = sys.argv[1:]
+activity_path, all_hooks, active_hooks = sys.argv[1:]
 all_hooks = [name for name in all_hooks.split("\n") if name]
 active_hooks = [name for name in active_hooks.split("\n") if name]
-
-try:
-    settings = json.load(open(settings_path))
-except Exception as exc:
-    raise SystemExit(f"agents: hook projection check failed: {settings_path}: {exc}")
-
-expected = {}
-for name in active_hooks:
-    try:
-        fragment = json.load(open(os.path.join(fragments_dir, name + ".json")))
-        entries = fragment["entries"]
-    except Exception as exc:
-        raise SystemExit(f"agents: hook projection check failed: {name}: {exc}")
-    for entry in entries:
-        event = entry["event"]
-        matcher = entry["matcher"]
-        blocks = expected.setdefault(event, [])
-        for block in blocks:
-            if block.get("matcher") == matcher:
-                block["hooks"].append(entry["hook"])
-                break
-        else:
-            block = {"hooks": [entry["hook"]]}
-            if matcher is not None:
-                block["matcher"] = matcher
-            blocks.append(block)
-
-if settings.get("hooks", {}) != expected:
-    raise SystemExit("agents: hook projection check failed: Claude settings hooks drifted")
-
 try:
     rows = dict(line.split()[1:] for line in open(activity_path)
                 if line.startswith("hook "))
 except Exception as exc:
-    raise SystemExit(f"agents: hook projection check failed: {activity_path}: {exc}")
-expected_rows = {name: ("on" if name in active_hooks else "off")
-                 for name in all_hooks}
-if rows != expected_rows:
-    raise SystemExit("agents: hook projection check failed: activity projection drifted")
-
-print(f"checked: {len(active_hooks)} active hook targets and projections")
+    raise SystemExit(f"agents: activity projection check failed: {activity_path}: {exc}")
+expected = {name: ("on" if name in active_hooks else "off") for name in all_hooks}
+if rows != expected:
+    raise SystemExit("agents: activity projection drifted")
+print(f"checked: {len(active_hooks)} active hooks in the shared activity projection")
 PY
 }
-
 apply() {
   ensure_manifest
   # Read once, up front: every composition below is decided by ACTIVITY, never
@@ -1378,22 +1145,14 @@ apply() {
   # get written, linked, or composed — otherwise the switchboard would say one
   # thing and the surfaces would say another.
   load_activity
-  # Admission is before every provider projection. In particular, do not update
-  # ~/.claude/settings.json while a declared hook target is missing: that would
-  # publish a configuration that looks enforced but is not.
+  # Admission precedes the shared activity projection.
   local on_hooks=() hname
   for hname in ${ACT_HOOKS[@]+"${ACT_HOOKS[@]}"}; do
     if is_active "$hname"; then on_hooks+=("$hname"); fi
   done
-  admit_hook_targets "${on_hooks[@]}"
   write_activity_projection
-  # the global profile — `dir global`, the context file scoped at the root:
-  # empty when off. One slot, every provider surface: the claude config target,
-  # every account-scoped copy (the launcher redirects CLAUDE_CONFIG_DIR, so
-  # account copies are what sessions actually load), and the codex target that
-  # ~/.codex/AGENTS.md resolves to. Being root-scoped is exactly why it is not
-  # in the per-directory loop below: it writes no <dir>-CLAUDE.md pair and hangs
-  # no links off a directory — its surfaces are these global ones.
+  # The global profile is the context file scoped at the root. It writes the
+  # target that ~/.codex/AGENTS.md and ~/.agents/AGENTS.md resolve to.
   # The durable global profile is the source. Optional orchestration and
   # coordination instructions are appended below only when their sets
   # derive active.
@@ -1402,8 +1161,7 @@ apply() {
   # abort the run half-applied — the surfaces written after the failure would
   # keep whatever the previous apply left there, which is a state no manifest
   # describes.
-  local agents_target="$STATE/CLAUDE.md"
-  local codex_target="$STATE/AGENTS.md"
+  local agents_target="$STATE/AGENTS.md"
   local agents_src="$HOME/code/nixos-config/main/dotfiles/agents/AGENTS.md"
   # `ins global`, not `dir global`: the dir row is the gate over the whole root
   # subtree now, and the instruction file is the row under it. Activity already
@@ -1432,33 +1190,20 @@ apply() {
         "— not appended" >&2
     fi
   done
-  copy_surface "$agents_target" "$codex_target"
-  # Glob the account DIRECTORIES, not the files in them: a copy someone deleted,
-  # or one a new account never seeded, heals on the next apply instead of
-  # staying absent while status insists the profile is on.
-  local acctdir
-  for acctdir in "$HOME"/.local/state/north/accounts/*/*/; do
-    [ -d "$acctdir" ] || continue
-    copy_surface "$agents_target" "${acctdir}CLAUDE.md"
-  done
-  # directory instructions — one slot per registered directory, both
-  # provider surfaces: <dir>/CLAUDE.md and <dir>/AGENTS.md resolve to the pair
-  # written here, and a provider walks up from wherever the session stands, so
-  # inactive means nothing is picked up anywhere in that subtree.
+  # Directory instructions — one AGENTS.md slot per registered directory.
   local i slug ddir base dsrc
   for i in "${!DIRS[@]}"; do
     slug="${DIRS[$i]}"; ddir="${DIR_PATHS[$i]}"
     base="$(dir_target_base "$slug")"; dsrc="$(dir_source "$slug")"
     if is_active "ins:$slug" && [ -f "$dsrc" ]; then
-      cat "$dsrc" > "$base-CLAUDE.md" ||
-        { echo "agents: could not write $base-CLAUDE.md" >&2; continue; }
+      cat "$dsrc" > "$base-AGENTS.md" ||
+        { echo "agents: could not write $base-AGENTS.md" >&2; continue; }
     else
       if is_active "ins:$slug"; then
         echo "agents: ins $slug is on but $dsrc is missing — wrote empty" >&2
       fi
-      : > "$base-CLAUDE.md"
+      : > "$base-AGENTS.md"
     fi
-    copy_surface "$base-CLAUDE.md" "$base-AGENTS.md"
     link_dir_context "$ddir" "$base"
   done
   # memories — the INDEX, and only the index. Every account keeps its own copy
@@ -1609,7 +1354,8 @@ PY
       echo "agents: the memory index for $mslug was left as it was" >&2
     fi
   done < <(dir_rows)
-  # skills — a farm of symlinks; only ACTIVE skills exist, in BOTH surfaces.
+  # skills — a farm of symlinks; only ACTIVE skills exist in the shared farm
+  # and Codex's discovery directory.
   # Publish desired links before retiring inactive ones. In particular, never
   # sweep an active link and recreate it: Codex may be reading SKILL.md at that
   # exact moment and its startup scan does not retry an ENOENT.
@@ -1625,101 +1371,11 @@ PY
   done
   sweep_state_skills
   sweep_codex_skills
-  # agent templates — a skill may ship a directory of them (`agents:` in its
-  # frontmatter), and they exist in ~/.claude/agents while that skill is active:
-  # live symlinks into the source, so editing a template there is immediately
-  # live and no frozen copy can drift. Nothing here names a particular skill —
-  # the declaration is the whole wiring.
-  local link tgt tpl adir
-  if [ -d "$CLAUDE_AGENTS" ]; then
-    # Sweep only what this switchboard owns, proven the same way as the codex
-    # farm: a link is ours when it points inside a directory some skill declared.
-    # ~/.claude/agents is user-visible, and a hand-written agent there must
-    # survive an off.
-    for link in "$CLAUDE_AGENTS"/*; do
-      [ -L "$link" ] || continue
-      tgt="$(readlink "$link")"
-      for s in "${SKILLS[@]}"; do
-        adir="${SKILL_AGENTS[$s]:-}"
-        [ -n "$adir" ] || continue
-        case "$tgt" in "$adir"/*) rm -f "$link"; break ;; esac
-      done
-    done
-  fi
-  for s in "${SKILLS[@]}"; do
-    adir="${SKILL_AGENTS[$s]:-}"
-    [ -n "$adir" ] || continue
-    is_active "$s" || continue
-    if [ ! -d "$adir" ]; then
-      echo "agents: skill $s is on but $adir is missing — no templates linked" >&2
-      continue
-    fi
-    mkdir -p "$CLAUDE_AGENTS"
-    for tpl in "$adir"/*.md; do
-      [ -e "$tpl" ] && ln -sfn "$tpl" "$CLAUDE_AGENTS/$(basename "$tpl")"
-    done
-  done
-  # hooks + statusline + plugins — rewrite exactly those keys in live settings.json
-  # The composed set is derived, never read off the manifest: a hook runs when
-  # the user has it enabled AND its companion unit (if any) is on.
-  local on_plugins=() p
-  for p in "${PLUGINS[@]}"; do
-    if is_active "$p"; then on_plugins+=("$p"); fi
-  done
-  if ! STATUSLINE_STATE="$(on_off statusline-script)" \
-  ON_PLUGINS="$(printf '%s\n' ${on_plugins[@]+"${on_plugins[@]}"})" \
-  python3 - "$SETTINGS" "$FRAGMENTS" ${on_hooks[@]+"${on_hooks[@]}"} <<'PY'
-import json, os, sys
-settings_path, fragments_dir, *names = sys.argv[1:]
-try:
-    settings = json.load(open(settings_path))
-except FileNotFoundError:
-    settings = {}
-except Exception as exc:
-    # A settings.json we cannot parse is somebody's live config in a state we
-    # do not understand. Rewriting it from {} would drop every key this
-    # switchboard does not own, so this item degrades to "did nothing".
-    sys.exit(f"agents: {settings_path} is unreadable ({exc}) — hooks/plugins/"
-             "statusline left as they are")
-hooks = {}
-for name in names:
-    try:
-        frag = json.load(open(os.path.join(fragments_dir, f"{name}.json")))
-    except Exception as exc:
-        print(f"agents: hook {name}: {exc} — not composed", file=sys.stderr)
-        continue
-    for entry in frag["entries"]:
-        matchers = hooks.setdefault(entry["event"], [])
-        for m in matchers:
-            if m.get("matcher") == entry["matcher"]:
-                m["hooks"].append(entry["hook"]); break
-        else:
-            block = {"hooks": [entry["hook"]]}
-            if entry["matcher"] is not None: block["matcher"] = entry["matcher"]
-            matchers.append(block)
-settings["hooks"] = hooks
-# A RECORD, not a list: Claude Code validates this key strictly and rejects an
-# array outright — and one invalid key makes it skip the whole file, so a
-# session runs with no settings at all. A plugin that is off is absent rather
-# than false, which is what its own converter writes.
-settings["enabledPlugins"] = {p: True for p in os.environ["ON_PLUGINS"].split("\n") if p}
-if os.environ["STATUSLINE_STATE"] == "on":
-    settings["statusLine"] = {"type": "command",
-      "command": 'bash "$HOME/code/nixos-config/dotfiles/claude/statusline.sh"'}
-else:
-    settings.pop("statusLine", None)
-tmp = settings_path + ".next"
-json.dump(settings, open(tmp, "w"), indent=2)
-os.replace(tmp, settings_path)
-PY
-  then
-    echo "agents: hooks, plugins, and statusline are as $SETTINGS already had them" >&2
-  fi
   local on_dirs=0
   for i in "${!DIRS[@]}"; do
     is_active "ins:${DIRS[$i]}" && on_dirs=$((on_dirs + 1))
   done
-  echo "applied: $(on_off "ins:$GLOBAL_SLUG") AGENTS.md, ${#on_hooks[@]} hooks, $(find "$STATE/skills" -maxdepth 1 -type l | wc -l) skills, ${#on_plugins[@]} plugins, $on_dirs/${#DIRS[@]} dir contexts, $mem_on/$mem_all memories"
+  echo "applied: $(on_off "ins:$GLOBAL_SLUG") AGENTS.md, ${#on_hooks[@]} hooks, $(find "$STATE/skills" -maxdepth 1 -type l | wc -l) skills, $on_dirs/${#DIRS[@]} dir contexts, $mem_on/$mem_all memories"
 }
 
 flip() { # on|off [--all | kind? name]
@@ -1750,9 +1406,6 @@ flip() { # on|off [--all | kind? name]
     case " ${OTHERS[*]} " in *" $name "*)
       set_state other "$name" "$target_state"; apply; return ;;
     esac
-    case " ${PLUGINS[*]} " in *" $name "*)
-      set_state plugin "$name" "$target_state"; apply; return ;;
-    esac
     # A row under a directory gate, addressed through it. Read after the flat
     # kinds so a name that legitimately contains a slash — a marketplace plugin,
     # say — is still found where it lives.
@@ -1765,361 +1418,17 @@ flip() { # on|off [--all | kind? name]
       # shellcheck disable=SC2086
       set_state $row "$target_state"; apply; return ;;
     esac
-    # Hook or :tag — a direct flip writes PERMISSION, the sticky axis: `off`
+    # A direct hook flip writes PERMISSION, the sticky axis: `off`
     # is a pin no skill can undo, `on` grants the hook and everything it
-    # requires (asking for a hook is asking for what it needs to work). There
-    # is no off-cascade to write: a dependent of a revoked hook simply stops
-    # composing, and status says so.
-    local resolved h perm
+    # cannot be undone by a skill claim.
+    local perm
     perm="$([ "$target_state" = on ] && echo enabled || echo disabled)"
-    resolved="$(python3 - "$FRAGMENTS" "$target_state" "$name" <<'PY'
-import json, os, sys, glob
-frag_dir, op, sel = sys.argv[1:]
-frags = {}
-for p in glob.glob(os.path.join(frag_dir, "*.json")):
-    try:
-        frags[os.path.basename(p)[:-5]] = json.load(open(p))
-    except Exception as exc:
-        print(f"agents: {p}: unreadable ({exc}) — skipped", file=sys.stderr)
-if sel.startswith(":"):
-    seeds = {n for n, d in frags.items() if sel[1:] in d.get("tags", [])}
-    if not seeds: sys.exit(f"agents: no hooks tagged {sel}")
-elif sel in frags:
-    seeds = {sel}
-else:
-    sys.exit(f"agents: unknown hook or tag: {sel}")
-result = set(seeds)
-changed = True
-while changed:
-    changed = False
-    for n, d in frags.items():
-        if op == "on" and n in result:
-            for req in d.get("requires", []):
-                if req not in result: result.add(req); changed = True
-print("\n".join(sorted(result)))
-PY
-)" || { echo "$resolved" >&2; exit 2; }
-    for h in $resolved; do set_state hook "$h" "$perm"; done
+    case " ${HOOKS[*]} " in
+      *" $name "*) set_state hook "$name" "$perm" ;;
+      *) echo "agents: unknown hook: $name" >&2; exit 2 ;;
+    esac
   fi
   apply
-}
-
-# ── export-plugin ─────────────────────────────────────────────────────────────
-# A module is the working tree: live symlinks into repos, governed by a switch,
-# edited in place. A plugin is the opposite kind of object — a sealed release
-# somebody else installs — so the export COPIES. Freezing is not a compromise
-# here, it is what a release IS: the artifact must not change when the source
-# repo moves on, and the receipt says exactly which revision it froze.
-PLUGIN_RELEASES="${AGENTS_PLUGIN_RELEASES:-$HOME/code/north-data/plugin-releases}"
-
-export_plugin() { # <module> [dest] [--force] [--description <text>]
-  local module="" dest="" force="" desc=""
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --force)       force=1 ;;
-      --description) shift; desc="${1:?agents: --description needs text}" ;;
-      -*)            echo "agents: unknown flag: $1" >&2; exit 2 ;;
-      *)             if [ -z "$module" ]; then module="$1"; else dest="$1"; fi ;;
-    esac
-    shift
-  done
-  [ -n "$module" ] || { echo "agents: export-plugin requires a module name" >&2; exit 2; }
-  ensure_manifest
-  case " ${MODULES[*]} " in
-    *" $module "*) ;;
-    *) echo "agents: not a module: $module" >&2; exit 2 ;;
-  esac
-  # Sources are resolved HERE, by the same function the sweep and the link use,
-  # so a plugin can never contain a skill from a path the switchboard would not
-  # have linked. Agent templates ride the same way: a skill that declares them
-  # ships them, and the export learns that from the declaration rather than from
-  # a directory it went looking for.
-  local sources=() n src
-  load_skill_hooks
-  for n in "${SKILLS[@]}" ${MODULES[@]+"${MODULES[@]}"}; do
-    src="$(skill_source "$n")"
-    if [ -n "$src" ]; then sources+=("$n=$src"); fi
-  done
-  local templates=()
-  for n in "${SKILLS[@]}"; do
-    if [ -n "${SKILL_AGENTS[$n]:-}" ]; then templates+=("$n=${SKILL_AGENTS[$n]}"); fi
-  done
-  AGENTS_PLUGIN_DESC="$desc" AGENTS_PLUGIN_TEMPLATES="$(printf '%s\n' \
-    ${templates[@]+"${templates[@]}"})" \
-    python3 - "$module" "$dest" "${force:-}" "$MODULES_D" \
-    "$FRAGMENTS" "$MANIFEST" "$PLUGIN_RELEASES" ${sources[@]+"${sources[@]}"} <<'PY'
-import hashlib, json, os, re, shutil, stat, subprocess, sys, tempfile, time
-
-module, dest_arg, force, modules_d, frag_dir, manifest, releases, *pairs = sys.argv[1:]
-sources = dict(p.split("=", 1) for p in pairs)
-templates = dict(t.split("=", 1) for t in
-                 os.environ.get("AGENTS_PLUGIN_TEMPLATES", "").split("\n") if "=" in t)
-desc_flag = os.environ.get("AGENTS_PLUGIN_DESC", "").strip()
-
-kind = {}
-for line in open(manifest):
-    parts = line.split()
-    # The rows nested under a directory gate are namespaced by their slug, not
-    # named in the flat namespace a member is written in — and reading them here
-    # would shadow the `dir` row they hang under.
-    if len(parts) >= 3 and parts[0] not in ("ins", "memroot", "mem"):
-        kind[parts[1]] = parts[0]
-
-def module_file(name):
-    return os.path.join(modules_d, name + ".json")
-
-def module_decl(name):
-    p = module_file(name)
-    if not os.path.isfile(p):
-        return {}
-    try:
-        return json.load(open(p))
-    except Exception as exc:
-        sys.exit(f"agents: {p}: unreadable ({exc}) — nothing exported")
-
-# Flatten: a contained module is not a nested plugin, because a plugin has no
-# such thing. Its members join this one's, union, and the receipt records that
-# they arrived through their own module rather than being named here directly.
-skills, hooks, skipped, flattened = [], [], [], {}
-seen_modules, seen_units = [], set()
-
-def walk(name, via):
-    if name in seen_modules:
-        return
-    seen_modules.append(name)
-    if via:
-        flattened[name] = via
-    for raw in (module_decl(name).get("members") or []):
-        u = str(raw).strip()
-        if not u or u in seen_units:
-            continue
-        seen_units.add(u)
-        k = kind.get(u, "")
-        if k == "module":
-            walk(u, name)
-        elif k == "skill":
-            skills.append((u, name))
-        elif k == "hook":
-            hooks.append((u, name))
-        elif k:
-            skipped.append((u, k, name, f"{k} rows have no plugin equivalent"))
-        else:
-            skipped.append((u, "?", name, "names no unit in the manifest"))
-
-walk(module, "")
-
-stage = tempfile.mkdtemp(prefix="agents-plugin.")
-warnings, copied_scripts, unresolved, repos = [], [], [], {}
-
-def note(msg):
-    warnings.append(msg)
-    print("agents: " + msg, file=sys.stderr)
-
-def record_repo(path):
-    d = path if os.path.isdir(path) else os.path.dirname(path)
-    try:
-        top = subprocess.run(["git", "-C", d, "rev-parse", "--show-toplevel"],
-                             capture_output=True, text=True, timeout=5)
-        rev = subprocess.run(["git", "-C", d, "rev-parse", "HEAD"],
-                             capture_output=True, text=True, timeout=5)
-        if top.returncode == 0 and rev.returncode == 0:
-            repos[top.stdout.strip()] = rev.stdout.strip()
-    except Exception:
-        pass
-
-def copy_tree(src, rel):
-    dst = os.path.join(stage, rel)
-    os.makedirs(os.path.dirname(dst), exist_ok=True)
-    shutil.copytree(src, dst, symlinks=False, dirs_exist_ok=True)
-    record_repo(src)
-
-def rewrite_command(cmd, hook_name):
-    # A plugin runs from wherever it was installed, so a command naming this
-    # machine's paths is a command that works nowhere else. Every absolute path
-    # that IS a file rides along in hooks/bin and the command points at it
-    # through ${CLAUDE_PLUGIN_ROOT}; every one that is not gets named in the
-    # receipt rather than shipped broken and silent.
-    out = cmd
-    for tok in re.findall(r'/[^\s"\']+', cmd):
-        if os.path.isfile(tok):
-            base = os.path.basename(tok)
-            dst = os.path.join(stage, "hooks", "bin", base)
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            shutil.copy2(tok, dst)
-            if (tok, "hooks/bin/" + base) not in copied_scripts:
-                copied_scripts.append((tok, "hooks/bin/" + base))
-            record_repo(tok)
-            out = out.replace(tok, "${CLAUDE_PLUGIN_ROOT}/hooks/bin/" + base)
-        else:
-            unresolved.append((hook_name, tok))
-            note(f"hook {hook_name}: {tok} is not a file on this machine"
-                 " — left as an absolute path in the plugin")
-    return out
-
-def guide_skill(name, path):
-    body = open(path).read()
-    head = ""
-    for line in body.splitlines():
-        if line.startswith("#"):
-            head = line.lstrip("#").strip()
-            break
-    head = head or f"Instructions carried by the {name} module."
-    d = os.path.join(stage, "skills", name + "-guide")
-    os.makedirs(d, exist_ok=True)
-    esc = head.replace("\\", "\\\\").replace('"', '\\"')
-    with open(os.path.join(d, "SKILL.md"), "w") as fh:
-        fh.write(f'---\nname: {name}-guide\ndescription: "{esc}"\n---\n\n{body}')
-    record_repo(path)
-    return head
-
-# Every module in the flattened set contributes its own payload and its own
-# instructions, not just its member list: a plugin has no global-context slot,
-# so instructions become a skill, which is the honest equivalent of "text every
-# session reads".
-first_head = ""
-for m in seen_modules:
-    decl = module_decl(m)
-    payload = sources.get(m, "")
-    if payload and os.path.isdir(payload):
-        copy_tree(payload, os.path.join("skills", m))
-    ins = (decl.get("instructions") or "").strip()
-    if ins and os.path.isfile(ins):
-        head = guide_skill(m, ins)
-        if m == module:
-            first_head = head
-    elif ins:
-        note(f"module {m}: instructions file {ins} is missing — no guide skill")
-
-for name, via in skills:
-    src = sources.get(name, "")
-    if src and os.path.isdir(src):
-        copy_tree(src, os.path.join("skills", name))
-    else:
-        skipped.append((name, "skill", via, f"source {src or '(unknown)'} is missing"))
-        note(f"skill {name}: source is missing — not exported")
-        continue
-    # and the templates that skill declares, which are the other half of what a
-    # module ships — flattened into the plugin's own agents/ directory
-    tpl = templates.get(name, "")
-    if not tpl:
-        continue
-    if not os.path.isdir(tpl):
-        note(f"skill {name}: agents directory {tpl} is missing — no templates")
-        continue
-    for f in sorted(os.listdir(tpl)):
-        if f.endswith(".md"):
-            os.makedirs(os.path.join(stage, "agents"), exist_ok=True)
-            shutil.copy2(os.path.join(tpl, f), os.path.join(stage, "agents", f))
-    record_repo(tpl)
-
-events = {}
-for name, via in hooks:
-    p = os.path.join(frag_dir, name + ".json")
-    try:
-        frag = json.load(open(p))
-    except Exception as exc:
-        skipped.append((name, "hook", via, f"fragment unreadable ({exc})"))
-        note(f"hook {name}: {p} unreadable ({exc}) — not exported")
-        continue
-    record_repo(p)
-    for entry in frag.get("entries", []):
-        hook = dict(entry.get("hook") or {})
-        hook["command"] = rewrite_command(hook.get("command", ""), name)
-        blocks = events.setdefault(entry["event"], [])
-        for b in blocks:
-            if b.get("matcher") == entry.get("matcher"):
-                b["hooks"].append(hook)
-                break
-        else:
-            block = {"hooks": [hook]}
-            if entry.get("matcher") is not None:
-                block["matcher"] = entry["matcher"]
-            blocks.append(block)
-
-if events:
-    os.makedirs(os.path.join(stage, "hooks"), exist_ok=True)
-    with open(os.path.join(stage, "hooks", "hooks.json"), "w") as fh:
-        json.dump({"description": f"Hooks composed by the {module} module.",
-                   "hooks": events}, fh, indent=2)
-        fh.write("\n")
-
-# The version is a fact about the CONTENT, computed before plugin.json and the
-# receipt exist so that neither can perturb it: identical sources always yield
-# the same version, and any change to any exported byte yields a new one.
-h = hashlib.sha256()
-for root, dirs, files in os.walk(stage):
-    dirs.sort()
-    for f in sorted(files):
-        p = os.path.join(root, f)
-        h.update(os.path.relpath(p, stage).encode())
-        h.update(b"\0")
-        h.update(open(p, "rb").read())
-        h.update(b"\0")
-version = time.strftime("%Y%m%d") + "-" + h.hexdigest()[:8]
-
-description = desc_flag or first_head or f"The {module} module, exported from the agents switchboard."
-os.makedirs(os.path.join(stage, ".claude-plugin"), exist_ok=True)
-with open(os.path.join(stage, ".claude-plugin", "plugin.json"), "w") as fh:
-    json.dump({"name": module, "version": version, "description": description,
-               "author": {"name": "Tom Passarelli",
-                          "url": "https://github.com/tompassarelli"}}, fh, indent=2)
-    fh.write("\n")
-
-dest = dest_arg or os.path.join(releases, f"{module}-{version}")
-if os.path.exists(dest):
-    if not force:
-        shutil.rmtree(stage)
-        sys.exit(f"agents: {dest} already exists and a release is sealed — "
-                 "pass --force to write a new version directory beside it")
-    n = 2
-    while os.path.exists(f"{dest}-{n}"):
-        n += 1
-    dest = f"{dest}-{n}"
-
-lines = ["format=north-agents-plugin/v1",
-         f"module={module}",
-         f"version={version}",
-         f"created={time.strftime('%Y-%m-%dT%H:%M:%S%z')}",
-         f"declaration={module_file(module)}"]
-for m in seen_modules[1:]:
-    lines.append(f"flattened={m} (members merged in, contained by {flattened[m]})")
-for name, via in skills:
-    lines.append(f"member=skill {name} {sources.get(name, '(unknown)')} via {via}")
-for name, via in hooks:
-    lines.append(f"member=hook {name} {os.path.join(frag_dir, name + '.json')} via {via}")
-for src, rel in copied_scripts:
-    lines.append(f"script={src} -> {rel}")
-for name, k, via, why in skipped:
-    lines.append(f"skipped={k} {name} (member of {via}) — {why}")
-for hookname, tok in unresolved:
-    lines.append(f"unresolved-path={hookname} {tok}")
-for root in sorted(repos):
-    lines.append(f"repo={root} {repos[root]}")
-if not unresolved:
-    lines.append("unresolved-path=(none)")
-with open(os.path.join(stage, "RELEASE"), "w") as fh:
-    fh.write("\n".join(lines) + "\n")
-
-os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
-shutil.move(stage, dest)
-
-# Sealed, like every other release under north-data: an artifact somebody can
-# edit in place is an artifact whose receipt is a guess.
-for root, dirs, files in os.walk(dest, topdown=False):
-    for name in files + dirs:
-        p = os.path.join(root, name)
-        mode = os.lstat(p).st_mode
-        if not stat.S_ISLNK(mode):
-            os.chmod(p, stat.S_IMODE(mode) & ~0o222)
-# The staging directory was private (mkdtemp is 0700); a release is readable.
-os.chmod(dest, 0o555)
-
-for name, k, via, why in skipped:
-    print(f"agents: skipped {k} {name} — {why}", file=sys.stderr)
-print(f"exported: {module} {version} -> {dest} "
-      f"({len(skills)} skills, {len(hooks)} hooks, {len(seen_modules) - 1} flattened, "
-      f"{len(skipped)} skipped)")
-PY
 }
 
 case "${1:-status}" in
@@ -2129,7 +1438,5 @@ case "${1:-status}" in
   off) shift; flip off "$@" ;;
   apply) apply ;;
   path) shift; path_of "${1:?agents: path requires a name}" ;;
-  export-plugin) shift; export_plugin "$@" ;;
-  *) echo "usage: agents [status|check] | on|off <name>|--all | path <name> | apply" \
-       "| export-plugin <module> [dest] [--force] [--description <text>]" >&2; exit 2 ;;
+  *) echo "usage: agents [status|check] | on|off <name>|--all | path <name> | apply" >&2; exit 2 ;;
 esac

@@ -17,7 +17,7 @@ unavailable, say so and use the safest supported fallback.
 
 ## Respect source authority
 
-Files under `~/.agents`, `~/.claude`, `~/.codex`, and `/etc/codex` are
+Files under `~/.agents`, `~/.codex`, and `/etc/codex` are
 projections, not policy sources, and must not be hand-edited. Change the owning
 source in its repository and use its sanctioned projection mechanism.
 

@@ -14,7 +14,7 @@
 ;;     and Hermes' own `connect_timeout` key; shared external skills are wired to
 ;;     ~/.agents/skills. No credentials.
 ;;   * ~/.hermes/SOUL.md       — the switchboard-owned global constitution (the
-;;     same ~/.config/agents/AGENTS.md bytes Claude and Codex are given).
+;;     same ~/.config/agents/AGENTS.md bytes Codex is given).
 ;;   * ~/.hermes/plugins/north-bridge — the standalone fail-closed guard +
 ;;     North-lifecycle bridge, installed as an IMMUTABLE nix-store source so
 ;;     Python imports cannot write __pycache__ back into the dotfiles tree.
@@ -80,8 +80,8 @@
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
                         "/code/nixos-config/dotfiles/hermes/config.yaml"))}
-                 ;; Switchboard-owned, exactly like ~/.claude/CLAUDE.md,
-                 ;; ~/.codex/AGENTS.md, and ~/.agents/AGENTS.md: `agents apply`
+                 ;; Switchboard-owned, exactly like ~/.codex/AGENTS.md and
+                 ;; ~/.agents/AGENTS.md: `agents apply`
                  ;; is the sole writer under ~/.config/agents, so every provider
                  ;; sees the same set composition.
                  ".hermes/SOUL.md"

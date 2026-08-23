@@ -272,10 +272,10 @@ run_policy_contract_fixture() {
   firn_destination_digest="$(printf %s "$firn_destination" | sha256sum | awk '{print $1}')"
   credential_digest="$(printf %s "$credential" | sha256sum | awk '{print $1}')"
   repo_digest="$(printf %s "$repo_claim" | sha256sum | awk '{print $1}')"
-  mkdir -p "$base/policy" "$base/fragments" "$base/north-profile/hooks" \
+  mkdir -p "$base/policy" "$base/north-profile/hooks" \
     "$base/north-profile/skills" \
     "$base/skill-source/repo-safety" "$base/modules/north-profile/firn/skills/firn" "$base/farms/shared" \
-    "$base/farms/claude" "$base/farms/codex" "$base/projections"
+    "$base/farms/codex" "$base/projections"
   printf '# Global\n\n%s\n\n## Routes\n\n%s\n\n## Credentials\n\n%s\n' \
     "$preamble" "$route" "$credential" >"$base/policy/AGENTS.md"
   printf '# Repository\n\n## Architecture\n\n%s\n' "$repo_claim" \
@@ -295,12 +295,6 @@ skill_source() {
   esac
 }
 SH
-  cat >"$base/fragments/worktree-guard.json" <<'JSON'
-{"entries":[
-  {"event":"PreToolUse","matcher":"Edit|Write|MultiEdit","hook":{"type":"command","command":"/home/tom/.agents/hooks/launch-critical-worktree-guard.sh"}},
-  {"event":"PreToolUse","matcher":"Bash","hook":{"type":"command","command":"/home/tom/.agents/hooks/launch-critical-worktree-guard.sh"}}
-],"tags":["guards"]}
-JSON
   cat >"$base/requirements.toml" <<'TOML'
 [hooks]
 managed_dir = "/etc/codex/hooks"
@@ -336,15 +330,15 @@ claim = [
   { key = "repo.example.architecture", owner = "repo:example", role = "owner", scope = "repo:example", surface = "repo", section = "Architecture", digest = "$repo_digest" },
 ]
 guard = [
-  { key = "guard.worktree", switchboard = "worktree-guard", fragment = "worktree-guard.json", command = "launch-critical-worktree-guard.sh", claude_command = "/home/tom/.agents/hooks/launch-critical-worktree-guard.sh", codex_command = "/etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh", claude = ["PreToolUse:Edit|Write|MultiEdit", "PreToolUse:Bash"], codex = ["PreToolUse:^(Edit|Write|MultiEdit|apply_patch)$", "PreToolUse:^Bash$"], north_registry = "launch-critical-worktree-guard", north_path = "launch-critical-worktree-guard.sh", north_events = "PreToolUse:Edit|Write|MultiEdit,PreToolUse:Bash", north_chains = ["EDIT_GUARDS", "BASH_GUARDS", "WORKER_BASH_GUARDS"] },
+  { key = "guard.worktree", switchboard = "worktree-guard", command = "launch-critical-worktree-guard.sh", codex_command = "/etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh", codex = ["PreToolUse:^(Edit|Write|MultiEdit|apply_patch)$", "PreToolUse:^Bash$"], north_registry = "launch-critical-worktree-guard", north_path = "launch-critical-worktree-guard.sh", north_events = "PreToolUse:Edit|Write|MultiEdit,PreToolUse:Bash", north_chains = ["EDIT_GUARDS", "BASH_GUARDS", "WORKER_BASH_GUARDS"] },
 ]
 TOML
   printf '%s\n' 'skill repo-safety on' >"$base/activity.conf"
-  for farm in shared claude codex; do
+  for farm in shared codex; do
     ln -s ../../skill-source/repo-safety "$base/farms/$farm/repo-safety"
   done
   ln -s ../../skill-source/repo-safety "$base/north-profile/skills/repo-safety"
-  for projection in state-agents state-claude agents claude codex; do
+  for projection in state-agents agents codex; do
     cp "$base/policy/AGENTS.md" "$base/projections/$projection"
   done
 
@@ -355,18 +349,14 @@ TOML
     AGENT_POLICY_BOOTSTRAP="$root/policy/AGENTS.md" \
     AGENT_POLICY_REPO_AGENTS="$root/policy/REPO-AGENTS.md" \
     AGENT_POLICY_SWITCHBOARD="$root/switchboard" \
-    AGENT_POLICY_FRAGMENTS="$root/fragments" \
     AGENT_POLICY_CODEX_REQUIREMENTS="$root/requirements.toml" \
     AGENT_POLICY_NORTH_PROFILE="$root/north-profile" \
     AGENT_POLICY_NORTH_HARNESS="$root/harness.ts" \
     AGENT_POLICY_ACTIVITY="$root/activity.conf" \
     AGENT_POLICY_SHARED_SKILLS="$root/farms/shared" \
-    AGENT_POLICY_CLAUDE_SKILLS="$root/farms/claude" \
     AGENT_POLICY_CODEX_SKILLS="$root/farms/codex" \
     AGENT_POLICY_STATE_AGENTS="$root/projections/state-agents" \
-    AGENT_POLICY_STATE_CLAUDE="$root/projections/state-claude" \
     AGENT_POLICY_AGENTS_PROJECTION="$root/projections/agents" \
-    AGENT_POLICY_CLAUDE_PROJECTION="$root/projections/claude" \
     AGENT_POLICY_CODEX_PROJECTION="$root/projections/codex" \
       python3 "$REPO/scripts/agent-policy-contract.py" --repo "$root" --local
   }
@@ -410,12 +400,9 @@ TOML
   }
   mutate_unreadable_skill() { rm "$1/skill-source/repo-safety/SKILL.md"; }
   mutate_projection() { printf 'drift\n' >>"$1/projections/codex"; }
-  mutate_farm() { rm "$1/farms/claude/repo-safety"; }
+  mutate_farm() { rm "$1/farms/shared/repo-safety"; }
   mutate_hook() {
     sed -i 's/const WORKER_BASH_GUARDS.*/const WORKER_BASH_GUARDS = resolveManagedGuardChain([]);/' "$1/harness.ts"
-  }
-  mutate_claude_hook_path() {
-    sed -i 's#/home/tom/.agents/hooks/launch-critical-worktree-guard.sh#/tmp/launch-critical-worktree-guard.sh#' "$1/fragments/worktree-guard.json"
   }
   mutate_codex_hook_path() {
     sed -i 's#/etc/codex/hooks/launch-critical-worktree-guard.sh#/tmp/launch-critical-worktree-guard.sh#' "$1/requirements.toml"
@@ -434,9 +421,8 @@ TOML
   expect_policy_reject missing-destination 'destination skill section or digest is invalid' mutate_missing_destination
   expect_policy_reject unreadable-skill 'active skill source is unreadable' mutate_unreadable_skill
   expect_policy_reject projection-drift 'projection digest mismatch' mutate_projection
-  expect_policy_reject farm-drift 'Claude skill farm is missing active skill' mutate_farm
+  expect_policy_reject farm-drift 'shared skill farm is missing active skill' mutate_farm
   expect_policy_reject hook-drift 'North worker guard reachability drift' mutate_hook
-  expect_policy_reject claude-hook-path 'Claude guard identity or reachability drift' mutate_claude_hook_path
   expect_policy_reject codex-hook-path 'Codex guard identity or reachability drift' mutate_codex_hook_path
   expect_policy_reject malformed-activity 'active skill projection has invalid state' mutate_activity_state
   expect_policy_reject repo-global 'owner role has invalid repository authority' mutate_repo_scope
@@ -469,81 +455,6 @@ if [ "${1:-}" = '--policy-contract-only' ]; then
   exit 0
 fi
 
-assert_native_identity() {
-  local lifecycle_fragment="$1" repair_fragment="$2" expected_provider="$3" label="$4"
-  local expected_spawn="AGENT_PROVIDER=$expected_provider /run/current-system/sw/bin/north-on-spawn"
-  local expected_repair="AGENT_PROVIDER=$expected_provider /home/tom/.agents/hooks/hook-detach.sh /run/current-system/sw/bin/north-on-tooluse"
-  local event command spawn_count=0 repair_count=0
-
-  while IFS=$'\t' read -r event command; do
-    [ -n "$command" ] || continue
-    case "$command" in
-      *'/north-on-spawn')
-        spawn_count=$((spawn_count + 1))
-        case "$event" in SessionStart|SubagentStart) ;; *)
-          printf 'unexpected %s north-on-spawn event: %s\n' "$label" "$event" >&2
-          exit 1
-        esac
-        [ "$command" = "$expected_spawn" ] || {
-          printf '%s %s has wrong spawn provider identity: %s\n' "$label" "$event" "$command" >&2
-          exit 1
-        }
-        ;;
-      *'/north-on-tooluse')
-        repair_count=$((repair_count + 1))
-        [ "$event" = PostToolUse ] || {
-          printf 'unexpected %s north-on-tooluse event: %s\n' "$label" "$event" >&2
-          exit 1
-        }
-        [ "$command" = "$expected_repair" ] || {
-          printf '%s %s has wrong repair provider identity: %s\n' "$label" "$event" "$command" >&2
-          exit 1
-        }
-        ;;
-    esac
-  done < <(jq -sr '.[] | .entries[] | select(.hook.type == "command" and ((.hook.command | contains("/north-on-spawn")) or (.hook.command | contains("/north-on-tooluse")))) | [.event,.hook.command] | @tsv' "$lifecycle_fragment" "$repair_fragment")
-
-  [ "$spawn_count" -eq 2 ] || {
-    printf '%s has %s north-on-spawn bindings, expected 2\n' "$label" "$spawn_count" >&2
-    exit 1
-  }
-  [ "$repair_count" -eq 1 ] || {
-    printf '%s has %s north-on-tooluse bindings, expected 1\n' "$label" "$repair_count" >&2
-    exit 1
-  }
-  jq -se '[.[] | .entries[] | .hook | select(.type == "command" and (.command | startswith("AGENT_PROVIDER=")) and ((.command | test("/north-on-(spawn|tooluse)$")) | not))] | length == 0' "$lifecycle_fragment" "$repair_fragment" >/dev/null
-}
-
-assert_native_identity \
-  "$REPO/dotfiles/agents/hooks.d/north-session-lifecycle.json" \
-  "$REPO/dotfiles/agents/hooks.d/hook-detach.json" \
-  anthropic "Claude switchboard fragments"
-if rg -n '/home/tom/code/north/bin/(north-(on-|mark-|stream)|concern)' \
-  "$REPO/dotfiles/claude/settings.json" \
-  "$REPO/dotfiles/claude/statusline.sh" \
-  "$BEAGLE_INTEGRATION/hooks/beagle-session-start.sh" \
-  "$AGENT_PROFILE/hooks/north-session-end.sh"; then
-  printf 'authoritative lifecycle configuration still references a mutable checkout command\n' >&2
-  exit 1
-fi
-if rg -n 'dotfiles/claude/hooks' \
-  "$REPO/dotfiles/claude/settings.json" \
-  "$REPO/modules/north-profile/default.bnix" \
-  "$REPO/modules/claude/default.bnix" \
-  "$REPO/modules/codex/default.bnix" \
-  "$REPO/modules/hermes/default.bnix"; then
-  printf 'active provider wiring still references the retired Firn agent tree\n' >&2
-  exit 1
-fi
-grep -Fq '"/.config/agents/AGENTS.md"' \
-  "$REPO/modules/north-profile/default.bnix"
-grep -Fq '"/.agents/hooks"' "$REPO/modules/claude/default.bnix"
-grep -Fq '"/.config/agents/AGENTS.md"' "$REPO/modules/codex/default.bnix"
-grep -Fq '"/.config/agents/AGENTS.md"' "$REPO/modules/hermes/default.bnix"
-grep -Fq '"/home/tom/.agents/hooks/north-session-end.sh"' \
-  "$REPO/dotfiles/agents/hooks.d/north-session-lifecycle.json"
-! grep -Fq 'writeShellScriptBin "north-session-end"' \
-  "$REPO/modules/claude/default.bnix"
 report="$("$REPO/scripts/agent-config-check.sh")"
 managed_binding_count="$(python3 - "$REPO/modules/codex/requirements.toml" <<'PY'
 import sys
@@ -681,34 +592,6 @@ if grep -Fq '(s inputs.beagle "/integrations/north/hooks/' "$REPO/modules/codex/
   exit 1
 fi
 
-claude_mcp_server_connected \
-  $'north: /run/current-system/sw/bin/north-mcp - ✔ Connected' \
-  north
-if claude_mcp_server_connected \
-   $'north: /run/current-system/sw/bin/north-mcp - ! Connected · failed' \
-   north; then
-  printf 'Claude MCP failure marker was accepted as connected\n' >&2
-  exit 1
-fi
-
-mkdir -p "$scratch/bin"
-cat >"$scratch/bin/claude-probe" <<'SH'
-#!/usr/bin/env bash
-printf 'CLAUDE_CONFIG_DIR=%s\n' "${CLAUDE_CONFIG_DIR-unset}" >"$CLAUDE_PROBE_CALLS"
-printf 'argv=%s\n' "$*" >>"$CLAUDE_PROBE_CALLS"
-SH
-chmod +x "$scratch/bin/claude-probe"
-(
-  export CLAUDE_CONFIG_DIR="$scratch/wrong-claude-state"
-  export CLAUDE_BIN="$scratch/bin/claude-probe"
-  export CLAUDE_PROBE_CALLS="$scratch/claude-probe-calls"
-  claude_probe_binary_is_authoritative
-  run_claude_probe 0.2 mcp list >/dev/null
-)
-diff -u \
-  <(printf '%s\n' 'CLAUDE_CONFIG_DIR=unset' 'argv=mcp list') \
-  "$scratch/claude-probe-calls"
-
 managed_policy="$REPO/modules/codex/requirements.toml"
 [ "$(codex_managed_policy_binding_count "$managed_policy")" = "$managed_binding_count" ]
 cp "$managed_policy" "$scratch/managed-policy-not-exclusive.toml"
@@ -778,26 +661,6 @@ if managed_source_root_matches "$scratch/orchestration-logical" "$distinct_obser
   printf 'distinct managed Orchestration worktree root was accepted through a logical alias\n' >&2
   exit 1
 fi
-
-# Mutable checkout lifecycle bindings are rejected even when their provider
-# identity is otherwise correct.
-mutable_claude="$scratch/claude-mutable"
-cp -a "$REPO/dotfiles/claude" "$mutable_claude"
-jq '.hooks.SessionStart = [{
-      "hooks": [{
-        "type": "command",
-        "command": "AGENT_PROVIDER=anthropic /home/tom/code/north/main/bin/north-on-spawn",
-        "timeout": 15
-      }]
-    }]' "$mutable_claude/settings.json" >"$scratch/mutable-claude-settings.json"
-mv "$scratch/mutable-claude-settings.json" "$mutable_claude/settings.json"
-if AGENT_CONFIG_CLAUDE="$mutable_claude" \
-  "$REPO/scripts/agent-config-check.sh" >"$scratch/mutable-claude.out" 2>&1; then
-  printf 'mutable checkout North lifecycle hook was accepted\n' >&2
-  exit 1
-fi
-grep -Fq 'uses mutable checkout North lifecycle command' \
-  "$scratch/mutable-claude.out"
 
 # Deployed provider readiness goes through the packaged closure. The sourceable
 # seam makes the exact argv contract hermetic.
@@ -951,8 +814,6 @@ assert_hung_probe_reaped() {
   fi
 }
 
-CLAUDE_BIN="$scratch/bin/hostile-probe" \
-  assert_hung_probe_reaped claude run_claude_probe 0.1 mcp list
 CODEX_BIN="$scratch/bin/hostile-probe" \
   assert_hung_probe_reaped codex run_codex_probe 0.1 mcp list
 NORTH_PACKAGED_BIN="$scratch/bin/hostile-probe" \
@@ -1216,63 +1077,9 @@ grep -Fq 'CODEX_HOME="$HOME/.codex"' "$REPO/scripts/agent-config-check.sh"
 grep -Fq 'CODEX_SQLITE_HOME="$HOME/.codex/sqlite"' \
   "$REPO/scripts/agent-config-check.sh"
 
-claude_runtime_settings="$scratch/claude-runtime-settings.json"
-cp "$REPO/dotfiles/claude/settings.json" "$claude_runtime_settings"
-chmod 600 "$claude_runtime_settings"
-writable_claude_settings_match_control_plane \
-  "$claude_runtime_settings" "$REPO/dotfiles/claude/settings.json" \
-  'writable Claude fixture'
-[ "$fail" -eq 0 ]
-jq '.enabledPlugins += ["runtime-only@test"]' \
-  "$claude_runtime_settings" >"$scratch/claude-runtime-settings.next"
-mv "$scratch/claude-runtime-settings.next" "$claude_runtime_settings"
-writable_claude_settings_match_control_plane \
-  "$claude_runtime_settings" "$REPO/dotfiles/claude/settings.json" \
-  'mutated writable Claude fixture'
-[ "$fail" -eq 0 ]
-ln -s "$REPO/dotfiles/claude/settings.json" "$scratch/claude-settings-link"
-if writable_claude_settings_match_control_plane \
-   "$scratch/claude-settings-link" "$REPO/dotfiles/claude/settings.json" \
-   'symlinked Claude fixture' 2>/dev/null; then
-  printf 'symlinked writable Claude settings were accepted\n' >&2
-  exit 1
-fi
-[ "$fail" -eq 1 ]
-fail=0
-details=()
-jq '(.hooks.SessionEnd[0].hooks[0].command) = "/home/tom/code/north/bin/north-on-stop"' \
-  "$claude_runtime_settings" >"$scratch/claude-runtime-settings.next"
-mv "$scratch/claude-runtime-settings.next" "$claude_runtime_settings"
-if writable_claude_settings_match_control_plane \
-   "$claude_runtime_settings" "$REPO/dotfiles/claude/settings.json" \
-   'checkout-backed Claude fixture' 2>/dev/null; then
-  printf 'checkout-backed Claude hook control plane was accepted\n' >&2
-  exit 1
-fi
-[ "$fail" -eq 1 ]
-fail=0
-details=()
-if grep -Fq 'CLAUDE_CONFIG_DIR="$HOME/.claude"' \
-   "$REPO/scripts/agent-config-check.sh"; then
-  printf 'Claude health still forces the wrong config directory\n' >&2
-  exit 1
-fi
-grep -Fq '${PROBE_ENV_BIN:-/run/current-system/sw/bin/env}" -u CLAUDE_CONFIG_DIR' \
-  "$REPO/scripts/agent-config-check.sh"
-grep -Fq '${CLAUDE_BIN:-/run/current-system/sw/bin/claude}' \
-  "$REPO/scripts/agent-config-check.sh"
-
-# The client-scoped Linear MCP's live connection health must be advisory
-# (soft warn), never a FAIL, while North stays required. Its config
-# declaration still stays required, so the entry keeps working on clock-in.
-grep -Fq 'CLIENT_SCOPED_MCP_SERVERS=(linear-mcp-msa-new)' \
-  "$REPO/scripts/agent-config-check.sh"
-grep -Fq 'client MCP '"'"'$server'"'"': unauthenticated (advisory — client-scoped)' \
-  "$REPO/scripts/agent-config-check.sh"
+# The Codex MCP declaration remains required.
 grep -Fq 'command = "/run/current-system/sw/bin/north-mcp"' \
   "$REPO/dotfiles/codex/config.toml"
-grep -Fq 'NORTH_MCP_BIN="${NORTH_MCP_BIN:-/run/current-system/sw/bin/north-mcp}"' \
-  "$REPO/scripts/claude-mcp-register.sh"
 
 # North has no web package or service; keep the config check CLI/MCP-only.
 if rg -n -- 'check-web|NORTH_WEB|north-web' "$REPO/scripts/agent-config-check.sh"; then
@@ -1394,5 +1201,5 @@ if AGENT_CONFIG_HERMES="$hermes_fixture2" \
   exit 1
 fi
 
-printf 'ok: Claude native identity + authoritative Codex managed policy + canonical Orchestration source identity are exact\n'
+printf 'ok: Codex managed policy and canonical Orchestration source identity are exact\n'
 printf 'ok: Hermes controller adapter — fail-closed north-bridge, disabled native delegation, packaged North MCP\n'

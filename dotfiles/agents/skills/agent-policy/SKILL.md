@@ -2,10 +2,10 @@
 name: agent-policy
 description: >-
   Author, restructure, register, or debug personally owned AGENTS.md policy,
-  Codex or Claude skills, switchboard modules, and activation metadata. Use
+  Codex skills, switchboard modules, and activation metadata. Use
   whenever changing agent instructions or skills, deciding what must stay
   always loaded versus trigger on demand, locating a projected policy source,
-  or verifying that a skill reaches Claude Code and Codex.
+  or verifying that a skill reaches the shared and Codex skill farms.
 ---
 
 # Agent policy
@@ -15,7 +15,7 @@ Keep one source for each rule and make its loading scope match its trigger.
 ## Locate authority before editing
 
 Run `agents status` to see live composition and `agents path <name>` to resolve
-the owning source. Never edit `~/.agents`, `~/.claude`, `~/.codex`,
+the owning source. Never edit `~/.agents`, `~/.codex`,
 `/etc/codex`, or another generated projection. `agents apply` is the only
 writer of provider instruction, skill, and hook projections. Read each
 repository's root `AGENTS.md` and use repo-safety for the write and landing
@@ -52,7 +52,7 @@ registration, activation, and projection behavior.
 
 Register a standalone skill in the switchboard's skill inventory and source
 resolver. Extend the existing switchboard fixture so path resolution and both
-provider links are asserted. Keep third-party and system skills read-only.
+the shared and Codex links are asserted. Keep third-party and system skills read-only.
 
 Permission and activity are separate: stored permission says whether a unit
 may run, while activity also requires its claimant or containing set to be

@@ -119,38 +119,7 @@ run_bounded_process() {
   return "$timeout_status"
 }
 
-run_claude_probe() {
-  local duration="$1"
-  shift
-  run_bounded_process "$duration" \
-    "${PROBE_ENV_BIN:-/run/current-system/sw/bin/env}" -u CLAUDE_CONFIG_DIR \
-    "${CLAUDE_BIN:-/run/current-system/sw/bin/claude}" "$@"
-}
-
-claude_probe_binary_is_authoritative() {
-  local configured="${CLAUDE_BIN:-/run/current-system/sw/bin/claude}" resolved
-
-  [ -x "$configured" ] || return 1
-  if [ -n "${CLAUDE_BIN:-}" ]; then
-    return 0
-  fi
-  [ "$configured" = /run/current-system/sw/bin/claude ] || return 1
-  resolved="$(readlink -f "$configured" 2>/dev/null)" || return 1
-  [[ "$resolved" = /nix/store/* ]] && [ -x "$resolved" ]
-}
-
-claude_mcp_server_connected() {
-  local output="$1" server="$2"
-  local -a lines=()
-
-  mapfile -t lines < <(grep -F "${server}:" <<<"$output" || true)
-  [ "${#lines[@]}" -eq 1 ] || return 1
-  [[ "${lines[0]}" = "$server:"* ]] || return 1
-  [[ "${lines[0]}" = *'✔ Connected'* ]] || return 1
-  [[ "${lines[0]}" != *'! Connected'* ]]
-}
-
-run_codex_probe() {
+ run_codex_probe() {
   local duration="$1"
   shift
   run_bounded_process "$duration" "${CODEX_BIN:-codex}" "$@"
@@ -638,48 +607,7 @@ north_wrapped_runtime_matches_locked_source() {
     [ "${wrapper_lines[$((index + 1))]}" = "$expected_exec" ]
 }
 
-writable_claude_settings_match_control_plane() {
-  local live="$1" baseline="$2" label="$3" link_count
-
-  if [ ! -f "$live" ] || [ -L "$live" ] || [ ! -O "$live" ] || [ ! -w "$live" ]; then
-    bad "$label must be a writable, user-owned regular file"
-    return 1
-  fi
-  link_count="$(stat -c '%h' "$live" 2>/dev/null || true)"
-  if [ "$link_count" != 1 ]; then
-    bad "$label must not share writable inode state (link count: ${link_count:-unknown})"
-    return 1
-  fi
-  if python3 - "$live" "$baseline" <<'PY'
-import json
-import re
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as handle:
-    live = json.load(handle)
-with open(sys.argv[2], encoding="utf-8") as handle:
-    baseline = json.load(handle)
-
-if not isinstance(live, dict) or not isinstance(baseline, dict):
-    raise SystemExit("Claude settings must be JSON objects")
-
-checkout_command = re.compile(r"/home/tom/code/north/bin/")
-for event_groups in live.get("hooks", {}).values():
-    for group in event_groups:
-        for hook in group.get("hooks", []):
-            command = hook.get("command")
-            if isinstance(command, str) and checkout_command.search(command):
-                raise SystemExit(f"live hook uses mutable checkout command: {command}")
-PY
-  then
-    ok_detail "$label is writable runtime state with no mutable-checkout lifecycle commands"
-  else
-    bad "$label contains an invalid runtime hook control plane"
-    return 1
-  fi
-}
-
-# Read the switchboard's derived activity projection without requiring the
+ # Read the switchboard's derived activity projection without requiring the
 # switchboard CLI or any North service. A missing projection preserves legacy
 # behavior for live probes; once the projection exists, an absent row is off.
 switchboard_activity_state() {
@@ -728,7 +656,6 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHARED="${AGENT_CONFIG_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
 BEAGLE_INTEGRATION="${AGENT_CONFIG_BEAGLE_INTEGRATION:-$HOME/code/beagle/main/integrations/north}"
 FIRN_INTEGRATION="$REPO/modules/north-profile/firn"
-CLAUDE="${AGENT_CONFIG_CLAUDE:-$REPO/dotfiles/claude}"
 CODEX="$REPO/dotfiles/codex"
 LIVE_REPO="${AGENT_CONFIG_LIVE_REPO:-$HOME/code/nixos-config}"
 LIVE_SHARED="${AGENT_CONFIG_LIVE_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
@@ -737,7 +664,6 @@ LIVE_AGENT_STATE="${AGENT_CONFIG_LIVE_AGENT_STATE:-$HOME/.config/agents}"
 LIVE_NORTH_ROOT="${AGENT_CONFIG_LIVE_NORTH_ROOT:-$HOME/code/north}"
 LIVE_BEAGLE_ROOT="${AGENT_CONFIG_LIVE_BEAGLE_ROOT:-$HOME/code/beagle}"
 LIVE_FIRN_ROOT="${AGENT_CONFIG_LIVE_FIRN_ROOT:-$HOME/code/nixos-config}"
-LIVE_CLAUDE="$LIVE_REPO/dotfiles/claude"
 LIVE_HERMES="$LIVE_REPO/dotfiles/hermes"
 CODEX_REQUIREMENTS="$REPO/modules/codex/requirements.toml"
 HERMES="${AGENT_CONFIG_HERMES:-$REPO/dotfiles/hermes}"
@@ -753,7 +679,6 @@ CANONICAL_BEAGLE_STORE_LOG="$CANONICAL_PROFILE_HOME/.local/state/north/coordinat
 CANONICAL_BEAGLE_STORE_TELEMETRY_LOG="$CANONICAL_PROFILE_HOME/.local/state/north/telemetry.log"
 CANONICAL_BEAGLE_STORE_THREADS="$CANONICAL_PROFILE_HOME/.local/state/north/threads"
 # MCP servers whose live-connection health is advisory-only, not FAIL-worthy.
-CLIENT_SCOPED_MCP_SERVERS=(linear-mcp-msa-new)
 for arg in "$@"; do
   case "$arg" in
     --local) LOCAL=1 ;;
@@ -910,12 +835,6 @@ if grep -Fq '"/.local/state/north/skills"' "$north_profile_module"; then
 else
   bad '~/.agents/skills must be wired to ~/.local/state/north/skills'
 fi
-if [ -e "$REPO/dotfiles/claude/CLAUDE.md" ] ||
-   [ -L "$REPO/dotfiles/claude/CLAUDE.md" ] ||
-   [ -e "$REPO/dotfiles/claude/hooks" ] ||
-   [ -L "$REPO/dotfiles/claude/hooks" ]; then
-  bad "obsolete Claude redirect sources still exist after Home Manager took ownership"
-fi
 if [ "$LOCAL" -eq 1 ]; then
   canonical_link "$HOME/.agents/AGENTS.md" "$LIVE_AGENT_STATE/AGENTS.md" "$HOME/.agents/AGENTS.md"
   canonical_link "$HOME/.agents/docs" "$LIVE_SHARED/docs" "$HOME/.agents/docs"
@@ -923,180 +842,6 @@ if [ "$LOCAL" -eq 1 ]; then
   canonical_link "$HOME/.agents/skills" "$LIVE_SKILLS_FARM" "$HOME/.agents/skills"
 fi
 group shared "$hook_count owner hooks linted · $skill_count owner skills · switchboard-composed instructions" "$before"
-
-# Validate a provider hook manifest. Shared adapter commands must resolve to the
-# canonical source tree. North lifecycle commands must use the immutable system
-# package surface; mutable checkout lifecycle bindings are never authoritative.
-validate_hooks() {
-  local manifest="$1" provider="$2" expected_provider="$3"
-  local count=0 ev command raw_command provider_marker identity_kind first resolved expected basename declared_shared interpreter detach
-  local detach hook_sha role provenance_manifest provenance_digest expected_resolved immutable_north=0
-  local -A provenance_seen=()
-  HOOK_PROVENANCE_SUMMARY='immutable North package commands · static declaration'
-  while IFS=$'\t' read -r ev command; do
-    [ -n "$command" ] || continue
-    count=$((count + 1))
-    raw_command="$command"
-    provider_marker=''
-    detach=''
-    interpreter=''
-    if [[ "$command" =~ ^AGENT_PROVIDER=([^[:space:]]+)[[:space:]]+(.+)$ ]]; then
-      provider_marker="${BASH_REMATCH[1]}"
-      command="${BASH_REMATCH[2]}"
-    fi
-    if [[ "$command" =~ ^/run/current-system/sw/bin/bash[[:space:]]+(.+)$ ]]; then
-      interpreter='/run/current-system/sw/bin/bash'
-      command="${BASH_REMATCH[1]}"
-    fi
-    # hook-detach is a transparent telemetry wrapper: it drains the payload,
-    # re-execs the real hook detached, and returns. The wrapped command keeps
-    # the identity of the hook it carries, so unwrap before classifying — the
-    # same way the exact Bash interpreter above is unwrapped.
-    if [[ "$command" =~ ^/home/tom/\.agents/hooks/hook-detach\.sh[[:space:]]+(.+)$ ]]; then
-      detach='hook-detach'
-      command="${BASH_REMATCH[1]}"
-    fi
-    first="${command%% *}"
-    basename="${first##*/}"
-    identity_kind=''
-    case "$first" in
-      /run/current-system/sw/bin/north-on-spawn|/home/tom/code/north/main/bin/north-on-spawn)
-        identity_kind='spawn'
-        ;;
-      /run/current-system/sw/bin/north-on-tooluse|/home/tom/code/north/main/bin/north-on-tooluse)
-        identity_kind='repair'
-        ;;
-    esac
-    expected="$SHARED/hooks/$basename"
-    declared_shared=0
-    case "$first" in
-      "/home/tom/.agents/hooks/$basename"|"/home/tom/code/north/main/profiles/tom/hooks/$basename"|"$expected"|"$basename")
-        declared_shared=1
-        ;;
-    esac
-    if [ -n "$interpreter" ]; then
-      ok_detail "$provider $ev uses root-managed exact Bash interpreter"
-    fi
-    if [ -n "$provider_marker" ] && [ -z "$identity_kind" ]; then
-      bad "$provider $ev sets AGENT_PROVIDER on an unrelated hook: $raw_command"
-    elif [ -n "$identity_kind" ] && [ "$provider_marker" != "$expected_provider" ]; then
-      bad "$provider $ev North identity $identity_kind must set AGENT_PROVIDER=$expected_provider: $raw_command"
-    elif [[ "$first" = /run/current-system/sw/bin/north-on-spawn ||
-            "$first" = /run/current-system/sw/bin/north-on-tooluse ||
-            "$first" = /run/current-system/sw/bin/north-mark-delegated ||
-            "$first" = /run/current-system/sw/bin/north-on-stop ]]; then
-      immutable_north=1
-      ok_detail "$provider $ev → immutable system package command $basename"
-    elif [[ "$first" = /home/tom/code/north/main/bin/* ]]; then
-      bad "$provider $ev uses mutable checkout North lifecycle command $first; use /run/current-system/sw/bin/$basename"
-    elif [ "$declared_shared" -eq 1 ]; then
-      if [ "$LOCAL" -eq 1 ]; then
-        expected_resolved="$(readlink -f "$LIVE_SHARED/hooks/$basename" 2>/dev/null || true)"
-        if IFS=$'\t' read -r resolved hook_sha \
-          < <(hook_target_fingerprint "$first" \
-                "$LIVE_NORTH_ROOT" "$LIVE_BEAGLE_ROOT" \
-                "$LIVE_FIRN_ROOT") &&
-           [ "$resolved" = "$expected_resolved" ]; then
-          role="$basename:shared-adapter"
-          if record_live_hook_binding "$role" "$resolved" "$hook_sha"; then
-            provenance_seen["$resolved"$'\t'"$hook_sha"]=1
-            ok_detail "$provider $ev → $basename · development checkout (mutable): $resolved · sha256=$hook_sha"
-          else
-            bad "$provider $ev split shared hook binding: $HOOK_SPLIT_REASON"
-          fi
-        else
-          bad "$provider $ev live hook is missing/non-executable or resolves to '${resolved:-missing}', expected '$expected_resolved'"
-        fi
-      else
-        ok_detail "$provider $ev declares canonical shared hook $basename"
-      fi
-    else bad "$provider $ev hook is outside the canonical composed profile: $raw_command"; fi
-  done < <(jq -r '.hooks // {} | to_entries[] | .key as $event | .value[] | .hooks[]? | select(.type == "command") | [$event,.command] | @tsv' "$manifest")
-  if [ "$LOCAL" -eq 1 ] && [ "${#provenance_seen[@]}" -gt 0 ]; then
-    provenance_manifest="$(
-      printf '%s\n' "${!provenance_seen[@]}" |
-        sort
-    )"
-    provenance_digest="$(printf '%s\n' "$provenance_manifest" | sha256sum | awk '{print $1}')"
-    if [ "$immutable_north" -eq 1 ]; then
-      HOOK_PROVENANCE_SUMMARY="immutable North package commands · ${#provenance_seen[@]} mutable shared adapter targets · manifest sha256=$provenance_digest"
-    else
-      HOOK_PROVENANCE_SUMMARY="${#provenance_seen[@]} mutable shared adapter targets · manifest sha256=$provenance_digest"
-    fi
-  fi
-  HOOK_BINDINGS="$count"
-}
-
-manifest_guard_count() {
-  local manifest="$1" matcher_token="$2"
-  jq -r --arg token "$matcher_token" '
-    [.hooks.PreToolUse[]? |
-     select(((.matcher // "") | split("|") | index($token)) != null) |
-     .hooks[]? |
-     select(.type == "command" and (.command | endswith("/agent-spawn-guard.sh")))] |
-    length
-  ' "$manifest"
-}
-
-require_manifest_guard_count() {
-  local manifest="$1" provider="$2" matcher_token="$3" expected="$4" contract="$5" count
-  count="$(manifest_guard_count "$manifest" "$matcher_token" 2>/dev/null || printf invalid)"
-  if [ "$count" = "$expected" ]; then ok_detail "$provider $contract"
-  else bad "$provider $contract: found $count matching guard binding(s), expected $expected"; fi
-}
-
-require_switchboard_guard_count() {
-  local manifest="$1" provider="$2" matcher_token="$3" activity="$4"
-  local count
-
-  case "$activity" in
-    on)
-      require_manifest_guard_count "$manifest" "$provider" "$matcher_token" 1 \
-        'user Bash topology guard is enabled and bound once'
-      ;;
-    off)
-      require_manifest_guard_count "$manifest" "$provider" "$matcher_token" 0 \
-        'user Bash topology guard is disabled and absent'
-      ;;
-    unknown)
-      count="$(manifest_guard_count "$manifest" "$matcher_token" 2>/dev/null || printf invalid)"
-      if [ "$count" = 0 ] || [ "$count" = 1 ]; then
-        ok_detail "$provider user Bash topology guard has no duplicate binding (switchboard projection unavailable)"
-      else
-        bad "$provider user Bash topology guard has $count bindings while the switchboard projection is unavailable"
-      fi
-      ;;
-    *) bad "$provider agent-spawn-guard switchboard state is invalid: $activity" ;;
-  esac
-}
-
-validate_claude_statusline_activity() {
-  local settings="$1" label="$2" activity="$3"
-  local canonical_command='bash "$HOME/code/nixos-config/dotfiles/claude/statusline.sh"'
-
-  case "$activity" in
-    on)
-      if jq -e --arg command "$canonical_command" \
-        '.statusLine.type == "command" and .statusLine.command == $command' \
-        "$settings" >/dev/null; then
-        ok_detail "$label statusline points at the canonical adapter"
-      else bad "$label statusline is not wired to the canonical adapter while coordination is enabled"; fi
-      ;;
-    off)
-      if jq -e '(.statusLine // null) == null' "$settings" >/dev/null; then
-        ok_detail "$label statusline is absent while coordination is disabled"
-      else bad "$label statusline must be absent while coordination is disabled"; fi
-      ;;
-    unknown)
-      if jq -e --arg command "$canonical_command" \
-        '(.statusLine // null) == null or (.statusLine.type == "command" and .statusLine.command == $command)' \
-        "$settings" >/dev/null; then
-        ok_detail "$label statusline has a valid optional shape (switchboard projection unavailable)"
-      else bad "$label statusline has an invalid command"; fi
-      ;;
-    *) bad "$label coordination switchboard state is invalid: $activity" ;;
-  esac
-}
 
 validate_codex_managed_policy() {
   if ! need_toml "$CODEX_REQUIREMENTS" 'Codex managed requirements'; then return; fi
@@ -1319,229 +1064,6 @@ validate_codex_managed_policy() {
     CODEX_HOOK_PROVENANCE='immutable /nix/store generation deferred to --local'
   fi
 }
-
-before=$fail
-claude_north='connection deferred to --local'
-claude_north_topology='explicit corpus env deferred'
-claude_linear='connection deferred to --local'
-claude_digitalocean='connection deferred to --local'
-claude_orchestration='cache freshness deferred to --local'
-need_json "$CLAUDE/settings.json" 'Claude settings'
-if grep -Fq '(pkgs.writeText "claude-settings.json"' \
-     "$REPO/modules/claude/default.bnix" &&
-   grep -Fq ':home.activation.seedClaudeSettings' \
-     "$REPO/modules/claude/default.bnix" &&
-   grep -Fq '(config.lib.dag.entryAfter ["writeBoundary"]' \
-     "$REPO/modules/claude/default.bnix" &&
-   ! rg -q 'linkClaudeSettings|/code/nixos-config/dotfiles/claude/settings\.json' \
-     "$REPO/modules/claude/default.bnix" "$REPO/modules/claude/default.nix"; then
-  ok_detail 'Claude settings are atomically reseeded from each committed generation into writable state'
-else
-  bad 'Claude settings delivery must atomically reseed from the committed generation without a checkout link'
-fi
-if command -v shellcheck >/dev/null 2>&1 && shellcheck -S warning "$CLAUDE/statusline.sh"; then
-  ok_detail "Claude statusline shellcheck"
-else bad "Claude statusline shellcheck failed"; fi
-validate_claude_statusline_activity \
-  "$CLAUDE/settings.json" Claude "$COORDINATION_ACTIVITY"
-if bash "$CLAUDE/statusline.test.sh" >/dev/null; then
-  ok_detail "Claude statusline observer is detached and output-safe"
-else bad "Claude statusline observer test failed"; fi
-if grep -Fqx '  local north="/run/current-system/sw/bin/north"' "$CLAUDE/statusline.sh" &&
-   ! grep -Fq '/home/tom/code/north/main/bin/' "$CLAUDE/statusline.sh"; then
-  ok_detail "Claude statusline observer uses the immutable North package command"
-else bad "Claude statusline observer must use /run/current-system/sw/bin/north"; fi
-if [ "$NORTH_LIFECYCLE_ACTIVITY" = off ]; then
-  if jq -e '((.hooks // {}).SessionEnd // []) | length == 0' "$CLAUDE/settings.json" >/dev/null; then
-    ok_detail 'Claude SessionEnd lifecycle is absent while north-session-lifecycle is disabled'
-  else
-    bad 'Claude SessionEnd lifecycle must be absent while north-session-lifecycle is disabled'
-  fi
-elif [ "$NORTH_LIFECYCLE_ACTIVITY" = unknown ] &&
-     jq -e '((.hooks // {}).SessionEnd // []) | length == 0' "$CLAUDE/settings.json" >/dev/null; then
-  ok_detail 'Claude SessionEnd lifecycle is optionally absent (switchboard projection unavailable)'
-elif [ ! -f "$SHARED/hooks/north-session-end.sh" ] && [ "$LOCAL" -eq 0 ]; then
-  note "North-owned SessionEnd hook unavailable in repository-only mode"
-elif jq -e '
-     .hooks.SessionEnd[0].hooks[0].command
-       == "/home/tom/.agents/hooks/north-session-end.sh"
-   ' "$CLAUDE/settings.json" >/dev/null &&
-   ! grep -Fq 'northSessionEnd' "$REPO/modules/claude/default.bnix" &&
-   ! grep -Fq 'writeShellScriptBin "north-session-end"' "$REPO/modules/claude/default.bnix" &&
-   grep -Fqx 'CONCERN="/run/current-system/sw/bin/concern"' "$SHARED/hooks/north-session-end.sh" &&
-   grep -Fq 'timeout 5 /run/current-system/sw/bin/north-stream-sync' "$SHARED/hooks/north-session-end.sh" &&
-   ! grep -Fq '/home/tom/code/north/main/bin/' "$SHARED/hooks/north-session-end.sh"; then
-  ok_detail "Claude SessionEnd is profile-owned and calls immutable North package commands"
-else bad "Claude SessionEnd must use the composed profile hook with immutable North commands"; fi
-if [ ! -f "$BEAGLE_INTEGRATION/hooks/beagle-session-start.test.sh" ] &&
-   [ "$LOCAL" -eq 0 ]; then
-  note "Beagle-owned SessionStart lifecycle test unavailable in repository-only mode"
-elif bash "$BEAGLE_INTEGRATION/hooks/beagle-session-start.test.sh" >/dev/null; then
-  ok_detail "Beagle SessionStart gates its immutable status probe behind project detection"
-else bad "Beagle SessionStart lifecycle test failed"; fi
-if command -v shellcheck >/dev/null 2>&1 && \
-   shellcheck -S warning "$LAUNCHER_BIN/claude" "$LAUNCHER_BIN/codex" "$LAUNCHER_BIN/launcher.test.sh"; then
-  ok_detail "Account launcher wrappers shellcheck"
-else bad "Account launcher wrappers shellcheck failed"; fi
-if bash "$LAUNCHER_BIN/launcher.test.sh" >/dev/null; then
-  ok_detail "Account launcher fallbacks are diagnostic (missing/nonzero/empty/malformed north, no-eligible, absent dir, clean pick)"
-else bad "Account launcher diagnostics test failed"; fi
-if command -v shellcheck >/dev/null 2>&1 && \
-   shellcheck -S warning "$LAUNCHER_BIN/north-enforcement-promote" \
-     "$LAUNCHER_BIN/north-enforcement-promote.test.sh"; then
-  ok_detail "Enforcement promote command shellchecks"
-else bad "Enforcement promote command shellcheck failed"; fi
-if bash "$LAUNCHER_BIN/north-enforcement-promote.test.sh" >/dev/null; then
-  ok_detail "Enforcement promote seals, attests, retains previous, and rolls back"
-else bad "Enforcement promote transaction test failed"; fi
-if grep -Fq '(config.lib.file.mkOutOfStoreSymlink' "$REPO/modules/bash/default.bnix" &&
-   grep -Fq '"/code/nixos-config/main/dotfiles/bin"' "$REPO/modules/bash/default.bnix"; then
-  ok_detail 'Account launcher directory follows the live Firn checkout'
-else bad 'Account launcher directory must follow the live Firn checkout'; fi
-if [ "$LOCAL" -eq 1 ]; then
-  live_safe_push="$(command -v safe-push 2>/dev/null || true)"
-  live_safe_push_resolved="$(readlink -f "$live_safe_push" 2>/dev/null || true)"
-  if [ -x "$live_safe_push" ] &&
-     managed_source_root_matches "$LIVE_FIRN_ROOT/main/dotfiles/bin/safe-push" "$live_safe_push_resolved" &&
-     "$live_safe_push" --help | grep -Fq -- '--to BRANCH'; then
-    ok_detail 'Live safe-push follows the Firn checkout and supports explicit --to destinations'
-  else
-    bad 'Live safe-push must follow the Firn checkout and expose --to BRANCH'
-  fi
-fi
-if jq -e '.autoMemoryEnabled == false' "$CLAUDE/settings.json" >/dev/null; then ok_detail "auto-memory disabled"
-else bad "Claude autoMemoryEnabled must be false"; fi
-if jq -e '
-  ((.enabledPlugins // []) |
-    if type == "array" then index("orchestration@orchestration") == null
-    else (.["orchestration@orchestration"] // false) == false
-    end)
-  and (.extraKnownMarketplaces.orchestration // null) == null
-' "$CLAUDE/settings.json" >/dev/null; then
-  ok_detail "retired Orchestration plugin cannot bypass the set switch"
-else
-  bad "Claude settings must not enable the retired Orchestration plugin or marketplace"
-fi
-validate_hooks "$CLAUDE/settings.json" Claude anthropic
-require_switchboard_guard_count \
-  "$CLAUDE/settings.json" Claude Bash "$AGENT_SPAWN_GUARD_ACTIVITY"
-claude_bindings="$HOOK_BINDINGS"
-claude_hook_provenance="$HOOK_PROVENANCE_SUMMARY"
-if [ "$LOCAL" -eq 1 ]; then
-  writable_claude_settings_match_control_plane \
-    "$HOME/.claude/settings.json" "$CLAUDE/settings.json" \
-    "$HOME/.claude/settings.json"
-  validate_claude_statusline_activity \
-    "$HOME/.claude/settings.json" 'Live Claude' "$COORDINATION_ACTIVITY"
-  validate_hooks "$HOME/.claude/settings.json" Claude anthropic
-  require_switchboard_guard_count \
-    "$HOME/.claude/settings.json" Claude Bash "$AGENT_SPAWN_GUARD_ACTIVITY"
-  if [ "$NORTH_LIFECYCLE_ACTIVITY" = off ]; then
-    if jq -e '((.hooks // {}).SessionEnd // []) | length == 0' "$HOME/.claude/settings.json" >/dev/null; then
-      ok_detail 'Live Claude SessionEnd lifecycle is absent while north-session-lifecycle is disabled'
-    else
-      bad 'Live Claude SessionEnd lifecycle must be absent while north-session-lifecycle is disabled'
-    fi
-  fi
-  canonical_link "$HOME/.claude/skills" "$LIVE_AGENT_STATE/skills" "$HOME/.claude/skills"
-  canonical_link "$HOME/.claude/hooks" "$LIVE_SHARED/hooks" "$HOME/.claude/hooks"
-  canonical_link "$HOME/.claude/CLAUDE.md" "$LIVE_AGENT_STATE/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
-  canonical_link "$HOME/.claude/commands" "$LIVE_CLAUDE/commands" "$HOME/.claude/commands"
-  if [ -f "$HOME/.claude.json" ]; then
-    for server in north linear-mcp-msa-new digitalocean; do
-      jq -e --arg s "$server" '.mcpServers[$s]' "$HOME/.claude.json" >/dev/null || bad "Claude user MCP '$server' is missing"
-    done
-    extra="$(jq -r '.mcpServers | keys[] | select(. != "north" and . != "linear-mcp-msa-new" and . != "digitalocean")' "$HOME/.claude.json")"
-    [ -z "$extra" ] || bad "unexpected Claude user MCP server(s): ${extra//$'\n'/, }"
-    north_log="$(jq -r '.mcpServers.north.env.BEAGLE_STORE_LOG // empty' "$HOME/.claude.json")"
-    north_telemetry_log="$(jq -r '.mcpServers.north.env.BEAGLE_STORE_TELEMETRY_LOG // empty' "$HOME/.claude.json")"
-    north_threads="$(jq -r '.mcpServers.north.env.BEAGLE_STORE_THREADS // empty' "$HOME/.claude.json")"
-    north_port="$(jq -r '.mcpServers.north.env.NORTH_PORT // empty' "$HOME/.claude.json")"
-    [ "$north_log" = "$CANONICAL_BEAGLE_STORE_LOG" ] || bad "Claude North BEAGLE_STORE_LOG is '${north_log:-unset}', expected '$CANONICAL_BEAGLE_STORE_LOG'"
-    [ "$north_telemetry_log" = "$CANONICAL_BEAGLE_STORE_TELEMETRY_LOG" ] || bad "Claude North BEAGLE_STORE_TELEMETRY_LOG is '${north_telemetry_log:-unset}', expected '$CANONICAL_BEAGLE_STORE_TELEMETRY_LOG'"
-    [ "$north_threads" = "$CANONICAL_BEAGLE_STORE_THREADS" ] || bad "Claude North BEAGLE_STORE_THREADS is '${north_threads:-unset}', expected '$CANONICAL_BEAGLE_STORE_THREADS'"
-    [ "$north_port" = 7977 ] || bad "Claude North NORTH_PORT is '${north_port:-unset}', expected '7977'"
-    if [ "$north_log" = "$CANONICAL_BEAGLE_STORE_LOG" ] &&
-       [ "$north_telemetry_log" = "$CANONICAL_BEAGLE_STORE_TELEMETRY_LOG" ] &&
-       [ "$north_threads" = "$CANONICAL_BEAGLE_STORE_THREADS" ] &&
-       [ "$north_port" = 7977 ]; then
-      claude_north_topology='canonical explicit instance env'
-    else
-      claude_north_topology='stale/missing instance env'
-    fi
-    digitalocean_shell_command='export DIGITALOCEAN_API_TOKEN="$(</home/tom/do-token.txt)"; exec /run/current-system/sw/bin/npx -y @digitalocean/mcp@1.0.67 --services accounts,droplets,networking,volumes'
-    if jq -e \
-      --arg cmd /run/current-system/sw/bin/bash \
-      --arg shell_command "$digitalocean_shell_command" \
-      '(.mcpServers.digitalocean.type // "stdio") == "stdio"
-       and .mcpServers.digitalocean.command == $cmd
-       and .mcpServers.digitalocean.args == ["-c", $shell_command]' \
-      "$HOME/.claude.json" >/dev/null; then
-      ok_detail 'Claude DigitalOcean MCP uses the pinned scoped token-file wrapper'
-    else
-      bad 'Claude DigitalOcean MCP declaration does not match the pinned scoped token-file wrapper'
-    fi
-    project_count="$(jq '[.projects[]? | select(.mcpServers != null)] | length' "$HOME/.claude.json")"
-    note "$project_count project-scoped Claude MCP registrations (allowed)"
-    ok_detail "Claude MCP declarations: North + Linear + DigitalOcean"
-  else bad "$HOME/.claude.json is missing"; fi
-  if [ "$COORDINATION_ACTIVE" -eq 0 ]; then
-    claude_north='disabled by switchboard; not probed'
-    claude_orchestration='disabled by switchboard'
-    ok_detail 'Claude MCP health probe skipped because coordination is disabled'
-  elif claude_probe_binary_is_authoritative; then
-    if [ -n "${CLAUDE_BIN:-}" ]; then
-      ok_detail "Claude health probe uses explicit test override $CLAUDE_BIN"
-    else
-      ok_detail "Claude health probe uses immutable /run/current-system/sw/bin/claude with default user state"
-    fi
-    claude_mcp_status=0
-    claude_mcp_output="$(
-      run_claude_probe "${MCP_PROBE_TIMEOUT_SECONDS:-20}" mcp list 2>&1
-    )" || claude_mcp_status=$?
-    if [ "$claude_mcp_status" -eq 0 ]; then
-      claude_mcp_exact=1
-      for server in north digitalocean; do
-        claude_mcp_server_connected "$claude_mcp_output" "$server" || {
-          claude_mcp_exact=0
-          bad "Claude MCP '$server' is missing or not connected:\n$claude_mcp_output"
-        }
-      done
-      for server in "${CLIENT_SCOPED_MCP_SERVERS[@]}"; do
-        if claude_mcp_server_connected "$claude_mcp_output" "$server"; then
-          claude_linear='connected'
-        else
-          claude_linear='unauthenticated (advisory — client-scoped)'
-          soft "client MCP '$server': unauthenticated (advisory — client-scoped)"
-        fi
-      done
-      if [ "$claude_mcp_exact" -eq 1 ]; then
-        claude_north="connected; $claude_north_topology"
-        claude_digitalocean='connected; scoped infrastructure services'
-        ok_detail "Claude reports North + DigitalOcean MCP connected"
-      fi
-    elif [ "$claude_mcp_status" -eq 124 ]; then
-      bad "Claude MCP health probe timed out after ${MCP_PROBE_TIMEOUT_SECONDS:-20}s; its process group was reaped"
-    else
-      bad "claude rejected its config while checking MCP health (exit $claude_mcp_status):\n$claude_mcp_output"
-    fi
-    # Orchestration ships INSIDE north (nixos-config 57b0521), so there is no
-    # separate flake input to pin and no detached marketplace checkout to
-    # verify. The plugin is read straight from the north working tree, the
-    # same way every other agent-config surface is symlinked from a repo, so
-    # exact-revision drift is not a thing that can happen here any more.
-    claude_orchestration='in-tree (north/orchestration)'
-  else bad "Claude health probe binary is missing, non-executable, or not the immutable /run/current-system/sw/bin/claude"; fi
-fi
-provider_group Claude "$before" \
-  "Hooks       $claude_bindings bindings" \
-  'Identity    adapter-pinned native spawn + repair → anthropic' \
-  'Topology    user Bash hook (loaded directly by Claude)' \
-  "Hook source $claude_hook_provenance" \
-  "Bootstrap   static config parsed · Orchestration $claude_orchestration" \
-  "MCP         North: $claude_north" \
-  "            Linear: $claude_linear" \
-  "            DigitalOcean: $claude_digitalocean"
 
 before=$fail
 need_toml "$CODEX/config.toml" 'Codex config'
@@ -1815,10 +1337,6 @@ provider_group Hermes "$before" \
   "Link        $hermes_link"
 
 before=$fail
-anthropic_installed='not probed'
-anthropic_authenticated='not probed'
-anthropic_headroom='not probed'
-anthropic_routing='not probed'
 openai_installed='not probed'
 openai_authenticated='not probed'
 openai_headroom='not probed'
@@ -1827,21 +1345,12 @@ allocation_summary='not probed'
 if [ "$LOCAL" -eq 1 ] && [ "$COORDINATION_ACTIVE" -eq 0 ]; then
   ok_detail 'Provider probes skipped because coordination is disabled'
 elif [ "$LOCAL" -eq 1 ]; then
-  anthropic_installed='unknown'
-  anthropic_authenticated='unknown'
-  anthropic_headroom='unknown'
-  anthropic_routing='unknown'
   openai_installed='unknown'
   openai_authenticated='unknown'
   openai_headroom='unknown'
   openai_routing='unknown'
   if command -v "${NORTH_PACKAGED_BIN:-north-packaged}" >/dev/null 2>&1; then
     if provider_output="$(run_north_packaged providers --json 2>&1)"; then
-      if anthropic_fields="$(printf '%s\n' "$provider_output" | "$REPO/scripts/agent-provider-status.sh" anthropic)"; then
-        IFS='|' read -r anthropic_installed anthropic_authenticated anthropic_headroom anthropic_routing <<<"$anthropic_fields"
-        [ "$anthropic_installed" = yes ] || bad "North reports Anthropic not installed"
-        [ "$anthropic_authenticated" = yes ] || bad "North reports Anthropic not authenticated"
-      else bad "North omitted or malformed Anthropic capability status:\n$provider_output"; fi
       if openai_fields="$(printf '%s\n' "$provider_output" | "$REPO/scripts/agent-provider-status.sh" openai)"; then
         IFS='|' read -r openai_installed openai_authenticated openai_headroom openai_routing <<<"$openai_fields"
         [ "$openai_installed" = yes ] || bad "North reports OpenAI/Codex not installed"
@@ -1877,7 +1386,6 @@ else ok_detail "provider readiness deferred to --local"; fi
 if [ "$LOCAL" -eq 1 ]; then
   provider_group North "$before" \
     'Surface     CLI/MCP only · web deployment retired' \
-    "Anthropic   installed=$anthropic_installed · authenticated=$anthropic_authenticated · routing=$anthropic_routing · headroom=$anthropic_headroom" \
     "OpenAI      installed=$openai_installed · authenticated=$openai_authenticated · routing=$openai_routing · headroom=$openai_headroom" \
     "Allocation  ${allocation_summary:-unknown}"
 else

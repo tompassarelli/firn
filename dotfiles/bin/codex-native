@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Launch Codex on the native profile: no north hooks, no managed lifecycle, no
-# orchestration. The Codex counterpart to claude-native.
+# orchestration.
 #
 # Managed Codex lanes carry the full hook manifest through /etc/codex/hooks and
 # run under a workspace sandbox. When that path stalls, this is the rung to

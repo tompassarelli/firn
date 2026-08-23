@@ -1,17 +1,14 @@
 name: Agent harness config
-# Anti-rot gate for Firn-owned profile fragments plus provider adapters.
+# Anti-rot gate for Firn-owned profile fragments plus the Codex adapter.
 # The Drift check (tests.yml) only governs .bnix<->.nix; this validates the
 # dotfile content that actually injects behavior into every agent session.
 on:
   push:
     branches: [main]
     paths:
-      - 'dotfiles/claude/**'
       - 'dotfiles/codex/**'
-      - 'dotfiles/bin/claude'
       - 'dotfiles/bin/codex'
       - 'dotfiles/bin/launcher.test.sh'
-      - 'modules/claude/**'
       - 'modules/codex/**'
       - 'modules/agent-core/**'
       - 'modules/hermes/**'
@@ -23,12 +20,9 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'dotfiles/claude/**'
       - 'dotfiles/codex/**'
-      - 'dotfiles/bin/claude'
       - 'dotfiles/bin/codex'
       - 'dotfiles/bin/launcher.test.sh'
-      - 'modules/claude/**'
       - 'modules/codex/**'
       - 'modules/agent-core/**'
       - 'modules/hermes/**'
@@ -55,7 +49,7 @@ jobs:
           fi
       - name: Validate agent harness config
         run: ./scripts/agent-config-check.sh
-      - name: Test provider identity boundaries
+      - name: Test Codex identity boundaries
         run: bash ./scripts/agent-config-check.test.sh
       - name: Test provider status contract
         run: ./scripts/agent-provider-status.test.sh

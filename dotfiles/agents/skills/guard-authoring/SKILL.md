@@ -5,9 +5,9 @@ description: >-
   Use whenever a request means a new or changed enforcement hook on this
   machine — "add a hook that stops agents from doing X", "block <command>",
   "make agents refuse Y", "warn when someone edits Z", "wire up a guard", or
-  debugging a guard that fires in Claude Code but not Codex (or not for
-  north-dispatched workers). A hook here is correct only when it lands in
-  several places at once: the script, the switchboard manifest, Codex's static
+  debugging a guard that fires in Codex but not for north-dispatched workers.
+  A hook here is correct only when it lands in several places at once: the
+  script, the switchboard manifest, Codex's static
   managed manifest, and North Bridge's worker guard chain — and only when
   something CLAIMS it, because default state is off and an unclaimed hook
   reaches nobody. Covers the deny protocol, both tool entrances
@@ -23,7 +23,7 @@ The half that gets rediscovered every time — and half-done every time — is t
 one guard has to be true in four places at once, and is off by default in all
 of them.
 
-Read this before writing the script, because two of the four places constrain
+Read this before writing the script, because the integration points constrain
 what the script may look like.
 
 Paths below are written `repo:path`, which resolves to
@@ -36,15 +36,15 @@ and you edit in a `worktrees/<slug>` lane, never in `main/` and never in a
 | What | Where | Lands by |
 |---|---|---|
 | the script | `north:profiles/tom/hooks/<name>.sh` | live immediately |
-| Claude Code wiring | `nixos-config:dotfiles/agents/hooks.d/<name>.json` + `HOOKS` in `nixos-config:dotfiles/bin/agents` | `agents apply` |
+| switchboard activity | `HOOKS` in `nixos-config:dotfiles/bin/agents` | `agents apply` |
 | Codex wiring | `nixos-config:modules/codex/requirements.toml`, `modules/codex/default.bnix`, `north:sdk/src/providers/codex-managed-hooks.ts` | rebuild + enforcement promote |
 | North Bridge wiring | `EDIT_GUARDS` / `BASH_GUARDS` / `WORKER_BASH_GUARDS` in `north:sdk/src/harness.ts` | live from the checkout |
 
 `~/.agents/hooks` is a home-manager out-of-store symlink to
 `north:profiles/tom/hooks` (via the `agent-profile` → `profiles/tom` link), so
 editing the script there is immediately live for everything that reads the
-directory — no rebuild. `~/.agents/hooks` is a PROJECTION: never author there,
-author in the checkout. Same for `~/.claude`, `~/.codex`, `/etc/codex`.
+directory — no rebuild. `~/.agents/hooks` is a projection: never author there,
+author in the checkout. The same rule applies to `~/.codex` and `/etc/codex`.
 
 ## The script
 
@@ -79,16 +79,14 @@ case "$payload" in *git*) ;; *) exit 0 ;; esac
 # 4. Decide. Silence is "no opinion" and is by far the common case.
 ```
 
-Step 2 is why the switchboard can turn a Codex guard off at all: Claude Code
-composes only active hooks into its settings, but Codex's managed manifest is
-static and machine-wide, so the gate has to live inside the script.
+Step 2 is why the switchboard can turn a Codex guard off: Codex's managed
+manifest is static and machine-wide, so the gate has to live inside the script.
 `authoring_guards_off` reads it through `lib/harness-dial.sh` →
 `lib/switchboard-activity.sh` → `~/.config/agents/activity.conf`.
 
 ### Deny protocol
 
-Two shapes are accepted, and Claude Code, Codex, and North's `evaluateGuards`
-all understand both:
+Two shapes are accepted, and Codex and North's `evaluateGuards` understand both:
 
 ```
 stdout JSON, exit 0:
@@ -118,7 +116,7 @@ is not enforcement — the identical action goes through `Bash` (`sed -i`,
 `python3 -c`, a heredoc, `git checkout`). The payload differs by entrance:
 `tool_input.file_path` on Edit/Write/MultiEdit, `tool_input.command` on Bash,
 and on Codex an `apply_patch` envelope whose paths may be relative and need
-resolving. Parse whichever your matchers can receive. `~/code/CLAUDE.md` states
+resolving. Parse whichever your matchers can receive. `~/code/AGENTS.md` states
 this flatly for the worktree guard: *enforcement on one entrance is not
 enforcement.*
 
@@ -143,67 +141,16 @@ position* and deliberately allows a commit message that quotes the phrase —
 because denying that would be maddening and would end the guard's life. Decide
 what precise shape is expensive, and let everything adjacent through.
 
-**Both providers and the bridge, or it did not land.** These are three
-independent wirings and a guard present in one is genuinely absent from the
-others. The bridge case is the quiet one: `north:sdk/src/harness.ts` builds
-worker options with `settingSources: []`, so a north-dispatched worker never
-reads `~/.claude/settings.json` — it runs exactly the scripts named in
+**Both Codex and the bridge, or it did not land.** These are independent
+wirings and a guard present in one is genuinely absent from the other. The
+bridge case is the quiet one: `north:sdk/src/harness.ts` builds worker options
+with `settingSources: []`, so a north-dispatched worker runs exactly the scripts named in
 `EDIT_GUARDS` / `BASH_GUARDS` / `WORKER_BASH_GUARDS` and nothing else. Check the
 arrays, don't assume them: `resolveManagedGuardChain` drops a name it cannot
 resolve and says nothing, so a chain can read complete in the source and be
 empty at runtime.
 
 ## Wiring, place by place
-
-### Claude Code
-
-`nixos-config:dotfiles/agents/hooks.d/<name>.json`:
-
-```json
-{
- "entries": [
-  {"event": "PreToolUse", "matcher": "Edit|Write|MultiEdit",
-   "hook": {"type": "command",
-            "command": "/home/tom/.agents/hooks/<name>.sh", "timeout": 10}},
-  {"event": "PreToolUse", "matcher": "Bash",
-   "hook": {"type": "command",
-            "command": "/home/tom/.agents/hooks/<name>.sh", "timeout": 10}}
- ],
- "tags": ["guards"],
- "follows": "<unit>",
- "requires": []
-}
-```
-
-Then add the bare name to the `HOOKS` array in `nixos-config:dotfiles/bin/agents`
-(alphabetical), and run `agents apply` — that is the only writer of the `hooks`
-key in `~/.claude/settings.json`.
-
-**Give it a claimant, or it reaches nobody.** The switchboard is two axes:
-PERMISSION (`enabled`/`disabled`, the user's, stored) and ACTIVITY (derived:
-permission AND some claimant active). A hook's claimants are the unit named in
-`follows`, plus every skill whose SKILL.md frontmatter lists it under `hooks:`.
-An unclaimed hook seeds `disabled` and stays dark; a claimed one seeds `enabled`
-but is still inactive until its claimant is on. Prefer the skill-side claim —
-the skill is what knows which enforcement its rules need, and it puts the
-statement in one file instead of scattering it:
-
-```yaml
-hooks:
-  - <name>
-```
-
-A guard whose rules are already written down belongs to that skill's `hooks:`
-list (`repo-safety` claims the worktree, blind-stage, and tripwire guards).
-A guard that is pure infrastructure gets no claimant and answers only to a
-direct `agents on <name>`.
-
-`requires: []` names other hooks this one cannot work without; the chain is
-composed whole or not at all.
-
-**Do not flip it on for the user.** Default off is the configured answer, not a
-fault to route around. Wire it, verify it, and say it is ready — activation is
-the user's call.
 
 ### Codex
 
@@ -212,7 +159,7 @@ Codex trusts a hook by the provenance of `/etc/codex/requirements.toml`
 never by where the file sits. Three edits:
 
 1. `nixos-config:modules/codex/requirements.toml` — the matcher block. Matchers
-   here are ANCHORED REGEXES, not Claude's alternation:
+   here are anchored regular expressions, not shell alternation:
    `^(Edit|Write|MultiEdit|apply_patch)$`, `^Bash$`. The command is always
    `/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/<name>.sh`
    — the pinned runtime, so a hook cannot inherit a surprising interpreter.
@@ -313,11 +260,10 @@ Two suites above the script:
 
 ## Verify it landed
 
-Run these; each answers exactly one of the four places.
+Run these; together they exercise all four places.
 
 ```bash
 agents status | grep <name>          # permission, activity, and who claims it
-python3 -c "import json;print(json.load(open('$HOME/.claude/settings.json'))['hooks'])"
 grep -n <name> /etc/codex/requirements.toml; ls -l /etc/codex/hooks/<name>.sh
 grep -n <name> ~/code/north/main/sdk/src/harness.ts
 bash ~/.agents/hooks/<name>.test.sh
@@ -326,8 +272,8 @@ echo '{"tool_name":"Bash","tool_input":{"command":"<the bad shape>"}}' \
 ```
 
 `agents status` showing `off (skill: <x> off)` is a correctly wired hook whose
-claimant is not on — that is a report, not a failure. `(no fragment)` means the
-manifest is missing. Nothing at all means it is absent from the `HOOKS` array.
+claimant is not on — that is a report, not a failure. Nothing at all means it
+is absent from the `HOOKS` array.
 
 ## Worked example — `launch-critical-worktree-guard`
 
@@ -337,9 +283,8 @@ The one guard that is wired everywhere, and the reference to read when in doubt:
   split out to `lib/launch_critical_decide.py` so it can be tested directly
   rather than through a heredoc
 - registry row `launch-critical-worktree-guard  authoring  deny  yes  yes …`
-- Claude Code: `hooks.d/worktree-guard.json`, two entries (Edit/Write/MultiEdit
-  **and** Bash), `"follows": "repo-safety"` — plus `repo-safety`'s SKILL.md
-  claiming `worktree-guard` under `hooks:`
+- switchboard `HOOKS` entry plus `repo-safety`'s SKILL.md claiming
+  `worktree-guard` under `hooks:`
 - Codex: `requirements.toml` on `^(Edit|Write|MultiEdit|apply_patch)$` and
   `^Bash$`, `default.bnix` promote rule, `codex-managed-hooks.ts` entry
 - carve-outs so no lane is trapped: the `worktrees/` parent directory (a

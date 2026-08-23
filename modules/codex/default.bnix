@@ -116,8 +116,8 @@
               [config
                ...]
               {:home.file
-                {;; Switchboard-owned, exactly like ~/.claude/CLAUDE.md and
-                 ;; ~/.agents/AGENTS.md: `agents apply` is the sole writer under
+                {;; Switchboard-owned, exactly like ~/.agents/AGENTS.md:
+                 ;; `agents apply` is the sole writer under
                  ;; ~/.config/agents, so every provider sees the same set
                  ;; composition.
                  ".codex/AGENTS.md"
@@ -131,4 +131,4 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/claude/commands"))}}})}})}))
+                        "/code/nixos-config/dotfiles/codex/prompts"))}}})}})}))
