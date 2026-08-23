@@ -57,6 +57,9 @@ type = "command"
 command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh"
 timeout = 10
 
+[[hooks.PreToolUse]]
+matcher = "^(Edit|Write|MultiEdit)$"
+
 [[hooks.PreToolUse.hooks]]
 type = "command"
 command = "/run/current-system/sw/bin/firn-system-policy"

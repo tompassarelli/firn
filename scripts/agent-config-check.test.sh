@@ -236,22 +236,26 @@ run_locked_hook_provenance_fixture() {
   fi
 }
 
-run_switchboard_activity_fixture() {
-  local activity="$scratch/activity.conf"
-  local missing="$scratch/missing-activity.conf"
+run_north_activation_fixture() {
+  local activation="$scratch/activation.json"
+  local missing="$scratch/missing-activation.json"
 
-  [ "$(AGENTS_ACTIVITY_FILE="$missing" switchboard_activity_state module coordination)" = unknown ]
-  AGENTS_ACTIVITY_FILE="$missing" switchboard_activity_is_active module coordination
+  [ "$(AGENT_CONFIG_ACTIVATION_FILE="$missing" north_unit_activity_state set coordination)" = unknown ]
+  ! AGENT_CONFIG_ACTIVATION_FILE="$missing" north_unit_activity_is_active set coordination
 
-  printf '%s\n' \
-    'module coordination off' \
-    'hook agent-spawn-guard on' >"$activity"
-  [ "$(AGENTS_ACTIVITY_FILE="$activity" switchboard_activity_state module coordination)" = off ]
-  ! AGENTS_ACTIVITY_FILE="$activity" switchboard_activity_is_active module coordination
-  [ "$(AGENTS_ACTIVITY_FILE="$activity" switchboard_activity_state hook agent-spawn-guard)" = on ]
-  AGENTS_ACTIVITY_FILE="$activity" switchboard_activity_is_active hook agent-spawn-guard
-  [ "$(AGENTS_ACTIVITY_FILE="$activity" switchboard_activity_state hook absent-hook)" = off ]
-  ! AGENTS_ACTIVITY_FILE="$activity" switchboard_activity_is_active hook absent-hook
+  cat >"$activation" <<'JSON'
+{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"coordination","kind":"set","permission":"off","active":false},{"id":"agent-spawn-guard","kind":"hook","permission":"on","active":true}]}
+JSON
+  [ "$(AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_state set coordination)" = off ]
+  ! AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_is_active set coordination
+  [ "$(AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_state hook agent-spawn-guard)" = on ]
+  AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_is_active hook agent-spawn-guard
+  [ "$(AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_state hook absent-hook)" = off ]
+  ! AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_is_active hook absent-hook
+
+  sed -i 's#north.agent-activation/v1#north.agent-activation/invalid#' "$activation"
+  [ "$(AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_state hook agent-spawn-guard)" = invalid ]
+  ! AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_is_active hook agent-spawn-guard
 }
 
 run_policy_contract_fixture() {
@@ -272,29 +276,11 @@ run_policy_contract_fixture() {
   firn_destination_digest="$(printf %s "$firn_destination" | sha256sum | awk '{print $1}')"
   credential_digest="$(printf %s "$credential" | sha256sum | awk '{print $1}')"
   repo_digest="$(printf %s "$repo_claim" | sha256sum | awk '{print $1}')"
-  mkdir -p "$base/policy" "$base/north-profile/hooks" \
-    "$base/north-profile/skills" \
-    "$base/skill-source/repo-safety" "$base/modules/north-profile/firn/skills/firn" "$base/farms/shared" \
-    "$base/farms/codex" "$base/projections"
+  mkdir -p "$base/policy"
   printf '# Global\n\n%s\n\n## Routes\n\n%s\n\n## Credentials\n\n%s\n' \
     "$preamble" "$route" "$credential" >"$base/policy/AGENTS.md"
   printf '# Repository\n\n## Architecture\n\n%s\n' "$repo_claim" \
     >"$base/policy/REPO-AGENTS.md"
-  printf '%s\n' '---' 'name: repo-safety' \
-    'description: Repository write safety.' '---' '' '# Repository safety' '' "$destination" \
-    >"$base/skill-source/repo-safety/SKILL.md"
-  printf '%s\n' '---' 'name: firn' '---' '' '# Firn' '' "$firn_destination" \
-    >"$base/modules/north-profile/firn/skills/firn/SKILL.md"
-  cat >"$base/switchboard" <<'SH'
-HOOKS=(worktree-guard)
-SKILLS=(repo-safety firn)
-skill_source() {
-  case "$1" in
-    repo-safety) echo "$HOME/skill-source/repo-safety" ;;
-    firn) echo "$NIXOS_CONFIG/modules/north-profile/firn/skills/firn" ;;
-  esac
-}
-SH
   cat >"$base/requirements.toml" <<'TOML'
 [hooks]
 managed_dir = "/etc/codex/hooks"
@@ -309,14 +295,6 @@ matcher = "^Bash$"
 type = "command"
 command = "/etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh"
 TOML
-  printf 'id\tcategory\tkind\tin_all\tttl_req\tpath\tevents\n%s\n' \
-    $'launch-critical-worktree-guard\tauthoring\tdeny\tyes\tyes\tlaunch-critical-worktree-guard.sh\tPreToolUse:Edit|Write|MultiEdit,PreToolUse:Bash' \
-    >"$base/north-profile/hooks/registry.tsv"
-  cat >"$base/harness.ts" <<'TS'
-const EDIT_GUARDS = resolveManagedGuardChain(["launch-critical-worktree-guard.sh"]);
-const BASH_GUARDS = resolveManagedGuardChain(["launch-critical-worktree-guard.sh"]);
-const WORKER_BASH_GUARDS = resolveManagedGuardChain(["launch-critical-worktree-guard.sh"]);
-TS
   cat >"$base/manifest.toml" <<TOML
 version = 1
 approved_route = [
@@ -330,17 +308,12 @@ claim = [
   { key = "repo.example.architecture", owner = "repo:example", role = "owner", scope = "repo:example", surface = "repo", section = "Architecture", digest = "$repo_digest" },
 ]
 guard = [
-  { key = "guard.worktree", switchboard = "worktree-guard", command = "launch-critical-worktree-guard.sh", codex_command = "/etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh", codex = ["PreToolUse:^(Edit|Write|MultiEdit|apply_patch)$", "PreToolUse:^Bash$"], north_registry = "launch-critical-worktree-guard", north_path = "launch-critical-worktree-guard.sh", north_events = "PreToolUse:Edit|Write|MultiEdit,PreToolUse:Bash", north_chains = ["EDIT_GUARDS", "BASH_GUARDS", "WORKER_BASH_GUARDS"] },
+  { key = "guard.worktree", unit = "launch-critical-worktree-guard", command = "launch-critical-worktree-guard.sh", codex_command = "/etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh", codex = ["PreToolUse:^(Edit|Write|MultiEdit|apply_patch)$", "PreToolUse:^Bash$"] },
 ]
 TOML
-  printf '%s\n' 'skill repo-safety on' >"$base/activity.conf"
-  for farm in shared codex; do
-    ln -s ../../skill-source/repo-safety "$base/farms/$farm/repo-safety"
-  done
-  ln -s ../../skill-source/repo-safety "$base/north-profile/skills/repo-safety"
-  for projection in state-agents agents codex; do
-    cp "$base/policy/AGENTS.md" "$base/projections/$projection"
-  done
+  cat >"$base/activation.json" <<'JSON'
+{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"launch-critical-worktree-guard","kind":"hook","title":"Worktree guard","triggerDescription":"Protect launch-critical checkouts.","permission":"on","active":true,"owner":{"repo":"north","path":"profiles/tom/hooks/launch-critical-worktree-guard.sh"},"members":[],"supports":["repo-safety"],"distributions":[],"activationPaths":[]}]}
+JSON
 
   run_policy_case() {
     local root="$1"
@@ -348,16 +321,8 @@ TOML
     AGENT_POLICY_MANIFEST="$root/manifest.toml" \
     AGENT_POLICY_BOOTSTRAP="$root/policy/AGENTS.md" \
     AGENT_POLICY_REPO_AGENTS="$root/policy/REPO-AGENTS.md" \
-    AGENT_POLICY_SWITCHBOARD="$root/switchboard" \
     AGENT_POLICY_CODEX_REQUIREMENTS="$root/requirements.toml" \
-    AGENT_POLICY_NORTH_PROFILE="$root/north-profile" \
-    AGENT_POLICY_NORTH_HARNESS="$root/harness.ts" \
-    AGENT_POLICY_ACTIVITY="$root/activity.conf" \
-    AGENT_POLICY_SHARED_SKILLS="$root/farms/shared" \
-    AGENT_POLICY_CODEX_SKILLS="$root/farms/codex" \
-    AGENT_POLICY_STATE_AGENTS="$root/projections/state-agents" \
-    AGENT_POLICY_AGENTS_PROJECTION="$root/projections/agents" \
-    AGENT_POLICY_CODEX_PROJECTION="$root/projections/codex" \
+    AGENT_POLICY_ACTIVATION="$root/activation.json" \
       python3 "$REPO/scripts/agent-policy-contract.py" --repo "$root" --local
   }
 
@@ -392,22 +357,18 @@ TOML
     sed -i "s|$old_digest|$new_digest|" "$1/manifest.toml"
     sed -i 's/Repository edits, lanes, pins, commits, landing, or pushes →/Repository writes; create a lane and stage paths →/' "$1/policy/AGENTS.md"
   }
-  mutate_wrong_destination() {
-    sed -i 's/destination_digest = "[0-9a-f]\{64\}"/destination_digest = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"/' "$1/manifest.toml"
-  }
-  mutate_missing_destination() {
-    sed -i 's/, destination_section = "preamble", destination_digest = "[0-9a-f]\{64\}"//' "$1/manifest.toml"
-  }
-  mutate_unreadable_skill() { rm "$1/skill-source/repo-safety/SKILL.md"; }
-  mutate_projection() { printf 'drift\n' >>"$1/projections/codex"; }
-  mutate_farm() { rm "$1/farms/shared/repo-safety"; }
-  mutate_hook() {
-    sed -i 's/const WORKER_BASH_GUARDS.*/const WORKER_BASH_GUARDS = resolveManagedGuardChain([]);/' "$1/harness.ts"
-  }
   mutate_codex_hook_path() {
     sed -i 's#/etc/codex/hooks/launch-critical-worktree-guard.sh#/tmp/launch-critical-worktree-guard.sh#' "$1/requirements.toml"
   }
-  mutate_activity_state() { sed -i 's/ on$/ maybe/' "$1/activity.conf"; }
+  mutate_activation_schema() {
+    sed -i 's#north.agent-activation/v1#north.agent-activation/invalid#' "$1/activation.json"
+  }
+  mutate_activation_permission() {
+    sed -i 's/"permission":"on"/"permission":true/' "$1/activation.json"
+  }
+  mutate_activation_missing_hook() {
+    sed -i 's/launch-critical-worktree-guard/another-hook/' "$1/activation.json"
+  }
   mutate_repo_scope() {
     sed -i 's/scope = "repo:example", surface = "repo"/scope = "machine", surface = "repo"/' "$1/manifest.toml"
   }
@@ -417,14 +378,10 @@ TOML
   expect_policy_reject unmapped 'unmapped normative block' mutate_unmapped
   expect_policy_reject skill-procedure 'skill-owned procedure remains in bootstrap' mutate_skill_procedure
   expect_policy_reject procedural-route 'route differs from the closed approved-route catalog' mutate_procedural_route
-  expect_policy_reject wrong-destination 'destination skill block is absent' mutate_wrong_destination
-  expect_policy_reject missing-destination 'destination skill section or digest is invalid' mutate_missing_destination
-  expect_policy_reject unreadable-skill 'active skill source is unreadable' mutate_unreadable_skill
-  expect_policy_reject projection-drift 'projection digest mismatch' mutate_projection
-  expect_policy_reject farm-drift 'shared skill farm is missing active skill' mutate_farm
-  expect_policy_reject hook-drift 'North worker guard reachability drift' mutate_hook
-  expect_policy_reject codex-hook-path 'Codex guard identity or reachability drift' mutate_codex_hook_path
-  expect_policy_reject malformed-activity 'active skill projection has invalid state' mutate_activity_state
+  expect_policy_reject codex-hook-path 'Codex provider command drift' mutate_codex_hook_path
+  expect_policy_reject activation-schema 'North activation schema is not' mutate_activation_schema
+  expect_policy_reject activation-permission 'invalid permission' mutate_activation_permission
+  expect_policy_reject activation-missing-hook 'provider-bound hook is absent' mutate_activation_missing_hook
   expect_policy_reject repo-global 'owner role has invalid repository authority' mutate_repo_scope
 }
 
@@ -442,16 +399,16 @@ if [ "${1:-}" = '--locked-hook-provenance-only' ]; then
   exit 0
 fi
 
-if [ "${1:-}" = '--switchboard-activity-only' ]; then
+if [ "${1:-}" = '--north-activation-only' ]; then
   source "$REPO/scripts/agent-config-check.sh"
-  run_switchboard_activity_fixture
-  printf 'ok: advisory follows the derived switchboard activity projection\n'
+  run_north_activation_fixture
+  printf 'ok: advisory reads the singular North activation generation\n'
   exit 0
 fi
 
 if [ "${1:-}" = '--policy-contract-only' ]; then
   run_policy_contract_fixture
-  printf 'ok: explicit policy ownership rejects all fifteen drift classes\n'
+  printf 'ok: singular catalog policy rejects ownership, provider, and activation drift\n'
   exit 0
 fi
 
@@ -579,7 +536,7 @@ NORTH_ENFORCEMENT_ROOT="$real_enforcement"
 # longer be pinned to a flake input.
 grep -Fq '(promoted "agent-spawn-guard.sh" "north/profiles/tom/hooks/agent-spawn-guard.sh")' \
   "$REPO/modules/codex/default.bnix"
-grep -Fq '(promoted "beagle-session-start.sh" "beagle/integrations/north/hooks/beagle-session-start.sh")' \
+grep -Fq '(providerAdapter "beagle-session-start.sh")' \
   "$REPO/modules/codex/default.bnix"
 grep -Fq 'enforcement "/var/lib/north-enforcement/active/current"' \
   "$REPO/modules/codex/default.bnix"
@@ -587,8 +544,9 @@ if grep -Fq '(s inputs.north "/agent-profile/hooks/' "$REPO/modules/codex/defaul
   printf 'Codex module still pins a promoted North hook to the flake input\n' >&2
   exit 1
 fi
-if grep -Fq '(s inputs.beagle "/integrations/north/hooks/' "$REPO/modules/codex/default.bnix"; then
-  printf 'Codex module still pins a promoted Beagle hook to the flake input\n' >&2
+if grep -Eq 'promoted "beagle-session-start\.sh"|north-clock-guard-codex' \
+  "$REPO/modules/codex/default.bnix"; then
+  printf 'Codex module still bypasses activation or carries the retired clock guard\n' >&2
   exit 1
 fi
 

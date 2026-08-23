@@ -5,24 +5,39 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 test_root=$(mktemp -d)
 trap 'rm -rf "${test_root:?}"' EXIT
 
-mkdir -p "$test_root/code/nixos-config"
-ln -s "$repo" "$test_root/code/nixos-config/main"
+mkdir -p "$test_root/bin"
+cat >"$test_root/bin/north" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"$ESTIMATE_TEST_CALLS"
+[[ "${1:-} ${2:-}" == 'config agents' ]]
+shift 2
+case "${1:-}" in
+  path)
+    [[ "${2:-}" == estimate ]]
+    printf '%s\n' "$ESTIMATE_TEST_REPO/dotfiles/agents/skills/estimate/SKILL.md"
+    ;;
+  on|off)
+    [[ "${2:-}" == estimate ]]
+    printf 'generation fixture: estimate %s\n' "$1"
+    ;;
+  *) exit 2 ;;
+esac
+SH
+chmod +x "$test_root/bin/north"
+export ESTIMATE_TEST_CALLS="$test_root/calls"
+export ESTIMATE_TEST_REPO="$repo"
 
 ag() {
-  HOME=$test_root \
-    AGENTS_MODULES=$repo/dotfiles/agents/modules.d \
+  AGENTS_NORTH_BIN="$test_root/bin/north" \
     "$repo/dotfiles/bin/agents" "$@"
 }
 
 ag on estimate >/dev/null
-test -L "$test_root/.config/agents/skills/estimate"
-test -L "$test_root/.codex/skills/estimate"
-test -r "$test_root/.codex/skills/estimate/agents/openai.yaml"
-test "$(ag path estimate)" = "$test_root/code/nixos-config/main/dotfiles/agents/skills/estimate/SKILL.md"
+test "$(ag path estimate)" = "$repo/dotfiles/agents/skills/estimate/SKILL.md"
 
 ag off estimate >/dev/null
-test ! -e "$test_root/.config/agents/skills/estimate"
-test ! -e "$test_root/.codex/skills/estimate"
+test "$(<"$ESTIMATE_TEST_CALLS")" = $'config agents on estimate\nconfig agents path estimate\nconfig agents off estimate'
 
 todo_skill="$repo/dotfiles/agents/skills/todo/SKILL.md"
 delegate_skill="$repo/dotfiles/agents/skills/delegating-agents/SKILL.md"
@@ -112,4 +127,4 @@ assert winner["reviewer_model"] == "gpt-5.6-sol"
 assert record["quality_debt"][0]["attempt"] == winner["id"]
 PY
 
-printf 'ok: estimate skill activates and the Luna/Terra/Sol attempt-review receipt is representable\n'
+printf 'ok: estimate routes through North and the Luna/Terra/Sol attempt-review receipt is representable\n'

@@ -4,7 +4,7 @@
             [firn.system-policy :as policy]))
 
 (def max-hook-bytes Int 1048576)
-(def max-state-bytes Int 65536)
+(def max-activation-bytes Int 1048576)
 
 (defunion HookPayload
   (HookPayloadParsed
@@ -145,6 +145,76 @@
         [(JsonBoolean offset value) -1]
         [(JsonNull offset) -1]))))
 
+(defn object-array-field-start
+  [events (Vec json/JsonEvent)
+   object-start Int
+   wanted String]
+  Int
+  (loop [index Int (+ object-start 1)]
+    (if (>= index (count events))
+      -1
+      (match (nth events index)
+        [(JsonObjectEnd offset) -1]
+        [(JsonKey offset key)
+         (let [value-index Int (+ index 1)
+               next Int (json-value-end events value-index)]
+           (if (< next 0)
+             -1
+             (if (= key wanted)
+               (match (nth events value-index)
+                 [(JsonArrayStart value-offset) value-index]
+                 [(JsonObjectStart value-offset) -1]
+                 [(JsonObjectEnd value-offset) -1]
+                 [(JsonArrayEnd value-offset) -1]
+                 [(JsonKey value-offset value) -1]
+                 [(JsonString value-offset value) -1]
+                 [(JsonNumber value-offset lexeme) -1]
+                 [(JsonBoolean value-offset value) -1]
+                 [(JsonNull value-offset) -1])
+               (recur next))))]
+        [(JsonObjectStart offset) -1]
+        [(JsonArrayStart offset) -1]
+        [(JsonArrayEnd offset) -1]
+        [(JsonString offset value) -1]
+        [(JsonNumber offset lexeme) -1]
+        [(JsonBoolean offset value) -1]
+        [(JsonNull offset) -1]))))
+
+(defn object-bool-field
+  [events (Vec json/JsonEvent)
+   object-start Int
+   wanted String]
+  (U Bool Nil)
+  (loop [index Int (+ object-start 1)]
+    (if (>= index (count events))
+      nil
+      (match (nth events index)
+        [(JsonObjectEnd offset) nil]
+        [(JsonKey offset key)
+         (let [value-index Int (+ index 1)
+               next Int (json-value-end events value-index)]
+           (if (< next 0)
+             nil
+             (if (= key wanted)
+               (match (nth events value-index)
+                 [(JsonBoolean value-offset value) value]
+                 [(JsonObjectStart value-offset) nil]
+                 [(JsonObjectEnd value-offset) nil]
+                 [(JsonArrayStart value-offset) nil]
+                 [(JsonArrayEnd value-offset) nil]
+                 [(JsonKey value-offset value) nil]
+                 [(JsonString value-offset value) nil]
+                 [(JsonNumber value-offset lexeme) nil]
+                 [(JsonNull value-offset) nil])
+               (recur next))))]
+        [(JsonObjectStart offset) nil]
+        [(JsonArrayStart offset) nil]
+        [(JsonArrayEnd offset) nil]
+        [(JsonString offset value) nil]
+        [(JsonNumber offset lexeme) nil]
+        [(JsonBoolean offset value) nil]
+        [(JsonNull offset) nil]))))
+
 (defn decode-hook-payload [text String] HookPayload
   (match (json/decode text)
     [(JsonDecodeError offset message) (->HookPayloadRejected true)]
@@ -190,63 +260,105 @@
 (defn kill-switch-env [] KillSwitchEnv
   (env-kill-switch-value (System/getenv "AGENT_NO_AUTHORING_HOOKS")))
 
-(defn harness-state-path [] (U String Nil)
-  (let [explicit (U String Nil) (System/getenv "NORTH_HARNESS_STATE")]
+(defn activation-path [] (U String Nil)
+  (let [explicit (U String Nil) (System/getenv "NORTH_AGENT_STATE_ROOT")]
     (cond
-      (and (some? explicit) (not= explicit "")) explicit
+      (and (some? explicit) (not= explicit ""))
+      (str explicit "/current/activation.json")
       :else
-      (let [home (U String Nil) (System/getenv "HOME")]
-        (if (or (nil? home) (= home ""))
-          nil
-          (str home "/.local/state/north/harness.conf"))))))
+      (let [state-home (U String Nil) (System/getenv "XDG_STATE_HOME")]
+        (if (and (some? state-home) (not= state-home ""))
+          (str state-home "/north/agents/current/activation.json")
+          (let [home (U String Nil) (System/getenv "HOME")]
+            (if (or (nil? home) (= home ""))
+              nil
+              (str home "/.local/state/north/agents/current/activation.json"))))))))
 
-(defn line-end
-  [text String
-   start Int] Int
-  (loop [index Int start]
-    (if (or (>= index (count text))
-            (= (subs text index (+ index 1)) "\n"))
-      index
-      (recur (+ index 1)))))
-
-(defn state-setting
-  [text String
-   wanted String] (U String Nil)
-  (loop [start Int 0
-         found (U String Nil) nil]
-    (if (>= start (count text))
-      found
-      (let [end Int (line-end text start)
-            line String (subs text start end)
-            prefix String (str wanted "=")]
-        (recur (+ end 1)
-          (if (and (>= (count line) (count prefix))
-                   (= (subs line 0 (count prefix)) prefix))
-            (subs line (count prefix) (count line))
-            found))))))
-
-(defn stored-guards-off? [text String] Bool
-  (let [item (U String Nil) (state-setting text "hooks.hook.firn-system-policy")
-        category (U String Nil) (state-setting text "guards")
-        all (U String Nil) (state-setting text "hooks")]
-    (cond
-      (some? item) (= item "off")
-      (some? category) (= category "off")
-      (some? all) (= all "off")
-      :else false)))
-
-(defn state-guards-off? [] Bool
-  (let [path (U String Nil) (harness-state-path)]
-    (if (nil? path)
+(defn activation-unit-active-events?
+  [events (Vec json/JsonEvent)
+   units-start Int
+   wanted-kind String
+   wanted-id String]
+  Bool
+  (loop [index Int (+ units-start 1)
+         matched Bool false
+         active Bool false
+         valid Bool true]
+    (if (or (>= index (count events)) (not valid))
       false
-      (match (host.fs/read-text-bounded path max-state-bytes)
-        [(host.fs/ReadTextBoundedOk text) (stored-guards-off? text)]
-        [(host.fs/ReadTextBoundedError errno) false]))))
+      (match (nth events index)
+        [(JsonArrayEnd offset) (and matched active)]
+        [(JsonObjectStart offset)
+         (let [next Int (json-value-end events index)
+               kind (U String Nil) (object-string-field events index "kind")
+               id (U String Nil) (object-string-field events index "id")
+               permission (U String Nil) (object-string-field events index "permission")
+               unit-active (U Bool Nil) (object-bool-field events index "active")
+               wanted Bool (and (= kind wanted-kind) (= id wanted-id))]
+           (if (< next 0)
+             false
+             (recur next
+               (if matched true wanted)
+               (if wanted
+                 (if (or (nil? permission) (nil? unit-active)) false unit-active)
+                 active)
+               (if (or (and matched wanted)
+                       (and wanted (or (nil? permission) (nil? unit-active))))
+                 false
+                 true))))]
+        [(JsonObjectEnd offset) false]
+        [(JsonArrayStart offset) false]
+        [(JsonKey offset value) false]
+        [(JsonString offset value) false]
+        [(JsonNumber offset lexeme) false]
+        [(JsonBoolean offset value) false]
+        [(JsonNull offset) false]))))
+
+(defn activation-unit-active?
+  [text String
+   wanted-kind String
+   wanted-id String]
+  Bool
+  (match (json/decode text)
+    [(JsonDecodeError offset message) false]
+    [(JsonDecoded events)
+     (if (or (empty? events)
+             (not= (json-value-end events 0) (count events)))
+       false
+       (match (nth events 0)
+         [(JsonObjectStart offset)
+          (let [schema (U String Nil) (object-string-field events 0 "schema")
+                catalog-digest (U String Nil) (object-string-field events 0 "catalogDigest")
+                generation-id (U String Nil) (object-string-field events 0 "generationId")
+                units Int (object-array-field-start events 0 "units")]
+            (and (= schema "north.agent-activation/v1")
+                 (some? catalog-digest)
+                 (some? generation-id)
+                 (>= units 0)
+                 (activation-unit-active-events?
+                   events units wanted-kind wanted-id)))]
+         [(JsonObjectEnd offset) false]
+         [(JsonArrayStart offset) false]
+         [(JsonArrayEnd offset) false]
+         [(JsonKey offset value) false]
+         [(JsonString offset value) false]
+         [(JsonNumber offset lexeme) false]
+         [(JsonBoolean offset value) false]
+         [(JsonNull offset) false]))]))
+
+(defn activation-guards-off? [] Bool
+  (let [path (U String Nil) (activation-path)]
+    (if (nil? path)
+      true
+      (match (host.fs/read-text-bounded path max-activation-bytes)
+        [(host.fs/ReadTextBoundedOk text)
+         (not (activation-unit-active? text "hook" "firn-system-policy"))]
+        [(host.fs/ReadTextBoundedError errno) true]))))
 
 (defn guards-off? [] Bool
   (match (kill-switch-env)
     [(KillSwitchEnvDecision off) off]
-    [(KillSwitchEnvUnset token) (state-guards-off?)]))
+    [(KillSwitchEnvUnset token) (activation-guards-off?)]))
 
 (defn safe-session-byte? [byte Int] Bool
   (or (and (>= byte 65) (<= byte 90))

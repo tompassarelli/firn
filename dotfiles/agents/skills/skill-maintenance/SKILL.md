@@ -59,8 +59,8 @@ prior cases before broadening it.
 
 ## Ratchet the existing owner
 
-1. Use `agents status` and `agents path <name>` plus repository search to find
-   the current owning policy.
+1. Use `agents status`, `agents inspect <id>`, and `agents path <id>` plus
+   repository search to find the current owning policy.
 2. Amend that owner first. Remove superseded, conflicting, or duplicate wording
    in the same change so policy ratchets instead of accumulating archaeology.
 3. Keep `AGENTS.md` for universal or directory-wide boundaries that must govern
@@ -99,12 +99,12 @@ the intended behavior.
 ## Publish before claiming retention
 
 Land the owning change through its normal publication path, fast-forward the
-clean authority checkout, activate the owning unit, and prove the live route
-resolves to the landed authority. Use `agents status`, `agents path`, and
-`agents apply` as directed by `agent-policy`, and inspect the applicable shared
-and Codex live skill paths.
+clean authority checkout, run `agents sync`, activate the owning UnitId, and
+prove the current generation resolves to the landed authority. Use `agents
+status`, `agents inspect <id>`, and `agents path <id>` as directed by
+`agent-policy`.
 
 Do not say the feedback is remembered, retained, or now policy while it exists
-only in a draft, lane, candidate commit, test fixture, or inactive registry
-entry. The claim becomes true only after publication, activation, and live-path
-proof all succeed.
+only in a draft, lane, candidate commit, test fixture, or inactive catalog row.
+The claim becomes true only after publication, activation, and current-
+generation proof all succeed.

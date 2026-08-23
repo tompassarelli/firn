@@ -27,11 +27,12 @@ HERE="$(
   drain_stdin
   exit 0
 }
-ACTIVITY_LIB="$HERE/lib/switchboard-activity.sh"
+ACTIVATION_LIB="$HERE/lib/north-agent-activation.sh"
+NORTH_AGENT_PYTHON="$HERE/runtime/python3"
 # shellcheck disable=SC1090
-if [ ! -r "$ACTIVITY_LIB" ] ||
-   ! source "$ACTIVITY_LIB" ||
-   ! agents_switchboard_active hook north-session-lifecycle; then
+if [ ! -r "$ACTIVATION_LIB" ] ||
+   ! source "$ACTIVATION_LIB" ||
+   ! north_agent_unit_active hook north-session-lifecycle; then
   drain_stdin
   exit 0
 fi
@@ -45,4 +46,5 @@ TARGET="$NORTH_HOME/bin/north-on-stop"
 
 unset AGENT_ID AGENT_TOPOLOGY NORTH_MANAGED_LANE
 export AGENT_PROVIDER=openai NORTH_HOME
+unset NORTH_AGENT_PYTHON
 exec "$BASH_BIN" "$TARGET" "$@"

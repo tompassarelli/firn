@@ -53,6 +53,9 @@ def declared_paths(path):
     relative_paths.update(
         re.findall(r'\(promoted\s+"([^"]+)"\s+"[^"]+"\)', text)
     )
+    relative_paths.update(
+        re.findall(r'\(providerAdapter\s+"([^"]+)"\)', text)
+    )
     return {f"{managed_dir}/{relative}" for relative in relative_paths}
 
 
@@ -71,6 +74,18 @@ print(
     f"ok: {len(required_paths)} requirements command paths have source and generated install declarations"
 )
 PY
+
+if rg -n '"\.codex/skills"|current/skills/codex' "$source_file" "$generated_file"; then
+  printf 'Home Manager still replaces the provider-owned Codex skills directory\n' >&2
+  exit 1
+fi
+
+grep -Fq '(providerAdapter "beagle-session-start.sh")' "$source_file"
+if rg -n 'north-clock-guard-codex|promoted "beagle-session-start\.sh"' \
+  "$source_file" "$generated_file"; then
+  printf 'retired or activation-bypassing Codex hook wiring remains\n' >&2
+  exit 1
+fi
 
 if rg -n \
   'mkOutOfStoreSymlink.*config\.toml|code/nixos-config/dotfiles/codex/config\.toml' \

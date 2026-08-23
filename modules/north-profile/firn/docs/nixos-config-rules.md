@@ -49,31 +49,38 @@ publication, or rollback that must restore those exact bytes.
 
 ## Symlinks
 
-`~/.agents/{AGENTS.md,docs,hooks}` are `mkOutOfStoreSymlink`s into North's
-composed profile. `~/.agents/skills` instead points at the atomic runtime farm
-`~/.local/state/north/skills`; North inventories the complete source at
-`~/code/north/main/profiles/tom/skills` and publishes resolved immutable
-generations there. Injected context surfaces are switchboard-owned instead:
-`~/.codex/AGENTS.md` and `~/code/AGENTS.md` point into `~/.config/agents`,
-which only `agents apply` writes, so one manifest slot decides what every
-active interface loads. Provider-specific adapters remain in `nixos-config`.
+`~/.agents/docs` and `~/.agents/hooks` are `mkOutOfStoreSymlink`s into North's
+shared profile. Instructions and skills instead point into North's one current
+activation generation under `~/.local/state/north/agents/current`:
+
+- `~/.agents/AGENTS.md` → `instructions/shared/AGENTS.md`;
+- `~/.codex/AGENTS.md` → `instructions/codex/AGENTS.md`;
+- `~/code/AGENTS.md` → `instructions/code/AGENTS.md`;
+- `~/.agents/skills` → `skills/shared`.
+
+North owns the catalog, permission transition, set/support resolution, atomic
+generation, and those projections. Firn owns only stable discovery pointers
+and immutable provider wiring. North may maintain exact catalog-owned
+compatibility links inside the existing `~/.codex/skills` directory, but Firn
+never replaces that directory or its provider-owned `.system` entries. The
+`agents` command delegates directly to `north config agents`; it is not a
+second reader or writer.
 The immutable managed Codex hook directory
 under `/etc/codex/hooks` is the deliberate security exception and sources each
 hook from its owning locked flake input.
 
 ## Shared skill dials
 
-`north config skills` is the only runtime control surface for the shared farm.
-It resolves item over category over all over default-on, stages a complete
-generation, and atomically replaces the farm pointer. `category:` is optional
-SKILL.md frontmatter; missing metadata is the `uncategorized` category. Firn's
-owned skill declares `category: nixos`. Provider/plugin-contributed skills
-remain outside this farm and are not toggled by North.
+`north config agents` is the only runtime control surface for catalogued
+skills, hooks, and sets. It stages a complete generation and atomically
+replaces one `current` pointer. `category:` remains optional SKILL.md metadata;
+missing metadata is `uncategorized`. Firn's owned skill declares
+`category: nixos`.
 
 Home Manager owns only the stable chain:
-`~/.agents/skills → ~/.local/state/north/skills`. It must
-never select individual skills or wire provider discovery directly back to the
-source profile.
+`~/.agents/skills → ~/.local/state/north/agents/current/skills/shared`. It must
+never select individual skills or wire provider discovery directly back to an
+owner source.
 
 ## CI validation
 
@@ -87,22 +94,21 @@ OpenAI provider readiness. Normal output is a grouped summary;
 
 ## Hooks kill-switch
 
-**Behavior-injecting hooks share one kill-switch** — semantics live in
-`~/.agents/hooks/lib/authoring-killswitch.sh`, sourced by every guard and by
-`north config`, so report and enforcement cannot disagree:
+**Behavior-injecting hooks share one resolved activity authority** — North
+publishes every hook's permission, active state, supporting claimants, and
+activation paths in `current/activation.json`, so report and enforcement
+cannot disagree:
 
-- **Persistent, live flip (all sessions):** `north config guards off` /
-  `guards on` — writes `guards=on|off` to
-  `~/.local/state/north/harness.conf`; hooks re-read it on every call, so it
-  takes effect immediately, no relaunch.
+- **Persistent, live flip (all sessions):** `agents off <hook-id>` /
+  `agents on <hook-id>` — publishes a new immutable activation generation.
 - **Per-session override at launch:** `AGENT_NO_AUTHORING_HOOKS=1 codex` —
   any value except `0`/`false`/empty engages the kill-switch for that session;
-  `0`/`false` forces guards LIVE (beats the state file). The var must be in
+  `0`/`false` forces guards live (beats stored activity). The var must be in
   the provider CLI's own launch environment — exporting inside a running
   session does nothing.
 
 Killed = every authoring guard no-ops (beagle SessionStart handshake,
-firn guard, racket-build guard, agent-spawn-guard, tripwire, north-clock guard)
+Firn system policy, agent-spawn guard, tripwire, and North clock guard)
 — used to pin a neutral, confound-free session.
 
 ## Adding new wiring

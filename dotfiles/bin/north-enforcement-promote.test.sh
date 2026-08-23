@@ -65,7 +65,6 @@ commit_all() {
 git_init "$NORTH"
 mkdir -p "$NORTH/profiles/tom/hooks/lib" "$NORTH/bin"
 printf 'guard v1\n' >"$NORTH/profiles/tom/hooks/agent-spawn-guard.sh"
-printf 'registry v1\n' >"$NORTH/profiles/tom/hooks/registry.tsv"
 printf 'dial v1\n' >"$NORTH/profiles/tom/hooks/lib/harness-dial.sh"
 ln -s ../../../../../external/main/integrations/north/hooks/external-guard.sh \
   "$NORTH/profiles/tom/hooks/cross-repo-guard.sh"
@@ -139,8 +138,6 @@ check 'North hook tree is promoted' \
   test -f "$CURRENT/north/profiles/tom/hooks/agent-spawn-guard.sh"
 check 'nested North hook lib is promoted' \
   test -f "$CURRENT/north/profiles/tom/hooks/lib/harness-dial.sh"
-check 'non-script hook data is promoted' \
-  test -f "$CURRENT/north/profiles/tom/hooks/registry.tsv"
 check 'lifecycle runtimes are promoted' \
   test -f "$CURRENT/north/bin/north-on-spawn"
 check 'Beagle Codex hooks are promoted under their own provenance' \

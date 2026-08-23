@@ -1,4 +1,4 @@
 interface:
   display_name: "Agent Policy"
   short_description: "Author and activate agent policy safely"
-  default_prompt: "Use $agent-policy to change agent instructions or skills at their switchboard-owned source."
+  default_prompt: "Use $agent-policy to change agent instructions, skills, hooks, sets, or North activation metadata at their exact owner source."

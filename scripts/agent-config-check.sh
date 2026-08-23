@@ -329,6 +329,11 @@ enabled = {
                 "matcher": "^(Edit|Write|MultiEdit|apply_patch)$",
                 "hooks": [
                     command("launch-critical-worktree-guard.sh", 10),
+                ],
+            },
+            {
+                "matcher": "^(Edit|Write|MultiEdit)$",
+                "hooks": [
                     direct_command("/run/current-system/sw/bin/firn-system-policy", 10),
                 ],
             },
@@ -607,30 +612,41 @@ north_wrapped_runtime_matches_locked_source() {
     [ "${wrapper_lines[$((index + 1))]}" = "$expected_exec" ]
 }
 
- # Read the switchboard's derived activity projection without requiring the
-# switchboard CLI or any North service. A missing projection preserves legacy
-# behavior for live probes; once the projection exists, an absent row is off.
-switchboard_activity_state() {
+# Read one decision from North's immutable activation generation. This checker
+# does not resolve permissions, sets, claims, or kill switches independently.
+north_unit_activity_state() {
   local wanted_kind="$1" wanted_name="$2"
-  local activity_file="${AGENTS_ACTIVITY_FILE:-${AGENT_CONFIG_LIVE_AGENT_STATE:-$HOME/.config/agents}/activity.conf}"
-  local kind name state rest
+  local state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+  local state_root="${NORTH_AGENT_STATE_ROOT:-$state_home/north/agents}"
+  local activation_file="${AGENT_CONFIG_ACTIVATION_FILE:-$state_root/current/activation.json}"
 
-  if [ ! -r "$activity_file" ]; then
+  if [ ! -r "$activation_file" ]; then
     printf 'unknown\n'
     return 0
   fi
-  while read -r kind name state rest; do
-    if [ "$kind" = "$wanted_kind" ] && [ "$name" = "$wanted_name" ]; then
-      printf '%s\n' "$state"
-      return 0
-    fi
-  done < "$activity_file"
-  printf 'off\n'
+  jq -er --arg kind "$wanted_kind" --arg id "$wanted_name" '
+    if .schema != "north.agent-activation/v1"
+       or ((.catalogDigest | type) != "string")
+       or ((.catalogDigest | test("^sha256:[0-9a-f]{64}$")) | not)
+       or ((.generationId | type) != "string")
+       or ((.generationId | test("^sha256:[0-9a-f]{64}$")) | not)
+       or (.units | type) != "array"
+    then "invalid"
+    else [.units[] | select(.kind == $kind and .id == $id)] as $matches
+      | if ($matches | length) != 1 then "off"
+        elif (($matches[0].permission | type) != "string")
+             or (($matches[0].permission | test("^(on|off|off:until=)")) | not)
+             or (($matches[0].active | type) != "boolean") then "invalid"
+        elif $matches[0].active == true then "on"
+        else "off"
+        end
+    end
+  ' "$activation_file" 2>/dev/null || printf 'invalid\n'
 }
 
-switchboard_activity_is_active() {
-  case "$(switchboard_activity_state "$1" "$2")" in
-    on|unknown) return 0 ;;
+north_unit_activity_is_active() {
+  case "$(north_unit_activity_state "$1" "$2")" in
+    on) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -659,8 +675,8 @@ FIRN_INTEGRATION="$REPO/modules/north-profile/firn"
 CODEX="$REPO/dotfiles/codex"
 LIVE_REPO="${AGENT_CONFIG_LIVE_REPO:-$HOME/code/nixos-config}"
 LIVE_SHARED="${AGENT_CONFIG_LIVE_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
-LIVE_SKILLS_FARM="${AGENT_CONFIG_LIVE_SKILLS_FARM:-$HOME/.local/state/north/skills}"
-LIVE_AGENT_STATE="${AGENT_CONFIG_LIVE_AGENT_STATE:-$HOME/.config/agents}"
+LIVE_AGENT_ROOT="${NORTH_AGENT_STATE_ROOT:-$HOME/.local/state/north/agents}"
+LIVE_SKILLS_FARM="${AGENT_CONFIG_LIVE_SKILLS_FARM:-$LIVE_AGENT_ROOT/current/skills/shared}"
 LIVE_NORTH_ROOT="${AGENT_CONFIG_LIVE_NORTH_ROOT:-$HOME/code/north}"
 LIVE_BEAGLE_ROOT="${AGENT_CONFIG_LIVE_BEAGLE_ROOT:-$HOME/code/beagle}"
 LIVE_FIRN_ROOT="${AGENT_CONFIG_LIVE_FIRN_ROOT:-$HOME/code/nixos-config}"
@@ -696,11 +712,11 @@ ok_detail() { details+=("ok: $*"); }
 note() { [ "$VERBOSE" -eq 0 ] || printf '  note: %s\n' "$*"; }
 bad() { printf '  FAIL: %s\n' "$*" >&2; fail=$((fail + 1)); }
 soft() { printf '  warn: %s\n' "$*" >&2; warn=$((warn + 1)); }
-COORDINATION_ACTIVITY="$(switchboard_activity_state module coordination)"
-AGENT_SPAWN_GUARD_ACTIVITY="$(switchboard_activity_state hook agent-spawn-guard)"
-NORTH_LIFECYCLE_ACTIVITY="$(switchboard_activity_state hook north-session-lifecycle)"
+COORDINATION_ACTIVITY="$(north_unit_activity_state set coordination)"
+AGENT_SPAWN_GUARD_ACTIVITY="$(north_unit_activity_state hook agent-spawn-guard)"
+NORTH_LIFECYCLE_ACTIVITY="$(north_unit_activity_state hook north-session-lifecycle)"
 COORDINATION_ACTIVE=0
-switchboard_activity_is_active module coordination && COORDINATION_ACTIVE=1
+north_unit_activity_is_active set coordination && COORDINATION_ACTIVE=1
 group() {
   local name="$1" summary="$2" before="$3"
   if [ "$fail" -eq "$before" ]; then printf '✓ %-13s %s\n' "$name" "$summary"
@@ -763,7 +779,7 @@ if policy_output="$(run_agent_policy_contract "$REPO" "$LOCAL" 2>&1)"; then
 else
   bad "$policy_output"
 fi
-group policy 'explicit ownership, skill reachability, projections, and guard identity' "$before"
+group policy 'explicit ownership and exact Firn provider bindings' "$before"
 
 # North-composed constitution plus hook/skill implementations from each owner.
 before=$fail
@@ -791,6 +807,7 @@ if command -v shellcheck >/dev/null 2>&1; then
 else bad "shellcheck is required to lint shared hooks"; fi
 skill_count=0
 for skill_root in \
+  "$REPO/dotfiles/agents/skills" \
   "$SHARED/skills" \
   "$BEAGLE_INTEGRATION/skills" \
   "$FIRN_INTEGRATION/skills"; do
@@ -809,15 +826,15 @@ for skill_root in \
   done < <(find "$skill_root" -mindepth 2 -maxdepth 2 -name SKILL.md -type f -print | sort)
 done
 if [ -s "$REPO/dotfiles/agents/AGENTS.md" ]; then
-  ok_detail "switchboard global AGENTS.md source present"
+  ok_detail "global AGENTS.md owner source present"
 else
-  bad "switchboard global AGENTS.md source is missing or empty"
+  bad "global AGENTS.md owner source is missing or empty"
 fi
 north_profile_module="$REPO/modules/north-profile/default.bnix"
-if grep -Fq '"/.config/agents/AGENTS.md"' "$north_profile_module"; then
-  ok_detail "~/.agents/AGENTS.md is wired to switchboard-composed instructions"
+if grep -Fq '"/.local/state/north/agents/current/instructions/shared/AGENTS.md"' "$north_profile_module"; then
+  ok_detail "~/.agents/AGENTS.md is wired to North-generation instructions"
 else
-  bad "~/.agents/AGENTS.md must be wired to ~/.config/agents/AGENTS.md"
+  bad "~/.agents/AGENTS.md must be wired to the current North activation generation"
 fi
 for profile_member in docs hooks; do
   if grep -Fq "\"/code/north/main/agent-profile/$profile_member\"" "$north_profile_module"; then
@@ -826,18 +843,18 @@ for profile_member in docs hooks; do
     bad "~/.agents/$profile_member must be wired to ~/code/north/main/agent-profile"
   fi
 done
-if grep -Fq '"/.local/state/north/skills"' "$north_profile_module"; then
-  ok_detail '~/.agents/skills is wired to the atomic North skills farm'
+if grep -Fq '"/.local/state/north/agents/current/skills/shared"' "$north_profile_module"; then
+  ok_detail '~/.agents/skills is wired to the current North skills projection'
 else
-  bad '~/.agents/skills must be wired to ~/.local/state/north/skills'
+  bad '~/.agents/skills must be wired to the current North activation generation'
 fi
 if [ "$LOCAL" -eq 1 ]; then
-  canonical_link "$HOME/.agents/AGENTS.md" "$LIVE_AGENT_STATE/AGENTS.md" "$HOME/.agents/AGENTS.md"
+  canonical_link "$HOME/.agents/AGENTS.md" "$LIVE_AGENT_ROOT/current/instructions/shared/AGENTS.md" "$HOME/.agents/AGENTS.md"
   canonical_link "$HOME/.agents/docs" "$LIVE_SHARED/docs" "$HOME/.agents/docs"
   canonical_link "$HOME/.agents/hooks" "$LIVE_SHARED/hooks" "$HOME/.agents/hooks"
   canonical_link "$HOME/.agents/skills" "$LIVE_SKILLS_FARM" "$HOME/.agents/skills"
 fi
-group shared "$hook_count owner hooks linted · $skill_count owner skills · switchboard-composed instructions" "$before"
+group shared "$hook_count owner hooks linted · $skill_count owner skills · North-generation instructions" "$before"
 
 validate_codex_managed_policy() {
   if ! need_toml "$CODEX_REQUIREMENTS" 'Codex managed requirements'; then return; fi
@@ -854,13 +871,13 @@ validate_codex_managed_policy() {
 
   local module="$REPO/modules/codex/default.bnix"
   local spec relative source_expr expected_checkout authority git_blob_path
-  local promoted_path live resolved
+  local promoted_path live resolved adapter expected_adapter
   # relative|module source expression|checkout|authority|blob path|promoted path.
   # A promoted path is the enforcement-deployment-relative name the generation's
   # tmpfiles link points at; it is empty for anything the generation still owns.
   local -a source_specs=(
     "requirements.toml|(s flakeRoot \"/modules/codex/requirements.toml\")|$CODEX_REQUIREMENTS|self|modules/codex/requirements.toml|"
-    "beagle-session-start.sh|(promoted \"beagle-session-start.sh\"|$BEAGLE_INTEGRATION/hooks/beagle-session-start.sh|beagle|integrations/north/hooks/beagle-session-start.sh|beagle/integrations/north/hooks/beagle-session-start.sh"
+    "lib/north-agent-activation.sh|(s flakeRoot \"/dotfiles/agents/lib/north-agent-activation.sh\")|$REPO/dotfiles/agents/lib/north-agent-activation.sh|self|dotfiles/agents/lib/north-agent-activation.sh|"
     "agent-spawn-guard.sh|(promoted \"agent-spawn-guard.sh\"|$SHARED/hooks/agent-spawn-guard.sh|north|profiles/tom/hooks/agent-spawn-guard.sh|north/profiles/tom/hooks/agent-spawn-guard.sh"
     # launch_critical guard and its Python decision libraries deploy together.
     "launch-critical-worktree-guard.sh|(promoted \"launch-critical-worktree-guard.sh\"|$SHARED/hooks/launch-critical-worktree-guard.sh|north|profiles/tom/hooks/launch-critical-worktree-guard.sh|north/profiles/tom/hooks/launch-critical-worktree-guard.sh"
@@ -869,14 +886,16 @@ validate_codex_managed_policy() {
     "tripwire-guard.sh|(promoted \"tripwire-guard.sh\"|$SHARED/hooks/tripwire-guard.sh|north|profiles/tom/hooks/tripwire-guard.sh|north/profiles/tom/hooks/tripwire-guard.sh"
     "logcompress-hook.js|(promoted \"logcompress-hook.js\"|$SHARED/hooks/logcompress-hook.js|north|profiles/tom/hooks/logcompress-hook.js|north/profiles/tom/hooks/logcompress-hook.js"
     "logcompress.js|(promoted \"logcompress.js\"|$SHARED/hooks/logcompress.js|north|profiles/tom/hooks/logcompress.js|north/profiles/tom/hooks/logcompress.js"
-    "lib/authoring-killswitch.sh|(promoted \"lib/authoring-killswitch.sh\"|$SHARED/hooks/lib/authoring-killswitch.sh|north|profiles/tom/hooks/lib/authoring-killswitch.sh|north/profiles/tom/hooks/lib/authoring-killswitch.sh"
-    "lib/harness-dial.sh|(promoted \"lib/harness-dial.sh\"|$SHARED/hooks/lib/harness-dial.sh|north|profiles/tom/hooks/lib/harness-dial.sh|north/profiles/tom/hooks/lib/harness-dial.sh"
-    "registry.tsv|(promoted \"registry.tsv\"|$SHARED/hooks/registry.tsv|north|profiles/tom/hooks/registry.tsv|north/profiles/tom/hooks/registry.tsv"
-    "north-on-spawn-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-spawn-codex\")|$CODEX/hooks/north-on-spawn-codex|self|dotfiles/codex/hooks/north-on-spawn-codex|"
-    "north-on-tooluse-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-tooluse-codex\")|$CODEX/hooks/north-on-tooluse-codex|self|dotfiles/codex/hooks/north-on-tooluse-codex|"
-    "north-mark-delegated-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-mark-delegated-codex\")|$CODEX/hooks/north-mark-delegated-codex|self|dotfiles/codex/hooks/north-mark-delegated-codex|"
-    "north-on-stop-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-stop-codex\")|$CODEX/hooks/north-on-stop-codex|self|dotfiles/codex/hooks/north-on-stop-codex|"
-    "north-on-terminal-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-terminal-codex\")|$CODEX/hooks/north-on-terminal-codex|self|dotfiles/codex/hooks/north-on-terminal-codex|"
+  )
+  local -a provider_adapters=(
+    north-on-spawn-codex
+    north-on-tooluse-codex
+    north-mark-delegated-codex
+    north-on-stop-codex
+    north-on-terminal-codex
+    beagle-session-start.sh
+    lib/authoring-killswitch.sh
+    lib/harness-dial.sh
   )
   for spec in "${source_specs[@]}"; do
     IFS='|' read -r relative source_expr expected_checkout authority \
@@ -887,6 +906,10 @@ validate_codex_managed_policy() {
        ! grep -Fq "(promoted \"$relative\" \"$promoted_path\")" "$module"; then
       bad "Codex module does not link $relative to the promoted enforcement payload $promoted_path"
     fi
+  done
+  for adapter in "${provider_adapters[@]}"; do
+    if grep -Fq "(providerAdapter \"$adapter\")" "$module"; then :
+    else bad "Codex module does not link provider adapter $adapter from the current North generation"; fi
   done
   if grep -Fq '"L+ /etc/codex/hooks/" relative " - - - - " enforcement "/" source' "$module" &&
      grep -Fq 'enforcement "/var/lib/north-enforcement/active/current"' "$module"; then
@@ -953,6 +976,15 @@ validate_codex_managed_policy() {
       generation_exact=0
       bad 'Codex managed requirements are not the current /etc generation'
     fi
+    for adapter in "${provider_adapters[@]}"; do
+      live="/etc/codex/hooks/$adapter"
+      expected_adapter="$LIVE_AGENT_ROOT/current/provider-hooks/$adapter"
+      if [ -L "$live" ] && [ "$(readlink "$live")" = "$expected_adapter" ]; then :
+      else
+        generation_exact=0
+        bad "Codex provider adapter $live is not the stable link to $expected_adapter"
+      fi
+    done
     # North and Beagle enforcement is attested against the active promote record.
     north_revision="$(promote_record_revision north 2>/dev/null || true)"
     beagle_revision="$(promote_record_revision beagle 2>/dev/null || true)"
@@ -1079,7 +1111,7 @@ codex_hook_provenance="${CODEX_HOOK_PROVENANCE:-declaration drift detected}"
 codex_north='declared; canonical explicit instance env; live probe deferred'
 codex_linear='authentication deferred to an interactive credential check'
 if [ "$COORDINATION_ACTIVE" -eq 0 ]; then
-  codex_north='declared but disabled by switchboard; not probed'
+  codex_north='declared but inactive in the North generation; not probed'
 fi
 grep -q '^\[mcp_servers\.north\]' "$CODEX/config.toml" || bad "Codex config does not declare North MCP"
 grep -q '^\[mcp_servers\.linear-mcp-msa-new\]' "$CODEX/config.toml" || bad "Codex config does not declare Linear MCP"
@@ -1100,7 +1132,12 @@ fi
 if [ "$LOCAL" -eq 1 ]; then
   immutable_store_link_matches \
     "$HOME/.codex/config.toml" "$CODEX/config.toml" "$HOME/.codex/config.toml"
-  canonical_link "$HOME/.codex/AGENTS.md" "$LIVE_AGENT_STATE/AGENTS.md" "$HOME/.codex/AGENTS.md"
+  canonical_link "$HOME/.codex/AGENTS.md" "$LIVE_AGENT_ROOT/current/instructions/codex/AGENTS.md" "$HOME/.codex/AGENTS.md"
+  if [ -d "$HOME/.codex/skills" ] && [ ! -L "$HOME/.codex/skills" ]; then
+    ok_detail 'Codex skills remains a provider/user-owned directory'
+  else
+    bad 'Codex skills must remain a real directory; North owns only exact compatibility links inside it'
+  fi
   if [ "$COORDINATION_ACTIVE" -eq 0 ]; then
     ok_detail 'Codex MCP inventory skipped because coordination is disabled'
   elif command -v codex >/dev/null 2>&1; then

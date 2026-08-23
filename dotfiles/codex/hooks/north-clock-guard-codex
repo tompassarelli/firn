@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-# Keep the retired hook path callable for Codex sessions spanning a system switch.
-while IFS= builtin read -r -N 65536; do
-  :
-done
-builtin printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse"}}'
-exit 0

@@ -69,12 +69,24 @@ if command -v ldd >/dev/null 2>&1; then
     || die "native executable links a hosted runtime"
 fi
 
-mkdir -p "$scratch/runtime" "$scratch/home/.local/state/north"
-printf 'guards=on\n' >"$scratch/harness.conf"
+mkdir -p "$scratch/runtime" "$scratch/home/.local/state/north" \
+  "$scratch/agent-state/current"
 export XDG_RUNTIME_DIR="$scratch/runtime"
 export HOME="$scratch/home"
-export NORTH_HARNESS_STATE="$scratch/harness.conf"
+export NORTH_AGENT_STATE_ROOT="$scratch/agent-state"
+unset NORTH_HARNESS_STATE
 unset AGENT_NO_AUTHORING_HOOKS
+
+write_activation() {
+  local active="$1" schema="${2:-north.agent-activation/v1}"
+  local permission=off
+  [ "$active" = true ] && permission=on
+  cat >"$NORTH_AGENT_STATE_ROOT/current/activation.json" <<JSON
+{"schema":"$schema","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"firn-system-policy","kind":"hook","title":"Firn system policy","triggerDescription":"Protect Firn authoring and system switching.","permission":"$permission","active":$active,"owner":{"repo":"nixos-config","path":"native/system_policy_native.bgl"},"members":[],"supports":["firn"],"distributions":[{"type":"providerAdapter","targets":["firn","codex","bridge"],"owner":{"repo":"north","path":"profiles/tom/hooks/firn-system-policy.sh"},"adapterId":"firn-system-policy"}],"activationPaths":[["firn-system-policy"]]}]}
+JSON
+}
+
+write_activation true
 
 run_case() {
   local name="$1" payload="$2"
@@ -108,6 +120,25 @@ run_case inject-second "$inject_payload"
 [[ ! -s "$scratch/inject-second.out" ]] \
   || die "second edit in one session repeated the intro"
 
+write_payload="$(printf \
+  '{"tool_name":"Write","tool_input":{"filePath":"%s/native/system_policy.bgl"},"session_id":"write-session"}' \
+  "$scratch/repo-through-symlink")"
+run_case write "$write_payload"
+[[ "$(<"$scratch/write.out")" == "${expected_inject%$'\n'}" ]] \
+  || die "Write camel-case path was not decoded"
+
+multiedit_payload="$(printf \
+  '{"tool_name":"MultiEdit","tool_input":{"file_path":"%s/native/system_policy.bgl"},"session_id":"multiedit-session"}' \
+  "$scratch/repo-through-symlink")"
+run_case multiedit "$multiedit_payload"
+[[ "$(<"$scratch/multiedit.out")" == "${expected_inject%$'\n'}" ]] \
+  || die "MultiEdit path was not decoded"
+
+run_case apply-patch \
+  '{"tool_name":"apply_patch","tool_input":{"patch":"*** Begin Patch"},"session_id":"apply-patch"}'
+[[ ! -s "$scratch/apply-patch.out" ]] \
+  || die "apply_patch without a decodable path claimed Firn handling"
+
 run_case deny \
   '{"tool_name":"Bash","tool_input":{"command":"sudo nixos-rebuild switch"},"session_id":"deny"}'
 reason="BLOCKED: that command switches the system outside the sanctioned path. Raw nixos-rebuild/darwin-rebuild/nh and \`firn repo upgrade now\` stay the user's. Agents may run \`firn rebuild\` after the relevant checks pass and their own changes are committed."
@@ -116,6 +147,25 @@ expected_deny="$(printf \
   "$reason")"
 [[ "$(<"$scratch/deny.out")" == "${expected_deny%$'\n'}" ]] \
   || die "permission deny JSON changed"
+
+write_activation false
+run_case inactive \
+  '{"tool_name":"Bash","tool_input":{"command":"nixos-rebuild switch"},"session_id":"inactive"}'
+[[ ! -s "$scratch/inactive.out" ]] \
+  || die "North activation did not disable firn-system-policy"
+
+write_activation true north.agent-activation/invalid
+run_case invalid-activation \
+  '{"tool_name":"Bash","tool_input":{"command":"nixos-rebuild switch"},"session_id":"invalid-activation"}'
+[[ ! -s "$scratch/invalid-activation.out" ]] \
+  || die "invalid activation schema did not fail inactive"
+
+write_activation false
+AGENT_NO_AUTHORING_HOOKS=0 run_case forced-live \
+  '{"tool_name":"Bash","tool_input":{"command":"nixos-rebuild switch"},"session_id":"forced-live"}'
+[[ "$(<"$scratch/forced-live.out")" == "${expected_deny%$'\n'}" ]] \
+  || die "per-session force-live override did not outrank stored activity"
+write_activation true
 
 run_case malformed '{not-json'
 [[ ! -s "$scratch/malformed.out" ]] || die "malformed payload did not fail open"
@@ -135,4 +185,4 @@ AGENT_NO_AUTHORING_HOOKS=1 run_case killed \
   '{"tool_name":"Bash","tool_input":{"command":"nixos-rebuild switch"},"session_id":"killed"}'
 [[ ! -s "$scratch/killed.out" ]] || die "kill-switch did not disable the guard"
 
-printf 'system-policy-native: pass inject deny malformed oversized no-hosted-runtime PASS\n'
+printf 'system-policy-native: activation edit/write/multiedit apply-patch-omitted bash kill-switch fail-open no-hosted-runtime PASS\n'

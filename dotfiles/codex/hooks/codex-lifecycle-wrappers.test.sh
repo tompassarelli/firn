@@ -8,10 +8,22 @@ TEST_PYTHON="$(readlink -f "$(command -v python3)")"
 HOOKS="$SCRATCH/hooks"
 mkdir -p "$HOOKS/north/bin" "$HOOKS/runtime" "$HOOKS/lib"
 ln -s "$(readlink -f "$(command -v bash)")" "$HOOKS/runtime/bash"
-cp "$HERE/../../agents/lib/switchboard-activity.sh" "$HOOKS/lib/"
-AGENTS_ACTIVITY_FILE="$SCRATCH/activity.conf"
-export AGENTS_ACTIVITY_FILE
-printf 'hook north-session-lifecycle on\n' > "$AGENTS_ACTIVITY_FILE"
+ln -s "$TEST_PYTHON" "$HOOKS/runtime/python3"
+cp "$HERE/../../agents/lib/north-agent-activation.sh" "$HOOKS/lib/"
+NORTH_AGENT_STATE_ROOT="$SCRATCH/agent-state"
+export NORTH_AGENT_STATE_ROOT
+mkdir -p "$NORTH_AGENT_STATE_ROOT/current"
+
+write_activation() {
+  local active="$1"
+  local permission=off
+  [ "$active" = true ] && permission=on
+  cat >"$NORTH_AGENT_STATE_ROOT/current/activation.json" <<JSON
+{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"north-session-lifecycle","kind":"hook","title":"North session lifecycle","triggerDescription":"Publish lifecycle telemetry.","permission":"$permission","active":$active,"owner":{"repo":"north","path":"profiles/tom/hooks/north-session-end.sh"},"members":[],"supports":["assignments"],"distributions":[{"type":"providerAdapter","targets":["codex"],"owner":{"repo":"nixos-config","path":"dotfiles/codex/hooks/north-on-spawn-codex"},"adapterId":"north-on-spawn-codex"}],"activationPaths":[]}]}
+JSON
+}
+
+write_activation true
 
 wrappers=(
   north-on-spawn-codex
@@ -232,11 +244,11 @@ for index in "${!wrappers[@]}"; do
     test "$output" = "{\"delegated\":\"$target\"}"
 done
 
-printf 'hook north-session-lifecycle off\n' > "$AGENTS_ACTIVITY_FILE"
+write_activation false
 for wrapper in "${wrappers[@]}"; do
-  record="$SCRATCH/$wrapper.switchboard-off"
+  record="$SCRATCH/$wrapper.activation-off"
   output="$(
-    printf '%s' '{"session_id":"switchboard-off"}' |
+    printf '%s' '{"session_id":"activation-off"}' |
       WRAPPER_TEST_RECORD="$record" "$HOOKS/$wrapper"
   )"
   check "$wrapper is silent while lifecycle activity is off" test -z "$output"
@@ -244,7 +256,34 @@ for wrapper in "${wrappers[@]}"; do
   check "$wrapper drains delayed stdin while lifecycle activity is off" \
     test "$(drain_probe "$wrapper" native)" = DRAINED
 done
-printf 'hook north-session-lifecycle on\n' > "$AGENTS_ACTIVITY_FILE"
+write_activation true
+
+mv "$NORTH_AGENT_STATE_ROOT/current/activation.json" \
+  "$NORTH_AGENT_STATE_ROOT/current/activation.missing"
+for wrapper in "${wrappers[@]}"; do
+  record="$SCRATCH/$wrapper.activation-missing"
+  output="$(
+    printf '%s' '{"session_id":"activation-missing"}' |
+      WRAPPER_TEST_RECORD="$record" "$HOOKS/$wrapper"
+  )"
+  check "$wrapper is inactive without a North generation" test -z "$output"
+  check "$wrapper does not delegate without a North generation" test ! -e "$record"
+done
+mv "$NORTH_AGENT_STATE_ROOT/current/activation.missing" \
+  "$NORTH_AGENT_STATE_ROOT/current/activation.json"
+
+sed -i 's#north.agent-activation/v1#north.agent-activation/invalid#' \
+  "$NORTH_AGENT_STATE_ROOT/current/activation.json"
+for wrapper in "${wrappers[@]}"; do
+  record="$SCRATCH/$wrapper.activation-invalid"
+  output="$(
+    printf '%s' '{"session_id":"activation-invalid"}' |
+      WRAPPER_TEST_RECORD="$record" "$HOOKS/$wrapper"
+  )"
+  check "$wrapper rejects an invalid North activation schema" test -z "$output"
+  check "$wrapper does not delegate from an invalid generation" test ! -e "$record"
+done
+write_activation true
 
 for index in "${!wrappers[@]}"; do
   wrapper="${wrappers[$index]}"

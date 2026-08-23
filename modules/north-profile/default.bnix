@@ -2,8 +2,8 @@
 
 (ns default)
 
-;; Firn materialises stable provider-neutral discovery paths. The switchboard
-;; owns composed instructions; North continues to own shared docs and hooks.
+;; Firn materialises stable provider-neutral discovery paths. North owns the
+;; immutable activation generation behind them and shared docs and hooks.
 (nix/module [config lib ...]
   (let [username config.myConfig.modules.users.username]
     {:tags [development]
@@ -15,19 +15,19 @@
           {username
             (nix/module [config ...]
               {:home.file
-                {;; Instructions have one authority: the switchboard-composed
-                 ;; target also used by Codex. Pointing this at North's personal
-                 ;; profile would bypass every set blackout.
+                {;; Instructions have one authority: the current North
+                 ;; generation. Pointing this at a source checkout would bypass
+                 ;; set permission and provenance.
                  ".agents/AGENTS.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/.config/agents/AGENTS.md"))}
+                        "/.local/state/north/agents/current/instructions/shared/AGENTS.md"))}
                  ".agents/skills"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/.local/state/north/skills"))}
+                        "/.local/state/north/agents/current/skills/shared"))}
                  ".agents/docs"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
@@ -39,11 +39,10 @@
                       (s config.home.homeDirectory
                         "/code/north/main/agent-profile/hooks"))}
                  ;; Provider-neutral routing instructions for the ~/code root.
-                 ;; Switchboard-owned, exactly like ~/code/AGENTS.md: the
-                 ;; directory slot feeds the agent surface and `agents apply` is the
-                 ;; sole writer under ~/.config/agents.
+                 ;; North renders this exact distribution in the same atomic
+                 ;; generation as sets, skills, hooks, and provider views.
                  "code/AGENTS.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/.config/agents/code-AGENTS.md"))}}})}})}))
+                        "/.local/state/north/agents/current/instructions/code/AGENTS.md"))}}})}})}))

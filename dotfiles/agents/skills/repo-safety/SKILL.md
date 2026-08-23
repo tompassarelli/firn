@@ -8,7 +8,7 @@ description: >-
   which commands are refused outright. The companion notice for the worktree,
   blind-stage, and tripwire guards.
 hooks:
-  - worktree-guard
+  - launch-critical-worktree-guard
   - git-blind-stage-guard
   - tripwire-guard
   - session-kill-guard
@@ -115,7 +115,8 @@ Deletes that lose nothing pass without friction: a path that does not exist,
 reports as ignored, and anything tracked and clean. In between — untracked work
 inside a repo, personal data, a path the guard cannot classify — the guard asks
 you in an interactive session and refuses in an unattended one; the reason names
-`north config guards off` for when the loss is reviewed and intended.
+`agents off tripwire-guard` for a reviewed exception and `agents on
+tripwire-guard` to restore enforcement afterward.
 
 Credential files may be passed to purpose-built authentication commands.
 In particular, `ssh-add <key>` may load any identity, and SSH-family identity

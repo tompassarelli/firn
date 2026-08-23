@@ -47,9 +47,14 @@
         ;; never by the hook file's own residency — so North/Beagle enforcement
         ;; can move at promote speed behind a stable /etc name.
         enforcement "/var/lib/north-enforcement/active/current"
+        agentGeneration (s homeDir "/.local/state/north/agents/current")
         promoted
          (fn [(relative String) (source String)] String
-           (s "L+ /etc/codex/hooks/" relative " - - - - " enforcement "/" source))]
+           (s "L+ /etc/codex/hooks/" relative " - - - - " enforcement "/" source))
+        providerAdapter
+         (fn [(adapterId String)] String
+           (s "L+ /etc/codex/hooks/" adapterId " - - - - "
+             agentGeneration "/provider-hooks/" adapterId))]
     {:options.myConfig.modules.codex.enable
       (lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)")
      :config
@@ -60,20 +65,8 @@
             {:source (s flakeRoot "/modules/codex/requirements.toml")}
            "codex/runtime"
             {:source codexPkg}
-           "codex/hooks/north-on-spawn-codex"
-            {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-spawn-codex")}
-           "codex/hooks/north-on-tooluse-codex"
-            {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-tooluse-codex")}
-           "codex/hooks/north-mark-delegated-codex"
-            {:source (s flakeRoot "/dotfiles/codex/hooks/north-mark-delegated-codex")}
-           "codex/hooks/north-on-stop-codex"
-            {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-stop-codex")}
-           "codex/hooks/north-on-terminal-codex"
-            {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-terminal-codex")}
-           "codex/hooks/north-clock-guard-codex"
-            {:source (s flakeRoot "/dotfiles/codex/hooks/north-clock-guard-codex")}
-           "codex/hooks/lib/switchboard-activity.sh"
-            {:source (s flakeRoot "/dotfiles/agents/lib/switchboard-activity.sh")}
+           "codex/hooks/lib/north-agent-activation.sh"
+            {:source (s flakeRoot "/dotfiles/agents/lib/north-agent-activation.sh")}
            "codex/hooks/runtime/bash"
             {:source (s pkgs.bash "/bin/bash")}
            "codex/hooks/runtime/cat"
@@ -97,6 +90,12 @@
          :systemd.tmpfiles.rules
           ["d /var/lib/north-enforcement 0755 root root -"
            "d /etc/codex/hooks/lib 0755 root root -"
+           (providerAdapter "north-on-spawn-codex")
+           (providerAdapter "north-on-tooluse-codex")
+           (providerAdapter "north-mark-delegated-codex")
+           (providerAdapter "north-on-stop-codex")
+           (providerAdapter "north-on-terminal-codex")
+           (providerAdapter "beagle-session-start.sh")
            (promoted "agent-spawn-guard.sh" "north/profiles/tom/hooks/agent-spawn-guard.sh")
            (promoted "launch-critical-worktree-guard.sh" "north/profiles/tom/hooks/launch-critical-worktree-guard.sh")
            (promoted "lib/launch_critical_decide.py" "north/profiles/tom/hooks/lib/launch_critical_decide.py")
@@ -106,25 +105,22 @@
            (promoted "session-kill-guard.sh" "north/profiles/tom/hooks/session-kill-guard.sh")
            (promoted "logcompress-hook.js" "north/profiles/tom/hooks/logcompress-hook.js")
            (promoted "logcompress.js" "north/profiles/tom/hooks/logcompress.js")
-           (promoted "registry.tsv" "north/profiles/tom/hooks/registry.tsv")
-           (promoted "lib/authoring-killswitch.sh" "north/profiles/tom/hooks/lib/authoring-killswitch.sh")
-           (promoted "lib/harness-dial.sh" "north/profiles/tom/hooks/lib/harness-dial.sh")
-           (promoted "beagle-session-start.sh" "beagle/integrations/north/hooks/beagle-session-start.sh")]
+           (providerAdapter "lib/authoring-killswitch.sh")
+           (providerAdapter "lib/harness-dial.sh")]
          :home-manager.users
           {username
             (nix/module
               [config
                ...]
               {:home.file
-                {;; Switchboard-owned, exactly like ~/.agents/AGENTS.md:
-                 ;; `agents apply` is the sole writer under
-                 ;; ~/.config/agents, so every provider sees the same set
-                 ;; composition.
+                {;; North renders instructions and skills into one immutable
+                 ;; activation generation; Firn owns only these stable provider
+                 ;; discovery pointers.
                  ".codex/AGENTS.md"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/.config/agents/AGENTS.md"))}
+                        "/.local/state/north/agents/current/instructions/codex/AGENTS.md"))}
                  ".codex/config.toml"
                   {:source (s flakeRoot "/dotfiles/codex/config.toml")}
                  ".codex/prompts"
