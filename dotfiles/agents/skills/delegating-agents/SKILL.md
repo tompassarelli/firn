@@ -249,13 +249,23 @@ awaits, release it. When a removal is delegated, sweep registrations,
 allowlists, paths, pins, locks, tests, and consumer repositories in the same
 campaign, then run the final token search across those consumers.
 
-The parent owns integration and settlement. Consume each result, settle every
-attempt with wall and agent time actuals, queue/block and verification time
-actuals, model/route outcome, race disposition, and any review/debt receipt, then
-update the restart record at every externally visible boundary. Copy one compact
-terminal receipt to the estimate calibration ledger and use repo-safety to land
-and reap verified work. A worker denial changes the path, never the goal; do
-not retry verbatim or route around standing law.
+The parent retains integration and semantic settlement authority. Consume each
+result and decide its verification, review, publication, verdict, race, debt,
+lane, and cleanup disposition. At a terminal worker boundary, emit the `todo`
+SettlementCard and delegate the mechanical update through `settle-work` by
+default with `fork_turns = none` or equivalent minimal context. The card, owning
+record, and named authorities replace product history. Settle directly only
+when no admitted worker slot exists or dispatch costs more than the bounded
+bookkeeping.
+
+The settler copies exact wall and agent time actuals, queue/block and
+verification time actuals, model/route outcome, race disposition, and review or
+debt receipts into the owning attempt and estimate calibration ledger, updates
+the named lane state, and performs only explicitly authorized safe cleanup. It
+cannot integrate, review, publish, invent evidence, or infer disposability.
+Update the restart record at every externally visible boundary and use
+repo-safety to land and reap verified work. A worker denial changes the path,
+never the goal; do not retry verbatim or route around standing law.
 
 In executive mode, decide and act on recorded evidence, keep every ready seam
 owned, and notify the operator after the fact in plain language. The standing

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Settle Work"
+  short_description: "Settle delegated work from exact evidence"
+  default_prompt: "Use $settle-work to apply this SettlementCard to its exact todo attempt and authorized lane bookkeeping."

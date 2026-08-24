@@ -155,6 +155,74 @@ entry with `attempt`, `path`, `invariant`, `severity`, `owner`, and
 unbounded “polish later,” and do not review a clean area again without a new
 change, finding, or named assurance reason.
 
+## SettlementCard delegation contract
+
+The product owner may delegate terminal bookkeeping without delegating a
+verdict. Emit one immutable TOML SettlementCard after deciding integration,
+verification, review, publication, race disposition, quality debt, lane state,
+and cleanup authority. The card is the settler's complete capability envelope:
+
+```toml
+schema = "agent-settlement-card/v1"
+todo_record = "~/code/todo/compiler-seam.md"
+todo_record_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+record_id = "compiler-seam"
+authorized_by = "codex:/root"
+issued_at = "2026-08-24T10:09:10+00:00"
+commit = "1111111111111111111111111111111111111111"
+overrun_cause = "none"
+verification_verdict = "passed"
+verification_evidence = ["nixos-config:dotfiles/bin/example.test.sh :: PASS"]
+review_evidence = []
+quality_debt = []
+
+[attempt]
+id = "A1"
+ended_at = "2026-08-24T10:09:00+00:00"
+outcome = "delivered"
+wall_time_actual = "9m"
+agent_time_actual = "9m"
+queue_block_time_actual = "0s"
+verification_time_actual = "1m"
+verification_summary = "focused fixture passed"
+review_outcome = "not-run"
+
+[lane]
+repo = "nixos-config"
+worktree = "~/code/nixos-config/worktrees/compiler-seam"
+branch = "compiler-seam"
+state = "landed"
+
+[cleanup]
+authorized = false
+actions = []
+```
+
+The `[attempt]` table is a terminal delta for the same attempt and uses the
+shared fields above; it never restates or changes forecast and staffing fields.
+For a task, `authorized_by` is its exact `delegated_by`; for owner-run project
+work, it is one of the record's `owners`. `verification_evidence` and
+`review_evidence` entries each name one exact source and observed result
+separated by ` :: `. A non-`not-run` verdict needs evidence, while `not-run`
+carries none. A raced attempt includes its exact `race_outcome`; a non-race
+never invents one. `quality_debt` is an explicit array, empty or composed only
+of the shared debt entries above.
+
+The lane table names one existing record lane and its owner-selected terminal
+state; use `{ state = "none" }` only when the record has no lane. Cleanup is
+denied by default. Authorized cleanup additionally names `authorized_by`, a
+non-empty subset of `remove-worktree` and `delete-branch`, an exact reason, and
+`lane_state_after = "reaped"`. It is valid only for the named clean lane with a
+`landed`, `superseded`, or `race-loser` disposition. No card authorizes product
+integration, publication, activation, history rewriting, or unrelated files.
+
+The settler validates the record hash, record and attempt identity, owner
+authority, chronology, evidence/verdict consistency, lane identity, and cleanup
+preconditions before mutation. Missing or conflicting data invalidates the
+whole card; the settler never fills it from inference. After exact application,
+copy one terminal receipt to the estimate-calibration ledger and acknowledge
+the product owner.
+
 ## Shapes are semantic, not one universal state machine
 
 Use the narrowest shape that is already true:

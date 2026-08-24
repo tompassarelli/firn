@@ -52,14 +52,20 @@ in-flight pointer to the flat restart-grade ledger at
 forecast before work begins, including a solo owner; inactive proposals and
 resources do not fabricate one.
 
-After every completion, settle the attempt and replace its in-flight pointer
-with one completed receipt: wall and agent time estimates and actuals,
-queue/block and verification time actuals, the derived wall-time
-actual-to-estimate ratio, selected model/reasoning/route/role, race result where
-relevant, and concise overrun cause or `none`. Include exact commit review
-findings, review-repair time actual, and explicitly deferred quality debt when
-they exist. The `todo` skill owns the shared field contract. Refresh the
-same-class calibration from settled receipts; use model-specific observations
-when enough exist, and otherwise retain the labeled cross-model fallback. Keep
-the ledger as concise Markdown with TOML front matter; it is a learning record,
-not a second live-work tracker.
+After every completion, the product owner fixes the exact terminal facts. At a
+terminal worker boundary, delegate their mechanical copy through the `todo`
+SettlementCard and `settle-work` by default. Settle directly only when no
+admitted worker slot exists or dispatch costs more than this bounded update.
+
+Replace the in-flight pointer with one completed receipt: wall and agent time
+estimates and actuals, queue/block and verification time actuals, the derived
+wall-time actual-to-estimate ratio, selected model/reasoning/route/role, race
+result where relevant, and concise overrun cause or `none`. Include exact commit
+review findings, review-repair time actual, and explicitly deferred quality
+debt when they exist. A settler copies these values from the owner-issued card
+and owning attempt; it never estimates a missing actual or upgrades a verdict.
+The `todo` skill owns the shared field and card contracts. Refresh same-class
+calibration from settled receipts; use model-specific observations when enough
+exist, and otherwise retain the labeled cross-model fallback. Keep the ledger
+as concise Markdown with TOML front matter; it is a learning record, not a
+second live-work tracker.
