@@ -29,6 +29,7 @@ nixos-config/scripts/agent-config-check.sh	9
 nixos-config/scripts/agent-config-check.test.sh	4
 north/bin/north-mine	1
 north/bin/tests/ci-required-bars-test.sh	1
+north/bin/tests/north-comms-attention-test.sh	1
 north/bin/tests/package-purity-check-test.sh	1
 north/build.sh	1
 north/cli/tests/acquire-claim-integration-test.clj	1
