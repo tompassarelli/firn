@@ -50,7 +50,7 @@ Row {
             property int ordinal: ActivityState.memberOrdinals[model.wsId] || 0
             property bool floating: ActivityState.floatingIds[model.wsId] || false
             // Keep every compositor-provided workspace visible; membership only changes its label.
-            visible: !ActivityState.available || ordinal > 0 || floating
+            visible: true
             spacing: 0
 
             Text {
