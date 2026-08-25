@@ -332,6 +332,77 @@ state = "preserved"
         assert "repeats an earlier segment turn" in result.stderr
         print("cross-segment duplicate turn evidence rejected case: PASS")
 
+        unsafe_segment_counts = root / "unsafe-segment-counts.toml"
+        unsafe_segment_counts.write_text(
+            base.replace(
+                "turn_count = 1, tool_call_count = 2",
+                "turn_count = 9007199254740992, tool_call_count = 9007199254740992",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        result = run(unsafe_segment_counts, todo)
+        assert result.returncode == 1
+        assert "turn_count must be a positive safe integer" in result.stderr
+        assert "tool_call_count must be a non-negative safe integer" in result.stderr
+        print("unsafe individual segment counts rejected case: PASS")
+
+        unsafe_derived_totals = root / "unsafe-derived-totals.toml"
+        unsafe_derived_totals.write_text(
+            base.replace(
+                "turn_count = 1, tool_call_count = 2",
+                "turn_count = 9007199254740991, tool_call_count = 9007199254740991",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        result = run(unsafe_derived_totals, todo)
+        assert result.returncode == 1
+        assert "derived turn_count total exceeds the safe-integer maximum" in result.stderr
+        assert "derived tool_call_count total exceeds the safe-integer maximum" in result.stderr
+        print("unsafe derived count totals rejected case: PASS")
+
+        line_ledger = todo / "estimate-calibration.md"
+        line_ledger.write_text("## Receipts\n", encoding="utf-8")
+        multiline_card = root / "multiline-receipt-field.toml"
+        multiline_card.write_text(
+            base.replace('overrun_cause = "none"', 'overrun_cause = "none\\ncontinued"'),
+            encoding="utf-8",
+        )
+        first_multiline = update(multiline_card, todo, line_ledger)
+        second_multiline = update(multiline_card, todo, line_ledger)
+        assert first_multiline.returncode == second_multiline.returncode == 1
+        assert first_multiline.stderr == second_multiline.stderr
+        assert "overrun_cause cannot contain CR or LF" in first_multiline.stderr
+        assert line_ledger.read_text(encoding="utf-8") == "## Receipts\n"
+
+        carriage_return_card = root / "carriage-return-receipt-field.toml"
+        carriage_return_card.write_text(
+            base.replace(
+                'review_summary = "one finding repaired"',
+                'review_summary = "one finding\\rrepaired"',
+            ),
+            encoding="utf-8",
+        )
+        result = run(carriage_return_card, todo)
+        assert result.returncode == 1
+        assert "attempt.review_summary cannot contain CR or LF" in result.stderr
+
+        multiline_record = unsettled.replace(
+            'seam = "bounded demo"', 'seam = """bounded\ndemo"""'
+        )
+        record.write_text(multiline_record, encoding="utf-8")
+        multiline_digest = hashlib.sha256(record.read_bytes()).hexdigest()
+        multiline_source_card = root / "multiline-source-field.toml"
+        multiline_source_card.write_text(
+            base.replace(digest, multiline_digest), encoding="utf-8"
+        )
+        result = run(multiline_source_card, todo)
+        assert result.returncode == 1
+        assert "owning attempt seam cannot contain CR or LF" in result.stderr
+        record.write_text(unsettled, encoding="utf-8")
+        print("receipt CR/LF rejection and identical multiline replay cases: PASS")
+
         terminal = f'''ended_at = "2026-08-24T10:01:00+00:00"
 outcome = "delivered"
 wall_time_actual = "1m"

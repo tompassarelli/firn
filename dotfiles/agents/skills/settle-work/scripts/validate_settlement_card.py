@@ -86,8 +86,21 @@ SEGMENT_FIELDS = {
 OBSERVATION_COVERAGE = {"exact", "unknown"}
 OBSERVATION_VERSION = "agent-execution-observation/v1"
 EXECUTION_MODES = {"standard", "fast"}
+MAX_SAFE_INTEGER = 9_007_199_254_740_991
 TOKEN = re.compile(r"^[a-z0-9][a-z0-9._:/-]*$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+LINE_BREAK = re.compile(r"[\r\n]")
+RECEIPT_SOURCE_FIELDS = {
+    "seam",
+    "class",
+    "wall_time_estimate",
+    "agent_time_estimate",
+    "model",
+    "reasoning",
+    "route",
+    "role",
+    "assignment_id",
+}
 DEBT_FIELDS = {"attempt", "path", "invariant", "severity", "owner", "exit_condition"}
 LANE_FIELDS = {"repo", "worktree", "branch", "state"}
 VERIFICATION_VERDICTS = {"passed", "failed", "not-run"}
@@ -194,6 +207,13 @@ def stable_token(value: Any) -> bool:
     return isinstance(value, str) and TOKEN.fullmatch(value) is not None
 
 
+def receipt_text(value: Any, label: str, errors: list[str]) -> None:
+    if not nonempty(value):
+        errors.append(f"{label} must be non-empty")
+    elif LINE_BREAK.search(value) is not None:
+        errors.append(f"{label} cannot contain CR or LF")
+
+
 def validate_execution_observation(value: Any, label: str, errors: list[str]) -> None:
     if not isinstance(value, dict):
         errors.append(f"{label} must be one execution observation object")
@@ -261,6 +281,8 @@ def validate_execution_observation(value: Any, label: str, errors: list[str]) ->
 
     prior_mode: str | None = None
     observed_turns: set[str] = set()
+    total_turn_count = 0
+    total_tool_call_count = 0
     for index, segment in enumerate(segments, 1):
         segment_label = f"{label}.segments[{index}]"
         if not isinstance(segment, dict):
@@ -280,14 +302,28 @@ def validate_execution_observation(value: Any, label: str, errors: list[str]) ->
         prior_mode = mode if isinstance(mode, str) else None
         turn_count = segment.get("turn_count")
         tool_call_count = segment.get("tool_call_count")
-        if not isinstance(turn_count, int) or isinstance(turn_count, bool) or turn_count <= 0:
-            errors.append(f"{segment_label}.turn_count must be a positive integer")
+        valid_turn_count = (
+            isinstance(turn_count, int)
+            and not isinstance(turn_count, bool)
+            and 0 < turn_count <= MAX_SAFE_INTEGER
+        )
+        if not valid_turn_count:
+            errors.append(
+                f"{segment_label}.turn_count must be a positive safe integer"
+            )
+        else:
+            total_turn_count += turn_count
         if (
             not isinstance(tool_call_count, int)
             or isinstance(tool_call_count, bool)
             or tool_call_count < 0
+            or tool_call_count > MAX_SAFE_INTEGER
         ):
-            errors.append(f"{segment_label}.tool_call_count must be a non-negative integer")
+            errors.append(
+                f"{segment_label}.tool_call_count must be a non-negative safe integer"
+            )
+        else:
+            total_tool_call_count += tool_call_count
         turn_digests = segment.get("turn_sha256")
         if (
             not isinstance(turn_digests, list)
@@ -302,10 +338,16 @@ def validate_execution_observation(value: Any, label: str, errors: list[str]) ->
             errors.append(f"{segment_label}.turn_sha256 must not repeat evidence")
         elif observed_turns.intersection(turn_digests):
             errors.append(f"{segment_label}.turn_sha256 repeats an earlier segment turn")
-        elif isinstance(turn_count, int) and not isinstance(turn_count, bool) and len(turn_digests) != turn_count:
+        elif valid_turn_count and len(turn_digests) != turn_count:
             errors.append(f"{segment_label}.turn_sha256 count must equal turn_count")
         if isinstance(turn_digests, list):
             observed_turns.update(item for item in turn_digests if isinstance(item, str))
+    if total_turn_count > MAX_SAFE_INTEGER:
+        errors.append(f"{label} derived turn_count total exceeds the safe-integer maximum")
+    if total_tool_call_count > MAX_SAFE_INTEGER:
+        errors.append(
+            f"{label} derived tool_call_count total exceeds the safe-integer maximum"
+        )
 
 
 def canonical_execution_observation(value: dict[str, Any]) -> str:
@@ -361,8 +403,7 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
                 record_digest_stale = True
 
     record_id = card.get("record_id")
-    if not nonempty(record_id):
-        errors.append("record_id must be non-empty")
+    receipt_text(record_id, "record_id", errors)
     if record is not None:
         if record.get("id") != record_id:
             errors.append("record_id conflicts with the todo record")
@@ -393,8 +434,8 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
     commit = card.get("commit")
     if not isinstance(commit, str) or COMMIT.fullmatch(commit) is None:
         errors.append("commit must be one full lowercase Git object ID")
-    if "overrun_cause" in card and not nonempty(card.get("overrun_cause")):
-        errors.append("overrun_cause must be explicit, including 'none'")
+    if "overrun_cause" in card:
+        receipt_text(card.get("overrun_cause"), "overrun_cause", errors)
 
     verification_verdict = card.get("verification_verdict")
     if verification_verdict not in VERIFICATION_VERDICTS:
@@ -430,6 +471,15 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
         ):
             if not nonempty(attempt[field]):
                 errors.append(f"attempt.{field} must be non-empty")
+        for field in (
+            "outcome",
+            "race_outcome",
+            "review_summary",
+            "reviewer_model",
+            "reviewer_reasoning",
+        ):
+            if field in attempt:
+                receipt_text(attempt[field], f"attempt.{field}", errors)
         if "execution_observation" in attempt:
             validate_execution_observation(
                 attempt["execution_observation"],
@@ -454,6 +504,15 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
             errors.append(f"attempt id {attempt_id!r} does not identify exactly one owning attempt")
         else:
             source_attempt = matches[0]
+            for field in sorted(RECEIPT_SOURCE_FIELDS):
+                receipt_text(
+                    source_attempt.get(field),
+                    f"owning attempt {field}",
+                    errors,
+                )
+            receipt_text(
+                source_attempt.get("id"), "owning attempt id", errors
+            )
             card_terminal = {
                 field: attempt[field]
                 for field in SETTLEMENT_FIELDS & set(attempt)

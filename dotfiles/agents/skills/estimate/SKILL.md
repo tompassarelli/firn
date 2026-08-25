@@ -67,7 +67,9 @@ entries. Copy values from the validated card and owning attempt; preserve
 execution segment array order while sorting object keys for the canonical JSON.
 Render an absent optional value as `none`, and use
 `none` when the optional card overrun cause is absent. Do not paraphrase a
-value, add provider actuals, or serialize the derivable wall-time ratio.
+value, add provider actuals, or serialize the derivable wall-time ratio. Reject
+CR or LF in every text value rendered directly into the receipt line; canonical
+JSON escaping remains authoritative for structured observation and debt values.
 
 Use exact execution observations for calibration only within the same source,
 `assistant-turn` unit, and `admitted-tool-call` unit. Keep `coverage =

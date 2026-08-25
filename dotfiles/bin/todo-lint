@@ -100,6 +100,7 @@ SEGMENT_FIELDS = {"mode", "turn_count", "tool_call_count", "turn_sha256"}
 OBSERVATION_COVERAGE = {"exact", "unknown"}
 OBSERVATION_VERSION = "agent-execution-observation/v1"
 EXECUTION_MODES = {"standard", "fast"}
+MAX_SAFE_INTEGER = 9_007_199_254_740_991
 EXECUTION_SHAPES = {"project", "task"}
 REVIEW_BUDGETS = {"none", "owner", "independent"}
 REVIEW_OUTCOMES = {"clean", "findings", "not-run"}
@@ -544,6 +545,8 @@ class Linter:
                 )
         prior_mode: str | None = None
         observed_turns: set[str] = set()
+        total_turn_count = 0
+        total_tool_call_count = 0
         for index, segment in enumerate(segments, 1):
             segment_label = f"{observation_label} segment {index}"
             if not isinstance(segment, dict) or set(segment) != SEGMENT_FIELDS:
@@ -570,18 +573,32 @@ class Linter:
             turn_count = segment.get("turn_count")
             tool_count = segment.get("tool_call_count")
             turn_digests = segment.get("turn_sha256")
-            if not isinstance(turn_count, int) or isinstance(turn_count, bool) or turn_count <= 0:
+            valid_turn_count = (
+                isinstance(turn_count, int)
+                and not isinstance(turn_count, bool)
+                and 0 < turn_count <= MAX_SAFE_INTEGER
+            )
+            if not valid_turn_count:
                 self.add(
                     "ATTEMPT_EXECUTION_SEGMENT_INVALID",
                     path,
-                    f"{segment_label} turn_count must be a positive integer",
+                    f"{segment_label} turn_count must be a positive safe integer",
                 )
-            if not isinstance(tool_count, int) or isinstance(tool_count, bool) or tool_count < 0:
+            else:
+                total_turn_count += turn_count
+            if (
+                not isinstance(tool_count, int)
+                or isinstance(tool_count, bool)
+                or tool_count < 0
+                or tool_count > MAX_SAFE_INTEGER
+            ):
                 self.add(
                     "ATTEMPT_EXECUTION_SEGMENT_INVALID",
                     path,
-                    f"{segment_label} tool_call_count must be a non-negative integer",
+                    f"{segment_label} tool_call_count must be a non-negative safe integer",
                 )
+            else:
+                total_tool_call_count += tool_count
             if (
                 not isinstance(turn_digests, list)
                 or not turn_digests
@@ -592,8 +609,7 @@ class Linter:
                 or len(set(turn_digests)) != len(turn_digests)
                 or bool(observed_turns.intersection(turn_digests))
                 or (
-                    isinstance(turn_count, int)
-                    and not isinstance(turn_count, bool)
+                    valid_turn_count
                     and len(turn_digests) != turn_count
                 )
             ):
@@ -606,6 +622,18 @@ class Linter:
                 observed_turns.update(
                     item for item in turn_digests if isinstance(item, str)
                 )
+        if total_turn_count > MAX_SAFE_INTEGER:
+            self.add(
+                "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                path,
+                f"{observation_label} derived turn_count total exceeds the safe-integer maximum",
+            )
+        if total_tool_call_count > MAX_SAFE_INTEGER:
+            self.add(
+                "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                path,
+                f"{observation_label} derived tool_call_count total exceeds the safe-integer maximum",
+            )
 
     def check_attempt_review(self, path: Path, label: str, attempt: dict[str, Any], settled: bool) -> None:
         review_outcome = attempt.get("review_outcome")

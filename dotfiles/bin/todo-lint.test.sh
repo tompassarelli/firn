@@ -279,6 +279,37 @@ record review-invalid.md \
   'queue_block_time_actual = "0s"' \
   'verification_time_actual = "1s"' \
   '+++'
+record unsafe-execution-counts.md \
+  '+++' \
+  'id = "unsafe-execution-counts"' \
+  'title = "Unsafe execution counts"' \
+  'shape = "project"' \
+  'life = "inactive"' \
+  'updated_at = "2026-01-01T00:00:00+00:00"' \
+  'owners = ["test"]' \
+  '[[attempt]]' \
+  'id = "A1"' \
+  'seam = "unsafe counts"' \
+  'class = "test"' \
+  'wall_time_estimate = "1m"' \
+  'agent_time_estimate = "1m"' \
+  'calibration_sample_count = 1' \
+  'started_at = "2026-01-01T00:00:00+00:00"' \
+  'model = "self"' \
+  'reasoning = "high"' \
+  'route = "test"' \
+  'assignment_id = "none"' \
+  'role = "owner"' \
+  'review_budget = "none"' \
+  'ended_at = "2026-01-01T00:01:00+00:00"' \
+  'outcome = "rejected"' \
+  'wall_time_actual = "1m"' \
+  'agent_time_actual = "1m"' \
+  'queue_block_time_actual = "0s"' \
+  'verification_time_actual = "1s"' \
+  'review_outcome = "not-run"' \
+  'execution_observation = { version = "agent-execution-observation/v1", coverage = "exact", source = "fixture-producer-join", turn_unit = "assistant-turn", tool_call_unit = "admitted-tool-call", evidence = { provider = "fixture", attempt_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", session_sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }, segments = [{ mode = "standard", turn_count = 9007199254740991, tool_call_count = 9007199254740991, turn_sha256 = ["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"] }, { mode = "fast", turn_count = 1, tool_call_count = 1, turn_sha256 = ["dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"] }, { mode = "standard", turn_count = 9007199254740992, tool_call_count = 9007199254740992, turn_sha256 = ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"] }] }' \
+  '+++'
 record cycle-a.md \
   '+++' \
   'id = "cycle-a"' \
@@ -352,6 +383,21 @@ assert any(
     item["code"] == "ATTEMPT_REVIEW_INCOMPLETE"
     and item["path"] == "invalid-attempt.md"
     and "reviewer_model and reviewer_reasoning must appear together" in item["message"]
+    for item in report["findings"]
+)
+unsafe_messages = {
+    item["message"]
+    for item in report["findings"]
+    if item["path"] == "unsafe-execution-counts.md"
+}
+assert any("turn_count must be a positive safe integer" in item for item in unsafe_messages)
+assert any("tool_call_count must be a non-negative safe integer" in item for item in unsafe_messages)
+assert any("derived turn_count total exceeds the safe-integer maximum" in item for item in unsafe_messages)
+assert any("derived tool_call_count total exceeds the safe-integer maximum" in item for item in unsafe_messages)
+assert any(
+    item["code"] == "ATTEMPT_SETTLEMENT_INCOMPLETE"
+    and item["path"] == "review-invalid.md"
+    and "execution_observation" in item["message"]
     for item in report["findings"]
 )
 PY

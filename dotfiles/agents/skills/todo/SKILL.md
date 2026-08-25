@@ -156,7 +156,9 @@ lowercase source/provider tokens matching `^[a-z0-9][a-z0-9._:/-]*$`, units
 provider/attempt/session evidence, and one or more segments. Each segment has
 `mode`, positive `turn_count`, non-negative `tool_call_count`, and one unique
 lowercase SHA-256 turn identity per counted turn. Array order is execution
-order. Coalesce adjacent equal modes, so standard→fast→standard remains three
+order. Every count and each derived count total must be at most
+9,007,199,254,740,991. Coalesce adjacent equal modes, so
+standard→fast→standard remains three
 segments. Codex `priority` service tier means `mode = "fast"`; explicit
 `default` means `mode = "standard"`. Attribution is exact only when an observed
 settings snapshot precedes each counted turn and every turn joins to the
@@ -175,6 +177,12 @@ paths, transcript text, prompts, tool arguments, or results. Totals are sums
 over exact segments and are never stored. Unsupported providers and current
 child sessions without the initial settings snapshot and exact attempt/session
 join settle `unknown`.
+
+Do not mutate historical settled attempts merely because they predate this
+field. The linter reports their missing terminal observation under the current
+schema, while analysis treats the absence as unknown and excludes it from
+mode/count cohorts. Only an authoritative producer join may materialize an
+exact or explicit unknown object in a record.
 
 Completion is not a vague quality certificate. An independent review consumes
 one exact commit and records concrete findings and their disposition. If a
@@ -246,7 +254,8 @@ rewriting, lane or branch operations, or unrelated files.
 The settler validates the record hash, record and attempt identity, owner
 authority, chronology, evidence/verdict consistency, review, debt, lane
 identity, duration relations, execution coverage, units, hashed joins, safe
-counts, and segment coalescing before mutation. Every supplied terminal field
+counts and derived totals, segment coalescing, and receipt-safe single-line
+text before mutation. Every supplied terminal field
 must either be absent or already equal in the owning attempt; a conflicting or
 unlisted prior terminal field invalidates the card. Require
 `ended_at - started_at == wall_time_actual` at compact-duration precision, and
