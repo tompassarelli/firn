@@ -1,0 +1,4 @@
+interface:
+  display_name: "Beagle System Design Reference"
+  short_description: "Detailed Beagle system design guidance"
+  default_prompt: "Use $beagle-system-design-reference for detailed Beagle system design guidance."

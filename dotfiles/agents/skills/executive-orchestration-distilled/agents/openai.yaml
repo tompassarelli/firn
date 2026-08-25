@@ -1,0 +1,4 @@
+interface:
+  display_name: "Executive Orchestration Distilled"
+  short_description: "Core fleet command boundaries and workflow"
+  default_prompt: "Use $executive-orchestration-distilled to command delegated workstreams."

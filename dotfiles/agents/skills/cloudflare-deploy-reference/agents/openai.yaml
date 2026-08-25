@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cloudflare Deploy Reference"
+  short_description: "Detailed Cloudflare deployment guidance"
+  default_prompt: "Use $cloudflare-deploy-reference for detailed Cloudflare deployment guidance."

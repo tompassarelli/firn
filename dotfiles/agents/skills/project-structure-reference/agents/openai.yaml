@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Structure Reference"
+  short_description: "Detailed project layout and lifecycle guidance"
+  default_prompt: "Use $project-structure-reference for detailed project structure guidance."

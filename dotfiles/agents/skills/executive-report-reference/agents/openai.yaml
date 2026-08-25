@@ -1,0 +1,4 @@
+interface:
+  display_name: "Executive Report Reference"
+  short_description: "Detailed executive reporting formats and rules"
+  default_prompt: "Use $executive-report-reference for detailed executive reporting guidance."

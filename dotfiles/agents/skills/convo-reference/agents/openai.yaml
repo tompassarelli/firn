@@ -1,0 +1,4 @@
+interface:
+  display_name: "Convo Reference"
+  short_description: "Detailed convo commands, filters, and recipes"
+  default_prompt: "Use $convo-reference for detailed convo search commands and recipes."

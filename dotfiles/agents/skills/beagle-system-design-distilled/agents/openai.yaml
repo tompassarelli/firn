@@ -1,0 +1,4 @@
+interface:
+  display_name: "Beagle System Design Distilled"
+  short_description: "Core Beagle architecture decisions and boundaries"
+  default_prompt: "Use $beagle-system-design-distilled to design a coherent Beagle system change."

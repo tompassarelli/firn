@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Structure Distilled"
+  short_description: "Core project layout decisions and safeguards"
+  default_prompt: "Use $project-structure-distilled to structure this project for reproducibility and handoff."

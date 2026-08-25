@@ -1,0 +1,4 @@
+interface:
+  display_name: "Estimate Distilled"
+  short_description: "Core calibrated agent estimation workflow"
+  default_prompt: "Use $estimate-distilled to give a calibrated agent ETA and checkpoint."

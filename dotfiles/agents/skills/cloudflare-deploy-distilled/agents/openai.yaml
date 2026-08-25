@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cloudflare Deploy Distilled"
+  short_description: "Safe Cloudflare deploy workflow and boundaries"
+  default_prompt: "Use $cloudflare-deploy-distilled to deploy and verify this Cloudflare project."

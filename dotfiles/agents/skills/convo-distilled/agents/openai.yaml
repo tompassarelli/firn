@@ -1,0 +1,4 @@
+interface:
+  display_name: "Convo Distilled"
+  short_description: "Safe conversation search workflow and boundaries"
+  default_prompt: "Use $convo-distilled to search prior agent conversations safely."
