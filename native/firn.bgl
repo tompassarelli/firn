@@ -16,6 +16,8 @@
 (defunion CommandId
   (FlakeInputsCommand [token Bool])
   (FlakeInputResolveCommand [token Bool])
+  (HostPrepareCommand [token Bool])
+  (HostActivateCommand [token Bool])
   (HostRebuildCommand [token Bool])
   (HostRollbackCommand [token Bool])
   (HostImpactCommand [token Bool])
@@ -149,6 +151,22 @@
     "" ""
     (->HostRebuildCommand false) (->NativeRebuildFamily false)
     (->CurrentHostLeaf false)))
+
+(def host-prepare FirnCommand
+  (->FirnCommand
+    "host" "prepare" "<host>" "   "
+    "pin, validate, and realize one exact commit without activation"
+    "" ""
+    (->HostPrepareCommand false) (->NativeRebuildFamily false)
+    (->CurrentHostLeaf false)))
+
+(def host-activate FirnCommand
+  (->FirnCommand
+    "host" "activate" "<exact-store-path>" "  "
+    "activate one already-realized exact NixOS toplevel without building"
+    "" ""
+    (->HostActivateCommand false) (->NativeRebuildFamily false)
+    (->RequiredLeaf false)))
 
 (def host-rollback FirnCommand
   (->FirnCommand
@@ -495,7 +513,8 @@
   [(->CommandGroup [flake-inputs])
    (->CommandGroup [flake-input-resolve])
    (->CommandGroup
-     [host-rebuild host-rollback host-impact host-list host-status host-gen])
+     [host-prepare host-activate host-rebuild host-rollback host-impact host-list
+      host-status host-gen])
    (->CommandGroup
      [module-list module-refs module-status module-add module-enable
       module-disable])
@@ -904,6 +923,14 @@
          (= edge "rollback")
          (rebuild/-main
            ["host" "rollback" (leaf-host (dispatchstep-leaf step))])
+
+         (= edge "prepare")
+         (rebuild/-main
+           ["host" "prepare" (leaf-host (dispatchstep-leaf step))])
+
+         (= edge "activate")
+         (rebuild/-main
+           ["host" "activate" (leaf-host (dispatchstep-leaf step))])
 
          :else
          (rebuild/-main

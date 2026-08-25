@@ -86,7 +86,7 @@
       (str "nixosConfigurations." host ".config.system.build.toplevel")
       (str "darwinConfigurations." host ".system"))))
 
-(defn prebuild-effects
+(defn preparation-effects
   [snapshot Snapshot
    host String
    platform Platform
@@ -94,7 +94,6 @@
   [(capture-effect "pin committed snapshot"
      ["git" "-C" (snapshot-root snapshot) "cat-file" "-e"
       (str (snapshot-revision snapshot) "^{commit}")])
-   (inherit-effect "activation preflight" ["sudo" "-v"])
    (capture-effect "materialize committed snapshot"
      ["git" "-C" (snapshot-root snapshot) "worktree" "add" "--detach"
       snapshot-directory (snapshot-revision snapshot)])
@@ -118,13 +117,22 @@
    platform Platform
    built-path String] (Vec ArgvEffect)
   (if (linux? platform)
-    [(inherit-effect "activate system profile"
+    [(inherit-effect "activation preflight" ["sudo" "-v"])
+     (inherit-effect "activate system profile"
        ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
         "--set" built-path])
      (activate-verified-closure-effect built-path)]
-    [(inherit-effect "activate verified closure"
+    [(inherit-effect "activation preflight" ["sudo" "-v"])
+     (inherit-effect "activate verified closure"
        ["sudo" "darwin-rebuild" "switch" "--flake"
         (str (snapshot-uri snapshot) "#" host)])]))
+
+(defn exact-path-activation-effects [built-path String] (Vec ArgvEffect)
+  [(inherit-effect "activation preflight" ["sudo" "-v"])
+   (inherit-effect "activate system profile"
+     ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
+      "--set" built-path])
+   (activate-verified-closure-effect built-path)])
 
 (defn generation-query-effect [platform Platform] ArgvEffect
   (if (linux? platform)

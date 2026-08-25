@@ -44,6 +44,8 @@
   (match command
     [(FlakeInputsCommand token) "flake-inputs"]
     [(FlakeInputResolveCommand token) "flake-input-resolve"]
+    [(HostPrepareCommand token) "host-prepare"]
+    [(HostActivateCommand token) "host-activate"]
     [(HostRebuildCommand token) "host-rebuild"]
     [(HostRollbackCommand token) "host-rollback"]
     [(HostImpactCommand token) "host-impact"]
@@ -89,7 +91,7 @@
 
 (defn case-registry-and-owners [] Bool
   (and
-    (= (firn/command-count) 44)
+    (= (firn/command-count) 46)
     (= (owner-name "tag" "resolve") "tag")
     (= (owner-name "flake-input" "resolve") "flake-input")
     (= (owner-name "module" "refs") "inventory")
@@ -99,6 +101,8 @@
     (= (owner-name "schema" "extract") "schema")
     (= (owner-name "repo" "doctor") "repo-workflow")
     (= (owner-name "host" "rebuild") "rebuild")
+    (= (owner-name "host" "prepare") "rebuild")
+    (= (owner-name "host" "activate") "rebuild")
     (= (owner-name "host" "rollback") "rebuild")
     (= (family-name (firn/->NativeCiPolicyFamily false)) "ci-policy")
     (= (owner-name "repo" "missing") "missing")
@@ -326,7 +330,7 @@
 
 (defn case-documentation-and-diagnostics [] Bool
   (and
-    (= (firn/command-count) 44)
+    (= (firn/command-count) 46)
     (all-documented-commands-planned?)
     (all-required-leaves-diagnose?)
     (error-diagnostic? (firn/parse-dispatch ["unknown" "edge"]))

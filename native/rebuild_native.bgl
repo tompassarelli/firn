@@ -220,6 +220,62 @@
     [(SequenceSucceeded stdout)
      (tag-generation snapshot host platform trace-path trace-id)]))
 
+(defn activate-exact-path
+  [built-path String
+   trace-path (U String Nil)
+   trace-id String]
+  Int
+  (if (not (rebuild/exact-store-path? built-path))
+    (do
+      (stderr-line
+        "firn activate: target must be one exact /nix/store toplevel path")
+      64)
+    (match (execute-effect (rebuild/generation-closure-check-effect built-path)
+             trace-path trace-id built-path)
+      [(EffectFailed status)
+       (do
+         (stderr-line
+           (str "firn activate: target does not contain an executable "
+             "switch-to-configuration (status " status "); no activation was attempted"))
+         status)]
+      [(EffectSucceeded stdout)
+       (match (execute-effects (rebuild/exact-path-activation-effects built-path)
+                trace-path trace-id built-path)
+         [(SequenceFailed status)
+          (do
+            (stderr-line
+              (str "firn activate: stopped at first failure (status " status
+                "); verify the active generation before retrying"))
+            status)]
+         [(SequenceSucceeded stdout)
+          (do (print (str "firn activate: activated " built-path "\n")) 0)])])))
+
+(defn prepare-pinned
+  [snapshot rebuild/Snapshot
+   host String
+   platform rebuild/Platform
+   snapshot-directory String
+   trace-path (U String Nil)
+   trace-id String]
+  Int
+  (match (execute-effects
+           (rebuild/preparation-effects
+             snapshot host platform snapshot-directory)
+           trace-path trace-id (rebuild/snapshot-revision snapshot))
+    [(SequenceFailed status) (fail-phase status)]
+    [(SequenceSucceeded stdout)
+     (let [built-path String (str/trim stdout)]
+       (if (rebuild/exact-store-path? built-path)
+         (do
+           (print
+             (str "firn prepare: prepared "
+               (rebuild/snapshot-revision snapshot) " " built-path "\n"))
+           0)
+         (do
+           (stderr-line
+             "firn prepare: build did not return one exact Nix store path")
+           65)))]))
+
 (defn run-pinned
   [snapshot rebuild/Snapshot
    host String
@@ -229,18 +285,37 @@
    trace-id String]
   Int
   (match (execute-effects
-           (rebuild/prebuild-effects
+           (rebuild/preparation-effects
              snapshot host platform snapshot-directory)
            trace-path trace-id (rebuild/snapshot-revision snapshot))
     [(SequenceFailed status) (fail-phase status)]
     [(SequenceSucceeded stdout)
      (let [built-path String (str/trim stdout)]
-       (if (rebuild/store-path? built-path)
+       (if (rebuild/exact-store-path? built-path)
          (activate snapshot host platform built-path trace-path trace-id)
          (do
            (stderr-line
-             "firn rebuild: build did not return a Nix store path")
+             "firn rebuild: build did not return one exact Nix store path")
            65)))]))
+
+(defn prepare
+  [root String
+   host String
+   snapshot-directory String
+   trace-path (U String Nil)
+   trace-id String] Int
+  (match (pin-snapshot root trace-path trace-id)
+    [(SnapshotPinFailed status) (fail-phase status)]
+    [(SnapshotPinned snapshot)
+     (match (select-platform (rebuild/snapshot-revision snapshot)
+              trace-path trace-id)
+       [(PlatformRejected name)
+        (do
+          (stderr-line (str "firn prepare: unsupported platform '" name "'"))
+          69)]
+       [(PlatformSelected platform)
+        (prepare-pinned snapshot host platform snapshot-directory
+          trace-path trace-id)])]))
 
 (defn run
   [root String
@@ -416,6 +491,8 @@
   (do
     (stderr-line
       (str "Usage:\n"
+        "  firn host prepare <host>\n"
+        "  firn host activate <exact-store-path>\n"
         "  firn host rebuild <host>\n"
         "  firn host rollback <generation>"))
     64))
@@ -428,8 +505,21 @@
           trace-id-value (U String Nil) (required-env "FIRN_TRACE_ID")
           trace-id String (if (nil? trace-id-value) "" trace-id-value)]
       (cond
+        (= (nth args 1) "activate")
+        (activate-exact-path (nth args 2) trace-path trace-id)
+
         (= (nth args 1) "rollback")
         (run-rollback (nth args 2) trace-path trace-id)
+
+        (= (nth args 1) "prepare")
+        (let [root (U String Nil) (repository-root)
+              snapshot-path String (snapshot-directory)]
+          (if (nil? root)
+            (do
+              (stderr-line
+                "firn prepare: FIRN_REPO and HOME are not set")
+              64)
+            (prepare root (nth args 2) snapshot-path trace-path trace-id)))
 
         (= (nth args 1) "rebuild")
         (let [root (U String Nil) (repository-root)

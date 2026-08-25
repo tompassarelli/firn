@@ -32,14 +32,13 @@
   (let [(effects (Vec rebuild/ArgvEffect))
         (append-effects
           (rebuild/pin-effects "/repo")
-          (rebuild/prebuild-effects
+          (rebuild/preparation-effects
             (snapshot) "whiterabbit" (rebuild/linux-platform) "/snapshot"))]
     (= (rebuild/effect-phases effects)
        ["pin revision"
         "pin branch"
         "select platform"
         "pin committed snapshot"
-        "activation preflight"
         "materialize committed snapshot"
         "validate committed snapshot"
         "retire validation snapshot"
@@ -47,9 +46,9 @@
 
 (defn case-committed-snapshot-build [] Bool
   (let [(effects (Vec rebuild/ArgvEffect))
-        (rebuild/prebuild-effects
+        (rebuild/preparation-effects
           (snapshot) "whiterabbit" (rebuild/linux-platform) "/snapshot")
-        (build rebuild/ArgvEffect) (nth effects 5)]
+        (build rebuild/ArgvEffect) (nth effects 4)]
     (and
       (= (rebuild/argveffect-argv (nth effects 0))
          ["git" "-C" "/repo" "cat-file" "-e"
@@ -62,6 +61,22 @@
             "&ref=native-rebuild-workflow#nixosConfigurations."
             "whiterabbit.config.system.build.toplevel")]))))
 
+(defn case-exact-path-activation [] Bool
+  (let [(effects (Vec rebuild/ArgvEffect))
+        (rebuild/exact-path-activation-effects "/nix/store/system")]
+    (and
+      (= (rebuild/effect-phases effects)
+         ["activation preflight"
+          "activate system profile"
+          "activate verified closure"])
+      (= (rebuild/argveffect-argv (nth effects 0)) ["sudo" "-v"])
+      (= (rebuild/argveffect-argv (nth effects 1))
+         ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
+          "--set" "/nix/store/system"])
+      (= (rebuild/argveffect-argv (nth effects 2))
+         ["sudo" "/nix/store/system/bin/switch-to-configuration"
+          "switch"]))))
+
 (defn case-platform-activation [] Bool
   (let [(linux (Vec rebuild/ArgvEffect))
         (rebuild/activation-effects
@@ -72,14 +87,17 @@
           (snapshot) "workstation" (rebuild/darwin-platform)
           "/nix/store/darwin-system")]
     (and
-      (= (count linux) 2)
+      (= (count linux) 3)
       (= (rebuild/argveffect-argv (nth linux 0))
+         ["sudo" "-v"])
+      (= (rebuild/argveffect-argv (nth linux 1))
          ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
           "--set" "/nix/store/system"])
-      (= (rebuild/argveffect-argv (nth linux 1))
+      (= (rebuild/argveffect-argv (nth linux 2))
          ["sudo" "/nix/store/system/bin/switch-to-configuration" "switch"])
-      (= (count darwin) 1)
-      (= (rebuild/argveffect-argv (nth darwin 0))
+      (= (count darwin) 2)
+      (= (rebuild/argveffect-argv (nth darwin 0)) ["sudo" "-v"])
+      (= (rebuild/argveffect-argv (nth darwin 1))
          ["sudo" "darwin-rebuild" "switch" "--flake"
           (str "git+file:///repo?rev=" revision
             "&ref=native-rebuild-workflow#workstation")]))))
@@ -156,7 +174,7 @@
 (defn workflow-effects [] (Vec rebuild/ArgvEffect)
   (let [(snapshot-value rebuild/Snapshot) (snapshot)
         (prebuild (Vec rebuild/ArgvEffect))
-        (rebuild/prebuild-effects snapshot-value "whiterabbit"
+        (rebuild/preparation-effects snapshot-value "whiterabbit"
           (rebuild/linux-platform) "/snapshot")
         (activation (Vec rebuild/ArgvEffect))
         (rebuild/activation-effects snapshot-value "whiterabbit"
@@ -170,19 +188,19 @@
 (defn case-first-failure-stops [] Bool
   (let [(result rebuild/Simulation)
         (rebuild/simulate (workflow-effects)
-          [0 0 0 0 0 23 0 0 0 0 0] revision)
+          [0 0 0 0 23 0 0 0 0 0 0] revision)
         (executed (Vec rebuild/ArgvEffect))
         (rebuild/simulation-executed result)
         (events (Vec rebuild/TraceEvent))
         (rebuild/simulation-events result)]
     (and
       (= (rebuild/simulation-status result) 23)
-      (= (count executed) 6)
-      (= (rebuild/argveffect-phase (nth executed 5))
+      (= (count executed) 5)
+      (= (rebuild/argveffect-phase (nth executed 4))
          "build committed snapshot")
-      (= (count events) 12)
-      (= (rebuild/traceevent-event (nth events 11)) "span_end")
-      (= (rebuild/traceevent-status (nth events 11)) "error")
+      (= (count events) 10)
+      (= (rebuild/traceevent-event (nth events 9)) "span_end")
+      (= (rebuild/traceevent-status (nth events 9)) "error")
       (not (str/includes?
              (str (rebuild/effect-phases executed)) "activate")))))
 
@@ -195,6 +213,7 @@
   [(->TestResult "snapshot-identity" (case-snapshot-identity))
    (->TestResult "pin-and-preflight-order" (case-pin-and-preflight-order))
    (->TestResult "committed-snapshot-build" (case-committed-snapshot-build))
+   (->TestResult "exact-path-activation" (case-exact-path-activation))
    (->TestResult "platform-activation" (case-platform-activation))
    (->TestResult "generation-tagging" (case-generation-tagging))
    (->TestResult "explicit-prior-generation"

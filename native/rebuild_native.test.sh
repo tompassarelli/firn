@@ -127,8 +127,9 @@ case "$name" in
     ;;
   test)
     if [[ "${1:-}" != -x \
-        || "${2:-}" != /nix/store/controlled-rollback-system/bin/switch-to-configuration ]]; then
-      printf 'invalid rollback closure check: %s %s\n' \
+        || ( "${2:-}" != /nix/store/controlled-system/bin/switch-to-configuration \
+          && "${2:-}" != /nix/store/controlled-rollback-system/bin/switch-to-configuration ) ]]; then
+      printf 'invalid closure check: %s %s\n' \
         "${1:-missing}" "${2:-missing}" >&2
       exit 1
     fi
@@ -159,9 +160,9 @@ for command in git uname nix nixos-rebuild darwin-rebuild readlink test firn sud
   ln -s command-stub "$fakebin/$command"
 done
 
-run_case() {
-  local name="$1" platform="$2"
-  shift 2
+run_host_case() {
+  local name="$1" platform="$2" edge="$3" target="$4"
+  shift 4
   : >"$scratch/$name.commands"
   rm -f "$scratch/$name.trace"
   set +e
@@ -173,11 +174,17 @@ run_case() {
     FIRN_TRACE_ID="$name" \
     FIRN_COMMAND_LOG="$scratch/$name.commands" \
     CASE_PLATFORM="$platform" \
-    "$@" "$scratch/rebuild-native" host rebuild whiterabbit \
+    "$@" "$scratch/rebuild-native" host "$edge" "$target" \
     >"$scratch/$name.out" 2>"$scratch/$name.err"
   local status=$?
   set -e
   printf '%s\n' "$status" >"$scratch/$name.status"
+}
+
+run_case() {
+  local name="$1" platform="$2"
+  shift 2
+  run_host_case "$name" "$platform" rebuild whiterabbit "$@"
 }
 
 run_case linux Linux env
@@ -189,11 +196,11 @@ git
 git
 uname
 git
-sudo
 git
 firn
 git
 nix
+sudo
 sudo
 sudo
 nixos-rebuild
@@ -215,6 +222,44 @@ rg -Fq $'git\t-C\t'"$fixture"$'\ttag\t-f\tgen-42' \
   || die "Linux trace start count changed"
 [[ "$(rg -c 'span_end' "$scratch/linux.trace")" == 14 ]] \
   || die "Linux trace end count changed"
+
+run_host_case prepare Linux prepare whiterabbit env
+[[ "$(<"$scratch/prepare.status")" == 0 ]] \
+  || die "controlled preparation failed"
+rg -Fq $'nix\tbuild\t--no-link\t--print-out-paths\tgit+file://' \
+  "$scratch/prepare.commands" \
+  || die "preparation did not build the exact snapshot"
+if rg -q 'sudo|nix-env|switch-to-configuration|nixos-rebuild|darwin-rebuild' \
+    "$scratch/prepare.commands"; then
+  die "activation leaked into preparation"
+fi
+rg -Fq \
+  'firn prepare: prepared aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa /nix/store/controlled-system' \
+  "$scratch/prepare.out" || die "preparation receipt is missing"
+
+run_host_case activate Linux activate /nix/store/controlled-system env
+[[ "$(<"$scratch/activate.status")" == 0 ]] \
+  || die "controlled exact activation failed"
+if rg -q $'^git\t|^nix\t|^firn\t|worktree|darwin-rebuild' \
+    "$scratch/activate.commands"; then
+  die "preparation or evaluation leaked into exact activation"
+fi
+rg -Fq \
+  $'test\t-x\t/nix/store/controlled-system/bin/switch-to-configuration' \
+  "$scratch/activate.commands" \
+  || die "exact activation did not validate the selected toplevel"
+rg -Fq \
+  $'sudo\tnix-env\t--profile\t/nix/var/nix/profiles/system\t--set\t/nix/store/controlled-system' \
+  "$scratch/activate.commands" \
+  || die "exact activation did not select the exact system profile"
+rg -Fq 'firn activate: activated /nix/store/controlled-system' \
+  "$scratch/activate.out" || die "exact activation receipt is missing"
+
+run_host_case activate-invalid Linux activate relative-system env
+[[ "$(<"$scratch/activate-invalid.status")" == 64 ]] \
+  || die "relative activation target was accepted"
+[[ ! -s "$scratch/activate-invalid.commands" ]] \
+  || die "invalid activation target executed an effect"
 
 run_case darwin Darwin env
 [[ "$(<"$scratch/darwin.status")" == 0 ]] \
