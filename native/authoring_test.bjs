@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.authoring-test
   (:require [firn.authoring :as a]))
 
@@ -19,7 +19,7 @@
     [(TemplateSubmodule name) "template-submodule"]
     [(TemplateHome name) "template-home"]
     [(TemplateHost name) "template-host"]
-    [(SecretList) "secret-list"]
+    [(SecretList token) "secret-list"]
     [(SecretShow name) "secret-show"]
     [(SecretEdit name) "secret-edit"]))
 
@@ -30,7 +30,7 @@
     [(TemplateSubmodule name) name]
     [(TemplateHome name) name]
     [(TemplateHost name) name]
-    [(SecretList) ""]
+    [(SecretList token) ""]
     [(SecretShow name) name]
     [(SecretEdit name) name]))
 
@@ -319,7 +319,8 @@
      (case-schema-json-name-authority))
    (->TestResult "empty-schema-summary" (case-empty-schema-summary))])
 
-(defn -main [(args (Vec String))] Int
+(js/export
+  (defn run-tests [] Int
   (let [(results (Vec TestResult)) (cases)]
     (loop [(index Int) 0
            (failures Int) 0]
@@ -333,4 +334,4 @@
             (recur (+ index 1)
               (if (testresult-passed result)
                 failures
-                (+ failures 1)))))))))
+                (+ failures 1))))))))))

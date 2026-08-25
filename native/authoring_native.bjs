@@ -1,0 +1,338 @@
+#lang beagle/js
+(ns firn.authoring-native
+  (:require [firn.authoring :as authoring]))
+
+(declare-extern host-getenv (Fn [Any String] (U String Nil)))
+(declare-extern host-path-kind (Fn [Any String] Any))
+(declare-extern host-read-text-bounded (Fn [Any String Int] Any))
+(declare-extern host-make-parent-directories (Fn [Any String] Any))
+(declare-extern host-write-text-atomic (Fn [Any String String] Any))
+(declare-extern host-list-directory-bounded (Fn [Any String Int] Any))
+(declare-extern host-run-inherit (Fn [Any (Vec String)] Int))
+(declare-extern host-out (Fn [Any String] Nil))
+(declare-extern host-err (Fn [Any String] Nil))
+(declare-extern host-result-tag (Fn [Any] String))
+(declare-extern host-result-int (Fn [Any String] Int))
+(declare-extern host-result-string (Fn [Any String] String))
+(declare-extern host-result-strings (Fn [Any String] (Vec String)))
+
+(def max-schema-bytes Int 67108864)
+(def max-directory-entries Int 16384)
+
+(defunion SchemaLoadResult
+  (SchemaLoaded [entries (Vec authoring/SchemaEntry)])
+  (SchemaLoadRejected [message String]))
+
+(defunion OperationResult
+  (OperationOk [token Bool])
+  (OperationRejected [message String]))
+
+(defunion SecretNamesResult
+  (SecretNamesLoaded [names (Vec String)])
+  (SecretNamesRejected [message String]))
+
+(defunion SecretSelectionResult
+  (SecretSelected [absolute String])
+  (SecretMissing [token Bool])
+  (SecretSelectionRejected [message String]))
+
+(defn path [root String relative String] String
+  (str root "/" relative))
+
+(defn errno-message
+  [operation String relative String errno Int] String
+  (str "firn authoring: " operation " '" relative "': errno " errno "\n"))
+
+(defn result-error? [result Any] Bool
+  (= "error" (host-result-tag result)))
+
+(defn result-errno [result Any] Int
+  (host-result-int result "errno"))
+
+(defn emit-error [bridge Any message String] Int
+  (do (host-err bridge message) 1))
+
+(defn repository-root [bridge Any] (U String Nil)
+  (let [explicit (U String Nil) (host-getenv bridge "FIRN_REPO")]
+    (if (some? explicit)
+      explicit
+      (let [home (U String Nil) (host-getenv bridge "HOME")]
+        (if (some? home) (str home "/code/nixos-config/main") nil)))))
+
+(defn usage-error [bridge Any] Int
+  (do
+    (host-err bridge
+      (str
+        "Usage: firn module add <name>\n"
+        "       firn template service <name>\n"
+        "       firn template submodule <name>\n"
+        "       firn template home <name>\n"
+        "       firn template host <name>\n"
+        "       firn secret list [all]\n"
+        "       firn secret show <name>\n"
+        "       firn secret edit <name>\n"))
+    64))
+
+(defn load-schema [bridge Any root String] SchemaLoadResult
+  (let [relative String ".beagle-cache/schema.json"
+        absolute String (path root relative)
+        kind-result Any (host-path-kind bridge absolute)]
+    (if (result-error? kind-result)
+      (let [errno Int (result-errno kind-result)]
+        (if (= errno 2)
+          (->SchemaLoaded [])
+          (->SchemaLoadRejected
+            (errno-message "cannot inspect schema" relative errno))))
+      (let [kind Int (host-result-int kind-result "kind")]
+        (if (not (or (= kind 1) (= kind 3)))
+          (->SchemaLoadRejected
+            (str "firn authoring: schema is not a file '" relative "'\n"))
+          (let [read-result Any
+                (host-read-text-bounded bridge absolute max-schema-bytes)]
+            (if (result-error? read-result)
+              (->SchemaLoadRejected
+                (errno-message "cannot read schema" relative
+                  (result-errno read-result)))
+              (match
+                (authoring/schema-entries-from-json
+                  (host-result-string read-result "text"))
+                [(SchemaParsed entries) (->SchemaLoaded entries)]
+                [(SchemaRejected message offset)
+                 (->SchemaLoadRejected
+                   (str "firn authoring: invalid schema '" relative
+                     "' at offset " offset ": " message "\n"))]))))))))
+
+(defn load-schema-for-action
+  [bridge Any root String action authoring/AuthoringAction] SchemaLoadResult
+  (match action
+    [(TemplateService name) (load-schema bridge root)]
+    [(ModuleAdd name) (->SchemaLoaded [])]
+    [(TemplateSubmodule name) (->SchemaLoaded [])]
+    [(TemplateHome name) (->SchemaLoaded [])]
+    [(TemplateHost name) (->SchemaLoaded [])]
+    [(SecretList token) (->SchemaLoaded [])]
+    [(SecretShow name) (->SchemaLoaded [])]
+    [(SecretEdit name) (->SchemaLoaded [])]))
+
+(defn preflight-module-directory
+  [bridge Any root String action authoring/AuthoringAction] OperationResult
+  (match action
+    [(ModuleAdd name)
+     (let [relative String (str "modules/" name)
+           result Any (host-path-kind bridge (path root relative))]
+       (if (result-error? result)
+         (if (= 2 (result-errno result))
+           (->OperationOk false)
+           (->OperationRejected
+             (errno-message "cannot inspect" relative (result-errno result))))
+         (->OperationRejected (str "Module " name " already exists\n"))))]
+    [(TemplateService name) (->OperationOk false)]
+    [(TemplateSubmodule name) (->OperationOk false)]
+    [(TemplateHome name) (->OperationOk false)]
+    [(TemplateHost name) (->OperationOk false)]
+    [(SecretList token) (->OperationOk false)]
+    [(SecretShow name) (->OperationOk false)]
+    [(SecretEdit name) (->OperationOk false)]))
+
+(defn preflight-targets
+  [bridge Any root String targets (Vec authoring/AuthoringTarget) index Int]
+  OperationResult
+  (if (>= index (count targets))
+    (->OperationOk false)
+    (let [target authoring/AuthoringTarget (nth targets index)
+          relative String (authoring/authoringtarget-relative target)
+          absolute String (path root relative)
+          result Any (host-path-kind bridge absolute)]
+      (if (result-error? result)
+        (if (= 2 (result-errno result))
+          (preflight-targets bridge root targets (+ index 1))
+          (->OperationRejected
+            (errno-message "cannot inspect" relative (result-errno result))))
+        (->OperationRejected
+          (str "firn scaffold: refusing to overwrite " absolute "\n"))))))
+
+(defn write-targets
+  [bridge Any root String targets (Vec authoring/AuthoringTarget) index Int]
+  OperationResult
+  (if (>= index (count targets))
+    (->OperationOk false)
+    (let [target authoring/AuthoringTarget (nth targets index)
+          relative String (authoring/authoringtarget-relative target)
+          absolute String (path root relative)
+          mkdir-result Any (host-make-parent-directories bridge absolute)]
+      (if (result-error? mkdir-result)
+        (->OperationRejected
+          (errno-message "cannot create parent for" relative
+            (result-errno mkdir-result)))
+        (let [write-result Any
+              (host-write-text-atomic bridge absolute
+                (authoring/authoringtarget-contents target))]
+          (if (result-error? write-result)
+            (->OperationRejected
+              (errno-message "cannot write" relative
+                (result-errno write-result)))
+            (write-targets bridge root targets (+ index 1))))))))
+
+(defn git-add-argv
+  [root String targets (Vec authoring/AuthoringTarget)] (Vec String)
+  (loop [index Int 0 argv (Vec String) ["git" "-C" root "add" "--"]]
+    (if (>= index (count targets))
+      argv
+      (recur (+ index 1)
+        (conj argv
+          (path root
+            (authoring/authoringtarget-relative (nth targets index))))))))
+
+(defn child-status [bridge Any tool String status Int] Int
+  (if (< status 0)
+    (do
+      (host-err bridge
+        (str "firn authoring: cannot run " tool ": errno " (- status) "\n"))
+      1)
+    status))
+
+(defn stage-created [bridge Any root String plan authoring/AuthoringPlan] Int
+  (let [status Int
+        (host-run-inherit bridge
+          (git-add-argv root (authoring/authoringplan-targets plan)))]
+    (if (= status 0)
+      (do (host-out bridge (authoring/authoringplan-success-output plan)) 0)
+      (child-status bridge "git" status))))
+
+(defn run-scaffold
+  [bridge Any root String action authoring/AuthoringAction] Int
+  (match (load-schema-for-action bridge root action)
+    [(SchemaLoadRejected message) (emit-error bridge message)]
+    [(SchemaLoaded entries)
+     (match (authoring/plan-authoring action entries)
+       [(AuthoringPlanRejected message) (emit-error bridge message)]
+       [(AuthoringPlanReady plan)
+        (match (preflight-module-directory bridge root action)
+          [(OperationRejected message) (emit-error bridge message)]
+          [(OperationOk token)
+           (match (preflight-targets bridge root
+                    (authoring/authoringplan-targets plan) 0)
+             [(OperationRejected message) (emit-error bridge message)]
+             [(OperationOk token)
+              (match (write-targets bridge root
+                       (authoring/authoringplan-targets plan) 0)
+                [(OperationRejected message) (emit-error bridge message)]
+                [(OperationOk token) (stage-created bridge root plan)])])])])]))
+
+(defn yaml-entry? [entry String] Bool
+  (and (authoring/ends-with? entry ".yaml")
+       (authoring/safe-secret-name? (authoring/strip-yaml-suffix entry))))
+
+(defn load-secret-names-from
+  [bridge Any root String entries (Vec String) index Int names (Vec String)]
+  SecretNamesResult
+  (if (>= index (count entries))
+    (->SecretNamesLoaded names)
+    (let [entry String (nth entries index)]
+      (if (not (yaml-entry? entry))
+        (load-secret-names-from bridge root entries (+ index 1) names)
+        (let [relative String (str "secrets/" entry)
+              result Any (host-path-kind bridge (path root relative))]
+          (if (result-error? result)
+            (if (= 2 (result-errno result))
+              (load-secret-names-from bridge root entries (+ index 1) names)
+              (->SecretNamesRejected
+                (errno-message "cannot inspect" relative
+                  (result-errno result))))
+            (load-secret-names-from bridge root entries (+ index 1)
+              (if (= 1 (host-result-int result "kind"))
+                (conj names (authoring/strip-yaml-suffix entry))
+                names))))))))
+
+(defn load-secret-names [bridge Any root String] SecretNamesResult
+  (let [relative String "secrets"
+        result Any
+        (host-list-directory-bounded bridge (path root relative)
+          max-directory-entries)]
+    (if (result-error? result)
+      (let [errno Int (result-errno result)]
+        (if (or (= errno 2) (= errno 20))
+          (->SecretNamesLoaded [])
+          (->SecretNamesRejected (errno-message "cannot list" relative errno))))
+      (load-secret-names-from bridge root
+        (host-result-strings result "entries") 0 []))))
+
+(defn secret-lines [names (Vec String)] String
+  (loop [index Int 0 text String ""]
+    (if (>= index (count names))
+      text
+      (recur (+ index 1) (str text (nth names index) "\n")))))
+
+(defn missing-secret [bridge Any name String] Int
+  (emit-error bridge (str "No secret file: secrets/" name ".yaml\n")))
+
+(defn selected-secret-path
+  [bridge Any root String name String] SecretSelectionResult
+  (match (load-secret-names bridge root)
+    [(SecretNamesRejected message) (->SecretSelectionRejected message)]
+    [(SecretNamesLoaded names)
+     (if (authoring/string-member? names name)
+       (->SecretSelected (path root (str "secrets/" name ".yaml")))
+       (->SecretMissing false))]))
+
+(defn run-secret-list [bridge Any root String] Int
+  (match (load-secret-names bridge root)
+    [(SecretNamesRejected message) (emit-error bridge message)]
+    [(SecretNamesLoaded names) (do (host-out bridge (secret-lines names)) 0)]))
+
+(defn run-secret-show [bridge Any root String name String] Int
+  (if (not (authoring/safe-secret-name? name))
+    (emit-error bridge "firn secret: invalid secret name\n")
+    (match (selected-secret-path bridge root name)
+      [(SecretSelectionRejected message) (emit-error bridge message)]
+      [(SecretMissing token) (missing-secret bridge name)]
+      [(SecretSelected absolute)
+       (child-status bridge "sops"
+         (host-run-inherit bridge ["sops" "-d" absolute]))])))
+
+(defn regular-path? [bridge Any absolute String] Bool
+  (let [result Any (host-path-kind bridge absolute)]
+    (and (not (result-error? result))
+         (= 1 (host-result-int result "kind")))))
+
+(defn run-secret-edit [bridge Any root String name String] Int
+  (if (not (authoring/safe-secret-name? name))
+    (emit-error bridge "firn secret: invalid secret name\n")
+    (match (selected-secret-path bridge root name)
+      [(SecretSelectionRejected message) (emit-error bridge message)]
+      [(SecretMissing token) (missing-secret bridge name)]
+      [(SecretSelected absolute)
+       (let [sops-status Int (host-run-inherit bridge ["sops" absolute])]
+         (cond
+           (not= sops-status 0) (child-status bridge "sops" sops-status)
+           (not (regular-path? bridge absolute)) (missing-secret bridge name)
+           :else
+           (let [git-status Int
+                 (host-run-inherit bridge ["git" "-C" root "add" "--" absolute])]
+             (if (= git-status 0)
+               (do
+                 (host-out bridge (str "secrets/" name ".yaml (git added)\n"))
+                 0)
+               (child-status bridge "git" git-status)))))])))
+
+(defn run-action
+  [bridge Any root String action authoring/AuthoringAction] Int
+  (match action
+    [(ModuleAdd name) (run-scaffold bridge root action)]
+    [(TemplateService name) (run-scaffold bridge root action)]
+    [(TemplateSubmodule name) (run-scaffold bridge root action)]
+    [(TemplateHome name) (run-scaffold bridge root action)]
+    [(TemplateHost name) (run-scaffold bridge root action)]
+    [(SecretList token) (run-secret-list bridge root)]
+    [(SecretShow name) (run-secret-show bridge root name)]
+    [(SecretEdit name) (run-secret-edit bridge root name)]))
+
+(js/export
+  (defn run [bridge Any args (Vec String)] Int
+    (match (authoring/parse-authoring-argv args)
+      [(InvalidAuthoringArgv argv) (usage-error bridge)]
+      [(ParsedAuthoring action)
+       (let [root (U String Nil) (repository-root bridge)]
+         (if (nil? root)
+           (emit-error bridge "firn authoring: FIRN_REPO and HOME are not set\n")
+           (run-action bridge root action)))])))

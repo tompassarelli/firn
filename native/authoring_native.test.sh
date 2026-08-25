@@ -36,51 +36,43 @@ die() {
   exit 1
 }
 
-for command in bash cmp git ldd rg timeout; do
+for command in bash bun cmp find git rg timeout; do
   command -v "$command" >/dev/null 2>&1 \
     || die "missing command: $command"
 done
 [[ -x "$beagle/bin/beagle" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
 
-json="$beagle/native-core/src/native/json.bgl"
-core="$repo/native/authoring.bgl"
-pure="$repo/native/authoring_test.bgl"
-native="$repo/native/authoring_native.bgl"
+json="$beagle/native-core/src/native/json.bjs"
+core="$repo/native/authoring.bjs"
+pure="$repo/native/authoring_test.bjs"
+native="$repo/native/authoring_native.bjs"
+bridge="$repo/native/authoring_host.mjs"
 
-printf 'authoring-native: strict source check\n' >&2
-timeout --foreground 120 "$beagle/bin/beagle" check --agent \
-  "$json" "$core" "$pure" "$native" \
-  >"$scratch/check.out" 2>"$scratch/check.err" \
+printf 'authoring-js: building one closed typed family graph\n' >&2
+mkdir -p "$scratch/build"
+timeout --foreground 120 "$beagle/bin/beagle" build \
+  "$json" "$core" "$pure" "$native" --out "$scratch/build" \
+  >"$scratch/build.out" 2>"$scratch/build.err" \
   || {
-    sed -n '1,240p' "$scratch/check.err" >&2
-    die "strict source check failed"
+    sed -n '1,240p' "$scratch/build.err" >&2
+    die "closed JS family build failed"
   }
-rg -Fx '0 errors' "$scratch/check.err" >/dev/null \
-  || die "strict source check did not report zero errors"
+pure_js="$(find "$scratch/build" -name authoring-test.js -print -quit)"
+native_js="$(find "$scratch/build" -name authoring-native.js -print -quit)"
+[[ -n "$pure_js" && -f "$pure_js" ]] || die "pure test module was not emitted"
+[[ -n "$native_js" && -f "$native_js" ]] || die "authoring module was not emitted"
 
-build_native() {
-  local name="$1" entry="$2"
-  shift 2
-  local output="$scratch/$name"
-  mkdir -p "$scratch/$name-artifacts"
-  printf 'authoring-native: building %s\n' "$name" >&2
-  timeout --foreground 620 "$beagle/bin/beagle" native-exe \
-    --out "$output" \
-    --entry "$entry" \
-    --artifacts "$scratch/$name-artifacts" \
-    "$@" >"$scratch/$name.build.out" 2>"$scratch/$name.build.err" \
-    || {
-      sed -n '1,240p' "$scratch/$name.build.err" >&2
-      die "$name compilation failed"
-    }
-  [[ -x "$output" ]] || die "$name is not executable"
-}
-
-build_native authoring-test firn.authoring-test/-main \
-  "$json" "$core" "$pure"
-build_native authoring-native firn.authoring-native/-main \
-  "$json" "$core" "$native"
+cat >"$scratch/authoring-test" <<EOF
+#!/usr/bin/env bash
+exec env FIRN_AUTHORING_TEST_MODULE='$pure_js' bun -e \
+  'const m = await import(process.env.FIRN_AUTHORING_TEST_MODULE); process.exitCode = m["run-tests"]();'
+EOF
+cat >"$scratch/authoring-native" <<EOF
+#!/usr/bin/env bash
+exec env FIRN_AUTHORING_MODULE='$native_js' bun '$bridge' "\$@"
+EOF
+chmod +x "$scratch/authoring-test" "$scratch/authoring-native"
 
 printf 'authoring-native: pure renderer, schema, argv, and refusal fixtures\n' >&2
 timeout --foreground 30 "$scratch/authoring-test" \
@@ -520,9 +512,4 @@ assert_file "$scratch/usage.err" "$scratch/usage.expected.err" \
   "usage stderr"
 [[ ! -e "$usage_log" ]] || die "usage error spawned a child"
 
-if ldd "$scratch/authoring-native" \
-    | rg -qi 'racket|clojure|babashka|java'; then
-  die "hosted runtime leaked into native executable"
-fi
-
-printf 'ok: native Firn authoring and inherited secret effects pass\n'
+printf 'ok: typed JS Firn authoring and inherited secret effects pass\n'

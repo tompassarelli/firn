@@ -1,48 +1,56 @@
-#lang beagle
+#lang beagle/js
 (ns firn.authoring
   (:require [native.json :as json]))
 
-(defrecord SchemaEntry
+(js/export
+  (defrecord SchemaEntry
   [name String
-   type String])
+   type String]))
 
-(defunion AuthoringAction
+(js/export
+  (defunion AuthoringAction
   (ModuleAdd [name String])
   (TemplateService [name String])
   (TemplateSubmodule [name String])
   (TemplateHome [name String])
   (TemplateHost [name String])
-  SecretList
+  (SecretList [token Bool])
   (SecretShow [name String])
-  (SecretEdit [name String]))
+  (SecretEdit [name String])))
 
-(defunion AuthoringArgv
+(js/export
+  (defunion AuthoringArgv
   (ParsedAuthoring [action AuthoringAction])
-  (InvalidAuthoringArgv [argv (Vec String)]))
+  (InvalidAuthoringArgv [argv (Vec String)])))
 
-(defrecord AuthoringTarget
+(js/export
+  (defrecord AuthoringTarget
   [relative String
-   contents String])
+   contents String]))
 
-(defrecord AuthoringPlan
+(js/export
+  (defrecord AuthoringPlan
   [targets (Vec AuthoringTarget)
-   success-output String])
+   success-output String]))
 
-(defunion AuthoringPlanResult
+(js/export
+  (defunion AuthoringPlanResult
   (AuthoringPlanReady [plan AuthoringPlan])
-  (AuthoringPlanRejected [message String]))
+  (AuthoringPlanRejected [message String])))
 
-(defunion SchemaParseResult
+(js/export
+  (defunion SchemaParseResult
   (SchemaParsed [entries (Vec SchemaEntry)])
   (SchemaRejected
     [message String
-     offset Int]))
+     offset Int])))
 
 (defrecord SchemaObjectScan
   [name (U String Nil)
    type (U String Nil)])
 
-(defn parse-authoring-argv [argv (Vec String)] AuthoringArgv
+(js/export
+  (defn parse-authoring-argv [argv (Vec String)] AuthoringArgv
   (cond
     (and (= 3 (count argv))
          (= "module" (nth argv 0))
@@ -73,7 +81,7 @@
          (= "secret" (nth argv 0))
          (= "list" (nth argv 1))
          (or (= 2 (count argv)) (= "all" (nth argv 2))))
-    (->ParsedAuthoring (->SecretList))
+    (->ParsedAuthoring (->SecretList false))
 
     (and (= 3 (count argv))
          (= "secret" (nth argv 0))
@@ -86,7 +94,7 @@
     (->ParsedAuthoring (->SecretEdit (nth argv 2)))
 
     :else
-    (->InvalidAuthoringArgv argv)))
+    (->InvalidAuthoringArgv argv))))
 
 (defn ascii-lower? [byte Int] Bool
   (and (>= byte 97) (<= byte 122)))
@@ -94,7 +102,8 @@
 (defn ascii-digit? [byte Int] Bool
   (and (>= byte 48) (<= byte 57)))
 
-(defn safe-authoring-name? [name String] Bool
+(js/export
+  (defn safe-authoring-name? [name String] Bool
   (let [bytes (Vec Int) (utf8-encode name)]
     (and (> (count bytes) 0)
          (ascii-lower? (nth bytes 0))
@@ -106,9 +115,10 @@
                        (ascii-digit? byte)
                        (= byte 45))
                  (recur (+ index 1))
-                 false)))))))
+                 false))))))))
 
-(defn safe-secret-name? [name String] Bool
+(js/export
+  (defn safe-secret-name? [name String] Bool
   (let [bytes (Vec Int) (utf8-encode name)]
     (and (> (count bytes) 0)
          (not= name ".")
@@ -119,7 +129,7 @@
              (let [byte Int (nth bytes index)]
                (if (or (= byte 0) (= byte 47) (= byte 92))
                  false
-                 (recur (+ index 1)))))))))
+                 (recur (+ index 1))))))))))
 
 (defn starts-with?
   [text String
@@ -127,13 +137,15 @@
   (and (>= (count text) (count prefix))
        (= (subs text 0 (count prefix)) prefix)))
 
-(defn ends-with?
+(js/export
+  (defn ends-with?
   [text String
    suffix String] Bool
   (and (>= (count text) (count suffix))
-       (= (subs text (- (count text) (count suffix)) (count text)) suffix)))
+       (= (subs text (- (count text) (count suffix)) (count text)) suffix))))
 
-(defn string-member?
+(js/export
+  (defn string-member?
   [values (Vec String)
    candidate String] Bool
   (loop [index Int 0]
@@ -141,7 +153,7 @@
       false
       (if (= candidate (nth values index))
         true
-        (recur (+ index 1))))))
+        (recur (+ index 1)))))))
 
 (defn append-unique
   [values (Vec String)
@@ -201,7 +213,8 @@
             (conj names (schemaentry-name entry))
             names))))))
 
-(defn selected-service-entries
+(js/export
+  (defn selected-service-entries
   [entries (Vec SchemaEntry)
    service String] (Vec SchemaEntry)
   (let [names (Vec String) (service-entry-names entries service)
@@ -213,7 +226,7 @@
         (let [path String (nth names index)]
           (recur (+ index 1)
             (conj selected
-              (->SchemaEntry path (service-entry-type entries path)))))))))
+              (->SchemaEntry path (service-entry-type entries path))))))))))
 
 (defn schema-event-offset [event json/JsonEvent] Int
   (match event
@@ -349,11 +362,12 @@
           [(JsonNull offset)
            (->SchemaRejected "schema entries must be objects" offset)])))))
 
-(defn schema-entries-from-json [source String] SchemaParseResult
+(js/export
+  (defn schema-entries-from-json [source String] SchemaParseResult
   (match (json/decode source)
     [(JsonDecodeError offset message)
      (->SchemaRejected message offset)]
-    [(JsonDecoded events) (parse-schema-events events)]))
+    [(JsonDecoded events) (parse-schema-events events)])))
 
 (defn module-body [name String] String
   (str
@@ -471,7 +485,8 @@
 (defn invalid-authoring-name [] AuthoringPlanResult
   (->AuthoringPlanRejected "firn authoring: invalid name\n"))
 
-(defn plan-authoring
+(js/export
+  (defn plan-authoring
   [action AuthoringAction
    schema (Vec SchemaEntry)] AuthoringPlanResult
   (match action
@@ -520,14 +535,15 @@
                "Don't forget to add " name
                " to flake.bnix's nixosConfigurations.\n"))))
        (invalid-authoring-name))]
-    [(SecretList)
+    [(SecretList token)
      (->AuthoringPlanRejected "firn authoring: not a scaffold command\n")]
     [(SecretShow name)
      (->AuthoringPlanRejected "firn authoring: not a scaffold command\n")]
     [(SecretEdit name)
-     (->AuthoringPlanRejected "firn authoring: not a scaffold command\n")]))
+     (->AuthoringPlanRejected "firn authoring: not a scaffold command\n")])))
 
-(defn strip-yaml-suffix [name String] String
+(js/export
+  (defn strip-yaml-suffix [name String] String
   (if (ends-with? name ".yaml")
     (subs name 0 (- (count name) 5))
-    name))
+    name)))
