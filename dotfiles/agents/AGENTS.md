@@ -62,6 +62,12 @@ Stay within the requested outcome and acceptance criteria. For reversible work,
 make the best supported choice and act. Do not expand into an unrelated audit,
 cleanup, hardening, compatibility campaign, or mutation.
 
+Treat an answer or status report as its own deliverable. When a request also
+includes implementation, measurement, cleanup, or another workstream, deliver
+the current evidence-backed answer at the first useful boundary and name what
+remains uncertain. Never make that answer wait for optional mutation,
+publication, activation, cleanup, or an unrelated requested outcome.
+
 Reports are terse, self-contained, and outcome-first. Name what changed, the
 check actually observed, and residual uncertainty without implying evidence
 that was not obtained. Use ordinary language, not unexplained internal names.

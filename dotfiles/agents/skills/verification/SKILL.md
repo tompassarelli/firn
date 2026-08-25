@@ -61,6 +61,56 @@ isolate contention that could falsify the measurement. Before interpreting
 probe overhead, compare a matched uninstrumented A/B run; remove temporary
 instrumentation when the decision is made.
 
+## Bound provenance to the decision
+
+Require provenance only when substituting a different producer or artifact
+could change the decision. Name that counterfactual first, then verify one
+producer → artifact → consumer edge at the nearest existing boundary. Reuse the
+workflow's version output, checkout identity, release manifest, activation
+record, or other existing authority; do not invent a stronger lineage system.
+
+For exploration, diagnosis, status, and directional measurement, record the
+observed command and readily available version or revision, then report any
+identity uncertainty as a caveat. For release or `critical` work, require the
+exact commit, digest, signature, or activation identity only when the named
+publication or irreversible action consumes that identity. A missing or
+malformed identity proof blocks only that consuming action.
+
+Do not recursively attest the attestor, traverse package or derivation graphs,
+normalize competing metadata schemas, or create immutable-package ceremony
+unless the governing acceptance contract or named threat requires that exact
+proof. If existing metadata cannot answer the required identity question,
+report the capability gap instead of building an attestation subsystem. Never
+move an answer, direct observation, or unrelated workstream behind provenance
+repair.
+
+## Measure directly before building a harness
+
+For a status, diagnosis, or directional performance decision, start with the
+cheapest existing direct command: one cold observation and at most three
+representative warm or edit observations. Report the observed range and its
+environmental caveats. Do not require a tail statistic or release-grade
+campaign when those direct observations already decide the question. Escalate
+to a larger sample only when a predeclared threshold or tail claim can change
+the action.
+
+Admit a new harness only when the direct instrument lacks one named observation
+required by the decision. Before authoring it, cap harness implementation and
+repair separately from product measurement; by default allow one initial
+implementation, one repair cycle, and no more harness time than one planned
+measurement run. A second harness/probe defect, lost artifact, schema or
+lifecycle hardening demand, or exhausted harness budget before any product
+sample ends that instrument. Switch to a simpler observation or report the
+exact capability gap. Only a `critical` profile with a named irreversible risk
+may justify a larger harness budget.
+
+Control only variables capable of crossing the decision threshold. For
+exploratory or reporting latency, label manageable contention or provenance
+uncertainty instead of turning the probe into release software with socket,
+process-lifecycle, package-lineage, or environment-purity proof. A disposable
+harness receives independent review only when its result itself authorizes a
+consequential action.
+
 ## Handle bugs once
 
 Reproduce once, minimize only enough to assign the failing layer, fix, run the

@@ -33,6 +33,26 @@ Make already-evidenced executive decisions directly. Delegate evidence
 gathering, domain planning, and execution. Reject a commander's smaller
 substitute, weaker gate, or changed objective without entering its domain.
 
+## Protect operator outcomes from dependency drift
+
+Keep each requested outcome independently closable. A workstream may depend on
+another only when it consumes one exact artifact or verdict from it. Shared CPU,
+a semaphore, an occupied lane, or convenient sequencing is a scheduling edge,
+not a semantic dependency; queue only the contended command and continue or
+close every unaffected outcome.
+
+A defect blocks only the outcome whose acceptance it actually invalidates.
+Record an adjacent defect as a finding or bounded repair, but do not promote it
+to a portfolio prerequisite, recursively widen the mission, or move an answer,
+report, or unrelated implementation behind it. A newly requested maintenance
+or system-update workstream remains separate unless the operator explicitly
+changes priorities or its artifact is truly required by the earlier outcome.
+
+At every phase boundary, name the smallest operator-visible outcome that can
+close now. Deliver it as soon as its evidence is sufficient; internal release,
+activation, cleanup, review, or further measurement may continue only for the
+separate outcome that requires it.
+
 ## Transfer closure to commanders
 
 Give every independently useful workstream one self-managing commander. Give
