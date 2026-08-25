@@ -671,8 +671,8 @@ fi
 # mutates exactly one clause of that shape.
 promoted_root="$scratch/enforcement"
 promoted_live="$scratch/live-promoted"
-promoted_relative='north/profiles/tom/hooks/agent-spawn-guard.sh'
-promoted_sibling='north/profiles/tom/hooks/tripwire-guard.sh'
+promoted_relative=''
+promoted_sibling=''
 real_enforcement="${NORTH_ENFORCEMENT_STATE_ROOT:-/var/lib/north-enforcement}"
 mkdir -p "$promoted_root/active" "$promoted_live"
 if [ -d "$real_enforcement/deployments" ] && [ -r "$real_enforcement/active/record" ]; then
@@ -680,12 +680,28 @@ if [ -d "$real_enforcement/deployments" ] && [ -r "$real_enforcement/active/reco
   ln -s "$(readlink -f "$real_enforcement/active/current")" "$promoted_root/active/current"
   cp "$real_enforcement/active/record" "$promoted_root/active/record"
   chmod u+w "$promoted_root/active/record"
+  if ! grep -q '^NIXOS_REV ' "$promoted_root/active/record"; then
+    nixos_fixture_revision="$(git -C "$REPO" rev-parse HEAD)"
+    sed -i "/^NORTH_REV /i NIXOS_REV $nixos_fixture_revision" \
+      "$promoted_root/active/record"
+  fi
+  promoted_relative="$(
+    awk '$1 == "FILE" { print $3; exit }' "$promoted_root/active/record"
+  )"
+  promoted_sibling="$(
+    awk -v first="$promoted_relative" \
+      '$1 == "FILE" && $3 != first { print $3; exit }' \
+      "$promoted_root/active/record"
+  )"
+  [ -n "$promoted_relative" ]
+  [ -n "$promoted_sibling" ]
   NORTH_ENFORCEMENT_ROOT="$promoted_root"
 
   [ "$(stat -c '%u:%a:%h' "$promoted_root/active/current/$promoted_relative")" = '0:444:1' ]
   ln -s "$promoted_root/active/current/$promoted_relative" \
     "$promoted_live/agent-spawn-guard.sh"
   sealed_promoted_file "$promoted_live/agent-spawn-guard.sh" "$promoted_relative"
+  [[ "$(promote_record_revision nixos)" =~ ^[0-9a-f]{40}$ ]]
   [[ "$(promote_record_revision north)" =~ ^[0-9a-f]{40}$ ]]
   [[ "$(promote_record_revision beagle)" =~ ^[0-9a-f]{40}$ ]]
 
@@ -733,15 +749,15 @@ NORTH_ENFORCEMENT_ROOT="$real_enforcement"
 
 # The generation must name the promoted payload, and the promoted hooks must no
 # longer be pinned to a flake input.
-grep -Fq '(promoted "agent-spawn-guard.sh" "north/profiles/tom/hooks/agent-spawn-guard.sh")' \
+grep -Fq '(promoted "agent-spawn-guard.sh" "north/agent-runtime/hooks/agent-spawn-guard.sh")' \
   "$REPO/modules/codex/default.bnix"
 grep -Fq '(providerAdapter "beagle-session-start.sh")' \
   "$REPO/modules/codex/default.bnix"
 grep -Fq '(providerAdapter "lib/north-agent-activation.sh")' \
   "$REPO/modules/codex/default.bnix"
-grep -Fq '(promoted "lib/authoring-killswitch.sh" "north/profiles/tom/hooks/lib/authoring-killswitch.sh")' \
+grep -Fq '(promoted "lib/authoring-killswitch.sh" "north/agent-runtime/hooks/lib/authoring-killswitch.sh")' \
   "$REPO/modules/codex/default.bnix"
-grep -Fq '(promoted "lib/harness-dial.sh" "north/profiles/tom/hooks/lib/harness-dial.sh")' \
+grep -Fq '(promoted "lib/harness-dial.sh" "north/agent-runtime/hooks/lib/harness-dial.sh")' \
   "$REPO/modules/codex/default.bnix"
 grep -Fq 'enforcement "/var/lib/north-enforcement/active/current"' \
   "$REPO/modules/codex/default.bnix"

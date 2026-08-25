@@ -45,6 +45,7 @@ export NORTH_ENFORCEMENT_UNPRIVILEGED=1
 export NORTH_ENFORCEMENT_STATE_ROOT="$WORK/state"
 
 NORTH="$WORK/north"
+NIXOS="$WORK/nixos-config"
 BEAGLE_FIXTURE="$WORK/beagle"
 BEAGLE="${NORTH_ENFORCEMENT_TEST_BEAGLE_REPO:-$BEAGLE_FIXTURE}"
 
@@ -60,14 +61,20 @@ commit_all() {
   git -C "$1" rev-parse HEAD
 }
 
-# Fixture North: the hook tree (including a cross-repo symlink that must not be
-# promoted, and a nested lib/ that must be), plus the lifecycle runtimes.
+# Fixture NixOS: operator/machine/repository guards and their shared libraries.
+git_init "$NIXOS"
+mkdir -p "$NIXOS/dotfiles/agents/hooks/lib"
+printf 'operator guard v1\n' >"$NIXOS/dotfiles/agents/hooks/tripwire-guard.sh"
+printf 'dial v1\n' >"$NIXOS/dotfiles/agents/hooks/lib/harness-dial.sh"
+NIXOS_V1="$(commit_all "$NIXOS" 'nixos v1')"
+
+# Fixture North: runtime hooks (including a cross-repo symlink that must not be
+# promoted), plus the lifecycle runtimes.
 git_init "$NORTH"
-mkdir -p "$NORTH/profiles/tom/hooks/lib" "$NORTH/bin"
-printf 'guard v1\n' >"$NORTH/profiles/tom/hooks/agent-spawn-guard.sh"
-printf 'dial v1\n' >"$NORTH/profiles/tom/hooks/lib/harness-dial.sh"
+mkdir -p "$NORTH/agent-runtime/hooks" "$NORTH/bin"
+printf 'guard v1\n' >"$NORTH/agent-runtime/hooks/agent-spawn-guard.sh"
 ln -s ../../../../../external/main/integrations/north/hooks/external-guard.sh \
-  "$NORTH/profiles/tom/hooks/cross-repo-guard.sh"
+  "$NORTH/agent-runtime/hooks/cross-repo-guard.sh"
 printf 'spawn v1\n' >"$NORTH/bin/north-on-spawn"
 printf 'tooluse v1\n' >"$NORTH/bin/north-on-tooluse"
 printf 'stop v1\n' >"$NORTH/bin/north-on-stop"
@@ -106,7 +113,7 @@ else
 fi
 
 promote() {
-  "$PROMOTE" "$@" --north-repo "$NORTH" --beagle-repo "$BEAGLE"
+  "$PROMOTE" "$@" --nixos-repo "$NIXOS" --north-repo "$NORTH" --beagle-repo "$BEAGLE"
 }
 
 # --- a promote must state why -------------------------------------------------
@@ -116,13 +123,14 @@ check_eq 'promote without --why exits 2' "$status" 2
 check_contains 'promote without --why explains itself' "$out" 'must record --why'
 
 # --- first promote ------------------------------------------------------------
-record="$(promote "$NORTH_V1" --beagle-rev "$BEAGLE_V1" --why 'initial seed')"
-ID="north-$NORTH_V1.beagle-$BEAGLE_V1"
+record="$(promote "$NORTH_V1" --nixos-rev "$NIXOS_V1" --beagle-rev "$BEAGLE_V1" --why 'initial seed')"
+ID="nixos-$NIXOS_V1.north-$NORTH_V1.beagle-$BEAGLE_V1"
 DEPLOY="$NORTH_ENFORCEMENT_STATE_ROOT/deployments/$ID"
 CURRENT="$NORTH_ENFORCEMENT_STATE_ROOT/active/current"
 
 check_contains 'record declares its format' "$record" 'FORMAT north-enforcement-promote/v1'
 check_contains 'record names the deployment id' "$record" "ID $ID"
+check_contains 'record pins the NixOS revision' "$record" "NIXOS_REV $NIXOS_V1"
 check_contains 'record pins the North revision' "$record" "NORTH_REV $NORTH_V1"
 check_contains 'record pins the Beagle revision' "$record" "BEAGLE_REV $BEAGLE_V1"
 check_contains 'record carries why' "$record" 'WHY initial seed'
@@ -134,10 +142,12 @@ check 'first promote makes previous the same deployment' \
   test "$(resolve_dir "$NORTH_ENFORCEMENT_STATE_ROOT/active/previous")" = "$(resolve_dir "$DEPLOY")"
 
 # --- payload selection --------------------------------------------------------
-check 'North hook tree is promoted' \
-  test -f "$CURRENT/north/profiles/tom/hooks/agent-spawn-guard.sh"
-check 'nested North hook lib is promoted' \
-  test -f "$CURRENT/north/profiles/tom/hooks/lib/harness-dial.sh"
+check 'NixOS owner hook tree is promoted' \
+  test -f "$CURRENT/nixos-config/dotfiles/agents/hooks/tripwire-guard.sh"
+check 'nested NixOS owner hook lib is promoted' \
+  test -f "$CURRENT/nixos-config/dotfiles/agents/hooks/lib/harness-dial.sh"
+check 'North runtime hook tree is promoted' \
+  test -f "$CURRENT/north/agent-runtime/hooks/agent-spawn-guard.sh"
 check 'lifecycle runtimes are promoted' \
   test -f "$CURRENT/north/bin/north-on-spawn"
 check 'Beagle Codex hooks are promoted under their own provenance' \
@@ -145,7 +155,7 @@ check 'Beagle Codex hooks are promoted under their own provenance' \
 check 'Beagle target metadata is promoted under the hook-relative root' \
   test -f "$CURRENT/beagle/share/targets.sh"
 check 'a cross-repo symlink is not promoted' \
-  test ! -e "$CURRENT/north/profiles/tom/hooks/cross-repo-guard.sh"
+  test ! -e "$CURRENT/north/agent-runtime/hooks/cross-repo-guard.sh"
 check_eq 'promoted content is the committed blob' \
   "$(cat "$CURRENT/north/bin/north-on-spawn")" 'spawn v1'
 
@@ -193,20 +203,20 @@ check_eq 'record covers exactly the deployed file set' \
   "$(find "$DEPLOY" -type f | wc -l)"
 
 # --- idempotent re-promote ----------------------------------------------------
-record_again="$(promote "$NORTH_V1" --beagle-rev "$BEAGLE_V1" --why 'same revisions again')"
+record_again="$(promote "$NORTH_V1" --nixos-rev "$NIXOS_V1" --beagle-rev "$BEAGLE_V1" --why 'same revisions again')"
 check_contains 're-promote of the same revisions reuses the deployment' "$record_again" "ID $ID"
 check 'reused deployment is still the active one' \
   test "$(resolve_dir "$CURRENT")" = "$(resolve_dir "$DEPLOY")"
 
 # --- second promote retains the previous deployment ---------------------------
-printf 'guard v2\n' >"$NORTH/profiles/tom/hooks/agent-spawn-guard.sh"
+printf 'guard v2\n' >"$NORTH/agent-runtime/hooks/agent-spawn-guard.sh"
 NORTH_V2="$(commit_all "$NORTH" 'north v2')"
-ID2="north-$NORTH_V2.beagle-$BEAGLE_V1"
-record2="$(promote "$NORTH_V2" --beagle-rev "$BEAGLE_V1" --why 'ship guard v2')"
+ID2="nixos-$NIXOS_V1.north-$NORTH_V2.beagle-$BEAGLE_V1"
+record2="$(promote "$NORTH_V2" --nixos-rev "$NIXOS_V1" --beagle-rev "$BEAGLE_V1" --why 'ship guard v2')"
 check_contains 'second promote records the previous deployment' "$record2" "PREVIOUS $ID"
-check_eq 'active content advanced' "$(cat "$CURRENT/north/profiles/tom/hooks/agent-spawn-guard.sh")" 'guard v2'
+check_eq 'active content advanced' "$(cat "$CURRENT/north/agent-runtime/hooks/agent-spawn-guard.sh")" 'guard v2'
 check_eq 'previous deployment is retained intact' \
-  "$(cat "$NORTH_ENFORCEMENT_STATE_ROOT/active/previous/north/profiles/tom/hooks/agent-spawn-guard.sh")" \
+  "$(cat "$NORTH_ENFORCEMENT_STATE_ROOT/active/previous/north/agent-runtime/hooks/agent-spawn-guard.sh")" \
   'guard v1'
 
 # --- status -------------------------------------------------------------------
@@ -219,13 +229,13 @@ rollback_record="$("$PROMOTE" rollback --why 'guard v2 regressed')"
 check_contains 'rollback records why' "$rollback_record" 'WHY rollback: guard v2 regressed'
 check_contains 'rollback re-pins the previous revision' "$rollback_record" "NORTH_REV $NORTH_V1"
 check_eq 'rollback restores the previous payload' \
-  "$(cat "$CURRENT/north/profiles/tom/hooks/agent-spawn-guard.sh")" 'guard v1'
+  "$(cat "$CURRENT/north/agent-runtime/hooks/agent-spawn-guard.sh")" 'guard v1'
 check_eq 'rollback retains the rolled-back deployment as previous' \
-  "$(cat "$NORTH_ENFORCEMENT_STATE_ROOT/active/previous/north/profiles/tom/hooks/agent-spawn-guard.sh")" \
+  "$(cat "$NORTH_ENFORCEMENT_STATE_ROOT/active/previous/north/agent-runtime/hooks/agent-spawn-guard.sh")" \
   'guard v2'
 rollback_again="$("$PROMOTE" rollback --why 'undo the undo')"
 check_eq 'rollback is itself rollback-able' \
-  "$(cat "$CURRENT/north/profiles/tom/hooks/agent-spawn-guard.sh")" 'guard v2'
+  "$(cat "$CURRENT/north/agent-runtime/hooks/agent-spawn-guard.sh")" 'guard v2'
 check_contains 'second rollback is recorded' "$rollback_again" 'WHY rollback: undo the undo'
 
 # --- tamper detection ---------------------------------------------------------
@@ -234,7 +244,7 @@ printf 'tampered\n' >"$DEPLOY/north/bin/north-on-spawn"
 chmod 0444 "$DEPLOY/north/bin/north-on-spawn"
 chmod 0555 "$DEPLOY/north/bin" "$DEPLOY"
 status=0
-out="$(promote "$NORTH_V1" --beagle-rev "$BEAGLE_V1" --why 'promote over a tampered tree' 2>&1)" || status=$?
+out="$(promote "$NORTH_V1" --nixos-rev "$NIXOS_V1" --beagle-rev "$BEAGLE_V1" --why 'promote over a tampered tree' 2>&1)" || status=$?
 check_eq 'a tampered deployment fails the promote' "$status" 1
 check_contains 'tamper is reported as content divergence' "$out" 'differs from its promote manifest'
 
@@ -246,6 +256,7 @@ printf 'session\n' >"$BROKEN/integrations/north/hooks/beagle-session-start.sh"
 BROKEN_REV="$(commit_all "$BROKEN" 'missing share/targets.sh')"
 status=0
 out="$("$PROMOTE" "$NORTH_V1" --beagle-rev "$BROKEN_REV" --north-repo "$NORTH" \
+  --nixos-rev "$NIXOS_V1" --nixos-repo "$NIXOS" \
   --beagle-repo "$BROKEN" --why 'incomplete payload' 2>&1)" || status=$?
 check_eq 'an absent payload entry fails the promote' "$status" 1
 check_contains 'the absent payload entry is named' "$out" 'share/targets.sh'

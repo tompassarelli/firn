@@ -1,0 +1,1253 @@
+{
+  "$schema": "north:agent-catalog/catalog-config.schema.json",
+  "schema": "north.agent-catalog-config/v1",
+  "role": "operator",
+  "rootOrder": [
+    "agent-machinery",
+    "coordination",
+    "elicit",
+    "webdev",
+    "importing-skills",
+    "threejs-animation",
+    "threejs-fundamentals",
+    "threejs-geometry",
+    "threejs-interaction",
+    "threejs-lighting",
+    "threejs-loaders",
+    "threejs-materials",
+    "threejs-postprocessing",
+    "threejs-shaders",
+    "threejs-textures",
+    "beagle-authoring",
+    "beagle-system-design",
+    "fact-modeling",
+    "firn",
+    "repo-safety",
+    "todo",
+    "convo",
+    "guard-authoring",
+    "cloudflare-deploy",
+    "estimate",
+    "agent-policy",
+    "delegating-agents",
+    "settle-work",
+    "executive-orchestration",
+    "executive-report",
+    "project-structure",
+    "store-modeling",
+    "code-as-facts",
+    "comment-bloat-guard",
+    "logcompress-hook"
+  ],
+  "baselines": [
+    {
+      "id": "global-bootstrap",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/AGENTS.md"
+      },
+      "targets": [
+        "shared",
+        "codex"
+      ]
+    },
+    {
+      "id": "code-bootstrap",
+      "owner": {
+        "repo": "north",
+        "path": "agent-catalog/instructions/code/AGENTS.md"
+      },
+      "targets": [
+        "code"
+      ]
+    }
+  ],
+  "providerSupport": [
+    {
+      "id": "activation-gate",
+      "owner": {
+        "repo": "north",
+        "path": "agent-runtime/hooks/lib/harness-dial.sh"
+      },
+      "path": "lib/harness-dial.sh"
+    },
+    {
+      "id": "north-agent-activation",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/lib/north-agent-activation.sh"
+      },
+      "path": "lib/north-agent-activation.sh"
+    },
+    {
+      "id": "authoring-gate",
+      "owner": {
+        "repo": "north",
+        "path": "agent-runtime/hooks/lib/authoring-killswitch.sh"
+      },
+      "path": "lib/authoring-killswitch.sh"
+    },
+    {
+      "id": "launch-critical-decider",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/lib/launch_critical_decide.py"
+      },
+      "path": "lib/launch_critical_decide.py"
+    },
+    {
+      "id": "launch-critical-paths",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/lib/launch_critical_paths.py"
+      },
+      "path": "lib/launch_critical_paths.py"
+    },
+    {
+      "id": "logcompress-runtime",
+      "owner": {
+        "repo": "north",
+        "path": "agent-runtime/hooks/logcompress.py"
+      },
+      "path": "logcompress.py"
+    }
+  ],
+  "registrations": {
+    "agent-policy": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/agent-policy/SKILL.md"
+      }
+    },
+    "beagle-authoring": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "beagle",
+        "path": "integrations/north/skills/beagle-authoring/SKILL.md"
+      }
+    },
+    "beagle-session-start": {
+      "kind": "hook",
+      "category": "context",
+      "owner": {
+        "repo": "beagle",
+        "path": "integrations/north/hooks/beagle-session-start.sh"
+      }
+    },
+    "beagle-system-design": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/beagle-system-design/SKILL.md"
+      }
+    },
+    "cloudflare-deploy": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/cloudflare-deploy/SKILL.md"
+      }
+    },
+    "code-as-facts": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "beagle",
+        "path": "store/integrations/north/skills/code-as-facts/SKILL.md"
+      }
+    },
+    "code-upstream-guard": {
+      "kind": "hook",
+      "category": "authoring",
+      "owner": {
+        "repo": "beagle",
+        "path": "store/integrations/north/hooks/code-upstream-guard.sh"
+      }
+    },
+    "comment-bloat-guard": {
+      "kind": "hook",
+      "category": "authoring",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/comment-bloat-guard.sh"
+      }
+    },
+    "convo": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/convo/SKILL.md"
+      }
+    },
+    "corpus-scan-guard": {
+      "kind": "hook",
+      "category": "authoring",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/corpus-scan-guard.sh"
+      }
+    },
+    "delegating-agents": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/delegating-agents/SKILL.md"
+      }
+    },
+    "estimate": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/estimate/SKILL.md"
+      }
+    },
+    "executive-orchestration": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/executive-orchestration/SKILL.md"
+      }
+    },
+    "executive-report": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/executive-report/SKILL.md"
+      }
+    },
+    "fact-modeling": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "beagle",
+        "path": "store/integrations/north/skills/fact-modeling/SKILL.md"
+      }
+    },
+    "firn": {
+      "kind": "skill",
+      "category": "nixos",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "modules/north-profile/firn/skills/firn/SKILL.md"
+      }
+    },
+    "firn-system-policy": {
+      "kind": "hook",
+      "category": "authoring",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "native/system_policy_native.bgl"
+      }
+    },
+    "git-blind-stage-guard": {
+      "kind": "hook",
+      "category": "authoring",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/git-blind-stage-guard.sh"
+      }
+    },
+    "guard-authoring": {
+      "kind": "skill",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/guard-authoring/SKILL.md"
+      }
+    },
+    "importing-skills": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/importing-skills/SKILL.md"
+      }
+    },
+    "launch-critical-worktree-guard": {
+      "kind": "hook",
+      "category": "authoring",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/launch-critical-worktree-guard.sh"
+      }
+    },
+    "project-structure": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/project-structure/SKILL.md"
+      }
+    },
+    "repo-safety": {
+      "kind": "skill",
+      "category": "git",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/repo-safety/SKILL.md"
+      }
+    },
+    "session-kill-guard": {
+      "kind": "hook",
+      "category": "authoring",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/session-kill-guard.sh"
+      }
+    },
+    "settle-work": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/settle-work/SKILL.md"
+      }
+    },
+    "store-modeling": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "beagle",
+        "path": "store/integrations/north/skills/beagle-store-modeling/SKILL.md"
+      }
+    },
+    "threejs-animation": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-animation/SKILL.md"
+      }
+    },
+    "threejs-fundamentals": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-fundamentals/SKILL.md"
+      }
+    },
+    "threejs-geometry": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-geometry/SKILL.md"
+      }
+    },
+    "threejs-interaction": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-interaction/SKILL.md"
+      }
+    },
+    "threejs-lighting": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-lighting/SKILL.md"
+      }
+    },
+    "threejs-loaders": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-loaders/SKILL.md"
+      }
+    },
+    "threejs-materials": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-materials/SKILL.md"
+      }
+    },
+    "threejs-postprocessing": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-postprocessing/SKILL.md"
+      }
+    },
+    "threejs-shaders": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-shaders/SKILL.md"
+      }
+    },
+    "threejs-textures": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-textures/SKILL.md"
+      }
+    },
+    "todo": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/todo/SKILL.md"
+      }
+    },
+    "tripwire-guard": {
+      "kind": "hook",
+      "category": "authoring",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/tripwire-guard.sh"
+      }
+    },
+    "webdev": {
+      "kind": "skill",
+      "category": "webdev",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/webdev/SKILL.md"
+      }
+    }
+  },
+  "activation": {
+    "agent-machinery": {
+      "distributions": [
+        {
+          "type": "projectPackage",
+          "targets": [
+            "north"
+          ],
+          "owner": {
+            "repo": "agent-machinery",
+            "path": "catalog.json"
+          }
+        }
+      ]
+    },
+    "agent-policy": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "agent-practice": {
+      "distributions": [
+        {
+          "type": "projectPackage",
+          "targets": [
+            "north"
+          ],
+          "owner": {
+            "repo": "agent-machinery",
+            "path": "catalog.json"
+          }
+        }
+      ]
+    },
+    "agent-spawn-guard": {
+      "supports": [
+        "staffing"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "codex",
+            "bridge"
+          ]
+        }
+      ]
+    },
+    "assignments": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "beagle-authoring": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "beagle-session-start": {
+      "supports": [
+        "beagle-authoring"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "shared",
+            "codex",
+            "bridge"
+          ],
+          "owner": {
+            "repo": "north",
+            "path": "agent-runtime/hooks/beagle-session-start.sh"
+          }
+        }
+      ]
+    },
+    "beagle-system-design": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "build-vs-reuse": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "cloudflare-deploy": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "code-as-facts": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "project:beagle"
+          ]
+        }
+      ]
+    },
+    "code-upstream-guard": {
+      "supports": [
+        "code-as-facts"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "project:beagle"
+          ],
+          "owner": {
+            "repo": "north",
+            "path": "agent-runtime/hooks/code-upstream-guard.sh"
+          }
+        }
+      ]
+    },
+    "comment-bloat-guard": {
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "codex",
+            "bridge"
+          ]
+        }
+      ]
+    },
+    "compose": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "convo": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "coordination": {
+      "distributions": [
+        {
+          "type": "instructions",
+          "targets": [
+            "shared",
+            "codex",
+            "north",
+            "bridge"
+          ],
+          "owner": {
+            "repo": "north",
+            "path": "coordination/guide.md"
+          }
+        }
+      ]
+    },
+    "corpus-scan-guard": {
+      "supports": [
+        "convo"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "codex",
+            "bridge"
+          ]
+        }
+      ]
+    },
+    "delegating-agents": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "elicit": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "estimate": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "executive-orchestration": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "executive-report": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "external-code": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "fact-modeling": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "firn": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "firn-system-policy": {
+      "supports": [
+        "firn"
+      ],
+      "distributions": [
+        {
+          "type": "providerAdapter",
+          "adapterId": "firn-system-policy",
+          "targets": [
+            "firn",
+            "codex",
+            "bridge"
+          ],
+          "owner": {
+            "repo": "north",
+            "path": "agent-runtime/hooks/firn-system-policy.sh"
+          }
+        }
+      ]
+    },
+    "git-blind-stage-guard": {
+      "supports": [
+        "repo-safety"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "codex",
+            "bridge"
+          ]
+        }
+      ]
+    },
+    "greenfield": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "guard-authoring": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "importing-skills": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        },
+        {
+          "type": "providerAdapter",
+          "targets": [
+            "codex"
+          ],
+          "owner": {
+            "repo": "north",
+            "path": "profiles/tom/skills/importing-skills/agents/openai.yaml"
+          }
+        }
+      ]
+    },
+    "launch-critical-worktree-guard": {
+      "supports": [
+        "repo-safety"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "codex",
+            "bridge"
+          ]
+        }
+      ]
+    },
+    "logcompress-hook": {
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "shared",
+            "codex",
+            "bridge"
+          ]
+        }
+      ]
+    },
+    "messages": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "north-mark-delegated": {
+      "supports": [
+        "coordination"
+      ],
+      "distributions": [
+        {
+          "type": "providerAdapter",
+          "targets": [
+            "codex"
+          ],
+          "owner": {
+            "repo": "nixos-config",
+            "path": "dotfiles/codex/hooks/north-mark-delegated-codex"
+          }
+        }
+      ]
+    },
+    "north-on-spawn": {
+      "supports": [
+        "coordination"
+      ],
+      "distributions": [
+        {
+          "type": "providerAdapter",
+          "targets": [
+            "codex"
+          ],
+          "owner": {
+            "repo": "nixos-config",
+            "path": "dotfiles/codex/hooks/north-on-spawn-codex"
+          }
+        }
+      ]
+    },
+    "north-on-stop": {
+      "supports": [
+        "coordination"
+      ],
+      "distributions": [
+        {
+          "type": "providerAdapter",
+          "targets": [
+            "codex"
+          ],
+          "owner": {
+            "repo": "nixos-config",
+            "path": "dotfiles/codex/hooks/north-on-stop-codex"
+          }
+        }
+      ]
+    },
+    "north-on-terminal": {
+      "supports": [
+        "coordination"
+      ],
+      "distributions": [
+        {
+          "type": "providerAdapter",
+          "targets": [
+            "codex"
+          ],
+          "owner": {
+            "repo": "nixos-config",
+            "path": "dotfiles/codex/hooks/north-on-terminal-codex"
+          }
+        }
+      ]
+    },
+    "north-on-tooluse": {
+      "supports": [
+        "coordination"
+      ],
+      "distributions": [
+        {
+          "type": "providerAdapter",
+          "targets": [
+            "codex"
+          ],
+          "owner": {
+            "repo": "nixos-config",
+            "path": "dotfiles/codex/hooks/north-on-tooluse-codex"
+          }
+        }
+      ]
+    },
+    "orchestration": {
+      "distributions": [
+        {
+          "type": "instructions",
+          "targets": [
+            "shared",
+            "codex",
+            "north",
+            "bridge"
+          ],
+          "owner": {
+            "repo": "agent-machinery",
+            "path": "doctrine.md"
+          }
+        }
+      ]
+    },
+    "planning": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "prior-art": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "production-hardening": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "program-craftsmanship": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "program-stewardship": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "project-structure": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "repo-safety": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "rust-development": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "session-kill-guard": {
+      "supports": [
+        "repo-safety",
+        "orchestration"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "codex",
+            "bridge"
+          ]
+        }
+      ]
+    },
+    "settle-work": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        },
+        {
+          "type": "providerAdapter",
+          "targets": [
+            "codex"
+          ],
+          "owner": {
+            "repo": "nixos-config",
+            "path": "dotfiles/agents/skills/settle-work/agents/openai.yaml"
+          }
+        }
+      ]
+    },
+    "skill-maintenance": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "staffing": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        },
+        {
+          "type": "agentTemplates",
+          "targets": [
+            "north",
+            "claude"
+          ],
+          "owner": {
+            "repo": "agent-machinery",
+            "path": "agents"
+          }
+        }
+      ]
+    },
+    "store-modeling": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "terse": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threads": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-animation": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-fundamentals": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-geometry": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-interaction": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-lighting": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-loaders": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-materials": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-postprocessing": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-shaders": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-textures": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "todo": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "tripwire-guard": {
+      "supports": [
+        "repo-safety"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "codex",
+            "bridge"
+          ]
+        }
+      ]
+    },
+    "verification": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "webdev": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    }
+  }
+}

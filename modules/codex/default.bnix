@@ -60,17 +60,17 @@
            (providerAdapter "north-on-terminal-codex")
            (providerAdapter "beagle-session-start.sh")
            (providerAdapter "lib/north-agent-activation.sh")
-           (promoted "agent-spawn-guard.sh" "north/profiles/tom/hooks/agent-spawn-guard.sh")
-           (promoted "launch-critical-worktree-guard.sh" "north/profiles/tom/hooks/launch-critical-worktree-guard.sh")
-           (promoted "lib/launch_critical_decide.py" "north/profiles/tom/hooks/lib/launch_critical_decide.py")
-           (promoted "lib/launch_critical_paths.py" "north/profiles/tom/hooks/lib/launch_critical_paths.py")
-           (promoted "tripwire-guard.sh" "north/profiles/tom/hooks/tripwire-guard.sh")
-           (promoted "corpus-scan-guard.sh" "north/profiles/tom/hooks/corpus-scan-guard.sh")
-           (promoted "session-kill-guard.sh" "north/profiles/tom/hooks/session-kill-guard.sh")
-           (promoted "logcompress-hook.py" "north/profiles/tom/hooks/logcompress-hook.py")
-           (promoted "logcompress.py" "north/profiles/tom/hooks/logcompress.py")
-           (promoted "lib/authoring-killswitch.sh" "north/profiles/tom/hooks/lib/authoring-killswitch.sh")
-           (promoted "lib/harness-dial.sh" "north/profiles/tom/hooks/lib/harness-dial.sh")]
+           (promoted "agent-spawn-guard.sh" "north/agent-runtime/hooks/agent-spawn-guard.sh")
+           (promoted "launch-critical-worktree-guard.sh" "nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.sh")
+           (promoted "lib/launch_critical_decide.py" "nixos-config/dotfiles/agents/hooks/lib/launch_critical_decide.py")
+           (promoted "lib/launch_critical_paths.py" "nixos-config/dotfiles/agents/hooks/lib/launch_critical_paths.py")
+           (promoted "tripwire-guard.sh" "nixos-config/dotfiles/agents/hooks/tripwire-guard.sh")
+           (promoted "corpus-scan-guard.sh" "nixos-config/dotfiles/agents/hooks/corpus-scan-guard.sh")
+           (promoted "session-kill-guard.sh" "nixos-config/dotfiles/agents/hooks/session-kill-guard.sh")
+           (promoted "logcompress-hook.py" "north/agent-runtime/hooks/logcompress-hook.py")
+           (promoted "logcompress.py" "north/agent-runtime/hooks/logcompress.py")
+           (promoted "lib/authoring-killswitch.sh" "north/agent-runtime/hooks/lib/authoring-killswitch.sh")
+           (promoted "lib/harness-dial.sh" "north/agent-runtime/hooks/lib/harness-dial.sh")]
          :home-manager.users
           {username
             (nix/module

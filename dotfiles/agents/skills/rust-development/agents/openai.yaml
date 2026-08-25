@@ -1,4 +1,0 @@
-interface:
-  display_name: "Rust Development"
-  short_description: "Develop robust Rust with fast feedback"
-  default_prompt: "Use $rust-development to implement this Rust change with focused checks and an isolated feedback loop."

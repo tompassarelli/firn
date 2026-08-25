@@ -17,6 +17,9 @@ beagle/store/scripts/native-core-reingest.sh	2
 beagle/store/tests/code_editpath_defect_test.clj	1
 beagle/store/tests/codegraph_exec_test.sh	1
 beagle/store/tests/store_anchor_disambig_test.clj	1
+nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.test.py	55
+nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.test.sh	13
+nixos-config/dotfiles/agents/hooks/tripwire-guard.test.sh	1
 nixos-config/dotfiles/bin/beagle	1
 nixos-config/dotfiles/bin/concern	1
 nixos-config/dotfiles/bin/north	1

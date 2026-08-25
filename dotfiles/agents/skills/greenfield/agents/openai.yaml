@@ -1,4 +1,0 @@
-interface:
-  display_name: "Greenfield"
-  short_description: "Pick current technology without stale memory or fresh packages"
-  default_prompt: "Use $greenfield to research current options and vet any new dependency before adopting it."

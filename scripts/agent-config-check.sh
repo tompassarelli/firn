@@ -449,7 +449,7 @@ managed_hook_source_matches() {
 
   case "$authority" in
     self) cmp -s "$live" "$expected_checkout" ;;
-    north|beagle)
+    nixos|north|beagle)
       locked_git_blob_matches_file \
         "$live" "$source_repo" "$revision" "$git_blob_path"
       ;;
@@ -457,8 +457,9 @@ managed_hook_source_matches() {
   esac
 }
 
-# North and Beagle enforcement is published by north-enforcement-promote, not by
-# the flake pin, so its attested revision comes from the active promote record.
+# NixOS, North, and Beagle enforcement is published by
+# north-enforcement-promote, so its attested revisions come from the active
+# promote record.
 NORTH_ENFORCEMENT_ROOT="${NORTH_ENFORCEMENT_STATE_ROOT:-/var/lib/north-enforcement}"
 
 promote_record_path() {
@@ -468,6 +469,7 @@ promote_record_path() {
 promote_record_revision() {
   local node="$1" field value
   case "$node" in
+    nixos) field=NIXOS_REV ;;
     north) field=NORTH_REV ;;
     beagle) field=BEAGLE_REV ;;
     *) return 1 ;;
@@ -642,7 +644,7 @@ if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
 fi
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SHARED="${AGENT_CONFIG_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
+NORTH_REPO="${AGENT_CONFIG_NORTH_REPO:-$HOME/code/north/main}"
 BEAGLE_INTEGRATION="${AGENT_CONFIG_BEAGLE_INTEGRATION:-$HOME/code/beagle/main/integrations/north}"
 FIRN_INTEGRATION="$REPO/modules/north-profile/firn"
 CODEX="$REPO/dotfiles/codex"
@@ -861,16 +863,18 @@ validate_codex_managed_policy() {
   # tmpfiles link points at; it is empty for anything the generation still owns.
   local -a source_specs=(
     "requirements.toml|(s flakeRoot \"/modules/codex/requirements.toml\")|$CODEX_REQUIREMENTS|self|modules/codex/requirements.toml|"
-    "agent-spawn-guard.sh|(promoted \"agent-spawn-guard.sh\"|$SHARED/hooks/agent-spawn-guard.sh|north|profiles/tom/hooks/agent-spawn-guard.sh|north/profiles/tom/hooks/agent-spawn-guard.sh"
+    "agent-spawn-guard.sh|(promoted \"agent-spawn-guard.sh\"|$NORTH_REPO/agent-runtime/hooks/agent-spawn-guard.sh|north|agent-runtime/hooks/agent-spawn-guard.sh|north/agent-runtime/hooks/agent-spawn-guard.sh"
     # launch_critical guard and its Python decision libraries deploy together.
-    "launch-critical-worktree-guard.sh|(promoted \"launch-critical-worktree-guard.sh\"|$SHARED/hooks/launch-critical-worktree-guard.sh|north|profiles/tom/hooks/launch-critical-worktree-guard.sh|north/profiles/tom/hooks/launch-critical-worktree-guard.sh"
-    "lib/launch_critical_decide.py|(promoted \"lib/launch_critical_decide.py\"|$SHARED/hooks/lib/launch_critical_decide.py|north|profiles/tom/hooks/lib/launch_critical_decide.py|north/profiles/tom/hooks/lib/launch_critical_decide.py"
-    "lib/launch_critical_paths.py|(promoted \"lib/launch_critical_paths.py\"|$SHARED/hooks/lib/launch_critical_paths.py|north|profiles/tom/hooks/lib/launch_critical_paths.py|north/profiles/tom/hooks/lib/launch_critical_paths.py"
-    "tripwire-guard.sh|(promoted \"tripwire-guard.sh\"|$SHARED/hooks/tripwire-guard.sh|north|profiles/tom/hooks/tripwire-guard.sh|north/profiles/tom/hooks/tripwire-guard.sh"
-    "logcompress-hook.py|(promoted \"logcompress-hook.py\"|$SHARED/hooks/logcompress-hook.py|north|profiles/tom/hooks/logcompress-hook.py|north/profiles/tom/hooks/logcompress-hook.py"
-    "logcompress.py|(promoted \"logcompress.py\"|$SHARED/hooks/logcompress.py|north|profiles/tom/hooks/logcompress.py|north/profiles/tom/hooks/logcompress.py"
-    "lib/authoring-killswitch.sh|(promoted \"lib/authoring-killswitch.sh\"|$SHARED/hooks/lib/authoring-killswitch.sh|north|profiles/tom/hooks/lib/authoring-killswitch.sh|north/profiles/tom/hooks/lib/authoring-killswitch.sh"
-    "lib/harness-dial.sh|(promoted \"lib/harness-dial.sh\"|$SHARED/hooks/lib/harness-dial.sh|north|profiles/tom/hooks/lib/harness-dial.sh|north/profiles/tom/hooks/lib/harness-dial.sh"
+    "launch-critical-worktree-guard.sh|(promoted \"launch-critical-worktree-guard.sh\"|$REPO/dotfiles/agents/hooks/launch-critical-worktree-guard.sh|nixos|dotfiles/agents/hooks/launch-critical-worktree-guard.sh|nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.sh"
+    "lib/launch_critical_decide.py|(promoted \"lib/launch_critical_decide.py\"|$REPO/dotfiles/agents/hooks/lib/launch_critical_decide.py|nixos|dotfiles/agents/hooks/lib/launch_critical_decide.py|nixos-config/dotfiles/agents/hooks/lib/launch_critical_decide.py"
+    "lib/launch_critical_paths.py|(promoted \"lib/launch_critical_paths.py\"|$REPO/dotfiles/agents/hooks/lib/launch_critical_paths.py|nixos|dotfiles/agents/hooks/lib/launch_critical_paths.py|nixos-config/dotfiles/agents/hooks/lib/launch_critical_paths.py"
+    "tripwire-guard.sh|(promoted \"tripwire-guard.sh\"|$REPO/dotfiles/agents/hooks/tripwire-guard.sh|nixos|dotfiles/agents/hooks/tripwire-guard.sh|nixos-config/dotfiles/agents/hooks/tripwire-guard.sh"
+    "corpus-scan-guard.sh|(promoted \"corpus-scan-guard.sh\"|$REPO/dotfiles/agents/hooks/corpus-scan-guard.sh|nixos|dotfiles/agents/hooks/corpus-scan-guard.sh|nixos-config/dotfiles/agents/hooks/corpus-scan-guard.sh"
+    "session-kill-guard.sh|(promoted \"session-kill-guard.sh\"|$REPO/dotfiles/agents/hooks/session-kill-guard.sh|nixos|dotfiles/agents/hooks/session-kill-guard.sh|nixos-config/dotfiles/agents/hooks/session-kill-guard.sh"
+    "logcompress-hook.py|(promoted \"logcompress-hook.py\"|$NORTH_REPO/agent-runtime/hooks/logcompress-hook.py|north|agent-runtime/hooks/logcompress-hook.py|north/agent-runtime/hooks/logcompress-hook.py"
+    "logcompress.py|(promoted \"logcompress.py\"|$NORTH_REPO/agent-runtime/hooks/logcompress.py|north|agent-runtime/hooks/logcompress.py|north/agent-runtime/hooks/logcompress.py"
+    "lib/authoring-killswitch.sh|(promoted \"lib/authoring-killswitch.sh\"|$NORTH_REPO/agent-runtime/hooks/lib/authoring-killswitch.sh|north|agent-runtime/hooks/lib/authoring-killswitch.sh|north/agent-runtime/hooks/lib/authoring-killswitch.sh"
+    "lib/harness-dial.sh|(promoted \"lib/harness-dial.sh\"|$NORTH_REPO/agent-runtime/hooks/lib/harness-dial.sh|north|agent-runtime/hooks/lib/harness-dial.sh|north/agent-runtime/hooks/lib/harness-dial.sh"
   )
   local -a provider_adapters=(
     north-on-spawn-codex
@@ -952,7 +956,7 @@ validate_codex_managed_policy() {
 
   if [ "$LOCAL" -eq 1 ]; then
     local generation_exact=1
-    local north_revision beagle_revision source_repo source_revision
+    local nixos_revision north_revision beagle_revision source_repo source_revision
     local immutable_source
     if cmp -s "$CODEX_REQUIREMENTS" /etc/codex/requirements.toml; then :
     else
@@ -968,11 +972,14 @@ validate_codex_managed_policy() {
         bad "Codex provider adapter $live is not the stable link to $expected_adapter"
       fi
     done
-    # North and Beagle enforcement is attested against the active promote record.
+    # NixOS, North, and Beagle enforcement is attested against the active promote
+    # record.
+    nixos_revision="$(promote_record_revision nixos 2>/dev/null || true)"
     north_revision="$(promote_record_revision north 2>/dev/null || true)"
     beagle_revision="$(promote_record_revision beagle 2>/dev/null || true)"
-    if [ -n "$north_revision" ] && [ -n "$beagle_revision" ]; then
-      ok_detail "Enforcement promote record pins North@${north_revision:0:12} and Beagle@${beagle_revision:0:12}"
+    if [ -n "$nixos_revision" ] && [ -n "$north_revision" ] &&
+       [ -n "$beagle_revision" ]; then
+      ok_detail "Enforcement promote record pins NixOS@${nixos_revision:0:12}, North@${north_revision:0:12}, and Beagle@${beagle_revision:0:12}"
     else
       generation_exact=0
       bad "Enforcement promote record is missing or malformed: $(promote_record_path)"
@@ -986,6 +993,11 @@ validate_codex_managed_policy() {
       source_revision=''
       case "$authority" in
         self) ;;
+        nixos)
+          source_repo="$(git -C "$(dirname "$expected_checkout")" \
+            rev-parse --show-toplevel 2>/dev/null || true)"
+          source_revision="$nixos_revision"
+          ;;
         north)
           source_repo="$(git -C "$(dirname "$expected_checkout")" \
             rev-parse --show-toplevel 2>/dev/null || true)"

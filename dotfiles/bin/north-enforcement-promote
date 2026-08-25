@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# north-enforcement-promote — publish the North/Beagle enforcement payload as a
-# sealed, root-owned, revision-attested deployment, replacing flake.lock as the
-# revision source for the Codex managed hook set.
+# north-enforcement-promote — publish the NixOS/North/Beagle enforcement
+# payload as a sealed, root-owned, revision-attested deployment, replacing
+# flake.lock as the revision source for the Codex managed hook set.
 #
 # Codex decides managed-hook trust from the provenance of the system config layer
 # (/etc/codex/requirements.toml) alone — no store residency, no ownership check —
@@ -16,12 +16,12 @@ DEPLOYMENTS="$STATE_ROOT/deployments"
 GENERATIONS="$STATE_ROOT/generations"
 ACTIVE_LINK="$STATE_ROOT/active"
 
-# The payload set. North's hook tree is taken wholesale (it is the enforcement
-# corpus); its per-file list is deliberately NOT enumerated here so a new hook
-# is promoted the moment North owns it. Symlinks inside the tree point at other
-# repositories' checkouts and are skipped: a sealed tree holds regular files
-# only, and a file North does not own is not North's to promote.
-NORTH_PAYLOAD_TREES=(profiles/tom/hooks)
+# The owner hook trees are taken wholesale. Their per-file lists are deliberately
+# not enumerated, so a newly owned implementation and its focused fixture enter
+# one sealed deployment together. Symlinks are skipped: a sealed tree holds only
+# regular files carrying their exact repository provenance.
+NIXOS_PAYLOAD_TREES=(dotfiles/agents/hooks)
+NORTH_PAYLOAD_TREES=(agent-runtime/hooks)
 NORTH_PAYLOAD_FILES=(
   bin/north-on-spawn
   bin/north-on-tooluse
@@ -56,7 +56,7 @@ Usage: north-enforcement-promote [REV] --why TEXT [options]
        north-enforcement-promote rollback --why TEXT
        north-enforcement-promote status
 
-Publish the North + Beagle enforcement payload as a sealed root-owned
+Publish the NixOS + North + Beagle enforcement payload as a sealed root-owned
 deployment and swap the active selector to it atomically.
 
 Arguments:
@@ -65,7 +65,9 @@ Arguments:
 
 Options:
   --why TEXT          why this promote is happening (recorded; required)
+  --nixos-rev REV     NixOS revision to promote (default: its HEAD)
   --beagle-rev REV    Beagle revision to promote (default: its HEAD)
+  --nixos-repo PATH   NixOS checkout (default: the promoter's nixos-config:main)
   --north-repo PATH   North checkout (default: the promoter's north:main)
   --beagle-repo PATH  Beagle checkout (default: the promoter's beagle:main)
   -h, --help          print this help
@@ -226,6 +228,10 @@ member_id() {
   printf '%s' "${resolved##*/}"
 }
 
+is_current_id() {
+  [[ "$1" =~ ^nixos-[0-9a-f]{40}\.north-[0-9a-f]{40}\.beagle-[0-9a-f]{40}$ ]]
+}
+
 # Publish one (current, previous) pair. The generation directory is built and
 # synced in full before the selector moves, and the selector moves by rename, so
 # a crash leaves either the old pair or the new pair active and never a torn one.
@@ -259,9 +265,10 @@ commit_pair() {
 }
 
 render_record() {
-  local id="$1" north_rev="$2" beagle_rev="$3" why="$4" manifest="$5" previous_id="$6"
+  local id="$1" nixos_rev="$2" north_rev="$3" beagle_rev="$4" why="$5" manifest="$6" previous_id="$7"
   printf 'FORMAT %s\n' "$RECORD_FORMAT"
   printf 'ID %s\n' "$id"
+  printf 'NIXOS_REV %s\n' "$nixos_rev"
   printf 'NORTH_REV %s\n' "$north_rev"
   printf 'BEAGLE_REV %s\n' "$beagle_rev"
   printf 'PREVIOUS %s\n' "$previous_id"
@@ -272,18 +279,22 @@ render_record() {
 }
 
 cmd_promote() {
-  local north_rev="$1" beagle_rev="$2" why="$3" north_repo="$4" beagle_repo="$5"
+  local nixos_rev="$1" north_rev="$2" beagle_rev="$3" why="$4"
+  local nixos_repo="$5" north_repo="$6" beagle_repo="$7"
   local staging manifest id previous_id record
 
   [ -n "$why" ] || argument_error 'a promote must record --why'
+  [ -d "$nixos_repo/.git" ] || [ -f "$nixos_repo/.git" ] ||
+    die "not a NixOS checkout: $nixos_repo"
   [ -d "$north_repo/.git" ] || [ -f "$north_repo/.git" ] ||
     die "not a North checkout: $north_repo"
   [ -d "$beagle_repo/.git" ] || [ -f "$beagle_repo/.git" ] ||
     die "not a Beagle checkout: $beagle_repo"
 
+  nixos_rev="$(resolve_rev "$nixos_repo" "$nixos_rev")"
   north_rev="$(resolve_rev "$north_repo" "$north_rev")"
   beagle_rev="$(resolve_rev "$beagle_repo" "$beagle_rev")"
-  id="north-$north_rev.beagle-$beagle_rev"
+  id="nixos-$nixos_rev.north-$north_rev.beagle-$beagle_rev"
 
   require_layout
   staging="$DEPLOYMENTS/.staging.$$"
@@ -294,6 +305,8 @@ cmd_promote() {
   cleanup_staging
   mkdir "$staging"
 
+  stage_repo_payload "$staging" nixos-config "$nixos_repo" "$nixos_rev" \
+    "${NIXOS_PAYLOAD_TREES[@]}" >>"$manifest.raw"
   stage_repo_payload "$staging" north "$north_repo" "$north_rev" \
     "${NORTH_PAYLOAD_TREES[@]}" "${NORTH_PAYLOAD_FILES[@]}" >>"$manifest.raw"
   stage_repo_payload "$staging" beagle "$beagle_repo" "$beagle_rev" \
@@ -313,19 +326,22 @@ cmd_promote() {
   fi
 
   previous_id="$(member_id current || true)"
-  [ -n "$previous_id" ] || previous_id="$id"
-  record="$(render_record "$id" "$north_rev" "$beagle_rev" "$why" "$manifest" "$previous_id")"
+  is_current_id "$previous_id" || previous_id="$id"
+  record="$(render_record "$id" "$nixos_rev" "$north_rev" "$beagle_rev" "$why" "$manifest" "$previous_id")"
   commit_pair "$id" "$previous_id" "$record"
   printf '%s\n' "$record"
 }
 
 cmd_rollback() {
   local why="$1" current_id previous_id record manifest
+  local nixos_rev north_rev beagle_rev
 
   [ -n "$why" ] || argument_error 'a rollback must record --why'
   current_id="$(member_id current)" || die 'no active deployment to roll back from'
   previous_id="$(member_id previous)" || die 'no retained previous deployment'
   [ "$current_id" != "$previous_id" ] || die 'previous deployment is the active one'
+  is_current_id "$previous_id" ||
+    die "previous deployment predates $RECORD_FORMAT and cannot satisfy current hook paths: $previous_id"
 
   manifest="$(mktemp)"
   CLEANUP_MANIFEST="$manifest"
@@ -338,10 +354,11 @@ cmd_rollback() {
     sed 's|  \./|  |' >"$manifest"
   verify_sealed "$DEPLOYMENTS/$previous_id" "$manifest"
 
+  nixos_rev="$(sed -n 's/^nixos-\([0-9a-f]\{40\}\)\.north-.*/\1/p' <<<"$previous_id")"
+  north_rev="$(sed -n 's/^.*\.north-\([0-9a-f]\{40\}\)\.beagle-.*/\1/p' <<<"$previous_id")"
+  beagle_rev="$(sed -n 's/^.*\.beagle-\([0-9a-f]\{40\}\)$/\1/p' <<<"$previous_id")"
   record="$(
-    render_record "$previous_id" \
-      "$(sed -n 's/^north-\([0-9a-f]\{40\}\)\..*/\1/p' <<<"$previous_id")" \
-      "$(sed -n 's/^.*\.beagle-\([0-9a-f]\{40\}\)$/\1/p' <<<"$previous_id")" \
+    render_record "$previous_id" "$nixos_rev" "$north_rev" "$beagle_rev" \
       "rollback: $why" "$manifest" "$current_id"
   )"
   commit_pair "$previous_id" "$current_id" "$record"
@@ -359,7 +376,8 @@ cmd_status() {
 }
 
 main() {
-  local command='' north_rev='' beagle_rev='' why='' north_repo='' beagle_repo=''
+  local command='' nixos_rev='' north_rev='' beagle_rev='' why=''
+  local nixos_repo='' north_repo='' beagle_repo=''
   local -a invocation=("$@")
 
   while [ "$#" -gt 0 ]; do
@@ -376,6 +394,16 @@ main() {
       --beagle-rev)
         [ "$#" -ge 2 ] || argument_error '--beagle-rev requires a value'
         beagle_rev="$2"
+        shift 2
+        ;;
+      --nixos-rev)
+        [ "$#" -ge 2 ] || argument_error '--nixos-rev requires a value'
+        nixos_rev="$2"
+        shift 2
+        ;;
+      --nixos-repo)
+        [ "$#" -ge 2 ] || argument_error '--nixos-repo requires a value'
+        nixos_repo="$2"
         shift 2
         ;;
       --north-repo)
@@ -416,7 +444,8 @@ main() {
     promote)
       local home
       home="$(caller_home)"
-      cmd_promote "${north_rev:-HEAD}" "${beagle_rev:-HEAD}" "$why" \
+      cmd_promote "${nixos_rev:-HEAD}" "${north_rev:-HEAD}" "${beagle_rev:-HEAD}" "$why" \
+        "${nixos_repo:-$home/code/nixos-config/main}" \
         "${north_repo:-$home/code/north/main}" "${beagle_repo:-$home/code/beagle/main}"
       ;;
   esac

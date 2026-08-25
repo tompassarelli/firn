@@ -23,7 +23,6 @@ fi
 
 grep -Fq 'category: nixos' "$firn_skill"
 grep -Fq 'modules/north-profile/default.bnix' "$checker"
-grep -Fq 'LIVE_SKILLS_FARM=' "$checker"
 
 nix_bin=${NIX_BIN:-nix}
 flake="path:$repo"
