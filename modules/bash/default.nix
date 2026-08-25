@@ -23,7 +23,10 @@
     environment.systemPackages = [ pkgs.fzf ];
     home-manager.users.${username} = ({ config, ... }: {
       systemd.user.startServices = "sd-switch";
-      home.file.".local/bin".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/main/dotfiles/bin";
+      home.file = {
+        ".local/bin".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/main/dotfiles/bin";
+        ".local/libexec/convo/python3".source = "${pkgs.python3}/bin/python3";
+      };
       home.packages = lib.mkMerge [ (with pkgs; [ libglvnd ]) ];
       programs.bash = {
         enable = true;

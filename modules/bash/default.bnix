@@ -41,7 +41,9 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/main/dotfiles/bin"))}}
+                        "/code/nixos-config/main/dotfiles/bin"))}
+                 ".local/libexec/convo/python3"
+                  {:source (s pkgs.python3 "/bin/python3")}}
                ;; glvnd loader at ~/.nix-profile/lib: /run/opengl-driver/lib has
                ;; vendor mesa only, and dotfiles/bin/gjoa's GL fallback needs both.
                ;; mkMerge only marks this as a partial definition — the validator

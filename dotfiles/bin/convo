@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+#!/bin/sh
+""":"
+exec "${CONVO_PYTHON:-$HOME/.local/libexec/convo/python3}" "$0" "$@"
+":"""
 """convo — full-text search over local agent conversation transcripts.
 
 Indexes the JSONL transcripts under ~/code/north-data/accounts into a SQLite
@@ -14,8 +17,6 @@ locator survives as provenance for the path:line each hit prints.
 `convo compress` is the other half: it rewrites closed transcripts as
 `.jsonl.zst`, which the indexer reads transparently.
 """
-
-from __future__ import annotations
 
 import argparse
 import fcntl
