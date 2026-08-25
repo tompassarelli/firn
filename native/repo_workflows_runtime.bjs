@@ -1,0 +1,165 @@
+#lang beagle/js
+(ns firn.repo-workflows-runtime
+  (:require [firn.repo-workflows :as workflow]))
+
+(declare-extern host-get (Fn [Any Any] Any))
+
+(def max-process-output Int 67108864)
+(def watch-ownership workflow/WatchOwnership
+  (workflow/->WatchOwnership 30 1))
+
+(defunion TrackedPathsResult
+  (TrackedPathsLoaded [paths (Vec String)])
+  (TrackedPathsRejected [message String]))
+
+(defn repository-root [bridge Any] (U String Nil)
+  (let [explicit (U String Nil) (.env bridge "FIRN_REPO")]
+    (if (some? explicit)
+      explicit
+      (let [home (U String Nil) (.env bridge "HOME")]
+        (if (some? home) (str home "/code/nixos-config/main") nil)))))
+
+(defn usage-error [bridge Any] Int
+  (do
+    (.err bridge
+      (str "Usage: firn repo validate|lint|diff|doctor|watch|architecture"
+        "|upgrade [leaf]\n"))
+    64))
+
+(defn observation-from-capture
+  [result Any
+   argv (Vec String)] workflow/ProcessObservation
+  (if (host-get result "ok")
+    (workflow/->ProcessObservation
+      (host-get result "status")
+      (host-get result "stdout")
+      (host-get result "stderr"))
+    (workflow/->ProcessObservation
+      1 ""
+      (str "firn repo: cannot run " (nth argv 0)
+        ": errno " (host-get result "errno") "\n"))))
+
+(defn execute-process
+  [bridge Any
+   process workflow/ProcessBoundary] workflow/ProcessObservation
+  (match process
+    [(InheritProcess phase argv)
+     (workflow/->ProcessObservation (.runInherit bridge argv) "" "")]
+    [(CaptureProcess phase argv stdin max-output)
+     (observation-from-capture
+       (.runCapture bridge argv stdin max-output) argv)]
+    [(CaptureToFileProcess phase argv stdin max-output output-path)
+     (let [observed workflow/ProcessObservation
+           (observation-from-capture
+             (.runCapture bridge argv stdin max-output) argv)]
+       (if (not= (workflow/processobservation-status observed) 0)
+         observed
+         (let [errno Int (.writeTextAtomic bridge output-path
+                           (workflow/processobservation-stdout observed))]
+           (if (= errno 0)
+             (workflow/->ProcessObservation 0 ""
+               (workflow/processobservation-stderr observed))
+             (workflow/->ProcessObservation 1 ""
+               (str "firn repo: cannot write " output-path
+                 ": errno " errno "\n"))))))]))
+
+(defn emit-observation
+  [bridge Any
+   observation workflow/ProcessObservation] Int
+  (do
+    (if (not= (workflow/processobservation-stdout observation) "")
+      (.out bridge (workflow/processobservation-stdout observation)) 0)
+    (if (not= (workflow/processobservation-stderr observation) "")
+      (.err bridge (workflow/processobservation-stderr observation)) 0)
+    (workflow/processobservation-status observation)))
+
+(defn execute-processes
+  [bridge Any
+   processes (Vec workflow/ProcessBoundary)
+   index Int] Int
+  (if (>= index (count processes))
+    0
+    (let [status Int
+          (emit-observation bridge
+            (execute-process bridge (nth processes index)))]
+      (if (= status 0)
+        (execute-processes bridge processes (+ index 1))
+        status))))
+
+(defn tracked-paths [bridge Any root String] TrackedPathsResult
+  (let [result Any
+        (.runCapture bridge ["git" "-C" root "ls-files"] ""
+          max-process-output)]
+    (if (not (host-get result "ok"))
+      (->TrackedPathsRejected
+        (str "firn repo: cannot run git: errno "
+          (host-get result "errno") "\n"))
+      (let [status Int (host-get result "status")
+            stdout String (host-get result "stdout")
+            stderr String (host-get result "stderr")]
+        (if (= status 0)
+          (->TrackedPathsLoaded (workflow/split-lines stdout))
+          (->TrackedPathsRejected
+            (if (= stderr "")
+              (str "firn repo: git ls-files failed with status " status "\n")
+              stderr)))))))
+
+(defn action-needs-tracked? [action workflow/RepoWorkflowAction] Bool
+  (match action
+    [(RepoLint token) true]
+    [(RepoArchitecture bundle) true]
+    [(RepoValidate token) false]
+    [(RepoDiff target) false]
+    [(RepoDoctor token) false]
+    [(RepoWatch token) false]
+    [(RepoUpgrade dry-run) false]))
+
+(defn doctor-status
+  [bridge Any
+   root String
+   action workflow/RepoWorkflowAction] Int
+  (match action
+    [(RepoDoctor token) (.checkFirstPartyInputSkew bridge root)]
+    [(RepoValidate token) 0]
+    [(RepoLint token) 0]
+    [(RepoDiff target) 0]
+    [(RepoWatch token) 0]
+    [(RepoArchitecture bundle) 0]
+    [(RepoUpgrade dry-run) 0]))
+
+(defn execute-action
+  [bridge Any
+   root String
+   action workflow/RepoWorkflowAction] Int
+  (let [loaded TrackedPathsResult
+        (if (action-needs-tracked? action)
+          (tracked-paths bridge root)
+          (->TrackedPathsLoaded []))]
+    (match loaded
+      [(TrackedPathsRejected message) (do (.err bridge message) 1)]
+      [(TrackedPathsLoaded tracked)
+       (let [doctor Int (doctor-status bridge root action)]
+         (if (not= doctor 0)
+           doctor
+           (let [plan workflow/RepoWorkflowPlan
+                 (workflow/repo-workflow-plan
+                   root action tracked watch-ownership)
+                 status Int (execute-processes bridge
+                              (workflow/repoworkflowplan-processes plan) 0)]
+             (if (= status 0)
+               (do
+                 (if (not= (workflow/repoworkflowplan-success-output plan) "")
+                   (.out bridge (workflow/repoworkflowplan-success-output plan))
+                   0)
+                 0)
+               status))))])))
+
+(js/export
+  (defn run [bridge Any args (Vec String)] Int
+    (match (workflow/parse-repo-workflow-argv args)
+      [(InvalidRepoWorkflowArgv argv) (usage-error bridge)]
+      [(ParsedRepoWorkflow action)
+       (let [root (U String Nil) (repository-root bridge)]
+         (if (nil? root)
+           (do (.err bridge "firn repo: FIRN_REPO and HOME are not set\n") 1)
+           (execute-action bridge root action)))])))

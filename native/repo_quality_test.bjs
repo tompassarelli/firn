@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.repo-quality-test
   (:require [firn.repo-quality :as q]))
 
@@ -164,7 +164,8 @@
    (->TestResult "health-order-and-severity" (case-health-order-and-severity))
    (->TestResult "warning-is-not-pass" (case-warning-is-not-pass))])
 
-(defn -main [(args (Vec String))] Int
+(js/export
+  (defn run-tests [] Int
   (loop [(index Int) 0]
     (if (>= index (count tests))
       0
@@ -173,4 +174,4 @@
           (recur (+ index 1))
           (do
             (print (str "FAIL: " (testresult-name test) "\n"))
-            1))))))
+            1)))))))

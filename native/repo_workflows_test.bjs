@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.repo-workflows-test
   (:require [firn.repo-workflows :as w]))
 
@@ -22,7 +22,7 @@
          (w/->ProcessObservation 7 "" "two-error")
          (w/->ProcessObservation 9 "" "must-not-win")]]
     (match (w/first-process-failure processes observations)
-      [(WorkflowSucceeded) false]
+      [(WorkflowSucceeded token) false]
       [(WorkflowStopped phase status stdout stderr)
        (and (= phase "second")
             (= status 7)
@@ -152,18 +152,19 @@
    (->TestResult "invalid-first-party-pin-rejected"
      (case-invalid-first-party-pin-rejected))])
 
-(defn -main [args (Vec String)] Int
-  (let [results (Vec TestResult) (cases)]
-    (loop [(index Int) 0
-           (failures Int) 0]
-      (if (>= index (count results))
-        failures
-        (let [result TestResult (nth results index)]
-          (do
-            (println
-              (str (if (testresult-passed result) "PASS " "FAIL ")
-                (testresult-name result)))
-            (recur (+ index 1)
-              (if (testresult-passed result)
-                failures
-                (+ failures 1)))))))))
+(js/export
+  (defn run-tests [] Int
+    (let [results (Vec TestResult) (cases)]
+      (loop [(index Int) 0
+             (failures Int) 0]
+        (if (>= index (count results))
+          failures
+          (let [result TestResult (nth results index)]
+            (do
+              (println
+                (str (if (testresult-passed result) "PASS " "FAIL ")
+                  (testresult-name result)))
+              (recur (+ index 1)
+                (if (testresult-passed result)
+                  failures
+                  (+ failures 1))))))))))

@@ -16,7 +16,7 @@ else
   code_root="$(cd "$(dirname "$git_common_dir")/../.." && pwd)"
   beagle="$code_root/beagle/main"
 fi
-scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-repo-workflows.XXXXXX")"
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-repo-workflows-js.XXXXXX")"
 
 cleanup() {
   local status=$?
@@ -24,7 +24,7 @@ cleanup() {
   if ((status == 0)); then
     rm -rf "${scratch:?}"
   else
-    printf 'repo-workflows-native: retained failure artifacts at %s\n' \
+    printf 'repo-workflows-js: retained failure artifacts at %s\n' \
       "$scratch" >&2
   fi
   exit "$status"
@@ -32,45 +32,32 @@ cleanup() {
 trap cleanup EXIT
 
 die() {
-  printf 'repo-workflows-native: %s\n' "$*" >&2
+  printf 'repo-workflows-js: %s\n' "$*" >&2
   exit 1
 }
 
-build_native() {
-  local name="$1" entry="$2"
-  shift 2
-  local output="$scratch/$name"
-  mkdir -p "$scratch/$name-artifacts"
-  timeout --foreground 620 "$beagle/bin/beagle" native-exe \
-    --out "$output" \
-    --entry "$entry" \
-    --artifacts "$scratch/$name-artifacts" \
-    "$@" >"$scratch/$name.build.out" 2>"$scratch/$name.build.err" \
-    || {
-      sed -n '1,240p' "$scratch/$name.build.err" >&2
-      die "$name compilation failed"
-    }
-  [[ -x "$output" ]] || die "$name is not executable"
-}
-
-datum="$beagle/native-core/src/beagle/datum_reader.bgl"
-json="$beagle/native-core/src/native/json.bgl"
-quality="$repo/native/repo_quality.bgl"
-workflows="$repo/native/repo_workflows.bgl"
-
-build_native repo-workflows-test firn.repo-workflows-test/-main \
-  "$datum" "$json" "$quality" "$workflows" \
-  "$repo/native/repo_workflows_test.bgl"
-build_native repo-workflows-native firn.repo-workflows-native/-main \
-  "$datum" "$json" "$quality" "$workflows" \
-  "$repo/native/repo_workflows_native.bgl"
-
-"$scratch/repo-workflows-test" >"$scratch/pure.out"
-[[ "$(rg -c '^PASS ' "$scratch/pure.out")" == "7" ]] \
-  || die "focused pure cases did not all pass"
+json="$beagle/native-core/src/native/json.bjs"
+quality="$repo/native/repo_quality.bjs"
+workflows="$repo/native/repo_workflows.bjs"
+runtime="$repo/native/repo_workflows_runtime.bjs"
+mkdir -p "$scratch/modules/node_modules/beagle"
+timeout --foreground 90 "$beagle/bin/beagle" build \
+  "$json" "$quality" "$workflows" "$runtime" \
+  --out "$scratch/modules" \
+  >"$scratch/build.out" 2>"$scratch/build.err" || {
+    sed -n '1,240p' "$scratch/build.err" >&2
+    die "module graph compilation failed"
+  }
+cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
+  "$scratch/modules/node_modules/beagle/core.js"
+cp -- "$beagle/beagle-lib/lib/beagle/host.js" \
+  "$scratch/modules/node_modules/beagle/host.js"
+printf '%s\n' '{"type":"module"}' \
+  >"$scratch/modules/node_modules/beagle/package.json"
 
 set +e
-"$scratch/repo-workflows-native" repo unknown \
+FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
+  bun "$repo/native/repo_workflows_host.mjs" repo unknown \
   >"$scratch/usage.out" 2>"$scratch/usage.err"
 usage_status=$?
 set -e
@@ -116,7 +103,8 @@ run_doctor() {
     HOME="$fixture_home" \
     FIRN_REPO="$fixture_repo" \
     PATH="$fixture_bin:$PATH" \
-    "$scratch/repo-workflows-native" repo doctor \
+    FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
+    bun "$repo/native/repo_workflows_host.mjs" repo doctor \
     >"$result.out" 2>"$result.err"
   local status=$?
   set -e
@@ -146,9 +134,4 @@ rg -F "pinned $independent_rev is not an ancestor of local beagle/main" \
   "$doctor_skewed.err" >/dev/null \
   || die "doctor did not identify first-party input skew"
 
-if ldd "$scratch/repo-workflows-native" \
-    | rg -qi 'racket|clojure|babashka|java'; then
-  die "hosted runtime leaked into native executable"
-fi
-
-printf 'PASS repo-workflows-native\n'
+printf 'PASS repo-workflows-js\n'

@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.repo-quality)
 
 (defunion OwnedStart
@@ -57,18 +57,18 @@
    f1 (Vec HealthResult)
    f4 (Vec HealthResult)])
 
-(defrecord HealthEntry
+(js/export (defrecord HealthEntry
   [source Keyword
    kind Keyword
    name String
-   message String])
+   message String]))
 
-(defrecord HealthReport
+(js/export (defrecord HealthReport
   [entries (Vec HealthEntry)
    passed Int
    failed Int
    warnings Int
-   status Int])
+   status Int]))
 
 (defn horizontal-space? [character String] Bool
   (or (= character " ") (= character "\t")))
@@ -248,7 +248,7 @@
              [(BlockFinished after)
               (recur after kept)])])))))
 
-(defn path-segments [path String] (Vec String)
+(js/export (defn path-segments [path String] (Vec String)
   (loop [cursor Int 0
          start Int 0
          segments (Vec String) []]
@@ -257,9 +257,9 @@
       (if (= (subs path cursor (+ cursor 1)) "/")
         (recur (+ cursor 1) (+ cursor 1)
           (conj segments (subs path start cursor)))
-        (recur (+ cursor 1) start segments)))))
+        (recur (+ cursor 1) start segments))))))
 
-(defn string-member?
+(js/export (defn string-member?
   [values (Vec String)
    candidate String] Bool
   (loop [index Int 0]
@@ -267,7 +267,7 @@
       false
       (if (= candidate (nth values index))
         true
-        (recur (+ index 1))))))
+        (recur (+ index 1)))))))
 
 (defn excluded-quality-path? [segments (Vec String)] Bool
   (loop [index Int 0]
@@ -287,8 +287,8 @@
           true
           (recur (+ index 1)))))))
 
-(defn path-basename [segments (Vec String)] String
-  (if (= (count segments) 0) "" (nth segments (- (count segments) 1))))
+(js/export (defn path-basename [segments (Vec String)] String
+  (if (= (count segments) 0) "" (nth segments (- (count segments) 1)))))
 
 (defn quality-target? [path String] Bool
   (let [segments (Vec String) (path-segments path)
