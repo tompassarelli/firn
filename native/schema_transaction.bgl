@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.schema-transaction
   (:require [clojure.string :as str]
             [native.json :as json]))

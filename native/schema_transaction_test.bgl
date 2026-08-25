@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.schema-transaction-test
   (:require [clojure.string :as str]
             [firn.schema-transaction :as transaction]))
@@ -257,7 +257,8 @@
    (->TestResult "argv-grammar" (case-argv-grammar))
    (->TestResult "native-error-rendering" (case-native-error-rendering))])
 
-(defn -main [args (Vec String)] Int
+(js/export
+  (defn run [args (Vec String)] Int
   (let [(results (Vec TestResult)) (cases)]
     (loop [(index Int) 0
            (failures Int) 0]
@@ -271,4 +272,4 @@
             (recur (+ index 1)
               (if (testresult-passed result)
                 failures
-                (+ failures 1)))))))))
+                (+ failures 1))))))))))

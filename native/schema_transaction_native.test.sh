@@ -36,47 +36,36 @@ die() {
   exit 1
 }
 
-for command in git rg timeout; do
+for command in bun git rg timeout; do
   command -v "$command" >/dev/null 2>&1 \
     || die "missing command: $command"
 done
 [[ -x "$beagle/bin/beagle" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
 
-json="$beagle/native-core/src/native/json.bgl"
-core="$repo/native/schema_transaction.bgl"
-pure="$repo/native/schema_transaction_test.bgl"
-native="$repo/native/schema_transaction_native.bgl"
+json="$beagle/native-core/src/native/json.bjs"
+core="$repo/native/schema_transaction.bjs"
+pure="$repo/native/schema_transaction_test.bjs"
+native="$repo/native/schema_transaction_native.bjs"
 
-printf 'schema-transaction-native: exact bundle check\n' >&2
-timeout --foreground 180 "$beagle/bin/beagle" check --agent \
-  "$json" "$core" "$pure" "$native" \
-  >"$scratch/check.out" 2>"$scratch/check.err" \
-  || {
-    sed -n '1,260p' "$scratch/check.err" >&2
-    die "exact bundle check failed"
-  }
-rg -x '0 errors( \([0-9]+ lint warnings hidden\))?' "$scratch/check.err" \
-  >/dev/null \
-  || die "exact bundle check did not report zero errors"
-
-printf 'schema-transaction-native: building focused pure test\n' >&2
-mkdir -p "$scratch/pure-artifacts"
-timeout --foreground 700 "$beagle/bin/beagle" native-exe \
-  --out "$scratch/schema-transaction-test" \
-  --entry firn.schema-transaction-test/-main \
-  --artifacts "$scratch/pure-artifacts" \
-  "$json" "$core" "$pure" \
+printf 'schema-transaction-js: building exact focused bundle\n' >&2
+mkdir -p "$scratch/out"
+timeout --foreground 180 "$beagle/bin/beagle" build \
+  "$json" "$core" "$pure" "$native" --out "$scratch/out" \
   >"$scratch/pure.build.out" 2>"$scratch/pure.build.err" \
   || {
     sed -n '1,260p' "$scratch/pure.build.err" >&2
-    die "focused pure test compilation failed"
+    die "focused Beagle/JS bundle compilation failed"
   }
-[[ -x "$scratch/schema-transaction-test" ]] \
-  || die "focused pure test executable is missing"
+[[ -f "$scratch/out/firn/schema-transaction-test.js" ]] \
+  || die "focused pure test module is missing"
+[[ -f "$scratch/out/firn/schema-transaction-native.js" ]] \
+  || die "schema host-plan module is missing"
 
 printf 'schema-transaction-native: focused pure policy fixtures\n' >&2
-timeout --foreground 30 "$scratch/schema-transaction-test" \
+FIRN_SCHEMA_TEST_MODULE="$scratch/out/firn/schema-transaction-test.js" \
+timeout --foreground 30 bun --eval \
+  'const module = await import(process.env.FIRN_SCHEMA_TEST_MODULE); process.exitCode = module.run([]);' \
   >"$scratch/pure.out" 2>"$scratch/pure.err" \
   || {
     sed -n '1,200p' "$scratch/pure.out" >&2
@@ -88,4 +77,4 @@ timeout --foreground 30 "$scratch/schema-transaction-test" \
 [[ ! -s "$scratch/pure.err" ]] \
   || die "focused pure policy fixtures wrote stderr"
 
-printf 'ok: native schema authority policy and transaction boundary are checked\n'
+printf 'ok: Beagle/JS schema authority policy and Bun transaction boundary are checked\n'

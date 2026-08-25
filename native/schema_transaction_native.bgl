@@ -1,7 +1,111 @@
-#lang beagle
+#lang beagle/js
 (ns firn.schema-transaction-native
   (:require [clojure.string :as str]
             [firn.schema-transaction :as transaction]))
+
+(declare-extern bridge-read-text-bounded (Fn [String Int] Any))
+(declare-extern bridge-list-directory-bounded (Fn [String Int] Any))
+(declare-extern bridge-path-kind (Fn [String] Any))
+(declare-extern bridge-make-parent-directories (Fn [String] Int))
+(declare-extern bridge-write-text-atomic (Fn [String String] Int))
+(declare-extern bridge-run-capture (Fn [(Vec String) String Int] Any))
+(declare-extern bridge-env (Fn [String] (U String Nil)))
+(declare-extern bridge-out (Fn [String] Nil))
+(declare-extern bridge-err (Fn [String] Nil))
+(declare-extern bridge-result-tag (Fn [Any] String))
+(declare-extern bridge-result-int (Fn [Any String] Int))
+(declare-extern bridge-result-string (Fn [Any String] String))
+(declare-extern bridge-result-strings (Fn [Any String] (Vec String)))
+
+(defunion HostTextResult
+  (HostTextOk [text String])
+  (HostTextError [errno Int]))
+
+(defunion HostListResult
+  (HostListOk [entries (Vec String)])
+  (HostListError [errno Int]))
+
+(defrecord ExactNanoseconds
+  [seconds String
+   nanoseconds String])
+
+(defunion HostPathKindResult
+  (HostPathKindOk
+    [kind Int
+     modified ExactNanoseconds])
+  (HostPathKindError [errno Int]))
+
+(defunion HostMkdirResult
+  HostMkdirOk
+  (HostMkdirError [errno Int]))
+
+(defunion HostWriteResult
+  HostWriteOk
+  (HostWriteError [errno Int]))
+
+(defunion HostCaptureResult
+  (HostCaptureOk
+    [status Int
+     stdout String
+     stderr String])
+  (HostCaptureError [errno Int]))
+
+(defn host-read-text-bounded-result
+  [absolute String
+   limit Int] HostTextResult
+  (let [result Any (bridge-read-text-bounded absolute limit)]
+    (if (= "ok" (bridge-result-tag result))
+      (->HostTextOk (bridge-result-string result "text"))
+      (->HostTextError (bridge-result-int result "errno")))))
+
+(defn host-list-directory-bounded-result
+  [absolute String
+   limit Int] HostListResult
+  (let [result Any (bridge-list-directory-bounded absolute limit)]
+    (if (= "ok" (bridge-result-tag result))
+      (->HostListOk (bridge-result-strings result "entries"))
+      (->HostListError (bridge-result-int result "errno")))))
+
+(defn host-path-kind-result [absolute String] HostPathKindResult
+  (let [result Any (bridge-path-kind absolute)]
+    (if (= "ok" (bridge-result-tag result))
+      (->HostPathKindOk
+        (bridge-result-int result "kind")
+        (->ExactNanoseconds
+          (bridge-result-string result "mtimeSeconds")
+          (bridge-result-string result "mtimeNanoseconds")))
+      (->HostPathKindError (bridge-result-int result "errno")))))
+
+(defn host-make-parent-directories-result [absolute String] HostMkdirResult
+  (let [errno Int (bridge-make-parent-directories absolute)]
+    (if (= errno 0) (->HostMkdirOk) (->HostMkdirError errno))))
+
+(defn host-write-text-atomic-result
+  [absolute String
+   contents String] HostWriteResult
+  (let [errno Int (bridge-write-text-atomic absolute contents)]
+    (if (= errno 0) (->HostWriteOk) (->HostWriteError errno))))
+
+(defn host-run-capture-result
+  [argv (Vec String)
+   stdin String
+   limit Int] HostCaptureResult
+  (let [result Any (bridge-run-capture argv stdin limit)]
+    (if (= "ok" (bridge-result-tag result))
+      (->HostCaptureOk
+        (bridge-result-int result "status")
+        (bridge-result-string result "stdout")
+        (bridge-result-string result "stderr"))
+      (->HostCaptureError (bridge-result-int result "errno")))))
+
+(defn host-env [name String] (U String Nil)
+  (bridge-env name))
+
+(defn host-out [text String] Nil
+  (bridge-out text))
+
+(defn host-err [text String] Nil
+  (bridge-err text))
 
 (def max-text-bytes Int 134217728)
 (def max-process-output Int 134217728)
@@ -60,9 +164,9 @@
 (defn read-text
   [root String
    relative String] TextLoadResult
-  (match (host.fs/read-text-bounded (path root relative) max-text-bytes)
-    [(host.fs/ReadTextBoundedOk text) (->TextLoaded text)]
-    [(host.fs/ReadTextBoundedError errno)
+  (match (host-read-text-bounded-result (path root relative) max-text-bytes)
+    [(HostTextOk text) (->TextLoaded text)]
+    [(HostTextError errno)
      (if (= errno 2)
        (->TextMissing relative)
        (->TextLoadRejected (errno-message "cannot read" relative errno)))]))
@@ -100,27 +204,27 @@
   [root String
    relative String
    tool-tree Bool] PathsLoadResult
-  (match (host.fs/list-directory-bounded
+  (match (host-list-directory-bounded-result
            (path root relative) max-directory-entries)
-    [(host.fs/ListDirectoryBoundedError errno)
+    [(HostListError errno)
      (if (or (= errno 2) (= errno 20))
        (->PathsLoaded [])
        (->PathsLoadRejected
          (errno-message "cannot list" relative errno)))]
-    [(host.fs/ListDirectoryBoundedOk entries)
+    [(HostListOk entries)
      (loop [index Int 0
             result (Vec String) []]
        (if (>= index (count entries))
          (->PathsLoaded result)
          (let [name String (nth entries index)
                child String (if (empty? relative) name (str relative "/" name))]
-           (match (host.fs/path-kind (path root child))
-             [(host.fs/PathKindError errno)
+           (match (host-path-kind-result (path root child))
+             [(HostPathKindError errno)
               (if (= errno 2)
                 (recur (+ index 1) result)
                 (->PathsLoadRejected
                   (errno-message "cannot inspect" child errno)))]
-             [(host.fs/PathKindOk kind)
+             [(HostPathKindOk kind modified)
               (cond
                 (= kind 2)
                 (if (if tool-tree
@@ -168,13 +272,13 @@
       (if (>= index (count roots))
         (->PathsLoaded selected)
         (let [relative String (nth roots index)]
-          (match (host.fs/path-kind (path beagle-path relative))
-            [(host.fs/PathKindError errno)
+          (match (host-path-kind-result (path beagle-path relative))
+            [(HostPathKindError errno)
              (if (= errno 2)
                (recur (+ index 1) selected)
                (->PathsLoadRejected
                  (errno-message "cannot inspect" relative errno)))]
-            [(host.fs/PathKindOk kind)
+            [(HostPathKindOk kind modified)
              (recur (+ index 1)
                (if (or (= kind 1) (= kind 3))
                  (conj selected relative)
@@ -183,13 +287,13 @@
 (defn tool-tree-paths
   [beagle-path String
    directory String] PathsLoadResult
-  (match (host.fs/path-kind (path beagle-path directory))
-    [(host.fs/PathKindError errno)
+  (match (host-path-kind-result (path beagle-path directory))
+    [(HostPathKindError errno)
      (if (= errno 2)
        (->PathsLoaded [])
        (->PathsLoadRejected
          (errno-message "cannot inspect" directory errno)))]
-    [(host.fs/PathKindOk kind)
+    [(HostPathKindOk kind modified)
      (if (= kind 2)
        (match (walk-files beagle-path directory true)
          [(PathsLoadRejected message) (->PathsLoadRejected message)]
@@ -246,13 +350,13 @@
           [(FingerprintReady value) (->CurrentFingerprint value)])])]))
 
 (defn run-process-spec [spec transaction/ProcessSpec] ProcessOutputResult
-  (match (host.process/run-capture
+  (match (host-run-capture-result
            (transaction/processspec-argv spec) "" max-process-output)
-    [(host.process/CaptureError errno)
+    [(HostCaptureError errno)
      (->ProcessOutputRejected
        (str "firn schema: cannot run "
          (transaction/processspec-label spec) ": errno " errno "\n"))]
-    [(host.process/CaptureOk status stdout stderr)
+    [(HostCaptureOk status stdout stderr)
      (if (= status 0)
        (->ProcessOutput stdout)
        (->ProcessOutputRejected
@@ -315,11 +419,11 @@
               (->OperationOk "validated Darwin extraction")])])])]))
 
 (defn ensure-cache-directory [root String] OperationResult
-  (match (host.fs/make-parent-directories
+  (match (host-make-parent-directories-result
            (path root ".beagle-cache/schema.json"))
-    [(host.fs/MakeParentDirectoriesOk)
+    [(HostMkdirOk)
      (->OperationOk "created schema cache directory")]
-    [(host.fs/MakeParentDirectoriesError errno)
+    [(HostMkdirError errno)
      (->OperationRejected
        (errno-message "cannot create parent for"
          ".beagle-cache/schema.json" errno))]))
@@ -328,10 +432,10 @@
   [root String
    relative String
    contents String] OperationResult
-  (match (host.fs/write-text-atomic (path root relative) contents)
-    [(host.fs/WriteTextAtomicOk)
+  (match (host-write-text-atomic-result (path root relative) contents)
+    [(HostWriteOk)
      (->OperationOk (str "published " relative))]
-    [(host.fs/WriteTextAtomicError errno)
+    [(HostWriteError errno)
      (->OperationRejected (errno-message "cannot publish" relative errno))]))
 
 (defn publish-nixos
@@ -373,15 +477,15 @@
              (str fingerprint "\n"))])])]))
 
 (defn validator-policy-relative [] String
-  (let [configured (U String Nil) (System/getenv "FIRN_SCHEMA_CONFIG")]
+  (let [configured (U String Nil) (host-env "FIRN_SCHEMA_CONFIG")]
     (if (nil? configured) "config/beagle-validate.json" configured)))
 
 (defn read-validator-policy [root String] TextLoadResult
   (let [configured String (validator-policy-relative)]
     (if (transaction/starts-with? configured "/")
-      (match (host.fs/read-text-bounded configured max-text-bytes)
-        [(host.fs/ReadTextBoundedOk text) (->TextLoaded text)]
-        [(host.fs/ReadTextBoundedError errno)
+      (match (host-read-text-bounded-result configured max-text-bytes)
+        [(HostTextOk text) (->TextLoaded text)]
+        [(HostTextError errno)
          (->TextLoadRejected
            (str "firn schema: cannot read validator policy '"
              configured "': errno " errno "\n"))])
@@ -497,7 +601,7 @@
            (->OperationOk "NixOS schema cache is current")]
           [(CacheStale reason)
            (do
-             (host.stderr/write-text
+             (host-err
                (str "firn repo validate: refreshing schema cache (" reason ")...\n"))
              (match (extract-and-publish root beagle-path
                       (transaction/nixos-mode) "whiterabbit")
@@ -535,7 +639,7 @@
            (->OperationOk "Darwin schema cache is current")]
           [(CacheStale reason)
            (do
-             (host.stderr/write-text
+             (host-err
                (str "firn repo validate: refreshing Darwin schema cache ("
                  reason ")...\n"))
              (match (extract-and-publish root beagle-path
@@ -587,14 +691,14 @@
     (->OperationOk "Nix syntax is clean")
     (let [relative String (nth files index)
           absolute String (absolute-input root relative)]
-      (match (host.process/run-capture
+      (match (host-run-capture-result
                ["nix-instantiate" "--parse-only" absolute]
                "" max-process-output)
-        [(host.process/CaptureError errno)
+        [(HostCaptureError errno)
          (->OperationRejected
            (str "firn repo validate: cannot run nix-instantiate: errno "
              errno "\n"))]
-        [(host.process/CaptureOk status stdout stderr)
+        [(HostCaptureOk status stdout stderr)
          (if (= status 0)
            (lint-nix-files root files (+ index 1))
            (->OperationRejected
@@ -611,17 +715,17 @@
             result
             (recur (+ index 1)
               (conj result (absolute-input root (nth inputs index))))))]
-    (match (host.process/run-capture argv "" max-process-output)
-      [(host.process/CaptureError errno)
+    (match (host-run-capture-result argv "" max-process-output)
+      [(HostCaptureError errno)
        (do
-         (host.stderr/write-text
+         (host-err
            (str "firn repo validate: cannot run beagle-validate: errno "
              errno "\n"))
          1)]
-      [(host.process/CaptureOk status stdout stderr)
+      [(HostCaptureOk status stdout stderr)
        (do
-         (if (empty? stdout) nil (print stdout))
-         (if (empty? stderr) nil (host.stderr/write-text stderr))
+         (if (empty? stdout) nil (host-out stdout))
+         (if (empty? stderr) nil (host-err stderr))
          status)])))
 
 (defn run-validation
@@ -630,57 +734,57 @@
    explicit (Vec String)] Int
   (match (walk-files root "" false)
     [(PathsLoadRejected message)
-     (do (host.stderr/write-text message) 1)]
+     (do (host-err message) 1)]
     [(PathsLoaded discovered)
      (let [bnix-inputs (Vec String) (transaction/select-bnix-inputs discovered explicit)
            nix-inputs (Vec String) (transaction/filter-sorted-nix discovered)]
        (do
-         (host.stderr/write-text
+         (host-err
            "firn repo validate: [1/2] syntax-checking generated .nix files...\n")
          (match (lint-nix-files root nix-inputs 0)
            [(OperationRejected message)
-            (do (host.stderr/write-text message) 1)]
+            (do (host-err message) 1)]
            [(OperationOk operation)
             (do
-              (host.stderr/write-text
+              (host-err
                 "firn repo validate: [2/2] schema-validating .bnix sources...\n")
               (if (empty? bnix-inputs)
                 (do
-                  (host.stderr/write-text
+                  (host-err
                     "beagle-validate: no .bnix files found\n")
                   2)
                 (match (ensure-nixos-cache root beagle-path)
                   [(OperationRejected message)
-                   (do (host.stderr/write-text message) 1)]
+                   (do (host-err message) 1)]
                   [(OperationOk operation)
                    (if (transaction/validation-needs-darwin? bnix-inputs)
                      (match (ensure-darwin-cache root beagle-path)
                        [(OperationRejected message)
-                        (do (host.stderr/write-text message) 1)]
+                        (do (host-err message) 1)]
                        [(OperationOk operation)
                         (run-validator root beagle-path bnix-inputs)])
                      (run-validator root beagle-path bnix-inputs))])))])))]))
 
 (defn repository-root [] (U String Nil)
-  (let [explicit (U String Nil) (System/getenv "FIRN_REPO")]
+  (let [explicit (U String Nil) (host-env "FIRN_REPO")]
     (if (some? explicit)
       explicit
-      (let [home (U String Nil) (System/getenv "HOME")]
+      (let [home (U String Nil) (host-env "HOME")]
         (if (some? home)
           (str home "/code/nixos-config/main")
           nil)))))
 
 (defn candidate-is-beagle? [candidate String] Bool
-  (match (host.fs/path-kind
+  (match (host-path-kind-result
            (path candidate "bin/beagle-extract-schema"))
-    [(host.fs/PathKindError errno) false]
-    [(host.fs/PathKindOk kind) (or (= kind 1) (= kind 3))]))
+    [(HostPathKindError errno) false]
+    [(HostPathKindOk kind modified) (or (= kind 1) (= kind 3))]))
 
 (defn beagle-root [root String] (U String Nil)
-  (let [explicit (U String Nil) (System/getenv "BEAGLE_PATH")]
+  (let [explicit (U String Nil) (host-env "BEAGLE_PATH")]
     (if (some? explicit)
       explicit
-      (let [home (U String Nil) (System/getenv "HOME")]
+      (let [home (U String Nil) (host-env "HOME")]
         (if (nil? home)
           nil
           (let [main-candidate String (str home "/code/beagle/main")
@@ -692,24 +796,25 @@
 
 (defn usage-error [] Int
   (do
-    (host.stderr/write-text
+    (host-err
       (str
         "Usage: firn schema extract [<host>]\n"
         "       firn schema extract --darwin [<host>]\n"
         "       firn repo validate [all|<file>...]\n"))
     64))
 
-(defn -main [args (Vec String)] Int
+(js/export
+  (defn run [args (Vec String)] Int
   (let [root (U String Nil) (repository-root)]
     (if (nil? root)
       (do
-        (host.stderr/write-text
+        (host-err
           "firn schema: FIRN_REPO and HOME are not set\n")
         1)
       (let [beagle-path (U String Nil) (beagle-root root)]
         (if (nil? beagle-path)
           (do
-            (host.stderr/write-text
+            (host-err
               "firn schema: cannot locate the Beagle checkout\n")
             2)
           (match (transaction/parse-schema-transaction-argv args)
@@ -718,6 +823,6 @@
              (match (extract-and-publish root beagle-path mode host)
                [(OperationOk operation) 0]
                [(OperationRejected message)
-                (do (host.stderr/write-text message) 1)])]
+                (do (host-err message) 1)])]
             [(ValidateSchema explicit-inputs)
-             (run-validation root beagle-path explicit-inputs)]))))))
+             (run-validation root beagle-path explicit-inputs)])))))))
