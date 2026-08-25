@@ -223,10 +223,10 @@
 
 (defn action-kind [(action views/ViewsAction)] String
   (match action
-    [(FlakeInputs) "flake"]
+    [(FlakeInputs token) "flake"]
     [(PlatformList selection) "platform-list"]
     [(PlatformShow module) "platform-show"]
-    [(PlatformSafelist) "platform-safelist"]
+    [(PlatformSafelist token) "platform-safelist"]
     [(SchemaExplain input) "schema-explain"]
     [(SchemaExtract host) (str "schema-extract:" host)]
     [(HostGeneration host) (str "host-gen:" host)]))

@@ -17,9 +17,10 @@
    broken Bool
    follows (Vec Follow)])
 
-(defunion FlakeRowsResult
+(js/export
+  (defunion FlakeRowsResult
   (FlakeRows [rows (Vec FlakeRow)])
-  (FlakeRowsRejected [message String]))
+  (FlakeRowsRejected [message String])))
 
 (defrecord SchemaEntry
   [path String
@@ -28,15 +29,17 @@
    enum-values (Vec String)
    declarations (Vec String)])
 
-(defunion SchemaResult
+(js/export
+  (defunion SchemaResult
   (SchemaLoaded [entries (Vec SchemaEntry)])
   (SchemaRejected
     [message String
-     offset Int]))
+     offset Int])))
 
-(defrecord ModuleSource
+(js/export
+  (defrecord ModuleSource
   [name String
-   documents (Vec paths/SourceDocument)])
+   documents (Vec paths/SourceDocument)]))
 
 (defunion ModulePathsResult
   (ModulePaths [paths (Vec String)])
@@ -51,32 +54,37 @@
   (PlatformVerdictLoaded [value PlatformVerdict])
   (PlatformVerdictRejected [message String]))
 
-(defunion PlatformResult
+(js/export
+  (defunion PlatformResult
   (PlatformLoaded [verdicts (Vec PlatformVerdict)])
-  (PlatformRejected [message String]))
+  (PlatformRejected [message String])))
 
-(defrecord ChildResult
+(js/export
+  (defrecord ChildResult
   [status Int
    stdout String
-   stderr String])
+   stderr String]))
 
-(defrecord CommandResult
+(js/export
+  (defrecord CommandResult
   [status Int
    stdout String
-   stderr String])
+   stderr String]))
 
-(defunion ViewsAction
-  FlakeInputs
+(js/export
+  (defunion ViewsAction
+  (FlakeInputs [token Bool])
   (PlatformList [selection String])
   (PlatformShow [module String])
-  PlatformSafelist
+  (PlatformSafelist [token Bool])
   (SchemaExplain [input String])
   (SchemaExtract [host String])
-  (HostGeneration [host String]))
+  (HostGeneration [host String])))
 
-(defunion ViewsArgv
+(js/export
+  (defunion ViewsArgv
   (ParsedViews [action ViewsAction])
-  (InvalidViewsArgv [argv (Vec String)]))
+  (InvalidViewsArgv [argv (Vec String)])))
 
 (defn starts-with?
   [text String
@@ -84,12 +92,13 @@
   (and (>= (count text) (count prefix))
        (= prefix (subs text 0 (count prefix)))))
 
-(defn ends-with?
+(js/export
+  (defn ends-with?
   [text String
    suffix String] Bool
   (and (>= (count text) (count suffix))
        (= suffix
-          (subs text (- (count text) (count suffix)) (count text)))))
+          (subs text (- (count text) (count suffix)) (count text))))))
 
 (defn string-member?
   [values (Vec String)
@@ -480,7 +489,8 @@
           (recur remaining (conj result row) true)
           (recur (rest remaining) (conj result current) inserted))))))
 
-(defn flake-rows
+(js/export
+  (defn flake-rows
   [source String
    now-seconds Int] FlakeRowsResult
   (match (json/decode source)
@@ -507,7 +517,7 @@
                    (->FlakeRowsRejected
                      (str "flake.lock input '" (first remaining)
                        "' has no lock node"))
-                   (recur (rest remaining) (insert-row rows row)))))))))]))
+                   (recur (rest remaining) (insert-row rows row)))))))))])))
 
 (defn max-row-name [rows (Vec FlakeRow)] Int
   (loop [remaining (Vec FlakeRow) rows
@@ -569,7 +579,8 @@
         true
         (recur (rest remaining))))))
 
-(defn render-flake-rows
+(js/export
+  (defn render-flake-rows
   [rows (Vec FlakeRow)
    tty Bool] String
   (if (= (count rows) 0)
@@ -603,7 +614,7 @@
           "")
         (if has-follows
           "→ └─ X shares Y = this input uses our copy of Y.\n"
-          "")))))
+          ""))))))
 
 (defn parse-schema-entry
   [events (Vec json/JsonEvent)
@@ -652,21 +663,24 @@
                 (->SchemaRejected "schema entries must name a path" index)
                 (recur next (conj entries entry))))))))))
 
-(defn schema-from-json [source String] SchemaResult
+(js/export
+  (defn schema-from-json [source String] SchemaResult
   (match (json/decode source)
     [(JsonDecodeError offset message) (->SchemaRejected message offset)]
-    [(JsonDecoded events) (parse-schema-array events 0)]))
+    [(JsonDecoded events) (parse-schema-array events 0)])))
 
-(defn append-schema-entries
+(js/export
+  (defn append-schema-entries
   [left (Vec SchemaEntry)
    right (Vec SchemaEntry)] (Vec SchemaEntry)
   (loop [remaining (Vec SchemaEntry) right
          result (Vec SchemaEntry) left]
     (if (= (count remaining) 0)
       result
-      (recur (rest remaining) (conj result (first remaining))))))
+      (recur (rest remaining) (conj result (first remaining)))))))
 
-(defn submodule-schema-from-json [source String] SchemaResult
+(js/export
+  (defn submodule-schema-from-json [source String] SchemaResult
   (match (json/decode source)
     [(JsonDecodeError offset message) (->SchemaRejected message offset)]
     [(JsonDecoded events)
@@ -684,7 +698,7 @@
                 (->SchemaRejected message offset)]
                [(SchemaLoaded nested)
                 (recur (rest remaining)
-                  (append-schema-entries entries nested))])))))]))
+                  (append-schema-entries entries nested))])))))])))
 
 (defn schema-paths [entries (Vec SchemaEntry)] (Vec String)
   (loop [remaining (Vec SchemaEntry) entries
@@ -853,7 +867,8 @@
              (modulesource-name module) :no-data
              (combine-unique linux-missing darwin-missing)))))]))
 
-(defn platform-matrix
+(js/export
+  (defn platform-matrix
   [modules (Vec ModuleSource)
    nixos (Vec SchemaEntry)
    darwin (Vec SchemaEntry)] PlatformResult
@@ -864,7 +879,7 @@
       (match (platform-verdict (first remaining) nixos darwin)
         [(PlatformVerdictRejected message) (->PlatformRejected message)]
         [(PlatformVerdictLoaded verdict)
-         (recur (rest remaining) (conj verdicts verdict))]))))
+         (recur (rest remaining) (conj verdicts verdict))])))))
 
 (defn verdict-label [verdict Keyword] String
   (cond
@@ -896,7 +911,8 @@
         text
         (recur (rest remaining) (str text "  " (first remaining) "\n"))))))
 
-(defn render-platform-list
+(js/export
+  (defn render-platform-list
   [selection String
    verdicts (Vec PlatformVerdict)
    nixos-count Int
@@ -938,7 +954,7 @@
       :else
       (->CommandResult 64 ""
         (str "firn platform list: expected all|darwin|linux, got '"
-          selection "'\n")))))
+          selection "'\n"))))))
 
 (defn verdict-for
   [verdicts (Vec PlatformVerdict)
@@ -958,7 +974,8 @@
       text
       (recur (rest remaining) (str text "  " (first remaining) "\n")))))
 
-(defn render-platform-show
+(js/export
+  (defn render-platform-show
   [module String
    verdicts (Vec PlatformVerdict)] CommandResult
   (let [verdict (U PlatformVerdict Nil) (verdict-for verdicts module)]
@@ -972,9 +989,10 @@
             ""
             (str "blocking paths:\n"
               (blocker-lines (platformverdict-blockers verdict)))))
-        ""))))
+        "")))))
 
-(defn render-platform-safelist [verdicts (Vec PlatformVerdict)] CommandResult
+(js/export
+  (defn render-platform-safelist [verdicts (Vec PlatformVerdict)] CommandResult
   (let [both (Vec String) (modules-with verdicts :both)
         darwin-only (Vec String) (modules-with verdicts :darwin-only)
         compatible (Vec String) (combine-unique both darwin-only)]
@@ -986,7 +1004,7 @@
           (str text ")\n")
           (recur (rest remaining)
             (str text "\n     \"" (first remaining) "\""))))
-      "")))
+      ""))))
 
 (defn allowed-path-character? [character String] Bool
   (or (and (>= (compare character "a") 0)
@@ -1098,7 +1116,8 @@
           (str text "  "
             (paths/pathsuggestion-path (first remaining)) "\n"))))))
 
-(defn render-schema-explain
+(js/export
+  (defn render-schema-explain
   [input String
    entries (Vec SchemaEntry)
    documents (Vec paths/SourceDocument)] CommandResult
@@ -1124,7 +1143,7 @@
                 (str "defined in:\n"
                   (declaration-lines (schemaentry-declarations entry))))
               (reference-lines (references-for path documents)))
-            ""))))))
+            "")))))))
 
 (defn line-has-current? [line String] Bool
   (or (>= (find-substring line "current") 0)
@@ -1148,7 +1167,8 @@
           (parse-long (first-token line))
           (recur (rest remaining)))))))
 
-(defn render-host-generation [child ChildResult] CommandResult
+(js/export
+  (defn render-host-generation [child ChildResult] CommandResult
   (if (not= (childresult-status child) 0)
     (->CommandResult (childresult-status child)
       (childresult-stdout child)
@@ -1159,9 +1179,10 @@
         (->CommandResult 0 "(no generation info)\n" "")
         (->CommandResult 0
           (str "current: " generation "\nnext:    " (+ generation 1) "\n")
-          "")))))
+          ""))))))
 
-(defn render-schema-extract
+(js/export
+  (defn render-schema-extract
   [host String
    child ChildResult] CommandResult
   (let [prefix String (str ">> firn schema extract " host "\n")]
@@ -1170,17 +1191,18 @@
         (childresult-stderr child))
       (->CommandResult (childresult-status child)
         (str prefix (childresult-stdout child))
-        (str (childresult-stderr child) "firn schema extract: failed.\n")))))
+        (str (childresult-stderr child) "firn schema extract: failed.\n"))))))
 
-(defn parse-views-argv
+(js/export
+  (defn parse-views-argv
   [argv (Vec String)
    current-host String] ViewsArgv
   (cond
     (= argv ["flake" "inputs"])
-    (->ParsedViews (->FlakeInputs))
+    (->ParsedViews (->FlakeInputs false))
 
     (= argv ["flake" "inputs" "all"])
-    (->ParsedViews (->FlakeInputs))
+    (->ParsedViews (->FlakeInputs false))
 
     (= argv ["platform" "list"])
     (->ParsedViews (->PlatformList "all"))
@@ -1196,10 +1218,10 @@
     (->ParsedViews (->PlatformShow (nth argv 2)))
 
     (= argv ["platform" "safelist" "all"])
-    (->ParsedViews (->PlatformSafelist))
+    (->ParsedViews (->PlatformSafelist false))
 
     (= argv ["platform" "safelist"])
-    (->ParsedViews (->PlatformSafelist))
+    (->ParsedViews (->PlatformSafelist false))
 
     (and (= (count argv) 3)
          (= (nth argv 0) "schema")
@@ -1222,4 +1244,4 @@
          (= (nth argv 1) "gen"))
     (->ParsedViews (->HostGeneration (nth argv 2)))
 
-    :else (->InvalidViewsArgv argv)))
+    :else (->InvalidViewsArgv argv))))

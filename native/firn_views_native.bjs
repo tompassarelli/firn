@@ -415,9 +415,9 @@
                   (count nixos) (count darwin)))]
              [(PlatformShow module)
               (emit-result (views/render-platform-show module verdicts))]
-             [(PlatformSafelist)
+             [(PlatformSafelist token)
               (emit-result (views/render-platform-safelist verdicts))]
-             [(FlakeInputs) (emit-error "firn views: invalid platform action\n")]
+             [(FlakeInputs token) (emit-error "firn views: invalid platform action\n")]
              [(SchemaExplain input)
               (emit-error "firn views: invalid platform action\n")]
              [(SchemaExtract host)
@@ -452,10 +452,10 @@
   (match action
     [(SchemaExtract host) (= host "")]
     [(HostGeneration host) (= host "")]
-    [(FlakeInputs) false]
+    [(FlakeInputs token) false]
     [(PlatformList selection) false]
     [(PlatformShow module) false]
-    [(PlatformSafelist) false]
+    [(PlatformSafelist token) false]
     [(SchemaExplain input) false]))
 
 (defn action-with-host
@@ -466,10 +466,10 @@
      (if (= host "") (views/->SchemaExtract hostname) action)]
     [(HostGeneration host)
      (if (= host "") (views/->HostGeneration hostname) action)]
-    [(FlakeInputs) action]
+    [(FlakeInputs token) action]
     [(PlatformList selection) action]
     [(PlatformShow module) action]
-    [(PlatformSafelist) action]
+    [(PlatformSafelist token) action]
     [(SchemaExplain input) action]))
 
 (defn usage-error [] Int
@@ -489,10 +489,10 @@
   [root String
    action views/ViewsAction] Int
   (match action
-    [(FlakeInputs) (run-flake-inputs root)]
+    [(FlakeInputs token) (run-flake-inputs root)]
     [(PlatformList selection) (run-platform root action)]
     [(PlatformShow module) (run-platform root action)]
-    [(PlatformSafelist) (run-platform root action)]
+    [(PlatformSafelist token) (run-platform root action)]
     [(SchemaExplain input) (run-schema-explain root input)]
     [(SchemaExtract host) (run-schema-extract root host)]
     [(HostGeneration host) (run-host-generation host)]))
