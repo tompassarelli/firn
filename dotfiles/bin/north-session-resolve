@@ -5,7 +5,7 @@
 set -uo pipefail
 
 usage() {
-  echo "usage: north-session-resolve <anthropic|openai> <session-uuid>" >&2
+  echo "usage: north-session-resolve <openai> <session-uuid>" >&2
   exit 64
 }
 
@@ -15,21 +15,10 @@ session_id="${2,,}"
 uuid_re='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 [[ "$session_id" =~ $uuid_re ]] || usage
 
-case "$provider" in
-  anthropic)
-    provider_word="claude"
-    account_base="$HOME/.local/state/north/accounts/anthropic"
-    ambient_home="$HOME/.claude"
-    ;;
-  openai)
-    provider_word="codex"
-    account_base="$HOME/.local/state/north/accounts/openai"
-    ambient_home="$HOME/.codex"
-    ;;
-  *)
-    usage
-    ;;
-esac
+[ "$provider" = openai ] || usage
+provider_word="codex"
+account_base="$HOME/.local/state/north/accounts/openai"
+ambient_home="$HOME/.codex"
 
 declare -a match_kinds=()
 declare -a match_names=()
@@ -63,22 +52,7 @@ transcript_head() { # <file>
     fi )
 }
 
-home_has_claude_session() {
-  local home="$1" candidate
-  [ -d "$home/projects" ] || return 1
-  while IFS= read -r candidate; do
-    [ -n "$candidate" ] || continue
-    if transcript_grep "$candidate" \
-       '"sessionId"[[:space:]]*:[[:space:]]*"'"$session_id"'"'; then
-      return 0
-    fi
-  done < <(find "$home/projects" -mindepth 2 -maxdepth 2 -type f \
-    \( -name "$session_id.jsonl" -o -name "$session_id.jsonl.zst" \) \
-    -print 2>/dev/null)
-  return 1
-}
-
-home_has_codex_session() {
+home_has_session() {
   local home="$1" candidate first
   [ -d "$home/sessions" ] || return 1
   while IFS= read -r candidate; do
@@ -93,13 +67,6 @@ home_has_codex_session() {
     \( -name "rollout-*-$session_id.jsonl" \
        -o -name "rollout-*-$session_id.jsonl.zst" \) -print 2>/dev/null)
   return 1
-}
-
-home_has_session() {
-  case "$provider" in
-    anthropic) home_has_claude_session "$1" ;;
-    openai) home_has_codex_session "$1" ;;
-  esac
 }
 
 add_home_if_match() {
@@ -128,7 +95,7 @@ fi
 
 # Native profiles are real, independently authenticated provider homes. Include
 # them in lookup so a UUID remains resumable even when it was created through
-# claude-native/codex-native rather than an isolated subscription account.
+# codex-native rather than an isolated subscription account.
 profiles_base="$HOME/.local/state/north/profiles"
 if [ -d "$profiles_base" ]; then
   shopt -s nullglob

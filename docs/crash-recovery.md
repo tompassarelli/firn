@@ -59,7 +59,7 @@ silent freeze into a captured PANIC, then auto-reboots:
 
 **GPU faults have a userspace trigger (2026-06-29, via gjoa):** the Jun-27 SQC
 page-fault → `gfx_0.0.0` ring-timeout was driven by many headless Firefox/WebRender
-instances on amdgpu (Claude dark-mode work). Mitigation: those browser boots now force
+instances on amdgpu. Mitigation: those browser boots now force
 software rendering (llvmpipe), so they no longer touch the GPU. That fault RECOVERED
 (gpu_recovery did its job); the *fatal* silent crashes left no GPU trace, so they
 remain unproven and may be a different cause — the panic stack above is to settle it.
@@ -90,4 +90,3 @@ journalctl -b -1 | grep -iE "thermal|throttl|mce|hardware error|critical temp"
 - **Still zero trace** (no panic, no pstore) → NMI couldn't fire: true SoC freeze or
   instant hardware power-cut. THEN do the `CONFIG_PSTORE_CONSOLE` rebuild or netconsole,
   and check `sensors` under load / fans / BIOS thermal limits / PSU.
-

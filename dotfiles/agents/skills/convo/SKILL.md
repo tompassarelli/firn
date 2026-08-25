@@ -2,7 +2,7 @@
 name: convo
 description: >-
   Search past agent conversations with the `convo` CLI — full-text across every
-  Claude Code, Codex, and North Bridge transcript on this machine. Use this
+  Codex and North Bridge transcript on this machine. Use this
   whenever the answer might live in an earlier session: "when did we discuss
   X", "what did I decide about Y", "find that session", recovering a prior
   ruling, tracking down where a defect was first named, or locating a session
@@ -42,7 +42,7 @@ will meet rather than a rule you must remember. It denies a recursive search
 or an interior container still holding tens of gigabytes — `accounts/`, a
 provider, an account, its `sessions/` or `projects/`, a sessions year or
 month, `archives/`. Everything narrower stays allowed: one named transcript,
-a single day directory or Claude project directory and deeper, any
+a single day directory and deeper, any
 non-transcript subtree of `north-data`, `find <root> -maxdepth 2`,
 `rg --max-depth 2`, and any non-recursive `grep`. The intended sequence is
 `convo` to name the file, raw tools from there.

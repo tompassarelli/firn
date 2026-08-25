@@ -129,8 +129,7 @@ def discover():
             continue
         for account in sorted(os.listdir(pdir)):
             adir = os.path.join(pdir, account)
-            # projects/ is Claude Code's layout, sessions/ is Codex's.
-            for sub in ("projects", "sessions"):
+            for sub in ("sessions",):
                 base = os.path.join(adir, sub)
                 if not os.path.isdir(base):
                     continue
@@ -148,9 +147,6 @@ def discover():
                         else:
                             continue
                         hint = ""
-                        if sub == "projects":
-                            rel = os.path.relpath(dirpath, base)
-                            hint = rel.split(os.sep)[0]
                         yield logical, disk, provider, account, hint
 
 
@@ -228,55 +224,6 @@ def _tool_text(name, args):
     else:
         body = ""
     return _clip(f"{name} {body}")
-
-
-def extract_anthropic(d):
-    """-> (list[(role, text)], meta_updates)"""
-    out = []
-    meta = {}
-    t = d.get("type")
-    if d.get("sessionId"):
-        meta["session_id"] = d["sessionId"]
-    if d.get("cwd"):
-        meta["cwd"] = d["cwd"]
-    if d.get("gitBranch"):
-        meta["branch"] = d["gitBranch"]
-    if t == "ai-title" and d.get("aiTitle"):
-        meta["title"] = d["aiTitle"]
-        return out, meta
-    if d.get("slug"):
-        meta.setdefault("slug", d["slug"])
-    if t not in ("user", "assistant"):
-        return out, meta
-    m = d.get("message")
-    if not isinstance(m, dict):
-        return out, meta
-    c = m.get("content")
-    if isinstance(c, str):
-        s = _clip(c)
-        if s:
-            out.append((t, s))
-        return out, meta
-    if not isinstance(c, list):
-        return out, meta
-    for b in c:
-        if not isinstance(b, dict):
-            continue
-        bt = b.get("type")
-        if bt == "text":
-            s = _clip(b.get("text"))
-            if s:
-                out.append((t, s))
-        elif bt == "thinking":
-            s = _clip(b.get("thinking"))
-            if s:
-                out.append(("thinking", s))
-        elif bt == "tool_use":
-            s = _tool_text(b.get("name", "tool"), b.get("input"))
-            if s:
-                out.append(("tool", s))
-        # tool_result and image are machine output: deliberately not indexed.
-    return out, meta
 
 
 def extract_openai(d):
@@ -603,8 +550,6 @@ def index(con, quiet=False, verbose=False):
         off = start
         first_ts = None
         last_ts = None
-        is_openai = provider == "openai"
-
         def flush(final_off):
             # msg.id and ftx.rowid are the same number by construction — ids are
             # assigned here rather than inferred from last_insert_rowid(), so a
@@ -639,17 +584,12 @@ def index(con, quiet=False, verbose=False):
                 prog.b += le - ls
                 if line is None:
                     continue
-                if is_openai:
-                    # Cheap prefix reject: drops compaction replays, token
-                    # counts, world_state and event_msg duplicates without ever
-                    # parsing them — that is what keeps a 75 GiB cold build
-                    # bounded. Matched loosely (no quotes/colon) so a producer
-                    # that pretty-prints its JSON does not silently index
-                    # nothing; extract_openai still checks the real type.
-                    head = line[:200]
-                    if (b"response_item" not in head
-                            and b"session_meta" not in head):
-                        continue
+                # Cheap prefix reject: drops compaction replays, token counts,
+                # world_state and event_msg duplicates before parsing.
+                head = line[:200]
+                if (b"response_item" not in head
+                        and b"session_meta" not in head):
+                    continue
                 if not line.strip():
                     continue
                 try:
@@ -658,8 +598,7 @@ def index(con, quiet=False, verbose=False):
                     continue
                 if not isinstance(d, dict):
                     continue
-                msgs, mu = (extract_openai(d) if is_openai
-                            else extract_anthropic(d))
+                msgs, mu = extract_openai(d)
                 for k, v in mu.items():
                     if v:
                         meta[k] = v

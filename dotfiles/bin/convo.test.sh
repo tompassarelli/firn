@@ -10,7 +10,7 @@ trap 'rm -rf "${fixture:?}"' EXIT
 
 export CONVO_ROOT="$fixture/corpus"
 export CONVO_STATE="$fixture/state"
-adir="$CONVO_ROOT/anthropic/acct/projects/-home-tom-code-demo"
+adir="$CONVO_ROOT/openai/acct/projects/-home-tom-code-demo"
 odir="$CONVO_ROOT/openai/acct/sessions/2026/08/12"
 mkdir -p "$adir" "$odir" "$CONVO_STATE"
 
@@ -22,7 +22,7 @@ nomatch() { if "$CONVO" --color=never "$1" >/dev/null 2>&1; then fail "$2"; fi; 
 
 SID=11111111-2222-3333-4444-555555555555
 
-# ---- fixture: one Claude transcript, one Codex rollout -------------------
+# ---- fixture: one legacy transcript, one Codex rollout -------------------
 python3 - "$adir/$SID.jsonl" "$odir/rollout-x.jsonl" "$SID" <<'PY'
 import json, sys
 apath, opath, sid = sys.argv[1:4]

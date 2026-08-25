@@ -6,31 +6,16 @@ fixture_v2='{
   "schemaVersion": 2,
   "providers": [
     {
-      "provider": "anthropic",
-      "targets": [
-        {"installed": true, "authenticated": true, "routing": "eligible", "headroom": "normal"},
-        {"installed": true, "authenticated": true, "routing": "eligible", "headroom": "plenty"}
-      ]
-    },
-    {
       "provider": "openai",
       "targets": [
         {"installed": true, "authenticated": false, "routing": "unavailable", "headroom": "unknown"}
       ]
     }
-  ],
-  "diagnosticRouteProbe": {"available": true, "provider": "anthropic"}
+  ]
 }'
 fixture_v3='{
   "schemaVersion": 3,
   "providers": [
-    {
-      "provider": "anthropic",
-      "targets": [
-        {"id":"a-exhausted","provider":"anthropic","installed":true,"authenticated":true,"available":true,"availabilityReason":"ready","routing":"exhausted","headroom":"exhausted"},
-        {"id":"a-eligible","provider":"anthropic","installed":true,"authenticated":true,"available":true,"availabilityReason":"ready","routing":"eligible","headroom":"normal"}
-      ]
-    },
     {
       "provider": "openai",
       "targets": [
@@ -45,7 +30,7 @@ fixture_v3='{
 assert_rejected() {
   local label="$1"
   local document="$2"
-  local provider="${3:-anthropic}"
+  local provider="${3:-openai}"
 
   if printf '%s\n' "$document" |
       "$HERE/agent-provider-status.sh" "$provider" >/dev/null 2>&1; then
@@ -54,16 +39,14 @@ assert_rejected() {
   fi
 }
 
-[ "$(printf '%s\n' "$fixture_v2" | "$HERE/agent-provider-status.sh" anthropic)" = 'yes|yes|plenty|eligible' ]
 [ "$(printf '%s\n' "$fixture_v2" | "$HERE/agent-provider-status.sh" openai)" = 'yes|no|unknown|unavailable' ]
-[ "$(printf '%s\n' "$fixture_v3" | "$HERE/agent-provider-status.sh" anthropic)" = 'yes|yes|normal|eligible' ]
 [ "$(printf '%s\n' "$fixture_v3" | "$HERE/agent-provider-status.sh" openai)" = 'yes|yes|unknown|eligible' ]
 
-only_exhausted="$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets = [.providers[1].targets[0] | .id = "o-exhausted" | .authenticated = true | .available = true | .availabilityReason = "ready" | .routing = "exhausted" | .headroom = "exhausted"]')"
+only_exhausted="$(printf '%s\n' "$fixture_v3" | jq '.providers[0].targets = [.providers[0].targets[0] | .id = "o-exhausted" | .authenticated = true | .available = true | .availabilityReason = "ready" | .routing = "exhausted" | .headroom = "exhausted"]')"
 [ "$(printf '%s\n' "$only_exhausted" | "$HERE/agent-provider-status.sh" openai)" = 'yes|yes|exhausted|exhausted' ]
-only_unavailable="$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets = [.providers[1].targets[0]]')"
+only_unavailable="$(printf '%s\n' "$fixture_v3" | jq '.providers[0].targets = [.providers[0].targets[0]]')"
 [ "$(printf '%s\n' "$only_unavailable" | "$HERE/agent-provider-status.sh" openai)" = 'yes|no|unknown|unavailable' ]
-only_disabled="$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets = [.providers[1].targets[2]]')"
+only_disabled="$(printf '%s\n' "$fixture_v3" | jq '.providers[0].targets = [.providers[0].targets[2]]')"
 [ "$(printf '%s\n' "$only_disabled" | "$HERE/agent-provider-status.sh" openai)" = 'yes|yes|unknown|disabled' ]
 
 assert_rejected 'missing provider' "$fixture_v3" missing
@@ -78,25 +61,25 @@ assert_rejected 'malformed v3 provider group' \
 assert_rejected 'malformed v3 target' \
   "$(printf '%s\n' "$fixture_v3" | jq '.providers[0].targets[0].authenticated = "true"')"
 assert_rejected 'v3 exhausted route without exhausted headroom' \
-  "$(printf '%s\n' "$fixture_v3" | jq '.providers[0].targets[0].headroom = "normal"')"
+  "$(printf '%s\n' "$fixture_v3" | jq '.providers[0].targets[1].routing = "exhausted"')"
 assert_rejected 'v3 eligible route with exhausted headroom' \
   "$(printf '%s\n' "$fixture_v3" | jq '.providers[0].targets[1].headroom = "exhausted"')"
 assert_rejected 'v3 unavailable route marked available' \
-  "$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets[0].available = true')" openai
+  "$(printf '%s\n' "$fixture_v3" | jq '.providers[0].targets[0].available = true')" openai
 assert_rejected 'v3 target with wrong provider identity' \
-  "$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets[0].provider = "anthropic"')" openai
+  "$(printf '%s\n' "$fixture_v3" | jq '.providers[0].targets[0].provider = "other"')" openai
 assert_rejected 'v3 target missing availability' \
-  "$(printf '%s\n' "$fixture_v3" | jq 'del(.providers[1].targets[0].available)')" openai
+  "$(printf '%s\n' "$fixture_v3" | jq 'del(.providers[0].targets[0].available)')" openai
 assert_rejected 'v3 unavailable routing with ready availability reason' \
-  "$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets[0].availabilityReason = "ready"')" openai
+  "$(printf '%s\n' "$fixture_v3" | jq '.providers[0].targets[0].availabilityReason = "ready"')" openai
 assert_rejected 'v3 command-missing target marked installed' \
-  "$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets[0].availabilityReason = "command_missing"')" openai
+  "$(printf '%s\n' "$fixture_v3" | jq '.providers[0].targets[0].availabilityReason = "command_missing"')" openai
 assert_rejected 'v3 authentication-missing target marked authenticated' \
-  "$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets[0].authenticated = true')" openai
+  "$(printf '%s\n' "$fixture_v3" | jq '.providers[0].targets[0].authenticated = true')" openai
 assert_rejected 'v3 unknown-headroom unavailable target marked authenticated' \
-  "$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets[0].authenticated = true | .providers[1].targets[0].headroom = "unknown"')" openai
+  "$(printf '%s\n' "$fixture_v3" | jq '.providers[0].targets[0].authenticated = true | .providers[0].targets[0].headroom = "unknown"')" openai
 assert_rejected 'v3 duplicate target IDs across providers' \
-  "$(printf '%s\n' "$fixture_v3" | jq '.providers[1].targets[0].id = .providers[0].targets[0].id')" openai
+  "$(printf '%s\n' "$fixture_v3" | jq '.providers += [.providers[0]] | .providers[1].targets[0].id = .providers[0].targets[0].id')" openai
 assert_rejected 'v3 duplicate provider groups' \
   "$(printf '%s\n' "$fixture_v3" | jq '.providers += [.providers[0]]')"
 

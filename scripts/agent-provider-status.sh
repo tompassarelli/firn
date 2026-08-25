@@ -3,7 +3,7 @@
 # without collapsing installation, authentication, and headroom into one flag.
 set -euo pipefail
 
-provider="${1:?usage: agent-provider-status.sh <anthropic|openai>}"
+provider="${1:?usage: agent-provider-status.sh <openai>}"
 jq -er --arg provider "$provider" '
   def valid_headroom:
     . == "plenty" or . == "normal" or . == "low" or
@@ -59,7 +59,7 @@ jq -er --arg provider "$provider" '
       ($target_ids | length) == ($target_ids | unique | length) and
       all(.providers[];
         type == "object" and
-        (.provider == "anthropic" or .provider == "openai") and
+        .provider == "openai" and
         (.targets | type) == "array" and (.targets | length) > 0 and
         (. as $group | all(.targets[]; valid_v3_target($group.provider))));
 
