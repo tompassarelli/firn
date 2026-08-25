@@ -4,81 +4,94 @@
 ;; This module is intentionally effect-free. Its callers obtain stdin, argv,
 ;; repository files, clocks, and network results, then pass typed facts here.
 
-(defrecord Diagnostic
+(js/export
+  (defrecord Diagnostic
   [level String
    code String
-   message String])
+   message String]))
 
-(defrecord PolicyReport
+(js/export
+  (defrecord PolicyReport
   [diagnostics (Vec Diagnostic)
-   exit-code Int])
+   exit-code Int]))
 
-(defrecord RawHookEvent
+(js/export
+  (defrecord RawHookEvent
   [tool-name String
    command (U String Nil)
    file-path (U String Nil)
    session-id String
    payload-oversized Bool
    guards-off Bool
-   intro-unseen Bool])
+   intro-unseen Bool]))
 
-(defunion HookEvent
+(js/export
+  (defunion HookEvent
   (HookBash [command String])
   (HookEdit [path String])
-  (HookIgnored [tool-name String]))
+  (HookIgnored [tool-name String])))
 
-(defunion HookDecision
+(js/export
+  (defunion HookDecision
   (HookPass [token Bool])
   (HookInject [context String])
-  (HookRefuse [reason String]))
+  (HookRefuse [reason String])))
 
-(defunion PinArguments
+(js/export
+  (defunion PinArguments
   (PinArgumentsAccepted [warn-days Int])
   (PinArgumentsHelp [token Bool])
-  (PinArgumentsRejected [message String]))
+  (PinArgumentsRejected [message String])))
 
-(defrecord PinEvidence
+(js/export
+  (defrecord PinEvidence
   [kind String
    location String
    value String
    verification-url String
    reachable Bool
-   checksum (U String Nil)])
+   checksum (U String Nil)]))
 
-(defrecord LockInput
+(js/export
+  (defrecord LockInput
   [name String
    revision String
-   modified (U Int Nil)])
+   modified (U Int Nil)]))
 
-(defrecord ChecksumAssertion
+(js/export
+  (defrecord ChecksumAssertion
   [path String
    expected String
-   actual String])
+   actual String]))
 
-(defrecord LicenseEvidence
+(js/export
+  (defrecord LicenseEvidence
   [checksums (Vec ChecksumAssertion)
-   readme-license (U String Nil)])
+   readme-license (U String Nil)]))
 
-(def firn-digest String
+(js/export
+  (def firn-digest String
   (str
     "You are editing the Firn system configuration. Edit .bnix sources, never "
     ".nix; run firn repo build and firn repo validate after .bnix changes. "
     "Raw nixos-rebuild, darwin-rebuild, nh switching, and firn repo upgrade "
-    "now remain user-only. Secrets use sops-nix only."))
+    "now remain user-only. Secrets use sops-nix only.")))
 
-(def blocked-command-reason String
+(js/export
+  (def blocked-command-reason String
   (str
     "BLOCKED: that command switches the system outside the sanctioned path. "
     "Raw nixos-rebuild/darwin-rebuild/nh and `firn repo upgrade now` stay "
     "the user's. Agents may run `firn rebuild` after the relevant checks pass "
-    "and their own changes are committed."))
+    "and their own changes are committed.")))
 
-(def expected-readme-license String
+(js/export
+  (def expected-readme-license String
   (str
     "## License\n\n"
     "Firn is dual-licensed under either the [MIT License](LICENSE-MIT) or the\n"
     "[Apache License, Version 2.0](LICENSE-APACHE), at your option\n"
-    "(`MIT OR Apache-2.0`)."))
+    "(`MIT OR Apache-2.0`).")))
 
 (defn starts-at?
   [text String
@@ -231,7 +244,8 @@
         true
         (recur (+ offset 1))))))
 
-(defn decode-hook-event [raw RawHookEvent] HookEvent
+(js/export
+  (defn decode-hook-event [raw RawHookEvent] HookEvent
   (let [tool String (rawhookevent-tool-name raw)]
     (cond
       (= tool "Bash")
@@ -243,17 +257,19 @@
         (if (some? path) (->HookEdit path) (->HookIgnored tool)))
 
       :else
-      (->HookIgnored tool))))
+      (->HookIgnored tool)))))
 
-(defn firn-path? [path String] Bool
+(js/export
+  (defn firn-path? [path String] Bool
   (loop [offset Int 0]
     (if (> (+ offset 18) (count path))
       false
       (if (starts-at? path offset "/code/nixos-config/")
         true
-        (recur (+ offset 1))))))
+        (recur (+ offset 1)))))))
 
-(defn decide-hook [raw RawHookEvent] HookDecision
+(js/export
+  (defn decide-hook [raw RawHookEvent] HookDecision
   (if (or (rawhookevent-guards-off raw) (rawhookevent-payload-oversized raw))
     (->HookPass true)
     (match (decode-hook-event raw)
@@ -265,10 +281,11 @@
        (if (and (rawhookevent-intro-unseen raw) (firn-path? path))
          (->HookInject firn-digest)
          (->HookPass true))]
-      [(HookIgnored tool-name) (->HookPass true)])))
+      [(HookIgnored tool-name) (->HookPass true)]))))
 
-(defn hook-exit-code [decision HookDecision] Int
-  0)
+(js/export
+  (defn hook-exit-code [decision HookDecision] Int
+    0))
 
 (defn digit-value [character String] Int
   (cond
@@ -295,7 +312,8 @@
             nil
             (recur (+ offset 1) (+ (* value 10) digit))))))))
 
-(defn parse-pin-arguments [args (Vec String)] PinArguments
+(js/export
+  (defn parse-pin-arguments [args (Vec String)] PinArguments
   (loop [index Int 0 warn-days Int 30]
     (if (>= index (count args))
       (->PinArgumentsAccepted warn-days)
@@ -321,7 +339,7 @@
               (recur (+ index 1) value)))
 
           :else
-          (->PinArgumentsRejected (str "error: unknown argument: " arg)))))))
+          (->PinArgumentsRejected (str "error: unknown argument: " arg))))))))
 
 (defn character-member?
   [characters String
@@ -339,7 +357,8 @@
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
     character))
 
-(defn valid-sri? [checksum String] Bool
+(js/export
+  (defn valid-sri? [checksum String] Bool
   (and (= (count checksum) 51)
        (starts-at? checksum 0 "sha256-")
        (= (subs checksum 50 51) "=")
@@ -348,7 +367,7 @@
            true
            (if (base64-sri-character? (subs checksum offset (+ offset 1)))
              (recur (+ offset 1))
-             false)))))
+             false))))))
 
 (defn hex-character? [character String] Bool
   (character-member? "0123456789abcdef" character))
@@ -431,7 +450,8 @@
           (+ total 1)
           total)))))
 
-(defn pin-policy
+(js/export
+  (defn pin-policy
   [arguments PinArguments
    now Int
    evidence (Vec PinEvidence)
@@ -450,7 +470,7 @@
                (if (>= index (count locks))
                  all
                  (recur (+ index 1) (conj all (nth locks index))))))]
-       (->PolicyReport diagnostics (if (= (error-count diagnostics) 0) 0 1)))]))
+       (->PolicyReport diagnostics (if (= (error-count diagnostics) 0) 0 1)))])))
 
 (defn checksum-diagnostics [assertions (Vec ChecksumAssertion)] (Vec Diagnostic)
   (loop [index Int 0 result (Vec Diagnostic) []]
@@ -472,7 +492,8 @@
                   (checksumassertion-expected assertion) ", got "
                   (checksumassertion-actual assertion) ")")))))))))
 
-(defn license-policy [evidence LicenseEvidence] PolicyReport
+(js/export
+  (defn license-policy [evidence LicenseEvidence] PolicyReport
   (let [checks (Vec Diagnostic)
         (checksum-diagnostics (licenseevidence-checksums evidence))
         readme (U String Nil) (licenseevidence-readme-license evidence)
@@ -491,4 +512,4 @@
         [(->Diagnostic "ok" "license-ok"
            "ok: Firn license files and README declare MIT OR Apache-2.0 consistently")]
         0)
-      (->PolicyReport diagnostics 1))))
+      (->PolicyReport diagnostics 1)))))

@@ -53,13 +53,18 @@ bridge="$repo/native/system_policy_host.mjs"
 
 printf 'system-policy-js: building one closed typed family graph\n' >&2
 mkdir -p "$scratch/build"
-timeout --foreground 180 "$beagle/bin/beagle" build \
+timeout --foreground 180 "$beagle/bin/beagle-build-all" \
   "$json" "$policy" "$pure" "$driver" --out "$scratch/build" \
   >"$scratch/build.out" 2>"$scratch/build.err" \
   || {
     sed -n '1,260p' "$scratch/build.err" >&2
     die "closed JS family build failed"
   }
+mkdir -p "$scratch/build/node_modules/beagle"
+cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
+  "$scratch/build/node_modules/beagle/core.js"
+printf '%s\n' '{"type":"module"}' \
+  >"$scratch/build/node_modules/beagle/package.json"
 pure_js="$(find "$scratch/build" -name system-policy-test.js -print -quit)"
 driver_js="$(find "$scratch/build" -name system-policy-native.js -print -quit)"
 [[ -n "$pure_js" && -f "$pure_js" ]] || die "pure test module was not emitted"
