@@ -1,13 +1,16 @@
 ---
 name: firn
-category: nixos
 description: >-
   Use whenever editing ~/code/nixos-config (firn): packages, modules, services,
-  host config, hooks/skills, inputs, live/out-of-store entrypoints, or any
-  "install X system-wide" request. Write interface is .bnix (compiled to .nix
-  — never edit .nix). System switch (firn rebuild) is agent-runnable; it builds
-  a commit snapshot (rev=HEAD), so commit your own changes first — nobody's
-  uncommitted state blocks or leaks. NOT general Nix in other repos.
+  host config, hooks/skills, inputs, launchers, builds, updates, closures,
+  live/out-of-store entrypoints, or any "install X system-wide" request. Also
+  use for decisions that could put project source or build outputs, dev
+  servers, fast-moving CLIs, SDKs, compilers, package managers, or toolchain
+  implementations into the boot/system closure. Write interface is .bnix
+  (compiled to .nix — never edit .nix). System switch (firn rebuild) is
+  agent-runnable; it builds a commit snapshot (rev=HEAD), so commit your own
+  changes first — nobody's uncommitted state blocks or leaks. NOT general Nix
+  in other repos.
 ---
 
 # firn — editing ~/code/nixos-config
@@ -21,34 +24,24 @@ itself → beagle-authoring.
 *.bnix  ──(firn build)──▶  *.nix  ──(firn rebuild)──▶  system
 ```
 
-## Keep live tools out of the store
+## Keep project and toolchain lifecycle outside the system closure
 
-Beagle and Firn are high-churn development tools. Keep their normal authoring
-and activation commands outside Nix derivations:
+Firn owns stable machine and service responsibility, not project or toolchain
+lifecycle. Classify a dependency by the responsibility it serves and its churn,
+never by package name. Project source and build outputs, dev servers,
+fast-moving CLIs, SDKs, compilers, package managers, and toolchain
+implementations default outside the boot/system closure.
 
-```text
-~/.local/bin/*  ──out-of-store──▶  nixos-config:dotfiles/bin/*
-beagle          ────────────────▶  ~/code/beagle/main/bin/beagle
-firn            ────────────────▶  current Firn source + live Beagle
-```
+Use a project-local development shell or direnv, a separately managed user
+profile/runtime, or a direct out-of-store launcher. A runtime belongs in the
+system closure only for a named, long-lived machine or service application
+consumer. Every exception must name that consumer, its responsibility, its
+lifecycle owner, and evidence that user- or project-local execution cannot
+satisfy the responsibility.
 
-`BEAGLE_PATH` may select an explicit alternate Beagle checkout. Reusing a local
-worktree must remain a direct process boundary; a `path:` flake input still
-copies that worktree into `/nix/store` and is not a live development path.
-
-Do not add Beagle as a Firn flake input or package, run `beagle` or
-`beagle native-exe` in `runCommand` or another derivation, introduce or extend
-`makeFirnNative`, or require a Beagle release, pin, lock update, or system
-rebuild to test a Beagle or Firn edit. Do not repair such wiring with writable
-store-build caches, package provenance, longer bounds, or more package tests;
-remove the store boundary from the normal loop.
-
-Nix may declare the out-of-store link or a tiny stable launcher that executes
-the live path. It may consume committed `.nix` configuration or an already
-proven materialized artifact, but it does not compile, pin, cache, or qualify
-the live Beagle/Firn toolchain. A separately invoked frozen package is valid
-only for a named release, CI, archival, or recovery requirement; it is never
-the default authoring or activation dependency and never blocks that loop.
+Never restore Node, npm, corepack, Bun, Rust, Cargo, Beagle, or Firn to the
+system closure merely to make a check, hook, compiler, delegation, or authoring
+loop work.
 
 ## The four rules that bite
 
