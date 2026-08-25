@@ -388,6 +388,22 @@ state = "preserved"
         assert result.returncode == 1
         assert "attempt.review_summary cannot contain CR or LF" in result.stderr
 
+        for label, escaped_separator in (("lf", "\\n"), ("cr", "\\r")):
+            timestamp_card = root / f"ended-at-{label}.toml"
+            timestamp_card.write_text(
+                base.replace(
+                    'ended_at = "2026-08-24T10:01:00+00:00"',
+                    f'ended_at = "2026-08-24{escaped_separator}10:01:00+00:00"',
+                ),
+                encoding="utf-8",
+            )
+            first_timestamp = update(timestamp_card, todo, line_ledger)
+            second_timestamp = update(timestamp_card, todo, line_ledger)
+            assert first_timestamp.returncode == second_timestamp.returncode == 1
+            assert first_timestamp.stderr == second_timestamp.stderr
+            assert "attempt.ended_at cannot contain CR or LF" in first_timestamp.stderr
+            assert line_ledger.read_text(encoding="utf-8") == "## Receipts\n"
+
         multiline_record = unsettled.replace(
             'seam = "bounded demo"', 'seam = """bounded\ndemo"""'
         )

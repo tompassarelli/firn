@@ -145,6 +145,13 @@ def timestamp(value: Any, label: str, errors: list[str]) -> datetime | None:
     return parsed
 
 
+def receipt_timestamp(value: Any, label: str, errors: list[str]) -> datetime | None:
+    if isinstance(value, str) and LINE_BREAK.search(value) is not None:
+        errors.append(f"{label} cannot contain CR or LF")
+        return None
+    return timestamp(value, label, errors)
+
+
 def duration(value: Any, label: str, errors: list[str]) -> tuple[Decimal, Decimal] | None:
     if not isinstance(value, str) or ACTUAL_DURATION.fullmatch(value) is None:
         errors.append(f"{label} must be an exact compact duration")
@@ -486,7 +493,9 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
                 "attempt.execution_observation",
                 errors,
             )
-        ended_at = timestamp(attempt.get("ended_at"), "attempt.ended_at", errors)
+        ended_at = receipt_timestamp(
+            attempt.get("ended_at"), "attempt.ended_at", errors
+        )
 
     attempt_id = attempt.get("id")
     if record is not None:
