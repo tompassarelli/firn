@@ -36,42 +36,55 @@ die() {
   exit 1
 }
 
-[[ -f "$beagle/bin/_beagle-racket" ]] \
+for command in bb bun cmp cp find git rg timeout; do
+  command -v "$command" >/dev/null 2>&1 \
+    || die "missing command: $command"
+done
+[[ -x "$beagle/bin/beagle" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
 
-# shellcheck disable=SC1091
-source "$beagle/bin/_beagle-racket"
+json="$beagle/native-core/src/native/json.bjs"
+schema_path="$beagle/native-core/src/beagle/nix_schema_path.bjs"
+core="$repo/native/window_marks.bjs"
+pure="$repo/native/window_marks_test.bjs"
+native="$repo/native/window_marks_native.bjs"
+bridge="$repo/native/window_marks_host.mjs"
+views_core="$repo/native/firn_views.bjs"
+views_pure="$repo/native/firn_views_test.bjs"
+views_native="$repo/native/firn_views_native.bjs"
 
-build_native() {
-  local name="$1" entry="$2"
-  shift 2
-  local output="$scratch/$name"
-  mkdir -p "$scratch/$name-artifacts"
-  timeout --foreground 620 "$beagle/bin/beagle" native-exe \
-    --out "$output" \
-    --entry "$entry" \
-    --artifacts "$scratch/$name-artifacts" \
-    "$@" >"$scratch/$name.build.out" 2>"$scratch/$name.build.err" \
-    || {
-      sed -n '1,260p' "$scratch/$name.build.err" >&2
-      die "$name compilation failed"
-    }
-  [[ -x "$output" ]] || die "$name is not executable"
-}
+printf 'window-marks-js: building one closed typed family graph\n' >&2
+mkdir -p "$scratch/build"
+timeout --foreground 180 "$beagle/bin/beagle" build \
+  "$json" "$schema_path" \
+  "$core" "$pure" "$native" \
+  "$views_core" "$views_pure" "$views_native" \
+  --out "$scratch/build" \
+  >"$scratch/build.out" 2>"$scratch/build.err" || {
+    sed -n '1,260p' "$scratch/build.err" >&2
+    die 'closed Beagle/JS family build failed'
+  }
+pure_js="$(find "$scratch/build" -name window-marks-test.js -print -quit)"
+native_js="$(find "$scratch/build" -name window-marks-native.js -print -quit)"
+[[ -n "$pure_js" && -f "$pure_js" ]] || die 'pure test module was not emitted'
+[[ -n "$native_js" && -f "$native_js" ]] || die 'window marks module was not emitted'
+[[ -f "$scratch/build/firn/views-native.js" ]] \
+  || die 'views host module was not emitted'
 
-datum="$beagle/native-core/src/beagle/datum_reader.bgl"
-edn="$beagle/native-core/src/native/edn.bgl"
-json="$beagle/native-core/src/native/json.bgl"
-core="$repo/native/window_marks.bgl"
+cat >"$scratch/window-marks" <<EOF
+#!/usr/bin/env bash
+exec env FIRN_WINDOW_MARKS_MODULE='$native_js' bun '$bridge' "\$@"
+EOF
+chmod +x "$scratch/window-marks"
 
-build_native window-marks-test firn.window-marks-test/-main \
-  "$datum" "$edn" "$json" "$core" "$repo/native/window_marks_test.bgl"
-build_native window-marks firn.window-marks-native/-main \
-  "$datum" "$edn" "$json" "$core" "$repo/native/window_marks_native.bgl"
-
-"$scratch/window-marks-test" >"$scratch/pure.out"
+FIRN_WINDOW_MARKS_TEST_MODULE="$pure_js" \
+timeout --foreground 30 bun --eval \
+  'const m = await import(process.env.FIRN_WINDOW_MARKS_TEST_MODULE); process.exitCode = m.run([]);' \
+  >"$scratch/pure.out" 2>"$scratch/pure.err" \
+  || die 'pure JSONL append/fold/identity fixtures failed'
 [[ "$(rg -c '^PASS ' "$scratch/pure.out")" == "5" ]] \
   || die "pure append/fold/identity cases did not all pass"
+[[ ! -s "$scratch/pure.err" ]] || die 'pure fixtures wrote stderr'
 
 fake_bin="$scratch/fake-bin"
 fake_log="$scratch/fake-log"
@@ -126,7 +139,7 @@ export FAKE_ROFI_ARGS="$fake_log/rofi-args"
 export FAKE_ROFI_STDIN="$fake_log/rofi-stdin"
 export FAKE_WM_MARK="$fake_log/wm-mark"
 export FAKE_WM_JUMP="$fake_log/wm-jump"
-export MARKS_LOG="$scratch/state/nested/marks.log"
+export MARKS_LOG="$scratch/state/nested/marks.jsonl"
 export FAKE_NIRI_FOCUSED='{"id":42,"app_id":"org.term","title":"Shell"}'
 export FAKE_NIRI_WINDOWS='[]'
 : >"$FAKE_EVENTS"
@@ -172,10 +185,10 @@ cmp -s "$scratch/mark-focused.out" \
   || die "focused mark output changed"
 [[ ! -s "$scratch/mark-focused.err" ]] || die "focused mark wrote stderr"
 [[ -f "$MARKS_LOG" ]] || die "MARKS_LOG parent creation failed"
-[[ "$(rg -c ':op "assert"' "$MARKS_LOG")" == "4" ]] \
+[[ "$(rg -c '"op":"assert"' "$MARKS_LOG")" == "4" ]] \
   || die "focused mark did not append four assertions"
 for tx in 1 2 3 4; do
-  rg -q "\\{:tx $tx," "$MARKS_LOG" || die "missing transaction $tx"
+  rg -q "^\\{\"tx\":$tx," "$MARKS_LOG" || die "missing transaction $tx"
 done
 
 export FAKE_NIRI_WINDOWS='[{"id":77,"app_id":"org.web","title":"Browser old"},{"id":5,"app_id":"x","title":"x"}]'
@@ -185,7 +198,7 @@ cmp -s "$scratch/mark-explicit.out" \
   <(printf 'marked b -> @w77  org.web  Browser old\n') \
   || die "explicit mark output changed"
 for tx in 5 6 7 8; do
-  rg -q "\\{:tx $tx," "$MARKS_LOG" || die "missing transaction $tx"
+  rg -q "^\\{\"tx\":$tx," "$MARKS_LOG" || die "missing transaction $tx"
 done
 
 run_case mark-missing "$scratch/window-marks" wm-mark c 404
@@ -197,7 +210,7 @@ run_case unmark "$scratch/window-marks" wm-unmark A
 expect_status unmark 0
 cmp -s "$scratch/unmark.out" <(printf 'unmarked a\n') \
   || die "unmark output changed"
-rg -q '^\{:tx 9, :op "retract", :l "@mark-a", :frame "wm-mark", :ts ' \
+rg -q '^\{"tx":9,"op":"retract","l":"@mark-a","frame":"wm-mark","ts":' \
   "$MARKS_LOG" || die "unmark retract encoding changed"
 
 export FAKE_NIRI_WINDOWS='[{"id":77,"app_id":"org.web","title":"Browser old"}]'
@@ -277,7 +290,7 @@ cmp -s "$FAKE_WM_JUMP" <(printf 'b\n') \
 tail -n 1 "$FAKE_ROFI_ARGS" | rg -qx -- '-dmenu -i -p jump to mark' \
   || die "wm-jump-rofi rofi argv changed"
 
-empty_log="$scratch/empty.log"
+empty_log="$scratch/empty.jsonl"
 : >"$empty_log"
 : >"$FAKE_ROFI_ARGS"
 run_case jump-rofi-empty env MARKS_LOG="$empty_log" \
@@ -290,11 +303,45 @@ default_home="$scratch/default-home"
 run_case default-path env -u MARKS_LOG HOME="$default_home" \
   "$scratch/window-marks" wm-unmark z
 expect_status default-path 0
-[[ -f "$default_home/.local/state/wm-world/marks.log" ]] \
+[[ -f "$default_home/.local/state/wm-world/marks.jsonl" ]] \
   || die "default HOME state path changed"
 
-if ldd "$scratch/window-marks" | rg -qi 'racket|clojure|babashka|java'; then
-  die "hosted runtime leaked into window-marks executable"
-fi
+migration="$scratch/migration"
+mkdir -p "$migration"
+cat >"$migration/facts.log" <<'EOF'
+{:tx 1 :op "assert" :l "@w1" :p "title" :r "Shell" :frame "wm" :ts "2026-08-26T00:00:00Z"}
+EOF
+cp "$migration/facts.log" "$scratch/facts.expected.rollback"
+bb "$repo/dotfiles/bin/wm-world-migrate-jsonl" "$migration" \
+  >"$scratch/migrate.out" 2>"$scratch/migrate.err" \
+  || die 'scratch JSONL migration failed'
+cmp -s "$migration/facts.log" "$scratch/facts.expected.rollback" \
+  || die 'migration changed legacy authority'
+cmp -s "$migration/facts.edn.rollback" "$scratch/facts.expected.rollback" \
+  || die 'migration rollback copy is not byte exact'
+rg -Fx \
+  '{"tx":1,"op":"assert","l":"@w1","p":"title","r":"Shell","frame":"wm","ts":"2026-08-26T00:00:00Z"}' \
+  "$migration/facts.jsonl" >/dev/null \
+  || die 'migration JSONL bytes changed'
+[[ ! -s "$scratch/migrate.err" ]] || die 'migration wrote stderr'
 
-printf 'ok: native window marks preserves append/fold/identity and six CLI contracts\n'
+invalid_migration="$scratch/invalid-migration"
+mkdir -p "$invalid_migration"
+printf '%s\n' '{:tx 1 :op "assert" :l "@w1" :p "title"}' \
+  >"$invalid_migration/marks.log"
+cp "$invalid_migration/marks.log" "$scratch/invalid.expected"
+set +e
+bb "$repo/dotfiles/bin/wm-world-migrate-jsonl" "$invalid_migration" \
+  >"$scratch/invalid-migrate.out" 2>"$scratch/invalid-migrate.err"
+invalid_migrate_status=$?
+set -e
+[[ "$invalid_migrate_status" -ne 0 ]] \
+  || die 'invalid legacy authority unexpectedly migrated'
+cmp -s "$invalid_migration/marks.log" "$scratch/invalid.expected" \
+  || die 'failed migration changed legacy authority'
+[[ ! -e "$invalid_migration/marks.jsonl" ]] \
+  || die 'failed migration promoted JSONL authority'
+[[ ! -e "$invalid_migration/marks.edn.rollback" ]] \
+  || die 'failed validation created rollback artifact'
+
+printf 'ok: Beagle/JS window marks preserves JSONL append/fold/identity and six Bun CLI contracts\n'

@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.views
   (:require [native.json :as json]
             [beagle.nix-schema-path :as paths]))

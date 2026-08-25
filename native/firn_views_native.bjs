@@ -1,7 +1,78 @@
-#lang beagle
+#lang beagle/js
 (ns firn.views-native
   (:require [firn.views :as views]
             [beagle.nix-schema-path :as paths]))
+
+(declare-extern bridge-env (Fn [String] (U String Nil)))
+(declare-extern bridge-hostname (Fn [] Any))
+(declare-extern bridge-path-kind (Fn [String] Any))
+(declare-extern bridge-read-text-bounded (Fn [String Int] Any))
+(declare-extern bridge-list-directory-bounded (Fn [String Int] Any))
+(declare-extern bridge-run-capture (Fn [(Vec String) String Int] Any))
+(declare-extern bridge-err (Fn [String] Nil))
+(declare-extern bridge-wall-nanoseconds (Fn [] Int))
+(declare-extern bridge-stdout-tty (Fn [] Bool))
+(declare-extern bridge-result-tag (Fn [Any] String))
+(declare-extern bridge-result-int (Fn [Any String] Int))
+(declare-extern bridge-result-string (Fn [Any String] String))
+(declare-extern bridge-result-strings (Fn [Any String] (Vec String)))
+
+(defunion HostHostnameResult
+  (HostHostnameOk [hostname String])
+  (HostHostnameError [errno Int]))
+
+(defunion HostPathKindResult
+  (HostPathKindOk [kind Int])
+  (HostPathKindError [errno Int]))
+
+(defunion HostTextResult
+  (HostTextOk [text String])
+  (HostTextError [errno Int]))
+
+(defunion HostListResult
+  (HostListOk [entries (Vec String)])
+  (HostListError [errno Int]))
+
+(defunion HostCaptureResult
+  (HostCaptureOk [status Int stdout String stderr String])
+  (HostCaptureError [errno Int]))
+
+(defn result-error? [result Any] Bool
+  (= "error" (bridge-result-tag result)))
+
+(defn host-hostname [] HostHostnameResult
+  (let [result Any (bridge-hostname)]
+    (if (result-error? result)
+      (->HostHostnameError (bridge-result-int result "errno"))
+      (->HostHostnameOk (bridge-result-string result "hostname")))))
+
+(defn host-path-kind [absolute String] HostPathKindResult
+  (let [result Any (bridge-path-kind absolute)]
+    (if (result-error? result)
+      (->HostPathKindError (bridge-result-int result "errno"))
+      (->HostPathKindOk (bridge-result-int result "kind")))))
+
+(defn host-read-text [absolute String limit Int] HostTextResult
+  (let [result Any (bridge-read-text-bounded absolute limit)]
+    (if (result-error? result)
+      (->HostTextError (bridge-result-int result "errno"))
+      (->HostTextOk (bridge-result-string result "text")))))
+
+(defn host-list-directory [absolute String limit Int] HostListResult
+  (let [result Any (bridge-list-directory-bounded absolute limit)]
+    (if (result-error? result)
+      (->HostListError (bridge-result-int result "errno"))
+      (->HostListOk (bridge-result-strings result "entries")))))
+
+(defn host-capture
+  [argv (Vec String) stdin String limit Int] HostCaptureResult
+  (let [result Any (bridge-run-capture argv stdin limit)]
+    (if (result-error? result)
+      (->HostCaptureError (bridge-result-int result "errno"))
+      (->HostCaptureOk
+        (bridge-result-int result "status")
+        (bridge-result-string result "stdout")
+        (bridge-result-string result "stderr")))))
 
 (def max-json-bytes Int 134217728)
 (def max-source-bytes Int 16777216)
@@ -51,22 +122,22 @@
   (str "firn views: " operation " '" relative "': errno " errno "\n"))
 
 (defn repository-root [] (U String Nil)
-  (let [explicit (U String Nil) (System/getenv "FIRN_REPO")]
+  (let [explicit (U String Nil) (bridge-env "FIRN_REPO")]
     (if (some? explicit)
       explicit
-      (let [home (U String Nil) (System/getenv "HOME")]
+      (let [home (U String Nil) (bridge-env "HOME")]
         (if (nil? home) nil (str home "/code/nixos-config/main"))))))
 
 (defn current-hostname [] HostnameResult
-  (let [configured (U String Nil) (System/getenv "FIRN_HOST")]
+  (let [configured (U String Nil) (bridge-env "FIRN_HOST")]
     (if (and (some? configured) (> (count configured) 0))
       (->HostnameLoaded configured)
-      (match (host.system/hostname)
-        [(host.system/HostnameOk hostname)
+      (match (host-hostname)
+        [(HostHostnameOk hostname)
          (if (= hostname "")
            (->HostnameRejected "firn views: hostname is empty\n")
            (->HostnameLoaded hostname))]
-        [(host.system/HostnameError errno)
+        [(HostHostnameError errno)
          (->HostnameRejected
            (str "firn views: cannot read hostname: errno " errno "\n"))]))))
 
@@ -76,22 +147,22 @@
    limit Int
    required Bool] TextLoadResult
   (let [absolute String (path root relative)]
-    (match (host.fs/path-kind absolute)
-      [(host.fs/PathKindError errno)
+    (match (host-path-kind absolute)
+      [(HostPathKindError errno)
        (if (= errno 2)
          (if required
            (->TextLoadRejected
              (str "firn views: missing '" relative "'\n"))
            (->TextMissing relative))
          (->TextLoadRejected (errno-message "cannot inspect" relative errno)))]
-      [(host.fs/PathKindOk kind)
+      [(HostPathKindOk kind)
        (if (not (or (= kind 1) (= kind 3)))
          (->TextLoadRejected
            (str "firn views: not a file '" relative "'\n"))
-         (match (host.fs/read-text-bounded absolute limit)
-           [(host.fs/ReadTextBoundedError errno)
+         (match (host-read-text absolute limit)
+           [(HostTextError errno)
             (->TextLoadRejected (errno-message "cannot read" relative errno))]
-           [(host.fs/ReadTextBoundedOk text) (->TextLoaded text)]))])))
+           [(HostTextOk text) (->TextLoaded text)]))])))
 
 (defn read-json-required
   [root String
@@ -101,14 +172,14 @@
 (defn directory-names
   [root String
    relative String] NamesLoadResult
-  (match (host.fs/list-directory-bounded
+  (match (host-list-directory
            (path root relative) max-directory-entries)
-    [(host.fs/ListDirectoryBoundedError errno)
+    [(HostListError errno)
      (if (or (= errno 2) (= errno 20))
        (->NamesLoaded [])
        (->NamesLoadRejected
          (errno-message "cannot list" relative errno)))]
-    [(host.fs/ListDirectoryBoundedOk entries)
+    [(HostListOk entries)
      (->NamesLoaded (sort entries))]))
 
 (defn load-bnix-files
@@ -144,13 +215,13 @@
     (->ModulesLoaded modules)
     (let [name String (nth names index)
           relative String (str "modules/" name)]
-      (match (host.fs/path-kind (path root relative))
-        [(host.fs/PathKindError errno)
+      (match (host-path-kind (path root relative))
+        [(HostPathKindError errno)
          (if (= errno 2)
            (load-module-sources-from root names (+ index 1) modules)
            (->ModulesLoadRejected
              (errno-message "cannot inspect" relative errno)))]
-        [(host.fs/PathKindOk kind)
+        [(HostPathKindOk kind)
          (if (not= kind 2)
            (load-module-sources-from root names (+ index 1) modules)
            (match (load-bnix-files root relative)
@@ -193,13 +264,13 @@
   (if (>= index (count names))
     (->DocumentsLoaded documents)
     (let [relative String (str parent "/" (nth names index))]
-      (match (host.fs/path-kind (path root relative))
-        [(host.fs/PathKindError errno)
+      (match (host-path-kind (path root relative))
+        [(HostPathKindError errno)
          (if (= errno 2)
            (load-named-directories root parent names (+ index 1) documents)
            (->DocumentsLoadRejected
              (errno-message "cannot inspect" relative errno)))]
-        [(host.fs/PathKindOk kind)
+        [(HostPathKindOk kind)
          (if (not= kind 2)
            (load-named-directories root parent names (+ index 1) documents)
            (match (load-bnix-files root relative)
@@ -290,11 +361,11 @@
 (defn child-result
   [argv (Vec String)
    stdin String] views/ChildResult
-  (match (host.process/run-capture argv stdin max-child-output)
-    [(host.process/CaptureError errno)
+  (match (host-capture argv stdin max-child-output)
+    [(HostCaptureError errno)
      (views/->ChildResult (- 0 errno) ""
        (str "firn views: cannot run '" (nth argv 0) "': errno " errno "\n"))]
-    [(host.process/CaptureOk status stdout stderr)
+    [(HostCaptureOk status stdout stderr)
      (views/->ChildResult status stdout stderr)]))
 
 (defn emit-result [result views/CommandResult] Int
@@ -303,12 +374,12 @@
       (print (views/commandresult-stdout result))
       nil)
     (if (not= (views/commandresult-stderr result) "")
-      (host.stderr/write-text (views/commandresult-stderr result))
+      (bridge-err (views/commandresult-stderr result))
       nil)
     (views/commandresult-status result)))
 
 (defn emit-error [message String] Int
-  (do (host.stderr/write-text message) 1))
+  (do (bridge-err message) 1))
 
 (defn run-flake-inputs [root String] Int
   (match (read-json-required root "flake.lock")
@@ -316,13 +387,13 @@
     [(TextLoadRejected message) (emit-error message)]
     [(TextLoaded text)
      (match (views/flake-rows text
-              (quot (host.clock/wall-nanoseconds) 1000000000))
+              (quot (bridge-wall-nanoseconds) 1000000000))
        [(FlakeRowsRejected message)
         (emit-error (str "firn flake inputs: " message "\n"))]
        [(FlakeRows rows)
         (do
           (print (views/render-flake-rows rows
-                   (host.terminal/stdout-tty?)))
+                   (bridge-stdout-tty)))
           0)])]))
 
 (defn run-platform
@@ -403,7 +474,7 @@
 
 (defn usage-error [] Int
   (do
-    (host.stderr/write-text
+    (bridge-err
       (str
         "Usage: firn flake inputs [all]\n"
         "       firn platform list [all|darwin|linux]\n"

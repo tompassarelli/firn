@@ -1,6 +1,57 @@
-#lang beagle
+#lang beagle/js
 (ns firn.window-marks-native
   (:require [firn.window-marks :as marks]))
+
+(declare-extern bridge-env (Fn [String] (U String Nil)))
+(declare-extern bridge-read-text-bounded (Fn [String Int] Any))
+(declare-extern bridge-make-parent-directories (Fn [String] Int))
+(declare-extern bridge-append-text (Fn [String String] Int))
+(declare-extern bridge-run-capture (Fn [(Vec String) String Int] Any))
+(declare-extern bridge-run-inherit (Fn [(Vec String)] Int))
+(declare-extern bridge-wall-nanoseconds (Fn [] Int))
+(declare-extern bridge-format-iso8601 (Fn [Int] Any))
+(declare-extern bridge-err (Fn [String] Nil))
+(declare-extern bridge-out (Fn [String] Nil))
+(declare-extern bridge-result-tag (Fn [Any] String))
+(declare-extern bridge-result-int (Fn [Any String] Int))
+(declare-extern bridge-result-string (Fn [Any String] String))
+
+(defunion HostTextResult
+  (HostTextOk [text String])
+  (HostTextError [errno Int]))
+
+(defunion HostCaptureResult
+  (HostCaptureOk [status Int stdout String stderr String])
+  (HostCaptureError [errno Int]))
+
+(defunion HostIsoResult
+  (HostIsoOk [text String])
+  (HostIsoError [errno Int]))
+
+(defn result-error? [result Any] Bool
+  (= "error" (bridge-result-tag result)))
+
+(defn host-read-text [path String limit Int] HostTextResult
+  (let [result Any (bridge-read-text-bounded path limit)]
+    (if (result-error? result)
+      (->HostTextError (bridge-result-int result "errno"))
+      (->HostTextOk (bridge-result-string result "text")))))
+
+(defn host-capture
+  [argv (Vec String) stdin String limit Int] HostCaptureResult
+  (let [result Any (bridge-run-capture argv stdin limit)]
+    (if (result-error? result)
+      (->HostCaptureError (bridge-result-int result "errno"))
+      (->HostCaptureOk
+        (bridge-result-int result "status")
+        (bridge-result-string result "stdout")
+        (bridge-result-string result "stderr")))))
+
+(defn host-format-iso8601 [value Int] HostIsoResult
+  (let [result Any (bridge-format-iso8601 value)]
+    (if (result-error? result)
+      (->HostIsoError (bridge-result-int result "errno"))
+      (->HostIsoOk (bridge-result-string result "text")))))
 
 (def max-log-bytes Int 16777216)
 (def max-command-output Int 16777216)
@@ -18,42 +69,45 @@
   (IsoValuesRejected [(errno Int)]))
 
 (defn stderr-line [(message String)] Nil
-  (host.stderr/write-text (str message "\n")))
+  (bridge-err (str message "\n")))
 
 (defn marks-log-path [] (U String Nil)
-  (let [(explicit (U String Nil)) (System/getenv "MARKS_LOG")]
+  (let [(explicit (U String Nil)) (bridge-env "MARKS_LOG")]
     (if (some? explicit)
       explicit
-      (let [(home (U String Nil)) (System/getenv "HOME")]
+      (let [(home (U String Nil)) (bridge-env "HOME")]
         (if (nil? home)
           nil
-          (str home "/.local/state/wm-world/marks.log"))))))
+          (str home "/.local/state/wm-world/marks.jsonl"))))))
 
 (defn load-log [(path String)] LogLoadResult
-  (match (host.fs/read-text-bounded path max-log-bytes)
-    [(host.fs/ReadTextBoundedOk text) (->LogLoaded text)]
-    [(host.fs/ReadTextBoundedError errno)
+  (match (host-read-text path max-log-bytes)
+    [(HostTextOk text) (->LogLoaded text)]
+    [(HostTextError errno)
      (if (= errno 2)
        (->LogLoaded "")
        (->LogLoadRejected errno))]))
 
 (defn append-log [(path String) (text String)] Int
-  (match (host.fs/make-parent-directories path)
-    [(host.fs/MakeParentDirectoriesError errno)
-     (do (stderr-line (str "wm marks: cannot create state directory: errno " errno))
-       1)]
-    [(host.fs/MakeParentDirectoriesOk)
-     (match (host.fs/append-text path text)
-       [(host.fs/AppendTextOk) 0]
-       [(host.fs/AppendTextError errno)
-        (do (stderr-line (str "wm marks: cannot append log: errno " errno))
-          1)])]))
+  (let [(mkdir-errno Int) (bridge-make-parent-directories path)]
+    (if (not= mkdir-errno 0)
+      (do
+        (stderr-line
+          (str "wm marks: cannot create state directory: errno " mkdir-errno))
+        1)
+      (let [(append-errno Int) (bridge-append-text path text)]
+        (if (= append-errno 0)
+          0
+          (do
+            (stderr-line
+              (str "wm marks: cannot append log: errno " append-errno))
+            1))))))
 
 (defn capture [(argv (Vec String)) (stdin String)] ProcessResult
-  (match (host.process/run-capture argv stdin max-command-output)
-    [(host.process/CaptureOk status stdout stderr)
+  (match (host-capture argv stdin max-command-output)
+    [(HostCaptureOk status stdout stderr)
      (->ProcessCompleted status stdout stderr)]
-    [(host.process/CaptureError errno) (->ProcessRejected errno)]))
+    [(HostCaptureError errno) (->ProcessRejected errno)]))
 
 (defn niri-windows [] marks/WindowsJsonResult
   (match (capture ["niri" "msg" "-j" "windows"] "")
@@ -78,11 +132,11 @@
          (values (Vec String)) []]
     (if (>= index count-needed)
       (->IsoValuesLoaded values)
-      (let [(now Int) (host.clock/wall-nanoseconds)]
-        (match (host.clock/format-iso8601 now)
-          [(host.clock/FormatIso8601Ok text)
+      (let [(now Int) (bridge-wall-nanoseconds)]
+        (match (host-format-iso8601 now)
+          [(HostIsoOk text)
            (recur (+ index 1) (conj values text))]
-          [(host.clock/FormatIso8601Error errno)
+          [(HostIsoError errno)
            (->IsoValuesRejected errno)])))))
 
 (defn tail-args [(args (Vec String))] (Vec String)
@@ -194,7 +248,7 @@
     [(LogLoaded text) (marks/fold-log text)]))
 
 (defn focus-window [(id Int)] Int
-  (host.process/run-inherit
+  (bridge-run-inherit
     ["niri" "msg" "action" "focus-window" "--id" (str id)]))
 
 (defn execute-jump
@@ -277,7 +331,7 @@
      (do (stderr-line (str "wm-mark-rofi: " message)) 1)]
     [(WindowJsonMissing token)
      (do
-       (host.process/run-inherit ["rofi" "-e" "no focused window to mark"])
+       (bridge-run-inherit ["rofi" "-e" "no focused window to mark"])
        1)]
     [(WindowJsonLoaded window)
      (match (capture
@@ -292,7 +346,7 @@
           status
           (let [(letter String) (str/trim stdout)]
             (if (marks/valid-letter? letter)
-              (host.process/run-inherit
+              (bridge-run-inherit
                 ["wm-mark" letter (str (marks/window-id window))])
               0)))])]))
 
@@ -310,7 +364,7 @@
              (let [(ordered (Vec marks/Mark)) (marks/sorted-marks folded)]
                (if (empty? ordered)
                  (do
-                   (host.process/run-inherit ["rofi" "-e" "no marks set"])
+                   (bridge-run-inherit ["rofi" "-e" "no marks set"])
                    0)
                  (match (capture
                           ["rofi" "-dmenu" "-i" "-p" "jump to mark"]
@@ -326,7 +380,7 @@
                       (let [(letter String) (marks/first-token stdout)]
                         (if (= letter "")
                           0
-                          (host.process/run-inherit ["wm-jump" letter]))))])))]))))))
+                          (bridge-run-inherit ["wm-jump" letter]))))])))]))))))
 
 (defn usage [] Int
   (do

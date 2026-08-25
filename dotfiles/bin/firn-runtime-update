@@ -37,6 +37,8 @@ done
 datum_reader="$beagle_path/native-core/src/beagle/datum_reader.bgl"
 native_json="$beagle_path/native-core/src/native/json.bgl"
 nix_schema_path="$beagle_path/native-core/src/beagle/nix_schema_path.bgl"
+native_json_js="$beagle_path/native-core/src/native/json.bjs"
+nix_schema_path_js="$beagle_path/native-core/src/beagle/nix_schema_path.bjs"
 dispatcher_source="$firn_repo/native/firn.bjs"
 dispatcher_bridge="$firn_repo/native/firn_host.mjs"
 beagle_core="$beagle_path/beagle-lib/lib/beagle/core.js"
@@ -82,12 +84,12 @@ authoring_sources=(
   "$firn_repo/native/authoring_native.bgl"
 )
 views_sources=(
-  "$datum_reader"
-  "$native_json"
-  "$nix_schema_path"
-  "$firn_repo/native/firn_views.bgl"
-  "$firn_repo/native/firn_views_native.bgl"
+  "$native_json_js"
+  "$nix_schema_path_js"
+  "$firn_repo/native/firn_views.bjs"
+  "$firn_repo/native/firn_views_native.bjs"
 )
+views_bridge="$firn_repo/native/firn_views_host.mjs"
 repo_build_sources=(
   "$datum_reader"
   "$native_json"
@@ -140,6 +142,7 @@ case "$scope" in
       "${inventory_sources[@]}"
       "${authoring_sources[@]}"
       "${views_sources[@]}"
+      "$views_bridge"
       "${repo_build_sources[@]}"
       "${schema_sources[@]}"
       "${repo_workflow_sources[@]}"
@@ -303,6 +306,31 @@ materialize() {
     >>"$manifest"
 }
 
+materialize_views() {
+  local output="$stage/lib/firn/views-native.js"
+  local bridge_output="$stage/bin/firn-views"
+  local relative
+
+  if ! "$beagle" build "${views_sources[@]}" --out "$stage/lib"; then
+    printf 'firn-runtime-update: JS materialization failed: views\n' >&2
+    exit 1
+  fi
+  if [[ ! -f "$output" ]]; then
+    printf 'firn-runtime-update: materializer produced no JS views module\n' >&2
+    exit 1
+  fi
+  cp -- "$views_bridge" "$bridge_output"
+  chmod +x "$bridge_output"
+  record_artifact views-host bin/firn-views "$views_bridge"
+  binaries+=("firn-views")
+  while IFS= read -r relative; do
+    record_generated_artifact views-js "${relative#"$stage/"}"
+  done < <(find "$stage/lib" -type f -name '*.js' ! -path '*/firn-dispatcher.js' \
+    -print | sort)
+  printf 'component=views entry=firn.views-native/run executable=bin/firn-views runtime=bun\n' \
+    >>"$manifest"
+}
+
 materialize_dispatcher
 case "$scope" in
   repo)
@@ -319,7 +347,7 @@ case "$scope" in
       "${inventory_sources[@]}"
     materialize authoring firn-authoring firn.authoring-native/-main \
       "${authoring_sources[@]}"
-    materialize views firn-views firn.views-native/-main "${views_sources[@]}"
+    materialize_views
     materialize repo-build firn-repo-build firn.repo-build-native/-main \
       "${repo_build_sources[@]}"
     materialize schema firn-schema firn.schema-transaction-native/-main \

@@ -19,6 +19,8 @@ printf 'alpha\n' >"$firn_repo/marker"
 datum_reader="$beagle_path/native-core/src/beagle/datum_reader.bgl"
 native_json="$beagle_path/native-core/src/native/json.bgl"
 nix_schema_path="$beagle_path/native-core/src/beagle/nix_schema_path.bgl"
+native_json_js="$beagle_path/native-core/src/native/json.bjs"
+nix_schema_path_js="$beagle_path/native-core/src/beagle/nix_schema_path.bjs"
 dispatcher_source="$firn_repo/native/firn.bjs"
 dispatcher_bridge="$firn_repo/native/firn_host.mjs"
 beagle_core="$beagle_path/beagle-lib/lib/beagle/core.js"
@@ -63,11 +65,11 @@ authoring_sources=(
   "$firn_repo/native/authoring_native.bgl"
 )
 views_sources=(
-  "$datum_reader"
-  "$native_json"
-  "$nix_schema_path"
-  "$firn_repo/native/firn_views.bgl"
-  "$firn_repo/native/firn_views_native.bgl"
+  "$native_json_js"
+  "$nix_schema_path_js"
+  "$firn_repo/native/firn_views.bjs"
+  "$firn_repo/native/firn_views_native.bjs"
+  "$firn_repo/native/firn_views_host.mjs"
 )
 repo_build_sources=(
   "$datum_reader"

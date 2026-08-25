@@ -4,9 +4,9 @@
 ;; an explicit niri window id may be given (used by wm-mark-rofi, which must
 ;; snapshot the target BEFORE rofi steals focus).
 ;;
-;; CONSTRAINT: this log is separate from wm-facts-daemon's facts.log — that
+;; CONSTRAINT: this log is separate from wm-facts-daemon's facts.jsonl — that
 ;; daemon is the sole writer there. wm-mark / wm-unmark are the only writers of
-;; MARKS_LOG, with their own tx counter. Same EDN line format.
+;; MARKS_LOG, with their own transaction counter and JSONL records.
 ;;
 ;; A mark is subject @mark-<letter> with predicates:
 ;;   window "@w<id>"  app_id <snapshot>  title <snapshot>  marked_at <iso>
@@ -14,13 +14,12 @@
 
 (require '[cheshire.core :as json]
          '[babashka.process :as proc]
-         '[clojure.edn :as edn]
          '[clojure.java.io :as io]
          '[clojure.string :as str])
 
 (def log-file
   (or (System/getenv "MARKS_LOG")
-      (str (System/getenv "HOME") "/.local/state/wm-world/marks.log")))
+      (str (System/getenv "HOME") "/.local/state/wm-world/marks.jsonl")))
 (io/make-parents log-file)
 
 (defn err [& xs] (binding [*out* *err*] (apply println xs)))
@@ -34,7 +33,7 @@
     (when (.exists (io/file log-file))
       (with-open [r (io/reader log-file)]
         (doseq [line (line-seq r) :when (not (str/blank? line))]
-          (try (when-let [tx (:tx (edn/read-string line))] (swap! t max tx))
+          (try (when-let [tx (:tx (json/parse-string line true))] (swap! t max tx))
                (catch Exception _ nil)))))
     @t))
 
@@ -42,8 +41,9 @@
 (defn emit-facts [subj kvs]
   (let [tx (atom (max-tx))
         lines (for [[p r] kvs]
-                (pr-str {:tx (swap! tx inc) :op "assert" :l subj :p p :r r
-                         :frame "wm-mark" :ts (now-iso)}))]
+                (json/generate-string
+                  {:tx (swap! tx inc) :op "assert" :l subj :p p :r r
+                   :frame "wm-mark" :ts (now-iso)}))]
     (locking out-lock
       (spit log-file (str (str/join "\n" lines) "\n") :append true))))
 

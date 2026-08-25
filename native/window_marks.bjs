@@ -1,7 +1,6 @@
-#lang beagle
+#lang beagle/js
 (ns firn.window-marks
-  (:require [native.edn :as edn]
-            [native.json :as json]))
+  (:require [native.json :as json]))
 
 (defrecord Mark
   [(subject String)
@@ -63,39 +62,41 @@
   (->FactFields nil nil nil nil nil))
 
 (defn assign-fact-field
-  [(fields FactFields) (key Keyword) (event edn/EdnEvent)] FactFieldResult
+  [(fields FactFields) (key String) (event json/JsonEvent)] FactFieldResult
   (cond
-    (= key :tx)
-    (if (instance? EdnInteger event)
-      (let [(value Int) (edn/edninteger-value event)]
-       (->FactFieldAccepted
-         (with fields [:tx value])))
+    (= key "tx")
+    (if (instance? JsonNumber event)
+      (let [(value (U Int Nil))
+            (parse-long (json/jsonnumber-lexeme event))]
+        (if (nil? value)
+          (->FactFieldRejected true)
+          (->FactFieldAccepted (with fields [:tx value]))))
       (->FactFieldRejected true))
 
-    (= key :op)
-    (if (instance? EdnString event)
-      (let [(value String) (edn/ednstring-value event)]
+    (= key "op")
+    (if (instance? JsonString event)
+      (let [(value String) (json/jsonstring-value event)]
        (->FactFieldAccepted
          (with fields [:op value])))
       (->FactFieldRejected true))
 
-    (= key :l)
-    (if (instance? EdnString event)
-      (let [(value String) (edn/ednstring-value event)]
+    (= key "l")
+    (if (instance? JsonString event)
+      (let [(value String) (json/jsonstring-value event)]
        (->FactFieldAccepted
          (with fields [:subject value])))
       (->FactFieldRejected true))
 
-    (= key :p)
-    (if (instance? EdnString event)
-      (let [(value String) (edn/ednstring-value event)]
+    (= key "p")
+    (if (instance? JsonString event)
+      (let [(value String) (json/jsonstring-value event)]
        (->FactFieldAccepted
          (with fields [:predicate value])))
       (->FactFieldRejected true))
 
-    (= key :r)
-    (if (instance? EdnString event)
-      (let [(value String) (edn/ednstring-value event)]
+    (= key "r")
+    (if (instance? JsonString event)
+      (let [(value String) (json/jsonstring-value event)]
        (->FactFieldAccepted
          (with fields [:value value])))
       (->FactFieldRejected true))
@@ -104,10 +105,10 @@
     (->FactFieldAccepted fields)))
 
 (defn scan-fact-events
-  [(events (Vec edn/EdnEvent))] (U FactFields Nil)
+  [(events (Vec json/JsonEvent))] (U FactFields Nil)
   (if (or (< (count events) 2)
-          (not (instance? EdnMapStart (first events)))
-          (not (instance? EdnMapEnd (peek events))))
+          (not (instance? JsonObjectStart (first events)))
+          (not (instance? JsonObjectEnd (peek events))))
     nil
     (loop [(index Int) 1
            (fields FactFields) (empty-fact-fields)]
@@ -115,9 +116,9 @@
         (= index (- (count events) 1)) fields
         (> (+ index 1) (- (count events) 2)) nil
         :else
-        (let [(key-event edn/EdnEvent) (nth events index)]
-          (if (instance? EdnKeyword key-event)
-            (let [(key Keyword) (edn/ednkeyword-value key-event)]
+        (let [(key-event json/JsonEvent) (nth events index)]
+          (if (instance? JsonKey key-event)
+            (let [(key String) (json/jsonkey-value key-event)]
               (match (assign-fact-field fields key (nth events (+ index 1)))
              [(FactFieldAccepted updated)
               (recur (+ index 2) updated)]
@@ -127,9 +128,9 @@
 (defn parse-fact-line [(line String)] (U FactFields Nil)
   (if (= (str/trim line) "")
     nil
-    (match (edn/decode line)
-      [(EdnDecoded events) (scan-fact-events events)]
-      [(EdnDecodeError offset message) nil])))
+    (match (json/decode line)
+      [(JsonDecoded events) (scan-fact-events events)]
+      [(JsonDecodeError offset message) nil])))
 
 (defn parsed-facts [(text String)] (Vec FactFields)
   (let [(lines (Vec String)) (split-lines text)]
@@ -227,47 +228,22 @@
         marks
         (recur (+ index 1) (apply-fact marks (nth facts index)))))))
 
-(defn fact-prefix [(tx Int) (op String) (subject String)]
-  (Vec edn/EdnEvent)
-  [(edn/->EdnMapStart 0)
-   (edn/->EdnKeyword 0 :tx) (edn/->EdnInteger 0 tx)
-   (edn/->EdnKeyword 0 :op) (edn/->EdnString 0 op)
-   (edn/->EdnKeyword 0 :l) (edn/->EdnString 0 subject)])
-
-(defn encoded-line [(events (Vec edn/EdnEvent))] String
-  (match (edn/encode events)
-    [(EdnEncoded text) (str text "\n")]
-    [(EdnEncodeError event-index message) ""]))
-
 (defn assert-line
   [(tx Int) (subject String) (predicate String) (value String) (timestamp String)]
   String
-  (encoded-line
-    (conj
-      (conj
-        (conj
-          (conj
-            (conj (fact-prefix tx "assert" subject)
-              (edn/->EdnKeyword 0 :p))
-            (edn/->EdnString 0 predicate))
-          (edn/->EdnKeyword 0 :r))
-        (edn/->EdnString 0 value))
-      (edn/->EdnKeyword 0 :frame)
-      (edn/->EdnString 0 "wm-mark")
-      (edn/->EdnKeyword 0 :ts)
-      (edn/->EdnString 0 timestamp)
-      (edn/->EdnMapEnd 0))))
+  (str "{\"tx\":" tx
+    ",\"op\":\"assert\",\"l\":" (json/encode-string subject)
+    ",\"p\":" (json/encode-string predicate)
+    ",\"r\":" (json/encode-string value)
+    ",\"frame\":\"wm-mark\",\"ts\":" (json/encode-string timestamp)
+    "}\n"))
 
 (defn retract-line
   [(tx Int) (subject String) (timestamp String)] String
-  (encoded-line
-    (conj
-      (fact-prefix tx "retract" subject)
-      (edn/->EdnKeyword 0 :frame)
-      (edn/->EdnString 0 "wm-mark")
-      (edn/->EdnKeyword 0 :ts)
-      (edn/->EdnString 0 timestamp)
-      (edn/->EdnMapEnd 0))))
+  (str "{\"tx\":" tx
+    ",\"op\":\"retract\",\"l\":" (json/encode-string subject)
+    ",\"frame\":\"wm-mark\",\"ts\":" (json/encode-string timestamp)
+    "}\n"))
 
 (defn mark-lines
   [(first-tx Int)

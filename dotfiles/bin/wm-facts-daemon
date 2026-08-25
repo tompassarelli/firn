@@ -1,9 +1,6 @@
 #!/usr/bin/env bb
 ;; wm-facts-daemon — subscribe to niri's event-stream and append window facts
-;; to a dedicated Store world (BEAGLE_STORE_LOG). Sole writer of that world:
-;; appends Store transaction-log lines directly (no coordinator dependency),
-;; which the Store fold
-;; reads back fact-identically.
+;; to its dedicated JSONL authority (WM_FACTS_LOG). Sole writer of that world.
 ;;
 ;; Vocabulary (seed, do not expand): subject @w<niri-id>; predicates
 ;; app_id title workspace opened_at closed_at focused_at.
@@ -13,12 +10,11 @@
 (require '[cheshire.core :as json]
          '[babashka.process :as proc]
          '[clojure.java.io :as io]
-         '[clojure.edn :as edn]
          '[clojure.string :as str])
 
 (def log-file
-  (or (System/getenv "BEAGLE_STORE_LOG")
-      (str (System/getenv "HOME") "/.local/state/wm-world/facts.log")))
+  (or (System/getenv "WM_FACTS_LOG")
+      (str (System/getenv "HOME") "/.local/state/wm-world/facts.jsonl")))
 
 (io/make-parents log-file)
 
@@ -36,7 +32,7 @@
     (with-open [r (io/reader log-file)]
       (doseq [line (line-seq r) :when (not (str/blank? line))]
         (try
-          (let [{:keys [tx l p r]} (edn/read-string line)]
+          (let [{:keys [tx l p r]} (json/parse-string line true)]
             (when tx (swap! tx-counter max tx))
             (when (= p "opened_at") (swap! known conj l))
             (when (#{"app_id" "title" "workspace"} p)
@@ -48,8 +44,9 @@
 (def out-lock (Object.))
 (defn emit [subj pred val]
   (let [tx   (swap! tx-counter inc)
-        line (pr-str {:tx tx :op "assert" :l subj :p pred :r val
-                      :frame "wm" :ts (now-iso)})]
+        line (json/generate-string
+               {:tx tx :op "assert" :l subj :p pred :r val
+                :frame "wm" :ts (now-iso)})]
     (locking out-lock
       (spit log-file (str line "\n") :append true))))
 

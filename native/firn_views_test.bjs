@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.views-test
   (:require [firn.views :as views]
             [beagle.nix-schema-path :as paths]))
@@ -271,6 +271,5 @@
             (print (str "PASS " (testresult-name test) "\n"))
             (recur (rest remaining)))
           (do
-            (host.stderr/write-text
-              (str "FAIL " (testresult-name test) "\n"))
+            (print (str "FAIL " (testresult-name test) "\n"))
             1))))))

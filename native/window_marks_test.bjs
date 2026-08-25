@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.window-marks-test
   (:require [firn.window-marks :as marks]))
 
@@ -17,25 +17,25 @@
     (and
       (= text
         (str
-          "{:tx 1, :op \"assert\", :l \"@mark-a\", :p \"window\", "
-          ":r \"@w42\", :frame \"wm-mark\", :ts \"2026-08-16T01:00:01Z\"}\n"
-          "{:tx 2, :op \"assert\", :l \"@mark-a\", :p \"app_id\", "
-          ":r \"org.term\", :frame \"wm-mark\", :ts \"2026-08-16T01:00:02Z\"}\n"
-          "{:tx 3, :op \"assert\", :l \"@mark-a\", :p \"title\", "
-          ":r \"Shell\", :frame \"wm-mark\", :ts \"2026-08-16T01:00:03Z\"}\n"
-          "{:tx 4, :op \"assert\", :l \"@mark-a\", :p \"marked_at\", "
-          ":r \"2026-08-16T01:00:00Z\", :frame \"wm-mark\", "
-          ":ts \"2026-08-16T01:00:04Z\"}\n"))
+          "{\"tx\":1,\"op\":\"assert\",\"l\":\"@mark-a\",\"p\":\"window\","
+          "\"r\":\"@w42\",\"frame\":\"wm-mark\",\"ts\":\"2026-08-16T01:00:01Z\"}\n"
+          "{\"tx\":2,\"op\":\"assert\",\"l\":\"@mark-a\",\"p\":\"app_id\","
+          "\"r\":\"org.term\",\"frame\":\"wm-mark\",\"ts\":\"2026-08-16T01:00:02Z\"}\n"
+          "{\"tx\":3,\"op\":\"assert\",\"l\":\"@mark-a\",\"p\":\"title\","
+          "\"r\":\"Shell\",\"frame\":\"wm-mark\",\"ts\":\"2026-08-16T01:00:03Z\"}\n"
+          "{\"tx\":4,\"op\":\"assert\",\"l\":\"@mark-a\",\"p\":\"marked_at\","
+          "\"r\":\"2026-08-16T01:00:00Z\",\"frame\":\"wm-mark\","
+          "\"ts\":\"2026-08-16T01:00:04Z\"}\n"))
       (= (marks/max-transaction
-           (str "not-edn\n\n{:tx 91}\n" text "{:tx -2}\n"))
+           (str "not-json\n\n{\"tx\":91}\n" text "{\"tx\":-2}\n"))
          91))))
 
 (defn case-fold-and-retract [] Bool
   (let [(base String) (fixed-mark-lines)
         (predicate-retract String)
-        "{:tx 5, :op \"retract\", :l \"@mark-a\", :p \"title\"}\n"
+        "{\"tx\":5,\"op\":\"retract\",\"l\":\"@mark-a\",\"p\":\"title\"}\n"
         (updated String)
-        "{:tx 6, :op \"assert\", :l \"@mark-a\", :p \"title\", :r \"New\"}\n"
+        "{\"tx\":6,\"op\":\"assert\",\"l\":\"@mark-a\",\"p\":\"title\",\"r\":\"New\"}\n"
         (folded (Vec marks/Mark))
         (marks/fold-log (str "garbage\n" base predicate-retract updated))
         (removed (Vec marks/Mark))

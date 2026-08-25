@@ -1,6 +1,6 @@
 #!/usr/bin/env bb
 ;; wm-query — read helper over the window-fact world written by wm-facts-daemon.
-;; Folds the Store world log (BEAGLE_STORE_LOG, newest assertion wins per subject/pred)
+;; Folds WM_FACTS_LOG (newest assertion wins per subject/predicate)
 ;; and answers questions about live windows.
 ;;
 ;;   wm-query recent-terminal
@@ -8,13 +8,13 @@
 ;;        terminal (contains ghostty / Alacritty / foot).
 ;;        prints:  <window-id><TAB><title>
 
-(require '[clojure.edn :as edn]
+(require '[cheshire.core :as json]
          '[clojure.java.io :as io]
          '[clojure.string :as str])
 
 (def log-file
-  (or (System/getenv "BEAGLE_STORE_LOG")
-      (str (System/getenv "HOME") "/.local/state/wm-world/facts.log")))
+  (or (System/getenv "WM_FACTS_LOG")
+      (str (System/getenv "HOME") "/.local/state/wm-world/facts.jsonl")))
 
 (def terminal-marks ["ghostty" "Alacritty" "foot"])
 (defn terminal? [app]
@@ -28,7 +28,7 @@
       (with-open [r (io/reader log-file)]
         (doseq [line (line-seq r) :when (not (str/blank? line))]
           (try
-            (let [{:keys [l p r op]} (edn/read-string line)]
+            (let [{:keys [l p r op]} (json/parse-string line true)]
               (when (= op "assert")
                 (swap! state assoc-in [l p] r)))
             (catch Exception _ nil)))))

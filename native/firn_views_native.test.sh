@@ -36,54 +36,43 @@ die() {
   exit 1
 }
 
-for command in bash cmp diff git ldd rg timeout; do
+for command in bash bun cmp diff find git rg timeout; do
   command -v "$command" >/dev/null 2>&1 \
     || die "missing command: $command"
 done
 [[ -x "$beagle/bin/beagle" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
 
-json="$beagle/native-core/src/native/json.bgl"
-datum="$beagle/native-core/src/beagle/datum_reader.bgl"
-schema_path="$beagle/native-core/src/beagle/nix_schema_path.bgl"
-core="$repo/native/firn_views.bgl"
-pure="$repo/native/firn_views_test.bgl"
-native="$repo/native/firn_views_native.bgl"
+json="$beagle/native-core/src/native/json.bjs"
+schema_path="$beagle/native-core/src/beagle/nix_schema_path.bjs"
+core="$repo/native/firn_views.bjs"
+pure="$repo/native/firn_views_test.bjs"
+native="$repo/native/firn_views_native.bjs"
+bridge="$repo/native/firn_views_host.mjs"
 
-printf 'firn-views-native: strict source check\n' >&2
-timeout --foreground 150 "$beagle/bin/beagle" check --agent \
-  "$json" "$datum" "$schema_path" "$core" "$pure" "$native" \
-  >"$scratch/check.out" 2>"$scratch/check.err" || {
-    sed -n '1,260p' "$scratch/check.err" >&2
-    die 'strict source check failed'
+printf 'firn-views-js: building one closed typed family graph\n' >&2
+mkdir -p "$scratch/build"
+timeout --foreground 240 "$beagle/bin/beagle" build \
+  "$json" "$schema_path" "$core" "$pure" "$native" --out "$scratch/build" \
+  >"$scratch/build.out" 2>"$scratch/build.err" || {
+    sed -n '1,260p' "$scratch/build.err" >&2
+    die 'closed Beagle/JS family build failed'
   }
-rg -Fx '0 errors' "$scratch/check.err" >/dev/null \
-  || die 'strict source check did not report zero errors'
+pure_js="$(find "$scratch/build" -name views-test.js -print -quit)"
+native_js="$(find "$scratch/build" -name views-native.js -print -quit)"
+[[ -n "$pure_js" && -f "$pure_js" ]] || die 'pure views module was not emitted'
+[[ -n "$native_js" && -f "$native_js" ]] || die 'views host module was not emitted'
 
-build_native() {
-  local name="$1" entry="$2"
-  shift 2
-  local output="$scratch/$name"
-  mkdir -p "$scratch/$name-artifacts"
-  printf 'firn-views-native: building %s\n' "$name" >&2
-  timeout --foreground 720 "$beagle/bin/beagle" native-exe \
-    --out "$output" \
-    --entry "$entry" \
-    --artifacts "$scratch/$name-artifacts" \
-    "$@" >"$scratch/$name.build.out" 2>"$scratch/$name.build.err" || {
-      sed -n '1,260p' "$scratch/$name.build.err" >&2
-      die "$name compilation failed"
-    }
-  [[ -x "$output" ]] || die "$name is not executable"
-}
-
-build_native firn-views-test firn.views-test/-main \
-  "$json" "$datum" "$schema_path" "$core" "$pure"
-build_native firn-views-native firn.views-native/-main \
-  "$json" "$datum" "$schema_path" "$core" "$native"
+cat >"$scratch/firn-views-native" <<EOF
+#!/usr/bin/env bash
+exec env FIRN_VIEWS_MODULE='$native_js' bun '$bridge' "\$@"
+EOF
+chmod +x "$scratch/firn-views-native"
 
 printf 'firn-views-native: pure fixed JSON/source/fake-result cases\n' >&2
-timeout --foreground 30 "$scratch/firn-views-test" \
+FIRN_VIEWS_TEST_MODULE="$pure_js" \
+timeout --foreground 30 bun --eval \
+  'const m = await import(process.env.FIRN_VIEWS_TEST_MODULE); process.exitCode = m.run([]);' \
   >"$scratch/pure.out" 2>"$scratch/pure.err" \
   || die 'pure fixture executable failed'
 [[ "$(rg -c '^PASS ' "$scratch/pure.out")" == '10' ]] \
@@ -212,7 +201,7 @@ expect_contains() {
     || die "$label did not contain: $literal"
 }
 
-printf 'firn-views-native: controlled native CLI cases\n' >&2
+printf 'firn-views-native: controlled Bun CLI cases\n' >&2
 
 run_cli flake "$scratch/firn-views-native" flake inputs all
 expect_status flake 0
@@ -304,9 +293,4 @@ run_cli invalid "$scratch/firn-views-native" platform stale
 expect_status invalid 64
 expect_contains "$scratch/invalid.err" 'Usage: firn flake inputs' 'usage error'
 
-if ldd "$scratch/firn-views-native" \
-    | rg -qi 'racket|clojure|babashka|java'; then
-  die 'hosted runtime leaked into native executable'
-fi
-
-printf 'ok: native Firn views pass fixed JSON, source, and fake-child gates\n'
+printf 'ok: Beagle/JS Firn views pass fixed JSON, source, and fake-child Bun gates\n'

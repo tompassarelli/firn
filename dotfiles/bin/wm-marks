@@ -4,13 +4,12 @@
 
 (require '[cheshire.core :as json]
          '[babashka.process :as proc]
-         '[clojure.edn :as edn]
          '[clojure.java.io :as io]
          '[clojure.string :as str])
 
 (def log-file
   (or (System/getenv "MARKS_LOG")
-      (str (System/getenv "HOME") "/.local/state/wm-world/marks.log")))
+      (str (System/getenv "HOME") "/.local/state/wm-world/marks.jsonl")))
 
 (defn niri-json [& args]
   (json/parse-string (:out (apply proc/sh "niri" "msg" "-j" args)) true))
@@ -21,7 +20,7 @@
       (with-open [r (io/reader log-file)]
         (doseq [line (line-seq r) :when (not (str/blank? line))]
           (try
-            (let [{:keys [l p r op]} (edn/read-string line)]
+            (let [{:keys [l p r op]} (json/parse-string line true)]
               (cond
                 (= op "retract") (if p (swap! state update l dissoc p)
                                      (swap! state dissoc l))
