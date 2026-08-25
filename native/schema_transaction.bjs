@@ -18,8 +18,8 @@
 
 (js/export
   (defrecord ToolFile
-  [relative String
-   contents String]))
+    [relative String
+     contents String]))
 (defrecord JsonMember
   [key String
    value String])
@@ -59,16 +59,16 @@
 
 (js/export
   (defrecord NixosCacheSnapshot
-  [schema (U String Nil)
-   home-manager-schema (U String Nil)
-   fingerprint (U String Nil)
-   cached-policy (U String Nil)
-   tracked-policy String]))
+    [schema (U String Nil)
+     home-manager-schema (U String Nil)
+     fingerprint (U String Nil)
+     cached-policy (U String Nil)
+     tracked-policy String]))
 
 (js/export
   (defrecord DarwinCacheSnapshot
-  [schema (U String Nil)
-   fingerprint (U String Nil)]))
+    [schema (U String Nil)
+     fingerprint (U String Nil)]))
 
 (js/export
   (defunion CacheAssessment
@@ -77,8 +77,8 @@
 
 (js/export
   (defrecord ProcessSpec
-  [label String
-   argv (Vec String)]))
+    [label String
+     argv (Vec String)]))
 
 (js/export
   (defunion SchemaTransactionAction
@@ -634,30 +634,6 @@
                   (json-event-offset (nth events locked-start)))
                 (canonical-json-value events locked-start))])])])]))
 
-(defn pow256 [exponent Int] Int
-  (loop [index Int 0
-         value Int 1]
-    (if (>= index exponent)
-      value
-      (recur (+ index 1) (* value 256)))))
-
-(defn u64-bytes [value Int] (Vec Int)
-  (loop [exponent Int 7
-         result (Vec Int) []]
-    (if (< exponent 0)
-      result
-      (recur (- exponent 1)
-        (conj result (mod (quot value (pow256 exponent)) 256))))))
-
-(defn append-bytes
-  [left (Vec Int)
-   right (Vec Int)] (Vec Int)
-  (loop [index Int 0
-         result (Vec Int) left]
-    (if (>= index (count right))
-      result
-      (recur (+ index 1) (conj result (nth right index))))))
-
 (defn tool-file-index
   [files (Vec ToolFile)
    relative String] Int
@@ -678,25 +654,22 @@
 
 (defn tool-fingerprint [files (Vec ToolFile)] String
   (let [paths (Vec String) (tool-file-paths files)
-        domain (Vec Int) (append-bytes (utf8-encode "firn-beagle-schema-tools-v1") [0])]
-    (sha256-bytes
-      (loop [index Int 0
-             bytes (Vec Int) domain]
-        (if (>= index (count paths))
-          bytes
-          (let [relative String (nth paths index)
-                file-index Int (tool-file-index files relative)
-                path-bytes (Vec Int) (utf8-encode relative)
-                contents-bytes (Vec Int) (utf8-encode
-                  (toolfile-contents (nth files file-index)))]
-            (recur (+ index 1)
-              (append-bytes
-                (append-bytes
-                  (append-bytes
-                    (append-bytes bytes (u64-bytes (count path-bytes)))
-                    path-bytes)
-                  (u64-bytes (count contents-bytes)))
-                contents-bytes))))))))
+        lines (Vec String) (loop [index Int 0
+                                  result (Vec String) []]
+                             (if (>= index (count paths))
+              result
+              (let [relative String (nth paths index)
+                    file-index Int (tool-file-index files relative)
+                    contents String (toolfile-contents (nth files file-index))]
+                (recur (+ index 1)
+                  (conj result
+                    (str "{\"path\":" (json/encode-string relative)
+                      ",\"sha256\":"
+                      (json/encode-string (bgl/sha256-utf8 contents))
+                      "}"))))))]
+    (bgl/sha256-utf8
+      (str "firn-beagle-schema-tools-v2-jsonl\n"
+        (str/join "\n" lines) "\n"))))
 
 (defn payload-fingerprint
   [mode SchemaMode
