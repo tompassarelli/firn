@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+bb="${NORTH_BB:-$HOME/.local/state/north/runtime-profile/bin/bb}"
+
+if [[ ! -x "$bb" ]]; then
+  printf 'bb: North runtime has no executable Babashka at %s\n' "$bb" >&2
+  printf 'run bb-runtime-update to install it\n' >&2
+  exit 127
+fi
+
+exec "$bb" "$@"

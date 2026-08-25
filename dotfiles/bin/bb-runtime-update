@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+profile="${NORTH_RUNTIME_PROFILE:-$HOME/.local/state/north/runtime-profile}"
+
+command -v nix >/dev/null 2>&1 || {
+  printf 'bb-runtime-update: nix is required\n' >&2
+  exit 127
+}
+
+mkdir -p "$(dirname "$profile")"
+if [[ -x "$profile/bin/bb" ]]; then
+  nix profile upgrade --profile "$profile" babashka
+else
+  nix profile add --profile "$profile" nixpkgs#babashka
+fi
+
+"$profile/bin/bb" --version
