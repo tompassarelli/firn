@@ -14,6 +14,7 @@
 (def is-realized-by Keyword :is_realized_by)
 (def is-realized-in Keyword :is_realized_in)
 (def has-criticality Keyword :has_criticality)
+(def has-lifecycle Keyword :has_lifecycle)
 (def must-realize Keyword :must_realize)
 
 (defrecord TripleScan
@@ -24,7 +25,9 @@
 
 (defunion ProjectionResult
   (ProjectionParsed [propositions (Vec t/Triple)])
-  (ProjectionRejected [message String offset Int]))
+  (ProjectionRejected
+    [message String
+     offset Int]))
 
 (defrecord RealizationExplanation
   [machine Keyword
@@ -33,7 +36,15 @@
    module Keyword?
    capabilities (Vec Keyword)
    domain Keyword?
-   criticality Keyword?])
+   criticality Keyword?
+   lifecycle Keyword?])
+
+(defrecord BootCouplingBudget
+  [environment-modules-in-boot (Vec String)
+   boot-environment-dependencies (Vec Keyword)
+   incomplete-software (Vec Keyword)
+   uncovered-capabilities (Vec Keyword)
+   inadmissible-boot-software (Vec Keyword)])
 
 (defn keyword-at
   [events (Vec reader/ReaderEvent)
@@ -172,11 +183,40 @@
     values
     (conj values candidate)))
 
+(defn string-member?
+  [values (Vec String)
+   candidate String] Bool
+  (some?
+    (some
+      (fn [value String] String?
+        (if (= value candidate) value nil))
+      values)))
+
+(defn append-string
+  [values (Vec String)
+   candidate String] (Vec String)
+  (if (string-member? values candidate) values (conj values candidate)))
+
+(defn ends-with?
+  [text String
+   suffix String] Bool
+  (and (>= (count text) (count suffix))
+       (= (subs text (- (count text) (count suffix)) (count text)) suffix)))
+
+(defn module-name [module Keyword] String
+  (let [spelling String (subs (str module) 1)
+        suffix String "-module"]
+    (if (ends-with? spelling suffix)
+      (subs spelling 0 (- (count spelling) (count suffix)))
+      spelling)))
+
 (defn union-keywords
   [left (Vec Keyword)
    right (Vec Keyword)] (Vec Keyword)
   (reduce
-    (fn [values (Vec Keyword) candidate Keyword] (Vec Keyword)
+    (fn
+      [values (Vec Keyword)
+       candidate Keyword] (Vec Keyword)
       (append-keyword values candidate))
     left
     right))
@@ -186,7 +226,9 @@
    subject Keyword
    relation Keyword] (Vec Keyword)
   (reduce
-    (fn [values (Vec Keyword) proposition t/Triple] (Vec Keyword)
+    (fn
+      [values (Vec Keyword)
+       proposition t/Triple] (Vec Keyword)
       (let [object Any (t/triple-t3 proposition)]
         (if (and (= subject (t/triple-t1 proposition))
                  (and (= relation (t/triple-t2 proposition))
@@ -233,17 +275,20 @@
     (first-object propositions software is-realized-by)
     (objects propositions software provides-capability)
     (first-object propositions responsibility is-realized-in)
-    (first-object propositions responsibility has-criticality)))
+    (first-object propositions responsibility has-criticality)
+    (first-object propositions responsibility has-lifecycle)))
 
 (defn explain-machine
   [propositions (Vec t/Triple)
    machine Keyword] (Vec RealizationExplanation)
   (reduce
-    (fn [explanations (Vec RealizationExplanation)
-         responsibility Keyword] (Vec RealizationExplanation)
+    (fn
+      [explanations (Vec RealizationExplanation)
+       responsibility Keyword] (Vec RealizationExplanation)
       (reduce
-        (fn [current (Vec RealizationExplanation)
-             software Keyword] (Vec RealizationExplanation)
+        (fn
+          [current (Vec RealizationExplanation)
+           software Keyword] (Vec RealizationExplanation)
           (conj current
             (explanation-for-software
               propositions machine responsibility software)))
@@ -253,14 +298,147 @@
     []
     (responsibilities-for propositions machine)))
 
+(defn environment-modules
+  [propositions (Vec t/Triple)
+   machine Keyword] (Vec String)
+  (reduce
+    (fn
+      [modules (Vec String)
+       explanation RealizationExplanation] (Vec String)
+      (let [module Keyword? (realizationexplanation-module explanation)]
+        (if (and (= :environment
+                    (realizationexplanation-domain explanation))
+                 (some? module))
+          (let [present Keyword module]
+            (append-string modules (module-name present)))
+          modules)))
+    []
+    (explain-machine propositions machine)))
+
+(defn environment-modules-in-boot
+  [propositions (Vec t/Triple)
+   machine Keyword
+   boot-modules (Vec String)] (Vec String)
+  (reduce
+    (fn
+      [coupled (Vec String)
+       module String] (Vec String)
+      (if (string-member? boot-modules module)
+        (conj coupled module)
+        coupled))
+    []
+    (environment-modules propositions machine)))
+
+(defn responsibility-has-domain?
+  [propositions (Vec t/Triple)
+   responsibility Keyword
+   domain Keyword] Bool
+  (= domain (first-object propositions responsibility is-realized-in)))
+
+(defn reaches-domain?
+  [propositions (Vec t/Triple)
+   responsibilities (Vec Keyword)
+   domain Keyword] Bool
+  (some?
+    (some
+      (fn [responsibility Keyword] Keyword?
+        (if (responsibility-has-domain? propositions responsibility domain)
+          responsibility
+          nil))
+      responsibilities)))
+
+(defn boot-environment-dependencies
+  [propositions (Vec t/Triple)
+   machine Keyword] (Vec Keyword)
+  (reduce
+    (fn
+      [violations (Vec Keyword)
+       responsibility Keyword] (Vec Keyword)
+      (if (and
+            (responsibility-has-domain? propositions responsibility :boot)
+            (reaches-domain?
+              propositions
+              (dependency-closure propositions
+                (objects propositions responsibility depends-on))
+              :environment))
+        (append-keyword violations responsibility)
+        violations))
+    []
+    (responsibilities-for propositions machine)))
+
+(defn incomplete-software
+  [propositions (Vec t/Triple)
+   machine Keyword] (Vec Keyword)
+  (reduce
+    (fn
+      [incomplete (Vec Keyword)
+       explanation RealizationExplanation] (Vec Keyword)
+      (if (or (nil? (realizationexplanation-module explanation))
+              (or (nil? (realizationexplanation-domain explanation))
+                  (or (nil? (realizationexplanation-criticality explanation))
+                      (and
+                        (= :boot
+                           (realizationexplanation-domain explanation))
+                        (nil?
+                          (realizationexplanation-lifecycle explanation))))))
+        (append-keyword incomplete
+          (realizationexplanation-software explanation))
+        incomplete))
+    []
+    (explain-machine propositions machine)))
+
+(defn boot-software-admissible?
+  [explanation RealizationExplanation
+   boot-modules (Vec String)] Bool
+  (let [module Keyword? (realizationexplanation-module explanation)]
+    (and (= :long-lived-system-service
+            (realizationexplanation-lifecycle explanation))
+         (and (some? module)
+              (let [present Keyword module]
+                (string-member? boot-modules (module-name present)))))))
+
+(defn inadmissible-boot-software
+  [propositions (Vec t/Triple)
+   machine Keyword
+   boot-modules (Vec String)] (Vec Keyword)
+  (reduce
+    (fn
+      [inadmissible (Vec Keyword)
+       explanation RealizationExplanation] (Vec Keyword)
+      (if (and (= :boot (realizationexplanation-domain explanation))
+               (not (boot-software-admissible? explanation boot-modules)))
+        (append-keyword inadmissible
+          (realizationexplanation-software explanation))
+        inadmissible))
+    []
+    (explain-machine propositions machine)))
+
+(defn assess-boot-coupling
+  [propositions (Vec t/Triple)
+   machine Keyword
+   boot-modules (Vec String)] BootCouplingBudget
+  (->BootCouplingBudget
+    (environment-modules-in-boot propositions machine boot-modules)
+    (boot-environment-dependencies propositions machine)
+    (incomplete-software propositions machine)
+    (uncovered-capabilities propositions machine)
+    (inadmissible-boot-software propositions machine boot-modules)))
+
+(defn boot-coupling-budget-passes? [budget BootCouplingBudget] Bool
+  (and
+    (empty? (bootcouplingbudget-environment-modules-in-boot budget))
+    (empty? (bootcouplingbudget-boot-environment-dependencies budget))
+    (empty? (bootcouplingbudget-incomplete-software budget))
+    (empty? (bootcouplingbudget-uncovered-capabilities budget))
+    (empty? (bootcouplingbudget-inadmissible-boot-software budget))))
+
 (defn realization-obligations
   [propositions (Vec t/Triple)
    machine Keyword] (Vec t/Triple)
   (reduce
     (fn [obligations (Vec t/Triple)
          explanation RealizationExplanation] (Vec t/Triple)
-      (let [candidate t/Triple
-            (t/triple machine must-realize
+      (let [candidate t/Triple (t/triple machine must-realize
               (realizationexplanation-software explanation))]
         (if (some?
               (some
@@ -276,21 +454,24 @@
   [propositions (Vec t/Triple)
    machine Keyword] (Vec Keyword)
   (reduce
-    (fn [missing (Vec Keyword) responsibility Keyword] (Vec Keyword)
-      (let [required (Vec Keyword)
-            (objects propositions responsibility requires-capability)
-            software (Vec Keyword)
-            (dependency-closure propositions
+    (fn
+      [missing (Vec Keyword)
+       responsibility Keyword] (Vec Keyword)
+      (let [required (Vec Keyword) (objects propositions responsibility requires-capability)
+            software (Vec Keyword) (dependency-closure propositions
               (objects propositions responsibility requires-software))
-            provided (Vec Keyword)
-            (reduce
-              (fn [capabilities (Vec Keyword) item Keyword] (Vec Keyword)
+            provided (Vec Keyword) (reduce
+              (fn
+                [capabilities (Vec Keyword)
+                 item Keyword] (Vec Keyword)
                 (union-keywords capabilities
                   (objects propositions item provides-capability)))
               []
               software)]
         (reduce
-          (fn [result (Vec Keyword) capability Keyword] (Vec Keyword)
+          (fn
+            [result (Vec Keyword)
+             capability Keyword] (Vec Keyword)
             (if (some?
                   (some
                     (fn [candidate Keyword] Keyword?

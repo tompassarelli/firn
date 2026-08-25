@@ -1,7 +1,13 @@
 #lang beagle
 (ns firn.responsibility-projection-test
-  (:require [firn.responsibility-projection :as projection]
+  (:require [firn.inventory :as inventory]
+            [firn.inventory-native :as inventory-native]
+            [firn.responsibility-projection :as projection]
+            [firn.tag-resolve :as tags]
+            [firn.tag-resolve-native :as tag-native]
             [store.types :as t]))
+
+(def max-source-bytes Int 1048576)
 
 (def source String
   (str
@@ -17,6 +23,7 @@
     "   [:is_realized_by :member_of :relationships]\n"
     "   [:is_realized_in :member_of :relationships]\n"
     "   [:has_criticality :member_of :relationships]\n"
+    "   [:has_lifecycle :member_of :relationships]\n"
     "   [:must_realize :member_of :relationships]\n"
     "   [:whiterabbit :has_responsibility :creative-workstation]\n"
     "   [:creative-workstation :depends_on :three-d-workflow]\n"
@@ -32,25 +39,138 @@
     "   [:three-d-workflow :is_realized_in :environment]\n"
     "   [:notes-workflow :is_realized_in :environment]\n"
     "   [:three-d-workflow :has_criticality :interactive]\n"
-    "   [:notes-workflow :has_criticality :interactive]])\n"))
+    "   [:notes-workflow :has_criticality :interactive]\n"
+    "   [:whiterabbit :has_responsibility :remote-access-service]\n"
+    "   [:remote-access-service :requires_capability :remote-access]\n"
+    "   [:remote-access-service :requires_software :remote-access-runtime]\n"
+    "   [:remote-access-runtime :provides_capability :remote-access]\n"
+    "   [:remote-access-runtime :is_realized_by :remote-access-runtime-module]\n"
+    "   [:remote-access-service :is_realized_in :boot]\n"
+    "   [:remote-access-service :has_criticality :essential]\n"
+    "   [:remote-access-service :has_lifecycle :long-lived-system-service]])\n"))
 
 (defn expected-obligations [] (Vec t/Triple)
   [(t/triple :whiterabbit :must_realize :blender)
-   (t/triple :whiterabbit :must_realize :obsidian)])
+   (t/triple :whiterabbit :must_realize :obsidian)
+   (t/triple :whiterabbit :must_realize :remote-access-runtime)])
 
 (defn projection-behavior? [] Bool
   (match (projection/project-source source)
     [(ProjectionRejected message offset) false]
     [(ProjectionParsed propositions)
-     (let [explanations (Vec projection/RealizationExplanation)
-           (projection/explain-machine propositions :whiterabbit)]
+     (let [explanations (Vec projection/RealizationExplanation) (projection/explain-machine propositions :whiterabbit)
+           baseline projection/BootCouplingBudget (projection/assess-boot-coupling
+             propositions :whiterabbit ["remote-access-runtime"])
+           blender-coupled projection/BootCouplingBudget (projection/assess-boot-coupling
+             propositions :whiterabbit ["remote-access-runtime" "blender"])
+           dev-lifecycle (Vec t/Triple) (into propositions
+             [(t/triple :whiterabbit :has_responsibility :project-build)
+              (t/triple :project-build :requires_software :project-toolchain)
+              (t/triple :project-build :is_realized_in :boot)
+              (t/triple :project-build :has_criticality :interactive)
+              (t/triple :project-build :has_lifecycle :development)
+              (t/triple :project-toolchain :is_realized_by
+                :project-toolchain-module)])
+           unowned (Vec t/Triple) (into propositions
+             [(t/triple :whiterabbit :has_responsibility :unowned-build)
+              (t/triple :unowned-build :requires_software :unowned-toolchain)
+              (t/triple :unowned-build :is_realized_in :boot)
+              (t/triple :unowned-build :has_criticality :interactive)
+              (t/triple :unowned-toolchain :is_realized_by
+                :unowned-toolchain-module)])
+           inverted (Vec t/Triple) (into propositions
+             [(t/triple :whiterabbit :has_responsibility :boot-workflow)
+              (t/triple :boot-workflow :is_realized_in :boot)
+              (t/triple :boot-workflow :depends_on :three-d-workflow)])
+           incomplete (Vec t/Triple) (conj propositions
+             (t/triple :three-d-workflow :requires_software :unrealized))
+           uncovered (Vec t/Triple) (conj propositions
+             (t/triple :three-d-workflow :requires_capability
+               :missing-capability))]
        (and (= (projection/realization-obligations
                  propositions :whiterabbit)
                (expected-obligations))
-            (and (= 2 (count explanations))
+            (and (= 3 (count explanations))
                  (empty?
                    (projection/uncovered-capabilities
-                     propositions :whiterabbit)))))]))
+                     propositions :whiterabbit)))
+            (and
+              (projection/boot-coupling-budget-passes? baseline)
+              (not
+                (projection/boot-coupling-budget-passes? blender-coupled)))
+            (and
+              (not
+                (projection/boot-coupling-budget-passes?
+                  (projection/assess-boot-coupling
+                    dev-lifecycle :whiterabbit
+                    ["remote-access-runtime" "project-toolchain"])))
+              (not
+                (projection/boot-coupling-budget-passes?
+                  (projection/assess-boot-coupling
+                    unowned :whiterabbit
+                    ["remote-access-runtime" "unowned-toolchain"]))))
+            (and
+              (not
+                (projection/boot-coupling-budget-passes?
+                  (projection/assess-boot-coupling
+                    inverted :whiterabbit ["remote-access-runtime"])))
+              (not
+                (projection/boot-coupling-budget-passes?
+                  (projection/assess-boot-coupling
+                    incomplete :whiterabbit ["remote-access-runtime"]))))
+            (not
+              (projection/boot-coupling-budget-passes?
+                (projection/assess-boot-coupling
+                  uncovered :whiterabbit ["remote-access-runtime"])))))]))
 
-(defn -main [(args (Vec String))] Int
-  (if (projection-behavior?) 0 1))
+(defn module-names-from-paths [paths (Vec String)] (Vec String)
+  (reduce
+    (fn
+      [names (Vec String)
+       path String] (Vec String)
+      (conj names (inventory/module-name-from-path path)))
+    []
+    paths))
+
+(defn active-boot-modules
+  [modules (Vec tags/ModuleTags)
+   host inventory/InventoryHost] (Vec String)
+  (let [config inventory/HostConfig (inventory/inventoryhost-config host)
+        direct-on (Vec String) (module-names-from-paths (inventory/state-paths config true))
+        direct-off (Vec String) (module-names-from-paths (inventory/state-paths config false))
+        tagged (Vec String) (inventory/tag-active
+          (inventory/->InventoryRepository modules [host]) host)]
+    (tags/remove-strings (tags/union-strings tagged direct-on) direct-off)))
+
+(defn live-budget-passes? [root String] Bool
+  (match
+    (host.fs/read-text-bounded
+      (str root "/hosts/whiterabbit/responsibilities.bnix")
+      max-source-bytes)
+    [(host.fs/ReadTextBoundedError errno) false]
+    [(host.fs/ReadTextBoundedOk responsibility-source)
+     (match (projection/project-source responsibility-source)
+       [(ProjectionRejected message offset) false]
+       [(ProjectionParsed propositions)
+        (match (tag-native/load-modules root)
+          [(ModulesRejected message) false]
+          [(ModulesLoaded modules)
+           (match
+             (inventory-native/load-inventory-host root "whiterabbit")
+             [(InventoryHostRejected message) false]
+             [(InventoryHostLoaded host)
+              (projection/boot-coupling-budget-passes?
+                (projection/assess-boot-coupling
+                  propositions
+                  :whiterabbit
+                  (active-boot-modules modules host)))])])])]))
+
+(defn -main [args (Vec String)] Int
+  (if (and (= 1 (count args))
+           (and (projection-behavior?)
+                (live-budget-passes? (nth args 0))))
+    0
+    (do
+      (host.stderr/write-text
+        "responsibility projection: boot-coupling budget failed\n")
+      1)))

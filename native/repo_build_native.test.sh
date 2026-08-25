@@ -63,6 +63,30 @@ tag_native="$repo/native/tag_resolve_native.bgl"
 flake_input="$repo/native/flake_input.bgl"
 flake_driver="$repo/native/flake_input_driver.bgl"
 flake_native="$repo/native/flake_input_native.bgl"
+store_slots="$beagle/store/src/store/slots.bgl"
+store_types="$beagle/store/src/store/types.bgl"
+responsibility_projection="$repo/native/responsibility_projection.bgl"
+responsibility_test="$repo/native/responsibility_projection_test.bgl"
+inventory="$repo/native/inventory.bgl"
+inventory_native="$repo/native/inventory_native.bgl"
+
+build_native responsibility-projection-test \
+  firn.responsibility-projection-test/-main \
+  "$datum" "$json" "$tag_resolve" "$tag_inputs" "$tag_driver" \
+  "$tag_native" "$store_slots" "$store_types" \
+  "$inventory" "$inventory_native" \
+  "$responsibility_projection" "$responsibility_test"
+
+timeout --foreground 30 "$scratch/responsibility-projection-test" "$repo" \
+  >"$scratch/responsibility.out" 2>"$scratch/responsibility.err" \
+  || {
+    sed -n '1,240p' "$scratch/responsibility.err" >&2
+    die "responsibility projection boot-coupling budget failed"
+  }
+[[ ! -s "$scratch/responsibility.out" ]] \
+  || die "responsibility projection fixture wrote stdout"
+[[ ! -s "$scratch/responsibility.err" ]] \
+  || die "responsibility projection fixture wrote stderr"
 
 build_native repo-build-native firn.repo-build-native/-main \
   "$datum" "$json" "$tag_resolve" "$tag_inputs" \
