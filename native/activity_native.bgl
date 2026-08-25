@@ -897,10 +897,9 @@
        state)]))
 
 (defn make-parent [path String] Int
-  (let [made (host.fs/make-parent-directories path)]
-    (if (instance? host.fs/MakeParentDirectoriesOk made)
-      0
-      (- 0 (host.fs/makeparentdirectorieserror-errno made)))))
+  (match (host.fs/make-parent-directories path)
+    [(host.fs/MakeParentDirectoriesOk) 0]
+    [(host.fs/MakeParentDirectoriesError errno) (- 0 errno)]))
 
 (defn takeover-owner [pid-path String] Int
   (let [loaded (host.fs/read-text-bounded pid-path 64)]
