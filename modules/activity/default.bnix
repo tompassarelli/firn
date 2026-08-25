@@ -2,9 +2,10 @@
 
 (ns default)
 
-(nix/module [config firnLaunchers lib pkgs ...]
+(nix/module [config lib pkgs ...]
   (let
-    [username config.myConfig.modules.users.username]
+    [username config.myConfig.modules.users.username
+     homeDir config.myConfig.modules.users.homeDir]
     {:tags [desktop]
      :options.myConfig.modules.activity.enable
       (lib.mkEnableOption
@@ -21,7 +22,8 @@
                    :After       ["graphical-session.target"]
                    :Requisite   ["graphical-session.target"]}
                  :Service
-                  {:ExecStart (s firnLaunchers "/bin/activity daemon")
+                  {:ExecStart
+                    (s homeDir "/.local/bin/activity daemon")
                    :Restart    "on-failure"
                    :RestartSec 2}
                  :Install {:WantedBy ["niri.service"]}}

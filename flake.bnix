@@ -49,28 +49,7 @@
       [firnModules (p "./modules")
        darwinModuleNames
         (builtins.fromJSON
-          (builtins.readFile (p "./config/darwin-modules.json")))
-       makeFirnLaunchers
-        (fn [system] Any
-          (let
-            [pkgs (builtins.getAttr system nixpkgs.legacyPackages)
-             live
-              (fn [name] Any
-                (pkgs.writeShellScriptBin name
-                  (ms
-                    (s "live=\"$HOME/.local/bin/" name "\"")
-                    "if [ -x \"$live\" ]; then"
-                    "  exec \"$live\" \"$@\""
-                    "fi"
-                    (s "export FIRN_REPO=\"" self "\"")
-                    (s "exec \"" self "/dotfiles/bin/" name "\" \"$@\""))))]
-            (pkgs.symlinkJoin
-              {:name "firn-launchers"
-               :paths
-                [(live "firn")
-                 (live "activity")
-                 (live "activity-menu")
-                 (live "firn-system-policy")]})))]
+          (builtins.readFile (p "./config/darwin-modules.json")))]
       {:lib.mkSystem
         (nix/module
           [hostname
@@ -94,10 +73,7 @@
                     :zen-browser zen-browser
                    ;; --- END GENERATED MODULE SPECIALARGS ---
                    }
-                 :flakeRoot self
-                 :firnLaunchers
-                  (builtins.getAttr "firn-launchers"
-                    (builtins.getAttr system self.packages))}
+                 :flakeRoot self}
                 extraSpecialArgs)
              :modules
               (++
@@ -283,10 +259,7 @@
                     :zen-browser zen-browser
                              ;; --- END GENERATED DARWIN SPECIALARGS ---
                              }
-                 :flakeRoot self
-                 :firnLaunchers
-                  (builtins.getAttr "firn-launchers"
-                    (builtins.getAttr system self.packages))}
+                 :flakeRoot self}
                 extraSpecialArgs)
              :modules
               (++
@@ -354,13 +327,6 @@
                      extraOverlays)}]
                 extraModules)}))
        :modules firnModules
-       :packages.x86_64-linux
-        (let [pkgs
-              ((import nixpkgs)
-                {:system "x86_64-linux" :config.allowUnfree true})]
-          {:firn-launchers (makeFirnLaunchers "x86_64-linux")})
-       :packages.aarch64-darwin
-        {:firn-launchers (makeFirnLaunchers "aarch64-darwin")}
        :nixosConfigurations
         {:whiterabbit
           (self.lib.mkSystem

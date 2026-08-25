@@ -2,7 +2,7 @@
 
 (ns default)
 
-(nix/module [config lib pkgs flakeRoot firnLaunchers ...]
+(nix/module [config lib pkgs flakeRoot ...]
   (let [username config.myConfig.modules.users.username]
     {:tags [terminal]
      :options.myConfig.modules.bash.enable
@@ -26,7 +26,7 @@
                 "fi"
                 ""))
          :programs.bash.completion.enable true
-         :environment.systemPackages [pkgs.fzf firnLaunchers]
+         :environment.systemPackages [pkgs.fzf]
          :home-manager.users
           {username
             (nix/module [config ...]

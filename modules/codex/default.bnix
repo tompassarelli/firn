@@ -13,36 +13,6 @@
         ;; North's hook surface is delivered by its live checkout, so /etc points
         ;; at the checkout instead of building the whole project.
         northPkg (s homeDir "/code/north/main")
-        ;; Codex is the upstream nixpkgs-master package, taken here rather than
-        ;; re-exported by a project flake: no project flake may sit in the
-        ;; system closure's eval graph. Identity is pinned so a master bump
-        ;; cannot silently move the managed runtime out from under the hook
-        ;; contract — drift fails the build with both identities named.
-        codexExpectedIdentity
-         {:version "0.149.0"
-          :owner "openai"
-          :repo "codex"
-          :rev "refs/tags/rust-v0.149.0"
-          :tag "rust-v0.149.0"
-          :srcHash "sha256-SMVTW/CcGz4xxyeFe3KUf3Ns6jp+2SRMTvtA2o2+y7Q="
-          :cargoHash "sha256-K58PL588Hhk75FyXgU6b8IEAco8FIz8oGd1S0WgOjyQ="}
-        codexUpstreamPkg pkgs.master.codex
-        codexObservedIdentity
-         {:version (get-or codexUpstreamPkg version nil)
-          :owner (get-or codexUpstreamPkg src.owner nil)
-          :repo (get-or codexUpstreamPkg src.repo nil)
-          :rev (get-or codexUpstreamPkg src.rev nil)
-          :tag (get-or codexUpstreamPkg src.tag nil)
-          :srcHash (get-or codexUpstreamPkg src.outputHash nil)
-          :cargoHash (get-or codexUpstreamPkg cargoHash nil)}
-        codexPkg
-         (lib.throwIfNot
-           (== codexObservedIdentity codexExpectedIdentity)
-           (s "codex: managed runtime identity drifted; expected "
-             (builtins.toJSON codexExpectedIdentity)
-             "; observed "
-             (builtins.toJSON codexObservedIdentity))
-           codexUpstreamPkg)
         ;; Codex trusts a managed hook by the provenance of requirements.toml,
         ;; never by the hook file's own residency — so North/Beagle enforcement
         ;; can move at promote speed behind a stable /etc name.
@@ -59,12 +29,9 @@
       (lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)")
      :config
       (lib.mkIf config.myConfig.modules.codex.enable
-        {:environment.systemPackages [codexPkg]
-         :environment.etc
+        {:environment.etc
           {"codex/requirements.toml"
             {:source (s flakeRoot "/modules/codex/requirements.toml")}
-           "codex/runtime"
-            {:source codexPkg}
            "codex/hooks/runtime/bash"
             {:source (s pkgs.bash "/bin/bash")}
            "codex/hooks/runtime/cat"

@@ -49,7 +49,7 @@ jobs:
         env:
           BEAGLE_PATH: ${{ github.workspace }}/beagle
         run: |
-          nix run .#firn-launchers -- repo build
+          FIRN_REPO="$PWD" "$PWD/dotfiles/bin/firn" repo build
           if ! git diff --exit-code; then
             echo "::error::Generated .nix files don't match .bnix sources. Run 'firn repo build' locally and commit."
             exit 1

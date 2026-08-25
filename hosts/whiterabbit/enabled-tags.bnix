@@ -29,5 +29,29 @@
    notes
    writing
    [vpn -protonvpn-cli]]
- :disabled [anytype clang glide lutris mail obs-studio promptfoo slack spotify wine wowup zoom]
+ :disabled
+  [anytype
+   bun
+   cargo
+   clang
+   clippy
+   clojure
+   drracket
+   gcc
+   glide
+   lutris
+   mail
+   nodejs
+   obs-studio
+   promptfoo
+   python
+   racket
+   rust-analyzer
+   rustc
+   rustfmt
+   slack
+   spotify
+   wine
+   wowup
+   zoom]
 }

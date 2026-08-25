@@ -1,14 +1,10 @@
 { config, lib, pkgs, flakeRoot, ... }:
 
-((username: ((homeDir: ((northPkg: ((codexExpectedIdentity: ((codexUpstreamPkg: ((codexObservedIdentity: ((codexPkg: ((enforcement: ((agentGeneration: ((promoted: ((providerAdapter: {
+((username: ((homeDir: ((northPkg: ((enforcement: ((agentGeneration: ((promoted: ((providerAdapter: {
   options.myConfig.modules.codex.enable = lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)";
   config = lib.mkIf config.myConfig.modules.codex.enable {
-    environment.systemPackages = [ codexPkg ];
     environment.etc = {
       "codex/requirements.toml".source = "${flakeRoot}/modules/codex/requirements.toml";
-      "codex/runtime" = {
-        source = codexPkg;
-      };
       "codex/hooks/runtime/bash" = {
         source = "${pkgs.bash}/bin/bash";
       };
@@ -70,20 +66,4 @@
       };
     });
   };
-}) (adapterId: "L+ /etc/codex/hooks/${adapterId} - - - - ${agentGeneration}/provider-hooks/${adapterId}"))) (relative: source: "L+ /etc/codex/hooks/${relative} - - - - ${enforcement}/${source}"))) "${homeDir}/.local/state/north/agents/current")) "/var/lib/north-enforcement/active/current")) (lib.throwIfNot (codexObservedIdentity == codexExpectedIdentity) "codex: managed runtime identity drifted; expected ${builtins.toJSON codexExpectedIdentity}; observed ${builtins.toJSON codexObservedIdentity}" codexUpstreamPkg))) {
-    version = codexUpstreamPkg.version or null;
-    owner = codexUpstreamPkg.src.owner or null;
-    repo = codexUpstreamPkg.src.repo or null;
-    rev = codexUpstreamPkg.src.rev or null;
-    tag = codexUpstreamPkg.src.tag or null;
-    srcHash = codexUpstreamPkg.src.outputHash or null;
-    cargoHash = codexUpstreamPkg.cargoHash or null;
-  })) pkgs.master.codex)) {
-    version = "0.149.0";
-    owner = "openai";
-    repo = "codex";
-    rev = "refs/tags/rust-v0.149.0";
-    tag = "rust-v0.149.0";
-    srcHash = "sha256-SMVTW/CcGz4xxyeFe3KUf3Ns6jp+2SRMTvtA2o2+y7Q=";
-    cargoHash = "sha256-K58PL588Hhk75FyXgU6b8IEAco8FIz8oGd1S0WgOjyQ=";
-  })) "${homeDir}/code/north/main")) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)
+}) (adapterId: "L+ /etc/codex/hooks/${adapterId} - - - - ${agentGeneration}/provider-hooks/${adapterId}"))) (relative: source: "L+ /etc/codex/hooks/${relative} - - - - ${enforcement}/${source}"))) "${homeDir}/.local/state/north/agents/current")) "/var/lib/north-enforcement/active/current")) "${homeDir}/code/north/main")) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)

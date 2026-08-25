@@ -3,7 +3,6 @@
 {
   options.myConfig.modules.framework.enable = lib.mkEnableOption "Framework Computer specific tools";
   config = lib.mkIf config.myConfig.modules.framework.enable {
-    environment.systemPackages = with pkgs; [ framework-tool ];
     services.logind.settings.Login = {
       HandleLidSwitch = "ignore";
       HandleLidSwitchExternalPower = "ignore";

@@ -22,7 +22,6 @@
   myConfig.modules.glow.enable = lib.mkDefault true;
   myConfig.modules.imagemagick.enable = lib.mkDefault true;
   myConfig.modules.jq.enable = lib.mkDefault true;
-  myConfig.modules.opencode.enable = lib.mkDefault true;
   myConfig.modules.procs.enable = lib.mkDefault true;
   myConfig.modules.promptfoo.enable = lib.mkDefault true;
   myConfig.modules.ripgrep.enable = lib.mkDefault true;

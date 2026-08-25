@@ -6,10 +6,9 @@ repo="${FIRN_LIVENESS_REPO:-$HOME/code/nixos-config/main}" # hardcoded-repo-path
 host="${FIRN_LIVENESS_HOST:-whiterabbit}"
 git_bin="${FIRN_LIVENESS_GIT:-git}"
 nix_bin="${FIRN_LIVENESS_NIX:-nix}"
-firn_bin="${FIRN_LIVENESS_CURRENT_FIRN:-/run/current-system/sw/bin/firn}"
+firn_bin="${FIRN_LIVENESS_CURRENT_FIRN:-$HOME/.local/bin/firn}"
 agents_bin="${FIRN_LIVENESS_AGENTS:-$HOME/.local/bin/agents}"
 flock_bin="${FIRN_LIVENESS_FLOCK:-flock}"
-system="${FIRN_LIVENESS_SYSTEM:-x86_64-linux}"
 state_dir="${FIRN_LIVENESS_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/firn}"
 state_file="$state_dir/delivery-liveness.json"
 freshness_seconds=3600
@@ -24,13 +23,7 @@ revision=""
 candidate_path=""
 failing_check="bootstrap"
 
-store_path_or_null() {
-  local resolved=""
-  resolved="$(readlink -f "$1" 2>/dev/null || true)"
-  case "$resolved" in /nix/store/*) printf '%s\n' "$resolved" ;; esac
-}
-
-current_path="$(store_path_or_null "$firn_bin")"
+current_path="$(readlink -f "$firn_bin" 2>/dev/null || true)"
 
 write_fact() {
   local status=$? tmp digest_tmp
@@ -108,17 +101,6 @@ run "checking direct first-party pin ancestry" \
 failing_check="current_firn_output"
 current_output="$("$firn_bin" host list all)"
 [[ -n "$current_output" ]] || fail "current Firn produced no host-list output"
-
-failing_check="candidate_firn_build"
-candidate_root="$(run "building candidate Firn" "$nix_bin" build --no-link --print-out-paths \
-  "$source#packages.$system.firn-launchers")"
-candidate_firn="$candidate_root/bin/firn"
-candidate_path="$(store_path_or_null "$candidate_firn")"
-failing_check="candidate_firn"
-[[ -x "$candidate_firn" ]] || fail "candidate Firn is missing or non-executable: $candidate_firn"
-failing_check="candidate_firn_output"
-candidate_output="$("$candidate_firn" host list all)"
-[[ -n "$candidate_output" ]] || fail "candidate Firn produced no host-list output"
 
 failing_check="toplevel_build"
 run "building committed $host toplevel" "$nix_bin" build --no-link --print-out-paths \

@@ -53,7 +53,6 @@
    :myConfig.modules.zed.enable true
    :myConfig.modules.windows-vm.enable true
    :myConfig.modules.nh.enable true
-   :myConfig.modules.babashka.enable true
    ;; The coordination engine: one user service, direct bind on :7977, no
    ;; socket activation, no telemetry twin. Owns :7977 alone.
    :myConfig.modules.north-store.enable true

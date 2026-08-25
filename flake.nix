@@ -52,7 +52,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: ((makeFirnLaunchers: {
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: {
     lib.mkSystem = ({ hostname, hostConfig, hardwareConfig, system ? "x86_64-linux", extraModules ? [ ], extraOverlays ? [ ], extraSpecialArgs ? { }, ... }: nixpkgs.lib.nixosSystem {
       system = system;
       specialArgs = ({
@@ -64,7 +64,6 @@
           zen-browser = zen-browser;
         };
         flakeRoot = self;
-        firnLaunchers = builtins.getAttr "firn-launchers" (builtins.getAttr system self.packages);
       } // extraSpecialArgs);
       modules = ([
         hardwareConfig
@@ -237,7 +236,6 @@
           zen-browser = zen-browser;
         };
         flakeRoot = self;
-        firnLaunchers = builtins.getAttr "firn-launchers" (builtins.getAttr system self.packages);
       } // extraSpecialArgs);
       modules = ([
         home-manager.darwinModules.home-manager
@@ -299,13 +297,6 @@
       ] ++ extraModules);
     });
     modules = firnModules;
-    packages.x86_64-linux = ((pkgs: {
-      firn-launchers = makeFirnLaunchers "x86_64-linux";
-    }) (import nixpkgs {
-        system = "x86_64-linux";
-        config.allowUnfree = true;
-      }));
-    packages.aarch64-darwin.firn-launchers = makeFirnLaunchers "aarch64-darwin";
     nixosConfigurations = {
       whiterabbit = self.lib.mkSystem {
         hostname = "whiterabbit";
@@ -335,20 +326,5 @@
 
       '';
     }) nixpkgs.legacyPackages.x86_64-linux);
-  }) (system: ((pkgs: ((live: pkgs.symlinkJoin {
-      name = "firn-launchers";
-      paths = [
-        (live "firn")
-        (live "activity")
-        (live "activity-menu")
-        (live "firn-system-policy")
-      ];
-    }) (name: pkgs.writeShellScriptBin name ''
-        live="$HOME/.local/bin/${name}"
-        if [ -x "$live" ]; then
-          exec "$live" "$@"
-        fi
-        export FIRN_REPO="${self}"
-        exec "${self}/dotfiles/bin/${name}" "$@"
-      ''))) (builtins.getAttr system nixpkgs.legacyPackages))))) (builtins.fromJSON (builtins.readFile ./config/darwin-modules.json)))) ./modules));
+  }) (builtins.fromJSON (builtins.readFile ./config/darwin-modules.json)))) ./modules));
 }

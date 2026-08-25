@@ -18,8 +18,7 @@ ok() { printf 'PASS %s\n' "$1"; }
 
 fixture_repo="$scratch/repo"
 fixture_bin="$scratch/bin"
-fixture_candidate="$scratch/candidate"
-mkdir -p "$fixture_repo" "$fixture_bin" "$fixture_candidate/bin"
+mkdir -p "$fixture_repo" "$fixture_bin"
 git init -q -b main "$fixture_repo"
 git -C "$fixture_repo" -c user.name=test -c user.email=test@example.invalid \
   commit --allow-empty -qm base
@@ -37,17 +36,15 @@ write_tool firn \
   'if [ "${1:-}" = repo ]; then test "${LIVENESS_CASE:-ok}" != skew || exit 1; echo "first-party input ok"; exit 0; fi' \
   'test "${LIVENESS_CASE:-ok}" != silent-cli || exit 0' \
   'echo whiterabbit'
-cp "$fixture_bin/firn" "$fixture_candidate/bin/firn"
 write_tool nix \
   'test "${LIVENESS_CASE:-ok}" != build-failure || exit 1' \
-  'if [[ "$*" == *firn-launchers* ]]; then printf "%s\n" "${LIVENESS_CANDIDATE:?}"; ' \
-  'else printf "/nix/store/fake-toplevel\n"; fi'
+  'printf "/nix/store/fake-toplevel\n"'
 
 run_case() {
   local name="$1" expected="$2"
   local status=0
   set +e
-  LIVENESS_CASE="$name" LIVENESS_CANDIDATE="$fixture_candidate" \
+  LIVENESS_CASE="$name" \
     FIRN_LIVENESS_REPO="$fixture_repo" \
     FIRN_LIVENESS_GIT=git FIRN_LIVENESS_NIX="$fixture_bin/nix" \
     FIRN_LIVENESS_CURRENT_FIRN="$fixture_bin/firn" \
