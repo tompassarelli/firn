@@ -52,7 +52,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: {
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: ((environmentPkgs: ((validateDomainDependency: ((mkWhiterabbitEnvironment: ((mkWhiterabbitWorld: ((baselineWorld: ((toggledWorld: ((rejectedDependency: {
     lib.mkSystem = ({ hostname, hostConfig, hardwareConfig, system ? "x86_64-linux", extraModules ? [ ], extraOverlays ? [ ], extraSpecialArgs ? { }, ... }: nixpkgs.lib.nixosSystem {
       system = system;
       specialArgs = ({
@@ -297,6 +297,22 @@
       ] ++ extraModules);
     });
     modules = firnModules;
+    homeConfigurations = {
+      "tom@whiterabbit" = mkWhiterabbitEnvironment false;
+    };
+    domainIndependence = {
+      baseline = {
+        bootDrvPath = baselineWorld.boot.config.system.build.toplevel.drvPath;
+        environmentDrvPath = baselineWorld.environment.activationPackage.drvPath;
+      };
+      environmentToggle = {
+        bootDrvPath = toggledWorld.boot.config.system.build.toplevel.drvPath;
+        environmentDrvPath = toggledWorld.environment.activationPackage.drvPath;
+      };
+      bootIdentityIndependent = (baselineWorld.boot.config.system.build.toplevel.drvPath == toggledWorld.boot.config.system.build.toplevel.drvPath);
+      environmentIdentityChanged = (baselineWorld.environment.activationPackage.drvPath != toggledWorld.environment.activationPackage.drvPath);
+      bootEnvironmentDependencyRejected = !rejectedDependency.success;
+    };
     nixosConfigurations = {
       whiterabbit = self.lib.mkSystem {
         hostname = "whiterabbit";
@@ -326,5 +342,25 @@
 
       '';
     }) nixpkgs.legacyPackages.x86_64-linux);
-  }) (builtins.fromJSON (builtins.readFile ./config/darwin-modules.json)))) ./modules));
+  }) (builtins.tryEval (validateDomainDependency {
+      dependentDomain = "boot";
+      requiredDomain = "environment";
+    })))) (mkWhiterabbitWorld true))) (mkWhiterabbitWorld false))) (includeExperimentPackage: {
+      boot = self.lib.mkSystem {
+        hostname = "whiterabbit";
+        hostConfig = ./hosts/whiterabbit/configuration.nix;
+        hardwareConfig = ./hardware-configuration.nix;
+      };
+      environment = mkWhiterabbitEnvironment includeExperimentPackage;
+    }))) (includeExperimentPackage: home-manager.lib.homeManagerConfiguration {
+      pkgs = environmentPkgs;
+      modules = [
+        ({ pkgs, ... }: {
+          home.username = "tom";
+          home.homeDirectory = "/home/tom";
+          home.stateVersion = "25.05";
+          home.packages = if includeExperimentPackage then [ pkgs.hello ] else [ ];
+        })
+      ];
+    }))) (dependency: if ((dependency.dependentDomain == "boot") && (dependency.requiredDomain == "environment")) then builtins.throw "boot responsibilities cannot require the environment domain" else dependency))) nixpkgs.legacyPackages.x86_64-linux)) (builtins.fromJSON (builtins.readFile ./config/darwin-modules.json)))) ./modules));
 }

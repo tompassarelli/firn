@@ -49,7 +49,41 @@
       [firnModules (p "./modules")
        darwinModuleNames
         (builtins.fromJSON
-          (builtins.readFile (p "./config/darwin-modules.json")))]
+          (builtins.readFile (p "./config/darwin-modules.json")))
+       environmentPkgs nixpkgs.legacyPackages.x86_64-linux
+       validateDomainDependency
+        (fn [dependency] Any
+          (if (and (== dependency.dependentDomain "boot")
+                   (== dependency.requiredDomain "environment"))
+            (builtins.throw
+              "boot responsibilities cannot require the environment domain")
+            dependency))
+       mkWhiterabbitEnvironment
+        (fn [includeExperimentPackage] Any
+          (home-manager.lib.homeManagerConfiguration
+            {:pkgs environmentPkgs
+             :modules
+              [(nix/module [pkgs ...]
+                 {:home.username      "tom"
+                  :home.homeDirectory "/home/tom"
+                  :home.stateVersion  "25.05"
+                  :home.packages
+                   (if includeExperimentPackage [pkgs.hello] [])})]}))
+       mkWhiterabbitWorld
+        (fn [includeExperimentPackage] Any
+          {:boot
+            (self.lib.mkSystem
+              {:hostname       "whiterabbit"
+               :hostConfig     (p "./hosts/whiterabbit/configuration.nix")
+               :hardwareConfig (p "./hardware-configuration.nix")})
+           :environment
+            (mkWhiterabbitEnvironment includeExperimentPackage)})
+       baselineWorld (mkWhiterabbitWorld false)
+       toggledWorld (mkWhiterabbitWorld true)
+       rejectedDependency
+        (builtins.tryEval
+          (validateDomainDependency
+            {:dependentDomain "boot" :requiredDomain "environment"}))]
       {:lib.mkSystem
         (nix/module
           [hostname
@@ -327,6 +361,28 @@
                      extraOverlays)}]
                 extraModules)}))
        :modules firnModules
+       :homeConfigurations
+        {(s "tom@whiterabbit") (mkWhiterabbitEnvironment false)}
+       :domainIndependence
+        {:baseline
+          {:bootDrvPath
+            baselineWorld.boot.config.system.build.toplevel.drvPath
+           :environmentDrvPath
+            baselineWorld.environment.activationPackage.drvPath}
+         :environmentToggle
+          {:bootDrvPath
+            toggledWorld.boot.config.system.build.toplevel.drvPath
+           :environmentDrvPath
+            toggledWorld.environment.activationPackage.drvPath}
+         :bootIdentityIndependent
+          (== baselineWorld.boot.config.system.build.toplevel.drvPath
+              toggledWorld.boot.config.system.build.toplevel.drvPath)
+         :environmentIdentityChanged
+          (not=
+            baselineWorld.environment.activationPackage.drvPath
+            toggledWorld.environment.activationPackage.drvPath)
+         :bootEnvironmentDependencyRejected
+          (not rejectedDependency.success)}
        :nixosConfigurations
         {:whiterabbit
           (self.lib.mkSystem
