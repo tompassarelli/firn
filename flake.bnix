@@ -321,7 +321,7 @@
                         :description "Git author / display name"})
                     :config
                      {:networking.hostName hostname
-                      :system.stateVersion 6
+                      :system.stateVersion "6"
                       :nixpkgs.config.allowUnfree true
                       :users.users
                        {(s config.myConfig.modules.users.username)

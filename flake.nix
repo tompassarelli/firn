@@ -259,7 +259,7 @@
           };
           config = {
             networking.hostName = hostname;
-            system.stateVersion = 6;
+            system.stateVersion = "6";
             nixpkgs.config.allowUnfree = true;
             users.users."${config.myConfig.modules.users.username}".home = "/Users/${config.myConfig.modules.users.username}";
             home-manager.backupFileExtension = "backup";
