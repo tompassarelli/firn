@@ -22,9 +22,10 @@ agents path <id>
 ```
 
 The client delegates to `north config agents`; it owns no catalog, resolver,
-permission state, or projector. Correlate the reported ID with exactly one row
-in `north:agent-catalog/catalog.json`. That row supplies the kind, exact owner
-`repo:path`, trigger metadata, support relations, and distributions.
+permission state, or projector. Start from `north:agent-catalog/sources.json`
+and correlate the reported ID with exactly one declaration in its three named
+source catalogs. That declaration and the operator overlay supply the kind,
+exact owner `repo:path`, trigger metadata, support relations, and distributions.
 
 ## Loading-layer selection
 

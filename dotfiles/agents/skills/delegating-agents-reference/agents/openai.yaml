@@ -1,0 +1,4 @@
+interface:
+  display_name: "Delegating Agents Reference"
+  short_description: "Detailed delegated-agent operating guidance"
+  default_prompt: "Use $delegating-agents-reference for detailed delegation, supervision, and settlement guidance."

@@ -269,7 +269,7 @@ JSON
 run_policy_contract_fixture() {
   local base="$scratch/policy-contract-base"
   local north_root="$NORTH_REPO"
-  local north_catalog="${NORTH_AGENT_CATALOG:-$north_root/agent-catalog/catalog.json}"
+  local north_catalog="${NORTH_AGENT_CATALOG:-$north_root/agent-catalog/sources.json}"
   local preamble='Provider-neutral bootstrap.'
   local route='- Repository edits, lanes, pins, commits, landing, or pushes → `repo-safety`.'
   local destination='Repository writes belong in a lane.'

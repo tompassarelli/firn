@@ -1,0 +1,4 @@
+interface:
+  display_name: "Firn Reference"
+  short_description: "Detailed Firn operating guidance"
+  default_prompt: "Use $firn-reference for detailed Firn configuration and recovery procedures."

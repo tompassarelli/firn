@@ -36,7 +36,7 @@ plus its cleanup path. Posture evidence is:
   windows; reports `healthy`, `late`, `failed`, `halted`, or `unknown` only to
   that supervisor and exposes its own degradation.
 - **Settlement clerk:** fresh minimal-context worker applying one immutable
-  SettlementCard through `settle-work`, then acknowledging and exiting.
+  SettlementCard through `settle-work-distilled`, then acknowledging and exiting.
 - **Janitor:** removes only owner-released enumerated targets and proves their
   absence plus unaffected siblings.
 - **Assurance worker:** independently reviews or verifies one exact artifact
@@ -158,7 +158,7 @@ disposition, cleanup eligibility, wall/agent/queue/verification/review actuals,
 and authoritative execution-observation provenance or explicit unknown.
 
 The closure owner consumes that evidence, decides the product verdict and all
-dispositions, updates continuity prose, and issues one `todo` SettlementCard.
-A fresh `settle-work` clerk applies only the card's terminal fields, keyed
+dispositions, updates continuity prose, and issues one `todo-distilled` SettlementCard.
+A fresh `settle-work-distilled` clerk applies only the card's terminal fields, keyed
 estimate receipt, and named lane state. After acknowledgement, the owner lands
 and reaps through repository safety.

@@ -20,8 +20,8 @@ Estimate agent execution, never human effort.
    commit/push in 90. At twice the point, interrupt and rebrief or split; never
    extend in place.
 4. Record forecast, sample count, and staffing in the owning active todo attempt
-   before execution. Close terminal facts through the `todo` SettlementCard and
-   `settle-work` by default.
+   before execution. Close terminal facts through the `todo-distilled` SettlementCard and
+   `settle-work-distilled` by default.
 
 Never hand-format receipts, combine incomparable observation units, count
 unknown coverage, or overwrite a receipt key. Route exact receipt and settlement

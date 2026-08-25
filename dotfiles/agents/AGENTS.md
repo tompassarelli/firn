@@ -23,7 +23,7 @@ source in its repository and use its sanctioned projection mechanism.
 
 ## Preserve development velocity
 
-- Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification`.
+- Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification-distilled`.
 
 ## Keep hard boundaries
 

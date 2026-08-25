@@ -18,7 +18,7 @@ Start the clerk with only:
 
 - the immutable SettlementCard;
 - its exact owning todo record;
-- the `todo` SettlementCard/attempt/receipt schema;
+- the `todo-distilled` SettlementCard/attempt/receipt schema;
 - `~/code/todo/estimate-calibration.md`;
 - the bundled validator and receipt updater.
 

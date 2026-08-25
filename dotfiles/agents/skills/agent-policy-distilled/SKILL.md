@@ -15,8 +15,9 @@ covers its trigger.
 
 ## Boundaries and decisions
 
-- Treat `north:agent-catalog/catalog.json` as the single registry of globally
-  unique skill, hook, and module IDs and their exact source-owning `repo:path`.
+- Treat `north:agent-catalog/sources.json` as the composition authority for the
+  exact source catalogs that declare globally unique skill, hook, and module
+  IDs and their source-owning `repo:path`.
 - Never edit projections under `~/.agents`, `~/.codex`, `/etc/codex`, or
   `~/.local/state/north/agents`. Read the owner repository's instructions and
   change its worktree source.
@@ -33,7 +34,7 @@ covers its trigger.
 
 ## Minimum workflow
 
-1. Read the owner repository's `AGENTS.md` and `repo-safety` guidance.
+1. Read the owner repository's `AGENTS.md` and `repo-safety-distilled` guidance.
 2. Run `agents status`, `agents inspect <id>`, and `agents path <id>` to locate
    current authority and activation evidence.
 3. Choose `AGENTS.md`, skill, or module from the loading decision above, then

@@ -15,7 +15,7 @@ product owner retains every product verdict and disposition decision.
 ## Hard boundaries
 
 - Use one fresh minimal-context clerk per card, supervised and reaped by the
-  owner. Load only this skill pair, the card, exact todo record, `todo` field
+  owner. Load only this skill pair, the card, exact todo record, `todo-distilled` field
   contract, and estimate-calibration ledger.
 - Validate with bundled `scripts/validate_settlement_card.py` before mutation.
   Stop `UNSETTLED` on any stale/conflicting/missing fact unless the complete

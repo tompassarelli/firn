@@ -12,7 +12,7 @@ description: >-
 
 Name the unexpressed decision, missing fact or query, owner, equality contract,
 dependencies, and authorization or physical boundaries. Fix that semantic
-boundary before infrastructure; use `fact-modeling` for Store Triples.
+boundary before infrastructure; use `fact-modeling-distilled` for Store Triples.
 
 Keep native typed Beagle and canonical Store Triples authoritative. Host code
 may bootstrap or execute irreducible edges, never become a second authority.
@@ -26,4 +26,4 @@ admitted form. Keep effects behind intent, authorization, attempt, and receipt.
 Complete only with those facts and clean/warm acceptance: equal semantic
 results and plans for one world, with changes invalidating only dependents.
 Route detail through
-`agents path beagle-system-design-reference`; use `verification` for evidence.
+`agents path beagle-system-design-reference`; use `verification-distilled` for evidence.

@@ -21,10 +21,10 @@ Paths below use `repo:path`. Edit only an owner worktree, never `main`, a pin,
 
 ## Locate the one identity
 
-Use one globally unique hook ID in
-`north:agent-catalog/catalog.json`. Its catalog owner is the exact source
+Use one globally unique hook ID declared by one of the exact sources in
+`north:agent-catalog/sources.json`. Its catalog owner is the exact source
 `repo:path`; no forwarding source or provider alias survives. Declare support
-relations and distributions there. North alone resolves permission, active
+relations and distributions in the owning source and operator overlay. North alone resolves permission, active
 claimants, module closure, provenance, and provider activation paths into
 `${NORTH_AGENT_STATE_ROOT:-~/.local/state/north/agents}/current/activation.json`.
 

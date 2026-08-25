@@ -19,9 +19,10 @@ North's current immutable activation generation. The `agents` command is only a
 stable Firn client of `north config agents`; it owns no catalog, permission
 state, resolver, or projector.
 
-North's one catalog is `north:agent-catalog/catalog.json`. It gives every
-globally unique ID exactly one kind (`skill`, `hook`, or `module`) and one exact
-owner `repo:path`. Never edit `~/.agents`, `~/.codex`, `/etc/codex`, or a
+North composes the catalog only from the exact owners declared in
+`north:agent-catalog/sources.json`. Those source catalogs give every globally
+unique ID exactly one kind (`skill`, `hook`, or `module`) and one exact owner
+`repo:path`. Never edit `~/.agents`, `~/.codex`, `/etc/codex`, or a
 generation under `~/.local/state/north/agents`. Read each owning repository's
 root `AGENTS.md` and use repo-safety for its write and landing path.
 

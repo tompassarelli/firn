@@ -1,0 +1,4 @@
+interface:
+  display_name: "Firn Distilled"
+  short_description: "Edit and verify the personal NixOS configuration"
+  default_prompt: "Use $firn-distilled to make this NixOS configuration change through its Beagle source and focused checks."

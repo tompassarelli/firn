@@ -1,0 +1,4 @@
+interface:
+  display_name: "Settle Work Distilled"
+  short_description: "Settle delegated work from exact evidence"
+  default_prompt: "Use $settle-work-distilled to apply this SettlementCard to its exact todo attempt, estimate receipt, and lane state."

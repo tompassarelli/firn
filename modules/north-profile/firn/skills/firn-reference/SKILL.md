@@ -19,7 +19,7 @@ unit owns detailed authoring and recovery procedures.
 ```
 
 The flake reads the Git tree, so new source and generated targets must be
-tracked. Beagle itself is documented by `beagle-authoring`.
+tracked. Beagle itself is documented by `beagle-authoring-distilled`.
 
 ## Add a module
 

@@ -74,7 +74,7 @@ state.
 For incremental behavior, compare clean and warm runs over the same declared
 world. Inspect semantic results, typed artifacts, and effect plans, then change
 one identity and observe its dependent and independent closures. The
-`verification` skill selects the concrete instrument; this reference does not
+`verification-distilled` selects the concrete instrument; this reference does not
 prescribe a cache, daemon, timing target, or test apparatus.
 
 ## Proposal record

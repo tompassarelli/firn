@@ -5,39 +5,87 @@
   "rootOrder": [
     "agent-machinery",
     "coordination",
-    "elicit",
-    "webdev",
-    "importing-skills",
-    "threejs-animation",
-    "threejs-fundamentals",
-    "threejs-geometry",
-    "threejs-interaction",
-    "threejs-lighting",
-    "threejs-loaders",
-    "threejs-materials",
-    "threejs-postprocessing",
-    "threejs-shaders",
-    "threejs-textures",
-    "beagle-authoring",
-    "beagle-system-design",
-    "fact-modeling",
-    "firn",
-    "repo-safety",
-    "todo",
-    "convo",
-    "guard-authoring",
-    "cloudflare-deploy",
-    "estimate",
-    "agent-policy",
-    "delegating-agents",
-    "settle-work",
-    "executive-orchestration",
-    "executive-report",
-    "project-structure",
-    "store-modeling",
-    "code-as-facts",
+    "elicit-distilled",
+    "webdev-distilled",
+    "importing-skills-distilled",
+    "threejs-animation-distilled",
+    "threejs-fundamentals-distilled",
+    "threejs-geometry-distilled",
+    "threejs-interaction-distilled",
+    "threejs-lighting-distilled",
+    "threejs-loaders-distilled",
+    "threejs-materials-distilled",
+    "threejs-postprocessing-distilled",
+    "threejs-shaders-distilled",
+    "threejs-textures-distilled",
+    "beagle-authoring-distilled",
+    "beagle-system-design-distilled",
+    "fact-modeling-distilled",
+    "firn-distilled",
+    "repo-safety-distilled",
+    "todo-distilled",
+    "convo-distilled",
+    "guard-authoring-distilled",
+    "cloudflare-deploy-distilled",
+    "estimate-distilled",
+    "agent-policy-distilled",
+    "delegating-agents-distilled",
+    "settle-work-distilled",
+    "executive-orchestration-distilled",
+    "executive-report-distilled",
+    "project-structure-distilled",
+    "store-modeling-distilled",
+    "code-as-facts-distilled",
     "comment-bloat-guard",
-    "logcompress-hook"
+    "logcompress-hook",
+    "agent-policy-reference",
+    "assignments-reference",
+    "beagle-authoring-reference",
+    "beagle-system-design-reference",
+    "build-vs-reuse-reference",
+    "cloudflare-deploy-reference",
+    "code-as-facts-reference",
+    "compose-reference",
+    "convo-reference",
+    "delegating-agents-reference",
+    "elicit-reference",
+    "estimate-reference",
+    "executive-orchestration-reference",
+    "executive-report-reference",
+    "external-code-reference",
+    "fact-modeling-reference",
+    "firn-reference",
+    "greenfield-reference",
+    "guard-authoring-reference",
+    "importing-skills-reference",
+    "messages-reference",
+    "planning-reference",
+    "prior-art-reference",
+    "production-hardening-reference",
+    "program-craftsmanship-reference",
+    "program-stewardship-reference",
+    "project-structure-reference",
+    "repo-safety-reference",
+    "rust-development-reference",
+    "settle-work-reference",
+    "skill-maintenance-reference",
+    "staffing-reference",
+    "store-modeling-reference",
+    "terse-reference",
+    "threads-reference",
+    "threejs-animation-reference",
+    "threejs-fundamentals-reference",
+    "threejs-geometry-reference",
+    "threejs-interaction-reference",
+    "threejs-lighting-reference",
+    "threejs-loaders-reference",
+    "threejs-materials-reference",
+    "threejs-postprocessing-reference",
+    "threejs-shaders-reference",
+    "threejs-textures-reference",
+    "todo-reference",
+    "verification-reference",
+    "webdev-reference"
   ],
   "baselines": [
     {
@@ -113,20 +161,36 @@
     }
   ],
   "registrations": {
-    "agent-policy": {
+    "agent-policy-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/agent-policy/SKILL.md"
+        "path": "dotfiles/agents/skills/agent-policy-distilled/SKILL.md"
       }
     },
-    "beagle-authoring": {
+    "agent-policy-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/agent-policy-reference/SKILL.md"
+      }
+    },
+    "beagle-authoring-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "beagle",
-        "path": "integrations/north/skills/beagle-authoring/SKILL.md"
+        "path": "integrations/north/skills/beagle-authoring-distilled/SKILL.md"
+      }
+    },
+    "beagle-authoring-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "beagle",
+        "path": "integrations/north/skills/beagle-authoring-reference/SKILL.md"
       }
     },
     "beagle-session-start": {
@@ -137,28 +201,52 @@
         "path": "integrations/north/hooks/beagle-session-start.sh"
       }
     },
-    "beagle-system-design": {
+    "beagle-system-design-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/beagle-system-design/SKILL.md"
+        "path": "dotfiles/agents/skills/beagle-system-design-distilled/SKILL.md"
       }
     },
-    "cloudflare-deploy": {
+    "beagle-system-design-reference": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/cloudflare-deploy/SKILL.md"
+        "path": "dotfiles/agents/skills/beagle-system-design-reference/SKILL.md"
       }
     },
-    "code-as-facts": {
+    "cloudflare-deploy-distilled": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/cloudflare-deploy-distilled/SKILL.md"
+      }
+    },
+    "cloudflare-deploy-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/cloudflare-deploy-reference/SKILL.md"
+      }
+    },
+    "code-as-facts-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "beagle",
-        "path": "store/integrations/north/skills/code-as-facts/SKILL.md"
+        "path": "store/integrations/north/skills/code-as-facts-distilled/SKILL.md"
+      }
+    },
+    "code-as-facts-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "beagle",
+        "path": "store/integrations/north/skills/code-as-facts-reference/SKILL.md"
       }
     },
     "code-upstream-guard": {
@@ -177,12 +265,20 @@
         "path": "dotfiles/agents/hooks/comment-bloat-guard.sh"
       }
     },
-    "convo": {
+    "convo-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/convo/SKILL.md"
+        "path": "dotfiles/agents/skills/convo-distilled/SKILL.md"
+      }
+    },
+    "convo-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/convo-reference/SKILL.md"
       }
     },
     "corpus-scan-guard": {
@@ -193,52 +289,100 @@
         "path": "dotfiles/agents/hooks/corpus-scan-guard.sh"
       }
     },
-    "delegating-agents": {
+    "delegating-agents-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/delegating-agents/SKILL.md"
+        "path": "dotfiles/agents/skills/delegating-agents-distilled/SKILL.md"
       }
     },
-    "estimate": {
+    "delegating-agents-reference": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/estimate/SKILL.md"
+        "path": "dotfiles/agents/skills/delegating-agents-reference/SKILL.md"
       }
     },
-    "executive-orchestration": {
+    "estimate-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/executive-orchestration/SKILL.md"
+        "path": "dotfiles/agents/skills/estimate-distilled/SKILL.md"
       }
     },
-    "executive-report": {
+    "estimate-reference": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/executive-report/SKILL.md"
+        "path": "dotfiles/agents/skills/estimate-reference/SKILL.md"
       }
     },
-    "fact-modeling": {
+    "executive-orchestration-distilled": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/executive-orchestration-distilled/SKILL.md"
+      }
+    },
+    "executive-orchestration-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/executive-orchestration-reference/SKILL.md"
+      }
+    },
+    "executive-report-distilled": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/executive-report-distilled/SKILL.md"
+      }
+    },
+    "executive-report-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/executive-report-reference/SKILL.md"
+      }
+    },
+    "fact-modeling-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "beagle",
-        "path": "store/integrations/north/skills/fact-modeling/SKILL.md"
+        "path": "store/integrations/north/skills/fact-modeling-distilled/SKILL.md"
       }
     },
-    "firn": {
+    "fact-modeling-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "beagle",
+        "path": "store/integrations/north/skills/fact-modeling-reference/SKILL.md"
+      }
+    },
+    "firn-distilled": {
       "kind": "skill",
       "category": "nixos",
       "owner": {
         "repo": "nixos-config",
-        "path": "modules/north-profile/firn/skills/firn/SKILL.md"
+        "path": "modules/north-profile/firn/skills/firn-distilled/SKILL.md"
+      }
+    },
+    "firn-reference": {
+      "kind": "skill",
+      "category": "nixos",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "modules/north-profile/firn/skills/firn-reference/SKILL.md"
       }
     },
     "firn-system-policy": {
@@ -257,20 +401,36 @@
         "path": "dotfiles/agents/hooks/git-blind-stage-guard.sh"
       }
     },
-    "guard-authoring": {
+    "guard-authoring-distilled": {
       "kind": "skill",
       "category": "agents",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/guard-authoring/SKILL.md"
+        "path": "dotfiles/agents/skills/guard-authoring-distilled/SKILL.md"
       }
     },
-    "importing-skills": {
+    "guard-authoring-reference": {
+      "kind": "skill",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/guard-authoring-reference/SKILL.md"
+      }
+    },
+    "importing-skills-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "north",
-        "path": "profiles/tom/skills/importing-skills/SKILL.md"
+        "path": "profiles/tom/skills/importing-skills-distilled/SKILL.md"
+      }
+    },
+    "importing-skills-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/importing-skills-reference/SKILL.md"
       }
     },
     "launch-critical-worktree-guard": {
@@ -281,20 +441,36 @@
         "path": "dotfiles/agents/hooks/launch-critical-worktree-guard.sh"
       }
     },
-    "project-structure": {
+    "project-structure-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/project-structure/SKILL.md"
+        "path": "dotfiles/agents/skills/project-structure-distilled/SKILL.md"
       }
     },
-    "repo-safety": {
+    "project-structure-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/project-structure-reference/SKILL.md"
+      }
+    },
+    "repo-safety-distilled": {
       "kind": "skill",
       "category": "git",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/repo-safety/SKILL.md"
+        "path": "dotfiles/agents/skills/repo-safety-distilled/SKILL.md"
+      }
+    },
+    "repo-safety-reference": {
+      "kind": "skill",
+      "category": "git",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/repo-safety-reference/SKILL.md"
       }
     },
     "session-kill-guard": {
@@ -305,108 +481,212 @@
         "path": "dotfiles/agents/hooks/session-kill-guard.sh"
       }
     },
-    "settle-work": {
+    "settle-work-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/settle-work/SKILL.md"
+        "path": "dotfiles/agents/skills/settle-work-distilled/SKILL.md"
       }
     },
-    "store-modeling": {
+    "settle-work-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/settle-work-reference/SKILL.md"
+      }
+    },
+    "store-modeling-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "beagle",
-        "path": "store/integrations/north/skills/beagle-store-modeling/SKILL.md"
+        "path": "store/integrations/north/skills/store-modeling-distilled/SKILL.md"
       }
     },
-    "threejs-animation": {
+    "store-modeling-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "beagle",
+        "path": "store/integrations/north/skills/store-modeling-reference/SKILL.md"
+      }
+    },
+    "threejs-animation-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "north",
-        "path": "profiles/tom/skills/threejs-animation/SKILL.md"
+        "path": "profiles/tom/skills/threejs-animation-distilled/SKILL.md"
       }
     },
-    "threejs-fundamentals": {
+    "threejs-animation-reference": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "north",
-        "path": "profiles/tom/skills/threejs-fundamentals/SKILL.md"
+        "path": "profiles/tom/skills/threejs-animation-reference/SKILL.md"
       }
     },
-    "threejs-geometry": {
+    "threejs-fundamentals-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "north",
-        "path": "profiles/tom/skills/threejs-geometry/SKILL.md"
+        "path": "profiles/tom/skills/threejs-fundamentals-distilled/SKILL.md"
       }
     },
-    "threejs-interaction": {
+    "threejs-fundamentals-reference": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "north",
-        "path": "profiles/tom/skills/threejs-interaction/SKILL.md"
+        "path": "profiles/tom/skills/threejs-fundamentals-reference/SKILL.md"
       }
     },
-    "threejs-lighting": {
+    "threejs-geometry-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "north",
-        "path": "profiles/tom/skills/threejs-lighting/SKILL.md"
+        "path": "profiles/tom/skills/threejs-geometry-distilled/SKILL.md"
       }
     },
-    "threejs-loaders": {
+    "threejs-geometry-reference": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "north",
-        "path": "profiles/tom/skills/threejs-loaders/SKILL.md"
+        "path": "profiles/tom/skills/threejs-geometry-reference/SKILL.md"
       }
     },
-    "threejs-materials": {
+    "threejs-interaction-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "north",
-        "path": "profiles/tom/skills/threejs-materials/SKILL.md"
+        "path": "profiles/tom/skills/threejs-interaction-distilled/SKILL.md"
       }
     },
-    "threejs-postprocessing": {
+    "threejs-interaction-reference": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "north",
-        "path": "profiles/tom/skills/threejs-postprocessing/SKILL.md"
+        "path": "profiles/tom/skills/threejs-interaction-reference/SKILL.md"
       }
     },
-    "threejs-shaders": {
+    "threejs-lighting-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "north",
-        "path": "profiles/tom/skills/threejs-shaders/SKILL.md"
+        "path": "profiles/tom/skills/threejs-lighting-distilled/SKILL.md"
       }
     },
-    "threejs-textures": {
+    "threejs-lighting-reference": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "north",
-        "path": "profiles/tom/skills/threejs-textures/SKILL.md"
+        "path": "profiles/tom/skills/threejs-lighting-reference/SKILL.md"
       }
     },
-    "todo": {
+    "threejs-loaders-distilled": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-loaders-distilled/SKILL.md"
+      }
+    },
+    "threejs-loaders-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-loaders-reference/SKILL.md"
+      }
+    },
+    "threejs-materials-distilled": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-materials-distilled/SKILL.md"
+      }
+    },
+    "threejs-materials-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-materials-reference/SKILL.md"
+      }
+    },
+    "threejs-postprocessing-distilled": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-postprocessing-distilled/SKILL.md"
+      }
+    },
+    "threejs-postprocessing-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-postprocessing-reference/SKILL.md"
+      }
+    },
+    "threejs-shaders-distilled": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-shaders-distilled/SKILL.md"
+      }
+    },
+    "threejs-shaders-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-shaders-reference/SKILL.md"
+      }
+    },
+    "threejs-textures-distilled": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-textures-distilled/SKILL.md"
+      }
+    },
+    "threejs-textures-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/threejs-textures-reference/SKILL.md"
+      }
+    },
+    "todo-distilled": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/todo/SKILL.md"
+        "path": "dotfiles/agents/skills/todo-distilled/SKILL.md"
+      }
+    },
+    "todo-reference": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/todo-reference/SKILL.md"
       }
     },
     "tripwire-guard": {
@@ -417,12 +697,20 @@
         "path": "dotfiles/agents/hooks/tripwire-guard.sh"
       }
     },
-    "webdev": {
+    "webdev-distilled": {
       "kind": "skill",
       "category": "webdev",
       "owner": {
         "repo": "north",
-        "path": "profiles/tom/skills/webdev/SKILL.md"
+        "path": "profiles/tom/skills/webdev-distilled/SKILL.md"
+      }
+    },
+    "webdev-reference": {
+      "kind": "skill",
+      "category": "webdev",
+      "owner": {
+        "repo": "north",
+        "path": "profiles/tom/skills/webdev-reference/SKILL.md"
       }
     }
   },
@@ -441,7 +729,17 @@
         }
       ]
     },
-    "agent-policy": {
+    "agent-policy-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "agent-policy-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -467,7 +765,7 @@
     },
     "agent-spawn-guard": {
       "supports": [
-        "staffing"
+        "staffing-distilled"
       ],
       "distributions": [
         {
@@ -479,7 +777,7 @@
         }
       ]
     },
-    "assignments": {
+    "assignments-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -489,7 +787,27 @@
         }
       ]
     },
-    "beagle-authoring": {
+    "assignments-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "beagle-authoring-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "beagle-authoring-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -501,7 +819,7 @@
     },
     "beagle-session-start": {
       "supports": [
-        "beagle-authoring"
+        "beagle-authoring-distilled"
       ],
       "distributions": [
         {
@@ -518,7 +836,7 @@
         }
       ]
     },
-    "beagle-system-design": {
+    "beagle-system-design-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -528,7 +846,7 @@
         }
       ]
     },
-    "build-vs-reuse": {
+    "beagle-system-design-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -538,7 +856,7 @@
         }
       ]
     },
-    "cloudflare-deploy": {
+    "build-vs-reuse-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -548,7 +866,47 @@
         }
       ]
     },
-    "code-as-facts": {
+    "build-vs-reuse-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "cloudflare-deploy-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "cloudflare-deploy-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "code-as-facts-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "project:beagle"
+          ]
+        }
+      ]
+    },
+    "code-as-facts-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -560,7 +918,7 @@
     },
     "code-upstream-guard": {
       "supports": [
-        "code-as-facts"
+        "code-as-facts-distilled"
       ],
       "distributions": [
         {
@@ -586,7 +944,7 @@
         }
       ]
     },
-    "compose": {
+    "compose-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -596,7 +954,27 @@
         }
       ]
     },
-    "convo": {
+    "compose-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "convo-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "convo-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -625,7 +1003,7 @@
     },
     "corpus-scan-guard": {
       "supports": [
-        "convo"
+        "convo-distilled"
       ],
       "distributions": [
         {
@@ -637,7 +1015,7 @@
         }
       ]
     },
-    "delegating-agents": {
+    "delegating-agents-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -647,7 +1025,7 @@
         }
       ]
     },
-    "elicit": {
+    "delegating-agents-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -657,7 +1035,7 @@
         }
       ]
     },
-    "estimate": {
+    "elicit-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -667,7 +1045,7 @@
         }
       ]
     },
-    "executive-orchestration": {
+    "elicit-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -677,7 +1055,7 @@
         }
       ]
     },
-    "executive-report": {
+    "estimate-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -687,7 +1065,7 @@
         }
       ]
     },
-    "external-code": {
+    "estimate-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -697,7 +1075,7 @@
         }
       ]
     },
-    "fact-modeling": {
+    "executive-orchestration-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -707,7 +1085,87 @@
         }
       ]
     },
-    "firn": {
+    "executive-orchestration-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "executive-report-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "executive-report-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "external-code-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "external-code-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "fact-modeling-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "fact-modeling-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "firn-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "firn-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -719,7 +1177,7 @@
     },
     "firn-system-policy": {
       "supports": [
-        "firn"
+        "firn-distilled"
       ],
       "distributions": [
         {
@@ -739,7 +1197,7 @@
     },
     "git-blind-stage-guard": {
       "supports": [
-        "repo-safety"
+        "repo-safety-distilled"
       ],
       "distributions": [
         {
@@ -751,7 +1209,7 @@
         }
       ]
     },
-    "greenfield": {
+    "greenfield-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -761,7 +1219,7 @@
         }
       ]
     },
-    "guard-authoring": {
+    "greenfield-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -771,7 +1229,27 @@
         }
       ]
     },
-    "importing-skills": {
+    "guard-authoring-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "guard-authoring-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "importing-skills-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -786,14 +1264,24 @@
           ],
           "owner": {
             "repo": "north",
-            "path": "profiles/tom/skills/importing-skills/agents/openai.yaml"
+            "path": "profiles/tom/skills/importing-skills-distilled/agents/openai.yaml"
           }
+        }
+      ]
+    },
+    "importing-skills-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
         }
       ]
     },
     "launch-critical-worktree-guard": {
       "supports": [
-        "repo-safety"
+        "repo-safety-distilled"
       ],
       "distributions": [
         {
@@ -817,7 +1305,17 @@
         }
       ]
     },
-    "messages": {
+    "messages-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "messages-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -929,7 +1427,7 @@
         }
       ]
     },
-    "planning": {
+    "planning-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -939,7 +1437,7 @@
         }
       ]
     },
-    "prior-art": {
+    "planning-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -949,7 +1447,7 @@
         }
       ]
     },
-    "production-hardening": {
+    "prior-art-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -959,7 +1457,7 @@
         }
       ]
     },
-    "program-craftsmanship": {
+    "prior-art-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -969,7 +1467,7 @@
         }
       ]
     },
-    "program-stewardship": {
+    "production-hardening-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -979,7 +1477,7 @@
         }
       ]
     },
-    "project-structure": {
+    "production-hardening-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -989,7 +1487,7 @@
         }
       ]
     },
-    "repo-safety": {
+    "program-craftsmanship-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -999,7 +1497,87 @@
         }
       ]
     },
-    "rust-development": {
+    "program-craftsmanship-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "program-stewardship-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "program-stewardship-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "project-structure-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "project-structure-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "repo-safety-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "repo-safety-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "rust-development-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "rust-development-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -1011,7 +1589,7 @@
     },
     "session-kill-guard": {
       "supports": [
-        "repo-safety",
+        "repo-safety-distilled",
         "orchestration"
       ],
       "distributions": [
@@ -1024,7 +1602,7 @@
         }
       ]
     },
-    "settle-work": {
+    "settle-work-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -1039,12 +1617,12 @@
           ],
           "owner": {
             "repo": "nixos-config",
-            "path": "dotfiles/agents/skills/settle-work/agents/openai.yaml"
+            "path": "dotfiles/agents/skills/settle-work-distilled/agents/openai.yaml"
           }
         }
       ]
     },
-    "skill-maintenance": {
+    "settle-work-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -1054,7 +1632,27 @@
         }
       ]
     },
-    "staffing": {
+    "skill-maintenance-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "skill-maintenance-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "staffing-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -1075,7 +1673,28 @@
         }
       ]
     },
-    "store-modeling": {
+    "staffing-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        },
+        {
+          "type": "agentTemplates",
+          "targets": [
+            "north",
+            "claude"
+          ],
+          "owner": {
+            "repo": "agent-machinery",
+            "path": "agents"
+          }
+        }
+      ]
+    },
+    "store-modeling-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -1085,7 +1704,7 @@
         }
       ]
     },
-    "terse": {
+    "store-modeling-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -1095,7 +1714,7 @@
         }
       ]
     },
-    "threads": {
+    "terse-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -1105,7 +1724,7 @@
         }
       ]
     },
-    "threejs-animation": {
+    "terse-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -1115,7 +1734,7 @@
         }
       ]
     },
-    "threejs-fundamentals": {
+    "threads-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -1125,7 +1744,7 @@
         }
       ]
     },
-    "threejs-geometry": {
+    "threads-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -1135,7 +1754,7 @@
         }
       ]
     },
-    "threejs-interaction": {
+    "threejs-animation-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -1145,7 +1764,7 @@
         }
       ]
     },
-    "threejs-lighting": {
+    "threejs-animation-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -1155,7 +1774,7 @@
         }
       ]
     },
-    "threejs-loaders": {
+    "threejs-fundamentals-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -1165,7 +1784,7 @@
         }
       ]
     },
-    "threejs-materials": {
+    "threejs-fundamentals-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -1175,7 +1794,7 @@
         }
       ]
     },
-    "threejs-postprocessing": {
+    "threejs-geometry-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -1185,7 +1804,7 @@
         }
       ]
     },
-    "threejs-shaders": {
+    "threejs-geometry-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -1195,7 +1814,7 @@
         }
       ]
     },
-    "threejs-textures": {
+    "threejs-interaction-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -1205,7 +1824,147 @@
         }
       ]
     },
-    "todo": {
+    "threejs-interaction-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-lighting-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-lighting-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-loaders-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-loaders-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-materials-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-materials-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-postprocessing-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-postprocessing-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-shaders-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-shaders-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-textures-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "threejs-textures-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "todo-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "todo-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -1217,7 +1976,7 @@
     },
     "tripwire-guard": {
       "supports": [
-        "repo-safety"
+        "repo-safety-distilled"
       ],
       "distributions": [
         {
@@ -1229,7 +1988,7 @@
         }
       ]
     },
-    "verification": {
+    "verification-distilled": {
       "distributions": [
         {
           "type": "skill",
@@ -1239,7 +1998,27 @@
         }
       ]
     },
-    "webdev": {
+    "verification-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "webdev-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "webdev-reference": {
       "distributions": [
         {
           "type": "skill",

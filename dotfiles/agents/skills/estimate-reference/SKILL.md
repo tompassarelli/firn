@@ -10,8 +10,8 @@ description: >-
 # Estimate reference
 
 The distilled skill owns forecast formation, execution bounds, and the minimum
-close-the-loop workflow. The `todo` skill owns shared attempt and SettlementCard
-contracts; `settle-work` owns their mechanical application.
+close-the-loop workflow. `todo-distilled` owns shared attempt and SettlementCard
+contracts; `settle-work-distilled` owns their mechanical application.
 
 ## Forecast evidence
 
@@ -31,7 +31,7 @@ or dispatch costs more than this bounded update.
 Replace the in-flight pointer with one completed receipt keyed by
 `<record_id>/<attempt_id>`. Render through the SettlementCard validator's
 `--render-receipt` path and apply through the atomic keyed updater owned by
-`settle-work`.
+`settle-work-distilled`.
 
 ## Receipt schema
 

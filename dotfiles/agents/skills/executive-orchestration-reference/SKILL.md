@@ -54,11 +54,11 @@ direct non-delegable policy decision still loads its owning skill.
 
 The procedural ownership map is:
 
-- `delegating-agents`: decomposition, dispatch, races, supervision, settlement;
-- `todo`: restart continuity;
-- `estimate`: forecasts and timing closure;
-- `verification`: evidence selection;
-- `repo-safety`: lanes and publication.
+- `delegating-agents-distilled`: decomposition, dispatch, races, supervision, settlement;
+- `todo-distilled`: restart continuity;
+- `estimate-distilled`: forecasts and timing closure;
+- `verification-distilled`: evidence selection;
+- `repo-safety-distilled`: lanes and publication.
 
 ## Direct-action classifier
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Policy Reference"
+  short_description: "Detailed agent catalog and activation guidance"
+  default_prompt: "Use $agent-policy-reference for detailed agent catalog, activation, and projection guidance."

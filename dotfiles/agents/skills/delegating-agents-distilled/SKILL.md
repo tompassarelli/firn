@@ -58,7 +58,7 @@ outcome.
    consume terminal reports immediately.
 5. The closure owner decides verification, review, integration, publication,
    debt, race, and lane state; then emits an immutable SettlementCard and uses
-   a fresh `settle-work` clerk for mechanical bookkeeping.
+   a fresh `settle-work-distilled` clerk for mechanical bookkeeping.
 6. Update continuity prose, land through repository safety, and reap released
    workers, processes, lanes, branches, and claims.
 

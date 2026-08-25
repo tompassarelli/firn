@@ -28,7 +28,7 @@ cat >"$state/current/activation.json" <<'JSON'
       "triggerDescription": "Durable coordination workflows.",
       "permission": "on",
       "active": true,
-      "owner": {"repo": "north", "path": "agent-catalog/catalog.json"},
+      "owner": {"repo": "north", "path": "agent-catalog/north.json"},
       "members": ["messages", "threads", "assignments"],
       "supports": [],
       "distributions": [],
