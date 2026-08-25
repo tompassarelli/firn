@@ -49,8 +49,8 @@ Row {
         Row {
             property int ordinal: ActivityState.memberOrdinals[model.wsId] || 0
             property bool floating: ActivityState.floatingIds[model.wsId] || false
-            // The trailing empty workspace earns a pill only while you stand on it.
-            visible: !ActivityState.available || ordinal > 0 || (floating && model.isActive)
+            // Keep every compositor-provided workspace visible; membership only changes its label.
+            visible: !ActivityState.available || ordinal > 0 || floating
             spacing: 0
 
             Text {
