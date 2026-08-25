@@ -39,12 +39,12 @@
 
 (js/export
   (defunion InventoryAction
-  ModuleListAll
-  ModuleListUsed
-  ModuleListUnused
+  (ModuleListAll [])
+  (ModuleListUsed [])
+  (ModuleListUnused [])
   (ModuleRefs [name String])
   (ModuleStatus [host String])
-  HostList
+  (HostList [])
   (HostStatus [host String])))
 
 (js/export
