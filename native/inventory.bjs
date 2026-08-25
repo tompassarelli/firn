@@ -39,12 +39,12 @@
 
 (js/export
   (defunion InventoryAction
-  (ModuleListAll [])
-  (ModuleListUsed [])
-  (ModuleListUnused [])
+  (ModuleListAll [token Bool])
+  (ModuleListUsed [token Bool])
+  (ModuleListUnused [token Bool])
   (ModuleRefs [name String])
   (ModuleStatus [host String])
-  (HostList [])
+  (HostList [token Bool])
   (HostStatus [host String])))
 
 (js/export
@@ -464,25 +464,25 @@
     (and (= (count argv) 2)
          (= (nth argv 0) "module")
          (= (nth argv 1) "list"))
-    (->ParsedInventory (->ModuleListAll))
+    (->ParsedInventory (->ModuleListAll false))
 
     (and (= (count argv) 3)
          (= (nth argv 0) "module")
          (= (nth argv 1) "list")
          (= (nth argv 2) "all"))
-    (->ParsedInventory (->ModuleListAll))
+    (->ParsedInventory (->ModuleListAll false))
 
     (and (= (count argv) 3)
          (= (nth argv 0) "module")
          (= (nth argv 1) "list")
          (= (nth argv 2) "used"))
-    (->ParsedInventory (->ModuleListUsed))
+    (->ParsedInventory (->ModuleListUsed false))
 
     (and (= (count argv) 3)
          (= (nth argv 0) "module")
          (= (nth argv 1) "list")
          (= (nth argv 2) "unused"))
-    (->ParsedInventory (->ModuleListUnused))
+    (->ParsedInventory (->ModuleListUnused false))
 
     (and (= (count argv) 3)
          (= (nth argv 0) "module")
@@ -499,7 +499,7 @@
          (= (nth argv 0) "host")
          (= (nth argv 1) "list")
          (or (= (count argv) 2) (= (nth argv 2) "all")))
-    (->ParsedInventory (->HostList))
+    (->ParsedInventory (->HostList false))
 
     (and (or (= (count argv) 2) (= (count argv) 3))
          (= (nth argv 0) "host")
@@ -520,15 +520,15 @@
   [repository InventoryRepository
    action InventoryAction] InventoryRenderResult
   (match action
-    [(ModuleListAll)
+    [(ModuleListAll token)
      (->InventoryRendered (render-module-list-all (module-names repository)))]
-    [(ModuleListUsed)
+    [(ModuleListUsed token)
      (->InventoryRendered (render-module-list-used repository))]
-    [(ModuleListUnused)
+    [(ModuleListUnused token)
      (->InventoryRendered (render-module-list-unused repository))]
     [(ModuleRefs name)
      (->InventoryRendered (render-module-refs repository name))]
-    [(HostList)
+    [(HostList token)
      (->InventoryRendered (render-host-list (host-names repository)))]
     [(ModuleStatus host)
      (let [config HostConfig? (find-host-config repository host)]

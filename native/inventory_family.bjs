@@ -131,12 +131,12 @@
 
 (defn run-action [(bridge Any) (root String) (action inventory/InventoryAction)] Int
   (match action
-    [(ModuleListAll) (print-directory-list bridge root "modules" true)]
-    [(ModuleListUsed) (print-repository-action bridge root action)]
-    [(ModuleListUnused) (print-repository-action bridge root action)]
+    [(ModuleListAll token) (print-directory-list bridge root "modules" true)]
+    [(ModuleListUsed token) (print-repository-action bridge root action)]
+    [(ModuleListUnused token) (print-repository-action bridge root action)]
     [(ModuleRefs name) (print-repository-action bridge root action)]
     [(ModuleStatus host) (print-config-status bridge root host)]
-    [(HostList) (print-directory-list bridge root "hosts" false)]
+    [(HostList token) (print-directory-list bridge root "hosts" false)]
     [(HostStatus host) (print-config-status bridge root host)]))
 
 (defn repository-root [(bridge Any)] String?

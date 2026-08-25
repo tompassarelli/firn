@@ -97,32 +97,32 @@
 
 (defn module-list-all-action? [(action i/InventoryAction)] Bool
   (match action
-    [(ModuleListAll) true]
-    [(ModuleListUsed) false]
-    [(ModuleListUnused) false]
+    [(ModuleListAll token) true]
+    [(ModuleListUsed token) false]
+    [(ModuleListUnused token) false]
     [(ModuleRefs name) false]
     [(ModuleStatus host) false]
-    [(HostList) false]
+    [(HostList token) false]
     [(HostStatus host) false]))
 
 (defn module-status-host [(action i/InventoryAction)] String
   (match action
-    [(ModuleListAll) ""]
-    [(ModuleListUsed) ""]
-    [(ModuleListUnused) ""]
+    [(ModuleListAll token) ""]
+    [(ModuleListUsed token) ""]
+    [(ModuleListUnused token) ""]
     [(ModuleRefs name) ""]
     [(ModuleStatus host) host]
-    [(HostList) ""]
+    [(HostList token) ""]
     [(HostStatus host) ""]))
 
 (defn host-status-host [(action i/InventoryAction)] String
   (match action
-    [(ModuleListAll) ""]
-    [(ModuleListUsed) ""]
-    [(ModuleListUnused) ""]
+    [(ModuleListAll token) ""]
+    [(ModuleListUsed token) ""]
+    [(ModuleListUnused token) ""]
     [(ModuleRefs name) ""]
     [(ModuleStatus host) ""]
-    [(HostList) ""]
+    [(HostList token) ""]
     [(HostStatus host) host]))
 
 (defn case-argv-grammar [] Bool
