@@ -44,6 +44,7 @@ delegate_skill="$repo/dotfiles/agents/skills/delegating-agents/SKILL.md"
 grep -Fq '## Attempt, review, and debt receipt' "$todo_skill"
 grep -Fq 'wall_time_estimate' "$todo_skill"
 grep -Fq 'agent_time_actual' "$todo_skill"
+grep -Fq 'execution_observation' "$todo_skill"
 grep -Fq '[[quality_debt]]' "$todo_skill"
 grep -Fq 'same-class, same-model agent actuals' "$repo/dotfiles/agents/skills/estimate/SKILL.md"
 grep -Fq '## Budget review without losing deferred work' "$delegate_skill"
@@ -80,6 +81,7 @@ wall_time_actual = "6m"
 agent_time_actual = "6m"
 queue_block_time_actual = "0m"
 verification_time_actual = "1m"
+execution_observation = { version = "agent-execution-observation/v1", coverage = "unknown", source = "historical-telemetry-unavailable", turn_unit = "unknown", tool_call_unit = "unknown", evidence = {}, segments = [] }
 race_outcome = "lost"
 
 [[attempt]]
@@ -103,6 +105,7 @@ wall_time_actual = "5m"
 agent_time_actual = "5m"
 queue_block_time_actual = "0m"
 verification_time_actual = "1m"
+execution_observation = { version = "agent-execution-observation/v1", coverage = "unknown", source = "historical-telemetry-unavailable", turn_unit = "unknown", tool_call_unit = "unknown", evidence = {}, segments = [] }
 race_outcome = "winner"
 reviewed_commit = "0123456789abcdef"
 review_outcome = "findings"

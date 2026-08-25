@@ -62,14 +62,24 @@ Replace the in-flight pointer with one deterministic completed receipt keyed by
 wall estimate/actual, agent estimate/actual, queue/block actual, verification
 actual, model, reasoning, route, role, assignment ID, outcome, overrun cause,
 race outcome, reviewed commit/outcome/summary, reviewer model/reasoning, review
-repair actual, and exact quality-debt entries. Copy values from the validated
-card and owning attempt; render an absent optional value as `none`, and use
+repair actual, canonical execution-observation JSON, and exact quality-debt
+entries. Copy values from the validated card and owning attempt; preserve
+execution segment array order while sorting object keys for the canonical JSON.
+Render an absent optional value as `none`, and use
 `none` when the optional card overrun cause is absent. Do not paraphrase a
 value, add provider actuals, or serialize the derivable wall-time ratio.
 
+Use exact execution observations for calibration only within the same source,
+`assistant-turn` unit, and `admitted-tool-call` unit. Keep `coverage =
+"unknown"` observations explicit but out of count- or mode-based cohorts.
+Never merge provider-turn or provider-tool-item facts into these comparable
+units, and never derive a zero or standard-mode sample from unknown coverage.
+
 The stable key may occur only once. An identical receipt is an idempotent
 replay; a different receipt with that key is a conflict. The settler never
-rewrites another receipt or authors calibration prose. The `todo` skill owns
+rewrites another receipt or authors calibration prose. Render with the
+SettlementCard validator's `--render-receipt` path and apply with the atomic
+keyed updater owned by `settle-work`; do not hand-format the line. The `todo` skill owns
 the shared field and card contracts. Refresh same-class calibration from
 settled receipts; use model-specific observations when enough exist, and
 otherwise retain the labeled cross-model fallback. Keep the ledger as concise

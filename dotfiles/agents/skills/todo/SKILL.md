@@ -128,7 +128,8 @@ and every candidate receives its own model, route, and outcome.
 
 At settlement, update the same attempt with `ended_at`, `outcome`,
 `wall_time_actual`, `agent_time_actual`, `queue_block_time_actual`,
-`verification_time_actual`, and (for a race) `race_outcome`. These are
+`verification_time_actual`, `execution_observation`, and (for a race)
+`race_outcome`. These are
 overlapping explanatory measurements, not numbers to add together: wall time
 is the elapsed critical path, agent time is summed execution duration, and
 queue/block and verification time explain portions of the path. If a duration
@@ -146,6 +147,34 @@ staffing can compare like attempts without copying live state into another
 ledger. Derive the wall-time actual-to-estimate ratio from the two stored
 values; do not duplicate that derivable value in the attempt. Record provider
 cost or token actuals only when an authoritative source already supplies them.
+
+`execution_observation` is one terminal `agent-execution-observation/v1`
+object with `version`, `coverage`, `source`, `turn_unit`, `tool_call_unit`,
+`evidence`, and ordered `segments`. Exact coverage uses `coverage = "exact"`,
+lowercase source/provider tokens matching `^[a-z0-9][a-z0-9._:/-]*$`, units
+`assistant-turn` and `admitted-tool-call`, exact hashed
+provider/attempt/session evidence, and one or more segments. Each segment has
+`mode`, positive `turn_count`, non-negative `tool_call_count`, and one unique
+lowercase SHA-256 turn identity per counted turn. Array order is execution
+order. Coalesce adjacent equal modes, so standard→fast→standard remains three
+segments. Codex `priority` service tier means `mode = "fast"`; explicit
+`default` means `mode = "standard"`. Attribution is exact only when an observed
+settings snapshot precedes each counted turn and every turn joins to the
+latest preceding snapshot. Exact coverage therefore requires a real producer
+join; agent recollection is never evidence.
+
+Use `coverage = "unknown"`, one stable source/reason, both units set to
+`"unknown"`, empty evidence, and no segments when initial mode, the exact
+attempt→session join, either comparable counting unit, or complete coverage is
+absent. Do not retain partial counts in this v1 object, infer standard from
+silence, or fabricate zeroes. Provider-turn and provider-tool-item facts are
+not comparable and never populate it. Failed or cancelled admitted calls
+count; a retry counts only under a new admitted identity. Hash exact attempt,
+session, and turn join keys before storage. Never store raw identifiers,
+paths, transcript text, prompts, tool arguments, or results. Totals are sums
+over exact segments and are never stored. Unsupported providers and current
+child sessions without the initial settings snapshot and exact attempt/session
+join settle `unknown`.
 
 Completion is not a vague quality certificate. An independent review consumes
 one exact commit and records concrete findings and their disposition. If a
@@ -186,6 +215,7 @@ queue_block_time_actual = "0s"
 verification_time_actual = "1m"
 verification_summary = "focused fixture passed"
 review_outcome = "not-run"
+execution_observation = { version = "agent-execution-observation/v1", coverage = "unknown", source = "codex-missing-initial-settings-and-attempt-session-join", turn_unit = "unknown", tool_call_unit = "unknown", evidence = {}, segments = [] }
 
 [lane]
 repo = "nixos-config"
@@ -196,6 +226,8 @@ state = "landed"
 
 The `[attempt]` table is a terminal delta for the same attempt and uses the
 shared fields above; it never restates or changes forecast and staffing fields.
+It copies `execution_observation` as one immutable object, preserving segment
+order and keeping mode independent of the attempt's model and reasoning.
 For a task, `authorized_by` is its exact `delegated_by`; for owner-run project
 work, it is one of the record's `owners`. `verification_evidence` and
 `review_evidence` entries each name one exact source and observed result
@@ -213,7 +245,8 @@ rewriting, lane or branch operations, or unrelated files.
 
 The settler validates the record hash, record and attempt identity, owner
 authority, chronology, evidence/verdict consistency, review, debt, lane
-identity, and duration relations before mutation. Every supplied terminal field
+identity, duration relations, execution coverage, units, hashed joins, safe
+counts, and segment coalescing before mutation. Every supplied terminal field
 must either be absent or already equal in the owning attempt; a conflicting or
 unlisted prior terminal field invalidates the card. Require
 `ended_at - started_at == wall_time_actual` at compact-duration precision, and

@@ -8,14 +8,56 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import tomllib
 
 
 VALIDATOR = Path(__file__).with_name("validate_settlement_card.py")
+UPDATER = Path(__file__).with_name("update_calibration_receipt.py")
+
+EXACT_OBSERVATION = (
+    'execution_observation = { version = "agent-execution-observation/v1", '
+    'coverage = "exact", source = "fixture-producer-join", '
+    'turn_unit = "assistant-turn", tool_call_unit = "admitted-tool-call", '
+    'evidence = { provider = "fixture", attempt_sha256 = "' + "a" * 64
+    + '", session_sha256 = "' + "b" * 64
+    + '" }, segments = ['
+    '{ mode = "standard", turn_count = 1, tool_call_count = 2, turn_sha256 = ["'
+    + "c" * 64
+    + '"] }, { mode = "fast", turn_count = 1, tool_call_count = 3, turn_sha256 = ["'
+    + "d" * 64
+    + '"] }, { mode = "standard", turn_count = 1, tool_call_count = 1, turn_sha256 = ["'
+    + "e" * 64
+    + '"] }] }'
+)
+UNKNOWN_OBSERVATION = (
+    'execution_observation = { version = "agent-execution-observation/v1", '
+    'coverage = "unknown", '
+    'source = "codex-missing-initial-settings-and-attempt-session-join", '
+    'turn_unit = "unknown", tool_call_unit = "unknown", '
+    'evidence = {}, segments = [] }'
+)
 
 
 def run(card: Path, todo: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(VALIDATOR), str(card), "--todo-root", str(todo)],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
+def update(card: Path, todo: Path, ledger: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(UPDATER),
+            str(card),
+            str(ledger),
+            "--todo-root",
+            str(todo),
+        ],
         check=False,
         text=True,
         stdout=subprocess.PIPE,
@@ -102,6 +144,7 @@ review_summary = "one finding repaired"
 reviewer_model = "gpt-5.6-sol"
 reviewer_reasoning = "high"
 review_repair_time_actual = "5s"
+{EXACT_OBSERVATION}
 
 [lane]
 repo = "alpha"
@@ -115,6 +158,40 @@ state = "preserved"
         assert result.returncode == 0, result.stderr
         assert "SettlementCard valid" in result.stdout
         print("positive settlement case: PASS")
+
+        unavailable = root / "unknown-observation.toml"
+        unavailable.write_text(
+            base.replace(EXACT_OBSERVATION, UNKNOWN_OBSERVATION),
+            encoding="utf-8",
+        )
+        result = run(unavailable, todo)
+        assert result.returncode == 0, result.stderr
+        print("explicit unknown observation case: PASS")
+
+        rendered = subprocess.run(
+            [
+                sys.executable,
+                str(VALIDATOR),
+                str(positive),
+                "--todo-root",
+                str(todo),
+                "--render-receipt",
+            ],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        assert rendered.returncode == 0, rendered.stderr
+        assert 'execution observation: {"coverage":"exact"' in rendered.stdout
+        assert rendered.stdout.index('"mode":"standard"') < rendered.stdout.index('"mode":"fast"')
+        assert "turn count total" not in rendered.stdout
+        assert "tool call count total" not in rendered.stdout
+        observation = tomllib.loads(base)["attempt"]["execution_observation"]
+        assert sum(segment["turn_count"] for segment in observation["segments"]) == 3
+        assert sum(segment["tool_call_count"] for segment in observation["segments"]) == 6
+        assert not {"turn_count_total", "tool_call_count_total"}.intersection(observation)
+        print("deterministic ordered receipt rendering case: PASS")
 
         cleanup = root / "cleanup-field-rejected.toml"
         cleanup.write_text(
@@ -212,7 +289,50 @@ state = "preserved"
         assert "verification_time_actual exceeds wall_time_actual" in result.stderr
         print("portion greater than wall case: PASS")
 
-        terminal = '''ended_at = "2026-08-24T10:01:00+00:00"
+        adjacent = root / "adjacent-equal-modes.toml"
+        adjacent.write_text(
+            base.replace(
+                '{ mode = "fast", turn_count = 1, tool_call_count = 3',
+                '{ mode = "standard", turn_count = 1, tool_call_count = 3',
+            ),
+            encoding="utf-8",
+        )
+        result = run(adjacent, todo)
+        assert result.returncode == 1
+        assert "repeats the preceding mode instead of coalescing" in result.stderr
+        print("adjacent equal mode rejected case: PASS")
+
+        fabricated_unknown = root / "fabricated-unknown.toml"
+        fabricated_unknown.write_text(
+            base.replace('coverage = "exact"', 'coverage = "unknown"', 1),
+            encoding="utf-8",
+        )
+        result = run(fabricated_unknown, todo)
+        assert result.returncode == 1
+        assert "unknown coverage cannot carry segments" in result.stderr
+        print("unknown observation cannot fabricate zero/default case: PASS")
+
+        raw_session = root / "raw-session-id.toml"
+        raw_session.write_text(
+            base.replace('session_sha256 = "' + "b" * 64 + '"', 'session_sha256 = "raw-session-id"'),
+            encoding="utf-8",
+        )
+        result = run(raw_session, todo)
+        assert result.returncode == 1
+        assert "session_sha256 must be lowercase SHA-256" in result.stderr
+        print("raw provider session identity rejected case: PASS")
+
+        repeated_turn = root / "repeated-turn-across-segments.toml"
+        repeated_turn.write_text(
+            base.replace('"' + "e" * 64 + '"] }] }', '"' + "c" * 64 + '"] }] }'),
+            encoding="utf-8",
+        )
+        result = run(repeated_turn, todo)
+        assert result.returncode == 1
+        assert "repeats an earlier segment turn" in result.stderr
+        print("cross-segment duplicate turn evidence rejected case: PASS")
+
+        terminal = f'''ended_at = "2026-08-24T10:01:00+00:00"
 outcome = "delivered"
 wall_time_actual = "1m"
 agent_time_actual = "1m"
@@ -227,6 +347,7 @@ review_summary = "one finding repaired"
 reviewer_model = "gpt-5.6-sol"
 reviewer_reasoning = "high"
 review_repair_time_actual = "5s"
+{EXACT_OBSERVATION}
 '''
         partially_settled = unsettled.replace(
             'review_budget = "independent"\nrace = "race-1"\n',
@@ -258,6 +379,49 @@ review_repair_time_actual = "5s"
         assert result.returncode == 1
         assert "conflicting settlement field: queue_block_cause" in result.stderr
         print("conflicting prior settlement case: PASS")
+
+        ledger = todo / "estimate-calibration.md"
+        ledger.write_text("## Receipts\n", encoding="utf-8")
+        result = update(positive, todo, ledger)
+        assert result.returncode == 0, result.stderr
+        assert "updated: demo/A1" in result.stdout
+        first_receipt = ledger.read_text(encoding="utf-8")
+        assert first_receipt.count("`demo/A1`") == 1
+        result = update(positive, todo, ledger)
+        assert result.returncode == 0, result.stderr
+        assert "already exact: demo/A1" in result.stdout
+        assert ledger.read_text(encoding="utf-8") == first_receipt
+        reordered = root / "reordered-segments.toml"
+        reordered.write_text(
+            base.replace(
+                'segments = [{ mode = "standard", turn_count = 1, tool_call_count = 2, turn_sha256 = ["'
+                + "c" * 64
+                + '"] }, { mode = "fast", turn_count = 1, tool_call_count = 3, turn_sha256 = ["'
+                + "d" * 64
+                + '"] }, { mode = "standard", turn_count = 1, tool_call_count = 1, turn_sha256 = ["'
+                + "e" * 64
+                + '"] }]',
+                'segments = [{ mode = "standard", turn_count = 1, tool_call_count = 1, turn_sha256 = ["'
+                + "e" * 64
+                + '"] }, { mode = "fast", turn_count = 1, tool_call_count = 3, turn_sha256 = ["'
+                + "d" * 64
+                + '"] }, { mode = "standard", turn_count = 1, tool_call_count = 2, turn_sha256 = ["'
+                + "c" * 64
+                + '"] }]',
+            ),
+            encoding="utf-8",
+        )
+        result = run(reordered, todo)
+        assert result.returncode == 1
+        assert "conflicting settlement field: execution_observation" in result.stderr
+        assert ledger.read_text(encoding="utf-8") == first_receipt
+        conflicting_receipt = first_receipt.replace("outcome: delivered", "outcome: altered")
+        ledger.write_text(conflicting_receipt, encoding="utf-8")
+        result = update(positive, todo, ledger)
+        assert result.returncode == 1
+        assert "calibration receipt conflicts for key: demo/A1" in result.stderr
+        assert ledger.read_text(encoding="utf-8") == conflicting_receipt
+        print("atomic keyed receipt insert/replay/conflict and segment-reorder cases: PASS")
     return 0
 
 

@@ -254,6 +254,7 @@ record review-invalid.md \
   'agent_time_actual = "1m"' \
   'queue_block_time_actual = "0s"' \
   'verification_time_actual = "under 1s"' \
+  'execution_observation = { version = "agent-execution-observation/v1", coverage = "unknown", source = "codex-missing-settings", turn_unit = "assistant-turn", tool_call_unit = "unknown", evidence = {}, segments = [] }' \
   'review_outcome = "clean"' \
   'reviewer_model = 7' \
   'review_repair_time_actual = "1s"' \
@@ -327,7 +328,7 @@ for code_name in \
   REQUIRES_CYCLE REQUIRES_SELF ATTEMPT_CHRONOLOGY_INVALID \
   ATTEMPT_FIELD_UNKNOWN ATTEMPT_FIELD_REQUIRED ATTEMPT_FIELD_INVALID ATTEMPT_TIMESTAMP_INVALID \
   ATTEMPT_REVIEW_BUDGET_INVALID ATTEMPT_REVIEW_OUTCOME_INVALID ATTEMPT_REVIEW_OUTCOME_REQUIRED \
-  ATTEMPT_REVIEW_INCOMPLETE ATTEMPT_REVIEW_REPAIR_INVALID; do
+  ATTEMPT_REVIEW_INCOMPLETE ATTEMPT_REVIEW_REPAIR_INVALID ATTEMPT_EXECUTION_OBSERVATION_INVALID; do
   grep -Fq "$code_name" "$scratch/text"
 done
 grep -Fq 'REFERENCE_UNRESOLVED' "$scratch/text"
@@ -386,6 +387,7 @@ record_clean() {
     'agent_time_actual = "1m"' \
     'queue_block_time_actual = "0s"' \
     'verification_time_actual = "1s"' \
+    'execution_observation = { version = "agent-execution-observation/v1", coverage = "unknown", source = "codex-missing-initial-settings", turn_unit = "unknown", tool_call_unit = "unknown", evidence = {}, segments = [] }' \
     'reviewed_commit = "0123456789abcdef"' \
     'review_outcome = "clean"' \
     '+++' >"$clean/clean.md"

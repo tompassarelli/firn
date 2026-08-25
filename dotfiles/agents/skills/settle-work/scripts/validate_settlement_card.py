@@ -7,6 +7,7 @@ import argparse
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 import hashlib
+import json
 from pathlib import Path
 import re
 import sys
@@ -42,6 +43,7 @@ ATTEMPT_REQUIRED = {
     "verification_time_actual",
     "verification_summary",
     "review_outcome",
+    "execution_observation",
 }
 ATTEMPT_OPTIONAL = {
     "queue_block_cause",
@@ -61,6 +63,31 @@ TIME_FIELDS = {
     "verification_time_actual",
     "review_repair_time_actual",
 }
+OBSERVATION_FIELDS = {
+    "version",
+    "coverage",
+    "source",
+    "turn_unit",
+    "tool_call_unit",
+    "evidence",
+    "segments",
+}
+OBSERVATION_EVIDENCE_FIELDS = {
+    "provider",
+    "attempt_sha256",
+    "session_sha256",
+}
+SEGMENT_FIELDS = {
+    "mode",
+    "turn_count",
+    "tool_call_count",
+    "turn_sha256",
+}
+OBSERVATION_COVERAGE = {"exact", "unknown"}
+OBSERVATION_VERSION = "agent-execution-observation/v1"
+EXECUTION_MODES = {"standard", "fast"}
+TOKEN = re.compile(r"^[a-z0-9][a-z0-9._:/-]*$")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
 DEBT_FIELDS = {"attempt", "path", "invariant", "severity", "owner", "exit_condition"}
 LANE_FIELDS = {"repo", "worktree", "branch", "state"}
 VERIFICATION_VERDICTS = {"passed", "failed", "not-run"}
@@ -161,6 +188,128 @@ def evidence(label: str, verdict: str, values: Any, errors: list[str]) -> None:
         errors.append(f"{label} marked not-run cannot carry evidence")
     if verdict != "not-run" and not values:
         errors.append(f"{verdict} {label} needs exact evidence; a verdict cannot be invented")
+
+
+def stable_token(value: Any) -> bool:
+    return isinstance(value, str) and TOKEN.fullmatch(value) is not None
+
+
+def validate_execution_observation(value: Any, label: str, errors: list[str]) -> None:
+    if not isinstance(value, dict):
+        errors.append(f"{label} must be one execution observation object")
+        return
+    missing = sorted(OBSERVATION_FIELDS - set(value))
+    unknown = sorted(set(value) - OBSERVATION_FIELDS)
+    if missing:
+        errors.append(f"{label} is missing: {', '.join(missing)}")
+    if unknown:
+        errors.append(f"{label} has unknown fields: {', '.join(unknown)}")
+
+    version = value.get("version")
+    coverage = value.get("coverage")
+    source = value.get("source")
+    turn_unit = value.get("turn_unit")
+    tool_call_unit = value.get("tool_call_unit")
+    observation_evidence = value.get("evidence")
+    segments = value.get("segments")
+    if version != OBSERVATION_VERSION:
+        errors.append(f"{label}.version must be {OBSERVATION_VERSION}")
+    if coverage not in OBSERVATION_COVERAGE:
+        errors.append(f"{label}.coverage must be exact or unknown")
+    for field, item in (
+        ("source", source),
+        ("turn_unit", turn_unit),
+        ("tool_call_unit", tool_call_unit),
+    ):
+        if not stable_token(item):
+            errors.append(f"{label}.{field} must be one stable token")
+    if not isinstance(segments, list):
+        errors.append(f"{label}.segments must be an ordered array")
+        return
+
+    if coverage == "unknown":
+        if segments:
+            errors.append(f"{label} with unknown coverage cannot carry segments")
+        if turn_unit != "unknown" or tool_call_unit != "unknown":
+            errors.append(f"{label} with unknown coverage must use unknown counting units")
+        if observation_evidence != {}:
+            errors.append(f"{label} with unknown coverage cannot fabricate evidence")
+        return
+
+    if coverage == "exact":
+        if not segments:
+            errors.append(f"{label} with exact coverage needs at least one segment")
+        if turn_unit != "assistant-turn" or tool_call_unit != "admitted-tool-call":
+            errors.append(
+                f"{label} with exact coverage requires assistant-turn and admitted-tool-call units"
+            )
+        if not isinstance(observation_evidence, dict):
+            errors.append(f"{label}.evidence must be one exact provider join object")
+        else:
+            missing_evidence = sorted(OBSERVATION_EVIDENCE_FIELDS - set(observation_evidence))
+            unknown_evidence = sorted(set(observation_evidence) - OBSERVATION_EVIDENCE_FIELDS)
+            if missing_evidence:
+                errors.append(f"{label}.evidence is missing: {', '.join(missing_evidence)}")
+            if unknown_evidence:
+                errors.append(f"{label}.evidence has unknown fields: {', '.join(unknown_evidence)}")
+            if not stable_token(observation_evidence.get("provider")):
+                errors.append(f"{label}.evidence.provider must be one stable token")
+            for field in ("attempt_sha256", "session_sha256"):
+                digest = observation_evidence.get(field)
+                if not isinstance(digest, str) or SHA256.fullmatch(digest) is None:
+                    errors.append(f"{label}.evidence.{field} must be lowercase SHA-256")
+
+    prior_mode: str | None = None
+    observed_turns: set[str] = set()
+    for index, segment in enumerate(segments, 1):
+        segment_label = f"{label}.segments[{index}]"
+        if not isinstance(segment, dict):
+            errors.append(f"{segment_label} must be one segment object")
+            continue
+        missing_segment = sorted(SEGMENT_FIELDS - set(segment))
+        unknown_segment = sorted(set(segment) - SEGMENT_FIELDS)
+        if missing_segment:
+            errors.append(f"{segment_label} is missing: {', '.join(missing_segment)}")
+        if unknown_segment:
+            errors.append(f"{segment_label} has unknown fields: {', '.join(unknown_segment)}")
+        mode = segment.get("mode")
+        if mode not in EXECUTION_MODES:
+            errors.append(f"{segment_label}.mode must be standard or fast")
+        elif mode == prior_mode:
+            errors.append(f"{segment_label} repeats the preceding mode instead of coalescing")
+        prior_mode = mode if isinstance(mode, str) else None
+        turn_count = segment.get("turn_count")
+        tool_call_count = segment.get("tool_call_count")
+        if not isinstance(turn_count, int) or isinstance(turn_count, bool) or turn_count <= 0:
+            errors.append(f"{segment_label}.turn_count must be a positive integer")
+        if (
+            not isinstance(tool_call_count, int)
+            or isinstance(tool_call_count, bool)
+            or tool_call_count < 0
+        ):
+            errors.append(f"{segment_label}.tool_call_count must be a non-negative integer")
+        turn_digests = segment.get("turn_sha256")
+        if (
+            not isinstance(turn_digests, list)
+            or not turn_digests
+            or any(
+                not isinstance(item, str) or SHA256.fullmatch(item) is None
+                for item in turn_digests
+            )
+        ):
+            errors.append(f"{segment_label}.turn_sha256 must be non-empty lowercase SHA-256 values")
+        elif len(set(turn_digests)) != len(turn_digests):
+            errors.append(f"{segment_label}.turn_sha256 must not repeat evidence")
+        elif observed_turns.intersection(turn_digests):
+            errors.append(f"{segment_label}.turn_sha256 repeats an earlier segment turn")
+        elif isinstance(turn_count, int) and not isinstance(turn_count, bool) and len(turn_digests) != turn_count:
+            errors.append(f"{segment_label}.turn_sha256 count must equal turn_count")
+        if isinstance(turn_digests, list):
+            observed_turns.update(item for item in turn_digests if isinstance(item, str))
+
+
+def canonical_execution_observation(value: dict[str, Any]) -> str:
+    return json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
 
 
 def validate(card_path: Path, todo_root: Path) -> list[str]:
@@ -271,9 +420,22 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
             parsed = duration(attempt[field], f"attempt.{field}", errors)
             if parsed is not None:
                 parsed_durations[field] = parsed
-        for field in sorted((ATTEMPT_ALLOWED - TIME_FIELDS - {"id", "ended_at"}) & set(attempt)):
+        for field in sorted(
+            (
+                ATTEMPT_ALLOWED
+                - TIME_FIELDS
+                - {"id", "ended_at", "execution_observation"}
+            )
+            & set(attempt)
+        ):
             if not nonempty(attempt[field]):
                 errors.append(f"attempt.{field} must be non-empty")
+        if "execution_observation" in attempt:
+            validate_execution_observation(
+                attempt["execution_observation"],
+                "attempt.execution_observation",
+                errors,
+            )
         ended_at = timestamp(attempt.get("ended_at"), "attempt.ended_at", errors)
 
     attempt_id = attempt.get("id")
@@ -461,9 +623,77 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
     return sorted(set(errors))
 
 
+def display(value: Any) -> str:
+    if value is None:
+        return "none"
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+def receipt_from_valid_card(card_path: Path, todo_root: Path) -> tuple[str, str]:
+    card = tomllib.loads(card_path.read_text(encoding="utf-8"))
+    record_path = Path(card["todo_record"]).expanduser()
+    if not record_path.is_absolute():
+        record_path = todo_root / record_path
+    record_bytes = record_path.resolve().read_bytes()
+    record_errors: list[str] = []
+    record = parse_frontmatter(record_bytes, record_errors)
+    if record_errors or record is None:
+        raise ValueError("validated todo record could not be reread")
+    attempt = card["attempt"]
+    source_attempt = next(
+        item for item in record["attempt"] if item.get("id") == attempt["id"]
+    )
+    key = f"{card['record_id']}/{attempt['id']}"
+    overrun_cause = card.get("overrun_cause", "none")
+    observation = canonical_execution_observation(attempt["execution_observation"])
+    quality_debt = json.dumps(
+        card["quality_debt"], ensure_ascii=True, separators=(",", ":"), sort_keys=True
+    )
+    fields = (
+        ("ended-at", attempt["ended_at"]),
+        ("seam", source_attempt["seam"]),
+        ("class", source_attempt["class"]),
+        (
+            "wall estimate/actual",
+            f"{source_attempt['wall_time_estimate']} / {attempt['wall_time_actual']}",
+        ),
+        (
+            "agent estimate/actual",
+            f"{source_attempt['agent_time_estimate']} / {attempt['agent_time_actual']}",
+        ),
+        ("queue/block actual", attempt["queue_block_time_actual"]),
+        ("verification actual", attempt["verification_time_actual"]),
+        ("model", source_attempt["model"]),
+        ("reasoning", source_attempt["reasoning"]),
+        ("route", source_attempt["route"]),
+        ("role", source_attempt["role"]),
+        ("assignment ID", source_attempt["assignment_id"]),
+        ("outcome", attempt["outcome"]),
+        ("overrun cause", overrun_cause),
+        ("race outcome", attempt.get("race_outcome")),
+        ("reviewed commit", attempt.get("reviewed_commit")),
+        ("review outcome", attempt["review_outcome"]),
+        ("review summary", attempt.get("review_summary")),
+        ("reviewer model", attempt.get("reviewer_model")),
+        ("reviewer reasoning", attempt.get("reviewer_reasoning")),
+        ("review repair actual", attempt.get("review_repair_time_actual")),
+        ("execution observation", observation),
+        ("quality-debt entries", quality_debt),
+    )
+    rendered = "; ".join(f"{label}: {display(value)}" for label, value in fields)
+    return key, f"- `{key}` — {rendered}."
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="validate one delegated-work SettlementCard")
     parser.add_argument("card", type=Path)
+    parser.add_argument(
+        "--render-receipt",
+        action="store_true",
+        help="render the deterministic keyed calibration receipt after validation",
+    )
     parser.add_argument(
         "--todo-root",
         type=Path,
@@ -476,6 +706,12 @@ def main(argv: list[str]) -> int:
         for error in errors:
             print(f"SettlementCard invalid: {error}", file=sys.stderr)
         return 1
+    if args.render_receipt:
+        _, receipt = receipt_from_valid_card(
+            args.card.resolve(), args.todo_root.expanduser().resolve()
+        )
+        print(receipt)
+        return 0
     print("SettlementCard valid: exact terminal fields and lane identity admitted")
     return 0
 

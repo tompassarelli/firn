@@ -62,6 +62,7 @@ ATTEMPT_SETTLEMENT_FIELDS = (
     "agent_time_actual",
     "queue_block_time_actual",
     "verification_time_actual",
+    "execution_observation",
 )
 ATTEMPT_TIME_FIELDS = {
     "wall_time_estimate",
@@ -85,11 +86,27 @@ ATTEMPT_OPTIONAL_FIELDS = {
     "review_repair_time_actual",
 }
 ATTEMPT_ALLOWED_FIELDS = set(ATTEMPT_REQUIRED_FIELDS) | set(ATTEMPT_SETTLEMENT_FIELDS) | ATTEMPT_OPTIONAL_FIELDS
+OBSERVATION_FIELDS = {
+    "version",
+    "coverage",
+    "source",
+    "turn_unit",
+    "tool_call_unit",
+    "evidence",
+    "segments",
+}
+OBSERVATION_EVIDENCE_FIELDS = {"provider", "attempt_sha256", "session_sha256"}
+SEGMENT_FIELDS = {"mode", "turn_count", "tool_call_count", "turn_sha256"}
+OBSERVATION_COVERAGE = {"exact", "unknown"}
+OBSERVATION_VERSION = "agent-execution-observation/v1"
+EXECUTION_MODES = {"standard", "fast"}
 EXECUTION_SHAPES = {"project", "task"}
 REVIEW_BUDGETS = {"none", "owner", "independent"}
 REVIEW_OUTCOMES = {"clean", "findings", "not-run"}
 ESTIMATED_DURATION_PATTERN = re.compile(r"^(?:~|under )?(?:\d+(?:\.\d+)?(?:ms|s|m|h|d))+$")
 ACTUAL_DURATION_PATTERN = re.compile(r"^(?:\d+(?:\.\d+)?(?:ms|s|m|h|d))+$")
+OBSERVATION_TOKEN_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:/-]*$")
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True)
@@ -411,7 +428,184 @@ class Linter:
         ):
             if field in attempt and (not isinstance(attempt[field], str) or not attempt[field]):
                 self.add("ATTEMPT_FIELD_INVALID", path, f"{label} {field} must be a non-empty string")
+        if "execution_observation" in attempt:
+            self.check_execution_observation(
+                path, label, attempt["execution_observation"]
+            )
         self.check_attempt_review(path, label, attempt, settled)
+
+    def check_execution_observation(
+        self, path: Path, label: str, observation: Any
+    ) -> None:
+        observation_label = f"{label} execution_observation"
+        if not isinstance(observation, dict):
+            self.add(
+                "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                path,
+                f"{observation_label} must be one object",
+            )
+            return
+        missing = sorted(OBSERVATION_FIELDS - set(observation))
+        unknown = sorted(set(observation) - OBSERVATION_FIELDS)
+        if missing:
+            self.add(
+                "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                path,
+                f"{observation_label} is missing {', '.join(missing)}",
+            )
+        if unknown:
+            self.add(
+                "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                path,
+                f"{observation_label} has unknown fields {', '.join(unknown)}",
+            )
+        coverage = observation.get("coverage")
+        if observation.get("version") != OBSERVATION_VERSION:
+            self.add(
+                "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                path,
+                f"{observation_label} version must be {OBSERVATION_VERSION}",
+            )
+        if coverage not in OBSERVATION_COVERAGE:
+            self.add(
+                "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                path,
+                f"{observation_label} coverage must be exact or unknown",
+            )
+        for field in ("source", "turn_unit", "tool_call_unit"):
+            value = observation.get(field)
+            if not isinstance(value, str) or OBSERVATION_TOKEN_PATTERN.fullmatch(value) is None:
+                self.add(
+                    "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                    path,
+                    f"{observation_label} {field} must be one stable token",
+                )
+        segments = observation.get("segments")
+        evidence = observation.get("evidence")
+        if not isinstance(segments, list):
+            self.add(
+                "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                path,
+                f"{observation_label} segments must be an ordered array",
+            )
+            return
+        if coverage == "unknown":
+            if segments:
+                self.add(
+                    "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                    path,
+                    f"{observation_label} unknown coverage cannot carry segments",
+                )
+            if observation.get("turn_unit") != "unknown" or observation.get("tool_call_unit") != "unknown":
+                self.add(
+                    "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                    path,
+                    f"{observation_label} unknown coverage needs unknown units",
+                )
+            if evidence != {}:
+                self.add(
+                    "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                    path,
+                    f"{observation_label} unknown coverage cannot fabricate evidence",
+                )
+            return
+        if coverage == "exact":
+            if not segments:
+                self.add(
+                    "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                    path,
+                    f"{observation_label} exact coverage needs a segment",
+                )
+            if observation.get("turn_unit") != "assistant-turn" or observation.get("tool_call_unit") != "admitted-tool-call":
+                self.add(
+                    "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                    path,
+                    f"{observation_label} exact coverage needs assistant-turn and admitted-tool-call units",
+                )
+            if not isinstance(evidence, dict) or set(evidence) != OBSERVATION_EVIDENCE_FIELDS:
+                self.add(
+                    "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                    path,
+                    f"{observation_label} exact evidence must name provider and hashed attempt/session joins",
+                )
+            elif (
+                not isinstance(evidence.get("provider"), str)
+                or OBSERVATION_TOKEN_PATTERN.fullmatch(evidence["provider"]) is None
+                or any(
+                    not isinstance(evidence.get(field), str)
+                    or SHA256_PATTERN.fullmatch(evidence[field]) is None
+                    for field in ("attempt_sha256", "session_sha256")
+                )
+            ):
+                self.add(
+                    "ATTEMPT_EXECUTION_OBSERVATION_INVALID",
+                    path,
+                    f"{observation_label} exact evidence contains an invalid provider or digest",
+                )
+        prior_mode: str | None = None
+        observed_turns: set[str] = set()
+        for index, segment in enumerate(segments, 1):
+            segment_label = f"{observation_label} segment {index}"
+            if not isinstance(segment, dict) or set(segment) != SEGMENT_FIELDS:
+                self.add(
+                    "ATTEMPT_EXECUTION_SEGMENT_INVALID",
+                    path,
+                    f"{segment_label} must use the exact segment fields",
+                )
+                continue
+            mode = segment.get("mode")
+            if mode not in EXECUTION_MODES:
+                self.add(
+                    "ATTEMPT_EXECUTION_SEGMENT_INVALID",
+                    path,
+                    f"{segment_label} mode must be standard or fast",
+                )
+            elif mode == prior_mode:
+                self.add(
+                    "ATTEMPT_EXECUTION_SEGMENT_INVALID",
+                    path,
+                    f"{segment_label} repeats the preceding mode",
+                )
+            prior_mode = mode if isinstance(mode, str) else None
+            turn_count = segment.get("turn_count")
+            tool_count = segment.get("tool_call_count")
+            turn_digests = segment.get("turn_sha256")
+            if not isinstance(turn_count, int) or isinstance(turn_count, bool) or turn_count <= 0:
+                self.add(
+                    "ATTEMPT_EXECUTION_SEGMENT_INVALID",
+                    path,
+                    f"{segment_label} turn_count must be a positive integer",
+                )
+            if not isinstance(tool_count, int) or isinstance(tool_count, bool) or tool_count < 0:
+                self.add(
+                    "ATTEMPT_EXECUTION_SEGMENT_INVALID",
+                    path,
+                    f"{segment_label} tool_call_count must be a non-negative integer",
+                )
+            if (
+                not isinstance(turn_digests, list)
+                or not turn_digests
+                or any(
+                    not isinstance(item, str) or SHA256_PATTERN.fullmatch(item) is None
+                    for item in turn_digests
+                )
+                or len(set(turn_digests)) != len(turn_digests)
+                or bool(observed_turns.intersection(turn_digests))
+                or (
+                    isinstance(turn_count, int)
+                    and not isinstance(turn_count, bool)
+                    and len(turn_digests) != turn_count
+                )
+            ):
+                self.add(
+                    "ATTEMPT_EXECUTION_SEGMENT_INVALID",
+                    path,
+                    f"{segment_label} turn_sha256 must uniquely account for turn_count",
+                )
+            if isinstance(turn_digests, list):
+                observed_turns.update(
+                    item for item in turn_digests if isinstance(item, str)
+                )
 
     def check_attempt_review(self, path: Path, label: str, attempt: dict[str, Any], settled: bool) -> None:
         review_outcome = attempt.get("review_outcome")
