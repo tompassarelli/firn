@@ -11,9 +11,12 @@
 set -u
 
 PROFILE="$HOME/.local/state/north/profiles/codex-native"
-REAL="/run/current-system/sw/bin/codex"
+REAL="${CODEX_RUNTIME:-$HOME/.local/lib/codex/current/bin/codex}"
 
-[ -x "$REAL" ] || { echo "codex-native: real codex not at $REAL" >&2; exit 127; }
+[ -x "$REAL" ] || {
+  echo "codex-native: user runtime is not installed; run codex-runtime-update" >&2
+  exit 127
+}
 [ -f "$PROFILE/config.toml" ] || {
   echo "codex-native: no profile at $PROFILE" >&2; exit 1; }
 

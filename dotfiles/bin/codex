@@ -15,17 +15,27 @@ ACCOUNTS_ROOT="$HOME/.local/state/north/accounts/openai"
 NORTH_PROVIDER="openai"
 BIND_LIMIT="codex:primary"   # window that binds OpenAI subscription usage
 
-# Locate the real codex: first PATH entry that isn't this wrapper itself.
+# Prefer the atomically promoted user runtime. PATH is only a migration fallback
+# for machines that have not run codex-runtime-update yet.
 self="$(realpath "$0" 2>/dev/null || echo "$0")"
 REAL=""
-while IFS= read -r cand; do
-  [ -n "$cand" ] || continue
-  cp="$(realpath "$cand" 2>/dev/null || echo "$cand")"
-  [ "$cp" = "$self" ] && continue
-  REAL="$cand"; break
-done < <(type -aP codex 2>/dev/null)
+user_runtime="${CODEX_RUNTIME:-$HOME/.local/lib/codex/current/bin/codex}"
+if [ -n "${CODEX_RUNTIME:-}" ] && [ ! -x "$user_runtime" ]; then
+  echo "codex: CODEX_RUNTIME is not executable: $user_runtime" >&2
+  exit 127
+fi
+if [ -x "$user_runtime" ]; then
+  REAL="$user_runtime"
+else
+  while IFS= read -r cand; do
+    [ -n "$cand" ] || continue
+    cp="$(realpath "$cand" 2>/dev/null || echo "$cand")"
+    [ "$cp" = "$self" ] && continue
+    REAL="$cand"; break
+  done < <(type -aP codex 2>/dev/null)
+fi
 if [ -z "$REAL" ]; then
-  echo "codex: real binary not found on PATH" >&2
+  echo "codex: user runtime is not installed; run codex-runtime-update" >&2
   exit 127
 fi
 

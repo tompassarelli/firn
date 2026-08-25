@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# Install the official Codex npm payload into a user-owned, atomically selected
+# runtime. The native executable is self-contained; Node/npm are only needed
+# while preparing a new version.
+set -euo pipefail
+
+[ "$#" -le 1 ] || {
+  echo "usage: codex-runtime-update [version|latest]" >&2
+  exit 2
+}
+requested="${1:-latest}"
+case "$requested" in
+  ''|*[!0-9A-Za-z._+-]*)
+    echo "usage: codex-runtime-update [version|latest]" >&2
+    exit 2
+    ;;
+esac
+
+command -v npm >/dev/null 2>&1 || {
+  echo "codex-runtime-update: npm is required to fetch the official @openai/codex package" >&2
+  exit 127
+}
+command -v node >/dev/null 2>&1 || {
+  echo "codex-runtime-update: node is required while preparing the runtime" >&2
+  exit 127
+}
+command -v sha256sum >/dev/null 2>&1 || {
+  echo "codex-runtime-update: sha256sum is required to record runtime provenance" >&2
+  exit 127
+}
+
+case "$(uname -s):$(uname -m)" in
+  Linux:x86_64)
+    platform_package="codex-linux-x64"
+    platform_version_suffix="linux-x64"
+    target="x86_64-unknown-linux-musl"
+    ;;
+  Linux:aarch64|Linux:arm64)
+    platform_package="codex-linux-arm64"
+    platform_version_suffix="linux-arm64"
+    target="aarch64-unknown-linux-musl"
+    ;;
+  *)
+    echo "codex-runtime-update: unsupported platform $(uname -s)/$(uname -m)" >&2
+    exit 1
+    ;;
+esac
+
+root="$HOME/.local/lib/codex"
+versions="$root/versions"
+mkdir -p "$versions"
+stage="$(mktemp -d "$root/.stage.XXXXXX")"
+next=""
+cleanup() {
+  case "${stage:-}" in
+    "$root"/.stage.*) rm -rf -- "$stage" ;;
+  esac
+  [ -z "${next:-}" ] || rm -f -- "$next"
+}
+trap cleanup EXIT INT TERM HUP
+
+npm install \
+  --prefix "$stage" \
+  --ignore-scripts \
+  --no-audit \
+  --no-fund \
+  "@openai/codex@$requested"
+
+package_root="$stage/node_modules/@openai/codex"
+platform_root="$stage/node_modules/@openai/$platform_package"
+native="$platform_root/vendor/$target/bin/codex"
+[ -x "$native" ] || {
+  echo "codex-runtime-update: official package did not contain $target/bin/codex" >&2
+  exit 1
+}
+
+version="$(node -e 'process.stdout.write(require(process.argv[1]).version)' "$package_root/package.json")"
+case "$version" in
+  ''|*[!0-9A-Za-z._+-]*)
+    echo "codex-runtime-update: package reported an invalid version: $version" >&2
+    exit 1
+    ;;
+esac
+
+mkdir -p "$stage/bin"
+ln -s "../node_modules/@openai/$platform_package/vendor/$target/bin/codex" \
+  "$stage/bin/codex"
+observed="$($stage/bin/codex --version)"
+[ "$observed" = "codex-cli $version" ] || {
+  echo "codex-runtime-update: version mismatch: package=$version binary=$observed" >&2
+  exit 1
+}
+
+binary_sha256="$(sha256sum "$native")"
+binary_sha256="${binary_sha256%% *}"
+package_integrity="$(node -e 'const p=require(process.argv[1]); process.stdout.write(p.packages[process.argv[2]].integrity)' "$stage/package-lock.json" "node_modules/@openai/codex")"
+platform_integrity="$(node -e 'const p=require(process.argv[1]); process.stdout.write(p.packages[process.argv[2]].integrity)' "$stage/package-lock.json" "node_modules/@openai/$platform_package")"
+cat >"$stage/provenance" <<EOF
+package=npm:@openai/codex@$version
+package_integrity=$package_integrity
+platform_package=npm:@openai/codex@$version-$platform_version_suffix
+platform_integrity=$platform_integrity
+target=$target
+binary_sha256=$binary_sha256
+EOF
+
+destination="$versions/$version"
+if [ -e "$destination" ]; then
+  [ -x "$destination/bin/codex" ] || {
+    echo "codex-runtime-update: existing runtime is incomplete: $destination" >&2
+    exit 1
+  }
+  existing="$($destination/bin/codex --version)"
+  [ "$existing" = "$observed" ] || {
+    echo "codex-runtime-update: existing runtime identity mismatch: $existing" >&2
+    exit 1
+  }
+  existing_sha256="$(sha256sum "$destination/bin/codex")"
+  existing_sha256="${existing_sha256%% *}"
+  [ "$existing_sha256" = "$binary_sha256" ] || {
+    echo "codex-runtime-update: existing runtime hash mismatch: $destination" >&2
+    exit 1
+  }
+else
+  mv -- "$stage" "$destination"
+  stage=""
+fi
+
+next="$root/.current.$$"
+ln -s "versions/$version" "$next"
+mv -Tf -- "$next" "$root/current"
+next=""
+
+printf 'codex runtime active: %s\n' "$observed"
+printf 'provenance: %s\n' "$destination/provenance"
