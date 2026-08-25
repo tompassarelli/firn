@@ -57,6 +57,14 @@ while :; do
   [ "$status" -eq 0 ] || break
 done
 
+# The session override is a pure environment decision and must precede the
+# payload fast path. Persistent activation still resolves below only for a
+# payload this guard could deny.
+case "${AGENT_NO_AUTHORING_HOOKS:-}" in
+  ''|0|false) ;;
+  *) exit 0 ;;
+esac
+
 # Cheap bash pre-filter — this runs on EVERY Edit/Write, so a payload that
 # cannot possibly name a protected checkout must not pay a python3 startup.
 # Safe because a protected path names a `main` component or a `pins` one.
