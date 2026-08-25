@@ -4,7 +4,8 @@
          '[clojure.edn :as edn]
          '[clojure.java.io :as io]
          '[clojure.string :as str])
-(import '[java.io FileOutputStream RandomAccessFile]
+(import '[java.lang ProcessHandle]
+        '[java.io FileOutputStream RandomAccessFile]
         '[java.nio.channels FileChannel]
         '[java.nio.file CopyOption Files LinkOption Path StandardCopyOption StandardOpenOption])
 
