@@ -118,6 +118,9 @@ case "$name" in
     ;;
   readlink)
     if [[ "${1:-}" == -e \
+        && "${2:-}" == /nix/var/nix/profiles/system ]]; then
+      printf '%s\n' "${PROFILE_TARGET:-/nix/store/controlled-system}"
+    elif [[ "${1:-}" == -e \
         && "${2:-}" == /nix/var/nix/profiles/system-40-link ]]; then
       printf '%s\n' '/nix/store/controlled-rollback-system'
     else
@@ -141,7 +144,11 @@ case "$name" in
     fi
     ;;
   sudo)
-    if [[ "${ROLLBACK_SWITCH_FAIL:-0}" == 1 \
+    if [[ "${EXACT_SWITCH_FAIL:-0}" == 1 \
+        && "${1:-}" == /nix/store/controlled-system/bin/switch-to-configuration ]]; then
+      printf 'controlled exact activation failure\n' >&2
+      exit 29
+    elif [[ "${ROLLBACK_SWITCH_FAIL:-0}" == 1 \
         && "${1:-}" == */bin/switch-to-configuration ]]; then
       printf 'controlled rollback activation failure\n' >&2
       exit 29
@@ -240,6 +247,20 @@ rg -Fq \
 run_host_case activate Linux activate /nix/store/controlled-system env
 [[ "$(<"$scratch/activate.status")" == 0 ]] \
   || die "controlled exact activation failed"
+cut -f1 "$scratch/activate.commands" >"$scratch/activate.names"
+cat >"$scratch/activate.expected-names" <<'EOF'
+test
+sudo
+sudo
+readlink
+sudo
+EOF
+cmp -s "$scratch/activate.expected-names" "$scratch/activate.names" \
+  || {
+    diff -u "$scratch/activate.expected-names" \
+      "$scratch/activate.names" >&2 || true
+    die "exact activation did not persist before switching"
+  }
 if rg -q $'^git\t|^nix\t|^firn\t|worktree|darwin-rebuild' \
     "$scratch/activate.commands"; then
   die "preparation or evaluation leaked into exact activation"
@@ -252,8 +273,33 @@ rg -Fq \
   $'sudo\tnix-env\t--profile\t/nix/var/nix/profiles/system\t--set\t/nix/store/controlled-system' \
   "$scratch/activate.commands" \
   || die "exact activation did not select the exact system profile"
+rg -Fq $'readlink\t-e\t/nix/var/nix/profiles/system' \
+  "$scratch/activate.commands" \
+  || die "exact activation did not verify the persistent system profile"
 rg -Fq 'firn activate: activated /nix/store/controlled-system' \
   "$scratch/activate.out" || die "exact activation receipt is missing"
+
+run_host_case activate-profile-mismatch Linux activate \
+  /nix/store/controlled-system env PROFILE_TARGET=/nix/store/other-system
+[[ "$(<"$scratch/activate-profile-mismatch.status")" == 65 ]] \
+  || die "mismatched persistent profile was accepted"
+if rg -q $'^sudo\t.*/bin/switch-to-configuration' \
+    "$scratch/activate-profile-mismatch.commands"; then
+  die "configuration switched before the persistent profile was verified"
+fi
+rg -Fq \
+  'persistent system profile resolved to /nix/store/other-system instead of /nix/store/controlled-system; no configuration switch was attempted' \
+  "$scratch/activate-profile-mismatch.err" \
+  || die "persistent profile mismatch recovery is not actionable"
+
+run_host_case activate-switch-failure Linux activate \
+  /nix/store/controlled-system env EXACT_SWITCH_FAIL=1
+[[ "$(<"$scratch/activate-switch-failure.status")" == 29 ]] \
+  || die "exact switch failure status was not preserved"
+rg -Fq \
+  'persistent system profile is /nix/store/controlled-system, but configuration switching failed (status 29); running and boot state may be incomplete' \
+  "$scratch/activate-switch-failure.err" \
+  || die "exact switch failure did not report the verified recovery boundary"
 
 run_host_case activate-invalid Linux activate relative-system env
 [[ "$(<"$scratch/activate-invalid.status")" == 64 ]] \

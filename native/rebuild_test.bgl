@@ -63,17 +63,20 @@
 
 (defn case-exact-path-activation [] Bool
   (let [(effects (Vec rebuild/ArgvEffect))
-        (rebuild/exact-path-activation-effects "/nix/store/system")]
+        (rebuild/exact-path-profile-effects "/nix/store/system")]
     (and
       (= (rebuild/effect-phases effects)
          ["activation preflight"
-          "activate system profile"
-          "activate verified closure"])
+          "select persistent system profile"])
       (= (rebuild/argveffect-argv (nth effects 0)) ["sudo" "-v"])
       (= (rebuild/argveffect-argv (nth effects 1))
          ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
           "--set" "/nix/store/system"])
-      (= (rebuild/argveffect-argv (nth effects 2))
+      (= (rebuild/argveffect-argv
+           (rebuild/system-profile-resolve-effect))
+         ["readlink" "-e" "/nix/var/nix/profiles/system"])
+      (= (rebuild/argveffect-argv
+           (rebuild/activate-verified-closure-effect "/nix/store/system"))
          ["sudo" "/nix/store/system/bin/switch-to-configuration"
           "switch"]))))
 

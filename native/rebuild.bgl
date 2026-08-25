@@ -127,12 +127,15 @@
        ["sudo" "darwin-rebuild" "switch" "--flake"
         (str (snapshot-uri snapshot) "#" host)])]))
 
-(defn exact-path-activation-effects [built-path String] (Vec ArgvEffect)
+(defn exact-path-profile-effects [built-path String] (Vec ArgvEffect)
   [(inherit-effect "activation preflight" ["sudo" "-v"])
-   (inherit-effect "activate system profile"
+   (inherit-effect "select persistent system profile"
      ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
-      "--set" built-path])
-   (activate-verified-closure-effect built-path)])
+      "--set" built-path])])
+
+(defn system-profile-resolve-effect [] ArgvEffect
+  (capture-effect "verify persistent system profile"
+    ["readlink" "-e" "/nix/var/nix/profiles/system"]))
 
 (defn generation-query-effect [platform Platform] ArgvEffect
   (if (linux? platform)

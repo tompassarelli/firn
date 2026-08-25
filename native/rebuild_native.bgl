@@ -220,6 +220,65 @@
     [(SequenceSucceeded stdout)
      (tag-generation snapshot host platform trace-path trace-id)]))
 
+(defn switch-exact-path
+  [built-path String
+   trace-path (U String Nil)
+   trace-id String]
+  Int
+  (match (execute-effect (rebuild/activate-verified-closure-effect built-path)
+           trace-path trace-id built-path)
+    [(EffectFailed status)
+     (do
+       (stderr-line
+         (str "firn activate: persistent system profile is " built-path
+           ", but configuration switching failed (status " status
+           "); running and boot state may be incomplete"))
+       status)]
+    [(EffectSucceeded stdout)
+     (do (print (str "firn activate: activated " built-path "\n")) 0)]))
+
+(defn verify-exact-system-profile
+  [built-path String
+   trace-path (U String Nil)
+   trace-id String]
+  Int
+  (match (execute-effect (rebuild/system-profile-resolve-effect)
+           trace-path trace-id built-path)
+    [(EffectFailed status)
+     (do
+       (stderr-line
+         (str "firn activate: persistent system profile could not be verified "
+           "after selection (status " status
+           "); no configuration switch was attempted"))
+       status)]
+    [(EffectSucceeded stdout)
+     (let [profile-path String (str/trim stdout)]
+       (if (= profile-path built-path)
+         (switch-exact-path built-path trace-path trace-id)
+         (do
+           (stderr-line
+             (str "firn activate: persistent system profile resolved to "
+               profile-path " instead of " built-path
+               "; no configuration switch was attempted"))
+           65)))]))
+
+(defn persist-exact-system-profile
+  [built-path String
+   trace-path (U String Nil)
+   trace-id String]
+  Int
+  (match (execute-effects (rebuild/exact-path-profile-effects built-path)
+           trace-path trace-id built-path)
+    [(SequenceFailed status)
+     (do
+       (stderr-line
+         (str "firn activate: persistent system profile selection failed "
+           "(status " status "); verify /nix/var/nix/profiles/system "
+           "before retrying"))
+       status)]
+    [(SequenceSucceeded stdout)
+     (verify-exact-system-profile built-path trace-path trace-id)]))
+
 (defn activate-exact-path
   [built-path String
    trace-path (U String Nil)
@@ -236,19 +295,11 @@
        (do
          (stderr-line
            (str "firn activate: target does not contain an executable "
-             "switch-to-configuration (status " status "); no activation was attempted"))
+             "switch-to-configuration (status " status
+             "); no activation was attempted"))
          status)]
       [(EffectSucceeded stdout)
-       (match (execute-effects (rebuild/exact-path-activation-effects built-path)
-                trace-path trace-id built-path)
-         [(SequenceFailed status)
-          (do
-            (stderr-line
-              (str "firn activate: stopped at first failure (status " status
-                "); verify the active generation before retrying"))
-            status)]
-         [(SequenceSucceeded stdout)
-          (do (print (str "firn activate: activated " built-path "\n")) 0)])])))
+       (persist-exact-system-profile built-path trace-path trace-id)])))
 
 (defn prepare-pinned
   [snapshot rebuild/Snapshot
