@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+firn_repo="${FIRN_REPO:-$HOME/code/nixos-config/main}" # hardcoded-repo-path:allow
+beagle_path="${BEAGLE_PATH:-$HOME/code/beagle/main}" # hardcoded-repo-path:allow
+beagle="$beagle_path/bin/beagle"
+runtime_root="${FIRN_ACTIVITY_RUNTIME_ROOT:-$HOME/.local/lib/firn/activity}"
+versions="$runtime_root/versions"
+next=""
+
+if [[ ! -x "$beagle" ]]; then
+  printf 'activity-runtime-update: BEAGLE_PATH has no executable bin/beagle: %s\n' \
+    "$beagle_path" >&2
+  exit 1
+fi
+
+sources=(
+  "$beagle_path/native-core/src/beagle/datum_reader.bgl"
+  "$beagle_path/native-core/src/native/json.bgl"
+  "$firn_repo/native/activity_core.bgl"
+  "$firn_repo/native/activity_driver.bgl"
+  "$firn_repo/native/activity_native.bgl"
+)
+for source in "${sources[@]}"; do
+  if [[ ! -f "$source" ]]; then
+    printf 'activity-runtime-update: required source is unavailable: %s\n' \
+      "$source" >&2
+    exit 1
+  fi
+done
+
+mkdir -p "$versions"
+stage="$(mktemp -d "$runtime_root/.stage.XXXXXX")"
+cleanup() {
+  if [[ -n "${stage:-}" ]]; then
+    rm -rf -- "${stage:?}"
+  fi
+  if [[ -n "$next" ]]; then
+    rm -f -- "$next"
+  fi
+}
+trap cleanup EXIT INT TERM HUP
+mkdir -p "$stage/bin" "$stage/artifacts"
+
+if ! "$beagle" native-exe \
+  --out "$stage/bin/activity" \
+  --artifacts "$stage/artifacts" \
+  --entry activity.native/-main \
+  "${sources[@]}"; then
+  printf 'activity-runtime-update: native materialization failed\n' >&2
+  exit 1
+fi
+
+if [[ ! -x "$stage/bin/activity" ]]; then
+  printf 'activity-runtime-update: materializer produced no executable\n' >&2
+  exit 1
+fi
+if ! grep -Fxq 'source-entry activity.native/-main' "$stage/artifacts/report.txt" ||
+   ! grep -Fq 'native-exe-entry PASS name=activity.native/-main ' \
+     "$stage/artifacts/native-exe.report.txt"; then
+  printf 'activity-runtime-update: materializer producer identity is invalid\n' >&2
+  exit 1
+fi
+
+source_id="$(sed -n \
+  's/^native-provenance-v0 source sha256:\([0-9a-f]\{64\}\)$/\1/p' \
+  "$stage/artifacts/report.txt")"
+if [[ ${#source_id} -ne 64 ]]; then
+  printf 'activity-runtime-update: materializer source identity is invalid\n' >&2
+  exit 1
+fi
+read -r artifact_id _ < <(sha256sum "$stage/bin/activity")
+destination="$versions/$artifact_id"
+cat >"$stage/provenance" <<EOF
+format=firn-activity-runtime/v1
+entry=activity.native/-main
+source_sha256=$source_id
+artifact_sha256=$artifact_id
+firn_revision=$(git -C "$firn_repo" rev-parse HEAD)
+beagle_revision=$(git -C "$beagle_path" rev-parse HEAD)
+EOF
+
+if [[ -e "$destination" ]]; then
+  if [[ ! -x "$destination/bin/activity" ]]; then
+    printf 'activity-runtime-update: existing runtime is incomplete: %s\n' \
+      "$destination" >&2
+    exit 1
+  fi
+  read -r existing_id _ < <(sha256sum "$destination/bin/activity")
+  if [[ "$existing_id" != "$artifact_id" ]]; then
+    printf 'activity-runtime-update: existing runtime identity mismatch: %s\n' \
+      "$destination" >&2
+    exit 1
+  fi
+else
+  mv -- "$stage" "$destination"
+  stage=""
+fi
+
+next="$runtime_root/.current.$$"
+ln -s "versions/$artifact_id" "$next"
+mv -Tf -- "$next" "$runtime_root/current"
+next=""
+
+printf 'activity runtime active: %s\n' "$destination"
+printf 'provenance: %s\n' "$destination/provenance"

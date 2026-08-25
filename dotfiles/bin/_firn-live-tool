@@ -14,16 +14,6 @@ if [[ ! -x "$beagle" ]]; then
 fi
 
 case "$tool" in
-  activity)
-    entry="activity.native/-main"
-    sources=(
-      "$beagle_path/native-core/src/beagle/datum_reader.bgl"
-      "$beagle_path/native-core/src/native/json.bgl"
-      "$firn_repo/native/activity_core.bgl"
-      "$firn_repo/native/activity_driver.bgl"
-      "$firn_repo/native/activity_native.bgl"
-    )
-    ;;
   activity-menu)
     entry="activity.menu/-main"
     sources=("$firn_repo/native/activity_menu.bgl")
