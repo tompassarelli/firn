@@ -11,6 +11,7 @@
 (def max-line-bytes Int 16777216)
 (def fifo-write-timeout-ms Int 500)
 (def poll-timeout-ms Int 250)
+(def poll-timeout-status Int -110)
 (def child-stop-timeout-ms Int 500)
 (def reconnect-delay-ms Int 2000)
 (def lease-retry-delay-ms Int 25)
@@ -1016,58 +1017,66 @@
 
 (defn daemon-loop
   [paths ActivityPaths
-   state a/ActivityState
-   control-fd Int
-   event-pid Int
-   event-fd Int]
+   initial-state a/ActivityState
+   initial-control-fd Int
+   initial-event-pid Int
+   initial-event-fd Int]
   Int
-  (let [(ready Int)
-        (host.process/poll-readable [event-fd control-fd] poll-timeout-ms)]
-    (cond
-      (= ready 0)
-      (match (read-line event-fd)
-        [(LineLoaded line eof)
-         (if eof
+  (loop [(state a/ActivityState) initial-state
+         (control-fd Int) initial-control-fd
+         (event-pid Int) initial-event-pid
+         (event-fd Int) initial-event-fd]
+    (let [(ready Int)
+          (host.process/poll-readable [event-fd control-fd] poll-timeout-ms)]
+      (cond
+        (= ready event-fd)
+        (match (read-line event-fd)
+          [(LineLoaded line eof)
+           (if eof
+             (match (reconnect-event-stream event-pid event-fd)
+               [(EventStreamRejected errno)
+                (do
+                  (stderr-line
+                    (str
+                      "activity daemon: cannot reconnect niri: errno " errno))
+                  (host.time/sleep-milliseconds reconnect-delay-ms)
+                  (match (start-event-stream)
+                    [(EventStreamRejected second-errno) second-errno]
+                    [(EventStreamStarted next-pid next-fd)
+                     (recur state control-fd next-pid next-fd)]))]
+               [(EventStreamStarted next-pid next-fd)
+                (recur state control-fd next-pid next-fd)])
+             (recur (handle-event paths state line)
+               control-fd event-pid event-fd))]
+          [(LineRejected errno)
            (match (reconnect-event-stream event-pid event-fd)
-             [(EventStreamRejected errno)
-              (do
-                (stderr-line
-                  (str "activity daemon: cannot reconnect niri: errno " errno))
-                (host.time/sleep-milliseconds reconnect-delay-ms)
-                (match (start-event-stream)
-                  [(EventStreamRejected second-errno) second-errno]
-                  [(EventStreamStarted next-pid next-fd)
-                   (daemon-loop paths state control-fd next-pid next-fd)]))]
+             [(EventStreamRejected reconnect-errno) reconnect-errno]
              [(EventStreamStarted next-pid next-fd)
-              (daemon-loop paths state control-fd next-pid next-fd)])
-           (daemon-loop paths (handle-event paths state line)
-             control-fd event-pid event-fd))]
-        [(LineRejected errno)
-         (match (reconnect-event-stream event-pid event-fd)
-           [(EventStreamRejected reconnect-errno) reconnect-errno]
-           [(EventStreamStarted next-pid next-fd)
-            (daemon-loop paths state control-fd next-pid next-fd)])])
+              (recur state control-fd next-pid next-fd)])])
 
-      (= ready 1)
-      (match (read-line control-fd)
-        [(LineLoaded line eof)
-         (if eof
+        (= ready control-fd)
+        (match (read-line control-fd)
+          [(LineLoaded line eof)
+           (if eof
+             (let [(next-control Int)
+                   (reopen-control (activitypaths-ctl paths) control-fd)]
+               (if (< next-control 0)
+                 next-control
+                 (recur state next-control event-pid event-fd)))
+             (recur (handle-command paths state line)
+               control-fd event-pid event-fd))]
+          [(LineRejected errno)
            (let [(next-control Int)
                  (reopen-control (activitypaths-ctl paths) control-fd)]
              (if (< next-control 0)
                next-control
-               (daemon-loop paths state next-control event-pid event-fd)))
-           (daemon-loop paths (handle-command paths state line)
-             control-fd event-pid event-fd))]
-        [(LineRejected errno)
-         (let [(next-control Int)
-               (reopen-control (activitypaths-ctl paths) control-fd)]
-           (if (< next-control 0)
-             next-control
-             (daemon-loop paths state next-control event-pid event-fd)))])
+               (recur state next-control event-pid event-fd)))])
 
-      :else
-      (daemon-loop paths state control-fd event-pid event-fd))))
+        (= ready poll-timeout-status)
+        (recur state control-fd event-pid event-fd)
+
+        :else
+        ready))))
 
 (defn initial-state
   [defs (Vec a/ActivityDef)
