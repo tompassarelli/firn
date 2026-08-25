@@ -21,7 +21,8 @@ contract, and the estimate-calibration ledger. Do not fork product conversation
 history, reuse a product worker as settler, batch unrelated cards into one
 judgment context, or keep a standing clerk alive after acknowledgement. The
 owning commander supervises the invocation and reaps it after the exact one-line
-terminal result.
+terminal result. That acknowledgement closes the clerk itself; never issue a
+second SettlementCard to settle the settlement clerk.
 
 ## Admit the card
 

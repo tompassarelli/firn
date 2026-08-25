@@ -42,9 +42,13 @@ deadline or lengthen one without evidence that legitimate work changed.
 A reusable role is a repeatable bounded contract, not a title or a permanently
 privileged actor. Admit an instance only when its brief names one concrete
 trigger, its read/write and decision authority, terminal evidence, owning
-supervisor, and reap path. Give it an attempt and scope like any other worker.
-When the trigger is gone or the evidence is consumed, stop and reap it. Do not
-invent a support role whose output cannot change or close a named seam.
+supervisor, and reap path. Give every product-bearing or independently
+resumable instance its own attempt and give every instance an exact scope. A
+one-shot settlement clerk is the mechanical writer for the attempt named by
+its card; its acknowledgement closes the clerk and never creates a recursive
+attempt or SettlementCard. When the trigger is gone or the evidence is
+consumed, stop and reap it. Do not invent a support role whose output cannot
+change or close a named seam.
 
 Use these stock roles where their trigger is real:
 
