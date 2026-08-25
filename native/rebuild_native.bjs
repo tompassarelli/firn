@@ -1,7 +1,17 @@
-#lang beagle
+#lang beagle/js
 (ns firn.rebuild-native
-  (:require [firn.rebuild :as rebuild]
+  (:require [clojure.string :as str]
+            [firn.rebuild :as rebuild]
             [native.json :as json]))
+
+(declare-extern firn-host-get (Fn [Any Int] Any))
+(declare-extern firn-host-env (Fn [String] (U String Nil)))
+(declare-extern firn-host-pid (Fn [] Int))
+(declare-extern firn-host-out (Fn [String] Nil))
+(declare-extern firn-host-err (Fn [String] Nil))
+(declare-extern firn-host-capture (Fn [(Vec String) Int] Any))
+(declare-extern firn-host-inherit (Fn [(Vec String)] Int))
+(declare-extern firn-host-append (Fn [String String] Any))
 
 (def max-command-output Int 16777216)
 
@@ -21,8 +31,40 @@
   (TraceLine [text String])
   (TraceLineRejected [message String]))
 
+(defunion CaptureResult
+  (CaptureOk
+    [status Int
+     stdout String
+     stderr String])
+  (CaptureError [errno Int]))
+
+(defunion AppendResult
+  (AppendOk [token Bool])
+  (AppendError [errno Int]))
+
+(defn capture
+  [argv (Vec String)
+   limit Int] CaptureResult
+  (let [result Any (firn-host-capture argv limit)
+        tag String (firn-host-get result 0)]
+    (if (= tag "ok")
+      (->CaptureOk
+        (firn-host-get result 1)
+        (firn-host-get result 2)
+        (firn-host-get result 3))
+      (->CaptureError (firn-host-get result 1)))))
+
+(defn append-text
+  [path String
+   text String] AppendResult
+  (let [result Any (firn-host-append path text)
+        tag String (firn-host-get result 0)]
+    (if (= tag "ok")
+      (->AppendOk false)
+      (->AppendError (firn-host-get result 1)))))
+
 (defn stderr-text [text String] Nil
-  (host.stderr/write-text text))
+  (firn-host-err text))
 
 (defn stderr-line [text String] Nil
   (stderr-text (str text "\n")))
@@ -61,9 +103,9 @@
       [(TraceLineRejected message)
        (do (stderr-line (str "firn rebuild: " message)) false)]
       [(TraceLine text)
-       (match (host.fs/append-text trace-path text)
-         [(host.fs/AppendTextOk) true]
-         [(host.fs/AppendTextError errno)
+       (match (append-text trace-path text)
+         [(AppendOk token) true]
+         [(AppendError errno)
           (do
             (stderr-line
               (str "firn rebuild: cannot append trace: errno " errno))
@@ -73,7 +115,7 @@
   [stdout String
    stderr String] Nil
   (do
-    (if (= stdout "") nil (print stdout))
+    (if (= stdout "") nil (firn-host-out stdout))
     (if (= stderr "") nil (stderr-text stderr))))
 
 (defn finish-effect
@@ -101,19 +143,19 @@
              (rebuild/start-event effect revision)))
     (->EffectFailed 74)
     (if (rebuild/argveffect-capture effect)
-      (match (host.process/run-capture
-               (rebuild/argveffect-argv effect) "" max-command-output)
-        [(host.process/CaptureError errno)
+      (match (capture
+               (rebuild/argveffect-argv effect) max-command-output)
+        [(CaptureError errno)
          (do
            (stderr-line
              (str "firn rebuild: cannot start "
                (rebuild/argveffect-phase effect) ": errno " errno))
            (finish-effect effect trace-path trace-id revision 126 ""))]
-        [(host.process/CaptureOk status stdout stderr)
+        [(CaptureOk status stdout stderr)
          (do
            (emit-output stdout stderr)
            (finish-effect effect trace-path trace-id revision status stdout))])
-      (let [status Int (host.process/run-inherit (rebuild/argveffect-argv effect))]
+      (let [status Int (firn-host-inherit (rebuild/argveffect-argv effect))]
         (finish-effect effect trace-path trace-id revision status "")))))
 
 (defn execute-effects
@@ -235,7 +277,7 @@
            "); running and boot state may be incomplete"))
        status)]
     [(EffectSucceeded stdout)
-     (do (print (str "firn activate: activated " built-path "\n")) 0)]))
+       (do (firn-host-out (str "firn activate: activated " built-path "\n")) 0)]))
 
 (defn verify-exact-system-profile
   [built-path String
@@ -318,7 +360,7 @@
      (let [built-path String (str/trim stdout)]
        (if (rebuild/exact-store-path? built-path)
          (do
-           (print
+           (firn-host-out
              (str "firn prepare: prepared "
                (rebuild/snapshot-revision snapshot) " " built-path "\n"))
            0)
@@ -413,7 +455,7 @@
     [(SequenceFailed status) (rollback-stopped generation status)]
     [(SequenceSucceeded stdout)
      (do
-       (print
+       (firn-host-out
          (str "firn rollback: activated generation " generation
            " (" built-path ")\n"))
        0)]))
@@ -517,7 +559,7 @@
               69))])])))
 
 (defn required-env [name String] (U String Nil)
-  (let [value (U String Nil) (System/getenv name)]
+  (let [value (U String Nil) (firn-host-env name)]
     (if (and (some? value) (> (count value) 0)) value nil)))
 
 (defn repository-root [] (U String Nil)
@@ -536,7 +578,7 @@
       (let [runtime (U String Nil) (required-env "XDG_RUNTIME_DIR")
             parent String (if (some? runtime) runtime "/tmp")]
         (str parent "/firn-rebuild-snapshot-"
-          (host.process/current-pid))))))
+          (firn-host-pid))))))
 
 (defn usage-error [] Int
   (do
@@ -548,7 +590,8 @@
         "  firn host rollback <generation>"))
     64))
 
-(defn -main [args (Vec String)] Int
+(js/export
+  (defn run-command [args (Vec String)] Int
   (if (not (and (= (count args) 3)
                 (= (nth args 0) "host")))
     (usage-error)
@@ -583,4 +626,4 @@
             (run root (nth args 2) snapshot-path trace-path trace-id)))
 
         :else
-        (usage-error)))))
+        (usage-error))))))

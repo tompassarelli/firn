@@ -1,33 +1,39 @@
-#lang beagle
-(ns firn.rebuild)
+#lang beagle/js
+(ns firn.rebuild
+  (:require [clojure.string :as str]))
 
-(defrecord Platform [name String])
+(js/export (defrecord Platform [name String]))
 
-(defrecord Snapshot
-  [root String
-   revision String
-   branch String
-   uri String])
+(js/export
+  (defrecord Snapshot
+    [root String
+     revision String
+     branch String
+     uri String]))
 
-(defrecord ArgvEffect
-  [phase String
-   argv (Vec String)
-   capture Bool])
+(js/export
+  (defrecord ArgvEffect
+    [phase String
+     argv (Vec String)
+     capture Bool]))
 
-(defrecord TraceEvent
-  [event String
-   name String
-   status String
-   revision String])
+(js/export
+  (defrecord TraceEvent
+    [event String
+     name String
+     status String
+     revision String]))
 
-(defrecord Simulation
-  [status Int
-   executed (Vec ArgvEffect)
-   events (Vec TraceEvent)])
+(js/export
+  (defrecord Simulation
+    [status Int
+     executed (Vec ArgvEffect)
+     events (Vec TraceEvent)]))
 
-(defunion PlatformResult
-  (PlatformSelected [platform Platform])
-  (PlatformRejected [name String]))
+(js/export
+  (defunion PlatformResult
+    (PlatformSelected [platform Platform])
+    (PlatformRejected [name String])))
 
 (defn capture-effect
   [phase String
@@ -39,43 +45,51 @@
    argv (Vec String)] ArgvEffect
   (->ArgvEffect phase argv false))
 
-(defn snapshot-uri-for
+(js/export
+  (defn snapshot-uri-for
   [root String
    revision String
    branch String] String
   (str "git+file://" root "?rev=" revision
-    (if (= branch "") "" (str "&ref=" branch))))
+      (if (= branch "") "" (str "&ref=" branch)))))
 
-(defn make-snapshot
+(js/export
+  (defn make-snapshot
   [root String
    revision String
    branch String] Snapshot
-  (->Snapshot root revision branch (snapshot-uri-for root revision branch)))
+    (->Snapshot root revision branch (snapshot-uri-for root revision branch))))
 
-(defn platform-from-name [name String] PlatformResult
-  (cond
-    (= name "Linux") (->PlatformSelected (->Platform "Linux"))
-    (= name "Darwin") (->PlatformSelected (->Platform "Darwin"))
-    :else (->PlatformRejected name)))
+(js/export
+  (defn platform-from-name [name String] PlatformResult
+    (cond
+      (= name "Linux") (->PlatformSelected (->Platform "Linux"))
+      (= name "Darwin") (->PlatformSelected (->Platform "Darwin"))
+      :else (->PlatformRejected name))))
 
-(defn linux-platform [] Platform
-  (->Platform "Linux"))
+(js/export
+  (defn linux-platform [] Platform
+    (->Platform "Linux")))
 
-(defn darwin-platform [] Platform
-  (->Platform "Darwin"))
+(js/export
+  (defn darwin-platform [] Platform
+    (->Platform "Darwin")))
 
-(defn linux? [platform Platform] Bool
-  (= (platform-name platform) "Linux"))
+(js/export
+  (defn linux? [platform Platform] Bool
+    (= (platform-name platform) "Linux")))
 
-(defn platform-effect [] ArgvEffect
-  (capture-effect "select platform" ["uname" "-s"]))
+(js/export
+  (defn platform-effect [] ArgvEffect
+    (capture-effect "select platform" ["uname" "-s"])))
 
-(defn pin-effects [root String] (Vec ArgvEffect)
-  [(capture-effect "pin revision"
-     ["git" "-C" root "rev-parse" "HEAD"])
-   (capture-effect "pin branch"
-     ["git" "-C" root "branch" "--show-current"])
-   (platform-effect)])
+(js/export
+  (defn pin-effects [root String] (Vec ArgvEffect)
+    [(capture-effect "pin revision"
+       ["git" "-C" root "rev-parse" "HEAD"])
+     (capture-effect "pin branch"
+       ["git" "-C" root "branch" "--show-current"])
+     (platform-effect)]))
 
 (defn system-attribute
   [snapshot Snapshot
@@ -86,7 +100,8 @@
       (str "nixosConfigurations." host ".config.system.build.toplevel")
       (str "darwinConfigurations." host ".system"))))
 
-(defn preparation-effects
+(js/export
+  (defn preparation-effects
   [snapshot Snapshot
    host String
    platform Platform
@@ -105,13 +120,15 @@
       snapshot-directory])
    (capture-effect "build committed snapshot"
      ["nix" "build" "--no-link" "--print-out-paths"
-      (system-attribute snapshot host platform)])])
+      (system-attribute snapshot host platform)])]))
 
-(defn activate-verified-closure-effect [built-path String] ArgvEffect
-  (inherit-effect "activate verified closure"
-    ["sudo" (str built-path "/bin/switch-to-configuration") "switch"]))
+(js/export
+  (defn activate-verified-closure-effect [built-path String] ArgvEffect
+    (inherit-effect "activate verified closure"
+      ["sudo" (str built-path "/bin/switch-to-configuration") "switch"])))
 
-(defn activation-effects
+(js/export
+  (defn activation-effects
   [snapshot Snapshot
    host String
    platform Platform
@@ -125,61 +142,69 @@
     [(inherit-effect "activation preflight" ["sudo" "-v"])
      (inherit-effect "activate verified closure"
        ["sudo" "darwin-rebuild" "switch" "--flake"
-        (str (snapshot-uri snapshot) "#" host)])]))
+        (str (snapshot-uri snapshot) "#" host)])])))
 
-(defn exact-path-profile-effects [built-path String] (Vec ArgvEffect)
-  [(inherit-effect "activation preflight" ["sudo" "-v"])
-   (inherit-effect "select persistent system profile"
-     ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
-      "--set" built-path])])
+(js/export
+  (defn exact-path-profile-effects [built-path String] (Vec ArgvEffect)
+    [(inherit-effect "activation preflight" ["sudo" "-v"])
+     (inherit-effect "select persistent system profile"
+       ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
+        "--set" built-path])]))
 
-(defn system-profile-resolve-effect [] ArgvEffect
-  (capture-effect "verify persistent system profile"
-    ["readlink" "-e" "/nix/var/nix/profiles/system"]))
+(js/export
+  (defn system-profile-resolve-effect [] ArgvEffect
+    (capture-effect "verify persistent system profile"
+      ["readlink" "-e" "/nix/var/nix/profiles/system"])))
 
-(defn generation-query-effect [platform Platform] ArgvEffect
-  (if (linux? platform)
-    (capture-effect "read active generation"
-      ["nixos-rebuild" "list-generations"])
-    (capture-effect "read active generation"
-      ["darwin-rebuild" "--list-generations"])))
+(js/export
+  (defn generation-query-effect [platform Platform] ArgvEffect
+    (if (linux? platform)
+      (capture-effect "read active generation"
+        ["nixos-rebuild" "list-generations"])
+      (capture-effect "read active generation"
+        ["darwin-rebuild" "--list-generations"]))))
 
 (defn generation-profile-link [generation String] String
   (str "/nix/var/nix/profiles/system-" generation "-link"))
 
-(defn generation-resolve-effect [generation String] ArgvEffect
-  (capture-effect "resolve rollback generation"
-    ["readlink" "-e" (generation-profile-link generation)]))
+(js/export
+  (defn generation-resolve-effect [generation String] ArgvEffect
+    (capture-effect "resolve rollback generation"
+      ["readlink" "-e" (generation-profile-link generation)])))
 
-(defn generation-closure-check-effect [built-path String] ArgvEffect
-  (capture-effect "validate rollback closure"
-    ["test" "-x" (str built-path "/bin/switch-to-configuration")]))
+(js/export
+  (defn generation-closure-check-effect [built-path String] ArgvEffect
+    (capture-effect "validate rollback closure"
+      ["test" "-x" (str built-path "/bin/switch-to-configuration")])))
 
-(defn rollback-activation-effects
+(js/export
+  (defn rollback-activation-effects
   [generation String
    built-path String] (Vec ArgvEffect)
   [(inherit-effect "activation preflight" ["sudo" "-v"])
    (inherit-effect "select rollback generation"
      ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system"
       "--switch-generation" generation])
-   (activate-verified-closure-effect built-path)])
+   (activate-verified-closure-effect built-path)]))
 
-(defn generation-tag-effect
+(js/export
+  (defn generation-tag-effect
   [snapshot Snapshot
    generation String] ArgvEffect
   (capture-effect "tag active generation"
     ["git" "-C" (snapshot-root snapshot) "tag" "-f"
-     (str "gen-" generation) (snapshot-revision snapshot)]))
+       (str "gen-" generation) (snapshot-revision snapshot)])))
 
-(defn advisory-effect [snapshot Snapshot] ArgvEffect
-  (inherit-effect "schedule agent configuration check"
-    ["systemd-run" "--user" "--no-block" "--collect" "--quiet"
-     "--unit" (str "firn-agent-config-check-"
-                (snapshot-revision snapshot) ".service")
-     "--description" "Firn agent configuration advisory check"
-     "--property=Type=oneshot"
-     (str (snapshot-root snapshot) "/scripts/agent-config-check.sh")
-     "--local"]))
+(js/export
+  (defn advisory-effect [snapshot Snapshot] ArgvEffect
+    (inherit-effect "schedule agent configuration check"
+      ["systemd-run" "--user" "--no-block" "--collect" "--quiet"
+       "--unit" (str "firn-agent-config-check-"
+                  (snapshot-revision snapshot) ".service")
+       "--description" "Firn agent configuration advisory check"
+       "--property=Type=oneshot"
+       (str (snapshot-root snapshot) "/scripts/agent-config-check.sh")
+       "--local"])))
 
 (defn starts-with?
   [text String
@@ -187,8 +212,9 @@
   (and (>= (count text) (count prefix))
        (= (subs text 0 (count prefix)) prefix)))
 
-(defn store-path? [text String] Bool
-  (starts-with? (str/trim text) "/nix/store/"))
+(js/export
+  (defn store-path? [text String] Bool
+    (starts-with? (str/trim text) "/nix/store/")))
 
 (defn split-lines [text String] (Vec String)
   (loop [index Int 0
@@ -227,9 +253,10 @@
              (recur (+ index 1))
              false)))))
 
-(defn generation-token? [text String] Bool
-  (and (decimal-string? text)
-       (not (= (subs text 0 1) "0"))))
+(js/export
+  (defn generation-token? [text String] Bool
+    (and (decimal-string? text)
+         (not (= (subs text 0 1) "0")))))
 
 (defn digit-value [character String] Int
   (cond
@@ -258,31 +285,34 @@
           (> left-digit right-digit) false
           :else (recur (+ index 1)))))))
 
-(defn generation-less?
+(js/export
+  (defn generation-less?
   [left String
    right String] Bool
   (cond
     (< (count left) (count right)) true
     (> (count left) (count right)) false
-    :else (equal-width-decimal-less? left right)))
+      :else (equal-width-decimal-less? left right))))
 
 (defn current-generation-line? [line String] Bool
   (or (str/includes? line "True")
       (str/includes? (str/lower-case line) "current")))
 
-(defn current-generation [text String] (U String Nil)
-  (let [lines (Vec String) (split-lines text)]
-    (loop [index Int 0]
-      (if (>= index (count lines))
-        nil
-        (let [line String (nth lines index)
-              generation String (first-token line)]
-          (if (and (current-generation-line? line)
-                   (decimal-string? generation))
-            generation
-            (recur (+ index 1))))))))
+(js/export
+  (defn current-generation [text String] (U String Nil)
+    (let [lines (Vec String) (split-lines text)]
+      (loop [index Int 0]
+        (if (>= index (count lines))
+          nil
+          (let [line String (nth lines index)
+                generation String (first-token line)]
+            (if (and (current-generation-line? line)
+                     (decimal-string? generation))
+              generation
+              (recur (+ index 1)))))))))
 
-(defn generation-present?
+(js/export
+  (defn generation-present?
   [text String
    generation String] Bool
   (let [lines (Vec String) (split-lines text)]
@@ -291,29 +321,33 @@
         false
         (if (= (first-token (nth lines index)) generation)
           true
-          (recur (+ index 1)))))))
+          (recur (+ index 1))))))))
 
-(defn exact-store-path? [text String] Bool
-  (let [trimmed String (str/trim text)]
-    (and (store-path? trimmed)
-         (not (str/includes? trimmed "\n"))
-         (not (str/includes? trimmed "\r"))
-         (not (str/includes? trimmed "\t"))
-         (not (str/includes? trimmed " ")))))
+(js/export
+  (defn exact-store-path? [text String] Bool
+    (let [trimmed String (str/trim text)]
+      (and (store-path? trimmed)
+           (not (str/includes? trimmed "\n"))
+           (not (str/includes? trimmed "\r"))
+           (not (str/includes? trimmed "\t"))
+           (not (str/includes? trimmed " "))))))
 
-(defn start-event
+(js/export
+  (defn start-event
   [effect ArgvEffect
    revision String] TraceEvent
-  (->TraceEvent "span_start" (argveffect-phase effect) "started" revision))
+    (->TraceEvent "span_start" (argveffect-phase effect) "started" revision)))
 
-(defn end-event
+(js/export
+  (defn end-event
   [effect ArgvEffect
    revision String
    status Int] TraceEvent
   (->TraceEvent "span_end" (argveffect-phase effect)
-    (if (= status 0) "ok" "error") revision))
+      (if (= status 0) "ok" "error") revision)))
 
-(defn simulate
+(js/export
+  (defn simulate
   [effects (Vec ArgvEffect)
    statuses (Vec Int)
    revision String] Simulation
@@ -331,12 +365,13 @@
                 (end-event effect revision status))]
           (if (= status 0)
             (recur (+ index 1) next-executed next-events)
-            (->Simulation status next-executed next-events)))))))
+            (->Simulation status next-executed next-events))))))))
 
-(defn effect-phases [effects (Vec ArgvEffect)] (Vec String)
-  (loop [index Int 0
-         phases (Vec String) []]
-    (if (>= index (count effects))
-      phases
-      (recur (+ index 1)
-        (conj phases (argveffect-phase (nth effects index)))))))
+(js/export
+  (defn effect-phases [effects (Vec ArgvEffect)] (Vec String)
+    (loop [index Int 0
+           phases (Vec String) []]
+      (if (>= index (count effects))
+        phases
+        (recur (+ index 1)
+          (conj phases (argveffect-phase (nth effects index))))))))

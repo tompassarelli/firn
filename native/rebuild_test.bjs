@@ -1,6 +1,7 @@
-#lang beagle
+#lang beagle/js
 (ns firn.rebuild-test
-  (:require [firn.rebuild :as rebuild]))
+  (:require [clojure.string :as str]
+            [firn.rebuild :as rebuild]))
 
 (defrecord TestResult
   [name String
@@ -227,13 +228,12 @@
    (->TestResult "first-failure-stops" (case-first-failure-stops))
    (->TestResult "store-path-gate" (case-store-path-gate))])
 
-(defn -main [args (Vec String)] Int
-  (loop [(index Int) 0]
-    (if (>= index (count tests))
-      0
-      (let [(test TestResult) (nth tests index)]
-        (if (testresult-passed test)
-          (recur (+ index 1))
-          (do
-            (print (str "FAIL: " (testresult-name test) "\n"))
+(js/export
+  (defn run-tests [] Int
+    (loop [(index Int) 0]
+      (if (>= index (count tests))
+        0
+        (let [(test TestResult) (nth tests index)]
+          (if (testresult-passed test)
+            (recur (+ index 1))
             1))))))

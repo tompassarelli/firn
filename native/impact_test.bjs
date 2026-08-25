@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.impact-test
   (:require [firn.impact :as impact]))
 
@@ -98,16 +98,13 @@
    (->TestResult "up-to-date" (case-up-to-date))
    (->TestResult "failure-tail" (case-failure-tail))])
 
-(defn -main [args (Vec String)] Int
-  (let [(results (Vec TestResult)) (cases)]
-    (loop [(index Int) 0
-           (failures Int) 0]
-      (if (>= index (count results))
-        failures
-        (let [(result TestResult) (nth results index)]
-          (do
-            (println
-              (str (if (testresult-passed result) "PASS " "FAIL ")
-                (testresult-name result)))
+(js/export
+  (defn run-tests [] Int
+    (let [(results (Vec TestResult)) (cases)]
+      (loop [(index Int) 0
+             (failures Int) 0]
+        (if (>= index (count results))
+          failures
+          (let [(result TestResult) (nth results index)]
             (recur (+ index 1)
               (if (testresult-passed result) failures (+ failures 1)))))))))

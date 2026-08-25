@@ -39,33 +39,30 @@ die() {
 [[ -x "$beagle/bin/beagle" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
 
-build_native() {
-  local name="$1" entry="$2"
-  shift 2
-  local output="$scratch/$name"
-  mkdir -p "$scratch/$name-artifacts"
-  timeout --foreground 620 "$beagle/bin/beagle" native-exe \
-    --out "$output" \
-    --entry "$entry" \
-    --artifacts "$scratch/$name-artifacts" \
-    "$@" >"$scratch/$name.build.out" 2>"$scratch/$name.build.err" \
-    || {
-      sed -n '1,240p' "$scratch/$name.build.err" >&2
-      die "$name compilation failed"
-    }
-  [[ -x "$output" ]] || die "$name is not executable"
-}
+modules="$scratch/modules"
+json="$beagle/native-core/src/native/json.bjs"
+timeout --foreground 120 "$beagle/bin/beagle" build \
+  "$json" \
+  "$repo/native/impact.bjs" \
+  "$repo/native/impact_test.bjs" \
+  "$repo/native/rebuild.bjs" \
+  "$repo/native/rebuild_test.bjs" \
+  "$repo/native/rebuild_native.bjs" \
+  "$repo/native/firn_rebuild_family.bjs" \
+  --out "$modules" \
+  >"$scratch/rebuild.build.out" 2>"$scratch/rebuild.build.err" \
+  || {
+    sed -n '1,240p' "$scratch/rebuild.build.err" >&2
+    die "rebuild module compilation failed"
+  }
 
-json="$beagle/native-core/src/native/json.bgl"
-core="$repo/native/rebuild.bgl"
-native="$repo/native/rebuild_native.bgl"
+bun="${FIRN_BUN:-$(command -v bun || true)}"
+[[ -n "$bun" && -x "$bun" ]] || die "Bun runtime is unavailable"
 
-build_native rebuild-test firn.rebuild-test/-main \
-  "$core" "$repo/native/rebuild_test.bgl"
-build_native rebuild-native firn.rebuild-native/-main \
-  "$json" "$core" "$native"
-
-timeout --foreground 30 "$scratch/rebuild-test" \
+timeout --foreground 30 env \
+  FIRN_IMPACT_TEST_MODULE="$modules/firn/impact-test.js" \
+  FIRN_REBUILD_TEST_MODULE="$modules/firn/rebuild-test.js" \
+  "$bun" "$repo/native/firn_rebuild_test_host.mjs" \
   >"$scratch/pure.out" 2>"$scratch/pure.err" \
   || die "pure rebuild fixtures failed"
 [[ ! -s "$scratch/pure.out" ]] || die "pure fixtures wrote stdout"
@@ -181,7 +178,9 @@ run_host_case() {
     FIRN_TRACE_ID="$name" \
     FIRN_COMMAND_LOG="$scratch/$name.commands" \
     CASE_PLATFORM="$platform" \
-    "$@" "$scratch/rebuild-native" host "$edge" "$target" \
+    FIRN_REBUILD_MODULE="$modules/firn/rebuild-family.js" \
+    "$@" "$bun" "$repo/native/firn_rebuild_host.mjs" \
+    host "$edge" "$target" \
     >"$scratch/$name.out" 2>"$scratch/$name.err"
   local status=$?
   set -e

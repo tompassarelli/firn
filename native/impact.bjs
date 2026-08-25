@@ -1,42 +1,49 @@
-#lang beagle
-(ns firn.impact)
+#lang beagle/js
+(ns firn.impact
+  (:require [clojure.string :as str]))
 
-(defrecord DryRunResult
-  [exit-status Int
-   output String])
+(js/export
+  (defrecord DryRunResult
+    [exit-status Int
+     output String]))
 
-(defrecord ImpactInput
-  [host String
-   dry-run DryRunResult
-   current-system-derivations (Vec String)])
+(js/export
+  (defrecord ImpactInput
+    [host String
+     dry-run DryRunResult
+     current-system-derivations (Vec String)]))
 
-(defrecord ExpensiveBuild
-  [name String
-   estimate String])
+(js/export
+  (defrecord ExpensiveBuild
+    [name String
+     estimate String]))
 
-(defrecord RebuildImpact
-  [builds (Vec String)
-   fetches (Vec String)
-   notable-builds (Vec ExpensiveBuild)
-   new-packages (Vec String)])
+(js/export
+  (defrecord RebuildImpact
+    [builds (Vec String)
+     fetches (Vec String)
+     notable-builds (Vec ExpensiveBuild)
+     new-packages (Vec String)]))
 
-(defunion ImpactResult
-  (ImpactReady
-    [impact RebuildImpact
-     text String])
-  (ImpactFailed [text String]))
+(js/export
+  (defunion ImpactResult
+    (ImpactReady
+      [impact RebuildImpact
+       text String])
+    (ImpactFailed [text String])))
 
-(defn split-lines [text String] (Vec String)
-  (loop [index Int 0
-         start Int 0
-         lines (Vec String) []]
-    (if (>= index (count text))
-      (if (< start (count text))
-        (conj lines (subs text start (count text)))
-        lines)
-      (if (= (subs text index (+ index 1)) "\n")
-        (recur (+ index 1) (+ index 1) (conj lines (subs text start index)))
-        (recur (+ index 1) start lines)))))
+(js/export
+  (defn split-lines [text String] (Vec String)
+    (loop [index Int 0
+           start Int 0
+           lines (Vec String) []]
+      (if (>= index (count text))
+        (if (< start (count text))
+          (conj lines (subs text start (count text)))
+          lines)
+        (if (= (subs text index (+ index 1)) "\n")
+          (recur (+ index 1) (+ index 1) (conj lines (subs text start index)))
+          (recur (+ index 1) start lines))))))
 
 (defn starts-with?
   [text String
@@ -269,12 +276,13 @@
         text
         (recur (+ index 1) (str text (nth lines index) "\n"))))))
 
-(defn interpret [input ImpactInput] ImpactResult
-  (let [dry-run DryRunResult (impactinput-dry-run input)]
-    (if (not= 0 (dryrunresult-exit-status dry-run))
-      (->ImpactFailed
-        (str "firn impact: dry-run failed (eval error?)\n"
-          (failure-tail (dryrunresult-output dry-run))))
-      (let [planned RebuildImpact (planned-impact (dryrunresult-output dry-run))
-            impact RebuildImpact (enrich-impact planned (impactinput-current-system-derivations input))]
-        (->ImpactReady impact (render-impact (impactinput-host input) impact))))))
+(js/export
+  (defn interpret [input ImpactInput] ImpactResult
+    (let [dry-run DryRunResult (impactinput-dry-run input)]
+      (if (not= 0 (dryrunresult-exit-status dry-run))
+        (->ImpactFailed
+          (str "firn impact: dry-run failed (eval error?)\n"
+            (failure-tail (dryrunresult-output dry-run))))
+        (let [planned RebuildImpact (planned-impact (dryrunresult-output dry-run))
+              impact RebuildImpact (enrich-impact planned (impactinput-current-system-derivations input))]
+          (->ImpactReady impact (render-impact (impactinput-host input) impact)))))))
