@@ -15,7 +15,7 @@
          :users.groups.kanata {}
          :services.kanata
           {:enable    true
-           :package   pkgs.kanata
+           :package   pkgs.unstable.kanata
            :keyboards
             (lib.mkIf (!= cfg.devices [])
               {:main
