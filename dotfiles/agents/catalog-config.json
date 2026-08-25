@@ -246,7 +246,7 @@
       "category": "authoring",
       "owner": {
         "repo": "nixos-config",
-        "path": "native/system_policy_native.bgl"
+        "path": "native/system_policy_native.bjs"
       }
     },
     "git-blind-stage-guard": {

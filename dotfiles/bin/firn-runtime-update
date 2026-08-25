@@ -26,7 +26,7 @@ if [[ ! -x "$beagle" ]]; then
     "$beagle_path" >&2
   exit 1
 fi
-for prerequisite in cmp git sha256sum; do
+for prerequisite in bun cmp find git sha256sum; do
   if ! command -v "$prerequisite" >/dev/null 2>&1; then
     printf 'firn-runtime-update: required producer command is unavailable: %s\n' \
       "$prerequisite" >&2
@@ -34,11 +34,9 @@ for prerequisite in cmp git sha256sum; do
   fi
 done
 
-datum_reader="$beagle_path/native-core/src/beagle/datum_reader.bgl"
-native_json="$beagle_path/native-core/src/native/json.bgl"
-nix_schema_path="$beagle_path/native-core/src/beagle/nix_schema_path.bgl"
-native_json_js="$beagle_path/native-core/src/native/json.bjs"
-nix_schema_path_js="$beagle_path/native-core/src/beagle/nix_schema_path.bjs"
+datum_reader="$beagle_path/native-core/src/beagle/datum_reader.bjs"
+native_json="$beagle_path/native-core/src/native/json.bjs"
+nix_schema_path="$beagle_path/native-core/src/beagle/nix_schema_path.bjs"
 dispatcher_source="$firn_repo/native/firn.bjs"
 dispatcher_bridge="$firn_repo/native/firn_host.mjs"
 beagle_core="$beagle_path/beagle-lib/lib/beagle/core.js"
@@ -53,39 +51,43 @@ dispatcher_sources=(
 tag_sources=(
   "$datum_reader"
   "$native_json"
-  "$firn_repo/native/tag_resolve.bgl"
-  "$firn_repo/native/tag_inputs.bgl"
-  "$firn_repo/native/tag_resolve_driver.bgl"
-  "$firn_repo/native/tag_resolve_native.bgl"
-  "$firn_repo/native/tag_commands.bgl"
-  "$firn_repo/native/tag_commands_driver.bgl"
-  "$firn_repo/native/tag_commands_native.bgl"
-  "$firn_repo/native/firn_tag_family.bgl"
+  "$firn_repo/native/tag_resolve.bjs"
+  "$firn_repo/native/tag_inputs.bjs"
+  "$firn_repo/native/tag_resolve_driver.bjs"
+  "$firn_repo/native/tag_resolve_family.bjs"
+  "$firn_repo/native/tag_commands.bjs"
+  "$firn_repo/native/tag_commands_driver.bjs"
+  "$firn_repo/native/tag_commands_family.bjs"
+  "$firn_repo/native/firn_tag_family.bjs"
 )
+tag_bridge="$firn_repo/native/firn_tag_host.mjs"
 flake_input_sources=(
   "$datum_reader"
-  "$firn_repo/native/flake_input.bgl"
-  "$firn_repo/native/flake_input_driver.bgl"
-  "$firn_repo/native/flake_input_native.bgl"
+  "$firn_repo/native/flake_input.bjs"
+  "$firn_repo/native/flake_input_driver.bjs"
+  "$firn_repo/native/flake_input_family.bjs"
 )
+flake_input_bridge="$firn_repo/native/flake_input_host.mjs"
 inventory_sources=(
   "$datum_reader"
   "$native_json"
-  "$firn_repo/native/tag_resolve.bgl"
-  "$firn_repo/native/tag_inputs.bgl"
-  "$firn_repo/native/tag_resolve_driver.bgl"
-  "$firn_repo/native/tag_resolve_native.bgl"
-  "$firn_repo/native/inventory.bgl"
-  "$firn_repo/native/inventory_native.bgl"
+  "$firn_repo/native/tag_resolve.bjs"
+  "$firn_repo/native/tag_inputs.bjs"
+  "$firn_repo/native/tag_resolve_driver.bjs"
+  "$firn_repo/native/tag_resolve_family.bjs"
+  "$firn_repo/native/inventory.bjs"
+  "$firn_repo/native/inventory_family.bjs"
 )
+inventory_bridge="$firn_repo/native/inventory_host.mjs"
 authoring_sources=(
   "$native_json"
-  "$firn_repo/native/authoring.bgl"
-  "$firn_repo/native/authoring_native.bgl"
+  "$firn_repo/native/authoring.bjs"
+  "$firn_repo/native/authoring_native.bjs"
 )
+authoring_bridge="$firn_repo/native/authoring_host.mjs"
 views_sources=(
-  "$native_json_js"
-  "$nix_schema_path_js"
+  "$native_json"
+  "$nix_schema_path"
   "$firn_repo/native/firn_views.bjs"
   "$firn_repo/native/firn_views_native.bjs"
 )
@@ -93,61 +95,76 @@ views_bridge="$firn_repo/native/firn_views_host.mjs"
 repo_build_sources=(
   "$datum_reader"
   "$native_json"
-  "$firn_repo/native/tag_resolve.bgl"
-  "$firn_repo/native/tag_inputs.bgl"
-  "$firn_repo/native/tag_resolve_driver.bgl"
-  "$firn_repo/native/tag_resolve_native.bgl"
-  "$firn_repo/native/flake_input.bgl"
-  "$firn_repo/native/flake_input_driver.bgl"
-  "$firn_repo/native/flake_input_native.bgl"
-  "$firn_repo/native/repo_build.bgl"
-  "$firn_repo/native/repo_build_native.bgl"
+  "$firn_repo/native/tag_resolve.bjs"
+  "$firn_repo/native/tag_inputs.bjs"
+  "$firn_repo/native/tag_resolve_driver.bjs"
+  "$firn_repo/native/tag_resolve_family.bjs"
+  "$firn_repo/native/flake_input.bjs"
+  "$firn_repo/native/flake_input_driver.bjs"
+  "$firn_repo/native/flake_input_family.bjs"
+  "$firn_repo/native/repo_build.bjs"
+  "$firn_repo/native/repo_build_family.bjs"
 )
+repo_build_bridge="$firn_repo/native/repo_build_host.mjs"
 schema_sources=(
   "$native_json"
-  "$firn_repo/native/schema_transaction.bgl"
-  "$firn_repo/native/schema_transaction_native.bgl"
+  "$firn_repo/native/schema_transaction.bjs"
+  "$firn_repo/native/schema_transaction_native.bjs"
 )
+schema_bridge="$firn_repo/native/schema_transaction_host.mjs"
 repo_workflow_sources=(
   "$native_json"
-  "$firn_repo/native/repo_quality.bgl"
-  "$firn_repo/native/repo_workflows.bgl"
-  "$firn_repo/native/repo_workflows_native.bgl"
+  "$firn_repo/native/repo_quality.bjs"
+  "$firn_repo/native/repo_workflows.bjs"
+  "$firn_repo/native/repo_workflows_runtime.bjs"
 )
+repo_workflow_bridge="$firn_repo/native/repo_workflows_host.mjs"
 rebuild_sources=(
   "$native_json"
-  "$firn_repo/native/impact.bgl"
-  "$firn_repo/native/rebuild.bgl"
-  "$firn_repo/native/rebuild_native.bgl"
-  "$firn_repo/native/firn_rebuild_family.bgl"
+  "$firn_repo/native/impact.bjs"
+  "$firn_repo/native/rebuild.bjs"
+  "$firn_repo/native/rebuild_native.bjs"
+  "$firn_repo/native/firn_rebuild_family.bjs"
 )
+rebuild_bridge="$firn_repo/native/firn_rebuild_host.mjs"
 prewarm_sources=(
-  "$firn_repo/native/prewarm.bgl"
-  "$firn_repo/native/prewarm_native.bgl"
+  "$firn_repo/native/prewarm.bjs"
 )
+prewarm_bridge="$firn_repo/native/prewarm_host.mjs"
 
 case "$scope" in
   repo)
     selected_sources=(
       "${dispatcher_sources[@]}"
       "${repo_build_sources[@]}"
+      "$repo_build_bridge"
       "${schema_sources[@]}"
+      "$schema_bridge"
     )
     ;;
   full)
     selected_sources=(
       "${dispatcher_sources[@]}"
       "${tag_sources[@]}"
+      "$tag_bridge"
       "${flake_input_sources[@]}"
+      "$flake_input_bridge"
       "${inventory_sources[@]}"
+      "$inventory_bridge"
       "${authoring_sources[@]}"
+      "$authoring_bridge"
       "${views_sources[@]}"
       "$views_bridge"
       "${repo_build_sources[@]}"
+      "$repo_build_bridge"
       "${schema_sources[@]}"
+      "$schema_bridge"
       "${repo_workflow_sources[@]}"
+      "$repo_workflow_bridge"
       "${rebuild_sources[@]}"
+      "$rebuild_bridge"
       "${prewarm_sources[@]}"
+      "$prewarm_bridge"
     )
     ;;
 esac
@@ -186,7 +203,7 @@ mkdir -p "$stage/bin" "$stage/lib" "$stage/artifacts" \
 
 manifest="$stage/manifest"
 {
-  printf 'format=firn-cli-runtime/v2\n'
+  printf 'format=firn-cli-runtime/v3\n'
   printf 'scope=%s\n' "$scope"
   printf 'firn_revision=%s\n' "$firn_revision"
   printf 'beagle_revision=%s\n' "$beagle_revision"
@@ -252,112 +269,78 @@ materialize_dispatcher() {
   record_generated_artifact beagle-package node_modules/beagle/package.json
 }
 
-materialize() {
+materialize_js() {
   local component="$1"
   local binary="$2"
-  local entry="$3"
-  shift 3
-  local artifacts="$stage/artifacts/$component"
-  local output="$stage/bin/$binary"
-  local source_id
-  local artifact_id
-  local source
-
-  mkdir -p "$artifacts"
-  if ! "$beagle" native-exe \
-    --out "$output" \
-    --artifacts "$artifacts" \
-    --entry "$entry" \
-    "$@"; then
-    printf 'firn-runtime-update: native materialization failed: %s\n' \
-      "$component" >&2
-    exit 1
-  fi
-
-  if [[ ! -x "$output" ]]; then
-    printf 'firn-runtime-update: materializer produced no executable: %s\n' \
-      "$component" >&2
-    exit 1
-  fi
-  if [[ ! -f "$artifacts/report.txt" ]] ||
-     [[ ! -f "$artifacts/native-exe.report.txt" ]] ||
-     ! grep -Fxq "source-entry $entry" "$artifacts/report.txt" ||
-     ! grep -Fq "native-exe-entry PASS name=$entry " \
-       "$artifacts/native-exe.report.txt"; then
-    printf 'firn-runtime-update: materializer producer identity is invalid: %s\n' \
-      "$component" >&2
-    exit 1
-  fi
-
-  source_id="$(sed -n \
-    's/^native-provenance-v0 source sha256:\([0-9a-f]\{64\}\)$/\1/p' \
-    "$artifacts/report.txt")"
-  if [[ ${#source_id} -ne 64 ]]; then
-    printf 'firn-runtime-update: materializer source identity is invalid: %s\n' \
-      "$component" >&2
-    exit 1
-  fi
-  read -r artifact_id _ < <(sha256sum "$output")
-  artifact_ids["bin/$binary"]="$artifact_id"
-  artifact_paths+=("bin/$binary")
-  binaries+=("$binary")
-  printf 'component=%s entry=%s executable=bin/%s source_sha256=%s artifact_sha256=%s\n' \
-    "$component" "$entry" "$binary" "$source_id" "$artifact_id" \
-    >>"$manifest"
-}
-
-materialize_views() {
-  local output="$stage/lib/firn/views-native.js"
-  local bridge_output="$stage/bin/firn-views"
+  local module_relative="$3"
+  local module_environment="$4"
+  local bridge="$5"
+  shift 5
+  local output_root="$stage/lib/$component"
+  local module="$output_root/$module_relative"
+  local host="$output_root/host.mjs"
+  local launcher="$stage/bin/$binary"
   local relative
 
-  if ! "$beagle" build "${views_sources[@]}" --out "$stage/lib"; then
-    printf 'firn-runtime-update: JS materialization failed: views\n' >&2
+  mkdir -p "$output_root"
+  if ! "$beagle/bin/beagle-build-all" "$@" --out "$output_root"; then
+    printf 'firn-runtime-update: Beagle/JS materialization failed: %s\n' \
+      "$component" >&2
     exit 1
   fi
-  if [[ ! -f "$output" ]]; then
-    printf 'firn-runtime-update: materializer produced no JS views module\n' >&2
+  if [[ ! -f "$module" ]]; then
+    printf 'firn-runtime-update: materializer produced no JS module: %s\n' \
+      "$component" >&2
     exit 1
   fi
-  cp -- "$views_bridge" "$bridge_output"
-  chmod +x "$bridge_output"
-  record_artifact views-host bin/firn-views "$views_bridge"
-  binaries+=("firn-views")
+  cp -- "$bridge" "$host"
+  cat >"$launcher" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+here="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+exec env $module_environment="\$here/../lib/$component/$module_relative" \
+  bun "\$here/../lib/$component/host.mjs" "\$@"
+EOF
+  chmod +x "$launcher"
+  record_generated_artifact "$component-launcher" "bin/$binary"
+  record_artifact "$component-host" "lib/$component/host.mjs" "$bridge"
   while IFS= read -r relative; do
-    record_generated_artifact views-js "${relative#"$stage/"}"
-  done < <(find "$stage/lib" -type f -name '*.js' ! -path '*/firn-dispatcher.js' \
-    -print | sort)
-  printf 'component=views entry=firn.views-native/run executable=bin/firn-views runtime=bun\n' \
-    >>"$manifest"
+    record_generated_artifact "$component-js" "${relative#"$stage/"}"
+  done < <(find "$output_root" -type f -name '*.js' -print | sort)
+  binaries+=("$binary")
+  printf 'component=%s module=lib/%s/%s executable=bin/%s runtime=bun\n' \
+    "$component" "$component" "$module_relative" "$binary" >>"$manifest"
 }
 
 materialize_dispatcher
 case "$scope" in
   repo)
-    materialize repo-build firn-repo-build firn.repo-build-native/-main \
-      "${repo_build_sources[@]}"
-    materialize schema firn-schema firn.schema-transaction-native/-main \
-      "${schema_sources[@]}"
+    materialize_js repo-build firn-repo-build firn/repo-build-family.js \
+      FIRN_REPO_BUILD_MODULE "$repo_build_bridge" "${repo_build_sources[@]}"
+    materialize_js schema firn-schema firn/schema-transaction-native.js \
+      FIRN_SCHEMA_MODULE "$schema_bridge" "${schema_sources[@]}"
     ;;
   full)
-    materialize tag firn-tag firn.tag-family/-main "${tag_sources[@]}"
-    materialize flake-input firn-flake-input firn.flake-input-native/-main \
-      "${flake_input_sources[@]}"
-    materialize inventory firn-inventory firn.inventory-native/-main \
-      "${inventory_sources[@]}"
-    materialize authoring firn-authoring firn.authoring-native/-main \
-      "${authoring_sources[@]}"
-    materialize_views
-    materialize repo-build firn-repo-build firn.repo-build-native/-main \
-      "${repo_build_sources[@]}"
-    materialize schema firn-schema firn.schema-transaction-native/-main \
-      "${schema_sources[@]}"
-    materialize repo-workflow firn-repo-workflow firn.repo-workflows-native/-main \
-      "${repo_workflow_sources[@]}"
-    materialize rebuild firn-rebuild firn.rebuild-family/-main \
-      "${rebuild_sources[@]}"
-    materialize prewarm firn-prewarm firn.prewarm-native/-main \
-      "${prewarm_sources[@]}"
+    materialize_js tag firn-tag firn/tag-family.js \
+      FIRN_TAG_MODULE "$tag_bridge" "${tag_sources[@]}"
+    materialize_js flake-input firn-flake-input firn/flake-input-family.js \
+      FIRN_FLAKE_INPUT_MODULE "$flake_input_bridge" "${flake_input_sources[@]}"
+    materialize_js inventory firn-inventory firn/inventory-family.js \
+      FIRN_INVENTORY_MODULE "$inventory_bridge" "${inventory_sources[@]}"
+    materialize_js authoring firn-authoring firn/authoring-native.js \
+      FIRN_AUTHORING_MODULE "$authoring_bridge" "${authoring_sources[@]}"
+    materialize_js views firn-views firn/views-native.js \
+      FIRN_VIEWS_MODULE "$views_bridge" "${views_sources[@]}"
+    materialize_js repo-build firn-repo-build firn/repo-build-family.js \
+      FIRN_REPO_BUILD_MODULE "$repo_build_bridge" "${repo_build_sources[@]}"
+    materialize_js schema firn-schema firn/schema-transaction-native.js \
+      FIRN_SCHEMA_MODULE "$schema_bridge" "${schema_sources[@]}"
+    materialize_js repo-workflow firn-repo-workflow firn/repo-workflows-runtime.js \
+      FIRN_REPO_WORKFLOW_MODULE "$repo_workflow_bridge" "${repo_workflow_sources[@]}"
+    materialize_js rebuild firn-rebuild firn/rebuild-family.js \
+      FIRN_REBUILD_MODULE "$rebuild_bridge" "${rebuild_sources[@]}"
+    materialize_js prewarm firn-prewarm firn/prewarm.js \
+      FIRN_PREWARM_MODULE "$prewarm_bridge" "${prewarm_sources[@]}"
     ;;
 esac
 

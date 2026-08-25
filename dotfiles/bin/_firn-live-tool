@@ -15,18 +15,20 @@ fi
 
 case "$tool" in
   activity-menu)
-    mode="js"
     sources=("$firn_repo/native/activity_menu.bjs")
     host="$firn_repo/native/activity_menu_host.mjs"
+    module="activity/menu.js"
+    module_environment="FIRN_ACTIVITY_MENU_MODULE"
     ;;
   firn-system-policy)
-    mode="native"
-    entry="firn.system-policy-native/-main"
     sources=(
-      "$beagle_path/native-core/src/native/json.bgl"
-      "$firn_repo/native/system_policy.bgl"
-      "$firn_repo/native/system_policy_native.bgl"
+      "$beagle_path/native-core/src/native/json.bjs"
+      "$firn_repo/native/system_policy.bjs"
+      "$firn_repo/native/system_policy_native.bjs"
     )
+    host="$firn_repo/native/system_policy_host.mjs"
+    module="firn/system-policy-native.js"
+    module_environment="FIRN_SYSTEM_POLICY_MODULE"
     ;;
   *)
     printf '_firn-live-tool: unknown tool: %s\n' "$tool" >&2
@@ -40,29 +42,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ "$mode" == js ]]; then
-  bun="${FIRN_BUN:-$(command -v bun || true)}"
-  if [[ -z "$bun" || ! -x "$bun" ]]; then
-    printf '%s: Bun runtime is unavailable\n' "$tool" >&2
-    exit 127
-  fi
-  mkdir -p "$stage/modules/activity"
-  if ! "$beagle" build "${sources[0]}" "$stage/modules/activity/menu.js"; then
-    printf '%s: live Beagle/JS compilation failed\n' "$tool" >&2
-    exit 1
-  fi
-  FIRN_ACTIVITY_MENU_MODULE="$stage/modules/activity/menu.js" \
-    "$bun" "$host" "$@"
-  exit $?
+ bun="${FIRN_BUN:-$(command -v bun || true)}"
+if [[ -z "$bun" || ! -x "$bun" ]]; then
+  printf '%s: Bun runtime is unavailable\n' "$tool" >&2
+  exit 127
 fi
-
-if ! "$beagle" native-exe \
-  --out "$stage/$tool" \
-  --artifacts "$stage/artifacts" \
-  --entry "$entry" \
-  "${sources[@]}"; then
-  printf '%s: live native materialization failed\n' "$tool" >&2
+mkdir -p "$stage/modules/node_modules/beagle"
+if ! "$beagle_path/bin/beagle-build-all" "${sources[@]}" \
+  --out "$stage/modules"; then
+  printf '%s: live Beagle/JS compilation failed\n' "$tool" >&2
   exit 1
 fi
-
-"$stage/$tool" "$@"
+cp -- "$beagle_path/beagle-lib/lib/beagle/core.js" \
+  "$stage/modules/node_modules/beagle/core.js"
+printf '%s\n' '{"type":"module"}' \
+  >"$stage/modules/node_modules/beagle/package.json"
+env "$module_environment=$stage/modules/$module" "$bun" "$host" "$@"
