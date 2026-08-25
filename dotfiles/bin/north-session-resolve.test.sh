@@ -67,10 +67,11 @@ printf '%s\n%s\n' "$CODEX_HOME" "$CODEX_SQLITE_HOME" >"$CODEX_TEST_ENV_LOG"
 EOF
 chmod +x "$runtime"
 
-CODEX_RUNTIME="$runtime" \
-CODEX_TEST_ARGV_LOG="$argv_log" \
-CODEX_TEST_ENV_LOG="$env_log" \
-NORTH_NO_SLICE=1 \
+env -u CODEX_HOME -u CODEX_SQLITE_HOME \
+  CODEX_RUNTIME="$runtime" \
+  CODEX_TEST_ARGV_LOG="$argv_log" \
+  CODEX_TEST_ENV_LOG="$env_log" \
+  NORTH_NO_SLICE=1 \
   "$CODEX" resume "$PSID" >/dev/null 2>&1 || fail "pooled resume launch failed"
 
 mapfile -t launched_env <"$env_log"
