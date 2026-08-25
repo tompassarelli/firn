@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-AGENT_PROFILE="${AGENT_CONFIG_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
+NORTH_REPO="${AGENT_CONFIG_NORTH_REPO:-$HOME/code/north/main}"
 BEAGLE_INTEGRATION="${AGENT_CONFIG_BEAGLE_INTEGRATION:-$HOME/code/beagle/main/integrations/north}"
 export PROBE_ENV_BIN="${PROBE_ENV_BIN:-$(command -v env)}"
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/agent-config-check.XXXXXX")"
@@ -268,7 +268,7 @@ JSON
 
 run_policy_contract_fixture() {
   local base="$scratch/policy-contract-base"
-  local north_root="${AGENT_PROFILE%/profiles/tom}"
+  local north_root="$NORTH_REPO"
   local north_catalog="${NORTH_AGENT_CATALOG:-$north_root/agent-catalog/catalog.json}"
   local preamble='Provider-neutral bootstrap.'
   local route='- Repository edits, lanes, pins, commits, landing, or pushes → `repo-safety`.'
@@ -650,6 +650,20 @@ grep -Fq '"Allocation  ' \
 
 source "$REPO/scripts/agent-config-check.sh"
 run_locked_hook_provenance_fixture
+
+for target in \
+  instructions/shared/AGENTS.md \
+  skills/shared \
+  provider-hooks \
+  instructions/code/AGENTS.md; do
+  grep -Fq "/.local/state/north/agents/current/$target" \
+    "$REPO/scripts/agent-config-check.sh"
+done
+if rg -n 'LIVE_SHARED|LIVE_SKILLS_FARM|AGENT_CONFIG_LIVE_NORTH_PROFILE' \
+  "$REPO/scripts/agent-config-check.sh"; then
+  printf 'agent-config-check still carries a legacy live profile farm\n' >&2
+  exit 1
+fi
 
 # Sealed promotion replaces store residency as the immutability proof for the
 # North/Beagle managed hooks. Only a real promote can produce root-owned 0444

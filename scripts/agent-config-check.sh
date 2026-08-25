@@ -647,9 +647,7 @@ BEAGLE_INTEGRATION="${AGENT_CONFIG_BEAGLE_INTEGRATION:-$HOME/code/beagle/main/in
 FIRN_INTEGRATION="$REPO/modules/north-profile/firn"
 CODEX="$REPO/dotfiles/codex"
 LIVE_REPO="${AGENT_CONFIG_LIVE_REPO:-$HOME/code/nixos-config}"
-LIVE_SHARED="${AGENT_CONFIG_LIVE_NORTH_PROFILE:-$HOME/code/north/main/profiles/tom}"
 LIVE_AGENT_ROOT="${NORTH_AGENT_STATE_ROOT:-$HOME/.local/state/north/agents}"
-LIVE_SKILLS_FARM="${AGENT_CONFIG_LIVE_SKILLS_FARM:-$LIVE_AGENT_ROOT/current/skills/shared}"
 LIVE_NORTH_ROOT="${AGENT_CONFIG_LIVE_NORTH_ROOT:-$HOME/code/north}"
 LIVE_BEAGLE_ROOT="${AGENT_CONFIG_LIVE_BEAGLE_ROOT:-$HOME/code/beagle}"
 LIVE_FIRN_ROOT="${AGENT_CONFIG_LIVE_FIRN_ROOT:-$HOME/code/nixos-config}"
@@ -758,7 +756,7 @@ before=$fail
 hook_count=0
 if command -v shellcheck >/dev/null 2>&1; then
   for hook_root in \
-    "$SHARED/hooks" \
+    "$LIVE_AGENT_ROOT/current/provider-hooks" \
     "$BEAGLE_INTEGRATION/hooks" \
     "$FIRN_INTEGRATION/hooks"; do
     if [ ! -d "$hook_root" ]; then
@@ -780,7 +778,7 @@ else bad "shellcheck is required to lint shared hooks"; fi
 skill_count=0
 for skill_root in \
   "$REPO/dotfiles/agents/skills" \
-  "$SHARED/skills" \
+  "$LIVE_AGENT_ROOT/current/skills/shared" \
   "$BEAGLE_INTEGRATION/skills" \
   "$FIRN_INTEGRATION/skills"; do
   if [ ! -d "$skill_root" ]; then
@@ -808,23 +806,37 @@ if grep -Fq '"/.local/state/north/agents/current/instructions/shared/AGENTS.md"'
 else
   bad "~/.agents/AGENTS.md must be wired to the current North activation generation"
 fi
-for profile_member in docs hooks; do
-  if grep -Fq "\"/code/north/main/agent-profile/$profile_member\"" "$north_profile_module"; then
-    ok_detail "~/.agents/$profile_member is wired to the North-composed profile"
-  else
-    bad "~/.agents/$profile_member must be wired to ~/code/north/main/agent-profile"
-  fi
-done
 if grep -Fq '"/.local/state/north/agents/current/skills/shared"' "$north_profile_module"; then
-  ok_detail '~/.agents/skills is wired to the current North skills projection'
+  ok_detail 'shared agent skills are wired to the current North projection'
 else
-  bad '~/.agents/skills must be wired to the current North activation generation'
+  bad 'shared agent skills must be wired to the current North activation generation'
+fi
+if grep -Fq '"/.local/state/north/agents/current/provider-hooks"' "$north_profile_module"; then
+  ok_detail 'shared agent hooks are wired to the current North provider hooks'
+else
+  bad 'shared agent hooks must be wired to the current North activation generation'
+fi
+if grep -Fq '"/.local/state/north/agents/current/instructions/code/AGENTS.md"' "$north_profile_module"; then
+  ok_detail 'code-root instructions are wired to North-generation instructions'
+else
+  bad 'code-root instructions must be wired to the current North activation generation'
+fi
+if rg -n 'agent-profile|\.config/agents|profiles/tom|\.agents/docs' \
+  "$north_profile_module" >/dev/null; then
+  bad 'north-profile module still declares a retired agent projection'
+else
+  ok_detail 'north-profile module contains no retired agent projection'
 fi
 if [ "$LOCAL" -eq 1 ]; then
   canonical_link "$HOME/.agents/AGENTS.md" "$LIVE_AGENT_ROOT/current/instructions/shared/AGENTS.md" "$HOME/.agents/AGENTS.md"
-  canonical_link "$HOME/.agents/docs" "$LIVE_SHARED/docs" "$HOME/.agents/docs"
-  canonical_link "$HOME/.agents/hooks" "$LIVE_SHARED/hooks" "$HOME/.agents/hooks"
-  canonical_link "$HOME/.agents/skills" "$LIVE_SKILLS_FARM" "$HOME/.agents/skills"
+  canonical_link "$HOME/.agents/hooks" "$LIVE_AGENT_ROOT/current/provider-hooks" "$HOME/.agents/hooks"
+  canonical_link "$HOME/.agents/skills" "$LIVE_AGENT_ROOT/current/skills/shared" "$HOME/.agents/skills"
+  canonical_link "$HOME/code/AGENTS.md" "$LIVE_AGENT_ROOT/current/instructions/code/AGENTS.md" "$HOME/code/AGENTS.md"
+  if [ -e "$HOME/.agents/docs" ] || [ -L "$HOME/.agents/docs" ]; then
+    bad "$HOME/.agents/docs must be absent because the generation has no docs artifact"
+  else
+    ok_detail "$HOME/.agents/docs is absent"
+  fi
 fi
 group shared "$hook_count owner hooks linted · $skill_count owner skills · North-generation instructions" "$before"
 

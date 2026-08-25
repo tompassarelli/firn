@@ -25,7 +25,7 @@ nixos-config/dotfiles/codex/config.toml	4
 nixos-config/dotfiles/niri/config.kdl	7
 nixos-config/modules/beagle/default.bnix	1
 nixos-config/modules/theme-switcher/default.bnix	1
-nixos-config/scripts/agent-config-check.sh	9
+nixos-config/scripts/agent-config-check.sh	7
 nixos-config/scripts/agent-config-check.test.sh	4
 north/bin/north-mine	1
 north/bin/tests/ci-required-bars-test.sh	1

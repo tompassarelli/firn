@@ -3,7 +3,7 @@
 (ns default)
 
 ;; Firn materialises stable provider-neutral discovery paths. North owns the
-;; immutable activation generation behind them and shared docs and hooks.
+;; immutable activation generation behind them.
 (nix/module [config lib ...]
   (let [username config.myConfig.modules.users.username]
     {:tags [development]
@@ -28,16 +28,11 @@
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
                         "/.local/state/north/agents/current/skills/shared"))}
-                 ".agents/docs"
-                  {:source
-                    (config.lib.file.mkOutOfStoreSymlink
-                      (s config.home.homeDirectory
-                        "/code/north/main/agent-profile/docs"))}
                  ".agents/hooks"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/north/main/agent-profile/hooks"))}
+                        "/.local/state/north/agents/current/provider-hooks"))}
                  ;; Provider-neutral routing instructions for the ~/code root.
                  ;; North renders this exact distribution in the same atomic
                  ;; generation as sets, skills, hooks, and provider views.

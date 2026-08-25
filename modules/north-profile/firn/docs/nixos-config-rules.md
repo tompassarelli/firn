@@ -4,10 +4,10 @@ Any durable change to the machine's configuration or Firn-owned agent
 integration is declared through `~/code/nixos-config`, never left as an
 unowned live-system tweak. Declaring the stable wiring does **not** mean putting
 every frequently changing byte or child command into a bespoke Nix closure.
-Personal agent policy is composed by
-`~/code/north/main/profiles/tom`; Firn owns only its Nix-specific fragments,
-provider adapters, system packages, services, dotfiles, and Home Manager
-wiring. A fresh rebuild must reproduce the integration.
+Personal agent policy is composed into North's immutable current activation
+generation. Firn owns only its Nix-specific fragments, provider adapters,
+system packages, services, dotfiles, and Home Manager wiring. A fresh rebuild
+must reproduce the integration.
 
 ## House style — Nix is the publication boundary, not the development loop
 
@@ -49,14 +49,17 @@ publication, or rollback that must restore those exact bytes.
 
 ## Symlinks
 
-`~/.agents/docs` and `~/.agents/hooks` are `mkOutOfStoreSymlink`s into North's
-shared profile. Instructions and skills instead point into North's one current
+Agent discovery pointers are `mkOutOfStoreSymlink`s into North's one current
 activation generation under `~/.local/state/north/agents/current`:
 
 - `~/.agents/AGENTS.md` → `instructions/shared/AGENTS.md`;
 - `~/.codex/AGENTS.md` → `instructions/codex/AGENTS.md`;
 - `~/code/AGENTS.md` → `instructions/code/AGENTS.md`;
-- `~/.agents/skills` → `skills/shared`.
+- `~/.agents/skills` → `skills/shared`;
+- `~/.agents/hooks` → `provider-hooks`.
+
+North publishes no shared docs artifact, so Firn declares no `~/.agents/docs`
+projection.
 
 North owns the catalog, permission transition, module/support resolution, atomic
 generation, and those projections. Firn owns only stable discovery pointers

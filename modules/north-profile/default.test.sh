@@ -7,11 +7,17 @@ generated_file=$repo/modules/north-profile/default.nix
 firn_skill=$repo/modules/north-profile/firn/skills/firn/SKILL.md
 checker=$repo/scripts/agent-config-check.sh
 
-grep -Fq '"/.local/state/north/agents/current/skills/shared"' "$source_file"
-grep -Fq '/.local/state/north/agents/current/skills/shared";' "$generated_file"
-if rg -n '/code/north/main/(agent-profile|profiles/tom)/skills' \
+for target in \
+  instructions/shared/AGENTS.md \
+  skills/shared \
+  provider-hooks \
+  instructions/code/AGENTS.md; do
+  grep -Fq "\"/.local/state/north/agents/current/$target\"" "$source_file"
+  grep -Fq "/.local/state/north/agents/current/$target\";" "$generated_file"
+done
+if rg -n 'agent-profile|\.config/agents|profiles/tom|\.agents/docs' \
   "$source_file" "$generated_file"; then
-  printf 'Home Manager still wires ~/.agents/skills directly to the source profile\n' >&2
+  printf 'Home Manager still declares a retired agent projection\n' >&2
   exit 1
 fi
 
@@ -34,11 +40,19 @@ realized_source() {
   printf '%s\n' "$built"
 }
 
-agents_source=$(
-  realized_source \
-    "$flake#nixosConfigurations.whiterabbit.config.home-manager.users.tom.home.file.\".agents/skills\".source"
-)
-[ -L "$agents_source" ]
-[ "$(readlink "$agents_source")" = /home/tom/.local/state/north/agents/current/skills/shared ]
+for spec in \
+  '.agents/AGENTS.md|instructions/shared/AGENTS.md' \
+  '.agents/skills|skills/shared' \
+  '.agents/hooks|provider-hooks' \
+  'code/AGENTS.md|instructions/code/AGENTS.md'; do
+  home_file=${spec%%|*}
+  target=${spec#*|}
+  realized=$(
+    realized_source \
+      "$flake#nixosConfigurations.whiterabbit.config.home-manager.users.tom.home.file.\"$home_file\".source"
+  )
+  [ -L "$realized" ]
+  [ "$(readlink "$realized")" = "/home/tom/.local/state/north/agents/current/$target" ]
+done
 
-printf 'ok: evaluated Home Manager skills wiring follows the current North generation\n'
+printf 'ok: evaluated Home Manager agent wiring follows the current North generation\n'
