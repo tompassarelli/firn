@@ -15,7 +15,7 @@ FIRN_REPO="$source_repo" BEAGLE_PATH="$candidate_beagle" \
 FIRN_REPO="$source_repo" BEAGLE_PATH="$candidate_beagle" \
   FIRN_RUNTIME_ROOT="$real_runtime" \
   "$here/firn" host list all >"$scratch/real-hosts.out"
-grep -Fxq whiterabbit "$scratch/real-hosts.out"
+grep -Fxq '  whiterabbit' "$scratch/real-hosts.out"
 
 home="$scratch/home"
 beagle_path="$scratch/beagle-alt"
