@@ -200,8 +200,41 @@ seam/model; do not pretend one receipt establishes an economic ranking.
 
 Mechanically admit model, applicable policy, repository identity, entrypoint,
 environment, write authority, and a viable supervisor. A write needs an owned
-lane and no conflicting owner; an unadmitted item remains read-only or queued,
-not implicitly authorized.
+physical lane with no conflicting owner of that lane; overlapping paths in
+separate lanes are not conflicting ownership. Integration and publication each
+need unambiguous authority. An unadmitted item remains read-only or queued, not
+implicitly authorized.
+
+## Separate authoring from publication authority
+
+Overlapping path names in separate worktrees are not a write conflict. Admit
+concurrent candidate authoring when each lane has an exact base, owner, terminal
+gate. Authoring does not wait for an integration owner or landing order. Write
+authority is exclusive within one physical checkout. Before the first candidate
+integrates or publishes, name one integration owner and landing order for that
+overlapping candidate chain targeting one branch. Never turn “edits the same
+file” into a repository-wide single-writer hold or serialize unrelated
+publication chains.
+
+When an earlier overlapping candidate lands, rebase or merge every later
+candidate onto that exact published object. Reconcile both textual and semantic
+conflicts, then rerun the affected checks and publication gate. Evidence from
+the pre-rebase candidate does not prove the rebased candidate publishable.
+
+For a completed writer handoff, decide release from repository, assignment, and
+lifecycle evidence rather than notification delivery. Clean publication at an
+exact object, settled attempts, explicit recorded release, and a reaped lane
+and branch are sufficient evidence that the prior writer is gone. A missing or
+failed acknowledgement remains a coordination and provenance defect: preserve
+and repair it separately, but do not use it to fabricate an active writer,
+block an independently ready successor, or mark the goal blocked. Silence alone
+still neither transfers ownership nor authorizes cleanup.
+
+Hold authoring only for mutation of the same physical lane or an unresolved
+shared semantic contract that makes parallel candidates undefined. Hold
+integration or publication for simultaneous or competing attempts or ambiguous
+integration authority. A serial consumer still waits for the exact predecessor
+artifact it consumes.
 
 ## Use the machine without falsifying checks
 
