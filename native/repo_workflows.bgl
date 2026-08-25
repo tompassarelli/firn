@@ -179,7 +179,7 @@
   (and (<= (+ offset (count needle)) (count text))
        (= (subs text offset (+ offset (count needle))) needle)))
 
-(defn contains?
+(defn string-contains?
   [text String
    needle String] Bool
   (if (= (count needle) 0)
@@ -321,7 +321,7 @@
   (loop [index Int start]
     (if (>= index (count text))
       true
-      (if (contains? allowed (subs text index (+ index 1)))
+      (if (string-contains? allowed (subs text index (+ index 1)))
         (recur (+ index 1))
         false))))
 
@@ -841,7 +841,7 @@
       paths
       (let [source SourceText (nth sources index)]
         (recur (+ index 1)
-          (if (contains? (sourcetext-text source) name)
+          (if (string-contains? (sourcetext-text source) name)
             (conj paths (sourcetext-path source))
             paths))))))
 

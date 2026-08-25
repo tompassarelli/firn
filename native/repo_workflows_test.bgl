@@ -90,7 +90,7 @@
         first String (w/render-architecture snapshot)
         second String (w/render-architecture snapshot)]
     (and (= first second)
-         (w/contains? first "Tracked architecture entries: 2\n")
+         (w/string-contains? first "Tracked architecture entries: 2\n")
          (= (w/render-upgrade-dry-run) (w/render-upgrade-dry-run)))))
 
 (def first-party-lock String

@@ -69,10 +69,8 @@
 (defn git-argv [arguments (Vec String)] (Vec String)
   (append-argv git-environment-prefix arguments))
 
-(defn host-error-status [errno Any] Int
-  (if (integer? errno)
-    (- 0 errno)
-    (throw "host error errno must be Int")))
+(defn host-error-status [errno Int] Int
+  (- 0 errno))
 
 (defn capture-text [argv (Vec String)] CaptureTextResult
   (match (host.process/run-capture argv "" max-process-output)

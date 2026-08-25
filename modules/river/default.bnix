@@ -5,7 +5,7 @@
 ;; river 0.4 — pluggable-WM Wayland compositor. Opt-in only (:tags-opt-in
 ;; [desktop]): present in the desktop tag but OFF unless a host writes
 ;; +river, so niri (daily driver) is untouched. Package pinned to
-;; pkgs.unstable.river (0.4.5) to guarantee 0.4. Home Manager calls this
+;; pkgs.unstable.river (0.4.8) to guarantee 0.4. Home Manager calls this
 ;; option namespace programs.river-classic, but its old 0.3 default package
 ;; is overridden here and is not used.
 ;;
@@ -23,7 +23,7 @@
 ;; exact fetchzip url+hash pairs from nixpkgs river's build.zig.zon.nix, so
 ;; the dep hashes are upstream-verified. Pinned to tag 0.6.0 (commit
 ;; b0634853de4be8942a92306e386a23884841f1b2); protocol river-window-management
-;; v4, matching river 0.4.5.
+;; v4, matching river 0.4.8.
 
 (nix/module [config lib pkgs ...]
   (let

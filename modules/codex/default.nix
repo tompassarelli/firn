@@ -79,11 +79,11 @@
     srcHash = codexUpstreamPkg.src.outputHash or null;
     cargoHash = codexUpstreamPkg.cargoHash or null;
   })) pkgs.master.codex)) {
-    version = "0.146.0";
+    version = "0.149.0";
     owner = "openai";
     repo = "codex";
-    rev = "refs/tags/rust-v0.146.0";
-    tag = "rust-v0.146.0";
-    srcHash = "sha256-/kTIOX/klxm1nq2bJsBqS8f1jZZp2ilaTeULQFPJgDk=";
-    cargoHash = "sha256-N9jbH/cgAyu2QxneSnpkdaF0MgV3ZtDmN9q6rr9u+hE=";
+    rev = "refs/tags/rust-v0.149.0";
+    tag = "rust-v0.149.0";
+    srcHash = "sha256-SMVTW/CcGz4xxyeFe3KUf3Ns6jp+2SRMTvtA2o2+y7Q=";
+    cargoHash = "sha256-K58PL588Hhk75FyXgU6b8IEAco8FIz8oGd1S0WgOjyQ=";
   })) "${homeDir}/code/north/main")) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)
