@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.inventory
   (:require [beagle.datum-reader :as reader]
             [firn.tag-inputs :as input]

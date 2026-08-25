@@ -1,43 +1,49 @@
-#lang beagle
+#lang beagle/js
 (ns firn.flake-input-driver
   (:require [firn.flake-input :as input]))
 
-(defrecord ModuleSource
+(js/export
+ (defrecord ModuleSource
   [name String
-   source String])
+   source String]))
 
-(defrecord FlakeInputRepositoryData
+(js/export
+ (defrecord FlakeInputRepositoryData
   [modules (Vec ModuleSource)
-   flake-text String])
+   flake-text String]))
 
-(defunion FlakeInputArgv
-  ParsedFlakeInputEmit
+(js/export
+ (defunion FlakeInputArgv
+  (ParsedFlakeInputEmit [token Bool])
   (OtherFirnCommand [argv (Vec String)])
-  (InvalidFlakeInputArgv [argv (Vec String)]))
+  (InvalidFlakeInputArgv [argv (Vec String)])))
 
-(defunion FlakeInputEffect
+(js/export
+ (defunion FlakeInputEffect
   (StdoutText [text String])
   (StderrText [text String])
   (WriteFlake
     [path String
-     text String]))
+     text String])))
 
-(defrecord FlakeInputOutcome
+(js/export
+ (defrecord FlakeInputOutcome
   [status Int
-   effects (Vec FlakeInputEffect)])
+   effects (Vec FlakeInputEffect)]))
 
 (defunion ParsedModulesResult
   (ParsedModules [groups (Vec (Vec input/FlakeInput))])
   (RejectedModule [message String]))
 
-(defn parse-flake-input-argv [argv (Vec String)] FlakeInputArgv
+(js/export
+ (defn parse-flake-input-argv [argv (Vec String)] FlakeInputArgv
   (if (and (>= (count argv) 2)
            (= (nth argv 0) "flake-input")
            (= (nth argv 1) "resolve"))
     (if (and (= (count argv) 3) (= (nth argv 2) "emit"))
-      (->ParsedFlakeInputEmit)
+      (->ParsedFlakeInputEmit false)
       (->InvalidFlakeInputArgv argv))
-    (->OtherFirnCommand argv)))
+    (->OtherFirnCommand argv))))
 
 (defn module-parse-message
   [module-name String
@@ -62,14 +68,17 @@
         [(ModuleInputsParsed inputs)
          (parse-modules modules (+ index 1) (conj groups inputs))]))))
 
+(defn error-effects-from
+  [errors (Vec String)
+   index Int
+   effects (Vec FlakeInputEffect)] (Vec FlakeInputEffect)
+  (if (>= index (count errors))
+    effects
+    (error-effects-from errors (+ index 1)
+      (conj effects (->StderrText (str (nth errors index) "\n"))))))
+
 (defn error-effects [errors (Vec String)] (Vec FlakeInputEffect)
-  (loop [index Int 0
-         effects (Vec FlakeInputEffect) []]
-    (if (>= index (count errors))
-      effects
-      (recur (+ index 1)
-        (conj effects
-          (->StderrText (str (nth errors index) "\n")))))))
+  (error-effects-from errors 0 []))
 
 (defn source-module-line
   [inputs (Vec input/FlakeInput)
@@ -119,7 +128,8 @@
         (->WriteFlake "flake.bnix" text)
         (->StdoutText "flake-inputs: updated flake.bnix\n")])]))
 
-(defn run-flake-input-emit [repository FlakeInputRepositoryData] FlakeInputOutcome
+(js/export
+ (defn run-flake-input-emit [repository FlakeInputRepositoryData] FlakeInputOutcome
   (match (parse-modules
            (flakeinputrepositorydata-modules repository) 0 [])
     [(RejectedModule message)
@@ -134,35 +144,43 @@
              (count (flakeinputrepositorydata-modules repository))
              (input/splice-flake-inputs
                (flakeinputrepositorydata-flake-text repository)
-               inputs)))))]))
+               inputs)))))])))
+
+(defn outcome-stdout-from
+  [outcome FlakeInputOutcome index Int result String] String
+  (if (>= index (count (flakeinputoutcome-effects outcome)))
+    result
+    (match (nth (flakeinputoutcome-effects outcome) index)
+      [(StdoutText text) (outcome-stdout-from outcome (+ index 1) (str result text))]
+      [(StderrText text) (outcome-stdout-from outcome (+ index 1) result)]
+      [(WriteFlake path text) (outcome-stdout-from outcome (+ index 1) result)])))
 
 (defn outcome-stdout [outcome FlakeInputOutcome] String
-  (loop [index Int 0
-         result String ""]
-    (if (>= index (count (flakeinputoutcome-effects outcome)))
-      result
-      (match (nth (flakeinputoutcome-effects outcome) index)
-        [(StdoutText text) (recur (+ index 1) (str result text))]
-        [(StderrText text) (recur (+ index 1) result)]
-        [(WriteFlake path text) (recur (+ index 1) result)]))))
+  (outcome-stdout-from outcome 0 ""))
+
+(defn outcome-stderr-from
+  [outcome FlakeInputOutcome index Int result String] String
+  (if (>= index (count (flakeinputoutcome-effects outcome)))
+    result
+    (match (nth (flakeinputoutcome-effects outcome) index)
+      [(StdoutText text) (outcome-stderr-from outcome (+ index 1) result)]
+      [(StderrText text) (outcome-stderr-from outcome (+ index 1) (str result text))]
+      [(WriteFlake path text) (outcome-stderr-from outcome (+ index 1) result)])))
 
 (defn outcome-stderr [outcome FlakeInputOutcome] String
-  (loop [index Int 0
-         result String ""]
-    (if (>= index (count (flakeinputoutcome-effects outcome)))
-      result
-      (match (nth (flakeinputoutcome-effects outcome) index)
-        [(StdoutText text) (recur (+ index 1) result)]
-        [(StderrText text) (recur (+ index 1) (str result text))]
-        [(WriteFlake path text) (recur (+ index 1) result)]))))
+  (outcome-stderr-from outcome 0 ""))
+
+(defn outcome-effect-kinds-from
+  [outcome FlakeInputOutcome index Int result (Vec String)] (Vec String)
+  (if (>= index (count (flakeinputoutcome-effects outcome)))
+    result
+    (match (nth (flakeinputoutcome-effects outcome) index)
+      [(StdoutText text)
+       (outcome-effect-kinds-from outcome (+ index 1) (conj result "stdout"))]
+      [(StderrText text)
+       (outcome-effect-kinds-from outcome (+ index 1) (conj result "stderr"))]
+      [(WriteFlake path text)
+       (outcome-effect-kinds-from outcome (+ index 1) (conj result "write"))])))
 
 (defn outcome-effect-kinds [outcome FlakeInputOutcome] (Vec String)
-  (loop [index Int 0
-         result (Vec String) []]
-    (if (>= index (count (flakeinputoutcome-effects outcome)))
-      result
-      (match (nth (flakeinputoutcome-effects outcome) index)
-        [(StdoutText text) (recur (+ index 1) (conj result "stdout"))]
-        [(StderrText text) (recur (+ index 1) (conj result "stderr"))]
-        [(WriteFlake path text)
-         (recur (+ index 1) (conj result "write"))]))))
+  (outcome-effect-kinds-from outcome 0 []))

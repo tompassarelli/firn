@@ -4,7 +4,7 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
 beagle="${BEAGLE_PATH:?BEAGLE_PATH must name the Beagle checkout}"
-scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-repo-build-native.XXXXXX")"
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-repo-build-family.XXXXXX")"
 
 cleanup() {
   local status=$?
@@ -12,7 +12,7 @@ cleanup() {
   if ((status == 0)); then
     rm -rf "${scratch:?}"
   else
-    printf 'repo-build-native: retained failure artifacts at %s\n' \
+    printf 'repo-build-family: retained failure artifacts at %s\n' \
       "$scratch" >&2
   fi
   exit "$status"
@@ -20,64 +20,64 @@ cleanup() {
 trap cleanup EXIT
 
 die() {
-  printf 'repo-build-native: %s\n' "$*" >&2
+  printf 'repo-build-family: %s\n' "$*" >&2
   exit 1
 }
 
 [[ -x "$beagle/bin/beagle" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
 
-build_native() {
-  local name="$1" entry="$2"
-  shift 2
-  local output="$scratch/$name"
-  mkdir -p "$scratch/$name-artifacts"
-  timeout --foreground 180 "$beagle/bin/beagle" native-exe \
-    --out "$output" \
-    --entry "$entry" \
-    --artifacts "$scratch/$name-artifacts" \
-    "$@" >"$scratch/$name.build.out" 2>"$scratch/$name.build.err" \
+build_family() {
+  local output="$scratch/build"
+  mkdir -p "$output/node_modules/beagle"
+  timeout --foreground 180 "$beagle/bin/beagle-build-all" "$@" \
+    --out "$output" >"$scratch/build.out" 2>"$scratch/build.err" \
     || {
-      sed -n '1,240p' "$scratch/$name.build.err" >&2
-      die "$name compilation failed"
+      sed -n '1,240p' "$scratch/build.err" >&2
+      die "Beagle/JS graph compilation failed"
     }
-  [[ -x "$output" ]] || die "$name is not executable"
+  cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
+    "$output/node_modules/beagle/core.js"
+  cp -- "$beagle/beagle-lib/lib/beagle/host.js" \
+    "$output/node_modules/beagle/host.js"
+  printf '%s\n' '{"type":"module"}' \
+    >"$output/node_modules/beagle/package.json"
+  cp -- "$repo/native/repo_build_family_test_host.mjs" \
+    "$output/repo_build_family_test_host.mjs"
+  [[ -f "$output/firn/repo-build-family.js" ]] \
+    || die "compiled repo-build family module is unavailable"
 }
 
-core="$repo/native/repo_build.bgl"
-build_native repo-build-test firn.repo-build-test/-main \
-  "$core" "$repo/native/repo_build_test.bgl"
-
-timeout --foreground 30 "$scratch/repo-build-test" \
-  >"$scratch/pure.out" 2>"$scratch/pure.err" \
-  || die "pure repository-build fixtures failed"
-[[ ! -s "$scratch/pure.out" ]] || die "pure fixtures wrote stdout"
-[[ ! -s "$scratch/pure.err" ]] || die "pure fixtures wrote stderr"
-
-datum="$beagle/native-core/src/beagle/datum_reader.bgl"
-json="$beagle/native-core/src/native/json.bgl"
-tag_resolve="$repo/native/tag_resolve.bgl"
-tag_inputs="$repo/native/tag_inputs.bgl"
-tag_driver="$repo/native/tag_resolve_driver.bgl"
-tag_native="$repo/native/tag_resolve_native.bgl"
-flake_input="$repo/native/flake_input.bgl"
-flake_driver="$repo/native/flake_input_driver.bgl"
-flake_native="$repo/native/flake_input_native.bgl"
+core="$repo/native/repo_build.bjs"
+datum="$beagle/native-core/src/beagle/datum_reader.bjs"
+json="$beagle/native-core/src/native/json.bjs"
+tag_resolve="$repo/native/tag_resolve.bjs"
+tag_inputs="$repo/native/tag_inputs.bjs"
+tag_driver="$repo/native/tag_resolve_driver.bjs"
+tag_family="$repo/native/tag_resolve_family.bjs"
+flake_input="$repo/native/flake_input.bjs"
+flake_driver="$repo/native/flake_input_driver.bjs"
+flake_family="$repo/native/flake_input_family.bjs"
 store_slots="$beagle/store/src/store/slots.bgl"
 store_types="$beagle/store/src/store/types.bgl"
-responsibility_projection="$repo/native/responsibility_projection.bgl"
-responsibility_test="$repo/native/responsibility_projection_test.bgl"
-inventory="$repo/native/inventory.bgl"
-inventory_native="$repo/native/inventory_native.bgl"
+responsibility_projection="$repo/native/responsibility_projection.bjs"
+responsibility_test="$repo/native/responsibility_projection_test.bjs"
+inventory="$repo/native/inventory.bjs"
+inventory_family="$repo/native/inventory_family.bjs"
 
-build_native responsibility-projection-test \
-  firn.responsibility-projection-test/-main \
+build_family \
   "$datum" "$json" "$tag_resolve" "$tag_inputs" "$tag_driver" \
-  "$tag_native" "$store_slots" "$store_types" \
-  "$inventory" "$inventory_native" \
-  "$responsibility_projection" "$responsibility_test"
+  "$tag_family" "$store_slots" "$store_types" \
+  "$flake_input" "$flake_driver" "$flake_family" \
+  "$repo/native/flake_input_test.bjs" \
+  "$repo/native/flake_input_driver_test.bjs" \
+  "$inventory" "$inventory_family" "$repo/native/inventory_test.bjs" \
+  "$responsibility_projection" "$responsibility_test" \
+  "$core" "$repo/native/repo_build_test.bjs" \
+  "$repo/native/repo_build_family.bjs"
 
-timeout --foreground 30 "$scratch/responsibility-projection-test" "$repo" \
+timeout --foreground 30 bun \
+  "$scratch/build/repo_build_family_test_host.mjs" "$repo" \
   >"$scratch/responsibility.out" 2>"$scratch/responsibility.err" \
   || {
     sed -n '1,240p' "$scratch/responsibility.err" >&2
@@ -87,11 +87,6 @@ timeout --foreground 30 "$scratch/responsibility-projection-test" "$repo" \
   || die "responsibility projection fixture wrote stdout"
 [[ ! -s "$scratch/responsibility.err" ]] \
   || die "responsibility projection fixture wrote stderr"
-
-build_native repo-build-native firn.repo-build-native/-main \
-  "$datum" "$json" "$tag_resolve" "$tag_inputs" \
-  "$tag_driver" "$tag_native" "$flake_input" "$flake_driver" \
-  "$flake_native" "$core" "$repo/native/repo_build_native.bgl"
 
 fixture="$scratch/repo"
 fake_beagle="$scratch/beagle"
@@ -185,7 +180,7 @@ touch -d '2026-08-20 00:00:02 UTC' \
   "$fixture/modules/alpha/default.bnix"
 : >"$compiler_log"
 
-run_native() {
+run_family() {
   local name="$1"
   shift
   set +e
@@ -193,16 +188,17 @@ run_native() {
     FIRN_REPO="$fixture" \
     BEAGLE_PATH="$fake_beagle" \
     COMPILER_LOG="$compiler_log" \
-    "$@" "$scratch/repo-build-native" repo build \
+    "$@" FIRN_REPO_BUILD_MODULE="$scratch/build/firn/repo-build-family.js" \
+      bun "$repo/native/repo_build_host.mjs" repo build \
     >"$scratch/$name.out" 2>"$scratch/$name.err"
   local status=$?
   set -e
   printf '%s\n' "$status" >"$scratch/$name.status"
 }
 
-run_native first env
+run_family first env
 [[ "$(<"$scratch/first.status")" == 0 ]] \
-  || die "first native build returned $(<"$scratch/first.status")"
+  || die "first family build returned $(<"$scratch/first.status")"
 [[ -f "$fixture/modules/alpha/default.nix" ]] \
   || die "compiled output was not published"
 [[ ! -e "$fixture/hosts/test/enabled-tags.nix" ]] \
@@ -231,9 +227,9 @@ rg -Fq 'config = { example = true; };' \
 
 : >"$compiler_log"
 printf 'obsolete again\n' >"$fixture/hosts/test/enabled-tags.nix"
-run_native cached env
+run_family cached env
 [[ "$(<"$scratch/cached.status")" == 0 ]] \
-  || die "cached native build returned $(<"$scratch/cached.status")"
+  || die "cached family build returned $(<"$scratch/cached.status")"
 [[ ! -s "$compiler_log" ]] || die "valid cache reran the compiler"
 [[ ! -e "$fixture/hosts/test/enabled-tags.nix" ]] \
   || die "cached build skipped obsolete-output cleanup"
@@ -247,7 +243,7 @@ touch -d '2026-08-20 00:00:01 UTC' \
 touch -d '2026-08-20 00:00:03 UTC' \
   "$fixture/modules/alpha/default.bnix"
 : >"$compiler_log"
-run_native failed env FAKE_COMPILER_FAIL=1
+run_family failed env FAKE_COMPILER_FAIL=1
 [[ "$(<"$scratch/failed.status")" == 1 ]] \
   || die "failed compiler did not produce command status 1"
 [[ "$(<"$fixture/modules/alpha/default.nix")" == \
@@ -269,9 +265,4 @@ cmp -s "$scratch/failed.expected.err" "$scratch/failed.err" \
     die "compiler failure diagnostic changed"
   }
 
-if ldd "$scratch/repo-build-native" \
-    | rg -qi 'racket|clojure|babashka|java'; then
-  die "hosted runtime leaked into native executable"
-fi
-
-printf 'ok: native repository build preserves cache and atomic publication contracts\n'
+printf 'ok: Beagle/JS repository build preserves cache and atomic publication contracts\n'

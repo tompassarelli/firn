@@ -39,47 +39,44 @@ die() {
 [[ -x "$beagle/bin/beagle" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
 
-build_native() {
-  local name="$1" entry="$2"
-  shift 2
-  local output="$scratch/$name"
-  mkdir -p "$scratch/$name-artifacts"
-  printf 'inventory-native: building %s\n' "$name" >&2
-  timeout --foreground 620 "$beagle/bin/beagle" native-exe \
-    --out "$output" \
-    --entry "$entry" \
-    --artifacts "$scratch/$name-artifacts" \
-    "$@" >"$scratch/$name.build.out" 2>"$scratch/$name.build.err" \
+build_family() {
+  local output="$scratch/build"
+  mkdir -p "$output/node_modules/beagle"
+  printf 'inventory-family: building closed Beagle/JS graph\n' >&2
+  timeout --foreground 620 "$beagle/bin/beagle-build-all" "$@" \
+    --out "$output" >"$scratch/build.out" 2>"$scratch/build.err" \
     || {
-      sed -n '1,240p' "$scratch/$name.build.err" >&2
-      die "$name compilation failed"
+      sed -n '1,240p' "$scratch/build.err" >&2
+      die "family compilation failed"
     }
-  [[ -x "$output" ]] || die "$name is not executable"
+  cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
+    "$output/node_modules/beagle/core.js"
+  cp -- "$beagle/beagle-lib/lib/beagle/host.js" \
+    "$output/node_modules/beagle/host.js"
+  printf '%s\n' '{"type":"module"}' \
+    >"$output/node_modules/beagle/package.json"
+  cp -- "$repo/native/inventory_family_test_host.mjs" \
+    "$output/inventory_family_test_host.mjs"
 }
 
-datum="$beagle/native-core/src/beagle/datum_reader.bgl"
-json="$beagle/native-core/src/native/json.bgl"
-tag_resolve="$repo/native/tag_resolve.bgl"
-tag_inputs="$repo/native/tag_inputs.bgl"
-tag_driver="$repo/native/tag_resolve_driver.bgl"
-tag_native="$repo/native/tag_resolve_native.bgl"
-inventory="$repo/native/inventory.bgl"
+datum="$beagle/native-core/src/beagle/datum_reader.bjs"
+json="$beagle/native-core/src/native/json.bjs"
+tag_resolve="$repo/native/tag_resolve.bjs"
+tag_inputs="$repo/native/tag_inputs.bjs"
+tag_driver="$repo/native/tag_resolve_driver.bjs"
+tag_family="$repo/native/tag_resolve_family.bjs"
+inventory="$repo/native/inventory.bjs"
 
-build_native inventory-test firn.inventory-test/-main \
-  "$datum" "$json" "$tag_resolve" "$tag_inputs" \
-  "$inventory" "$repo/native/inventory_test.bgl"
+build_family "$datum" "$json" "$tag_resolve" "$tag_inputs" \
+  "$tag_driver" "$tag_family" "$inventory" \
+  "$repo/native/inventory_test.bjs" "$repo/native/inventory_family.bjs"
 
 printf 'inventory-native: running pure fixtures\n' >&2
-timeout --foreground 30 "$scratch/inventory-test" \
+timeout --foreground 30 bun "$scratch/build/inventory_family_test_host.mjs" \
   >"$scratch/pure.out" 2>"$scratch/pure.err" \
   || die "pure inventory fixtures failed"
 [[ ! -s "$scratch/pure.out" ]] || die "pure fixtures wrote stdout"
 [[ ! -s "$scratch/pure.err" ]] || die "pure fixtures wrote stderr"
-
-build_native inventory-native firn.inventory-native/-main \
-  "$datum" "$json" "$tag_resolve" "$tag_inputs" \
-  "$tag_driver" "$tag_native" "$inventory" \
-  "$repo/native/inventory_native.bgl"
 
 fixture="$scratch/repo"
 mkdir -p \
@@ -162,7 +159,8 @@ run_cli() {
   timeout --foreground 30 env \
     -u FIRN_TRACE_ID -u FIRN_TRACE_PATH \
     FIRN_REPO="$fixture" FIRN_HOST=alpha-host \
-    "$scratch/inventory-native" "$@" \
+    env FIRN_INVENTORY_MODULE="$scratch/build/firn/inventory-family.js" \
+      bun "$repo/native/inventory_host.mjs" "$@" \
     >"$scratch/$name.out" 2>"$scratch/$name.err"
   local status=$?
   set -e
@@ -242,9 +240,4 @@ Enabled in zeta-host:
 EOF
 assert_output host-status "$scratch/host-status.expected"
 
-if ldd "$scratch/inventory-native" \
-    | rg -qi 'racket|clojure|babashka|java'; then
-  die "hosted runtime leaked into native executable"
-fi
-
-printf 'ok: native Firn inventory matches the canonical controlled fixture\n'
+printf 'ok: Beagle/JS Firn inventory matches the canonical controlled fixture\n'

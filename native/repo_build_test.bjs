@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.repo-build-test
   (:require [firn.repo-build :as build]))
 
@@ -8,9 +8,7 @@
   Int
   (if condition
     0
-    (do
-      (host.stderr/write-text (str "FAIL " message "\n"))
-      1)))
+    1))
 
 (defn source
   [relative String
@@ -18,9 +16,11 @@
    output-time (U Int Nil)]
   build/SourceState
   (build/->SourceState
-    (build/->SourceKey relative source-time)
+    (build/->SourceKey relative (build/->ModifiedTime source-time 0))
     (build/output-relative relative)
-    output-time))
+    (if (nil? output-time)
+      nil
+      (build/->ModifiedTime output-time 0))))
 
 (defn test-path-contract! [] Int
   (assert!
@@ -124,7 +124,8 @@
         (build/parse-repo-build-argv ["repo" "validate"])))
     "repo build argv contract"))
 
-(defn -main [] Int
+(js/export
+ (defn test [] Int
   (let [(results (Vec Int))
         [(test-path-contract!)
          (test-cache-contract!)
@@ -133,4 +134,4 @@
          (test-command-contract!)]]
     (if (= results [0 0 0 0 0])
       0
-      1)))
+      1))))

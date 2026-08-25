@@ -1,10 +1,10 @@
-#lang beagle
+#lang beagle/js
 (ns firn.responsibility-projection-test
   (:require [firn.inventory :as inventory]
-            [firn.inventory-native :as inventory-native]
+            [firn.inventory-family :as inventory-family]
             [firn.responsibility-projection :as projection]
             [firn.tag-resolve :as tags]
-            [firn.tag-resolve-native :as tag-native]
+            [firn.tag-resolve-family :as tag-family]
             [store.types :as t]))
 
 (def max-source-bytes Int 1048576)
@@ -142,35 +142,35 @@
           (inventory/->InventoryRepository modules [host]) host)]
     (tags/remove-strings (tags/union-strings tagged direct-on) direct-off)))
 
-(defn live-budget-passes? [root String] Bool
-  (match
-    (host.fs/read-text-bounded
-      (str root "/hosts/whiterabbit/responsibilities.bnix")
-      max-source-bytes)
-    [(host.fs/ReadTextBoundedError errno) false]
-    [(host.fs/ReadTextBoundedOk responsibility-source)
+(defn live-budget-passes? [bridge Any root String] Bool
+  (let [read-result Any
+        (.readText bridge
+          (str root "/hosts/whiterabbit/responsibilities.bnix")
+          max-source-bytes)
+        errno Int (.status bridge read-result)]
+    (if (not (= errno 0))
+      false
+      (let [responsibility-source String (.value bridge read-result)]
      (match (projection/project-source responsibility-source)
        [(ProjectionRejected message offset) false]
        [(ProjectionParsed propositions)
-        (match (tag-native/load-modules root)
+        (match (tag-family/load-modules bridge root)
           [(ModulesRejected message) false]
           [(ModulesLoaded modules)
            (match
-             (inventory-native/load-inventory-host root "whiterabbit")
+             (inventory-family/load-inventory-host bridge root "whiterabbit")
              [(InventoryHostRejected message) false]
              [(InventoryHostLoaded host)
               (projection/boot-coupling-budget-passes?
                 (projection/assess-boot-coupling
                   propositions
                   :whiterabbit
-                  (active-boot-modules modules host)))])])])]))
+                  (active-boot-modules modules host)))])])])))))
 
-(defn -main [args (Vec String)] Int
+(js/export
+ (defn test [bridge Any args (Vec String)] Int
   (if (and (= 1 (count args))
            (and (projection-behavior?)
-                (live-budget-passes? (nth args 0))))
+                (live-budget-passes? bridge (nth args 0))))
     0
-    (do
-      (host.stderr/write-text
-        "responsibility projection: boot-coupling budget failed\n")
-      1)))
+    1)))

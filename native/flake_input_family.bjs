@@ -1,5 +1,5 @@
-#lang beagle
-(ns firn.flake-input-native
+#lang beagle/js
+(ns firn.flake-input-family
   (:require [firn.flake-input-driver :as driver]))
 
 (def max-source-bytes Int 16777216)
@@ -33,145 +33,147 @@
   (str "firn flake-input resolve: " operation " '" relative
     "': errno " errno "\n"))
 
-(defn directory-names [root String] DirectoryNamesResult
+(defn directory-names [bridge Any root String] DirectoryNamesResult
   (let [relative String "modules"
-        absolute String (path root relative)]
-    (match (host.fs/list-directory-bounded
-             absolute max-directory-entries)
-      [(host.fs/ListDirectoryBoundedError errno)
+        absolute String (path root relative)
+        result Any (.listDirectory bridge absolute max-directory-entries)
+        errno Int (.status bridge result)]
+    (if (not (= errno 0))
        (if (or (= errno 2) (= errno 20))
          (->DirectoryNamesLoaded [])
          (->DirectoryNamesRejected
-           (errno-message "cannot list" relative errno)))]
-      [(host.fs/ListDirectoryBoundedOk entries)
-       (loop [index Int 0
-              names (Vec String) []]
-         (if (>= index (count entries))
-           (->DirectoryNamesLoaded (sort names))
-           (let [name String (nth entries index)
-                 candidate String (str absolute "/" name)]
-             (match (host.fs/path-kind candidate)
-               [(host.fs/PathKindOk kind)
-                (recur (+ index 1)
-                  (if (= kind 2) (conj names name) names))]
-               [(host.fs/PathKindError errno)
-                (if (= errno 2)
+           (errno-message "cannot list" relative errno)))
+      (let [entries (Vec String) (.value bridge result)]
+        (loop [index Int 0
+               names (Vec String) []]
+          (if (>= index (count entries))
+            (->DirectoryNamesLoaded (sort names))
+            (let [name String (nth entries index)
+                  candidate String (str absolute "/" name)
+                  kind-result Any (.pathKind bridge candidate)
+                  kind-errno Int (.status bridge kind-result)]
+              (if (= kind-errno 0)
+                (let [kind Int (.value bridge kind-result)]
+                  (recur (+ index 1)
+                    (if (= kind 2) (conj names name) names)))
+                (if (= kind-errno 2)
                   (recur (+ index 1) names)
                   (->DirectoryNamesRejected
                     (errno-message "cannot inspect"
-                      (str relative "/" name) errno)))])
-             )
-           )
-         )]
-    )
-  )
-)
+                      (str relative "/" name) kind-errno)))))))))))
 
 (defn load-module
-  [root String
+  [bridge Any
+   root String
    name String] ModuleLoadResult
   (let [relative String (str "modules/" name "/default.bnix")
-        absolute String (path root relative)]
-    (match (host.fs/path-kind absolute)
-      [(host.fs/PathKindError errno)
-       (if (= errno 2)
+        absolute String (path root relative)
+        kind-result Any (.pathKind bridge absolute)
+        kind-errno Int (.status bridge kind-result)]
+    (if (not (= kind-errno 0))
+       (if (= kind-errno 2)
          (->ModuleLoaded (driver/->ModuleSource name ""))
          (->ModuleLoadRejected
-           (errno-message "cannot inspect" relative errno)))]
-      [(host.fs/PathKindOk kind)
+           (errno-message "cannot inspect" relative kind-errno)))
+      (let [kind Int (.value bridge kind-result)]
        (if (not (or (= kind 1) (= kind 3)))
          (->ModuleLoaded (driver/->ModuleSource name ""))
-         (match (host.fs/read-text-bounded absolute max-source-bytes)
-           [(host.fs/ReadTextBoundedError errno)
+         (let [read-result Any (.readText bridge absolute max-source-bytes)
+               read-errno Int (.status bridge read-result)]
+           (if (not (= read-errno 0))
             (->ModuleLoadRejected
-              (errno-message "cannot read" relative errno))]
-           [(host.fs/ReadTextBoundedOk source)
-            (->ModuleLoaded (driver/->ModuleSource name source))]))])))
+              (errno-message "cannot read" relative read-errno))
+            (let [source String (.value bridge read-result)]
+              (->ModuleLoaded (driver/->ModuleSource name source))))))))))
 
 (defn load-modules-from
-  [root String
+  [bridge Any
+   root String
    names (Vec String)
    index Int
    modules (Vec driver/ModuleSource)] ModulesLoadResult
   (if (>= index (count names))
     (->ModulesLoaded modules)
-    (match (load-module root (nth names index))
+    (match (load-module bridge root (nth names index))
       [(ModuleLoadRejected message) (->ModulesLoadRejected message)]
       [(ModuleLoaded module)
-       (load-modules-from root names (+ index 1) (conj modules module))])))
+       (load-modules-from bridge root names (+ index 1) (conj modules module))])))
 
-(defn load-modules [root String] ModulesLoadResult
-  (match (directory-names root)
+(defn load-modules [bridge Any root String] ModulesLoadResult
+  (match (directory-names bridge root)
     [(DirectoryNamesRejected message) (->ModulesLoadRejected message)]
-    [(DirectoryNamesLoaded names) (load-modules-from root names 0 [])]))
+    [(DirectoryNamesLoaded names) (load-modules-from bridge root names 0 [])]))
 
-(defn load-flake [root String] FlakeLoadResult
+(defn load-flake [bridge Any root String] FlakeLoadResult
   (let [relative String "flake.bnix"
-        absolute String (path root relative)]
-    (match (host.fs/read-text-bounded absolute max-source-bytes)
-      [(host.fs/ReadTextBoundedError errno)
+        absolute String (path root relative)
+        result Any (.readText bridge absolute max-source-bytes)
+        errno Int (.status bridge result)]
+    (if (not (= errno 0))
        (->FlakeLoadRejected
-         (errno-message "cannot read" relative errno))]
-      [(host.fs/ReadTextBoundedOk text) (->FlakeLoaded text)])))
+         (errno-message "cannot read" relative errno))
+      (let [text String (.value bridge result)] (->FlakeLoaded text)))))
 
-(defn emit-io-error [message String] Int
-  (do (host.stderr/write-text message) 1))
+(defn emit-io-error [bridge Any message String] Int
+  (do (.err bridge message) 1))
 
 (defn execute-effects
-  [root String
+  [bridge Any
+   root String
    outcome driver/FlakeInputOutcome
    index Int] Int
   (if (>= index (count (driver/flakeinputoutcome-effects outcome)))
     (driver/flakeinputoutcome-status outcome)
     (match (nth (driver/flakeinputoutcome-effects outcome) index)
       [(StdoutText text)
-       (do (print text) (execute-effects root outcome (+ index 1)))]
+       (do (.out bridge text) (execute-effects bridge root outcome (+ index 1)))]
       [(StderrText text)
-       (do (host.stderr/write-text text)
-           (execute-effects root outcome (+ index 1)))]
+       (do (.err bridge text)
+           (execute-effects bridge root outcome (+ index 1)))]
       [(WriteFlake relative text)
-       (match (host.fs/write-text-atomic (path root relative) text)
-         [(host.fs/WriteTextAtomicOk)
-          (execute-effects root outcome (+ index 1))]
-         [(host.fs/WriteTextAtomicError errno)
-          (emit-io-error (errno-message "cannot write" relative errno))])])))
+       (let [errno Int (.writeTextAtomic bridge (path root relative) text)]
+         (if (= errno 0)
+           (execute-effects bridge root outcome (+ index 1))
+           (emit-io-error bridge
+             (errno-message "cannot write" relative errno))))])))
 
-(defn run [root String] Int
-  (match (load-modules root)
-    [(ModulesLoadRejected message) (emit-io-error message)]
+(js/export
+ (defn run-root [bridge Any root String] Int
+  (match (load-modules bridge root)
+    [(ModulesLoadRejected message) (emit-io-error bridge message)]
     [(ModulesLoaded modules)
-     (match (load-flake root)
-       [(FlakeLoadRejected message) (emit-io-error message)]
+     (match (load-flake bridge root)
+       [(FlakeLoadRejected message) (emit-io-error bridge message)]
        [(FlakeLoaded text)
-        (execute-effects root
+        (execute-effects bridge root
           (driver/run-flake-input-emit
             (driver/->FlakeInputRepositoryData modules text))
-          0)])]))
+          0)])])))
 
-(defn repository-root [] (U String Nil)
-  (let [explicit (U String Nil) (System/getenv "FIRN_REPO")]
+(defn repository-root [bridge Any] (U String Nil)
+  (let [explicit (U String Nil) (.env bridge "FIRN_REPO")]
     (if (some? explicit)
       explicit
-      (let [home (U String Nil) (System/getenv "HOME")]
+      (let [home (U String Nil) (.env bridge "HOME")]
         (if (some? home)
           (str home "/code/nixos-config/main")
           nil)))))
 
-(defn usage-error [] Int
+(defn usage-error [bridge Any] Int
   (do
-    (host.stderr/write-text
-      "Usage: firn flake-input resolve emit\n")
+    (.err bridge "Usage: firn flake-input resolve emit\n")
     64))
 
-(defn -main [args (Vec String)] Int
+(js/export
+ (defn run [bridge Any args (Vec String)] Int
   (match (driver/parse-flake-input-argv args)
-    [(OtherFirnCommand argv) (usage-error)]
-    [(InvalidFlakeInputArgv argv) (usage-error)]
-    [(ParsedFlakeInputEmit)
-     (let [root (U String Nil) (repository-root)]
+    [(OtherFirnCommand argv) (usage-error bridge)]
+    [(InvalidFlakeInputArgv argv) (usage-error bridge)]
+    [(ParsedFlakeInputEmit token)
+     (let [root (U String Nil) (repository-root bridge)]
        (if (nil? root)
          (do
-           (host.stderr/write-text
+           (.err bridge
              "firn flake-input resolve: FIRN_REPO and HOME are not set\n")
            1)
-         (run root)))]))
+         (run-root bridge root)))])))

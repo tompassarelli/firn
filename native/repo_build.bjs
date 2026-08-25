@@ -1,14 +1,18 @@
-#lang beagle
+#lang beagle/js
 (ns firn.repo-build)
+
+(defrecord ModifiedTime
+  [seconds Int
+   nanoseconds Int])
 
 (defrecord SourceKey
   [relative String
-   modified-nanoseconds Int])
+   modified-time ModifiedTime])
 
 (defrecord SourceState
   [key SourceKey
    output-relative String
-   output-modified-nanoseconds (U Int Nil)])
+   output-modified-time (U ModifiedTime Nil)])
 
 (defrecord SourceInventory
   [sources (Vec SourceState)
@@ -74,11 +78,17 @@
   (str (subs source-relative 0 (- (count source-relative) 5)) ".nix"))
 
 (defn cache-valid? [state SourceState] Bool
-  (let [output (U Int Nil) (sourcestate-output-modified-nanoseconds state)]
+  (let [output (U ModifiedTime Nil) (sourcestate-output-modified-time state)]
     (if (nil? output)
       false
-      (> output
-         (sourcekey-modified-nanoseconds (sourcestate-key state))))))
+      (let [source ModifiedTime
+            (sourcekey-modified-time (sourcestate-key state))]
+        (or
+          (> (modifiedtime-seconds output) (modifiedtime-seconds source))
+          (and
+            (= (modifiedtime-seconds output) (modifiedtime-seconds source))
+            (> (modifiedtime-nanoseconds output)
+               (modifiedtime-nanoseconds source))))))))
 
 (defn stale-sources
   [sources (Vec SourceState)

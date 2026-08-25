@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.inventory-test
   (:require [firn.inventory :as i]
             [firn.tag-resolve :as r]))
@@ -151,13 +151,12 @@
    (->TestResult "refs-layout" (case-refs-layout))
    (->TestResult "argv-grammar" (case-argv-grammar))])
 
-(defn -main [(args (Vec String))] Int
+(js/export
+ (defn test [] Int
   (loop [(index Int) 0]
     (if (>= index (count tests))
       0
       (let [(test TestResult) (nth tests index)]
         (if (testresult-passed test)
           (recur (+ index 1))
-          (do
-            (print (str "FAIL: " (testresult-name test) "\n"))
-            1))))))
+          1))))))

@@ -39,40 +39,37 @@ die() {
 [[ -x "$beagle/bin/beagle" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
 
-build_native() {
-  local name="$1" entry="$2"
-  shift 2
-  local output="$scratch/$name"
-  mkdir -p "$scratch/$name-artifacts"
-  timeout --foreground 620 "$beagle/bin/beagle" native-exe \
-    --out "$output" \
-    --entry "$entry" \
-    --artifacts "$scratch/$name-artifacts" \
-    "$@" >"$scratch/$name.build.out" 2>"$scratch/$name.build.err" \
+build_family() {
+  local output="$scratch/build"
+  mkdir -p "$output/node_modules/beagle"
+  timeout --foreground 620 "$beagle/bin/beagle-build-all" "$@" \
+    --out "$output" >"$scratch/build.out" 2>"$scratch/build.err" \
     || {
-      sed -n '1,240p' "$scratch/$name.build.err" >&2
-      die "$name compilation failed"
+      sed -n '1,240p' "$scratch/build.err" >&2
+      die "family compilation failed"
     }
-  [[ -x "$output" ]] || die "$name is not executable"
+  cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
+    "$output/node_modules/beagle/core.js"
+  cp -- "$beagle/beagle-lib/lib/beagle/host.js" \
+    "$output/node_modules/beagle/host.js"
+  printf '%s\n' '{"type":"module"}' \
+    >"$output/node_modules/beagle/package.json"
+  cp -- "$repo/native/flake_input_family_test_host.mjs" \
+    "$output/flake_input_family_test_host.mjs"
 }
 
-datum="$beagle/native-core/src/beagle/datum_reader.bgl"
-core="$repo/native/flake_input.bgl"
-driver="$repo/native/flake_input_driver.bgl"
+datum="$beagle/native-core/src/beagle/datum_reader.bjs"
+core="$repo/native/flake_input.bjs"
+driver="$repo/native/flake_input_driver.bjs"
 
-build_native flake-input-test firn.flake-input-test/-main \
-  "$datum" "$core" "$repo/native/flake_input_test.bgl"
-build_native flake-input-driver-test firn.flake-input-driver-test/-main \
-  "$datum" "$core" "$driver" "$repo/native/flake_input_driver_test.bgl"
-build_native flake-input-native firn.flake-input-native/-main \
-  "$datum" "$core" "$driver" "$repo/native/flake_input_native.bgl"
+build_family "$datum" "$core" "$driver" \
+  "$repo/native/flake_input_test.bjs" \
+  "$repo/native/flake_input_driver_test.bjs" \
+  "$repo/native/flake_input_family.bjs"
 
-"$scratch/flake-input-test" >"$scratch/pure.out"
-"$scratch/flake-input-driver-test" >"$scratch/driver.out"
-[[ "$(rg -c '^PASS ' "$scratch/pure.out")" == "5" ]] \
-  || die "pure test cases did not all pass"
-[[ "$(rg -c '^PASS ' "$scratch/driver.out")" == "4" ]] \
-  || die "driver test cases did not all pass"
+timeout --foreground 30 bun "$scratch/build/flake_input_family_test_host.mjs" \
+  >"$scratch/pure.out" 2>"$scratch/driver.err" \
+  || die "pure and driver test cases did not all pass"
 
 make_fixture() {
   local root="$1"
@@ -162,7 +159,8 @@ run_once() {
 run_once "$scratch/native" \
   env -u FIRN_FLAKE_INPUTS_EMIT -u FIRN_TRACE_ID -u FIRN_TRACE_PATH \
     FIRN_REPO="$native_root" \
-    "$scratch/flake-input-native" flake-input resolve emit
+    env FIRN_FLAKE_INPUT_MODULE="$scratch/build/firn/flake-input-family.js" \
+      bun "$repo/native/flake_input_host.mjs" flake-input resolve emit
 
 [[ "$(<"$scratch/native.status")" == "0" ]] \
   || die "native command failed with status $(<"$scratch/native.status")"
@@ -180,7 +178,8 @@ cmp -s "$expected_first" "$scratch/native.out" \
 cp "$native_root/flake.bnix" "$scratch/first-native-flake.bnix"
 run_once "$scratch/native-second" \
   env FIRN_REPO="$native_root" \
-    "$scratch/flake-input-native" flake-input resolve emit
+    env FIRN_FLAKE_INPUT_MODULE="$scratch/build/firn/flake-input-family.js" \
+      bun "$repo/native/flake_input_host.mjs" flake-input resolve emit
 [[ "$(<"$scratch/native-second.status")" == "0" ]] \
   || die "second native run failed"
 cmp -s "$scratch/first-native-flake.bnix" "$native_root/flake.bnix" \
@@ -196,8 +195,9 @@ cmp -s "$expected_second" "$scratch/native-second.out" \
 [[ ! -s "$scratch/native-second.err" ]] \
   || die "up-to-date run wrote stderr"
 
-run_once "$scratch/invalid" "$scratch/flake-input-native" \
-  flake-input resolve show
+run_once "$scratch/invalid" env \
+  FIRN_FLAKE_INPUT_MODULE="$scratch/build/firn/flake-input-family.js" \
+  bun "$repo/native/flake_input_host.mjs" flake-input resolve show
 [[ "$(<"$scratch/invalid.status")" == "64" ]] \
   || die "invalid grammar did not return 64"
 [[ ! -s "$scratch/invalid.out" ]] || die "invalid grammar wrote stdout"
@@ -205,8 +205,4 @@ cmp -s "$scratch/invalid.err" \
   <(printf 'Usage: firn flake-input resolve emit\n') \
   || die "usage diagnostic changed"
 
-if ldd "$scratch/flake-input-native" | rg -qi 'racket|clojure|babashka|java'; then
-  die "hosted runtime leaked into native executable"
-fi
-
-printf 'ok: native flake-input emit passes pure, driver, and CLI contracts\n'
+printf 'ok: Beagle/JS flake-input emit passes pure, driver, and CLI contracts\n'

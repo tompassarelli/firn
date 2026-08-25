@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.flake-input-test
   (:require [firn.flake-input :as input]))
 
@@ -139,18 +139,15 @@
      (case-six-marker-splice-and-idempotence))
    (->TestResult "missing-marker-rejected" (case-missing-marker-rejected))])
 
-(defn -main [(args (Vec String))] Int
+(js/export
+ (defn test [] Int
   (let [(results (Vec TestResult)) (cases)]
     (loop [(index Int) 0
            (failures Int) 0]
       (if (>= index (count results))
         failures
         (let [(result TestResult) (nth results index)]
-          (do
-            (println
-              (str (if (testresult-passed result) "PASS " "FAIL ")
-                (testresult-name result)))
-            (recur (+ index 1)
-              (if (testresult-passed result)
-                failures
-                (+ failures 1)))))))))
+          (recur (+ index 1)
+            (if (testresult-passed result)
+              failures
+              (+ failures 1))))))))

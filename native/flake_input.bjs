@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.flake-input
   (:require [beagle.datum-reader :as reader]))
 
@@ -7,10 +7,11 @@
    literal String
    display String])
 
-(defrecord FlakeInput
-  [name String
-   source-module String
-   properties (Vec FlakeInputProperty)])
+(js/export
+  (defrecord FlakeInput
+    [name String
+     source-module String
+     properties (Vec FlakeInputProperty)]))
 
 (defunion ModuleInputsResult
   (ModuleInputsParsed [inputs (Vec FlakeInput)])
@@ -18,14 +19,16 @@
     [message String
      offset Int]))
 
-(defrecord CollectedInputs
-  [inputs (Vec FlakeInput)
-   errors (Vec String)])
+(js/export
+  (defrecord CollectedInputs
+    [inputs (Vec FlakeInput)
+     errors (Vec String)]))
 
-(defunion SpliceResult
-  (SpliceChanged [text String])
-  (SpliceUnchanged [text String])
-  (SpliceRejected [message String]))
+(js/export
+  (defunion SpliceResult
+    (SpliceChanged [text String])
+    (SpliceUnchanged [text String])
+    (SpliceRejected [message String])))
 
 (defunion ReplacementResult
   (ReplacementOk [text String])
@@ -487,7 +490,8 @@
                           (propertyscan-offset properties))))
                     (recur (+ cursor 1) inputs)))))))))))
 
-(defn module-inputs-from-source
+(js/export
+ (defn module-inputs-from-source
   [module-name String
    source String] ModuleInputsResult
   (let [read reader/DatumRead (reader/read-events source)
@@ -513,7 +517,7 @@
                 (if (inputsscan-ok scan)
                   (->ModuleInputsParsed (inputsscan-inputs scan))
                   (->ModuleInputsRejected
-                    (inputsscan-message scan) (inputsscan-offset scan)))))))))))
+                    (inputsscan-message scan) (inputsscan-offset scan))))))))))))
 
 (defn property
   [input FlakeInput
@@ -569,7 +573,8 @@
             incoming
             (+ index 1)))))))
 
-(defn collect [module-input-groups (Vec (Vec FlakeInput))] CollectedInputs
+(js/export
+ (defn collect [module-input-groups (Vec (Vec FlakeInput))] CollectedInputs
   (loop [index Int 0
          collected (Vec FlakeInput) []
          errors (Vec String) []]
@@ -579,15 +584,16 @@
               collected errors (nth module-input-groups index) 0)]
         (recur (+ index 1)
           (collectedinputs-inputs next)
-          (collectedinputs-errors next))))))
+          (collectedinputs-errors next)))))))
 
-(defn sorted-input-names [inputs (Vec FlakeInput)] (Vec String)
+(js/export
+ (defn sorted-input-names [inputs (Vec FlakeInput)] (Vec String)
   (loop [index Int 0
          names (Vec String) []]
     (if (>= index (count inputs))
       (sort names)
       (recur (+ index 1)
-        (conj names (flakeinput-name (nth inputs index)))))))
+        (conj names (flakeinput-name (nth inputs index))))))))
 
 (defn sorted-property-keys [properties (Vec FlakeInputProperty)] (Vec String)
   (loop [index Int 0
@@ -597,10 +603,11 @@
       (recur (+ index 1)
         (conj keys (flakeinputproperty-key (nth properties index)))))))
 
-(defn find-input
+(js/export
+ (defn find-input
   [inputs (Vec FlakeInput)
    name String] FlakeInput
-  (nth inputs (input-index inputs name)))
+  (nth inputs (input-index inputs name))))
 
 (defn render-property-pairs
   [properties (Vec FlakeInputProperty)
@@ -659,8 +666,7 @@
 (defn find-text
   [text String
    needle String] Int
-  (let [found (U Int Nil) (str/index-of text needle)]
-    (if (nil? found) -1 found)))
+  (.indexOf text needle))
 
 (defn indentation-before
   [text String
@@ -700,7 +706,8 @@
     [(ReplacementOk text)
      (replace-between-markers text begin-marker end-marker content)]))
 
-(defn splice-flake-inputs
+(js/export
+ (defn splice-flake-inputs
   [original String
    inputs (Vec FlakeInput)] SpliceResult
   (let [inputs-text String (input-block inputs)
@@ -723,4 +730,4 @@
       [(ReplacementOk text)
        (if (= text original)
          (->SpliceUnchanged text)
-         (->SpliceChanged text))])))
+         (->SpliceChanged text))]))))

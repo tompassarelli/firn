@@ -1,8 +1,8 @@
-#lang beagle
-(ns firn.inventory-native
+#lang beagle/js
+(ns firn.inventory-family
   (:require [firn.inventory :as inventory]
             [firn.tag-resolve-driver :as driver]
-            [firn.tag-resolve-native :as tag-native]))
+            [firn.tag-resolve-family :as tag-family]))
 
 (def max-source-bytes Int 16777216)
 
@@ -10,9 +10,10 @@
   (ConfigLoaded [(config inventory/HostConfig)])
   (ConfigRejected [(message String)]))
 
-(defunion InventoryHostLoadResult
+(js/export
+ (defunion InventoryHostLoadResult
   (InventoryHostLoaded [(host inventory/InventoryHost)])
-  (InventoryHostRejected [(message String)]))
+  (InventoryHostRejected [(message String)])))
 
 (defunion InventoryHostsLoadResult
   (InventoryHostsLoaded [(hosts (Vec inventory/InventoryHost))])
@@ -32,124 +33,128 @@
   (str "firn inventory: invalid configuration '" relative
     "' at offset " offset ": " message "\n"))
 
-(defn load-config [(root String) (host String)] ConfigLoadResult
+(defn load-config [(bridge Any) (root String) (host String)] ConfigLoadResult
   (let [(relative String) (str "hosts/" host "/configuration.bnix")
-        (absolute String) (path root relative)]
-    (match (host.fs/path-kind absolute)
-      [(host.fs/PathKindError errno)
-       (->ConfigRejected (errno-message "cannot inspect" relative errno))]
-      [(host.fs/PathKindOk kind)
+        (absolute String) (path root relative)
+        (kind-result Any) (.pathKind bridge absolute)
+        (kind-errno Int) (.status bridge kind-result)]
+    (if (not (= kind-errno 0))
+       (->ConfigRejected (errno-message "cannot inspect" relative kind-errno))
+      (let [(kind Int) (.value bridge kind-result)]
        (if (not (or (= kind 1) (= kind 3)))
          (->ConfigRejected
            (str "firn inventory: configuration is not a file '"
              relative "'\n"))
-         (match (host.fs/read-text-bounded absolute max-source-bytes)
-           [(host.fs/ReadTextBoundedError errno)
+         (let [(read-result Any) (.readText bridge absolute max-source-bytes)
+               (read-errno Int) (.status bridge read-result)]
+           (if (not (= read-errno 0))
             (->ConfigRejected
-              (errno-message "cannot read" relative errno))]
-           [(host.fs/ReadTextBoundedOk source)
+              (errno-message "cannot read" relative read-errno))
+            (let [(source String) (.value bridge read-result)]
             (match (inventory/host-config-from-source host source)
               [(HostConfigParsed config) (->ConfigLoaded config)]
               [(HostConfigRejected message offset)
                (->ConfigRejected
-                 (parse-message relative message offset))])]))])))
+                 (parse-message relative message offset))]))))))))
 
-(defn load-inventory-host [(root String) (host String)] InventoryHostLoadResult
-  (match (tag-native/load-host root host false)
+(js/export
+ (defn load-inventory-host [(bridge Any) (root String) (host String)] InventoryHostLoadResult
+  (match (tag-family/load-host bridge root host false)
     [(HostRejected message) (->InventoryHostRejected message)]
     [(HostLoaded data)
-     (match (load-config root host)
+     (match (load-config bridge root host)
        [(ConfigRejected message) (->InventoryHostRejected message)]
        [(ConfigLoaded config)
         (->InventoryHostLoaded
           (inventory/->InventoryHost
-            (driver/tagresolvehostdata-tags data) config))])]))
+            (driver/tagresolvehostdata-tags data) config))])])))
 
 (defn load-inventory-hosts-from
-  [(root String)
+  [(bridge Any)
+   (root String)
    (names (Vec String))
    (index Int)
    (hosts (Vec inventory/InventoryHost))]
   InventoryHostsLoadResult
   (if (>= index (count names))
     (->InventoryHostsLoaded hosts)
-    (match (load-inventory-host root (nth names index))
+    (match (load-inventory-host bridge root (nth names index))
       [(InventoryHostRejected message)
        (->InventoryHostsRejected message)]
       [(InventoryHostLoaded host)
-       (load-inventory-hosts-from root names (+ index 1)
+       (load-inventory-hosts-from bridge root names (+ index 1)
          (conj hosts host))])))
 
-(defn load-repository [(root String)] RepositoryLoadResult
-  (match (tag-native/load-modules root)
+(defn load-repository [(bridge Any) (root String)] RepositoryLoadResult
+  (match (tag-family/load-modules bridge root)
     [(ModulesRejected message) (->RepositoryRejected message)]
     [(ModulesLoaded modules)
-     (match (tag-native/directory-names root "hosts")
+     (match (tag-family/directory-names bridge root "hosts")
        [(DirectoryNamesRejected message) (->RepositoryRejected message)]
        [(DirectoryNamesLoaded names)
-        (match (load-inventory-hosts-from root names 0 [])
+        (match (load-inventory-hosts-from bridge root names 0 [])
           [(InventoryHostsRejected message) (->RepositoryRejected message)]
           [(InventoryHostsLoaded hosts)
            (->RepositoryLoaded
              (inventory/->InventoryRepository modules hosts))])])]))
 
-(defn emit-error [(message String)] Int
-  (do (host.stderr/write-text message) 1))
+(defn emit-error [(bridge Any) (message String)] Int
+  (do (.err bridge message) 1))
 
-(defn print-config-status [(root String) (host String)] Int
-  (match (load-config root host)
-    [(ConfigRejected message) (emit-error message)]
+(defn print-config-status [(bridge Any) (root String) (host String)] Int
+  (match (load-config bridge root host)
+    [(ConfigRejected message) (emit-error bridge message)]
     [(ConfigLoaded config)
-     (do (print (inventory/render-host-status config)) 0)]))
+     (do (.out bridge (inventory/render-host-status config)) 0)]))
 
-(defn print-directory-list [(root String) (relative String) (modules Bool)] Int
-  (match (tag-native/directory-names root relative)
-    [(DirectoryNamesRejected message) (emit-error message)]
+(defn print-directory-list [(bridge Any) (root String) (relative String) (modules Bool)] Int
+  (match (tag-family/directory-names bridge root relative)
+    [(DirectoryNamesRejected message) (emit-error bridge message)]
     [(DirectoryNamesLoaded names)
      (do
-       (print
+       (.out bridge
          (if modules
            (inventory/render-module-list-all names)
            (inventory/render-host-list names)))
        0)]))
 
 (defn print-repository-action
-  [(root String) (action inventory/InventoryAction)] Int
-  (match (load-repository root)
-    [(RepositoryRejected message) (emit-error message)]
+  [(bridge Any) (root String) (action inventory/InventoryAction)] Int
+  (match (load-repository bridge root)
+    [(RepositoryRejected message) (emit-error bridge message)]
     [(RepositoryLoaded repository)
      (match (inventory/render-action repository action)
-       [(InventoryRendered text) (do (print text) 0)]
+       [(InventoryRendered text) (do (.out bridge text) 0)]
        [(InventoryHostMissing host)
-        (emit-error
+        (emit-error bridge
           (str "firn inventory: no such host '" host "'\n"))])]))
 
-(defn run-action [(root String) (action inventory/InventoryAction)] Int
+(defn run-action [(bridge Any) (root String) (action inventory/InventoryAction)] Int
   (match action
-    [(ModuleListAll) (print-directory-list root "modules" true)]
-    [(ModuleListUsed) (print-repository-action root action)]
-    [(ModuleListUnused) (print-repository-action root action)]
-    [(ModuleRefs name) (print-repository-action root action)]
-    [(ModuleStatus host) (print-config-status root host)]
-    [(HostList) (print-directory-list root "hosts" false)]
-    [(HostStatus host) (print-config-status root host)]))
+    [(ModuleListAll) (print-directory-list bridge root "modules" true)]
+    [(ModuleListUsed) (print-repository-action bridge root action)]
+    [(ModuleListUnused) (print-repository-action bridge root action)]
+    [(ModuleRefs name) (print-repository-action bridge root action)]
+    [(ModuleStatus host) (print-config-status bridge root host)]
+    [(HostList) (print-directory-list bridge root "hosts" false)]
+    [(HostStatus host) (print-config-status bridge root host)]))
 
-(defn repository-root [] String?
-  (let [(explicit String?) (System/getenv "FIRN_REPO")]
+(defn repository-root [(bridge Any)] String?
+  (let [(explicit String?) (.env bridge "FIRN_REPO")]
     (if (some? explicit)
       explicit
-      (let [(home String?) (System/getenv "HOME")]
+      (let [(home String?) (.env bridge "HOME")]
         (if (some? home)
           (str home "/code/nixos-config/main")
           nil)))))
 
-(defn default-host [] String
-  (let [(host String?) (System/getenv "FIRN_HOST")]
+(defn default-host [(bridge Any)] String
+  (let [(host String?) (.env bridge "FIRN_HOST")]
     (if (some? host) host "whiterabbit")))
 
-(defn usage-error [] Int
+(defn usage-error [(bridge Any)] Int
   (do
-    (host.stderr/write-text
+    (.err bridge
       (str
         "Usage: firn module list [all|used|unused]\n"
         "       firn module refs <name>\n"
@@ -158,11 +163,12 @@
         "       firn host status [<host>]\n"))
     64))
 
-(defn -main [(args (Vec String))] Int
-  (match (inventory/parse-inventory-argv args (default-host))
-    [(InvalidInventoryArgv argv) (usage-error)]
+(js/export
+ (defn run [(bridge Any) (args (Vec String))] Int
+  (match (inventory/parse-inventory-argv args (default-host bridge))
+    [(InvalidInventoryArgv argv) (usage-error bridge)]
     [(ParsedInventory action)
-     (let [(root String?) (repository-root)]
+     (let [(root String?) (repository-root bridge)]
        (if (nil? root)
-         (emit-error "firn inventory: FIRN_REPO and HOME are not set\n")
-         (run-action root action)))]))
+         (emit-error bridge "firn inventory: FIRN_REPO and HOME are not set\n")
+         (run-action bridge root action)))])))
