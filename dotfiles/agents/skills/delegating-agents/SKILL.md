@@ -149,11 +149,22 @@ evidence that a model is unavailable.
 
 Treat North presets as templates, not cages: compose a justified custom route
 when its model/deliberation and authority choices are recorded. Prefer
-subscription-backed Codex Luna or Terra for bounded and mid-sized leaves and
-Sol for hard integration. For a direct OpenAI lane, compose the North payload,
-pin model and reasoning on `codex exec`, give the workstream a positive integer
-estimated-token budget, and dispatch through `north account dispatch
---assignment <id> --estimated-tokens <n> -- exec ...`. The entry point refreshes
+subscription-backed Codex Sol is the general workhorse for meaningful
+engineering, at `medium` by default. Use `high` for complex, cross-cutting,
+architectural, or weak-oracle work, and `low` only for unusually deterministic,
+tightly bounded engineering with a strong oracle. Reserve Luna or Terra for
+deliberately auxiliary, mechanical, or non-critical leaves; they do not
+substitute for Sol on meaningful engineering. For direct dispatches that
+select `gpt-5.6-luna` or `gpt-5.6-terra`, use model-specific reasoning defaults
+of `xhigh` and `high`, respectively, when the operator leaves reasoning
+unspecified. An explicit operator model or reasoning pin takes precedence
+exactly; defaults never rewrite a pinned field. These are calibration defaults,
+not a permanent contract: settled comparative delivery, review-finding, and
+repair-tax evidence may revise them through this owner and North's provider
+catalog. For a direct OpenAI lane, compose the North payload, pin model and
+reasoning on `codex exec`, give the workstream a positive integer estimated-token
+budget, and dispatch through `north account dispatch --assignment <id>
+--estimated-tokens <n> -- exec ...`. The entry point refreshes
 subscription usage, projects each eligible account's utilization from its
 observed percentage plus outstanding token reservations through a versioned
 per-account/window calibration, records the selected account, atomically
