@@ -336,7 +336,7 @@ enabled = {
             {
                 "matcher": "^(Edit|Write|MultiEdit)$",
                 "hooks": [
-                    direct_command("/home/tom/.local/lib/firn/policy/current/bin/firn-system-policy", 10),
+                    direct_command("/home/tom/.local/lib/firn/cli/current/bin/firn-system-policy", 10),
                 ],
             },
             {
@@ -344,7 +344,7 @@ enabled = {
                 "hooks": [
                     command("agent-spawn-guard.sh", 10),
                     command("tripwire-guard.sh", 10),
-                    direct_command("/home/tom/.local/lib/firn/policy/current/bin/firn-system-policy", 10),
+                    direct_command("/home/tom/.local/lib/firn/cli/current/bin/firn-system-policy", 10),
                     command("launch-critical-worktree-guard.sh", 10),
                     command("corpus-scan-guard.sh", 10),
                     command("session-kill-guard.sh", 10),

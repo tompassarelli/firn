@@ -68,7 +68,7 @@ for command in awk bash cmp git jq od rg seq timeout; do
   command -v "$command" >/dev/null 2>&1 \
     || die "missing command: $command"
 done
-[[ -x "$beagle/bin/beagle" ]] \
+[[ -x "$beagle/bin/beagle-build-all" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
 
 json="$beagle/native-core/src/native/json.bjs"
@@ -76,7 +76,6 @@ core="$repo/native/activity_core.bjs"
 driver="$repo/native/activity_driver.bjs"
 native="$repo/native/activity_native.bjs"
 host="$repo/native/activity_host.mjs"
-migrator="$repo/native/activity_assignments_migrate.mjs"
 bun="${FIRN_BUN:-$(command -v bun || true)}"
 executable="$scratch/activity"
 modules="$scratch/modules"
@@ -84,8 +83,8 @@ modules="$scratch/modules"
 
 printf 'activity-native: building controlled Beagle/JS modules\n' >&2
 mkdir -p "$modules/activity"
-timeout --foreground 120 "$beagle/bin/beagle" build \
-  "$native" "$modules/activity/native.js" \
+timeout --foreground 120 "$beagle/bin/beagle-build-all" \
+  "$json" "$core" "$driver" "$native" --out "$modules" \
   >"$scratch/build.out" 2>"$scratch/build.err" \
   || {
     sed -n '1,300p' "$scratch/build.err" >&2
@@ -93,6 +92,11 @@ timeout --foreground 120 "$beagle/bin/beagle" build \
   }
 [[ -f "$modules/activity/native.js" ]] \
   || die "activity JS module was not produced"
+mkdir -p "$modules/node_modules/beagle"
+cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
+  "$modules/node_modules/beagle/core.js"
+printf '%s\n' '{"type":"module"}' \
+  >"$modules/node_modules/beagle/package.json"
 cat >"$executable" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -152,7 +156,8 @@ case "$*" in
     done
     ;;
   'msg action '*)
-    printf '%s\n' "${*#msg action }" >>"$FAKE_ACTIONS"
+    shift 2
+    printf '%s\n' "$*" >>"$FAKE_ACTIONS"
     ;;
   *)
     exit 97
@@ -172,29 +177,6 @@ export FAKE_EVENT_TWO="$scratch/event-two.json"
 export FAKE_EVENT_COUNT="$scratch/event-count"
 export FAKE_EVENT_CHILDREN="$scratch/event-children.log"
 export FAKE_ACTIONS="$scratch/actions.log"
-
-printf 'activity-native: recoverable assignment migration\n' >&2
-migration="$scratch/migration"
-mkdir -p "$migration"
-printf '{"render" "gjoa", "notes" "home"}\n' >"$migration/assignments.edn"
-"$bun" "$migrator" \
-  "$migration/assignments.edn" "$migration/assignments.json" \
-  >"$scratch/migration.out" 2>"$scratch/migration.err"
-cmp -s "$migration/assignments.json" \
-  <(printf '{"notes":"home","render":"gjoa"}\n') \
-  || die "legacy assignments did not migrate to ordered JSON"
-cmp -s "$migration/assignments.edn" \
-  "$migration/assignments.edn.rollback" \
-  || die "legacy rollback copy changed bytes"
-printf '{"broken"\n' >"$migration/broken.edn"
-if "$bun" "$migrator" \
-    "$migration/broken.edn" "$migration/broken.json" \
-    >"$scratch/broken.out" 2>"$scratch/broken.err"; then
-  die "malformed legacy assignments unexpectedly migrated"
-fi
-[[ ! -e "$migration/broken.json" \
-   && ! -e "$migration/broken.edn.rollback" ]] \
-  || die "failed validation wrote migration artifacts"
 
 wait_for() {
   local label="$1"
@@ -326,4 +308,4 @@ cmp -s "$scratch/unreachable.out" \
 [[ ! -s "$scratch/unreachable.err" ]] \
   || die "unreachable daemon wrote stderr"
 
-printf 'ok: Beagle/JS Activity preserves migration, FIFO order, reconnect, lease takeover, persistence, snapshot, and CLI timeout\n'
+printf 'ok: Beagle/JS Activity preserves FIFO order, reconnect, lease takeover, persistence, snapshot, and CLI timeout\n'

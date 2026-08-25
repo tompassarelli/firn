@@ -76,32 +76,23 @@ function readTextBounded(path, limit) {
 }
 
 function lockExclusive(path) {
+  const scratch = mkdtempSync(join(tmpdir(), 'firn-activity-lock.'));
+  const readyPath = join(scratch, 'ready');
   const child = spawn('flock', [
     '--exclusive', '--nonblock', '--conflict-exit-code', '73', path,
-    'sh', '-c', 'printf locked; cat >/dev/null',
-  ], { stdin: 'pipe', stdout: 'pipe', stderr: 'ignore' });
-  const fd = child.stdout?._handle?.fd;
-  if (!Number.isInteger(fd)) {
-    child.kill('SIGTERM');
-    return ['error', 5];
-  }
-  const buffer = Buffer.alloc(6);
+    'sh', '-c', 'printf locked >"$1"; cat >/dev/null',
+    'activity-lock', readyPath,
+  ], { stdin: 'pipe', stdout: 'ignore', stderr: 'ignore' });
   const deadline = performance.now() + 250;
-  let amount = 0;
-  while (amount < buffer.byteLength && performance.now() < deadline) {
+  let ready = '';
+  while (ready !== 'locked' && performance.now() < deadline) {
     try {
-      const read = readSync(fd, buffer, amount, buffer.byteLength - amount, null);
-      if (read === 0) break;
-      amount += read;
-    } catch (error) {
-      if (error?.code !== 'EAGAIN') {
-        child.kill('SIGTERM');
-        return ['error', errnoOf(error)];
-      }
-      sleep(5);
-    }
+      ready = readFileSync(readyPath, 'utf8');
+    } catch {}
+    if (ready !== 'locked') sleep(5);
   }
-  if (buffer.subarray(0, amount).toString() !== 'locked') {
+  rmSync(scratch, { recursive: true, force: true });
+  if (ready !== 'locked') {
     try { child.stdin.end(); } catch {}
     child.kill('SIGTERM');
     return ['error', 11];
@@ -122,16 +113,18 @@ function unlock(descriptor) {
 function spawnStdout(argv) {
   const scratch = mkdtempSync(join(tmpdir(), 'firn-activity-child.'));
   const pidPath = join(scratch, 'pid');
-  const child = spawn('setsid', [
-    '-f', 'sh', '-c', 'printf "%s\\n" "$$" >"$1"; shift; exec "$@"',
-    'activity-event', pidPath, ...argv,
-  ], { stdin: 'ignore', stdout: 'pipe', stderr: 'inherit' });
-  const fd = child.stdout?._handle?.fd;
-  if (!Number.isInteger(fd)) {
-    child.kill('SIGTERM');
+  const stdoutPath = join(scratch, 'stdout');
+  const fifo = spawnSync('mkfifo', ['--mode=600', stdoutPath]);
+  if (fifo.error || fifo.status !== 0) {
     rmSync(scratch, { recursive: true, force: true });
-    return ['error', 5];
+    return ['error', fifo.error ? errnoOf(fifo.error) : 5];
   }
+  const readFd = openSync(stdoutPath, constants.O_RDONLY | constants.O_NONBLOCK);
+  const child = spawn('setsid', [
+    '-f', 'sh', '-c',
+    'exec >"$2"; printf "%s\\n" "$$" >"$1"; shift 2; exec "$@"',
+    'activity-event', pidPath, stdoutPath, ...argv,
+  ], { stdin: 'ignore', stdout: 'ignore', stderr: 'inherit' });
   const deadline = performance.now() + 250;
   let pid = 0;
   while (performance.now() < deadline) {
@@ -144,10 +137,12 @@ function spawnStdout(argv) {
   rmSync(scratch, { recursive: true, force: true });
   if (!Number.isSafeInteger(pid) || pid <= 1) {
     child.kill('SIGTERM');
+    closeSync(readFd);
     return ['error', 5];
   }
   const descriptor = nextDescriptor++;
-  descriptors.set(descriptor, { fd, child, buffer: Buffer.alloc(0), eof: false });
+  descriptors.set(descriptor,
+    { fd: readFd, child, buffer: Buffer.alloc(0), eof: false });
   return ['ok', pid, descriptor];
 }
 
@@ -242,8 +237,8 @@ function closeDescriptor(descriptor) {
   if (!entry) return -9;
   descriptors.delete(descriptor);
   try {
-    if (entry.child) entry.child.stdout.destroy();
-    else closeSync(entry.fd);
+    if (entry.child?.stdout) entry.child.stdout.destroy();
+    closeSync(entry.fd);
     return 0;
   } catch (error) {
     return -errnoOf(error);

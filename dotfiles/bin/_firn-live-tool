@@ -7,6 +7,7 @@ shift
 firn_repo="${FIRN_REPO:-$HOME/code/nixos-config/main}" # hardcoded-repo-path:allow
 beagle_path="${BEAGLE_PATH:-$HOME/code/beagle/main}" # hardcoded-repo-path:allow
 beagle="$beagle_path/bin/beagle"
+runtime_root="${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}"
 
 if [[ ! -x "$beagle" ]]; then
   printf '%s: BEAGLE_PATH has no executable bin/beagle: %s\n' "$tool" "$beagle_path" >&2
@@ -42,9 +43,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
- bun="${FIRN_BUN:-$(command -v bun || true)}"
-if [[ -z "$bun" || ! -x "$bun" ]]; then
-  printf '%s: Bun runtime is unavailable\n' "$tool" >&2
+bun="${FIRN_BUN:-$runtime_root/current/bin/bun}"
+if [[ ! -x "$bun" ]]; then
+  printf '%s: Firn Bun runtime is unavailable: %s\n' "$tool" "$bun" >&2
   exit 127
 fi
 mkdir -p "$stage/modules/node_modules/beagle"

@@ -109,9 +109,10 @@ The command shape is:
 /etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/<id>.sh
 ```
 
-Native Firn is installed by the system and binds directly as
-`/run/current-system/sw/bin/firn-system-policy`. Edit `.bnix`, never generated
-`.nix`, and regenerate through `firn repo build`.
+Firn's Beagle/JS policy is promoted with the Firn CLI runtime and binds as
+`~/.local/lib/firn/cli/current/bin/firn-system-policy`. Refresh that runtime
+from committed source with `firn-runtime-update`; it does not belong to the
+NixOS system closure.
 
 Provider lifecycle wrappers are separate. Register each spawn, tool-use,
 delegated, stop, and terminal source under its exact hook identity and bind its

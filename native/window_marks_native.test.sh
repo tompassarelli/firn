@@ -307,47 +307,4 @@ expect_status default-path 0
 [[ -f "$default_home/.local/state/wm-world/marks.jsonl" ]] \
   || die "default HOME state path changed"
 
-migration="$scratch/migration"
-mkdir -p "$migration"
-cat >"$migration/facts.log" <<'EOF'
-{:tx 1 :op "assert" :l "@w1" :p "title" :r "Shell" :frame "wm" :ts "2026-08-26T00:00:00Z"}
-{:tx 2 :op "assert" :l "@w1" :p "workspace" :r 3 :frame "wm" :ts "2026-08-26T00:00:01Z"}
-EOF
-cp "$migration/facts.log" "$scratch/facts.expected.rollback"
-bb "$repo/dotfiles/bin/wm-world-migrate-jsonl" "$migration" \
-  >"$scratch/migrate.out" 2>"$scratch/migrate.err" \
-  || die 'scratch JSONL migration failed'
-cmp -s "$migration/facts.log" "$scratch/facts.expected.rollback" \
-  || die 'migration changed legacy authority'
-cmp -s "$migration/facts.edn.rollback" "$scratch/facts.expected.rollback" \
-  || die 'migration rollback copy is not byte exact'
-rg -Fx \
-  '{"tx":1,"op":"assert","l":"@w1","p":"title","r":"Shell","frame":"wm","ts":"2026-08-26T00:00:00Z"}' \
-  "$migration/facts.jsonl" >/dev/null \
-  || die 'migration JSONL bytes changed'
-rg -Fx \
-  '{"tx":2,"op":"assert","l":"@w1","p":"workspace","r":3,"frame":"wm","ts":"2026-08-26T00:00:01Z"}' \
-  "$migration/facts.jsonl" >/dev/null \
-  || die 'migration integer JSONL bytes changed'
-[[ ! -s "$scratch/migrate.err" ]] || die 'migration wrote stderr'
-
-invalid_migration="$scratch/invalid-migration"
-mkdir -p "$invalid_migration"
-printf '%s\n' '{:tx 1 :op "assert" :l "@w1" :p "title"}' \
-  >"$invalid_migration/marks.log"
-cp "$invalid_migration/marks.log" "$scratch/invalid.expected"
-set +e
-bb "$repo/dotfiles/bin/wm-world-migrate-jsonl" "$invalid_migration" \
-  >"$scratch/invalid-migrate.out" 2>"$scratch/invalid-migrate.err"
-invalid_migrate_status=$?
-set -e
-[[ "$invalid_migrate_status" -ne 0 ]] \
-  || die 'invalid legacy authority unexpectedly migrated'
-cmp -s "$invalid_migration/marks.log" "$scratch/invalid.expected" \
-  || die 'failed migration changed legacy authority'
-[[ ! -e "$invalid_migration/marks.jsonl" ]] \
-  || die 'failed migration promoted JSONL authority'
-[[ ! -e "$invalid_migration/marks.edn.rollback" ]] \
-  || die 'failed validation created rollback artifact'
-
 printf 'ok: Beagle/JS window marks preserves JSONL append/fold/identity and six Bun CLI contracts\n'

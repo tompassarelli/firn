@@ -1,19 +1,24 @@
 #lang beagle/js
 (ns activity.core)
 
-(defrecord ActivityDef
+(js/export
+  (defrecord ActivityDef
   [(id String)
    (label (U String Nil))
    (bind-names (Vec String))
-   (bind-prefixes (Vec String))])
+   (bind-prefixes (Vec String))]))
 
-(defrecord Assignment [(workspace-name String) (activity String)])
+(js/export
+  (defrecord Assignment [(workspace-name String) (activity String)]))
 
-(defrecord Membership [(workspace-id Int) (activity String)])
+(js/export
+  (defrecord Membership [(workspace-id Int) (activity String)]))
 
-(defrecord LastActive [(activity String) (workspace-id Int)])
+(js/export
+  (defrecord LastActive [(activity String) (workspace-id Int)]))
 
-(defrecord Workspace
+(js/export
+  (defrecord Workspace
   [(id Int)
    (idx Int)
    (name (U String Nil))
@@ -21,9 +26,10 @@
    (focused Bool)
    (active Bool)
    (urgent Bool)
-   (active-window-id (U Int Nil))])
+   (active-window-id (U Int Nil))]))
 
-(defrecord ActivityState
+(js/export
+  (defrecord ActivityState
   [(defs (Vec ActivityDef))
    (default String)
    (assignments (Vec Assignment))
@@ -31,43 +37,49 @@
    (last-active (Vec LastActive))
    (current String)
    (previous String)
-   (workspaces (Vec Workspace))])
+   (workspaces (Vec Workspace))]))
 
-(defrecord WorkspaceMove [(workspace Workspace) (target-index Int)])
+(js/export
+  (defrecord WorkspaceMove [(workspace Workspace) (target-index Int)]))
 
-(defunion WorkspaceLookup
+(js/export
+  (defunion WorkspaceLookup
   (WorkspaceFound [(workspace Workspace)])
-  (WorkspaceMissing [(token Bool)]))
+  (WorkspaceMissing [(token Bool)])))
 
-(defunion ActivityCommand
+(js/export
+  (defunion ActivityCommand
   (Goto [(activity String)])
   (MoveToActivity [(activity String)])
   (Back [(token Bool)])
   (Here [(ordinal Int)])
   (MoveHere [(ordinal Int)])
-  (Assign [(activity String)]))
+  (Assign [(activity String)])))
 
-(defunion ActivityEffect
+(js/export
+  (defunion ActivityEffect
   (FocusWorkspace [(reference String)])
   (MoveColumnToWorkspace [(reference String)])
   (ReconcileBands [(token Bool)])
   (PublishSnapshot [(token Bool)])
-  (PersistAssignments [(assignments (Vec Assignment))]))
+  (PersistAssignments [(assignments (Vec Assignment))])))
 
-(defrecord CommandOutcome [(state ActivityState) (effects (Vec ActivityEffect))])
+(js/export
+  (defrecord CommandOutcome [(state ActivityState) (effects (Vec ActivityEffect))]))
 
 (defn starts-with? [(text String) (prefix String)] Bool
   (and
     (<= (count prefix) (count text))
     (= (subs text 0 (count prefix)) prefix)))
 
-(defn string-member? [(values (Vec String)) (candidate String)] Bool
+(js/export
+  (defn string-member? [(values (Vec String)) (candidate String)] Bool
   (loop [(index Int) 0]
     (if (>= index (count values))
       false
       (if (= (nth values index) candidate)
         true
-        (recur (+ index 1))))))
+        (recur (+ index 1)))))))
 
 (defn workspace-id-member? [(workspaces (Vec Workspace)) (candidate Int)] Bool
   (loop [(index Int) 0]
@@ -228,23 +240,26 @@
             (conj (conj result workspace) current))
           (recur (+ index 1) inserted (conj result current)))))))
 
-(defn sort-workspaces-by-index [(workspaces (Vec Workspace))] (Vec Workspace)
+(js/export
+  (defn sort-workspaces-by-index [(workspaces (Vec Workspace))] (Vec Workspace)
   (loop [(index Int) 0 (ordered (Vec Workspace)) []]
     (if (>= index (count workspaces))
       ordered
       (recur (+ index 1)
-        (insert-workspace-by-index ordered (nth workspaces index))))))
+        (insert-workspace-by-index ordered (nth workspaces index)))))))
 
-(defn focused-workspace [(workspaces (Vec Workspace))] WorkspaceLookup
+(js/export
+  (defn focused-workspace [(workspaces (Vec Workspace))] WorkspaceLookup
   (loop [(index Int) 0]
     (if (>= index (count workspaces))
       (->WorkspaceMissing false)
       (let [(workspace Workspace) (nth workspaces index)]
         (if (workspace-focused workspace)
           (->WorkspaceFound workspace)
-          (recur (+ index 1)))))))
+          (recur (+ index 1))))))))
 
-(defn members-of
+(js/export
+  (defn members-of
   [(state ActivityState)
    (workspaces (Vec Workspace))
    (activity String)]
@@ -259,9 +274,10 @@
         (recur (+ index 1)
           (if (= workspace-activity activity)
             (conj members workspace)
-            members))))))
+            members)))))))
 
-(defn floats-of
+(js/export
+  (defn floats-of
   [(state ActivityState) (workspaces (Vec Workspace))] (Vec Workspace)
   (loop [(index Int) 0 (floats (Vec Workspace)) []]
     (if (>= index (count workspaces))
@@ -272,7 +288,7 @@
                 (membership-for
                   (activitystate-members state) (workspace-id workspace)))
             (conj floats workspace)
-            floats))))))
+            floats)))))))
 
 (defn workspace-before?
   [(state ActivityState) (left Workspace) (right Workspace)] Bool
@@ -308,7 +324,8 @@
             (conj (conj result workspace) current))
           (recur (+ index 1) inserted (conj result current)))))))
 
-(defn desired-order
+(js/export
+  (defn desired-order
   [(state ActivityState)
    (workspaces (Vec Workspace))
    (output String)]
@@ -320,18 +337,20 @@
         (recur (+ index 1)
           (if (= (workspace-output workspace) output)
             (insert-workspace-by-band state ordered workspace)
-            ordered))))))
+            ordered)))))))
 
-(defn first-misplaced [(desired (Vec Workspace))] (U WorkspaceMove Nil)
+(js/export
+  (defn first-misplaced [(desired (Vec Workspace))] (U WorkspaceMove Nil)
   (loop [(index Int) 0 (target Int) 1]
     (if (>= index (count desired))
       nil
       (let [(workspace Workspace) (nth desired index)]
         (if (not= (workspace-idx workspace) target)
           (->WorkspaceMove workspace target)
-          (recur (+ index 1) (+ target 1)))))))
+          (recur (+ index 1) (+ target 1))))))))
 
-(defn last-active-for
+(js/export
+  (defn last-active-for
   [(last-active (Vec LastActive)) (activity String)] (U Int Nil)
   (loop [(index Int) 0]
     (if (>= index (count last-active))
@@ -339,7 +358,7 @@
       (let [(entry LastActive) (nth last-active index)]
         (if (= (lastactive-activity entry) activity)
           (lastactive-workspace-id entry)
-          (recur (+ index 1)))))))
+          (recur (+ index 1))))))))
 
 (defn put-last-active
   [(last-active (Vec LastActive))
@@ -390,7 +409,8 @@
     previous
     (activitystate-workspaces state)))
 
-(defn apply-workspaces
+(js/export
+  (defn apply-workspaces
   [(state ActivityState) (workspaces (Vec Workspace))] ActivityState
   (let [(members (Vec Membership)) (adopt-all state workspaces)
         (with-workspaces ActivityState)
@@ -414,7 +434,7 @@
                (put-last-active
                  (activitystate-last-active with-workspaces)
                  focused-activity
-                 (workspace-id focused))))))])))
+                 (workspace-id focused))))))]))))
 
 (defn activity-target
   [(state ActivityState)
@@ -451,11 +471,12 @@
             (min (max 0 (- ordinal 1)) (- (count members) 1))]
         (->WorkspaceFound (nth members bounded))))))
 
-(defn workspace-reference [(workspace Workspace)] String
+(js/export
+  (defn workspace-reference [(workspace Workspace)] String
   (let [(name (U String Nil)) (workspace-name workspace)]
     (if (nil? name)
       (str (workspace-idx workspace))
-      name)))
+      name))))
 
 (defn put-assignment
   [(assignments (Vec Assignment))
@@ -505,13 +526,13 @@
         (state-with-members state
           (put-membership
             (activitystate-members state) (workspace-id workspace) activity))
-        (workspace-name (U String Nil)) (workspace-name workspace)]
-    (if (nil? workspace-name)
+        (assigned-name (U String Nil)) (workspace-name workspace)]
+    (if (nil? assigned-name)
       with-member
       (state-with-assignments with-member
         (put-assignment
           (activitystate-assignments with-member)
-          workspace-name
+          assigned-name
           activity)))))
 
 (defn first-floating
@@ -570,7 +591,8 @@
             (->PublishSnapshot true)
             (->PersistAssignments (activitystate-assignments assigned))])))]))
 
-(defn apply-command
+(js/export
+  (defn apply-command
   [(state ActivityState)
    (workspaces (Vec Workspace))
    (command ActivityCommand)]
@@ -592,4 +614,4 @@
        [(WorkspaceFound workspace)
         (->CommandOutcome state
           [(->MoveColumnToWorkspace (workspace-reference workspace))])])]
-    [(Assign activity) (assign-outcome state workspaces activity)]))
+    [(Assign activity) (assign-outcome state workspaces activity)])))

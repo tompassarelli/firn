@@ -3,14 +3,15 @@ set -euo pipefail
 
 firn_repo="${FIRN_REPO:-$HOME/code/nixos-config/main}" # hardcoded-repo-path:allow
 beagle_path="${BEAGLE_PATH:-$HOME/code/beagle/main}" # hardcoded-repo-path:allow
-beagle="$beagle_path/bin/beagle"
-bun="${FIRN_BUN:-$(command -v bun || true)}"
+beagle_build="$beagle_path/bin/beagle-build-all"
+firn_runtime_root="${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}"
+bun="${FIRN_BUN:-$firn_runtime_root/current/bin/bun}"
 runtime_root="${FIRN_ACTIVITY_RUNTIME_ROOT:-$HOME/.local/lib/firn/activity}"
 versions="$runtime_root/versions"
 next=""
 
-if [[ ! -x "$beagle" ]]; then
-  printf 'activity-runtime-update: BEAGLE_PATH has no executable bin/beagle: %s\n' \
+if [[ ! -x "$beagle_build" ]]; then
+  printf 'activity-runtime-update: BEAGLE_PATH has no executable bin/beagle-build-all: %s\n' \
     "$beagle_path" >&2
   exit 1
 fi
@@ -25,7 +26,7 @@ sources=(
   "$firn_repo/native/activity_driver.bjs"
   "$firn_repo/native/activity_native.bjs"
   "$firn_repo/native/activity_host.mjs"
-  "$firn_repo/native/activity_assignments_migrate.mjs"
+  "$beagle_path/beagle-lib/lib/beagle/core.js"
 )
 for source in "${sources[@]}"; do
   if [[ ! -f "$source" ]]; then
@@ -46,12 +47,15 @@ cleanup() {
   fi
 }
 trap cleanup EXIT INT TERM HUP
-mkdir -p "$stage/bin" "$stage/lib"
+mkdir -p "$stage/bin" "$stage/lib/node_modules/beagle"
 
 mkdir -p "$stage/lib/activity"
-if ! "$beagle" build \
+if ! "$beagle_build" \
+  "$beagle_path/native-core/src/native/json.bjs" \
+  "$firn_repo/native/activity_core.bjs" \
+  "$firn_repo/native/activity_driver.bjs" \
   "$firn_repo/native/activity_native.bjs" \
-  "$stage/lib/activity/native.js"; then
+  --out "$stage/lib"; then
   printf 'activity-runtime-update: Beagle/JS compilation failed\n' >&2
   exit 1
 fi
@@ -60,13 +64,23 @@ if [[ ! -f "$stage/lib/activity/native.js" ]]; then
   printf 'activity-runtime-update: compiler produced no activity module\n' >&2
   exit 1
 fi
+cp -- "$beagle_path/beagle-lib/lib/beagle/core.js" \
+  "$stage/lib/node_modules/beagle/core.js"
+printf '%s\n' '{"type":"module"}' \
+  >"$stage/lib/node_modules/beagle/package.json"
 cp -- "$firn_repo/native/activity_host.mjs" "$stage/bin/activity.mjs"
 cat >"$stage/bin/activity" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export FIRN_ACTIVITY_MODULE="$root/lib/activity/native.js"
-exec "${FIRN_BUN:-bun}" "$root/bin/activity.mjs" "$@"
+firn_runtime_root="${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}"
+bun="${FIRN_BUN:-$firn_runtime_root/current/bin/bun}"
+if [[ ! -x "$bun" ]]; then
+  printf 'activity: Firn Bun runtime is unavailable: %s\n' "$bun" >&2
+  exit 127
+fi
+exec "$bun" "$root/bin/activity.mjs" "$@"
 EOF
 chmod +x "$stage/bin/activity"
 
@@ -98,8 +112,6 @@ else
   mv -- "$stage" "$destination"
   stage=""
 fi
-
-"$bun" "$firn_repo/native/activity_assignments_migrate.mjs"
 
 next="$runtime_root/.current.$$"
 ln -s "versions/$artifact_id" "$next"

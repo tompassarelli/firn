@@ -26,14 +26,25 @@ if [[ ! -x "$beagle" ]]; then
     "$beagle_path" >&2
   exit 1
 fi
-for prerequisite in bun cmp find git readlink sha256sum; do
+for prerequisite in cmp find git readlink sha256sum; do
   if ! command -v "$prerequisite" >/dev/null 2>&1; then
     printf 'firn-runtime-update: required producer command is unavailable: %s\n' \
       "$prerequisite" >&2
     exit 127
   fi
 done
-bun_source="$(readlink -f "$(command -v bun)")"
+bun_candidate="${FIRN_BUN:-}"
+if [[ -z "$bun_candidate" && -x "$runtime_root/current/bin/bun" ]]; then
+  bun_candidate="$runtime_root/current/bin/bun"
+fi
+if [[ -z "$bun_candidate" ]]; then
+  bun_candidate="$(command -v bun || true)"
+fi
+if [[ -z "$bun_candidate" || ! -x "$bun_candidate" ]]; then
+  printf 'firn-runtime-update: Bun runtime is unavailable\n' >&2
+  exit 127
+fi
+bun_source="$(readlink -f "$bun_candidate")"
 bun_store_path=""
 case "$bun_source" in
   /nix/store/*)
@@ -145,6 +156,12 @@ prewarm_sources=(
   "$firn_repo/native/prewarm.bjs"
 )
 prewarm_bridge="$firn_repo/native/prewarm_host.mjs"
+system_policy_sources=(
+  "$native_json"
+  "$firn_repo/native/system_policy.bjs"
+  "$firn_repo/native/system_policy_native.bjs"
+)
+system_policy_bridge="$firn_repo/native/system_policy_host.mjs"
 
 case "$scope" in
   repo)
@@ -179,6 +196,8 @@ case "$scope" in
       "$rebuild_bridge"
       "${prewarm_sources[@]}"
       "$prewarm_bridge"
+      "${system_policy_sources[@]}"
+      "$system_policy_bridge"
     )
     ;;
 esac
@@ -363,6 +382,9 @@ case "$scope" in
       FIRN_REBUILD_MODULE "$rebuild_bridge" "${rebuild_sources[@]}"
     materialize_js prewarm firn-prewarm firn/prewarm.js \
       FIRN_PREWARM_MODULE "$prewarm_bridge" "${prewarm_sources[@]}"
+    materialize_js system-policy firn-system-policy firn/system-policy-native.js \
+      FIRN_SYSTEM_POLICY_MODULE "$system_policy_bridge" \
+      "${system_policy_sources[@]}"
     ;;
 esac
 

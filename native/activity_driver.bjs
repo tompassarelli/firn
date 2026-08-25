@@ -21,25 +21,28 @@
    (entries (Vec ActivitySnapshotEntry))
    (floating-ids (Vec Int))])
 
-(defunion BandOutcome
+(js/export
+  (defunion BandOutcome
   (BandsSettled [(moves (Vec a/WorkspaceMove)) (workspaces (Vec a/Workspace))])
   (BandsUnsettled
-    [(moves (Vec a/WorkspaceMove)) (workspaces (Vec a/Workspace)) (limit Int)]))
+    [(moves (Vec a/WorkspaceMove)) (workspaces (Vec a/Workspace)) (limit Int)])))
 
 ;; FocusStep and MoveColumnStep carry the kernel's reference verbatim; the
 ;; driver resolves no references of its own.
-(defunion PlannedStep
+(js/export
+  (defunion PlannedStep
   (FocusStep [(reference String)])
   (MoveColumnStep [(reference String)])
   (ReorderStep [(reference String) (id Int) (target-index Int)])
   (SnapshotStep [(snapshot ActivitySnapshot)])
-  (PersistStep [(assignments (Vec a/Assignment))]))
+  (PersistStep [(assignments (Vec a/Assignment))])))
 
-(defrecord CommandPlan
+(js/export
+  (defrecord CommandPlan
   [(state a/ActivityState)
    (workspaces (Vec a/Workspace))
    (steps (Vec PlannedStep))
-   (settled Bool)])
+   (settled Bool)]))
 
 (defn workspace-with-index [(workspace a/Workspace) (idx Int)] a/Workspace
   (a/->Workspace
@@ -137,20 +140,23 @@
         (insert-workspace-at remaining position moved)]
     (merge-output workspaces output (renumber-output placed))))
 
-(defn band-moves [(outcome BandOutcome)] (Vec a/WorkspaceMove)
+(js/export
+  (defn band-moves [(outcome BandOutcome)] (Vec a/WorkspaceMove)
   (match outcome
     [(BandsSettled moves workspaces) moves]
-    [(BandsUnsettled moves workspaces limit) moves]))
+    [(BandsUnsettled moves workspaces limit) moves])))
 
-(defn band-workspaces [(outcome BandOutcome)] (Vec a/Workspace)
+(js/export
+  (defn band-workspaces [(outcome BandOutcome)] (Vec a/Workspace)
   (match outcome
     [(BandsSettled moves workspaces) workspaces]
-    [(BandsUnsettled moves workspaces limit) workspaces]))
+    [(BandsUnsettled moves workspaces limit) workspaces])))
 
-(defn band-settled? [(outcome BandOutcome)] Bool
+(js/export
+  (defn band-settled? [(outcome BandOutcome)] Bool
   (match outcome
     [(BandsSettled moves workspaces) true]
-    [(BandsUnsettled moves workspaces limit) false]))
+    [(BandsUnsettled moves workspaces limit) false])))
 
 ;; The kernel decides one move at a time; the loop is the driver's. Each move
 ;; is applied to a modelled workspace list rather than to niri, so the whole
@@ -186,10 +192,12 @@
 
 ;; One settling pass per output can need one move per workspace on it; the
 ;; extra step lets a settled output prove itself without consuming budget.
-(defn default-band-limit [(workspaces (Vec a/Workspace))] Int
-  (+ (count workspaces) 1))
+(js/export
+  (defn default-band-limit [(workspaces (Vec a/Workspace))] Int
+    (+ (count workspaces) 1)))
 
-(defn reconcile-bands
+(js/export
+  (defn reconcile-bands
   [(state a/ActivityState)
    (workspaces (Vec a/Workspace))
    (limit Int)]
@@ -208,7 +216,7 @@
           (recur (+ index 1)
             (band-workspaces outcome)
             (into moves (band-moves outcome))
-            (and settled (band-settled? outcome))))))))
+            (and settled (band-settled? outcome)))))))))
 
 (defn reorder-steps [(moves (Vec a/WorkspaceMove))] (Vec PlannedStep)
   (loop [(index Int) 0 (result (Vec PlannedStep)) []]
@@ -358,13 +366,14 @@
       (a/commandoutcome-effects outcome)
       limit)))
 
-(defn plan-command
+(js/export
+  (defn plan-command
   [(state a/ActivityState)
    (workspaces (Vec a/Workspace))
    (command a/ActivityCommand)]
   CommandPlan
   (plan-command-bounded state workspaces command
-    (default-band-limit workspaces)))
+    (default-band-limit workspaces))))
 
 (defn plan-step-kinds [(steps (Vec PlannedStep))] (Vec String)
   (loop [(index Int) 0 (result (Vec String)) []]

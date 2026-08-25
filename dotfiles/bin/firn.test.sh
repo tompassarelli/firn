@@ -9,8 +9,11 @@ trap cleanup EXIT
 
 candidate_beagle="${BEAGLE_PATH:?set BEAGLE_PATH to the exact Beagle candidate}"
 bash_path="$(command -v bash)"
+producer_bun="${FIRN_BUN:-$HOME/.local/lib/firn/cli/current/bin/bun}"
+[[ -x "$producer_bun" ]]
 real_runtime="$scratch/real-runtime"
-FIRN_REPO="$source_repo" BEAGLE_PATH="$candidate_beagle" \
+PATH="$(dirname "$producer_bun"):$PATH" \
+  FIRN_REPO="$source_repo" BEAGLE_PATH="$candidate_beagle" \
   FIRN_RUNTIME_ROOT="$real_runtime" \
   "$here/firn-runtime-update" >"$scratch/real-update.out"
 FIRN_REPO="$source_repo" BEAGLE_PATH="$candidate_beagle" \
@@ -114,6 +117,7 @@ case "\$2" in
 esac
 EOF
 chmod +x "$fake_bin/git"
+ln -s "$producer_bun" "$fake_bin/bun"
 
 export HOME="$home"
 export PATH="$fake_bin:$PATH"
@@ -134,12 +138,12 @@ grep -Fxq 'beagle_revision=2222222222222222222222222222222222222222' \
 grep -Fq 'artifact=bun path=bin/bun ' "$destination/manifest"
 [[ -x "$destination/bin/bun" ]]
 for component in tag flake-input inventory authoring views repo-build schema \
-  repo-workflow rebuild prewarm; do
+  repo-workflow rebuild prewarm system-policy; do
   grep -Fq "component=$component " "$destination/manifest"
 done
 for binary in firn-tag firn-flake-input firn-inventory firn-authoring \
   firn-views firn-repo-build firn-schema firn-repo-workflow firn-rebuild \
-  firn-prewarm; do
+  firn-prewarm firn-system-policy; do
   [[ -x "$destination/bin/$binary" ]]
 done
 no_bun_path=""
@@ -155,6 +159,7 @@ done
 [[ "$(PATH="$no_bun_path" "$bash_path" "$here/firn" repo validate)" == \
   prepared:alpha:schema ]]
 
+unlink "$fake_bin/bun"
 "$here/firn-runtime-update" >"$scratch/update-again.out"
 [[ "$(readlink "$runtime_root/current")" == "$target" ]]
 ! tr '\0' '\n' <"$FAKE_BEAGLE_LOG" | grep -Fxq native-exe
@@ -162,6 +167,8 @@ done
 [[ "$("$here/_firn-live-tool" activity-menu)" == \
   prepared:alpha:activity-menu ]]
 [[ "$(printf '{}\n' | "$here/_firn-live-tool" firn-system-policy)" == \
+  prepared:alpha:system-policy ]]
+[[ "$(printf '{}\n' | "$destination/bin/firn-system-policy")" == \
   prepared:alpha:system-policy ]]
 
 missing_root="$scratch/missing-runtime"

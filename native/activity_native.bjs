@@ -282,12 +282,12 @@
       -1
       (let [(event json/JsonEvent) (nth events index)]
         (cond
-          (or (instance? JsonObjectStart event)
-              (instance? JsonArrayStart event))
+          (or (instance? json/JsonObjectStart event)
+              (instance? json/JsonArrayStart event))
           (recur (+ index 1) (+ depth 1))
 
-          (or (instance? JsonObjectEnd event)
-              (instance? JsonArrayEnd event))
+          (or (instance? json/JsonObjectEnd event)
+              (instance? json/JsonArrayEnd event))
           (if (= depth 1)
             (+ index 1)
             (recur (+ index 1) (- depth 1)))
@@ -303,16 +303,64 @@
     -1
     (let [(event json/JsonEvent) (nth events start)]
       (cond
-        (or (instance? JsonObjectStart event)
-            (instance? JsonArrayStart event))
+        (or (instance? json/JsonObjectStart event)
+            (instance? json/JsonArrayStart event))
         (json-container-end events start)
 
-        (or (instance? JsonObjectEnd event)
-            (instance? JsonArrayEnd event))
+        (or (instance? json/JsonObjectEnd event)
+            (instance? json/JsonArrayEnd event))
         -1
 
         :else
         (+ start 1)))))
+
+(defn json-key-value [event json/JsonEvent] (U String Nil)
+  (match event
+    [(JsonKey offset value) value]
+    [(JsonObjectStart offset) nil]
+    [(JsonObjectEnd offset) nil]
+    [(JsonArrayStart offset) nil]
+    [(JsonArrayEnd offset) nil]
+    [(JsonString offset value) nil]
+    [(JsonNumber offset lexeme) nil]
+    [(JsonBoolean offset value) nil]
+    [(JsonNull offset) nil]))
+
+(defn json-string-value [event json/JsonEvent] (U String Nil)
+  (match event
+    [(JsonString offset value) value]
+    [(JsonObjectStart offset) nil]
+    [(JsonObjectEnd offset) nil]
+    [(JsonArrayStart offset) nil]
+    [(JsonArrayEnd offset) nil]
+    [(JsonKey offset value) nil]
+    [(JsonNumber offset lexeme) nil]
+    [(JsonBoolean offset value) nil]
+    [(JsonNull offset) nil]))
+
+(defn json-number-value [event json/JsonEvent] (U String Nil)
+  (match event
+    [(JsonNumber offset lexeme) lexeme]
+    [(JsonObjectStart offset) nil]
+    [(JsonObjectEnd offset) nil]
+    [(JsonArrayStart offset) nil]
+    [(JsonArrayEnd offset) nil]
+    [(JsonKey offset value) nil]
+    [(JsonString offset value) nil]
+    [(JsonBoolean offset value) nil]
+    [(JsonNull offset) nil]))
+
+(defn json-boolean-value [event json/JsonEvent] (U Bool Nil)
+  (match event
+    [(JsonBoolean offset value) value]
+    [(JsonObjectStart offset) nil]
+    [(JsonObjectEnd offset) nil]
+    [(JsonArrayStart offset) nil]
+    [(JsonArrayEnd offset) nil]
+    [(JsonKey offset value) nil]
+    [(JsonString offset value) nil]
+    [(JsonNumber offset lexeme) nil]
+    [(JsonNull offset) nil]))
 
 (defn json-object-field-index
   [events (Vec json/JsonEvent)
@@ -321,7 +369,7 @@
   (U Int Nil)
   (if (or (< start 0)
           (>= start (count events))
-          (not (instance? JsonObjectStart (nth events start))))
+          (not (instance? json/JsonObjectStart (nth events start))))
     nil
     (let [(end Int) (json-value-end events start)]
       (if (< end 0)
@@ -329,15 +377,16 @@
         (loop [(index Int) (+ start 1)]
           (if (>= index (- end 1))
             nil
-            (let [(event json/JsonEvent) (nth events index)]
-              (if (not (instance? JsonKey event))
+            (let [(event json/JsonEvent) (nth events index)
+                  (key (U String Nil)) (json-key-value event)]
+              (if (nil? key)
                 nil
                (let [(value-index Int) (+ index 1)
                      (next Int) (json-value-end events value-index)
-                     (key String) (json/jsonkey-value event)]
+                     (field String) key]
                  (if (< next 0)
                    nil
-                   (if (= key wanted)
+                   (if (= field wanted)
                      value-index
                      (recur next))))))))))))
 
@@ -347,10 +396,7 @@
   (U String Nil)
   (if (nil? index)
     nil
-    (let [(event json/JsonEvent) (nth events index)]
-      (if (instance? JsonString event)
-        (json/jsonstring-value event)
-        nil))))
+    (json-string-value (nth events index))))
 
 (defn json-int-at
   [events (Vec json/JsonEvent)
@@ -358,10 +404,9 @@
   (U Int Nil)
   (if (nil? index)
     nil
-    (let [(event json/JsonEvent) (nth events index)]
-      (if (instance? JsonNumber event)
-        (parse-long (json/jsonnumber-lexeme event))
-        nil))))
+    (let [(lexeme (U String Nil))
+          (json-number-value (nth events index))]
+      (if (nil? lexeme) nil (parse-long lexeme)))))
 
 (defn json-bool-at
   [events (Vec json/JsonEvent)
@@ -370,10 +415,9 @@
   Bool
   (if (nil? index)
     fallback
-    (let [(event json/JsonEvent) (nth events index)]
-      (if (instance? JsonBoolean event)
-        (json/jsonboolean-value event)
-        fallback))))
+    (let [(value (U Bool Nil))
+          (json-boolean-value (nth events index))]
+      (if (nil? value) fallback value))))
 
 (defn json-nullable-string-at
   [events (Vec json/JsonEvent)
@@ -381,10 +425,7 @@
   (U String Nil)
   (if (nil? index)
     nil
-    (let [(event json/JsonEvent) (nth events index)]
-      (if (instance? JsonString event)
-        (let [(value String) (json/jsonstring-value event)] value)
-        nil))))
+    (json-string-value (nth events index))))
 
 (defn workspace-object
   [events (Vec json/JsonEvent)
@@ -419,7 +460,7 @@
   WorkspacesResult
   (if (or (< start 0)
           (>= start (count events))
-          (not (instance? JsonArrayStart (nth events start))))
+          (not (instance? json/JsonArrayStart (nth events start))))
     (->WorkspacesRejected "expected a workspace array")
     (let [(end Int) (json-value-end events start)]
       (if (< end 0)
@@ -450,7 +491,7 @@
      (->EventRejected (str offset ":" message))]
     [(JsonDecoded events)
      (if (or (empty? events)
-             (not (instance? JsonObjectStart (first events))))
+             (not (instance? json/JsonObjectStart (first events))))
        (->EventRejected "expected an event object")
        (let [(changed (U Int Nil))
              (json-object-field-index events 0 "WorkspacesChanged")
@@ -480,7 +521,7 @@
   StringVectorResult
   (if (nil? index)
     (->StringVectorLoaded [])
-    (if (not (instance? JsonArrayStart (nth events index)))
+    (if (not (instance? json/JsonArrayStart (nth events index)))
       (->StringVectorRejected "expected a string array")
       (let [(end Int) (json-value-end events index)]
         (if (< end 0)
@@ -488,10 +529,11 @@
           (loop [(at Int) (+ index 1) (result (Vec String)) []]
             (if (= at (- end 1))
               (->StringVectorLoaded result)
-              (let [(event json/JsonEvent) (nth events at)]
-                (if (instance? JsonString event)
+              (let [(event json/JsonEvent) (nth events at)
+                    (value (U String Nil)) (json-string-value event)]
+                (if (some? value)
                   (recur (+ at 1)
-                    (conj result (json/jsonstring-value event)))
+                    (conj result value))
                   (->StringVectorRejected
                     "activity bindings must be strings"))))))))))
 
@@ -522,7 +564,7 @@
   DefsResult
   (if (or (< start 0)
           (>= start (count events))
-          (not (instance? JsonArrayStart (nth events start))))
+          (not (instance? json/JsonArrayStart (nth events start))))
     (->DefsRejected "activities must be an array")
     (let [(end Int) (json-value-end events start)]
       (if (< end 0)
@@ -553,7 +595,7 @@
      (->DefsRejected (str offset ":" message))]
     [(JsonDecoded events)
      (if (or (empty? events)
-             (not (instance? JsonObjectStart (first events)))
+             (not (instance? json/JsonObjectStart (first events)))
              (not= (json-value-end events 0) (count events)))
        (->DefsRejected "expected an activity definition object")
        (let [(default (U String Nil))
@@ -574,7 +616,7 @@
   [events (Vec json/JsonEvent)]
   AssignmentsResult
   (if (or (empty? events)
-          (not (instance? JsonObjectStart (first events))))
+          (not (instance? json/JsonObjectStart (first events))))
     (->AssignmentsRejected "expected an assignment object")
     (let [(end Int) (json-value-end events 0)]
       (if (not= end (count events))
@@ -586,22 +628,23 @@
               (->AssignmentsRejected "assignment object has no value")
               (let [(name-event json/JsonEvent) (nth events index)
                     (activity-event json/JsonEvent)
-                    (nth events (+ index 1))]
+                    (nth events (+ index 1))
+                    (name (U String Nil)) (json-key-value name-event)
+                    (activity (U String Nil))
+                    (json-string-value activity-event)]
                 (cond
-                  (not (instance? JsonKey name-event))
+                  (nil? name)
                   (->AssignmentsRejected
                     "assignment workspace name must be a string")
 
-                  (not (instance? JsonString activity-event))
+                  (nil? activity)
                   (->AssignmentsRejected
                     "assignment activity must be a string")
 
                   :else
                   (recur (+ index 2)
                     (conj result
-                      (a/->Assignment
-                        (json/jsonkey-value name-event)
-                        (json/jsonstring-value activity-event)))))))))))))
+                      (a/->Assignment name activity))))))))))))
 
 (defn parse-assignments [text String] AssignmentsResult
   (match (json/decode text)
@@ -755,21 +798,19 @@
    state a/ActivityState
    workspaces (Vec a/Workspace)]
   Int
-  (let [encoded (json/encode (snapshot-events state workspaces))]
-    (if (instance? JsonEncodeError encoded)
+  (match (json/encode (snapshot-events state workspaces))
+    [(JsonEncodeError event-index message)
      (do
-       (stderr-line
-         (str "activity daemon: cannot encode snapshot: "
-           (json/jsonencodeerror-message encoded)))
-       1)
-     (match (host-write-text-atomic path
-              (str (json/jsonencoded-text encoded) "\n"))
+       (stderr-line (str "activity daemon: cannot encode snapshot: " message))
+       1)]
+    [(JsonEncoded text)
+     (match (host-write-text-atomic path (str text "\n"))
        [(WriteTextAtomicOk) 0]
        [(WriteTextAtomicError errno)
         (do
           (stderr-line
             (str "activity daemon: cannot write snapshot: errno " errno))
-          1)]))))
+          1)])]))
 
 (defn capture [argv (Vec String)] ProcessResult
   (match (host-capture argv "" max-command-output)
@@ -843,7 +884,7 @@
     [(JsonDecodeError offset message) (->CommandIgnored true)]
     [(JsonDecoded events)
      (if (or (empty? events)
-             (not (instance? JsonObjectStart (first events))))
+             (not (instance? json/JsonObjectStart (first events))))
        (->CommandIgnored true)
        (let [(command (U String Nil))
              (json-string-at events
@@ -1024,7 +1065,7 @@
      (->EventStreamStarted pid stdout-fd)]
     [(SpawnStdoutError errno) (->EventStreamRejected errno)]))
 
-(defn read-line [descriptor Int] LineResult
+(defn read-descriptor-line [descriptor Int] LineResult
   (match (host-read-line-deadline
            descriptor max-line-bytes poll-timeout-ms)
     [(ReadLineOk line eof) (->LineLoaded line eof)]
@@ -1091,7 +1132,7 @@
           (host-poll-readable [event-fd control-fd] poll-timeout-ms)]
       (cond
         (= ready event-fd)
-        (match (read-line event-fd)
+        (match (read-descriptor-line event-fd)
           [(LineLoaded line eof)
            (if eof
              (match (reconnect-event-stream event-pid event-fd)
@@ -1116,7 +1157,7 @@
               (recur state control-fd next-pid next-fd)])])
 
         (= ready control-fd)
-        (match (read-line control-fd)
+        (match (read-descriptor-line control-fd)
           [(LineLoaded line eof)
            (if eof
              (let [(next-control Int)
@@ -1214,7 +1255,7 @@
         (workspaces-index (U Int Nil))
         (json-object-field-index events start "workspaces")]
     (if (or (nil? id) (nil? workspaces-index)
-            (not (instance? JsonArrayStart (nth events workspaces-index))))
+            (not (instance? json/JsonArrayStart (nth events workspaces-index))))
       nil
       (let [(end Int) (json-value-end events workspaces-index)]
         (if (< end 0)
@@ -1233,7 +1274,7 @@
   (U (Vec ListEntry) Nil)
   (if (or (< start 0)
           (>= start (count events))
-          (not (instance? JsonArrayStart (nth events start))))
+          (not (instance? json/JsonArrayStart (nth events start))))
     nil
     (let [(end Int) (json-value-end events start)
           (empty-entries (Vec ListEntry)) []]
@@ -1255,7 +1296,7 @@
     [(JsonDecodeError offset message) (->SnapshotMissing true)]
     [(JsonDecoded events)
      (if (or (empty? events)
-             (not (instance? JsonObjectStart (first events))))
+             (not (instance? json/JsonObjectStart (first events))))
        (->SnapshotMissing true)
        (let [(current (U String Nil))
              (json-string-at events
@@ -1306,21 +1347,21 @@
    activity (U String Nil)
    ordinal (U Int Nil)]
   Int
-  (let [encoded (json/encode
-                  (command-json-events command activity ordinal))]
-    (if (instance? JsonEncodeError encoded)
-      (do (stdout-line "activity: cannot encode command") 1)
-      (let [(status Int)
-            (host-fifo-write-deadline
-              (activitypaths-ctl paths)
-              (str (json/jsonencoded-text encoded) "\n")
-              fifo-write-timeout-ms)]
-        (if (= status 0)
-          0
-          (do
-            (stdout-line
-              "activity: daemon not reachable (systemctl --user status activity-daemon)")
-            1))))))
+  (match (json/encode (command-json-events command activity ordinal))
+    [(JsonEncodeError event-index message)
+     (do (stdout-line "activity: cannot encode command") 1)]
+    [(JsonEncoded text)
+     (let [(status Int)
+           (host-fifo-write-deadline
+             (activitypaths-ctl paths)
+             (str text "\n")
+             fifo-write-timeout-ms)]
+       (if (= status 0)
+         0
+         (do
+           (stdout-line
+             "activity: daemon not reachable (systemctl --user status activity-daemon)")
+           1)))]))
 
 (defn print-list
   [snapshot SnapshotView

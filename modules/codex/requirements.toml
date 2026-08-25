@@ -55,7 +55,7 @@ matcher = "^(Edit|Write|MultiEdit)$"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "/home/tom/.local/lib/firn/policy/current/bin/firn-system-policy"
+command = "/home/tom/.local/lib/firn/cli/current/bin/firn-system-policy"
 timeout = 10
 
 [[hooks.PreToolUse]]
@@ -73,7 +73,7 @@ timeout = 10
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "/home/tom/.local/lib/firn/policy/current/bin/firn-system-policy"
+command = "/home/tom/.local/lib/firn/cli/current/bin/firn-system-policy"
 timeout = 10
 
 [[hooks.PreToolUse.hooks]]
