@@ -8,6 +8,7 @@ cleanup() { rm -rf -- "${scratch:?}"; }
 trap cleanup EXIT
 
 candidate_beagle="${BEAGLE_PATH:?set BEAGLE_PATH to the exact Beagle candidate}"
+bash_path="$(command -v bash)"
 real_runtime="$scratch/real-runtime"
 FIRN_REPO="$source_repo" BEAGLE_PATH="$candidate_beagle" \
   FIRN_RUNTIME_ROOT="$real_runtime" \
@@ -130,6 +131,8 @@ grep -Fxq 'firn_revision=1111111111111111111111111111111111111111' \
   "$destination/manifest"
 grep -Fxq 'beagle_revision=2222222222222222222222222222222222222222' \
   "$destination/manifest"
+grep -Fq 'artifact=bun path=bin/bun ' "$destination/manifest"
+[[ -x "$destination/bin/bun" ]]
 for component in tag flake-input inventory authoring views repo-build schema \
   repo-workflow rebuild prewarm; do
   grep -Fq "component=$component " "$destination/manifest"
@@ -139,7 +142,18 @@ for binary in firn-tag firn-flake-input firn-inventory firn-authoring \
   firn-prewarm; do
   [[ -x "$destination/bin/$binary" ]]
 done
-[[ "$("$here/firn" repo validate)" == prepared:alpha:schema ]]
+no_bun_path=""
+IFS=: read -r -a path_entries <<<"$PATH"
+for path_entry in "${path_entries[@]}"; do
+  if [[ -x "$path_entry/bun" ]]; then
+    continue
+  fi
+  no_bun_path="${no_bun_path:+$no_bun_path:}$path_entry"
+done
+[[ -n "$no_bun_path" ]]
+! PATH="$no_bun_path" command -v bun >/dev/null 2>&1
+[[ "$(PATH="$no_bun_path" "$bash_path" "$here/firn" repo validate)" == \
+  prepared:alpha:schema ]]
 
 "$here/firn-runtime-update" >"$scratch/update-again.out"
 [[ "$(readlink "$runtime_root/current")" == "$target" ]]

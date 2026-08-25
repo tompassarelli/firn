@@ -26,13 +26,26 @@ if [[ ! -x "$beagle" ]]; then
     "$beagle_path" >&2
   exit 1
 fi
-for prerequisite in bun cmp find git sha256sum; do
+for prerequisite in bun cmp find git readlink sha256sum; do
   if ! command -v "$prerequisite" >/dev/null 2>&1; then
     printf 'firn-runtime-update: required producer command is unavailable: %s\n' \
       "$prerequisite" >&2
     exit 127
   fi
 done
+bun_source="$(readlink -f "$(command -v bun)")"
+bun_store_path=""
+case "$bun_source" in
+  /nix/store/*)
+    bun_store_relative="${bun_source#/nix/store/}"
+    bun_store_path="/nix/store/${bun_store_relative%%/*}"
+    if ! command -v nix-store >/dev/null 2>&1; then
+      printf 'firn-runtime-update: nix-store is required to retain Bun: %s\n' \
+        "$bun_store_path" >&2
+      exit 127
+    fi
+    ;;
+esac
 
 datum_reader="$beagle_path/native-core/src/beagle/datum_reader.bjs"
 native_json="$beagle_path/native-core/src/native/json.bjs"
@@ -208,6 +221,7 @@ manifest="$stage/manifest"
   printf 'scope=%s\n' "$scope"
   printf 'firn_revision=%s\n' "$firn_revision"
   printf 'beagle_revision=%s\n' "$beagle_revision"
+  printf 'bun_store_path=%s\n' "${bun_store_path:-copied}"
 } >"$manifest"
 
 declare -A artifact_ids=()
@@ -300,7 +314,7 @@ materialize_js() {
 set -euo pipefail
 here="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 exec env $module_environment="\$here/../lib/$component/$module_relative" \
-  bun "\$here/../lib/$component/host.mjs" "\$@"
+  "\$here/bun" "\$here/../lib/$component/host.mjs" "\$@"
 EOF
   chmod +x "$launcher"
   record_generated_artifact "$component-launcher" "bin/$binary"
@@ -313,6 +327,13 @@ EOF
     "$component" "$component" "$module_relative" "$binary" >>"$manifest"
 }
 
+if [[ -n "$bun_store_path" ]]; then
+  ln -s "$bun_source" "$stage/bin/bun"
+else
+  cp -- "$bun_source" "$stage/bin/bun"
+  chmod +x "$stage/bin/bun"
+fi
+record_artifact bun bin/bun "$bun_source"
 materialize_dispatcher
 case "$scope" in
   repo)
@@ -385,6 +406,26 @@ if [[ -e "$destination" ]]; then
 else
   mv -- "$stage" "$destination"
   stage=""
+fi
+
+if [[ -n "$bun_store_path" ]]; then
+  bun_gc_root="$destination/.bun-gc-root"
+  if [[ -L "$bun_gc_root" ]]; then
+    if [[ "$(readlink "$bun_gc_root")" != "$bun_store_path" ]]; then
+      printf 'firn-runtime-update: Bun GC root identity mismatch: %s\n' \
+        "$bun_gc_root" >&2
+      exit 1
+    fi
+  elif [[ -e "$bun_gc_root" ]]; then
+    printf 'firn-runtime-update: Bun GC root is not a symlink: %s\n' \
+      "$bun_gc_root" >&2
+    exit 1
+  elif ! nix-store --add-root "$bun_gc_root" -r "$bun_store_path" \
+      >/dev/null; then
+    printf 'firn-runtime-update: cannot retain Bun store path: %s\n' \
+      "$bun_store_path" >&2
+    exit 1
+  fi
 fi
 
 next="$runtime_root/.current.$$"
