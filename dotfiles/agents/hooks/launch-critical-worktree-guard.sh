@@ -57,13 +57,6 @@ while :; do
   [ "$status" -eq 0 ] || break
 done
 
-# Kill-switch — the shared implementation, so this guard can never disagree with
-# what `north config guards` reports. Sourced, never shelled out to: this runs on
-# EVERY Edit/Write, and a north CLI call here would add per-tool subprocess cost.
-# shellcheck disable=SC1090,SC1091
-. "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
-type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
-
 # Cheap bash pre-filter — this runs on EVERY Edit/Write, so a payload that
 # cannot possibly name a protected checkout must not pay a python3 startup.
 # Safe because a protected path names a `main` component or a `pins` one.
@@ -88,6 +81,14 @@ if [ -z "${LAUNCH_CRITICAL_CODE_ROOT:-}" ]; then
       ;;
   esac
 fi
+
+# Kill-switch — the shared implementation, so this guard can never disagree with
+# what `north config guards` reports. The pre-filter above has already discharged
+# payloads this guard can never deny, so only a decision-capable path pays for
+# the immutable activation lookup.
+# shellcheck disable=SC1090,SC1091
+. "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
+type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 command -v python3 >/dev/null 2>&1 || exit 0
 
