@@ -55,7 +55,7 @@
               [(HostConfigParsed config) (->ConfigLoaded config)]
               [(HostConfigRejected message offset)
                (->ConfigRejected
-                 (parse-message relative message offset))]))))))))
+                 (parse-message relative message offset))])))))))))
 
 (js/export
  (defn load-inventory-host [(bridge Any) (root String) (host String)] InventoryHostLoadResult
