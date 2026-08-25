@@ -3,19 +3,23 @@
   (:require [clojure.string :as str]
             [native.json :as json]))
 
-(defunion SchemaMode
+(js/export
+  (defunion SchemaMode
   (NixosSchema [label String])
-  (DarwinSchema [label String]))
+  (DarwinSchema [label String])))
 
-(defn nixos-mode [] SchemaMode
-  (->NixosSchema "nixos"))
+(js/export
+  (defn nixos-mode [] SchemaMode
+    (->NixosSchema "nixos")))
 
-(defn darwin-mode [] SchemaMode
-  (->DarwinSchema "darwin"))
+(js/export
+  (defn darwin-mode [] SchemaMode
+    (->DarwinSchema "darwin")))
 
-(defrecord ToolFile
+(js/export
+  (defrecord ToolFile
   [relative String
-   contents String])
+   contents String]))
 (defrecord JsonMember
   [key String
    value String])
@@ -40,41 +44,48 @@
   (NodeResolved [id String])
   (NodeResolutionRejected [message String]))
 
-(defunion FingerprintResult
+(js/export
+  (defunion FingerprintResult
   (FingerprintReady [value String])
-  (FingerprintRejected [message String]))
+  (FingerprintRejected [message String])))
 
-(defunion JsonPolicyResult
+(js/export
+  (defunion JsonPolicyResult
   (JsonPolicyValid [kind String])
   (JsonPolicyRejected
     [message String
-     offset Int]))
+     offset Int])))
 
-(defrecord NixosCacheSnapshot
+(js/export
+  (defrecord NixosCacheSnapshot
   [schema (U String Nil)
    home-manager-schema (U String Nil)
    fingerprint (U String Nil)
    cached-policy (U String Nil)
-   tracked-policy String])
+   tracked-policy String]))
 
-(defrecord DarwinCacheSnapshot
+(js/export
+  (defrecord DarwinCacheSnapshot
   [schema (U String Nil)
-   fingerprint (U String Nil)])
+   fingerprint (U String Nil)]))
 
-(defunion CacheAssessment
+(js/export
+  (defunion CacheAssessment
   (CacheCurrent [fingerprint String])
-  (CacheStale [reason String]))
+  (CacheStale [reason String])))
 
-(defrecord ProcessSpec
+(js/export
+  (defrecord ProcessSpec
   [label String
-   argv (Vec String)])
+   argv (Vec String)]))
 
-(defunion SchemaTransactionAction
+(js/export
+  (defunion SchemaTransactionAction
   (ExtractSchema
     [mode SchemaMode
      host String])
   (ValidateSchema [explicit-inputs (Vec String)])
-  (InvalidSchemaTransaction [argv (Vec String)]))
+  (InvalidSchemaTransaction [argv (Vec String)])))
 
 (defn mode-name [mode SchemaMode] String
   (match mode
@@ -365,26 +376,28 @@
                0))
            (canonical-json-value events 0))))]))
 
-(defn json-array-nonempty [source String] JsonPolicyResult
-  (match (json/decode source)
-    [(JsonDecodeError offset message) (->JsonPolicyRejected message offset)]
-    [(JsonDecoded events)
-     (if (or (< (count events) 3)
-             (not (instance? JsonArrayStart (first events)))
-             (not= (json-value-end events 0) (count events))
-             (instance? JsonArrayEnd (nth events 1)))
-       (->JsonPolicyRejected "expected a nonempty JSON array" 0)
-       (->JsonPolicyValid "array"))]))
+(js/export
+  (defn json-array-nonempty [source String] JsonPolicyResult
+    (match (json/decode source)
+      [(JsonDecodeError offset message) (->JsonPolicyRejected message offset)]
+      [(JsonDecoded events)
+       (if (or (< (count events) 3)
+               (not (instance? JsonArrayStart (first events)))
+               (not= (json-value-end events 0) (count events))
+               (instance? JsonArrayEnd (nth events 1)))
+         (->JsonPolicyRejected "expected a nonempty JSON array" 0)
+         (->JsonPolicyValid "array"))])))
 
-(defn json-object-policy [source String] JsonPolicyResult
-  (match (json/decode source)
-    [(JsonDecodeError offset message) (->JsonPolicyRejected message offset)]
-    [(JsonDecoded events)
-     (if (or (empty? events)
-             (not (instance? JsonObjectStart (first events)))
-             (not= (json-value-end events 0) (count events)))
-       (->JsonPolicyRejected "expected a JSON object" 0)
-       (->JsonPolicyValid "object"))]))
+(js/export
+  (defn json-object-policy [source String] JsonPolicyResult
+    (match (json/decode source)
+      [(JsonDecodeError offset message) (->JsonPolicyRejected message offset)]
+      [(JsonDecoded events)
+       (if (or (empty? events)
+               (not (instance? JsonObjectStart (first events)))
+               (not= (json-value-end events 0) (count events)))
+         (->JsonPolicyRejected "expected a JSON object" 0)
+         (->JsonPolicyValid "object"))])))
 
 (defn decoded-lock [source String] (U (Vec json/JsonEvent) Nil)
   (match (json/decode source)
@@ -701,127 +714,133 @@
           ",\"mode\":" (json/encode-string (mode-name mode)) "}")]
     (sha256-bytes (utf8-encode payload))))
 
-(defn schema-input-fingerprint
-  [lock-source String
-   mode SchemaMode
-   tool-files (Vec ToolFile)] FingerprintResult
-  (let [events (U (Vec json/JsonEvent) Nil) (decoded-lock lock-source)]
-    (if (nil? events)
-      (->FingerprintRejected "malformed flake.lock root or nodes")
-      (let [root-nodes (U LockRoot Nil) (root-and-nodes events)]
-        (if (nil? root-nodes)
-          (->FingerprintRejected "malformed flake.lock root or nodes")
-          (let [root-id String (lockroot-root-id root-nodes)
-                nodes-start Int (lockroot-nodes-start root-nodes)]
-            (match (locked-source-json
-                     events root-id nodes-start "home-manager")
-              [(CanonicalJsonRejected message offset)
-               (->FingerprintRejected message)]
-              [(CanonicalJson home-manager)
-               (match (locked-source-json
-                        events root-id nodes-start "nixpkgs")
-                 [(CanonicalJsonRejected message offset)
-                  (->FingerprintRejected message)]
-                 [(CanonicalJson nixpkgs)
-                  (match mode
-                    [(NixosSchema label)
-                     (->FingerprintReady
-                       (payload-fingerprint mode home-manager nixpkgs nil
-                         (tool-fingerprint tool-files)))]
-                    [(DarwinSchema label)
-                     (match (locked-source-json
-                              events root-id nodes-start "nix-darwin")
-                       [(CanonicalJsonRejected message offset)
-                        (->FingerprintRejected message)]
-                       [(CanonicalJson nix-darwin)
-                        (->FingerprintReady
-                          (payload-fingerprint mode home-manager nixpkgs
-                            nix-darwin
-                            (tool-fingerprint tool-files)))])])])])))))))
+(js/export
+  (defn schema-input-fingerprint
+    [lock-source String
+     mode SchemaMode
+     tool-files (Vec ToolFile)] FingerprintResult
+    (let [events (U (Vec json/JsonEvent) Nil) (decoded-lock lock-source)]
+      (if (nil? events)
+        (->FingerprintRejected "malformed flake.lock root or nodes")
+        (let [root-nodes (U LockRoot Nil) (root-and-nodes events)]
+          (if (nil? root-nodes)
+            (->FingerprintRejected "malformed flake.lock root or nodes")
+            (let [root-id String (lockroot-root-id root-nodes)
+                  nodes-start Int (lockroot-nodes-start root-nodes)]
+              (match (locked-source-json
+                       events root-id nodes-start "home-manager")
+                [(CanonicalJsonRejected message offset)
+                 (->FingerprintRejected message)]
+                [(CanonicalJson home-manager)
+                 (match (locked-source-json
+                          events root-id nodes-start "nixpkgs")
+                   [(CanonicalJsonRejected message offset)
+                    (->FingerprintRejected message)]
+                   [(CanonicalJson nixpkgs)
+                    (match mode
+                      [(NixosSchema label)
+                       (->FingerprintReady
+                         (payload-fingerprint mode home-manager nixpkgs nil
+                           (tool-fingerprint tool-files)))]
+                      [(DarwinSchema label)
+                       (match (locked-source-json
+                                events root-id nodes-start "nix-darwin")
+                         [(CanonicalJsonRejected message offset)
+                          (->FingerprintRejected message)]
+                         [(CanonicalJson nix-darwin)
+                          (->FingerprintReady
+                            (payload-fingerprint mode home-manager nixpkgs
+                              nix-darwin
+                              (tool-fingerprint tool-files)))])])])]))))))))
 
-(defn nixos-cache-assessment
-  [snapshot NixosCacheSnapshot
-   current-fingerprint String] CacheAssessment
-  (let [schema (U String Nil) (nixoscachesnapshot-schema snapshot)
-        hm (U String Nil) (nixoscachesnapshot-home-manager-schema snapshot)
-        fingerprint (U String Nil) (nixoscachesnapshot-fingerprint snapshot)
-        cached-policy (U String Nil) (nixoscachesnapshot-cached-policy snapshot)
-        tracked-policy String (nixoscachesnapshot-tracked-policy snapshot)]
-    (cond
-      (nil? schema) (->CacheStale "missing .beagle-cache/schema.json")
-      (nil? hm) (->CacheStale "missing .beagle-cache/schema-hm.json")
-      (nil? fingerprint)
-      (->CacheStale "missing .beagle-cache/schema.inputs.sha256")
-      (nil? cached-policy)
-      (->CacheStale "missing .beagle-cache/validate-config.json")
-      (not= tracked-policy cached-policy)
-      (->CacheStale
-        "validator policy differs from tracked config/beagle-validate.json")
-      (not (instance? JsonPolicyValid (json-array-nonempty schema)))
-      (->CacheStale "schema JSON is partial or malformed")
-      (not (instance? JsonPolicyValid (json-array-nonempty hm)))
-      (->CacheStale "schema JSON is partial or malformed")
-      (not (instance? JsonPolicyValid (json-object-policy cached-policy)))
-      (->CacheStale "schema JSON is partial or malformed")
-      (not= (str/trim fingerprint) current-fingerprint)
-      (->CacheStale
-        "schema input fingerprint differs from flake.lock or Beagle tool identity")
-      :else (->CacheCurrent current-fingerprint))))
+(js/export
+  (defn nixos-cache-assessment
+    [snapshot NixosCacheSnapshot
+     current-fingerprint String] CacheAssessment
+    (let [schema (U String Nil) (nixoscachesnapshot-schema snapshot)
+          hm (U String Nil) (nixoscachesnapshot-home-manager-schema snapshot)
+          fingerprint (U String Nil) (nixoscachesnapshot-fingerprint snapshot)
+          cached-policy (U String Nil) (nixoscachesnapshot-cached-policy snapshot)
+          tracked-policy String (nixoscachesnapshot-tracked-policy snapshot)]
+      (cond
+        (nil? schema) (->CacheStale "missing .beagle-cache/schema.json")
+        (nil? hm) (->CacheStale "missing .beagle-cache/schema-hm.json")
+        (nil? fingerprint)
+        (->CacheStale "missing .beagle-cache/schema.inputs.sha256")
+        (nil? cached-policy)
+        (->CacheStale "missing .beagle-cache/validate-config.json")
+        (not= tracked-policy cached-policy)
+        (->CacheStale
+          "validator policy differs from tracked config/beagle-validate.json")
+        (not (instance? JsonPolicyValid (json-array-nonempty schema)))
+        (->CacheStale "schema JSON is partial or malformed")
+        (not (instance? JsonPolicyValid (json-array-nonempty hm)))
+        (->CacheStale "schema JSON is partial or malformed")
+        (not (instance? JsonPolicyValid (json-object-policy cached-policy)))
+        (->CacheStale "schema JSON is partial or malformed")
+        (not= (str/trim fingerprint) current-fingerprint)
+        (->CacheStale
+          "schema input fingerprint differs from flake.lock or Beagle tool identity")
+        :else (->CacheCurrent current-fingerprint)))))
 
-(defn darwin-cache-assessment
-  [snapshot DarwinCacheSnapshot
-   current-fingerprint String] CacheAssessment
-  (let [schema (U String Nil) (darwincachesnapshot-schema snapshot)
-        fingerprint (U String Nil) (darwincachesnapshot-fingerprint snapshot)]
-    (cond
-      (nil? schema)
-      (->CacheStale "missing .beagle-cache/schema-darwin.json")
-      (nil? fingerprint)
-      (->CacheStale "missing .beagle-cache/schema-darwin.inputs.sha256")
-      (not (instance? JsonPolicyValid (json-array-nonempty schema)))
-      (->CacheStale "Darwin schema JSON is partial or malformed")
-      (not= (str/trim fingerprint) current-fingerprint)
-      (->CacheStale
-        "Darwin schema input fingerprint differs from flake.lock or Beagle tool identity")
-      :else (->CacheCurrent current-fingerprint))))
+(js/export
+  (defn darwin-cache-assessment
+    [snapshot DarwinCacheSnapshot
+     current-fingerprint String] CacheAssessment
+    (let [schema (U String Nil) (darwincachesnapshot-schema snapshot)
+          fingerprint (U String Nil) (darwincachesnapshot-fingerprint snapshot)]
+      (cond
+        (nil? schema)
+        (->CacheStale "missing .beagle-cache/schema-darwin.json")
+        (nil? fingerprint)
+        (->CacheStale "missing .beagle-cache/schema-darwin.inputs.sha256")
+        (not (instance? JsonPolicyValid (json-array-nonempty schema)))
+        (->CacheStale "Darwin schema JSON is partial or malformed")
+        (not= (str/trim fingerprint) current-fingerprint)
+        (->CacheStale
+          "Darwin schema input fingerprint differs from flake.lock or Beagle tool identity")
+        :else (->CacheCurrent current-fingerprint)))))
 
 (defn path
   [root String
    relative String] String
   (str root "/" relative))
 
-(defn extraction-processes
-  [beagle-path String
-   root String
-   mode SchemaMode
-   host String] (Vec ProcessSpec)
-  (let [extractor String (path beagle-path "bin/beagle-extract-schema")]
-    (match mode
-      [(NixosSchema label)
-       [(->ProcessSpec "NixOS schema"
-          [extractor "--target"
-           (str "nixosConfigurations." host ".options")
-           "--out" "/dev/stdout" "--flake" root])
-        (->ProcessSpec "Home Manager schema"
-          [extractor "--hm" "--target"
-           (str "nixosConfigurations." host
-             ".options.home-manager.users")
-           "--out" "/dev/stdout" "--flake" root])]]
-      [(DarwinSchema label)
-       [(->ProcessSpec "Darwin schema"
-          [extractor "--target"
-           (str "darwinConfigurations." host ".options")
-           "--out" "/dev/stdout" "--flake" root])]])))
+(js/export
+  (defn extraction-processes
+    [beagle-path String
+     root String
+     mode SchemaMode
+     host String] (Vec ProcessSpec)
+    (let [extractor String (path beagle-path "bin/beagle-extract-schema")]
+      (match mode
+        [(NixosSchema label)
+         [(->ProcessSpec "NixOS schema"
+            [extractor "--target"
+             (str "nixosConfigurations." host ".options")
+             "--out" "/dev/stdout" "--flake" root])
+          (->ProcessSpec "Home Manager schema"
+            [extractor "--hm" "--target"
+             (str "nixosConfigurations." host
+               ".options.home-manager.users")
+             "--out" "/dev/stdout" "--flake" root])]]
+        [(DarwinSchema label)
+         [(->ProcessSpec "Darwin schema"
+            [extractor "--target"
+             (str "darwinConfigurations." host ".options")
+             "--out" "/dev/stdout" "--flake" root])]]))))
 
-(defn starts-with?
-  [text String
-   prefix String] Bool
-  (str/starts-with? text prefix))
+(js/export
+  (defn starts-with?
+    [text String
+     prefix String] Bool
+    (str/starts-with? text prefix)))
 
-(defn ends-with?
-  [text String
-   suffix String] Bool
-  (str/ends-with? text suffix))
+(js/export
+  (defn ends-with?
+    [text String
+     suffix String] Bool
+    (str/ends-with? text suffix)))
 
 (defn excluded-source-path? [relative String] Bool
   (or (starts-with? relative "tests/fixtures/")
@@ -837,13 +856,14 @@
       (str/includes? relative "/.beagle-cache/")
       (str/includes? relative "/.git/")))
 
-(defn file-name [path-value String] String
-  (let [bytes (Vec Int) (utf8-encode path-value)]
-    (loop [index Int (- (count bytes) 1)]
-      (cond
-        (< index 0) path-value
-        (= 47 (nth bytes index)) (subs path-value (+ index 1) (count path-value))
-        :else (recur (- index 1))))))
+(js/export
+  (defn file-name [path-value String] String
+    (let [bytes (Vec Int) (utf8-encode path-value)]
+      (loop [index Int (- (count bytes) 1)]
+        (cond
+          (< index 0) path-value
+          (= 47 (nth bytes index)) (subs path-value (+ index 1) (count path-value))
+          :else (recur (- index 1)))))))
 
 (defn implicit-bnix-input? [relative String] Bool
   (and (ends-with? relative ".bnix")
@@ -865,75 +885,82 @@
             (conj selected relative)
             selected))))))
 
-(defn filter-sorted-nix [discovered (Vec String)] (Vec String)
-  (loop [index Int 0
-         selected (Vec String) []]
-    (if (>= index (count discovered))
-      (sort selected)
-      (let [relative String (nth discovered index)]
-        (recur (+ index 1)
-          (if (implicit-nix-input? relative)
-            (conj selected relative)
-            selected))))))
+(js/export
+  (defn filter-sorted-nix [discovered (Vec String)] (Vec String)
+    (loop [index Int 0
+           selected (Vec String) []]
+      (if (>= index (count discovered))
+        (sort selected)
+        (let [relative String (nth discovered index)]
+          (recur (+ index 1)
+            (if (implicit-nix-input? relative)
+              (conj selected relative)
+              selected)))))))
 
-(defn select-bnix-inputs
-  [discovered (Vec String)
-   explicit (Vec String)] (Vec String)
-  (if (empty? explicit) (filter-sorted-bnix discovered) explicit))
+(js/export
+  (defn select-bnix-inputs
+    [discovered (Vec String)
+     explicit (Vec String)] (Vec String)
+    (if (empty? explicit) (filter-sorted-bnix discovered) explicit)))
 
-(defn validation-needs-darwin? [inputs (Vec String)] Bool
-  (loop [index Int 0]
-    (if (>= index (count inputs))
-      false
-      (if (= "flake.bnix" (file-name (nth inputs index)))
-        true
-        (recur (+ index 1))))))
+(js/export
+  (defn validation-needs-darwin? [inputs (Vec String)] Bool
+    (loop [index Int 0]
+      (if (>= index (count inputs))
+        false
+        (if (= "flake.bnix" (file-name (nth inputs index)))
+          true
+          (recur (+ index 1)))))))
 
-(defn parse-schema-transaction-argv [argv (Vec String)] SchemaTransactionAction
-  (cond
-    (and (>= (count argv) 2)
-         (<= (count argv) 4)
-         (= "schema" (nth argv 0))
-         (= "extract" (nth argv 1)))
+(js/export
+  (defn parse-schema-transaction-argv [argv (Vec String)] SchemaTransactionAction
     (cond
-      (= (count argv) 2)
-      (->ExtractSchema (nixos-mode) "whiterabbit")
-      (and (= (count argv) 3) (= "--darwin" (nth argv 2)))
-      (->ExtractSchema (darwin-mode) "ashashi")
-      (= (count argv) 3)
-      (->ExtractSchema (nixos-mode) (nth argv 2))
-      (and (= (count argv) 4) (= "--darwin" (nth argv 2)))
-      (->ExtractSchema (darwin-mode) (nth argv 3))
-      :else (->InvalidSchemaTransaction argv))
+      (and (>= (count argv) 2)
+           (<= (count argv) 4)
+           (= "schema" (nth argv 0))
+           (= "extract" (nth argv 1)))
+      (cond
+        (= (count argv) 2)
+        (->ExtractSchema (nixos-mode) "whiterabbit")
+        (and (= (count argv) 3) (= "--darwin" (nth argv 2)))
+        (->ExtractSchema (darwin-mode) "ashashi")
+        (= (count argv) 3)
+        (->ExtractSchema (nixos-mode) (nth argv 2))
+        (and (= (count argv) 4) (= "--darwin" (nth argv 2)))
+        (->ExtractSchema (darwin-mode) (nth argv 3))
+        :else (->InvalidSchemaTransaction argv))
 
-    (and (>= (count argv) 2)
-         (= "repo" (nth argv 0))
-         (= "validate" (nth argv 1)))
-    (let [tail (Vec String) (loop [index Int 2
-                                   result (Vec String) []]
-                              (if (>= index (count argv))
-              result
-              (recur (+ index 1) (conj result (nth argv index)))))]
-      (if (and (= (count tail) 1) (= "all" (nth tail 0)))
-        (->ValidateSchema [])
-        (->ValidateSchema tail)))
+      (and (>= (count argv) 2)
+           (= "repo" (nth argv 0))
+           (= "validate" (nth argv 1)))
+      (let [tail (Vec String) (loop [index Int 2
+                                     result (Vec String) []]
+                                (if (>= index (count argv))
+                result
+                (recur (+ index 1) (conj result (nth argv index)))))]
+        (if (and (= (count tail) 1) (= "all" (nth tail 0)))
+          (->ValidateSchema [])
+          (->ValidateSchema tail)))
 
-    :else (->InvalidSchemaTransaction argv)))
+      :else (->InvalidSchemaTransaction argv))))
 
-(defn render-fingerprint-error [message String] String
-  (str "firn schema: cannot fingerprint flake.lock and Beagle schema tool inputs: "
-    message "\n"))
+(js/export
+  (defn render-fingerprint-error [message String] String
+    (str "firn schema: cannot fingerprint flake.lock and Beagle schema tool inputs: "
+      message "\n")))
 
-(defn render-json-error
-  [label String
-   message String
-   offset Int] String
-  (str "firn schema: " label " is not valid JSON at offset " offset
-    ": " message "\n"))
+(js/export
+  (defn render-json-error
+    [label String
+     message String
+     offset Int] String
+    (str "firn schema: " label " is not valid JSON at offset " offset
+      ": " message "\n")))
 
-(defn render-process-error
-  [label String
-   status Int
-   stderr String] String
-  (str "firn schema: " label " failed with status " status
-    (if (empty? stderr) "\n" (str ":\n" stderr))))
+(js/export
+  (defn render-process-error
+    [label String
+     status Int
+     stderr String] String
+    (str "firn schema: " label " failed with status " status
+      (if (empty? stderr) "\n" (str ":\n" stderr)))))

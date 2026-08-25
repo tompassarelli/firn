@@ -36,11 +36,11 @@
   (HostPathKindError [errno Int]))
 
 (defunion HostMkdirResult
-  HostMkdirOk
+  (HostMkdirOk)
   (HostMkdirError [errno Int]))
 
 (defunion HostWriteResult
-  HostWriteOk
+  (HostWriteOk)
   (HostWriteError [errno Int]))
 
 (defunion HostCaptureResult
