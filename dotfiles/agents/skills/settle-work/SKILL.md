@@ -20,28 +20,39 @@ verdict authority; this skill owns only bounded bookkeeping.
 2. Run this skill's bundled `scripts/validate_settlement_card.py` against the
    card before editing anything. The `todo` skill owns the SettlementCard and
    receipt schema; do not reconstruct or extend it here.
-3. Stop on a stale record that still needs mutation, wrong record or attempt,
-   conflicting prior field, conflicting evidence, or missing value. Return the
-   validator's narrow diagnostic. Never repair the card, select a more favorable
-   verdict, estimate a missing duration, or infer a lane disposition.
+3. Stop on a stale record unless the complete todo target is already exact, on
+   a wrong record or attempt, conflicting prior field, conflicting evidence, or
+   missing value. Return the validator's narrow diagnostic. Never repair the
+   card, select a more favorable verdict, estimate a missing duration, or infer
+   a lane disposition.
 
 Use no product history beyond the card and named authoritative files. A full
 conversation fork is not settlement input.
 
 ## Apply the exact bookkeeping
 
-Preserve the attempt's forecast and staffing fields. Copy only the card's
-terminal attempt fields into that same attempt, add its exact quality-debt
-entries, and set the named lane to the card's exact state. Leave an already
-equal field or debt entry unchanged; reject any conflicting or unlisted prior
-terminal field. Do not edit Markdown sections or turn an evidence reference
-into a stronger claim.
+Preserve the attempt's forecast and staffing fields. Construct the complete
+revised todo record before writing: copy only the card's terminal attempt
+fields into that same attempt, add its exact quality-debt entries, and set the
+named lane to the card's exact state. Apply those three changes in one atomic
+file replacement. Never expose a proper subset as a written record. If the
+available mutation surface cannot guarantee one replacement, stop
+`UNSETTLED`. Leave an already equal field or debt entry unchanged; reject any
+conflicting or unlisted prior terminal field. Do not edit Markdown sections or
+turn an evidence reference into a stronger claim.
 
-Replace the attempt's in-flight estimate pointer with the one deterministic
-terminal calibration receipt defined by `estimate`. Derive it only from the
-validated card and owning attempt, use the stable `<record_id>/<attempt_id>`
-key, and leave an already identical receipt unchanged. Never paraphrase or add
-a field. The `todo` and `estimate` skills remain the field authorities.
+Only after the todo replacement succeeds, replace the attempt's in-flight
+estimate pointer with the one deterministic terminal calibration receipt
+defined by `estimate`, using one independently atomic keyed update. Derive it
+only from the validated card and owning attempt, use the stable
+`<record_id>/<attempt_id>` key, and leave an already identical receipt
+unchanged. Never paraphrase or add a field. The `todo` and `estimate` skills
+remain the field authorities.
+
+An interruption may therefore expose only the original todo record, the
+complete todo replacement without its receipt, or both complete targets. The
+same card can safely finish either incomplete boundary. A proper subset of the
+todo replacement is invalid state, not a replay case to reconcile.
 
 Re-read both changed records and verify that only the named attempt, its exact
 debt entries, the named lane state, and the keyed receipt changed. If a target

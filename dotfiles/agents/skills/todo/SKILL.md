@@ -220,12 +220,15 @@ unlisted prior terminal field invalidates the card. Require
 require queue/block, verification, and review-repair time individually not to
 exceed wall time.
 
-A stale record digest remains invalid while any todo mutation is pending. The
-same card may replay after an interrupted settlement only when its complete
-terminal field map, attempt-owned debt entries, and lane state are already
-exact. The settler then writes or confirms the deterministic keyed receipt
-defined by `estimate`; it never rewrites Current state or Verification prose or
-fills any value from inference.
+The attempt fields, attempt-owned debt entries, and lane state form one atomic
+todo-record replacement. A settler constructs the complete replacement before
+writing and never exposes a proper subset in the live record. It writes or
+confirms the deterministic keyed receipt defined by `estimate` only after that
+replacement succeeds, using a separate atomic keyed update. A stale record
+digest is therefore valid only when the complete todo target is already exact
+and only the receipt may remain pending. The settler never reconciles a partial
+todo mutation, rewrites Current state or Verification prose, or fills any value
+from inference.
 
 ## Shapes are semantic, not one universal state machine
 

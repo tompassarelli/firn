@@ -70,6 +70,7 @@ Pending.
 """,
             encoding="utf-8",
         )
+        unsettled = record.read_text(encoding="utf-8")
         digest = hashlib.sha256(record.read_bytes()).hexdigest()
         base = f'''schema = "agent-settlement-card/v1"
 todo_record = "{record}"
@@ -227,7 +228,19 @@ reviewer_model = "gpt-5.6-sol"
 reviewer_reasoning = "high"
 review_repair_time_actual = "5s"
 '''
-        settled = record.read_text(encoding="utf-8").replace(
+        partially_settled = unsettled.replace(
+            'review_budget = "independent"\nrace = "race-1"\n',
+            'review_budget = "independent"\nrace = "race-1"\n'
+            'ended_at = "2026-08-24T10:01:00+00:00"\n'
+            'outcome = "delivered"\n',
+        )
+        record.write_text(partially_settled, encoding="utf-8")
+        result = run(positive, todo)
+        assert result.returncode == 1
+        assert "todo record digest is stale or conflicting" in result.stderr
+        print("partial todo replacement rejected case: PASS")
+
+        settled = unsettled.replace(
             'review_budget = "independent"\nrace = "race-1"\n',
             'review_budget = "independent"\nrace = "race-1"\n' + terminal,
         ).replace('state = "active"', 'state = "preserved"')
