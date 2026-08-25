@@ -26,16 +26,18 @@
    message String
    offset Int])
 
-(defrecord InventoryHost
+(js/export
+  (defrecord InventoryHost
   [tags r/HostTags
-   config HostConfig])
+   config HostConfig]))
 
-(defrecord InventoryRepository
+(js/export
+  (defrecord InventoryRepository
   [modules (Vec r/ModuleTags)
-   hosts (Vec InventoryHost)])
+   hosts (Vec InventoryHost)]))
 
 (defunion InventoryAction
-  ModuleListAll
+  (ModuleListAll [token Bool])
   ModuleListUsed
   ModuleListUnused
   (ModuleRefs [name String])
@@ -193,7 +195,8 @@
                         (recur value-end next-references next-states)))
                     (recur value-end found-references found-states)))))))))))
 
-(defn host-config-from-source
+(js/export
+  (defn host-config-from-source
   [host String
    source String] HostConfigResult
   (let [read reader/DatumRead (reader/read-events source)
@@ -243,7 +246,7 @@
                       (configscan-states scan)))
                   (->HostConfigRejected
                     (configscan-message scan)
-                    (configscan-offset scan)))))))))))
+                    (configscan-offset scan))))))))))))
 
 (defn inventory-host-name [host InventoryHost] String
   (r/hosttags-host (inventoryhost-tags host)))
@@ -355,7 +358,8 @@
         (recur (+ index 1)
           (append-unique labels (str "via tag@" (nth tagged index))))))))
 
-(defn render-lines
+(js/export
+  (defn render-lines
   [values (Vec String)
    prefix String] String
   (loop [index Int 0
@@ -363,17 +367,19 @@
     (if (>= index (count values))
       result
       (recur (+ index 1)
-        (str result prefix (nth values index) "\n")))))
+        (str result prefix (nth values index) "\n"))))))
 
-(defn render-module-list-all [modules (Vec String)] String
+(js/export
+  (defn render-module-list-all [modules (Vec String)] String
   (loop [index Int 0
          result String (str "Modules (" (count modules) "):\n")]
     (if (>= index (count modules))
       result
       (recur (+ index 1)
-        (str result "  myConfig.modules." (nth modules index) "\n")))))
+        (str result "  myConfig.modules." (nth modules index) "\n"))))))
 
-(defn render-module-list-used [repository InventoryRepository] String
+(js/export
+  (defn render-module-list-used [repository InventoryRepository] String
   (let [modules (Vec String) (live-modules repository)]
     (loop [index Int 0
            result String (str "Used modules (" (count modules) "):\n")]
@@ -383,28 +389,32 @@
               labels (Vec String) (source-labels repository module)]
           (recur (+ index 1)
             (str result "  " module "  ("
-              (if (= (count labels) 0) "—" (join-strings labels)) ")\n")))))))
+              (if (= (count labels) 0) "—" (join-strings labels)) ")\n"))))))))
 
-(defn render-module-list-unused [repository InventoryRepository] String
+(js/export
+  (defn render-module-list-unused [repository InventoryRepository] String
   (let [modules (Vec String) (unused-modules repository)]
     (str "Unreferenced modules (" (count modules) "):\n"
-      (render-lines modules "  "))))
+      (render-lines modules "  ")))))
 
-(defn render-host-list [hosts (Vec String)] String
-  (str "Hosts (" (count hosts) "):\n" (render-lines hosts "  ")))
+(js/export
+  (defn render-host-list [hosts (Vec String)] String
+    (str "Hosts (" (count hosts) "):\n" (render-lines hosts "  "))))
 
-(defn render-host-section [hosts (Vec String)] String
+(js/export
+  (defn render-host-section [hosts (Vec String)] String
   (if (= (count hosts) 0)
     "  (none)\n"
-    (render-lines hosts "  ")))
+    (render-lines hosts "  "))))
 
-(defn render-module-refs
+(js/export
+  (defn render-module-refs
   [repository InventoryRepository
    module String] String
   (str "Hosts (direct, from configuration.bnix):\n"
     (render-host-section (direct-hosts repository module))
     "\nHosts (via tag resolution):\n"
-    (render-host-section (tag-hosts repository module))))
+    (render-host-section (tag-hosts repository module)))))
 
 (defn state-paths
   [config HostConfig
@@ -419,7 +429,8 @@
             (conj paths (strip-enable-suffix (modulestate-path state)))
             paths))))))
 
-(defn render-host-status [config HostConfig] String
+(js/export
+  (defn render-host-status [config HostConfig] String
   (let [host String (hostconfig-host config)
         enabled (Vec String) (state-paths config true)
         disabled (Vec String) (state-paths config false)]
@@ -428,7 +439,7 @@
       (if (= (count disabled) 0)
         ""
         (str "\nExplicitly disabled in " host ":\n"
-          (render-lines disabled "  "))))))
+          (render-lines disabled "  ")))))))
 
 (defn find-host-config
   [repository InventoryRepository
@@ -441,20 +452,21 @@
           (inventoryhost-config host)
           (recur (+ index 1)))))))
 
-(defn parse-inventory-argv
+(js/export
+  (defn parse-inventory-argv
   [argv (Vec String)
    default-host String] InventoryArgv
   (cond
     (and (= (count argv) 2)
          (= (nth argv 0) "module")
          (= (nth argv 1) "list"))
-    (->ParsedInventory (->ModuleListAll))
+    (->ParsedInventory (->ModuleListAll false))
 
     (and (= (count argv) 3)
          (= (nth argv 0) "module")
          (= (nth argv 1) "list")
          (= (nth argv 2) "all"))
-    (->ParsedInventory (->ModuleListAll))
+    (->ParsedInventory (->ModuleListAll false))
 
     (and (= (count argv) 3)
          (= (nth argv 0) "module")
@@ -497,13 +509,14 @@
             (nth argv 2)))))
 
     :else
-    (->InvalidInventoryArgv argv)))
+    (->InvalidInventoryArgv argv))))
 
-(defn render-action
+(js/export
+  (defn render-action
   [repository InventoryRepository
    action InventoryAction] InventoryRenderResult
   (match action
-    [(ModuleListAll)
+    [(ModuleListAll token)
      (->InventoryRendered (render-module-list-all (module-names repository)))]
     [(ModuleListUsed)
      (->InventoryRendered (render-module-list-used repository))]
@@ -522,4 +535,4 @@
      (let [config HostConfig? (find-host-config repository host)]
        (if (some? config)
          (->InventoryRendered (render-host-status config))
-         (->InventoryHostMissing host)))]))
+         (->InventoryHostMissing host)))])))

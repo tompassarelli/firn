@@ -59,7 +59,8 @@
   (str "firn tag resolve: invalid " kind " '" relative "' at offset "
     offset ": " message "\n"))
 
-(defn directory-names
+(js/export
+  (defn directory-names
   [bridge Any
    root String
    relative String] DirectoryNamesResult
@@ -88,7 +89,7 @@
                   (recur (+ index 1) names)
                   (->DirectoryNamesRejected
                     (errno-message "cannot inspect"
-                      (str relative "/" name) kind-errno)))))))))))
+                      (str relative "/" name) kind-errno))))))))))))
 
 (defn clause-delimiter? [character String] Bool
   (or (= character " ")
@@ -252,7 +253,8 @@
        (host-data preliminary true
          (load-generated bridge root host load-generated?)))]))
 
-(defn load-host
+(js/export
+  (defn load-host
   [bridge Any
    root String
    host String
@@ -278,7 +280,7 @@
                (errno-message "cannot read" relative read-errno))
              (let [source String (.value bridge read-result)]
                (parse-host-source bridge root host relative source
-                 load-generated?)))))))))
+                 load-generated?))))))))))
 
 (defn load-hosts-from
   [bridge Any
