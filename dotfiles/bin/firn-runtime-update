@@ -283,7 +283,7 @@ materialize_js() {
   local relative
 
   mkdir -p "$output_root"
-  if ! "$beagle/bin/beagle-build-all" "$@" --out "$output_root"; then
+  if ! "$beagle_path/bin/beagle-build-all" "$@" --out "$output_root"; then
     printf 'firn-runtime-update: Beagle/JS materialization failed: %s\n' \
       "$component" >&2
     exit 1
