@@ -1,0 +1,218 @@
+#lang beagle/js
+(ns firn.tag-commands-family
+  (:require [firn.tag-resolve :as r]
+            [firn.tag-resolve-family :as repository]
+            [firn.tag-commands :as commands]
+            [firn.tag-commands-driver :as driver]))
+
+(def max-source-bytes Int 16777216)
+
+(js/export
+  (defunion HostDocumentLoadResult
+  (HostDocumentLoaded [(document commands/HostDocument)])
+  (HostDocumentMissing [(host String)])
+  (HostDocumentLoadRejected [(message String)])))
+
+(js/export
+  (defunion HostDocumentsLoadResult
+  (HostDocumentsLoaded [(documents (Vec commands/HostDocument))])
+  (HostDocumentsLoadRejected [(message String)])))
+
+(defn path [(root String) (relative String)] String
+  (str root "/" relative))
+
+(defn errno-message
+  [(label String) (operation String) (relative String) (errno Int)] String
+  (str label ": " operation " '" relative "': errno " errno "\n"))
+
+(defn parse-message [(relative String) (message String) (offset Int)] String
+  (str "firn: invalid host tag source '" relative "' at offset " offset
+    ": " message "\n"))
+
+(defn finish-host-document
+  [(host String)
+   (relative String)
+   (source String)
+   (allowed (Vec String))]
+  HostDocumentLoadResult
+  (match (commands/host-document-from-source host source allowed)
+    [(HostDocumentRejected message offset)
+     (->HostDocumentLoadRejected (parse-message relative message offset))]
+    [(HostDocumentParsed document) (->HostDocumentLoaded document)]))
+
+(defn parse-host-document
+  [(bridge Any)
+   (root String)
+   (host String)
+   (relative String)
+   (source String)]
+  HostDocumentLoadResult
+  (match (commands/host-document-from-source host source [])
+    [(HostDocumentRejected message offset)
+     (->HostDocumentLoadRejected (parse-message relative message offset))]
+    [(HostDocumentParsed preliminary)
+     (if (= "darwin"
+            (r/hosttags-platform
+              (commands/hostdocument-tags preliminary)))
+       (match (repository/load-darwin-allowlist bridge root)
+         [(AllowlistRejected message) (->HostDocumentLoadRejected message)]
+         [(AllowlistLoaded allowed)
+          (finish-host-document host relative source allowed)])
+       (->HostDocumentLoaded preliminary))]))
+
+(defn load-host-document
+  [(bridge Any) (root String) (host String)] HostDocumentLoadResult
+  (let [(relative String) (str "hosts/" host "/enabled-tags.bnix")
+        (absolute String) (path root relative)
+        (kind-result Any) (.pathKind bridge absolute)
+        (kind-errno Int) (.status bridge kind-result)]
+    (if (not (= kind-errno 0))
+      (if (= kind-errno 2)
+         (->HostDocumentMissing host)
+         (->HostDocumentLoadRejected
+           (errno-message "firn" "cannot inspect" relative kind-errno)))
+      (let [(kind Int) (.value bridge kind-result)]
+       (if (not (or (= kind 1) (= kind 3)))
+         (->HostDocumentMissing host)
+         (let [(read-result Any) (.readText bridge absolute max-source-bytes)
+               (read-errno Int) (.status bridge read-result)]
+           (if (not (= read-errno 0))
+            (->HostDocumentLoadRejected
+              (errno-message "firn" "cannot read" relative read-errno))
+            (let [(source String) (.value bridge read-result)]
+              (parse-host-document bridge root host relative source)))))))))
+
+(defn load-action-hosts
+  [(bridge Any)
+   (root String)
+   (action driver/TagCommandAction)] HostDocumentsLoadResult
+  (let [(wanted (U String Nil)) (driver/action-host action)]
+    (if (nil? wanted)
+      (->HostDocumentsLoaded [])
+      (let [(host String) wanted]
+        (match (load-host-document bridge root host)
+          [(HostDocumentLoadRejected message)
+           (->HostDocumentsLoadRejected message)]
+          [(HostDocumentMissing missing)
+           (->HostDocumentsLoaded [])]
+          [(HostDocumentLoaded document)
+           (->HostDocumentsLoaded [document])])))))
+
+(defn emit-io-error [(bridge Any) (message String)] Int
+  (do (.err bridge message) 1))
+
+(defn write-error
+  [(bridge Any)
+   (label String)
+   (operation String)
+   (relative String)
+   (errno Int)] Int
+  (emit-io-error bridge (errno-message label operation relative errno)))
+
+(defn execute-write
+  [(bridge Any)
+   (root String)
+   (outcome driver/TagCommandOutcome)
+   (index Int)
+   (relative String)
+   (text String)
+   (make-parents Bool)
+   (label String)]
+  Int
+  (let [(absolute String) (path root relative)]
+    (if make-parents
+      (let [(parent-errno Int) (.makeParentDirectories bridge absolute)]
+        (if (not (= parent-errno 0))
+          (write-error bridge label "cannot create parent for" relative
+            parent-errno)
+          (let [(write-errno Int) (.writeTextAtomic bridge absolute text)]
+            (if (not (= write-errno 0))
+              (write-error bridge label "cannot write" relative write-errno)
+              (execute-effects bridge root outcome (+ index 1))))))
+      (let [(write-errno Int) (.writeTextAtomic bridge absolute text)]
+        (if (not (= write-errno 0))
+          (write-error bridge label "cannot write" relative write-errno)
+          (execute-effects bridge root outcome (+ index 1)))))))
+
+(defn execute-effects
+  [(bridge Any)
+   (root String)
+   (outcome driver/TagCommandOutcome)
+   (index Int)] Int
+  (if (>= index (count (driver/tagcommandoutcome-effects outcome)))
+    (driver/tagcommandoutcome-status outcome)
+    (match (nth (driver/tagcommandoutcome-effects outcome) index)
+      [(CommandStdout text)
+       (do (.out bridge text)
+           (execute-effects bridge root outcome (+ index 1)))]
+      [(CommandStderr text)
+       (do (.err bridge text)
+           (execute-effects bridge root outcome (+ index 1)))]
+      [(CommandWrite relative text make-parents label)
+       (execute-write bridge root outcome index relative text make-parents
+         label)])))
+
+(defn run-with-modules
+  [(bridge Any)
+   (root String)
+   (action driver/TagCommandAction)
+   (modules (Vec r/ModuleTags))]
+  Int
+  (match (load-action-hosts bridge root action)
+    [(HostDocumentsLoadRejected message) (emit-io-error bridge message)]
+    [(HostDocumentsLoaded documents)
+     (execute-effects bridge root
+       (driver/run-tag-command
+         (driver/->TagCommandRepository modules documents)
+         action)
+       0)]))
+
+(defn run-loaded-action
+  [(bridge Any) (root String) (action driver/TagCommandAction)] Int
+  (if (driver/action-needs-modules? action)
+    (match (repository/load-modules bridge root)
+      [(ModulesRejected message) (emit-io-error bridge message)]
+      [(ModulesLoaded modules) (run-with-modules bridge root action modules)])
+    (run-with-modules bridge root action [])))
+
+(defn run-action
+  [(bridge Any) (root String) (action driver/TagCommandAction)] Int
+  (match (driver/preload-tag-command action)
+    [(TagCommandRefusal outcome) (execute-effects bridge root outcome 0)]
+    [(TagCommandLoad token) (run-loaded-action bridge root action)]))
+
+(defn repository-root [bridge Any] (U String Nil)
+  (let [(explicit (U String Nil)) (.env bridge "FIRN_REPO")]
+    (if (some? explicit)
+      explicit
+      (let [(home (U String Nil)) (.env bridge "HOME")]
+        (if (some? home)
+          (str home "/code/nixos-config/main")
+          nil)))))
+
+(defn default-host [bridge Any] String
+  (let [(host (U String Nil)) (.env bridge "FIRN_HOST")]
+    (if (some? host) host "whiterabbit")))
+
+(defn usage-error [bridge Any] Int
+  (do
+    (.err bridge
+      (str
+        "Usage: firn tag <list|show|filter|index|status|enable|disable|"
+        "opt-in|opt-out> [<leaf>]\n"
+        "       firn module <enable|disable> <name>\n"))
+    64))
+
+(js/export
+ (defn run [(bridge Any) (args (Vec String))] Int
+  (match (driver/parse-tag-command-argv args (default-host bridge))
+    [(OtherTagCommand argv) (usage-error bridge)]
+    [(InvalidTagCommand argv) (usage-error bridge)]
+    [(ParsedTagCommand action)
+     (let [(root (U String Nil)) (repository-root bridge)]
+       (if (nil? root)
+         (do
+           (.err bridge
+             "firn: FIRN_REPO and HOME are not set\n")
+           1)
+         (run-action bridge root action)))])))

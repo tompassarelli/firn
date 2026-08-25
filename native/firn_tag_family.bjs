@@ -1,0 +1,15 @@
+#lang beagle/js
+(ns firn.tag-family
+  (:require [firn.tag-commands-family :as commands]
+            [firn.tag-resolve-family :as resolve]))
+
+(defn resolve-request? [args (Vec String)] Bool
+  (and (>= (count args) 2)
+       (= (nth args 0) "tag")
+       (= (nth args 1) "resolve")))
+
+(js/export
+ (defn run [bridge Any args (Vec String)] Int
+  (if (resolve-request? args)
+    (resolve/run bridge args)
+    (commands/run bridge args))))

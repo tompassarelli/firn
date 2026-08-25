@@ -10,13 +10,13 @@ else
     timeout --foreground 5 git -C "$repo" rev-parse \
       --path-format=absolute --git-common-dir
   )" || {
-    printf 'tag-commands-native: cannot locate the Firn Git common directory\n' >&2
+    printf 'tag-family: cannot locate the Firn Git common directory\n' >&2
     exit 1
   }
   code_root="$(cd "$(dirname "$git_common_dir")/../.." && pwd)"
   beagle="$code_root/beagle/main"
 fi
-scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-tag-commands-native.XXXXXX")"
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-tag-family.XXXXXX")"
 
 cleanup() {
   local status=$?
@@ -24,7 +24,7 @@ cleanup() {
   if ((status == 0)); then
     rm -rf "${scratch:?}"
   else
-    printf 'tag-commands-native: retained failure artifacts at %s\n' \
+    printf 'tag-family: retained failure artifacts at %s\n' \
       "$scratch" >&2
   fi
   exit "$status"
@@ -32,29 +32,32 @@ cleanup() {
 trap cleanup EXIT
 
 die() {
-  printf 'tag-commands-native: %s\n' "$*" >&2
+  printf 'tag-family: %s\n' "$*" >&2
   exit 1
 }
 
 [[ -x "$beagle/bin/beagle" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
+command -v bun >/dev/null 2>&1 || die "Bun is unavailable"
 
-build_native() {
-  local name="$1" entry="$2"
-  shift 2
-  local output="$scratch/$name"
-  printf 'tag-commands-native: building %s\n' "$name" >&2
-  mkdir -p "$scratch/$name-artifacts"
-  timeout --foreground 620 "$beagle/bin/beagle" native-exe \
-    --out "$output" \
-    --entry "$entry" \
-    --artifacts "$scratch/$name-artifacts" \
-    "$@" >"$scratch/$name.build.out" 2>"$scratch/$name.build.err" \
+build_family() {
+  local output="$scratch/build"
+  printf 'tag-family: building closed Beagle/JS graph\n' >&2
+  mkdir -p "$output/node_modules/beagle"
+  timeout --foreground 60 "$beagle/bin/beagle" build "$@" \
+    --out "$output" >"$scratch/build.out" 2>"$scratch/build.err" \
     || {
-      sed -n '1,240p' "$scratch/$name.build.err" >&2
-      die "$name compilation failed"
+      sed -n '1,240p' "$scratch/build.err" >&2
+      die "Beagle/JS graph compilation failed"
     }
-  [[ -x "$output" ]] || die "$name is not executable"
+  cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
+    "$output/node_modules/beagle/core.js"
+  cp -- "$beagle/beagle-lib/lib/beagle/host.js" \
+    "$output/node_modules/beagle/host.js"
+  printf '%s\n' '{"type":"module"}' \
+    >"$output/node_modules/beagle/package.json"
+  [[ -f "$output/firn/tag-family.js" ]] \
+    || die "compiled family module is unavailable"
 }
 
 run_once() {
@@ -86,31 +89,23 @@ assert_same() {
   }
 }
 
-datum="$beagle/native-core/src/beagle/datum_reader.bgl"
-json="$beagle/native-core/src/native/json.bgl"
-resolve="$repo/native/tag_resolve.bgl"
-inputs="$repo/native/tag_inputs.bgl"
-resolve_driver="$repo/native/tag_resolve_driver.bgl"
-resolve_native="$repo/native/tag_resolve_native.bgl"
-commands="$repo/native/tag_commands.bgl"
-commands_driver="$repo/native/tag_commands_driver.bgl"
+datum="$beagle/native-core/src/beagle/datum_reader.bjs"
+json="$beagle/native-core/src/native/json.bjs"
+resolve="$repo/native/tag_resolve.bjs"
+inputs="$repo/native/tag_inputs.bjs"
+resolve_driver="$repo/native/tag_resolve_driver.bjs"
+resolve_family="$repo/native/tag_resolve_family.bjs"
+commands="$repo/native/tag_commands.bjs"
+commands_driver="$repo/native/tag_commands_driver.bjs"
+commands_family="$repo/native/tag_commands_family.bjs"
+family="$repo/native/firn_tag_family.bjs"
 
-build_native tag-commands-test firn.tag-commands-test/-main \
-  "$datum" "$json" "$resolve" "$inputs" "$commands" \
-  "$commands_driver" "$repo/native/tag_commands_test.bgl"
-build_native tag-commands-native firn.tag-commands-native/-main \
+build_family \
   "$datum" "$json" "$resolve" "$inputs" "$resolve_driver" \
-  "$resolve_native" "$commands" "$commands_driver" \
-  "$repo/native/tag_commands_native.bgl"
-
-printf 'tag-commands-native: running pure render/index checks\n' >&2
-run_once "$scratch/pure" "$scratch/tag-commands-test"
-assert_status "$scratch/pure" 0 "pure command tests"
-assert_empty "$scratch/pure.err" "pure command test stderr"
-[[ "$(rg -c '^PASS ' "$scratch/pure.out")" == "7" ]] \
-  || die "pure render/index cases did not all pass"
-[[ "$(rg -c '^FAIL ' "$scratch/pure.out" || true)" == "0" ]] \
-  || die "pure render/index cases reported a failure"
+  "$resolve_family" "$commands" "$commands_driver" "$commands_family" \
+  "$family"
+runtime=(env FIRN_TAG_MODULE="$scratch/build/firn/tag-family.js" \
+  bun "$repo/native/firn_tag_host.mjs")
 
 make_fixture() {
   local root="$1" host="${2:-fixture}"
@@ -387,12 +382,18 @@ run_native() {
   local result="$1" root="$2" host="$3"
   shift 3
   run_once "$result" env FIRN_REPO="$root" FIRN_HOST="$host" \
-    "$scratch/tag-commands-native" "$@"
+    "${runtime[@]}" "$@"
 }
 
-printf 'tag-commands-native: checking exact inventory/status output\n' >&2
+printf 'tag-family: checking exact resolution, inventory, and status output\n' >&2
 inventory_root="$scratch/inventory-repo"
 make_fixture "$inventory_root"
+
+run_native "$scratch/resolve" "$inventory_root" fixture tag resolve fixture
+assert_status "$scratch/resolve" 0 "tag resolve"
+rg -q '^Host: fixture$' "$scratch/resolve.out" \
+  || die "tag resolve did not route through the family wrapper"
+assert_empty "$scratch/resolve.err" "tag resolve stderr"
 
 cat >"$scratch/list.expected" <<'EOF'
 Tags (3):
@@ -511,7 +512,7 @@ check_mutation() {
       == "1" ]] || die "$name left an atomic-write side file"
 }
 
-printf 'tag-commands-native: checking six mutations and re-resolution\n' >&2
+printf 'tag-family: checking six mutations and re-resolution\n' >&2
 check_mutation enable-creative \
   "$scratch/enable-creative.bnix" "$scratch/status-enable-creative.out" \
   noop tag enable creative
@@ -532,7 +533,7 @@ check_mutation module-enable-gamma \
   "$scratch/status-module-enable-gamma.out" module-enable-refusal \
   module enable gamma
 
-printf 'tag-commands-native: checking refusal paths\n' >&2
+printf 'tag-family: checking refusal paths\n' >&2
 refusal_root="$scratch/refusal-repo"
 make_fixture "$refusal_root"
 cp "$refusal_root/hosts/fixture/enabled-tags.bnix" \
@@ -602,9 +603,4 @@ printf "firn tag show: no module named 'absent'\n" \
 assert_same "$scratch/missing-module.expected" "$scratch/missing-module.err" \
   "missing module show diagnostic"
 
-if ldd "$scratch/tag-commands-native" \
-  | rg -qi 'racket|clojure|babashka|java'; then
-  die "hosted runtime leaked into native executable"
-fi
-
-printf 'ok: Native tag inventory and all six mutations pass native contracts\n'
+printf 'ok: Bun tag family resolution, inventory, and six mutations pass\n'

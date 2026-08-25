@@ -1,5 +1,5 @@
-#lang beagle
-(ns firn.tag-resolve-native
+#lang beagle/js
+(ns firn.tag-resolve-family
   (:require [firn.tag-resolve :as r]
             [firn.tag-resolve-driver :as driver]
             [firn.tag-inputs :as input]))
@@ -7,31 +7,37 @@
 (def max-source-bytes Int 16777216)
 (def max-directory-entries Int 16384)
 
-(defunion DirectoryNamesResult
+(js/export
+  (defunion DirectoryNamesResult
   (DirectoryNamesLoaded [names (Vec String)])
-  (DirectoryNamesRejected [message String]))
+  (DirectoryNamesRejected [message String])))
 
-(defunion ModulesLoadResult
+(js/export
+  (defunion ModulesLoadResult
   (ModulesLoaded [modules (Vec r/ModuleTags)])
-  (ModulesRejected [message String]))
+  (ModulesRejected [message String])))
 
-(defunion HostLoadResult
+(js/export
+  (defunion HostLoadResult
   (HostLoaded [data driver/TagResolveHostData])
-  (HostRejected [message String]))
+  (HostRejected [message String])))
 
-(defunion HostsLoadResult
+(js/export
+  (defunion HostsLoadResult
   (HostsLoaded [hosts (Vec driver/TagResolveHostData)])
-  (HostsRejected [message String]))
+  (HostsRejected [message String])))
 
-(defunion GeneratedLoadResult
+(js/export
+  (defunion GeneratedLoadResult
   (GeneratedLoaded
     [present Bool
      text String])
-  (GeneratedRejected [message String]))
+  (GeneratedRejected [message String])))
 
-(defunion AllowlistLoadResult
+(js/export
+  (defunion AllowlistLoadResult
   (AllowlistLoaded [modules (Vec String)])
-  (AllowlistRejected [message String]))
+  (AllowlistRejected [message String])))
 
 (defn path
   [root String
@@ -54,38 +60,35 @@
     offset ": " message "\n"))
 
 (defn directory-names
-  [root String
+  [bridge Any
+   root String
    relative String] DirectoryNamesResult
-  (let [absolute String (path root relative)]
-    (match (host.fs/list-directory-bounded absolute max-directory-entries)
-      [(host.fs/ListDirectoryBoundedError errno)
-       (if (= errno 2)
+  (let [absolute String (path root relative)
+        result Any (.listDirectory bridge absolute max-directory-entries)
+        errno Int (.status bridge result)]
+    (if (not (= errno 0))
+      (if (= errno 2)
          (->DirectoryNamesLoaded [])
          (->DirectoryNamesRejected
-           (errno-message "cannot list" relative errno)))]
-      [(host.fs/ListDirectoryBoundedOk entries)
+           (errno-message "cannot list" relative errno)))
+      (let [entries (Vec String) (.value bridge result)]
        (loop [index Int 0
               names (Vec String) []]
          (if (>= index (count entries))
            (->DirectoryNamesLoaded (sort names))
            (let [name String (nth entries index)
-                 candidate String (str absolute "/" name)]
-             (match (host.fs/path-kind candidate)
-               [(host.fs/PathKindOk kind)
+                 candidate String (str absolute "/" name)
+                 kind-result Any (.pathKind bridge candidate)
+                 kind-errno Int (.status bridge kind-result)]
+             (if (= kind-errno 0)
+               (let [kind Int (.value bridge kind-result)]
                 (recur (+ index 1)
-                  (if (= kind 2) (conj names name) names))]
-               [(host.fs/PathKindError errno)
-                (if (= errno 2)
+                  (if (= kind 2) (conj names name) names)))
+               (if (= kind-errno 2)
                   (recur (+ index 1) names)
                   (->DirectoryNamesRejected
                     (errno-message "cannot inspect"
-                      (str relative "/" name) errno)))])
-             )
-           )
-         )]
-    )
-  )
-)
+                      (str relative "/" name) kind-errno)))))))))))
 
 (defn clause-delimiter? [character String] Bool
   (or (= character " ")
@@ -118,93 +121,97 @@
   (r/->ModuleTags name [] [] []))
 
 (defn load-module
-  [root String
+  [bridge Any
+   root String
    name String] ModulesLoadResult
   (let [relative String (str "modules/" name "/default.bnix")
-        absolute String (path root relative)]
-    (match (host.fs/path-kind absolute)
-      [(host.fs/PathKindError errno)
-       (if (= errno 2)
-         (->ModulesLoaded [(empty-module name)])
-         (->ModulesRejected (errno-message "cannot inspect" relative errno)))]
-      [(host.fs/PathKindOk kind)
-       (if (not (or (= kind 1) (= kind 3)))
-         (->ModulesLoaded [(empty-module name)])
-         (match (host.fs/read-text-bounded absolute max-source-bytes)
-           [(host.fs/ReadTextBoundedError errno)
-            (->ModulesRejected
-              (errno-message "cannot read" relative errno))]
-           [(host.fs/ReadTextBoundedOk source)
-            (if (not (source-has-tag-clause? source))
-              (->ModulesLoaded [(empty-module name)])
-              (match (input/module-tags-from-source name source)
-                [(ModuleSourceParsed value)
-                 (->ModulesLoaded [value])]
-                [(ModuleSourceRejected message offset)
-                 (->ModulesRejected
-                   (parse-message "module tag source" relative message
-                     offset))])
-              )
-            ]
-         )
-       )]
-    )
-  )
-)
+        absolute String (path root relative)
+        kind-result Any (.pathKind bridge absolute)
+        kind-errno Int (.status bridge kind-result)]
+    (if (not (= kind-errno 0))
+      (if (= kind-errno 2)
+        (->ModulesLoaded [(empty-module name)])
+        (->ModulesRejected
+          (errno-message "cannot inspect" relative kind-errno)))
+      (let [kind Int (.value bridge kind-result)]
+        (if (not (or (= kind 1) (= kind 3)))
+          (->ModulesLoaded [(empty-module name)])
+          (let [read-result Any (.readText bridge absolute max-source-bytes)
+                read-errno Int (.status bridge read-result)]
+            (if (not (= read-errno 0))
+              (->ModulesRejected
+                (errno-message "cannot read" relative read-errno))
+              (let [source String (.value bridge read-result)]
+                (if (not (source-has-tag-clause? source))
+                  (->ModulesLoaded [(empty-module name)])
+                  (match (input/module-tags-from-source name source)
+                    [(ModuleSourceParsed value)
+                     (->ModulesLoaded [value])]
+                    [(ModuleSourceRejected message offset)
+                     (->ModulesRejected
+                       (parse-message "module tag source" relative message
+                         offset))]))))))))))
 
 (defn load-modules-from
-  [root String
+  [bridge Any
+   root String
    names (Vec String)
    index Int
    modules (Vec r/ModuleTags)] ModulesLoadResult
   (if (>= index (count names))
     (->ModulesLoaded modules)
-    (match (load-module root (nth names index))
+    (match (load-module bridge root (nth names index))
       [(ModulesRejected message) (->ModulesRejected message)]
       [(ModulesLoaded loaded)
-       (load-modules-from root names (+ index 1) (into modules loaded))])))
+       (load-modules-from bridge root names (+ index 1) (into modules loaded))])))
 
-(defn load-modules [root String] ModulesLoadResult
-  (match (directory-names root "modules")
+(js/export
+ (defn load-modules [bridge Any root String] ModulesLoadResult
+  (match (directory-names bridge root "modules")
     [(DirectoryNamesRejected message) (->ModulesRejected message)]
-    [(DirectoryNamesLoaded names) (load-modules-from root names 0 [])]))
+    [(DirectoryNamesLoaded names) (load-modules-from bridge root names 0 [])])))
 
-(defn load-darwin-allowlist [root String] AllowlistLoadResult
+(js/export
+ (defn load-darwin-allowlist [bridge Any root String] AllowlistLoadResult
   (let [relative String "config/darwin-modules.json"
-        absolute String (path root relative)]
-    (match (host.fs/read-text-bounded absolute max-source-bytes)
-      [(host.fs/ReadTextBoundedError errno)
-       (->AllowlistRejected (errno-message "cannot read" relative errno))]
-      [(host.fs/ReadTextBoundedOk source)
+        absolute String (path root relative)
+        result Any (.readText bridge absolute max-source-bytes)
+        errno Int (.status bridge result)]
+    (if (not (= errno 0))
+      (->AllowlistRejected (errno-message "cannot read" relative errno))
+      (let [source String (.value bridge result)]
        (match (input/darwin-allowlist-from-json source)
          [(DarwinAllowlistParsed modules) (->AllowlistLoaded modules)]
          [(DarwinAllowlistRejected message offset)
           (->AllowlistRejected
-            (parse-message "Darwin allowlist" relative message offset))])])))
+            (parse-message "Darwin allowlist" relative message offset))]))))))
 
 (defn load-generated
-  [root String
+  [bridge Any
+   root String
    host String
    needed Bool] GeneratedLoadResult
   (if (not needed)
     (->GeneratedLoaded false "")
     (let [relative String (str "hosts/" host "/_generated-enables.bnix")
-          absolute String (path root relative)]
-      (match (host.fs/path-kind absolute)
-        [(host.fs/PathKindError errno)
-         (if (= errno 2)
+          absolute String (path root relative)
+          kind-result Any (.pathKind bridge absolute)
+          kind-errno Int (.status bridge kind-result)]
+      (if (not (= kind-errno 0))
+        (if (= kind-errno 2)
            (->GeneratedLoaded false "")
            (->GeneratedRejected
-             (errno-message "cannot inspect" relative errno)))]
-        [(host.fs/PathKindOk kind)
+             (errno-message "cannot inspect" relative kind-errno)))
+        (let [kind Int (.value bridge kind-result)]
          (if (not (or (= kind 1) (= kind 3)))
            (->GeneratedLoaded false "")
-           (match (host.fs/read-text-bounded absolute max-source-bytes)
-             [(host.fs/ReadTextBoundedError errno)
+           (let [read-result Any (.readText bridge absolute max-source-bytes)
+                 read-errno Int (.status bridge read-result)]
+             (if (not (= read-errno 0))
               (->GeneratedRejected
-                (errno-message "cannot read" relative errno))]
-             [(host.fs/ReadTextBoundedOk text)
-              (->GeneratedLoaded true text)]))]))))
+                (errno-message "cannot read" relative read-errno))
+              (let [text String (.value bridge read-result)]
+                (->GeneratedLoaded true text))))))))))
 
 (defn empty-host [host String] r/HostTags
   (r/->HostTags host [] [] "linux" false []))
@@ -220,7 +227,8 @@
        (driver/->TagResolveHostData tags tag-source-present present text))]))
 
 (defn parse-host-source
-  [root String
+  [bridge Any
+   root String
    host String
    relative String
    source String
@@ -231,7 +239,7 @@
        (parse-message "host tag source" relative message offset))]
     [(HostSourceParsed preliminary)
      (if (= (r/hosttags-platform preliminary) "darwin")
-       (match (load-darwin-allowlist root)
+       (match (load-darwin-allowlist bridge root)
          [(AllowlistRejected message) (->HostRejected message)]
          [(AllowlistLoaded allowed)
           (match (input/host-tags-from-source host source allowed)
@@ -240,53 +248,61 @@
                (parse-message "host tag source" relative message offset))]
             [(HostSourceParsed tags)
              (host-data tags true
-               (load-generated root host load-generated?))])])
+               (load-generated bridge root host load-generated?))])])
        (host-data preliminary true
-         (load-generated root host load-generated?))) ]))
+         (load-generated bridge root host load-generated?)))]))
 
 (defn load-host
-  [root String
+  [bridge Any
+   root String
    host String
    load-generated? Bool] HostLoadResult
   (let [relative String (str "hosts/" host "/enabled-tags.bnix")
-        absolute String (path root relative)]
-    (match (host.fs/path-kind absolute)
-      [(host.fs/PathKindError errno)
-       (if (= errno 2)
+        absolute String (path root relative)
+        kind-result Any (.pathKind bridge absolute)
+        kind-errno Int (.status bridge kind-result)]
+    (if (not (= kind-errno 0))
+      (if (= kind-errno 2)
          (host-data (empty-host host) false
-           (load-generated root host load-generated?))
-         (->HostRejected (errno-message "cannot inspect" relative errno)))]
-      [(host.fs/PathKindOk kind)
+           (load-generated bridge root host load-generated?))
+         (->HostRejected
+           (errno-message "cannot inspect" relative kind-errno)))
+      (let [kind Int (.value bridge kind-result)]
        (if (not (or (= kind 1) (= kind 3)))
          (host-data (empty-host host) false
-           (load-generated root host load-generated?))
-         (match (host.fs/read-text-bounded absolute max-source-bytes)
-           [(host.fs/ReadTextBoundedError errno)
-            (->HostRejected (errno-message "cannot read" relative errno))]
-           [(host.fs/ReadTextBoundedOk source)
-            (parse-host-source root host relative source load-generated?)]))])))
+           (load-generated bridge root host load-generated?))
+         (let [read-result Any (.readText bridge absolute max-source-bytes)
+               read-errno Int (.status bridge read-result)]
+           (if (not (= read-errno 0))
+             (->HostRejected
+               (errno-message "cannot read" relative read-errno))
+             (let [source String (.value bridge read-result)]
+               (parse-host-source bridge root host relative source
+                 load-generated?)))))))))
 
 (defn load-hosts-from
-  [root String
+  [bridge Any
+   root String
    names (Vec String)
    index Int
    load-generated? Bool
    hosts (Vec driver/TagResolveHostData)] HostsLoadResult
   (if (>= index (count names))
     (->HostsLoaded hosts)
-    (match (load-host root (nth names index) load-generated?)
+    (match (load-host bridge root (nth names index) load-generated?)
       [(HostRejected message) (->HostsRejected message)]
       [(HostLoaded data)
-       (load-hosts-from root names (+ index 1) load-generated?
+       (load-hosts-from bridge root names (+ index 1) load-generated?
          (conj hosts data))])))
 
 (defn load-hosts
-  [root String
+  [bridge Any
+   root String
    names (Vec String)
    action driver/TagResolveAction] HostsLoadResult
   (if (driver/action-all? action)
-    (load-hosts-from root names 0 (driver/action-emit? action) [])
-    (load-hosts-from root [(driver/action-host action)] 0
+    (load-hosts-from bridge root names 0 (driver/action-emit? action) [])
+    (load-hosts-from bridge root [(driver/action-host action)] 0
       (driver/action-emit? action) [])))
 
 (defn string-member?
@@ -309,8 +325,8 @@
           (driver/->TagResolveHostData
             (empty-host (nth names index)) false false ""))))))
 
-(defn emit-io-error [message String] Int
-  (do (host.stderr/write-text message) 1))
+(defn emit-io-error [bridge Any message String] Int
+  (do (.err bridge message) 1))
 
 (defn any-tag-source? [hosts (Vec driver/TagResolveHostData)] Bool
   (loop [index Int 0]
@@ -322,87 +338,92 @@
         (recur (+ index 1))))))
 
 (defn execute-effects
-  [root String
+  [bridge Any
+   root String
    outcome driver/TagResolveOutcome
    index Int] Int
   (if (>= index (count (driver/tagresolveoutcome-effects outcome)))
     (driver/tagresolveoutcome-status outcome)
     (match (nth (driver/tagresolveoutcome-effects outcome) index)
       [(StdoutText text)
-       (do (print text) (execute-effects root outcome (+ index 1)))]
+       (do (.out bridge text)
+           (execute-effects bridge root outcome (+ index 1)))]
       [(StderrText text)
-       (do (host.stderr/write-text text)
-           (execute-effects root outcome (+ index 1)))]
+       (do (.err bridge text)
+           (execute-effects bridge root outcome (+ index 1)))]
       [(WriteGenerated relative text)
-       (match (host.fs/write-text-atomic (path root relative) text)
-         [(host.fs/WriteTextAtomicOk)
-          (execute-effects root outcome (+ index 1))]
-         [(host.fs/WriteTextAtomicError errno)
-          (emit-io-error (errno-message "cannot write" relative errno))])])))
+       (let [errno Int (.writeTextAtomic bridge (path root relative) text)]
+         (if (= errno 0)
+           (execute-effects bridge root outcome (+ index 1))
+           (emit-io-error bridge
+             (errno-message "cannot write" relative errno))))])))
 
 (defn run-action
-  [root String
+  [bridge Any
+   root String
    host-names (Vec String)
    action driver/TagResolveAction] Int
   (if (and (not (driver/action-all? action))
            (not (string-member? host-names (driver/action-host action))))
-    (execute-effects root
+    (execute-effects bridge root
       (driver/run-tag-resolve-action
         (driver/->TagResolveRepositoryData []
           (placeholder-hosts host-names))
         action)
       0)
-    (match (load-hosts root host-names action)
-      [(HostsRejected message) (emit-io-error message)]
+    (match (load-hosts bridge root host-names action)
+      [(HostsRejected message) (emit-io-error bridge message)]
       [(HostsLoaded hosts)
        (if (and (driver/action-all? action)
                 (driver/action-emit? action)
                 (not (any-tag-source? hosts)))
-         (execute-effects root
+         (execute-effects bridge root
            (driver/run-tag-resolve-action
              (driver/->TagResolveRepositoryData [] hosts)
              action)
            0)
-         (match (load-modules root)
-           [(ModulesRejected message) (emit-io-error message)]
+         (match (load-modules bridge root)
+           [(ModulesRejected message) (emit-io-error bridge message)]
            [(ModulesLoaded modules)
-            (execute-effects root
+            (execute-effects bridge root
               (driver/run-tag-resolve-action
                 (driver/->TagResolveRepositoryData modules hosts)
                 action)
               0)]))])))
 
-(defn repository-root [] (U String Nil)
-  (let [explicit (U String Nil) (System/getenv "FIRN_REPO")]
+(defn repository-root [bridge Any] (U String Nil)
+  (let [explicit (U String Nil) (.env bridge "FIRN_REPO")]
     (if (some? explicit)
       explicit
-      (let [home (U String Nil) (System/getenv "HOME")]
+      (let [home (U String Nil) (.env bridge "HOME")]
         (if (some? home)
           (str home "/code/nixos-config/main")
           nil)))))
 
-(defn default-host [] String
-  (let [host (U String Nil) (System/getenv "FIRN_HOST")]
+(defn default-host [bridge Any] String
+  (let [host (U String Nil) (.env bridge "FIRN_HOST")]
     (if (some? host) host "whiterabbit")))
 
-(defn usage-error [] Int
+(defn usage-error [bridge Any] Int
   (do
-    (host.stderr/write-text
+    (.err bridge
       "Usage: firn tag resolve [<host>|all][+emit]\n")
     64))
 
-(defn -main [args (Vec String)] Int
-  (match (driver/parse-tag-resolve-argv args (default-host)
-           (some? (System/getenv "FIRN_TAG_EMIT")))
-    [(OtherFirnCommand argv) (usage-error)]
-    [(InvalidTagResolveArgv argv) (usage-error)]
+(js/export
+  (defn run [bridge Any args (Vec String)] Int
+  (match (driver/parse-tag-resolve-argv args (default-host bridge)
+           (some? (.env bridge "FIRN_TAG_EMIT")))
+    [(OtherFirnCommand argv) (usage-error bridge)]
+    [(InvalidTagResolveArgv argv) (usage-error bridge)]
     [(ParsedTagResolve action)
-     (let [root (U String Nil) (repository-root)]
+     (let [root (U String Nil) (repository-root bridge)]
        (if (nil? root)
          (do
-           (host.stderr/write-text
+           (.err bridge
              "firn tag resolve: FIRN_REPO and HOME are not set\n")
            1)
-         (match (directory-names root "hosts")
-           [(DirectoryNamesRejected message) (emit-io-error message)]
-           [(DirectoryNamesLoaded names) (run-action root names action)])))]))
+         (match (directory-names bridge root "hosts")
+           [(DirectoryNamesRejected message) (emit-io-error bridge message)]
+           [(DirectoryNamesLoaded names)
+            (run-action bridge root names action)])))])))
