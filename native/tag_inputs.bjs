@@ -1,109 +1,127 @@
-#lang beagle
+#lang beagle/js
 (ns firn.tag-inputs
   (:require [beagle.datum-reader :as reader]
             [native.json :as json]
             [firn.tag-resolve :as r]))
 
-(defunion ModuleSourceResult
+(js/export
+  (defunion ModuleSourceResult
   (ModuleSourceParsed [value r/ModuleTags])
   (ModuleSourceRejected
     [message String
-     offset Int]))
+     offset Int])))
 
-(defunion HostSourceResult
+(js/export
+  (defunion HostSourceResult
   (HostSourceParsed [value r/HostTags])
   (HostSourceRejected
     [message String
-     offset Int]))
+     offset Int])))
 
-(defunion DarwinAllowlistResult
+(js/export
+  (defunion DarwinAllowlistResult
   (DarwinAllowlistParsed [modules (Vec String)])
   (DarwinAllowlistRejected
     [message String
-     offset Int]))
+     offset Int])))
 
-(defrecord SpanScan
+(js/export
+  (defrecord SpanScan
   [ok Bool
    found Bool
    start Int
    message String
-   offset Int])
+   offset Int]))
 
-(defrecord StringVectorScan
+(js/export
+  (defrecord StringVectorScan
   [ok Bool
    values (Vec String)
    message String
-   offset Int])
+   offset Int]))
 
-(defrecord OverrideValuesScan
+(js/export
+  (defrecord OverrideValuesScan
   [ok Bool
    values (Vec r/OverrideValue)
    message String
-   offset Int])
+   offset Int]))
 
-(defrecord OverridesScan
+(js/export
+  (defrecord OverridesScan
   [ok Bool
    values (Vec r/TaggedOverrides)
    message String
-   offset Int])
+   offset Int]))
 
-(defrecord EnabledEntryScan
+(js/export
+  (defrecord EnabledEntryScan
   [ok Bool
    value r/EnabledTag
    message String
-   offset Int])
+   offset Int]))
 
-(defrecord EnabledVectorScan
+(js/export
+  (defrecord EnabledVectorScan
   [ok Bool
    values (Vec r/EnabledTag)
    message String
-   offset Int])
+   offset Int]))
 
-(defrecord StringAtomScan
+(js/export
+  (defrecord StringAtomScan
   [ok Bool
    value String
    message String
-   offset Int])
+   offset Int]))
 
-(defn span-found [start Int] SpanScan
-  (->SpanScan true true start "" -1))
+(js/export
+  (defn span-found [start Int] SpanScan
+  (->SpanScan true true start "" -1)))
 
-(defn span-missing [] SpanScan
-  (->SpanScan true false -1 "" -1))
+(js/export
+  (defn span-missing [] SpanScan
+  (->SpanScan true false -1 "" -1)))
 
-(defn span-rejected
+(js/export
+  (defn span-rejected
   [message String
    offset Int] SpanScan
-  (->SpanScan false false -1 message offset))
+  (->SpanScan false false -1 message offset)))
 
-(defn event-offset
+(js/export
+  (defn event-offset
   [events (Vec reader/ReaderEvent)
    index Int] Int
   (if (and (>= index 0) (< index (count events)))
     (reader/readerevent-offset (nth events index))
-    -1))
+    -1)))
 
-(defn open-kind? [kind Keyword] Bool
+(js/export
+  (defn open-kind? [kind Keyword] Bool
   (or (= kind :list/open)
       (= kind :vector/open)
       (= kind :map/open)
-      (= kind :set/open)))
+      (= kind :set/open))))
 
-(defn close-kind? [kind Keyword] Bool
+(js/export
+  (defn close-kind? [kind Keyword] Bool
   (or (= kind :list/close)
       (= kind :vector/close)
       (= kind :map/close)
-      (= kind :set/close)))
+      (= kind :set/close))))
 
-(defn matching-close-kind?
+(js/export
+  (defn matching-close-kind?
   [opened Keyword
    closed Keyword] Bool
   (or (and (= opened :list/open) (= closed :list/close))
       (and (= opened :vector/open) (= closed :vector/close))
       (and (= opened :map/open) (= closed :map/close))
-      (and (= opened :set/open) (= closed :set/close))))
+      (and (= opened :set/open) (= closed :set/close)))))
 
-(defn datum-end
+(js/export
+  (defn datum-end
   [events (Vec reader/ReaderEvent)
    start Int] Int
   (if (or (< start 0) (>= start (count events)))
@@ -127,9 +145,10 @@
                          kind
                          (reader/readerevent-kind event)))
                 (+ index 1)
-                (recur (+ index 1))))))))))
+                (recur (+ index 1)))))))))))
 
-(defn container-child-count
+(js/export
+  (defn container-child-count
   [events (Vec reader/ReaderEvent)
    start Int] Int
   (let [end Int (datum-end events start)]
@@ -146,9 +165,10 @@
           (let [next Int (datum-end events cursor)]
             (if (or (< next 0) (> next (- end 1)))
               -1
-              (recur next (+ total 1)))))))))
+              (recur next (+ total 1))))))))))
 
-(defn container-child-start
+(js/export
+  (defn container-child-start
   [events (Vec reader/ReaderEvent)
    start Int
    wanted Int] Int
@@ -168,27 +188,30 @@
           (let [next Int (datum-end events cursor)]
             (if (or (< next 0) (> next (- end 1)))
               -1
-              (recur next (+ index 1)))))))))
+              (recur next (+ index 1))))))))))
 
-(defn symbol-at?
+(js/export
+  (defn symbol-at?
   [events (Vec reader/ReaderEvent)
    index Int
    value String] Bool
   (and (>= index 0)
        (< index (count events))
        (= :symbol (reader/readerevent-kind (nth events index)))
-       (= value (reader/readerevent-value (nth events index)))))
+       (= value (reader/readerevent-value (nth events index))))))
 
-(defn list-head?
+(js/export
+  (defn list-head?
   [events (Vec reader/ReaderEvent)
    start Int
    head String] Bool
   (and (>= start 0)
        (< start (count events))
        (= :list/open (reader/readerevent-kind (nth events start)))
-       (symbol-at? events (container-child-start events start 0) head)))
+       (symbol-at? events (container-child-start events start 0) head))))
 
-(defn find-top-level-form
+(js/export
+  (defn find-top-level-form
   [events (Vec reader/ReaderEvent)
    head String] SpanScan
   (loop [cursor Int 0
@@ -204,9 +227,10 @@
                 (str "duplicate top-level " head " form")
                 (event-offset events cursor))
               (recur next cursor))
-            (recur next found)))))))
+            (recur next found))))))))
 
-(defn host-map-candidate
+(js/export
+  (defn host-map-candidate
   [events (Vec reader/ReaderEvent)
    start Int] Int
   (if (= :map/open (reader/readerevent-kind (nth events start)))
@@ -219,9 +243,10 @@
                     (reader/readerevent-kind (nth events candidate))))
           candidate
           -1))
-      -1)))
+      -1))))
 
-(defn find-host-map [events (Vec reader/ReaderEvent)] SpanScan
+(js/export
+  (defn find-host-map [events (Vec reader/ReaderEvent)] SpanScan
   (loop [cursor Int 0
          found Int -1]
     (if (= cursor (count events))
@@ -240,9 +265,10 @@
                          (event-offset events candidate))
 
           :else
-          (recur next candidate))))))
+          (recur next candidate)))))))
 
-(defn unwrap-module-body
+(js/export
+  (defn unwrap-module-body
   [events (Vec reader/ReaderEvent)
    start Int] SpanScan
   (loop [current Int start
@@ -279,9 +305,10 @@
 
           :else
           (span-rejected "unsupported nix/module body"
-                         (event-offset events current)))))))
+                         (event-offset events current))))))))
 
-(defn map-field
+(js/export
+  (defn map-field
   [events (Vec reader/ReaderEvent)
    start Int
    field String] SpanScan
@@ -328,9 +355,10 @@
                     (reader/readerevent-offset key))
 
                   :else
-                  (recur value-end (if matches value-start found)))))))))))
+                  (recur value-end (if matches value-start found))))))))))))
 
-(defn read-symbol-vector
+(js/export
+  (defn read-symbol-vector
   [events (Vec reader/ReaderEvent)
    start Int
    label String] StringVectorScan
@@ -355,9 +383,10 @@
                 (str label " entries must be symbols")
                 (reader/readerevent-offset event))
               (recur next
-                     (conj values (reader/readerevent-value event))))))))))
+                     (conj values (reader/readerevent-value event)))))))))))
 
-(defn read-symbol-field
+(js/export
+  (defn read-symbol-field
   [events (Vec reader/ReaderEvent)
    field SpanScan
    fallback String] StringAtomScan
@@ -372,9 +401,10 @@
                  (= :symbol (reader/readerevent-kind event)))
           (->StringAtomScan true (reader/readerevent-value event) "" -1)
           (->StringAtomScan false "" "field must be a symbol"
-                            (reader/readerevent-offset event)))))))
+                            (reader/readerevent-offset event))))))))
 
-(defn override-path-member?
+(js/export
+  (defn override-path-member?
   [values (Vec r/OverrideValue)
    path String] Bool
   (loop [index Int 0]
@@ -382,9 +412,10 @@
       false
       (if (= path (r/overridevalue-path (nth values index)))
         true
-        (recur (+ index 1))))))
+        (recur (+ index 1)))))))
 
-(defn tagged-override-member?
+(js/export
+  (defn tagged-override-member?
   [values (Vec r/TaggedOverrides)
    tag String] Bool
   (loop [index Int 0]
@@ -392,16 +423,18 @@
       false
       (if (= tag (r/taggedoverrides-tag (nth values index)))
         true
-        (recur (+ index 1))))))
+        (recur (+ index 1)))))))
 
-(defn literal-atom? [kind Keyword] Bool
+(js/export
+  (defn literal-atom? [kind Keyword] Bool
   (or (= kind :string)
       (= kind :boolean)
       (= kind :nil)
       (= kind :symbol)
-      (= kind :keyword)))
+      (= kind :keyword))))
 
-(defn read-override-values
+(js/export
+  (defn read-override-values
   [events (Vec reader/ReaderEvent)
    start Int] OverrideValuesScan
   (if (or (< start 0)
@@ -452,9 +485,10 @@
                     (conj values
                       (r/->OverrideValue
                         path
-                        (reader/readerevent-literal value)))))))))))))
+                        (reader/readerevent-literal value))))))))))))))
 
-(defn read-overrides-map
+(js/export
+  (defn read-overrides-map
   [events (Vec reader/ReaderEvent)
    start Int] OverridesScan
   (if (or (< start 0)
@@ -507,9 +541,10 @@
                     (conj values
                       (r/->TaggedOverrides
                         tag
-                        (overridevaluesscan-values inner)))))))))))))
+                        (overridevaluesscan-values inner))))))))))))))
 
-(defn optional-symbol-vector
+(js/export
+  (defn optional-symbol-vector
   [events (Vec reader/ReaderEvent)
    field SpanScan
    label String] StringVectorScan
@@ -522,9 +557,10 @@
     (->StringVectorScan true [] "" -1)
 
     :else
-    (read-symbol-vector events (spanscan-start field) label)))
+    (read-symbol-vector events (spanscan-start field) label))))
 
-(defn optional-overrides
+(js/export
+  (defn optional-overrides
   [events (Vec reader/ReaderEvent)
    field SpanScan] OverridesScan
   (cond
@@ -536,9 +572,10 @@
     (->OverridesScan true [] "" -1)
 
     :else
-    (read-overrides-map events (spanscan-start field))))
+    (read-overrides-map events (spanscan-start field)))))
 
-(defn module-tags-from-source
+(js/export
+  (defn module-tags-from-source
   [name String
    source String] ModuleSourceResult
   (let [read reader/DatumRead (reader/read-events source)
@@ -613,14 +650,16 @@
                       name
                       (stringvectorscan-values tags)
                       (stringvectorscan-values opt-in)
-                      (overridesscan-values overrides))))))))))))
+                      (overridesscan-values overrides)))))))))))))
 
-(defn valid-edit-text? [text String] Bool
+(js/export
+  (defn valid-edit-text? [text String] Bool
   (and (> (count text) 1)
        (let [prefix String (subs text 0 1)]
-         (or (= prefix "+") (= prefix "-")))))
+         (or (= prefix "+") (= prefix "-"))))))
 
-(defn read-enabled-entry
+(js/export
+  (defn read-enabled-entry
   [events (Vec reader/ReaderEvent)
    start Int] EnabledEntryScan
   (let [event reader/ReaderEvent (nth events start)
@@ -670,9 +709,10 @@
       :else
       (->EnabledEntryScan false (r/->EnabledTag "" [] [])
                           "enabled tag entry must be a symbol or vector"
-                          (reader/readerevent-offset event)))))
+                          (reader/readerevent-offset event))))))
 
-(defn read-enabled-vector
+(js/export
+  (defn read-enabled-vector
   [events (Vec reader/ReaderEvent)
    field SpanScan] EnabledVectorScan
   (cond
@@ -701,9 +741,10 @@
                     (enabledentryscan-message entry)
                     (enabledentryscan-offset entry))
                   (recur next
-                    (conj values (enabledentryscan-value entry))))))))))))
+                    (conj values (enabledentryscan-value entry)))))))))))))
 
-(defn host-tags-from-source
+(js/export
+  (defn host-tags-from-source
   [host String
    source String
    darwin-allowed (Vec String)] HostSourceResult
@@ -760,9 +801,10 @@
                     (stringvectorscan-values disabled)
                     platform-name
                     darwin
-                    (if darwin darwin-allowed [])))))))))))
+                    (if darwin darwin-allowed []))))))))))))
 
-(defn json-event-offset [event json/JsonEvent] Int
+(js/export
+  (defn json-event-offset [event json/JsonEvent] Int
   (match event
     [(JsonObjectStart offset) offset]
     [(JsonObjectEnd offset) offset]
@@ -772,9 +814,10 @@
     [(JsonString offset value) offset]
     [(JsonNumber offset lexeme) offset]
     [(JsonBoolean offset value) offset]
-    [(JsonNull offset) offset]))
+    [(JsonNull offset) offset])))
 
-(defn darwin-allowlist-from-json [source String] DarwinAllowlistResult
+(js/export
+  (defn darwin-allowlist-from-json [source String] DarwinAllowlistResult
   (match (json/decode source)
     [(JsonDecodeError offset message)
      (->DarwinAllowlistRejected message offset)]
@@ -856,4 +899,4 @@
          [(JsonNull bad-offset)
           (->DarwinAllowlistRejected
             "Darwin allowlist must be a JSON array"
-            bad-offset)]))]))
+            bad-offset)]))])))

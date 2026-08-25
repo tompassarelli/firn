@@ -1,50 +1,59 @@
-#lang beagle
+#lang beagle/js
 (ns firn.tag-resolve-driver
   (:require [firn.tag-resolve :as r]))
 
 ;; `argv` below excludes argv[0]; `firn-tag-emit` is the injected boolean
 ;; interpretation of FIRN_TAG_EMIT, never an environment read in this module.
-(defunion TagResolveAction
+(js/export
+  (defunion TagResolveAction
   (ResolveOne
     [host String
      emit Bool])
-  (ResolveAll [emit Bool]))
+  (ResolveAll [emit Bool])))
 
-(defunion TagResolveArgv
+(js/export
+  (defunion TagResolveArgv
   (ParsedTagResolve [action TagResolveAction])
   (OtherFirnCommand [argv (Vec String)])
-  (InvalidTagResolveArgv [argv (Vec String)]))
+  (InvalidTagResolveArgv [argv (Vec String)])))
 
-(defrecord TagResolveHostData
+(js/export
+  (defrecord TagResolveHostData
   [tags r/HostTags
    tag-source-present Bool
    generated-present Bool
-   generated-text String])
+   generated-text String]))
 
-(defrecord TagResolveRepositoryData
+(js/export
+  (defrecord TagResolveRepositoryData
   [modules (Vec r/ModuleTags)
-   hosts (Vec TagResolveHostData)])
+   hosts (Vec TagResolveHostData)]))
 
-(defunion HostLookup
+(js/export
+  (defunion HostLookup
   (FoundHost [data TagResolveHostData])
-  (MissingHost [host String]))
+  (MissingHost [host String])))
 
-(defunion TagResolveEffect
+(js/export
+  (defunion TagResolveEffect
   (StdoutText [text String])
   (StderrText [text String])
   (WriteGenerated
     [path String
-     text String]))
+     text String])))
 
-(defrecord TagResolveOutcome
+(js/export
+  (defrecord TagResolveOutcome
   [status Int
-   effects (Vec TagResolveEffect)])
+   effects (Vec TagResolveEffect)]))
 
-(defn emit-suffix? [leaf String] Bool
+(js/export
+  (defn emit-suffix? [leaf String] Bool
   (let [length Int (count leaf)]
-    (and (>= length 5) (= (subs leaf (- length 5) length) "+emit"))))
+    (and (>= length 5) (= (subs leaf (- length 5) length) "+emit")))))
 
-(defn action-from-leaf
+(js/export
+  (defn action-from-leaf
   [leaf String
    firn-tag-emit Bool] TagResolveAction
   (let [suffix Bool (emit-suffix? leaf)
@@ -52,9 +61,10 @@
         emit Bool (or suffix firn-tag-emit)]
     (if (= target "all")
       (->ResolveAll emit)
-      (->ResolveOne target emit))))
+      (->ResolveOne target emit)))))
 
-(defn parse-tag-resolve-argv
+(js/export
+  (defn parse-tag-resolve-argv
   [argv (Vec String)
    default-host String
    firn-tag-emit Bool] TagResolveArgv
@@ -67,27 +77,32 @@
       [(= (count argv) 3)
        (->ParsedTagResolve (action-from-leaf (nth argv 2) firn-tag-emit))]
       [:else (->InvalidTagResolveArgv argv)])
-    (->OtherFirnCommand argv)))
+    (->OtherFirnCommand argv))))
 
-(defn action-host [action TagResolveAction] String
+(js/export
+  (defn action-host [action TagResolveAction] String
   (match action
     [(ResolveOne host emit) host]
-    [(ResolveAll emit) "all"]))
+    [(ResolveAll emit) "all"])))
 
-(defn action-emit? [action TagResolveAction] Bool
+(js/export
+  (defn action-emit? [action TagResolveAction] Bool
   (match action
     [(ResolveOne host emit) emit]
-    [(ResolveAll emit) emit]))
+    [(ResolveAll emit) emit])))
 
-(defn action-all? [action TagResolveAction] Bool
+(js/export
+  (defn action-all? [action TagResolveAction] Bool
   (match action
     [(ResolveOne host emit) false]
-    [(ResolveAll emit) true]))
+    [(ResolveAll emit) true])))
 
-(defn host-data-name [data TagResolveHostData] String
-  (r/hosttags-host (tagresolvehostdata-tags data)))
+(js/export
+  (defn host-data-name [data TagResolveHostData] String
+  (r/hosttags-host (tagresolvehostdata-tags data))))
 
-(defn repository-host-names [repository TagResolveRepositoryData] (Vec String)
+(js/export
+  (defn repository-host-names [repository TagResolveRepositoryData] (Vec String)
   (loop [index Int 0
          result (Vec String) []]
     (if (>= index (count (tagresolverepositorydata-hosts repository)))
@@ -95,9 +110,10 @@
       (recur (+ index 1)
         (conj result
           (host-data-name
-            (nth (tagresolverepositorydata-hosts repository) index)))))))
+            (nth (tagresolverepositorydata-hosts repository) index))))))))
 
-(defn find-host
+(js/export
+  (defn find-host
   [repository TagResolveRepositoryData
    host String] HostLookup
   (loop [index Int 0]
@@ -106,24 +122,27 @@
       (let [data TagResolveHostData (nth (tagresolverepositorydata-hosts repository) index)]
         (if (= (host-data-name data) host)
           (->FoundHost data)
-          (recur (+ index 1)))))))
+          (recur (+ index 1))))))))
 
-(defn join-host-names [hosts (Vec String)] String
+(js/export
+  (defn join-host-names [hosts (Vec String)] String
   (loop [index Int 0
          result String ""]
     (if (>= index (count hosts))
       result
       (recur (+ index 1)
-        (str result (if (= index 0) "" ", ") (nth hosts index))))))
+        (str result (if (= index 0) "" ", ") (nth hosts index)))))))
 
-(defn validation-error-hint [error r/ValidationError] String
+(js/export
+  (defn validation-error-hint [error r/ValidationError] String
   (match error
     [(UnknownPlatform host platform hint) hint]
     [(UnknownTag host tag hint) hint]
     [(OptInMismatch host tag module hint) hint]
-    [(UnknownDisabled host module hint) hint]))
+    [(UnknownDisabled host module hint) hint])))
 
-(defn error-effects [errors (Vec r/ValidationError)] (Vec TagResolveEffect)
+(js/export
+  (defn error-effects [errors (Vec r/ValidationError)] (Vec TagResolveEffect)
   (loop [index Int 0
          result (Vec TagResolveEffect) []]
     (if (>= index (count errors))
@@ -132,9 +151,10 @@
         (conj result
           (->StderrText
             (str "tag-resolve: "
-              (validation-error-hint (nth errors index)) "\n")))))))
+              (validation-error-hint (nth errors index)) "\n"))))))))
 
-(defn warning-effects [warnings (Vec String)] (Vec TagResolveEffect)
+(js/export
+  (defn warning-effects [warnings (Vec String)] (Vec TagResolveEffect)
   (loop [index Int 0
          result (Vec TagResolveEffect) []]
     (if (>= index (count warnings))
@@ -142,9 +162,10 @@
       (recur (+ index 1)
         (conj result
           (->StderrText
-            (str "tag-resolve: warning: " (nth warnings index) "\n")))))))
+            (str "tag-resolve: warning: " (nth warnings index) "\n"))))))))
 
-(defn resolution-tags [resolution r/Resolution] (Vec String)
+(js/export
+  (defn resolution-tags [resolution r/Resolution] (Vec String)
   (loop [index Int 0
          result (Vec String) []]
     (if (>= index (count (r/resolution-per-tag resolution)))
@@ -152,16 +173,18 @@
       (recur (+ index 1)
         (conj result
           (r/tagcontribution-tag
-            (nth (r/resolution-per-tag resolution) index)))))))
+            (nth (r/resolution-per-tag resolution) index))))))))
 
-(defn render-module-lines [modules (Vec String)] String
+(js/export
+  (defn render-module-lines [modules (Vec String)] String
   (loop [index Int 0
          result String ""]
     (if (>= index (count modules))
       result
-      (recur (+ index 1) (str result "    " (nth modules index) "\n")))))
+      (recur (+ index 1) (str result "    " (nth modules index) "\n"))))))
 
-(defn render-tag-contributions [resolution r/Resolution] String
+(js/export
+  (defn render-tag-contributions [resolution r/Resolution] String
   (let [tags (Vec String) (resolution-tags resolution)]
     (if (= (count tags) 0)
       "  (no tags enabled)\n"
@@ -175,9 +198,10 @@
               (str result "  " tag " (" (count modules) "):\n"
                 (if (= (count modules) 0)
                   "    (none)\n"
-                  (render-module-lines modules))))))))))
+                  (render-module-lines modules)))))))))))
 
-(defn render-override-lines [values (Vec r/OverrideValue)] String
+(js/export
+  (defn render-override-lines [values (Vec r/OverrideValue)] String
   (loop [index Int 0
          result String ""]
     (if (>= index (count values))
@@ -185,9 +209,10 @@
       (let [value r/OverrideValue (nth values index)]
         (recur (+ index 1)
           (str result "      " (r/overridevalue-path value) " = "
-            (r/overridevalue-literal value) "\n"))))))
+            (r/overridevalue-literal value) "\n")))))))
 
-(defn render-active-modules [resolution r/Resolution] String
+(js/export
+  (defn render-active-modules [resolution r/Resolution] String
   (let [active (Vec String) (r/resolution-active resolution)]
     (loop [index Int 0
            result String (str "Active modules (" (count active) "):\n")]
@@ -196,17 +221,20 @@
         (let [module String (nth active index)]
           (recur (+ index 1)
             (str result "  " module "\n"
-              (render-override-lines (r/overrides-for resolution module)))))))))
+              (render-override-lines (r/overrides-for resolution module))))))))))
 
-(defn render-pretty-resolution [resolution r/Resolution] String
+(js/export
+  (defn render-pretty-resolution [resolution r/Resolution] String
   (str "Host: " (r/resolution-host resolution) "\n\n"
     (render-tag-contributions resolution) "\n"
-    (render-active-modules resolution)))
+    (render-active-modules resolution))))
 
-(defn generated-path [host String] String
-  (str "hosts/" host "/_generated-enables.bnix"))
+(js/export
+  (defn generated-path [host String] String
+  (str "hosts/" host "/_generated-enables.bnix")))
 
-(defn emit-success-effects
+(js/export
+  (defn emit-success-effects
   [data TagResolveHostData
    resolution r/Resolution] (Vec TagResolveEffect)
   (let [host String (r/resolution-host resolution)
@@ -220,9 +248,10 @@
            " modules)\n"))]
       [(->WriteGenerated path text)
        (->StdoutText
-         (str "tag-resolve: wrote " path " (" count-active " modules)\n"))])))
+         (str "tag-resolve: wrote " path " (" count-active " modules)\n"))]))))
 
-(defn resolve-one
+(js/export
+  (defn resolve-one
   [modules (Vec r/ModuleTags)
    data TagResolveHostData
    emit Bool] TagResolveOutcome
@@ -235,14 +264,16 @@
           (warning-effects (r/resolution-warnings resolution))
           (if emit
             (emit-success-effects data resolution)
-            [(->StdoutText (render-pretty-resolution resolution))]))))))
+            [(->StdoutText (render-pretty-resolution resolution))])))))))
 
-(defn append-all-pretty-gap
+(js/export
+  (defn append-all-pretty-gap
   [effects (Vec TagResolveEffect)
    emit Bool] (Vec TagResolveEffect)
-  (if emit effects (conj effects (->StdoutText "\n"))))
+  (if emit effects (conj effects (->StdoutText "\n")))))
 
-(defn run-all
+(js/export
+  (defn run-all
   [repository TagResolveRepositoryData
    hosts (Vec String)
    index Int
@@ -263,18 +294,20 @@
              (run-all repository hosts (+ index 1) emit
                (append-all-pretty-gap next-effects emit))
              (->TagResolveOutcome
-               (tagresolveoutcome-status outcome) next-effects))))])))
+               (tagresolveoutcome-status outcome) next-effects))))]))))
 
-(defn unknown-host-outcome
+(js/export
+  (defn unknown-host-outcome
   [repository TagResolveRepositoryData
    host String] TagResolveOutcome
   (->TagResolveOutcome
     1
     [(->StderrText
        (str "firn tag resolve: no such host '" host "' (have: "
-         (join-host-names (repository-host-names repository)) ")\n"))]))
+         (join-host-names (repository-host-names repository)) ")\n"))])))
 
-(defn run-tag-resolve-action
+(js/export
+  (defn run-tag-resolve-action
   [repository TagResolveRepositoryData
    action TagResolveAction] TagResolveOutcome
   (match action
@@ -284,9 +317,10 @@
      (match (find-host repository host)
        [(MissingHost missing) (unknown-host-outcome repository missing)]
        [(FoundHost data)
-        (resolve-one (tagresolverepositorydata-modules repository) data emit)])]))
+        (resolve-one (tagresolverepositorydata-modules repository) data emit)])])))
 
-(defn outcome-stdout [outcome TagResolveOutcome] String
+(js/export
+  (defn outcome-stdout [outcome TagResolveOutcome] String
   (loop [index Int 0
          result String ""]
     (if (>= index (count (tagresolveoutcome-effects outcome)))
@@ -295,9 +329,10 @@
         (match effect
           [(StdoutText text) (recur (+ index 1) (str result text))]
           [(StderrText text) (recur (+ index 1) result)]
-          [(WriteGenerated path text) (recur (+ index 1) result)])))))
+          [(WriteGenerated path text) (recur (+ index 1) result)]))))))
 
-(defn outcome-stderr [outcome TagResolveOutcome] String
+(js/export
+  (defn outcome-stderr [outcome TagResolveOutcome] String
   (loop [index Int 0
          result String ""]
     (if (>= index (count (tagresolveoutcome-effects outcome)))
@@ -306,9 +341,10 @@
         (match effect
           [(StdoutText text) (recur (+ index 1) result)]
           [(StderrText text) (recur (+ index 1) (str result text))]
-          [(WriteGenerated path text) (recur (+ index 1) result)])))))
+          [(WriteGenerated path text) (recur (+ index 1) result)]))))))
 
-(defn outcome-effect-kinds [outcome TagResolveOutcome] (Vec String)
+(js/export
+  (defn outcome-effect-kinds [outcome TagResolveOutcome] (Vec String)
   (loop [index Int 0
          result (Vec String) []]
     (if (>= index (count (tagresolveoutcome-effects outcome)))
@@ -319,4 +355,4 @@
             (match effect
               [(StdoutText text) "stdout"]
               [(StderrText text) "stderr"]
-              [(WriteGenerated path text) "write"])))))))
+              [(WriteGenerated path text) "write"]))))))))

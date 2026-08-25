@@ -1,42 +1,50 @@
-#lang beagle
+#lang beagle/js
 (ns firn.tag-resolve)
 
-(defrecord OverrideValue
+(js/export
+  (defrecord OverrideValue
   [path String
-   literal String])
+   literal String]))
 
-(defrecord TaggedOverrides
+(js/export
+  (defrecord TaggedOverrides
   [tag String
-   values (Vec OverrideValue)])
+   values (Vec OverrideValue)]))
 
-(defrecord ModuleTags
+(js/export
+  (defrecord ModuleTags
   [name String
    tags (Vec String)
    opt-in (Vec String)
-   overrides (Vec TaggedOverrides)])
+   overrides (Vec TaggedOverrides)]))
 
-(defrecord EnabledTag
+(js/export
+  (defrecord EnabledTag
   [tag String
    pluses (Vec String)
-   minuses (Vec String)])
+   minuses (Vec String)]))
 
-(defrecord HostTags
+(js/export
+  (defrecord HostTags
   [host String
    enabled (Vec EnabledTag)
    disabled (Vec String)
    platform String
    restrict-allowed Bool
-   allowed (Vec String)])
+   allowed (Vec String)]))
 
-(defrecord TagContribution
+(js/export
+  (defrecord TagContribution
   [tag String
-   modules (Vec String)])
+   modules (Vec String)]))
 
-(defrecord ModuleOverrides
+(js/export
+  (defrecord ModuleOverrides
   [module String
-   values (Vec OverrideValue)])
+   values (Vec OverrideValue)]))
 
-(defunion ValidationError
+(js/export
+  (defunion ValidationError
   (UnknownPlatform
     [host String
      platform String
@@ -53,22 +61,25 @@
   (UnknownDisabled
     [host String
      module String
-     hint String]))
+     hint String])))
 
-(defrecord Resolution
+(js/export
+  (defrecord Resolution
   [host String
    active (Vec String)
    per-tag (Vec TagContribution)
    overrides (Vec ModuleOverrides)
    errors (Vec ValidationError)
-   warnings (Vec String)])
+   warnings (Vec String)]))
 
-(defunion TagEdit
+(js/export
+  (defunion TagEdit
   (PlusEdit [module String])
   (MinusEdit [module String])
-  (IgnoredEdit [text String]))
+  (IgnoredEdit [text String])))
 
-(defn string-member?
+(js/export
+  (defn string-member?
   [values (Vec String)
    candidate String] Bool
   (loop [index Int 0]
@@ -76,23 +87,26 @@
       false
       (if (= (nth values index) candidate)
         true
-        (recur (+ index 1))))))
+        (recur (+ index 1)))))))
 
-(defn append-unique
+(js/export
+  (defn append-unique
   [values (Vec String)
    candidate String] (Vec String)
-  (if (string-member? values candidate) values (conj values candidate)))
+  (if (string-member? values candidate) values (conj values candidate))))
 
-(defn union-strings
+(js/export
+  (defn union-strings
   [left (Vec String)
    right (Vec String)] (Vec String)
   (loop [index Int 0
          result (Vec String) left]
     (if (>= index (count right))
       result
-      (recur (+ index 1) (append-unique result (nth right index))))))
+      (recur (+ index 1) (append-unique result (nth right index)))))))
 
-(defn remove-strings
+(js/export
+  (defn remove-strings
   [values (Vec String)
    removed (Vec String)] (Vec String)
   (loop [index Int 0
@@ -101,15 +115,17 @@
       result
       (let [value String (nth values index)]
         (recur (+ index 1)
-          (if (string-member? removed value) result (conj result value)))))))
+          (if (string-member? removed value) result (conj result value))))))))
 
-(defn allowed-module?
+(js/export
+  (defn allowed-module?
   [host HostTags
    module String] Bool
   (or (not (hosttags-restrict-allowed host))
-      (string-member? (hosttags-allowed host) module)))
+      (string-member? (hosttags-allowed host) module))))
 
-(defn modules-declaring-default
+(js/export
+  (defn modules-declaring-default
   [modules (Vec ModuleTags)
    tag String] (Vec String)
   (loop [index Int 0
@@ -120,9 +136,10 @@
         (recur (+ index 1)
           (if (string-member? (moduletags-tags module) tag)
             (conj result (moduletags-name module))
-            result))))))
+            result)))))))
 
-(defn modules-declaring-opt-in
+(js/export
+  (defn modules-declaring-opt-in
   [modules (Vec ModuleTags)
    tag String] (Vec String)
   (loop [index Int 0
@@ -133,9 +150,10 @@
         (recur (+ index 1)
           (if (string-member? (moduletags-opt-in module) tag)
             (conj result (moduletags-name module))
-            result))))))
+            result)))))))
 
-(defn module-known?
+(js/export
+  (defn module-known?
   [modules (Vec ModuleTags)
    name String] Bool
   (loop [index Int 0]
@@ -143,9 +161,10 @@
       false
       (if (= (moduletags-name (nth modules index)) name)
         true
-        (recur (+ index 1))))))
+        (recur (+ index 1)))))))
 
-(defn parse-tag-edit [text String] TagEdit
+(js/export
+  (defn parse-tag-edit [text String] TagEdit
   (if (= (count text) 0)
     (->IgnoredEdit text)
     (let [prefix String (subs text 0 1)
@@ -153,9 +172,10 @@
       (cond
         [(= prefix "+") (->PlusEdit module)]
         [(= prefix "-") (->MinusEdit module)]
-        [:else (->IgnoredEdit text)]))))
+        [:else (->IgnoredEdit text)])))))
 
-(defn enabled-tag-from-edit-texts
+(js/export
+  (defn enabled-tag-from-edit-texts
   [tag String
    edits (Vec String)] EnabledTag
   (loop [index Int 0
@@ -169,9 +189,10 @@
         [(MinusEdit module)
          (recur (+ index 1) pluses (conj minuses module))]
         [(IgnoredEdit text)
-         (recur (+ index 1) pluses minuses)]))))
+         (recur (+ index 1) pluses minuses)])))))
 
-(defn filter-allowed
+(js/export
+  (defn filter-allowed
   [host HostTags
    modules (Vec String)] (Vec String)
   (loop [index Int 0
@@ -180,9 +201,10 @@
       result
       (let [module String (nth modules index)]
         (recur (+ index 1)
-          (if (allowed-module? host module) (conj result module) result))))))
+          (if (allowed-module? host module) (conj result module) result)))))))
 
-(defn valid-pluses
+(js/export
+  (defn valid-pluses
   [host HostTags
    pluses (Vec String)
    opt-ins (Vec String)] (Vec String)
@@ -195,9 +217,10 @@
           (if (and (string-member? opt-ins module)
                    (allowed-module? host module))
             (conj result module)
-            result))))))
+            result)))))))
 
-(defn put-contribution
+(js/export
+  (defn put-contribution
   [contributions (Vec TagContribution)
    replacement TagContribution] (Vec TagContribution)
   (loop [index Int 0
@@ -209,9 +232,10 @@
         (if (= (tagcontribution-tag current)
                (tagcontribution-tag replacement))
           (recur (+ index 1) true (conj result replacement))
-          (recur (+ index 1) found (conj result current)))))))
+          (recur (+ index 1) found (conj result current))))))))
 
-(defn append-module-overrides
+(js/export
+  (defn append-module-overrides
   [overrides (Vec ModuleOverrides)
    module String
    values (Vec OverrideValue)] (Vec ModuleOverrides)
@@ -226,9 +250,10 @@
             (conj result
               (->ModuleOverrides module
                 (into values (moduleoverrides-values current)))))
-          (recur (+ index 1) found (conj result current)))))))
+          (recur (+ index 1) found (conj result current))))))))
 
-(defn tagged-override-values
+(js/export
+  (defn tagged-override-values
   [module ModuleTags
    tag String] (Vec OverrideValue)
   (loop [index Int 0]
@@ -237,9 +262,10 @@
       (let [entry TaggedOverrides (nth (moduletags-overrides module) index)]
         (if (= (taggedoverrides-tag entry) tag)
           (taggedoverrides-values entry)
-          (recur (+ index 1)))))))
+          (recur (+ index 1))))))))
 
-(defn collect-default-overrides
+(js/export
+  (defn collect-default-overrides
   [modules (Vec ModuleTags)
    tag String
    from-defaults (Vec String)
@@ -255,9 +281,10 @@
           (if (and (string-member? from-defaults name)
                    (> (count values) 0))
             (append-module-overrides result name values)
-            result))))))
+            result)))))))
 
-(defn tag-errors
+(js/export
+  (defn tag-errors
   [host HostTags
    tag String
    known Bool
@@ -285,9 +312,10 @@
                   module
                   (str "host '" (hosttags-host host) "' tag '" tag
                        "': +" module " but module '" module
-                       "' does not list tag '" tag "' in :tags-opt-in"))))))))))
+                       "' does not list tag '" tag "' in :tags-opt-in")))))))))))
 
-(defn tag-warnings
+(js/export
+  (defn tag-warnings
   [host HostTags
    tag String
    minuses (Vec String)
@@ -303,9 +331,10 @@
             (conj result
               (str "host '" (hosttags-host host) "' tag '" tag "': -"
                    module " but " module
-                   " is not in this tag's default set"))))))))
+                   " is not in this tag's default set")))))))))
 
-(defn disabled-errors
+(js/export
+  (defn disabled-errors
   [modules (Vec ModuleTags)
    host HostTags] (Vec ValidationError)
   (loop [index Int 0
@@ -321,9 +350,10 @@
                 (hosttags-host host)
                 module
                 (str "host '" (hosttags-host host) "' :disabled lists '"
-                     module "' but no such module exists")))))))))
+                     module "' but no such module exists"))))))))))
 
-(defn remove-disabled-overrides
+(js/export
+  (defn remove-disabled-overrides
   [overrides (Vec ModuleOverrides)
    disabled (Vec String)] (Vec ModuleOverrides)
   (loop [index Int 0
@@ -334,9 +364,10 @@
         (recur (+ index 1)
           (if (string-member? disabled (moduleoverrides-module entry))
             result
-            (conj result entry)))))))
+            (conj result entry))))))))
 
-(defn resolve
+(js/export
+  (defn resolve
   [modules (Vec ModuleTags)
    host HostTags] Resolution
   (let [platform-errors (Vec ValidationError) (if (or (= (hosttags-platform host) "linux")
@@ -382,9 +413,10 @@
                 (enabledtag-pluses enabled)
                 opt-ins))
             (into warnings
-              (tag-warnings host tag (enabledtag-minuses enabled) defaults))))))))
+              (tag-warnings host tag (enabledtag-minuses enabled) defaults)))))))))
 
-(defn contribution-for
+(js/export
+  (defn contribution-for
   [resolution Resolution
    tag String] (Vec String)
   (loop [index Int 0]
@@ -393,9 +425,10 @@
       (let [entry TagContribution (nth (resolution-per-tag resolution) index)]
         (if (= (tagcontribution-tag entry) tag)
           (tagcontribution-modules entry)
-          (recur (+ index 1)))))))
+          (recur (+ index 1))))))))
 
-(defn overrides-for
+(js/export
+  (defn overrides-for
   [resolution Resolution
    module String] (Vec OverrideValue)
   (loop [index Int 0]
@@ -404,30 +437,34 @@
       (let [entry ModuleOverrides (nth (resolution-overrides resolution) index)]
         (if (= (moduleoverrides-module entry) module)
           (moduleoverrides-values entry)
-          (recur (+ index 1)))))))
+          (recur (+ index 1))))))))
 
-(defn validation-error-kind [error ValidationError] String
+(js/export
+  (defn validation-error-kind [error ValidationError] String
   (match error
     [(UnknownPlatform host platform hint) "unknown-platform"]
     [(UnknownTag host tag hint) "unknown-tag"]
     [(OptInMismatch host tag module hint) "opt-in-mismatch"]
-    [(UnknownDisabled host module hint) "unknown-disabled"]))
+    [(UnknownDisabled host module hint) "unknown-disabled"])))
 
-(defn validation-error-tag [error ValidationError] String
+(js/export
+  (defn validation-error-tag [error ValidationError] String
   (match error
     [(UnknownPlatform host platform hint) ""]
     [(UnknownTag host tag hint) tag]
     [(OptInMismatch host tag module hint) tag]
-    [(UnknownDisabled host module hint) ""]))
+    [(UnknownDisabled host module hint) ""])))
 
-(defn validation-error-module [error ValidationError] String
+(js/export
+  (defn validation-error-module [error ValidationError] String
   (match error
     [(UnknownPlatform host platform hint) ""]
     [(UnknownTag host tag hint) ""]
     [(OptInMismatch host tag module hint) module]
-    [(UnknownDisabled host module hint) module]))
+    [(UnknownDisabled host module hint) module])))
 
-(defn override-lines-for
+(js/export
+  (defn override-lines-for
   [resolution Resolution
    module String] (Vec String)
   (let [values (Vec OverrideValue) (overrides-for resolution module)]
@@ -439,9 +476,10 @@
           (recur (+ index 1)
             (conj result
               (str ":" (overridevalue-path entry) " (lib.mkDefault "
-                   (overridevalue-literal entry) ")"))))))))
+                   (overridevalue-literal entry) ")")))))))))
 
-(defn emission-lines [resolution Resolution] (Vec String)
+(js/export
+  (defn emission-lines [resolution Resolution] (Vec String)
   (loop [index Int 0
          result (Vec String) []]
     (if (>= index (count (resolution-active resolution)))
@@ -452,17 +490,19 @@
             (conj result
               (str ":myConfig.modules." module
                    ".enable (lib.mkDefault true)"))
-            (override-lines-for resolution module)))))))
+            (override-lines-for resolution module))))))))
 
-(defn join-emission-lines [lines (Vec String)] String
+(js/export
+  (defn join-emission-lines [lines (Vec String)] String
   (loop [index Int 0
          result String ""]
     (if (>= index (count lines))
       result
       (recur (+ index 1)
-        (str result (if (= index 0) "" "\n   ") (nth lines index))))))
+        (str result (if (= index 0) "" "\n   ") (nth lines index)))))))
 
-(defn emit-host-enables-bnix [resolution Resolution] String
+(js/export
+  (defn emit-host-enables-bnix [resolution Resolution] String
   (let [host String (resolution-host resolution)]
     (str
       "#lang beagle/nix\n\n"
@@ -472,4 +512,4 @@
       ";;   hosts/" host "/enabled-tags.bnix\n\n"
       "(ns _generated-enables)\n\n"
       "(nix/module [config lib pkgs ...]\n"
-      "  {" (join-emission-lines (emission-lines resolution)) "})\n")))
+      "  {" (join-emission-lines (emission-lines resolution)) "})\n"))))

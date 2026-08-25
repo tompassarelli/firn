@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.tag-resolve-driver-test
   (:require [firn.tag-resolve :as r]
             [firn.tag-resolve-driver :as d]))

@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.tag-inputs-test
   (:require [beagle.datum-reader :as reader]
             [native.json :as json]
