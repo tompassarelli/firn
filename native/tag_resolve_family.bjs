@@ -360,7 +360,8 @@
            (emit-io-error bridge
              (errno-message "cannot write" relative errno))))])))
 
-(defn run-action
+(js/export
+  (defn run-action
   [bridge Any
    root String
    host-names (Vec String)
@@ -391,7 +392,7 @@
               (driver/run-tag-resolve-action
                 (driver/->TagResolveRepositoryData modules hosts)
                 action)
-              0)]))])))
+              0)]))]))))
 
 (defn repository-root [bridge Any] (U String Nil)
   (let [explicit (U String Nil) (.env bridge "FIRN_REPO")]

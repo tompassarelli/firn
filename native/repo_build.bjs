@@ -1,36 +1,43 @@
 #lang beagle/js
 (ns firn.repo-build)
 
-(defrecord ModifiedTime
+(js/export
+  (defrecord ModifiedTime
   [seconds Int
-   nanoseconds Int])
+   nanoseconds Int]))
 
-(defrecord SourceKey
+(js/export
+  (defrecord SourceKey
   [relative String
-   modified-time ModifiedTime])
+   modified-time ModifiedTime]))
 
-(defrecord SourceState
+(js/export
+  (defrecord SourceState
   [key SourceKey
    output-relative String
-   output-modified-time (U ModifiedTime Nil)])
+   output-modified-time (U ModifiedTime Nil)]))
 
-(defrecord SourceInventory
+(js/export
+  (defrecord SourceInventory
   [sources (Vec SourceState)
-   obsolete-outputs (Vec String)])
+   obsolete-outputs (Vec String)]))
 
-(defrecord RepoBuildPlan
+(js/export
+  (defrecord RepoBuildPlan
   [stale-sources (Vec SourceState)
-   obsolete-outputs (Vec String)])
+   obsolete-outputs (Vec String)]))
 
-(defrecord CompilerProcess
+(js/export
+  (defrecord CompilerProcess
   [source-relative String
    destination-relative String
-   argv (Vec String)])
+   argv (Vec String)]))
 
-(defunion RepoBuildArgv
+(js/export
+  (defunion RepoBuildArgv
   (ParsedRepoBuild [token Bool])
   (OtherRepoBuildCommand [argv (Vec String)])
-  (InvalidRepoBuildArgv [argv (Vec String)]))
+  (InvalidRepoBuildArgv [argv (Vec String)])))
 
 (defn starts-with?
   [text String
@@ -47,10 +54,11 @@
 (defn root-result-path? [relative String] Bool
   (starts-with? relative "result"))
 
-(defn traversal-excluded? [relative String] Bool
+(js/export
+  (defn traversal-excluded? [relative String] Bool
   (or (= relative ".direnv")
       (starts-with? relative ".direnv/")
-      (root-result-path? relative)))
+      (root-result-path? relative))))
 
 (defn source-excluded? [relative String] Bool
   (or (traversal-excluded? relative)
@@ -65,17 +73,20 @@
       (= relative "responsibilities.bnix")
       (ends-with? relative "/responsibilities.bnix")))
 
-(defn source-path? [relative String] Bool
+(js/export
+  (defn source-path? [relative String] Bool
   (and (ends-with? relative ".bnix")
-       (not (source-excluded? relative))))
+       (not (source-excluded? relative)))))
 
-(defn obsolete-output-path? [relative String] Bool
+(js/export
+  (defn obsolete-output-path? [relative String] Bool
   (and (not (traversal-excluded? relative))
        (or (= relative "enabled-tags.nix")
-           (ends-with? relative "/enabled-tags.nix"))))
+           (ends-with? relative "/enabled-tags.nix")))))
 
-(defn output-relative [source-relative String] String
-  (str (subs source-relative 0 (- (count source-relative) 5)) ".nix"))
+(js/export
+  (defn output-relative [source-relative String] String
+    (str (subs source-relative 0 (- (count source-relative) 5)) ".nix")))
 
 (defn cache-valid? [state SourceState] Bool
   (let [output (U ModifiedTime Nil) (sourcestate-output-modified-time state)]
@@ -100,17 +111,19 @@
       (stale-sources sources (+ index 1)
         (if (cache-valid? state) result (conj result state))))))
 
-(defn build-plan [inventory SourceInventory] RepoBuildPlan
+(js/export
+  (defn build-plan [inventory SourceInventory] RepoBuildPlan
   (->RepoBuildPlan
     (stale-sources (sourceinventory-sources inventory) 0 [])
-    (sourceinventory-obsolete-outputs inventory)))
+    (sourceinventory-obsolete-outputs inventory))))
 
 (defn absolute-path
   [root String
    relative String] String
   (str root "/" relative))
 
-(defn compiler-process
+(js/export
+  (defn compiler-process
   [compiler String
    root String
    state SourceState
@@ -118,9 +131,10 @@
   (let [source-relative String (sourcekey-relative (sourcestate-key state))
         destination-relative String (sourcestate-output-relative state)]
     (->CompilerProcess source-relative destination-relative
-      [compiler (absolute-path root source-relative) temporary])))
+      [compiler (absolute-path root source-relative) temporary]))))
 
-(defn parse-repo-build-argv [argv (Vec String)] RepoBuildArgv
+(js/export
+  (defn parse-repo-build-argv [argv (Vec String)] RepoBuildArgv
   (if (and (>= (count argv) 2)
            (= (nth argv 0) "repo")
            (= (nth argv 1) "build"))
@@ -129,7 +143,7 @@
       [(and (= (count argv) 3) (= (nth argv 2) "all"))
        (->ParsedRepoBuild true)]
       [:else (->InvalidRepoBuildArgv argv)])
-    (->OtherRepoBuildCommand argv)))
+    (->OtherRepoBuildCommand argv))))
 
 (defn horizontal-space? [character String] Bool
   (or (= character " ") (= character "\t")))
@@ -223,7 +237,8 @@
         next
         (recur next next-depth)))))
 
-(defn strip-authoring-attributes [text String] String
+(js/export
+  (defn strip-authoring-attributes [text String] String
   (loop [cursor Int 0
          result String ""]
     (if (>= cursor (count text))
@@ -233,22 +248,25 @@
         (cond
           [(= kind 1) (recur next result)]
           [(= kind 2) (recur (after-brace-block text cursor) result)]
-          [:else (recur next (str result (subs text cursor next)))])))))
+          [:else (recur next (str result (subs text cursor next)))]))))))
 
-(defn errno-message
+(js/export
+  (defn errno-message
   [operation String
    relative String
    errno Int] String
-  (str "firn-build: " operation " '" relative "': errno " errno "\n"))
+  (str "firn-build: " operation " '" relative "': errno " errno "\n")))
 
-(defn compiler-failure-message
+(js/export
+  (defn compiler-failure-message
   [relative String
    status Int] String
   (str "firn-build: compiler failed for '" relative
-    "' with status " status "\n"))
+    "' with status " status "\n")))
 
-(defn compiler-spawn-message
+(js/export
+  (defn compiler-spawn-message
   [relative String
    errno Int] String
   (str "firn-build: cannot start compiler for '" relative
-    "': errno " errno "\n"))
+    "': errno " errno "\n")))
