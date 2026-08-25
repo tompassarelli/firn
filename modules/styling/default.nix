@@ -1,7 +1,6 @@
 { config, lib, pkgs, ... }:
 
 ((username: ((chosenTheme: ((schemeFile: ((schemeYaml: ((variant: {
-  tags = [ theming ];
   options.myConfig.modules.styling.enable = lib.mkEnableOption "system-wide theming and styling";
   config = lib.mkIf config.myConfig.modules.styling.enable {
     stylix = {
