@@ -1,0 +1,56 @@
+#lang beagle
+(ns firn.responsibility-projection-test
+  (:require [firn.responsibility-projection :as projection]
+            [store.types :as t]))
+
+(def source String
+  (str
+    "#lang beagle/nix\n"
+    "(ns responsibilities)\n"
+    "(def machine-responsibility-triples Any\n"
+    "  [[:member_of :member_of :relationships]\n"
+    "   [:has_responsibility :member_of :relationships]\n"
+    "   [:depends_on :member_of :relationships]\n"
+    "   [:requires_capability :member_of :relationships]\n"
+    "   [:provides_capability :member_of :relationships]\n"
+    "   [:requires_software :member_of :relationships]\n"
+    "   [:is_realized_by :member_of :relationships]\n"
+    "   [:is_realized_in :member_of :relationships]\n"
+    "   [:has_criticality :member_of :relationships]\n"
+    "   [:must_realize :member_of :relationships]\n"
+    "   [:whiterabbit :has_responsibility :creative-workstation]\n"
+    "   [:creative-workstation :depends_on :three-d-workflow]\n"
+    "   [:creative-workstation :depends_on :notes-workflow]\n"
+    "   [:three-d-workflow :requires_capability :three-d-authoring]\n"
+    "   [:notes-workflow :requires_capability :knowledge-authoring]\n"
+    "   [:three-d-workflow :requires_software :blender]\n"
+    "   [:notes-workflow :requires_software :obsidian]\n"
+    "   [:blender :provides_capability :three-d-authoring]\n"
+    "   [:obsidian :provides_capability :knowledge-authoring]\n"
+    "   [:blender :is_realized_by :blender-module]\n"
+    "   [:obsidian :is_realized_by :obsidian-module]\n"
+    "   [:three-d-workflow :is_realized_in :environment]\n"
+    "   [:notes-workflow :is_realized_in :environment]\n"
+    "   [:three-d-workflow :has_criticality :interactive]\n"
+    "   [:notes-workflow :has_criticality :interactive]])\n"))
+
+(defn expected-obligations [] (Vec t/Triple)
+  [(t/triple :whiterabbit :must_realize :blender)
+   (t/triple :whiterabbit :must_realize :obsidian)])
+
+(defn projection-behavior? [] Bool
+  (match (projection/project-source source)
+    [(ProjectionRejected message offset) false]
+    [(ProjectionParsed propositions)
+     (let [explanations (Vec projection/RealizationExplanation)
+           (projection/explain-machine propositions :whiterabbit)]
+       (and (= (projection/realization-obligations
+                 propositions :whiterabbit)
+               (expected-obligations))
+            (and (= 2 (count explanations))
+                 (empty?
+                   (projection/uncovered-capabilities
+                     propositions :whiterabbit)))))]))
+
+(defn -main [(args (Vec String))] Int
+  (if (projection-behavior?) 0 1))

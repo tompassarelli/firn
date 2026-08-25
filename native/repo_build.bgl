@@ -57,7 +57,9 @@
       (= relative "docs/fixtures")
       (starts-with? relative "docs/fixtures/")
       (= relative "enabled-tags.bnix")
-      (ends-with? relative "/enabled-tags.bnix")))
+      (ends-with? relative "/enabled-tags.bnix")
+      (= relative "responsibilities.bnix")
+      (ends-with? relative "/responsibilities.bnix")))
 
 (defn source-path? [relative String] Bool
   (and (ends-with? relative ".bnix")

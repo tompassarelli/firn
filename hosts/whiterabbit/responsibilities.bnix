@@ -1,0 +1,46 @@
+#lang beagle/nix
+
+(ns responsibilities)
+
+;; Desired-state authority stays here. Native Firn projects these canonical
+;; relationships to Store Triples; it does not recover meaning from Atom names.
+(def machine-responsibility-triples Any
+  [[:member_of :member_of :relationships]
+   [:has_responsibility :member_of :relationships]
+   [:depends_on :member_of :relationships]
+   [:requires_capability :member_of :relationships]
+   [:provides_capability :member_of :relationships]
+   [:requires_software :member_of :relationships]
+   [:is_realized_by :member_of :relationships]
+   [:is_realized_in :member_of :relationships]
+   [:has_criticality :member_of :relationships]
+   [:must_realize :member_of :relationships]
+
+   [:whiterabbit :member_of :machines]
+   [:creative-workstation :member_of :responsibilities]
+   [:three-d-authoring-workflow :member_of :responsibilities]
+   [:knowledge-authoring-workflow :member_of :responsibilities]
+   [:three-d-authoring :member_of :capabilities]
+   [:knowledge-authoring :member_of :capabilities]
+   [:blender :member_of :software-units]
+   [:obsidian :member_of :software-units]
+   [:blender-module :member_of :firn-modules]
+   [:obsidian-module :member_of :firn-modules]
+   [:environment :member_of :realization-domains]
+   [:interactive :member_of :criticalities]
+
+   [:whiterabbit :has_responsibility :creative-workstation]
+   [:creative-workstation :depends_on :three-d-authoring-workflow]
+   [:creative-workstation :depends_on :knowledge-authoring-workflow]
+   [:three-d-authoring-workflow :requires_capability :three-d-authoring]
+   [:knowledge-authoring-workflow :requires_capability :knowledge-authoring]
+   [:three-d-authoring-workflow :requires_software :blender]
+   [:knowledge-authoring-workflow :requires_software :obsidian]
+   [:blender :provides_capability :three-d-authoring]
+   [:obsidian :provides_capability :knowledge-authoring]
+   [:blender :is_realized_by :blender-module]
+   [:obsidian :is_realized_by :obsidian-module]
+   [:three-d-authoring-workflow :is_realized_in :environment]
+   [:knowledge-authoring-workflow :is_realized_in :environment]
+   [:three-d-authoring-workflow :has_criticality :interactive]
+   [:knowledge-authoring-workflow :has_criticality :interactive]])

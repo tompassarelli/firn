@@ -17,6 +17,7 @@
        ".git/worktrees/lane/config.bnix"
        ".firn-build/generated.bnix"
        "hosts/alpha/enabled-tags.bnix"
+       "hosts/alpha/responsibilities.bnix"
        "modules/alpha/default.bnix"
        "modules/alpha/default.nix"
        "nested/scripts-like/default.bnix"])

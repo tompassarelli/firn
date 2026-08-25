@@ -31,6 +31,7 @@
       (not (build/source-path? "tests/fixture.bnix"))
       (not (build/source-path? "docs/fixtures/example.bnix"))
       (not (build/source-path? "hosts/alpha/enabled-tags.bnix"))
+      (not (build/source-path? "hosts/alpha/responsibilities.bnix"))
       (not (build/source-path? "result-old/module.bnix"))
       (not (build/source-path? ".direnv/cache/module.bnix"))
       (build/obsolete-output-path? "hosts/alpha/enabled-tags.nix")

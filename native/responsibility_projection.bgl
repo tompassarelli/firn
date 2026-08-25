@@ -1,0 +1,304 @@
+#lang beagle
+(ns firn.responsibility-projection
+  (:require [beagle.datum-reader :as reader]
+            [firn.tag-inputs :as input]
+            [store.types :as t]))
+
+(def member-of Keyword :member_of)
+(def relationships Keyword :relationships)
+(def has-responsibility Keyword :has_responsibility)
+(def depends-on Keyword :depends_on)
+(def requires-capability Keyword :requires_capability)
+(def provides-capability Keyword :provides_capability)
+(def requires-software Keyword :requires_software)
+(def is-realized-by Keyword :is_realized_by)
+(def is-realized-in Keyword :is_realized_in)
+(def has-criticality Keyword :has_criticality)
+(def must-realize Keyword :must_realize)
+
+(defrecord TripleScan
+  [ok Bool
+   value t/Triple?
+   message String
+   offset Int])
+
+(defunion ProjectionResult
+  (ProjectionParsed [propositions (Vec t/Triple)])
+  (ProjectionRejected [message String offset Int]))
+
+(defrecord RealizationExplanation
+  [machine Keyword
+   responsibility Keyword
+   software Keyword
+   module Keyword?
+   capabilities (Vec Keyword)
+   domain Keyword?
+   criticality Keyword?])
+
+(defn keyword-at
+  [events (Vec reader/ReaderEvent)
+   index Int] Keyword?
+  (if (or (< index 0) (>= index (count events)))
+    nil
+    (let [event reader/ReaderEvent (nth events index)]
+      (if (and (= :keyword (reader/readerevent-kind event))
+               (= (+ index 1) (input/datum-end events index)))
+        (keyword
+          (subs (reader/readerevent-value event)
+                1
+                (count (reader/readerevent-value event))))
+        nil))))
+
+(defn read-triple
+  [events (Vec reader/ReaderEvent)
+   start Int] TripleScan
+  (if (or (< start 0)
+          (>= start (count events))
+          (not= :vector/open
+                (reader/readerevent-kind (nth events start)))
+          (not= 3 (input/container-child-count events start)))
+    (->TripleScan false nil "each proposition must be a three-Term vector"
+                  (input/event-offset events start))
+    (let [t1 Keyword? (keyword-at events
+                        (input/container-child-start events start 0))
+          t2 Keyword? (keyword-at events
+                        (input/container-child-start events start 1))
+          t3 Keyword? (keyword-at events
+                        (input/container-child-start events start 2))]
+      (if (and (some? t1) (and (some? t2) (some? t3)))
+        (let [subject Keyword t1
+              relation Keyword t2
+              object Keyword t3]
+          (->TripleScan true (t/triple subject relation object) "" -1))
+        (->TripleScan false nil
+          "responsibility propositions currently admit Keyword Atoms only"
+          (input/event-offset events start))))))
+
+(defn relationship-declared?
+  [propositions (Vec t/Triple)
+   relation Any] Bool
+  (some?
+    (some
+      (fn [proposition t/Triple] t/Triple?
+        (if (and (= relation (t/triple-t1 proposition))
+                 (and (= member-of (t/triple-t2 proposition))
+                      (= relationships (t/triple-t3 proposition))))
+          proposition
+          nil))
+      propositions)))
+
+(defn fact-normal-form?
+  [propositions (Vec t/Triple)] Bool
+  (and
+    (relationship-declared? propositions member-of)
+    (every?
+      (fn [proposition t/Triple] Bool
+        (relationship-declared? propositions (t/triple-t2 proposition)))
+      propositions)))
+
+(defn read-proposition-vector
+  [events (Vec reader/ReaderEvent)
+   start Int] ProjectionResult
+  (if (or (< start 0)
+          (>= start (count events))
+          (not= :vector/open
+                (reader/readerevent-kind (nth events start))))
+    (->ProjectionRejected
+      "machine-responsibility-triples must be a vector"
+      (input/event-offset events start))
+    (let [end Int (input/datum-end events start)]
+      (loop [cursor Int (+ start 1)
+             propositions (Vec t/Triple) []]
+        (if (= cursor (- end 1))
+          (if (fact-normal-form? propositions)
+            (->ProjectionParsed propositions)
+            (->ProjectionRejected
+              "every predicate must have an explicit relationship membership Triple"
+              (input/event-offset events start)))
+          (let [scan TripleScan (read-triple events cursor)]
+            (if (triplescan-ok scan)
+              (let [value t/Triple? (triplescan-value scan)]
+                (if (some? value)
+                  (let [proposition t/Triple value]
+                    (recur (input/datum-end events cursor)
+                           (conj propositions proposition)))
+                  (->ProjectionRejected "missing projected Triple"
+                                        (input/event-offset events cursor))))
+              (->ProjectionRejected (triplescan-message scan)
+                                    (triplescan-offset scan)))))))))
+
+(defn project-source [source String] ProjectionResult
+  (let [read reader/DatumRead (reader/read-events source)
+        read-error String? (reader/datumread-error read)]
+    (if (some? read-error)
+      (->ProjectionRejected read-error (reader/datumread-error-offset read))
+      (let [events (Vec reader/ReaderEvent) (reader/datumread-events read)
+            form input/SpanScan (input/find-top-level-form events "def")]
+        (cond
+          (not (input/spanscan-ok form))
+          (->ProjectionRejected (input/spanscan-message form)
+                                (input/spanscan-offset form))
+
+          (not (input/spanscan-found form))
+          (->ProjectionRejected "missing machine-responsibility-triples def" -1)
+
+          (not= 4
+                (input/container-child-count events
+                  (input/spanscan-start form)))
+          (->ProjectionRejected
+            "machine-responsibility-triples def requires a type and value"
+            (input/spanscan-offset form))
+
+          (not (input/symbol-at? events
+                 (input/container-child-start events
+                   (input/spanscan-start form) 1)
+                 "machine-responsibility-triples"))
+          (->ProjectionRejected "unexpected desired-state def" -1)
+
+          :else
+          (read-proposition-vector
+            events
+            (input/container-child-start events
+              (input/spanscan-start form) 3)))))))
+
+(defn append-keyword
+  [values (Vec Keyword)
+   candidate Keyword] (Vec Keyword)
+  (if (some?
+        (some
+          (fn [value Keyword] Keyword?
+            (if (= value candidate) value nil))
+          values))
+    values
+    (conj values candidate)))
+
+(defn union-keywords
+  [left (Vec Keyword)
+   right (Vec Keyword)] (Vec Keyword)
+  (reduce
+    (fn [values (Vec Keyword) candidate Keyword] (Vec Keyword)
+      (append-keyword values candidate))
+    left
+    right))
+
+(defn objects
+  [propositions (Vec t/Triple)
+   subject Keyword
+   relation Keyword] (Vec Keyword)
+  (reduce
+    (fn [values (Vec Keyword) proposition t/Triple] (Vec Keyword)
+      (let [object Any (t/triple-t3 proposition)]
+        (if (and (= subject (t/triple-t1 proposition))
+                 (and (= relation (t/triple-t2 proposition))
+                      (keyword? object)))
+          (append-keyword values object)
+          values)))
+    []
+    propositions))
+
+(defn first-object
+  [propositions (Vec t/Triple)
+   subject Keyword
+   relation Keyword] Keyword?
+  (let [values (Vec Keyword) (objects propositions subject relation)]
+    (if (empty? values) nil (first values))))
+
+(defn dependency-closure
+  [propositions (Vec t/Triple)
+   seeds (Vec Keyword)] (Vec Keyword)
+  (loop [cursor Int 0
+         reached (Vec Keyword) seeds]
+    (if (>= cursor (count reached))
+      reached
+      (recur (+ cursor 1)
+        (union-keywords
+          reached
+          (objects propositions (nth reached cursor) depends-on))))))
+
+(defn responsibilities-for
+  [propositions (Vec t/Triple)
+   machine Keyword] (Vec Keyword)
+  (dependency-closure propositions
+    (objects propositions machine has-responsibility)))
+
+(defn explanation-for-software
+  [propositions (Vec t/Triple)
+   machine Keyword
+   responsibility Keyword
+   software Keyword] RealizationExplanation
+  (->RealizationExplanation
+    machine
+    responsibility
+    software
+    (first-object propositions software is-realized-by)
+    (objects propositions software provides-capability)
+    (first-object propositions responsibility is-realized-in)
+    (first-object propositions responsibility has-criticality)))
+
+(defn explain-machine
+  [propositions (Vec t/Triple)
+   machine Keyword] (Vec RealizationExplanation)
+  (reduce
+    (fn [explanations (Vec RealizationExplanation)
+         responsibility Keyword] (Vec RealizationExplanation)
+      (reduce
+        (fn [current (Vec RealizationExplanation)
+             software Keyword] (Vec RealizationExplanation)
+          (conj current
+            (explanation-for-software
+              propositions machine responsibility software)))
+        explanations
+        (dependency-closure propositions
+          (objects propositions responsibility requires-software))))
+    []
+    (responsibilities-for propositions machine)))
+
+(defn realization-obligations
+  [propositions (Vec t/Triple)
+   machine Keyword] (Vec t/Triple)
+  (reduce
+    (fn [obligations (Vec t/Triple)
+         explanation RealizationExplanation] (Vec t/Triple)
+      (let [candidate t/Triple
+            (t/triple machine must-realize
+              (realizationexplanation-software explanation))]
+        (if (some?
+              (some
+                (fn [existing t/Triple] t/Triple?
+                  (if (= existing candidate) existing nil))
+                obligations))
+          obligations
+          (conj obligations candidate))))
+    []
+    (explain-machine propositions machine)))
+
+(defn uncovered-capabilities
+  [propositions (Vec t/Triple)
+   machine Keyword] (Vec Keyword)
+  (reduce
+    (fn [missing (Vec Keyword) responsibility Keyword] (Vec Keyword)
+      (let [required (Vec Keyword)
+            (objects propositions responsibility requires-capability)
+            software (Vec Keyword)
+            (dependency-closure propositions
+              (objects propositions responsibility requires-software))
+            provided (Vec Keyword)
+            (reduce
+              (fn [capabilities (Vec Keyword) item Keyword] (Vec Keyword)
+                (union-keywords capabilities
+                  (objects propositions item provides-capability)))
+              []
+              software)]
+        (reduce
+          (fn [result (Vec Keyword) capability Keyword] (Vec Keyword)
+            (if (some?
+                  (some
+                    (fn [candidate Keyword] Keyword?
+                      (if (= capability candidate) candidate nil))
+                    provided))
+              result
+              (append-keyword result capability)))
+          missing
+          required)))
+    []
+    (responsibilities-for propositions machine)))
