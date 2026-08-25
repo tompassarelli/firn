@@ -1,12 +1,14 @@
 { config, lib, pkgs, ... }:
 
 ((username: ((chosenTheme: ((schemeFile: ((schemeYaml: ((variant: {
+  tags = [ theming ];
   options.myConfig.modules.styling.enable = lib.mkEnableOption "system-wide theming and styling";
   config = lib.mkIf config.myConfig.modules.styling.enable {
     stylix = {
       enable = true;
       base16Scheme = schemeFile;
       polarity = variant;
+      targets.nixos-icons.enable = false;
       fonts = {
         monospace = {
           package = pkgs.commit-mono;

@@ -26,6 +26,7 @@
           {:enable       true
            :base16Scheme schemeFile
            :polarity     variant
+           :targets.nixos-icons.enable false
            :fonts
             {:monospace {:package pkgs.commit-mono :name "CommitMono"}
              :sansSerif {:package pkgs.dejavu_fonts :name "DejaVu Sans"}
