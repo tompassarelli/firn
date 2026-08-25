@@ -1,7 +1,6 @@
 { config, lib, pkgs, ... }:
 
 ((username: {
-  tags = [ vpn ];
   options.myConfig.modules.wireguard.enable = lib.mkEnableOption "WireGuard VPN support";
   config = lib.mkIf config.myConfig.modules.wireguard.enable {
     security.sudo.extraRules = [

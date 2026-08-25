@@ -1,7 +1,6 @@
 { config, lib, pkgs, ... }:
 
 {
-  tags = [ vpn ];
   options.myConfig.modules.protonvpn-gui.enable = lib.mkEnableOption "ProtonVPN GUI client";
   config = lib.mkIf config.myConfig.modules.protonvpn-gui.enable {
     environment.systemPackages = [ pkgs.unstable.proton-vpn ];
