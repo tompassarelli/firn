@@ -7,6 +7,16 @@ scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-family-runtime-test.XXXXXX")"
 cleanup() { rm -rf -- "${scratch:?}"; }
 trap cleanup EXIT
 
+candidate_beagle="${BEAGLE_PATH:?set BEAGLE_PATH to the exact Beagle candidate}"
+real_runtime="$scratch/real-runtime"
+FIRN_REPO="$source_repo" BEAGLE_PATH="$candidate_beagle" \
+  FIRN_RUNTIME_ROOT="$real_runtime" \
+  "$here/firn-runtime-update" >"$scratch/real-update.out"
+FIRN_REPO="$source_repo" BEAGLE_PATH="$candidate_beagle" \
+  FIRN_RUNTIME_ROOT="$real_runtime" \
+  "$here/firn" host list all >"$scratch/real-hosts.out"
+grep -Fxq whiterabbit "$scratch/real-hosts.out"
+
 home="$scratch/home"
 beagle_path="$scratch/beagle-alt"
 firn_repo="$scratch/firn-alt"
