@@ -10,7 +10,32 @@ command -v nix >/dev/null 2>&1 || {
 
 mkdir -p "$(dirname "$profile")"
 if [[ -x "$profile/bin/bb" ]]; then
-  nix profile upgrade --profile "$profile" babashka
+  if grep -Eq '"babashka"[[:space:]]*:[[:space:]]*\{[^}]*"originalUrl"' \
+    "$profile/manifest.json"; then
+    nix profile upgrade --profile "$profile" babashka
+  else
+    profile_name="${profile##*/}"
+    previous_link="$(readlink "$profile")"
+    previous_version="${previous_link#"$profile_name-"}"
+    previous_version="${previous_version%-link}"
+    case "$previous_version" in
+      ''|*[!0-9]*)
+        printf 'bb-runtime-update: cannot identify current profile generation: %s\n' \
+          "$previous_link" >&2
+        exit 1
+        ;;
+    esac
+
+    restore_previous() {
+      if [[ "$(readlink "$profile")" != "$previous_link" ]]; then
+        nix profile rollback --profile "$profile" --to "$previous_version"
+      fi
+    }
+    trap restore_previous EXIT INT TERM HUP
+    nix profile remove --profile "$profile" babashka
+    nix profile add --profile "$profile" nixpkgs#babashka
+    trap - EXIT INT TERM HUP
+  fi
 else
   nix profile add --profile "$profile" nixpkgs#babashka
 fi
