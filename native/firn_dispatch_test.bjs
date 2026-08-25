@@ -1,10 +1,51 @@
 #lang beagle/js
 (ns firn.dispatch-test
-  (:require [firn.main :as firn]))
+  (:require [firn.main
+             :as firn
+             :refer
+             [->NativeCiPolicyFamily
+              ->CommandFound
+              ->CommandMissing
+              ->CurrentHostDefault
+              ->CurrentHostLeaf
+              ->DefaultLeaf
+              ->DispatchError
+              ->DispatchHelp
+              ->DispatchPlanned
+              ->ExplicitLeaf
+              ->LiteralLeaf
+              ->RequiredLeaf
+              command-count
+              command-groups
+              commandgroup-commands
+              dispatchplan-steps
+              dispatchstep-command
+              dispatchstep-leaf
+              find-command
+              firncommand-default-leaf
+              firncommand-edge
+              firncommand-node
+              firncommand-owner
+              firncommand-summary
+              full-help-text
+              incomplete-walk-text
+              node-help-text
+              parse-dispatch
+              secret-edit
+              unknown-walk-text]]))
 
 (defrecord TestResult
   [name String
    passed Bool])
+
+(defn lookup-command
+  [node String
+   edge String] firn/CommandLookup
+  (find-command node edge))
+
+(defn dispatch-decision
+  [args (Vec String)] firn/DispatchDecision
+  (parse-dispatch args))
 
 (defn family-name [family firn/CommandFamily] String
   (match family
@@ -23,9 +64,9 @@
   [node String
    edge String]
   String
-  (match (firn/find-command node edge)
+  (match (lookup-command node edge)
     [(CommandFound command)
-     (family-name (firn/firncommand-owner command))]
+     (family-name (firncommand-owner command))]
     [(CommandMissing token) "missing"]))
 
 (defn leaf-kind [leaf firn/DispatchLeaf] String
@@ -91,7 +132,7 @@
 
 (defn case-registry-and-owners [] Bool
   (and
-    (= (firn/command-count) 46)
+    (= (command-count) 46)
     (= (owner-name "tag" "resolve") "tag")
     (= (owner-name "flake-input" "resolve") "flake-input")
     (= (owner-name "module" "refs") "inventory")
@@ -104,135 +145,135 @@
     (= (owner-name "host" "prepare") "rebuild")
     (= (owner-name "host" "activate") "rebuild")
     (= (owner-name "host" "rollback") "rebuild")
-    (= (family-name (firn/->NativeCiPolicyFamily false)) "ci-policy")
+    (= (family-name (->NativeCiPolicyFamily false)) "ci-policy")
     (= (owner-name "repo" "missing") "missing")
-    (= (firn/firncommand-summary firn/secret-edit)
+    (= (firncommand-summary secret-edit)
        "open an existing secret in $EDITOR via sops")))
 
 (defn case-defaults [] Bool
   (and
-    (match (firn/parse-dispatch ["repo" "upgrade"])
+    (match (dispatch-decision ["repo" "upgrade"])
       [(DispatchPlanned plan)
        (let [(steps (Vec firn/DispatchStep))
-             (firn/dispatchplan-steps plan)
+             (dispatchplan-steps plan)
              (step firn/DispatchStep) (nth steps 0)]
          (and (= (count steps) 1)
-              (= (command-name (firn/dispatchstep-command step))
+              (= (command-name (dispatchstep-command step))
                  "repo-upgrade")
-              (= (leaf-kind (firn/dispatchstep-leaf step)) "default")
-              (= (leaf-value (firn/dispatchstep-leaf step)) "now")))]
+              (= (leaf-kind (dispatchstep-leaf step)) "default")
+              (= (leaf-value (dispatchstep-leaf step)) "now")))]
       [(DispatchHelp text status) false]
       [(DispatchError text status) false])
-    (match (firn/parse-dispatch ["flake-input" "resolve"])
+    (match (dispatch-decision ["flake-input" "resolve"])
       [(DispatchPlanned plan)
        (= (leaf-value
-            (firn/dispatchstep-leaf
-              (nth (firn/dispatchplan-steps plan) 0)))
+            (dispatchstep-leaf
+              (nth (dispatchplan-steps plan) 0)))
           "emit")]
       [(DispatchHelp text status) false]
       [(DispatchError text status) false])
-    (match (firn/parse-dispatch ["host" "status"])
+    (match (dispatch-decision ["host" "status"])
       [(DispatchPlanned plan)
        (= (leaf-kind
-            (firn/dispatchstep-leaf
-              (nth (firn/dispatchplan-steps plan) 0)))
+            (dispatchstep-leaf
+              (nth (dispatchplan-steps plan) 0)))
           "current-host")]
       [(DispatchHelp text status) false]
       [(DispatchError text status) false])
-    (match (firn/parse-dispatch ["tag" "index"])
+    (match (dispatch-decision ["tag" "index"])
       [(DispatchPlanned plan)
        (= (leaf-value
-            (firn/dispatchstep-leaf
-              (nth (firn/dispatchplan-steps plan) 0)))
+            (dispatchstep-leaf
+              (nth (dispatchplan-steps plan) 0)))
           "repo")]
       [(DispatchHelp text status) false]
       [(DispatchError text status) false])))
 
 (defn case-chained-walk [] Bool
   (match
-    (firn/parse-dispatch
+    (dispatch-decision
       ["repo" "build"
        "repo" "validate"
        "tag" "enable" "terminal"
        "module" "list" "used"])
     [(DispatchPlanned plan)
-     (let [(steps (Vec firn/DispatchStep)) (firn/dispatchplan-steps plan)
+     (let [(steps (Vec firn/DispatchStep)) (dispatchplan-steps plan)
            (build firn/DispatchStep) (nth steps 0)
            (validate firn/DispatchStep) (nth steps 1)
            (enable firn/DispatchStep) (nth steps 2)
            (listing firn/DispatchStep) (nth steps 3)]
        (and
          (= (count steps) 4)
-         (= (command-name (firn/dispatchstep-command build)) "repo-build")
-         (= (leaf-value (firn/dispatchstep-leaf build)) "all")
-         (= (command-name (firn/dispatchstep-command validate))
+         (= (command-name (dispatchstep-command build)) "repo-build")
+         (= (leaf-value (dispatchstep-leaf build)) "all")
+         (= (command-name (dispatchstep-command validate))
             "repo-validate")
-         (= (leaf-value (firn/dispatchstep-leaf validate)) "all")
-         (= (command-name (firn/dispatchstep-command enable)) "tag-enable")
-         (= (leaf-kind (firn/dispatchstep-leaf enable)) "explicit")
-         (= (leaf-value (firn/dispatchstep-leaf enable)) "terminal")
-         (= (command-name (firn/dispatchstep-command listing)) "module-list")
-         (= (leaf-kind (firn/dispatchstep-leaf listing)) "explicit")
-         (= (leaf-value (firn/dispatchstep-leaf listing)) "used")))]
+         (= (leaf-value (dispatchstep-leaf validate)) "all")
+         (= (command-name (dispatchstep-command enable)) "tag-enable")
+         (= (leaf-kind (dispatchstep-leaf enable)) "explicit")
+         (= (leaf-value (dispatchstep-leaf enable)) "terminal")
+         (= (command-name (dispatchstep-command listing)) "module-list")
+         (= (leaf-kind (dispatchstep-leaf listing)) "explicit")
+         (= (leaf-value (dispatchstep-leaf listing)) "used")))]
     [(DispatchHelp text status) false]
     [(DispatchError text status) false]))
 
 (defn case-aliases-and-help [] Bool
   (and
-    (match (firn/parse-dispatch ["rebuild"])
+    (match (dispatch-decision ["rebuild"])
       [(DispatchPlanned plan)
        (let [(step firn/DispatchStep)
-             (nth (firn/dispatchplan-steps plan) 0)]
-         (and (= (command-name (firn/dispatchstep-command step))
+             (nth (dispatchplan-steps plan) 0)]
+         (and (= (command-name (dispatchstep-command step))
                  "host-rebuild")
-              (= (leaf-kind (firn/dispatchstep-leaf step))
+              (= (leaf-kind (dispatchstep-leaf step))
                  "current-host")))]
       [(DispatchHelp text status) false]
       [(DispatchError text status) false])
-    (match (firn/parse-dispatch ["rebuild" "whiterabbit"])
+    (match (dispatch-decision ["rebuild" "whiterabbit"])
       [(DispatchPlanned plan)
        (let [(leaf firn/DispatchLeaf)
-             (firn/dispatchstep-leaf
-               (nth (firn/dispatchplan-steps plan) 0))]
+             (dispatchstep-leaf
+               (nth (dispatchplan-steps plan) 0))]
          (and (= (leaf-kind leaf) "explicit")
               (= (leaf-value leaf) "whiterabbit")))]
       [(DispatchHelp text status) false]
       [(DispatchError text status) false])
-    (match (firn/parse-dispatch ["rebuild" "--bad"])
+    (match (dispatch-decision ["rebuild" "--bad"])
       [(DispatchPlanned plan) false]
       [(DispatchHelp text status) false]
       [(DispatchError text status)
        (and (= status 1) (= text "Usage: firn rebuild [host]\n"))])
-    (match (firn/parse-dispatch ["rollback" "40"])
+    (match (dispatch-decision ["rollback" "40"])
       [(DispatchPlanned plan)
        (let [(step firn/DispatchStep)
-             (nth (firn/dispatchplan-steps plan) 0)]
-         (and (= (command-name (firn/dispatchstep-command step))
+             (nth (dispatchplan-steps plan) 0)]
+         (and (= (command-name (dispatchstep-command step))
                  "host-rollback")
-              (= (leaf-kind (firn/dispatchstep-leaf step)) "explicit")
-              (= (leaf-value (firn/dispatchstep-leaf step)) "40")))]
+              (= (leaf-kind (dispatchstep-leaf step)) "explicit")
+              (= (leaf-value (dispatchstep-leaf step)) "40")))]
       [(DispatchHelp text status) false]
       [(DispatchError text status) false])
-    (match (firn/parse-dispatch ["rollback"])
+    (match (dispatch-decision ["rollback"])
       [(DispatchPlanned plan) false]
       [(DispatchHelp text status) false]
       [(DispatchError text status)
        (and (= status 1)
             (= text "Usage: firn rollback <generation>\n"))])
-    (match (firn/parse-dispatch ["--help" "ignored"])
+    (match (dispatch-decision ["--help" "ignored"])
       [(DispatchPlanned plan) false]
       [(DispatchHelp text status)
-       (and (= status 0) (= text (firn/full-help-text)))]
+       (and (= status 0) (= text (full-help-text)))]
       [(DispatchError text status) false])
-    (match (firn/parse-dispatch ["repo"])
+    (match (dispatch-decision ["repo"])
       [(DispatchPlanned plan) false]
       [(DispatchHelp text status)
-       (and (= status 0) (= text (firn/node-help-text "repo")))]
+       (and (= status 0) (= text (node-help-text "repo")))]
       [(DispatchError text status) false])))
 
 (defn case-errors [] Bool
   (and
-    (match (firn/parse-dispatch ["tag" "enable"])
+    (match (dispatch-decision ["tag" "enable"])
       [(DispatchPlanned plan) false]
       [(DispatchHelp text status) false]
       [(DispatchError text status)
@@ -241,18 +282,18 @@
                (str "firn: 'tag enable' requires a leaf node\n"
                  "Usage: firn tag enable <tag>\n"
                  "  enable a tag in the current host's enabled-tags.bnix\n")))])
-    (match (firn/parse-dispatch ["repo" "missing"])
+    (match (dispatch-decision ["repo" "missing"])
       [(DispatchPlanned plan) false]
       [(DispatchHelp text status) false]
       [(DispatchError text status)
        (and (= status 1)
-            (= text (firn/unknown-walk-text "repo" "missing")))])
-    (match (firn/parse-dispatch ["missing"])
+            (= text (unknown-walk-text "repo" "missing")))])
+    (match (dispatch-decision ["missing"])
       [(DispatchPlanned plan) false]
       [(DispatchHelp text status) false]
       [(DispatchError text status)
-       (and (= status 1) (= text (firn/incomplete-walk-text)))])
-    (match (firn/parse-dispatch ["tag" "enable" "terminal" "loose"])
+       (and (= status 1) (= text (incomplete-walk-text)))])
+    (match (dispatch-decision ["tag" "enable" "terminal" "loose"])
       [(DispatchPlanned plan) false]
       [(DispatchHelp text status) false]
       [(DispatchError text status)
@@ -261,21 +302,21 @@
                "firn: dangling token after a complete walk: loose\n"))])))
 
 (defn documented-argv [command firn/FirnCommand] (Vec String)
-  (let [node String (firn/firncommand-node command)
-        edge String (firn/firncommand-edge command)]
-    (match (firn/firncommand-default-leaf command)
+  (let [node String (firncommand-node command)
+        edge String (firncommand-edge command)]
+    (match (firncommand-default-leaf command)
       [(RequiredLeaf token) [node edge "fixture"]]
       [(CurrentHostLeaf token) [node edge]]
       [(LiteralLeaf value) [node edge]])))
 
 (defn documented-command-planned? [command firn/FirnCommand] Bool
-  (match (firn/parse-dispatch (documented-argv command))
+  (match (dispatch-decision (documented-argv command))
     [(DispatchPlanned plan) true]
     [(DispatchHelp text status) false]
     [(DispatchError text status) false]))
 
 (defn documented-group-planned? [group firn/CommandGroup] Bool
-  (let [commands (Vec firn/FirnCommand) (firn/commandgroup-commands group)]
+  (let [commands (Vec firn/FirnCommand) (commandgroup-commands group)]
     (loop [(index Int) 0]
       (if (>= index (count commands))
         true
@@ -284,21 +325,22 @@
           false)))))
 
 (defn usage-diagnostic? [command firn/FirnCommand] Bool
-  (let [node String (firn/firncommand-node command)
-        edge String (firn/firncommand-edge command)]
-    (match (firn/firncommand-default-leaf command)
+  (let [node String (firncommand-node command)
+        edge String (firncommand-edge command)]
+    (match (firncommand-default-leaf command)
       [(RequiredLeaf token)
-       (match (firn/parse-dispatch [node edge])
+       (match (dispatch-decision [node edge])
          [(DispatchPlanned plan) false]
          [(DispatchHelp text status) false]
          [(DispatchError text status)
           (and (= status 1)
-               (str/includes? text (str "Usage: firn " node " " edge " ")))] )]
+               (>= (.indexOf text (str "Usage: firn " node " " edge " "))
+                   0))] )]
       [(CurrentHostLeaf token) true]
       [(LiteralLeaf value) true])))
 
 (defn required-leaves-diagnose? [group firn/CommandGroup] Bool
-  (let [commands (Vec firn/FirnCommand) (firn/commandgroup-commands group)]
+  (let [commands (Vec firn/FirnCommand) (commandgroup-commands group)]
     (loop [(index Int) 0]
       (if (>= index (count commands))
         true
@@ -308,17 +350,17 @@
 
 (defn all-documented-commands-planned? [] Bool
   (loop [(index Int) 0]
-    (if (>= index (count firn/command-groups))
+    (if (>= index (count command-groups))
       true
-      (if (documented-group-planned? (nth firn/command-groups index))
+      (if (documented-group-planned? (nth command-groups index))
         (recur (+ index 1))
         false))))
 
 (defn all-required-leaves-diagnose? [] Bool
   (loop [(index Int) 0]
-    (if (>= index (count firn/command-groups))
+    (if (>= index (count command-groups))
       true
-      (if (required-leaves-diagnose? (nth firn/command-groups index))
+      (if (required-leaves-diagnose? (nth command-groups index))
         (recur (+ index 1))
         false))))
 
@@ -330,12 +372,12 @@
 
 (defn case-documentation-and-diagnostics [] Bool
   (and
-    (= (firn/command-count) 46)
+    (= (command-count) 46)
     (all-documented-commands-planned?)
     (all-required-leaves-diagnose?)
-    (error-diagnostic? (firn/parse-dispatch ["unknown" "edge"]))
-    (error-diagnostic? (firn/parse-dispatch ["rebuild" "--bad"]))
-    (error-diagnostic? (firn/parse-dispatch ["rollback"]))))
+    (error-diagnostic? (dispatch-decision ["unknown" "edge"]))
+    (error-diagnostic? (dispatch-decision ["rebuild" "--bad"]))
+    (error-diagnostic? (dispatch-decision ["rollback"]))))
 
 (defn cases [] (Vec TestResult)
   [(->TestResult "registry-and-owners" (case-registry-and-owners))

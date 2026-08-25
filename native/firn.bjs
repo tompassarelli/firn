@@ -1,115 +1,123 @@
 #lang beagle/js
 (ns firn.main)
 
-(defunion CommandId
-  (FlakeInputsCommand [token Bool])
-  (FlakeInputResolveCommand [token Bool])
-  (HostPrepareCommand [token Bool])
-  (HostActivateCommand [token Bool])
-  (HostRebuildCommand [token Bool])
-  (HostRollbackCommand [token Bool])
-  (HostImpactCommand [token Bool])
-  (HostListCommand [token Bool])
-  (HostStatusCommand [token Bool])
-  (HostGenCommand [token Bool])
-  (ModuleListCommand [token Bool])
-  (ModuleRefsCommand [token Bool])
-  (ModuleStatusCommand [token Bool])
-  (ModuleAddCommand [token Bool])
-  (ModuleEnableCommand [token Bool])
-  (ModuleDisableCommand [token Bool])
-  (PlatformListCommand [token Bool])
-  (PlatformShowCommand [token Bool])
-  (PlatformSafelistCommand [token Bool])
-  (RepoWatchCommand [token Bool])
-  (RepoDiffCommand [token Bool])
-  (RepoDoctorCommand [token Bool])
-  (RepoUpgradeCommand [token Bool])
-  (RepoBuildCommand [token Bool])
-  (RepoValidateCommand [token Bool])
-  (RepoLintCommand [token Bool])
-  (RepoArchitectureCommand [token Bool])
-  (SchemaExplainCommand [token Bool])
-  (SchemaExtractCommand [token Bool])
-  (SecretListCommand [token Bool])
-  (SecretShowCommand [token Bool])
-  (SecretEditCommand [token Bool])
-  (TagListCommand [token Bool])
-  (TagShowCommand [token Bool])
-  (TagFilterCommand [token Bool])
-  (TagIndexCommand [token Bool])
-  (TagResolveCommand [token Bool])
-  (TagEnableCommand [token Bool])
-  (TagDisableCommand [token Bool])
-  (TagOptInCommand [token Bool])
-  (TagOptOutCommand [token Bool])
-  (TagStatusCommand [token Bool])
-  (TemplateServiceCommand [token Bool])
-  (TemplateSubmoduleCommand [token Bool])
-  (TemplateHomeCommand [token Bool])
-  (TemplateHostCommand [token Bool]))
+(js/export
+  (defunion CommandId
+    (FlakeInputsCommand [token Bool])
+    (FlakeInputResolveCommand [token Bool])
+    (HostPrepareCommand [token Bool])
+    (HostActivateCommand [token Bool])
+    (HostRebuildCommand [token Bool])
+    (HostRollbackCommand [token Bool])
+    (HostImpactCommand [token Bool])
+    (HostListCommand [token Bool])
+    (HostStatusCommand [token Bool])
+    (HostGenCommand [token Bool])
+    (ModuleListCommand [token Bool])
+    (ModuleRefsCommand [token Bool])
+    (ModuleStatusCommand [token Bool])
+    (ModuleAddCommand [token Bool])
+    (ModuleEnableCommand [token Bool])
+    (ModuleDisableCommand [token Bool])
+    (PlatformListCommand [token Bool])
+    (PlatformShowCommand [token Bool])
+    (PlatformSafelistCommand [token Bool])
+    (RepoWatchCommand [token Bool])
+    (RepoDiffCommand [token Bool])
+    (RepoDoctorCommand [token Bool])
+    (RepoUpgradeCommand [token Bool])
+    (RepoBuildCommand [token Bool])
+    (RepoValidateCommand [token Bool])
+    (RepoLintCommand [token Bool])
+    (RepoArchitectureCommand [token Bool])
+    (SchemaExplainCommand [token Bool])
+    (SchemaExtractCommand [token Bool])
+    (SecretListCommand [token Bool])
+    (SecretShowCommand [token Bool])
+    (SecretEditCommand [token Bool])
+    (TagListCommand [token Bool])
+    (TagShowCommand [token Bool])
+    (TagFilterCommand [token Bool])
+    (TagIndexCommand [token Bool])
+    (TagResolveCommand [token Bool])
+    (TagEnableCommand [token Bool])
+    (TagDisableCommand [token Bool])
+    (TagOptInCommand [token Bool])
+    (TagOptOutCommand [token Bool])
+    (TagStatusCommand [token Bool])
+    (TemplateServiceCommand [token Bool])
+    (TemplateSubmoduleCommand [token Bool])
+    (TemplateHomeCommand [token Bool])
+    (TemplateHostCommand [token Bool])))
 
-(defunion CommandFamily
-  (NativeTagFamily [token Bool])
-  (NativeFlakeInputFamily [token Bool])
-  (NativeInventoryFamily [token Bool])
-  (NativeAuthoringFamily [token Bool])
-  (NativeViewsFamily [token Bool])
-  (NativeRepoBuildFamily [token Bool])
-  (NativeSchemaFamily [token Bool])
-  (NativeRepoWorkflowFamily [token Bool])
-  (NativeRebuildFamily [token Bool])
-  (NativeCiPolicyFamily [token Bool]))
+(js/export
+  (defunion CommandFamily
+    (NativeTagFamily [token Bool])
+    (NativeFlakeInputFamily [token Bool])
+    (NativeInventoryFamily [token Bool])
+    (NativeAuthoringFamily [token Bool])
+    (NativeViewsFamily [token Bool])
+    (NativeRepoBuildFamily [token Bool])
+    (NativeSchemaFamily [token Bool])
+    (NativeRepoWorkflowFamily [token Bool])
+    (NativeRebuildFamily [token Bool])
+    (NativeCiPolicyFamily [token Bool])))
 
-(defunion LeafDefault
-  (RequiredLeaf [token Bool])
-  (CurrentHostLeaf [token Bool])
-  (LiteralLeaf [value String]))
+(js/export
+  (defunion LeafDefault
+    (RequiredLeaf [token Bool])
+    (CurrentHostLeaf [token Bool])
+    (LiteralLeaf [value String])))
 
-(defunion DispatchLeaf
-  (ExplicitLeaf [value String])
-  (DefaultLeaf [value String])
-  (CurrentHostDefault [token Bool]))
+(js/export
+  (defunion DispatchLeaf
+    (ExplicitLeaf [value String])
+    (DefaultLeaf [value String])
+    (CurrentHostDefault [token Bool])))
 
-(defrecord DispatchStep
-  [command CommandId
-   owner CommandFamily
-   node String
-   edge String
-   leaf DispatchLeaf])
+(js/export
+  (defrecord DispatchStep
+    [command CommandId
+     owner CommandFamily
+     node String
+     edge String
+     leaf DispatchLeaf]))
 
-(defrecord DispatchPlan [steps (Vec DispatchStep)])
+(js/export (defrecord DispatchPlan [steps (Vec DispatchStep)]))
 
-(defunion DispatchDecision
-  (DispatchPlanned [plan DispatchPlan])
-  (DispatchHelp
-    [text String
-     status Int])
-  (DispatchError
-    [text String
-     status Int]))
+(js/export
+  (defunion DispatchDecision
+    (DispatchPlanned [plan DispatchPlan])
+    (DispatchHelp
+      [text String
+       status Int])
+    (DispatchError
+      [text String
+       status Int])))
 
 (defunion DefaultLookup
   (DefaultFound [leaf DispatchLeaf])
   (DefaultMissing [token Bool]))
 
-(defrecord FirnCommand
-  [node String
-   edge String
-   leaf String
-   detail-gap String
-   summary String
-   common-gap String
-   common-summary String
-   id CommandId
-   owner CommandFamily
-   default-leaf LeafDefault])
+(js/export
+  (defrecord FirnCommand
+    [node String
+     edge String
+     leaf String
+     detail-gap String
+     summary String
+     common-gap String
+     common-summary String
+     id CommandId
+     owner CommandFamily
+     default-leaf LeafDefault]))
 
-(defunion CommandLookup
-  (CommandFound [command FirnCommand])
-  (CommandMissing [token Bool]))
+(js/export
+  (defunion CommandLookup
+    (CommandFound [command FirnCommand])
+    (CommandMissing [token Bool])))
 
-(defrecord CommandGroup [commands (Vec FirnCommand)])
+(js/export (defrecord CommandGroup [commands (Vec FirnCommand)]))
 
 (defrecord CommonCommand
   [command FirnCommand
@@ -375,13 +383,14 @@
     (->SecretShowCommand false) (->NativeAuthoringFamily false)
     (->RequiredLeaf false)))
 
-(def secret-edit FirnCommand
-  (->FirnCommand
-    "secret" "edit" "<name>" "  "
-    "open an existing secret in $EDITOR via sops"
-    "" ""
-    (->SecretEditCommand false) (->NativeAuthoringFamily false)
-    (->RequiredLeaf false)))
+(js/export
+  (def secret-edit FirnCommand
+    (->FirnCommand
+      "secret" "edit" "<name>" "  "
+      "open an existing secret in $EDITOR via sops"
+      "" ""
+      (->SecretEditCommand false) (->NativeAuthoringFamily false)
+      (->RequiredLeaf false))))
 
 (def tag-list FirnCommand
   (->FirnCommand
@@ -497,26 +506,27 @@
     (->TemplateHostCommand false) (->NativeAuthoringFamily false)
     (->RequiredLeaf false)))
 
-(def command-groups (Vec CommandGroup)
-  [(->CommandGroup [flake-inputs])
-   (->CommandGroup [flake-input-resolve])
-   (->CommandGroup
-     [host-prepare host-activate host-rebuild host-rollback host-impact host-list
-      host-status host-gen])
-   (->CommandGroup
-     [module-list module-refs module-status module-add module-enable
-      module-disable])
-   (->CommandGroup [platform-list platform-show platform-safelist])
-   (->CommandGroup
-     [repo-watch repo-diff repo-doctor repo-upgrade repo-build repo-validate
-      repo-lint repo-architecture])
-   (->CommandGroup [schema-explain schema-extract])
-   (->CommandGroup [secret-list secret-show secret-edit])
-   (->CommandGroup
-     [tag-list tag-show tag-filter tag-index tag-resolve tag-enable tag-disable
-      tag-opt-in tag-opt-out tag-status])
-   (->CommandGroup
-     [template-service template-submodule template-home template-host])])
+(js/export
+  (def command-groups (Vec CommandGroup)
+    [(->CommandGroup [flake-inputs])
+     (->CommandGroup [flake-input-resolve])
+     (->CommandGroup
+       [host-prepare host-activate host-rebuild host-rollback host-impact host-list
+        host-status host-gen])
+     (->CommandGroup
+       [module-list module-refs module-status module-add module-enable
+        module-disable])
+     (->CommandGroup [platform-list platform-show platform-safelist])
+     (->CommandGroup
+       [repo-watch repo-diff repo-doctor repo-upgrade repo-build repo-validate
+        repo-lint repo-architecture])
+     (->CommandGroup [schema-explain schema-extract])
+     (->CommandGroup [secret-list secret-show secret-edit])
+     (->CommandGroup
+       [tag-list tag-show tag-filter tag-index tag-resolve tag-enable tag-disable
+        tag-opt-in tag-opt-out tag-status])
+     (->CommandGroup
+       [template-service template-submodule template-home template-host])]))
 
 (def common-commands (Vec CommonCommand)
   [(->CommonCommand repo-build "build")
@@ -569,18 +579,19 @@
             (command-list-text commands) "\n")))
       result)))
 
-(defn full-help-text [] String
-  (str
-    "firn — config management\n\n"
-    "Usage:\n"
-    "  firn <node> <edge> [<leaf>]  [<node> <edge> [<leaf>] ...]\n\n"
-    "Operator shortcuts:\n"
-    "  firn rebuild [host]          build + validate + switch\n"
-    "  firn rollback <generation>  activate one exact prior generation\n\n"
-    "Common graph commands:\n"
-    (common-commands-text)
-    "\nFull graph:\n\n"
-    (command-groups-text)))
+(js/export
+  (defn full-help-text [] String
+    (str
+      "firn — config management\n\n"
+      "Usage:\n"
+      "  firn <node> <edge> [<leaf>]  [<node> <edge> [<leaf>] ...]\n\n"
+      "Operator shortcuts:\n"
+      "  firn rebuild [host]          build + validate + switch\n"
+      "  firn rollback <generation>  activate one exact prior generation\n\n"
+      "Common graph commands:\n"
+      (common-commands-text)
+      "\nFull graph:\n\n"
+      (command-groups-text))))
 
 (defn print-help [] Nil
   (print (full-help-text)))
@@ -598,25 +609,27 @@
 (defn node-known? [node String] Bool
   (> (count (commands-for-node node)) 0))
 
-(defn find-command
-  [node String
-   edge String] CommandLookup
-  (let [commands (Vec FirnCommand) (commands-for-node node)]
-    (loop [index Int 0]
-      (if (>= index (count commands))
-        (->CommandMissing false)
-        (let [command FirnCommand (nth commands index)]
-          (if (= edge (:edge command))
-            (->CommandFound command)
-            (recur (+ index 1))))))))
+(js/export
+  (defn find-command
+    [node String
+     edge String] CommandLookup
+    (let [commands (Vec FirnCommand) (commands-for-node node)]
+      (loop [index Int 0]
+        (if (>= index (count commands))
+          (->CommandMissing false)
+          (let [command FirnCommand (nth commands index)]
+            (if (= edge (:edge command))
+              (->CommandFound command)
+              (recur (+ index 1)))))))))
 
-(defn command-count [] Int
-  (loop [group-index Int 0
-         result Int 0]
-    (if (>= group-index (count command-groups))
-      result
-      (let [commands (Vec FirnCommand) (:commands (nth command-groups group-index))]
-        (recur (+ group-index 1) (+ result (count commands)))))))
+(js/export
+  (defn command-count [] Int
+    (loop [group-index Int 0
+           result Int 0]
+      (if (>= group-index (count command-groups))
+        result
+        (let [commands (Vec FirnCommand) (:commands (nth command-groups group-index))]
+          (recur (+ group-index 1) (+ result (count commands))))))))
 
 (defn joined-node-names [] String
   (loop [index Int 0
@@ -637,27 +650,29 @@
         (recur (+ index 1)
           (str result (if (= index 0) "" ", ") (:edge command)))))))
 
-(defn node-help-text [node String] String
-  (let [commands (Vec FirnCommand) (commands-for-node node)]
-    (loop [index Int 0
-           result String (str "Edges on '" node "':\n")]
-      (if (>= index (count commands))
-        result
-        (let [command FirnCommand (nth commands index)]
-          (recur (+ index 1)
-            (str result "  firn " (:node command) " "
-              (command-usage command) "\n      " (:summary command) "\n")))))))
+(js/export
+  (defn node-help-text [node String] String
+    (let [commands (Vec FirnCommand) (commands-for-node node)]
+      (loop [index Int 0
+             result String (str "Edges on '" node "':\n")]
+        (if (>= index (count commands))
+          result
+          (let [command FirnCommand (nth commands index)]
+            (recur (+ index 1)
+              (str result "  firn " (:node command) " "
+                (command-usage command) "\n      " (:summary command) "\n"))))))))
 
-(defn unknown-walk-text
-  [node String
-   edge String] String
-  (let [commands (Vec FirnCommand) (commands-for-node node)]
-    (if (= (count commands) 0)
-      (str "firn: unknown walk '" node " " edge "'\n"
-        "  no such node '" node "'\n"
-        "  available nodes: " (joined-node-names) "\n")
-      (str "firn: unknown walk '" node " " edge "'\n"
-        "  edges on '" node "': " (joined-edge-names commands) "\n"))))
+(js/export
+  (defn unknown-walk-text
+    [node String
+     edge String] String
+    (let [commands (Vec FirnCommand) (commands-for-node node)]
+      (if (= (count commands) 0)
+        (str "firn: unknown walk '" node " " edge "'\n"
+          "  no such node '" node "'\n"
+          "  available nodes: " (joined-node-names) "\n")
+        (str "firn: unknown walk '" node " " edge "'\n"
+          "  edges on '" node "': " (joined-edge-names commands) "\n")))))
 
 (defn edge-usage-text [command FirnCommand] String
   (str "Usage: firn " (:node command) " " (:edge command) " "
@@ -790,29 +805,31 @@
            "rollback"
            (->ExplicitLeaf (nth args 1)))]))))
 
-(defn incomplete-walk-text [] String
-  (str "firn: incomplete walk; expected <node> <edge> [<leaf>]\n"
-    "  available nodes: " (joined-node-names) "\n"))
+(js/export
+  (defn incomplete-walk-text [] String
+    (str "firn: incomplete walk; expected <node> <edge> [<leaf>]\n"
+      "  available nodes: " (joined-node-names) "\n")))
 
-(defn parse-dispatch [args (Vec String)] DispatchDecision
-  (cond
-    (help-request? args)
-    (->DispatchHelp (full-help-text) 0)
+(js/export
+  (defn parse-dispatch [args (Vec String)] DispatchDecision
+    (cond
+      (help-request? args)
+      (->DispatchHelp (full-help-text) 0)
 
-    (rebuild-alias? args)
-    (parse-rebuild-alias args)
+      (rebuild-alias? args)
+      (parse-rebuild-alias args)
 
-    (rollback-alias? args)
-    (parse-rollback-alias args)
+      (rollback-alias? args)
+      (parse-rollback-alias args)
 
-    (= (count args) 1)
-    (let [node String (nth args 0)]
-      (if (node-known? node)
-        (->DispatchHelp (node-help-text node) 0)
-        (->DispatchError (incomplete-walk-text) 1)))
+      (= (count args) 1)
+      (let [node String (nth args 0)]
+        (if (node-known? node)
+          (->DispatchHelp (node-help-text node) 0)
+          (->DispatchError (incomplete-walk-text) 1)))
 
-    :else
-    (parse-walk args [])))
+      :else
+      (parse-walk args []))))
 
 (defn step-argv [step DispatchStep] (Vec String)
   (match (dispatchstep-leaf step)
