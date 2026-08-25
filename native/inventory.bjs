@@ -13,11 +13,12 @@
    references (Vec String)
    states (Vec ModuleState)])
 
-(defunion HostConfigResult
+(js/export
+  (defunion HostConfigResult
   (HostConfigParsed [value HostConfig])
   (HostConfigRejected
     [message String
-     offset Int]))
+     offset Int])))
 
 (defrecord ConfigScan
   [ok Bool
@@ -36,22 +37,25 @@
   [modules (Vec r/ModuleTags)
    hosts (Vec InventoryHost)]))
 
-(defunion InventoryAction
-  (ModuleListAll [token Bool])
+(js/export
+  (defunion InventoryAction
+  ModuleListAll
   ModuleListUsed
   ModuleListUnused
   (ModuleRefs [name String])
   (ModuleStatus [host String])
   HostList
-  (HostStatus [host String]))
+  (HostStatus [host String])))
 
-(defunion InventoryArgv
+(js/export
+  (defunion InventoryArgv
   (ParsedInventory [action InventoryAction])
-  (InvalidInventoryArgv [argv (Vec String)]))
+  (InvalidInventoryArgv [argv (Vec String)])))
 
-(defunion InventoryRenderResult
+(js/export
+  (defunion InventoryRenderResult
   (InventoryRendered [text String])
-  (InventoryHostMissing [host String]))
+  (InventoryHostMissing [host String])))
 
 (def module-prefix String "myConfig.modules.")
 (def enable-suffix String ".enable")
@@ -460,13 +464,13 @@
     (and (= (count argv) 2)
          (= (nth argv 0) "module")
          (= (nth argv 1) "list"))
-    (->ParsedInventory (->ModuleListAll false))
+    (->ParsedInventory (->ModuleListAll))
 
     (and (= (count argv) 3)
          (= (nth argv 0) "module")
          (= (nth argv 1) "list")
          (= (nth argv 2) "all"))
-    (->ParsedInventory (->ModuleListAll false))
+    (->ParsedInventory (->ModuleListAll))
 
     (and (= (count argv) 3)
          (= (nth argv 0) "module")
@@ -516,7 +520,7 @@
   [repository InventoryRepository
    action InventoryAction] InventoryRenderResult
   (match action
-    [(ModuleListAll token)
+    [(ModuleListAll)
      (->InventoryRendered (render-module-list-all (module-names repository)))]
     [(ModuleListUsed)
      (->InventoryRendered (render-module-list-used repository))]
