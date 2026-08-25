@@ -3,91 +3,14 @@ set -euo pipefail
 
 firn_repo="${FIRN_REPO:-$HOME/code/nixos-config/main}" # hardcoded-repo-path:allow
 beagle_path="${BEAGLE_PATH:-$HOME/code/beagle/main}" # hardcoded-repo-path:allow
-beagle="$beagle_path/bin/beagle"
+runtime_root="${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}"
+runtime="$runtime_root/current/bin/firn"
 
-if [[ ! -x "$beagle" ]]; then
-  printf 'firn: BEAGLE_PATH has no executable bin/beagle: %s\n' "$beagle_path" >&2
-  exit 1
-fi
-if [[ ! -f "$firn_repo/native/firn.bgl" ]]; then
-  printf 'firn: FIRN_REPO has no native/firn.bgl: %s\n' "$firn_repo" >&2
-  exit 1
+if [[ ! -x "$runtime" ]]; then
+  printf 'firn: user runtime is not installed; run firn-runtime-update\n' >&2
+  exit 127
 fi
 
 export FIRN_REPO="$firn_repo"
 export BEAGLE_PATH="$beagle_path"
-
-stage="$(mktemp -d "${TMPDIR:-/tmp}/firn-live.XXXXXX")"
-cleanup() {
-  rm -rf -- "${stage:?}"
-}
-trap cleanup EXIT
-
-sources=(
-  "$beagle_path/native-core/src/beagle/datum_reader.bgl"
-  "$beagle_path/native-core/src/native/json.bgl"
-  "$beagle_path/native-core/src/beagle/nix_schema_path.bgl"
-  "$firn_repo/native/tag_resolve.bgl"
-  "$firn_repo/native/tag_inputs.bgl"
-  "$firn_repo/native/tag_resolve_driver.bgl"
-  "$firn_repo/native/tag_resolve_native.bgl"
-  "$firn_repo/native/inventory.bgl"
-  "$firn_repo/native/inventory_native.bgl"
-  "$firn_repo/native/authoring.bgl"
-  "$firn_repo/native/authoring_native.bgl"
-  "$firn_repo/native/flake_input.bgl"
-  "$firn_repo/native/flake_input_driver.bgl"
-  "$firn_repo/native/flake_input_native.bgl"
-  "$firn_repo/native/tag_commands.bgl"
-  "$firn_repo/native/tag_commands_driver.bgl"
-  "$firn_repo/native/tag_commands_native.bgl"
-  "$firn_repo/native/firn_views.bgl"
-  "$firn_repo/native/firn_views_native.bgl"
-  "$firn_repo/native/schema_transaction.bgl"
-  "$firn_repo/native/schema_transaction_native.bgl"
-  "$firn_repo/native/repo_quality.bgl"
-  "$firn_repo/native/repo_workflows.bgl"
-  "$firn_repo/native/repo_workflows_native.bgl"
-  "$firn_repo/native/impact.bgl"
-  "$firn_repo/native/rebuild.bgl"
-  "$firn_repo/native/rebuild_native.bgl"
-  "$firn_repo/native/repo_build.bgl"
-  "$firn_repo/native/repo_build_native.bgl"
-  "$firn_repo/native/prewarm.bgl"
-  "$firn_repo/native/prewarm_native.bgl"
-  "$firn_repo/native/system_policy.bgl"
-  "$firn_repo/native/firn.bgl"
-)
-entry="firn.main/-main"
-
-if [[ "$#" -eq 2 && "${1:-}" == repo && "${2:-}" == validate ]] ||
-   [[ "$#" -eq 3 && "${1:-}" == repo && "${2:-}" == validate && "${3:-}" == all ]]; then
-  entry="firn.schema-transaction-native/-main"
-  sources=(
-    "$beagle_path/native-core/src/native/json.bgl"
-    "$firn_repo/native/schema_transaction.bgl"
-    "$firn_repo/native/schema_transaction_native.bgl"
-  )
-fi
-
-set +e
-"$beagle" native-exe \
-  --out "$stage/firn" \
-  --artifacts "$stage/artifacts" \
-  --entry "$entry" \
-  "${sources[@]}" \
-  >"$stage/build.stdout" 2>"$stage/build.stderr"
-build_status=$?
-set -e
-if [[ "$build_status" -ne 0 ]]; then
-  printf 'firn: live native materialization failed\n' >&2
-  sed -n '1,240p' "$stage/build.stderr" >&2
-  sed -n '1,240p' "$stage/build.stdout" >&2
-  exit "$build_status"
-fi
-
-set +e
-"$stage/firn" "$@"
-status=$?
-set -e
-exit "$status"
+exec "$runtime" "$@"

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
-scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-live-launcher-test.XXXXXX")"
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-runtime-launcher-test.XXXXXX")"
 cleanup() {
   rm -rf -- "${scratch:?}"
 }
@@ -11,43 +11,106 @@ trap cleanup EXIT
 home="$scratch/home"
 beagle_path="$scratch/beagle-alt"
 firn_repo="$scratch/firn-alt"
+runtime_root="$scratch/runtime"
 fake_bin="$scratch/bin"
 mkdir -p "$home" "$beagle_path/bin" "$firn_repo/native" "$fake_bin"
-printf '#lang beagle\n(ns firn.main)\n' >"$firn_repo/native/firn.bgl"
 printf 'alpha\n' >"$firn_repo/marker"
+
+sources=(
+  "$beagle_path/native-core/src/beagle/datum_reader.bgl"
+  "$beagle_path/native-core/src/native/json.bgl"
+  "$beagle_path/native-core/src/beagle/nix_schema_path.bgl"
+  "$firn_repo/native/tag_resolve.bgl"
+  "$firn_repo/native/tag_inputs.bgl"
+  "$firn_repo/native/tag_resolve_driver.bgl"
+  "$firn_repo/native/tag_resolve_native.bgl"
+  "$firn_repo/native/inventory.bgl"
+  "$firn_repo/native/inventory_native.bgl"
+  "$firn_repo/native/authoring.bgl"
+  "$firn_repo/native/authoring_native.bgl"
+  "$firn_repo/native/flake_input.bgl"
+  "$firn_repo/native/flake_input_driver.bgl"
+  "$firn_repo/native/flake_input_native.bgl"
+  "$firn_repo/native/tag_commands.bgl"
+  "$firn_repo/native/tag_commands_driver.bgl"
+  "$firn_repo/native/tag_commands_native.bgl"
+  "$firn_repo/native/firn_views.bgl"
+  "$firn_repo/native/firn_views_native.bgl"
+  "$firn_repo/native/schema_transaction.bgl"
+  "$firn_repo/native/schema_transaction_native.bgl"
+  "$firn_repo/native/repo_quality.bgl"
+  "$firn_repo/native/repo_workflows.bgl"
+  "$firn_repo/native/repo_workflows_native.bgl"
+  "$firn_repo/native/impact.bgl"
+  "$firn_repo/native/rebuild.bgl"
+  "$firn_repo/native/rebuild_native.bgl"
+  "$firn_repo/native/repo_build.bgl"
+  "$firn_repo/native/repo_build_native.bgl"
+  "$firn_repo/native/prewarm.bgl"
+  "$firn_repo/native/prewarm_native.bgl"
+  "$firn_repo/native/system_policy.bgl"
+  "$firn_repo/native/firn.bgl"
+)
+for source in "${sources[@]}"; do
+  mkdir -p "$(dirname "$source")"
+  printf '#lang beagle\n' >"$source"
+done
 
 cat >"$beagle_path/bin/beagle" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'BEAGLE_CALL\0' >>"$FAKE_BEAGLE_LOG"
 printf '%s\0' "$BEAGLE_PATH" "$FIRN_REPO" "$@" >>"$FAKE_BEAGLE_LOG"
-if [[ "${1:-}" != native-exe ]]; then
-  exit 0
-fi
+[[ "${1:-}" == native-exe ]]
 out=""
+artifacts=""
 while [[ "$#" -gt 0 ]]; do
-  if [[ "$1" == --out ]]; then
-    out="$2"
-    break
-  fi
-  shift
+  case "$1" in
+    --out) out="$2"; shift 2 ;;
+    --artifacts) artifacts="$2"; shift 2 ;;
+    *) shift ;;
+  esac
 done
-[[ -n "$out" ]]
+[[ -n "$out" && -n "$artifacts" ]]
 marker="$(sed -n '1p' "$FIRN_REPO/marker")"
 cat >"$out" <<INNER
 #!/usr/bin/env bash
-printf 'compiled:%s\\n' '$marker'
+printf 'prepared:%s\\n' '$marker'
 printf 'RUNTIME_CALL\\0' >>"\$FAKE_RUNTIME_LOG"
 printf '%s\\0' "\$BEAGLE_PATH" "\$FIRN_REPO" "\$@" >>"\$FAKE_RUNTIME_LOG"
 INNER
 chmod +x "$out"
+if [[ -n "${FAKE_BAD_IDENTITY:-}" ]]; then
+  printf 'source-entry wrong.entry/-main\n' >"$artifacts/report.txt"
+else
+  source_digit=a
+  [[ "$marker" == alpha ]] || source_digit=b
+  printf 'source-entry firn.main/-main\n' >"$artifacts/report.txt"
+  source_id="$(printf '%064d' 0 | tr 0 "$source_digit")"
+  printf 'native-provenance-v0 source sha256:%s\n' "$source_id" \
+    >>"$artifacts/report.txt"
+fi
+printf 'native-exe-entry PASS name=firn.main/-main symbol=fake return=Int abi=argv\n' \
+  >"$artifacts/native-exe.report.txt"
 EOF
 chmod +x "$beagle_path/bin/beagle"
 
-for command in nix nix-store; do
+cat >"$fake_bin/git" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "\${1:-}" == -C && "\${3:-}" == rev-parse && "\${4:-}" == HEAD ]]
+case "\$2" in
+  "$firn_repo") printf '1111111111111111111111111111111111111111\\n' ;;
+  "$beagle_path") printf '2222222222222222222222222222222222222222\\n' ;;
+  *) exit 1 ;;
+esac
+EOF
+chmod +x "$fake_bin/git"
+
+for command in nix nix-store beagle python3 bb north; do
   cat >"$fake_bin/$command" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' "$0 $*" >>"$NIX_TRIPWIRE_LOG"
+printf '%s\n' "$0 $*" >>"$BOOT_CLOSURE_TRIPWIRE_LOG"
 exit 97
 EOF
   chmod +x "$fake_bin/$command"
@@ -55,136 +118,110 @@ done
 
 export HOME="$home"
 export PATH="$fake_bin:$PATH"
+export BEAGLE_PATH="$beagle_path"
+export FIRN_REPO="$firn_repo"
+export FIRN_RUNTIME_ROOT="$runtime_root"
 export FAKE_BEAGLE_LOG="$scratch/beagle.log"
 export FAKE_RUNTIME_LOG="$scratch/runtime.log"
-export NIX_TRIPWIRE_LOG="$scratch/nix.log"
+export BOOT_CLOSURE_TRIPWIRE_LOG="$scratch/boot-closure.log"
 
-run_live() {
-  BEAGLE_PATH="$beagle_path" FIRN_REPO="$firn_repo" \
-    "$here/firn" repo validate
-}
+"$here/firn-runtime-update" >"$scratch/update-alpha.stdout"
+[[ "$("$here/firn" repo validate)" == prepared:alpha ]]
+[[ "$("$here/firn" repo validate all)" == prepared:alpha ]]
+[[ "$("$here/firn" repo validate hosts/whiterabbit/configuration.bnix)" == prepared:alpha ]]
+[[ "$("$here/firn" repo validate tag enable terminal)" == prepared:alpha ]]
 
-run_live_all() {
-  BEAGLE_PATH="$beagle_path" FIRN_REPO="$firn_repo" \
-    "$here/firn" repo validate all
-}
-
-run_live_explicit() {
-  BEAGLE_PATH="$beagle_path" FIRN_REPO="$firn_repo" \
-    "$here/firn" repo validate hosts/whiterabbit/configuration.bnix
-}
-
-run_live_chained() {
-  BEAGLE_PATH="$beagle_path" FIRN_REPO="$firn_repo" \
-    "$here/firn" repo validate tag enable terminal
-}
-
-[[ "$(run_live)" == "compiled:alpha" ]]
 printf 'beta\n' >"$firn_repo/marker"
-[[ "$(run_live)" == "compiled:beta" ]]
-[[ "$(run_live_all)" == "compiled:beta" ]]
-[[ "$(run_live_explicit)" == "compiled:beta" ]]
-[[ "$(run_live_chained)" == "compiled:beta" ]]
+[[ "$("$here/firn" host list all)" == prepared:alpha ]]
+alpha_target="$(readlink "$runtime_root/current")"
+alpha_destination="$runtime_root/$alpha_target"
+[[ -x "$alpha_destination/bin/firn" ]]
+grep -Fxq 'format=firn-cli-runtime/v1' "$alpha_destination/provenance"
+grep -Fxq 'entry=firn.main/-main' "$alpha_destination/provenance"
+grep -Fxq 'firn_revision=1111111111111111111111111111111111111111' \
+  "$alpha_destination/provenance"
+grep -Fxq 'beagle_revision=2222222222222222222222222222222222222222' \
+  "$alpha_destination/provenance"
 
-python3 - "$scratch/beagle.log" "$scratch/runtime.log" "$beagle_path" "$firn_repo" <<'PY'
-import pathlib
-import sys
-
-beagle_log = pathlib.Path(sys.argv[1])
-runtime_log = pathlib.Path(sys.argv[2])
-beagle_path = pathlib.Path(sys.argv[3])
-firn_repo = pathlib.Path(sys.argv[4])
-
-
-def records(path, marker):
-    result = []
-    current = None
-    for field in path.read_bytes().split(b"\0"):
-        if field == marker:
-            current = []
-            result.append(current)
-        elif current is not None and field:
-            current.append(field)
-    return result
-
-
-beagle_calls = records(beagle_log, b"BEAGLE_CALL")
-runtime_calls = records(runtime_log, b"RUNTIME_CALL")
-assert len(beagle_calls) == 5
-assert len(runtime_calls) == 5
-
-beagle_prefix = str(beagle_path).encode()
-firn_prefix = str(firn_repo).encode()
-narrow_sources = [
-    str(beagle_path / "native-core/src/native/json.bgl").encode(),
-    str(firn_repo / "native/schema_transaction.bgl").encode(),
-    str(firn_repo / "native/schema_transaction_native.bgl").encode(),
-]
-
-for call in beagle_calls[:3]:
-    assert call[:3] == [beagle_prefix, firn_prefix, b"native-exe"]
-    entry_index = call.index(b"--entry")
-    assert call[entry_index + 1] == b"firn.schema-transaction-native/-main"
-    assert call[entry_index + 2:] == narrow_sources
-
-for call in beagle_calls[3:]:
-    assert call[:3] == [beagle_prefix, firn_prefix, b"native-exe"]
-    entry_index = call.index(b"--entry")
-    assert call[entry_index + 1] == b"firn.main/-main"
-    aggregate_sources = call[entry_index + 2:]
-    assert len(aggregate_sources) == 33
-    assert aggregate_sources[0] == str(
-        beagle_path / "native-core/src/beagle/datum_reader.bgl"
-    ).encode()
-    assert aggregate_sources[-1] == str(firn_repo / "native/firn.bgl").encode()
-
-assert runtime_calls == [
-    [beagle_prefix, firn_prefix, b"repo", b"validate"],
-    [beagle_prefix, firn_prefix, b"repo", b"validate"],
-    [beagle_prefix, firn_prefix, b"repo", b"validate", b"all"],
-    [
-        beagle_prefix,
-        firn_prefix,
-        b"repo",
-        b"validate",
-        b"hosts/whiterabbit/configuration.bnix",
-    ],
-    [
-        beagle_prefix,
-        firn_prefix,
-        b"repo",
-        b"validate",
-        b"tag",
-        b"enable",
-        b"terminal",
-    ],
-]
-PY
-
-[[ ! -e "$NIX_TRIPWIRE_LOG" ]]
+"$here/firn-runtime-update" >"$scratch/update-beta.stdout"
+[[ "$("$here/firn" host list all)" == prepared:beta ]]
+beta_target="$(readlink "$runtime_root/current")"
+beta_destination="$runtime_root/$beta_target"
+[[ "$beta_target" != "$alpha_target" ]]
+[[ -x "$alpha_destination/bin/firn" ]]
+[[ -x "$beta_destination/bin/firn" ]]
 
 set +e
-BEAGLE_PATH="$scratch/missing" FIRN_REPO="$firn_repo" \
-  "$here/firn" repo validate >"$scratch/missing.stdout" 2>"$scratch/missing.stderr"
+FAKE_BAD_IDENTITY=1 "$here/firn-runtime-update" \
+  >"$scratch/invalid.stdout" 2>"$scratch/invalid.stderr"
+invalid_status=$?
+set -e
+[[ "$invalid_status" -ne 0 ]]
+grep -Fxq 'firn-runtime-update: materializer producer identity is invalid' \
+  "$scratch/invalid.stderr"
+[[ "$(readlink "$runtime_root/current")" == "$beta_target" ]]
+
+mapfile -d '' -t beagle_fields <"$FAKE_BEAGLE_LOG"
+cursor=0
+for call in 1 2 3; do
+  [[ "${beagle_fields[cursor++]}" == BEAGLE_CALL ]]
+  [[ "${beagle_fields[cursor++]}" == "$beagle_path" ]]
+  [[ "${beagle_fields[cursor++]}" == "$firn_repo" ]]
+  [[ "${beagle_fields[cursor++]}" == native-exe ]]
+  [[ "${beagle_fields[cursor++]}" == --out ]]
+  out="${beagle_fields[cursor++]}"
+  stage="${out%/bin/firn}"
+  [[ "$stage" == "$runtime_root"/.stage.* ]]
+  [[ "${beagle_fields[cursor++]}" == --artifacts ]]
+  [[ "${beagle_fields[cursor++]}" == "$stage/artifacts" ]]
+  [[ "${beagle_fields[cursor++]}" == --entry ]]
+  [[ "${beagle_fields[cursor++]}" == firn.main/-main ]]
+  for source in "${sources[@]}"; do
+    [[ "${beagle_fields[cursor++]}" == "$source" ]]
+  done
+done
+[[ "$cursor" -eq "${#beagle_fields[@]}" ]]
+
+mapfile -d '' -t runtime_fields <"$FAKE_RUNTIME_LOG"
+cursor=0
+expected_commands=(
+  'repo validate'
+  'repo validate all'
+  'repo validate hosts/whiterabbit/configuration.bnix'
+  'repo validate tag enable terminal'
+  'host list all'
+  'host list all'
+)
+for command in "${expected_commands[@]}"; do
+  [[ "${runtime_fields[cursor++]}" == RUNTIME_CALL ]]
+  [[ "${runtime_fields[cursor++]}" == "$beagle_path" ]]
+  [[ "${runtime_fields[cursor++]}" == "$firn_repo" ]]
+  read -r -a args <<<"$command"
+  for arg in "${args[@]}"; do
+    [[ "${runtime_fields[cursor++]}" == "$arg" ]]
+  done
+done
+[[ "$cursor" -eq "${#runtime_fields[@]}" ]]
+[[ ! -e "$BOOT_CLOSURE_TRIPWIRE_LOG" ]]
+
+missing_root="$scratch/missing-runtime"
+set +e
+FIRN_RUNTIME_ROOT="$missing_root" "$here/firn" repo validate \
+  >"$scratch/missing.stdout" 2>"$scratch/missing.stderr"
 missing_status=$?
 set -e
-[[ "$missing_status" -ne 0 ]]
-grep -Fq "firn: BEAGLE_PATH has no executable bin/beagle: $scratch/missing" \
+[[ "$missing_status" -eq 127 ]]
+grep -Fxq 'firn: user runtime is not installed; run firn-runtime-update' \
   "$scratch/missing.stderr"
 [[ ! -s "$scratch/missing.stdout" ]]
-[[ ! -e "$NIX_TRIPWIRE_LOG" ]]
 
 BEAGLE_PATH="$beagle_path" FAKE_BEAGLE_LOG="$scratch/beagle-command.log" \
   FIRN_REPO="$firn_repo" "$here/beagle" check sentinel.bgl >/dev/null
-python3 - "$scratch/beagle-command.log" "$beagle_path" <<'PY'
-import pathlib
-import sys
+mapfile -d '' -t command_fields <"$scratch/beagle-command.log"
+[[ "${command_fields[0]}" == BEAGLE_CALL ]]
+[[ "${command_fields[1]}" == "$beagle_path" ]]
+[[ "${command_fields[2]}" == "$firn_repo" ]]
+[[ "${command_fields[3]}" == check ]]
+[[ "${command_fields[4]}" == sentinel.bgl ]]
 
-fields = pathlib.Path(sys.argv[1]).read_bytes().split(b"\0")
-assert fields[0] == b"BEAGLE_CALL"
-assert fields[1] == sys.argv[2].encode()
-assert b"check" in fields
-assert b"sentinel.bgl" in fields
-PY
-
-printf 'firn-live-launcher: PASS\n'
+printf 'firn-runtime-launcher: PASS\n'
