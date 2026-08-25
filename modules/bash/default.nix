@@ -1,7 +1,6 @@
 { config, lib, pkgs, flakeRoot, firnLaunchers, ... }:
 
 ((username: {
-  tags = [ terminal ];
   options.myConfig.modules.bash.enable = lib.mkEnableOption "Bash shell configuration";
   config = lib.mkIf config.myConfig.modules.bash.enable {
     environment.etc.bash_logout.text = lib.mkForce ''

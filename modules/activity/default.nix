@@ -1,7 +1,6 @@
 { config, firnLaunchers, lib, pkgs, ... }:
 
 ((username: {
-  tags = [ desktop ];
   options.myConfig.modules.activity.enable = lib.mkEnableOption "activity — activities own workspaces: two-level layer over niri (daemon + CLI)";
   config = lib.mkIf config.myConfig.modules.activity.enable {
     home-manager.users.${username} = ({ config, ... }: {
