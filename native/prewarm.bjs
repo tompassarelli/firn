@@ -1,54 +1,63 @@
-#lang beagle
+#lang beagle/js
 (ns firn.prewarm)
 
-(defrecord Snapshot
+(js/export
+ (defrecord Snapshot
   [repository String
    revision String
    branch (U String Nil)
    host String
-   platform String])
+   platform String]))
 
-(defrecord WarmSpec
+(js/export
+ (defrecord WarmSpec
   [uri String
    attribute String
-   key String])
+   key String]))
 
 (defrecord RefUpdate
   [old String
    new String
    ref String])
 
-(defrecord LeaseOwner
+(js/export
+ (defrecord LeaseOwner
   [worker-pid Int
    child-pid Int
-   key String])
+   key String]))
 
-(defrecord ProcessIdentity
+(js/export
+ (defrecord ProcessIdentity
   [pid Int
-   argv (Vec String)])
+   argv (Vec String)]))
 
-(defunion LeaseOwnerResult
+(js/export
+ (defunion LeaseOwnerResult
   (LeaseOwnerParsed [owner LeaseOwner])
-  (LeaseOwnerInvalid [message String]))
+  (LeaseOwnerInvalid [message String])))
 
-(defunion RefUpdateResult
+(js/export
+ (defunion RefUpdateResult
   (RefUpdateParsed [update RefUpdate])
-  (RefUpdateInvalid [line String]))
+  (RefUpdateInvalid [line String])))
 
-(defunion SupersedePlan
+(js/export
+ (defunion SupersedePlan
   (LeaseDeduplicated [key String])
   (LeaseSupersede
     [child-pid Int
      worker-pid Int])
-  (LeaseContended [key String]))
+  (LeaseContended [key String])))
 
-(defunion StampPlan
+(js/export
+ (defunion StampPlan
   (StampUnchanged [exit-status Int])
-  (StampWrite [key String]))
+  (StampWrite [key String])))
 
-(defunion HookPlan
+(js/export
+ (defunion HookPlan
   (HookIgnored [state String])
-  (HookLaunch [argv (Vec String)]))
+  (HookLaunch [argv (Vec String)])))
 
 (defn starts-with?
   [text String
@@ -77,15 +86,22 @@
    needle String] Int
   (text-index-from text needle 0))
 
+(defn contains-from?
+  [values (Vec String)
+   candidate String
+   index Int] Bool
+  (if (>= index (count values))
+    false
+    (if (= (nth values index) candidate)
+      true
+      (contains-from? values candidate (+ index 1)))))
+
 (defn append-unique
   [values (Vec String)
    candidate String] (Vec String)
-  (loop [index Int 0]
-    (if (>= index (count values))
-      (conj values candidate)
-      (if (= (nth values index) candidate)
-        values
-        (recur (+ index 1))))))
+  (if (contains-from? values candidate 0)
+    values
+    (conj values candidate)))
 
 (defn layout-main [checkout String] (U String Nil)
   (let [worktree-index Int (text-index checkout "/worktrees/")
@@ -100,7 +116,8 @@
     (subs common-directory 0 (- (count common-directory) 5))
     nil))
 
-(defn container-main-candidates
+(js/export
+ (defn container-main-candidates
   [checkout String
    common-directory (U String Nil)] (Vec String)
   (let [layout (U String Nil) (layout-main checkout)
@@ -111,19 +128,24 @@
         with-common (Vec String) (if (some? from-common)
             (append-unique with-layout from-common)
             with-layout)]
-    (append-unique with-common checkout)))
+    (append-unique with-common checkout))))
+
+(defn trim-line-ending-from
+  [text String
+   end Int] String
+  (if (and (> end 0)
+           (or (= (subs text (- end 1) end) "\n")
+               (= (subs text (- end 1) end) "\r")))
+    (trim-line-ending-from text (- end 1))
+    (subs text 0 end)))
 
 (defn trim-line-ending [text String] String
-  (loop [end Int (count text)]
-    (if (and (> end 0)
-             (or (= (subs text (- end 1) end) "\n")
-                 (= (subs text (- end 1) end) "\r")))
-      (recur (- end 1))
-      (subs text 0 end))))
+  (trim-line-ending-from text (count text)))
 
-(defn short-host [host String] String
+(js/export
+ (defn short-host [host String] String
   (let [dot Int (text-index host ".")]
-    (if (< dot 0) host (subs host 0 dot))))
+    (if (< dot 0) host (subs host 0 dot)))))
 
 (defn snapshot-uri
   [repository String
@@ -150,18 +172,23 @@
             (snapshot-host snapshot))]
     (->WarmSpec uri attribute (str uri "#" attribute))))
 
+(defn split-delimited-from
+  [text String
+   delimiter String
+   start Int
+   parts (Vec String)] (Vec String)
+  (if (>= start (count text))
+    parts
+    (let [end Int (text-index-from text delimiter start)]
+      (if (< end 0)
+        (conj parts (subs text start (count text)))
+        (split-delimited-from text delimiter (+ end (count delimiter))
+          (conj parts (subs text start end)))))))
+
 (defn split-delimited
   [text String
    delimiter String] (Vec String)
-  (loop [start Int 0
-         parts (Vec String) []]
-    (if (>= start (count text))
-      parts
-      (let [end Int (text-index-from text delimiter start)]
-        (if (< end 0)
-          (conj parts (subs text start (count text)))
-          (recur (+ end (count delimiter))
-            (conj parts (subs text start end))))))))
+  (split-delimited-from text delimiter 0 []))
 
 (defn parse-positive-int [text String] (U Int Nil)
   (let [parsed (U Int Nil) (parse-long text)]
@@ -183,43 +210,51 @@
     (leaseowner-child-pid owner) "\n"
     (leaseowner-key owner) "\n"))
 
-(defn command-argv [cmdline String] (Vec String)
+(js/export
+ (defn command-argv [cmdline String] (Vec String)
   (if (= cmdline "")
     []
     (split-delimited cmdline
-      (subs cmdline (- (count cmdline) 1) (count cmdline)))))
+      (subs cmdline (- (count cmdline) 1) (count cmdline))))))
+
+(defn argv-equal-from?
+  [left (Vec String)
+   right (Vec String)
+   index Int] Bool
+  (if (>= index (count left))
+    true
+    (if (= (nth left index) (nth right index))
+      (argv-equal-from? left right (+ index 1))
+      false)))
 
 (defn argv-equal?
   [left (Vec String)
    right (Vec String)] Bool
-  (if (not= (count left) (count right))
-    false
-    (loop [index Int 0]
-      (if (>= index (count left))
-        true
-        (if (= (nth left index) (nth right index))
-          (recur (+ index 1))
-          false)))))
+  (and (= (count left) (count right))
+       (argv-equal-from? left right 0)))
 
-(defn worker-argv
+(js/export
+ (defn worker-argv
   [executable String
    repository String
    key String] (Vec String)
-  [executable "--worker" executable repository key])
+  [executable "--worker" executable repository key]))
 
-(defn nix-build-argv [key String] (Vec String)
-  ["nix" "build" "--no-link" "--print-out-paths" key])
+(js/export
+ (defn nix-build-argv [key String] (Vec String)
+  ["nix" "build" "--no-link" "--print-out-paths" key]))
 
 (defn low-priority-build-argv [key String] (Vec String)
   ["nice" "-n" "19" "ionice" "-c" "3"
    "nix" "build" "--no-link" "--print-out-paths" key])
 
-(defn detached-worker-argv
+(js/export
+ (defn detached-worker-argv
   [executable String
    repository String
    key String] (Vec String)
   ["setsid" "-f" "nice" "-n" "19" "ionice" "-c" "3"
-   executable "--worker" executable repository key])
+   executable "--worker" executable repository key]))
 
 (defn identity-matches?
   [identity ProcessIdentity
@@ -253,10 +288,11 @@
 (defn lock-contention? [errno Int] Bool
   (or (= errno 11) (= errno 35)))
 
-(defn stamp-current?
+(js/export
+ (defn stamp-current?
   [stamp String
    key String] Bool
-  (= (trim-line-ending stamp) key))
+  (= (trim-line-ending stamp) key)))
 
 (defn stamp-plan
   [key String
@@ -272,34 +308,39 @@
         (->RefUpdate (nth parts 0) (nth parts 1) (nth parts 2)))
       (->RefUpdateInvalid line))))
 
+(defn all-zero-from?
+  [text String
+   index Int] Bool
+  (if (>= index (count text))
+    true
+    (if (= (subs text index (+ index 1)) "0")
+      (all-zero-from? text (+ index 1))
+      false)))
+
 (defn all-zero? [text String] Bool
-  (and (> (count text) 0)
-       (loop [index Int 0]
-         (if (>= index (count text))
-           true
-           (if (= (subs text index (+ index 1)) "0")
-             (recur (+ index 1))
-             false)))))
+  (and (> (count text) 0) (all-zero-from? text 0)))
 
 (defn main-ref-update? [update RefUpdate] Bool
   (and (= (refupdate-ref update) "refs/heads/main")
        (not= (refupdate-old update) (refupdate-new update))
        (not (all-zero? (refupdate-new update)))))
 
+(defn transaction-fires-from?
+  [lines (Vec String)
+   index Int] Bool
+  (if (>= index (count lines))
+    false
+    (match (parse-ref-update (nth lines index))
+      [(RefUpdateInvalid line) (transaction-fires-from? lines (+ index 1))]
+      [(RefUpdateParsed update)
+       (if (main-ref-update? update)
+         true
+         (transaction-fires-from? lines (+ index 1)))])))
+
 (defn transaction-fires?
   [state String
    lines (Vec String)] Bool
-  (if (not= state "committed")
-    false
-    (loop [index Int 0]
-      (if (>= index (count lines))
-        false
-        (match (parse-ref-update (nth lines index))
-          [(RefUpdateInvalid line) (recur (+ index 1))]
-          [(RefUpdateParsed update)
-           (if (main-ref-update? update)
-             true
-             (recur (+ index 1)))])))))
+  (and (= state "committed") (transaction-fires-from? lines 0)))
 
 (defn hook-plan
   [state String
@@ -328,22 +369,93 @@
               (= (nth argv (+ index 1)) "host")
               (= (nth argv (+ index 2)) "rebuild")))))
 
-(defn rebuild-argv? [argv (Vec String)] Bool
-  (loop [index Int 0]
-    (if (>= index (count argv))
-      false
-      (if (firn-rebuild-at? argv index)
+(defn rebuild-argv-from?
+  [argv (Vec String)
+   index Int] Bool
+  (if (>= index (count argv))
+    false
+    (if (firn-rebuild-at? argv index)
+      true
+      (rebuild-argv-from? argv (+ index 1)))))
+
+(js/export
+ (defn rebuild-argv? [argv (Vec String)] Bool
+  (rebuild-argv-from? argv 0)))
+
+(defn rebuild-running-from?
+  [processes (Vec ProcessIdentity)
+   current-pid Int
+   index Int] Bool
+  (if (>= index (count processes))
+    false
+    (let [process ProcessIdentity (nth processes index)]
+      (if (and (not= (processidentity-pid process) current-pid)
+               (rebuild-argv? (processidentity-argv process)))
         true
-        (recur (+ index 1))))))
+        (rebuild-running-from? processes current-pid (+ index 1))))))
 
 (defn rebuild-running?
   [processes (Vec ProcessIdentity)
    current-pid Int] Bool
-  (loop [index Int 0]
-    (if (>= index (count processes))
-      false
-      (let [process ProcessIdentity (nth processes index)]
-        (if (and (not= (processidentity-pid process) current-pid)
-                 (rebuild-argv? (processidentity-argv process)))
-          true
-          (recur (+ index 1)))))))
+  (rebuild-running-from? processes current-pid 0))
+
+(js/export
+  (defn warm-key
+    [repository String
+     revision String
+     branch-text String
+     host String
+     platform String] String
+    (warmspec-key
+      (warm-spec
+        (->Snapshot repository revision
+          (if (= branch-text "") nil branch-text)
+          host platform)))))
+
+(js/export
+  (defn parsed-owner-fields [text String] (Vec String)
+    (match (parse-lease-owner text)
+      [(LeaseOwnerInvalid message) []]
+      [(LeaseOwnerParsed owner)
+       [(str (leaseowner-worker-pid owner))
+        (str (leaseowner-child-pid owner))
+        (leaseowner-key owner)]])))
+
+(js/export
+  (defn render-owner
+    [worker-pid Int
+     child-pid Int
+     key String] String
+    (render-lease-owner (->LeaseOwner worker-pid child-pid key))))
+
+(js/export
+  (defn supersede-action
+    [desired-key String
+     current-pid Int
+     executable String
+     repository String
+     owner-text String
+     worker-argv-value (Vec String)
+     child-argv-value (Vec String)] (Vec String)
+    (match (parse-lease-owner owner-text)
+      [(LeaseOwnerInvalid message) ["contended" message]]
+      [(LeaseOwnerParsed owner)
+       (match
+         (supersede-plan desired-key current-pid executable repository owner
+           (->ProcessIdentity (leaseowner-worker-pid owner) worker-argv-value)
+           (->ProcessIdentity (leaseowner-child-pid owner) child-argv-value))
+         [(LeaseDeduplicated key) ["deduplicated" key]]
+         [(LeaseContended key) ["contended" key]]
+         [(LeaseSupersede child-pid worker-pid)
+          ["supersede" (str child-pid) (str worker-pid)]])])))
+
+(js/export
+  (defn hook-argv-or-empty
+    [state String
+     lines (Vec String)
+     executable String
+     repository String
+     key String] (Vec String)
+    (match (hook-plan state lines executable repository key)
+      [(HookIgnored ignored-state) []]
+      [(HookLaunch argv) argv])))
