@@ -148,8 +148,8 @@ availability. An omitted model in a spawn schema is route metadata, not
 evidence that a model is unavailable.
 
 Treat North presets as templates, not cages: compose a justified custom route
-when its model/deliberation and authority choices are recorded. Prefer
-subscription-backed Codex Sol is the general workhorse for meaningful
+when its model/deliberation and authority choices are recorded.
+Subscription-backed Codex Sol is the general workhorse for meaningful
 engineering, at `medium` by default. Use `high` for complex, cross-cutting,
 architectural, or weak-oracle work, and `low` only for unusually deterministic,
 tightly bounded engineering with a strong oracle. Reserve Luna or Terra for
