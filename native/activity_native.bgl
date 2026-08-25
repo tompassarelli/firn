@@ -858,35 +858,37 @@
    state a/ActivityState
    line String]
   a/ActivityState
-  (match (parse-command-json line)
-    [(CommandIgnored token) state]
-    [(CommandLoaded command)
-     (match (niri-workspaces)
-       [(WorkspacesRejected message)
-        (do (stderr-line (str "activity daemon: " message)) state)]
-       [(WorkspacesLoaded workspaces)
-        (let [(plan d/CommandPlan)
-              (d/plan-command state workspaces command)]
-          (do
-            (if (not (d/commandplan-settled plan))
-              (stderr-line "activity daemon: band reconciliation limit reached")
-              nil)
-            (execute-plan-steps paths plan)
-            (d/commandplan-state plan)))])]))
+  (bgl/promote
+    (match (parse-command-json line)
+      [(CommandIgnored token) state]
+      [(CommandLoaded command)
+       (match (niri-workspaces)
+         [(WorkspacesRejected message)
+          (do (stderr-line (str "activity daemon: " message)) state)]
+         [(WorkspacesLoaded workspaces)
+          (let [(plan d/CommandPlan)
+                (d/plan-command state workspaces command)]
+            (do
+              (if (not (d/commandplan-settled plan))
+                (stderr-line "activity daemon: band reconciliation limit reached")
+                nil)
+              (execute-plan-steps paths plan)
+              (d/commandplan-state plan)))])])))
 
 (defn handle-event
   [paths ActivityPaths
    state a/ActivityState
    line String]
   a/ActivityState
-  (match (parse-event-json line)
-    [(EventWorkspaces workspaces)
-     (apply-workspace-record paths state workspaces)]
-    [(EventRescan token) (rescan-state paths state)]
-    [(EventIgnored token) state]
-    [(EventRejected message)
-     (do (stderr-line (str "activity daemon: invalid niri event: " message))
-       state)]))
+  (bgl/promote
+    (match (parse-event-json line)
+      [(EventWorkspaces workspaces)
+       (apply-workspace-record paths state workspaces)]
+      [(EventRescan token) (rescan-state paths state)]
+      [(EventIgnored token) state]
+      [(EventRejected message)
+       (do (stderr-line (str "activity daemon: invalid niri event: " message))
+         state)])))
 
 (defn make-parent [path String] Int
   (match (host.fs/make-parent-directories path)
