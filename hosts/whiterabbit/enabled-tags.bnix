@@ -37,6 +37,7 @@
    clang
    clippy
    clojure
+   dbeaver
    drracket
    gcc
    glide
