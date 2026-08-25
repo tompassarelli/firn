@@ -95,7 +95,7 @@
 
 (defn looks-like-firn-repository? [candidate String] Bool
   (and (path-kind? candidate 2)
-       (regular-file? (path candidate "native/firn.bgl"))
+       (regular-file? (path candidate "native/firn.bjs"))
        (regular-file? (path candidate "flake.bnix"))))
 
 (defn select-repository

@@ -5,9 +5,9 @@ firn_repo="${FIRN_REPO:-$HOME/code/nixos-config/main}" # hardcoded-repo-path:all
 beagle_path="${BEAGLE_PATH:-$HOME/code/beagle/main}" # hardcoded-repo-path:allow
 runtime_root="${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}"
 runtime_bin="$runtime_root/current/bin"
-runtime="$runtime_bin/firn"
+runtime="$runtime_bin/firn-host.mjs"
 
-if [[ ! -x "$runtime" ]]; then
+if [[ ! -f "$runtime" ]]; then
   printf 'firn: user runtime is not installed; run firn-runtime-update\n' >&2
   exit 127
 fi
@@ -15,4 +15,4 @@ fi
 export FIRN_REPO="$firn_repo"
 export BEAGLE_PATH="$beagle_path"
 export FIRN_RUNTIME_BIN="$runtime_bin"
-exec "$runtime" "$@"
+exec bun "$runtime" "$@"

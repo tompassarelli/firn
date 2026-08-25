@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.dispatch-test
   (:require [firn.main :as firn]))
 
@@ -346,14 +346,15 @@
    (->TestResult "documentation-and-diagnostics"
      (case-documentation-and-diagnostics))])
 
-(defn -main [args (Vec String)] Int
-  (let [(results (Vec TestResult)) (cases)]
-    (loop [(index Int) 0 (failures Int) 0]
-      (if (>= index (count results))
-        failures
-        (let [(result TestResult) (nth results index)]
-          (if (testresult-passed result)
-            (recur (+ index 1) failures)
-            (do
-              (print (str "FAIL: " (testresult-name result) "\n"))
-              (recur (+ index 1) (+ failures 1)))))))))
+(js/export
+  (defn run-tests [] Int
+    (let [(results (Vec TestResult)) (cases)]
+      (loop [(index Int) 0 (failures Int) 0]
+        (if (>= index (count results))
+          failures
+          (let [(result TestResult) (nth results index)]
+            (if (testresult-passed result)
+              (recur (+ index 1) failures)
+              (do
+                (print (str "FAIL: " (testresult-name result) "\n"))
+                (recur (+ index 1) (+ failures 1))))))))))

@@ -19,7 +19,16 @@ printf 'alpha\n' >"$firn_repo/marker"
 datum_reader="$beagle_path/native-core/src/beagle/datum_reader.bgl"
 native_json="$beagle_path/native-core/src/native/json.bgl"
 nix_schema_path="$beagle_path/native-core/src/beagle/nix_schema_path.bgl"
-dispatcher_sources=("$firn_repo/native/firn.bgl")
+dispatcher_source="$firn_repo/native/firn.bjs"
+dispatcher_bridge="$firn_repo/native/firn_host.mjs"
+beagle_core="$beagle_path/beagle-lib/lib/beagle/core.js"
+beagle_host="$beagle_path/beagle-lib/lib/beagle/host.js"
+dispatcher_sources=(
+  "$dispatcher_source"
+  "$dispatcher_bridge"
+  "$beagle_core"
+  "$beagle_host"
+)
 tag_sources=(
   "$datum_reader"
   "$native_json"
@@ -110,7 +119,11 @@ all_sources=(
 )
 for source in "${all_sources[@]}"; do
   mkdir -p "$(dirname "$source")"
-  printf '#lang beagle\n' >"$source"
+  case "$source" in
+    *.bjs) printf '#lang beagle/js\n' >"$source" ;;
+    *.mjs|*.js) printf 'fixture\n' >"$source" ;;
+    *) printf '#lang beagle\n' >"$source" ;;
+  esac
 done
 
 cat >"$beagle_path/bin/beagle" <<'EOF'
@@ -118,9 +131,16 @@ cat >"$beagle_path/bin/beagle" <<'EOF'
 set -euo pipefail
 printf 'BEAGLE_CALL\0' >>"$FAKE_BEAGLE_LOG"
 printf '%s\0' "$BEAGLE_PATH" "$FIRN_REPO" "$@" >>"$FAKE_BEAGLE_LOG"
-if [[ "${1:-}" != native-exe ]]; then
+if [[ "${1:-}" == build ]]; then
+  output="$3"
+  if [[ -z "${FAKE_BAD_DISPATCHER:-}" ]]; then
+    marker="$(sed -n '1p' "$FIRN_REPO/marker")"
+    printf '// dispatcher:%s\n' "$marker" >"$output"
+    printf '{"version":3}\n' >"$output.map"
+  fi
   exit 0
 fi
+[[ "${1:-}" == native-exe ]]
 out=""
 artifacts=""
 entry=""
@@ -134,34 +154,17 @@ while [[ "$#" -gt 0 ]]; do
 done
 [[ -n "$out" && -n "$artifacts" && -n "$entry" ]]
 marker="$(sed -n '1p' "$FIRN_REPO/marker")"
-if [[ "$entry" == firn.main/-main ]]; then
-  cat >"$out" <<INNER
-#!/usr/bin/env bash
-set -euo pipefail
-case "\${1:-}:\${2:-}" in
-  repo:validate) family=firn-schema ;;
-  host:list) family=firn-inventory ;;
-  tag:resolve) family=firn-tag ;;
-  flake-input:resolve) family=firn-flake-input ;;
-  module:add) family=firn-authoring ;;
-  platform:list) family=firn-views ;;
-  repo:build) family=firn-repo-build ;;
-  repo:doctor) family=firn-repo-workflow ;;
-  host:rebuild) family=firn-rebuild ;;
-  --print-warm-key:) family=firn-prewarm ;;
-  *) exit 64 ;;
-esac
-exec "\$FIRN_RUNTIME_BIN/\$family" "\$@"
-INNER
-else
-  cat >"$out" <<INNER
+cat >"$out" <<INNER
 #!/usr/bin/env bash
 printf 'prepared:%s:%s\n' '$marker' '$entry'
 printf 'RUNTIME_CALL\0' >>"\$FAKE_RUNTIME_LOG"
 printf '%s\0' '$entry' "\$BEAGLE_PATH" "\$FIRN_REPO" \
   "\$FIRN_RUNTIME_BIN" "\$@" >>"\$FAKE_RUNTIME_LOG"
-INNER
+if [[ -n "\${FAKE_RUNTIME_STDERR:-}" ]]; then
+  printf '%s\n' "\$FAKE_RUNTIME_STDERR" >&2
 fi
+exit "\${FAKE_RUNTIME_STATUS:-0}"
+INNER
 chmod +x "$out"
 if [[ -n "${FAKE_BAD_IDENTITY:-}" ||
       "${FAKE_BAD_IDENTITY_ENTRY:-}" == "$entry" ]]; then
@@ -178,6 +181,30 @@ printf 'native-exe-entry PASS name=%s symbol=fake return=Int abi=argv\n' \
   "$entry" >"$artifacts/native-exe.report.txt"
 EOF
 chmod +x "$beagle_path/bin/beagle"
+
+cat >"$fake_bin/bun" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+bridge="$1"
+shift
+printf 'BUN_CALL\0' >>"$FAKE_BUN_LOG"
+printf '%s\0' "$bridge" "$FIRN_RUNTIME_BIN" "$@" >>"$FAKE_BUN_LOG"
+case "${1:-}:${2:-}" in
+  repo:validate) family=firn-schema ;;
+  host:list) family=firn-inventory ;;
+  tag:resolve) family=firn-tag ;;
+  flake-input:resolve) family=firn-flake-input ;;
+  module:add) family=firn-authoring ;;
+  platform:list) family=firn-views ;;
+  repo:build) family=firn-repo-build ;;
+  repo:doctor) family=firn-repo-workflow ;;
+  host:rebuild) family=firn-rebuild ;;
+  --print-warm-key:) family=firn-prewarm ;;
+  *) exit 64 ;;
+esac
+exec "$FIRN_RUNTIME_BIN/$family" "$@"
+EOF
+chmod +x "$fake_bin/bun"
 
 cat >"$fake_bin/git" <<EOF
 #!/usr/bin/env bash
@@ -206,6 +233,7 @@ export BEAGLE_PATH="$beagle_path"
 export FIRN_REPO="$firn_repo"
 export FIRN_RUNTIME_ROOT="$runtime_root"
 export FAKE_BEAGLE_LOG="$scratch/beagle.log"
+export FAKE_BUN_LOG="$scratch/bun.log"
 export FAKE_RUNTIME_LOG="$scratch/runtime.log"
 export BOOT_CLOSURE_TRIPWIRE_LOG="$scratch/boot-closure.log"
 
@@ -215,12 +243,16 @@ FIRN_RUNTIME_ROOT="$repo_runtime_root" \
 repo_target="$(readlink "$repo_runtime_root/current")"
 repo_destination="$repo_runtime_root/$repo_target"
 grep -Fxq 'scope=repo' "$repo_destination/manifest"
-for component in dispatcher repo-build schema; do
+for component in repo-build schema; do
   grep -Fq "component=$component " "$repo_destination/manifest"
 done
 for component in tag flake-input inventory authoring views repo-workflow \
   rebuild prewarm; do
   ! grep -Fq "component=$component " "$repo_destination/manifest"
+done
+for artifact in dispatcher dispatcher-map bridge beagle-core beagle-host \
+  beagle-package; do
+  grep -Fq "artifact=$artifact " "$repo_destination/manifest"
 done
 [[ "$(FIRN_RUNTIME_ROOT="$repo_runtime_root" "$here/firn" repo build all)" == \
   prepared:alpha:firn.repo-build-native/-main ]]
@@ -274,19 +306,35 @@ for index in "${!expected_commands[@]}"; do
   expected="prepared:alpha:${expected_entries[index]}"
   [[ "$("$here/firn" "${args[@]}")" == "$expected" ]]
 done
+set +e
+FAKE_BUN_LOG=/dev/null FAKE_RUNTIME_LOG=/dev/null \
+  FAKE_RUNTIME_STDERR=owned-stderr FAKE_RUNTIME_STATUS=23 \
+  "$here/firn" repo validate \
+  >"$scratch/status.stdout" 2>"$scratch/status.stderr"
+runtime_status=$?
+set -e
+[[ "$runtime_status" -eq 23 ]]
+grep -Fxq 'prepared:alpha:firn.schema-transaction-native/-main' \
+  "$scratch/status.stdout"
+grep -Fxq 'owned-stderr' "$scratch/status.stderr"
 
 alpha_target="$(readlink "$runtime_root/current")"
 alpha_destination="$runtime_root/$alpha_target"
-[[ -x "$alpha_destination/bin/firn" ]]
-grep -Fxq 'format=firn-cli-family-runtime/v1' "$alpha_destination/manifest"
+[[ -f "$alpha_destination/bin/firn-host.mjs" ]]
+[[ -f "$alpha_destination/lib/firn-dispatcher.js" ]]
+grep -Fxq 'format=firn-cli-runtime/v2' "$alpha_destination/manifest"
 grep -Fxq 'scope=full' "$alpha_destination/manifest"
 grep -Fxq 'firn_revision=1111111111111111111111111111111111111111' \
   "$alpha_destination/manifest"
 grep -Fxq 'beagle_revision=2222222222222222222222222222222222222222' \
   "$alpha_destination/manifest"
-for component in dispatcher tag flake-input inventory authoring views repo-build \
+for component in tag flake-input inventory authoring views repo-build \
   schema repo-workflow rebuild prewarm; do
   grep -Fq "component=$component " "$alpha_destination/manifest"
+done
+for artifact in dispatcher dispatcher-map bridge beagle-core beagle-host \
+  beagle-package; do
+  grep -Fq "artifact=$artifact " "$alpha_destination/manifest"
 done
 
 printf 'beta\n' >"$firn_repo/marker"
@@ -298,23 +346,34 @@ printf 'beta\n' >"$firn_repo/marker"
 beta_target="$(readlink "$runtime_root/current")"
 beta_destination="$runtime_root/$beta_target"
 [[ "$beta_target" != "$alpha_target" ]]
-[[ -x "$alpha_destination/bin/firn" ]]
-[[ -x "$beta_destination/bin/firn" ]]
+[[ -f "$alpha_destination/bin/firn-host.mjs" ]]
+[[ -f "$beta_destination/bin/firn-host.mjs" ]]
 
 set +e
-FAKE_BAD_IDENTITY=1 "$here/firn-runtime-update" \
+FAKE_BAD_DISPATCHER=1 "$here/firn-runtime-update" \
   >"$scratch/invalid.stdout" 2>"$scratch/invalid.stderr"
 invalid_status=$?
 set -e
 [[ "$invalid_status" -ne 0 ]]
 grep -Fxq \
-  'firn-runtime-update: materializer producer identity is invalid: dispatcher' \
+  'firn-runtime-update: materializer produced no JS dispatcher' \
   "$scratch/invalid.stderr"
 [[ "$(readlink "$runtime_root/current")" == "$beta_target" ]]
 
 mapfile -d '' -t beagle_fields <"$FAKE_BEAGLE_LOG"
 cursor=0
 assert_stage_root="$runtime_root"
+assert_dispatcher_call() {
+  [[ "${beagle_fields[cursor++]}" == BEAGLE_CALL ]]
+  [[ "${beagle_fields[cursor++]}" == "$beagle_path" ]]
+  [[ "${beagle_fields[cursor++]}" == "$firn_repo" ]]
+  [[ "${beagle_fields[cursor++]}" == build ]]
+  [[ "${beagle_fields[cursor++]}" == "$dispatcher_source" ]]
+  out="${beagle_fields[cursor++]}"
+  stage="${out%/lib/firn-dispatcher.js}"
+  [[ "$out" == "$stage/lib/firn-dispatcher.js" ]]
+  [[ "$stage" == "$assert_stage_root"/.stage.* ]]
+}
 assert_call() {
   local binary="$1"
   local entry="$2"
@@ -328,11 +387,7 @@ assert_call() {
   stage="${out%/bin/$binary}"
   [[ "$stage" == "$assert_stage_root"/.stage.* ]]
   [[ "${beagle_fields[cursor++]}" == --artifacts ]]
-  [[ "${beagle_fields[cursor++]}" == "$stage/artifacts/${binary#firn-}" ||
-     "$binary" == firn ]]
-  if [[ "$binary" == firn ]]; then
-    [[ "${beagle_fields[cursor-1]}" == "$stage/artifacts/dispatcher" ]]
-  fi
+  [[ "${beagle_fields[cursor++]}" == "$stage/artifacts/${binary#firn-}" ]]
   [[ "${beagle_fields[cursor++]}" == --entry ]]
   [[ "${beagle_fields[cursor++]}" == "$entry" ]]
   for source in "$@"; do
@@ -340,7 +395,7 @@ assert_call() {
   done
 }
 assert_bundle_calls() {
-  assert_call firn firn.main/-main "${dispatcher_sources[@]}"
+  assert_dispatcher_call
   assert_call firn-tag firn.tag-family/-main "${tag_sources[@]}"
   assert_call firn-flake-input firn.flake-input-native/-main \
     "${flake_input_sources[@]}"
@@ -361,12 +416,12 @@ assert_bundle_calls() {
     "${prewarm_sources[@]}"
 }
 assert_stage_root="$repo_runtime_root"
-assert_call firn firn.main/-main "${dispatcher_sources[@]}"
+assert_dispatcher_call
 assert_call firn-repo-build firn.repo-build-native/-main \
   "${repo_build_sources[@]}"
 assert_call firn-schema firn.schema-transaction-native/-main \
   "${schema_sources[@]}"
-assert_call firn firn.main/-main "${dispatcher_sources[@]}"
+assert_dispatcher_call
 assert_call firn-repo-build firn.repo-build-native/-main \
   "${repo_build_sources[@]}"
 assert_call firn-schema firn.schema-transaction-native/-main \
@@ -374,11 +429,13 @@ assert_call firn-schema firn.schema-transaction-native/-main \
 assert_stage_root="$runtime_root"
 assert_bundle_calls
 assert_bundle_calls
-assert_call firn firn.main/-main "${dispatcher_sources[@]}"
+assert_dispatcher_call
 [[ "$cursor" -eq "${#beagle_fields[@]}" ]]
 
 mapfile -d '' -t runtime_fields <"$FAKE_RUNTIME_LOG"
+mapfile -d '' -t bun_fields <"$FAKE_BUN_LOG"
 cursor=0
+bun_cursor=0
 runtime_invocations=('repo build all' 'repo validate' 'repo validate'
   "${expected_commands[@]}" 'repo validate' 'repo validate')
 runtime_entries=(firn.repo-build-native/-main
@@ -392,6 +449,11 @@ for _ in "${expected_commands[@]}" 'repo validate' 'repo validate'; do
   runtime_roots+=("$runtime_root")
 done
 for index in "${!runtime_invocations[@]}"; do
+  [[ "${bun_fields[bun_cursor++]}" == BUN_CALL ]]
+  [[ "${bun_fields[bun_cursor++]}" == \
+    "${runtime_roots[index]}/current/bin/firn-host.mjs" ]]
+  [[ "${bun_fields[bun_cursor++]}" == \
+    "${runtime_roots[index]}/current/bin" ]]
   [[ "${runtime_fields[cursor++]}" == RUNTIME_CALL ]]
   [[ "${runtime_fields[cursor++]}" == "${runtime_entries[index]}" ]]
   [[ "${runtime_fields[cursor++]}" == "$beagle_path" ]]
@@ -399,10 +461,12 @@ for index in "${!runtime_invocations[@]}"; do
   [[ "${runtime_fields[cursor++]}" == "${runtime_roots[index]}/current/bin" ]]
   read -r -a args <<<"${runtime_invocations[index]}"
   for arg in "${args[@]}"; do
+    [[ "${bun_fields[bun_cursor++]}" == "$arg" ]]
     [[ "${runtime_fields[cursor++]}" == "$arg" ]]
   done
 done
 [[ "$cursor" -eq "${#runtime_fields[@]}" ]]
+[[ "$bun_cursor" -eq "${#bun_fields[@]}" ]]
 [[ ! -e "$BOOT_CLOSURE_TRIPWIRE_LOG" ]]
 
 missing_root="$scratch/missing-runtime"

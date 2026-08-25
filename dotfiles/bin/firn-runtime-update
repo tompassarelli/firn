@@ -37,9 +37,16 @@ done
 datum_reader="$beagle_path/native-core/src/beagle/datum_reader.bgl"
 native_json="$beagle_path/native-core/src/native/json.bgl"
 nix_schema_path="$beagle_path/native-core/src/beagle/nix_schema_path.bgl"
+dispatcher_source="$firn_repo/native/firn.bjs"
+dispatcher_bridge="$firn_repo/native/firn_host.mjs"
+beagle_core="$beagle_path/beagle-lib/lib/beagle/core.js"
+beagle_host="$beagle_path/beagle-lib/lib/beagle/host.js"
 
 dispatcher_sources=(
-  "$firn_repo/native/firn.bgl"
+  "$dispatcher_source"
+  "$dispatcher_bridge"
+  "$beagle_core"
+  "$beagle_host"
 )
 tag_sources=(
   "$datum_reader"
@@ -171,18 +178,77 @@ cleanup() {
   fi
 }
 trap cleanup EXIT INT TERM HUP
-mkdir -p "$stage/bin" "$stage/artifacts"
+mkdir -p "$stage/bin" "$stage/lib" "$stage/artifacts" \
+  "$stage/node_modules/beagle"
 
 manifest="$stage/manifest"
 {
-  printf 'format=firn-cli-family-runtime/v1\n'
+  printf 'format=firn-cli-runtime/v2\n'
   printf 'scope=%s\n' "$scope"
   printf 'firn_revision=%s\n' "$firn_revision"
   printf 'beagle_revision=%s\n' "$beagle_revision"
 } >"$manifest"
 
 declare -A artifact_ids=()
+artifact_paths=()
 binaries=()
+record_artifact() {
+  local component="$1"
+  local relative="$2"
+  local source="$3"
+  local artifact="$stage/$relative"
+  local source_id
+  local artifact_id
+
+  read -r source_id _ < <(sha256sum "$source")
+  read -r artifact_id _ < <(sha256sum "$artifact")
+  artifact_ids["$relative"]="$artifact_id"
+  artifact_paths+=("$relative")
+  printf 'artifact=%s path=%s source_sha256=%s artifact_sha256=%s\n' \
+    "$component" "$relative" "$source_id" "$artifact_id" >>"$manifest"
+}
+
+record_generated_artifact() {
+  local component="$1"
+  local relative="$2"
+  local artifact_id
+
+  read -r artifact_id _ < <(sha256sum "$stage/$relative")
+  artifact_ids["$relative"]="$artifact_id"
+  artifact_paths+=("$relative")
+  printf 'artifact=%s path=%s artifact_sha256=%s\n' \
+    "$component" "$relative" "$artifact_id" >>"$manifest"
+}
+
+materialize_dispatcher() {
+  local output="$stage/lib/firn-dispatcher.js"
+
+  if ! "$beagle" build "$dispatcher_source" "$output"; then
+    printf 'firn-runtime-update: JS dispatcher materialization failed\n' >&2
+    exit 1
+  fi
+  if [[ ! -f "$output" ]]; then
+    printf 'firn-runtime-update: materializer produced no JS dispatcher\n' >&2
+    exit 1
+  fi
+
+  cp -- "$dispatcher_bridge" "$stage/bin/firn-host.mjs"
+  cp -- "$beagle_core" "$stage/node_modules/beagle/core.js"
+  cp -- "$beagle_host" "$stage/node_modules/beagle/host.js"
+  printf '%s\n' '{"type":"module"}' \
+    >"$stage/node_modules/beagle/package.json"
+
+  record_artifact dispatcher lib/firn-dispatcher.js "$dispatcher_source"
+  if [[ -f "$output.map" ]]; then
+    record_artifact dispatcher-map lib/firn-dispatcher.js.map \
+      "$dispatcher_source"
+  fi
+  record_artifact bridge bin/firn-host.mjs "$dispatcher_bridge"
+  record_artifact beagle-core node_modules/beagle/core.js "$beagle_core"
+  record_artifact beagle-host node_modules/beagle/host.js "$beagle_host"
+  record_generated_artifact beagle-package node_modules/beagle/package.json
+}
+
 materialize() {
   local component="$1"
   local binary="$2"
@@ -229,14 +295,15 @@ materialize() {
     exit 1
   fi
   read -r artifact_id _ < <(sha256sum "$output")
-  artifact_ids["$binary"]="$artifact_id"
+  artifact_ids["bin/$binary"]="$artifact_id"
+  artifact_paths+=("bin/$binary")
   binaries+=("$binary")
   printf 'component=%s entry=%s executable=bin/%s source_sha256=%s artifact_sha256=%s\n' \
     "$component" "$entry" "$binary" "$source_id" "$artifact_id" \
     >>"$manifest"
 }
 
-materialize dispatcher firn firn.main/-main "${dispatcher_sources[@]}"
+materialize_dispatcher
 case "$scope" in
   repo)
     materialize repo-build firn-repo-build firn.repo-build-native/-main \
@@ -283,7 +350,21 @@ if [[ -e "$destination" ]]; then
       exit 1
     fi
     read -r existing_id _ < <(sha256sum "$output")
-    if [[ "$existing_id" != "${artifact_ids[$binary]}" ]]; then
+    if [[ "$existing_id" != "${artifact_ids[bin/$binary]}" ]]; then
+      printf 'firn-runtime-update: existing runtime identity mismatch: %s\n' \
+        "$output" >&2
+      exit 1
+    fi
+  done
+  for relative in "${artifact_paths[@]}"; do
+    output="$destination/$relative"
+    if [[ ! -f "$output" ]]; then
+      printf 'firn-runtime-update: existing runtime is incomplete: %s\n' \
+        "$destination" >&2
+      exit 1
+    fi
+    read -r existing_id _ < <(sha256sum "$output")
+    if [[ "$existing_id" != "${artifact_ids[$relative]}" ]]; then
       printf 'firn-runtime-update: existing runtime identity mismatch: %s\n' \
         "$output" >&2
       exit 1

@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.main)
 
 (defunion CommandId
@@ -836,47 +836,34 @@
     [(NativeRebuildFamily token) "firn-rebuild"]
     [(NativeCiPolicyFamily token) ""]))
 
-(defn prepend-argument
-  [argument String
-   args (Vec String)] (Vec String)
-  (loop [index Int 0
-         result (Vec String) [argument]]
-    (if (>= index (count args))
-      result
-      (recur (+ index 1) (conj result (nth args index))))))
-
-(defn runtime-executable [name String] (U String Nil)
-  (let [runtime-bin (U String Nil) (System/getenv "FIRN_RUNTIME_BIN")]
-    (if (nil? runtime-bin) nil (str runtime-bin "/" name))))
-
 (defn execute-runtime
-  [name String
+  [bridge Any
+   name String
    args (Vec String)] Int
-  (let [executable (U String Nil) (runtime-executable name)]
-    (if (nil? executable)
-      (do
-        (host.stderr/write-text
-          "firn: FIRN_RUNTIME_BIN is not set by the user launcher\n")
-        127)
-      (host.process/run-inherit (prepend-argument executable args)))))
+  (.executeRuntime bridge name args))
 
-(defn execute-step [step DispatchStep] Int
+(defn execute-step
+  [bridge Any
+   step DispatchStep] Int
   (let [args (Vec String) (step-argv step)
         executable String (family-executable (dispatchstep-owner step))]
-    (if (= executable "") 64 (execute-runtime executable args))))
+    (if (= executable "") 64 (execute-runtime bridge executable args))))
 
 (defn execute-plan-from
-  [steps (Vec DispatchStep)
+  [bridge Any
+   steps (Vec DispatchStep)
    index Int] Int
   (if (>= index (count steps))
     0
-    (let [status Int (execute-step (nth steps index))]
+    (let [status Int (execute-step bridge (nth steps index))]
       (if (= status 0)
-        (execute-plan-from steps (+ index 1))
+        (execute-plan-from bridge steps (+ index 1))
         status))))
 
-(defn execute-plan [plan DispatchPlan] Int
-  (execute-plan-from (dispatchplan-steps plan) 0))
+(defn execute-plan
+  [bridge Any
+   plan DispatchPlan] Int
+  (execute-plan-from bridge (dispatchplan-steps plan) 0))
 
 (defn prewarm-request? [args (Vec String)] Bool
   (and (> (count args) 0)
@@ -887,11 +874,13 @@
              (= mode "--reference-transaction")
              (= mode "--worker")))))
 
-(defn -main [args (Vec String)] Int
-  (if (prewarm-request? args)
-    (execute-runtime "firn-prewarm" args)
-    (match (parse-dispatch args)
-      [(DispatchHelp text status) (do (print text) status)]
-      [(DispatchError text status)
-       (do (host.stderr/write-text text) status)]
-      [(DispatchPlanned plan) (execute-plan plan)])))
+(js/export
+  (defn run
+    [bridge Any
+     args (Vec String)] Int
+    (if (prewarm-request? args)
+      (execute-runtime bridge "firn-prewarm" args)
+      (match (parse-dispatch args)
+        [(DispatchHelp text status) (do (.out bridge text) status)]
+        [(DispatchError text status) (do (.err bridge text) status)]
+        [(DispatchPlanned plan) (execute-plan bridge plan)]))))

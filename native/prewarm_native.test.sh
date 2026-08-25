@@ -78,11 +78,11 @@ lane="$container/worktrees/slug"
 runtime="$scratch/runtime"
 host="$(hostname)"
 mkdir -p "$main/native" "$main/hosts/$host" "$container/worktrees" "$runtime"
-printf '#lang beagle\n(ns firn.main)\n' >"$main/native/firn.bgl"
+printf '#lang beagle/js\n(ns firn.main)\n' >"$main/native/firn.bjs"
 printf '#lang beagle/nix\n(ns flake)\n' >"$main/flake.bnix"
 printf 'fixture\n' >"$main/hosts/$host/marker"
 git init -q -b main "$main"
-git -C "$main" add -- native/firn.bgl flake.bnix "hosts/$host/marker"
+git -C "$main" add -- native/firn.bjs flake.bnix "hosts/$host/marker"
 git -C "$main" \
   -c user.name=prewarm-test \
   -c user.email=prewarm-test@example.invalid \
