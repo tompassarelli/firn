@@ -579,7 +579,7 @@ north_wrapped_runtime_matches_locked_source() {
 }
 
 # Read one decision from North's immutable activation generation. This checker
-# does not resolve permissions, sets, claims, or kill switches independently.
+# does not resolve permissions, modules, claims, or kill switches independently.
 north_unit_activity_state() {
   local wanted_kind="$1" wanted_name="$2"
   local state_root="${NORTH_AGENT_STATE_ROOT:-$HOME/.local/state/north/agents}"
@@ -680,10 +680,10 @@ ok_detail() { details+=("ok: $*"); }
 note() { [ "$VERBOSE" -eq 0 ] || printf '  note: %s\n' "$*"; }
 bad() { printf '  FAIL: %s\n' "$*" >&2; fail=$((fail + 1)); }
 soft() { printf '  warn: %s\n' "$*" >&2; warn=$((warn + 1)); }
-COORDINATION_ACTIVITY="$(north_unit_activity_state set coordination)"
+COORDINATION_ACTIVITY="$(north_unit_activity_state module coordination)"
 AGENT_SPAWN_GUARD_ACTIVITY="$(north_unit_activity_state hook agent-spawn-guard)"
 COORDINATION_ACTIVE=0
-north_unit_activity_is_active set coordination && COORDINATION_ACTIVE=1
+north_unit_activity_is_active module coordination && COORDINATION_ACTIVE=1
 group() {
   local name="$1" summary="$2" before="$3"
   if [ "$fail" -eq "$before" ]; then printf '✓ %-13s %s\n' "$name" "$summary"

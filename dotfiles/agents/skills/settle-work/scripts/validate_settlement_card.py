@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
+from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 import hashlib
 from pathlib import Path
 import re
-import subprocess
 import sys
 import tomllib
 from typing import Any
@@ -30,8 +30,8 @@ ROOT_FIELDS = {
     "quality_debt",
     "attempt",
     "lane",
-    "cleanup",
 }
+ROOT_REQUIRED = ROOT_FIELDS - {"overrun_cause"}
 ATTEMPT_REQUIRED = {
     "id",
     "ended_at",
@@ -53,14 +53,7 @@ ATTEMPT_OPTIONAL = {
     "review_repair_time_actual",
 }
 ATTEMPT_ALLOWED = ATTEMPT_REQUIRED | ATTEMPT_OPTIONAL
-SETTLEMENT_FIELDS = {
-    "ended_at",
-    "outcome",
-    "wall_time_actual",
-    "agent_time_actual",
-    "queue_block_time_actual",
-    "verification_time_actual",
-}
+SETTLEMENT_FIELDS = ATTEMPT_ALLOWED - {"id"}
 TIME_FIELDS = {
     "wall_time_actual",
     "agent_time_actual",
@@ -70,13 +63,18 @@ TIME_FIELDS = {
 }
 DEBT_FIELDS = {"attempt", "path", "invariant", "severity", "owner", "exit_condition"}
 LANE_FIELDS = {"repo", "worktree", "branch", "state"}
-CLEANUP_FIELDS = {"authorized", "authorized_by", "actions", "reason", "lane_state_after"}
-CLEANUP_ACTIONS = {"remove-worktree", "delete-branch"}
-CLEANUP_STATES = {"landed", "superseded", "race-loser"}
-TERMINAL_LANE_STATES = CLEANUP_STATES | {"preserved", "none"}
 VERIFICATION_VERDICTS = {"passed", "failed", "not-run"}
 REVIEW_OUTCOMES = {"clean", "findings", "not-run"}
 ACTUAL_DURATION = re.compile(r"^(?:\d+(?:\.\d+)?(?:ms|s|m|h|d))+$")
+DURATION_COMPONENT = re.compile(r"(\d+(?:\.\d+)?)(ms|s|m|h|d)")
+DURATION_SCALE = {
+    "ms": Decimal("0.001"),
+    "s": Decimal(1),
+    "m": Decimal(60),
+    "h": Decimal(3600),
+    "d": Decimal(86400),
+}
+DURATION_BASE_PRECISION = Decimal("0.001")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 COMMIT = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 
@@ -105,6 +103,34 @@ def timestamp(value: Any, label: str, errors: list[str]) -> datetime | None:
         errors.append(f"{label} must include a UTC offset")
         return None
     return parsed
+
+
+def duration(value: Any, label: str, errors: list[str]) -> tuple[Decimal, Decimal] | None:
+    if not isinstance(value, str) or ACTUAL_DURATION.fullmatch(value) is None:
+        errors.append(f"{label} must be an exact compact duration")
+        return None
+    total = Decimal(0)
+    precision = DURATION_BASE_PRECISION
+    try:
+        for raw_number, unit in DURATION_COMPONENT.findall(value):
+            number = Decimal(raw_number)
+            scale = DURATION_SCALE[unit]
+            total += number * scale
+            lexical_precision = Decimal(1).scaleb(number.as_tuple().exponent) * scale
+            precision = min(precision, lexical_precision)
+    except (InvalidOperation, OverflowError):
+        errors.append(f"{label} must be an exact compact duration")
+        return None
+    return total, precision
+
+
+def elapsed_seconds(started_at: datetime, ended_at: datetime) -> Decimal:
+    elapsed = ended_at - started_at
+    return (
+        Decimal(elapsed.days) * DURATION_SCALE["d"]
+        + Decimal(elapsed.seconds)
+        + Decimal(elapsed.microseconds) / Decimal(1_000_000)
+    )
 
 
 def parse_frontmatter(raw: bytes, errors: list[str]) -> dict[str, Any] | None:
@@ -137,47 +163,6 @@ def evidence(label: str, verdict: str, values: Any, errors: list[str]) -> None:
         errors.append(f"{verdict} {label} needs exact evidence; a verdict cannot be invented")
 
 
-def git(worktree: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", "-C", str(worktree), *args],
-        check=False,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-
-
-def validate_cleanup_worktree(
-    lane: dict[str, Any], commit: str, actions: list[str], errors: list[str]
-) -> None:
-    worktree = Path(lane["worktree"]).expanduser().resolve()
-    if "worktrees" not in worktree.parts:
-        errors.append("cleanup target is not inside a worktrees/ lane")
-        return
-    if not worktree.is_dir():
-        errors.append(f"cleanup worktree is absent: {worktree}")
-        return
-    status = git(worktree, "status", "--porcelain=v1", "--untracked-files=all")
-    if status.returncode != 0:
-        errors.append(f"cleanup worktree status failed: {status.stderr.strip()}")
-        return
-    if status.stdout:
-        errors.append("cleanup worktree is not clean")
-    branch = git(worktree, "branch", "--show-current")
-    if branch.returncode != 0 or branch.stdout.strip() != lane["branch"]:
-        errors.append("cleanup worktree branch conflicts with the card")
-    head = git(worktree, "rev-parse", "HEAD")
-    if head.returncode != 0 or head.stdout.strip() != commit:
-        errors.append("cleanup worktree HEAD conflicts with the card commit")
-    if "delete-branch" in actions and "remove-worktree" not in actions:
-        errors.append("delete-branch cleanup also requires remove-worktree")
-    if lane["state"] == "landed":
-        main = worktree.parent.parent / "main"
-        landed = git(main, "merge-base", "--is-ancestor", commit, "HEAD") if main.is_dir() else None
-        if landed is None or landed.returncode != 0:
-            errors.append("landed cleanup commit is not reachable from the clean main checkout")
-
-
 def validate(card_path: Path, todo_root: Path) -> list[str]:
     errors: list[str] = []
     try:
@@ -188,7 +173,7 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
         return ["card must decode to one TOML table"]
     for field in sorted(set(card) - ROOT_FIELDS):
         errors.append(f"unknown card field: {field}")
-    missing_root = sorted(ROOT_FIELDS - set(card))
+    missing_root = sorted(ROOT_REQUIRED - set(card))
     if missing_root:
         errors.append(f"card is missing: {', '.join(missing_root)}")
     if card.get("schema") != SCHEMA:
@@ -210,6 +195,7 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
         errors.append("todo_record must be an exact path")
 
     record: dict[str, Any] | None = None
+    record_digest_stale = False
     if record_path is not None:
         try:
             record_bytes = record_path.read_bytes()
@@ -223,7 +209,7 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
         else:
             actual_digest = hashlib.sha256(record_bytes).hexdigest()
             if actual_digest != expected_digest:
-                errors.append("todo record digest is stale or conflicting")
+                record_digest_stale = True
 
     record_id = card.get("record_id")
     if not nonempty(record_id):
@@ -258,7 +244,7 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
     commit = card.get("commit")
     if not isinstance(commit, str) or COMMIT.fullmatch(commit) is None:
         errors.append("commit must be one full lowercase Git object ID")
-    if not nonempty(card.get("overrun_cause")):
+    if "overrun_cause" in card and not nonempty(card.get("overrun_cause")):
         errors.append("overrun_cause must be explicit, including 'none'")
 
     verification_verdict = card.get("verification_verdict")
@@ -270,6 +256,8 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
     attempt = card.get("attempt")
     source_attempt: dict[str, Any] | None = None
     ended_at: datetime | None = None
+    attempt_replay_exact = False
+    parsed_durations: dict[str, tuple[Decimal, Decimal]] = {}
     if not isinstance(attempt, dict):
         errors.append("attempt must be one TOML table")
         attempt = {}
@@ -280,11 +268,9 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
         if missing:
             errors.append(f"attempt is missing: {', '.join(missing)}")
         for field in sorted(TIME_FIELDS & set(attempt)):
-            if (
-                not isinstance(attempt[field], str)
-                or ACTUAL_DURATION.fullmatch(attempt[field]) is None
-            ):
-                errors.append(f"attempt.{field} must be an exact compact duration")
+            parsed = duration(attempt[field], f"attempt.{field}", errors)
+            if parsed is not None:
+                parsed_durations[field] = parsed
         for field in sorted((ATTEMPT_ALLOWED - TIME_FIELDS - {"id", "ended_at"}) & set(attempt)):
             if not nonempty(attempt[field]):
                 errors.append(f"attempt.{field} must be non-empty")
@@ -306,15 +292,51 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
             errors.append(f"attempt id {attempt_id!r} does not identify exactly one owning attempt")
         else:
             source_attempt = matches[0]
-            if any(field in source_attempt for field in SETTLEMENT_FIELDS):
-                errors.append("owning attempt is already partially or fully settled")
+            card_terminal = {
+                field: attempt[field]
+                for field in SETTLEMENT_FIELDS & set(attempt)
+            }
+            source_terminal = {
+                field: source_attempt[field]
+                for field in SETTLEMENT_FIELDS & set(source_attempt)
+            }
+            attempt_replay_exact = source_terminal == card_terminal
+            for field in sorted(set(source_terminal) - set(card_terminal)):
+                errors.append(f"owning attempt has unlisted settlement field: {field}")
+            for field in sorted(set(card_terminal) & set(source_terminal)):
+                if source_attempt[field] != attempt[field]:
+                    errors.append(f"owning attempt has conflicting settlement field: {field}")
             started_at = timestamp(
                 source_attempt.get("started_at"), "owning attempt started_at", errors
             )
             if started_at is not None and ended_at is not None and ended_at < started_at:
                 errors.append("attempt.ended_at precedes the owning attempt start")
+            wall = parsed_durations.get("wall_time_actual")
+            if started_at is not None and ended_at is not None and wall is not None:
+                wall_seconds, precision = wall
+                elapsed = elapsed_seconds(started_at, ended_at)
+                elapsed_at_precision = (
+                    (elapsed / precision).to_integral_value(rounding=ROUND_HALF_EVEN)
+                    * precision
+                )
+                if elapsed_at_precision != wall_seconds:
+                    errors.append(
+                        "attempt.wall_time_actual conflicts with ended_at - started_at"
+                    )
     if issued_at is not None and ended_at is not None and issued_at < ended_at:
         errors.append("issued_at precedes attempt.ended_at")
+
+    wall = parsed_durations.get("wall_time_actual")
+    if wall is not None:
+        wall_seconds = wall[0]
+        for field in (
+            "queue_block_time_actual",
+            "verification_time_actual",
+            "review_repair_time_actual",
+        ):
+            parsed = parsed_durations.get(field)
+            if parsed is not None and parsed[0] > wall_seconds:
+                errors.append(f"attempt.{field} exceeds wall_time_actual")
 
     if verification_verdict in VERIFICATION_VERDICTS and not nonempty(
         attempt.get("verification_summary")
@@ -362,9 +384,23 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
         errors.append("race_outcome cannot be added to a non-race attempt")
 
     debt = card.get("quality_debt")
+    debt_replay_exact = False
     if not isinstance(debt, list):
         errors.append("quality_debt must be an explicit array")
     else:
+        prior_debt = record.get("quality_debt", []) if record is not None else []
+        prior_attempt_debt = (
+            [
+                item
+                for item in prior_debt
+                if isinstance(item, dict) and item.get("attempt") == attempt_id
+            ]
+            if isinstance(prior_debt, list)
+            else []
+        )
+        debt_replay_exact = prior_attempt_debt == debt
+        if prior_attempt_debt and not debt_replay_exact:
+            errors.append("quality_debt conflicts with the owning record")
         for index, item in enumerate(debt, 1):
             if not isinstance(item, dict) or set(item) != DEBT_FIELDS:
                 errors.append(f"quality_debt {index} must use the todo debt fields exactly")
@@ -373,16 +409,26 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
                 nonempty(value) for value in item.values()
             ):
                 errors.append(f"quality_debt {index} is incomplete or names the wrong attempt")
+            if record is not None:
+                matches = [
+                    prior
+                    for prior in prior_debt
+                    if isinstance(prior, dict)
+                    and prior.get("attempt") == item.get("attempt")
+                    and prior.get("path") == item.get("path")
+                ] if isinstance(prior_debt, list) else []
+                if matches and any(prior != item for prior in matches):
+                    errors.append(f"quality_debt {index} conflicts with the owning record")
 
     lane = card.get("lane")
-    source_lane: dict[str, Any] | None = None
+    lane_replay_exact = False
     if not isinstance(lane, dict):
         errors.append("lane must be one TOML table")
         lane = {}
     elif set(lane) - LANE_FIELDS:
         errors.append(f"unknown lane field: {', '.join(sorted(set(lane) - LANE_FIELDS))}")
-    if lane.get("state") not in TERMINAL_LANE_STATES:
-        errors.append("lane.state must name an explicit terminal disposition")
+    if not nonempty(lane.get("state")):
+        errors.append("lane.state must be an exact owner-supplied state")
     if record is not None:
         lanes = record.get("lane", [])
         if not isinstance(lanes, list):
@@ -390,6 +436,8 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
         if lane.get("state") == "none":
             if lanes or set(lane) != {"state"}:
                 errors.append("lane state none conflicts with the owning record")
+            else:
+                lane_replay_exact = True
         else:
             if not all(nonempty(lane.get(field)) for field in ("repo", "worktree", "branch")):
                 errors.append("lane must name repo, worktree, and branch")
@@ -403,57 +451,12 @@ def validate(card_path: Path, todo_root: Path) -> list[str]:
             if len(matches) != 1:
                 errors.append("lane does not identify exactly one owning record lane")
             else:
-                source_lane = matches[0]
+                lane_replay_exact = matches[0].get("state") == lane.get("state")
 
-    cleanup = card.get("cleanup")
-    if not isinstance(cleanup, dict):
-        errors.append("cleanup must be one TOML table")
-        cleanup = {}
-    else:
-        for field in sorted(set(cleanup) - CLEANUP_FIELDS):
-            errors.append(f"unknown cleanup field: {field}")
-    cleanup_authorized = cleanup.get("authorized")
-    actions = cleanup.get("actions")
-    if type(cleanup_authorized) is not bool:
-        errors.append("cleanup.authorized must be true or false")
-    if (
-        not isinstance(actions, list)
-        or not all(isinstance(action, str) and action in CLEANUP_ACTIONS for action in actions)
-        or len(set(actions)) != len(actions)
+    if record_digest_stale and not (
+        attempt_replay_exact and debt_replay_exact and lane_replay_exact
     ):
-        errors.append("cleanup.actions must be unique remove-worktree/delete-branch actions")
-        actions = []
-    if cleanup_authorized is False:
-        if actions:
-            errors.append("cleanup actions are unauthorized")
-        if set(cleanup) - {"authorized", "actions"}:
-            errors.append("unauthorized cleanup cannot carry authority or disposition fields")
-    elif cleanup_authorized is True:
-        ready = True
-        if not actions:
-            errors.append("authorized cleanup needs at least one exact action")
-            ready = False
-        if cleanup.get("authorized_by") != authorized_by:
-            errors.append("cleanup authorized_by must equal the product owner")
-            ready = False
-        if not nonempty(cleanup.get("reason")):
-            errors.append("authorized cleanup needs an explicit reason")
-            ready = False
-        if lane.get("state") not in CLEANUP_STATES:
-            errors.append("cleanup requires a landed, superseded, or race-loser lane")
-            ready = False
-        if cleanup.get("lane_state_after") != "reaped":
-            errors.append("authorized cleanup must explicitly set lane_state_after to reaped")
-            ready = False
-        if lane.get("state") == "race-loser" and attempt.get(
-            "race_outcome"
-        ) not in {"lost", "loser"}:
-            errors.append("race-loser cleanup conflicts with race_outcome")
-            ready = False
-        if source_lane is None or not isinstance(commit, str) or COMMIT.fullmatch(commit) is None:
-            ready = False
-        if ready:
-            validate_cleanup_worktree(lane, commit, actions, errors)
+        errors.append("todo record digest is stale or conflicting")
 
     return sorted(set(errors))
 
@@ -473,7 +476,7 @@ def main(argv: list[str]) -> int:
         for error in errors:
             print(f"SettlementCard invalid: {error}", file=sys.stderr)
         return 1
-    print("SettlementCard valid: exact attempt evidence and cleanup authority admitted")
+    print("SettlementCard valid: exact terminal fields and lane identity admitted")
     return 0
 
 

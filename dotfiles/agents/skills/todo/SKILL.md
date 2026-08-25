@@ -159,8 +159,8 @@ change, finding, or named assurance reason.
 
 The product owner may delegate terminal bookkeeping without delegating a
 verdict. Emit one immutable TOML SettlementCard after deciding integration,
-verification, review, publication, race disposition, quality debt, lane state,
-and cleanup authority. The card is the settler's complete capability envelope:
+verification, review, publication, race disposition, quality debt, and lane
+state. The card is the settler's complete capability envelope:
 
 ```toml
 schema = "agent-settlement-card/v1"
@@ -192,10 +192,6 @@ repo = "nixos-config"
 worktree = "~/code/nixos-config/worktrees/compiler-seam"
 branch = "compiler-seam"
 state = "landed"
-
-[cleanup]
-authorized = false
-actions = []
 ```
 
 The `[attempt]` table is a terminal delta for the same attempt and uses the
@@ -209,19 +205,27 @@ never invents one. `quality_debt` is an explicit array, empty or composed only
 of the shared debt entries above.
 
 The lane table names one existing record lane and its owner-selected terminal
-state; use `{ state = "none" }` only when the record has no lane. Cleanup is
-denied by default. Authorized cleanup additionally names `authorized_by`, a
-non-empty subset of `remove-worktree` and `delete-branch`, an exact reason, and
-`lane_state_after = "reaped"`. It is valid only for the named clean lane with a
-`landed`, `superseded`, or `race-loser` disposition. No card authorizes product
-integration, publication, activation, history rewriting, or unrelated files.
+state; use `{ state = "none" }` only when the record has no lane. The settler
+copies that string after matching the existing record, attempt, and lane
+identity; it does not interpret the state or inspect repository disposition.
+No card authorizes product integration, publication, activation, history
+rewriting, lane or branch operations, or unrelated files.
 
 The settler validates the record hash, record and attempt identity, owner
-authority, chronology, evidence/verdict consistency, lane identity, and cleanup
-preconditions before mutation. Missing or conflicting data invalidates the
-whole card; the settler never fills it from inference. After exact application,
-copy one terminal receipt to the estimate-calibration ledger and acknowledge
-the product owner.
+authority, chronology, evidence/verdict consistency, review, debt, lane
+identity, and duration relations before mutation. Every supplied terminal field
+must either be absent or already equal in the owning attempt; a conflicting or
+unlisted prior terminal field invalidates the card. Require
+`ended_at - started_at == wall_time_actual` at compact-duration precision, and
+require queue/block, verification, and review-repair time individually not to
+exceed wall time.
+
+A stale record digest remains invalid while any todo mutation is pending. The
+same card may replay after an interrupted settlement only when its complete
+terminal field map, attempt-owned debt entries, and lane state are already
+exact. The settler then writes or confirms the deterministic keyed receipt
+defined by `estimate`; it never rewrites Current state or Verification prose or
+fills any value from inference.
 
 ## Shapes are semantic, not one universal state machine
 

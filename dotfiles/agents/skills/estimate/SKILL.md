@@ -57,15 +57,21 @@ terminal worker boundary, delegate their mechanical copy through the `todo`
 SettlementCard and `settle-work` by default. Settle directly only when no
 admitted worker slot exists or dispatch costs more than this bounded update.
 
-Replace the in-flight pointer with one completed receipt: wall and agent time
-estimates and actuals, queue/block and verification time actuals, the derived
-wall-time actual-to-estimate ratio, selected model/reasoning/route/role, race
-result where relevant, and concise overrun cause or `none`. Include exact commit
-review findings, review-repair time actual, and explicitly deferred quality
-debt when they exist. A settler copies these values from the owner-issued card
-and owning attempt; it never estimates a missing actual or upgrades a verdict.
-The `todo` skill owns the shared field and card contracts. Refresh same-class
-calibration from settled receipts; use model-specific observations when enough
-exist, and otherwise retain the labeled cross-model fallback. Keep the ledger
-as concise Markdown with TOML front matter; it is a learning record, not a
-second live-work tracker.
+Replace the in-flight pointer with one deterministic completed receipt keyed by
+`<record_id>/<attempt_id>`. Render fields in this order: ended-at, seam, class,
+wall estimate/actual, agent estimate/actual, queue/block actual, verification
+actual, model, reasoning, route, role, assignment ID, outcome, overrun cause,
+race outcome, reviewed commit/outcome/summary, reviewer model/reasoning, review
+repair actual, and exact quality-debt entries. Copy values from the validated
+card and owning attempt; render an absent optional value as `none`, and use
+`none` when the optional card overrun cause is absent. Do not paraphrase a
+value, add provider actuals, or serialize the derivable wall-time ratio.
+
+The stable key may occur only once. An identical receipt is an idempotent
+replay; a different receipt with that key is a conflict. The settler never
+rewrites another receipt or authors calibration prose. The `todo` skill owns
+the shared field and card contracts. Refresh same-class calibration from
+settled receipts; use model-specific observations when enough exist, and
+otherwise retain the labeled cross-model fallback. Keep the ledger as concise
+Markdown with TOML front matter; it is a learning record, not a second
+live-work tracker.

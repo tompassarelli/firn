@@ -58,7 +58,7 @@ activation generation under `~/.local/state/north/agents/current`:
 - `~/code/AGENTS.md` → `instructions/code/AGENTS.md`;
 - `~/.agents/skills` → `skills/shared`.
 
-North owns the catalog, permission transition, set/support resolution, atomic
+North owns the catalog, permission transition, module/support resolution, atomic
 generation, and those projections. Firn owns only stable discovery pointers
 and immutable provider wiring. North may maintain exact catalog-owned
 compatibility links inside the existing `~/.codex/skills` directory, but Firn
@@ -73,7 +73,7 @@ their support files link to North's current immutable agent generation.
 ## Shared skill dials
 
 `north config agents` is the only runtime control surface for catalogued
-skills, hooks, and sets. It stages a complete generation and atomically
+skills, hooks, and modules. It stages a complete generation and atomically
 replaces one `current` pointer. `category:` remains optional SKILL.md metadata;
 missing metadata is `uncategorized`. Firn's owned skill declares
 `category: nixos`.

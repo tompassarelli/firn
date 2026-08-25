@@ -25,7 +25,7 @@ Use one globally unique hook ID in
 `north:agent-catalog/catalog.json`. Its catalog owner is the exact source
 `repo:path`; no forwarding source or provider alias survives. Declare support
 relations and distributions there. North alone resolves permission, active
-claimants, set closure, provenance, and provider activation paths into
+claimants, module closure, provenance, and provider activation paths into
 `${NORTH_AGENT_STATE_ROOT:-~/.local/state/north/agents}/current/activation.json`.
 
 Most owner scripts live under `north:profiles/tom/hooks`. A Firn-owned native
@@ -55,7 +55,7 @@ esac
 When the override is unset, read the hook's exact `kind=hook`, `id`, and
 resolved `active` boolean from the current North activation generation. A
 missing, duplicate, malformed, wrong-schema, or inactive row disables the
-hook. Never re-resolve sets or claims in the provider adapter.
+hook. Never re-resolve modules or claims in the provider adapter.
 
 ### Deny protocol
 

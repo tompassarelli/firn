@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused positive and fail-closed SettlementCard fixtures."""
+"""Focused positive, replay, and fail-closed SettlementCard fixtures."""
 
 from __future__ import annotations
 
@@ -60,7 +60,8 @@ reasoning = "high"
 route = "fixture"
 assignment_id = "fixture-a1"
 role = "worker"
-review_budget = "owner"
+review_budget = "independent"
+race = "race-1"
 +++
 
 ## Verification
@@ -80,7 +81,7 @@ commit = "1111111111111111111111111111111111111111"
 overrun_cause = "none"
 verification_verdict = "passed"
 verification_evidence = ["alpha:tests/demo.test :: PASS"]
-review_evidence = []
+review_evidence = ["alpha:review/demo :: findings repaired"]
 quality_debt = []
 
 [attempt]
@@ -92,17 +93,20 @@ agent_time_actual = "1m"
 queue_block_time_actual = "0s"
 verification_time_actual = "10s"
 verification_summary = "focused demo fixture passed"
-review_outcome = "not-run"
+review_outcome = "findings"
+queue_block_cause = "none"
+race_outcome = "won"
+reviewed_commit = "1111111111111111111111111111111111111111"
+review_summary = "one finding repaired"
+reviewer_model = "gpt-5.6-sol"
+reviewer_reasoning = "high"
+review_repair_time_actual = "5s"
 
 [lane]
 repo = "alpha"
 worktree = "/tmp/alpha/worktrees/demo"
 branch = "demo"
 state = "preserved"
-
-[cleanup]
-authorized = false
-actions = []
 '''
         positive = root / "positive.toml"
         positive.write_text(base, encoding="utf-8")
@@ -111,6 +115,16 @@ actions = []
         assert "SettlementCard valid" in result.stdout
         print("positive settlement case: PASS")
 
+        cleanup = root / "cleanup-field-rejected.toml"
+        cleanup.write_text(
+            base + "\n[cleanup]\nauthorized = false\nactions = []\n",
+            encoding="utf-8",
+        )
+        result = run(cleanup, todo)
+        assert result.returncode == 1
+        assert "unknown card field: cleanup" in result.stderr
+        print("cleanup field rejected case: PASS")
+
         wrong_attempt = root / "wrong-attempt.toml"
         wrong_attempt.write_text(base.replace('id = "A1"', 'id = "A9"', 1), encoding="utf-8")
         result = run(wrong_attempt, todo)
@@ -118,28 +132,119 @@ actions = []
         assert "does not identify exactly one owning attempt" in result.stderr
         print("wrong attempt case: PASS")
 
-        invented = root / "invented-verdict-cleanup.toml"
-        invented.write_text(
+        stale = root / "stale-record.toml"
+        stale.write_text(base.replace(digest, "0" * 64), encoding="utf-8")
+        result = run(stale, todo)
+        assert result.returncode == 1
+        assert "todo record digest is stale or conflicting" in result.stderr
+        print("stale record case: PASS")
+
+        missing_evidence = root / "missing-evidence.toml"
+        missing_evidence.write_text(
             base.replace(
                 'verification_evidence = ["alpha:tests/demo.test :: PASS"]',
                 "verification_evidence = []",
-            ).replace(
-                "[cleanup]\nauthorized = false\nactions = []",
-                '''[cleanup]
-authorized = true
-authorized_by = "codex:/root/settler"
-actions = ["remove-worktree"]
-reason = "assumed disposable"
-lane_state_after = "reaped"''',
             ),
             encoding="utf-8",
         )
-        result = run(invented, todo)
+        result = run(missing_evidence, todo)
         assert result.returncode == 1
         assert "a verdict cannot be invented" in result.stderr
-        assert "cleanup authorized_by must equal the product owner" in result.stderr
-        assert "cleanup requires a landed, superseded, or race-loser lane" in result.stderr
-        print("negative invented-verdict/cleanup case: PASS")
+        print("missing evidence case: PASS")
+
+        invalid_review = root / "invalid-review.toml"
+        invalid_review.write_text(
+            base.replace(
+                'review_evidence = ["alpha:review/demo :: findings repaired"]',
+                "review_evidence = []",
+            ),
+            encoding="utf-8",
+        )
+        result = run(invalid_review, todo)
+        assert result.returncode == 1
+        assert "findings review needs exact evidence" in result.stderr
+        print("invalid review case: PASS")
+
+        wrong_debt = root / "wrong-debt.toml"
+        wrong_debt.write_text(
+            base.replace(
+                "quality_debt = []",
+                'quality_debt = [{ attempt = "A9", path = "alpha:file", invariant = "exact", severity = "medium", owner = "codex:/root", exit_condition = "proved" }]',
+            ),
+            encoding="utf-8",
+        )
+        result = run(wrong_debt, todo)
+        assert result.returncode == 1
+        assert "is incomplete or names the wrong attempt" in result.stderr
+        print("wrong debt case: PASS")
+
+        wrong_lane = root / "wrong-lane.toml"
+        wrong_lane.write_text(
+            base.replace('branch = "demo"', 'branch = "elsewhere"'),
+            encoding="utf-8",
+        )
+        result = run(wrong_lane, todo)
+        assert result.returncode == 1
+        assert "lane does not identify exactly one owning record lane" in result.stderr
+        print("wrong lane case: PASS")
+
+        mismatch = root / "wall-duration-mismatch.toml"
+        mismatch.write_text(
+            base.replace('wall_time_actual = "1m"', 'wall_time_actual = "59s"'),
+            encoding="utf-8",
+        )
+        result = run(mismatch, todo)
+        assert result.returncode == 1
+        assert "wall_time_actual conflicts with ended_at - started_at" in result.stderr
+        print("wall-duration mismatch case: PASS")
+
+        excessive = root / "portion-greater-than-wall.toml"
+        excessive.write_text(
+            base.replace(
+                'verification_time_actual = "10s"',
+                'verification_time_actual = "1m1s"',
+            ),
+            encoding="utf-8",
+        )
+        result = run(excessive, todo)
+        assert result.returncode == 1
+        assert "verification_time_actual exceeds wall_time_actual" in result.stderr
+        print("portion greater than wall case: PASS")
+
+        terminal = '''ended_at = "2026-08-24T10:01:00+00:00"
+outcome = "delivered"
+wall_time_actual = "1m"
+agent_time_actual = "1m"
+queue_block_time_actual = "0s"
+verification_time_actual = "10s"
+verification_summary = "focused demo fixture passed"
+review_outcome = "findings"
+queue_block_cause = "none"
+race_outcome = "won"
+reviewed_commit = "1111111111111111111111111111111111111111"
+review_summary = "one finding repaired"
+reviewer_model = "gpt-5.6-sol"
+reviewer_reasoning = "high"
+review_repair_time_actual = "5s"
+'''
+        settled = record.read_text(encoding="utf-8").replace(
+            'review_budget = "independent"\nrace = "race-1"\n',
+            'review_budget = "independent"\nrace = "race-1"\n' + terminal,
+        ).replace('state = "active"', 'state = "preserved"')
+        record.write_text(settled, encoding="utf-8")
+        result = run(positive, todo)
+        assert result.returncode == 0, result.stderr
+        print("exact replay of every terminal field case: PASS")
+
+        conflicting = root / "conflicting-prior-settlement.toml"
+        conflicting.write_text(
+            base.replace('queue_block_cause = "none"', 'queue_block_cause = "contention"'),
+            encoding="utf-8",
+        )
+        result = run(conflicting, todo)
+        assert result.returncode == 1
+        assert "conflicting settlement field: queue_block_cause" in result.stderr
+        print("conflicting prior settlement case: PASS")
     return 0
 
 

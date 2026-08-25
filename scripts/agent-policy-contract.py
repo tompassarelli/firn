@@ -314,7 +314,7 @@ def check_activation(
         if unit_id in by_id:
             contract.reject(f"North activation duplicates global unit id {unit_id}")
         by_id[unit_id] = unit
-        if kind not in {"skill", "hook", "set"}:
+        if kind not in {"skill", "hook", "module"}:
             contract.reject(f"North activation unit {unit_id} has invalid kind {kind!r}")
         permission = unit.get("permission")
         if not isinstance(permission, str) or not PERMISSION.fullmatch(permission):

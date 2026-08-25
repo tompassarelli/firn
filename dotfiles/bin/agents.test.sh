@@ -23,7 +23,7 @@ cat >"$state/current/activation.json" <<'JSON'
   "units": [
     {
       "id": "coordination",
-      "kind": "set",
+      "kind": "module",
       "title": "Coordination",
       "triggerDescription": "Durable coordination workflows.",
       "permission": "on",
@@ -101,7 +101,7 @@ case "${1:-}" in
     if [[ "${2:-}" == --json ]]; then
       cat "$activation"
     else
-      printf '%s\n' 'Sets' '  coordination on' 'Skills' '  build-vs-reuse off' 'Hooks' '  north-on-spawn on'
+      printf '%s\n' 'Modules' '  coordination on' 'Skills' '  build-vs-reuse off' 'Hooks' '  north-on-spawn on'
     fi
     ;;
   inspect)
@@ -171,8 +171,8 @@ assert unit["owner"] == {
 PY
 
 status_text="$($agents status)"
-[[ "$status_text" == *$'Sets\n'*$'Skills\n'*$'Hooks\n'* ]]
-[[ "$(printf '%s\n' "$status_text" | sed -n '/^Sets$/=;/^Skills$/=;/^Hooks$/=')" == $'1\n3\n5' ]]
+[[ "$status_text" == *$'Modules\n'*$'Skills\n'*$'Hooks\n'* ]]
+[[ "$(printf '%s\n' "$status_text" | sed -n '/^Modules$/=;/^Skills$/=;/^Hooks$/=')" == $'1\n3\n5' ]]
 
 [[ "$($agents path build-vs-reuse)" == \
   "$AGENTS_TEST_OWNER/profiles/tom/skills/build-vs-reuse/SKILL.md" ]]
@@ -202,4 +202,4 @@ $agents off build-vs-reuse >/dev/null
 expected_calls=$'config agents status --json\nconfig agents status\nconfig agents path build-vs-reuse\nconfig agents inspect coordination --json\nconfig agents on build-vs-reuse\nconfig agents off build-vs-reuse\nconfig agents sync'
 [[ "$(<"$log")" == "$expected_calls" ]]
 
-printf 'agents thin client: North routing, set inspection, and build-vs-reuse projection PASS\n'
+printf 'agents thin client: North routing, module inspection, and build-vs-reuse projection PASS\n'

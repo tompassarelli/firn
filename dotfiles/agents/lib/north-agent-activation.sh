@@ -5,7 +5,7 @@ north_agent_activation_path() {
   printf '%s\n' "$state_root/current/activation.json"
 }
 
-# North resolves permission, set closure, support claims, and every kill switch
+# North resolves permission, module closure, support claims, and every kill switch
 # before publishing one immutable activation generation. Provider adapters read
 # only that resolved decision; a missing or malformed generation is inactive.
 north_agent_unit_active() {

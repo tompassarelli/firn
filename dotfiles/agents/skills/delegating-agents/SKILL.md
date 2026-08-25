@@ -251,21 +251,20 @@ campaign, then run the final token search across those consumers.
 
 The parent retains integration and semantic settlement authority. Consume each
 result and decide its verification, review, publication, verdict, race, debt,
-lane, and cleanup disposition. At a terminal worker boundary, emit the `todo`
+and exact lane state. At a terminal worker boundary, emit the `todo`
 SettlementCard and delegate the mechanical update through `settle-work` by
-default with `fork_turns = none` or equivalent minimal context. The card, owning
-record, and named authorities replace product history. Settle directly only
-when no admitted worker slot exists or dispatch costs more than the bounded
-bookkeeping.
+default with `fork_turns = none` or equivalent minimal context. The card,
+owning record, and named authorities replace product history. Settle directly
+only when no admitted worker slot exists or dispatch costs more than the
+bounded bookkeeping.
 
-The settler copies exact wall and agent time actuals, queue/block and
-verification time actuals, model/route outcome, race disposition, and review or
-debt receipts into the owning attempt and estimate calibration ledger, updates
-the named lane state, and performs only explicitly authorized safe cleanup. It
-cannot integrate, review, publish, invent evidence, or infer disposability.
-Update the restart record at every externally visible boundary and use
-repo-safety to land and reap verified work. A worker denial changes the path,
-never the goal; do not retry verbatim or route around standing law.
+The settler applies only exact card-supplied terminal TOML fields, writes the
+deterministic keyed estimate receipt, and applies the exact owner-supplied lane
+state after record, attempt, and lane identity checks. It cannot integrate,
+review, publish, invent evidence, rewrite Markdown prose, operate on a lane or
+branch, or infer disposition. The parent updates the restart record's prose and
+uses repo-safety to land and reap verified work. A worker denial changes the
+path, never the goal; do not retry verbatim or route around standing law.
 
 In executive mode, decide and act on recorded evidence, keep every ready seam
 owned, and notify the operator after the fact in plain language. The standing

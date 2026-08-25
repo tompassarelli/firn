@@ -240,14 +240,14 @@ run_north_activation_fixture() {
   local activation="$scratch/activation.json"
   local missing="$scratch/missing-activation.json"
 
-  [ "$(AGENT_CONFIG_ACTIVATION_FILE="$missing" north_unit_activity_state set coordination)" = unknown ]
-  ! AGENT_CONFIG_ACTIVATION_FILE="$missing" north_unit_activity_is_active set coordination
+  [ "$(AGENT_CONFIG_ACTIVATION_FILE="$missing" north_unit_activity_state module coordination)" = unknown ]
+  ! AGENT_CONFIG_ACTIVATION_FILE="$missing" north_unit_activity_is_active module coordination
 
   cat >"$activation" <<'JSON'
-{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"coordination","kind":"set","permission":"off","active":false},{"id":"agent-spawn-guard","kind":"hook","permission":"on","active":true}]}
+{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"coordination","kind":"module","permission":"off","active":false},{"id":"agent-spawn-guard","kind":"hook","permission":"on","active":true}]}
 JSON
-  [ "$(AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_state set coordination)" = off ]
-  ! AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_is_active set coordination
+  [ "$(AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_state module coordination)" = off ]
+  ! AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_is_active module coordination
   [ "$(AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_state hook agent-spawn-guard)" = on ]
   AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_is_active hook agent-spawn-guard
   [ "$(AGENT_CONFIG_ACTIVATION_FILE="$activation" north_unit_activity_state hook absent-hook)" = off ]
