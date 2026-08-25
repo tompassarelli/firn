@@ -75,6 +75,7 @@ authoring_sources=(
   "$firn_repo/native/authoring_native.bgl"
 )
 views_sources=(
+  "$datum_reader"
   "$native_json"
   "$nix_schema_path"
   "$firn_repo/native/firn_views.bgl"
