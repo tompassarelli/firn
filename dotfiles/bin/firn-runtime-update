@@ -243,7 +243,7 @@ record_generated_artifact() {
 materialize_dispatcher() {
   local output="$stage/lib/firn-dispatcher.js"
 
-  if ! "$beagle" build "$dispatcher_source" "$output"; then
+  if ! "$beagle_path/bin/beagle-build" "$dispatcher_source" "$output"; then
     printf 'firn-runtime-update: JS dispatcher materialization failed\n' >&2
     exit 1
   fi

@@ -46,12 +46,11 @@ printf 'export const fixture = true;\n' \
 printf 'export const fixtureHost = true;\n' \
   >"$beagle_path/beagle-lib/lib/beagle/host.js"
 
-cat >"$beagle_path/bin/beagle" <<'EOF'
+cat >"$beagle_path/bin/beagle-build" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\0' "$@" >>"$FAKE_BEAGLE_LOG"
-[[ "${1:-}" == build ]] || exit 97
-output="$3"
+output="$2"
 mkdir -p "$(dirname "$output")"
 cat >"$output" <<'JS'
 export function run(bridge, args) {
@@ -62,7 +61,8 @@ export function run(bridge, args) {
 }
 JS
 EOF
-chmod +x "$beagle_path/bin/beagle"
+chmod +x "$beagle_path/bin/beagle-build"
+ln -s beagle-build "$beagle_path/bin/beagle"
 
 cat >"$beagle_path/bin/beagle-build-all" <<'EOF'
 #!/usr/bin/env bash
