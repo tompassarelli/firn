@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Launch Codex in the credential-free pooled state against the local provider.
+# The provider service has its own owner; this launcher stays in the foreground
+# and never starts, restarts, or supervises it.
+set -euo pipefail
+
+self="$(realpath "$0" 2>/dev/null || echo "$0")"
+codex_launcher="$(dirname "$self")/codex"
+pooled_home="${NORTH_CODEX_POOLED_HOME:-$HOME/.local/state/north/codex-pooled}"
+
+if [ ! -x "$codex_launcher" ]; then
+  printf 'codex-pooled: launcher is unavailable: %s\n' "$codex_launcher" >&2
+  exit 127
+fi
+if [ ! -d "$pooled_home" ]; then
+  printf 'codex-pooled: credential-free Codex home is unavailable at %s\n' \
+    "$pooled_home" >&2
+  exit 1
+fi
+
+export CODEX_HOME="$pooled_home"
+export CODEX_SQLITE_HOME="$pooled_home/sqlite"
+
+provider_args=(
+  --add-dir "$HOME/code"
+  -c 'model_provider="codex-lb"'
+  -c 'model_providers.codex-lb.name="openai"'
+  -c 'model_providers.codex-lb.base_url="http://127.0.0.1:2455/backend-api/codex"'
+  -c 'model_providers.codex-lb.wire_api="responses"'
+  -c 'model_providers.codex-lb.supports_websockets=true'
+  -c 'model_providers.codex-lb.requires_openai_auth=false'
+  -c 'model="gpt-5.6-sol"'
+  -c 'model_reasoning_effort="high"'
+)
+
+# Non-interactive subcommands parse their own config flags. Put the provider
+# overrides after those subcommands; interactive and resume modes take global
+# config flags before their subcommand.
+case "${1:-}" in
+  exec|e|review)
+    subcommand="$1"
+    shift
+    exec "$codex_launcher" "$subcommand" "${provider_args[@]}" "$@"
+    ;;
+  *)
+    exec "$codex_launcher" "${provider_args[@]}" "$@"
+    ;;
+esac

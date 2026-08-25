@@ -19,6 +19,7 @@ uuid_re='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 provider_word="codex"
 account_base="$HOME/.local/state/north/accounts/openai"
 ambient_home="$HOME/.codex"
+pooled_home="$HOME/.local/state/north/codex-pooled"
 
 declare -a match_kinds=()
 declare -a match_names=()
@@ -83,6 +84,7 @@ add_home_if_match() {
 }
 
 add_home_if_match ambient ambient "$ambient_home"
+add_home_if_match pooled codex-lb "$pooled_home"
 
 if [ -d "$account_base" ]; then
   shopt -s nullglob
@@ -107,7 +109,7 @@ if [ -d "$profiles_base" ]; then
 fi
 
 if [ "${#match_homes[@]}" -eq 0 ]; then
-  echo "$provider_word: session $session_id was not found in any ambient, account, or profile home" >&2
+  echo "$provider_word: session $session_id was not found in any ambient, pooled, account, or profile home" >&2
   exit 1
 fi
 

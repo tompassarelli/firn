@@ -475,6 +475,12 @@ if [ "${1:-}" != "as" ]; then
     fi
     set -- "${argv[@]}"
     printf '[codex resume → %s:%s]\n' "$authority_kind" "$authority_name" >&2
+    if [ "$authority_kind" = "pooled" ]; then
+      pooled="$(dirname "$self")/codex-pooled"
+      [ -x "$pooled" ] || { echo "codex: pooled launcher is unavailable: $pooled" >&2; exit 127; }
+      export NORTH_CODEX_POOLED_HOME="$authority_home"
+      exec "$pooled" "$@"
+    fi
     if [ "$authority_kind" = "profile" ] && [ "$authority_name" = "codex-native" ]; then
       native="$(dirname "$self")/codex-native"
       [ -x "$native" ] || { echo "codex: native launcher is unavailable: $native" >&2; exit 127; }
