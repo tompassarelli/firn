@@ -1,0 +1,96 @@
+#lang beagle
+(ns firn.rebuild-family
+  (:require [firn.impact :as impact]
+            [firn.rebuild-native :as rebuild]))
+
+(def max-impact-output Int 16777216)
+
+(defn repository-root [] (U String Nil)
+  (let [explicit (U String Nil) (System/getenv "FIRN_REPO")]
+    (if (some? explicit)
+      explicit
+      (let [home (U String Nil) (System/getenv "HOME")]
+        (if (some? home)
+          (str home "/code/nixos-config/main")
+          nil)))))
+
+(defn current-host [] String
+  (let [configured (U String Nil) (System/getenv "FIRN_HOST")]
+    (if (some? configured)
+      configured
+      (match (host.process/run-capture ["hostname"] "" 4096)
+        [(host.process/CaptureError errno) "whiterabbit"]
+        [(host.process/CaptureOk status stdout stderr)
+         (let [hostname String (str/trim stdout)]
+           (if (and (= status 0) (> (count hostname) 0))
+             hostname
+             "whiterabbit"))]))))
+
+(defn current-system-derivations [] (Vec String)
+  (match (host.process/run-capture
+           ["nix" "path-info" "/run/current-system" "--derivation"]
+           "" max-impact-output)
+    [(host.process/CaptureError errno) []]
+    [(host.process/CaptureOk status stdout stderr)
+     (if (= status 0) (impact/split-lines stdout) [])]))
+
+(defn run-impact [host String] Int
+  (let [root (U String Nil) (repository-root)]
+    (if (nil? root)
+      (do
+        (host.stderr/write-text
+          "firn impact: FIRN_REPO and HOME are not set\n")
+        1)
+      (let [attribute String (str root "#nixosConfigurations." host
+              ".config.system.build.toplevel")]
+        (match (host.process/run-capture
+                 ["nix" "build" attribute "--dry-run"]
+                 "" max-impact-output)
+          [(host.process/CaptureError errno)
+           (do
+             (host.stderr/write-text
+               (str "firn impact: cannot run nix: errno " errno "\n"))
+             1)]
+          [(host.process/CaptureOk status stdout stderr)
+           (match (impact/interpret
+                    (impact/->ImpactInput host
+                      (impact/->DryRunResult status (str stdout stderr))
+                      (current-system-derivations)))
+             [(ImpactFailed text)
+              (do (host.stderr/write-text text) 1)]
+             [(ImpactReady assessment text)
+              (do (print text) 0)])])))))
+
+(defn requested-leaf [args (Vec String)] String
+  (if (= (count args) 3) (nth args 2) (current-host)))
+
+(defn usage-error [] Int
+  (do
+    (host.stderr/write-text
+      (str "Usage:\n"
+        "  firn host impact [<host>]\n"
+        "  firn host prepare [<host>]\n"
+        "  firn host activate <exact-store-path>\n"
+        "  firn host rebuild [<host>]\n"
+        "  firn host rollback <generation>\n"))
+    64))
+
+(defn -main [args (Vec String)] Int
+  (if (not (and (or (= (count args) 2) (= (count args) 3))
+                (= (nth args 0) "host")))
+    (usage-error)
+    (let [edge String (nth args 1)
+          leaf String (requested-leaf args)]
+      (cond
+        (= edge "impact") (run-impact leaf)
+        (= edge "prepare") (rebuild/-main ["host" "prepare" leaf])
+        (= edge "activate")
+        (if (= (count args) 3)
+          (rebuild/-main ["host" "activate" leaf])
+          (usage-error))
+        (= edge "rebuild") (rebuild/-main ["host" "rebuild" leaf])
+        (= edge "rollback")
+        (if (= (count args) 3)
+          (rebuild/-main ["host" "rollback" leaf])
+          (usage-error))
+        :else (usage-error)))))

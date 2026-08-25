@@ -7,13 +7,26 @@ beagle="$beagle_path/bin/beagle"
 runtime_root="${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}"
 versions="$runtime_root/versions"
 next=""
+scope="${1:-full}"
+
+if [[ "$#" -gt 1 ]]; then
+  printf 'usage: firn-runtime-update [repo|full]\n' >&2
+  exit 64
+fi
+case "$scope" in
+  repo|full) ;;
+  *)
+    printf 'firn-runtime-update: unknown runtime scope: %s\n' "$scope" >&2
+    exit 64
+    ;;
+esac
 
 if [[ ! -x "$beagle" ]]; then
   printf 'firn-runtime-update: BEAGLE_PATH has no executable bin/beagle: %s\n' \
     "$beagle_path" >&2
   exit 1
 fi
-for prerequisite in git sha256sum; do
+for prerequisite in cmp git sha256sum; do
   if ! command -v "$prerequisite" >/dev/null 2>&1; then
     printf 'firn-runtime-update: required producer command is unavailable: %s\n' \
       "$prerequisite" >&2
@@ -21,42 +34,113 @@ for prerequisite in git sha256sum; do
   fi
 done
 
-sources=(
-  "$beagle_path/native-core/src/beagle/datum_reader.bgl"
-  "$beagle_path/native-core/src/native/json.bgl"
-  "$beagle_path/native-core/src/beagle/nix_schema_path.bgl"
+datum_reader="$beagle_path/native-core/src/beagle/datum_reader.bgl"
+native_json="$beagle_path/native-core/src/native/json.bgl"
+nix_schema_path="$beagle_path/native-core/src/beagle/nix_schema_path.bgl"
+
+dispatcher_sources=(
+  "$firn_repo/native/firn.bgl"
+)
+tag_sources=(
+  "$datum_reader"
+  "$native_json"
+  "$firn_repo/native/tag_resolve.bgl"
+  "$firn_repo/native/tag_inputs.bgl"
+  "$firn_repo/native/tag_resolve_driver.bgl"
+  "$firn_repo/native/tag_resolve_native.bgl"
+  "$firn_repo/native/tag_commands.bgl"
+  "$firn_repo/native/tag_commands_driver.bgl"
+  "$firn_repo/native/tag_commands_native.bgl"
+  "$firn_repo/native/firn_tag_family.bgl"
+)
+flake_input_sources=(
+  "$datum_reader"
+  "$firn_repo/native/flake_input.bgl"
+  "$firn_repo/native/flake_input_driver.bgl"
+  "$firn_repo/native/flake_input_native.bgl"
+)
+inventory_sources=(
+  "$datum_reader"
+  "$native_json"
   "$firn_repo/native/tag_resolve.bgl"
   "$firn_repo/native/tag_inputs.bgl"
   "$firn_repo/native/tag_resolve_driver.bgl"
   "$firn_repo/native/tag_resolve_native.bgl"
   "$firn_repo/native/inventory.bgl"
   "$firn_repo/native/inventory_native.bgl"
+)
+authoring_sources=(
+  "$native_json"
   "$firn_repo/native/authoring.bgl"
   "$firn_repo/native/authoring_native.bgl"
+)
+views_sources=(
+  "$native_json"
+  "$nix_schema_path"
+  "$firn_repo/native/firn_views.bgl"
+  "$firn_repo/native/firn_views_native.bgl"
+)
+repo_build_sources=(
+  "$datum_reader"
+  "$native_json"
+  "$firn_repo/native/tag_resolve.bgl"
+  "$firn_repo/native/tag_inputs.bgl"
+  "$firn_repo/native/tag_resolve_driver.bgl"
+  "$firn_repo/native/tag_resolve_native.bgl"
   "$firn_repo/native/flake_input.bgl"
   "$firn_repo/native/flake_input_driver.bgl"
   "$firn_repo/native/flake_input_native.bgl"
-  "$firn_repo/native/tag_commands.bgl"
-  "$firn_repo/native/tag_commands_driver.bgl"
-  "$firn_repo/native/tag_commands_native.bgl"
-  "$firn_repo/native/firn_views.bgl"
-  "$firn_repo/native/firn_views_native.bgl"
+  "$firn_repo/native/repo_build.bgl"
+  "$firn_repo/native/repo_build_native.bgl"
+)
+schema_sources=(
+  "$native_json"
   "$firn_repo/native/schema_transaction.bgl"
   "$firn_repo/native/schema_transaction_native.bgl"
+)
+repo_workflow_sources=(
+  "$native_json"
   "$firn_repo/native/repo_quality.bgl"
   "$firn_repo/native/repo_workflows.bgl"
   "$firn_repo/native/repo_workflows_native.bgl"
+)
+rebuild_sources=(
+  "$native_json"
   "$firn_repo/native/impact.bgl"
   "$firn_repo/native/rebuild.bgl"
   "$firn_repo/native/rebuild_native.bgl"
-  "$firn_repo/native/repo_build.bgl"
-  "$firn_repo/native/repo_build_native.bgl"
+  "$firn_repo/native/firn_rebuild_family.bgl"
+)
+prewarm_sources=(
   "$firn_repo/native/prewarm.bgl"
   "$firn_repo/native/prewarm_native.bgl"
-  "$firn_repo/native/system_policy.bgl"
-  "$firn_repo/native/firn.bgl"
 )
-for source in "${sources[@]}"; do
+
+case "$scope" in
+  repo)
+    selected_sources=(
+      "${dispatcher_sources[@]}"
+      "${repo_build_sources[@]}"
+      "${schema_sources[@]}"
+    )
+    ;;
+  full)
+    selected_sources=(
+      "${dispatcher_sources[@]}"
+      "${tag_sources[@]}"
+      "${flake_input_sources[@]}"
+      "${inventory_sources[@]}"
+      "${authoring_sources[@]}"
+      "${views_sources[@]}"
+      "${repo_build_sources[@]}"
+      "${schema_sources[@]}"
+      "${repo_workflow_sources[@]}"
+      "${rebuild_sources[@]}"
+      "${prewarm_sources[@]}"
+    )
+    ;;
+esac
+for source in "${selected_sources[@]}"; do
   if [[ ! -f "$source" ]]; then
     printf 'firn-runtime-update: required source is unavailable: %s\n' \
       "$source" >&2
@@ -88,67 +172,131 @@ cleanup() {
 trap cleanup EXIT INT TERM HUP
 mkdir -p "$stage/bin" "$stage/artifacts"
 
-if ! "$beagle" native-exe \
-  --out "$stage/bin/firn" \
-  --artifacts "$stage/artifacts" \
-  --entry firn.main/-main \
-  "${sources[@]}"; then
-  printf 'firn-runtime-update: native materialization failed\n' >&2
-  exit 1
-fi
+manifest="$stage/manifest"
+{
+  printf 'format=firn-cli-family-runtime/v1\n'
+  printf 'scope=%s\n' "$scope"
+  printf 'firn_revision=%s\n' "$firn_revision"
+  printf 'beagle_revision=%s\n' "$beagle_revision"
+} >"$manifest"
 
-if [[ ! -x "$stage/bin/firn" ]]; then
-  printf 'firn-runtime-update: materializer produced no executable\n' >&2
-  exit 1
-fi
-if [[ ! -f "$stage/artifacts/report.txt" ]] ||
-   [[ ! -f "$stage/artifacts/native-exe.report.txt" ]] ||
-   ! grep -Fxq 'source-entry firn.main/-main' "$stage/artifacts/report.txt" ||
-   ! grep -Fq 'native-exe-entry PASS name=firn.main/-main ' \
-     "$stage/artifacts/native-exe.report.txt"; then
-  printf 'firn-runtime-update: materializer producer identity is invalid\n' >&2
-  exit 1
-fi
+declare -A artifact_ids=()
+binaries=()
+materialize() {
+  local component="$1"
+  local binary="$2"
+  local entry="$3"
+  shift 3
+  local artifacts="$stage/artifacts/$component"
+  local output="$stage/bin/$binary"
+  local source_id
+  local artifact_id
+  local source
 
-source_id="$(sed -n \
-  's/^native-provenance-v0 source sha256:\([0-9a-f]\{64\}\)$/\1/p' \
-  "$stage/artifacts/report.txt")"
-if [[ ${#source_id} -ne 64 ]]; then
-  printf 'firn-runtime-update: materializer source identity is invalid\n' >&2
-  exit 1
-fi
-read -r artifact_id _ < <(sha256sum "$stage/bin/firn")
-destination="$versions/$artifact_id"
-cat >"$stage/provenance" <<EOF
-format=firn-cli-runtime/v1
-entry=firn.main/-main
-source_sha256=$source_id
-artifact_sha256=$artifact_id
-firn_revision=$firn_revision
-beagle_revision=$beagle_revision
-EOF
+  mkdir -p "$artifacts"
+  if ! "$beagle" native-exe \
+    --out "$output" \
+    --artifacts "$artifacts" \
+    --entry "$entry" \
+    "$@"; then
+    printf 'firn-runtime-update: native materialization failed: %s\n' \
+      "$component" >&2
+    exit 1
+  fi
 
+  if [[ ! -x "$output" ]]; then
+    printf 'firn-runtime-update: materializer produced no executable: %s\n' \
+      "$component" >&2
+    exit 1
+  fi
+  if [[ ! -f "$artifacts/report.txt" ]] ||
+     [[ ! -f "$artifacts/native-exe.report.txt" ]] ||
+     ! grep -Fxq "source-entry $entry" "$artifacts/report.txt" ||
+     ! grep -Fq "native-exe-entry PASS name=$entry " \
+       "$artifacts/native-exe.report.txt"; then
+    printf 'firn-runtime-update: materializer producer identity is invalid: %s\n' \
+      "$component" >&2
+    exit 1
+  fi
+
+  source_id="$(sed -n \
+    's/^native-provenance-v0 source sha256:\([0-9a-f]\{64\}\)$/\1/p' \
+    "$artifacts/report.txt")"
+  if [[ ${#source_id} -ne 64 ]]; then
+    printf 'firn-runtime-update: materializer source identity is invalid: %s\n' \
+      "$component" >&2
+    exit 1
+  fi
+  read -r artifact_id _ < <(sha256sum "$output")
+  artifact_ids["$binary"]="$artifact_id"
+  binaries+=("$binary")
+  printf 'component=%s entry=%s executable=bin/%s source_sha256=%s artifact_sha256=%s\n' \
+    "$component" "$entry" "$binary" "$source_id" "$artifact_id" \
+    >>"$manifest"
+}
+
+materialize dispatcher firn firn.main/-main "${dispatcher_sources[@]}"
+case "$scope" in
+  repo)
+    materialize repo-build firn-repo-build firn.repo-build-native/-main \
+      "${repo_build_sources[@]}"
+    materialize schema firn-schema firn.schema-transaction-native/-main \
+      "${schema_sources[@]}"
+    ;;
+  full)
+    materialize tag firn-tag firn.tag-family/-main "${tag_sources[@]}"
+    materialize flake-input firn-flake-input firn.flake-input-native/-main \
+      "${flake_input_sources[@]}"
+    materialize inventory firn-inventory firn.inventory-native/-main \
+      "${inventory_sources[@]}"
+    materialize authoring firn-authoring firn.authoring-native/-main \
+      "${authoring_sources[@]}"
+    materialize views firn-views firn.views-native/-main "${views_sources[@]}"
+    materialize repo-build firn-repo-build firn.repo-build-native/-main \
+      "${repo_build_sources[@]}"
+    materialize schema firn-schema firn.schema-transaction-native/-main \
+      "${schema_sources[@]}"
+    materialize repo-workflow firn-repo-workflow firn.repo-workflows-native/-main \
+      "${repo_workflow_sources[@]}"
+    materialize rebuild firn-rebuild firn.rebuild-family/-main \
+      "${rebuild_sources[@]}"
+    materialize prewarm firn-prewarm firn.prewarm-native/-main \
+      "${prewarm_sources[@]}"
+    ;;
+esac
+
+read -r bundle_id _ < <(sha256sum "$manifest")
+destination="$versions/$bundle_id"
 if [[ -e "$destination" ]]; then
-  if [[ ! -x "$destination/bin/firn" ]]; then
-    printf 'firn-runtime-update: existing runtime is incomplete: %s\n' \
+  if [[ ! -f "$destination/manifest" ]] ||
+     ! cmp -s "$manifest" "$destination/manifest"; then
+    printf 'firn-runtime-update: existing runtime manifest mismatch: %s\n' \
       "$destination" >&2
     exit 1
   fi
-  read -r existing_id _ < <(sha256sum "$destination/bin/firn")
-  if [[ "$existing_id" != "$artifact_id" ]]; then
-    printf 'firn-runtime-update: existing runtime identity mismatch: %s\n' \
-      "$destination" >&2
-    exit 1
-  fi
+  for binary in "${binaries[@]}"; do
+    output="$destination/bin/$binary"
+    if [[ ! -x "$output" ]]; then
+      printf 'firn-runtime-update: existing runtime is incomplete: %s\n' \
+        "$destination" >&2
+      exit 1
+    fi
+    read -r existing_id _ < <(sha256sum "$output")
+    if [[ "$existing_id" != "${artifact_ids[$binary]}" ]]; then
+      printf 'firn-runtime-update: existing runtime identity mismatch: %s\n' \
+        "$output" >&2
+      exit 1
+    fi
+  done
 else
   mv -- "$stage" "$destination"
   stage=""
 fi
 
 next="$runtime_root/.current.$$"
-ln -s "versions/$artifact_id" "$next"
+ln -s "versions/$bundle_id" "$next"
 mv -Tf -- "$next" "$runtime_root/current"
 next=""
 
 printf 'firn runtime active: %s\n' "$destination"
-printf 'provenance: %s\n' "$destination/provenance"
+printf 'manifest: %s\n' "$destination/manifest"

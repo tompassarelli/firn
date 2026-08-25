@@ -1,0 +1,14 @@
+#lang beagle
+(ns firn.tag-family
+  (:require [firn.tag-commands-native :as commands]
+            [firn.tag-resolve-native :as resolve]))
+
+(defn resolve-request? [args (Vec String)] Bool
+  (and (>= (count args) 2)
+       (= (nth args 0) "tag")
+       (= (nth args 1) "resolve")))
+
+(defn -main [args (Vec String)] Int
+  (if (resolve-request? args)
+    (resolve/-main args)
+    (commands/-main args)))

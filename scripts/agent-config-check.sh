@@ -284,7 +284,7 @@ import sys
 import tomllib
 
 def command(path, timeout):
-    interpreter = "node" if path.endswith(".js") else "bash"
+    interpreter = "python3" if path.endswith(".py") else "bash"
     environment = (
         "PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin "
         if interpreter == "bash"
@@ -355,7 +355,7 @@ enabled = {
             {
                 "matcher": "^Bash$",
                 "hooks": [
-                    command("logcompress-hook.js", 10),
+                    command("logcompress-hook.py", 10),
                     command("north-on-tooluse-codex", 10),
                 ],
             },
@@ -855,8 +855,8 @@ validate_codex_managed_policy() {
     "lib/launch_critical_decide.py|(promoted \"lib/launch_critical_decide.py\"|$SHARED/hooks/lib/launch_critical_decide.py|north|profiles/tom/hooks/lib/launch_critical_decide.py|north/profiles/tom/hooks/lib/launch_critical_decide.py"
     "lib/launch_critical_paths.py|(promoted \"lib/launch_critical_paths.py\"|$SHARED/hooks/lib/launch_critical_paths.py|north|profiles/tom/hooks/lib/launch_critical_paths.py|north/profiles/tom/hooks/lib/launch_critical_paths.py"
     "tripwire-guard.sh|(promoted \"tripwire-guard.sh\"|$SHARED/hooks/tripwire-guard.sh|north|profiles/tom/hooks/tripwire-guard.sh|north/profiles/tom/hooks/tripwire-guard.sh"
-    "logcompress-hook.js|(promoted \"logcompress-hook.js\"|$SHARED/hooks/logcompress-hook.js|north|profiles/tom/hooks/logcompress-hook.js|north/profiles/tom/hooks/logcompress-hook.js"
-    "logcompress.js|(promoted \"logcompress.js\"|$SHARED/hooks/logcompress.js|north|profiles/tom/hooks/logcompress.js|north/profiles/tom/hooks/logcompress.js"
+    "logcompress-hook.py|(promoted \"logcompress-hook.py\"|$SHARED/hooks/logcompress-hook.py|north|profiles/tom/hooks/logcompress-hook.py|north/profiles/tom/hooks/logcompress-hook.py"
+    "logcompress.py|(promoted \"logcompress.py\"|$SHARED/hooks/logcompress.py|north|profiles/tom/hooks/logcompress.py|north/profiles/tom/hooks/logcompress.py"
     "lib/authoring-killswitch.sh|(promoted \"lib/authoring-killswitch.sh\"|$SHARED/hooks/lib/authoring-killswitch.sh|north|profiles/tom/hooks/lib/authoring-killswitch.sh|north/profiles/tom/hooks/lib/authoring-killswitch.sh"
     "lib/harness-dial.sh|(promoted \"lib/harness-dial.sh\"|$SHARED/hooks/lib/harness-dial.sh|north|profiles/tom/hooks/lib/harness-dial.sh|north/profiles/tom/hooks/lib/harness-dial.sh"
   )
@@ -896,7 +896,6 @@ validate_codex_managed_policy() {
     'env|pkgs.coreutils|env'
     'git|pkgs.git|git'
     'mktemp|pkgs.coreutils|mktemp'
-    'node|pkgs.nodejs|node'
     'python3|pkgs.python3|python3'
     'rm|pkgs.coreutils|rm'
     'timeout|pkgs.coreutils|timeout'

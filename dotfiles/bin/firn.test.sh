@@ -2,7 +2,7 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
-scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-runtime-launcher-test.XXXXXX")"
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-family-runtime-test.XXXXXX")"
 cleanup() {
   rm -rf -- "${scratch:?}"
 }
@@ -16,42 +16,98 @@ fake_bin="$scratch/bin"
 mkdir -p "$home" "$beagle_path/bin" "$firn_repo/native" "$fake_bin"
 printf 'alpha\n' >"$firn_repo/marker"
 
-sources=(
-  "$beagle_path/native-core/src/beagle/datum_reader.bgl"
-  "$beagle_path/native-core/src/native/json.bgl"
-  "$beagle_path/native-core/src/beagle/nix_schema_path.bgl"
+datum_reader="$beagle_path/native-core/src/beagle/datum_reader.bgl"
+native_json="$beagle_path/native-core/src/native/json.bgl"
+nix_schema_path="$beagle_path/native-core/src/beagle/nix_schema_path.bgl"
+dispatcher_sources=("$firn_repo/native/firn.bgl")
+tag_sources=(
+  "$datum_reader"
+  "$native_json"
+  "$firn_repo/native/tag_resolve.bgl"
+  "$firn_repo/native/tag_inputs.bgl"
+  "$firn_repo/native/tag_resolve_driver.bgl"
+  "$firn_repo/native/tag_resolve_native.bgl"
+  "$firn_repo/native/tag_commands.bgl"
+  "$firn_repo/native/tag_commands_driver.bgl"
+  "$firn_repo/native/tag_commands_native.bgl"
+  "$firn_repo/native/firn_tag_family.bgl"
+)
+flake_input_sources=(
+  "$datum_reader"
+  "$firn_repo/native/flake_input.bgl"
+  "$firn_repo/native/flake_input_driver.bgl"
+  "$firn_repo/native/flake_input_native.bgl"
+)
+inventory_sources=(
+  "$datum_reader"
+  "$native_json"
   "$firn_repo/native/tag_resolve.bgl"
   "$firn_repo/native/tag_inputs.bgl"
   "$firn_repo/native/tag_resolve_driver.bgl"
   "$firn_repo/native/tag_resolve_native.bgl"
   "$firn_repo/native/inventory.bgl"
   "$firn_repo/native/inventory_native.bgl"
+)
+authoring_sources=(
+  "$native_json"
   "$firn_repo/native/authoring.bgl"
   "$firn_repo/native/authoring_native.bgl"
+)
+views_sources=(
+  "$native_json"
+  "$nix_schema_path"
+  "$firn_repo/native/firn_views.bgl"
+  "$firn_repo/native/firn_views_native.bgl"
+)
+repo_build_sources=(
+  "$datum_reader"
+  "$native_json"
+  "$firn_repo/native/tag_resolve.bgl"
+  "$firn_repo/native/tag_inputs.bgl"
+  "$firn_repo/native/tag_resolve_driver.bgl"
+  "$firn_repo/native/tag_resolve_native.bgl"
   "$firn_repo/native/flake_input.bgl"
   "$firn_repo/native/flake_input_driver.bgl"
   "$firn_repo/native/flake_input_native.bgl"
-  "$firn_repo/native/tag_commands.bgl"
-  "$firn_repo/native/tag_commands_driver.bgl"
-  "$firn_repo/native/tag_commands_native.bgl"
-  "$firn_repo/native/firn_views.bgl"
-  "$firn_repo/native/firn_views_native.bgl"
+  "$firn_repo/native/repo_build.bgl"
+  "$firn_repo/native/repo_build_native.bgl"
+)
+schema_sources=(
+  "$native_json"
   "$firn_repo/native/schema_transaction.bgl"
   "$firn_repo/native/schema_transaction_native.bgl"
+)
+repo_workflow_sources=(
+  "$native_json"
   "$firn_repo/native/repo_quality.bgl"
   "$firn_repo/native/repo_workflows.bgl"
   "$firn_repo/native/repo_workflows_native.bgl"
+)
+rebuild_sources=(
+  "$native_json"
   "$firn_repo/native/impact.bgl"
   "$firn_repo/native/rebuild.bgl"
   "$firn_repo/native/rebuild_native.bgl"
-  "$firn_repo/native/repo_build.bgl"
-  "$firn_repo/native/repo_build_native.bgl"
+  "$firn_repo/native/firn_rebuild_family.bgl"
+)
+prewarm_sources=(
   "$firn_repo/native/prewarm.bgl"
   "$firn_repo/native/prewarm_native.bgl"
-  "$firn_repo/native/system_policy.bgl"
-  "$firn_repo/native/firn.bgl"
 )
-for source in "${sources[@]}"; do
+all_sources=(
+  "${dispatcher_sources[@]}"
+  "${tag_sources[@]}"
+  "${flake_input_sources[@]}"
+  "${inventory_sources[@]}"
+  "${authoring_sources[@]}"
+  "${views_sources[@]}"
+  "${repo_build_sources[@]}"
+  "${schema_sources[@]}"
+  "${repo_workflow_sources[@]}"
+  "${rebuild_sources[@]}"
+  "${prewarm_sources[@]}"
+)
+for source in "${all_sources[@]}"; do
   mkdir -p "$(dirname "$source")"
   printf '#lang beagle\n' >"$source"
 done
@@ -61,37 +117,64 @@ cat >"$beagle_path/bin/beagle" <<'EOF'
 set -euo pipefail
 printf 'BEAGLE_CALL\0' >>"$FAKE_BEAGLE_LOG"
 printf '%s\0' "$BEAGLE_PATH" "$FIRN_REPO" "$@" >>"$FAKE_BEAGLE_LOG"
-[[ "${1:-}" == native-exe ]]
+if [[ "${1:-}" != native-exe ]]; then
+  exit 0
+fi
 out=""
 artifacts=""
+entry=""
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --out) out="$2"; shift 2 ;;
     --artifacts) artifacts="$2"; shift 2 ;;
+    --entry) entry="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
-[[ -n "$out" && -n "$artifacts" ]]
+[[ -n "$out" && -n "$artifacts" && -n "$entry" ]]
 marker="$(sed -n '1p' "$FIRN_REPO/marker")"
-cat >"$out" <<INNER
+if [[ "$entry" == firn.main/-main ]]; then
+  cat >"$out" <<INNER
 #!/usr/bin/env bash
-printf 'prepared:%s\\n' '$marker'
-printf 'RUNTIME_CALL\\0' >>"\$FAKE_RUNTIME_LOG"
-printf '%s\\0' "\$BEAGLE_PATH" "\$FIRN_REPO" "\$@" >>"\$FAKE_RUNTIME_LOG"
+set -euo pipefail
+case "\${1:-}:\${2:-}" in
+  repo:validate) family=firn-schema ;;
+  host:list) family=firn-inventory ;;
+  tag:resolve) family=firn-tag ;;
+  flake-input:resolve) family=firn-flake-input ;;
+  module:add) family=firn-authoring ;;
+  platform:list) family=firn-views ;;
+  repo:build) family=firn-repo-build ;;
+  repo:doctor) family=firn-repo-workflow ;;
+  host:rebuild) family=firn-rebuild ;;
+  --print-warm-key:) family=firn-prewarm ;;
+  *) exit 64 ;;
+esac
+exec "\$FIRN_RUNTIME_BIN/\$family" "\$@"
 INNER
+else
+  cat >"$out" <<INNER
+#!/usr/bin/env bash
+printf 'prepared:%s:%s\n' '$marker' '$entry'
+printf 'RUNTIME_CALL\0' >>"\$FAKE_RUNTIME_LOG"
+printf '%s\0' '$entry' "\$BEAGLE_PATH" "\$FIRN_REPO" \
+  "\$FIRN_RUNTIME_BIN" "\$@" >>"\$FAKE_RUNTIME_LOG"
+INNER
+fi
 chmod +x "$out"
-if [[ -n "${FAKE_BAD_IDENTITY:-}" ]]; then
+if [[ -n "${FAKE_BAD_IDENTITY:-}" ||
+      "${FAKE_BAD_IDENTITY_ENTRY:-}" == "$entry" ]]; then
   printf 'source-entry wrong.entry/-main\n' >"$artifacts/report.txt"
 else
   source_digit=a
   [[ "$marker" == alpha ]] || source_digit=b
-  printf 'source-entry firn.main/-main\n' >"$artifacts/report.txt"
+  printf 'source-entry %s\n' "$entry" >"$artifacts/report.txt"
   source_id="$(printf '%064d' 0 | tr 0 "$source_digit")"
   printf 'native-provenance-v0 source sha256:%s\n' "$source_id" \
     >>"$artifacts/report.txt"
 fi
-printf 'native-exe-entry PASS name=firn.main/-main symbol=fake return=Int abi=argv\n' \
-  >"$artifacts/native-exe.report.txt"
+printf 'native-exe-entry PASS name=%s symbol=fake return=Int abi=argv\n' \
+  "$entry" >"$artifacts/native-exe.report.txt"
 EOF
 chmod +x "$beagle_path/bin/beagle"
 
@@ -125,26 +208,92 @@ export FAKE_BEAGLE_LOG="$scratch/beagle.log"
 export FAKE_RUNTIME_LOG="$scratch/runtime.log"
 export BOOT_CLOSURE_TRIPWIRE_LOG="$scratch/boot-closure.log"
 
-"$here/firn-runtime-update" >"$scratch/update-alpha.stdout"
-[[ "$("$here/firn" repo validate)" == prepared:alpha ]]
-[[ "$("$here/firn" repo validate all)" == prepared:alpha ]]
-[[ "$("$here/firn" repo validate hosts/whiterabbit/configuration.bnix)" == prepared:alpha ]]
-[[ "$("$here/firn" repo validate tag enable terminal)" == prepared:alpha ]]
+repo_runtime_root="$scratch/repo-runtime"
+FIRN_RUNTIME_ROOT="$repo_runtime_root" \
+  "$here/firn-runtime-update" repo >"$scratch/update-repo.stdout"
+repo_target="$(readlink "$repo_runtime_root/current")"
+repo_destination="$repo_runtime_root/$repo_target"
+grep -Fxq 'scope=repo' "$repo_destination/manifest"
+for component in dispatcher repo-build schema; do
+  grep -Fq "component=$component " "$repo_destination/manifest"
+done
+for component in tag flake-input inventory authoring views repo-workflow \
+  rebuild prewarm; do
+  ! grep -Fq "component=$component " "$repo_destination/manifest"
+done
+[[ "$(FIRN_RUNTIME_ROOT="$repo_runtime_root" "$here/firn" repo build all)" == \
+  prepared:alpha:firn.repo-build-native/-main ]]
+[[ "$(FIRN_RUNTIME_ROOT="$repo_runtime_root" "$here/firn" repo validate)" == \
+  prepared:alpha:firn.schema-transaction-native/-main ]]
 
 printf 'beta\n' >"$firn_repo/marker"
-[[ "$("$here/firn" host list all)" == prepared:alpha ]]
+set +e
+FAKE_BAD_IDENTITY_ENTRY=firn.schema-transaction-native/-main \
+  FIRN_RUNTIME_ROOT="$repo_runtime_root" \
+  "$here/firn-runtime-update" repo \
+  >"$scratch/invalid-repo.stdout" 2>"$scratch/invalid-repo.stderr"
+invalid_repo_status=$?
+set -e
+[[ "$invalid_repo_status" -ne 0 ]]
+grep -Fxq \
+  'firn-runtime-update: materializer producer identity is invalid: schema' \
+  "$scratch/invalid-repo.stderr"
+[[ "$(readlink "$repo_runtime_root/current")" == "$repo_target" ]]
+[[ "$(FIRN_RUNTIME_ROOT="$repo_runtime_root" "$here/firn" repo validate)" == \
+  prepared:alpha:firn.schema-transaction-native/-main ]]
+
+printf 'alpha\n' >"$firn_repo/marker"
+"$here/firn-runtime-update" >"$scratch/update-alpha.stdout"
+expected_entries=(
+  firn.schema-transaction-native/-main
+  firn.inventory-native/-main
+  firn.tag-family/-main
+  firn.flake-input-native/-main
+  firn.authoring-native/-main
+  firn.views-native/-main
+  firn.repo-build-native/-main
+  firn.repo-workflows-native/-main
+  firn.rebuild-family/-main
+  firn.prewarm-native/-main
+)
+expected_commands=(
+  'repo validate'
+  'host list all'
+  'tag resolve whiterabbit'
+  'flake-input resolve emit'
+  'module add example'
+  'platform list linux'
+  'repo build all'
+  'repo doctor all'
+  'host rebuild whiterabbit'
+  '--print-warm-key'
+)
+for index in "${!expected_commands[@]}"; do
+  read -r -a args <<<"${expected_commands[index]}"
+  expected="prepared:alpha:${expected_entries[index]}"
+  [[ "$("$here/firn" "${args[@]}")" == "$expected" ]]
+done
+
 alpha_target="$(readlink "$runtime_root/current")"
 alpha_destination="$runtime_root/$alpha_target"
 [[ -x "$alpha_destination/bin/firn" ]]
-grep -Fxq 'format=firn-cli-runtime/v1' "$alpha_destination/provenance"
-grep -Fxq 'entry=firn.main/-main' "$alpha_destination/provenance"
+grep -Fxq 'format=firn-cli-family-runtime/v1' "$alpha_destination/manifest"
+grep -Fxq 'scope=full' "$alpha_destination/manifest"
 grep -Fxq 'firn_revision=1111111111111111111111111111111111111111' \
-  "$alpha_destination/provenance"
+  "$alpha_destination/manifest"
 grep -Fxq 'beagle_revision=2222222222222222222222222222222222222222' \
-  "$alpha_destination/provenance"
+  "$alpha_destination/manifest"
+for component in dispatcher tag flake-input inventory authoring views repo-build \
+  schema repo-workflow rebuild prewarm; do
+  grep -Fq "component=$component " "$alpha_destination/manifest"
+done
 
+printf 'beta\n' >"$firn_repo/marker"
+[[ "$("$here/firn" repo validate)" == \
+  prepared:alpha:firn.schema-transaction-native/-main ]]
 "$here/firn-runtime-update" >"$scratch/update-beta.stdout"
-[[ "$("$here/firn" host list all)" == prepared:beta ]]
+[[ "$("$here/firn" repo validate)" == \
+  prepared:beta:firn.schema-transaction-native/-main ]]
 beta_target="$(readlink "$runtime_root/current")"
 beta_destination="$runtime_root/$beta_target"
 [[ "$beta_target" != "$alpha_target" ]]
@@ -157,46 +306,97 @@ FAKE_BAD_IDENTITY=1 "$here/firn-runtime-update" \
 invalid_status=$?
 set -e
 [[ "$invalid_status" -ne 0 ]]
-grep -Fxq 'firn-runtime-update: materializer producer identity is invalid' \
+grep -Fxq \
+  'firn-runtime-update: materializer producer identity is invalid: dispatcher' \
   "$scratch/invalid.stderr"
 [[ "$(readlink "$runtime_root/current")" == "$beta_target" ]]
 
 mapfile -d '' -t beagle_fields <"$FAKE_BEAGLE_LOG"
 cursor=0
-for call in 1 2 3; do
+assert_stage_root="$runtime_root"
+assert_call() {
+  local binary="$1"
+  local entry="$2"
+  shift 2
   [[ "${beagle_fields[cursor++]}" == BEAGLE_CALL ]]
   [[ "${beagle_fields[cursor++]}" == "$beagle_path" ]]
   [[ "${beagle_fields[cursor++]}" == "$firn_repo" ]]
   [[ "${beagle_fields[cursor++]}" == native-exe ]]
   [[ "${beagle_fields[cursor++]}" == --out ]]
   out="${beagle_fields[cursor++]}"
-  stage="${out%/bin/firn}"
-  [[ "$stage" == "$runtime_root"/.stage.* ]]
+  stage="${out%/bin/$binary}"
+  [[ "$stage" == "$assert_stage_root"/.stage.* ]]
   [[ "${beagle_fields[cursor++]}" == --artifacts ]]
-  [[ "${beagle_fields[cursor++]}" == "$stage/artifacts" ]]
+  [[ "${beagle_fields[cursor++]}" == "$stage/artifacts/${binary#firn-}" ||
+     "$binary" == firn ]]
+  if [[ "$binary" == firn ]]; then
+    [[ "${beagle_fields[cursor-1]}" == "$stage/artifacts/dispatcher" ]]
+  fi
   [[ "${beagle_fields[cursor++]}" == --entry ]]
-  [[ "${beagle_fields[cursor++]}" == firn.main/-main ]]
-  for source in "${sources[@]}"; do
+  [[ "${beagle_fields[cursor++]}" == "$entry" ]]
+  for source in "$@"; do
     [[ "${beagle_fields[cursor++]}" == "$source" ]]
   done
-done
+}
+assert_bundle_calls() {
+  assert_call firn firn.main/-main "${dispatcher_sources[@]}"
+  assert_call firn-tag firn.tag-family/-main "${tag_sources[@]}"
+  assert_call firn-flake-input firn.flake-input-native/-main \
+    "${flake_input_sources[@]}"
+  assert_call firn-inventory firn.inventory-native/-main \
+    "${inventory_sources[@]}"
+  assert_call firn-authoring firn.authoring-native/-main \
+    "${authoring_sources[@]}"
+  assert_call firn-views firn.views-native/-main "${views_sources[@]}"
+  assert_call firn-repo-build firn.repo-build-native/-main \
+    "${repo_build_sources[@]}"
+  assert_call firn-schema firn.schema-transaction-native/-main \
+    "${schema_sources[@]}"
+  assert_call firn-repo-workflow firn.repo-workflows-native/-main \
+    "${repo_workflow_sources[@]}"
+  assert_call firn-rebuild firn.rebuild-family/-main \
+    "${rebuild_sources[@]}"
+  assert_call firn-prewarm firn.prewarm-native/-main \
+    "${prewarm_sources[@]}"
+}
+assert_stage_root="$repo_runtime_root"
+assert_call firn firn.main/-main "${dispatcher_sources[@]}"
+assert_call firn-repo-build firn.repo-build-native/-main \
+  "${repo_build_sources[@]}"
+assert_call firn-schema firn.schema-transaction-native/-main \
+  "${schema_sources[@]}"
+assert_call firn firn.main/-main "${dispatcher_sources[@]}"
+assert_call firn-repo-build firn.repo-build-native/-main \
+  "${repo_build_sources[@]}"
+assert_call firn-schema firn.schema-transaction-native/-main \
+  "${schema_sources[@]}"
+assert_stage_root="$runtime_root"
+assert_bundle_calls
+assert_bundle_calls
+assert_call firn firn.main/-main "${dispatcher_sources[@]}"
 [[ "$cursor" -eq "${#beagle_fields[@]}" ]]
 
 mapfile -d '' -t runtime_fields <"$FAKE_RUNTIME_LOG"
 cursor=0
-expected_commands=(
-  'repo validate'
-  'repo validate all'
-  'repo validate hosts/whiterabbit/configuration.bnix'
-  'repo validate tag enable terminal'
-  'host list all'
-  'host list all'
-)
-for command in "${expected_commands[@]}"; do
+runtime_invocations=('repo build all' 'repo validate' 'repo validate'
+  "${expected_commands[@]}" 'repo validate' 'repo validate')
+runtime_entries=(firn.repo-build-native/-main
+  firn.schema-transaction-native/-main
+  firn.schema-transaction-native/-main
+  "${expected_entries[@]}"
+  firn.schema-transaction-native/-main
+  firn.schema-transaction-native/-main)
+runtime_roots=("$repo_runtime_root" "$repo_runtime_root" "$repo_runtime_root")
+for _ in "${expected_commands[@]}" 'repo validate' 'repo validate'; do
+  runtime_roots+=("$runtime_root")
+done
+for index in "${!runtime_invocations[@]}"; do
   [[ "${runtime_fields[cursor++]}" == RUNTIME_CALL ]]
+  [[ "${runtime_fields[cursor++]}" == "${runtime_entries[index]}" ]]
   [[ "${runtime_fields[cursor++]}" == "$beagle_path" ]]
   [[ "${runtime_fields[cursor++]}" == "$firn_repo" ]]
-  read -r -a args <<<"$command"
+  [[ "${runtime_fields[cursor++]}" == "${runtime_roots[index]}/current/bin" ]]
+  read -r -a args <<<"${runtime_invocations[index]}"
   for arg in "${args[@]}"; do
     [[ "${runtime_fields[cursor++]}" == "$arg" ]]
   done
@@ -224,4 +424,4 @@ mapfile -d '' -t command_fields <"$scratch/beagle-command.log"
 [[ "${command_fields[3]}" == check ]]
 [[ "${command_fields[4]}" == sentinel.bgl ]]
 
-printf 'firn-runtime-launcher: PASS\n'
+printf 'firn-family-runtime: PASS\n'

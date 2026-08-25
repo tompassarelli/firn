@@ -20,9 +20,6 @@
       "codex/hooks/runtime/mktemp" = {
         source = "${pkgs.coreutils}/bin/mktemp";
       };
-      "codex/hooks/runtime/node" = {
-        source = "${pkgs.nodejs}/bin/node";
-      };
       "codex/hooks/runtime/python3" = {
         source = "${pkgs.python3}/bin/python3";
       };
@@ -53,8 +50,8 @@
       (promoted "tripwire-guard.sh" "north/profiles/tom/hooks/tripwire-guard.sh")
       (promoted "corpus-scan-guard.sh" "north/profiles/tom/hooks/corpus-scan-guard.sh")
       (promoted "session-kill-guard.sh" "north/profiles/tom/hooks/session-kill-guard.sh")
-      (promoted "logcompress-hook.js" "north/profiles/tom/hooks/logcompress-hook.js")
-      (promoted "logcompress.js" "north/profiles/tom/hooks/logcompress.js")
+      (promoted "logcompress-hook.py" "north/profiles/tom/hooks/logcompress-hook.py")
+      (promoted "logcompress.py" "north/profiles/tom/hooks/logcompress.py")
       (promoted "lib/authoring-killswitch.sh" "north/profiles/tom/hooks/lib/authoring-killswitch.sh")
       (promoted "lib/harness-dial.sh" "north/profiles/tom/hooks/lib/harness-dial.sh")
     ];
