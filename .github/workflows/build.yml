@@ -20,12 +20,11 @@ jobs:
             extra-substituters = https://nix-community.cachix.org https://walker.cachix.org https://walker-git.cachix.org https://devenv.cachix.org https://quickshell.cachix.org
             extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= walker.cachix.org-1:fG8q+uAaMqhsMxWjwvk0IMb4mFPFLqHjuvfwQxE4oJM= walker-git.cachix.org-1:vmC0ocfPWh0S/vRAQGtChuiZBTAe4wiKDeyyXM0/7pM= devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw= quickshell.cachix.org-1:vBm3s5tZThc5KDLj6zhHVCMp8wX/AZJwle9wqdi81ts=
       - name: Build whiterabbit
-        # beagle/north are authored as local `git+file:///home/tom/...`
-        # inputs (fast local iteration on the sibling repos). CI can't fetch a
-        # path on the author's machine, so override each to its public github
-        # mirror for the build. Local rebuilds keep using the file:// paths.
+        # north is authored as a local `git+file:///home/tom/...` input. CI
+        # cannot fetch a path on the author's machine, so override it with its
+        # public GitHub mirror. Local rebuilds keep using the file:// path.
         env:
-          # Authenticate nix's github fetches. Locking each --override-input below
+          # Authenticate nix's github fetches. Locking the --override-input below
           # (and reading its lastModified) hits api.github.com; on the shared CI
           # runner IP, unauthenticated requests rate-limit to HTTP 429 intermittently.
           # NIX_CONFIG is read directly by the nix client doing the eval — unlike the
@@ -36,13 +35,11 @@ jobs:
         run: |
           # --fallback: a cache returning 5xx must cost build time, not a red run.
           nix build --fallback .#nixosConfigurations.whiterabbit.config.system.build.toplevel \
-            --override-input beagle github:tompassarelli/beagle/1d01847795b8b7af8737a2d24bcc0c5d8209ff22 \
             --override-input north github:tompassarelli/north/78798d68ec0c364862abcf08445429eae4e61f3a
           # Why these overrides:
-          # - beagle/north are authored as local git+file:///home/tom/...
-          #   inputs (fast local iteration); CI can't fetch a path on the author's
-          #   machine, so point each at its public github mirror. Local builds keep
-          #   the file:// paths.
+          # - north is authored as a local git+file:///home/tom/... input (fast
+          #   local iteration); CI can't fetch that path, so point it at the
+          #   public GitHub mirror. Local builds keep the file:// path.
           # - Pinned to full 40-char SHAs on purpose: a bare github:owner/repo
           #   resolves HEAD via api.github.com, which rate-limits to HTTP 429 on
           #   CI; a full SHA fetches the codeload tarball directly, no API call.

@@ -33,9 +33,6 @@
       url = "github:tompassarelli/glide";
       flake = false;
     };
-    beagle = {
-      url = "github:tompassarelli/beagle/b7e941e2323f38778bf68c3230fc52d4aca46ac0";
-    };
     elephant = {
       url = "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73";
     };
@@ -55,7 +52,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, beagle, elephant, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: ((makeFirnNative: {
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: ((makeFirnLaunchers: {
     lib.mkSystem = ({ hostname, hostConfig, hardwareConfig, system ? "x86_64-linux", extraModules ? [ ], extraOverlays ? [ ], extraSpecialArgs ? { }, ... }: nixpkgs.lib.nixosSystem {
       system = system;
       specialArgs = ({
@@ -67,7 +64,7 @@
           zen-browser = zen-browser;
         };
         flakeRoot = self;
-        firnNative = builtins.getAttr "firn-native" (builtins.getAttr system self.packages);
+        firnLaunchers = builtins.getAttr "firn-launchers" (builtins.getAttr system self.packages);
       } // extraSpecialArgs);
       modules = ([
         hardwareConfig
@@ -240,7 +237,7 @@
           zen-browser = zen-browser;
         };
         flakeRoot = self;
-        firnNative = builtins.getAttr "firn-native" (builtins.getAttr system self.packages);
+        firnLaunchers = builtins.getAttr "firn-launchers" (builtins.getAttr system self.packages);
       } // extraSpecialArgs);
       modules = ([
         home-manager.darwinModules.home-manager
@@ -303,12 +300,12 @@
     });
     modules = firnModules;
     packages.x86_64-linux = ((pkgs: {
-      firn-native = makeFirnNative "x86_64-linux";
+      firn-launchers = makeFirnLaunchers "x86_64-linux";
     }) (import nixpkgs {
         system = "x86_64-linux";
         config.allowUnfree = true;
       }));
-    packages.aarch64-darwin.firn-native = makeFirnNative "aarch64-darwin";
+    packages.aarch64-darwin.firn-launchers = makeFirnLaunchers "aarch64-darwin";
     nixosConfigurations = {
       whiterabbit = self.lib.mkSystem {
         hostname = "whiterabbit";
@@ -338,18 +335,20 @@
 
       '';
     }) nixpkgs.legacyPackages.x86_64-linux);
-  }) (system: ((pkgs: ((beaglePackage: pkgs.runCommand "firn-native" {
-      nativeBuildInputs = [ beaglePackage pkgs.stdenv.cc ];
-    } ''
-      mkdir -p $out/bin
-      export XDG_CACHE_HOME=$TMPDIR/firn-native-cache
-      export BEAGLE_CHECKED_AST_STORE=$TMPDIR/firn-native-checked-ast.storelog
-      sed '1s|^#!/usr/bin/env python3$|#!${pkgs.python3}/bin/python3|' ${beaglePackage}/native-core/bin/run-bounded > "$TMPDIR/firn-native-run-bounded"
-      chmod +x "$TMPDIR/firn-native-run-bounded"
-      export BEAGLE_RUST_SUPERVISOR=$TMPDIR/firn-native-run-bounded
-      beagle native-exe --out $out/bin/firn --entry firn.main/-main ${beagle}/native-core/src/beagle/datum_reader.bgl ${beagle}/native-core/src/native/json.bgl ${beagle}/native-core/src/beagle/nix_schema_path.bgl ${self}/native/tag_resolve.bgl ${self}/native/tag_inputs.bgl ${self}/native/tag_resolve_driver.bgl ${self}/native/tag_resolve_native.bgl ${self}/native/inventory.bgl ${self}/native/inventory_native.bgl ${self}/native/authoring.bgl ${self}/native/authoring_native.bgl ${self}/native/flake_input.bgl ${self}/native/flake_input_driver.bgl ${self}/native/flake_input_native.bgl ${self}/native/tag_commands.bgl ${self}/native/tag_commands_driver.bgl ${self}/native/tag_commands_native.bgl ${self}/native/firn_views.bgl ${self}/native/firn_views_native.bgl ${self}/native/schema_transaction.bgl ${self}/native/schema_transaction_native.bgl ${self}/native/repo_quality.bgl ${self}/native/repo_workflows.bgl ${self}/native/repo_workflows_native.bgl ${self}/native/impact.bgl ${self}/native/rebuild.bgl ${self}/native/rebuild_native.bgl ${self}/native/repo_build.bgl ${self}/native/repo_build_native.bgl ${self}/native/prewarm.bgl ${self}/native/prewarm_native.bgl ${self}/native/system_policy.bgl ${self}/native/firn.bgl
-      beagle native-exe --out $out/bin/activity --entry activity.native/-main ${beagle}/native-core/src/beagle/datum_reader.bgl ${beagle}/native-core/src/native/json.bgl ${self}/native/activity_core.bgl ${self}/native/activity_driver.bgl ${self}/native/activity_native.bgl
-      beagle native-exe --out $out/bin/activity-menu --entry activity.menu/-main ${self}/native/activity_menu.bgl
-      beagle native-exe --out $out/bin/firn-system-policy --entry firn.system-policy-native/-main ${beagle}/native-core/src/native/json.bgl ${self}/native/system_policy.bgl ${self}/native/system_policy_native.bgl
-    '') (builtins.getAttr "beagle" (builtins.getAttr system beagle.packages)))) (builtins.getAttr system nixpkgs.legacyPackages))))) (builtins.fromJSON (builtins.readFile ./config/darwin-modules.json)))) ./modules));
+  }) (system: ((pkgs: ((live: pkgs.symlinkJoin {
+      name = "firn-launchers";
+      paths = [
+        (live "firn")
+        (live "activity")
+        (live "activity-menu")
+        (live "firn-system-policy")
+      ];
+    }) (name: pkgs.writeShellScriptBin name ''
+        live="$HOME/.local/bin/${name}"
+        if [ -x "$live" ]; then
+          exec "$live" "$@"
+        fi
+        export FIRN_REPO="${self}"
+        exec "${self}/dotfiles/bin/${name}" "$@"
+      ''))) (builtins.getAttr system nixpkgs.legacyPackages))))) (builtins.fromJSON (builtins.readFile ./config/darwin-modules.json)))) ./modules));
 }

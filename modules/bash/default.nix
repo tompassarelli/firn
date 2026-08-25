@@ -1,6 +1,7 @@
-{ config, lib, pkgs, flakeRoot, firnNative, ... }:
+{ config, lib, pkgs, flakeRoot, firnLaunchers, ... }:
 
 ((username: {
+  tags = [ terminal ];
   options.myConfig.modules.bash.enable = lib.mkEnableOption "Bash shell configuration";
   config = lib.mkIf config.myConfig.modules.bash.enable {
     environment.etc.bash_logout.text = lib.mkForce ''
@@ -20,7 +21,7 @@
 
     '';
     programs.bash.completion.enable = true;
-    environment.systemPackages = [ pkgs.fzf firnNative ];
+    environment.systemPackages = [ pkgs.fzf firnLaunchers ];
     home-manager.users.${username} = ({ config, ... }: {
       systemd.user.startServices = "sd-switch";
       home.file.".local/bin".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/main/dotfiles/bin";

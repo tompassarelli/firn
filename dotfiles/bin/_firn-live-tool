@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+tool="${1:?usage: _firn-live-tool TOOL [ARGS...]}"
+shift
+
+firn_repo="${FIRN_REPO:-$HOME/code/nixos-config/main}" # hardcoded-repo-path:allow
+beagle_path="${BEAGLE_PATH:-$HOME/code/beagle/main}" # hardcoded-repo-path:allow
+beagle="$beagle_path/bin/beagle"
+
+if [[ ! -x "$beagle" ]]; then
+  printf '%s: BEAGLE_PATH has no executable bin/beagle: %s\n' "$tool" "$beagle_path" >&2
+  exit 1
+fi
+
+case "$tool" in
+  activity)
+    entry="activity.native/-main"
+    sources=(
+      "$beagle_path/native-core/src/beagle/datum_reader.bgl"
+      "$beagle_path/native-core/src/native/json.bgl"
+      "$firn_repo/native/activity_core.bgl"
+      "$firn_repo/native/activity_driver.bgl"
+      "$firn_repo/native/activity_native.bgl"
+    )
+    ;;
+  activity-menu)
+    entry="activity.menu/-main"
+    sources=("$firn_repo/native/activity_menu.bgl")
+    ;;
+  firn-system-policy)
+    entry="firn.system-policy-native/-main"
+    sources=(
+      "$beagle_path/native-core/src/native/json.bgl"
+      "$firn_repo/native/system_policy.bgl"
+      "$firn_repo/native/system_policy_native.bgl"
+    )
+    ;;
+  *)
+    printf '_firn-live-tool: unknown tool: %s\n' "$tool" >&2
+    exit 2
+    ;;
+esac
+
+stage="$(mktemp -d "${TMPDIR:-/tmp}/firn-live-tool.XXXXXX")"
+cleanup() {
+  rm -rf -- "${stage:?}"
+}
+trap cleanup EXIT
+
+if ! "$beagle" native-exe \
+  --out "$stage/$tool" \
+  --artifacts "$stage/artifacts" \
+  --entry "$entry" \
+  "${sources[@]}"; then
+  printf '%s: live native materialization failed\n' "$tool" >&2
+  exit 1
+fi
+
+"$stage/$tool" "$@"

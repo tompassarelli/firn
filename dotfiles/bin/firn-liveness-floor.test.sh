@@ -40,7 +40,7 @@ write_tool firn \
 cp "$fixture_bin/firn" "$fixture_candidate/bin/firn"
 write_tool nix \
   'test "${LIVENESS_CASE:-ok}" != build-failure || exit 1' \
-  'if [[ "$*" == *firn-native* ]]; then printf "%s\n" "${LIVENESS_CANDIDATE:?}"; ' \
+  'if [[ "$*" == *firn-launchers* ]]; then printf "%s\n" "${LIVENESS_CANDIDATE:?}"; ' \
   'else printf "/nix/store/fake-toplevel\n"; fi'
 
 run_case() {

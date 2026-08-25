@@ -111,7 +111,7 @@ current_output="$("$firn_bin" host list all)"
 
 failing_check="candidate_firn_build"
 candidate_root="$(run "building candidate Firn" "$nix_bin" build --no-link --print-out-paths \
-  "$source#packages.$system.firn-native")"
+  "$source#packages.$system.firn-launchers")"
 candidate_firn="$candidate_root/bin/firn"
 candidate_path="$(store_path_or_null "$candidate_firn")"
 failing_check="candidate_firn"
