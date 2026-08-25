@@ -549,22 +549,19 @@
       (parse-assignments-events (reader/datumread-events read)))))
 
 (defn load-defs [path String] DefsResult
-  (let [loaded (host.fs/read-text-bounded path max-config-bytes)]
-    (if (instance? host.fs/ReadTextBoundedOk loaded)
-      (parse-defs (host.fs/readtextboundedok-text loaded))
-      (->DefsRejected
-        (str "cannot read definitions: errno "
-          (host.fs/readtextboundederror-errno loaded))))))
+  (match (host.fs/read-text-bounded path max-config-bytes)
+    [(host.fs/ReadTextBoundedOk text) (parse-defs text)]
+    [(host.fs/ReadTextBoundedError errno)
+     (->DefsRejected (str "cannot read definitions: errno " errno))]))
 
 (defn load-assignments [path String] AssignmentsResult
-  (let [loaded (host.fs/read-text-bounded path max-config-bytes)]
-    (if (instance? host.fs/ReadTextBoundedOk loaded)
-      (parse-assignments (host.fs/readtextboundedok-text loaded))
-      (let [(errno Int) (host.fs/readtextboundederror-errno loaded)]
-        (if (= errno 2)
+  (match (host.fs/read-text-bounded path max-config-bytes)
+    [(host.fs/ReadTextBoundedOk text) (parse-assignments text)]
+    [(host.fs/ReadTextBoundedError errno)
+     (if (= errno 2)
        (->AssignmentsLoaded [])
        (->AssignmentsRejected
-            (str "cannot read assignments: errno " errno)))))))
+         (str "cannot read assignments: errno " errno)))]))
 
 (defn assignment-text [assignments (Vec a/Assignment)] String
   (loop [(index Int) 0 (result String) "{"]
@@ -584,14 +581,13 @@
   [path String
    assignments (Vec a/Assignment)]
   Int
-  (let [written (host.fs/write-text-atomic path (assignment-text assignments))]
-    (if (instance? host.fs/WriteTextAtomicOk written)
-      0
-      (do
-        (stderr-line
-          (str "activity daemon: cannot write assignments: errno "
-            (host.fs/writetextatomicerror-errno written)))
-        1))))
+  (match (host.fs/write-text-atomic path (assignment-text assignments))
+    [(host.fs/WriteTextAtomicOk) 0]
+    [(host.fs/WriteTextAtomicError errno)
+     (do
+       (stderr-line
+         (str "activity daemon: cannot write assignments: errno " errno))
+       1)]))
 
 (defn workspace-json-events [workspace a/Workspace] (Vec json/JsonEvent)
   (let [(name (U String Nil)) (a/workspace-name workspace)
@@ -704,25 +700,20 @@
          (str "activity daemon: cannot encode snapshot: "
            (json/jsonencodeerror-message encoded)))
        1)
-     (let [written
-           (host.fs/write-text-atomic path
-             (str (json/jsonencoded-text encoded) "\n"))]
-       (if (instance? host.fs/WriteTextAtomicOk written)
-         0
-         (do
-           (stderr-line
-             (str "activity daemon: cannot write snapshot: errno "
-               (host.fs/writetextatomicerror-errno written)))
-           1))))))
+     (match (host.fs/write-text-atomic path
+              (str (json/jsonencoded-text encoded) "\n"))
+       [(host.fs/WriteTextAtomicOk) 0]
+       [(host.fs/WriteTextAtomicError errno)
+        (do
+          (stderr-line
+            (str "activity daemon: cannot write snapshot: errno " errno))
+          1)]))))
 
 (defn capture [argv (Vec String)] ProcessResult
-  (let [captured (host.process/run-capture argv "" max-command-output)]
-    (if (instance? host.process/CaptureOk captured)
-      (->ProcessCompleted
-        (host.process/captureok-status captured)
-        (host.process/captureok-stdout captured)
-        (host.process/captureok-stderr captured))
-      (->ProcessRejected (host.process/captureerror-errno captured)))))
+  (match (host.process/run-capture argv "" max-command-output)
+    [(host.process/CaptureOk status stdout stderr)
+     (->ProcessCompleted status stdout stderr)]
+    [(host.process/CaptureError errno) (->ProcessRejected errno)]))
 
 (defn niri-workspaces [] WorkspacesResult
   (match (capture ["niri" "msg" "--json" "workspaces"])
@@ -902,12 +893,10 @@
     [(host.fs/MakeParentDirectoriesError errno) (- 0 errno)]))
 
 (defn takeover-owner [pid-path String] Int
-  (let [loaded (host.fs/read-text-bounded pid-path 64)]
-    (if (instance? host.fs/ReadTextBoundedError loaded)
-      0
-      (let [(owner (U Int Nil))
-            (parse-long
-              (str/trim (host.fs/readtextboundedok-text loaded)))
+  (match (host.fs/read-text-bounded pid-path 64)
+    [(host.fs/ReadTextBoundedError errno) 0]
+    [(host.fs/ReadTextBoundedOk text)
+     (let [(owner (U Int Nil)) (parse-long (str/trim text))
            (self Int) (host.process/current-pid)]
         (if (or (nil? owner) (<= owner 1) (= owner self)
                 (not (host.process/alive? owner)))
@@ -923,46 +912,42 @@
                 (if (not= kill-status 0)
                   kill-status
                   (host.process/wait-not-alive
-                    owner child-stop-timeout-ms))))))))))
+                    owner child-stop-timeout-ms)))))))]))
 
 (defn install-owner-pid
   [paths ActivityPaths
    descriptor Int]
   LeaseResult
-  (let [written
-        (host.fs/write-text-atomic
-          (activitypaths-pid paths)
-          (str (host.process/current-pid) "\n"))]
-    (if (instance? host.fs/WriteTextAtomicOk written)
-      (->LeaseAcquired descriptor)
-      (do
-        (host.fs/unlock descriptor)
-        (->LeaseRejected
-          (str "cannot write owner pid: errno "
-            (host.fs/writetextatomicerror-errno written)))))))
+  (match (host.fs/write-text-atomic
+           (activitypaths-pid paths)
+           (str (host.process/current-pid) "\n"))
+    [(host.fs/WriteTextAtomicOk) (->LeaseAcquired descriptor)]
+    [(host.fs/WriteTextAtomicError errno)
+     (do
+       (host.fs/unlock descriptor)
+       (->LeaseRejected (str "cannot write owner pid: errno " errno)))]))
 
 (defn acquire-lease
   [paths ActivityPaths
    attempt Int]
   LeaseResult
-  (let [locked (host.fs/lock-exclusive (activitypaths-lease paths))]
-    (if (instance? host.fs/LockExclusiveOk locked)
-      (install-owner-pid paths (host.fs/lockexclusiveok-descriptor locked))
+  (match (host.fs/lock-exclusive (activitypaths-lease paths))
+    [(host.fs/LockExclusiveOk descriptor)
+     (install-owner-pid paths descriptor)]
+    [(host.fs/LockExclusiveError errno)
       (if (>= attempt lease-attempt-limit)
         (->LeaseRejected
-          (str "cannot acquire sole-writer lease: errno "
-            (host.fs/lockexclusiveerror-errno locked)))
+          (str "cannot acquire sole-writer lease: errno " errno))
         (do
           (takeover-owner (activitypaths-pid paths))
           (host.time/sleep-milliseconds lease-retry-delay-ms)
-          (acquire-lease paths (+ attempt 1)))))))
+          (acquire-lease paths (+ attempt 1))))]))
 
 (defn ensure-fifo [path String] Int
-  (let [kind-result (host.fs/path-kind path)]
-    (if (instance? host.fs/PathKindOk kind-result)
-      (if (= (host.fs/pathkindok-kind kind-result) 4) 0 -22)
-      (let [(errno Int) (host.fs/pathkinderror-errno kind-result)]
-        (if (= errno 2) (host.process/fifo-create path) (- 0 errno))))))
+  (match (host.fs/path-kind path)
+    [(host.fs/PathKindOk kind) (if (= kind 4) 0 -22)]
+    [(host.fs/PathKindError errno)
+     (if (= errno 2) (host.process/fifo-create path) (- 0 errno))]))
 
 (defn open-control [path String] Int
   (let [(fifo-status Int) (ensure-fifo path)]
@@ -971,25 +956,17 @@
       fifo-status)))
 
 (defn start-event-stream [] EventStreamResult
-  (let [started
-        (host.process/spawn-stdout
-          ["niri" "msg" "--json" "event-stream"])]
-    (if (instance? host.process/SpawnStdoutOk started)
-      (->EventStreamStarted
-        (host.process/spawnstdoutok-pid started)
-        (host.process/spawnstdoutok-stdout-fd started))
-      (->EventStreamRejected
-        (host.process/spawnstdouterror-errno started)))))
+  (match (host.process/spawn-stdout
+           ["niri" "msg" "--json" "event-stream"])
+    [(host.process/SpawnStdoutOk pid stdout-fd)
+     (->EventStreamStarted pid stdout-fd)]
+    [(host.process/SpawnStdoutError errno) (->EventStreamRejected errno)]))
 
 (defn read-line [descriptor Int] LineResult
-  (let [read-result
-        (host.process/read-line-deadline
-          descriptor max-line-bytes poll-timeout-ms)]
-    (if (instance? host.process/ReadLineOk read-result)
-      (->LineLoaded
-        (host.process/readlineok-line read-result)
-        (host.process/readlineok-eof read-result))
-      (->LineRejected (host.process/readlineerror-errno read-result)))))
+  (match (host.process/read-line-deadline
+           descriptor max-line-bytes poll-timeout-ms)
+    [(host.process/ReadLineOk line eof) (->LineLoaded line eof)]
+    [(host.process/ReadLineError errno) (->LineRejected errno)]))
 
 (defn reap-child
   [pid Int
@@ -1189,17 +1166,17 @@
           (not (instance? JsonArrayStart (nth events start))))
     nil
     (let [(end Int) (json-value-end events start)
-          (empty-entries (Vec ListEntry)) []
-          (initial (U (Vec ListEntry) Nil)) empty-entries]
+          (empty-entries (Vec ListEntry)) []]
       (if (< end 0)
         nil
-        (loop [(index Int) (+ start 1) (result (U (Vec ListEntry) Nil)) initial]
+        (loop [(index Int) (+ start 1)
+               (result (Vec ListEntry)) empty-entries]
           (if (= index (- end 1))
             result
             (let [(entry (U ListEntry Nil))
                   (snapshot-list-entry events index)
                   (next Int) (json-value-end events index)]
-              (if (or (nil? result) (nil? entry) (< next 0))
+              (if (or (nil? entry) (< next 0))
                 nil
                 (recur next (conj result entry))))))))))
 
@@ -1224,10 +1201,9 @@
            (->SnapshotLoaded (->SnapshotView text current entries)))))]))
 
 (defn read-snapshot [path String] SnapshotResult
-  (let [loaded (host.fs/read-text-bounded path max-state-bytes)]
-    (if (instance? host.fs/ReadTextBoundedOk loaded)
-      (parse-snapshot (host.fs/readtextboundedok-text loaded))
-      (->SnapshotMissing true))))
+  (match (host.fs/read-text-bounded path max-state-bytes)
+    [(host.fs/ReadTextBoundedOk text) (parse-snapshot text)]
+    [(host.fs/ReadTextBoundedError errno) (->SnapshotMissing true)]))
 
 (defn command-json-events
   [command String
