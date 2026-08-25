@@ -50,7 +50,7 @@ native="$repo/native/schema_transaction_native.bjs"
 
 printf 'schema-transaction-js: building exact focused bundle\n' >&2
 mkdir -p "$scratch/out"
-timeout --foreground 180 "$beagle/bin/beagle" build \
+timeout --foreground 180 "$beagle/bin/beagle-build-all" \
   "$json" "$core" "$pure" "$native" --out "$scratch/out" \
   >"$scratch/pure.build.out" 2>"$scratch/pure.build.err" \
   || {
@@ -61,6 +61,11 @@ timeout --foreground 180 "$beagle/bin/beagle" build \
   || die "focused pure test module is missing"
 [[ -f "$scratch/out/firn/schema-transaction-native.js" ]] \
   || die "schema host-plan module is missing"
+mkdir -p "$scratch/out/node_modules/beagle"
+cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
+  "$scratch/out/node_modules/beagle/core.js"
+printf '%s\n' '{"type":"module"}' \
+  >"$scratch/out/node_modules/beagle/package.json"
 
 printf 'schema-transaction-native: focused pure policy fixtures\n' >&2
 FIRN_SCHEMA_TEST_MODULE="$scratch/out/firn/schema-transaction-test.js" \
@@ -76,5 +81,20 @@ timeout --foreground 30 bun --eval \
   || die "focused pure policy fixture count changed"
 [[ ! -s "$scratch/pure.err" ]] \
   || die "focused pure policy fixtures wrote stderr"
+
+printf 'schema-transaction-native: real flake.lock fingerprint\n' >&2
+FIRN_SCHEMA_TEST_MODULE="$scratch/out/firn/schema-transaction-test.js" \
+FIRN_SCHEMA_REAL_LOCK="$repo/flake.lock" \
+timeout --foreground 30 bun --eval '
+  const module = await import(process.env.FIRN_SCHEMA_TEST_MODULE);
+  const lock = await Bun.file(process.env.FIRN_SCHEMA_REAL_LOCK).text();
+  if (!module["real-lock-fingerprint-valid?"](lock)) process.exit(1);
+' >"$scratch/real-lock.out" 2>"$scratch/real-lock.err" \
+  || {
+    sed -n '1,200p' "$scratch/real-lock.err" >&2
+    die "real flake.lock fingerprint failed"
+  }
+[[ ! -s "$scratch/real-lock.err" ]] \
+  || die "real flake.lock fingerprint wrote stderr"
 
 printf 'ok: Beagle/JS schema authority policy and Bun transaction boundary are checked\n'

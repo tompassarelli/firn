@@ -50,6 +50,13 @@
     [(FingerprintRejected message) ""]
     [(FingerprintReady value) value]))
 
+(js/export
+  (defn real-lock-fingerprint-valid? [lock String] Bool
+    (match (transaction/schema-input-fingerprint
+             lock (transaction/nixos-mode) tool-files)
+      [(FingerprintRejected message) false]
+      [(FingerprintReady value) (= 64 (count value))])))
+
 (defn case-sha256-and-canonical-json [] Bool
   (and
     (= (sha256-bytes (utf8-encode "abc"))
@@ -106,15 +113,15 @@
 
 (defn case-schema-and-policy-validation [] Bool
   (and
-    (instance? JsonPolicyValid
+    (instance? transaction/JsonPolicyValid
       (transaction/json-array-nonempty "[{\"name\":\"x\"}]"))
-    (instance? JsonPolicyRejected
+    (instance? transaction/JsonPolicyRejected
       (transaction/json-array-nonempty "[]"))
-    (instance? JsonPolicyRejected
+    (instance? transaction/JsonPolicyRejected
       (transaction/json-array-nonempty "[{"))
-    (instance? JsonPolicyValid
+    (instance? transaction/JsonPolicyValid
       (transaction/json-object-policy "{}"))
-    (instance? JsonPolicyRejected
+    (instance? transaction/JsonPolicyRejected
       (transaction/json-object-policy "[]"))))
 
 (defn current-nixos-cache [] transaction/NixosCacheSnapshot
@@ -127,7 +134,7 @@
 
 (defn case-cache-authority [] Bool
   (and
-    (instance? CacheCurrent
+    (instance? transaction/CacheCurrent
       (transaction/nixos-cache-assessment
         (current-nixos-cache) "fingerprint"))
     (match (transaction/nixos-cache-assessment
@@ -156,7 +163,7 @@
 
 (defn case-darwin-cache-authority [] Bool
   (and
-    (instance? CacheCurrent
+    (instance? transaction/CacheCurrent
       (transaction/darwin-cache-assessment
         (transaction/->DarwinCacheSnapshot "[1]" "fingerprint\n")
         "fingerprint"))
@@ -211,13 +218,13 @@
     (match (transaction/parse-schema-transaction-argv
              ["schema" "extract"])
       [(ExtractSchema mode host)
-       (and (instance? NixosSchema mode) (= host "whiterabbit"))]
+       (and (instance? transaction/NixosSchema mode) (= host "whiterabbit"))]
       [(ValidateSchema inputs) false]
       [(InvalidSchemaTransaction argv) false])
     (match (transaction/parse-schema-transaction-argv
              ["schema" "extract" "--darwin" "mac"])
       [(ExtractSchema mode host)
-       (and (instance? DarwinSchema mode) (= host "mac"))]
+       (and (instance? transaction/DarwinSchema mode) (= host "mac"))]
       [(ValidateSchema inputs) false]
       [(InvalidSchemaTransaction argv) false])
     (match (transaction/parse-schema-transaction-argv
@@ -230,7 +237,7 @@
       [(ValidateSchema inputs) (empty? inputs)]
       [(ExtractSchema mode host) false]
       [(InvalidSchemaTransaction argv) false])
-    (instance? InvalidSchemaTransaction
+    (instance? transaction/InvalidSchemaTransaction
       (transaction/parse-schema-transaction-argv ["schema" "extract" "x" "y"]))))
 
 (defn case-native-error-rendering [] Bool

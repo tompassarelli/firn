@@ -27,11 +27,12 @@
   [root-id String
    nodes-start Int])
 
-(defunion CanonicalJsonResult
-  (CanonicalJson [text String])
-  (CanonicalJsonRejected
-    [message String
-     offset Int]))
+(js/export
+  (defunion CanonicalJsonResult
+    (CanonicalJson [text String])
+    (CanonicalJsonRejected
+      [message String
+       offset Int])))
 
 (defunion JsonFieldResult
   (JsonFieldFound [start Int])
@@ -178,7 +179,7 @@
   JsonFieldResult
   (if (or (< object-start 0)
           (>= object-start (count events))
-          (not (instance? JsonObjectStart (nth events object-start))))
+          (not (instance? json/JsonObjectStart (nth events object-start))))
     (->JsonFieldRejected "expected a JSON object"
       (if (and (>= object-start 0) (< object-start (count events)))
         (json-event-offset (nth events object-start))
@@ -361,20 +362,21 @@
       [(JsonKey offset key)
        (->CanonicalJsonRejected "unexpected JSON key" offset)])))
 
-(defn canonical-json [source String] CanonicalJsonResult
-  (match (json/decode source)
-    [(JsonDecodeError offset message)
-     (->CanonicalJsonRejected message offset)]
-    [(JsonDecoded events)
-     (if (empty? events)
-       (->CanonicalJsonRejected "missing JSON value" 0)
-       (let [end Int (json-value-end events 0)]
-         (if (not= end (count events))
-           (->CanonicalJsonRejected "unexpected events after JSON value"
-             (if (and (>= end 0) (< end (count events)))
-               (json-event-offset (nth events end))
-               0))
-           (canonical-json-value events 0))))]))
+(js/export
+  (defn canonical-json [source String] CanonicalJsonResult
+    (match (json/decode source)
+      [(JsonDecodeError offset message)
+       (->CanonicalJsonRejected message offset)]
+      [(JsonDecoded events)
+       (if (empty? events)
+         (->CanonicalJsonRejected "missing JSON value" 0)
+         (let [end Int (json-value-end events 0)]
+           (if (not= end (count events))
+             (->CanonicalJsonRejected "unexpected events after JSON value"
+               (if (and (>= end 0) (< end (count events)))
+                 (json-event-offset (nth events end))
+                 0))
+             (canonical-json-value events 0))))])))
 
 (js/export
   (defn json-array-nonempty [source String] JsonPolicyResult
@@ -382,9 +384,9 @@
       [(JsonDecodeError offset message) (->JsonPolicyRejected message offset)]
       [(JsonDecoded events)
        (if (or (< (count events) 3)
-               (not (instance? JsonArrayStart (first events)))
+               (not (instance? json/JsonArrayStart (first events)))
                (not= (json-value-end events 0) (count events))
-               (instance? JsonArrayEnd (nth events 1)))
+               (instance? json/JsonArrayEnd (nth events 1)))
          (->JsonPolicyRejected "expected a nonempty JSON array" 0)
          (->JsonPolicyValid "array"))])))
 
@@ -394,7 +396,7 @@
       [(JsonDecodeError offset message) (->JsonPolicyRejected message offset)]
       [(JsonDecoded events)
        (if (or (empty? events)
-               (not (instance? JsonObjectStart (first events)))
+               (not (instance? json/JsonObjectStart (first events)))
                (not= (json-value-end events 0) (count events)))
          (->JsonPolicyRejected "expected a JSON object" 0)
          (->JsonPolicyValid "object"))])))
@@ -404,7 +406,7 @@
     [(JsonDecodeError offset message) nil]
     [(JsonDecoded events)
      (if (and (not (empty? events))
-              (instance? JsonObjectStart (first events))
+              (instance? json/JsonObjectStart (first events))
               (= (json-value-end events 0) (count events)))
        events
        nil)]))
@@ -457,7 +459,7 @@
      (->JsonFieldRejected message offset)]
     [(JsonFieldMissing missing-field) (->JsonFieldMissing field)]
     [(JsonFieldFound value-start)
-     (if (instance? JsonObjectStart (nth events value-start))
+     (if (instance? json/JsonObjectStart (nth events value-start))
        (->JsonFieldFound value-start)
        (->JsonFieldRejected (str "JSON field " field " must be an object")
          (json-event-offset (nth events value-start))))]))
@@ -472,7 +474,7 @@
      (->JsonFieldRejected message offset)]
     [(JsonFieldMissing missing-field) (->JsonFieldMissing node-id)]
     [(JsonFieldFound start)
-     (if (instance? JsonObjectStart (nth events start))
+     (if (instance? json/JsonObjectStart (nth events start))
        (->JsonFieldFound start)
        (->JsonFieldRejected (str "lock node " node-id " must be an object")
          (json-event-offset (nth events start))))]))
@@ -626,7 +628,7 @@
               (->CanonicalJsonRejected
                 (str "root input " input-name " has no locked source") 0)]
              [(JsonFieldFound locked-start)
-              (if (not (instance? JsonObjectStart (nth events locked-start)))
+              (if (not (instance? json/JsonObjectStart (nth events locked-start)))
                 (->CanonicalJsonRejected
                   (str "root input " input-name " has no locked source")
                   (json-event-offset (nth events locked-start)))
