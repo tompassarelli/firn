@@ -34,7 +34,10 @@
   (HostListError [errno Int]))
 
 (defunion HostCaptureResult
-  (HostCaptureOk [status Int stdout String stderr String])
+  (HostCaptureOk
+    [status Int
+     stdout String
+     stderr String])
   (HostCaptureError [errno Int]))
 
 (defn result-error? [result Any] Bool
@@ -52,20 +55,26 @@
       (->HostPathKindError (bridge-result-int result "errno"))
       (->HostPathKindOk (bridge-result-int result "kind")))))
 
-(defn host-read-text [absolute String limit Int] HostTextResult
+(defn host-read-text
+  [absolute String
+   limit Int] HostTextResult
   (let [result Any (bridge-read-text-bounded absolute limit)]
     (if (result-error? result)
       (->HostTextError (bridge-result-int result "errno"))
       (->HostTextOk (bridge-result-string result "text")))))
 
-(defn host-list-directory [absolute String limit Int] HostListResult
+(defn host-list-directory
+  [absolute String
+   limit Int] HostListResult
   (let [result Any (bridge-list-directory-bounded absolute limit)]
     (if (result-error? result)
       (->HostListError (bridge-result-int result "errno"))
       (->HostListOk (bridge-result-strings result "entries")))))
 
 (defn host-capture
-  [argv (Vec String) stdin String limit Int] HostCaptureResult
+  [argv (Vec String)
+   stdin String
+   limit Int] HostCaptureResult
   (let [result Any (bridge-run-capture argv stdin limit)]
     (if (result-error? result)
       (->HostCaptureError (bridge-result-int result "errno"))
@@ -497,16 +506,17 @@
     [(SchemaExtract host) (run-schema-extract root host)]
     [(HostGeneration host) (run-host-generation host)]))
 
-(defn -main [argv (Vec String)] Int
-  (let [root (U String Nil) (repository-root)]
-    (if (nil? root)
-      (emit-error "firn views: FIRN_REPO and HOME are not set\n")
-      (match (views/parse-views-argv argv "")
-        [(InvalidViewsArgv invalid) (usage-error)]
-        [(ParsedViews action)
-         (if (not (action-needs-current-host? action))
-           (dispatch root action)
-           (match (current-hostname)
-             [(HostnameRejected message) (emit-error message)]
-             [(HostnameLoaded hostname)
-              (dispatch root (action-with-host action hostname))]))]))))
+(js/export
+  (defn run [argv (Vec String)] Int
+    (let [root (U String Nil) (repository-root)]
+      (if (nil? root)
+        (emit-error "firn views: FIRN_REPO and HOME are not set\n")
+        (match (views/parse-views-argv argv "")
+          [(InvalidViewsArgv invalid) (usage-error)]
+          [(ParsedViews action)
+           (if (not (action-needs-current-host? action))
+             (dispatch root action)
+             (match (current-hostname)
+               [(HostnameRejected message) (emit-error message)]
+               [(HostnameLoaded hostname)
+                (dispatch root (action-with-host action hostname))]))])))))
