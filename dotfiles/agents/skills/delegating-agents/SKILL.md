@@ -81,6 +81,15 @@ workers and replan or consolidate. At two times either the wall or agent-time
 estimate, interrupt and rebrief; never extend the estimate in place. Settle both
 actuals through the existing attempt receipt.
 
+Attempts subdivide accounting; they never reset the operator outcome's clock.
+A replacement commander, narrower rebrief, successor program, renamed phase,
+or new attempt ID inherits the same acceptance contract and cumulative wall
+and agent actuals. At two times the original outcome budget without an accepted
+operator-facing artifact, stop that program and deliver the best supported
+result or capability gap. Admit another budget only for a genuinely new
+operator goal or a newly exposed independent obligation whose changed work is
+explicitly priced; never obtain more time by renaming the continuation.
+
 ## Ratchet development speed
 
 Use a measured speed ratchet when uncertainty or critical-path risk makes
