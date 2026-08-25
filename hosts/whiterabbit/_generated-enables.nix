@@ -6,7 +6,6 @@
   myConfig.modules.bash.enable = lib.mkDefault true;
   myConfig.modules.bc.enable = lib.mkDefault true;
   myConfig.modules.bench-shield.enable = lib.mkDefault true;
-  myConfig.modules.blender.enable = lib.mkDefault true;
   myConfig.modules.brightnessctl.enable = lib.mkDefault true;
   myConfig.modules.btop.enable = lib.mkDefault true;
   myConfig.modules.bubblewrap.enable = lib.mkDefault true;
@@ -61,7 +60,6 @@
   myConfig.modules.nerd-fonts.enable = lib.mkDefault true;
   myConfig.modules.niri.enable = lib.mkDefault true;
   myConfig.modules.north-profile.enable = lib.mkDefault true;
-  myConfig.modules.obsidian.enable = lib.mkDefault true;
   myConfig.modules.pandoc.enable = lib.mkDefault true;
   myConfig.modules.pavucontrol.enable = lib.mkDefault true;
   myConfig.modules.pkg-config.enable = lib.mkDefault true;
