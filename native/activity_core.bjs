@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns activity.core)
 
 (defrecord ActivityDef

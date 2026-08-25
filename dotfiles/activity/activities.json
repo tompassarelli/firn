@@ -1,0 +1,21 @@
+{
+  "default": "home",
+  "activities": [
+    {
+      "id": "home",
+      "label": "home"
+    },
+    {
+      "id": "gjoa",
+      "label": "gjoa",
+      "bind_names": ["gjoa release", "render"],
+      "bind_prefixes": ["gjoa"]
+    },
+    {
+      "id": "msa",
+      "label": "msa",
+      "bind_names": ["heist"],
+      "bind_prefixes": ["msa"]
+    }
+  ]
+}

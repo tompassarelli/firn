@@ -64,33 +64,42 @@ die() {
   exit 1
 }
 
-for command in awk bash cmp git jq ldd od rg seq timeout; do
+for command in awk bash cmp git jq od rg seq timeout; do
   command -v "$command" >/dev/null 2>&1 \
     || die "missing command: $command"
 done
 [[ -x "$beagle/bin/beagle" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
 
-datum="$beagle/native-core/src/beagle/datum_reader.bgl"
-json="$beagle/native-core/src/native/json.bgl"
-core="$repo/native/activity_core.bgl"
-driver="$repo/native/activity_driver.bgl"
-native="$repo/native/activity_native.bgl"
+json="$beagle/native-core/src/native/json.bjs"
+core="$repo/native/activity_core.bjs"
+driver="$repo/native/activity_driver.bjs"
+native="$repo/native/activity_native.bjs"
+host="$repo/native/activity_host.mjs"
+migrator="$repo/native/activity_assignments_migrate.mjs"
+bun="${FIRN_BUN:-$(command -v bun || true)}"
 executable="$scratch/activity"
-mkdir -p "$scratch/build-artifacts"
+modules="$scratch/modules"
+[[ -n "$bun" && -x "$bun" ]] || die "Bun runtime is unavailable"
 
-printf 'activity-native: building controlled executable\n' >&2
-timeout --foreground 620 "$beagle/bin/beagle" native-exe \
-  --out "$executable" \
-  --entry activity.native/-main \
-  --artifacts "$scratch/build-artifacts" \
-  "$datum" "$json" "$core" "$driver" "$native" \
+printf 'activity-native: building controlled Beagle/JS modules\n' >&2
+mkdir -p "$modules/activity"
+timeout --foreground 120 "$beagle/bin/beagle" build \
+  "$native" "$modules/activity/native.js" \
   >"$scratch/build.out" 2>"$scratch/build.err" \
   || {
     sed -n '1,300p' "$scratch/build.err" >&2
-    die "native executable compilation failed"
+    die "Beagle/JS compilation failed"
   }
-[[ -x "$executable" ]] || die "native executable was not produced"
+[[ -f "$modules/activity/native.js" ]] \
+  || die "activity JS module was not produced"
+cat >"$executable" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export FIRN_ACTIVITY_MODULE='$modules/activity/native.js'
+exec '$bun' '$host' "\$@"
+EOF
+chmod +x "$executable"
 
 home="$scratch/home"
 runtime="$scratch/runtime"
@@ -99,14 +108,8 @@ config="$scratch/config"
 fake_bin="$scratch/fake-bin"
 mkdir -p "$home" "$runtime" "$state" "$config/activity" "$fake_bin"
 
-cat >"$config/activity/activities.edn" <<'EOF'
-{:default "home"
- :activities
- [{:id "home" :label "home"}
-  {:id "gjoa" :label "gjoa"
-   :bind-names ["render"] :bind-prefixes ["gjoa"]}
-  {:id "msa" :label "msa"
-   :bind-names ["heist"] :bind-prefixes ["msa"]}]}
+cat >"$config/activity/activities.json" <<'EOF'
+{"default":"home","activities":[{"id":"home","label":"home"},{"id":"gjoa","label":"gjoa","bind_names":["render"],"bind_prefixes":["gjoa"]},{"id":"msa","label":"msa","bind_names":["heist"],"bind_prefixes":["msa"]}]}
 EOF
 
 cat >"$scratch/workspaces.json" <<'EOF'
@@ -170,6 +173,29 @@ export FAKE_EVENT_COUNT="$scratch/event-count"
 export FAKE_EVENT_CHILDREN="$scratch/event-children.log"
 export FAKE_ACTIONS="$scratch/actions.log"
 
+printf 'activity-native: recoverable assignment migration\n' >&2
+migration="$scratch/migration"
+mkdir -p "$migration"
+printf '{"render" "gjoa", "notes" "home"}\n' >"$migration/assignments.edn"
+"$bun" "$migrator" \
+  "$migration/assignments.edn" "$migration/assignments.json" \
+  >"$scratch/migration.out" 2>"$scratch/migration.err"
+cmp -s "$migration/assignments.json" \
+  <(printf '{"notes":"home","render":"gjoa"}\n') \
+  || die "legacy assignments did not migrate to ordered JSON"
+cmp -s "$migration/assignments.edn" \
+  "$migration/assignments.edn.rollback" \
+  || die "legacy rollback copy changed bytes"
+printf '{"broken"\n' >"$migration/broken.edn"
+if "$bun" "$migrator" \
+    "$migration/broken.edn" "$migration/broken.json" \
+    >"$scratch/broken.out" 2>"$scratch/broken.err"; then
+  die "malformed legacy assignments unexpectedly migrated"
+fi
+[[ ! -e "$migration/broken.json" \
+   && ! -e "$migration/broken.edn.rollback" ]] \
+  || die "failed validation wrote migration artifacts"
+
 wait_for() {
   local label="$1"
   shift
@@ -183,7 +209,7 @@ wait_for() {
 }
 
 snapshot="$state/activity/state.json"
-assignments="$state/activity/assignments.edn"
+assignments="$state/activity/assignments.json"
 pid_path="$runtime/activity/pid"
 
 snapshot_is_ordered() {
@@ -247,7 +273,7 @@ cmp -s "$snapshot" "$scratch/list-json.out" \
 
 assignments_ready() {
   [[ -f "$assignments" ]] && \
-    cmp -s "$assignments" <(printf '{"notes" "gjoa"}\n')
+    cmp -s "$assignments" <(printf '{"notes":"gjoa"}\n')
 }
 wait_for 'persisted assignment' assignments_ready
 
@@ -300,8 +326,4 @@ cmp -s "$scratch/unreachable.out" \
 [[ ! -s "$scratch/unreachable.err" ]] \
   || die "unreachable daemon wrote stderr"
 
-if ldd "$executable" | rg -qi 'racket|clojure|babashka|java'; then
-  die "hosted runtime leaked into the Activity executable"
-fi
-
-printf 'ok: native Activity preserves FIFO order, reconnect, lease takeover, persistence, snapshot, and CLI timeout\n'
+printf 'ok: Beagle/JS Activity preserves migration, FIFO order, reconnect, lease takeover, persistence, snapshot, and CLI timeout\n'

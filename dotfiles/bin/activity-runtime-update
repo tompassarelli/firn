@@ -4,6 +4,7 @@ set -euo pipefail
 firn_repo="${FIRN_REPO:-$HOME/code/nixos-config/main}" # hardcoded-repo-path:allow
 beagle_path="${BEAGLE_PATH:-$HOME/code/beagle/main}" # hardcoded-repo-path:allow
 beagle="$beagle_path/bin/beagle"
+bun="${FIRN_BUN:-$(command -v bun || true)}"
 runtime_root="${FIRN_ACTIVITY_RUNTIME_ROOT:-$HOME/.local/lib/firn/activity}"
 versions="$runtime_root/versions"
 next=""
@@ -13,13 +14,18 @@ if [[ ! -x "$beagle" ]]; then
     "$beagle_path" >&2
   exit 1
 fi
+if [[ -z "$bun" || ! -x "$bun" ]]; then
+  printf 'activity-runtime-update: Bun runtime is unavailable\n' >&2
+  exit 127
+fi
 
 sources=(
-  "$beagle_path/native-core/src/beagle/datum_reader.bgl"
-  "$beagle_path/native-core/src/native/json.bgl"
-  "$firn_repo/native/activity_core.bgl"
-  "$firn_repo/native/activity_driver.bgl"
-  "$firn_repo/native/activity_native.bgl"
+  "$beagle_path/native-core/src/native/json.bjs"
+  "$firn_repo/native/activity_core.bjs"
+  "$firn_repo/native/activity_driver.bjs"
+  "$firn_repo/native/activity_native.bjs"
+  "$firn_repo/native/activity_host.mjs"
+  "$firn_repo/native/activity_assignments_migrate.mjs"
 )
 for source in "${sources[@]}"; do
   if [[ ! -f "$source" ]]; then
@@ -40,40 +46,37 @@ cleanup() {
   fi
 }
 trap cleanup EXIT INT TERM HUP
-mkdir -p "$stage/bin" "$stage/artifacts"
+mkdir -p "$stage/bin" "$stage/lib"
 
-if ! "$beagle" native-exe \
-  --out "$stage/bin/activity" \
-  --artifacts "$stage/artifacts" \
-  --entry activity.native/-main \
-  "${sources[@]}"; then
-  printf 'activity-runtime-update: native materialization failed\n' >&2
-  exit 1
-fi
-
-if [[ ! -x "$stage/bin/activity" ]]; then
-  printf 'activity-runtime-update: materializer produced no executable\n' >&2
-  exit 1
-fi
-if ! grep -Fxq 'source-entry activity.native/-main' "$stage/artifacts/report.txt" ||
-   ! grep -Fq 'native-exe-entry PASS name=activity.native/-main ' \
-     "$stage/artifacts/native-exe.report.txt"; then
-  printf 'activity-runtime-update: materializer producer identity is invalid\n' >&2
+mkdir -p "$stage/lib/activity"
+if ! "$beagle" build \
+  "$firn_repo/native/activity_native.bjs" \
+  "$stage/lib/activity/native.js"; then
+  printf 'activity-runtime-update: Beagle/JS compilation failed\n' >&2
   exit 1
 fi
 
-source_id="$(sed -n \
-  's/^native-provenance-v0 source sha256:\([0-9a-f]\{64\}\)$/\1/p' \
-  "$stage/artifacts/report.txt")"
-if [[ ${#source_id} -ne 64 ]]; then
-  printf 'activity-runtime-update: materializer source identity is invalid\n' >&2
+if [[ ! -f "$stage/lib/activity/native.js" ]]; then
+  printf 'activity-runtime-update: compiler produced no activity module\n' >&2
   exit 1
 fi
-read -r artifact_id _ < <(sha256sum "$stage/bin/activity")
+cp -- "$firn_repo/native/activity_host.mjs" "$stage/bin/activity.mjs"
+cat >"$stage/bin/activity" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export FIRN_ACTIVITY_MODULE="$root/lib/activity/native.js"
+exec "${FIRN_BUN:-bun}" "$root/bin/activity.mjs" "$@"
+EOF
+chmod +x "$stage/bin/activity"
+
+source_id="$(sha256sum "${sources[@]}" | sha256sum | cut -d' ' -f1)"
+artifact_id="$(find "$stage/bin" "$stage/lib" -type f -print0 \
+  | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
 destination="$versions/$artifact_id"
 cat >"$stage/provenance" <<EOF
-format=firn-activity-runtime/v1
-entry=activity.native/-main
+format=firn-activity-runtime/v2
+entry=activity.native/run
 source_sha256=$source_id
 artifact_sha256=$artifact_id
 firn_revision=$(git -C "$firn_repo" rev-parse HEAD)
@@ -86,8 +89,7 @@ if [[ -e "$destination" ]]; then
       "$destination" >&2
     exit 1
   fi
-  read -r existing_id _ < <(sha256sum "$destination/bin/activity")
-  if [[ "$existing_id" != "$artifact_id" ]]; then
+  if ! grep -Fxq "artifact_sha256=$artifact_id" "$destination/provenance"; then
     printf 'activity-runtime-update: existing runtime identity mismatch: %s\n' \
       "$destination" >&2
     exit 1
@@ -96,6 +98,8 @@ else
   mv -- "$stage" "$destination"
   stage=""
 fi
+
+"$bun" "$firn_repo/native/activity_assignments_migrate.mjs"
 
 next="$runtime_root/.current.$$"
 ln -s "versions/$artifact_id" "$next"

@@ -15,10 +15,12 @@ fi
 
 case "$tool" in
   activity-menu)
-    entry="activity.menu/-main"
-    sources=("$firn_repo/native/activity_menu.bgl")
+    mode="js"
+    sources=("$firn_repo/native/activity_menu.bjs")
+    host="$firn_repo/native/activity_menu_host.mjs"
     ;;
   firn-system-policy)
+    mode="native"
     entry="firn.system-policy-native/-main"
     sources=(
       "$beagle_path/native-core/src/native/json.bgl"
@@ -37,6 +39,22 @@ cleanup() {
   rm -rf -- "${stage:?}"
 }
 trap cleanup EXIT
+
+if [[ "$mode" == js ]]; then
+  bun="${FIRN_BUN:-$(command -v bun || true)}"
+  if [[ -z "$bun" || ! -x "$bun" ]]; then
+    printf '%s: Bun runtime is unavailable\n' "$tool" >&2
+    exit 127
+  fi
+  mkdir -p "$stage/modules/activity"
+  if ! "$beagle" build "${sources[0]}" "$stage/modules/activity/menu.js"; then
+    printf '%s: live Beagle/JS compilation failed\n' "$tool" >&2
+    exit 1
+  fi
+  FIRN_ACTIVITY_MENU_MODULE="$stage/modules/activity/menu.js" \
+    "$bun" "$host" "$@"
+  exit $?
+fi
 
 if ! "$beagle" native-exe \
   --out "$stage/$tool" \

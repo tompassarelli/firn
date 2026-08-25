@@ -20,7 +20,7 @@
           WantedBy = [ "niri.service" ];
         };
       };
-      xdg.configFile."activity/activities.edn".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/activity/activities.edn";
+      xdg.configFile."activity/activities.json".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/activity/activities.json";
     });
   };
 }) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)

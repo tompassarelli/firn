@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns activity.driver-test
   (:require [activity.core :as a]
             [activity.driver :as d]))

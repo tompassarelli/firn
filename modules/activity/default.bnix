@@ -28,8 +28,8 @@
                    :RestartSec 2}
                  :Install {:WantedBy ["niri.service"]}}
                :xdg.configFile
-                {"activity/activities.edn"
+                {"activity/activities.json"
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/activity/activities.edn"))}}})}})}))
+                        "/code/nixos-config/dotfiles/activity/activities.json"))}}})}})}))

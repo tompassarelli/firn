@@ -1,0 +1,76 @@
+#lang beagle/js
+(ns activity.menu
+  (:require [clojure.string :as str]))
+
+(declare-extern activity-menu-host-call (Fn [String Any] Any))
+(declare-extern activity-menu-host-get (Fn [Any Int] Any))
+
+(defunion CaptureResult
+  (CaptureOk [status Int stdout String stderr String])
+  (CaptureError [errno Int]))
+
+(defn host-capture
+  [argv (Vec String) input String limit Int] CaptureResult
+  (let [result Any (activity-menu-host-call "capture" [argv input limit])]
+    (if (= (activity-menu-host-get result 0) "ok")
+      (->CaptureOk
+        (activity-menu-host-get result 1)
+        (activity-menu-host-get result 2)
+        (activity-menu-host-get result 3))
+      (->CaptureError (activity-menu-host-get result 1)))))
+
+(defn host-stderr [text String] Nil
+  (let [ignored Any (activity-menu-host-call "stderr" [text])] nil))
+
+(defn host-inherit [argv (Vec String)] Int
+  (activity-menu-host-call "inherit" [argv]))
+
+(def max-command-output Int 16777216)
+
+(defn stderr-line [(message String)] Nil
+  (host-stderr (str message "\n")))
+
+(defn menu-choice [(prompt String) (items String)] (U String Nil)
+  (match (host-capture
+           ["rofi" "-dmenu" "-p" prompt]
+           items
+           max-command-output)
+    [(CaptureError errno)
+     (do
+       (stderr-line (str "activity-menu: cannot start rofi: errno " errno))
+       nil)]
+    [(CaptureOk status stdout stderr)
+     (if (= status 0)
+       (let [(choice String) (str/trim stdout)]
+         (if (= choice "") nil choice))
+       nil)]))
+
+(js/export
+ (defn run [(args (Vec String))] Int
+  (let [(mode String) (if (empty? args) "goto" (nth args 0))
+        (verb String)
+        (cond
+          (= mode "--move") "move-to-activity"
+          (= mode "--assign") "assign"
+          :else "goto")
+        (prompt String)
+        (cond
+          (= mode "--move") "move to activity"
+          (= mode "--assign") "assign to activity"
+          :else "activity")]
+    (match (host-capture
+             ["activity" "list" "--menu"]
+             ""
+             max-command-output)
+      [(CaptureError errno)
+       (do
+         (stderr-line
+           (str "activity-menu: cannot start activity: errno " errno))
+         1)]
+      [(CaptureOk status stdout stderr)
+       (if (not= status 0)
+         status
+         (let [(choice (U String Nil)) (menu-choice prompt stdout)]
+           (if (nil? choice)
+             0
+             (host-inherit ["activity" verb choice]))))]))))
