@@ -29,6 +29,12 @@ Never run repository inspection, builds, tests, edits, bookkeeping, or raw
 worker-output synthesis at root. These are workstream actions even before a
 commander exists.
 
+Root never clocks actors in or out, updates their attempt or lane receipts,
+reaps their worktrees, watches their raw event streams, or reconstructs terminal
+evidence. Transfer those mechanics with the workstream and consume only the
+commander's current state card. A missing support role is a staffing defect for
+the commander to repair, not permission for root to become that role.
+
 Make already-evidenced executive decisions directly. Delegate evidence
 gathering, domain planning, and execution. Reject a commander's smaller
 substitute, weaker gate, or changed objective without entering its domain.
@@ -55,12 +61,14 @@ separate outcome that requires it.
 
 ## Transfer closure to commanders
 
-Give every independently useful workstream one self-managing commander. Give
-the commander an outcome, authority boundary, dependencies, terminal evidence,
-and publication authority or an explicit publication hold. The commander owns
-its detailed plan and DAG, leaves and subcommanders, implementation,
-integration, verification, review, continuity and estimate records, settlement,
-and cleanup.
+Give every independently useful workstream one self-managing commander. Any
+outcome with multiple execution seams, leaves, support roles, or terminal gates
+requires a commander even when it appears to be one operator request. Give the
+commander an outcome, authority boundary, dependencies, terminal evidence, and
+publication authority or an explicit publication hold. The commander owns its
+detailed plan and DAG, leaves and subcommanders, implementation, integration,
+verification, review, continuity and estimate records, settlement preparation,
+mechanical settlement dispatch, and cleanup.
 
 Route audits, releases, shared-surface reconciliation, and cross-cutting repairs
 through commanders too. Add a portfolio or integration commander when root
@@ -72,6 +80,13 @@ independent seams or owns a genuine integration boundary.
 Once ownership transfers, communicate only with that commander. Do not inspect
 its domain or contact its leaves. Revoke or transfer ownership explicitly
 before another actor enters the boundary.
+
+The commander staffs bounded support roles through `delegating-agents` rather
+than retaining their mechanics. A role instance exists only for a concrete
+trigger and receives an authority boundary, terminal evidence, supervisor, and
+reap path. Titles, standing availability, and a large fleet do not confer
+authority. Root may request a capability or replace a commander; it does not
+staff or supervise that commander's leaves one by one.
 
 Use `delegating-agents` for decomposition, dispatch, races, supervision, and
 settlement; `todo` for restart continuity; `estimate` for forecasts and timing
@@ -129,7 +144,10 @@ critical path, or safety decision.
 
 Before reporting, require every ready workstream to have a commander or an
 exact dependency hold, every shared conflict to have one integration owner,
-and every completed workstream to name its artifact, gate, and settlement.
+and every completed workstream to name its artifact, gate, settlement, and
+cleanup disposition. Require commanders with live leaves to own continuity and
+leaf supervision and to have any needed watchdog, assurance, bookkeeping, or
+cleanup support admitted below them.
 Replace a silent commander from its compact checkpoint; never rescue its leaves
 one by one. Report the fleet outcome, next decision, and residual uncertainty
 to the operator without importing domain detail into root context.

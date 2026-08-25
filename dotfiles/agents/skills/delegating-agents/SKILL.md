@@ -37,6 +37,51 @@ authorized supervisor window plus margin. Capability and policy own standing
 prohibitions; a brief records only its scoped exception. Never invent a tighter
 deadline or lengthen one without evidence that legitimate work changed.
 
+## Admit reusable fleet roles
+
+A reusable role is a repeatable bounded contract, not a title or a permanently
+privileged actor. Admit an instance only when its brief names one concrete
+trigger, its read/write and decision authority, terminal evidence, owning
+supervisor, and reap path. Give it an attempt and scope like any other worker.
+When the trigger is gone or the evidence is consumed, stop and reap it. Do not
+invent a support role whose output cannot change or close a named seam.
+
+Use these stock roles where their trigger is real:
+
+- **Commander** — a multi-seam outcome, integration boundary, or leaf fleet
+  needs one closure owner. It owns the detailed DAG, continuity, supervision,
+  product verdicts, settlement preparation, and cleanup; its terminal evidence
+  is one accepted artifact or capability gap plus gate and disposition.
+- **Continuity keeper** — a commander has enough live state that checkpoint
+  maintenance would interrupt closure. It mechanically applies exact
+  commander-supplied facts to the named restart records and returns the updated
+  record identities; it does not infer status, priority, or product truth.
+- **Watchdog** — one supervisor boundary has evented progress windows worth
+  observing. It is isolated, read-only, advisory, and fail-open; consumes
+  bounded state events, classifies `healthy`, `late`, `failed`, `halted`, or
+  `unknown`, and sends notes or interrupt/replacement recommendations only to
+  that supervisor. It never becomes a peer, contacts leaves as an authority,
+  owns closure, settles work, publishes, or gates productive work. Bound its
+  backlog, waits, and retries; expose its own degraded state, require explicit
+  reset after halt, and detach or drain it before reaping.
+- **Settlement clerk** — a commander has issued one immutable owner-approved
+  SettlementCard. A fresh minimal-context worker applies exactly that card
+  through `settle-work`, returns its one-line acknowledgement, and is reaped;
+  it never receives or reconstructs product history.
+- **Janitor** — the owner has released an exact lane, branch, process, claim, or
+  org-tree node for cleanup. It removes only the enumerated released targets,
+  proves their absence and unaffected live siblings, then is reaped; cleanup
+  never decides that work is complete or releasable.
+- **Assurance worker** — a named exact artifact needs an independent review or
+  verification gate. It returns the observed verdict and concrete findings
+  against that artifact and has no repair, integration, or publication
+  authority unless a separate brief grants one.
+
+Add another stock role only when repeated work has a distinct trigger and
+authority boundary not covered above. Record its evidence and reap contract at
+the same time; decorative specialization fragments ownership instead of
+building a fleet.
+
 Budget inherited context as a dispatch input. For collaboration workers,
 default `fork_turns` to `none` or the smallest recent slice containing facts
 that authoritative artifacts do not already preserve; use `all` only when the
@@ -287,6 +332,22 @@ than a product verdict. When the user bus is unavailable, an explicitly approved
 child-free diagnostic may run foreground under `timeout <duration> -- command`;
 record that fallback and do not infer child supervision or product success.
 
+## Require settlement-ready terminal evidence
+
+Every terminal worker report names its attempt and role, exact artifact or
+capability gap, observed gate source and result, unresolved findings or debt,
+actual lane/process/child disposition, and the exact cleanup eligibility it can
+prove. Include actual wall, agent, queue/block, verification, and review facts
+plus execution-observation provenance when an authoritative producer exposes
+them. Unknown stays explicit. A worker does not decide integration,
+publication, final lane state, or whether a finding is acceptable unless its
+brief grants that product authority.
+
+The commander consumes that evidence immediately, decides the product verdict
+and disposition, updates continuity prose, and prepares the immutable
+SettlementCard. Do not bubble raw terminal output or mechanical clock-out work
+to executive root, and do not make root reconstruct a card from transcripts.
+
 ## Keep feature liveness safe
 
 Required feature liveness is fail-closed: do not automate feature work or
@@ -302,21 +363,22 @@ awaits, release it. When a removal is delegated, sweep registrations,
 allowlists, paths, pins, locks, tests, and consumer repositories in the same
 campaign, then run the final token search across those consumers.
 
-The parent retains integration and semantic settlement authority. Consume each
-result and decide its verification, review, publication, verdict, race, debt,
-and exact lane state. At a terminal worker boundary, emit the `todo`
-SettlementCard and delegate the mechanical update through `settle-work` by
-default with `fork_turns = none` or equivalent minimal context. The card,
-owning record, and named authorities replace product history. Settle directly
-only when no admitted worker slot exists or dispatch costs more than the
-bounded bookkeeping.
+The commander or other named closure owner retains integration and semantic
+settlement authority. Consume each result and decide its verification, review,
+publication, verdict, race, debt, and exact lane state. At a terminal worker
+boundary, emit the `todo` SettlementCard and delegate the mechanical update to
+a fresh settlement clerk through `settle-work` by default with
+`fork_turns = none` or equivalent minimal context. The card, owning record, and named
+authorities replace product history. Settle directly only when no admitted
+worker slot exists or dispatch costs more than the bounded bookkeeping; never
+escalate clock-out mechanics to executive root.
 
 The settler applies only exact card-supplied terminal TOML fields, writes the
 deterministic keyed estimate receipt, and applies the exact owner-supplied lane
 state after record, attempt, and lane identity checks. It cannot integrate,
 review, publish, invent evidence, rewrite Markdown prose, operate on a lane or
-branch, or infer disposition. The parent updates the restart record's prose and
-uses repo-safety to land and reap verified work. A worker denial changes the
+branch, or infer disposition. The commander updates the restart record's prose
+and uses repo-safety to land and reap verified work. A worker denial changes the
 path, never the goal; do not retry verbatim or route around standing law.
 
 In executive mode, decide and act on recorded evidence, keep every ready seam

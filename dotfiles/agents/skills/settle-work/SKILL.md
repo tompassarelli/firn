@@ -13,6 +13,16 @@ Apply one owner's terminal decisions without making new product decisions. The
 product owner retains integration, verification, review, publication, and
 verdict authority; this skill owns only bounded bookkeeping.
 
+## Keep the clerk disposable
+
+Run one card per fresh minimal-context settlement clerk. Its complete context is
+this skill, the immutable card, its exact owning todo record, the `todo` field
+contract, and the estimate-calibration ledger. Do not fork product conversation
+history, reuse a product worker as settler, batch unrelated cards into one
+judgment context, or keep a standing clerk alive after acknowledgement. The
+owning commander supervises the invocation and reaps it after the exact one-line
+terminal result.
+
 ## Admit the card
 
 1. Start from fresh context. Load this skill, the card, its exact owning todo
