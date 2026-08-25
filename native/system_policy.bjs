@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.system-policy)
 
 ;; This module is intentionally effect-free. Its callers obtain stdin, argv,

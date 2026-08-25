@@ -1,7 +1,18 @@
-#lang beagle
+#lang beagle/js
 (ns firn.system-policy-native
   (:require [native.json :as json]
             [firn.system-policy :as policy]))
+
+(declare-extern host-getenv (Fn [Any String] (U String Nil)))
+(declare-extern host-read-text-bounded (Fn [Any String Int] Any))
+(declare-extern host-path-kind (Fn [Any String] Any))
+(declare-extern host-write-text-atomic (Fn [Any String String] Any))
+(declare-extern host-real-path (Fn [Any String] Any))
+(declare-extern host-read-stdin-bounded (Fn [Any Int] Any))
+(declare-extern host-out (Fn [Any String] Nil))
+(declare-extern host-result-tag (Fn [Any] String))
+(declare-extern host-result-int (Fn [Any String] Int))
+(declare-extern host-result-string (Fn [Any String] String))
 
 (def max-hook-bytes Int 1048576)
 (def max-activation-bytes Int 1048576)
@@ -257,16 +268,16 @@
       (->KillSwitchEnvDecision false)
       (->KillSwitchEnvDecision true))))
 
-(defn kill-switch-env [] KillSwitchEnv
-  (env-kill-switch-value (System/getenv "AGENT_NO_AUTHORING_HOOKS")))
+(defn kill-switch-env [bridge Any] KillSwitchEnv
+  (env-kill-switch-value (host-getenv bridge "AGENT_NO_AUTHORING_HOOKS")))
 
-(defn activation-path [] (U String Nil)
-  (let [explicit (U String Nil) (System/getenv "NORTH_AGENT_STATE_ROOT")]
+(defn activation-path [bridge Any] (U String Nil)
+  (let [explicit (U String Nil) (host-getenv bridge "NORTH_AGENT_STATE_ROOT")]
     (cond
       (and (some? explicit) (not= explicit ""))
       (str explicit "/current/activation.json")
       :else
-      (let [home (U String Nil) (System/getenv "HOME")]
+      (let [home (U String Nil) (host-getenv bridge "HOME")]
         (if (or (nil? home) (= home ""))
           nil
           (str home "/.local/state/north/agents/current/activation.json"))))))
@@ -343,19 +354,20 @@
          [(JsonBoolean offset value) false]
          [(JsonNull offset) false]))]))
 
-(defn activation-guards-off? [] Bool
-  (let [path (U String Nil) (activation-path)]
+(defn activation-guards-off? [bridge Any] Bool
+  (let [path (U String Nil) (activation-path bridge)]
     (if (nil? path)
       true
-      (match (host.fs/read-text-bounded path max-activation-bytes)
-        [(host.fs/ReadTextBoundedOk text)
-         (not (activation-unit-active? text "hook" "firn-system-policy"))]
-        [(host.fs/ReadTextBoundedError errno) true]))))
+      (let [result Any (host-read-text-bounded bridge path max-activation-bytes)]
+        (if (= (host-result-tag result) "ok")
+          (not (activation-unit-active?
+                 (host-result-string result "text") "hook" "firn-system-policy"))
+          true)))))
 
-(defn guards-off? [] Bool
-  (match (kill-switch-env)
+(defn guards-off? [bridge Any] Bool
+  (match (kill-switch-env bridge)
     [(KillSwitchEnvDecision off) off]
-    [(KillSwitchEnvUnset token) (activation-guards-off?)]))
+    [(KillSwitchEnvUnset token) (activation-guards-off? bridge)]))
 
 (defn safe-session-byte? [byte Int] Bool
   (or (and (>= byte 65) (<= byte 90))
@@ -376,26 +388,25 @@
             (recur (+ index 1)
               (conj result (if (safe-session-byte? byte) byte 95)))))))))
 
-(defn marker-path [session-id String] String
-  (let [runtime (U String Nil) (System/getenv "XDG_RUNTIME_DIR")
+(defn marker-path [bridge Any session-id String] String
+  (let [runtime (U String Nil) (host-getenv bridge "XDG_RUNTIME_DIR")
         directory String (if (or (nil? runtime) (= runtime "")) "/tmp" runtime)]
     (str directory "/firn-system-policy." (safe-session-id session-id))))
 
-(defn intro-unseen? [session-id String] Bool
-  (let [marker String (marker-path session-id)]
-    (match (host.fs/path-kind marker)
-      [(host.fs/PathKindOk kind) false]
-      [(host.fs/PathKindError errno)
-       (if (not= errno 2)
-         false
-         (match (host.fs/write-text-atomic marker "")
-           [(host.fs/WriteTextAtomicOk) true]
-           [(host.fs/WriteTextAtomicError write-errno) true]))])))
+(defn intro-unseen? [bridge Any session-id String] Bool
+  (let [marker String (marker-path bridge session-id)
+        result Any (host-path-kind bridge marker)]
+    (if (= (host-result-tag result) "ok")
+      false
+      (if (not= (host-result-int result "errno") 2)
+        false
+        (do (host-write-text-atomic bridge marker "") true)))))
 
-(defn canonical-hook-path [path String] String
-  (match (host.fs/real-path path)
-    [(host.fs/RealPathOk canonical) canonical]
-    [(host.fs/RealPathError errno) path]))
+(defn canonical-hook-path [bridge Any path String] String
+  (let [result Any (host-real-path bridge path)]
+    (if (= (host-result-tag result) "ok")
+      (host-result-string result "path")
+      path)))
 
 (defn additional-context-json [context String] String
   (str
@@ -408,33 +419,34 @@
     "\"permissionDecision\":\"deny\",\"permissionDecisionReason\":"
     (json/encode-string reason) "}}"))
 
-(defn emit-decision [decision policy/HookDecision] Int
+(defn emit-decision [bridge Any decision policy/HookDecision] Int
   (match decision
     [(HookPass token) 0]
-    [(HookInject context) (do (println (additional-context-json context)) 0)]
-    [(HookRefuse reason) (do (println (permission-deny-json reason)) 0)]))
+    [(HookInject context) (do (host-out bridge (str (additional-context-json context) "\n")) 0)]
+    [(HookRefuse reason) (do (host-out bridge (str (permission-deny-json reason) "\n")) 0)]))
 
-(defn handle-payload [text String] Int
-  (if (guards-off?)
+(defn handle-payload [bridge Any text String] Int
+  (if (guards-off? bridge)
     0
     (match (decode-hook-payload text)
       [(HookPayloadRejected token) 0]
       [(HookPayloadParsed tool command file-path session-id)
-       (let [resolved-path (U String Nil) (if (some? file-path) (canonical-hook-path file-path) nil)
+       (let [resolved-path (U String Nil) (if (some? file-path) (canonical-hook-path bridge file-path) nil)
              intro-unseen Bool (if (and (some? resolved-path)
                       (or (= tool "Edit")
                           (= tool "Write")
                           (= tool "MultiEdit"))
                       (policy/firn-path? resolved-path))
-               (intro-unseen? session-id)
+               (intro-unseen? bridge session-id)
                false)]
-         (emit-decision
+         (emit-decision bridge
            (policy/decide-hook
              (policy/->RawHookEvent
                tool command resolved-path session-id false false intro-unseen))))])))
 
-(defn -main [args (Vec String)] Int
-  (match (host.stdin/read-text-bounded max-hook-bytes)
-    [(host.stdin/ReadTextBoundedOk text) (handle-payload text)]
-    [(host.stdin/ReadTextBoundedOverflow) 0]
-    [(host.stdin/ReadTextBoundedError errno) 0]))
+(js/export
+  (defn run [bridge Any] Int
+    (let [result Any (host-read-stdin-bounded bridge max-hook-bytes)]
+      (if (= (host-result-tag result) "ok")
+        (handle-payload bridge (host-result-string result "text"))
+        0))))

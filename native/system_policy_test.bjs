@@ -1,4 +1,4 @@
-#lang beagle
+#lang beagle/js
 (ns firn.system-policy-test
   (:require [firn.system-policy :as policy]))
 
@@ -98,7 +98,8 @@
    (->TestResult "pin-exit-decision" (case-pin-exit-decision))
    (->TestResult "license-assertions" (case-license-assertions))])
 
-(defn -main [args (Vec String)] Int
+(js/export
+  (defn run-tests [] Int
   (loop [(index Int) 0]
     (if (>= index (count (cases)))
       0
@@ -107,4 +108,4 @@
           (recur (+ index 1))
           (do
             (println (str "FAIL: " (testresult-name result)))
-            1))))))
+            1)))))))
