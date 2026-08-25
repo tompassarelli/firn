@@ -1,4 +1,0 @@
-interface:
-  display_name: "Executive Report"
-  short_description: "Turn commander state into decisive reports"
-  default_prompt: "Use $executive-report to produce the requested concise report type from current commander state."

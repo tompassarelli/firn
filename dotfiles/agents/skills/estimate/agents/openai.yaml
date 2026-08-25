@@ -1,4 +1,0 @@
-interface:
-  display_name: "Estimate"
-  short_description: "Calibrate terse agent execution estimates"
-  default_prompt: "Use $estimate to give a calibrated agent ETA and checkpoint."

@@ -14,12 +14,12 @@ printf '%s\n' "$*" >>"$ESTIMATE_TEST_CALLS"
 shift 2
 case "${1:-}" in
   path)
-    [[ "${2:-}" == estimate ]]
-    printf '%s\n' "$ESTIMATE_TEST_REPO/dotfiles/agents/skills/estimate/SKILL.md"
+    [[ "${2:-}" == estimate-distilled ]]
+    printf '%s\n' "$ESTIMATE_TEST_REPO/dotfiles/agents/skills/estimate-distilled/SKILL.md"
     ;;
   on|off)
-    [[ "${2:-}" == estimate ]]
-    printf 'generation fixture: estimate %s\n' "$1"
+    [[ "${2:-}" == estimate-distilled ]]
+    printf 'generation fixture: estimate-distilled %s\n' "$1"
     ;;
   *) exit 2 ;;
 esac
@@ -33,21 +33,21 @@ ag() {
     "$repo/dotfiles/bin/agents" "$@"
 }
 
-ag on estimate >/dev/null
-test "$(ag path estimate)" = "$repo/dotfiles/agents/skills/estimate/SKILL.md"
+ag on estimate-distilled >/dev/null
+test "$(ag path estimate-distilled)" = "$repo/dotfiles/agents/skills/estimate-distilled/SKILL.md"
 
-ag off estimate >/dev/null
-test "$(<"$ESTIMATE_TEST_CALLS")" = $'config agents on estimate\nconfig agents path estimate\nconfig agents off estimate'
+ag off estimate-distilled >/dev/null
+test "$(<"$ESTIMATE_TEST_CALLS")" = $'config agents on estimate-distilled\nconfig agents path estimate-distilled\nconfig agents off estimate-distilled'
 
-todo_skill="$repo/dotfiles/agents/skills/todo/SKILL.md"
-delegate_skill="$repo/dotfiles/agents/skills/delegating-agents/SKILL.md"
-grep -Fq '## Attempt, review, and debt receipt' "$todo_skill"
+todo_skill="$repo/dotfiles/agents/skills/todo-reference/SKILL.md"
+delegate_skill="$repo/dotfiles/agents/skills/delegating-agents-reference/SKILL.md"
+grep -Fq '## Attempt and terminal receipt' "$todo_skill"
 grep -Fq 'wall_time_estimate' "$todo_skill"
 grep -Fq 'agent_time_actual' "$todo_skill"
 grep -Fq 'execution_observation' "$todo_skill"
 grep -Fq '[[quality_debt]]' "$todo_skill"
-grep -Fq 'same-class, same-model agent actuals' "$repo/dotfiles/agents/skills/estimate/SKILL.md"
-grep -Fq '## Budget review without losing deferred work' "$delegate_skill"
+grep -Fq 'Same-class model-specific samples' "$repo/dotfiles/agents/skills/estimate-reference/SKILL.md"
+grep -Fq '## Review and debt' "$delegate_skill"
 
 python3 - <<'PY'
 import tomllib

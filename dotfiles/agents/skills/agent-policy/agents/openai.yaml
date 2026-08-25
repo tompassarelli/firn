@@ -1,4 +1,0 @@
-interface:
-  display_name: "Agent Policy"
-  short_description: "Author and activate agent policy safely"
-  default_prompt: "Use $agent-policy to change agent instructions, skills, hooks, modules, or North activation metadata at their exact owner source."

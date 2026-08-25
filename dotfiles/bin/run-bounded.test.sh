@@ -47,7 +47,7 @@ done
 grep -Fq 'MemoryMax=48G' "$run"
 grep -Fq -- '--kill-child=KILL' "$run"
 grep -Fq -- '--property="RuntimeMaxSec=${seconds}s"' "$run"
-grep -Fq -- '- session-kill-guard' \
-  "$repo/dotfiles/agents/skills/delegating-agents/SKILL.md"
+grep -Fq 'Background work must be bounded, named, supervised, and reaped.' \
+  "$repo/dotfiles/agents/skills/delegating-agents-distilled/SKILL.md"
 
 printf 'run-bounded fixture: PASS (24h cap, timed subtree reap, 48G shared cgroup ceiling, existing-guard claim)\n'

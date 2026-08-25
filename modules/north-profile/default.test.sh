@@ -4,7 +4,7 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 source_file=$repo/modules/north-profile/default.bnix
 generated_file=$repo/modules/north-profile/default.nix
-firn_skill=$repo/modules/north-profile/firn/skills/firn/SKILL.md
+firn_skill=$repo/modules/north-profile/firn/skills/firn-distilled/SKILL.md
 checker=$repo/scripts/agent-config-check.sh
 
 for target in \
@@ -21,7 +21,7 @@ if rg -n 'agent-profile|\.config/agents|profiles/tom|\.agents/docs' \
   exit 1
 fi
 
-grep -Fq 'category: nixos' "$firn_skill"
+grep -Fq 'name: firn-distilled' "$firn_skill"
 grep -Fq 'modules/north-profile/default.bnix' "$checker"
 
 nix_bin=${NIX_BIN:-nix}

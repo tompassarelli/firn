@@ -1,4 +1,0 @@
-interface:
-  display_name: "Delegating Agents"
-  short_description: "Decompose, route, and supervise agent work"
-  default_prompt: "Use $delegating-agents to decompose this work and supervise the delegated lanes."
