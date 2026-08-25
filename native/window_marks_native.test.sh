@@ -44,6 +44,7 @@ done
   || die "authoritative Beagle checkout is missing: $beagle"
 
 json="$beagle/native-core/src/native/json.bjs"
+datum="$beagle/native-core/src/beagle/datum_reader.bjs"
 schema_path="$beagle/native-core/src/beagle/nix_schema_path.bjs"
 core="$repo/native/window_marks.bjs"
 pure="$repo/native/window_marks_test.bjs"
@@ -55,8 +56,8 @@ views_native="$repo/native/firn_views_native.bjs"
 
 printf 'window-marks-js: building one closed typed family graph\n' >&2
 mkdir -p "$scratch/build"
-timeout --foreground 180 "$beagle/bin/beagle" build \
-  "$json" "$schema_path" \
+timeout --foreground 180 "$beagle/bin/beagle-build-all" \
+  "$json" "$datum" "$schema_path" \
   "$core" "$pure" "$native" \
   "$views_core" "$views_pure" "$views_native" \
   --out "$scratch/build" \
@@ -310,6 +311,7 @@ migration="$scratch/migration"
 mkdir -p "$migration"
 cat >"$migration/facts.log" <<'EOF'
 {:tx 1 :op "assert" :l "@w1" :p "title" :r "Shell" :frame "wm" :ts "2026-08-26T00:00:00Z"}
+{:tx 2 :op "assert" :l "@w1" :p "workspace" :r 3 :frame "wm" :ts "2026-08-26T00:00:01Z"}
 EOF
 cp "$migration/facts.log" "$scratch/facts.expected.rollback"
 bb "$repo/dotfiles/bin/wm-world-migrate-jsonl" "$migration" \
@@ -323,6 +325,10 @@ rg -Fx \
   '{"tx":1,"op":"assert","l":"@w1","p":"title","r":"Shell","frame":"wm","ts":"2026-08-26T00:00:00Z"}' \
   "$migration/facts.jsonl" >/dev/null \
   || die 'migration JSONL bytes changed'
+rg -Fx \
+  '{"tx":2,"op":"assert","l":"@w1","p":"workspace","r":3,"frame":"wm","ts":"2026-08-26T00:00:01Z"}' \
+  "$migration/facts.jsonl" >/dev/null \
+  || die 'migration integer JSONL bytes changed'
 [[ ! -s "$scratch/migrate.err" ]] || die 'migration wrote stderr'
 
 invalid_migration="$scratch/invalid-migration"
