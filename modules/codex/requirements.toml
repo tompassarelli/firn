@@ -12,26 +12,26 @@ managed_dir = "/etc/codex/hooks"
 
 [[hooks.SessionStart.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/beagle-session-start.sh"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/beagle-session-start.sh"
 timeout = 30
 
 [[hooks.SessionStart.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-spawn-codex"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-spawn-codex"
 timeout = 15
 
 [[hooks.SubagentStart]]
 
 [[hooks.SubagentStart.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-spawn-codex"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-spawn-codex"
 timeout = 15
 
 [[hooks.SubagentStop]]
 
 [[hooks.SubagentStop.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-terminal-codex"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-terminal-codex"
 timeout = 3
 
 [[hooks.PreToolUse]]
@@ -39,7 +39,7 @@ matcher = "^(Agent|Task|Workflow)$"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/agent-spawn-guard.sh"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/agent-spawn-guard.sh"
 timeout = 10
 
 [[hooks.PreToolUse]]
@@ -47,7 +47,7 @@ matcher = "^(Edit|Write|MultiEdit|apply_patch)$"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh"
 timeout = 10
 
 [[hooks.PreToolUse]]
@@ -55,7 +55,7 @@ matcher = "^(Edit|Write|MultiEdit)$"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "/run/current-system/sw/bin/firn-system-policy"
+command = "/home/tom/.local/lib/firn/policy/current/bin/firn-system-policy"
 timeout = 10
 
 [[hooks.PreToolUse]]
@@ -63,32 +63,32 @@ matcher = "^Bash$"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/agent-spawn-guard.sh"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/agent-spawn-guard.sh"
 timeout = 10
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/tripwire-guard.sh"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/tripwire-guard.sh"
 timeout = 10
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "/run/current-system/sw/bin/firn-system-policy"
+command = "/home/tom/.local/lib/firn/policy/current/bin/firn-system-policy"
 timeout = 10
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh"
 timeout = 10
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/corpus-scan-guard.sh"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/corpus-scan-guard.sh"
 timeout = 10
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/session-kill-guard.sh"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/session-kill-guard.sh"
 timeout = 10
 
 [[hooks.PostToolUse]]
@@ -101,7 +101,7 @@ timeout = 10
 
 [[hooks.PostToolUse.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-tooluse-codex"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-tooluse-codex"
 timeout = 10
 
 [[hooks.PostToolUse]]
@@ -109,7 +109,7 @@ matcher = "^(Edit|Write|MultiEdit|apply_patch)$"
 
 [[hooks.PostToolUse.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-tooluse-codex"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-tooluse-codex"
 timeout = 10
 
 [[hooks.PostToolUse]]
@@ -117,12 +117,12 @@ matcher = "^(mcp__north__spawn|mcp__north__dispatch|Task|Agent)$"
 
 [[hooks.PostToolUse.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-mark-delegated-codex"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-mark-delegated-codex"
 timeout = 10
 
 [[hooks.Stop]]
 
 [[hooks.Stop.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-stop-codex"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-on-stop-codex"
 timeout = 10

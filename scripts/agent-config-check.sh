@@ -285,12 +285,17 @@ import tomllib
 
 def command(path, timeout):
     interpreter = "node" if path.endswith(".js") else "bash"
+    environment = (
+        "PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin "
+        if interpreter == "bash"
+        else ""
+    )
     return {
         "type": "command",
         "command": (
-            "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV "
+            "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV %s"
             "/etc/codex/hooks/runtime/%s /etc/codex/hooks/%s"
-            % (interpreter, path)
+            % (environment, interpreter, path)
         ),
         "timeout": timeout,
     }
@@ -331,7 +336,7 @@ enabled = {
             {
                 "matcher": "^(Edit|Write|MultiEdit)$",
                 "hooks": [
-                    direct_command("/run/current-system/sw/bin/firn-system-policy", 10),
+                    direct_command("/home/tom/.local/lib/firn/policy/current/bin/firn-system-policy", 10),
                 ],
             },
             {
@@ -339,7 +344,7 @@ enabled = {
                 "hooks": [
                     command("agent-spawn-guard.sh", 10),
                     command("tripwire-guard.sh", 10),
-                    direct_command("/run/current-system/sw/bin/firn-system-policy", 10),
+                    direct_command("/home/tom/.local/lib/firn/policy/current/bin/firn-system-policy", 10),
                     command("launch-critical-worktree-guard.sh", 10),
                     command("corpus-scan-guard.sh", 10),
                     command("session-kill-guard.sh", 10),
@@ -909,13 +914,13 @@ validate_codex_managed_policy() {
   else
     bad 'Codex module must expose the complete North hook runtime from the live checkout'
   fi
-  if grep -Fq 'codexUpstreamPkg pkgs.master.codex' "$module" &&
-     grep -Fq ':environment.systemPackages [codexPkg]' "$module" &&
-     grep -Fq '"codex/runtime"' "$module" &&
-     grep -Fq '{:source codexPkg}' "$module"; then
-    ok_detail 'Firn installs the identity-pinned nixpkgs Codex and exposes that exact derivation as the runtime marker'
+  if ! grep -Fq 'codexUpstreamPkg' "$module" &&
+     ! grep -Fq 'codexPkg' "$module" &&
+     ! grep -Fq ':environment.systemPackages' "$module" &&
+     ! grep -Fq '"codex/runtime"' "$module"; then
+    ok_detail 'Codex stays out of the NixOS system closure and uses its independently promoted user runtime'
   else
-    bad 'Codex module must install and expose the identity-pinned nixpkgs Codex derivation'
+    bad 'Codex module must not install Codex or expose a Codex runtime through the NixOS system closure'
   fi
   if grep -Fq ':mode ' "$module"; then
     bad 'Codex hook sources must remain /etc symlinks into /nix/store; explicit mode copies are forbidden'
@@ -1019,23 +1024,23 @@ validate_codex_managed_policy() {
       generation_exact=0
       bad 'Codex North hook runtime does not resolve to the live North checkout'
     fi
-    local interactive_codex managed_codex
+    local interactive_codex user_codex
     interactive_codex="$(command -v codex 2>/dev/null || true)"
-    managed_codex="$(readlink -f /etc/codex/runtime/bin/codex 2>/dev/null || true)"
+    user_codex="$HOME/.local/lib/codex/current/bin/codex"
     interactive_codex="$(readlink -f "$interactive_codex" 2>/dev/null || true)"
-    if [ -n "$managed_codex" ] && [[ "$managed_codex" = /nix/store/* ]] &&
-       [ -x "$managed_codex" ]; then
-      ok_detail 'Managed Codex is an exact immutable executable'
+    if [ -x "$user_codex" ]; then
+      ok_detail 'Codex user runtime is installed and executable outside the NixOS system closure'
     else
       generation_exact=0
-      bad 'Managed Codex runtime marker is missing, mutable, or non-executable'
+      bad 'Codex user runtime is missing or non-executable; run codex-runtime-update'
     fi
-    if [ -n "$interactive_codex" ] && [ "$interactive_codex" = "$managed_codex" ]; then
-      ok_detail 'Interactive Codex directly resolves to the managed provider executable'
+    if [ -n "$interactive_codex" ] &&
+       [ "$interactive_codex" = "$(readlink -f "$user_codex" 2>/dev/null || true)" ]; then
+      ok_detail 'Interactive Codex directly resolves to the promoted user runtime'
     elif [ -n "$interactive_codex" ]; then
-      ok_detail 'Interactive Codex uses a distinct user launcher; managed provider authority remains the immutable runtime marker'
+      ok_detail 'Interactive Codex uses a distinct user launcher over the promoted user runtime'
     else
-      soft 'Interactive Codex is absent from PATH; managed provider authority remains independently attested'
+      soft 'Interactive Codex is absent from PATH; the promoted user runtime remains independently executable'
     fi
     for relative in \
       bin/north-on-spawn \
