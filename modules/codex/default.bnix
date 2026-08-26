@@ -29,7 +29,10 @@
       (lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)")
      :config
       (lib.mkIf config.myConfig.modules.codex.enable
-        {:environment.etc
+        {;; North's managed MCP/dispatch entrypoint shells out to Bun; keep
+         ;; that runtime in the same closure as the enabled Codex consumer.
+         :environment.systemPackages (nix/with pkgs [bun])
+         :environment.etc
           {"codex/requirements.toml"
             {:source (s flakeRoot "/modules/codex/requirements.toml")}
            "codex/hooks/runtime/bash"

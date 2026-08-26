@@ -3,6 +3,7 @@
 ((username: ((homeDir: ((northPkg: ((enforcement: ((agentGeneration: ((promoted: ((providerAdapter: {
   options.myConfig.modules.codex.enable = lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)";
   config = lib.mkIf config.myConfig.modules.codex.enable {
+    environment.systemPackages = with pkgs; [ bun ];
     environment.etc = {
       "codex/requirements.toml".source = "${flakeRoot}/modules/codex/requirements.toml";
       "codex/hooks/runtime/bash" = {
