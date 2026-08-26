@@ -44,9 +44,12 @@ convo restore <file>          restore one archived transcript as JSONL
 Combine `-r user|assistant|thinking|tool`, `--since 3d|2w|6m`, `-p <project>`,
 `-n <limit>`, `--json`, and `-u` as needed. Every ordinary search performs an
 incremental refresh first across all configured roots; unchanged files are
-skipped and only new bytes are read. If the refresh lock is unavailable, a
-no-match is explicitly inconclusive (exit 2), so retry after the writer
-finishes. A full rebuild is for index recovery, not routine freshness.
+skipped and only new bytes are read. If the refresh lock or an explicitly
+configured root is unavailable, the result is explicitly inconclusive (exit
+2), so restore the root or retry after the writer finishes. Successful passes
+record the exact reconciled root set. A full rebuild is for index recovery, not
+routine freshness. A `-u`/`--no-update` miss is also inconclusive; use that flag
+only when a stale hit is useful and freshness is intentionally unnecessary.
 
 ## Search recipes
 

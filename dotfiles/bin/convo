@@ -112,6 +112,10 @@ CREATE VIRTUAL TABLE IF NOT EXISTS ftx USING fts5(
 
 # ---------------------------------------------------------------- discovery
 
+class Unreconciled(Exception):
+    """A configured transcript root could not participate in this refresh."""
+
+
 def transcript_roots():
     """Return configured transcript roots, de-duplicated by real path.
 
@@ -120,19 +124,34 @@ def transcript_roots():
     ``sessions`` itself.  Symlinked North projections therefore resolve to one
     identity and cannot duplicate messages in the index.
     """
-    if os.environ.get("CONVO_ROOT"):
-        return [(ROOT, "", "")]
-    candidates = [
-        (ROOT, "", ""),
-        (os.environ.get("CODEX_HOME"), "openai", "configured"),
-        (os.environ.get("NORTH_CODEX_POOLED_HOME"), "openai", "pooled"),
-        (os.path.join(HOME, ".local/state/north/codex-pooled"), "openai", "pooled"),
-    ]
+    override = os.environ.get("CONVO_ROOT")
+    if override:
+        candidates = [(ROOT, "", "", True, "CONVO_ROOT")]
+    else:
+        codex_home = os.environ.get("CODEX_HOME")
+        pooled_home = os.environ.get("NORTH_CODEX_POOLED_HOME")
+        candidates = [
+            (ROOT, "", "", False, "account transcript root"),
+            (codex_home, "openai", "configured", bool(codex_home), "CODEX_HOME"),
+            (pooled_home, "openai", "pooled", bool(pooled_home),
+             "NORTH_CODEX_POOLED_HOME"),
+            (os.path.join(HOME, ".local/state/north/codex-pooled"),
+             "openai", "pooled", False, "default pooled transcript root"),
+        ]
     out, seen = [], set()
-    for root, provider, account in candidates:
-        if not root or not os.path.isdir(root):
+    for root, provider, account, required, label in candidates:
+        if not root:
             continue
-        canonical = os.path.realpath(root)
+        canonical = os.path.realpath(os.path.expanduser(root))
+        if not os.path.isdir(canonical):
+            if required:
+                raise Unreconciled(f"{label} is unavailable: {canonical}")
+            continue
+        try:
+            with os.scandir(canonical):
+                pass
+        except OSError as e:
+            raise Unreconciled(f"{label} is unreadable: {canonical}: {e}") from e
         if canonical in seen:
             continue
         seen.add(canonical)
@@ -140,7 +159,7 @@ def transcript_roots():
     return out
 
 
-def discover():
+def discover(roots=None):
     """Yield (logical, disk, provider, account, project_hint) per transcript.
 
     `logical` always names the `.jsonl`; `disk` is what actually exists, which
@@ -150,8 +169,15 @@ def discover():
     the uncompressed one wins, because it is the one a writer could still be
     appending to.
     """
-    seen = set()
-    for root, direct_provider, direct_account in transcript_roots():
+    seen_paths, seen_files = set(), set()
+
+    def walk_error(error):
+        raise Unreconciled(
+            f"configured transcript tree is unreadable: {error.filename}: {error}"
+        )
+
+    for root, direct_provider, direct_account in (
+            transcript_roots() if roots is None else roots):
         if direct_provider:
             trees = [(direct_provider, direct_account or os.path.basename(root),
                       os.path.join(root, "sessions"))]
@@ -167,7 +193,7 @@ def discover():
         for provider, account, base in trees:
             if not os.path.isdir(base):
                 continue
-            for dirpath, dirnames, filenames in os.walk(base):
+            for dirpath, dirnames, filenames in os.walk(base, onerror=walk_error):
                 dirnames.sort()
                 here = set(filenames)
                 for fn in sorted(filenames):
@@ -180,15 +206,22 @@ def discover():
                         disk = os.path.join(dirpath, fn)
                     else:
                         continue
-                    # Different configured roots may overlap without being
-                    # symlinks (for example an account tree plus a mounted
-                    # subtree).  The canonical logical path is the
-                    # transcript identity; retain the first spelling for
-                    # provenance while suppressing duplicate ingestion.
-                    identity = os.path.realpath(logical)
-                    if identity in seen:
+                    # Configured roots can overlap through symlinks, hardlinks,
+                    # or bind mounts. Preserve the first spelling for provenance
+                    # while suppressing the same canonical path or disk object.
+                    path_identity = os.path.realpath(logical)
+                    try:
+                        st = os.stat(disk)
+                        file_identity = (st.st_dev, st.st_ino)
+                    except OSError:
+                        file_identity = None
+                    if (path_identity in seen_paths
+                            or (file_identity is not None
+                                and file_identity in seen_files)):
                         continue
-                    seen.add(identity)
+                    seen_paths.add(path_identity)
+                    if file_identity is not None:
+                        seen_files.add(file_identity)
                     yield logical, disk, provider, account, ""
 
 
@@ -497,6 +530,19 @@ def index(con, quiet=False, verbose=False):
     except OSError:
         pass
 
+    roots = transcript_roots()
+    reconciled_roots = json.dumps(
+        [{"root": root, "provider": provider, "account": account}
+         for root, provider, account in roots],
+        sort_keys=True, separators=(",", ":"))
+
+    def record_reconciliation():
+        con.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('last_index',?)",
+                    (str(time.time()),))
+        con.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('last_roots',?)",
+                    (reconciled_roots,))
+        con.commit()
+
     known = {}
     for r in con.execute(
             "SELECT id,path,dev,ino,size,dsize,zst,mtime,head,off,nline "
@@ -513,7 +559,7 @@ def index(con, quiet=False, verbose=False):
     todo = []
     total_new = 0
     adopted = 0
-    for path, disk, provider, account, hint in discover():
+    for path, disk, provider, account, hint in discover(roots):
         try:
             st = os.stat(disk)
         except OSError:
@@ -560,9 +606,7 @@ def index(con, quiet=False, verbose=False):
         # A successful no-op pass is still a reconciliation checkpoint.  A
         # query may rely on this marker to distinguish fresh emptiness from an
         # index that has never observed the configured roots.
-        con.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('last_index',?)",
-                    (str(time.time()),))
-        con.commit()
+        record_reconciliation()
         return 0, 0, 0
 
     prog = Progress(len(todo), total_new, quiet=quiet)
@@ -713,9 +757,7 @@ def index(con, quiet=False, verbose=False):
 
     prog.tick(force=True)
     prog.done()
-    con.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('last_index',?)",
-                (str(time.time()),))
-    con.commit()
+    record_reconciliation()
     return len(todo), nmsg_total, nbytes
 
 
@@ -904,6 +946,7 @@ def cmd_status(con, args):
     if os.path.exists(wal):
         size += os.path.getsize(wal)
     last = con.execute("SELECT v FROM meta WHERE k='last_index'").fetchone()
+    roots = con.execute("SELECT v FROM meta WHERE k='last_roots'").fetchone()
     logical, disk = f["b"] or 0, f["d"] or 0
     print(f"index    {DB}")
     print(f"size     {size / 1048576:.1f} MiB")
@@ -914,6 +957,11 @@ def cmd_status(con, args):
     if last:
         age = time.time() - float(last["v"])
         print(f"updated  {age:.0f}s ago")
+    if roots:
+        try:
+            print(f"roots    {len(json.loads(roots['v']))} reconciled")
+        except (TypeError, ValueError):
+            print("roots    unknown")
     print(f"ratio    {100 * size / (f['b'] or 1):.2f}% of corpus bytes")
     top = con.execute(
         "SELECT project, SUM(nmsg) m FROM files GROUP BY project "
@@ -1356,7 +1404,7 @@ def main(argv=None):
         ok, r = refresh(con, quiet=args.quiet, verbose=args.verbose)
         if r is None:
             sys.stderr.write("convo: another index run holds the lock\n")
-            return 0
+            return 2
         nf, nm, nb = r
         el = time.time() - t0
         print(f"indexed {nm} messages from {nf} changed files "
@@ -1364,11 +1412,14 @@ def main(argv=None):
         return 0
 
     # Query-time refresh: cheap when nothing changed, so no daemon or timer.
-    reconciled = True
+    reconciled = not args.no_update
+    refresh_issue = "update disabled" if args.no_update else None
     if not args.no_update:
         con = connect()
         reconciled, _ = refresh(con, quiet=args.quiet, verbose=args.verbose)
         con.close()
+        if not reconciled:
+            refresh_issue = "index lock busy"
 
     if not os.path.exists(DB):
         sys.stderr.write("convo: no index yet; run `convo index`\n")
@@ -1386,7 +1437,7 @@ def main(argv=None):
         if args.cmd == "session":
             rc = cmd_session(con, args)
             if rc == 1 and not reconciled:
-                sys.stderr.write("convo: refresh inconclusive (index lock busy); "
+                sys.stderr.write(f"convo: refresh inconclusive ({refresh_issue}); "
                                  "retry session lookup\n")
                 return 2
             return rc
@@ -1394,7 +1445,7 @@ def main(argv=None):
             rc = cmd_session(con, argparse.Namespace(
                 id=args.session, limit=args.limit))
             if rc == 1 and not reconciled:
-                sys.stderr.write("convo: refresh inconclusive (index lock busy); "
+                sys.stderr.write(f"convo: refresh inconclusive ({refresh_issue}); "
                                  "retry session lookup\n")
                 return 2
             return rc
@@ -1406,11 +1457,11 @@ def main(argv=None):
         if rc == 1 and not reconciled:
             # A stale index cannot prove absence while another process is
             # reconciling configured roots.  Make the uncertainty explicit.
-            sys.stderr.write("convo: refresh inconclusive (index lock busy); "
+            sys.stderr.write(f"convo: refresh inconclusive ({refresh_issue}); "
                              "retry search\n")
             return 2
         if rc == 0 and not reconciled:
-            sys.stderr.write("convo: refresh inconclusive (index lock busy); "
+            sys.stderr.write(f"convo: refresh inconclusive ({refresh_issue}); "
                              "results may be stale\n")
         return rc
     finally:
@@ -1423,6 +1474,9 @@ if __name__ == "__main__":
     except Unsafe as e:
         sys.stderr.write(f"convo: refusing to sweep: {e}\n")
         sys.exit(3)
+    except Unreconciled as e:
+        sys.stderr.write(f"convo: refresh inconclusive: {e}\n")
+        sys.exit(2)
     except BrokenPipeError:
         os._exit(0)
     except KeyboardInterrupt:

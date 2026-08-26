@@ -310,6 +310,8 @@ export CODEX_HOME="$pooled"
 export CONVO_STATE="$fixture/pooled-state"
 mkrec "$data_home/accounts/openai/acct/sessions/2026/08/07/account.jsonl" \
   ACCOUNTROOT 2026-08-07T10:00:00Z
+ln "$data_home/accounts/openai/acct/sessions/2026/08/07/account.jsonl" \
+  "$data_home/accounts/openai/acct/sessions/2026/08/07/account-hardlink.jsonl"
 mkrec "$pooled/sessions/2026/08/07/pooled.jsonl" POOLEDROOT 2026-08-07T10:01:00Z
 "$CONVO" index >/dev/null
 has "$("$CONVO" --color=never ACCOUNTROOT)" ACCOUNTROOT
@@ -318,7 +320,27 @@ has "$out" POOLEDROOT
 [ "$(grep -c POOLEDROOT <<<"$out")" -eq 3 ] || fail "pooled mirror duplicated messages"
 out="$($CONVO --color=never ACCOUNTROOT -n 5)"
 [ "$(grep -c ACCOUNTROOT <<<"$out")" -eq 3 ] || fail "overlapping transcript identity duplicated messages"
+has "$("$CONVO" status)" "3 reconciled"
 nomatch NOT_IN_ANY_CONFIGURED_ROOT "absent query unexpectedly matched"
+
+set +e
+no_update_out="$("$CONVO" -u --color=never DEFINITELY_ABSENT_TOKEN 2>&1)"
+no_update_rc=$?
+set -e
+[ "$no_update_rc" -eq 2 ] || fail "no-update miss returned $no_update_rc"
+has "$no_update_out" "refresh inconclusive (update disabled)"
+
+# ---- an unavailable explicit root cannot disappear into a conclusive miss -
+saved_codex_home="$CODEX_HOME"
+export CODEX_HOME="$fixture/missing-codex-home"
+set +e
+missing_out="$("$CONVO" --color=never DEFINITELY_ABSENT_TOKEN 2>&1)"
+missing_rc=$?
+set -e
+[ "$missing_rc" -eq 2 ] || fail "missing CODEX_HOME returned $missing_rc"
+has "$missing_out" "refresh inconclusive"
+has "$missing_out" "CODEX_HOME is unavailable"
+export CODEX_HOME="$saved_codex_home"
 
 # ---- a refresh lock miss cannot become a definitive absence --------------
 ready="$CONVO_STATE/lock-ready"

@@ -27,7 +27,8 @@ one transcript, then raw tools only on that bounded file or narrow directory.
    the current tree.
 
 The index refreshes incrementally by default. If refresh cannot acquire its
-lock, a miss is reported as inconclusive (exit 2), never as absence; retry
+lock or an explicitly configured root is unavailable, the command reports the
+result as inconclusive (exit 2), never as absence; restore the root or retry
 after the writer finishes. Do not rebuild, compress, or restore it merely to
 answer a search.
 Route commands, filters, guard boundaries, recipes, and maintenance detail
