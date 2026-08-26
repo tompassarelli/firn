@@ -10,10 +10,14 @@ Re-evaluate when the target changes. Closer instructions refine broader ones;
 user and system instructions retain precedence.
 
 Inspect the available skill catalog before acting. When the user names a skill
-or the task matches its description, read that `SKILL.md` completely and follow
-its required references. Load the smallest set that covers the task and state
-the order when several apply. Skills apply for the current turn only; if one is
-unavailable, say so and use the safest supported fallback.
+or the task matches its description, read that distilled `SKILL.md` completely
+and follow it. A distilled skill is the normal complete operating surface:
+never load a linked `*-reference` skill merely because it is linked. Load a
+reference only when the user explicitly requests its detail or when you name a
+specific unresolved question that the distilled workflow cannot answer; record
+that reason in the work update. Load the smallest set that covers the task and
+state the order when several apply. Skills apply for the current turn only; if
+one is unavailable, say so and use the safest supported fallback.
 
 ## Respect source authority
 
