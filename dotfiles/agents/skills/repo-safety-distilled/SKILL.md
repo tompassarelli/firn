@@ -45,7 +45,5 @@ take the sanctioned route. Stop instead of routing around a secret finding,
 private-to-public exposure, uncertain destructive target, or unresolved live
 consumer.
 
-For exact lane and pin commands, pin sidecar/retirement procedure, destructive
-classification, tripwire exceptions, and signal examples, run
-`agents path repo-safety-reference` and read the returned skill completely
-before performing those detailed operations.
+Exact lane and pin details live in the reference skill; load it only for an
+explicit request or a named unresolved detail, per the always-loaded policy.

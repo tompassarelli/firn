@@ -49,6 +49,5 @@ covers its trigger.
 Stop before activation when any owner commit is unlanded, any reported path
 resolves to a lane or projection, or identity/provenance is ambiguous.
 
-For catalog row structure, resolution semantics, activation evidence, and the
-full validation sequence, run `agents path agent-policy-reference` and read the
-returned skill completely before performing that detailed work.
+Catalog and activation details live in the reference skill; load it only for an
+explicit request or a named unresolved detail, per the always-loaded policy.

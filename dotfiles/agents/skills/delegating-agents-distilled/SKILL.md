@@ -91,7 +91,5 @@ evidence; an unsettled child blocks settlement. Continue unrelated ready work
 and apply the continuous-supervision stop rule. Report the capability gap;
 never lower a safety boundary or invent success.
 
-For stock-role contracts, research fan-out, speed-ratchet economics, model and
-account commands, supervision protocol, terminal report fields, and settlement
-detail, run `agents path delegating-agents-reference` and read the returned
-skill completely before operating those mechanisms.
+Stock-role and settlement details live in the reference skill; load it only for
+an explicit request or a named unresolved detail, per the always-loaded policy.

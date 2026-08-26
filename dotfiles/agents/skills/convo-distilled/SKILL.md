@@ -31,5 +31,5 @@ lock or an explicitly configured root is unavailable, the command reports the
 result as inconclusive (exit 2), never as absence; restore the root or retry
 after the writer finishes. Do not rebuild, compress, or restore it merely to
 answer a search.
-Route commands, filters, guard boundaries, recipes, and maintenance detail
-through `agents path convo-reference`.
+Route unresolved command or maintenance detail to the reference skill only for
+an explicit request or a named unresolved question.

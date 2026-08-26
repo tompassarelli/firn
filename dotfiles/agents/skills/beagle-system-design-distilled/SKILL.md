@@ -25,5 +25,5 @@ admitted form. Keep effects behind intent, authorization, attempt, and receipt.
 
 Complete only with those facts and clean/warm acceptance: equal semantic
 results and plans for one world, with changes invalidating only dependents.
-Route detail through
-`agents path beagle-system-design-reference`; use `verification-distilled` for evidence.
+Route unresolved detail to the reference skill only for an explicit request or
+a named unresolved question; use `verification-distilled` for evidence.

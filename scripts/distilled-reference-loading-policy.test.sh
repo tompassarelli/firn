@@ -11,6 +11,12 @@ if grep -Fq 'follow its required references.' "$policy"; then
   printf 'stale unconditional reference-loading rule remains\n' >&2
   exit 1
 fi
+if rg -n 'run `?agents path [^` ]*-reference|read the returned skill completely' \
+  "$repo/dotfiles/agents/skills" "$repo/modules/north-profile/firn/skills" \
+  -g '*-distilled/SKILL.md' >/dev/null; then
+  printf 'distilled skill still mandates unconditional reference loading\n' >&2
+  exit 1
+fi
 
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT

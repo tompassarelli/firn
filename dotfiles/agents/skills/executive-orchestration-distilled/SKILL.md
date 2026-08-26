@@ -35,5 +35,5 @@ tools, or long commands.
 Consume replaceable commander cards, not event streams. A report requires every
 ready front to have a commander or exact hold, every conflict one owner, and
 every completion an artifact, gate, settlement, and cleanup disposition. Route
-topology, skill placement, card fields, and audit detail through
-`agents path executive-orchestration-reference`.
+topology, skill placement, card fields, and audit detail to the reference skill
+only for an explicit request or a named unresolved question.

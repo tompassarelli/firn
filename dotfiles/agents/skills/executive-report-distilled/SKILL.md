@@ -29,5 +29,6 @@ decisive gate and settlement.
 Lead portfolio reports with the candid verdict, critical path, and consequence;
 that changes the verdict. Omit raw logs, agent narration, chronology, internal
 lists, stale flags, and equal-weight laundry lists. Never overstate candidate,
-publication, or activation stages. Route format and disposition detail through
-`agents path executive-report-reference`.
+publication, or activation stages. Route unresolved format or disposition detail
+to the reference skill only for an explicit request or a named unresolved
+question.

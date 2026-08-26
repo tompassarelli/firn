@@ -51,7 +51,5 @@ Stop on an unknown schema/path, generated-only diff, untracked module pair,
 uncommitted snapshot, or closure exception without its named consumer case.
 Use `firn repo doctor` only for a specific stale/untracked/orphan/cache suspicion.
 
-For module examples, schema and focused-guide routing, verification rungs,
-snapshot mechanics, and exact rollback procedure, run
-`agents path firn-reference` and read the returned skill completely before
-performing those detailed operations.
+Module and rollback details live in the reference skill; load it only for an
+explicit request or a named unresolved detail, per the always-loaded policy.

@@ -48,6 +48,5 @@ Stop if any required provider/worker source cannot resolve or if a matcher has
 no native decoder evidence. Never fill the gap by copying behavior into prose
 or inventing a second hook identity.
 
-For exact payload shapes, deny JSON, Codex and North wiring, and the complete
-fixture matrix, run `agents path guard-authoring-reference` and read the
-returned skill completely before implementing or debugging those details.
+Exact payload and fixture details live in the reference skill; load it only for
+an explicit request or a named unresolved detail, per the always-loaded policy.

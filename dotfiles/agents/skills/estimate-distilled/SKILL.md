@@ -25,4 +25,5 @@ Estimate agent execution, never human effort.
 
 Never hand-format receipts, combine incomparable observation units, count
 unknown coverage, or overwrite a receipt key. Route exact receipt and settlement
-detail through `agents path estimate-reference`.
+detail to the reference skill only for an explicit request or a named unresolved
+question.

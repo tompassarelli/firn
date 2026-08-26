@@ -43,6 +43,5 @@ product owner retains every product verdict and disposition decision.
 
 The acknowledgement closes the clerk; never settle the settlement clerk.
 
-For validator admission detail, interruption/replay states, atomicity checks,
-and acknowledgement examples, run `agents path settle-work-reference` and read
-the returned skill completely before executing a settlement.
+Validator admission details live in the reference skill; load it only for an
+explicit request or a named unresolved detail, per the always-loaded policy.

@@ -49,7 +49,6 @@ more than one independently useful phase.
 5. Land or explicitly dispose of owned lanes, settle coordination, update
    dependents, then remove the record when recovery value is gone.
 
-For the complete TOML schemas, attempt and execution-observation fields,
-SettlementCard validation contract, shape semantics, and mailbox protocol, run
-`agents path todo-reference` and read the returned skill completely before
-authoring or settling those details.
+Complete schema and mailbox details live in the reference skill; load it only
+for an explicit request or a named unresolved detail, per the always-loaded
+policy.

@@ -27,6 +27,6 @@ Migrate every consumer, build rule, test, script, and document. Leave the native
 rerun path and distinguish authority and lifecycle.
 
 Complete when workflows run, authority and applicable provenance are clear,
-and newcomers can locate inputs, code, outputs, and rerun path. Route detail
-through
-`agents path project-structure-reference`.
+and newcomers can locate inputs, code, outputs, and rerun path. Route unresolved
+detail to the reference skill only for an explicit request or a named unresolved
+question.

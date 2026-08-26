@@ -17,5 +17,5 @@ back to OAuth. Prefer the project profile; use `admin` only when necessary.
 
 For missing credentials, inspect profile and secret filenames, never contents.
 Repair encrypted Firn source and activate a landed change with `firn rebuild`.
-Route profile, launcher, Gjoa, and credential-source detail through
-`agents path cloudflare-deploy-reference`.
+Route unresolved profile or credential-source detail to the reference skill only
+for an explicit request or a named unresolved question.
