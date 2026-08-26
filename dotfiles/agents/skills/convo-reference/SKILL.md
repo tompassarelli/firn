@@ -44,10 +44,9 @@ convo restore <file>          restore one archived transcript as JSONL
 Combine `-r user|assistant|thinking|tool`, `--since 3d|2w|6m`, `-p <project>`,
 `-n <limit>`, `--json`, and `-u` as needed. Every ordinary search performs an
 incremental refresh first across all configured roots; unchanged files are
-skipped and only new bytes are read. A no-match result is conclusive only after
-that refresh has reconciled live roots; check `convo status` and retry after a
-newly started runtime if needed. A full rebuild is for index recovery, not
-routine freshness.
+skipped and only new bytes are read. If the refresh lock is unavailable, a
+no-match is explicitly inconclusive (exit 2), so retry after the writer
+finishes. A full rebuild is for index recovery, not routine freshness.
 
 ## Search recipes
 

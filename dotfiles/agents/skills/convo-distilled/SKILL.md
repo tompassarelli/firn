@@ -26,9 +26,9 @@ one transcript, then raw tools only on that bounded file or narrow directory.
 3. Treat hits as recorded claims and verify load-bearing conclusions against
    the current tree.
 
-The index refreshes incrementally by default. A miss is not an absence verdict
-for a recent/current conversation until that refresh has reconciled configured
-live roots; inspect `convo status` and retry after a newly started runtime if
-needed. Do not rebuild, compress, or restore it merely to answer a search.
+The index refreshes incrementally by default. If refresh cannot acquire its
+lock, a miss is reported as inconclusive (exit 2), never as absence; retry
+after the writer finishes. Do not rebuild, compress, or restore it merely to
+answer a search.
 Route commands, filters, guard boundaries, recipes, and maintenance detail
 through `agents path convo-reference`.

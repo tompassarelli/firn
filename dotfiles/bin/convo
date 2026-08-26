@@ -150,6 +150,7 @@ def discover():
     the uncompressed one wins, because it is the one a writer could still be
     appending to.
     """
+    seen = set()
     for root, direct_provider, direct_account in transcript_roots():
         if direct_provider:
             trees = [(direct_provider, direct_account or os.path.basename(root),
@@ -179,6 +180,15 @@ def discover():
                         disk = os.path.join(dirpath, fn)
                     else:
                         continue
+                    # Different configured roots may overlap without being
+                    # symlinks (for example an account tree plus a mounted
+                    # subtree).  The canonical logical path is the
+                    # transcript identity; retain the first spelling for
+                    # provenance while suppressing duplicate ingestion.
+                    identity = os.path.realpath(logical)
+                    if identity in seen:
+                        continue
+                    seen.add(identity)
                     yield logical, disk, provider, account, ""
 
 
@@ -547,6 +557,12 @@ def index(con, quiet=False, verbose=False):
     if adopted:
         con.commit()
     if not todo:
+        # A successful no-op pass is still a reconciliation checkpoint.  A
+        # query may rely on this marker to distinguish fresh emptiness from an
+        # index that has never observed the configured roots.
+        con.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('last_index',?)",
+                    (str(time.time()),))
+        con.commit()
         return 0, 0, 0
 
     prog = Progress(len(todo), total_new, quiet=quiet)
@@ -715,6 +731,12 @@ def with_lock(fn, *a, **kw):
         return fn(*a, **kw)
     finally:
         os.close(fd)
+
+
+def refresh(con, quiet=False, verbose=False):
+    """Reconcile live roots, reporting whether the lock was acquired."""
+    result = with_lock(index, con, quiet=quiet, verbose=verbose)
+    return result is not None, result
 
 
 # ------------------------------------------------------------------ search
@@ -1318,7 +1340,7 @@ def main(argv=None):
         # it has not must be decompressed in full to catch up.
         if not (args.dry_run or args.no_update):
             con = connect()
-            with_lock(index, con, quiet=args.quiet)
+            refresh(con, quiet=args.quiet)
             con.close()
         return cmd_compress(args)
 
@@ -1331,7 +1353,7 @@ def main(argv=None):
                     pass
         con = connect()
         t0 = time.time()
-        r = with_lock(index, con, quiet=args.quiet, verbose=args.verbose)
+        ok, r = refresh(con, quiet=args.quiet, verbose=args.verbose)
         if r is None:
             sys.stderr.write("convo: another index run holds the lock\n")
             return 0
@@ -1342,9 +1364,10 @@ def main(argv=None):
         return 0
 
     # Query-time refresh: cheap when nothing changed, so no daemon or timer.
+    reconciled = True
     if not args.no_update:
         con = connect()
-        with_lock(index, con, quiet=args.quiet)
+        reconciled, _ = refresh(con, quiet=args.quiet, verbose=args.verbose)
         con.close()
 
     if not os.path.exists(DB):
@@ -1361,15 +1384,35 @@ def main(argv=None):
         if args.cmd == "status":
             return cmd_status(con, args)
         if args.cmd == "session":
-            return cmd_session(con, args)
+            rc = cmd_session(con, args)
+            if rc == 1 and not reconciled:
+                sys.stderr.write("convo: refresh inconclusive (index lock busy); "
+                                 "retry session lookup\n")
+                return 2
+            return rc
         if args.session and not args.query:
-            return cmd_session(con, argparse.Namespace(
+            rc = cmd_session(con, argparse.Namespace(
                 id=args.session, limit=args.limit))
+            if rc == 1 and not reconciled:
+                sys.stderr.write("convo: refresh inconclusive (index lock busy); "
+                                 "retry session lookup\n")
+                return 2
+            return rc
         if not args.query:
             p.print_help()
             return 0
         args.query = " ".join(args.query)
-        return cmd_search(con, args)
+        rc = cmd_search(con, args)
+        if rc == 1 and not reconciled:
+            # A stale index cannot prove absence while another process is
+            # reconciling configured roots.  Make the uncertainty explicit.
+            sys.stderr.write("convo: refresh inconclusive (index lock busy); "
+                             "retry search\n")
+            return 2
+        if rc == 0 and not reconciled:
+            sys.stderr.write("convo: refresh inconclusive (index lock busy); "
+                             "results may be stale\n")
+        return rc
     finally:
         con.close()
 

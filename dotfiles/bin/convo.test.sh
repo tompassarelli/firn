@@ -305,7 +305,7 @@ data_home="$HOME/code/$north_data_name"
 mkdir -p "$data_home/accounts/openai/acct/sessions/2026/08/07" \
          "$pooled/sessions/2026/08/07" "$HOME/.local/state"
 ln -s "$pooled" "$data_home/codex-pooled"
-export NORTH_CODEX_POOLED_HOME="$data_home/codex-pooled"
+export NORTH_CODEX_POOLED_HOME="$data_home/accounts/openai/acct"
 export CODEX_HOME="$pooled"
 export CONVO_STATE="$fixture/pooled-state"
 mkrec "$data_home/accounts/openai/acct/sessions/2026/08/07/account.jsonl" \
@@ -316,6 +316,46 @@ has "$("$CONVO" --color=never ACCOUNTROOT)" ACCOUNTROOT
 out="$("$CONVO" --color=never POOLEDROOT -n 5)"
 has "$out" POOLEDROOT
 [ "$(grep -c POOLEDROOT <<<"$out")" -eq 3 ] || fail "pooled mirror duplicated messages"
+out="$($CONVO --color=never ACCOUNTROOT -n 5)"
+[ "$(grep -c ACCOUNTROOT <<<"$out")" -eq 3 ] || fail "overlapping transcript identity duplicated messages"
 nomatch NOT_IN_ANY_CONFIGURED_ROOT "absent query unexpectedly matched"
+
+# ---- a refresh lock miss cannot become a definitive absence --------------
+ready="$CONVO_STATE/lock-ready"
+python3 - "$CONVO_STATE/index.lock" "$ready" <<'PY' &
+import fcntl, os, sys, time
+fd = os.open(sys.argv[1], os.O_CREAT | os.O_RDWR, 0o644)
+fcntl.flock(fd, fcntl.LOCK_EX)
+open(sys.argv[2], "w").close()
+time.sleep(3)
+PY
+locker=$!
+for _ in $(seq 1 50); do [ -f "$ready" ] && break; sleep 0.02; done
+[ -f "$ready" ] || fail "lock holder did not become ready"
+set +e
+lockout="$($CONVO --color=never DEFINITELY_ABSENT_TOKEN 2>&1)"
+lockrc=$?
+set -e
+wait "$locker"
+[ "$lockrc" -eq 2 ] || fail "lock contention returned $lockrc, expected explicit inconclusive"
+has "$lockout" "refresh inconclusive"
+
+rm -f "$ready"
+python3 - "$CONVO_STATE/index.lock" "$ready" <<'PY' &
+import fcntl, os, sys, time
+fd = os.open(sys.argv[1], os.O_CREAT | os.O_RDWR, 0o644)
+fcntl.flock(fd, fcntl.LOCK_EX)
+open(sys.argv[2], "w").close()
+time.sleep(3)
+PY
+locker=$!
+for _ in $(seq 1 50); do [ -f "$ready" ] && break; sleep 0.02; done
+set +e
+session_out="$($CONVO --color=never session 22222222-3333-4444-5555-666666666666 2>&1)"
+session_rc=$?
+set -e
+wait "$locker"
+[ "$session_rc" -eq 2 ] || fail "session lock contention returned $session_rc"
+has "$session_out" "refresh inconclusive"
 
 echo "convo.test.sh: all assertions passed"
