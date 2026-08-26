@@ -4,7 +4,7 @@ exec "${CONVO_PYTHON:-$HOME/.local/libexec/convo/python3}" "$0" "$@"
 ":"""
 """convo — full-text search over local agent conversation transcripts.
 
-Indexes the JSONL transcripts under ~/code/north-data/accounts into a SQLite
+Indexes JSONL transcripts under the configured North account and Codex homes into a SQLite
 FTS5 index at ~/.local/state/convo/index.db, then searches it.
 
 The index is self-sufficient: it stores the extracted message text alongside
@@ -112,6 +112,34 @@ CREATE VIRTUAL TABLE IF NOT EXISTS ftx USING fts5(
 
 # ---------------------------------------------------------------- discovery
 
+def transcript_roots():
+    """Return configured transcript roots, de-duplicated by real path.
+
+    Account stores contain ``<provider>/<account>/sessions`` while a direct
+    CODEX_HOME (notably the credential-free pooled home) contains
+    ``sessions`` itself.  Symlinked North projections therefore resolve to one
+    identity and cannot duplicate messages in the index.
+    """
+    if os.environ.get("CONVO_ROOT"):
+        return [(ROOT, "", "")]
+    candidates = [
+        (ROOT, "", ""),
+        (os.environ.get("CODEX_HOME"), "openai", "configured"),
+        (os.environ.get("NORTH_CODEX_POOLED_HOME"), "openai", "pooled"),
+        (os.path.join(HOME, ".local/state/north/codex-pooled"), "openai", "pooled"),
+    ]
+    out, seen = [], set()
+    for root, provider, account in candidates:
+        if not root or not os.path.isdir(root):
+            continue
+        canonical = os.path.realpath(root)
+        if canonical in seen:
+            continue
+        seen.add(canonical)
+        out.append((canonical, provider, account))
+    return out
+
+
 def discover():
     """Yield (logical, disk, provider, account, project_hint) per transcript.
 
@@ -122,33 +150,36 @@ def discover():
     the uncompressed one wins, because it is the one a writer could still be
     appending to.
     """
-    if not os.path.isdir(ROOT):
-        return
-    for provider in sorted(os.listdir(ROOT)):
-        pdir = os.path.join(ROOT, provider)
-        if not os.path.isdir(pdir):
-            continue
-        for account in sorted(os.listdir(pdir)):
-            adir = os.path.join(pdir, account)
-            for sub in ("sessions",):
-                base = os.path.join(adir, sub)
-                if not os.path.isdir(base):
+    for root, direct_provider, direct_account in transcript_roots():
+        if direct_provider:
+            trees = [(direct_provider, direct_account or os.path.basename(root),
+                      os.path.join(root, "sessions"))]
+        else:
+            trees = []
+            for provider in sorted(os.listdir(root)):
+                pdir = os.path.join(root, provider)
+                if not os.path.isdir(pdir):
                     continue
-                for dirpath, dirnames, filenames in os.walk(base):
-                    dirnames.sort()
-                    here = set(filenames)
-                    for fn in sorted(filenames):
-                        if fn.endswith(".jsonl"):
-                            logical = disk = os.path.join(dirpath, fn)
-                        elif fn.endswith(".jsonl.zst"):
-                            if fn[:-4] in here:
-                                continue
-                            logical = os.path.join(dirpath, fn[:-4])
-                            disk = os.path.join(dirpath, fn)
-                        else:
+                for account in sorted(os.listdir(pdir)):
+                    trees.append((provider, account,
+                                  os.path.join(pdir, account, "sessions")))
+        for provider, account, base in trees:
+            if not os.path.isdir(base):
+                continue
+            for dirpath, dirnames, filenames in os.walk(base):
+                dirnames.sort()
+                here = set(filenames)
+                for fn in sorted(filenames):
+                    if fn.endswith(".jsonl"):
+                        logical = disk = os.path.join(dirpath, fn)
+                    elif fn.endswith(".jsonl.zst"):
+                        if fn[:-4] in here:
                             continue
-                        hint = ""
-                        yield logical, disk, provider, account, hint
+                        logical = os.path.join(dirpath, fn[:-4])
+                        disk = os.path.join(dirpath, fn)
+                    else:
+                        continue
+                    yield logical, disk, provider, account, ""
 
 
 # ------------------------------------------------------------- line reader
@@ -1055,7 +1086,7 @@ def gib(n):
 
 
 def cmd_compress(args):
-    root_note = f"{C.dim}{ROOT}{C.off}"
+    root_note = f"{C.dim}{', '.join(r[0] for r in transcript_roots())}{C.off}"
     cutoff = time.time() - args.older_than * 3600
     live, unseen, hidden_others = open_files()
     roster = coordinator_ids()

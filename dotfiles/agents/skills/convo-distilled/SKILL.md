@@ -2,7 +2,8 @@
 name: convo-distilled
 description: >-
   Search past agent conversations with the `convo` CLI — full-text across every
-  Codex and North Bridge transcript on this machine. Use this
+  Codex and North Bridge transcript on this machine, including configured
+  `CODEX_HOME` stores such as the pooled runtime. Use this
   whenever the answer might live in an earlier session: "when did we discuss
   X", "what did I decide about Y", "find that session", recovering a prior
   ruling, tracking down where a defect was first named, or locating a session
@@ -18,12 +19,16 @@ Use `convo` for conversations and `rg` for code. Never recursively search the
 transcript corpus with `rg`, `grep`, `find`, `fd`, or `ag`; use `convo` to name
 one transcript, then raw tools only on that bounded file or narrow directory.
 
-1. Search with `convo <terms>` or exact text with `convo -x '<literal>'`.
+1. Search with `convo <terms>` or exact text with `convo -x '<literal>'`. Each
+   search refreshes account stores and configured live Codex homes first.
 2. Narrow with filters; use `convo session <uuid>` for a known session and
    `--json` for structured consumers.
 3. Treat hits as recorded claims and verify load-bearing conclusions against
    the current tree.
 
-The index refreshes incrementally by default. Do not rebuild, compress, or
-restore it merely to answer a search. Route commands, filters, guard boundaries,
-recipes, and maintenance detail through `agents path convo-reference`.
+The index refreshes incrementally by default. A miss is not an absence verdict
+for a recent/current conversation until that refresh has reconciled configured
+live roots; inspect `convo status` and retry after a newly started runtime if
+needed. Do not rebuild, compress, or restore it merely to answer a search.
+Route commands, filters, guard boundaries, recipes, and maintenance detail
+through `agents path convo-reference`.

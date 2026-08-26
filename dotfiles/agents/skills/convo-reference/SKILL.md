@@ -20,6 +20,10 @@ records rather than searchable conversation text. `convo` maintains a much
 smaller SQLite FTS5 index of extracted message text, answers queries without
 opening transcripts, and retains exact `path:line` locations. This also permits
 closed transcript files to be compressed beneath the index.
+Discovery covers the canonical `~/code/north-data/accounts` tree plus
+configured `CODEX_HOME`, `NORTH_CODEX_POOLED_HOME`, and the default pooled
+runtime home. Symlinked North projections are canonicalized, so each
+transcript is indexed once.
 
 `~/.local/state/north` points to `~/code/north-data`; searching both scans the
 same corpus twice, while `--hidden` can add Git objects. A raw hit may also be
@@ -39,8 +43,11 @@ convo restore <file>          restore one archived transcript as JSONL
 
 Combine `-r user|assistant|thinking|tool`, `--since 3d|2w|6m`, `-p <project>`,
 `-n <limit>`, `--json`, and `-u` as needed. Every ordinary search performs an
-incremental refresh first; unchanged files are skipped and only new bytes are
-read. A full rebuild is for index recovery, not routine freshness.
+incremental refresh first across all configured roots; unchanged files are
+skipped and only new bytes are read. A no-match result is conclusive only after
+that refresh has reconciled live roots; check `convo status` and retry after a
+newly started runtime if needed. A full rebuild is for index recovery, not
+routine freshness.
 
 ## Search recipes
 

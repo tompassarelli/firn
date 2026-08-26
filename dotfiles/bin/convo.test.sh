@@ -5,6 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CONVO="$ROOT/dotfiles/bin/convo"
+unset CODEX_HOME NORTH_CODEX_POOLED_HOME
 fixture="$(mktemp -d)"
 trap 'rm -rf "${fixture:?}"' EXIT
 fail() { printf 'convo.test.sh:%s: %s\n' "${BASH_LINENO[0]}" "$1" >&2; exit 1; }
@@ -293,5 +294,28 @@ nomatch STALEZSTTOKEN "the archive shadowed the live transcript"
 cmp -s "$cold" "$fixture/cold.orig" || fail "restore lost bytes"
 has "$("$CONVO" index)" "from 0 changed files"
 has "$("$CONVO" --color=never COLDTOKEN -n 1)" "COLDTOKEN record"
+
+# ---- configured pooled CODEX_HOME and projected mirror -------------------
+unset CONVO_ROOT
+HOME="$fixture/home"
+export HOME
+pooled="$HOME/.local/state/north/codex-pooled"
+north_data_name=north-data
+data_home="$HOME/code/$north_data_name"
+mkdir -p "$data_home/accounts/openai/acct/sessions/2026/08/07" \
+         "$pooled/sessions/2026/08/07" "$HOME/.local/state"
+ln -s "$pooled" "$data_home/codex-pooled"
+export NORTH_CODEX_POOLED_HOME="$data_home/codex-pooled"
+export CODEX_HOME="$pooled"
+export CONVO_STATE="$fixture/pooled-state"
+mkrec "$data_home/accounts/openai/acct/sessions/2026/08/07/account.jsonl" \
+  ACCOUNTROOT 2026-08-07T10:00:00Z
+mkrec "$pooled/sessions/2026/08/07/pooled.jsonl" POOLEDROOT 2026-08-07T10:01:00Z
+"$CONVO" index >/dev/null
+has "$("$CONVO" --color=never ACCOUNTROOT)" ACCOUNTROOT
+out="$("$CONVO" --color=never POOLEDROOT -n 5)"
+has "$out" POOLEDROOT
+[ "$(grep -c POOLEDROOT <<<"$out")" -eq 3 ] || fail "pooled mirror duplicated messages"
+nomatch NOT_IN_ANY_CONFIGURED_ROOT "absent query unexpectedly matched"
 
 echo "convo.test.sh: all assertions passed"
