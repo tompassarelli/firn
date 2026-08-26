@@ -119,6 +119,11 @@ blocking the whole task on the answer.
   outputs, and chronology belong in the commit message or private handoff.
 - Fix causes upstream. A local workaround routes around a defect, leaves it in
   place, and adds a second thing to maintain.
+- Aim at the proper end-state and root-cause architecture for the requested
+  outcome. Minimize accidental complexity: do not add duplicated authority,
+  compatibility layers, wrappers, daemons, or bespoke infrastructure unless
+  an explicit requirement forces them. This is a proportionality rule, not a
+  license for scope creep or needless redesign.
 - Never weaken a test, assertion, or gate to make it pass. Fix what it tests; a
   gate lowered to go green no longer proves anything.
 - Measure before naming a cause, especially for performance. An unmeasured
