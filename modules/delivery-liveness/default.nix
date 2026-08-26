@@ -15,7 +15,7 @@
           ExecStart = "${config.home.homeDirectory}/.local/bin/firn-liveness-floor";
           Environment = [
             "NORTH_BIN=${config.home.homeDirectory}/code/north/main/bin/north"
-            "PATH=${lib.makeBinPath (with pkgs; [
+            "PATH=${config.home.homeDirectory}/code/north/main/bin:${lib.makeBinPath (with pkgs; [
               bash
               coreutils
               gawk
