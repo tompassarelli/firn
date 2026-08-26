@@ -30,8 +30,10 @@ write_tool() {
   chmod +x "$fixture_bin/$name"
 }
 
-write_tool agents 'test "${LIVENESS_CASE:-ok}" != missing-hook || exit 1' \
-  'echo "checked: hooks"'
+write_tool agents 'test "${1:-}" = status' \
+  'test "${LIVENESS_CASE:-ok}" != missing-hook || exit 1' \
+  'echo "status: hooks"'
+write_tool north 'echo north'
 write_tool firn \
   'if [ "${1:-}" = repo ]; then test "${LIVENESS_CASE:-ok}" != skew || exit 1; echo "first-party input ok"; exit 0; fi' \
   'test "${LIVENESS_CASE:-ok}" != silent-cli || exit 0' \
@@ -49,6 +51,7 @@ run_case() {
     FIRN_LIVENESS_GIT=git FIRN_LIVENESS_NIX="$fixture_bin/nix" \
     FIRN_LIVENESS_CURRENT_FIRN="$fixture_bin/firn" \
     FIRN_LIVENESS_AGENTS="$fixture_bin/agents" \
+    NORTH_BIN="$fixture_bin/north" \
     FIRN_LIVENESS_STATE_DIR="$scratch/state-$name" \
     "$script" >"$scratch/$name.out" 2>"$scratch/$name.err"
   status=$?

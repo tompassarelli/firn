@@ -13,6 +13,18 @@
         Service = {
           Type = "oneshot";
           ExecStart = "${config.home.homeDirectory}/.local/bin/firn-liveness-floor";
+          Environment = [
+            "NORTH_BIN=${config.home.homeDirectory}/code/north/main/bin/north"
+            "PATH=${lib.makeBinPath (with pkgs; [
+              bash
+              coreutils
+              gawk
+              git
+              nix
+              python3
+              util-linux
+            ])}"
+          ];
           TimeoutStartSec = "30m";
         };
       };

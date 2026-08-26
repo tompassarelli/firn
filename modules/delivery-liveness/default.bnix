@@ -21,7 +21,14 @@
                  :Service
                   {:Type "oneshot"
                    :ExecStart (s config.home.homeDirectory
-                     "/.local/bin/firn-liveness-floor")
+                    "/.local/bin/firn-liveness-floor")
+                   :Environment
+                    [(s "NORTH_BIN=" config.home.homeDirectory
+                       "/code/north/main/bin/north")
+                     (s "PATH="
+                       (lib.makeBinPath
+                         (nix/with pkgs
+                           [bash coreutils gawk git nix python3 util-linux])))]
                    :TimeoutStartSec "30m"}}
                :systemd.user.timers.firn-delivery-liveness
                 {:Unit {:Description "Run Firn delivery liveness floor"}

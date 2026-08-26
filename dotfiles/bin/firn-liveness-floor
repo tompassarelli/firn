@@ -8,6 +8,8 @@ git_bin="${FIRN_LIVENESS_GIT:-git}"
 nix_bin="${FIRN_LIVENESS_NIX:-nix}"
 firn_bin="${FIRN_LIVENESS_CURRENT_FIRN:-$HOME/.local/bin/firn}"
 agents_bin="${FIRN_LIVENESS_AGENTS:-$HOME/.local/bin/agents}"
+north_bin="${NORTH_BIN:-$HOME/code/north/main/bin/north}" # hardcoded-repo-path:allow
+python_bin="${FIRN_LIVENESS_PYTHON:-python3}"
 flock_bin="${FIRN_LIVENESS_FLOCK:-flock}"
 state_dir="${FIRN_LIVENESS_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/firn}"
 state_file="$state_dir/delivery-liveness.json"
@@ -36,7 +38,7 @@ write_fact() {
   LIVENESS_FAILING_CHECK="$([[ "$status" == 0 ]] && printf '' || printf "$failing_check")" \
   LIVENESS_REVISION="$revision" LIVENESS_CURRENT="$current_path" \
   LIVENESS_CANDIDATE="$candidate_path" \
-    python3 - "$tmp" <<'PY'
+    "$python_bin" - "$tmp" <<'PY'
 import json, os, sys
 
 def nullable(value):
@@ -83,6 +85,10 @@ failing_check="current_firn"
 [[ -x "$firn_bin" ]] || fail "current Firn is missing or non-executable: $firn_bin"
 failing_check="agents"
 [[ -x "$agents_bin" ]] || fail "agents command is missing or non-executable: $agents_bin"
+failing_check="north"
+[[ -x "$north_bin" ]] || fail "North command is missing or non-executable: $north_bin"
+failing_check="python"
+command -v "$python_bin" >/dev/null 2>&1 || fail "Python is missing or non-executable: $python_bin"
 
 failing_check="branch"
 branch="$("$git_bin" -C "$repo" branch --show-current)"
@@ -93,7 +99,7 @@ failing_check="clean_worktree"
 source="git+file://$repo?rev=$revision&ref=main"
 
 failing_check="hook_projection"
-run "checking active hook targets and projections" "$agents_bin" check
+run "checking active hook targets and projections" "$agents_bin" status
 failing_check="pin_ancestry"
 run "checking direct first-party pin ancestry" \
   env FIRN_REPO="$repo" "$firn_bin" repo doctor
