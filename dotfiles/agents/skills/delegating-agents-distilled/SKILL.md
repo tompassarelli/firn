@@ -54,6 +54,22 @@ outcome.
   work must be bounded, named, supervised, and reaped. Do not retry the same
   failed brief blindly; three identical results are a finding.
 
+## Tool-call correctness
+
+- Before declaring a dispatch, wait, or capability surface unavailable, compare
+  the intended operation with the actual emitted recipient and tool name, then
+  read that tool's error. A failure from a different tool proves an invocation
+  error, not target infrastructure failure.
+- Native agent operations use the `collaboration.*` namespace. Call
+  `collaboration.spawn_agent` to admit a worker and the collaboration wait,
+  steer, or settlement operations for that worker. `functions.wait` only
+  resumes a yielded `exec` cell; it is not an agent-wait operation.
+- After a mismatched call, re-read the available tool catalog and make one
+  minimal, correctly named control call to the intended surface. Do not switch
+  fallback transports, widen architecture, or mark a blocker until that target
+  surface itself fails. Reports must distinguish an agent invocation error
+  from an infrastructure error.
+
 ## Continuous supervision
 
 - Treat dispatch as the start of ownership, not completion. A status answer
