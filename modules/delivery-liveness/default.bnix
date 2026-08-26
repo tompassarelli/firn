@@ -26,6 +26,7 @@
                     [(s "NORTH_BIN=" config.home.homeDirectory
                        "/code/north/main/bin/north")
                      (s "PATH="
+                       config.home.homeDirectory "/.local/bin:"
                        config.home.homeDirectory "/code/north/main/bin:"
                        (lib.makeBinPath
                          (nix/with pkgs
