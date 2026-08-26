@@ -29,6 +29,12 @@ outcome.
   object and rerun affected checks.
 - Use the smallest inherited context that preserves uncaptured decisions.
   Workers read applicable source instructions themselves.
+- Propagate applicable source authority into every worker brief and admit the
+  runtime and backend separately. Source authority selects the typed authoring
+  profile; runtime and backend select execution. The source-authority policy
+  constrains `domainRequirements`; runtime and backend remain consumer-owned
+  execution facts. Do not add to or replace the exactly eight portable routing
+  fields.
 
 ## Time, route, and safety decisions
 
