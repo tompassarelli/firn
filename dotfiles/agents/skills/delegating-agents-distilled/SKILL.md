@@ -54,6 +54,22 @@ outcome.
   work must be bounded, named, supervised, and reaped. Do not retry the same
   failed brief blindly; three identical results are a finding.
 
+## Continuous supervision
+
+- Treat dispatch as the start of ownership, not completion. A status answer
+  never releases ownership or turns an active workstream into an
+  operator-driven polling loop.
+- Continue bounded waits while workers or processes remain live, and drive
+  every ready in-scope action without requiring another operator ping.
+  Unchanged live state is expected and is not a blocker.
+- When silence passes the admitted supervisor window, check liveness and then
+  steer, interrupt, or replace the attempt within existing authority. Preserve
+  evidence and never turn an unchanged wait into a blind retry.
+- End ownership only when the outcome is complete, an exact operator decision
+  is required for remaining progress, or the governing repeated-blocker
+  threshold is satisfied. Continue unrelated ready work before requesting a
+  decision.
+
 ## Minimum delegation workflow
 
 1. Decompose to independent seams and appoint the nearest closure owner.
@@ -68,10 +84,12 @@ outcome.
 6. Update continuity prose, land through repository safety, and reap released
    workers, processes, lanes, branches, and claims.
 
-Stop on an unavailable required authority surface, ambiguous product owner,
-unsettled child, missing liveness signal for automated activation, exhausted
-outcome budget, or a worker result that lacks exact terminal evidence. Report
-the capability gap; never lower a safety boundary or invent success.
+Quarantine the affected seam on an unavailable required authority surface,
+ambiguous product owner, missing liveness signal for automated activation,
+exhausted outcome budget, or a worker result that lacks exact terminal
+evidence; an unsettled child blocks settlement. Continue unrelated ready work
+and apply the continuous-supervision stop rule. Report the capability gap;
+never lower a safety boundary or invent success.
 
 For stock-role contracts, research fan-out, speed-ratchet economics, model and
 account commands, supervision protocol, terminal report fields, and settlement
