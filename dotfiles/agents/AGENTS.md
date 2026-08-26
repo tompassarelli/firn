@@ -21,6 +21,15 @@ Files under `~/.agents`, `~/.codex`, and `/etc/codex` are
 projections, not policy sources, and must not be hand-edited. Change the owning
 source in its repository and use its sanctioned projection mechanism.
 
+## JavaScript and TypeScript tooling
+
+For JavaScript/TypeScript runtime, package-management, script, and test work,
+Bun is the default. Do not introduce or invoke Node, npm, npx, pnpm, or Yarn,
+or add a Node toolchain/environment, when Bun can perform the task. An explicit
+repository-required Node compatibility gate or a demonstrated Bun
+incompatibility is a valid exception; name the exception and keep Node scoped
+to it.
+
 ## Preserve development velocity
 
 - Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification-distilled`.
