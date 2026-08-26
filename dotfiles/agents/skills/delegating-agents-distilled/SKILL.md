@@ -60,10 +60,13 @@ outcome.
   the intended operation with the actual emitted recipient and tool name, then
   read that tool's error. A failure from a different tool proves an invocation
   error, not target infrastructure failure.
-- Native agent operations use the `collaboration.*` namespace. Call
-  `collaboration.spawn_agent` to admit a worker and the collaboration wait,
-  steer, or settlement operations for that worker. `functions.wait` only
-  resumes a yielded `exec` cell; it is not an agent-wait operation.
+- Native agent operations use the `collaboration.*` namespace: `spawn_agent`
+  admits a child; `followup_task` reactivates or steers an idle child;
+  `send_message` delivers without triggering a turn; `interrupt_agent`
+  interrupts; `list_agents` inspects fleet state; and `wait_agent` waits for
+  agent updates. `functions.wait` only resumes a yielded `exec` cell, while
+  `request_user_input` is a human-question surface; neither is a dispatch or
+  agent-wait operation.
 - After a mismatched call, re-read the available tool catalog and make one
   minimal, correctly named control call to the intended surface. Do not switch
   fallback transports, widen architecture, or mark a blocker until that target
