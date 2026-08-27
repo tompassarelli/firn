@@ -49,8 +49,8 @@ Row {
         Row {
             property int ordinal: ActivityState.memberOrdinals[model.wsId] || 0
             property bool floating: ActivityState.floatingIds[model.wsId] || false
-            // Keep every compositor-provided workspace visible; membership only changes its label.
-            visible: true
+            // Other activities retain their Niri workspaces without occupying this activity's row.
+            visible: !ActivityState.available || ordinal > 0 || floating
             spacing: 0
 
             Text {
