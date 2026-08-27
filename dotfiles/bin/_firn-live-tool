@@ -15,12 +15,6 @@ if [[ ! -x "$beagle" ]]; then
 fi
 
 case "$tool" in
-  activity-menu)
-    sources=("$firn_repo/native/activity_menu.bjs")
-    host="$firn_repo/native/activity_menu_host.mjs"
-    module="activity/menu.js"
-    module_environment="FIRN_ACTIVITY_MENU_MODULE"
-    ;;
   firn-system-policy)
     sources=(
       "$beagle_path/native-core/src/native/json.bjs"

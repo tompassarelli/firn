@@ -1,3 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
-exec "$(dirname "${BASH_SOURCE[0]}")/_firn-live-tool" activity-menu "$@"
+
+runtime_root="${FIRN_ACTIVITY_RUNTIME_ROOT:-$HOME/.local/lib/firn/activity}"
+runtime="$runtime_root/current/bin/activity-menu"
+if [[ ! -x "$runtime" ]]; then
+  printf 'activity-menu: user runtime is not installed; run activity-runtime-update\n' >&2
+  exit 127
+fi
+
+exec "$runtime" "$@"

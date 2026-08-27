@@ -102,6 +102,7 @@ write_module "$out/firn/repo-workflows-runtime.js" repo-workflow
 write_module "$out/firn/rebuild-family.js" rebuild
 write_module "$out/firn/prewarm.js" prewarm
 write_module "$out/firn/system-policy-native.js" system-policy
+write_module "$out/activity/native.js" activity
 write_module "$out/activity/menu.js" activity-menu
 EOF
 chmod +x "$beagle_path/bin/beagle-build-all"
@@ -164,12 +165,23 @@ unlink "$fake_bin/bun"
 [[ "$(readlink "$runtime_root/current")" == "$target" ]]
 ! tr '\0' '\n' <"$FAKE_BEAGLE_LOG" | grep -Fxq native-exe
 
-[[ "$("$here/_firn-live-tool" activity-menu)" == \
-  prepared:alpha:activity-menu ]]
 [[ "$(printf '{}\n' | "$here/_firn-live-tool" firn-system-policy)" == \
   prepared:alpha:system-policy ]]
 [[ "$(printf '{}\n' | "$destination/bin/firn-system-policy")" == \
   prepared:alpha:system-policy ]]
+
+activity_runtime_root="$scratch/activity-runtime"
+FIRN_ACTIVITY_RUNTIME_ROOT="$activity_runtime_root" \
+  "$here/activity-runtime-update" >"$scratch/activity-update.out"
+activity_target="$(readlink "$activity_runtime_root/current")"
+activity_destination="$activity_runtime_root/$activity_target"
+grep -Fxq 'format=firn-activity-runtime/v3' \
+  "$activity_destination/provenance"
+grep -Fxq 'entry=activity.menu/run' "$activity_destination/provenance"
+[[ -x "$activity_destination/bin/activity" ]]
+[[ -x "$activity_destination/bin/activity-menu" ]]
+[[ "$(FIRN_ACTIVITY_RUNTIME_ROOT="$activity_runtime_root" \
+  "$here/activity-menu")" == prepared:alpha:activity-menu ]]
 
 missing_root="$scratch/missing-runtime"
 set +e

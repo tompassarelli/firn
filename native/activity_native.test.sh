@@ -105,7 +105,8 @@ timeout --foreground 30 "$bun" --eval \
   'const m = await import(process.env.FIRN_ACTIVITY_TEST_MODULE); process.exitCode = m.run([]);' \
   >"$scratch/focus-test.out" 2>"$scratch/focus-test.err" \
   || die "post-reorder focus behavior failed"
-cmp -s "$scratch/focus-test.out" <(printf 'PASS post-reorder-focus\n') \
+cmp -s "$scratch/focus-test.out" \
+  <(printf 'PASS post-reorder-focus\nPASS empty-activity-reuses-trailing-seed\n') \
   || die "post-reorder focus behavior output changed"
 [[ ! -s "$scratch/focus-test.err" ]] \
   || die "post-reorder focus behavior wrote stderr"

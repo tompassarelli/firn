@@ -535,17 +535,13 @@
           assigned-name
           activity)))))
 
-(defn first-floating
-  [(state ActivityState) (workspaces (Vec Workspace))] WorkspaceLookup
+(defn first-activity-seed
+  [(workspaces (Vec Workspace))] WorkspaceLookup
   (loop [(index Int) 0]
     (if (>= index (count workspaces))
       (->WorkspaceMissing false)
       (let [(workspace Workspace) (nth workspaces index)]
-        (if (and
-              (nil?
-                (membership-for
-                  (activitystate-members state) (workspace-id workspace)))
-              (floating? workspaces workspace))
+        (if (floating? workspaces workspace)
           (->WorkspaceFound workspace)
           (recur (+ index 1)))))))
 
@@ -562,7 +558,7 @@
           (->MoveColumnToWorkspace workspace)
           (->FocusWorkspace workspace))])]
     [(WorkspaceMissing token)
-     (match (first-floating state workspaces)
+     (match (first-activity-seed workspaces)
        [(WorkspaceMissing nested-token) (->CommandOutcome state [])]
        [(WorkspaceFound workspace)
         (let [(assigned ActivityState)

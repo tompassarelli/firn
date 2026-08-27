@@ -38,8 +38,59 @@
         [(SnapshotStep snapshot) false]
         [(PersistStep assignments) false]))))
 
+(defn membership-activity
+  [state a/ActivityState workspace-id Int] (U String Nil)
+  (let [members (Vec a/Membership) (a/activitystate-members state)]
+    (loop [(index Int) 0]
+      (if (>= index (count members))
+        nil
+        (let [entry a/Membership (nth members index)]
+          (if (= (a/membership-workspace-id entry) workspace-id)
+            (a/membership-activity entry)
+            (recur (+ index 1))))))))
+
+(defn empty-activity-reuses-trailing-seed? [] Bool
+  (let [state a/ActivityState (a/->ActivityState
+          [(a/->ActivityDef "home" "home" [] [])
+           (a/->ActivityDef "gjoa" "gjoa" [] [])
+           (a/->ActivityDef "msa" "msa" [] [])]
+          "home"
+          []
+          [(a/->Membership 1 "home") (a/->Membership 2 "gjoa")]
+          []
+          "home"
+          "gjoa"
+          [])
+        workspaces (Vec a/Workspace) [(workspace 1 1 "notes" 10)
+         (workspace 2 2 nil nil)]
+        plan d/CommandPlan (d/plan-command state workspaces (a/->Goto "msa"))
+        steps (Vec d/PlannedStep) (d/commandplan-steps plan)]
+    (and
+      (d/commandplan-settled plan)
+      (= (membership-activity (d/commandplan-state plan) 2) "msa")
+      (= (count steps) 2)
+      (match (nth steps 0)
+        [(SnapshotStep snapshot) true]
+        [(FocusStep reference) false]
+        [(MoveColumnStep reference) false]
+        [(ReorderStep reference id target-index) false]
+        [(PersistStep assignments) false])
+      (match (nth steps 1)
+        [(FocusStep reference) (= reference "2")]
+        [(MoveColumnStep reference) false]
+        [(ReorderStep reference id target-index) false]
+        [(SnapshotStep snapshot) false]
+        [(PersistStep assignments) false]))))
+
 (js/export
   (defn run [args (Vec String)] Int
-    (if (post-reorder-focus?)
-      (do (println "PASS post-reorder-focus") 0)
-      (do (println "FAIL post-reorder-focus") 1))))
+    (let [focus-passed Bool (post-reorder-focus?)
+          empty-passed Bool (empty-activity-reuses-trailing-seed?)]
+      (do
+        (println (if focus-passed
+          "PASS post-reorder-focus"
+          "FAIL post-reorder-focus"))
+        (println (if empty-passed
+          "PASS empty-activity-reuses-trailing-seed"
+          "FAIL empty-activity-reuses-trailing-seed"))
+        (if (and focus-passed empty-passed) 0 1)))))
