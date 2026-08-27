@@ -26,6 +26,10 @@ more than one independently useful phase.
 - Give every active task/project execution one `[[attempt]]` before work begins,
   including forecast and staffing facts. Settle the same attempt with observed
   actuals; unknown evidence stays explicit and is never inferred.
+- Record the concrete model identity observed for each run and review. A model
+  field never records lineage, ambient, or selection behavior such as `self`,
+  `parent`, `default`, or `auto`; recover the exact identity from run or
+  dispatch evidence, and record an evidence gap outside the model field.
 - Update at every visible phase boundary by replacing stale state, not appending
   a transcript. A successor must be able to execute `Next actions` directly.
 - The product owner decides integration, verification, review, publication,

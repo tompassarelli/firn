@@ -216,6 +216,87 @@ record invalid-attempt.md \
   'review_outcome = "not-run"' \
   'reviewer_model = "gpt-5.6-sol"' \
   '+++'
+record model-placeholder.md \
+  '+++' \
+  'id = "model-placeholder"' \
+  'title = "Model placeholder"' \
+  'shape = "task"' \
+  'life = "inactive"' \
+  'updated_at = "2026-01-01T00:00:00+00:00"' \
+  'owners = ["test"]' \
+  '[[attempt]]' \
+  'id = "A1"' \
+  'seam = "placeholder"' \
+  'class = "test"' \
+  'wall_time_estimate = "1m"' \
+  'agent_time_estimate = "1m"' \
+  'calibration_sample_count = 0' \
+  'started_at = "2026-01-01T00:00:00+00:00"' \
+  'model = "inherited-parent-model"' \
+  'reasoning = "high"' \
+  'route = "test"' \
+  'assignment_id = "none"' \
+  'role = "owner"' \
+  'review_budget = "owner"' \
+  'reviewer_model = "default"' \
+  'reviewer_reasoning = "high"' \
+  '[[attempt]]' \
+  'id = "A2"' \
+  'seam = "plausible but unadmitted identity"' \
+  'class = "test"' \
+  'wall_time_estimate = "1m"' \
+  'agent_time_estimate = "1m"' \
+  'calibration_sample_count = 0' \
+  'started_at = "2026-01-01T00:00:00+00:00"' \
+  'model = "future-provider-model-9"' \
+  'reasoning = "high"' \
+  'route = "test"' \
+  'assignment_id = "none"' \
+  'role = "owner"' \
+  'review_budget = "owner"' \
+  '[[attempt]]' \
+  'id = "A3"' \
+  'seam = "provider alias"' \
+  'class = "test"' \
+  'wall_time_estimate = "1m"' \
+  'agent_time_estimate = "1m"' \
+  'calibration_sample_count = 0' \
+  'started_at = "2026-01-01T00:00:00+00:00"' \
+  'model = "sol"' \
+  'reasoning = "high"' \
+  'route = "test"' \
+  'assignment_id = "none"' \
+  'role = "owner"' \
+  'review_budget = "owner"' \
+  '+++'
+record estimate-calibration.md \
+  '- fixture/A1 — model: inherited-parent-model; reasoning: high; outcome: unresolved.' \
+  'fixture/A2 — inherited high worker.' \
+  'fixture/A3 — two inherited-route gpt-5.6-sol writers.' \
+  '| 2026-01-01 | fixture | 1m | 1m | model=inherited-parent-model reasoning=high | checkpoint |' \
+  '| Settled | Attempt | Estimate | Actual | Queue | Staffing | Review | Outcome |' \
+  '| --- | --- | --- | --- | --- | --- | --- | --- |' \
+  '| 2026-01-01 | fixture | 1m | 1m | 0s | inherited-root closure owner | clean | done |' \
+  '| 2026-01-01 | fixture | 1m | 1m | 0s | self closure owner | clean | done |' \
+  '' \
+  '| Completed | Seam | Estimate | Actual | Ratio | Overrun cause |' \
+  '| --- | --- | --- | --- | --- | --- |' \
+  '| 2026-01-01 | fixture | 1m | 1m | 1.00x | current-source generation is valid prose |' \
+  '| 2026-01-01 | fixture | 1m | 1m | 1.00x | current Beagle behavior is valid prose |'
+record model-prose.md \
+  '+++' \
+  'id = "model-prose"' \
+  'title = "Model prose"' \
+  'shape = "resource"' \
+  'life = "inactive"' \
+  'updated_at = "2026-01-01T00:00:00+00:00"' \
+  'owners = ["test"]' \
+  '+++' \
+  '' \
+  'The data model: inherited from the parent schema.'
+record model-assignment-ledger.md \
+  '# ts | task | model | effort | outcome | note' \
+  '2026-01-01T00:00:00+00:00 | fixture | inherited collaboration agent | high | pending | unresolved'
 record active-execution.md \
   '+++' \
   'id = "active-execution"' \
@@ -358,6 +439,7 @@ for code_name in \
   ROOT_FIELD_UNKNOWN ACTIVE_EXECUTION_ATTEMPT_MISSING ATTEMPT_EMPTY ATTEMPT_RECORD_SHAPE_INVALID \
   REQUIRES_CYCLE REQUIRES_SELF ATTEMPT_CHRONOLOGY_INVALID \
   ATTEMPT_FIELD_UNKNOWN ATTEMPT_FIELD_REQUIRED ATTEMPT_FIELD_INVALID ATTEMPT_TIMESTAMP_INVALID \
+  ATTEMPT_MODEL_IDENTITY_INVALID MODEL_LEDGER_IDENTITY_INVALID \
   ATTEMPT_REVIEW_BUDGET_INVALID ATTEMPT_REVIEW_OUTCOME_INVALID ATTEMPT_REVIEW_OUTCOME_REQUIRED \
   ATTEMPT_REVIEW_INCOMPLETE ATTEMPT_REVIEW_REPAIR_INVALID ATTEMPT_EXECUTION_OBSERVATION_INVALID; do
   grep -Fq "$code_name" "$scratch/text"
@@ -385,6 +467,33 @@ assert any(
     and "reviewer_model and reviewer_reasoning must appear together" in item["message"]
     for item in report["findings"]
 )
+assert any(
+    item["code"] == "ATTEMPT_MODEL_IDENTITY_INVALID"
+    and item["path"] == "model-placeholder.md"
+    and " model " in item["message"]
+    for item in report["findings"]
+)
+assert any(
+    item["code"] == "ATTEMPT_MODEL_IDENTITY_INVALID"
+    and item["path"] == "model-placeholder.md"
+    and " reviewer_model " in item["message"]
+    for item in report["findings"]
+)
+ledger_paths = {
+    item["path"]
+    for item in report["findings"]
+    if item["code"] == "MODEL_LEDGER_IDENTITY_INVALID"
+}
+assert ledger_paths == {"estimate-calibration.md", "model-assignment-ledger.md"}, ledger_paths
+ledger_count = sum(
+    item["code"] == "MODEL_LEDGER_IDENTITY_INVALID"
+    for item in report["findings"]
+)
+assert ledger_count == 6, [
+    (item["path"], item["message"])
+    for item in report["findings"]
+    if item["code"] == "MODEL_LEDGER_IDENTITY_INVALID"
+]
 unsafe_messages = {
     item["message"]
     for item in report["findings"]
@@ -421,7 +530,7 @@ record_clean() {
     'agent_time_estimate = "1m"' \
     'calibration_sample_count = 1' \
     'started_at = "2026-01-01T00:00:00+00:00"' \
-    'model = "self"' \
+    'model = "gpt-5.6-sol"' \
     'reasoning = "high"' \
     'route = "test"' \
     'assignment_id = "none"' \

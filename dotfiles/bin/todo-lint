@@ -108,6 +108,88 @@ ESTIMATED_DURATION_PATTERN = re.compile(r"^(?:~|under )?(?:\d+(?:\.\d+)?(?:ms|s|
 ACTUAL_DURATION_PATTERN = re.compile(r"^(?:\d+(?:\.\d+)?(?:ms|s|m|h|d))+$")
 OBSERVATION_TOKEN_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:/-]*$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+MODEL_PLACEHOLDER_WORDS = (
+    "ambient", "inherit", "inherited", "lineage", "self", "parent",
+    "default", "auto", "current", "unobserved",
+    "selected", "selection", "available", "best", "highest", "lowest",
+    "fallback", "unspecified", "unknown", "pending", "selector",
+)
+MODEL_PLACEHOLDER_ALTERNATION = "|".join(map(re.escape, MODEL_PLACEHOLDER_WORDS))
+MODEL_PLACEHOLDER_PATTERN = re.compile(
+    rf"(?<![a-z0-9])(?:{MODEL_PLACEHOLDER_ALTERNATION})(?![a-z0-9])",
+    re.IGNORECASE,
+)
+ADMITTED_MODEL_IDENTITIES = frozenset({
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-sonnet-5",
+    "gpt-5",
+    "gpt-5.6-luna",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+})
+ADMITTED_MODEL_PATTERN = re.compile(
+    r"(?<![a-z0-9])(?:"
+    + "|".join(
+        map(re.escape, sorted(ADMITTED_MODEL_IDENTITIES, key=len, reverse=True))
+    )
+    + r")(?![a-z0-9])"
+)
+CALIBRATION_COLON_MODEL_PATTERN = re.compile(
+    r"(?:^|[;|—])\s*((?:reviewer )?model)\s*:\s*([^;|]+)", re.IGNORECASE
+)
+CALIBRATION_INLINE_MODEL_PATTERN = re.compile(
+    r"(?:^|[;|—])\s*((?:reviewer_)?model)\s*=\s*([^\s;|]+)", re.IGNORECASE
+)
+CALIBRATION_PROSE_MODEL_PATTERN = re.compile(
+    rf"(?m)^[^|\n]*—\s+(?:(?:one|two|three|four)\s+)?"
+    rf"(?:{MODEL_PLACEHOLDER_ALTERNATION})(?:[- ](?:parent|root|model))?(?=\s|$)",
+    re.IGNORECASE,
+)
+CALIBRATION_MODEL_TABLE_HEADERS = {
+    "actor",
+    "actor / model",
+    "account / model",
+    "model",
+    "model / actor",
+    "staffing",
+}
+MARKDOWN_TABLE_SEPARATOR_PATTERN = re.compile(r"^:?-{3,}:?$")
+
+
+def markdown_table_columns(line: str) -> list[str] | None:
+    stripped = line.strip()
+    if not (stripped.startswith("|") and stripped.endswith("|")):
+        return None
+    return [column.strip() for column in stripped[1:-1].split("|")]
+
+
+def markdown_table_separator(columns: list[str] | None) -> bool:
+    return bool(
+        columns
+        and all(MARKDOWN_TABLE_SEPARATOR_PATTERN.fullmatch(column) for column in columns)
+    )
+
+
+def calibration_model_column(columns: list[str]) -> int | None:
+    for index, column in enumerate(columns):
+        normalized = " ".join(column.casefold().split())
+        if normalized in CALIBRATION_MODEL_TABLE_HEADERS:
+            return index
+    return None
+
+
+def concrete_model_identity(value: Any) -> bool:
+    return isinstance(value, str) and value in ADMITTED_MODEL_IDENTITIES
+
+
+def contains_concrete_model_identity(value: str) -> bool:
+    return bool(ADMITTED_MODEL_PATTERN.search(value))
+
+
+def first_model_token(value: str) -> str:
+    return value.strip().split(maxsplit=1)[0].strip("`'\",;") if value.strip() else ""
 
 
 @dataclass(frozen=True)
@@ -147,6 +229,7 @@ class Linter:
         self.check_top_level()
         self.check_records()
         self.check_attempts()
+        self.check_model_ledgers()
         self.check_references()
         self.check_lanes()
         return self.sorted_findings()
@@ -429,11 +512,96 @@ class Linter:
         ):
             if field in attempt and (not isinstance(attempt[field], str) or not attempt[field]):
                 self.add("ATTEMPT_FIELD_INVALID", path, f"{label} {field} must be a non-empty string")
+        for field in ("model", "reviewer_model"):
+            value = attempt.get(field)
+            if isinstance(value, str) and not concrete_model_identity(value):
+                self.add(
+                    "ATTEMPT_MODEL_IDENTITY_INVALID",
+                    path,
+                    f"{label} {field} must name one versioned concrete model, not {value!r}",
+                )
         if "execution_observation" in attempt:
             self.check_execution_observation(
                 path, label, attempt["execution_observation"]
             )
         self.check_attempt_review(path, label, attempt, settled)
+
+    def check_model_ledgers(self) -> None:
+        calibration = self.root / "estimate-calibration.md"
+        if calibration.is_file():
+            calibration_text = calibration.read_text(encoding="utf-8")
+            calibration_lines = calibration_text.splitlines()
+            table_model_column = None
+            for line_number, line in enumerate(calibration_lines, 1):
+                for pattern in (
+                    CALIBRATION_COLON_MODEL_PATTERN,
+                    CALIBRATION_INLINE_MODEL_PATTERN,
+                ):
+                    for match in pattern.finditer(line):
+                        value = first_model_token(match.group(2))
+                        if (
+                            match.group(1).casefold().startswith("reviewer")
+                            and value.casefold() == "none"
+                        ):
+                            continue
+                        if concrete_model_identity(value):
+                            continue
+                        self.add(
+                            "MODEL_LEDGER_IDENTITY_INVALID",
+                            calibration,
+                            f"line {line_number} {match.group(1)} must name the concrete model",
+                        )
+                columns = markdown_table_columns(line)
+                if columns is None:
+                    table_model_column = None
+                    continue
+                next_columns = (
+                    markdown_table_columns(calibration_lines[line_number])
+                    if line_number < len(calibration_lines)
+                    else None
+                )
+                if markdown_table_separator(next_columns):
+                    table_model_column = calibration_model_column(columns)
+                    continue
+                if markdown_table_separator(columns):
+                    continue
+                if (
+                    table_model_column is not None
+                    and table_model_column < len(columns)
+                    and MODEL_PLACEHOLDER_PATTERN.search(
+                        columns[table_model_column]
+                    )
+                    and not contains_concrete_model_identity(
+                        columns[table_model_column]
+                    )
+                ):
+                    self.add(
+                        "MODEL_LEDGER_IDENTITY_INVALID",
+                        calibration,
+                        f"line {line_number} model/staffing column must name the concrete model",
+                    )
+            for match in CALIBRATION_PROSE_MODEL_PATTERN.finditer(calibration_text):
+                line_number = calibration_text.count("\n", 0, match.start()) + 1
+                self.add(
+                    "MODEL_LEDGER_IDENTITY_INVALID",
+                    calibration,
+                    f"line {line_number} model description must name the concrete model",
+                )
+
+        assignments = self.root / "model-assignment-ledger.md"
+        if assignments.is_file():
+            for line_number, line in enumerate(
+                assignments.read_text(encoding="utf-8").splitlines(), 1
+            ):
+                if not line or line.lstrip().startswith("#"):
+                    continue
+                columns = [column.strip() for column in line.split("|")]
+                if len(columns) >= 5 and MODEL_PLACEHOLDER_PATTERN.search(columns[2]):
+                    self.add(
+                        "MODEL_LEDGER_IDENTITY_INVALID",
+                        assignments,
+                        f"line {line_number} model column must name the concrete model",
+                    )
 
     def check_execution_observation(
         self, path: Path, label: str, observation: Any

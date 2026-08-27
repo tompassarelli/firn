@@ -281,6 +281,14 @@
         "path": "dotfiles/agents/skills/convo-reference/SKILL.md"
       }
     },
+    "concrete-model-identity-guard": {
+      "kind": "hook",
+      "category": "authoring",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/concrete-model-identity-guard.sh"
+      }
+    },
     "corpus-scan-guard": {
       "kind": "hook",
       "category": "authoring",
@@ -980,6 +988,20 @@
           "type": "skill",
           "targets": [
             "shared"
+          ]
+        }
+      ]
+    },
+    "concrete-model-identity-guard": {
+      "supports": [
+        "todo-distilled"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "codex",
+            "bridge"
           ]
         }
       ]

@@ -331,6 +331,7 @@ enabled = {
                 "matcher": "^(Edit|Write|MultiEdit|apply_patch)$",
                 "hooks": [
                     command("launch-critical-worktree-guard.sh", 10),
+                    command("concrete-model-identity-guard.sh", 10),
                 ],
             },
             {
@@ -348,6 +349,7 @@ enabled = {
                     command("launch-critical-worktree-guard.sh", 10),
                     command("corpus-scan-guard.sh", 10),
                     command("session-kill-guard.sh", 10),
+                    command("concrete-model-identity-guard.sh", 10),
                 ],
             },
         ],
@@ -847,8 +849,8 @@ validate_codex_managed_policy() {
   CODEX_MANAGED_BINDINGS="$(
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
-  if [ "$CODEX_MANAGED_BINDINGS" = 18 ]; then
-    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 18-binding authoritative contract'
+  if [ "$CODEX_MANAGED_BINDINGS" = 20 ]; then
+    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 20-binding authoritative contract'
   elif [ "$CODEX_MANAGED_BINDINGS" = 0 ]; then
     ok_detail 'Codex managed hooks are authoritatively disabled; remote control remains disabled'
   else
@@ -864,6 +866,7 @@ validate_codex_managed_policy() {
   local -a source_specs=(
     "requirements.toml|(s flakeRoot \"/modules/codex/requirements.toml\")|$CODEX_REQUIREMENTS|self|modules/codex/requirements.toml|"
     "agent-spawn-guard.sh|(promoted \"agent-spawn-guard.sh\"|$NORTH_REPO/agent-runtime/hooks/agent-spawn-guard.sh|north|agent-runtime/hooks/agent-spawn-guard.sh|north/agent-runtime/hooks/agent-spawn-guard.sh"
+    "concrete-model-identity-guard.sh|(promoted \"concrete-model-identity-guard.sh\"|$REPO/dotfiles/agents/hooks/concrete-model-identity-guard.sh|nixos|dotfiles/agents/hooks/concrete-model-identity-guard.sh|nixos-config/dotfiles/agents/hooks/concrete-model-identity-guard.sh"
     # launch_critical guard and its Python decision libraries deploy together.
     "launch-critical-worktree-guard.sh|(promoted \"launch-critical-worktree-guard.sh\"|$REPO/dotfiles/agents/hooks/launch-critical-worktree-guard.sh|nixos|dotfiles/agents/hooks/launch-critical-worktree-guard.sh|nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.sh"
     "lib/launch_critical_decide.py|(promoted \"lib/launch_critical_decide.py\"|$REPO/dotfiles/agents/hooks/lib/launch_critical_decide.py|nixos|dotfiles/agents/hooks/lib/launch_critical_decide.py|nixos-config/dotfiles/agents/hooks/lib/launch_critical_decide.py"

@@ -65,6 +65,11 @@ role = "worker"
 review_budget = "owner"
 ```
 
+`model` and `reviewer_model` name the concrete runtime model. They never use a
+lineage, ambient, or selection placeholder; recover the exact identity from
+run or dispatch evidence rather than guessing, and record any evidence gap
+outside those fields.
+
 At settlement add `ended_at`, `outcome`, `wall_time_actual`,
 `agent_time_actual`, `queue_block_time_actual`, `verification_time_actual`,
 `execution_observation`, review fields, and race fields when applicable.

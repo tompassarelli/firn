@@ -45,6 +45,7 @@
       (providerAdapter "beagle-session-start.sh")
       (providerAdapter "lib/north-agent-activation.sh")
       (promoted "agent-spawn-guard.sh" "north/agent-runtime/hooks/agent-spawn-guard.sh")
+      (promoted "concrete-model-identity-guard.sh" "nixos-config/dotfiles/agents/hooks/concrete-model-identity-guard.sh")
       (promoted "launch-critical-worktree-guard.sh" "nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.sh")
       (promoted "lib/launch_critical_decide.py" "nixos-config/dotfiles/agents/hooks/lib/launch_critical_decide.py")
       (promoted "lib/launch_critical_paths.py" "nixos-config/dotfiles/agents/hooks/lib/launch_critical_paths.py")

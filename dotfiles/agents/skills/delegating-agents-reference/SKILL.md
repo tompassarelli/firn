@@ -96,6 +96,11 @@ Terra are auxiliary/mechanical routes; when directly selected without an
 operator reasoning pin, their calibrated defaults are `xhigh` and `high`.
 Explicit operator pins always win.
 
+Every provider-native dispatch passes the exact concrete model ID explicitly.
+An omitted model or a lineage, ambient, or selection marker such as `self`,
+`parent`, `default`, or `auto` is not model identity. Recover the concrete ID
+from runtime evidence before dispatch; never guess it after the run.
+
 An account-allocated direct OpenAI lane needs a North payload, exact model and
 reasoning, positive estimated-token budget, assignment ID, and:
 

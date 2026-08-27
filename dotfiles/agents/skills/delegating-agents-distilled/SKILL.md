@@ -23,6 +23,10 @@ outcome.
   environment, physical write lane, integration/publication authority, and a
   viable supervisor before dispatch. Unadmitted work remains read-only or
   queued.
+- Pass the exact concrete model identity on every provider-native dispatch.
+  Never omit it or substitute lineage, ambient, or selection behavior such as
+  `self`, `parent`, `default`, or `auto`; if runtime evidence cannot name the
+  model, do not dispatch and do not guess.
 - Write authority is exclusive per physical checkout. Separate worktrees may
   host overlapping candidates, but one integration owner and landing order must
   exist before publication; later candidates reconcile onto the exact landed
