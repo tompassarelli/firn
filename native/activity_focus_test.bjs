@@ -58,16 +58,18 @@
           []
           [(a/->Membership 1 "home") (a/->Membership 2 "gjoa")]
           []
-          "home"
           "gjoa"
+          "home"
           [])
         workspaces (Vec a/Workspace) [(workspace 1 1 "notes" 10)
-         (workspace 2 2 nil nil)]
+         (a/->Workspace 2 2 nil "DP-1" true true false nil)]
         plan d/CommandPlan (d/plan-command state workspaces (a/->Goto "msa"))
         steps (Vec d/PlannedStep) (d/commandplan-steps plan)]
     (and
       (d/commandplan-settled plan)
       (= (membership-activity (d/commandplan-state plan) 2) "msa")
+      (= (a/activitystate-current (d/commandplan-state plan)) "msa")
+      (= (a/activitystate-previous (d/commandplan-state plan)) "gjoa")
       (= (count steps) 2)
       (match (nth steps 0)
         [(SnapshotStep snapshot) true]

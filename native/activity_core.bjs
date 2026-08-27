@@ -562,8 +562,21 @@
        [(WorkspaceMissing nested-token) (->CommandOutcome state [])]
        [(WorkspaceFound workspace)
         (let [(assigned ActivityState)
-              (assign-state state workspace activity)]
-          (->CommandOutcome assigned
+              (assign-state state workspace activity)
+              (focused-state ActivityState)
+              (if (workspace-focused workspace)
+                (state-with-focus
+                  assigned
+                  activity
+                  (if (= activity (activitystate-current assigned))
+                    (activitystate-previous assigned)
+                    (activitystate-current assigned))
+                  (put-last-active
+                    (activitystate-last-active assigned)
+                    activity
+                    (workspace-id workspace)))
+                assigned)]
+          (->CommandOutcome focused-state
             [(->ReconcileBands true)
              (->PublishSnapshot true)
              (if move?
