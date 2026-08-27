@@ -33,6 +33,7 @@
   (defunion PlannedStep
   (FocusStep [(reference String)])
   (MoveColumnStep [(reference String)])
+  (NameWorkspaceStep [(reference String) (name String)])
   (ReorderStep [(reference String) (id Int) (target-index Int)])
   (SnapshotStep [(snapshot ActivitySnapshot)])
   (PersistStep [(assignments (Vec a/Assignment))])))
@@ -54,6 +55,29 @@
     (a/workspace-active workspace)
     (a/workspace-urgent workspace)
     (a/workspace-active-window-id workspace)))
+
+(defn workspace-with-name [(workspace a/Workspace) (name String)] a/Workspace
+  (a/->Workspace
+    (a/workspace-id workspace)
+    (a/workspace-idx workspace)
+    name
+    (a/workspace-output workspace)
+    (a/workspace-focused workspace)
+    (a/workspace-active workspace)
+    (a/workspace-urgent workspace)
+    (a/workspace-active-window-id workspace)))
+
+(defn rename-workspace
+  [(workspaces (Vec a/Workspace)) (id Int) (name String)] (Vec a/Workspace)
+  (loop [(index Int) 0 (result (Vec a/Workspace)) []]
+    (if (>= index (count workspaces))
+      result
+      (let [(workspace a/Workspace) (nth workspaces index)]
+        (recur (+ index 1)
+          (conj result
+            (if (= (a/workspace-id workspace) id)
+              (workspace-with-name workspace name)
+              workspace)))))))
 
 (defn workspaces-on-output
   [(workspaces (Vec a/Workspace)) (output String)] (Vec a/Workspace)
@@ -353,6 +377,13 @@
                (->MoveColumnStep
                  (current-workspace-reference current workspace)))
              settled)]
+          [(NameWorkspace workspace name)
+           (recur (+ index 1)
+             (rename-workspace current (a/workspace-id workspace) name)
+             (conj steps
+               (->NameWorkspaceStep
+                 (current-workspace-reference current workspace) name))
+             settled)]
           [(ReconcileBands token)
            (let [(outcome BandOutcome) (reconcile-bands state current limit)]
              (recur (+ index 1)
@@ -400,6 +431,8 @@
             (match step
               [(FocusStep reference) (str "focus:" reference)]
               [(MoveColumnStep reference) (str "move:" reference)]
+              [(NameWorkspaceStep reference name)
+               (str "name:" reference "->" name)]
               [(ReorderStep reference id target-index)
                (str "reorder:" reference "->" target-index)]
               [(SnapshotStep snapshot) "snapshot"]

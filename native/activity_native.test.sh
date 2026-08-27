@@ -106,7 +106,7 @@ timeout --foreground 30 "$bun" --eval \
   >"$scratch/focus-test.out" 2>"$scratch/focus-test.err" \
   || die "post-reorder focus behavior failed"
 cmp -s "$scratch/focus-test.out" \
-  <(printf 'PASS post-reorder-focus\nPASS empty-activity-reuses-trailing-seed\n') \
+  <(printf 'PASS post-reorder-focus\nPASS persistent-activity-sequence\n') \
   || die "post-reorder focus behavior output changed"
 [[ ! -s "$scratch/focus-test.err" ]] \
   || die "post-reorder focus behavior wrote stderr"
@@ -274,11 +274,11 @@ assignments_ready() {
 wait_for 'persisted assignment' assignments_ready
 
 actions_ready() {
-  [[ "$(wc -l <"$scratch/actions.log")" == 2 ]]
+  [[ "$(wc -l <"$scratch/actions.log")" == 3 ]]
 }
 wait_for 'ordered niri actions' actions_ready
 cmp -s "$scratch/actions.log" \
-  <(printf 'focus-workspace render\nmove-column-to-workspace 3\n') \
+  <(printf 'focus-workspace render\nset-workspace-name msa --workspace 3\nmove-column-to-workspace msa\n') \
   || die "command action order changed"
 
 printf 'activity-native: sole-writer takeover and restart persistence\n' >&2

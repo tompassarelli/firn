@@ -60,6 +60,7 @@
   (defunion ActivityEffect
   (FocusWorkspace [(workspace Workspace)])
   (MoveColumnToWorkspace [(workspace Workspace)])
+  (NameWorkspace [(workspace Workspace) (name String)])
   (ReconcileBands [(token Bool)])
   (PublishSnapshot [(token Bool)])
   (PersistAssignments [(assignments (Vec Assignment))])))
@@ -115,6 +116,7 @@
         nil
         (let [(definition ActivityDef) (nth defs index)]
           (if (or
+                (= (activitydef-id definition) workspace-name)
                 (string-member?
                   (activitydef-bind-names definition) workspace-name)
                 (any-prefix-matches?
@@ -536,14 +538,34 @@
           activity)))))
 
 (defn first-activity-seed
-  [(workspaces (Vec Workspace))] WorkspaceLookup
+  [(state ActivityState) (workspaces (Vec Workspace))] WorkspaceLookup
   (loop [(index Int) 0]
     (if (>= index (count workspaces))
       (->WorkspaceMissing false)
       (let [(workspace Workspace) (nth workspaces index)]
-        (if (floating? workspaces workspace)
+        (if (and
+              (nil?
+                (membership-for
+                  (activitystate-members state) (workspace-id workspace)))
+              (floating? workspaces workspace))
           (->WorkspaceFound workspace)
           (recur (+ index 1)))))))
+
+(defn activity-switch-effects
+  [(workspaces (Vec Workspace))
+   (workspace Workspace)
+   (activity String)
+   (move? Bool)]
+  (Vec ActivityEffect)
+  ;; Niri retains an empty workspace only when named. The activity id is both
+  ;; its durable compositor identity and its restart-time membership binding.
+  (let [(action ActivityEffect)
+        (if move?
+          (->MoveColumnToWorkspace workspace)
+          (->FocusWorkspace workspace))]
+    (if (floating? workspaces workspace)
+      [(->NameWorkspace workspace activity) action]
+      [action])))
 
 (defn goto-outcome
   [(state ActivityState)
@@ -554,34 +576,23 @@
   (match (activity-target state workspaces activity)
     [(WorkspaceFound workspace)
      (->CommandOutcome state
-       [(if move?
-          (->MoveColumnToWorkspace workspace)
-          (->FocusWorkspace workspace))])]
+       (activity-switch-effects workspaces workspace activity move?))]
     [(WorkspaceMissing token)
-     (match (first-activity-seed workspaces)
+     (match (first-activity-seed state workspaces)
        [(WorkspaceMissing nested-token) (->CommandOutcome state [])]
        [(WorkspaceFound workspace)
         (let [(assigned ActivityState)
-              (assign-state state workspace activity)
-              (focused-state ActivityState)
-              (if (workspace-focused workspace)
-                (state-with-focus
-                  assigned
-                  activity
-                  (if (= activity (activitystate-current assigned))
-                    (activitystate-previous assigned)
-                    (activitystate-current assigned))
-                  (put-last-active
-                    (activitystate-last-active assigned)
-                    activity
-                    (workspace-id workspace)))
-                assigned)]
-          (->CommandOutcome focused-state
-            [(->ReconcileBands true)
-             (->PublishSnapshot true)
-             (if move?
-               (->MoveColumnToWorkspace workspace)
-               (->FocusWorkspace workspace))]))])]))
+              (assign-state state workspace activity)]
+          (->CommandOutcome assigned
+            (if move?
+              [(->NameWorkspace workspace activity)
+               (->ReconcileBands true)
+               (->PublishSnapshot true)
+               (->MoveColumnToWorkspace workspace)]
+              [(->NameWorkspace workspace activity)
+               (->ReconcileBands true)
+               (->PublishSnapshot true)
+               (->FocusWorkspace workspace)])))])]))
 
 (defn assign-outcome
   [(state ActivityState)

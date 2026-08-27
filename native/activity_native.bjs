@@ -935,6 +935,11 @@
                (if (niri-action ["move-column-to-workspace" reference])
                  nil
                  (stderr-line "activity daemon: niri column move failed"))]
+              [(NameWorkspaceStep reference name)
+               (if (niri-action
+                     ["set-workspace-name" name "--workspace" reference])
+                 nil
+                 (stderr-line "activity daemon: niri workspace naming failed"))]
               [(ReorderStep reference id target-index)
                (if (niri-action
                      ["move-workspace-to-index" "--reference" reference

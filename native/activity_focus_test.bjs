@@ -10,6 +10,12 @@
    window (U Int Nil)] a/Workspace
   (a/->Workspace id idx name "DP-1" false false false window))
 
+(defn focused-workspace
+  [id Int
+   idx Int
+   name (U String Nil)] a/Workspace
+  (a/->Workspace id idx name "DP-1" true true false nil))
+
 (defn post-reorder-focus? [] Bool
   (let [state a/ActivityState (a/->ActivityState
           [(a/->ActivityDef "home" "home" [] [])
@@ -23,17 +29,27 @@
         steps (Vec d/PlannedStep) (d/commandplan-steps plan)]
     (and
       (d/commandplan-settled plan)
-      (= (count steps) 3)
+      (= (count steps) 4)
       (match (nth steps 0)
-        [(ReorderStep reference id target-index)
-         (and (= reference "2") (= id 2) (= target-index 1))]
+        [(NameWorkspaceStep reference name)
+         (and (= reference "2") (= name "gjoa"))]
+        [(ReorderStep reference id target-index) false]
         [(FocusStep reference) false]
         [(MoveColumnStep reference) false]
         [(SnapshotStep snapshot) false]
         [(PersistStep assignments) false])
-      (match (nth steps 2)
-        [(FocusStep reference) (= reference "1")]
+      (match (nth steps 1)
+        [(ReorderStep reference id target-index)
+         (and (= reference "gjoa") (= id 2) (= target-index 1))]
+        [(FocusStep reference) false]
         [(MoveColumnStep reference) false]
+        [(NameWorkspaceStep reference name) false]
+        [(SnapshotStep snapshot) false]
+        [(PersistStep assignments) false])
+      (match (nth steps 3)
+        [(FocusStep reference) (= reference "gjoa")]
+        [(MoveColumnStep reference) false]
+        [(NameWorkspaceStep reference name) false]
         [(ReorderStep reference id target-index) false]
         [(SnapshotStep snapshot) false]
         [(PersistStep assignments) false]))))
@@ -49,37 +65,77 @@
             (a/membership-activity entry)
             (recur (+ index 1))))))))
 
-(defn empty-activity-reuses-trailing-seed? [] Bool
-  (let [state a/ActivityState (a/->ActivityState
-          [(a/->ActivityDef "home" "home" [] [])
-           (a/->ActivityDef "gjoa" "gjoa" [] [])
-           (a/->ActivityDef "msa" "msa" [] [])]
-          "home"
-          []
-          [(a/->Membership 1 "home") (a/->Membership 2 "gjoa")]
-          []
-          "gjoa"
-          "home"
-          [])
-        workspaces (Vec a/Workspace) [(workspace 1 1 "notes" 10)
-         (a/->Workspace 2 2 nil "DP-1" true true false nil)]
-        plan d/CommandPlan (d/plan-command state workspaces (a/->Goto "msa"))
-        steps (Vec d/PlannedStep) (d/commandplan-steps plan)]
+(defn persistent-activity-sequence? [] Bool
+  (let [defs (Vec a/ActivityDef) [(a/->ActivityDef "home" "home" [] [])
+         (a/->ActivityDef "gjoa" "gjoa" [] [])
+         (a/->ActivityDef "msa" "msa" [] [])]
+        base a/ActivityState (a/->ActivityState defs "home" [] [] [] "home" "home" [])
+        start-workspaces (Vec a/Workspace) [(workspace 1 1 "notes" 10) (workspace 2 2 nil nil)]
+        start a/ActivityState (a/apply-workspaces base start-workspaces)
+        gjoa-plan d/CommandPlan (d/plan-command start start-workspaces (a/->Goto "gjoa"))
+        gjoa-steps (Vec d/PlannedStep) (d/commandplan-steps gjoa-plan)
+        gjoa-workspaces (Vec a/Workspace) [(workspace 1 1 "notes" 10)
+         (focused-workspace 2 2 "gjoa")
+         (workspace 3 3 nil nil)]
+        gjoa-state a/ActivityState (a/apply-workspaces (d/commandplan-state gjoa-plan) gjoa-workspaces)
+        msa-plan d/CommandPlan (d/plan-command gjoa-state gjoa-workspaces (a/->Goto "msa"))
+        msa-steps (Vec d/PlannedStep) (d/commandplan-steps msa-plan)
+        all-workspaces (Vec a/Workspace) [(workspace 1 1 "notes" 10)
+         (workspace 2 2 "gjoa" nil)
+         (focused-workspace 3 3 "msa")
+         (workspace 4 4 nil nil)]
+        all-state a/ActivityState (a/apply-workspaces (d/commandplan-state msa-plan) all-workspaces)
+        back-plan d/CommandPlan (d/plan-command all-state all-workspaces (a/->Goto "gjoa"))
+        back-steps (Vec d/PlannedStep) (d/commandplan-steps back-plan)
+        restarted a/ActivityState (a/apply-workspaces
+          (a/->ActivityState defs "home" [] [] [] "home" "home" [])
+          all-workspaces)
+        restart-plan d/CommandPlan (d/plan-command restarted all-workspaces (a/->Goto "gjoa"))
+        restart-steps (Vec d/PlannedStep) (d/commandplan-steps restart-plan)]
     (and
-      (d/commandplan-settled plan)
-      (= (membership-activity (d/commandplan-state plan) 2) "msa")
-      (= (a/activitystate-current (d/commandplan-state plan)) "msa")
-      (= (a/activitystate-previous (d/commandplan-state plan)) "gjoa")
-      (= (count steps) 2)
-      (match (nth steps 0)
-        [(SnapshotStep snapshot) true]
+      (d/commandplan-settled gjoa-plan)
+      (= (count gjoa-steps) 3)
+      (match (nth gjoa-steps 0)
+        [(NameWorkspaceStep reference name)
+         (and (= reference "2") (= name "gjoa"))]
         [(FocusStep reference) false]
         [(MoveColumnStep reference) false]
         [(ReorderStep reference id target-index) false]
+        [(SnapshotStep snapshot) false]
         [(PersistStep assignments) false])
-      (match (nth steps 1)
-        [(FocusStep reference) (= reference "2")]
+      (= (membership-activity gjoa-state 2) "gjoa")
+      (nil? (membership-activity gjoa-state 3))
+      (d/commandplan-settled msa-plan)
+      (= (count msa-steps) 3)
+      (match (nth msa-steps 0)
+        [(NameWorkspaceStep reference name)
+         (and (= reference "3") (= name "msa"))]
+        [(FocusStep reference) false]
         [(MoveColumnStep reference) false]
+        [(ReorderStep reference id target-index) false]
+        [(SnapshotStep snapshot) false]
+        [(PersistStep assignments) false])
+      (= (membership-activity all-state 1) "home")
+      (= (membership-activity all-state 2) "gjoa")
+      (= (membership-activity all-state 3) "msa")
+      (nil? (membership-activity all-state 4))
+      (= (count back-steps) 1)
+      (match (nth back-steps 0)
+        [(FocusStep reference) (= reference "gjoa")]
+        [(MoveColumnStep reference) false]
+        [(NameWorkspaceStep reference name) false]
+        [(ReorderStep reference id target-index) false]
+        [(SnapshotStep snapshot) false]
+        [(PersistStep assignments) false])
+      (= (membership-activity restarted 1) "home")
+      (= (membership-activity restarted 2) "gjoa")
+      (= (membership-activity restarted 3) "msa")
+      (nil? (membership-activity restarted 4))
+      (= (count restart-steps) 1)
+      (match (nth restart-steps 0)
+        [(FocusStep reference) (= reference "gjoa")]
+        [(MoveColumnStep reference) false]
+        [(NameWorkspaceStep reference name) false]
         [(ReorderStep reference id target-index) false]
         [(SnapshotStep snapshot) false]
         [(PersistStep assignments) false]))))
@@ -87,12 +143,12 @@
 (js/export
   (defn run [args (Vec String)] Int
     (let [focus-passed Bool (post-reorder-focus?)
-          empty-passed Bool (empty-activity-reuses-trailing-seed?)]
+          persistent-passed Bool (persistent-activity-sequence?)]
       (do
         (println (if focus-passed
           "PASS post-reorder-focus"
           "FAIL post-reorder-focus"))
-        (println (if empty-passed
-          "PASS empty-activity-reuses-trailing-seed"
-          "FAIL empty-activity-reuses-trailing-seed"))
-        (if (and focus-passed empty-passed) 0 1)))))
+        (println (if persistent-passed
+          "PASS persistent-activity-sequence"
+          "FAIL persistent-activity-sequence"))
+        (if (and focus-passed persistent-passed) 0 1)))))

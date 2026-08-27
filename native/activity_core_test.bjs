@@ -51,6 +51,8 @@
              (str "focus:" (a/workspace-reference workspace))]
             [(MoveColumnToWorkspace workspace)
              (str "move:" (a/workspace-reference workspace))]
+            [(NameWorkspace workspace name)
+             (str "name:" (a/workspace-reference workspace) "->" name)]
             [(ReconcileBands token) "bands"]
             [(PublishSnapshot token) "snapshot"]
             [(PersistAssignments assignments) "assignments"]))))))
@@ -178,7 +180,7 @@
            (a/activitystate-members (a/commandoutcome-state outcome)) 2)
          "gjoa")
       (= (effect-kinds (a/commandoutcome-effects outcome))
-         ["bands" "snapshot" "focus:2"]))))
+         ["name:2->gjoa" "bands" "snapshot" "focus:2"]))))
 
 (defn case-first-floating-preserves-live-order [] Bool
   (let [(state a/ActivityState) (base-state)
@@ -186,7 +188,7 @@
         [(workspace 1 1 nil "DP-1" false nil)
          (workspace 2 9 nil "DP-1" false nil)
          (workspace 3 2 nil "HDMI-1" false nil)]]
-    (= (lookup-id (a/first-floating state workspaces)) 2)))
+    (= (lookup-id (a/first-activity-seed state workspaces)) 2)))
 
 (defn case-assign-persists-named-only [] Bool
   (let [(state a/ActivityState) (base-state)
