@@ -58,8 +58,8 @@
 
 (js/export
   (defunion ActivityEffect
-  (FocusWorkspace [(reference String)])
-  (MoveColumnToWorkspace [(reference String)])
+  (FocusWorkspace [(workspace Workspace)])
+  (MoveColumnToWorkspace [(workspace Workspace)])
   (ReconcileBands [(token Bool)])
   (PublishSnapshot [(token Bool)])
   (PersistAssignments [(assignments (Vec Assignment))])))
@@ -559,8 +559,8 @@
     [(WorkspaceFound workspace)
      (->CommandOutcome state
        [(if move?
-          (->MoveColumnToWorkspace (workspace-reference workspace))
-          (->FocusWorkspace (workspace-reference workspace)))])]
+          (->MoveColumnToWorkspace workspace)
+          (->FocusWorkspace workspace))])]
     [(WorkspaceMissing token)
      (match (first-floating state workspaces)
        [(WorkspaceMissing nested-token) (->CommandOutcome state [])]
@@ -571,8 +571,8 @@
             [(->ReconcileBands true)
              (->PublishSnapshot true)
              (if move?
-               (->MoveColumnToWorkspace (workspace-reference workspace))
-               (->FocusWorkspace (workspace-reference workspace)))]))])]))
+               (->MoveColumnToWorkspace workspace)
+               (->FocusWorkspace workspace))]))])]))
 
 (defn assign-outcome
   [(state ActivityState)
@@ -607,11 +607,11 @@
        [(WorkspaceMissing token) (->CommandOutcome state [])]
        [(WorkspaceFound workspace)
         (->CommandOutcome state
-          [(->FocusWorkspace (workspace-reference workspace))])])]
+          [(->FocusWorkspace workspace)])])]
     [(MoveHere ordinal)
      (match (nth-member state workspaces ordinal)
        [(WorkspaceMissing token) (->CommandOutcome state [])]
        [(WorkspaceFound workspace)
         (->CommandOutcome state
-          [(->MoveColumnToWorkspace (workspace-reference workspace))])])]
+          [(->MoveColumnToWorkspace workspace)])])]
     [(Assign activity) (assign-outcome state workspaces activity)])))

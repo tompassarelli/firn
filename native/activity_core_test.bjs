@@ -47,8 +47,10 @@
       (recur (+ index 1)
         (conj result
           (match (nth effects index)
-            [(FocusWorkspace reference) (str "focus:" reference)]
-            [(MoveColumnToWorkspace reference) (str "move:" reference)]
+            [(FocusWorkspace workspace)
+             (str "focus:" (a/workspace-reference workspace))]
+            [(MoveColumnToWorkspace workspace)
+             (str "move:" (a/workspace-reference workspace))]
             [(ReconcileBands token) "bands"]
             [(PublishSnapshot token) "snapshot"]
             [(PersistAssignments assignments) "assignments"]))))))

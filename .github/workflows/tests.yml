@@ -67,6 +67,12 @@ jobs:
           BEAGLE_PATH: ${{ github.workspace }}/beagle
         run: bash native/activity_menu.test.sh
 
+      - name: Test activity daemon behavior
+        working-directory: firn
+        env:
+          BEAGLE_PATH: ${{ github.workspace }}/beagle
+        run: bash native/activity_native.test.sh
+
       - name: Test safe-push argument gate
         working-directory: firn
         run: ./dotfiles/bin/safe-push.test.sh

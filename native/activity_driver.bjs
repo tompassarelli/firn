@@ -27,8 +27,8 @@
   (BandsUnsettled
     [(moves (Vec a/WorkspaceMove)) (workspaces (Vec a/Workspace)) (limit Int)])))
 
-;; FocusStep and MoveColumnStep carry the kernel's reference verbatim; the
-;; driver resolves no references of its own.
+;; Effects carry workspace identity. The driver resolves the reference after
+;; modelled band moves so unnamed workspaces use their final numeric index.
 (js/export
   (defunion PlannedStep
   (FocusStep [(reference String)])
@@ -238,6 +238,16 @@
       (recur (+ index 1)
         (conj result (a/workspace-id (nth workspaces index)))))))
 
+(defn current-workspace-reference
+  [(workspaces (Vec a/Workspace)) (workspace a/Workspace)] String
+  (loop [(index Int) 0]
+    (if (>= index (count workspaces))
+      (a/workspace-reference workspace)
+      (let [(current a/Workspace) (nth workspaces index)]
+        (if (= (a/workspace-id current) (a/workspace-id workspace))
+          (a/workspace-reference current)
+          (recur (+ index 1)))))))
+
 (defn focused-id [(workspaces (Vec a/Workspace))] (U Int Nil)
   (let [(lookup a/WorkspaceLookup) (a/focused-workspace workspaces)]
     (match lookup
@@ -332,12 +342,17 @@
       (->CommandPlan state current steps settled)
       (let [(effect a/ActivityEffect) (nth effects index)]
         (match effect
-          [(FocusWorkspace reference)
+          [(FocusWorkspace workspace)
            (recur (+ index 1) current
-             (conj steps (->FocusStep reference)) settled)]
-          [(MoveColumnToWorkspace reference)
+             (conj steps
+               (->FocusStep (current-workspace-reference current workspace)))
+             settled)]
+          [(MoveColumnToWorkspace workspace)
            (recur (+ index 1) current
-             (conj steps (->MoveColumnStep reference)) settled)]
+             (conj steps
+               (->MoveColumnStep
+                 (current-workspace-reference current workspace)))
+             settled)]
           [(ReconcileBands token)
            (let [(outcome BandOutcome) (reconcile-bands state current limit)]
              (recur (+ index 1)

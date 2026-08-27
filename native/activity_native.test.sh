@@ -74,6 +74,7 @@ done
 json="$beagle/native-core/src/native/json.bjs"
 core="$repo/native/activity_core.bjs"
 driver="$repo/native/activity_driver.bjs"
+focus_test="$repo/native/activity_focus_test.bjs"
 native="$repo/native/activity_native.bjs"
 host="$repo/native/activity_host.mjs"
 bun="${FIRN_BUN:-$(command -v bun || true)}"
@@ -84,7 +85,7 @@ modules="$scratch/modules"
 printf 'activity-native: building controlled Beagle/JS modules\n' >&2
 mkdir -p "$modules/activity"
 timeout --foreground 120 "$beagle/bin/beagle-build-all" \
-  "$json" "$core" "$driver" "$native" --out "$modules" \
+  "$json" "$core" "$driver" "$focus_test" "$native" --out "$modules" \
   >"$scratch/build.out" 2>"$scratch/build.err" \
   || {
     sed -n '1,300p' "$scratch/build.err" >&2
@@ -97,6 +98,18 @@ cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
   "$modules/node_modules/beagle/core.js"
 printf '%s\n' '{"type":"module"}' \
   >"$modules/node_modules/beagle/package.json"
+
+printf 'activity-native: post-reorder focus behavior\n' >&2
+FIRN_ACTIVITY_TEST_MODULE="$modules/activity/focus-test.js" \
+timeout --foreground 30 "$bun" --eval \
+  'const m = await import(process.env.FIRN_ACTIVITY_TEST_MODULE); process.exitCode = m.run([]);' \
+  >"$scratch/focus-test.out" 2>"$scratch/focus-test.err" \
+  || die "post-reorder focus behavior failed"
+cmp -s "$scratch/focus-test.out" <(printf 'PASS post-reorder-focus\n') \
+  || die "post-reorder focus behavior output changed"
+[[ ! -s "$scratch/focus-test.err" ]] \
+  || die "post-reorder focus behavior wrote stderr"
+
 cat >"$executable" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail

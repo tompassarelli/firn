@@ -1,0 +1,45 @@
+#lang beagle/js
+(ns activity.focus-test
+  (:require [activity.core :as a]
+            [activity.driver :as d]))
+
+(defn workspace
+  [id Int
+   idx Int
+   name (U String Nil)
+   window (U Int Nil)] a/Workspace
+  (a/->Workspace id idx name "DP-1" false false false window))
+
+(defn post-reorder-focus? [] Bool
+  (let [state a/ActivityState (a/->ActivityState
+          [(a/->ActivityDef "home" "home" [] [])
+           (a/->ActivityDef "gjoa" "gjoa" ["render"] ["gjoa"])
+           (a/->ActivityDef "msa" "msa" ["heist"] ["msa"])]
+          "home" [] [] [] "home" "home" [])
+        workspaces (Vec a/Workspace) [(workspace 1 1 "heist" 10)
+         (workspace 2 2 nil nil)]
+        applied a/ActivityState (a/apply-workspaces state workspaces)
+        plan d/CommandPlan (d/plan-command applied workspaces (a/->Goto "gjoa"))
+        steps (Vec d/PlannedStep) (d/commandplan-steps plan)]
+    (and
+      (d/commandplan-settled plan)
+      (= (count steps) 3)
+      (match (nth steps 0)
+        [(ReorderStep reference id target-index)
+         (and (= reference "2") (= id 2) (= target-index 1))]
+        [(FocusStep reference) false]
+        [(MoveColumnStep reference) false]
+        [(SnapshotStep snapshot) false]
+        [(PersistStep assignments) false])
+      (match (nth steps 2)
+        [(FocusStep reference) (= reference "1")]
+        [(MoveColumnStep reference) false]
+        [(ReorderStep reference id target-index) false]
+        [(SnapshotStep snapshot) false]
+        [(PersistStep assignments) false]))))
+
+(js/export
+  (defn run [args (Vec String)] Int
+    (if (post-reorder-focus?)
+      (do (println "PASS post-reorder-focus") 0)
+      (do (println "FAIL post-reorder-focus") 1))))

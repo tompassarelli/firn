@@ -169,7 +169,7 @@
         (snapshot (U d/ActivitySnapshot Nil)) (step-snapshot steps 1)]
     (and
       (d/commandplan-settled plan)
-      (= (d/plan-step-kinds steps) ["reorder:2->1" "snapshot" "focus:2"])
+      (= (d/plan-step-kinds steps) ["reorder:2->1" "snapshot" "focus:1"])
       (= (idx-of (d/commandplan-workspaces plan) 2) 1)
       (= (idx-of (d/commandplan-workspaces plan) 1) 2)
       (some? snapshot)
