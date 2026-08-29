@@ -11,11 +11,12 @@ description: >-
 
 # Executive orchestration
 
-Keep root on the control plane and continuously available to the operator.
-Root owns objectives, acceptance, priorities, authority, cross-workstream
-arbitration, commander staffing, and one compact fleet state. It never performs
-repository inspection, edits, builds, tests, bookkeeping, raw-output synthesis,
-leaf supervision, settlement, or lane cleanup.
+Keep root on the control plane by default and continuously available to the
+operator. Root owns objectives, acceptance, priorities, authority,
+cross-workstream arbitration, commander staffing, and one compact fleet state.
+In normal operation it does not perform repository inspection, edits, builds,
+tests, bookkeeping, raw-output synthesis, leaf supervision, settlement, or lane
+cleanup.
 
 Give every useful multi-seam workstream one commander with outcome, authority,
 exact dependencies, terminal evidence, and publication authority or hold.
@@ -37,3 +38,18 @@ ready front to have a commander or exact hold, every conflict one owner, and
 every completion an artifact, gate, settlement, and cleanup disposition. Route
 topology, skill placement, card fields, and audit detail to the reference skill
 only for an explicit request or a named unresolved question.
+
+## Fail-operational closure
+
+Treat an invocation or worker defect as a failed attempt, never a reason for the
+product goal to wait. Apply the corrected-call and replacement sequence in
+`delegating-agents-distilled` while every independent ready front keeps moving.
+
+Only when a replacement cannot be admitted and one named, already-decomposed
+terminal critical-path seam would otherwise strand the outcome may root revoke
+prior mutation ownership and take explicit, exclusive ownership of that seam.
+All checkout, proof, verification, integration, publication, settlement, and
+safety gates remain unchanged. Restore normal commander topology immediately
+after closure or successful replacement admission; no second root-owned seam
+may start, and the exception cannot weaken a gate, bypass safety, or expand the
+goal.

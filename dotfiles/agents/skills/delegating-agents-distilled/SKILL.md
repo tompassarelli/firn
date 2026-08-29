@@ -31,6 +31,9 @@ outcome.
   host overlapping candidates, but one integration owner and landing order must
   exist before publication; later candidates reconcile onto the exact landed
   object and rerun affected checks.
+- Treat `land-before-next` as a mutation dependency: serialize overlapping
+  writes and consumers of the exact landed artifact, while independent
+  read-only or separately owned ready work continues.
 - Use the smallest inherited context that preserves uncaptured decisions.
   Workers read applicable source instructions themselves.
 - Propagate applicable source authority into every worker brief and admit the
@@ -74,11 +77,17 @@ outcome.
   resumes a yielded `exec` cell, while
   `request_user_input` is a human-question surface; neither is a dispatch or
   agent-wait operation.
-- After a mismatched call, re-read the available tool catalog and make one
-  minimal, correctly named control call to the intended surface. Do not switch
-  fallback transports, widen architecture, or mark a blocker until that target
-  surface itself fails. Reports must distinguish an agent invocation error
-  from an infrastructure error.
+- After one wrong-recipient or misnamed call, inspect its error and the available
+  tool catalog, then make exactly one minimal, correctly named native
+  collaboration control call to the intended surface. Do not switch fallback
+  transports, widen architecture, or mark a blocker until that target surface
+  itself fails. Reports must distinguish an agent invocation error from an
+  infrastructure error.
+- If the same run repeats a recipient/name mismatch after that correction,
+  preserve the evidence, quarantine or retire the run, and admit a replacement
+  under the original bounds. Apply the same replace-with-new-evidence rule to a
+  worker defect. Neither failure blocks the product goal; drive the replacement
+  and every other ready front within the original outcome clock.
 
 ## Continuous supervision
 
@@ -92,9 +101,8 @@ outcome.
   steer, interrupt, or replace the attempt within existing authority. Preserve
   evidence and never turn an unchanged wait into a blind retry.
 - End ownership only when the outcome is complete, an exact operator decision
-  is required for remaining progress, or the governing repeated-blocker
-  threshold is satisfied. Continue unrelated ready work before requesting a
-  decision.
+  is required for remaining progress, or one of the bounded stop conditions
+  below is reached. Continue unrelated ready work before requesting a decision.
 
 ## Minimum delegation workflow
 
@@ -110,12 +118,19 @@ outcome.
 6. Update continuity prose, land through repository safety, and reap released
    workers, processes, lanes, branches, and claims.
 
-Quarantine the affected seam on an unavailable required authority surface,
-ambiguous product owner, missing liveness signal for automated activation,
-exhausted outcome budget, or a worker result that lacks exact terminal
-evidence; an unsettled child blocks settlement. Continue unrelated ready work
-and apply the continuous-supervision stop rule. Report the capability gap;
-never lower a safety boundary or invent success.
+Quarantine the affected seam, not the program, on an unavailable required
+authority surface, ambiguous product owner, missing liveness signal for
+automated activation, exhausted outcome budget, or a worker result that lacks
+exact terminal evidence; an unsettled child blocks settlement only. Continue
+unrelated ready work and apply the continuous-supervision stop rule.
+
+Reserve a blocked outcome for a correctly invoked unavailable required surface,
+missing external authority, an irreducible safety conflict, or a genuinely
+exhausted outcome boundary. A local routing mistake, invocation error, worker
+failure, unchanged wait, or failed replacement attempt is not blocking
+evidence. When executive replacement admission fails, use the bounded root
+fallback in `executive-orchestration-distilled`; otherwise report the exact gap
+without lowering a safety boundary or inventing success.
 
 Stock-role and settlement details live in the reference skill; load it only for
 an explicit request or a named unresolved detail, per the always-loaded policy.

@@ -95,5 +95,5 @@ work, exact holds, overlapping shared surfaces, missing integration ownership,
 silent commanders, and terminal work without artifact, gate, settlement, or
 cleanup disposition. A commander with live leaves owns continuity, supervision,
 and whatever watchdog, assurance, bookkeeping, or cleanup support is needed.
-A silent commander is replaced from its compact checkpoint; root does not
-rescue individual leaves.
+A silent commander is replaced from its compact checkpoint; any root action
+remains within the authority boundary in `executive-orchestration-distilled`.
