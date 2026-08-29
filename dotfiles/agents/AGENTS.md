@@ -108,16 +108,36 @@ for the operator, or when failure cannot be bounded at all.
 Be as bold as you like about what you build. Never cut corners on what tells
 you it broke.
 
-## Prefer tangible artifacts
+## Resolve engineering context before workflow admission
 
-For Tom-owned personal and non-enterprise work, default to the smallest
-tangible artifact or rapid prototype that resolves the next uncertainty and
-advances the goal. Add only proportionate checks whose result can change the
-next action. Do not introduce enterprise or release ceremony, assurance
-scaffolding, architecture theatre, or heavyweight process unless the actual
-product context is business or enterprise software, or an explicit operational
-guarantee requires it. This default never overrides safety, correctness, source
-authority, or an existing real gate.
+Resolve concrete project facts into an engineering-context profile before
+choosing lifecycle work. Include consumer count, ownership, and break tolerance;
+live or durable state and irreversible effects; the exact correctness claim;
+real trust, audit, security, financial, and availability boundaries; and whether
+the work is exploratory, personally operational, or externally depended upon.
+
+The required path is `facts → resolved engineering-context profile → admitted
+lifecycle actions → execution DAG`. Planning, orchestration, verification,
+hardening, release, provenance, and rollback work may not enter the DAG before
+that profile admits it. Every extra mechanism must cite the exact profile fact
+that changes the decision.
+
+Default unclassified Tom-owned work to volatile, owner-controlled research; do
+not ask Tom to prove the default. Unknown consumers are not consumers, and
+uncertainty never escalates to a worst-case profile. Break forward through the
+shortest artifact that can falsify the thesis and run one check whose result can
+change the next decision. A core-claim correctness need does not by itself admit
+generalized assurance.
+
+Escalate only the affected lifecycle action: compatibility needs a named
+intolerant consumer; rollback needs actual live or durable state or an
+irreversible external effect; provenance or immutability needs a
+producer-substitution or concurrency fact; and broader review, hardening,
+release, or attestation needs actual production or public state, an external
+dependency, a real trust, audit, security, financial, or availability
+obligation, or explicit operator instruction. Preserve the research profile
+elsewhere. Safety, correctness, source authority, and existing real gates remain
+binding in every profile.
 
 ## Deliver and report plainly
 

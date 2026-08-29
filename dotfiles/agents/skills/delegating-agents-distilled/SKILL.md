@@ -16,6 +16,10 @@ outcome.
 
 ## Admission and ownership
 
+- Apply the always-loaded engineering-context gate before forecasts,
+  decomposition, or workstream admission. Carry only its admitted lifecycle
+  actions and exact fact anchors into the brief; do not add a ninth portable
+  routing field.
 - Create restart-grade continuity and one forecast/staffing attempt before
   delegation. Name exact dependencies, posture, boundaries, terminal evidence,
   nearest existing check, supervisor window, and reap path.
@@ -119,16 +123,19 @@ reliability-closure decision back to the incident skill.
 
 ## Minimum delegation workflow
 
-1. Decompose to independent seams and appoint the nearest closure owner.
-2. Record continuity, attempt budgets, posture, authority, evidence, and checks.
-3. Route and dispatch every ready seam; keep serial consumers waiting only for
+1. Resolve the engineering-context profile and admit only fact-backed lifecycle
+   actions.
+2. Decompose admitted work to independent seams and appoint the nearest closure
+   owner.
+3. Record continuity, attempt budgets, posture, authority, evidence, and checks.
+4. Route and dispatch every ready seam; keep serial consumers waiting only for
    the exact artifact they consume.
-4. Supervise progress against authorized windows, steer with new evidence, and
+5. Supervise progress against authorized windows, steer with new evidence, and
    consume terminal reports immediately.
-5. The closure owner decides verification, review, integration, publication,
+6. The closure owner decides verification, review, integration, publication,
    debt, race, and lane state; then emits an immutable SettlementCard and uses
    a fresh `settle-work-distilled` clerk for mechanical bookkeeping.
-6. Update continuity prose, land through repository safety, and reap released
+7. Update continuity prose, land through repository safety, and reap released
    workers, processes, lanes, branches, and claims.
 
 Quarantine the affected seam, not the program, on an unavailable required

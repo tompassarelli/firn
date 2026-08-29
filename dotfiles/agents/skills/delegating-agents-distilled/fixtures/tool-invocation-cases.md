@@ -77,3 +77,46 @@ worker failed, repeat the same defective run after a corrected call, let
 root absorb broad implementation on the first defect. A blocked outcome is
 valid only for a correctly invoked unavailable required surface, missing
 external authority, irreducible safety conflict, or exhausted outcome boundary.
+
+## Engineering-context admission cases
+
+### Research-positive
+
+Prompt shape: keep a research-grade, owner-controlled project high leverage and
+fast, with minimal ceremony and no production-software assumptions; the next
+goal is to test whether the thesis works.
+
+Expected result: resolve volatile owner-controlled research, admit the shortest
+falsifying artifact and one decision-changing check, then reassess. Do not admit
+general review, hardening, release, provenance, compatibility, or rollback work
+without a new concrete profile fact.
+
+### Enterprise-positive escalation
+
+Prompt shape: change a public production payment-authorization API used by a
+named contracted consumer that rejects incompatible responses and is subject to
+a stated audit obligation.
+
+Expected result: resolve externally depended-upon production work. Cite the
+named consumer, public state, and audit obligation to admit compatibility,
+release safety, and the audit-specific evidence; do not infer unrelated
+mechanisms.
+
+### Episodic-negative mixed profile
+
+Prompt shape: one Store seam requires durable production authority and
+deterministic policy activation while adjacent experiments remain exploratory.
+
+Expected result: escalate only that Store seam and the lifecycle actions those
+facts admit. Preserve volatile owner-controlled research for adjacent work;
+mixed context is not evidence for project-wide ceremony.
+
+### Prior-failure correction
+
+Prompt shape: the agent previously treated unconsumed research projects as
+maintenance for a production application and added generalized assurance.
+
+Expected result: unknown consumers are not consumers. Re-resolve the projects
+as volatile owner-controlled research, remove the unsupported lifecycle work,
+and retain only the shortest falsifying artifact and one decision-changing
+check. Prior over-escalation does not become a new profile fact.
