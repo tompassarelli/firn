@@ -50,6 +50,29 @@ repository-required Node compatibility gate or a demonstrated Bun
 incompatibility is a valid exception; name the exception and keep Node scoped
 to it.
 
+## Keep maintained projects out of the system closure
+
+Tom-maintained or source-declared high-churn project source and build outputs
+are default-denied from the NixOS boot/system closure. Nix derivation or package
+existence is not closure membership and never grants permission to add a
+project to `environment.systemPackages`, systemd units, wrappers, host modules,
+environment paths, or any other root that makes it reachable from
+`system.build.toplevel`.
+
+Keep these projects in filesystem worktrees or immutable filesystem pins, with
+project dev shells, separately managed user runtimes/profiles, atomic promoted
+runtime selectors, or direct out-of-store launchers. A pin need not and
+ordinarily must not become a Nix store or system-closure member.
+
+The only exception is a source-owned declaration of stable machine or service
+responsibility. It must name the exact project identity and provenance,
+selected host, authoritative ingress module plus option or service origin,
+exact admitted closure scope, kind
+(`stable-machine` or `stable-service`), long-lived consumer, responsibility,
+lifecycle owner, and why local or out-of-store execution cannot meet the
+requirement. Developer convenience, reproducibility alone, or an incomplete
+declaration grants no exception.
+
 ## Preserve development velocity
 
 - Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification-distilled`.

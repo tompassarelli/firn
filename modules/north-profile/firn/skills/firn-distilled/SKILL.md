@@ -4,9 +4,10 @@ description: >-
   Use whenever editing ~/code/nixos-config (firn): packages, modules, services,
   host config, hooks/skills, inputs, launchers, builds, updates, closures,
   live/out-of-store entrypoints, or any "install X system-wide" request. Also
-  use for decisions that could put project source or build outputs, dev
-  servers, fast-moving CLIs, SDKs, compilers, package managers, or toolchain
-  implementations into the boot/system closure. Write interface is .bnix
+  use for decisions that could put Tom-maintained or other high-churn project
+  source or build outputs, dev servers, fast-moving CLIs, SDKs, compilers,
+  package managers, or toolchain implementations into the boot/system closure.
+  Write interface is .bnix
   (compiled to .nix — never edit .nix). System switch (firn rebuild) is
   agent-runnable; it builds a commit snapshot (rev=HEAD), so commit your own
   changes first — nobody's uncommitted state blocks or leaks. NOT general Nix
@@ -17,7 +18,7 @@ description: >-
 
 Firn owns stable machine and service responsibility. Project source, build
 outputs, dev servers, fast-moving CLIs, SDKs, compilers, package managers, and
-toolchain implementations default outside the boot/system closure.
+toolchain implementations are default-denied from the boot/system closure.
 
 ## Hard boundaries
 
@@ -27,10 +28,22 @@ toolchain implementations default outside the boot/system closure.
 - Add one package or service per module under `modules/<name>/`; dynamic imports
   discover it. Enable through declared options/tags and default new modules to
   `whiterabbit` unless the operator names another host.
-- Put project/toolchain lifecycle in a project dev shell, separately managed
-  user runtime/profile, or direct out-of-store launcher. A system-closure
-  exception must name a long-lived machine/service consumer, responsibility,
-  lifecycle owner, and why local execution cannot satisfy it.
+- Decide closure membership from actual reachability from
+  `system.build.toplevel`. A derivation, package, flake input, filesystem
+  worktree, or pin may exist without permission or membership; never treat its
+  presence as either. Do not put Tom-maintained or declared high-churn project
+  source or build outputs into a closure root by default.
+- Keep project/toolchain lifecycle in a filesystem worktree or immutable pin,
+  project dev shell, separately managed user runtime/profile, atomic promoted
+  runtime selector, or direct out-of-store launcher. Pins ordinarily stay out
+  of the Nix store and system closure.
+- Admit an exception only from one source-owned declaration that names the
+  exact project identity and provenance, selected host, authoritative ingress
+  module plus option or service origin, exact admitted closure scope,
+  `stable-machine` or `stable-service` kind, long-lived consumer,
+  responsibility, lifecycle owner, and the concrete reason every local or
+  out-of-store route fails. Convenience, reproducibility alone, or a missing
+  field is not an exception.
 - `firn rebuild` builds and switches exact committed `HEAD`; commit owned
   changes first. Never use raw `nixos-rebuild`, `nh switch`, or
   `firn repo upgrade now`. Verify only `whiterabbit`.
@@ -38,18 +51,24 @@ toolchain implementations default outside the boot/system closure.
 ## Minimum workflow
 
 1. Read `nixos-config:AGENTS.md`, repository safety, and any closer instructions.
-2. Classify lifecycle responsibility and locate the authoritative `.bnix`.
-3. Query package/schema/compiler facts rather than guessing.
-4. Edit `.bnix`; run `firn repo build`, then `firn repo validate` once each.
-5. Explicitly stage every changed `.bnix` and generated `.nix`, commit the
+2. Resolve exact project identity from source-owned provenance and local Git
+   evidence; never infer stewardship from a name, URL substring, or provider
+   organization lookup.
+3. Trace whether the proposed source or output is actually reachable from a
+   boot/system closure root, then classify lifecycle responsibility and locate
+   the authoritative `.bnix`. Stop rather than infer reachability.
+4. Query package/schema/compiler facts rather than guessing.
+5. Edit `.bnix`; run `firn repo build`, then `firn repo validate` once each.
+6. Explicitly stage every changed `.bnix` and generated `.nix`, commit the
    coherent checkpoint, and use stronger evaluation only when static validation
    cannot decide the risk.
-6. Run `firn rebuild` only when a system switch is in scope and the exact commit
+7. Run `firn rebuild` only when a system switch is in scope and the exact commit
    is ready; confirm the printed snapshot identity.
 
 Stop on an unknown schema/path, generated-only diff, untracked module pair,
-uncommitted snapshot, or closure exception without its named consumer case.
-Use `firn repo doctor` only for a specific stale/untracked/orphan/cache suspicion.
+uncommitted snapshot, uncertain maintained-project reachability, or incomplete
+closure exception. Use `firn repo doctor` only for a specific
+stale/untracked/orphan/cache suspicion.
 
 Module and rollback details live in the reference skill; load it only for an
 explicit request or a named unresolved detail, per the always-loaded policy.
