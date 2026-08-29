@@ -39,15 +39,6 @@ if [ -z "$REAL" ]; then
   exit 127
 fi
 
-launch_codex() {
-  local controller="${CODEX_INVOCATION_CONTROLLER:-$HOME/.local/lib/firn/cli/current/bin/codex-invocation-controller}"
-  if [ ! -x "$controller" ]; then
-    echo "codex: invocation controller is unavailable; run firn-runtime-update full" >&2
-    exit 127
-  fi
-  exec "$controller" "$REAL" "$@"
-}
-
 # Compute governance: run the session inside agent.slice so a lane and
 # everything it spawns yields to the desktop under contention. ONE chokepoint —
 # re-exec the launcher, and every downstream exec path plus every descendant
@@ -452,7 +443,7 @@ if [ "${1:-}" != "as" ]; then
       fi
       set -- "${argv[@]}"
     fi
-    launch_codex "${FORCE_CONFIG[@]}" "$@"
+    exec "$REAL" "${FORCE_CONFIG[@]}" "$@"
   fi
 
   uuid_re='^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
@@ -502,7 +493,7 @@ if [ "${1:-}" != "as" ]; then
       export CODEX_SQLITE_HOME="$authority_home/sqlite"
     fi
     load_direct_execution_args "$@"
-    launch_codex "${FORCE_CONFIG[@]}" "${DIRECT_EXECUTION_ARGS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+    exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_EXECUTION_ARGS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
   fi
 
   # Non-UUID aliases still map to the native subcommand (picker/session name)
@@ -520,7 +511,7 @@ fi
 # 2. Passthrough guard for `codex as ...`, which intentionally skipped the
 #    automatic resume parser above.
 if [ -n "${CODEX_HOME:-}" ]; then
-  launch_codex "${FORCE_CONFIG[@]}" "$@"
+  exec "$REAL" "${FORCE_CONFIG[@]}" "$@"
 fi
 
 list_accounts() {
@@ -554,7 +545,7 @@ if [ "${1:-}" = "as" ]; then
   export CODEX_HOME="$root"
   export CODEX_SQLITE_HOME="$root/sqlite"
   load_direct_execution_args "$@"
-  launch_codex "${FORCE_CONFIG[@]}" "${DIRECT_EXECUTION_ARGS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+  exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_EXECUTION_ARGS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
 fi
 
 # 4. Auto-select greatest-headroom account from north's machine boundary.
@@ -849,4 +840,4 @@ else
   fi
 fi
 load_direct_execution_args "$@"
-launch_codex "${FORCE_CONFIG[@]}" "${DIRECT_EXECUTION_ARGS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_EXECUTION_ARGS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"

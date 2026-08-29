@@ -162,11 +162,6 @@ system_policy_sources=(
   "$firn_repo/native/system_policy_native.bjs"
 )
 system_policy_bridge="$firn_repo/native/system_policy_host.mjs"
-codex_invocation_controller_sources=(
-  "$native_json"
-  "$firn_repo/native/codex_invocation_controller.bjs"
-)
-codex_invocation_controller_bridge="$firn_repo/native/codex_invocation_controller_host.mjs"
 
 case "$scope" in
   repo)
@@ -203,8 +198,6 @@ case "$scope" in
       "$prewarm_bridge"
       "${system_policy_sources[@]}"
       "$system_policy_bridge"
-      "${codex_invocation_controller_sources[@]}"
-      "$codex_invocation_controller_bridge"
     )
     ;;
 esac
@@ -392,10 +385,6 @@ case "$scope" in
     materialize_js system-policy firn-system-policy firn/system-policy-native.js \
       FIRN_SYSTEM_POLICY_MODULE "$system_policy_bridge" \
       "${system_policy_sources[@]}"
-    materialize_js codex-invocation-controller codex-invocation-controller \
-      firn/codex-invocation-controller.js CODEX_INVOCATION_CONTROLLER_MODULE \
-      "$codex_invocation_controller_bridge" \
-      "${codex_invocation_controller_sources[@]}"
     ;;
 esac
 
