@@ -55,9 +55,9 @@ to it.
 Tom-maintained or source-declared high-churn project source and build outputs
 are default-denied from the NixOS boot/system closure. Nix derivation or package
 existence is not closure membership and never grants permission to add a
-project to `environment.systemPackages`, systemd units, wrappers, host modules,
-environment paths, or any other root that makes it reachable from
-`system.build.toplevel`.
+project through `environment.systemPackages`, enabled systemd units or wrappers,
+host configuration, environment paths, or another closure root when that
+enabled configuration actually makes it reachable from `system.build.toplevel`.
 
 Keep these projects in filesystem worktrees or immutable filesystem pins, with
 project dev shells, separately managed user runtimes/profiles, atomic promoted
