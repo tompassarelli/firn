@@ -31,17 +31,27 @@ CLEAN_PATH="$(printf '%s' "$PATH" | tr ':' '\n' \
   | grep -vE '/north/main/orchestration/bin|/plugins/cache/' \
   | paste -sd: -)"
 
-exec env -u AGENT_PROVIDER \
-         -u AI_AGENT \
-         -u CODEX_MANAGED \
-         -u NORTH_HARNESS_STATE \
-         -u NORTH_THREAD \
-         -u NORTH_RUN_ID \
-         -u NORTH_AGENT_ID \
-         -u NORTH_BIN \
-     CODEX_HOME="$PROFILE" \
-     CODEX_SQLITE_HOME="$PROFILE/sqlite" \
-     AGENT_NO_AUTHORING_HOOKS=1 \
-     PATH="$CLEAN_PATH" \
-     "$REAL" -c 'agents.max_concurrent_threads_per_session=64' \
-             --add-dir /home/tom/code "$@"
+launch_codex() {
+  local controller="${CODEX_INVOCATION_CONTROLLER:-$HOME/.local/lib/firn/cli/current/bin/codex-invocation-controller}"
+  if [ ! -x "$controller" ]; then
+    echo "codex-native: invocation controller is unavailable; run firn-runtime-update full" >&2
+    exit 127
+  fi
+  exec env -u AGENT_PROVIDER \
+           -u AI_AGENT \
+           -u CODEX_MANAGED \
+           -u NORTH_HARNESS_STATE \
+           -u NORTH_THREAD \
+           -u NORTH_RUN_ID \
+           -u NORTH_AGENT_ID \
+           -u NORTH_BIN \
+       CODEX_HOME="$PROFILE" \
+       CODEX_SQLITE_HOME="$PROFILE/sqlite" \
+       AGENT_NO_AUTHORING_HOOKS=1 \
+       PATH="$CLEAN_PATH" \
+       "$controller" "$REAL" \
+         -c 'agents.max_concurrent_threads_per_session=64' \
+         --add-dir /home/tom/code "$@"
+}
+
+launch_codex "$@"
