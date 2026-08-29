@@ -122,7 +122,7 @@ inject_payload="$(printf \
   '{"tool_name":"Edit","tool_input":{"file_path":"%s/native/system_policy.bjs"},"session_id":"inject/session"}' \
   "$scratch/repo-through-symlink")"
 run_case inject "$inject_payload"
-digest='You are editing the Firn system configuration. Edit .bnix sources, never .nix; run firn repo build and firn repo validate after .bnix changes. Raw nixos-rebuild, darwin-rebuild, nh switching, and firn repo upgrade now remain user-only. Secrets use sops-nix only.'
+digest='You are editing the Firn system configuration. Edit .bnix sources, never .nix; run firn repo build and firn repo validate after .bnix changes. Keep Tom-maintained and high-churn project source and build outputs out of the boot/system closure. A derivation, package, worktree, or filesystem pin does not grant closure admission; use a dev shell, user runtime, or direct out-of-store launcher unless an exact stable machine/service responsibility is declared. Raw nixos-rebuild, darwin-rebuild, nh switching, and firn repo upgrade now remain user-only. Secrets use sops-nix only.'
 expected_inject="$(printf \
   '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"%s"}}\n' \
   "$digest")"

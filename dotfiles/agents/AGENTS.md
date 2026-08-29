@@ -50,6 +50,29 @@ repository-required Node compatibility gate or a demonstrated Bun
 incompatibility is a valid exception; name the exception and keep Node scoped
 to it.
 
+## Keep maintained projects out of the system closure
+
+Tom-maintained or source-declared high-churn project source and build outputs
+are default-denied from the NixOS boot/system closure. Nix derivation or package
+existence is not closure membership and never grants permission to add a
+project through `environment.systemPackages`, enabled systemd units or wrappers,
+host configuration, environment paths, or another closure root when that
+enabled configuration actually makes it reachable from `system.build.toplevel`.
+
+Keep these projects in filesystem worktrees or immutable filesystem pins, with
+project dev shells, separately managed user runtimes/profiles, atomic promoted
+runtime selectors, or direct out-of-store launchers. A pin need not and
+ordinarily must not become a Nix store or system-closure member.
+
+The only exception is a source-owned declaration of stable machine or service
+responsibility. It must name the exact project identity and provenance,
+selected host, authoritative ingress module plus option or service origin,
+exact admitted closure scope, kind
+(`stable-machine` or `stable-service`), long-lived consumer, responsibility,
+lifecycle owner, and why local or out-of-store execution cannot meet the
+requirement. Developer convenience, reproducibility alone, or an incomplete
+declaration grants no exception.
+
 ## Preserve development velocity
 
 - Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification-distilled`.
@@ -84,6 +107,17 @@ for the operator, or when failure cannot be bounded at all.
 
 Be as bold as you like about what you build. Never cut corners on what tells
 you it broke.
+
+## Prefer tangible artifacts
+
+For Tom-owned personal and non-enterprise work, default to the smallest
+tangible artifact or rapid prototype that resolves the next uncertainty and
+advances the goal. Add only proportionate checks whose result can change the
+next action. Do not introduce enterprise or release ceremony, assurance
+scaffolding, architecture theatre, or heavyweight process unless the actual
+product context is business or enterprise software, or an explicit operational
+guarantee requires it. This default never overrides safety, correctness, source
+authority, or an existing real gate.
 
 ## Deliver and report plainly
 
