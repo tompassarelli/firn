@@ -53,3 +53,10 @@ safety gates remain unchanged. Restore normal commander topology immediately
 after closure or successful replacement admission; no second root-owned seam
 may start, and the exception cannot weaken a gate, bypass safety, or expand the
 goal.
+
+Using the exception creates temporary restoration debt through
+`agent-runtime-incident-distilled`. Root owns it unless authority is explicitly
+transferred to a named commander; record the admitted fallback, preferred
+topology, expiry or exit condition, and exact scope. Fallback never changes the
+default. Root or that commander restores preferred topology and canaries the
+repaired primary path before the debt or reliability incident closes.

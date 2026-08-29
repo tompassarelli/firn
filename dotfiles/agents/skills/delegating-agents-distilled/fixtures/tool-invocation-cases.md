@@ -21,6 +21,19 @@ ownership of only that named seam after revoking prior mutation ownership, keep
 every existing gate, and restore the normal commander topology immediately
 afterward.
 
+If the run repeats the recipient/name mismatch, preserve both occurrences,
+compute the stable lifecycle signature, and create exactly one `IncidentSeed`
+while quarantining that run and attempting replacement. Further complete
+signature matches update its count and evidence. Replacement or root fallback
+may complete delivery, but the incident remains open through upstream repair,
+regression, activation, restored preferred topology, and a primary-path canary.
+
+Use the exact fully qualified native recipient in Default and subagent modes.
+After prerequisites, an execution DAG exists only when a writer is admitted
+with a physical lane and reaches an artifact checkpoint. Start its admission
+window after those prerequisites; zero spawn calls means admission was
+unattempted, not failed.
+
 ## Episodic-negative control
 
 Observed event: the listener calls `functions.wait` while intending to wait for
@@ -35,6 +48,12 @@ Additional negative controls: using `request_user_input` as spawn or wait, or
 using `functions.wait` as an agent wait, are both wrong-tool invocations. In
 each case, make one minimal correctly named native collaboration control call
 before claiming the target surface is unavailable.
+
+A single diagnosed mismatch followed by the successful corrected native call
+is episodic evidence, not by itself an unexplained durable incident. Do not
+create multiple seeds for complete-signature matches, escalate a wrong
+invocation to blocked before exact correction and failover, quarantine
+unaffected seams, or treat fallback completion as reliability closure.
 
 Additional episodic negatives: do not mark the program blocked because a
 worker failed, repeat the same defective run after a corrected call, let

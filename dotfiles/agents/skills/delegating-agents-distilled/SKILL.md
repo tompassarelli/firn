@@ -89,6 +89,15 @@ outcome.
   worker defect. Neither failure blocks the product goal; drive the replacement
   and every other ready front within the original outcome clock.
 
+## Runtime incidents
+
+For an unexplained admission, startup, death, liveness, control, or reporting
+anomaly, seed or join the deduplicated lifecycle in
+`agent-runtime-incident-distilled` in parallel with quarantine, replacement,
+or fallback. A repeated recipient/name mismatch and admitted worker death or
+silence are incident signals. Delivery closure never closes the reliability
+incident or any primary-restoration debt.
+
 ## Continuous supervision
 
 - Treat dispatch as the start of ownership, not completion. A status answer

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Runtime Incident Distilled"
+  short_description: "Contain and close agent runtime incidents"
+  default_prompt: "Use $agent-runtime-incident-distilled to contain, investigate, repair, and close this agent-runtime reliability incident."

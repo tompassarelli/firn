@@ -30,6 +30,7 @@
     "estimate-distilled",
     "agent-policy-distilled",
     "delegating-agents-distilled",
+    "agent-runtime-incident-distilled",
     "settle-work-distilled",
     "executive-orchestration-distilled",
     "executive-report-distilled",
@@ -167,6 +168,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/agent-policy-distilled/SKILL.md"
+      }
+    },
+    "agent-runtime-incident-distilled": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/agent-runtime-incident-distilled/SKILL.md"
       }
     },
     "agent-policy-reference": {
@@ -738,6 +747,16 @@
       ]
     },
     "agent-policy-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "agent-runtime-incident-distilled": {
       "distributions": [
         {
           "type": "skill",
