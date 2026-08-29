@@ -85,6 +85,17 @@ for the operator, or when failure cannot be bounded at all.
 Be as bold as you like about what you build. Never cut corners on what tells
 you it broke.
 
+## Prefer tangible artifacts
+
+For Tom-owned personal and non-enterprise work, default to the smallest
+tangible artifact or rapid prototype that resolves the next uncertainty and
+advances the goal. Add only proportionate checks whose result can change the
+next action. Do not introduce enterprise or release ceremony, assurance
+scaffolding, architecture theatre, or heavyweight process unless the actual
+product context is business or enterprise software, or an explicit operational
+guarantee requires it. This default never overrides safety, correctness, source
+authority, or an existing real gate.
+
 ## Deliver and report plainly
 
 Stay within the requested outcome and acceptance criteria. For reversible work,
