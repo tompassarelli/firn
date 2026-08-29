@@ -65,8 +65,9 @@ outcome.
 
 - Before declaring a dispatch, wait, or capability surface unavailable, compare
   the intended operation with the actual emitted recipient and tool name, then
-  read that tool's error. A failure from a different tool proves an invocation
-  error, not target infrastructure failure.
+  preserve that tool's exact result. A recipient/name mismatch is an invocation
+  error even when the emitted tool succeeds and returns valid unrelated data;
+  its result says nothing about the intended surface.
 - Native agent operations use the `collaboration.*` namespace:
   `collaboration.spawn_agent` admits a child;
   `collaboration.followup_task` reactivates or steers an idle child;
@@ -77,9 +78,10 @@ outcome.
   resumes a yielded `exec` cell, while
   `request_user_input` is a human-question surface; neither is a dispatch or
   agent-wait operation.
-- After one wrong-recipient or misnamed call, inspect its error and the available
+- After one wrong-recipient or misnamed call, inspect its result and the available
   tool catalog, then make exactly one minimal, correctly named native
-  collaboration control call to the intended surface. Do not switch fallback
+  collaboration control call to the intended surface. Do not repeat a
+  successful unrelated tool or wait for it to error. Do not switch fallback
   transports, widen architecture, or mark a blocker until that target surface
   itself fails. Reports must distinguish an agent invocation error from an
   infrastructure error.

@@ -48,6 +48,23 @@ using `functions.wait` as an agent wait, are both wrong-tool invocations. In
 each case, make one minimal correctly named native collaboration control call
 before claiming the target surface is unavailable.
 
+## Successful wrong-recipient control
+
+Observed event: the listener intends `collaboration.spawn_agent` or
+`collaboration.followup_task`, but emits `functions.get_goal({})`; the goal read
+succeeds and returns one valid active goal object with no explicit error.
+
+Expected result: the valid goal object does not satisfy either native-agent
+intent and is not evidence about collaboration availability. Preserve the
+successful wrong-recipient result, inspect the tool catalog, and make exactly
+one correctly named call to the intended `collaboration.*` surface. Do not emit
+another goal read or wait for an unrelated tool to fail before correcting.
+Split spawn and follow-up occurrences because their intended operations differ;
+deduplicate only complete signature matches. If the same run repeats either
+mismatch after correction, hand the exact evidence to
+`agent-runtime-incident-distilled`, quarantine or retire the run, and keep
+product delivery moving through the admitted replacement.
+
 A single diagnosed mismatch followed by the successful corrected native call
 is episodic evidence, not by itself an unexplained durable incident. Do not
 create multiple seeds for complete-signature matches, escalate a wrong
