@@ -6,6 +6,7 @@ result-*
 
 # Racket compiled artifacts (regenerated on every repository build)
 **/compiled/
+__pycache__/
 .firn-build/
 .beagle-cache/
 
