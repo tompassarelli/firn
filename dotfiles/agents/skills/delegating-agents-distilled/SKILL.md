@@ -91,12 +91,14 @@ outcome.
 
 ## Runtime incidents
 
-For an unexplained admission, startup, death, liveness, control, or reporting
-anomaly, seed or join the deduplicated lifecycle in
-`agent-runtime-incident-distilled` in parallel with quarantine, replacement,
-or fallback. A repeated recipient/name mismatch and admitted worker death or
-silence are incident signals. Delivery closure never closes the reliability
-incident or any primary-restoration debt.
+Detect unexplained admission, startup, death, liveness, control, or reporting
+anomalies, preserve their bounded evidence, and hand the bounded event evidence
+to `agent-runtime-incident-distilled` while authorized containment and
+replacement continue. A repeated recipient/name mismatch and admitted worker
+death or silence are incident signals. That incident skill alone owns
+deduplication, lifecycle transitions, and reliability closure. Route fallback
+admission to `executive-orchestration-distilled` and route every
+reliability-closure decision back to the incident skill.
 
 ## Continuous supervision
 
@@ -137,9 +139,9 @@ Reserve a blocked outcome for a correctly invoked unavailable required surface,
 missing external authority, an irreducible safety conflict, or a genuinely
 exhausted outcome boundary. A local routing mistake, invocation error, worker
 failure, unchanged wait, or failed replacement attempt is not blocking
-evidence. When executive replacement admission fails, use the bounded root
-fallback in `executive-orchestration-distilled`; otherwise report the exact gap
-without lowering a safety boundary or inventing success.
+evidence. When executive replacement admission fails, route any request for
+bounded root fallback to `executive-orchestration-distilled`; otherwise report
+the exact gap without lowering a safety boundary or inventing success.
 
 Stock-role and settlement details live in the reference skill; load it only for
 an explicit request or a named unresolved detail, per the always-loaded policy.

@@ -39,7 +39,7 @@ every completion an artifact, gate, settlement, and cleanup disposition. Route
 topology, skill placement, card fields, and audit detail to the reference skill
 only for an explicit request or a named unresolved question.
 
-## Fail-operational closure
+## Fail-operational fallback
 
 Treat an invocation or worker defect as a failed attempt, never a reason for the
 product goal to wait. Apply the corrected-call and replacement sequence in
@@ -50,13 +50,15 @@ terminal critical-path seam would otherwise strand the outcome may root revoke
 prior mutation ownership and take explicit, exclusive ownership of that seam.
 All checkout, proof, verification, integration, publication, settlement, and
 safety gates remain unchanged. Restore normal commander topology immediately
-after closure or successful replacement admission; no second root-owned seam
-may start, and the exception cannot weaken a gate, bypass safety, or expand the
-goal.
+after that root-owned seam completes or replacement is admitted; no second
+root-owned seam may start, and the exception cannot weaken a gate, bypass
+safety, or expand the goal.
 
-Using the exception creates temporary restoration debt through
-`agent-runtime-incident-distilled`. Root owns it unless authority is explicitly
-transferred to a named commander; record the admitted fallback, preferred
-topology, expiry or exit condition, and exact scope. Fallback never changes the
-default. Root or that commander restores preferred topology and canaries the
-repaired primary path before the debt or reliability incident closes.
+Using the exception creates temporary restoration debt owned by root unless
+authority is explicitly transferred to a named commander. Record its owner,
+admitted fallback, preferred topology, expiry or exit condition, exact scope,
+state, and restoration evidence. Fallback never changes the default. Root or
+that commander restores preferred topology and records the debt's exit
+evidence. Route the evidence and every reliability-closure decision to
+`agent-runtime-incident-distilled`; executive orchestration does not decide the
+incident lifecycle or closure.

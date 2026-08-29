@@ -122,11 +122,10 @@ blocking the whole task on the answer.
 - A comment records a constraint the code cannot express. Investigation history,
   outputs, and chronology belong in the commit message or private handoff.
 - Fix causes upstream and aim at the proper end-state, root-cause architecture.
-  Fallback never closes reliability; repair, regress, activate, and restore the
-  primary path without duplicate authority →
-  `agent-runtime-incident-distilled`. Minimize accidental complexity: avoid
-  compatibility layers, wrappers, daemons, or bespoke infrastructure unless an
-  explicit requirement forces them. This is proportionality, not scope creep.
+  Fallback never closes agent-runtime reliability. Minimize accidental
+  complexity: avoid compatibility layers, wrappers, daemons, or bespoke
+  infrastructure unless an explicit requirement forces them. This is
+  proportionality, not scope creep.
 - Never weaken a test, assertion, or gate to make it pass. Fix what it tests; a
   gate lowered to go green no longer proves anything.
 - Measure before naming a cause, especially for performance. An unmeasured

@@ -8,15 +8,56 @@ activity, liveness, control, and reporting evidence; computes the stable
 signature; and creates one `IncidentSeed`. A second complete-signature
 observation increments that seed instead of creating another.
 
-Only that worker seam is quarantined. A replacement or bounded fallback keeps
-delivery moving while one priced reproduction tests falsifiable hypotheses.
+Only that worker seam is quarantined. A replacement or already-authorized
+bounded fallback keeps delivery moving while one priced reproduction tests
+falsifiable hypotheses.
 The exact upstream owner repairs the cause, the focused regression passes, the
 repair is activated, preferred topology is restored, and the repaired primary
 path canary observes healthy startup, liveness, control, and terminal reporting.
-Only then may restoration debt and the incident close.
+Executive orchestration records any restoration-debt exit evidence; only then
+may incident closure be considered.
 
 If fallback delivery finishes first, delivery is complete while the incident
 and restoration debt remain open.
+
+## Positive retry-deduplication case
+
+A retry has a new actor/run identity and later timestamp but the same lifecycle
+class, intended operation, normalized call shape, runtime mode, error class,
+and stable worker-startup seam. It increments the existing seed's observation
+count and evidence; the run-specific differences do not create another seed.
+
+## Negative cross-seam collision case
+
+Two failures share lifecycle class, intended operation, normalized call shape,
+runtime mode, and error class, but one affects worker admission while the other
+affects terminal reporting. Their stable affected seams differ, so they produce
+two signatures and two seeds. A multi-seam observation is deterministically
+split on those scopes rather than collapsed into one incident.
+
+## Reopen rejects stale evidence
+
+A closed generation recurs with the same complete signature. Reopening
+increments the generation and leaves the old repair, regression, activation,
+primary-canary, and restoration-debt exit evidence as historical only. The
+reopened incident cannot close from that evidence: its new generation must be
+contained, investigated, classified, owned, repaired, regressed, activated,
+and primary-canaried before closure is considered.
+
+## Reporting/control delivery case
+
+`/root/clause_v0_program_commander` emits an opaque `gAAAA…` token where root
+expects a consumable plaintext status card at the commander-to-root report
+boundary. Preserve the stable sender, intended report boundary, normalized
+`opaque-token:gAAAA` signature, runtime mode, and stable reporting surface;
+exclude the token body. Those fields create one reporting/control
+`IncidentSeed`, and a repeat with the same tuple increments it.
+
+After the preconditions in `executive-orchestration-distilled` are established,
+root admits one plaintext-resend fallback and delivery remains active. Record
+its executive-owned restoration-debt fields in the same incident seed. The
+resend, delivery state, and open debt do not create a second lifecycle or close
+reliability.
 
 ## Episodic-negative control
 
@@ -26,5 +67,6 @@ explained policy rejection. These observations do not prove an unexplained
 death or silence and do not create duplicate incidents.
 
 Do not quarantine adjacent workers, create one seed per retry or observer,
-promote fallback to the new default, treat fallback success as the primary
-canary, or close reliability because the product artifact was delivered.
+merge distinct affected seams, promote fallback to the new default, treat
+fallback success as the primary canary, or close reliability because the
+product artifact was delivered.

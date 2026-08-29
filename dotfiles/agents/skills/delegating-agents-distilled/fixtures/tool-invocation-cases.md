@@ -16,17 +16,16 @@ resumes a yielded `exec` cell.
 Expected report: identify any mismatch as an agent invocation error; call the
 native surface once before declaring infrastructure unavailable. Keep other
 ready work moving throughout. If replacement admission then fails and one
-terminal critical-path seam would strand the outcome, root may take exclusive
-ownership of only that named seam after revoking prior mutation ownership, keep
-every existing gate, and restore the normal commander topology immediately
-afterward.
+terminal critical-path seam would strand the outcome, route any root-fallback
+request to `executive-orchestration-distilled`; this delegation fixture does
+not admit it.
 
 If the run repeats the recipient/name mismatch, preserve both occurrences,
-compute the stable lifecycle signature, and create exactly one `IncidentSeed`
-while quarantining that run and attempting replacement. Further complete
-signature matches update its count and evidence. Replacement or root fallback
-may complete delivery, but the incident remains open through upstream repair,
-regression, activation, restored preferred topology, and a primary-path canary.
+hand the bounded event evidence to `agent-runtime-incident-distilled`,
+quarantine that run, and attempt replacement. Route deduplication, lifecycle
+transitions, and reliability closure to that skill. Route any root-fallback
+admission to `executive-orchestration-distilled`; delivery completion does not
+decide the incident.
 
 Use the exact fully qualified native recipient in Default and subagent modes.
 After prerequisites, an execution DAG exists only when a writer is admitted
