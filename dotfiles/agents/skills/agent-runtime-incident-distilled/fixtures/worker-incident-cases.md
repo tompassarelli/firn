@@ -22,10 +22,12 @@ and restoration debt remain open.
 
 ## Positive retry-deduplication case
 
-A retry has a new actor/run identity and later timestamp but the same lifecycle
-class, intended operation, normalized call shape, runtime mode, error class,
-and stable worker-startup seam. It increments the existing seed's observation
-count and evidence; the run-specific differences do not create another seed.
+A retry changes only the excluded actor/run identity and timestamp. Every
+canonical signature field remains unchanged: lifecycle class, stable affected
+actor or sender role, intended operation, emitted recipient/tool, normalized
+argument shape, runtime/provider mode, error class, and stable affected
+worker-startup seam. It increments the existing seed's observation count and
+evidence; the excluded run-specific differences do not create another seed.
 
 ## Negative cross-seam collision case
 
@@ -44,14 +46,25 @@ reopened incident cannot close from that evidence: its new generation must be
 contained, investigated, classified, owned, repaired, regressed, activated,
 and primary-canaried before closure is considered.
 
-## Reporting/control delivery case
+## Reporting delivery case
 
-`/root/clause_v0_program_commander` emits an opaque `gAAAA…` token where root
-expects a consumable plaintext status card at the commander-to-root report
-boundary. Preserve the stable sender, intended report boundary, normalized
-`opaque-token:gAAAA` signature, runtime mode, and stable reporting surface;
-exclude the token body. Those fields create one reporting/control
-`IncidentSeed`, and a repeat with the same tuple increments it.
+`/root/clause_v0_program_commander` emits an opaque token payload where root
+expects a consumable plaintext status card. Normalize the complete canonical
+tuple as:
+
+- lifecycle class: `reporting`;
+- stable affected actor or sender role: `/root/clause_v0_program_commander`;
+- intended operation or report boundary: `commander-to-root plaintext-status-card`;
+- emitted recipient/tool or payload surface: `agent-report/message-body`;
+- normalized argument or payload signature: `opaque-token:gAAAA`;
+- runtime/provider mode: `native-collaboration`;
+- normalized error class: `opaque-report-payload`; and
+- stable affected seam/surface scope: `commander-terminal-reporting`.
+
+The intended report boundary and emitted message-body surface are distinct.
+Retain only the normalized `opaque-token:gAAAA` signature and never the token
+body. Those fields create one `reporting` `IncidentSeed`, and a repeat with the
+same tuple increments it.
 
 After the preconditions in `executive-orchestration-distilled` are established,
 root admits one plaintext-resend fallback and delivery remains active. Record
