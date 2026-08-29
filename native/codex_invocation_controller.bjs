@@ -1,0 +1,499 @@
+#lang beagle/js
+(ns firn.codex-invocation-controller
+  (:require [native.json :as json]))
+
+(def handshake-version String "InvocationFirewallHandshake/v1")
+(def request-version String "InvocationFirewallRequest/v1")
+(def response-version String "ControlExpectation/v2")
+(def max-id-bytes Int 256)
+
+(defrecord ToolIdentity
+  [namespace (U String Nil)
+   name String])
+
+(defunion ToolShapeResult
+  (ToolShapeLoaded [tool ToolIdentity])
+  (ToolShapeRejected [token Bool]))
+
+(defn json-value-end
+  [events (Vec json/JsonEvent)
+   start Int]
+  Int
+  (if (or (< start 0) (>= start (count events)))
+    -1
+    (match (nth events start)
+      [(JsonObjectStart offset)
+       (loop [index Int (+ start 1)
+              depth Int 0]
+         (if (>= index (count events))
+           -1
+           (match (nth events index)
+             [(JsonObjectStart nested-offset)
+              (recur (+ index 1) (+ depth 1))]
+             [(JsonArrayStart nested-offset)
+              (recur (+ index 1) (+ depth 1))]
+             [(JsonObjectEnd nested-offset)
+              (if (= depth 0)
+                (+ index 1)
+                (recur (+ index 1) (- depth 1)))]
+             [(JsonArrayEnd nested-offset)
+              (recur (+ index 1) (- depth 1))]
+             [(JsonKey nested-offset value) (recur (+ index 1) depth)]
+             [(JsonString nested-offset value) (recur (+ index 1) depth)]
+             [(JsonNumber nested-offset lexeme) (recur (+ index 1) depth)]
+             [(JsonBoolean nested-offset value) (recur (+ index 1) depth)]
+             [(JsonNull nested-offset) (recur (+ index 1) depth)])))]
+      [(JsonArrayStart offset)
+       (loop [index Int (+ start 1)
+              depth Int 0]
+         (if (>= index (count events))
+           -1
+           (match (nth events index)
+             [(JsonObjectStart nested-offset)
+              (recur (+ index 1) (+ depth 1))]
+             [(JsonArrayStart nested-offset)
+              (recur (+ index 1) (+ depth 1))]
+             [(JsonArrayEnd nested-offset)
+              (if (= depth 0)
+                (+ index 1)
+                (recur (+ index 1) (- depth 1)))]
+             [(JsonObjectEnd nested-offset)
+              (recur (+ index 1) (- depth 1))]
+             [(JsonKey nested-offset value) (recur (+ index 1) depth)]
+             [(JsonString nested-offset value) (recur (+ index 1) depth)]
+             [(JsonNumber nested-offset lexeme) (recur (+ index 1) depth)]
+             [(JsonBoolean nested-offset value) (recur (+ index 1) depth)]
+             [(JsonNull nested-offset) (recur (+ index 1) depth)])))]
+      [(JsonObjectEnd offset) -1]
+      [(JsonArrayEnd offset) -1]
+      [(JsonKey offset value) -1]
+      [(JsonString offset value) (+ start 1)]
+      [(JsonNumber offset lexeme) (+ start 1)]
+      [(JsonBoolean offset value) (+ start 1)]
+      [(JsonNull offset) (+ start 1)])))
+
+(defn string-member?
+  [values (Vec String)
+   candidate String] Bool
+  (loop [index Int 0]
+    (if (>= index (count values))
+      false
+      (if (= candidate (nth values index))
+        true
+        (recur (+ index 1))))))
+
+(defn all-members?
+  [required (Vec String)
+   actual (Vec String)] Bool
+  (loop [index Int 0]
+    (if (>= index (count required))
+      true
+      (if (string-member? actual (nth required index))
+        (recur (+ index 1))
+        false))))
+
+(defn object-exact-keys?
+  [events (Vec json/JsonEvent)
+   start Int
+   allowed (Vec String)
+   required (Vec String)]
+  Bool
+  (let [end Int (json-value-end events start)]
+    (if (or (< end 0)
+            (not (instance? json/JsonObjectStart (nth events start))))
+      false
+      (loop [index Int (+ start 1)
+             seen (Vec String) []]
+        (cond
+          (= index (- end 1)) (all-members? required seen)
+          (> index (- end 1)) false
+          :else
+          (match (nth events index)
+            [(JsonKey offset key)
+             (let [value-start Int (+ index 1)
+                   next Int (json-value-end events value-start)]
+               (if (or (< next 0)
+                       (> next (- end 1))
+                       (not (string-member? allowed key))
+                       (string-member? seen key))
+                 false
+                 (recur next (conj seen key))))]
+            [(JsonObjectStart offset) false]
+            [(JsonObjectEnd offset) false]
+            [(JsonArrayStart offset) false]
+            [(JsonArrayEnd offset) false]
+            [(JsonString offset value) false]
+            [(JsonNumber offset lexeme) false]
+            [(JsonBoolean offset value) false]
+            [(JsonNull offset) false]))))))
+
+(defn object-field-start
+  [events (Vec json/JsonEvent)
+   start Int
+   wanted String]
+  Int
+  (let [end Int (json-value-end events start)]
+    (if (or (< end 0)
+            (not (instance? json/JsonObjectStart (nth events start))))
+      -1
+      (loop [index Int (+ start 1)]
+        (if (>= index (- end 1))
+          -1
+          (match (nth events index)
+            [(JsonKey offset key)
+             (let [value-start Int (+ index 1)
+                   next Int (json-value-end events value-start)]
+               (if (< next 0)
+                 -1
+                 (if (= key wanted) value-start (recur next))))]
+            [(JsonObjectStart offset) -1]
+            [(JsonObjectEnd offset) -1]
+            [(JsonArrayStart offset) -1]
+            [(JsonArrayEnd offset) -1]
+            [(JsonString offset value) -1]
+            [(JsonNumber offset lexeme) -1]
+            [(JsonBoolean offset value) -1]
+            [(JsonNull offset) -1]))))))
+
+(defn object-string
+  [events (Vec json/JsonEvent)
+   start Int
+   wanted String]
+  (U String Nil)
+  (let [value-start Int (object-field-start events start wanted)]
+    (if (< value-start 0)
+      nil
+      (match (nth events value-start)
+        [(JsonString offset value) value]
+        [(JsonObjectStart offset) nil]
+        [(JsonObjectEnd offset) nil]
+        [(JsonArrayStart offset) nil]
+        [(JsonArrayEnd offset) nil]
+        [(JsonKey offset value) nil]
+        [(JsonNumber offset lexeme) nil]
+        [(JsonBoolean offset value) nil]
+        [(JsonNull offset) nil]))))
+
+(defn object-number-lexeme
+  [events (Vec json/JsonEvent)
+   start Int
+   wanted String]
+  (U String Nil)
+  (let [value-start Int (object-field-start events start wanted)]
+    (if (< value-start 0)
+      nil
+      (match (nth events value-start)
+        [(JsonNumber offset lexeme) lexeme]
+        [(JsonObjectStart offset) nil]
+        [(JsonObjectEnd offset) nil]
+        [(JsonArrayStart offset) nil]
+        [(JsonArrayEnd offset) nil]
+        [(JsonKey offset value) nil]
+        [(JsonString offset value) nil]
+        [(JsonBoolean offset value) nil]
+        [(JsonNull offset) nil]))))
+
+(defn ascii-graphic-id? [value String] Bool
+  (let [bytes (Vec Int) (utf8-encode value)]
+    (and (> (count bytes) 0)
+         (<= (count bytes) max-id-bytes)
+         (loop [index Int 0]
+           (if (>= index (count bytes))
+             true
+             (let [byte Int (nth bytes index)]
+               (if (and (>= byte 33) (<= byte 126))
+                 (recur (+ index 1))
+                 false)))))))
+
+(defn lowercase-hex-byte? [byte Int] Bool
+  (or (and (>= byte 48) (<= byte 57))
+      (and (>= byte 97) (<= byte 102))))
+
+(defn hex-byte? [byte Int] Bool
+  (or (lowercase-hex-byte? byte)
+      (and (>= byte 65) (<= byte 70))))
+
+(defn uuid? [value String] Bool
+  (let [bytes (Vec Int) (utf8-encode value)]
+    (and (= (count bytes) 36)
+         (loop [index Int 0]
+           (if (>= index 36)
+             true
+             (if (or (= index 8) (= index 13) (= index 18) (= index 23))
+               (if (= (nth bytes index) 45)
+                 (recur (+ index 1))
+                 false)
+               (if (lowercase-hex-byte? (nth bytes index))
+                 (recur (+ index 1))
+                 false)))))))
+
+(defn digest? [value String] Bool
+  (let [bytes (Vec Int) (utf8-encode value)]
+    (and (= (count bytes) 71)
+         (= (subs value 0 7) "sha256:")
+         (loop [index Int 7]
+           (if (>= index (count bytes))
+             true
+             (if (hex-byte? (nth bytes index))
+               (recur (+ index 1))
+               false))))))
+
+(defn positive-u64-lexeme? [value String] Bool
+  (let [bytes (Vec Int) (utf8-encode value)]
+    (and (> (count bytes) 0)
+         (not= (nth bytes 0) 48)
+         (loop [index Int 0]
+           (if (>= index (count bytes))
+             true
+             (let [byte Int (nth bytes index)]
+               (if (and (>= byte 48) (<= byte 57))
+                 (recur (+ index 1))
+                 false))))
+         (or (< (count bytes) 20)
+             (and (= (count bytes) 20)
+                  (<= (compare value "18446744073709551615") 0))))))
+
+(defn valid-namespace?
+  [events (Vec json/JsonEvent)
+   start Int]
+  Bool
+  (match (nth events start)
+    [(JsonString offset value) (ascii-graphic-id? value)]
+    [(JsonNull offset) true]
+    [(JsonObjectStart offset) false]
+    [(JsonObjectEnd offset) false]
+    [(JsonArrayStart offset) false]
+    [(JsonArrayEnd offset) false]
+    [(JsonKey offset value) false]
+    [(JsonNumber offset lexeme) false]
+    [(JsonBoolean offset value) false]))
+
+(defn parse-tool
+  [events (Vec json/JsonEvent)
+   start Int]
+  (U ToolIdentity Nil)
+  (if (not (object-exact-keys? events start
+             ["name" "namespace"] ["name" "namespace"]))
+    nil
+    (let [name (U String Nil) (object-string events start "name")
+          namespace-start Int (object-field-start events start "namespace")]
+      (if (or (nil? name)
+              (not (ascii-graphic-id? name))
+              (< namespace-start 0)
+              (not (valid-namespace? events namespace-start)))
+        nil
+        (match (nth events namespace-start)
+          [(JsonString offset namespace) (->ToolIdentity namespace name)]
+          [(JsonNull offset) (->ToolIdentity nil name)]
+          [(JsonObjectStart offset) nil]
+          [(JsonObjectEnd offset) nil]
+          [(JsonArrayStart offset) nil]
+          [(JsonArrayEnd offset) nil]
+          [(JsonKey offset value) nil]
+          [(JsonNumber offset lexeme) nil]
+          [(JsonBoolean offset value) nil])))))
+
+(defn payload-kind? [value String] Bool
+  (or (= value "FUNCTION")
+      (= value "FREEFORM")
+      (= value "TOOL_SEARCH")))
+
+(defn parse-tool-shape
+  [events (Vec json/JsonEvent)
+   start Int
+   require-schema Bool]
+  ToolShapeResult
+  (if (not (object-exact-keys? events start
+             ["tool" "payload_kind" "schema_digest"]
+             ["tool" "payload_kind"]))
+    (->ToolShapeRejected false)
+    (let [tool-start Int (object-field-start events start "tool")
+          tool (U ToolIdentity Nil) (if (< tool-start 0)
+            nil
+            (parse-tool events tool-start))
+          payload-kind (U String Nil) (object-string events start "payload_kind")
+          schema-start Int (object-field-start events start "schema_digest")
+          schema (U String Nil) (if (< schema-start 0)
+            nil
+            (object-string events start "schema_digest"))]
+      (if (or (nil? tool)
+              (nil? payload-kind)
+              (not (payload-kind? payload-kind))
+              (and require-schema (nil? schema))
+              (and (>= schema-start 0) (nil? schema))
+              (and (some? schema) (not (digest? schema))))
+        (->ToolShapeRejected false)
+        (->ToolShapeLoaded tool)))))
+
+(defn tool-before?
+  [left ToolIdentity
+   right ToolIdentity] Bool
+  (let [left-namespace (U String Nil) (toolidentity-namespace left)
+        right-namespace (U String Nil) (toolidentity-namespace right)
+        left-first String (if (nil? left-namespace)
+          (toolidentity-name left)
+          left-namespace)
+        right-first String (if (nil? right-namespace)
+          (toolidentity-name right)
+          right-namespace)
+        first-order Int (compare left-first right-first)]
+    (cond
+      (< first-order 0) true
+      (> first-order 0) false
+      (and (nil? left-namespace) (some? right-namespace)) true
+      (and (some? left-namespace) (nil? right-namespace)) false
+      (and (nil? left-namespace) (nil? right-namespace)) false
+      :else
+      (< (compare (toolidentity-name left) (toolidentity-name right)) 0))))
+
+(defn valid-catalog?
+  [events (Vec json/JsonEvent)
+   start Int]
+  Bool
+  (let [end Int (json-value-end events start)]
+    (if (or (< end 0)
+            (not (instance? json/JsonArrayStart (nth events start))))
+      false
+      (loop [index Int (+ start 1)
+             previous (U ToolIdentity Nil) nil]
+        (cond
+          (= index (- end 1)) true
+          (> index (- end 1)) false
+          :else
+          (let [next Int (json-value-end events index)]
+            (if (or (< next 0) (> next (- end 1)))
+              false
+              (match (parse-tool-shape events index true)
+                [(ToolShapeRejected token) false]
+                [(ToolShapeLoaded tool)
+                 (if (and (some? previous)
+                          (not (tool-before? previous tool)))
+                   false
+                   (recur next tool))]))))))))
+
+(defn valid-scope?
+  [events (Vec json/JsonEvent)
+   start Int]
+  Bool
+  (if (not (object-exact-keys? events start
+             ["session_id" "turn_id" "actor" "call_slot"]
+             ["session_id" "turn_id" "actor" "call_slot"]))
+    false
+    (let [session (U String Nil) (object-string events start "session_id")
+          turn (U String Nil) (object-string events start "turn_id")
+          actor (U String Nil) (object-string events start "actor")
+          call-slot (U String Nil) (object-number-lexeme events start "call_slot")]
+      (and (some? session) (ascii-graphic-id? session)
+           (some? turn) (ascii-graphic-id? turn)
+           (some? actor) (ascii-graphic-id? actor)
+           (some? call-slot) (positive-u64-lexeme? call-slot)))))
+
+(defn decoded-root [source String] (U (Vec json/JsonEvent) Nil)
+  (match (json/decode source)
+    [(JsonDecodeError offset message) nil]
+    [(JsonDecoded events)
+     (if (and (not (empty? events))
+              (instance? json/JsonObjectStart (first events))
+              (= (json-value-end events 0) (count events)))
+       events
+       nil)]))
+
+(js/export
+  (defn validate-handshake
+    [source String
+     expected-consumer-pid Int] String
+    (let [events (U (Vec json/JsonEvent) Nil) (decoded-root source)]
+    (if (nil? events)
+      ""
+      (if (not (object-exact-keys? events 0
+                 ["version" "kind" "challenge" "consumer_pid"]
+                 ["version" "kind" "challenge" "consumer_pid"]))
+        ""
+        (let [version (U String Nil) (object-string events 0 "version")
+              kind (U String Nil) (object-string events 0 "kind")
+              challenge (U String Nil) (object-string events 0 "challenge")
+              consumer-pid (U String Nil) (object-number-lexeme events 0 "consumer_pid")]
+          (if (and (= version handshake-version)
+                   (= kind "challenge")
+                   (some? challenge)
+                   (uuid? challenge)
+                   (some? consumer-pid)
+                   (= consumer-pid (str expected-consumer-pid)))
+            challenge
+            "")))))))
+
+(js/export
+  (defn render-handshake-response
+    [challenge String
+     controller-pid Int
+     controller-uid Int] String
+    (if (or (not (uuid? challenge))
+          (<= controller-pid 0)
+          (< controller-uid 0))
+    ""
+    (match (json/encode
+             [(json/->JsonObjectStart 0)
+              (json/->JsonKey 0 "version")
+              (json/->JsonString 0 handshake-version)
+              (json/->JsonKey 0 "kind")
+              (json/->JsonString 0 "response")
+              (json/->JsonKey 0 "challenge")
+              (json/->JsonString 0 challenge)
+              (json/->JsonKey 0 "controller_pid")
+              (json/->JsonNumber 0 (str controller-pid))
+              (json/->JsonKey 0 "controller_uid")
+              (json/->JsonNumber 0 (str controller-uid))
+              (json/->JsonObjectEnd 0)])
+      [(JsonEncoded text) text]
+      [(JsonEncodeError event-index message) ""]))))
+
+(js/export
+  (defn validate-request [source String] String
+  (let [events (U (Vec json/JsonEvent) Nil) (decoded-root source)]
+    (if (nil? events)
+      ""
+      (if (not (object-exact-keys? events 0
+                 ["record" "version" "request_id" "scope"
+                  "catalog_digest" "emitted" "catalog"]
+                 ["record" "version" "request_id" "scope"
+                  "catalog_digest" "emitted" "catalog"]))
+        ""
+        (let [record (U String Nil) (object-string events 0 "record")
+              version (U String Nil) (object-string events 0 "version")
+              request-id (U String Nil) (object-string events 0 "request_id")
+              scope-start Int (object-field-start events 0 "scope")
+              catalog-digest (U String Nil) (object-string events 0 "catalog_digest")
+              emitted-start Int (object-field-start events 0 "emitted")
+              catalog-start Int (object-field-start events 0 "catalog")]
+          (if (and (= record "invocation")
+                   (= version request-version)
+                   (some? request-id)
+                   (ascii-graphic-id? request-id)
+                   (>= scope-start 0)
+                   (valid-scope? events scope-start)
+                   (some? catalog-digest)
+                   (digest? catalog-digest)
+                   (>= emitted-start 0)
+                   (match (parse-tool-shape events emitted-start false)
+                     [(ToolShapeLoaded tool) true]
+                     [(ToolShapeRejected token) false])
+                   (>= catalog-start 0)
+                   (valid-catalog? events catalog-start))
+            request-id
+            "")))))))
+
+(js/export
+  (defn render-no-expectation [request-id String] String
+  (if (not (ascii-graphic-id? request-id))
+    ""
+    (match (json/encode
+             [(json/->JsonObjectStart 0)
+              (json/->JsonKey 0 "record")
+              (json/->JsonString 0 "no_expectation")
+              (json/->JsonKey 0 "version")
+              (json/->JsonString 0 response-version)
+              (json/->JsonKey 0 "request_id")
+              (json/->JsonString 0 request-id)
+              (json/->JsonObjectEnd 0)])
+      [(JsonEncoded text) text]
+      [(JsonEncodeError event-index message) ""]))))

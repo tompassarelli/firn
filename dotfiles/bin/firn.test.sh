@@ -9,6 +9,8 @@ trap cleanup EXIT
 
 candidate_beagle="${BEAGLE_PATH:?set BEAGLE_PATH to the exact Beagle candidate}"
 bash_path="$(command -v bash)"
+dirname_path="$(command -v dirname)"
+env_path="$(command -v env)"
 producer_bun="${FIRN_BUN:-$HOME/.local/lib/firn/cli/current/bin/bun}"
 [[ -x "$producer_bun" ]]
 real_runtime="$scratch/real-runtime"
@@ -102,6 +104,7 @@ write_module "$out/firn/repo-workflows-runtime.js" repo-workflow
 write_module "$out/firn/rebuild-family.js" rebuild
 write_module "$out/firn/prewarm.js" prewarm
 write_module "$out/firn/system-policy-native.js" system-policy
+write_module "$out/firn/codex-invocation-controller.js" codex-invocation-controller
 write_module "$out/activity/native.js" activity
 write_module "$out/activity/menu.js" activity-menu
 EOF
@@ -139,24 +142,30 @@ grep -Fxq 'beagle_revision=2222222222222222222222222222222222222222' \
 grep -Fq 'artifact=bun path=bin/bun ' "$destination/manifest"
 [[ -x "$destination/bin/bun" ]]
 for component in tag flake-input inventory authoring views repo-build schema \
-  repo-workflow rebuild prewarm system-policy; do
+  repo-workflow rebuild prewarm system-policy codex-invocation-controller; do
   grep -Fq "component=$component " "$destination/manifest"
 done
 for binary in firn-tag firn-flake-input firn-inventory firn-authoring \
   firn-views firn-repo-build firn-schema firn-repo-workflow firn-rebuild \
-  firn-prewarm firn-system-policy; do
+  firn-prewarm firn-system-policy codex-invocation-controller; do
   [[ -x "$destination/bin/$binary" ]]
 done
-no_bun_path=""
-IFS=: read -r -a path_entries <<<"$PATH"
-for path_entry in "${path_entries[@]}"; do
-  if [[ -x "$path_entry/bun" ]]; then
-    continue
-  fi
-  no_bun_path="${no_bun_path:+$no_bun_path:}$path_entry"
-done
-[[ -n "$no_bun_path" ]]
-! PATH="$no_bun_path" command -v bun >/dev/null 2>&1
+grep -Fq \
+  'component=codex-invocation-controller module=lib/codex-invocation-controller/firn/codex-invocation-controller.js executable=bin/codex-invocation-controller runtime=bun' \
+  "$destination/manifest"
+grep -Fq \
+  'artifact=codex-invocation-controller-host path=lib/codex-invocation-controller/host.mjs ' \
+  "$destination/manifest"
+no_bun_tools="$scratch/no-bun-tools"
+mkdir -p "$no_bun_tools"
+ln -s "$bash_path" "$no_bun_tools/bash"
+ln -s "$dirname_path" "$no_bun_tools/dirname"
+ln -s "$env_path" "$no_bun_tools/env"
+no_bun_path="$no_bun_tools"
+if PATH="$no_bun_path" command -v bun >/dev/null 2>&1; then
+  printf 'fixture PATH unexpectedly exposes bun\n' >&2
+  exit 1
+fi
 [[ "$(PATH="$no_bun_path" "$bash_path" "$here/firn" repo validate)" == \
   prepared:alpha:schema ]]
 
