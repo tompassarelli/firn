@@ -132,16 +132,21 @@ decision-changing check. Bounded correctness for the requested claim remains
 mandatory; a core-claim correctness need does not itself admit generalized
 assurance.
 
-Admit each lifecycle action independently and only for the affected seam:
+Delegate independent bounded work whenever parallelism shortens artifact
+delivery, including same-turn speculative experiments. Cross-turn recovery, a
+live process, or an external wait triggers the applicable continuity or
+supervision bookkeeping for that run, but none is a prerequisite for
+delegation.
+
+Admit lifecycle actions independently and only for the affected seam:
 compatibility needs a named intolerant consumer; rollback needs actual live or
 durable state or an irreversible external effect; provenance or immutability
-needs a producer-substitution or concurrency fact; broader hardening, release,
-or attestation needs actual production or public state, an external dependency,
-or a real trust, audit, security, financial, or availability obligation; and
-delegation or continuity bookkeeping needs actual cross-turn recovery, a live
-process, or an external wait. Explicit operator instruction may admit its named
-action. One escalated seam never escalates adjacent work. Safety, bounded
-correctness, source authority, and existing real gates remain binding.
+needs a producer-substitution or concurrency fact; and broader hardening,
+release, or attestation needs actual production or public state, an external
+dependency, or a real trust, audit, security, financial, or availability
+obligation. Explicit operator instruction may admit its named action. One
+escalated seam never escalates adjacent work. Safety, bounded correctness,
+source authority, and existing real gates remain binding.
 
 ## Deliver and report plainly
 
