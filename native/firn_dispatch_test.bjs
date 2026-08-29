@@ -43,8 +43,7 @@
    edge String] firn/CommandLookup
   (find-command node edge))
 
-(defn dispatch-decision
-  [args (Vec String)] firn/DispatchDecision
+(defn dispatch-decision [args (Vec String)] firn/DispatchDecision
   (parse-dispatch args))
 
 (defn family-name [family firn/CommandFamily] String
@@ -62,8 +61,7 @@
 
 (defn owner-name
   [node String
-   edge String]
-  String
+   edge String] String
   (match (lookup-command node edge)
     [(CommandFound command)
      (family-name (firncommand-owner command))]
@@ -105,6 +103,7 @@
     [(RepoWatchCommand token) "repo-watch"]
     [(RepoDiffCommand token) "repo-diff"]
     [(RepoDoctorCommand token) "repo-doctor"]
+    [(RepoPinAncestryCommand token) "repo-pin-ancestry"]
     [(RepoUpgradeCommand token) "repo-upgrade"]
     [(RepoBuildCommand token) "repo-build"]
     [(RepoValidateCommand token) "repo-validate"]
@@ -132,7 +131,7 @@
 
 (defn case-registry-and-owners [] Bool
   (and
-    (= (command-count) 46)
+    (= (command-count) 47)
     (= (owner-name "tag" "resolve") "tag")
     (= (owner-name "flake-input" "resolve") "flake-input")
     (= (owner-name "module" "refs") "inventory")
@@ -141,6 +140,7 @@
     (= (owner-name "repo" "build") "repo-build")
     (= (owner-name "schema" "extract") "schema")
     (= (owner-name "repo" "doctor") "repo-workflow")
+    (= (owner-name "repo" "pin-ancestry") "repo-workflow")
     (= (owner-name "host" "rebuild") "rebuild")
     (= (owner-name "host" "prepare") "rebuild")
     (= (owner-name "host" "activate") "rebuild")
@@ -154,9 +154,8 @@
   (and
     (match (dispatch-decision ["repo" "upgrade"])
       [(DispatchPlanned plan)
-       (let [(steps (Vec firn/DispatchStep))
-             (dispatchplan-steps plan)
-             (step firn/DispatchStep) (nth steps 0)]
+       (let [steps (Vec firn/DispatchStep) (dispatchplan-steps plan)
+             step firn/DispatchStep (nth steps 0)]
          (and (= (count steps) 1)
               (= (command-name (dispatchstep-command step))
                  "repo-upgrade")
@@ -197,11 +196,11 @@
        "tag" "enable" "terminal"
        "module" "list" "used"])
     [(DispatchPlanned plan)
-     (let [(steps (Vec firn/DispatchStep)) (dispatchplan-steps plan)
-           (build firn/DispatchStep) (nth steps 0)
-           (validate firn/DispatchStep) (nth steps 1)
-           (enable firn/DispatchStep) (nth steps 2)
-           (listing firn/DispatchStep) (nth steps 3)]
+     (let [steps (Vec firn/DispatchStep) (dispatchplan-steps plan)
+           build firn/DispatchStep (nth steps 0)
+           validate firn/DispatchStep (nth steps 1)
+           enable firn/DispatchStep (nth steps 2)
+           listing firn/DispatchStep (nth steps 3)]
        (and
          (= (count steps) 4)
          (= (command-name (dispatchstep-command build)) "repo-build")
@@ -222,8 +221,7 @@
   (and
     (match (dispatch-decision ["rebuild"])
       [(DispatchPlanned plan)
-       (let [(step firn/DispatchStep)
-             (nth (dispatchplan-steps plan) 0)]
+       (let [step firn/DispatchStep (nth (dispatchplan-steps plan) 0)]
          (and (= (command-name (dispatchstep-command step))
                  "host-rebuild")
               (= (leaf-kind (dispatchstep-leaf step))
@@ -232,8 +230,7 @@
       [(DispatchError text status) false])
     (match (dispatch-decision ["rebuild" "whiterabbit"])
       [(DispatchPlanned plan)
-       (let [(leaf firn/DispatchLeaf)
-             (dispatchstep-leaf
+       (let [leaf firn/DispatchLeaf (dispatchstep-leaf
                (nth (dispatchplan-steps plan) 0))]
          (and (= (leaf-kind leaf) "explicit")
               (= (leaf-value leaf) "whiterabbit")))]
@@ -246,8 +243,7 @@
        (and (= status 1) (= text "Usage: firn rebuild [host]\n"))])
     (match (dispatch-decision ["rollback" "40"])
       [(DispatchPlanned plan)
-       (let [(step firn/DispatchStep)
-             (nth (dispatchplan-steps plan) 0)]
+       (let [step firn/DispatchStep (nth (dispatchplan-steps plan) 0)]
          (and (= (command-name (dispatchstep-command step))
                  "host-rollback")
               (= (leaf-kind (dispatchstep-leaf step)) "explicit")
@@ -335,7 +331,7 @@
          [(DispatchError text status)
           (and (= status 1)
                (>= (.indexOf text (str "Usage: firn " node " " edge " "))
-                   0))] )]
+                   0))])]
       [(CurrentHostLeaf token) true]
       [(LiteralLeaf value) true])))
 
@@ -372,7 +368,7 @@
 
 (defn case-documentation-and-diagnostics [] Bool
   (and
-    (= (command-count) 46)
+    (= (command-count) 47)
     (all-documented-commands-planned?)
     (all-required-leaves-diagnose?)
     (error-diagnostic? (dispatch-decision ["unknown" "edge"]))
@@ -390,11 +386,11 @@
 
 (js/export
   (defn run-tests [] Int
-    (let [(results (Vec TestResult)) (cases)]
+    (let [results (Vec TestResult) (cases)]
       (loop [(index Int) 0 (failures Int) 0]
         (if (>= index (count results))
           failures
-          (let [(result TestResult) (nth results index)]
+          (let [result TestResult (nth results index)]
             (if (testresult-passed result)
               (recur (+ index 1) failures)
               (do

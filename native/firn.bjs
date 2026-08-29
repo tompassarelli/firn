@@ -25,6 +25,7 @@
     (RepoWatchCommand [token Bool])
     (RepoDiffCommand [token Bool])
     (RepoDoctorCommand [token Bool])
+    (RepoPinAncestryCommand [token Bool])
     (RepoUpgradeCommand [token Bool])
     (RepoBuildCommand [token Bool])
     (RepoValidateCommand [token Bool])
@@ -306,6 +307,15 @@
     (->NativeRepoWorkflowFamily false)
     (->LiteralLeaf "all")))
 
+(def repo-pin-ancestry FirnCommand
+  (->FirnCommand
+    "repo" "pin-ancestry" "all" "         "
+    "check first-party input pins against local main ancestry"
+    "" ""
+    (->RepoPinAncestryCommand false)
+    (->NativeRepoWorkflowFamily false)
+    (->LiteralLeaf "all")))
+
 (def repo-upgrade FirnCommand
   (->FirnCommand
     "repo" "upgrade" "now|dry-run" "      "
@@ -518,8 +528,8 @@
         module-disable])
      (->CommandGroup [platform-list platform-show platform-safelist])
      (->CommandGroup
-       [repo-watch repo-diff repo-doctor repo-upgrade repo-build repo-validate
-        repo-lint repo-architecture])
+       [repo-watch repo-diff repo-doctor repo-pin-ancestry repo-upgrade repo-build
+        repo-validate repo-lint repo-architecture])
      (->CommandGroup [schema-explain schema-extract])
      (->CommandGroup [secret-list secret-show secret-edit])
      (->CommandGroup

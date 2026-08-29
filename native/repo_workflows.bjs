@@ -8,6 +8,7 @@
   (RepoLint [token Bool])
   (RepoDiff [target String])
   (RepoDoctor [token Bool])
+  (RepoPinAncestry [token Bool])
   (RepoWatch [token Bool])
   (RepoArchitecture [bundle Bool])
   (RepoUpgrade [dry-run Bool])))
@@ -17,9 +18,9 @@
   (InvalidRepoWorkflowArgv [argv (Vec String)])))
 
 (js/export (defrecord ProcessObservation
-  [status Int
-   stdout String
-   stderr String]))
+             [status Int
+              stdout String
+              stderr String]))
 
 (defrecord FirstPartyInput
   [name String
@@ -52,12 +53,12 @@
      output-path String])))
 
 (js/export (defrecord RepoWorkflowPlan
-  [processes (Vec ProcessBoundary)
-   success-output String]))
+             [processes (Vec ProcessBoundary)
+              success-output String]))
 
 (js/export (defrecord WatchOwnership
-  [timeout-seconds Int
-   max-events Int]))
+             [timeout-seconds Int
+              max-events Int]))
 
 (defunion WorkflowCompletion
   (WorkflowSucceeded [token Bool])
@@ -529,6 +530,12 @@
         (if (or (= leaf-count 0)
                 (and (= leaf-count 1) (= (nth argv 2) "all")))
           (->ParsedRepoWorkflow (->RepoDoctor false))
+          (->InvalidRepoWorkflowArgv argv))
+
+        (= edge "pin-ancestry")
+        (if (or (= leaf-count 0)
+                (and (= leaf-count 1) (= (nth argv 2) "all")))
+          (->ParsedRepoWorkflow (->RepoPinAncestry false))
           (->InvalidRepoWorkflowArgv argv))
 
         (= edge "watch")
@@ -1088,11 +1095,11 @@
      ["beagle" "validate" root])])
 
 (js/export (defn repo-workflow-plan
-  [root String
-   action RepoWorkflowAction
-   tracked (Vec String)
-   ownership WatchOwnership] RepoWorkflowPlan
-  (match action
+             [root String
+              action RepoWorkflowAction
+              tracked (Vec String)
+              ownership WatchOwnership] RepoWorkflowPlan
+             (match action
     [(RepoValidate token)
      (->RepoWorkflowPlan
        [(->InheritProcess
@@ -1119,6 +1126,8 @@
         (->InheritProcess "repository validation"
           ["beagle" "validate" root])]
        "")]
+    [(RepoPinAncestry token)
+     (->RepoWorkflowPlan [] "")]
     [(RepoWatch token)
      (->RepoWorkflowPlan (watch-processes root ownership) "")]
     [(RepoArchitecture bundle)

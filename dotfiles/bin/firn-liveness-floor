@@ -102,7 +102,7 @@ failing_check="hook_projection"
 run "checking active hook targets and projections" "$agents_bin" status
 failing_check="pin_ancestry"
 run "checking direct first-party pin ancestry" \
-  env FIRN_REPO="$repo" "$firn_bin" repo doctor
+  env FIRN_REPO="$repo" "$firn_bin" repo pin-ancestry
 
 failing_check="current_firn_output"
 current_output="$("$firn_bin" host list all)"

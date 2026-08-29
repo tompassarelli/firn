@@ -22,8 +22,8 @@
 (defn usage-error [bridge Any] Int
   (do
     (.err bridge
-      (str "Usage: firn repo validate|lint|diff|doctor|watch|architecture"
-        "|upgrade [leaf]\n"))
+      (str "Usage: firn repo validate|lint|diff|doctor|pin-ancestry|watch"
+        "|architecture|upgrade [leaf]\n"))
     64))
 
 (defn observation-from-capture
@@ -49,8 +49,7 @@
      (observation-from-capture
        (.runCapture bridge argv stdin max-output) argv)]
     [(CaptureToFileProcess phase argv stdin max-output output-path)
-     (let [observed workflow/ProcessObservation
-           (observation-from-capture
+     (let [observed workflow/ProcessObservation (observation-from-capture
              (.runCapture bridge argv stdin max-output) argv)]
        (if (not= (workflow/processobservation-status observed) 0)
          observed
@@ -79,16 +78,16 @@
    index Int] Int
   (if (>= index (count processes))
     0
-    (let [status Int
-          (emit-observation bridge
+    (let [status Int (emit-observation bridge
             (execute-process bridge (nth processes index)))]
       (if (= status 0)
         (execute-processes bridge processes (+ index 1))
         status))))
 
-(defn tracked-paths [bridge Any root String] TrackedPathsResult
-  (let [result Any
-        (.runCapture bridge ["git" "-C" root "ls-files"] ""
+(defn tracked-paths
+  [bridge Any
+   root String] TrackedPathsResult
+  (let [result Any (.runCapture bridge ["git" "-C" root "ls-files"] ""
           max-process-output)]
     (if (not (host-get result "ok"))
       (->TrackedPathsRejected
@@ -111,15 +110,17 @@
     [(RepoValidate token) false]
     [(RepoDiff target) false]
     [(RepoDoctor token) false]
+    [(RepoPinAncestry token) false]
     [(RepoWatch token) false]
     [(RepoUpgrade dry-run) false]))
 
-(defn doctor-status
+(defn pin-ancestry-status
   [bridge Any
    root String
    action workflow/RepoWorkflowAction] Int
   (match action
     [(RepoDoctor token) (.checkFirstPartyInputSkew bridge root)]
+    [(RepoPinAncestry token) (.checkFirstPartyInputSkew bridge root)]
     [(RepoValidate token) 0]
     [(RepoLint token) 0]
     [(RepoDiff target) 0]
@@ -131,18 +132,16 @@
   [bridge Any
    root String
    action workflow/RepoWorkflowAction] Int
-  (let [loaded TrackedPathsResult
-        (if (action-needs-tracked? action)
+  (let [loaded TrackedPathsResult (if (action-needs-tracked? action)
           (tracked-paths bridge root)
           (->TrackedPathsLoaded []))]
     (match loaded
       [(TrackedPathsRejected message) (do (.err bridge message) 1)]
       [(TrackedPathsLoaded tracked)
-       (let [doctor Int (doctor-status bridge root action)]
-         (if (not= doctor 0)
-           doctor
-           (let [plan workflow/RepoWorkflowPlan
-                 (workflow/repo-workflow-plan
+       (let [pin-ancestry Int (pin-ancestry-status bridge root action)]
+         (if (not= pin-ancestry 0)
+           pin-ancestry
+           (let [plan workflow/RepoWorkflowPlan (workflow/repo-workflow-plan
                    root action tracked watch-ownership)
                  status Int (execute-processes bridge
                               (workflow/repoworkflowplan-processes plan) 0)]
@@ -155,7 +154,9 @@
                status))))])))
 
 (js/export
-  (defn run [bridge Any args (Vec String)] Int
+  (defn run
+    [bridge Any
+     args (Vec String)] Int
     (match (workflow/parse-repo-workflow-argv args)
       [(InvalidRepoWorkflowArgv argv) (usage-error bridge)]
       [(ParsedRepoWorkflow action)

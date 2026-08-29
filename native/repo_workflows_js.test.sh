@@ -38,11 +38,15 @@ die() {
 
 json="$beagle/native-core/src/native/json.bjs"
 quality="$repo/native/repo_quality.bjs"
+dispatcher="$repo/native/firn.bjs"
+dispatcher_test="$repo/native/firn_dispatch_test.bjs"
 workflows="$repo/native/repo_workflows.bjs"
 runtime="$repo/native/repo_workflows_runtime.bjs"
+pin_ancestry_test="$repo/native/repo_pin_ancestry_test.bjs"
 mkdir -p "$scratch/modules/node_modules/beagle"
-timeout --foreground 90 "$beagle/bin/beagle" build \
-  "$json" "$quality" "$workflows" "$runtime" \
+timeout --foreground 90 "$beagle/bin/beagle-build-all" \
+  "$json" "$quality" "$dispatcher" "$dispatcher_test" \
+  "$workflows" "$runtime" "$pin_ancestry_test" \
   --out "$scratch/modules" \
   >"$scratch/build.out" 2>"$scratch/build.err" || {
     sed -n '1,240p' "$scratch/build.err" >&2
@@ -54,6 +58,12 @@ cp -- "$beagle/beagle-lib/lib/beagle/host.js" \
   "$scratch/modules/node_modules/beagle/host.js"
 printf '%s\n' '{"type":"module"}' \
   >"$scratch/modules/node_modules/beagle/package.json"
+
+for test_module in firn/dispatch-test.js firn/repo-pin-ancestry-test.js; do
+  FIRN_TEST_MODULE="$scratch/modules/$test_module" \
+    bun -e \
+      'const m = await import(process.env.FIRN_TEST_MODULE); process.exitCode = m["run-tests"]();'
+done
 
 set +e
 FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
@@ -93,7 +103,9 @@ write_lock() {
     >"$fixture_repo/flake.lock"
 }
 
-printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$fixture_bin/beagle"
+printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' \
+  'printf "%s\n" "$*" >>"${BEAGLE_CALLS:?}"' \
+  >"$fixture_bin/beagle"
 chmod +x "$fixture_bin/beagle"
 
 run_doctor() {
@@ -101,6 +113,7 @@ run_doctor() {
   set +e
   timeout --foreground 30 env \
     HOME="$fixture_home" \
+    BEAGLE_CALLS="$scratch/beagle.calls" \
     FIRN_REPO="$fixture_repo" \
     PATH="$fixture_bin:$PATH" \
     FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
@@ -111,7 +124,31 @@ run_doctor() {
   printf '%s\n' "$status" >"$result.status"
 }
 
+run_pin_ancestry() {
+  local result="$1"
+  set +e
+  timeout --foreground 30 env \
+    HOME="$fixture_home" \
+    BEAGLE_CALLS="$scratch/beagle.calls" \
+    FIRN_REPO="$fixture_repo" \
+    PATH="$fixture_bin:$PATH" \
+    FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
+    bun "$repo/native/repo_workflows_host.mjs" repo pin-ancestry \
+    >"$result.out" 2>"$result.err"
+  local status=$?
+  set -e
+  printf '%s\n' "$status" >"$result.status"
+}
+
 write_lock "$pinned_rev"
+: >"$scratch/beagle.calls"
+pin_current="$scratch/pin-current"
+run_pin_ancestry "$pin_current"
+[[ "$(<"$pin_current.status")" == "0" ]] \
+  || die "ancestor pin did not pass the narrow action"
+[[ ! -s "$scratch/beagle.calls" ]] \
+  || die "narrow pin-ancestry action ran full doctor processes"
+
 doctor_current="$scratch/doctor-current"
 run_doctor "$doctor_current"
 [[ "$(<"$doctor_current.status")" == "0" ]] \
@@ -124,6 +161,10 @@ rg -F "local checkout $fixture_home/code/glide/main is absent; skipped (portable
   || die "doctor did not report portable missing local input"
 [[ ! -s "$doctor_current.err" ]] \
   || die "current first-party input wrote stderr"
+rg -Fx 'doctor --deep' "$scratch/beagle.calls" >/dev/null \
+  || die "full doctor no longer ran Beagle authoring doctor"
+rg -Fx "validate $fixture_repo" "$scratch/beagle.calls" >/dev/null \
+  || die "full doctor no longer ran repository validation"
 
 write_lock "$independent_rev"
 doctor_skewed="$scratch/doctor-skewed"

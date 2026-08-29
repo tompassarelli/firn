@@ -1,0 +1,36 @@
+#lang beagle/js
+(ns firn.repo-pin-ancestry-test
+  (:require [firn.repo-workflows :as workflow]))
+
+(defn action-kind [action workflow/RepoWorkflowAction] String
+  (match action
+    [(RepoValidate token) "validate"]
+    [(RepoLint token) "lint"]
+    [(RepoDiff target) "diff"]
+    [(RepoDoctor token) "doctor"]
+    [(RepoPinAncestry token) "pin-ancestry"]
+    [(RepoWatch token) "watch"]
+    [(RepoArchitecture bundle) "architecture"]
+    [(RepoUpgrade dry-run) "upgrade"]))
+
+(defn parsed-pin-ancestry? [argv (Vec String)] Bool
+  (match (workflow/parse-repo-workflow-argv argv)
+    [(ParsedRepoWorkflow action) (= (action-kind action) "pin-ancestry")]
+    [(InvalidRepoWorkflowArgv rejected) false]))
+
+(defn case-pin-ancestry-action [] Bool
+  (let [ownership workflow/WatchOwnership (workflow/->WatchOwnership 30 1)
+        pin-plan workflow/RepoWorkflowPlan (workflow/repo-workflow-plan
+          "/repo" (workflow/->RepoPinAncestry false) [] ownership)
+        doctor-plan workflow/RepoWorkflowPlan (workflow/repo-workflow-plan
+          "/repo" (workflow/->RepoDoctor false) [] ownership)]
+    (and
+      (parsed-pin-ancestry? ["repo" "pin-ancestry"])
+      (parsed-pin-ancestry? ["repo" "pin-ancestry" "all"])
+      (not (parsed-pin-ancestry? ["repo" "pin-ancestry" "stale"]))
+      (= (count (workflow/repoworkflowplan-processes pin-plan)) 0)
+      (= (count (workflow/repoworkflowplan-processes doctor-plan)) 2))))
+
+(js/export
+  (defn run-tests [] Int
+    (if (case-pin-ancestry-action) 0 1)))
