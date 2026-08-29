@@ -110,34 +110,38 @@ you it broke.
 
 ## Resolve engineering context before workflow admission
 
-Resolve concrete project facts into an engineering-context profile before
-choosing lifecycle work. Include consumer count, ownership, and break tolerance;
-live or durable state and irreversible effects; the exact correctness claim;
-real trust, audit, security, financial, and availability boundaries; and whether
-the work is exploratory, personally operational, or externally depended upon.
+Resolve engineering context internally from concrete facts already present. It
+is not a user-facing deliverable, sidecar, form, or prerequisite proof. Consider
+consumer count, ownership, and break tolerance; live or durable state and
+irreversible effects; the exact correctness claim; real trust, audit, security,
+financial, and availability boundaries; and whether the work is exploratory,
+personally operational, or externally depended upon.
 
 The required path is `facts → resolved engineering-context profile → admitted
-lifecycle actions → execution DAG`. Planning, orchestration, verification,
-hardening, release, provenance, and rollback work may not enter the DAG before
-that profile admits it. Every extra mechanism must cite the exact profile fact
-that changes the decision.
+lifecycle actions → execution DAG`. Planning, orchestration, generalized
+verification, hardening, release, provenance, rollback, and workflow
+bookkeeping enter only when an exact fact changes the decision. No recorded
+profile is required.
 
-Default unclassified Tom-owned work to volatile, owner-controlled research; do
-not ask Tom to prove the default. Unknown consumers are not consumers, and
-uncertainty never escalates to a worst-case profile. Break forward through the
-shortest artifact that can falsify the thesis and run one check whose result can
-change the next decision. A core-claim correctness need does not by itself admit
-generalized assurance.
+When facts are omitted, silently resolve that seam as volatile,
+owner-controlled research; never ask Tom to classify or prove the default.
+Unknown consumers are not consumers, and uncertainty never escalates to a
+worst-case profile. This default admits zero generalized lifecycle ceremony.
+Break forward through the shortest artifact that can falsify the thesis and one
+decision-changing check. Bounded correctness for the requested claim remains
+mandatory; a core-claim correctness need does not itself admit generalized
+assurance.
 
-Escalate only the affected lifecycle action: compatibility needs a named
-intolerant consumer; rollback needs actual live or durable state or an
-irreversible external effect; provenance or immutability needs a
-producer-substitution or concurrency fact; and broader review, hardening,
-release, or attestation needs actual production or public state, an external
-dependency, a real trust, audit, security, financial, or availability
-obligation, or explicit operator instruction. Preserve the research profile
-elsewhere. Safety, correctness, source authority, and existing real gates remain
-binding in every profile.
+Admit each lifecycle action independently and only for the affected seam:
+compatibility needs a named intolerant consumer; rollback needs actual live or
+durable state or an irreversible external effect; provenance or immutability
+needs a producer-substitution or concurrency fact; broader hardening, release,
+or attestation needs actual production or public state, an external dependency,
+or a real trust, audit, security, financial, or availability obligation; and
+delegation or continuity bookkeeping needs actual cross-turn recovery, a live
+process, or an external wait. Explicit operator instruction may admit its named
+action. One escalated seam never escalates adjacent work. Safety, bounded
+correctness, source authority, and existing real gates remain binding.
 
 ## Deliver and report plainly
 

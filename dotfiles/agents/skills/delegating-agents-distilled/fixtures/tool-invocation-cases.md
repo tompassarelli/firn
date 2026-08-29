@@ -89,7 +89,9 @@ goal is to test whether the thesis works.
 Expected result: resolve volatile owner-controlled research, admit the shortest
 falsifying artifact and one decision-changing check, then reassess. Do not admit
 general review, hardening, release, provenance, compatibility, or rollback work
-without a new concrete profile fact.
+without a new concrete profile fact. Resolve this internally; do not request or
+validate a profile sidecar, ask the operator to classify the project, or treat
+omitted facts as a reason to escalate.
 
 ### Enterprise-positive escalation
 
@@ -120,3 +122,24 @@ Expected result: unknown consumers are not consumers. Re-resolve the projects
 as volatile owner-controlled research, remove the unsupported lifecycle work,
 and retain only the shortest falsifying artifact and one decision-changing
 check. Prior over-escalation does not become a new profile fact.
+
+### Research delegation has no bookkeeping side quest
+
+Prompt shape: split two independent, in-turn experiments in an owner-controlled
+research repository. Each worker can return a concrete result before the
+current response and no external wait or live process remains.
+
+Expected result: dispatch both workers with bounded briefs and consume their
+terminal results directly. Do not create a todo, forecast record, assignment,
+review lane, SettlementCard, settlement worker, or cleanup lane. A recoverable
+Git worktree alone is not a durable-continuity fact.
+
+### Durable coordination admits only its own bookkeeping
+
+Prompt shape: one externally depended-upon deployment must wait on a named
+third-party approval across turns while an adjacent research probe completes
+in the current turn.
+
+Expected result: record continuity and terminal settlement only for the
+external wait and its actual durable consumer. Close the research probe from
+its terminal result; the durable seam does not authorize program-wide process.

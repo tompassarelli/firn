@@ -19,9 +19,10 @@ Estimate agent execution, never human effort.
    resolved mechanical edit, default to first diff in 30 seconds and
    commit/push in 90. At twice the point, interrupt and rebrief or split; never
    extend in place.
-4. Record forecast, sample count, and staffing in the owning active todo attempt
-   before execution. Close terminal facts through the `todo-distilled` SettlementCard and
-   `settle-work-distilled` by default.
+4. If an active todo attempt already exists for independent continuity reasons,
+   record the forecast and observed actual there. Never create a todo,
+   SettlementCard, staffing record, or settlement worker merely to hold an
+   estimate; report the actual directly when no durable consumer exists.
 
 Never hand-format receipts, combine incomparable observation units, count
 unknown coverage, or overwrite a receipt key. Route exact receipt and settlement

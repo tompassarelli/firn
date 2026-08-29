@@ -35,9 +35,11 @@ tools, or long commands.
 
 Consume replaceable commander cards, not event streams. A report requires every
 ready front to have a commander or exact hold, every conflict one owner, and
-every completion an artifact, gate, settlement, and cleanup disposition. Route
-topology, skill placement, card fields, and audit detail to the reference skill
-only for an explicit request or a named unresolved question.
+every completion a concrete result plus the observation that decided it.
+Require a gate, settlement, or cleanup disposition only when the resolved
+engineering context, an existing durable record, or actual live state admits
+one. Route topology, skill placement, card fields, and audit detail to the
+reference skill only for an explicit request or a named unresolved question.
 
 ## Fail-operational fallback
 

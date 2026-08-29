@@ -16,13 +16,19 @@ outcome.
 
 ## Admission and ownership
 
-- Apply the always-loaded engineering-context gate before forecasts,
-  decomposition, or workstream admission. Carry only its admitted lifecycle
-  actions and exact fact anchors into the brief; do not add a ninth portable
-  routing field.
-- Create restart-grade continuity and one forecast/staffing attempt before
-  delegation. Name exact dependencies, posture, boundaries, terminal evidence,
-  nearest existing check, supervisor window, and reap path.
+- Apply the always-loaded engineering-context gate internally before forecasts,
+  decomposition, or workstream admission. When facts are omitted, silently use
+  volatile owner-controlled research. Carry only admitted lifecycle actions and
+  exact fact anchors into the brief; do not request a profile artifact or add a
+  ninth portable routing field.
+- In volatile owner-controlled research, dispatch from the current brief. Do
+  not create a todo record, forecast, assignment, review lane, settlement job,
+  or cleanup lane merely because delegation occurred. Add durable continuity
+  only when work must survive this turn or leaves an actual live process,
+  external wait, or unresolved lane for another run to recover.
+- Name the outcome, write boundary, nearest decision-changing check, supervisor,
+  and publication authority in the brief. Add further lifecycle fields only
+  when the resolved engineering context admits them.
 - Admit model/tier/deliberation, policy, repository identity, entrypoint,
   environment, physical write lane, integration/publication authority, and a
   viable supervisor before dispatch. Unadmitted work remains read-only or
@@ -49,9 +55,10 @@ outcome.
 
 ## Time, route, and safety decisions
 
-- Budget elapsed critical-path wall time separately from summed agent execution
-  time. Stop adding workers at planned aggregate agent time without a closure
-  candidate; at twice either estimate interrupt and rebrief. Renaming or
+- When an estimate is requested or materially changes sequencing, budget
+  elapsed critical-path wall time separately from summed agent execution time.
+  Otherwise supervise from observable progress instead of creating forecast
+  paperwork. At twice a stated estimate, interrupt and rebrief; renaming or
   replacing an attempt does not reset the operator outcome clock.
 - Select capability from task difficulty and oracle strength; select ceremony
   and authority separately. Honor every operator pin exactly and use the live
@@ -127,21 +134,24 @@ reliability-closure decision back to the incident skill.
    actions.
 2. Decompose admitted work to independent seams and appoint the nearest closure
    owner.
-3. Record continuity, attempt budgets, posture, authority, evidence, and checks.
+3. Record continuity or estimates only when their own trigger is present; an
+   in-turn research worker and recoverable Git lane require neither by default.
 4. Route and dispatch every ready seam; keep serial consumers waiting only for
    the exact artifact they consume.
 5. Supervise progress against authorized windows, steer with new evidence, and
    consume terminal reports immediately.
-6. The closure owner decides verification, review, integration, publication,
-   debt, race, and lane state; then emits an immutable SettlementCard and uses
-   a fresh `settle-work-distilled` clerk for mechanical bookkeeping.
-7. Update continuity prose, land through repository safety, and reap released
-   workers, processes, lanes, branches, and claims.
+6. The closure owner decides the result, proportionate verification,
+   integration, and publication. The worker's terminal report closes ordinary
+   in-turn work. Emit a SettlementCard only when an existing durable todo,
+   assignment, or coordination record actually requires settlement.
+7. Update only continuity that exists, land through repository safety, and
+   remove only actual released workers, processes, lanes, branches, or claims.
 
 Quarantine the affected seam, not the program, on an unavailable required
 authority surface, ambiguous product owner, missing liveness signal for
 automated activation, exhausted outcome budget, or a worker result that lacks
-exact terminal evidence; an unsettled child blocks settlement only. Continue
+exact terminal evidence; an unsettled child blocks only settlement that was
+independently required. Continue
 unrelated ready work and apply the continuous-supervision stop rule.
 
 Reserve a blocked outcome for a correctly invoked unavailable required surface,
