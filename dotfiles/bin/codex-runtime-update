@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install the official Codex npm payload into a user-owned, atomically selected
-# runtime. The native executable is self-contained; Node/npm are only needed
-# while preparing a new version.
+# runtime. The native executable is self-contained; Bun is only needed while
+# preparing a new version.
 set -euo pipefail
 
 [ "$#" -le 1 ] || {
@@ -16,12 +16,8 @@ case "$requested" in
     ;;
 esac
 
-command -v npm >/dev/null 2>&1 || {
-  echo "codex-runtime-update: npm is required to fetch the official @openai/codex package" >&2
-  exit 127
-}
-command -v node >/dev/null 2>&1 || {
-  echo "codex-runtime-update: node is required while preparing the runtime" >&2
+command -v bun >/dev/null 2>&1 || {
+  echo "codex-runtime-update: Bun is required to fetch the official @openai/codex package" >&2
   exit 127
 }
 command -v sha256sum >/dev/null 2>&1 || {
@@ -59,11 +55,15 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM HUP
 
-npm install \
-  --prefix "$stage" \
+bun install \
+  --cwd "$stage" \
+  --backend=copyfile \
+  --exact \
   --ignore-scripts \
-  --no-audit \
-  --no-fund \
+  --linker=hoisted \
+  --no-progress \
+  --no-summary \
+  --save-text-lockfile \
   "@openai/codex@$requested"
 
 package_root="$stage/node_modules/@openai/codex"
@@ -74,7 +74,13 @@ native="$platform_root/vendor/$target/bin/codex"
   exit 1
 }
 
-version="$(node -e 'process.stdout.write(require(process.argv[1]).version)' "$package_root/package.json")"
+version="$(bun -e '
+const value = (await Bun.file(Bun.argv[1]).json()).version;
+if (typeof value !== "string" || value.length === 0) {
+  throw new Error("package version is missing");
+}
+process.stdout.write(value);
+' "$package_root/package.json")"
 case "$version" in
   ''|*[!0-9A-Za-z._+-]*)
     echo "codex-runtime-update: package reported an invalid version: $version" >&2
@@ -93,8 +99,26 @@ observed="$($stage/bin/codex --version)"
 
 binary_sha256="$(sha256sum "$native")"
 binary_sha256="${binary_sha256%% *}"
-package_integrity="$(node -e 'const p=require(process.argv[1]); process.stdout.write(p.packages[process.argv[2]].integrity)' "$stage/package-lock.json" "node_modules/@openai/codex")"
-platform_integrity="$(node -e 'const p=require(process.argv[1]); process.stdout.write(p.packages[process.argv[2]].integrity)' "$stage/package-lock.json" "node_modules/@openai/$platform_package")"
+read_lock_integrity() {
+  bun -e '
+const lock = Bun.JSONC.parse(await Bun.file(Bun.argv[1]).text());
+const entry = lock.packages?.[Bun.argv[2]];
+const expected = Bun.argv[3];
+const integrity = entry?.[3];
+if (!Array.isArray(entry) || entry[0] !== expected) {
+  throw new Error("lock identity mismatch for " + Bun.argv[2]);
+}
+if (typeof integrity !== "string" ||
+    !/^sha(?:256|384|512)-[A-Za-z0-9+/]+={0,2}$/.test(integrity)) {
+  throw new Error("lock integrity is missing for " + Bun.argv[2]);
+}
+process.stdout.write(integrity);
+' "$stage/bun.lock" "$1" "$2"
+}
+package_integrity="$(read_lock_integrity \
+  "@openai/codex" "@openai/codex@$version")"
+platform_integrity="$(read_lock_integrity \
+  "@openai/$platform_package" "@openai/codex@$version-$platform_version_suffix")"
 cat >"$stage/provenance" <<EOF
 package=npm:@openai/codex@$version
 package_integrity=$package_integrity
