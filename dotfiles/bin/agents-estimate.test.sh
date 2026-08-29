@@ -40,14 +40,12 @@ ag off estimate-distilled >/dev/null
 test "$(<"$ESTIMATE_TEST_CALLS")" = $'config agents on estimate-distilled\nconfig agents path estimate-distilled\nconfig agents off estimate-distilled'
 
 todo_skill="$repo/dotfiles/agents/skills/todo-reference/SKILL.md"
-delegate_skill="$repo/dotfiles/agents/skills/delegating-agents-reference/SKILL.md"
 grep -Fq '## Attempt and terminal receipt' "$todo_skill"
 grep -Fq 'wall_time_estimate' "$todo_skill"
 grep -Fq 'agent_time_actual' "$todo_skill"
 grep -Fq 'execution_observation' "$todo_skill"
 grep -Fq '[[quality_debt]]' "$todo_skill"
 grep -Fq 'Same-class model-specific samples' "$repo/dotfiles/agents/skills/estimate-reference/SKILL.md"
-grep -Fq '## Review and debt' "$delegate_skill"
 
 python3 - <<'PY'
 import tomllib

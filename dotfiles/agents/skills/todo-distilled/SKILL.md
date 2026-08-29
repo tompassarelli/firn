@@ -35,10 +35,9 @@ ordinary in-turn delegation, worktree, plan, phase, or status report.
   dispatch evidence, and record an evidence gap outside the model field.
 - Update at every visible phase boundary by replacing stale state, not appending
   a transcript. A successor must be able to execute `Next actions` directly.
-- The product owner closes ordinary work directly from its terminal result.
-  Issue a SettlementCard only when an existing durable todo, assignment, or
-  coordination record needs terminal bookkeeping; a settler may apply only
-  that exact envelope.
+- The product owner closes an existing durable record directly from terminal
+  evidence. North separately settles the concrete run's process, delivery,
+  driver, and parent/child state through `agent-run-lifecycle-distilled`.
 - A mailbox `OPEN` transfers no ownership until the addressed receiver writes
   `ACK` and a live bounded monitor delivers it.
 - Delete a record only when no continuity, dependent update, owned change,
@@ -52,8 +51,8 @@ ordinary in-turn delegation, worktree, plan, phase, or status report.
    needed to resume the durable unit.
 3. Maintain current checkpoint, load-bearing decisions, executable next steps,
    observed verification, and recovery/cleanup conditions.
-4. At terminal work, update the record directly unless an existing durable
-   assignment or coordination consumer requires the settlement contract.
+4. At terminal work, update the durable record directly from the fixed terminal
+   facts after North has settled the concrete run state.
 5. Land or explicitly dispose of the live state the record owns, update actual
    dependents, then remove the record when recovery value is gone.
 

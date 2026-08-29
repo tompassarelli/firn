@@ -149,7 +149,7 @@ codex_mcp_inventory_server_has_state() {
     ' <<<"$inventory" >/dev/null
 }
 
-orchestration_version_matches() {
+agent_machinery_version_matches() {
   local version="$1" commit="$2"
 
   [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || return 1
@@ -157,7 +157,7 @@ orchestration_version_matches() {
   [ "$version" = "$commit" ] || [ "$version" = "${commit:0:12}" ]
 }
 
-orchestration_revisions_converged() {
+agent_machinery_revisions_converged() {
   local intent="$1" source_head="$2" verified_input="$3"
 
   [[ "$intent" =~ ^[0-9a-f]{40}$ ]] &&

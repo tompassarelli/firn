@@ -14,7 +14,7 @@ falsifiable hypotheses.
 The exact upstream owner repairs the cause, the focused regression passes, the
 repair is activated, preferred topology is restored, and the repaired primary
 path canary observes healthy startup, liveness, control, and terminal reporting.
-Executive orchestration records any restoration-debt exit evidence; only then
+North records any agent-run restoration-debt exit evidence; only then
 may incident closure be considered.
 
 If fallback delivery finishes first, delivery is complete while the incident
@@ -66,11 +66,11 @@ Retain only the normalized `opaque-token:gAAAA` signature and never the token
 body. Those fields create one `reporting` `IncidentSeed`, and a repeat with the
 same tuple increments it.
 
-After the preconditions in `executive-orchestration-distilled` are established,
-root admits one plaintext-resend fallback and delivery remains active. Record
-its executive-owned restoration-debt fields in the same incident seed. The
-resend, delivery state, and open debt do not create a second lifecycle or close
-reliability.
+After North has typed proof that no provider side effect became observable,
+`agent-run-lifecycle-distilled` admits one plaintext-resend fallback and delivery
+remains active. Record its North-owned requested/resolved route and
+restoration-debt fields in the same incident seed. The resend, delivery state,
+and open debt do not create a second lifecycle or close reliability.
 
 ## Episodic-negative control
 

@@ -1,17 +1,17 @@
 ---
 name: estimate-reference
 description: >-
-  Calibration receipt, settlement, canonical observation, comparability, and
-  idempotency reference for estimate-distilled. Load only when that skill routes
-  here through `agents path estimate-reference`; this is not the trigger or
-  minimum workflow for giving an agent ETA.
+  Calibration receipt, canonical observation, comparability, and idempotency
+  reference for estimate-distilled. Load only when that skill routes here
+  through `agents path estimate-reference`; this is not the trigger or minimum
+  workflow for giving an agent ETA.
 ---
 
 # Estimate reference
 
 The distilled skill owns forecast formation, execution bounds, and the minimum
-close-the-loop workflow. `todo-distilled` owns shared attempt and SettlementCard
-contracts; `settle-work-distilled` owns their mechanical application.
+close-the-loop workflow. `todo-distilled` owns shared attempt and terminal
+record contracts.
 
 ## Forecast evidence
 
@@ -24,14 +24,13 @@ sample count includes only comparable completed observations.
 ## Terminal settlement
 
 At a terminal worker boundary, the product owner fixes the terminal facts and
-normally delegates their mechanical copy through a validated SettlementCard.
-Direct settlement is reserved for the case where no admitted worker slot exists
-or dispatch costs more than this bounded update.
+updates any independently required durable record directly. North separately
+settles process, delivery, driver, and parent/child run state through
+`agent-run-lifecycle-distilled`.
 
 Replace the in-flight pointer with one completed receipt keyed by
-`<record_id>/<attempt_id>`. Render through the SettlementCard validator's
-`--render-receipt` path and apply through the atomic keyed updater owned by
-`settle-work-distilled`.
+`<record_id>/<attempt_id>` using the canonical field order below. Apply it as an
+atomic keyed update after the complete terminal todo-record replacement.
 
 ## Receipt schema
 

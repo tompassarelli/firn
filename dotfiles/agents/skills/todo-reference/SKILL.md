@@ -2,9 +2,9 @@
 name: todo-reference
 description: >-
   Detailed todo continuity reference for record TOML, attempt and execution
-  observations, SettlementCards, shape and dependency semantics, lifecycle
-  updates, calibration receipts, and the acknowledged mailbox protocol. Use
-  after todo-distilled routes here.
+  observations, shape and dependency semantics, lifecycle updates, calibration
+  receipts, and the acknowledged mailbox protocol. Use after todo-distilled
+  routes here.
 ---
 
 # Todo continuity reference
@@ -106,27 +106,18 @@ empty evidence, and no segments. Do not retain partial counts, infer a mode
 from silence, fabricate zeroes, or store raw identifiers, paths, transcript
 text, prompts, tool arguments, or results.
 
-## SettlementCard
+## Terminal record update
 
-The immutable card carries schema `agent-settlement-card/v1`, exact record path
-and SHA-256, record and authorizer identity, issue time, commit, verdict and
-evidence arrays, debt, terminal attempt delta, and exact lane state. Its
-`[attempt]` table adds terminal fields only; it does not restate forecast or
-staffing. Evidence entries use `<exact source> :: <observed result>`.
-
-The validator checks record hash and identity, authorization, chronology,
-verdict/evidence consistency, review, debt, lane identity, duration relations,
-observation schema, units, hashed joins, count safety, and segment coalescing.
-Every supplied terminal field must be absent or already equal in the record.
-Require `ended_at - started_at == wall_time_actual` at compact-duration
+The product owner fixes terminal evidence and applies the complete terminal
+attempt fields, attempt-owned debt, and lane state as one atomic todo-record
+replacement. Preserve forecast fields and ordered execution-observation
+segments. Require `ended_at - started_at == wall_time_actual` at compact-duration
 precision; each explanatory duration must not exceed wall time.
 
-Attempt fields, attempt-owned debt, and lane state are one atomic todo-record
-replacement. The deterministic keyed estimate receipt follows as a separate
-atomic update. Therefore replay may observe the original record, the complete
-record replacement without its receipt, or both complete targets. A stale
-digest is acceptable only when the todo target is already exact and only the
-receipt remains.
+Write the deterministic keyed estimate receipt as a separate atomic update,
+then re-read both targets. Replay may observe the original record, the complete
+record replacement without its receipt, or both complete targets; partial
+terminal fields, debt, or lane mutation are invalid.
 
 ## Shapes, links, and debt
 

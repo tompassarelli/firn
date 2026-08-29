@@ -1,4 +1,0 @@
-interface:
-  display_name: "Settle Work Reference"
-  short_description: "Detailed delegated-work settlement guidance"
-  default_prompt: "Use $settle-work-reference for detailed SettlementCard validation and receipt procedures."

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Executive Report Distilled"
-  short_description: "Core outcome-first portfolio reporting workflow"
-  default_prompt: "Use $executive-report-distilled to produce the requested executive report."

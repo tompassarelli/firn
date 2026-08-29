@@ -55,12 +55,13 @@ than the opaque payload itself.
 ## Contain and investigate
 
 Quarantine only the defective call, run, or lifecycle seam. Continue a
-replacement admitted through delegation and keep independent work moving.
-Continue and record a fallback only after
-`executive-orchestration-distilled` has admitted it under that skill's
-preconditions. If fallback is needed but not authorized, route admission there;
-this incident workflow never admits fallback. Preserve delivery containment
-separately from incident state.
+replacement only after Agent Machinery supplies a fresh portable run design and
+North admits it through `agent-run-lifecycle-distilled`; keep independent work
+moving. North may fall back only with typed proof that no provider side effect
+became observable. Preserve requested and resolved route evidence and any
+restoration debt. If that proof is unavailable, do not retry or switch runtime;
+record the blocked delivery state. This incident workflow never admits fallback.
+Preserve delivery containment separately from incident state.
 
 Write falsifiable hypotheses before naming a cause: each states its predicted
 observation and what would refute it. Run one smallest safe, authorized,
@@ -77,11 +78,11 @@ never the upstream owner.
 ## Restoration and closure
 
 This skill alone owns incident lifecycle transitions and the reliability
-closure decision. `executive-orchestration-distilled` alone admits fallback
-and owns its restoration-debt fields. Record those fields as incident evidence
-without creating a second debt model, broadening fallback authority, or
-changing the default. Fallback completion may close delivery containment but
-not the incident.
+closure decision. `agent-run-lifecycle-distilled` owns concrete fallback,
+restoration, and terminal agent-run settlement. Record its route and
+restoration-debt facts as incident evidence without creating a second debt
+model, broadening fallback authority, or changing the default. Fallback
+completion may close delivery containment but not the incident.
 
 Use explicit states:
 `seeded → contained → investigated → classified → owned → repaired → regressed
@@ -100,5 +101,5 @@ Close only when the upstream repair is landed, the focused regression passes,
 the repaired authority is activated, the preferred topology is restored, and
 a primary-path canary exercises the triggering lifecycle seam successfully,
 all in the current generation. When current-generation fallback restoration
-debt exists, also require its executive-owned exit evidence. Fallback-path
+debt exists, also require its North-owned exit evidence. Fallback-path
 success is not a primary canary.

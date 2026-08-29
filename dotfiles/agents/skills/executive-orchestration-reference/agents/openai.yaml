@@ -1,4 +1,0 @@
-interface:
-  display_name: "Executive Orchestration Reference"
-  short_description: "Detailed executive orchestration guidance"
-  default_prompt: "Use $executive-orchestration-reference for detailed fleet command guidance."

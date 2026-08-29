@@ -46,7 +46,7 @@ north/cli/tests/agent-identity-publication-integration-test.clj	4
 north/cli/tests/concern-cli-validation-test.clj	1
 north/cli/tests/concern-offline-reconcile-integration-test.clj	1
 north/cli/tests/concern-offline-spool-integration-test.clj	1
-north/cli/tests/config-comms-test.clj	2
+north/cli/tests/config-comms-test.clj	3
 north/cli/tests/config-hooks-test.clj	3
 north/cli/tests/context-replacement-test.clj	1
 north/cli/tests/coord-assert-after-read-integration-test.clj	1
@@ -69,6 +69,7 @@ north/cli/tests/native-listener-liveness-integration-test.clj	1
 north/cli/tests/north-listen-reconnect-test.clj	1
 north/cli/tests/peer-command-integration-test.clj	1
 north/cli/tests/pending-pagination-integration-test.clj	1
+north/cli/tests/pred-cli-test.clj	1
 north/cli/tests/presence-online-integration-test.clj	1
 north/cli/tests/read-projection-churn-oracle.clj	1
 north/cli/tests/run-event-ingress-integration-test.clj	1

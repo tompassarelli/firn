@@ -270,6 +270,7 @@ run_policy_contract_fixture() {
   local base="$scratch/policy-contract-base"
   local north_root="$NORTH_REPO"
   local north_catalog="${NORTH_AGENT_CATALOG:-$north_root/agent-catalog/sources.json}"
+  local north_bb="${NORTH_BB:-$HOME/.local/state/north/runtime-profile/bin/bb}"
   local preamble='Provider-neutral bootstrap.'
   local route='- Repository edits, lanes, pins, commits, landing, or pushes → `repo-safety`.'
   local destination='Repository writes belong in a lane.'
@@ -290,7 +291,9 @@ run_policy_contract_fixture() {
   credential_digest="$(printf %s "$credential" | sha256sum | awk '{print $1}')"
   repo_digest="$(printf %s "$repo_claim" | sha256sum | awk '{print $1}')"
   mkdir -p "$base/policy" "$base/skills/repo-safety" "$base/skills/firn" \
-    "$base/hooks" "$base/support"
+    "$base/skills/source-fixture" "$base/skills/package-fixture" \
+    "$base/hooks" "$base/support" "$base/agent-catalog" \
+    "$base/dotfiles/agents" "$base/contracts"
   printf '# Global\n\n%s\n\n## Routes\n\n%s\n\n## Credentials\n\n%s\n' \
     "$preamble" "$route" "$credential" >"$base/policy/AGENTS.md"
   printf '# Repository\n\n## Architecture\n\n%s\n' "$repo_claim" \
@@ -301,6 +304,12 @@ run_policy_contract_fixture() {
   printf '%s\n' '---' 'name: firn' 'category: nixos' \
     'description: Author Firn configuration.' '---' '' '# Firn' '' "$firn_destination" \
     >"$base/skills/firn/SKILL.md"
+  printf '%s\n' '---' 'name: source-fixture' \
+    'description: Source catalog fixture.' '---' '' '# Source fixture' \
+    >"$base/skills/source-fixture/SKILL.md"
+  printf '%s\n' '---' 'name: package-fixture' \
+    'description: Package catalog fixture.' '---' '' '# Package fixture' \
+    >"$base/skills/package-fixture/SKILL.md"
   printf '%s\n' '#!/usr/bin/env bash' 'exit 0' \
     >"$base/hooks/launch-critical-worktree-guard.sh"
   printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$base/support/harness-dial.sh"
@@ -334,16 +343,45 @@ guard = [
   { key = "guard.worktree", unit = "launch-critical-worktree-guard", command = "launch-critical-worktree-guard.sh", codex_command = "/etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh", codex = ["PreToolUse:^(Edit|Write|MultiEdit|apply_patch)$", "PreToolUse:^Bash$"] },
 ]
 TOML
+  cat >"$base/agent-catalog/sources.json" <<'JSON'
+{"$schema":"sources.schema.json","schema":"north.agent-catalog-sources/v1","sources":[
+{"id":"north","role":"source","owner":{"repo":"north","path":"agent-catalog/north.json"}},
+{"id":"agent-machinery","role":"package","owner":{"repo":"agent-machinery","path":"catalog.json"}},
+{"id":"operator","role":"operator","owner":{"repo":"nixos-config","path":"dotfiles/agents/catalog-config.json"}}
+]}
+JSON
+  cat >"$base/agent-catalog/north.json" <<'JSON'
+{"$schema":"catalog-config.schema.json","schema":"north.agent-catalog-config/v1","role":"source","units":[
+{"id":"source-fixture","kind":"skill","owner":{"repo":"north","path":"skills/source-fixture/SKILL.md"}}
+]}
+JSON
   cat >"$base/catalog.json" <<'JSON'
-{"schema":"north.agent-catalog/v1",
+{"$schema":"urn:agent-machinery:schema:catalog:v1","schema":"agent-machinery.catalog/v1",
+"package":{"name":"@tompassarelli/agent-machinery","version":"0.0.0","license":"MIT OR Apache-2.0"},
+"units":[{"id":"package-fixture","kind":"skill","source":"skills/package-fixture/SKILL.md"}],
+"assets":[{"id":"package-fixture-asset","type":"instructions","path":"doctrine.md"}],
+"contracts":[{"id":"package-fixture-contract","schema":"contracts/schema.json","schemaScope":"structural","fixtures":"contracts/fixtures.json","validator":"validateContract"}]}
+JSON
+  printf '%s\n' 'Package fixture.' >"$base/doctrine.md"
+  printf '%s\n' '{}' >"$base/contracts/schema.json"
+  printf '%s\n' '{}' >"$base/contracts/fixtures.json"
+  cat >"$base/dotfiles/agents/catalog-config.json" <<'JSON'
+{"$schema":"catalog-config.schema.json","schema":"north.agent-catalog-config/v1","role":"operator",
 "baselines":[{"id":"global-bootstrap","owner":{"repo":"nixos-config","path":"policy/AGENTS.md"},"targets":["shared"]}],
 "providerSupport":[{"id":"activation-gate","owner":{"repo":"nixos-config","path":"support/harness-dial.sh"},"path":"lib/harness-dial.sh"}],
 "rootOrder":["repo-safety","firn"],
-"units":[
-{"id":"repo-safety","kind":"skill","category":"git","owner":{"repo":"nixos-config","path":"skills/repo-safety/SKILL.md"},"distributions":[{"type":"skill","targets":["shared"]}]},
-{"id":"firn","kind":"skill","category":"nixos","owner":{"repo":"nixos-config","path":"skills/firn/SKILL.md"},"distributions":[{"type":"skill","targets":["shared"]}]},
-{"id":"launch-critical-worktree-guard","kind":"hook","category":"authoring","title":"Worktree guard","triggerDescription":"Protect launch-critical checkouts.","owner":{"repo":"nixos-config","path":"hooks/launch-critical-worktree-guard.sh"},"supports":["repo-safety"],"distributions":[{"type":"hook","targets":["codex"]}]}
-]}
+"registrations":{
+"repo-safety":{"kind":"skill","category":"git","owner":{"repo":"nixos-config","path":"skills/repo-safety/SKILL.md"}},
+"firn":{"kind":"skill","category":"nixos","owner":{"repo":"nixos-config","path":"skills/firn/SKILL.md"}},
+"launch-critical-worktree-guard":{"kind":"hook","category":"authoring","owner":{"repo":"nixos-config","path":"hooks/launch-critical-worktree-guard.sh"}}
+},
+"activation":{
+"source-fixture":{"distributions":[{"type":"skill","targets":["shared"]}]},
+"package-fixture":{"distributions":[{"type":"skill","targets":["shared"]}]},
+"repo-safety":{"distributions":[{"type":"skill","targets":["shared"]}]},
+"firn":{"distributions":[{"type":"skill","targets":["shared"]}]},
+"launch-critical-worktree-guard":{"supports":["repo-safety"],"distributions":[{"type":"hook","targets":["codex"]}]}
+}}
 JSON
 
   chmod 0644 "$base/skills/repo-safety/SKILL.md" "$base/skills/firn/SKILL.md" \
@@ -352,13 +390,16 @@ JSON
   git -C "$base" config user.name 'Policy Fixture'
   git -C "$base" config user.email 'policy-fixture@example.invalid'
   git -C "$base" add policy/AGENTS.md policy/REPO-AGENTS.md \
-    skills/repo-safety/SKILL.md skills/firn/SKILL.md requirements.toml \
+    skills/repo-safety/SKILL.md skills/firn/SKILL.md \
+    skills/source-fixture/SKILL.md skills/package-fixture/SKILL.md requirements.toml \
     hooks/launch-critical-worktree-guard.sh support/harness-dial.sh \
-    manifest.toml catalog.json
+    manifest.toml catalog.json doctrine.md contracts/schema.json \
+    contracts/fixtures.json agent-catalog/sources.json agent-catalog/north.json \
+    dotfiles/agents/catalog-config.json
   git -C "$base" commit -qm 'Build policy fixture'
 
-  NORTH_AGENT_CATALOG="$base/catalog.json" \
-  NORTH_REPO_ROOTS="{\"nixos-config\":\"$base\"}" \
+  NORTH_AGENT_CATALOG="$base/agent-catalog/sources.json" \
+  NORTH_REPO_ROOTS="{\"nixos-config\":\"$base\",\"north\":\"$base\",\"agent-machinery\":\"$base\"}" \
     bb -e '
       (require (quote [cheshire.core :as json]))
       (load-file (first *command-line-args*))
@@ -377,27 +418,29 @@ JSON
 
   run_policy_case() {
     local root="$1"
+    NORTH_BB="$north_bb" \
     HOME="$root" \
     AGENT_POLICY_MANIFEST="$root/manifest.toml" \
     AGENT_POLICY_BOOTSTRAP="$root/policy/AGENTS.md" \
     AGENT_POLICY_REPO_AGENTS="$root/policy/REPO-AGENTS.md" \
     AGENT_POLICY_CODEX_REQUIREMENTS="$root/requirements.toml" \
     AGENT_POLICY_ACTIVATION="$root/activation.json" \
-    NORTH_AGENT_CATALOG="$root/catalog.json" \
-    NORTH_REPO_ROOTS="{\"nixos-config\":\"$root\"}" \
+    NORTH_AGENT_CATALOG="$root/agent-catalog/sources.json" \
+    NORTH_REPO_ROOTS="{\"nixos-config\":\"$root\",\"north\":\"$root\",\"agent-machinery\":\"$root\"}" \
     AGENT_POLICY_NORTH_CATALOG_LIB="$north_root/cli/agent-catalog.clj" \
       python3 "$REPO/scripts/agent-policy-contract.py" --repo "$root" --local
   }
 
   run_policy_source_case() {
     local root="$1"
+    NORTH_BB="$north_bb" \
     HOME="$root" \
     AGENT_POLICY_MANIFEST="$root/manifest.toml" \
     AGENT_POLICY_BOOTSTRAP="$root/policy/AGENTS.md" \
     AGENT_POLICY_REPO_AGENTS="$root/policy/REPO-AGENTS.md" \
     AGENT_POLICY_CODEX_REQUIREMENTS="$root/requirements.toml" \
-    NORTH_AGENT_CATALOG="$root/catalog.json" \
-    NORTH_REPO_ROOTS="{\"nixos-config\":\"$root\"}" \
+    NORTH_AGENT_CATALOG="$root/agent-catalog/sources.json" \
+    NORTH_REPO_ROOTS="{\"nixos-config\":\"$root\",\"north\":\"$root\",\"agent-machinery\":\"$root\"}" \
     AGENT_POLICY_NORTH_CATALOG_LIB="$north_root/cli/agent-catalog.clj" \
       python3 "$REPO/scripts/agent-policy-contract.py" --repo "$root"
   }
@@ -530,10 +573,12 @@ JSON
     printf '\nA stale unclaimed block.\n' >>"$1/skills/repo-safety/SKILL.md"
   }
   mutate_catalog_owner_escape() {
-    sed -i 's#skills/repo-safety/SKILL.md#../outside/SKILL.md#' "$1/catalog.json"
+    sed -i 's#skills/repo-safety/SKILL.md#../outside/SKILL.md#' \
+      "$1/dotfiles/agents/catalog-config.json"
   }
   mutate_catalog_owner_swap() {
-    sed -i 's#skills/repo-safety/SKILL.md#skills/firn/SKILL.md#' "$1/catalog.json"
+    sed -i 's#skills/repo-safety/SKILL.md#skills/firn/SKILL.md#' \
+      "$1/dotfiles/agents/catalog-config.json"
   }
   mutate_repo_scope() {
     sed -i 's/scope = "repo:example", surface = "repo"/scope = "machine", surface = "repo"/' "$1/manifest.toml"
@@ -825,19 +870,19 @@ fi
 # A logical state path may traverse symlinks before Git reports its physical
 # worktree root. Canonical identity must accept that alias, but never a distinct
 # repository merely because its lexical path looks related.
-mkdir -p "$scratch/orchestration-real" "$scratch/orchestration-distinct"
-git -C "$scratch/orchestration-real" init -q
-git -C "$scratch/orchestration-distinct" init -q
-ln -s "$scratch/orchestration-real" "$scratch/orchestration-logical"
-orchestration_observed="$(
-  git -C "$scratch/orchestration-logical" rev-parse --path-format=absolute --show-toplevel
+mkdir -p "$scratch/agent-machinery-real" "$scratch/agent-machinery-distinct"
+git -C "$scratch/agent-machinery-real" init -q
+git -C "$scratch/agent-machinery-distinct" init -q
+ln -s "$scratch/agent-machinery-real" "$scratch/agent-machinery-logical"
+agent_machinery_observed="$(
+  git -C "$scratch/agent-machinery-logical" rev-parse --path-format=absolute --show-toplevel
 )"
-managed_source_root_matches "$scratch/orchestration-logical" "$orchestration_observed"
+managed_source_root_matches "$scratch/agent-machinery-logical" "$agent_machinery_observed"
 distinct_observed="$(
-  git -C "$scratch/orchestration-distinct" rev-parse --path-format=absolute --show-toplevel
+  git -C "$scratch/agent-machinery-distinct" rev-parse --path-format=absolute --show-toplevel
 )"
-if managed_source_root_matches "$scratch/orchestration-logical" "$distinct_observed"; then
-  printf 'distinct managed Orchestration worktree root was accepted through a logical alias\n' >&2
+if managed_source_root_matches "$scratch/agent-machinery-logical" "$distinct_observed"; then
+  printf 'distinct managed Agent Machinery worktree root was accepted through a logical alias\n' >&2
   exit 1
 fi
 
@@ -1029,11 +1074,11 @@ fi
 # available: intent, managed HEAD, and verified flake input must be identical.
 verified_revision=1111111111111111111111111111111111111111
 stale_intent_revision=2222222222222222222222222222222222222222
-orchestration_revisions_converged \
+agent_machinery_revisions_converged \
   "$verified_revision" "$verified_revision" "$verified_revision"
-if orchestration_revisions_converged \
+if agent_machinery_revisions_converged \
   "$stale_intent_revision" "$verified_revision" "$verified_revision"; then
-  printf 'stale but valid Orchestration intent revision was accepted\n' >&2
+  printf 'stale but valid Agent Machinery intent revision was accepted\n' >&2
   exit 1
 fi
 
@@ -1233,4 +1278,4 @@ if rg -n -- 'check-web|NORTH_WEB|north-web' "$REPO/scripts/agent-config-check.sh
   exit 1
 fi
 
-printf 'ok: Codex managed policy and canonical Orchestration source identity are exact\n'
+printf 'ok: Codex managed policy and canonical Agent Machinery source identity are exact\n'

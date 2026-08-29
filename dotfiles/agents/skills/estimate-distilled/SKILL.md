@@ -21,10 +21,9 @@ Estimate agent execution, never human effort.
    extend in place.
 4. If an active todo attempt already exists for independent continuity reasons,
    record the forecast and observed actual there. Never create a todo,
-   SettlementCard, staffing record, or settlement worker merely to hold an
-   estimate; report the actual directly when no durable consumer exists.
+   continuity record, or worker merely to hold an estimate; report the actual
+   directly when no durable consumer exists.
 
-Never hand-format receipts, combine incomparable observation units, count
-unknown coverage, or overwrite a receipt key. Route exact receipt and settlement
-detail to the reference skill only for an explicit request or a named unresolved
-question.
+Never combine incomparable observation units, count unknown coverage, or
+overwrite a receipt key. Route exact receipt detail to the reference skill only
+for an explicit request or a named unresolved question.

@@ -29,37 +29,29 @@
     "cloudflare-deploy-distilled",
     "estimate-distilled",
     "agent-policy-distilled",
-    "delegating-agents-distilled",
     "agent-runtime-incident-distilled",
-    "settle-work-distilled",
-    "executive-orchestration-distilled",
-    "executive-report-distilled",
     "project-structure-distilled",
     "store-modeling-distilled",
     "code-as-facts-distilled",
     "comment-bloat-guard",
     "logcompress-hook",
     "agent-policy-reference",
-    "assignments-reference",
+    "agent-run-design-reference",
+    "agent-run-lifecycle-reference",
     "beagle-authoring-reference",
     "beagle-system-design-reference",
     "build-vs-reuse-reference",
     "cloudflare-deploy-reference",
     "code-as-facts-reference",
-    "compose-reference",
     "convo-reference",
-    "delegating-agents-reference",
     "elicit-reference",
     "estimate-reference",
-    "executive-orchestration-reference",
-    "executive-report-reference",
     "external-code-reference",
     "fact-modeling-reference",
     "firn-reference",
     "greenfield-reference",
     "guard-authoring-reference",
     "importing-skills-reference",
-    "messages-reference",
     "planning-reference",
     "prior-art-reference",
     "production-hardening-reference",
@@ -68,9 +60,7 @@
     "project-structure-reference",
     "repo-safety-reference",
     "rust-development-reference",
-    "settle-work-reference",
     "skill-maintenance-reference",
-    "staffing-reference",
     "store-modeling-reference",
     "terse-reference",
     "threads-reference",
@@ -306,22 +296,6 @@
         "path": "dotfiles/agents/hooks/corpus-scan-guard.sh"
       }
     },
-    "delegating-agents-distilled": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/delegating-agents-distilled/SKILL.md"
-      }
-    },
-    "delegating-agents-reference": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/delegating-agents-reference/SKILL.md"
-      }
-    },
     "estimate-distilled": {
       "kind": "skill",
       "category": "uncategorized",
@@ -336,38 +310,6 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/estimate-reference/SKILL.md"
-      }
-    },
-    "executive-orchestration-distilled": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/executive-orchestration-distilled/SKILL.md"
-      }
-    },
-    "executive-orchestration-reference": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/executive-orchestration-reference/SKILL.md"
-      }
-    },
-    "executive-report-distilled": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/executive-report-distilled/SKILL.md"
-      }
-    },
-    "executive-report-reference": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/executive-report-reference/SKILL.md"
       }
     },
     "fact-modeling-distilled": {
@@ -496,22 +438,6 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/hooks/session-kill-guard.sh"
-      }
-    },
-    "settle-work-distilled": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/settle-work-distilled/SKILL.md"
-      }
-    },
-    "settle-work-reference": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/settle-work-reference/SKILL.md"
       }
     },
     "store-modeling-distilled": {
@@ -743,6 +669,19 @@
             "repo": "agent-machinery",
             "path": "catalog.json"
           }
+        },
+        {
+          "type": "instructions",
+          "targets": [
+            "shared",
+            "codex",
+            "north",
+            "bridge"
+          ],
+          "owner": {
+            "repo": "agent-machinery",
+            "path": "doctrine.md"
+          }
         }
       ]
     },
@@ -757,6 +696,57 @@
       ]
     },
     "agent-runtime-incident-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "agent-run-design-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        },
+        {
+          "type": "agentTemplates",
+          "targets": [
+            "north",
+            "claude"
+          ],
+          "owner": {
+            "repo": "agent-machinery",
+            "path": "agents"
+          }
+        }
+      ]
+    },
+    "agent-run-design-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "agent-run-lifecycle-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "agent-run-lifecycle-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -792,7 +782,7 @@
     },
     "agent-spawn-guard": {
       "supports": [
-        "staffing-distilled"
+        "agent-run-design-distilled"
       ],
       "distributions": [
         {
@@ -800,26 +790,6 @@
           "targets": [
             "codex",
             "bridge"
-          ]
-        }
-      ]
-    },
-    "assignments-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "assignments-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
           ]
         }
       ]
@@ -971,26 +941,6 @@
         }
       ]
     },
-    "compose-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "compose-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
     "convo-distilled": {
       "distributions": [
         {
@@ -1056,26 +1006,6 @@
         }
       ]
     },
-    "delegating-agents-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "delegating-agents-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
     "elicit-distilled": {
       "distributions": [
         {
@@ -1107,46 +1037,6 @@
       ]
     },
     "estimate-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "executive-orchestration-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "executive-orchestration-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "executive-report-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "executive-report-reference": {
       "distributions": [
         {
           "type": "skill",
@@ -1346,26 +1236,6 @@
         }
       ]
     },
-    "messages-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "messages-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
     "north-mark-delegated": {
       "supports": [
         "coordination"
@@ -1447,23 +1317,6 @@
           "owner": {
             "repo": "nixos-config",
             "path": "dotfiles/codex/hooks/north-on-tooluse-codex"
-          }
-        }
-      ]
-    },
-    "orchestration": {
-      "distributions": [
-        {
-          "type": "instructions",
-          "targets": [
-            "shared",
-            "codex",
-            "north",
-            "bridge"
-          ],
-          "owner": {
-            "repo": "agent-machinery",
-            "path": "doctrine.md"
           }
         }
       ]
@@ -1631,7 +1484,7 @@
     "session-kill-guard": {
       "supports": [
         "repo-safety-distilled",
-        "orchestration"
+        "agent-machinery"
       ],
       "distributions": [
         {
@@ -1639,36 +1492,6 @@
           "targets": [
             "codex",
             "bridge"
-          ]
-        }
-      ]
-    },
-    "settle-work-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        },
-        {
-          "type": "providerAdapter",
-          "targets": [
-            "codex"
-          ],
-          "owner": {
-            "repo": "nixos-config",
-            "path": "dotfiles/agents/skills/settle-work-distilled/agents/openai.yaml"
-          }
-        }
-      ]
-    },
-    "settle-work-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
           ]
         }
       ]
@@ -1690,48 +1513,6 @@
           "targets": [
             "shared"
           ]
-        }
-      ]
-    },
-    "staffing-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        },
-        {
-          "type": "agentTemplates",
-          "targets": [
-            "north",
-            "claude"
-          ],
-          "owner": {
-            "repo": "agent-machinery",
-            "path": "agents"
-          }
-        }
-      ]
-    },
-    "staffing-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        },
-        {
-          "type": "agentTemplates",
-          "targets": [
-            "north",
-            "claude"
-          ],
-          "owner": {
-            "repo": "agent-machinery",
-            "path": "agents"
-          }
         }
       ]
     },
@@ -2060,6 +1841,16 @@
       ]
     },
     "webdev-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "work-ownership-distilled": {
       "distributions": [
         {
           "type": "skill",
