@@ -13,7 +13,7 @@
    :myConfig.modules.networking.enable true
    :myConfig.modules.remmina.enable true
    :myConfig.modules.timezone.enable true
-   :myConfig.modules.timezone.zone "Asia/Taipei"
+   :myConfig.modules.timezone.zone "America/Los_Angeles"
    :myConfig.modules.ssh.enable true
    :myConfig.modules.swap.enable true
    :myConfig.modules.tmp-retention.enable true
