@@ -233,8 +233,28 @@ def codex_bindings(path: Path, identity: str) -> tuple[list[str], list[str]]:
     return events, commands
 
 
+def claude_bindings(path: Path, identity: str) -> tuple[list[str], list[str]]:
+    data = json.loads(path.read_text())
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        raise ValueError("hooks must be an object")
+    events: list[str] = []
+    commands: list[str] = []
+    for event, groups in hooks.items():
+        if not isinstance(groups, list):
+            raise ValueError(f"{event} hook groups must be an array")
+        for group in groups:
+            matcher = group.get("matcher", "")
+            for hook in group.get("hooks", []):
+                command = hook.get("command", "")
+                if command_identity(command) == identity:
+                    events.append(f"{event}:{matcher}")
+                    commands.append(command)
+    return events, commands
+
+
 def check_provider_bindings(
-    contract: Contract, policy: dict, requirements: Path
+    contract: Contract, policy: dict, requirements: Path, claude_hooks: Path
 ) -> None:
     seen_keys: set[str] = set()
     seen_units: set[str] = set()
@@ -258,6 +278,20 @@ def check_provider_bindings(
             contract.reject(f"{key}: Codex provider event reachability drift")
         if events and set(commands) != {expected_command}:
             contract.reject(f"{key}: Codex provider command drift")
+        expected_claude_events = guard.get("claude", [])
+        expected_claude_command = guard.get("claude_command", "")
+        if expected_claude_events or expected_claude_command:
+            try:
+                claude_events, claude_commands = claude_bindings(
+                    claude_hooks, identity
+                )
+            except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+                contract.reject(f"{key}: native-Claude hook projection is unreadable: {exc}")
+                continue
+            if sorted(claude_events) != sorted(expected_claude_events):
+                contract.reject(f"{key}: native-Claude provider event reachability drift")
+            if claude_events and set(claude_commands) != {expected_claude_command}:
+                contract.reject(f"{key}: native-Claude provider command drift")
 
 
 def activation_path() -> Path:
@@ -518,10 +552,14 @@ def main() -> int:
     requirements = env_path(
         "AGENT_POLICY_CODEX_REQUIREMENTS", repo / "modules/codex/requirements.toml"
     )
+    claude_hooks = env_path(
+        "AGENT_POLICY_CLAUDE_HOOKS",
+        repo / "modules/north-profile/claude-hooks.json",
+    )
 
     contract = Contract()
     check_claims(contract, policy, {"bootstrap": bootstrap, "repo": repo_agents})
-    check_provider_bindings(contract, policy, requirements)
+    check_provider_bindings(contract, policy, requirements, claude_hooks)
     skill_ids = {
         entry.get("owner", "").split(":", 1)[1]
         for entry in policy.get("claim", []) + policy.get("approved_route", [])

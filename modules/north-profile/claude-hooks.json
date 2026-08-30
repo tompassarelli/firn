@@ -1,0 +1,67 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/beagle-session-start.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/corpus-scan-guard.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /home/tom/.local/lib/firn/cli/current/bin/firn-system-policy",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/git-blind-stage-guard.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/session-kill-guard.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/tripwire-guard.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/launch-critical-worktree-guard.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /home/tom/.local/lib/firn/cli/current/bin/firn-system-policy",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/launch-critical-worktree-guard.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

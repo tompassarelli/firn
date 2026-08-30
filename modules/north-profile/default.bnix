@@ -4,8 +4,12 @@
 
 ;; Firn materialises stable provider-neutral discovery paths. North owns the
 ;; immutable activation generation behind them.
-(nix/module [config lib ...]
-  (let [username config.myConfig.modules.users.username]
+(nix/module [config lib pkgs ...]
+  (let [username config.myConfig.modules.users.username
+        claudeHookProjection (pkgs.writeText "north-claude-hooks.json"
+           (builtins.readFile (p "./claude-hooks.json")))
+        claudeHookProjector (pkgs.writeShellScript "north-claude-hook-projector"
+           (builtins.readFile (p "./claude-hook-projector.sh")))]
     {:tags [development]
      :options.myConfig.modules.north-profile.enable
       (lib.mkEnableOption "Publish shared agent surfaces at ~/.agents")
@@ -40,4 +44,19 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/.local/state/north/agents/current/instructions/code/AGENTS.md"))}}})}})}))
+                        "/.local/state/north/agents/current/instructions/code/AGENTS.md"))}}
+               ;; Native Claude owns every setting except this exact hook
+               ;; subtree. Merge it atomically so provider preferences survive
+               ;; while hook commands converge to managed runtimes.
+               :home.activation.projectNorthClaudeHooks
+                (config.lib.dag.entryAfter ["writeBoundary"]
+                  (s "run " pkgs.coreutils "/bin/env"
+                     " CHMOD_BIN=" pkgs.coreutils "/bin/chmod"
+                     " FLOCK_BIN=" pkgs.util-linux "/bin/flock"
+                     " JQ_BIN=" pkgs.jq "/bin/jq"
+                     " MKDIR_BIN=" pkgs.coreutils "/bin/mkdir"
+                     " MV_BIN=" pkgs.coreutils "/bin/mv"
+                     " REALPATH_BIN=" pkgs.coreutils "/bin/realpath"
+                     " RM_BIN=" pkgs.coreutils "/bin/rm "
+                     claudeHookProjector " " claudeHookProjection
+                     " $HOME/.claude/settings.json\n"))})}})}))

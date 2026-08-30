@@ -855,7 +855,8 @@
           "targets": [
             "shared",
             "codex",
-            "bridge"
+            "bridge",
+            "claude"
           ],
           "owner": {
             "repo": "north",
@@ -1032,7 +1033,8 @@
           "type": "hook",
           "targets": [
             "codex",
-            "bridge"
+            "bridge",
+            "claude"
           ]
         }
       ]
@@ -1148,7 +1150,8 @@
           "targets": [
             "firn",
             "codex",
-            "bridge"
+            "bridge",
+            "claude"
           ],
           "owner": {
             "repo": "north",
@@ -1166,7 +1169,8 @@
           "type": "hook",
           "targets": [
             "codex",
-            "bridge"
+            "bridge",
+            "claude"
           ]
         }
       ]
@@ -1250,7 +1254,8 @@
           "type": "hook",
           "targets": [
             "codex",
-            "bridge"
+            "bridge",
+            "claude"
           ]
         }
       ]
@@ -1546,7 +1551,8 @@
           "type": "hook",
           "targets": [
             "codex",
-            "bridge"
+            "bridge",
+            "claude"
           ]
         }
       ]
@@ -1860,7 +1866,8 @@
           "type": "hook",
           "targets": [
             "codex",
-            "bridge"
+            "bridge",
+            "claude"
           ]
         }
       ]

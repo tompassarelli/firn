@@ -327,6 +327,12 @@ matcher = "^Bash$"
 type = "command"
 command = "/etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh"
 TOML
+  cat >"$base/claude-hooks.json" <<'JSON'
+{"hooks":{"PreToolUse":[
+  {"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"/home/tom/.agents/hooks/launch-critical-worktree-guard.sh"}]},
+  {"matcher":"Bash","hooks":[{"type":"command","command":"/home/tom/.agents/hooks/launch-critical-worktree-guard.sh"}]}
+]}}
+JSON
   cat >"$base/manifest.toml" <<TOML
 version = 1
 approved_route = [
@@ -340,7 +346,7 @@ claim = [
   { key = "repo.example.architecture", owner = "repo:example", role = "owner", scope = "repo:example", surface = "repo", section = "Architecture", digest = "$repo_digest" },
 ]
 guard = [
-  { key = "guard.worktree", unit = "launch-critical-worktree-guard", command = "launch-critical-worktree-guard.sh", codex_command = "/etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh", codex = ["PreToolUse:^(Edit|Write|MultiEdit|apply_patch)$", "PreToolUse:^Bash$"] },
+  { key = "guard.worktree", unit = "launch-critical-worktree-guard", command = "launch-critical-worktree-guard.sh", claude_command = "/home/tom/.agents/hooks/launch-critical-worktree-guard.sh", claude = ["PreToolUse:Edit|Write|MultiEdit", "PreToolUse:Bash"], codex_command = "/etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh", codex = ["PreToolUse:^(Edit|Write|MultiEdit|apply_patch)$", "PreToolUse:^Bash$"] },
 ]
 TOML
   cat >"$base/agent-catalog/sources.json" <<'JSON'
@@ -392,6 +398,7 @@ JSON
   git -C "$base" add policy/AGENTS.md policy/REPO-AGENTS.md \
     skills/repo-safety/SKILL.md skills/firn/SKILL.md \
     skills/source-fixture/SKILL.md skills/package-fixture/SKILL.md requirements.toml \
+    claude-hooks.json \
     hooks/launch-critical-worktree-guard.sh support/harness-dial.sh \
     manifest.toml catalog.json doctrine.md contracts/schema.json \
     contracts/fixtures.json agent-catalog/sources.json agent-catalog/north.json \
@@ -424,6 +431,7 @@ JSON
     AGENT_POLICY_BOOTSTRAP="$root/policy/AGENTS.md" \
     AGENT_POLICY_REPO_AGENTS="$root/policy/REPO-AGENTS.md" \
     AGENT_POLICY_CODEX_REQUIREMENTS="$root/requirements.toml" \
+    AGENT_POLICY_CLAUDE_HOOKS="$root/claude-hooks.json" \
     AGENT_POLICY_ACTIVATION="$root/activation.json" \
     NORTH_AGENT_CATALOG="$root/agent-catalog/sources.json" \
     NORTH_REPO_ROOTS="{\"nixos-config\":\"$root\",\"north\":\"$root\",\"agent-machinery\":\"$root\"}" \
@@ -439,6 +447,7 @@ JSON
     AGENT_POLICY_BOOTSTRAP="$root/policy/AGENTS.md" \
     AGENT_POLICY_REPO_AGENTS="$root/policy/REPO-AGENTS.md" \
     AGENT_POLICY_CODEX_REQUIREMENTS="$root/requirements.toml" \
+    AGENT_POLICY_CLAUDE_HOOKS="$root/claude-hooks.json" \
     NORTH_AGENT_CATALOG="$root/agent-catalog/sources.json" \
     NORTH_REPO_ROOTS="{\"nixos-config\":\"$root\",\"north\":\"$root\",\"agent-machinery\":\"$root\"}" \
     AGENT_POLICY_NORTH_CATALOG_LIB="$north_root/cli/agent-catalog.clj" \
@@ -493,6 +502,9 @@ JSON
   }
   mutate_codex_hook_path() {
     sed -i 's#/etc/codex/hooks/launch-critical-worktree-guard.sh#/tmp/launch-critical-worktree-guard.sh#' "$1/requirements.toml"
+  }
+  mutate_claude_hook_path() {
+    sed -i 's#/home/tom/.agents/hooks/launch-critical-worktree-guard.sh#/tmp/launch-critical-worktree-guard.sh#' "$1/claude-hooks.json"
   }
   mutate_activation_schema() {
     sed -i 's#north.agent-activation/v1#north.agent-activation/invalid#' "$1/activation.json"
@@ -591,6 +603,7 @@ JSON
   expect_policy_reject skill-procedure 'skill-owned procedure remains in bootstrap' mutate_skill_procedure
   expect_policy_reject procedural-route 'route differs from the closed approved-route catalog' mutate_procedural_route
   expect_policy_reject codex-hook-path 'Codex provider command drift' mutate_codex_hook_path
+  expect_policy_reject claude-hook-path 'native-Claude provider command drift' mutate_claude_hook_path
   expect_policy_reject activation-schema 'North activation schema is not' mutate_activation_schema
   expect_policy_reject activation-permission 'invalid permission' mutate_activation_permission
   expect_policy_reject activation-ttl-permission 'invalid permission' mutate_activation_ttl_permission
