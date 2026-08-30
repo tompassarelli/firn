@@ -52,7 +52,7 @@
   myConfig.modules.codex.enable = true;
   myConfig.modules.windows-vm.enable = false;
   myConfig.modules.nh.enable = true;
-  myConfig.modules.north-store.enable = true;
+  myConfig.modules.north-coordinator.enable = true;
   myConfig.modules.agent-slice.enable = true;
   myConfig.modules.delivery-liveness.enable = true;
   systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";

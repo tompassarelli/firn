@@ -52,9 +52,8 @@
    :myConfig.modules.codex.enable true
    :myConfig.modules.windows-vm.enable false
    :myConfig.modules.nh.enable true
-   ;; The coordination engine: one user service, direct bind on :7977, no
-   ;; socket activation, no telemetry twin. Owns :7977 alone.
-   :myConfig.modules.north-store.enable true
+   ;; North hosts Beagle Store in-process as the only writer on :7977.
+   :myConfig.modules.north-coordinator.enable true
    ;; agent.slice + the session.slice mirror weight. Inert until a launcher
    ;; actually enters the scope; the slice itself costs nothing.
    :myConfig.modules.agent-slice.enable true

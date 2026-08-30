@@ -1,0 +1,83 @@
+fail() {
+  echo "north-coordinator: $*" >&2
+  exit 78
+}
+
+selection="${NORTH_COORDINATOR_SELECTION:?north-coordinator: NORTH_COORDINATOR_SELECTION is required}"
+coordinator="${NORTH_COORDINATOR_EXECUTABLE:?north-coordinator: NORTH_COORDINATOR_EXECUTABLE is required}"
+
+[ -r "$selection" ] || fail "Store selection is unreadable: $selection"
+[ -x "$coordinator" ] || fail "North coordinator is not executable: $coordinator"
+
+governed=(
+  BEAGLE_STORE_HOME
+  BEAGLE_STORE_OUT
+  BEAGLE_STORE_PACKAGED
+  BEAGLE_STORE_SERVER_RUNTIME
+  BEAGLE_STORE_LOG
+  BEAGLE_STORE_SPACE_ID
+  BEAGLE_STORE_SERVER_PORT
+  BEAGLE_STORE_JAVA
+  BEAGLE_STORE_SERVER_CLASSPATH_FILE
+  NORTH_PORT
+)
+for variable in "${governed[@]}"; do
+  unset "$variable"
+done
+
+set -a
+# shellcheck disable=SC1090
+. "$selection"
+set +a
+
+: "${BEAGLE_STORE_HOME:?north-coordinator: selection must set BEAGLE_STORE_HOME}"
+: "${BEAGLE_STORE_OUT:?north-coordinator: selection must set BEAGLE_STORE_OUT}"
+: "${BEAGLE_STORE_LOG:?north-coordinator: selection must set BEAGLE_STORE_LOG}"
+: "${BEAGLE_STORE_SPACE_ID:?north-coordinator: selection must set BEAGLE_STORE_SPACE_ID}"
+: "${BEAGLE_STORE_SERVER_PORT:?north-coordinator: selection must set BEAGLE_STORE_SERVER_PORT}"
+[ "${BEAGLE_STORE_PACKAGED:-}" = 1 ] ||
+  fail "selected Store must be packaged"
+[ "${BEAGLE_STORE_SERVER_RUNTIME:-}" = jvm ] ||
+  fail "selected Store runtime must be jvm"
+
+[[ "$BEAGLE_STORE_HOME" =~ ^/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[^/]+/libexec/store$ ]] ||
+  fail "selected Store home is not a canonical packaged composite: $BEAGLE_STORE_HOME"
+[ "$BEAGLE_STORE_OUT" = "$BEAGLE_STORE_HOME/out" ] ||
+  fail "selected Store output does not belong to the selected Store home"
+
+dispatcher="${BEAGLE_STORE_HOME%/store}/bin/beagle"
+[ -f "$dispatcher" ] && [ -x "$dispatcher" ] ||
+  fail "selected Store composite has no executable dispatcher: $dispatcher"
+
+read_dispatcher_binding() {
+  local key=$1
+  local values=()
+  mapfile -t values < <(sed -n "s/^export ${key}='\\([^']*\\)'$/\\1/p" "$dispatcher")
+  [ "${#values[@]}" -eq 1 ] && [ -n "${values[0]}" ] ||
+    fail "selected Store dispatcher must export exactly one $key binding"
+  printf '%s\n' "${values[0]}"
+}
+
+BEAGLE_STORE_JAVA="$(read_dispatcher_binding BEAGLE_STORE_JAVA)"
+BEAGLE_STORE_SERVER_CLASSPATH_FILE="$(
+  read_dispatcher_binding BEAGLE_STORE_SERVER_CLASSPATH_FILE
+)"
+export BEAGLE_STORE_JAVA BEAGLE_STORE_SERVER_CLASSPATH_FILE
+
+[[ "$BEAGLE_STORE_JAVA" =~ ^/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[^/]+/bin/java$ ]] ||
+  fail "selected Store Java is not a canonical packaged executable"
+[ -x "$BEAGLE_STORE_JAVA" ] ||
+  fail "selected Store Java is not executable: $BEAGLE_STORE_JAVA"
+[ "$BEAGLE_STORE_SERVER_CLASSPATH_FILE" = "$BEAGLE_STORE_HOME/server.classpath" ] ||
+  fail "selected Store classpath does not belong to the selected Store home"
+[ -r "$BEAGLE_STORE_SERVER_CLASSPATH_FILE" ] ||
+  fail "selected Store classpath is unreadable: $BEAGLE_STORE_SERVER_CLASSPATH_FILE"
+[ -s "$BEAGLE_STORE_SERVER_CLASSPATH_FILE" ] ||
+  fail "selected Store classpath is empty: $BEAGLE_STORE_SERVER_CLASSPATH_FILE"
+
+if [ -n "${NORTH_PORT:-}" ] && [ "$NORTH_PORT" != "$BEAGLE_STORE_SERVER_PORT" ]; then
+  fail "NORTH_PORT and BEAGLE_STORE_SERVER_PORT disagree"
+fi
+export NORTH_PORT="$BEAGLE_STORE_SERVER_PORT"
+
+exec "$coordinator"

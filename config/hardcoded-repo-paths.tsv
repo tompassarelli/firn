@@ -40,7 +40,8 @@ north/bin/tests/ci-required-bars-test.sh	1
 north/bin/tests/package-purity-check-test.sh	1
 north/build.sh	1
 north/cli/tests/acquire-claim-integration-test.clj	1
-north/cli/tests/agent-catalog-test.clj	6
+north/cli/tests/agent-catalog-test.bclj	6
+north/cli/tests/agent-catalog-test.clj	2
 north/cli/tests/agent-identity-publication-integration-test.clj	4
 north/cli/tests/concern-cli-validation-test.clj	1
 north/cli/tests/concern-offline-reconcile-integration-test.clj	1

@@ -33,5 +33,5 @@ Both `.bnix` and `.nix` are committed because the flake reads from the
 git tree. **Edit the `.bnix`** — `firn repo build` overwrites direct `.nix`
 edits.
 
-The `north-store` module launches the sealed Beagle Store release selected by
-North; active configuration never resolves a standalone database checkout.
+The `north-coordinator` module launches North's live out-of-store coordinator,
+which hosts the sealed JVM Store selected by North in-process.
