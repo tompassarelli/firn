@@ -80,8 +80,19 @@ if rg -n '"\.codex/skills"|current/skills/codex' "$source_file" "$generated_file
   exit 1
 fi
 
-grep -Fq '(providerAdapter "beagle-session-start.sh")' "$source_file"
+for adapter in \
+  north-on-spawn-codex \
+  north-on-tooluse-codex \
+  north-mark-delegated-codex \
+  north-on-stop-codex \
+  north-on-terminal-codex; do
+  grep -Fq \
+    "{:source (s flakeRoot \"/dotfiles/codex/hooks/$adapter\")}" \
+    "$source_file"
+done
 grep -Fq '(providerAdapter "lib/north-agent-activation.sh")' "$source_file"
+grep -Fq '(promoted "beagle-session-start.sh" "beagle/integrations/north/hooks/beagle-session-start.sh")' "$source_file"
+grep -Fq '(promoted "firn-system-policy" "north/agent-runtime/hooks/firn-system-policy.sh")' "$source_file"
 grep -Fq '(promoted "agent-spawn-guard.sh" "north/agent-runtime/hooks/agent-spawn-guard.sh")' "$source_file"
 grep -Fq '(promoted "resource-safe-search-guard.sh" "nixos-config/dotfiles/agents/hooks/resource-safe-search-guard.sh")' "$source_file"
 grep -Fq '(promoted "logcompress-hook.py" "north/agent-runtime/hooks/logcompress-hook.py")' "$source_file"
@@ -91,9 +102,9 @@ if rg -n 'north/profiles/tom/hooks' "$source_file" "$generated_file"; then
   printf 'retired North personal-profile hook wiring remains\n' >&2
   exit 1
 fi
-if rg -n 'north-clock-guard-codex|promoted "beagle-session-start\.sh"' \
+if rg -n 'north-clock-guard-codex|providerAdapter "(beagle-session-start\.sh|north-(on|mark-))' \
   "$source_file" "$generated_file"; then
-  printf 'retired or activation-bypassing Codex hook wiring remains\n' >&2
+  printf 'retired or generation-backed Codex hook wiring remains\n' >&2
   exit 1
 fi
 

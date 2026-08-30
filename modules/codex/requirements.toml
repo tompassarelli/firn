@@ -35,6 +35,13 @@ command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks
 timeout = 3
 
 [[hooks.PreToolUse]]
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/firn-system-policy"
+timeout = 10
+
+[[hooks.PreToolUse]]
 matcher = "^(Agent|Task|Workflow)$"
 
 [[hooks.PreToolUse.hooks]]
@@ -56,14 +63,6 @@ command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks
 timeout = 10
 
 [[hooks.PreToolUse]]
-matcher = "^(Edit|Write|MultiEdit)$"
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "/home/tom/.local/lib/firn/cli/current/bin/firn-system-policy"
-timeout = 10
-
-[[hooks.PreToolUse]]
 matcher = "^Bash$"
 
 [[hooks.PreToolUse.hooks]]
@@ -74,11 +73,6 @@ timeout = 10
 [[hooks.PreToolUse.hooks]]
 type = "command"
 command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/tripwire-guard.sh"
-timeout = 10
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "/home/tom/.local/lib/firn/cli/current/bin/firn-system-policy"
 timeout = 10
 
 [[hooks.PreToolUse.hooks]]

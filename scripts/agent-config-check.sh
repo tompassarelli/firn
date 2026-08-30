@@ -283,11 +283,11 @@ codex_managed_policy_binding_count() {
 import sys
 import tomllib
 
-def command(path, timeout):
+def command(path, timeout, with_path=True):
     interpreter = "python3" if path.endswith(".py") else "bash"
     environment = (
         "PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin "
-        if interpreter == "bash"
+        if interpreter == "bash" and with_path
         else ""
     )
     return {
@@ -299,9 +299,6 @@ def command(path, timeout):
         ),
         "timeout": timeout,
     }
-
-def direct_command(path, timeout):
-    return {"type": "command", "command": path, "timeout": timeout}
 
 enabled = {
     "allow_managed_hooks_only": True,
@@ -324,6 +321,9 @@ enabled = {
         }],
         "PreToolUse": [
             {
+                "hooks": [command("firn-system-policy", 10, False)],
+            },
+            {
                 "matcher": "^(Agent|Task|Workflow)$",
                 "hooks": [command("agent-spawn-guard.sh", 10)],
             },
@@ -335,17 +335,10 @@ enabled = {
                 ],
             },
             {
-                "matcher": "^(Edit|Write|MultiEdit)$",
-                "hooks": [
-                    direct_command("/home/tom/.local/lib/firn/cli/current/bin/firn-system-policy", 10),
-                ],
-            },
-            {
                 "matcher": "^Bash$",
                 "hooks": [
                     command("agent-spawn-guard.sh", 10),
                     command("tripwire-guard.sh", 10),
-                    direct_command("/home/tom/.local/lib/firn/cli/current/bin/firn-system-policy", 10),
                     command("launch-critical-worktree-guard.sh", 10),
                     command("corpus-scan-guard.sh", 10),
                     command("resource-safe-search-guard.sh", 10),
@@ -863,9 +856,16 @@ validate_codex_managed_policy() {
   local promoted_path live resolved adapter expected_adapter
   # relative|module source expression|checkout|authority|blob path|promoted path.
   # A promoted path is the enforcement-deployment-relative name the generation's
-  # tmpfiles link points at; it is empty for anything the generation still owns.
+  # tmpfiles link points at; it is empty for a Nix-supplied Firn source.
   local -a source_specs=(
     "requirements.toml|(s flakeRoot \"/modules/codex/requirements.toml\")|$CODEX_REQUIREMENTS|self|modules/codex/requirements.toml|"
+    "north-on-spawn-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-spawn-codex\")|$CODEX/hooks/north-on-spawn-codex|self|dotfiles/codex/hooks/north-on-spawn-codex|"
+    "north-on-tooluse-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-tooluse-codex\")|$CODEX/hooks/north-on-tooluse-codex|self|dotfiles/codex/hooks/north-on-tooluse-codex|"
+    "north-mark-delegated-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-mark-delegated-codex\")|$CODEX/hooks/north-mark-delegated-codex|self|dotfiles/codex/hooks/north-mark-delegated-codex|"
+    "north-on-stop-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-stop-codex\")|$CODEX/hooks/north-on-stop-codex|self|dotfiles/codex/hooks/north-on-stop-codex|"
+    "north-on-terminal-codex|(s flakeRoot \"/dotfiles/codex/hooks/north-on-terminal-codex\")|$CODEX/hooks/north-on-terminal-codex|self|dotfiles/codex/hooks/north-on-terminal-codex|"
+    "beagle-session-start.sh|(promoted \"beagle-session-start.sh\"|$BEAGLE_INTEGRATION/hooks/beagle-session-start.sh|beagle|integrations/north/hooks/beagle-session-start.sh|beagle/integrations/north/hooks/beagle-session-start.sh"
+    "firn-system-policy|(promoted \"firn-system-policy\"|$NORTH_REPO/agent-runtime/hooks/firn-system-policy.sh|north|agent-runtime/hooks/firn-system-policy.sh|north/agent-runtime/hooks/firn-system-policy.sh"
     "agent-spawn-guard.sh|(promoted \"agent-spawn-guard.sh\"|$NORTH_REPO/agent-runtime/hooks/agent-spawn-guard.sh|north|agent-runtime/hooks/agent-spawn-guard.sh|north/agent-runtime/hooks/agent-spawn-guard.sh"
     "concrete-model-identity-guard.sh|(promoted \"concrete-model-identity-guard.sh\"|$REPO/dotfiles/agents/hooks/concrete-model-identity-guard.sh|nixos|dotfiles/agents/hooks/concrete-model-identity-guard.sh|nixos-config/dotfiles/agents/hooks/concrete-model-identity-guard.sh"
     # launch_critical guard and its Python decision libraries deploy together.
@@ -882,12 +882,6 @@ validate_codex_managed_policy() {
     "lib/harness-dial.sh|(promoted \"lib/harness-dial.sh\"|$NORTH_REPO/agent-runtime/hooks/lib/harness-dial.sh|north|agent-runtime/hooks/lib/harness-dial.sh|north/agent-runtime/hooks/lib/harness-dial.sh"
   )
   local -a provider_adapters=(
-    north-on-spawn-codex
-    north-on-tooluse-codex
-    north-mark-delegated-codex
-    north-on-stop-codex
-    north-on-terminal-codex
-    beagle-session-start.sh
     lib/north-agent-activation.sh
   )
   for spec in "${source_specs[@]}"; do

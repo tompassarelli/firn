@@ -809,7 +809,19 @@ NORTH_ENFORCEMENT_ROOT="$real_enforcement"
 # longer be pinned to a flake input.
 grep -Fq '(promoted "agent-spawn-guard.sh" "north/agent-runtime/hooks/agent-spawn-guard.sh")' \
   "$REPO/modules/codex/default.bnix"
-grep -Fq '(providerAdapter "beagle-session-start.sh")' \
+for adapter in \
+  north-on-spawn-codex \
+  north-on-tooluse-codex \
+  north-mark-delegated-codex \
+  north-on-stop-codex \
+  north-on-terminal-codex; do
+  grep -Fq \
+    "{:source (s flakeRoot \"/dotfiles/codex/hooks/$adapter\")}" \
+    "$REPO/modules/codex/default.bnix"
+done
+grep -Fq '(promoted "beagle-session-start.sh" "beagle/integrations/north/hooks/beagle-session-start.sh")' \
+  "$REPO/modules/codex/default.bnix"
+grep -Fq '(promoted "firn-system-policy" "north/agent-runtime/hooks/firn-system-policy.sh")' \
   "$REPO/modules/codex/default.bnix"
 grep -Fq '(providerAdapter "lib/north-agent-activation.sh")' \
   "$REPO/modules/codex/default.bnix"
@@ -823,9 +835,9 @@ if grep -Fq '(s inputs.north "/agent-profile/hooks/' "$REPO/modules/codex/defaul
   printf 'Codex module still pins a promoted North hook to the flake input\n' >&2
   exit 1
 fi
-if grep -Eq 'promoted "beagle-session-start\.sh"' \
+if grep -Eq 'providerAdapter "(beagle-session-start\.sh|north-(on|mark-))' \
   "$REPO/modules/codex/default.bnix"; then
-  printf 'Codex module still bypasses activation\n' >&2
+  printf 'Codex module still sources sealed or Nix-supplied hooks from activation\n' >&2
   exit 1
 fi
 

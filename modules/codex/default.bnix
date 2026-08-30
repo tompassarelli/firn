@@ -51,18 +51,24 @@
             {:source (s pkgs.coreutils "/bin/rm")}
            "codex/hooks/runtime/timeout"
             {:source (s pkgs.coreutils "/bin/timeout")}
+           "codex/hooks/north-on-spawn-codex"
+            {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-spawn-codex")}
+           "codex/hooks/north-on-tooluse-codex"
+            {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-tooluse-codex")}
+           "codex/hooks/north-mark-delegated-codex"
+            {:source (s flakeRoot "/dotfiles/codex/hooks/north-mark-delegated-codex")}
+           "codex/hooks/north-on-stop-codex"
+            {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-stop-codex")}
+           "codex/hooks/north-on-terminal-codex"
+            {:source (s flakeRoot "/dotfiles/codex/hooks/north-on-terminal-codex")}
            "codex/hooks/north"
             {:source northPkg}}
          :systemd.tmpfiles.rules
           ["d /var/lib/north-enforcement 0755 root root -"
            "d /etc/codex/hooks/lib 0755 root root -"
-           (providerAdapter "north-on-spawn-codex")
-           (providerAdapter "north-on-tooluse-codex")
-           (providerAdapter "north-mark-delegated-codex")
-           (providerAdapter "north-on-stop-codex")
-           (providerAdapter "north-on-terminal-codex")
-           (providerAdapter "beagle-session-start.sh")
            (providerAdapter "lib/north-agent-activation.sh")
+           (promoted "beagle-session-start.sh" "beagle/integrations/north/hooks/beagle-session-start.sh")
+           (promoted "firn-system-policy" "north/agent-runtime/hooks/firn-system-policy.sh")
            (promoted "agent-spawn-guard.sh" "north/agent-runtime/hooks/agent-spawn-guard.sh")
            (promoted "concrete-model-identity-guard.sh" "nixos-config/dotfiles/agents/hooks/concrete-model-identity-guard.sh")
            (promoted "launch-critical-worktree-guard.sh" "nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.sh")

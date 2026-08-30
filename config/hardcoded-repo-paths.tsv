@@ -68,7 +68,6 @@ north/cli/tests/north-listen-reconnect-test.clj	1
 north/cli/tests/peer-command-integration-test.clj	1
 north/cli/tests/pending-pagination-integration-test.clj	1
 north/cli/tests/pred-cli-test.clj	1
-north/cli/tests/presence-online-integration-test.clj	1
 north/cli/tests/read-projection-churn-oracle.clj	1
 north/cli/tests/run-event-ingress-integration-test.clj	1
 north/cli/tests/run-fact-publication-integration-test.clj	1
