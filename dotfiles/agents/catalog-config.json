@@ -729,17 +729,6 @@
           "targets": [
             "shared"
           ]
-        },
-        {
-          "type": "agentTemplates",
-          "targets": [
-            "north",
-            "claude"
-          ],
-          "owner": {
-            "repo": "agent-machinery",
-            "path": "agents"
-          }
         }
       ]
     },
@@ -793,6 +782,17 @@
           "owner": {
             "repo": "agent-machinery",
             "path": "catalog.json"
+          }
+        },
+        {
+          "type": "agentTemplates",
+          "targets": [
+            "north",
+            "claude"
+          ],
+          "owner": {
+            "repo": "agent-machinery",
+            "path": "delegation/agents"
           }
         }
       ]
