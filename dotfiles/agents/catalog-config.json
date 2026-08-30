@@ -792,7 +792,7 @@
           ],
           "owner": {
             "repo": "agent-machinery",
-            "path": "delegation/agents"
+            "path": "agents"
           }
         }
       ]
