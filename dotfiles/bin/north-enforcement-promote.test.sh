@@ -69,10 +69,43 @@ printf 'dial v1\n' >"$NIXOS/dotfiles/agents/hooks/lib/harness-dial.sh"
 NIXOS_V1="$(commit_all "$NIXOS" 'nixos v1')"
 
 # Fixture North: runtime hooks (including a cross-repo symlink that must not be
-# promoted), plus the lifecycle runtimes.
+# promoted), their generated Beagle runtime closure, plus the lifecycle runtimes.
 git_init "$NORTH"
-mkdir -p "$NORTH/agent-runtime/hooks" "$NORTH/bin"
-printf 'guard v1\n' >"$NORTH/agent-runtime/hooks/agent-spawn-guard.sh"
+mkdir -p "$NORTH/agent-runtime/hooks" "$NORTH/bin" \
+  "$NORTH/sdk/src/bridge/generated/beagle"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -uo pipefail' \
+  'entry_dir="$(cd "$(dirname "$0")" && pwd)"' \
+  'source_path="$(readlink -f "$0" 2>/dev/null || printf "%s" "$0")"' \
+  'program="${source_path%.sh}.js"' \
+  'bun="${NORTH_BUN:-$entry_dir/runtime/bun}"' \
+  'if [ ! -x "$bun" ]; then bun="$(command -v bun 2>/dev/null || true)"; fi' \
+  '[ -n "$bun" ] && [ -r "$program" ] || exit 0' \
+  'exec "$bun" "$program"' \
+  >"$NORTH/agent-runtime/hooks/agent-spawn-guard.sh"
+printf '%s\n' \
+  "import { keyword, property_key, str } from '../../sdk/src/bridge/generated/beagle/core.js';" \
+  "import { catch_dispatch } from '../../sdk/src/bridge/generated/beagle/exception-dispatch.js';" \
+  'const payload = JSON.parse(await Bun.stdin.text());' \
+  'if (property_key(keyword("tool")) !== "tool" || str(payload.tool_name) !== "Bash") process.exit(1);' \
+  'try { throw new Error("benign"); } catch (error) {' \
+  '  if (catch_dispatch(error, [Error]) !== 0) process.exit(1);' \
+  '}' \
+  >"$NORTH/agent-runtime/hooks/agent-spawn-guard.js"
+printf '%s\n' \
+  'class Keyword { constructor(value) { this.value = value; } }' \
+  'export function keyword(value) { return new Keyword(value); }' \
+  'export function property_key(value) { return value.value; }' \
+  'export function str(...values) { return values.join(""); }' \
+  >"$NORTH/sdk/src/bridge/generated/beagle/core.js"
+printf '%s\n' \
+  'export function catch_dispatch(error, exceptionTypes) {' \
+  '  const index = exceptionTypes.findIndex((exceptionType) => error instanceof exceptionType);' \
+  '  if (index < 0) throw error;' \
+  '  return index;' \
+  '}' \
+  >"$NORTH/sdk/src/bridge/generated/beagle/exception-dispatch.js"
 ln -s ../../../../../external/main/integrations/north/hooks/external-guard.sh \
   "$NORTH/agent-runtime/hooks/cross-repo-guard.sh"
 printf 'spawn v1\n' >"$NORTH/bin/north-on-spawn"
@@ -80,6 +113,7 @@ printf 'tooluse v1\n' >"$NORTH/bin/north-on-tooluse"
 printf 'stop v1\n' >"$NORTH/bin/north-on-stop"
 printf 'delegated v1\n' >"$NORTH/bin/north-mark-delegated"
 NORTH_V1="$(commit_all "$NORTH" 'north v1')"
+GUARD_V1="$(cat "$NORTH/agent-runtime/hooks/agent-spawn-guard.sh")"
 
 if [ "$BEAGLE" = "$BEAGLE_FIXTURE" ]; then
   git_init "$BEAGLE"
@@ -148,6 +182,10 @@ check 'nested NixOS owner hook lib is promoted' \
   test -f "$CURRENT/nixos-config/dotfiles/agents/hooks/lib/harness-dial.sh"
 check 'North runtime hook tree is promoted' \
   test -f "$CURRENT/north/agent-runtime/hooks/agent-spawn-guard.sh"
+check 'spawn guard generated Beagle core is promoted' \
+  test -f "$CURRENT/north/sdk/src/bridge/generated/beagle/core.js"
+check 'spawn guard exception dispatch is promoted' \
+  test -f "$CURRENT/north/sdk/src/bridge/generated/beagle/exception-dispatch.js"
 check 'lifecycle runtimes are promoted' \
   test -f "$CURRENT/north/bin/north-on-spawn"
 check 'Beagle Codex hooks are promoted under their own provenance' \
@@ -177,6 +215,16 @@ hook_output="$(
 )"
 check_contains 'sealed SessionStart detects an extension-only Beagle project' \
   "$hook_output" 'Beagle authoring is active.'
+
+spawn_status=0
+spawn_output="$(
+  printf '%s\n' '{"tool_name":"Bash","tool_input":{"command":"printf benign"}}' |
+    NORTH_BUN="$(command -v bun)" \
+      bash "$CURRENT/north/agent-runtime/hooks/agent-spawn-guard.sh" 2>&1
+)" || spawn_status=$?
+check_eq 'sealed spawn guard resolves its generated Beagle runtime closure' \
+  "$spawn_status" 0
+check_eq 'benign provider payload remains silent' "$spawn_output" ''
 
 # --- sealing ------------------------------------------------------------------
 unsealed=0
@@ -217,7 +265,7 @@ check_contains 'second promote records the previous deployment' "$record2" "PREV
 check_eq 'active content advanced' "$(cat "$CURRENT/north/agent-runtime/hooks/agent-spawn-guard.sh")" 'guard v2'
 check_eq 'previous deployment is retained intact' \
   "$(cat "$NORTH_ENFORCEMENT_STATE_ROOT/active/previous/north/agent-runtime/hooks/agent-spawn-guard.sh")" \
-  'guard v1'
+  "$GUARD_V1"
 
 # --- status -------------------------------------------------------------------
 status_out="$("$PROMOTE" status)"
@@ -229,7 +277,7 @@ rollback_record="$("$PROMOTE" rollback --why 'guard v2 regressed')"
 check_contains 'rollback records why' "$rollback_record" 'WHY rollback: guard v2 regressed'
 check_contains 'rollback re-pins the previous revision' "$rollback_record" "NORTH_REV $NORTH_V1"
 check_eq 'rollback restores the previous payload' \
-  "$(cat "$CURRENT/north/agent-runtime/hooks/agent-spawn-guard.sh")" 'guard v1'
+  "$(cat "$CURRENT/north/agent-runtime/hooks/agent-spawn-guard.sh")" "$GUARD_V1"
 check_eq 'rollback retains the rolled-back deployment as previous' \
   "$(cat "$NORTH_ENFORCEMENT_STATE_ROOT/active/previous/north/agent-runtime/hooks/agent-spawn-guard.sh")" \
   'guard v2'
@@ -237,6 +285,16 @@ rollback_again="$("$PROMOTE" rollback --why 'undo the undo')"
 check_eq 'rollback is itself rollback-able' \
   "$(cat "$CURRENT/north/agent-runtime/hooks/agent-spawn-guard.sh")" 'guard v2'
 check_contains 'second rollback is recorded' "$rollback_again" 'WHY rollback: undo the undo'
+
+# --- an incomplete runtime closure is rejected before publication -------------
+git -C "$NORTH" rm -q sdk/src/bridge/generated/beagle/core.js
+NORTH_MISSING_CLOSURE="$(commit_all "$NORTH" 'remove required spawn guard runtime')"
+status=0
+out="$(promote "$NORTH_MISSING_CLOSURE" --nixos-rev "$NIXOS_V1" \
+  --beagle-rev "$BEAGLE_V1" --why 'incomplete spawn guard runtime' 2>&1)" || status=$?
+check_eq 'a missing spawn guard runtime dependency fails the promote' "$status" 1
+check_contains 'the missing spawn guard runtime dependency is named' "$out" \
+  'sdk/src/bridge/generated/beagle/core.js'
 
 # --- tamper detection ---------------------------------------------------------
 chmod u+w "$DEPLOY" "$DEPLOY/north/bin" "$DEPLOY/north/bin/north-on-spawn"

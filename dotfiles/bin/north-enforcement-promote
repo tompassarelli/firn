@@ -27,6 +27,8 @@ NORTH_PAYLOAD_FILES=(
   bin/north-on-tooluse
   bin/north-on-stop
   bin/north-mark-delegated
+  sdk/src/bridge/generated/beagle/core.js
+  sdk/src/bridge/generated/beagle/exception-dispatch.js
 )
 BEAGLE_PAYLOAD_FILES=(
   integrations/north/hooks/beagle-session-start.sh
