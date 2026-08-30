@@ -70,6 +70,7 @@
            (promoted "lib/launch_critical_paths.py" "nixos-config/dotfiles/agents/hooks/lib/launch_critical_paths.py")
            (promoted "tripwire-guard.sh" "nixos-config/dotfiles/agents/hooks/tripwire-guard.sh")
            (promoted "corpus-scan-guard.sh" "nixos-config/dotfiles/agents/hooks/corpus-scan-guard.sh")
+           (promoted "resource-safe-search-guard.sh" "nixos-config/dotfiles/agents/hooks/resource-safe-search-guard.sh")
            (promoted "session-kill-guard.sh" "nixos-config/dotfiles/agents/hooks/session-kill-guard.sh")
            (promoted "logcompress-hook.py" "north/agent-runtime/hooks/logcompress-hook.py")
            (promoted "logcompress.py" "north/agent-runtime/hooks/logcompress.py")

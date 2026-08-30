@@ -23,6 +23,7 @@
     "fact-modeling-distilled",
     "firn-distilled",
     "repo-safety-distilled",
+    "resource-safe-search-distilled",
     "todo-distilled",
     "convo-distilled",
     "guard-authoring-distilled",
@@ -430,6 +431,22 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/repo-safety-reference/SKILL.md"
+      }
+    },
+    "resource-safe-search-distilled": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/resource-safe-search-distilled/SKILL.md"
+      }
+    },
+    "resource-safe-search-guard": {
+      "kind": "hook",
+      "category": "authoring",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/resource-safe-search-guard.sh"
       }
     },
     "session-kill-guard": {
@@ -1457,6 +1474,30 @@
           "type": "skill",
           "targets": [
             "shared"
+          ]
+        }
+      ]
+    },
+    "resource-safe-search-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "resource-safe-search-guard": {
+      "supports": [
+        "resource-safe-search-distilled"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "codex",
+            "bridge"
           ]
         }
       ]

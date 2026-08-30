@@ -83,6 +83,7 @@ fi
 grep -Fq '(providerAdapter "beagle-session-start.sh")' "$source_file"
 grep -Fq '(providerAdapter "lib/north-agent-activation.sh")' "$source_file"
 grep -Fq '(promoted "agent-spawn-guard.sh" "north/agent-runtime/hooks/agent-spawn-guard.sh")' "$source_file"
+grep -Fq '(promoted "resource-safe-search-guard.sh" "nixos-config/dotfiles/agents/hooks/resource-safe-search-guard.sh")' "$source_file"
 grep -Fq '(promoted "logcompress-hook.py" "north/agent-runtime/hooks/logcompress-hook.py")' "$source_file"
 grep -Fq '(promoted "lib/authoring-killswitch.sh" "north/agent-runtime/hooks/lib/authoring-killswitch.sh")' "$source_file"
 grep -Fq '(promoted "lib/harness-dial.sh" "north/agent-runtime/hooks/lib/harness-dial.sh")' "$source_file"

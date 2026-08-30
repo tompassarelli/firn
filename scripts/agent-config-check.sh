@@ -348,6 +348,7 @@ enabled = {
                     direct_command("/home/tom/.local/lib/firn/cli/current/bin/firn-system-policy", 10),
                     command("launch-critical-worktree-guard.sh", 10),
                     command("corpus-scan-guard.sh", 10),
+                    command("resource-safe-search-guard.sh", 10),
                     command("session-kill-guard.sh", 10),
                     command("concrete-model-identity-guard.sh", 10),
                 ],
@@ -873,6 +874,7 @@ validate_codex_managed_policy() {
     "lib/launch_critical_paths.py|(promoted \"lib/launch_critical_paths.py\"|$REPO/dotfiles/agents/hooks/lib/launch_critical_paths.py|nixos|dotfiles/agents/hooks/lib/launch_critical_paths.py|nixos-config/dotfiles/agents/hooks/lib/launch_critical_paths.py"
     "tripwire-guard.sh|(promoted \"tripwire-guard.sh\"|$REPO/dotfiles/agents/hooks/tripwire-guard.sh|nixos|dotfiles/agents/hooks/tripwire-guard.sh|nixos-config/dotfiles/agents/hooks/tripwire-guard.sh"
     "corpus-scan-guard.sh|(promoted \"corpus-scan-guard.sh\"|$REPO/dotfiles/agents/hooks/corpus-scan-guard.sh|nixos|dotfiles/agents/hooks/corpus-scan-guard.sh|nixos-config/dotfiles/agents/hooks/corpus-scan-guard.sh"
+    "resource-safe-search-guard.sh|(promoted \"resource-safe-search-guard.sh\"|$REPO/dotfiles/agents/hooks/resource-safe-search-guard.sh|nixos|dotfiles/agents/hooks/resource-safe-search-guard.sh|nixos-config/dotfiles/agents/hooks/resource-safe-search-guard.sh"
     "session-kill-guard.sh|(promoted \"session-kill-guard.sh\"|$REPO/dotfiles/agents/hooks/session-kill-guard.sh|nixos|dotfiles/agents/hooks/session-kill-guard.sh|nixos-config/dotfiles/agents/hooks/session-kill-guard.sh"
     "logcompress-hook.py|(promoted \"logcompress-hook.py\"|$NORTH_REPO/agent-runtime/hooks/logcompress-hook.py|north|agent-runtime/hooks/logcompress-hook.py|north/agent-runtime/hooks/logcompress-hook.py"
     "logcompress.py|(promoted \"logcompress.py\"|$NORTH_REPO/agent-runtime/hooks/logcompress.py|north|agent-runtime/hooks/logcompress.py|north/agent-runtime/hooks/logcompress.py"
