@@ -797,6 +797,20 @@
         }
       ]
     },
+    "delegation": {
+      "distributions": [
+        {
+          "type": "projectPackage",
+          "targets": [
+            "north"
+          ],
+          "owner": {
+            "repo": "agent-machinery",
+            "path": "catalog.json"
+          }
+        }
+      ]
+    },
     "agent-spawn-guard": {
       "supports": [
         "agent-run-design-distilled"
