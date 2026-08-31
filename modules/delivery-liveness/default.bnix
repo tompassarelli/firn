@@ -38,4 +38,13 @@
                   {:OnCalendar "*:0/30"
                    :Persistent true
                    :RandomizedDelaySec "5m"}
-                 :Install {:WantedBy ["timers.target"]}}})}})}))
+                 :Install {:WantedBy ["timers.target"]}}
+               :systemd.user.paths.firn-delivery-liveness
+                {:Unit
+                  {:Description
+                    "Refresh Firn delivery liveness when main advances"}
+                 :Path
+                  {:PathChanged
+                    (s config.home.homeDirectory
+                       "/code/nixos-config/main/.git/logs/HEAD")}
+                 :Install {:WantedBy ["paths.target"]}}})}})}))
