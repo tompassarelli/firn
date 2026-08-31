@@ -42,7 +42,7 @@ command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runt
 timeout = 10
 
 [[hooks.PreToolUse]]
-matcher = "^(Agent|Task|Workflow)$"
+matcher = "^(Agent|Task|Workflow|functions\\.wait)$"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"

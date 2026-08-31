@@ -26,6 +26,19 @@ with requirements_path.open("rb") as handle:
 hook_requirements = requirements.get("hooks", {})
 managed_dir = hook_requirements.get("managed_dir", "/etc/codex/hooks").rstrip("/")
 
+wait_entries = [
+    entry
+    for entry in hook_requirements.get("PreToolUse", [])
+    if re.fullmatch(entry.get("matcher", ""), "functions.wait")
+    and any(
+        hook.get("command", "").endswith("/agent-spawn-guard.sh")
+        for hook in entry.get("hooks", [])
+    )
+]
+assert len(wait_entries) == 1, (
+    "functions.wait must reach the singular agent-spawn-guard PreToolUse registration"
+)
+
 
 def commands(value):
     if isinstance(value, dict):
