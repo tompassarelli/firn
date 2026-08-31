@@ -2,6 +2,7 @@ version = 1
 
 approved_route = [
   { key = "verification.loop-roi-route", owner = "skill:verification-distilled", text = "- Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification-distilled`.", destination_section = "preamble", destination_digest = "d61d9458fb5086eddbfb7992e22e2e03928f1a5e410fca5da1c56ff6749a702b" },
+  { key = "development-loop.competitive-route", owner = "skill:competitive-development-loop-distilled", text = "- When designing, diagnosing, measuring, or optimizing a repeated edit-to-signal or edit-to-behavior loop, route its latency and invalidation economics → `competitive-development-loop-distilled`.", destination_section = "preamble", destination_digest = "e7b4128e3835c295a26463e569a002a2fc8a63234d3b5ad216016119f1cf7187" },
 ]
 
 # Every normative block has one explicit semantic key. Digests are over the
@@ -11,6 +12,7 @@ claim = [
   { key = "instructions.repository-discovery", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Discover applicable instructions", digest = "5293878fb7670bee54af4c13a58494fc4e7f159cfbbfdcd5527c7f5477a1577b" },
   { key = "instructions.skill-loading", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Discover applicable instructions", digest = "6effa963ed889b389b24b0cf430cd1e12e4c965714ce31f689e95a54f3239802" },
   { key = "verification.loop-roi-route", owner = "skill:verification-distilled", role = "route", scope = "machine", surface = "bootstrap", section = "Preserve development velocity", digest = "c1c5e22a01b72783a906548b12f03ee322d9c63df998ea8c43c42b564326efd5", destination_section = "preamble", destination_digest = "d61d9458fb5086eddbfb7992e22e2e03928f1a5e410fca5da1c56ff6749a702b" },
+  { key = "development-loop.competitive-route", owner = "skill:competitive-development-loop-distilled", role = "route", scope = "machine", surface = "bootstrap", section = "Preserve development velocity", digest = "d9617f757cdb2aadbd41a70488611c1545e4767914416d66e8e37418496093e7", destination_section = "preamble", destination_digest = "e7b4128e3835c295a26463e569a002a2fc8a63234d3b5ad216016119f1cf7187" },
   { key = "agent-policy.projection-authority", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Respect source authority", digest = "222496cd4ab4eaf02d3578571924ffae6a4fffa1a873b815bbda9d1da7e89c2f" },
   { key = "source-authority.semantic-vs-runtime", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Respect source authority", digest = "fb326d1fcaeaf4c9abf650f69da444b2f0e88cec2022aeef8a929b6fc3d981c1" },
   { key = "source-authority.typed-beagle-greenfield", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Respect source authority", digest = "73404f17d2db16eabd023a80dd9fae0864806def4bb44c7c272d4a709200b271" },

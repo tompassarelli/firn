@@ -80,6 +80,7 @@ declaration grants no exception.
 ## Preserve development velocity
 
 - Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification-distilled`.
+- When designing, diagnosing, measuring, or optimizing a repeated edit-to-signal or edit-to-behavior loop, route its latency and invalidation economics → `competitive-development-loop-distilled`.
 
 ## Keep hard boundaries
 
