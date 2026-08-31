@@ -203,7 +203,7 @@ VALUED_OPTIONS = {
 }
 
 
-def path_operands(tool, arguments):
+def path_operands(tool, arguments, piped_stdin=False):
     informational = {
         "--help", "--version", "--type-list", "--pcre2-version", "--generate",
     }
@@ -234,7 +234,18 @@ def path_operands(tool, arguments):
         words.append(argument)
     if not explicit_pattern and not files_mode and words:
         words = words[1:]
-    return words or ["."]
+    pattern_from_stdin = any(
+        (argument in ("-f", "--file")
+         and index + 1 < len(arguments)
+         and arguments[index + 1] == "-")
+        or argument == "--file=-"
+        for index, argument in enumerate(arguments)
+    )
+    if words:
+        return words
+    if piped_stdin and not files_mode and not pattern_from_stdin:
+        return []
+    return ["."]
 
 
 GLOB_META = re.compile(r"[*?\[{]")
@@ -311,7 +322,7 @@ def dangerous_repository_container(paths, base):
     return None
 
 
-def inspect_segment(words, base, depth):
+def inspect_segment(words, base, depth, piped_stdin=False):
     if not words or depth > 3:
         return None
     index = 0
@@ -334,7 +345,7 @@ def inspect_segment(words, base, depth):
         if executable == "eval":
             return inspect_command(" ".join(words[index + 1:]), base, depth + 1)
         if executable in SEARCH_TOOLS:
-            operands = path_operands(executable, words[index + 1:])
+            operands = path_operands(executable, words[index + 1:], piped_stdin)
             if operands is None:
                 return None
             hit = dangerous_virtual_operand(operands, base)
@@ -368,15 +379,17 @@ def inspect_segment(words, base, depth):
 
 def inspect_command(text, base, depth=0):
     segment = []
+    piped_stdin = False
     for kind, value, _quoted in tokenize(strip_heredocs(text)):
         if kind == "sep":
-            hit = inspect_segment(segment, base, depth)
+            hit = inspect_segment(segment, base, depth, piped_stdin)
             if hit:
                 return hit
             segment = []
+            piped_stdin = value == "|"
         else:
             segment.append(value)
-    return inspect_segment(segment, base, depth)
+    return inspect_segment(segment, base, depth, piped_stdin)
 
 
 try:

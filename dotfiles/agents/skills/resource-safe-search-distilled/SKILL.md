@@ -16,6 +16,15 @@ holding `main/` plus `worktrees/` is not a search root: select one checkout or
 subtree first. This applies equally to an explicit operand and to the current
 directory supplying the default `.` root, including `rg --files`.
 
+In a repository-container layout, pass the selected checkout or subtree to
+`rg` as an absolute path. Do not rely on a tool working directory plus `.` or
+an omitted root: guards may resolve that relative root from the launch context
+and correctly treat it as the surrounding container.
+
+When `rg` is only filtering a pipeline, name stdin explicitly as `-`, for
+example `producer | rg PATTERN -`. A pipeline filter is not a filesystem search
+and must not accidentally inherit the launch working directory as its root.
+
 For process diagnostics, first select one PID with bounded native
 metadata such as `ps -eo pid=,comm=,args=` or `ps -p PID -o ...`, then query the
 one required edge or field, for example `readlink -e /proc/PID/cwd`,
