@@ -97,6 +97,14 @@ a fresh transition through containment, investigation, classification,
 ownership, repair, regression, activation, and primary canary before closing;
 do not close directly from `reopened` or reuse old-generation evidence.
 
+For every reproduced Codex defect repaired in a downstream fork, publish a
+sanitized upstream GitHub issue with the minimal reproduction, affected
+version, expected and actual behavior, and the downstream solution outline.
+Record its URL, the downstream repair commit, and the exact upstream release or
+commit that retires the fork patch. Do not publish credentials, private
+transcript content, or a pull request. An unavailable or unfiled issue keeps the
+incident open; it never blocks an independent delivery path.
+
 Close only when the upstream repair is landed, the focused regression passes,
 the repaired authority is activated, the preferred topology is restored, and
 a primary-path canary exercises the triggering lifecycle seam successfully,
