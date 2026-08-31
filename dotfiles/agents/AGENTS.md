@@ -9,6 +9,10 @@ Before touching a repository, read its root and more-local `AGENTS.md` files.
 Re-evaluate when the target changes. Closer instructions refine broader ones;
 user and system instructions retain precedence.
 
+Start repository discovery and search at the exact checkout or subtree, never
+the `~/code/<project>` container. Load `resource-safe-search-distilled` before
+any broader, container, or virtual-filesystem search.
+
 Inspect the available skill catalog before acting. When the user names a skill
 or the task matches its description, read that distilled `SKILL.md` completely
 and follow it. A distilled skill is the normal complete operating surface:
