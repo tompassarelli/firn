@@ -18,6 +18,12 @@ immutable consumer state.
 
 - Never edit, stash, reset, clean, or commit a dirty `main/`; use `wt-rescue` to
   relocate human work intact. Never mutate or repoint a pin checkout.
+- Keep build output produced for a lane inside that exact lane, with the
+  tool's default lane-local output preferred. Concurrent Rust lanes use
+  distinct lane-local `target/` directories. Any explicit `CARGO_TARGET_DIR`
+  or `--target-dir` must resolve inside the current lane; a deliberate `/tmp`
+  target may be used when output must live outside it. Never put `target-*` or
+  another build-output directory directly in a project container.
 - Preserve peer work and lanes. Do not remove a repository container,
   checkout root, `.git`, `worktrees/` or `pins/` root, personal/system root,
   transcript state, live pin, or another actor's lane.

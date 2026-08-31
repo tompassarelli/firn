@@ -254,6 +254,29 @@ check("Edit into ~/code/resources is allowed",
                ROOT, "resources/upstream/main/x.py")}},
           code_root=ROOT) is None)
 
+print("--- Cargo target output belongs to its exact lane ---")
+
+CONTAINER_TARGET = os.path.join(ROOT, "proj", "target-agent-a")
+LANE_TARGET = os.path.join(ROOT, "proj", "worktrees", "x", "target")
+check("CARGO_TARGET_DIR cannot create a fourth container slot",
+      fixture(f"CARGO_TARGET_DIR={CONTAINER_TARGET} cargo test"))
+check("env cannot hide a container-root CARGO_TARGET_DIR",
+      fixture(f"env CARGO_TARGET_DIR={CONTAINER_TARGET} cargo test"))
+check("Cargo --target-dir cannot create a fourth container slot",
+      fixture(f"cargo test --target-dir {CONTAINER_TARGET}"))
+check("Cargo --target-dir= cannot create a fourth container slot",
+      fixture(f"cargo test --target-dir={CONTAINER_TARGET}"))
+check("the default target location inside a lane remains allowed",
+      fixture("cargo test", cwd=os.path.join(ROOT, "proj", "worktrees", "x"))
+      is None)
+check("an explicit target inside the exact lane remains allowed",
+      fixture(f"CARGO_TARGET_DIR={LANE_TARGET} cargo test") is None)
+check("an explicit /tmp target remains allowed",
+      fixture("cargo test --target-dir /tmp/proj-target-agent-a") is None)
+check("Cargo command text passed as prose is not an invocation",
+      fixture(f"printf 'CARGO_TARGET_DIR={CONTAINER_TARGET} cargo test'")
+      is None)
+
 print("--- pins/: protected because something OUTSIDE consumes them ---")
 
 # A pin is not a main and not a lane. Its deny must carry its own noun, its

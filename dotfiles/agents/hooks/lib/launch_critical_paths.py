@@ -182,6 +182,37 @@ def protected_project(path):
     return None
 
 
+def repository_container_spill(path):
+    """Container name when PATH uses a non-layout slot under a repository.
+
+    A repository container has three sanctioned top-level slots: `main`,
+    `worktrees`, and `pins`. Build output beside those slots has no lifecycle
+    owner and is the root-level `target-*` spill this guard must prevent.
+    Detection reuses the same real `main/.git` evidence as protected_project;
+    an arbitrary directory under ~/code is not inferred to be a repository.
+    """
+    if not isinstance(path, str) or not path:
+        return None
+    try:
+        real = os.path.realpath(path)
+    except Exception:
+        return None
+    root = code_root()
+    if not _within(real, root):
+        return None
+    rest = real[len(root):].strip(os.sep)
+    parts = [p for p in rest.split(os.sep) if p] if rest else []
+    if not parts or parts[0] in EXCLUDED_ROOTS:
+        return None
+    container, slot_index = _container_slot(root, parts)
+    if container is None or slot_index is None:
+        return None
+    slot = parts[slot_index] if len(parts) > slot_index else None
+    if slot not in (MAIN_KIND, WORKTREES_DIR, PINS_DIR):
+        return container
+    return None
+
+
 def pin_sidecar(path):
     """(container, object-id, pin-path) for one live top-level pin sidecar.
 

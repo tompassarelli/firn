@@ -61,7 +61,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from launch_critical_paths import (  # noqa: E402
     code_root, hit_advice, hit_noun, is_pin, pin_sidecar, protected_project,
-    worktree_advice)
+    repository_container_spill, worktree_advice)
 
 # git subcommands that change the repository or working tree.
 MUTATING_GIT = {
@@ -527,6 +527,45 @@ def _shell_command_index(tokens):
     return i
 
 
+def _cargo_target_paths(text):
+    """Literal Cargo target paths selected by directly invoked cargo commands.
+
+    The Bash entrance exposes a command string, so only shell forms whose
+    executable and target path are mechanically decidable are covered: an
+    inline CARGO_TARGET_DIR assignment (including through `env`) and Cargo's
+    `--target-dir PATH` / `--target-dir=PATH` option. Variable-expanded or
+    indirect shell state remains fail-open.
+    """
+    paths = []
+    for segment in _shell_segments(text):
+        tokens = _tokens(segment)
+        executable_index = _shell_command_index(tokens)
+        if (executable_index >= len(tokens)
+                or os.path.basename(tokens[executable_index]).lstrip("(") != "cargo"):
+            continue
+        for token in tokens[:executable_index]:
+            if token.startswith("CARGO_TARGET_DIR="):
+                value = token.split("=", 1)[1]
+                if value and "$" not in value:
+                    paths.append(value)
+        args = tokens[executable_index + 1:]
+        i = 0
+        while i < len(args):
+            argument = args[i]
+            if argument == "--target-dir" and i + 1 < len(args):
+                value = args[i + 1]
+                if value and "$" not in value:
+                    paths.append(value)
+                i += 2
+                continue
+            if argument.startswith("--target-dir="):
+                value = argument.split("=", 1)[1]
+                if value and "$" not in value:
+                    paths.append(value)
+            i += 1
+    return paths
+
+
 def _shell_c_script(tokens, executable_index):
     """The command string executed by a shell's `-c` option, if present."""
     i = executable_index + 1
@@ -764,6 +803,27 @@ def decide(payload):
 
     tokens = _tokens(scan)
     invocations = _git_invocations(scan, eff)
+
+    # Cargo output belongs to the exact lane that produced it. A literal
+    # target path in a main or pin is already protected; a path in a fourth
+    # top-level container slot is the root-level target-* spill this rule adds.
+    for raw in _cargo_target_paths(scan):
+        resolved = _resolve(os.path.expanduser(raw), eff)
+        hit = protected_project(resolved)
+        if hit:
+            project, why, kind = hit
+            return deny(resolved, project, why, "write Cargo target output", kind)
+        container = repository_container_spill(resolved)
+        if container:
+            lane_target = os.path.join(
+                code_root(), container, "worktrees", "SLUG", "target")
+            return (
+                f"This Bash command would put Cargo target output directly in "
+                f"the repository container {os.path.join(code_root(), container)} "
+                f"({resolved}). Build output belongs to the exact lane that "
+                f"produced it. Use the lane-local default, set "
+                f"`CARGO_TARGET_DIR={lane_target}`, or use a deliberate /tmp "
+                f"target outside repository containers.")
 
     # 0. destroying uncommitted work in a main checkout — its own class, because
     #    the loss is the human's and is not recoverable from the ref. A pin has

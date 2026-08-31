@@ -15,9 +15,11 @@
 # SCOPE
 #   Denies a write whose realpath sits inside a protected checkout — a `main`
 #   checkout, or a `pins/<full-object-id>` checkout something outside the repository
-#   consumes — see lib/launch_critical_paths.py for the derivation, and,
-#   separately, a git call that would discard uncommitted work in a main. Every
-#   other path returns empty stdout, which the harness reads as "no opinion".
+#   consumes — see lib/launch_critical_paths.py for the derivation; a Cargo
+#   target override that spills build output into a fourth project-container
+#   slot; and, separately, a git call that would discard uncommitted work in a
+#   main. Every other path returns empty stdout, which the harness reads as
+#   "no opinion".
 #
 #   Lanes are the sanctioned destination and must never be caught: a lane lives
 #   at ~/code/<project>/worktrees/<slug> and is carved out by its PARENT
@@ -83,7 +85,7 @@ if [ -z "${LAUNCH_CRITICAL_CODE_ROOT:-}" ]; then
         *) exit 0 ;;
       esac
       case "$payload" in
-        *main*|*pins*|*/code/north*|*/code/beagle*|*/code/nixos-config*) ;;
+        *main*|*pins*|*/code/north*|*/code/beagle*|*/code/nixos-config*|*CARGO_TARGET_DIR*|*--target-dir*) ;;
         *) exit 0 ;;
       esac
       ;;

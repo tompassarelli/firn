@@ -334,6 +334,25 @@ esac
 rm -rf "${FIXTURE:?}"
 unset ROOT FIXTURE pin_out
 
+# This runs without LAUNCH_CRITICAL_CODE_ROOT so it proves the production
+# pre-filter admits the demonstrated root-level Cargo spill to the decoder.
+case "$(bash_decide "CARGO_TARGET_DIR=$HOME/code/clause/target-agent-a cargo test" "$HOME")" in
+  *'"deny"'*) pass=$((pass + 1)) ;;
+  *) fail=$((fail + 1)); echo "FAIL  project-container CARGO_TARGET_DIR must be denied" >&2 ;;
+esac
+case "$(bash_decide "cargo test --target-dir $HOME/code/clause/target-agent-b" "$HOME")" in
+  *'"deny"'*) pass=$((pass + 1)) ;;
+  *) fail=$((fail + 1)); echo "FAIL  project-container --target-dir must be denied" >&2 ;;
+esac
+case "$(bash_decide "CARGO_TARGET_DIR=$HOME/code/clause/worktrees/lane/target cargo test" "$HOME")" in
+  "") pass=$((pass + 1)) ;;
+  *) fail=$((fail + 1)); echo "FAIL  lane-local CARGO_TARGET_DIR must remain allowed" >&2 ;;
+esac
+case "$(bash_decide "cargo test --target-dir /tmp/clause-target-agent-a" "$HOME")" in
+  "") pass=$((pass + 1)) ;;
+  *) fail=$((fail + 1)); echo "FAIL  /tmp Cargo target must remain allowed" >&2 ;;
+esac
+
 case "$(apply_decide "*** Begin Patch\n*** Update File: code/north/main/cli/x.clj\n@@\n-a\n+b\n*** End Patch" "/home/tom")" in
   *'"deny"'*) pass=$((pass + 1)) ;;
   *) fail=$((fail + 1)); echo "FAIL  relative apply_patch must bypass the cheap pre-filter" >&2 ;;
