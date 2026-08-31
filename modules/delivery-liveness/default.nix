@@ -41,6 +41,17 @@
           WantedBy = [ "timers.target" ];
         };
       };
+      systemd.user.paths.firn-delivery-liveness = {
+        Unit = {
+          Description = "Refresh Firn delivery liveness when main advances";
+        };
+        Path = {
+          PathChanged = "${config.home.homeDirectory}/code/nixos-config/main/.git/logs/HEAD";
+        };
+        Install = {
+          WantedBy = [ "paths.target" ];
+        };
+      };
     });
   };
 }) config.myConfig.modules.users.username)
