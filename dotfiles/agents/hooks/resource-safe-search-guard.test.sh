@@ -115,7 +115,10 @@ run_case allow 'files inside exact main checkout' "rg --files $CODE"
 run_case allow 'files inside exact worktree checkout' "rg --files $LANE"
 run_case allow 'content inside exact subtree' "rg TARGET $CODE/src"
 run_case allow 'content in one exact file' "rg TARGET $CODE/src/main.txt"
-run_case allow 'piped rg filters stdin without inheriting container cwd' \
+run_case allow 'explicit stdin process filter ignores path-looking alternation pattern' \
+  "ps -eo pid,etime,args | rg '$LANE|cargo test' - | rg -v 'rg ' - || true" \
+  "$CONTAINER"
+run_case allow 'implicit piped rg remains an adjacent supported filter' \
   "rg --files $CODE | rg 'main[.]txt'" "$CONTAINER"
 run_case allow 'informational rg does not search container cwd' 'rg --version' "$CONTAINER"
 run_case allow 'virtual root in pattern only' "rg '/proc/[0-9]*/cwd' $CODE"

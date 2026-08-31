@@ -234,6 +234,9 @@ def path_operands(tool, arguments, piped_stdin=False):
         words.append(argument)
     if not explicit_pattern and not files_mode and words:
         words = words[1:]
+    explicit_stdin = not files_mode and "-" in words
+    if explicit_stdin:
+        words = [word for word in words if word != "-"]
     pattern_from_stdin = any(
         (argument in ("-f", "--file")
          and index + 1 < len(arguments)
@@ -243,7 +246,7 @@ def path_operands(tool, arguments, piped_stdin=False):
     )
     if words:
         return words
-    if piped_stdin and not files_mode and not pattern_from_stdin:
+    if explicit_stdin or (piped_stdin and not files_mode and not pattern_from_stdin):
         return []
     return ["."]
 
