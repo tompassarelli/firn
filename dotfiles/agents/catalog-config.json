@@ -377,22 +377,6 @@
         "path": "dotfiles/agents/skills/guard-authoring-reference/SKILL.md"
       }
     },
-    "importing-skills-distilled": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "north",
-        "path": "profiles/tom/skills/importing-skills-distilled/SKILL.md"
-      }
-    },
-    "importing-skills-reference": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "north",
-        "path": "profiles/tom/skills/importing-skills-reference/SKILL.md"
-      }
-    },
     "launch-critical-worktree-guard": {
       "kind": "hook",
       "category": "authoring",
@@ -1222,16 +1206,6 @@
           "targets": [
             "shared"
           ]
-        },
-        {
-          "type": "providerAdapter",
-          "targets": [
-            "codex"
-          ],
-          "owner": {
-            "repo": "north",
-            "path": "profiles/tom/skills/importing-skills-distilled/agents/openai.yaml"
-          }
         }
       ]
     },
