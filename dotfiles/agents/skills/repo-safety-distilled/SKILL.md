@@ -27,6 +27,11 @@ immutable consumer state.
 - Preserve peer work and lanes. Do not remove a repository container,
   checkout root, `.git`, `worktrees/` or `pins/` root, personal/system root,
   transcript state, live pin, or another actor's lane.
+- Before retiring any worktree, prove that no live intentional actor owns it.
+  Clean status, merged ancestry, and a HEAD equal to `main` prove no such
+  thing: a newly admitted worker may not have written yet. Only the lane owner
+  or its accountable parent may retire it after that work is settled; unknown
+  ownership preserves the lane.
 - Stage only enumerated paths. Do not use `git add -A`, `git add -u`,
   `git add .`, or `git commit -a`.
 - Publish with `safe-push`, never raw `git push`, force-push, or rewritten
@@ -43,8 +48,8 @@ immutable consumer state.
 3. Stage each intended path explicitly and commit one coherent checkpoint.
 4. From the lane, run `safe-push --to main`; then fast-forward the clean
    `main/` checkout.
-5. Once landed and released, remove the lane through the sanctioned worktree
-   lifecycle and delete its local branch.
+5. Once landed and released, settle the lane owner's work, then remove the lane
+   through the sanctioned worktree lifecycle and delete its local branch.
 
 When a guard refuses an operation, treat the denial as path information and
 take the sanctioned route. Stop instead of routing around a secret finding,
