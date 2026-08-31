@@ -723,6 +723,16 @@
         }
       ]
     },
+    "competitive-development-loop-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
     "cloudflare-deploy-distilled": {
       "distributions": [
         {
