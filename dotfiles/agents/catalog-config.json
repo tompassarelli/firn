@@ -491,8 +491,8 @@
             "north"
           ],
           "owner": {
-            "repo": "agent-machinery",
-            "path": "catalog.json"
+            "repo": "north",
+            "path": "agent-machinery/catalog.json"
           }
         },
         {
@@ -504,8 +504,8 @@
             "bridge"
           ],
           "owner": {
-            "repo": "agent-machinery",
-            "path": "doctrine.md"
+            "repo": "north",
+            "path": "agent-machinery/doctrine.md"
           }
         }
       ]
