@@ -2,6 +2,8 @@
 set -euo pipefail
 
 profile="${NORTH_RUNTIME_PROFILE:-$HOME/.local/state/north/runtime-profile}"
+north_checkout="${NORTH_CHECKOUT:-$HOME/code/north/main}" # hardcoded-repo-path:allow
+north_ref="path:$north_checkout#babashka"
 
 command -v nix >/dev/null 2>&1 || {
   printf 'bb-runtime-update: nix is required\n' >&2
@@ -10,34 +12,29 @@ command -v nix >/dev/null 2>&1 || {
 
 mkdir -p "$(dirname "$profile")"
 if [[ -x "$profile/bin/bb" ]]; then
-  if grep -Eq '"babashka"[[:space:]]*:[[:space:]]*\{[^}]*"originalUrl"' \
-    "$profile/manifest.json"; then
-    nix profile upgrade --profile "$profile" babashka
-  else
-    profile_name="${profile##*/}"
-    previous_link="$(readlink "$profile")"
-    previous_version="${previous_link#"$profile_name-"}"
-    previous_version="${previous_version%-link}"
-    case "$previous_version" in
-      ''|*[!0-9]*)
-        printf 'bb-runtime-update: cannot identify current profile generation: %s\n' \
-          "$previous_link" >&2
-        exit 1
-        ;;
-    esac
+  profile_name="${profile##*/}"
+  previous_link="$(readlink "$profile")"
+  previous_version="${previous_link#"$profile_name-"}"
+  previous_version="${previous_version%-link}"
+  case "$previous_version" in
+    ''|*[!0-9]*)
+      printf 'bb-runtime-update: cannot identify current profile generation: %s\n' \
+        "$previous_link" >&2
+      exit 1
+      ;;
+  esac
 
-    restore_previous() {
-      if [[ "$(readlink "$profile")" != "$previous_link" ]]; then
-        nix profile rollback --profile "$profile" --to "$previous_version"
-      fi
-    }
-    trap restore_previous EXIT INT TERM HUP
-    nix profile remove --profile "$profile" babashka
-    nix profile add --profile "$profile" nixpkgs#babashka
-    trap - EXIT INT TERM HUP
-  fi
+  restore_previous() {
+    if [[ "$(readlink "$profile")" != "$previous_link" ]]; then
+      nix profile rollback --profile "$profile" --to "$previous_version"
+    fi
+  }
+  trap restore_previous EXIT INT TERM HUP
+  nix profile remove --profile "$profile" babashka
+  nix profile add --profile "$profile" "$north_ref"
+  trap - EXIT INT TERM HUP
 else
-  nix profile add --profile "$profile" nixpkgs#babashka
+  nix profile add --profile "$profile" "$north_ref"
 fi
 
 "$profile/bin/bb" --version
