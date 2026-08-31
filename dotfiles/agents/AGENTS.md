@@ -251,11 +251,14 @@ blocking the whole task on the answer.
   correctness, error handling, or security.
 - A comment records a constraint the code cannot express. Investigation history,
   outputs, and chronology belong in the commit message or private handoff.
-- Fix causes upstream and aim at the proper end-state, root-cause architecture.
-  Fallback never closes agent-runtime reliability. Minimize accidental
-  complexity: avoid compatibility layers, wrappers, daemons, or bespoke
-  infrastructure unless an explicit requirement forces them. This is
-  proportionality, not scope creep.
+- For every observed defect, fix the smallest true owning cause when it is on
+  the critical path; when it is nonblocking, durably record and defer it. Tom's
+  fleet never closes a defect with a workaround, shim, bypass, fallback,
+  quarantine, or replacement. Reliability incidents remain open through root
+  repair, activation, and primary-path proof. Aim at the proper end-state,
+  root-cause architecture. Minimize accidental complexity: avoid compatibility
+  layers, wrappers, daemons, or bespoke infrastructure unless an explicit
+  requirement forces them. This is proportionality, not scope creep.
 - Never weaken a test, assertion, or gate to make it pass. Fix what it tests; a
   gate lowered to go green no longer proves anything.
 - Measure before naming a cause, especially for performance. An unmeasured
