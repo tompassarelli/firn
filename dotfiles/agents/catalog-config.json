@@ -633,6 +633,16 @@
         }
       ]
     },
+    "babashka-development-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
     "beagle-authoring-distilled": {
       "distributions": [
         {
