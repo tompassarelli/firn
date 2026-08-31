@@ -3,8 +3,30 @@
 (ns default)
 
 (nix/module [config lib pkgs ...]
-  {:options.myConfig.modules.babashka.enable
-    (lib.mkEnableOption "Babashka native Clojure scripting")
-   :config
-    (lib.mkIf config.myConfig.modules.babashka.enable
-      {:environment.systemPackages (nix/with pkgs [babashka])})})
+  (let
+    [version "1.13.220"
+     babashka
+      (pkgs.stdenvNoCC.mkDerivation
+        {:pname "babashka"
+         :version version
+         :src
+          (pkgs.fetchurl
+            {:url
+              (s "https://github.com/babashka/babashka/releases/download/v"
+                 version "/babashka-" version "-linux-amd64-static.tar.gz")
+             :hash "sha256-6z7dEoJ28Lb73vyxjcfUJlKpXqQJqBs08I42uKw8vDw="})
+         :sourceRoot "."
+         :dontBuild true
+         :installPhase
+          (ms "runHook preInstall"
+              "install -Dm755 bb \"$out/bin/bb\""
+              "runHook postInstall")
+         :doInstallCheck true
+         :installCheckPhase
+          (ms (s "test \"$(\"$out/bin/bb\" --version)\" = \"babashka v" version "\""))
+         :meta pkgs.babashka.meta})]
+    {:options.myConfig.modules.babashka.enable
+      (lib.mkEnableOption "Babashka native Clojure scripting")
+     :config
+      (lib.mkIf config.myConfig.modules.babashka.enable
+        {:environment.systemPackages [babashka]})}))
