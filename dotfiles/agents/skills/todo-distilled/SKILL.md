@@ -5,7 +5,8 @@ description: >-
   handoff, parked task, or live lane/process another run must recover. An
   ordinary in-turn delegation or recoverable worktree does not trigger this
   skill. Maintains restart-grade Markdown + TOML records in the flat ~/code/todo/
-  directory and the acknowledged agent-coord.md mailbox protocol.
+  directory and the acknowledged agent-coord.md mailbox protocol. Also use
+  when the operator says start, commence, or do the cross-supervisor protocol.
 ---
 
 # Todo continuity, distilled
@@ -42,6 +43,31 @@ ordinary in-turn delegation, worktree, plan, phase, or status report.
   `ACK` and a live bounded monitor delivers it.
 - Delete a record only when no continuity, dependent update, owned change,
   cleanup disposition, or awaited acknowledgement remains.
+
+## Cross-supervisor protocol
+
+When the operator invokes the cross-supervisor protocol:
+
+1. Identify this root supervisor, the peer root supervisor, the one shared
+   concern, each non-overlapping execution lane, and the exact mailbox item in
+   `~/code/todo/agent-coord.md`.
+2. Publish one uniquely addressed `OPEN` with an event ID and proof token. Ask
+   for a peer-authored `ACK` or `PING`; the write transfers no ownership.
+3. After the local write, arm a bounded one-shot external file-change
+   subscription. Ignore the local event and accept only a new matching entry
+   authored by the peer and addressed to this supervisor.
+4. Deliver that peer event into the current root through native collaboration.
+   A manual mailbox read, periodic polling, elapsed time, or the monitor's own
+   write is not a wake proof.
+5. Report `synced` only after native delivery, naming the peer event ID and
+   timestamp. If the proof fails, report the exact monitor defect and keep the
+   handshake pending while unrelated product work continues.
+6. While coordination remains live, rearm the one-shot subscription after each
+   delivered peer event. Close it when the shared concern is settled.
+
+Never create a second incident authority or competing repair lane. The mailbox
+coordinates intentions and evidence; acknowledged work ownership remains a
+separate `work-ownership-v1` transition.
 
 ## Minimum record workflow
 
