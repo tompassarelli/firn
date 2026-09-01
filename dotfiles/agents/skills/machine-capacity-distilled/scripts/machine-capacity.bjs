@@ -1,0 +1,47 @@
+#lang beagle/js
+(ns machine-capacity.policy)
+
+(js/export
+ (defn resource-class
+   [kind String
+    cores Int] (Vec Int)
+   (cond
+     (= kind "agent") [1 768]
+     (= kind "moderate") [(if (> cores 1) 2 1) 2048]
+     (= kind "heavy") [(cond (> cores 8) 6 (> cores 4) 3 :else 1) 8192]
+     (= kind "exclusive") [(cond (> cores 31) 24
+                                 (> cores 23) 18
+                                 (> cores 15) 12
+                                 (> cores 11) 8
+                                 (> cores 7) 6
+                                 (> cores 3) 3
+                                 :else 1) 16384]
+     :else [])))
+
+(js/export
+ (defn admission-decision
+   [cores Int
+    memory-total-mib Int
+    memory-available-mib Int
+    cpu-some-avg10-basis-points Int
+    memory-full-avg10-basis-points Int
+    leased-cpus Int
+    leased-memory-mib Int
+    requested-cpus Int
+    requested-memory-mib Int] String
+   (cond
+     (or (<= cores 0)
+         (<= memory-total-mib 0)
+         (<= memory-available-mib 0)
+         (<= requested-cpus 0)
+         (<= requested-memory-mib 0)) "INVALID"
+     (> memory-full-avg10-basis-points 0) "DEFER_MEMORY_PRESSURE"
+     (or (< (- memory-available-mib requested-memory-mib) 4096)
+         (< (* (- memory-available-mib requested-memory-mib) 5)
+            memory-total-mib)) "DEFER_MEMORY_HEADROOM"
+     (>= cpu-some-avg10-basis-points 2000) "DEFER_CPU_PRESSURE"
+     (> (* (+ leased-cpus requested-cpus) 4)
+        (* cores 3)) "DEFER_CPU_CAPACITY"
+     (> (* (+ leased-memory-mib requested-memory-mib) 4)
+        (* memory-total-mib 3)) "DEFER_MEMORY_CAPACITY"
+     :else "RUN")))
