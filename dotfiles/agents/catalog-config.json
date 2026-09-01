@@ -509,7 +509,7 @@
             "north"
           ],
           "owner": {
-            "repo": "north",
+            "repo": "north-v2",
             "path": "agent-machinery/catalog.json"
           }
         },
@@ -518,11 +518,10 @@
           "targets": [
             "shared",
             "codex",
-            "north",
-            "bridge"
+            "north"
           ],
           "owner": {
-            "repo": "north",
+            "repo": "north-v2",
             "path": "agent-machinery/doctrine.md"
           }
         }
@@ -606,8 +605,8 @@
             "north"
           ],
           "owner": {
-            "repo": "agent-machinery",
-            "path": "catalog.json"
+            "repo": "north-v2",
+            "path": "agent-machinery/catalog.json"
           }
         },
         {
@@ -617,8 +616,8 @@
             "claude"
           ],
           "owner": {
-            "repo": "agent-machinery",
-            "path": "agents"
+            "repo": "north-v2",
+            "path": "agent-machinery/agents"
           }
         }
       ]
@@ -631,8 +630,8 @@
             "north"
           ],
           "owner": {
-            "repo": "agent-machinery",
-            "path": "catalog.json"
+            "repo": "north-v2",
+            "path": "agent-machinery/catalog.json"
           }
         }
       ]
@@ -645,8 +644,7 @@
         {
           "type": "hook",
           "targets": [
-            "codex",
-            "bridge"
+            "codex"
           ]
         }
       ]
@@ -691,7 +689,6 @@
           "targets": [
             "shared",
             "codex",
-            "bridge",
             "claude"
           ],
           "owner": {
@@ -823,8 +820,7 @@
         {
           "type": "hook",
           "targets": [
-            "codex",
-            "bridge"
+            "codex"
           ]
         }
       ]
@@ -857,8 +853,7 @@
         {
           "type": "hook",
           "targets": [
-            "codex",
-            "bridge"
+            "codex"
           ]
         }
       ]
@@ -870,8 +865,7 @@
           "targets": [
             "shared",
             "codex",
-            "north",
-            "bridge"
+            "north"
           ],
           "owner": {
             "repo": "north",
@@ -889,7 +883,6 @@
           "type": "hook",
           "targets": [
             "codex",
-            "bridge",
             "claude"
           ]
         }
@@ -1006,7 +999,6 @@
           "targets": [
             "firn",
             "codex",
-            "bridge",
             "claude"
           ],
           "owner": {
@@ -1025,7 +1017,6 @@
           "type": "hook",
           "targets": [
             "codex",
-            "bridge",
             "claude"
           ]
         }
@@ -1100,7 +1091,6 @@
           "type": "hook",
           "targets": [
             "codex",
-            "bridge",
             "claude"
           ]
         }
@@ -1112,8 +1102,7 @@
           "type": "hook",
           "targets": [
             "shared",
-            "codex",
-            "bridge"
+            "codex"
           ]
         }
       ]
@@ -1371,8 +1360,7 @@
         {
           "type": "hook",
           "targets": [
-            "codex",
-            "bridge"
+            "codex"
           ]
         }
       ]
@@ -1407,7 +1395,6 @@
           "type": "hook",
           "targets": [
             "codex",
-            "bridge",
             "claude"
           ]
         }
@@ -1732,7 +1719,6 @@
           "type": "hook",
           "targets": [
             "codex",
-            "bridge",
             "claude"
           ]
         }
