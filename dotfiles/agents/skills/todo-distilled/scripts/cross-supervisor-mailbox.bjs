@@ -43,13 +43,13 @@
 
 (defn envelope
   [line String
-   coordination String
+   channel String
    sender String
    receiver String
    status String] (Vec String)
   (let [timestamp-start Int 3
         timestamp-end Int (text-index-from line "]" timestamp-start)
-        prefix String (str "[" coordination "][" sender " -> " receiver "]["
+        prefix String (str "[" channel "][" sender " -> " receiver "]["
           status "] ")]
     (if (and (starts-at? line 0 "- [")
              (> timestamp-end timestamp-start)
@@ -61,11 +61,11 @@
 (js/export
  (defn peer-open-facts
    [line String
-    coordination String
+    channel String
     peer-sender String
     local-receiver String
     now-ms Int] (Vec String)
-   (let [parts (Vec String) (envelope line coordination peer-sender local-receiver "OPEN")]
+   (let [parts (Vec String) (envelope line channel peer-sender local-receiver "OPEN")]
      (if (not= (count parts) 2)
        []
        (let [timestamp String (nth parts 0)
@@ -83,7 +83,9 @@
              proof-end Int (token-end body proof-start)
              expires-label String " expires="
              expires-start Int (+ proof-end (count expires-label))
-             expires-end Int (token-end body expires-start)]
+             expires-end Int (token-end body expires-start)
+             message-label String " message="
+             message-start Int (+ expires-end (count message-label))]
          (if (and (starts-at? body 0 "event=")
                   (> event-end event-start)
                   (starts-at? body event-end session-label)
@@ -94,6 +96,8 @@
                   (> proof-end proof-start)
                   (starts-at? body proof-end expires-label)
                   (> expires-end expires-start)
+                  (starts-at? body expires-end message-label)
+                  (> (count body) message-start)
                   (valid-positive-int? (subs body round-start round-end)))
            (let [expires-text String (subs body expires-start expires-end)
                  expires (U Int Nil) (parse-long expires-text)]
@@ -105,18 +109,18 @@
                 (subs body session-start session-end)
                 (subs body round-start round-end)
                 (subs body proof-start proof-end)
-                expires-text]
+                expires-text
+                (subs body message-start (count body))]
                []))
            []))))))
 
 (js/export
- (defn receipt-facts
+ (defn received-facts
    [line String
-    coordination String
+    channel String
     sender String
-    receiver String
-    status String] (Vec String)
-   (let [parts (Vec String) (envelope line coordination sender receiver status)]
+    receiver String] (Vec String)
+   (let [parts (Vec String) (envelope line channel sender receiver "RECEIVED")]
      (if (not= (count parts) 2)
        []
        (let [timestamp String (nth parts 0)
@@ -134,7 +138,10 @@
              round-end Int (token-end body round-start)
              proof-label String " proof="
              proof-start Int (+ round-end (count proof-label))
-             proof-end Int (token-end body proof-start)]
+             proof-end Int (token-end body proof-start)
+             received-session-label String " received-session="
+             received-session-start Int (+ proof-end (count received-session-label))
+             received-session-end Int (token-end body received-session-start)]
          (if (and (starts-at? body 0 "event=")
                   (> event-end event-start)
                   (starts-at? body event-end reply-label)
@@ -145,11 +152,15 @@
                   (> round-end round-start)
                   (starts-at? body round-end proof-label)
                   (> proof-end proof-start)
+                  (starts-at? body proof-end received-session-label)
+                  (> received-session-end received-session-start)
+                  (= received-session-end (count body))
                   (valid-positive-int? (subs body round-start round-end)))
            [timestamp
             (subs body event-start event-end)
             (subs body reply-start reply-end)
             (subs body session-start session-end)
             (subs body round-start round-end)
-            (subs body proof-start proof-end)]
+            (subs body proof-start proof-end)
+            (subs body received-session-start received-session-end)]
            []))))))

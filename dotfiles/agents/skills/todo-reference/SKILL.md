@@ -141,29 +141,32 @@ when its exit condition is proven.
 ## Mailbox protocol
 
 One named monitor must watch `agent-coord.md`, deliver changes to its owner
-within a bound, and be reaped with its supervisor. Prove the route with one
-addressed round trip:
+within a bound, and be reaped with its supervisor. The helper derives
+`PAIR-CHANNEL` as the full SHA-256 digest of the JSON-encoded, lexicographically
+ordered exact root identities, prefixed with `pair-`. Prove the route with one
+addressed transport round trip:
 
 ```text
-- [timestamp][C007][sender -> receiver][OPEN] event=EVENT session=SESSION round=N proof=TOKEN expires=MILLISECONDS request or claim
-- [timestamp][C007][receiver -> sender][ACK] event=EVENT reply-to=OPEN-EVENT session=SESSION round=N proof=TOKEN receipt
-- [timestamp][C007][receiver -> sender][PING] event=EVENT reply-to=OPEN-EVENT session=SESSION round=N proof=TOKEN liveness receipt
-- [timestamp][C007][sender -> receiver][UPDATE] event=EVENT changed checkpoint
-- [timestamp][C007][sender -> receiver][DONE] event=EVENT terminal result and revision
+- [timestamp][PAIR-CHANNEL][sender -> receiver][OPEN] event=EVENT session=SESSION round=N proof=TOKEN expires=MILLISECONDS message=EXACT-CONCERN
+- [timestamp][PAIR-CHANNEL][receiver -> sender][RECEIVED] event=EVENT reply-to=OPEN-EVENT session=SESSION round=N proof=TOKEN received-session=OPEN-SESSION
 ```
 
-Messages remain append-only while a claim is live. On a delivery timeout,
-append one explicit retry and retain ownership. Before stopping the monitor,
-reread the board and settle every addressed `OPEN` and `UPDATE`.
+Messages remain append-only while a concern is live. `RECEIVED` is a neutral
+transport fact, never semantic acceptance or work acknowledgement. Use the
+separate `work-ownership-v1` contract for ownership. On delivery timeout,
+retain ownership and report the exact failure; the next bounded helper
+invocation creates fresh events. Before stopping the monitor, settle every peer
+payload already delivered to the root.
 
 ### Executable duplex bootstrap
 
-Resolve the helper from active authority, never from a projection or remembered
-path:
+Resolve the helper relative to the authoritative `SKILL.md` already read for
+this invocation, never from a projection, remembered path, or a second
+`agents path` lookup:
 
 ```bash
-todo_skill=$(dirname "$(agents path todo-distilled)")
-mailbox_helper="$todo_skill/scripts/cross-supervisor-mailbox.mjs"
+# todo_skill_dir is the directory containing that authoritative SKILL.md.
+mailbox_helper="$todo_skill_dir/scripts/cross-supervisor-mailbox.mjs"
 ```
 
 Each supervisor's named monitor starts one copy of the same command. `--local`
@@ -173,42 +176,44 @@ independently with those two values reversed:
 ```bash
 bun "$mailbox_helper" duplex \
   --mailbox ~/code/todo/agent-coord.md \
-  --coordination C007 \
   --local "codex:/root" \
   --peer "peer:/root" \
-  --status ACK \
-  --timeout-ms 60000 \
-  --rounds 2 \
   --message "synchronize the shared concern"
 ```
 
-The helper generates its local session, events, timestamps, proofs, and expiry,
-appends its `OPEN`, discovers the peer's exact unexpired `OPEN`, and appends the
-requested `ACK` or `PING` using that peer event and proof. It also watches for
-the exact status, `reply-to`, round, and proof matching its own `OPEN`. The
-operator must never be asked to copy a coordinate, line, event, or token between
-roots.
+The normal invocation has no operator-chosen coordination ID or status. The
+helper derives one stable order-independent channel from the exact local/peer
+pair. The shared concern remains `message=` payload. The helper generates its
+local session, events, timestamps, proofs, and expiry, appends its `OPEN`,
+discovers the peer's exact unexpired `OPEN`, and appends `RECEIVED` using that
+peer event, proof, and session. It also watches for the exact `reply-to`, round,
+proof, and receiving session matching its own `OPEN`. The operator must never
+be asked to copy a channel, line, event, or token between roots.
 
 The subscription is installed before the baseline is captured. Baseline
 discovery accepts only an exact, unexpired peer `OPEN` that this local root has
 not previously answered. This makes either startup order safe while rejecting
 expired or already-replied stale events. Current and future processing also
-rejects a local route, another sender or receiver, a receipt with the wrong
-`reply-to` or proof, malformed ordered fields, and duplicate event IDs. Each
-peer `OPEN` receives at most one helper-owned receipt.
+rejects a local route, another sender or receiver, another pair channel, a
+receipt with the wrong `reply-to` or proof, malformed ordered fields, and
+duplicate event IDs. Each peer `OPEN` receives at most one helper-owned receipt,
+and each round delivers at most one peer `OPEN`.
 
 `OPENED`, `ARMED`, `ROUND-COMPLETE`, and `REARMED` are diagnostics on stderr.
-Each stdout line is the unchanged peer receipt for one fully bidirectional
-round: this helper has both answered the peer `OPEN` and matched the receipt to
-its own `OPEN`. The named monitor sends `ARMED` and every stdout receipt to its
-root with the provider's native `send_message` operation. Only then may the
-root report `synced`, naming the timestamp in the first field and event from
-`event=...` and confirming the next round is armed.
+Each stdout line is one JSON object containing `channel`, `round`, the unchanged
+`peerOpen`, parsed `peerMessage`, and unchanged correlated `receipt`. It appears
+only after the helper has both answered that peer `OPEN` and matched the peer's
+`RECEIVED` to its own `OPEN`. The named monitor sends `ARMED` and every stdout
+delivery to its root with the provider's native `send_message` operation. Only
+then may the root report transport `synced`, naming the peer event and receipt
+and confirming the next round is armed. That claim never means the peer accepted
+the message's semantics.
 
-`--rounds` is bounded from 1 through 32 and `--timeout-ms` from 1 through
-300000. Completing all rounds exits zero; timeout exits 124; argument, watch,
-or read failure exits 2. While the concern remains live, the named monitor
-immediately re-invokes the same command after zero exit, so the protocol stays
-armed without operator involvement. The helper itself remains a bounded
-file-event process with one ownership split, no polling, daemon, provider
-credential, manual mailbox read, or transcript dependency.
+The defaults are two rounds and 300000 milliseconds. Explicit `--rounds` is
+bounded from 1 through 32 and `--timeout-ms` from 1 through 300000. Completing
+all rounds exits zero; timeout exits 124; argument, watch, or read failure exits
+2. While the concern remains live, the named monitor immediately re-invokes the
+same command after zero exit, so the protocol stays armed without operator
+involvement. The helper itself remains a bounded file-event process with no
+polling, daemon, provider credential, manual mailbox read, compatibility path,
+or transcript dependency.

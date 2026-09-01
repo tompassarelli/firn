@@ -1,12 +1,18 @@
 import { appendFileSync, readFileSync, watch } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 import * as mailboxLogic from './cross-supervisor-mailbox-logic.js';
 
 const peerOpenFacts = mailboxLogic['peer-open-facts'];
-const receiptFacts = mailboxLogic['receipt-facts'];
-const statuses = new Set(['ACK', 'PING']);
+const receivedFacts = mailboxLogic['received-facts'];
 const maximumTimeoutMilliseconds = 300_000;
 const maximumRounds = 32;
+const defaultTimeoutMilliseconds = 300_000;
+const defaultRounds = 2;
+// Keep successive writes on distinct file-event turns. Each owned write also
+// schedules one bounded catch-up read because fs.watch may coalesce the peer's
+// immediately correlated write into the notification already being handled.
+const fileEventSeparationMilliseconds = 10;
 
 function fail(message, status = 2) {
   process.stderr.write(`cross-supervisor-mailbox: ${message}\n`);
@@ -15,7 +21,7 @@ function fail(message, status = 2) {
 
 function parseArguments(argv) {
   if (argv[0] !== 'duplex') {
-    fail('usage: duplex --mailbox PATH --coordination ID --local NAME --peer NAME --status ACK|PING --timeout-ms N --rounds N [--message TEXT]');
+    fail('usage: duplex --mailbox PATH --local NAME --peer NAME --message TEXT [--timeout-ms N] [--rounds N]');
   }
   const values = new Map();
   for (let index = 1; index < argv.length; index += 2) {
@@ -28,28 +34,26 @@ function parseArguments(argv) {
     values.set(option, value);
   }
   const allowed = new Set([
-    '--mailbox', '--coordination', '--local', '--peer', '--status',
-    '--timeout-ms', '--rounds', '--message',
+    '--mailbox', '--local', '--peer', '--message', '--timeout-ms', '--rounds',
   ]);
   for (const [option, value] of values) {
     if (!allowed.has(option)) fail(`unknown option: ${option}`);
-    if (/[\r\n\]]/.test(value)) fail(`${option} contains a mailbox delimiter`);
+    if (/[\r\n\[\]]/.test(value)) fail(`${option} contains a mailbox delimiter`);
   }
-  for (const option of [
-    '--mailbox', '--coordination', '--local', '--peer', '--status',
-    '--timeout-ms', '--rounds',
-  ]) {
+  for (const option of ['--mailbox', '--local', '--peer', '--message']) {
     if (!values.get(option)) fail(`missing ${option}`);
   }
-  const status = values.get('--status');
-  if (!statuses.has(status)) fail('--status must be ACK or PING');
-  const timeoutMilliseconds = Number(values.get('--timeout-ms'));
+  const timeoutMilliseconds = values.has('--timeout-ms')
+    ? Number(values.get('--timeout-ms'))
+    : defaultTimeoutMilliseconds;
   if (!Number.isSafeInteger(timeoutMilliseconds)
       || timeoutMilliseconds < 1
       || timeoutMilliseconds > maximumTimeoutMilliseconds) {
     fail(`--timeout-ms must be an integer from 1 to ${maximumTimeoutMilliseconds}`);
   }
-  const rounds = Number(values.get('--rounds'));
+  const rounds = values.has('--rounds')
+    ? Number(values.get('--rounds'))
+    : defaultRounds;
   if (!Number.isSafeInteger(rounds) || rounds < 1 || rounds > maximumRounds) {
     fail(`--rounds must be an integer from 1 to ${maximumRounds}`);
   }
@@ -58,14 +62,19 @@ function parseArguments(argv) {
   }
   return Object.freeze({
     mailbox: values.get('--mailbox'),
-    coordination: values.get('--coordination'),
     local: values.get('--local'),
     peer: values.get('--peer'),
-    status,
+    channel: stableChannel(values.get('--local'), values.get('--peer')),
     timeoutMilliseconds,
     rounds,
-    message: values.get('--message') ?? 'cross-supervisor sync',
+    message: values.get('--message'),
   });
+}
+
+function stableChannel(local, peer) {
+  const pair = local < peer ? [local, peer] : [peer, local];
+  const digest = createHash('sha256').update(JSON.stringify(pair)).digest('hex');
+  return `pair-${digest}`;
 }
 
 function newIdentity(prefix) {
@@ -94,7 +103,7 @@ function runDuplex(options) {
     const session = newIdentity('session');
     const ownByEvent = new Map();
     const ownByRound = new Map();
-    const peerRoundsHandled = new Set();
+    const peerByRound = new Map();
     const repliedPeerEvents = new Set();
     const seenReceiptEvents = new Set();
     let nextRound = 1;
@@ -102,6 +111,12 @@ function runDuplex(options) {
     let settled = false;
     let timeoutHandle;
     let watcher;
+
+    const scheduleCausalCatchUp = () => {
+      setTimeout(() => {
+        if (!settled) inspectFuture();
+      }, fileEventSeparationMilliseconds * 2);
+    };
 
     const finish = status => {
       if (settled) return;
@@ -123,7 +138,8 @@ function runDuplex(options) {
       ownByEvent.set(open.event, open);
       ownByRound.set(round, open);
       appendLine(options.mailbox,
-        `- [${at}][${options.coordination}][${options.local} -> ${options.peer}][OPEN] event=${open.event} session=${session} round=${round} proof=${open.proof} expires=${open.expires} ${options.message}`);
+        `- [${at}][${options.channel}][${options.local} -> ${options.peer}][OPEN] event=${open.event} session=${session} round=${round} proof=${open.proof} expires=${open.expires} message=${options.message}`);
+      scheduleCausalCatchUp();
       process.stderr.write(`OPENED event=${open.event} timestamp=${at} round=${round}\n`);
       return open;
     };
@@ -131,43 +147,66 @@ function runDuplex(options) {
     const maybeAdvance = () => {
       while (nextRound <= options.rounds) {
         const own = ownByRound.get(nextRound);
-        if (!own?.receiptLine || !peerRoundsHandled.has(nextRound)) return;
-        process.stdout.write(`${own.receiptLine}\n`);
+        const peer = peerByRound.get(nextRound);
+        if (!own?.receiptLine || !peer) return;
+        process.stdout.write(`${JSON.stringify({
+          channel: options.channel,
+          round: nextRound,
+          peerOpen: peer.openLine,
+          peerMessage: peer.message,
+          receipt: own.receiptLine,
+        })}\n`);
         process.stderr.write(`ROUND-COMPLETE round=${nextRound}\n`);
         if (nextRound === options.rounds) {
           finish(0);
           return;
         }
         nextRound += 1;
-        publishOpen(nextRound);
-        process.stderr.write(`REARMED round=${nextRound}\n`);
+        const rearmRound = nextRound;
+        setTimeout(() => {
+          if (settled) return;
+          publishOpen(rearmRound);
+          process.stderr.write(`REARMED round=${rearmRound}\n`);
+        }, fileEventSeparationMilliseconds);
+        return;
       }
     };
 
     const handlePeerOpen = line => {
       const facts = peerOpenFacts(
-        line, options.coordination, options.peer, options.local, Date.now(),
+        line, options.channel, options.peer, options.local, Date.now(),
       );
-      if (!Array.isArray(facts) || facts.length !== 6) return;
-      const [, event, peerSession, roundText, proof] = facts;
+      if (!Array.isArray(facts) || facts.length !== 7) return;
+      const [, event, peerSession, roundText, proof, , message] = facts;
       const round = Number(roundText);
       if (!Number.isSafeInteger(round)
           || round < 1
           || round > options.rounds
-          || repliedPeerEvents.has(event)) return;
+          || repliedPeerEvents.has(event)
+          || peerByRound.has(round)) return;
       repliedPeerEvents.add(event);
-      const at = timestamp();
-      const receipt = `- [${at}][${options.coordination}][${options.local} -> ${options.peer}][${options.status}] event=${newIdentity('event')} reply-to=${event} session=${session} round=${round} proof=${proof} received-session=${peerSession}`;
-      appendLine(options.mailbox, receipt);
-      peerRoundsHandled.add(round);
-      maybeAdvance();
+      setTimeout(() => {
+        if (settled) return;
+        try {
+          const at = timestamp();
+          const receipt = `- [${at}][${options.channel}][${options.local} -> ${options.peer}][RECEIVED] event=${newIdentity('event')} reply-to=${event} session=${session} round=${round} proof=${proof} received-session=${peerSession}`;
+          appendLine(options.mailbox, receipt);
+          scheduleCausalCatchUp();
+          peerByRound.set(round, Object.freeze({ openLine: line, message }));
+        } catch (error) {
+          process.stderr.write(`ERROR ${error?.message ?? String(error)}\n`);
+          finish(2);
+          return;
+        }
+        maybeAdvance();
+      }, fileEventSeparationMilliseconds);
     };
 
     const handlePeerReceipt = line => {
-      const facts = receiptFacts(
-        line, options.coordination, options.peer, options.local, options.status,
+      const facts = receivedFacts(
+        line, options.channel, options.peer, options.local,
       );
-      if (!Array.isArray(facts) || facts.length !== 6) return;
+      if (!Array.isArray(facts) || facts.length !== 7) return;
       const [, receiptEvent, replyTo, , roundText, proof] = facts;
       if (seenReceiptEvents.has(receiptEvent)) return;
       const own = ownByEvent.get(replyTo);
@@ -192,13 +231,11 @@ function runDuplex(options) {
 
     const rememberPriorReplies = lines => {
       for (const line of lines) {
-        for (const status of statuses) {
-          const facts = receiptFacts(
-            line, options.coordination, options.local, options.peer, status,
-          );
-          if (Array.isArray(facts) && facts.length === 6) {
-            repliedPeerEvents.add(facts[2]);
-          }
+        const facts = receivedFacts(
+          line, options.channel, options.local, options.peer,
+        );
+        if (Array.isArray(facts) && facts.length === 7) {
+          repliedPeerEvents.add(facts[2]);
         }
       }
     };
@@ -235,7 +272,7 @@ function runDuplex(options) {
       rememberPriorReplies(baselineLines);
       publishOpen(1);
       process.stderr.write(
-        `ARMED coordination=${options.coordination} local=${options.local} peer=${options.peer} session=${session} rounds=${options.rounds} timeout_ms=${options.timeoutMilliseconds}\n`,
+        `ARMED channel=${options.channel} local=${options.local} peer=${options.peer} session=${session} rounds=${options.rounds} timeout_ms=${options.timeoutMilliseconds}\n`,
       );
       handleLines(baselineLines);
     } catch (error) {
@@ -246,12 +283,12 @@ function runDuplex(options) {
 
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
-      process.stderr.write(`TIMEOUT coordination=${options.coordination}\n`);
+      process.stderr.write(`TIMEOUT channel=${options.channel}\n`);
       finish(124);
       return;
     }
     timeoutHandle = setTimeout(() => {
-      process.stderr.write(`TIMEOUT coordination=${options.coordination}\n`);
+      process.stderr.write(`TIMEOUT channel=${options.channel}\n`);
       finish(124);
     }, remaining);
   });

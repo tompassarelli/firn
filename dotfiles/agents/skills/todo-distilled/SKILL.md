@@ -39,8 +39,8 @@ ordinary in-turn delegation, worktree, plan, phase, or status report.
 - The product owner closes an existing durable record directly from terminal
   evidence. North separately settles the concrete run's process, delivery,
   driver, and parent/child state through `agent-run-lifecycle-distilled`.
-- A mailbox `OPEN` transfers no ownership until the addressed receiver writes
-  `ACK` and a live bounded monitor delivers it.
+- A mailbox `OPEN` or transport `RECEIVED` transfers no ownership. Use a
+  separate acknowledged `work-ownership-v1` transition when ownership changes.
 - Delete a record only when no continuity, dependent update, owned change,
   cleanup disposition, or awaited acknowledgement remains.
 
@@ -48,41 +48,43 @@ ordinary in-turn delegation, worktree, plan, phase, or status report.
 
 When the operator invokes the cross-supervisor protocol:
 
-1. Identify this root supervisor, the peer root supervisor, the one shared
-   concern, each non-overlapping execution lane, and the exact mailbox item in
-   `~/code/todo/agent-coord.md`.
+1. Identify this root supervisor, the peer root supervisor, the shared concern,
+   and each non-overlapping execution lane. The exact root identities determine
+   one stable pair channel in either startup order; the concern remains message
+   payload and never becomes a guessed coordination ID.
 2. Admit one named monitor per root. Each monitor independently runs the same
-   duplex helper once, with `--local` and `--peer` set from its own perspective:
+   duplex helper once, with `--local` and `--peer` set from its own perspective.
+   Resolve the helper beside the authoritative `SKILL.md` already read for this
+   invocation; do not rediscover it through `agents path` or a projection:
 
    ```bash
-   todo_skill=$(dirname "$(agents path todo-distilled)")
-   bun "$todo_skill/scripts/cross-supervisor-mailbox.mjs" duplex \
+   # todo_skill_dir is the directory containing the authoritative SKILL.md.
+   bun "$todo_skill_dir/scripts/cross-supervisor-mailbox.mjs" duplex \
      --mailbox ~/code/todo/agent-coord.md \
-     --coordination C007 \
      --local "codex:/root" \
      --peer "peer:/root" \
-     --status ACK \
-     --timeout-ms 60000 \
-     --rounds 2 \
      --message "synchronize the shared concern"
    ```
 
-   Never ask the operator to relay a coordination ID, mailbox line, event,
-   token, or pending message between roots. The shared concern supplies the
-   coordination ID; the helper generates every event, timestamp, session, and
-   proof and owns all mailbox writes after startup.
+   The defaults are two rounds and 300000 milliseconds. Never ask the operator
+   to relay a channel, mailbox line, event, token, or pending message between
+   roots. The helper derives the channel from the exact root pair, generates
+   every event, timestamp, session, and proof, and owns all mailbox writes.
 3. The duplex helper registers one bounded file-event subscription, emits its
    local `OPEN`, discovers an exact live peer `OPEN`, writes the corresponding
-   `ACK` or `PING` with the peer proof, matches the receipt to its own `OPEN`,
-   and rearms for the requested rounds. It accepts an unexpired, previously
-   unanswered peer `OPEN` already present at arm time, so either root may start
-   first. It ignores stale, local, wrong-direction, wrong-token, malformed, and
-   duplicate events. It never polls and is not a daemon.
+   neutral `RECEIVED` with the peer proof, matches the peer receipt to its own
+   `OPEN`, and rearms for the requested rounds. It subscribes before publishing
+   and accepts an unexpired, previously unanswered peer `OPEN` already present
+   at arm time, so either root may start first. It ignores stale, local,
+   wrong-direction, wrong-pair, wrong-proof, malformed, and duplicate events.
+   It never polls and is not a daemon. `RECEIVED` proves transport only; it
+   never accepts a claim, decision, instruction, or work transfer.
 4. On the stderr `ARMED` line, the monitor native-delivers the armed state to
-   its root. Each stdout line is the exact peer receipt for one completed duplex
-   round; native-deliver it unchanged. Report `synced` only with that receipt's
-   event ID and timestamp and evidence that the next round or bounded helper is
-   armed.
+   its root. Each stdout JSON line contains the exact peer `OPEN`, its message
+   payload, and the exact correlated `RECEIVED` for one completed duplex round;
+   native-deliver it unchanged. Report `synced` only after naming the delivered
+   peer event and receipt plus evidence that the next round or bounded helper is
+   armed. Do not infer semantic agreement from transport completion.
 5. While the shared concern remains live, the named monitor immediately
    re-invokes the same bounded duplex command after its configured rounds
    complete. This provider-native recurrence requires no user action and adds
