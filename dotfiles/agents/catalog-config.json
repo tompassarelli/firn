@@ -19,6 +19,7 @@
     "threejs-shaders-distilled",
     "threejs-textures-distilled",
     "beagle-authoring-distilled",
+    "clause-authoring-distilled",
     "beagle-system-design-distilled",
     "fact-modeling-distilled",
     "firn-distilled",
@@ -232,6 +233,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/cloudflare-deploy-reference/SKILL.md"
+      }
+    },
+    "clause-authoring-distilled": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/clause-authoring-distilled/SKILL.md"
       }
     },
     "code-as-facts-distilled": {
@@ -753,6 +762,16 @@
       ]
     },
     "cloudflare-deploy-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "clause-authoring-distilled": {
       "distributions": [
         {
           "type": "skill",
