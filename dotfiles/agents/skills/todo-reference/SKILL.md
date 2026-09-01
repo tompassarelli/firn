@@ -145,12 +145,76 @@ within a bound, and be reaped with its supervisor. Prove the route with one
 addressed round trip:
 
 ```text
-- [timestamp][C007][sender -> receiver][OPEN] request or claim
-- [timestamp][C007][receiver -> sender][ACK] received and accepted/declined
-- [timestamp][C007][sender -> receiver][UPDATE] changed checkpoint
-- [timestamp][C007][sender -> receiver][DONE] terminal result and revision
+- [timestamp][C007][sender -> receiver][OPEN] event=EVENT proof=TOKEN request or claim
+- [timestamp][C007][receiver -> sender][ACK] event=EVENT proof=TOKEN received and accepted/declined
+- [timestamp][C007][receiver -> sender][PING] event=EVENT proof=TOKEN liveness receipt
+- [timestamp][C007][sender -> receiver][UPDATE] event=EVENT changed checkpoint
+- [timestamp][C007][sender -> receiver][DONE] event=EVENT terminal result and revision
 ```
 
 Messages remain append-only while a claim is live. On a delivery timeout,
 append one explicit retry and retain ownership. Before stopping the monitor,
 reread the board and settle every addressed `OPEN` and `UPDATE`.
+
+### Executable bootstrap
+
+Resolve the helper from active authority, never from a projection or remembered
+path:
+
+```bash
+todo_skill=$(dirname "$(agents path todo-distilled)")
+mailbox_helper="$todo_skill/scripts/cross-supervisor-mailbox.mjs"
+```
+
+The initiating monitor publishes and arms in one invocation. `--sender` is the
+local root, `--receiver` is the exact peer root, and `--status` is the expected
+peer response:
+
+```bash
+bun "$mailbox_helper" open-watch \
+  --mailbox ~/code/todo/agent-coord.md \
+  --coordination C007 \
+  --sender "codex:/root" \
+  --receiver "peer:/root" \
+  --status ACK \
+  --timeout-ms 60000 \
+  --message "acknowledge the shared concern"
+```
+
+The helper creates the event ID, UTC timestamp, and proof token. A caller may
+supply `--proof TOKEN` only for an already-created fresh request; ordinary
+bootstrap omits it. `OPENED` and `ARMED` are diagnostics on stderr. Stdout stays
+empty until the first new exact peer line, then contains that one line only and
+the process exits zero. Timeout exits 124; argument, watch, or read failure
+exits 2. The timeout must remain at or below 300000 milliseconds.
+
+The peer responds without hand-writing mailbox syntax. It copies the proof from
+the addressed `OPEN`; the helper supplies its own new event ID and timestamp:
+
+```bash
+bun "$mailbox_helper" reply \
+  --mailbox ~/code/todo/agent-coord.md \
+  --coordination C007 \
+  --sender "peer:/root" \
+  --receiver "codex:/root" \
+  --status ACK \
+  --proof "proof-from-the-open" \
+  --message "received"
+```
+
+`PING` uses the same command with `--status PING`. The watcher registers before
+capturing its baseline, so all baseline content—including its local `OPEN`, a
+wrong route or token, and a receipt that arrived before `ARMED`—is ignored. If
+the fresh proof already has a matching baseline receipt, the helper emits
+`PREARM-RETRY`, publishes a new `OPEN` with a new event and proof, and rearms
+within the original deadline. A manually observed receipt never substitutes for
+this event path.
+
+The named monitor sends `ARMED` to its root using native collaboration. When
+stdout yields a peer line, it sends that exact line to the root using the native
+`send_message` operation, then starts another `open-watch` immediately with a
+fresh generated request unless the shared concern is settled. Only after that
+native delivery may the root report `synced`; it names the timestamp in the
+first field and the peer event from `event=...`, plus the newly armed watcher.
+This recurrence belongs to the monitor agent, not to a polling loop, shell
+daemon, manual mailbox read, or user babysitting.

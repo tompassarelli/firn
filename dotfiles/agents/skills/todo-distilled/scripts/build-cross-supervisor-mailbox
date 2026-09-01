@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+output=${1:-"$here/cross-supervisor-mailbox.mjs"}
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/cross-supervisor-mailbox-build.XXXXXX")
+trap 'rm -rf "${scratch:?}"' EXIT
+
+beagle=${BEAGLE_PATH:-}
+if [[ -z "$beagle" ]]; then
+  git_common_dir=$(git -C "$here" rev-parse --path-format=absolute --git-common-dir)
+  code_root=$(cd "$(dirname "$git_common_dir")/../.." && pwd)
+  beagle="$code_root/beagle/main"
+fi
+bun=${BUN_PATH:-$(command -v bun || true)}
+[[ -x "$beagle/bin/beagle-build-all" ]] || {
+  printf 'cross-supervisor-mailbox build: Beagle is unavailable: %s\n' "$beagle" >&2
+  exit 1
+}
+[[ -n "$bun" && -x "$bun" ]] || {
+  printf 'cross-supervisor-mailbox build: Bun is unavailable\n' >&2
+  exit 1
+}
+
+mkdir -p "$scratch/modules/node_modules/beagle"
+"$beagle/bin/beagle-build-all" \
+  "$here/cross-supervisor-mailbox.bjs" \
+  --out "$scratch/modules"
+logic=$(find "$scratch/modules" -name cross-supervisor-mailbox.js -print -quit)
+[[ -n "$logic" && -f "$logic" ]] || {
+  printf 'cross-supervisor-mailbox build: Beagle emitted no JS module\n' >&2
+  exit 1
+}
+cp -- "$logic" "$scratch/modules/cross-supervisor-mailbox-logic.js"
+cp -- "$here/cross-supervisor-mailbox-host.mjs" "$scratch/modules/"
+cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
+  "$scratch/modules/node_modules/beagle/core.js"
+printf '%s\n' '{"type":"module"}' \
+  >"$scratch/modules/node_modules/beagle/package.json"
+
+"$bun" build "$scratch/modules/cross-supervisor-mailbox-host.mjs" \
+  --target=bun \
+  --minify \
+  --outfile "$output" \
+  --banner '#!/usr/bin/env bun'
+chmod +x "$output"

@@ -51,19 +51,42 @@ When the operator invokes the cross-supervisor protocol:
 1. Identify this root supervisor, the peer root supervisor, the one shared
    concern, each non-overlapping execution lane, and the exact mailbox item in
    `~/code/todo/agent-coord.md`.
-2. Publish one uniquely addressed `OPEN` with an event ID and proof token. Ask
-   for a peer-authored `ACK` or `PING`; the write transfers no ownership.
-3. After the local write, arm a bounded one-shot external file-change
-   subscription. Ignore the local event and accept only a new matching entry
-   authored by the peer and addressed to this supervisor.
-4. Deliver that peer event into the current root through native collaboration.
-   A manual mailbox read, periodic polling, elapsed time, or the monitor's own
-   write is not a wake proof.
+2. Admit one named monitor and have it invoke the skill-owned Bun helper; do
+   not ask the operator to compose a mailbox line or set up a watcher:
+
+   ```bash
+   todo_skill=$(dirname "$(agents path todo-distilled)")
+   bun "$todo_skill/scripts/cross-supervisor-mailbox.mjs" open-watch \
+     --mailbox ~/code/todo/agent-coord.md \
+     --coordination C007 \
+     --sender "codex:/root" \
+     --receiver "peer:/root" \
+     --status ACK \
+     --timeout-ms 60000 \
+     --message "acknowledge the shared concern"
+   ```
+
+   `open-watch` generates a unique event ID, timestamp, and fresh proof token,
+   appends the addressed `OPEN`, registers a future file-event subscription,
+   writes `ARMED` to stderr, and writes only the first matching peer `ACK` or
+   `PING` line to stdout before exiting. The write transfers no ownership.
+3. On `ARMED`, the monitor sends the armed state to this root through native
+   collaboration. On the one stdout line, it native-delivers that exact line,
+   then immediately invokes `open-watch` again with a fresh generated request
+   while the concern remains live. This is the normal self-rearm path; each
+   underlying watcher remains bounded and one-shot, with no polling or daemon.
+4. Accept only an event authored by the exact peer, addressed to this root,
+   with the requested status and proof. A local `OPEN`, wrong direction, wrong
+   token, manual mailbox read, elapsed time, or the monitor's own write is not
+   wake proof.
 5. Report `synced` only after native delivery, naming the peer event ID and
-   timestamp. If the proof fails, report the exact monitor defect and keep the
-   handshake pending while unrelated product work continues.
-6. While coordination remains live, rearm the one-shot subscription after each
-   delivered peer event. Close it when the shared concern is settled.
+   timestamp and confirming the next watcher is armed. If proof fails, report
+   the exact monitor defect and keep the handshake pending while unrelated
+   product work continues.
+6. A receipt found before `ARMED` is a pre-arm race, not wake proof. The helper
+   automatically appends a retry with a new event ID and proof token and rearms
+   within the original timeout. Never reuse the old request after a manual read.
+   Close the monitor when the shared concern is settled.
 
 Never create a second incident authority or competing repair lane. The mailbox
 coordinates intentions and evidence; acknowledged work ownership remains a
@@ -82,6 +105,6 @@ separate `work-ownership-v1` transition.
 5. Land or explicitly dispose of the live state the record owns, update actual
    dependents, then remove the record when recovery value is gone.
 
-Complete schema and mailbox details live in the reference skill; load it only
-for an explicit request or a named unresolved detail, per the always-loaded
-policy.
+Peer receipt invocation, exact line grammar, failure behavior, and record
+schemas live in the reference skill; load it only when those details are
+needed, per the always-loaded policy.

@@ -1,0 +1,48 @@
+#lang beagle/js
+(ns todo.cross-supervisor-mailbox)
+
+(defn text-index-from
+  [text String
+   needle String
+   start Int] Int
+  (cond
+    (= needle "") start
+    (> (+ start (count needle)) (count text)) -1
+    (= (subs text start (+ start (count needle))) needle) start
+    :else (text-index-from text needle (+ start 1))))
+
+(defn starts-at?
+  [text String
+   index Int
+   prefix String] Bool
+  (and (>= index 0)
+       (<= (+ index (count prefix)) (count text))
+       (= (subs text index (+ index (count prefix))) prefix)))
+
+(js/export
+ (defn mailbox-line-matches?
+   [line String
+    coordination String
+    peer-sender String
+    local-receiver String
+    proof String
+    status String] Bool
+   (let [timestamp-start Int 3
+         timestamp-end Int (text-index-from line "]" timestamp-start)
+         response-prefix String (str "[" coordination "][" peer-sender " -> " local-receiver "]["
+          status "] event=")]
+     (if (or (not (starts-at? line 0 "- ["))
+            (<= timestamp-end timestamp-start)
+            (not (starts-at? line (+ timestamp-end 1) response-prefix)))
+      false
+      (let [event-start Int (+ timestamp-end 1 (count response-prefix))
+            proof-marker Int (text-index-from line " proof=" event-start)]
+        (if (<= proof-marker event-start)
+          false
+          (let [proof-start Int (+ proof-marker 7)
+                proof-end Int (+ proof-start (count proof))]
+            (and (> (count proof) 0)
+                 (starts-at? line proof-start proof)
+                 (or (= proof-end (count line))
+                     (and (< proof-end (count line))
+                          (= (subs line proof-end (+ proof-end 1)) " ")))))))))))
