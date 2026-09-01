@@ -51,42 +51,46 @@ When the operator invokes the cross-supervisor protocol:
 1. Identify this root supervisor, the peer root supervisor, the one shared
    concern, each non-overlapping execution lane, and the exact mailbox item in
    `~/code/todo/agent-coord.md`.
-2. Admit one named monitor and have it invoke the skill-owned Bun helper; do
-   not ask the operator to compose a mailbox line or set up a watcher:
+2. Admit one named monitor per root. Each monitor independently runs the same
+   duplex helper once, with `--local` and `--peer` set from its own perspective:
 
    ```bash
    todo_skill=$(dirname "$(agents path todo-distilled)")
-   bun "$todo_skill/scripts/cross-supervisor-mailbox.mjs" open-watch \
+   bun "$todo_skill/scripts/cross-supervisor-mailbox.mjs" duplex \
      --mailbox ~/code/todo/agent-coord.md \
      --coordination C007 \
-     --sender "codex:/root" \
-     --receiver "peer:/root" \
+     --local "codex:/root" \
+     --peer "peer:/root" \
      --status ACK \
      --timeout-ms 60000 \
-     --message "acknowledge the shared concern"
+     --rounds 2 \
+     --message "synchronize the shared concern"
    ```
 
-   `open-watch` generates a unique event ID, timestamp, and fresh proof token,
-   appends the addressed `OPEN`, registers a future file-event subscription,
-   writes `ARMED` to stderr, and writes only the first matching peer `ACK` or
-   `PING` line to stdout before exiting. The write transfers no ownership.
-3. On `ARMED`, the monitor sends the armed state to this root through native
-   collaboration. On the one stdout line, it native-delivers that exact line,
-   then immediately invokes `open-watch` again with a fresh generated request
-   while the concern remains live. This is the normal self-rearm path; each
-   underlying watcher remains bounded and one-shot, with no polling or daemon.
-4. Accept only an event authored by the exact peer, addressed to this root,
-   with the requested status and proof. A local `OPEN`, wrong direction, wrong
-   token, manual mailbox read, elapsed time, or the monitor's own write is not
-   wake proof.
-5. Report `synced` only after native delivery, naming the peer event ID and
-   timestamp and confirming the next watcher is armed. If proof fails, report
-   the exact monitor defect and keep the handshake pending while unrelated
-   product work continues.
-6. A receipt found before `ARMED` is a pre-arm race, not wake proof. The helper
-   automatically appends a retry with a new event ID and proof token and rearms
-   within the original timeout. Never reuse the old request after a manual read.
-   Close the monitor when the shared concern is settled.
+   Never ask the operator to relay a coordination ID, mailbox line, event,
+   token, or pending message between roots. The shared concern supplies the
+   coordination ID; the helper generates every event, timestamp, session, and
+   proof and owns all mailbox writes after startup.
+3. The duplex helper registers one bounded file-event subscription, emits its
+   local `OPEN`, discovers an exact live peer `OPEN`, writes the corresponding
+   `ACK` or `PING` with the peer proof, matches the receipt to its own `OPEN`,
+   and rearms for the requested rounds. It accepts an unexpired, previously
+   unanswered peer `OPEN` already present at arm time, so either root may start
+   first. It ignores stale, local, wrong-direction, wrong-token, malformed, and
+   duplicate events. It never polls and is not a daemon.
+4. On the stderr `ARMED` line, the monitor native-delivers the armed state to
+   its root. Each stdout line is the exact peer receipt for one completed duplex
+   round; native-deliver it unchanged. Report `synced` only with that receipt's
+   event ID and timestamp and evidence that the next round or bounded helper is
+   armed.
+5. While the shared concern remains live, the named monitor immediately
+   re-invokes the same bounded duplex command after its configured rounds
+   complete. This provider-native recurrence requires no user action and adds
+   no provider credentials or lifecycle logic to the helper. Stop and reap it
+   when the concern is settled.
+6. A timeout or watch failure is not wake proof. Report its exact diagnostic,
+   keep the handshake pending, and continue unrelated product work. A manual or
+   transcript read never substitutes for the event path.
 
 Never create a second incident authority or competing repair lane. The mailbox
 coordinates intentions and evidence; acknowledged work ownership remains a

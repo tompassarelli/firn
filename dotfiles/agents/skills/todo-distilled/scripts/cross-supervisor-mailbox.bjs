@@ -19,30 +19,137 @@
        (<= (+ index (count prefix)) (count text))
        (= (subs text index (+ index (count prefix))) prefix)))
 
+(defn token-end
+  [text String
+   start Int] Int
+  (let [ending Int (text-index-from text " " start)]
+    (if (< ending 0) (count text) ending)))
+
+(defn digits-from?
+  [text String
+   index Int] Bool
+  (if (>= index (count text))
+    true
+    (if (>= (text-index-from "0123456789" (subs text index (+ index 1)) 0) 0)
+      (digits-from? text (+ index 1))
+      false)))
+
+(defn valid-positive-int? [text String] Bool
+  (let [value (U Int Nil) (parse-long text)]
+    (and (> (count text) 0)
+         (digits-from? text 0)
+         (some? value)
+         (> value 0))))
+
+(defn envelope
+  [line String
+   coordination String
+   sender String
+   receiver String
+   status String] (Vec String)
+  (let [timestamp-start Int 3
+        timestamp-end Int (text-index-from line "]" timestamp-start)
+        prefix String (str "[" coordination "][" sender " -> " receiver "]["
+          status "] ")]
+    (if (and (starts-at? line 0 "- [")
+             (> timestamp-end timestamp-start)
+             (starts-at? line (+ timestamp-end 1) prefix))
+      [(subs line timestamp-start timestamp-end)
+       (subs line (+ timestamp-end 1 (count prefix)) (count line))]
+      [])))
+
 (js/export
- (defn mailbox-line-matches?
+ (defn peer-open-facts
    [line String
     coordination String
     peer-sender String
     local-receiver String
-    proof String
-    status String] Bool
-   (let [timestamp-start Int 3
-         timestamp-end Int (text-index-from line "]" timestamp-start)
-         response-prefix String (str "[" coordination "][" peer-sender " -> " local-receiver "]["
-          status "] event=")]
-     (if (or (not (starts-at? line 0 "- ["))
-            (<= timestamp-end timestamp-start)
-            (not (starts-at? line (+ timestamp-end 1) response-prefix)))
-      false
-      (let [event-start Int (+ timestamp-end 1 (count response-prefix))
-            proof-marker Int (text-index-from line " proof=" event-start)]
-        (if (<= proof-marker event-start)
-          false
-          (let [proof-start Int (+ proof-marker 7)
-                proof-end Int (+ proof-start (count proof))]
-            (and (> (count proof) 0)
-                 (starts-at? line proof-start proof)
-                 (or (= proof-end (count line))
-                     (and (< proof-end (count line))
-                          (= (subs line proof-end (+ proof-end 1)) " ")))))))))))
+    now-ms Int] (Vec String)
+   (let [parts (Vec String) (envelope line coordination peer-sender local-receiver "OPEN")]
+     (if (not= (count parts) 2)
+       []
+       (let [timestamp String (nth parts 0)
+             body String (nth parts 1)
+             event-start Int 6
+             event-end Int (token-end body event-start)
+             session-label String " session="
+             session-start Int (+ event-end (count session-label))
+             session-end Int (token-end body session-start)
+             round-label String " round="
+             round-start Int (+ session-end (count round-label))
+             round-end Int (token-end body round-start)
+             proof-label String " proof="
+             proof-start Int (+ round-end (count proof-label))
+             proof-end Int (token-end body proof-start)
+             expires-label String " expires="
+             expires-start Int (+ proof-end (count expires-label))
+             expires-end Int (token-end body expires-start)]
+         (if (and (starts-at? body 0 "event=")
+                  (> event-end event-start)
+                  (starts-at? body event-end session-label)
+                  (> session-end session-start)
+                  (starts-at? body session-end round-label)
+                  (> round-end round-start)
+                  (starts-at? body round-end proof-label)
+                  (> proof-end proof-start)
+                  (starts-at? body proof-end expires-label)
+                  (> expires-end expires-start)
+                  (valid-positive-int? (subs body round-start round-end)))
+           (let [expires-text String (subs body expires-start expires-end)
+                 expires (U Int Nil) (parse-long expires-text)]
+             (if (and (valid-positive-int? expires-text)
+                      (some? expires)
+                      (> expires now-ms))
+               [timestamp
+                (subs body event-start event-end)
+                (subs body session-start session-end)
+                (subs body round-start round-end)
+                (subs body proof-start proof-end)
+                expires-text]
+               []))
+           []))))))
+
+(js/export
+ (defn receipt-facts
+   [line String
+    coordination String
+    sender String
+    receiver String
+    status String] (Vec String)
+   (let [parts (Vec String) (envelope line coordination sender receiver status)]
+     (if (not= (count parts) 2)
+       []
+       (let [timestamp String (nth parts 0)
+             body String (nth parts 1)
+             event-start Int 6
+             event-end Int (token-end body event-start)
+             reply-label String " reply-to="
+             reply-start Int (+ event-end (count reply-label))
+             reply-end Int (token-end body reply-start)
+             session-label String " session="
+             session-start Int (+ reply-end (count session-label))
+             session-end Int (token-end body session-start)
+             round-label String " round="
+             round-start Int (+ session-end (count round-label))
+             round-end Int (token-end body round-start)
+             proof-label String " proof="
+             proof-start Int (+ round-end (count proof-label))
+             proof-end Int (token-end body proof-start)]
+         (if (and (starts-at? body 0 "event=")
+                  (> event-end event-start)
+                  (starts-at? body event-end reply-label)
+                  (> reply-end reply-start)
+                  (starts-at? body reply-end session-label)
+                  (> session-end session-start)
+                  (starts-at? body session-end round-label)
+                  (> round-end round-start)
+                  (starts-at? body round-end proof-label)
+                  (> proof-end proof-start)
+                  (valid-positive-int? (subs body round-start round-end)))
+           [timestamp
+            (subs body event-start event-end)
+            (subs body reply-start reply-end)
+            (subs body session-start session-end)
+            (subs body round-start round-end)
+            (subs body proof-start proof-end)]
+           []))))))

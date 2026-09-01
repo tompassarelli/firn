@@ -145,9 +145,9 @@ within a bound, and be reaped with its supervisor. Prove the route with one
 addressed round trip:
 
 ```text
-- [timestamp][C007][sender -> receiver][OPEN] event=EVENT proof=TOKEN request or claim
-- [timestamp][C007][receiver -> sender][ACK] event=EVENT proof=TOKEN received and accepted/declined
-- [timestamp][C007][receiver -> sender][PING] event=EVENT proof=TOKEN liveness receipt
+- [timestamp][C007][sender -> receiver][OPEN] event=EVENT session=SESSION round=N proof=TOKEN expires=MILLISECONDS request or claim
+- [timestamp][C007][receiver -> sender][ACK] event=EVENT reply-to=OPEN-EVENT session=SESSION round=N proof=TOKEN receipt
+- [timestamp][C007][receiver -> sender][PING] event=EVENT reply-to=OPEN-EVENT session=SESSION round=N proof=TOKEN liveness receipt
 - [timestamp][C007][sender -> receiver][UPDATE] event=EVENT changed checkpoint
 - [timestamp][C007][sender -> receiver][DONE] event=EVENT terminal result and revision
 ```
@@ -156,7 +156,7 @@ Messages remain append-only while a claim is live. On a delivery timeout,
 append one explicit retry and retain ownership. Before stopping the monitor,
 reread the board and settle every addressed `OPEN` and `UPDATE`.
 
-### Executable bootstrap
+### Executable duplex bootstrap
 
 Resolve the helper from active authority, never from a projection or remembered
 path:
@@ -166,55 +166,49 @@ todo_skill=$(dirname "$(agents path todo-distilled)")
 mailbox_helper="$todo_skill/scripts/cross-supervisor-mailbox.mjs"
 ```
 
-The initiating monitor publishes and arms in one invocation. `--sender` is the
-local root, `--receiver` is the exact peer root, and `--status` is the expected
-peer response:
+Each supervisor's named monitor starts one copy of the same command. `--local`
+is that monitor's root and `--peer` is the other root; the peer runs the command
+independently with those two values reversed:
 
 ```bash
-bun "$mailbox_helper" open-watch \
+bun "$mailbox_helper" duplex \
   --mailbox ~/code/todo/agent-coord.md \
   --coordination C007 \
-  --sender "codex:/root" \
-  --receiver "peer:/root" \
+  --local "codex:/root" \
+  --peer "peer:/root" \
   --status ACK \
   --timeout-ms 60000 \
-  --message "acknowledge the shared concern"
+  --rounds 2 \
+  --message "synchronize the shared concern"
 ```
 
-The helper creates the event ID, UTC timestamp, and proof token. A caller may
-supply `--proof TOKEN` only for an already-created fresh request; ordinary
-bootstrap omits it. `OPENED` and `ARMED` are diagnostics on stderr. Stdout stays
-empty until the first new exact peer line, then contains that one line only and
-the process exits zero. Timeout exits 124; argument, watch, or read failure
-exits 2. The timeout must remain at or below 300000 milliseconds.
+The helper generates its local session, events, timestamps, proofs, and expiry,
+appends its `OPEN`, discovers the peer's exact unexpired `OPEN`, and appends the
+requested `ACK` or `PING` using that peer event and proof. It also watches for
+the exact status, `reply-to`, round, and proof matching its own `OPEN`. The
+operator must never be asked to copy a coordinate, line, event, or token between
+roots.
 
-The peer responds without hand-writing mailbox syntax. It copies the proof from
-the addressed `OPEN`; the helper supplies its own new event ID and timestamp:
+The subscription is installed before the baseline is captured. Baseline
+discovery accepts only an exact, unexpired peer `OPEN` that this local root has
+not previously answered. This makes either startup order safe while rejecting
+expired or already-replied stale events. Current and future processing also
+rejects a local route, another sender or receiver, a receipt with the wrong
+`reply-to` or proof, malformed ordered fields, and duplicate event IDs. Each
+peer `OPEN` receives at most one helper-owned receipt.
 
-```bash
-bun "$mailbox_helper" reply \
-  --mailbox ~/code/todo/agent-coord.md \
-  --coordination C007 \
-  --sender "peer:/root" \
-  --receiver "codex:/root" \
-  --status ACK \
-  --proof "proof-from-the-open" \
-  --message "received"
-```
+`OPENED`, `ARMED`, `ROUND-COMPLETE`, and `REARMED` are diagnostics on stderr.
+Each stdout line is the unchanged peer receipt for one fully bidirectional
+round: this helper has both answered the peer `OPEN` and matched the receipt to
+its own `OPEN`. The named monitor sends `ARMED` and every stdout receipt to its
+root with the provider's native `send_message` operation. Only then may the
+root report `synced`, naming the timestamp in the first field and event from
+`event=...` and confirming the next round is armed.
 
-`PING` uses the same command with `--status PING`. The watcher registers before
-capturing its baseline, so all baseline content—including its local `OPEN`, a
-wrong route or token, and a receipt that arrived before `ARMED`—is ignored. If
-the fresh proof already has a matching baseline receipt, the helper emits
-`PREARM-RETRY`, publishes a new `OPEN` with a new event and proof, and rearms
-within the original deadline. A manually observed receipt never substitutes for
-this event path.
-
-The named monitor sends `ARMED` to its root using native collaboration. When
-stdout yields a peer line, it sends that exact line to the root using the native
-`send_message` operation, then starts another `open-watch` immediately with a
-fresh generated request unless the shared concern is settled. Only after that
-native delivery may the root report `synced`; it names the timestamp in the
-first field and the peer event from `event=...`, plus the newly armed watcher.
-This recurrence belongs to the monitor agent, not to a polling loop, shell
-daemon, manual mailbox read, or user babysitting.
+`--rounds` is bounded from 1 through 32 and `--timeout-ms` from 1 through
+300000. Completing all rounds exits zero; timeout exits 124; argument, watch,
+or read failure exits 2. While the concern remains live, the named monitor
+immediately re-invokes the same command after zero exit, so the protocol stays
+armed without operator involvement. The helper itself remains a bounded
+file-event process with one ownership split, no polling, daemon, provider
+credential, manual mailbox read, or transcript dependency.

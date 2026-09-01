@@ -2,9 +2,11 @@ import { appendFileSync, readFileSync, watch } from 'node:fs';
 
 import * as mailboxLogic from './cross-supervisor-mailbox-logic.js';
 
-const lineMatches = mailboxLogic['mailbox-line-matches?'];
+const peerOpenFacts = mailboxLogic['peer-open-facts'];
+const receiptFacts = mailboxLogic['receipt-facts'];
 const statuses = new Set(['ACK', 'PING']);
 const maximumTimeoutMilliseconds = 300_000;
+const maximumRounds = 32;
 
 function fail(message, status = 2) {
   process.stderr.write(`cross-supervisor-mailbox: ${message}\n`);
@@ -12,9 +14,8 @@ function fail(message, status = 2) {
 }
 
 function parseArguments(argv) {
-  const mode = argv[0];
-  if (mode !== 'open-watch' && mode !== 'reply') {
-    fail('usage: open-watch|reply --mailbox PATH --coordination ID --sender NAME --receiver NAME --status ACK|PING --timeout-ms N [--proof TOKEN] [--message TEXT]');
+  if (argv[0] !== 'duplex') {
+    fail('usage: duplex --mailbox PATH --coordination ID --local NAME --peer NAME --status ACK|PING --timeout-ms N --rounds N [--message TEXT]');
   }
   const values = new Map();
   for (let index = 1; index < argv.length; index += 2) {
@@ -26,41 +27,44 @@ function parseArguments(argv) {
     if (values.has(option)) fail(`duplicate option: ${option}`);
     values.set(option, value);
   }
-  const required = ['--mailbox', '--coordination', '--sender', '--receiver', '--status'];
-  if (mode === 'open-watch') required.push('--timeout-ms');
-  if (mode === 'reply') required.push('--proof');
-  for (const option of required) {
-    if (!values.get(option)) fail(`missing ${option}`);
-  }
+  const allowed = new Set([
+    '--mailbox', '--coordination', '--local', '--peer', '--status',
+    '--timeout-ms', '--rounds', '--message',
+  ]);
   for (const [option, value] of values) {
-    if (!['--mailbox', '--coordination', '--sender', '--receiver', '--status', '--timeout-ms', '--proof', '--message'].includes(option)) {
-      fail(`unknown option: ${option}`);
-    }
+    if (!allowed.has(option)) fail(`unknown option: ${option}`);
     if (/[\r\n\]]/.test(value)) fail(`${option} contains a mailbox delimiter`);
+  }
+  for (const option of [
+    '--mailbox', '--coordination', '--local', '--peer', '--status',
+    '--timeout-ms', '--rounds',
+  ]) {
+    if (!values.get(option)) fail(`missing ${option}`);
   }
   const status = values.get('--status');
   if (!statuses.has(status)) fail('--status must be ACK or PING');
-  const timeoutMilliseconds = mode === 'open-watch'
-    ? Number(values.get('--timeout-ms'))
-    : 0;
-  if (mode === 'open-watch'
-      && (!Number.isSafeInteger(timeoutMilliseconds)
-          || timeoutMilliseconds < 1
-          || timeoutMilliseconds > maximumTimeoutMilliseconds)) {
+  const timeoutMilliseconds = Number(values.get('--timeout-ms'));
+  if (!Number.isSafeInteger(timeoutMilliseconds)
+      || timeoutMilliseconds < 1
+      || timeoutMilliseconds > maximumTimeoutMilliseconds) {
     fail(`--timeout-ms must be an integer from 1 to ${maximumTimeoutMilliseconds}`);
   }
-  const proof = values.get('--proof');
-  if (proof && /\s/.test(proof)) fail('--proof must not contain whitespace');
+  const rounds = Number(values.get('--rounds'));
+  if (!Number.isSafeInteger(rounds) || rounds < 1 || rounds > maximumRounds) {
+    fail(`--rounds must be an integer from 1 to ${maximumRounds}`);
+  }
+  if (values.get('--local') === values.get('--peer')) {
+    fail('--local and --peer must differ');
+  }
   return Object.freeze({
-    mode,
     mailbox: values.get('--mailbox'),
     coordination: values.get('--coordination'),
-    sender: values.get('--sender'),
-    receiver: values.get('--receiver'),
+    local: values.get('--local'),
+    peer: values.get('--peer'),
     status,
     timeoutMilliseconds,
-    proof,
-    message: values.get('--message') ?? (mode === 'reply' ? 'received' : 'receipt requested'),
+    rounds,
+    message: values.get('--message') ?? 'cross-supervisor sync',
   });
 }
 
@@ -72,66 +76,140 @@ function timestamp() {
   return new Date().toISOString();
 }
 
-function mailboxLine({ coordination, sender, receiver, status, event, proof, message, at }) {
-  return `- [${at}][${coordination}][${sender} -> ${receiver}][${status}] event=${event} proof=${proof} ${message}`;
-}
-
 function appendLine(path, line) {
   appendFileSync(path, `${line}\n`, { encoding: 'utf8', mode: 0o600 });
 }
 
-function matchingLine(text, options) {
-  for (const line of text.split(/\r?\n/)) {
-    if (lineMatches(
-      line,
-      options.coordination,
-      options.receiver,
-      options.sender,
-      options.proof,
-      options.status,
-    )) return line;
-  }
-  return null;
+function completeLines(text) {
+  const completeEnd = text.lastIndexOf('\n');
+  return completeEnd < 0
+    ? []
+    : text.slice(0, completeEnd).split(/\r?\n/);
 }
 
-function publishOpen(options, retryOf = null) {
-  const at = timestamp();
-  const event = newIdentity('event');
-  const proof = options.proof ?? newIdentity('proof');
-  const message = retryOf
-    ? `${options.message} retry-of=${retryOf}`
-    : options.message;
-  const line = mailboxLine({
-    ...options,
-    status: 'OPEN',
-    event,
-    proof,
-    message,
-    at,
-  });
-  appendLine(options.mailbox, line);
-  process.stderr.write(`OPENED event=${event} timestamp=${at} proof=${proof}\n`);
-  return Object.freeze({ event, proof });
-}
-
-function armOnce(options, request, deadline) {
+function runDuplex(options) {
   return new Promise(resolve => {
+    const startedAt = Date.now();
+    const deadline = startedAt + options.timeoutMilliseconds;
+    const session = newIdentity('session');
+    const ownByEvent = new Map();
+    const ownByRound = new Map();
+    const peerRoundsHandled = new Set();
+    const repliedPeerEvents = new Set();
+    const seenReceiptEvents = new Set();
+    let nextRound = 1;
     let cursor = 0;
     let settled = false;
     let timeoutHandle;
-    const finish = result => {
+    let watcher;
+
+    const finish = status => {
       if (settled) return;
       settled = true;
       clearTimeout(timeoutHandle);
-      watcher.close();
-      resolve(result);
+      if (watcher) watcher.close();
+      resolve(status);
     };
+
+    const publishOpen = round => {
+      const at = timestamp();
+      const open = {
+        event: newIdentity('event'),
+        proof: newIdentity('proof'),
+        round,
+        expires: deadline,
+        receiptLine: null,
+      };
+      ownByEvent.set(open.event, open);
+      ownByRound.set(round, open);
+      appendLine(options.mailbox,
+        `- [${at}][${options.coordination}][${options.local} -> ${options.peer}][OPEN] event=${open.event} session=${session} round=${round} proof=${open.proof} expires=${open.expires} ${options.message}`);
+      process.stderr.write(`OPENED event=${open.event} timestamp=${at} round=${round}\n`);
+      return open;
+    };
+
+    const maybeAdvance = () => {
+      while (nextRound <= options.rounds) {
+        const own = ownByRound.get(nextRound);
+        if (!own?.receiptLine || !peerRoundsHandled.has(nextRound)) return;
+        process.stdout.write(`${own.receiptLine}\n`);
+        process.stderr.write(`ROUND-COMPLETE round=${nextRound}\n`);
+        if (nextRound === options.rounds) {
+          finish(0);
+          return;
+        }
+        nextRound += 1;
+        publishOpen(nextRound);
+        process.stderr.write(`REARMED round=${nextRound}\n`);
+      }
+    };
+
+    const handlePeerOpen = line => {
+      const facts = peerOpenFacts(
+        line, options.coordination, options.peer, options.local, Date.now(),
+      );
+      if (!Array.isArray(facts) || facts.length !== 6) return;
+      const [, event, peerSession, roundText, proof] = facts;
+      const round = Number(roundText);
+      if (!Number.isSafeInteger(round)
+          || round < 1
+          || round > options.rounds
+          || repliedPeerEvents.has(event)) return;
+      repliedPeerEvents.add(event);
+      const at = timestamp();
+      const receipt = `- [${at}][${options.coordination}][${options.local} -> ${options.peer}][${options.status}] event=${newIdentity('event')} reply-to=${event} session=${session} round=${round} proof=${proof} received-session=${peerSession}`;
+      appendLine(options.mailbox, receipt);
+      peerRoundsHandled.add(round);
+      maybeAdvance();
+    };
+
+    const handlePeerReceipt = line => {
+      const facts = receiptFacts(
+        line, options.coordination, options.peer, options.local, options.status,
+      );
+      if (!Array.isArray(facts) || facts.length !== 6) return;
+      const [, receiptEvent, replyTo, , roundText, proof] = facts;
+      if (seenReceiptEvents.has(receiptEvent)) return;
+      const own = ownByEvent.get(replyTo);
+      const round = Number(roundText);
+      if (!own
+          || own.round !== round
+          || own.proof !== proof
+          || own.receiptLine) return;
+      seenReceiptEvents.add(receiptEvent);
+      own.receiptLine = line;
+      maybeAdvance();
+    };
+
+    const handleLines = lines => {
+      if (settled) return;
+      for (const line of lines) {
+        handlePeerOpen(line);
+        handlePeerReceipt(line);
+        if (settled) return;
+      }
+    };
+
+    const rememberPriorReplies = lines => {
+      for (const line of lines) {
+        for (const status of statuses) {
+          const facts = receiptFacts(
+            line, options.coordination, options.local, options.peer, status,
+          );
+          if (Array.isArray(facts) && facts.length === 6) {
+            repliedPeerEvents.add(facts[2]);
+          }
+        }
+      }
+    };
+
     const inspectFuture = () => {
       let text;
       try {
         text = readFileSync(options.mailbox, 'utf8');
       } catch (error) {
-        finish({ kind: 'error', error });
+        process.stderr.write(`ERROR ${error?.message ?? String(error)}\n`);
+        finish(2);
         return;
       }
       if (text.length < cursor) {
@@ -142,76 +220,42 @@ function armOnce(options, request, deadline) {
       const completeEnd = appended.lastIndexOf('\n');
       if (completeEnd < 0) return;
       cursor += completeEnd + 1;
-      const line = matchingLine(appended.slice(0, completeEnd), {
-        ...options,
-        proof: request.proof,
-      });
-      if (line) finish({ kind: 'match', line });
+      handleLines(appended.slice(0, completeEnd).split(/\r?\n/));
     };
-    let watcher;
+
     try {
       watcher = watch(options.mailbox, { persistent: true }, inspectFuture);
-      watcher.on('error', error => finish({ kind: 'error', error }));
+      watcher.on('error', error => {
+        process.stderr.write(`ERROR ${error?.message ?? String(error)}\n`);
+        finish(2);
+      });
       const baseline = readFileSync(options.mailbox, 'utf8');
       cursor = baseline.length;
-      const racedLine = matchingLine(baseline, { ...options, proof: request.proof });
-      if (racedLine) {
-        finish({ kind: 'pre-arm-race' });
-        return;
-      }
+      const baselineLines = completeLines(baseline);
+      rememberPriorReplies(baselineLines);
+      publishOpen(1);
+      process.stderr.write(
+        `ARMED coordination=${options.coordination} local=${options.local} peer=${options.peer} session=${session} rounds=${options.rounds} timeout_ms=${options.timeoutMilliseconds}\n`,
+      );
+      handleLines(baselineLines);
     } catch (error) {
-      if (watcher) watcher.close();
-      resolve({ kind: 'error', error });
+      process.stderr.write(`ERROR ${error?.message ?? String(error)}\n`);
+      finish(2);
       return;
     }
+
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
-      finish({ kind: 'timeout' });
+      process.stderr.write(`TIMEOUT coordination=${options.coordination}\n`);
+      finish(124);
       return;
     }
-    timeoutHandle = setTimeout(() => finish({ kind: 'timeout' }), remaining);
-    process.stderr.write(
-      `ARMED coordination=${options.coordination} peer=${options.receiver} receiver=${options.sender} status=${options.status} timeout_ms=${remaining}\n`,
-    );
-  });
-}
-
-async function openAndWatch(options) {
-  const deadline = Date.now() + options.timeoutMilliseconds;
-  let request = publishOpen(options);
-  while (true) {
-    const result = await armOnce(options, request, deadline);
-    if (result.kind === 'match') {
-      process.stdout.write(`${result.line}\n`);
-      return 0;
-    }
-    if (result.kind === 'pre-arm-race') {
-      process.stderr.write(`PREARM-RETRY event=${request.event}\n`);
-      request = publishOpen({ ...options, proof: null }, request.event);
-      continue;
-    }
-    if (result.kind === 'timeout') {
+    timeoutHandle = setTimeout(() => {
       process.stderr.write(`TIMEOUT coordination=${options.coordination}\n`);
-      return 124;
-    }
-    process.stderr.write(`ERROR ${result.error?.message ?? String(result.error)}\n`);
-    return 2;
-  }
-}
-
-function reply(options) {
-  const line = mailboxLine({
-    ...options,
-    event: newIdentity('event'),
-    proof: options.proof,
-    at: timestamp(),
+      finish(124);
+    }, remaining);
   });
-  appendLine(options.mailbox, line);
-  process.stdout.write(`${line}\n`);
-  return 0;
 }
 
 const options = parseArguments(Bun.argv.slice(2));
-process.exitCode = options.mode === 'reply'
-  ? reply(options)
-  : await openAndWatch(options);
+process.exitCode = await runDuplex(options);
