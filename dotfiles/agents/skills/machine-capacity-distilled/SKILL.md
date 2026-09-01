@@ -44,8 +44,9 @@ background, or detach servers and browsers outside that command. The scope
 reaps the exact process tree on timeout or cancellation.
 
 Before admitting a parallel worker expected to use local compute, reserve an
-`agent` lease. Release it when that child settles; renew it only before its
-declared bound expires:
+`agent` lease. Persistent `reserve` is mechanically limited to `agent`; use a
+bounded `run` scope for `moderate`, `heavy`, or `exclusive`. Release the lease
+when that child settles; renew it only before its declared bound expires:
 
 ```bash
 bun "$capacity" reserve --class agent --owner "codex:/root/task" --timeout-seconds 1800
@@ -67,6 +68,11 @@ breadth; it never weakens the required correctness check.
 ## Ownership and recovery
 
 One actor owns each admitted scope and its lease through terminal cleanup.
+Settlement requires retaining the helper's machine-readable `RELEASED` result;
+prose or a terminal report is not release evidence. If a settled child did not
+return it, the accountable parent must release the exact known lease and retain
+that result.
+
 Never kill or reclaim a peer process. An expired lease is helper-owned state and
 may be reclaimed automatically; its matching cgroup has the same hard runtime
 bound. If unleased work causes pressure, defer new heavy work and identify the

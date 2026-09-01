@@ -15,6 +15,7 @@ import * as policy from './machine-capacity-logic.js';
 
 const admissionDecision = policy['admission-decision'];
 const resourceClass = policy['resource-class'];
+const reserveClass = policy['reserve-class?'];
 const classNames = new Set(['agent', 'moderate', 'heavy', 'exclusive']);
 const maximumTimeoutSeconds = 3600;
 const lockStaleMilliseconds = 2000;
@@ -323,6 +324,7 @@ async function main(argv) {
   if (operation === 'reserve') {
     const parsed = parseKeyValues(argv, 1, new Set(['--class', '--owner', '--timeout-seconds']));
     if (parsed.separator !== argv.length) fail('reserve accepts no command');
+    if (!reserveClass(required(parsed.values, '--class'))) fail('reserve --class must be agent');
     const signals = readSignals();
     const requested = parseClass(parsed.values, signals.cores);
     const owner = parseOwner(parsed.values);

@@ -19,6 +19,10 @@
      :else [])))
 
 (js/export
+ (defn reserve-class? [kind String] Bool
+   (= kind "agent")))
+
+(js/export
  (defn admission-decision
    [cores Int
     memory-total-mib Int
