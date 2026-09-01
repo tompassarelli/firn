@@ -2,7 +2,7 @@
 name: convo-distilled
 description: >-
   Search past agent conversations with the `convo` CLI — full-text across every
-  Codex and North Bridge transcript on this machine, including configured
+  Codex and North transcripts on this machine, including configured
   `CODEX_HOME` stores such as the pooled runtime. Use this
   whenever the answer might live in an earlier session: "when did we discuss
   X", "what did I decide about Y", "find that session", recovering a prior
