@@ -256,11 +256,30 @@ blocking the whole task on the answer.
 - For every observed defect, fix the smallest true owning cause when it is on
   the critical path; when it is nonblocking, durably record and defer it. Tom's
   fleet never closes a defect with a workaround, shim, bypass, fallback,
-  quarantine, or replacement. Reliability incidents remain open through root
-  repair, activation, and primary-path proof. Aim at the proper end-state,
-  root-cause architecture. Minimize accidental complexity: avoid compatibility
-  layers, wrappers, daemons, or bespoke infrastructure unless an explicit
-  requirement forces them. This is proportionality, not scope creep.
+  quarantine, or replacement. When a real consumer exposes a missing or broken
+  source-language, compiler, checker, runtime, standard-library, or
+  foreign-boundary capability on its delivery path, preserve the executable
+  counterexample and repair the smallest true owning general-purpose seam
+  before resuming the consumer. Bound the failing family, retain or transfer
+  acknowledged upstream ownership, implement one reusable capability, run the
+  nearest focused upstream proof, then rebuild or repin the exact consumer and
+  resume from the counterexample. Domain-specific duplicated facts or state,
+  precomputed or manually maintained bounds, source reshaping solely to dodge
+  the gap, generated patches or shims, host-language fallbacks,
+  dynamic/`Any`/cast escapes, magic dispatch, old-version fallbacks,
+  compatibility wrappers, weakened laws or tests, and claims that a consumer
+  workaround closes the defect are noncompliant. If the repair needs a real
+  semantic or product decision or lies outside authority, stop only the
+  dependent path and return the exact decision or blocker without silently
+  narrowing the goal; unrelated work continues. Ordinary domain logic stays
+  consumer-owned, and genuinely irreducible foreign, operating-system, or
+  bootstrap boundaries remain valid; this rule does not force migration of
+  externally owned or existing non-greenfield source. Reliability incidents
+  remain open through root repair, activation, and primary-path proof. Aim at
+  the proper end-state, root-cause architecture. Minimize accidental
+  complexity: avoid compatibility layers, wrappers, daemons, or bespoke
+  infrastructure unless an explicit requirement forces them. This is
+  proportionality, not scope creep.
 - Never weaken a test, assertion, or gate to make it pass. Fix what it tests; a
   gate lowered to go green no longer proves anything.
 - Measure before naming a cause, especially for performance. An unmeasured
