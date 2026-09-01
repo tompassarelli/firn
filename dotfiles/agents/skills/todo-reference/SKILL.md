@@ -149,6 +149,7 @@ addressed transport round trip:
 ```text
 - [timestamp][PAIR-CHANNEL][sender -> receiver][OPEN] event=EVENT session=SESSION round=N proof=TOKEN expires=MILLISECONDS message=EXACT-CONCERN
 - [timestamp][PAIR-CHANNEL][receiver -> sender][RECEIVED] event=EVENT reply-to=OPEN-EVENT session=SESSION round=N proof=TOKEN received-session=OPEN-SESSION
+- [timestamp][PAIR-CHANNEL][sender -> receiver][SETTLED] event=EVENT open=OPEN-EVENT session=SESSION proof=TOKEN message-sha256=DIGEST
 ```
 
 Messages remain append-only while a concern is live. `RECEIVED` is a neutral
@@ -190,6 +191,15 @@ peer event, proof, and session. It also watches for the exact `reply-to`, round,
 proof, and receiving session matching its own `OPEN`. The operator must never
 be asked to copy a channel, line, event, or token between roots.
 
+After the peer receipt matches its own final initial `OPEN`, or its one changed
+local `OPEN`, the helper appends `SETTLED` correlated to that open and proof.
+The SHA-256 digest binds the exact delivered local payload without duplicating
+it. Only an ordered local `OPEN` plus matching peer `RECEIVED` plus matching
+local `SETTLED` establishes completed history. An uncorrelated receipt or marker
+never suppresses delivery. On later invocation, an identical settled local
+payload enters quiescence without an `OPEN`; a different local payload emits
+one `OPEN` and settles after its receipt.
+
 The subscription is installed before the baseline is captured. Baseline
 discovery accepts only an exact, unexpired peer `OPEN` that this local root has
 not previously answered. This makes either startup order safe while rejecting
@@ -197,23 +207,29 @@ expired or already-replied stale events. Current and future processing also
 rejects a local route, another sender or receiver, another pair channel, a
 receipt with the wrong `reply-to` or proof, malformed ordered fields, and
 duplicate event IDs. Each peer `OPEN` receives at most one helper-owned receipt,
-and each round delivers at most one peer `OPEN`.
+and each initial round delivers at most one peer `OPEN`. Once quiescent, an
+unchanged peer payload emits nothing; one changed peer payload emits one
+`RECEIVED`, one native delivery, and leaves the same helper quiescent.
 
-`OPENED`, `ARMED`, `ROUND-COMPLETE`, and `REARMED` are diagnostics on stderr.
-Each stdout line is one JSON object containing `channel`, `round`, the unchanged
-`peerOpen`, parsed `peerMessage`, and unchanged correlated `receipt`. It appears
-only after the helper has both answered that peer `OPEN` and matched the peer's
-`RECEIVED` to its own `OPEN`. The named monitor sends `ARMED` and every stdout
-delivery to its root with the provider's native `send_message` operation. Only
-then may the root report transport `synced`, naming the peer event and receipt
-and confirming the next round is armed. That claim never means the peer accepted
-the message's semantics.
+`OPENED`, `ARMED`, `ROUND-COMPLETE`, `REARMED`, `SETTLED`, `QUIESCENT`,
+`PEER-MESSAGE`, and `MESSAGE-RECEIVED` are diagnostics on stderr. Each stdout
+line is one JSON object. `kind=duplex` carries the initial unchanged `peerOpen`,
+parsed `peerMessage`, and correlated peer `receipt`; `kind=peer-message` carries
+one changed peer payload and this helper's neutral receipt; and
+`kind=message-received` carries the changed local open and peer receipt. The
+named monitor sends `ARMED`, `QUIESCENT`, and every stdout delivery to its root
+with the provider's native `send_message` operation. Only then may the root
+report transport `synced`, naming the peer event and receipt and confirming the
+next round or quiescent listener is armed. That claim never means the peer
+accepted the message's semantics.
 
 The defaults are two rounds and 300000 milliseconds. Explicit `--rounds` is
 bounded from 1 through 32 and `--timeout-ms` from 1 through 300000. Completing
-all rounds exits zero; timeout exits 124; argument, watch, or read failure exits
-2. While the concern remains live, the named monitor immediately re-invokes the
-same command after zero exit, so the protocol stays armed without operator
-involvement. The helper itself remains a bounded file-event process with no
-polling, daemon, provider credential, manual mailbox read, compatibility path,
-or transcript dependency.
+the initial rounds or changed delivery enters quiescence rather than exiting.
+Normal quiescent timeout emits `QUIESCENT-TIMEOUT` and exits zero; timeout before
+quiescence exits 124; argument, watch, or read failure exits 2. While the
+concern remains live, the named monitor keeps the quiescent helper and
+re-invokes only after its bounded zero exit. Completed history makes that
+renewal write-free for an unchanged payload. The helper remains a bounded
+file-event process with no polling, daemon, provider credential, manual mailbox
+read, compatibility path, or transcript dependency.

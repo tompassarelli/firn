@@ -5,6 +5,13 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/cross-supervisor-mailbox-test.XXXXXX")
 alpha_pid=
 beta_pid=
+await_line() {
+  local path=$1
+  local expected=$2
+  timeout 5 bash -c \
+    'tail -n +1 -F "$1" | grep -Fqm1 -- "$2"' \
+    cross-supervisor-await "$path" "$expected"
+}
 cleanup() {
   local status=$?
   trap - EXIT
@@ -69,19 +76,75 @@ bun "$scratch/cross-supervisor-mailbox.mjs" duplex \
   >"$scratch/beta.out" 2>"$scratch/beta.err" &
 beta_pid=$!
 
-wait "$alpha_pid"
-alpha_pid=
-wait "$beta_pid"
-beta_pid=
+await_line "$scratch/alpha.err" 'QUIESCENT '
+await_line "$scratch/beta.err" 'QUIESCENT '
 
-bun - "$mailbox" "$scratch/alpha.out" "$scratch/beta.out" "$channel" <<'JS'
+initial_delivery_lines=$(wc -l <"$mailbox")
+[[ $((initial_delivery_lines - initial_lines)) -eq 10 ]]
+alpha_initial_pid=$alpha_pid
+beta_initial_pid=$beta_pid
+sleep 0.25
+[[ $(wc -l <"$mailbox") -eq $initial_delivery_lines ]]
+[[ $alpha_pid -eq $alpha_initial_pid && $beta_pid -eq $beta_initial_pid ]]
+kill -0 "$alpha_pid"
+kill -0 "$beta_pid"
+
+# A bounded helper renewal with the identical local payload must arm from
+# completed mailbox history without adding another OPEN or RECEIVED.
+kill "$beta_pid"
+wait "$beta_pid" 2>/dev/null || true
+beta_pid=
+bun "$scratch/cross-supervisor-mailbox.mjs" duplex \
+  --mailbox "$mailbox" \
+  --local beta:/root \
+  --peer alpha:/root \
+  --message 'beta reports live Clause lane status' \
+  --timeout-ms 10000 \
+  >"$scratch/beta-renew.out" 2>"$scratch/beta-renew.err" &
+beta_pid=$!
+await_line "$scratch/beta-renew.err" 'QUIESCENT '
+sleep 0.25
+[[ $(wc -l <"$mailbox") -eq $initial_delivery_lines ]]
+[[ ! -s "$scratch/beta-renew.out" ]]
+kill -0 "$alpha_pid"
+kill -0 "$beta_pid"
+
+# A substantive payload change emits one OPEN. The already-quiescent peer
+# event-wakes, delivers the exact payload once, and emits one neutral receipt.
+kill "$beta_pid"
+wait "$beta_pid" 2>/dev/null || true
+beta_pid=
+bun "$scratch/cross-supervisor-mailbox.mjs" duplex \
+  --mailbox "$mailbox" \
+  --local beta:/root \
+  --peer alpha:/root \
+  --message 'beta changed Clause ownership checkpoint' \
+  --timeout-ms 10000 \
+  >"$scratch/beta-changed.out" 2>"$scratch/beta-changed.err" &
+beta_pid=$!
+await_line "$scratch/beta-changed.err" 'QUIESCENT '
+changed_delivery_lines=$(wc -l <"$mailbox")
+[[ $((changed_delivery_lines - initial_delivery_lines)) -eq 3 ]]
+sleep 0.25
+[[ $(wc -l <"$mailbox") -eq $changed_delivery_lines ]]
+kill -0 "$alpha_pid"
+kill -0 "$beta_pid"
+
+bun - "$mailbox" "$scratch/alpha.out" "$scratch/beta.out" \
+  "$scratch/beta-renew.out" "$scratch/beta-changed.out" "$channel" <<'JS'
 import { readFileSync } from 'node:fs';
 
-const [mailboxPath, alphaPath, betaPath, expectedChannel] = Bun.argv.slice(2);
+const [mailboxPath, alphaPath, betaPath, betaRenewPath, betaChangedPath,
+  expectedChannel] = Bun.argv.slice(2);
 const mailbox = readFileSync(mailboxPath, 'utf8');
-const readDeliveries = path => readFileSync(path, 'utf8').trim().split('\n').map(JSON.parse);
+const readDeliveries = path => {
+  const text = readFileSync(path, 'utf8').trim();
+  return text === '' ? [] : text.split('\n').map(JSON.parse);
+};
 const alpha = readDeliveries(alphaPath);
 const beta = readDeliveries(betaPath);
+const betaRenew = readDeliveries(betaRenewPath);
+const betaChanged = readDeliveries(betaChangedPath);
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);
 };
@@ -90,10 +153,12 @@ for (const [name, deliveries, peer, message] of [
   ['alpha', alpha, 'beta:/root', 'beta reports live Clause lane status'],
   ['beta', beta, 'alpha:/root', 'alpha requests Clause ownership summary'],
 ]) {
-  assert(deliveries.length === 2, `${name} did not receive two rounds`);
-  assert(deliveries[0].round === 1 && deliveries[1].round === 2,
+  const initial = deliveries.slice(0, 2);
+  assert(initial.length === 2, `${name} did not receive two initial rounds`);
+  assert(initial[0].round === 1 && initial[1].round === 2,
     `${name} rounds were not ordered`);
-  for (const delivery of deliveries) {
+  for (const delivery of initial) {
+    assert(delivery.kind === 'duplex', `${name} initial delivery kind changed`);
     assert(delivery.channel === expectedChannel, `${name} derived a different pair channel`);
     assert(delivery.peerMessage === message, `${name} did not receive the exact peer message`);
     assert(delivery.peerOpen.includes(`[${peer} -> ${name}:/root][OPEN]`),
@@ -110,25 +175,49 @@ for (const [name, deliveries, peer, message] of [
       `${name} delivery manufactured semantic acceptance`);
   }
 }
+
+assert(alpha.length === 3, 'changed peer payload was not delivered exactly once');
+const changed = alpha[2];
+assert(changed.kind === 'peer-message', 'changed peer payload used the wrong delivery kind');
+assert(changed.peerMessage === 'beta changed Clause ownership checkpoint',
+  'changed peer payload was not delivered exactly');
+assert(changed.peerOpen.endsWith('message=beta changed Clause ownership checkpoint'),
+  'changed peer OPEN was not delivered unchanged');
+assert(changed.receipt.includes('[alpha:/root -> beta:/root][RECEIVED]'),
+  'changed peer payload lacks the local neutral receipt');
+assert(beta.length === 2, 'initial beta helper emitted extra deliveries');
+assert(betaRenew.length === 0, 'unchanged helper renewal emitted a delivery');
+assert(betaChanged.length === 1, 'changed sender did not receive exactly one receipt');
+assert(betaChanged[0].kind === 'message-received',
+  'changed sender receipt used the wrong delivery kind');
+assert(betaChanged[0].message === 'beta changed Clause ownership checkpoint',
+  'changed sender receipt named the wrong message');
+assert(!/\]\[(ACK|PING)\]/.test(JSON.stringify(changed)),
+  'changed delivery manufactured semantic acceptance');
 JS
 
 grep -Fq 'ROUND-COMPLETE round=2' "$scratch/alpha.err"
 grep -Fq 'ROUND-COMPLETE round=2' "$scratch/beta.err"
 grep -Fq 'REARMED round=2' "$scratch/alpha.err"
 grep -Fq 'REARMED round=2' "$scratch/beta.err"
+grep -Fq 'mode=quiescent' "$scratch/beta-renew.err"
+grep -Fq 'PEER-MESSAGE ' "$scratch/alpha.err"
+grep -Fq 'MESSAGE-RECEIVED ' "$scratch/beta-changed.err"
 
 final_lines=$(wc -l <"$mailbox")
-[[ $((final_lines - initial_lines)) -eq 8 ]]
+[[ $((final_lines - initial_lines)) -eq 13 ]]
 [[ $(grep -c 'reply-to=duplicate-event' "$mailbox") -eq 1 ]]
 generated="$scratch/generated-mailbox-lines"
 tail -n "+$((initial_lines + 1))" "$mailbox" >"$generated"
-[[ $(grep -c '\]\[OPEN\] ' "$generated") -eq 4 ]]
-[[ $(grep -c '\]\[RECEIVED\] ' "$generated") -eq 4 ]]
+[[ $(grep -c '\]\[OPEN\] ' "$generated") -eq 5 ]]
+[[ $(grep -c '\]\[RECEIVED\] ' "$generated") -eq 5 ]]
+[[ $(grep -c '\]\[SETTLED\] ' "$generated") -eq 3 ]]
 ! grep -Eq '\]\[(ACK|PING)\]' "$generated"
 for ignored in stale-event local-event direction-event wrong-pair-event \
   malformed-event duplicate-event wrong-proof-event; do
   ! grep -Fq "$ignored" "$scratch/alpha.out"
   ! grep -Fq "$ignored" "$scratch/beta.out"
+  ! grep -Fq "$ignored" "$scratch/beta-changed.out"
 done
 
-printf 'cross-supervisor-mailbox fixture: PASS (stable pair channel, staggered roots, two exact payload rounds, neutral receipts, rejection family)\n'
+printf 'cross-supervisor-mailbox fixture: PASS (initial delivery, quiescent renewal, one changed-payload wake, neutral receipts, rejection family)\n'

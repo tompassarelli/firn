@@ -164,3 +164,47 @@
             (subs body proof-start proof-end)
             (subs body received-session-start received-session-end)]
            []))))))
+
+(js/export
+ (defn settled-facts
+   [line String
+    channel String
+    sender String
+    receiver String] (Vec String)
+   (let [parts (Vec String) (envelope line channel sender receiver "SETTLED")]
+     (if (not= (count parts) 2)
+       []
+       (let [timestamp String (nth parts 0)
+             body String (nth parts 1)
+             event-start Int 6
+             event-end Int (token-end body event-start)
+             open-label String " open="
+             open-start Int (+ event-end (count open-label))
+             open-end Int (token-end body open-start)
+             session-label String " session="
+             session-start Int (+ open-end (count session-label))
+             session-end Int (token-end body session-start)
+             proof-label String " proof="
+             proof-start Int (+ session-end (count proof-label))
+             proof-end Int (token-end body proof-start)
+             message-label String " message-sha256="
+             message-start Int (+ proof-end (count message-label))
+             message-end Int (token-end body message-start)]
+         (if (and (starts-at? body 0 "event=")
+                  (> event-end event-start)
+                  (starts-at? body event-end open-label)
+                  (> open-end open-start)
+                  (starts-at? body open-end session-label)
+                  (> session-end session-start)
+                  (starts-at? body session-end proof-label)
+                  (> proof-end proof-start)
+                  (starts-at? body proof-end message-label)
+                  (> message-end message-start)
+                  (= message-end (count body)))
+           [timestamp
+            (subs body event-start event-end)
+            (subs body open-start open-end)
+            (subs body session-start session-end)
+            (subs body proof-start proof-end)
+            (subs body message-start message-end)]
+           []))))))

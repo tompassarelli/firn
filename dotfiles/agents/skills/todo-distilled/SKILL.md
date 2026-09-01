@@ -73,26 +73,32 @@ When the operator invokes the cross-supervisor protocol:
 3. The duplex helper registers one bounded file-event subscription, emits its
    local `OPEN`, discovers an exact live peer `OPEN`, writes the corresponding
    neutral `RECEIVED` with the peer proof, matches the peer receipt to its own
-   `OPEN`, and rearms for the requested rounds. It subscribes before publishing
-   and accepts an unexpired, previously unanswered peer `OPEN` already present
-   at arm time, so either root may start first. It ignores stale, local,
-   wrong-direction, wrong-pair, wrong-proof, malformed, and duplicate events.
-   It never polls and is not a daemon. `RECEIVED` proves transport only; it
-   never accepts a claim, decision, instruction, or work transfer.
+   `OPEN`, and rearms for the requested initial rounds. After successful local
+   delivery it writes one correlated `SETTLED` marker and remains event-armed
+   and quiescent. A bounded renewal with the same exact local payload reads that
+   marker and emits no new `OPEN`; a changed local payload emits one `OPEN`.
+   A changed peer payload wakes the quiescent helper, receives one `RECEIVED`,
+   and is delivered once. It subscribes before publishing and accepts an
+   unexpired, previously unanswered peer `OPEN` already present at arm time, so
+   either root may start first. It ignores stale, local, wrong-direction,
+   wrong-pair, wrong-proof, malformed, duplicate, and unchanged peer events. It
+   never polls and is not a daemon. `RECEIVED` proves transport only; it never
+   accepts a claim, decision, instruction, or work transfer.
 4. On the stderr `ARMED` line, the monitor native-delivers the armed state to
    its root. Each stdout JSON line contains the exact peer `OPEN`, its message
-   payload, and the exact correlated `RECEIVED` for one completed duplex round;
-   native-deliver it unchanged. Report `synced` only after naming the delivered
-   peer event and receipt plus evidence that the next round or bounded helper is
-   armed. Do not infer semantic agreement from transport completion.
-5. While the shared concern remains live, the named monitor immediately
-   re-invokes the same bounded duplex command after its configured rounds
-   complete. This provider-native recurrence requires no user action and adds
-   no provider credentials or lifecycle logic to the helper. Stop and reap it
-   when the concern is settled.
-6. A timeout or watch failure is not wake proof. Report its exact diagnostic,
-   keep the handshake pending, and continue unrelated product work. A manual or
-   transcript read never substitutes for the event path.
+   payload, and its correlated neutral receipt; native-deliver it unchanged.
+   `QUIESCENT` means the same helper remains event-armed without writing. Report
+   `synced` only after naming the delivered peer event and receipt plus evidence
+   that the next round or quiescent helper is armed. Do not infer semantic
+   agreement from transport completion.
+5. Do not re-invoke after `QUIESCENT`; the current bounded helper is already the
+   listener. At its normal `QUIESCENT-TIMEOUT`, re-invoke the same command. The
+   completed `SETTLED` marker makes unchanged renewal quiescent without mailbox
+   writes, while a newly supplied local payload announces once. Stop and reap
+   the exact helper when the concern is settled.
+6. A pre-quiescence timeout or watch failure is not wake proof. Report its exact
+   diagnostic, keep the handshake pending, and continue unrelated product work.
+   A manual or transcript read never substitutes for the event path.
 
 Never create a second incident authority or competing repair lane. The mailbox
 coordinates intentions and evidence; acknowledged work ownership remains a
