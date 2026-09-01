@@ -22,7 +22,6 @@ nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.test.sh	13
 nixos-config/dotfiles/agents/hooks/tripwire-guard.test.sh	1
 nixos-config/dotfiles/bin/beagle	1
 nixos-config/dotfiles/bin/concern	1
-nixos-config/dotfiles/bin/north	1
 nixos-config/dotfiles/bin/north-mcp	1
 nixos-config/dotfiles/codex/config.toml	4
 nixos-config/dotfiles/niri/config.kdl	7

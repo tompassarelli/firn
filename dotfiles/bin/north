@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
-# Live dev-loop tool: never store-placed (staleness charter, law 3).
+# Live project runtime: selected outside the NixOS closure.
 set -euo pipefail
-source "$HOME/.local/state/north/beagle-store.env"
-exec "$HOME/code/north/main/bin/north" "$@"
+
+north_runtime="$HOME/.local/state/north-v2/current/north"
+if [[ ! -x "$north_runtime" ]]; then
+  printf 'north: selected runtime is unavailable: %s\n' "$north_runtime" >&2
+  exit 127
+fi
+
+# North is an operator UI, so it must not inherit an agent pool's account.
+unset CODEX_HOME
+exec "$north_runtime" "$@"
