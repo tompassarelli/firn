@@ -11,10 +11,42 @@
   (let [username config.myConfig.modules.users.username
         homeDir config.myConfig.modules.users.homeDir
         agentGeneration (s homeDir "/.local/state/north/agents/current")
-        providerAdapter
-         (fn [(adapterId String)] String
-           (s "L+ /etc/codex/hooks/" adapterId " - - - - "
-             agentGeneration "/provider-hooks/" adapterId))]
+        codexHooks (pkgs.linkFarm
+         "codex-hooks"
+         [{:name "requirements.toml"
+           :path "${flakeRoot}/modules/codex/requirements.toml"}
+          {:name "runtime/bash" :path "${pkgs.bash}/bin/bash"}
+          {:name "runtime/cat" :path "${pkgs.coreutils}/bin/cat"}
+          {:name "runtime/env" :path "${pkgs.coreutils}/bin/env"}
+          {:name "runtime/git" :path "${pkgs.git}/bin/git"}
+          {:name "runtime/mktemp" :path "${pkgs.coreutils}/bin/mktemp"}
+          {:name "runtime/python3" :path "${pkgs.python3}/bin/python3"}
+          {:name "runtime/rm" :path "${pkgs.coreutils}/bin/rm"}
+          {:name "runtime/timeout" :path "${pkgs.coreutils}/bin/timeout"}
+          {:name "lib/north-agent-activation.sh"
+           :path (s agentGeneration "/provider-hooks/lib/north-agent-activation.sh")}
+          {:name "beagle-session-start.sh"
+           :path (s agentGeneration "/provider-hooks/beagle-session-start.sh")}
+          {:name "firn-system-policy"
+           :path (s agentGeneration "/provider-hooks/firn-system-policy")}
+          {:name "concrete-model-identity-guard.sh"
+           :path (s agentGeneration "/provider-hooks/concrete-model-identity-guard.sh")}
+          {:name "launch-critical-worktree-guard.sh"
+           :path (s agentGeneration "/provider-hooks/launch-critical-worktree-guard.sh")}
+          {:name "lib/launch_critical_decide.py"
+           :path (s agentGeneration "/provider-hooks/lib/launch_critical_decide.py")}
+          {:name "lib/launch_critical_paths.py"
+           :path (s agentGeneration "/provider-hooks/lib/launch_critical_paths.py")}
+          {:name "tripwire-guard.sh"
+           :path (s agentGeneration "/provider-hooks/tripwire-guard.sh")}
+          {:name "corpus-scan-guard.sh"
+           :path (s agentGeneration "/provider-hooks/corpus-scan-guard.sh")}
+          {:name "resource-safe-search-guard.sh"
+           :path (s agentGeneration "/provider-hooks/resource-safe-search-guard.sh")}
+          {:name "session-kill-guard.sh"
+           :path (s agentGeneration "/provider-hooks/session-kill-guard.sh")}
+          {:name "lib/authoring-killswitch.sh"
+           :path (s agentGeneration "/provider-hooks/lib/authoring-killswitch.sh")}])]
     {:options.myConfig.modules.codex.enable
       (lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)")
      :config
@@ -22,37 +54,10 @@
         {:environment.etc
           {"codex/requirements.toml"
             {:source (s flakeRoot "/modules/codex/requirements.toml")}
-           "codex/hooks/runtime/bash"
-            {:source (s pkgs.bash "/bin/bash")}
-           "codex/hooks/runtime/cat"
-            {:source (s pkgs.coreutils "/bin/cat")}
-           "codex/hooks/runtime/env"
-            {:source (s pkgs.coreutils "/bin/env")}
-           "codex/hooks/runtime/git"
-            {:source (s pkgs.git "/bin/git")}
-           "codex/hooks/runtime/mktemp"
-            {:source (s pkgs.coreutils "/bin/mktemp")}
-           "codex/hooks/runtime/python3"
-            {:source (s pkgs.python3 "/bin/python3")}
-           "codex/hooks/runtime/rm"
-            {:source (s pkgs.coreutils "/bin/rm")}
-           "codex/hooks/runtime/timeout"
-            {:source (s pkgs.coreutils "/bin/timeout")}
            }
          :systemd.tmpfiles.rules
-          ["d /etc/codex/hooks/lib 0755 root root -"
-           (providerAdapter "lib/north-agent-activation.sh")
-           (providerAdapter "beagle-session-start.sh")
-           (providerAdapter "firn-system-policy")
-           (providerAdapter "concrete-model-identity-guard.sh")
-           (providerAdapter "launch-critical-worktree-guard.sh")
-           (providerAdapter "lib/launch_critical_decide.py")
-           (providerAdapter "lib/launch_critical_paths.py")
-           (providerAdapter "tripwire-guard.sh")
-           (providerAdapter "corpus-scan-guard.sh")
-           (providerAdapter "resource-safe-search-guard.sh")
-           (providerAdapter "session-kill-guard.sh")
-           (providerAdapter "lib/authoring-killswitch.sh")]
+       [(s "L+ /etc/codex/hooks - - - - " codexHooks)
+        ]
          :home-manager.users
           {username
             (nix/module

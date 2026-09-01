@@ -52,6 +52,13 @@ def declared_paths(path):
     relative_paths.update(
         re.findall(r'\(promoted\s+"([^"]+)"\s+"[^"]+"\)', text)
     )
+    hook_tree = re.search(
+        r'codexHooks\s+\(pkgs\.linkFarm\s+"codex-hooks"\s+\[(.*?)\]\)\]',
+        text,
+        re.DOTALL,
+    )
+    if hook_tree:
+        relative_paths.update(re.findall(r':name\s+"([^"]+)"', hook_tree.group(1)))
     relative_paths.update(
         re.findall(r'\(providerAdapter\s+"([^"]+)"\)', text)
     )
@@ -79,8 +86,15 @@ if rg -n '"\.codex/skills"|current/skills/codex' "$source_file" "$generated_file
   exit 1
 fi
 
-grep -Fq '(providerAdapter "lib/north-agent-activation.sh")' "$source_file"
+grep -Fq '(pkgs.linkFarm "codex-hooks"' "$source_file"
+grep -Fq '(s "L+ /etc/codex/hooks - - - - " codexHooks)' "$source_file"
+if grep -Fq 'L+ /etc/codex/hooks/' "$source_file"; then
+  echo "per-hook tmpfiles links can retain retired hook names" >&2
+  exit 1
+fi
+
 for adapter in \
+  lib/north-agent-activation.sh \
   beagle-session-start.sh \
   firn-system-policy \
   concrete-model-identity-guard.sh \
@@ -92,7 +106,7 @@ for adapter in \
   resource-safe-search-guard.sh \
   session-kill-guard.sh \
   lib/authoring-killswitch.sh; do
-  grep -Fq "(providerAdapter \"$adapter\")" "$source_file"
+  grep -Fq ":name \"$adapter\"" "$source_file"
 done
 if rg -n 'north/profiles/tom/hooks' "$source_file" "$generated_file"; then
   printf 'retired North personal-profile hook wiring remains\n' >&2
