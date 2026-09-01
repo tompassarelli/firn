@@ -24,10 +24,9 @@
                     "/.local/bin/firn-liveness-floor")
                    :Environment
                     [(s "NORTH_BIN=" config.home.homeDirectory
-                       "/code/north/main/bin/north")
+                       "/.local/bin/north")
                      (s "PATH="
                        config.home.homeDirectory "/.local/bin:"
-                       config.home.homeDirectory "/code/north/main/bin:"
                        (lib.makeBinPath
                          (nix/with pkgs
                            [bash coreutils gawk git nix python3 util-linux])))]

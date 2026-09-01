@@ -1,6 +1,10 @@
 # shellcheck shell=bash
 
 north_agent_activation_path() {
+  if [ -n "${NORTH_AGENT_ACTIVATION:-}" ]; then
+    printf '%s\n' "$NORTH_AGENT_ACTIVATION"
+    return
+  fi
   local state_root="${NORTH_AGENT_STATE_ROOT:-$HOME/.local/state/north/agents}"
   printf '%s\n' "$state_root/current/activation.json"
 }
@@ -12,6 +16,9 @@ north_agent_unit_active() {
   local wanted_kind="$1" wanted_id="$2" activation python_bin
   activation="$(north_agent_activation_path)" || return 1
   python_bin="${NORTH_AGENT_PYTHON:-python3}"
+  if [[ "$python_bin" != */* ]]; then
+    python_bin="$(command -v -- "$python_bin")" || return 1
+  fi
   [ -r "$activation" ] && [ -x "$python_bin" ] || return 1
 
   "$python_bin" - "$activation" "$wanted_kind" "$wanted_id" 2>/dev/null <<'PY'

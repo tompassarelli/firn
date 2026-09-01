@@ -97,7 +97,10 @@ fi
 # payloads this guard can never deny, so only a decision-capable path pays for
 # the immutable activation lookup.
 # shellcheck disable=SC1090,SC1091
-. "$(dirname "$0")/lib/authoring-killswitch.sh" 2>/dev/null || true
+authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
+[ -r "$authoring_killswitch" ] \
+  || authoring_killswitch="$(dirname "$0")/../lib/authoring-killswitch.sh"
+. "$authoring_killswitch" 2>/dev/null || true
 type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 command -v python3 >/dev/null 2>&1 || exit 0

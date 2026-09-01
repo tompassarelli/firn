@@ -96,7 +96,7 @@ write_activation() {
     [ "$active" = true ] && permission=on
   fi
   cat >"$NORTH_AGENT_STATE_ROOT/current/activation.json" <<JSON
-{"schema":"$schema","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"firn-system-policy","kind":"hook","title":"Firn system policy","triggerDescription":"Protect Firn authoring and system switching.","permission":"$permission","active":$active,"owner":{"repo":"nixos-config","path":"native/system_policy_native.bjs"},"members":[],"supports":["firn"],"distributions":[{"type":"providerAdapter","targets":["firn","codex","bridge"],"owner":{"repo":"north","path":"profiles/tom/hooks/firn-system-policy.sh"},"adapterId":"firn-system-policy"}],"activationPaths":[["firn-system-policy"]]}]}
+{"schema":"$schema","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"firn-system-policy","kind":"hook","title":"Firn system policy","triggerDescription":"Protect Firn authoring and system switching.","permission":"$permission","active":$active,"owner":{"repo":"nixos-config","path":"native/system_policy_native.bjs"},"members":[],"supports":["firn"],"distributions":[{"type":"providerAdapter","targets":["firn","codex","claude"],"owner":{"repo":"nixos-config","path":"dotfiles/agents/hooks/firn-system-policy"},"adapterId":"firn-system-policy"}],"activationPaths":[["firn-system-policy"]]}]}
 JSON
 }
 

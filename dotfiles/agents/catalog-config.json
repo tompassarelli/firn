@@ -4,7 +4,6 @@
   "role": "operator",
   "rootOrder": [
     "agent-machinery",
-    "coordination",
     "elicit-distilled",
     "webdev-distilled",
     "importing-skills-distilled",
@@ -37,7 +36,6 @@
     "store-modeling-distilled",
     "code-as-facts-distilled",
     "comment-bloat-guard",
-    "logcompress-hook",
     "agent-policy-reference",
     "agent-run-design-reference",
     "agent-run-lifecycle-reference",
@@ -96,8 +94,8 @@
     {
       "id": "code-bootstrap",
       "owner": {
-        "repo": "north",
-        "path": "agent-catalog/instructions/code/AGENTS.md"
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/code/AGENTS.md"
       },
       "targets": [
         "code"
@@ -105,14 +103,6 @@
     }
   ],
   "providerSupport": [
-    {
-      "id": "activation-gate",
-      "owner": {
-        "repo": "north",
-        "path": "agent-runtime/hooks/lib/harness-dial.sh"
-      },
-      "path": "lib/harness-dial.sh"
-    },
     {
       "id": "north-agent-activation",
       "owner": {
@@ -124,8 +114,8 @@
     {
       "id": "authoring-gate",
       "owner": {
-        "repo": "north",
-        "path": "agent-runtime/hooks/lib/authoring-killswitch.sh"
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/lib/authoring-killswitch.sh"
       },
       "path": "lib/authoring-killswitch.sh"
     },
@@ -144,14 +134,6 @@
         "path": "dotfiles/agents/hooks/lib/launch_critical_paths.py"
       },
       "path": "lib/launch_critical_paths.py"
-    },
-    {
-      "id": "logcompress-runtime",
-      "owner": {
-        "repo": "north",
-        "path": "agent-runtime/hooks/logcompress.py"
-      },
-      "path": "logcompress.py"
     }
   ],
   "registrations": {
@@ -692,8 +674,8 @@
             "claude"
           ],
           "owner": {
-            "repo": "north",
-            "path": "agent-runtime/hooks/beagle-session-start.sh"
+            "repo": "beagle",
+            "path": "integrations/north/hooks/beagle-session-start.sh"
           }
         }
       ]
@@ -809,8 +791,8 @@
             "project:beagle"
           ],
           "owner": {
-            "repo": "north",
-            "path": "agent-runtime/hooks/code-upstream-guard.sh"
+            "repo": "beagle",
+            "path": "store/integrations/north/hooks/code-upstream-guard.sh"
           }
         }
       ]
@@ -855,22 +837,6 @@
           "targets": [
             "codex"
           ]
-        }
-      ]
-    },
-    "coordination": {
-      "distributions": [
-        {
-          "type": "instructions",
-          "targets": [
-            "shared",
-            "codex",
-            "north"
-          ],
-          "owner": {
-            "repo": "north",
-            "path": "coordination/guide.md"
-          }
         }
       ]
     },
@@ -1002,8 +968,8 @@
             "claude"
           ],
           "owner": {
-            "repo": "north",
-            "path": "agent-runtime/hooks/firn-system-policy.sh"
+            "repo": "nixos-config",
+            "path": "dotfiles/agents/hooks/firn-system-policy"
           }
         }
       ]
@@ -1093,102 +1059,6 @@
             "codex",
             "claude"
           ]
-        }
-      ]
-    },
-    "logcompress-hook": {
-      "distributions": [
-        {
-          "type": "hook",
-          "targets": [
-            "shared",
-            "codex"
-          ]
-        }
-      ]
-    },
-    "north-mark-delegated": {
-      "supports": [
-        "coordination"
-      ],
-      "distributions": [
-        {
-          "type": "providerAdapter",
-          "targets": [
-            "codex"
-          ],
-          "owner": {
-            "repo": "nixos-config",
-            "path": "dotfiles/codex/hooks/north-mark-delegated-codex"
-          }
-        }
-      ]
-    },
-    "north-on-spawn": {
-      "supports": [
-        "coordination"
-      ],
-      "distributions": [
-        {
-          "type": "providerAdapter",
-          "targets": [
-            "codex"
-          ],
-          "owner": {
-            "repo": "nixos-config",
-            "path": "dotfiles/codex/hooks/north-on-spawn-codex"
-          }
-        }
-      ]
-    },
-    "north-on-stop": {
-      "supports": [
-        "coordination"
-      ],
-      "distributions": [
-        {
-          "type": "providerAdapter",
-          "targets": [
-            "codex"
-          ],
-          "owner": {
-            "repo": "nixos-config",
-            "path": "dotfiles/codex/hooks/north-on-stop-codex"
-          }
-        }
-      ]
-    },
-    "north-on-terminal": {
-      "supports": [
-        "coordination"
-      ],
-      "distributions": [
-        {
-          "type": "providerAdapter",
-          "targets": [
-            "codex"
-          ],
-          "owner": {
-            "repo": "nixos-config",
-            "path": "dotfiles/codex/hooks/north-on-terminal-codex"
-          }
-        }
-      ]
-    },
-    "north-on-tooluse": {
-      "supports": [
-        "coordination"
-      ],
-      "distributions": [
-        {
-          "type": "providerAdapter",
-          "targets": [
-            "codex"
-          ],
-          "owner": {
-            "repo": "nixos-config",
-            "path": "dotfiles/codex/hooks/north-on-tooluse-codex"
-          }
         }
       ]
     },

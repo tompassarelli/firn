@@ -23,9 +23,12 @@ capture_hook_stdin() {
 capture_hook_stdin
 
 hook_dir="$(dirname "$0")"
-if [ -r "$hook_dir/lib/authoring-killswitch.sh" ]; then
+authoring_killswitch="$hook_dir/lib/authoring-killswitch.sh"
+[ -r "$authoring_killswitch" ] \
+  || authoring_killswitch="$hook_dir/../lib/authoring-killswitch.sh"
+if [ -r "$authoring_killswitch" ]; then
   # shellcheck disable=SC1090,SC1091
-  . "$hook_dir/lib/authoring-killswitch.sh" 2>/dev/null || true
+  . "$authoring_killswitch" 2>/dev/null || true
 fi
 type authoring_guards_off >/dev/null 2>&1 || exit 0
 authoring_guards_off && exit 0

@@ -16,7 +16,7 @@ ND="$HOME_SB/code/north-data"
 SESS="$ND/accounts/openai/codex-personal-apple/sessions/2026/08/12"
 PROJ="$ND/accounts/anthropic/claude-acct/projects/-home-tom-code-north"
 mkdir -p "$SESS" "$PROJ" "$ND/archives/zero-slate" "$ND/threads" \
-  "$HOME_SB/.local/state" "$HOME_SB/code/north/main"
+  "$HOME_SB/.local/state" "$HOME_SB/code/north-v2/main"
 ln -sfn "$ND" "$HOME_SB/.local/state/north"
 ROLLOUT="$SESS/rollout-2026-08-12T13-42-23-019ff47e.jsonl"
 : > "$ROLLOUT"
@@ -110,7 +110,7 @@ allow 'du is not searching' "du -sh $ND/accounts"
 allow 'reading a known file' "cat $ND/README.md"
 allow 'convo itself' "convo -x 'some literal'"
 allow 'convo session lookup' 'convo session 019ff47e-4216-7de0-8308-4c88d9427a7a'
-allow 'searching a different repo' "rg needle $HOME_SB/code/north/main"
+allow 'searching a different repo' "rg needle $HOME_SB/code/north-v2/main"
 
 echo
 echo '== a mention is not an invocation =='

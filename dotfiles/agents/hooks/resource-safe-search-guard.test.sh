@@ -5,7 +5,6 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_GUARD="$HERE/resource-safe-search-guard.sh"
-NORTH_REPO="${AGENT_CONFIG_NORTH_REPO:?set AGENT_CONFIG_NORTH_REPO to the exact North candidate under test}"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/resource-safe-search-guard.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
 PROVIDER_HOOKS="$SCRATCH/provider-hooks"
@@ -22,10 +21,10 @@ mkdir -p "$PROVIDER_HOOKS/lib" "$CODE/src" "$LANE/src"
 : >"$CODE/src/main.txt"
 : >"$LANE/src/main.txt"
 
-for source in authoring-killswitch.sh harness-dial.sh; do
-  candidate="$NORTH_REPO/agent-runtime/hooks/lib/$source"
+for source in authoring-killswitch.sh north-agent-activation.sh; do
+  candidate="$HERE/../lib/$source"
   [ -r "$candidate" ] || {
-    printf 'missing candidate North hook helper: %s\n' "$candidate" >&2
+    printf 'missing Firn-owned hook helper: %s\n' "$candidate" >&2
     exit 1
   }
   ln -s "$candidate" "$PROVIDER_HOOKS/lib/$source"
@@ -34,8 +33,10 @@ ln -s "$SOURCE_GUARD" "$PROVIDER_HOOKS/resource-safe-search-guard.sh"
 GUARD="$PROVIDER_HOOKS/resource-safe-search-guard.sh"
 
 set_active() {
-  printf '{"schema":"north.agent-activation/v1","units":[{"id":"resource-safe-search-guard","kind":"hook","category":"authoring","active":%s}]}\n' \
-    "$1" >"$ACTIVATION"
+  local permission=off
+  [ "$1" = true ] && permission=on
+  printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"resource-safe-search-guard","kind":"hook","category":"authoring","permission":"%s","active":%s}]}\n' \
+    "$permission" "$1" >"$ACTIVATION"
 }
 set_active true
 

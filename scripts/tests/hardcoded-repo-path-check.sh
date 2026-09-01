@@ -44,13 +44,13 @@ git -C "$scratch/canary/main" config user.name path-check-test
 git -C "$scratch/canary/main" config user.email path-check-test@example.invalid
 {
   printf '%s\n' '#!/usr/bin/env bash'
-  printf '%s\n' 'printf "%s\n" /home/pathchecktest/code/north/main' # hardcoded-repo-path:allow
+  printf '%s\n' 'printf "%s\n" /home/pathchecktest/code/north-v2/main' # hardcoded-repo-path:allow
 } >"$scratch/canary/main/violation"
 chmod +x "$scratch/canary/main/violation"
 git -C "$scratch/canary/main" add violation
 git -C "$scratch/canary/main" commit -qm fixture
 
-roots="$REPO_ROOT:$HOME/code/north/main:$HOME/code/beagle/main:$scratch/canary/main" # hardcoded-repo-path:allow
+roots="$REPO_ROOT:$HOME/code/north-v2/main:$HOME/code/beagle/main:$scratch/canary/main" # hardcoded-repo-path:allow
 set +e
 output="$(
   GIT_DIR="$caller_git_dir" \

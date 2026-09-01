@@ -14,8 +14,8 @@
           Type = "oneshot";
           ExecStart = "${config.home.homeDirectory}/.local/bin/firn-liveness-floor";
           Environment = [
-            "NORTH_BIN=${config.home.homeDirectory}/code/north/main/bin/north"
-            "PATH=${config.home.homeDirectory}/.local/bin:${config.home.homeDirectory}/code/north/main/bin:${lib.makeBinPath (with pkgs; [
+            "NORTH_BIN=${config.home.homeDirectory}/.local/bin/north"
+            "PATH=${config.home.homeDirectory}/.local/bin:${lib.makeBinPath (with pkgs; [
               bash
               coreutils
               gawk

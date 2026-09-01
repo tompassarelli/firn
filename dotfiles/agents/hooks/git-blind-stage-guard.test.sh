@@ -13,7 +13,9 @@ ACTIVATION="$SCRATCH/activation.json"
 
 pass=0 fail=0
 set_active() {
-  printf '{"schema":"north.agent-activation/v1","units":[{"id":"git-blind-stage-guard","kind":"hook","category":"authoring","active":%s}]}\n' "$1" >"$ACTIVATION"
+  local permission=off
+  [ "$1" = true ] && permission=on
+  printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"git-blind-stage-guard","kind":"hook","category":"authoring","permission":"%s","active":%s}]}\n' "$permission" "$1" >"$ACTIVATION"
 }
 set_active true
 
@@ -23,7 +25,8 @@ run() {
   local input out decision ok=0
   input="$(python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$cmd")"
   out="$(printf '%s' "$input" | env -u AGENT_NO_AUTHORING_HOOKS \
-    HOME="$SCRATCH/home" NORTH_AGENT_ACTIVATION="$ACTIVATION" "$@" "$HOOK" 2>&1)"
+    HOME="$SCRATCH/home" NORTH_AGENT_ACTIVATION="$ACTIVATION" \
+    NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 "$@" "$HOOK" 2>&1)"
   decision="$(python3 -c 'import json,sys
 try:
     d = json.loads(sys.argv[1] or "null")

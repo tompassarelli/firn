@@ -41,7 +41,7 @@ make_checkout() { # make_checkout <container-name> -> echoes the checkout path
   local name="$1" root="$scratch/$1/main" i
   mkdir -p "$root/config" "$root/dotfiles/bin" "$root/filler"
   cp "$TARGET" "$root/dotfiles/bin/hardcoded-repo-path-check"
-  printf '%s\n' 'ref="$HOME/code/north/main"' >"$root/dotfiles/bin/sample" # hardcoded-repo-path:allow
+  printf '%s\n' 'ref="$HOME/code/north-v2/main"' >"$root/dotfiles/bin/sample" # hardcoded-repo-path:allow
   # The scan refuses to run on fewer than 100 files, so it cannot silently
   # match nothing. Pad past that floor.
   for i in $(seq 1 120); do printf 'x\n' >"$root/filler/f$i.txt"; done

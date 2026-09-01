@@ -33,5 +33,5 @@ Both `.bnix` and `.nix` are committed because the flake reads from the
 git tree. **Edit the `.bnix`** — `firn repo build` overwrites direct `.nix`
 edits.
 
-The `north-coordinator` module launches North's live out-of-store coordinator,
-which hosts the sealed JVM Store selected by North in-process.
+North-v2 is promoted independently and reached through `~/.local/bin/north`;
+Firn owns only the stable launcher, guard wiring, and delivery-liveness entry.

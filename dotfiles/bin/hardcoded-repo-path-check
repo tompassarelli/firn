@@ -32,7 +32,7 @@ check_roots() {
 
   local -a roots=(
     "$CHECK_SOURCE_ROOT"
-    "$HOME/code/north/main" # hardcoded-repo-path:allow
+    "$HOME/code/north-v2/main" # hardcoded-repo-path:allow
     "$HOME/code/beagle/main" # hardcoded-repo-path:allow
   )
   printf '%s\n' "${roots[@]}"
@@ -83,10 +83,10 @@ run_check() {
   local findings="$scratch/findings.tsv"
   : >"$findings"
 
-  local r1='\$\{?HOME\}?/code/(nixos-config|north|beagle)\b'
+  local r1='\$\{?HOME\}?/code/(nixos-config|north(-v2)?|beagle)\b'
   local r2='/home/[a-z][a-z0-9_-]*/code/'
   # shellcheck disable=SC2088 # This is the literal repository-path form being checked.
-  local r3='~/code/(nixos-config|north|beagle)/'
+  local r3='~/code/(nixos-config|north(-v2)?|beagle)/'
   local canary_count
   canary_count="$(printf '/home/pathcanary/code/north/\n' | rg -c "$r2" || true)" # hardcoded-repo-path:allow
   if (( canary_count < 1 )); then

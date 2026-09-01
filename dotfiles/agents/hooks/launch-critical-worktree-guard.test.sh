@@ -46,7 +46,7 @@ check() { # check <expect deny|allow> <path> <why>
 }
 
 # --- 1. primaries are denied -------------------------------------------------
-check deny "$HOME/code/north/main/cli/dashboard-cli.clj" "north primary"
+check deny "$HOME/code/north-v2/main/cli/dashboard-cli.clj" "north-v2 primary"
 check deny "$HOME/code/beagle/main/bin/beagle-build"     "beagle primary"
 check deny "$HOME/code/nixos-config/main/flake.nix"      "nixos-config primary"
 check deny "$HOME/code/beagle/main"                      "the checkout root itself, not only files under it"
@@ -69,15 +69,14 @@ check deny "$HOME/code/gjoa/pins/0123456789abcdef0123456789abcdef01234567/index.
 # A gitignored file can never make the tree tracked-dirty, so it cannot cause
 # either failure this guard prevents (a runtime reading a dirty Beagle Store checkout,
 # or a rebuild publishing only committed state). Blocking them bought
-# nothing and stopped agents writing docs/private/ notes — which is exactly
-# where policy says internal notes belong.
-check allow "$HOME/code/north/main/docs/private/overnight-notes.md" \
-  "docs/private is gitignored: cannot dirty the tree, and policy REQUIRES notes there"
+# nothing and stopped agents writing ignored local output.
+check allow "$HOME/code/north-v2/main/target/debug/local-note.txt" \
+  "North-v2 target output is gitignored and cannot dirty the tree"
 check allow "$HOME/code/beagle/main/docs/private/scratch.md" \
   "same exemption in beagle"
 
 # ...but a TRACKED file in the same repo is still denied.
-check deny "$HOME/code/north/main/cli/trace-cli.clj" \
+check deny "$HOME/code/north-v2/main/cli/trace-cli.clj" \
   "tracked source in a launch-critical primary stays denied"
 
 # --- 3. near-miss paths must not be swept in ---------------------------------
@@ -353,7 +352,7 @@ case "$(bash_decide "cargo test --target-dir /tmp/clause-target-agent-a" "$HOME"
   *) fail=$((fail + 1)); echo "FAIL  /tmp Cargo target must remain allowed" >&2 ;;
 esac
 
-case "$(apply_decide "*** Begin Patch\n*** Update File: code/north/main/cli/x.clj\n@@\n-a\n+b\n*** End Patch" "/home/tom")" in
+case "$(apply_decide "*** Begin Patch\n*** Update File: code/north-v2/main/cli/x.clj\n@@\n-a\n+b\n*** End Patch" "/home/tom")" in
   *'"deny"'*) pass=$((pass + 1)) ;;
   *) fail=$((fail + 1)); echo "FAIL  relative apply_patch must bypass the cheap pre-filter" >&2 ;;
 esac
@@ -412,7 +411,7 @@ deny_ms() { # deny_ms <path>
   done
   echo $(( ( $(date +%s%N) - start ) / 20 / 1000000 ))
 }
-main_ms="$(deny_ms "$HOME/code/north/main/cli/x.clj")"
+main_ms="$(deny_ms "$HOME/code/north-v2/main/cli/x.clj")"
 pins_ms="$(deny_ms "$HOME/code/gjoa/pins/0123456789abcdef0123456789abcdef01234567/index.html")"
 if [ "$pins_ms" -le $((main_ms + 20)) ]; then pass=$((pass + 1)); else
   fail=$((fail + 1))

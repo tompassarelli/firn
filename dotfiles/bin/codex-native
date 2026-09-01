@@ -25,10 +25,10 @@ if [ ! -s "$PROFILE/auth.json" ]; then
   echo "  ~/.local/state/north/accounts/openai/<target>/auth.json" >&2
 fi
 
-# Drop the orchestration and plugin bins a parent session injected, so a native
-# shell cannot reach back into the managed stack by PATH alone.
+# Drop plugin bins a parent session injected, so a native shell cannot reach
+# back into that managed plugin stack by PATH alone.
 CLEAN_PATH="$(printf '%s' "$PATH" | tr ':' '\n' \
-  | grep -vE '/north/main/orchestration/bin|/plugins/cache/' \
+  | grep -vE '/plugins/cache/' \
   | paste -sd: -)"
 
 exec env -u AGENT_PROVIDER \

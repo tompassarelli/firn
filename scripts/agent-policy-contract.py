@@ -10,7 +10,6 @@ import os
 from pathlib import Path
 import re
 import shlex
-import subprocess
 import sys
 import tomllib
 
@@ -389,76 +388,63 @@ def check_activation(
     return by_id
 
 
-def resolver_path() -> Path:
-    explicit = os.environ.get("AGENT_POLICY_NORTH_CATALOG_LIB")
-    if explicit:
-        return Path(explicit)
-    return Path.home() / "code/north/main/cli/agent-catalog.clj"
-
-
 def resolve_catalog(
-    contract: Contract, unit_ids: set[str]
+    contract: Contract, unit_ids: set[str], repo: Path
 ) -> tuple[str, dict[str, dict]]:
-    resolver = resolver_path()
-    if resolver.name != "agent-catalog.clj" or not resolver.is_file():
-        contract.reject(f"North catalog resolver is unreadable: {resolver}")
-        return "", {}
-    expression = r'''
-(require '[cheshire.core :as json])
-(load-file (first *command-line-args*))
-(let [load-catalog (ns-resolve 'north.agent-catalog 'load-catalog)
-      owner-path (ns-resolve 'north.agent-catalog 'owner-path)
-      wanted (json/parse-string (System/getenv "AGENT_POLICY_SKILL_IDS"))
-      loaded (load-catalog)
-      units (->> wanted
-                 (keep (fn [id]
-                         (when-let [unit (get (:by-id loaded) id)]
-                           (assoc unit "resolvedOwnerPath"
-                             (str (owner-path
-                                    (get unit "owner")
-                                    (str "policy destination " id)))))))
-                 vec)]
-  (println (json/generate-string
-             {"catalogDigest" (:digest loaded)
-              "units" units})))
-'''
-    environment = os.environ.copy()
-    environment["AGENT_POLICY_SKILL_IDS"] = json.dumps(sorted(unit_ids))
     try:
-        result = subprocess.run(
-            ["bb", "-e", expression, str(resolver)],
-            check=False,
-            capture_output=True,
-            text=True,
-            env=environment,
-        )
-    except OSError as exc:
-        contract.reject(f"North catalog resolver could not run: {exc}")
-        return "", {}
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip() or "unknown failure"
-        contract.reject(f"North catalog resolver rejected its inputs: {detail}")
-        return "", {}
-    try:
-        payload = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        contract.reject(f"North catalog resolver returned invalid JSON: {exc}")
+        payload = json.loads(activation_path().read_text())
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        contract.reject(f"North-v2 activation is unreadable: {activation_path()}: {exc}")
         return "", {}
     digest_value = payload.get("catalogDigest")
     units = payload.get("units")
     if not ACTIVATION_DIGEST.fullmatch(digest_value or "") or not isinstance(units, list):
-        contract.reject("North catalog resolver returned an invalid payload")
+        contract.reject("North-v2 activation returned an invalid catalog payload")
         return "", {}
+    roots = {"nixos-config": str(repo)}
+    if configured := os.environ.get("NORTH_REPO_ROOTS"):
+        try:
+            parsed_roots = json.loads(configured)
+        except json.JSONDecodeError as exc:
+            contract.reject(f"NORTH_REPO_ROOTS is invalid JSON: {exc}")
+            return "", {}
+        if not isinstance(parsed_roots, dict) or not all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in parsed_roots.items()
+        ):
+            contract.reject("NORTH_REPO_ROOTS must map repository names to paths")
+            return "", {}
+        roots.update(parsed_roots)
     by_id: dict[str, dict] = {}
     for unit in units:
         if not isinstance(unit, dict) or not UNIT.fullmatch(unit.get("id", "")):
-            contract.reject("North catalog resolver returned an invalid unit")
+            contract.reject("North-v2 activation returned an invalid unit")
             continue
         unit_id = unit["id"]
-        if unit_id in by_id:
-            contract.reject(f"North catalog resolver duplicated unit {unit_id}")
+        if unit_id not in unit_ids:
             continue
-        by_id[unit_id] = unit
+        if unit_id in by_id:
+            contract.reject(f"North-v2 activation duplicated unit {unit_id}")
+            continue
+        owner = unit.get("owner")
+        if not isinstance(owner, dict):
+            contract.reject(f"North-v2 activation unit {unit_id} has no owner")
+            continue
+        owner_repo = owner.get("repo")
+        owner_relative = owner.get("path")
+        if not isinstance(owner_repo, str) or not isinstance(owner_relative, str):
+            contract.reject(f"North-v2 activation unit {unit_id} has an invalid owner")
+            continue
+        root = Path(roots.get(owner_repo, Path.home() / "code" / owner_repo / "main"))
+        resolved = (root / owner_relative).resolve()
+        try:
+            resolved.relative_to(root.resolve())
+        except ValueError:
+            contract.reject(f"North-v2 activation unit {unit_id} owner escapes its repository")
+            continue
+        enriched = dict(unit)
+        enriched["resolvedOwnerPath"] = str(resolved)
+        by_id[unit_id] = enriched
     return digest_value, by_id
 
 
@@ -565,7 +551,7 @@ def main() -> int:
         for entry in policy.get("claim", []) + policy.get("approved_route", [])
         if entry.get("owner", "").startswith("skill:")
     }
-    catalog_digest, catalog = resolve_catalog(contract, skill_ids)
+    catalog_digest, catalog = resolve_catalog(contract, skill_ids, repo)
     activation = None
     if args.local:
         activation = check_activation(contract, policy, repo, catalog_digest)

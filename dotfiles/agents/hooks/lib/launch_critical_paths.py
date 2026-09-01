@@ -35,12 +35,12 @@ import re
 # Containers whose PRIMARY breaks something beyond itself. They are protected by
 # the same rule as every other main; only the reason text is theirs.
 LAUNCH_CRITICAL = {
-    "north": (
-        "north is launch-critical and `firn rebuild` builds a COMMIT SNAPSHOT, so"
-        " uncommitted work here is silently absent from the generation."
+    "north-v2": (
+        "north-v2 is launch-critical: its promoted binary is the normal `north`"
+        " command, so uncommitted work here is absent from the operator runtime."
     ),
     "beagle": (
-        "beagle is launch-critical: it compiles north and nixos-config, and a"
+        "beagle is launch-critical: it compiles nixos-config, and a"
         " half-edited checkout breaks builds for every other lane at once."
     ),
     "nixos-config": (

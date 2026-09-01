@@ -26,20 +26,6 @@ with requirements_path.open("rb") as handle:
 hook_requirements = requirements.get("hooks", {})
 managed_dir = hook_requirements.get("managed_dir", "/etc/codex/hooks").rstrip("/")
 
-wait_entries = [
-    entry
-    for entry in hook_requirements.get("PreToolUse", [])
-    if re.fullmatch(entry.get("matcher", ""), "functions.wait")
-    and any(
-        hook.get("command", "").endswith("/agent-spawn-guard.sh")
-        for hook in entry.get("hooks", [])
-    )
-]
-assert len(wait_entries) == 1, (
-    "functions.wait must reach the singular agent-spawn-guard PreToolUse registration"
-)
-
-
 def commands(value):
     if isinstance(value, dict):
         command = value.get("command")
@@ -93,29 +79,26 @@ if rg -n '"\.codex/skills"|current/skills/codex' "$source_file" "$generated_file
   exit 1
 fi
 
-for adapter in \
-  north-on-spawn-codex \
-  north-on-tooluse-codex \
-  north-mark-delegated-codex \
-  north-on-stop-codex \
-  north-on-terminal-codex; do
-  grep -Fq \
-    "{:source (s flakeRoot \"/dotfiles/codex/hooks/$adapter\")}" \
-    "$source_file"
-done
 grep -Fq '(providerAdapter "lib/north-agent-activation.sh")' "$source_file"
-grep -Fq '(promoted "beagle-session-start.sh" "beagle/integrations/north/hooks/beagle-session-start.sh")' "$source_file"
-grep -Fq '(promoted "firn-system-policy" "north/agent-runtime/hooks/firn-system-policy.sh")' "$source_file"
-grep -Fq '(promoted "agent-spawn-guard.sh" "north/agent-runtime/hooks/agent-spawn-guard.sh")' "$source_file"
-grep -Fq '(promoted "resource-safe-search-guard.sh" "nixos-config/dotfiles/agents/hooks/resource-safe-search-guard.sh")' "$source_file"
-grep -Fq '(promoted "logcompress-hook.py" "north/agent-runtime/hooks/logcompress-hook.py")' "$source_file"
-grep -Fq '(promoted "lib/authoring-killswitch.sh" "north/agent-runtime/hooks/lib/authoring-killswitch.sh")' "$source_file"
-grep -Fq '(promoted "lib/harness-dial.sh" "north/agent-runtime/hooks/lib/harness-dial.sh")' "$source_file"
+for adapter in \
+  beagle-session-start.sh \
+  firn-system-policy \
+  concrete-model-identity-guard.sh \
+  launch-critical-worktree-guard.sh \
+  lib/launch_critical_decide.py \
+  lib/launch_critical_paths.py \
+  tripwire-guard.sh \
+  corpus-scan-guard.sh \
+  resource-safe-search-guard.sh \
+  session-kill-guard.sh \
+  lib/authoring-killswitch.sh; do
+  grep -Fq "(providerAdapter \"$adapter\")" "$source_file"
+done
 if rg -n 'north/profiles/tom/hooks' "$source_file" "$generated_file"; then
   printf 'retired North personal-profile hook wiring remains\n' >&2
   exit 1
 fi
-if rg -n 'north-clock-guard-codex|providerAdapter "(beagle-session-start\.sh|north-(on|mark-))' \
+if rg -n 'north-clock-guard-codex|north-(on|mark-)|\(promoted |harness-dial' \
   "$source_file" "$generated_file"; then
   printf 'retired or generation-backed Codex hook wiring remains\n' >&2
   exit 1
@@ -167,8 +150,9 @@ assert config["model"] == "gpt-5.6-sol"
 assert config["model_reasoning_effort"] == "high"
 assert config["agents"]["max_concurrent_threads_per_session"] == 64
 assert config["agents"]["default_subagent_model"] == "gpt-5.6-luna"
-assert config["mcp_servers"]["north"]["command"] == "/run/current-system/sw/bin/north-mcp"
+assert "north" not in config.get("mcp_servers", {})
+assert "linear-mcp-msa-new" in config.get("mcp_servers", {})
 PY
 
 printf 'ok: Codex config.toml is a generation-retained store copy with no checkout delivery dependency\n'
-printf 'ok: Codex keeps Sol/high and immutable North MCP command path\n'
+printf 'ok: Codex keeps Sol/high with no North MCP declaration\n'

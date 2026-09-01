@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-profile="${NORTH_RUNTIME_PROFILE:-$HOME/.local/state/north/runtime-profile}"
-north_checkout="${NORTH_CHECKOUT:-$HOME/code/north/main}" # hardcoded-repo-path:allow
-north_ref="path:$north_checkout#babashka"
+profile="${BABASHKA_RUNTIME_PROFILE:-$HOME/.local/state/babashka/runtime-profile}"
+package_ref="${BABASHKA_NIX_REF:-nixpkgs#babashka}"
 
 command -v nix >/dev/null 2>&1 || {
   printf 'bb-runtime-update: nix is required\n' >&2
@@ -31,10 +30,10 @@ if [[ -x "$profile/bin/bb" ]]; then
   }
   trap restore_previous EXIT INT TERM HUP
   nix profile remove --profile "$profile" babashka
-  nix profile add --profile "$profile" "$north_ref"
+  nix profile add --profile "$profile" "$package_ref"
   trap - EXIT INT TERM HUP
 else
-  nix profile add --profile "$profile" "$north_ref"
+  nix profile add --profile "$profile" "$package_ref"
 fi
 
 "$profile/bin/bb" --version

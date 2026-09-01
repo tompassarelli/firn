@@ -1,9 +1,8 @@
 { config, lib, pkgs, flakeRoot, ... }:
 
-((username: ((homeDir: ((northPkg: ((enforcement: ((agentGeneration: ((promoted: ((providerAdapter: {
+((username: ((homeDir: ((agentGeneration: ((providerAdapter: {
   options.myConfig.modules.codex.enable = lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)";
   config = lib.mkIf config.myConfig.modules.codex.enable {
-    environment.systemPackages = with pkgs; [ bun ];
     environment.etc = {
       "codex/requirements.toml".source = "${flakeRoot}/modules/codex/requirements.toml";
       "codex/hooks/runtime/bash" = {
@@ -30,44 +29,21 @@
       "codex/hooks/runtime/timeout" = {
         source = "${pkgs.coreutils}/bin/timeout";
       };
-      "codex/hooks/north-on-spawn-codex" = {
-        source = "${flakeRoot}/dotfiles/codex/hooks/north-on-spawn-codex";
-      };
-      "codex/hooks/north-on-tooluse-codex" = {
-        source = "${flakeRoot}/dotfiles/codex/hooks/north-on-tooluse-codex";
-      };
-      "codex/hooks/north-mark-delegated-codex" = {
-        source = "${flakeRoot}/dotfiles/codex/hooks/north-mark-delegated-codex";
-      };
-      "codex/hooks/north-on-stop-codex" = {
-        source = "${flakeRoot}/dotfiles/codex/hooks/north-on-stop-codex";
-      };
-      "codex/hooks/north-on-terminal-codex" = {
-        source = "${flakeRoot}/dotfiles/codex/hooks/north-on-terminal-codex";
-      };
-      "codex/hooks/north" = {
-        source = northPkg;
-      };
     };
     systemd.tmpfiles.rules = [
-      "d /var/lib/north-enforcement 0755 root root -"
       "d /etc/codex/hooks/lib 0755 root root -"
       (providerAdapter "lib/north-agent-activation.sh")
-      (promoted "beagle-session-start.sh" "beagle/integrations/north/hooks/beagle-session-start.sh")
-      (promoted "firn-system-policy" "north/agent-runtime/hooks/firn-system-policy.sh")
-      (promoted "agent-spawn-guard.sh" "north/agent-runtime/hooks/agent-spawn-guard.sh")
-      (promoted "concrete-model-identity-guard.sh" "nixos-config/dotfiles/agents/hooks/concrete-model-identity-guard.sh")
-      (promoted "launch-critical-worktree-guard.sh" "nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.sh")
-      (promoted "lib/launch_critical_decide.py" "nixos-config/dotfiles/agents/hooks/lib/launch_critical_decide.py")
-      (promoted "lib/launch_critical_paths.py" "nixos-config/dotfiles/agents/hooks/lib/launch_critical_paths.py")
-      (promoted "tripwire-guard.sh" "nixos-config/dotfiles/agents/hooks/tripwire-guard.sh")
-      (promoted "corpus-scan-guard.sh" "nixos-config/dotfiles/agents/hooks/corpus-scan-guard.sh")
-      (promoted "resource-safe-search-guard.sh" "nixos-config/dotfiles/agents/hooks/resource-safe-search-guard.sh")
-      (promoted "session-kill-guard.sh" "nixos-config/dotfiles/agents/hooks/session-kill-guard.sh")
-      (promoted "logcompress-hook.py" "north/agent-runtime/hooks/logcompress-hook.py")
-      (promoted "logcompress.py" "north/agent-runtime/hooks/logcompress.py")
-      (promoted "lib/authoring-killswitch.sh" "north/agent-runtime/hooks/lib/authoring-killswitch.sh")
-      (promoted "lib/harness-dial.sh" "north/agent-runtime/hooks/lib/harness-dial.sh")
+      (providerAdapter "beagle-session-start.sh")
+      (providerAdapter "firn-system-policy")
+      (providerAdapter "concrete-model-identity-guard.sh")
+      (providerAdapter "launch-critical-worktree-guard.sh")
+      (providerAdapter "lib/launch_critical_decide.py")
+      (providerAdapter "lib/launch_critical_paths.py")
+      (providerAdapter "tripwire-guard.sh")
+      (providerAdapter "corpus-scan-guard.sh")
+      (providerAdapter "resource-safe-search-guard.sh")
+      (providerAdapter "session-kill-guard.sh")
+      (providerAdapter "lib/authoring-killswitch.sh")
     ];
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {
@@ -77,4 +53,4 @@
       };
     });
   };
-}) (adapterId: "L+ /etc/codex/hooks/${adapterId} - - - - ${agentGeneration}/provider-hooks/${adapterId}"))) (relative: source: "L+ /etc/codex/hooks/${relative} - - - - ${enforcement}/${source}"))) "${homeDir}/.local/state/north/agents/current")) "/var/lib/north-enforcement/active/current")) "${homeDir}/code/north/main")) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)
+}) (adapterId: "L+ /etc/codex/hooks/${adapterId} - - - - ${agentGeneration}/provider-hooks/${adapterId}"))) "${homeDir}/.local/state/north/agents/current")) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)

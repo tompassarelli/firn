@@ -49,6 +49,7 @@ printf 'node_modules/\nbuild/\n' > "$REPO_CWD/.gitignore"
 git -C "$REPO_CWD" add .gitignore src >/dev/null 2>&1
 git -C "$REPO_CWD" -c user.email=t@example -c user.name=t \
   commit -qm base >/dev/null 2>&1
+printf '%s\n' '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"tripwire-guard","kind":"hook","category":"authoring","permission":"on","active":true}]}' >"$SCRATCH/activation.json"
 
 pass=0 fail=0
 
@@ -72,7 +73,8 @@ run() {
   set -- env -u SAFE_PUSH_ACTIVE -u XDG_CACHE_HOME \
     HOME="$FH" TMPDIR=/tmp \
     TRIPWIRE_LOG_DIR="$SCRATCH" AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
-    NORTH_AGENT_ACTIVATION="$SCRATCH/activation.json" NORTH_BIN=/bin/true
+    NORTH_AGENT_ACTIVATION="$SCRATCH/activation.json" \
+    NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 NORTH_BIN=/bin/true
   # shellcheck disable=SC2086  # deliberate split: EXTRA_ENV may name several vars
   [ -n "$extra" ] && set -- "$@" $extra
   out="$(printf '%s' "$json" | "$@" "$HOOK" 2>&1)"
@@ -238,7 +240,10 @@ runm default allow 'gitignored dir inside this lane -> allow (no ask spam)' 'rm 
 macc="$(jq -n --arg c "rm -rf $FH/Documents/notes $FH/Pictures/Screenshots" --arg d "$REPO_CWD" --arg pm default \
   '{tool_name:"Bash", tool_input:{command:$c}, cwd:$d, permission_mode:$pm}' |
   env -u SAFE_PUSH_ACTIVE HOME="$FH" TRIPWIRE_LOG_DIR="$SCRATCH" \
-    AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" NORTH_BIN=/bin/true "$HOOK" 2>/dev/null)"
+    AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
+    NORTH_AGENT_ACTIVATION="$SCRATCH/activation.json" \
+    NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 \
+    NORTH_BIN=/bin/true "$HOOK" 2>/dev/null)"
 mrc=$?
 if [ "$mrc" = 0 ] &&
   [ "$(printf '%s' "$macc" | jq -s 'length' 2>/dev/null)" = 1 ] &&
@@ -330,7 +335,7 @@ run allow 'chown -R tom' 'chown -R tom:users /tmp/claude-x'
 
 echo "== estate hot paths (must never trip) =="
 run allow 'firn build + validate' 'firn build && firn validate'
-run allow 'north CLI' '~/code/north/main/bin/north show 019f2053 && ~/code/north/main/bin/north tell 019f2053 progress "done"'
+run allow 'north-v2 checkout reads' '~/code/north-v2/main/target/release/north --help && git -C ~/code/north-v2/main status --short'
 run allow 'beagle build' 'cd ~/code/beagle && source bin/_beagle-racket && "$RACO" make src/main.rkt'
 run allow 'nix build' 'nix build --no-link .#default'
 run allow 'plain ls' 'ls -la'
@@ -357,7 +362,7 @@ echo "== kill-switch: shared value-aware semantics (lib/authoring-killswitch.sh)
 # env 0/false force guards LIVE -> guard runs -> deny. The old presence-only check
 # (`[ -n "$VAR" ] && exit 0`) would have ALLOWED these — the bug this rewire fixes.
 # Persistent inactive unit (env unset) -> guard OFF -> allow.
-printf '%s\n' '{"schema":"north.agent-activation/v1","units":[{"id":"tripwire-guard","kind":"hook","category":"authoring","active":false}]}' >"$SCRATCH/activation.json"
+printf '%s\n' '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"tripwire-guard","kind":"hook","category":"authoring","permission":"off","active":false}]}' >"$SCRATCH/activation.json"
 run allow 'tripwire UnitId off -> personal delete allowed' 'rm -rf ~/Pictures/Screenshots'
 run allow 'tripwire UnitId off -> bounded find allowed' \
   'find ~/Pictures/Screenshots -type f -mtime +30 -delete'

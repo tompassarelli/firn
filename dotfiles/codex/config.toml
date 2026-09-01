@@ -39,16 +39,6 @@ trust_level = "trusted"
 [features]
 hooks = true
 
-[mcp_servers.north]
-command = "/run/current-system/sw/bin/north-mcp"
-startup_timeout_sec = 15
-
-[mcp_servers.north.env]
-BEAGLE_STORE_LOG = "/home/tom/.local/state/north/coordination.log"
-BEAGLE_STORE_TELEMETRY_LOG = "/home/tom/.local/state/north/telemetry.log"
-BEAGLE_STORE_THREADS = "/home/tom/.local/state/north/threads"
-NORTH_PORT = "7977"
-
 [mcp_servers.linear-mcp-msa-new]
 url = "https://mcp.linear.app/mcp"
 auth = "oauth"

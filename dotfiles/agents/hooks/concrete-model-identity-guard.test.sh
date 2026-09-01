@@ -5,16 +5,17 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_GUARD="$HERE/concrete-model-identity-guard.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/concrete-model-identity-guard.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
-NORTH_REPO="${AGENT_CONFIG_NORTH_REPO:?set AGENT_CONFIG_NORTH_REPO to the exact North candidate under test}"
+NORTH_V2_REPO="${AGENT_CONFIG_NORTH_V2_REPO:-$HOME/code/north-v2/main}"
+MODEL_CATALOG="$NORTH_V2_REPO/agent-machinery/selection/catalog.json"
 PROVIDER_HOOKS="$SCRATCH/provider-hooks"
 TODO="$SCRATCH/home/code/todo"
 ACTIVATION="$SCRATCH/activation.json"
 mkdir -p "$TODO" "$SCRATCH/work" "$PROVIDER_HOOKS/lib"
 
-for source in authoring-killswitch.sh harness-dial.sh; do
-  candidate="$NORTH_REPO/agent-runtime/hooks/lib/$source"
+for source in authoring-killswitch.sh north-agent-activation.sh; do
+  candidate="$HERE/../lib/$source"
   if [ ! -r "$candidate" ]; then
-    printf 'missing candidate North hook helper: %s\n' "$candidate" >&2
+    printf 'missing Firn-owned hook helper: %s\n' "$candidate" >&2
     exit 1
   fi
   ln -s "$candidate" "$PROVIDER_HOOKS/lib/$source"
@@ -23,7 +24,9 @@ ln -s "$SOURCE_GUARD" "$PROVIDER_HOOKS/concrete-model-identity-guard.sh"
 GUARD="$PROVIDER_HOOKS/concrete-model-identity-guard.sh"
 
 set_active() {
-  printf '{"schema":"north.agent-activation/v1","units":[{"id":"concrete-model-identity-guard","kind":"hook","category":"authoring","active":%s}]}\n' "$1" >"$ACTIVATION"
+  local permission=off
+  [ "$1" = true ] && permission=on
+  printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"concrete-model-identity-guard","kind":"hook","category":"authoring","permission":"%s","active":%s}]}\n' "$permission" "$1" >"$ACTIVATION"
 }
 set_active true
 
@@ -70,6 +73,7 @@ run_case() {
   shift 3
   output="$(printf '%s' "$input" | env -u AGENT_NO_AUTHORING_HOOKS \
     HOME="$SCRATCH/home" TODO_ROOT="$TODO" NORTH_AGENT_ACTIVATION="$ACTIVATION" \
+    NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 \
     "$@" "$GUARD" 2>&1)"
   decision="$(python3 -c 'import json,sys
 try:
@@ -113,13 +117,11 @@ run_case deny 'plausible unknown model identity' \
 while IFS= read -r alias; do
   run_case deny "provider alias $alias" \
     "$(payload Write "$TODO/task.md" "model = \"$alias\"")"
-done < <(jq -r '.modelAliases | keys[]' \
-  "$NORTH_REPO"/agent-runtime/orchestration/providers/{openai,anthropic}.json)
+done < <(printf '%s\n' inherited parent default auto ambient lineage)
 while IFS= read -r exact_model; do
   run_case allow "exact provider model $exact_model" \
     "$(payload Write "$TODO/task.md" "model = \"$exact_model\"")"
-done < <(jq -r '.models | keys[]' \
-  "$NORTH_REPO"/agent-runtime/orchestration/providers/{openai,anthropic}.json)
+done < <(jq -r '.providers[].models[].id' "$MODEL_CATALOG")
 run_case allow 'historical exact model identity' \
   "$(payload Write "$TODO/task.md" 'model = "gpt-5"')"
 run_case deny 'assignment-ledger model column' \
@@ -244,9 +246,9 @@ set_active true
 printf 'not-json\n' >"$ACTIVATION"
 run_case allow 'malformed activation' \
   "$(payload Write "$TODO/task.md" 'model = "inherited"')"
-printf '{"schema":"north.agent-activation/v1","units":[%s,%s]}\n' \
-  '{"id":"concrete-model-identity-guard","kind":"hook","category":"authoring","active":true}' \
-  '{"id":"concrete-model-identity-guard","kind":"hook","category":"authoring","active":true}' \
+printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[%s,%s]}\n' \
+  '{"id":"concrete-model-identity-guard","kind":"hook","category":"authoring","permission":"on","active":true}' \
+  '{"id":"concrete-model-identity-guard","kind":"hook","category":"authoring","permission":"on","active":true}' \
   >"$ACTIVATION"
 run_case allow 'duplicate activation unit' \
   "$(payload Write "$TODO/task.md" 'model = "inherited"')"

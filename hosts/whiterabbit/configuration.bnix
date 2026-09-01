@@ -52,8 +52,6 @@
    :myConfig.modules.codex.enable true
    :myConfig.modules.windows-vm.enable false
    :myConfig.modules.nh.enable true
-   ;; North hosts Beagle Store in-process as the only writer on :7977.
-   :myConfig.modules.north-coordinator.enable true
    ;; agent.slice + the session.slice mirror weight. Inert until a launcher
    ;; actually enters the scope; the slice itself costs nothing.
    :myConfig.modules.agent-slice.enable true
