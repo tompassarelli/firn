@@ -22,6 +22,7 @@
     "beagle-system-design-distilled",
     "fact-modeling-distilled",
     "firn-distilled",
+    "nix-development-distilled",
     "repo-safety-distilled",
     "resource-safe-search-distilled",
     "machine-capacity-distilled",
@@ -335,6 +336,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "modules/north-profile/firn/skills/firn-reference/SKILL.md"
+      }
+    },
+    "nix-development-distilled": {
+      "kind": "skill",
+      "category": "nixos",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/nix-development-distilled/SKILL.md"
       }
     },
     "firn-system-policy": {
@@ -945,6 +954,16 @@
       ]
     },
     "firn-reference": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "nix-development-distilled": {
       "distributions": [
         {
           "type": "skill",
