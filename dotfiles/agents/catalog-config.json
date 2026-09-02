@@ -19,6 +19,7 @@
     "threejs-textures-distilled",
     "beagle-authoring-distilled",
     "clause-authoring-distilled",
+    "greywrought-development-distilled",
     "beagle-system-design-distilled",
     "fact-modeling-distilled",
     "firn-distilled",
@@ -224,6 +225,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/clause-authoring-distilled/SKILL.md"
+      }
+    },
+    "greywrought-development-distilled": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/greywrought-development-distilled/SKILL.md"
       }
     },
     "code-as-facts-distilled": {
@@ -760,6 +769,16 @@
       ]
     },
     "clause-authoring-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "greywrought-development-distilled": {
       "distributions": [
         {
           "type": "skill",
