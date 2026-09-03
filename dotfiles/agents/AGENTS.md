@@ -45,6 +45,20 @@ Do not infer a conversion mandate for externally owned source or existing
 non-greenfield implementations. Convert those only when the requested outcome
 explicitly includes that migration.
 
+## Keep product copy in the product's language
+
+When authoring, changing, reviewing, or validating player- or user-facing
+interface copy—including loading, status, error, control, and help text—never
+expose implementation-language, DSL, framework, compiler, runtime, backend,
+protocol, projection, authority-model, state-machine, or architecture terms
+merely because they name how the product is built. Describe the observable
+user state or action in product-domain language; keep actionable technical
+detail in developer-only diagnostics and logs. A technical term is permitted
+when the product itself teaches that term or the interface is explicitly
+developer-facing. If no honest product wording exists because a product
+decision is missing, stop that copy seam for owner naming rather than leaking
+internals.
+
 ## JavaScript and TypeScript tooling
 
 For JavaScript/TypeScript runtime, package-management, script, and test work,
