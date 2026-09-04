@@ -29,7 +29,7 @@ payload_bytes="$(wc -c <"$payload" 2>/dev/null)" || exit 0
 export NORTH_HOOK_ID=firn-system-policy
 authoring_guards_off && exit 0
 
-policy="${FIRN_SYSTEM_POLICY:-/home/tom/.local/lib/firn/policy/current/bin/firn-system-policy}"
+policy="${FIRN_SYSTEM_POLICY:-/home/tom/.local/lib/firn/cli/current/bin/firn-system-policy}"
 [[ -x "$policy" ]] || exit 0
 
 (
