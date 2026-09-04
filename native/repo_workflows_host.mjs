@@ -11,6 +11,8 @@ import {
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
+globalThis.host_get = (value, key) => value?.[key];
+
 const modulePath = process.env.FIRN_REPO_WORKFLOW_MODULE
   ?? new URL('../lib/firn/repo-workflows-runtime.js', import.meta.url).pathname;
 const workflow = await import(modulePath);
