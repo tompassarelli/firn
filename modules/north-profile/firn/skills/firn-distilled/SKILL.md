@@ -44,9 +44,12 @@ toolchain implementations are default-denied from the boot/system closure.
   responsibility, lifecycle owner, and the concrete reason every local or
   out-of-store route fails. Convenience, reproducibility alone, or a missing
   field is not an exception.
+- `firn repo upgrade now` may advance inputs only in an owned worktree when the
+  requested outcome includes that update. Inspect and commit its exact changes
+  before activation.
 - `firn rebuild` builds and switches exact committed `HEAD`; commit owned
-  changes first. Never use raw `nixos-rebuild`, `nh switch`, or
-  `firn repo upgrade now`. Verify only `whiterabbit`.
+  changes first. Never use raw `nixos-rebuild` or `nh switch`. Verify only
+  `whiterabbit`.
 
 ## Minimum workflow
 
@@ -59,9 +62,10 @@ toolchain implementations are default-denied from the boot/system closure.
    the authoritative `.bnix`. Stop rather than infer reachability.
 4. Query package/schema/compiler facts rather than guessing.
 5. Edit `.bnix`; run `firn repo build`, then `firn repo validate` once each.
-6. Explicitly stage every changed `.bnix` and generated `.nix`, commit the
-   coherent checkpoint, and use stronger evaluation only when static validation
-   cannot decide the risk.
+6. When an input update is in scope, run `firn repo upgrade now` in the owned
+   worktree and inspect its result. Explicitly stage every intended path,
+   commit the coherent checkpoint, and use stronger evaluation only when
+   static validation cannot decide the risk.
 7. Run `firn rebuild` only when a system switch is in scope and the exact commit
    is ready; confirm the printed snapshot identity.
 

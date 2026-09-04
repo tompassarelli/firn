@@ -35,6 +35,9 @@ closure with the committed lock, and switches that **exact store path** without
 a second evaluation. Untracked files are reported and do not enter the committed
 build snapshot.
 
-**Don't** run `nh` or `nixos-rebuild` directly — only the wrapper. `firn repo upgrade now` (wholesale input bumps) stays the user's.
+**Don't** run `nh` or `nixos-rebuild` directly — only the wrapper. An agent may
+run `firn repo upgrade now` in its owned worktree when the requested outcome
+includes advancing inputs, then must inspect and commit the exact result before
+rebuilding.
 
 Only verify whiterabbit. Skip thinkpad-x1e.

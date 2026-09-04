@@ -54,6 +54,8 @@ the manuals preemptively.
 After a `.bnix` edit, trust the PostToolUse syntax/schema feedback, then run
 `firn repo build` and `firn repo validate`. Use `firn repo doctor` only for the
 specific untracked, stale-output, cache, orphan, or validation suspicion it can
-decide. Agents may run `firn rebuild` only after committing their own changes;
-it builds the exact commit snapshot. Never use raw `nixos-rebuild`, `nh`, or
-`firn repo upgrade now`. Verify only `whiterabbit`, never `thinkpad-x1e`.
+decide. Agents may run `firn repo upgrade now` in an owned worktree when the
+requested outcome includes advancing inputs. Inspect and commit the resulting
+changes before running `firn rebuild`, which builds the exact commit snapshot.
+Never use raw `nixos-rebuild` or `nh`. Verify only `whiterabbit`, never
+`thinkpad-x1e`.

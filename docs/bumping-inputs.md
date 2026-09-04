@@ -18,5 +18,7 @@ Rebuilds evaluate the committed repository snapshot, so working-tree state
 cannot enter the closure.
 
 After a local config edit, use `firn rebuild`. Run `firn repo upgrade now` only
-when you deliberately want newer remote package inputs. A failed fetch, schema
-extraction, or validation exits before the lock is ready to apply.
+when you deliberately want newer remote package inputs. Agents may run it in
+their owned worktree when advancing inputs is part of the requested outcome,
+then must inspect and commit the exact result before rebuilding. A failed fetch,
+schema extraction, or validation exits before the lock is ready to apply.

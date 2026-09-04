@@ -122,7 +122,7 @@ inject_payload="$(printf \
   '{"tool_name":"Edit","tool_input":{"file_path":"%s/native/system_policy.bjs"},"session_id":"inject/session"}' \
   "$scratch/repo-through-symlink")"
 run_case inject "$inject_payload"
-digest='You are editing the Firn system configuration. Edit .bnix sources, never .nix; run firn repo build and firn repo validate after .bnix changes. Keep Tom-maintained and high-churn project source and build outputs out of the boot/system closure. A derivation, package, worktree, or filesystem pin does not grant closure admission; use a dev shell, user runtime, or direct out-of-store launcher unless an exact stable machine/service responsibility is declared. Raw nixos-rebuild, darwin-rebuild, nh switching, and firn repo upgrade now remain user-only. Secrets use sops-nix only.'
+digest="You are editing the Firn system configuration. Edit .bnix sources, never .nix; run firn repo build and firn repo validate after .bnix changes. Keep Tom-maintained and high-churn project source and build outputs out of the boot/system closure. A derivation, package, worktree, or filesystem pin does not grant closure admission; use a dev shell, user runtime, or direct out-of-store launcher unless an exact stable machine/service responsibility is declared. Use firn's committed-snapshot workflow for system changes; raw nixos-rebuild, darwin-rebuild, and nh switching are forbidden. Secrets use sops-nix only."
 expected_inject="$(printf \
   '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"%s"}}\n' \
   "$digest")"
@@ -155,12 +155,17 @@ run_case apply-patch \
 
 run_case deny \
   '{"tool_name":"Bash","tool_input":{"command":"sudo nixos-rebuild switch"},"session_id":"deny"}'
-reason="BLOCKED: that command switches the system outside the sanctioned path. Raw nixos-rebuild/darwin-rebuild/nh and \`firn repo upgrade now\` stay the user's. Agents may run \`firn rebuild\` after the relevant checks pass and their own changes are committed."
+reason="BLOCKED: raw nixos-rebuild/darwin-rebuild/nh bypasses the sanctioned snapshot workflow. Use \`firn rebuild\` after the relevant checks pass and owned changes are committed."
 expected_deny="$(printf \
   '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' \
   "$reason")"
 [[ "$(<"$scratch/deny.out")" == "${expected_deny%$'\n'}" ]] \
   || die "permission deny JSON changed"
+
+run_case upgrade-allowed \
+  '{"tool_name":"Bash","tool_input":{"command":"firn repo upgrade now"},"session_id":"upgrade-allowed"}'
+[[ ! -s "$scratch/upgrade-allowed.out" ]] \
+  || die "sanctioned Firn input upgrade was denied"
 
 write_activation false
 run_case inactive \

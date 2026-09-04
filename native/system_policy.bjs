@@ -6,24 +6,24 @@
 
 (js/export
   (defrecord Diagnostic
-  [level String
-   code String
-   message String]))
+    [level String
+     code String
+     message String]))
 
 (js/export
   (defrecord PolicyReport
-  [diagnostics (Vec Diagnostic)
-   exit-code Int]))
+    [diagnostics (Vec Diagnostic)
+     exit-code Int]))
 
 (js/export
   (defrecord RawHookEvent
-  [tool-name String
-   command (U String Nil)
-   file-path (U String Nil)
-   session-id String
-   payload-oversized Bool
-   guards-off Bool
-   intro-unseen Bool]))
+    [tool-name String
+     command (U String Nil)
+     file-path (U String Nil)
+     session-id String
+     payload-oversized Bool
+     guards-off Bool
+     intro-unseen Bool]))
 
 (js/export
   (defunion HookEvent
@@ -45,29 +45,29 @@
 
 (js/export
   (defrecord PinEvidence
-  [kind String
-   location String
-   value String
-   verification-url String
-   reachable Bool
-   checksum (U String Nil)]))
+    [kind String
+     location String
+     value String
+     verification-url String
+     reachable Bool
+     checksum (U String Nil)]))
 
 (js/export
   (defrecord LockInput
-  [name String
-   revision String
-   modified (U Int Nil)]))
+    [name String
+     revision String
+     modified (U Int Nil)]))
 
 (js/export
   (defrecord ChecksumAssertion
-  [path String
-   expected String
-   actual String]))
+    [path String
+     expected String
+     actual String]))
 
 (js/export
   (defrecord LicenseEvidence
-  [checksums (Vec ChecksumAssertion)
-   readme-license (U String Nil)]))
+    [checksums (Vec ChecksumAssertion)
+     readme-license (U String Nil)]))
 
 (js/export
   (def firn-digest String
@@ -79,16 +79,16 @@
     "pin does not grant closure admission; use a dev shell, user runtime, or "
     "direct out-of-store launcher unless an exact stable machine/service "
     "responsibility is declared. "
-    "Raw nixos-rebuild, darwin-rebuild, nh switching, and firn repo upgrade "
-    "now remain user-only. Secrets use sops-nix only.")))
+    "Use firn's committed-snapshot workflow for system changes; raw "
+    "nixos-rebuild, darwin-rebuild, and nh switching are forbidden. "
+    "Secrets use sops-nix only.")))
 
 (js/export
   (def blocked-command-reason String
   (str
-    "BLOCKED: that command switches the system outside the sanctioned path. "
-    "Raw nixos-rebuild/darwin-rebuild/nh and `firn repo upgrade now` stay "
-    "the user's. Agents may run `firn rebuild` after the relevant checks pass "
-    "and their own changes are committed.")))
+    "BLOCKED: raw nixos-rebuild/darwin-rebuild/nh bypasses the sanctioned "
+    "snapshot workflow. Use `firn rebuild` after the relevant checks pass "
+    "and owned changes are committed.")))
 
 (js/export
   (def expected-readme-license String
@@ -101,8 +101,7 @@
 (defn starts-at?
   [text String
    offset Int
-   token String]
-  Bool
+   token String] Bool
   (and (>= offset 0)
        (<= (+ offset (count token)) (count text))
        (= (subs text offset (+ offset (count token))) token)))
@@ -121,8 +120,7 @@
 
 (defn skip-whitespace
   [text String
-   offset Int]
-  Int
+   offset Int] Int
   (loop [cursor Int offset]
     (if (and (< cursor (count text))
              (whitespace? (subs text cursor (+ cursor 1))))
@@ -131,8 +129,7 @@
 
 (defn token-end
   [text String
-   offset Int]
-  Int
+   offset Int] Int
   (loop [cursor Int offset]
     (if (or (>= cursor (count text))
             (separator? (subs text cursor (+ cursor 1))))
@@ -142,8 +139,7 @@
 (defn word-at?
   [text String
    offset Int
-   word String]
-  Bool
+   word String] Bool
   (and (starts-at? text offset word)
        (let [after Int (+ offset (count word))]
          (or (= after (count text))
@@ -151,16 +147,14 @@
 
 (defn next-word
   [text String
-   offset Int]
-  Int
+   offset Int] Int
   (let [start Int (skip-whitespace text offset)
         end Int (token-end text start)]
     (skip-whitespace text end)))
 
 (defn strip-privilege-prefix
   [text String
-   offset Int]
-  Int
+   offset Int] Int
   (let [start Int (skip-whitespace text offset)]
     (if (or (word-at? text start "sudo") (word-at? text start "doas"))
       (next-word text start)
@@ -168,8 +162,7 @@
 
 (defn command-anchor?
   [text String
-   offset Int]
-  Bool
+   offset Int] Bool
   (or (= offset 0)
       (let [before String (subs text (- offset 1) offset)]
         (or (= before "\n")
@@ -182,27 +175,13 @@
 (defn nth-word-at?
   [text String
    offset Int
-   word String]
-  Bool
+   word String] Bool
   (word-at? text (next-word text offset) word))
-
-(defn third-word-at?
-  [text String
-   offset Int
-   first String
-   second String
-   third String]
-  Bool
-  (and (word-at? text offset first)
-       (let [next Int (next-word text offset)]
-         (and (word-at? text next second)
-              (word-at? text (next-word text next) third)))))
 
 (defn command-has-word?
   [text String
    command-offset Int
-   wanted String]
-  Bool
+   wanted String] Bool
   (loop [cursor Int (next-word text command-offset)]
     (if (or (>= cursor (count text))
             (command-anchor? text cursor))
@@ -216,15 +195,11 @@
 
 (defn refusal-at?
   [command String
-   offset Int]
-  Bool
+   offset Int] Bool
   (if (not (command-anchor? command offset))
     false
     (let [start Int (strip-privilege-prefix command offset)]
       (or
-        (and (third-word-at? command start "firn" "repo" "upgrade")
-             (nth-word-at? command (next-word command (next-word command start))
-               "now"))
         (and (word-at? command start "nixos-rebuild")
              (or (command-has-word? command start "switch")
                  (command-has-word? command start "boot")
@@ -309,7 +284,8 @@
 (defn decimal-value [text String] (U Int Nil)
   (if (= (count text) 0)
     nil
-    (loop [offset Int 0 value Int 0]
+    (loop [offset Int 0
+           value Int 0]
       (if (= offset (count text))
         value
         (let [digit Int (digit-value (subs text offset (+ offset 1)))]
@@ -319,7 +295,8 @@
 
 (js/export
   (defn parse-pin-arguments [args (Vec String)] PinArguments
-  (loop [index Int 0 warn-days Int 30]
+  (loop [index Int 0
+         warn-days Int 30]
     (if (>= index (count args))
       (->PinArgumentsAccepted warn-days)
       (let [arg String (nth args index)]
@@ -336,8 +313,7 @@
                 (recur (+ index 2) value))))
 
           (starts-at? arg 0 "--warn-days=")
-          (let [value (U Int Nil)
-                (decimal-value (subs arg 12 (count arg)))]
+          (let [value (U Int Nil) (decimal-value (subs arg 12 (count arg)))]
             (if (nil? value)
               (->PinArgumentsRejected
                 "error: --warn-days must be a non-negative integer")
@@ -348,8 +324,7 @@
 
 (defn character-member?
   [characters String
-   character String]
-  Bool
+   character String] Bool
   (loop [offset Int 0]
     (if (>= offset (count characters))
       false
@@ -405,19 +380,18 @@
       :else nil)))
 
 (defn hand-pin-diagnostics [evidence (Vec PinEvidence)] (Vec Diagnostic)
-  (loop [index Int 0 result (Vec Diagnostic) []]
+  (loop [index Int 0
+         result (Vec Diagnostic) []]
     (if (>= index (count evidence))
       result
-      (let [diagnostic (U Diagnostic Nil)
-            (hand-pin-diagnostic (nth evidence index))]
+      (let [diagnostic (U Diagnostic Nil) (hand-pin-diagnostic (nth evidence index))]
         (recur (+ index 1)
           (if (some? diagnostic) (conj result diagnostic) result))))))
 
 (defn lock-input-diagnostic
   [now Int
    warn-days Int
-   input LockInput]
-  (U Diagnostic Nil)
+   input LockInput] (U Diagnostic Nil)
   (let [modified (U Int Nil) (lockinput-modified input)]
     (if (nil? modified)
       (->Diagnostic
@@ -436,18 +410,18 @@
 (defn lock-input-diagnostics
   [now Int
    warn-days Int
-   inputs (Vec LockInput)]
-  (Vec Diagnostic)
-  (loop [index Int 0 result (Vec Diagnostic) []]
+   inputs (Vec LockInput)] (Vec Diagnostic)
+  (loop [index Int 0
+         result (Vec Diagnostic) []]
     (if (>= index (count inputs))
       result
-      (let [diagnostic (U Diagnostic Nil)
-            (lock-input-diagnostic now warn-days (nth inputs index))]
+      (let [diagnostic (U Diagnostic Nil) (lock-input-diagnostic now warn-days (nth inputs index))]
         (recur (+ index 1)
           (if (some? diagnostic) (conj result diagnostic) result))))))
 
 (defn error-count [diagnostics (Vec Diagnostic)] Int
-  (loop [index Int 0 total Int 0]
+  (loop [index Int 0
+         total Int 0]
     (if (>= index (count diagnostics))
       total
       (recur (+ index 1)
@@ -457,34 +431,31 @@
 
 (js/export
   (defn pin-policy
-  [arguments PinArguments
-   now Int
-   evidence (Vec PinEvidence)
-   inputs (Vec LockInput)]
-  PolicyReport
-  (match arguments
+    [arguments PinArguments
+     now Int
+     evidence (Vec PinEvidence)
+     inputs (Vec LockInput)] PolicyReport
+    (match arguments
     [(PinArgumentsHelp token) (->PolicyReport [] 0)]
     [(PinArgumentsRejected message)
      (->PolicyReport [(->Diagnostic "error" "invalid-arguments" message)] 2)]
     [(PinArgumentsAccepted warn-days)
-     (let [diagnostics (Vec Diagnostic)
-           (loop [index Int 0
-                  all (Vec Diagnostic) (hand-pin-diagnostics evidence)]
-             (let [locks (Vec Diagnostic)
-                   (lock-input-diagnostics now warn-days inputs)]
+     (let [diagnostics (Vec Diagnostic) (loop [index Int 0
+                                               all (Vec Diagnostic) (hand-pin-diagnostics evidence)]
+                                          (let [locks (Vec Diagnostic) (lock-input-diagnostics now warn-days inputs)]
                (if (>= index (count locks))
                  all
                  (recur (+ index 1) (conj all (nth locks index))))))]
        (->PolicyReport diagnostics (if (= (error-count diagnostics) 0) 0 1)))])))
 
 (defn checksum-diagnostics [assertions (Vec ChecksumAssertion)] (Vec Diagnostic)
-  (loop [index Int 0 result (Vec Diagnostic) []]
+  (loop [index Int 0
+         result (Vec Diagnostic) []]
     (if (>= index (count assertions))
       result
       (let [assertion ChecksumAssertion (nth assertions index)
             actual-valid Bool (valid-sha256? (checksumassertion-actual assertion))
-            matches Bool
-            (= (checksumassertion-expected assertion)
+            matches Bool (= (checksumassertion-expected assertion)
                (checksumassertion-actual assertion))]
         (recur (+ index 1)
           (if (and actual-valid matches)
@@ -499,11 +470,9 @@
 
 (js/export
   (defn license-policy [evidence LicenseEvidence] PolicyReport
-  (let [checks (Vec Diagnostic)
-        (checksum-diagnostics (licenseevidence-checksums evidence))
+  (let [checks (Vec Diagnostic) (checksum-diagnostics (licenseevidence-checksums evidence))
         readme (U String Nil) (licenseevidence-readme-license evidence)
-        diagnostics (Vec Diagnostic)
-        (if (nil? readme)
+        diagnostics (Vec Diagnostic) (if (nil? readme)
           (conj checks
             (->Diagnostic "error" "license-section"
               "README.md has no License section"))
