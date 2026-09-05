@@ -21,8 +21,10 @@ fi
 export CODEX_HOME="$pooled_home"
 export CODEX_SQLITE_HOME="$pooled_home/sqlite"
 
-provider_args=(
+workspace_args=(
   --add-dir "$HOME/code"
+)
+provider_args=(
   -c 'model_provider="codex-lb"'
   -c 'model_providers.codex-lb.name="openai"'
   -c 'model_providers.codex-lb.base_url="http://127.0.0.1:2455/backend-api/codex"'
@@ -74,12 +76,14 @@ case "${1:-}" in
     if ((resume_arg_index >= 0)); then
       resume_prefix_length=$((resume_arg_index + 1))
       exec "$codex_launcher" "$subcommand" \
-        "${exec_args[@]:0:resume_prefix_length}" \
+        "${exec_args[@]:0:resume_arg_index}" \
+        "${workspace_args[@]}" resume \
         "${provider_args[@]}" "${full_access_args[@]}" \
         "${exec_args[@]:resume_prefix_length}"
     fi
     exec "$codex_launcher" "$subcommand" \
-      "${provider_args[@]}" "${full_access_args[@]}" "${exec_args[@]}"
+      "${workspace_args[@]}" "${provider_args[@]}" \
+      "${full_access_args[@]}" "${exec_args[@]}"
     ;;
   review)
     subcommand="$1"
@@ -87,6 +91,6 @@ case "${1:-}" in
     exec "$codex_launcher" "$subcommand" "${provider_args[@]}" "$@"
     ;;
   *)
-    exec "$codex_launcher" "${provider_args[@]}" "$@"
+    exec "$codex_launcher" "${workspace_args[@]}" "${provider_args[@]}" "$@"
     ;;
 esac

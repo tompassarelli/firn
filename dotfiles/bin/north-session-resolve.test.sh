@@ -7,11 +7,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RESOLVE="$ROOT/dotfiles/bin/north-session-resolve"
 CODEX="$ROOT/dotfiles/bin/codex"
 CODEX_POOLED="$ROOT/dotfiles/bin/codex-pooled"
+CODEX_PARSER_RUNTIME="${CODEX_PARSER_RUNTIME:-$HOME/.local/lib/codex/current/bin/codex}"
 fixture="$(mktemp -d)"
 trap 'rm -rf "${fixture:?}"' EXIT
 
 export HOME="$fixture"
 fail() { printf 'north-session-resolve.test.sh:%s: %s\n' "${BASH_LINENO[0]}" "$1" >&2; exit 1; }
+[ -x "$CODEX_PARSER_RUNTIME" ] || fail "installed Codex parser is unavailable at $CODEX_PARSER_RUNTIME"
 
 OSID=33333333-dddd-eeee-ffff-444444444444
 base="$HOME/.local/state/north/accounts"
@@ -89,9 +91,9 @@ fi
 
 # Pooled non-interactive execution owns its provider and permission argv.
 # Plain exec needs the executable full-access switch. Nested exec resume needs
-# every pooled override after the real nested subcommand, even when exec-level
-# options precede it; option values and prompt operands named resume are not
-# subcommands.
+# exec-only workspace authority before the nested subcommand and every
+# resume-owned override after it, even when exec-level options precede it;
+# option values and prompt operands named resume are not subcommands.
 run_pooled() {
   env -u CODEX_HOME -u CODEX_SQLITE_HOME \
     CODEX_RUNTIME="$runtime" \
@@ -108,17 +110,22 @@ argv_line() {
 
 assert_nested_resume_layout() {
   local entrypoint="$1" label="$2"
-  local entrypoint_line resume_line provider_line bypass_line session_line
+  local entrypoint_line workspace_line directory_line resume_line provider_line bypass_line session_line
   [ "$(grep -Fxc -- '--dangerously-bypass-approvals-and-sandbox' "$argv_log")" -eq 1 ] ||
     fail "$label did not pass the full-access switch exactly once"
+  [ "$(grep -Fxc -- '--add-dir' "$argv_log")" -eq 1 ] ||
+    fail "$label did not pass workspace authority exactly once"
   entrypoint_line="$(argv_line "$entrypoint")"
+  workspace_line="$(argv_line --add-dir)"
+  directory_line="$(argv_line "$HOME/code")"
   resume_line="$(argv_line resume)"
   provider_line="$(argv_line 'model_provider="codex-lb"')"
   bypass_line="$(argv_line '--dangerously-bypass-approvals-and-sandbox')"
   session_line="$(argv_line "$PSID")"
-  [ "$entrypoint_line" -lt "$resume_line" ] && [ "$resume_line" -lt "$provider_line" ] &&
+  [ "$entrypoint_line" -lt "$workspace_line" ] && [ "$workspace_line" -lt "$directory_line" ] &&
+    [ "$directory_line" -lt "$resume_line" ] && [ "$resume_line" -lt "$provider_line" ] &&
     [ "$provider_line" -lt "$bypass_line" ] && [ "$bypass_line" -lt "$session_line" ] ||
-    fail "$label did not pass provider and permission argv after resume"
+    fail "$label did not split exec and resume argv at the nested parser boundary"
 }
 
 run_pooled exec plain-task
@@ -147,6 +154,24 @@ resume_line="$(argv_line resume)"
 
 run_pooled e --json resume "$PSID" resumed-task
 assert_nested_resume_layout e 'e --json resume'
+
+# Exercise the installed clap parser without starting a session. Appending
+# --help forces a successful parse to exit before provider or session work.
+parser_runtime="$fixture/codex-parser-runtime"
+cat >"$parser_runtime" <<'EOF'
+#!/usr/bin/env bash
+exec "$CODEX_TEST_REAL_RUNTIME" "$@" --help >/dev/null
+EOF
+chmod +x "$parser_runtime"
+
+env -u CODEX_HOME -u CODEX_SQLITE_HOME \
+  CODEX_RUNTIME="$parser_runtime" \
+  CODEX_TEST_REAL_RUNTIME="$CODEX_PARSER_RUNTIME" \
+  NORTH_CODEX_POOLED_HOME="$pooled" \
+  NORTH_NO_SLICE=1 \
+  "$CODEX_POOLED" exec --json resume --disable multi_agent \
+    -m gpt-5.6-sol -c 'model_reasoning_effort="xhigh"' "$PSID" - \
+    >/dev/null 2>&1 || fail "installed parser rejected pooled exec resume argv"
 
 run_pooled exec --disable resume plain-task
 provider_line="$(argv_line 'model_provider="codex-lb"')"
