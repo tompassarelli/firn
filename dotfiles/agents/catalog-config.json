@@ -767,6 +767,16 @@
         }
       ]
     },
+    "digitalocean-access-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
     "cloudflare-deploy-reference": {
       "distributions": [
         {
