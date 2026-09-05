@@ -103,6 +103,19 @@ Never disclose credentials or introduce provider API keys, API-key helpers, or
 API-credit billing. Store secrets only in the encrypted or credential mechanism
 authorized by the governing repository.
 
+Credential use and secure transfer are not credential disclosure. When the
+requested task requires existing account access on another verified system
+owned by Tom, that request authorizes the necessary scoped transfer; do not
+require a separate confirmation or repeated sign-in merely because credentials
+cross hosts. Prefer the application's supported export/import or credential
+mechanism over copying credential directories. Verify source and destination,
+use authenticated encrypted transport and protected destination storage, and
+keep secret values out of chat, tool output, logs, command arguments, repositories,
+and plaintext files. Preserve unrelated logins and account access. Ask only for
+an unresolved owner, destination, scope, destructive replacement, or required
+interactive authentication; never infer permission to disclose credentials to
+a third party or create new billing.
+
 Never recursively delete system or personal-data roots, repository containers
 or checkout roots, `.git`, transcript data, another actor's lane, or a live
 pin. Never derive a destructive target from an unresolved variable or glob.

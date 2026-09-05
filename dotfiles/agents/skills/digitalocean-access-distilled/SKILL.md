@@ -45,10 +45,10 @@ do not claim API access from working SSH.
 When a request requires account inventory or API actions, inspect command
 availability and credential-file existence only. If an established context is
 available, `doctl account get` and a narrowly selected Droplet listing can
-verify its identity without printing credentials. Otherwise stop that API seam
-and ask the operator to establish the approved account access. Do not create a
-personal access token, copy browser cookies, scrape password stores, or move
-credentials between machines as an access workaround.
+verify its identity without printing credentials. If access is missing, use
+the authorized credential mechanism under the global credential-use boundary;
+ask for interaction only when it is actually required. Do not create a personal
+access token, copy browser cookies, or scrape password stores as a workaround.
 
 Creating, resizing, destroying, changing firewalls/DNS, adding billable
 resources, or changing production requires authorization for that specific
@@ -67,11 +67,29 @@ ssh -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
 ```
 
 Use the requested model and reasoning effort explicitly, verify their remote
-availability, and preserve existing subscription sign-in. Never copy local
-Codex credentials or introduce provider API-key billing. Inspect the installed
+availability, and preserve existing subscription sign-in. Reuse or securely
+transfer existing subscription access when the requested task requires it,
+under the global credential-use boundary; do not introduce provider API-key
+billing. Inspect the installed
 CLI help before constructing a launch command. Worktree and executable paths
 differ from the laptop; resolve them on the host rather than transplanting
 local paths or assuming Bun/Cargo are on the remote user's PATH.
+
+Remote Control sign-in and codex-lb account enrollment are separate. A paired
+phone does not prove that the balancer contains any accounts or receives model
+requests. Inspect both inventories before asking for another sign-in. When
+the task requests the existing pool on this verified Droplet, use codex-lb's
+supported account export/import over SSH into its encrypted store; never print
+the export or create a plaintext credential file. Preserve the phone-control
+login and existing remote accounts. Do not ask for an additional transfer
+confirmation or re-enroll accounts that already have usable credentials.
+
+After transfer, verify source-account coverage, remote eligibility, and actual
+requests from the intended session. Quota-exhausted accounts remain enrolled
+but cannot serve until quota recovers. Do not claim every account serves every
+request: routing may retain affinity and must respect eligibility. Check
+credential-refresh behavior when both hosts will remain active; do not silently
+replace an independent server with a tunnel dependent on the laptop.
 
 Follow the available run-design, ownership, and supervision procedures for
 delegation. Save the scoped plan and restart-grade status on the host. Require

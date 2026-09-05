@@ -38,8 +38,10 @@ immutable consumer state.
   published history. Let pre-commit finish before a separate publish command.
 - Signal only processes you started by exact PID or unique scoped pattern;
   never tear down a user session or broadcast across it.
-- Never print, copy, upload, or pipe credential contents. Purpose-built
-  authentication commands may load credential files without disclosure.
+- Never expose credential values in repositories, chat, tool output, logs, or
+  command arguments. Purpose-built authentication and scoped credential
+  transfers may consume secrets without disclosure under the global
+  credential-use boundary; a private pipe is not inherently disclosure.
 
 ## Minimum lane workflow
 
