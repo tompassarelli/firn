@@ -4,7 +4,6 @@
   "role": "operator",
   "rootOrder": [
     "agent-machinery",
-    "elicit-distilled",
     "webdev-distilled",
     "importing-skills-distilled",
     "threejs-animation-distilled",
@@ -41,14 +40,12 @@
     "comment-bloat-guard",
     "agent-policy-reference",
     "agent-run-design-reference",
-    "agent-run-lifecycle-reference",
     "beagle-authoring-reference",
     "beagle-system-design-reference",
     "build-vs-reuse-reference",
     "cloudflare-deploy-reference",
     "code-as-facts-reference",
     "convo-reference",
-    "elicit-reference",
     "estimate-reference",
     "external-code-reference",
     "fact-modeling-reference",
@@ -67,7 +64,6 @@
     "skill-maintenance-reference",
     "store-modeling-reference",
     "terse-reference",
-    "threads-reference",
     "threejs-animation-reference",
     "threejs-fundamentals-reference",
     "threejs-geometry-reference",
@@ -182,6 +178,8 @@
     },
     "beagle-session-start": {
       "kind": "hook",
+      "title": "Beagle session context",
+      "triggerDescription": "Inject source-aware Beagle authoring context at session start and context reset.",
       "category": "context",
       "owner": {
         "repo": "beagle",
@@ -262,6 +260,8 @@
     },
     "code-upstream-guard": {
       "kind": "hook",
+      "title": "Graph-owned source guard",
+      "triggerDescription": "Block direct text edits to explicitly adopted graph-owned source files.",
       "category": "authoring",
       "owner": {
         "repo": "beagle",
@@ -270,6 +270,8 @@
     },
     "comment-bloat-guard": {
       "kind": "hook",
+      "title": "Comment guidance (advisory)",
+      "triggerDescription": "Flag narrative comments in added code; advise only, never deny.",
       "category": "authoring",
       "owner": {
         "repo": "nixos-config",
@@ -294,6 +296,8 @@
     },
     "concrete-model-identity-guard": {
       "kind": "hook",
+      "title": "Concrete model record guard",
+      "triggerDescription": "Reject placeholder model identities in Todo attempts and calibration records.",
       "category": "authoring",
       "owner": {
         "repo": "nixos-config",
@@ -302,6 +306,8 @@
     },
     "corpus-scan-guard": {
       "kind": "hook",
+      "title": "Conversation archive search guard",
+      "triggerDescription": "Block broad transcript archive scans; use convo or a bounded transcript target.",
       "category": "authoring",
       "owner": {
         "repo": "nixos-config",
@@ -366,6 +372,8 @@
     },
     "firn-system-policy": {
       "kind": "hook",
+      "title": "Firn system policy",
+      "triggerDescription": "Check system configuration operations through Firn's source-owned policy adapter.",
       "category": "authoring",
       "owner": {
         "repo": "nixos-config",
@@ -374,6 +382,8 @@
     },
     "git-blind-stage-guard": {
       "kind": "hook",
+      "title": "Explicit Git staging guard",
+      "triggerDescription": "Reject bulk Git staging and automatic commit staging; enumerate paths.",
       "category": "authoring",
       "owner": {
         "repo": "nixos-config",
@@ -398,6 +408,8 @@
     },
     "launch-critical-worktree-guard": {
       "kind": "hook",
+      "title": "Main checkout and live pin guard",
+      "triggerDescription": "Block protected checkout writes and project-container build output; use an owned worktree.",
       "category": "authoring",
       "owner": {
         "repo": "nixos-config",
@@ -454,6 +466,8 @@
     },
     "resource-safe-search-guard": {
       "kind": "hook",
+      "title": "Bounded filesystem search guard",
+      "triggerDescription": "Block recursive searches of virtual filesystems and repository containers.",
       "category": "authoring",
       "owner": {
         "repo": "nixos-config",
@@ -462,6 +476,8 @@
     },
     "session-kill-guard": {
       "kind": "hook",
+      "title": "Session and child-process guard",
+      "triggerDescription": "Block session-wide kills and unmanaged background child launches.",
       "category": "authoring",
       "owner": {
         "repo": "nixos-config",
@@ -502,6 +518,8 @@
     },
     "tripwire-guard": {
       "kind": "hook",
+      "title": "Destructive command and upload guard",
+      "triggerDescription": "Check destructive commands, unsafe Git publishing, and sensitive outbound transfers.",
       "category": "authoring",
       "owner": {
         "repo": "nixos-config",
@@ -576,26 +594,6 @@
         }
       ]
     },
-    "agent-run-lifecycle-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "agent-run-lifecycle-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
     "agent-policy-reference": {
       "distributions": [
         {
@@ -642,19 +640,6 @@
             "repo": "north-v2",
             "path": "agent-machinery/catalog.json"
           }
-        }
-      ]
-    },
-    "agent-spawn-guard": {
-      "supports": [
-        "agent-run-design-distilled"
-      ],
-      "distributions": [
-        {
-          "type": "hook",
-          "targets": [
-            "codex"
-          ]
         }
       ]
     },
@@ -897,26 +882,6 @@
           "targets": [
             "codex",
             "claude"
-          ]
-        }
-      ]
-    },
-    "elicit-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "elicit-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
           ]
         }
       ]
@@ -1367,16 +1332,6 @@
         }
       ]
     },
-    "supervision-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
     "terse-distilled": {
       "distributions": [
         {
@@ -1388,26 +1343,6 @@
       ]
     },
     "terse-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threads-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threads-reference": {
       "distributions": [
         {
           "type": "skill",
