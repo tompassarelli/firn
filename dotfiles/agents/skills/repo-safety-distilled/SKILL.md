@@ -1,62 +1,34 @@
 ---
 name: repo-safety-distilled
 description: >-
-  Use before editing, committing, or pushing in any ~/code repository: where
-  agents may write (a lane under `worktrees/`, never a `main` checkout and
-  never a `pins/` checkout), how work lands (safe-push, enumerated paths), and
-  which commands are refused outright. The companion notice for the worktree,
-  blind-stage, and tripwire guards.
+  Edit and publish ~/code repositories through owned worktrees, enumerated staging, and safe-push; preserve main checkouts, pins, and peer work.
 ---
 
-# Repository safety, distilled
+# Repository safety
 
-Work only in an owned `~/code/<project>/worktrees/<slug>` lane. A `main/`
-checkout is human/launch state and every `pins/<full-object-id>/` checkout is
-immutable consumer state.
+Work in `~/code/<project>/worktrees/<slug>`. Main checkouts are human/launch
+state; pins are immutable. Never edit, stash, reset, clean, or commit dirty
+main. Use the sanctioned rescue workflow when relocation is required.
 
-## Hard boundaries
+Keep build output inside its lane, including each Rust target directory;
+use an explicit temporary target only when output must live elsewhere.
+Never place build-output directories in a project container.
 
-- Never edit, stash, reset, clean, or commit a dirty `main/`; use `wt-rescue` to
-  relocate human work intact. Never mutate or repoint a pin checkout.
-- Keep build output produced for a lane inside that exact lane, with the
-  tool's default lane-local output preferred. Concurrent Rust lanes use
-  distinct lane-local `target/` directories. Any explicit `CARGO_TARGET_DIR`
-  or `--target-dir` must resolve inside the current lane; a deliberate `/tmp`
-  target may be used when output must live outside it. Never put `target-*` or
-  another build-output directory directly in a project container.
-- Preserve peer work and lanes. Do not remove a repository container,
-  checkout root, `.git`, `worktrees/` or `pins/` root, personal/system root,
-  transcript state, live pin, or another actor's lane.
-- Before retiring any worktree, prove that no live intentional actor owns it.
-  Clean status, merged ancestry, and a HEAD equal to `main` prove no such
-  thing: a newly admitted worker may not have written yet. Only the lane owner
-  or its accountable parent may retire it after that work is settled; unknown
-  ownership preserves the lane.
-- Stage only enumerated paths. Do not use `git add -A`, `git add -u`,
-  `git add .`, or `git commit -a`.
-- Publish with `safe-push`, never raw `git push`, force-push, or rewritten
-  published history. Let pre-commit finish before a separate publish command.
-- Signal only processes you started by exact PID or unique scoped pattern;
-  never tear down a user session or broadcast across it.
-- Never expose credential values in repositories, chat, tool output, logs, or
-  command arguments. Purpose-built authentication and scoped credential
-  transfers may consume secrets without disclosure under the global
-  credential-use boundary; a private pipe is not inherently disclosure.
+Stage named paths only. Prohibited shortcuts include `git add -A`,
+`git add -u`, `git add .`, and `git commit -a`. Let commit hooks finish,
+publish separately with `safe-push --to main`, then fast-forward clean main.
 
-## Minimum lane workflow
+Preserve roots, Git metadata, transcripts, live pins, and peer lanes. Only a
+lane's owner or accountable parent may retire it after its work is settled;
+clean status or merged ancestry does not prove release. Unknown ownership
+preserves the lane.
 
-1. Create an owned branch and worktree from the clean project `main` checkout.
-2. Edit and verify in that lane, staying within the requested ownership paths.
-3. Stage each intended path explicitly and commit one coherent checkpoint.
-4. From the lane, run `safe-push --to main`; then fast-forward the clean
-   `main/` checkout.
-5. Once landed and released, settle the lane owner's work, then remove the lane
-   through the sanctioned worktree lifecycle and delete its local branch.
+Signal only owned processes by exact PID or unique scoped pattern. Never expose
+credentials; authenticated use and scoped transfer follow global policy.
 
-When a guard refuses an operation, treat the denial as path information and
-take the sanctioned route. Stop instead of routing around a secret finding,
-private-to-public exposure, uncertain destructive target, or unresolved live
-consumer.
+A guard denial supplies boundary information. Take its sanctioned route;
+do not bypass a secret finding, private-to-public exposure, uncertain
+destructive target, or unresolved live consumer.
 
-Exact lane and pin details live in the reference skill; load it only for an
-explicit request or a named unresolved detail, per the always-loaded policy.
+For lane creation, rescue, pin retirement, and scoped operations, use
+`agents path repo-safety-reference`.

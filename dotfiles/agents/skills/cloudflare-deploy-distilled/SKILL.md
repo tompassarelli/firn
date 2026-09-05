@@ -1,21 +1,20 @@
 ---
 name: cloudflare-deploy-distilled
-description: Authenticate, deploy, and verify Cloudflare Workers and Pages projects on this machine. Use whenever a request involves Wrangler authentication, a Cloudflare production deployment, publishing a site or Worker, checking whether a Cloudflare deploy reached its domains, or diagnosing missing Cloudflare credentials.
+description: >-
+  Authenticate, deploy, and verify Cloudflare Workers or Pages through this machine's approved credential launcher.
 ---
 
 # Cloudflare deployment
 
-Use `with-cloudflare <profile> -- <command>` for every authenticated Cloudflare
-command. Never run `wrangler login`, expose a credential in any form, or fall
-back to OAuth. Prefer the project profile; use `admin` only when necessary.
+Run authenticated commands through `with-cloudflare <profile> -- <command>`.
+Prefer the project's profile; use `admin` only for a required capability.
+Never expose credentials, invoke `wrangler login`, or substitute OAuth.
 
-1. Read the repository instructions and Cloudflare configuration.
-2. Prefer its production script. Otherwise run existing checks and build, then
-   Wrangler through the launcher.
-3. Verify the public domain and expected version or content; Wrangler success
-   alone is insufficient.
+Use the repository's production command when present. Otherwise run its
+required checks and build, then Wrangler through the launcher. Verify the
+public domain and expected content or version before declaring deployment done.
 
-For missing credentials, inspect profile and secret filenames, never contents.
-Repair encrypted Firn source and activate a landed change with `firn rebuild`.
-Route unresolved profile or credential-source detail to the reference skill only
-for an explicit request or a named unresolved question.
+For missing access, inspect profile declarations and secret filenames, not
+contents. Repair encrypted Firn source and activate its landed change through
+the Firn workflow. For profiles and credential sources, use
+`agents path cloudflare-deploy-reference`.

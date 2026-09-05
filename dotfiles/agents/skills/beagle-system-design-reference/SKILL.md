@@ -1,16 +1,21 @@
 ---
 name: beagle-system-design-reference
 description: >-
-  Detailed identity, provenance, degraded-visibility, incremental-path, and
-  proposal-checklist reference for beagle-system-design-distilled. Load only
-  when that skill routes here through `agents path beagle-system-design-reference`;
-  this is not the trigger or minimum workflow for Beagle system design.
+  Full Beagle system-design notes for semantic identity, effects, persistence failure, and incremental paths.
 ---
 
-# Beagle system design reference
+# Beagle system design: full notes
 
-The distilled skill owns the workflow and constraints. Use this reference to
-resolve a design detail without creating a second rule source.
+## Decide semantics before adding machinery
+
+A cache, daemon, or wrapper often appears to solve a missing semantic
+distinction. First identify the fact, identity, dependency, or query that should
+decide reuse or execution. Physical machinery can then implement that decision
+without becoming a competing authority.
+
+This is not a mandate to model every possible stage. Trace the actual consumer
+path and add a distinction only when the next executable artifact needs it or
+an observed counterexample requires it.
 
 ## Identity and provenance distinctions
 
@@ -89,3 +94,14 @@ A complete design record includes:
 - intent, authorization, attempt, receipt, and later-observation handling for
   effects;
 - clean-versus-warm equality and invalidation acceptance statements.
+
+## Alternatives and stopping point
+
+A whole-root hash can detect drift but over-invalidates when only a selected
+closure matters. A timestamp can schedule a poll but does not define semantic
+equality. A live observation can inform the operator without becoming an
+admitted automation fact. Keep those useful roles separate.
+
+Stop design expansion once the load-bearing model can run through its nearest
+real consumer. Retain at most a short labeled conjecture for an unconsumed idea;
+internal elegance is not a substitute for executable feedback.

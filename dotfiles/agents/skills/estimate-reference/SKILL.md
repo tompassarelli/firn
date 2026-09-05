@@ -1,36 +1,40 @@
 ---
 name: estimate-reference
 description: >-
-  Calibration receipt, canonical observation, comparability, and idempotency
-  reference for estimate-distilled. Load only when that skill routes here
-  through `agents path estimate-reference`; this is not the trigger or minimum
-  workflow for giving an agent ETA.
+  Full estimate notes for comparable forecasts, uncertainty, and optional durable calibration receipts.
 ---
 
-# Estimate reference
+# Estimates: full notes
 
-The distilled skill owns forecast formation, execution bounds, and the minimum
-close-the-loop workflow. `todo-distilled` owns shared attempt and terminal
-record contracts.
+## Forecast from work, not model mythology
 
-## Forecast evidence
+Separate active execution from queueing, external waits, downloads, and
+verification. Use comparable completed observations when available; otherwise
+label the estimate uncertain and use the current work's measurable parts.
+Do not derive machine time from an invented human-time multiplier.
 
-The calibration file is concise Markdown with TOML front matter. An in-flight
-entry is only a pointer to the owning live attempt, never a second work tracker.
-Same-class model-specific samples support the point when enough exist;
-otherwise use a clearly labeled same-class cross-model sample. The reported
-sample count includes only comparable completed observations.
+An estimate predicts completion. A checkpoint selects when to inspect progress.
+A hard limit bounds resource use or authority. Confusing them causes premature
+cancellation and repeated setup. At an unexpected delay, inspect the existing
+run; elapsed time alone does not establish a stall.
 
-## Terminal settlement
+## Comparable samples
 
-At a terminal worker boundary, the product owner fixes the terminal facts and
-updates any independently required durable record directly. North separately
-settles process, delivery, driver, and parent/child run state through
-`agent-run-lifecycle-distilled`.
+Use same-class model-specific samples when enough exist; otherwise label
+same-class cross-model evidence. Count only comparable completed observations.
+Version, workload, cache, hardware, and observation units may explain a sample
+difference; do not attribute it to model capability without evidence.
 
-Replace the in-flight pointer with one completed receipt keyed by
-`<record_id>/<attempt_id>` using the canonical field order below. Apply it as an
-atomic keyed update after the complete terminal todo-record replacement.
+## Durable calibration when independently needed
+
+An ordinary ETA does not require a Todo task or calibration program.
+When an existing resumable attempt uses calibration, keep its Markdown/TOML
+in-flight entry as a pointer, not a second tracker. At terminal work the product
+owner fixes the facts; the run host separately settles process and delivery.
+
+Replace the pointer with one completed receipt keyed by
+`<record_id>/<attempt_id>`, after the complete terminal Todo replacement.
+Preserve observed facts and unknowns; do not guess model identity.
 
 ## Receipt schema
 
@@ -54,7 +58,7 @@ overrun cause. Reject carriage returns or line feeds in direct text fields;
 structured values rely on canonical JSON escaping. Do not add provider actuals,
 paraphrase supplied values, or serialize the derivable wall-time ratio.
 
-## Comparability and key behavior
+## Comparability and idempotency
 
 Calibration cohorts require the same observation source and the same
 `assistant-turn` and `admitted-tool-call` units. Observations with `coverage =

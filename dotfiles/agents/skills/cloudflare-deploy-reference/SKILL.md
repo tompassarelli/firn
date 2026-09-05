@@ -1,15 +1,20 @@
 ---
 name: cloudflare-deploy-reference
 description: >-
-  Profile, launcher, repository-command, Gjoa, and credential-source reference
-  for cloudflare-deploy-distilled. Load only when that skill routes here through
-  `agents path cloudflare-deploy-reference`; this is not the trigger or minimum
-  Cloudflare deployment workflow.
+  Full Cloudflare notes for credential profiles, repository deploy authority, and missing-secret diagnosis.
 ---
 
-# Cloudflare deployment reference
+# Cloudflare deployment: full notes
 
-The distilled skill owns the credential safeguards and deployment workflow.
+## Boundaries and rationale
+
+The task authorizes its deployment, not unrelated account administration.
+A repository production script owns build/deploy/live checks; the credential
+launcher supplies only the selected account capability. Keep these authorities
+separate so switching accounts cannot silently switch the deployment target.
+
+Existing credentials may be consumed without exposing them. Never print token
+values or dump authentication environments to diagnose access.
 
 ## Credential launcher
 
@@ -51,3 +56,11 @@ The credential source is the encrypted Firn file at
 declaration and the filenames projected under `/run/secrets`, without opening
 those files. A source change is activated through the Firn workflow after it
 lands.
+
+## Evidence and alternatives
+
+A successful Wrangler exit establishes command success, not necessarily the
+expected public content. Check the named domain and version/content through the
+repository's existing live check. If a profile lacks capability, identify the
+exact missing permission before choosing a broader account. Do not ask for a
+new sign-in while a valid existing profile already supports the task.

@@ -1,16 +1,17 @@
 ---
 name: convo-reference
 description: >-
-  Command, filter, guard-boundary, recipe, indexing, compression, and restore
-  reference for convo-distilled. Load only when that skill routes here through
-  `agents path convo-reference`; this is not the trigger or minimum workflow for
-  searching agent conversations.
+  Full conversation-search notes for index freshness, filters, bounded source inspection, and restoration.
 ---
 
-# Convo reference
+# Conversation search: full notes
 
-The distilled skill owns tool selection, the corpus-search boundary, and the
-minimum search workflow.
+## Why the index is the first route
+
+The transcript corpus contains large binary-like payloads and repeated context.
+A bounded text index answers the question without turning a name lookup into
+a machine-wide scan. Search results identify evidence of a conversation, not
+objective truth or a current repository state.
 
 ## Corpus and index
 
@@ -80,3 +81,14 @@ the selected rollout first.
 
 The corpus is local-only and indexes conversations, not repository code,
 configuration, commits, or objective truth.
+
+## Interpreting a result
+
+Use the speaker, date, and surrounding source to distinguish a proposed rule
+from an accepted decision or a later reversal. A search miss proves absence
+only within a successfully refreshed, relevant scope. An unavailable root or
+stale index leaves a gap; it does not justify an unbounded raw scan.
+
+Search first, inspect the exact resulting source second. Compression and full
+index rebuilding are maintenance operations, not prerequisites for answering
+an ordinary historical question.

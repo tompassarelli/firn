@@ -1,53 +1,38 @@
 ---
 name: agent-policy-distilled
 description: >-
-  Author, restructure, register, or debug personally owned AGENTS.md policy,
-  Codex skills, hooks, modules, and North activation metadata. Use whenever
-  changing agent instructions or skills, deciding what stays always loaded
-  versus trigger-on-demand, locating a projected policy source, or verifying
-  that one North activation generation reaches provider surfaces.
+  Author, locate, register, or activate source-owned agent instructions, skills, hooks, and modules.
 ---
 
-# Agent policy, distilled
+# Agent policy
 
-Keep one authority for every rule and load it at the narrowest scope that always
-covers its trigger.
+Keep one source for each rule. Use `agents status`, `agents inspect <id>`, and
+`agents path <id>` to resolve the live catalog and owner; do not infer source
+locations from projection paths or remembered repository layouts.
 
-## Boundaries and decisions
+Use the nearest bootstrap for universal boundaries, a skill for a triggered
+workflow, a module for a group of registered units, and hook code for
+mechanical enforcement. Permission and resolved activity are distinct.
 
-- Treat `north:agent-catalog/sources.json` as the composition authority for the
-  exact source catalogs that declare globally unique skill, hook, and module
-  IDs and their source-owning `repo:path`.
-- Never edit projections under `~/.agents`, `~/.codex`, `/etc/codex`, or
-  `~/.local/state/north/agents`. Read the owner repository's instructions and
-  change its worktree source.
-- Keep universally applicable safety, authority, architecture, and irreversible
-  operation rules in the nearest `AGENTS.md`. Put a reliably triggered optional
-  workflow in one skill. Use a module only to activate several catalogued units
-  as one recursive unit.
-- Register one identity once. Do not create aliases, compatibility copies,
-  forwarding sources, decorative categories, or hidden module members.
-- Keep permission distinct from resolved activity. North resolves module and
-  support provenance once; provider adapters consume the immutable generation.
-- Keep hook enforcement in hook code and provider wiring. Skill prose must not
-  duplicate enforcement or pretend a lifecycle event is `PreToolUse`.
+## Distilled guides and full notes
 
-## Minimum workflow
+Keep trigger descriptions short and distilled guides complete for ordinary
+execution. Full notes retain constraints, rationale, examples, alternatives,
+and clearly labeled exploratory ideas for future re-distillation. Read them
+for a named detail or when re-distilling; do not load them routinely. Split
+long notes by topic and link the relevant file from the guide or reference
+index. Update both layers when an adopted rule changes.
 
-1. Read the owner repository's `AGENTS.md` and `repo-safety-distilled` guidance.
-2. Run `agents status`, `agents inspect <id>`, and `agents path <id>` to locate
-   current authority and activation evidence.
-3. Choose `AGENTS.md`, skill, or module from the loading decision above, then
-   edit only the owning source in a worktree.
-4. For skills, follow `skill-creator`; for catalog/provider changes, validate
-   with the nearest focused fixture. Do not rebuild NixOS for an owner-local
-   out-of-store skill.
-5. After every required owner and catalog commit is landed and clean `main`
-   checkouts are current, use `agents sync`, permission the ID, and confirm
-   `status`, `inspect`, and `path` all resolve to landed authority.
+## Change and activate
 
-Stop before activation when any owner commit is unlanded, any reported path
-resolves to a lane or projection, or identity/provenance is ambiguous.
+1. Read owner instructions; edit an owned worktree, never a projection or pin.
+2. Follow `skill-creator`. Register each identity once; preserve explicit
+   module membership and hook events. Do not add aliases or duplicate rules.
+3. Run the relevant source/catalog check. Local skill edits need no NixOS
+   rebuild.
+4. Land required owner and catalog commits and update clean main checkouts.
+   Run `agents sync`; change permission only when requested or needed.
+5. Verify the active ID, owner revision, and provider projection resolve to
+   that published source. Unlanded or ambiguous authority blocks activation.
 
-Catalog and activation details live in the reference skill; load it only for an
-explicit request or a named unresolved detail, per the always-loaded policy.
+For catalog and projection mechanics, use `agents path agent-policy-reference`.

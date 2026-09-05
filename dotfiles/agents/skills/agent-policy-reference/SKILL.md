@@ -1,19 +1,16 @@
 ---
 name: agent-policy-reference
 description: >-
-  Detailed agent-policy reference for catalog ownership, loading-layer
-  selection, skill and hook registration, North activation resolution, and
-  provider projection evidence. Use after agent-policy-distilled routes here.
+  Full policy notes for loading layers, catalog authority, registration, and activation evidence.
 ---
 
-# Agent policy reference
+# Agent policy: full notes
 
-`agent-policy-distilled` owns the policy decisions and stop conditions. Use
-this unit for their detailed procedure and evidence model.
+## One owner, several surfaces
 
-## Locate authority
-
-Use the stable Firn client to inspect the current immutable generation:
+A source declaration owns a rule; a catalog identifies it; a generation resolves
+its activity; provider surfaces project it. Copies and symlinks are delivery
+mechanisms, not new authorities. Start with live evidence:
 
 ```text
 agents status
@@ -21,56 +18,58 @@ agents inspect <id>
 agents path <id>
 ```
 
-The client delegates to `north config agents`; it owns no catalog, resolver,
-permission state, or projector. Start from `north:agent-catalog/sources.json`
-and correlate the reported ID with exactly one declaration in its three named
-source catalogs. That declaration and the operator overlay supply the kind,
-exact owner `repo:path`, trigger metadata, support relations, and distributions.
+Correlate the reported owner with its actual source catalog and operator
+overlay. Do not hardcode a catalog path or repository topology from an older
+North version. The Firn client delegates resolution and projection to North;
+it is not a second catalog/resolver.
 
-## Loading-layer selection
+## Choose the loading layer
 
-| Need | Unit | Registration consequence |
-| --- | --- | --- |
-| Rule constrains every applicable action | nearest `AGENTS.md` | instruction distribution |
-| Coherent workflow has a reliable request/task trigger | skill | one skill ID and owner |
-| Several catalogued units activate together | module | recursive member closure |
-| Enforcement or telemetry at a provider event | hook | exact event wiring and support provenance |
+| Need | Owner |
+| --- | --- |
+| Boundary governing every matching action | nearest applicable AGENTS.md |
+| Coherent reliably triggered workflow | one skill |
+| Several registered units enabled together | module |
+| Deterministic provider-event enforcement | hook |
 
-Instruction files and template trees are distributions attached to catalogued
-units, not additional unit kinds. Modules compose already catalogued skills,
-hooks, and modules.
+Instruction/template distributions attach to catalogued units; they are not
+extra unit kinds. Modules compose existing identities, never hidden members.
 
-## Skill and hook registration detail
+## Distilled and full notes
 
-Create or revise a standard skill with the system `skill-creator`: precise
-frontmatter, focused body/resources, matching interface metadata when present,
-and `quick_validate.py`. Add its exact owner path to the North catalog once.
+Discovery descriptions state the trigger cheaply. The distilled guide contains
+the complete normal decision path and essential boundaries. Full notes retain
+reasoning, exact protocols, examples, counterexamples, alternatives, and
+explicitly labeled open questions for future re-distillation.
 
-For hooks, keep the implementation and lifecycle source identity exact. Record
-which units a hook supports in the catalog rather than skill frontmatter. A
-provider wrapper retains its actual lifecycle event and consumes North's
-resolved activity; it does not independently resolve module closure or claims.
+Do not force a model to read both layers for routine work. Split a long reference
+where different questions select different topics; retain a short index with
+read conditions. Avoid one file per heading when several sections are always
+used together. Do not turn exploratory reasoning into adopted requirements.
 
-## Resolution and projection model
+## Registration and enforcement
 
-Stored permission answers whether a unit may run. Resolved activity additionally
-requires an active parent or supported claimant. North retains all module and
-support provenance, renders provider projections into a private generation,
-and atomically advances `current`. Provider adapters read that generation.
+Use skill-creator for frontmatter, matching IDs, useful resources, and metadata/
+link validation. Register the exact owner once. Shape validation does not prove
+the rule selects the right action.
 
-After source and catalog publication, run:
+A hook's catalog support relations and provider event wiring belong outside
+skill prose. A lifecycle wrapper keeps its actual event and consumes resolved
+activity; it does not recompute module closure or pretend to be PreToolUse.
+Follow guard-authoring for changes to executable enforcement.
 
-```text
-agents sync
-agents on <id>
-agents status
-agents inspect <id>
-agents path <id>
-```
+## Permission, activity, and activation
 
-Inspect `~/.local/state/north/agents/current/activation.json`. Expected evidence
-is schema `north.agent-activation/v1`, one generation/digest identity, the exact
-owner, stored permission, resolved activity, full provenance, and provider
-activation paths. Resolve each path and confirm it points to landed owner
-authority. Finished owner lanes and branches can then be reaped through the
-owner repository's safety workflow.
+Stored permission says a unit may run; resolved activity also incorporates
+active parents or supported claimants. North resolves provenance once, writes
+a private generation, and atomically advances the current selector.
+
+After required owner/catalog commits land and clean source checkouts are
+current, use `agents sync`. Change permission with `agents on <id>` only
+when enablement is requested or required by the authorized workflow; editing
+a reference does not authorize enabling it.
+
+Inspect status, owner, activity, generation/digest, and provider activation
+paths from the live client. Resolve paths to landed authority, not a lane or
+hand-edited projection. Stop on ambiguous identity or unlanded source.
+Skill-only out-of-store activation does not require a NixOS rebuild.

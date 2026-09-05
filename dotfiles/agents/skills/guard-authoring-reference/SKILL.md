@@ -1,22 +1,28 @@
 ---
 name: guard-authoring-reference
 description: >-
-  Detailed guard-authoring reference for North identity lookup, decoded tool
-  payloads, deny envelopes, Codex and worker wiring, and two-direction fixture
-  coverage. Use after guard-authoring-distilled routes here.
+  Full guard notes for identity/activity, deny envelopes, decoded entrances, provider wiring, and fixtures.
 ---
 
-# Guard authoring reference
+# Guard authoring: full notes
 
-`guard-authoring-distilled` owns the boundaries and decisions. This unit owns
-the implementation shapes, wiring procedure, and fixture detail.
+## Enforcement is a separate layer
+
+A skill explains the sanctioned workflow; the guard enforces a deterministic
+boundary even when that skill is not loaded. A provider wrapper transports the
+real event and payload. Neither should independently invent identity,
+permission, module closure, or source authority.
+
+Choose fail-open behavior for unavailable ancillary authoring state as the
+owning contract requires; never silently redefine a security enforcement
+contract. A deny must point to a legal next move, not merely scold.
 
 ## Identity and activity inputs
 
-Most owner scripts are under `north:profiles/tom/hooks`. A Firn-owned native
-policy instead points at its NixOS source and installed executable;
-`firn-system-policy` is the reference shape. North's shell adapter is a
-distribution of that identity.
+Resolve the owner with `agents inspect <id>` and its current catalog; do not
+copy a historical hooks-directory path. A Firn-owned native policy points at
+its NixOS source and installed executable. `firn-system-policy` illustrates
+that shape; a provider adapter is a distribution, not a second identity.
 
 The current generation defaults to
 `${NORTH_AGENT_STATE_ROOT:-~/.local/state/north/agents}/current/activation.json`.
@@ -91,3 +97,10 @@ missing, or invalid generations drain stdin and delegate nowhere.
 After publication and any required promotion, use `agents inspect <id>` to
 confirm exact owner, support provenance, resolved activity, and activation
 paths.
+
+## Why two-direction fixtures matter
+
+A dangerous command refusal alone cannot show the sanctioned route remains
+usable. Pair each refusal with its permitted neighbor, including quoted text
+that only mentions the operation. Exercise the decoded payload and composed
+callback; a file appearing in a source list is not proof it ran.

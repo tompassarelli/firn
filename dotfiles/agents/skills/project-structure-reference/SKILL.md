@@ -1,16 +1,21 @@
 ---
 name: project-structure-reference
 description: >-
-  Workflow-inventory, lifecycle, data-provenance, naming, checkpoint, handoff,
-  and attribution reference for project-structure-distilled. Load only when
-  that skill routes here through `agents path project-structure-reference`;
-  this is not the trigger or minimum workflow for restructuring a project.
+  Full layout notes for authority/lifecycle boundaries, data stages, naming, and reproducible handoff.
 ---
 
-# Project structure reference
+# Project structure: full notes
 
-The distilled skill owns the layout decisions, safeguards, and completion
-criteria. Use this reference for detailed inventories and examples.
+## Architecture follows retrieval and lifecycle
+
+A useful directory tells a future reader where authority lives, what can be
+regenerated, and what must be preserved. More folders are not automatically
+better architecture. Split when consumers, lifecycle, authority, scale, or
+retrieval genuinely differ; keep native tool conventions.
+
+Distilled guides and full notes are one example: their read frequency and
+purpose differ. Several tightly coupled short sections can remain one file;
+large independently selected topics deserve descriptive files and a small index.
 
 ## Workflow inventory
 
@@ -76,3 +81,7 @@ needed to compare or repeat it.
 This independently worded synthesis was adapted from MIT Broad Research
 Communication Lab, “File Structure”; the source page is licensed CC BY-NC 4.0:
 https://mitcommlab.mit.edu/broad/commkit/file-structure/
+
+This revision reorganizes and clarifies that synthesis. The cited source's
+CC BY-NC 4.0 attribution and noncommercial boundary are retained; a surrounding
+repository license does not relicense third-party expression.
