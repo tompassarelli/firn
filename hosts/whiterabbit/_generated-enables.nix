@@ -76,6 +76,7 @@
   myConfig.modules.slurp.enable = lib.mkDefault true;
   myConfig.modules.sqlite.enable = lib.mkDefault true;
   myConfig.modules.starship.enable = lib.mkDefault true;
+  myConfig.modules.steam.enable = lib.mkDefault true;
   myConfig.modules.styling.enable = lib.mkDefault true;
   myConfig.modules.stylix.enable = lib.mkDefault true;
   myConfig.modules.stylix.chosenTheme = lib.mkDefault "tokyo-night-dark";
