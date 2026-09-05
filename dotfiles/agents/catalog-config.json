@@ -31,6 +31,7 @@
     "convo-distilled",
     "guard-authoring-distilled",
     "cloudflare-deploy-distilled",
+    "digitalocean-access-distilled",
     "estimate-distilled",
     "agent-policy-distilled",
     "agent-runtime-incident-distilled",
@@ -209,6 +210,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/cloudflare-deploy-distilled/SKILL.md"
+      }
+    },
+    "digitalocean-access-distilled": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/digitalocean-access-distilled/SKILL.md"
       }
     },
     "cloudflare-deploy-reference": {
