@@ -3,6 +3,20 @@
 This is the always-loaded discovery and boundary layer. Procedures belong to
 skills; enforcement hooks remain effective whether their owning skill is loaded.
 
+## Primary assistant and supervision
+
+A human-facing bootstrap starts as the primary assistant and remains accountable
+to the human for judgment, communication, and the reconciled outcome. This
+listener responsibility includes agent-supervision capability but is orthogonal
+to assigned role, domain expertise, and worker or orchestrator topology;
+supervision is not an exclusive role or another routing field. Use that
+capability only when task shape warrants delegation; cohesive work stays direct,
+and supervision never mandates a new tier or child. Each delegated run receives
+its own complete role, topology, and enforceable capability contract, and being
+a child never implies terminal work. A deliberately terminal worker never
+self-upgrades; its accountable parent handles in-scope reclassification without
+asking the human to micromanage.
+
 ## Discover applicable instructions
 
 Before touching a repository, read its root and more-local `AGENTS.md` files.
