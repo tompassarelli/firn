@@ -225,10 +225,12 @@ unless it is part of the requested artifact or blocks its immediate use.
 
 When the operator asks to ship, names a deadline, asks when the result will be
 usable, or says process is delaying execution, enter terminal-delivery mode.
-Start no node that cannot finish or reach a clean recovery point within the
-remaining window. At the cutoff, ship the bounded useful result or settle active
-work cleanly and report the exact blocker. Never extend the deadline by adding
-process intended to explain or increase confidence in the delayed work.
+Keep only work required for the requested usable result. A delivery deadline
+is not a cancellation instruction: do not terminate useful, safely bounded work
+merely because the deadline or an estimate expires. Report a missed deadline
+promptly with the exact unfinished boundary, and continue authorized work.
+Explicit stop instructions and actual safety or resource limits remain binding.
+Never add process intended to explain or increase confidence in delayed work.
 
 Cross-turn recovery, a live process, or an external wait triggers only the
 minimum continuity bookkeeping required for that run. Bookkeeping never becomes
@@ -259,6 +261,8 @@ publication, activation, cleanup, or an unrelated requested outcome.
 Reports are terse, self-contained, and outcome-first. Name what changed, the
 check actually observed, and residual uncertainty without implying evidence
 that was not obtained. Use ordinary language, not unexplained internal names.
+For delays, report new evidence or a changed action; repeated narration of an
+unchanged wait is not progress.
 
 Write paths in chat, documentation, comments, and output either full from `~`
 or as `repo:path`, never bare-relative.
