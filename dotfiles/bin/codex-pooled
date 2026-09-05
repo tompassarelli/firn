@@ -32,12 +32,56 @@ provider_args=(
   -c 'model="gpt-5.6-sol"'
   -c 'model_reasoning_effort="high"'
 )
+full_access_args=(
+  --dangerously-bypass-approvals-and-sandbox
+)
 
 # Non-interactive subcommands parse their own config flags. Put the provider
-# overrides after those subcommands; interactive and resume modes take global
-# config flags before their subcommand.
+# overrides after the deepest subcommand that owns them. Pooled exec also needs
+# Codex's executable full-access switch; config preferences alone still permit
+# the runtime to enter a restricted sandbox.
 case "${1:-}" in
-  exec|e|review)
+  exec|e)
+    subcommand="$1"
+    shift
+    exec_args=("$@")
+    resume_arg_index=-1
+    arg_index=0
+    while ((arg_index < ${#exec_args[@]})); do
+      arg="${exec_args[arg_index]}"
+      case "$arg" in
+        --|-)
+          break
+          ;;
+        -c|--config|--enable|--disable|--thread-source|\
+        -i|--image|-m|--model|--local-provider|-p|--profile|\
+        -s|--sandbox|-C|--cd|--add-dir|--output-schema|\
+        --color|-o|--output-last-message)
+          ((arg_index += 2))
+          ;;
+        -*)
+          ((arg_index += 1))
+          ;;
+        resume)
+          resume_arg_index="$arg_index"
+          break
+          ;;
+        *)
+          break
+          ;;
+      esac
+    done
+    if ((resume_arg_index >= 0)); then
+      resume_prefix_length=$((resume_arg_index + 1))
+      exec "$codex_launcher" "$subcommand" \
+        "${exec_args[@]:0:resume_prefix_length}" \
+        "${provider_args[@]}" "${full_access_args[@]}" \
+        "${exec_args[@]:resume_prefix_length}"
+    fi
+    exec "$codex_launcher" "$subcommand" \
+      "${provider_args[@]}" "${full_access_args[@]}" "${exec_args[@]}"
+    ;;
+  review)
     subcommand="$1"
     shift
     exec "$codex_launcher" "$subcommand" "${provider_args[@]}" "$@"

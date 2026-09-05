@@ -6,6 +6,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RESOLVE="$ROOT/dotfiles/bin/north-session-resolve"
 CODEX="$ROOT/dotfiles/bin/codex"
+CODEX_POOLED="$ROOT/dotfiles/bin/codex-pooled"
 fixture="$(mktemp -d)"
 trap 'rm -rf "${fixture:?}"' EXIT
 
@@ -85,6 +86,81 @@ grep -Fxq 'model_providers.codex-lb.base_url="http://127.0.0.1:2455/backend-api/
 if grep -Fxq "$ASID" "$argv_log"; then
   fail "launch fell through into another account home"
 fi
+
+# Pooled non-interactive execution owns its provider and permission argv.
+# Plain exec needs the executable full-access switch. Nested exec resume needs
+# every pooled override after the real nested subcommand, even when exec-level
+# options precede it; option values and prompt operands named resume are not
+# subcommands.
+run_pooled() {
+  env -u CODEX_HOME -u CODEX_SQLITE_HOME \
+    CODEX_RUNTIME="$runtime" \
+    CODEX_TEST_ARGV_LOG="$argv_log" \
+    CODEX_TEST_ENV_LOG="$env_log" \
+    NORTH_CODEX_POOLED_HOME="$pooled" \
+    NORTH_NO_SLICE=1 \
+    "$CODEX_POOLED" "$@" >/dev/null 2>&1 || fail "pooled launch failed: $*"
+}
+
+argv_line() {
+  grep -Fnx -- "$1" "$argv_log" | cut -d: -f1
+}
+
+assert_nested_resume_layout() {
+  local entrypoint="$1" label="$2"
+  local entrypoint_line resume_line provider_line bypass_line session_line
+  [ "$(grep -Fxc -- '--dangerously-bypass-approvals-and-sandbox' "$argv_log")" -eq 1 ] ||
+    fail "$label did not pass the full-access switch exactly once"
+  entrypoint_line="$(argv_line "$entrypoint")"
+  resume_line="$(argv_line resume)"
+  provider_line="$(argv_line 'model_provider="codex-lb"')"
+  bypass_line="$(argv_line '--dangerously-bypass-approvals-and-sandbox')"
+  session_line="$(argv_line "$PSID")"
+  [ "$entrypoint_line" -lt "$resume_line" ] && [ "$resume_line" -lt "$provider_line" ] &&
+    [ "$provider_line" -lt "$bypass_line" ] && [ "$bypass_line" -lt "$session_line" ] ||
+    fail "$label did not pass provider and permission argv after resume"
+}
+
+run_pooled exec plain-task
+
+[ "$(grep -Fxc -- '--dangerously-bypass-approvals-and-sandbox' "$argv_log")" -eq 1 ] ||
+  fail "plain pooled exec did not pass the full-access switch exactly once"
+exec_line="$(argv_line exec)"
+provider_line="$(argv_line 'model_provider="codex-lb"')"
+bypass_line="$(argv_line '--dangerously-bypass-approvals-and-sandbox')"
+[ "$exec_line" -lt "$provider_line" ] && [ "$provider_line" -lt "$bypass_line" ] ||
+  fail "plain pooled exec passed provider or permission argv outside exec"
+
+run_pooled exec --json resume "$PSID" resumed-task
+assert_nested_resume_layout exec 'exec --json resume'
+json_line="$(argv_line --json)"
+resume_line="$(argv_line resume)"
+[ "$json_line" -lt "$resume_line" ] || fail "exec --json was not preserved before resume"
+
+run_pooled exec --disable multi_agent resume "$PSID" resumed-task
+assert_nested_resume_layout exec 'exec --disable multi_agent resume'
+disable_line="$(argv_line --disable)"
+feature_line="$(argv_line multi_agent)"
+resume_line="$(argv_line resume)"
+[ "$disable_line" -lt "$feature_line" ] && [ "$feature_line" -lt "$resume_line" ] ||
+  fail "exec --disable value was not preserved before resume"
+
+run_pooled e --json resume "$PSID" resumed-task
+assert_nested_resume_layout e 'e --json resume'
+
+run_pooled exec --disable resume plain-task
+provider_line="$(argv_line 'model_provider="codex-lb"')"
+disable_line="$(argv_line --disable)"
+resume_line="$(argv_line resume)"
+[ "$provider_line" -lt "$disable_line" ] && [ "$disable_line" -lt "$resume_line" ] ||
+  fail "an exec option value named resume was treated as a subcommand"
+
+run_pooled exec -- resume
+provider_line="$(argv_line 'model_provider="codex-lb"')"
+separator_line="$(argv_line --)"
+resume_line="$(argv_line resume)"
+[ "$provider_line" -lt "$separator_line" ] && [ "$separator_line" -lt "$resume_line" ] ||
+  fail "a prompt operand named resume was treated as a subcommand"
 
 # ---- an archived transcript resolves identically --------------------------
 # `convo compress` rewrites a closed transcript as .jsonl.zst; a session must
