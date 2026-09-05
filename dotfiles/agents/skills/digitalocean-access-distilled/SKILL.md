@@ -115,11 +115,17 @@ with active status, actual requested model/effort, and useful execution before
 reporting launch. Distinguish server-side visibility from observing the phone
 screen. Phone route: ChatGPT → Remote → greywrought-dev → named job.
 
-The stock coordinator remains read-only. Native child spawning inherits its
-parent's live permission profile despite a custom role's sandbox setting.
-The runtime host must separately admit the terminal child's exact writable
-lane through supported per-thread controls; a role prompt alone grants no
-effective write access. Never broaden coordinator permissions to resolve it.
+Native child spawning inherits its parent's live permission profile despite a
+custom role's sandbox setting. Resolve this before admitting implementation:
+a read-only parent cannot promise writable native children. Check the child's
+`canAcceptDirectInput` before assuming app-server turn controls can independently
+configure it; the current native children report false. A role prompt alone
+grants no effective write access. Preserve the stock coordinator's read-only
+boundary unless the user explicitly overrides it. When the user explicitly
+requests full executive permissions for the team, apply `dangerFullAccess`
+with approval policy `never` to the actual parent turn, record that per-run
+authority exception, and verify a newly admitted worker inherits it. This does
+not authorize production, credentials, or unrelated destructive operations.
 
 ## Ubuntu sandbox prerequisite
 
