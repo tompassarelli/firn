@@ -89,6 +89,52 @@ if grep -Fxq "$ASID" "$argv_log"; then
   fail "launch fell through into another account home"
 fi
 
+# Automatic sessions use the same pooled entrypoint, including North's
+# app-server launch. Explicit account and inherited homes remain authoritative.
+run_automatic() {
+  env -u CODEX_HOME -u CODEX_SQLITE_HOME \
+    CODEX_RUNTIME="$runtime" \
+    CODEX_TEST_ARGV_LOG="$argv_log" \
+    CODEX_TEST_ENV_LOG="$env_log" \
+    NORTH_CODEX_POOLED_HOME="$pooled" \
+    NORTH_NO_SLICE=1 XDG_RUNTIME_DIR= \
+    "$CODEX" "$@" >"$fixture/automatic.stdout" 2>"$fixture/automatic.stderr" ||
+    fail "automatic launch failed: $*"
+}
+
+for invocation in interactive app-server exec; do
+  case "$invocation" in
+    interactive) run_automatic ;;
+    app-server) run_automatic app-server --listen stdio:// ;;
+    exec) run_automatic exec "hello pool" ;;
+  esac
+  mapfile -t launched_env <"$env_log"
+  [ "${launched_env[0]}" = "$pooled" ] || fail "$invocation did not use pooled home"
+  [ "${launched_env[1]}" = "$pooled/sqlite" ] || fail "$invocation lost SQLite home"
+  grep -Fxq 'model_provider="codex-lb"' "$argv_log" || fail "$invocation lost pooled provider"
+  if grep -Eq 'north providers|fallback' "$fixture/automatic.stderr"; then
+    fail "$invocation invoked retired selection"
+  fi
+done
+
+run_automatic as acct exec "explicit account"
+mapfile -t launched_env <"$env_log"
+[ "${launched_env[0]}" = "$base/openai/acct" ] || fail "explicit account was replaced"
+if grep -Fxq 'model_provider="codex-lb"' "$argv_log"; then
+  fail "explicit account received pooled provider"
+fi
+
+env CODEX_HOME="$base/openai/acct" CODEX_SQLITE_HOME="$fixture/custom-sqlite" \
+  CODEX_RUNTIME="$runtime" CODEX_TEST_ARGV_LOG="$argv_log" CODEX_TEST_ENV_LOG="$env_log" \
+  NORTH_NO_SLICE=1 XDG_RUNTIME_DIR= \
+  "$CODEX" app-server --listen stdio:// >/dev/null 2>&1 || fail "inherited launch failed"
+mapfile -t launched_env <"$env_log"
+[ "${launched_env[0]}" = "$base/openai/acct" ] || fail "inherited home was replaced"
+[ "${launched_env[1]}" = "$fixture/custom-sqlite" ] || fail "inherited SQLite home was replaced"
+if grep -Fxq 'model_provider="codex-lb"' "$argv_log"; then
+  fail "inherited home received pooled provider"
+fi
+
 # Pooled non-interactive execution owns its provider and permission argv.
 # Plain exec needs the executable full-access switch. Nested exec resume needs
 # exec-only workspace authority before the nested subcommand and every
@@ -163,6 +209,14 @@ cat >"$parser_runtime" <<'EOF'
 exec "$CODEX_TEST_REAL_RUNTIME" "$@" --help >/dev/null
 EOF
 chmod +x "$parser_runtime"
+
+env -u CODEX_HOME -u CODEX_SQLITE_HOME \
+  CODEX_RUNTIME="$parser_runtime" \
+  CODEX_TEST_REAL_RUNTIME="$CODEX_PARSER_RUNTIME" \
+  NORTH_CODEX_POOLED_HOME="$pooled" \
+  NORTH_NO_SLICE=1 XDG_RUNTIME_DIR= \
+  "$CODEX" app-server --listen stdio:// --enable multi_agent_v2 \
+    >/dev/null 2>&1 || fail "installed parser rejected automatic app-server argv"
 
 env -u CODEX_HOME -u CODEX_SQLITE_HOME \
   CODEX_RUNTIME="$parser_runtime" \

@@ -1,19 +1,11 @@
 #!/usr/bin/env bash
 # Bootloader wrapper for the `codex` CLI.
-#   bare / any args -> auto-select the north-managed OpenAI account with the
-#                      most headroom, then exec the real codex.
+#   bare / any args -> use the managed account pool.
 #   as <id> [args]  -> pin one account explicitly.
-# Fails OPEN: north trouble never blocks the real binary — but the banner names
-# the ACTUAL reason (north missing / snapshot error / empty or malformed data /
-# no eligible account / vanished account dir), never a blanket "north
-# unavailable", and points at an explicit `codex as <id>` recovery — using a
-# real id when one is known, never guessing one.
 set -u
 
 PROVIDER_WORD="codex"
 ACCOUNTS_ROOT="$HOME/.local/state/north/accounts/openai"
-NORTH_PROVIDER="openai"
-BIND_LIMIT="codex:primary"   # window that binds OpenAI subscription usage
 
 # Prefer the atomically promoted user runtime. PATH is only a migration fallback
 # for machines that have not run codex-runtime-update yet.
@@ -43,8 +35,8 @@ fi
 # everything it spawns yields to the desktop under contention. ONE chokepoint —
 # re-exec the launcher, and every downstream exec path plus every descendant
 # tool call inherits the cgroup. Weights live in nixos-config
-# modules/agent-slice; this only enters them. Fails OPEN like the account
-# selection below: absent systemd-run, no user manager, or a scope that never
+# modules/agent-slice; this only enters them. Fails OPEN: absent
+# systemd-run, no user manager, or a scope that never
 # started the payload all fall through.
 NORTH_SLICE_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/north/agent-slice.state"
 slice_note() {
@@ -318,7 +310,7 @@ done < <(native_dispatch_args)
 
 # 1. Uniform resume syntax: upstream Codex uses `codex resume ID`; accept the
 #    requested `codex --resume ID` / `codex --resume=ID` aliases as well.
-#    Resolve exact UUIDs before quota selection can choose the wrong account.
+#    Resolve exact UUIDs to their existing conversation home.
 #    `codex as <id> ...` remains an explicit override.
 if [ "${1:-}" != "as" ]; then
   resume_index=-1
@@ -548,296 +540,8 @@ if [ "${1:-}" = "as" ]; then
   exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_EXECUTION_ARGS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
 fi
 
-# 4. Auto-select greatest-headroom account from north's machine boundary.
-#    Rank: lowest measured used% on the binding window. In balanced mode,
-#    active launch reservations break a numeric tie before headroom class and
-#    target order, so a burst spreads instead of pinning every child to one id.
-#    Every failure mode fails OPEN but is reported distinctly — the caller
-#    learns WHY it went ambient.
-#
-#    Emits a single tab-separated verdict line on stdout:
-#      ok\t<account-id>     a rankable eligible account was chosen
-#      err\t<reason>        no id — <reason> is a concise, actionable cause
-# Account selection reads staffing from file: the graph catalog projection
-# takes ~30s against the live corpus and falls back to file anyway.
-# A fenced coordinator read routinely exceeds 10s, and every slow probe
-# landed ambient. NORTH_SELECT_TIMEOUT overrides.
-SELECT_TIMEOUT="${NORTH_SELECT_TIMEOUT:-25}"
-SELECT_CACHE="${XDG_STATE_HOME:-$HOME/.local/state}/north/account-select.${NORTH_PROVIDER}"
-SELECT_CACHE_TTL_OK=180
-SELECT_CACHE_TTL_ERR=60
-SELECT_RESERVATIONS="${SELECT_CACHE}.reservations"
-SELECT_RESERVATION_TTL=180
-SELECT_LOCK="${SELECT_CACHE}.lock"
-SELECT_LOCK_TIMEOUT="${NORTH_SELECT_LOCK_TIMEOUT:-30}"
-
-selection_now() {
-  local now="${NORTH_SELECT_NOW:-${EPOCHSECONDS:-0}}"
-  if [ -z "$now" ] || [ -n "${now//[0-9]/}" ]; then now=0; fi
-  printf '%s\n' "$now"
-}
-
-provider_snapshot() {
-  if ! command -v north >/dev/null 2>&1; then
-    printf 'err\tnorth not found on PATH\n'
-    return
-  fi
-
-  local errfile json compact rc detail
-  errfile="$(mktemp 2>/dev/null || true)"
-  if command -v timeout >/dev/null 2>&1; then
-    if [ -n "$errfile" ]; then
-      json="$(timeout --foreground "${SELECT_TIMEOUT}s" env -u NORTH_CHECKOUT NORTH_STAFFING_SOURCE=file north providers --json 2>"$errfile")"; rc=$?
-    else
-      json="$(timeout --foreground "${SELECT_TIMEOUT}s" env -u NORTH_CHECKOUT NORTH_STAFFING_SOURCE=file north providers --json 2>/dev/null)"; rc=$?
-    fi
-  elif [ -n "$errfile" ]; then
-    json="$(env -u NORTH_CHECKOUT NORTH_STAFFING_SOURCE=file north providers --json 2>"$errfile")"; rc=$?
-  else
-    json="$(env -u NORTH_CHECKOUT NORTH_STAFFING_SOURCE=file north providers --json 2>/dev/null)"; rc=$?
-  fi
-
-  if [ "$rc" -ne 0 ]; then
-    detail=""
-    [ -n "$errfile" ] && detail="$(head -n1 "$errfile" 2>/dev/null)"
-    [ -n "$errfile" ] && rm -f "$errfile"
-    if [ "$rc" -eq 124 ]; then
-      printf 'err\tnorth providers timed out after %ss\n' "$SELECT_TIMEOUT"
-    elif [ -n "$detail" ]; then
-      printf 'err\tnorth providers exited %s: %s\n' "$rc" "$detail"
-    else
-      printf 'err\tnorth providers exited %s\n' "$rc"
-    fi
-    return
-  fi
-  [ -n "$errfile" ] && rm -f "$errfile"
-
-  if [ -z "$json" ]; then
-    printf 'err\tnorth providers returned no output\n'
-    return
-  fi
-
-  if ! compact="$(printf '%s' "$json" | jq -c 'select(type == "object")' 2>/dev/null)" \
-     || [ -z "$compact" ]; then
-    printf 'err\tnorth providers JSON was malformed\n'
-    return
-  fi
-  printf 'ok\t%s\n' "$compact"
-}
-
-# Cache the provider snapshot, never a selected account. The snapshot avoids a
-# provider probe stampede while every launch still makes its own reservation-
-# aware choice. The old `timestamp ok account-id` cache shape fails the JSON
-# check and refreshes immediately.
-cached_provider_snapshot() {
-  local now="$1" stamp kind value ttl age verdict tmp
-  if [ "${NORTH_NO_SELECT_CACHE:-}" != "1" ] && [ "$now" -gt 0 ] \
-     && [ -r "$SELECT_CACHE" ] \
-     && IFS=$'\t' read -r stamp kind value <"$SELECT_CACHE" 2>/dev/null \
-     && [ -n "${kind:-}" ] && [ -n "${stamp:-}" ] \
-     && [ -z "${stamp//[0-9]/}" ]; then
-    case "$kind" in ok) ttl=$SELECT_CACHE_TTL_OK ;; *) ttl=$SELECT_CACHE_TTL_ERR ;; esac
-    age=$((now - stamp))
-    if [ "$age" -ge 0 ] && [ "$age" -lt "$ttl" ]; then
-      if [ "$kind" != "ok" ] \
-         || printf '%s' "$value" | jq -e 'type == "object"' >/dev/null 2>&1; then
-        printf '%s\t%s\n' "$kind" "$value"
-        return
-      fi
-    fi
-  fi
-
-  printf '[%s] north launcher — probing %s accounts (north providers, up to %ss)…\n' \
-    "$PROVIDER_WORD" "$NORTH_PROVIDER" "$SELECT_TIMEOUT" >&2
-  verdict="$(provider_snapshot)"
-  if [ "$now" -gt 0 ]; then
-    tmp="$(mktemp "$SELECT_CACHE.XXXXXX" 2>/dev/null || true)"
-    if [ -n "$tmp" ]; then
-      if printf '%s\t%s\n' "$now" "$verdict" >"$tmp" 2>/dev/null; then
-        mv -f "$tmp" "$SELECT_CACHE" 2>/dev/null || rm -f "$tmp" 2>/dev/null
-      else
-        rm -f "$tmp" 2>/dev/null
-      fi
-    fi
-  fi
-  printf '%s\n' "$verdict"
-}
-
-prune_reservations() {
-  local now="$1" stamp id age tmp
-  tmp="$(mktemp "$SELECT_RESERVATIONS.XXXXXX" 2>/dev/null || true)"
-  [ -n "$tmp" ] || return
-  if [ -r "$SELECT_RESERVATIONS" ]; then
-    while IFS=$'\t' read -r stamp id; do
-      [ -n "${id:-}" ] && [ -n "${stamp:-}" ] && [ -z "${stamp//[0-9]/}" ] || continue
-      age=$((now - stamp))
-      if [ "$age" -ge 0 ] && [ "$age" -lt "$SELECT_RESERVATION_TTL" ]; then
-        printf '%s\t%s\n' "$stamp" "$id" >>"$tmp"
-      fi
-    done <"$SELECT_RESERVATIONS"
-  fi
-  mv -f "$tmp" "$SELECT_RESERVATIONS" 2>/dev/null || rm -f "$tmp" 2>/dev/null
-}
-
-reservation_counts() {
-  if [ ! -r "$SELECT_RESERVATIONS" ]; then
-    printf '{}\n'
-    return
-  fi
-  jq -Rn '
-    [inputs | split("\t") | select(length == 2) | .[1]]
-    | group_by(.)
-    | map({key: .[0], value: length})
-    | from_entries
-  ' <"$SELECT_RESERVATIONS" 2>/dev/null || printf '{}\n'
-}
-
-select_from_snapshot() {
-  local json="$1" now="$2" reserved result mode id
-  reserved="$(reservation_counts)"
-  if ! result="$(printf '%s' "$json" | jq -r \
-    --arg prov "$NORTH_PROVIDER" --arg limit "$BIND_LIMIT" \
-    --argjson reserved "$reserved" '
-    (.allocationMode // "balanced") as $mode
-    | ((.providers[]? | select(.provider==$prov) | .targets) // []
-    | to_entries
-    | map(.value + {order: .key})
-    | map(select(.authenticated==true and .routing=="eligible"))
-    | map({
-        id,
-        order,
-        reservations: ($reserved[.id] // 0),
-        hclass: (if .headroom=="plenty" then 0
-                 elif .headroom=="normal" then 1
-                 elif .headroom=="low" then 2
-                 else 3 end),
-        used: ([.usage.windows[]? | select(.limitId==$limit) | .usedPercent][0] // 999)
-      })
-    | sort_by(.used, (if $mode == "balanced" then .reservations else 0 end), .hclass, .order)
-    | .[0].id // "") as $id
-    | [$mode, $id] | @tsv
-  ' 2>/dev/null)"; then
-    printf 'err\tnorth providers JSON was malformed\n'
-    return
-  fi
-  mode="${result%%$'\t'*}"
-  id="${result#*$'\t'}"
-  if [ -z "$id" ]; then
-    printf 'none\tno eligible %s account (need authenticated + routing-eligible)\n' "$NORTH_PROVIDER"
-    return
-  fi
-  if [ "$mode" = "balanced" ] && [ "${NORTH_NO_SELECT_RESERVATIONS:-}" != "1" ] \
-     && [ "$now" -gt 0 ]; then
-    printf '%s\t%s\n' "$now" "$id" >>"$SELECT_RESERVATIONS" 2>/dev/null || true
-  fi
-  printf 'ok\t%s\n' "$id"
-}
-
-cached_select_account() {
-  local now snapshot kind value lock_fd
-  now="$(selection_now)"
-  { mkdir -p "${SELECT_CACHE%/*}"; } 2>/dev/null || true
-  if command -v flock >/dev/null 2>&1; then
-    exec {lock_fd}>"$SELECT_LOCK" 2>/dev/null || lock_fd=""
-  else
-    lock_fd=""
-  fi
-  if [ -n "$lock_fd" ]; then
-    if ! flock -w "$SELECT_LOCK_TIMEOUT" "$lock_fd"; then
-      exec {lock_fd}>&-
-      printf 'err\taccount selection lock timed out after %ss\n' "$SELECT_LOCK_TIMEOUT"
-      return
-    fi
-  else
-    NORTH_NO_SELECT_RESERVATIONS=1
-  fi
-
-  snapshot="$(cached_provider_snapshot "$now")"
-  kind="${snapshot%%$'\t'*}"
-  value="${snapshot#*$'\t'}"
-  if [ "$kind" = "ok" ]; then
-    prune_reservations "$now"
-    select_from_snapshot "$value" "$now"
-  else
-    printf '%s\t%s\n' "$kind" "$value"
-  fi
-  if [ -n "$lock_fd" ]; then
-    flock -u "$lock_fd"
-    exec {lock_fd}>&-
-  fi
-}
-
-# Concise recovery hint: prefer a real, known id; otherwise show the command
-# shape with any on-disk account ids, never inventing an account.
-recovery_hint() {
-  local known
-  known="$(list_accounts | paste -sd, - 2>/dev/null)"
-  if [ -n "$known" ]; then
-    printf 'pin explicitly: %s as <id> (known: %s)' "$PROVIDER_WORD" "$known"
-  else
-    printf 'no %s accounts present — authenticate one, then: %s as <id>' \
-      "$PROVIDER_WORD" "$PROVIDER_WORD"
-  fi
-}
-
-# 4c. A provider probe failure may use the most recently reserved authenticated
-#     account, then the first authenticated account. A valid snapshot with no
-#     eligible target never falls back: that would revive a manual exhaustion.
-AUTH_MARKER="auth.json"
-
-authenticated_account() {
-  [ -n "${1:-}" ] && [ -r "$ACCOUNTS_ROOT/$1/$AUTH_MARKER" ]
-}
-
-fallback_account() {
-  local stamp value id
-  if [ -r "$SELECT_RESERVATIONS" ]; then
-    while IFS=$'\t' read -r stamp id; do
-      [ -n "${id:-}" ] && value="$id"
-    done <"$SELECT_RESERVATIONS"
-    if authenticated_account "${value:-}"; then
-      printf 'last-reserved\t%s\n' "$value"
-      return
-    fi
-  fi
-  for id in $(list_accounts); do
-    if authenticated_account "$id"; then
-      printf 'first-authenticated\t%s\n' "$id"
-      return
-    fi
-  done
-}
-
-verdict="$(cached_select_account)"
-kind="${verdict%%$'\t'*}"
-value="${verdict#*$'\t'}"
-
-if [ "$kind" = "ok" ] && [ -n "$value" ]; then
-  if [ -d "$ACCOUNTS_ROOT/$value" ]; then
-    export CODEX_HOME="$ACCOUNTS_ROOT/$value"
-    export CODEX_SQLITE_HOME="$ACCOUNTS_ROOT/$value/sqlite"
-    printf '[%s → %s]\n' "$PROVIDER_WORD" "$value" >&2
-  else
-    # An id was selected but its state dir vanished. Do NOT auto-pick it
-    # (unverified stale account); fail open and name the exact recovery.
-    printf '[%s → ambient] selected %s but %s/%s is absent — pin once restored: %s as %s\n' \
-      "$PROVIDER_WORD" "$value" "$ACCOUNTS_ROOT" "$value" "$PROVIDER_WORD" "$value" >&2
-  fi
-else
-  reason="$value"
-  [ "$kind" = "ok" ] && reason="north returned an empty selection"
-  fallback=""
-  [ "$kind" = "err" ] && fallback="$(fallback_account)"
-  fb_why="${fallback%%$'\t'*}"
-  fb_id="${fallback#*$'\t'}"
-  if [ -n "$fallback" ] && [ -n "$fb_id" ]; then
-    export CODEX_HOME="$ACCOUNTS_ROOT/$fb_id"
-    export CODEX_SQLITE_HOME="$ACCOUNTS_ROOT/$fb_id/sqlite"
-    printf '[%s → %s] %s — %s fallback; override: %s as <id>\n' \
-      "$PROVIDER_WORD" "$fb_id" "$reason" "$fb_why" "$PROVIDER_WORD" >&2
-  else
-    printf '[%s → ambient] %s — %s\n' "$PROVIDER_WORD" "$reason" "$(recovery_hint)" >&2
-  fi
-fi
-load_direct_execution_args "$@"
-exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_EXECUTION_ARGS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
+# 4. Automatic sessions use the managed pool. The provider owns execution
+# account eligibility and routing; the conversation stays in the pooled home.
+pooled="$(dirname "$self")/codex-pooled"
+[ -x "$pooled" ] || { echo "codex: pooled launcher is unavailable: $pooled" >&2; exit 127; }
+exec "$pooled" "$@"
