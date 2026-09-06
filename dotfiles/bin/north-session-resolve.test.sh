@@ -123,6 +123,8 @@ for invocation in interactive app-server exec; do
   [ "${launched_env[0]}" = "$pooled" ] || fail "$invocation did not use pooled home"
   [ "${launched_env[1]}" = "$pooled/sqlite" ] || fail "$invocation lost SQLite home"
   grep -Fxq 'model_provider="codex-lb"' "$argv_log" || fail "$invocation lost pooled provider"
+  grep -Fxq 'model="gpt-6-astra"' "$argv_log" || fail "$invocation lost Astra root default"
+  grep -Fxq 'model_reasoning_effort="high"' "$argv_log" || fail "$invocation lost high root effort"
   if [[ "$invocation" = interactive ]]; then
     grep -Fxq 'unix:///synthetic/shared/app-server.sock' "$argv_log" ||
       fail "interactive launch did not attach to shared owner"
@@ -133,6 +135,12 @@ for invocation in interactive app-server exec; do
     fail "$invocation invoked retired selection"
   fi
 done
+
+run_automatic -c 'model="gpt-5.6-sol"' -c 'model_reasoning_effort="low"' app-server --listen stdio://
+[[ "$(grep '^model=' "$argv_log" | tail -1)" = 'model="gpt-5.6-sol"' ]] ||
+  fail "pooled default replaced explicit model"
+[[ "$(grep '^model_reasoning_effort=' "$argv_log" | tail -1)" = 'model_reasoning_effort="low"' ]] ||
+  fail "pooled default replaced explicit effort"
 
 run_automatic resume "$ASID"
 mapfile -t launched_env <"$env_log"
@@ -146,9 +154,17 @@ grep -Fxq 'model_provider="codex-lb"' "$argv_log" || fail "historical resume did
 run_automatic as acct exec "explicit account"
 mapfile -t launched_env <"$env_log"
 [ "${launched_env[0]}" = "$base/openai/acct" ] || fail "explicit account was replaced"
+grep -Fxq 'model="gpt-6-astra"' "$argv_log" || fail "native root lost Astra default"
+grep -Fxq 'model_reasoning_effort="high"' "$argv_log" || fail "native root lost high effort"
 if grep -Fxq 'model_provider="codex-lb"' "$argv_log"; then
   fail "explicit account received pooled provider"
 fi
+
+run_automatic as acct -c 'model="gpt-5.6-sol"' -c 'model_reasoning_effort="low"' exec "explicit model"
+[[ "$(grep '^model=' "$argv_log" | tail -1)" = 'model="gpt-5.6-sol"' ]] ||
+  fail "native default replaced explicit model"
+[[ "$(grep '^model_reasoning_effort=' "$argv_log" | tail -1)" = 'model_reasoning_effort="low"' ]] ||
+  fail "native default replaced explicit effort"
 
 env CODEX_HOME="$base/openai/acct" CODEX_SQLITE_HOME="$fixture/custom-sqlite" \
   CODEX_RUNTIME="$runtime" CODEX_TEST_ARGV_LOG="$argv_log" CODEX_TEST_ENV_LOG="$env_log" \
@@ -159,6 +175,9 @@ mapfile -t launched_env <"$env_log"
 [ "${launched_env[1]}" = "$fixture/custom-sqlite" ] || fail "inherited SQLite home was replaced"
 if grep -Fxq 'model_provider="codex-lb"' "$argv_log"; then
   fail "inherited home received pooled provider"
+fi
+if grep -Eq '^(model|model_reasoning_effort)=' "$argv_log"; then
+  fail "managed lane received root model defaults"
 fi
 
 mkdir -p "$HOME/.local/state/north-v2/current"

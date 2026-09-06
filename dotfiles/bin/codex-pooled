@@ -31,7 +31,7 @@ provider_args=(
   -c 'model_providers.codex-lb.wire_api="responses"'
   -c 'model_providers.codex-lb.supports_websockets=true'
   -c 'model_providers.codex-lb.requires_openai_auth=false'
-  -c 'model="gpt-5.6-sol"'
+  -c 'model="gpt-6-astra"'
   -c 'model_reasoning_effort="high"'
 )
 full_access_args=(
