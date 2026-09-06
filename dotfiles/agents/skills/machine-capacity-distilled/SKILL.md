@@ -27,6 +27,8 @@ cgroup. Do not detach work outside it. One owner retains the terminal
 `RUN`/`RESERVED` continues; `DEFER` queues heavy work while useful light work
 continues. Retry after a known release or at least 30 seconds, never busy-poll.
 `RECLAIMED` concerns expired helper-owned leases, not permission to kill peers.
+Memory PSI is diagnostic: local cgroup throttling can raise it despite ample
+host headroom. Admission uses available memory, lease budgets, and CPU pressure.
 
 Before a parallel worker expected to consume local compute, reserve its
 `agent` lease (1 CPU/768 MiB); renew before expiry and release at settlement.

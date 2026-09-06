@@ -26,8 +26,12 @@ releasing the exact known lease. A prose report is not a release receipt.
 ## Headroom and pressure
 
 The helper reserves 25% of CPUs and memory headroom of at least 20% and 4 GiB.
-It defers new heavy work at CPU PSI of 20% or more over ten seconds, or any
-full-memory stall. The helper implementation owns these thresholds; inspect it
+It defers work at CPU PSI of 20% or more over ten seconds, insufficient
+available memory, or CPU/memory lease budgets above 75% of host capacity.
+Full-memory PSI remains diagnostic telemetry: cgroup-local throttling can
+raise it without exhausting host headroom, so it does not independently veto
+admission. Per-job CPU, memory, and runtime bounds still apply.
+The helper implementation owns these thresholds; inspect it
 when changing admission behavior rather than adding a parallel calculator.
 
 Expired leases are reclaimable helper state and matching scopes have the same

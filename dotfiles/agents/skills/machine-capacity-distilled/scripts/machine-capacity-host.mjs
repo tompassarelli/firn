@@ -177,7 +177,6 @@ function decision(root, requested, create) {
       signals.memoryTotalMiB,
       signals.memoryAvailableMiB,
       signals.cpuSomeAvg10BasisPoints,
-      signals.memoryFullAvg10BasisPoints,
       leased.cpus,
       leased.memoryMiB,
       requested.cpus,
@@ -298,18 +297,20 @@ async function main(argv) {
     if (parsed.separator !== argv.length) fail('fixture accepts no command');
     const cores = parsePositiveInteger(required(parsed.values, '--cores'), '--cores');
     const requested = parseClass(parsed.values, cores);
+    const memoryFullAvg10 = parseNonnegativeInteger(
+      required(parsed.values, '--memory-full-avg10-basis-points'), '--memory-full-avg10-basis-points',
+    ) / 100;
     const code = admissionDecision(
       cores,
       parsePositiveInteger(required(parsed.values, '--memory-total-mib'), '--memory-total-mib'),
       parsePositiveInteger(required(parsed.values, '--memory-available-mib'), '--memory-available-mib'),
       parseNonnegativeInteger(required(parsed.values, '--cpu-some-avg10-basis-points'), '--cpu-some-avg10-basis-points'),
-      parseNonnegativeInteger(required(parsed.values, '--memory-full-avg10-basis-points'), '--memory-full-avg10-basis-points'),
       parseNonnegativeInteger(required(parsed.values, '--leased-cpus'), '--leased-cpus'),
       parseNonnegativeInteger(required(parsed.values, '--leased-memory-mib'), '--leased-memory-mib'),
       requested.cpus,
       requested.memoryMiB,
     );
-    print({ decision: code, class: requested.name, cpus: requested.cpus, memoryMiB: requested.memoryMiB });
+    print({ decision: code, class: requested.name, cpus: requested.cpus, memoryMiB: requested.memoryMiB, memoryFullAvg10 });
     return code === 'RUN' ? 0 : 75;
   }
   const root = runtimeRoot();

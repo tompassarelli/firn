@@ -28,7 +28,6 @@
     memory-total-mib Int
     memory-available-mib Int
     cpu-some-avg10-basis-points Int
-    memory-full-avg10-basis-points Int
     leased-cpus Int
     leased-memory-mib Int
     requested-cpus Int
@@ -39,7 +38,6 @@
          (<= memory-available-mib 0)
          (<= requested-cpus 0)
          (<= requested-memory-mib 0)) "INVALID"
-     (> memory-full-avg10-basis-points 0) "DEFER_MEMORY_PRESSURE"
      (or (< (- memory-available-mib requested-memory-mib) 4096)
          (< (* (- memory-available-mib requested-memory-mib) 5)
             memory-total-mib)) "DEFER_MEMORY_HEADROOM"

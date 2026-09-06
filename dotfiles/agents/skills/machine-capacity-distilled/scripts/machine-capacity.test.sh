@@ -13,7 +13,7 @@ fixture() {
   bun "$scratch/machine-capacity.mjs" fixture \
     --class "${1}" \
     --cores 24 \
-    --memory-total-mib 96000 \
+    --memory-total-mib 96343 \
     --memory-available-mib "${2}" \
     --cpu-some-avg10-basis-points "${3}" \
     --memory-full-avg10-basis-points "${4}" \
@@ -21,12 +21,15 @@ fixture() {
     --leased-memory-mib "${6}"
 }
 
-[[ $(fixture heavy 70000 500 0 6 8192) == '{"decision":"RUN","class":"heavy","cpus":6,"memoryMiB":8192}' ]]
-[[ $(fixture exclusive 70000 500 0 0 0) == '{"decision":"RUN","class":"exclusive","cpus":18,"memoryMiB":16384}' ]]
-[[ $(fixture heavy 70000 2000 0 0 0 || true) == '{"decision":"DEFER_CPU_PRESSURE","class":"heavy","cpus":6,"memoryMiB":8192}' ]]
-[[ $(fixture heavy 21000 0 0 0 0 || true) == '{"decision":"DEFER_MEMORY_HEADROOM","class":"heavy","cpus":6,"memoryMiB":8192}' ]]
-[[ $(fixture heavy 70000 0 0 15 8192 || true) == '{"decision":"DEFER_CPU_CAPACITY","class":"heavy","cpus":6,"memoryMiB":8192}' ]]
-[[ $(fixture heavy 70000 0 1 0 0 || true) == '{"decision":"DEFER_MEMORY_PRESSURE","class":"heavy","cpus":6,"memoryMiB":8192}' ]]
+[[ $(fixture heavy 70000 500 0 6 8192) == '{"decision":"RUN","class":"heavy","cpus":6,"memoryMiB":8192,"memoryFullAvg10":0}' ]]
+[[ $(fixture exclusive 70000 500 0 0 0) == '{"decision":"RUN","class":"exclusive","cpus":18,"memoryMiB":16384,"memoryFullAvg10":0}' ]]
+[[ $(fixture heavy 70000 2000 394 0 0 || true) == '{"decision":"DEFER_CPU_PRESSURE","class":"heavy","cpus":6,"memoryMiB":8192,"memoryFullAvg10":3.94}' ]]
+[[ $(fixture heavy 21000 0 394 0 0 || true) == '{"decision":"DEFER_MEMORY_HEADROOM","class":"heavy","cpus":6,"memoryMiB":8192,"memoryFullAvg10":3.94}' ]]
+[[ $(fixture heavy 70000 0 394 15 8192 || true) == '{"decision":"DEFER_CPU_CAPACITY","class":"heavy","cpus":6,"memoryMiB":8192,"memoryFullAvg10":3.94}' ]]
+[[ $(fixture heavy 70000 0 394 0 70000 || true) == '{"decision":"DEFER_MEMORY_CAPACITY","class":"heavy","cpus":6,"memoryMiB":8192,"memoryFullAvg10":3.94}' ]]
+[[ $(fixture agent 73412 0 394 8 9728) == '{"decision":"RUN","class":"agent","cpus":1,"memoryMiB":768,"memoryFullAvg10":3.94}' ]]
+[[ $(fixture heavy 73412 0 394 8 9728) == '{"decision":"RUN","class":"heavy","cpus":6,"memoryMiB":8192,"memoryFullAvg10":3.94}' ]]
+[[ $(fixture heavy 73412 0 10000 8 9728) == '{"decision":"RUN","class":"heavy","cpus":6,"memoryMiB":8192,"memoryFullAvg10":100}' ]]
 
 fixture_runtime="$scratch/runtime"
 mkdir -p "$fixture_runtime"
