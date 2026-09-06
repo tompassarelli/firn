@@ -470,8 +470,7 @@ if [ "${1:-}" != "as" ]; then
     if [ "$authority_kind" = "pooled" ]; then
       pooled="$(dirname "$self")/codex-pooled"
       [ -x "$pooled" ] || { echo "codex: pooled launcher is unavailable: $pooled" >&2; exit 127; }
-      export NORTH_CODEX_CONVERSATION_HOME="$authority_home"
-      export NORTH_CODEX_CONVERSATION_SQLITE_HOME="$authority_home/sqlite"
+      export NORTH_CODEX_POOLED_HOME="$authority_home"
       exec "$pooled" "$@"
     fi
     if [ "$authority_kind" = "profile" ] && [ "$authority_name" = "codex-native" ]; then
@@ -479,15 +478,14 @@ if [ "${1:-}" != "as" ]; then
       [ -x "$native" ] || { echo "codex: native launcher is unavailable: $native" >&2; exit 127; }
       exec "$native" "$@"
     fi
-    export NORTH_CODEX_CONVERSATION_HOME="$authority_home"
+    export CODEX_HOME="$authority_home"
     if [ "$authority_kind" = "ambient" ]; then
-      export NORTH_CODEX_CONVERSATION_SQLITE_HOME="$authority_home"
+      export CODEX_SQLITE_HOME="$authority_home"
     else
-      export NORTH_CODEX_CONVERSATION_SQLITE_HOME="$authority_home/sqlite"
+      export CODEX_SQLITE_HOME="$authority_home/sqlite"
     fi
-    pooled="$(dirname "$self")/codex-pooled"
-    [ -x "$pooled" ] || { echo "codex: pooled launcher is unavailable: $pooled" >&2; exit 127; }
-    exec "$pooled" "$@"
+    load_direct_execution_args "$@"
+    exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_EXECUTION_ARGS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
   fi
 
   # Non-UUID aliases still map to the native subcommand (picker/session name)

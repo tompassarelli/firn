@@ -11,17 +11,6 @@ CODEX_PARSER_RUNTIME="${CODEX_PARSER_RUNTIME:-$HOME/.local/lib/codex/current/bin
 fixture="$(mktemp -d)"
 trap 'rm -rf "${fixture:?}"' EXIT
 
-mkdir -p "$fixture/launchers"
-cp "$CODEX" "$CODEX_POOLED" "$RESOLVE" "$ROOT/dotfiles/bin/north" "$fixture/launchers/"
-export CODEX_TEST_SHARED_HOME_LOG="$fixture/shared-home"
-printf '%s\n' '#!/usr/bin/env bash' \
-  'printf "%s\\n" "${NORTH_CODEX_CONVERSATION_HOME:-${NORTH_CODEX_POOLED_HOME:-$HOME/.local/state/north/codex-pooled}}" >"$CODEX_TEST_SHARED_HOME_LOG"' \
-  'printf "%s\\n" "unix:///synthetic/shared/app-server.sock"' \
-  >"$fixture/launchers/codex-shared-server"
-chmod +x "$fixture/launchers/codex-shared-server"
-CODEX="$fixture/launchers/codex"
-CODEX_POOLED="$fixture/launchers/codex-pooled"
-
 export HOME="$fixture"
 fail() { printf 'north-session-resolve.test.sh:%s: %s\n' "${BASH_LINENO[0]}" "$1" >&2; exit 1; }
 [ -x "$CODEX_PARSER_RUNTIME" ] || fail "installed Codex parser is unavailable at $CODEX_PARSER_RUNTIME"
@@ -77,7 +66,7 @@ env_log="$fixture/codex.env"
 cat >"$runtime" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$@" >"$CODEX_TEST_ARGV_LOG"
-printf '%s\n%s\n%s\n' "${CODEX_HOME:-}" "${CODEX_SQLITE_HOME:-}" "${NORTH_CODEX_ENDPOINT:-}" >"$CODEX_TEST_ENV_LOG"
+printf '%s\n%s\n' "$CODEX_HOME" "$CODEX_SQLITE_HOME" >"$CODEX_TEST_ENV_LOG"
 EOF
 chmod +x "$runtime"
 
@@ -123,25 +112,10 @@ for invocation in interactive app-server exec; do
   [ "${launched_env[0]}" = "$pooled" ] || fail "$invocation did not use pooled home"
   [ "${launched_env[1]}" = "$pooled/sqlite" ] || fail "$invocation lost SQLite home"
   grep -Fxq 'model_provider="codex-lb"' "$argv_log" || fail "$invocation lost pooled provider"
-  if [[ "$invocation" = interactive ]]; then
-    grep -Fxq 'unix:///synthetic/shared/app-server.sock' "$argv_log" ||
-      fail "interactive launch did not attach to shared owner"
-  elif grep -Fxq -- '--remote' "$argv_log"; then
-    fail "$invocation unexpectedly attached instead of running its native command"
-  fi
   if grep -Eq 'north providers|fallback' "$fixture/automatic.stderr"; then
     fail "$invocation invoked retired selection"
   fi
 done
-
-run_automatic resume "$ASID"
-mapfile -t launched_env <"$env_log"
-[[ "${launched_env[0]}" = "$base/openai/fallback" ]] || fail "historical resume moved conversation home"
-[[ "${launched_env[1]}" = "$base/openai/fallback/sqlite" ]] || fail "historical resume moved SQLite home"
-[[ "$(<"$CODEX_TEST_SHARED_HOME_LOG")" = "$base/openai/fallback" ]] ||
-  fail "historical resume selected another server home"
-grep -Fxq -- '--remote' "$argv_log" || fail "historical resume did not attach"
-grep -Fxq 'model_provider="codex-lb"' "$argv_log" || fail "historical resume did not use managed provider"
 
 run_automatic as acct exec "explicit account"
 mapfile -t launched_env <"$env_log"
@@ -160,29 +134,6 @@ mapfile -t launched_env <"$env_log"
 if grep -Fxq 'model_provider="codex-lb"' "$argv_log"; then
   fail "inherited home received pooled provider"
 fi
-
-mkdir -p "$HOME/.local/state/north-v2/current"
-ln -s "$runtime" "$HOME/.local/state/north-v2/current/north"
-env -u NORTH_CODEX_ENDPOINT \
-  CODEX_HOME="$base/openai/acct" \
-  CODEX_TEST_ARGV_LOG="$argv_log" CODEX_TEST_ENV_LOG="$env_log" \
-  "$fixture/launchers/north" || fail "ordinary North launch failed"
-mapfile -t launched_env <"$env_log"
-[[ -z "${launched_env[0]}" ]] || fail "North retained ambient account home"
-[[ "${launched_env[2]}" = unix:///synthetic/shared/app-server.sock ]] ||
-  fail "North and Codex chose different shared endpoints"
-env -u NORTH_CODEX_ENDPOINT \
-  CODEX_TEST_ARGV_LOG="$argv_log" CODEX_TEST_ENV_LOG="$env_log" \
-  "$fixture/launchers/north" --resume "$ASID" || fail "North historical resume failed"
-[[ "$(<"$CODEX_TEST_SHARED_HOME_LOG")" = "$base/openai/fallback" ]] ||
-  fail "North historical resume selected another server home"
-grep -Fxq -- --resume "$argv_log" || fail "North lost explicit resume action"
-grep -Fxq -- "$ASID" "$argv_log" || fail "North lost requested conversation"
-env -u NORTH_CODEX_ENDPOINT \
-  CODEX_TEST_ARGV_LOG="$argv_log" CODEX_TEST_ENV_LOG="$env_log" \
-  "$fixture/launchers/north" --help || fail "North help failed"
-mapfile -t launched_env <"$env_log"
-[[ -z "${launched_env[2]}" ]] || fail "North maintenance started a server"
 
 # Pooled non-interactive execution owns its provider and permission argv.
 # Plain exec needs the executable full-access switch. Nested exec resume needs

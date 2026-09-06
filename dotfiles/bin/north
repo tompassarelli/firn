@@ -10,25 +10,4 @@ fi
 
 # North is an operator UI, so it must not inherit an agent pool's account.
 unset CODEX_HOME
-# CLI maintenance commands do not need a conversation server.
-if [[ ( $# -eq 0 || ( $# -eq 2 && "$1" = --resume ) ) && -z "${NORTH_CODEX_ENDPOINT:-}" ]]; then
-  launcher_directory="$(dirname "$(realpath "$0")")"
-  if [[ $# -eq 2 ]]; then
-    resolved="$("$launcher_directory/north-session-resolve" openai "$2")"
-    IFS=$'\t' read -r version provider kind name conversation_home canonical_id <<<"$resolved"
-    [[ "$version" = v1 && "$provider" = openai && -n "$conversation_home" && -n "$canonical_id" ]] || {
-      printf 'north: could not resolve the requested conversation\n' >&2
-      exit 1
-    }
-    export NORTH_CODEX_CONVERSATION_HOME="$conversation_home"
-    if [[ "$kind" = ambient ]]; then
-      export NORTH_CODEX_CONVERSATION_SQLITE_HOME="$conversation_home"
-    else
-      export NORTH_CODEX_CONVERSATION_SQLITE_HOME="$conversation_home/sqlite"
-    fi
-    set -- --resume "$canonical_id"
-  fi
-  export NORTH_CODEX_ENDPOINT
-  NORTH_CODEX_ENDPOINT="$("$launcher_directory/codex-shared-server")"
-fi
 exec "$north_runtime" "$@"

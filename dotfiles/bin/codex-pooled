@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
-# Launch Codex against the local account pool, retaining the selected conversation home.
+# Launch Codex in the credential-free pooled state against the local provider.
 # The provider service has its own owner; this launcher stays in the foreground
 # and never starts, restarts, or supervises it.
 set -euo pipefail
 
 self="$(realpath "$0" 2>/dev/null || echo "$0")"
 codex_launcher="$(dirname "$self")/codex"
-pooled_home="${NORTH_CODEX_CONVERSATION_HOME:-${NORTH_CODEX_POOLED_HOME:-$HOME/.local/state/north/codex-pooled}}"
+pooled_home="${NORTH_CODEX_POOLED_HOME:-$HOME/.local/state/north/codex-pooled}"
 
 if [ ! -x "$codex_launcher" ]; then
   printf 'codex-pooled: launcher is unavailable: %s\n' "$codex_launcher" >&2
   exit 127
 fi
 if [ ! -d "$pooled_home" ]; then
-  printf 'codex-pooled: conversation home is unavailable at %s\n' \
+  printf 'codex-pooled: credential-free Codex home is unavailable at %s\n' \
     "$pooled_home" >&2
   exit 1
 fi
 
 export CODEX_HOME="$pooled_home"
-export CODEX_SQLITE_HOME="${NORTH_CODEX_CONVERSATION_SQLITE_HOME:-$pooled_home/sqlite}"
+export CODEX_SQLITE_HOME="$pooled_home/sqlite"
 
 workspace_args=(
   --add-dir "$HOME/code"
@@ -37,39 +37,6 @@ provider_args=(
 full_access_args=(
   --dangerously-bypass-approvals-and-sandbox
 )
-
-# Only interactive journeys attach to the shared owner. App-server startup
-# and maintenance commands keep their native lifecycle; an explicit endpoint
-# remains the caller's choice.
-shared_interactive() {
-  local skip_value=0 entry command=""
-  for entry in "$@"; do
-    if ((skip_value)); then skip_value=0; continue; fi
-    case "$entry" in
-      --remote|--remote=*|-h|--help|-V|--version) return 1 ;;
-      -c|--config|--enable|--disable|--remote-auth-token-env|\
-      -i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|\
-      -C|--cd|--add-dir|-a|--ask-for-approval) skip_value=1 ;;
-      --) break ;;
-      -*) ;;
-      *)
-        if [[ -z "$command" ]]; then command="$entry"; fi
-        ;;
-    esac
-  done
-  case "$command" in
-    ""|resume|fork) return 0 ;;
-    exec|e|review|login|logout|mcp|plugin|app-server|remote-control|completion|\
-    update|doctor|sandbox|debug|apply|a|queue|archive|delete|migrate-rollouts|\
-    unarchive|cloud|exec-server|features|help|agents) return 1 ;;
-    *) return 0 ;;
-  esac
-}
-shared_args=()
-if shared_interactive "$@"; then
-  endpoint="$("$(dirname "$self")/codex-shared-server")"
-  shared_args=(--remote "$endpoint")
-fi
 
 # Non-interactive subcommands parse their own config flags. Put the provider
 # overrides after the deepest subcommand that owns them. Pooled exec also needs
@@ -124,6 +91,6 @@ case "${1:-}" in
     exec "$codex_launcher" "$subcommand" "${provider_args[@]}" "$@"
     ;;
   *)
-    exec "$codex_launcher" "${workspace_args[@]}" "${provider_args[@]}" "${shared_args[@]}" "$@"
+    exec "$codex_launcher" "${workspace_args[@]}" "${provider_args[@]}" "$@"
     ;;
 esac
