@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Ensure the selected conversation home's app-server exists; clients never own its lifetime.
+set -euo pipefail
+umask 077
+
+fail() { printf 'codex: %s\n' "$*" >&2; exit 1; }
+self="$(realpath "$0")"
+pooled_home="$(realpath -e "${NORTH_CODEX_CONVERSATION_HOME:-${NORTH_CODEX_POOLED_HOME:-$HOME/.local/state/north/codex-pooled}}")" ||
+  fail "shared conversation home is unavailable"
+sqlite_home="$(realpath -m "${NORTH_CODEX_CONVERSATION_SQLITE_HOME:-$pooled_home/sqlite}")"
+runtime="$(realpath -e "${CODEX_RUNTIME:-$HOME/.local/lib/codex/current/bin/codex}")" ||
+  fail "selected runtime is unavailable"
+[[ -x "$runtime" ]] || fail "selected runtime is not executable"
+[[ -n "${XDG_RUNTIME_DIR:-}" && -d "$XDG_RUNTIME_DIR" ]] ||
+  fail "user runtime directory is unavailable"
+[[ "$(stat -c '%u:%a' "$XDG_RUNTIME_DIR")" = "$UID:700" ]] ||
+  fail "user runtime directory must be private and owned by this user"
+
+home_key="$(printf '%s\n%s' "$pooled_home" "$sqlite_home" | sha256sum)"
+home_key="${home_key:0:16}"
+directory="$XDG_RUNTIME_DIR/codex-shared-$home_key"
+mkdir -p "$directory"
+[[ ! -L "$directory" && "$(stat -c '%u:%a' "$directory")" = "$UID:700" ]] ||
+  fail "shared server directory must be private and owned by this user"
+socket="$directory/app-server.sock"
+endpoint="unix://$socket"
+unit="codex-shared-$home_key.service"
+exec {lock_fd}>"$directory/start.lock"
+flock -w 15 "$lock_fd" || fail "shared server startup is still busy"
+
+if ! systemctl --user is-active --quiet "$unit"; then
+  [[ ! -e "$socket" ]] ||
+    fail "shared server socket exists without an active owner; inspect $unit before retrying"
+  systemd-run --user --quiet --collect --unit="$unit" --service-type=exec \
+    --property=UMask=0077 --property=Slice=agent.slice \
+    --working-directory="$HOME" \
+    --setenv="HOME=$HOME" --setenv="PATH=$PATH" \
+    --setenv="XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" \
+    --setenv="NORTH_CODEX_CONVERSATION_HOME=$pooled_home" \
+    --setenv="NORTH_CODEX_CONVERSATION_SQLITE_HOME=$sqlite_home" \
+    --setenv="CODEX_RUNTIME=$runtime" --setenv=NORTH_NO_SLICE=1 \
+    -- "$(dirname "$self")/codex-pooled" app-server --listen "$endpoint" --enable multi_agent_v2 ||
+    fail "shared server could not start; inspect $unit"
+fi
+
+for ((attempt = 0; attempt < 100; attempt++)); do
+  systemctl --user is-active --quiet "$unit" ||
+    fail "shared server exited before becoming ready; inspect $unit"
+  if [[ -S "$socket" ]]; then
+    [[ "$(stat -c '%u' "$socket")" = "$UID" ]] ||
+      fail "shared server socket belongs to another user"
+    printf '%s\n' "$endpoint"
+    exit 0
+  fi
+  sleep 0.1
+done
+fail "shared server did not become ready within 10 seconds; inspect $unit"
