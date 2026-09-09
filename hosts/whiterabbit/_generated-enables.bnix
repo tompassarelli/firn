@@ -67,6 +67,7 @@
    :myConfig.modules.nerd-fonts.enable (lib.mkDefault true)
    :myConfig.modules.niri.enable (lib.mkDefault true)
    :myConfig.modules.north-profile.enable (lib.mkDefault true)
+   :myConfig.modules.obsidian.enable (lib.mkDefault true)
    :myConfig.modules.pandoc.enable (lib.mkDefault true)
    :myConfig.modules.pavucontrol.enable (lib.mkDefault true)
    :myConfig.modules.pkg-config.enable (lib.mkDefault true)
