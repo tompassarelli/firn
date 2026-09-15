@@ -71,11 +71,16 @@
          (= (type-change-names (w/schemadiff-type-changed diff))
             ["b.changed"])
          (= (process-phases upgrade)
-            ["schema snapshot"
+            ["current Beagle schema extraction"
+             "schema snapshot"
              "nix flake update"
              "Beagle schema extraction"
              "schema comparison"
              "repository validation"])
+         (= (w/process-argv (nth upgrade 0))
+            ["env" "FIRN_REPO=/repo" "firn-schema" "schema" "extract"])
+         (= (w/process-argv (nth upgrade 1))
+            ["cat" "/repo/.beagle-cache/schema.json"])
          (= (count (w/upgrade-processes "/repo" true)) 0))))
 
 (defn case-deterministic-rendering [] Bool

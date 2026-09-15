@@ -45,6 +45,9 @@
      argv (Vec String)
      stdin String
      max-output Int])
+  (CompareProcess
+    [phase String
+     argv (Vec String)])
   (CaptureToFileProcess
     [phase String
      argv (Vec String)
@@ -1026,12 +1029,14 @@
 (defn process-phase [process ProcessBoundary] String
   (match process
     [(InheritProcess phase argv) phase]
+    [(CompareProcess phase argv) phase]
     [(CaptureProcess phase argv stdin max-output) phase]
     [(CaptureToFileProcess phase argv stdin max-output output-path) phase]))
 
 (defn process-argv [process ProcessBoundary] (Vec String)
   (match process
     [(InheritProcess phase argv) argv]
+    [(CompareProcess phase argv) argv]
     [(CaptureProcess phase argv stdin max-output) argv]
     [(CaptureToFileProcess phase argv stdin max-output output-path) argv]))
 
@@ -1055,9 +1060,12 @@
    dry-run Bool] (Vec ProcessBoundary)
   (if dry-run
     []
-    [(->CaptureToFileProcess
+    [(->InheritProcess
+       "current Beagle schema extraction"
+       ["env" (str "FIRN_REPO=" root) "firn-schema" "schema" "extract"])
+     (->CaptureToFileProcess
        "schema snapshot"
-       ["git" "-C" root "show" "HEAD:.beagle-cache/schema.json"]
+       ["cat" (root-path root ".beagle-cache/schema.json")]
        ""
        67108864
        (root-path root ".beagle-cache/schema.before.json"))
@@ -1066,15 +1074,15 @@
        ["nix" "flake" "update" "--flake" root])
      (->InheritProcess
        "Beagle schema extraction"
-       ["beagle-extract-schema" "--repo" root])
-     (->InheritProcess
+       ["env" (str "FIRN_REPO=" root) "firn-schema" "schema" "extract"])
+     (->CompareProcess
        "schema comparison"
-       ["beagle-schema-diff"
+       ["diff" "--unified"
         (root-path root ".beagle-cache/schema.before.json")
         (root-path root ".beagle-cache/schema.json")])
      (->InheritProcess
        "repository validation"
-       ["beagle" "validate" root])]))
+       ["env" (str "FIRN_REPO=" root) "firn-schema" "repo" "validate"])]))
 
 (defn watch-processes
   [root String

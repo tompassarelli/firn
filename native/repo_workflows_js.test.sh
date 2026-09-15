@@ -175,4 +175,59 @@ rg -F "pinned $independent_rev is not an ancestor of local beagle/main" \
   "$doctor_skewed.err" >/dev/null \
   || die "doctor did not identify first-party input skew"
 
+upgrade_repo="$scratch/upgrade-repo"
+upgrade_bin="$scratch/upgrade-bin"
+mkdir -p "$upgrade_repo" "$upgrade_bin"
+git init --quiet "$upgrade_repo"
+printf '.beagle-cache/\n' >"$upgrade_repo/.gitignore"
+printf 'before\n' >"$upgrade_repo/flake.lock"
+cat >"$upgrade_bin/firn-schema" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  'schema extract')
+    [[ "${FAIL_EXTRACTION:-0}" == 0 ]] || exit 7
+    mkdir -p "$FIRN_REPO/.beagle-cache"
+    cp "$FIRN_REPO/flake.lock" "$FIRN_REPO/.beagle-cache/schema.json"
+    ;;
+  'repo validate')
+    [[ "$(cat "$FIRN_REPO/.beagle-cache/schema.before.json")" == before ]]
+    [[ "$(cat "$FIRN_REPO/.beagle-cache/schema.json")" == after ]]
+    touch "$FIRN_REPO/validated"
+    exit "${VALIDATION_STATUS:-0}"
+    ;;
+  *) exit 64 ;;
+esac
+SH
+cat >"$upgrade_bin/nix" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == "flake update --flake $FIRN_REPO" ]]
+[[ "$(cat "$FIRN_REPO/.beagle-cache/schema.before.json")" == before ]]
+printf 'after\n' >"$FIRN_REPO/flake.lock"
+SH
+chmod +x "$upgrade_bin/"*
+FIRN_REPO="$upgrade_repo" PATH="$upgrade_bin:$PATH" \
+  FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
+  bun "$repo/native/repo_workflows_host.mjs" repo upgrade now
+[[ -f "$upgrade_repo/validated" ]] \
+  || die "upgrade with an untracked cache did not reach validation"
+
+printf 'before\n' >"$upgrade_repo/flake.lock"
+upgrade_status=0
+FIRN_REPO="$upgrade_repo" PATH="$upgrade_bin:$PATH" FAIL_EXTRACTION=1 \
+  FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
+  bun "$repo/native/repo_workflows_host.mjs" repo upgrade now \
+  || upgrade_status=$?
+[[ "$upgrade_status" == 7 && "$(cat "$upgrade_repo/flake.lock")" == before ]] \
+  || die "failed extraction did not stop upgrade before lock mutation"
+
+upgrade_status=0
+FIRN_REPO="$upgrade_repo" PATH="$upgrade_bin:$PATH" VALIDATION_STATUS=9 \
+  FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
+  bun "$repo/native/repo_workflows_host.mjs" repo upgrade now \
+  || upgrade_status=$?
+[[ "$upgrade_status" == 9 ]] \
+  || die "upgrade did not propagate canonical validation failure"
+
 printf 'PASS repo-workflows-js\n'

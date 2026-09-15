@@ -45,6 +45,10 @@
   (match process
     [(InheritProcess phase argv)
      (workflow/->ProcessObservation (.runInherit bridge argv) "" "")]
+    [(CompareProcess phase argv)
+     (let [status Int (.runInherit bridge argv)]
+       (workflow/->ProcessObservation
+         (if (or (= status 0) (= status 1)) 0 status) "" ""))]
     [(CaptureProcess phase argv stdin max-output)
      (observation-from-capture
        (.runCapture bridge argv stdin max-output) argv)]
