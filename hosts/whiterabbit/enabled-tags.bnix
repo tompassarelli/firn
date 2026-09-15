@@ -5,9 +5,6 @@
 {:platform linux
  :enabled
   [terminal
-   ;; north/beagle tools are live-linked from dotfiles/bin, never
-   ;; store-placed: a dev-loop tool in the closure is stale by construction.
-   ;; north has no module left to exclude — the module is gone.
    cli-tools
    [desktop -mako +river]
    theming
@@ -29,31 +26,5 @@
    notes
    writing
    [vpn -protonvpn-cli]]
- :disabled
-  [anytype
-   blender
-   bun
-   cargo
-   clang
-   clippy
-   clojure
-   dbeaver
-   drracket
-   gcc
-   glide
-   lutris
-   mail
-   nodejs
-   obs-studio
-   promptfoo
-   python
-   racket
-   rust-analyzer
-   rustc
-   rustfmt
-   slack
-   spotify
-   wine
-   wowup
-   zoom]
+ :disabled [anytype blender bun cargo clang clippy clojure dbeaver drracket gcc glide mail nodejs obs-studio promptfoo python racket rust-analyzer rustc rustfmt slack spotify wine wowup zoom]
 }

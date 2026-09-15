@@ -61,6 +61,7 @@
    :myConfig.modules.libnotify.enable (lib.mkDefault true)
    :myConfig.modules.libsecret.enable (lib.mkDefault true)
    :myConfig.modules.libtool.enable (lib.mkDefault true)
+   :myConfig.modules.lutris.enable (lib.mkDefault true)
    :myConfig.modules.mpv.enable (lib.mkDefault true)
    :myConfig.modules.musl.enable (lib.mkDefault true)
    :myConfig.modules.nautilus.enable (lib.mkDefault true)
