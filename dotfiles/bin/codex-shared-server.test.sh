@@ -24,6 +24,7 @@ case "${0##*/}" in
     for argument in "$@"; do
       if [[ "$previous" = --listen ]]; then
         perl -MSocket -e 'socket(my $s, AF_UNIX, SOCK_STREAM, 0) or die $!; bind($s, sockaddr_un($ARGV[0])) or die $!;' "${argument#unix://}"
+        printf '%s\n' "${argument#unix://}" >"$SHARED_TEST_ROOT/listener.path"
       fi
       previous="$argument"
     done
@@ -32,7 +33,7 @@ case "${0##*/}" in
     exit
     ;;
   ss)
-    if [[ -e "$SHARED_TEST_ROOT/listening" ]]; then echo 'test listener'; fi
+    if [[ -e "$SHARED_TEST_ROOT/listening" && "${*: -1}" = "$(<"$SHARED_TEST_ROOT/listener.path")" ]]; then echo 'test listener'; fi
     exit 0
     ;;
 esac
@@ -76,6 +77,17 @@ grep -Fxq -- "--setenv=NORTH_CODEX_CONVERSATION_HOME=$fixture/home/pool" "$fixtu
 grep -Fxq -- "--setenv=NORTH_CODEX_CONVERSATION_SQLITE_HOME=$fixture/home/pool/sqlite" "$fixture/start.argv" ||
   fail "service did not preserve the SQLite directory"
 grep -Fxq -- app-server "$fixture/start.argv" || fail "service did not start supported app-server"
+
+# Codex can publish the requested endpoint as a symlink to its control socket.
+mv "${endpoint#unix://}" "$fixture/control.sock"
+ln -s "$fixture/control.sock" "${endpoint#unix://}"
+printf '%s\n' "$fixture/control.sock" >"$fixture/listener.path"
+"$helper" >"$fixture/aliased"
+cmp "$fixture/first" "$fixture/aliased" || fail "socket alias changed the client endpoint"
+[[ "$(wc -l <"$fixture/starts")" = 1 ]] || fail "socket alias started another owner"
+rm "${endpoint#unix://}"
+mv "$fixture/control.sock" "${endpoint#unix://}"
+printf '%s\n' "${endpoint#unix://}" >"$fixture/listener.path"
 
 mv "$fixture/active" "$fixture/inactive"
 if "$helper" >"$fixture/failed" 2>"$fixture/error"; then

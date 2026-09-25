@@ -60,9 +60,11 @@ for ((attempt = 0; attempt < 100; attempt++)); do
   systemctl --user is-active --quiet "$unit" ||
     fail "shared server exited before becoming ready; inspect $unit"
   if [[ -S "$socket" ]]; then
-    [[ "$(stat -c '%u' "$socket")" = "$UID" ]] ||
+    [[ "$(stat -Lc '%u' "$socket")" = "$UID" ]] ||
       fail "shared server socket belongs to another user"
-    listeners="$(ss -H -xl src "$socket")" || fail "cannot inspect shared server listener"
+    # Codex may publish this endpoint as a symlink; the kernel lists its target.
+    listener_socket="$(realpath -e "$socket")" || fail "cannot resolve shared server socket"
+    listeners="$(ss -H -xl src "$listener_socket")" || fail "cannot inspect shared server listener"
     if [[ -n "$listeners" ]]; then
       printf '%s\n' "$endpoint"
       exit 0
