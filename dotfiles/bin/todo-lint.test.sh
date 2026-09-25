@@ -214,7 +214,7 @@ record invalid-attempt.md \
   'role = "owner"' \
   'review_budget = "maximum"' \
   'review_outcome = "not-run"' \
-  'reviewer_model = "gpt-6-sol"' \
+  'reviewer_model = "gpt-5.6-sol"' \
   '+++'
 record model-placeholder.md \
   '+++' \
@@ -272,7 +272,7 @@ record model-placeholder.md \
 record estimate-calibration.md \
   '- fixture/A1 — model: inherited-parent-model; reasoning: high; outcome: unresolved.' \
   'fixture/A2 — inherited high worker.' \
-  'fixture/A3 — two inherited-route gpt-6-sol writers.' \
+  'fixture/A3 — two inherited-route gpt-5.6-sol writers.' \
   '| 2026-01-01 | fixture | 1m | 1m | model=inherited-parent-model reasoning=high | checkpoint |' \
   '| Settled | Attempt | Estimate | Actual | Queue | Staffing | Review | Outcome |' \
   '| --- | --- | --- | --- | --- | --- | --- | --- |' \
@@ -530,7 +530,7 @@ record_clean() {
     'agent_time_estimate = "1m"' \
     'calibration_sample_count = 1' \
     'started_at = "2026-01-01T00:00:00+00:00"' \
-    'model = "gpt-6-sol"' \
+    'model = "gpt-5.6-sol"' \
     'reasoning = "high"' \
     'route = "test"' \
     'assignment_id = "none"' \
