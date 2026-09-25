@@ -40,6 +40,22 @@ def command(*args, **kwargs):
         raise RuntimeError(f"{args[0]} exited {exc.returncode}: {exc.stderr.strip()}") from exc
 
 
+def runtime_root(kind):
+    """Return the selected install root for an exact runtime executable."""
+    executable_key = "old_runtime" if kind == "old" else kind
+    root = Path(CONFIG[f"{executable_key}_root"])
+    assert root.is_absolute(), f"{kind} runtime root must be absolute"
+    return root
+
+
+def check_runtime_layout(kind):
+    root = runtime_root(kind)
+    executable_key = "old_runtime" if kind == "old" else kind
+    executable = Path(CONFIG[executable_key]).resolve(strict=True)
+    selected = (root / "bin" / "codex").resolve(strict=True)
+    assert selected == executable, f"{kind} runtime root does not select its executable"
+
+
 def check_candidate():
     candidate = Path(CONFIG["candidate"])
     assert candidate.is_absolute() and candidate.resolve(strict=True) == candidate, "candidate must be an exact executable path"
@@ -47,6 +63,7 @@ def check_candidate():
         digest = hashlib.file_digest(binary, "sha256").hexdigest()
     assert digest == CONFIG["candidate_sha256"], "candidate identity changed"
     assert candidate.is_file() and os.access(candidate, os.X_OK)
+    check_runtime_layout("candidate")
 
 
 def provider_preflight():
@@ -74,9 +91,10 @@ def provider_preflight():
 
 def preflight():
     check_candidate()
+    check_runtime_layout("old")
     checkpoint = Path(CONFIG["peer_checkpoint"]).read_bytes()
     assert hashlib.sha256(checkpoint).hexdigest() == CONFIG["peer_checkpoint_sha256"], "peer checkpoint changed"
-    assert Path(CONFIG["selector"]).resolve() == Path(CONFIG["old_runtime"]).parent.parent, "runtime selector changed"
+    assert Path(CONFIG["selector"]).resolve() == Path(CONFIG["previous_selector_root"]), "runtime selector changed"
     pid = int(command("systemctl", "--user", "show", CONFIG["unit"], "--property=MainPID", "--value"))
     assert str(Path(f"/proc/{pid}/exe").resolve()) == CONFIG["old_runtime"], "shared runtime changed"
     own_group = Path("/proc/self/cgroup").read_text().strip()
@@ -265,7 +283,7 @@ def activate(mode):
     next_selector = Path(CONFIG["selector"] + ".communication-next")
     assert not next_selector.exists() and not next_selector.is_symlink()
     asyncio.run(quiesce_threads())
-    next_selector.symlink_to(Path(CONFIG["candidate"]).parent.parent)
+    next_selector.symlink_to(runtime_root("candidate"))
     env = dict(os.environ)
     env.update({"CODEX_RUNTIME": CONFIG["candidate"],
                 "NORTH_CODEX_CONVERSATION_HOME": CONFIG["conversation_home"],
@@ -295,7 +313,7 @@ def activate(mode):
                     command("systemctl", "--user", "stop", CONFIG["unit"])
             if next_selector.is_symlink():
                 next_selector.unlink()
-            next_selector.symlink_to(Path(CONFIG["old_runtime"]).parent.parent)
+            next_selector.symlink_to(Path(CONFIG["previous_selector_root"]))
             os.replace(next_selector, CONFIG["selector"])
             env["CODEX_RUNTIME"] = CONFIG["old_runtime"]
             endpoint = command(CONFIG["launcher"], env=env)

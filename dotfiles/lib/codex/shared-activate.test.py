@@ -201,18 +201,26 @@ with tempfile.TemporaryDirectory(prefix="codex-shared-recovery-") as temporary:
         asyncio.run(check_turn_summary_api())
         print("PASS: installed old runtime recognizes bounded current-turn query and rejects unmaterialized threads")
 
-        candidate = root / "bad/bin/codex"
+        bad_root = root / "bad"
+        candidate = bad_root / "node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex"
         candidate.parent.mkdir(parents=True)
+        (bad_root / "bin").mkdir()
+        (bad_root / "bin/codex").symlink_to(candidate)
         candidate.write_text("#!/usr/bin/env bash\necho 'injected candidate startup failure' >&2\nexit 42\n")
         candidate.chmod(0o700)
         selector = root / "current"
-        selector.symlink_to(runtime.parent.parent)
+        previous_selector_root = root / "previous-selected"
+        (previous_selector_root / "bin").mkdir(parents=True)
+        (previous_selector_root / "bin/codex").symlink_to(candidate)
+        selector.symlink_to(previous_selector_root)
         checkpoint = root / "checkpoint"
         checkpoint.write_text("isolated service has no model turns\n")
         activation.ROOT = root
         activation.CONFIG = {
             "candidate": str(candidate), "candidate_sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
-            "old_runtime": str(runtime), "selector": str(selector), "unit": unit,
+            "old_runtime": str(runtime), "old_runtime_root": str(runtime.parent.parent),
+            "candidate_root": str(bad_root), "previous_selector_root": str(previous_selector_root),
+            "selector": str(selector), "unit": unit,
             "socket": str(directory / "app-server.sock"), "launcher": str(launcher),
             "conversation_home": str(pool), "sqlite_home": str(sqlite),
             "peer_checkpoint": str(checkpoint), "peer_checkpoint_sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
@@ -249,7 +257,7 @@ with tempfile.TemporaryDirectory(prefix="codex-shared-recovery-") as temporary:
         else:
             raise AssertionError("broken executable passed the real isolated preflight launcher")
         assert command("systemctl", "--user", "show", unit, "-p", "MainPID", "--value") == original_pid
-        assert selector.resolve() == runtime.parent.parent
+        assert selector.resolve() == previous_selector_root
         run_process = subprocess.run
         canary_calls = []
 
@@ -273,7 +281,7 @@ with tempfile.TemporaryDirectory(prefix="codex-shared-recovery-") as temporary:
             quiesce.assert_not_awaited()
         assert len(canary_calls) == 1
         assert command("systemctl", "--user", "show", unit, "-p", "MainPID", "--value") == original_pid
-        assert selector.resolve() == runtime.parent.parent
+        assert selector.resolve() == previous_selector_root
         assert not Path(str(selector) + ".communication-next").is_symlink()
         print("PASS: provider preflight rejection leaves PID, selector, and listener turns untouched")
         with patch.object(activation, "provider_preflight"), \
@@ -285,7 +293,7 @@ with tempfile.TemporaryDirectory(prefix="codex-shared-recovery-") as temporary:
             else:
                 raise AssertionError("failed candidate reported success")
             resume.assert_awaited_once()
-        assert selector.resolve() == runtime.parent.parent
+        assert selector.resolve() == previous_selector_root
         asyncio.run(activation.quiesce_threads())
         receipts = [json.loads(line) for line in (root / "activation-receipt.jsonl").read_text().splitlines()]
         failures = [entry for entry in receipts if entry["stage"] == "command-failed"]
@@ -294,10 +302,14 @@ with tempfile.TemporaryDirectory(prefix="codex-shared-recovery-") as temporary:
         assert any(entry["stage"] == "previous-runtime-restored" for entry in receipts)
         print("PASS: failed candidate restores selector, running old executable, and API availability; receipt preserves launcher stderr")
 
-        candidate = root / "candidate/bin/codex"
+        candidate_root = root / "candidate"
+        candidate = candidate_root / "node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex"
         candidate.parent.mkdir(parents=True)
+        (candidate_root / "bin").mkdir()
+        (candidate_root / "bin/codex").symlink_to(candidate)
         shutil.copy2(runtime, candidate)
         activation.CONFIG.update(candidate=str(candidate),
+            candidate_root=str(candidate_root),
             candidate_sha256=hashlib.sha256(candidate.read_bytes()).hexdigest(), resume_timeout_seconds=0.15,
             resume=[{"id": name, "message": "no model call"} for name in ("listener-one", "listener-two")])
         original_resume = activation.resume_threads
@@ -332,7 +344,7 @@ with tempfile.TemporaryDirectory(prefix="codex-shared-recovery-") as temporary:
                 else:
                     raise AssertionError(f"{outcome} activation incorrectly succeeded")
             assert observed == [str(candidate), str(runtime)], observed
-            assert selector.resolve() == runtime.parent.parent
+            assert selector.resolve() == previous_selector_root
             if outcome.startswith("late-"):
                 assert apis[0].commentary_seen == ["listener-one", "listener-two"]
             assert apis[1].completed_seen == ["listener-one", "listener-two"]
