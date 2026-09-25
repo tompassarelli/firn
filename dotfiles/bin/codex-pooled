@@ -65,10 +65,32 @@ shared_interactive() {
     *) return 0 ;;
   esac
 }
+# Codex refuses --add-dir alongside --remote: an attached client may not widen
+# the server's workspace. The server's own launch is never remote and carries
+# these roots itself, so every remote invocation drops them here — the endpoint
+# selected below and a caller-supplied one alike.
+remote_invocation() {
+  local skip_value=0 entry
+  for entry in "$@"; do
+    if ((skip_value)); then skip_value=0; continue; fi
+    case "$entry" in
+      --remote|--remote=*) return 0 ;;
+      -c|--config|--enable|--disable|--remote-auth-token-env|\
+      -i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|\
+      -C|--cd|--add-dir|-a|--ask-for-approval) skip_value=1 ;;
+      --) break ;;
+    esac
+  done
+  return 1
+}
+
 shared_args=()
 if shared_interactive "$@"; then
   endpoint="$("$(dirname "$self")/codex-shared-server")"
   shared_args=(--remote "$endpoint")
+fi
+if ((${#shared_args[@]})) || remote_invocation "$@"; then
+  workspace_args=()
 fi
 
 # Non-interactive subcommands parse their own config flags. Put the provider
