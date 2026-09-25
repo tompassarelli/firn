@@ -136,8 +136,8 @@ for invocation in interactive app-server exec; do
   fi
 done
 
-run_automatic -c 'model="gpt-5.6-sol"' -c 'model_reasoning_effort="low"' app-server --listen stdio://
-[[ "$(grep '^model=' "$argv_log" | tail -1)" = 'model="gpt-5.6-sol"' ]] ||
+run_automatic -c 'model="gpt-6-sol"' -c 'model_reasoning_effort="low"' app-server --listen stdio://
+[[ "$(grep '^model=' "$argv_log" | tail -1)" = 'model="gpt-6-sol"' ]] ||
   fail "pooled default replaced explicit model"
 [[ "$(grep '^model_reasoning_effort=' "$argv_log" | tail -1)" = 'model_reasoning_effort="low"' ]] ||
   fail "pooled default replaced explicit effort"
@@ -160,8 +160,8 @@ if grep -Fxq 'model_provider="codex-lb"' "$argv_log"; then
   fail "explicit account received pooled provider"
 fi
 
-run_automatic as acct -c 'model="gpt-5.6-sol"' -c 'model_reasoning_effort="low"' exec "explicit model"
-[[ "$(grep '^model=' "$argv_log" | tail -1)" = 'model="gpt-5.6-sol"' ]] ||
+run_automatic as acct -c 'model="gpt-6-sol"' -c 'model_reasoning_effort="low"' exec "explicit model"
+[[ "$(grep '^model=' "$argv_log" | tail -1)" = 'model="gpt-6-sol"' ]] ||
   fail "native default replaced explicit model"
 [[ "$(grep '^model_reasoning_effort=' "$argv_log" | tail -1)" = 'model_reasoning_effort="low"' ]] ||
   fail "native default replaced explicit effort"
@@ -292,7 +292,7 @@ env -u CODEX_HOME -u CODEX_SQLITE_HOME \
   NORTH_CODEX_POOLED_HOME="$pooled" \
   NORTH_NO_SLICE=1 \
   "$CODEX_POOLED" exec --json resume --disable multi_agent \
-    -m gpt-5.6-sol -c 'model_reasoning_effort="xhigh"' "$PSID" - \
+    -m gpt-6-sol -c 'model_reasoning_effort="xhigh"' "$PSID" - \
     >/dev/null 2>&1 || fail "installed parser rejected pooled exec resume argv"
 
 run_pooled exec --disable resume plain-task

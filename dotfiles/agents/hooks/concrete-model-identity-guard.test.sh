@@ -154,7 +154,7 @@ repair_patch='*** Begin Patch
 *** Update File: code/todo/task.md
 @@
 -model = "inherited"
-+model = "gpt-5.6-sol"
++model = "gpt-6-sol"
 *** End Patch'
 bad_table_patch='*** Begin Patch
 *** Update File: code/todo/estimate-calibration.md
@@ -186,9 +186,9 @@ run_case deny 'Bash sed attached-suffix edit writes placeholder' \
 run_case deny 'Bash sed long backup-suffix edit writes placeholder' \
   "$(bash_payload "$SCRATCH/home" "sed --in-place=.bak 's/model = self/model = inherited-parent-model/' '$TODO/task.md'")"
 run_case allow 'Bash in-place edit repairs a placeholder' \
-  "$(bash_payload "$SCRATCH/home" "sed -i 's/model = self/model = gpt-5.6-sol/' '$TODO/task.md'")"
+  "$(bash_payload "$SCRATCH/home" "sed -i 's/model = self/model = gpt-6-sol/' '$TODO/task.md'")"
 run_case deny 'quoted sed command writes placeholder' \
-  "$(bash_payload "$SCRATCH/home" "'sed' -i 's/model = gpt-5.6-sol/model = self/' '$TODO/task.md'")"
+  "$(bash_payload "$SCRATCH/home" "'sed' -i 's/model = gpt-6-sol/model = self/' '$TODO/task.md'")"
 run_case deny 'static nested Bash writes placeholder' \
   "$(bash_payload "$SCRATCH/home" "bash -c 'printf \"model = self\" > \"$TODO/task.md\"'")"
 run_case deny 'static nested sh option cluster writes placeholder' \
@@ -206,25 +206,25 @@ run_case allow 'Bash redirect outside todo remains legal' \
 run_case allow 'Bash quoted mention without a write remains legal' \
   "$(bash_payload "$SCRATCH/home" "echo 'model = \"inherited\"'")"
 run_case allow 'unrelated placeholder command does not taint concrete redirect' \
-  "$(bash_payload "$SCRATCH/home" "echo 'model = \"self\"'; printf 'model = \"gpt-5.6-sol\"' > '$TODO/task.md'")"
+  "$(bash_payload "$SCRATCH/home" "echo 'model = \"self\"'; printf 'model = \"gpt-6-sol\"' > '$TODO/task.md'")"
 run_case allow 'concrete redirect does not inherit later unrelated placeholder' \
-  "$(bash_payload "$SCRATCH/home" "printf 'model = \"gpt-5.6-sol\"' > '$TODO/task.md' && echo 'model = \"parent\"'")"
+  "$(bash_payload "$SCRATCH/home" "printf 'model = \"gpt-6-sol\"' > '$TODO/task.md' && echo 'model = \"parent\"'")"
 run_case allow 'shell comment does not taint concrete redirect' \
-  "$(bash_payload "$SCRATCH/home" "printf 'model = \"gpt-5.6-sol\"' > '$TODO/task.md' # model = self")"
+  "$(bash_payload "$SCRATCH/home" "printf 'model = \"gpt-6-sol\"' > '$TODO/task.md' # model = self")"
 run_case allow 'unrelated redirect name does not taint concrete model value' \
-  "$(bash_payload "$SCRATCH/home" "printf 'model = \"gpt-5.6-sol\"' > '$TODO/task.md' 2> '$SCRATCH/work/default.log'")"
+  "$(bash_payload "$SCRATCH/home" "printf 'model = \"gpt-6-sol\"' > '$TODO/task.md' 2> '$SCRATCH/work/default.log'")"
 
 run_case allow 'quoted redirection token is ordinary data' \
   "$(bash_payload "$SCRATCH/home" "printf '%s\\n' '>' '$TODO/task.md' 'model = \"self\"'")"
 run_case allow 'sed argument mention is not a command' \
-  "$(bash_payload "$SCRATCH/home" "echo sed -i 's/model = gpt-5.6-sol/model = self/' '$TODO/task.md'")"
+  "$(bash_payload "$SCRATCH/home" "echo sed -i 's/model = gpt-6-sol/model = self/' '$TODO/task.md'")"
 run_case allow 'tee argument mention is not a command' \
   "$(bash_payload "$SCRATCH/home" "echo tee '$TODO/task.md' 'model = self'")"
 run_case allow 'nested shell mention is ordinary prose' \
   "$(bash_payload "$SCRATCH/home" "echo \"bash -c 'printf model=self > $TODO/task.md'\"")"
 
 run_case allow 'concrete model' \
-  "$(payload Write "$TODO/task.md" 'model = "gpt-5.6-sol"')"
+  "$(payload Write "$TODO/task.md" 'model = "gpt-6-sol"')"
 run_case allow 'reasoning may describe selection behavior' \
   "$(payload Write "$TODO/task.md" 'reasoning = "inherited"')"
 run_case allow 'ordinary prose use' \
@@ -234,7 +234,7 @@ run_case allow 'ordinary data-model prose use' \
 run_case allow 'assignment ledger comment header' \
   "$(payload Edit "$TODO/model-assignment-ledger.md" '# ts | task | model | effort | outcome | note')"
 run_case allow 'calibration inherited-route prose with concrete model' \
-  "$(payload Write "$TODO/estimate-calibration.md" 'fixture — two inherited-route gpt-5.6-sol writers.')"
+  "$(payload Write "$TODO/estimate-calibration.md" 'fixture — two inherited-route gpt-6-sol writers.')"
 run_case allow 'same field outside todo' \
   "$(payload Write "$SCRATCH/work/task.md" 'model = "inherited"')"
 run_case allow 'malformed JSON fails open' 'not-json'

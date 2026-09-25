@@ -153,7 +153,7 @@ with pathlib.Path(sys.argv[1]).open("rb") as handle:
 assert config["model"] == "gpt-6-astra"
 assert config["model_reasoning_effort"] == "medium"
 assert config["agents"]["max_concurrent_threads_per_session"] == 64
-assert config["agents"]["default_subagent_model"] == "gpt-5.6-luna"
+assert config["agents"]["default_subagent_model"] == "gpt-6-luna"
 assert "north" not in config.get("mcp_servers", {})
 assert "linear-mcp-msa-new" in config.get("mcp_servers", {})
 PY

@@ -103,6 +103,9 @@ ADMITTED_MODEL_IDENTITIES = frozenset({
     "claude-opus-5",
     "claude-sonnet-5",
     "gpt-5",
+    "gpt-6-astra",
+    "gpt-6-luna",
+    "gpt-6-sol",
     "gpt-5.6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
@@ -615,7 +618,7 @@ reason = (
     "BLOCKED: a todo model field must name an exact concrete runtime model, "
     "not a selection or lineage placeholder. "
     "Record the exact concrete model from run or dispatch evidence "
-    "(for example `gpt-5.6-sol`); if that evidence is unavailable, record the "
+    "(for example `gpt-6-sol`); if that evidence is unavailable, record the "
     "evidence gap outside the model field instead of inventing an identity."
 )
 print(json.dumps({

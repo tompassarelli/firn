@@ -9,7 +9,7 @@ model_reasoning_effort = "medium"
 
 [agents]
 max_concurrent_threads_per_session = 64
-default_subagent_model = "gpt-5.6-luna"
+default_subagent_model = "gpt-6-luna"
 
 [projects."/home/tom"]
 trust_level = "trusted"
@@ -34,7 +34,7 @@ trust_level = "trusted"
 
 [tui.model_availability_nux]
 "gpt-5.6-terra" = 1
-"gpt-5.6-sol" = 1
+"gpt-6-sol" = 1
 
 [features]
 hooks = true

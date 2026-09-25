@@ -125,6 +125,8 @@ ADMITTED_MODEL_IDENTITIES = frozenset({
     "claude-opus-5",
     "claude-sonnet-5",
     "gpt-5",
+    "gpt-6-luna",
+    "gpt-6-sol",
     "gpt-5.6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
