@@ -67,6 +67,7 @@
   myConfig.modules.pkg-config.enable = lib.mkDefault true;
   myConfig.modules.polkit.enable = lib.mkDefault true;
   myConfig.modules.procs.enable = lib.mkDefault true;
+  myConfig.modules.protonup-qt.enable = lib.mkDefault true;
   myConfig.modules.protonvpn-gui.enable = lib.mkDefault true;
   myConfig.modules.quickshell.enable = lib.mkDefault true;
   myConfig.modules.qutebrowser.enable = lib.mkDefault true;

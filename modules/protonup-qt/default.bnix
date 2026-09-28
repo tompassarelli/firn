@@ -1,0 +1,11 @@
+#lang beagle/nix
+
+(ns default)
+
+(nix/module [config lib pkgs ...]
+  {:options.myConfig.modules.protonup-qt.enable
+    (lib.mkEnableOption "ProtonUp-Qt compatibility tool manager")
+   :tags [gaming]
+   :config
+    (lib.mkIf config.myConfig.modules.protonup-qt.enable
+      {:environment.systemPackages (nix/with pkgs [protonup-qt])})})
