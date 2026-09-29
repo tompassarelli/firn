@@ -39,6 +39,7 @@
   myConfig.modules.glide.enable = false;
   myConfig.modules.guix.enable = false;
   myConfig.modules.neovim.enable = true;
+  myConfig.modules.vscode.enable = true;
   myConfig.modules.mini-serve.enable = true;
   myConfig.modules.awscli.enable = true;
   myConfig.modules.cloudflare-auth.enable = true;
