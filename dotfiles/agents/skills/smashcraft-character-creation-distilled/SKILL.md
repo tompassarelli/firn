@@ -70,6 +70,21 @@ render cannot prove native materials, attachment behavior, or animation phase
 restoration. Add character-specific VFX/audio with stable semantic event IDs
 so replay does not duplicate impacts, shots, or summon effects.
 
+Every fighter must explicitly pass both damage-presentation checks:
+
+- **Hitstun:** authored, readable "I've been hit" reactions for grounded and
+  airborne hits, including launch/tumble where appropriate; transition back
+  to controllable movement or into landing/knockdown according to simulation.
+  An idle pose, attack pose, or generic frozen unit is not a hitstun animation.
+- **Hitlag:** hold the correct contact pose for the exact simulation hitlag
+  frames, then resume at the correct phase without restarting the clip. This
+  is pose freezing, not a separately advancing animation. Check attacker and
+  victim independently: do not assume the victim retains its pre-hit attack
+  pose instead of entering a damage pose. Confirm transition ordering against
+  the local reference before claiming Melee parity. Shield contact must hold
+  the appropriate shield reaction. Test repeated hits and replay restoration;
+  freezing animation must not stop global input sampling or the match clock.
+
 ## Connect a complete character
 
 Use normalized, rebindable input actions; do not hardcode physical keys into
