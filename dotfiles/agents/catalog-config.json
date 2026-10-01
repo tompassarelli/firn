@@ -20,6 +20,7 @@
     "game-design-prototyping-distilled",
     "wurst-development-distilled",
     "smashcraft-character-creation-distilled",
+    "off-monitor-development-distilled",
     "greywrought-development-distilled",
     "firn-distilled",
     "nix-development-distilled",
@@ -435,6 +436,14 @@
         "path": "dotfiles/agents/skills/smashcraft-character-creation-distilled/SKILL.md"
       }
     },
+    "off-monitor-development-distilled": {
+      "kind": "skill",
+      "category": "games",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/off-monitor-development-distilled/SKILL.md"
+      }
+    },
     "wurst-development-distilled": {
       "kind": "skill",
       "category": "games",
@@ -446,6 +455,9 @@
   },
   "activation": {
     "smashcraft-character-creation-distilled": {
+      "distributions": [{ "type": "skill", "targets": ["shared"] }]
+    },
+    "off-monitor-development-distilled": {
       "distributions": [{ "type": "skill", "targets": ["shared"] }]
     },
     "agent-machinery": {

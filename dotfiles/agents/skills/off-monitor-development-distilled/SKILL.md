@@ -1,0 +1,82 @@
+---
+name: off-monitor-development-distilled
+description: >-
+  Run GPU-accelerated Linux games and graphical development tools in a private desktop beside Niri, with remote input that never grabs the normal desktop.
+---
+
+# Off-monitor development
+
+Use this when an application must keep rendering or receiving input while the
+owner uses the normal desktop. It starts a separate headless Wayland compositor
+with hardware rendering and a loopback-only VNC control channel. Niri remains
+the everyday desktop; do not switch desktops or inject input globally.
+
+## Start the private desktop
+
+Use the canonical launcher at `scripts/private-desktop.sh` from this skill.
+It needs `agents`, `bun`, `nix`, and access to the configured GPU render node.
+Run it from any project; keep game-specific commands in that project's own
+launcher or shell.
+
+```bash
+skill_file=$(agents path off-monitor-development-distilled)
+skill_dir=$(dirname "$skill_file")
+"$skill_dir/scripts/private-desktop.sh" start --resolution 2560x1440 \
+  --seconds 3600 -- COMMAND ARG...
+```
+
+The command after `--` runs with only the private display environment. Its exit
+ends the session. Without a command, the launcher stays open until its bounded
+timeout or Ctrl-C. Each run gets a private runtime directory, unique Wayland
+socket, and an available localhost VNC port. The launcher uses labwc with
+wlroots GLES rendering on the selected DRM render node and contains the session
+in the shared machine-capacity helper. Do not run two clients against one
+mutable Wine/Proton prefix.
+
+Read the printed run directory and port. Control it only through the launcher:
+
+```bash
+"$skill_dir/scripts/private-desktop.sh" capture RUN_DIR /absolute/path/frame.png
+"$skill_dir/scripts/private-desktop.sh" control RUN_DIR move 640 360 key enter
+"$skill_dir/scripts/private-desktop.sh" control RUN_DIR keydown shift pause 0.2 keyup shift
+"$skill_dir/scripts/private-desktop.sh" control RUN_DIR mousedown 1 pause 0.2 mouseup 1
+```
+
+`vncdo` actions are case-sensitive; use lowercase key names such as `f10`.
+Keep each control sequence shorter than the command's eight-second bound.
+`mousedown`/`mouseup` and `keydown`/`keyup` allow held inputs. Never use
+`ydotool`, `xdotool`, compositor global bindings, or main-desktop focus changes
+to control the private app. `xdotool` is suitable only for diagnostics that run
+inside the private Xwayland display, never for sending real user input.
+
+To stop, send Ctrl-C to the foreground launcher or let its timeout expire. Use
+only its exact run directory and processes for cleanup; never kill the user's
+desktop or another session. Logs and captures remain in the printed runtime
+directory until logout. VNC binds to `127.0.0.1` with no password, so do not
+change that address to expose it to a network.
+
+## Add a graphical application
+
+Start applications only after the launcher has set the requested output mode.
+Use the normal project launcher and environment for the target application;
+put reusable project-specific flags or prefix selection in that project, not
+in this generic launcher. Existing account state and credentials stay in their
+application's supported stores. Do not expose secrets in process arguments or
+logs.
+
+For Warcraft III under Steam Proton, first establish that no other Wine/Proton
+client is using the same prefix. Start Battle.net inside the private session
+with the installed GE-Proton and Steam Linux Runtime, reusing the existing
+logged-in prefix. Do not start a second Battle.net/WC3 process on the same
+prefix, bypass Steam's supported runtime, or copy credentials. Select Play and
+verify an actual in-game action through private VNC input and a fresh capture;
+a Battle.net window alone does not prove gameplay works.
+
+## Verify the path
+
+Check the startup `glxinfo -B` log for the hardware renderer. Use the capture
+command to confirm the private framebuffer updates. Before declaring a game
+usable, verify that key and pointer events arrive in the private app, the app
+responds to an ordinary in-game action, and the normal desktop retains focus
+and input. Report what you observed; do not infer game support from compositor
+startup or a launcher screen.
