@@ -11,6 +11,11 @@ owner uses the normal desktop. It starts a separate headless Wayland compositor
 with hardware rendering and a loopback-only VNC control channel. Niri remains
 the everyday desktop; do not switch desktops or inject input globally.
 
+Before repeated captures, load `image-context-budget-distilled`. Capture to
+disk and inspect with bounded text/OCR by default; keep recordings and screenshot
+sequences out of conversation history. Follow its cumulative preview budget and
+text-only recovery rule after a payload-size failure.
+
 ## Start the private desktop
 
 Use the canonical launcher at `scripts/private-desktop.sh` from this skill.

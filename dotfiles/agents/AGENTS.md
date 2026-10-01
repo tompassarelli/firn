@@ -49,6 +49,17 @@ that reason in the work update. Load the smallest set that covers the task and
 state the order when several apply. Skills apply for the current turn only; if
 one is unavailable, say so and use the safest supported fallback.
 
+## Keep graphical inspection out of conversation history
+
+Before repeated screenshot or graphical inspection, load
+`image-context-budget-distilled`. Keep captures on disk and return bounded
+text from OCR, application state, or measurements by default. Small previews
+still accumulate across turns; cropping the next image does not remove earlier
+images. After a payload-size failure, send no further inline images, base64,
+or image-bearing history in that context until the runtime confirms those
+images were removed. Preserve a text handoff and continue useful work; never
+treat an intended compaction as completed compaction.
+
 ## Respect source authority
 
 Files under `~/.agents`, `~/.codex`, and `/etc/codex` are
