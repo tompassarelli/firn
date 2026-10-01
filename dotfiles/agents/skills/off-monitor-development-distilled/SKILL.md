@@ -27,15 +27,19 @@ launcher or shell.
 skill_file=$(agents path off-monitor-development-distilled)
 skill_dir=$(dirname "$skill_file")
 "$skill_dir/scripts/private-desktop.sh" start --resolution 2560x1440 \
-  --seconds 3600 -- COMMAND ARG...
+  -- COMMAND ARG...
 ```
 
 The command after `--` runs with only the private display environment. Its exit
-ends the session. Without a command, the launcher stays open until its bounded
-timeout or Ctrl-C. Each run gets a private runtime directory, unique Wayland
+ends the session. Without a command, the launcher stays open until explicitly
+stopped or Ctrl-C. There is no default wall-clock deadline. Add `--seconds 3600`
+only when a finite deadline is wanted. Each run gets a private runtime directory, unique Wayland
 socket, and an available localhost VNC port. The launcher uses labwc with
 wlroots GLES rendering on the selected DRM render node and contains the session
-in the shared machine-capacity helper. Do not run two clients against one
+in the shared machine-capacity helper's foreground `session` mode, keeping its
+resource allowance for the entire live session. Launch directly or inside a
+helper `session`; an enclosing finite `run` scope still imposes its deadline.
+Do not run two clients against one
 mutable Wine/Proton prefix.
 
 Read the printed run directory and port. Control it only through the launcher:
@@ -72,7 +76,8 @@ nix shell nixpkgs#xdotool --command env DISPLAY="$private_display" \
 Never use `ydotool`, or run `xdotool` with the normal desktop's `DISPLAY` or
 X authority. Do not change normal-desktop focus or target windows on it.
 
-To stop, send Ctrl-C to the foreground launcher or let its timeout expire. Use
+To stop, send Ctrl-C to the foreground launcher (or SIGTERM to its wrapper).
+An explicit `--seconds` deadline also ends the session. Use
 only its exact run directory and processes for cleanup; never kill the user's
 desktop or another session. Logs and captures remain in the printed runtime
 directory until logout. VNC binds to `127.0.0.1` with no password, so do not

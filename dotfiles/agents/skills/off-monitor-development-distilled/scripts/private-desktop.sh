@@ -9,7 +9,8 @@ Usage:
   private-desktop.sh capture RUN_DIRECTORY ABSOLUTE_PNG_PATH
 
 Start a private GPU desktop. Ctrl-C ends the session. Default resolution:
-2560x1440. VNC listens only on localhost. Default lifetime: 3600 seconds.
+2560x1440. VNC listens only on localhost. Default lifetime: until stopped.
+Use --seconds to set an optional deadline.
 Run directories and logs remain under /run/user/UID until logout.
 The shared machine-capacity helper bounds CPU and memory; an existing helper
 scope is reused. Do not start two clients sharing one mutable Wine prefix.
@@ -42,7 +43,7 @@ port=5999
 port_was_explicit=0
 resolution=2560x1440
 render_node=${WLR_RENDER_DRM_DEVICE:-/dev/dri/renderD128}
-seconds=3600
+seconds=
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --port) [[ $# -ge 2 ]] || die '--port needs a value'; port=$2; port_was_explicit=1; shift 2 ;;
@@ -55,7 +56,7 @@ while [[ $# -gt 0 ]]; do
 done
 [[ "$port" =~ ^[1-9][0-9]{3,4}$ ]] && ((port <= 65535)) || die 'port must be between 1024 and 65535'
 ((port >= 1024)) || die 'port must be between 1024 and 65535'
-[[ "$seconds" =~ ^[1-9][0-9]*$ ]] || die 'seconds must be a positive integer'
+[[ -z "$seconds" || "$seconds" =~ ^[1-9][0-9]*$ ]] || die 'seconds must be a positive integer'
 [[ "$resolution" =~ ^[1-9][0-9]{2,4}x[1-9][0-9]{2,4}$ ]] || die 'resolution must look like 2560x1440'
 [[ "$render_node" == /dev/dri/renderD* && -r "$render_node" ]] || die "GPU render node is unavailable: $render_node"
 
@@ -65,9 +66,10 @@ if ! grep -Eq '/agent-capacity-[0-9a-f]+\.scope(/|$)' /proc/self/cgroup; then
         exec nix shell nixpkgs#bun --command bash "$self" start "${original_args[@]}"
     fi
     capacity_skill=$(dirname -- "$(agents path machine-capacity-distilled)")
-    exec bun "$capacity_skill/scripts/machine-capacity.mjs" run --class heavy \
-        --owner "private-desktop:$$" --timeout-seconds "$seconds" -- \
-        bash "$self" start "${original_args[@]}"
+    lifetime=(session)
+    [[ -z "$seconds" ]] || lifetime=(run --timeout-seconds "$seconds")
+    exec bun "$capacity_skill/scripts/machine-capacity.mjs" "${lifetime[@]}" --class heavy \
+        --owner "private-desktop:$$" -- bash "$self" start "${original_args[@]}"
 fi
 
 for executable in labwc wayvnc wlr-randr uv python3 glxinfo setsid; do
@@ -157,12 +159,15 @@ printf 'Control: %q control %q key enter\n' "$self" "$run"
 printf 'Capture: %q capture %q /tmp/private-desktop.png\n' "$self" "$run"
 printf 'GPU diagnostics: %s/glxinfo.log\n' "$run"
 glxinfo -B > "$run/glxinfo.log" 2>&1 || die "GPU query failed; see $run/glxinfo.log"
-sleep "$seconds" &
-timer_pid=$!
+session_pids=("$desktop_pid" "$vnc_pid")
+if [[ -n "$seconds" ]]; then
+    sleep "$seconds" &
+    timer_pid=$!
+    session_pids+=("$timer_pid")
+fi
 if [[ $# -gt 0 ]]; then
     setsid -- "$@" &
     client_pid=$!
-    wait -n "$desktop_pid" "$vnc_pid" "$client_pid" "$timer_pid"
-else
-    wait -n "$desktop_pid" "$vnc_pid" "$timer_pid"
+    session_pids+=("$client_pid")
 fi
+wait -n "${session_pids[@]}"

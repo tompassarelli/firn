@@ -20,6 +20,13 @@ Choose the smallest sufficient class: `moderate` (2 CPUs/2 GiB), `heavy`
 Set an honest hard runtime bound including legitimate setup and downloads;
 the example is not a universal timeout.
 
+Interactive desktops and other explicitly retained foreground sessions use
+`bun "$capacity" session --class heavy --owner "codex:/root/task" -- COMMAND ARG...`.
+They have no wall-clock deadline; command exit, Ctrl-C, or an explicit stop ends
+the scope. Keep the wrapper supervised until its `RELEASED` result. Use `run`
+with a finite timeout for builds and other bounded jobs. Never replace a deadline
+with a very large timeout or detach a renewal process.
+
 The wrapper admits atomically and contains every descendant in one user
 cgroup. All helper jobs share a CPU limit of 75% of the host; per-job CPU
 allowances are ceilings, not measured use or additive reservations. Exclusive
@@ -29,7 +36,9 @@ Do not detach work outside the scope. One owner retains the terminal
 
 `RUN`/`RESERVED` continues; `DEFER` queues heavy work while useful light work
 continues. Retry after a known release or at least 30 seconds, never busy-poll.
-`RECLAIMED` concerns expired helper-owned leases, not permission to kill peers.
+`RECLAIMED` concerns expired agent leases or finished helper-owned scopes, not
+permission to kill peers. Run allowances remain charged while their wrapper or
+scope is live, including throughout an interactive session without a deadline.
 Memory PSI is diagnostic: local cgroup throttling can raise it despite ample
 host headroom. Admission uses available memory, lease budgets, and CPU pressure.
 

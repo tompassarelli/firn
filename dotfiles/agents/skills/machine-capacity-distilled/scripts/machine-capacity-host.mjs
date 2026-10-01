@@ -138,6 +138,30 @@ function withLock(root, action) {
   fail('shared admission lock remained busy', 75);
 }
 
+function processStart(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    return fields[0] === 'Z' ? null : fields[19];
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ESRCH') return null;
+    throw error;
+  }
+}
+
+function scopeUnit(id) {
+  return `agent-capacity-${id.replaceAll('-', '')}.scope`;
+}
+
+function scopeLive(id) {
+  const result = Bun.spawnSync([
+    'systemctl', '--user', 'show', scopeUnit(id), '--property=ActiveState', '--value',
+  ], { stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' });
+  const state = result.stdout.toString().trim();
+  // Unknown manager state must not free a possibly live resource allowance.
+  return !['inactive', 'failed'].includes(state);
+}
+
 function readLeases(root, now) {
   const directory = join(root, 'leases');
   let reclaimed = 0;
@@ -151,7 +175,11 @@ function readLeases(root, now) {
     } catch {
       fail(`malformed helper-owned lease: ${path}`);
     }
-    if (!Number.isSafeInteger(lease.expiresAt) || lease.expiresAt <= now) {
+    const liveRun = lease.kind === 'run' && lease.wrapperStart !== undefined;
+    const expired = liveRun
+      ? processStart(lease.wrapperPid) !== lease.wrapperStart && !scopeLive(lease.id)
+      : !Number.isSafeInteger(lease.expiresAt) || lease.expiresAt <= now;
+    if (expired) {
       unlinkSync(path);
       reclaimed += 1;
       continue;
@@ -214,8 +242,12 @@ function decision(root, requested, create) {
       cpus: requested.cpus,
       memoryMiB: requested.memoryMiB,
       createdAt: now,
-      expiresAt: now + create.timeoutSeconds * 1000
+      expiresAt: create.timeoutSeconds === null ? null : now + create.timeoutSeconds * 1000
         + (create.kind === 'run' ? runLeaseGraceMilliseconds : 0),
+      ...(create.kind === 'run' ? {
+        wrapperPid: process.pid,
+        wrapperStart: processStart(process.pid),
+      } : {}),
     };
     writeFileSync(join(root, 'leases', `${id}.json`), `${JSON.stringify(lease)}\n`, {
       encoding: 'utf8',
@@ -231,12 +263,13 @@ function exactLease(root, id) {
   return join(root, 'leases', `${id}.json`);
 }
 
-function changeLease(root, id, owner, timeoutSeconds) {
+function changeLease(root, id, owner, timeoutSeconds, settledRun = false) {
   return withLock(root, () => {
     const path = exactLease(root, id);
     if (!existsSync(path)) fail(`unknown or expired lease: ${id}`, 75);
     const lease = JSON.parse(readFileSync(path, 'utf8'));
     if (lease.owner !== owner) fail(`lease owner mismatch: ${id}`);
+    if (lease.kind === 'run' && !settledRun) fail('run leases belong to their foreground wrapper');
     if (timeoutSeconds === null) {
       unlinkSync(path);
       return { decision: 'RELEASED', lease: id };
@@ -274,7 +307,7 @@ async function runScoped(root, requested, owner, timeoutSeconds, command) {
   const admitted = decision(root, requested, { kind: 'run', owner, timeoutSeconds });
   print(admitted, process.stderr);
   if (admitted.decision !== 'RESERVED') return 75;
-  const unit = `agent-capacity-${admitted.lease.replaceAll('-', '')}.scope`;
+  const unit = scopeUnit(admitted.lease);
   const stop = () => {
     Bun.spawnSync(['systemctl', '--user', 'stop', unit], {
       stdin: 'ignore', stdout: 'ignore', stderr: 'ignore',
@@ -287,19 +320,22 @@ async function runScoped(root, requested, owner, timeoutSeconds, command) {
       `--slice=${aggregateSlice}`,
       `--property=CPUQuota=${requested.cpus * 100}%`,
       `--property=MemoryHigh=${requested.memoryMiB}M`,
-      `--property=RuntimeMaxSec=${timeoutSeconds}s`,
+      `--property=RuntimeMaxSec=${timeoutSeconds === null ? 'infinity' : `${timeoutSeconds}s`}`,
       '--property=KillMode=control-group',
       '--', ...command,
     ], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
     process.once('SIGINT', stop);
     process.once('SIGTERM', stop);
+    process.once('SIGHUP', stop);
     return await child.exited;
   } finally {
     stop();
     process.removeListener('SIGINT', stop);
     process.removeListener('SIGTERM', stop);
+    process.removeListener('SIGHUP', stop);
     try {
-      print(changeLease(root, admitted.lease, owner, null), process.stderr);
+      if (scopeLive(admitted.lease)) throw new Error(`scope still live; retained lease ${admitted.lease}`);
+      print(changeLease(root, admitted.lease, owner, null, true), process.stderr);
     } catch (error) {
       process.stderr.write(`machine-capacity: lease cleanup failed: ${error?.message ?? String(error)}\n`);
     }
@@ -381,21 +417,23 @@ async function main(argv) {
     ));
     return 0;
   }
-  if (operation === 'run') {
-    const parsed = parseKeyValues(argv, 1, new Set(['--class', '--owner', '--timeout-seconds']));
+  if (operation === 'run' || operation === 'session') {
+    const parsed = parseKeyValues(argv, 1, new Set(operation === 'session'
+      ? ['--class', '--owner'] : ['--class', '--owner', '--timeout-seconds']));
     const command = argv.slice(parsed.separator + 1);
-    if (parsed.separator === argv.length || command.length === 0) fail('run requires -- COMMAND ARG...');
+    if (parsed.separator === argv.length || command.length === 0) fail(`${operation} requires -- COMMAND ARG...`);
     const signals = readSignals();
     const requested = parseClass(parsed.values, signals.cores);
     return runScoped(
       root,
       requested,
       parseOwner(parsed.values),
-      parsePositiveInteger(required(parsed.values, '--timeout-seconds'), '--timeout-seconds', maximumTimeoutSeconds),
+      operation === 'session' ? null
+        : parsePositiveInteger(required(parsed.values, '--timeout-seconds'), '--timeout-seconds', maximumTimeoutSeconds),
       command,
     );
   }
-  fail('usage: probe|reserve|renew|release|run; see machine-capacity-distilled');
+  fail('usage: probe|reserve|renew|release|run|session; see machine-capacity-distilled');
 }
 
 process.exitCode = await main(Bun.argv.slice(2));

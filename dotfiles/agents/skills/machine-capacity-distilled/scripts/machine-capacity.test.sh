@@ -153,4 +153,39 @@ fixture_pids=()
 XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" release \
   --lease "$lease" --owner fixture:/capacity
 
-printf 'machine-capacity policy and aggregate enforcement: PASS\n'
+# A foreground session has no deadline, but keeps its allowance until its
+# scope and descendants stop. Probing must not reclaim its null expiry.
+XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" session \
+  --class moderate --owner fixture:/capacity \
+  -- bash -c 'IFS=: read -r _ _ group < /proc/self/cgroup; printf "%s\n" "$group" >"$1"; sleep 60 & printf "%s\n" "$!" >"$2"; wait' \
+  fixture-session "$scratch/session-group" "$scratch/session-child" \
+  >"$scratch/session-out" 2>"$scratch/session-err" &
+fixture_pids+=("$!")
+for attempt in {1..100}; do
+  [[ -s "$scratch/session-child" ]] && break
+  sleep 0.05
+done
+read -r group <"$scratch/session-group"
+read -r session_child <"$scratch/session-child"
+[[ $(systemctl --user show "${group##*/}" --property=RuntimeMaxUSec --value) == infinity ]]
+[[ $(head -n 1 "$scratch/session-err" | jq -r '.expiresAt') == null ]]
+probe=$(XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" probe --class exclusive || true)
+[[ $(jq -r '.reason' <<<"$probe") == DEFER_EXCLUSIVE ]]
+[[ $(jq -r '.leasedMemoryMiB' <<<"$probe") -eq 2048 ]]
+[[ $(jq -r '.reclaimed' <<<"$probe") -eq 0 ]]
+kill -TERM "${fixture_pids[0]}"
+wait "${fixture_pids[0]}" || true
+fixture_pids=()
+[[ $(tail -n 1 "$scratch/session-err" | jq -r '.decision') == RELEASED ]]
+[[ ! -e "/sys/fs/cgroup$group" ]]
+! kill -0 "$session_child" 2>/dev/null
+set +e
+XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" session \
+  --class moderate --owner fixture:/capacity -- bash -c 'exit 7' 2>"$scratch/session-exit"
+session_status=$?
+set -e
+[[ $session_status -eq 7 ]]
+[[ $(tail -n 1 "$scratch/session-exit" | jq -r '.decision') == RELEASED ]]
+[[ $(XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" probe --class agent | jq -r '.leasedMemoryMiB') -eq 0 ]]
+
+printf 'machine-capacity policy, aggregate enforcement, and session lifetime: PASS\n'
