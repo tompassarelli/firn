@@ -49,15 +49,17 @@ when the application handles its key and pointer events correctly. For an X11
 app whose VNC input path fails, private-display XTEST through `xdotool` is
 supported after confirming its window is active on that private display.
 
-The launcher writes its private X display and X authority path to files in the
-exact run directory. Set `run_dir` to the printed Run path, read both values
-from that run, require them to be nonempty, and pass them only to the private
-X11 tool. For example:
+The launcher writes its private X display and X authority value to files in the
+exact run directory. Set `run_dir` to the printed Run path and read both values
+from that run. Require the display to be nonempty and the private socket to be
+live. The authority value can be empty for this private Xwayland server; pass
+that empty value explicitly so the normal desktop's authority is not inherited.
+For example:
 
 ```bash
 private_display=$(<"$run_dir/display")
 private_xauthority=$(<"$run_dir/xauthority")
-test -n "$private_display" && test -n "$private_xauthority"
+test -n "$private_display" && test -S "$run_dir/runtime/wayland-0"
 nix shell nixpkgs#xdotool --command env DISPLAY="$private_display" \
   XAUTHORITY="$private_xauthority" xdotool mousemove 640 360 click 1
 ```
@@ -90,8 +92,8 @@ fresh capture; a Battle.net window alone does not prove gameplay works.
 
 For Warcraft, use private XTEST for gameplay input and VNC for capture only.
 One observed single-player Smashcraft run tested movement, jump, and attack via
-private XTEST over 300 ticks (4.995 seconds), with no dropped ticks; the capture
-showed the Archer attack state and CPU interaction. Warcraft's VNC virtual
+private XTEST over 300 ticks (about five seconds), with no dropped trace entries;
+the capture showed the Archer attack state and CPU interaction. Warcraft's VNC virtual
 input remains unreliable and unresolved. This does not prove multiplayer,
 performance, or audio behavior, and does not establish a VNC fix or root cause.
 
