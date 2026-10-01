@@ -88,12 +88,12 @@ prefix, bypass Steam's supported runtime, or copy credentials. Select Play and
 verify an actual in-game action through the working private input method and a
 fresh capture; a Battle.net window alone does not prove gameplay works.
 
-Private XTEST mouse input has navigated Warcraft menus and loaded Smashcraft.
-Warcraft keyboard gameplay remains unverified: VNC reconnections have changed
-the key mapping and Wine has delivered a key unexpectedly. The cause is not
-known, and starting a persistent VNC connection before Warcraft is still an
-experiment rather than a confirmed fix. Verify keyboard actions in the actual
-game before reporting them as working.
+For Warcraft, use private XTEST for gameplay input and VNC for capture only.
+One observed single-player Smashcraft run tested movement, jump, and attack via
+private XTEST over 300 ticks (4.995 seconds), with no dropped ticks; the capture
+showed the Archer attack state and CPU interaction. Warcraft's VNC virtual
+input remains unreliable and unresolved. This does not prove multiplayer,
+performance, or audio behavior, and does not establish a VNC fix or root cause.
 
 ## Verify the path
 
