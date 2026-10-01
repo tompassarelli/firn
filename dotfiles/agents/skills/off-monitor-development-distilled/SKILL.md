@@ -100,6 +100,12 @@ prefix, bypass Steam's supported runtime, or copy credentials. Select Play and
 verify an actual in-game action through the working private input method and a
 fresh capture; a Battle.net window alone does not prove gameplay works.
 
+Keep signed-in Warcraft clients and their private desktops open through normal
+map leave/rejoin iterations. Leave the map, return to the lobby, and rejoin with
+the existing clients. Restart only an actually unusable or terminated client,
+or when the owner explicitly asks to stop it. A test iteration or elapsed time
+alone is not a reason to discard a working signed-in session.
+
 For Warcraft, use private XTEST for gameplay input and VNC for capture only.
 One observed single-player Smashcraft run tested movement, jump, and attack via
 private XTEST over 300 ticks (about five seconds), with no dropped trace entries;
