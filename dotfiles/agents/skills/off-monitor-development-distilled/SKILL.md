@@ -44,10 +44,26 @@ Read the printed run directory and port. Control it only through the launcher:
 
 `vncdo` actions are case-sensitive; use lowercase key names such as `f10`.
 Keep each control sequence shorter than the command's eight-second bound.
-`mousedown`/`mouseup` and `keydown`/`keyup` allow held inputs. Never use
-`ydotool`, `xdotool`, compositor global bindings, or main-desktop focus changes
-to control the private app. `xdotool` is suitable only for diagnostics that run
-inside the private Xwayland display, never for sending real user input.
+`mousedown`/`mouseup` and `keydown`/`keyup` allow held inputs. Use VNC input
+when the application handles its key and pointer events correctly. For an X11
+app whose VNC input path fails, private-display XTEST through `xdotool` is
+supported after confirming its window is active on that private display.
+
+The launcher writes its private X display and X authority path to files in the
+exact run directory. Set `run_dir` to the printed Run path, read both values
+from that run, require them to be nonempty, and pass them only to the private
+X11 tool. For example:
+
+```bash
+private_display=$(<"$run_dir/display")
+private_xauthority=$(<"$run_dir/xauthority")
+test -n "$private_display" && test -n "$private_xauthority"
+nix shell nixpkgs#xdotool --command env DISPLAY="$private_display" \
+  XAUTHORITY="$private_xauthority" xdotool mousemove 640 360 click 1
+```
+
+Never use `ydotool`, or run `xdotool` with the normal desktop's `DISPLAY` or
+X authority. Do not change normal-desktop focus or target windows on it.
 
 To stop, send Ctrl-C to the foreground launcher or let its timeout expire. Use
 only its exact run directory and processes for cleanup; never kill the user's
@@ -69,8 +85,15 @@ client is using the same prefix. Start Battle.net inside the private session
 with the installed GE-Proton and Steam Linux Runtime, reusing the existing
 logged-in prefix. Do not start a second Battle.net/WC3 process on the same
 prefix, bypass Steam's supported runtime, or copy credentials. Select Play and
-verify an actual in-game action through private VNC input and a fresh capture;
-a Battle.net window alone does not prove gameplay works.
+verify an actual in-game action through the working private input method and a
+fresh capture; a Battle.net window alone does not prove gameplay works.
+
+Private XTEST mouse input has navigated Warcraft menus and loaded Smashcraft.
+Warcraft keyboard gameplay remains unverified: VNC reconnections have changed
+the key mapping and Wine has delivered a key unexpectedly. The cause is not
+known, and starting a persistent VNC connection before Warcraft is still an
+experiment rather than a confirmed fix. Verify keyboard actions in the actual
+game before reporting them as working.
 
 ## Verify the path
 
