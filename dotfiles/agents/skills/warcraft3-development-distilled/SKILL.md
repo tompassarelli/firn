@@ -84,6 +84,30 @@ the capture showed the Archer attack state and CPU interaction. Warcraft's VNC v
 input remains unreliable and unresolved. This does not prove multiplayer,
 performance, or audio behavior, and does not establish a VNC fix or root cause.
 
+## Fast native iteration
+
+Use recorded, state-specific input procedures for repeated menu and map work.
+Recover the current session once, identify the starting screen, then batch the
+known inputs in one private XTEST invocation. Check the meaningful ending screen
+or fresh map trace rather than taking a screenshot and reasoning after every
+click. Keep authentication and loading transitions as separate boundaries.
+Stop a chain on an unexpected result; repair or re-identify that boundary
+instead of replaying guessed clicks. Never promote a candidate chain as verified
+without the actual native ending state.
+
+Record successful chains with their start/end states, Warcraft build, display
+geometry, ordered inputs, required waits, elapsed time and verification artifact
+in the project. Reuse them across warm leave/rejoin, rematch and probe-export
+iterations without restarting signed-in clients. Resolve tool paths once per
+session; keep transient PIDs, coordinates and session directories out of this
+skill. Use the project's procedure runner when present.
+
+Measure the same warm procedure before and after; report cold launcher/login,
+loading, build and test time separately. The owner's target is 5–10× faster
+iteration, not permission to remove checks or a claim already achieved. See
+[fast procedure guidance](references/fast-native-iteration.md) when recording,
+executing or measuring a chain.
+
 ## Controller and multiplayer evidence
 
 For a keyboard mapper trial, load the project's matching key preset and enable
