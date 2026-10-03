@@ -71,6 +71,16 @@ Never derive a target from unresolved variables or globs. A guard denial is
 evidence to select the sanctioned route, not a reason to disable the guard.
 Stop for unresolved ownership, destructive scope, secret findings, or exposure.
 
+## Disc-image reference material
+
+The owning boundary is in `repo-safety-distilled`. A local Melee ISO, an archive
+containing that ISO, and its extracted PlCo.dat stay in private storage such as
+`~/.local/share/smashcraft-melee-reference/`, outside the project checkout.
+An authored JSON table of selected gravity or shield constants is a different
+artifact: it records numerical facts, with source identity and limitations,
+without redistributing the original game files. An authored Warcraft map is
+not a disc image; this policy does not prohibit ordinary project build output.
+
 ## Processes and credentials
 
 Signal only a process/tree you own, by exact PID or genuinely unique scoped

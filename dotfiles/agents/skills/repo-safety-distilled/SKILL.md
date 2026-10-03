@@ -14,6 +14,12 @@ Keep build output inside its lane, including each Rust target directory;
 use an explicit temporary target only when output must live elsewhere.
 Never place build-output directories in a project container.
 
+Never track, commit, upload, or publish ISO/disc images in GitHub projects,
+including compressed archives containing them. Keep images and extracted
+proprietary game binaries/assets in private local storage outside repository
+trees; `.gitignore` alone is not this boundary. Independently recorded numerical
+facts and authored extraction tools may be tracked when their rights permit it.
+
 Stage named paths only. Prohibited shortcuts include `git add -A`,
 `git add -u`, `git add .`, and `git commit -a`. Let commit hooks finish,
 publish separately with `safe-push --to main`, then fast-forward clean main.

@@ -136,6 +136,9 @@ declaration grants no exception.
 
 ## Keep hard boundaries
 
+Before handling disc images or extracted proprietary game files for a
+repository, load `repo-safety-distilled` for the publication boundary.
+
 Never disclose credentials or introduce provider API keys, API-key helpers, or
 API-credit billing. Store secrets only in the encrypted or credential mechanism
 authorized by the governing repository.
