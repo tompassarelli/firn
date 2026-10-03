@@ -12,7 +12,7 @@ export DISPLAY XAUTHORITY
 for dependency in xdotool jq sops sudo; do command -v "$dependency" >/dev/null || { echo "Missing dependency: $dependency" >&2; exit 1; }; done
 window=$(xdotool getactivewindow)
 title=$(xdotool getwindowname "$window")
-[[ "$title" == 'Battle.net' || "$title" == 'Warcraft III' ]] || { echo 'Login window is not active.' >&2; exit 1; }
+[[ "$title" == 'Battle.net' || "$title" == 'Battle.net Login' || "$title" == 'Warcraft III' ]] || { echo 'Login window is not active.' >&2; exit 1; }
 source_root=$(git -C "$(dirname "$(readlink -f "$0")")" rev-parse --show-toplevel)
 secret_file="$source_root/secrets/bnet.yaml"
 [[ -f "$secret_file" ]] || { echo 'Encrypted account file unavailable.' >&2; exit 1; }
