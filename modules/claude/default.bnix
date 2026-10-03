@@ -11,8 +11,10 @@
 
      :config
       (lib.mkIf config.myConfig.modules.claude.enable
+        ;; Stable nixpkgs freezes claude-code far behind upstream; the agent
+        ;; must track the release its instructions and hooks are written for.
         {:environment.systemPackages
-          [pkgs.claude-code]
+          [pkgs.unstable.claude-code]
 
          :home-manager.users
           {username

@@ -37,7 +37,6 @@ def command(path, timeout, with_path=True):
 enabled = {
     "allow_managed_hooks_only": True,
     "allow_remote_control": False,
-    "managed_hook_failure_mode": "block",
     "features": {"hooks": True},
     "hooks": {
         "managed_dir": "/etc/codex/hooks",
