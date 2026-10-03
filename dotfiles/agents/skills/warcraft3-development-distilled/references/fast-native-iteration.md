@@ -77,3 +77,19 @@ its missing signal and limitation stated.
 The retained four-screen OCR benchmark measured a 3.41× observation-stage gain
 (24/24 fixture classifications), not the requested 5–10× complete warm map loop.
 See wc3-melee:docs/wc3-screen-state.md for individual samples and scope.
+
+## Verified warm exit and native menu observation
+
+Warcraft III 3.0.0.24268 on the retained private 2560×1440 desktop:
+F10 opened Game Menu; E opened End Game; Q chose Quit Mission; the score
+screen Back returned to online Custom Games with the same game PID.
+XTEST mouse clicks on End Game did not advance the observed menu in this
+trial; native E/Q keyboard actions did. Verify each menu boundary, not merely
+input-tool success. No elapsed-time speedup was measured for this sequence.
+
+White-only OCR missed gold menu labels and caused an unnecessary restart.
+For a fresh capture, a normalized ImageMagick mask
+`(r>0.667&&g>0.588)?0:1` with Tesseract psm11 recovered those labels.
+This is a native-menu observation option, not a universal classifier for
+white map UI. Preserve fresh capture success and inspect label bounding boxes
+when selecting controls. A missing OCR label is not evidence of a frozen game.

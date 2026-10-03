@@ -77,6 +77,14 @@ the existing clients. Restart only an actually unusable or terminated client,
 or when the owner explicitly asks to stop it. A test iteration or elapsed time
 alone is not a reason to discard a working signed-in session.
 
+For a warm exit from a running match, use **F10 → observe Game Menu → E
+(End Game) → observe submenu → Q (Quit Mission)**, then observe the score
+screen and choose Back to return to Custom Games. Quit Mission is distinct
+from Exit Game. This path retained the signed-in process in the native trial.
+Do not restart because OCR did not recognize a menu: native labels can be gold,
+and white-only extraction can miss them. Re-observe with the matching color
+mask/full-screen OCR and verify the actual state before declaring unresponsiveness.
+
 For Warcraft, use private XTEST for gameplay input and the private-desktop
 launcher's native compositor capture for observation. Verify actual pointer
 position before clicks; an absolute XTEST move may leave it unchanged under
