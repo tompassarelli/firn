@@ -54,7 +54,7 @@ while [[ $# -gt 0 ]]; do
         *) die "unknown start option: $1" ;;
     esac
 done
-[[ "$port" =~ ^[1-9][0-9]{3,4}$ ]] && ((port <= 65535)) || die 'port must be between 1024 and 65535'
+if ! [[ "$port" =~ ^[1-9][0-9]{3,4}$ ]] || ((port > 65535)); then die 'port must be between 1024 and 65535'; fi
 ((port >= 1024)) || die 'port must be between 1024 and 65535'
 [[ -z "$seconds" || "$seconds" =~ ^[1-9][0-9]*$ ]] || die 'seconds must be a positive integer'
 [[ "$resolution" =~ ^[1-9][0-9]{2,4}x[1-9][0-9]{2,4}$ ]] || die 'resolution must look like 2560x1440'
@@ -72,10 +72,10 @@ if ! grep -Eq '/agent-capacity-[0-9a-f]+\.scope(/|$)' /proc/self/cgroup; then
         --owner "private-desktop:$$" -- bash "$self" start "${original_args[@]}"
 fi
 
-for executable in labwc wayvnc wlr-randr uv python3 glxinfo setsid flock; do
+for executable in labwc wayvnc wlr-randr uv python3 glxinfo setsid flock dbus-run-session; do
     if ! command -v "$executable" >/dev/null; then
         exec nix shell nixpkgs#labwc nixpkgs#wayvnc nixpkgs#wlr-randr nixpkgs#uv nixpkgs#python3 \
-            nixpkgs#mesa-demos nixpkgs#util-linux \
+            nixpkgs#mesa-demos nixpkgs#util-linux nixpkgs#dbus \
             --command bash "$self" start "${original_args[@]}"
     fi
 done
@@ -107,7 +107,7 @@ else
     done
 fi
 printf '%s\n' "$port" > "$run/port"
-desktop_pid= vnc_pid= client_pid= timer_pid=
+desktop_pid='' vnc_pid='' client_pid='' timer_pid=''
 cleanup() {
     trap - EXIT INT TERM
     rm -f -- "$run/active"
@@ -143,11 +143,13 @@ for ((attempt=0; attempt<100; attempt++)); do
     sleep 0.1
 done
 [[ -f "$run/ready" ]] || die "desktop startup timed out; see $run/labwc.log"
-export DISPLAY=$(cat "$run/display")
-export WAYLAND_DISPLAY=$(cat "$run/wayland-display")
+DISPLAY=$(cat "$run/display")
+WAYLAND_DISPLAY=$(cat "$run/wayland-display")
+export DISPLAY WAYLAND_DISPLAY
 [[ -n "$DISPLAY" && -n "$WAYLAND_DISPLAY" ]] || die 'desktop did not provide its displays'
 if [[ -s "$run/xauthority" && -n "$(cat "$run/xauthority")" ]]; then
-    export XAUTHORITY=$(cat "$run/xauthority")
+    XAUTHORITY=$(cat "$run/xauthority")
+    export XAUTHORITY
 fi
 output=$(wlr-randr | awk '/^HEADLESS-[0-9]+ / {print $1; exit}')
 [[ -n "$output" ]] || die 'could not find labwc headless output'
@@ -177,7 +179,7 @@ if [[ -n "$seconds" ]]; then
     session_pids+=("$timer_pid")
 fi
 if [[ $# -gt 0 ]]; then
-    setsid -- "$@" &
+    setsid -- dbus-run-session -- "$@" &
     client_pid=$!
     session_pids+=("$client_pid")
 fi
