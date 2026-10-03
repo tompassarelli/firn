@@ -174,3 +174,12 @@ Handle ordinary credential prompts autonomously; do not ask the owner to type
 these stored credentials. Authenticator, CAPTCHA, account lock or unsupported
 interactive challenge is a separate blocker. Notify by email only through an
 available authenticated mail route; report unavailable delivery honestly.
+
+## Wurst authoring and UI workflow
+
+Use [Wurst development](../wurst-development-distilled/SKILL.md) for source,
+object data, UI components and focused headless checks. Keep the map project
+AGENTS.md current with its source layout, pinned toolchain and actual commands.
+Prefer headless layout/type checks before native iteration; use this skill for
+click/focus, presentation, authentication and multiplayer proof. An upstream
+Grill feature or macOS toolchain claim is not a verified capability of this map.

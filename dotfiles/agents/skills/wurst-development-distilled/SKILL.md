@@ -85,3 +85,11 @@ compiled script is Jass. It rewrites a Jass map script and emits preload data
 that must be inserted into the running map; it does not hot reload Lua maps or
 replace the ordinary compile/build path. Use it only when the project targets
 Jass and that extra setup is useful.
+
+## Current UI and tooling practices
+
+For UI work, object-data workflow changes, Grill verification or a new workspace,
+read [modern Wurst workflow guidance](references/modern-workflow.md). Prefer
+existing UI components and headless layout checks before raw frame plumbing;
+confirm newer APIs against the resolved project versions and verify engine
+interaction natively. Keep a project AGENTS.md with its actual pinned commands.
