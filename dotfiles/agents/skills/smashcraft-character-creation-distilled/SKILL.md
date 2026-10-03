@@ -28,7 +28,7 @@ intentional exceptions explicitly rather than silently omitting an action.
 | Specials | Neutral-, side-, up-, and down-special; grounded and airborne behavior, startup/active/recovery, cancellations, movement and landing rules |
 | Grabs and throws | Standing grab, dash/pivot variants where supported, shield grab, whiff, hold, pummel, escape/release, forward/back/up/down throws; coordinated attacker and victim poses |
 | Movement | Idle, walk, initial dash, run, turnaround, stop, crouch, jump squat, short/full jump, double jump, ascent/fall, fast-fall, normal and special landing |
-| Defense | Shield raise/hold/release and shield hit/break; spot dodge, both rolls, air dodge and wavedash landing |
+| Defense | Shield raise/hold/release and shield hit/break; stunned/dizzy loop and recovery after shield break; spot dodge, both rolls, air dodge and wavedash landing |
 | Recovery and damage | Directional hit reactions, hitlag, tumble, missed tech/prone, neutral/directional techs, get-up stand/attack/both rolls, ledge catch/hang/climb/jump/roll/attack, KO and respawn |
 | Character entities | Projectiles, summons, traps, wings/forms and attachments: spawn, active action, contact, expiry, and interruption |
 
@@ -70,7 +70,7 @@ render cannot prove native materials, attachment behavior, or animation phase
 restoration. Add character-specific VFX/audio with stable semantic event IDs
 so replay does not duplicate impacts, shots, or summon effects.
 
-Every fighter must explicitly pass both damage-presentation checks:
+Every fighter must explicitly pass these damage-presentation checks:
 
 - **Hitstun:** authored, readable "I've been hit" reactions for grounded and
   airborne hits, including launch/tumble where appropriate; transition back
@@ -84,6 +84,15 @@ Every fighter must explicitly pass both damage-presentation checks:
   the local reference before claiming Melee parity. Shield contact must hold
   the appropriate shield reaction. Test repeated hits and replay restoration;
   freezing animation must not stop global input sampling or the match clock.
+- **Stunned/dizzy:** require a dedicated seamless loop for the incapacitated
+  state after shield break, distinct from hitstun and hitlag. Use a tilted head
+  and circular upper-body sway, adapted to the fighter's anatomy and readable
+  from both facings. Pair it with small, brief, firework-like starbursts that
+  appear intermittently around the head. Keep sparkles in the shared effect
+  system and derive their apparently random timing/placement from replayable
+  state; restoration must neither duplicate bursts nor advance them independently
+  of the stun. Verify entry, looping, pause/hitlag, interruption, recovery and
+  backward restoration in Warcraft. Stock loss and rematch must clear the effect.
 
 ## Connect a complete character
 
