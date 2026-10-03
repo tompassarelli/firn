@@ -74,4 +74,24 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/codex/prompts"))}}})}})}))
+                        "/code/nixos-config/dotfiles/codex/prompts"))}}
+               ;; A locked default secret collection stops Codex before a
+               ;; session starts: it waits on an unlock prompt that a session
+               ;; without a graphical prompter never answers. PAM unlocks only
+               ;; `login`, and a keyring restart relocks everything, so select
+               ;; an already-unlocked collection on every login. The secrets
+               ;; service is D-Bus activated and publishes collections lazily,
+               ;; so the command owns that wait rather than unit ordering.
+               :systemd.user.services.codex-keyring-default
+                {:Unit
+                  {:Description
+                    "Select an unlocked secret collection as the Secret Service default"
+                   :After ["dbus.service"]}
+                 :Service
+                  {:Type "oneshot"
+                   :RemainAfterExit true
+                   :Environment
+                    [(s "PATH=" pkgs.systemd "/bin:" pkgs.coreutils "/bin:"
+                       pkgs.gnugrep "/bin")]
+                   :ExecStart (s homeDir "/.local/bin/codex-keyring-default")}
+                 :Install {:WantedBy ["default.target"]}}})}})}))

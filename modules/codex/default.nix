@@ -51,6 +51,23 @@
         ".codex/config.toml".source = "${flakeRoot}/dotfiles/codex/config.toml";
         ".codex/prompts".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/codex/prompts";
       };
+      systemd.user.services.codex-keyring-default = {
+        Unit = {
+          Description = "Select an unlocked secret collection as the Secret Service default";
+          After = [ "dbus.service" ];
+        };
+        Service = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          Environment = [
+            "PATH=${pkgs.systemd}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin"
+          ];
+          ExecStart = "${homeDir}/.local/bin/codex-keyring-default";
+        };
+        Install = {
+          WantedBy = [ "default.target" ];
+        };
+      };
     });
   };
 }) (adapterId: "L+ /etc/codex/hooks/${adapterId} - - - - ${agentGeneration}/provider-hooks/${adapterId}"))) "${homeDir}/.local/state/north/agents/current")) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)
