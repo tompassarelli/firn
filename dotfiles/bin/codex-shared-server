@@ -50,7 +50,7 @@ case "$state" in
     --setenv="NORTH_CODEX_CONVERSATION_HOME=$pooled_home" \
     --setenv="NORTH_CODEX_CONVERSATION_SQLITE_HOME=$sqlite_home" \
     --setenv="CODEX_RUNTIME=$runtime" --setenv=NORTH_NO_SLICE=1 \
-    -- "$(dirname "$self")/codex-pooled" app-server --listen "$endpoint" --enable multi_agent_v2 ||
+    -- "$(dirname "$self")/codex" app-server --listen "$endpoint" --enable multi_agent_v2 ||
     fail "shared server could not start; inspect $unit"
   ;;
   *) fail "shared server is $state; wait for $unit to finish its transition" ;;

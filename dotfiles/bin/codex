@@ -5,7 +5,6 @@
 set -u
 
 PROVIDER_WORD="codex"
-ACCOUNTS_ROOT="$HOME/.local/state/north/accounts/openai"
 
 # Prefer the atomically promoted user runtime. PATH is only a migration fallback
 # for machines that have not run codex-runtime-update yet.
@@ -93,62 +92,141 @@ FORCE_CONFIG=(
   -c 'agents.default_subagent_model="gpt-6-luna"'
 )
 
-# Direct user sessions may coordinate work across repositories beneath the
-# stable code root. Managed lanes arrive with CODEX_HOME already set and return
-# through the passthrough branches, so they retain their narrower workspace.
-DIRECT_WORKSPACE_ARGS=(
-  --add-dir /home/tom/code
-)
+# The single conversation home. Managed lanes arrive with CODEX_HOME already
+# set and keep their own; every other session shares this one.
+CONVERSATION_HOME="${NORTH_CODEX_CONVERSATION_HOME:-${NORTH_CODEX_POOLED_HOME:-$HOME/.local/state/north/codex-pooled}}"
 
-# Native provider roots are a coordination surface when North owns dispatch:
-# keep the listener capable, but do not let an ambient Codex session silently
-# become another agent orchestrator. These are launch defaults, deliberately
-# placed before caller argv so a later explicit model/reasoning choice wins.
-# Account-pinned managed lanes return through the passthrough guard below and
-# therefore never inherit this native-root policy.
-native_dispatch_args() {
-  local state mode="north" line enforce_topology=1
-  if [ -n "${NORTH_HARNESS_STATE:-}" ]; then
-    state="$NORTH_HARNESS_STATE"
-  elif [ -f "$HOME/.local/state/north/harness.conf" ]; then
-    state="$HOME/.local/state/north/harness.conf"
-  else
-    state="$HOME/.local/state/north/harness.conf"
+# Only interactive journeys attach to the shared app-server owner. App-server
+# startup and maintenance commands keep their native lifecycle; an explicit
+# endpoint remains the caller's choice.
+shared_interactive() {
+  local skip_value=0 entry command=""
+  for entry in "$@"; do
+    if ((skip_value)); then skip_value=0; continue; fi
+    case "$entry" in
+      --remote|--remote=*|-h|--help|-V|--version) return 1 ;;
+      -c|--config|--enable|--disable|--remote-auth-token-env|\
+      -i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|\
+      -C|--cd|--add-dir|-a|--ask-for-approval) skip_value=1 ;;
+      --) break ;;
+      -*) ;;
+      *)
+        if [[ -z "$command" ]]; then command="$entry"; fi
+        ;;
+    esac
+  done
+  case "$command" in
+    ""|resume|fork) return 0 ;;
+    exec|e|review|login|logout|mcp|plugin|app-server|remote-control|completion|\
+    update|doctor|sandbox|debug|apply|a|queue|archive|delete|migrate-rollouts|\
+    unarchive|cloud|exec-server|features|help|agents) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+# Codex refuses --add-dir alongside --remote: an attached client may not widen
+# the server's workspace. The server's own launch is never remote and carries
+# these roots itself, so every remote invocation drops them here.
+remote_invocation() {
+  local skip_value=0 entry
+  for entry in "$@"; do
+    if ((skip_value)); then skip_value=0; continue; fi
+    case "$entry" in
+      --remote|--remote=*) return 0 ;;
+      -c|--config|--enable|--disable|--remote-auth-token-env|\
+      -i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|\
+      -C|--cd|--add-dir|-a|--ask-for-approval) skip_value=1 ;;
+      --) break ;;
+    esac
+  done
+  return 1
+}
+
+# Run the session in the conversation home. The provider service has its own
+# owner; this launcher stays in the foreground and never supervises it.
+exec_conversation() {
+  local endpoint subcommand exec_args resume_arg_index arg_index arg resume_prefix_length
+  [ -d "$CONVERSATION_HOME" ] || {
+    printf 'codex: conversation home is unavailable at %s\n' "$CONVERSATION_HOME" >&2
+    exit 1
+  }
+  export CODEX_HOME="$CONVERSATION_HOME"
+  export CODEX_SQLITE_HOME="${NORTH_CODEX_CONVERSATION_SQLITE_HOME:-$CONVERSATION_HOME/sqlite}"
+
+  local workspace_args=(--add-dir "$HOME/code")
+  local provider_args=(
+    -c 'model_provider="codex-lb"'
+    -c 'model_providers.codex-lb.name="openai"'
+    -c 'model_providers.codex-lb.base_url="http://127.0.0.1:2455/backend-api/codex"'
+    -c 'model_providers.codex-lb.wire_api="responses"'
+    -c 'model_providers.codex-lb.supports_websockets=true'
+    -c 'model_providers.codex-lb.requires_openai_auth=false'
+    -c 'model="gpt-6-astra"'
+    -c 'model_reasoning_effort="medium"'
+  )
+  local full_access_args=(--dangerously-bypass-approvals-and-sandbox)
+  local shared_args=()
+  if shared_interactive "$@"; then
+    endpoint="$("$(dirname "$self")/codex-shared-server")"
+    shared_args=(--remote "$endpoint")
   fi
-  if [ -r "$state" ]; then
-    while IFS= read -r line; do
-      case "$line" in dispatch=*) mode="${line#dispatch=}" ;; esac
-    done <"$state"
-    mode="${mode:-north}"
+  if ((${#shared_args[@]})) || remote_invocation "$@"; then
+    workspace_args=()
   fi
-  # `north config dispatch` owns this vocabulary; this table must track it.
-  # Disabling multi_agent is correct ONLY when native dispatch is actually
-  # denied. A catch-all here once left native-forced sessions with no dispatch
-  # surface at all.
-  case "$mode" in
-    # Current vocabulary (`north config dispatch`): native | north | auto.
-    # `auto` chooses per dispatch, so native dispatch stays available; only a
-    # pinned `north` denies it. Omitting `auto` sent every session through the
-    # catch-all below and stripped its dispatch surface on 2026-08-02.
-    auto) enforce_topology=0 ;;
-    # Superseded four-mode vocabulary, honored for stale state files.
-    native-forced|native-biased|managed-biased) enforce_topology=0 ;;
-    managed-forced) ;;
-    # Legacy values, honored exactly as before.
-    native) return 0 ;;
-    warn) enforce_topology=0 ;;
-    north) ;;
+
+  case "${1:-}" in
+    exec|e)
+      subcommand="$1"
+      shift
+      exec_args=("$@")
+      resume_arg_index=-1
+      arg_index=0
+      while ((arg_index < ${#exec_args[@]})); do
+        arg="${exec_args[arg_index]}"
+        case "$arg" in
+          --|-)
+            break
+            ;;
+          -c|--config|--enable|--disable|--thread-source|\
+          -i|--image|-m|--model|--local-provider|-p|--profile|\
+          -s|--sandbox|-C|--cd|--add-dir|--output-schema|\
+          --color|-o|--output-last-message)
+            ((arg_index += 2))
+            ;;
+          -*)
+            ((arg_index += 1))
+            ;;
+          resume)
+            resume_arg_index="$arg_index"
+            break
+            ;;
+          *)
+            break
+            ;;
+        esac
+      done
+      if ((resume_arg_index >= 0)); then
+        resume_prefix_length=$((resume_arg_index + 1))
+        exec "$REAL" "${FORCE_CONFIG[@]}" "$subcommand" \
+          "${exec_args[@]:0:resume_arg_index}" \
+          "${workspace_args[@]}" resume \
+          "${provider_args[@]}" "${full_access_args[@]}" \
+          "${exec_args[@]:resume_prefix_length}"
+      fi
+      exec "$REAL" "${FORCE_CONFIG[@]}" "$subcommand" \
+        "${workspace_args[@]}" "${provider_args[@]}" \
+        "${full_access_args[@]}" "${exec_args[@]}"
+      ;;
+    review)
+      subcommand="$1"
+      shift
+      exec "$REAL" "${FORCE_CONFIG[@]}" "$subcommand" "${provider_args[@]}" "$@"
+      ;;
     *)
-      # Fail closed, but never silently: an unreadable mode is a coupling bug
-      # between north and this launcher, and it must be visible the first time.
-      printf 'codex: unrecognized dispatch mode "%s" in %s; assuming managed-forced\n' \
-        "$mode" "$state" >&2
+      exec "$REAL" "${FORCE_CONFIG[@]}" \
+        "${workspace_args[@]}" "${provider_args[@]}" "${shared_args[@]}" "$@"
       ;;
   esac
-  printf '%s\0' \
-    '-c' 'model="gpt-6-astra"' \
-    '-c' 'model_reasoning_effort="medium"'
-  [ "$enforce_topology" -eq 0 ] || printf '%s\0' '--disable' 'multi_agent'
 }
 
 codex_option_takes_value() {
@@ -201,245 +279,123 @@ codex_terminal_flag() {
   esac
 }
 
-# `sandbox_mode="danger-full-access"` is only a config preference. Codex's
-# executable bypass is the no-sandbox boundary: without it, an account-pinned
-# worker can still resolve to workspace-write and enter bwrap. Detect native
-# exec/resume shapes after global options and inject the bypass exactly once.
-codex_execution_invocation() {
-  local skip_value=0 entry
-  for entry in "$@"; do
-    [ "$entry" = "--" ] && break
-    codex_terminal_flag "$entry" && return 1
-  done
-  for entry in "$@"; do
-    if [ "$skip_value" -eq 1 ]; then
-      skip_value=0
-      continue
-    fi
-    case "$entry" in
-      --) return 1 ;;
-      exec|e|resume) return 0 ;;
-      *)
-        if codex_option_takes_value "$entry"; then
-          skip_value=1
-        elif codex_option_has_attached_value "$entry" || codex_known_flag "$entry"; then
-          :
-        elif [[ "$entry" = -* ]]; then
-          :
-        else
-          return 1
-        fi
-        ;;
-    esac
-  done
-  return 1
-}
-
-direct_execution_args() {
-  local entry
-  codex_execution_invocation "$@" || return 0
-  for entry in "$@"; do
-    [ "$entry" = "--dangerously-bypass-approvals-and-sandbox" ] && return 0
-  done
-  printf '%s\0' '--dangerously-bypass-approvals-and-sandbox'
-}
-
-load_direct_execution_args() {
-  DIRECT_EXECUTION_ARGS=()
-  while IFS= read -r -d '' entry; do
-    DIRECT_EXECUTION_ARGS+=("$entry")
-  done < <(direct_execution_args "$@")
-}
-
-NATIVE_DISPATCH_ARGS=()
-while IFS= read -r -d '' arg; do
-  NATIVE_DISPATCH_ARGS+=("$arg")
-done < <(native_dispatch_args)
-
 # 1. Uniform resume syntax: upstream Codex uses `codex resume ID`; accept the
 #    requested `codex --resume ID` / `codex --resume=ID` aliases as well.
 #    Resolve exact UUIDs to their existing conversation home.
-#    `codex as <id> ...` remains an explicit override.
-if [ "${1:-}" != "as" ]; then
-  resume_index=-1
-  resume_marker=-1
-  resume_id=""
-  resume_alias=0
-  resume_equals=0
-  resume_last=0
-  resume_terminal=0
-  skip_value=0
-  argv=("$@")
-  for entry in "${argv[@]}"; do
-    case "$entry" in
-      --) break ;;
-      -h|--help|-V|--version)
-        resume_terminal=1
-        break
-        ;;
-    esac
-  done
-  for index in "${!argv[@]}"; do
-    if [ "$skip_value" -eq 1 ]; then
-      skip_value=0
-      continue
-    fi
-    case "${argv[$index]}" in
-      --)
-        break
-        ;;
-      resume)
-        skip_resume_value=0
-        after_separator=0
-        for ((next = index + 1; next < ${#argv[@]}; next++)); do
-          if [ "$skip_resume_value" -eq 1 ]; then
-            skip_resume_value=0
-            continue
-          fi
-          if [ "$after_separator" -eq 1 ]; then
-            resume_index="$next"
-            resume_id="${argv[$next]}"
-            break
-          fi
-          case "${argv[$next]}" in
-            --)
-              after_separator=1
-              ;;
-            --last)
-              # --last supplies the session selection; any positional that
-              # follows is a prompt, even when it happens to look like a UUID.
-              resume_last=1
-              break
-              ;;
-            --all|--include-non-interactive)
-              ;;
-            *)
-              if codex_option_takes_value "${argv[$next]}"; then
-                skip_resume_value=1
-              elif codex_terminal_flag "${argv[$next]}"; then
-                break
-              elif codex_option_has_attached_value "${argv[$next]}" ||
-                   codex_known_flag "${argv[$next]}"; then
-                :
-              elif [[ "${argv[$next]}" = -* ]]; then
-                # Unknown future option: leave parsing to Codex rather than
-                # risk treating its value as a session id.
-                break
-              else
-                # SESSION_ID/name is the first positional. Never scan into the
-                # optional PROMPT for a later UUID.
-                resume_index="$next"
-                resume_id="${argv[$next]}"
-                break
-              fi
-              ;;
-          esac
-        done
-        break
-        ;;
-      --resume)
-        resume_marker="$index"
-        resume_alias=1
-        next=$((index + 1))
-        if [ "$next" -lt "${#argv[@]}" ]; then
+resume_index=-1
+resume_marker=-1
+resume_id=""
+resume_alias=0
+resume_equals=0
+resume_last=0
+resume_terminal=0
+skip_value=0
+argv=("$@")
+for entry in "${argv[@]}"; do
+  case "$entry" in
+    --) break ;;
+    -h|--help|-V|--version)
+      resume_terminal=1
+      break
+      ;;
+  esac
+done
+for index in "${!argv[@]}"; do
+  if [ "$skip_value" -eq 1 ]; then
+    skip_value=0
+    continue
+  fi
+  case "${argv[$index]}" in
+    --)
+      break
+      ;;
+    resume)
+      skip_resume_value=0
+      after_separator=0
+      for ((next = index + 1; next < ${#argv[@]}; next++)); do
+        if [ "$skip_resume_value" -eq 1 ]; then
+          skip_resume_value=0
+          continue
+        fi
+        if [ "$after_separator" -eq 1 ]; then
           resume_index="$next"
           resume_id="${argv[$next]}"
-        fi
-        break
-        ;;
-      --resume=*)
-        resume_marker="$index"
-        resume_index="$index"
-        resume_id="${argv[$index]#--resume=}"
-        resume_alias=1
-        resume_equals=1
-        break
-        ;;
-      *)
-        if codex_option_takes_value "${argv[$index]}"; then
-          skip_value=1
-        elif codex_terminal_flag "${argv[$index]}"; then
-          break
-        elif codex_option_has_attached_value "${argv[$index]}" ||
-             codex_known_flag "${argv[$index]}"; then
-          :
-        else
-          # Another subcommand or an interactive prompt owns the remaining
-          # argv; a later literal "resume"/"--resume" is not launcher syntax.
           break
         fi
-        ;;
-    esac
-  done
-
-  # A caller-supplied Codex home is an exact authority. Normalize the friendly
-  # alias, but never search outside a managed/custom/explicitly pinned home.
-  if [ -n "${CODEX_HOME:-}" ]; then
-    if [ "$resume_alias" -eq 1 ]; then
-      if [ "$resume_equals" -eq 1 ]; then
-        argv=("${argv[@]:0:$resume_marker}" resume "$resume_id" "${argv[@]:$((resume_marker + 1))}")
-      else
-        argv[resume_marker]=resume
+        case "${argv[$next]}" in
+          --)
+            after_separator=1
+            ;;
+          --last)
+            # --last supplies the session selection; any positional that
+            # follows is a prompt, even when it happens to look like a UUID.
+            resume_last=1
+            break
+            ;;
+          --all|--include-non-interactive)
+            ;;
+          *)
+            if codex_option_takes_value "${argv[$next]}"; then
+              skip_resume_value=1
+            elif codex_terminal_flag "${argv[$next]}"; then
+              break
+            elif codex_option_has_attached_value "${argv[$next]}" ||
+                 codex_known_flag "${argv[$next]}"; then
+              :
+            elif [[ "${argv[$next]}" = -* ]]; then
+              # Unknown future option: leave parsing to Codex rather than
+              # risk treating its value as a session id.
+              break
+            else
+              # SESSION_ID/name is the first positional. Never scan into the
+              # optional PROMPT for a later UUID.
+              resume_index="$next"
+              resume_id="${argv[$next]}"
+              break
+            fi
+            ;;
+        esac
+      done
+      break
+      ;;
+    --resume)
+      resume_marker="$index"
+      resume_alias=1
+      next=$((index + 1))
+      if [ "$next" -lt "${#argv[@]}" ]; then
+        resume_index="$next"
+        resume_id="${argv[$next]}"
       fi
-      set -- "${argv[@]}"
-    fi
-    exec "$REAL" "${FORCE_CONFIG[@]}" "$@"
-  fi
+      break
+      ;;
+    --resume=*)
+      resume_marker="$index"
+      resume_index="$index"
+      resume_id="${argv[$index]#--resume=}"
+      resume_alias=1
+      resume_equals=1
+      break
+      ;;
+    *)
+      if codex_option_takes_value "${argv[$index]}"; then
+        skip_value=1
+      elif codex_terminal_flag "${argv[$index]}"; then
+        break
+      elif codex_option_has_attached_value "${argv[$index]}" ||
+           codex_known_flag "${argv[$index]}"; then
+        :
+      else
+        # Another subcommand or an interactive prompt owns the remaining
+        # argv; a later literal "resume"/"--resume" is not launcher syntax.
+        break
+      fi
+      ;;
+  esac
+done
 
-  uuid_re='^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
-  if [ "$resume_terminal" -eq 0 ] && [ "$resume_last" -eq 0 ] &&
-     [ "$resume_index" -ge 0 ] &&
-     [[ "$resume_id" =~ $uuid_re ]]; then
-    resolver="$(dirname "$self")/north-session-resolve"
-    if [ ! -x "$resolver" ]; then
-      echo "codex: cross-account resume resolver is unavailable: $resolver" >&2
-      exit 127
-    fi
-    printf '[codex] north launcher — resolving cross-account resume…\n' >&2
-    resolved="$("$resolver" openai "$resume_id")"
-    resolve_status=$?
-    [ "$resolve_status" -eq 0 ] || exit "$resolve_status"
-    IFS=$'\t' read -r version resolved_provider authority_kind authority_name authority_home canonical_id <<<"$resolved"
-    if [ "$version" != "v1" ] || [ "$resolved_provider" != "openai" ] ||
-       [ -z "$authority_home" ] || [ -z "$canonical_id" ]; then
-      echo "codex: cross-account resume resolver returned an invalid result" >&2
-      exit 1
-    fi
-    if [ "$resume_alias" -eq 1 ] && [ "$resume_equals" -eq 1 ]; then
-      argv=("${argv[@]:0:$resume_marker}" resume "$canonical_id" "${argv[@]:$((resume_marker + 1))}")
-    elif [ "$resume_alias" -eq 1 ]; then
-      argv[resume_marker]=resume
-      argv[resume_index]="$canonical_id"
-    else
-      argv[resume_index]="$canonical_id"
-    fi
-    set -- "${argv[@]}"
-    printf '[codex resume → %s:%s]\n' "$authority_kind" "$authority_name" >&2
-    if [ "$authority_kind" = "pooled" ]; then
-      pooled="$(dirname "$self")/codex-pooled"
-      [ -x "$pooled" ] || { echo "codex: pooled launcher is unavailable: $pooled" >&2; exit 127; }
-      export NORTH_CODEX_CONVERSATION_HOME="$authority_home"
-      export NORTH_CODEX_CONVERSATION_SQLITE_HOME="$authority_home/sqlite"
-      exec "$pooled" "$@"
-    fi
-    if [ "$authority_kind" = "profile" ] && [ "$authority_name" = "codex-native" ]; then
-      native="$(dirname "$self")/codex-native"
-      [ -x "$native" ] || { echo "codex: native launcher is unavailable: $native" >&2; exit 127; }
-      exec "$native" "$@"
-    fi
-    export NORTH_CODEX_CONVERSATION_HOME="$authority_home"
-    if [ "$authority_kind" = "ambient" ]; then
-      export NORTH_CODEX_CONVERSATION_SQLITE_HOME="$authority_home"
-    else
-      export NORTH_CODEX_CONVERSATION_SQLITE_HOME="$authority_home/sqlite"
-    fi
-    pooled="$(dirname "$self")/codex-pooled"
-    [ -x "$pooled" ] || { echo "codex: pooled launcher is unavailable: $pooled" >&2; exit 127; }
-    exec "$pooled" "$@"
-  fi
-
-  # Non-UUID aliases still map to the native subcommand (picker/session name)
-  # and then follow the existing pinned/automatic account routing.
+# A caller-supplied Codex home is an exact authority. Normalize the friendly
+# alias, but never search outside a managed/custom/explicitly pinned home.
+if [ -n "${CODEX_HOME:-}" ]; then
   if [ "$resume_alias" -eq 1 ]; then
     if [ "$resume_equals" -eq 1 ]; then
       argv=("${argv[@]:0:$resume_marker}" resume "$resume_id" "${argv[@]:$((resume_marker + 1))}")
@@ -448,50 +404,73 @@ if [ "${1:-}" != "as" ]; then
     fi
     set -- "${argv[@]}"
   fi
+  exec "$REAL" "${FORCE_CONFIG[@]}" "$@"
 fi
 
-# 2. Passthrough guard for `codex as ...`, which intentionally skipped the
-#    automatic resume parser above.
+uuid_re='^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
+if [ "$resume_terminal" -eq 0 ] && [ "$resume_last" -eq 0 ] &&
+   [ "$resume_index" -ge 0 ] &&
+   [[ "$resume_id" =~ $uuid_re ]]; then
+  resolver="$(dirname "$self")/north-session-resolve"
+  if [ ! -x "$resolver" ]; then
+    echo "codex: cross-account resume resolver is unavailable: $resolver" >&2
+    exit 127
+  fi
+  printf '[codex] north launcher — resolving cross-account resume…\n' >&2
+  resolved="$("$resolver" openai "$resume_id")"
+  resolve_status=$?
+  [ "$resolve_status" -eq 0 ] || exit "$resolve_status"
+  IFS=$'\t' read -r version resolved_provider authority_kind authority_name authority_home canonical_id <<<"$resolved"
+  if [ "$version" != "v1" ] || [ "$resolved_provider" != "openai" ] ||
+     [ -z "$authority_home" ] || [ -z "$canonical_id" ]; then
+    echo "codex: cross-account resume resolver returned an invalid result" >&2
+    exit 1
+  fi
+  if [ "$resume_alias" -eq 1 ] && [ "$resume_equals" -eq 1 ]; then
+    argv=("${argv[@]:0:$resume_marker}" resume "$canonical_id" "${argv[@]:$((resume_marker + 1))}")
+  elif [ "$resume_alias" -eq 1 ]; then
+    argv[resume_marker]=resume
+    argv[resume_index]="$canonical_id"
+  else
+    argv[resume_index]="$canonical_id"
+  fi
+  set -- "${argv[@]}"
+  printf '[codex resume → %s:%s]\n' "$authority_kind" "$authority_name" >&2
+  if [ "$authority_kind" = "pooled" ]; then
+    CONVERSATION_HOME="$authority_home"
+    export NORTH_CODEX_CONVERSATION_HOME="$authority_home"
+    export NORTH_CODEX_CONVERSATION_SQLITE_HOME="$authority_home/sqlite"
+    exec_conversation "$@"
+  fi
+  if [ "$authority_kind" = "profile" ] && [ "$authority_name" = "codex-native" ]; then
+    native="$(dirname "$self")/codex-native"
+    [ -x "$native" ] || { echo "codex: native launcher is unavailable: $native" >&2; exit 127; }
+    exec "$native" "$@"
+  fi
+  CONVERSATION_HOME="$authority_home"
+  export NORTH_CODEX_CONVERSATION_HOME="$authority_home"
+  if [ "$authority_kind" = "ambient" ]; then
+    export NORTH_CODEX_CONVERSATION_SQLITE_HOME="$authority_home"
+  else
+    export NORTH_CODEX_CONVERSATION_SQLITE_HOME="$authority_home/sqlite"
+  fi
+  exec_conversation "$@"
+fi
+
+# Non-UUID aliases still map to the native subcommand (picker/session name)
+# and then follow the existing pinned/automatic account routing.
+if [ "$resume_alias" -eq 1 ]; then
+  if [ "$resume_equals" -eq 1 ]; then
+    argv=("${argv[@]:0:$resume_marker}" resume "$resume_id" "${argv[@]:$((resume_marker + 1))}")
+  else
+    argv[resume_marker]=resume
+  fi
+  set -- "${argv[@]}"
+fi
+# 2. Managed lanes arrive with CODEX_HOME already set and keep their own home.
 if [ -n "${CODEX_HOME:-}" ]; then
   exec "$REAL" "${FORCE_CONFIG[@]}" "$@"
 fi
 
-list_accounts() {
-  [ -d "$ACCOUNTS_ROOT" ] && \
-    find "$ACCOUNTS_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort
-}
-
-# 3. Explicit pin: `codex as <id> [args...]`.
-if [ "${1:-}" = "as" ]; then
-  shift
-  acct="${1:-}"
-  usage() {
-    echo "usage: codex as <account-id> [codex args...]"
-    echo "available account ids:"
-    list_accounts | sed 's/^/  /'
-  }
-  case "$acct" in
-    -h|--help) usage; exit 0 ;;
-    "")        usage >&2; exit 1 ;;
-  esac
-  shift
-  root="$ACCOUNTS_ROOT/$acct"
-  if [ ! -d "$root" ]; then
-    {
-      echo "codex as: unknown account '$acct'"
-      echo "available account ids:"
-      list_accounts | sed 's/^/  /'
-    } >&2
-    exit 1
-  fi
-  export CODEX_HOME="$root"
-  export CODEX_SQLITE_HOME="$root/sqlite"
-  load_direct_execution_args "$@"
-  exec "$REAL" "${FORCE_CONFIG[@]}" "${DIRECT_EXECUTION_ARGS[@]}" "${DIRECT_WORKSPACE_ARGS[@]}" "${NATIVE_DISPATCH_ARGS[@]}" "$@"
-fi
-
-# 4. Automatic sessions use the managed pool. The provider owns execution
-# account eligibility and routing; the conversation stays in the pooled home.
-pooled="$(dirname "$self")/codex-pooled"
-[ -x "$pooled" ] || { echo "codex: pooled launcher is unavailable: $pooled" >&2; exit 127; }
-exec "$pooled" "$@"
+# 3. Every other session runs in the single conversation home.
+exec_conversation "$@"

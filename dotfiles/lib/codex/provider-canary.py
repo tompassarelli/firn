@@ -163,7 +163,7 @@ def main():
         env = dict(os.environ)
         env.update(CODEX_RUNTIME=str(candidate), NORTH_CODEX_CONVERSATION_HOME=str(root),
                    NORTH_CODEX_CONVERSATION_SQLITE_HOME=str(root / "sqlite"), NORTH_NO_SLICE="1")
-        launcher = Path(__file__).resolve().parents[2] / "bin" / "codex-pooled"
+        launcher = Path(__file__).resolve().parents[2] / "bin" / "codex"
         process = subprocess.Popen([str(launcher), "app-server", "--listen", "unix://" + str(socket),
             "--enable", "multi_agent_v2"], env=env, stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)

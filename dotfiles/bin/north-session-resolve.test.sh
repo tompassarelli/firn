@@ -6,13 +6,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RESOLVE="$ROOT/dotfiles/bin/north-session-resolve"
 CODEX="$ROOT/dotfiles/bin/codex"
-CODEX_POOLED="$ROOT/dotfiles/bin/codex-pooled"
 CODEX_PARSER_RUNTIME="${CODEX_PARSER_RUNTIME:-$HOME/.local/lib/codex/current/bin/codex}"
 fixture="$(mktemp -d)"
 trap 'rm -rf "${fixture:?}"' EXIT
 
 mkdir -p "$fixture/launchers"
-cp "$CODEX" "$CODEX_POOLED" "$RESOLVE" "$ROOT/dotfiles/bin/north" "$fixture/launchers/"
+cp "$CODEX" "$RESOLVE" "$ROOT/dotfiles/bin/north" "$fixture/launchers/"
 export CODEX_TEST_SHARED_HOME_LOG="$fixture/shared-home"
 printf '%s\n' '#!/usr/bin/env bash' \
   'printf "%s\\n" "${NORTH_CODEX_CONVERSATION_HOME:-${NORTH_CODEX_POOLED_HOME:-$HOME/.local/state/north/codex-pooled}}" >"$CODEX_TEST_SHARED_HOME_LOG"' \
@@ -20,7 +19,6 @@ printf '%s\n' '#!/usr/bin/env bash' \
   >"$fixture/launchers/codex-shared-server"
 chmod +x "$fixture/launchers/codex-shared-server"
 CODEX="$fixture/launchers/codex"
-CODEX_POOLED="$fixture/launchers/codex-pooled"
 
 export HOME="$fixture"
 fail() { printf 'north-session-resolve.test.sh:%s: %s\n' "${BASH_LINENO[0]}" "$1" >&2; exit 1; }
@@ -100,8 +98,8 @@ if grep -Fxq "$ASID" "$argv_log"; then
   fail "launch fell through into another account home"
 fi
 
-# Automatic sessions use the same pooled entrypoint, including North's
-# app-server launch. Explicit account and inherited homes remain authoritative.
+# Automatic sessions use the single entrypoint, including North's
+# app-server launch. Inherited homes remain authoritative.
 run_automatic() {
   env -u CODEX_HOME -u CODEX_SQLITE_HOME \
     CODEX_RUNTIME="$runtime" \
@@ -150,21 +148,6 @@ mapfile -t launched_env <"$env_log"
   fail "historical resume selected another server home"
 grep -Fxq -- '--remote' "$argv_log" || fail "historical resume did not attach"
 grep -Fxq 'model_provider="codex-lb"' "$argv_log" || fail "historical resume did not use managed provider"
-
-run_automatic as acct exec "explicit account"
-mapfile -t launched_env <"$env_log"
-[ "${launched_env[0]}" = "$base/openai/acct" ] || fail "explicit account was replaced"
-grep -Fxq 'model="gpt-6-astra"' "$argv_log" || fail "native root lost Astra default"
-grep -Fxq 'model_reasoning_effort="medium"' "$argv_log" || fail "native root lost medium effort"
-if grep -Fxq 'model_provider="codex-lb"' "$argv_log"; then
-  fail "explicit account received pooled provider"
-fi
-
-run_automatic as acct -c 'model="gpt-5.6-sol"' -c 'model_reasoning_effort="low"' exec "explicit model"
-[[ "$(grep '^model=' "$argv_log" | tail -1)" = 'model="gpt-5.6-sol"' ]] ||
-  fail "native default replaced explicit model"
-[[ "$(grep '^model_reasoning_effort=' "$argv_log" | tail -1)" = 'model_reasoning_effort="low"' ]] ||
-  fail "native default replaced explicit effort"
 
 env CODEX_HOME="$base/openai/acct" CODEX_SQLITE_HOME="$fixture/custom-sqlite" \
   CODEX_RUNTIME="$runtime" CODEX_TEST_ARGV_LOG="$argv_log" CODEX_TEST_ENV_LOG="$env_log" \
@@ -215,7 +198,7 @@ run_pooled() {
     CODEX_TEST_ENV_LOG="$env_log" \
     NORTH_CODEX_POOLED_HOME="$pooled" \
     NORTH_NO_SLICE=1 \
-    "$CODEX_POOLED" "$@" >/dev/null 2>&1 || fail "pooled launch failed: $*"
+    "$CODEX" "$@" >/dev/null 2>&1 || fail "pooled launch failed: $*"
 }
 
 argv_line() {
@@ -291,7 +274,7 @@ env -u CODEX_HOME -u CODEX_SQLITE_HOME \
   CODEX_TEST_REAL_RUNTIME="$CODEX_PARSER_RUNTIME" \
   NORTH_CODEX_POOLED_HOME="$pooled" \
   NORTH_NO_SLICE=1 \
-  "$CODEX_POOLED" exec --json resume --disable multi_agent \
+  "$CODEX" exec --json resume --disable multi_agent \
     -m gpt-5.6-sol -c 'model_reasoning_effort="xhigh"' "$PSID" - \
     >/dev/null 2>&1 || fail "installed parser rejected pooled exec resume argv"
 
