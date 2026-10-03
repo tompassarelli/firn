@@ -8,7 +8,7 @@ and map compilation have different costs and must not be mixed into its ratio.
 ## Record only useful chains
 
 Keep game-specific procedures in the consuming repository, such as
-wc3-melee:tools/wc3-procedures.sh and its accompanying procedure records. The
+wc3-melee:tools/wc3-procedure and wc3-melee:tools/wc3-procedures/ records. The
 generic private-desktop skill continues to own private display/capture transport.
 
 A record needs the named action, starting screen/phase, desired ending
