@@ -21,7 +21,7 @@
     "warcraft3-development-distilled",
     "wurst-development-distilled",
     "smashcraft-character-creation-distilled",
-    "off-monitor-development-distilled",
+    "private-desktop-development-distilled",
     "image-context-budget-distilled",
     "greywrought-development-distilled",
     "firn-distilled",
@@ -438,12 +438,12 @@
         "path": "dotfiles/agents/skills/smashcraft-character-creation-distilled/SKILL.md"
       }
     },
-    "off-monitor-development-distilled": {
+    "private-desktop-development-distilled": {
       "kind": "skill",
       "category": "games",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/off-monitor-development-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/private-desktop-development-distilled/SKILL.md"
       }
     },
     "image-context-budget-distilled": {
@@ -478,7 +478,7 @@
     "smashcraft-character-creation-distilled": {
       "distributions": [{ "type": "skill", "targets": ["shared"] }]
     },
-    "off-monitor-development-distilled": {
+    "private-desktop-development-distilled": {
       "distributions": [{ "type": "skill", "targets": ["shared"] }]
     },
     "image-context-budget-distilled": {

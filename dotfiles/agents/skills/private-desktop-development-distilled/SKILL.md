@@ -1,10 +1,10 @@
 ---
-name: off-monitor-development-distilled
+name: private-desktop-development-distilled
 description: >-
   Run GPU-accelerated Linux games and graphical development tools in a private desktop beside Niri, with remote input that never grabs the normal desktop.
 ---
 
-# Off-monitor development
+# Private desktop development
 
 Use this when an application must keep rendering or receiving input while the
 owner uses the normal desktop. It starts a separate headless Wayland compositor
@@ -24,7 +24,7 @@ Run it from any project; keep game-specific commands in that project's own
 launcher or shell.
 
 ```bash
-skill_file=$(agents path off-monitor-development-distilled)
+skill_file=$(agents path private-desktop-development-distilled)
 skill_dir=$(dirname "$skill_file")
 "$skill_dir/scripts/private-desktop.sh" start --resolution 2560x1440 \
   -- COMMAND ARG...
@@ -50,6 +50,21 @@ Read the printed run directory and port. Control it only through the launcher:
 "$skill_dir/scripts/private-desktop.sh" control RUN_DIR keydown shift pause 0.2 keyup shift
 "$skill_dir/scripts/private-desktop.sh" control RUN_DIR mousedown 1 pause 0.2 mouseup 1
 ```
+
+Capture reads the compositor framebuffer directly through `grim` using the exact
+run's saved Wayland display and private runtime directory. VNC remains the input
+channel. Capture needs an active run and a live private socket; it has an
+eight-second timeout with a one-second forced-termination grace, and atomically
+replaces the requested absolute PNG only after successful nonempty output.
+Check its exit status before OCR or pixel inspection: failure preserves an older
+destination, which is not fresh evidence. A fresh frame proves capture, not that
+the application advanced; interpret its visible state in the owning project.
+
+Startup resolves `grim` once and records its executable in the run. For a
+retained session started before that declaration, put `grim` on PATH once for
+the whole capture loop (for example, enter `nix shell nixpkgs#grim`). Do not
+realize a Nix shell for every frame. Capture never sends input or restarts a
+client. Keep original images on disk and report bounded text or measurements.
 
 `vncdo` actions are case-sensitive; use lowercase key names such as `f10`.
 Keep each control sequence shorter than the command's eight-second bound.

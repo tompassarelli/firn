@@ -25,13 +25,34 @@ case "$action" in
         [[ $# -ge 3 ]] || die 'a run directory and action/path are required'
         run=$(realpath -- "$2")
         shift 2
-        [[ -O "$run" && -f "$run/active" && -S "$run/runtime/wayland-0" ]] || die 'run is not active or not owned by this user'
-        port=$(cat "$run/port")
-        [[ "$port" =~ ^[0-9]+$ ]] || die 'invalid run port'
+        [[ -O "$run" && -f "$run/active" ]] || die 'run is not active or not owned by this user'
+        wayland_display=$(cat "$run/wayland-display")
+        [[ -n "$wayland_display" && "$wayland_display" != */* && -S "$run/runtime/$wayland_display" ]] || die 'private Wayland socket is unavailable'
         if [[ "$action" == capture ]]; then
             [[ $# == 1 && "$1" == /* ]] || die 'capture needs one absolute output path'
-            set -- capture "$1"
+            output=$1
+            [[ ! -d "$output" ]] || die 'capture output must be a file'
+            if [[ -f "$run/grim" ]]; then
+                grim=$(cat "$run/grim")
+            else
+                grim=$(command -v grim) || die 'grim is required on PATH for this retained session'
+            fi
+            [[ "$grim" == /* && -x "$grim" ]] || die 'capture executable is unavailable'
+            umask 077
+            temporary=$(mktemp -- "${output}.XXXXXX")
+            trap 'rm -f -- "$temporary"' EXIT
+            trap 'exit 130' INT
+            trap 'exit 143' TERM
+            timeout --kill-after=1s 8s env -u WAYLAND_SOCKET \
+                XDG_RUNTIME_DIR="$run/runtime" WAYLAND_DISPLAY="$wayland_display" \
+                "$grim" -t png "$temporary" || die 'native capture failed; output was not replaced'
+            [[ -s "$temporary" ]] || die 'native capture was empty; output was not replaced'
+            [[ -f "$run/active" ]] || die 'run ended during capture; output was not replaced'
+            mv -fT -- "$temporary" "$output"
+            exit 0
         fi
+        port=$(cat "$run/port")
+        [[ "$port" =~ ^[0-9]+$ ]] || die 'invalid run port'
         exec "$run/venv/bin/vncdo" -s "127.0.0.1::$port" -t 8 "$@"
         ;;
     start) shift ;;
@@ -72,16 +93,17 @@ if ! grep -Eq '/agent-capacity-[0-9a-f]+\.scope(/|$)' /proc/self/cgroup; then
         --owner "private-desktop:$$" -- bash "$self" start "${original_args[@]}"
 fi
 
-for executable in labwc wayvnc wlr-randr uv python3 glxinfo setsid flock dbus-run-session; do
+for executable in labwc wayvnc wlr-randr grim uv python3 glxinfo setsid flock dbus-run-session; do
     if ! command -v "$executable" >/dev/null; then
         exec nix shell nixpkgs#labwc nixpkgs#wayvnc nixpkgs#wlr-randr nixpkgs#uv nixpkgs#python3 \
-            nixpkgs#mesa-demos nixpkgs#util-linux nixpkgs#dbus \
+            nixpkgs#mesa-demos nixpkgs#util-linux nixpkgs#grim nixpkgs#dbus \
             --command bash "$self" start "${original_args[@]}"
     fi
 done
 umask 077
 run=$(mktemp -d "/run/user/$(id -u)/private-desktop.XXXXXXXX")
 mkdir "$run/runtime" "$run/config"
+command -v grim > "$run/grim"
 port_free() {
     python3 - "$1" <<'PY'
 import socket, sys

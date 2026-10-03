@@ -18,7 +18,7 @@ not choose or migrate the map's source language.
 
 Default Warcraft development and testing to an off-monitor subsession. An
 explicit off-monitor request also selects that path. Use
-[off-monitor development](../off-monitor-development-distilled/SKILL.md) for the
+[private desktop development](../private-desktop-development-distilled/SKILL.md) for the
 private GPU desktop, display environment, capture and input transport. Read that
 skill before creating or controlling a private desktop. Keep Warcraft launch,
 authentication and map iteration decisions here; the desktop skill is generic.
