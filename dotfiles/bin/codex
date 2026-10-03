@@ -187,7 +187,7 @@ exec_conversation() {
           --|-)
             break
             ;;
-          -c|--config|--enable|--disable|--thread-source|\
+          -c|--config|--enable|--disable|--remote|--thread-source|\
           -i|--image|-m|--model|--local-provider|-p|--profile|\
           -s|--sandbox|-C|--cd|--add-dir|--output-schema|\
           --color|-o|--output-last-message)
