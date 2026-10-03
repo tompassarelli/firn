@@ -121,3 +121,8 @@ usable, verify that key and pointer events arrive in the private app, the app
 responds to an ordinary in-game action, and the normal desktop retains focus
 and input. Report what you observed; do not infer game support from compositor
 startup or a launcher screen.
+
+If capture disagrees with the native compositor or Wine ignores modifier chords,
+read [nixos-config:private input diagnostics](references/private-input-diagnostics.md).
+Verify the actual control changed before advancing; a successful command or
+pointer coordinate alone does not establish keyboard delivery.
