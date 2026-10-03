@@ -56,3 +56,24 @@ The requested 5–10× speedup is a target for the named warm loop. Use measured
 ratios only for equivalent completed loops. If menu control or loading remains
 the dominant blocker, report it and repair that boundary rather than claiming
 that fewer tool calls made the whole development loop 10× faster.
+
+## Detect readiness rather than estimate it
+
+Prefer actual lifecycle, UI, or native trace events to readiness sleeps. For a
+graphical boundary without those events, observe fresh captures and detect
+the expected state; this is polling-based observation, not a native event
+subscription. Bound it with a deadline and stop on a blocking dialog. A
+launcher can time out while its requested game later starts, so check the same
+retained runtime before retrying. Never submit a second launch solely because
+a readiness estimate expired.
+
+Verify input delivery separately from submission: an input tool returning zero
+does not establish focus, pointer position or a successful transition. Record
+missing delivery as unresolved until its owning cause is repaired. Known key
+hold durations may be intrinsic to an action; they do not establish resulting
+readiness. A fixed settling delay is permitted only as a named fallback with
+its missing signal and limitation stated.
+
+The retained four-screen OCR benchmark measured a 3.41× observation-stage gain
+(24/24 fixture classifications), not the requested 5–10× complete warm map loop.
+See wc3-melee:docs/wc3-screen-state.md for individual samples and scope.

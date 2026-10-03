@@ -86,6 +86,13 @@ performance, or audio behavior, and does not establish a VNC fix or root cause.
 
 ## Fast native iteration
 
+Prefer event-driven automation with real state detection. Advance on observed
+window/focus, control availability and resulting game state; elapsed time is
+not readiness. Use native callbacks, UI state or trace events where available,
+then fresh bounded OCR observation when those signals are unavailable. Timers
+bound waits. Fixed delays are an explicitly labeled fallback for a boundary
+without a usable signal, never the first approach.
+
 Use recorded, state-specific input procedures for repeated menu and map work.
 Recover the current session once, identify the starting screen, then batch the
 known inputs in one private XTEST invocation. Check the meaningful ending screen
