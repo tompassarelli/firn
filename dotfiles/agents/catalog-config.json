@@ -18,6 +18,7 @@
     "threejs-textures-distilled",
     "clause-authoring-distilled",
     "game-design-prototyping-distilled",
+    "warcraft3-development-distilled",
     "wurst-development-distilled",
     "smashcraft-character-creation-distilled",
     "off-monitor-development-distilled",
@@ -453,6 +454,14 @@
         "path": "dotfiles/agents/skills/image-context-budget-distilled/SKILL.md"
       }
     },
+    "warcraft3-development-distilled": {
+      "kind": "skill",
+      "category": "games",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/warcraft3-development-distilled/SKILL.md"
+      }
+    },
     "wurst-development-distilled": {
       "kind": "skill",
       "category": "games",
@@ -463,6 +472,9 @@
     }
   },
   "activation": {
+    "warcraft3-development-distilled": {
+      "distributions": [{ "type": "skill", "targets": ["shared"] }]
+    },
     "smashcraft-character-creation-distilled": {
       "distributions": [{ "type": "skill", "targets": ["shared"] }]
     },
