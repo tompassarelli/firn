@@ -5,7 +5,9 @@ set -euo pipefail
 private_run=$1
 case "$private_run" in /run/user/"$(id -u)"/private-desktop.*) ;; *) echo 'Private desktop required.' >&2; exit 1 ;; esac
 [[ -S "$private_run/runtime/wayland-0" && -f "$private_run/display" && -f "$private_run/xauthority" ]] || exit 1
-export DISPLAY="$(<"$private_run/display")" XAUTHORITY="$(<"$private_run/xauthority")"
+DISPLAY="$(<"$private_run/display")"
+XAUTHORITY="$(<"$private_run/xauthority")"
+export DISPLAY XAUTHORITY
 [[ -n "$DISPLAY" ]] || exit 1
 for dependency in xdotool jq sops sudo; do command -v "$dependency" >/dev/null || { echo "Missing dependency: $dependency" >&2; exit 1; }; done
 window=$(xdotool getactivewindow)
