@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Foreign boundary: type one SOPS field into the verified private login window.
+[[ $# == 3 && ($2 == a || $2 == b) && ($3 == username || $3 == password) ]] || { echo 'Usage: wc3-login-field PRIVATE_RUN a|b username|password' >&2; exit 2; }
+private_run=$1
+case "$private_run" in /run/user/"$(id -u)"/private-desktop.*) ;; *) echo 'Private desktop required.' >&2; exit 1 ;; esac
+[[ -S "$private_run/runtime/wayland-0" && -f "$private_run/display" && -f "$private_run/xauthority" ]] || exit 1
+export DISPLAY="$(<"$private_run/display")" XAUTHORITY="$(<"$private_run/xauthority")"
+[[ -n "$DISPLAY" ]] || exit 1
+for dependency in xdotool jq sops sudo; do command -v "$dependency" >/dev/null || { echo "Missing dependency: $dependency" >&2; exit 1; }; done
+window=$(xdotool getactivewindow)
+title=$(xdotool getwindowname "$window")
+[[ "$title" == 'Battle.net' || "$title" == 'Warcraft III' ]] || { echo 'Login window is not active.' >&2; exit 1; }
+source_root=$(git -C "$(dirname "$(readlink -f "$0")")" rev-parse --show-toplevel)
+secret_file="$source_root/secrets/bnet.yaml"
+[[ -f "$secret_file" ]] || { echo 'Encrypted account file unavailable.' >&2; exit 1; }
+# Values travel only through pipes, never argv, a clipboard, files or tool output.
+sudo -n env SOPS_AGE_KEY_FILE=/var/lib/sops-nix/key.txt sops --decrypt --output-type json "$secret_file" |
+  jq -j --arg account "$2" --arg field "$3" '.[$account][$field] | if type == "string" then . else error("Missing account field") end' |
+  xdotool type --clearmodifiers --file -
+[[ $(xdotool getactivewindow) == "$window" ]] || { echo 'Focus changed during delivery; inspect privately before proceeding.' >&2; exit 1; }
+echo 'Field delivered; verify the login result privately.'

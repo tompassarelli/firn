@@ -151,3 +151,26 @@ candidate. Synthetic host tests, local gameplay and a successful launcher do not
 establish online responsiveness, fairness or controller feel. Preserve signed-in
 clients across map leave/rejoin cycles and record the current live state in the
 project handoff rather than hard-coding transient process IDs into this skill.
+
+## Authorized account login
+
+The owner authorized username/password entry for both test accounts. Encrypted
+pairs live in nixos-config:secrets/bnet.yaml (a and b, in source-file order).
+Use the machine SOPS key through sudo; never print decrypted values, put them
+in tool arguments, clipboard, traces or screenshots, or write plaintext files.
+The helper nixos-config:dotfiles/bin/wc3-login-field reads a selected field into
+a pipe and types it into the active private Battle.net/Warcraft window.
+
+First verify a real login form and the focused target field, using text/OCR
+without retaining account text. Use separate account/prefix bindings for A/B.
+Run the helper with the exact private run, account a|b, and username|password
+inside a shell providing jq, xdotool and sops. Deliver username, Tab into the
+verified password field, deliver password, then submit through the observed
+login control. Enable supported persistent login and verify actual launcher
+online state and W3 SSO before Play. Window focus alone is not a login-form
+check. A helper exit is not authenticated success.
+
+Handle ordinary credential prompts autonomously; do not ask the owner to type
+these stored credentials. Authenticator, CAPTCHA, account lock or unsupported
+interactive challenge is a separate blocker. Notify by email only through an
+available authenticated mail route; report unavailable delivery honestly.
