@@ -72,7 +72,7 @@ if ! grep -Eq '/agent-capacity-[0-9a-f]+\.scope(/|$)' /proc/self/cgroup; then
         --owner "private-desktop:$$" -- bash "$self" start "${original_args[@]}"
 fi
 
-for executable in labwc wayvnc wlr-randr uv python3 glxinfo setsid; do
+for executable in labwc wayvnc wlr-randr uv python3 glxinfo setsid flock; do
     if ! command -v "$executable" >/dev/null; then
         exec nix shell nixpkgs#labwc nixpkgs#wayvnc nixpkgs#wlr-randr nixpkgs#uv nixpkgs#python3 \
             nixpkgs#mesa-demos nixpkgs#util-linux \
@@ -94,6 +94,10 @@ finally:
     s.close()
 PY
 }
+# Serialize discovery through actual VNC binding; parallel starts must not
+# release a candidate port before their listener owns it.
+exec 9>"/run/user/$(id -u)/private-desktop-port.lock"
+flock -x 9
 if ((port_was_explicit)); then
     port_free "$port" || die "localhost port $port is already occupied"
 else
@@ -131,7 +135,7 @@ export PRIVATE_DESKTOP_RUN="$run"
 unset DISPLAY WAYLAND_DISPLAY WAYLAND_SOCKET XAUTHORITY
 export XDG_RUNTIME_DIR="$run/runtime"
 WLR_BACKENDS=headless WLR_RENDERER=gles2 WLR_RENDER_DRM_DEVICE="$render_node" \
-    WLR_HEADLESS_OUTPUTS=1 setsid labwc -C "$run/config" -s "$run/startup.sh" > "$run/labwc.log" 2>&1 &
+    WLR_HEADLESS_OUTPUTS=1 setsid labwc -C "$run/config" -s "$run/startup.sh" > "$run/labwc.log" 2>&1 9>&- &
 desktop_pid=$!
 for ((attempt=0; attempt<100; attempt++)); do
     [[ ! -f "$run/ready" ]] || break
@@ -149,10 +153,17 @@ output=$(wlr-randr | awk '/^HEADLESS-[0-9]+ / {print $1; exit}')
 [[ -n "$output" ]] || die 'could not find labwc headless output'
 wlr-randr --output "$output" --custom-mode "${resolution}@60Hz" || die "could not set private output to $resolution"
 printf 'address=127.0.0.1\nport=%s\nenable_auth=false\n' "$port" > "$run/wayvnc.conf"
-setsid wayvnc -C "$run/wayvnc.conf" > "$run/wayvnc.log" 2>&1 &
+setsid wayvnc -C "$run/wayvnc.conf" > "$run/wayvnc.log" 2>&1 9>&- &
 vnc_pid=$!
-sleep 0.5
-kill -0 "$vnc_pid" 2>/dev/null || die "VNC exited; see $run/wayvnc.log"
+vnc_ready=0
+for ((attempt=0; attempt<100; attempt++)); do
+    kill -0 "$vnc_pid" 2>/dev/null || die "VNC exited; see $run/wayvnc.log"
+    if ! port_free "$port"; then vnc_ready=1; break; fi
+    sleep 0.1
+done
+((vnc_ready)) || die "VNC listener startup timed out; see $run/wayvnc.log"
+flock -u 9
+exec 9>&-
 touch "$run/active"
 printf 'Run: %s\nPort: %s\nDISPLAY=%s WAYLAND_DISPLAY=%s XDG_RUNTIME_DIR=%s\n' "$run" "$port" "$DISPLAY" "$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR"
 printf 'Control: %q control %q key enter\n' "$self" "$run"
