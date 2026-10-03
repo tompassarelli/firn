@@ -91,7 +91,7 @@
                   {:Type "oneshot"
                    :RemainAfterExit true
                    :Environment
-                    [(s "PATH=" pkgs.systemd "/bin:" pkgs.coreutils "/bin:"
-                       pkgs.gnugrep "/bin")]
+                    [(s "PATH=" pkgs.bash "/bin:" pkgs.systemd "/bin:"
+                       pkgs.coreutils "/bin:" pkgs.gnugrep "/bin")]
                    :ExecStart (s homeDir "/.local/bin/codex-keyring-default")}
                  :Install {:WantedBy ["default.target"]}}})}})}))

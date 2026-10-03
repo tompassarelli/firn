@@ -60,7 +60,7 @@
           Type = "oneshot";
           RemainAfterExit = true;
           Environment = [
-            "PATH=${pkgs.systemd}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin"
+            "PATH=${pkgs.bash}/bin:${pkgs.systemd}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin"
           ];
           ExecStart = "${homeDir}/.local/bin/codex-keyring-default";
         };
