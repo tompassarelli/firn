@@ -77,7 +77,11 @@ the existing clients. Restart only an actually unusable or terminated client,
 or when the owner explicitly asks to stop it. A test iteration or elapsed time
 alone is not a reason to discard a working signed-in session.
 
-For Warcraft, use private XTEST for gameplay input and VNC for capture only.
+For Warcraft, use private XTEST for gameplay input and the private-desktop
+launcher's native compositor capture for observation. Verify actual pointer
+position before clicks; an absolute XTEST move may leave it unchanged under
+Xwayland. Relative XTEST motion moved the pointer in the retained native menus;
+check the resulting position and screen rather than inferring delivery.
 One observed single-player Smashcraft run tested movement, jump, and attack via
 private XTEST over 300 ticks (about five seconds), with no dropped trace entries;
 the capture showed the Archer attack state and CPU interaction. Warcraft's VNC virtual
