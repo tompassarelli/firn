@@ -84,6 +84,27 @@ the capture showed the Archer attack state and CPU interaction. Warcraft's VNC v
 input remains unreliable and unresolved. This does not prove multiplayer,
 performance, or audio behavior, and does not establish a VNC fix or root cause.
 
+## Avoid repeated authentication
+
+Before recovery or Play, check launcher authentication transport separately from
+its visible account label. A socket bound to an address no longer on the host,
+repeated authentication RPC timeouts, or explicit W3 SSO-generation failure
+means the launcher is unhealthy. Do not launch or request another game sign-in
+in that state. A launcher may start Warcraft even after SSO generation fails.
+Keep the network/VPN route stable during retained sessions; observe address and
+connection changes rather than estimating token lifetime. Require distinct
+accounts for concurrent online clients and one runtime per mutable prefix.
+
+Preserve account stores and working games. Re-establish the broken connection
+through the supported launcher path, then check actual authentication and game
+access. A reconnect can reveal absent saved login tokens; classify that actual
+challenge separately from transport failure. Do not promise silent recovery.
+Use persistent login only through the application's supported option; never
+store or script passwords. Notify the owner by the requested email channel only
+when an actual interactive challenge remains after transport recovery, and
+only when an authenticated sending route is available. Report an unavailable
+mail route explicitly; do not claim a notification was sent.
+
 ## Fast native iteration
 
 Prefer event-driven automation with real state detection. Advance on observed
