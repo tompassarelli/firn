@@ -19,11 +19,9 @@ test_python="${CONVO_TEST_PYTHON:-$(command -v python3 || true)}"
 [ -n "$test_python" ] || fail 'set CONVO_TEST_PYTHON to run outside a Python-enabled test environment'
 ln -s "$test_python" "$runtime_home/.local/libexec/convo/python3"
 env -i HOME="$runtime_home" PATH=/no-ambient-python "$CONVO" --help >/dev/null
-grep -Fq '
-                 ".local/libexec/convo/python3"
-                  {:source (s pkgs.python3 "/bin/python3")}' \
-  "$ROOT/modules/bash/default.bnix"
-grep -Fq '".local/libexec/convo/python3".source = "${pkgs.python3}/bin/python3";' \
+grep -Fq '".local/libexec/convo/python3": {source: "{package-text(package(path(python3)))}/bin/python3"}' \
+  "$ROOT/native/nix/bash.clause"
+grep -Fq '".local/libexec/convo/python3" = { "source" = (("" + (builtins."toString" (pkgs."python3"))) + "/bin/python3"); };' \
   "$ROOT/modules/bash/default.nix"
 mkdir -p "$fixture/test-bin"
 ln -s "$test_python" "$fixture/test-bin/python3"
