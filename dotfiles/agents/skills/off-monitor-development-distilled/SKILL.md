@@ -87,6 +87,23 @@ desktop or another session. Logs and captures remain in the printed runtime
 directory until logout. VNC binds to `127.0.0.1` with no password, so do not
 change that address to expose it to a network.
 
+## Session bus and concurrent startup
+
+The canonical launcher gives each client command its own live session bus with
+`dbus-run-session`. Do not inherit or manually recreate the normal desktop's
+D-Bus address. A stale inherited address can make Steam's container fail before
+launching the app, even while the private compositor and VNC are healthy. Keep
+this at the generic private-desktop boundary, separate from Warcraft login.
+
+Parallel starts serialize VNC port selection until the selected listener has
+bound its port. A free-port probe alone does not reserve a port. The launcher
+checks listener readiness and releases its startup lock before client work.
+Do not choose ports independently and rely on a startup sleep to avoid collision.
+
+Observed repair: two simultaneous Warcraft desktop starts obtained distinct
+ports and both passed the previous stale-D-Bus container failure. This establishes
+startup transport, not game authentication, input delivery or capture fidelity.
+
 ## Add a graphical application
 
 Start applications only after the launcher has set the requested output mode.
