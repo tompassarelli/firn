@@ -1,7 +1,11 @@
 { config, lib, pkgs, ... }:
 
-let
-  switch-theme = pkgs.writeShellScriptBin "switch-theme" ''
+((switch-theme: {
+  options.myConfig.modules.theme-switcher.enable = lib.mkEnableOption "theme switcher script";
+  config = lib.mkIf config.myConfig.modules.theme-switcher.enable {
+    environment.systemPackages = [ switch-theme ];
+  };
+}) (pkgs.writeShellScriptBin "switch-theme" ''
     #!/usr/bin/env bash
 
     # Theme switcher script for NixOS using walker dmenu
@@ -86,11 +90,4 @@ let
         exit 1
     fi
 
-  '';
-in
-{
-  options.myConfig.modules.theme-switcher.enable = lib.mkEnableOption "theme switcher script";
-  config = lib.mkIf config.myConfig.modules.theme-switcher.enable {
-    environment.systemPackages = [ switch-theme ];
-  };
-}
+  ''))

@@ -1,13 +1,11 @@
 { config, lib, pkgs, inputs, ... }:
 
-let
-  username = config.myConfig.modules.users.username;
-  monoFont = config.stylix.fonts.monospace.name;
-in
-{
+((username: ((monoFont: {
   options.myConfig.modules.quickshell.enable = lib.mkEnableOption "Quickshell (Qt6/QML) status bar";
   config = lib.mkIf config.myConfig.modules.quickshell.enable {
-    environment.systemPackages = [ inputs.quickshell.packages."${pkgs.stdenv.hostPlatform.system}".default ];
+    environment.systemPackages = [
+      (inputs.quickshell.packages."${pkgs.stdenv.hostPlatform.system}").default
+    ];
     users.users.${username}.extraGroups = [ "input" ];
     home-manager.users.${username} = ({ config, ... }: {
       systemd.user.services.quickshell = {
@@ -18,7 +16,7 @@ in
           Requisite = [ "graphical-session.target" ];
         };
         Service = {
-          ExecStart = "${inputs.quickshell.packages."${pkgs.stdenv.hostPlatform.system}".default}/bin/qs";
+          ExecStart = "${(inputs.quickshell.packages."${pkgs.stdenv.hostPlatform.system}").default}/bin/qs";
           Restart = "on-failure";
         };
         Install = {
@@ -63,4 +61,4 @@ in
       };
     });
   };
-}
+}) config.stylix.fonts.monospace.name)) config.myConfig.modules.users.username)

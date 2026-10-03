@@ -1,8 +1,19 @@
 { config, lib, pkgs, ... }:
 
-let
-  username = config.myConfig.modules.users.username;
-  niri-viewport-nav = pkgs.writers.writePython3Bin "niri-viewport-nav" {
+((username: ((niri-viewport-nav: {
+  options.myConfig.modules.niri.enable = lib.mkEnableOption "Enable niri compositor configuration";
+  imports = [ ./xwayland-satellite.nix ./swaybg.nix ./swayidle.nix ];
+  config = lib.mkIf config.myConfig.modules.niri.enable {
+    programs.niri.enable = true;
+    programs.niri.package = pkgs.unstable.niri;
+    environment.systemPackages = [ niri-viewport-nav ];
+    environment.sessionVariables.NIXOS_OZONE_WL = "1";
+    security.chromiumSuidSandbox.enable = true;
+    home-manager.users.${username} = ({ config, ... }: {
+      xdg.configFile."niri/config.kdl".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/main/dotfiles/niri/config.kdl";
+    });
+  };
+}) (pkgs.writers.writePython3Bin "niri-viewport-nav" {
     libraries = [ ];
   } ''
     import json
@@ -124,19 +135,4 @@ let
 
     if __name__ == "__main__":
         main()
-  '';
-in
-{
-  options.myConfig.modules.niri.enable = lib.mkEnableOption "Enable niri compositor configuration";
-  imports = [ ./xwayland-satellite.nix ./swaybg.nix ./swayidle.nix ];
-  config = lib.mkIf config.myConfig.modules.niri.enable {
-    programs.niri.enable = true;
-    programs.niri.package = pkgs.unstable.niri;
-    environment.systemPackages = [ niri-viewport-nav ];
-    environment.sessionVariables.NIXOS_OZONE_WL = "1";
-    security.chromiumSuidSandbox.enable = true;
-    home-manager.users.${username} = ({ config, ... }: {
-      xdg.configFile."niri/config.kdl".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/main/dotfiles/niri/config.kdl";
-    });
-  };
-}
+  ''))) config.myConfig.modules.users.username)
