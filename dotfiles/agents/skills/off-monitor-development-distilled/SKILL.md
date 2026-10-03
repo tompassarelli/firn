@@ -1,7 +1,7 @@
 ---
 name: off-monitor-development-distilled
 description: >-
-  Run GPU-accelerated Linux games and graphical development tools in a private desktop beside Niri, with remote input that never grabs the normal desktop.
+  Run GPU-accelerated Linux games in a private desktop beside Niri; launch and recover Warcraft III under Steam Proton while preserving signed-in sessions.
 ---
 
 # Off-monitor development
@@ -75,6 +75,9 @@ nix shell nixpkgs#xdotool --command env DISPLAY="$private_display" \
 
 Never use `ydotool`, or run `xdotool` with the normal desktop's `DISPLAY` or
 X authority. Do not change normal-desktop focus or target windows on it.
+An explicit request for hands-on testing on the primary display overrides this
+private-display default: confine control to the identified game window. Do not
+substitute a streamed desktop for a requested native controller/latency trial.
 
 To stop, send Ctrl-C to the foreground launcher (or SIGTERM to its wrapper).
 An explicit `--seconds` deadline also ends the session. Use
@@ -92,13 +95,46 @@ in this generic launcher. Existing account state and credentials stay in their
 application's supported stores. Do not expose secrets in process arguments or
 logs.
 
-For Warcraft III under Steam Proton, first establish that no other Wine/Proton
-client is using the same prefix. Start Battle.net inside the private session
-with the installed GE-Proton and Steam Linux Runtime, reusing the existing
-logged-in prefix. Do not start a second Battle.net/WC3 process on the same
-prefix, bypass Steam's supported runtime, or copy credentials. Select Play and
-verify an actual in-game action through the working private input method and a
-fresh capture; a Battle.net window alone does not prove gameplay works.
+### Warcraft III startup and post-login recovery
+
+Read this sequence before launching or recovering Warcraft, including controller
+trials. Recover the current process, prefix, display and signed-in launcher from
+the project handoff before taking action.
+
+1. Reuse a working game. For a cold start, first establish that no Wine/Proton
+   client uses the selected mutable prefix. Use the existing Steam Linux Runtime
+   and installed GE-Proton to start **Battle.net Launcher.exe** in that prefix
+   on the intended display. Separate Steam runtime namespaces can create two
+   independent wineservers against one prefix; their isolation does not make
+   this safe. Never start another runtime against a live prefix.
+2. Use **Play in the already-signed-in Battle.net launcher** to start Warcraft.
+   A direct `Warcraft III.exe -launch -uid w3` invocation is not equivalent to
+   this observed successful path. Do not replace Play with direct execution or
+   assume an in-game login will survive restarting the executable.
+3. Verify the real main menu, enter Custom Games and load the intended map.
+   Verify one actual gameplay action before announcing controller readiness.
+   A login form, Options/Exit Game shell, mapper profile or game process is not
+   a successful launch. Keep the launcher and signed-in game available.
+
+If login closes to an empty Options/Exit Game shell, treat it as the known
+post-login failure, not a request for another sign-in. Inspect the retained
+launcher and the exact previously successful sequence before changing state.
+The observed recovery relaunched an unusable game with the retained launcher's
+Play button; it did not establish that any restart preserves authentication.
+Do not discard another completed login to retry direct execution. If a current
+session has a no-restart constraint, prepare the launcher path without closing
+the game; resolve that constraint before applying a relaunch.
+
+Alt+Enter can repair clipped/windowed rendering, but is not an established fix
+for missing menu contents. One failed toggle closes that hypothesis. Inspect
+BlizzardBrowser through the owning Wine runtime's children: Linux process names
+can be `CrBrowserMain`, `CrRendererMain` and `CrGpuMain`, so absence of the literal
+name `BlizzardBrowser` does not establish browser startup failure. Keep auth
+values out of process/log output. Preserve the distinction between observed
+recovery and an unresolved underlying defect.
+
+Observed evidence and the failed alternative are retained in
+[nixos-config:Warcraft startup evidence](references/warcraft-startup.md).
 
 Keep signed-in Warcraft clients and their private desktops open through normal
 map leave/rejoin iterations. Leave the map, return to the lobby, and rejoin with
