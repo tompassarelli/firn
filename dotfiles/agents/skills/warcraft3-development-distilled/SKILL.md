@@ -91,7 +91,9 @@ its visible account label. A socket bound to an address no longer on the host,
 repeated authentication RPC timeouts, or explicit W3 SSO-generation failure
 means the launcher is unhealthy. Do not launch or request another game sign-in
 in that state. A launcher may start Warcraft even after SSO generation fails.
-Keep the network/VPN route stable during retained sessions; observe address and
+Use the project
+wc3-melee:tools/wc3-auth-transport check when present; its source-present result
+is not proof of authenticated readiness. Keep the network/VPN route stable during retained sessions; observe address and
 connection changes rather than estimating token lifetime. Require distinct
 accounts for concurrent online clients and one runtime per mutable prefix.
 
