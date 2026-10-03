@@ -21,7 +21,8 @@ runtime="$(realpath -e "${CODEX_RUNTIME:-$HOME/.local/lib/codex/current/bin/code
 # for a completion signal, which strands `thread/start` forever and leaves the
 # attached client queueing input. Withhold the session bus so that lookup fails
 # fast instead; secret storage is not reachable from a headless owner anyway.
-NO_SECRET_PROMPTER="unix:path=$XDG_RUNTIME_DIR/codex-no-secret-prompter"
+# An abstract address has no filesystem path for child containers to bind-mount.
+NO_SECRET_PROMPTER="unix:abstract=codex-no-secret-prompter-$UID"
 
 home_key="$(printf '%s\n%s' "$pooled_home" "$sqlite_home" | sha256sum)"
 home_key="${home_key:0:16}"
