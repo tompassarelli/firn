@@ -4,6 +4,15 @@ set -euo pipefail
 # Test doubles record only this test's synthetic user-service state.
 case "${0##*/}" in
   systemctl)
+    if [[ " $* " = *" --property=MainPID "* ]]; then
+      cat "$SHARED_TEST_ROOT/main.pid"
+      exit
+    fi
+    if [[ " $* " = *" stop "* ]]; then
+      printf 'stop\n' >>"$SHARED_TEST_ROOT/stops"
+      rm "$SHARED_TEST_ROOT/active" "$SHARED_TEST_ROOT/listening"
+      exit
+    fi
     if [[ " $* " = *" show "* ]]; then
       if [[ -e "$SHARED_TEST_ROOT/transition" ]]; then
         cat "$SHARED_TEST_ROOT/transition"
@@ -47,6 +56,7 @@ ln -s "$(realpath "$0")" "$fixture/bin/systemctl"
 ln -s "$(realpath "$0")" "$fixture/bin/systemd-run"
 ln -s "$(realpath "$0")" "$fixture/bin/ss"
 export SHARED_TEST_ROOT="$fixture"
+printf '%s\n' "$$" >"$fixture/main.pid"
 export PATH="$fixture/bin:$PATH"
 export XDG_RUNTIME_DIR="$fixture/runtime"
 export NORTH_CODEX_POOLED_HOME="$fixture/home/pool"
@@ -107,4 +117,13 @@ cmp "$fixture/first" "$fixture/recovered" || fail "recovery changed endpoint"
 [[ "$(wc -l <"$fixture/starts")" = 2 ]] || fail "dead socket did not recover"
 grep -Fxq -- "--property=RuntimeDirectory=$(basename "$(dirname "${endpoint#unix://}")")" "$fixture/start.argv" ||
   fail "service did not give systemd ownership of cleanup"
+
+# An active owner must follow a newly selected executable, preserving its endpoint.
+CODEX_RUNTIME="$(type -P sleep)"
+"$helper" >"$fixture/updated"
+cmp "$fixture/first" "$fixture/updated" || fail "runtime update changed endpoint"
+[[ "$(wc -l <"$fixture/stops")" = 1 ]] || fail "runtime update did not stop the old owner"
+[[ "$(wc -l <"$fixture/starts")" = 3 ]] || fail "runtime update did not replace the owner"
+grep -Fxq -- "--setenv=CODEX_RUNTIME=$(realpath "$CODEX_RUNTIME")" "$fixture/start.argv" ||
+  fail "replacement did not pin the new runtime"
 printf 'codex-shared-server.test.sh: all assertions passed\n'
