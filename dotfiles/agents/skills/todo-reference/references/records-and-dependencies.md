@@ -4,8 +4,17 @@
 
 Create one only when continuity is independently needed. Its value is that a
 successor can take the next safe action without reconstructing a transcript.
-Replace current state, preserve decisions that still constrain the work, and
-remove completed trivia.
+Replace current state, attribute decisions that still constrain the work, and
+remove completed trivia and superseded holds. Preserve the distinction between
+an operator restriction, an enforced boundary, and an agent's recommendation.
+The record is memory, not a new source of authority.
+
+For example, a saved instruction to withhold a branch must not trigger another
+approval request after the operator authorizes merging it. Update the record
+and proceed within that authorization. Conversely, permission to merge that
+branch does not authorize publishing private assets or changing another
+project. This correction addresses a continuation that treated a saved lane
+restriction as an independent veto; it does not relax actual safety boundaries.
 
 ## Record schema
 

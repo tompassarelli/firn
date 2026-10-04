@@ -21,7 +21,9 @@ Ordinary plans, in-turn delegation, and recoverable worktrees need no record.
   Forecast/staffing facts enter only when needed.
 - Record a model only from concrete run/dispatch evidence. Unknown identity
   stays an evidence gap, never `self`, `parent`, `default`, or `auto`.
-- Replace stale state at meaningful boundaries; do not append a transcript.
+- Replace stale state at meaningful boundaries, including superseded holds.
+  Distinguish operator restrictions from agent recommendations; notes do not
+  grant or revoke authorization. Do not append a transcript.
 - The product owner closes from terminal evidence; the run's host separately
   settles its process, delivery, driver, and child state.
 - Delete only after owned changes, dependents, cleanup, continuity, and awaited
