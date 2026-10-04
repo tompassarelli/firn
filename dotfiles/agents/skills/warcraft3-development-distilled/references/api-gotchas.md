@@ -63,6 +63,20 @@ Compare actual sustained throughput, completion and UI behavior before choosing
 the path. This is a factual mechanism summary, not copied/adapted code or a
 license determination.
 
+The tutorial's [post #4](https://www.hiveworkshop.com/threads/wc3-networking-crucial-component-of-codeless-save-load.304287/post-3249371)
+reports large `SyncStored*` transfers delaying subsequently issued player actions.
+[Posts #9](https://www.hiveworkshop.com/threads/wc3-networking-crucial-component-of-codeless-save-load.304287/post-3251736)
+and [#10](https://www.hiveworkshop.com/threads/wc3-networking-crucial-component-of-codeless-save-load.304287/post-3251744)
+discuss GameCache name/key strings and sync-call count as overhead: short keys
+were used in the Wurst port, while many small caches and packed 32-bit integer
+streams were optimization ideas, not a demonstrated combined implementation.
+[Post #8](https://www.hiveworkshop.com/threads/wc3-networking-crucial-component-of-codeless-save-load.304287/post-3250923)
+describes Escape-based encoding as O(value) events and vulnerable to the player's
+own Escape presses. These are 2018 observations and proposals, not modern
+throughput or packet-size guarantees. Compare sustained matched payloads/rates
+against `BlzSendSyncData`, including later player-action delay and UI interference,
+before choosing or optimizing either transport.
+
 Sources in pinned common.j:
 [key/sync/polling declarations](https://github.com/lep/jassdoc/blob/d49b2ba47c72ad757aa17abdfa9ccd55a7493fd5/common.j#L27640),
 [order events](https://github.com/lep/jassdoc/blob/d49b2ba47c72ad757aa17abdfa9ccd55a7493fd5/common.j#L3865),
