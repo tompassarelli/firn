@@ -43,6 +43,26 @@ barrier guarantee across modern `BlzSendSyncData` and selection paths; reproduce
 that boundary if using it. Its contemporary host/TCP description likewise does
 not establish the current game's transport topology.
 
+Keep TriggerHappy's two historical mechanisms distinct:
+
+- [SyncInteger v1.2.1](https://www.hiveworkshop.com/threads/syncinteger.278674/)
+  encodes a signed integer as selections of digit dummies (`BASE = 10`), with
+  terminator/sign markers and per-player reassembly. Selection events carry the
+  value itself; this mechanism has no GameCache dependency.
+- [Sync v1.3.0 (2016)](https://www.hiveworkshop.com/threads/sync-game-cache.279148/)
+  sends values through GameCache, then uses selection-based acknowledgements
+  from each client and completes when all active players are done. A completion
+  acknowledgement and a selection-encoded integer serve different purposes.
+
+These implementations show that local native `SelectUnit` is a concrete
+synchronization path, unlike the unsupported inference about local script
+orders. Their dummies must be selectable (no Locust); selection capacity and
+interference with player selection/UI matter, and an integer can require several
+events. They establish historical prior art, not a current 60 Hz guarantee.
+Compare actual sustained throughput, completion and UI behavior before choosing
+the path. This is a factual mechanism summary, not copied/adapted code or a
+license determination.
+
 Sources in pinned common.j:
 [key/sync/polling declarations](https://github.com/lep/jassdoc/blob/d49b2ba47c72ad757aa17abdfa9ccd55a7493fd5/common.j#L27640),
 [order events](https://github.com/lep/jassdoc/blob/d49b2ba47c72ad757aa17abdfa9ccd55a7493fd5/common.j#L3865),
