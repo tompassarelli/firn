@@ -3,7 +3,8 @@ name: warcraft3-development-distilled
 description: >-
   Develop and test Warcraft III maps in the native game, including Battle.net
   startup, Steam Proton on Linux, post-login recovery, controller trials and
-  multiplayer test sessions. Applies on primary and private displays; use the
+  multiplayer test sessions, API quirks, input transport and netcode diagnosis.
+  Applies on primary and private displays; use the
   source-language skill separately for Wurst, Lua or Jass authoring.
 ---
 
@@ -149,6 +150,35 @@ loading, build and test time separately. The owner's target is 5–10× faster
 iteration, not permission to remove checks or a claim already achieved. See
 [fast procedure guidance](references/fast-native-iteration.md) when recording,
 executing or measuring a chain.
+
+## Warcraft API gotchas and prior art
+
+Before designing or diagnosing input, commands, netcode, rollback or FileIO,
+resolve the relevant Warcraft-specific semantics from pinned API documentation,
+existing map code and a distinct viable prior-art approach. Compare native
+player-issued unit/order, ability and shop-event proxies alongside synchronized
+key events, local polling and `BlzSendSyncData`; the first chosen API is not the
+whole design space. Use `prior-art-distilled` for the decision and read
+[nixos-config:Warcraft API evidence](references/api-gotchas.md) for the relevant
+API family. Ordinary asset, balance or copy edits do not trigger this research.
+Stop when the evidence selects the next implementation or discriminating test.
+
+Distinguish player/engine-issued commands from map-script `Issue*Order` calls;
+local script orders are not an assumed synchronization channel. Event arrival
+alone does not preserve the original press/release, capture frame or analog
+value. Keep local capture, transport receipt, simulation confirmation, rendering
+and physical button-to-pixel timing separate. Continuing game callbacks prove
+neither cheap callbacks nor smooth rendering or wall-clock cadence.
+
+When a native baseline works but integration has abnormal latency, investigate
+the integration and harness first. Compare the same bytes, message rate, player
+count, game phase, prefix and receiver path, with sustained load and independent
+wall-clock correlation. Do not diagnose an engine quota, garbage collection,
+OS input or menu interference without evidence that discriminates that cause.
+Keep the minimal reproduction, exact source revision and Warcraft build with
+observations; label documentation claims, historical measurements and hypotheses
+separately. A missing-file preload test says nothing conclusive about populated
+read cost; one API's result does not establish another's behavior.
 
 ## Controller and multiplayer evidence
 
