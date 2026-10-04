@@ -32,6 +32,17 @@ key-up. `ForceUICancel` has different key-event behavior and hotkey-layout bugs.
 Neither is a faithful substitute for physical key transitions. In an order
 proxy, separately prove the local UI action, resulting command and remote event.
 
+The [2018 Warcraft networking tutorial](https://www.hiveworkshop.com/threads/wc3-networking-crucial-component-of-codeless-save-load.304287/)
+describes Wurst's `Network`/`SyncSimple` approach: send GameCache integers with
+`SyncStoredInteger`, then call local native `SelectUnit` and use its synchronized
+selection event as a completion marker for the preceding queued data. This is
+a viable historical alternative to compare. Its special use of local selection
+networking does not imply that local `Issue*Order` calls transmit commands.
+The tutorial's sequential-completion argument is not an established ordering or
+barrier guarantee across modern `BlzSendSyncData` and selection paths; reproduce
+that boundary if using it. Its contemporary host/TCP description likewise does
+not establish the current game's transport topology.
+
 Sources in pinned common.j:
 [key/sync/polling declarations](https://github.com/lep/jassdoc/blob/d49b2ba47c72ad757aa17abdfa9ccd55a7493fd5/common.j#L27640),
 [order events](https://github.com/lep/jassdoc/blob/d49b2ba47c72ad757aa17abdfa9ccd55a7493fd5/common.j#L3865),
@@ -49,6 +60,13 @@ if it determines the representation. Bytes are not characters: a 2.0.4 note
 warns that splitting a multibyte character across chunks makes individual chunks
 invalid for display, even when joining first preserves the text.
 
+The [March 2020 Hive estimate of about 5,000 integers per minute](https://www.hiveworkshop.com/threads/desync-2-possible-causes-found.323158/post-3409624)
+is an unbenchmarked forum estimate, explicitly conditional on whether the
+netcode changed. It specifies neither payload encoding/batching nor an exact
+tested build. It is not an established modern `BlzSendSyncData` quota; integers
+per minute cannot be converted into a message limit without those missing facts.
+Use sustained matched traffic on the current build to decide capacity.
+
 For a slow integration with a working baseline, first compare registration,
 duplicate sends/listeners, prefix routing, encoding, receiver work, queues and
 instrumentation. Hold bytes, send rate, participant count, game phase and
@@ -62,6 +80,27 @@ Rendering and physical response require their own observation. Callbacks that
 continue running do not exclude expensive callback work, uneven frame pacing,
 or a stalled renderer. Make the next test distinguish an implementation change,
 not merely collect another latency number.
+
+## Local terrain height can leak into shared gameplay
+
+[GetLocationZ in pinned common.j](https://github.com/lep/jassdoc/blob/d49b2ba47c72ad757aa17abdfa9ccd55a7493fd5/common.j#L13301)
+explicitly warns that its result is asynchronous and not guaranteed equal across
+players. The annotations identify terrain deformation, graphics settings,
+destructable rendering state and visibility as possible differences. Never feed
+an unsynchronized local height into shared combat or simulation state. Trace its
+consumers, including cached floor offsets, projectile collisions and unit-height
+setters; adding a constant or caching once does not make the value synchronous.
+
+A unit called a presentation dummy is still an engine unit and may affect
+occlusion or vision. Establish that its effects are presentation-only before
+using local height. In the 2020 Hive thread,
+[post #42](https://www.hiveworkshop.com/threads/desync-2-possible-causes-found.323158/post-3415389)
+explains the fly-height concern through occlusion on steep cliffs, and
+[post #43](https://www.hiveworkshop.com/threads/desync-2-possible-causes-found.323158/post-3415415)
+accepts that explanation and scopes the warning to cross-player height
+differences. This is not proof that every height setter always desynchronizes,
+nor a diagnosis of a current map. Check the actual dataflow and decisive native
+case; nominally cosmetic usage alone does not establish safety.
 
 ## Preloader/FileIO is not an ordinary fresh file read
 
