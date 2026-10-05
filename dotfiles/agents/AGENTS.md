@@ -299,6 +299,11 @@ blocking the whole task on the answer.
   correctness, error handling, or security.
 - A comment records a constraint the code cannot express. Investigation history,
   outputs, and chronology belong in the commit message or private handoff.
+- Docs hold durable knowledge: how things work, design decisions, reference
+  data and procedures. Status, progress, plans, next steps and claim tables
+  live in the issue or tracker that owns the work, never in a doc. A dated
+  trial record goes in a separate evidence location and is never edited later.
+  When a trial teaches something durable, add that fact to the relevant doc.
 - For an observed defect, prefer the smallest repair at the owning cause.
   Bound investigation to the evidenced failure and an owned, repairable seam;
   do not descend indefinitely through dependencies merely to claim ultimate
