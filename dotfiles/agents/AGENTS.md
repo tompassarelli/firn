@@ -122,19 +122,16 @@ declaration grants no exception.
 
 ## Select delegated worker models explicitly
 
-Use this normal five-rung ladder for delegated workers, unless Tom explicitly
+Use this normal four-rung ladder for delegated workers, unless Tom explicitly
 requests another selection:
 
 1. **SOL 6.1 low** (`gpt-6.1-sol`, `low`): straightforward edits and execution.
 2. **SOL 6.1 medium** (`gpt-6.1-sol`, `medium`): ordinary implementation.
 3. **SOL 6.1 high** (`gpt-6.1-sol`, `high`): complex implementation and debugging.
-4. **Astra medium** (`gpt-6-astra`, `medium`): difficult reasoning beyond the SOL
-   high tier; prefer this to SOL xhigh.
-5. **Astra high** (`gpt-6-astra`, `high`): harder diagnosis and design problems.
+4. **Astra xhigh** (`gpt-6-astra`, `xhigh`): difficult reasoning beyond SOL high.
 
-Reserve **Astra xhigh** (`gpt-6-astra`, `xhigh`) for the absolute hardest
-problems where attempts keep looping. SOL xhigh is not a normal rung. Select
-the rung that fits the task; there is no requirement to fail at every lower
+Escalate directly from SOL high to Astra xhigh; SOL xhigh and Astra medium/high
+are not normal rungs. Select the rung that fits the task; there is no requirement to fail at every lower
 rung first. Set both model and reasoning effort on admission instead of relying
 on inherited or runtime defaults. Do not silently substitute Luna or another
 unlisted model when the selected route is unavailable; report the unavailable
