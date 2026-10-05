@@ -166,9 +166,12 @@ Stop when the evidence selects the next implementation or discriminating test.
 Distinguish player/engine-issued commands from map-script `Issue*Order` calls;
 local script orders are not an assumed synchronization channel. Event arrival
 alone does not preserve the original press/release, capture frame or analog
-value. Keep local capture, transport receipt, simulation confirmation, rendering
-and physical button-to-pixel timing separate. Continuing game callbacks prove
-neither cheap callbacks nor smooth rendering or wall-clock cadence.
+value. Local capture, transport receipt, simulation confirmation, rendering and
+physical button-to-pixel timing are different quantities. Continuing game
+callbacks prove neither cheap callbacks nor smooth rendering or wall-clock
+cadence. To answer an owner's input-timing question, measure end to end in one
+aggregate run on the current release, as defined by the project's input-integrity
+issue. Instrument individual stages only to debug a failure of that run.
 
 When a native baseline works but integration has abnormal latency, investigate
 the integration and harness first. Compare the same bytes, message rate, player

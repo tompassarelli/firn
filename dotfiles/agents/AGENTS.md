@@ -188,6 +188,47 @@ cannot be bounded at all.
 Be as bold as you like about what you build. Never cut corners on what tells
 you it broke.
 
+## Finish against a written definition of done
+
+The recurring failure is proof-chasing. Work drifts from producing the
+requested outcome to accumulating defensible claims about it. It looks like
+rigor and produces real but narrow results, but it never closes. Its signs:
+
+- The goal is phrased as a guarantee: "never loses an input", "always the
+  first frame", "full fidelity", "every platform". Finite tests cannot prove a
+  guarantee, so the unproven remainder never empties.
+- Each experiment is scoped to exactly what it observed and ends by listing
+  what it does not prove. That remainder picks the next, narrower experiment.
+  Many bounded passes never add up to the answer the owner asked for.
+- Boxes that only the owner, real hardware or another account can tick stay
+  open, while synthetic stand-ins are built and then disclaimed.
+- Scope grows through absorbed issues, new "boundaries" and per-trial evidence
+  documents. Updates move no checkbox, a status question starts a new
+  investigation, and slowness is answered with more rules or process.
+
+Before substantive delivery, write the finish line where the work is tracked
+(the issue, the plan or the first reply), then keep it fixed:
+1. **Done when**: at most five binary checks. Each names the check that ticks
+   it, with a number where one applies. Mark boxes that need the owner,
+   hardware or an account as owner-gated.
+2. **Not required**: the tempting adjacent guarantees, platforms and cases.
+3. Turn a guarantee into a measured claim: what was exercised, the sample
+   size, the failure count as the gate and the distribution as the report.
+   "500 inputs across every action: 0 lost, 100% on their frame" can close;
+   "never loses an input" cannot.
+4. Answer a general owner question ("what can I claim about X?") with one
+   aggregate check whose output answers it in the owner's words. Use narrow
+   probes only to debug a failure of that check.
+
+Close when the boxes pass, with one line of residual risk. A discovery that
+blocks no box becomes a backlog item, never added scope. For an owner-gated
+box, ask once for exactly what is needed, then keep working; never substitute
+a proxy. Report progress as checklist movement ("3/5; next: X"). After two
+failed fixes on one box, or about a day without ticking one, stop and bring
+one recommendation. A repeated owner question means the deliverable has the
+wrong shape. Answer from existing evidence now, then reshape the work so the
+next result answers it.
+
 ## Resolve engineering context before workflow admission
 
 Resolve engineering context internally from concrete facts already present. It
