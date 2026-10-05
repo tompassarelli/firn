@@ -9,6 +9,11 @@ approved_route = [
 # Every normative block has one explicit semantic key. Digests are over the
 # whitespace-normalized block text; headings and code blocks are not claims.
 claim = [
+  { key = "delegation.model-ladder-scope", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Select delegated worker models explicitly", digest = "690c9e761ac23d359ced4cc71d6c0a23e23380a50e9bb4b50dc9a3d290f1a13a" },
+  { key = "delegation.model-ladder", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Select delegated worker models explicitly", digest = "1dd72059a1af7cb3341060755713304c98ea5ec79600eb6e2bcd81c1a2af6d71" },
+  { key = "delegation.explicit-model-escalation", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Select delegated worker models explicitly", digest = "4fde17567d1524c1223a9fbe88532ff985252776adf02bbd15c85ff6829a5e48" },
+  { key = "delegation.model-handoff-checkpoint", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Select delegated worker models explicitly", digest = "8ed4e6ce3aa383973b936eca58376fe3e1e4bd7a57f12a752b930227932e50cc" },
+  { key = "delivery.usable-checkpoint-publication", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Finish against a written definition of done", digest = "8099058d0611657b39ed7967dfd406b17554c6ca429aead025348b34e78154df" },
   { key = "bootstrap.layering", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "preamble", digest = "d8e8bfa2d5669d949482eaf9e478765d50700bf955640a9abf8d8d36283a4d6f" },
   { key = "instructions.repository-discovery", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Discover applicable instructions", digest = "5293878fb7670bee54af4c13a58494fc4e7f159cfbbfdcd5527c7f5477a1577b" },
   { key = "instructions.skill-loading", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Discover applicable instructions", digest = "6effa963ed889b389b24b0cf430cd1e12e4c965714ce31f689e95a54f3239802" },

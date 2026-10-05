@@ -122,28 +122,31 @@ declaration grants no exception.
 
 ## Select delegated worker models explicitly
 
-Use this normal four-rung ladder for delegated workers, unless Tom explicitly
+Use this normal five-rung ladder for delegated workers, unless Tom explicitly
 requests another selection:
 
 1. **SOL 6.1 low** (`gpt-6.1-sol`, `low`): straightforward edits and execution.
 2. **SOL 6.1 medium** (`gpt-6.1-sol`, `medium`): ordinary implementation.
 3. **SOL 6.1 high** (`gpt-6.1-sol`, `high`): complex implementation and debugging.
 4. **Astra xhigh** (`gpt-6-astra`, `xhigh`): difficult reasoning beyond SOL high.
+5. **Astra max** (`gpt-6-astra`, `max`): the hardest problems, or to unblock
+   repeated unsuccessful reasoning or fix loops.
 
 Escalate directly from SOL high to Astra xhigh; SOL xhigh and Astra medium/high
-are not normal rungs. Select the rung that fits the task; there is no requirement to fail at every lower
-rung first. Set both model and reasoning effort on admission instead of relying
-on inherited or runtime defaults. Do not silently substitute Luna or another
-unlisted model when the selected route is unavailable; report the unavailable
-route.
+are not allowed substitutions. Escalate to Astra max for the hardest problems
+or repeated unsuccessful reasoning or fix loops. Select the rung that fits the
+task; there is no requirement to fail at every lower rung first. Set both model
+and reasoning effort on admission instead of relying on inherited or runtime
+defaults. Do not substitute Luna or another unlisted model when the selected
+route is unavailable; report the unavailable route.
 
 When full-history forking prevents an explicit model selection, use a supported
 bounded-history or self-contained handoff that preserves the task, constraints,
 owned lane and acceptance checks. This preference governs worker selection; it
-does not authorize delegation where delegation is otherwise disallowed, change
-the parent model, or require restarting an in-flight worker before its useful
-checkpoint. Report a worker's actual model only when dispatch or runtime evidence
-establishes it.
+does not authorize delegation where delegation is otherwise disallowed or
+change the parent model. Preserve an in-flight worker's useful checkpoint when
+replacing a worker whose model or effort does not comply. Report a worker's
+actual model only when dispatch or runtime evidence establishes it.
 
 ## Keep hard boundaries
 
