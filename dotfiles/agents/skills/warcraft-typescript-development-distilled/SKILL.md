@@ -17,7 +17,23 @@ re-hosting. Smashcraft (smashcraft:ts/) is its first project. Until a second
 map needs it, it lives inside that repository, not in a separate SDK. Read the
 project's style contract (smashcraft:docs/typescript.md) before writing map
 code, and use `warcraft3-development-distilled` for launching, signing in and
-controlling the game.
+controlling the game. For Effect APIs and design, also use
+`effect-development-distilled` and follow Smashcraft's repository-local Effect
+policy before changing its vendored source or Effect dependency.
+
+## Effect in Warcraft Live
+
+Effect is a deliberate part of Smashcraft's TypeScript application and host
+tooling architecture. Prefer its services, typed failures, Schema boundaries,
+scoped resource handling, and bounded concurrency where those abstractions
+clarify a real application boundary. Keep deterministic frame simulation,
+synchronized gameplay state, and other latency-sensitive code as small, pure
+records and functions unless a measured design requires Effect there. Do not
+assume an Effect API accepted by Bun also compiles through TSTL or runs in
+Warcraft Lua: check the project's runtime compatibility evidence before using
+an API on either side, and keep host-only tools and in-map code on their actual
+supported paths. Never import from the vendored `repos/effect` tree; imports
+must resolve through the project's pinned package dependency.
 
 ## Take the fastest signal
 

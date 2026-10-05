@@ -20,6 +20,7 @@
     "game-design-prototyping-distilled",
     "warcraft3-development-distilled",
     "warcraft-typescript-development-distilled",
+    "effect-development-distilled",
     "wurst-development-distilled",
     "smashcraft-character-creation-distilled",
     "private-desktop-development-distilled",
@@ -469,6 +470,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/warcraft-typescript-development-distilled/SKILL.md"
+      }
+    },
+    "effect-development-distilled": {
+      "kind": "skill",
+      "category": "development",
+      "owner": {
+        "repo": "north",
+        "path": "agent-machinery/catalog.json"
       }
     },
     "wurst-development-distilled": {
@@ -1496,6 +1505,16 @@
       ]
     },
     "warcraft-typescript-development-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "effect-development-distilled": {
       "distributions": [
         {
           "type": "skill",
