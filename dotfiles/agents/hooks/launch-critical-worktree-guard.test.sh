@@ -71,7 +71,7 @@ check deny "$HOME/code/gjoa/pins/0123456789abcdef0123456789abcdef01234567/index.
 # or a rebuild publishing only committed state). Blocking them bought
 # nothing and stopped agents writing ignored local output.
 check allow "$HOME/code/north/main/target/debug/local-note.txt" \
-  "North-v2 target output is gitignored and cannot dirty the tree"
+  "North target output is gitignored and cannot dirty the tree"
 check allow "$HOME/code/clause/main/target/debug/scratch.md" \
   "same exemption in clause"
 

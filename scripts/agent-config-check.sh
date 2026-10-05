@@ -425,8 +425,8 @@ validate_codex_managed_policy() {
       soft 'Interactive Codex is absent from PATH; the promoted user runtime remains independently executable'
     fi
     if [ "$generation_exact" -eq 1 ]; then
-      CODEX_HOOK_PROVENANCE='North-v2 activation generation · immutable Firn runtime tools'
-      ok_detail 'Codex hook deployment is exact to the current North-v2 activation generation'
+      CODEX_HOOK_PROVENANCE='North activation generation · immutable Firn runtime tools'
+      ok_detail 'Codex hook deployment is exact to the current North activation generation'
     else
       CODEX_HOOK_PROVENANCE='generation drift detected'
     fi

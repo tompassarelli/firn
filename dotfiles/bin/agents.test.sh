@@ -43,9 +43,9 @@ expected=$'config agents status --json\nconfig agents inspect clause-authoring-d
 
 if AGENTS_NORTH_BIN="$scratch/bin/missing" "$agents" status \
   >"$scratch/missing.out" 2>"$scratch/missing.err"; then
-  printf 'agents accepted a missing North-v2 CLI\n' >&2
+  printf 'agents accepted a missing North CLI\n' >&2
   exit 1
 fi
 grep -Fq 'agents: North CLI is unavailable' "$scratch/missing.err"
 
-printf 'ok: agents is a thin North-v2 CLI client\n'
+printf 'ok: agents is a thin North CLI client\n'

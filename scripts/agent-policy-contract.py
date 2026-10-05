@@ -394,12 +394,12 @@ def resolve_catalog(
     try:
         payload = json.loads(activation_path().read_text())
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        contract.reject(f"North-v2 activation is unreadable: {activation_path()}: {exc}")
+        contract.reject(f"North activation is unreadable: {activation_path()}: {exc}")
         return "", {}
     digest_value = payload.get("catalogDigest")
     units = payload.get("units")
     if not ACTIVATION_DIGEST.fullmatch(digest_value or "") or not isinstance(units, list):
-        contract.reject("North-v2 activation returned an invalid catalog payload")
+        contract.reject("North activation returned an invalid catalog payload")
         return "", {}
     roots = {"nixos-config": str(repo)}
     if configured := os.environ.get("NORTH_REPO_ROOTS"):
@@ -418,29 +418,29 @@ def resolve_catalog(
     by_id: dict[str, dict] = {}
     for unit in units:
         if not isinstance(unit, dict) or not UNIT.fullmatch(unit.get("id", "")):
-            contract.reject("North-v2 activation returned an invalid unit")
+            contract.reject("North activation returned an invalid unit")
             continue
         unit_id = unit["id"]
         if unit_id not in unit_ids:
             continue
         if unit_id in by_id:
-            contract.reject(f"North-v2 activation duplicated unit {unit_id}")
+            contract.reject(f"North activation duplicated unit {unit_id}")
             continue
         owner = unit.get("owner")
         if not isinstance(owner, dict):
-            contract.reject(f"North-v2 activation unit {unit_id} has no owner")
+            contract.reject(f"North activation unit {unit_id} has no owner")
             continue
         owner_repo = owner.get("repo")
         owner_relative = owner.get("path")
         if not isinstance(owner_repo, str) or not isinstance(owner_relative, str):
-            contract.reject(f"North-v2 activation unit {unit_id} has an invalid owner")
+            contract.reject(f"North activation unit {unit_id} has an invalid owner")
             continue
         root = Path(roots.get(owner_repo, Path.home() / "code" / owner_repo / "main"))
         resolved = (root / owner_relative).resolve()
         try:
             resolved.relative_to(root.resolve())
         except ValueError:
-            contract.reject(f"North-v2 activation unit {unit_id} owner escapes its repository")
+            contract.reject(f"North activation unit {unit_id} owner escapes its repository")
             continue
         enriched = dict(unit)
         enriched["resolvedOwnerPath"] = str(resolved)

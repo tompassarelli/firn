@@ -33,5 +33,5 @@ Both `.bnix` and `.nix` are committed because the flake reads from the
 git tree. **Edit the `.bnix`** — `firn repo build` overwrites direct `.nix`
 edits.
 
-North-v2 is promoted independently and reached through `~/.local/bin/north`;
+North is promoted independently and reached through `~/.local/bin/north`;
 Firn owns only the stable launcher, guard wiring, and delivery-liveness entry.

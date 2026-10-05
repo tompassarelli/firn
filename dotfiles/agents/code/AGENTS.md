@@ -46,5 +46,5 @@ checkouts and pins, including writes attempted through shell commands. A dirty
 
 `fram`, `north`, and `clause` are launch-critical. Their primary checkouts
 are production inputs, so agents always edit them in a worktree lane.
-Uncommitted North-v2, Clause, or NixOS changes are absent from promoted runtime
+Uncommitted North, Clause, or NixOS changes are absent from promoted runtime
 or commit-snapshot rebuilds.

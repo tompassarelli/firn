@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Shared authoring kill-switch entry point backed by North-v2 activation.
+# Shared authoring kill-switch entry point backed by North activation.
 
 # shellcheck source=north-agent-activation.sh
 . "${BASH_SOURCE[0]%/*}/north-agent-activation.sh"

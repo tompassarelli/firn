@@ -50,7 +50,8 @@ retired = {
 assert retired.isdisjoint(catalog["rootOrder"])
 assert retired.isdisjoint(catalog["activation"])
 assert all(
-    value.get("repo") != "north"
+    value["repo"] == "nixos-config"
+    or (value["repo"] == "north" and value["path"].startswith("agent-machinery/"))
     for value in owners(catalog)
 )
 assert catalog["baselines"][1]["owner"] == {
@@ -110,4 +111,4 @@ AGENT_NO_AUTHORING_HOOKS=1 \
     "$repo/dotfiles/agents/lib/authoring-killswitch.sh"
 
 bash -n "$repo/dotfiles/agents/hooks/firn-system-policy"
-printf 'ok: North-v2 activation and Codex guard wiring contain no North-v1 runtime\n'
+printf 'ok: North activation and Codex guard wiring contain no North-v1 runtime\n'

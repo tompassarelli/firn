@@ -89,7 +89,7 @@ sed -i 's/\t999$/\t1/' "$beta/config/hardcoded-repo-paths.tsv"
 
 # --- --write-allow targets the caller's checkout ---------------------------
 
-printf '%s\n' 'other="$HOME/code/beagle/main"' >>"$beta/dotfiles/bin/sample" # hardcoded-repo-path:allow
+printf '%s\n' 'other="$HOME/code/clause/main"' >>"$beta/dotfiles/bin/sample" # hardcoded-repo-path:allow
 git -C "$beta" commit -qm drift dotfiles/bin/sample
 alpha_before="$(cat "$alpha/config/hardcoded-repo-paths.tsv")"
 
