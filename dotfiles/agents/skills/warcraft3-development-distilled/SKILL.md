@@ -123,7 +123,7 @@ mail route explicitly; do not claim a notification was sent.
 
 ## Fast native iteration
 
-When the map's code is TypeScript with Warcraft Live, change running code
+When the map's code is TypeScript with Waygate, change running code
 with its hot reload instead of rebuilding and rejoining. Its in-game error
 report gives the TypeScript line. Rejoin only when the map file must change
 (see `warcraft-typescript-development-distilled`).

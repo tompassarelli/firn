@@ -2,16 +2,16 @@
 name: warcraft-typescript-development-distilled
 description: >-
   Develop Warcraft III maps in TypeScript compiled to Lua (TypeScriptToLua),
-  using Warcraft Live: hot reload into running multiplayer clients, TypeScript
-  lines for in-game errors, two-second map rebuilds and logic tests checked
-  in Bun and 32-bit Lua. Use for any TypeScript map work, Smashcraft's ts/
+  using Waygate: hot reload into running multiplayer clients, TypeScript
+  lines for in-game errors, two-second map rebuilds, scripted fresh matches,
+  and logic tests and replay tapes checked in Bun and 32-bit Lua. Use for any TypeScript map work, Smashcraft's ts/
   included, and whenever changing code in a running Warcraft game.
 ---
 
 # Warcraft TypeScript development
 
-Warcraft Live is the development environment for Warcraft maps written in
-TypeScript. TypeScriptToLua (TSTL) compiles map code to Warcraft's Lua, Bun
+Waygate (`waygate` on the command line) is the framework and development
+environment for Warcraft maps written in TypeScript. TypeScriptToLua (TSTL) compiles map code to Warcraft's Lua, Bun
 runs the host tools and logic tests, and a running game takes new code without
 re-hosting. Smashcraft (smashcraft:ts/) is its first project. Until a second
 map needs it, it lives inside that repository, not in a separate SDK. Read the
@@ -21,7 +21,7 @@ controlling the game. For Effect APIs and design, also use
 `effect-development-distilled` and follow Smashcraft's repository-local Effect
 policy before changing its vendored source or Effect dependency.
 
-## Effect in Warcraft Live
+## Effect in Waygate
 
 Effect is a deliberate part of Smashcraft's TypeScript application and host
 tooling architecture. Prefer its services, typed failures, Schema boundaries,
@@ -53,9 +53,13 @@ Work from the cheapest check that can answer the question:
    each version as running or refused, and prints in-game errors as TypeScript
    file and line about 0.05 s after they happen.
 4. **A changed map file.** After one full project build,
-   `bun scripts/map.ts rebuild MAP.w3x` swaps only the script in about 2 s.
-   Then rejoin. Do a full build only when assets, object data or non-TypeScript
-   sources change.
+   `bun scripts/map.ts rebuild MAP.w3x` swaps only the script in about 2-4 s.
+   Then `bun scripts/fresh.ts MAP.w3x` takes both signed-in clients from
+   wherever they are into a new game of it, about 24 s. Do a full build only
+   when assets, object data or non-TypeScript sources change.
+5. **Behavior against the old game.** `LUA=<32-bit lua> bun scripts/tapes.ts`
+   replays the acceptance tapes in compiled Wurst Lua, Bun and 32-bit Lua and
+   names the first divergent frame and field, about 6 s cached.
 
 Re-host only when the map file itself must change. Before rebuilding and
 rejoining, try hot reload: it keeps the clients, the lobby and the match state.
@@ -89,7 +93,9 @@ names the reason; nothing has changed in any client.
   - Synchronized reals use exact helpers or `f32()`.
   - The compiler rejects `%`, `>>>`, `Math.floor(a / b)`, decimal literals that
     aren't binary32 values (write the exact value or `f32(0.1)`), `Math.random`,
-    `Date`, `JSON`, `Intl`, and Node, Bun and DOM APIs.
+    `Date`, `JSON`, `Intl`, and Node, Bun and DOM APIs. Outside tests it also
+    rejects `any`, `as unknown as` and non-null `!`; use the project's `at()`
+    lookup for indices the caller guarantees.
 - **`Preloader`:** it checks on every call whether a file exists, but runs the
   content it first read from that path for the rest of the session. Any file
   the host writes for the game to read again needs a new name for new content.
