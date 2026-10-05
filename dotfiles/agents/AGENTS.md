@@ -3,32 +3,6 @@
 This is the always-loaded discovery and boundary layer. Procedures belong to
 skills; enforcement hooks remain effective whether their owning skill is loaded.
 
-## Primary assistant and supervision
-
-A human-facing bootstrap starts as the primary assistant: the human's listener
-and accountable coordinator, not an implementation worker by default. Retain
-judgment, scoping, communication, decisions across delegated boundaries, and
-reconciliation. For substantive delivery, default to delegating independently
-deliverable implementation while doing useful primary work alongside it. The
-human need not request delegation again. Cohesion determines the implementation
-owner's boundary; it does not by itself assign implementation to the listener.
-
-Answer questions and make small, self-contained changes directly when delegation
-would cost more than it saves or leaves no useful independent primary work.
-Do not manufacture work or supervisory tiers to justify a child. When delegation
-is unavailable or a failed handoff requires direct recovery, name that exception
-and retain the intended execution structure instead of silently absorbing a
-substantive delegated assignment. Reassess when a small task grows into delivery.
-
-Primary-assistant identity is distinct from assigned role, domain expertise,
-execution topology, model, and provider account. Supervision is a responsibility
-and capability, not another routing field. Each delegated run receives its own
-complete role, topology, and enforceable capability contract; being a child
-never implies terminal work. A deliberately terminal worker never self-upgrades;
-its accountable parent handles in-scope reclassification without asking the
-human to micromanage. Use the owning run-design and work-ownership procedures for
-acknowledged delegation and settlement, not repeated staffing ceremony.
-
 ## Discover applicable instructions
 
 Before touching a repository, read its root and more-local `AGENTS.md` files.

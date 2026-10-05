@@ -5,7 +5,7 @@ The live catalog is authoritative: `agents status --json`, `agents inspect
 
 ## Source and activation
 
-- `north-v2:agent-machinery/` owns reusable workflows and run-design contracts.
+- `north:agent-machinery/` owns reusable workflows and run-design contracts.
 - `nixos-config:dotfiles/agents/` owns operator policy and local hook sources.
 - `nixos-config:modules/north-profile/firn/skills/` owns configuration workflows.
 - `nixos-config:dotfiles/agents/catalog-config.json` declares owner registrations,

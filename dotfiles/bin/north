@@ -2,7 +2,7 @@
 # Live project runtime: selected outside the NixOS closure.
 set -euo pipefail
 
-north_runtime="$HOME/.local/state/north-v2/current/north"
+north_runtime="$HOME/.local/state/north/current/north"
 if [[ ! -x "$north_runtime" ]]; then
   printf 'north: selected runtime is unavailable: %s\n' "$north_runtime" >&2
   exit 127

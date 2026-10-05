@@ -39,7 +39,7 @@ index. Update both layers when an adopted rule changes.
 
 - Bad: hand-editing `~/.agents/skills/<id>/SKILL.md` or a generated
   `~/.claude/CLAUDE.md` because it is faster than the source repo. Good: edit
-  the owned source (e.g. `north-v2:agent-machinery/skills/<id>/SKILL.md` or
+  the owned source (e.g. `north:agent-machinery/skills/<id>/SKILL.md` or
   `nixos-config:dotfiles/agents/`), then `agents sync` — a projection edit is
   silently overwritten by the next sync and never reaches other consumers.
 - Bad: registering a new skill unit in `catalog.json` and assuming `agents

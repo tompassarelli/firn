@@ -32,7 +32,7 @@ check_roots() {
 
   local -a roots=(
     "$CHECK_SOURCE_ROOT"
-    "$HOME/code/north-v2/main" # hardcoded-repo-path:allow
+    "$HOME/code/north/main" # hardcoded-repo-path:allow
     "$HOME/code/clause/main" # hardcoded-repo-path:allow
   )
   printf '%s\n' "${roots[@]}"

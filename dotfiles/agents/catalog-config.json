@@ -492,19 +492,17 @@
             "north"
           ],
           "owner": {
-            "repo": "north-v2",
+            "repo": "north",
             "path": "agent-machinery/catalog.json"
           }
         },
         {
           "type": "instructions",
           "targets": [
-            "shared",
-            "codex",
             "north"
           ],
           "owner": {
-            "repo": "north-v2",
+            "repo": "north",
             "path": "agent-machinery/doctrine.md"
           }
         }
@@ -568,7 +566,7 @@
             "north"
           ],
           "owner": {
-            "repo": "north-v2",
+            "repo": "north",
             "path": "agent-machinery/catalog.json"
           }
         },
@@ -579,7 +577,7 @@
             "claude"
           ],
           "owner": {
-            "repo": "north-v2",
+            "repo": "north",
             "path": "agent-machinery/agents"
           }
         }
@@ -593,8 +591,20 @@
             "north"
           ],
           "owner": {
-            "repo": "north-v2",
+            "repo": "north",
             "path": "agent-machinery/catalog.json"
+          }
+        },
+        {
+          "type": "instructions",
+          "targets": [
+            "shared",
+            "codex",
+            "north"
+          ],
+          "owner": {
+            "repo": "north",
+            "path": "agent-machinery/delegation.md"
           }
         }
       ]

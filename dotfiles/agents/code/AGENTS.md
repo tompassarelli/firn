@@ -35,7 +35,7 @@ shape. Resource repositories are read-only and get neither worktrees nor pins.
 
 ## Paths in documentation
 
-Use `repo:path` for repository files, such as `north-v2:src/main.rs`. Use an
+Use `repo:path` for repository files, such as `north:src/main.rs`. Use an
 absolute path only for state that genuinely has a fixed location.
 
 ## Enforcement
@@ -44,7 +44,7 @@ The launch-critical worktree guard refuses writes to protected `main/`
 checkouts and pins, including writes attempted through shell commands. A dirty
 `main/` is human work-in-progress: never commit, stash, reset, or clean it.
 
-`fram`, `north-v2`, and `clause` are launch-critical. Their primary checkouts
+`fram`, `north`, and `clause` are launch-critical. Their primary checkouts
 are production inputs, so agents always edit them in a worktree lane.
 Uncommitted North-v2, Clause, or NixOS changes are absent from promoted runtime
 or commit-snapshot rebuilds.

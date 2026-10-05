@@ -35,8 +35,8 @@ import re
 # Containers whose PRIMARY breaks something beyond itself. They are protected by
 # the same rule as every other main; only the reason text is theirs.
 LAUNCH_CRITICAL = {
-    "north-v2": (
-        "north-v2 is launch-critical: its promoted binary is the normal `north`"
+    "north": (
+        "north is launch-critical: its promoted binary is the normal `north`"
         " command, so uncommitted work here is absent from the operator runtime."
     ),
     "clause": (

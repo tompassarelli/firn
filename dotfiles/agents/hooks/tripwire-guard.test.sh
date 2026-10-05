@@ -335,7 +335,7 @@ run allow 'chown -R tom' 'chown -R tom:users /tmp/claude-x'
 
 echo "== estate hot paths (must never trip) =="
 run allow 'firn build + validate' 'firn build && firn validate'
-run allow 'north-v2 checkout reads' '~/code/north-v2/main/target/release/north --help && git -C ~/code/north-v2/main status --short'
+run allow 'north checkout reads' '~/code/north/main/target/release/north --help && git -C ~/code/north/main status --short'
 run allow 'clause build' 'cd ~/code/clause/main && cargo build'
 run allow 'nix build' 'nix build --no-link .#default'
 run allow 'plain ls' 'ls -la'

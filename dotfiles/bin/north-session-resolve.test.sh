@@ -163,8 +163,8 @@ if grep -Eq '^(model|model_reasoning_effort)=' "$argv_log"; then
   fail "managed lane received root model defaults"
 fi
 
-mkdir -p "$HOME/.local/state/north-v2/current"
-ln -s "$runtime" "$HOME/.local/state/north-v2/current/north"
+mkdir -p "$HOME/.local/state/north/current"
+ln -s "$runtime" "$HOME/.local/state/north/current/north"
 env -u NORTH_CODEX_ENDPOINT \
   CODEX_HOME="$base/openai/acct" \
   CODEX_TEST_ARGV_LOG="$argv_log" CODEX_TEST_ENV_LOG="$env_log" \
