@@ -231,6 +231,16 @@ Before substantive delivery, write the finish line where the work is tracked
    aggregate check whose output answers it in the owner's words. Use narrow
    probes only to debug a failure of that check.
 
+Deliver each coherent change through integration, the relevant acceptance check,
+and authorized publication at its first usable checkpoint. The accountable
+parent owns this path for delegated work too. Do not stockpile completed patches
+or hold independently finishable work until the whole project is complete.
+Record passed checks in the owning issue's checklist and concise Status in the
+same reconciliation; edit them in place rather than accumulating progress
+comments. Patches, agent activity and test counts alone are not delivered issue
+progress. When patches accumulate without checkbox movement, prioritize the
+nearest acceptance or publication blocker while independent useful work continues.
+
 Close when the boxes pass, with one line of residual risk. A discovery that
 blocks no box becomes a backlog item, never added scope. For an owner-gated
 box, ask once for exactly what is needed, then keep working; never substitute
