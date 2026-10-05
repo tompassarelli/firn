@@ -79,6 +79,18 @@ repository-required Node compatibility gate or a demonstrated Bun
 incompatibility is a valid exception; name the exception and keep Node scoped
 to it.
 
+## Keep each project in one language
+
+A project's established source language is also the language of its tools,
+scripts, tests and automation. Add a second language only for an irreducible
+reason, and name that reason where the code lives. Two reasons qualify: a
+foreign system whose only interface is that language (such as Blender's Python
+API or a game's script VM), or a required capability the established language
+demonstrably lacks. Convenience, familiarity, a quick script or a richer
+library for one task are not reasons. When substantive work touches existing
+code in another language without such a reason, port it to the established
+language instead of extending it.
+
 ## Keep maintained projects out of the system closure
 
 Tom-maintained or source-declared high-churn project source and build outputs
