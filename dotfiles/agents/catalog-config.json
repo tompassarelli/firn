@@ -472,14 +472,6 @@
         "path": "dotfiles/agents/skills/warcraft-typescript-development-distilled/SKILL.md"
       }
     },
-    "effect-development-distilled": {
-      "kind": "skill",
-      "category": "development",
-      "owner": {
-        "repo": "north",
-        "path": "agent-machinery/catalog.json"
-      }
-    },
     "wurst-development-distilled": {
       "kind": "skill",
       "category": "games",
