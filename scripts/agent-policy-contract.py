@@ -480,6 +480,15 @@ def check_skill_evidence(
             contract.reject(f"{key}: North resolver omitted the destination source")
             continue
         source = Path(source_value)
+        destination_file = entry.get("destination_file")
+        if destination_file is not None:
+            skill_dir = source.parent.resolve()
+            source = (skill_dir / str(destination_file)).resolve()
+            try:
+                source.relative_to(skill_dir)
+            except ValueError:
+                contract.reject(f"{key}: destination file escapes its skill: {destination_file}")
+                continue
         try:
             blocks = markdown_blocks(source)
         except (OSError, UnicodeError) as exc:
@@ -496,6 +505,7 @@ def check_skill_evidence(
             if approved and (
                 approved.get("destination_section") != section
                 or approved.get("destination_digest") != block_digest
+                or approved.get("destination_file") != destination_file
             ):
                 contract.reject(f"{key}: route destination differs from the approved catalog")
 

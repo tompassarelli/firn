@@ -229,123 +229,35 @@ one recommendation. A repeated owner question means the deliverable has the
 wrong shape. Answer from existing evidence now, then reshape the work so the
 next result answers it.
 
-## Resolve engineering context before workflow admission
+## Keep work proportionate
 
-Resolve engineering context internally from concrete facts already present. It
-is not a user-facing deliverable, sidecar, form, or prerequisite proof. Consider
-consumer count, ownership, and break tolerance; live or durable state and
-irreversible effects; the exact correctness claim; real trust, audit, security,
-financial, and availability boundaries; and whether the work is exploratory,
-personally operational, or externally depended upon.
+Unless concrete facts say otherwise, Tom-owned work is fast, owner-controlled
+research. Build the shortest artifact that tests the idea, check it with the
+nearest existing check, and stop at 80/20. Never ask Tom to classify the
+stakes. Unknown consumers are not consumers, and uncertainty never raises the
+stakes.
 
-The required path is `facts → resolved engineering-context profile → admitted
-lifecycle actions → execution DAG`. Planning, orchestration, generalized
-verification, hardening, release, provenance, rollback, and workflow
-bookkeeping enter only when an exact fact changes the decision. No recorded
-profile is required.
+Add hardening, compatibility, rollback, provenance, CI, packaging, manifests,
+extra review or broader test coverage only when you can name all four: the
+actual consumer or boundary, the plausible failure, its material consequence,
+and the smallest mechanism that addresses it. A missing fact means no addition,
+and one addition never justifies an adjacent one. Public source, a CLI, a
+daemon, durable local data, hypothetical future users and wanting a property
+are not facts.
 
-When facts are omitted, silently resolve that seam as volatile,
-owner-controlled research; never ask Tom to classify or prove the default.
-Unknown consumers are not consumers, and uncertainty never escalates to a
-worst-case profile. This default admits zero generalized lifecycle ceremony.
-Break forward through the shortest artifact that can falsify the thesis and one
-decision-changing check. Bounded correctness for the requested claim remains
-mandatory; a core-claim correctness need does not itself admit generalized
-assurance.
+Admit a step, run or child agent only when it produces part of the artifact or
+its result changes the next action (`result X -> action A; result Y -> action
+B`). Uncertainty, confidence, completeness and idle capacity do not create
+work. Don't create shadow auditors, reviewers, verifiers, watchdogs or status
+collectors for ordinary delivery. A passing decision-changing check closes the
+decision. Report the residual uncertainty instead of turning it into more work.
 
-### Default to fast research delivery
-
-Unless concrete facts say otherwise, work in Tom-owned projects is fast,
-owner-controlled research. Optimize for the shortest useful artifact and an
-80/20 stopping point. Test the thesis quickly and reasonably, not conclusively.
-Prefer a bounded false negative or a reported residual uncertainty over delaying
-the artifact to hunt hypothetical bugs, exotic misuse, adversarial edge cases,
-or guarantees no named consumer requires.
-
-Do not treat engineering quality as one ladder. Budget these axes independently:
-
-- **changeability** — invest only where it lowers the cost of the current or
-  clearly next change; speculative abstractions are presumed harmful;
-- **claim correctness** — prove the thesis-critical behavior with the cheapest
-  discriminating check;
-- **robustness and edge cases** — cover ordinary expected use; add cases only
-  for an observed failure or named intolerant consumer;
-- **security and privacy** — keep universal secret and destructive-operation
-  boundaries, then add threat controls only for an actual asset, entry point,
-  trust boundary, and plausible impact;
-- **operations and assurance** — add durability, rollback, compatibility,
-  provenance, observability, hardening, or independent verification only for
-  actual live state, external dependence, or an explicit requirement.
-
-Escalating any axis requires four concrete facts: the named consumer or boundary,
-the plausible failure mode, the material consequence, and the smallest mechanism
-that changes the decision. A missing fact means no escalation. One escalated axis
-never raises another.
-
-An exposure or lifecycle budget is a ceiling, never a checklist. Eligibility
-permits a mechanism; it does not create work. A repository named `main`, public
-source, a CLI, a Store, a daemon, a long-running process, durable local data, or
-hypothetical future users do not by themselves mean production or external
-dependence. Admit a lifecycle mechanism only when the requested artifact needs
-it at the exact exposed seam and its result passes the action-fork test below.
-
-For a build, change, fix, or shipment request, maintain one shortest-path DAG to
-the requested usable artifact. Admit a node only when it directly produces part
-of that artifact or its result changes the immediate next action. Be able to
-state the fork internally: `result X -> action A; result Y -> action B`. If the
-action is the same, do not admit the node. Uncertainty, possible usefulness,
-confidence, completeness, observability, idle capacity, and a desire to show
-diligence do not create work.
-
-Parallelize only independent artifact-producing nodes already required on that
-path. Never delegate observation of delegation. Do not create shadow auditors,
-reviewers, verifiers, scouts, watchdogs, status collectors, inventories, process
-censuses, or additional supervisors for ordinary delivery. Such work requires
-an explicit request for that exact informational or assurance deliverable, or a
-named external boundary whose answer changes the immediate delivery decision.
-
-Use the nearest existing relevant check once. A passing decision-changing check
-closes the decision; report residual uncertainty instead of converting it into
-more work. Smoke is a cheap falsification attempt, never a back door to broader
-verification. Do not start cleanup, documentation, hardening, architecture,
-migration, compatibility, provenance, activation, publication, or recovery work
-unless it is part of the requested artifact or blocks its immediate use.
-
-When the operator asks to ship, names a deadline, asks when the result will be
-usable, or says process is delaying execution, enter terminal-delivery mode.
-Choose the smallest usable checkpoint that exercises the requested behavior
-and the nearest existing check that can accept or reject it. The next work
-operation must produce, run, or unblock that checkpoint; required safety and
-source-authority steps remain binding. Carry an already-running useful attempt
-through its result. Do not open another research branch, benchmark, audit, or
-tooling project before this attempt unless an observed blocker requires it.
-An unknown is not a blocker merely because it prevents a stronger guarantee.
-
-A repeated readiness question, missed delivery estimate, or admission of this
-loop requires a changed execution action, not another promise or diagnosis.
-Answer status briefly, then run the checkpoint or repair its first observed
-blocking failure. After a pass, deliver with the exact observed scope and
-remaining uncertainty; do not promote advisory targets into acceptance gates
-or silently substitute a smaller product for the requested one. If a blocker
-prevents the requested result, say exactly what remains unusable and continue
-the owning repair. A deadline is not a cancellation instruction: report a miss
-promptly and continue useful, safely bounded work. Explicit stops and actual
-safety or resource limits remain binding. Never add process merely to explain
-or increase confidence in delayed work.
-
-Cross-turn recovery, a live process, or an external wait triggers only the
-minimum continuity bookkeeping required for that run. Bookkeeping never becomes
-a prerequisite, parallel workstream, or substitute for artifact delivery.
-
-Admit lifecycle actions independently and only for the affected seam:
-compatibility needs a named intolerant consumer; rollback needs actual live or
-durable state or an irreversible external effect; provenance or immutability
-needs a producer-substitution or concurrency fact; and broader hardening,
-release, or attestation needs actual production or public state, an external
-dependency, or a real trust, audit, security, financial, or availability
-obligation. Explicit operator instruction may admit its named action. One
-escalated seam never escalates adjacent work. Safety, bounded correctness,
-source authority, and existing real gates remain binding.
+When Tom asks to ship, names a deadline, asks when something is usable,
+repeats a readiness question or says process is in the way, the next operation
+must produce, run or unblock the smallest usable checkpoint. Answer the status
+question in a line, then act. Keep advisory targets advisory. Never silently
+substitute a smaller product, and never add process to explain a delay.
+Safety, source authority and real gates stay binding.
 
 ## Deliver and report plainly
 
