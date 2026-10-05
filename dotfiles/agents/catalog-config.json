@@ -19,6 +19,7 @@
     "clause-authoring-distilled",
     "game-design-prototyping-distilled",
     "warcraft3-development-distilled",
+    "warcraft-typescript-development-distilled",
     "wurst-development-distilled",
     "smashcraft-character-creation-distilled",
     "private-desktop-development-distilled",
@@ -460,6 +461,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/warcraft3-development-distilled/SKILL.md"
+      }
+    },
+    "warcraft-typescript-development-distilled": {
+      "kind": "skill",
+      "category": "games",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/warcraft-typescript-development-distilled/SKILL.md"
       }
     },
     "wurst-development-distilled": {
@@ -1477,6 +1486,16 @@
       ]
     },
     "game-design-prototyping-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "warcraft-typescript-development-distilled": {
       "distributions": [
         {
           "type": "skill",

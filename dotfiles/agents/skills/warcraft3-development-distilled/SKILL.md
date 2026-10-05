@@ -5,15 +5,16 @@ description: >-
   startup, Steam Proton on Linux, post-login recovery, controller trials and
   multiplayer test sessions, API quirks, input transport and netcode diagnosis.
   Applies on primary and private displays; use the
-  source-language skill separately for Wurst, Lua or Jass authoring.
+  source-language skill separately for TypeScript, Wurst, Lua or Jass authoring.
 ---
 
 # Warcraft III development
 
 This skill owns Warcraft-specific runtime setup, recovery and native testing.
 Keep the project's map build, installed candidate and intended Warcraft version
-aligned. Use `wurst-development-distilled` when authoring Wurst; this skill does
-not choose or migrate the map's source language.
+aligned. Use `warcraft-typescript-development-distilled` when authoring
+TypeScript and `wurst-development-distilled` when authoring Wurst; this skill
+does not choose or migrate the map's source language.
 
 ## Select the test display
 
@@ -121,6 +122,11 @@ only when an authenticated sending route is available. Report an unavailable
 mail route explicitly; do not claim a notification was sent.
 
 ## Fast native iteration
+
+When the map's code is TypeScript with Warcraft Live, change running code
+with its hot reload instead of rebuilding and rejoining. Its in-game error
+report gives the TypeScript line. Rejoin only when the map file must change
+(see `warcraft-typescript-development-distilled`).
 
 Prefer event-driven automation with real state detection. Advance on observed
 window/focus, control availability and resulting game state; elapsed time is
