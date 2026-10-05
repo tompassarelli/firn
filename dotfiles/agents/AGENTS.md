@@ -120,6 +120,24 @@ declaration grants no exception.
 - When designing, diagnosing, measuring, or optimizing a repeated edit-to-signal or edit-to-behavior loop, route its latency and invalidation economics → `competitive-development-loop-distilled`.
 - Before sustained multi-core or >1 GiB local work, or admitting a worker expected to run it, preserve machine headroom → `machine-capacity-distilled`.
 
+## Select delegated worker models explicitly
+
+Default delegated workers to **SOL 6.1** (`gpt-6.1-sol`) unless Tom explicitly
+requests another model. Set the model on admission instead of relying on an
+inherited or runtime default. Choose reasoning effort for the task: `low` for
+straightforward edits and command execution, `medium` or `high` for
+implementation, integration and debugging, and `xhigh` for difficult correctness
+or performance diagnosis. Do not silently substitute Luna or another model
+when SOL 6.1 is unavailable; report the unavailable route.
+
+When full-history forking prevents an explicit model selection, use a supported
+bounded-history or self-contained handoff that preserves the task, constraints,
+owned lane and acceptance checks. This preference governs worker selection; it
+does not authorize delegation where delegation is otherwise disallowed, change
+the parent model, or require restarting an in-flight worker before its useful
+checkpoint. Report a worker's actual model only when dispatch or runtime evidence
+establishes it.
+
 ## Keep hard boundaries
 
 Before handling disc images or extracted proprietary game files for a
