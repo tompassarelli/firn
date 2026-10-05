@@ -318,9 +318,11 @@ the current evidence-backed answer at the first useful boundary and name what
 remains uncertain. Never make that answer wait for optional mutation,
 publication, activation, cleanup, or an unrelated requested outcome.
 
-Reports are terse, self-contained, and outcome-first. Name what changed, the
-check actually observed, and residual uncertainty without implying evidence
-that was not obtained. Use ordinary language, not unexplained internal names.
+Reports are terse, self-contained, and outcome-first. Lead with the delivered
+result and its observed scope, followed by one material residual sentence by
+default; link deeper evidence. Include every limitation that changes the user's
+next decision, but do not bury useful delivery beneath a catalog of unproved
+guarantees. Use ordinary language and never imply evidence not obtained.
 For delays, report new evidence or a changed action; repeated narration of an
 unchanged wait is not progress.
 
@@ -344,33 +346,30 @@ blocking the whole task on the answer.
   correctness, error handling, or security.
 - A comment records a constraint the code cannot express. Investigation history,
   outputs, and chronology belong in the commit message or private handoff.
-- For every observed defect, fix the smallest true owning cause when it is on
-  the critical path; when it is nonblocking, durably record and defer it. Tom's
-  fleet never closes a defect with a workaround, shim, bypass, fallback,
-  quarantine, or replacement. When a real consumer exposes a missing or broken
-  source-language, compiler, checker, runtime, standard-library, or
-  foreign-boundary capability on its delivery path, preserve the executable
-  counterexample and repair the smallest true owning general-purpose seam
-  before resuming the consumer. Bound the failing family, retain or transfer
-  acknowledged upstream ownership, implement one reusable capability, run the
-  nearest focused upstream proof, then rebuild or repin the exact consumer and
-  resume from the counterexample. Domain-specific duplicated facts or state,
-  precomputed or manually maintained bounds, source reshaping solely to dodge
-  the gap, generated patches or shims, host-language fallbacks,
-  dynamic/`Any`/cast escapes, magic dispatch, old-version fallbacks,
-  compatibility wrappers, weakened laws or tests, and claims that a consumer
-  workaround closes the defect are noncompliant. If the repair needs a real
-  semantic or product decision or lies outside authority, stop only the
-  dependent path and return the exact decision or blocker without silently
-  narrowing the goal; unrelated work continues. Ordinary domain logic stays
-  consumer-owned, and genuinely irreducible foreign, operating-system, or
-  bootstrap boundaries remain valid; this rule does not force migration of
-  externally owned or existing non-greenfield source. Reliability incidents
-  remain open through root repair, activation, and primary-path proof. Aim at
-  the proper end-state, root-cause architecture. Minimize accidental
-  complexity: avoid compatibility layers, wrappers, daemons, or bespoke
-  infrastructure unless an explicit requirement forces them. This is
-  proportionality, not scope creep.
+- For an observed defect, prefer the smallest repair at the owning cause.
+  Bound investigation to the evidenced failure and an owned, repairable seam;
+  do not descend indefinitely through dependencies merely to claim ultimate
+  root cause. At an upstream, access, or human boundary, retain the concrete
+  counterexample and state who or what can resolve it. Record and defer a
+  nonblocking defect in the existing mechanism.
+- A bounded, evidenced mitigation may deliver the requested usable outcome
+  while its underlying defect remains open. It must preserve actual requirements,
+  source authority and safety gates, and its residual limitation must fit the
+  operator's accepted scope. If it changes that scope, bring the specific
+  tradeoff to the operator. Report mitigation as mitigation; neither successful
+  delivery nor deferral proves root repair. Do not require a root-cause campaign
+  before usable delivery when that campaign cannot change its acceptance.
+- Missing or broken source-language, compiler, checker, runtime, standard-library,
+  or foreign-boundary semantics still require repair at their owning seam when
+  needed for the promised behavior. Preserve the executable counterexample,
+  repair the reusable capability, run its focused check, and rebuild or repin the
+  consumer. Do not evade that repair through duplicated semantic facts,
+  source reshaping solely to dodge the gap, generated patches, casts/`Any`,
+  host-language fallbacks, magic dispatch, old-version fallbacks, or weakened
+  laws or tests. If repair is outside authority or requires a semantic decision,
+  name that exact boundary and continue independent delivery. Ordinary domain
+  logic and genuinely irreducible foreign, operating-system, and bootstrap
+  boundaries remain valid; no migration of existing external source is implied.
 - Never weaken a test, assertion, or gate to make it pass. Fix what it tests; a
   gate lowered to go green no longer proves anything.
 - Measure before naming a cause, especially for performance. An unmeasured
