@@ -2,7 +2,7 @@
 name: warcraft-typescript-development-distilled
 description: >-
   Develop Warcraft III maps in TypeScript compiled to Lua (TypeScriptToLua),
-  using Waygate: hot reload into running multiplayer clients, TypeScript
+  using Wisp: hot reload into running multiplayer clients, TypeScript
   lines for in-game errors, two-second map rebuilds, scripted fresh matches,
   and logic tests and replay tapes checked in Bun and 32-bit Lua. Use for any TypeScript map work, Smashcraft's ts/
   included, and whenever changing code in a running Warcraft game.
@@ -10,18 +10,19 @@ description: >-
 
 # Warcraft TypeScript development
 
-Waygate (`waygate` on the command line) is the framework and development
-environment for Warcraft maps written in TypeScript. TypeScriptToLua (TSTL) compiles map code to Warcraft's Lua, Bun
+Wisp (`bun wisp ...` from the project's TypeScript directory) is the framework
+and development environment for Warcraft maps written in TypeScript. TypeScriptToLua (TSTL) compiles map code to Warcraft's Lua, Bun
 runs the host tools and logic tests, and a running game takes new code without
-re-hosting. Smashcraft (smashcraft:ts/) is its first project. Until a second
-map needs it, it lives inside that repository, not in a separate SDK. Read the
+re-hosting. Wisp is maintained in its own repository
+(https://github.com/tompassarelli/wisp); Smashcraft (smashcraft:ts/) is its
+first project and consumes a pinned Wisp package. Read the
 project's style contract (smashcraft:docs/typescript.md) before writing map
 code, and use `warcraft3-development-distilled` for launching, signing in and
 controlling the game. For Effect APIs and design, also use
 `effect-development-distilled` and follow Smashcraft's repository-local Effect
 policy before changing its vendored source or Effect dependency.
 
-## Effect in Waygate
+## Effect in Wisp
 
 Effect is a deliberate part of Smashcraft's TypeScript application and host
 tooling architecture. Prefer its services, typed failures, Schema boundaries,
@@ -48,16 +49,16 @@ Work from the cheapest check that can answer the question:
    same tests in 32-bit Lua. That catches what Bun can't: integer wrap, binary32
    rounding and TSTL output.
 3. **The running game.** Leave
-   `bun scripts/hot.ts --data <client A CustomMapData> --data <client B ...> --watch`
+   `bun wisp hot --data <client A CustomMapData> --data <client B ...> --watch`
    running. Every save reaches both clients in about 1-1.5 s. Its log reports
    each version as running or refused, and prints in-game errors as TypeScript
    file and line about 0.05 s after they happen.
 4. **A changed map file.** After one full project build,
-   `bun scripts/map.ts rebuild MAP.w3x` swaps only the script in about 2-4 s.
-   Then `bun scripts/fresh.ts MAP.w3x` takes both signed-in clients from
+   `bun wisp rebuild MAP.w3x` swaps only the script in about 2-4 s.
+   Then `bun wisp fresh MAP.w3x` takes both signed-in clients from
    wherever they are into a new game of it, about 24 s. Do a full build only
    when assets, object data or non-TypeScript sources change.
-5. **Behavior against the old game.** `LUA=<32-bit lua> bun scripts/tapes.ts`
+5. **Behavior against the old game.** `LUA=<32-bit lua> bun wisp tapes`
    replays the acceptance tapes in compiled Wurst Lua, Bun and 32-bit Lua and
    names the first divergent frame and field, about 6 s cached.
 
