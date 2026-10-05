@@ -50,8 +50,8 @@ Work from the cheapest check that can answer the question:
    rounding and TSTL output.
 3. **The running game.** Leave
    `bun wisp hot --data <client A CustomMapData> --data <client B ...> --watch`
-   running. Every save reaches both clients in about 1-1.5 s. Its log reports
-   each version as running or refused, and prints in-game errors as TypeScript
+   running. Its log reports each version as running or refused, with the time
+   from save to both clients' acknowledgements, and prints in-game errors as TypeScript
    file and line about 0.05 s after they happen.
 4. **A changed map file.** After one full project build,
    `bun wisp rebuild MAP.w3x` swaps only the script in about 2-4 s.
@@ -79,8 +79,9 @@ rejoining, try hot reload: it keeps the clients, the lobby and the match state.
   earlier. A reload that changes the shape of global state must convert it, or
   start a fresh match.
 
-How a reload applies: the host client announces the new version. Every client
-loads and verifies its copy and answers ready or refuse. On the last answer,
+How a reload applies: the host publishes each client's payload, then its
+manifest, into `CustomMapData/<prefix>-hot`. Every client polls for its own
+manifest, loads and verifies its copy and answers ready or refuse. On the last answer,
 all clients install on the same frame, or none do. "hot reload N not applied"
 names the reason; nothing has changed in any client.
 
@@ -100,8 +101,9 @@ names the reason; nothing has changed in any client.
 - **`Preloader`:** it checks on every call whether a file exists, but runs the
   content it first read from that path for the rest of the session. Any file
   the host writes for the game to read again needs a new name for new content.
-- **No `debug` library in map Lua:** error reports carry the failing line but
-  no stack, and a thrown `Error` carries no position.
+- **No `debug` library in map Lua:** error reports carry the failing line, and
+  Wisp records a thrown value's TypeScript throw site at compile time. Full
+  call stacks need the opt-in stack-traces plugin (development builds only).
 - **`Object.assign`:** in Lua it skips fields whose value is `undefined`; copy
   records with optional fields field by field.
 
