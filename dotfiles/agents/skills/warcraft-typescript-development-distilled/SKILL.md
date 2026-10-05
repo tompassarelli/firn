@@ -42,15 +42,23 @@ package dependency.
 
 Work from the cheapest check that can answer the question:
 
-1. **Logic.** `bun test` runs every test, about 1 s. A focused run takes about
+0. **Every save.** Leave `bun wisp dev` running: it keeps the checker, the
+   affected tests and the headless runtime warm and prints type errors (about
+   0.06 s), the affected unit tests (about 0.6 s) and a two-client headless
+   journey (about 2 s) after each save. Add `--data <client A CustomMapData>
+   --data <client B ...>` to also hot-reload running clients.
+1. **Logic.** `bun run test` runs every test, about 2 s. A focused run takes about
    0.07 s: `bun test test/game.test.ts -t NAME`. `bun run check` type-checks
-   with TypeScript 7 in about 0.3 s.
+   with TypeScript 7 in about 0.4 s. `bun wisp headless` plays the real bundle
+   in simulated clients without Warcraft and reports desyncs, error reports and
+   what a player would see wrong, in about 1.6 s.
 2. **Emitted Lua.** Run `LUA=<32-bit lua> bun scripts/lua-tests.ts` to run the
    same tests in 32-bit Lua. That catches what Bun can't: integer wrap, binary32
    rounding and TSTL output.
 3. **The running game.** Leave
    `bun wisp hot --data <client A CustomMapData> --data <client B ...> --watch`
-   running. Its log reports each version as running or refused, with the time
+   running. A save reaches both clients in about 0.4 s: only changed modules
+   are sent. Its log reports each version as running or refused, with the time
    from save to both clients' acknowledgements, and prints in-game errors as TypeScript
    file and line about 0.05 s after they happen.
 4. **A changed map file.** After one full project build,
