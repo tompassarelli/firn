@@ -8,7 +8,7 @@ and map compilation have different costs and must not be mixed into its ratio.
 ## Record only useful chains
 
 Keep game-specific procedures in the consuming repository, such as
-wc3-melee:tools/wc3-procedure and wc3-melee:tools/wc3-procedures/ records. The
+smashcraft:tools/wc3-procedure and smashcraft:tools/wc3-procedures/ records. The
 generic private-desktop skill continues to own private display/capture transport.
 
 A record needs the named action, starting screen/phase, desired ending
@@ -76,7 +76,7 @@ its missing signal and limitation stated.
 
 The retained four-screen OCR benchmark measured a 3.41× observation-stage gain
 (24/24 fixture classifications), not the requested 5–10× complete warm map loop.
-See wc3-melee:docs/wc3-screen-state.md for individual samples and scope.
+See smashcraft:docs/wc3-screen-state.md for individual samples and scope.
 
 ## Verified warm exit and native menu observation
 

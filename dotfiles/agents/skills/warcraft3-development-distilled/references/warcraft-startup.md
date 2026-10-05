@@ -11,7 +11,7 @@ fixed.
 
 The successful A sequence is recorded in conversation
 01a0f6b6-0b0f-7942-b6ed-22e8b72fd4cf, 3 October 01:18–01:24 UTC, and
-wc3-melee:build/two-client-current-state.md under the 01:32 UTC checkpoint.
+smashcraft:build/two-client-current-state.md under the 01:32 UTC checkpoint.
 Use the indexed convo CLI to retrieve the exact sequence when needed.
 
 Later that day, a primary-display controller trial directly restarted
