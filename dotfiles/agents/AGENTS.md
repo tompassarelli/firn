@@ -350,6 +350,10 @@ blocking the whole task on the answer.
   live in the issue or tracker that owns the work, never in a doc. A dated
   trial record goes in a separate evidence location and is never edited later.
   When a trial teaches something durable, add that fact to the relevant doc.
+- A new command, tool or capability is not done until it is discoverable where
+  its future users look: the repo's feature index or command list, and the
+  skill that routes that work. Prefer a test that enforces the index over a
+  reminder.
 - For an observed defect, prefer the smallest repair at the owning cause.
   Bound investigation to the evidenced failure and an owned, repairable seam;
   do not descend indefinitely through dependencies merely to claim ultimate
