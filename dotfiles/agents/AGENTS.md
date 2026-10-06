@@ -120,6 +120,16 @@ declaration grants no exception.
 - When designing, diagnosing, measuring, or optimizing a repeated edit-to-signal or edit-to-behavior loop, route its latency and invalidation economics → `competitive-development-loop-distilled`.
 - Before sustained multi-core or >1 GiB local work, or admitting a worker expected to run it, preserve machine headroom → `machine-capacity-distilled`.
 
+## Debug with evidence, not guesses
+
+For a non-trivial bug or unexplained behavior, never solve from first principles
+as if the Internet did not exist. Before the second fix attempt, search the
+exact error text or symptom with the product and version. Change one variable
+per experiment. When a good and a bad case exist, trace both and diff to the
+first divergence. Prefer existing instrumentation over screenshots.
+
+- For any non-trivial bug or unexplained behavior, research, reproduce, isolate, and diff good against bad runs → `debugging-distilled`.
+
 ## Select delegated worker models explicitly
 
 Use this normal five-rung ladder for delegated workers, unless Tom explicitly
