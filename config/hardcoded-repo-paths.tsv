@@ -5,8 +5,9 @@
 # `hardcoded-repo-path-check --write-allow` re-counts and prunes listed paths.
 # It never adds a path: a brand-new coupling is declared by hand, on purpose.
 nixos-config/dotfiles/agents/hooks/concrete-model-identity-guard.test.sh	1
-nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.test.py	55
+nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.test.py	56
 nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.test.sh	16
+nixos-config/dotfiles/agents/hooks/session-kill-guard.test.sh	1
 nixos-config/dotfiles/agents/hooks/tripwire-guard.test.sh	2
 nixos-config/dotfiles/codex/config.toml	4
 nixos-config/dotfiles/niri/config.kdl	7

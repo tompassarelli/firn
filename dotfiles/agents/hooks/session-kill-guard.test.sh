@@ -86,6 +86,102 @@ case "$LAST_OUT" in
     fail=$((fail + 1)); printf 'FAIL  deny   ownership denial is incomplete (got: %s)\n' "$LAST_OUT" ;;
 esac
 
+echo '== session scratchpad scripts run in the foreground (2026-10-06) =='
+SP=/tmp/claude-1000/-home-tom-code-smashcraft/f3a82404-e5fe-4e7f-9184-4ef91c01a770/scratchpad
+run allow 'heredoc writes a scratchpad script, then runs it in the foreground' "$(cat <<'CMD'
+cd /home/tom/code/wisp/worktrees/watch-20261006 && cat > /tmp/claude-1000/-home-tom-code-smashcraft/f3a82404-e5fe-4e7f-9184-4ef91c01a770/scratchpad/menus-edit.ts <<'EOF'
+const p = "scripts/wisp/menus.ts";
+let s = await Bun.file(p).text();
+const rep = (a: string, b: string) => { if (!s.includes(a)) throw new Error("missing: " + a.slice(0, 60)); s = s.replace(a, b); };
+rep(`import { dirname, join } from "node:path";`, `import { tmpdir } from "node:os";\nimport { dirname, join } from "node:path";`);
+rep(`import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, writeFileSync } from "node:fs";`,
+  `import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, writeFileSync } from "node:fs";`);
+rep(`const Announcement = Schema.Struct({ port: Schema.Int, guid: Schema.String });`,
+`const Announcement = Schema.Struct({ port: Schema.Int, guid: Schema.String });
+
+/**
+ * One program at a time can listen on a report port. The listener keeps the
+ * newest announced address in a file only this user can read, so another
+ * Wisp program (\`wisp watch\` beside \`play\` or \`fresh\`) finds the menus too.
+ */
+export const menuAddressFile = (reportPort: number) => join(process.env["XDG_RUNTIME_DIR"] ?? tmpdir(), \`wisp-menus-\${reportPort}.json\`);
+/** The page announces every 2 s; an address file older than this has no listener behind it. */
+const ADDRESS_FRESH_MS = 6000;
+const AddressRecord = Schema.Struct({ port: Schema.Int, guid: Schema.String, at: Schema.Number });
+
+const keepAddress = (reportPort: number, address: MenuAddress) => {
+  try {
+    const path = menuAddressFile(reportPort);
+    writeFileSync(\`\${path}.new\`, JSON.stringify({ ...address, at: Date.now() }), { mode: 0o600 });
+    renameSync(\`\${path}.new\`, path);
+  } catch {
+    // Without the file, only this listener knows the address.
+  }
+};
+
+/** The address another listener on the port keeps, while it is fresh. */
+export const keptAddress = (reportPort: number, now = Date.now()): MenuAddress | undefined => {
+  try {
+    const kept = Schema.decodeUnknownOption(AddressRecord)(JSON.parse(readFileSync(menuAddressFile(reportPort), "utf8")));
+    return Option.isSome(kept) && now - kept.value.at <= ADDRESS_FRESH_MS ? { port: kept.value.port, guid: kept.value.guid } : undefined;
+  } catch {
+    return undefined;
+  }
+};`);
+rep(`            latest = { port: announced.value.port, guid: announced.value.guid };
+            Deferred.doneUnsafe(first, Effect.succeed(latest));`,
+`            latest = { port: announced.value.port, guid: announced.value.guid };
+            keepAddress(reportPort, latest);
+            Deferred.doneUnsafe(first, Effect.succeed(latest));`);
+rep(`/** Finds this client's installed page. No page means the caller may use its ordinary menu controls. */
+export const reportedMenus = (reportPort: number | undefined): Effect.Effect<MenuSocket | undefined, MenuFailure, Scope.Scope> => Effect.gen(function*() {
+  if (reportPort === undefined) return undefined;
+  const reports = yield* listenForMenus(reportPort);
+  const address = yield* reports.waitForAddress(3).pipe(Effect.catchTag("MenuFailure", () => Effect.void));
+  if (address === undefined) return undefined;
+  return yield* connectMenus(address);
+});`,
+`/**
+ * The menus' address: from the page's announcements, or, while another Wisp
+ * program listens on the report port, from the address it keeps.
+ */
+export const menuAddress = (reportPort: number, seconds: number): Effect.Effect<MenuAddress, MenuFailure, Scope.Scope> =>
+  listenForMenus(reportPort).pipe(
+    Effect.flatMap((reports) => reports.waitForAddress(seconds)),
+    Effect.catchTag("MenuFailure", (failure) => {
+      if (failure.operation !== "listen for the menu page") return Effect.fail(failure);
+      return Effect.gen(function*() {
+        const deadline = Date.now() + seconds * 1000;
+        while (true) {
+          const kept = keptAddress(reportPort);
+          if (kept !== undefined) return kept;
+          if (Date.now() >= deadline) return yield* Effect.fail(failure);
+          yield* Effect.sleep("250 millis");
+        }
+      });
+    }),
+  );
+
+/** Finds this client's installed page. No page means the caller may use its ordinary menu controls. */
+export const reportedMenus = (reportPort: number | undefined): Effect.Effect<MenuSocket | undefined, MenuFailure, Scope.Scope> => Effect.gen(function*() {
+  if (reportPort === undefined) return undefined;
+  const address = yield* menuAddress(reportPort, 3).pipe(Effect.catchTag("MenuFailure", () => Effect.void));
+  if (address === undefined) return undefined;
+  return yield* connectMenus(address);
+});`);
+await Bun.write(p, s);
+EOF
+export PATH=/nix/store/g7skjk9lrdnshaxd7px62bchq6yg0bbh-bun-1.3.13/bin:$PATH; bun /tmp/claude-1000/-home-tom-code-smashcraft/f3a82404-e5fe-4e7f-9184-4ef91c01a770/scratchpad/menus-edit.ts && git diff --stat
+CMD
+)"
+run allow 'foreground scratchpad Bun script in a command list' 'export PATH=/nix/store/g7skjk9lrdnshaxd7px62bchq6yg0bbh-bun-1.3.13/bin:$PATH && bun /tmp/claude-1000/-home-tom-code-smashcraft/025c4a93-ad00-4198-9ec6-9ef9a1cccd8e/scratchpad/endframe-patch.ts; echo "patch exit $?"; cd ~/code/smashcraft/worktrees/end-frame-gate-20261006/ts && git diff --stat && git grep -n "end frames differ" -- .. | head -3; mkdir -p build && bun install --frozen-lockfile > build/install.log 2>&1; echo "install exit $?"; bun test test/playable.test.ts > build/pt.log 2>&1; echo "test exit $?"; grep -E " pass$| fail$" build/pt.log'
+run allow 'foreground scratchpad Node script' "node $SP/check.mjs"
+run deny 'backgrounded scratchpad Bun script' "bun $SP/menus-edit.ts &"
+run deny 'nohup scratchpad Bun script' "nohup bun $SP/menus-edit.ts &"
+run deny 'setsid scratchpad Node script' "setsid node $SP/check.mjs"
+run deny 'scratchpad path that climbs out' "bun $SP/../../../../../wake-cljs-migrate.mjs"
+run deny 'claude temp dir outside a scratchpad' 'bun /tmp/claude-1000/-home-tom-code-smashcraft/f3a82404-e5fe-4e7f-9184-4ef91c01a770/other/x.ts'
+
 echo '== scoped signals — the sanctioned alternative — stay allowed =='
 run allow 'kill by pid' 'kill 1234'
 run allow 'kill -9 by pid' 'kill -9 1234'

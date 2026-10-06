@@ -654,6 +654,56 @@ check("rm of a tracked file is still denied with a redirection attached",
 check("a real redirect INTO a main checkout is still denied",
       repo_fixture(f"echo hi > {os.path.join(REPO, 'src', 'new.txt')}"))
 
+print("--- 2026-10-06 false positives: variables, quoting, read-only leads ---")
+
+# Verbatim commands refused on 2026-10-06 with the shell in a main checkout,
+# although none of them wrote inside it.
+SMASHCRAFT_TS = "/home/tom/code/smashcraft/main/ts"
+
+check("rm through a variable assigned to an absolute path outside main is allowed",
+      run(bash(r'''M="$HOME/.local/share/Steam/steamapps/compatdata/3516115571/pfx/drive_c/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft"; P=~/.local/share/smashcraft-build-inputs/play-current; ls "$P"/*/; for f in "Smashcraft latest 713ec32c.w3x" "Smashcraft latest 11446d88.w3x" "Smashcraft 0.5.0 b2ed6109.w3x"; do src=$(ls "$P"/*/"$f" 2>/dev/null | head -1); [ -n "$src" ] && cmp -s "$src" "$M/$f" && rm "$M/$f" && echo "removed $f (copy kept at $src)"; done; ls "$M"''',
+               cwd=SMASHCRAFT_TS)) is None)
+check("cp into a variable assigned to the scratchpad is allowed",
+      run(bash(r'''S=/tmp/claude-1000/-home-tom-code-smashcraft/f3a82404-e5fe-4e7f-9184-4ef91c01a770/scratchpad/crash; cp "$HOME/.local/share/smashcraft-build-inputs/play-current/b2ed6109e8e0b8925821a70ec85aff2a56d54425/Smashcraft 0.5.0 b2ed6109.w3x" "$S/Smashcraft 0.0.50 test 1.w3x"; sed -n 1,60p ~/code/smashcraft/main/ts/scripts/wisp/commands/fresh.ts | grep -n 'MAP\|tests\|install\|quick' | head''',
+               cwd=SMASHCRAFT_TS)) is None)
+check("a quoted > in a grep pattern is not a redirect",
+      run(bash(r'''B="$HOME/.local/share/wc3-melee/client-b/pfx/drive_c/users/steamuser/Documents/Warcraft III"; grep -o 'ACCESS_VIOLATION[^)]*)' "$B/Errors/2026-10-06 17.03.42 ab69d8e4/Crash.txt"; grep -A14 'Exception.Assertion:' "$B/Errors/2026-10-06 17.03.42 ab69d8e4/Crash.txt" | grep -o 'DBG-ADDR<[0-9A-F]*>' | head -12 | tr '\n' ' ' ''',
+               cwd=SMASHCRAFT_TS)) is None)
+check("`install` as a grep pattern is not install(1)",
+      run(bash(r'''cd ~/code/smashcraft/main/ts && grep -n 'install' node_modules/wisp/scripts/wisp/commands/menus.ts | head -15; cat ~/.local/state/smashcraft/clients.json | grep -v -i 'pass\|token' | head -40''',
+               cwd=SMASHCRAFT_TS)) is None)
+check("a redirect through a variable assigned to the scratchpad is allowed",
+      run(bash(r'''S=/tmp/claude-1000/-home-tom-code-smashcraft/025c4a93-ad00-4198-9ec6-9ef9a1cccd8e/scratchpad; cd ~/code/smashcraft/main && for n in 14 17 38 39; do gh issue view $n --json body -q .body > $S/issue-$n.md; echo "$n exit $?"; done; ls ~/code/smashcraft/main/evidence/native-delivery-20261005/; grep -n "Status" -A7 $S/issue-14.md | head -12''',
+               cwd=SMASHCRAFT_TS)) is None)
+check("an unresolved leading variable is not read as cwd-relative",
+      repo_fixture(f"cd {REPO} && rm \"$OUT/x.w3x\"") is None)
+
+TRACKED_DIR = os.path.join(REPO, "src")
+check("rm through a variable assigned inside main is still denied",
+      repo_fixture(f'M="{TRACKED_DIR}"; for f in kept.txt; do rm "$M/$f"; done'))
+check("an exported variable inside main is still denied",
+      repo_fixture(f'export M={TRACKED_DIR}; rm "$M/kept.txt"'))
+check("cp into a variable assigned inside main is still denied",
+      repo_fixture(f'S={TRACKED_DIR}; cp /tmp/x "$S/Smashcraft 0.0.50 test 1.w3x"'))
+check("a redirect through a variable assigned inside main is still denied",
+      repo_fixture(f'S={TRACKED_DIR}; echo hi > "$S/issue-14.md"'))
+check("a relative path with an unresolved variable in a main cwd is still denied",
+      repo_fixture(f'cd {REPO} && rm "src/$f"'))
+check("a variable reassigned to unknowable state is not trusted",
+      repo_fixture(f'M=/tmp; M=$(pwd); cd {REPO} && rm "src/$M"'))
+check("a real redirect after a quoted > in the same pipeline is still denied",
+      repo_fixture(f"cd {REPO} && grep -o 'DBG-ADDR<[0-9A-F]*>' x | head -12 > src/out.txt"))
+check("a redirect inside a double-quoted substitution is still denied",
+      repo_fixture(f'echo "$(date > {TRACKED_DIR}/x)"'))
+check("tee after a grep in a pipeline is still denied",
+      repo_fixture(f"cd {REPO} && grep -n install x | tee src/kept.txt"))
+check("a real install(1) after a grep is still denied",
+      repo_fixture(f"cd {REPO} && grep -n 'install' x; install -m 644 /tmp/x src/x"))
+check("rm inside a command substitution is still denied",
+      repo_fixture(f"echo $(rm {os.path.join(TRACKED_DIR, 'kept.txt')})"))
+check("an untracked directory reached through a variable stays removable",
+      repo_fixture(f'B={os.path.join(REPO, "build")}; rm -rf "$B/$f"') is None)
+
 print("--- fail-open ---")
 
 check("no command field is allowed", run({"tool_name": "Bash", "tool_input": {}}) is None)

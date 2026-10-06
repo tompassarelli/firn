@@ -5,7 +5,7 @@
 # (pkill/killall niri), login-session teardown (`loginctl terminate-*`/`kill-*`,
 # `systemctl --user exit`, stop/kill/restart of `user@*` or the compositor
 # unit), and detached agent child processes (`nohup`, `setsid`, `disown`, bare
-# background `&`, or direct Bun/Node temporary scripts).
+# background `&`, or direct Bun/Node /tmp scripts outside a session scratchpad).
 # ============================================================================
 # kill(-1, SIG) signals EVERY process the user owns — the compositor, the
 # user manager, the login shell, and every other agent — in one syscall. The
@@ -281,8 +281,14 @@ def command_word(segment):
             index += 1
     return None, []
 
+# A session scratchpad script run in the foreground is owned by the agent's
+# shell like any project script; backgrounding or detaching it is still caught.
+SCRATCHPAD = re.compile(r"/tmp/claude-\d+/[^/\s]+/[^/\s]+/scratchpad/[^\s]+")
+
 def temporary_script(args):
-    return any(re.fullmatch(r"/tmp/[^\s]*\.(?:js|mjs|cjs|ts)", arg) for arg in args)
+    return any(re.fullmatch(r"/tmp/[^\s]*\.(?:js|mjs|cjs|ts)", arg)
+               and not (SCRATCHPAD.fullmatch(arg) and "/../" not in arg)
+               for arg in args)
 
 def background_shape(segment, background=False):
     word, args = command_word(segment)

@@ -91,6 +91,15 @@ COPY_COMMANDS = {"cp", "mv", "rsync", "ln"}
 
 DESTRUCTIVE_COMMANDS = {"rm", "rmdir", "shred", "unlink"}
 
+# Commands that never execute or write their arguments: in `grep -n install
+# f`, `install` is a pattern. Their redirects are still checked.
+READ_ONLY_COMMANDS = {
+    "grep", "egrep", "fgrep", "rg", "cat", "head", "tail", "less", "more",
+    "wc", "ls", "echo", "printf", "file", "stat", "diff", "cmp", "cut", "tr",
+    "jq", "nl", "basename", "dirname", "realpath", "readlink", "du", "which",
+    "type", "man", "test", "[",
+}
+
 INTERPRETERS = {"python", "python3", "perl", "ruby", "node", "bb", "bash", "sh", "zsh"}
 
 # `git stash` subcommands that only report.
@@ -181,17 +190,139 @@ def _strip_heredoc_bodies(command):
     return "".join(out)
 
 
+def _unquoted_mask(text):
+    """TEXT with every quoted or backslash-escaped character blanked.
+
+    Offsets are preserved, so a match in the mask indexes the original. A `>`
+    inside quotes (`grep -o 'ADDR<[0-9A-F]*>'`) is data, not a redirect.
+    """
+    out = list(text)
+    quote = None
+    i = 0
+    while i < len(text):
+        char = text[i]
+        if quote:
+            if quote == '"' and char == "\\" and i + 1 < len(text):
+                out[i] = out[i + 1] = "_"
+                i += 2
+                continue
+            if char == quote:
+                quote = None
+            else:
+                out[i] = "_"
+            i += 1
+            continue
+        if char in ("'", '"'):
+            quote = char
+        elif char == "\\" and i + 1 < len(text):
+            out[i + 1] = "_"
+            i += 1
+        i += 1
+    return "".join(out)
+
+
 def _redirect_targets(text):
     """Files the shell would open for writing via > or >>.
 
-    TEXT is already heredoc-stripped: a redirect inside a heredoc BODY is data.
-    `->` is NOT a redirect (excluded so an arrow inside a quoted string, e.g.
-    `echo "a -> b"`, is not treated as one). `>&` (fd duplication, e.g. 2>&1)
-    opens no file either, so it is excluded too.
+    TEXT is already heredoc-stripped: a redirect inside a heredoc BODY is data,
+    and so is a `>` inside quotes. `->` is NOT a redirect. `>&` (fd
+    duplication, e.g. 2>&1) opens no file either, so it is excluded too. A
+    substitution inside double quotes still runs, so its body is scanned.
     """
-    return [m.group(1).strip('"\'')
-            for m in re.finditer(
-                r'(?<![-&])>>?\s*(?!&)("[^"]+"|\'[^\']+\'|[^\s;&|<>]+)', text)]
+    targets = []
+    for m in re.finditer(r'(?<![-&])>>?(?!&)', _unquoted_mask(text)):
+        target = re.match(r'\s*("[^"]+"|\'[^\']+\'|[^\s;&|<>]+)', text[m.end():])
+        if target:
+            targets.append(target.group(1).strip('"\''))
+    for body in _shell_substitutions(text):
+        targets.extend(_redirect_targets(body))
+    return targets
+
+
+_VARIABLE = re.compile(
+    r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))")
+_ASSIGNMENT = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", re.S)
+_DECLARERS = {"export", "local", "declare", "readonly", "typeset"}
+_CONTROL_WORDS = {"!", "{", "}", "(", ")", "if", "then", "elif", "else", "fi",
+                  "while", "until", "do", "done"}
+
+
+def _base_env():
+    """Variables whose value the hook knows without reading the command."""
+    home = os.path.expanduser("~")
+    return {"HOME": home} if os.path.isabs(home) else {}
+
+
+def _substitute(word, env):
+    """WORD with tilde and every KNOWN variable expanded; others kept verbatim."""
+    if word.startswith("~"):
+        word = os.path.expanduser(word)
+    return _VARIABLE.sub(
+        lambda m: env.get(m.group(1) or m.group(2)) or m.group(0), word)
+
+
+def _unresolved_at(word):
+    """Offset of the first expansion the hook cannot evaluate, else -1."""
+    m = re.search(r"[$`]", word)
+    return m.start() if m else -1
+
+
+def _record_assignments(tokens, env):
+    """Update ENV with what one shell segment assigns.
+
+    Only a segment made entirely of assignments (optionally behind `export`
+    and friends) sets shell state; a value the hook cannot evaluate, a `for`
+    loop variable, or a `read` target becomes unknown rather than stale.
+    """
+    i = 0
+    while i < len(tokens) and tokens[i] in _CONTROL_WORDS:
+        i += 1
+    rest = tokens[i:]
+    if len(rest) > 1 and rest[0] == "for":
+        env[rest[1]] = None
+        return
+    if rest and rest[0] == "read":
+        for token in rest[1:]:
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", token):
+                env[token] = None
+        return
+    if rest and rest[0] in _DECLARERS:
+        rest = [t for t in rest[1:] if not t.startswith("-")]
+    assignments = [_ASSIGNMENT.match(t) for t in rest]
+    if not rest or not all(assignments):
+        return
+    for m in assignments:
+        value = _substitute(m.group(2), env)
+        env[m.group(1)] = value if _unresolved_at(value) == -1 else None
+
+
+def _segments_with_env(text, env):
+    """(segment, variables known when it runs) for each shell segment."""
+    env = dict(env)
+    for segment in _shell_segments(text):
+        yield segment, dict(env)
+        _record_assignments(_tokens(segment), env)
+
+
+def _target(word, env, cwd):
+    """(path, scope) for a shell word naming a file, or None if unknowable.
+
+    PATH is the word with known variables expanded, resolved against CWD.
+    SCOPE is the deepest directory the word certainly lies under — PATH itself
+    when fully resolved. A word that STARTS with an unknown expansion could be
+    anywhere, so it is not guessed to be relative to CWD.
+    """
+    value = _substitute(word, env)
+    cut = _unresolved_at(value)
+    if cut == -1:
+        path = _resolve(value, cwd)
+        return (path, path) if path else None
+    prefix = value[:cut]
+    if not prefix:
+        return None
+    path = _resolve(value, cwd)
+    scope = _resolve(prefix[:prefix.rfind("/") + 1] or ".", cwd)
+    return (path, scope) if path and scope else None
 
 
 def _tokens(command):
@@ -586,7 +717,7 @@ def _shell_c_script(tokens, executable_index):
     return None
 
 
-def _git_invocations(text, cwd):
+def _git_invocations(text, cwd, env=None):
     """(target, verb, args) for EVERY git call in TEXT.
 
     Split per segment first: one sanctioned git call must not vouch for a
@@ -596,7 +727,8 @@ def _git_invocations(text, cwd):
     # shlex preserves quoted arguments as single tokens. Thus `git -C
     # "<pin>" checkout REF` retains its target, while quoted prose such as
     # `printf 'git -C <pin> checkout REF'` never manufactures a `git` token.
-    for segment in _shell_segments(text):
+    for segment, seg_env in _segments_with_env(
+            text, _base_env() if env is None else env):
         tokens = _tokens(segment)
         command_index = _shell_command_index(tokens)
         for i, tok in enumerate(tokens):
@@ -605,7 +737,7 @@ def _git_invocations(text, cwd):
                 script = _shell_c_script(tokens, i)
                 if script:
                     nested_cwd = _effective_cwd(script, cwd)
-                    found.extend(_git_invocations(script, nested_cwd))
+                    found.extend(_git_invocations(script, nested_cwd, seg_env))
             if executable != "git":
                 continue
             rest = tokens[i + 1:]
@@ -613,7 +745,8 @@ def _git_invocations(text, cwd):
             while j < len(rest):
                 t = rest[j]
                 if t == "-C" and j + 1 < len(rest):
-                    target = _resolve(os.path.expanduser(rest[j + 1]), cwd) or cwd
+                    named = _target(rest[j + 1], seg_env, cwd)
+                    target = named[0] if named else None
                     j += 2
                     continue
                 if t.startswith("-"):
@@ -621,11 +754,11 @@ def _git_invocations(text, cwd):
                     continue
                 verb = t
                 break
-            if verb:
+            if verb and target:
                 found.append((target, verb, rest[j + 1:]))
         for body in _shell_substitutions(segment):
             nested_cwd = _effective_cwd(body, cwd)
-            found.extend(_git_invocations(body, nested_cwd))
+            found.extend(_git_invocations(body, nested_cwd, seg_env))
     return found
 
 
@@ -803,6 +936,16 @@ def decide(payload):
 
     tokens = _tokens(scan)
     invocations = _git_invocations(scan, eff)
+    segments = list(_segments_with_env(scan, _base_env()))
+    # A substitution body is cut apart by the segment split, so bodies are
+    # taken from the whole command and scanned with the variables known at
+    # its end.
+    final_env = dict(segments[-1][1]) if segments else _base_env()
+    if segments:
+        _record_assignments(_tokens(segments[-1][0]), final_env)
+    nested = [(segment, seg_env)
+              for body in _shell_substitutions(scan)
+              for segment, seg_env in _segments_with_env(body, final_env)]
 
     # Cargo output belongs to the exact lane that produced it. A literal
     # target path in a main or pin is already protected; a path in a fourth
@@ -861,20 +1004,21 @@ def decide(payload):
             return deny(target, project, why, f"run `git {verb}`", kind)
 
     # 2. shell redirection into a protected path
-    for raw in _redirect_targets(scan):
-        resolved = _resolve(os.path.expanduser(raw), eff)
-        hit = protected_project(resolved)
-        if hit:
-            project, why, kind = hit
-            return deny(resolved, project, why, "write", kind)
+    for segment, seg_env in segments:
+        for raw in _redirect_targets(segment):
+            named = _target(raw, seg_env, eff)
+            hit = protected_project(named[0]) if named else None
+            if hit:
+                project, why, kind = hit
+                return deny(named[0], project, why, "write", kind)
 
     # 3. in-place / destination-taking commands, per SEGMENT.
     #    `cp`/`mv`/`ln` take their destination as the LAST argument — but only
     #    within their own command. Scanning to the end of a compound command
     #    made `ln -s a b; echo "(none = clean)"` treat the echo's text as ln's
     #    destination and deny it. Split on shell separators first.
-    for segment in re.split(SEGMENT_SPLIT, scan):
-        found = _scan_write_commands(_tokens(segment), eff, deny)
+    for segment, seg_env in segments + nested:
+        found = _scan_write_commands(_tokens(segment), eff, deny, seg_env)
         if found:
             return found
 
@@ -892,9 +1036,18 @@ def decide(payload):
     return None
 
 
-def _scan_write_commands(tokens, eff, deny):
+def _scan_write_commands(tokens, eff, deny, env):
     lead = os.path.basename(tokens[0]) if tokens else ""
     package_manager = lead in PACKAGE_MANAGERS
+    command_index = _shell_command_index(tokens)
+    if (command_index < len(tokens)
+            and os.path.basename(tokens[command_index]) in READ_ONLY_COMMANDS):
+        return None
+
+    def located(word):
+        named = _target(word, env, eff)
+        return named[0] if named else None
+
     for i, tok in enumerate(tokens):
         base = os.path.basename(tok)
         if package_manager and i > 0:
@@ -903,12 +1056,15 @@ def _scan_write_commands(tokens, eff, deny):
                 if not a.startswith("-") and not _redirection(a)]
         if base == "sed" and any(a.startswith("-i") for a in tokens[i + 1:]):
             for a in args[1:]:
-                hit = protected_project(_resolve(os.path.expanduser(a), eff))
+                hit = protected_project(located(a))
                 if hit:
                     return deny(a, hit[0], hit[1], "edit in place", hit[2])
         elif base in WRITE_COMMANDS or base in DESTRUCTIVE_COMMANDS:
             for a in args:
-                resolved = _resolve(os.path.expanduser(a), eff)
+                named = _target(a, env, eff)
+                if not named:
+                    continue
+                resolved, scope = named
                 sidecar = pin_sidecar(resolved)
                 if base in DESTRUCTIVE_COMMANDS and sidecar:
                     container, name, pin_path = sidecar
@@ -926,13 +1082,13 @@ def _scan_write_commands(tokens, eff, deny):
                     # it is protected because a consumer reads the tree, not
                     # because git tracks the bytes.
                     if (base in DESTRUCTIVE_COMMANDS and not is_pin(hit[2])
-                            and _tracks_nothing(resolved)):
+                            and _tracks_nothing(scope)):
                         continue
                     return deny(a, hit[0], hit[1], f"run `{base}`", hit[2])
         elif base in COPY_COMMANDS and args:
             if base == "mv":
                 for source in args[:-1]:
-                    resolved = _resolve(os.path.expanduser(source), eff)
+                    resolved = located(source)
                     sidecar = pin_sidecar(resolved)
                     if sidecar:
                         _container, _name, pin_path = sidecar
@@ -945,7 +1101,7 @@ def _scan_write_commands(tokens, eff, deny):
                                 f"{pin_path}` instead",
                                 hit[2])
             dest = args[-1]
-            hit = protected_project(_resolve(os.path.expanduser(dest), eff))
+            hit = protected_project(located(dest))
             if hit:
                 return deny(dest, hit[0], hit[1], f"run `{base}` into", hit[2])
     return None
