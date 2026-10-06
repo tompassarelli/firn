@@ -30,12 +30,14 @@ clearly call for it, such as a hands-on controller trial they need to see and
 play. Do not require special wording or another confirmation when that intent
 is clear. Use the native Warcraft window there and confine input to that window.
 
-The owner may be working on that monitor. When a session's plan needs the main
-display for agent-driven runs (timing checks, `wisp play` validation), ask the
-owner once early in the session whether main-display use is fine this session.
-With a yes, still send a one-line heads-up immediately before each use (what,
-roughly how long), then proceed without waiting. A yes lasts only for that
-session.
+The owner may be working on that monitor. Bootstrap step for every Warcraft
+session: check whether the agenda needs the main display for agent-driven runs
+(open issue boxes requiring the main desktop, `wisp play` validation, timing
+checks, an owner playtest setup). If it does, ask the owner once, up front,
+whether main-display use is fine this session. With a yes, still send a
+one-line heads-up immediately before each use (what, roughly how long), then
+proceed without waiting. A yes lasts only for that session; without one, keep
+all agent-driven runs off the main display.
 A streamed private desktop adds another input/display path and is not equivalent
 for this trial. Use `image-context-budget` for repeated inspection.
 
