@@ -243,3 +243,29 @@ AGENTS.md current with its source layout, pinned toolchain and actual commands.
 Prefer headless layout/type checks before native iteration; use this skill for
 click/focus, presentation, authentication and multiplayer proof. An upstream
 Grill feature or macOS toolchain claim is not a verified capability of this map.
+
+## Failure modes to avoid
+
+Symptom, cause, rule. Smashcraft, 6 Oct 2026.
+
+- Green HUD, invisible stage, "menus could not load": `-loadfile` raced the
+  post-login ladder-map scan. Host via the menu socket after the scan; treat any
+  "model creation failed - war3mapImported" as a failed load.
+- Private test client renders at the wrong aspect, pointer clamps, frame checks
+  miss: main-display play sharing its prefix rewrote War3Preferences (window
+  mode, size, resolution, fps, refresh) on exit. One prefix per display role, or
+  save/restore War3Preferences around main-display play and have doctor verify
+  each client's display settings.
+- Missing log line read as a state (no LoginDoorClose): War3Log is written in
+  bursts. The menu socket outranks the log for sign-in and menus; the log is
+  evidence only for what it contains.
+- Grey sky for seconds in the first match after a cold start: models draw late.
+  Preload stage/scene models before match frames; take evidence frames only
+  after a receipt says the scene is drawn.
+- Missed clicks, wrong pointer targets, slow OCR: XTEST clicks shorter than one
+  frame are missed by per-frame-sampled UI, targets depend on render area. Drive
+  with in-map commands and receipts plus the menu socket; pixels are evidence only.
+- Hours lost on a native experiment: launch path and display changed together.
+  One variable per run; route to `debugging`.
+- Receipt wait times out on a fresh game: it rewrote an identical receipt file.
+  Wait on a counter or timestamp, never text equality.

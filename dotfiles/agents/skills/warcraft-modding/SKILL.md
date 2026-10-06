@@ -168,3 +168,28 @@ owner drives it. Everything else runs in parallel around it.
   ladder scan, each from the menu socket, War3Log, crash reports, receipts or
   processes. In host code wait with `waitFor` and wrap existing waits in
   `unlessLost`, so a crash or lost Battle.net fails at once.
+
+## Failure modes to avoid
+
+Symptom, cause, rule. Smashcraft, 6 Oct 2026. Native-runtime classes (menu-socket
+load, pixel driving, one variable) are in "Native client time is the bottleneck"
+above and in `warcraft3-development`.
+
+- "no element 1 in a table of 1" every tick at stage select: presentation built
+  for one selection (stage decks drawn at shell start) outlived it. Key
+  persistent presentation by the selection it was built for; headless journeys
+  step through stage and fighter selection with computer slots
+  (smashcraft:ts/test/bot-selection.test.ts).
+- Bun and Lua tapes diverge (stray element, electric): a scratch object reused
+  across hits/throws leaked fields; Bun runs all tapes in one process, Lua one
+  process per tape. Reset every field of a reused scratch object; tapes catch it
+  only when run in sequence.
+- Every lane's Lua suite breaks on a literal like 0.02 or 1.4: not binary32 per
+  the emitted-Lua number check. Wrap non-integer literals in `f32(...)` in tests too.
+- 100+ MB Lua allocation spikes: per-kit text rebuilt by string concatenation in
+  every checksum. Precompute static digests at load; no per-frame string building.
+- Native work grinding for hours, duplicate CPU, edits landing in protected
+  main: one agent owned all native work, each lane ran its own graph
+  regeneration/soak, a relative `git worktree add` path resolved inside main.
+  One native job per agent with a deadline and 20-minute reports; one shared
+  regeneration/baseline; absolute worktree paths.
