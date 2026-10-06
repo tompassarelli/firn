@@ -223,7 +223,7 @@ a pipe and types it into the active private Battle.net/Warcraft window.
 
 First verify a real login form and the focused target field, using text/OCR
 without retaining account text. Use separate account/prefix bindings for A/B.
-Run the helper with the exact private run, account a|b, and username|password
+Run the helper with the exact private run, account a|b|c, and username|password
 inside a shell providing jq, xdotool and sops. Deliver username, Tab into the
 verified password field, deliver password, then submit through the observed
 login control. Enable supported persistent login and verify actual launcher

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Foreign boundary: type one SOPS field into the verified private login window.
-[[ $# == 3 && ($2 == a || $2 == b) && ($3 == username || $3 == password) ]] || { echo 'Usage: wc3-login-field PRIVATE_RUN a|b username|password' >&2; exit 2; }
+[[ $# == 3 && ($2 == a || $2 == b || $2 == c) && ($3 == username || $3 == password) ]] || { echo 'Usage: wc3-login-field PRIVATE_RUN a|b|c username|password' >&2; exit 2; }
 private_run=$1
 case "$private_run" in /run/user/"$(id -u)"/private-desktop.*) ;; *) echo 'Private desktop required.' >&2; exit 1 ;; esac
 [[ -S "$private_run/runtime/wayland-0" && -f "$private_run/display" && -f "$private_run/xauthority" ]] || exit 1
