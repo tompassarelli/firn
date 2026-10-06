@@ -1,6 +1,8 @@
 ---
-name: warcraft-typescript-development-distilled
+name: warcraft-modding-distilled
 description: >-
+  Boundary: TypeScript map authoring and the Wisp dev loop; launching,
+  sign-in and native game control belong to warcraft3-development-distilled.
   Develop Warcraft III maps in TypeScript compiled to Lua (TypeScriptToLua),
   using Wisp: hot reload into running multiplayer clients, TypeScript
   lines for in-game errors, two-second map rebuilds, scripted fresh matches,
@@ -8,7 +10,7 @@ description: >-
   included, and whenever changing code in a running Warcraft game.
 ---
 
-# Warcraft TypeScript development
+# Warcraft modding (TypeScript and Wisp)
 
 Wisp (`bun wisp ...` from the project's TypeScript directory) is the framework
 and development environment for Warcraft maps written in TypeScript. TypeScriptToLua (TSTL) compiles map code to Warcraft's Lua, Bun

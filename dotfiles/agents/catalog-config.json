@@ -19,7 +19,7 @@
     "clause-authoring-distilled",
     "game-design-prototyping-distilled",
     "warcraft3-development-distilled",
-    "warcraft-typescript-development-distilled",
+    "warcraft-modding-distilled",
     "effect-development-distilled",
     "wurst-development-distilled",
     "smashcraft-character-creation-distilled",
@@ -464,12 +464,12 @@
         "path": "dotfiles/agents/skills/warcraft3-development-distilled/SKILL.md"
       }
     },
-    "warcraft-typescript-development-distilled": {
+    "warcraft-modding-distilled": {
       "kind": "skill",
       "category": "games",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/warcraft-typescript-development-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/warcraft-modding-distilled/SKILL.md"
       }
     },
     "wurst-development-distilled": {
@@ -1496,7 +1496,7 @@
         }
       ]
     },
-    "warcraft-typescript-development-distilled": {
+    "warcraft-modding-distilled": {
       "distributions": [
         {
           "type": "skill",

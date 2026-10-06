@@ -12,7 +12,7 @@ description: >-
 # Smashcraft character creation
 
 Smashcraft is TypeScript on Wisp (smashcraft:ts/). Before code, read
-smashcraft:AGENTS.md, apply warcraft-typescript-development-distilled, and
+smashcraft:AGENTS.md, apply warcraft-modding-distilled, and
 read smashcraft:docs/typescript.md. Work in an owned lane from `origin/main`
 (`bun install --frozen-lockfile` in ts/). Take every number from the source
 or generated data linked here; this skill holds no tuning values.

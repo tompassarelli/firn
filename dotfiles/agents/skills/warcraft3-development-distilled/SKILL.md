@@ -4,15 +4,15 @@ description: >-
   Develop and test Warcraft III maps in the native game, including Battle.net
   startup, Steam Proton on Linux, post-login recovery, controller trials and
   multiplayer test sessions, API quirks, input transport and netcode diagnosis.
-  Applies on primary and private displays; use the
-  source-language skill separately for TypeScript, Wurst, Lua or Jass authoring.
+  Applies on primary and private displays. Boundary: native game runtime and
+  testing only; TypeScript or Wurst authoring belongs to the source-language skills.
 ---
 
 # Warcraft III development
 
 This skill owns Warcraft-specific runtime setup, recovery and native testing.
 Keep the project's map build, installed candidate and intended Warcraft version
-aligned. Use `warcraft-typescript-development-distilled` when authoring
+aligned. Use `warcraft-modding-distilled` when authoring
 TypeScript and `wurst-development-distilled` when authoring Wurst; this skill
 does not choose or migrate the map's source language.
 
@@ -126,7 +126,7 @@ mail route explicitly; do not claim a notification was sent.
 When the map's code is TypeScript with Wisp, change running code
 with its hot reload instead of rebuilding and rejoining. Its in-game error
 report gives the TypeScript line. Rejoin only when the map file must change
-(see `warcraft-typescript-development-distilled`).
+(see `warcraft-modding-distilled`).
 
 Prefer event-driven automation with real state detection. Advance on observed
 window/focus, control availability and resulting game state; elapsed time is
