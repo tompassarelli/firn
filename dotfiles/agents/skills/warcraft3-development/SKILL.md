@@ -209,6 +209,13 @@ read cost; one API's result does not establish another's behavior.
 
 ## Controller and multiplayer evidence
 
+For an owner's Smashcraft trial, use `bun wisp play` for current main and its
+matching helper. Experiments use `fresh`, captures or `accept`, with maps in
+Maps/00-Smashcraft/tests; preserve the owner's latest and versioned playable
+maps. Confirm the current roster, stage thumbnails and gameplay before calling
+the new build ready. A process, map title or old successful run cannot establish
+that the current content loaded.
+
 For a keyboard mapper trial, load the project's matching key preset and enable
 mapping only while Warcraft is focused. Verify movement, jump and attack in the
 loaded map before announcing readiness. Device recognition and profile parsing

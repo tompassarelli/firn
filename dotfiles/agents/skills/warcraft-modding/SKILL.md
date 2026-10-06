@@ -126,6 +126,13 @@ make a port or a change pass; a disagreement is a defect to name.
 
 ## Native client time is the bottleneck
 
+`wisp play` is the owner's normal playable path. In Smashcraft it resolves
+current main and builds the matching map and helper; never repoint it at an
+experiment. Use `fresh`, captures or `accept` for named test candidates, installed
+under Maps/00-Smashcraft/tests. Keep the latest playable map and two previous
+versions visible at the top level, with older versions in older/. A script-only
+rebuild does not update the map's in-game title or missing imports.
+
 Signed-in native clients are scarce: one pair is one serial lane, and one
 owner drives it. Everything else runs in parallel around it.
 

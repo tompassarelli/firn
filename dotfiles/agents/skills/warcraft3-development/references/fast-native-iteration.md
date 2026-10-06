@@ -93,3 +93,11 @@ For a fresh capture, a normalized ImageMagick mask
 This is a native-menu observation option, not a universal classifier for
 white map UI. Preserve fresh capture success and inspect label bounding boxes
 when selecting controls. A missing OCR label is not evidence of a frozen game.
+# Owner play versus experimental candidates
+
+Smashcraft's `wisp play` resolves current main, builds its matching map and helper,
+and maintains Maps/00-Smashcraft with a correctly titled latest map, two previous
+versions, older/, and tests/. Experimental native procedures name their candidate
+through `fresh`, captures or `accept` and install into tests/. A script-only
+rebuild preserves old titles and imports, so it cannot deliver changed art or
+establish that new roster content is installed.
