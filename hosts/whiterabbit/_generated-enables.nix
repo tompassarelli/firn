@@ -79,6 +79,7 @@
   myConfig.modules.sbcl.enable = lib.mkDefault true;
   myConfig.modules.shellcheck.enable = lib.mkDefault true;
   myConfig.modules.slurp.enable = lib.mkDefault true;
+  myConfig.modules.smashcraft-controller.enable = lib.mkDefault true;
   myConfig.modules.sqlite.enable = lib.mkDefault true;
   myConfig.modules.starship.enable = lib.mkDefault true;
   myConfig.modules.steam.enable = lib.mkDefault true;
