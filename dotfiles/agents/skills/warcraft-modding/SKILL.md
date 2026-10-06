@@ -162,6 +162,11 @@ owner drives it. Everything else runs in parallel around it.
   regeneration) for that window, and never let capacity gating starve it.
 - Change one variable per native experiment; never confound launch path with
   display or config (route to `debugging`).
+- When researching a Warcraft III bug, crash or engine behaviour (the
+  `debugging` search step), look on Hive Workshop (hiveworkshop.com) first:
+  most Warcraft III modding knowledge, crash reports and patch-behaviour
+  findings live there. Blizzard's Warcraft III forums (us/eu.forums.blizzard.com)
+  carry patch notes and some support threads.
 - Load the map by hosting through the menu socket after the game's post-login
   ladder-map scan (Maps/Download/Season<N>) finishes. Battle.net `-loadfile`
   can race that scan and make every war3mapImported asset fail (War3Log
