@@ -1506,6 +1506,16 @@
         }
       ]
     },
+    "debugging-distilled": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
     "effect-development-distilled": {
       "distributions": [
         {
