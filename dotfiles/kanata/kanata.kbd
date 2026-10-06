@@ -33,7 +33,7 @@
   lctl a    s    d    f    g    ]    h    j    k    l    @semicolonsym '    ret
   @lshiftcaps @slashshift z x    c    v    b    /    n    m    ,    .    rsft
   lctl lalt lmet      spc                 @enteralt ralt cmp  rctl
-  @m4shift @m5ctrl XX
+  @m4shift @m5ctrl f10
 )
 
 ;; Numbers layer - qwert=12345, uiop[=67890, jkl;=arrows, m,.=home+-end
