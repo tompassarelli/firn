@@ -245,7 +245,9 @@ progress. When patches accumulate without checkbox movement, prioritize the
 nearest acceptance or publication blocker while independent useful work continues.
 
 Close when the boxes pass, with one line of residual risk. A discovery that
-blocks no box becomes a backlog item, never added scope. For an owner-gated
+blocks no box stays outside current scope; record it in the existing backlog
+only when useful. During a delivery push, do not create follow-up issues unless
+Tom requests them or the discovery blocks a required box. For an owner-gated
 box, ask once for exactly what is needed, then keep working; never substitute
 a proxy. Report progress as checklist movement ("3/5; next: X"). After two
 failed fixes on one box, or about a day without ticking one, stop and bring
@@ -282,6 +284,16 @@ must produce, run or unblock the smallest usable checkpoint. Answer the status
 question in a line, then act. Keep advisory targets advisory. Never silently
 substitute a smaller product, and never add process to explain a delay.
 Safety, source authority and real gates stay binding.
+
+Delivery urgency changes execution, not just reports. Reuse passing evidence
+after unrelated merges; repeat only the check a relevant change invalidates.
+Once required gates pass, the next action is authorized publication and issue
+closure, or the concrete remaining acceptance blocker. Do not add a full-suite
+rerun, soak, benchmark, review or CI wait for confidence alone. A benchmark or
+target is advisory unless the existing acceptance criteria make it a gate.
+Parallelize independently deliverable work, then serialize only shared mutable
+fixtures and resource-bound checks. Do not fill available slots with assurance
+work or let extra checks delay a passing ticket.
 
 ## Deliver and report plainly
 
