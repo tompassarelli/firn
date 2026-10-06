@@ -29,6 +29,13 @@ Use the current monitor when the owner's request or immediate testing needs
 clearly call for it, such as a hands-on controller trial they need to see and
 play. Do not require special wording or another confirmation when that intent
 is clear. Use the native Warcraft window there and confine input to that window.
+
+The owner may be working on that monitor. When a session's plan needs the main
+display for agent-driven runs (timing checks, `wisp play` validation), ask the
+owner once early in the session whether main-display use is fine this session.
+With a yes, still send a one-line heads-up immediately before each use (what,
+roughly how long), then proceed without waiting. A yes lasts only for that
+session.
 A streamed private desktop adds another input/display path and is not equivalent
 for this trial. Use `image-context-budget` for repeated inspection.
 
