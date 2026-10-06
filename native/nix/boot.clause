@@ -23,7 +23,10 @@ export boot-module()
       # Open regression across 6.18.x and 6.19.x; no upstream fix. Do not bump
       # kernel/firmware: newer MES ucode (0x82/0x83) triggers it.
       # Reference: community.frame.work/t/79221.
-      kernelParams: ["amdgpu.gpu_recovery=1", "nmi_watchdog=panic", "amdgpu.cwsr_enable=0"],
+      # dcdebugmask=0x10 disables eDP panel self-refresh: with it on, the DCN35
+      # display engine can miss a page flip ("flip_done timed out" on the eDP
+      # CRTC), freezing the screen while the system keeps running.
+      kernelParams: ["amdgpu.gpu_recovery=1", "nmi_watchdog=panic", "amdgpu.cwsr_enable=0", "amdgpu.dcdebugmask=0x10"],
 
       # Soft-lockup panic can falsely reboot after a >20s stall; set it to 0
       # if it fires spuriously. Panic recovery reboots after 20s, after capture.
