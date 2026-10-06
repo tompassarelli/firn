@@ -208,10 +208,12 @@ From smashcraft:ts/ unless noted. Through the machine-capacity helper
    rules it pins (pattern: the per-fighter down-air and down-tilt tests in
    sim/normals.tests.ts) and see it fail without the change. Focused:
    `GAME_TESTS=sim/normals bun test test/game.test.ts -t NAME`; `bun run check`.
-3. **Interaction graph.** For every new or changed move,
-   `bun wisp interactions --move FIGHTER:MOVE` (about 10 s, capacity scope):
-   read where it wins, loses and punishes, and record what changed. Then
-   `bun wisp interactions` rewrites smashcraft:tools/move-data/interactions/.
+3. **Interaction graph.** The graph is not committed; each checkout writes its
+   own. Before the change, write it with `bun wisp interactions`. After it,
+   `bun wisp interactions --move FIGHTER:MOVE` (about 10 s, capacity scope)
+   compares against that graph: read where the move wins, loses and punishes,
+   and record what changed in the commit message. Never commit
+   smashcraft:tools/move-data/interactions/.
 4. **Move data.** From the repository root, in this order, because the
    reference join reads the checked-in snapshots:
    `tools/move-data/export.sh --check`, then `compare.sh --check` (it also
