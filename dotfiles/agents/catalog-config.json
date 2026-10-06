@@ -32,6 +32,7 @@
     "resource-safe-search",
     "machine-capacity",
     "todo",
+    "auto-wake",
     "convo",
     "guard-authoring",
     "cloudflare-deploy",
@@ -306,6 +307,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/todo/SKILL.md"
+      }
+    },
+    "auto-wake": {
+      "kind": "skill",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/auto-wake/SKILL.md"
       }
     },
     "tripwire-guard": {
@@ -1015,6 +1024,16 @@
       ]
     },
     "todo": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "auto-wake": {
       "distributions": [
         {
           "type": "skill",
