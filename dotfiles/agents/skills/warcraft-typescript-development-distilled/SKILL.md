@@ -121,3 +121,26 @@ Register tests with `test()` in `*.tests.ts`, so each runs in Bun and in
 32-bit Lua. Keep a test only for a contract: a reference value, a gameplay or
 netcode invariant, or a reproduced defect. Never change an expected value to
 make a port or a change pass; a disagreement is a defect to name.
+
+## Native client time is the bottleneck
+
+Signed-in native clients are scarce: one pair is one serial lane, and one
+owner drives it. Everything else runs in parallel around it.
+
+- Batch native checks. One fresh map or session covers every presentation box
+  that needs it; one bot session's outputs feed every checker that consumes
+  them (replay-to-checksum, stall recovery, cost/overlay, captures). Test all
+  new characters and content in one combined match, not one session each.
+- Order the native queue by issues closed per session. Finish source and
+  headless prep (driver fixes, command sequences) before native time, not during.
+- The native lane gets machine priority. Perf, cost and timing captures need a
+  quiet host: pause or defer heavy local jobs (suites, soaks, graph
+  regeneration) for that window, and never let capacity gating starve it.
+- Change one variable per native experiment; never confound launch path with
+  display or config (route to `debugging-distilled`).
+- Load the map by hosting through the menu socket after the game's post-login
+  ladder-map scan (Maps/Download/Season<N>) finishes. Battle.net `-loadfile`
+  can race that scan and make every war3mapImported asset fail (War3Log
+  evidence, Smashcraft #73, 6 Oct 2026).
+- Drive and observe through existing instrumentation (menu WebSocket, map
+  receipts and journal, War3Log) before screenshots or OCR.
