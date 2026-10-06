@@ -139,6 +139,15 @@ owner drives it. Everything else runs in parallel around it.
   `bun wisp accept`, checks in smashcraft:ts/scripts/wisp/acceptChecks.ts).
   `--dry-run` prints the plan without touching clients; each check reports
   pass, fail or needs-look with its private evidence folder.
+- Never hand-drive a broken client. `wisp doctor [CLIENT...]`
+  (wisp:docs/doctor.md; Smashcraft: `bun wisp doctor`) finds each client's
+  state from events and runs its known recovery: dropped from Battle.net,
+  crashed with the error dialog up, empty Options/Exit Game login shell,
+  stale lobby or score screen, stuck loading, a map loaded without its
+  imports, two runtimes on one prefix, a launcher whose connection failed.
+  It stops with one plain line only when the owner must sign in. `play`,
+  `fresh`, bot captures and `accept` run it before they start and once after
+  a failure.
 - Order the native queue by issues closed per session. Finish source and
   headless prep (driver fixes, command sequences) before native time, not during.
 - The native lane gets machine priority. Perf, cost and timing captures need a

@@ -38,6 +38,15 @@ Read this sequence before launching or recovering Warcraft, including controller
 trials. Recover the current process, prefix, display and signed-in launcher from
 the project handoff before taking action.
 
+When the project uses Wisp, run `wisp doctor [CLIENT...]` (wisp:docs/doctor.md)
+first instead of the manual recoveries below: it starts Battle.net alone on a
+free prefix, presses Play in the signed-in launcher, ends a second runtime, a
+crashed game and its error dialog, a disconnected game or the empty
+Options/Exit Game shell and relaunches with Play, leaves stale lobbies, and
+restarts a launcher whose connection failed. It never signs in; it stops with
+one plain line when the owner must. Follow the steps below by hand only where
+doctor stops on an unknown state.
+
 1. Reuse a working game. For a cold start, first establish that no Wine/Proton
    client uses the selected mutable prefix. Use the existing Steam Linux Runtime
    and installed GE-Proton to start **Battle.net Launcher.exe** in that prefix
