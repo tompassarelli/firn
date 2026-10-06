@@ -133,6 +133,12 @@ owner drives it. Everything else runs in parallel around it.
   that needs it; one bot session's outputs feed every checker that consumes
   them (replay-to-checksum, stall recovery, cost/overlay, captures). Test all
   new characters and content in one combined match, not one session each.
+- Declare each native box as data next to the issue it closes (map profile,
+  setup chat commands, captures, pass rule) and run the batch with
+  `wisp accept [--only ID...]` (wisp:docs/accept.md; Smashcraft:
+  `bun wisp accept`, checks in smashcraft:ts/scripts/wisp/acceptChecks.ts).
+  `--dry-run` prints the plan without touching clients; each check reports
+  pass, fail or needs-look with its private evidence folder.
 - Order the native queue by issues closed per session. Finish source and
   headless prep (driver fixes, command sequences) before native time, not during.
 - The native lane gets machine priority. Perf, cost and timing captures need a
