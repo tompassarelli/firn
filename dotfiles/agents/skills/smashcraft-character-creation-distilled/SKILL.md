@@ -25,19 +25,18 @@ does not make a playable fighter.
 ## Read the design layers in order
 
 Each layer is descriptive and sourced; the stance lives only in the last.
-Layers marked (in progress) may not have landed: use their issue until they do.
 
-1. Fighting-game language: smashcraft:docs/design/fighting-games.md (#64, in progress).
-2. Platform-fighter language: smashcraft:docs/design/platform-fighters.md (#64, in progress).
-3. Melee case study: smashcraft:docs/design/melee/ (#65, in progress), built on
-   the facts in smashcraft:docs/smash-melee-reference/ and
-   smashcraft:references/melee-frame-data/ (#65 keeps one canonical corpus).
+1. Fighting-game language: smashcraft:docs/design/fighting-games.md (#64).
+2. Platform-fighter language: smashcraft:docs/design/platform-fighters.md (#64).
+3. Melee case study: smashcraft:docs/design/melee/ (#65), built on the
+   physics facts in smashcraft:docs/smash-melee-reference/ and the one
+   frame-data corpus, smashcraft:references/melee-frame-data/records.jsonl.
 4. Modern mechanics: smashcraft:docs/design/modern-platform-fighters.md (#66).
-5. Measurement: smashcraft:docs/design/interaction-graph.md and its tool
-   (#67, in progress); smashcraft:docs/design/execution-windows.md (#69).
+5. Measurement: smashcraft:docs/design/interaction-graph.md and
+   `bun wisp interactions` (#67); smashcraft:docs/design/execution-windows.md (#69).
 6. Tom's stance, the only place for owner decisions:
-   smashcraft:docs/gameplay-design.md, with its open questions and, once #62
-   adds it, its deviations table. smashcraft:docs/delivery-goal.md lists each current fighter's
+   smashcraft:docs/gameplay-design.md, with its deviations from Melee and
+   open questions. smashcraft:docs/delivery-goal.md lists each current fighter's
    required moves and approved custom mechanics.
 
 #62 owns combat geometry, hurtboxes that follow animation, trade-offs as
@@ -57,11 +56,14 @@ numbers and the model of fun; link its results rather than restating them.
   pass the zero-agency detector (#68, in progress): no stretch where the
   victim's input changes nothing and loops without escape. Until it lands,
   name each guaranteed string and the victim inputs you checked.
-- **Interaction graph.** Evaluate a new move's options on shield, landing,
-  ledge, tech and out-of-shield situations with #67's tool (in progress);
-  until then use smashcraft:tools/move-data/compare.sh and its rule that
-  greater shield damage must cost later recovery or an earlier defender
-  response (smashcraft:docs/move-comparisons.md).
+- **Interaction graph.** Read smashcraft:docs/design/interaction-graph.md,
+  then evaluate every new or changed move with
+  `bun wisp interactions --move FIGHTER:MOVE` (from ts/, for example
+  `rifleman:down-tilt`): it plays the fighter's shield, landing, ledge, tech,
+  out-of-shield and neutral situations and prints every place the move
+  appears, its frame advantage and punishes, and what changed in the graph.
+  Keep the move-comparison rule that greater shield damage must cost later
+  recovery or an earlier defender response (smashcraft:docs/move-comparisons.md).
 - **Windows.** Any required window stays inside the bounds Tom has accepted
   in gameplay-design.md; proposals are in execution-windows.md.
 - **Direction, not yet a rule:** fighters generally need launchers into
@@ -206,37 +208,42 @@ From smashcraft:ts/ unless noted. Through the machine-capacity helper
    rules it pins (pattern: the per-fighter down-air and down-tilt tests in
    sim/normals.tests.ts) and see it fail without the change. Focused:
    `GAME_TESTS=sim/normals bun test test/game.test.ts -t NAME`; `bun run check`.
-3. **Move data.** From the repository root, in this order, because the
+3. **Interaction graph.** For every new or changed move,
+   `bun wisp interactions --move FIGHTER:MOVE` (about 10 s, capacity scope):
+   read where it wins, loses and punishes, and record what changed. Then
+   `bun wisp interactions` rewrites smashcraft:tools/move-data/interactions/.
+4. **Move data.** From the repository root, in this order, because the
    reference join reads the checked-in snapshots:
-   `tools/move-data/export.sh --check`, then `compare.sh --check`, then
-   `reference.sh --check`. On a difference, diff
+   `tools/move-data/export.sh --check`, then `compare.sh --check` (it also
+   runs `interactions --check`, which fails until step 3 rewrote the graph),
+   then `reference.sh --check`. On a difference, diff
    smashcraft:build/move-*/ against smashcraft:tools/move-data/, confirm only
    intended rows changed, copy the generated file over the snapshot and
    check again. `bun run test` doesn't run these checks.
-4. **Shared rules.** `bun wisp oracle` (0 mismatches; it checks shared rules
+5. **Shared rules.** `bun wisp oracle` (0 mismatches; it checks shared rules
    and borrowed movement, not move damage). A new fighter declares the rows
    it borrows in ts/scripts/meleeOracle.ts. `bun wisp headless` plays the
    quick match in two simulated clients (`headless desync` is a detector
    self-test that must report a desync, not a gate).
-5. **After soak and record.** Same soak command and seed;
+6. **After soak and record.** Same soak command and seed;
    `bun scripts/soakOutcomes.ts FILE` summarizes each run. Put the raw
    files and a README in smashcraft:evidence/<topic>-<yyyymmdd>/, add a
    before/after section to smashcraft:docs/move-comparisons.md, and correct
    any doc sentence that states the old value.
-6. **Publication gates.** Merge `origin/main` (and rerun
+7. **Publication gates.** Merge `origin/main` (and rerun
    `bun install --frozen-lockfile` when it changed ts/wisp.lock), then `bun run check`,
    `bun run test`, `LUA=<lua32> bun scripts/lua-tests.ts`,
    `LUA=<lua32> bun wisp tapes` and `LUA=<lua32> bun wisp parity numeric`
    (both also need a toward-zero Lua: `TOWARD_ZERO_LUA`, or built with nix
    on first use), `bun scripts/unused-code.ts`, `bun wisp oracle`,
    `CI_TIMING=report bun scripts/ci.ts`, then `safe-push --to main`.
-7. **Map build.** Reuse the newest candidate's private inputs: the first
+8. **Map build.** Reuse the newest candidate's private inputs: the first
    line of ~/.local/share/smashcraft-build-inputs/playable-00NN/build*.log is
    its exact command (smashcraft:docs/playable-00NN.md can lag behind it):
    `bun wisp build --profile main|playable --base BASE.w3m --container CONTAINER.w3x --assets DIR --summon DIR --name NAME --out OUT.w3x`.
    A diagnostic build takes its own name and folder, never the next
    `Smashcraft 0.0.N`; only a release candidate takes that number.
-8. **Native, by the native owner only.** Name the exact map and commands
+9. **Native, by the native owner only.** Name the exact map and commands
    for them: `bun wisp fresh MAP.w3x` (development profile, `-dev quick`),
    `bun wisp hot --data A --data B --watch` for later saves,
    `bun wisp parity capture --bot ...` for a bot session
