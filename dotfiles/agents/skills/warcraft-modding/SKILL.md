@@ -152,3 +152,10 @@ owner drives it. Everything else runs in parallel around it.
   evidence, Smashcraft #73, 6 Oct 2026).
 - Drive and observe through existing instrumentation (menu WebSocket, map
   receipts and journal, War3Log) before screenshots or OCR.
+- Before clicking, reading or waiting on a client, ask `wisp watch` what it is
+  doing (wisp:docs/watch.md; Smashcraft: `bun wisp watch --once`, `bun wisp
+  client wait CLIENT STATE...`): signed in, menu screen, lobby, loading, in
+  match, results, disconnected or crashed, its map's load errors and the
+  ladder scan, each from the menu socket, War3Log, crash reports, receipts or
+  processes. In host code wait with `waitFor` and wrap existing waits in
+  `unlessLost`, so a crash or lost Battle.net fails at once.
