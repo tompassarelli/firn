@@ -161,6 +161,9 @@ owner drives it. Everything else runs in parallel around it.
   evidence, Smashcraft #73, 6 Oct 2026).
 - Drive and observe through existing instrumentation (menu WebSocket, map
   receipts and journal, War3Log) before screenshots or OCR.
+- Set up native sessions through in-map commands and receipts (slots,
+  fighters, stage), never pointer clicks or OCR; pixels are for capturing
+  evidence, not for driving.
 - Before clicking, reading or waiting on a client, ask `wisp watch` what it is
   doing (wisp:docs/watch.md; Smashcraft: `bun wisp watch --once`, `bun wisp
   client wait CLIENT STATE...`): signed in, menu screen, lobby, loading, in
