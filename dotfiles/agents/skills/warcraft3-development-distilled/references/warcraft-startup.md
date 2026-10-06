@@ -33,3 +33,18 @@ Scope check: this procedure applies to a Warcraft launch or blank post-login
 menu. An ordinary map leave/rejoin with a working signed-in game does not call
 for a launcher restart. Display clipping alone is a geometry problem until
 evidence establishes otherwise.
+
+On 6 October 2026 the owner started the "Warcraft III (Battle.net)" Steam
+shortcut on the primary display while automation client A's runtime still owned
+the same prefix, creating a second wineserver. With client A then stopped, that
+launcher's Play still failed twice: battle.net logged `Could not launch
+C:/Program Files (x86)/Warcraft III/_retail_/x86_64/Warcraft III.exe (FAILED)`
+and the pending launch expired after 15 s. After fully exiting that launcher
+(tray Exit) and confirming no process remained on the prefix, starting the same
+shortcut alone launched the game on the first Play. A launcher whose runtime
+started against a live prefix stays unable to create the game process; restart
+it as the prefix's only runtime.
+
+Custom Games "Join game name" is case-sensitive: "Smashcraft" returned GAME NOT
+FOUND for a lobby named "smashcraft"; the exact name and its password joined.
+A passworded lobby never appears in another client's Custom Games list.
