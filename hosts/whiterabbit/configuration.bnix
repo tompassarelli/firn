@@ -63,6 +63,10 @@
    ;; that activation independently of a periodic worker which may be hung.
    ;; mkForce: home-manager's nixos module pins its own 5m at equal priority.
    :systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec (lib.mkForce "90s")
+   ;; Framework's airplane-mode key (HID Wireless Radio Control, usage 0x100c6)
+   ;; sends KEY_RFKILL; the owner wants F10 to only ever be F10. Airplane mode
+   ;; stays available as a command (`rfkill block all`).
+   :services.udev.extraHwdb "evdev:input:b0018v32ACp0006*\n KEYBOARD_KEY_100c6=f10\n"
    :myConfig.modules.stylix.chosenTheme "everforest-dark-hard"
    ;; WireGuard client tunnel (wg0) to the Kea worker box. The wireguard module
    ;; (watchdog + wg tools) rides the `vpn` tag; this is just the host's interface
