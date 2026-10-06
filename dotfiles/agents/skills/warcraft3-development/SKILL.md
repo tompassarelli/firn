@@ -215,7 +215,7 @@ project handoff rather than hard-coding transient process IDs into this skill.
 ## Authorized account login
 
 The owner authorized username/password entry for both test accounts. Encrypted
-pairs live in nixos-config:secrets/bnet.yaml (a and b, in source-file order).
+pairs live in nixos-config:secrets/bnet.yaml (a and b, in source-file order; c is the third account added 6 Oct 2026 for the new test client prefix ~/.local/share/wc3-melee/client-a).
 Use the machine SOPS key through sudo; never print decrypted values, put them
 in tool arguments, clipboard, traces or screenshots, or write plaintext files.
 The helper nixos-config:dotfiles/bin/wc3-login-field reads a selected field into
