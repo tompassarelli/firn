@@ -221,6 +221,18 @@ in tool arguments, clipboard, traces or screenshots, or write plaintext files.
 The helper nixos-config:dotfiles/bin/wc3-login-field reads a selected field into
 a pipe and types it into the active private Battle.net/Warcraft window.
 
+Account a is the owner's personal account, reserved for his own play (and the
+main-display `wisp play` install, ~/.local/share/Steam/steamapps/compatdata/3516115571);
+its entry carries owner_reserved_unencrypted and the helper refuses it. Test
+clients use b (client B) and c (new test client A,
+~/.local/share/wc3-melee/client-a). Never sign in, log out, or switch accounts
+on the owner's launcher, and never pass --owner-authorized without the owner's
+explicit authorization in the current session.
+
+Account a always needs the owner's explicit per-session authorization. Standing
+case: on 6 Oct 2026 Tom authorized running `wisp play` on a's install for
+Wisp#14/#73 checks only, with no sign-in, logout or account changes.
+
 First verify a real login form and the focused target field, using text/OCR
 without retaining account text. Use separate account/prefix bindings for A/B.
 Run the helper with the exact private run, account a|b|c, and username|password
