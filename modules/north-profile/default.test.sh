@@ -4,7 +4,7 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 source_file=$repo/modules/north-profile/default.bnix
 generated_file=$repo/modules/north-profile/default.nix
-firn_skill=$repo/modules/north-profile/firn/skills/firn-distilled/SKILL.md
+firn_skill=$repo/modules/north-profile/firn/skills/firn/SKILL.md
 checker=$repo/scripts/agent-config-check.sh
 claude_projection=$repo/modules/north-profile/claude-hooks.json
 claude_projector=$repo/modules/north-profile/claude-hook-projector.sh
@@ -24,7 +24,7 @@ if rg -n 'agent-profile|\.config/agents|profiles/tom|\.agents/docs' \
   exit 1
 fi
 
-grep -Fq 'name: firn-distilled' "$firn_skill"
+grep -Fq 'name: firn' "$firn_skill"
 grep -Fq 'modules/north-profile/default.bnix' "$checker"
 grep -Fq 'projectNorthClaudeHooks' "$source_file"
 grep -Fq 'projectNorthClaudeHooks' "$generated_file"

@@ -4,77 +4,43 @@
   "role": "operator",
   "rootOrder": [
     "agent-machinery",
-    "webdev-distilled",
-    "importing-skills-distilled",
-    "threejs-animation-distilled",
-    "threejs-fundamentals-distilled",
-    "threejs-geometry-distilled",
-    "threejs-interaction-distilled",
-    "threejs-lighting-distilled",
-    "threejs-loaders-distilled",
-    "threejs-materials-distilled",
-    "threejs-postprocessing-distilled",
-    "threejs-shaders-distilled",
-    "threejs-textures-distilled",
-    "clause-authoring-distilled",
-    "game-design-prototyping-distilled",
-    "warcraft3-development-distilled",
-    "warcraft-modding-distilled",
-    "effect-development-distilled",
-    "wurst-development-distilled",
-    "smashcraft-character-creation-distilled",
-    "private-desktop-development-distilled",
-    "image-context-budget-distilled",
-    "greywrought-development-distilled",
-    "firn-distilled",
-    "nix-development-distilled",
-    "repo-safety-distilled",
-    "resource-safe-search-distilled",
-    "machine-capacity-distilled",
-    "todo-distilled",
-    "convo-distilled",
-    "guard-authoring-distilled",
-    "cloudflare-deploy-distilled",
-    "digitalocean-access-distilled",
-    "estimate-distilled",
-    "agent-policy-distilled",
-    "agent-runtime-incident-distilled",
-    "project-structure-distilled",
-    "comment-bloat-guard",
-    "agent-policy-reference",
-    "agent-run-design-reference",
-    "build-vs-reuse-reference",
-    "cloudflare-deploy-reference",
-    "convo-reference",
-    "estimate-reference",
-    "external-code-reference",
-    "firn-reference",
-    "greenfield-reference",
-    "guard-authoring-reference",
-    "importing-skills-reference",
-    "planning-reference",
-    "prior-art-reference",
-    "production-hardening-reference",
-    "program-craftsmanship-reference",
-    "program-stewardship-reference",
-    "project-structure-reference",
-    "repo-safety-reference",
-    "rust-development-reference",
-    "skill-maintenance-reference",
-    "terse-reference",
-    "threejs-animation-reference",
-    "threejs-fundamentals-reference",
-    "threejs-geometry-reference",
-    "threejs-interaction-reference",
-    "threejs-lighting-reference",
-    "threejs-loaders-reference",
-    "threejs-materials-reference",
-    "threejs-postprocessing-reference",
-    "threejs-shaders-reference",
-    "threejs-textures-reference",
-    "todo-reference",
-    "verification-reference",
-    "webdev-reference"
+    "webdev",
+    "importing-skills",
+    "threejs-animation",
+    "threejs-fundamentals",
+    "threejs-geometry",
+    "threejs-interaction",
+    "threejs-lighting",
+    "threejs-loaders",
+    "threejs-materials",
+    "threejs-postprocessing",
+    "threejs-shaders",
+    "threejs-textures",
+    "clause-authoring",
+    "game-design-prototyping",
+    "warcraft3-development",
+    "warcraft-modding",
+    "effect-development",
+    "wurst-development",
+    "smashcraft-character-creation",
+    "private-desktop-development",
+    "image-context-budget",
+    "greywrought-development",
+    "firn",
+    "nix-development",
+    "repo-safety",
+    "resource-safe-search",
+    "machine-capacity",
+    "todo",
+    "convo",
+    "guard-authoring",
+    "cloudflare-deploy",
+    "digitalocean-access",
+    "estimate",
+    "agent-policy",
+    "agent-runtime-incident",
+    "project-structure",
+    "comment-bloat-guard"
   ],
   "baselines": [
     {
@@ -134,68 +100,52 @@
     }
   ],
   "registrations": {
-    "agent-policy-distilled": {
+    "agent-policy": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/agent-policy-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/agent-policy/SKILL.md"
       }
     },
-    "agent-runtime-incident-distilled": {
+    "agent-runtime-incident": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/agent-runtime-incident-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/agent-runtime-incident/SKILL.md"
       }
     },
-    "agent-policy-reference": {
+    "cloudflare-deploy": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/agent-policy-reference/SKILL.md"
+        "path": "dotfiles/agents/skills/cloudflare-deploy/SKILL.md"
       }
     },
-    "cloudflare-deploy-distilled": {
+    "digitalocean-access": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/cloudflare-deploy-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/digitalocean-access/SKILL.md"
       }
     },
-    "digitalocean-access-distilled": {
+    "clause-authoring": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/digitalocean-access-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/clause-authoring/SKILL.md"
       }
     },
-    "cloudflare-deploy-reference": {
+    "greywrought-development": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/cloudflare-deploy-reference/SKILL.md"
-      }
-    },
-    "clause-authoring-distilled": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/clause-authoring-distilled/SKILL.md"
-      }
-    },
-    "greywrought-development-distilled": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/greywrought-development-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/greywrought-development/SKILL.md"
       }
     },
     "comment-bloat-guard": {
@@ -208,20 +158,12 @@
         "path": "dotfiles/agents/hooks/comment-bloat-guard.sh"
       }
     },
-    "convo-distilled": {
+    "convo": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/convo-distilled/SKILL.md"
-      }
-    },
-    "convo-reference": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/convo-reference/SKILL.md"
+        "path": "dotfiles/agents/skills/convo/SKILL.md"
       }
     },
     "concrete-model-identity-guard": {
@@ -244,44 +186,28 @@
         "path": "dotfiles/agents/hooks/corpus-scan-guard.sh"
       }
     },
-    "estimate-distilled": {
+    "estimate": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/estimate-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/estimate/SKILL.md"
       }
     },
-    "estimate-reference": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/estimate-reference/SKILL.md"
-      }
-    },
-    "firn-distilled": {
+    "firn": {
       "kind": "skill",
       "category": "nixos",
       "owner": {
         "repo": "nixos-config",
-        "path": "modules/north-profile/firn/skills/firn-distilled/SKILL.md"
+        "path": "modules/north-profile/firn/skills/firn/SKILL.md"
       }
     },
-    "firn-reference": {
+    "nix-development": {
       "kind": "skill",
       "category": "nixos",
       "owner": {
         "repo": "nixos-config",
-        "path": "modules/north-profile/firn/skills/firn-reference/SKILL.md"
-      }
-    },
-    "nix-development-distilled": {
-      "kind": "skill",
-      "category": "nixos",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/nix-development-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/nix-development/SKILL.md"
       }
     },
     "firn-system-policy": {
@@ -304,20 +230,12 @@
         "path": "dotfiles/agents/hooks/git-blind-stage-guard.sh"
       }
     },
-    "guard-authoring-distilled": {
+    "guard-authoring": {
       "kind": "skill",
       "category": "agents",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/guard-authoring-distilled/SKILL.md"
-      }
-    },
-    "guard-authoring-reference": {
-      "kind": "skill",
-      "category": "agents",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/guard-authoring-reference/SKILL.md"
+        "path": "dotfiles/agents/skills/guard-authoring/SKILL.md"
       }
     },
     "launch-critical-worktree-guard": {
@@ -330,52 +248,36 @@
         "path": "dotfiles/agents/hooks/launch-critical-worktree-guard.sh"
       }
     },
-    "project-structure-distilled": {
+    "project-structure": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/project-structure-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/project-structure/SKILL.md"
       }
     },
-    "project-structure-reference": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/project-structure-reference/SKILL.md"
-      }
-    },
-    "repo-safety-distilled": {
+    "repo-safety": {
       "kind": "skill",
       "category": "git",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/repo-safety-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/repo-safety/SKILL.md"
       }
     },
-    "repo-safety-reference": {
-      "kind": "skill",
-      "category": "git",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/repo-safety-reference/SKILL.md"
-      }
-    },
-    "resource-safe-search-distilled": {
+    "resource-safe-search": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/resource-safe-search-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/resource-safe-search/SKILL.md"
       }
     },
-    "machine-capacity-distilled": {
+    "machine-capacity": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/machine-capacity-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/machine-capacity/SKILL.md"
       }
     },
     "resource-safe-search-guard": {
@@ -398,20 +300,12 @@
         "path": "dotfiles/agents/hooks/session-kill-guard.sh"
       }
     },
-    "todo-distilled": {
+    "todo": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/todo-distilled/SKILL.md"
-      }
-    },
-    "todo-reference": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/todo-reference/SKILL.md"
+        "path": "dotfiles/agents/skills/todo/SKILL.md"
       }
     },
     "tripwire-guard": {
@@ -424,75 +318,103 @@
         "path": "dotfiles/agents/hooks/tripwire-guard.sh"
       }
     },
-    "game-design-prototyping-distilled": {
+    "game-design-prototyping": {
       "kind": "skill",
       "category": "games",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/game-design-prototyping-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/game-design-prototyping/SKILL.md"
       }
     },
-    "smashcraft-character-creation-distilled": {
+    "smashcraft-character-creation": {
       "kind": "skill",
       "category": "games",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/smashcraft-character-creation-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/smashcraft-character-creation/SKILL.md"
       }
     },
-    "private-desktop-development-distilled": {
+    "private-desktop-development": {
       "kind": "skill",
       "category": "games",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/private-desktop-development-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/private-desktop-development/SKILL.md"
       }
     },
-    "image-context-budget-distilled": {
+    "image-context-budget": {
       "kind": "skill",
       "category": "development",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/image-context-budget-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/image-context-budget/SKILL.md"
       }
     },
-    "warcraft3-development-distilled": {
+    "warcraft3-development": {
       "kind": "skill",
       "category": "games",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/warcraft3-development-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/warcraft3-development/SKILL.md"
       }
     },
-    "warcraft-modding-distilled": {
+    "warcraft-modding": {
       "kind": "skill",
       "category": "games",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/warcraft-modding-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/warcraft-modding/SKILL.md"
       }
     },
-    "wurst-development-distilled": {
+    "wurst-development": {
       "kind": "skill",
       "category": "games",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/wurst-development-distilled/SKILL.md"
+        "path": "dotfiles/agents/skills/wurst-development/SKILL.md"
       }
     }
   },
   "activation": {
-    "warcraft3-development-distilled": {
-      "distributions": [{ "type": "skill", "targets": ["shared"] }]
+    "warcraft3-development": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
     },
-    "smashcraft-character-creation-distilled": {
-      "distributions": [{ "type": "skill", "targets": ["shared"] }]
+    "smashcraft-character-creation": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
     },
-    "private-desktop-development-distilled": {
-      "distributions": [{ "type": "skill", "targets": ["shared"] }]
+    "private-desktop-development": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
     },
-    "image-context-budget-distilled": {
-      "distributions": [{ "type": "skill", "targets": ["shared"] }]
+    "image-context-budget": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
     },
     "agent-machinery": {
       "distributions": [
@@ -518,7 +440,7 @@
         }
       ]
     },
-    "agent-policy-distilled": {
+    "agent-policy": {
       "distributions": [
         {
           "type": "skill",
@@ -528,7 +450,7 @@
         }
       ]
     },
-    "agent-runtime-incident-distilled": {
+    "agent-runtime-incident": {
       "distributions": [
         {
           "type": "skill",
@@ -538,27 +460,7 @@
         }
       ]
     },
-    "agent-run-design-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "agent-run-design-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "agent-policy-reference": {
+    "agent-run-design": {
       "distributions": [
         {
           "type": "skill",
@@ -619,7 +521,7 @@
         }
       ]
     },
-    "babashka-development-distilled": {
+    "babashka-development": {
       "distributions": [
         {
           "type": "skill",
@@ -629,7 +531,7 @@
         }
       ]
     },
-    "build-vs-reuse-distilled": {
+    "build-vs-reuse": {
       "distributions": [
         {
           "type": "skill",
@@ -639,7 +541,7 @@
         }
       ]
     },
-    "build-vs-reuse-reference": {
+    "ceremony-budget": {
       "distributions": [
         {
           "type": "skill",
@@ -649,7 +551,7 @@
         }
       ]
     },
-    "ceremony-budget-distilled": {
+    "competitive-development-loop": {
       "distributions": [
         {
           "type": "skill",
@@ -659,7 +561,7 @@
         }
       ]
     },
-    "competitive-development-loop-distilled": {
+    "cloudflare-deploy": {
       "distributions": [
         {
           "type": "skill",
@@ -669,7 +571,7 @@
         }
       ]
     },
-    "cloudflare-deploy-distilled": {
+    "digitalocean-access": {
       "distributions": [
         {
           "type": "skill",
@@ -679,7 +581,7 @@
         }
       ]
     },
-    "digitalocean-access-distilled": {
+    "clause-authoring": {
       "distributions": [
         {
           "type": "skill",
@@ -689,27 +591,7 @@
         }
       ]
     },
-    "cloudflare-deploy-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "clause-authoring-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "greywrought-development-distilled": {
+    "greywrought-development": {
       "distributions": [
         {
           "type": "skill",
@@ -729,17 +611,7 @@
         }
       ]
     },
-    "convo-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "convo-reference": {
+    "convo": {
       "distributions": [
         {
           "type": "skill",
@@ -751,7 +623,7 @@
     },
     "concrete-model-identity-guard": {
       "supports": [
-        "todo-distilled"
+        "todo"
       ],
       "distributions": [
         {
@@ -764,7 +636,7 @@
     },
     "corpus-scan-guard": {
       "supports": [
-        "convo-distilled"
+        "convo"
       ],
       "distributions": [
         {
@@ -776,7 +648,7 @@
         }
       ]
     },
-    "estimate-distilled": {
+    "estimate": {
       "distributions": [
         {
           "type": "skill",
@@ -786,7 +658,7 @@
         }
       ]
     },
-    "estimate-reference": {
+    "external-code": {
       "distributions": [
         {
           "type": "skill",
@@ -796,7 +668,7 @@
         }
       ]
     },
-    "external-code-distilled": {
+    "firn": {
       "distributions": [
         {
           "type": "skill",
@@ -806,37 +678,7 @@
         }
       ]
     },
-    "external-code-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "firn-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "firn-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "nix-development-distilled": {
+    "nix-development": {
       "distributions": [
         {
           "type": "skill",
@@ -848,7 +690,7 @@
     },
     "firn-system-policy": {
       "supports": [
-        "firn-distilled"
+        "firn"
       ],
       "distributions": [
         {
@@ -868,7 +710,7 @@
     },
     "git-blind-stage-guard": {
       "supports": [
-        "repo-safety-distilled"
+        "repo-safety"
       ],
       "distributions": [
         {
@@ -880,7 +722,7 @@
         }
       ]
     },
-    "greenfield-distilled": {
+    "greenfield": {
       "distributions": [
         {
           "type": "skill",
@@ -890,7 +732,7 @@
         }
       ]
     },
-    "greenfield-reference": {
+    "guard-authoring": {
       "distributions": [
         {
           "type": "skill",
@@ -900,37 +742,7 @@
         }
       ]
     },
-    "guard-authoring-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "guard-authoring-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "importing-skills-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "importing-skills-reference": {
+    "importing-skills": {
       "distributions": [
         {
           "type": "skill",
@@ -942,7 +754,7 @@
     },
     "launch-critical-worktree-guard": {
       "supports": [
-        "repo-safety-distilled"
+        "repo-safety"
       ],
       "distributions": [
         {
@@ -954,7 +766,7 @@
         }
       ]
     },
-    "planning-distilled": {
+    "planning": {
       "distributions": [
         {
           "type": "skill",
@@ -964,7 +776,7 @@
         }
       ]
     },
-    "planning-reference": {
+    "prior-art": {
       "distributions": [
         {
           "type": "skill",
@@ -974,7 +786,7 @@
         }
       ]
     },
-    "prior-art-distilled": {
+    "production-hardening": {
       "distributions": [
         {
           "type": "skill",
@@ -984,7 +796,7 @@
         }
       ]
     },
-    "prior-art-reference": {
+    "program-craftsmanship": {
       "distributions": [
         {
           "type": "skill",
@@ -994,7 +806,7 @@
         }
       ]
     },
-    "production-hardening-distilled": {
+    "program-stewardship": {
       "distributions": [
         {
           "type": "skill",
@@ -1004,7 +816,7 @@
         }
       ]
     },
-    "production-hardening-reference": {
+    "project-structure": {
       "distributions": [
         {
           "type": "skill",
@@ -1014,7 +826,7 @@
         }
       ]
     },
-    "program-craftsmanship-distilled": {
+    "repo-safety": {
       "distributions": [
         {
           "type": "skill",
@@ -1024,7 +836,7 @@
         }
       ]
     },
-    "program-craftsmanship-reference": {
+    "resource-safe-search": {
       "distributions": [
         {
           "type": "skill",
@@ -1034,77 +846,7 @@
         }
       ]
     },
-    "program-stewardship-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "program-stewardship-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "project-structure-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "project-structure-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "repo-safety-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "repo-safety-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "resource-safe-search-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "machine-capacity-distilled": {
+    "machine-capacity": {
       "distributions": [
         {
           "type": "skill",
@@ -1116,7 +858,7 @@
     },
     "resource-safe-search-guard": {
       "supports": [
-        "resource-safe-search-distilled"
+        "resource-safe-search"
       ],
       "distributions": [
         {
@@ -1127,17 +869,7 @@
         }
       ]
     },
-    "rust-development-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "rust-development-reference": {
+    "rust-development": {
       "distributions": [
         {
           "type": "skill",
@@ -1149,7 +881,7 @@
     },
     "session-kill-guard": {
       "supports": [
-        "repo-safety-distilled",
+        "repo-safety",
         "agent-machinery"
       ],
       "distributions": [
@@ -1162,7 +894,7 @@
         }
       ]
     },
-    "skill-maintenance-distilled": {
+    "skill-maintenance": {
       "distributions": [
         {
           "type": "skill",
@@ -1172,7 +904,7 @@
         }
       ]
     },
-    "skill-maintenance-reference": {
+    "terse": {
       "distributions": [
         {
           "type": "skill",
@@ -1182,7 +914,7 @@
         }
       ]
     },
-    "terse-distilled": {
+    "threejs-animation": {
       "distributions": [
         {
           "type": "skill",
@@ -1192,7 +924,7 @@
         }
       ]
     },
-    "terse-reference": {
+    "threejs-fundamentals": {
       "distributions": [
         {
           "type": "skill",
@@ -1202,7 +934,7 @@
         }
       ]
     },
-    "threejs-animation-distilled": {
+    "threejs-geometry": {
       "distributions": [
         {
           "type": "skill",
@@ -1212,7 +944,7 @@
         }
       ]
     },
-    "threejs-animation-reference": {
+    "threejs-interaction": {
       "distributions": [
         {
           "type": "skill",
@@ -1222,7 +954,7 @@
         }
       ]
     },
-    "threejs-fundamentals-distilled": {
+    "threejs-lighting": {
       "distributions": [
         {
           "type": "skill",
@@ -1232,7 +964,7 @@
         }
       ]
     },
-    "threejs-fundamentals-reference": {
+    "threejs-loaders": {
       "distributions": [
         {
           "type": "skill",
@@ -1242,7 +974,7 @@
         }
       ]
     },
-    "threejs-geometry-distilled": {
+    "threejs-materials": {
       "distributions": [
         {
           "type": "skill",
@@ -1252,7 +984,7 @@
         }
       ]
     },
-    "threejs-geometry-reference": {
+    "threejs-postprocessing": {
       "distributions": [
         {
           "type": "skill",
@@ -1262,7 +994,7 @@
         }
       ]
     },
-    "threejs-interaction-distilled": {
+    "threejs-shaders": {
       "distributions": [
         {
           "type": "skill",
@@ -1272,7 +1004,7 @@
         }
       ]
     },
-    "threejs-interaction-reference": {
+    "threejs-textures": {
       "distributions": [
         {
           "type": "skill",
@@ -1282,137 +1014,7 @@
         }
       ]
     },
-    "threejs-lighting-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-lighting-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-loaders-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-loaders-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-materials-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-materials-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-postprocessing-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-postprocessing-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-shaders-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-shaders-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-textures-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-textures-reference": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "todo-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "todo-reference": {
+    "todo": {
       "distributions": [
         {
           "type": "skill",
@@ -1424,7 +1026,7 @@
     },
     "tripwire-guard": {
       "supports": [
-        "repo-safety-distilled"
+        "repo-safety"
       ],
       "distributions": [
         {
@@ -1436,7 +1038,7 @@
         }
       ]
     },
-    "verification-distilled": {
+    "verification": {
       "distributions": [
         {
           "type": "skill",
@@ -1446,7 +1048,7 @@
         }
       ]
     },
-    "verification-reference": {
+    "webdev": {
       "distributions": [
         {
           "type": "skill",
@@ -1456,7 +1058,7 @@
         }
       ]
     },
-    "webdev-distilled": {
+    "work-ownership": {
       "distributions": [
         {
           "type": "skill",
@@ -1466,7 +1068,7 @@
         }
       ]
     },
-    "webdev-reference": {
+    "game-design-prototyping": {
       "distributions": [
         {
           "type": "skill",
@@ -1476,7 +1078,7 @@
         }
       ]
     },
-    "work-ownership-distilled": {
+    "warcraft-modding": {
       "distributions": [
         {
           "type": "skill",
@@ -1486,7 +1088,7 @@
         }
       ]
     },
-    "game-design-prototyping-distilled": {
+    "debugging": {
       "distributions": [
         {
           "type": "skill",
@@ -1496,7 +1098,7 @@
         }
       ]
     },
-    "warcraft-modding-distilled": {
+    "effect-development": {
       "distributions": [
         {
           "type": "skill",
@@ -1506,27 +1108,7 @@
         }
       ]
     },
-    "debugging-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "effect-development-distilled": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "wurst-development-distilled": {
+    "wurst-development": {
       "distributions": [
         {
           "type": "skill",

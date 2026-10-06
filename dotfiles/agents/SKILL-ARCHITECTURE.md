@@ -22,10 +22,11 @@ that a provider invokes an event.
 
 ## Guide layout
 
-A distilled guide contains the complete ordinary workflow. A reference entrypoint
-or supporting topic file holds detail for a specific unresolved question. Keep
-scripts, fixtures, and UI metadata with their consuming skill. Reference files
-are not additional skills or a second routinely loaded instruction set.
+Each idea is one skill with a plain name. Its `SKILL.md` contains the complete
+ordinary workflow; its `references/` folder (`notes.md` plus topic files) holds
+detail for a specific unresolved question. Keep scripts, fixtures, and UI
+metadata with their consuming skill. Reference files are not additional skills
+or a second routinely loaded instruction set.
 
 ## Provider bindings
 

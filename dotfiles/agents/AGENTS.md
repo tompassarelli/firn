@@ -10,23 +10,23 @@ Re-evaluate when the target changes. Closer instructions refine broader ones;
 user and system instructions retain precedence.
 
 Start repository discovery and search at the exact checkout or subtree, never
-the `~/code/<project>` container. Load `resource-safe-search-distilled` before
-any broader, container, or virtual-filesystem search.
+the `~/code/<project>` container. Load `resource-safe-search` before any
+broader, container, or virtual-filesystem search.
 
 Inspect the available skill catalog before acting. When the user names a skill
-or the task matches its description, read that distilled `SKILL.md` completely
-and follow it. A distilled skill is the normal complete operating surface:
-never load a linked `*-reference` skill merely because it is linked. Load a
-reference only when the user explicitly requests its detail or when you name a
-specific unresolved question that the distilled workflow cannot answer; record
-that reason in the work update. Load the smallest set that covers the task and
-state the order when several apply. Skills apply for the current turn only; if
-one is unavailable, say so and use the safest supported fallback.
+or the task matches its description, read its `SKILL.md` completely and follow
+it. A skill's `SKILL.md` is the complete normal operating surface: never read
+its `references/` merely because they are linked. Read them only when the user
+explicitly requests that detail or when you name a specific unresolved question
+that `SKILL.md` cannot answer; record that reason in the work update. Load the
+smallest set that covers the task and state the order when several apply.
+Skills apply for the current turn only; if one is unavailable, say so and use
+the safest supported fallback.
 
 ## Keep graphical inspection out of conversation history
 
 Before repeated screenshot or graphical inspection, load
-`image-context-budget-distilled`. Keep captures on disk and return bounded
+`image-context-budget`. Keep captures on disk and return bounded
 text from OCR, application state, or measurements by default. Small previews
 still accumulate across turns; cropping the next image does not remove earlier
 images. After a payload-size failure, send no further inline images, base64,
@@ -116,9 +116,9 @@ declaration grants no exception.
 
 ## Preserve development velocity
 
-- Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification-distilled`.
-- When designing, diagnosing, measuring, or optimizing a repeated edit-to-signal or edit-to-behavior loop, route its latency and invalidation economics → `competitive-development-loop-distilled`.
-- Before sustained multi-core or >1 GiB local work, or admitting a worker expected to run it, preserve machine headroom → `machine-capacity-distilled`.
+- Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification`.
+- When designing, diagnosing, measuring, or optimizing a repeated edit-to-signal or edit-to-behavior loop, route its latency and invalidation economics → `competitive-development-loop`.
+- Before sustained multi-core or >1 GiB local work, or admitting a worker expected to run it, preserve machine headroom → `machine-capacity`.
 
 ## Debug with evidence, not guesses
 
@@ -128,7 +128,7 @@ exact error text or symptom with the product and version. Change one variable
 per experiment. When a good and a bad case exist, trace both and diff to the
 first divergence. Prefer existing instrumentation over screenshots.
 
-- For any non-trivial bug or unexplained behavior, research, reproduce, isolate, and diff good against bad runs → `debugging-distilled`.
+- For any non-trivial bug or unexplained behavior, research, reproduce, isolate, and diff good against bad runs → `debugging`.
 
 ## Select delegated worker models explicitly
 
@@ -161,7 +161,7 @@ actual model only when dispatch or runtime evidence establishes it.
 ## Keep hard boundaries
 
 Before handling disc images or extracted proprietary game files for a
-repository, load `repo-safety-distilled` for the publication boundary.
+repository, load `repo-safety` for the publication boundary.
 
 Never disclose credentials or introduce provider API keys, API-key helpers, or
 API-credit billing. Store secrets only in the encrypted or credential mechanism

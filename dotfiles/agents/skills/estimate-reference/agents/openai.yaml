@@ -1,4 +1,0 @@
-interface:
-  display_name: "Estimate Reference"
-  short_description: "Detailed estimate settlement and receipt rules"
-  default_prompt: "Use $estimate-reference for detailed estimate calibration and settlement rules."

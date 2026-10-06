@@ -28,17 +28,17 @@ export AGENTS_NORTH_BIN="$scratch/bin/north"
 export AGENTS_TEST_LOG="$scratch/calls"
 
 [[ "$($agents status --json)" == 'fixture status' ]]
-[[ "$($agents inspect clause-authoring-distilled --json)" == \
-  'fixture inspect clause-authoring-distilled' ]]
-[[ "$($agents path clause-authoring-distilled)" == \
-  '/fixture/clause-authoring-distilled/SKILL.md' ]]
-[[ "$($agents on clause-authoring-distilled)" == \
-  'fixture on clause-authoring-distilled' ]]
-[[ "$($agents off clause-authoring-distilled)" == \
-  'fixture off clause-authoring-distilled' ]]
+[[ "$($agents inspect clause-authoring --json)" == \
+  'fixture inspect clause-authoring' ]]
+[[ "$($agents path clause-authoring)" == \
+  '/fixture/clause-authoring/SKILL.md' ]]
+[[ "$($agents on clause-authoring)" == \
+  'fixture on clause-authoring' ]]
+[[ "$($agents off clause-authoring)" == \
+  'fixture off clause-authoring' ]]
 [[ "$($agents sync)" == 'fixture sync' ]]
 
-expected=$'config agents status --json\nconfig agents inspect clause-authoring-distilled --json\nconfig agents path clause-authoring-distilled\nconfig agents on clause-authoring-distilled\nconfig agents off clause-authoring-distilled\nconfig agents sync'
+expected=$'config agents status --json\nconfig agents inspect clause-authoring --json\nconfig agents path clause-authoring\nconfig agents on clause-authoring\nconfig agents off clause-authoring\nconfig agents sync'
 [[ "$(<"$AGENTS_TEST_LOG")" == "$expected" ]]
 
 if AGENTS_NORTH_BIN="$scratch/bin/missing" "$agents" status \

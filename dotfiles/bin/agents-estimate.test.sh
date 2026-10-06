@@ -14,12 +14,12 @@ printf '%s\n' "$*" >>"$ESTIMATE_TEST_CALLS"
 shift 2
 case "${1:-}" in
   path)
-    [[ "${2:-}" == estimate-distilled ]]
-    printf '%s\n' "$ESTIMATE_TEST_REPO/dotfiles/agents/skills/estimate-distilled/SKILL.md"
+    [[ "${2:-}" == estimate ]]
+    printf '%s\n' "$ESTIMATE_TEST_REPO/dotfiles/agents/skills/estimate/SKILL.md"
     ;;
   on|off)
-    [[ "${2:-}" == estimate-distilled ]]
-    printf 'generation fixture: estimate-distilled %s\n' "$1"
+    [[ "${2:-}" == estimate ]]
+    printf 'generation fixture: estimate %s\n' "$1"
     ;;
   *) exit 2 ;;
 esac
@@ -33,19 +33,19 @@ ag() {
     "$repo/dotfiles/bin/agents" "$@"
 }
 
-ag on estimate-distilled >/dev/null
-test "$(ag path estimate-distilled)" = "$repo/dotfiles/agents/skills/estimate-distilled/SKILL.md"
+ag on estimate >/dev/null
+test "$(ag path estimate)" = "$repo/dotfiles/agents/skills/estimate/SKILL.md"
 
-ag off estimate-distilled >/dev/null
-test "$(<"$ESTIMATE_TEST_CALLS")" = $'config agents on estimate-distilled\nconfig agents path estimate-distilled\nconfig agents off estimate-distilled'
+ag off estimate >/dev/null
+test "$(<"$ESTIMATE_TEST_CALLS")" = $'config agents on estimate\nconfig agents path estimate\nconfig agents off estimate'
 
-todo_skill="$repo/dotfiles/agents/skills/todo-reference/SKILL.md"
+todo_skill="$repo/dotfiles/agents/skills/todo/references/notes.md"
 grep -Fq '## Attempt and terminal receipt' "$todo_skill"
 grep -Fq 'wall_time_estimate' "$todo_skill"
 grep -Fq 'agent_time_actual' "$todo_skill"
 grep -Fq 'execution_observation' "$todo_skill"
 grep -Fq '[[quality_debt]]' "$todo_skill"
-grep -Fq 'Same-class model-specific samples' "$repo/dotfiles/agents/skills/estimate-reference/SKILL.md"
+grep -Fq 'Same-class model-specific samples' "$repo/dotfiles/agents/skills/estimate/references/notes.md"
 
 python3 - <<'PY'
 import tomllib
