@@ -3,6 +3,8 @@
 # deny — every assertion below checks that the decision is never "deny", in
 # addition to whether the advisory context fires.
 set -uo pipefail
+# Hooks run with the managed hook runtime first on PATH; so do their tests.
+export PATH="/etc/codex/hooks/runtime:$PATH"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 HOOK="$HERE/comment-bloat-guard.sh"

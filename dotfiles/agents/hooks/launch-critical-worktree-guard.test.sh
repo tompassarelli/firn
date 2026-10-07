@@ -7,6 +7,8 @@
 #      switched off, and then it protects nothing. The worktree cases and the
 #      ~/code/north-data sibling are the ones that would regress in practice.
 set -uo pipefail
+# Hooks run with the managed hook runtime first on PATH; so do their tests.
+export PATH="/etc/codex/hooks/runtime:$PATH"
 
 HOOK="$(cd "$(dirname "$0")" && pwd)/launch-critical-worktree-guard.sh"
 pass=0 fail=0

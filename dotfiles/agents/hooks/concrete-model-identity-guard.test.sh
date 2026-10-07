@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
+# Hooks run with the managed hook runtime first on PATH; so do their tests.
+export PATH="/etc/codex/hooks/runtime:$PATH"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_GUARD="$HERE/concrete-model-identity-guard.sh"

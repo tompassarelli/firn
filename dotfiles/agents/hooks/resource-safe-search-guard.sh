@@ -32,10 +32,10 @@ capture_hook_stdin
 # The activity gate and its runtime are optional inputs. Any missing or invalid
 # dependency disables this guard rather than turning an internal failure into a
 # provider-wide tool outage.
-# shellcheck disable=SC1090,SC1091
 authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
 [ -r "$authoring_killswitch" ] \
   || authoring_killswitch="$(dirname "$0")/../lib/authoring-killswitch.sh"
+# shellcheck disable=SC1090,SC1091
 . "$authoring_killswitch" 2>/dev/null || exit 0
 type authoring_guards_off >/dev/null 2>&1 || exit 0
 authoring_guards_off && exit 0

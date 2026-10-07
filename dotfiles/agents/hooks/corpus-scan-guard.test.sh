@@ -5,6 +5,8 @@
 # runs. The fixture builds a fake corpus under a sandbox HOME so the geometry
 # under test is the directory shape, never the live 99 GB tree.
 set -uo pipefail
+# Hooks run with the managed hook runtime first on PATH; so do their tests.
+export PATH="/etc/codex/hooks/runtime:$PATH"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUARD="$HERE/corpus-scan-guard.sh"

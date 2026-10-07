@@ -3,6 +3,8 @@
 # trap: a commit MESSAGE or heredoc body that mentions the trigger phrase
 # must still be ALLOWED — only a command-position invocation is denied.
 set -uo pipefail
+# Hooks run with the managed hook runtime first on PATH; so do their tests.
+export PATH="/etc/codex/hooks/runtime:$PATH"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 HOOK="$HERE/git-blind-stage-guard.sh"

@@ -33,7 +33,7 @@ jq -e '
   [
     .hooks[] | .[] | .hooks[] | select(.type == "command") | .command
   ] as $commands
-  | ($commands | length == 9)
+  | ($commands | length == 8)
     and ($commands | all(
       contains("NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3")
       and contains("PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin")
@@ -50,7 +50,6 @@ jq -e '
 ' "$claude_projection" >/dev/null
 
 for unit in \
-  beagle-session-start \
   corpus-scan-guard \
   firn-system-policy \
   git-blind-stage-guard \

@@ -33,7 +33,6 @@
     systemd.tmpfiles.rules = [
       "d /etc/codex/hooks/lib 0755 root root -"
       (providerAdapter "lib/north-agent-activation.sh")
-      (providerAdapter "beagle-session-start.sh")
       (providerAdapter "firn-system-policy")
       (providerAdapter "concrete-model-identity-guard.sh")
       (providerAdapter "launch-critical-worktree-guard.sh")
