@@ -175,6 +175,8 @@ expect orchestrator-digs-logs fires "worker's job" "$(pre o1 "$game" '"rg -n err
 expect orchestrator-reads-ci fires "worker's job" "$(pre o1 "$game" '"gh run view 37620992094 --repo tompassarelli/smashcraft --log-failed"')"
 expect orchestrator-closes-issue quiet '' "$(pre o1 "$game" '"gh issue close 184 --repo tompassarelli/smashcraft"')"
 expect orchestrator-lands quiet '' "$(pre o1 "$game" '"git -C ~/code/smashcraft/main merge --ff-only native_r2"')"
+worker_pre() { printf '{"hook_event_name":"PreToolUse","session_id":"%s","agent_id":"%s","cwd":"%s","tool_name":"Bash","tool_input":{"command":%s}}' "$1" "$2" "$3" "$4"; }
+expect worker-of-orchestrator-runs-tests quiet '' "$(worker_pre o1 capture_r2 "$game" '"bun test"')"
 expect orchestrator-with-reason quiet '' "$(pre o1 "$game" '"ORCH_RUNS_BECAUSE=\"all eight workers are mid-native-run\" bun test"')"
 expect landed-no-box fires 'closed nothing' "$(stopping false '"Landed 60cacdfe. The original native bot capture completed both matches in 95 seconds; 21 journey tests passed."')"
 expect landed-and-closed quiet '' "$(stopping false '"Landed 60cacdfe and closed #144: all 13 fighters show their spell.\nNeeds you: nothing"')"

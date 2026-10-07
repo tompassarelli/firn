@@ -197,6 +197,13 @@ class State:
             self.lock.close()
 
 
+def agent_key(event):
+    """Workers share their root session's id; each agent keeps its own record."""
+    session = event.get("session_id") or "unknown"
+    agent = event.get("agent_id")
+    return f"{session}--{agent}" if agent else session
+
+
 def minutes(seconds):
     total = int(seconds // 60)
     return f"{total // 60}h {total % 60:02d}m" if total >= 60 else f"{total} min"
@@ -267,7 +274,7 @@ def user_prompt_submit(event):
     prompt = event.get("prompt") or ""
     if prompt.lstrip().startswith("<codex_internal_context"):
         # Goal mode re-prompts on its own; that is not Tom speaking.
-        with State(event.get("session_id")) as state:
+        with State(agent_key(event)) as state:
             if state.get("stop_request"):
                 return context(
                     "UserPromptSubmit",
@@ -275,7 +282,7 @@ def user_prompt_submit(event):
                     "reply ready and end the turn.",
                 )
         return None
-    with State(event.get("session_id")) as state:
+    with State(agent_key(event)) as state:
         state["prompts"] = (state["prompts"] + [prompt])[-PROMPTS_KEPT:]
         elapsed = time.time() - state["started"]
         lines = [
@@ -288,7 +295,7 @@ def user_prompt_submit(event):
             "Don't answer with a new review, verifier, audit, rule, policy or skill "
             "edit. If he asked a question, answer it in your first line."
         )
-    with State(event.get("session_id")) as state:
+    with State(agent_key(event)) as state:
         if STOP_REQUEST.search(prompt):
             state["stop_request"] = {"at": time.time(), "calls": 0}
             lines.append(
@@ -332,7 +339,7 @@ def update_plan(event):
     steps = [s for s in tool_input.get("plan") or [] if isinstance(s, dict)]
     explanation = tool_input.get("explanation") or ""
 
-    with State(event.get("session_id")) as state:
+    with State(agent_key(event)) as state:
         prompts = state["prompts"][-3:]
         quotes = re.findall(r"asked:\s*\"([^\"]{4,})\"", explanation, re.IGNORECASE)
         quoted = any(quoted_in(q, state["prompts"]) for q in quotes)
@@ -503,7 +510,7 @@ def pre_bash(event):
         problem = issue_shape_problem(issue_body(command, cwd), True)
         if problem:
             return deny(f"No. This issue can't close: {problem}. Rewrite it and retry.")
-        with State(event.get("session_id")) as state:
+        with State(agent_key(event)) as state:
             prompts = state["prompts"][-3:]
             if state["opened"] > state["closed"] and not asked_keyword(("issue", "ticket"), prompts):
                 return deny(
@@ -513,7 +520,7 @@ def pre_bash(event):
                 )
         return None
 
-    with State(event.get("session_id")) as state:
+    with State(agent_key(event)) as state:
         spawned = state.get("spawned", 0)
     if spawned and (is_check(command) or WORKER_JOB.search(command)):
         if not re.search(r"\bORCH_RUNS_BECAUSE=(\"[^\"]{8,}\"|'[^']{8,}'|\S{8,})", command):
@@ -527,7 +534,7 @@ def pre_bash(event):
         return None
     if len(rerun_reason(command)) >= 8:
         return None
-    with State(event.get("session_id")) as state:
+    with State(agent_key(event)) as state:
         record = state["passed"].get(check_key(cwd, command))
     if not record:
         return None
@@ -575,7 +582,7 @@ def post_bash(event):
     cwd = event.get("cwd")
     code = exit_code(event.get("tool_response"))
     notes = []
-    with State(event.get("session_id")) as state:
+    with State(agent_key(event)) as state:
         overrun = stop_overrun(state)
         if overrun:
             notes.append(overrun)
@@ -631,13 +638,13 @@ def stop_overrun(state):
 
 
 def post_spawn(event):
-    with State(event.get("session_id")) as state:
+    with State(agent_key(event)) as state:
         state["spawned"] = state.get("spawned", 0) + 1
     return None
 
 
 def post_patch(event):
-    with State(event.get("session_id")) as state:
+    with State(agent_key(event)) as state:
         state["streak"] = 0
         overrun = stop_overrun(state)
     return context("PostToolUse", overrun) if overrun else None
