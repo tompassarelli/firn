@@ -388,6 +388,15 @@ or capacity constraint requires a scoped pause.
   health checks to the selected clients (smashcraft:docs/native-bot-session.md).
   Consume these supported routes (Smashcraft commit 1745c4df) instead of
   adding bespoke doctor/autopsy wrappers or accidentally recovering online A/B.
+- Exact pad pose captures use the original authored `capture` frames. With a
+  scripted quick match, Smashcraft holds each pose locally through Wisp's
+  framebuffer read while simulation and helper inputs continue unchanged
+  (smashcraft:docs/native-bot-session.md). Both drawn receipts must name the
+  requested match and frame; a skipped frame, absent completion or stalled clock
+  makes the run INVALID, retaining earlier successful images. Wisp bounds a
+  framebuffer read to eight seconds and reaps its capture child before returning
+  failure (wisp:docs/player-view.md). `held visual` captures establish the pose;
+  input-to-screen timing requires the live response route below.
 - Keyboard response capture: `bun wisp map build --profile native-input --name NAME --out IMMUTABLE_MAP.w3x`
   retains the playable keyboard path, two-frame delay, rollback and predicted
   pooled fighters, adding developer setup and the response probe (Smashcraft
