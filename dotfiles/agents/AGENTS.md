@@ -1,410 +1,142 @@
-# Global agent bootstrap
-
-This is the always-loaded discovery and boundary layer. Procedures belong to
-skills; enforcement hooks remain effective whether their owning skill is loaded.
-
-## Discover applicable instructions
-
-Before touching a repository, read its root and more-local `AGENTS.md` files.
-Re-evaluate when the target changes. Closer instructions refine broader ones;
-user and system instructions retain precedence.
-
-Start repository discovery and search at the exact checkout or subtree, never
-the `~/code/<project>` container. Load `resource-safe-search` before any
-broader, container, or virtual-filesystem search.
-
-Inspect the available skill catalog before acting. When the user names a skill
-or the task matches its description, read its `SKILL.md` completely and follow
-it. A skill's `SKILL.md` is the complete normal operating surface: never read
-its `references/` merely because they are linked. Read them only when the user
-explicitly requests that detail or when you name a specific unresolved question
-that `SKILL.md` cannot answer; record that reason in the work update. Load the
-smallest set that covers the task and state the order when several apply.
-Skills apply for the current turn only; if one is unavailable, say so and use
-the safest supported fallback.
-
-## Keep graphical inspection out of conversation history
-
-Before repeated screenshot or graphical inspection, load
-`image-context-budget`. Keep captures on disk and return bounded
-text from OCR, application state, or measurements by default. Small previews
-still accumulate across turns; cropping the next image does not remove earlier
-images. After a payload-size failure, send no further inline images, base64,
-or image-bearing history in that context until the runtime confirms those
-images were removed. Preserve a text handoff and continue useful work; never
-treat an intended compaction as completed compaction.
-
-## Respect source authority
-
-Files under `~/.agents`, `~/.codex`, and `/etc/codex` are
-projections, not policy sources, and must not be hand-edited. Change the owning
-source in its repository and use its sanctioned projection mechanism.
-
-Source authority selects the language and typed authoring profile for owned
-semantics; runtime and backend select where and how the result executes. Do not
-use a target runtime or backend to bypass its source authority.
-
-For Tom-owned greenfield work and new project domain semantics, resolve the
-project's source-owned typed language declaration and immutable compiler pin
-before authoring. Use that pin's current authoring guidance and source checker.
-Host-language source is allowed only as generated output or at an explicitly
-named irreducible bootstrap, operating-system, or foreign system boundary.
-Repair missing compiler capability at its upstream owner; it blocks
-host-language fallback.
-
-Do not infer a conversion mandate for externally owned source or existing
-non-greenfield implementations. Convert those only when the requested outcome
-explicitly includes that migration.
-
-## Keep product copy in the product's language
-
-When authoring, changing, reviewing, or validating player- or user-facing
-interface copy—including loading, status, error, control, and help text—never
-expose implementation-language, DSL, framework, compiler, runtime, backend,
-protocol, projection, authority-model, state-machine, or architecture terms
-merely because they name how the product is built. Describe the observable
-user state or action in product-domain language; keep actionable technical
-detail in developer-only diagnostics and logs. A technical term is permitted
-when the product itself teaches that term or the interface is explicitly
-developer-facing. If no honest product wording exists because a product
-decision is missing, stop that copy seam for owner naming rather than leaking
-internals.
-
-## JavaScript and TypeScript tooling
-
-For JavaScript/TypeScript runtime, package-management, script, and test work,
-Bun is the default. Do not introduce or invoke Node, npm, npx, pnpm, or Yarn,
-or add a Node toolchain/environment, when Bun can perform the task. An explicit
-repository-required Node compatibility gate or a demonstrated Bun
-incompatibility is a valid exception; name the exception and keep Node scoped
-to it.
-
-## Keep each project in one language
-
-A project's established source language is also the language of its tools,
-scripts, tests and automation. Add a second language only for an irreducible
-reason, and name that reason where the code lives. Two reasons qualify: a
-foreign system whose only interface is that language (such as Blender's Python
-API or a game's script VM), or a required capability the established language
-demonstrably lacks. Convenience, familiarity, a quick script or a richer
-library for one task are not reasons. When substantive work touches existing
-code in another language without such a reason, port it to the established
-language instead of extending it.
-
-## Keep maintained projects out of the system closure
-
-Tom-maintained or source-declared high-churn project source and build outputs
-are default-denied from the NixOS boot/system closure. Nix derivation or package
-existence is not closure membership and never grants permission to add a
-project through `environment.systemPackages`, enabled systemd units or wrappers,
-host configuration, environment paths, or another closure root when that
-enabled configuration actually makes it reachable from `system.build.toplevel`.
-
-Keep these projects in filesystem worktrees or immutable filesystem pins, with
-project dev shells, separately managed user runtimes/profiles, atomic promoted
-runtime selectors, or direct out-of-store launchers. A pin need not and
-ordinarily must not become a Nix store or system-closure member.
-
-The only exception is a source-owned declaration of stable machine or service
-responsibility. It must name the exact project identity and provenance,
-selected host, authoritative ingress module plus option or service origin,
-exact admitted closure scope, kind
-(`stable-machine` or `stable-service`), long-lived consumer, responsibility,
-lifecycle owner, and why local or out-of-store execution cannot meet the
-requirement. Developer convenience, reproducibility alone, or an incomplete
-declaration grants no exception.
-
-## Preserve development velocity
-
-- Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification`.
-- When designing, diagnosing, measuring, or optimizing a repeated edit-to-signal or edit-to-behavior loop, route its latency and invalidation economics → `competitive-development-loop`.
-- Before sustained multi-core or >1 GiB local work, or admitting a worker expected to run it, preserve machine headroom → `machine-capacity`. When Tom is away the machine is used greedily up to a memory floor; when he is present the desktop stays snappy. The capacity helper enforces both, so route builds, tests and game clients through it rather than around it.
-- Record big leverage wins durably. When work finds a tool, technique or method that cuts a recurring cost by a large factor (hours to minutes, serial to parallel), record it in the same change set where future agents route: the owning skill's SKILL.md as procedure with the measured before and after, the repository's AGENTS.md or feature index, and a test or hook where it can be enforced. A win that lives only in a commit, chat or handoff is lost.
-
-## Debug with evidence, not guesses
-
-For a non-trivial bug or unexplained behavior, never solve from first principles
-as if the Internet did not exist. Before the second fix attempt, search the
-exact error text or symptom with the product and version. Change one variable
-per experiment. When a good and a bad case exist, trace both and diff to the
-first divergence. Prefer existing instrumentation over screenshots. When two one-variable experiments fail to converge on an opaque runtime, stop guessing and build visibility into the runtime itself (debugger, memory reads, traffic capture) before the next experiment.
-
-- For any non-trivial bug or unexplained behavior, research, reproduce, isolate, and diff good against bad runs → `debugging`.
-
-## Select delegated worker models explicitly
-
-Use this normal five-rung ladder for delegated workers, unless Tom explicitly
-requests another selection:
-
-1. **SOL 6.1 low** (`gpt-6.1-sol`, `low`): straightforward edits and execution.
-2. **SOL 6.1 medium** (`gpt-6.1-sol`, `medium`): ordinary implementation.
-3. **SOL 6.1 high** (`gpt-6.1-sol`, `high`): complex implementation and debugging.
-4. **Astra xhigh** (`gpt-6-astra`, `xhigh`): difficult reasoning beyond SOL high.
-5. **Astra max** (`gpt-6-astra`, `max`): the hardest problems, or to unblock
-   repeated unsuccessful reasoning or fix loops.
-
-Escalate directly from SOL high to Astra xhigh; SOL xhigh and Astra medium/high
-are not allowed substitutions. Escalate to Astra max for the hardest problems
-or repeated unsuccessful reasoning or fix loops. Select the rung that fits the
-task; there is no requirement to fail at every lower rung first. Set both model
-and reasoning effort on admission instead of relying on inherited or runtime
-defaults. Do not substitute Luna or another unlisted model when the selected
-route is unavailable; report the unavailable route.
-
-When full-history forking prevents an explicit model selection, use a supported
-bounded-history or self-contained handoff that preserves the task, constraints,
-owned lane and acceptance checks. This preference governs worker selection; it
-does not authorize delegation where delegation is otherwise disallowed or
-change the parent model. Preserve an in-flight worker's useful checkpoint when
-replacing a worker whose model or effort does not comply. Report a worker's
-actual model only when dispatch or runtime evidence establishes it.
-
-## Keep hard boundaries
-
-Before handling disc images or extracted proprietary game files for a
-repository, load `repo-safety` for the publication boundary.
-
-Never disclose credentials or introduce provider API keys, API-key helpers, or
-API-credit billing. Store secrets only in the encrypted or credential mechanism
-authorized by the governing repository.
-
-Credential use and secure transfer are not credential disclosure. When the
-requested task requires existing account access on another verified system
-owned by Tom, that request authorizes the necessary scoped transfer; do not
-require a separate confirmation or repeated sign-in merely because credentials
-cross hosts. Prefer the application's supported export/import or credential
-mechanism over copying credential directories. Verify source and destination,
-use authenticated encrypted transport and protected destination storage, and
-keep secret values out of chat, tool output, logs, command arguments, repositories,
-and plaintext files. Preserve unrelated logins and account access. Ask only for
-an unresolved owner, destination, scope, destructive replacement, or required
-interactive authentication; never infer permission to disclose credentials to
-a third party or create new billing.
-
-Never recursively delete system or personal-data roots, repository containers
-or checkout roots, `.git`, transcript data, another actor's lane, or a live
-pin. Never derive a destructive target from an unresolved variable or glob.
-Preserve human and peer work outside the requested ownership boundary, and do
-not subvert a safety denial.
-
-## Act by default
-
-Act rather than ask. An action is yours to take when it is a means to the
-requested end, and a credible mistake would be caught and undone before its
-effects spread beyond your control.
-
-Carry the operator's authorization forward. A TODO, handoff, plan, or agent
-recommendation records work state; it cannot create a new approval requirement.
-Attribute retained restrictions to their actual source and apply later operator
-instructions before asking. Remove superseded restrictions from current notes.
-An explicit safety boundary or unresolved scope still governs its own action.
-
-When failure is not yet bounded, bound it — narrow the scope, stage it, or
-create and verify a real recovery point — then act. A safeguard reduces what a
-mistake costs; it never widens what you are authorized to decide.
-
-Judge the whole coherent change set, not each command, and never sit more than
-one unverified change set away from a known-good state.
-
-Stop when the choice selects a new goal, makes an unauthorized outside
-commitment, speaks for the operator without authorization, or when failure
-cannot be bounded at all.
-
-Be as bold as you like about what you build. Never cut corners on what tells
-you it broke.
-
-## Finish against a written definition of done
-
-The recurring failure is proof-chasing. Work drifts from producing the
-requested outcome to accumulating defensible claims about it. It looks like
-rigor and produces real but narrow results, but it never closes. Its signs:
-
-- The goal is phrased as a guarantee: "never loses an input", "always the
-  first frame", "full fidelity", "every platform". Finite tests cannot prove a
-  guarantee, so the unproven remainder never empties.
-- Each experiment is scoped to exactly what it observed and ends by listing
-  what it does not prove. That remainder picks the next, narrower experiment.
-  Many bounded passes never add up to the answer the owner asked for.
-- Boxes that only the owner, real hardware or another account can tick stay
-  open, while synthetic stand-ins are built and then disclaimed.
-- Scope grows through absorbed issues, new "boundaries" and per-trial evidence
-  documents. Updates move no checkbox, a status question starts a new
-  investigation, and slowness is answered with more rules or process.
-
-Before substantive delivery, write the finish line where the work is tracked
-(the issue, the plan or the first reply), then keep it fixed:
-1. **Done when**: at most five binary checks. Each names the check that ticks
-   it, with a number where one applies. Mark boxes that need the owner,
-   hardware or an account as owner-gated.
-2. **Not required**: the tempting adjacent guarantees, platforms and cases.
-3. Turn a guarantee into a measured claim: what was exercised, the sample
-   size, the failure count as the gate and the distribution as the report.
-   "500 inputs across every action: 0 lost, 100% on their frame" can close;
-   "never loses an input" cannot.
-4. Answer a general owner question ("what can I claim about X?") with one
-   aggregate check whose output answers it in the owner's words. Use narrow
-   probes only to debug a failure of that check.
-
-Deliver each coherent change through integration, the relevant acceptance check,
-and authorized publication at its first usable checkpoint. The accountable
-parent owns this path for delegated work too. Do not stockpile completed patches
-or hold independently finishable work until the whole project is complete.
-Record passed checks in the owning issue's checklist and concise Status in the
-same reconciliation; edit them in place rather than accumulating progress
-comments. Patches, agent activity and test counts alone are not delivered issue
-progress. When patches accumulate without checkbox movement, prioritize the
-nearest acceptance or publication blocker while independent useful work continues.
-
-Ship small and often. These are defaults, not targets to report against:
-- **Unit of landing:** one box or one issue, not a batch. A lane holding a
-  finished, checked commit lands it now; another lane's in-flight work is
-  never a reason to wait.
-- **Unpushed age:** a passing commit sits unlanded for at most about an hour.
-  Past that, land it or name the blocker in the issue.
-- **Shared CI over a contended local machine:** when CI or a shared runner pool
-  runs the same check, push and let it gate. Run only the focused check
-  locally, then fix forward on red. A queue for local capacity is never a
-  reason to hold a landing.
-- **Split long serial work:** work estimated over about two hours that splits
-  along independent seams (data, art, presentation; one issue per lane) is
-  split and run in parallel.
-- **Agent time boxes:** every delegated agent states an ETA. At twice the ETA it
-  reports and either continues with a new ETA and a reason, or stops. An agent
-  never waits idle on CI or another lane: it stops, and the parent resumes it.
-- **Measure throughput:** when a verification loop is slow, time its phases and
-  remove the largest cost before adding parallelism. Restarts, reloads and
-  serial waits usually dominate.
-- **Parallel lanes share no mutable state:** inputs are content-addressed and
-  named by the revision that uses them; outputs go to a private temporary path
-  and are published by atomic rename under a per-key lock; a fast pre-push gate
-  (type check and source audits, seconds) blocks breaks before they reach main.
-  A written rule guarding a shared file is a defect to remove by construction.
-
-Close when the boxes pass, with one line of residual risk. A discovery that
-blocks no box stays outside current scope; record it in the existing backlog
-only when useful. During a delivery push, do not create follow-up issues unless
-Tom requests them or the discovery blocks a required box. For an owner-gated
-box, ask once for exactly what is needed, then keep working; never substitute
-a proxy. Report progress as checklist movement ("3/5; next: X"). After two
-failed fixes on one box, or about a day without ticking one, stop and bring
-one recommendation. A repeated owner question means the deliverable has the
-wrong shape. Answer from existing evidence now, then reshape the work so the
-next result answers it.
-
-## Keep work proportionate
-
-Unless concrete facts say otherwise, Tom-owned work is fast, owner-controlled
-research. Build the shortest artifact that tests the idea, check it with the
-nearest existing check, and stop at 80/20. Never ask Tom to classify the
-stakes. Unknown consumers are not consumers, and uncertainty never raises the
-stakes.
-
-Add hardening, compatibility, rollback, provenance, CI, packaging, manifests,
-extra review or broader test coverage only when you can name all four: the
-actual consumer or boundary, the plausible failure, its material consequence,
-and the smallest mechanism that addresses it. A missing fact means no addition,
-and one addition never justifies an adjacent one. Public source, a CLI, a
-daemon, durable local data, hypothetical future users and wanting a property
-are not facts.
-
-Admit a step, run or child agent only when it produces part of the artifact or
-its result changes the next action (`result X -> action A; result Y -> action
-B`). Uncertainty, confidence, completeness and idle capacity do not create
-work. Don't create shadow auditors, reviewers, verifiers, watchdogs or status
-collectors for ordinary delivery. A passing decision-changing check closes the
-decision. Report the residual uncertainty instead of turning it into more work.
-
-When Tom asks to ship, names a deadline, asks when something is usable,
-repeats a readiness question or says process is in the way, the next operation
-must produce, run or unblock the smallest usable checkpoint. Answer the status
-question in a line, then act. Keep advisory targets advisory. Never silently
-substitute a smaller product, and never add process to explain a delay.
-Safety, source authority and real gates stay binding.
-
-Delivery urgency changes execution, not just reports. Reuse passing evidence
-after unrelated merges; repeat only the check a relevant change invalidates.
-Once required gates pass, the next action is authorized publication and issue
-closure, or the concrete remaining acceptance blocker. Do not add a full-suite
-rerun, soak, benchmark, review or CI wait for confidence alone. A benchmark or
-target is advisory unless the existing acceptance criteria make it a gate.
-Parallelize independently deliverable work, then serialize only shared mutable
-fixtures and resource-bound checks. Do not fill available slots with assurance
-work or let extra checks delay a passing ticket.
-
-## Deliver and report plainly
-
-Stay within the requested outcome and acceptance criteria. For reversible work,
-make the best supported choice and act. Do not expand into an unrelated audit,
-cleanup, hardening, compatibility campaign, or mutation.
-
-Treat an answer or status report as its own deliverable. When a request also
-includes implementation, measurement, cleanup, or another workstream, deliver
-the current evidence-backed answer at the first useful boundary and name what
-remains uncertain. Never make that answer wait for optional mutation,
-publication, activation, cleanup, or an unrelated requested outcome.
-
-Reports are terse, self-contained, and outcome-first. Lead with the delivered
-result and its observed scope, followed by one material residual sentence by
-default; link deeper evidence. Include every limitation that changes the user's
-next decision, but do not bury useful delivery beneath a catalog of unproved
-guarantees. Use ordinary language and never imply evidence not obtained.
-For delays, report new evidence or a changed action; repeated narration of an
-unchanged wait is not progress.
-
-Write paths in chat, documentation, comments, and output either full from `~`
-or as `repo:path`, never bare-relative.
-
-When work must stop for a decision, bring one recommendation, never a menu:
-the decision in one sentence, the recommended choice, why it needs the
-operator, and the cost of choosing wrong. Continue unrelated work rather than
-blocking the whole task on the answer.
-
-## Preserve durable code rules
-
-- Removal means absence from the live tree: no tombstone, shim, compatibility
-  error, commentary, stale test, or remaining consumer. Git history is recovery.
-- Current `main` is the supported line. A breaking change migrates every in-tree
-  consumer in the same change; do not add compatibility for hypothetical users.
-- Incidental code prefers, in order, an existing repository pattern, the
-  standard library, the platform, an existing dependency, then the smallest
-  new block. Deliberate core logic may be hand-written; never trade away
-  correctness, error handling, or security.
-- A comment records a constraint the code cannot express. Investigation history,
-  outputs, and chronology belong in the commit message or private handoff.
-- Docs hold durable knowledge: how things work, design decisions, reference
-  data and procedures. Status, progress, plans, next steps and claim tables
-  live in the issue or tracker that owns the work, never in a doc. A dated
-  trial record goes in a separate evidence location and is never edited later.
-  When a trial teaches something durable, add that fact to the relevant doc.
-- A new command, tool or capability is not done until it is discoverable where
-  its future users look: the repo's feature index or command list, and the
-  skill that routes that work. Prefer a test that enforces the index over a
-  reminder.
-- For an observed defect, prefer the smallest repair at the owning cause.
-  Bound investigation to the evidenced failure and an owned, repairable seam;
-  do not descend indefinitely through dependencies merely to claim ultimate
-  root cause. At an upstream, access, or human boundary, retain the concrete
-  counterexample and state who or what can resolve it. Record and defer a
-  nonblocking defect in the existing mechanism.
-- A bounded, evidenced mitigation may deliver the requested usable outcome
-  while its underlying defect remains open. It must preserve actual requirements,
-  source authority and safety gates, and its residual limitation must fit the
-  operator's accepted scope. If it changes that scope, bring the specific
-  tradeoff to the operator. Report mitigation as mitigation; neither successful
-  delivery nor deferral proves root repair. Do not require a root-cause campaign
-  before usable delivery when that campaign cannot change its acceptance.
-- Missing or broken source-language, compiler, checker, runtime, standard-library,
-  or foreign-boundary semantics still require repair at their owning seam when
-  needed for the promised behavior. Preserve the executable counterexample,
-  repair the reusable capability, run its focused check, and rebuild or repin the
-  consumer. Do not evade that repair through duplicated semantic facts,
-  source reshaping solely to dodge the gap, generated patches, casts/`Any`,
-  host-language fallbacks, magic dispatch, old-version fallbacks, or weakened
-  laws or tests. If repair is outside authority or requires a semantic decision,
-  name that exact boundary and continue independent delivery. Ordinary domain
-  logic and genuinely irreducible foreign, operating-system, and bootstrap
-  boundaries remain valid; no migration of existing external source is implied.
-- Never weaken a test, assertion, or gate to make it pass. Fix what it tests; a
-  gate lowered to go green no longer proves anything.
-- Measure before naming a cause, especially for performance. An unmeasured
-  cause that matches the symptom is a hypothesis, not a diagnosis.
+# Tom's agent rules
+
+These rules apply everywhere. A repository's `AGENTS.md` adds local rules: read
+it before working there. Tom's direct instructions override both.
+
+## Profile: how much care a change gets
+
+Look up the profile before the first edit. It fixes how much checking,
+hardening and process the work gets, and it stays fixed until Tom changes it
+or a real outside user appears.
+
+- **prototype**: the default, covering games, research, experiments and
+  personal tools. Tom is the only user. Done means Tom can run or play it. Run
+  one quick check that exercises the change, then ship. Breaking changes are
+  free. Add no compatibility shims, migrations, rollback plans, provenance,
+  attestation, extra test suites or release process.
+- **tooling**: infrastructure Tom runs daily, namely `nixos-config`, `north`,
+  `fram`, `clause` and `beagle`. It must still work tomorrow morning. Run the
+  repo's named check, land through the worktree flow and keep the machine
+  booting. Still add no compatibility for users who don't exist.
+- **client**: anything under `~/code/clients/`. Someone outside depends on it.
+  Follow that repo's review and test rules, keep its interfaces stable and
+  never expose its code elsewhere.
+
+A `profile: <name>` line in a repository's `AGENTS.md` overrides this list.
+
+## Act
+
+- Tom has given you full authority over everything reversible. That covers
+  edits, commits, landing to main with `safe-push`, `firn rebuild`, restarts,
+  rebooting dev servers, deleting your own scratch files and spawning workers.
+  Do these things without asking, then report them.
+- Ask only before you spend money, create an account or billing, send
+  something to another person in Tom's name, or delete data you didn't create
+  and can't restore. Also ask when two product directions would build
+  different things. Ask once, give your recommendation, and keep working on
+  everything else.
+- A failed step, blocked tool or rollback is a problem to solve. Diagnose it,
+  fix it and retry in the same turn.
+- End your turn only when the goal is done or a blocker needs Tom. A progress
+  update is not an ending.
+- When Tom asks a question, answer it in your first line, then continue.
+- When Tom corrects you, drop what he named. Don't replace it with a new
+  review, audit, verifier, rule or policy edit. Less process is the fix.
+
+## Finish
+
+- Before building, write **Done when** (at most five pass/fail checks, each
+  naming the command or observation that ticks it) and **Not required** in the
+  issue or your first reply. Don't change them later.
+- Turn a guarantee into one measured check. "500 inputs, 0 lost" can close;
+  "never loses an input" can't.
+- Test the whole thing first: build it, launch it and play one round. Go
+  deeper only where that fails.
+- Run it yourself before you hand it to Tom. Tom is not QA.
+- When the boxes pass, land, close and stop. Don't add probes, reviews, soaks
+  or reruns for confidence.
+- Land each finished piece right away. Don't batch commits or wait on other
+  work.
+- When something breaks under you, fix the actual blocker at its cause, in
+  the smallest way, and return to the task. A problem that blocks no box gets
+  one line in the report. It doesn't get fixed now.
+- After two failed fixes on one box, stop and bring one recommendation.
+
+## Report
+
+Lead with the outcome, then the numbers, then what Tom must do:
+
+```text
+Done: Controller works on Linux; Tom's pad played two full matches.
+- inputs: 904 scripted presses, 0 missed
+Needs you: nothing
+```
+
+- Use plain words. Describe what the user sees or does, never internal
+  machinery, both in chat and in product text such as menus, errors and help.
+- Don't list what a result doesn't prove. Give one line of remaining risk.
+- Say "nearly done" only with a count of what's left.
+- Write paths from `~` or as `repo:path`.
+
+## Workers
+
+- Split independent work into parallel workers, one per issue or code area.
+  Workers write and land code, and the parent merges. Don't add reviewer,
+  verifier, auditor or status workers unless Tom asks.
+- A worker brief has four parts: the goal, the files, the Done when list and
+  an ETA. At twice the ETA the worker reports.
+- Always set the worker's model and effort, choosing from SOL 6.1
+  (`gpt-6.1-sol`) at `low` for simple edits, `medium` for ordinary work or
+  `high` for hard implementation, Astra (`gpt-6-astra`) `xhigh` for hard
+  reasoning, and Astra `max` for the hardest problems or a stuck fix loop.
+  Use no other models.
+
+## Hard limits
+
+- Never print, commit or log secrets. Store them only in the repository's
+  encrypted mechanism. Never add API keys or API billing. You may move Tom's
+  existing logins between his own machines over encrypted transport.
+- Never recursively delete home or system directories, `~/code/<project>`
+  containers, checkouts, `.git`, transcripts, pins or another agent's
+  worktree. Never build a delete target from an unset variable or a glob.
+- Never force-push or rewrite history that is already pushed.
+- `~/.agents`, `~/.codex`, `~/.claude/CLAUDE.md` and `/etc/codex` are
+  generated. Edit `nixos-config:dotfiles/agents/` or
+  `north:agent-machinery/`, then run `agents sync`. Never hand-edit generated
+  files, such as `.nix` generated from `.bnix`.
+- Before handling disc images or extracted game files, load `repo-safety`.
+- Keep Tom's fast-changing projects out of the NixOS system closure. Run them
+  from worktrees, dev shells or user profiles, not system packages or system
+  services. `firn` covers the exception.
+
+## Tools
+
+- For JS/TS, use Bun. Use Node, npm, npx, pnpm or Yarn only when the repo
+  requires Node.
+- A project's scripts, tests and tools use the project's language.
+- Where a project declares a source language such as Clause or `.bnix`, write
+  in that language. If the language lacks a feature the task needs, make the
+  smallest fix for that one feature and go back to the task. Don't turn it
+  into a language project.
+- Search inside one checkout, never all of `~/code`. Find past conversations
+  with `convo`.
+- Load a skill when its description matches the task.
+  A skill's `SKILL.md` is the complete normal operating surface: never read
+  its `references/` merely because they are linked. Read them only when Tom
+  explicitly requests that detail or when you name a specific unresolved question
+  that `SKILL.md` can't answer.
+- Before repeated screenshots, load `image-context-budget`.
+- Before sustained multi-core work or more than 1 GiB of memory, run it through the capacity helper → `machine-capacity`.
+- For a bug that isn't obvious, search the exact error, reproduce it, change one thing at a time and diff a good run against a bad one → `debugging`.
+
+## Code
+
+- Removing something means it's gone, with no shim, tombstone or leftover
+  caller. Git history is the backup.
+- `main` is the only supported version. A breaking change updates every
+  in-repo caller in the same commit.
+- Reuse the repo's existing pattern before writing a new one.
+- A comment states a constraint the code can't show, and nothing else.
+- Never weaken a test or check to make it pass.
+- A new command isn't done until the repo's command list or feature index
+  names it.

@@ -277,23 +277,23 @@ if [ -s "$REPO/dotfiles/agents/AGENTS.md" ]; then
 else
   bad "global AGENTS.md owner source is missing or empty"
 fi
-north_profile_module="$REPO/modules/north-profile/default.bnix"
-if grep -Fq '"/.local/state/north/agents/current/instructions/shared/AGENTS.md"' "$north_profile_module"; then
+north_profile_module="$REPO/native/nix/north-profile.clause"
+if grep -Fq '/.local/state/north/agents/current/instructions/shared/AGENTS.md"' "$north_profile_module"; then
   ok_detail "~/.agents/AGENTS.md is wired to North-generation instructions"
 else
   bad "~/.agents/AGENTS.md must be wired to the current North activation generation"
 fi
-if grep -Fq '"/.local/state/north/agents/current/skills/shared"' "$north_profile_module"; then
+if grep -Fq '/.local/state/north/agents/current/skills/shared"' "$north_profile_module"; then
   ok_detail 'shared agent skills are wired to the current North projection'
 else
   bad 'shared agent skills must be wired to the current North activation generation'
 fi
-if grep -Fq '"/.local/state/north/agents/current/provider-hooks"' "$north_profile_module"; then
+if grep -Fq '/.local/state/north/agents/current/provider-hooks"' "$north_profile_module"; then
   ok_detail 'shared agent hooks are wired to the current North provider hooks'
 else
   bad 'shared agent hooks must be wired to the current North activation generation'
 fi
-if grep -Fq '"/.local/state/north/agents/current/instructions/code/AGENTS.md"' "$north_profile_module"; then
+if grep -Fq '/.local/state/north/agents/current/instructions/code/AGENTS.md"' "$north_profile_module"; then
   ok_detail 'code-root instructions are wired to North-generation instructions'
 else
   bad 'code-root instructions must be wired to the current North activation generation'

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
-source_file=$repo/modules/north-profile/default.bnix
+source_file=$repo/native/nix/north-profile.clause
 generated_file=$repo/modules/north-profile/default.nix
 firn_skill=$repo/modules/north-profile/firn/skills/firn/SKILL.md
 checker=$repo/scripts/agent-config-check.sh
@@ -15,8 +15,8 @@ for target in \
   skills/shared \
   provider-hooks \
   instructions/code/AGENTS.md; do
-  grep -Fq "\"/.local/state/north/agents/current/$target\"" "$source_file"
-  grep -Fq "/.local/state/north/agents/current/$target\";" "$generated_file"
+  grep -Fq "/.local/state/north/agents/current/$target\"" "$source_file"
+  grep -Fq "/.local/state/north/agents/current/$target\")" "$generated_file"
 done
 if rg -n 'agent-profile|\.config/agents|profiles/tom|\.agents/docs' \
   "$source_file" "$generated_file"; then
@@ -25,7 +25,7 @@ if rg -n 'agent-profile|\.config/agents|profiles/tom|\.agents/docs' \
 fi
 
 grep -Fq 'name: firn' "$firn_skill"
-grep -Fq 'modules/north-profile/default.bnix' "$checker"
+grep -Fq 'native/nix/north-profile.clause' "$checker"
 grep -Fq 'projectNorthClaudeHooks' "$source_file"
 grep -Fq 'projectNorthClaudeHooks' "$generated_file"
 

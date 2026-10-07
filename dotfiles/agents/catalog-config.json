@@ -57,6 +57,16 @@
       ]
     },
     {
+      "id": "codex-overlay",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/codex/AGENTS.md"
+      },
+      "targets": [
+        "codex"
+      ]
+    },
+    {
       "id": "code-bootstrap",
       "owner": {
         "repo": "nixos-config",
