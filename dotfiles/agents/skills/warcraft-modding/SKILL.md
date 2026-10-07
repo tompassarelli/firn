@@ -78,6 +78,18 @@ Work from the cheapest check that can answer the question:
    replays the acceptance tapes in compiled Wurst Lua, Bun and 32-bit Lua and
    names the first divergent frame and field, about 6 s cached.
 
+6. **Heavy headless sweeps go to the farm, not this machine.** Smashcraft's
+   repository is public, so GitHub's hosted runners are free (about 20 jobs
+   at once, four cores each). `bun wisp farm balance --wait` plays the
+   level-9, 400-a-pair balance field, one `cpuField --pairs` process a core,
+   and prints the verdict and field table: 4.1 min from dispatch, against
+   about 25 min locally on the shared machine (7 Oct). `bun wisp farm pads
+   --wait` plays every native check script headless against its own `#!`
+   expectations, 17 scripts in 4.2 min. Without `--ref` they measure the
+   checkout's HEAD; a lane commit goes to a scratch `farm/` branch that is
+   deleted after the run. Prefer the farm for any sweep needing no private
+   build inputs or Warcraft client.
+
 Re-host only when the map file itself must change. Before rebuilding and
 rejoining, try hot reload: it keeps the clients, the lobby and the match state.
 
