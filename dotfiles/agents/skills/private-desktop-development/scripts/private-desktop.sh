@@ -12,6 +12,7 @@ Start a private GPU desktop. Ctrl-C ends the session. Default resolution:
 2560x1440. VNC listens only on localhost. Default lifetime: until stopped.
 Use --seconds to set an optional deadline.
 Run directories and logs remain under /run/user/UID until logout.
+VNC tools share one Python environment in the user's disk cache.
 The shared machine-capacity helper bounds CPU and memory; an existing helper
 scope is reused. Do not start two clients sharing one mutable Wine prefix.
 EOF
@@ -101,8 +102,23 @@ for executable in labwc wayvnc wlr-randr grim uv python3 glxinfo setsid flock db
     fi
 done
 umask 077
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/private-desktop
+mkdir -p -- "$cache"
+python_path=$(realpath -- "$(command -v python3)")
+python_id=$(printf '%s' "$python_path" | sha256sum | cut -c1-16)
+venv="$cache/vncdotool-1.4.2-$python_id"
+# Parallel desktops share dependencies, but installation must finish before use.
+exec 8>"$cache/install.lock"
+flock -x 8
+if [[ ! -x "$venv/bin/vncdo" ]]; then
+    [[ -x "$venv/bin/python" ]] || uv venv --python "$python_path" "$venv"
+    uv pip install --python "$venv/bin/python" vncdotool==1.4.2
+fi
+flock -u 8
+exec 8>&-
 run=$(mktemp -d "/run/user/$(id -u)/private-desktop.XXXXXXXX")
 mkdir "$run/runtime" "$run/config"
+ln -s -- "$venv" "$run/venv"
 command -v grim > "$run/grim"
 port_free() {
     python3 - "$1" <<'PY'
@@ -143,8 +159,6 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-uv venv --python python3 "$run/venv"
-uv pip install --python "$run/venv/bin/python" vncdotool==1.4.2
 cat > "$run/startup.sh" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$DISPLAY" > "$PRIVATE_DESKTOP_RUN/display"

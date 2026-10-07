@@ -37,7 +37,11 @@ only when a finite deadline is wanted. Each run gets a private runtime directory
 socket, and an available localhost VNC port. The launcher uses labwc with
 wlroots GLES rendering on the selected DRM render node and contains the session
 in the shared machine-capacity helper's foreground `session` mode, keeping its
-resource allowance for the entire live session. Launch directly or inside a
+resource allowance for the entire live session. VNC tools reuse one Python
+environment under `${XDG_CACHE_HOME:-~/.cache}/private-desktop`, keyed to the
+Python interpreter. Parallel starts wait for its installation; each runtime
+directory holds only a link to it, so stopping desktops does not retain a new
+53 MiB dependency copy in runtime tmpfs. Launch directly or inside a
 helper `session`; an enclosing finite `run` scope still imposes its deadline.
 Do not run two clients against one
 mutable Wine/Proton prefix.
