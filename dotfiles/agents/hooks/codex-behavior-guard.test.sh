@@ -182,6 +182,15 @@ expect landed-no-box fires 'closed nothing' "$(stopping false '"Landed 60cacdfe.
 expect landed-and-closed quiet '' "$(stopping false '"Landed 60cacdfe and closed #144: all 13 fighters show their spell.\nNeeds you: nothing"')"
 expect landed-box-remains quiet '' "$(stopping false '"Landed c0de10c6. #181 is at 3/4; the native capture box remains."')"
 
+# A commander's relay reaches the root session once, after any tool or at Stop.
+mkdir -p "$scratch/state"
+printf 'Workers blocked on native startup retry now.' >"$scratch/state/relay-rr.txt"
+expect relay-skips-worker quiet '' '{"hook_event_name":"PostToolUse","session_id":"rr","agent_id":"capture_r2","tool_name":"collaborationsend_message","tool_input":{},"tool_response":"{}"}'
+expect relay-after-any-tool fires 'retry now' '{"hook_event_name":"PostToolUse","session_id":"rr","tool_name":"collaborationsend_message","tool_input":{},"tool_response":"{}"}'
+expect relay-delivered-once quiet '' '{"hook_event_name":"PostToolUse","session_id":"rr","tool_name":"collaborationsend_message","tool_input":{},"tool_response":"{}"}'
+printf 'Close #163 next.' >"$scratch/state/relay-rr.txt"
+expect relay-at-stop fires 'Close #163 next' "$(printf '{"hook_event_name":"Stop","session_id":"rr","stop_hook_active":false,"last_assistant_message":"Done: closed #147.\\nNeeds you: nothing"}')"
+
 # Other tools skip the interpreter; the off switch and malformed input allow.
 expect other-tool quiet '' '{"hook_event_name":"PreToolUse","session_id":"x","tool_name":"apply_patch","tool_input":{"command":"bun test"}}'
 out="$(prompt k1 '"stop asking, wtf"' | AGENT_NO_AUTHORING_HOOKS=1 "$HOOK" 2>/dev/null)"

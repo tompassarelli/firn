@@ -18,6 +18,9 @@ malformed event allows.
 - PostToolUse(Bash) records passing checks and issue opens and closes, and
   says once when the work passes twice its ETA or after a long run of
   read-only commands with no change; an apply_patch ends that run.
+- A commander's message left in relay-<session>.txt reaches a root session
+  once, as context after its next tool call or as the reason its turn can't
+  end yet.
 - Stop refuses one ending per turn that lands work without accounting for its
   issue box, escalates without having tried, asks
   permission, narrates, hands the check to someone else, lists what isn't
@@ -710,7 +713,44 @@ def stop(event):
     return None
 
 
+def take_relay(event):
+    """A commander's message for a root session, delivered once and removed."""
+    if event.get("agent_id"):
+        return None
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", str(event.get("session_id") or ""))
+    path = STATE_ROOT / f"relay-{safe}.txt"
+    try:
+        text = path.read_text().strip()
+        path.unlink()
+    except OSError:
+        return None
+    return f"Message from Tom's commander: {text}" if text else None
+
+
+def with_relay(event, decision):
+    relay = take_relay(event)
+    if not relay:
+        return decision
+    name = event.get("hook_event_name")
+    if name == "Stop":
+        if decision and decision.get("decision") == "block":
+            decision["reason"] = relay + " " + decision["reason"]
+            return decision
+        return block(relay)
+    if decision and decision.get("hookSpecificOutput", {}).get("permissionDecision") == "deny":
+        return decision
+    extra = (decision or {}).get("hookSpecificOutput", {}).get("additionalContext")
+    return context(name, relay + (" " + extra if extra else ""))
+
+
 def decide(event):
+    name = event.get("hook_event_name")
+    if name in ("PostToolUse", "Stop") and not event.get("stop_hook_active"):
+        return with_relay(event, decide_event(event))
+    return decide_event(event)
+
+
+def decide_event(event):
     name = event.get("hook_event_name")
     tool = event.get("tool_name")
     if name == "UserPromptSubmit":

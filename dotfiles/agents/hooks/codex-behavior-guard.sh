@@ -15,8 +15,10 @@ set -uo pipefail
 payload="$(head -c 1048576)"
 
 # Bound to every tool; only shell commands, patches and plan updates need a decision,
-# so every other tool call exits before paying for an interpreter.
-case "$payload" in
+# so every other tool call exits before paying for an interpreter, unless a
+# commander's relay message is waiting.
+relays=("${CODEX_BEHAVIOR_STATE:-${XDG_RUNTIME_DIR:-/tmp}/codex-behavior}"/relay-*.txt)
+[ -e "${relays[0]}" ] || case "$payload" in
   *'"hook_event_name":"PreToolUse"'*|*'"hook_event_name": "PreToolUse"'*|\
   *'"hook_event_name":"PostToolUse"'*|*'"hook_event_name": "PostToolUse"'*)
     case "$payload" in
