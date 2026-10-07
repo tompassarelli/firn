@@ -87,6 +87,12 @@ old ones close.
 Good: one worker per independent issue, up to machine capacity, and close
 issues before opening new ones.
 
+**A tool you haven't called isn't missing.**
+Bad: searching exec's ALL_TOOLS for send_message, finding nothing, and asking
+Tom to "restore the collaboration tools".
+Good: call send_message directly. Worker tools live in the collaboration
+namespace, the same place spawn_agent does.
+
 **Follow the plan you were given.**
 When a brief or issue gives you an order or procedure, use it. Don't
 rearrange it into your own phases.

@@ -89,6 +89,12 @@ STOP_DISCLAIMERS = re.compile(
     re.IGNORECASE,
 )
 STOP_NEARLY = re.compile(r"\b(nearly|almost) (done|there|finished|complete)\b", re.IGNORECASE)
+STOP_MISSING_TOOL = re.compile(
+    r"\b(tools?|send_message|followup_task|spawn_agent|wait_agent)\b[^.\n]{0,60}"
+    r"\b(missing|unavailable|not available|restored?|gone)\b|"
+    r"\b(lacks?|missing|restore)\b[^.\n]{0,40}\btools?\b",
+    re.IGNORECASE,
+)
 NEGATION = re.compile(r"\b(no|not|don't|dont|stop|without|never|skip|drop|enough)\b[^.!?\n]{0,30}$")
 
 RUNNERS = {
@@ -520,6 +526,13 @@ def stop(event):
     message = (event.get("last_assistant_message") or "").strip()
     if not message:
         return None
+    if STOP_MISSING_TOOL.search(message) and not re.search(r"\berror\b|\bfailed with\b", message, re.IGNORECASE):
+        return block(
+            "No. You say a tool is missing, but you never got an error from calling it. "
+            "Call it directly first. spawn_agent, send_message, followup_task, list_agents "
+            "and wait_agent are direct collaboration tools; exec's ALL_TOOLS lists only "
+            "scripting tools. Report a missing tool only with the error its call returned."
+        )
     final = last_sentence(message[-600:])
     if "needs you:" in message.lower():
         final = ""

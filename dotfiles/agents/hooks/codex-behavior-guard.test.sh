@@ -132,6 +132,10 @@ expect nearly-counted quiet '' "$(stopping false '"Nearly done: 2 of 5 boxes lef
 expect closed-with-number quiet '' "$(stopping false '"Closed #19: four-fighter p95 predicted within 12% of native.\nNeeds you: nothing"')"
 expect already-continued quiet '' "$(stopping true '"Should I push it?"')"
 
+# A tool reported missing without an error from calling it.
+expect invented-missing-tool fires 'never got an error' "$(stopping false '"Yes, there is an orchestration blocker. This turn lacks send_message / followup_task, so five workers are still waiting.\nNeeds you: restore those collaboration tools to this root session."')"
+expect real-missing-tool quiet '' "$(stopping false '"Blocked: shellcheck is unavailable; calling it failed with: command not found.\nNeeds you: nothing, installing it now."')"
+
 # Other tools skip the interpreter; the off switch and malformed input allow.
 expect other-tool quiet '' '{"hook_event_name":"PreToolUse","session_id":"x","tool_name":"apply_patch","tool_input":{"command":"bun test"}}'
 out="$(prompt k1 '"stop asking, wtf"' | AGENT_NO_AUTHORING_HOOKS=1 "$HOOK" 2>/dev/null)"
