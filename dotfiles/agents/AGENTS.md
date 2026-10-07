@@ -274,6 +274,11 @@ Ship small and often. These are defaults, not targets to report against:
 - **Measure throughput:** when a verification loop is slow, time its phases and
   remove the largest cost before adding parallelism. Restarts, reloads and
   serial waits usually dominate.
+- **Parallel lanes share no mutable state:** inputs are content-addressed and
+  named by the revision that uses them; outputs go to a private temporary path
+  and are published by atomic rename under a per-key lock; a fast pre-push gate
+  (type check and source audits, seconds) blocks breaks before they reach main.
+  A written rule guarding a shared file is a defect to remove by construction.
 
 Close when the boxes pass, with one line of residual risk. A discovery that
 blocks no box stays outside current scope; record it in the existing backlog
