@@ -388,6 +388,16 @@ or capacity constraint requires a scoped pause.
   health checks to the selected clients (smashcraft:docs/native-bot-session.md).
   Consume these supported routes (Smashcraft commit 1745c4df) instead of
   adding bespoke doctor/autopsy wrappers or accidentally recovering online A/B.
+- Keyboard response capture: `bun wisp map build --profile native-input --name NAME --out IMMUTABLE_MAP.w3x`
+  retains the playable keyboard path, two-frame delay, rollback and predicted
+  pooled fighters, adding developer setup and the response probe (Smashcraft
+  commit 019983c0). Ctrl+G starts recording and Ctrl+H exports callback/input
+  rows to CustomMapData; the magenta marker identifies the callback drawn in
+  captured pixels. Pair original host input timestamps with framebuffer
+  timestamps: exported game-clock rows alone do not measure press-to-screen
+  latency. Report diagnostic overhead separately; journal integrity uses a
+  different input path. See smashcraft:docs/native-bot-session.md,
+  "Raw playable cost captures".
 - Never hand-drive a broken client. `wisp client doctor [CLIENT...]`
   (wisp:docs/doctor.md) finds each client's state from events and runs its
   known recovery: dropped from Battle.net, crashed, empty Options/Exit Game
