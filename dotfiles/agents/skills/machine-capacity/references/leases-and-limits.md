@@ -35,7 +35,13 @@ held 25-40% for hours while the session slice measured 0%, because the batch
 slice's own quota throttling (Warcraft clients in 2-CPU `moderate` scopes were
 throttled in about 65% of periods) is counted as CPU pressure. Attended batch
 admission instead defers while the session or native slice's own CPU PSI some
-avg10 is at least 10%. The sum of per-job CPU ceilings may exceed the cap:
+avg10 is at least 10%: with the CPU saturated (load 135, system PSI 70%, 24
+extra admitted batch spinners) the session slice measured 6.5% (mostly
+PipeWire, niri 2%) while 5 ms sleeps in the session, app and native slices
+woke with p99 2.1-2.7 ms and max under 4 ms; the batch slice absorbed the
+delay (p99 47 ms). Ten percent therefore fires only when the protected slices
+lose CPU beyond what saturation by low-weight work causes. The sum of per-job
+CPU ceilings may exceed the cap:
 sleeping or serial jobs do not consume their ceilings continuously. Agent reservations
 retain their 768 MiB memory budget without charging remote inference as local
 CPU work. Admission reports CPU pressure separately from CPU ceilings and the

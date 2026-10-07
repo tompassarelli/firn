@@ -26,6 +26,7 @@ const nativeCpuWeight = 200;
 const classNames = new Set(['agent', 'native', 'moderate', 'heavy', 'exclusive']);
 const modes = new Map([['present', 'attended'], ['away', 'unattended'], ['auto', null]]);
 const idleSecondsForUnattended = 600;
+const presenceUnit = 'agent-capacity-presence.service';
 const maximumTimeoutSeconds = 3600;
 const lockStaleMilliseconds = 2000;
 const runLeaseGraceMilliseconds = 5000;
@@ -169,6 +170,76 @@ function setSlice(slice, ...properties) {
 function applyProfile(profile, cores) {
   return setSlice(aggregateSlice, `CPUQuota=${aggregateCpus(profile, cores) * 100}%`)
     && setSlice(nativeSlice, `CPUWeight=${nativeCpuWeight}`, `IOWeight=${nativeCpuWeight}`);
+}
+
+// Input devices that report keys or buttons, minus automation's virtual pads,
+// which must not make an unattended machine look attended. A grabbed physical
+// keyboard is silent here; its remapper's re-emitting device is read instead.
+function presenceDevices() {
+  const devices = [];
+  for (const name of readdirSync('/sys/class/input')) {
+    if (!/^event[0-9]+$/.test(name)) continue;
+    try {
+      const base = `/sys/class/input/${name}/device`;
+      const label = readFileSync(`${base}/name`, 'utf8').trim();
+      const events = Number.parseInt(readFileSync(`${base}/capabilities/ev`, 'utf8').trim(), 16);
+      if ((events & 0x2) !== 0 && !/virtual/i.test(label)) devices.push(`/dev/input/${name}`);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
+  return devices;
+}
+
+async function watchPresence(root) {
+  ensureState(root);
+  const marker = join(root, 'last-input');
+  const readers = new Map();
+  let applied = null;
+  let lastMark = 0;
+  const reconcile = () => {
+    const { profile } = activeProfile(root);
+    if (profile !== applied && applyProfile(profile, readSignals().cores)) {
+      applied = profile;
+      process.stdout.write(`${JSON.stringify({ profile, at: new Date().toISOString() })}\n`);
+    }
+  };
+  const mark = () => {
+    const now = Date.now();
+    if (now - lastMark < 1000) return;
+    lastMark = now;
+    writeFileSync(marker, '', { mode: 0o600 });
+    if (applied === 'unattended') reconcile();
+  };
+  const rescan = () => {
+    for (const device of presenceDevices()) {
+      if (readers.has(device)) continue;
+      const reader = Bun.spawn(['cat', device], { stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' });
+      readers.set(device, reader);
+      (async () => {
+        for await (const _ of reader.stdout) mark();
+        readers.delete(device);
+      })();
+    }
+  };
+  // Idleness is unknown until watched: count it from the watcher's start.
+  if (!existsSync(marker)) writeFileSync(marker, '', { mode: 0o600 });
+  rescan();
+  reconcile();
+  setInterval(() => { rescan(); reconcile(); }, 5000);
+  await new Promise(() => {});
+}
+
+function ensurePresenceWatcher() {
+  const state = Bun.spawnSync(['systemctl', '--user', 'is-active', presenceUnit], {
+    stdin: 'ignore', stdout: 'pipe', stderr: 'ignore',
+  }).stdout.toString().trim();
+  if (state === 'active' || state === 'activating') return;
+  Bun.spawnSync([
+    'systemd-run', '--user', '--quiet', '--collect', `--unit=${presenceUnit}`,
+    '--slice=background.slice', '--property=Restart=on-failure',
+    process.execPath, Bun.main, 'presence',
+  ], { stdin: 'ignore', stdout: 'ignore', stderr: 'inherit' });
 }
 
 function ensureState(root) {
@@ -455,6 +526,14 @@ async function main(argv) {
     return code === 'RUN' ? 0 : 75;
   }
   const root = runtimeRoot();
+  if (operation === 'presence') {
+    if (argv.length !== 1) fail('presence accepts no arguments');
+    return watchPresence(root);
+  }
+  // Fixture runtimes exercise profiles from a recorded marker instead.
+  if (process.env.XDG_RUNTIME_DIR === undefined || root.startsWith(`/run/user/${process.getuid()}/`)) {
+    ensurePresenceWatcher();
+  }
   if (operation === 'mode') {
     if (argv.length > 2) fail('usage: mode [away|present|auto]');
     if (argv.length === 2) {

@@ -118,7 +118,7 @@ declaration grants no exception.
 
 - Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification`.
 - When designing, diagnosing, measuring, or optimizing a repeated edit-to-signal or edit-to-behavior loop, route its latency and invalidation economics → `competitive-development-loop`.
-- Before sustained multi-core or >1 GiB local work, or admitting a worker expected to run it, preserve machine headroom → `machine-capacity`.
+- Before sustained multi-core or >1 GiB local work, or admitting a worker expected to run it, preserve machine headroom → `machine-capacity`. When Tom is away the machine is used greedily up to a memory floor; when he is present the desktop stays snappy. The capacity helper enforces both, so route builds, tests and game clients through it rather than around it.
 - Record big leverage wins durably. When work finds a tool, technique or method that cuts a recurring cost by a large factor (hours to minutes, serial to parallel), record it in the same change set where future agents route: the owning skill's SKILL.md as procedure with the measured before and after, the repository's AGENTS.md or feature index, and a test or hook where it can be enforced. A win that lives only in a commit, chat or handoff is lost.
 
 ## Debug with evidence, not guesses

@@ -38,9 +38,12 @@ profiles set admission. **attended** (Tom present): batch shares cores minus a
 waits for CPU (PSI some avg10 at least 10%); it keeps 20% of RAM available.
 **unattended** (Tom away): greedy, every core, no CPU refusal, only an 8 GiB
 available-memory floor against swap and OOM. Both cap leased memory at 75% of
-RAM. `mode` auto-switches to unattended after 10 minutes without input and
-back when input returns; `bun "$capacity" mode away|present|auto` overrides
-it (no argument prints the active profile). `probe` reports `profile` and
+RAM. In `auto` mode a presence watcher (`agent-capacity-presence.service`,
+started by any helper call) reads keyboard, pointer and pad input, excluding
+virtual automation pads; it selects unattended after 10 minutes without input
+and attended within a second of input. `bun "$capacity" mode away|present|auto`
+overrides it (no argument prints the active profile); the override lasts until
+reboot. `probe` reports `profile` and
 `mode`. The wrapper admits atomically and contains every descendant in one user
 cgroup. Per-job batch CPU allowances are ceilings, not reservations. Exclusive
 runs wait for peer batch jobs and block new batch jobs until release; native
