@@ -51,7 +51,7 @@ A passworded lobby never appears in another client's Custom Games list.
 
 ## Manual startup and recovery detail
 
-Use this only where `wisp doctor` stops on an unknown state.
+Use this only where `wisp client doctor` stops on an unknown state.
 
 1. Reuse a working game. For a cold start, first establish that no Wine/Proton
    client uses the selected mutable prefix. Use the existing Steam Linux Runtime

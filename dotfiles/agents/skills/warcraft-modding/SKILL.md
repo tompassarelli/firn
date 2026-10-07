@@ -30,6 +30,24 @@ Effect APIs and design, also use `effect-development` and follow Smashcraft's
 repository-local Effect policy before changing its vendored source or Effect
 dependency.
 
+## Command vocabulary
+
+Follow wisp:docs/cli.md for Wisp and game extensions: `wisp NOUN [VERB] [OBJECT...]`.
+Map creation is `map build|rebuild`; client state and recovery are `client watch|wait|doctor`;
+engine traps are `engine trace` and `engine locate --trace`; numeric checks and tapes
+are `parity numeric|tapes`; native sessions are `integrity capture|result|headless`.
+A new operation belongs under its existing noun. A new top-level noun requires a
+row in the vocabulary table and a feature-index entry. Wisp's docs-index test and
+the game's vocabulary test enforce registered nouns and usage flags.
+
+Shared flags keep one meaning: `--client NAME` selects named native clients,
+`--clients N` counts simulated clients, `--pairs N` counts pairs, `--profile NAME`
+selects the map build, `--map MAP.w3x` selects the built map played or hosted, and
+`--ref REF` selects the Git revision measured. Pool graphics use `--pool-profile`;
+perf function reporting uses `--functions`; configuration files use `--clients-file`.
+Migrate every live in-tree consumer with a rename; add no aliases. Saved dated
+evidence retains the invocation it actually measured.
+
 ## Effect in Wisp
 
 Effect is a deliberate part of Smashcraft's TypeScript application and host
@@ -70,11 +88,11 @@ Work from the cheapest check that can answer the question:
    from save to both clients' acknowledgements, and prints in-game errors as TypeScript
    file and line about 0.05 s after they happen.
 4. **A changed map file.** After one full project build,
-   `bun wisp rebuild MAP.w3x` swaps only the script in about 2-4 s.
+   `bun wisp map rebuild MAP.w3x` swaps only the script in about 2-4 s.
    Then `bun wisp fresh MAP.w3x` takes both clients from wherever they are
    into a new game of it, about 24 s. Do a full build only when assets, object
    data or non-TypeScript sources change.
-5. **Behavior against the old game.** `LUA=<32-bit lua> bun wisp tapes`
+5. **Behavior against the old game.** `LUA=<32-bit lua> bun wisp parity tapes`
    replays the acceptance tapes in compiled Wurst Lua, Bun and 32-bit Lua and
    names the first divergent frame and field, about 6 s cached.
 
@@ -158,7 +176,7 @@ Pick the client by what the test needs (Tom, 7 Oct 2026):
   Throwaway clients with no account, each pair in a network namespace with
   only loopback, play LAN matches that Wisp hosts. `wisp lan setup --from
   INSTALL [--pairs N]` creates them once (reflinked from an install);
-  `wisp lan pool --pairs N [--profile parity|visual]` runs pairs admitted by
+  `wisp lan pool --pairs N [--pool-profile parity|visual]` runs pairs admitted by
   the machine-capacity helper (foreground; Ctrl-C stops it); `wisp lan fresh
   MAP [--pair K]` hosts and starts a match; `wisp lan status`, `wisp lan end
   --pair K`. The host logs every turn's actions and compares checksums each
@@ -181,8 +199,8 @@ Engine tooling has two tiers (wisp:docs/engine.md, "Guardrails"):
   TypeScript line, `engine diff` of its logs, `engine locate` without
   `--watch`), passive packet capture.
 - **OFFLINE-ONLY** (pool clients): anything that traps, stops or modifies the
-  process: `engine watch` and `locate --watch` (perf hardware breakpoints),
-  `engine watch --lua` (stops the thread with ptrace for the exact Lua and
+  process: `engine trace` and `locate --trace` (perf hardware breakpoints),
+  `engine trace --lua` (stops the thread with ptrace for the exact Lua and
   TypeScript stack), gdb, memory writes (including the LAN switch, which
   `wisp lan` makes and undoes within a fraction of a second), code or DLL
   injection. The tools refuse unless the client is verifiably offline:
@@ -197,9 +215,9 @@ Engine tooling has two tiers (wisp:docs/engine.md, "Guardrails"):
 
 On a desync:
 
-1. **Read the autopsy line.** Every native session runner (`wisp doctor`,
-   `wisp watch`, runs wrapped by `withDoctor` with `autopsy`; in Smashcraft
-   `pad`, `parity capture`, `fresh` and `accept`) runs the desync autopsy
+1. **Read the autopsy line.** Every native session runner (`wisp client doctor`,
+   `wisp client watch`, runs wrapped by `withDoctor` with `autopsy`; in Smashcraft
+   `pad`, `integrity capture`, `fresh` and `accept`) runs the desync autopsy
    (wisp:docs/autopsy.md). On a new desync report it prints `desync autopsy:
    first divergent birth #N Class at turn T on client X` and saves the
    evidence under `~/.local/state/wisp/autopsy/<time>/`. Another runner wraps
@@ -209,7 +227,7 @@ On a desync:
    the clients' Documents folders names the first turn and section (only
    `ipse` means a handle made or freed on a different turn); `engine poll
    --client a,b` during a repro, then `engine diff`, names the birth's class;
-   on offline clients `engine watch` gives its game stack and `watch --lua`
+   on offline clients `engine trace` gives its game stack and `trace --lua`
    its exact Lua and TypeScript stack. On #158 this took
    the hunt from about 3.5 hours to about 30 minutes; start here before
    one-variable experiments.
@@ -234,7 +252,7 @@ script-only rebuild does not update the map's in-game title or missing imports.
 Private build inputs (base map, container, clip pools, stage, impact and
 imported models, art) are content-addressed: each family is stored once,
 read-only, under the hash of its contents, and the revision's
-smashcraft:build-inputs.json names each family's hash, so `bun wisp build`
+smashcraft:build-inputs.json names each family's hash, so `bun wisp map build`
 needs no input flags and verifies them first. New art is `bun wisp inputs add
 FAMILY DIR` plus a commit landed like code; never a shared farm, pointer file
 or in-place edit (smashcraft:docs/build-inputs.md). Builders of one output share
@@ -267,15 +285,15 @@ parallel around it.
   `wisp accept [--only ID...]` (wisp:docs/accept.md; Smashcraft checks in
   smashcraft:ts/scripts/wisp/acceptChecks.ts). `--dry-run` prints the plan
   without touching clients.
-- Never hand-drive a broken client. `wisp doctor [CLIENT...]`
+- Never hand-drive a broken client. `wisp client doctor [CLIENT...]`
   (wisp:docs/doctor.md) finds each client's state from events and runs its
   known recovery: dropped from Battle.net, crashed, empty Options/Exit Game
   login shell, stale lobby or score screen, stuck loading, a map loaded
   without its imports, two runtimes on one prefix, a launcher whose connection
   failed. It never signs in; it stops with one plain line when the owner must.
   `play`, `fresh`, captures and `accept` run it first and once after a failure.
-- Before clicking, reading or waiting on a client, ask `wisp watch`
-  (wisp:docs/watch.md; `bun wisp watch --once`, `bun wisp client wait CLIENT
+- Before clicking, reading or waiting on a client, ask `wisp client watch`
+  (wisp:docs/watch.md; `bun wisp client watch --once`, `bun wisp client wait CLIENT
   STATE...`). In host code wait with `waitFor` and wrap waits in `unlessLost`.
 - Drive and observe through instrumentation (menu socket, map receipts and
   journal, War3Log) before screenshots or OCR. Set up sessions through in-map
@@ -304,7 +322,7 @@ before each use. Use `image-context-budget` for repeated inspection.
 
 ## Startup, recovery and accounts
 
-With Wisp, run `wisp doctor` instead of manual recovery. Where it stops on an
+With Wisp, run `wisp client doctor` instead of manual recovery. Where it stops on an
 unknown state, the manual rules are: one runtime per mutable prefix (never
 start a second one against a live prefix); start Warcraft with Play in the
 already-signed-in Battle.net launcher, never a direct `Warcraft III.exe`
