@@ -89,7 +89,8 @@ FORCE_CONFIG=(
   -c 'sandbox_mode="danger-full-access"'
   -c 'default_permissions=":danger-full-access"'
   -c 'agents.max_concurrent_threads_per_session=64'
-  -c 'agents.default_subagent_model="gpt-6-luna"'
+  -c 'agents.default_subagent_model="gpt-6.1-sol"'
+  -c 'agents.default_subagent_reasoning_effort="medium"'
 )
 
 # The single conversation home. Managed lanes arrive with CODEX_HOME already
@@ -223,7 +224,17 @@ exec_conversation() {
       exec "$REAL" "${FORCE_CONFIG[@]}" "$subcommand" "${provider_args[@]}" "$@"
       ;;
     *)
-      exec "$REAL" "${FORCE_CONFIG[@]}" \
+      local force_args=("${FORCE_CONFIG[@]}")
+      # Codex rejects permission overrides when resuming through the shared
+      # server; that server already runs with the same permissions.
+      if ((${#shared_args[@]})) && [[ "${1:-}" = resume || "${1:-}" = fork ]]; then
+        force_args=(
+          -c 'agents.max_concurrent_threads_per_session=64'
+          -c 'agents.default_subagent_model="gpt-6.1-sol"'
+          -c 'agents.default_subagent_reasoning_effort="medium"'
+        )
+      fi
+      exec "$REAL" "${force_args[@]}" \
         "${workspace_args[@]}" "${provider_args[@]}" "${shared_args[@]}" "$@"
       ;;
   esac

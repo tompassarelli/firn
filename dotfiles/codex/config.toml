@@ -9,7 +9,8 @@ model_reasoning_effort = "medium"
 
 [agents]
 max_concurrent_threads_per_session = 64
-default_subagent_model = "gpt-6-luna"
+default_subagent_model = "gpt-6.1-sol"
+default_subagent_reasoning_effort = "medium"
 
 [projects."/home/tom"]
 trust_level = "trusted"
