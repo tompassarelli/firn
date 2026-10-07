@@ -237,6 +237,20 @@ parallel around it.
 - Batch native checks. One fresh map or session covers every box that needs
   it; one session's outputs feed every checker that consumes them. Test all
   new characters and content in one combined match.
+- POLICY: run pad parity scripts as ONE batch, never one new game each:
+  `bun wisp pad SCRIPT|DIR... --helper H --out DIR --map MAP.w3x
+  --pair K...` (clients per "Native testing and debugging" above). It starts
+  one game per pair, types `-dev reset` between scripts (it restores the
+  boot match state; smashcraft:ts/test/dev-reset.test.ts holds the next
+  match's checksums and moments equal to a new game's), starts every
+  headless reference at once (`--headless-jobs N`) and compares as each
+  native run ends. Measured on A+B, 7 Oct 2026, the old loop per script:
+  new game 42-64 s, native run 23.5-26 s, headless compare 22 s (about
+  1 min 50 s; 17 scripts over 35 min). The batch drops the new game and
+  overlaps the compare: about 25 s a script per pair plus one new game, a
+  reset costing about a second. Real-time runs slip on a saturated host
+  (the batch reruns slipped scripts); run it on a quiet host
+  (smashcraft:docs/native-bot-session.md, "Many scripts in one game").
 - Declare each native box as data next to the issue it closes (map profile,
   setup chat commands, captures, pass rule) and run the batch with
   `wisp accept [--only ID...]` (wisp:docs/accept.md; Smashcraft checks in
