@@ -813,16 +813,6 @@
         }
       ]
     },
-    "production-hardening": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
     "program-craftsmanship": {
       "distributions": [
         {
