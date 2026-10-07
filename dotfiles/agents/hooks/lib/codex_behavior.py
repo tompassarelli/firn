@@ -11,8 +11,9 @@ malformed event allows.
 - PreToolUse(update_plan) refuses process steps Tom didn't ask for, and a
   first plan without its checklist: the goal quoted from the request, the
   profile, Done-when, extra checks, workers and an ETA.
-- PreToolUse(Bash) refuses a check rerun on unchanged code, a malformed
-  issue, and a new issue while the session has opened more than it closed.
+- PreToolUse(Bash) refuses a check rerun on unchanged code, a new issue that
+  can't close, and a new issue while the session has opened more than it
+  closed. Edits to existing issues pass.
 - PostToolUse(Bash) records passing checks and issue opens and closes, and
   says once when the work passes twice its ETA or after a long run of
   read-only commands with no change; an apply_patch ends that run.
@@ -488,21 +489,20 @@ def pre_bash(event):
     cwd = event.get("cwd")
 
     action, _ = gh_issue_action(command)
-    if action in ("create", "edit"):
-        body = issue_body(command, cwd)
-        has_body = action == "create" or re.search(r"--body|-b\b|-F\b", command)
-        problem = has_body and issue_shape_problem(body, action == "create")
+    if action == "create":
+        # Only new issues are shaped here: an existing issue's boxes predate
+        # these rules, and its Done-when list must not be rewritten mid-flight.
+        problem = issue_shape_problem(issue_body(command, cwd), True)
         if problem:
             return deny(f"No. This issue can't close: {problem}. Rewrite it and retry.")
-        if action == "create":
-            with State(event.get("session_id")) as state:
-                prompts = state["prompts"][-3:]
-                if state["opened"] > state["closed"] and not asked_keyword(("issue", "ticket"), prompts):
-                    return deny(
-                        f"No. This session opened {state['opened']} issues and closed "
-                        f"{state['closed']}. Close one before opening another. A problem "
-                        "that blocks nothing goes in your report as one line."
-                    )
+        with State(event.get("session_id")) as state:
+            prompts = state["prompts"][-3:]
+            if state["opened"] > state["closed"] and not asked_keyword(("issue", "ticket"), prompts):
+                return deny(
+                    f"No. This session opened {state['opened']} issues and closed "
+                    f"{state['closed']}. Close one before opening another. A problem "
+                    "that blocks nothing goes in your report as one line."
+                )
         return None
 
     if not is_check(command):

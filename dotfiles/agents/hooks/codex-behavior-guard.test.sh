@@ -102,7 +102,7 @@ expect opens-past-closes fires 'Close one before' "$(pre i1 "$game" "\"gh issue 
 prompt i1 '"please file issues for each bug you found"' | run >/dev/null
 expect asked-for-issues quiet '' "$(pre i1 "$game" "\"gh issue create --title Next --body \\\"$body\\\"\"")"
 expect label-edit quiet '' "$(pre i1 "$game" '"gh issue edit 5 --add-label later"')"
-expect guarantee-edit fires 'measured check' "$(pre i1 "$game" '"gh issue edit 5 --body \"## Done when\n- [ ] always on frame\""')"
+expect existing-issue-edit quiet '' "$(pre i1 "$game" '"gh issue edit 5 --body \"## Done when\n- [ ] always on frame\""')"
 post i1 "$game" '"gh issue close 12"' 0 | run >/dev/null
 expect score-counts-close fires '1 issues closed' "$(prompt i1 '"status?"')"
 
