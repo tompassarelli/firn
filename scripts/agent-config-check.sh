@@ -62,11 +62,9 @@ enabled = {
                     command("concrete-model-identity-guard.sh", 10),
                 ],
             },
-            {
-                "matcher": "^update_plan$",
-                "hooks": [command("codex-behavior-guard.sh", 10)],
-            },
+            {"hooks": [command("codex-behavior-guard.sh", 10)]},
         ],
+        "PostToolUse": [{"hooks": [command("codex-behavior-guard.sh", 10)]}],
         "UserPromptSubmit": [{"hooks": [command("codex-behavior-guard.sh", 10)]}],
         "Stop": [{"hooks": [command("codex-behavior-guard.sh", 10)]}],
     },
@@ -328,8 +326,8 @@ validate_codex_managed_policy() {
   CODEX_MANAGED_BINDINGS="$(
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
-  if [ "$CODEX_MANAGED_BINDINGS" = 12 ]; then
-    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 12-binding authoritative contract'
+  if [ "$CODEX_MANAGED_BINDINGS" = 13 ]; then
+    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 13-binding authoritative contract'
   elif [ "$CODEX_MANAGED_BINDINGS" = 0 ]; then
     ok_detail 'Codex managed hooks are authoritatively disabled; remote control remains disabled'
   else

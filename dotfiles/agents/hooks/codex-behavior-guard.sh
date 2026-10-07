@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
-# Codex behavior guard: UserPromptSubmit, PreToolUse(update_plan) and Stop.
+# Codex behavior guard: UserPromptSubmit, PreToolUse, PostToolUse and Stop.
 # ============================================================================
 # Turns the Codex overlay's worst recorded failures into checks Codex can't
-# skip. A correction from Tom adds the correction rule as context. A plan step
-# that adds reviews, soaks, attestation, compatibility or policy edits is
-# rejected unless Tom's recent prompts asked for it, and a first plan must end
-# with a checklist citing the profile, Done-when, extra checks and workers
-# rules. An ending that asks permission, narrates the next step or lists what
-# isn't proven is rejected once per turn. Decisions live in
-# lib/codex_behavior.py; a missing interpreter or malformed input allows.
+# skip, and shows it a score of issues closed instead of claims defended.
+# Decisions live in lib/codex_behavior.py; a missing interpreter or malformed
+# input allows.
 #
 # Kill-switch: persistent `north config agents off codex-behavior-guard` OR env
 # AGENT_NO_AUTHORING_HOOKS (any value but 0/false). Shared impl:
@@ -17,6 +13,19 @@
 set -uo pipefail
 
 payload="$(head -c 1048576)"
+
+# Bound to every tool; only shell commands and plan updates need a decision,
+# so every other tool call exits before paying for an interpreter.
+case "$payload" in
+  *'"hook_event_name":"PreToolUse"'*|*'"hook_event_name": "PreToolUse"'*|\
+  *'"hook_event_name":"PostToolUse"'*|*'"hook_event_name": "PostToolUse"'*)
+    case "$payload" in
+      *'"tool_name":"Bash"'*|*'"tool_name": "Bash"'*|\
+      *'"tool_name":"update_plan"'*|*'"tool_name": "update_plan"'*) ;;
+      *) exit 0 ;;
+    esac
+    ;;
+esac
 
 authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
 [ -r "$authoring_killswitch" ] \

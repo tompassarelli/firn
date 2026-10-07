@@ -1,17 +1,32 @@
 """Decisions for codex-behavior-guard.sh, one per Codex hook event.
 
-UserPromptSubmit remembers Tom's prompts for the session and, when a prompt
-reads as a correction, adds the correction rule as context. PreToolUse on
-update_plan rejects a plan that adds process from the recorded Codex failure
-list, or a first plan without the rule-citing checklist. Stop rejects one
-ending per turn that asks permission, narrates the next step, or lists what a
-result doesn't prove. Every decision prints one JSON object or nothing.
+Codex optimizes for never being wrong. These checks make it optimize for
+closing issues instead: wasteful moves are refused and the score it sees is
+issues closed. Every decision prints one JSON object or nothing, and a
+malformed event allows.
+
+- UserPromptSubmit records the prompt, shows the session scoreboard, and adds
+  the correction or close-it-now rule when the prompt calls for it.
+- PreToolUse(update_plan) refuses process steps Tom didn't ask for, and a
+  first plan without its checklist: the goal quoted from the request, the
+  profile, Done-when, extra checks, workers and an ETA.
+- PreToolUse(Bash) refuses a check rerun on unchanged code, a malformed
+  issue, and a new issue while the session has opened more than it closed.
+- PostToolUse(Bash) records passing checks and issue opens and closes, and
+  says once when the work passes twice its ETA.
+- Stop refuses one ending per turn that asks permission, narrates, hands the
+  check to someone else, lists what isn't proven, or says nearly done.
 """
 
+import fcntl
+import hashlib
 import json
 import os
 import re
+import shlex
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 TOOLING_REPOS = {"nixos-config", "north", "fram", "clause", "beagle"}
@@ -24,14 +39,20 @@ STATE_ROOT = Path(
     )
 )
 PROMPTS_KEPT = 20
+MAX_BOXES = 5
+
+STANDING = (
+    "Score: issues closed. Being wrong is cheap here; the compiler, tests and "
+    "debugger catch it. Being slow is the failure."
+)
 
 CORRECTION = re.compile(
     r"\b(fuck\w*|shit\w*|wtf|ffs|jesus|stop (asking|doing|with|adding|it)|"
     r"(i|i've) (already )?(told|asked) you|you keep|again\?|why (are|do|did) you|"
-    r"for the (second|third|fourth) time|not what i asked|too much (process|ceremony))\b",
+    r"for the (second|third|fourth) time|not what i asked|too much (process|ceremony)|"
+    r"over-?engineer\w*)\b",
     re.IGNORECASE,
 )
-
 CLOSE_REQUEST = re.compile(
     r"\b(not (done|closed|finished|landed) yet|(isn't|is not|still not) (done|closed|finished|landed)|"
     r"still open|close (it|this|that|the issue|#?\d+)|land (it|this|the plane))\b",
@@ -68,10 +89,74 @@ STOP_DISCLAIMERS = re.compile(
     re.IGNORECASE,
 )
 STOP_NEARLY = re.compile(r"\b(nearly|almost) (done|there|finished|complete)\b", re.IGNORECASE)
-
-
 NEGATION = re.compile(r"\b(no|not|don't|dont|stop|without|never|skip|drop|enough)\b[^.!?\n]{0,30}$")
 
+RUNNERS = {
+    "bun", "bunx", "cargo", "npm", "pnpm", "yarn", "npx", "pytest", "go", "make", "just",
+    "nix", "firn", "deno", "uv", "python", "python3", "bash", "sh", "zig", "dotnet", "gradle",
+}
+CHECK_WORDS = re.compile(
+    r"\b(test|tests|check|lint|typecheck|tsc|clippy|validate|verify|soak|parity|bench|perf|smoke|build)\b"
+)
+EXIT_CODE = re.compile(r"(?:Exit code:|Process exited with code)\s*(-?\d+)")
+GUARANTEE = re.compile(
+    r"\b(every|never|always|guarantee[sd]?|full fidelity|bit[- ]exact|no (recurring|unexplained))\b",
+    re.IGNORECASE,
+)
+
+
+# --- state -----------------------------------------------------------------
+
+def normalize(text):
+    return " ".join(re.sub(r"[^\w\s]", " ", text.lower()).split())
+
+
+def state_path(session):
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", str(session or "unknown"))
+    return STATE_ROOT / f"{safe}.json"
+
+
+class State:
+    """One session's record, read and written under an exclusive lock."""
+
+    def __init__(self, session):
+        self.path = state_path(session)
+        self.lock = None
+        self.data = {}
+
+    def __enter__(self):
+        try:
+            STATE_ROOT.mkdir(parents=True, exist_ok=True)
+            self.lock = open(self.path.with_suffix(".lock"), "w")
+            fcntl.flock(self.lock, fcntl.LOCK_EX)
+            raw = json.loads(self.path.read_text())
+        except (OSError, ValueError):
+            raw = {}
+        self.data = {"prompts": raw} if isinstance(raw, list) else raw
+        self.data.setdefault("prompts", [])
+        self.data.setdefault("started", time.time())
+        self.data.setdefault("opened", 0)
+        self.data.setdefault("closed", 0)
+        self.data.setdefault("passed", {})
+        return self.data
+
+    def __exit__(self, *exc):
+        try:
+            tmp = self.path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(self.data))
+            tmp.replace(self.path)
+        except OSError:
+            pass
+        if self.lock:
+            self.lock.close()
+
+
+def minutes(seconds):
+    total = int(seconds // 60)
+    return f"{total // 60}h {total % 60:02d}m" if total >= 60 else f"{total} min"
+
+
+# --- shared helpers ----------------------------------------------------------
 
 def last_sentence(text):
     parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+|\n+", text) if p.strip()]
@@ -90,32 +175,9 @@ def asked_keyword(keywords, prompts):
     return False
 
 
-def normalize(text):
-    return " ".join(re.sub(r"[^\w\s]", " ", text.lower()).split())
-
-
-def state_file(session):
-    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", str(session or "unknown"))
-    return STATE_ROOT / f"{safe}.json"
-
-
-def load_prompts(session):
-    try:
-        return json.loads(state_file(session).read_text())
-    except (OSError, ValueError):
-        return []
-
-
-def save_prompt(session, prompt):
-    prompts = (load_prompts(session) + [prompt])[-PROMPTS_KEPT:]
-    try:
-        STATE_ROOT.mkdir(parents=True, exist_ok=True)
-        path = state_file(session)
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(prompts))
-        tmp.replace(path)
-    except OSError:
-        pass
+def quoted_in(quote, prompts):
+    needle = normalize(quote)
+    return len(needle.split()) >= 3 and needle in normalize(" ".join(prompts))
 
 
 def expected_profile(cwd):
@@ -139,33 +201,6 @@ def expected_profile(cwd):
     return "prototype"
 
 
-def user_prompt_submit(event):
-    prompt = event.get("prompt") or ""
-    save_prompt(event.get("session_id"), prompt)
-    context = []
-    if CORRECTION.search(prompt):
-        context.append(
-            "Tom is correcting you. Drop exactly what he named and keep going. "
-            "Don't answer with a new review, verifier, audit, rule, policy or "
-            "skill edit. If he asked a question, answer it in your first line."
-        )
-    if CLOSE_REQUEST.search(prompt):
-        context.append(
-            "Tom wants this closed. Read the issue's unchecked Done-when box and run "
-            "that check yourself in this turn; don't assign it or describe a plan. "
-            "If it needs a quiet machine, take an `exclusive` capacity lease. Then "
-            "close the issue, or report the measured miss and fix it now."
-        )
-    if not context:
-        return None
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "UserPromptSubmit",
-            "additionalContext": " ".join(context),
-        }
-    }
-
-
 def deny(reason):
     return {
         "hookSpecificOutput": {
@@ -176,19 +211,49 @@ def deny(reason):
     }
 
 
+def context(event_name, text):
+    return {"hookSpecificOutput": {"hookEventName": event_name, "additionalContext": text}}
+
+
+# --- UserPromptSubmit ----------------------------------------------------------
+
+def user_prompt_submit(event):
+    prompt = event.get("prompt") or ""
+    with State(event.get("session_id")) as state:
+        state["prompts"] = (state["prompts"] + [prompt])[-PROMPTS_KEPT:]
+        elapsed = time.time() - state["started"]
+        lines = [
+            f"Scoreboard: {minutes(elapsed)} in, {state['closed']} issues closed, "
+            f"{state['opened']} opened. {STANDING}"
+        ]
+    if CORRECTION.search(prompt):
+        lines.append(
+            "Tom is correcting you. Drop exactly what he named and keep going. "
+            "Don't answer with a new review, verifier, audit, rule, policy or skill "
+            "edit. If he asked a question, answer it in your first line."
+        )
+    if CLOSE_REQUEST.search(prompt):
+        lines.append(
+            "Tom wants this closed. Read the issue's unchecked Done-when box and run "
+            "that check yourself in this turn; don't assign it or describe a plan. "
+            "If it needs a quiet machine, take an `exclusive` capacity lease. Then "
+            "close the issue, or report the measured miss and fix it now."
+        )
+    return context("UserPromptSubmit", " ".join(lines))
+
+
+# --- PreToolUse(update_plan) ----------------------------------------------------
+
 CHECKLIST = (
-    "End the plan's explanation with this checklist, citing each rule:\n"
-    "profile: <prototype|tooling|client>  (bootstrap Profile table)\n"
-    "done-when: <the pass/fail checks>  (bootstrap Finish)\n"
-    "extra checks: none | <check> catches <new failure>  (Codex: ship it)\n"
-    "workers: none | <n>, one per <issue or area>  (bootstrap Workers)"
+    "End the plan's explanation with this checklist:\n"
+    'goal: "<Tom\'s exact words from the request>"\n'
+    "profile: <prototype|tooling|client>\n"
+    "done-when: <the pass/fail checks>\n"
+    "extra checks: none | <check> catches <new failure>\n"
+    "workers: none | <n>, one per <issue or area>\n"
+    "eta: <minutes> min"
 )
-
-
-def asked_for(text, prompts):
-    quotes = re.findall(r"asked:\s*\"([^\"]{4,})\"", text, re.IGNORECASE)
-    joined = normalize(" ".join(prompts))
-    return [q for q in quotes if normalize(q) and normalize(q) in joined]
+CHECKLIST_KEYS = ("goal", "profile", "done-when", "extra checks", "workers", "eta")
 
 
 def update_plan(event):
@@ -200,55 +265,250 @@ def update_plan(event):
             return None
     steps = [s for s in tool_input.get("plan") or [] if isinstance(s, dict)]
     explanation = tool_input.get("explanation") or ""
-    prompts = load_prompts(event.get("session_id"))
-    quoted = asked_for(explanation, prompts)
 
-    for index, step in enumerate(steps, 1):
-        if step.get("status") == "completed":
-            continue
-        text = str(step.get("step", ""))
-        for pattern, label, keywords in PLAN_PROCESS:
-            if not re.search(pattern, text, re.IGNORECASE) or quoted:
+    with State(event.get("session_id")) as state:
+        prompts = state["prompts"][-3:]
+        quotes = re.findall(r"asked:\s*\"([^\"]{4,})\"", explanation, re.IGNORECASE)
+        quoted = any(quoted_in(q, state["prompts"]) for q in quotes)
+
+        for index, step in enumerate(steps, 1):
+            if step.get("status") == "completed":
                 continue
-            if not asked_keyword(keywords, prompts[-3:]):
-                return deny(
-                    f'Step {index} ("{text[:80]}") adds {label}, which Tom\'s history shows '
-                    "turns short tasks into long ones. Remove the step and resubmit the plan. "
-                    "If Tom explicitly asked for it, keep it and add asked: \"<his exact words>\" "
-                    "to the explanation."
-                )
+            text = str(step.get("step", ""))
+            for pattern, label, keywords in PLAN_PROCESS:
+                if not re.search(pattern, text, re.IGNORECASE) or quoted:
+                    continue
+                if not asked_keyword(keywords, prompts):
+                    return deny(
+                        f'No. Step {index} ("{text[:80]}") adds {label}. Nobody asked for '
+                        "it, and it's the move that turns ten-minute tasks into five-hour "
+                        "ones. Delete the step and resubmit. If Tom literally asked for it, "
+                        'add asked: "<his exact words>" to the explanation.'
+                    )
 
-    if not steps or any(s.get("status") == "completed" for s in steps):
-        return None
+        if not steps or any(s.get("status") == "completed" for s in steps):
+            return None
 
-    lines = {
-        key: value.strip()
-        for key, value in re.findall(
-            r"^\s*(profile|done-when|extra checks|workers):\s*(.+)$", explanation, re.IGNORECASE | re.MULTILINE
-        )
-    }
-    lines = {key.lower(): value for key, value in lines.items()}
-    missing = [k for k in ("profile", "done-when", "extra checks", "workers") if not lines.get(k)]
-    if missing:
-        return deny(f"First plan is missing: {', '.join(missing)}. {CHECKLIST}")
+        lines = {
+            key.lower(): value.strip()
+            for key, value in re.findall(
+                r"^\s*(goal|profile|done-when|extra checks|workers|eta):\s*(.+)$",
+                explanation,
+                re.IGNORECASE | re.MULTILINE,
+            )
+        }
+        missing = [key for key in CHECKLIST_KEYS if not lines.get(key)]
+        if missing:
+            return deny(f"No. The plan is missing: {', '.join(missing)}. {CHECKLIST}")
 
-    cited = lines["profile"].split()[0].strip("`*.,").lower()
-    expected = expected_profile(event.get("cwd"))
-    if cited != expected:
-        return deny(
-            f"You cited profile {cited!r}, but the bootstrap Profile table gives "
-            f"{expected!r} for {event.get('cwd')}. Re-read it, fix the profile line, "
-            "and size the plan to that profile."
-        )
-    extra = lines["extra checks"].lower()
-    if not extra.startswith("none") and "catches" not in extra:
-        return deny(
-            "Each extra check needs the new failure it would catch: "
-            "`extra checks: <check> catches <failure>`. If you can't name one, write `none` "
-            "and drop the check."
-        )
+        goal = lines["goal"].strip().strip('"“”')
+        if state["prompts"] and not quoted_in(goal, state["prompts"]):
+            return deny(
+                "No. The goal line must quote the request word for word, at least three "
+                "words. Work nobody asked for is not the job. Re-read the request and "
+                "plan only that."
+            )
+        cited = lines["profile"].split()[0].strip("`*.,").lower()
+        expected = expected_profile(event.get("cwd"))
+        if cited != expected:
+            return deny(
+                f"No. The profile here is {expected!r}, not {cited!r} (bootstrap Profile "
+                "table). Fix the line and size the plan to that profile."
+            )
+        extra = lines["extra checks"].lower()
+        if not extra.startswith("none") and "catches" not in extra:
+            return deny(
+                "No. Each extra check names the new failure it would catch: "
+                "`extra checks: <check> catches <failure>`. Can't name one? Write `none` "
+                "and drop the check."
+            )
+        eta = re.match(r"(\d+)", lines["eta"])
+        if not eta or int(eta.group(1)) <= 0:
+            return deny("No. `eta:` must be a number of minutes, like `eta: 25 min`.")
+        state["eta"] = {"minutes": int(eta.group(1)), "set_at": time.time(), "warned": False}
     return None
 
+
+# --- PreToolUse/PostToolUse(Bash) ------------------------------------------------
+
+def segments(command):
+    for part in re.split(r"&&|\|\||;|\||\n", command):
+        words = part.strip().split()
+        while words and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[0]):
+            words = words[1:]
+        if words and words[0] in ("env", "time", "nice", "exec"):
+            words = words[1:]
+        if words:
+            yield words
+
+
+def is_check(command):
+    for words in segments(command):
+        runner = os.path.basename(words[0])
+        rest = " ".join(words[1:])
+        if runner in RUNNERS and CHECK_WORDS.search(rest):
+            return True
+        if (runner.endswith((".sh", ".test.sh")) or runner.startswith("./")) and CHECK_WORDS.search(" ".join(words)):
+            return True
+    return False
+
+
+def rerun_reason(command):
+    match = re.search(r"\bRERUN_BECAUSE=(\"[^\"]*\"|'[^']*'|\S+)", command)
+    if not match:
+        return ""
+    return match.group(1).strip("\"'")
+
+
+def check_key(cwd, command):
+    command = re.sub(r"\bRERUN_BECAUSE=(\"[^\"]*\"|'[^']*'|\S+)\s*", "", command)
+    return hashlib.sha256(f"{cwd}\0{' '.join(command.split())}".encode()).hexdigest()[:24]
+
+
+def tree_state(cwd):
+    try:
+        run = lambda *args: subprocess.run(
+            ["git", "-C", str(cwd), *args], capture_output=True, timeout=5, check=True
+        ).stdout
+        head = run("rev-parse", "HEAD")
+        status = run("status", "--porcelain=v1", "-uall")
+        diff = run("diff", "HEAD", "--no-ext-diff")
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return hashlib.sha256(head + b"\0" + status + b"\0" + diff).hexdigest()
+
+
+def gh_issue_action(command):
+    for words in segments(command):
+        if len(words) >= 3 and os.path.basename(words[0]) == "gh" and words[1] == "issue":
+            return words[2], words
+    return None, None
+
+
+def issue_body(command, cwd):
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return command
+    for index, token in enumerate(tokens[:-1]):
+        if token in ("--body", "-b"):
+            return tokens[index + 1]
+        if token in ("--body-file", "-F"):
+            path = Path(tokens[index + 1])
+            path = path if path.is_absolute() else Path(cwd or ".") / path
+            try:
+                return path.read_text(errors="ignore")
+            except OSError:
+                return command
+    for token in tokens:
+        if token.startswith("--body="):
+            return token[len("--body="):]
+    return command
+
+
+def issue_shape_problem(body, creating):
+    boxes = re.findall(r"^\s*[-*] \[[ xX]\] (.+)$", body, re.MULTILINE)
+    if creating and not re.search(r"done when", body, re.IGNORECASE):
+        return "it has no Done when list"
+    if creating and not re.search(r"not required", body, re.IGNORECASE):
+        return "it has no Not required list, so scope will grow"
+    if len(boxes) > MAX_BOXES:
+        return f"it has {len(boxes)} boxes; at most {MAX_BOXES}, each a pass/fail check"
+    for box in boxes:
+        match = GUARANTEE.search(box)
+        if match:
+            return (
+                f'box "{box[:70]}" promises "{match.group(0)}", which no finite test '
+                'can close. Make it a measured check, like "500 inputs, 0 lost"'
+            )
+    return None
+
+
+def pre_bash(event):
+    command = (event.get("tool_input") or {}).get("command") or ""
+    if isinstance(command, list):
+        command = " ".join(command)
+    cwd = event.get("cwd")
+
+    action, _ = gh_issue_action(command)
+    if action in ("create", "edit"):
+        body = issue_body(command, cwd)
+        has_body = action == "create" or re.search(r"--body|-b\b|-F\b", command)
+        problem = has_body and issue_shape_problem(body, action == "create")
+        if problem:
+            return deny(f"No. This issue can't close: {problem}. Rewrite it and retry.")
+        if action == "create":
+            with State(event.get("session_id")) as state:
+                prompts = state["prompts"][-3:]
+                if state["opened"] > state["closed"] and not asked_keyword(("issue", "ticket"), prompts):
+                    return deny(
+                        f"No. This session opened {state['opened']} issues and closed "
+                        f"{state['closed']}. Close one before opening another. A problem "
+                        "that blocks nothing goes in your report as one line."
+                    )
+        return None
+
+    if not is_check(command):
+        return None
+    if len(rerun_reason(command)) >= 8:
+        return None
+    with State(event.get("session_id")) as state:
+        record = state["passed"].get(check_key(cwd, command))
+    if not record:
+        return None
+    if tree_state(cwd) != record.get("tree"):
+        return None
+    at = time.strftime("%H:%M", time.localtime(record.get("at", 0)))
+    return deny(
+        f"No. This exact check passed at {at} and the code hasn't changed since. "
+        "Running it again proves nothing new. Land it and close the box. If a rerun "
+        'really can catch a new failure, prefix the command with RERUN_BECAUSE="<that failure>".'
+    )
+
+
+def exit_code(response):
+    text = response if isinstance(response, str) else json.dumps(response)
+    match = EXIT_CODE.search(text)
+    return int(match.group(1)) if match else None
+
+
+def post_bash(event):
+    command = (event.get("tool_input") or {}).get("command") or ""
+    if isinstance(command, list):
+        command = " ".join(command)
+    cwd = event.get("cwd")
+    code = exit_code(event.get("tool_response"))
+    note = None
+    with State(event.get("session_id")) as state:
+        action, words = gh_issue_action(command)
+        if code == 0 and action == "create":
+            state["opened"] += 1
+        if code == 0 and action == "close":
+            numbers = [w for w in words[3:] if re.fullmatch(r"#?\d+|https?://\S+/issues/\d+", w)]
+            state["closed"] += max(1, len(numbers))
+            state["last_close"] = time.time()
+        if is_check(command) and code is not None:
+            key = check_key(cwd, command)
+            if code == 0:
+                tree = tree_state(cwd)
+                if tree:
+                    state["passed"][key] = {"tree": tree, "at": time.time()}
+            else:
+                state["passed"].pop(key, None)
+        eta = state.get("eta")
+        if eta and not eta.get("warned"):
+            spent = time.time() - eta["set_at"]
+            if spent > 2 * eta["minutes"] * 60:
+                eta["warned"] = True
+                note = (
+                    f"You're at {minutes(spent)} on a {eta['minutes']} min ETA, more than "
+                    "twice over. Stop expanding. Land what passes now, close what's done, "
+                    "and report the rest with a new ETA and the reason."
+                )
+    return context("PostToolUse", note) if note else None
+
+
+# --- Stop ------------------------------------------------------------------------
 
 def block(reason):
     return {"decision": "block", "reason": reason}
@@ -265,33 +525,37 @@ def stop(event):
         final = ""
     if STOP_ASKING.search(final):
         return block(
-            "Your turn ended by asking permission. Tom has given you authority over everything "
-            "reversible (bootstrap Act), so do it now and report the result. If it truly needs him "
-            "(money, accounts, sending as Tom, deleting data you didn't create, or a product fork), "
+            "No. You ended by asking permission. Tom gave you authority over everything "
+            "reversible: do it now and report the result. If it truly needs him (money, "
+            "accounts, sending as Tom, deleting data you didn't create, a product fork), "
             "end with `Needs you: <action>` and your recommendation."
         )
     if STOP_NARRATING.search(final):
         return block(
-            "Your turn ended on a progress update. A progress update is not an ending "
-            "(bootstrap Act). Do the next step now and end only when the goal is done or "
-            "blocked."
+            "No. You ended on a plan or a hand-off. That's not an ending. Do the next step "
+            "yourself, now, and stop only when it's done or blocked."
         )
     if STOP_DISCLAIMERS.search(message):
         return block(
-            "Rewrite the report without listing what the result doesn't prove. Give the result, "
-            "the numbers, and one line of remaining risk (bootstrap Report)."
+            "No. Delete the list of what the result doesn't prove. Give the result, the "
+            "numbers and one line of remaining risk."
         )
     if STOP_NEARLY.search(message) and not re.search(r"\d+ (of|/) ?\d+|\d+ (left|remaining)", message):
-        return block("You said nearly done. Replace it with a count of what's left (bootstrap Report).")
+        return block("No. 'Nearly done' means nothing. Give a count of what's left.")
     return None
 
 
 def decide(event):
     name = event.get("hook_event_name")
+    tool = event.get("tool_name")
     if name == "UserPromptSubmit":
         return user_prompt_submit(event)
-    if name == "PreToolUse" and event.get("tool_name") == "update_plan":
+    if name == "PreToolUse" and tool == "update_plan":
         return update_plan(event)
+    if name == "PreToolUse" and tool == "Bash":
+        return pre_bash(event)
+    if name == "PostToolUse" and tool == "Bash":
+        return post_bash(event)
     if name == "Stop":
         return stop(event)
     return None

@@ -1,9 +1,15 @@
 # Codex: how Tom wants you to work
 
-This section exists because Codex sessions repeatedly turned 10-minute tasks
-into 5-hour ones. Your care with tests and secrets is good. The trouble is
-proportion. Each pair below is a real moment from Tom's history, followed by
-what he wanted.
+Your score is issues closed. Being wrong is cheap here: the compiler, tests,
+debugger and Tom's next playtest catch a wrong guess within minutes. Being
+slow is the failure. Guess, ship and fix forward. Nobody's sending a plane to
+Mars.
+
+Codex sessions repeatedly turned 10-minute tasks into 5-hour ones. Your care
+with tests and secrets is good; the trouble is proportion. Hooks enforce the
+worst of it: they refuse reruns on unchanged code, issues that can't close,
+plans without the checklist, and endings that ask or narrate. Each pair below
+is a real moment from Tom's history, followed by what he wanted.
 
 **The job is done, so ship it.**
 Bad: "1,069 tests passed. Running one more probe to confirm before release."
