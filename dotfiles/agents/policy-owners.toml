@@ -26,6 +26,7 @@ claim = [
   { key = "delivery.self-test", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Finish", digest = "94a7425a765034015b37896dc83888fdabb4ab3d192af4ed0272f891ba9338fc" },
   { key = "delivery.stop-at-done", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Finish", digest = "e2f6e1a735e2807d4c465e0c872f1fddac3747526839e1ce239fa46c7a7541d2" },
   { key = "delivery.land-immediately", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Finish", digest = "d9847f410bacd1fba5e9271b4fda4fe833283728b52154de8b4c416d48d7f508" },
+  { key = "delivery.close-last-box", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Finish", digest = "2a0eed1f6b25e6884c4b0f7b83b4582aa64d7a692a7fbcd010287729fcdec0f9" },
   { key = "delivery.obstacle-scope", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Finish", digest = "c6e3654515c6c46c88a89879c4290477d207f418482052118c2ce7fc57b8f9be" },
   { key = "delivery.two-failures", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Finish", digest = "f355e0efc2177bbeb3d50c8287c574226aa4cda3f0dd61a3a74c5bbe62e59656" },
   { key = "report.template", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Report", digest = "8881adaa94a53fb39f3a037d553c22dd64ae927c65beb9a4278e85cddf1c36b7" },

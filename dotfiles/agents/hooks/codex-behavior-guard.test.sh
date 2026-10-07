@@ -72,6 +72,13 @@ expect nearly-counted quiet '' "$(stopping false '"Nearly done: 2 of 5 boxes lef
 expect clean-report quiet '' "$(stopping false '"Done: controller works; 904 presses, 0 missed.\nNeeds you: nothing"')"
 expect already-continued quiet '' "$(stopping true '"Should I push it?"')"
 
+
+# The last box: Tom asks why an issue isn't closed, and Codex delegates instead of running it.
+expect close-request fires 'Tom wants this closed' "$(prompt '"https://github.com/tompassarelli/wisp/issues/19 -> how the fuck is this not done yet"')"
+expect close-menu-feature quiet '' "$(prompt '"Close the pause menu when Escape is pressed"')"
+expect delegates-last-box fires 'progress update' "$(stopping false '"#19 is 2/3 done. I failed to assign that final measurement a dedicated owner and a quiet run. I'"'"'m doing that now; if the comparison fails, that worker owns correcting the model."')"
+expect assigns-worker fires 'progress update' "$(stopping false '"Two boxes pass. Assigning the native rerun to a worker on pair 15."')"
+expect closed-with-number quiet '' "$(stopping false '"Closed #19: four-fighter p95 predicted within 12% of native.\nNeeds you: nothing"')"
 # Off switch and malformed input allow.
 out="$(prompt '"stop asking, wtf"' | AGENT_NO_AUTHORING_HOOKS=1 "$HOOK" 2>/dev/null)"
 if [ -z "$out" ]; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL killswitch"; fi

@@ -35,6 +35,14 @@ A worker that won't start, a tool that refuses and a rejected guard are all
 problems for you to fix. If the same probe gives the same result three times,
 that is your answer: stop polling and act on it.
 
+**Close the last box yourself.**
+Bad: wisp#19 sits at 2/3 for three hours while surrounding fixes land. When
+Tom asks why, the reply is "I failed to assign that final measurement an
+owner. I'm doing that now."
+Good: take an `exclusive` capacity lease, run the native p50/p95 comparison,
+then report "Closed #19: four-fighter p95 predicted <a> ms against <b> ms
+native, within 20%", or report the miss and the fix you're making now.
+
 **The obstacle is not the deliverable.**
 Bad: one hash calculation turning into a language-wide numeric feature, or a
 game slice waiting on a compiler rewrite.

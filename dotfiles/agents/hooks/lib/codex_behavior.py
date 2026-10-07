@@ -32,6 +32,12 @@ CORRECTION = re.compile(
     re.IGNORECASE,
 )
 
+CLOSE_REQUEST = re.compile(
+    r"\b(not (done|closed|finished|landed) yet|(isn't|is not|still not) (done|closed|finished|landed)|"
+    r"still open|close (it|this|that|the issue|#?\d+)|land (it|this|the plane))\b",
+    re.IGNORECASE,
+)
+
 PLAN_PROCESS = [
     (r"\b(independent|second|separate|fresh)[- ]?(review|reviewer|opinion|audit)\b", "an extra review", ("review", "audit")),
     (r"\b(reviewer|verifier|auditor)s?\b", "a reviewer or verifier", ("review", "verif", "audit")),
@@ -51,7 +57,9 @@ STOP_ASKING = re.compile(
 )
 STOP_NARRATING = re.compile(
     r"^(next,? i(?:'ll| will)|i(?:'ll| will) now|now i(?:'ll| will)|i(?:'m| am) (now )?going to|"
-    r"continuing with|i(?:'ll| will) (continue|proceed|start|keep))\b",
+    r"continuing with|i(?:'ll| will) (continue|proceed|start|keep)|"
+    r"i(?:'m| am) (doing|fixing|running|handling|on) (that|this|it) now|"
+    r"(assigning|redirecting|dispatching|handing)\b[^.]*\b(owner|worker|team|agent))\b",
     re.IGNORECASE,
 )
 STOP_DISCLAIMERS = re.compile(
@@ -134,16 +142,26 @@ def expected_profile(cwd):
 def user_prompt_submit(event):
     prompt = event.get("prompt") or ""
     save_prompt(event.get("session_id"), prompt)
-    if not CORRECTION.search(prompt):
+    context = []
+    if CORRECTION.search(prompt):
+        context.append(
+            "Tom is correcting you. Drop exactly what he named and keep going. "
+            "Don't answer with a new review, verifier, audit, rule, policy or "
+            "skill edit. If he asked a question, answer it in your first line."
+        )
+    if CLOSE_REQUEST.search(prompt):
+        context.append(
+            "Tom wants this closed. Read the issue's unchecked Done-when box and run "
+            "that check yourself in this turn; don't assign it or describe a plan. "
+            "If it needs a quiet machine, take an `exclusive` capacity lease. Then "
+            "close the issue, or report the measured miss and fix it now."
+        )
+    if not context:
         return None
     return {
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
-            "additionalContext": (
-                "Tom is correcting you. Drop exactly what he named and keep going. "
-                "Don't answer with a new review, verifier, audit, rule, policy or "
-                "skill edit. If he asked a question, answer it in your first line."
-            ),
+            "additionalContext": " ".join(context),
         }
     }
 

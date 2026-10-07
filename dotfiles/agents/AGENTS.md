@@ -57,6 +57,10 @@ A `profile: <name>` line in a repository's `AGENTS.md` overrides this list.
   or reruns for confidence.
 - Land each finished piece right away. Don't batch commits or wait on other
   work.
+- Closing beats starting. An issue with one unchecked box comes before any new
+  work. Run that check yourself now, then close the issue or report the
+  number. If the check needs a quiet machine, take an `exclusive` capacity
+  lease instead of waiting for the load to drop.
 - When something breaks under you, fix the actual blocker at its cause, in
   the smallest way, and return to the task. A problem that blocks no box gets
   one line in the report. It doesn't get fixed now.
