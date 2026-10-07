@@ -102,8 +102,11 @@ substitute a streamed desktop for a requested native controller/latency trial.
 To stop, send Ctrl-C to the foreground launcher (or SIGTERM to its wrapper).
 An explicit `--seconds` deadline also ends the session. Use
 only its exact run directory and processes for cleanup; never kill the user's
-desktop or another session. Logs and captures remain in the printed runtime
-directory until logout. VNC binds to `127.0.0.1` with no password, so do not
+desktop or another session. On exit, the launcher removes the active marker and
+runtime files, and saves the remaining logs under
+`${XDG_STATE_HOME:-~/.local/state}/private-desktop/`. It prints that saved path.
+The next launch recovers folders left by a crash only when their session lock is
+free; live peers keep theirs. VNC binds to `127.0.0.1` with no password, so do not
 change that address to expose it to a network.
 
 ## Session bus and concurrent startup

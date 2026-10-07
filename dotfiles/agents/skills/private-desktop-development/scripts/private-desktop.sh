@@ -11,7 +11,8 @@ Usage:
 Start a private GPU desktop. Ctrl-C ends the session. Default resolution:
 2560x1440. VNC listens only on localhost. Default lifetime: until stopped.
 Use --seconds to set an optional deadline.
-Run directories and logs remain under /run/user/UID until logout.
+Live run directories use /run/user/UID; ended-session logs move to the user's
+state directory. Runtime files are removed on exit and after a crashed run.
 VNC tools share one Python environment in the user's disk cache.
 The shared machine-capacity helper bounds CPU and memory; an existing helper
 scope is reused. Do not start two clients sharing one mutable Wine prefix.
@@ -116,7 +117,49 @@ if [[ ! -x "$venv/bin/vncdo" ]]; then
 fi
 flock -u 8
 exec 8>&-
-run=$(mktemp -d "/run/user/$(id -u)/private-desktop.XXXXXXXX")
+runtime_root="/run/user/$(id -u)"
+archive_root=${XDG_STATE_HOME:-$HOME/.local/state}/private-desktop
+mkdir -p -- "$archive_root"
+archive_run() {
+    local stopped=$1
+    [[ "$stopped" == "$runtime_root/private-desktop."* && -d "$stopped" && -O "$stopped" && -f "$stopped/lifecycle-owned" ]] || return
+    rm -f -- "$stopped/active"
+    rm -rf -- "$stopped/runtime"
+    mv -T -- "$stopped" "$archive_root/$(basename -- "$stopped")"
+}
+# A lock retained by the session's processes keeps crash recovery off live peers.
+while IFS= read -r -d '' stale; do
+    [[ -O "$stale" && -f "$stale/lifecycle-owned" && -f "$stale/lifecycle.lock" ]] || continue
+    exec 6<"$stale/lifecycle.lock" || continue
+    if flock -n -x 6; then archive_run "$stale"; fi
+    exec 6>&-
+done < <(python3 - "$runtime_root" <<'PY'
+import os, sys
+for entry in os.scandir(sys.argv[1]):
+    if entry.name.startswith("private-desktop.") and entry.is_dir(follow_symlinks=False):
+        sys.stdout.buffer.write(os.fsencode(entry.path) + b"\0")
+PY
+)
+run=$(mktemp -d "$runtime_root/private-desktop.XXXXXXXX")
+desktop_pid='' vnc_pid='' client_pid='' timer_pid=''
+exec 7>"$run/lifecycle.lock"
+flock -x 7
+touch "$run/lifecycle-owned"
+printf '%s\n' "$$" > "$run/launcher-pid"
+cleanup() {
+    trap - EXIT INT TERM
+    rm -f -- "$run/active"
+    for pid in "$client_pid" "$vnc_pid" "$desktop_pid"; do
+        [[ -z "$pid" ]] || kill -TERM -- "-$pid" 2>/dev/null || true
+    done
+    [[ -z "$timer_pid" ]] || kill -TERM "$timer_pid" 2>/dev/null || true
+    wait 2>/dev/null || true
+    archive_run "$run"
+    printf 'Session ended; logs: %s/%s\n' "$archive_root" "$(basename -- "$run")"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 mkdir "$run/runtime" "$run/config"
 ln -s -- "$venv" "$run/venv"
 command -v grim > "$run/grim"
@@ -134,7 +177,7 @@ PY
 }
 # Serialize discovery through actual VNC binding; parallel starts must not
 # release a candidate port before their listener owns it.
-exec 9>"/run/user/$(id -u)/private-desktop-port.lock"
+exec 9>"$runtime_root/private-desktop-port.lock"
 flock -x 9
 if ((port_was_explicit)); then
     port_free "$port" || die "localhost port $port is already occupied"
@@ -145,20 +188,6 @@ else
     done
 fi
 printf '%s\n' "$port" > "$run/port"
-desktop_pid='' vnc_pid='' client_pid='' timer_pid=''
-cleanup() {
-    trap - EXIT INT TERM
-    rm -f -- "$run/active"
-    for pid in "$client_pid" "$vnc_pid" "$desktop_pid"; do
-        [[ -z "$pid" ]] || kill -TERM -- "-$pid" 2>/dev/null || true
-    done
-    [[ -z "$timer_pid" ]] || kill -TERM "$timer_pid" 2>/dev/null || true
-    wait 2>/dev/null || true
-    printf 'Session ended; logs: %s\n' "$run"
-}
-trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
 cat > "$run/startup.sh" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$DISPLAY" > "$PRIVATE_DESKTOP_RUN/display"
