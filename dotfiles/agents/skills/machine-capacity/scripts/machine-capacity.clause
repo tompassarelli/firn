@@ -2,24 +2,43 @@ Resources:
   cpus: F64
   memoryMiB: F64
 
-export aggregate-cpus(?cores: F64): F64
-  ?cores * 0.75
+# Tom present: keep cores idle for the desktop. Away: batch may take every core.
+export reserved-cpus(?profile: Text, ?cores: F64): F64
+  if(?profile = "attended", if(?cores > 8, 4, if(?cores > 4, 2, 1)), 0)
+
+export aggregate-cpus(?profile: Text, ?cores: F64): F64
+  ?cores - reserved-cpus(?profile, ?cores)
+
+# Available-memory floor below which nothing is admitted. Away keeps only the
+# hard floor against swap and OOM; present keeps 20% for the desktop.
+export memory-floor-mib(?profile: Text, ?memory-total-mib: F64): F64
+  ?share: if(?profile = "attended", ?memory-total-mib / 5, ?memory-total-mib / 12)
+  if(?share > 8192, ?share, 8192)
 
 export resource-class(?kind: Text, ?cores: F64): Resources
   if(?kind = "agent", {cpus: 0, memoryMiB: 768},
-    if(?kind = "moderate", {cpus: if(?cores > 1, 2, 1), memoryMiB: 2048},
-      if(?kind = "heavy", {cpus: if(?cores > 8, 6, if(?cores > 4, 3, 1)), memoryMiB: 8192},
-        require(?kind = "exclusive", {cpus: aggregate-cpus(?cores), memoryMiB: 16384},
-          "Unknown resource class"))))
+    if(?kind = "native", {cpus: if(?cores > 1, 2, 1), memoryMiB: 4096},
+      if(?kind = "moderate", {cpus: if(?cores > 1, 2, 1), memoryMiB: 2048},
+        if(?kind = "heavy", {cpus: if(?cores > 8, 6, if(?cores > 4, 3, 1)), memoryMiB: 8192},
+          require(?kind = "exclusive", {cpus: ?cores, memoryMiB: 16384},
+            "Unknown resource class")))))
 
 export reserve-class(?kind: Text): Bool
   ?kind = "agent"
 
-export admission-decision(?kind: Text, ?cores: F64, ?memory-total-mib: F64, ?memory-available-mib: F64, ?cpu-some-avg10-basis-points: F64, ?leased-memory-mib: F64, ?requested-cpus: F64, ?requested-memory-mib: F64, ?peer-runs: F64, ?peer-exclusive-runs: F64, ?unbounded-runs: F64): Text
-  if(?cores <= 0 or ?memory-total-mib <= 0 or ?memory-available-mib <= 0 or ?requested-cpus < 0 or ?requested-memory-mib <= 0, "INVALID",
-    if(?memory-available-mib - ?requested-memory-mib < 4096 or (?memory-available-mib - ?requested-memory-mib) * 5 < ?memory-total-mib, "DEFER_MEMORY_HEADROOM",
-      if(?cpu-some-avg10-basis-points >= 2000, "DEFER_CPU_PRESSURE",
-        if((?leased-memory-mib + ?requested-memory-mib) * 4 > ?memory-total-mib * 3, "DEFER_MEMORY_CAPACITY",
-          if(?kind = "agent", "RUN",
-            if(?unbounded-runs > 0, "DEFER_UNBOUNDED_PEER",
-              if(?peer-exclusive-runs > 0 or (?kind = "exclusive" and ?peer-runs > 0), "DEFER_EXCLUSIVE", "RUN")))))))
+export batch-class(?kind: Text): Bool
+  ?kind = "moderate" or ?kind = "heavy" or ?kind = "exclusive"
+
+# Batch work runs at low CPU weight and only takes cycles the desktop and native
+# clients leave idle, so it is refused only when a protected slice itself waits.
+# Native clients run at high weight and are admitted on cores and memory.
+export admission-decision(?profile: Text, ?kind: Text, ?cores: F64, ?memory-total-mib: F64, ?memory-available-mib: F64, ?protected-cpu-some-avg10-basis-points: F64, ?leased-memory-mib: F64, ?leased-native-cpus: F64, ?requested-cpus: F64, ?requested-memory-mib: F64, ?peer-batch-runs: F64, ?peer-exclusive-runs: F64, ?unbounded-runs: F64): Text
+  require(?profile = "attended" or ?profile = "unattended", if(?cores <= 0 or ?memory-total-mib <= 0 or ?memory-available-mib <= 0 or ?requested-cpus < 0 or ?requested-memory-mib <= 0, "INVALID",
+    if(?memory-available-mib - ?requested-memory-mib < memory-floor-mib(?profile, ?memory-total-mib), "DEFER_MEMORY_HEADROOM",
+      if((?leased-memory-mib + ?requested-memory-mib) * 4 > ?memory-total-mib * 3, "DEFER_MEMORY_CAPACITY",
+        if(?kind = "agent", "RUN",
+          if(?kind = "native",
+            if(?leased-native-cpus + ?requested-cpus > aggregate-cpus(?profile, ?cores), "DEFER_NATIVE_CPUS", "RUN"),
+            if(?profile = "attended" and ?protected-cpu-some-avg10-basis-points >= 1000, "DEFER_INTERACTIVE_PRESSURE",
+              if(?unbounded-runs > 0, "DEFER_UNBOUNDED_PEER",
+                if(?peer-exclusive-runs > 0 or (?kind = "exclusive" and ?peer-batch-runs > 0), "DEFER_EXCLUSIVE", "RUN")))))))), "Unknown capacity profile")

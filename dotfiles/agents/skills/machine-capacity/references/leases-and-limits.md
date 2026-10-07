@@ -25,17 +25,23 @@ releasing the exact known lease. A prose report is not a release receipt.
 
 ## Headroom and pressure
 
-The helper reserves 25% of CPUs and memory headroom of at least 20% and 4 GiB.
-It defers work at CPU PSI of 20% or more over ten seconds, insufficient
-available memory, or memory lease budgets above 75% of host capacity.
-Every local job joins `agent-capacity.slice`, whose aggregate CPU quota is 75%
-of host CPUs. The sum of per-job CPU ceilings may exceed that quota: sleeping
-or serial jobs do not consume their ceilings continuously. Agent reservations
+Desktop protection comes from CPU weight, not refusal. Batch jobs join
+`agent-capacity.slice` under `agent.slice` (weight 20); game clients join
+`native.slice` (weight 200); the compositor's `session.slice` keeps 300. The
+attended profile caps the batch slice at all cores but four and keeps 20% of
+RAM available; the unattended profile lifts the cap and keeps only 8 GiB
+available. System-wide CPU PSI is not an admission signal: on 2026-10-07 it
+held 25-40% for hours while the session slice measured 0%, because the batch
+slice's own quota throttling (Warcraft clients in 2-CPU `moderate` scopes were
+throttled in about 65% of periods) is counted as CPU pressure. Attended batch
+admission instead defers while the session or native slice's own CPU PSI some
+avg10 is at least 10%. The sum of per-job CPU ceilings may exceed the cap:
+sleeping or serial jobs do not consume their ceilings continuously. Agent reservations
 retain their 768 MiB memory budget without charging remote inference as local
 CPU work. Admission reports CPU pressure separately from CPU ceilings and the
 aggregate limit; a reserved ceiling is not a utilization measurement.
 
-Exclusive work requires no other local run lease and prevents new local runs
+Exclusive work requires no other batch run lease and prevents new batch runs
 until release; agent memory reservations may coexist. A run lease outside the
 aggregate limit defers new local jobs until its owner finishes. Activation
 must therefore wait for old helper invocations to drain; never move or kill

@@ -15,8 +15,12 @@ bun "$capacity" run --class heavy --owner "codex:/root/task" \
   --timeout-seconds 900 -- COMMAND ARG...
 ```
 
-Choose the smallest sufficient class: `moderate` (2 CPUs/2 GiB), `heavy`
-(6 CPUs/8 GiB), or `exclusive` (bounded heavy budget with no peer heavy lease).
+Choose the smallest sufficient class. Builds, tests and other batch work use
+`moderate` (2 CPUs/2 GiB), `heavy` (6 CPUs/8 GiB), or `exclusive` (every
+allowed core, no peer batch lease); they run in the low-weight
+`agent-capacity.slice` and only take cycles the desktop and game clients leave
+idle. Latency-sensitive Warcraft clients, one scope per client (a pool pair is
+two), use `native` (2 CPUs/4 GiB): the high-weight `native.slice`, no CPU quota.
 Set an honest hard runtime bound including legitimate setup and downloads;
 the example is not a universal timeout.
 
@@ -27,10 +31,20 @@ the scope. Keep the wrapper supervised until its `RELEASED` result. Use `run`
 with a finite timeout for builds and other bounded jobs. Never replace a deadline
 with a very large timeout or detach a renewal process.
 
-The wrapper admits atomically and contains every descendant in one user
-cgroup. All helper jobs share a CPU limit of 75% of the host; per-job CPU
-allowances are ceilings, not measured use or additive reservations. Exclusive
-runs wait for all peer local jobs and block new local jobs until release.
+CPU weights order contention: `session.slice` (compositor) 300 > `native.slice`
+200 > `app.slice` (terminals, browser) 100 > `agent.slice` batch 20. Two
+profiles set admission. **attended** (Tom present): batch shares cores minus a
+4-core reserve and is refused only while the session or native slice itself
+waits for CPU (PSI some avg10 at least 10%); it keeps 20% of RAM available.
+**unattended** (Tom away): greedy, every core, no CPU refusal, only an 8 GiB
+available-memory floor against swap and OOM. Both cap leased memory at 75% of
+RAM. `mode` auto-switches to unattended after 10 minutes without input and
+back when input returns; `bun "$capacity" mode away|present|auto` overrides
+it (no argument prints the active profile). `probe` reports `profile` and
+`mode`. The wrapper admits atomically and contains every descendant in one user
+cgroup. Per-job batch CPU allowances are ceilings, not reservations. Exclusive
+runs wait for peer batch jobs and block new batch jobs until release; native
+clients are never blocked by batch work.
 Do not detach work outside the scope. One owner retains the terminal
 `RELEASED` result and cleans up the exact scope.
 
@@ -39,8 +53,8 @@ continues. Retry after a known release or at least 30 seconds, never busy-poll.
 `RECLAIMED` concerns expired agent leases or finished helper-owned scopes, not
 permission to kill peers. Run allowances remain charged while their wrapper or
 scope is live, including throughout an interactive session without a deadline.
-Memory PSI is diagnostic: local cgroup throttling can raise it despite ample
-host headroom. Admission uses available memory, lease budgets, and CPU pressure.
+System-wide CPU and memory PSI are diagnostic only: batch work at low weight
+and per-job quota throttling raise them without hurting the desktop.
 
 Before a parallel worker expected to consume local compute, reserve its
 `agent` lease (768 MiB, no local CPU reservation); renew before expiry and

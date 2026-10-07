@@ -17,8 +17,15 @@ const admissionDecision = policy['admission-decision'];
 const resourceClass = policy['resource-class'];
 const reserveClass = policy['reserve-class'];
 const aggregateCpus = policy['aggregate-cpus'];
+const batchClass = policy['batch-class'];
 const aggregateSlice = 'agent-capacity.slice';
-const classNames = new Set(['agent', 'moderate', 'heavy', 'exclusive']);
+// Sibling of session.slice (300), app.slice (100) and agent.slice (20): game
+// clients outrank terminals and batch work but never the compositor.
+const nativeSlice = 'native.slice';
+const nativeCpuWeight = 200;
+const classNames = new Set(['agent', 'native', 'moderate', 'heavy', 'exclusive']);
+const modes = new Map([['present', 'attended'], ['away', 'unattended'], ['auto', null]]);
+const idleSecondsForUnattended = 600;
 const maximumTimeoutSeconds = 3600;
 const lockStaleMilliseconds = 2000;
 const runLeaseGraceMilliseconds = 5000;
@@ -72,7 +79,7 @@ function required(values, option) {
 
 function parseClass(values, cores) {
   const name = required(values, '--class');
-  if (!classNames.has(name)) fail('--class must be agent, moderate, heavy, or exclusive');
+  if (!classNames.has(name)) fail('--class must be agent, native, moderate, heavy, or exclusive');
   const resources = resourceClass(name, cores);
   if (!Number.isFinite(resources.cpus) || !Number.isFinite(resources.memoryMiB)) {
     fail(`policy rejected resource class: ${name}`);
@@ -85,6 +92,15 @@ function parsePsi(path, kind) {
   const match = line?.match(/avg10=([0-9]+(?:\.[0-9]+)?)/);
   if (!match) fail(`cannot read ${kind} avg10 from ${path}`);
   return Math.round(Number(match[1]) * 100);
+}
+
+function userManagerCgroup() {
+  return `/sys/fs/cgroup/user.slice/user-${process.getuid()}.slice/user@${process.getuid()}.service`;
+}
+
+function slicePressure(slice) {
+  const path = join(userManagerCgroup(), slice, 'cpu.pressure');
+  return existsSync(path) ? parsePsi(path, 'some') : 0;
 }
 
 function readSignals() {
@@ -101,6 +117,7 @@ function readSignals() {
     memoryTotalMiB: fields.get('MemTotal'),
     memoryAvailableMiB: fields.get('MemAvailable'),
     cpuSomeAvg10BasisPoints: parsePsi('/proc/pressure/cpu', 'some'),
+    protectedCpuSomeAvg10BasisPoints: Math.max(slicePressure('session.slice'), slicePressure(nativeSlice)),
     memoryFullAvg10BasisPoints: parsePsi('/proc/pressure/memory', 'full'),
   };
 }
@@ -109,6 +126,49 @@ function runtimeRoot() {
   const base = process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid()}`;
   if (!base.startsWith('/')) fail('XDG_RUNTIME_DIR must be absolute');
   return join(base, 'agent-capacity-v1');
+}
+
+function readMode(root) {
+  try {
+    const mode = readFileSync(join(root, 'mode'), 'utf8').trim();
+    return modes.has(mode) ? mode : 'auto';
+  } catch (error) {
+    if (error?.code === 'ENOENT') return 'auto';
+    throw error;
+  }
+}
+
+function idleSeconds(root) {
+  try {
+    return (Date.now() - statSync(join(root, 'last-input')).mtimeMs) / 1000;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+// Without presence evidence the desktop is assumed attended.
+function activeProfile(root) {
+  const mode = readMode(root);
+  if (modes.get(mode)) return { mode, profile: modes.get(mode), idleSeconds: idleSeconds(root) };
+  const idle = idleSeconds(root);
+  return {
+    mode,
+    profile: idle !== null && idle >= idleSecondsForUnattended ? 'unattended' : 'attended',
+    idleSeconds: idle,
+  };
+}
+
+function setSlice(slice, ...properties) {
+  const result = Bun.spawnSync([
+    'systemctl', '--user', 'set-property', '--runtime', slice, ...properties,
+  ], { stdin: 'ignore', stdout: 'ignore', stderr: 'inherit' });
+  return result.exitCode === 0;
+}
+
+function applyProfile(profile, cores) {
+  return setSlice(aggregateSlice, `CPUQuota=${aggregateCpus(profile, cores) * 100}%`)
+    && setSlice(nativeSlice, `CPUWeight=${nativeCpuWeight}`, `IOWeight=${nativeCpuWeight}`);
 }
 
 function ensureState(root) {
@@ -192,8 +252,13 @@ function readLeases(root, now) {
 function totals(leases) {
   return leases.reduce((sum, lease) => ({
     cpus: sum.cpus + (lease.kind === 'run' ? lease.cpus : 0),
+    nativeCpus: sum.nativeCpus + (lease.kind === 'run' && lease.class === 'native' ? lease.cpus : 0),
     memoryMiB: sum.memoryMiB + lease.memoryMiB,
-  }), { cpus: 0, memoryMiB: 0 });
+  }), { cpus: 0, nativeCpus: 0, memoryMiB: 0 });
+}
+
+function leaseSlice(className) {
+  return className === 'native' ? nativeSlice : aggregateSlice;
 }
 
 function decision(root, requested, create) {
@@ -203,28 +268,36 @@ function decision(root, requested, create) {
     const leased = totals(active);
     const runs = active.filter(lease => lease.kind === 'run');
     const signals = readSignals();
+    const { mode, profile, idleSeconds: idle } = activeProfile(root);
     const code = admissionDecision(
+      profile,
       requested.name,
       signals.cores,
       signals.memoryTotalMiB,
       signals.memoryAvailableMiB,
-      signals.cpuSomeAvg10BasisPoints,
+      signals.protectedCpuSomeAvg10BasisPoints,
       leased.memoryMiB,
+      leased.nativeCpus,
       requested.cpus,
       requested.memoryMiB,
-      runs.length,
+      runs.filter(lease => batchClass(lease.class)).length,
       runs.filter(lease => lease.class === 'exclusive').length,
-      runs.filter(lease => lease.aggregateSlice !== aggregateSlice).length,
+      runs.filter(lease => lease.aggregateSlice !== leaseSlice(lease.class)).length,
     );
     const result = {
       decision: code === 'RUN' ? (create ? 'RESERVED' : 'RUN') : 'DEFER',
       reason: code,
+      profile,
+      mode,
+      idleSeconds: idle === null ? null : Math.round(idle),
       class: requested.name,
       requestedCpus: requested.cpus,
       requestedMemoryMiB: requested.memoryMiB,
       leasedCpuCeilings: leased.cpus,
-      aggregateCpuLimit: aggregateCpus(signals.cores),
+      aggregateCpuLimit: aggregateCpus(profile, signals.cores),
+      leasedNativeCpus: leased.nativeCpus,
       leasedMemoryMiB: leased.memoryMiB,
+      protectedCpuSomeAvg10: signals.protectedCpuSomeAvg10BasisPoints / 100,
       cpuSomeAvg10: signals.cpuSomeAvg10BasisPoints / 100,
       memoryFullAvg10: signals.memoryFullAvg10BasisPoints / 100,
       memoryAvailableMiB: signals.memoryAvailableMiB,
@@ -237,7 +310,7 @@ function decision(root, requested, create) {
       id,
       kind: create.kind,
       class: requested.name,
-      aggregateSlice: create.kind === 'run' ? aggregateSlice : null,
+      aggregateSlice: create.kind === 'run' ? leaseSlice(requested.name) : null,
       owner: create.owner,
       cpus: requested.cpus,
       memoryMiB: requested.memoryMiB,
@@ -298,12 +371,11 @@ function parseOwner(values) {
 
 async function runScoped(root, requested, owner, timeoutSeconds, command) {
   if (requested.name === 'agent') fail('run --class must be moderate, heavy, or exclusive');
-  // The parent limit must exist before any admitted command can execute.
-  const capped = Bun.spawnSync([
-    'systemctl', '--user', 'set-property', '--runtime', aggregateSlice,
-    `CPUQuota=${aggregateCpus(readSignals().cores) * 100}%`,
-  ], { stdin: 'ignore', stdout: 'ignore', stderr: 'inherit' });
-  if (capped.exitCode !== 0) fail('cannot establish aggregate CPU limit', 75);
+  // The parent limit and weights must exist before any admitted command executes.
+  if (!applyProfile(activeProfile(root).profile, readSignals().cores)) {
+    fail('cannot establish aggregate CPU limit and native weight', 75);
+  }
+  const native = requested.name === 'native';
   const admitted = decision(root, requested, { kind: 'run', owner, timeoutSeconds });
   print(admitted, process.stderr);
   if (admitted.decision !== 'RESERVED') return 75;
@@ -317,8 +389,9 @@ async function runScoped(root, requested, owner, timeoutSeconds, command) {
     const child = Bun.spawn([
       'systemd-run', '--user', '--scope', '--quiet', '--collect', '--expand-environment=no',
       `--unit=${unit}`,
-      `--slice=${aggregateSlice}`,
-      `--property=CPUQuota=${requested.cpus * 100}%`,
+      `--slice=${leaseSlice(requested.name)}`,
+      // A quota-throttled game client stalls for the rest of each period.
+      ...(native ? [] : [`--property=CPUQuota=${requested.cpus * 100}%`]),
       `--property=MemoryHigh=${requested.memoryMiB}M`,
       `--property=RuntimeMaxSec=${timeoutSeconds === null ? 'infinity' : `${timeoutSeconds}s`}`,
       '--property=KillMode=control-group',
@@ -346,10 +419,10 @@ async function main(argv) {
   const operation = argv[0];
   if (operation === 'fixture') {
     const parsed = parseKeyValues(argv, 1, new Set([
-      '--class', '--cores', '--memory-total-mib', '--memory-available-mib',
-      '--cpu-some-avg10-basis-points', '--memory-full-avg10-basis-points',
-      '--leased-cpus', '--leased-memory-mib',
-      '--peer-runs', '--peer-exclusive-runs', '--unbounded-runs',
+      '--profile', '--class', '--cores', '--memory-total-mib', '--memory-available-mib',
+      '--protected-cpu-some-avg10-basis-points', '--memory-full-avg10-basis-points',
+      '--leased-cpus', '--leased-native-cpus', '--leased-memory-mib',
+      '--peer-batch-runs', '--peer-exclusive-runs', '--unbounded-runs',
     ]));
     if (parsed.separator !== argv.length) fail('fixture accepts no command');
     const cores = parsePositiveInteger(required(parsed.values, '--cores'), '--cores');
@@ -360,24 +433,41 @@ async function main(argv) {
     const leasedCpuCeilings = parseNonnegativeInteger(
       required(parsed.values, '--leased-cpus'), '--leased-cpus',
     );
+    const profile = required(parsed.values, '--profile');
+    if (profile !== 'attended' && profile !== 'unattended') fail('--profile must be attended or unattended');
     const code = admissionDecision(
+      profile,
       requested.name,
       cores,
       parsePositiveInteger(required(parsed.values, '--memory-total-mib'), '--memory-total-mib'),
       parsePositiveInteger(required(parsed.values, '--memory-available-mib'), '--memory-available-mib'),
-      parseNonnegativeInteger(required(parsed.values, '--cpu-some-avg10-basis-points'), '--cpu-some-avg10-basis-points'),
+      parseNonnegativeInteger(required(parsed.values, '--protected-cpu-some-avg10-basis-points'), '--protected-cpu-some-avg10-basis-points'),
       parseNonnegativeInteger(required(parsed.values, '--leased-memory-mib'), '--leased-memory-mib'),
+      parseNonnegativeInteger(parsed.values.get('--leased-native-cpus') ?? '0', '--leased-native-cpus'),
       requested.cpus,
       requested.memoryMiB,
-      parseNonnegativeInteger(parsed.values.get('--peer-runs') ?? '0', '--peer-runs'),
+      parseNonnegativeInteger(parsed.values.get('--peer-batch-runs') ?? '0', '--peer-batch-runs'),
       parseNonnegativeInteger(parsed.values.get('--peer-exclusive-runs') ?? '0', '--peer-exclusive-runs'),
       parseNonnegativeInteger(parsed.values.get('--unbounded-runs') ?? '0', '--unbounded-runs'),
     );
-    print({ decision: code, class: requested.name, cpus: requested.cpus, memoryMiB: requested.memoryMiB, memoryFullAvg10,
-      leasedCpuCeilings, aggregateCpuLimit: aggregateCpus(cores) });
+    print({ decision: code, profile, class: requested.name, cpus: requested.cpus, memoryMiB: requested.memoryMiB, memoryFullAvg10,
+      leasedCpuCeilings, aggregateCpuLimit: aggregateCpus(profile, cores) });
     return code === 'RUN' ? 0 : 75;
   }
   const root = runtimeRoot();
+  if (operation === 'mode') {
+    if (argv.length > 2) fail('usage: mode [away|present|auto]');
+    if (argv.length === 2) {
+      if (!modes.has(argv[1])) fail('mode must be away, present, or auto');
+      ensureState(root);
+      writeFileSync(join(root, 'mode'), `${argv[1]}\n`, { encoding: 'utf8', mode: 0o600 });
+    }
+    const active = activeProfile(root);
+    if (!applyProfile(active.profile, readSignals().cores)) fail('cannot apply capacity profile', 75);
+    print({ ...active, idleSeconds: active.idleSeconds === null ? null : Math.round(active.idleSeconds),
+      aggregateCpuLimit: aggregateCpus(active.profile, readSignals().cores) });
+    return 0;
+  }
   if (operation === 'probe') {
     const { values, separator } = parseKeyValues(argv, 1, new Set(['--class']));
     if (separator !== argv.length) fail('probe accepts no command');
@@ -433,7 +523,7 @@ async function main(argv) {
       command,
     );
   }
-  fail('usage: probe|reserve|renew|release|run|session; see machine-capacity');
+  fail('usage: probe|mode|reserve|renew|release|run|session; see machine-capacity');
 }
 
 process.exitCode = await main(Bun.argv.slice(2));
