@@ -204,9 +204,12 @@ async function watchPresence(root) {
       process.stdout.write(`${JSON.stringify({ profile, at: new Date().toISOString() })}\n`);
     }
   };
-  const mark = () => {
+  const mark = device => {
     const now = Date.now();
     if (now - lastMark < 1000) return;
+    if (now - lastMark > 60000) {
+      process.stdout.write(`${JSON.stringify({ input: device, at: new Date(now).toISOString() })}\n`);
+    }
     lastMark = now;
     writeFileSync(marker, '', { mode: 0o600 });
     if (applied === 'unattended') reconcile();
@@ -217,7 +220,7 @@ async function watchPresence(root) {
       const reader = Bun.spawn(['cat', device], { stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' });
       readers.set(device, reader);
       (async () => {
-        for await (const _ of reader.stdout) mark();
+        for await (const _ of reader.stdout) mark(device);
         readers.delete(device);
       })();
     }
