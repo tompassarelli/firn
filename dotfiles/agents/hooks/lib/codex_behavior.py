@@ -6,7 +6,8 @@ issues closed. Every decision prints one JSON object or nothing, and a
 malformed event allows.
 
 - UserPromptSubmit records the prompt, shows the session scoreboard, and adds
-  the correction or close-it-now rule when the prompt calls for it.
+  the correction, close-it-now or stop-now rule when the prompt calls for it;
+  after a stop request, every fifth command says to reply ready.
 - PreToolUse(update_plan) refuses process steps Tom didn't ask for, and a
   first plan without its checklist: the goal quoted from the request, the
   profile, Done-when, extra checks, workers and an ETA.
@@ -60,6 +61,14 @@ CLOSE_REQUEST = re.compile(
     r"still open|close (it|this|that|the issue|#?\d+)|land (it|this|the plane))\b",
     re.IGNORECASE,
 )
+
+STOP_REQUEST = re.compile(
+    r"\b(wrap (it |this |everything )?up|stop (now|everything|all work|the workers|working)|"
+    r"pause (everything|the workers|all work|work)|stand down|"
+    r"restart(s|ing)? (in|now|shortly|soon)|reply (with the word )?ready)\b",
+    re.IGNORECASE,
+)
+STOP_CALL_LIMIT = 5
 
 PLAN_PROCESS = [
     (r"\b(independent|second|separate|fresh)[- ]?(review|reviewer|opinion|audit)\b", "an extra review", ("review", "audit")),
@@ -247,6 +256,16 @@ def context(event_name, text):
 
 def user_prompt_submit(event):
     prompt = event.get("prompt") or ""
+    if prompt.lstrip().startswith("<codex_internal_context"):
+        # Goal mode re-prompts on its own; that is not Tom speaking.
+        with State(event.get("session_id")) as state:
+            if state.get("stop_request"):
+                return context(
+                    "UserPromptSubmit",
+                    "Tom told you to stop, and that outranks the goal. Pause the goal, "
+                    "reply ready and end the turn.",
+                )
+        return None
     with State(event.get("session_id")) as state:
         state["prompts"] = (state["prompts"] + [prompt])[-PROMPTS_KEPT:]
         elapsed = time.time() - state["started"]
@@ -260,6 +279,16 @@ def user_prompt_submit(event):
             "Don't answer with a new review, verifier, audit, rule, policy or skill "
             "edit. If he asked a question, answer it in your first line."
         )
+    with State(event.get("session_id")) as state:
+        if STOP_REQUEST.search(prompt):
+            state["stop_request"] = {"at": time.time(), "calls": 0}
+            lines.append(
+                "Tom asked you to stop. Send each worker one message to stop, pause the "
+                "active goal, then reply ready. Don't verify, re-read issues or wait for "
+                "confirmations: work in worktrees survives a restart."
+            )
+        else:
+            state.pop("stop_request", None)
     if CLOSE_REQUEST.search(prompt):
         lines.append(
             "Tom wants this closed. Read the issue's unchecked Done-when box and run "
@@ -529,6 +558,9 @@ def post_bash(event):
     code = exit_code(event.get("tool_response"))
     notes = []
     with State(event.get("session_id")) as state:
+        overrun = stop_overrun(state)
+        if overrun:
+            notes.append(overrun)
         if read_only(command):
             state["streak"] = state.get("streak", 0) + 1
             if state["streak"] == STREAK_LIMIT:
@@ -567,10 +599,24 @@ def post_bash(event):
     return context("PostToolUse", " ".join(notes)) if notes else None
 
 
+def stop_overrun(state):
+    request = state.get("stop_request")
+    if not request:
+        return None
+    request["calls"] += 1
+    if request["calls"] < STOP_CALL_LIMIT or request["calls"] % STOP_CALL_LIMIT:
+        return None
+    return (
+        f"Tom told you to stop {request['calls']} commands ago "
+        f"({minutes(time.time() - request['at'])}). Reply ready now."
+    )
+
+
 def post_patch(event):
     with State(event.get("session_id")) as state:
         state["streak"] = 0
-    return None
+        overrun = stop_overrun(state)
+    return context("PostToolUse", overrun) if overrun else None
 
 
 # --- Stop ------------------------------------------------------------------------

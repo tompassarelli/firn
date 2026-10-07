@@ -154,6 +154,18 @@ for _ in $(seq 1 19); do post r2 "$game" '"ls"' 0 | run >/dev/null; done
 expect build-counts-as-action fires 'Stop reading' "$(post r2 "$game" '"ls"' 0)"
 expect sed-in-place-is-action quiet '' "$(post r3 "$game" '"sed -i s/a/b/ arc.ts"' 0)"
 
+# A stop request means stop now, and running on gets a reminder every five commands.
+expect stop-request fires 'Tom asked you to stop' "$(prompt s1 '"Heads-up from Tom: the shared Codex server restarts in a few minutes. Reply with the word ready and stop."')"
+expect stop-asking-is-not-stop lacks 'asked you to stop' "$(prompt s2 '"stop asking me questions and just ship it"')"
+for _ in 1 2 3 4; do post s1 "$game" '"git add -A"' 0 | run >/dev/null; done
+expect fifth-command fires 'Reply ready now' "$(post s1 "$game" '"git commit -m wip"' 0)"
+expect sixth-command quiet '' "$(post s1 "$game" '"git push"' 0)"
+expect goal-reprompt-holds-stop fires 'outranks the goal' "$(prompt s1 '"<codex_internal_context source=\"goal\"> Continue working toward the active thread goal."')"
+expect goal-reprompt-without-stop quiet '' "$(prompt s3 '"<codex_internal_context source=\"goal\"> Continue working toward the active thread goal."')"
+prompt s1 '"restarted, resume from the roadmap restart list"' | run >/dev/null
+for _ in 1 2 3 4; do post s1 "$game" '"bun run build"' 0 | run >/dev/null; done
+expect cleared-by-next-prompt quiet '' "$(post s1 "$game" '"bun run build:map"' 0)"
+
 # Other tools skip the interpreter; the off switch and malformed input allow.
 expect other-tool quiet '' '{"hook_event_name":"PreToolUse","session_id":"x","tool_name":"apply_patch","tool_input":{"command":"bun test"}}'
 out="$(prompt k1 '"stop asking, wtf"' | AGENT_NO_AUTHORING_HOOKS=1 "$HOOK" 2>/dev/null)"
