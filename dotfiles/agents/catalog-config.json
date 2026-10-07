@@ -385,14 +385,12 @@
       }
     },
     "github-issues": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/github-issues/SKILL.md"
+      }
     }
   },
   "activation": {
@@ -1139,6 +1137,16 @@
       ]
     },
     "smashcraft-animation": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "github-issues": {
       "distributions": [
         {
           "type": "skill",
