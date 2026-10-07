@@ -103,6 +103,28 @@ applied" names the reason.
   timer, trigger or callback on a turn that differs between clients changes
   the checksum (#158).
 
+## Warcraft 3.0 (September 2026) changes
+
+From the 3.0.0 patch notes (build 24268, 12 Sep) and the 3.0.1 update (24342, 8 Oct):
+
+- **Online only.** LAN mode is removed, and the client must stay online (offline
+  only through the Classic Client, reported to be Legacy 1.29, which has no Lua
+  and can't run Wisp maps). Our offline pool ran on 3.0.0 but fails to start on
+  3.0.1. Native checks run as online private games on Tom's three accounts, with
+  password-protected lobbies, unless an isolated, internet-free pool copy works
+  (wisp:docs/lan.md).
+- **New natives.** Reset a unit's attack cooldown, set an ability's remaining
+  cooldown, toggle all of a unit's auras, and more ability natives: declare them
+  in Wisp and model them headlessly before using them.
+- **Assets.** OGG audio imports are supported, and the floating-text cap is 10,000.
+- **Fixed engine bugs.** Projectiles now appear when the target is very close,
+  and new lightning effects no longer remove old ones. Drop any workaround for
+  either.
+- **Graphics.** The client offers Classic, Definitive Edition and Reforged
+  modes. Ambient Occlusion, Bloom, Portrait Bloom, Particles and Spells options
+  were removed; Point Light Shadows, Water and Supersampling were added.
+  Forsaken Paladin is a neutral tavern hero in all three modes.
+
 ## When the engine does something odd
 
 Check [Warsmash](https://github.com/Retera/WarsmashModEngine) first. It
@@ -136,7 +158,8 @@ over lockstep WebRTC peer to peer, with no server.
 
 ## Native testing
 
-- **Offline LAN pool, the default** (wisp:docs/lan.md): throwaway clients,
+- **Offline LAN pool, the default while it starts** (wisp:docs/lan.md; it fails
+  on 3.0.1, see Warcraft 3.0 changes): throwaway clients,
   each pair in a loopback-only network namespace. `wisp lan setup --from
   INSTALL [--pairs N]` once; `wisp lan pool [--pairs N | --pair K...]
   [--pool-profile parity|visual] [--fps N]` runs pairs through the
@@ -144,9 +167,11 @@ over lockstep WebRTC peer to peer, with no server.
   `lan end --pair K`. State and `clients.json` are in
   `~/.local/state/wisp/lan/`. Pad parity, captures, `accept` and desync hunts
   run here.
-- **Signed-in A and B** (accounts c and b): only for tests that need
-  Battle.net (real netplay, `online host|join`, spectating). Passive reads
-  only.
+- **Signed-in A and B** (accounts c and b): tests that need Battle.net (real
+  netplay, `online host|join`, spectating), and every native check while the
+  offline pool can't start, as password-protected private games. Account a
+  joins them only when Tom isn't playing (one login per account). Passive
+  reads only.
 - **Tom's install** (account a, display `:0`): no agent tests or engine
   tools; `wisp play` there only when Tom asks.
 
