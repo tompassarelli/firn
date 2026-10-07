@@ -105,25 +105,36 @@ applied" names the reason.
 
 ## Warcraft 3.0 (September 2026) changes
 
-From the 3.0.0 patch notes (build 24268, 12 Sep) and the 3.0.1 update (24342, 8 Oct):
+From the patch notes for 3.0.0 (build 24268, 12 Sep) and 3.0.1 (build 24342, 7 Oct):
 
 - **Online only.** LAN mode is removed, and the client must stay online (offline
   only through the Classic Client, reported to be Legacy 1.29, which has no Lua
-  and can't run Wisp maps). Our offline pool ran on 3.0.0 but fails to start on
-  3.0.1. Native checks run as online private games on Tom's three accounts, with
-  password-protected lobbies, unless an isolated, internet-free pool copy works
-  (wisp:docs/lan.md).
-- **New natives.** Reset a unit's attack cooldown, set an ability's remaining
-  cooldown, toggle all of a unit's auras, and more ability natives: declare them
-  in Wisp and model them headlessly before using them.
-- **Assets.** OGG audio imports are supported, and the floating-text cap is 10,000.
-- **Fixed engine bugs.** Projectiles now appear when the target is very close,
-  and new lightning effects no longer remove old ones. Drop any workaround for
-  either.
-- **Graphics.** The client offers Classic, Definitive Edition and Reforged
-  modes. Ambient Occlusion, Bloom, Portrait Bloom, Particles and Spells options
-  were removed; Point Light Shadows, Water and Supersampling were added.
-  Forsaken Paladin is a neutral tavern hero in all three modes.
+  and can't run Wisp maps). Our offline pool ran on 3.0.0 but stops at a
+  war3_loader assertion on 3.0.1; 3.0.1's notes don't mention it. Native checks
+  run as password-protected online private games on Tom's three accounts unless
+  an isolated, internet-free pool copy starts (wisp:docs/lan.md).
+- **Natives.** 3.0 natives carry the `Blz` prefix as of 3.0.1, and the
+  unprefixed names will be removed. New: cooldown resets and settings, an
+  aura toggle, `BlzUnitHeal`, `BlzRemoveEffect`, `BlzResetUnitTalents`, and
+  `BlzSetCameraAllowsHotkeyTargetLock` (the old camera lock functions now
+  disable hotkey target lock). Declare them in Wisp and model them headlessly
+  before using them (wisp#51).
+- **Art changed in 3.0.1.** The Pandaren Brewmaster and Orc Grunt are
+  reanimated, and about 35 spell effects were retuned, among them Blizzard,
+  Divine Shield, Immolation, Starfall, Black Arrow, Breath of Fire, Banish,
+  Life and Mana Drain, Roar, Forked Lightning and Death Coil. Re-derive clip
+  tables and re-take reference captures that use them.
+- **Assets and sound.** OGG audio imports work, and the floating-text cap is
+  10,000. 3.0.1 fixed custom-asset loading and model paths containing periods.
+  Definitive Edition plays classic sounds, so a sound check names its graphics
+  mode.
+- **Fixed engine bugs.** Projectiles appear when the target is very close, and
+  new lightning effects no longer remove old ones. Drop workarounds for either.
+- **Graphics.** The modes are Classic, Definitive Edition and Reforged. 3.0.0
+  removed Bloom, Portrait Bloom, Particles and Spells and added Point Light
+  Shadows, Water and Supersampling; 3.0.1 restored Ambient Occlusion. Test
+  profiles set the mode and Ambient Occlusion explicitly. Forsaken Paladin is
+  a neutral tavern hero in all three modes.
 
 ## When the engine does something odd
 
