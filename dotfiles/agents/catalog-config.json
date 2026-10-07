@@ -29,6 +29,7 @@
     "firn",
     "nix-development",
     "repo-safety",
+    "github-issues",
     "resource-safe-search",
     "machine-capacity",
     "todo",
@@ -382,6 +383,16 @@
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/smashcraft-animation/SKILL.md"
       }
+    },
+    "github-issues": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
     }
   },
   "activation": {
