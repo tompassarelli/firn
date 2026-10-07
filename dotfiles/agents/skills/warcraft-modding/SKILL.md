@@ -181,6 +181,19 @@ names the reason; nothing has changed in any client.
   agent (timer, trigger, code callback closure) on a turn that differs between
   clients changes Tempest's checksum (#158: a `TimerStart` closure).
 
+## Frames, assets and CI
+
+- **Frames:** declare a panel once as typed frames; Wisp generates its FDF, TOC
+  and typed handle bindings and rejects bad names and anchors at build time
+  (wisp:docs/ui.md). Prefer it to string-wired `BlzCreateFrameByType` code.
+- **Imports:** the map build adds every import, base file and byte check in one
+  archive opening (`map-pack replace-list`/`extract-list`; 1,108 files: 49 s to
+  12 s). Imports are already compressed; measure before re-encoding assets
+  (wisp:docs/asset-ingestion.md).
+- **CI:** consumers call Wisp's reusable workflow (wisp:docs/ci.md) for check,
+  Lua32 tests, headless journeys and soak. A `.w3x` is built only on a private
+  self-hosted runner into its private store, never uploaded as a public artifact.
+
 ## Tests
 
 Register tests with `test()` in `*.tests.ts`, so each runs in Bun and in
