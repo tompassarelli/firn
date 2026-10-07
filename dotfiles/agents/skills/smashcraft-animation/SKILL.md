@@ -127,7 +127,7 @@ From the Smashcraft root:
   smashcraft:docs/fighter-animation-work.md, "Hero drill clips". A cape can
   obscure the leading foot even when the motion check passes; judge the drawn
   silhouette and send the stable candidate to the native owner.
-- `bun tools/animations/grab-clips.ts PRIVATE_ASSETS PRIVATE_OUTPUT` appends
+- `bun tools/animations/grab-clips.ts PRIVATE_ASSETS PRIVATE_OUTPUT [--character ID]` appends
   thirteen paired grab-family gestures for each of ten expansion heroes
   (130 clips), preserving existing indices. Authored contact times align
   holder and victim to the holder's actual contact frame despite different
@@ -135,6 +135,9 @@ From the Smashcraft root:
   "Paired expansion-hero grabs"; the original three fighters retain their
   existing grab authoring. Holds are deliberately still. Check unlike-height
   and mirror pairs in both facings through the native owner.
+  Existing paired clips are reauthored at their same sequence indices and
+  intervals. `--character ID` limits replacements to that expansion fighter;
+  publish only changed input families and refresh the clip pool afterward.
 - `bun tools/animations/grab-pads.ts` generates 80 mirror scripts in
   smashcraft:ts/test/native/pads/180/: ten expansion heroes, four throws and
   both holder facings. The production-simulation pass requires ordinary

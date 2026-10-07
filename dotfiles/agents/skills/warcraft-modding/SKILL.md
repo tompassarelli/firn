@@ -338,7 +338,10 @@ and one owner, an immutable candidate map, and private output paths. Use
 `bun wisp lan pool --pair K --pool-profile visual` for the assigned
 pair, `bun wisp pad SCRIPT|DIR... --helper H --out PRIVATE_OUTPUT
 --map IMMUTABLE_MAP.w3x --pair K` for its batch, or
-`bun wisp accept --only ID... --pair K` for its declared acceptance checks.
+`bun wisp accept --map IMMUTABLE_MAP.w3x --only ID... --pair K` for its declared acceptance checks.
+`--map` uses the already-built candidate without rebuilding it; every
+selected check must use the same build profile. Give each revision its own
+private path; the same candidate is passed to every selected pair.
 Do not let simultaneous acceptance runs rebuild the same mutable map path;
 prepare their immutable candidates or use independent lane-owned fixtures.
 
