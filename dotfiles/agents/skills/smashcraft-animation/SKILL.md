@@ -135,6 +135,15 @@ From the Smashcraft root:
   "Paired expansion-hero grabs"; the original three fighters retain their
   existing grab authoring. Holds are deliberately still. Check unlike-height
   and mirror pairs in both facings through the native owner.
+- `bun tools/animations/grab-pads.ts` generates 80 mirror scripts in
+  smashcraft:ts/test/native/pads/180/: ten expansion heroes, four throws and
+  both holder facings. The production-simulation pass requires ordinary
+  approach/catch/pummel and the requested release, then positions captures at
+  contact and completion. Run that directory as one native pad batch with
+  headless references alongside it; matching traces establish input/selection,
+  while gameplay-zoom captures establish readability. Unlike-height pairs are
+  an additional visual sample. See smashcraft:docs/fighter-animation-work.md,
+  "Paired expansion-hero grabs" (Smashcraft commit b059af3a).
 - `bun tools/animations/damage-clips.ts PRIVATE_ASSETS PRIVATE_OUTPUT`
   appends the 117 articulated pain clips and checks their drawn first poses.
   For the unresolved native interpolation seam,
