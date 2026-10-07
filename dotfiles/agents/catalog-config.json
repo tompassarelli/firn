@@ -6,16 +6,7 @@
     "agent-machinery",
     "webdev",
     "importing-skills",
-    "threejs-animation",
-    "threejs-fundamentals",
-    "threejs-geometry",
-    "threejs-interaction",
-    "threejs-lighting",
-    "threejs-loaders",
-    "threejs-materials",
-    "threejs-postprocessing",
-    "threejs-shaders",
-    "threejs-textures",
+    "threejs",
     "clause-authoring",
     "game-design-prototyping",
     "warcraft-modding",
@@ -932,97 +923,7 @@
         }
       ]
     },
-    "threejs-animation": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-fundamentals": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-geometry": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-interaction": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-lighting": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-loaders": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-materials": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-postprocessing": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-shaders": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "threejs-textures": {
+    "threejs": {
       "distributions": [
         {
           "type": "skill",
