@@ -184,6 +184,27 @@ owner drives it. Everything else runs in parallel around it.
   processes. In host code wait with `waitFor` and wrap existing waits in
   `unlessLost`, so a crash or lost Battle.net fails at once.
 
+## Native desyncs: debug inside the engine
+
+For a native network desync, start with `wisp engine`
+(wisp:docs/engine.md; Smashcraft: `bun wisp engine`) before running
+experiments that change one variable at a time. On #158 it took the hunt from
+about 3.5 hours to about 30 minutes.
+
+- `engine desync A B` on the clients' Documents folders names the first turn and
+  checksum section that differ. If only `ipse` differs, a client made or freed
+  a handle on a different turn.
+- `engine poll --client a,b` during a repro, then `engine diff`, names the
+  birth: its class and owning handle, such as `CScriptFunc`, a code callback.
+- `engine watch` gives each birth's game stack, on offline clients only.
+- Guardrails: dev clients from the clients file only. Reads are allowed on
+  online dev clients; breakpoints need offline ones. No writes, injection, gdb
+  or ptrace attach; a gdb attach made a signed-in client exit. Memory reads
+  need `kernel.yama.ptrace_scope=0`, which only the owner sets; the command
+  prints the set and restore commands and never changes it.
+- After a Warcraft update, `engine locate` re-finds the offsets. Keep decrypted
+  code dumps and decompiler output private, outside every repository.
+
 ## Failure modes to avoid
 
 Symptom, cause, rule. Smashcraft, 6 Oct 2026. Native-runtime classes (menu-socket
