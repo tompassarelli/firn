@@ -255,6 +255,26 @@ comments. Patches, agent activity and test counts alone are not delivered issue
 progress. When patches accumulate without checkbox movement, prioritize the
 nearest acceptance or publication blocker while independent useful work continues.
 
+Ship small and often. These are defaults, not targets to report against:
+- **Unit of landing:** one box or one issue, not a batch. A lane holding a
+  finished, checked commit lands it now; another lane's in-flight work is
+  never a reason to wait.
+- **Unpushed age:** a passing commit sits unlanded for at most about an hour.
+  Past that, land it or name the blocker in the issue.
+- **Shared CI over a contended local machine:** when CI or a shared runner pool
+  runs the same check, push and let it gate. Run only the focused check
+  locally, then fix forward on red. A queue for local capacity is never a
+  reason to hold a landing.
+- **Split long serial work:** work estimated over about two hours that splits
+  along independent seams (data, art, presentation; one issue per lane) is
+  split and run in parallel.
+- **Agent time boxes:** every delegated agent states an ETA. At twice the ETA it
+  reports and either continues with a new ETA and a reason, or stops. An agent
+  never waits idle on CI or another lane: it stops, and the parent resumes it.
+- **Measure throughput:** when a verification loop is slow, time its phases and
+  remove the largest cost before adding parallelism. Restarts, reloads and
+  serial waits usually dominate.
+
 Close when the boxes pass, with one line of residual risk. A discovery that
 blocks no box stays outside current scope; record it in the existing backlog
 only when useful. During a delivery push, do not create follow-up issues unless
