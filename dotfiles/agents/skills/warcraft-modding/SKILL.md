@@ -196,7 +196,7 @@ Pick the client by what the test needs (Tom, 7 Oct 2026):
   Throwaway clients with no account, each pair in a network namespace with
   only loopback, play LAN matches that Wisp hosts. `wisp lan setup --from
   INSTALL [--pairs N]` creates them once (reflinked from an install);
-  `wisp lan pool --pairs N [--pool-profile parity|visual] [--fps N]` runs pairs admitted by
+  `wisp lan pool [--pairs N | --pair K...] [--pool-profile parity|visual] [--fps N]` runs pairs admitted by
   the machine-capacity helper (foreground; Ctrl-C stops it); `wisp lan fresh
   MAP [--pair K]` hosts and starts a match; `wisp lan status`, `wisp lan end
   --pair K`. The host logs every turn's actions and compares checksums each
@@ -273,7 +273,7 @@ rerun it. Gameplay boxes pass by checksum parity: the native run of a pad
 script equals a headless run of the same script (Smashcraft: `bun wisp pad
 ... --compare`, scripts in smashcraft:ts/test/native/pads/).
 
-## Native client time is the bottleneck
+## Native sessions across LAN pairs
 
 `wisp play` is the owner's normal playable path. In Smashcraft it resolves
 current main and builds the matching map and helper; never repoint it at an
@@ -293,13 +293,36 @@ a lock and publish a private staging folder by one rename; optional parts (the
 controller helper) never block the map. A pre-push gate type-checks and audits
 type escapes for every push that changes TypeScript.
 
-One client pair is one serial lane with one owner. Everything else runs in
-parallel around it.
+When independent native checks or maps are ready, run them concurrently on
+distinct supported offline LAN pairs. Assign each lane an explicit pair ID
+and one owner, an immutable candidate map, and private output paths. Use
+`bun wisp lan pool --pair K --pool-profile visual` for the assigned
+pair, `bun wisp pad SCRIPT|DIR... --helper H --out PRIVATE_OUTPUT
+--map IMMUTABLE_MAP.w3x --pair K` for its batch, or
+`bun wisp accept --only ID... --pair K` for its declared acceptance checks.
+Do not let simultaneous acceptance runs rebuild the same mutable map path;
+prepare their immutable candidates or use independent lane-owned fixtures.
 
-- Batch native checks. One fresh map or session covers every box that needs
-  it; one session's outputs feed every checker that consumes them. Test all
-  new characters and content in one combined match.
-- POLICY: run pad parity scripts as ONE batch, never one new game each:
+Serialize operations on the same pair or shared mutable fixture. A measured
+capacity or timing constraint may limit concurrent pairs for that workload;
+name the measurement and affected interval. Do not create a global single
+native-owner queue or infer a bottleneck merely because only one pair is
+active. Admit additional clients through machine-capacity, preserve desktop
+responsiveness, and investigate measured client/host cost before permanently
+shrinking the pool. Pair ownership, signed-in-client restrictions, Tom's :0
+boundary and offline-only invasive tooling continue to apply independently.
+
+A timed ten-client batch coordinates its ten clients as one shared measurement
+workload, with a fixed candidate, workload and measurement interval. It does
+not combine the queues of independent visual/gameplay lanes. Run those lanes
+on separate assigned pairs unless they share that fixture or a measured timing
+or capacity constraint requires a scoped pause.
+
+- Batch compatible checks within each pair. One fresh map or session covers
+  their boxes and its outputs feed their checkers. Independent maps and checks
+  use other assigned pairs concurrently.
+- Run compatible pad parity scripts as one batch per pair, or shard one
+  immutable candidate's batch across explicitly selected pairs:
   `bun wisp pad SCRIPT|DIR... --helper H --out DIR --map MAP.w3x
   --pair K...` (clients per "Native testing and debugging" above). It starts
   one game per pair, types `-dev reset` between scripts (it restores the
@@ -340,9 +363,10 @@ parallel around it.
 - Load the map by hosting through the menu socket after the post-login
   ladder-map scan finishes; Battle.net `-loadfile` can race it and fail every
   war3mapImported asset (Smashcraft #73).
-- Order the native queue by issues closed per session; finish source and
-  headless prep first. The native lane gets machine priority: defer heavy
-  local jobs during perf, cost and timing captures.
+- Order each pair's queue by issues closed per session; finish source and
+  headless prep first. Protect performance/cost/timing captures from local
+  heavy work within their declared measurement interval; keep independent
+  ready native lanes moving outside a measured shared constraint.
 - Change one variable per native experiment (route to `debugging`). Research
   Warcraft III bugs and engine behaviour on Hive Workshop (hiveworkshop.com)
   first; Blizzard's forums carry patch notes.
@@ -439,11 +463,6 @@ Symptom, cause, rule. Smashcraft, 6-7 Oct 2026.
   every checksum. Precompute static digests at load; no per-frame string building.
 - Desync hunt ran 3.5 hours of one-variable native experiments (#158): nobody
   looked inside the engine. Read the autopsy line, then `wisp engine`.
-- Native work grinding for hours, duplicate CPU, edits landing in protected
-  main: one agent owned all native work, each lane ran its own graph
-  regeneration/soak, a relative `git worktree add` path resolved inside main.
-  One native job per agent with a deadline and 20-minute reports; one shared
-  regeneration/baseline; absolute worktree paths.
 - Green HUD, invisible stage, "menus could not load": `-loadfile` raced the
   post-login ladder-map scan. Host via the menu socket after the scan; treat any
   "model creation failed - war3mapImported" as a failed load.
