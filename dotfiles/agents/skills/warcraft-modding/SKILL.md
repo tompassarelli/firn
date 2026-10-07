@@ -231,6 +231,17 @@ installed under Maps/00-Smashcraft/tests. Keep the latest playable map and two
 previous versions visible at the top level, with older versions in older/. A
 script-only rebuild does not update the map's in-game title or missing imports.
 
+Private build inputs (base map, container, clip pools, stage, impact and
+imported models, art) are content-addressed: each family is stored once,
+read-only, under the hash of its contents, and the revision's
+smashcraft:build-inputs.json names each family's hash, so `bun wisp build`
+needs no input flags and verifies them first. New art is `bun wisp inputs add
+FAMILY DIR` plus a commit landed like code; never a shared farm, pointer file
+or in-place edit (smashcraft:docs/build-inputs.md). Builders of one output share
+a lock and publish a private staging folder by one rename; optional parts (the
+controller helper) never block the map. A pre-push gate type-checks and audits
+type escapes for every push that changes TypeScript.
+
 One client pair is one serial lane with one owner. Everything else runs in
 parallel around it.
 
@@ -393,3 +404,8 @@ Symptom, cause, rule. Smashcraft, 6-7 Oct 2026.
   receipts plus the menu socket.
 - Receipt wait times out on a fresh game: it rewrote an identical receipt file.
   Wait on a counter or timestamp, never text equality.
+- `bun wisp play` broke for every lane ("extract war3mapImported\\...Clip47
+  failed", "Cannot open map archive"): ~20 lanes hand-edited one global input
+  pointer, and concurrent builders shared an output folder, a `.next` file and
+  a build worktree. Content-address shared inputs and name them per revision in
+  Git; build into private staging, publish by one rename under a per-key lock.
