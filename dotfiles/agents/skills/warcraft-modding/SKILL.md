@@ -176,7 +176,7 @@ Pick the client by what the test needs (Tom, 7 Oct 2026):
   Throwaway clients with no account, each pair in a network namespace with
   only loopback, play LAN matches that Wisp hosts. `wisp lan setup --from
   INSTALL [--pairs N]` creates them once (reflinked from an install);
-  `wisp lan pool --pairs N [--pool-profile parity|visual]` runs pairs admitted by
+  `wisp lan pool --pairs N [--pool-profile parity|visual] [--fps N]` runs pairs admitted by
   the machine-capacity helper (foreground; Ctrl-C stops it); `wisp lan fresh
   MAP [--pair K]` hosts and starts a match; `wisp lan status`, `wisp lan end
   --pair K`. The host logs every turn's actions and compares checksums each
@@ -185,6 +185,9 @@ Pick the client by what the test needs (Tom, 7 Oct 2026):
   `~/.local/state/wisp/lan/`; its `clients.json` is the clients file for
   `wisp engine` and `withAutopsy`. Pad parity runs, captures, `accept`
   checks and desync hunts go here, and so does the full engine-tooling tier.
+  For pool contention, `--fps N` varies only foreground/background frame caps;
+  keep the map and active script fixed and compare per-client CPU/GPU cost,
+  protected CPU pressure, parity and game time before changing a default cap.
 - **Signed-in A and B** (accounts c and b): only for tests that need
   Battle.net itself: real netplay or latency, direct play (`online
   host|join`, Smashcraft #142), spectating. Passive reads only.
