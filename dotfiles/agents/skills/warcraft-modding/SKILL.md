@@ -421,6 +421,12 @@ or capacity constraint requires a scoped pause.
   journal, War3Log) before screenshots or OCR. Set up sessions through in-map
   commands and receipts (`-dev quick`, `-dev quick hero NAME`, `-dev quick cpu
   N`, `-dev slots`), never pointer clicks; pixels are evidence, not driving.
+  Native chat setup uses Wisp's `openObservedChat` and `confirmedCommand`
+  (wisp:scripts/wisp/chatSetup.ts; wisp:docs/watch.md): wait for the selected
+  pair's fresh binding-ready files, observe Return's new chat publication,
+  and confirm both requested map receipts before scripted input. Missing setup
+  is INVALID at its first client boundary. Journal chat leaves a match paused;
+  a continuing workload explicitly resumes and observes both helper receipts.
 - Load the map by hosting through the menu socket after the post-login
   ladder-map scan finishes; Battle.net `-loadfile` can race it and fail every
   war3mapImported asset (Smashcraft #73).
