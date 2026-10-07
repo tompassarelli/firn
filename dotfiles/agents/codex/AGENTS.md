@@ -93,6 +93,10 @@ issues before opening new ones.
 When you orchestrate, you assign, merge and close; workers run the tests,
 builds and native sessions. A worker that reports done gets its next issue
 within two minutes.
+Bad: eight fighter workers parked at 3 of 4 boxes for 40 minutes, waiting on
+one shared balance run owned by one worker.
+Good: each worker keeps closing the gap on its own part in parallel, and the
+shared check runs once, when every part is ready.
 
 **Nothing is missing until you've used it.**
 Bad: searching exec's ALL_TOOLS for send_message, finding nothing, and asking
