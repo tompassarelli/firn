@@ -154,6 +154,11 @@ exceptions come from the design. An unimplemented action stays an open box.
 
 ## Models, animations and presentation
 
+Use smashcraft-animation for animation quality, the nine pain reactions,
+drills, rolls/get-ups and paired grab/throw authoring. Its source-backed
+reference library and existing motion audit cover all 13 fighters; a mapped
+clip alone does not establish a readable action.
+
 Blender scripts in smashcraft:tools/animations/ author clips (Python is the
 Blender boundary); `tools/animations/build-assets.sh` writes
 smashcraft:build/animation-assets/ and `package.ts` regenerates

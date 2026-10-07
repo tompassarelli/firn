@@ -22,6 +22,7 @@
     "effect-development",
     "wurst-development",
     "smashcraft-character-creation",
+    "smashcraft-animation",
     "private-desktop-development",
     "image-context-budget",
     "greywrought-development",
@@ -372,6 +373,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/wurst-development/SKILL.md"
+      }
+    },
+    "smashcraft-animation": {
+      "kind": "skill",
+      "category": "games",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/smashcraft-animation/SKILL.md"
       }
     }
   },
@@ -1109,6 +1118,16 @@
       ]
     },
     "wurst-development": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "smashcraft-animation": {
       "distributions": [
         {
           "type": "skill",

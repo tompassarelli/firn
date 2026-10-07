@@ -14,6 +14,11 @@ description: >-
 
 # Warcraft modding
 
+For Smashcraft fighter animation quality and action coverage, use
+smashcraft-animation: source-backed silhouettes, drills, rolls/get-ups,
+paired grabs/throws and nine-way pain reactions. Keep this skill for the
+Warcraft runtime, asset publication and native-test boundary.
+
 Wisp (`bun wisp ...` from the project's TypeScript directory) is the framework
 and development environment for Warcraft maps written in TypeScript.
 TypeScriptToLua (TSTL) compiles map code to Warcraft's Lua, Bun runs the host
