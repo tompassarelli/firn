@@ -76,3 +76,16 @@ rules: [nixos-config:capacity leases and limits](references/leases-and-limits.md
 
 Never kill a peer process. Only its owner or accountable parent may stop the
 identified tree. Pressure changes admission, not correctness requirements.
+
+## Scale native clients by pressure, not by lease count
+
+On 7 Oct 2026 an orchestrator told to "use the idle machine" grew to 20
+Warcraft clients, every one inside an admitted native lease. Load reached 76
+on 24 cores and protected CPU pressure 75%, which makes native timing checks
+fail and the desktop lag. A native lease charges 2 CPUs with no CPU cap and is
+admitted on a single pressure reading at its start, while a pool client really
+costs about 0.9 of a core plus about 0.4 for its Battle.net browser and 0.3 for
+its Wine server; away mode, set while Tom chatted from another device, admits
+greedily. Add native pairs one at a time and stop adding while the helper's
+`protectedCpuSomeAvg10` is above 20, whether Tom is present or away. "Use the
+machine" means use idle cores, never go past them.
