@@ -156,12 +156,6 @@ exec_conversation() {
 
   local workspace_args=(--add-dir "$HOME/code")
   local provider_args=(
-    -c 'model_provider="codex-lb"'
-    -c 'model_providers.codex-lb.name="openai"'
-    -c 'model_providers.codex-lb.base_url="http://127.0.0.1:2455/backend-api/codex"'
-    -c 'model_providers.codex-lb.wire_api="responses"'
-    -c 'model_providers.codex-lb.supports_websockets=true'
-    -c 'model_providers.codex-lb.requires_openai_auth=false'
     -c 'model="gpt-6.1-sol"'
     -c 'model_reasoning_effort="high"'
   )

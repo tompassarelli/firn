@@ -1,11 +1,12 @@
 { config, lib, pkgs, ... }:
 
-((username: ((homeDir: {
-  options.myConfig.modules.codex-runtime.enable = lib.mkEnableOption "Codex provider runtime (account load balancer + runtime store roots)";
+((username: ((homeDir: ((loadBalancer: {
+  options.myConfig.modules.codex-runtime.enable = lib.mkEnableOption "Codex provider runtime (runtime store roots, optional load balancer)";
+  options.myConfig.modules.codex-runtime.loadBalancer.enable = lib.mkEnableOption "the local Codex account load balancer, for several ChatGPT accounts";
   config = lib.mkIf config.myConfig.modules.codex-runtime.enable {
     home-manager.users.${username} = ({ config, ... }: {
       systemd.user.services = {
-        codex-lb = {
+        codex-lb = lib.mkIf loadBalancer {
           Unit = {
             Description = "Local Codex account load balancer";
             After = [ "network.target" ];
@@ -45,4 +46,4 @@
       };
     });
   };
-}) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)
+}) config.myConfig.modules.codex-runtime.loadBalancer.enable)) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)

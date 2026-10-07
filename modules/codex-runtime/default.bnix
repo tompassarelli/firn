@@ -2,27 +2,31 @@
 
 (ns default)
 
-;; Owns the two pieces of Codex provider infrastructure that the launchers
-;; depend on but deliberately never supervise: the account load balancer, and
-;; the Nix store roots that keep out-of-store Codex runtimes executable.
+;; Owns the Nix store roots that keep out-of-store Codex runtimes executable,
+;; and the optional account load balancer. Codex talks to OpenAI directly with
+;; one account; the balancer only pays for itself across several.
 
 (nix/module [config lib pkgs ...]
   (let
     [username config.myConfig.modules.users.username
-     homeDir config.myConfig.modules.users.homeDir]
+     homeDir config.myConfig.modules.users.homeDir
+     loadBalancer config.myConfig.modules.codex-runtime.loadBalancer.enable]
     {:options.myConfig.modules.codex-runtime.enable
       (lib.mkEnableOption
-        "Codex provider runtime (account load balancer + runtime store roots)")
+        "Codex provider runtime (runtime store roots, optional load balancer)")
+     :options.myConfig.modules.codex-runtime.loadBalancer.enable
+      (lib.mkEnableOption
+        "the local Codex account load balancer, for several ChatGPT accounts")
      :config
       (lib.mkIf config.myConfig.modules.codex-runtime.enable
         {:home-manager.users
           {username
             (nix/module [config ...]
               {:systemd.user.services
-                {;; The pooled launchers require the load balancer but never
-                 ;; start or restart it. This is that owner; without it nothing
-                 ;; restores the balancer across a reboot.
+                {;; With several accounts, point the codex launcher's provider at
+                 ;; http://127.0.0.1:2455/backend-api/codex and enable this.
                  :codex-lb
+                  (lib.mkIf loadBalancer
                   {:Unit
                     {:Description "Local Codex account load balancer"
                      :After ["network.target"]
@@ -44,7 +48,7 @@
                      :Restart "on-failure"
                      :RestartSec 2
                      :UMask "0077"}
-                   :Install {:WantedBy ["default.target"]}}
+                   :Install {:WantedBy ["default.target"]}})
                  ;; Codex runtimes stay out of the store, but a locally built
                  ;; one still resolves its ELF interpreter and RUNPATH from
                  ;; /nix/store. Nothing else roots those paths, so a garbage
