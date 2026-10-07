@@ -90,6 +90,9 @@ Bad: one issue at a time while 27 are open, and new issues opened faster than
 old ones close.
 Good: one worker per independent issue, up to machine capacity, and close
 issues before opening new ones.
+When you orchestrate, you assign, merge and close; workers run the tests,
+builds and native sessions. A worker that reports done gets its next issue
+within two minutes.
 
 **A tool you haven't called isn't missing.**
 Bad: searching exec's ALL_TOOLS for send_message, finding nothing, and asking

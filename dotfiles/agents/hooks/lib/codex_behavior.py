@@ -11,13 +11,15 @@ malformed event allows.
 - PreToolUse(update_plan) refuses process steps Tom didn't ask for, and a
   first plan without its checklist: the goal quoted from the request, the
   profile, Done-when, extra checks, workers and an ETA.
-- PreToolUse(Bash) refuses a check rerun on unchanged code, a new issue that
+- PreToolUse(Bash) refuses worker jobs (checks, native sessions, log digging)
+  in a session that has spawned workers, a check rerun on unchanged code, a new issue that
   can't close, and a new issue while the session has opened more than it
   closed. Edits to existing issues pass.
 - PostToolUse(Bash) records passing checks and issue opens and closes, and
   says once when the work passes twice its ETA or after a long run of
   read-only commands with no change; an apply_patch ends that run.
-- Stop refuses one ending per turn that escalates without having tried, asks
+- Stop refuses one ending per turn that lands work without accounting for its
+  issue box, escalates without having tried, asks
   permission, narrates, hands the check to someone else, lists what isn't
   proven, or says nearly done.
 """
@@ -70,6 +72,12 @@ STOP_REQUEST = re.compile(
     re.IGNORECASE,
 )
 STOP_CALL_LIMIT = 5
+WORKER_JOB = re.compile(r"\bgh run (view|watch)\b.*--log|\b(rg|grep|tail|less|cat)\b[^|;&]*\.log\b|\bwisp (lan|pad|native|capture|soak)\b")
+LANDED = re.compile(r"\b(landed|pushed|merged)\b", re.IGNORECASE)
+BOX_ACCOUNTED = re.compile(
+    r"\b(closed|closing|close[sd]? #|ticked|checked off|box(es)?|remains? open|still open)\b|\b\d+/\d+\b",
+    re.IGNORECASE,
+)
 
 PLAN_PROCESS = [
     (r"\b(independent|second|separate|fresh)[- ]?(review|reviewer|opinion|audit)\b", "an extra review", ("review", "audit")),
@@ -505,6 +513,16 @@ def pre_bash(event):
                 )
         return None
 
+    with State(event.get("session_id")) as state:
+        spawned = state.get("spawned", 0)
+    if spawned and (is_check(command) or WORKER_JOB.search(command)):
+        if not re.search(r"\bORCH_RUNS_BECAUSE=(\"[^\"]{8,}\"|'[^']{8,}'|\S{8,})", command):
+            return deny(
+                f"No. You're orchestrating {spawned} workers, so this is a worker's job: "
+                "tests, builds, native sessions and log digging. Hand it to a worker and "
+                "go back to assigning, merging and closing. If no worker can run it, prefix "
+                'the command with ORCH_RUNS_BECAUSE="<why>".'
+            )
     if not is_check(command):
         return None
     if len(rerun_reason(command)) >= 8:
@@ -612,6 +630,12 @@ def stop_overrun(state):
     )
 
 
+def post_spawn(event):
+    with State(event.get("session_id")) as state:
+        state["spawned"] = state.get("spawned", 0) + 1
+    return None
+
+
 def post_patch(event):
     with State(event.get("session_id")) as state:
         state["streak"] = 0
@@ -664,6 +688,11 @@ def stop(event):
             "No. You ended on a plan or a hand-off. That's not an ending. Do the next step "
             "yourself, now, and stop only when it's done or blocked."
         )
+    if LANDED.search(message) and not BOX_ACCOUNTED.search(message):
+        return block(
+            "No. You landed it but closed nothing. Tick the issue box it satisfies or close "
+            "the issue now, then end. If it ticks no box yet, say which box remains."
+        )
     if STOP_DISCLAIMERS.search(message):
         return block(
             "No. Delete the list of what the result doesn't prove. Give the result, the "
@@ -687,6 +716,8 @@ def decide(event):
         return post_bash(event)
     if name == "PostToolUse" and tool == "apply_patch":
         return post_patch(event)
+    if name == "PostToolUse" and str(tool).endswith("spawn_agent"):
+        return post_spawn(event)
     if name == "Stop":
         return stop(event)
     return None

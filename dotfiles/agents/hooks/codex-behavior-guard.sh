@@ -22,7 +22,8 @@ case "$payload" in
     case "$payload" in
       *'"tool_name":"Bash"'*|*'"tool_name": "Bash"'*|\
       *'"tool_name":"update_plan"'*|*'"tool_name": "update_plan"'*|\
-      *'"tool_name":"apply_patch"'*|*'"tool_name": "apply_patch"'*) ;;
+      *'"tool_name":"apply_patch"'*|*'"tool_name": "apply_patch"'*|\
+      *'spawn_agent"'*) ;;
       *) exit 0 ;;
     esac
     ;;

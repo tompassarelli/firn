@@ -166,6 +166,20 @@ prompt s1 '"restarted, resume from the roadmap restart list"' | run >/dev/null
 for _ in 1 2 3 4; do post s1 "$game" '"bun run build"' 0 | run >/dev/null; done
 expect cleared-by-next-prompt quiet '' "$(post s1 "$game" '"bun run build:map"' 0)"
 
+# An orchestrator hands worker jobs to workers; landing must account for the issue box.
+spawn() { printf '{"hook_event_name":"PostToolUse","session_id":"%s","cwd":"%s","tool_name":"%s","tool_input":{},"tool_response":"{}"}' "$1" "$2" "$3"; }
+expect solo-runs-tests quiet '' "$(pre o1 "$game" '"bun test"')"
+spawn o1 "$game" collaborationspawn_agent | run >/dev/null
+expect orchestrator-runs-tests fires 'orchestrating 1 workers' "$(pre o1 "$game" '"bun test"')"
+expect orchestrator-digs-logs fires "worker's job" "$(pre o1 "$game" '"rg -n error /tmp/smashcraft-ci-37620992094.log"')"
+expect orchestrator-reads-ci fires "worker's job" "$(pre o1 "$game" '"gh run view 37620992094 --repo tompassarelli/smashcraft --log-failed"')"
+expect orchestrator-closes-issue quiet '' "$(pre o1 "$game" '"gh issue close 184 --repo tompassarelli/smashcraft"')"
+expect orchestrator-lands quiet '' "$(pre o1 "$game" '"git -C ~/code/smashcraft/main merge --ff-only native_r2"')"
+expect orchestrator-with-reason quiet '' "$(pre o1 "$game" '"ORCH_RUNS_BECAUSE=\"all eight workers are mid-native-run\" bun test"')"
+expect landed-no-box fires 'closed nothing' "$(stopping false '"Landed 60cacdfe. The original native bot capture completed both matches in 95 seconds; 21 journey tests passed."')"
+expect landed-and-closed quiet '' "$(stopping false '"Landed 60cacdfe and closed #144: all 13 fighters show their spell.\nNeeds you: nothing"')"
+expect landed-box-remains quiet '' "$(stopping false '"Landed c0de10c6. #181 is at 3/4; the native capture box remains."')"
+
 # Other tools skip the interpreter; the off switch and malformed input allow.
 expect other-tool quiet '' '{"hook_event_name":"PreToolUse","session_id":"x","tool_name":"apply_patch","tool_input":{"command":"bun test"}}'
 out="$(prompt k1 '"stop asking, wtf"' | AGENT_NO_AUTHORING_HOOKS=1 "$HOOK" 2>/dev/null)"
