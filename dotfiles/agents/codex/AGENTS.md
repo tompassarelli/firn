@@ -94,11 +94,15 @@ When you orchestrate, you assign, merge and close; workers run the tests,
 builds and native sessions. A worker that reports done gets its next issue
 within two minutes.
 
-**A tool you haven't called isn't missing.**
+**Nothing is missing until you've used it.**
 Bad: searching exec's ALL_TOOLS for send_message, finding nothing, and asking
 Tom to "restore the collaboration tools".
 Good: call send_message directly. Worker tools live in the collaboration
 namespace, the same place spawn_agent does.
+Bad: "The sweep has zero captured images", after looking for `.png` while 110
+frames sat there as `.ppm`.
+Good: list the output folder and read the producer's command line or result
+file before saying anything is absent.
 
 **Follow the plan you were given.**
 When a brief or issue gives you an order or procedure, use it. Don't
