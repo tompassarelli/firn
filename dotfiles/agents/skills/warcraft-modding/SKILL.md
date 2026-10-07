@@ -158,12 +158,13 @@ Engine tooling has two tiers (wisp:docs/engine.md, "Guardrails"):
 
 - **ONLINE-OK** (allowed on signed-in A/B): passive, out-of-process, nothing
   written. Reading Desync.log and War3Log (`engine desync`), read-only
-  `/proc/PID/mem` reads (`engine poll`, `engine diff` of their logs,
-  `engine locate` without `--watch`, the Lua VM reader
-  wisp:scripts/wisp/engine/lua.ts), passive packet capture.
+  `/proc/PID/mem` reads (`engine poll`, whose log names a code callback's
+  TypeScript line, `engine diff` of its logs, `engine locate` without
+  `--watch`), passive packet capture.
 - **OFFLINE-ONLY** (pool clients): anything that traps, stops or modifies the
   process: `engine watch` and `locate --watch` (perf hardware breakpoints),
-  ptrace or gdb, memory writes (including the LAN provider switch), code or
+  `engine watch --lua` (stops the thread with ptrace for the exact Lua and
+  TypeScript stack), gdb, memory writes (including the LAN provider switch), code or
   DLL injection. The tools refuse unless the client is verifiably offline:
   loopback-only network namespace, no `-uid`, no Battle.net program in its
   prefix, no socket off this machine. A gdb attach made a signed-in client exit.
@@ -188,7 +189,8 @@ On a desync:
    the clients' Documents folders names the first turn and section (only
    `ipse` means a handle made or freed on a different turn); `engine poll
    --client a,b` during a repro, then `engine diff`, names the birth's class;
-   on offline clients `engine watch` gives its game stack. On #158 this took
+   on offline clients `engine watch` gives its game stack and `watch --lua`
+   its exact Lua and TypeScript stack. On #158 this took
    the hunt from about 3.5 hours to about 30 minutes; start here before
    one-variable experiments.
 3. After a Warcraft update, `engine locate` re-finds the offsets
