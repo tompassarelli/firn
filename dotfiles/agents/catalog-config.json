@@ -18,7 +18,6 @@
     "threejs-textures",
     "clause-authoring",
     "game-design-prototyping",
-    "warcraft3-development",
     "warcraft-modding",
     "effect-development",
     "wurst-development",
@@ -359,14 +358,6 @@
         "path": "dotfiles/agents/skills/image-context-budget/SKILL.md"
       }
     },
-    "warcraft3-development": {
-      "kind": "skill",
-      "category": "games",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/warcraft3-development/SKILL.md"
-      }
-    },
     "warcraft-modding": {
       "kind": "skill",
       "category": "games",
@@ -385,16 +376,6 @@
     }
   },
   "activation": {
-    "warcraft3-development": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
     "smashcraft-character-creation": {
       "distributions": [
         {
