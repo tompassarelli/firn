@@ -44,6 +44,8 @@
       (providerAdapter "resource-safe-search-guard.sh")
       (providerAdapter "session-kill-guard.sh")
       (providerAdapter "lib/authoring-killswitch.sh")
+      (providerAdapter "codex-behavior-guard.sh")
+      (providerAdapter "lib/codex_behavior.py")
     ];
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {

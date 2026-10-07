@@ -100,6 +100,14 @@
         "path": "dotfiles/agents/hooks/lib/launch_critical_paths.py"
       },
       "path": "lib/launch_critical_paths.py"
+    },
+    {
+      "id": "codex-behavior-decider",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/lib/codex_behavior.py"
+      },
+      "path": "lib/codex_behavior.py"
     }
   ],
   "registrations": {
@@ -391,6 +399,16 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/github-issues/SKILL.md"
+      }
+    },
+    "codex-behavior-guard": {
+      "kind": "hook",
+      "title": "Codex behavior guard",
+      "triggerDescription": "Check Codex prompts, plans and endings against the recorded delivery failures.",
+      "category": "authoring",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/codex-behavior-guard.sh"
       }
     }
   },
@@ -1063,6 +1081,19 @@
           "type": "skill",
           "targets": [
             "shared"
+          ]
+        }
+      ]
+    },
+    "codex-behavior-guard": {
+      "supports": [
+        "agent-machinery"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "codex"
           ]
         }
       ]

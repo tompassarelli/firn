@@ -31,9 +31,11 @@ or a second routinely loaded instruction set.
 ## Provider bindings
 
 `nixos-config:modules/codex/requirements.toml` declares the exact managed Codex
-policy: nine PreToolUse bindings for seven guards. The worktree and concrete
-model guards each bind both edit and shell events; Firn system policy applies
-to every tool. Provider binding contracts live in
+policy: twelve bindings for eight guards. The worktree and concrete model
+guards each bind both edit and shell events; Firn system policy applies to
+every tool. The Codex-only behavior guard binds `update_plan`,
+`UserPromptSubmit` and `Stop` to check plans and endings against the Codex
+overlay. Provider binding contracts live in
 `nixos-config:dotfiles/agents/policy-owners.toml` and are checked by
 `nixos-config:scripts/agent-policy-contract.py`.
 

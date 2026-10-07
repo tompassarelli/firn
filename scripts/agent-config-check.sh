@@ -62,7 +62,13 @@ enabled = {
                     command("concrete-model-identity-guard.sh", 10),
                 ],
             },
+            {
+                "matcher": "^update_plan$",
+                "hooks": [command("codex-behavior-guard.sh", 10)],
+            },
         ],
+        "UserPromptSubmit": [{"hooks": [command("codex-behavior-guard.sh", 10)]}],
+        "Stop": [{"hooks": [command("codex-behavior-guard.sh", 10)]}],
     },
 }
 
@@ -322,8 +328,8 @@ validate_codex_managed_policy() {
   CODEX_MANAGED_BINDINGS="$(
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
-  if [ "$CODEX_MANAGED_BINDINGS" = 9 ]; then
-    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 9-binding authoritative contract'
+  if [ "$CODEX_MANAGED_BINDINGS" = 12 ]; then
+    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 12-binding authoritative contract'
   elif [ "$CODEX_MANAGED_BINDINGS" = 0 ]; then
     ok_detail 'Codex managed hooks are authoritatively disabled; remote control remains disabled'
   else
@@ -344,6 +350,8 @@ validate_codex_managed_policy() {
     resource-safe-search-guard.sh
     session-kill-guard.sh
     lib/authoring-killswitch.sh
+    codex-behavior-guard.sh
+    lib/codex_behavior.py
   )
   if grep -Fq '(s flakeRoot "/modules/codex/requirements.toml")' "$module"; then :
   else bad 'Codex module does not install its managed requirements'; fi
