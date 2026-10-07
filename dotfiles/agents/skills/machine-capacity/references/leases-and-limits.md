@@ -72,6 +72,13 @@ that owner or accountable parent.
 
 ## Interactive session lifetime
 
+Native `run` and `session` accept `--memory-gib` for a measured client
+allowance; `probe` accepts the same option without creating a lease. The
+request changes this client's charged memory and `MemoryHigh`, preserving
+the default 4 GiB when omitted. Offline Warcraft clients may request 1.5 GiB.
+Only native clients allow this override; batch and agent classes keep their
+class allowances. It applies to newly started scopes only.
+
 Use `bun "$capacity" session --class heavy --owner OWNER -- COMMAND ARG...`
 for a foreground interactive session intended to remain until explicitly
 stopped. It sets systemd's runtime limit to infinity but retains the same atomic

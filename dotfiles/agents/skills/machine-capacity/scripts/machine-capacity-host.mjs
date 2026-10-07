@@ -15,6 +15,7 @@ import * as policy from './machine-capacity-logic.js';
 
 const admissionDecision = policy['admission-decision'];
 const resourceClass = policy['resource-class'];
+const nativeMemoryRequest = policy['native-memory-request'];
 const reserveClass = policy['reserve-class'];
 const aggregateCpus = policy['aggregate-cpus'];
 const batchClass = policy['batch-class'];
@@ -81,7 +82,19 @@ function required(values, option) {
 function parseClass(values, cores) {
   const name = required(values, '--class');
   if (!classNames.has(name)) fail('--class must be agent, native, moderate, heavy, or exclusive');
-  const resources = resourceClass(name, cores);
+  let resources = resourceClass(name, cores);
+  if (values.has('--memory-gib')) {
+    const memoryGiB = Number(required(values, '--memory-gib'));
+    if (!Number.isFinite(memoryGiB)) fail('--memory-gib must be finite');
+    try {
+      resources = nativeMemoryRequest(name, cores, memoryGiB);
+    } catch (error) {
+      fail(error.message);
+    }
+    if (!Number.isSafeInteger(resources.memoryMiB)) {
+      fail('--memory-gib must represent a whole, safe number of MiB');
+    }
+  }
   if (!Number.isFinite(resources.cpus) || !Number.isFinite(resources.memoryMiB)) {
     fail(`policy rejected resource class: ${name}`);
   }
@@ -497,6 +510,7 @@ async function main(argv) {
       '--protected-cpu-some-avg10-basis-points', '--memory-full-avg10-basis-points',
       '--leased-cpus', '--leased-native-cpus', '--leased-memory-mib',
       '--peer-batch-runs', '--peer-exclusive-runs', '--unbounded-runs',
+      '--memory-gib',
     ]));
     if (parsed.separator !== argv.length) fail('fixture accepts no command');
     const cores = parsePositiveInteger(required(parsed.values, '--cores'), '--cores');
@@ -551,7 +565,7 @@ async function main(argv) {
     return 0;
   }
   if (operation === 'probe') {
-    const { values, separator } = parseKeyValues(argv, 1, new Set(['--class']));
+    const { values, separator } = parseKeyValues(argv, 1, new Set(['--class', '--memory-gib']));
     if (separator !== argv.length) fail('probe accepts no command');
     const signals = readSignals();
     const result = decision(root, parseClass(values, signals.cores), null);
@@ -591,7 +605,7 @@ async function main(argv) {
   }
   if (operation === 'run' || operation === 'session') {
     const parsed = parseKeyValues(argv, 1, new Set(operation === 'session'
-      ? ['--class', '--owner'] : ['--class', '--owner', '--timeout-seconds']));
+      ? ['--class', '--owner', '--memory-gib'] : ['--class', '--owner', '--timeout-seconds', '--memory-gib']));
     const command = argv.slice(parsed.separator + 1);
     if (parsed.separator === argv.length || command.length === 0) fail(`${operation} requires -- COMMAND ARG...`);
     const signals = readSignals();

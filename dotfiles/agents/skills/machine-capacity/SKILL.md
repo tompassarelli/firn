@@ -24,6 +24,15 @@ two), use `native` (2 CPUs/4 GiB): the high-weight `native.slice`, no CPU quota.
 Set an honest hard runtime bound including legitimate setup and downloads;
 the example is not a universal timeout.
 
+For offline Warcraft clients with a measured smaller footprint, pass
+`--memory-gib 1.5` to `run` or `session` (and `probe` to check admission).
+This native-only request charges 1536 MiB instead of the 4096 MiB default and
+sets that client's memory high watermark to the same amount; other leases are
+unchanged. Requests must be positive and represent whole MiB. The available
+memory floor, 75% leased-memory cap, and native CPU admission still apply.
+The capacity fixture with 70000 MiB already leased on a 96343 MiB host defers
+the default 4 GiB client but admits 1.5 GiB, saving 2.5 GiB per new client.
+
 Interactive desktops and other explicitly retained foreground sessions use
 `bun "$capacity" session --class heavy --owner "codex:/root/task" -- COMMAND ARG...`.
 They have no wall-clock deadline; command exit, Ctrl-C, or an explicit stop ends

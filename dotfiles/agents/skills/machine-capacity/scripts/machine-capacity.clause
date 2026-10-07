@@ -26,6 +26,13 @@ export resource-class(?kind: Text, ?cores: F64): Resources
 export reserve-class(?kind: Text): Bool
   ?kind = "agent"
 
+# The request is charged and used as MemoryHigh for this client only.
+export native-memory-request(?kind: Text, ?cores: F64, ?memory-gib: F64): Resources
+  ?base: resource-class(?kind, ?cores)
+  require(?kind = "native" and ?memory-gib > 0,
+    {cpus: ?base.cpus, memoryMiB: ?memory-gib * 1024},
+    "--memory-gib requires a positive native memory request")
+
 export batch-class(?kind: Text): Bool
   ?kind = "moderate" or ?kind = "heavy" or ?kind = "exclusive"
 

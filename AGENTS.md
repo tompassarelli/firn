@@ -49,6 +49,11 @@ paths, types, callers, exports, and targets; never trust a copied inventory.
 
 ## Dotfiles and commands
 
+Native clients with measured smaller memory use may request an allowance
+through `machine-capacity`'s `--memory-gib` option; see the owning skill for
+admission and scope behavior. Its focused check is
+`nixos-config:dotfiles/agents/skills/machine-capacity/scripts/machine-capacity.test.sh`.
+
 Every dotfile has one source under `dotfiles/`. Prefer an out-of-store symlink
 for user-owned dotfiles, scripts, and live entrypoints. Use a store-managed copy
 only for a named immutability, publication, security, or rollback invariant.

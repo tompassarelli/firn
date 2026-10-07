@@ -56,6 +56,23 @@ decision() { fixture "$@" | jq -r '.decision' || true; }
 [[ $(decision unattended native 70000 0 0 20 0 --leased-native-cpus 20) == RUN ]]
 [[ $(decision attended native 70000 0 0 24 16384 --peer-exclusive-runs 1) == RUN ]]
 [[ $(decision attended native 12000 0 0 0 0) == DEFER_MEMORY_HEADROOM ]]
+# A smaller client request retains the existing floor and leased-memory cap.
+[[ $(decision unattended native 40000 0 0 0 70000) == DEFER_MEMORY_CAPACITY ]]
+[[ $(fixture unattended native 40000 0 0 0 70000 --memory-gib 1.5 | jq -r '.memoryMiB') -eq 1536 ]]
+[[ $(decision unattended native 40000 0 0 0 70000 --memory-gib 1.5) == RUN ]]
+[[ $(decision unattended native 9600 0 0 0 0 --memory-gib 1.5) == DEFER_MEMORY_HEADROOM ]]
+[[ $(decision attended native 20000 0 0 0 0 --memory-gib 1.5) == DEFER_MEMORY_HEADROOM ]]
+[[ $(decision unattended native 40000 0 0 0 71000 --memory-gib 1.5) == DEFER_MEMORY_CAPACITY ]]
+for memory in 0 -1 NaN Infinity 1.0001 100000000000000; do
+  if fixture unattended native 40000 0 0 0 0 --memory-gib "$memory" >/dev/null 2>&1; then
+    printf 'invalid memory request accepted: %s\n' "$memory" >&2
+    exit 1
+  fi
+done
+if fixture unattended heavy 40000 0 0 0 0 --memory-gib 1.5 >/dev/null 2>&1; then
+  printf 'batch memory override accepted\n' >&2
+  exit 1
+fi
 
 # Peer ceilings do not refuse batch work; only exclusive and unbounded peers do.
 [[ $(decision attended heavy 80000 0 0 18 21504 --peer-batch-runs 3) == RUN ]]
@@ -232,6 +249,34 @@ kill -TERM "${fixture_pids[0]}"
 wait "${fixture_pids[0]}" || true
 fixture_pids=()
 [[ $(tail -n 1 "$scratch/native-err" | jq -r '.decision') == RELEASED ]]
+
+# Requests reach both lease accounting and the kernel for runs and sessions.
+for lifetime in run session; do
+  options=()
+  [[ $lifetime != run ]] || options=(--timeout-seconds 30)
+  XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" "$lifetime" \
+    --class native --memory-gib 1.5 --owner fixture:/capacity "${options[@]}" \
+    -- bash -c 'IFS=: read -r _ _ group < /proc/self/cgroup; printf "%s\n" "$group" >"$1"; sleep 60 & wait' \
+    fixture-native-memory "$scratch/memory-group-$lifetime" \
+    >"$scratch/memory-out-$lifetime" 2>"$scratch/memory-err-$lifetime" &
+  fixture_pids+=("$!")
+  for attempt in {1..100}; do
+    [[ -s "$scratch/memory-group-$lifetime" ]] && break
+    sleep 0.05
+  done
+  read -r group <"$scratch/memory-group-$lifetime"
+  [[ $(cat "/sys/fs/cgroup$group/memory.high") -eq 1610612736 ]]
+  [[ $(head -n 1 "$scratch/memory-err-$lifetime" | jq -r '.requestedMemoryMiB') -eq 1536 ]]
+  lease=$(head -n 1 "$scratch/memory-err-$lifetime" | jq -r '.lease')
+  [[ $(jq -r '.memoryMiB' "$fixture_runtime/agent-capacity-v1/leases/$lease.json") -eq 1536 ]]
+  probe=$(XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" probe --class native --memory-gib 1.5)
+  [[ $(jq -r '.leasedMemoryMiB' <<<"$probe") -eq 1536 ]]
+  [[ $(jq -r '.requestedMemoryMiB' <<<"$probe") -eq 1536 ]]
+  kill -TERM "${fixture_pids[0]}"
+  wait "${fixture_pids[0]}" || true
+  fixture_pids=()
+  [[ $(tail -n 1 "$scratch/memory-err-$lifetime" | jq -r '.decision') == RELEASED ]]
+done
 
 # Mode overrides select the profile; auto follows recorded input idleness.
 mode=$(XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" mode away)
