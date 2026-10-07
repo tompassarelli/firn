@@ -119,6 +119,7 @@ declaration grants no exception.
 - Before any compile, test, build, format, generation, or equivalent development-loop command, price its duration and optimization return → `verification`.
 - When designing, diagnosing, measuring, or optimizing a repeated edit-to-signal or edit-to-behavior loop, route its latency and invalidation economics → `competitive-development-loop`.
 - Before sustained multi-core or >1 GiB local work, or admitting a worker expected to run it, preserve machine headroom → `machine-capacity`.
+- Record big leverage wins durably. When work finds a tool, technique or method that cuts a recurring cost by a large factor (hours to minutes, serial to parallel), record it in the same change set where future agents route: the owning skill's SKILL.md as procedure with the measured before and after, the repository's AGENTS.md or feature index, and a test or hook where it can be enforced. A win that lives only in a commit, chat or handoff is lost.
 
 ## Debug with evidence, not guesses
 
@@ -126,7 +127,7 @@ For a non-trivial bug or unexplained behavior, never solve from first principles
 as if the Internet did not exist. Before the second fix attempt, search the
 exact error text or symptom with the product and version. Change one variable
 per experiment. When a good and a bad case exist, trace both and diff to the
-first divergence. Prefer existing instrumentation over screenshots.
+first divergence. Prefer existing instrumentation over screenshots. When two one-variable experiments fail to converge on an opaque runtime, stop guessing and build visibility into the runtime itself (debugger, memory reads, traffic capture) before the next experiment.
 
 - For any non-trivial bug or unexplained behavior, research, reproduce, isolate, and diff good against bad runs → `debugging`.
 
