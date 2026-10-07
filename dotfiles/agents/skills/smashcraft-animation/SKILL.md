@@ -84,14 +84,14 @@ torso; low loses lower-body support. Scale the whole silhouette and limb
 response across intensity while preserving height identity. Do not replace
 the nine poses with nine scalar root tilts.
 
-Tom's requested transition is from the **current interrupted pose** into the
-pain silhouette within **1–2 presentation frames**, including hitstop.
-Capture the actual current pose; never visit idle first. Hold the readable
-pain silhouette during the remaining stop, then continue hitstun/tumble as
-the simulation says. The historical Sakurai article uses four transition
-frames; the faster target here is Tom's deliberate requirement, not a claimed
-Melee constant. Presentation interpolation must not advance attack, hitstun,
-input or collision clocks.
+Blend from the **current interrupted pose** into a promptly readable pain
+silhouette during hitstop. Tom delegated researched, move-appropriate timing
+in #181; his earlier 1–2 frames is guidance, not a fixed gate. Capture the
+actual current pose; never visit idle first. Hold the readable pain silhouette
+during the remaining stop, then continue hitstun/tumble as the simulation says.
+The historical Sakurai article uses four transition frames; neither that
+number nor the earlier guidance is a claimed Melee constant. Presentation
+interpolation must not advance attack, hitstun, input or collision clocks.
 
 Hitstop vibration is presentation only. Sakurai describes horizontal shake
 on the ground (avoid floor clipping), vertical in the air, decreasing amplitude
@@ -117,6 +117,34 @@ recovery sequences, body travel >=5, extremity/directional travel >=20, and
 get-up-attack travel >=30 in each direction. These are existing recovery
 gates, not universal aesthetic thresholds. Use the nearest attack/reach check
 for drills and throws; do not invent a second animation engine.
+
+From the Smashcraft root:
+
+- `bun tools/animations/drill-clips.ts PRIVATE_ASSETS PRIVATE_OUTPUT` appends
+  Blademaster, Warden and Shadow Hunter down-air motion with coordinated body
+  and leading-limb rotation, preserving old sequence indices and writing
+  private both-facing phase silhouette sheets. See
+  smashcraft:docs/fighter-animation-work.md, "Hero drill clips". A cape can
+  obscure the leading foot even when the motion check passes; judge the drawn
+  silhouette and send the stable candidate to the native owner.
+- `bun tools/animations/grab-clips.ts PRIVATE_ASSETS PRIVATE_OUTPUT` appends
+  thirteen paired grab-family gestures for each of ten expansion heroes
+  (130 clips), preserving existing indices. Authored contact times align
+  holder and victim to the holder's actual contact frame despite different
+  kit durations or hitstop. See smashcraft:docs/fighter-animation-work.md,
+  "Paired expansion-hero grabs"; the original three fighters retain their
+  existing grab authoring. Holds are deliberately still. Check unlike-height
+  and mirror pairs in both facings through the native owner.
+- `bun tools/animations/damage-clips.ts PRIVATE_ASSETS PRIVATE_OUTPUT`
+  appends the 117 articulated pain clips and checks their drawn first poses.
+  For the unresolved native interpolation seam,
+  `bun tools/animations/damage-blend-probe.ts PRIVATE_ASSETS PRIVATE_OUTPUT`
+  creates Archer probe models, each containing donor motion and a constant
+  pain target, with checked hashed metadata. The `damage-blend-probe` map profile
+  compares time scale zero and one in both facings. Follow
+  smashcraft:docs/fighter-animation-work.md, "Native pain blending diagnostic";
+  it separates pose blending from match clocks. Generator/build success alone
+  does not establish native blending; the native owner inspects the comparison.
 
 Author in private output, materialize model-input symlinks before mutation,
 preserve old sequences and run the focused geometry/motion check. Publish art

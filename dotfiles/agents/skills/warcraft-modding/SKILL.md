@@ -193,6 +193,16 @@ Pick the client by what the test needs (Tom, 7 Oct 2026):
   For pool contention, `--fps N` varies only foreground/background frame caps;
   keep the map and active script fixed and compare per-client CPU/GPU cost,
   protected CPU pressure, parity and game time before changing a default cap.
+  Consume Wisp's discovery lifecycle mitigation (wisp commit 2aaae0b): close
+  the lobby UDP discovery socket when countdown starts; gameplay continues on
+  TCP. With Bun 1.3.13, an isolated two-second ECONNREFUSED polling sample
+  consumed 1.664 CPU-seconds with the socket retained and 0.0028 after close
+  (about 600× less isolated socket cost). The old pair host used 1.11 cores;
+  fleet savings require a controlled pair-agent restart and measurement, so
+  do not extrapolate the isolated ratio to the fleet. This is a bounded Wisp
+  lifecycle mitigation, not a Bun root repair. When comparing this mitigation,
+  keep the 60 fps cap and 2 ms autopsy polling unchanged. Procedure and
+  regression are in wisp:docs/lan.md and wisp:test/lan.test.ts.
 - **Signed-in A and B** (accounts c and b): only for tests that need
   Battle.net itself: real netplay or latency, direct play (`online
   host|join`, Smashcraft #142), spectating. Passive reads only.
@@ -290,9 +300,14 @@ parallel around it.
   (smashcraft:docs/native-bot-session.md, "Many scripts in one game").
 - Declare each native box as data next to the issue it closes (map profile,
   setup chat commands, captures, pass rule) and run the batch with
-  `wisp accept [--only ID...]` (wisp:docs/accept.md; Smashcraft checks in
+  `wisp accept [--only ID...] [--pair K]` (wisp:docs/accept.md; Smashcraft checks in
   smashcraft:ts/scripts/wisp/acceptChecks.ts). `--dry-run` prints the plan
-  without touching clients.
+  without touching clients. In Smashcraft, `--pair K` starts through `lan fresh`
+  and routes checks, captures, receipts, doctor and autopsy to that offline
+  pair. `wisp integrity capture --clients-file FILE ...` likewise routes
+  health checks to the selected clients (smashcraft:docs/native-bot-session.md).
+  Consume these supported routes (Smashcraft commit 1745c4df) instead of
+  adding bespoke doctor/autopsy wrappers or accidentally recovering online A/B.
 - Never hand-drive a broken client. `wisp client doctor [CLIENT...]`
   (wisp:docs/doctor.md) finds each client's state from events and runs its
   known recovery: dropped from Battle.net, crashed, empty Options/Exit Game

@@ -38,8 +38,9 @@ quotation. The retrieved text supplies these specific claims:
   the precomputed freeze interval.
 - **Other → Making Damage Look Painful:** an initial flinch transitions into
   a painful pose during hitstop; the historical example uses four frames.
-  Smashcraft's 1–2 frames is the requested faster target, not this source's
-  number and not a Melee fact.
+  Tom delegated researched, move-appropriate transition timing in #181;
+  his earlier 1–2 frames is guidance, not a fixed gate. Neither number is a
+  claimed Melee fact. Promptly readable pain during the stop remains required.
 - **Moving Slightly During Hitstop:** very slow attacker animation is described
   as presentation flavor, with the normal animation position restored on
   release. This supports separate presentation and simulation clocks, not a
