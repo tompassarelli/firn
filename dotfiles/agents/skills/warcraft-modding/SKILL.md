@@ -112,7 +112,10 @@ playback, pathing, collision, order queues, and attack and damage timing. The
 simulation is under `core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/`.
 A fork with a browser-build branch,
 [ErikSom/WarsmashModEngine `HTML`](https://github.com/ErikSom/WarsmashModEngine/tree/HTML),
-is the reference for playing a map outside Warcraft (wisp#48).
+is the reference for playing a map outside Warcraft (wisp#48). Its live build,
+[warsmash.pages.dev](https://warsmash.pages.dev) (v0.2.0), loads maps from the
+player's own Warcraft III files kept in browser storage and plays multiplayer
+over lockstep WebRTC peer to peer, with no server.
 
 - It's a lead, not the answer. Confirm the behavior against the real game
   before changing Wisp; Warsmash targets older versions and skips models newer
