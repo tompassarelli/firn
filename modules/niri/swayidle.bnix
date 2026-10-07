@@ -3,7 +3,8 @@
 (ns swayidle)
 
 (nix/module [config lib pkgs ...]
-  (let [username config.myConfig.modules.users.username]
+  (let [username config.myConfig.modules.users.username
+        busy (s config.myConfig.modules.users.homeDir "/.local/bin/agents-busy")]
     {:config
       (lib.mkIf config.myConfig.modules.niri.enable
         {:home-manager.users
@@ -17,7 +18,9 @@
                    :Requisite   ["graphical-session.target"]}
                  :Service
                   {:ExecStart
+                    ;; Idle never locks or blanks the screen while an agent
+                    ;; workflow is running; suspend still locks.
                     (s pkgs.swayidle
-                      "/bin/swayidle -w timeout 601 'niri msg action power-off-monitors' timeout 600 'swaylock -f' before-sleep 'swaylock -f'")
+                      "/bin/swayidle -w timeout 601 '" busy " || niri msg action power-off-monitors' timeout 600 '" busy " || swaylock -f' before-sleep 'swaylock -f'")
                    :Restart   "on-failure"}
                  :Install {:WantedBy ["niri.service"]}}})}})}))

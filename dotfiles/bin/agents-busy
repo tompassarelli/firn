@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Exits 0 while an agent workflow is working: a Codex or Claude Code
+# transcript was written within the last AGENTS_BUSY_MINUTES (default 5).
+# swayidle runs it before locking or blanking the screen.
+set -u
+
+window="${AGENTS_BUSY_MINUTES:-5}"
+codex_root="${AGENTS_BUSY_CODEX_ROOT:-${NORTH_CODEX_CONVERSATION_HOME:-${NORTH_CODEX_POOLED_HOME:-$HOME/.local/state/north/codex-pooled}}/sessions}"
+claude_root="${AGENTS_BUSY_CLAUDE_ROOT:-$HOME/.claude/projects}"
+
+recent() { # recent <dir> <depth>: any transcript written inside the window
+  [ -d "$1" ] && [ -n "$(find "$1" -mindepth "$2" -maxdepth "$2" -name '*.jsonl' -mmin "-$window" -print -quit 2>/dev/null)" ]
+}
+
+# Codex keeps one folder per day; yesterday's covers sessions past midnight.
+recent "$codex_root/$(date +%Y/%m/%d)" 1 && exit 0
+recent "$codex_root/$(date -d yesterday +%Y/%m/%d)" 1 && exit 0
+recent "$claude_root" 2 && exit 0
+exit 1
