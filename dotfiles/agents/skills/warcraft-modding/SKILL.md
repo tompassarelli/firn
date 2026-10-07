@@ -110,6 +110,9 @@ rebuilds Warcraft III's simulation and renderer from scratch, and its author
 has already worked out most odd engine behavior: animation blending and
 playback, pathing, collision, order queues, and attack and damage timing. The
 simulation is under `core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/`.
+A fork with a browser-build branch,
+[ErikSom/WarsmashModEngine `HTML`](https://github.com/ErikSom/WarsmashModEngine/tree/HTML),
+is the reference for playing a map outside Warcraft (wisp#48).
 
 - It's a lead, not the answer. Confirm the behavior against the real game
   before changing Wisp; Warsmash targets older versions and skips models newer
