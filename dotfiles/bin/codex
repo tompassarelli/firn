@@ -90,7 +90,7 @@ FORCE_CONFIG=(
   -c 'default_permissions=":danger-full-access"'
   -c 'agents.max_concurrent_threads_per_session=64'
   -c 'agents.default_subagent_model="gpt-6.1-sol"'
-  -c 'agents.default_subagent_reasoning_effort="medium"'
+  -c 'agents.default_subagent_reasoning_effort="high"'
 )
 
 # The single conversation home. Managed lanes arrive with CODEX_HOME already
@@ -156,8 +156,8 @@ exec_conversation() {
 
   local workspace_args=(--add-dir "$HOME/code")
   local provider_args=(
-    -c 'model="gpt-6.1-sol"'
-    -c 'model_reasoning_effort="high"'
+    -c 'model="gpt-6-astra"'
+    -c 'model_reasoning_effort="xhigh"'
   )
   local full_access_args=(--dangerously-bypass-approvals-and-sandbox)
   local shared_args=()
@@ -225,7 +225,7 @@ exec_conversation() {
         force_args=(
           -c 'agents.max_concurrent_threads_per_session=64'
           -c 'agents.default_subagent_model="gpt-6.1-sol"'
-          -c 'agents.default_subagent_reasoning_effort="medium"'
+          -c 'agents.default_subagent_reasoning_effort="high"'
         )
       fi
       exec "$REAL" "${force_args[@]}" \

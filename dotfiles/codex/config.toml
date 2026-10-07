@@ -4,13 +4,13 @@ default_permissions = ":danger-full-access"
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
 approvals_reviewer = "user"
-model = "gpt-6.1-sol"
-model_reasoning_effort = "high"
+model = "gpt-6-astra"
+model_reasoning_effort = "xhigh"
 
 [agents]
 max_concurrent_threads_per_session = 64
 default_subagent_model = "gpt-6.1-sol"
-default_subagent_reasoning_effort = "medium"
+default_subagent_reasoning_effort = "high"
 
 [projects."/home/tom"]
 trust_level = "trusted"
