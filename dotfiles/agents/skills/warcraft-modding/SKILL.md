@@ -103,6 +103,21 @@ applied" names the reason.
   timer, trigger or callback on a turn that differs between clients changes
   the checksum (#158).
 
+## When the engine does something odd
+
+Check [Warsmash](https://github.com/Retera/WarsmashModEngine) first. It
+rebuilds Warcraft III's simulation and renderer from scratch, and its author
+has already worked out most odd engine behavior: animation blending and
+playback, pathing, collision, order queues, and attack and damage timing. The
+simulation is under `core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/`.
+
+- It's a lead, not the answer. Confirm the behavior against the real game
+  before changing Wisp; Warsmash targets older versions and skips models newer
+  than 1.33.
+- Read it; never copy or adapt its code. It's AGPL-3.0 and Wisp is MIT. Write
+  what you learn as a behavior note (a number, formula or order of events) in
+  wisp:docs/warsmash-notes.md, and build from the note.
+
 ## Frames, assets, CI and tests
 
 - Declare panels as typed frames (wisp:docs/ui.md). Imports are already
