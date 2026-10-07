@@ -154,11 +154,18 @@ make a port or a change pass; a disagreement is a defect to name.
 
 Pick the client by what the test needs (Tom, 7 Oct 2026):
 
-- **Offline LAN pool: the default for native testing** (landing; until
-  `wisp lan` is on Wisp main, use A/B). `wisp lan pool --pairs N` runs pairs
-  of throwaway clients with no account, each in its own network namespace with
-  no internet, playing over LAN. Its clients file is
-  `~/.local/state/wisp/lan/clients.json`. Pad parity runs, captures, `accept`
+- **Offline LAN pool: the default for native testing** (wisp:docs/lan.md).
+  Throwaway clients with no account, each pair in a network namespace with
+  only loopback, play LAN matches that Wisp hosts. `wisp lan setup --from
+  INSTALL [--pairs N]` creates them once (reflinked from an install);
+  `wisp lan pool --pairs N [--profile parity|visual]` runs pairs admitted by
+  the machine-capacity helper (foreground; Ctrl-C stops it); `wisp lan fresh
+  MAP [--pair K]` hosts and starts a match; `wisp lan status`, `wisp lan end
+  --pair K`. The host logs every turn's actions and compares checksums each
+  turn: `wisp engine actions --client lan0a,lan0b [--follow]`, and `engine
+  diff ACTIONS.log POLL.log` places each birth in its turn. Pool state is in
+  `~/.local/state/wisp/lan/`; its `clients.json` is the clients file for
+  `wisp engine` and `withAutopsy`. Pad parity runs, captures, `accept`
   checks and desync hunts go here, and so does the full engine-tooling tier.
 - **Signed-in A and B** (accounts c and b): only for tests that need
   Battle.net itself: real netplay or latency, direct play (`online
@@ -176,8 +183,9 @@ Engine tooling has two tiers (wisp:docs/engine.md, "Guardrails"):
 - **OFFLINE-ONLY** (pool clients): anything that traps, stops or modifies the
   process: `engine watch` and `locate --watch` (perf hardware breakpoints),
   `engine watch --lua` (stops the thread with ptrace for the exact Lua and
-  TypeScript stack), gdb, memory writes (including the LAN provider switch), code or
-  DLL injection. The tools refuse unless the client is verifiably offline:
+  TypeScript stack), gdb, memory writes (including the LAN switch, which
+  `wisp lan` makes and undoes within a fraction of a second), code or DLL
+  injection. The tools refuse unless the client is verifiably offline:
   loopback-only network namespace, no `-uid`, no Battle.net program in its
   prefix, no socket off this machine. A gdb attach made a signed-in client exit.
 - Always: only clients the project's clients file declares, never a game on
