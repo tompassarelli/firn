@@ -14,14 +14,15 @@ set -uo pipefail
 
 payload="$(head -c 1048576)"
 
-# Bound to every tool; only shell commands and plan updates need a decision,
+# Bound to every tool; only shell commands, patches and plan updates need a decision,
 # so every other tool call exits before paying for an interpreter.
 case "$payload" in
   *'"hook_event_name":"PreToolUse"'*|*'"hook_event_name": "PreToolUse"'*|\
   *'"hook_event_name":"PostToolUse"'*|*'"hook_event_name": "PostToolUse"'*)
     case "$payload" in
       *'"tool_name":"Bash"'*|*'"tool_name": "Bash"'*|\
-      *'"tool_name":"update_plan"'*|*'"tool_name": "update_plan"'*) ;;
+      *'"tool_name":"update_plan"'*|*'"tool_name": "update_plan"'*|\
+      *'"tool_name":"apply_patch"'*|*'"tool_name": "apply_patch"'*) ;;
       *) exit 0 ;;
     esac
     ;;

@@ -13,9 +13,11 @@ malformed event allows.
 - PreToolUse(Bash) refuses a check rerun on unchanged code, a malformed
   issue, and a new issue while the session has opened more than it closed.
 - PostToolUse(Bash) records passing checks and issue opens and closes, and
-  says once when the work passes twice its ETA.
-- Stop refuses one ending per turn that asks permission, narrates, hands the
-  check to someone else, lists what isn't proven, or says nearly done.
+  says once when the work passes twice its ETA or after a long run of
+  read-only commands with no change; an apply_patch ends that run.
+- Stop refuses one ending per turn that escalates without having tried, asks
+  permission, narrates, hands the check to someone else, lists what isn't
+  proven, or says nearly done.
 """
 
 import fcntl
@@ -95,6 +97,26 @@ STOP_MISSING_TOOL = re.compile(
     r"\b(lacks?|missing|restore)\b[^.\n]{0,40}\btools?\b",
     re.IGNORECASE,
 )
+ESCALATION = re.compile(r"(^|\n)\W*(blocked|needs you)\b", re.IGNORECASE)
+NEEDS_NOTHING = re.compile(r"needs you\W*\s*nothing", re.IGNORECASE)
+ATTEMPT_EVIDENCE = re.compile(
+    r"\b(error|errors|failed|failure|fails|exit code|exited|returned|denied|refused|not found|"
+    r"timed out|timeout|traceback|panic|panicked|http \d{3}|\d{3} (status|response))\b",
+    re.IGNORECASE,
+)
+REAL_ASK = re.compile(
+    r"\b(money|pay|paid|billing|purchase|price|subscription|account|sign[- ]?in|log[- ]?in|password|"
+    r"credential|2fa|mfa|email|send (it|this|that|an? \w+) to|publish|post publicly|delete|"
+    r"choose|pick (one|between)|which (option|direction|one)|product (choice|decision|direction))\b|\$\d",
+    re.IGNORECASE,
+)
+READ_ONLY_WORDS = {
+    "rg", "grep", "egrep", "cat", "head", "tail", "less", "ls", "find", "fd", "tree", "wc",
+    "jq", "file", "stat", "du", "diff", "cut", "sort", "uniq", "convo", "pwd", "which", "realpath",
+}
+READ_ONLY_GIT = {"log", "show", "diff", "status", "blame", "grep", "ls-files", "rev-parse", "branch", "remote"}
+STREAK_LIMIT = 20
+
 NEGATION = re.compile(r"\b(no|not|don't|dont|stop|without|never|skip|drop|enough)\b[^.!?\n]{0,30}$")
 
 RUNNERS = {
@@ -472,6 +494,27 @@ def pre_bash(event):
     )
 
 
+def read_only(command):
+    parts = list(segments(command))
+    if not parts:
+        return False
+    for words in parts:
+        head = os.path.basename(words[0])
+        if head == "cd":
+            continue
+        if head == "sed" and "-n" in words and "-i" not in words:
+            continue
+        if head == "git" and len(words) > 1 and words[1] in READ_ONLY_GIT:
+            continue
+        if head == "gh" and len(words) > 2 and words[2] in ("view", "list") or (
+            head == "gh" and len(words) > 1 and words[1] == "api" and "-X" not in words and "--method" not in words
+        ):
+            continue
+        if head not in READ_ONLY_WORDS:
+            return False
+    return True
+
+
 def exit_code(response):
     text = response if isinstance(response, str) else json.dumps(response)
     match = EXIT_CODE.search(text)
@@ -484,8 +527,18 @@ def post_bash(event):
         command = " ".join(command)
     cwd = event.get("cwd")
     code = exit_code(event.get("tool_response"))
-    note = None
+    notes = []
     with State(event.get("session_id")) as state:
+        if read_only(command):
+            state["streak"] = state.get("streak", 0) + 1
+            if state["streak"] == STREAK_LIMIT:
+                notes.append(
+                    f"You've run {STREAK_LIMIT} read-only commands since your last change or "
+                    "run. Stop reading. Make the change you think is right and let the build "
+                    "or test tell you if it's wrong."
+                )
+        else:
+            state["streak"] = 0
         action, words = gh_issue_action(command)
         if code == 0 and action == "create":
             state["opened"] += 1
@@ -506,12 +559,18 @@ def post_bash(event):
             spent = time.time() - eta["set_at"]
             if spent > 2 * eta["minutes"] * 60:
                 eta["warned"] = True
-                note = (
+                notes.append(
                     f"You're at {minutes(spent)} on a {eta['minutes']} min ETA, more than "
                     "twice over. Stop expanding. Land what passes now, close what's done, "
                     "and report the rest with a new ETA and the reason."
                 )
-    return context("PostToolUse", note) if note else None
+    return context("PostToolUse", " ".join(notes)) if notes else None
+
+
+def post_patch(event):
+    with State(event.get("session_id")) as state:
+        state["streak"] = 0
+    return None
 
 
 # --- Stop ------------------------------------------------------------------------
@@ -532,6 +591,17 @@ def stop(event):
             "Call it directly first. spawn_agent, send_message, followup_task, list_agents "
             "and wait_agent are direct collaboration tools; exec's ALL_TOOLS lists only "
             "scripting tools. Report a missing tool only with the error its call returned."
+        )
+    if (
+        ESCALATION.search(message)
+        and not NEEDS_NOTHING.search(message)
+        and not ATTEMPT_EVIDENCE.search(message)
+        and not REAL_ASK.search(message)
+    ):
+        return block(
+            "No. You're escalating without having tried. Try it, and come back only with the "
+            "error it returned. Tom decides only money, accounts, sending as him, deleting "
+            "data you didn't create, and product choices."
         )
     final = last_sentence(message[-600:])
     if "needs you:" in message.lower():
@@ -569,6 +639,8 @@ def decide(event):
         return pre_bash(event)
     if name == "PostToolUse" and tool == "Bash":
         return post_bash(event)
+    if name == "PostToolUse" and tool == "apply_patch":
+        return post_patch(event)
     if name == "Stop":
         return stop(event)
     return None

@@ -5,6 +5,10 @@ debugger and Tom's next playtest catch a wrong guess within minutes. Being
 slow is the failure. Guess, ship and fix forward. Nobody's sending a plane to
 Mars.
 
+**When in doubt, try it.** A failed attempt costs seconds, and its error tells
+you more than an hour of reading. Don't stop, investigate further or escalate
+to Tom until you have the error from an attempt in hand.
+
 Codex sessions repeatedly turned 10-minute tasks into 5-hour ones. Your care
 with tests and secrets is good; the trouble is proportion. Hooks enforce the
 worst of it: they refuse reruns on unchanged code, issues that can't close,

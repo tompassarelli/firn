@@ -136,6 +136,24 @@ expect already-continued quiet '' "$(stopping true '"Should I push it?"')"
 expect invented-missing-tool fires 'never got an error' "$(stopping false '"Yes, there is an orchestration blocker. This turn lacks send_message / followup_task, so five workers are still waiting.\nNeeds you: restore those collaboration tools to this root session."')"
 expect real-missing-tool quiet '' "$(stopping false '"Blocked: shellcheck is unavailable; calling it failed with: command not found.\nNeeds you: nothing, installing it now."')"
 
+# Escalating without an attempt: try first, come back with the error.
+expect untried-escalation fires 'without having tried' "$(stopping false '"Blocked: I am not sure the shared server supports resume.\nNeeds you: confirm it is safe to restart."')"
+expect tried-escalation quiet '' "$(stopping false '"Blocked: bun test failed with exit code 1 on arc.test.ts.\nNeeds you: decide whether the arc follows Melee or Ultimate."')"
+expect product-choice quiet '' "$(stopping false '"Blocked: two designs fit.\nNeeds you: choose between ledge-cancel on or off. I recommend on."')"
+
+# A long run of read-only commands with no change gets told to try something.
+patch_post() { printf '{"hook_event_name":"PostToolUse","session_id":"%s","cwd":"%s","tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch"},"tool_response":"ok"}' "$1" "$2"; }
+for _ in $(seq 1 19); do post r1 "$game" '"rg jumpArc ts/src"' 0 | run >/dev/null; done
+expect twentieth-read fires 'Stop reading' "$(post r1 "$game" '"git log --oneline -5"' 0)"
+expect after-limit quiet '' "$(post r1 "$game" '"cat ts/src/arc.ts"' 0)"
+patch_post r1 "$game" | run >/dev/null
+for _ in $(seq 1 18); do post r1 "$game" '"sed -n 1,40p ts/src/arc.ts"' 0 | run >/dev/null; done
+expect reset-by-patch quiet '' "$(post r1 "$game" '"rg arc"' 0)"
+post r2 "$game" '"bun run build"' 0 | run >/dev/null
+for _ in $(seq 1 19); do post r2 "$game" '"ls"' 0 | run >/dev/null; done
+expect build-counts-as-action fires 'Stop reading' "$(post r2 "$game" '"ls"' 0)"
+expect sed-in-place-is-action quiet '' "$(post r3 "$game" '"sed -i s/a/b/ arc.ts"' 0)"
+
 # Other tools skip the interpreter; the off switch and malformed input allow.
 expect other-tool quiet '' '{"hook_event_name":"PreToolUse","session_id":"x","tool_name":"apply_patch","tool_input":{"command":"bun test"}}'
 out="$(prompt k1 '"stop asking, wtf"' | AGENT_NO_AUTHORING_HOOKS=1 "$HOOK" 2>/dev/null)"
