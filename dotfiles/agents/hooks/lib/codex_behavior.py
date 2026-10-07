@@ -207,6 +207,27 @@ def agent_key(event):
     return f"{session}--{agent}" if agent else session
 
 
+def tree_counts(event, state):
+    """Opened and closed across the root session and every worker under it.
+
+    The orchestrator assigns and workers close, so the root's own record alone
+    reads zero while issues close all around it."""
+    opened, closed = state["opened"], state["closed"]
+    own = state_path(agent_key(event))
+    root = state_path(event.get("session_id") or "unknown")
+    for path in [root, *STATE_ROOT.glob(f"{root.stem}--*.json")]:
+        if path == own:
+            continue
+        try:
+            other = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if isinstance(other, dict):
+            opened += int(other.get("opened", 0))
+            closed += int(other.get("closed", 0))
+    return opened, closed
+
+
 def minutes(seconds):
     total = int(seconds // 60)
     return f"{total // 60}h {total % 60:02d}m" if total >= 60 else f"{total} min"
@@ -288,9 +309,10 @@ def user_prompt_submit(event):
     with State(agent_key(event)) as state:
         state["prompts"] = (state["prompts"] + [prompt])[-PROMPTS_KEPT:]
         elapsed = time.time() - state["started"]
+        opened, closed = tree_counts(event, state)
         lines = [
-            f"Scoreboard: {minutes(elapsed)} in, {state['closed']} issues closed, "
-            f"{state['opened']} opened. {STANDING}"
+            f"Scoreboard: {minutes(elapsed)} in, {closed} issues closed, "
+            f"{opened} opened. {STANDING}"
         ]
     if CORRECTION.search(prompt):
         lines.append(
@@ -515,10 +537,11 @@ def pre_bash(event):
             return deny(f"No. This issue can't close: {problem}. Rewrite it and retry.")
         with State(agent_key(event)) as state:
             prompts = state["prompts"][-3:]
-            if state["opened"] > state["closed"] and not asked_keyword(("issue", "ticket"), prompts):
+            opened, closed = tree_counts(event, state)
+            if opened > closed and not asked_keyword(("issue", "ticket"), prompts):
                 return deny(
-                    f"No. This session opened {state['opened']} issues and closed "
-                    f"{state['closed']}. Close one before opening another. A problem "
+                    f"No. This session opened {opened} issues and closed "
+                    f"{closed}. Close one before opening another. A problem "
                     "that blocks nothing goes in your report as one line."
                 )
         return None

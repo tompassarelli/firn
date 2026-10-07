@@ -177,6 +177,10 @@ expect orchestrator-closes-issue quiet '' "$(pre o1 "$game" '"gh issue close 184
 expect orchestrator-lands quiet '' "$(pre o1 "$game" '"git -C ~/code/smashcraft/main merge --ff-only native_r2"')"
 worker_pre() { printf '{"hook_event_name":"PreToolUse","session_id":"%s","agent_id":"%s","cwd":"%s","tool_name":"Bash","tool_input":{"command":%s}}' "$1" "$2" "$3" "$4"; }
 expect worker-of-orchestrator-runs-tests quiet '' "$(worker_pre o1 capture_r2 "$game" '"bun test"')"
+# The root's score counts its workers' closes: the orchestrator closes nothing itself.
+printf '{"hook_event_name":"PostToolUse","session_id":"t1","agent_id":"art_r3","cwd":"%s","tool_name":"Bash","tool_input":{"command":"gh issue close 163 167"},"tool_response":"Exit code: 0\\nOutput:\\nok"}' "$game" | run >/dev/null
+expect tree-score fires '2 issues closed' "$(prompt t1 '"How is it going?"')"
+expect other-tree-score fires '0 issues closed' "$(prompt t2 '"How is it going?"')"
 expect orchestrator-with-reason quiet '' "$(pre o1 "$game" '"ORCH_RUNS_BECAUSE=\"all eight workers are mid-native-run\" bun test"')"
 expect landed-no-box fires 'closed nothing' "$(stopping false '"Landed 60cacdfe. The original native bot capture completed both matches in 95 seconds; 21 journey tests passed."')"
 expect landed-and-closed quiet '' "$(stopping false '"Landed 60cacdfe and closed #144: all 13 fighters show their spell.\nNeeds you: nothing"')"
