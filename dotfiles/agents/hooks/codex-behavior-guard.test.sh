@@ -186,6 +186,15 @@ expect landed-no-box fires 'closed nothing' "$(stopping false '"Landed 60cacdfe.
 expect landed-and-closed quiet '' "$(stopping false '"Landed 60cacdfe and closed #144: all 13 fighters show their spell.\nNeeds you: nothing"')"
 expect landed-box-remains quiet '' "$(stopping false '"Landed c0de10c6. #181 is at 3/4; the native capture box remains."')"
 
+# A heavy suite already running in the same worktree is not started twice.
+suite_dir="$scratch/suite" && mkdir -p "$suite_dir/ts" "$scratch/other"
+(cd "$suite_dir/ts" && bash -c 'sleep 30; :' bun scripts/lua-tests.ts) & sleeper=$!
+sleep 0.3
+expect duplicate-suite fires 'already running' "$(pre d1 "$suite_dir" '"cd ts && bun scripts/lua-tests.ts"')"
+expect suite-elsewhere quiet '' "$(pre d1 "$scratch/other" '"bun scripts/lua-tests.ts"')"
+expect suite-kill quiet '' "$(pre d1 "$suite_dir" '"pkill -f scripts/lua-tests.ts"')"
+kill "$sleeper" 2>/dev/null; wait "$sleeper" 2>/dev/null
+
 # A commander's relay reaches the root session once, after any tool or at Stop.
 mkdir -p "$scratch/state"
 printf 'Workers blocked on native startup retry now.' >"$scratch/state/relay-rr.txt"

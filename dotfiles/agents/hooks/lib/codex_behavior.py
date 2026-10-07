@@ -522,11 +522,47 @@ def issue_shape_problem(body, creating):
     return None
 
 
+HEAVY_SUITE = re.compile(r"\b(scripts/lua-tests\.ts|scripts/cpuTiers\.ts|scripts/cpuField\.ts)\b")
+PROCESS_TOOLS = re.compile(r"\b(pkill|pgrep|kill|ps|grep|rg|cat|sed)\b")
+
+
+def running_copy(cwd, suite):
+    """A live process already running `suite` in the same worktree subtree."""
+    if not cwd:
+        return None
+    here = os.path.realpath(cwd)
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        try:
+            cmdline = Path(f"/proc/{entry}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+            if suite not in cmdline:
+                continue
+            there = os.path.realpath(os.readlink(f"/proc/{entry}/cwd"))
+            started = os.stat(f"/proc/{entry}").st_mtime
+        except OSError:
+            continue
+        if there.startswith(here) or here.startswith(there):
+            return int(entry), started
+    return None
+
+
 def pre_bash(event):
     command = (event.get("tool_input") or {}).get("command") or ""
     if isinstance(command, list):
         command = " ".join(command)
     cwd = event.get("cwd")
+
+    suite = HEAVY_SUITE.search(command)
+    if suite and not PROCESS_TOOLS.search(command):
+        copy = running_copy(cwd, suite.group(1))
+        if copy:
+            pid, started = copy
+            return deny(
+                f"No. `{suite.group(1)}` is already running in this worktree (pid {pid}, "
+                f"{minutes(time.time() - started)}). Wait for it or stop it; one copy at a time. "
+                "Full suites belong on GitHub's runners: `bun wisp farm`."
+            )
 
     action, _ = gh_issue_action(command)
     if action == "create":
