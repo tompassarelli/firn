@@ -1,54 +1,81 @@
 # How agent work is staffed, hand-edited by Tom. `agents plan` combines this
 # file with the providers signed in on this machine and prints the bands every
 # session staffs from. Skills keep each provider's facts (model ids, how to
-# spawn); this file holds the choices that change with accounts and prices.
+# spawn).
 
 # split: use every signed-in provider.
-# claude-only or codex-only: drop the other provider even when it is signed in.
+# claude-only or codex-only: drop the other provider even when signed in.
 mode = "split"
 
-# Worker tiers each provider offers, as `provider:name` in the bands below.
-# `name` is the tier the ledger records; `agent` is the Claude Code agent type.
-[tiers.claude]
-haiku = { model = "claude-haiku-5-5", effort = "high", agent = "worker-haiku" }
-medium = { model = "claude-opus-5-5", effort = "medium", agent = "worker" }
-high = { model = "claude-opus-5-5", effort = "high", agent = "worker-high" }
+# balanced: the default split of work between tiers.
+# efficiency: weekly usage is running low, so stretch cheaper tiers further
+#   before paying for the next one.
+# performance: a deadline is close, so stronger tiers take work sooner.
+# `agents plan --posture X` tries one for a single run without editing this.
+posture = "balanced"
 
-[tiers.codex]
-medium = { model = "gpt-6.1-sol", effort = "medium" }
-high = { model = "gpt-6.1-sol", effort = "high" }
+# Per-provider override: that provider's tiers use its own posture column.
+# Example: Claude's weekly usage is low, so Claude gives work up to SOL.
+[claude]
+# posture = "efficiency"
 
-# Used only when Tom names the model; never part of a band.
-[on_request.codex]
+[codex]
+
+# Worker tiers, weakest first, as `provider:name`. Difficulty is a percentile
+# of Tom's work. `start` is where the tier begins taking work under each
+# posture: [efficiency, balanced, performance]. A tier takes work from its
+# start up to the next tier's start. When columns disagree so a stronger tier
+# would start below a weaker one, the larger start wins, so a provider in
+# efficiency gives work up rather than taking more. A provider that is
+# unavailable hands its range to the tier below it (above, if none is below).
+# A failed box goes to the next tier in this list, then to Tom.
+# `agent` is the Claude Code agent type that runs the tier.
+
+# Mechanical work: exact edits, ticking and closing issues, running a named
+# check, lookups in large logs, triage. Never senior work.
+[tiers."claude:haiku"]
+model = "claude-haiku-5-5"
+effort = "high"
+agent = "worker-haiku"
+role = "mechanical"
+start = [0, 0, 0]
+
+# The easier half of the middle: features, fixes with a known cause, tooling,
+# docs and skills.
+[tiers."codex:sol-medium"]
+model = "gpt-6.1-sol"
+effort = "medium"
+role = "middle"
+start = [30, 20, 20]
+
+# The harder half of SOL's range: multi-step or ambiguous middle work.
+# Efficiency stretches it to the 85th percentile; performance starts it at
+# the 40th.
+[tiers."codex:sol-high"]
+model = "gpt-6.1-sol"
+effort = "high"
+role = "middle, harder half"
+start = [55, 50, 40]
+
+# Senior-plus execution: unknown-cause debugging, netcode, determinism,
+# engine and cross-module changes. Performance hands it work from the 50th.
+[tiers."claude:opus-medium"]
+model = "claude-opus-5-5"
+effort = "medium"
+agent = "worker"
+role = "top"
+start = [85, 75, 50]
+
+# Planning and architecture always go here, plus the hardest execution.
+[tiers."claude:opus-high"]
+model = "claude-opus-5-5"
+effort = "high"
+agent = "worker-high"
+role = "planning and architecture"
+start = [98, 95, 90]
+
+# Used only when Tom names the model; never in a band or the escalation.
 # 9 Oct: Astra drains Tom's usage and SOL is good enough.
-astra = { model = "gpt-6-astra", effort = "xhigh" }
-
-# Bands, easiest first. Pick one band per item and start at its first tier.
-# A box that fails a band's last tier goes to the next band's first tier;
-# after the last band, bring Tom one recommendation. A band whose providers
-# are all unavailable uses the nearest available band: the next one up, else
-# the one below.
-
-# Mechanical, the bottom ~20%: exact edits, ticking and closing issues,
-# running a named check, lookups in large logs, triage, summaries.
-[[band]]
-name = "mechanical"
-tiers = ["claude:haiku"]
-
-# The middle, ~20th to 75th percentile: features, fixes with a known cause,
-# tooling, docs and skills; high for multi-step or ambiguous work.
-[[band]]
-name = "middle"
-tiers = ["codex:medium", "codex:high"]
-
-# The top, ~75th percentile and up: senior-plus execution such as unknown-
-# cause debugging, netcode, determinism, engine and cross-module changes.
-[[band]]
-name = "top"
-tiers = ["claude:medium"]
-
-# Planning and architecture: designing the approach, splitting work,
-# choosing between directions.
-[[band]]
-name = "planning"
-tiers = ["claude:high"]
+[on_request."codex:astra"]
+model = "gpt-6-astra"
+effort = "xhigh"

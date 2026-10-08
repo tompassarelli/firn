@@ -13,8 +13,9 @@ or takes Tom's focus.
 
 ## Steps
 
-1. Run `agents plan`. Items in bands whose tiers are SOL go to the lead;
-   items in bands whose tiers are Claude's stay with you (`claude-workers`).
+1. Run `agents plan`. Items in bands that start at a SOL tier go to the
+   lead; items in bands that start at a Claude tier stay with you
+   (`claude-workers`).
    Write the brief from the template below to
    `~/.local/state/agents/handoffs/codex-lead-brief.md`.
 2. `codex-lead start ~/.local/state/agents/handoffs/codex-lead-brief.md`
@@ -48,8 +49,8 @@ Read first: ~/.codex/AGENTS.md, <repo>/AGENTS.md, <issues or notes>.
 Staffing: one worker per independent issue, all independent items at once,
   bands and tiers from `agents plan` (run it first) and the staffing and
   codex-workers skills; never low or max. Astra only when Tom asks for it
-  by name. When an item's next step in the plan is a tier you can't spawn,
-  escalate as below.
+  by name. When an item's next tier in the plan's escalation is one you
+  can't spawn, escalate as below.
 Every worker brief: goal, files, Done when, ETA, a report that starts with
   "Done:", "Not done:" or "Blocked:", and the lines
   Item: <repo#N>
@@ -61,8 +62,8 @@ Waiting: wait on farm runs and CI with one blocking command (`--wait`, or
   `gh run watch RUN --exit-status`), never a polling loop. Confirm the exact
   revision before dispatching a farm run.
 Escalation: when an item is clearly struggling (a worker past 2x ETA, a
-  second "Not done" on one box, or a failure whose next step in the plan
-  is a tier you can't spawn), append one line to
+  second "Not done" on one box, or a failure whose next tier in the plan's
+  escalation is one you can't spawn), append one line to
   ~/.local/state/agents/handoffs/codex-lead-peer.md:
   PEER <HH:MM> <repo#N>: <tried, by tiers>; <how it fails>; <next idea>
   Claude answers with a breakdown and leads; run the next attempt on it.
@@ -107,7 +108,7 @@ goal hourly, or right away when the queue changes.
 
 This is the one mode that mixes providers. The lead staffs only Codex
 workers. Claude runs its own workers (`claude-workers` skill) on items the
-lead isn't holding whose band in `agents plan` uses Claude tiers: open or
+lead isn't holding whose band in `agents plan` starts at a Claude tier: open or
 claim the issue first and tell the lead it's held, so no item has two owners.
 Compare providers only here, with the ledger's Claude and Codex rows for the
 same category side by side. Anthropic's charts put Opus 5.5 medium at GPT-6

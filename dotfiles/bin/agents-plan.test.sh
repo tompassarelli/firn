@@ -27,66 +27,92 @@ SH
 chmod +x "$scratch/bin/claude" "$scratch/bin/codex"
 export AGENTS_CLAUDE_BIN="$scratch/bin/claude" AGENTS_CODEX_BIN="$scratch/bin/codex"
 
-# Tom's live file parses and resolves every band.
-live="$("$agents" plan)" || fail "live orchestration.toml did not resolve"
-[[ "$(grep -c '; then ' <<<"$live")" -ge 1 ]] || fail "live plan printed no bands"
+# Tom's live file parses and resolves.
+"$agents" plan | grep -q '^  0-' || fail "live orchestration.toml did not resolve"
 
-# Fixture with Tom's 9 Oct bands, so editing the live file never breaks this.
-export AGENTS_ORCHESTRATION="$scratch/orchestration.toml"
-cat >"$AGENTS_ORCHESTRATION" <<'TOML'
+# Fixture with Tom's 9 Oct table, so editing the live file never breaks this.
+fixture() {
+  cat <<TOML
 mode = "split"
-[tiers.claude]
-haiku = { model = "claude-haiku-5-5", effort = "high", agent = "worker-haiku" }
-medium = { model = "claude-opus-5-5", effort = "medium", agent = "worker" }
-high = { model = "claude-opus-5-5", effort = "high", agent = "worker-high" }
-[tiers.codex]
-medium = { model = "gpt-6.1-sol", effort = "medium" }
-high = { model = "gpt-6.1-sol", effort = "high" }
-[on_request.codex]
-astra = { model = "gpt-6-astra", effort = "xhigh" }
-[[band]]
-name = "mechanical"
-tiers = ["claude:haiku"]
-[[band]]
-name = "middle"
-tiers = ["codex:medium", "codex:high"]
-[[band]]
-name = "top"
-tiers = ["claude:medium"]
-[[band]]
-name = "planning"
-tiers = ["claude:high"]
+posture = "balanced"
+[claude]
+${1:-}
+[tiers."claude:haiku"]
+model = "claude-haiku-5-5"
+effort = "high"
+agent = "worker-haiku"
+role = "mechanical"
+start = [0, 0, 0]
+[tiers."codex:sol-medium"]
+model = "gpt-6.1-sol"
+effort = "medium"
+role = "middle"
+start = [30, 20, 20]
+[tiers."codex:sol-high"]
+model = "gpt-6.1-sol"
+effort = "high"
+role = "middle, harder half"
+start = [55, 50, 40]
+[tiers."claude:opus-medium"]
+model = "claude-opus-5-5"
+effort = "medium"
+agent = "worker"
+role = "top"
+start = [85, 75, 50]
+[tiers."claude:opus-high"]
+model = "claude-opus-5-5"
+effort = "high"
+agent = "worker-high"
+role = "planning and architecture"
+start = [98, 95, 90]
+[on_request."codex:astra"]
+model = "gpt-6-astra"
+effort = "xhigh"
 TOML
+}
+export AGENTS_ORCHESTRATION="$scratch/orchestration.toml"
+fixture >"$AGENTS_ORCHESTRATION"
+bands() { grep '^  [0-9]' <<<"$1"; }
 
-bands() { grep -E '^(mechanical|middle|top|planning)' <<<"$1"; }
-
-# Split with both providers: each band keeps its own tiers, escalating upward.
+# Balanced with both providers is Tom's table.
 out="$("$agents" plan)"
-expected='mechanical: claude-haiku-5-5 high (worker-haiku); then middle
-middle: gpt-6.1-sol medium, gpt-6.1-sol high; then top
-top: claude-opus-5-5 medium (worker); then planning
-planning: claude-opus-5-5 high (worker-high); then recommend to Tom'
-[[ "$(bands "$out")" == "$expected" ]] || fail "split plan: $out"
+expected='  0-20 mechanical: claude-haiku-5-5 high (worker-haiku)
+  20-50 middle: gpt-6.1-sol medium
+  50-75 middle, harder half: gpt-6.1-sol high
+  75-95 top: claude-opus-5-5 medium (worker)
+  95-100 planning and architecture: claude-opus-5-5 high (worker-high)'
+[[ "$(bands "$out")" == "$expected" ]] || fail "balanced plan: $out"
+grep -Fxq 'escalation: claude-haiku-5-5 high (worker-haiku), gpt-6.1-sol medium, gpt-6.1-sol high, claude-opus-5-5 medium (worker), claude-opus-5-5 high (worker-high), then recommend to Tom' <<<"$out" ||
+  fail "balanced escalation: $out"
 
-# Codex-only: Claude bands move to SOL, and the ladder ends at Tom.
+# Performance widens Opus medium down to the 50th percentile.
+out="$("$agents" plan --posture performance)"
+grep -Fxq '  50-90 top: claude-opus-5-5 medium (worker)' <<<"$out" || fail "performance plan: $out"
+
+# Claude in efficiency gives SOL work up to the 85th; planning stays on Opus high.
+fixture 'posture = "efficiency"' >"$AGENTS_ORCHESTRATION"
+out="$("$agents" plan)"
+grep -Fxq 'mode: split, posture: balanced (claude efficiency)' <<<"$out" || fail "override header: $out"
+grep -Fxq '  50-85 middle, harder half: gpt-6.1-sol high' <<<"$out" || fail "claude efficiency: $out"
+grep -Fxq '  98-100 planning and architecture: claude-opus-5-5 high (worker-high)' <<<"$out" ||
+  fail "claude efficiency planning: $out"
+fixture >"$AGENTS_ORCHESTRATION"
+
+# Codex-only: every band is SOL, the dropped ranges say why, and escalation ends at Tom.
 out="$("$agents" plan --mode codex-only)"
-expected='mechanical (moved to middle, claude dropped: mode is codex-only): gpt-6.1-sol medium, gpt-6.1-sol high; then recommend to Tom
-middle: gpt-6.1-sol medium, gpt-6.1-sol high; then recommend to Tom
-top (moved to middle, claude dropped: mode is codex-only): gpt-6.1-sol medium, gpt-6.1-sol high; then recommend to Tom
-planning (moved to middle, claude dropped: mode is codex-only): gpt-6.1-sol medium, gpt-6.1-sol high; then recommend to Tom'
+expected='  0-50 middle: gpt-6.1-sol medium (takes claude:haiku 0-20: provider dropped)
+  50-100 middle, harder half: gpt-6.1-sol high (takes claude:opus-medium 75-95, claude:opus-high 95-100: provider dropped)'
 [[ "$(bands "$out")" == "$expected" ]] || fail "codex-only plan: $out"
-! grep -q claude- <<<"$out" || fail "codex-only plan names a Claude tier"
+grep -Fxq 'escalation: gpt-6.1-sol medium, gpt-6.1-sol high, then recommend to Tom' <<<"$out" ||
+  fail "codex-only escalation: $out"
 
-# Claude-only: the middle band moves up to Opus medium.
+# Claude-only resolves, and a signed-out Codex gives the same bands.
 out="$("$agents" plan --mode claude-only)"
-grep -Fxq 'middle (moved to top, codex dropped: mode is claude-only): claude-opus-5-5 medium (worker); then planning' <<<"$out" ||
-  fail "claude-only plan: $out"
-
-# Split with Codex signed out behaves as Claude-only and says why.
-out="$(FAKE_CODEX_IN=false "$agents" plan)"
-grep -Fxq 'codex: dropped, not signed in (codex login status)' <<<"$out" || fail "signed-out codex: $out"
-grep -Fxq 'middle (moved to top, codex dropped: not signed in (codex login status)): claude-opus-5-5 medium (worker); then planning' <<<"$out" ||
-  fail "signed-out codex: $out"
+grep -Fxq '  75-95 top: claude-opus-5-5 medium (worker)' <<<"$out" || fail "claude-only plan: $out"
+! grep -q gpt- <<<"$out" || fail "claude-only plan names a SOL tier"
+signed_out="$(FAKE_CODEX_IN=false "$agents" plan)"
+grep -Fxq 'codex: dropped, not signed in (codex login status)' <<<"$signed_out" || fail "signed-out codex: $signed_out"
+[[ "$(bands "$signed_out")" == "$(bands "$out")" ]] || fail "signed-out codex differs from claude-only"
 
 # Neither provider usable: only Tom is left.
 if out="$(FAKE_CODEX_IN=false FAKE_CLAUDE_IN=false "$agents" plan)"; then
@@ -94,9 +120,10 @@ if out="$(FAKE_CODEX_IN=false FAKE_CLAUDE_IN=false "$agents" plan)"; then
 fi
 grep -Fq 'recommend to Tom' <<<"$out" || fail "no-provider plan: $out"
 
-# On-request tiers never appear in any plan.
-for mode in split codex-only claude-only; do
-  ! "$agents" plan --mode "$mode" | grep -q astra || fail "$mode plan names Astra"
+# On-request tiers never appear.
+for args in "" "--posture performance" "--posture efficiency" "--mode codex-only"; do
+  # shellcheck disable=SC2086
+  ! "$agents" plan $args | grep -q astra || fail "plan $args names Astra"
 done
 
-printf 'ok: agents plan resolves bands from orchestration.toml and sign-ins\n'
+printf 'ok: agents plan derives bands from tier starts, posture and sign-ins\n'

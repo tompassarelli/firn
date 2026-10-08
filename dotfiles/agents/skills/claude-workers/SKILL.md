@@ -16,9 +16,10 @@ Fable only when Tom asks.
 | high | `worker-high` (Opus 5.5, high) | Multi-step or ambiguous work: unknown-cause debugging, netcode, engine, performance, cross-module work, native checks, research. |
 
 Which work gets these tiers, and where a failed box goes next, comes from
-`agents plan`: run it at session start, pick each item's band, and start at
-that band's first tier. A band's tier from another provider runs through
-that provider (`orchestrating-codex` for Codex).
+`agents plan`: run it at session start, place each item in its band, start
+at that band's tier, and escalate in the order it prints. A tier from
+another provider runs through that provider (`orchestrating-codex` for
+Codex).
 
 ## Anthropic's priors
 

@@ -2,29 +2,32 @@
 # Firn keeps this stable command name; North owns the catalog, permission
 # transition, activation generation, and every projection it reports.
 # `plan` is local: it reads dotfiles/agents/orchestration.toml and the
-# providers signed in now, and prints the worker ladder sessions staff from.
+# providers signed in now, and prints the bands sessions staff from.
 set -uo pipefail
 
 north_bin="${AGENTS_NORTH_BIN:-north}"
 
 usage() {
-  printf 'usage: agents {status [--json]|inspect <id> [--json]|path <id>|on <id>|off <id>|sync|plan [--mode split|claude-only|codex-only]}\n' >&2
+  printf 'usage: agents {status [--json]|inspect <id> [--json]|path <id>|on <id>|off <id>|sync|plan [--mode split|claude-only|codex-only] [--posture efficiency|balanced|performance]}\n' >&2
 }
 
 plan() {
-  local mode=""
+  local mode="" posture=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --mode) [ $# -ge 2 ] || { usage; exit 2; }; mode=$2; shift 2 ;;
+      --posture) [ $# -ge 2 ] || { usage; exit 2; }; posture=$2; shift 2 ;;
       *) usage; exit 2 ;;
     esac
   done
   local config="${AGENTS_ORCHESTRATION:-$(dirname "$(readlink -f "$0")")/../agents/orchestration.toml}"
-  AGENTS_PLAN_MODE="$mode" AGENTS_PLAN_CONFIG="$config" \
+  AGENTS_PLAN_MODE="$mode" AGENTS_PLAN_POSTURE="$posture" AGENTS_PLAN_CONFIG="$config" \
     AGENTS_CLAUDE_BIN="${AGENTS_CLAUDE_BIN:-claude}" \
     AGENTS_CODEX_BIN="${AGENTS_CODEX_BIN:-codex}" \
     exec python3 -I -c '
 import json, os, subprocess, sys, tomllib
+
+POSTURES = ("efficiency", "balanced", "performance")
 
 def die(msg):
     print(f"agents plan: {msg}", file=sys.stderr)
@@ -38,16 +41,28 @@ except (OSError, tomllib.TOMLDecodeError) as e:
     die(f"cannot read {path}: {e}")
 
 tiers = cfg.get("tiers", {})
-bands = cfg.get("band", [])
-if not bands:
-    die("the file has no bands")
+for ref, t in tiers.items():
+    st = t.get("start")
+    if ":" not in ref or "model" not in t or "effort" not in t or not (isinstance(st, list) and len(st) == 3):
+        die(f"tier {ref!r} needs provider:name, model, effort and start = [efficiency, balanced, performance]")
+providers = list(dict.fromkeys(ref.split(":")[0] for ref in tiers))
+
 mode = os.environ["AGENTS_PLAN_MODE"] or cfg.get("mode", "split")
 if mode == "split":
-    wanted = list(tiers)
-elif mode.endswith("-only") and mode[:-5] in tiers:
+    wanted = providers
+elif mode.endswith("-only") and mode[:-5] in providers:
     wanted = [mode[:-5]]
 else:
-    die(f"unknown mode {mode!r}; use split, " + ", ".join(p + "-only" for p in tiers))
+    die(f"unknown mode {mode!r}; use split, " + ", ".join(p + "-only" for p in providers))
+
+override = os.environ["AGENTS_PLAN_POSTURE"]
+posture = override or cfg.get("posture", "balanced")
+own = {p: cfg.get(p, {}).get("posture", posture) for p in providers}
+if override:
+    own = {p: override for p in providers}
+for p in [posture, *own.values()]:
+    if p not in POSTURES:
+        die(f"unknown posture {p!r}; use " + ", ".join(POSTURES))
 
 def run(cmd):
     try:
@@ -68,53 +83,47 @@ def signed_in(name):
         return code == 0 and "Logged in" in out, "codex login status"
     return False, "no sign-in check for this provider"
 
-print(f"mode: {mode}")
-why = {}
-for name in tiers:
+head = f"mode: {mode}, posture: {posture}"
+moved = [f"{p} {own[p]}" for p in providers if own[p] != posture and p in wanted]
+print(head + (" (" + ", ".join(moved) + ")" if moved else ""))
+usable = []
+for name in providers:
     if name not in wanted:
-        why[name] = f"mode is {mode}"
+        print(f"{name}: dropped, mode is {mode}")
         continue
     ok, how = signed_in(name)
     if ok:
+        usable.append(name)
         print(f"{name}: signed in")
     else:
-        why[name] = f"not signed in ({how})"
-for name, reason in why.items():
-    print(f"{name}: dropped, {reason}")
+        print(f"{name}: dropped, not signed in ({how})")
+if not usable:
+    print("bands: none; recommend to Tom (no provider is usable)")
+    sys.exit(1)
 
-def label(ref):
-    provider, _, name = ref.partition(":")
-    t = tiers.get(provider, {}).get(name)
-    if t is None:
-        die(f"band tier {ref!r} is not under [tiers]")
+def bands_of(refs):
+    out, floor = [], 0
+    for i, r in enumerate(refs):
+        lo = 0 if i == 0 else max(floor, tiers[r]["start"][POSTURES.index(own[r.split(":")[0]])])
+        floor = lo
+        out.append([lo, 100, r])
+    for i in range(len(out) - 1):
+        out[i][1] = out[i + 1][0]
+    return [x for x in out if x[1] > x[0]]
+
+def label(r):
+    t = tiers[r]
     agent = f" ({t["agent"]})" if t.get("agent") else ""
     return f"{t["model"]} {t["effort"]}{agent}"
 
-own = [[r for r in b.get("tiers", []) if label(r) and r.split(":")[0] not in why] for b in bands]
-n = len(bands)
-resolved = []
-for i, b in enumerate(bands):
-    order = list(range(i, n)) + list(range(i - 1, -1, -1))
-    j = next((k for k in order if own[k]), None)
-    if j is None:
-        print("no band has a usable provider: recommend to Tom")
-        sys.exit(1)
-    resolved.append(j)
-
-TOM = "recommend to Tom"
-for i, b in enumerate(bands):
-    j = resolved[i]
-    tried = set(own[j])
-    nxt = TOM
-    for k in range(i + 1, n):
-        if not set(own[resolved[k]]) <= tried:
-            nxt = bands[k]["name"]
-            break
-    moved = ""
-    if j != i:
-        gone = sorted({r.split(":")[0] for r in b.get("tiers", [])} & set(why))
-        moved = f" (moved to {bands[j]["name"]}, " + "; ".join(f"{p} dropped: {why[p]}" for p in gone) + ")"
-    print(f"{b["name"]}{moved}: " + ", ".join(label(r) for r in own[j]) + f"; then {nxt}")
+avail = [r for r in tiers if r.split(":")[0] in usable]
+full = bands_of(list(tiers))
+print("bands (difficulty percentile: start tier):")
+for lo, hi, r in bands_of(avail):
+    took = [f"{x[2]} {x[0]}-{x[1]}" for x in full if x[2] not in avail and x[0] < hi and x[1] > lo]
+    note = f" (takes {", ".join(took)}: provider dropped)" if took else ""
+    print(f"  {lo}-{hi} {tiers[r].get("role", r)}: {label(r)}{note}")
+print("escalation: " + ", ".join(label(r) for r in avail) + ", then recommend to Tom")
 '
 }
 

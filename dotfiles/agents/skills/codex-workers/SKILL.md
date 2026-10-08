@@ -18,9 +18,10 @@ Never low; never max. Use Astra (`gpt-6-astra` xhigh) only when Tom asks
 for it by name (9 Oct: it drains his usage and SOL is good enough).
 
 Which work gets these tiers, and where a failed box goes next, comes from
-`agents plan`: run it at session start, pick each item's band, and start at
-that band's first tier. When the band's next step is a tier this session
-can't spawn, tell whoever started this session (Tom, or a supervisor whose
-brief says how to escalate) instead of running it.
+`agents plan`: run it at session start, place each item in its band, start
+at that band's tier, and escalate in the order it prints. When the next
+tier is one this session can't spawn, tell whoever started this session
+(Tom, or a supervisor whose brief says how to escalate) instead of running
+it.
 
 Close a worker as soon as its final report (Done:, Not done: or Blocked:) arrives; keep only workers that are running or waiting on one blocking command.

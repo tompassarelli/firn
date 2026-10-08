@@ -36,16 +36,17 @@ workers. `threads need` and `threads unneed` change blocked-by links on GitHub.
 ## Band and tier
 
 Run `agents plan` at session start. It reads Tom's
-`nixos-config:dotfiles/agents/orchestration.toml` and the providers signed
-in now, and prints each difficulty band (mechanical, middle, top, planning),
-the tiers it uses and the band a failed box goes to next. Pick each item's
-band from its difficulty and start at that band's first tier. Your
-provider's workers skill says how to spawn each tier: `claude-workers` in
-Claude Code, `codex-workers` in Codex. Always set the model and effort.
+`nixos-config:dotfiles/agents/orchestration.toml`, his posture (efficiency,
+balanced or performance) and the providers signed in now, and prints the
+difficulty bands, as percentiles of Tom's work, with the tier each starts at,
+plus the escalation order. Place each item in a band by its difficulty and
+start at that band's tier. Your provider's workers skill says how to spawn
+each tier: `claude-workers` in Claude Code, `codex-workers` in Codex. Always
+set the model and effort. Use `--posture` only when Tom asks to try one.
 
-A failed or unfinished attempt starts at the next tier in its band, then at
-the next band's first tier, even after rewording the brief or reopening the
-issue, and its brief carries the failed report's evidence. The history rule
+A failed or unfinished attempt starts at the next tier in the escalation
+order, even after rewording the brief or reopening the issue, and its brief
+carries the failed report's evidence. The history rule
 outranks the default. When the plan says "recommend to Tom", bring Tom one
 recommendation. A running worker's effort cannot change.
 
@@ -55,7 +56,7 @@ unclear outcomes are missing evidence, not proof that a tier failed. A
 provider's benchmarks set a category's starting tier only while it has fewer
 than five closed issues at that tier. Then the ledger decides:
 
-- Start at the cheapest band and tier that closed at least four of its last
+- Start at the cheapest tier that closed at least four of its last
   five issues without escalation.
 - Start one step higher when a third or more of the category's last five
   issues escalated.
