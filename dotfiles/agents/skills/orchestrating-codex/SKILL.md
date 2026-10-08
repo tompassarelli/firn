@@ -103,6 +103,18 @@ same category side by side. Anthropic's charts put Opus 5.5 medium at GPT-6
 Astra's best coding scores for 20 to 40% of the cost; that's a prior, and the
 ledger decides.
 
+## Cross-review
+
+Tom (8 Oct): Claude and Codex review each other at critical points, meaning
+changes where a miss is costly: netcode, rollback and determinism, save or
+replay formats, balance gates. Before a Codex worker lands such a piece, the
+lead writes `Review: <item> <branch> <commit>` in the status file; Claude
+reviews it adversarially within 20 minutes and sends findings, and the piece
+lands once they're answered, or after 20 minutes with none. When Claude's
+workers land such a change, Claude sends the commits to the lead, which
+staffs one SOL high reviewer per item. Reviewers report concrete defects only,
+each with file:line and a failing case. Fix forward.
+
 ## Known failure modes
 
 - The daemon socket moves when the daemon restarts, and
