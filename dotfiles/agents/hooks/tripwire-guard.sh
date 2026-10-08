@@ -21,6 +21,9 @@
 #                   ~/.local/state/north, ~/code/resources, a
 #                   `worktrees/<slug>` lane this session is not working in, any
 #                   `.git`, any checkout root. HARD in every mode, no ask.
+#                   A lane is this session's when the session cwd is in it, the
+#                   command creates it (`git worktree add`), the transcript
+#                   records creating it, or the command cd's into it.
 #        gone     — the path does not exist: nothing to lose. ALLOW.
 #        scratch  — strictly inside a declared agent scratch root (Wisp's
 #                   LAN/online client and run copies under
@@ -32,6 +35,9 @@
 #                   anything git itself declares ignored. ALLOW.
 #        tracked  — inside a repo with nothing untracked or modified under it:
 #                   git restores it. ALLOW.
+#        own      — only new files, inside a lane the session cwd, this
+#                   command or the transcript shows is this session's: its own
+#                   scratch. ALLOW. (A cd alone does not count here.)
 #        dirty    — inside a repo, but untracked/modified content under the
 #                   target that git cannot restore. DENY.
 #        personal — under $HOME, no version control, no cache: DENY.
@@ -47,6 +53,12 @@
 #      both directories are judged; a cd in a pipe never moves the shell, and
 #      one inside ( ), $( ), backticks or if/for/while/case/{ } leaves both
 #      directories judged after the block closes.
+#      Variables set earlier in the same command (`S=/tmp/x; rm -rf $S/y`,
+#      `D=$(mktemp -d); … rm -rf "$D"`) resolve to their value when it surely
+#      holds: not inside a pipe, not after `||`, and a value set inside a block
+#      is forgotten when the block closes. Any other `$VAR` stays unknown.
+#      Heredoc bodies are data unless a shell reads them or the file they write
+#      is run later in the same command.
 #      PROPORTIONALITY: a bounded `find … -type f -mtime +N -delete` and an
 #      `rm -rf` of the same directory are both blocked, but the reason says
 #      which one it is — the friction should read as sized to the act.
@@ -264,7 +276,136 @@ DELETE_SEEN=0 UNREAD=""
 # strip_g trims a trailing ")" instead. Quoted strings split on spaces — fine for
 # detection: dispatch keys off the segment's COMMAND WORD, so words inside quoted
 # args (`git commit -m "never push"`) can't false-positive.
-norm="$cmd"
+# ---- heredoc bodies are data. A body stays in the command text only when a
+# shell reads it (`bash <<EOF`, `cat <<EOF | sh`), when an unquoted body holds a
+# substitution the outer shell runs, or when the file it writes is run later in
+# this same command (`cat > x.sh <<EOF … EOF; bash x.sh`).
+HD_SHELLS=' bash sh zsh dash ksh source . eval '
+hd_command() { # hd_command WORDS... -> $HD_WORD (basename) + $HD_ARG (first operand)
+  local w skip=0 found=0
+  HD_WORD="" HD_ARG=""
+  for w in "$@"; do
+    if [ "$skip" = 1 ]; then skip=0; continue; fi
+    w="${w#[\"\']}"
+    w="${w%[\"\']}"
+    if [ "$found" = 1 ]; then
+      case "$w" in -*) continue ;; esac
+      HD_ARG="${w##*/}"
+      return 0
+    fi
+    case "$w" in
+      sudo | env | command | exec | nohup | time | nice | stdbuf | builtin | -*) continue ;;
+      timeout) skip=1; continue ;;
+      [A-Za-z_]*=*) continue ;;
+    esac
+    HD_WORD="${w##*/}"
+    found=1
+  done
+}
+runs_file() { # runs_file LINE BASE : some segment of LINE runs a file named BASE
+  local text="$1" seg
+  local -a segs words
+  text="${text//&&/;}"
+  IFS=$';|&()`' read -r -a segs <<<"$text"
+  for seg in ${segs[@]+"${segs[@]}"}; do
+    read -r -a words <<<"$seg" || true
+    [ "${#words[@]}" -gt 0 ] || continue
+    hd_command "${words[@]}"
+    case "$HD_SHELLS" in
+      *" $HD_WORD "*) [ "$HD_ARG" = "$2" ] && return 0 ;;
+      *) [ "$HD_WORD" = "$2" ] && return 0 ;;
+    esac
+  done
+  return 1
+}
+strip_heredocs() { # strip_heredocs CMD -> $CMD_EFF
+  CMD_EFF="$1"
+  case "$1" in *'<<'*) ;; *) return 0 ;; esac
+  local re='(^|[^<])<<(-?)[[:space:]]*(\\?)(["'"'"']?)([A-Za-z_][A-Za-z0-9_]*)'
+  local nl i j h line rest before after seg tail delim dash unq keep file body l out m0 m1
+  local -a L words HS HE HK HF pd pdash punq pkeep pfile
+  mapfile -t L <<<"$1"
+  nl=${#L[@]}
+  i=0
+  while [ "$i" -lt "$nl" ]; do
+    line="${L[$i]}"
+    i=$((i + 1))
+    rest="$line" before=""
+    pd=() pdash=() punq=() pkeep=() pfile=()
+    while [[ "$rest" =~ $re ]]; do
+      m0="${BASH_REMATCH[0]}" m1="${BASH_REMATCH[1]}"
+      before+="${rest%%"$m0"*}$m1"
+      after="${rest#*"$m0"}"
+      dash="${BASH_REMATCH[2]}"
+      unq=0
+      [ -z "${BASH_REMATCH[3]}${BASH_REMATCH[4]}" ] && unq=1
+      delim="${BASH_REMATCH[5]}"
+      after="${after#[\"\']}"
+      seg="${before##*[;|&(\`]}"
+      tail="${after%%[;|&]*}"
+      read -r -a words <<<"$seg" || true
+      HD_WORD=""
+      [ "${#words[@]}" -gt 0 ] && hd_command "${words[@]}"
+      keep=0
+      case "$HD_SHELLS" in *" $HD_WORD "*) [ -n "$HD_WORD" ] && keep=1 ;; esac
+      [[ "$after" =~ \|[[:space:]]*(sudo[[:space:]]+)?(bash|sh|zsh|dash|ksh)([[:space:]]|$) ]] && keep=1
+      file=""
+      if [ "$HD_WORD" = tee ]; then
+        file="$HD_ARG"
+      elif [[ "$seg $tail" =~ (^|[^0-9\&\<\>])\>\>?[[:space:]]*([^[:space:]\;\|\&\<\>]+) ]]; then
+        file="${BASH_REMATCH[2]}"
+        file="${file#[\"\']}"
+        file="${file%[\"\']}"
+        file="${file##*/}"
+      fi
+      pd+=("$delim") pdash+=("$dash") punq+=("$unq") pkeep+=("$keep") pfile+=("$file")
+      before+="${m0#"$m1"}"
+      rest="$after"
+    done
+    for ((h = 0; h < ${#pd[@]}; h++)); do
+      HS+=("$i")
+      body=""
+      while [ "$i" -lt "$nl" ]; do
+        l="${L[$i]}"
+        [ "${pdash[$h]}" = - ] && l="${l#"${l%%[!$'\t']*}"}"
+        i=$((i + 1))
+        [ "$l" = "${pd[$h]}" ] && break
+        body+="$l"$'\n'
+      done
+      HE+=("$((i - 1))")
+      keep="${pkeep[$h]}"
+      if [ "${punq[$h]}" = 1 ]; then
+        case "$body" in *'$('* | *'`'*) keep=1 ;; esac
+      fi
+      HK+=("$keep") HF+=("${pfile[$h]}")
+    done
+  done
+  [ "${#HS[@]}" -gt 0 ] || return 0
+  in_body() { # in_body LINE -> 0 when LINE is a body line of a blanked heredoc
+    local b
+    for ((b = 0; b < ${#HS[@]}; b++)); do
+      [ "${HK[$b]}" = 0 ] && [ "$1" -ge "${HS[$b]}" ] && [ "$1" -le "${HE[$b]}" ] && return 0
+    done
+    return 1
+  }
+  for ((h = 0; h < ${#HS[@]}; h++)); do
+    [ "${HK[$h]}" = 0 ] && [ -n "${HF[$h]}" ] || continue
+    for ((j = HS[h] - 1; j < nl; j++)); do
+      [ "$j" -ge "${HS[$h]}" ] && [ "$j" -le "${HE[$h]}" ] && continue
+      in_body "$j" && continue
+      if runs_file "${L[$j]}" "${HF[$h]}"; then HK[h]=1; break; fi
+    done
+  done
+  out=""
+  for ((j = 0; j < nl; j++)); do
+    in_body "$j" && continue
+    out+="${L[$j]}"$'\n'
+  done
+  CMD_EFF="${out%$'\n'}"
+}
+strip_heredocs "$cmd"
+
+norm="$CMD_EFF"
 norm="${norm//\\$'\n'/ }" # line continuation first — keep the logical line whole
 norm="${norm//$'\n'/ ; }"
 norm="${norm//$'\t'/ }"
@@ -280,14 +421,15 @@ while [[ "$norm" == *'`'* ]]; do
   else norm="${norm/\`/ ) ; }"; bt_open=1; fi
 done
 unset bt_open
-and_mark=$'\x01'
+and_mark=$'\x01' or_mark=$'\x03'
 norm="${norm//&&/ $and_mark }" # && kept DISTINCT: only it makes a `cd` certain
-norm="${norm//'||'/ ; }" # logical OR is a HARD boundary — normalize before bare |
+norm="${norm//'||'/ $or_mark }" # || kept DISTINCT: an assignment after it may not run
 norm="${norm//;/ ; }"
 norm="${norm//|/ | }" # single pipe kept DISTINCT from ";" (stdin flows across it)
 norm="${norm//&/ ; }"
 norm="${norm//$and_mark/\&\&}" # \& : a bare & in a replacement is the match
-unset and_mark
+norm="${norm//$or_mark/||}"
+unset and_mark or_mark
 read -r -a TOK <<<"$norm" || exit 0
 [ "${#TOK[@]}" -gt 0 ] || exit 0
 
@@ -307,10 +449,32 @@ ensure_repo_root() {
   REPO_ROOT_SET=1
 }
 
+# VARS: shell variables this command sets to a value known before it runs (see
+# assignment_segment). VDEPTH: the block depth each was set at; closing that
+# block forgets it, because a value set inside a block may not have run.
+declare -A VARS=() VDEPTH=()
+VARS[HOME]="$HOME"
+
+# expand_known WORD -> $EXP : substitute the variables in VARS; unknown ones
+# stay as written, so the unset-variable rules below still see them.
+expand_known() {
+  local w="$1" out="" name
+  EXP="$w"
+  case "$w" in *'$'*) ;; *) return 0 ;; esac
+  while [[ "$w" =~ \$\{([A-Za-z_][A-Za-z0-9_]*)(:\?[^}]*)?\}|\$([A-Za-z_][A-Za-z0-9_]*) ]]; do
+    name="${BASH_REMATCH[1]:-${BASH_REMATCH[3]}}"
+    out+="${w%%"${BASH_REMATCH[0]}"*}"
+    if [ -n "${VARS[$name]+x}" ]; then out+="${VARS[$name]}"; else out+="${BASH_REMATCH[0]}"; fi
+    w="${w#*"${BASH_REMATCH[0]}"}"
+  done
+  EXP="$out$w"
+}
+
 # resolve_path TOKEN -> $RES (canonical abs path); return 1 = unresolvable (fail-open).
 resolve_path() {
   strip_g "$1"
-  local t="$S"
+  expand_known "$S"
+  local t="$EXP"
   # shellcheck disable=SC2016,SC2088  # matching LITERAL ~ / $HOME text in the command
   case "$t" in
     '~' | '$HOME' | '${HOME}') t="$HOME" ;;
@@ -471,23 +635,66 @@ sacred_owner_reason() {
           rest="${p#"$pre"/worktrees/}"
           slug="${rest%%/*}"
           wt="$pre/worktrees/$slug"
-          ensure_cwd
-          case "$cwd/" in
-            "$wt"/*) ;;
-            *)
-              if [ "$p" = "$wt" ]; then
-                WHY="'$p' is another session's worktree"
-              else
-                WHY="'$p' is inside $wt, another session's worktree"
-              fi
-              WHY="$WHY — it may hold in-flight work this session cannot see (several lanes run concurrently here). If that lane is yours and has landed: git -C $pre/main worktree remove $wt"
-              return 0
-              ;;
-          esac
+          if ! owns_lane "$wt"; then
+            if [ "$p" = "$wt" ]; then
+              WHY="'$p' is another session's worktree"
+            else
+              WHY="'$p' is inside $wt, another session's worktree"
+            fi
+            WHY="$WHY — it may hold in-flight work this session cannot see (several lanes run concurrently here). If it is your lane, cd into it in the same command (cd $wt && rm -r RELATIVE/PATH); if it has landed: git -C $pre/main worktree remove $wt"
+            return 0
+          fi
           ;;
       esac
       ;;
   esac
+  return 1
+}
+
+# lane_of PATH -> $LANE : the ~/code/<project>/worktrees/<slug> lane PATH is in.
+lane_of() {
+  local pre rest
+  LANE=""
+  case "$1" in */worktrees/*) ;; *) return 1 ;; esac
+  pre="${1%%/worktrees/*}"
+  case "$pre" in "$HOME"/code*) ;; *) return 1 ;; esac
+  rest="${1#"$pre"/worktrees/}"
+  LANE="$pre/worktrees/${rest%%/*}"
+}
+
+# owns_lane WT : this session works in lane WT — lane_strong, or a cd into it in
+# this command. A cd shows where the command runs, not who made the lane, so it
+# lifts only the cross-lane refusal; new files there stay protected.
+# lane_strong WT : the session cwd is in it, this command creates it, or the
+# session transcript records creating it.
+CD_DIRS=() CREATED_LANES=()
+owns_lane() {
+  local wt="$1" c
+  lane_strong "$wt" && return 0
+  for c in ${CD_DIRS[@]+"${CD_DIRS[@]}"}; do
+    case "$c/" in "$wt"/*) return 0 ;; esac
+  done
+  return 1
+}
+lane_strong() {
+  local wt="$1" c
+  ensure_cwd
+  case "$cwd/" in "$wt"/*) return 0 ;; esac
+  for c in ${CREATED_LANES[@]+"${CREATED_LANES[@]}"}; do [ "$c" = "$wt" ] && return 0; done
+  transcript_made_lane "$wt"
+}
+# transcript_made_lane WT : a `worktree add` line naming this lane in the
+# session's own transcript (Claude subagents report theirs separately).
+transcript_made_lane() {
+  local slug="${1##*/}" tp
+  local -a tps
+  case "$slug" in '' | *[!A-Za-z0-9._-]*) return 1 ;; esac
+  mapfile -t tps < <(jq -r '.agent_transcript_path // empty, .transcript_path // empty' <<<"$payload" 2>/dev/null)
+  for tp in ${tps[@]+"${tps[@]}"}; do
+    [ -f "$tp" ] && [ -r "$tp" ] || continue
+    grep -F -- "worktree add" "$tp" 2>/dev/null |
+      grep -q -E -- "worktrees/${slug//./\\.}([^A-Za-z0-9._-]|\$)" && return 0
+  done
   return 1
 }
 
@@ -572,11 +779,17 @@ classify_delete_target() {
       CLASS=regen
       return 0
     fi
-    dirty="$(git -C "$GREPO" status --porcelain -- "$p" 2>/dev/null | head -3)"
+    dirty="$(git -C "$GREPO" status --porcelain -- "$p" 2>/dev/null)"
     if [ -z "$dirty" ]; then
       CLASS=tracked
       return 0
     fi
+    # Only new files, in a lane this session surely works in: its own scratch.
+    if ! grep -q -v '^?? ' <<<"$dirty" && lane_of "$p" && lane_strong "$LANE"; then
+      CLASS=own
+      return 0
+    fi
+    dirty="$(head -3 <<<"$dirty")"
     CLASS=dirty
     WHY="'$p' holds work git cannot restore (${dirty//$'\n'/; }) — commit it, or gitignore it if it is build output; $OVERRIDE"
     return 0
@@ -626,6 +839,15 @@ var_shape_check() {
       pre="${rcwd:-$cwd}/$pre"
       ;;
   esac
+  case "${t#"${t%%[\$\`$SUB]*}"}" in
+    */../* | */..)
+      deny "'..' after a variable in a recursive-delete target ('$disp') can climb out of '$pre'. Write the literal path"
+      ;;
+  esac
+  case "$pre" in
+    */) ;;
+    *) is_agent_scratch "$pre" && return 1 ;; # the expansion only lengthens a name inside a scratch root
+  esac
   pre="${pre%/*}"
   [ -n "$pre" ] || pre=/
   pre="$(realpath -sm -- "$pre" 2>/dev/null)" || pre=/
@@ -638,11 +860,14 @@ var_shape_check() {
 # +30 -delete` does not get told off in the words reserved for `rm -rf ~`.
 check_delete_target() {
   local shape="${2:-tree}"
-  var_shape_check "$1" || return 0
-  resolve_path "$1" || { strip_g "$1"; UNREAD="$S"; return 0; }
+  strip_g "$1"
+  expand_known "$S"
+  local w="$EXP"
+  var_shape_check "$w" || return 0
+  resolve_path "$w" || { UNREAD="$w"; return 0; }
   classify_delete_target "$RES"
   case "$CLASS" in
-    gone | regen | scratch | tracked) return 0 ;;
+    gone | regen | scratch | tracked | own) return 0 ;;
     never | sacred) deny "$WHY" ;;
   esac
   case "$shape" in
@@ -693,7 +918,7 @@ ssh_pipe_exfil_check() {
   [ "$LOCALHOST_HIT" = 1 ] && return 0
   local k
   for ((k = $1 - 1; k >= 0; k--)); do
-    case "${TOK[$k]}" in ";" | "&&") break ;; esac # hard boundary — stdin does not cross it
+    case "${TOK[$k]}" in ";" | "&&" | "||") break ;; esac # hard boundary — stdin does not cross it
     [ "${TOK[$k]}" = "|" ] && continue # pipe — stdin DOES flow across it
     strip_g "${TOK[$k]}"
     is_secret_path && deny "secret path piped into ssh — local credential material into ssh stdin is an exfil surface (remote reads inside ssh's own args stay allowed)"
@@ -791,6 +1016,29 @@ handle_git() {
   done
   local j force=0 del=0
   case "$sub" in
+    worktree)
+      [ "${a[$((i + 1))]:-}" = add ] || return 0
+      local base save="$rcwd"
+      if [ -n "$cval" ]; then
+        resolve_path "$cval" || return 0
+        base="$RES"
+      else
+        ensure_cwd
+        base="${rcwd:-$cwd}"
+      fi
+      for ((j = i + 2; j < n; j++)); do
+        case "${a[$j]}" in
+          -b | -B | --reason) j=$((j + 1)) ;;
+          -*) ;;
+          *)
+            rcwd="$base"
+            resolve_path "${a[$j]}" && CREATED_LANES+=("$RES")
+            rcwd="$save"
+            break
+            ;;
+        esac
+      done
+      ;;
     push)
       for ((j = i + 1; j < n; j++)); do
         case "${a[$j]}" in
@@ -835,6 +1083,7 @@ handle_git() {
         return 0
       fi
       is_disposable "$RES" && return 0
+      lane_of "$RES" && lane_strong "$LANE" && return 0
       deny "git clean -f in '$RES' — outside this session's repo, and untracked files there are not in any object database; $OVERRIDE"
       ;;
   esac
@@ -995,7 +1244,7 @@ join_cwds() { # join_cwds ITEMS... -> $JOINED, \x1f-separated, fork-free
   for c in "$@"; do JOINED+="$c"$'\x1f'; done
 }
 
-is_sep() { case "$1" in ";" | "|" | "&&") return 0 ;; esac; return 1; }
+is_sep() { case "$1" in ";" | "|" | "&&" | "||") return 0 ;; esac; return 1; }
 
 cwds_union() { # cwds_union JOINED : add the \x1f-joined candidates to CWDS
   local have saved
@@ -1038,7 +1287,113 @@ close_segment() {
     top="${SCOPES[${#SCOPES[@]} - 1]}"
     unset 'SCOPES[${#SCOPES[@]}-1]'
     cwds_union "$top"
+    forget_deeper "${#SCOPES[@]}"
   done
+}
+
+forget_deeper() { # forget_deeper DEPTH : drop variables set inside a closed block
+  local name
+  for name in "${!VDEPTH[@]}"; do
+    [ "${VDEPTH[$name]}" -gt "$1" ] && unset "VARS[$name]" "VDEPTH[$name]"
+  done
+  return 0
+}
+
+forget_var() { # forget_var NAME : its value is no longer known
+  [[ "$1" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 0
+  unset "VARS[$1]" "VDEPTH[$1]"
+}
+
+# fresh_temp K : TOK[K] starts `; ( mktemp …)` — the substitution an assignment
+# took its value from. Sets $FRESH to the not-yet-existing directory it creates.
+fresh_temp() {
+  local k="$1" t dir="" tmpl="" tflag=0 last=0 want=""
+  [ "${TOK[$k]:-}" = ';' ] && [ "${TOK[$((k + 1))]:-}" = '(' ] || return 1
+  k=$((k + 2))
+  case "${TOK[$k]:-}" in *')'*) last=1 ;; esac
+  strip_g "${TOK[$k]:-}"
+  [ "${S##*/}" = mktemp ] || return 1
+  while [ "$last" = 0 ]; do
+    k=$((k + 1))
+    [ "$k" -lt "$n" ] || return 1
+    t="${TOK[$k]}"
+    case "$t" in *')'*) last=1 ;; esac
+    is_sep "$t" && return 1
+    strip_g "$t"
+    t="$S"
+    if [ -n "$want" ]; then dir="$t" want=""; continue; fi
+    case "$t" in
+      -p | --tmpdir) want=dir ;;
+      -p?*) dir="${t#-p}" ;;
+      --tmpdir=*) dir="${t#--tmpdir=}" ;;
+      -t) tflag=1 ;;
+      -*) ;;
+      *) tmpl="$t" ;;
+    esac
+  done
+  [ "$want" = dir ] && dir="${TMPDIR:-/tmp}"
+  # shellcheck disable=SC2088  # matching a LITERAL ~ in the command text
+  case "$dir" in '~') dir="$HOME" ;; '~/'*) dir="$HOME/${dir#'~/'}" ;; esac
+  if [ -n "$dir" ]; then
+    FRESH="$dir/${tmpl:-tmp.XXXXXXXXXX}"
+  elif [ -n "$tmpl" ] && [ "$tflag" = 0 ]; then
+    FRESH="$tmpl"
+  else
+    FRESH="${TMPDIR:-/tmp}/${tmpl:-tmp.XXXXXXXXXX}"
+  fi
+  expand_known "$FRESH"
+  FRESH="$EXP"
+}
+
+# assignment_segment I : a segment of only NAME=VALUE words (optionally after
+# export/local/declare/readonly/typeset) sets shell variables. A value counts
+# only when it surely holds for what follows: not in a pipe, not after `||`.
+# Sets SEG_END.
+assignment_segment() {
+  local k="$1" e t sure=1
+  case "${TOK[$k]}" in do | then | else | '{' | '!') k=$((k + 1)) ;; esac
+  case "${TOK[$k]:-}" in export | local | declare | readonly | typeset) k=$((k + 1)) ;; esac
+  e="$k"
+  while [ "$e" -lt "$n" ] && ! is_sep "${TOK[$e]}"; do
+    t="${TOK[$e]}"
+    [[ "$t" =~ ^[A-Za-z_][A-Za-z0-9_]*= || "$t" == -* ]] || return 1
+    e=$((e + 1))
+  done
+  [ "$e" -gt "$k" ] || return 1
+  case "$PREV_SEP" in '||' | '|') sure=0 ;; esac
+  [ "${TOK[$e]:-}" = '|' ] && sure=0
+  for ((; k < e; k++)); do
+    t="${TOK[$k]}"
+    case "$t" in -*) continue ;; esac
+    record_assignment "$t" "$sure" "$e"
+  done
+  SEG_END="$e"
+}
+
+record_assignment() { # record_assignment NAME=VALUE SURE SEP_INDEX
+  local name="${1%%=*}" val="${1#*=}"
+  [ "$2" = 1 ] || { forget_var "$name"; return 0; }
+  case "$val" in
+    "$SUB" | "\"$SUB")
+      if fresh_temp "$3"; then VARS[$name]="$FRESH"; else VARS[$name]="$SUB"; fi
+      VDEPTH[$name]="${#SCOPES[@]}"
+      return 0
+      ;;
+    \'*\')
+      val="${val:1:${#val}-2}"
+      case "$val" in *'$'* | *"$SUB"*) forget_var "$name"; return 0 ;; esac
+      ;;
+    \"*\")
+      [ "${#val}" -ge 2 ] || { forget_var "$name"; return 0; }
+      val="${val:1:${#val}-2}"
+      ;;
+    \"* | \'* | *\" | *\') forget_var "$name"; return 0 ;; # the value spans words
+  esac
+  # shellcheck disable=SC2088  # matching a LITERAL ~ in the command text
+  case "$val" in '~') val="$HOME" ;; '~/'*) val="$HOME/${val#'~/'}" ;; esac
+  expand_known "$val"
+  VARS[$name]="$EXP"
+  VDEPTH[$name]="${#SCOPES[@]}"
 }
 
 # handle_cd NEXT_SEP ARGS... : move the candidates. An unknowable target
@@ -1064,6 +1419,7 @@ handle_cd() {
     rcwd="$here"
     resolve_path "$dest" || { rcwd=""; return 0; }
     moved+=("$RES")
+    CD_DIRS+=("$RES")
   done
   rcwd=""
   if [ "$next" = "&&" ]; then
@@ -1100,7 +1456,12 @@ while [ "$i" -lt "$n" ]; do
   if [ "$SEG_START" = 1 ]; then
     SEG_START=0
     open_segment "$i"
+    if assignment_segment "$i"; then
+      i="$SEG_END"
+      continue
+    fi
   fi
+  case "$t" in for | select) forget_var "${TOK[$((i + 1))]:-}" ;; esac
   # prefix skippers at segment start
   word="${t#'('}"
   word="${word#'{'}"
@@ -1144,6 +1505,9 @@ while [ "$i" -lt "$n" ]; do
     cd | pushd) handle_cd "${TOK[$j]:-}" ${args[@]+"${args[@]}"} ;;
     rm) in_each_cwd handle_rm ${args[@]+"${args[@]}"} ;;
     rmdir | unlink) DELETE_SEEN=1 ;;
+    read | unset | mapfile | readarray)
+      for a in ${args[@]+"${args[@]}"}; do forget_var "$a"; done
+      ;;
     find) in_each_cwd handle_find ${args[@]+"${args[@]}"} ;;
     git) in_each_cwd handle_git ${args[@]+"${args[@]}"} ;;
     curl | wget) handle_http "$word" ${args[@]+"${args[@]}"} ;;

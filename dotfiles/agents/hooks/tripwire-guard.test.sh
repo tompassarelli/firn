@@ -46,9 +46,12 @@ printf 'node_modules/\nbuild/\n' > "$REPO_CWD/.gitignore"
 : > "$REPO_CWD/node_modules/dep.js"
 : > "$REPO_CWD/build/out.o"
 : > "$REPO_CWD/scratch/notes.txt" # untracked, NOT ignored: unrecoverable work
-git -C "$REPO_CWD" add .gitignore src >/dev/null 2>&1
+mkdir -p "$REPO_CWD/lib"
+printf 'a\n' > "$REPO_CWD/lib/x.txt"
+git -C "$REPO_CWD" add .gitignore src lib >/dev/null 2>&1
 git -C "$REPO_CWD" -c user.email=t@example -c user.name=t \
   commit -qm base >/dev/null 2>&1
+printf 'edited\n' > "$REPO_CWD/lib/x.txt" # a tracked edit: real work git cannot restore
 printf '%s\n' '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"tripwire-guard","kind":"hook","category":"authoring","permission":"on","active":true}]}' >"$SCRATCH/activation.json"
 
 pass=0 fail=0
@@ -65,8 +68,10 @@ run() {
   local expect="$1" desc="$2" c="$3" wd="${4:-$REPO_CWD}" extra="${5:-}"
   local json rc want out ok=1
   json="$(jq -n --arg c "$c" --arg d "$wd" --arg pm "${PM:-}" --arg ev "${EV:-PreToolUse}" \
+    --arg tp "${TP:-}" \
     '{hook_event_name:$ev, tool_name:"Bash", tool_input:{command:$c}, cwd:$d}
-     + (if $pm == "" then {} else {permission_mode:$pm} end)')"
+     + (if $pm == "" then {} else {permission_mode:$pm} end)
+     + (if $tp == "" then {} else {transcript_path:$tp} end)')"
 
   set -- env -u SAFE_PUSH_ACTIVE -u XDG_CACHE_HOME -u XDG_DATA_HOME \
     HOME="$FH" TMPDIR=/tmp \
@@ -217,11 +222,14 @@ run allow 'find -delete under /tmp' 'find /tmp/claude-123 -type f -delete'
 run allow 'git clean -fdx in this lane' 'git clean -fdx'
 run allow 'echo mentioning rm -rf /' "echo 'rm -rf /'"
 
-echo "== class 1e: unrecoverable work the old rule permitted =="
-run deny 'untracked work inside this lane' "rm -rf $REPO_CWD/scratch"
-run deny 'untracked work, relative' 'rm -rf ./scratch'
-runm default deny 'untracked work -> deny (default mode too)' "rm -rf $REPO_CWD/scratch"
-runm bypassPermissions deny 'untracked work -> deny (unattended)' "rm -rf $REPO_CWD/scratch"
+echo "== class 1e: unrecoverable work =="
+run deny 'a tracked edit inside this lane' "rm -rf $REPO_CWD/lib"
+run deny 'a tracked edit, relative' 'rm -rf ./lib'
+runm default deny 'tracked edit -> deny (default mode too)' "rm -rf $REPO_CWD/lib"
+runm bypassPermissions deny 'tracked edit -> deny (unattended)' "rm -rf $REPO_CWD/lib"
+run allow "new files only, in this session's own lane: its own scratch" "rm -rf $REPO_CWD/scratch"
+run allow "new files only in its own lane, relative" 'rm -rf ./scratch'
+run deny 'new files only, but in a repo that is not a lane' 'rm -rf ./stuff' "$NOREPO_CWD"
 
 echo "== class 1f: personal data + proportionality =="
 run deny 'whole-tree rm -rf of a personal directory' 'rm -rf ~/Pictures/Screenshots'
@@ -270,6 +278,91 @@ runp none 'not a deleting command -> not answered' 'curl -fsS https://example.co
 runp none 'prescreen miss -> not answered' 'ls -la'
 run deny 'PreToolUse: command substitution as rm target' 'rm -rf "$(pwd)"'
 run allow 'PreToolUse: substitution mid-path under /tmp' 'rm -rf /tmp/build-$(date +%s)'
+
+echo "== variables set earlier in the same command (2026-10-08 false positives) =="
+SP=/tmp/claude-1000/-home-tom/sess/scratchpad
+run allow 'S=/tmp/…; rm -rf $S/runs/$x' "S=$SP; rm -rf \$S/runs/\$x" "$FH"
+run allow 'S=…; rm -rf $S/w52/a1-f-control' "S=$SP; W=~/.local/share/wisp/lan/w52; rm -rf \$S/w52/a1-f-control; \$S/w52-run.sh \$W/f" "$FH"
+run allow 'D=$(mktemp -d); … rm -rf "$D"' 'D=$(mktemp -d); cd /tmp && XDG_STATE_HOME=$D true; rm -rf "$D"' "$FH"
+run allow 'D="$(mktemp -d -p ~/x)"; rm -rf "$D"/out' 'D="$(mktemp -d -p ~/notrepo)"; rm -rf "$D"/out' "$FH"
+run allow 'cd X && T=/tmp/… && rm -rf $T' "cd $REPO_CWD && T=$SP/b && rm -rf \$T && mkdir -p \$T/home" "$FH"
+run allow 'd=/tmp/…; rm -rf "$d"' "d=$SP/farmtest-art; rm -rf \"\$d\"; mkdir -p \"\$d\"" "$FH"
+run allow 'a value built from an earlier variable, on the next line' \
+  $'set -e; c=~/.local/share/wisp/online/clone-b; ad=$c/pfx/drive_c/users/steamuser/AppData\nrm -rf -- "$ad/Local/Battle.net/Account"' "$FH"
+run allow 'export S=…; rm -rf $S/x' "export S=$SP; rm -rf \$S/x" "$FH"
+run allow 'a loop variable after a known scratch prefix' "S=$SP; for x in a b; do rm -rf \$S/runs/\$x; done" "$FH"
+run allow 'a variable inside a Wisp clone name' 'for c in b c; do rm -rf ~/.local/share/wisp/online/clone-$c/pfx/x; done' "$FH"
+run deny 'D=~; rm -rf $D' 'D=~; rm -rf $D' "$FH"
+run deny 'a known value that is a project container' "D=\$HOME/code/proj; rm -rf \"\$D\"" "$FH"
+run deny 'a known value that is a main checkout' "M=$MAIN_CO; rm -rf \$M/src" "$FH"
+run deny "a known value inside another session's lane" "W=$FH/code/proj/worktrees; rm -rf \$W/other/src" "$FH"
+run deny 'a value from another substitution stays unread' 'D=$(pwd); rm -rf "$D"' "$FH"
+run deny 'set after || may not have run' '[ -n "$X" ] || X=/tmp/x; rm -rf $X/*' "$FH"
+run deny 'set inside if may not have run' 'if true; then D=/tmp/a; fi; rm -rf $D/*' "$FH"
+run deny 'set in a pipe does not persist' 'D=/tmp/a | true; rm -rf $D/*' "$FH"
+run deny 'unset forgets it' 'D=/tmp/a; unset D; rm -rf $D/*' "$FH"
+run deny 'read forgets it' 'D=/tmp/a; read -r D < /tmp/f; rm -rf $D/*' "$FH"
+run allow 'set at the top of a loop body, used in it' 'for c in b c; do d=/tmp/x/clone-$c/logs; find "$d" -maxdepth 1 -type f -name "*.log" -delete; done' "$FH"
+run deny 'a loop-body value is forgotten after done' 'for c in b; do d=/tmp/x; done; rm -rf $d/*' "$FH"
+run deny 'a bare loop variable' 'for d in a b; do rm -rf $d; done' "$FH"
+run deny 'a value that climbs to /tmp' 'D=/tmp/a/..; rm -rf $D' "$FH"
+run deny '.. after an unknown variable' 'rm -rf /tmp/x$V/../../home' "$FH"
+run deny '${HOME:?} is still home' 'rm -rf "${HOME:?}"' "$FH"
+run deny 'an env prefix is not a shell assignment' 'D=/tmp/a true; rm -rf $D/*' "$FH"
+run allow 'cd $D follows a known value' "D=$SP; cd \$D && rm -rf build" "$MAIN_CO"
+
+echo "== heredoc bodies are data unless a shell runs them =="
+run allow 'cat > script <<EOF … rm -rf … EOF (never run)' \
+  $'S=/tmp/x; cat > $S/scrub.sh <<\'EOF\'\napp=$1\nrm -rf "$app/Local/Battle.net/Account"\nEOF\necho written' "$FH"
+run allow 'python heredoc mentioning rm -rf' \
+  $'python3 - <<\'PY\'\ns = "rm -rf $MAIN_CO"\nprint(s)\nPY' "$FH"
+run allow 'heredoc text mentioning git clean -f, written to a note' \
+  $'cat <<EOF > /tmp/x/note.txt\nthen git clean -fdx and rm -rf ~\nEOF' "$FH"
+run allow 'a <<- body with tab-indented terminator' \
+  $'cat > /tmp/x/a.txt <<-EOF\n\trm -rf ~\n\tEOF\necho ok' "$FH"
+run deny 'bash <<EOF runs its body' $'bash <<\'EOF\'\nrm -rf ~\nEOF' "$FH"
+run deny 'cat <<EOF | sh runs its body' $'cat <<\'EOF\' | sh\nrm -rf ~\nEOF' "$FH"
+run deny 'a written script run later in the command' \
+  $'cat > /tmp/x/run.sh <<\'EOF\'\nrm -rf ~\nEOF\nbash /tmp/x/run.sh' "$FH"
+run deny 'a written script made executable and run' \
+  $'cat > /tmp/x/run.sh <<\'EOF\'\nrm -rf ~\nEOF\nchmod +x /tmp/x/run.sh && /tmp/x/run.sh' "$FH"
+run deny 'an unquoted body runs its substitutions' \
+  $'cat > /tmp/x/n.txt <<EOF\n$(rm -rf ~)\nEOF' "$FH"
+run deny 'the command after a blanked body is still judged' \
+  $'cat > /tmp/x/a.txt <<\'EOF\'\nhello\nEOF\nrm -rf ~' "$FH"
+
+echo "== this session's own lane, recognized from a shell in ~ =="
+MADE="$FH/code/proj/worktrees/made-220"
+mkdir -p "$MADE/tools/__pycache__" "$MADE/.checks/controller" "$MADE/src"
+git -C "$MADE" init -q 2>/dev/null
+: > "$MADE/src/a.txt"
+git -C "$MADE" add src >/dev/null 2>&1
+git -C "$MADE" -c user.email=t@example -c user.name=t commit -qm base >/dev/null 2>&1
+: > "$MADE/.checks/controller/out.log"
+: > "$MADE/tools/__pycache__/m.pyc"
+printf 'x\n' > "$MADE/src/a.txt"
+TRANSCRIPT="$SCRATCH/transcript.jsonl"
+jq -cn --arg c "git -C $FH/code/proj/main worktree add $MADE -b made-220" \
+  '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:$c}}]}}' >"$TRANSCRIPT"
+run deny 'no evidence: a lane is another session' "rm -rf $MADE/.checks" "$FH"
+TP="$TRANSCRIPT" run allow 'own lane (transcript made it): .checks' "rm -rf $MADE/.checks" "$FH"
+TP="$TRANSCRIPT" run allow 'own lane (transcript made it): __pycache__' "rm -rf $MADE/tools/__pycache__" "$FH"
+TP="$TRANSCRIPT" run deny 'own lane: a tracked edit is still refused' "rm -rf $MADE/src" "$FH"
+TP="$TRANSCRIPT" run deny 'own lane: the checkout root is still refused' "rm -rf $MADE" "$FH"
+TP="$TRANSCRIPT" run deny "own-lane evidence does not cover another lane" "rm -rf $OTHER_WT/src" "$FH"
+run allow 'cd into the lane, then a cache inside it' "cd $MADE && rm -rf tools/__pycache__" "$FH"
+run deny 'cd alone does not make new files there disposable' "cd $MADE && rm -rf .checks" "$FH"
+run allow 'a lane this command creates' \
+  "git -C $MAIN_CO worktree add $FH/code/proj/worktrees/fresh9 -b fresh9 && rm -rf $FH/code/proj/worktrees/fresh9/build" "$FH"
+run deny 'a sibling of the lane this command creates' \
+  "git -C $MAIN_CO worktree add $FH/code/proj/worktrees/fresh9 -b fresh9 && rm -rf $OTHER_WT/src" "$FH"
+
+TP="$TRANSCRIPT" run allow 'git clean -f in a lane this session made' "cd $MADE && git clean -fdq" "$FH"
+run deny 'git clean -f in a lane only cd shows' "cd $MADE && git clean -fdq" "$FH"
+
+echo "== PermissionRequest answers for the shapes Claude Code flags =="
+runp allow 'D=$(mktemp -d); rm -rf "$D" -> allow' 'D=$(mktemp -d); rm -rf "$D"' "$FH"
+runp deny 'D=$(pwd); rm -rf "$D" -> deny' 'D=$(pwd); rm -rf "$D"' "$FH"
 
 echo "== class 1g: agent scratch roots (2026-10-08 false positive) =="
 WISP="$FH/.local/share/wisp"

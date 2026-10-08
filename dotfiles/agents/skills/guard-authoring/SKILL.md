@@ -18,7 +18,9 @@ hooks retain their actual events.
   or inactive state disables the guard.
 - Deny only a decoded dangerous operation and name a sanctioned alternative.
   Prefer stdout JSON with exit zero; exit 2 plus one stderr reason is supported.
-  Ask only for a real operator decision.
+- Guards allow or deny with an actionable reason an agent can retry from; they
+  never ask the owner. A PreToolUse allow does not skip Claude Code's own
+  dangerous-rm dialog; `tripwire-guard` answers it on `PermissionRequest:Bash`.
 
 Resolve the ID with `agents inspect` and `agents path`. Wire only events and
 tool payloads the implementation actually decodes. Exercise dangerous,
