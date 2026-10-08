@@ -66,4 +66,4 @@ handoff sooner. The parent session compacts at 600k. Keep
 idle 20 minutes or needs a handoff. `worker-ledger` records a run with model
 Haiku as tier `haiku`, whatever agent type started it.
 
-The parent stops its own monitors and background shells once nothing needs them; a finished worker's row clears by itself after about 30 s, and a row that lingers means a background task is still running.
+The parent stops its own monitors and background shells once nothing needs them; a finished worker's row clears by itself after about 30 s, and a row that lingers means a background task is still running. The subagent-teardown hook refuses a worker's finish while its own background shells or Monitor watches still run.

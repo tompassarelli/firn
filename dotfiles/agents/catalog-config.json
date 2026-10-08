@@ -504,6 +504,16 @@
         "path": "dotfiles/agents/hooks/worker-handoff.sh"
       }
     },
+    "subagent-teardown": {
+      "kind": "hook",
+      "title": "Subagent background-task teardown",
+      "triggerDescription": "Refuse to let a Claude subagent finish while background shells or Monitor watches it started are still running.",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/subagent-teardown.sh"
+      }
+    },
     "spawn-capacity-guard": {
       "kind": "hook",
       "title": "Spawn capacity gate",
@@ -1255,6 +1265,19 @@
       ]
     },
     "worker-handoff": {
+      "supports": [
+        "agent-machinery"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "claude"
+          ]
+        }
+      ]
+    },
+    "subagent-teardown": {
       "supports": [
         "agent-machinery"
       ],

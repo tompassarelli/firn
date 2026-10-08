@@ -33,7 +33,7 @@ jq -e '
   [
     .hooks[] | .[] | .hooks[] | select(.type == "command") | .command
   ] as $commands
-  | ($commands | length == 13)
+  | ($commands | length == 14)
     and ($commands | all(
       contains("NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3")
       and contains("PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin")
@@ -58,6 +58,7 @@ for unit in \
   modern-search-guard \
   session-kill-guard \
   spawn-capacity-guard \
+  subagent-teardown \
   tripwire-guard \
   worker-handoff; do
   jq -e --arg unit "$unit" '
