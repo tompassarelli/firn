@@ -60,6 +60,10 @@ status 4 20.5
 DENY_LEASED=4 DENY_PROTECTED=20.5 expect_deny "$(agent "$worker")" 'protected pressure 20.5 denies with few provisioned CPUs'
 status 4 20
 expect_allow "$(agent "$worker")" 'protected pressure exactly 20 allows'
+printf '{"decision":"RUN","profile":"unattended","leasedBatchCpus":4,"aggregateCpuLimit":20,"protectedCpuSomeAvg10":40}\n' >"$STATUS"
+expect_allow "$(agent "$worker")" 'unattended profile (Tom away) skips the protected-pressure refusal, as the helper does'
+printf '{"decision":"RUN","profile":"unattended","leasedBatchCpus":20,"aggregateCpuLimit":20,"protectedCpuSomeAvg10":40}\n' >"$STATUS"
+DENY_LEASED=20 DENY_PROTECTED=0 expect_deny "$(agent "$worker")" 'unattended profile still denies at the provisioned limit'
 status 24 5
 expect_deny "$(agent "$worker")" '24 of 20 provisioned CPUs (over the limit) denies with the message'
 expect_deny "$(agent '{"description":"d","prompt":"p"}')" 'omitted subagent_type (general-purpose) is local and denied'

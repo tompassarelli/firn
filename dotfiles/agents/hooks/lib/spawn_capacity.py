@@ -7,7 +7,8 @@ thinks and its heavy commands run inside capacity leases, so admission counts
 the CPUs batch leases hold (machine-capacity `probe`: leasedBatchCpus against
 aggregateCpuLimit; native clients count only through the protected-pressure
 check, since their 2-CPU charge per desktop and client overstates them) rather than system CPU pressure. It also refuses while the
-protected desktop slice is under pressure (protectedCpuSomeAvg10 above 20). A
+protected desktop slice is under pressure (protectedCpuSomeAvg10 above 20; skipped in
+the unattended profile, as the helper does). A
 missing, slow (2 s) or unreadable helper allows. An urgent fix passes with
 `CASE=URGENT FACT="..."` at the start of the brief, logged beside the Codex
 behavior overrides.
@@ -73,6 +74,8 @@ def capacity():
     protected = number(data.get("protectedCpuSomeAvg10"))
     if provisioned is None or protected is None:
         return None
+    if data.get("profile") == "unattended":
+        protected = 0.0
     return provisioned, limit, protected
 
 

@@ -17,7 +17,7 @@ posture = "balanced"
 # Per-provider override: that provider's tiers use its own posture column.
 # Example: Claude's weekly usage is low, so Claude gives work up to SOL.
 [claude]
-# posture = "efficiency"
+posture = "efficiency"   # Tom, 9 Oct night: preserve Claude usage, lean on Codex
 
 [codex]
 
