@@ -32,6 +32,7 @@
     "guard-authoring",
     "cloudflare-deploy",
     "digitalocean-access",
+    "staffing",
     "estimate",
     "testing",
     "agent-policy",
@@ -199,6 +200,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/hooks/corpus-scan-guard.sh"
+      }
+    },
+    "staffing": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/staffing/SKILL.md"
       }
     },
     "estimate": {
@@ -757,6 +766,16 @@
           "targets": [
             "codex",
             "claude"
+          ]
+        }
+      ]
+    },
+    "staffing": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
           ]
         }
       ]

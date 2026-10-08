@@ -90,46 +90,13 @@ Needs you: nothing
   pending check in batches, and issue workers hand their checks to it.
   Workers write and land code, and the parent merges. Don't add reviewer,
   verifier, auditor or status workers unless Tom asks.
-- A worker brief has four parts: the goal, the files, the Done when list and
-  an ETA. At twice the ETA the worker reports. Every brief also carries the
-  lines `Item: <repo#N>`, `Category: <name>` and, when it continues earlier
-  work, `Follows: <agent id>`. Category is one of mechanical, docs-policy,
-  tooling, feature, bug-known-cause, debugging-unknown-cause,
-  netcode-determinism, performance, balance-tuning, native-check, research.
-- Every tracked item is a GitHub issue; GitHub holds its title, boxes, state
-  and blocked-by links. A running worker holds its brief's issue in `threads`
-  until it finishes; `claim` and `release --to` are for people and lanes.
-  `need`/`unneed` set blocked-by on GitHub, `list` shows who holds what
-  against ETA, and `ready` lists open, unblocked, unheld issues. Close an
-  issue with `gh issue close`, citing the last run's outcome.
+- Use the `staffing` skill to pick ready work in `threads`, write the brief,
+  choose a model and effort from `worker-ledger --summary`, and set the ETA.
 - To run work through a Codex lead session, use `codex-lead` (start, send,
   goal, status, workers) and the `codex-lead` skill.
 - A message to a running agent must reach it at once, mid-turn: use
   `codex-lead send` or the agent message tool, never `codex queue`, which
   waits until the turn ends.
-- Always set the worker's model and effort, choosing from SOL 6.1
-  (`gpt-6.1-sol`) at `medium` for ordinary and simple work (never `low`) or
-  `high` for hard implementation, Astra (`gpt-6-astra`) `xhigh` for hard
-  reasoning, and Astra `max` for the hardest problems or a stuck fix loop.
-  Use no other models.
-- In Claude Code, workers are Opus agents by effort tier. Pick the tier from
-  the work and its history; `worker-ledger --summary` shows how each tier did
-  by category.
-  - `worker` (medium): the floor and the default, for ordinary work with a
-    clear Done when: features, fixes with a known cause, docs and skills,
-    setup, and mechanical work such as ticking and closing issues, exact
-    edits, running a named check or a prepared script.
-  - `worker-high`: known-hard from the start: unknown-cause debugging,
-    netcode and determinism, engine, performance, cross-module work, native
-    lane owners.
-  - `worker-xhigh`: a box an earlier high worker failed or left unfinished,
-    or rare work that clearly needs the hardest reasoning.
-  - `worker-max`: never a starting tier; a last resort for important work an
-    extra-high worker failed. Never use the Fable model unless Tom asks.
-
-  A box an earlier worker failed or left unfinished starts one tier above that
-  worker, even when the brief is reworded or the issue reopened, and the brief
-  names that attempt and its tier. A running worker's effort can't change.
 - A worker does one task. Send a running worker only its own task's
   follow-up; new or unrelated work goes to a fresh worker whose brief carries
   what it needs.
