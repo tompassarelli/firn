@@ -70,6 +70,11 @@ row '{id:"a333",status:"running",tier:"medium",started:"2026-10-08T03:00:00Z",et
 out=$(t list)
 check '[spec] a running worker whose brief has Item: holds the issue with no claim command' \
   'grep -qE "^smashcraft#4 +a333 .* 30m" <<<"$out"'
+row --arg s "$(date -u -d '45 minutes ago' +%Y-%m-%dT%H:%M:%S.000Z)" \
+  '{id:"a444",status:"running",tier:"high",started:$s,eta_min:20,brief:"Item: smashcraft#2"}' | "$threads" ingest 2>/dev/null
+out=$(t list)
+check '[spec] the clock runs from when the worker started, and past 2x ETA it is overdue' \
+  'grep -qE "^smashcraft#2 +a444 +4[56]m +20m +OVERDUE" <<<"$out"'
 out=$(t ready)
 check '[spec] an issue a running worker holds is not ready' '! grep -q "^smashcraft#4" <<<"$out"'
 row '{id:"a333",status:"finished",ended:"2026-10-08T03:20:00Z",tier:"medium",actual_min:20,tokens:1,outcome:"done",brief:"Item: smashcraft#4"}' |

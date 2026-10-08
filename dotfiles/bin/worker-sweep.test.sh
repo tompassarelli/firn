@@ -9,7 +9,7 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 sweep=$repo/dotfiles/bin/worker-sweep
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/worker-sweep-test.XXXXXX")
 trap 'rm -rf "${scratch:?}"' EXIT
-export CLAUDE_CONFIG_DIR=$scratch/claude
+export CLAUDE_CONFIG_DIR=$scratch/claude THREADS_DB=$scratch/threads.db
 
 python3 - "$CLAUDE_CONFIG_DIR/projects" <<'PY'
 import json, os, sys, time
