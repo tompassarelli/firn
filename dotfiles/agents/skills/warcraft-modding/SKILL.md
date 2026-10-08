@@ -192,6 +192,12 @@ over lockstep WebRTC peer to peer, with no server.
 - **Tom's install** (account a, display `:0`): no agent tests or engine
   tools; `wisp play` there only when Tom asks.
 
+Each client set (an offline pair, the signed-in A+B pair, clone-a) has one
+lane owner. It runs every pending native check in batches: one immutable
+build, one session, many pad scripts and captures (`pad SCRIPT|DIR...`,
+`accept --only ID...`). An issue's worker lands its fix, hands the native box
+to the lane and moves on; it never starts clients itself.
+
 Engine tools (wisp:docs/engine.md, "Guardrails"): signed-in A/B allow only
 passive reads (`engine desync`, `engine poll`, `engine diff`, `engine locate`
 without `--watch`, packet capture). Anything that traps, stops or changes the

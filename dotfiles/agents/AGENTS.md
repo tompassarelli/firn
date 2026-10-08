@@ -85,6 +85,9 @@ Needs you: nothing
 ## Workers
 
 - Split independent work into parallel workers, one per issue or code area.
+  Work that needs the same scarce resource (game clients, a device, a quiet
+  machine) isn't independent: one lane worker per resource runs every
+  pending check in batches, and issue workers hand their checks to it.
   Workers write and land code, and the parent merges. Don't add reviewer,
   verifier, auditor or status workers unless Tom asks.
 - A worker brief has four parts: the goal, the files, the Done when list and
