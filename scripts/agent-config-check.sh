@@ -352,6 +352,7 @@ validate_codex_managed_policy() {
     lib/authoring-killswitch.sh
     codex-behavior-guard.sh
     lib/codex_behavior.py
+    lib/spawn_capacity.py
   )
   if grep -Fq '(s flakeRoot "/modules/codex/requirements.toml")' "$module"; then :
   else bad 'Codex module does not install its managed requirements'; fi

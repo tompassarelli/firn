@@ -18,7 +18,8 @@ malformed event allows.
   close, and a new issue while the session has opened more than it closed.
   Edits to existing issues pass. One timing check may confirm once under an
   exclusive capacity lease.
-- PreToolUse(spawn_agent) refuses a measure-only brief, and PreToolUse of a
+- PreToolUse(spawn_agent) refuses a local worker at high CPU pressure
+  (lib/spawn_capacity.py) and a measure-only brief, and PreToolUse of a
   patch or shell write refuses a new manifest, provenance, attestation,
   inventory or checksum file in a prototype repo unless a prompt asked.
 - PostToolUse(Bash) says to close an issue whose boxes are all ticked.
@@ -878,6 +879,14 @@ MEASURE_OUTCOME = re.compile(r"\bPEER\b|\bland(s|ing)? (a |the |its |one )?fix\b
 
 
 def pre_spawn(event):
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import spawn_capacity
+        reason = spawn_capacity.check(event)
+    except Exception:
+        reason = None
+    if reason:
+        return deny(reason)
     tool_input = event.get("tool_input") or {}
     brief = json.dumps(tool_input) if not isinstance(tool_input, str) else tool_input
     if MEASURE_ONLY.search(brief) and not MEASURE_OUTCOME.search(brief):

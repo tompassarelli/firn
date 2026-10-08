@@ -115,6 +115,14 @@
         "path": "dotfiles/agents/hooks/lib/codex_behavior.py"
       },
       "path": "lib/codex_behavior.py"
+    },
+    {
+      "id": "spawn-capacity-decider",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/lib/spawn_capacity.py"
+      },
+      "path": "lib/spawn_capacity.py"
     }
   ],
   "registrations": {
@@ -494,6 +502,16 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/hooks/worker-handoff.sh"
+      }
+    },
+    "spawn-capacity-guard": {
+      "kind": "hook",
+      "title": "Spawn capacity gate",
+      "triggerDescription": "Refuse a new local Claude worker while CPU pressure is at or above 40%.",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/spawn-capacity-guard.sh"
       }
     },
     "orchestrating-codex": {
@@ -1239,6 +1257,19 @@
     "worker-handoff": {
       "supports": [
         "agent-machinery"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "claude"
+          ]
+        }
+      ]
+    },
+    "spawn-capacity-guard": {
+      "supports": [
+        "machine-capacity"
       ],
       "distributions": [
         {

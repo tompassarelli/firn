@@ -46,6 +46,7 @@
       (providerAdapter "lib/authoring-killswitch.sh")
       (providerAdapter "codex-behavior-guard.sh")
       (providerAdapter "lib/codex_behavior.py")
+      (providerAdapter "lib/spawn_capacity.py")
     ];
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {

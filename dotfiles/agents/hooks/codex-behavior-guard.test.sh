@@ -15,6 +15,8 @@ git -C "$game" init -q && printf 'a\n' >"$game/arc.ts" && git -C "$game" add arc
   && git -C "$game" -c user.name=t -c user.email=t@t commit -qm init
 export PATH="/etc/codex/hooks/runtime:$PATH"
 export CODEX_BEHAVIOR_CODE_ROOT="$code" CODEX_BEHAVIOR_STATE="$scratch/state"
+printf 'some avg10=1.00 avg60=1.00 avg300=1.00 total=1\n' >"$scratch/cpu"
+export SPAWN_CAPACITY_PRESSURE="$scratch/cpu"
 pass=0 fail=0
 
 run() { AGENT_NO_AUTHORING_HOOKS=0 "$HOOK" 2>/dev/null; }
