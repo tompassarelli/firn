@@ -47,7 +47,8 @@ Staffing: one worker per independent issue, all independent items at once.
   high for hard implementation; Astra (gpt-6-astra) xhigh for hard
   reasoning, max for the hardest problems or a stuck fix loop. A box a
   worker failed starts one tier up.
-Every worker brief: goal, files, Done when, ETA, and the lines
+Every worker brief: goal, files, Done when, ETA, a report that starts with
+  "Done:", "Not done:" or "Blocked:", and the lines
   Item: <repo#N>
   Category: <category from AGENTS.md>
   Follows: <agent id>   (only when it continues earlier work)
