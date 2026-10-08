@@ -34,7 +34,7 @@ claim = [
   { key = "report.no-disclaimers", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Report", digest = "12ea3c493ce61656566ab77430c1ed20750e17a2a51cf65f87cf2cd0a53e2f5e" },
   { key = "report.counted-progress", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Report", digest = "97d8c48e06d286f26a937d825cf7b8d9afb2901e248c7d0fb018cf50f0bc9705" },
   { key = "report.paths", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Report", digest = "f3a118893c542e9c443bebd92a397c30d79bf703555c1b60f45ed5acb5fb63c7" },
-  { key = "delegation.parallel-owners", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Workers", digest = "dc5f3f5859444260af4808e5826919e5335d205a55fd5d622abfbc9af1c8a0d7" },
+  { key = "delegation.parallel-owners", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Workers", digest = "0774463eba8ef6f9dae83e185baeae6d2837b38e4d60eee2074c60f09e9d97af" },
   { key = "delegation.staffing", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Workers", digest = "e32ea72d182b3e9134c27b2e10cbc5d0d9531f59e34fa5596abc672b6b8b564c" },
   { key = "delegation.mid-turn-messages", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Workers", digest = "69e63f7d49ba4497382dab6263fad6cdc1283b231cfb46cdb83fdf82fc267550" },
   { key = "delegation.one-task-per-worker", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Workers", digest = "bca2d696665f517c3bc6edbf5cf532256a92e6c8b6d34a5a01c730eb2d1678a2" },

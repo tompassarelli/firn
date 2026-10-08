@@ -85,9 +85,12 @@ Needs you: nothing
 ## Workers
 
 - Split independent work into parallel workers, one per issue or code area.
-  Work that needs the same scarce resource (game clients, a device, a quiet
-  machine) isn't independent: one lane worker per resource runs every
-  pending check in batches, and issue workers hand their checks to it.
+  Checks that need a scarce resource (game clients, devices, a quiet
+  machine) go to lane workers, one per instance of it: one per client or
+  device. Split the pending checks across every instance and use pairs only
+  for checks that need two. Release an instance whenever its holder isn't
+  actively running on it; never hold one idle. An instance that fails setup
+  is fixed or reported within the hour, not parked.
   Workers write and land code, and the parent merges. Don't add reviewer,
   verifier, auditor or status workers unless Tom asks.
 - Use the `staffing` skill to pick ready work in `threads`, write the brief,
