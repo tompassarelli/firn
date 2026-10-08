@@ -18,7 +18,7 @@ from pathlib import Path
 PRESSURE_LIMIT = 40.0
 LOCAL_CLAUDE_TYPES = {"worker", "worker-high", "worker-haiku", "general-purpose", "Explore", "fork"}
 ACTIVE_SECONDS = 300
-URGENT = re.compile(r"^\s*CASE=URGENT\s+FACT=(\"([^\"]*)\"|'([^']*)')", re.IGNORECASE)
+URGENT = re.compile(r"(?m)^\W*CASE=URGENT\s+FACT=(?:[\"“”]([^\"“”]*)[\"“”]|['‘’]([^'‘’]*)['‘’])", re.IGNORECASE)
 
 
 def pressure_path():
@@ -108,6 +108,18 @@ def brief_texts(tool_input):
     return []
 
 
+def log_denial(event):
+    try:
+        path = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "agents/spawn-gate-denials.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        texts = brief_texts(event.get("tool_input") or {})
+        with path.open("a") as f:
+            f.write(json.dumps({"tool": event.get("tool_name"), "input_type": type(event.get("tool_input")).__name__,
+                                "heads": [t[:160] for t in texts[:4]]}) + "\n")
+    except OSError:
+        pass
+
+
 def check(event):
     """The refusal text for this spawn, or None to allow it."""
     if not is_local(event):
@@ -115,12 +127,13 @@ def check(event):
     pressure = cpu_pressure()
     if pressure is None or pressure < PRESSURE_LIMIT:
         return None
-    urgent = next((m for m in map(URGENT.match, brief_texts(event.get("tool_input") or {})) if m), None)
+    urgent = next((m for m in map(URGENT.search, brief_texts(event.get("tool_input") or {})) if m), None)
     if urgent:
-        fact = urgent.group(2) if urgent.group(2) is not None else urgent.group(3)
+        fact = urgent.group(1) if urgent.group(1) is not None else urgent.group(2)
         if len(fact.strip()) >= 15:
             log_override(event, fact.strip())
             return None
+    log_denial(event)
     return (
         f"The machine is at {pressure:g}% CPU pressure (limit {PRESSURE_LIMIT:g}%) with "
         f"{local_workers()} local workers running. Queue this worker until pressure falls, "
