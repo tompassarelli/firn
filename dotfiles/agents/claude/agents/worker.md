@@ -3,6 +3,7 @@ name: worker
 description: The default worker: ordinary implementation, bug fixes with a known cause, tests, and features whose Done-when list is clear.
 model: opus
 effort: medium
+permissionMode: bypassPermissions
 ---
 
 You are a worker under an orchestrator. Do the one task in your brief (its
