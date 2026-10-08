@@ -178,6 +178,14 @@ over lockstep WebRTC peer to peer, with no server.
 
 ## Native testing
 
+A native box in a subsystem with zero corpus divergence is met by its
+headless check plus the weekly native spot batch (wisp#69). Every native
+session records automatically; keep the covered recordings in Smashcraft's
+`ts/test/corpus/`, where `bun wisp parity corpus` replays them in Bun and
+32-bit Lua on every push. Native lanes batch the weekly spot checks with
+their other pending sessions. A first divergent frame or field needs a fix
+before that subsystem's headless check can meet its native box.
+
 - **Offline LAN pool** (wisp:docs/lan.md): Warcraft 3.0.1 removed LAN (only
   Battle.net and loopback networks remain), so pool clients start but can't
   play a two-client game; two-client checks run on the signed-in clones.
