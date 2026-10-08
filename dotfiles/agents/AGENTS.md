@@ -93,11 +93,14 @@ Needs you: nothing
 - A worker brief has four parts: the goal, the files, the Done when list and
   an ETA. At twice the ETA the worker reports. Every brief also carries the
   lines `Item: <repo#N>`, `Category: <name>` and, when it continues earlier
-  work, `Follows: <agent id>`, so each run lands on its issue.
+  work, `Follows: <agent id>`. Category is one of mechanical, docs-policy,
+  tooling, feature, bug-known-cause, debugging-unknown-cause,
+  netcode-determinism, performance, balance-tuning, native-check, research.
 - Every tracked item is a GitHub issue; GitHub holds its title, boxes, state
-  and blocked-by links. `threads` holds the rest: `claim`, `release --to`,
-  `need`/`unneed` (sets blocked-by on GitHub), `show`, `list` (who holds
-  what, against ETA) and `ready` (open, unblocked, unheld issues). Close an
+  and blocked-by links. A running worker holds its brief's issue in `threads`
+  until it finishes; `claim` and `release --to` are for people and lanes.
+  `need`/`unneed` set blocked-by on GitHub, `list` shows who holds what
+  against ETA, and `ready` lists open, unblocked, unheld issues. Close an
   issue with `gh issue close`, citing the last run's outcome.
 - Always set the worker's model and effort, choosing from SOL 6.1
   (`gpt-6.1-sol`) at `low` for simple edits, `medium` for ordinary work or

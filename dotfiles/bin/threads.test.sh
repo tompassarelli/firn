@@ -64,6 +64,28 @@ out=$(t show smashcraft#3; t summary)
 check '[spec] runs take Item, Follows and Category from the brief; a new agent is a change of hands' \
   'grep -q "a222 xhigh follows a111  50m/45m ETA  done" <<<"$out" && grep -q "handoff  a111 -> a222" <<<"$out" && grep -q "note ~/h/a111.md" <<<"$out" && grep -qE "^tooling +xhigh +1 +1 +100%" <<<"$out"'
 
+row() { jq -cn "$@"; }
+row '{id:"a333",status:"running",tier:"medium",started:"2026-10-08T03:00:00Z",eta_min:30,brief:"Item: smashcraft#4"}' |
+  "$threads" ingest 2>/dev/null
+out=$(t list)
+check '[spec] a running worker whose brief has Item: holds the issue with no claim command' \
+  'grep -qE "^smashcraft#4 +a333 .* 30m" <<<"$out"'
+out=$(t ready)
+check '[spec] an issue a running worker holds is not ready' '! grep -q "^smashcraft#4" <<<"$out"'
+row '{id:"a333",status:"finished",ended:"2026-10-08T03:20:00Z",tier:"medium",actual_min:20,tokens:1,outcome:"done",brief:"Item: smashcraft#4"}' |
+  "$threads" ingest 2>/dev/null
+out=$(t list)
+check '[spec] the worker finishing releases the issue' '! grep -q "^smashcraft#4" <<<"$out"'
+
+# smashcraft#5 is closed (not in the open set): a medium run, then a high one after it.
+{ row '{id:"b1",ended:"2026-10-08T04:00:00Z",tier:"medium",actual_min:10,tokens:3000,outcome:"not done",brief:"Item: smashcraft#5 Category: bug-known-cause"}'
+  row '{id:"b2",ended:"2026-10-08T05:00:00Z",tier:"high",actual_min:10,tokens:5000,outcome:"done",brief:"Item: smashcraft#5 Follows: b1 Category: frobnicate"}'
+} | "$threads" ingest 2>/dev/null
+out=$(t summary)
+check '[spec] a category outside the fixed list counts as unknown' 'grep -qE "^unknown +high +1 " <<<"$out"'
+check '[spec] closure groups by the first run: issues, closed, runs and tokens per closed issue, escalations' \
+  'grep -qE "^bug-known-cause +medium +1 +1 +2.0 +8k +100%" <<<"$out"'
+
 # 40 processes, each making 25 claims through threads' own entry point.
 for w in $(seq 1 40); do
   python3 - "$threads" "$w" <<'PY' >/dev/null &

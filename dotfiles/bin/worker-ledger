@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# worker-ledger: records each finished Claude Code worker as a run in threads
+# worker-ledger: a running Claude Code worker holds its brief's issue in
+# threads; a finished one releases it and is recorded as a run
 # (issue ref, follows and category from its brief; tier, ETA vs actual
 # minutes, output tokens, peak context, outcome, handoff note path), and a
 # category x tier summary of runs.
@@ -8,9 +9,10 @@ set -uo pipefail
 usage() {
   cat >&2 <<'EOF'
 usage: worker-ledger [--session ID] [--since DATE]   record finished workers as runs in threads
-       worker-ledger --summary [--since DATE]        per category x tier: count, success, minutes, tokens
-  --session ID  only that session's workers (default: every session)
-  --since DATE  only workers that finished on or after DATE (e.g. 2026-10-08)
+       worker-ledger --summary [--since DATE]        per category x tier: runs against ETA, and issues closed
+  --session ID  only that session's workers (default: every session's, active in the last day)
+  --since DATE  only workers active on or after DATE (e.g. 2026-10-08)
+A running worker whose brief names `Item:` holds that issue until it finishes.
 Briefs carry `Item: <repo#N>`, `Follows: <agent id>` and `Category: <name>` lines.
 Runs live in threads' database (${THREADS_DB:-~/.local/state/threads/threads.db}).
 EOF
@@ -53,25 +55,32 @@ while IFS= read -r f; do
     | select($agent | startswith("worker"))
     | [$lines[] | select(.type == "user" or .type == "assistant")] as $m
     | ($m[-1]) as $last
-    | select($last.type == "assistant" and ($last.message.content | type) == "array"
+    | ($last.type == "assistant" and ($last.message.content | type) == "array"
         and ([$last.message.content[].type] | index("tool_use") | not)
-        and ($last | texts | length) > 0)
+        and ($last | texts | length) > 0
+        and (($last | texts | length) > 200 or ($last | texts | test("^\\W*(waiting|i.ll wait|i.ll pick|the test run)"; "i") | not))) as $finished
     | ([$lines[] | select(.type == "user")][0] | texts) as $brief
-    | select(($last | texts | length) > 200 or ($last | texts | test("^\\W*(waiting|i.ll wait|i.ll pick|the test run)"; "i") | not))
     | ([$a[] | select(.message.content | type == "array" and any(.[]; .type == "text")) | texts] | .[-3:] | max_by(length)) as $report
     | ($report | .[0:400]) as $head
     | ($lines | map(.timestamp // empty)) as $times
     | ($times | last) as $ended
     | select($ended >= $since)
-    | {
+    | (($agent | ltrimstr("worker") | ltrimstr("-")) | if . == "" then "medium" else . end) as $tiername
+    | ($brief | [scan("(?i)\\bETA\\b[^0-9\\n]{0,12}([0-9]+(?:\\.[0-9]+)?)\\s*(hours?|hrs?|h|minutes?|mins?|m)\\b")] | first
+       | if . == null then null else (.[0] | tonumber) * (if (.[1] | test("^h")) then 60 else 1 end) end) as $eta
+    | if ($finished | not) then
+        {id: $id, session: ($lines[0].sessionId // null), brief: ($brief | .[0:4000]), started: $times[0],
+         tier: $tiername, eta_min: $eta,
+         status: (if (now - ($ended | ts)) < 7200 then "running" else "stale" end)}
+      else {
+        status: "finished",
         id: $id,
         session: ($lines[0].sessionId // null),
         ended: $ended,
         brief: ($brief | .[0:4000]),
         started: $times[0],
-        tier: (($agent | ltrimstr("worker") | ltrimstr("-")) | if . == "" then "medium" else . end),
-        eta_min: ($brief | [scan("(?i)\\bETA\\b[^0-9\\n]{0,12}([0-9]+(?:\\.[0-9]+)?)\\s*(hours?|hrs?|h|minutes?|mins?|m)\\b")] | first
-                  | if . == null then null else (.[0] | tonumber) * (if (.[1] | test("^h")) then 60 else 1 end) end),
+        tier: $tiername,
+        eta_min: $eta,
         actual_min: ((($ended | ts) - ($times[0] | ts)) / 60 | floor),
         tokens: ([$a | group_by(.requestId // .message.id)[] | .[-1].message.usage.output_tokens // 0] | add),
         peak_ctx: ($a[-1].message.usage | (.input_tokens // 0) + (.cache_read_input_tokens // 0) + (.cache_creation_input_tokens // 0)),
@@ -82,7 +91,7 @@ while IFS= read -r f; do
                   else "unclear" end),
         note: ([$report | scan("(?:~|/home/[^/\\s]+)/[^\\s`]*handoffs?/[^\\s`]+?\\.md")] | first),
         report: ($head | gsub("\\s+"; " ") | .[0:160])
-      }
+      } end
   ' <"$f" 2>/dev/null)
   [ -n "$row" ] || continue
   rows+=$row$'\n'
@@ -90,7 +99,7 @@ done < <(
   if [ -n "$session" ]; then
     find "$projects" -mindepth 4 -maxdepth 4 -path "*/$session/subagents/agent-*.jsonl" 2>/dev/null
   else
-    find "$projects" -mindepth 4 -maxdepth 4 -path '*/subagents/agent-*.jsonl' ${since:+-newermt "$since"} 2>/dev/null
+    find "$projects" -mindepth 4 -maxdepth 4 -path '*/subagents/agent-*.jsonl' -newermt "${since:-1 day ago}" 2>/dev/null
   fi | sort
 )
 printf '%s' "$rows" | "$threads" ingest

@@ -21,7 +21,7 @@ def ts(minutes_ago):
     return datetime.fromtimestamp(now - minutes_ago * 60, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 def usage(tokens):
     return {"input_tokens": 10, "cache_read_input_tokens": tokens - 10, "cache_creation_input_tokens": 0}
-def brief(m): return {"type": "user", "timestamp": ts(m), "message": {"role": "user", "content": "brief"}}
+def brief(m, words="brief"): return {"type": "user", "timestamp": ts(m), "message": {"role": "user", "content": words}}
 def tool_use(m, tokens, tid="t1", bg=False):
     return {"type": "assistant", "timestamp": ts(m), "message": {"role": "assistant", "usage": usage(tokens),
             "content": [{"type": "tool_use", "id": tid, "name": "Bash", "input": {"command": "x", "run_in_background": bg}}]}}
@@ -49,7 +49,7 @@ old = session("-home-tom", "old-session", [
 ])
 os.utime(old, (now - 3600, now - 3600))
 session("-home-tom", "new-session", [
-    ("pending", "worker-high", [brief(30), tool_use(1, 200000)]),
+    ("pending", "worker-high", [brief(30, "Item: smashcraft#7"), tool_use(1, 200000)]),
     ("result", "worker", [brief(30), tool_use(2, 150000), result(1), reminder(1)]),
     ("handoff", "worker-xhigh", [brief(40), tool_use(2, 410000), result(2)]),
     ("stalled", "worker-low", [brief(60), tool_use(25, 90000)]),
@@ -78,6 +78,7 @@ check 'fresh worker has no flag' '! row pending | grep -qE "STALLED|HANDOFF"'
 check 'tier, running minutes' 'row pending | grep -q "worker-high.*ctx=200k.*ran=30m.*idle=1m"'
 check 'waiting on its own background job' 'row bgwait | grep -q waiting-bg'
 check 'a pass records finished workers as runs in threads' '"$repo/dotfiles/bin/threads" run-ids | grep -qx finished'
+check 'a pass makes a running worker the holder of its Item' '"$repo/dotfiles/bin/threads" list | grep -qE "^smashcraft#7 +pending "'
 
 out=$("$sweep" --session old-session)
 check '--session picks that session' '[ "$(awk "{print \$1}" <<<"$out")" = oldtool ]'

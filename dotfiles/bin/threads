@@ -367,30 +367,67 @@ def brief_fields(brief: str) -> dict:
     return out
 
 
-def canonical(item):
+CATEGORIES = [
+    "mechanical", "docs-policy", "tooling", "feature", "bug-known-cause", "debugging-unknown-cause",
+    "netcode-determinism", "performance", "balance-tuning", "native-check", "research",
+]
+
+
+def issue_ref(item):
+    """Canonical repo#N, or None when the brief's Item is not an issue ref."""
     try:
-        return ref(*parse_ref(item))
+        return ref(*parse_ref(item)) if item else None
     except Refused:
-        return item
+        return None
+
+
+def hold(db, item, r, claim, follows):
+    """A running worker holds its brief's issue; taking it from someone else is a handoff."""
+    prev = claim["owner"] if claim else follows
+    if claim:
+        db.execute("UPDATE claims SET owner = ?, since = ?, eta_min = ? WHERE item = ?",
+                   (r["id"], r.get("started") or now(), r.get("eta_min") and round(r["eta_min"]), item))
+    else:
+        db.execute("INSERT INTO claims(item, owner, since, eta_min) VALUES (?,?,?,?)",
+                   (item, r["id"], r.get("started") or now(), r.get("eta_min") and round(r["eta_min"])))
+        event(db, item, "claim", r["id"], r["tier"], eta_min=r.get("eta_min"))
+    if prev and prev != r["id"]:
+        event(db, item, "handoff", r["id"], r["tier"], **{"from": prev, "to": r["id"]})
 
 
 def cmd_ingest(db, a):
-    """Read worker-ledger's JSON rows on stdin; rows already recorded are skipped."""
+    """Read worker-ledger's JSON rows on stdin. A running worker holds its Item; a finished one
+    releases it and becomes a run; a stale one (idle 2 h) releases it. Recorded runs are skipped."""
     added = 0
     with Tx(db):
         for line in sys.stdin:
             if not line.strip():
                 continue
             r = json.loads(line)
+            status = r.get("status", "finished")
             if db.execute("SELECT 1 FROM runs WHERE agent = ?", (r["id"],)).fetchone():
                 continue
             f = brief_fields(r.get("brief") or "")
-            item = f.get("item") or r.get("item")
-            item = canonical(item) if item else None
+            item = issue_ref(f.get("item") or r.get("item"))
             follows = f.get("follows") or r.get("follows")
-            category = f.get("category") or r.get("category") or "unknown"
+            claim = db.execute("SELECT owner FROM claims WHERE item = ?", (item,)).fetchone() if item else None
+            mine = claim is not None and claim["owner"] == r["id"]
+            if status == "running":
+                if item and not mine:
+                    hold(db, item, r, claim, follows)
+                continue
+            if mine:
+                db.execute("DELETE FROM claims WHERE item = ?", (item,))
+                event(db, item, "release", r["id"], r["tier"], why=status)
+            if status != "finished":
+                continue
+            raw = f.get("category") or r.get("category") or "unknown"
+            category = raw if raw in CATEGORIES else "unknown"
             prev = None
-            if item:
+            if item and not db.execute(
+                "SELECT 1 FROM events WHERE item = ? AND kind = 'handoff' AND json_extract(data, '$.to') = ?",
+                (item, r["id"]),
+            ).fetchone():
                 p = db.execute("SELECT agent FROM runs WHERE item = ? ORDER BY ended DESC LIMIT 1", (item,)).fetchone()
                 prev = follows or (p["agent"] if p else None)
             eta = r.get("eta_min")
@@ -404,8 +441,8 @@ def cmd_ingest(db, a):
             )
             if prev and prev != r["id"]:
                 event(db, item, "handoff", r["id"], r["tier"], **{"from": prev, "to": r["id"]})
-            event(db, item, "run", r["id"], r["tier"], category=category, minutes=r["actual_min"],
-                  eta_min=eta, outcome=r["outcome"], note=r.get("note"))
+            event(db, item, "run", r["id"], r["tier"], category=category, brief_category=raw,
+                  minutes=r["actual_min"], eta_min=eta, outcome=r["outcome"], note=r.get("note"))
             added += 1
     print(f"threads: {added} runs recorded in {DB}", file=sys.stderr)
 
@@ -429,7 +466,7 @@ def cmd_summary(db, a):
         raise Refused(f"no runs in {DB}")
     groups: dict = {}
     for r in rows:
-        groups.setdefault((r["category"], r["tier"]), []).append(r)
+        groups.setdefault((r["category"] if r["category"] in CATEGORIES else "unknown", r["tier"]), []).append(r)
     out = [("category", "tier", "n", "done", "success", "eta_med", "actual_med", "x_eta_med", "over_2x_eta", "tokens_med")]
     for (cat, tier), rs in sorted(groups.items(), key=lambda kv: (kv[0][0], TIER_RANK.get(kv[0][1], 5))):
         done = sum(r["outcome"] == "done" for r in rs)
@@ -441,9 +478,48 @@ def cmd_summary(db, a):
                     f"{ratio:.1f}" if ratio is not None else "-",
                     f"{sum(r['minutes'] > 2 * r['eta_min'] for r in timed)}/{len(timed)}",
                     f"{tok // 1000}k" if tok is not None else "-"))
+    table(out)
+    print()
+    try:
+        closure(db, rows)
+    except Refused as e:
+        print(f"threads: closure table needs GitHub: {e}", file=sys.stderr)
+
+
+def table(out):
     widths = [max(len(row[i]) for row in out) for i in range(len(out[0]))]
     for row in out:
         print("  ".join(c.ljust(w) for c, w in zip(row, widths)).rstrip())
+
+
+def closure(db, rows):
+    """Per issue: category and tier of its first run; closed from GitHub's open set; escalated when a
+    later run used a higher tier."""
+    by_item: dict = {}
+    for r in rows:
+        if issue_ref(r["item"]):
+            by_item.setdefault(r["item"], []).append(r)
+    opened: dict = {}
+    groups: dict = {}
+    for item, rs in by_item.items():
+        rs.sort(key=lambda r: r["started"] or r["ended"])
+        first = rs[0]
+        repo, number = parse_ref(item)
+        if repo not in opened:
+            opened[repo] = open_issues(db, repo)
+        g = groups.setdefault((first["category"], first["tier"]), {"issues": 0, "closed": 0, "runs": 0, "tokens": 0, "escalated": 0})
+        g["issues"] += 1
+        g["escalated"] += any(TIER_RANK.get(r["tier"], 5) > TIER_RANK.get(first["tier"], 5) for r in rs[1:])
+        if str(number) not in opened[repo]:
+            g["closed"] += 1
+            g["runs"] += len(rs)
+            g["tokens"] += sum(r["tokens"] or 0 for r in rs)
+    out = [("category", "first_tier", "issues", "closed", "runs_per_closed", "tokens_per_closed", "escalated")]
+    for (cat, tier), g in sorted(groups.items(), key=lambda kv: (kv[0][0], TIER_RANK.get(kv[0][1], 5))):
+        c = g["closed"]
+        out.append((cat, tier, str(g["issues"]), str(c), f"{g['runs'] / c:.1f}" if c else "-",
+                    f"{g['tokens'] // c // 1000}k" if c else "-", f"{g['escalated'] * 100 // g['issues']}%"))
+    table(out)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -451,6 +527,9 @@ def parser() -> argparse.ArgumentParser:
         prog="threads",
         description=f"Who holds which GitHub issue, handoffs and worker runs. Items are issue refs "
                     f"({', '.join(r + '#N' for r in REPOS)}). Database: {DB}",
+        epilog="A running worker whose brief has `Item: <repo#N>` holds that issue (worker-ledger, run by "
+               "worker-sweep); claim/release are for humans and lanes. Brief categories: "
+               + ", ".join(CATEGORIES) + "; anything else counts as unknown.",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
