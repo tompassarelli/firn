@@ -33,6 +33,8 @@
     "cloudflare-deploy",
     "digitalocean-access",
     "staffing",
+    "claude-workers",
+    "codex-workers",
     "estimate",
     "testing",
     "agent-policy",
@@ -208,6 +210,22 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/staffing/SKILL.md"
+      }
+    },
+    "claude-workers": {
+      "kind": "skill",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/claude-workers/SKILL.md"
+      }
+    },
+    "codex-workers": {
+      "kind": "skill",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/codex-workers/SKILL.md"
       }
     },
     "estimate": {
@@ -771,6 +789,26 @@
       ]
     },
     "staffing": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "claude-workers": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "codex-workers": {
       "distributions": [
         {
           "type": "skill",

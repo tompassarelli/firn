@@ -91,20 +91,13 @@ Needs you: nothing
   Workers write and land code, and the parent merges. Don't add reviewer,
   verifier, auditor or status workers unless Tom asks.
 - Use the `staffing` skill to pick ready work in `threads`, write the brief,
-  choose a model and effort from `worker-ledger --summary`, and set the ETA.
-- To run work through a Codex lead session, use `codex-lead` (start, send,
-  goal, status, workers) and the `orchestrating-codex` skill.
-- A message to a running agent must reach it at once, mid-turn: use
-  `codex-lead send` or the agent message tool, never `codex queue`, which
-  waits until the turn ends.
+  choose a tier from your provider's workers skill and
+  `worker-ledger --summary`, and set the ETA.
+- A message to a running agent must reach it at once, mid-turn: use the
+  agent message tool, never `codex queue`, which waits until the turn ends.
 - A worker does one task. Send a running worker only its own task's
   follow-up; new or unrelated work goes to a fresh worker whose brief carries
   what it needs.
-- At 400k tokens of context a hook tells a worker to write a handoff note and
-  stop; the parent starts a fresh worker of the same tier from the note, and
-  may request a handoff sooner. The parent session compacts at 600k. Keep
-  `worker-sweep --wait` running: it wakes the parent when a worker has been
-  idle 20 minutes or needs a handoff.
 
 ## Hard limits
 

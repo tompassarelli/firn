@@ -1,5 +1,6 @@
 ---
 name: auto-wake
+agents: [claude]
 description: >-
   Auto-wake mode: when the operator asks for "auto-wake" (or to keep working
   through usage limits, overnight or while away), schedule a recurring

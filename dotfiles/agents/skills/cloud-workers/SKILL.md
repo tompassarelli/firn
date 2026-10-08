@@ -1,5 +1,6 @@
 ---
 name: cloud-workers
+agents: [claude]
 description: >-
   Run code-only worker tasks in Anthropic's cloud through Claude Code routines
   with the RemoteTrigger tool: when local CPU is busy or the task needs no

@@ -1,6 +1,6 @@
 ---
 name: staffing
-description: Pick ready work, write worker briefs, and choose effort and ETA from work history.
+description: Pick ready work, write worker briefs, and choose a worker tier and ETA from work history.
 ---
 
 # Staffing
@@ -10,7 +10,9 @@ GitHub owns the title, Done when, state and blocked-by links. `threads` owns
 holders, handoffs and runs. Close an issue with `gh issue close`, citing the
 last run's outcome.
 
-A worker brief names the goal, files, Done when and ETA, plus these lines:
+A worker brief names the goal, files, Done when and ETA, asks for a final
+report whose first word is "Done:", "Not done:" or "Blocked:", and carries
+these lines:
 
 ```text
 Item: repo#N
@@ -18,64 +20,36 @@ Category: docs-policy
 Follows: <earlier agent id>
 ```
 
-Use Follows when continuing an earlier attempt. Name that attempt's tier.
-Category is one of: mechanical, docs-policy, tooling, feature,
-bug-known-cause, debugging-unknown-cause, netcode-determinism, performance,
-balance-tuning, native-check, research.
+Use Follows on every retry, escalation or continuation, naming that
+attempt's tier. Category is one of: mechanical, docs-policy, tooling,
+feature, bug-known-cause, debugging-unknown-cause, netcode-determinism,
+performance, balance-tuning, native-check, research. The ledger scores a run
+only from its report's first word and links attempts only through Follows:
+on 8 Oct, 70 of 139 Claude runs scored unclear and 6 of 147 runs named
+Follows.
 
 A running brief is the claim: its worker holds the issue until it finishes.
 Use `threads claim` and `threads release --to` for people and shared-resource
 workers. `threads need` and `threads unneed` change blocked-by links on GitHub.
 `threads list` shows holders and time held against ETA.
 
-Read `worker-ledger --summary` before choosing a tier. Compare the category's
+## Tier
+
+Your provider's workers skill names the tiers, their models and efforts and
+the escalation ladder: `claude-workers` in Claude Code, `codex-workers` in
+Codex. Use only its choices and always set the model and effort.
+
+A failed or unfinished attempt starts one tier above the earlier worker,
+even after rewording the brief or reopening the issue, and its brief carries
+the failed report's evidence. The history rule outranks the default. When the
+top of the ladder fails on a box, bring Tom one recommendation. A running
+worker's effort cannot change.
+
+Read `worker-ledger --summary` before choosing. Compare the category's
 success rate, completed runs and actual time by tier. Missing categories and
-unclear outcomes are missing evidence, not proof that a tier failed.
-Always set the model and effort. Use only these choices. There is no Sonnet
-tier (Tom, 8 Oct): Haiku 5.5 covers mechanical work and Opus 5.5 the rest.
-
-| Tier | Claude Code | Codex | Start here when |
-| --- | --- | --- | --- |
-| haiku | worker-haiku (Haiku 5.5 high) | gpt-6.1-sol medium | Mechanical, fully specified, short: exact edits, ticking and closing issues, running a named check or prepared script and reporting its numbers; lookups and extraction from large logs or documents (the failing tests in a farm log); triaging an issue list; recurring summaries and status reports. |
-| medium | worker (Opus 5.5) | gpt-6.1-sol medium | Default: features, fixes with a known cause, tooling, docs and skills, setup. Codex floor. |
-| high | worker-high | gpt-6.1-sol high | Multi-step or ambiguous work: unknown-cause debugging, netcode, engine, performance, cross-module work, native checks, research. |
-| escalation | worker-high again | gpt-6-astra xhigh | A failed or unfinished high attempt. |
-
-Opus medium is the default (Tom, 8 Oct). The Claude ladder is haiku, medium,
-high; nothing above high, since xhigh and max add little on coding (below).
-A failed or unfinished attempt starts one tier above the earlier worker, even
-after rewording the brief or reopening the issue; a failed high attempt gets
-one more high attempt (Codex: Astra xhigh) whose brief carries the failure
-evidence. After that, bring Tom one recommendation. Every retry's brief
-carries Follows and the failed report's evidence. A running worker's effort
-cannot change. Never use low or max; never use Fable unless Tom asks.
-
-## Priors, then our evidence
-
-Anthropic's launch charts (Opus 5.5, 22 Sep 2026; Haiku 5.5, 7 Oct 2026) set
-the starting tier only while a category has fewer than five closed issues at
-that tier:
-
-- Mergeable code changes peak at Opus medium (FrontierCode: medium 54.6%,
-  high 54%, xhigh 51%, max 54% at seven times medium's cost).
-- Multi-step terminal work and ambiguous multi-file tasks gain from medium to
-  high (Terminal-Bench 57 to 64%, CursorBench 52 to 56%) and little above:
-  xhigh adds 2 points at twice the cost, and max is no better.
-- Only knowledge work and long data collection keep gaining above high
-  (GDPval 1690 to 1820 Elo at xhigh, WANDR 67 to 71%). Our 27 Opus xhigh runs
-  before 8 Oct averaged 76 minutes and 111k tokens, and 6 clearly finished.
-- Haiku 5.5 suits narrow work and runs at high: medium to high is its
-  cheapest large gain on multi-step tool use (OSWorld 53 to 61% for 1.4 times
-  the cost), at about a tenth of Opus medium's cost per task. Its max costs
-  what Opus medium does and scores no higher (GDPval 1620 against 1575 at
-  about $0.90 a task; Terminal-Bench 39% against Opus low's 38%), so a failed
-  haiku attempt goes to Opus medium, never to a higher Haiku effort. Prompts over 100k tokens cost it
-  five times as much, still an eighth of Opus, so reading a large log for
-  one answer stays a haiku task; multi-step changes don't.
-- Opus 5.5 medium matches GPT-6 Astra's best coding scores at 20 to 40% of
-  the cost. The charts don't include SOL 6.1.
-
-With five or more closed issues for a category at a tier, the ledger decides:
+unclear outcomes are missing evidence, not proof that a tier failed. A
+provider's benchmarks set a category's starting tier only while it has fewer
+than five closed issues at that tier. Then the ledger decides:
 
 - Start at the cheapest tier that closed at least four of its last five
   issues without escalation.
@@ -85,17 +59,10 @@ With five or more closed issues for a category at a tier, the ledger decides:
   a mechanical, docs-policy, tooling or balance-tuning category, send every
   other item there; a failure costs one escalation. Stop the trial at five
   closures or two failures.
-- Compare cost as tokens_per_closed within one model. Across models, weigh by
-  list price: Haiku 5.5's tokens cost about a fortieth of Opus 5.5's ($0.10
-  and $0.50 against $4 and $20 per million input and output tokens).
-- Compare Claude and Codex rows in the same category the same way before
-  preferring either.
+- Compare cost as tokens_per_closed within one model; the workers skill gives
+  the price ratio between its models.
 
-The ledger only scores what briefs and reports record. Every brief carries
-Item and Category, Follows on every retry or escalation (on 8 Oct 6 of 147
-runs named one, so escalations were invisible), and asks for a report that
-starts with "Done:", "Not done:" or "Blocked:" (70 of 139 earlier Claude runs
-scored unclear because the report started otherwise).
+## ETA
 
 ETA is the category's median actual minutes (`actual_med`) in the summary;
 prefer the chosen tier's row when available. Briefed ETAs on 8 Oct ran 1.5 to

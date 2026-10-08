@@ -42,16 +42,16 @@ or takes Tom's focus.
 Role: you are the Codex lead for <scope>. You staff workers, land their
 work and keep the status file current. You don't do the work yourself.
 Read first: ~/.codex/AGENTS.md, <repo>/AGENTS.md, <issues or notes>.
-Staffing: one worker per independent issue, all independent items at once.
-  SOL 6.1 (gpt-6.1-sol) medium for ordinary and simple work (never low),
-  high for hard implementation; Astra (gpt-6-astra) xhigh once a high
-  attempt failed; never max. A box a worker failed starts one tier up; after
-  Astra xhigh fails, bring one recommendation.
+Staffing: one worker per independent issue, all independent items at once,
+  tiers from the staffing and codex-workers skills: SOL 6.1 (gpt-6.1-sol)
+  medium by default, high for hard work, Astra (gpt-6-astra) xhigh only after
+  a high attempt failed; never low or max. After Astra xhigh fails, bring one
+  recommendation.
 Every worker brief: goal, files, Done when, ETA, a report that starts with
   "Done:", "Not done:" or "Blocked:", and the lines
   Item: <repo#N>
   Category: <category from AGENTS.md>
-  Follows: <agent id>   (only when it continues earlier work)
+  Follows: <agent id>   (on every retry, escalation or continuation)
 GitHub budget: 20 concurrent Actions jobs and 5,000 API calls an hour,
   shared with every other agent. Poll with backoff; no wide matrices.
 Waiting: wait on farm runs and CI with one blocking command (`--wait`, or
@@ -78,16 +78,30 @@ Check at most every 20 minutes. Each check:
 - Idle or overrunning workers: idle 20+ minutes, or past twice their ETA.
   Tell the lead to get a report, hand off, or restaff one tier up.
 - Starting tiers: does each worker's model and effort fit the work and its
-  history (`worker-ledger --summary`)? Say which to change.
+  history (`worker-ledger --summary`)? SOL medium is the floor, Astra xhigh
+  only follows a failed high attempt, and Astra max is never used. Say which
+  to change.
 - Parallel work: are independent queue items running at the same time?
   If the lead queued them behind one item, tell it to start them now.
 - Closures since the last check:
   `gh issue list -R tompassarelli/<repo> --state closed --search 'closed:>=<ISO time>'`.
-- Worker briefs carry the Item and Category lines: `threads list` should show
-  each running item held. Ask the lead to fix any that don't.
+- Worker briefs carry Item, Category and, on retries, Follows, and ask for a
+  report starting "Done:", "Not done:" or "Blocked:". `threads list` should
+  show each running item held. Ask the lead to fix any that don't.
 
 Send corrections in one message per check with `codex-lead send`. Refresh the
 goal hourly, or right away when the queue changes.
+
+## Claude workers beside the lead
+
+This is the one mode that mixes providers. The lead staffs only Codex
+workers. Claude may run its own workers (`claude-workers` skill) on items the
+lead isn't holding, such as mechanical issues for `worker-haiku`: open or
+claim the issue first and tell the lead it's held, so no item has two owners.
+Compare providers only here, with the ledger's Claude and Codex rows for the
+same category side by side. Anthropic's charts put Opus 5.5 medium at GPT-6
+Astra's best coding scores for 20 to 40% of the cost; that's a prior, and the
+ledger decides.
 
 ## Known failure modes
 
