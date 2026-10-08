@@ -106,6 +106,14 @@ Needs you: nothing
   check or returns a shallow result and re-run its brief, plus what it tried,
   on the next tier, ending at `worker-xhigh`; a running worker's effort can't
   change.
+- A worker does one task. Send a running worker only its own task's
+  follow-up; new or unrelated work goes to a fresh worker whose brief carries
+  what it needs.
+- At 400k tokens of context a hook tells a worker to write a handoff note and
+  stop; the parent starts a fresh worker of the same tier from the note, and
+  may request a handoff sooner. The parent session compacts at 600k. Keep
+  `worker-sweep --wait` running: it wakes the parent when a worker has been
+  idle 20 minutes or needs a handoff.
 
 ## Hard limits
 

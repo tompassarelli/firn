@@ -33,7 +33,7 @@ jq -e '
   [
     .hooks[] | .[] | .hooks[] | select(.type == "command") | .command
   ] as $commands
-  | ($commands | length == 9)
+  | ($commands | length == 10)
     and ($commands | all(
       contains("NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3")
       and contains("PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin")
@@ -56,7 +56,8 @@ for unit in \
   git-stash-guard \
   launch-critical-worktree-guard \
   session-kill-guard \
-  tripwire-guard; do
+  tripwire-guard \
+  worker-handoff; do
   jq -e --arg unit "$unit" '
     any(.activation[$unit].distributions[]; .targets | index("claude"))
   ' "$catalog" >/dev/null
@@ -89,6 +90,7 @@ jq -e --slurpfile projection "$claude_projection" '
   .model == "preserved-model"
   and .permissions == {"allow": ["Read"]}
   and .hooks == $projection[0].hooks
+  and .autoCompactWindow == 600000
 ' "$target" >/dev/null
 [[ $(stat -c '%a' "$target") == 600 ]]
 

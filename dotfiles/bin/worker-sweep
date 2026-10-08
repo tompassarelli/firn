@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# worker-sweep: running Claude Code workers of one session with their tier,
+# context, minutes running and minutes idle. Flags STALLED (idle 20+ minutes
+# while running) and HANDOFF (context 400k+).
+set -uo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: worker-sweep [--session ID] [--wait]
+  --session ID  sweep that session's workers (default: the newest session)
+  --wait        sweep every 15 minutes; print the table and exit once a worker is flagged
+EOF
+  exit 2
+}
+
+session="" wait=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --session) [ $# -ge 2 ] || usage; session=$2; shift 2 ;;
+    --wait) wait=1; shift ;;
+    -h|--help) usage ;;
+    *) usage ;;
+  esac
+done
+
+projects="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
+if [ -n "$session" ]; then
+  dir=$(find "$projects" -mindepth 3 -maxdepth 3 -type d -path "*/$session/subagents" -print -quit 2>/dev/null)
+else
+  dir=$(find "$projects" -mindepth 3 -maxdepth 3 -type d -name subagents -printf '%T@ %p\n' 2>/dev/null |
+    sort -rn | head -n 1 | cut -d' ' -f2-)
+fi
+if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+  printf 'worker-sweep: no subagents directory for session %s under %s\n' "${session:-<newest>}" "$projects" >&2
+  exit 1
+fi
+
+sweep() {
+  local now f id tier
+  now=$(date +%s)
+  for f in "$dir"/agent-*.jsonl; do
+    [ -e "$f" ] || continue
+    id=$(basename "$f" .jsonl)
+    id=${id#agent-}
+    tier=$(jq -r '.agentType // empty' "${f%.jsonl}.meta.json" 2>/dev/null)
+    jq -rRn --arg id "$id" --arg tier "$tier" --argjson now "$now" '
+      def ctx: (.message.usage // {}) | ((.input_tokens//0)+(.cache_read_input_tokens//0)+(.cache_creation_input_tokens//0));
+      def ts: sub("\\.[0-9]+Z$";"Z") | fromdate;
+      def texts: [(.message.content | if type=="array" then .[] | select(.type=="text") | .text else tostring end)] | join(" ");
+      [inputs] as $raw
+      | [$raw[] | fromjson? | select(type=="object")] as $lines
+      | [$lines[] | select(.type=="assistant" and .message.usage != null)] as $a
+      | select(($a|length) > 0)
+      | (if $tier != "" then $tier else ($a[-1].attributionAgent // "?") end) as $t
+      | select($t|startswith("worker"))
+      | [$lines[] | select(.type=="user" or .type=="assistant" or (.type=="attachment" and .attachment.type=="queued_command"))] as $m
+      | ($m[-1]) as $last
+      | ($last.type=="assistant" and (($last.message.content|type)=="array") and ([$last.message.content[].type]|index("tool_use"))) as $pending
+      | ($last.type=="user" and ((($last.message.content|tostring)|test("Request interrupted"))|not)) as $result
+      | ($last.type=="attachment") as $notified
+      | ([$lines[] | select(.type=="assistant") | .message.content | arrays | .[]
+          | select(.type=="tool_use" and (.input.run_in_background==true)) | .id]) as $bg
+      | ([$raw[] | select(contains("task-notification"))
+          | scan("<tool-use-id>([^<]+)</tool-use-id>") | .[0]]) as $done
+      | ([$bg[] | select(. as $b | $done | index($b) | not)] | length > 0) as $open_bg
+      | ($last.type=="assistant" and (($last.message.content|type)=="array")
+          and ([$last.message.content[].type] - ["thinking", "redacted_thinking"] | length == 0)) as $thinking
+      | ($last.type=="assistant" and $open_bg and ($last|texts|length < 600)
+          and ($last|texts|test("\\b(waiting|wait for|will be notified|notified when)\\b";"i"))) as $waiting
+      | select($pending or $result or $notified or $thinking or $waiting)
+      | ($a[-1]|ctx) as $c
+      | ([$lines[] | .timestamp // empty] | first | ts) as $t0
+      | ([$lines[] | .timestamp // empty] | last | ts) as $t1
+      | ([($now-$t1)/60, 0] | max | floor) as $idle
+      | [ (if $idle>=20 then "STALLED" else empty end), (if $c>=400000 then "HANDOFF" else empty end) ] as $flags
+      | "\($id)\t\($t)\tctx=\($c/1000|floor)k\tran=\((($now-$t0)/60)|floor)m\tidle=\($idle)m\t\(if $waiting then "waiting-bg " else "" end)\($flags|join(","))"
+    ' <"$f" 2>/dev/null
+  done
+}
+
+table() {
+  sort -t= -k2 -nr | column -t -s $'\t'
+}
+
+if [ "$wait" -eq 0 ]; then
+  sweep | table
+  exit 0
+fi
+while :; do
+  out=$(sweep)
+  if grep -qE 'STALLED|HANDOFF' <<<"$out"; then
+    date +%H:%M
+    table <<<"$out"
+    exit 0
+  fi
+  sleep 900
+done

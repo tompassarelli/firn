@@ -429,6 +429,16 @@
         "repo": "nixos-config",
         "path": "dotfiles/agents/hooks/codex-behavior-guard.sh"
       }
+    },
+    "worker-handoff": {
+      "kind": "hook",
+      "title": "Worker context handoff",
+      "triggerDescription": "Tell a Claude Code worker at 400k tokens of context to write a handoff note and stop.",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/worker-handoff.sh"
+      }
     }
   },
   "activation": {
@@ -1127,6 +1137,19 @@
           "type": "hook",
           "targets": [
             "codex"
+          ]
+        }
+      ]
+    },
+    "worker-handoff": {
+      "supports": [
+        "agent-machinery"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "claude"
           ]
         }
       ]
