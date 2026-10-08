@@ -108,7 +108,8 @@ grep -Fxq 'escalation: gpt-6.1-sol medium, gpt-6.1-sol high, then recommend to T
 
 # Claude-only resolves, and a signed-out Codex gives the same bands.
 out="$("$agents" plan --mode claude-only)"
-grep -Fxq '  75-95 top: claude-opus-5-5 medium (worker)' <<<"$out" || fail "claude-only plan: $out"
+grep -Fxq '  0-20 mechanical: claude-haiku-5-5 high (worker-haiku)' <<<"$out" || fail "claude-only keeps Haiku at mechanical: $out"
+grep -Fq '  20-95 top: claude-opus-5-5 medium (worker)' <<<"$out" || fail "claude-only gives SOL's middle to Opus medium, not Haiku: $out"
 ! grep -q gpt- <<<"$out" || fail "claude-only plan names a SOL tier"
 signed_out="$(FAKE_CODEX_IN=false "$agents" plan)"
 grep -Fxq 'codex: dropped, not signed in (codex login status)' <<<"$signed_out" || fail "signed-out codex: $signed_out"

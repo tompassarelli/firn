@@ -27,7 +27,8 @@ posture = "balanced"
 # start up to the next tier's start. When columns disagree so a stronger tier
 # would start below a weaker one, the larger start wins, so a provider in
 # efficiency gives work up rather than taking more. A provider that is
-# unavailable hands its range to the tier below it (above, if none is below).
+# unavailable hands its range to the next stronger tier (weaker, if none is
+# stronger), so a cheap tier never inherits harder work.
 # A failed box goes to the next tier in this list, then to Tom.
 # `agent` is the Claude Code agent type that runs the tier.
 

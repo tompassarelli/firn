@@ -118,8 +118,21 @@ def label(r):
 
 avail = [r for r in tiers if r.split(":")[0] in usable]
 full = bands_of(list(tiers))
+
+def resolve():
+    out, pending = [], None
+    for lo, hi, r in full:
+        if r in avail:
+            out.append([lo if pending is None else pending, hi, r])
+            pending = None
+        elif pending is None:
+            pending = lo
+    if pending is not None:
+        out[-1][1] = 100
+    return out
+
 print("bands (difficulty percentile: start tier):")
-for lo, hi, r in bands_of(avail):
+for lo, hi, r in resolve():
     took = [f"{x[2]} {x[0]}-{x[1]}" for x in full if x[2] not in avail and x[0] < hi and x[1] > lo]
     note = f" (takes {", ".join(took)}: provider dropped)" if took else ""
     print(f"  {lo}-{hi} {tiers[r].get("role", r)}: {label(r)}{note}")
