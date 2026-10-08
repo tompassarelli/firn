@@ -58,6 +58,7 @@ enabled = {
                     command("launch-critical-worktree-guard.sh", 10),
                     command("corpus-scan-guard.sh", 10),
                     command("resource-safe-search-guard.sh", 10),
+                    command("modern-search-guard.sh", 10),
                     command("session-kill-guard.sh", 10),
                     command("concrete-model-identity-guard.sh", 10),
                 ],
@@ -346,6 +347,7 @@ validate_codex_managed_policy() {
     tripwire-guard.sh
     corpus-scan-guard.sh
     resource-safe-search-guard.sh
+    modern-search-guard.sh
     session-kill-guard.sh
     lib/authoring-killswitch.sh
     codex-behavior-guard.sh

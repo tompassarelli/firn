@@ -94,6 +94,7 @@ for adapter in \
   tripwire-guard.sh \
   corpus-scan-guard.sh \
   resource-safe-search-guard.sh \
+  modern-search-guard.sh \
   session-kill-guard.sh \
   lib/authoring-killswitch.sh; do
   grep -Fq "(providerAdapter \"$adapter\")" "$source_file"

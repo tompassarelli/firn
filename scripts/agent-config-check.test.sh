@@ -12,7 +12,7 @@ bash -n "$checker"
 # shellcheck source=agent-config-check.sh
 source "$checker"
 
-[ "$(codex_managed_policy_binding_count "$requirements")" = 9 ]
+[ "$(codex_managed_policy_binding_count "$requirements")" = 14 ]
 grep -Fq '[mcp_servers.linear-mcp-msa-new]' "$config"
 if grep -Fq '[mcp_servers.north]' "$config"; then
   printf 'retired North MCP declaration remains\n' >&2
@@ -70,6 +70,7 @@ for adapter in \
   tripwire-guard.sh \
   corpus-scan-guard.sh \
   resource-safe-search-guard.sh \
+  modern-search-guard.sh \
   session-kill-guard.sh \
   lib/authoring-killswitch.sh; do
   grep -Fq "(providerAdapter \"$adapter\")" "$module"

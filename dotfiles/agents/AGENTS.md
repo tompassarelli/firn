@@ -139,6 +139,9 @@ Needs you: nothing
 - For JS/TS, use Bun. Use Node, npm, npx, pnpm or Yarn only when the repo
   requires Node.
 - A project's scripts, tests and tools use the project's language.
+- Search and edit with `rg` (not `grep -r`), `fd` (not `find`), `ast-grep`
+  for structural code search, `sd` for simple replacements and `jq`/`yq` for
+  JSON/YAML; a guard refuses `grep -r` and `find` tree searches.
 - Where a project declares a source language such as Clause or `.bnix`, write
   in that language. If the language lacks a feature the task needs, make the
   smallest fix for that one feature and go back to the task. Don't turn it

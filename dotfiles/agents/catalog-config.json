@@ -303,6 +303,16 @@
         "path": "dotfiles/agents/skills/machine-capacity/SKILL.md"
       }
     },
+    "modern-search-guard": {
+      "kind": "hook",
+      "title": "Modern search tool guard",
+      "triggerDescription": "Refuse recursive grep and find tree searches; name the exact rg or fd replacement.",
+      "category": "authoring",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/modern-search-guard.sh"
+      }
+    },
     "resource-safe-search-guard": {
       "kind": "hook",
       "title": "Bounded filesystem search guard",
@@ -931,6 +941,20 @@
           "type": "skill",
           "targets": [
             "shared"
+          ]
+        }
+      ]
+    },
+    "modern-search-guard": {
+      "supports": [
+        "resource-safe-search"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "codex",
+            "claude"
           ]
         }
       ]
