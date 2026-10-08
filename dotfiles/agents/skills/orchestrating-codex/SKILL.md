@@ -24,7 +24,7 @@ or takes Tom's focus.
    Extra arguments go to `codex`, such as `-m gpt-6-astra`.
 3. `codex-lead goal "Drive every item in <brief> (Order 1-N) until each is
    closed on GitHub or has a named blocker with evidence and an owner"`.
-4. Arm a Monitor on the peer file: `tail -n0 -F ~/.local/state/agents/handoffs/codex-lead-peer.md | grep --line-buffered '^PEER'`, 30-minute timeout, re-armed on expiry. Answer each PEER line with `codex-lead send` within minutes.
+4. Arm a Monitor on the peer file: `tail -n0 -F ~/.local/state/agents/handoffs/codex-lead-peer.md | grep -E --line-buffered '^(PEER|HANDOFF)'`, 30-minute timeout, re-armed on expiry. Answer a PEER line with a breakdown into smaller pieces and leads via `codex-lead send` within minutes; on a HANDOFF line, take the item over and staff it with Claude workers.
 5. Run the supervision loop until the queue is empty, then tell Tom.
 
 ## Commands
@@ -58,12 +58,14 @@ GitHub budget: 20 concurrent Actions jobs and 5,000 API calls an hour,
 Waiting: wait on farm runs and CI with one blocking command (`--wait`, or
   `gh run watch RUN --exit-status`), never a polling loop. Confirm the exact
   revision before dispatching a farm run.
-Peer channel: before spending more on an over-budget item, append one line
-  to ~/.local/state/agents/handoffs/codex-lead-peer.md:
-  PEER <HH:MM> <repo#N>: <spend vs ETA>; <evidence>; <proposed next step>
-  Triggers: a worker past 2x ETA; before any Astra xhigh escalation; a
-  second "Not done" on one box; an item past 15M tokens across its workers.
-  Keep working on other items while Claude answers.
+Escalation to Claude: when an item is clearly struggling (a worker past 2x
+  ETA, a failed high attempt about to go to Astra xhigh, or a second
+  "Not done" on one box), append one line to
+  ~/.local/state/agents/handoffs/codex-lead-peer.md:
+  PEER <HH:MM> <repo#N>: <tried, by tiers>; <how it fails>; <next idea>
+  Claude answers with a breakdown and leads; run the next attempt on it.
+  If that fails too, append HANDOFF <HH:MM> <repo#N>: <state, branch,
+  evidence> and stop staffing it: Claude takes it over.
 Queue, in order (start every item that doesn't depend on another now):
   1. <repo#N> <one line> - Done when: <check>
   2. ...
