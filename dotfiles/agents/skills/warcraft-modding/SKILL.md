@@ -201,8 +201,12 @@ over lockstep WebRTC peer to peer, with no server.
 Each client set (an offline pair, the signed-in A+B pair, clone-a) has one
 lane owner. It runs every pending native check in batches: one immutable
 build, one session, many pad scripts and captures (`pad SCRIPT|DIR...`,
-`accept --only ID...`). An issue's worker lands its fix, hands the native box
-to the lane and moves on; it never starts clients itself.
+`accept --only ID...`). An issue's worker lands its fix, labels the issue
+`needs:native-pair` (two clients) or `needs:native-single`, comments the map
+or script and rows to capture, and moves on; it never starts clients itself.
+The lane's queue is the open issues with its label, in either repository:
+when a batch ends, it takes the next ones and removes the label when it ticks
+the box or comments a failure.
 
 Engine tools (wisp:docs/engine.md, "Guardrails"): signed-in A/B allow only
 passive reads (`engine desync`, `engine poll`, `engine diff`, `engine locate`
