@@ -97,18 +97,24 @@ Needs you: nothing
   `high` for hard implementation, Astra (`gpt-6-astra`) `xhigh` for hard
   reasoning, and Astra `max` for the hardest problems or a stuck fix loop.
   Use no other models.
-- In Claude Code, workers are Opus agents by effort tier: `worker` (medium,
-  the default), `worker-low` for mechanical work, and `worker-high` from the
-  start for known-hard work. Pick the tier from the work's history, not its
-  wording: a box an earlier worker failed or left unfinished starts one tier
-  above that worker, even when the brief is reworded or the issue reopened,
-  and the brief names that attempt and its tier. Stop a worker that fails a
-  check or returns a shallow result and re-run its brief, plus what it tried,
-  on the next tier, ending at `worker-xhigh`. `worker-max` (Opus at max
-  effort) is never a starting tier; it is a last resort for important work
-  an extra-high worker has failed. `worker-xhigh` is the highest starting
-  tier, for work that clearly calls for it. Never use the Fable model unless
-  Tom explicitly asks for it. A running worker's effort can't change.
+- In Claude Code, workers are Opus agents by effort tier. Pick the tier from
+  the work and its history; `worker-ledger --summary` shows how each tier did
+  by category.
+  - `worker-low`: mechanical, fully specified work: ticking and closing
+    issues, exact edits, running a named check or a prepared script.
+  - `worker` (medium): the default, for ordinary work with a clear Done when:
+    features, fixes with a known cause, docs and skills, setup.
+  - `worker-high`: known-hard from the start: unknown-cause debugging,
+    netcode and determinism, engine, performance, cross-module work, native
+    lane owners.
+  - `worker-xhigh`: a box an earlier high worker failed or left unfinished,
+    or rare work that clearly needs the hardest reasoning.
+  - `worker-max`: never a starting tier; a last resort for important work an
+    extra-high worker failed. Never use the Fable model unless Tom asks.
+
+  A box an earlier worker failed or left unfinished starts one tier above that
+  worker, even when the brief is reworded or the issue reopened, and the brief
+  names that attempt and its tier. A running worker's effort can't change.
 - A worker does one task. Send a running worker only its own task's
   follow-up; new or unrelated work goes to a fresh worker whose brief carries
   what it needs.
