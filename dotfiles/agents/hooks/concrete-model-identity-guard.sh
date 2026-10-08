@@ -99,13 +99,17 @@ PLACEHOLDER = re.compile(
 )
 ADMITTED_MODEL_IDENTITIES = frozenset({
     "claude-fable-5",
+    "claude-fable-5-1",
+    "claude-haiku-5-5",
     "claude-opus-4-8",
     "claude-opus-5",
+    "claude-opus-5-5",
     "claude-sonnet-5",
     "gpt-5",
     "gpt-6-astra",
     "gpt-6-luna",
     "gpt-6-sol",
+    "gpt-6.1-sol",
     "gpt-5.6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-terra",

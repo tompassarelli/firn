@@ -121,7 +121,7 @@ done < <(printf '%s\n' inherited parent default auto ambient lineage)
 while IFS= read -r exact_model; do
   run_case allow "exact provider model $exact_model" \
     "$(payload Write "$TODO/task.md" "model = \"$exact_model\"")"
-done < <(printf '%s\n' gpt-6-astra gpt-6-sol gpt-6-luna gpt-5.6-terra claude-opus-5 claude-sonnet-5 claude-fable-5)
+done < <(printf '%s\n' gpt-6-astra gpt-6.1-sol gpt-6-sol gpt-6-luna gpt-5.6-terra claude-opus-5-5 claude-haiku-5-5 claude-fable-5-1 claude-opus-5 claude-sonnet-5 claude-fable-5)
 run_case allow 'historical exact model identity' \
   "$(payload Write "$TODO/task.md" 'model = "gpt-5"')"
 run_case deny 'assignment-ledger model column' \
