@@ -56,7 +56,9 @@ CREATE TABLE IF NOT EXISTS runs(
   peak_ctx INTEGER,
   outcome TEXT NOT NULL CHECK(outcome IN ('done','not done','escalated','handoff','unclear')),
   report TEXT NOT NULL DEFAULT '',
-  note TEXT
+  note TEXT,
+  repeats INTEGER,
+  landed INTEGER
 ) STRICT;
 CREATE TABLE IF NOT EXISTS gh_cache(
   repo TEXT PRIMARY KEY,
@@ -115,6 +117,10 @@ def connect() -> sqlite3.Connection:
             for stmt in SCHEMA.split(";"):
                 if stmt.strip():
                     db.execute(stmt)
+    columns = {r[1] for r in db.execute("PRAGMA table_info(runs)")}
+    for column in ("repeats", "landed"):
+        if column not in columns:
+            db.execute(f"ALTER TABLE runs ADD COLUMN {column} INTEGER")
     return db
 
 
@@ -433,11 +439,11 @@ def cmd_ingest(db, a):
             eta = r.get("eta_min")
             db.execute(
                 """INSERT INTO runs(agent, item, follows, session, tier, category, started, ended, minutes,
-                                    eta_min, tokens, peak_ctx, outcome, report, note)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                    eta_min, tokens, peak_ctx, outcome, report, note, repeats, landed)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (r["id"], item, follows, r.get("session"), r["tier"], category, r.get("started"), r["ended"],
                  r["actual_min"], None if eta is None else round(eta), r.get("tokens"), r.get("peak_ctx"),
-                 r["outcome"], r.get("report") or "", r.get("note")),
+                 r["outcome"], r.get("report") or "", r.get("note"), r.get("repeats"), r.get("landed")),
             )
             if prev and prev != r["id"]:
                 event(db, item, "handoff", r["id"], r["tier"], **{"from": prev, "to": r["id"]})
@@ -467,7 +473,8 @@ def cmd_summary(db, a):
     groups: dict = {}
     for r in rows:
         groups.setdefault((r["category"] if r["category"] in CATEGORIES else "unknown", r["tier"]), []).append(r)
-    out = [("category", "tier", "n", "done", "success", "eta_med", "actual_med", "x_eta_med", "over_2x_eta", "tokens_med")]
+    out = [("category", "tier", "n", "done", "success", "eta_med", "actual_med", "x_eta_med", "over_2x_eta", "tokens_med",
+            "repeat_runs", "no_landing")]
     for (cat, tier), rs in sorted(groups.items(), key=lambda kv: (kv[0][0], TIER_RANK.get(kv[0][1], 5))):
         done = sum(r["outcome"] == "done" for r in rs)
         timed = [r for r in rs if r["eta_min"]]
@@ -477,7 +484,9 @@ def cmd_summary(db, a):
                     str(median([r["eta_min"] for r in rs]) or "-"), str(median([r["minutes"] for r in rs])),
                     f"{ratio:.1f}" if ratio is not None else "-",
                     f"{sum(r['minutes'] > 2 * r['eta_min'] for r in timed)}/{len(timed)}",
-                    f"{tok // 1000}k" if tok is not None else "-"))
+                    f"{tok // 1000}k" if tok is not None else "-",
+                    str(sum(r["repeats"] or 0 for r in rs)),
+                    f"{sum(r['landed'] == 0 for r in rs)}/{sum(r['landed'] is not None for r in rs)}"))
     table(out)
     print()
     try:

@@ -33,6 +33,34 @@ done
 
 threads="$(dirname "$(readlink -f "$0")")/threads"
 
+# Per transcript: checks rerun after passing with no change between (repeats),
+# and whether any push landed (landed). Shared by the Claude and Codex readers.
+export LEDGER_CHECKS_PY='
+import json, re
+CHECK = re.compile(r"\b(test|tests|check|typecheck|farm|sweep|parity|perf|bench)\b")
+CHANGE = re.compile(r"\b(git commit|apply_patch|sed -i|safe-push|git push)\b")
+LAND = re.compile(r"\b(safe-push|git push)\b")
+def norm(cmd):
+    cmd = re.sub(r"^\s*cd\s+\S+\s*&&\s*", "", cmd)
+    cmd = re.sub(r"^\s*CASE=\w\s+FACT=(\"[^\"]*\"|\x27[^\x27]*\x27)\s*", "", cmd)
+    return " ".join(re.sub(r"\s--(wait|exit-status)\b|\s--out(=|\s+)\S+", "", cmd).split())
+def tally(steps):
+    """steps: (command, exit code or None, is_edit) in order."""
+    passed, repeats, landed = set(), 0, 0
+    for cmd, code, edit in steps:
+        if edit or CHANGE.search(cmd or ""):
+            passed.clear()
+        if not cmd:
+            continue
+        if LAND.search(cmd) and code == 0:
+            landed = 1
+        if CHECK.search(cmd) and code == 0:
+            key = norm(cmd)
+            repeats += key in passed
+            passed.add(key)
+    return {"repeats": repeats, "landed": landed}
+'
+
 if [ "$summary" -eq 1 ]; then
   exec "$threads" summary ${since:+--since "$since"}
 fi
@@ -96,6 +124,26 @@ while IFS= read -r f; do
       } end
   ' <"$f" 2>/dev/null)
   [ -n "$row" ] || continue
+  runs=$(python3 -c "$LEDGER_CHECKS_PY"'
+import sys
+calls, steps = {}, []
+for line in open(sys.argv[1]):
+    try:
+        r = json.loads(line)
+    except ValueError:
+        continue
+    content = (r.get("message") or {}).get("content")
+    if not isinstance(content, list):
+        continue
+    for c in content:
+        if c.get("type") == "tool_use":
+            cmd = (c.get("input") or {}).get("command") if c.get("name") == "Bash" else None
+            calls[c.get("id")] = len(steps)
+            steps.append([cmd, None, c.get("name") in ("Edit", "Write", "MultiEdit")])
+        elif c.get("type") == "tool_result" and c.get("tool_use_id") in calls:
+            steps[calls[c["tool_use_id"]]][1] = 1 if c.get("is_error") else 0
+print(json.dumps(tally(steps)))' "$f" 2>/dev/null) || runs='{}'
+  row=$(jq -c --argjson runs "${runs:-{\}}" '. + $runs' <<<"$row")
   rows+=$row$'\n'
 done < <(
   if [ -n "$session" ]; then
@@ -110,6 +158,7 @@ printf '%s' "$rows" | "$threads" ingest
 # prompts require the worker to repeat its brief fields in commentary.
 python3 - "$session" "$since" "$known" <<'PY' | "$threads" ingest
 import json, os, re, sqlite3, sys, time
+exec(os.environ["LEDGER_CHECKS_PY"])
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -175,6 +224,7 @@ def briefs(parent):
 for path in candidates:
     meta, model, effort, brief, report = None, None, None, "", ""
     ended, final, tokens, peak = None, False, 0, 0
+    steps, cells = [], {}
     for r in records(path):
         p, kind = r.get("payload", {}), r.get("type")
         if kind == "session_meta" and meta is None:
@@ -207,6 +257,21 @@ for path in candidates:
                     report = texts(p)
             elif p.get("type") in ("function_call", "custom_tool_call"):
                 final = False
+                args = str(p.get("arguments") or p.get("input") or "")
+                if p.get("name") == "apply_patch" or "*** Begin Patch" in args:
+                    steps.append(("", None, True))
+                cmds = []
+                for m in re.finditer(r'\bcmd"?\s*:\s*("(?:[^"\\]|\\.)*")', args):
+                    try:
+                        cmds.append(json.loads(m.group(1)))
+                    except ValueError:
+                        continue
+                cells[p.get("call_id")] = [len(steps) + i for i in range(len(cmds))]
+                steps.extend([c, None, False] for c in cmds)
+            elif p.get("type") in ("function_call_output", "custom_tool_call_output") and p.get("call_id") in cells:
+                codes = [int(c) for c in re.findall(r'exit_code\W+(-?\d+)', json.dumps(p.get("output")))]
+                for index, code in zip(cells.pop(p["call_id"]), codes):
+                    steps[index][1] = code
         elif kind == "event_msg":
             if p.get("type") in ("task_started", "user_message"):
                 final = False
@@ -234,6 +299,6 @@ for path in candidates:
                status="finished" if final else "running" if time.time() - stamp(ended) < 7200 else "stale",
                actual_min=max(0, int((stamp(ended) - stamp(meta["timestamp"])) / 60)),
                tokens=tokens, peak_ctx=peak, outcome=outcome, note=note[0] if note else None,
-               report=re.sub(r"\s+", " ", head)[:160])
+               report=re.sub(r"\s+", " ", head)[:160], **tally(steps))
     print(json.dumps(row))
 PY

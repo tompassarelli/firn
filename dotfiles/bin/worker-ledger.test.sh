@@ -25,6 +25,15 @@ def worker(name,brief='',finished=False):
 worker('finished',finished=True)
 worker('running','Item: wisp#70\nCategory: native-check\nETA: 20 minutes',finished=True)
 worker('untracked',finished=True)
+farm='text(await tools.exec_command({cmd:"bun wisp farm balance \\"wren 120\\" --wait",workdir:"/w"}))'
+rs=[row('session_meta',dict(id='repeater',timestamp='2026-10-08T00:00:00Z',source=dict(subagent=dict(thread_spawn=dict(parent_thread_id='parent',agent_path='/root/repeater'))))),
+    row('turn_context',dict(model='gpt-6.1-sol',effort='high')),
+    row('response_item',dict(type='message',role='assistant',phase='commentary',content=[dict(type='output_text',text='Item: smashcraft#250\nCategory: balance-tuning\nETA: 20 minutes')]))]
+for n in (1,2,3):
+    rs.append(row('response_item',dict(type='custom_tool_call',name='exec',call_id=f'c{n}',input=farm),n))
+    rs.append(row('response_item',dict(type='custom_tool_call_output',call_id=f'c{n}',output=[dict(type='input_text',text='{"exit_code":0,"output":"pass"}')]),n))
+rs.append(row('response_item',dict(type='message',role='assistant',phase='final',content=[dict(type='output_text',text='Done: measured.')]),5))
+write('repeater',rs)
 PY
 subagents=$CLAUDE_CONFIG_DIR/projects/-home-tom/session/subagents
 mkdir -p "$subagents"
@@ -40,11 +49,15 @@ import sqlite3,sys
 c=sqlite3.connect(sys.argv[1])
 r=c.execute("select agent,item,follows,tier,category,minutes,eta_min,tokens,peak_ctx,outcome from runs where agent!='haiku1'").fetchall()
 want=[('finished','firn#5','prior','gpt-6.1-sol medium','tooling',5,10,321,900,'done'),
-      ('running','wisp#70',None,'gpt-6.1-sol medium','native-check',5,20,321,900,'done')]
+      ('running','wisp#70',None,'gpt-6.1-sol medium','native-check',5,20,321,900,'done'),
+      ('repeater','smashcraft#250',None,'gpt-6.1-sol high','balance-tuning',5,20,0,0,'done')]
 assert r==want,(r,want)
 h=c.execute("select tier,category,minutes from runs where agent='haiku1'").fetchone()
 assert h==('haiku','mechanical',4),h
 print('PASS a Claude worker running a Haiku model is recorded as tier haiku')
+rep=c.execute("select repeats,landed from runs where agent='repeater'").fetchone()
+assert rep==(2,0),rep
+print('PASS a Codex worker that reran a passing farm check twice and pushed nothing counts 2 repeats, no landing')
 assert c.execute('select count(*) from claims').fetchone()[0]==0,'finished workers must release holds'
 print('PASS [spec #5] Codex plaintext spawn brief records fields, model/effort, timing and tokens exactly once')
 PY
@@ -58,4 +71,6 @@ chmod +x "$scratch/bin/gh"
 out=$(PATH="$scratch/bin:$PATH" "$repo/dotfiles/bin/worker-ledger" --summary)
 [[ "$out" =~ tooling[[:space:]]+gpt-6.1-sol[[:space:]]+medium[[:space:]]+1[[:space:]]+1 ]]
 [[ "$out" =~ native-check[[:space:]]+gpt-6.1-sol[[:space:]]+medium[[:space:]]+1[[:space:]]+1 ]]
+[[ "$out" =~ repeat_runs[[:space:]]+no_landing ]]
+[[ "$out" =~ balance-tuning[[:space:]]+gpt-6.1-sol[[:space:]]+high[[:space:]].*[[:space:]]2[[:space:]]+1/1 ]]
 printf '%s\n' 'PASS [spec #5] encrypted brief repeated in commentary counts once by category and model/effort in summary'
