@@ -33,7 +33,7 @@ jq -e '
   [
     .hooks[] | .[] | .hooks[] | select(.type == "command") | .command
   ] as $commands
-  | ($commands | length == 8)
+  | ($commands | length == 9)
     and ($commands | all(
       contains("NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3")
       and contains("PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin")
@@ -53,6 +53,7 @@ for unit in \
   corpus-scan-guard \
   firn-system-policy \
   git-blind-stage-guard \
+  git-stash-guard \
   launch-critical-worktree-guard \
   session-kill-guard \
   tripwire-guard; do

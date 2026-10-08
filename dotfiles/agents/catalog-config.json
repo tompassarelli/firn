@@ -231,6 +231,16 @@
         "path": "native/system_policy_native.bjs"
       }
     },
+    "git-stash-guard": {
+      "kind": "hook",
+      "title": "Shared Git stash guard",
+      "triggerDescription": "Reject unnamed stash pushes and stash pop; the stash is shared by every worktree.",
+      "category": "authoring",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/git-stash-guard.sh"
+      }
+    },
     "git-blind-stage-guard": {
       "kind": "hook",
       "title": "Explicit Git staging guard",
@@ -736,6 +746,20 @@
       ]
     },
     "git-blind-stage-guard": {
+      "supports": [
+        "repo-safety"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "codex",
+            "claude"
+          ]
+        }
+      ]
+    },
+    "git-stash-guard": {
       "supports": [
         "repo-safety"
       ],
