@@ -30,7 +30,7 @@ Desktop protection comes from CPU weight, not refusal. Batch jobs join
 `native.slice` (weight 200); the compositor's `session.slice` keeps 300. The
 attended profile caps the batch slice at all cores but four and keeps 20% of
 RAM available; the unattended profile lifts the cap and keeps only 8 GiB
-available. System-wide CPU PSI is not an admission signal: on 2026-10-07 it
+available. System-wide CPU PSI does not measure desktop harm: on 2026-10-07 it
 held 25-40% for hours while the session slice measured 0%, because the batch
 slice's own quota throttling (Warcraft clients in 2-CPU `moderate` scopes were
 throttled in about 65% of periods) is counted as CPU pressure. Attended batch
@@ -40,9 +40,18 @@ extra admitted batch spinners) the session slice measured 6.5% (mostly
 PipeWire, niri 2%) while 5 ms sleeps in the session, app and native slices
 woke with p99 2.1-2.7 ms and max under 4 ms; the batch slice absorbed the
 delay (p99 47 ms). Ten percent therefore fires only when the protected slices
-lose CPU beyond what saturation by low-weight work causes. The sum of per-job
-CPU ceilings may exceed the cap:
-sleeping or serial jobs do not consume their ceilings continuously. Agent reservations
+lose CPU beyond what saturation by low-weight work causes.
+
+Oversubscription is a separate harm: on 2026-10-08 greedy unattended admission
+let load reach 122 on 24 cores (system CPU some avg10 84%) and every job ran
+about five times slower. In every profile a moderate or heavy run therefore
+waits in an arrival-order queue (`queue/` tickets, dropped when the wrapper
+dies) while its ceiling would push leased batch ceilings past the cap, or while
+system CPU some avg10 is above 30%. Sampled the same day with other agents
+busy, avg10 averaged 24-26% with load at or below the 24 cores, 31% at load
+30-36 and 47-52% above 36, so 30% holds work once runnable tasks pass the
+cores. Exclusive and native requests skip both checks and keep their rules.
+Agent reservations
 retain their 768 MiB memory budget without charging remote inference as local
 CPU work. Admission reports CPU pressure separately from CPU ceilings and the
 aggregate limit; a reserved ceiling is not a utilization measurement.

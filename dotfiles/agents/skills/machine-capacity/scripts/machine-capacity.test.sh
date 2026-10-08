@@ -11,6 +11,10 @@ cleanup() {
 }
 trap cleanup EXIT
 user_runtime_dir=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+# Live runs read recorded system CPU pressure, so other machine load cannot hold them.
+export AGENT_CAPACITY_CPU_PRESSURE="$scratch/cpu.pressure"
+calm_pressure() { printf 'some avg10=%s avg60=0.00 avg300=0.00 total=0\n' "$1" >"$AGENT_CAPACITY_CPU_PRESSURE"; }
+calm_pressure 0.00
 
 "$here/build-machine-capacity" "$scratch/machine-capacity.mjs"
 cmp -- "$here/machine-capacity.mjs" "$scratch/machine-capacity.mjs"
@@ -38,8 +42,9 @@ decision() { fixture "$@" | jq -r '.decision' || true; }
 [[ $(decision attended heavy 70000 1000 394 0 0) == DEFER_INTERACTIVE_PRESSURE ]]
 [[ $(decision attended heavy 70000 999 394 0 0) == RUN ]]
 [[ $(decision unattended heavy 70000 10000 394 0 0) == RUN ]]
-# Today's fleet: 70 GiB available, 32 GiB leased, system PSI 33% but session 0%.
-[[ $(decision attended moderate 70109 0 0 26 32768 --peer-batch-runs 7) == RUN ]]
+# Batch ceilings past the aggregate limit queue new batch work in every profile.
+[[ $(decision attended moderate 70109 0 0 26 32768 --peer-batch-runs 7) == DEFER_CPU_CAPACITY ]]
+[[ $(decision attended moderate 70109 0 0 18 32768 --peer-batch-runs 7) == RUN ]]
 # Memory floor: 20% of RAM present, the hard 8 GiB floor away.
 [[ $(decision attended heavy 21000 0 394 0 0) == DEFER_MEMORY_HEADROOM ]]
 [[ $(decision unattended heavy 21000 0 394 0 0) == RUN ]]
@@ -74,8 +79,19 @@ if fixture unattended heavy 40000 0 0 0 0 --memory-gib 1.5 >/dev/null 2>&1; then
   exit 1
 fi
 
-# Peer ceilings do not refuse batch work; only exclusive and unbounded peers do.
-[[ $(decision attended heavy 80000 0 0 18 21504 --peer-batch-runs 3) == RUN ]]
+# Peer ceilings hold batch work at the aggregate limit: 20 cores present, 24 away.
+[[ $(decision attended heavy 80000 0 0 18 21504 --peer-batch-runs 3) == DEFER_CPU_CAPACITY ]]
+[[ $(decision attended heavy 80000 0 0 14 21504 --peer-batch-runs 3) == RUN ]]
+[[ $(decision unattended heavy 80000 0 0 18 21504 --peer-batch-runs 3) == RUN ]]
+[[ $(decision unattended heavy 80000 0 0 20 21504 --peer-batch-runs 4) == DEFER_CPU_CAPACITY ]]
+# System CPU pressure above 30% holds moderate and heavy work, present or away.
+[[ $(decision unattended heavy 80000 0 0 0 0 --cpu-some-avg10-basis-points 3001) == DEFER_CPU_PRESSURE ]]
+[[ $(decision unattended heavy 80000 0 0 0 0 --cpu-some-avg10-basis-points 3000) == RUN ]]
+[[ $(decision attended moderate 80000 0 0 0 0 --cpu-some-avg10-basis-points 8400) == DEFER_CPU_PRESSURE ]]
+[[ $(decision unattended exclusive 80000 0 0 0 0 --cpu-some-avg10-basis-points 8400) == RUN ]]
+[[ $(decision unattended native 80000 0 0 0 0 --cpu-some-avg10-basis-points 8400) == RUN ]]
+[[ $(decision unattended heavy 80000 0 0 0 0 --queued-ahead 1) == DEFER_QUEUED ]]
+[[ $(decision unattended native 80000 0 0 0 0 --queued-ahead 1) == RUN ]]
 [[ $(decision attended exclusive 80000 0 0 4 3072) == RUN ]]
 [[ $(decision attended exclusive 80000 0 0 2 2048 --peer-batch-runs 1) == DEFER_EXCLUSIVE ]]
 [[ $(decision unattended moderate 80000 0 0 18 16384 --peer-batch-runs 1 --peer-exclusive-runs 1) == DEFER_EXCLUSIVE ]]
@@ -127,17 +143,22 @@ read -r sleeper_pid <"$sleeper_pid_file"
 [[ $sleeper_pid =~ ^[1-9][0-9]*$ ]]
 ! kill -0 "$sleeper_pid" 2>/dev/null
 
-# Four sleeping jobs request 24 CPU ceilings on this 24-core fixture host.
-# Their kernel ancestor, not those ceilings, enforces the shared cap, which
-# keeps four cores for the desktop in the fixture's attended profile.
+# Four heavy jobs request 24 CPU ceilings on this 24-core host. The attended
+# fixture admits three (18 of 20 cores) and queues the fourth; the kernel
+# ancestor enforces the shared cap, which keeps four cores for the desktop.
 for number in 1 2 3 4; do
   XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" run \
     --class heavy --owner fixture:/capacity --timeout-seconds 30 \
     -- bash -c 'IFS=: read -r _ _ group < /proc/self/cgroup; printf "%s\n" "$group" >"$1"; sleep 60 & wait' \
     fixture-scope "$scratch/group-$number" >"$scratch/out-$number" 2>"$scratch/err-$number" &
   fixture_pids+=("$!")
+  for attempt in {1..100}; do
+    [[ $number -eq 4 || -s "$scratch/group-$number" ]] && break
+    sleep 0.05
+  done
 done
-for number in 1 2 3 4; do
+sleep 2.5
+for number in 1 2 3; do
   for attempt in {1..100}; do
     [[ -s "$scratch/group-$number" ]] && break
     sleep 0.05
@@ -154,12 +175,22 @@ for number in 1 2 3 4; do
   [[ $((quota / period)) -eq 6 ]]
   [[ $(cat "/sys/fs/cgroup$group/memory.high") -eq $((8192 * 1024 * 1024)) ]]
 done
+[[ ! -s "$scratch/group-4" ]]
+[[ $(head -n 1 "$scratch/err-4" | jq -r '.decision + " " + .reason') == 'QUEUED DEFER_CPU_CAPACITY' ]]
 probe=$(XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" probe --class exclusive || true)
 [[ $(jq -r '.reason' <<<"$probe") == DEFER_EXCLUSIVE ]]
-[[ $(jq -r '.leasedCpuCeilings' <<<"$probe") -eq 24 ]]
+[[ $(jq -r '.leasedCpuCeilings' <<<"$probe") -eq 18 ]]
+[[ $(jq -r '.queuedAhead' <<<"$probe") -eq 1 ]]
 [[ $(jq -r '.aggregateCpuLimit' <<<"$probe") -eq 20 ]]
 [[ $(jq -r '.profile' <<<"$probe") == attended ]]
-for pid in "${fixture_pids[@]}"; do kill -TERM "$pid"; done
+# Releasing one job starts the queued one.
+kill -TERM "${fixture_pids[0]}"
+for attempt in {1..100}; do
+  [[ -s "$scratch/group-4" ]] && break
+  sleep 0.05
+done
+[[ -s "$scratch/group-4" ]]
+for pid in "${fixture_pids[@]}"; do kill -TERM "$pid" 2>/dev/null || true; done
 for pid in "${fixture_pids[@]}"; do wait "$pid" || true; done
 fixture_pids=()
 for number in 1 2 3 4; do
@@ -191,6 +222,39 @@ fixture_pids=()
 [[ $(tail -n 1 "$scratch/exclusive-err" | jq -r '.decision') == RELEASED ]]
 XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" release \
   --lease "$lease" --owner fixture:/capacity
+
+# Pressure holds a run in the queue until it eases; leaving the queue drops the ticket.
+calm_pressure 90.00
+XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" run \
+  --class moderate --owner fixture:/capacity --timeout-seconds 30 \
+  -- bash -c 'printf ready >"$1"; sleep 60 & wait' fixture-held "$scratch/held-ready" \
+  >"$scratch/held-out" 2>"$scratch/held-err" &
+fixture_pids+=("$!")
+sleep 2.5
+[[ ! -s "$scratch/held-ready" ]]
+[[ $(head -n 1 "$scratch/held-err" | jq -r '.decision') == QUEUED ]]
+[[ $(XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" probe --class agent | jq -r '.queuedAhead') -eq 1 ]]
+calm_pressure 0.00
+for attempt in {1..100}; do
+  [[ -s "$scratch/held-ready" ]] && break
+  sleep 0.05
+done
+[[ -s "$scratch/held-ready" ]]
+kill -TERM "${fixture_pids[0]}"
+wait "${fixture_pids[0]}" || true
+fixture_pids=()
+[[ $(tail -n 1 "$scratch/held-err" | jq -r '.decision') == RELEASED ]]
+calm_pressure 90.00
+XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" run \
+  --class heavy --owner fixture:/capacity --timeout-seconds 30 -- true 2>/dev/null &
+fixture_pids+=("$!")
+sleep 1
+[[ $(ls "$fixture_runtime/agent-capacity-v1/queue" | wc -l) -eq 1 ]]
+kill -TERM "${fixture_pids[0]}"
+wait "${fixture_pids[0]}" || true
+fixture_pids=()
+[[ $(ls "$fixture_runtime/agent-capacity-v1/queue" | wc -l) -eq 0 ]]
+calm_pressure 0.00
 
 # A foreground session has no deadline, but keeps its allowance until its
 # scope and descendants stop. Probing must not reclaim its null expiry.

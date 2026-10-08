@@ -37,9 +37,14 @@ export batch-class(?kind: Text): Bool
   ?kind = "moderate" or ?kind = "heavy" or ?kind = "exclusive"
 
 # Batch work runs at low CPU weight and only takes cycles the desktop and native
-# clients leave idle, so it is refused only when a protected slice itself waits.
-# Native clients run at high weight and are admitted on cores and memory.
-export admission-decision(?profile: Text, ?kind: Text, ?cores: F64, ?memory-total-mib: F64, ?memory-available-mib: F64, ?protected-cpu-some-avg10-basis-points: F64, ?leased-memory-mib: F64, ?leased-native-cpus: F64, ?requested-cpus: F64, ?requested-memory-mib: F64, ?peer-batch-runs: F64, ?peer-exclusive-runs: F64, ?unbounded-runs: F64): Text
+# clients leave idle. Present, it also yields while a protected slice itself
+# waits. In every profile moderate and heavy work waits its turn while declared
+# batch ceilings would pass the aggregate limit or system CPU pressure shows the
+# cores already oversubscribed. Native clients are admitted on cores and memory.
+export batch-pressure-limit-basis-points(): F64
+  3000
+
+export admission-decision(?profile: Text, ?kind: Text, ?cores: F64, ?memory-total-mib: F64, ?memory-available-mib: F64, ?cpu-some-avg10-basis-points: F64, ?protected-cpu-some-avg10-basis-points: F64, ?leased-memory-mib: F64, ?leased-batch-cpus: F64, ?leased-native-cpus: F64, ?requested-cpus: F64, ?requested-memory-mib: F64, ?peer-batch-runs: F64, ?peer-exclusive-runs: F64, ?unbounded-runs: F64, ?queued-ahead: F64): Text
   require(?profile = "attended" or ?profile = "unattended", if(?cores <= 0 or ?memory-total-mib <= 0 or ?memory-available-mib <= 0 or ?requested-cpus < 0 or ?requested-memory-mib <= 0, "INVALID",
     if(?memory-available-mib - ?requested-memory-mib < memory-floor-mib(?profile, ?memory-total-mib), "DEFER_MEMORY_HEADROOM",
       if((?leased-memory-mib + ?requested-memory-mib) * 4 > ?memory-total-mib * 3, "DEFER_MEMORY_CAPACITY",
@@ -48,4 +53,8 @@ export admission-decision(?profile: Text, ?kind: Text, ?cores: F64, ?memory-tota
             if(?leased-native-cpus + ?requested-cpus > aggregate-cpus(?profile, ?cores), "DEFER_NATIVE_CPUS", "RUN"),
             if(?profile = "attended" and ?protected-cpu-some-avg10-basis-points >= 1000, "DEFER_INTERACTIVE_PRESSURE",
               if(?unbounded-runs > 0, "DEFER_UNBOUNDED_PEER",
-                if(?peer-exclusive-runs > 0 or (?kind = "exclusive" and ?peer-batch-runs > 0), "DEFER_EXCLUSIVE", "RUN")))))))), "Unknown capacity profile")
+                if(?peer-exclusive-runs > 0 or (?kind = "exclusive" and ?peer-batch-runs > 0), "DEFER_EXCLUSIVE",
+                  if(?queued-ahead > 0, "DEFER_QUEUED",
+                    if(?kind = "exclusive", "RUN",
+                      if(?leased-batch-cpus + ?requested-cpus > aggregate-cpus(?profile, ?cores), "DEFER_CPU_CAPACITY",
+                        if(?cpu-some-avg10-basis-points > batch-pressure-limit-basis-points(), "DEFER_CPU_PRESSURE", "RUN")))))))))))), "Unknown capacity profile")

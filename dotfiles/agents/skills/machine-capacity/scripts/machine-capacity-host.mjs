@@ -31,6 +31,7 @@ const presenceUnit = 'agent-capacity-presence.service';
 const maximumTimeoutSeconds = 3600;
 const lockStaleMilliseconds = 2000;
 const runLeaseGraceMilliseconds = 5000;
+const queuePollMilliseconds = 1000;
 
 function fail(message, status = 2) {
   process.stderr.write(`machine-capacity: ${message}\n`);
@@ -113,7 +114,7 @@ function userManagerCgroup() {
 }
 
 function slicePressure(slice) {
-  const path = join(userManagerCgroup(), slice, 'cpu.pressure');
+  const path = process.env.AGENT_CAPACITY_CPU_PRESSURE ?? join(userManagerCgroup(), slice, 'cpu.pressure');
   return existsSync(path) ? parsePsi(path, 'some') : 0;
 }
 
@@ -130,7 +131,8 @@ function readSignals() {
     cores: cpus().length,
     memoryTotalMiB: fields.get('MemTotal'),
     memoryAvailableMiB: fields.get('MemAvailable'),
-    cpuSomeAvg10BasisPoints: parsePsi('/proc/pressure/cpu', 'some'),
+    // Tests record one pressure file for every reading so other load cannot hold them.
+    cpuSomeAvg10BasisPoints: parsePsi(process.env.AGENT_CAPACITY_CPU_PRESSURE ?? '/proc/pressure/cpu', 'some'),
     protectedCpuSomeAvg10BasisPoints: Math.max(slicePressure('session.slice'), slicePressure(nativeSlice)),
     memoryFullAvg10BasisPoints: parsePsi('/proc/pressure/memory', 'full'),
   };
@@ -260,12 +262,14 @@ function ensurePresenceWatcher() {
 
 function ensureState(root) {
   mkdirSync(join(root, 'leases'), { recursive: true, mode: 0o700 });
+  mkdirSync(join(root, 'queue'), { recursive: true, mode: 0o700 });
 }
 
 function withLock(root, action) {
   ensureState(root);
   const lock = join(root, 'lock');
-  for (let attempt = 0; attempt < 12; attempt += 1) {
+  // Queued wrappers poll the lock, so allow for many short peer holds.
+  for (let attempt = 0; attempt < 400; attempt += 1) {
     try {
       mkdirSync(lock, { mode: 0o700 });
       try {
@@ -339,19 +343,61 @@ function readLeases(root, now) {
 function totals(leases) {
   return leases.reduce((sum, lease) => ({
     cpus: sum.cpus + (lease.kind === 'run' ? lease.cpus : 0),
+    batchCpus: sum.batchCpus + (lease.kind === 'run' && batchClass(lease.class) ? lease.cpus : 0),
     nativeCpus: sum.nativeCpus + (lease.kind === 'run' && lease.class === 'native' ? lease.cpus : 0),
     memoryMiB: sum.memoryMiB + lease.memoryMiB,
-  }), { cpus: 0, nativeCpus: 0, memoryMiB: 0 });
+  }), { cpus: 0, batchCpus: 0, nativeCpus: 0, memoryMiB: 0 });
+}
+
+// Held batch wrappers wait in arrival order; a ticket whose wrapper died is dropped.
+function enqueue(root) {
+  ensureState(root);
+  const name = `${String(Date.now()).padStart(15, '0')}-${crypto.randomUUID()}.json`;
+  writeFileSync(join(root, 'queue', name), `${JSON.stringify({
+    wrapperPid: process.pid, wrapperStart: processStart(process.pid),
+  })}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+  return name;
+}
+
+function dequeue(root, ticket) {
+  try {
+    unlinkSync(join(root, 'queue', ticket));
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+}
+
+function readQueue(root) {
+  const directory = join(root, 'queue');
+  const waiting = [];
+  for (const name of readdirSync(directory).sort()) {
+    if (!name.endsWith('.json')) continue;
+    let ticket;
+    try {
+      ticket = JSON.parse(readFileSync(join(directory, name), 'utf8'));
+    } catch {
+      dequeue(root, name);
+      continue;
+    }
+    if (processStart(ticket.wrapperPid) !== ticket.wrapperStart) {
+      dequeue(root, name);
+      continue;
+    }
+    waiting.push(name);
+  }
+  return waiting;
 }
 
 function leaseSlice(className) {
   return className === 'native' ? nativeSlice : aggregateSlice;
 }
 
-function decision(root, requested, create) {
+function decision(root, requested, create, ticket = null) {
   return withLock(root, () => {
     const now = Date.now();
     const { active, reclaimed } = readLeases(root, now);
+    const queue = readQueue(root);
+    const queuedAhead = ticket === null ? queue.length : queue.filter(name => name < ticket).length;
     const leased = totals(active);
     const runs = active.filter(lease => lease.kind === 'run');
     const signals = readSignals();
@@ -362,14 +408,17 @@ function decision(root, requested, create) {
       signals.cores,
       signals.memoryTotalMiB,
       signals.memoryAvailableMiB,
+      signals.cpuSomeAvg10BasisPoints,
       signals.protectedCpuSomeAvg10BasisPoints,
       leased.memoryMiB,
+      leased.batchCpus,
       leased.nativeCpus,
       requested.cpus,
       requested.memoryMiB,
       runs.filter(lease => batchClass(lease.class)).length,
       runs.filter(lease => lease.class === 'exclusive').length,
       runs.filter(lease => lease.aggregateSlice !== leaseSlice(lease.class)).length,
+      queuedAhead,
     );
     const result = {
       decision: code === 'RUN' ? (create ? 'RESERVED' : 'RUN') : 'DEFER',
@@ -381,7 +430,9 @@ function decision(root, requested, create) {
       requestedCpus: requested.cpus,
       requestedMemoryMiB: requested.memoryMiB,
       leasedCpuCeilings: leased.cpus,
+      leasedBatchCpus: leased.batchCpus,
       aggregateCpuLimit: aggregateCpus(profile, signals.cores),
+      queuedAhead,
       leasedNativeCpus: leased.nativeCpus,
       leasedMemoryMiB: leased.memoryMiB,
       protectedCpuSomeAvg10: signals.protectedCpuSomeAvg10BasisPoints / 100,
@@ -391,6 +442,7 @@ function decision(root, requested, create) {
       reclaimed,
     };
     if (code !== 'RUN' || !create) return result;
+    if (ticket !== null) dequeue(root, ticket);
     const id = crypto.randomUUID();
     const lease = {
       schema: 'agent-capacity-lease/v1',
@@ -456,6 +508,34 @@ function parseOwner(values) {
   return owner;
 }
 
+// Batch work is held in arrival order until admitted, never refused; native
+// clients keep their immediate DEFER answer.
+async function admit(root, requested, create) {
+  if (!batchClass(requested.name)) return decision(root, requested, create);
+  const ticket = enqueue(root);
+  const leave = signal => () => {
+    dequeue(root, ticket);
+    process.exit(128 + ({ SIGHUP: 1, SIGINT: 2, SIGTERM: 15 })[signal]);
+  };
+  const handlers = ['SIGINT', 'SIGTERM', 'SIGHUP'].map(signal => [signal, leave(signal)]);
+  for (const [signal, handler] of handlers) process.on(signal, handler);
+  try {
+    let reported = null;
+    for (;;) {
+      const result = decision(root, requested, create, ticket);
+      if (result.decision === 'RESERVED') return result;
+      if (result.reason !== reported) {
+        print({ ...result, decision: 'QUEUED' }, process.stderr);
+        reported = result.reason;
+      }
+      await Bun.sleep(queuePollMilliseconds + Math.random() * queuePollMilliseconds);
+    }
+  } finally {
+    dequeue(root, ticket);
+    for (const [signal, handler] of handlers) process.removeListener(signal, handler);
+  }
+}
+
 async function runScoped(root, requested, owner, timeoutSeconds, command) {
   if (requested.name === 'agent') fail('run --class must be moderate, heavy, or exclusive');
   // The parent limit and weights must exist before any admitted command executes.
@@ -463,7 +543,7 @@ async function runScoped(root, requested, owner, timeoutSeconds, command) {
     fail('cannot establish aggregate CPU limit and native weight', 75);
   }
   const native = requested.name === 'native';
-  const admitted = decision(root, requested, { kind: 'run', owner, timeoutSeconds });
+  const admitted = await admit(root, requested, { kind: 'run', owner, timeoutSeconds });
   print(admitted, process.stderr);
   if (admitted.decision !== 'RESERVED') return 75;
   const unit = scopeUnit(admitted.lease);
@@ -510,7 +590,7 @@ async function main(argv) {
       '--protected-cpu-some-avg10-basis-points', '--memory-full-avg10-basis-points',
       '--leased-cpus', '--leased-native-cpus', '--leased-memory-mib',
       '--peer-batch-runs', '--peer-exclusive-runs', '--unbounded-runs',
-      '--memory-gib',
+      '--memory-gib', '--cpu-some-avg10-basis-points', '--queued-ahead',
     ]));
     if (parsed.separator !== argv.length) fail('fixture accepts no command');
     const cores = parsePositiveInteger(required(parsed.values, '--cores'), '--cores');
@@ -529,14 +609,17 @@ async function main(argv) {
       cores,
       parsePositiveInteger(required(parsed.values, '--memory-total-mib'), '--memory-total-mib'),
       parsePositiveInteger(required(parsed.values, '--memory-available-mib'), '--memory-available-mib'),
+      parseNonnegativeInteger(parsed.values.get('--cpu-some-avg10-basis-points') ?? '0', '--cpu-some-avg10-basis-points'),
       parseNonnegativeInteger(required(parsed.values, '--protected-cpu-some-avg10-basis-points'), '--protected-cpu-some-avg10-basis-points'),
       parseNonnegativeInteger(required(parsed.values, '--leased-memory-mib'), '--leased-memory-mib'),
+      leasedCpuCeilings,
       parseNonnegativeInteger(parsed.values.get('--leased-native-cpus') ?? '0', '--leased-native-cpus'),
       requested.cpus,
       requested.memoryMiB,
       parseNonnegativeInteger(parsed.values.get('--peer-batch-runs') ?? '0', '--peer-batch-runs'),
       parseNonnegativeInteger(parsed.values.get('--peer-exclusive-runs') ?? '0', '--peer-exclusive-runs'),
       parseNonnegativeInteger(parsed.values.get('--unbounded-runs') ?? '0', '--unbounded-runs'),
+      parseNonnegativeInteger(parsed.values.get('--queued-ahead') ?? '0', '--queued-ahead'),
     );
     print({ decision: code, profile, class: requested.name, cpus: requested.cpus, memoryMiB: requested.memoryMiB, memoryFullAvg10,
       leasedCpuCeilings, aggregateCpuLimit: aggregateCpus(profile, cores) });

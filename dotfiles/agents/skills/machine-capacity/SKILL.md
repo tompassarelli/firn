@@ -45,7 +45,7 @@ CPU weights order contention: `session.slice` (compositor) 300 > `native.slice`
 profiles set admission. **attended** (Tom present): batch shares cores minus a
 4-core reserve and is refused only while the session or native slice itself
 waits for CPU (PSI some avg10 at least 10%); it keeps 20% of RAM available.
-**unattended** (Tom away): greedy, every core, no CPU refusal, only an 8 GiB
+**unattended** (Tom away): every core, no protected-slice refusal, only an 8 GiB
 available-memory floor against swap and OOM. Both cap leased memory at 75% of
 RAM. In `auto` mode a presence watcher (`agent-capacity-presence.service`,
 started by any helper call) reads keyboard, pointer and pad input, excluding
@@ -54,19 +54,22 @@ and attended within a second of input. `bun "$capacity" mode away|present|auto`
 overrides it (no argument prints the active profile); the override lasts until
 reboot. `probe` reports `profile` and
 `mode`. The wrapper admits atomically and contains every descendant in one user
-cgroup. Per-job batch CPU allowances are ceilings, not reservations. Exclusive
+cgroup. Exclusive
 runs wait for peer batch jobs and block new batch jobs until release; native
 clients are never blocked by batch work.
+**Every profile queues moderate and heavy runs in arrival order while declared
+batch CPUs would pass the core limit or system CPU some avg10 exceeds 30%.**
 Do not detach work outside the scope. One owner retains the terminal
 `RELEASED` result and cleans up the exact scope.
 
-`RUN`/`RESERVED` continues; `DEFER` queues heavy work while useful light work
-continues. Retry after a known release or at least 30 seconds, never busy-poll.
+`RUN`/`RESERVED` continues. A queued batch wrapper prints `QUEUED` and starts by
+itself when room frees; keep it supervised. `DEFER` from `probe`, `reserve` or a
+native client means retry after a known release or 30 seconds, never busy-poll.
 `RECLAIMED` concerns expired agent leases or finished helper-owned scopes, not
 permission to kill peers. Run allowances remain charged while their wrapper or
 scope is live, including throughout an interactive session without a deadline.
-System-wide CPU and memory PSI are diagnostic only: batch work at low weight
-and per-job quota throttling raise them without hurting the desktop.
+Memory PSI is diagnostic only. System CPU PSI paces batch admission but does not
+measure desktop harm; the protected-slice reading does.
 
 Before a parallel worker expected to consume local compute, reserve its
 `agent` lease (768 MiB, no local CPU reservation); renew before expiry and
