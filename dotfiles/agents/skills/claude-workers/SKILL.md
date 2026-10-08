@@ -1,7 +1,7 @@
 ---
 name: claude-workers
 agents: [claude]
-description: Claude Code worker tiers (Haiku 5.5, Opus 5.5), their escalation ladder, Anthropic's priors, and running workers from a Claude session. Use with staffing whenever a Claude session starts workers.
+description: Claude Code worker tiers (Haiku 5.5, Opus 5.5), their escalation ladder, Anthropic's priors, where work can run (this machine, GitHub Actions, Anthropic's cloud), and running workers from a Claude session. Use with staffing whenever a Claude session starts workers, or when going faster or short of local capacity.
 ---
 
 # Claude Code workers
@@ -42,6 +42,19 @@ set a category's start only until the ledger has five closed issues for it.
   and $0.50 against $4 and $20 per million input and output tokens). Its
   prompts over 100k tokens cost five times as much, still an eighth of Opus,
   so reading a large log for one answer stays a haiku task.
+
+## Where work runs
+
+Pick the place by what the task needs, and check all three when going faster
+or when the machine is the bottleneck:
+
+- This machine: anything that needs local files, Warcraft clients or Tom's
+  install. Sustained multi-core work goes through `machine-capacity`.
+- GitHub Actions: farm suites and sweeps; 20 jobs and 5,000 API calls an hour
+  shared by every agent (`github-actions`).
+- Anthropic's cloud: code-only work in the public smashcraft and wisp repos,
+  4 cores per run, landing itself through Autoland (`cloud-workers`). Each
+  branch also costs Actions jobs.
 
 ## Running them
 
