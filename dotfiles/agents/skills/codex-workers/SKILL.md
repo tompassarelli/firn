@@ -19,3 +19,5 @@ Never low; never max. Ladder: medium, high, Astra xhigh, then one
 recommendation to Tom. No published chart or price ratio here covers SOL 6.1
 against Astra, so compare tokens within one model and let the ledger move a
 category's start.
+
+Close a worker as soon as its final report (Done:, Not done: or Blocked:) arrives; keep only workers that are running or waiting on one blocking command.
