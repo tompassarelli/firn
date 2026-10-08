@@ -21,7 +21,7 @@ or takes Tom's focus.
    the thread id. It saves the id, so later calls need no argument. To
    supervise an existing lead, set `CODEX_LEAD_THREAD=<id>`; `codex-lead id`
    prints the newest session Tom or Claude started (not a worker).
-   Extra arguments go to `codex`, such as `-m gpt-6-astra`.
+   Extra arguments go to `codex`, such as `-m gpt-6.1-sol`.
 3. `codex-lead goal "Drive every item in <brief> (Order 1-N) until each is
    closed on GitHub or has a named blocker with evidence and an owner"`.
 4. Arm a Monitor on the peer file: `tail -n0 -F ~/.local/state/agents/handoffs/codex-lead-peer.md | grep -E --line-buffered '^(PEER|HANDOFF)'`, 30-minute timeout, re-armed on expiry. Answer a PEER line with a breakdown into smaller pieces and leads via `codex-lead send` within minutes; on a HANDOFF line, take the item over and staff it with Claude workers.
@@ -45,9 +45,8 @@ work and keep the status file current. You don't do the work yourself.
 Read first: ~/.codex/AGENTS.md, <repo>/AGENTS.md, <issues or notes>.
 Staffing: one worker per independent issue, all independent items at once,
   tiers from the staffing and codex-workers skills: SOL 6.1 (gpt-6.1-sol)
-  medium by default, high for hard work, Astra (gpt-6-astra) xhigh only after
-  a high attempt failed; never low or max. After Astra xhigh fails, bring one
-  recommendation.
+  medium by default, high for hard work; never low or max. Astra only when
+  Tom asks for it by name. After high fails, hand the box to Claude.
 Every worker brief: goal, files, Done when, ETA, a report that starts with
   "Done:", "Not done:" or "Blocked:", and the lines
   Item: <repo#N>
@@ -59,7 +58,7 @@ Waiting: wait on farm runs and CI with one blocking command (`--wait`, or
   `gh run watch RUN --exit-status`), never a polling loop. Confirm the exact
   revision before dispatching a farm run.
 Escalation to Claude: when an item is clearly struggling (a worker past 2x
-  ETA, a failed high attempt about to go to Astra xhigh, or a second
+  ETA, a failed high attempt, or a second
   "Not done" on one box), append one line to
   ~/.local/state/agents/handoffs/codex-lead-peer.md:
   PEER <HH:MM> <repo#N>: <tried, by tiers>; <how it fails>; <next idea>
@@ -87,8 +86,9 @@ Check at most every 20 minutes. Each check:
 - Idle or overrunning workers: idle 20+ minutes, or past twice their ETA.
   Tell the lead to get a report, hand off, or restaff one tier up.
 - Starting tiers: does each worker's model and effort fit the work and its
-  history (`worker-ledger --summary`)? SOL medium is the floor, Astra xhigh
-  only follows a failed high attempt, and Astra max is never used. Say which
+  history (`worker-ledger --summary`)? SOL medium is the floor and SOL high
+  the top; a box SOL high failed goes to a Claude Opus worker (medium or
+  higher), and Astra runs only when Tom names it. Say which
   to change.
 - Parallel work: are independent queue items running at the same time?
   If the lead queued them behind one item, tell it to start them now.
