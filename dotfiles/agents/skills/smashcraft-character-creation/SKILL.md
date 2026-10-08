@@ -107,6 +107,11 @@ original values provisional. Query current facts rather than guessing (see
   visuals and audio stay outside replay.
 - Selection needs roster chip, portrait, name, HUD plate, mirror match,
   rematch and an off-screen indicator. Player-facing text stays in the game's language.
+- A new fighter names its home stage, the place you'd meet them in a Warcraft
+  campaign: an existing stage or a new one built from native assets first,
+  with a one-line lore reason. Add it to smashcraft:ts/src/game/menu/homeStages.ts
+  and the table in smashcraft:docs/design/home-stages.md; stages may be shared.
+  smashcraft:ts/test/home-stages.test.ts fails for a selectable fighter without one.
 
 ## Make the change and ship
 
