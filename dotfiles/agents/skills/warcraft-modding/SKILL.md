@@ -19,8 +19,11 @@ smashcraft:docs/typescript.md before writing map code.
 
 Use `wurst-development` for Wurst source (this skill covers the native game
 for both languages), `smashcraft-animation` for fighter animation and
-`effect-development` for Effect. Effect can't be imported into code compiled
-to map Lua; use it only in Bun-hosted tools.
+`effect-development` for Effect. Bun-hosted tools (commands, runners, builds,
+captures, farm jobs) are Effect programs when they start processes, wait,
+retry, hold a resource or parse outside data; a test in each repo fails a new
+one that isn't. Map code compiled to Lua can't import Effect and stays plain
+TypeScript.
 
 ## Commands
 
