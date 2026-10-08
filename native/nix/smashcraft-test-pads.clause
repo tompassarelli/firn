@@ -1,0 +1,26 @@
+import "nixpkgs.clause"
+
+foreign package-text(?package: Delayed<nix,Package>): Text
+  construction: "nix"
+  call: "toString"
+  from: "builtins"
+  failure: throw
+
+foreign text-directory(?name: Text, ?text: Delayed<nix,Text>): Package
+  construction: "nix"
+  call: "writeTextDir"
+  from: "pkgs"
+  failure: throw
+
+test-pad-rules(?bin: Delayed<nix,Text>, ?sh: Delayed<nix,Text>): Delayed<nix,Text>
+  "ACTION!=\"remove\", SUBSYSTEM==\"input\", KERNEL==\"event*|js*\", ATTRS\u{7b}name}==\"Smashcraft Event Retention Virtual Gamepad\", TAG-=\"uaccess\", TAG-=\"seat\", GROUP:=\"root\", MODE:=\"0600\"\nACTION!=\"remove\", SUBSYSTEM==\"input\", KERNEL==\"event*\", ATTRS\u{7b}name}==\"Smashcraft Event Retention Virtual Gamepad\", ENV\u{7b}SMASHCRAFT_TEST_PAD_NODE}=\"/dev/smashcraft-pads/%k\", RUN+=\"{?sh} -c '{?bin}/mkdir -p /dev/smashcraft-pads && {?bin}/rm -f /dev/smashcraft-pads/.%k && {?bin}/mknod -m 0660 /dev/smashcraft-pads/.%k c $major $minor && {?bin}/chgrp input /dev/smashcraft-pads/.%k && {?bin}/mv -f /dev/smashcraft-pads/.%k /dev/smashcraft-pads/%k'\"\nACTION==\"remove\", SUBSYSTEM==\"input\", KERNEL==\"event*\", ENV\u{7b}SMASHCRAFT_TEST_PAD_NODE}==\"?*\", RUN+=\"{?bin}/rm -f $env\u{7b}SMASHCRAFT_TEST_PAD_NODE}\"\n"
+
+// Smashcraft's virtual test pads, from smashcraft:ts/scripts/integrity/linux.ts,
+// keep root-only /dev/input nodes, so Steam and every other desktop program
+// can't open them; the test helpers read a twin node in /dev/smashcraft-pads.
+// The file sorts after 70-uaccess.rules, which tags joysticks for the seat
+// user, and before 73-seat-late.rules, which grants that tag's access.
+export smashcraft-test-pads-module()
+  configuration-module(path(myConfig.modules.smashcraft-test-pads.enable), "Smashcraft test pads: hidden from Steam and the desktop, readable by the test helpers",
+    {services: {udev: {packages: [text-directory("lib/udev/rules.d/71-smashcraft-test-pads.rules",
+      test-pad-rules("{package-text(package(path(coreutils)))}/bin", "{package-text(package(path(bash)))}/bin/sh"))]}}})
