@@ -41,6 +41,13 @@ smashcraft:docs/delivery-goal.md lists each fighter's required moves.
 - **Windows** stay inside the bounds Tom accepted in gameplay-design.md.
 - **Launchers.** Fighters generally need a launcher into follow-ups such as
   tech chases; say how this one starts one.
+- **Balance is a score, not a playtest.** smashcraft:docs/design/balance.md
+  is Tom's spec: win rate 40-60%, a spam probe of the top move winning at
+  most 45%, no move over 40% of damage but a named signature, explosive
+  openings per kill, and a play-style profile (archetype, aerial, approach,
+  ranged and special shares) in each fighter's design doc. A new fighter
+  gets a profile; a tuning change cites its balance score before and after
+  (`bun wisp farm balance --wait`).
 
 ## Write the brief first
 
