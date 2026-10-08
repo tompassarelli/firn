@@ -58,9 +58,10 @@ printf %s 'Ab@#1x.Z_-+' | "$skill_dir/scripts/private-desktop.sh" type RUN_DIR
 
 Type text with `type`, never with `control ... type` or `xdotool type`. It
 reads the text only from stdin, so pipe secrets straight in. It types into the
-focused window at a steady pace and holds Shift for capitals and US-layout
-symbols, which the VNC server would otherwise send unshifted (`@` arrives as
-`2`). It refuses a character outside the US layout before typing anything.
+focused window at a steady pace and holds a real Shift key for capitals and
+US-layout symbols; the VNC server alone sets Shift only as modifier state,
+which Wine apps ignore (`@` arrives as `2`). It refuses a character outside the
+US layout before typing anything.
 Its key mapping test is `scripts/private-desktop-type.test.sh`.
 
 Capture reads the compositor framebuffer directly through `grim` using the exact

@@ -3,26 +3,23 @@ import string
 import sys
 import time
 
-SHIFT = 0xFFE1
-# wayvnc maps a keysym to its unshifted keycode, so a shifted character is sent
-# as Shift held around its US-layout base key.
-SHIFTED = dict(zip('~!@#$%^&*()_+{}|:"<>?', "`1234567890-=[]\\;',./"))
-NAMED = {"\n": 0xFF0D, "\t": 0xFF09}
+# wayvnc sets Shift only as a modifier state, which Wine apps ignore (@ arrives
+# as 2), so a shifted character is sent with a real Shift key held around it.
+SHIFTED = set('~!@#$%^&*()_+{}|:"<>?' + string.ascii_uppercase)
+NAMED = {"\n": "enter", "\t": "tab"}
 PLAIN = set(string.ascii_lowercase + string.digits + " `-=[]\\;',./")
 
 
 def plan(text):
-    """Return one (shift, keysym) per character; refuse text a US layout cannot type."""
+    """Return one (shift, vncdotool key) per character; refuse text a US layout cannot type."""
     keys = []
     for position, character in enumerate(text):
         if character in NAMED:
             keys.append((False, NAMED[character]))
         elif character in PLAIN:
-            keys.append((False, ord(character)))
-        elif character in string.ascii_uppercase:
-            keys.append((True, ord(character.lower())))
+            keys.append((False, character))
         elif character in SHIFTED:
-            keys.append((True, ord(SHIFTED[character])))
+            keys.append((True, character))
         else:
             raise ValueError(f"character {position + 1} has no US-layout key")
     return keys
@@ -38,13 +35,15 @@ def main():
 
     client = api.connect(f"127.0.0.1::{port}", timeout=20)
     try:
-        for shift, keysym in keys:
+        # keyDown/keyUp, not keyEvent: they return the client, which keeps
+        # vncdotool's per-call connection chain alive.
+        for shift, key in keys:
             if shift:
-                client.keyEvent(SHIFT, down=True)
-            client.keyEvent(keysym, down=True)
-            client.keyEvent(keysym, down=False)
+                client.keyDown("shift")
+            client.keyDown(key)
+            client.keyUp(key)
             if shift:
-                client.keyEvent(SHIFT, down=False)
+                client.keyUp("shift")
             time.sleep(0.08)
     finally:
         client.disconnect()

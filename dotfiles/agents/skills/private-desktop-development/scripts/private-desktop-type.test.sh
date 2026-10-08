@@ -8,13 +8,10 @@ spec = importlib.util.spec_from_file_location("typer", "private-desktop-type.py"
 typer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(typer)
 SHIFT = True
-expected = {c: (False, ord(c)) for c in string.ascii_lowercase + string.digits + " `-=[]\\;',./"}
-expected.update({c: (SHIFT, ord(c.lower())) for c in string.ascii_uppercase})
-pairs = {"~": "`", "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7",
-         "*": "8", "(": "9", ")": "0", "_": "-", "+": "=", "{": "[", "}": "]", "|": "\\",
-         ":": ";", '"': "'", "<": ",", ">": ".", "?": "/"}
-expected.update({c: (SHIFT, ord(base)) for c, base in pairs.items()})
-expected.update({"\n": (False, 0xFF0D), "\t": (False, 0xFF09)})
+expected = {c: (False, c) for c in string.ascii_lowercase + string.digits + " `-=[]\\;',./"}
+expected.update({c: (SHIFT, c) for c in string.ascii_uppercase})
+expected.update({c: (SHIFT, c) for c in '~!@#$%^&*()_+{}|:"<>?'})
+expected.update({"\n": (False, "enter"), "\t": (False, "tab")})
 printable = set(string.printable) - set("\r\x0b\x0c")
 assert set(expected) == printable, sorted(printable ^ set(expected))
 for character, key in expected.items():
