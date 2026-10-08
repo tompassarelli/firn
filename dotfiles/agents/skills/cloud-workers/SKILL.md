@@ -53,12 +53,23 @@ For each job:
 ## Briefs
 
 Same four parts as a local worker: goal, files, Done when, ETA. Make it
-self-contained; the cloud worker has none of your local context. Tell it to
-push to a `claude/<slug>` branch, never main, and not to send push
-notifications.
+self-contained; the cloud worker has none of your local context. Its commits
+say `Refs <repo>#N` for the issue. Don't let it send push notifications. End
+every cloud prompt with: "push to claude/<name>; it lands itself if it
+passes".
 
 ## Landing
 
-The orchestrator (or a local worker) fetches the branch, cherry-picks it onto
-current main in a worktree, runs the repo's checks and lands with
-`safe-push`.
+Nobody relays it. In smashcraft and wisp, a push to `claude/**` starts the
+repo's Autoland workflow (`.github/workflows/autoland.yml`; each repo's
+docs/ci.md, "Autoland"): rebase onto main, the repo's checks, the full farm
+suite on GitHub's runners, then a comparison with main's own failures. No new
+failures: it lands on main, deletes the branch and starts main's CI. A
+conflict, failed check or new failing test leaves the branch and comments on
+the `Refs` issue with the files or tests; push a fix to the same branch.
+Branches land one at a time in push order.
+
+Retry a branch without a new commit:
+`gh workflow run autoland.yml -R tompassarelli/<repo> -f branch=claude/<name>`.
+A commit that changes `.github/workflows/` can't land this way (the workflow
+token can't push workflow files); land it locally with `safe-push`.
