@@ -327,8 +327,8 @@ validate_codex_managed_policy() {
   CODEX_MANAGED_BINDINGS="$(
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
-  if [ "$CODEX_MANAGED_BINDINGS" = 13 ]; then
-    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 13-binding authoritative contract'
+  if [ "$CODEX_MANAGED_BINDINGS" = 14 ]; then
+    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 14-binding authoritative contract'
   elif [ "$CODEX_MANAGED_BINDINGS" = 0 ]; then
     ok_detail 'Codex managed hooks are authoritatively disabled; remote control remains disabled'
   else
