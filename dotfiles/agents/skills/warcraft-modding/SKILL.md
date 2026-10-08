@@ -200,6 +200,14 @@ over lockstep WebRTC peer to peer, with no server.
 - **Tom's install** (account a, display `:0`): no agent tests or engine
   tools; `wisp play` there only when Tom asks.
 
+Signed-in clients run as user services that outlive the agent that started
+them: `bun wisp client start [CLIENT...] --clients-file FILE` starts each
+missing private desktop (`wisp-desktop-CLIENT`) and Battle.net
+(`wisp-client-CLIENT`), runs doctor and returns at the menu; `client status`
+names the service behind each, `client stop` stops them
+(wisp:docs/doctor.md, "Clients as services"). Never start a client or desktop
+from a shell or background task: it dies when that task ends.
+
 Each client set (an offline pair, the signed-in A+B pair, clone-a) has one
 lane owner. It runs every pending native check in batches: one immutable
 build, one session, many pad scripts and captures (`pad SCRIPT|DIR...`,
