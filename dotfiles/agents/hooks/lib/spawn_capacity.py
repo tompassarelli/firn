@@ -120,6 +120,24 @@ def log_denial(event):
         pass
 
 
+def urgent_file_fact(texts):
+    """Codex encrypts spawn briefs, so its override names the agent in
+    spawn-urgent.tsv (epoch<TAB>agent-name<TAB>fact), written within 15 minutes."""
+    path = Path(os.environ.get("SPAWN_CAPACITY_HOME", Path.home())) / ".local/state/agents/spawn-urgent.tsv"
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return None
+    names = {t.strip() for t in texts if len(t) <= 80}
+    now = time.time()
+    for line in reversed(lines):
+        parts = line.split("\t", 2)
+        if len(parts) == 3 and parts[0].isdigit() and now - int(parts[0]) <= 900 \
+                and parts[1] in names and len(parts[2].strip()) >= 15:
+            return parts[2].strip()
+    return None
+
+
 def check(event):
     """The refusal text for this spawn, or None to allow it."""
     if not is_local(event):
@@ -127,7 +145,12 @@ def check(event):
     pressure = cpu_pressure()
     if pressure is None or pressure < PRESSURE_LIMIT:
         return None
-    urgent = next((m for m in map(URGENT.search, brief_texts(event.get("tool_input") or {})) if m), None)
+    texts = brief_texts(event.get("tool_input") or {})
+    fact = urgent_file_fact(texts)
+    if fact:
+        log_override(event, fact)
+        return None
+    urgent = next((m for m in map(URGENT.search, texts) if m), None)
     if urgent:
         fact = urgent.group(1) if urgent.group(1) is not None else urgent.group(2)
         if len(fact.strip()) >= 15:
@@ -139,7 +162,7 @@ def check(event):
         f"{local_workers()} local workers running. Queue this worker until pressure falls, "
         "send heavy checks to the farm, or use a cloud worker for code-only work "
         "(cloud-workers skill). Workers already running are unaffected. For an urgent fix, "
-        "start the brief with CASE=URGENT FACT=\"<why it can't wait>\"."
+        "start the brief with CASE=URGENT FACT=\"<why it can't wait>\". Codex, whose briefs are encrypted, appends \"<epoch>\\t<agent name>\\t<fact>\" to ~/.local/state/agents/spawn-urgent.tsv first."
     )
 
 
