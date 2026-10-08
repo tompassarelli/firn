@@ -58,6 +58,13 @@ say `Refs <repo>#N` for the issue. Don't let it send push notifications. End
 every cloud prompt with: "push to claude/<name>; it lands itself if it
 passes".
 
+The sandbox's Bun 1.4.2 isn't the repos' pinned 1.3.13 (their toolchain-lock
+test fails on it), so start every cloud prompt with:
+
+```sh
+curl -fsSL https://bun.sh/install | bash -s bun-v1.3.13 && export PATH="$HOME/.bun/bin:$PATH"
+```
+
 ## Landing
 
 Nobody relays it. In smashcraft and wisp, a push to `claude/**` starts the
