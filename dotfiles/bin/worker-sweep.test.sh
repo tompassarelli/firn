@@ -52,7 +52,7 @@ session("-home-tom", "new-session", [
     ("pending", "worker-high", [brief(30, "Item: smashcraft#7"), tool_use(1, 200000)]),
     ("result", "worker", [brief(30), tool_use(2, 150000), result(1), reminder(1)]),
     ("handoff", "worker-xhigh", [brief(40), tool_use(2, 410000), result(2)]),
-    ("stalled", "worker-low", [brief(60), tool_use(25, 90000)]),
+    ("stalled", "worker", [brief(60), tool_use(25, 90000)]),
     ("bgwait", "worker", [brief(30), tool_use(10, 80000, "bg1", True), result(10, "bg1"), text(9, 81000, "Waiting for the test run.")]),
     ("bgdone", "worker", [brief(30), tool_use(10, 80000, "bg2", True), result(10, "bg2"), text(9, 81000, "Waiting for the test run."), notice(1, "bg2")]),
     ("bgfinal", "worker", [brief(30), tool_use(10, 80000, "bg3", True), result(10, "bg3"), notice(8, "bg3"), text(7, 82000, "Done: waiting is over.")]),

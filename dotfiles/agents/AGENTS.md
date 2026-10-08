@@ -112,10 +112,10 @@ Needs you: nothing
 - In Claude Code, workers are Opus agents by effort tier. Pick the tier from
   the work and its history; `worker-ledger --summary` shows how each tier did
   by category.
-  - `worker-low`: mechanical, fully specified work: ticking and closing
-    issues, exact edits, running a named check or a prepared script.
-  - `worker` (medium): the default, for ordinary work with a clear Done when:
-    features, fixes with a known cause, docs and skills, setup.
+  - `worker` (medium): the floor and the default, for ordinary work with a
+    clear Done when: features, fixes with a known cause, docs and skills,
+    setup, and mechanical work such as ticking and closing issues, exact
+    edits, running a named check or a prepared script.
   - `worker-high`: known-hard from the start: unknown-cause debugging,
     netcode and determinism, engine, performance, cross-module work, native
     lane owners.
