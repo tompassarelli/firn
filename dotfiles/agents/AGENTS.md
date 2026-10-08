@@ -96,10 +96,13 @@ Needs you: nothing
   Use no other models.
 - In Claude Code, workers are Opus agents by effort tier: `worker` (medium,
   the default), `worker-low` for mechanical work, and `worker-high` from the
-  start for known-hard work. Escalate a worker that fails a check or returns a
-  shallow result to the next tier, ending at `worker-xhigh`. Stop it and
-  re-run its brief, plus what it tried, on the stronger agent; a running
-  worker's effort can't change.
+  start for known-hard work. Pick the tier from the work's history, not its
+  wording: a box an earlier worker failed or left unfinished starts one tier
+  above that worker, even when the brief is reworded or the issue reopened,
+  and the brief names that attempt and its tier. Stop a worker that fails a
+  check or returns a shallow result and re-run its brief, plus what it tried,
+  on the next tier, ending at `worker-xhigh`; a running worker's effort can't
+  change.
 
 ## Hard limits
 
