@@ -27,8 +27,8 @@ or takes Tom's focus.
 
 ## Commands
 
-- `codex-lead send "MSG"`: queue a message; the lead reads it after its
-  current step.
+- `codex-lead send "MSG"`: delivers at once. It steers the message into the
+  lead's running turn, or starts a turn if the lead is idle, and prints which.
 - `codex-lead goal "TEXT"` / `codex-lead goal-get`: replace or print the goal.
 - `codex-lead status [N]`: the status file, then the lead's last N steps.
 - `codex-lead workers`: the worker tree with path, model, effort, tokens and
@@ -93,9 +93,9 @@ goal hourly, or right away when the queue changes.
   `~/code/north-data/codex-pooled/app-server-control/app-server-control.sock`
   can point at a dead one. The command finds the listening socket under
   `/tmp/codex-daemon-1000/` on every call.
-- `codex queue` without `--remote` fails with "cannot queue through an
-  embedded app server while a local app-server daemon is running". The
-  command always passes `--remote`.
+- Never use `codex queue`: it holds the message until the lead's turn ends,
+  and a lead on a goal can stay in one turn for hours. On 8 Oct seven
+  messages sat unread for 20 minutes that way.
 - A Codex TUI makes its thread only on its first message, so the lead starts
   with the prompt as an argument. Never type into its window.
 - `send` reaches a thread only while a session runs it. A finished

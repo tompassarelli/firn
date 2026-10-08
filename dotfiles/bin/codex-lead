@@ -4,7 +4,7 @@
 # socket, because the pooled control symlink can point at a dead daemon.
 #   codex-lead start BRIEF [codex args]  open the lead in a window that does not take focus; prints the thread id
 #   codex-lead id                        newest user-started Codex TUI thread
-#   codex-lead send MESSAGE              queue a message for the lead
+#   codex-lead send MESSAGE              deliver a message to the lead now (mid-turn if it is working)
 #   codex-lead goal OBJECTIVE            replace the lead's goal (status active)
 #   codex-lead goal-get                  print the lead's goal
 #   codex-lead status [N]                status file plus the lead's last N rollout events (default 12)
@@ -85,8 +85,20 @@ case "$cmd" in
     t=$(newest_tui); [ -n "$t" ] || die "no Codex TUI thread found"
     echo "$t" ;;
   send)
+    # `codex queue` holds a message until the lead's turn ends, and a lead on a
+    # goal can stay in one turn for hours; steer into the live turn instead.
     [ $# -eq 1 ] || usage
-    codex queue --remote "unix://$(sock)" --thread "$(thread)" --message "$1" ;;
+    t=$(thread)
+    input=$(jq -cn --arg m "$1" '[{type:"text",text:$m,text_elements:[]}]')
+    turn=$(rpc thread/turns/list "$(jq -cn --arg t "$t" '{threadId:$t,limit:1,sortDirection:"desc",itemsView:"notLoaded"}')" |
+      jq -r '.data[0] | select(.status=="inProgress") | .id')
+    if [ -n "$turn" ] && out=$(rpc turn/steer "$(jq -cn --arg t "$t" --arg turn "$turn" --argjson i "$input" \
+        '{threadId:$t,expectedTurnId:$turn,input:$i}')" 2>&1); then
+      echo "delivered into running turn $(jq -r .turnId <<<"$out")"
+    else
+      rpc turn/start "$(jq -cn --arg t "$t" --argjson i "$input" '{threadId:$t,input:$i}')" |
+        jq -r '"delivered as new turn \(.turn.id)"'
+    fi ;;
   goal)
     [ $# -eq 1 ] || usage
     rpc thread/goal/set "$(jq -cn --arg t "$(thread)" --arg o "$1" '{threadId:$t,objective:$o,status:"active"}')" |
