@@ -54,22 +54,20 @@ printf '%s\n' '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaa
 pass=0 fail=0
 
 # run EXPECT DESC CMD [CWD] [EXTRA_ENV]
-#   EXPECT: allow | deny | ask   EXTRA_ENV: VAR=VAL (whitespace-separated for
+#   EXPECT: allow | deny   EXTRA_ENV: VAR=VAL (whitespace-separated for
 #   more than one) added to the hook env.
-#   ask = exit 0 AND stdout parses as JSON with permissionDecision == "ask".
 #   Set permission_mode by prefixing a call with the PM env (PM=default run …)
 #   or via the runm helper below; empty/unset PM omits the field (old harness).
+#   EV=PermissionRequest sends that event instead (see runp).
+#   Every case also fails if the guard emits an ask in any form.
 LAST_OUT=""
 run() {
   local expect="$1" desc="$2" c="$3" wd="${4:-$REPO_CWD}" extra="${5:-}"
   local json rc want out ok=1
-  if [ -n "${PM:-}" ]; then
-    json="$(jq -n --arg c "$c" --arg d "$wd" --arg pm "$PM" \
-      '{tool_name:"Bash", tool_input:{command:$c}, cwd:$d, permission_mode:$pm}')"
-  else
-    json="$(jq -n --arg c "$c" --arg d "$wd" \
-      '{tool_name:"Bash", tool_input:{command:$c}, cwd:$d}')"
-  fi
+  json="$(jq -n --arg c "$c" --arg d "$wd" --arg pm "${PM:-}" --arg ev "${EV:-PreToolUse}" \
+    '{hook_event_name:$ev, tool_name:"Bash", tool_input:{command:$c}, cwd:$d}
+     + (if $pm == "" then {} else {permission_mode:$pm} end)')"
+
   set -- env -u SAFE_PUSH_ACTIVE -u XDG_CACHE_HOME -u XDG_DATA_HOME \
     HOME="$FH" TMPDIR=/tmp \
     TRIPWIRE_LOG_DIR="$SCRATCH" AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
@@ -80,14 +78,10 @@ run() {
   out="$(printf '%s' "$json" | "$@" "$HOOK" 2>&1)"
   rc=$?
   LAST_OUT="$out"
-  case "$expect" in allow | ask) want=0 ;; deny) want=2 ;; esac
+  case "$expect" in allow) want=0 ;; deny) want=2 ;; esac
   [ "$rc" = "$want" ] || ok=0
-  # ask must also emit the ask envelope on stdout (the merged out is JSON-only
-  # on the ask path — no stderr reason is printed when the guard asks).
-  if [ "$expect" = ask ]; then
-    printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecision == "ask"' \
-      >/dev/null 2>&1 || ok=0
-  fi
+  case "$out" in *'"ask"'*) ok=0 ;; esac
+  case "$out" in *permissionDecision*) ok=0 ;; esac
   if [ "$ok" = 1 ]; then
     pass=$((pass + 1))
     printf 'PASS  %-5s  %s\n' "$expect" "$desc"
@@ -103,6 +97,27 @@ runm() {
   local pm="$1"
   shift
   PM="$pm" run "$@"
+}
+
+# runp ANSWER DESC CMD [CWD] — the PermissionRequest event Claude Code sends
+# before it would show its own dialog. ANSWER: allow | deny (a JSON decision on
+# stdout, exit 0) or none (no output: not a deleting command, not answered).
+runp() {
+  local answer="$1" desc="$2" c="$3" wd="${4:-$REPO_CWD}" got
+  EV=PermissionRequest PM=bypassPermissions run allow "$desc" "$c" "$wd" >/dev/null
+  if [ -z "$LAST_OUT" ]; then
+    got=none
+  else
+    got="$(printf '%s' "$LAST_OUT" | jq -r 'select(.hookSpecificOutput.hookEventName == "PermissionRequest") | .hookSpecificOutput.decision.behavior' 2>/dev/null)"
+    [ -n "$got" ] || got="malformed"
+  fi
+  if [ "$got" = "$answer" ]; then
+    pass=$((pass + 1))
+    printf 'PASS  P-%-5s %s\n' "$answer" "$desc"
+  else
+    fail=$((fail + 1))
+    printf 'FAIL  P-%-5s %s\n      cmd: %s\n      got=%s out=%s\n' "$answer" "$desc" "$c" "$got" "$LAST_OUT"
+  fi
 }
 
 # raw EXPECT DESC PAYLOAD — feed a raw (possibly non-JSON) payload
@@ -205,7 +220,7 @@ run allow 'echo mentioning rm -rf /' "echo 'rm -rf /'"
 echo "== class 1e: unrecoverable work the old rule permitted =="
 run deny 'untracked work inside this lane' "rm -rf $REPO_CWD/scratch"
 run deny 'untracked work, relative' 'rm -rf ./scratch'
-runm default ask 'untracked work -> ask (default)' "rm -rf $REPO_CWD/scratch"
+runm default deny 'untracked work -> deny (default mode too)' "rm -rf $REPO_CWD/scratch"
 runm bypassPermissions deny 'untracked work -> deny (unattended)' "rm -rf $REPO_CWD/scratch"
 
 echo "== class 1f: personal data + proportionality =="
@@ -222,42 +237,39 @@ run deny 'personal dir with no repo above it' 'rm -rf ./stuff' "$NOREPO_CWD"
 run deny 'unclassifiable path is blocked, not waved through' "rm -rf $UNCLASSIFIED"
 run deny 'git -C clean -fdx in another repo' "git -C $NOREPO_CWD clean -fdx"
 
-echo "== class 1 mode-aware: interactive ask vs unattended deny =="
-# The no-permission_mode rows above (run without PM) ARE the missing-field case:
-# they must keep passing unchanged (the fail-closed unattended floor).
-runm default ask 'personal data -> ask (default)' 'rm -rf ~/Pictures/Screenshots'
-runm acceptEdits ask 'personal data -> ask (acceptEdits)' 'rm -rf ~/Pictures/Screenshots'
-runm plan ask 'personal data -> ask (plan)' 'rm -rf ~/Pictures/Screenshots'
-runm bypassPermissions deny 'personal data -> deny (bypassPermissions)' 'rm -rf ~/Pictures/Screenshots'
-runm default deny 'hard class wins over pending ask (rm ask + git push -f)' \
-  'rm -rf ~/Pictures/Screenshots && git push -f'
-runm default ask 'bounded find under personal data -> ask (default)' \
-  'find ~/Pictures/Screenshots -type f -mtime +30 -delete'
-runm default ask 'git -C clean -fdx elsewhere -> ask (default)' "git -C $NOREPO_CWD clean -fdx"
+echo "== class 1 never asks: every mode is allow or deny =="
+# The no-permission_mode rows above (run without PM) ARE the missing-field case.
+for pm in default acceptEdits plan auto dontAsk bypassPermissions; do
+  runm "$pm" deny "personal data -> deny ($pm)" 'rm -rf ~/Pictures/Screenshots'
+  runm "$pm" deny "bounded find under personal data -> deny ($pm)" \
+    'find ~/Pictures/Screenshots -type f -mtime +30 -delete'
+  runm "$pm" deny "git -C clean -fdx elsewhere -> deny ($pm)" "git -C $NOREPO_CWD clean -fdx"
+  runm "$pm" allow "gitignored dir inside this lane -> allow ($pm)" 'rm -rf ./node_modules'
+done
 runm default deny 'git push --force unaffected by mode (class 2 hard)' 'git push --force'
-runm default allow 'gitignored dir inside this lane -> allow (no ask spam)' 'rm -rf ./node_modules'
-# two personal targets ACCUMULATE into ONE ask envelope naming both.
-macc="$(jq -n --arg c "rm -rf $FH/Documents/notes $FH/Pictures/Screenshots" --arg d "$REPO_CWD" --arg pm default \
-  '{tool_name:"Bash", tool_input:{command:$c}, cwd:$d, permission_mode:$pm}' |
-  env -u SAFE_PUSH_ACTIVE HOME="$FH" TRIPWIRE_LOG_DIR="$SCRATCH" \
-    AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
-    NORTH_AGENT_ACTIVATION="$SCRATCH/activation.json" \
-    NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 \
-    NORTH_BIN=/bin/true "$HOOK" 2>/dev/null)"
-mrc=$?
-if [ "$mrc" = 0 ] &&
-  [ "$(printf '%s' "$macc" | jq -s 'length' 2>/dev/null)" = 1 ] &&
-  printf '%s' "$macc" | jq -e '.hookSpecificOutput.permissionDecision == "ask"' >/dev/null 2>&1 &&
-  printf '%s' "$macc" |
-  jq -e --arg a "$FH/Documents/notes" --arg b "$FH/Pictures/Screenshots" \
-    '.hookSpecificOutput.permissionDecisionReason | contains($a) and contains($b)' \
-    >/dev/null 2>&1; then
-  pass=$((pass + 1))
-  echo 'PASS  ask    accumulation: two personal targets -> one ask naming both'
-else
-  fail=$((fail + 1))
-  printf 'FAIL  ask    accumulation: two personal targets in one ask (rc=%s out=%s)\n' "$mrc" "$macc"
-fi
+run deny 'two personal targets: one deny naming the first' \
+  "rm -rf $FH/Documents/notes $FH/Pictures/Screenshots"
+grep -q 'permissionDecision:"ask"\|permissionDecision: *"ask"\|"ask"' "$HOOK" &&
+  { fail=$((fail + 1)); echo 'FAIL  never  the guard source still names an ask decision'; } ||
+  { pass=$((pass + 1)); echo 'PASS  never  no decision path in the guard source returns ask'; }
+
+echo "== PermissionRequest: Claude Code's own rm dialog is answered, never shown =="
+runp allow 'safe delete in this lane -> allow' 'rm -rf ./node_modules'
+runp allow 'cd then relative glob delete under /tmp -> allow' 'cd /tmp/claude-1000/x && rm -rf build/*'
+runp allow 'non-recursive rm -> allow' 'rm -f ./build/out.o'
+runp allow 'rmdir -> allow' 'rmdir ./build/empty'
+runp deny 'home -> deny' 'rm -rf ~'
+case "$LAST_OUT" in *'never, not even by accident'*) pass=$((pass + 1)); echo 'PASS  P-deny  deny carries the guard reason' ;;
+  *) fail=$((fail + 1)); printf 'FAIL  P-deny  deny carries the guard reason (got: %s)\n' "$LAST_OUT" ;; esac
+runp deny "another lane's worktree -> deny" "rm -rf $OTHER_WT"
+runp deny 'unset variable -> deny' 'rm -rf "$UNSET_DIR"/*'
+runp deny 'command substitution target -> deny' 'rm -rf "$(pwd)"'
+runp deny 'unreadable ~user target -> deny' 'rm -rf ~nobody/x'
+runp deny 'personal data -> deny' 'rm -rf ~/Pictures/Screenshots'
+runp none 'not a deleting command -> not answered' 'curl -fsS https://example.com'
+runp none 'prescreen miss -> not answered' 'ls -la'
+run deny 'PreToolUse: command substitution as rm target' 'rm -rf "$(pwd)"'
+run allow 'PreToolUse: substitution mid-path under /tmp' 'rm -rf /tmp/build-$(date +%s)'
 
 echo "== class 1g: agent scratch roots (2026-10-08 false positive) =="
 WISP="$FH/.local/share/wisp"

@@ -73,6 +73,18 @@
           }
         ]
       }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/tripwire-guard.sh",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

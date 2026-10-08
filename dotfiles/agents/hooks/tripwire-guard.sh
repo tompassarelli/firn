@@ -33,20 +33,15 @@
 #        tracked  — inside a repo with nothing untracked or modified under it:
 #                   git restores it. ALLOW.
 #        dirty    — inside a repo, but untracked/modified content under the
-#                   target that git cannot restore. Ask/deny.
-#        personal — under $HOME, no version control, no cache: ask/deny.
-#        unknown  — unclassifiable: ask/deny (blocking is the safe default).
-#      MODE-AWARE, for the ask/deny tiers ONLY: in an INTERACTIVE session
-#      (permission_mode ∈ default/acceptEdits/plan) they become a permission ASK
-#      (stdout ask envelope, exit 0); unattended (bypassPermissions, or a
-#      missing/empty/unknown permission_mode — old harness or SDK-dispatched
-#      lane) fails CLOSED to the hard deny, and the reason names
-#      `north config agents off tripwire-guard` as the deliberate path.
-#      never/sacred are HARD
-#      in every mode. Asks ACCUMULATE, they do not exit — a later hard-deny
-#      class in the same command (e.g. `rm -rf ~/x && git push -f`) still wins
-#      (exit 2); the ask envelope emits only after the full walk with asks
-#      pending and no hard deny. Classes 2-5 below are hard denies in EVERY mode.
+#                   target that git cannot restore. DENY.
+#        personal — under $HOME, no version control, no cache: DENY.
+#        unknown  — unclassifiable: DENY (blocking is the safe default).
+#      Every tier is allow or deny in every permission mode: the guard never
+#      asks the operator. Each deny names the move that works instead.
+#      Claude Code's own dangerous-rm dialog cannot be skipped by a PreToolUse
+#      allow, so this file is also wired to PermissionRequest:Bash. There it
+#      answers every prompt for a deleting command: deny with this guard's
+#      reason, deny a recursive target it cannot read, otherwise allow.
 #      Relative targets resolve where the command really runs: a `cd`/`pushd`
 #      joined by `&&` moves later commands; joined any other way (it may fail)
 #      both directories are judged; a cd in a pipe never moves the shell, and
@@ -102,9 +97,6 @@
 #     + source=tripwire — so the block is ATTRIBUTED (which agent) and queryable off the
 #     graph, not just a loose unattributed TSV line. Fire-and-forget + detached: a
 #     fact-write failure NEVER delays or breaks the DENY; the file line stays regardless.
-#   - The interactive class-1 ASK writes an "ask: <reason>" line to the same
-#     tripwire.log for audit but does NOT route through record_denial_fact — an
-#     ask is not a denial; the guard_denial graph idiom stays denial-only.
 #
 # Test matrix: sibling tripwire-guard.test.sh — run it after EVERY edit here.
 # Kill-switch: persistent `north config agents off tripwire-guard` OR env
@@ -225,6 +217,22 @@ record_denial_fact() {
   disown 2>/dev/null || true
 }
 
+# EVENT is PreToolUse (exit 2 + stderr) or PermissionRequest (a JSON decision).
+# The raw-text test keeps the PreToolUse slow path at its two jq forks.
+EVENT="" EV_SET=0
+ensure_event() {
+  [ "$EV_SET" = 1 ] && return 0
+  case "$payload" in
+    *PermissionRequest*) EVENT="$(jq -r '.hook_event_name // empty' <<<"$payload" 2>/dev/null || true)" ;;
+  esac
+  EV_SET=1
+}
+
+permission_answer() { # permission_answer allow|deny [MESSAGE]
+  jq -cn --arg b "$1" --arg m "${2:-}" \
+    '{hookSpecificOutput:{hookEventName:"PermissionRequest",decision:({behavior:$b} + (if $m == "" then {} else {message:$m} end))}}'
+}
+
 deny() {
   ensure_cwd
   local head="${cmd//$'\n'/ }"
@@ -233,37 +241,18 @@ deny() {
   printf '%s\t%s\t%s\t%s\n' "$(date -Is)" "$cwd" "$1" "$head" \
     >>"$LOGDIR/tripwire.log" 2>/dev/null || true
   record_denial_fact "$1" "$head" # ALSO route to the guard_denial graph idiom (fire-and-forget)
+  ensure_event
+  if [ "$EVENT" = PermissionRequest ]; then
+    permission_answer deny "tripwire: $1"
+    exit 0
+  fi
   printf 'tripwire: %s\n' "$1" >&2
   exit 2
 }
 
-# Mode extraction — lazily read permission_mode ONLY when an ask-eligible class-1
-# violation fires (the allow fast-path must not pay an extra jq fork). Cached like
-# ensure_cwd. INTERACTIVE = permission_mode is exactly default/acceptEdits/plan;
-# anything else (bypassPermissions, empty/missing field, unknown value) is NOT
-# interactive — fail CLOSED to the hard deny so the unattended floor never weakens.
-PERM_MODE="" PM_SET=0 INTERACTIVE=0
-ensure_mode() {
-  [ "$PM_SET" = 1 ] && return 0
-  PERM_MODE="$(jq -r '.permission_mode // empty' <<<"$payload" 2>/dev/null || true)"
-  case "$PERM_MODE" in
-    default | acceptEdits | plan) INTERACTIVE=1 ;;
-    *) INTERACTIVE=0 ;;
-  esac
-  PM_SET=1
-}
-
-# ask_or_deny REASON : mode-aware class-1 terminal for the two ask-eligible deny
-# sites (outside-safe-roots delete + git -C clean). NON-interactive: byte-for-byte
-# the old hard deny() — exits 2 before the array is ever touched. INTERACTIVE:
-# accumulate the reason and RETURN so the segment walk continues; a later hard
-# class still wins. The ask envelope emits post-walk (see the tail below).
-ASK_REASONS=()
-ask_or_deny() {
-  ensure_mode
-  [ "$INTERACTIVE" = 1 ] || deny "$1"
-  ASK_REASONS+=("$1")
-}
+# DELETE_SEEN: the command deletes something (any rm/rmdir/unlink, find -delete,
+# git clean -f). UNREAD: a recursive-delete target this guard could not read.
+DELETE_SEEN=0 UNREAD=""
 
 # ---- tokenize: normalize separators to standalone tokens, then word-split.
 # Three separator kinds, kept DISTINCT: hard boundaries (";" — from ; || & $( ` \n,
@@ -279,12 +268,15 @@ norm="$cmd"
 norm="${norm//\\$'\n'/ }" # line continuation first — keep the logical line whole
 norm="${norm//$'\n'/ ; }"
 norm="${norm//$'\t'/ }"
+# A substitution leaves SUB glued where its output lands, so a word built from
+# one reads as unknown (like a $VAR) instead of as its literal prefix alone.
+SUB=$'\x02'
 # shellcheck disable=SC2016  # literal $( — command substitution opener in the TEXT
-norm="${norm//'$('/ ; ( }"
+norm="${norm//'$('/$SUB ; ( }"
 # Backticks alternate open/close; each becomes a subshell boundary.
 bt_open=1
 while [[ "$norm" == *'`'* ]]; do
-  if [ "$bt_open" = 1 ]; then norm="${norm/\`/ ; ( }"; bt_open=0
+  if [ "$bt_open" = 1 ]; then norm="${norm/\`/$SUB ; ( }"; bt_open=0
   else norm="${norm/\`/ ) ; }"; bt_open=1; fi
 done
 unset bt_open
@@ -334,7 +326,7 @@ resolve_path() {
   esac
   t="${t%%[*?]*}" # glob → its literal prefix (rm -rf /x/* judges /x/)
   case "$t" in
-    *'$'* | *'`'*) return 1 ;; # unexpanded substitution mid-path
+    *'$'* | *'`'* | *"$SUB"*) return 1 ;; # unexpanded substitution mid-path
     '') return 1 ;;
   esac
   # -s: LEXICAL canonicalization only — never follow symlinks. rm on a symlink
@@ -350,7 +342,7 @@ resolve_path() {
 # never speak for a main checkout, a sibling lane, or a root.
 
 CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}"
-# The deliberate path, quoted verbatim in every ask/deny reason: it is the move
+# The deliberate path, quoted verbatim in every personal/dirty deny reason: it is the move
 # that worked, and a denial that does not name the exit is a trap.
 OVERRIDE='deliberate path: `north config agents off tripwire-guard`, run it, `north config agents on tripwire-guard`'
 
@@ -610,19 +602,23 @@ var_shape_check() {
   local t="$S" pre disp
   disp="${t//\"/}" # quote residue from the split: show the shape, not the noise
   disp="${disp//\'/}"
+  disp="${disp//$SUB/\$(…)}"
   case "$t" in
-    *'$'* | *'`'*) ;;
+    *'$'* | *'`'* | *"$SUB"*) ;;
     *) return 0 ;;
   esac
   # shellcheck disable=SC2016  # matching LITERAL $HOME text in the command
   case "$t" in
     '$HOME' | '${HOME}' | '$HOME/'* | '${HOME}/'*) return 0 ;; # resolvable below
     *'${'*':?'*) return 1 ;;                                   # the prescribed guarded form
+    "$SUB"*)
+      deny "command substitution as a recursive-delete target ('$disp') — its output cannot be checked before it runs. Run the substitution on its own first, then rm -rf the literal path it printed"
+      ;;
     '$'*)
       deny "unguarded variable as a recursive-delete target ('$disp') — an unset variable expands to a bare-root delete. Write the literal path, or guard it: rm -rf \"\${VAR:?}\"/subdir"
       ;;
   esac
-  pre="${t%%[\$\`]*}"
+  pre="${t%%[\$\`$SUB]*}"
   case "$pre" in
     /*) ;;
     *)
@@ -643,15 +639,15 @@ var_shape_check() {
 check_delete_target() {
   local shape="${2:-tree}"
   var_shape_check "$1" || return 0
-  resolve_path "$1" || return 0 # unresolvable for any other reason: fail-open
+  resolve_path "$1" || { strip_g "$1"; UNREAD="$S"; return 0; }
   classify_delete_target "$RES"
   case "$CLASS" in
     gone | regen | scratch | tracked) return 0 ;;
     never | sacred) deny "$WHY" ;;
   esac
   case "$shape" in
-    bounded) ask_or_deny "bounded delete (find … -delete, filtered by type/age/name): $WHY" ;;
-    *) ask_or_deny "whole-tree recursive delete: $WHY" ;;
+    bounded) deny "bounded delete (find … -delete, filtered by type/age/name): $WHY" ;;
+    *) deny "whole-tree recursive delete: $WHY" ;;
   esac
 }
 
@@ -723,6 +719,7 @@ redirect_skip() {
 handle_rm() {
   local recursive=0 endflags=0 skipnext=0 t
   local -a targets=()
+  DELETE_SEEN=1
   for t in "$@"; do
     if [ "$skipnext" = 1 ]; then skipnext=0; continue; fi
     redirect_skip "$t"
@@ -757,6 +754,7 @@ handle_find() {
     prev="$t"
   done
   [ "$has_delete" = 1 ] || return 0
+  DELETE_SEEN=1
   local shape=tree
   { [ "$typef" = 1 ] && [ "$narrow" = 1 ]; } && shape=bounded
   local -a paths=()
@@ -818,13 +816,14 @@ handle_git() {
         case "${a[$j]}" in --force | -*f*) force=1 ;; esac
       done
       [ "$force" = 1 ] || return 0
+      DELETE_SEEN=1
       # `git clean -f` destroys untracked work by definition, so the tiers that
       # ask git what is recoverable do not apply — ownership does. The repo it
       # runs in is the one it cleans: -C when given, otherwise the cwd. That is
       # why the no-C form is no longer waved through: a `git clean -fdx` with
       # the cwd in a main/ checkout wipes the human's work-in-progress.
       if [ -n "$cval" ]; then
-        resolve_path "$cval" || return 0
+        resolve_path "$cval" || { UNREAD="$cval"; return 0; }
       else
         ensure_cwd
         RES="$(realpath -sm -- "${rcwd:-$cwd}" 2>/dev/null)" || return 0
@@ -836,7 +835,7 @@ handle_git() {
         return 0
       fi
       is_disposable "$RES" && return 0
-      ask_or_deny "git clean -f in '$RES' — outside this session's repo, and untracked files there are not in any object database; $OVERRIDE"
+      deny "git clean -f in '$RES' — outside this session's repo, and untracked files there are not in any object database; $OVERRIDE"
       ;;
   esac
 }
@@ -1144,6 +1143,7 @@ while [ "$i" -lt "$n" ]; do
   case "$word" in
     cd | pushd) handle_cd "${TOK[$j]:-}" ${args[@]+"${args[@]}"} ;;
     rm) in_each_cwd handle_rm ${args[@]+"${args[@]}"} ;;
+    rmdir | unlink) DELETE_SEEN=1 ;;
     find) in_each_cwd handle_find ${args[@]+"${args[@]}"} ;;
     git) in_each_cwd handle_git ${args[@]+"${args[@]}"} ;;
     curl | wget) handle_http "$word" ${args[@]+"${args[@]}"} ;;
@@ -1169,24 +1169,15 @@ while [ "$i" -lt "$n" ]; do
 done
 close_segment
 
-# ---- ask tail: interactive class-1 violations accumulated and NO hard deny fired
-# during the walk (a hard deny would have exited 2 already). Emit the ask envelope
-# on stdout (exit 0). Audit line uses the "ask: " prefix — NOT record_denial_fact.
-if [ "${#ASK_REASONS[@]}" -gt 0 ]; then
-  ensure_cwd
-  ask_joined=""
-  for r in "${ASK_REASONS[@]}"; do
-    [ -n "$ask_joined" ] && ask_joined+="; "
-    ask_joined+="$r"
-  done
-  ask_head="${cmd//$'\n'/ }"
-  ask_head="${ask_head:0:200}"
-  mkdir -p "$LOGDIR" 2>/dev/null || true
-  printf '%s\t%s\t%s\t%s\n' "$(date -Is)" "$cwd" "ask: $ask_joined" "$ask_head" \
-    >>"$LOGDIR/tripwire.log" 2>/dev/null || true
-  jq -cn --arg r "tripwire: $ask_joined" \
-    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
-  exit 0
+# ---- PermissionRequest: answer every prompt for a deleting command, so Claude
+# Code's dangerous-rm dialog never reaches the operator. A hard deny already
+# answered above; a target the guard could not read is denied with the rewrite.
+ensure_event
+if [ "$EVENT" = PermissionRequest ] && [ "$DELETE_SEEN" = 1 ]; then
+  if [ -n "$UNREAD" ]; then
+    deny "recursive delete target '$UNREAD' cannot be read before it runs. Delete the literal path instead: run the expansion on its own first, then rm -rf the path it printed"
+  fi
+  permission_answer allow
 fi
 
 exit 0
