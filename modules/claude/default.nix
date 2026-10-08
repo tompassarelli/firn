@@ -5,7 +5,10 @@
   config = lib.mkIf config.myConfig.modules.claude.enable {
     environment.systemPackages = [ pkgs.unstable.claude-code ];
     home-manager.users.${username} = ({ config, ... }: {
-      home.file.".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.local/state/north/agents/current/instructions/shared/AGENTS.md";
+      home.file = {
+        ".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.local/state/north/agents/current/instructions/shared/AGENTS.md";
+        ".claude/agents".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/main/dotfiles/agents/claude/agents";
+      };
     });
   };
 }) config.myConfig.modules.users.username)

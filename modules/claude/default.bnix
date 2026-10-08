@@ -24,4 +24,11 @@
                {:source
                 (config.lib.file.mkOutOfStoreSymlink
                   (s config.home.homeDirectory
-                     "/.local/state/north/agents/current/instructions/shared/AGENTS.md"))}}})}})}))
+                     "/.local/state/north/agents/current/instructions/shared/AGENTS.md"))}
+               ;; Worker tiers by reasoning effort. A spawn can't set effort,
+               ;; so escalation re-runs a task on the next tier's agent.
+               ".claude/agents"
+               {:source
+                (config.lib.file.mkOutOfStoreSymlink
+                  (s config.home.homeDirectory
+                     "/code/nixos-config/main/dotfiles/agents/claude/agents"))}}})}})}))

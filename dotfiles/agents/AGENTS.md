@@ -94,6 +94,12 @@ Needs you: nothing
   `high` for hard implementation, Astra (`gpt-6-astra`) `xhigh` for hard
   reasoning, and Astra `max` for the hardest problems or a stuck fix loop.
   Use no other models.
+- In Claude Code, workers are Opus agents by effort tier: `worker` (medium,
+  the default), `worker-low` for mechanical work, and `worker-high` from the
+  start for known-hard work. Escalate a worker that fails a check or returns a
+  shallow result to the next tier, ending at `worker-xhigh`. Stop it and
+  re-run its brief, plus what it tried, on the stronger agent; a running
+  worker's effort can't change.
 
 ## Hard limits
 
