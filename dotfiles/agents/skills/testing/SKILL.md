@@ -21,11 +21,14 @@ revising this skill or when a decision here needs its source.
   computes it (matching checksums, frame-for-frame replays, no desync). A
   test whose expected value came from running the code you just wrote is a
   restatement of the implementation; don't write it. Headless expected rows
-  stay provisional until a native capture confirms them. [G1, E1, A14]
+  stay provisional until a native capture confirms them. The title carries
+  the oracle tag: `[native]`, `[reference]`, `[spec #N]`, `[repro #N]`,
+  `[invariant]` or `[provisional]` (headless, awaiting a native capture);
+  runners refuse an untagged test. No oracle: delete it. [G1, E1, A14]
 - Add a test wherever a rule is unpinned. Every fixed bug gets one named for
   its issue; netcode and invariants get one even when the code looks right.
-- One rule or defect per test, said in the title: `shield breaks at 0 and
-  stuns 120 frames`, `#181 low projectile hits a crouching fighter`.
+- One rule or defect per test, said in the title: `[spec #12] shield breaks
+  at 0 and stuns 120 frames`, `[repro #181] low projectile hits a crouching fighter`.
   Failures print `got X, want Y` and the case name. [E6, P1]
 - Test behavior through the path the product runs, so a refactor that keeps
   behavior keeps the test green. Real code first, then fakes; a mock that
