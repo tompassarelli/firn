@@ -89,8 +89,8 @@ Needs you: nothing
   Checks that need a scarce resource (game clients, devices, a quiet
   machine) go to lane workers, one per instance of it: one per client or
   device. Split the pending checks across every instance and use pairs only
-  for checks that need two. Release an instance whenever its holder isn't
-  actively running on it; never hold one idle. An instance that fails setup
+  for checks that need two. Never stop a signed-in client that is at its
+  menu: hand it to the next lane. An instance that fails setup
   is fixed or reported within the hour, not parked.
   Workers write and land code, and the parent merges. Don't add reviewer,
   verifier, auditor or status workers unless Tom asks.
