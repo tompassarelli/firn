@@ -279,7 +279,14 @@ function withLock(root, action) {
       }
     } catch (error) {
       if (error?.code !== 'EEXIST') throw error;
-      if (existsSync(lock) && Date.now() - statSync(lock).mtimeMs > lockStaleMilliseconds) {
+      let age = 0;
+      try {
+        age = Date.now() - statSync(lock).mtimeMs;
+      } catch (statError) {
+        // The holder released it between our attempt and this check.
+        if (statError?.code !== 'ENOENT') throw statError;
+      }
+      if (age > lockStaleMilliseconds) {
         rmSync(lock, { recursive: true, force: true });
         continue;
       }
