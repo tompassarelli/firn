@@ -43,6 +43,11 @@ out=$(t release smashcraft#3 --by alice --to bob; t list)
 check '[spec] release --to hands the issue over and records the handoff' \
   'grep -qE "^smashcraft#3 +bob" <<<"$out" && [ "$(sqlite3 "$THREADS_DB" "select data from events where kind = '"'handoff'"'")" = '"'"'{"from": "alice", "to": "bob"}'"'"' ]'
 
+out=$(t claim nixos-config#9 --by alice >/dev/null; t claim tompassarelli/firn#9 --by bob)
+check '[spec] a checkout alias and the GitHub name are the same issue' \
+  'grep -q "firn#9 is already owned by alice" <<<"$out"'
+t release firn#9 --by alice >/dev/null
+
 out=$(t ready)
 check '[spec] ready lists open issues minus open blockers and held issues' \
   '[ "$(cut -f1 <<<"$out" | tr "\n" " ")" = "smashcraft#2 smashcraft#4 " ]'

@@ -19,16 +19,11 @@ from datetime import datetime, timezone
 DB = os.environ.get("THREADS_DB") or os.path.expanduser("~/.local/state/threads/threads.db")
 CACHE_SECONDS = 60
 
-# Short name used in refs -> GitHub repository.
-REPOS = {
-    "smashcraft": "tompassarelli/smashcraft",
-    "wisp": "tompassarelli/wisp",
-    "nixos-config": "tompassarelli/firn",
-    "north": "tompassarelli/north",
-    "clause": "tompassarelli/clause",
-    "beagle": "tompassarelli/beagle",
-}
-SHORT = {full: short for short, full in REPOS.items()}
+# Every repository under OWNER whose issues threads tracks. A ref names the
+# GitHub repository (firn#3); ALIASES lets a checkout's name stand in for it.
+OWNER = "tompassarelli"
+REPOS = ["smashcraft", "wisp", "firn", "north", "clause", "beagle", "gjoa", "fram", "wake"]
+ALIASES = {"nixos-config": "firn"}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS events(
@@ -136,11 +131,12 @@ REF = re.compile(r"^([\w.-]+(?:/[\w.-]+)?)#(\d+)$")
 
 
 def parse_ref(ref: str) -> tuple[str, int]:
-    """'smashcraft#222' or 'tompassarelli/smashcraft#222' -> ('smashcraft', 222)."""
+    """'smashcraft#222', 'tompassarelli/smashcraft#222' or 'nixos-config#3' -> ('smashcraft', 222) / ('firn', 3)."""
     m = REF.match(ref.strip())
     if not m:
         raise Refused(f"{ref} is not an issue ref like smashcraft#222")
-    repo = SHORT.get(m.group(1), m.group(1))
+    name = m.group(1).removeprefix(f"{OWNER}/")
+    repo = ALIASES.get(name, name)
     if repo not in REPOS:
         raise Refused(f"unknown repo {m.group(1)} (known: {', '.join(REPOS)})")
     return repo, int(m.group(2))
@@ -190,7 +186,7 @@ def blockers(node) -> list:
     out = []
     for b in node["blockedBy"]["nodes"]:
         full = b["repository"]["nameWithOwner"]
-        out.append({"ref": ref(SHORT.get(full, full), b["number"]), "state": b["state"]})
+        out.append({"ref": ref(full.removeprefix(f"{OWNER}/"), b["number"]), "state": b["state"]})
     return out
 
 
@@ -199,7 +195,7 @@ def open_issues(db, repo: str) -> dict:
     row = db.execute("SELECT fetched, issues FROM gh_cache WHERE repo = ?", (repo,)).fetchone()
     if row and time.time() - row["fetched"] < CACHE_SECONDS:
         return json.loads(row["issues"])
-    owner, name = REPOS[repo].split("/")
+    owner, name = OWNER, repo
     issues, cursor = {}, None
     while True:
         args = ["api", "graphql", "-f", f"query={OPEN_ISSUES}", "-F", f"owner={owner}", "-F", f"name={name}"]
@@ -223,7 +219,7 @@ def one_issue(db, repo: str, number: int) -> dict:
     row = db.execute("SELECT fetched, issues FROM gh_cache WHERE repo = ?", (repo,)).fetchone()
     if row and time.time() - row["fetched"] < CACHE_SECONDS and str(number) in json.loads(row["issues"]):
         return dict(json.loads(row["issues"])[str(number)], state="OPEN")
-    owner, name = REPOS[repo].split("/")
+    owner, name = OWNER, repo
     out = json.loads(gh("api", "graphql", "-f", f"query={ONE_ISSUE}", "-F", f"owner={owner}",
                         "-F", f"name={name}", "-F", f"number={number}"))
     issue = out["data"]["repository"]["issue"]
@@ -272,8 +268,8 @@ def cmd_release(db, a):
 def dependency(db, a, method):
     repo, number = parse_ref(a.id)
     brepo, bnumber = parse_ref(a.other)
-    blocker_id = gh("api", f"repos/{REPOS[brepo]}/issues/{bnumber}", "--jq", ".id").strip()
-    path = f"repos/{REPOS[repo]}/issues/{number}/dependencies/blocked_by"
+    blocker_id = gh("api", f"repos/{OWNER}/{brepo}/issues/{bnumber}", "--jq", ".id").strip()
+    path = f"repos/{OWNER}/{repo}/issues/{number}/dependencies/blocked_by"
     if method == "POST":
         gh("api", "-X", "POST", path, "-F", f"issue_id={blocker_id}")
     else:
