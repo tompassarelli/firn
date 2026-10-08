@@ -12,9 +12,16 @@ malformed event allows.
   first plan without its checklist: the goal quoted from the request, the
   profile, Done-when, extra checks, workers and an ETA.
 - PreToolUse(Bash) refuses worker jobs (checks, native sessions, log digging)
-  in a session that has spawned workers, a check rerun on unchanged code, a new issue that
-  can't close, and a new issue while the session has opened more than it
-  closed. Edits to existing issues pass.
+  in a session that has spawned workers, a check rerun on unchanged code, a
+  second run of a check (farm runs included) on a commit where any agent
+  already passed it, `gh run rerun` of a passing run, a new issue that can't
+  close, and a new issue while the session has opened more than it closed.
+  Edits to existing issues pass. One timing check may confirm once under an
+  exclusive capacity lease.
+- PreToolUse(spawn_agent) refuses a measure-only brief, and PreToolUse of a
+  patch or shell write refuses a new manifest, provenance, attestation,
+  inventory or checksum file in a prototype repo unless a prompt asked.
+- PostToolUse(Bash) says to close an issue whose boxes are all ticked.
 - PostToolUse(Bash) records passing checks and issue opens and closes, and
   says once when the work passes twice its ETA or after a long run of
   read-only commands with no change; an apply_patch ends that run.
@@ -48,6 +55,52 @@ STATE_ROOT = Path(
     )
 )
 PROMPTS_KEPT = 20
+PEER_LINE = (
+    "A real doubt goes in one PEER line in "
+    "~/.local/state/agents/handoffs/codex-lead-peer.md, not another run."
+)
+ONE_RUN = (
+    "Tom's rule: every check gets one run. It passes, ship; a failure gets fixed and run "
+    "once more. The sim is deterministic, so a second run on the same code shows nothing new."
+)
+JUSTIFY_PREFIX = re.compile(r"^\s*CASE=([A-Za-z])\s+FACT=(\"([^\"]*)\"|'([^']*)')\s*")
+JUSTIFY_NOOP = re.compile(r"^\s*:\s+justify\s+([\w-]+)\s+([A-Za-z])\s+(\"([^\"]*)\"|'([^']*)')\s*$")
+FACT_BANNED = re.compile(
+    r"confiden|\bsure\b|\bagain\b|double[- ]?check|sanity|verif|flaky|just in case|safety",
+    re.IGNORECASE,
+)
+
+
+def parse_case(command):
+    """`CASE=X FACT="..." cmd` -> (X, fact, cmd); no prefix -> (None, None, cmd)."""
+    match = JUSTIFY_PREFIX.match(command)
+    if not match:
+        return None, None, command
+    fact = match.group(3) if match.group(3) is not None else match.group(4)
+    return match.group(1).upper(), fact.strip(), command[match.end():]
+
+
+def fact_problem(fact):
+    if len(fact or "") < 15:
+        return "FACT must name the new fact in 15 or more characters."
+    banned = FACT_BANNED.search(fact)
+    if banned:
+        return f"FACT can't rest on \"{banned.group(0)}\": name what this run shows that the last one didn't."
+    return None
+
+
+def log_override(event, gate, case, fact):
+    try:
+        STATE_ROOT.mkdir(parents=True, exist_ok=True)
+        with open(STATE_ROOT / "verify-overrides.jsonl", "a") as log:
+            log.write(json.dumps({
+                "at": time.time(), "session": event.get("session_id"), "agent": event.get("agent_id"),
+                "gate": gate, "case": case, "cwd": event.get("cwd"), "fact": (fact or "")[:300],
+            }) + "\n")
+    except OSError:
+        pass
+
+
 MAX_BOXES = 5
 
 STANDING = (
@@ -145,7 +198,7 @@ RUNNERS = {
     "nix", "firn", "deno", "uv", "python", "python3", "bash", "sh", "zig", "dotnet", "gradle",
 }
 CHECK_WORDS = re.compile(
-    r"\b(test|tests|check|lint|typecheck|tsc|clippy|validate|verify|soak|parity|bench|perf|smoke|build)\b"
+    r"\b(test|tests|check|lint|typecheck|tsc|clippy|validate|verify|soak|parity|bench|perf|smoke|build|farm|sweep)\b"
 )
 EXIT_CODE = re.compile(r"(?:Exit code:|Process exited with code)\s*(-?\d+)")
 GUARANTEE = re.compile(
@@ -451,16 +504,70 @@ def is_check(command):
     return False
 
 
-def rerun_reason(command):
-    match = re.search(r"\bRERUN_BECAUSE=(\"[^\"]*\"|'[^']*'|\S+)", command)
-    if not match:
-        return ""
-    return match.group(1).strip("\"'")
+def strip_token(command):
+    return parse_case(command)[2]
 
 
 def check_key(cwd, command):
-    command = re.sub(r"\bRERUN_BECAUSE=(\"[^\"]*\"|'[^']*'|\S+)\s*", "", command)
+    command = strip_token(command)
     return hashlib.sha256(f"{cwd}\0{' '.join(command.split())}".encode()).hexdigest()[:24]
+
+
+def check_name(command):
+    """The check a command runs, without where it runs or how it waits."""
+    command = re.sub(r"^\s*cd\s+\S+\s*&&\s*", "", strip_token(command))
+    command = re.sub(r"\bmachine-capacity\S*\s+run\b.*?\s--\s+", "", command)
+    command = re.sub(r"\s--(wait|exit-status)\b|\s--out(=|\s+)\S+", "", command)
+    return " ".join(command.split())
+
+
+def head_commit(cwd):
+    """HEAD of a clean checkout, or None when the tree has changes."""
+    try:
+        run = lambda *args: subprocess.run(
+            ["git", "-C", str(cwd), *args], capture_output=True, timeout=5, check=True, text=True
+        ).stdout
+        if run("status", "--porcelain=v1", "-uno").strip():
+            return None
+        return run("rev-parse", "HEAD").strip() or None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+class SharedRuns:
+    """Passing checks by commit, shared by every agent on the machine."""
+
+    def __enter__(self):
+        self.path = STATE_ROOT / "passed-by-commit.json"
+        try:
+            STATE_ROOT.mkdir(parents=True, exist_ok=True)
+            self.lock = open(self.path.with_suffix(".lock"), "w")
+            fcntl.flock(self.lock, fcntl.LOCK_EX)
+            self.data = json.loads(self.path.read_text())
+        except (OSError, ValueError):
+            self.data = {}
+        return self.data
+
+    def __exit__(self, *exc):
+        try:
+            tmp = self.path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(self.data))
+            tmp.replace(self.path)
+        except (OSError, AttributeError):
+            pass
+        if getattr(self, "lock", None):
+            self.lock.close()
+
+
+def run_conclusion(run_id):
+    try:
+        out = subprocess.run(
+            ["gh", "run", "view", run_id, "--json", "conclusion", "-q", ".conclusion"],
+            capture_output=True, timeout=6, text=True,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.strip()
 
 
 def tree_state(cwd):
@@ -592,21 +699,254 @@ def pre_bash(event):
                 "go back to assigning, merging and closing. If no worker can run it, prefix "
                 'the command with ORCH_RUNS_BECAUSE="<why>".'
             )
-    if not is_check(command):
+    case, fact, bare = parse_case(command)
+    noop = JUSTIFY_NOOP.match(command)
+    if noop:
+        return pre_justify(event, noop)
+    rerun = re.search(r"\bgh run rerun\s+(\d+)", bare)
+    if rerun and run_conclusion(rerun.group(1)) == "success":
+        return rerun_gate(event, f"run {rerun.group(1)}", "an earlier run", f"gh-run\0{rerun.group(1)}",
+                          case, fact, command)
+    if is_measure(bare):
+        decision = measure_gate(event, case, fact, command)
+        if decision:
+            return decision
+    if not is_check(bare):
         return None
-    if len(rerun_reason(command)) >= 8:
-        return None
+    name = check_name(bare)
+    commit = head_commit(cwd)
+    if commit:
+        with SharedRuns() as shared:
+            record = shared.get(f"{commit}\0{name}")
+        if record:
+            at = time.strftime("%H:%M", time.localtime(record.get("at", 0)))
+            return rerun_gate(event, name, at, f"{commit}\0{name}", case, fact, command)
     with State(agent_key(event)) as state:
-        record = state["passed"].get(check_key(cwd, command))
+        record = state["passed"].get(check_key(cwd, bare))
     if not record:
         return None
-    if tree_state(cwd) != record.get("tree"):
+    tree = tree_state(cwd)
+    if tree != record.get("tree"):
         return None
     at = time.strftime("%H:%M", time.localtime(record.get("at", 0)))
+    return rerun_gate(event, name, at, f"{tree}\0{name}", case, fact, command)
+
+
+RERUN_CASES = (
+    "Which case is it?\n"
+    "A. It reads something outside the worktree that changed since {at} (a rebuilt map, a new "
+    "client build): proceed, and name it in FACT.\n"
+    "B. Tom asked for a rerun: proceed; the hook checks his last 3 prompts.\n"
+    "C. A rerun for confidence before landing: stop and land with safe-push. On 8 Oct #244's "
+    "worker spent 95 min and 31.9M tokens on five more CI runs after its boxes passed, and four "
+    "tuning workers ran the same balance baseline on febfa549 within six minutes.\n"
+    "D. The last pass looked flaky: stop and report it in one line. Never rerun until it passes.\n"
+    "E. You lost the output: rerun once, with `| tee FILE`.\n"
+    "F. A frame-cost or latency check confirming once on a quiet machine, under an exclusive "
+    "capacity lease: proceed, and name the load difference in FACT.\n"
+    "To proceed, prefix the command with CASE=<letter> FACT=\"<the one new fact this run shows>\". "
+    "One justification per check and code state. "
+)
+TIMING_CHECK = re.compile(r"\b(perf|bench\w*|frame[- ]?cost|latency|timing)\b", re.IGNORECASE)
+RERUN_ASKED = ("rerun", "re run", "again", "retry", "run it once more")
+
+
+def rerun_gate(event, name, at, fingerprint, case, fact, command):
+    lead = f"`{name[:80]}` already passed on this code at {at}. {ONE_RUN}\n"
+    if not case:
+        return deny(lead + RERUN_CASES.format(at=at) + PEER_LINE)
+    problem = None
+    with State(agent_key(event)) as state:
+        prompts = state["prompts"][-3:]
+    if case in ("C", "D"):
+        problem = {
+            "C": "Case C stops here: land it with `safe-push --to main` and tick the box.",
+            "D": "Case D stops here: report the flaky result in one line; don't rerun it until it passes.",
+        }[case]
+    elif case == "B":
+        if not asked_keyword(RERUN_ASKED, prompts):
+            problem = "Case B needs Tom's ask: none of his last 3 prompts asks for a rerun."
+    elif case == "E" and not re.search(r"\|\s*tee\b", command):
+        problem = "Case E reruns only with `| tee FILE`, so the output survives this time."
+    elif case == "F" and not (TIMING_CHECK.search(name) and "exclusive" in command):
+        problem = "Case F is only for a frame-cost or latency check run under an exclusive capacity lease."
+    elif case not in "ABEF":
+        problem = f"There is no case {case}."
+    if not problem and case != "B":
+        problem = fact_problem(fact)
+    if not problem:
+        with SharedRuns() as shared:
+            used = shared.setdefault("justified", {})
+            key = hashlib.sha256(fingerprint.encode()).hexdigest()[:24]
+            if used.get(key):
+                problem = "This check already used its one justification on this code."
+            else:
+                used[key] = case
+    if problem:
+        return deny(lead + problem + " " + PEER_LINE)
+    log_override(event, "rerun", case, fact)
+    return None
+
+
+MEASURE_CMD = re.compile(
+    r"\b(bench\w*|perf|soak|profil\w*|hyperfine)\b|(^|[;&|]\s*)time\s|"
+    r"\b(for|while)\b[^;]*;\s*do\b",
+    re.IGNORECASE,
+)
+MEASURE_LIMIT = 2
+
+
+def is_measure(command):
+    return bool(MEASURE_CMD.search(command))
+
+
+def measure_gate(event, case, fact, command):
+    with State(agent_key(event)) as state:
+        count = state.get("measures", 0)
+        baseline = state.get("fix_baseline")
+        if count < MEASURE_LIMIT and not baseline:
+            return None
+        lead = (
+            f"You've run {count} measurements since your last change. Tom's rule: a measurement "
+            "ends in a fix you land, or a PEER line.\n"
+        )
+        if baseline:
+            return deny(lead + "You took a fix: baseline already. Make the fix first; the next "
+                        "measurement needs a patch in between. " + PEER_LINE)
+        if not case:
+            return deny(
+                lead + "Which case is it?\n"
+                "A. A box asks for this number: proceed; FACT starts `box:` and quotes the box.\n"
+                "B. A baseline for a fix you're about to make: proceed; FACT starts `fix:` and "
+                "names the fix. The next measurement needs a patch first.\n"
+                "C. To understand the problem better: stop and change the likeliest cause. On "
+                "8 Oct perf_phases_168 spent 6.0M tokens on a phase table, wrote \"No "
+                "optimization was made\", and #168 stayed at 18.26 ms against 10 ms.\n"
+                "D. To confirm the earlier number: stop and report it.\n"
+                "To proceed, prefix the command with CASE=<letter> FACT=\"box: ...\" or "
+                "FACT=\"fix: ...\". " + PEER_LINE
+            )
+        problem = None
+        if case in ("C", "D"):
+            problem = {"C": "Case C stops here: change the likeliest cause now.",
+                       "D": "Case D stops here: report the number you have."}[case]
+        elif case == "A" and not (fact or "").lower().startswith("box:"):
+            problem = "Case A's FACT starts `box:` and quotes the box that asks for this number."
+        elif case == "B" and not (fact or "").lower().startswith("fix:"):
+            problem = "Case B's FACT starts `fix:` and names the fix you're about to make."
+        elif case not in "AB":
+            problem = f"There is no case {case}."
+        problem = problem or fact_problem(fact)
+        if problem:
+            return deny(lead + problem + " " + PEER_LINE)
+        state["measures"] = 0
+        if case == "B":
+            state["fix_baseline"] = True
+    log_override(event, "measure", case, fact)
+    return None
+
+
+def pre_justify(event, match):
+    """`: justify <gate> <case> "<fact>"` arms one patch for the scaffold gate."""
+    gate, case = match.group(1), match.group(2).upper()
+    fact = match.group(4) if match.group(4) is not None else match.group(5)
+    problem = None
+    if gate != "scaffold":
+        problem = "Only the scaffold gate takes `: justify`; other gates take a CASE= FACT= prefix."
+    elif case == "C":
+        problem = "Case C stops here: drop the traceability or later-readiness part."
+    elif case == "A":
+        problem = "Case A is checked by the hook from Tom's prompts; just retry the patch if he asked."
+    elif case not in "BD":
+        problem = f"There is no case {case}."
+    problem = problem or fact_problem(fact)
+    if problem:
+        return deny(problem + " " + PEER_LINE)
+    with State(agent_key(event)) as state:
+        state["scaffold_ok"] = {"case": case, "fact": fact, "at": time.time()}
+    log_override(event, "scaffold", case, fact)
+    return None
+
+
+MEASURE_ONLY = re.compile(
+    r"\b(measure|measurement|profil\w*|diagnos\w*|investigat\w*|research)[- ]only\b|"
+    r"\bno (fix|optimi[sz]ation|code change)s? (in|for) (this|that) task\b|"
+    r"\b(do not|don'?t) (fix|change|optimi[sz]e)\b|\bwithout (landing |making )?(a |any )?fix\b",
+    re.IGNORECASE,
+)
+MEASURE_OUTCOME = re.compile(r"\bPEER\b|\bland(s|ing)? (a |the |its |one )?fix\b|\bfix it lands\b", re.IGNORECASE)
+
+
+def pre_spawn(event):
+    tool_input = event.get("tool_input") or {}
+    brief = json.dumps(tool_input) if not isinstance(tool_input, str) else tool_input
+    if MEASURE_ONLY.search(brief) and not MEASURE_OUTCOME.search(brief):
+        return deny(
+            "This brief only measures. Tom's rule: a measurement worker ends with a fix it "
+            "lands, or a PEER line naming what the numbers point to. On 8 Oct "
+            "perf_phases_168 spent 6.0M tokens on a measure-only brief and #168 moved no "
+            "number. To retry, add one line to the brief: \"End with a fix you land, or a "
+            "PEER line.\""
+        )
+    return None
+
+
+SCAFFOLD_WORDS = (
+    "manifest", "provenance", "attest", "sbom", "checksum", "schema_version", "migration",
+    "compat", "changelog", "release", "inventory", "sha256",
+)
+SCAFFOLD_FILE = re.compile(
+    r"(^|[/_.-])(" + "|".join(SCAFFOLD_WORDS) + r")\w*([._-][^/]*)?$|\.(sha256|sha256sum|sha512)$",
+    re.IGNORECASE,
+)
+
+
+def new_files(event):
+    tool = event.get("tool_name")
+    tool_input = event.get("tool_input") or {}
+    text = tool_input.get("command") if isinstance(tool_input, dict) else str(tool_input)
+    if isinstance(text, list):
+        text = " ".join(text)
+    text = text or ""
+    if tool == "Bash":
+        return re.findall(r"(?:>>?|\btee(?:\s+-a)?|\btouch)\s+['\"]?([^\s'\";|&<>]+)", text)
+    if tool == "Write" and isinstance(tool_input, dict) and tool_input.get("file_path"):
+        return [tool_input["file_path"]]
+    return re.findall(r"^\*\*\* Add File:\s*(\S+)", text, re.MULTILINE)
+
+
+def pre_scaffold(event):
+    cwd = event.get("cwd")
+    paths = [p for p in new_files(event) if SCAFFOLD_FILE.search(p)]
+    if not paths:
+        return None
+    root = CODE_ROOT.resolve()
+    inside = []
+    for name in paths:
+        path = Path(name) if Path(name).is_absolute() else Path(cwd or ".") / name
+        resolved = path.resolve()
+        if resolved.is_relative_to(root) and not resolved.exists() \
+                and expected_profile(resolved.parent if resolved.parent.exists() else cwd) == "prototype":
+            inside.append(name)
+    if not inside:
+        return None
+    word = SCAFFOLD_FILE.search(inside[0]).group(2) or "sha256"
+    with State(agent_key(event)) as state:
+        prompts = state["prompts"][-3:]
+        armed = state.pop("scaffold_ok", None)
+    if asked_keyword((word.lower(),), prompts) or armed:
+        return None
     return deny(
-        f"No. This exact check passed at {at} and the code hasn't changed since. "
-        "Running it again proves nothing new. Land it and close the box. If a rerun "
-        'really can catch a new failure, prefix the command with RERUN_BECAUSE="<that failure>".'
+        f"`{inside[0]}` adds a {word} file to a prototype repo, and none of Tom's last 3 "
+        "prompts asks for one. Tom is the only user. Which case is it?\n"
+        "A. Tom asked for it: the hook checks his prompts, so this isn't A.\n"
+        "B. The build or run fails without it: name the command and its error.\n"
+        "C. Traceability, safety or readiness for later: stop and drop that part. On 8 Oct "
+        "the #168 worker committed tapes.sha256, a generator SHA256 and 384 KB of samples, "
+        "and 20 of 180 Smashcraft commits only added such records (evidence/ is 391 MB).\n"
+        "D. Another tool requires this format: treat it as B.\n"
+        "To proceed with B or D, run `: justify scaffold B \"<command and its error>\"`, then "
+        "retry the patch. Otherwise put the result in the issue comment. " + PEER_LINE
     )
 
 
@@ -642,6 +982,7 @@ def post_bash(event):
     if isinstance(command, list):
         command = " ".join(command)
     cwd = event.get("cwd")
+    command = strip_token(command)
     code = exit_code(event.get("tool_response"))
     notes = []
     with State(agent_key(event)) as state:
@@ -671,8 +1012,43 @@ def post_bash(event):
                 tree = tree_state(cwd)
                 if tree:
                     state["passed"][key] = {"tree": tree, "at": time.time()}
+                commit = head_commit(cwd)
+                if commit:
+                    with SharedRuns() as shared:
+                        shared.setdefault(f"{commit}\0{check_name(command)}", {"at": time.time()})
+                if LAND_CHECK.search(command) and unlanded(cwd):
+                    state["last_pass"] = {"cwd": cwd, "tree": tree, "at": time.time()}
+                    state["land_wait"] = 0
+                    notes.append(
+                        "That check passed. Land it now: commit, `safe-push --to main`, then "
+                        "tick the box. No more checks first."
+                    )
             else:
                 state["passed"].pop(key, None)
+        elif LANDING.search(command) and code == 0:
+            state.pop("land_wait", None)
+        elif state.get("land_wait") is not None:
+            state["land_wait"] += 1
+            if state["land_wait"] >= LAND_NUDGE:
+                state.pop("land_wait", None)
+                notes.append(
+                    f"{LAND_NUDGE} commands since a passing check and still nothing landed. "
+                    "Land now, or say in one line which box is still failing."
+                )
+        if is_measure(command) and code is not None:
+            state["measures"] = state.get("measures", 0) + 1
+        if action in ("edit", "view", "comment") and code == 0:
+            text = issue_body(command, cwd) if action == "edit" else str(event.get("tool_response") or "")
+            ticked = re.findall(r"^\s*[-*] \[[xX]\] ", text, re.MULTILINE)
+            open_box = re.search(r"^\s*[-*] \[ \] ", text, re.MULTILINE)
+            closed = re.search(r"\bstate:\s*closed\b|\"state\":\s*\"CLOSED\"", text, re.IGNORECASE)
+            if ticked and not open_box and not closed:
+                number = next((w for w in words[3:] if re.fullmatch(r"#?\d+", w)), "it")
+                notes.append(
+                    f"Every box on issue {number} is ticked. Close it now: `gh issue close "
+                    f"{number} --comment \"<run and commit>\"`. Don't run anything else first. "
+                    + PEER_LINE
+                )
         eta = state.get("eta")
         if eta and not eta.get("warned"):
             spent = time.time() - eta["set_at"]
@@ -684,6 +1060,25 @@ def post_bash(event):
                     "and report the rest with a new ETA and the reason."
                 )
     return context("PostToolUse", " ".join(notes)) if notes else None
+
+
+LAND_CHECK = re.compile(r"\b(test|tests|check|typecheck|farm|sweep|parity|verify|validate)\b")
+LANDING = re.compile(r"\b(git commit|safe-push|git push)\b")
+LAND_NUDGE = 3
+
+
+def unlanded(cwd):
+    """True when the worktree has uncommitted changes or commits not on origin/main."""
+    try:
+        run = lambda *args: subprocess.run(
+            ["git", "-C", str(cwd), *args], capture_output=True, timeout=5, text=True
+        )
+        if run("status", "--porcelain=v1", "-uno").stdout.strip():
+            return True
+        ahead = run("rev-list", "--count", "origin/main..HEAD")
+        return ahead.returncode == 0 and ahead.stdout.strip() not in ("", "0")
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def stop_overrun(state):
@@ -708,6 +1103,8 @@ def post_spawn(event):
 def post_patch(event):
     with State(agent_key(event)) as state:
         state["streak"] = 0
+        state["measures"] = 0
+        state.pop("fix_baseline", None)
         overrun = stop_overrun(state)
     return context("PostToolUse", overrun) if overrun else None
 
@@ -724,6 +1121,16 @@ def stop(event):
     message = (event.get("last_assistant_message") or "").strip()
     if not message:
         return None
+    if not re.match(r"\W*(not done|blocked):", message, re.IGNORECASE):
+        with State(agent_key(event)) as state:
+            last = state.get("last_pass")
+        if last and tree_state(last["cwd"]) == last["tree"] and unlanded(last["cwd"]):
+            return block(
+                "Your last check passed on code that isn't landed. Land it now with "
+                "`safe-push --to main` and close the box, then send a 3-line report starting "
+                "\"Done:\". If something blocks landing, start with \"Blocked:\" and the exact "
+                "error. Don't add checks."
+            )
     if STOP_MISSING_TOOL.search(message) and not re.search(r"\berror\b|\bfailed with\b", message, re.IGNORECASE):
         return block(
             "No. You say a tool is missing, but you never got an error from calling it. "
@@ -816,7 +1223,12 @@ def decide_event(event):
         return user_prompt_submit(event)
     if name == "PreToolUse" and tool == "update_plan":
         return update_plan(event)
-    if name == "PreToolUse" and tool == "Bash":
+    if name == "PreToolUse" and str(tool).endswith("spawn_agent"):
+        return pre_spawn(event)
+    if name == "PreToolUse" and tool in ("Bash", "apply_patch", "Write", "Edit"):
+        decision = pre_scaffold(event)
+        if decision or tool != "Bash":
+            return decision
         return pre_bash(event)
     if name == "PostToolUse" and tool == "Bash":
         return post_bash(event)

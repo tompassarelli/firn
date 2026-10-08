@@ -81,15 +81,88 @@ expect progress-update-plan quiet '' "$(plan p1 "$game" "$good" '[{"step":"Fix a
 # Checks: a rerun on unchanged code is refused; changed code, a failure or a named reason allows.
 expect first-run quiet '' "$(pre b1 "$game" '"bun test"')"
 post b1 "$game" '"bun test"' 0 | run >/dev/null
-expect unchanged-rerun fires 'passed at' "$(pre b1 "$game" '"bun test"')"
-expect named-rerun quiet '' "$(pre b1 "$game" '"RERUN_BECAUSE=\"flaky timer on pair 15\" bun test"')"
+expect unchanged-rerun fires 'already passed' "$(pre b1 "$game" '"bun test"')"
+expect rerun-lists-cases fires 'Which case is it' "$(pre b1 "$game" '"bun test"')"
+expect rerun-confidence-stops fires 'Case C stops' "$(pre b1 "$game" '"CASE=C FACT=\"land it after one more pass\" bun test"')"
+expect rerun-banned-fact fires "rest on" "$(pre b1 "$game" '"CASE=A FACT=\"to be sure nothing regressed\" bun test"')"
+expect rerun-short-fact fires '15 or more' "$(pre b1 "$game" '"CASE=A FACT=\"map\" bun test"')"
+expect rerun-unasked-b fires 'needs Tom' "$(pre b1 "$game" '"CASE=B FACT=\"x\" bun test"')"
+expect rerun-e-needs-tee fires 'tee FILE' "$(pre b1 "$game" '"CASE=E FACT=\"output scrolled out of the window\" bun test"')"
+expect rerun-case-a quiet '' "$(pre b1 "$game" '"CASE=A FACT=\"rebuilt map at 18:02 from the new model import\" bun test"')"
+expect rerun-one-justification fires 'one justification' "$(pre b1 "$game" '"CASE=A FACT=\"another rebuilt map from the other import\" bun test"')"
+grep -q '"gate": "rerun"' "$scratch/state/verify-overrides.jsonl" && pass=$((pass + 1)) || { fail=$((fail + 1)); echo 'FAIL override-logged'; }
 expect other-command quiet '' "$(pre b1 "$game" '"git status"')"
 printf 'b\n' >>"$game/arc.ts"
 expect changed-code quiet '' "$(pre b1 "$game" '"bun test"')"
 post b1 "$game" '"bun test"' 1 | run >/dev/null
 expect after-failure quiet '' "$(pre b1 "$game" '"bun test"')"
 post b1 "$game" '"cd ts && bun run check"' 0 | run >/dev/null
-expect chained-check-rerun fires 'passed at' "$(pre b1 "$game" '"cd ts && bun run check"')"
+expect chained-check-rerun fires 'already passed' "$(pre b1 "$game" '"cd ts && bun run check"')"
+
+# One run per check per commit, across every agent: a farm run that passed on
+# this commit is refused to any other worker; one case-F timing confirmation passes.
+farm="$code/wisp/main"
+mkdir -p "$farm" && git -C "$farm" init -q && printf 'a\n' >"$farm/a.ts" && git -C "$farm" add a.ts \
+  && git -C "$farm" -c user.name=t -c user.email=t@t commit -qm init
+expect farm-first-run quiet '' "$(pre f1 "$farm" '"bun wisp farm balance \"wren expert 120\" --wait"')"
+post f1 "$farm" '"bun wisp farm balance \"wren expert 120\" --wait"' 0 | run >/dev/null
+expect farm-repeat-other-worker fires 'already passed on this code' "$(pre f2 "$farm" '"cd ts && bun wisp farm balance \"wren expert 120\""')"
+expect farm-other-spec quiet '' "$(pre f2 "$farm" '"bun wisp farm balance \"wren expert 40\" --wait"')"
+post f1 "$farm" '"bun wisp farm perf \"profile four\""' 0 | run >/dev/null
+expect timing-without-lease fires 'exclusive capacity lease' "$(pre f2 "$farm" '"CASE=F FACT=\"first run shared the box with a 99 load\" bun wisp farm perf \"profile four\""')"
+expect timing-confirm quiet '' "$(pre f2 "$farm" '"CASE=F FACT=\"first run shared the box with a 99 load\" bun machine-capacity.mjs run --class exclusive -- bun wisp farm perf \"profile four\""')"
+saved_path="$PATH"; mkdir -p "$scratch/bin" && printf '#!/bin/sh\necho success\n' >"$scratch/bin/gh" && chmod +x "$scratch/bin/gh"
+export PATH="$scratch/bin:$PATH"
+expect rerun-passing-run fires 'already passed' "$(pre r1 "$farm" '"gh run rerun 37752983299"')"
+printf '#!/bin/sh\necho failure\n' >"$scratch/bin/gh"
+expect rerun-failed-run quiet '' "$(pre r1 "$farm" '"gh run rerun 37752983299"')"
+export PATH="$saved_path"
+
+# A passing check on unlanded code: land it. The nudge repeats after three idle commands,
+# and the turn can't end until it lands.
+post l1 "$game" '"bun test -t arc"' 0 | run >/dev/null
+expect land-nudge fires 'safe-push' "$(post l2 "$game" '"bun test -t jump"' 0)"
+post l2 "$game" '"ls"' 0 | run >/dev/null; post l2 "$game" '"ls"' 0 | run >/dev/null
+expect land-nudge-repeat fires 'still nothing landed' "$(post l2 "$game" '"ls"' 0)"
+stop_in() { printf '{"hook_event_name":"Stop","session_id":"%s","stop_hook_active":false,"last_assistant_message":%s}' "$1" "$2"; }
+expect stop-unlanded fires "isn't landed" "$(stop_in l2 '"Tests pass on the arc fix.\nNeeds you: nothing"')"
+expect stop-blocked-ok quiet '' "$(stop_in l2 '"Blocked: safe-push failed with exit code 1: main moved.\nNeeds you: nothing"')"
+
+# Measuring: after two measurements with no change, a third needs a box or a fix.
+for i in 1 2; do post s1 "$game" '"hyperfine \"node arc.js\""' 0 | run >/dev/null; done
+expect third-measure fires 'Which case is it' "$(pre s1 "$game" '"hyperfine \"node arc.js\""')"
+expect measure-understand fires 'Case C stops' "$(pre s1 "$game" '"CASE=C FACT=\"see which phase dominates\" hyperfine \"node arc.js\""')"
+expect measure-box-prefix fires 'starts `box:`' "$(pre s1 "$game" '"CASE=A FACT=\"p99 for the phase table\" hyperfine \"node arc.js\""')"
+expect measure-fix-baseline quiet '' "$(pre s1 "$game" '"CASE=B FACT=\"fix: replay recorded CPU inputs during resim\" hyperfine \"node arc.js\""')"
+expect measure-needs-patch fires 'patch in between' "$(pre s1 "$game" '"hyperfine \"node arc.js\""')"
+patch_done() { printf '{"hook_event_name":"PostToolUse","session_id":"%s","cwd":"%s","tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch"},"tool_response":"ok"}' "$1" "$2"; }
+patch_done s1 "$game" | run >/dev/null
+expect measure-after-patch quiet '' "$(pre s1 "$game" '"hyperfine \"node arc.js\""')"
+
+# Briefs: a measure-only worker must end with a landed fix or a PEER line.
+brief() { printf '{"hook_event_name":"PreToolUse","session_id":"s1","cwd":"%s","tool_name":"collaborationspawn_agent","tool_input":{"task_name":"perf","message":%s}}' "$game" "$1"; }
+expect measure-only-brief fires 'only measures' "$(brief '"Item: smashcraft#168. MEASURE ONLY: per-phase p99 table. No fix in that task."')"
+expect measure-then-fix quiet '' "$(brief '"Item: smashcraft#168. Measure only the worst tape, then land the fix it points to, or post PEER."')"
+expect ordinary-brief quiet '' "$(brief '"Item: smashcraft#273. Narrow Archer side special to 3-15% use and land it."')"
+
+# New manifest, provenance, checksum or similar files in a prototype repo need Tom's ask.
+add() { printf '{"hook_event_name":"PreToolUse","session_id":"%s","cwd":"%s","tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\\n*** Add File: %s\\n+x\\n*** End Patch"}}' "$1" "$2" "$3"; }
+expect checksum-file fires 'Which case is it' "$(add m1 "$game" evidence/perf-168/tapes.sha256)"
+expect changelog-file fires 'CHANGELOG file' "$(add m1 "$game" CHANGELOG.md)"
+expect source-file quiet '' "$(add m1 "$game" ts/src/arc.ts)"
+expect tooling-manifest quiet '' "$(add m1 "$code/north/main" manifest.json)"
+expect shell-checksum fires 'sha256' "$(pre m1 "$game" '"sha256sum build/*.lua > evidence/tapes.sha256"')"
+expect justify-traceability fires 'Case C stops' "$(pre m1 "$game" '": justify scaffold C \"keeps the tapes traceable later\""')"
+expect justify-banned fires 'rest on' "$(pre m1 "$game" '": justify scaffold B \"safety net for the next worker\""')"
+expect justify-build quiet '' "$(pre m1 "$game" '": justify scaffold B \"bun wisp map build fails: missing build/manifest.json\""')"
+expect justified-patch quiet '' "$(add m1 "$game" build/manifest.json)"
+expect justification-used fires 'Which case' "$(add m1 "$game" build/other-manifest.json)"
+prompt m2 '"add a build manifest that lists every imported model"' | run >/dev/null
+expect asked-manifest quiet '' "$(add m2 "$game" build/manifest.json)"
+
+# An issue whose boxes are all ticked gets closed now.
+expect all-ticked fires 'Close it now' "$(post t1 "$game" '"gh issue edit 5 --body \"## Done when\n- [x] a\n- [x] b\""' 0)"
+expect box-open quiet '' "$(post t1 "$game" '"gh issue edit 5 --body \"## Done when\n- [x] a\n- [ ] b\""' 0)"
 
 # Issues: the shape must be closable, and a session can't open faster than it closes.
 body='## Done when\n- [ ] jump test passes\n## Not required\n- netcode'
