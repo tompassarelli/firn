@@ -64,7 +64,8 @@ peer jobs to activate this policy.
 Full-memory PSI remains diagnostic telemetry: cgroup-local throttling can
 raise it without exhausting host headroom, so it does not independently veto
 admission. Per-job CPU and memory bounds still apply. `run` also requires a
-finite runtime bound; `session` deliberately has no wall-clock deadline.
+finite runtime bound; a batch `session` defaults to 30 minutes, and only a
+native `session` has no wall-clock deadline.
 The helper implementation owns these thresholds; inspect it
 when changing admission behavior rather than adding a parallel calculator.
 
@@ -88,8 +89,8 @@ the default 4 GiB when omitted. Offline Warcraft clients may request 1.5 GiB.
 Only native clients allow this override; batch and agent classes keep their
 class allowances. It applies to newly started scopes only.
 
-Use `bun "$capacity" session --class heavy --owner OWNER -- COMMAND ARG...`
-for a foreground interactive session intended to remain until explicitly
+Use `bun "$capacity" session --class native --owner OWNER -- COMMAND ARG...`
+for a foreground client or desktop intended to remain until explicitly
 stopped. It sets systemd's runtime limit to infinity but retains the same atomic
 admission, aggregate CPU quota, memory ceiling, and descendant containment.
 Command exit and SIGINT/SIGTERM/SIGHUP to the wrapper stop the exact scope and

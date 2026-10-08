@@ -19,6 +19,8 @@ const nativeMemoryRequest = policy['native-memory-request'];
 const reserveClass = policy['reserve-class'];
 const aggregateCpus = policy['aggregate-cpus'];
 const batchClass = policy['batch-class'];
+const maximumSeconds = policy['maximum-seconds'];
+const sessionSeconds = policy['session-seconds'];
 const aggregateSlice = 'agent-capacity.slice';
 // Sibling of session.slice (300), app.slice (100) and agent.slice (20): game
 // clients outrank terminals and batch work but never the compositor.
@@ -28,7 +30,6 @@ const classNames = new Set(['agent', 'native', 'moderate', 'heavy', 'exclusive']
 const modes = new Map([['present', 'attended'], ['away', 'unattended'], ['auto', null]]);
 const idleSecondsForUnattended = 600;
 const presenceUnit = 'agent-capacity-presence.service';
-const maximumTimeoutSeconds = 3600;
 const lockStaleMilliseconds = 2000;
 const runLeaseGraceMilliseconds = 5000;
 const queuePollMilliseconds = 1000;
@@ -357,11 +358,11 @@ function totals(leases) {
 }
 
 // Held batch wrappers wait in arrival order; a ticket whose wrapper died is dropped.
-function enqueue(root) {
+function enqueue(root, className, owner) {
   ensureState(root);
   const name = `${String(Date.now()).padStart(15, '0')}-${crypto.randomUUID()}.json`;
   writeFileSync(join(root, 'queue', name), `${JSON.stringify({
-    wrapperPid: process.pid, wrapperStart: processStart(process.pid),
+    wrapperPid: process.pid, wrapperStart: processStart(process.pid), class: className, owner,
   })}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
   return name;
 }
@@ -390,9 +391,15 @@ function readQueue(root) {
       dequeue(root, name);
       continue;
     }
-    waiting.push(name);
+    waiting.push({ ...ticket, name, queuedAt: Number(name.slice(0, 15)) });
   }
   return waiting;
+}
+
+// Admission order: waiting exclusive requests first, each part in arrival order.
+function priorityOrder(queue) {
+  return [...queue.filter(ticket => ticket.class === 'exclusive'),
+    ...queue.filter(ticket => ticket.class !== 'exclusive')];
 }
 
 function leaseSlice(className) {
@@ -404,7 +411,9 @@ function decision(root, requested, create, ticket = null) {
     const now = Date.now();
     const { active, reclaimed } = readLeases(root, now);
     const queue = readQueue(root);
-    const queuedAhead = ticket === null ? queue.length : queue.filter(name => name < ticket).length;
+    const queuedAhead = ticket === null ? queue.length : queue.filter(entry => entry.name < ticket).length;
+    const exclusiveWaiting = queue.filter(entry => entry.class === 'exclusive'
+      && (requested.name !== 'exclusive' || ticket === null || entry.name < ticket)).length;
     const leased = totals(active);
     const runs = active.filter(lease => lease.kind === 'run');
     const signals = readSignals();
@@ -426,6 +435,7 @@ function decision(root, requested, create, ticket = null) {
       runs.filter(lease => lease.class === 'exclusive').length,
       runs.filter(lease => lease.aggregateSlice !== leaseSlice(lease.class)).length,
       queuedAhead,
+      exclusiveWaiting,
     );
     const result = {
       decision: code === 'RUN' ? (create ? 'RESERVED' : 'RUN') : 'DEFER',
@@ -440,6 +450,7 @@ function decision(root, requested, create, ticket = null) {
       leasedBatchCpus: leased.batchCpus,
       aggregateCpuLimit: aggregateCpus(profile, signals.cores),
       queuedAhead,
+      exclusiveWaiting,
       leasedNativeCpus: leased.nativeCpus,
       leasedMemoryMiB: leased.memoryMiB,
       protectedCpuSomeAvg10: signals.protectedCpuSomeAvg10BasisPoints / 100,
@@ -503,6 +514,35 @@ function changeLease(root, id, owner, timeoutSeconds, settledRun = false) {
   });
 }
 
+function status(root) {
+  return withLock(root, () => {
+    const now = Date.now();
+    const { active, reclaimed } = readLeases(root, now);
+    const { mode, profile } = activeProfile(root);
+    const seconds = milliseconds => Math.round(milliseconds / 1000);
+    return {
+      profile,
+      mode,
+      holding: active.sort((left, right) => left.createdAt - right.createdAt).map(lease => ({
+        owner: lease.owner,
+        class: lease.class,
+        kind: lease.kind,
+        cpus: lease.cpus,
+        memoryMiB: lease.memoryMiB,
+        heldSeconds: seconds(now - lease.createdAt),
+        remainingSeconds: lease.expiresAt === null ? null : seconds(lease.expiresAt - now),
+      })),
+      queued: priorityOrder(readQueue(root)).map((ticket, index) => ({
+        position: index + 1,
+        owner: ticket.owner ?? null,
+        class: ticket.class ?? null,
+        waitingSeconds: seconds(now - ticket.queuedAt),
+      })),
+      reclaimed,
+    };
+  });
+}
+
 function print(result, stream = process.stdout) {
   stream.write(`${JSON.stringify(result)}\n`);
 }
@@ -519,7 +559,7 @@ function parseOwner(values) {
 // clients keep their immediate DEFER answer.
 async function admit(root, requested, create) {
   if (!batchClass(requested.name)) return decision(root, requested, create);
-  const ticket = enqueue(root);
+  const ticket = enqueue(root, requested.name, create.owner);
   const leave = signal => () => {
     dequeue(root, ticket);
     process.exit(128 + ({ SIGHUP: 1, SIGINT: 2, SIGTERM: 15 })[signal]);
@@ -597,7 +637,7 @@ async function main(argv) {
       '--protected-cpu-some-avg10-basis-points', '--memory-full-avg10-basis-points',
       '--leased-cpus', '--leased-native-cpus', '--leased-memory-mib',
       '--peer-batch-runs', '--peer-exclusive-runs', '--unbounded-runs',
-      '--memory-gib', '--cpu-some-avg10-basis-points', '--queued-ahead',
+      '--memory-gib', '--cpu-some-avg10-basis-points', '--queued-ahead', '--exclusive-waiting',
     ]));
     if (parsed.separator !== argv.length) fail('fixture accepts no command');
     const cores = parsePositiveInteger(required(parsed.values, '--cores'), '--cores');
@@ -627,6 +667,7 @@ async function main(argv) {
       parseNonnegativeInteger(parsed.values.get('--peer-exclusive-runs') ?? '0', '--peer-exclusive-runs'),
       parseNonnegativeInteger(parsed.values.get('--unbounded-runs') ?? '0', '--unbounded-runs'),
       parseNonnegativeInteger(parsed.values.get('--queued-ahead') ?? '0', '--queued-ahead'),
+      parseNonnegativeInteger(parsed.values.get('--exclusive-waiting') ?? '0', '--exclusive-waiting'),
     );
     print({ decision: code, profile, class: requested.name, cpus: requested.cpus, memoryMiB: requested.memoryMiB, memoryFullAvg10,
       leasedCpuCeilings, aggregateCpuLimit: aggregateCpus(profile, cores) });
@@ -654,6 +695,11 @@ async function main(argv) {
       aggregateCpuLimit: aggregateCpus(active.profile, readSignals().cores) });
     return 0;
   }
+  if (operation === 'status') {
+    if (argv.length !== 1) fail('status accepts no arguments');
+    print(status(root), process.stdout);
+    return 0;
+  }
   if (operation === 'probe') {
     const { values, separator } = parseKeyValues(argv, 1, new Set(['--class', '--memory-gib']));
     if (separator !== argv.length) fail('probe accepts no command');
@@ -670,7 +716,7 @@ async function main(argv) {
     const requested = parseClass(parsed.values, signals.cores);
     const owner = parseOwner(parsed.values);
     const timeoutSeconds = parsePositiveInteger(
-      required(parsed.values, '--timeout-seconds'), '--timeout-seconds', maximumTimeoutSeconds,
+      required(parsed.values, '--timeout-seconds'), '--timeout-seconds', maximumSeconds('agent'),
     );
     const result = decision(root, requested, { kind: 'agent', owner, timeoutSeconds });
     print(result);
@@ -683,7 +729,7 @@ async function main(argv) {
     const parsed = parseKeyValues(argv, 1, allowed);
     if (parsed.separator !== argv.length) fail(`${operation} accepts no command`);
     const timeoutSeconds = operation === 'renew'
-      ? parsePositiveInteger(required(parsed.values, '--timeout-seconds'), '--timeout-seconds', maximumTimeoutSeconds)
+      ? parsePositiveInteger(required(parsed.values, '--timeout-seconds'), '--timeout-seconds', maximumSeconds('agent'))
       : null;
     print(changeLease(
       root,
@@ -694,22 +740,19 @@ async function main(argv) {
     return 0;
   }
   if (operation === 'run' || operation === 'session') {
-    const parsed = parseKeyValues(argv, 1, new Set(operation === 'session'
-      ? ['--class', '--owner', '--memory-gib'] : ['--class', '--owner', '--timeout-seconds', '--memory-gib']));
+    const parsed = parseKeyValues(argv, 1, new Set(['--class', '--owner', '--timeout-seconds', '--memory-gib']));
     const command = argv.slice(parsed.separator + 1);
     if (parsed.separator === argv.length || command.length === 0) fail(`${operation} requires -- COMMAND ARG...`);
     const signals = readSignals();
     const requested = parseClass(parsed.values, signals.cores);
-    return runScoped(
-      root,
-      requested,
-      parseOwner(parsed.values),
-      operation === 'session' ? null
-        : parsePositiveInteger(required(parsed.values, '--timeout-seconds'), '--timeout-seconds', maximumTimeoutSeconds),
-      command,
-    );
+    // A session without one takes its class's default deadline; native sessions have none.
+    const timeoutSeconds = parsed.values.has('--timeout-seconds') || operation === 'run'
+      ? parsePositiveInteger(required(parsed.values, '--timeout-seconds'), '--timeout-seconds',
+        maximumSeconds(requested.name))
+      : sessionSeconds(requested.name) || null;
+    return runScoped(root, requested, parseOwner(parsed.values), timeoutSeconds, command);
   }
-  fail('usage: probe|mode|reserve|renew|release|run|session; see machine-capacity');
+  fail('usage: status|probe|mode|reserve|renew|release|run|session; see machine-capacity');
 }
 
 process.exitCode = await main(Bun.argv.slice(2));

@@ -98,7 +98,7 @@ if ! grep -Eq '/agent-capacity-[0-9a-f]+\.scope(/|$)' /proc/self/cgroup; then
     capacity_skill=$(dirname -- "$(agents path machine-capacity)")
     lifetime=(session)
     [[ -z "$seconds" ]] || lifetime=(run --timeout-seconds "$seconds")
-    exec bun "$capacity_skill/scripts/machine-capacity.mjs" "${lifetime[@]}" --class heavy \
+    exec bun "$capacity_skill/scripts/machine-capacity.mjs" "${lifetime[@]}" --class native \
         --owner "private-desktop:$$" -- bash "$self" start "${original_args[@]}"
 fi
 

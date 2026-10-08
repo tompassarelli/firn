@@ -96,6 +96,15 @@ fi
 [[ $(decision attended exclusive 80000 0 0 2 2048 --peer-batch-runs 1) == DEFER_EXCLUSIVE ]]
 [[ $(decision unattended moderate 80000 0 0 18 16384 --peer-batch-runs 1 --peer-exclusive-runs 1) == DEFER_EXCLUSIVE ]]
 [[ $(decision attended heavy 80000 0 0 6 8192 --peer-batch-runs 1 --unbounded-runs 1) == DEFER_UNBOUNDED_PEER ]]
+# A waiting exclusive request holds all later batch work and waits only for
+# running batch leases: not for earlier batch tickets or pressure.
+[[ $(decision unattended heavy 80000 0 0 0 0 --exclusive-waiting 1) == DEFER_EXCLUSIVE_QUEUED ]]
+[[ $(decision attended moderate 80000 0 0 0 0 --exclusive-waiting 1) == DEFER_EXCLUSIVE_QUEUED ]]
+[[ $(decision unattended native 80000 0 0 0 0 --exclusive-waiting 1) == RUN ]]
+[[ $(decision unattended exclusive 80000 0 0 0 0 --queued-ahead 3) == RUN ]]
+[[ $(decision unattended exclusive 80000 0 0 0 0 --exclusive-waiting 1) == DEFER_QUEUED ]]
+[[ $(decision attended exclusive 80000 5000 0 0 0 --cpu-some-avg10-basis-points 9000) == RUN ]]
+[[ $(decision attended exclusive 80000 5000 0 6 8192 --peer-batch-runs 1) == DEFER_EXCLUSIVE ]]
 
 fixture_runtime="$scratch/runtime"
 mkdir -p "$fixture_runtime"
@@ -256,8 +265,8 @@ fixture_pids=()
 [[ $(ls "$fixture_runtime/agent-capacity-v1/queue" | wc -l) -eq 0 ]]
 calm_pressure 0.00
 
-# A foreground session has no deadline, but keeps its allowance until its
-# scope and descendants stop. Probing must not reclaim its null expiry.
+# A batch session takes its class's default deadline and keeps its allowance
+# until its scope and descendants stop.
 XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" session \
   --class moderate --owner fixture:/capacity \
   -- bash -c 'IFS=: read -r _ _ group < /proc/self/cgroup; printf "%s\n" "$group" >"$1"; sleep 60 & printf "%s\n" "$!" >"$2"; wait' \
@@ -270,8 +279,8 @@ for attempt in {1..100}; do
 done
 read -r group <"$scratch/session-group"
 read -r session_child <"$scratch/session-child"
-[[ $(systemctl --user show "${group##*/}" --property=RuntimeMaxUSec --value) == infinity ]]
-[[ $(head -n 1 "$scratch/session-err" | jq -r '.expiresAt') == null ]]
+[[ $(systemctl --user show "${group##*/}" --property=RuntimeMaxUSec --value) == 30min ]]
+[[ $(head -n 1 "$scratch/session-err" | jq -r '.expiresAt') != null ]]
 probe=$(XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" probe --class exclusive || true)
 [[ $(jq -r '.reason' <<<"$probe") == DEFER_EXCLUSIVE ]]
 [[ $(jq -r '.leasedMemoryMiB' <<<"$probe") -eq 2048 ]]
@@ -330,6 +339,8 @@ for lifetime in run session; do
   done
   read -r group <"$scratch/memory-group-$lifetime"
   [[ $(cat "/sys/fs/cgroup$group/memory.high") -eq 1610612736 ]]
+  # Native sessions alone have no deadline; probing must not reclaim it.
+  [[ $lifetime == run || $(systemctl --user show "${group##*/}" --property=RuntimeMaxUSec --value) == infinity ]]
   [[ $(head -n 1 "$scratch/memory-err-$lifetime" | jq -r '.requestedMemoryMiB') -eq 1536 ]]
   lease=$(head -n 1 "$scratch/memory-err-$lifetime" | jq -r '.lease')
   [[ $(jq -r '.memoryMiB' "$fixture_runtime/agent-capacity-v1/leases/$lease.json") -eq 1536 ]]
@@ -341,6 +352,66 @@ for lifetime in run session; do
   fixture_pids=()
   [[ $(tail -n 1 "$scratch/memory-err-$lifetime" | jq -r '.decision') == RELEASED ]]
 done
+
+# Deadlines are capped per class: an hour for batch work, 15 minutes exclusive.
+for request in 'exclusive 901' 'heavy 3601'; do
+  read -r class seconds <<<"$request"
+  set +e
+  refused=$(XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" run \
+    --class "$class" --owner fixture:/capacity --timeout-seconds "$seconds" -- true 2>&1)
+  refused_status=$?
+  set -e
+  [[ $refused_status -eq 2 && $refused == *'--timeout-seconds must be an integer from 1 to'* ]]
+done
+
+wait_for() { for attempt in {1..100}; do [[ -s "$1" ]] && return 0; sleep 0.05; done; [[ -s "$1" ]]; }
+held_run() {
+  local class=$1 owner=$2 name=$3; shift 3
+  XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" "$@" \
+    --class "$class" --owner "fixture:/$owner" \
+    -- bash -c 'IFS=: read -r _ _ group < /proc/self/cgroup; printf "%s\n" "$group" >"$1"; sleep 60 & wait' \
+    fixture-drain "$scratch/$name-ready" >"$scratch/$name-out" 2>"$scratch/$name-err" &
+  fixture_pids+=("$!")
+  pid_of[$name]=$!
+}
+declare -A pid_of
+stop_run() { kill -TERM "${pid_of[$1]}"; wait "${pid_of[$1]}" || true; }
+status() { XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" status; }
+# An exclusive request passes an earlier batch ticket held by pressure (the
+# recorded file is also the protected slices' reading).
+calm_pressure 90.00
+held_run moderate early early run --timeout-seconds 30
+sleep 1.5
+[[ $(head -n 1 "$scratch/early-err" | jq -r '.reason') == DEFER_INTERACTIVE_PRESSURE ]]
+held_run exclusive drain drain session
+wait_for "$scratch/drain-ready"
+read -r group <"$scratch/drain-ready"
+[[ $(systemctl --user show "${group##*/}" --property=RuntimeMaxUSec --value) == 15min ]]
+calm_pressure 0.00
+sleep 2.5
+[[ ! -s "$scratch/early-ready" ]]
+[[ $(status | jq -c '[.holding[].owner, .queued[].owner, .queued[0].position]') == '["fixture:/drain","fixture:/early",1]' ]]
+stop_run drain
+wait_for "$scratch/early-ready"
+# While a running lease holds the machine, a queued exclusive request goes first
+# and later batch work waits behind it.
+held_run exclusive drain second run --timeout-seconds 30
+sleep 1.5
+held_run moderate late late run --timeout-seconds 30
+sleep 1.5
+[[ $(head -n 1 "$scratch/second-err" | jq -r '.reason') == DEFER_EXCLUSIVE ]]
+[[ $(head -n 1 "$scratch/late-err" | jq -r '.reason') == DEFER_EXCLUSIVE_QUEUED ]]
+[[ $(status | jq -c '[.holding[] | .owner + " " + .class] + [.queued[] | .class]') == '["fixture:/early moderate","exclusive","moderate"]' ]]
+[[ $(status | jq '.holding[0].remainingSeconds') -le 35 ]]
+stop_run early
+wait_for "$scratch/second-ready"
+sleep 1.5
+[[ ! -s "$scratch/late-ready" ]]
+stop_run second
+wait_for "$scratch/late-ready"
+stop_run late
+fixture_pids=()
+[[ $(status | jq -c '[.holding, .queued]') == '[[],[]]' ]]
 
 # Mode overrides select the profile; auto follows recorded input idleness.
 mode=$(XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" mode away)

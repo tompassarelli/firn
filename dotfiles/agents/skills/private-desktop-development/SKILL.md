@@ -36,7 +36,7 @@ stopped or Ctrl-C. There is no default wall-clock deadline. Add `--seconds 3600`
 only when a finite deadline is wanted. Each run gets a private runtime directory, unique Wayland
 socket, and an available localhost VNC port. The launcher uses labwc with
 wlroots GLES rendering on the selected DRM render node and contains the session
-in the shared machine-capacity helper's foreground `session` mode, keeping its
+in the shared machine-capacity helper's foreground native `session` mode, keeping its
 resource allowance for the entire live session. VNC tools reuse one Python
 environment under `${XDG_CACHE_HOME:-~/.cache}/private-desktop`, keyed to the
 Python interpreter. Parallel starts wait for its installation; each runtime

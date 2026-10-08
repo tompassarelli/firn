@@ -33,12 +33,13 @@ memory floor, 75% leased-memory cap, and native CPU admission still apply.
 The capacity fixture with 70000 MiB already leased on a 96343 MiB host defers
 the default 4 GiB client but admits 1.5 GiB, saving 2.5 GiB per new client.
 
-Interactive desktops and other explicitly retained foreground sessions use
-`bun "$capacity" session --class heavy --owner "codex:/root/task" -- COMMAND ARG...`.
-They have no wall-clock deadline; command exit, Ctrl-C, or an explicit stop ends
-the scope. Keep the wrapper supervised until its `RELEASED` result. Use `run`
-with a finite timeout for builds and other bounded jobs. Never replace a deadline
-with a very large timeout or detach a renewal process.
+Warcraft clients and the private desktops they draw on use
+`bun "$capacity" session --class native --owner "codex:/root/task" -- COMMAND ARG...`.
+Native sessions alone have no wall-clock deadline; command exit, Ctrl-C, or an
+explicit stop ends the scope. Every batch lease has one: `run` requires
+`--timeout-seconds`, and a batch `session` defaults to 30 minutes. Batch work
+is capped at an hour and `exclusive` at 15 minutes. Keep the wrapper supervised
+until its `RELEASED` result. Never detach a renewal process.
 
 CPU weights order contention: `session.slice` (compositor) 300 > `native.slice`
 200 > `app.slice` (terminals, browser) 100 > `agent.slice` batch 20. Two
@@ -54,9 +55,13 @@ and attended within a second of input. `bun "$capacity" mode away|present|auto`
 overrides it (no argument prints the active profile); the override lasts until
 reboot. `probe` reports `profile` and
 `mode`. The wrapper admits atomically and contains every descendant in one user
-cgroup. Exclusive
-runs wait for peer batch jobs and block new batch jobs until release; native
-clients are never blocked by batch work.
+cgroup. A queued
+exclusive request drains the machine: no moderate or heavy work starts after it
+arrives, and it starts as soon as running batch leases end, whatever the
+pressure, so it waits at most the longest remaining batch deadline. It then
+blocks new batch jobs until release; native clients are never blocked.
+`bun "$capacity" status` lists who holds what (with remaining seconds) and who
+is queued, in admission order.
 **Every profile queues moderate and heavy runs in arrival order while declared
 batch CPUs would pass the core limit or system CPU some avg10 exceeds 30%.**
 Do not detach work outside the scope. One owner retains the terminal
@@ -67,7 +72,7 @@ itself when room frees; keep it supervised. `DEFER` from `probe`, `reserve` or a
 native client means retry after a known release or 30 seconds, never busy-poll.
 `RECLAIMED` concerns expired agent leases or finished helper-owned scopes, not
 permission to kill peers. Run allowances remain charged while their wrapper or
-scope is live, including throughout an interactive session without a deadline.
+scope is live, including throughout a native session without a deadline.
 Memory PSI is diagnostic only. System CPU PSI paces batch admission but does not
 measure desktop harm; the protected-slice reading does.
 
