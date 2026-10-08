@@ -174,6 +174,7 @@ over lockstep WebRTC peer to peer, with no server.
 - Register tests with `test()` in `*.tests.ts` so each runs in Bun and 32-bit
   Lua. Keep a test only for a reference value, a gameplay or netcode
   invariant, or a reproduced defect. Never change an expected value to pass.
+  The `testing` skill decides each test's level, tier, cost and deletion.
 
 ## Native testing
 

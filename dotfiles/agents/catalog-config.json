@@ -31,6 +31,7 @@
     "cloudflare-deploy",
     "digitalocean-access",
     "estimate",
+    "testing",
     "agent-policy",
     "agent-runtime-incident",
     "project-structure",
@@ -380,6 +381,14 @@
         "path": "dotfiles/agents/skills/private-desktop-development/SKILL.md"
       }
     },
+    "testing": {
+      "kind": "skill",
+      "category": "development",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/testing/SKILL.md"
+      }
+    },
     "image-context-budget": {
       "kind": "skill",
       "category": "development",
@@ -453,6 +462,16 @@
       ]
     },
     "private-desktop-development": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "testing": {
       "distributions": [
         {
           "type": "skill",

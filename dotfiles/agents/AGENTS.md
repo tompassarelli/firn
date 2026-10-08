@@ -166,20 +166,23 @@ Needs you: nothing
 
 ## Tests
 
-- The suite grows with what the product does, and each test stays cheap;
-  confidence doesn't come from volume. A repository's `AGENTS.md` sets a CPU
-  ceiling per test. Its test runner fails a test over the ceiling and a file
-  whose cost rises without new tests in it, and prints the suite's CPU cost
-  per test, which should hold or fall as the suite grows.
-- A test earns its place by pinning a reference value, a rule the product
-  must keep (gameplay, netcode, input, file formats) or a reproduced defect,
-  and it fails when that breaks. Its title names the rule or the issue.
+Load `testing` before writing, changing, deleting, running or speeding up
+tests.
+
+- Tests aim to cover the product's real behavior, so a broken rule shows up
+  in a test before Tom finds it in play. Cut cost and waste, not coverage: a
+  repository's `AGENTS.md` sets a CPU ceiling per test, its runner enforces
+  it, and the CPU cost per test holds or falls as the suite grows.
+- A test pins a reference value, a rule the product must keep (gameplay,
+  netcode, input, file formats) or a reproduced defect, fails when that
+  breaks, and names it in its title.
 - Test the path the product runs, at the cheapest level that runs real code,
-  with the smallest input that shows the rule: one seeded match, not eight;
-  one representative case plus a table check, not every fighter.
-- Sweeps (many matches, every pair, balance, calibration, soak) run on the
-  farm on every push, never in the suite.
-- No vanity tests: none that restate a constant or table, check source text
-  or wording the compiler or a lint could check, test the test tooling, or
-  repeat what a cheaper test covers. Delete one when you find it.
-- Never weaken a test or check to make it pass.
+  with the smallest input that shows the rule.
+- Run the tests a change affects locally. The full suite and the sweeps
+  (many matches, every pair, balance, calibration, soak) run on the farm on
+  every push.
+- Delete vanity tests when you find them: ones that restate a constant or
+  table, check what a compiler or lint could, test the test tooling, or repeat
+  a cheaper test.
+- Never weaken a test or check to make it pass, and never retry a flaky test
+  until it passes.
