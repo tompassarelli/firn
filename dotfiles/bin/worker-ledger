@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# worker-ledger: one JSONL row per finished Claude Code worker (category, tier,
+# ETA vs actual minutes, output tokens, peak context, outcome), and a
+# category x tier summary of those rows.
+set -uo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: worker-ledger [--session ID] [--since DATE]   append finished workers to the ledger
+       worker-ledger --summary [--since DATE]        per category x tier: count, success, minutes, tokens
+  --session ID  only that session's workers (default: every session)
+  --since DATE  only workers that finished on or after DATE (e.g. 2026-10-08)
+Ledger: ${WORKER_LEDGER:-~/.local/state/agents/ledger.jsonl}
+EOF
+  exit 2
+}
+
+session="" since="" summary=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --session) [ $# -ge 2 ] || usage; session=$2; shift 2 ;;
+    --since) [ $# -ge 2 ] || usage; since=$2; shift 2 ;;
+    --summary) summary=1; shift ;;
+    -h|--help) usage ;;
+    *) usage ;;
+  esac
+done
+
+ledger="${WORKER_LEDGER:-$HOME/.local/state/agents/ledger.jsonl}"
+
+if [ "$summary" -eq 1 ]; then
+  [ -s "$ledger" ] || { printf 'worker-ledger: no rows in %s\n' "$ledger" >&2; exit 1; }
+  jq -rs --arg since "$since" '
+    def median: sort | if length == 0 then null else .[(length - 1) / 2 | floor] end;
+    def rank: {"low":0,"medium":1,"high":2,"xhigh":3,"max":4}[.] // 5;
+    [.[] | select(.ended >= $since)]
+    | group_by([.category, (.tier | rank)])
+    | (["category", "tier", "n", "done", "success", "eta_med", "actual_med", "tokens_med"] | @tsv),
+      (.[] | [
+        .[0].category, .[0].tier, length,
+        ([.[] | select(.outcome == "done")] | length),
+        "\(([.[] | select(.outcome == "done")] | length) * 100 / length | floor)%",
+        ([.[] | .eta_min | numbers] | median // "-"),
+        ([.[] | .actual_min] | median),
+        "\(([.[] | .tokens] | median) / 1000 | floor)k"
+      ] | @tsv)
+  ' "$ledger" | column -t -s $'\t'
+  exit 0
+fi
+
+projects="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
+mkdir -p "$(dirname "$ledger")"
+touch "$ledger"
+known=$(jq -r '.id' "$ledger" 2>/dev/null)
+
+added=0
+while IFS= read -r f; do
+  id=$(basename "$f" .jsonl)
+  id=${id#agent-}
+  grep -qxF "$id" <<<"$known" && continue
+  tier=$(jq -r '.agentType // empty' "${f%.jsonl}.meta.json" 2>/dev/null)
+  row=$(jq -cRn --arg id "$id" --arg tier "$tier" --arg since "$since" '
+    def texts: [(.message.content | if type == "array" then .[] | select(.type == "text") | .text else tostring end)] | join("\n");
+    def ts: sub("\\.[0-9]+Z$"; "Z") | fromdate;
+    [inputs | fromjson? | select(type == "object")] as $lines
+    | [$lines[] | select(.type == "assistant" and .message.usage != null)] as $a
+    | select(($a | length) > 0)
+    | (if $tier != "" then $tier else ($a[-1].attributionAgent // "") end) as $agent
+    | select($agent | startswith("worker"))
+    | [$lines[] | select(.type == "user" or .type == "assistant")] as $m
+    | ($m[-1]) as $last
+    | select($last.type == "assistant" and ($last.message.content | type) == "array"
+        and ([$last.message.content[].type] | index("tool_use") | not)
+        and ($last | texts | length) > 0)
+    | ([$lines[] | select(.type == "user")][0] | texts) as $brief
+    | select(($last | texts | length) > 200 or ($last | texts | test("^\\W*(waiting|i.ll wait|i.ll pick|the test run)"; "i") | not))
+    | ([$a[] | select(.message.content | type == "array" and any(.[]; .type == "text")) | texts] | .[-3:] | max_by(length)) as $report
+    | ($report | .[0:400]) as $head
+    | ($lines | map(.timestamp // empty)) as $times
+    | ($times | last) as $ended
+    | select($ended >= $since)
+    | {
+        id: $id,
+        session: ($lines[0].sessionId // null),
+        ended: $ended,
+        category: (($brief | capture("^\\s*Category:\\s*(?<c>[^.;,\\n]+)").c | ascii_downcase | gsub("^\\s+|\\s+$"; "")) // "unknown"),
+        tier: (($agent | ltrimstr("worker") | ltrimstr("-")) | if . == "" then "medium" else . end),
+        eta_min: ($brief | [scan("(?i)\\bETA\\b[^0-9\\n]{0,12}([0-9]+(?:\\.[0-9]+)?)\\s*(hours?|hrs?|h|minutes?|mins?|m)\\b")] | first
+                  | if . == null then null else (.[0] | tonumber) * (if (.[1] | test("^h")) then 60 else 1 end) end),
+        actual_min: ((($ended | ts) - ($times[0] | ts)) / 60 | floor),
+        tokens: ([$a | group_by(.requestId // .message.id)[] | .[-1].message.usage.output_tokens // 0] | add),
+        peak_ctx: ($a[-1].message.usage | (.input_tokens // 0) + (.cache_read_input_tokens // 0) + (.cache_creation_input_tokens // 0)),
+        outcome: (if ($head | test("HANDOFF")) then "handoff"
+                  elif ($head | test("^\\W*(not|partly|mostly|half) done"; "i")) then "not done"
+                  elif ($head | test("^\\W*blocked"; "i")) then "escalated"
+                  elif ($head | test("^\\W*done\\b"; "i")) then "done"
+                  else "unclear" end),
+        report: ($head | gsub("\\s+"; " ") | .[0:160])
+      }
+  ' <"$f" 2>/dev/null)
+  [ -n "$row" ] || continue
+  printf '%s\n' "$row" >>"$ledger"
+  added=$((added + 1))
+done < <(
+  if [ -n "$session" ]; then
+    find "$projects" -mindepth 4 -maxdepth 4 -path "*/$session/subagents/agent-*.jsonl" 2>/dev/null
+  else
+    find "$projects" -mindepth 4 -maxdepth 4 -path '*/subagents/agent-*.jsonl' ${since:+-newermt "$since"} 2>/dev/null
+  fi | sort
+)
+printf 'worker-ledger: %d rows added to %s\n' "$added" "$ledger" >&2
