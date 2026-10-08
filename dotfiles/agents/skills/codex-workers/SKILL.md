@@ -14,8 +14,9 @@ reads the tier from them.
 | medium | `gpt-6.1-sol` medium | Default and floor: features, fixes with a known cause, tooling, docs and skills, setup, mechanical work. |
 | high | `gpt-6.1-sol` high | Multi-step or ambiguous work: unknown-cause debugging, netcode, determinism, engine, performance, cross-module work, native lane owners. |
 
-Never low; never max. Ladder: medium, high, then a PEER/HANDOFF to Claude,
-whose Opus workers (medium or higher) take the box. Use Astra only when Tom
+Never low; never max. Ladder: medium, high, then one recommendation to
+whoever started this session: Tom, or a supervisor whose brief says how to
+escalate. Use Astra only when Tom
 asks for it by name (9 Oct: it drains his usage and SOL is good enough). Let
 the ledger move a category's start.
 
