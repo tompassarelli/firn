@@ -10,13 +10,13 @@
 # the scan is captured first and must remain identical at publication; pushes
 # name the captured object ID and destination ref explicitly.
 #
-# Usage:  safe-push [--dry-run] [--to BRANCH]
+# Usage:  safe-push [--dry-run] [--to BRANCH] [--keep-lane]
 #         safe-push [--dry-run] --tag NAME
 set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: safe-push [--dry-run] [--to BRANCH]
+Usage: safe-push [--dry-run] [--to BRANCH] [--keep-lane]
        safe-push [--dry-run] --tag NAME
 
 Scan outgoing content for secrets, then push the current branch or one tag.
@@ -25,12 +25,18 @@ Options:
   --dry-run    run all safety checks without pushing
   --to BRANCH  explicitly publish HEAD to another remote branch; waits for
                the per-origin landing lock, then rebases onto origin BRANCH
+  --keep-lane  after landing --to main from ~/code/<project>/worktrees/<slug>,
+               keep the lane instead of removing it and its branch
   --tag NAME   push an existing annotated tag after scanning new content
   -h, --help   print this help without inspecting a repository
 
 On a non-default branch, plain "safe-push" (no --to/--tag) is refused —
 one-branch-main doctrine: origin carries the default branch only. Publish
 with --to main, or --to another branch as a deliberate escape hatch.
+
+A clean lane landed with --to main is removed afterwards (git worktree remove,
+then git branch -d), and its same-named origin branch is deleted when main
+holds all of it.
 USAGE
 }
 
@@ -41,6 +47,7 @@ argument_error() {
 }
 
 dry=0
+keep_lane=0
 tag=""
 tag_seen=0
 to=""
@@ -57,6 +64,11 @@ while [ "$#" -gt 0 ]; do
     --dry-run)
       [ "$dry" -eq 0 ] || argument_error 'duplicate --dry-run'
       dry=1
+      shift
+      ;;
+    --keep-lane)
+      [ "$keep_lane" -eq 0 ] || argument_error 'duplicate --keep-lane'
+      keep_lane=1
       shift
       ;;
     --tag)
@@ -91,6 +103,8 @@ done
 
 [ "$tag_seen" -eq 0 ] || [ "$to_seen" -eq 0 ] \
   || argument_error '--to cannot be combined with --tag'
+[ "$keep_lane" -eq 0 ] || [ "$to_seen" -eq 1 ] \
+  || argument_error '--keep-lane needs --to'
 
 validate_destination_name() {
   case "$1" in
@@ -216,6 +230,65 @@ auto_reap() {
   return 0
 }
 
+default_branch() {
+  local default
+  default=$(git symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null) || default=""
+  default=${default#refs/remotes/origin/}
+  printf '%s\n' "${default:-main}"
+}
+
+# Workers land and walk away, so lanes piled up by the hundred. Landing is the
+# one moment a lane is provably spent; best-effort, never changes exit status.
+cleanup_landed_lane() {
+  local container main_checkout tracking remote_oid lane_ref dirty
+  [ "$to_seen" -eq 1 ] && [ "$to" = "$(default_branch)" ] || return 0
+  [ "$branch" != "$to" ] || return 0
+  [ "$(basename "$(dirname "$repo_root")")" = worktrees ] || return 0
+  container=$(dirname "$(dirname "$repo_root")")
+  main_checkout="$container/main"
+  [ -e "$main_checkout/.git" ] || return 0
+  tracking="refs/remotes/origin/$to"
+  git fetch -q "$origin_url" "+${destination_ref}:${tracking}" 2>/dev/null || return 0
+  git merge-base --is-ancestor HEAD "$tracking" 2>/dev/null || return 0
+
+  lane_ref="refs/heads/$branch"
+  remote_oid=$(git ls-remote "$origin_url" "$lane_ref" 2>/dev/null | awk 'NR==1 {print $1}') || remote_oid=""
+  if [ -n "$remote_oid" ] \
+      && git fetch -q "$origin_url" "+${lane_ref}:refs/remotes/origin/$branch" 2>/dev/null \
+      && ! git cherry "$tracking" "refs/remotes/origin/$branch" 2>/dev/null | grep -q '^+'; then
+    echo "safe-push: origin $branch is fully on $to — deleting it"
+    if SAFE_PUSH_ACTIVE=1 git push -q --force-with-lease="${lane_ref}:${remote_oid}" \
+        "$origin_url" ":${lane_ref}"; then
+      git update-ref -d "refs/remotes/origin/$branch" 2>/dev/null || true
+    else
+      echo "safe-push: could not delete origin $branch; left in place" >&2
+    fi
+  fi
+
+  if [ "$keep_lane" -eq 1 ]; then
+    echo "safe-push: --keep-lane: keeping $repo_root and branch $branch"
+    return 0
+  fi
+  dirty=$(git status --porcelain 2>/dev/null) || return 0
+  if [ -n "$dirty" ]; then
+    printf 'safe-push: lane %s has uncommitted or untracked files, so it was kept; once they are saved: git -C %s worktree remove %s && git -C %s branch -d %s\n' \
+      "$repo_root" "$main_checkout" "$repo_root" "$main_checkout" "$branch"
+    return 0
+  fi
+  # branch -d judges merged-ness against the upstream, so a stale local main
+  # in the main checkout cannot block deleting a branch origin already holds.
+  git branch -q --set-upstream-to="origin/$to" "$branch" >/dev/null 2>&1 || true
+  printf 'safe-push: lane landed — removing worktree %s and branch %s\n' "$repo_root" "$branch"
+  cd "$container" || return 0
+  if ! git -C "$main_checkout" worktree remove "$repo_root"; then
+    echo "safe-push: could not remove $repo_root; left in place" >&2
+    return 0
+  fi
+  git -C "$main_checkout" branch -q -d "$branch" \
+    || echo "safe-push: could not delete branch $branch; left in place" >&2
+  printf 'safe-push: your working directory %s no longer exists; cd %s\n' "$repo_root" "$main_checkout"
+}
+
 capture_destination_state() {
   destination_branch=${to:-$branch}
   destination_ref="refs/heads/$destination_branch"
@@ -293,9 +366,7 @@ enforce_one_branch_main() {
     refs/heads/*) current=${ref#refs/heads/} ;;
     *) return 0 ;;
   esac
-  default=$(git symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null) || default=""
-  default=${default#refs/remotes/origin/}
-  [ -n "$default" ] || default=main
+  default=$(default_branch)
   [ "$current" = "$default" ] && return 0
   printf 'safe-push: non-main branch %s: publish with safe-push --to main (one-branch-main doctrine)\n' "$current" >&2
   printf 'safe-push: pushing branch names to origin is disabled\n' >&2
@@ -483,4 +554,5 @@ if [ "$to_seen" -eq 0 ]; then
       "$destination_branch" >&2
   fi
 fi
+cleanup_landed_lane || true
 auto_reap || true

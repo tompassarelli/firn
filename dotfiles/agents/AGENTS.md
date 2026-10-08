@@ -29,7 +29,8 @@ A `profile: <name>` line in a repository's `AGENTS.md` overrides this list.
 - Tom has given you full authority over everything reversible. That covers
   edits, commits, landing to main with `safe-push`, `firn rebuild`, restarts,
   rebooting dev servers, deleting your own scratch files and spawning workers.
-  Do these things without asking, then report them.
+  Do these things without asking, then report them. `safe-push --to main`
+  removes the landed lane and its branch; pass `--keep-lane` to keep it.
 - Ask only before you spend money, create an account or billing, send
   something to another person in Tom's name, or delete data you didn't create
   and can't restore. Also ask when two product directions would build

@@ -276,6 +276,11 @@ for help_flag in -h --help; do
   expect_no_tool_calls
 done
 
+run_case --keep-lane
+expect_status nonzero
+expect_output '--keep-lane needs --to'
+expect_no_tool_calls
+
 for rejected in --wat main --force -f --force-with-lease --mirror --delete --prune; do
   run_case "$rejected"
   expect_status nonzero
@@ -747,5 +752,85 @@ done
   || fail 'conflict refusal moved the lane HEAD'
 [ "$("$real_git" --git-dir="$landing_remote" rev-parse main)" = "$remote_main_before" ] \
   || fail 'conflict refusal mutated origin main'
+
+# Lane cleanup: a landed lane under <container>/worktrees/<slug> is removed
+# with its branch, judged against origin main even while the main checkout's
+# local main is stale.
+new_lane_container() {
+  lane_container="$scratch/lanes-$1"
+  lane_remote="$lane_container/remote.git"
+  lane="$lane_container/worktrees/lane"
+  mkdir -p "$lane_container/worktrees"
+  "$real_git" init --bare -q -b main "$lane_remote"
+  "$real_git" init -q -b main "$lane_container/main"
+  "$real_git" -C "$lane_container/main" config user.name safe-push-test
+  "$real_git" -C "$lane_container/main" config user.email safe-push-test@example.invalid
+  "$real_git" -C "$lane_container/main" commit --allow-empty -qm base
+  "$real_git" -C "$lane_container/main" remote add origin "$lane_remote"
+  "$real_git" -C "$lane_container/main" push -q -u origin main
+  "$real_git" -C "$lane_container/main" worktree add -q "$lane" -b lane
+  "$real_git" -C "$lane" commit --allow-empty -qm lane-work
+}
+
+run_lane() {
+  set +e
+  case_output="$(
+    cd "$lane"
+    SAFE_PUSH_TEST_SHIM=1 \
+      SAFE_PUSH_TEST_TRACE="$lane_container/trace" \
+      SAFE_PUSH_TEST_STATE="$lane_container/state" \
+      XDG_STATE_HOME="$scratch/xdg-state" \
+      PATH="$real_bin:$PATH" \
+      "$TARGET" --to main "$@" 2>&1
+  )"
+  case_status=$?
+  set -e
+}
+
+lane_branch_exists() {
+  "$real_git" -C "$lane_container/main" rev-parse -q --verify refs/heads/lane >/dev/null
+}
+
+remote_lane_exists() {
+  "$real_git" --git-dir="$lane_remote" rev-parse -q --verify refs/heads/lane >/dev/null
+}
+
+new_lane_container clean
+run_lane
+expect_status zero
+expect_output 'no longer exists'
+[ ! -e "$lane" ] || fail 'landed clean lane was not removed'
+! lane_branch_exists || fail 'landed clean lane branch was not deleted'
+
+new_lane_container keep
+run_lane --keep-lane
+expect_status zero
+expect_output '--keep-lane: keeping'
+[ -d "$lane" ] || fail '--keep-lane removed the lane'
+lane_branch_exists || fail '--keep-lane deleted the lane branch'
+
+new_lane_container dirty
+printf 'unsaved\n' >"$lane/notes.txt"
+run_lane
+expect_status zero
+expect_output 'uncommitted or untracked files, so it was kept'
+[ -f "$lane/notes.txt" ] || fail 'dirty lane was removed'
+lane_branch_exists || fail 'dirty lane branch was deleted'
+
+new_lane_container remote-merged
+"$real_git" -C "$lane" push -q origin lane
+run_lane
+expect_status zero
+expect_output 'origin lane is fully on main'
+! remote_lane_exists || fail 'merged remote lane branch was not deleted'
+[ ! -e "$lane" ] || fail 'landed lane with a merged remote branch was not removed'
+
+new_lane_container remote-unmerged
+"$real_git" -C "$lane" commit --allow-empty -qm 'only on the remote branch'
+"$real_git" -C "$lane" push -q origin lane
+"$real_git" -C "$lane" reset -q --hard HEAD~1
+run_lane
+expect_status zero
+remote_lane_exists || fail 'remote lane branch with unlanded work was deleted'
 
 printf 'safe-push tests: PASS\n'
