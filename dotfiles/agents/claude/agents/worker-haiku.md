@@ -1,6 +1,6 @@
 ---
 name: worker-haiku
-description: Mechanical, fully specified, small work: exact edits, ticking and closing issues, running a named check or prepared script and reporting its numbers, summaries, lookups. Haiku 5.5. A failed attempt goes to worker.
+description: Mechanical, fully specified, short work: exact edits, ticking and closing issues, running a named check or prepared script, lookups and extraction from large logs or documents, issue triage, recurring summaries. Haiku 5.5. A failed attempt goes to worker.
 model: claude-haiku-5-5
 effort: medium
 ---

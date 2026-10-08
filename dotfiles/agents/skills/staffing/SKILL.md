@@ -36,7 +36,7 @@ tier (Tom, 8 Oct): Haiku 5.5 covers mechanical work and Opus 5.5 the rest.
 
 | Tier | Claude Code | Codex | Start here when |
 | --- | --- | --- | --- |
-| haiku | worker-haiku (Haiku 5.5 medium) | gpt-6.1-sol medium | Mechanical, fully specified, small: exact edits, ticking and closing issues, running a named check or prepared script and reporting its numbers, summaries, lookups. |
+| haiku | worker-haiku (Haiku 5.5 medium) | gpt-6.1-sol medium | Mechanical, fully specified, short: exact edits, ticking and closing issues, running a named check or prepared script and reporting its numbers; lookups and extraction from large logs or documents (the failing tests in a farm log); triaging an issue list; recurring summaries and status reports. |
 | medium | worker (Opus 5.5) | gpt-6.1-sol medium | Default: features, fixes with a known cause, tooling, docs and skills, setup. Codex floor. |
 | high | worker-high | gpt-6.1-sol high | Multi-step or ambiguous work: unknown-cause debugging, netcode, engine, performance, cross-module work, native checks, research. |
 | xhigh | worker-xhigh | gpt-6-astra xhigh | Escalation from a failed or unfinished high attempt. |
@@ -68,7 +68,8 @@ that tier:
   does and scores no higher (GDPval 1620 against 1575 at about $0.90 a task;
   Terminal-Bench 39% against Opus low's 38%), so Haiku stays at medium and a
   failed haiku attempt goes to Opus medium. Prompts over 100k tokens cost it
-  five times as much: keep its briefs to one file or one check.
+  five times as much, still an eighth of Opus, so reading a large log for
+  one answer stays a haiku task; multi-step changes don't.
 - Opus 5.5 medium matches GPT-6 Astra's best coding scores at 20 to 40% of
   the cost. The charts don't include SOL 6.1.
 
