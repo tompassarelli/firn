@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# codex-lead: supervise a Codex lead session from outside, without touching
+# Tom's keyboard or focus. Every call resolves the live app-server daemon
+# socket, because the pooled control symlink can point at a dead daemon.
+#   codex-lead start BRIEF [codex args]  open the lead in a window that does not take focus; prints the thread id
+#   codex-lead id                        newest user-started Codex TUI thread
+#   codex-lead send MESSAGE              queue a message for the lead
+#   codex-lead goal OBJECTIVE            replace the lead's goal (status active)
+#   codex-lead goal-get                  print the lead's goal
+#   codex-lead status [N]                status file plus the lead's last N rollout events (default 12)
+#   codex-lead workers                   the lead's worker tree: path, model, effort, tokens, minutes idle
+# The thread is $CODEX_LEAD_THREAD, else the one `start` saved.
+set -euo pipefail
+
+CODEX_HOME_DIR=${NORTH_CODEX_POOLED_HOME:-$HOME/.local/state/north/codex-pooled}
+DB=$CODEX_HOME_DIR/sqlite/state_5.sqlite
+STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/agents/codex-lead
+STATE_FILE=$STATE_DIR/thread
+STATUS_FILE=${CODEX_LEAD_STATUS:-$HOME/.local/state/agents/handoffs/codex-lead-status.md}
+
+die() { echo "codex-lead: $*" >&2; exit 1; }
+
+usage() { sed -n '5,13p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+
+sock() {
+  local s
+  s=$(ss -xlp 2>/dev/null | rg -o '/tmp/codex-daemon-1000/[0-9a-f]+' | head -1 || true)
+  [ -n "$s" ] || die "no Codex app-server daemon is listening (start any codex session first)"
+  printf '%s\n' "$s"
+}
+
+thread() {
+  local t=${CODEX_LEAD_THREAD:-}
+  [ -n "$t" ] || { [ -f "$STATE_FILE" ] && t=$(<"$STATE_FILE"); }
+  [ -n "$t" ] || die "no lead thread: set CODEX_LEAD_THREAD or run 'codex-lead start BRIEF'"
+  printf '%s\n' "$t"
+}
+
+sql() { sqlite3 -readonly -cmd '.timeout 5000' "$DB" "$@"; }
+
+newest_tui() { # $1 = optional minimum created_at (epoch seconds)
+  sql "select id from threads where originator='codex-tui' and thread_source='user'
+       and archived=0 and created_at >= ${1:-0} order by created_at desc limit 1"
+}
+
+websocat_cmd() {
+  if command -v websocat >/dev/null 2>&1; then echo websocat; return; fi
+  local out
+  out=$(nix build --no-link --print-out-paths nixpkgs#websocat 2>/dev/null | tail -1) ||
+    die "cannot build websocat"
+  echo "$out/bin/websocat"
+}
+
+rpc() { # $1 = method, $2 = params JSON; prints the result JSON
+  local s ws out
+  s=$(sock); ws=$(websocat_cmd)
+  out=$({ printf '%s\n' \
+      '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"codex-lead","version":"1"}}}' \
+      '{"jsonrpc":"2.0","method":"initialized"}' \
+      "$(jq -cn --arg m "$1" --argjson p "$2" '{jsonrpc:"2.0",id:2,method:$m,params:$p}')"
+    sleep 3; } |
+    timeout 20 "$ws" -t --ws-c-uri=ws://localhost/ - "ws-c:unix:$s" 2>/dev/null |
+    jq -c 'select(.id==2)' | head -1) || true
+  [ -n "$out" ] || die "$1: no reply from the daemon"
+  jq -e 'has("error") | not' >/dev/null <<<"$out" || die "$1: $(jq -c .error <<<"$out")"
+  jq -c .result <<<"$out"
+}
+
+cmd=${1:-}; [ $# -gt 0 ] && shift
+case "$cmd" in
+  start)
+    [ $# -ge 1 ] || usage
+    brief=$(realpath -e "$1") || die "brief not found: $1"; shift
+    command -v spawn-quiet >/dev/null || die "spawn-quiet is missing"
+    since=$(( $(date +%s) - 1 ))
+    spawn-quiet ghostty --title="codex lead" -e codex "$@" "read $brief and follow it" >/dev/null
+    t=""
+    for _ in $(seq 1 60); do
+      t=$(newest_tui "$since"); [ -n "$t" ] && break; sleep 1
+    done
+    [ -n "$t" ] || die "the lead window opened but no thread appeared within 60s"
+    mkdir -p "$STATE_DIR"; printf '%s\n' "$t" >"$STATE_FILE"
+    echo "$t" ;;
+  id)
+    t=$(newest_tui); [ -n "$t" ] || die "no Codex TUI thread found"
+    echo "$t" ;;
+  send)
+    [ $# -eq 1 ] || usage
+    codex queue --remote "unix://$(sock)" --thread "$(thread)" --message "$1" ;;
+  goal)
+    [ $# -eq 1 ] || usage
+    rpc thread/goal/set "$(jq -cn --arg t "$(thread)" --arg o "$1" '{threadId:$t,objective:$o,status:"active"}')" |
+      jq -r '.goal | "\(.status // "?"): \(.objective)"' ;;
+  goal-get)
+    rpc thread/goal/get "$(jq -cn --arg t "$(thread)" '{threadId:$t}')" |
+      jq -r 'if .goal then .goal | "\(.status // "?"): \(.objective)" else "no goal set" end' ;;
+  status)
+    n=${1:-12}
+    if [ -f "$STATUS_FILE" ]; then cat "$STATUS_FILE"; else echo "(no status file at $STATUS_FILE)"; fi
+    t=$(thread)
+    rollout=$(sql "select rollout_path from threads where id='$t'")
+    [ -f "$rollout" ] || die "no rollout for thread $t"
+    printf '\n--- lead %s, last %s events ---\n' "$t" "$n"
+    tail -n 400 "$rollout" |
+      jq -r 'select(.type=="response_item") | .payload as $p
+        | select($p.type != "function_call_output" and $p.type != "reasoning")
+        | (.timestamp[11:19]) + " " + $p.type
+          + (if $p.name then " " + $p.name else "" end) + ": "
+          + ((([$p.content[]? | .text? // empty] | join(" ")) + ($p.arguments // ""))
+             | gsub("\\s+"; " ") | .[0:220])' |
+      tail -n "$n" ;;
+  workers)
+    t=$(thread)
+    sql -separator $'\t' "with recursive tree(id, depth) as (
+         select '$t', 0
+         union all
+         select e.child_thread_id, tree.depth + 1
+         from thread_spawn_edges e join tree on e.parent_thread_id = tree.id)
+       select coalesce(th.agent_path, '/root'), th.model, coalesce(th.reasoning_effort, '?'),
+              (th.tokens_used / 1000) || 'k tok',
+              'idle ' || cast((strftime('%s','now') - th.updated_at) / 60 as int) || 'm'
+       from tree join threads th on th.id = tree.id
+       order by tree.depth, th.created_at" | column -t -s $'\t' ;;
+  *) usage ;;
+esac

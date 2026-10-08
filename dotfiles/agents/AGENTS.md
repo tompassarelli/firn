@@ -102,8 +102,10 @@ Needs you: nothing
   `need`/`unneed` set blocked-by on GitHub, `list` shows who holds what
   against ETA, and `ready` lists open, unblocked, unheld issues. Close an
   issue with `gh issue close`, citing the last run's outcome.
+- To run work through a Codex lead session, use `codex-lead` (start, send,
+  goal, status, workers) and the `codex-lead` skill.
 - Always set the worker's model and effort, choosing from SOL 6.1
-  (`gpt-6.1-sol`) at `low` for simple edits, `medium` for ordinary work or
+  (`gpt-6.1-sol`) at `medium` for ordinary and simple work (never `low`) or
   `high` for hard implementation, Astra (`gpt-6-astra`) `xhigh` for hard
   reasoning, and Astra `max` for the hardest problems or a stuck fix loop.
   Use no other models.
