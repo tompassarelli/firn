@@ -150,6 +150,25 @@ Needs you: nothing
   in-repo caller in the same commit.
 - Reuse the repo's existing pattern before writing a new one.
 - A comment states a constraint the code can't show, and nothing else.
-- Never weaken a test or check to make it pass.
 - A new command isn't done until the repo's command list or feature index
   names it.
+
+## Tests
+
+- The suite grows with what the product does, and each test stays cheap;
+  confidence doesn't come from volume. A repository's `AGENTS.md` sets a CPU
+  ceiling per test. Its test runner fails a test over the ceiling and a file
+  whose cost rises without new tests in it, and prints the suite's CPU cost
+  per test, which should hold or fall as the suite grows.
+- A test earns its place by pinning a reference value, a rule the product
+  must keep (gameplay, netcode, input, file formats) or a reproduced defect,
+  and it fails when that breaks. Its title names the rule or the issue.
+- Test the path the product runs, at the cheapest level that runs real code,
+  with the smallest input that shows the rule: one seeded match, not eight;
+  one representative case plus a table check, not every fighter.
+- Sweeps (many matches, every pair, balance, calibration, soak) run on the
+  farm on every push, never in the suite.
+- No vanity tests: none that restate a constant or table, check source text
+  or wording the compiler or a lint could check, test the test tooling, or
+  repeat what a cheaper test covers. Delete one when you find it.
+- Never weaken a test or check to make it pass.
