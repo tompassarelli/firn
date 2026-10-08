@@ -18,8 +18,8 @@ malformed event allows.
   close, and a new issue while the session has opened more than it closed.
   Edits to existing issues pass. One timing check may confirm once under an
   exclusive capacity lease.
-- PreToolUse(spawn_agent) refuses a local worker at high CPU pressure
-  (lib/spawn_capacity.py) and a measure-only brief, and PreToolUse of a
+- PreToolUse(spawn_agent) refuses a local worker once capacity leases hold
+  the CPU limit (lib/spawn_capacity.py) and a measure-only brief, and PreToolUse of a
   patch or shell write refuses a new manifest, provenance, attestation,
   inventory or checksum file in a prototype repo unless a prompt asked.
 - PostToolUse(Bash) says to close an issue whose boxes are all ticked.

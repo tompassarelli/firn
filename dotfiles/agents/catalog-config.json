@@ -517,7 +517,7 @@
     "spawn-capacity-guard": {
       "kind": "hook",
       "title": "Spawn capacity gate",
-      "triggerDescription": "Refuse a new local Claude worker while CPU pressure is at or above 40%.",
+      "triggerDescription": "Refuse a new local Claude worker once capacity leases hold the machine's CPU limit or protected desktop pressure is above 20%.",
       "category": "agents",
       "owner": {
         "repo": "nixos-config",
