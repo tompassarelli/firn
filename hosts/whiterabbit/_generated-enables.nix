@@ -2,8 +2,10 @@
 
 {
   myConfig.modules.activity.enable = lib.mkDefault true;
+  myConfig.modules.ast-grep.enable = lib.mkDefault true;
   myConfig.modules.atuin.enable = lib.mkDefault true;
   myConfig.modules.bash.enable = lib.mkDefault true;
+  myConfig.modules.bat.enable = lib.mkDefault true;
   myConfig.modules.bc.enable = lib.mkDefault true;
   myConfig.modules.bench-shield.enable = lib.mkDefault true;
   myConfig.modules.blender.enable = lib.mkDefault true;
@@ -20,6 +22,7 @@
   myConfig.modules.direnv.enable = lib.mkDefault true;
   myConfig.modules.discord.enable = lib.mkDefault true;
   myConfig.modules.doom-emacs.enable = lib.mkDefault true;
+  myConfig.modules.duf.enable = lib.mkDefault true;
   myConfig.modules.dust.enable = lib.mkDefault true;
   myConfig.modules.emacs.enable = lib.mkDefault true;
   myConfig.modules.eyedropper.enable = lib.mkDefault true;
@@ -48,6 +51,7 @@
   myConfig.modules.grim.enable = lib.mkDefault true;
   myConfig.modules.gtk.enable = lib.mkDefault true;
   myConfig.modules.hugo.enable = lib.mkDefault true;
+  myConfig.modules.hyperfine.enable = lib.mkDefault true;
   myConfig.modules.imagemagick.enable = lib.mkDefault true;
   myConfig.modules.imv.enable = lib.mkDefault true;
   myConfig.modules.jq.enable = lib.mkDefault true;
@@ -78,6 +82,7 @@
   myConfig.modules.river.enable = lib.mkDefault true;
   myConfig.modules.rofi.enable = lib.mkDefault true;
   myConfig.modules.sbcl.enable = lib.mkDefault true;
+  myConfig.modules.sd.enable = lib.mkDefault true;
   myConfig.modules.shellcheck.enable = lib.mkDefault true;
   myConfig.modules.slurp.enable = lib.mkDefault true;
   myConfig.modules.smashcraft-controller.enable = lib.mkDefault true;
@@ -102,6 +107,7 @@
   myConfig.modules.wl-clipboard.enable = lib.mkDefault true;
   myConfig.modules.wl-gammarelay.enable = lib.mkDefault true;
   myConfig.modules.yazi.enable = lib.mkDefault true;
+  myConfig.modules.yq-go.enable = lib.mkDefault true;
   myConfig.modules.zathura.enable = lib.mkDefault true;
   myConfig.modules.zen-browser.enable = lib.mkDefault true;
   myConfig.modules.zoxide.enable = lib.mkDefault true;

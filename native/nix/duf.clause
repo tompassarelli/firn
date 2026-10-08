@@ -1,0 +1,4 @@
+import "nixpkgs.clause"
+
+export duf-module()
+  module(path(myConfig.modules.duf.enable), "duf disk usage viewer", package(path(duf)))

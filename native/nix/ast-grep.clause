@@ -1,0 +1,4 @@
+import "nixpkgs.clause"
+
+export ast-grep-module()
+  module(path(myConfig.modules.ast-grep.enable), "ast-grep structural code search", package(path(ast-grep)))

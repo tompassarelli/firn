@@ -1,0 +1,4 @@
+import "nixpkgs.clause"
+
+export yq-go-module()
+  module(path(myConfig.modules.yq-go.enable), "yq YAML/JSON/TOML processor", package(path(yq-go)))

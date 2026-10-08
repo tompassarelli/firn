@@ -1,0 +1,4 @@
+import "nixpkgs.clause"
+
+export hyperfine-module()
+  module(path(myConfig.modules.hyperfine.enable), "hyperfine command benchmarking", package(path(hyperfine)))
