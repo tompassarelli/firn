@@ -187,6 +187,19 @@ personal blog) that teams delete whole suites.
   about 2026-02. Took: tests are cheap now, so write them; see each new test
   fail first; start a session by running the tests. The counterweight to
   pruning: more tests, if each is cheap and real.
+- [A14] Kun Chen (@kunchenguid), X post 2108030810691629403, 2026-10.
+  Took: on the DeepSWE eval set, banning Sonnet 5.5 high from writing tests
+  gave a slightly higher (not significant) success rate with significantly
+  less time and tokens; the 65% unit / 35% integration tests the baseline
+  wrote added nothing; disabling even existing tests on a 44-task subset
+  didn't change success; spot checks showed most tests repeated the
+  implementation. Doesn't cover: it measures single-task success, not
+  cross-agent regression catching in a shared codebase, and not end-to-end
+  tests (only 17 written). Our evidence, 2026-10-08: headless fixture rows
+  written before native captures were wrong in several cases (wisp#56, #60,
+  #61), and existing tests caught cross-agent regressions (Thrall model
+  facts, Kael'thas move list and powershield reflect, Uther clip numbers).
+  Hence: name the oracle; headless rows stay provisional until a capture.
 
 ## Lessons from exemplary suites
 

@@ -15,9 +15,13 @@ revising this skill or when a decision here needs its source.
 
 ## What earns a test
 
-- A **rule** the product must keep (gameplay, netcode, input, file format,
-  command interface), a **reference value** from outside the code (the real
-  game, a capture, a spec), or a **reproduced defect**. [G1, E1]
+- Before writing a test, name its **oracle**, where the expected value comes
+  from: a real-game capture, a value Tom or a design doc set, a reproduction
+  that fails on the old code, or an invariant that holds however the code
+  computes it (matching checksums, frame-for-frame replays, no desync). A
+  test whose expected value came from running the code you just wrote is a
+  restatement of the implementation; don't write it. Headless expected rows
+  stay provisional until a native capture confirms them. [G1, E1, A14]
 - Add a test wherever a rule is unpinned. Every fixed bug gets one named for
   its issue; netcode and invariants get one even when the code looks right.
 - One rule or defect per test, said in the title: `shield breaks at 0 and
@@ -149,8 +153,7 @@ shrink it, go down a size, or move it to the farm.
 2. Extend an existing table, else use the cheapest level that runs the path.
 3. Smallest input that shows the rule: one fighter, one seeded match, values
    just below and at each threshold.
-4. Expected values from the real game, a capture, a spec or the issue, cited.
-   Never from the code under test or copied from its output. [A9]
+4. Expected values from the named oracle, cited; never from the code's output. [A9]
 5. Watch it fail: a defect test before the fix; a rule test by breaking the
    rule once. [A3, A6, A13]
 6. Deterministic and independent: fixed seed, no clock, no network, any order.
