@@ -81,7 +81,7 @@ Before a parallel worker expected to consume local compute, reserve its
 release at settlement. Its local commands still require their own `run` scope.
 Only `agent` permits persistent reservation. Exact commands and headroom
 rules: [nixos-config:capacity leases and limits](references/leases-and-limits.md).
-The spawn gate (`spawn-capacity-guard`, shared with the Codex behavior guard) refuses a new local Claude or Codex worker once the CPUs held by capacity leases (`probe`: `leasedCpuCeilings`) reach `aggregateCpuLimit`, or while `protectedCpuSomeAvg10` is above 20; system CPU pressure alone never refuses, since a worker's heavy commands already run inside leases. Queue it, use the farm, or use a cloud worker.
+The spawn gate (`spawn-capacity-guard`, shared with the Codex behavior guard) refuses a new local Claude or Codex worker once the CPUs held by batch leases (`probe`: `leasedBatchCpus`; native clients count only through protected pressure) reach `aggregateCpuLimit`, or while `protectedCpuSomeAvg10` is above 20; system CPU pressure alone never refuses, since a worker's heavy commands already run inside leases. Queue it, use the farm, or use a cloud worker.
 
 Never kill a peer process. Only its owner or accountable parent may stop the
 identified tree. Pressure changes admission, not correctness requirements.

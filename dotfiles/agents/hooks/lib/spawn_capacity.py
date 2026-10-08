@@ -4,8 +4,9 @@
 Shared by the Claude PreToolUse(Agent) hook (spawn-capacity-guard.sh) and the
 Codex behavior guard's PreToolUse(spawn_agent). A worker idles while its model
 thinks and its heavy commands run inside capacity leases, so admission counts
-the CPUs those leases hold (machine-capacity `probe`: leasedCpuCeilings against
-aggregateCpuLimit) rather than system CPU pressure. It also refuses while the
+the CPUs batch leases hold (machine-capacity `probe`: leasedBatchCpus against
+aggregateCpuLimit; native clients count only through the protected-pressure
+check, since their 2-CPU charge per desktop and client overstates them) rather than system CPU pressure. It also refuses while the
 protected desktop slice is under pressure (protectedCpuSomeAvg10 above 20). A
 missing, slow (2 s) or unreadable helper allows. An urgent fix passes with
 `CASE=URGENT FACT="..."` at the start of the brief, logged beside the Codex
@@ -67,7 +68,7 @@ def capacity():
     data = capacity_probe()
     if data is None:
         return None
-    provisioned = number(data.get("leasedCpuCeilings"))
+    provisioned = number(data.get("leasedBatchCpus"))
     limit = number(data.get("aggregateCpuLimit")) or float(os.cpu_count() or 1)
     protected = number(data.get("protectedCpuSomeAvg10"))
     if provisioned is None or protected is None:

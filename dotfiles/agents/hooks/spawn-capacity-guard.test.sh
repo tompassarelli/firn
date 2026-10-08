@@ -20,7 +20,7 @@ mkdir -p "$SCRATCH/home/.claude/projects/p/s/subagents"
 : >"$SCRATCH/home/.claude/projects/p/s/subagents/agent-b.jsonl"
 
 # status LEASED PROTECTED [SYSTEM_PSI]: write the probe fixture (limit 20 CPUs).
-status() { printf '{"decision":"RUN","leasedCpuCeilings":%s,"aggregateCpuLimit":20,"protectedCpuSomeAvg10":%s,"cpuSomeAvg10":%s}\n' "$1" "$2" "${3:-1}" >"$STATUS"; }
+status() { printf '{"decision":"RUN","leasedBatchCpus":%s,"leasedNativeCpus":12,"aggregateCpuLimit":20,"protectedCpuSomeAvg10":%s,"cpuSomeAvg10":%s}\n' "$1" "$2" "${3:-1}" >"$STATUS"; }
 
 # call HOOK JSON: print the deny reason ("" when allowed).
 call() {
