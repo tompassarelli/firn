@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # worker-ledger: records each finished Claude Code worker as a run in threads
-# (item, follows and category from its brief; tier, ETA vs actual minutes,
-# output tokens, peak context, outcome), and a category x tier summary of runs.
+# (issue ref, follows and category from its brief; tier, ETA vs actual
+# minutes, output tokens, peak context, outcome, handoff note path), and a
+# category x tier summary of runs.
 set -uo pipefail
 
 usage() {
@@ -10,7 +11,7 @@ usage: worker-ledger [--session ID] [--since DATE]   record finished workers as 
        worker-ledger --summary [--since DATE]        per category x tier: count, success, minutes, tokens
   --session ID  only that session's workers (default: every session)
   --since DATE  only workers that finished on or after DATE (e.g. 2026-10-08)
-Briefs carry `Item: <id>`, `Follows: <agent id>` and `Category: <name>` lines.
+Briefs carry `Item: <repo#N>`, `Follows: <agent id>` and `Category: <name>` lines.
 Runs live in threads' database (${THREADS_DB:-~/.local/state/threads/threads.db}).
 EOF
   exit 2
@@ -79,6 +80,7 @@ while IFS= read -r f; do
                   elif ($head | test("^\\W*blocked"; "i")) then "escalated"
                   elif ($head | test("^\\W*done\\b"; "i")) then "done"
                   else "unclear" end),
+        note: ([$report | scan("(?:~|/home/[^/\\s]+)/[^\\s`]*handoffs?/[^\\s`]+?\\.md")] | first),
         report: ($head | gsub("\\s+"; " ") | .[0:160])
       }
   ' <"$f" 2>/dev/null)

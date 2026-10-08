@@ -92,11 +92,13 @@ Needs you: nothing
   verifier, auditor or status workers unless Tom asks.
 - A worker brief has four parts: the goal, the files, the Done when list and
   an ETA. At twice the ETA the worker reports. Every brief also carries the
-  lines `Item: <id>`, `Category: <name>` and, when it continues earlier work,
-  `Follows: <agent id>`, so each run lands on its item.
-- `threads` tracks the work: `add`, `claim`, `release --to`, `need`, `close`,
-  `drop`, `show`, `ready` and `list`. Record each open item there, with what
-  it needs; `threads ready` lists what can start now.
+  lines `Item: <repo#N>`, `Category: <name>` and, when it continues earlier
+  work, `Follows: <agent id>`, so each run lands on its issue.
+- Every tracked item is a GitHub issue; GitHub holds its title, boxes, state
+  and blocked-by links. `threads` holds the rest: `claim`, `release --to`,
+  `need`/`unneed` (sets blocked-by on GitHub), `show`, `list` (who holds
+  what, against ETA) and `ready` (open, unblocked, unheld issues). Close an
+  issue with `gh issue close`, citing the last run's outcome.
 - Always set the worker's model and effort, choosing from SOL 6.1
   (`gpt-6.1-sol`) at `low` for simple edits, `medium` for ordinary work or
   `high` for hard implementation, Astra (`gpt-6-astra`) `xhigh` for hard

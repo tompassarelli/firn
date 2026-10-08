@@ -1,47 +1,50 @@
 #!/usr/bin/env python3
-"""threads: a small work tracker. Items, who owns them, what they need, and
-the worker runs spent on them, in one SQLite file."""
+"""threads: who holds which GitHub issue, handoffs, and the worker runs spent
+on each. GitHub owns the issue itself (title, boxes, state, blocked-by); this
+SQLite file holds only what GitHub can't."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import random
 import re
 import sqlite3
+import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 
 DB = os.environ.get("THREADS_DB") or os.path.expanduser("~/.local/state/threads/threads.db")
+CACHE_SECONDS = 60
+
+# Short name used in refs -> GitHub repository.
+REPOS = {
+    "smashcraft": "tompassarelli/smashcraft",
+    "wisp": "tompassarelli/wisp",
+    "nixos-config": "tompassarelli/firn",
+    "north": "tompassarelli/north",
+    "clause": "tompassarelli/clause",
+    "beagle": "tompassarelli/beagle",
+}
+SHORT = {full: short for short, full in REPOS.items()}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS events(
   seq INTEGER PRIMARY KEY,
   ts TEXT NOT NULL,
   item TEXT,
-  kind TEXT NOT NULL CHECK(kind IN ('capture','claim','release','handoff','need','unneed','run','note','close','drop')),
+  kind TEXT NOT NULL CHECK(kind IN ('claim','release','handoff','need','unneed','run','note')),
   actor TEXT NOT NULL DEFAULT '',
   tier TEXT NOT NULL DEFAULT '',
   data TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(data))
 ) STRICT;
-CREATE TABLE IF NOT EXISTS items(
-  id TEXT PRIMARY KEY CHECK(length(id) > 0),
-  title TEXT NOT NULL,
-  done_when TEXT NOT NULL DEFAULT '',
-  part_of TEXT REFERENCES items(id),
-  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','done','dropped')),
-  outcome TEXT NOT NULL DEFAULT '',
-  owner TEXT NOT NULL DEFAULT '',
-  owned_since TEXT,
-  eta_min INTEGER CHECK(eta_min IS NULL OR eta_min > 0),
-  created TEXT NOT NULL,
-  closed TEXT
-) STRICT;
-CREATE TABLE IF NOT EXISTS deps(
-  item TEXT NOT NULL REFERENCES items(id),
-  needs TEXT NOT NULL REFERENCES items(id),
-  PRIMARY KEY(item, needs),
-  CHECK(item <> needs)
+CREATE TABLE IF NOT EXISTS claims(
+  item TEXT PRIMARY KEY CHECK(item GLOB '*#[0-9]*'),
+  owner TEXT NOT NULL CHECK(length(owner) > 0),
+  since TEXT NOT NULL,
+  eta_min INTEGER CHECK(eta_min IS NULL OR eta_min > 0)
 ) STRICT;
 CREATE TABLE IF NOT EXISTS runs(
   agent TEXT PRIMARY KEY,
@@ -57,7 +60,13 @@ CREATE TABLE IF NOT EXISTS runs(
   tokens INTEGER,
   peak_ctx INTEGER,
   outcome TEXT NOT NULL CHECK(outcome IN ('done','not done','escalated','handoff','unclear')),
-  report TEXT NOT NULL DEFAULT ''
+  report TEXT NOT NULL DEFAULT '',
+  note TEXT
+) STRICT;
+CREATE TABLE IF NOT EXISTS gh_cache(
+  repo TEXT PRIMARY KEY,
+  fetched REAL NOT NULL,
+  issues TEXT NOT NULL CHECK(json_valid(issues))
 ) STRICT;
 CREATE INDEX IF NOT EXISTS events_item ON events(item, seq);
 CREATE INDEX IF NOT EXISTS runs_item ON runs(item, ended);
@@ -72,28 +81,16 @@ def now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def parse_ts(ts: str) -> datetime:
-    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+def minutes_since(ts):
+    return int((datetime.now(timezone.utc) - datetime.fromisoformat(ts.replace("Z", "+00:00"))).total_seconds() // 60)
 
 
 def default_actor() -> str:
     return os.environ.get("THREADS_ACTOR") or os.environ.get("USER") or "unknown"
 
 
-def connect() -> sqlite3.Connection:
-    os.makedirs(os.path.dirname(DB), exist_ok=True)
-    db = sqlite3.connect(DB, timeout=10, isolation_level=None)
-    db.row_factory = sqlite3.Row
-    db.execute("PRAGMA busy_timeout = 10000")
-    db.execute("PRAGMA foreign_keys = ON")
-    if db.execute("PRAGMA journal_mode").fetchone()[0] != "wal":
-        db.execute("PRAGMA journal_mode = WAL")
-    if not table_exists(db, "runs"):
-        with Tx(db):
-            for stmt in SCHEMA.split(";"):
-                if stmt.strip():
-                    db.execute(stmt)
-    return db
+def table_exists(db, name):
+    return db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)).fetchone()
 
 
 class Tx:
@@ -111,6 +108,21 @@ class Tx:
         return False
 
 
+def connect() -> sqlite3.Connection:
+    os.makedirs(os.path.dirname(DB), exist_ok=True)
+    db = sqlite3.connect(DB, timeout=10, isolation_level=None)
+    db.row_factory = sqlite3.Row
+    db.execute("PRAGMA busy_timeout = 10000")
+    if db.execute("PRAGMA journal_mode").fetchone()[0] != "wal":
+        db.execute("PRAGMA journal_mode = WAL")
+    if not table_exists(db, "gh_cache"):
+        with Tx(db):
+            for stmt in SCHEMA.split(";"):
+                if stmt.strip():
+                    db.execute(stmt)
+    return db
+
+
 def event(db, item, kind, actor="", tier="", **data):
     db.execute(
         "INSERT INTO events(ts, item, kind, actor, tier, data) VALUES (?,?,?,?,?,?)",
@@ -118,134 +130,183 @@ def event(db, item, kind, actor="", tier="", **data):
     )
 
 
-def item_row(db, item_id):
-    row = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-    if row is None:
-        raise Refused(f"no item {item_id}")
-    return row
+# Issue refs and GitHub ---------------------------------------------------------
+
+REF = re.compile(r"^([\w.-]+(?:/[\w.-]+)?)#(\d+)$")
 
 
-def open_item(db, item_id):
-    row = item_row(db, item_id)
-    if row["status"] != "open":
-        raise Refused(f"{item_id} is already {row['status']}")
-    return row
+def parse_ref(ref: str) -> tuple[str, int]:
+    """'smashcraft#222' or 'tompassarelli/smashcraft#222' -> ('smashcraft', 222)."""
+    m = REF.match(ref.strip())
+    if not m:
+        raise Refused(f"{ref} is not an issue ref like smashcraft#222")
+    repo = SHORT.get(m.group(1), m.group(1))
+    if repo not in REPOS:
+        raise Refused(f"unknown repo {m.group(1)} (known: {', '.join(REPOS)})")
+    return repo, int(m.group(2))
 
 
-def add_need(db, item_id, other, actor):
-    item_row(db, other)
-    if item_id == other:
-        raise Refused(f"{item_id} cannot need itself")
-    if db.execute("SELECT 1 FROM deps WHERE item = ? AND needs = ?", (item_id, other)).fetchone():
-        return
-    db.execute("INSERT INTO deps(item, needs) VALUES (?,?)", (item_id, other))
-    event(db, item_id, "need", actor, needs=other)
+def ref(repo: str, number: int) -> str:
+    return f"{repo}#{number}"
+
+
+def gh(*args: str) -> str:
+    """Run gh, waiting out rate-limit refusals (retry-after unknown: 30 s doubling to 5 min, ~65 min in all)."""
+    delay, waited = 30.0, 0.0
+    while True:
+        p = subprocess.run(["gh", *args], capture_output=True, text=True)
+        if p.returncode == 0:
+            return p.stdout
+        if "rate limit" not in p.stderr.lower() or waited > 65 * 60:
+            raise Refused(f"gh {args[0]} {args[1] if len(args) > 1 else ''}: {p.stderr.strip()}")
+        pause = delay * random.uniform(0.8, 1.2)
+        print(f"threads: GitHub rate limit, waiting {pause:.0f} s", file=sys.stderr)
+        time.sleep(pause)
+        waited += pause
+        delay = min(delay * 2, 300)
+
+
+OPEN_ISSUES = """
+query($owner: String!, $name: String!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    issues(states: OPEN, first: 100, after: $cursor) {
+      pageInfo { hasNextPage endCursor }
+      nodes { number title blockedBy(first: 50) { nodes { number state repository { nameWithOwner } } } }
+    }
+  }
+}"""
+
+ONE_ISSUE = """
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      number title state blockedBy(first: 50) { nodes { number state repository { nameWithOwner } } }
+    }
+  }
+}"""
+
+
+def blockers(node) -> list:
+    out = []
+    for b in node["blockedBy"]["nodes"]:
+        full = b["repository"]["nameWithOwner"]
+        out.append({"ref": ref(SHORT.get(full, full), b["number"]), "state": b["state"]})
+    return out
+
+
+def open_issues(db, repo: str) -> dict:
+    """{number: {title, blockers}} for the repo's open issues; one paged query, cached CACHE_SECONDS."""
+    row = db.execute("SELECT fetched, issues FROM gh_cache WHERE repo = ?", (repo,)).fetchone()
+    if row and time.time() - row["fetched"] < CACHE_SECONDS:
+        return json.loads(row["issues"])
+    owner, name = REPOS[repo].split("/")
+    issues, cursor = {}, None
+    while True:
+        args = ["api", "graphql", "-f", f"query={OPEN_ISSUES}", "-F", f"owner={owner}", "-F", f"name={name}"]
+        if cursor:
+            args += ["-F", f"cursor={cursor}"]
+        page = json.loads(gh(*args))["data"]["repository"]["issues"]
+        for n in page["nodes"]:
+            issues[str(n["number"])] = {"title": n["title"], "blockers": blockers(n)}
+        if not page["pageInfo"]["hasNextPage"]:
+            break
+        cursor = page["pageInfo"]["endCursor"]
+    with Tx(db):
+        db.execute(
+            "INSERT OR REPLACE INTO gh_cache(repo, fetched, issues) VALUES (?,?,?)",
+            (repo, time.time(), json.dumps(issues)),
+        )
+    return issues
+
+
+def one_issue(db, repo: str, number: int) -> dict:
+    row = db.execute("SELECT fetched, issues FROM gh_cache WHERE repo = ?", (repo,)).fetchone()
+    if row and time.time() - row["fetched"] < CACHE_SECONDS and str(number) in json.loads(row["issues"]):
+        return dict(json.loads(row["issues"])[str(number)], state="OPEN")
+    owner, name = REPOS[repo].split("/")
+    out = json.loads(gh("api", "graphql", "-f", f"query={ONE_ISSUE}", "-F", f"owner={owner}",
+                        "-F", f"name={name}", "-F", f"number={number}"))
+    issue = out["data"]["repository"]["issue"]
+    if issue is None:
+        raise Refused(f"no issue {ref(repo, number)}")
+    return {"title": issue["title"], "state": issue["state"], "blockers": blockers(issue)}
+
+
+def forget(db, repo):
+    with Tx(db):
+        db.execute("DELETE FROM gh_cache WHERE repo = ?", (repo,))
 
 
 # Commands --------------------------------------------------------------------
 
 
-def cmd_add(db, a):
-    with Tx(db):
-        if db.execute("SELECT 1 FROM items WHERE id = ?", (a.id,)).fetchone():
-            raise Refused(f"{a.id} already exists")
-        if a.part_of:
-            item_row(db, a.part_of)
-        db.execute(
-            "INSERT INTO items(id, title, done_when, part_of, created) VALUES (?,?,?,?,?)",
-            (a.id, a.title, a.done_when or "", a.part_of, now()),
-        )
-        event(db, a.id, "capture", a.by, title=a.title, done_when=a.done_when or "", part_of=a.part_of)
-        for other in a.needs or []:
-            add_need(db, a.id, other, a.by)
-    print(f"added {a.id}")
-
-
 def cmd_claim(db, a):
+    item = ref(*parse_ref(a.id))
     with Tx(db):
-        row = open_item(db, a.id)
-        if row["owner"] and row["owner"] != a.by:
-            raise Refused(f"{a.id} is already owned by {row['owner']}")
-        db.execute(
-            "UPDATE items SET owner = ?, owned_since = COALESCE(?, owned_since), eta_min = COALESCE(?, eta_min) WHERE id = ?",
-            (a.by, None if row["owner"] else now(), a.eta, a.id),
-        )
-        event(db, a.id, "claim", a.by, eta_min=a.eta)
-    print(f"{a.by} owns {a.id}")
+        row = db.execute("SELECT owner FROM claims WHERE item = ?", (item,)).fetchone()
+        if row and row["owner"] != a.by:
+            raise Refused(f"{item} is already owned by {row['owner']}")
+        if row:
+            db.execute("UPDATE claims SET eta_min = COALESCE(?, eta_min) WHERE item = ?", (a.eta, item))
+        else:
+            db.execute("INSERT INTO claims(item, owner, since, eta_min) VALUES (?,?,?,?)", (item, a.by, now(), a.eta))
+        event(db, item, "claim", a.by, eta_min=a.eta)
+    print(f"{a.by} owns {item}")
 
 
 def cmd_release(db, a):
+    item = ref(*parse_ref(a.id))
     with Tx(db):
-        row = open_item(db, a.id)
-        if not row["owner"]:
-            raise Refused(f"{a.id} has no owner")
+        row = db.execute("SELECT owner FROM claims WHERE item = ?", (item,)).fetchone()
+        if not row:
+            raise Refused(f"{item} has no owner")
         if a.to:
-            db.execute("UPDATE items SET owner = ?, owned_since = ? WHERE id = ?", (a.to, now(), a.id))
-            event(db, a.id, "handoff", a.by, **{"from": row["owner"], "to": a.to})
+            db.execute("UPDATE claims SET owner = ?, since = ? WHERE item = ?", (a.to, now(), item))
+            event(db, item, "handoff", a.by, **{"from": row["owner"], "to": a.to})
         else:
-            db.execute("UPDATE items SET owner = '', owned_since = NULL WHERE id = ?", (a.id,))
-            event(db, a.id, "release", a.by, owner=row["owner"])
-    print(f"{a.id} handed from {row['owner']} to {a.to}" if a.to else f"{a.id} released by {row['owner']}")
+            db.execute("DELETE FROM claims WHERE item = ?", (item,))
+            event(db, item, "release", a.by, owner=row["owner"])
+    print(f"{item} handed from {row['owner']} to {a.to}" if a.to else f"{item} released by {row['owner']}")
+
+
+def dependency(db, a, method):
+    repo, number = parse_ref(a.id)
+    brepo, bnumber = parse_ref(a.other)
+    blocker_id = gh("api", f"repos/{REPOS[brepo]}/issues/{bnumber}", "--jq", ".id").strip()
+    path = f"repos/{REPOS[repo]}/issues/{number}/dependencies/blocked_by"
+    if method == "POST":
+        gh("api", "-X", "POST", path, "-F", f"issue_id={blocker_id}")
+    else:
+        gh("api", "-X", "DELETE", f"{path}/{blocker_id}")
+    forget(db, repo)
+    with Tx(db):
+        event(db, ref(repo, number), "need" if method == "POST" else "unneed", a.by, needs=ref(brepo, bnumber))
 
 
 def cmd_need(db, a):
-    with Tx(db):
-        item_row(db, a.id)
-        add_need(db, a.id, a.other, a.by)
-    print(f"{a.id} needs {a.other}")
+    dependency(db, a, "POST")
+    print(f"{a.id} is blocked by {a.other} on GitHub")
 
 
 def cmd_unneed(db, a):
-    with Tx(db):
-        if db.execute("DELETE FROM deps WHERE item = ? AND needs = ?", (a.id, a.other)).rowcount == 0:
-            raise Refused(f"{a.id} does not need {a.other}")
-        event(db, a.id, "unneed", a.by, needs=a.other)
-    print(f"{a.id} no longer needs {a.other}")
-
-
-def finish(db, a, status, kind, text_key, text):
-    with Tx(db):
-        open_item(db, a.id)
-        db.execute(
-            "UPDATE items SET status = ?, outcome = ?, closed = ? WHERE id = ?", (status, text, now(), a.id)
-        )
-        event(db, a.id, kind, a.by, **{text_key: text})
-    print(f"{a.id} {status}")
-
-
-def cmd_close(db, a):
-    finish(db, a, "done", "close", "outcome", a.outcome)
-
-
-def cmd_drop(db, a):
-    finish(db, a, "dropped", "drop", "why", a.why)
-
-
-def minutes_since(ts):
-    return int((datetime.now(timezone.utc) - parse_ts(ts)).total_seconds() // 60) if ts else None
+    dependency(db, a, "DELETE")
+    print(f"{a.id} is no longer blocked by {a.other}")
 
 
 def cmd_show(db, a):
-    row = item_row(db, a.id)
-    print(f"{row['id']}  {row['title']}")
-    print(f"  status: {row['status']}" + (f" ({row['closed']}): {row['outcome']}" if row["status"] != "open" else ""))
-    if row["done_when"]:
-        print(f"  done when: {row['done_when']}")
-    if row["part_of"]:
-        print(f"  part of: {row['part_of']}")
-    if row["owner"]:
-        clock = minutes_since(row["owned_since"])
-        print(f"  owner: {row['owner']} for {clock}m" + (f" of {row['eta_min']}m ETA" if row["eta_min"] else ""))
-    for label, sql in (
-        ("needs", "SELECT d.needs AS id, i.status FROM deps d JOIN items i ON i.id = d.needs WHERE d.item = ?"),
-        ("needed by", "SELECT d.item AS id, i.status FROM deps d JOIN items i ON i.id = d.item WHERE d.needs = ?"),
-    ):
-        rows = db.execute(sql, (a.id,)).fetchall()
-        if rows:
-            print(f"  {label}: " + ", ".join(f"{r['id']} ({r['status']})" for r in rows))
+    repo, number = parse_ref(a.id)
+    item = ref(repo, number)
+    issue = one_issue(db, repo, number)
+    print(f"{item}  {issue['title']}")
+    print(f"  state: {issue['state'].lower()}")
+    if issue["blockers"]:
+        print("  blocked by: " + ", ".join(f"{b['ref']} ({b['state'].lower()})" for b in issue["blockers"]))
+    c = db.execute("SELECT * FROM claims WHERE item = ?", (item,)).fetchone()
+    if c:
+        print(f"  owner: {c['owner']} for {minutes_since(c['since'])}m" + (f" of {c['eta_min']}m ETA" if c["eta_min"] else ""))
     hands = db.execute(
         "SELECT ts, kind, actor, data FROM events WHERE item = ? AND kind IN ('claim','release','handoff') ORDER BY seq",
-        (a.id,),
+        (item,),
     ).fetchall()
     if hands:
         print("  owners:")
@@ -253,51 +314,48 @@ def cmd_show(db, a):
             d = json.loads(e["data"])
             what = f"{d['from']} -> {d['to']}" if e["kind"] == "handoff" else e["actor"]
             print(f"    {e['ts']}  {e['kind']:<8} {what}")
-    runs = db.execute("SELECT * FROM runs WHERE item = ? ORDER BY ended", (a.id,)).fetchall()
+    runs = db.execute("SELECT * FROM runs WHERE item = ? ORDER BY ended", (item,)).fetchall()
     if runs:
-        total = sum(r["minutes"] for r in runs)
-        print(f"  runs: {len(runs)}, {total}m in all")
+        print(f"  runs: {len(runs)}, {sum(r['minutes'] for r in runs)}m in all")
         for r in runs:
             eta = f"/{r['eta_min']}m ETA" if r["eta_min"] else ""
             follows = f" follows {r['follows']}" if r["follows"] else ""
-            print(f"    {r['ended'][:16]}  {r['agent']} {r['tier']}{follows}  {r['minutes']}m{eta}  {r['outcome']}: {r['report'][:80]}")
+            note = f"  note {r['note']}" if r["note"] else ""
+            print(f"    {r['ended'][:16]}  {r['agent']} {r['tier']}{follows}  {r['minutes']}m{eta}  {r['outcome']}: {r['report'][:80]}{note}")
 
 
 def cmd_ready(db, a):
-    rows = db.execute(
-        """SELECT id, title FROM items i WHERE status = 'open' AND owner = ''
-           AND NOT EXISTS (SELECT 1 FROM deps d JOIN items n ON n.id = d.needs
-                           WHERE d.item = i.id AND n.status = 'open')
-           ORDER BY created, id"""
-    ).fetchall()
-    for r in rows:
-        print(f"{r['id']}\t{r['title']}")
+    claimed = {r["item"] for r in db.execute("SELECT item FROM claims")}
+    for repo in REPOS:
+        issues = open_issues(db, repo)
+        for number in sorted(issues, key=int):
+            i = issues[number]
+            item = ref(repo, int(number))
+            if item in claimed or any(b["state"] == "OPEN" for b in i["blockers"]):
+                continue
+            print(f"{item}\t{i['title']}")
 
 
 def cmd_list(db, a):
-    where = "" if a.all else "WHERE status = 'open'"
-    rows = db.execute(
-        f"""SELECT i.*, (SELECT group_concat(d.needs, ',') FROM deps d JOIN items n ON n.id = d.needs
-                         WHERE d.item = i.id AND n.status = 'open') AS blocked
-            FROM items i {where} ORDER BY created, id"""
-    ).fetchall()
-    out = [("id", "status", "owner", "clock", "eta", "flag", "title")]
-    for r in rows:
-        clock = minutes_since(r["owned_since"]) if r["owner"] and r["status"] == "open" else None
-        overdue = clock is not None and r["eta_min"] and clock > 2 * r["eta_min"]
-        flag = "OVERDUE" if overdue else (f"needs {r['blocked']}" if r["blocked"] else "")
-        out.append((r["id"], r["status"], r["owner"] or "-", f"{clock}m" if clock is not None else "-",
-                    f"{r['eta_min']}m" if r["eta_min"] else "-", flag or "-", r["title"]))
-    widths = [max(len(row[i]) for row in out) for i in range(6)]
+    cached = {r["repo"]: json.loads(r["issues"]) for r in db.execute("SELECT repo, issues FROM gh_cache")}
+    out = [("item", "owner", "clock", "eta", "flag")]
+    for c in db.execute("SELECT * FROM claims ORDER BY since"):
+        repo, number = parse_ref(c["item"])
+        clock = minutes_since(c["since"])
+        flag = "-"
+        if repo in cached and str(number) not in cached[repo]:
+            flag = "CLOSED"
+        elif c["eta_min"] and clock > 2 * c["eta_min"]:
+            flag = "OVERDUE"
+        out.append((c["item"], c["owner"], f"{clock}m", f"{c['eta_min']}m" if c["eta_min"] else "-", flag))
+    widths = [max(len(row[i]) for row in out) for i in range(len(out[0]))]
     for row in out:
-        print("  ".join(c.ljust(w) for c, w in zip(row, widths)) + "  " + row[6])
+        print("  ".join(v.ljust(w) for v, w in zip(row, widths)).rstrip())
 
 
 # Runs (fed by worker-ledger) ---------------------------------------------------
 
-BRIEF_FIELD = {
-    name: re.compile(rf"\b{name}:[ \t]*([^\s`<>]+)") for name in ("Item", "Follows")
-}
+BRIEF_FIELD = {name: re.compile(rf"\b{name}:[ \t]*([^\s`<>]+)") for name in ("Item", "Follows")}
 CATEGORY = re.compile(r"\bCategory:[ \t]*([^.;,\n`<>]+)")
 
 
@@ -313,6 +371,13 @@ def brief_fields(brief: str) -> dict:
     return out
 
 
+def canonical(item):
+    try:
+        return ref(*parse_ref(item))
+    except Refused:
+        return item
+
+
 def cmd_ingest(db, a):
     """Read worker-ledger's JSON rows on stdin; rows already recorded are skipped."""
     added = 0
@@ -325,24 +390,26 @@ def cmd_ingest(db, a):
                 continue
             f = brief_fields(r.get("brief") or "")
             item = f.get("item") or r.get("item")
+            item = canonical(item) if item else None
             follows = f.get("follows") or r.get("follows")
             category = f.get("category") or r.get("category") or "unknown"
             prev = None
             if item:
                 p = db.execute("SELECT agent FROM runs WHERE item = ? ORDER BY ended DESC LIMIT 1", (item,)).fetchone()
                 prev = follows or (p["agent"] if p else None)
+            eta = r.get("eta_min")
             db.execute(
                 """INSERT INTO runs(agent, item, follows, session, tier, category, started, ended, minutes,
-                                    eta_min, tokens, peak_ctx, outcome, report)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                    eta_min, tokens, peak_ctx, outcome, report, note)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (r["id"], item, follows, r.get("session"), r["tier"], category, r.get("started"), r["ended"],
-                 r["actual_min"], None if r.get("eta_min") is None else round(r["eta_min"]), r.get("tokens"), r.get("peak_ctx"), r["outcome"],
-                 r.get("report") or ""),
+                 r["actual_min"], None if eta is None else round(eta), r.get("tokens"), r.get("peak_ctx"),
+                 r["outcome"], r.get("report") or "", r.get("note")),
             )
             if prev and prev != r["id"]:
                 event(db, item, "handoff", r["id"], r["tier"], **{"from": prev, "to": r["id"]})
             event(db, item, "run", r["id"], r["tier"], category=category, minutes=r["actual_min"],
-                  eta_min=r.get("eta_min"), outcome=r["outcome"])
+                  eta_min=eta, outcome=r["outcome"], note=r.get("note"))
             added += 1
     print(f"threads: {added} runs recorded in {DB}", file=sys.stderr)
 
@@ -350,10 +417,6 @@ def cmd_ingest(db, a):
 def cmd_run_ids(db, a):
     for (agent,) in db.execute("SELECT agent FROM runs"):
         print(agent)
-
-
-def table_exists(db, name):
-    return db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)).fetchone()
 
 
 def median(xs):
@@ -388,7 +451,11 @@ def cmd_summary(db, a):
 
 
 def parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="threads", description=f"Work tracker. Database: {DB}")
+    p = argparse.ArgumentParser(
+        prog="threads",
+        description=f"Who holds which GitHub issue, handoffs and worker runs. Items are issue refs "
+                    f"({', '.join(r + '#N' for r in REPOS)}). Database: {DB}",
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
 
     def cmd(name, fn, help_):
@@ -397,33 +464,22 @@ def parser() -> argparse.ArgumentParser:
         s.add_argument("--by", default=default_actor(), help="who is acting (default $THREADS_ACTOR or $USER)")
         return s
 
-    s = cmd("add", cmd_add, "record a new item")
-    s.add_argument("id")
-    s.add_argument("title")
-    s.add_argument("--done-when")
-    s.add_argument("--part-of")
-    s.add_argument("--needs", nargs="+")
-    s = cmd("claim", cmd_claim, "take ownership; refused when someone else owns it")
+    s = cmd("claim", cmd_claim, "hold an issue; refused when someone else holds it")
     s.add_argument("id")
     s.add_argument("--eta", type=int, help="minutes")
-    s = cmd("release", cmd_release, "give up ownership, or hand it --to someone")
+    s = cmd("release", cmd_release, "let go of an issue, or hand it --to someone")
     s.add_argument("id")
     s.add_argument("--to")
-    for name, fn, help_ in (("need", cmd_need, "ID can't finish before OTHER"), ("unneed", cmd_unneed, "remove a need")):
-        s = cmd(name, fn, help_)
-        s.add_argument("id")
-        s.add_argument("other")
-    s = cmd("close", cmd_close, "mark done")
+    s = cmd("need", cmd_need, "on GitHub: ID is blocked by OTHER")
     s.add_argument("id")
-    s.add_argument("--outcome", required=True)
-    s = cmd("drop", cmd_drop, "abandon")
+    s.add_argument("other")
+    s = cmd("unneed", cmd_unneed, "on GitHub: remove ID's blocked-by OTHER")
     s.add_argument("id")
-    s.add_argument("--why", required=True)
-    s = cmd("show", cmd_show, "item, needs, owners, runs and time against ETA")
+    s.add_argument("other")
+    s = cmd("show", cmd_show, "issue title, state and blockers, with its owners, handoffs and runs")
     s.add_argument("id")
-    cmd("ready", cmd_ready, "open, unowned items whose needs are all closed")
-    s = cmd("list", cmd_list, "open items with owner, time on the clock and ETA")
-    s.add_argument("--all", action="store_true", help="include closed and dropped items")
+    cmd("ready", cmd_ready, "open issues with no open blocker and no owner")
+    cmd("list", cmd_list, "held issues with owner, time on the clock, ETA and overdue flag")
     cmd("ingest", cmd_ingest, "record worker runs from worker-ledger rows on stdin")
     cmd("run-ids", cmd_run_ids, "agent ids already recorded (for worker-ledger)")
     s = cmd("summary", cmd_summary, "runs by category and tier: success and minutes against ETA")
