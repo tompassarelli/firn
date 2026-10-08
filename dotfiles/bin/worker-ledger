@@ -66,7 +66,8 @@ while IFS= read -r f; do
     | ($lines | map(.timestamp // empty)) as $times
     | ($times | last) as $ended
     | select($ended >= $since)
-    | (($agent | ltrimstr("worker") | ltrimstr("-")) | if . == "" then "medium" else . end) as $tiername
+    | (if ($a[-1].message.model // "" | test("haiku")) then "haiku"
+       else ($agent | ltrimstr("worker") | ltrimstr("-")) | if . == "" then "medium" else . end end) as $tiername
     | ($brief | [scan("(?i)\\bETA\\b[^0-9\\n]{0,12}([0-9]+(?:\\.[0-9]+)?)\\s*(hours?|hrs?|h|minutes?|mins?|m)\\b")] | first
        | if . == null then null else (.[0] | tonumber) * (if (.[1] | test("^h")) then 60 else 1 end) end) as $eta
     | if ($finished | not) then
