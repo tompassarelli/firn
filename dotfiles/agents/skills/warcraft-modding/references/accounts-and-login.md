@@ -11,8 +11,10 @@ sign-in, logout or account changes. Test clients use b (client B)
 and c (client A, ~/.local/share/wc3-melee/client-a); concurrent online clients
 need distinct accounts and separate prefixes. Ordinary credential prompts on
 A/B are yours: verify a real login form and the focused field, then run
-nixos-config:dotfiles/bin/wc3-login-field (account a|b|c, username|password)
+nixos-config:dotfiles/bin/wc3-login-field (account a|b|c|d, username|password)
 in a shell with jq, xdotool and sops, using the machine SOPS key through sudo.
+It types through the private desktop's VNC (`private-desktop.sh type`), because
+`xdotool type` drops characters in Battle.net's login page.
 Never print decrypted values or put them in arguments, clipboard, traces,
 screenshots or files. Enable supported persistent login and verify launcher
 online state and W3 SSO before Play. Authenticator, CAPTCHA or account lock

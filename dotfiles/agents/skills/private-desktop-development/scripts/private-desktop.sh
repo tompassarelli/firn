@@ -6,11 +6,14 @@ usage() {
 Usage:
   private-desktop.sh start [--port PORT] [--resolution WIDTHxHEIGHT] [--render-node PATH] [--seconds SECONDS] [-- COMMAND ARG...]
   private-desktop.sh control RUN_DIRECTORY VNC_ACTION...
+  private-desktop.sh type RUN_DIRECTORY < TEXT
   private-desktop.sh capture RUN_DIRECTORY ABSOLUTE_PNG_PATH
 
 Start a private GPU desktop. Ctrl-C ends the session. Default resolution:
 2560x1440. VNC listens only on localhost. Default lifetime: until stopped.
 Use --seconds to set an optional deadline.
+Type reads text only from stdin and sends it to the focused window with US-layout
+Shift handling; it refuses any character outside that layout before typing.
 Live run directories use /run/user/UID; ended-session logs move to the user's
 state directory. Runtime files are removed on exit and after a crashed run.
 VNC tools share one Python environment in the user's disk cache.
@@ -23,8 +26,8 @@ self=$(realpath -- "$0")
 action=${1:---help}
 case "$action" in
     -h|--help|help) usage; exit 0 ;;
-    control|capture)
-        [[ $# -ge 3 ]] || die 'a run directory and action/path are required'
+    control|capture|type)
+        [[ $# -ge 3 || ( "$action" == type && $# == 2 ) ]] || die 'a run directory and action/path are required'
         run=$(realpath -- "$2")
         shift 2
         [[ -O "$run" && -f "$run/active" ]] || die 'run is not active or not owned by this user'
@@ -55,6 +58,10 @@ case "$action" in
         fi
         port=$(cat "$run/port")
         [[ "$port" =~ ^[0-9]+$ ]] || die 'invalid run port'
+        if [[ "$action" == type ]]; then
+            [[ $# == 0 ]] || die 'type reads its text from stdin only'
+            exec "$run/venv/bin/python" "$(dirname -- "$self")/private-desktop-type.py" "$port"
+        fi
         exec "$run/venv/bin/vncdo" -s "127.0.0.1::$port" -t 8 "$@"
         ;;
     start) shift ;;

@@ -17,6 +17,9 @@ title=$(xdotool getwindowname "$window")
 [[ "$title" == 'Battle.net' || "$title" == 'Battle.net Login' || "$title" == 'Warcraft III' ]] || { echo 'Login window is not active.' >&2; exit 1; }
 source_root=$(git -C "$(dirname "$(readlink -f "$0")")" rev-parse --show-toplevel)
 secret_file="$source_root/secrets/bnet.yaml"
+# xdotool typing drops characters in Battle.net; VNC typing holds Shift correctly.
+typer="$source_root/dotfiles/agents/skills/private-desktop-development/scripts/private-desktop.sh"
+[[ -x "$typer" ]] || { echo 'Private desktop typer unavailable.' >&2; exit 1; }
 [[ -f "$secret_file" ]] || { echo 'Encrypted account file unavailable.' >&2; exit 1; }
 # Values travel only through pipes, never argv, a clipboard, files or tool output.
 decrypt() { sudo -n env SOPS_AGE_KEY_FILE=/var/lib/sops-nix/key.txt sops --decrypt --output-type json "$secret_file"; }
@@ -26,6 +29,6 @@ if [[ $owner_authorized == 0 ]] && [[ $(decrypt | jq -r --arg account "$2" '.[$a
 fi
 decrypt |
   jq -j --arg account "$2" --arg field "$3" '.[$account][$field] | if type == "string" then . else error("Missing account field") end' |
-  xdotool type --clearmodifiers --file -
+  "$typer" type "$private_run"
 [[ $(xdotool getactivewindow) == "$window" ]] || { echo 'Focus changed during delivery; inspect privately before proceeding.' >&2; exit 1; }
 echo 'Field delivered; verify the login result privately.'

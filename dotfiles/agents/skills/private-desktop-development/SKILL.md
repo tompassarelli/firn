@@ -53,7 +53,15 @@ Read the printed run directory and port. Control it only through the launcher:
 "$skill_dir/scripts/private-desktop.sh" control RUN_DIR move 640 360 key enter
 "$skill_dir/scripts/private-desktop.sh" control RUN_DIR keydown shift pause 0.2 keyup shift
 "$skill_dir/scripts/private-desktop.sh" control RUN_DIR mousedown 1 pause 0.2 mouseup 1
+printf %s 'Ab@#1x.Z_-+' | "$skill_dir/scripts/private-desktop.sh" type RUN_DIR
 ```
+
+Type text with `type`, never with `control ... type` or `xdotool type`. It
+reads the text only from stdin, so pipe secrets straight in. It types into the
+focused window at a steady pace and holds Shift for capitals and US-layout
+symbols, which the VNC server would otherwise send unshifted (`@` arrives as
+`2`). It refuses a character outside the US layout before typing anything.
+Its key mapping test is `scripts/private-desktop-type.test.sh`.
 
 Capture reads the compositor framebuffer directly through `grim` using the exact
 run's saved Wayland display and private runtime directory. VNC remains the input
@@ -75,7 +83,8 @@ Keep each control sequence shorter than the command's eight-second bound.
 `mousedown`/`mouseup` and `keydown`/`keyup` allow held inputs. Use VNC input
 when the application handles its key and pointer events correctly. For an X11
 app whose VNC input path fails, private-display XTEST through `xdotool` is
-supported after confirming its window is active on that private display.
+supported for pointer and window queries after confirming its window is
+active on that private display; type text with `type`.
 
 The launcher writes its private X display and X authority value to files in the
 exact run directory. Set `run_dir` to the printed Run path and read both values
