@@ -228,8 +228,15 @@ capture_destination_state() {
       || { echo "safe-push: non-fast-forward $head_oid -> $destination_ref (origin at $destination_oid) — refusing" >&2; exit 1; }
     scan_range="${destination_oid}..${head_oid}"
   else
-    # A single commit-ish makes gitleaks traverse the exact captured history.
-    scan_range="$head_oid"
+    # A new branch publishes only what origin's default branch lacks; scanning
+    # the whole reachable history costs minutes and cores on every scratch push.
+    absent_base=$(git ls-remote "$origin_url" HEAD 2>/dev/null | awk 'NR==1 {print $1}')
+    if [ -n "$absent_base" ] && git cat-file -e "${absent_base}^{commit}" 2>/dev/null; then
+      scan_range="${absent_base}..${head_oid}"
+    else
+      absent_base=""
+      scan_range="$head_oid"
+    fi
   fi
 }
 
@@ -266,7 +273,7 @@ revalidate_repository_state() {
   if [[ "$current_destination_snapshot" == object:* ]]; then
     current_range="${current_destination_snapshot#object:}..${current_head_oid}"
   else
-    current_range="$current_head_oid"
+    current_range="${absent_base:+${absent_base}..}${current_head_oid}"
   fi
   [ "$current_range" = "$scan_range" ] || state_changed 'outgoing range changed'
 }

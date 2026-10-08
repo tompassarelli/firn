@@ -587,6 +587,20 @@ if "$real_git" -C "$real_repo" rev-parse --verify '@{upstream}' >/dev/null 2>&1;
   fail '--to unexpectedly changed local branch tracking'
 fi
 
+# A new destination branch scans only what origin's default branch lacks, not
+# the whole reachable history.
+make_real_fixture new-destination
+remote_main_before="$("$real_git" --git-dir="$real_remote" rev-parse refs/heads/main)"
+"$real_git" -C "$real_repo" switch -q -c scratch
+"$real_git" -C "$real_repo" commit --allow-empty -qm scratch
+scratch_oid="$("$real_git" -C "$real_repo" rev-parse scratch)"
+run_real_case '' --to farm/scan-test
+expect_status zero
+grep -Fq "<--log-opts=$remote_main_before..$scratch_oid>" "$real_trace" \
+  || fail 'new destination branch did not scan only commits missing from origin main'
+[ "$("$real_git" --git-dir="$real_remote" rev-parse refs/heads/farm/scan-test)" = "$scratch_oid" ] \
+  || fail 'new destination branch was not created at HEAD'
+
 # Destination ancestry is checked before scanning or pushing. An unrelated
 # remote main is rejected even when --to makes the target explicit.
 make_real_fixture non-fast-forward
