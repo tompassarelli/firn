@@ -94,9 +94,12 @@ Needs you: nothing
   is fixed or reported within the hour, not parked.
   Workers write and land code, and the parent merges. Don't add reviewer,
   verifier, auditor or status workers unless Tom asks.
+- Run `agents plan` before staffing. It prints the difficulty bands, the
+  tiers each band uses with the providers signed in now, and where a failed
+  box goes next; staff only from it.
 - Use the `staffing` skill to pick ready work in `threads`, write the brief,
-  choose a tier from your provider's workers skill and
-  `worker-ledger --summary`, and set the ETA.
+  choose a band and tier from `agents plan` and `worker-ledger --summary`,
+  and set the ETA.
 - A message to a running agent must reach it at once, mid-turn: use the
   agent message tool, never `codex queue`, which waits until the turn ends.
 - A worker does one task. Send a running worker only its own task's

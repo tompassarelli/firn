@@ -33,17 +33,21 @@ Use `threads claim` and `threads release --to` for people and shared-resource
 workers. `threads need` and `threads unneed` change blocked-by links on GitHub.
 `threads list` shows holders and time held against ETA.
 
-## Tier
+## Band and tier
 
-Your provider's workers skill names the tiers, their models and efforts and
-the escalation ladder: `claude-workers` in Claude Code, `codex-workers` in
-Codex. Use only its choices and always set the model and effort.
+Run `agents plan` at session start. It reads Tom's
+`nixos-config:dotfiles/agents/orchestration.toml` and the providers signed
+in now, and prints each difficulty band (mechanical, middle, top, planning),
+the tiers it uses and the band a failed box goes to next. Pick each item's
+band from its difficulty and start at that band's first tier. Your
+provider's workers skill says how to spawn each tier: `claude-workers` in
+Claude Code, `codex-workers` in Codex. Always set the model and effort.
 
-A failed or unfinished attempt starts one tier above the earlier worker,
-even after rewording the brief or reopening the issue, and its brief carries
-the failed report's evidence. The history rule outranks the default. When the
-top of the ladder fails on a box, bring Tom one recommendation. A running
-worker's effort cannot change.
+A failed or unfinished attempt starts at the next tier in its band, then at
+the next band's first tier, even after rewording the brief or reopening the
+issue, and its brief carries the failed report's evidence. The history rule
+outranks the default. When the plan says "recommend to Tom", bring Tom one
+recommendation. A running worker's effort cannot change.
 
 Read `worker-ledger --summary` before choosing. Compare the category's
 success rate, completed runs and actual time by tier. Missing categories and
@@ -51,9 +55,9 @@ unclear outcomes are missing evidence, not proof that a tier failed. A
 provider's benchmarks set a category's starting tier only while it has fewer
 than five closed issues at that tier. Then the ledger decides:
 
-- Start at the cheapest tier that closed at least four of its last five
-  issues without escalation.
-- Start one tier higher when a third or more of the category's last five
+- Start at the cheapest band and tier that closed at least four of its last
+  five issues without escalation.
+- Start one step higher when a third or more of the category's last five
   issues escalated.
 - While the tier below the current start has fewer than five closed issues in
   a mechanical, docs-policy, tooling or balance-tuning category, send every

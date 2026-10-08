@@ -1,0 +1,54 @@
+# How agent work is staffed, hand-edited by Tom. `agents plan` combines this
+# file with the providers signed in on this machine and prints the bands every
+# session staffs from. Skills keep each provider's facts (model ids, how to
+# spawn); this file holds the choices that change with accounts and prices.
+
+# split: use every signed-in provider.
+# claude-only or codex-only: drop the other provider even when it is signed in.
+mode = "split"
+
+# Worker tiers each provider offers, as `provider:name` in the bands below.
+# `name` is the tier the ledger records; `agent` is the Claude Code agent type.
+[tiers.claude]
+haiku = { model = "claude-haiku-5-5", effort = "high", agent = "worker-haiku" }
+medium = { model = "claude-opus-5-5", effort = "medium", agent = "worker" }
+high = { model = "claude-opus-5-5", effort = "high", agent = "worker-high" }
+
+[tiers.codex]
+medium = { model = "gpt-6.1-sol", effort = "medium" }
+high = { model = "gpt-6.1-sol", effort = "high" }
+
+# Used only when Tom names the model; never part of a band.
+[on_request.codex]
+# 9 Oct: Astra drains Tom's usage and SOL is good enough.
+astra = { model = "gpt-6-astra", effort = "xhigh" }
+
+# Bands, easiest first. Pick one band per item and start at its first tier.
+# A box that fails a band's last tier goes to the next band's first tier;
+# after the last band, bring Tom one recommendation. A band whose providers
+# are all unavailable uses the nearest available band: the next one up, else
+# the one below.
+
+# Mechanical, the bottom ~20%: exact edits, ticking and closing issues,
+# running a named check, lookups in large logs, triage, summaries.
+[[band]]
+name = "mechanical"
+tiers = ["claude:haiku"]
+
+# The middle, ~20th to 75th percentile: features, fixes with a known cause,
+# tooling, docs and skills; high for multi-step or ambiguous work.
+[[band]]
+name = "middle"
+tiers = ["codex:medium", "codex:high"]
+
+# The top, ~75th percentile and up: senior-plus execution such as unknown-
+# cause debugging, netcode, determinism, engine and cross-module changes.
+[[band]]
+name = "top"
+tiers = ["claude:medium"]
+
+# Planning and architecture: designing the approach, splitting work,
+# choosing between directions.
+[[band]]
+name = "planning"
+tiers = ["claude:high"]

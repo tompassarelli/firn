@@ -1,16 +1,129 @@
 #!/usr/bin/env bash
 # Firn keeps this stable command name; North owns the catalog, permission
 # transition, activation generation, and every projection it reports.
+# `plan` is local: it reads dotfiles/agents/orchestration.toml and the
+# providers signed in now, and prints the worker ladder sessions staff from.
 set -uo pipefail
 
 north_bin="${AGENTS_NORTH_BIN:-north}"
 
 usage() {
-  printf 'usage: agents {status [--json]|inspect <id> [--json]|path <id>|on <id>|off <id>|sync}\n' >&2
+  printf 'usage: agents {status [--json]|inspect <id> [--json]|path <id>|on <id>|off <id>|sync|plan [--mode split|claude-only|codex-only]}\n' >&2
+}
+
+plan() {
+  local mode=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --mode) [ $# -ge 2 ] || { usage; exit 2; }; mode=$2; shift 2 ;;
+      *) usage; exit 2 ;;
+    esac
+  done
+  local config="${AGENTS_ORCHESTRATION:-$(dirname "$(readlink -f "$0")")/../agents/orchestration.toml}"
+  AGENTS_PLAN_MODE="$mode" AGENTS_PLAN_CONFIG="$config" \
+    AGENTS_CLAUDE_BIN="${AGENTS_CLAUDE_BIN:-claude}" \
+    AGENTS_CODEX_BIN="${AGENTS_CODEX_BIN:-codex}" \
+    exec python3 -I -c '
+import json, os, subprocess, sys, tomllib
+
+def die(msg):
+    print(f"agents plan: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+path = os.environ["AGENTS_PLAN_CONFIG"]
+try:
+    with open(path, "rb") as f:
+        cfg = tomllib.load(f)
+except (OSError, tomllib.TOMLDecodeError) as e:
+    die(f"cannot read {path}: {e}")
+
+tiers = cfg.get("tiers", {})
+bands = cfg.get("band", [])
+if not bands:
+    die("the file has no bands")
+mode = os.environ["AGENTS_PLAN_MODE"] or cfg.get("mode", "split")
+if mode == "split":
+    wanted = list(tiers)
+elif mode.endswith("-only") and mode[:-5] in tiers:
+    wanted = [mode[:-5]]
+else:
+    die(f"unknown mode {mode!r}; use split, " + ", ".join(p + "-only" for p in tiers))
+
+def run(cmd):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        return r.returncode, r.stdout + r.stderr
+    except (OSError, subprocess.TimeoutExpired):
+        return None, ""
+
+def signed_in(name):
+    if name == "claude":
+        code, out = run([os.environ["AGENTS_CLAUDE_BIN"], "auth", "status"])
+        try:
+            return code == 0 and json.loads(out).get("loggedIn") is True, "claude auth status"
+        except ValueError:
+            return False, "claude auth status"
+    if name == "codex":
+        code, out = run([os.environ["AGENTS_CODEX_BIN"], "login", "status"])
+        return code == 0 and "Logged in" in out, "codex login status"
+    return False, "no sign-in check for this provider"
+
+print(f"mode: {mode}")
+why = {}
+for name in tiers:
+    if name not in wanted:
+        why[name] = f"mode is {mode}"
+        continue
+    ok, how = signed_in(name)
+    if ok:
+        print(f"{name}: signed in")
+    else:
+        why[name] = f"not signed in ({how})"
+for name, reason in why.items():
+    print(f"{name}: dropped, {reason}")
+
+def label(ref):
+    provider, _, name = ref.partition(":")
+    t = tiers.get(provider, {}).get(name)
+    if t is None:
+        die(f"band tier {ref!r} is not under [tiers]")
+    agent = f" ({t["agent"]})" if t.get("agent") else ""
+    return f"{t["model"]} {t["effort"]}{agent}"
+
+own = [[r for r in b.get("tiers", []) if label(r) and r.split(":")[0] not in why] for b in bands]
+n = len(bands)
+resolved = []
+for i, b in enumerate(bands):
+    order = list(range(i, n)) + list(range(i - 1, -1, -1))
+    j = next((k for k in order if own[k]), None)
+    if j is None:
+        print("no band has a usable provider: recommend to Tom")
+        sys.exit(1)
+    resolved.append(j)
+
+TOM = "recommend to Tom"
+for i, b in enumerate(bands):
+    j = resolved[i]
+    tried = set(own[j])
+    nxt = TOM
+    for k in range(i + 1, n):
+        if not set(own[resolved[k]]) <= tried:
+            nxt = bands[k]["name"]
+            break
+    moved = ""
+    if j != i:
+        gone = sorted({r.split(":")[0] for r in b.get("tiers", [])} & set(why))
+        moved = f" (moved to {bands[j]["name"]}, " + "; ".join(f"{p} dropped: {why[p]}" for p in gone) + ")"
+    print(f"{b["name"]}{moved}: " + ", ".join(label(r) for r in own[j]) + f"; then {nxt}")
+'
 }
 
 case "${1:-}" in
   status|inspect|path|on|off|sync) ;;
+  plan)
+    shift
+    plan "$@"
+    ;;
   *)
     usage
     exit 2

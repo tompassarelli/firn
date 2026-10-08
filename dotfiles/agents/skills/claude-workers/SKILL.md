@@ -1,22 +1,24 @@
 ---
 name: claude-workers
 agents: [claude]
-description: Claude Code worker tiers (Haiku 5.5, Opus 5.5), their escalation ladder, Anthropic's priors, where work can run (this machine, GitHub Actions, Anthropic's cloud), and running workers from a Claude session. Use with staffing whenever a Claude session starts workers, or when going faster or short of local capacity.
+description: Claude Code worker tiers (Haiku 5.5, Opus 5.5), how to spawn them, Anthropic's priors, where work can run (this machine, GitHub Actions, Anthropic's cloud), and running workers from a Claude session. Use with staffing whenever a Claude session starts workers, or when going faster or short of local capacity.
 ---
 
 # Claude Code workers
 
-Tom's choices (8 Oct): Opus 5.5 medium is the default; no Sonnet, no Opus
-low, nothing above Opus high; Fable only when Tom asks.
+Tom's choices (8 Oct): no Sonnet, no Opus low, nothing above Opus high;
+Fable only when Tom asks.
 
 | Tier | Agent | Start here when |
 | --- | --- | --- |
 | haiku | `worker-haiku` (Haiku 5.5, high) | Mechanical, fully specified, short: exact edits, ticking and closing issues, running a named check or prepared script and reporting its numbers; lookups and extraction from large logs or documents; triaging an issue list; recurring summaries and status reports. |
-| medium | `worker` (Opus 5.5, medium) | Default: features, fixes with a known cause, tooling, docs and skills, setup. |
+| medium | `worker` (Opus 5.5, medium) | Features, fixes with a known cause, tooling, docs and skills, setup. |
 | high | `worker-high` (Opus 5.5, high) | Multi-step or ambiguous work: unknown-cause debugging, netcode, engine, performance, cross-module work, native checks, research. |
 
-Ladder: haiku, medium, high, then one more high attempt whose brief carries
-the failure evidence, then one recommendation to Tom.
+Which work gets these tiers, and where a failed box goes next, comes from
+`agents plan`: run it at session start, pick each item's band, and start at
+that band's first tier. A band's tier from another provider runs through
+that provider (`orchestrating-codex` for Codex).
 
 ## Anthropic's priors
 
