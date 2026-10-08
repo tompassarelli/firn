@@ -104,6 +104,9 @@ Needs you: nothing
   issue with `gh issue close`, citing the last run's outcome.
 - To run work through a Codex lead session, use `codex-lead` (start, send,
   goal, status, workers) and the `codex-lead` skill.
+- A message to a running agent must reach it at once, mid-turn: use
+  `codex-lead send` or the agent message tool, never `codex queue`, which
+  waits until the turn ends.
 - Always set the worker's model and effort, choosing from SOL 6.1
   (`gpt-6.1-sol`) at `medium` for ordinary and simple work (never `low`) or
   `high` for hard implementation, Astra (`gpt-6-astra`) `xhigh` for hard
