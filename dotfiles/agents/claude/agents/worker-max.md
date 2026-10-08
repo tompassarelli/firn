@@ -1,6 +1,6 @@
 ---
 name: worker-max
-description: Only after an extra-high worker has failed the same box: Opus at maximum effort for the hardest problems and stuck fix loops.
+description: "Never a starting tier. Last resort only: important work an extra-high worker has failed. Opus at maximum effort."
 model: opus
 effort: max
 ---
