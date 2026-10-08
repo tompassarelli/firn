@@ -727,6 +727,88 @@ for f in a.txt b.txt shared.txt; do
     || fail "concurrent landing: origin main lacks $f"
 done
 
+# A repo's pre-push hook runs before the landing lock: two concurrent landings
+# each run it once, the lock is held for well under the hook's 3 s, and the
+# later landing keeps its verdict because the earlier one touched other files.
+add_slow_hook() {
+  local dir="$1" verdict="${2:-0}"
+  mkdir -p "$dir/.hooks"
+  printf '#!/usr/bin/env bash\ncat >/dev/null\nprintf "%%s\\n" "$(git rev-parse HEAD)" >>"%s"\nsleep 3\nexit %s\n' \
+    "$dir.hook-runs" "$verdict" >"$dir/.hooks/pre-push"
+  chmod +x "$dir/.hooks/pre-push"
+  "$real_git" -C "$dir" config core.hooksPath .hooks
+  : >"$dir.hook-runs"
+}
+
+lock_holds() {
+  sed -n 's/^safe-push: held the landing lock for \([0-9.]*\) s$/\1/p' "$@"
+}
+
+new_landing_origin hooked
+make_landing_clone "$landing_root/a" a.txt
+make_landing_clone "$landing_root/b" b.txt
+add_slow_hook "$landing_root/a"
+add_slow_hook "$landing_root/b"
+run_landing "$landing_root/a" & pid_a=$!
+run_landing "$landing_root/b" & pid_b=$!
+status_a=0; wait "$pid_a" || status_a=$?
+status_b=0; wait "$pid_b" || status_b=$?
+case_output="$(cat "$landing_root/a.out" "$landing_root/b.out")"
+[ $((status_a + status_b)) -eq 0 ] || fail "hooked landing: a run failed: $case_output"
+expect_output 'keeping the checks'"'"' verdict'
+[ "$("$real_git" --git-dir="$landing_remote" rev-list --count main)" -eq 3 ] \
+  || fail 'hooked landing: origin main does not carry base plus both changes'
+[ "$(cat "$landing_root/a.hook-runs" "$landing_root/b.hook-runs" | wc -l)" -eq 2 ] \
+  || fail 'hooked landing: the hook did not run exactly once per landing'
+holds="$(lock_holds "$landing_root/a.out" "$landing_root/b.out")"
+[ "$(wc -l <<<"$holds")" -eq 2 ] || fail "hooked landing: lock hold times missing: $case_output"
+awk '$1 >= 3 { bad = 1 } END { exit bad }' <<<"$holds" \
+  || fail "hooked landing: the lock was held while the hook ran ($holds)"
+
+# When origin changes the same file while the checks run, the later landing
+# re-runs them on the rebased commit before pushing.
+new_landing_origin hooked-overlap
+printf 'top\nmiddle\nbottom\n' >"$landing_root/seed/shared.txt"
+"$real_git" -C "$landing_root/seed" commit -qam 'three lines'
+"$real_git" -C "$landing_root/seed" push -q "$landing_remote" main
+for lane in a b; do
+  "$real_git" clone -q "$landing_remote" "$landing_root/$lane"
+  "$real_git" -C "$landing_root/$lane" config user.name safe-push-test
+  "$real_git" -C "$landing_root/$lane" config user.email safe-push-test@example.invalid
+  "$real_git" -C "$landing_root/$lane" switch -q -c "lane-$lane"
+  add_slow_hook "$landing_root/$lane"
+done
+sed -i 's/^top$/top from a/' "$landing_root/a/shared.txt"
+sed -i 's/^bottom$/bottom from b/' "$landing_root/b/shared.txt"
+"$real_git" -C "$landing_root/a" commit -qam 'a edits the top'
+"$real_git" -C "$landing_root/b" commit -qam 'b edits the bottom'
+run_landing "$landing_root/a" & pid_a=$!
+sleep 1
+run_landing "$landing_root/b" & pid_b=$!
+status_a=0; wait "$pid_a" || status_a=$?
+status_b=0; wait "$pid_b" || status_b=$?
+case_output="$(cat "$landing_root/a.out" "$landing_root/b.out")"
+[ $((status_a + status_b)) -eq 0 ] || fail "overlapping hooked landing: a run failed: $case_output"
+expect_output 're-running them (1/3)'
+[ "$(wc -l <"$landing_root/b.hook-runs")" -eq 2 ] \
+  || fail 'overlapping hooked landing: the checks were not re-run after origin changed the file'
+[ "$("$real_git" --git-dir="$landing_remote" show main:shared.txt)" = $'top from a\nmiddle\nbottom from b' ] \
+  || fail 'overlapping hooked landing: origin main lacks either change'
+
+# A failing hook refuses the landing before the lock, and origin is unchanged.
+new_landing_origin hook-fails
+make_landing_clone "$landing_root/lane" lane.txt
+add_slow_hook "$landing_root/lane" 1
+remote_main_before="$("$real_git" --git-dir="$landing_remote" rev-parse main)"
+case_status=0
+run_landing "$landing_root/lane" || case_status=$?
+case_output="$(cat "$landing_root/lane.out")"
+expect_status nonzero
+expect_output 'the pre-push checks failed; NOT pushed.'
+[ -z "$(lock_holds "$landing_root/lane.out")" ] || fail 'failing hook took the landing lock'
+[ "$("$real_git" --git-dir="$landing_remote" rev-parse main)" = "$remote_main_before" ] \
+  || fail 'failing hook landing mutated origin main'
+
 # A lane whose change conflicts with what landed meanwhile is refused with
 # the file named, and the rebase is aborted so the worktree is left clean.
 new_landing_origin conflict

@@ -23,8 +23,9 @@ Scan outgoing content for secrets, then push the current branch or one tag.
 
 Options:
   --dry-run    run all safety checks without pushing
-  --to BRANCH  explicitly publish HEAD to another remote branch; waits for
-               the per-origin landing lock, then rebases onto origin BRANCH
+  --to BRANCH  explicitly publish HEAD to another remote branch: rebases onto
+               origin BRANCH and runs the repo's pre-push hook, then takes the
+               per-origin landing lock only to fetch, rebase and push
   --keep-lane  after landing --to main from ~/code/<project>/worktrees/<slug>,
                keep the lane instead of removing it and its branch
   --tag NAME   push an existing annotated tag after scanning new content
@@ -440,10 +441,11 @@ if [ -n "$tag" ]; then
 fi
 
 # --- --to landings: serialize per origin, rebase onto the fresh destination -------
-# ~20 workers land on one busy main and the push-time gates take 15-40 s, so an
-# unserialized landing loses the race to non-fast-forward. Holders of the lock
-# fetch, rebase, scan and push; the lock is dropped right after the push.
+# ~20 workers land on one busy main, so an unserialized landing loses the race to
+# non-fast-forward. A repo's pre-push hook can take minutes, so it runs before
+# the lock; holders of the lock only fetch, rebase, scan and push.
 push_lock_fd=""
+push_lock_taken=""
 acquire_push_lock() {
   local url="$1" dir key file holder waited=0
   dir="${XDG_STATE_HOME:-$HOME/.local/state}/safe-push"
@@ -466,6 +468,7 @@ acquire_push_lock() {
     done
   fi
   printf 'pid %s in %s\n' "$$" "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" >"$file"
+  push_lock_taken=$EPOCHREALTIME
 }
 
 release_push_lock() {
@@ -473,6 +476,8 @@ release_push_lock() {
   flock -u "$push_lock_fd" || true
   exec {push_lock_fd}>&-
   push_lock_fd=""
+  awk -v a="$push_lock_taken" -v b="$EPOCHREALTIME" \
+    'BEGIN { printf "safe-push: held the landing lock for %.1f s\n", b - a }'
 }
 
 rebase_in_progress() {
@@ -483,12 +488,17 @@ rebase_in_progress() {
   return 1
 }
 
-sync_with_destination() {
-  local remote_ref="refs/remotes/origin/$to" upstream conflicts log
-  # An absent destination has nothing to rebase onto; a real fetch failure
-  # is caught by the destination snapshot below.
+# Fetches origin's destination and prints its tip; nothing when it is absent
+# (a real fetch failure is caught by the destination snapshot later).
+fetch_destination() {
+  local remote_ref="refs/remotes/origin/$to"
   git fetch -q origin "+refs/heads/$to:$remote_ref" 2>/dev/null || return 0
-  upstream=$(git rev-parse -q --verify "${remote_ref}^{commit}" 2>/dev/null) || return 0
+  git rev-parse -q --verify "${remote_ref}^{commit}" 2>/dev/null || true
+}
+
+rebase_onto_destination() {
+  local upstream="$1" conflicts log
+  [ -n "$upstream" ] || return 0
   git merge-base --is-ancestor "$upstream" HEAD 2>/dev/null && return 0
   # Unrelated history is left to the non-fast-forward refusal.
   git merge-base HEAD "$upstream" >/dev/null 2>&1 || return 0
@@ -508,11 +518,87 @@ sync_with_destination() {
   exit 1
 }
 
+sync_with_destination() {
+  rebase_onto_destination "$(fetch_destination)"
+}
+
+# The pre-push hook git would run, resolved as git does (core.hooksPath
+# included); nothing when the repo has none.
+pre_push_hook() {
+  local top path
+  top=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
+  path=$(cd "$top" && git rev-parse --git-path hooks/pre-push 2>/dev/null) || return 0
+  case "$path" in /*) ;; *) path="$top/$path" ;; esac
+  if [ -f "$path" ] && [ -x "$path" ]; then printf '%s\n' "$path"; fi
+  return 0
+}
+
+# Runs the hook as git would for pushing HEAD to origin's destination at $2.
+run_pre_push_checks() {
+  local hook="$1" base="$2" head local_ref top zero
+  head=$(git rev-parse HEAD)
+  local_ref=$(git symbolic-ref --quiet HEAD)
+  top=$(git rev-parse --show-toplevel)
+  zero=$(printf '%0*d' "${#head}" 0)
+  echo "safe-push: running the pre-push checks on $head before taking the landing lock"
+  if ! (cd "$top" && printf '%s %s refs/heads/%s %s\n' "$local_ref" "$head" "$to" "${base:-$zero}" \
+      | "$hook" origin "$lock_url"); then
+    echo "safe-push: ✗ the pre-push checks failed; NOT pushed." >&2
+    exit 1
+  fi
+}
+
+# Whether origin's commits base..upstream change any file that base..head changes.
+touches_same_files() {
+  LC_ALL=C comm -12 \
+    <(git diff --no-renames --name-only "$1" "$3" | LC_ALL=C sort -u) \
+    <(git diff --no-renames --name-only "$1" "$2" | LC_ALL=C sort -u) | grep -q .
+}
+
+# hook_verified=1: the hook passed on HEAD's change against the destination it
+# will land on (or one whose new commits touch none of its files), so the push
+# skips it.
+hook_verified=0
 if [ "$to_seen" -eq 1 ] && [ "$dry" = 0 ]; then
   lock_url=$(git remote get-url --push origin 2>/dev/null) \
     || { echo "safe-push: origin has no push URL"; exit 1; }
-  acquire_push_lock "$lock_url"
-  sync_with_destination
+  hook=$(pre_push_hook)
+  if [ -z "$hook" ]; then
+    acquire_push_lock "$lock_url"
+    sync_with_destination
+  else
+    attempt=1
+    while :; do
+      checked_base=$(fetch_destination)
+      rebase_onto_destination "$checked_base"
+      checked_head=$(git rev-parse HEAD)
+      run_pre_push_checks "$hook" "$checked_base"
+      acquire_push_lock "$lock_url"
+      [ "$(git rev-parse HEAD)" = "$checked_head" ] \
+        || { echo "safe-push: HEAD changed while the pre-push checks ran — refusing; NOT pushed." >&2; exit 1; }
+      upstream=$(fetch_destination)
+      if [ "$upstream" = "$checked_base" ]; then
+        hook_verified=1
+        break
+      fi
+      if [ -n "$checked_base" ] && [ -n "$upstream" ] \
+          && git merge-base --is-ancestor "$checked_base" "$upstream" 2>/dev/null \
+          && ! touches_same_files "$checked_base" "$upstream" "$checked_head"; then
+        echo "safe-push: origin $to's new commits touch none of this change's files — keeping the checks' verdict"
+        rebase_onto_destination "$upstream"
+        hook_verified=1
+        break
+      fi
+      if [ "$attempt" -ge 3 ]; then
+        echo "safe-push: origin $to changed this change's files during $attempt check runs — running the checks under the landing lock"
+        rebase_onto_destination "$upstream"
+        break
+      fi
+      echo "safe-push: origin $to changed this change's files during the checks — re-running them ($attempt/3)"
+      release_push_lock
+      attempt=$((attempt + 1))
+    done
+  fi
 fi
 
 # --- the load-bearing guard: secret scan of the commits about to be pushed -------
@@ -540,7 +626,9 @@ echo "safe-push: ✓ clean — pushing $branch -> origin as $publication"
 # The source is the immutable object that was scanned, never a mutable branch/HEAD.
 # The exact lease closes the final destination race. It cannot authorize a
 # non-fast-forward update: capture_destination_state proved ancestry first.
-SAFE_PUSH_ACTIVE=1 git push \
+push_flags=()
+[ "$hook_verified" -eq 0 ] || push_flags+=(--no-verify)
+SAFE_PUSH_ACTIVE=1 git push "${push_flags[@]}" \
   --force-with-lease="${destination_ref}:${destination_oid}" \
   "$origin_url" "$publication"
 release_push_lock
