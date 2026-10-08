@@ -646,18 +646,6 @@
             "repo": "north",
             "path": "agent-machinery/catalog.json"
           }
-        },
-        {
-          "type": "instructions",
-          "targets": [
-            "shared",
-            "codex",
-            "north"
-          ],
-          "owner": {
-            "repo": "north",
-            "path": "agent-machinery/delegation.md"
-          }
         }
       ]
     },

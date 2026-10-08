@@ -7,8 +7,6 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_GUARD="$HERE/concrete-model-identity-guard.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/concrete-model-identity-guard.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
-NORTH_REPO="${AGENT_CONFIG_NORTH_REPO:-$HOME/code/north/main}"
-MODEL_CATALOG="$NORTH_REPO/agent-machinery/selection/catalog.json"
 PROVIDER_HOOKS="$SCRATCH/provider-hooks"
 TODO="$SCRATCH/home/code/todo"
 ACTIVATION="$SCRATCH/activation.json"
@@ -123,7 +121,7 @@ done < <(printf '%s\n' inherited parent default auto ambient lineage)
 while IFS= read -r exact_model; do
   run_case allow "exact provider model $exact_model" \
     "$(payload Write "$TODO/task.md" "model = \"$exact_model\"")"
-done < <(jq -r '.providers[].models[].id' "$MODEL_CATALOG")
+done < <(printf '%s\n' gpt-6-astra gpt-6-sol gpt-6-luna gpt-5.6-terra claude-opus-5 claude-sonnet-5 claude-fable-5)
 run_case allow 'historical exact model identity' \
   "$(payload Write "$TODO/task.md" 'model = "gpt-5"')"
 run_case deny 'assignment-ledger model column' \
