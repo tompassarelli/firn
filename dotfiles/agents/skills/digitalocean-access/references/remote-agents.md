@@ -38,7 +38,7 @@ request: routing may retain affinity and must respect eligibility. Check
 credential-refresh behavior when both hosts will remain active; do not silently
 replace an independent server with a tunnel dependent on the laptop.
 
-Follow the available run-design, ownership, and supervision procedures for
+Follow the available ownership and supervision procedures for
 delegation. Save the scoped plan and restart-grade status on the host. Require
 the actual run's ownership acceptance and first useful activity before reporting
 that work started. A systemd unit, PID, or background log alone is insufficient.

@@ -600,16 +600,6 @@
         }
       ]
     },
-    "agent-run-design": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
     "agent-practice": {
       "distributions": [
         {
@@ -620,17 +610,6 @@
           "owner": {
             "repo": "north",
             "path": "agent-machinery/catalog.json"
-          }
-        },
-        {
-          "type": "agentTemplates",
-          "targets": [
-            "north",
-            "claude"
-          ],
-          "owner": {
-            "repo": "north",
-            "path": "agent-machinery/agents"
           }
         }
       ]
