@@ -104,8 +104,9 @@ Needs you: nothing
   above that worker, even when the brief is reworded or the issue reopened,
   and the brief names that attempt and its tier. Stop a worker that fails a
   check or returns a shallow result and re-run its brief, plus what it tried,
-  on the next tier up to `worker-xhigh`, and past it on `worker-xhigh` with
-  the Fable model; a running worker's effort can't change.
+  on the next tier: `worker-xhigh`, then `worker-max` (Opus at max effort),
+  then `worker-xhigh` with the Fable model; a running worker's effort can't
+  change.
 - A worker does one task. Send a running worker only its own task's
   follow-up; new or unrelated work goes to a fresh worker whose brief carries
   what it needs.

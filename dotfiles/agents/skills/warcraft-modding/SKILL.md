@@ -178,8 +178,10 @@ over lockstep WebRTC peer to peer, with no server.
 
 ## Native testing
 
-- **Offline LAN pool, the default while it starts** (wisp:docs/lan.md; it fails
-  on 3.0.1, see Warcraft 3.0 changes): throwaway clients,
+- **Offline LAN pool** (wisp:docs/lan.md): Warcraft 3.0.1 removed LAN (only
+  Battle.net and loopback networks remain), so pool clients start but can't
+  play a two-client game; two-client checks run on the signed-in clones.
+  Offline clients still allow engine tools in a single-client game. Throwaway clients,
   each pair in a loopback-only network namespace. `wisp lan setup --from
   INSTALL [--pairs N]` once; `wisp lan pool [--pairs N | --pair K...]
   [--pool-profile parity|visual] [--fps N]` runs pairs through the
