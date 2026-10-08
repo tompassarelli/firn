@@ -40,6 +40,10 @@ Always set the model and effort. Use only these choices:
 | xhigh | worker-xhigh | gpt-6-astra xhigh | Escalation from a failed or unfinished high attempt. |
 | max | worker-max | gpt-6-astra max | Last resort after an important xhigh attempt failed or was unfinished. |
 
+Trial: `worker-haiku` (Claude Haiku 5.5, `claude-haiku-5-5`) takes mechanical,
+fully specified Claude work so the ledger can compare its `haiku` row with
+`medium`. Escalate a failed haiku attempt to `worker`.
+
 A failed or unfinished attempt starts one tier above the earlier worker,
 even after rewording the brief or reopening the issue. The history rule
 outranks the default. A running worker's effort cannot change. Never use low;
