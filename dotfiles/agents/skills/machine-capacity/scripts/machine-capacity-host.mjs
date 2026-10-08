@@ -411,7 +411,8 @@ function decision(root, requested, create, ticket = null) {
     const now = Date.now();
     const { active, reclaimed } = readLeases(root, now);
     const queue = readQueue(root);
-    const queuedAhead = ticket === null ? queue.length : queue.filter(entry => entry.name < ticket).length;
+    const queuedAhead = queue.filter(entry => (ticket === null || entry.name < ticket)
+      && (requested.name !== 'moderate' || entry.class !== 'exclusive')).length;
     const exclusiveWaiting = queue.filter(entry => entry.class === 'exclusive'
       && (requested.name !== 'exclusive' || ticket === null || entry.name < ticket)).length;
     const leased = totals(active);

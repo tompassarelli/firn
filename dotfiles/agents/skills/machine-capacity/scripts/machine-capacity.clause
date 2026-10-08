@@ -49,10 +49,11 @@ export session-seconds(?kind: Text): F64
 # clients leave idle. Present, it also yields while a protected slice itself
 # waits. In every profile moderate and heavy work waits its turn while declared
 # batch ceilings would pass the aggregate limit or system CPU pressure shows the
-# cores already oversubscribed. A waiting exclusive request drains the machine:
-# no batch work starts after it is queued, and it starts once running batch
-# leases end, whatever the pressure. Native clients are admitted on cores and
-# memory.
+# cores already oversubscribed. A waiting exclusive request drains the machine
+# of heavy work: no heavy work starts after it is queued, and it starts once
+# running batch leases end, whatever the pressure. Moderate work (builds,
+# dependency updates) keeps running beside it. Native clients are admitted on
+# cores and memory.
 export batch-pressure-limit-basis-points(): F64
   3000
 
@@ -68,7 +69,7 @@ export admission-decision(?profile: Text, ?kind: Text, ?cores: F64, ?memory-tota
                 if(?kind = "exclusive",
                   if(?exclusive-waiting > 0, "DEFER_QUEUED",
                     if(?peer-batch-runs > 0, "DEFER_EXCLUSIVE", "RUN")),
-                  if(?exclusive-waiting > 0, "DEFER_EXCLUSIVE_QUEUED",
+                  if(?exclusive-waiting > 0 and ?kind = "heavy", "DEFER_EXCLUSIVE_QUEUED",
                     if(?profile = "attended" and ?protected-cpu-some-avg10-basis-points >= 1000, "DEFER_INTERACTIVE_PRESSURE",
                       if(?queued-ahead > 0, "DEFER_QUEUED",
                         if(?leased-batch-cpus + ?requested-cpus > aggregate-cpus(?profile, ?cores), "DEFER_CPU_CAPACITY",

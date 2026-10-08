@@ -56,8 +56,8 @@ overrides it (no argument prints the active profile); the override lasts until
 reboot. `probe` reports `profile` and
 `mode`. The wrapper admits atomically and contains every descendant in one user
 cgroup. A queued
-exclusive request drains the machine: no moderate or heavy work starts after it
-arrives, and it starts as soon as running batch leases end, whatever the
+exclusive request drains the machine of heavy work: no heavy work starts after
+it arrives (moderate builds and `update:wisp` still do), and it starts as soon as running batch leases end, whatever the
 pressure, so it waits at most the longest remaining batch deadline. It then
 blocks new batch jobs until release; native clients are never blocked.
 `bun "$capacity" status` lists who holds what (with remaining seconds) and who

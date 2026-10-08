@@ -96,10 +96,11 @@ fi
 [[ $(decision attended exclusive 80000 0 0 2 2048 --peer-batch-runs 1) == DEFER_EXCLUSIVE ]]
 [[ $(decision unattended moderate 80000 0 0 18 16384 --peer-batch-runs 1 --peer-exclusive-runs 1) == DEFER_EXCLUSIVE ]]
 [[ $(decision attended heavy 80000 0 0 6 8192 --peer-batch-runs 1 --unbounded-runs 1) == DEFER_UNBOUNDED_PEER ]]
-# A waiting exclusive request holds all later batch work and waits only for
-# running batch leases: not for earlier batch tickets or pressure.
+# A waiting exclusive request holds later heavy work and waits only for
+# running batch leases: not for earlier batch tickets or pressure. Moderate
+# builds and dependency updates still start.
 [[ $(decision unattended heavy 80000 0 0 0 0 --exclusive-waiting 1) == DEFER_EXCLUSIVE_QUEUED ]]
-[[ $(decision attended moderate 80000 0 0 0 0 --exclusive-waiting 1) == DEFER_EXCLUSIVE_QUEUED ]]
+[[ $(decision attended moderate 80000 0 0 0 0 --exclusive-waiting 1) == RUN ]]
 [[ $(decision unattended native 80000 0 0 0 0 --exclusive-waiting 1) == RUN ]]
 [[ $(decision unattended exclusive 80000 0 0 0 0 --queued-ahead 3) == RUN ]]
 [[ $(decision unattended exclusive 80000 0 0 0 0 --exclusive-waiting 1) == DEFER_QUEUED ]]
@@ -394,16 +395,19 @@ sleep 2.5
 stop_run drain
 wait_for "$scratch/early-ready"
 # While a running lease holds the machine, a queued exclusive request goes first
-# and later batch work waits behind it.
+# and later heavy work waits behind it; a moderate build still starts.
 held_run exclusive drain second run --timeout-seconds 30
 sleep 1.5
-held_run moderate late late run --timeout-seconds 30
+held_run moderate build build run --timeout-seconds 30
+wait_for "$scratch/build-ready"
+held_run heavy late late run --timeout-seconds 30
 sleep 1.5
 [[ $(head -n 1 "$scratch/second-err" | jq -r '.reason') == DEFER_EXCLUSIVE ]]
 [[ $(head -n 1 "$scratch/late-err" | jq -r '.reason') == DEFER_EXCLUSIVE_QUEUED ]]
-[[ $(status | jq -c '[.holding[] | .owner + " " + .class] + [.queued[] | .class]') == '["fixture:/early moderate","exclusive","moderate"]' ]]
+[[ $(status | jq -c '[.holding[] | .owner + " " + .class] + [.queued[] | .class]') == '["fixture:/early moderate","fixture:/build moderate","exclusive","heavy"]' ]]
 [[ $(status | jq '.holding[0].remainingSeconds') -le 35 ]]
 stop_run early
+stop_run build
 wait_for "$scratch/second-ready"
 sleep 1.5
 [[ ! -s "$scratch/late-ready" ]]
