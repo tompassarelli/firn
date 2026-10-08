@@ -14,7 +14,12 @@
         ;; Stable nixpkgs freezes claude-code far behind upstream; the agent
         ;; must track the release its instructions and hooks are written for.
         {:environment.systemPackages
-          [pkgs.unstable.claude-code]
+          [(pkgs.unstable.claude-code.overrideAttrs
+            (fn [old] Any
+              {:version "2.1.293"
+               :src (pkgs.fetchurl
+                     {:url "https://downloads.claude.ai/claude-code-releases/2.1.293/linux-x64/claude.zst"
+                      :hash "sha256-JXhto0fDBkHcbFBzPQkNd8tUDxBaYa9+mJW1bjn+FqU="})}))]
 
          :home-manager.users
           {username
