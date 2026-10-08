@@ -43,12 +43,17 @@ rename updates every caller; no aliases.
    affected tests (0.6 s) and a two-client headless journey (2 s) after each
    save. `--data <client A CustomMapData> --data <client B ...>` also
    hot-reloads running clients.
-1. **Logic.** `bun run test` (about 2 s); `bun test test/game.test.ts -t NAME`
-   (0.07 s); `bun run check` (0.4 s); `bun wisp headless` plays the real
-   bundle in simulated clients and reports desyncs and visible faults (1.6 s).
-2. **Emitted Lua.** `LUA=<32-bit lua> bun scripts/lua-tests.ts` runs the same
-   tests in 32-bit Lua, catching integer wrap, binary32 rounding and TSTL
-   output that Bun can't.
+1. **Logic.** Run the tests a change affects locally (`bun wisp dev`, or
+   `bun test test/game.test.ts -t NAME`, 0.07 s); `bun run check` (0.4 s);
+   `bun wisp headless` plays the real bundle in simulated clients and reports
+   desyncs and visible faults (1.6 s). Full suites run on the farm, never on
+   this machine: `bun wisp farm test --wait` runs the full Bun and 32-bit Lua
+   suites for HEAD on GitHub's runners and prints the counts and each failing
+   test (Smashcraft and Wisp; wisp:docs/farm.md).
+2. **Emitted Lua.** The farm's Lua suite (locally,
+   `LUA=<32-bit lua> GAME_TESTS=PATH bun scripts/lua-tests.ts` for the affected
+   modules) runs the same tests in 32-bit Lua, catching integer wrap, binary32
+   rounding and TSTL output that Bun can't.
 3. **The running game.** `bun wisp hot --data <A> --data <B> --watch` sends
    only changed modules to both clients in about 0.4 s, says whether each
    version runs or was refused, and prints in-game errors as TypeScript lines.
