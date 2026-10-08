@@ -22,6 +22,11 @@
 #                   `worktrees/<slug>` lane this session is not working in, any
 #                   `.git`, any checkout root. HARD in every mode, no ask.
 #        gone     — the path does not exist: nothing to lose. ALLOW.
+#        scratch  — strictly inside a declared agent scratch root (Wisp's
+#                   LAN/online client and run copies under
+#                   $XDG_DATA_HOME/wisp/{lan,online}/), lexically AND after
+#                   following symlinks. Agents make these copies and remake
+#                   them on demand. ALLOW.
 #        regen    — provably regenerable: $XDG_CACHE_HOME, /tmp/*, /var/tmp,
 #                   $TMPDIR/*, /run/user/*, node_modules/__pycache__/&c, and
 #                   anything git itself declares ignored. ALLOW.
@@ -42,6 +47,11 @@
 #      class in the same command (e.g. `rm -rf ~/x && git push -f`) still wins
 #      (exit 2); the ask envelope emits only after the full walk with asks
 #      pending and no hard deny. Classes 2-5 below are hard denies in EVERY mode.
+#      Relative targets resolve where the command really runs: a `cd`/`pushd`
+#      joined by `&&` moves later commands; joined any other way (it may fail)
+#      both directories are judged; a cd in a pipe never moves the shell, and
+#      one inside ( ), $( ), backticks or if/for/while/case/{ } leaves both
+#      directories judged after the block closes.
 #      PROPORTIONALITY: a bounded `find … -type f -mtime +N -delete` and an
 #      `rm -rf` of the same directory are both blocked, but the reason says
 #      which one it is — the friction should read as sized to the act.
@@ -256,8 +266,9 @@ ask_or_deny() {
 }
 
 # ---- tokenize: normalize separators to standalone tokens, then word-split.
-# Two separator kinds, kept DISTINCT: hard boundaries (";" — from ; && || & $( ` \n)
-# end a command's stdin, a pipe ("|") does NOT. The segment walk treats both as
+# Three separator kinds, kept DISTINCT: hard boundaries (";" — from ; || & $( ` \n,
+# and "&&") end a command's stdin, a pipe ("|") does NOT; "&&" alone also tells
+# the cwd tracker a preceding `cd` succeeded. The segment walk treats both as
 # segment breaks; only the ssh pipe-in check cares which — a secret in an earlier
 # PIPE stage flows into ssh's stdin (exfil), a secret before a hard ";" does not.
 # "$(" is split (catches `$(rm -rf /)`); bare "(" is NOT (keeps find \( \) intact);
@@ -269,13 +280,22 @@ norm="${norm//\\$'\n'/ }" # line continuation first — keep the logical line wh
 norm="${norm//$'\n'/ ; }"
 norm="${norm//$'\t'/ }"
 # shellcheck disable=SC2016  # literal $( — command substitution opener in the TEXT
-norm="${norm//'$('/ ; }"
-norm="${norm//\`/ ; }"
-norm="${norm//&&/ ; }"
+norm="${norm//'$('/ ; ( }"
+# Backticks alternate open/close; each becomes a subshell boundary.
+bt_open=1
+while [[ "$norm" == *'`'* ]]; do
+  if [ "$bt_open" = 1 ]; then norm="${norm/\`/ ; ( }"; bt_open=0
+  else norm="${norm/\`/ ) ; }"; bt_open=1; fi
+done
+unset bt_open
+and_mark=$'\x01'
+norm="${norm//&&/ $and_mark }" # && kept DISTINCT: only it makes a `cd` certain
 norm="${norm//'||'/ ; }" # logical OR is a HARD boundary — normalize before bare |
 norm="${norm//;/ ; }"
 norm="${norm//|/ | }" # single pipe kept DISTINCT from ";" (stdin flows across it)
 norm="${norm//&/ ; }"
+norm="${norm//$and_mark/\&\&}" # \& : a bare & in a replacement is the match
+unset and_mark
 read -r -a TOK <<<"$norm" || exit 0
 [ "${#TOK[@]}" -gt 0 ] || exit 0
 
@@ -309,7 +329,7 @@ resolve_path() {
     '~'*) return 1 ;; # ~otheruser — can't resolve cheaply
     *)
       ensure_cwd
-      t="$cwd/$t"
+      t="${rcwd:-$cwd}/$t"
       ;;
   esac
   t="${t%%[*?]*}" # glob → its literal prefix (rm -rf /x/* judges /x/)
@@ -497,6 +517,26 @@ sacred_reason() {
   return 1
 }
 
+# is_agent_scratch PATH : strictly inside a root that agent tools fill with
+# disposable copies and refill on demand. The signal is the declared root, not
+# a record of who made the folder: the tools that create these copies are
+# scripts as often as agent shell calls, so a creation log would miss them, and
+# a stale log would vouch for a path that has since become something else. The
+# physical path must agree, so a symlink cannot route a delete out of the root.
+DATA_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}"
+is_agent_scratch() {
+  local real
+  agent_scratch_shape "$1" || return 1
+  real="$(realpath -m -- "$1" 2>/dev/null)" || return 1
+  agent_scratch_shape "$real"
+}
+agent_scratch_shape() {
+  case "$1" in
+    "$DATA_ROOT"/wisp/lan/?* | "$DATA_ROOT"/wisp/online/?*) return 0 ;;
+  esac
+  return 1
+}
+
 GREPO=""
 git_root_of() { # nearest existing dir at or above PATH -> $GREPO ("" = no repo)
   local d="$1"
@@ -527,6 +567,10 @@ classify_delete_target() {
   fi
   if is_disposable "$p"; then
     CLASS=regen
+    return 0
+  fi
+  if is_agent_scratch "$p"; then
+    CLASS=scratch
     return 0
   fi
   if git_root_of "$p"; then
@@ -583,7 +627,7 @@ var_shape_check() {
     /*) ;;
     *)
       ensure_cwd
-      pre="$cwd/$pre"
+      pre="${rcwd:-$cwd}/$pre"
       ;;
   esac
   pre="${pre%/*}"
@@ -602,7 +646,7 @@ check_delete_target() {
   resolve_path "$1" || return 0 # unresolvable for any other reason: fail-open
   classify_delete_target "$RES"
   case "$CLASS" in
-    gone | regen | tracked) return 0 ;;
+    gone | regen | scratch | tracked) return 0 ;;
     never | sacred) deny "$WHY" ;;
   esac
   case "$shape" in
@@ -653,7 +697,7 @@ ssh_pipe_exfil_check() {
   [ "$LOCALHOST_HIT" = 1 ] && return 0
   local k
   for ((k = $1 - 1; k >= 0; k--)); do
-    [ "${TOK[$k]}" = ";" ] && break    # hard boundary — stdin does not cross it
+    case "${TOK[$k]}" in ";" | "&&") break ;; esac # hard boundary — stdin does not cross it
     [ "${TOK[$k]}" = "|" ] && continue # pipe — stdin DOES flow across it
     strip_g "${TOK[$k]}"
     is_secret_path && deny "secret path piped into ssh — local credential material into ssh stdin is an exfil surface (remote reads inside ssh's own args stay allowed)"
@@ -783,7 +827,7 @@ handle_git() {
         resolve_path "$cval" || return 0
       else
         ensure_cwd
-        RES="$(realpath -sm -- "$cwd" 2>/dev/null)" || return 0
+        RES="$(realpath -sm -- "${rcwd:-$cwd}" 2>/dev/null)" || return 0
       fi
       is_never_path "$RES" && deny "git clean -f in '$RES' — never"
       sacred_owner_reason "$RES" && deny "git clean -f: $WHY"
@@ -935,14 +979,128 @@ handle_chown() {
   esac
 }
 
+# ---- cwd tracking: the directories each segment may run in ------------------
+# CWDS holds the candidates; "" stands for the session cwd, so the payload's
+# cwd is only decoded when a relative path needs it. Only `cd X &&` narrows
+# the set; every close of a subshell or block unions back what was saved at
+# its open, so a miscounted open or close can only widen the set.
+CWDS=("")
+SCOPES=()
+PENDING_POPS=0
+PREV_SEP=""
+SEG_START=1
+
+join_cwds() { # join_cwds ITEMS... -> $JOINED, \x1f-separated, fork-free
+  local c
+  JOINED=""
+  for c in "$@"; do JOINED+="$c"$'\x1f'; done
+}
+
+is_sep() { case "$1" in ";" | "|" | "&&") return 0 ;; esac; return 1; }
+
+cwds_union() { # cwds_union JOINED : add the \x1f-joined candidates to CWDS
+  local have saved
+  local -a list
+  IFS=$'\x1f' read -r -a list <<<"$1"
+  [ "${#list[@]}" -gt 0 ] || list=("")
+  for saved in "${list[@]}"; do
+    for have in "${CWDS[@]}"; do [ "$have" = "$saved" ] && continue 2; done
+    CWDS+=("$saved")
+  done
+}
+
+# open_segment I : count the segment's scope opens (pushed now) and closes
+# (popped once the segment has run).
+open_segment() {
+  local k="$1" tk
+  PENDING_POPS=0
+  while [ "$k" -lt "$n" ] && ! is_sep "${TOK[$k]}"; do
+    tk="${TOK[$k]}"
+    case "$tk" in
+      *'\('* | *'\)') ;;
+      'if' | 'while' | 'until' | 'for' | 'case' | 'select' | '{' | *'('*)
+        join_cwds "${CWDS[@]}"
+        SCOPES+=("$JOINED")
+        ;;
+    esac
+    case "$tk" in
+      *'\)') ;;
+      'fi' | 'done' | 'esac' | '}' | *')') PENDING_POPS=$((PENDING_POPS + 1)) ;;
+    esac
+    k=$((k + 1))
+  done
+}
+
+close_segment() {
+  local top
+  while [ "$PENDING_POPS" -gt 0 ]; do
+    PENDING_POPS=$((PENDING_POPS - 1))
+    [ "${#SCOPES[@]}" -gt 0 ] || continue
+    top="${SCOPES[${#SCOPES[@]} - 1]}"
+    unset 'SCOPES[${#SCOPES[@]}-1]'
+    cwds_union "$top"
+  done
+}
+
+# handle_cd NEXT_SEP ARGS... : move the candidates. An unknowable target
+# (variable, glob, `cd -`) leaves them where they were.
+handle_cd() {
+  local next="$1" t dest="" here
+  shift
+  local -a moved=()
+  [ "$PREV_SEP" = "|" ] && return 0
+  [ "$next" = "|" ] && return 0
+  for t in "$@"; do
+    case "$t" in
+      --) continue ;;
+      -) return 0 ;;
+      -*) continue ;;
+    esac
+    dest="$t"
+    break
+  done
+  [ -n "$dest" ] || dest='~'
+  case "$dest" in *[*?]* | +*) return 0 ;; esac
+  for here in "${CWDS[@]}"; do
+    rcwd="$here"
+    resolve_path "$dest" || { rcwd=""; return 0; }
+    moved+=("$RES")
+  done
+  rcwd=""
+  if [ "$next" = "&&" ]; then
+    CWDS=("${moved[@]}")
+  else
+    join_cwds "${moved[@]}"
+    cwds_union "$JOINED"
+  fi
+}
+
+# in_each_cwd HANDLER ARGS... : run a path-judging handler once per candidate.
+in_each_cwd() {
+  local here
+  for here in "${CWDS[@]}"; do
+    rcwd="$here"
+    "$@"
+  done
+  rcwd=""
+}
+
 # ---- segment walk: find each segment's command word, dispatch with its args.
+rcwd=""
 i=0
 n="${#TOK[@]}"
 while [ "$i" -lt "$n" ]; do
   t="${TOK[$i]}"
-  if [ "$t" = ";" ] || [ "$t" = "|" ]; then
+  if is_sep "$t"; then
+    close_segment
+    PREV_SEP="$t"
+    SEG_START=1
     i=$((i + 1))
     continue
+  fi
+  if [ "$SEG_START" = 1 ]; then
+    SEG_START=0
+    open_segment "$i"
   fi
   # prefix skippers at segment start
   word="${t#'('}"
@@ -979,14 +1137,15 @@ while [ "$i" -lt "$n" ]; do
   # collect args to end of segment
   j=$((i + 1))
   args=()
-  while [ "$j" -lt "$n" ] && [ "${TOK[$j]}" != ";" ] && [ "${TOK[$j]}" != "|" ]; do
+  while [ "$j" -lt "$n" ] && ! is_sep "${TOK[$j]}"; do
     args+=("${TOK[$j]}")
     j=$((j + 1))
   done
   case "$word" in
-    rm) handle_rm ${args[@]+"${args[@]}"} ;;
-    find) handle_find ${args[@]+"${args[@]}"} ;;
-    git) handle_git ${args[@]+"${args[@]}"} ;;
+    cd | pushd) handle_cd "${TOK[$j]:-}" ${args[@]+"${args[@]}"} ;;
+    rm) in_each_cwd handle_rm ${args[@]+"${args[@]}"} ;;
+    find) in_each_cwd handle_find ${args[@]+"${args[@]}"} ;;
+    git) in_each_cwd handle_git ${args[@]+"${args[@]}"} ;;
     curl | wget) handle_http "$word" ${args[@]+"${args[@]}"} ;;
     nc | ncat | netcat) secret_exfil_check "$word" ;;
     # ssh is a class-3 verb ONLY in the pipe-in shape (ssh_pipe_exfil_check).
@@ -1008,6 +1167,7 @@ while [ "$i" -lt "$n" ]; do
   esac
   i="$j"
 done
+close_segment
 
 # ---- ask tail: interactive class-1 violations accumulated and NO hard deny fired
 # during the walk (a hard deny would have exited 2 already). Emit the ask envelope

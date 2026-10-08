@@ -704,6 +704,43 @@ check("rm inside a command substitution is still denied",
 check("an untracked directory reached through a variable stays removable",
       repo_fixture(f'B={os.path.join(REPO, "build")}; rm -rf "$B/$f"') is None)
 
+print("--- 2026-10-08: each git write runs where the cd steps put it ---")
+
+WISP_MAIN = "/home/tom/code/wisp/main"
+LANE = "../worktrees/land-wisp60"
+
+check("worktree add, cd into the new lane, then cherry-pick there is allowed",
+      run(bash("cd ~/code/wisp/main && git fetch -q origin && git worktree add -q "
+               "-b land-wisp60 ../worktrees/land-wisp60 origin/main && "
+               "cd ../worktrees/land-wisp60 && git cherry-pick ce17e42")) is None)
+check("git -C a lane relative to a cd'd main is allowed",
+      run(bash(f"cd ~/code/wisp/main && git -C {LANE} cherry-pick ce17e42")) is None)
+check("a redirect after cd into a lane is allowed",
+      run(bash(f"cd ~/code/wisp/main && cd {LANE} && echo x > notes.txt")) is None)
+check("cherry-pick after cd back into main is still denied",
+      run(bash(f"cd {LANE} && cd ~/code/wisp/main && git cherry-pick ce17e42",
+               cwd=WISP_MAIN)))
+check("a cd joined by ; might fail: commit is still judged in main",
+      run(bash(f"cd {LANE}; git commit -m x", cwd=WISP_MAIN)))
+check("a cd joined by || might fail: commit is still judged in main",
+      run(bash(f"cd {LANE} || true; git commit -m x", cwd=WISP_MAIN)))
+check("a subshell's cd ends at its ): commit after it is still denied",
+      run(bash(f"(cd {LANE} && git cherry-pick a); git commit -m x", cwd=WISP_MAIN)))
+check("a cd inside if/fi may not have run: commit after it is still denied",
+      run(bash(f"if false; then cd {LANE} && git status; fi; git commit -m x",
+               cwd=WISP_MAIN)))
+check("a cd in a pipeline does not move the shell: commit is still denied",
+      run(bash(f"cd {LANE} | cat && git commit -m x", cwd=WISP_MAIN)))
+check("a cd to an unknown variable does not vouch for the commit",
+      run(bash("cd $LANE && git commit -m x", cwd=WISP_MAIN)))
+check("git -C main from inside a lane is still denied",
+      run(bash(f"cd {LANE} && git -C ~/code/wisp/main cherry-pick ce17e42",
+               cwd=WISP_MAIN)))
+check("chained -C resolves each step from the previous one",
+      run(bash(f"git -C {LANE} -C ../../main commit -m x", cwd=WISP_MAIN)))
+check("a substitution after cd into main is still denied",
+      run(bash("cd ~/code/wisp/main && echo $(git commit -m x)")))
+
 print("--- fail-open ---")
 
 check("no command field is allowed", run({"tool_name": "Bash", "tool_input": {}}) is None)

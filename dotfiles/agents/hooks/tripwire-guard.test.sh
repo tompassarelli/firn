@@ -70,7 +70,7 @@ run() {
     json="$(jq -n --arg c "$c" --arg d "$wd" \
       '{tool_name:"Bash", tool_input:{command:$c}, cwd:$d}')"
   fi
-  set -- env -u SAFE_PUSH_ACTIVE -u XDG_CACHE_HOME \
+  set -- env -u SAFE_PUSH_ACTIVE -u XDG_CACHE_HOME -u XDG_DATA_HOME \
     HOME="$FH" TMPDIR=/tmp \
     TRIPWIRE_LOG_DIR="$SCRATCH" AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
     NORTH_AGENT_ACTIVATION="$SCRATCH/activation.json" \
@@ -258,6 +258,60 @@ else
   fail=$((fail + 1))
   printf 'FAIL  ask    accumulation: two personal targets in one ask (rc=%s out=%s)\n' "$mrc" "$macc"
 fi
+
+echo "== class 1g: agent scratch roots (2026-10-08 false positive) =="
+WISP="$FH/.local/share/wisp"
+STEAM="$FH/.local/share/Steam/steamapps/compatdata/3516115571"
+mkdir -p "$WISP/lan/diff52/pfx/drive_c" "$WISP/lan/clients/lan0a/pfx" \
+  "$WISP/online/clone-b/pfx" "$STEAM/pfx/drive_c" "$FH/.claude/projects/-home" \
+  "$FH/xdg/wisp"
+: > "$WISP/lan/diff52/pfx/drive_c/game.exe"
+: > "$STEAM/pfx/drive_c/game.exe"
+: > "$FH/.claude/projects/-home/s.jsonl"
+ln -s "$FH/.local/share/Steam/steamapps" "$FH/xdg/wisp/lan"
+run allow 'Wisp LAN diff copy (the 1.4 TB reflink folder)' "rm -rf $WISP/lan/diff52"
+run allow 'Wisp LAN diff copy through ~' 'rm -rf ~/.local/share/wisp/lan/diff52'
+run allow 'Wisp LAN client prefix' 'rm -rf ~/.local/share/wisp/lan/clients/lan0a'
+run allow 'Wisp online clone' 'rm -rf ~/.local/share/wisp/online/clone-b'
+run deny 'the Wisp LAN root itself stays personal' 'rm -rf ~/.local/share/wisp/lan'
+run deny 'all of Wisp data stays personal' 'rm -rf ~/.local/share/wisp'
+run deny "Tom's Steam Warcraft prefix" "rm -rf $STEAM"
+run deny 'the Steam install' 'rm -rf ~/.local/share/Steam'
+run deny 'a scratch root that is a symlink into Steam' \
+  "rm -rf $FH/xdg/wisp/lan/compatdata" "$REPO_CWD" "XDG_DATA_HOME=$FH/xdg"
+run deny 'agent transcripts' 'rm -rf ~/.claude/projects/-home'
+run deny 'home stays never' 'rm -rf ~'
+run deny 'a glob over home stays never' 'rm -rf ~/*'
+run deny 'a project container stays sacred' 'rm -rf ~/code/proj'
+run deny 'a main checkout stays sacred' "rm -rf $MAIN_CO"
+run deny 'a .git stays sacred' "rm -rf $REPO_CWD/.git"
+run deny 'an unset variable stays refused' 'rm -rf "$UNSET_DIR"/'
+
+echo "== class 1h: relative targets resolve where cd puts them =="
+run allow 'cd into a scratchpad, then delete there (from a main cwd)' \
+  'cd /tmp/claude-1000/x/scratchpad && rm -rf new-run' "$MAIN_CO"
+run allow 'cd into a Wisp lan dir, then delete a copy there' \
+  'cd ~/.local/share/wisp/lan && rm -rf diff52' "$NOREPO_CWD"
+run deny 'cd into a main checkout, then delete there' \
+  "cd $MAIN_CO && rm -rf src" "$NOREPO_CWD"
+run deny 'a cd joined by ; may fail: main cwd still judged' \
+  'cd /tmp/x; rm -rf build' "$MAIN_CO"
+run deny 'a cd joined by || may fail: main cwd still judged' \
+  'cd /tmp/x || true; rm -rf build' "$MAIN_CO"
+run deny 'a subshell cd ends at its )' \
+  '(cd /tmp/x && rm -rf a); rm -rf build' "$MAIN_CO"
+run deny 'a $( ) cd ends at its )' \
+  'x=$(cd /tmp/x && pwd) && rm -rf build' "$MAIN_CO"
+run deny 'a backtick cd ends at its closing backtick' \
+  'echo `cd /tmp/x && pwd` && rm -rf build' "$MAIN_CO"
+run deny 'a cd in a pipeline does not move the shell' \
+  'cd /tmp/x | cat && rm -rf build' "$MAIN_CO"
+run deny 'a cd inside if/fi may not have run' \
+  'if true; then cd /tmp/x && true; fi; rm -rf build' "$MAIN_CO"
+run deny 'a cd to an unknown variable does not vouch' \
+  'cd "$SOMEWHERE" && rm -rf build' "$MAIN_CO"
+run deny 'git clean -f after cd into a main checkout' \
+  "cd $MAIN_CO && git clean -fdx" "$NOREPO_CWD"
 
 echo "== class 2: force-push / history rewrite / raw push =="
 run deny 'git push --force' 'git push --force origin main'

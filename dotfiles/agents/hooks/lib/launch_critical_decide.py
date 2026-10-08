@@ -296,12 +296,82 @@ def _record_assignments(tokens, env):
         env[m.group(1)] = value if _unresolved_at(value) == -1 else None
 
 
-def _segments_with_env(text, env):
-    """(segment, variables known when it runs) for each shell segment."""
+def _segments_with_env(text, env, cwd=None):
+    """(segment, variables known, directories it may run in) per segment.
+
+    The directories follow `cd`/`pushd` through the command: a `cd` joined by
+    `&&` moves every later command; one joined any other way might have failed,
+    so later commands may run in either directory. A subshell's `cd` ends with
+    its `)`, and a `cd` inside if/for/while/case/{} leaves both possibilities
+    after the block.
+    """
     env = dict(env)
-    for segment in _shell_segments(text):
-        yield segment, dict(env)
-        _record_assignments(_tokens(segment), env)
+    cwds = (cwd,)
+    stack = []
+    prev_sep = None
+    for segment, sep in _shell_segments_sep(text):
+        tokens = _tokens(segment)
+        mask = _unquoted_mask(segment)
+        lead = len(segment) - len(segment.lstrip("( "))
+        opens = mask[:lead].count("(")
+        for _ in range(opens):
+            stack.append(("(", cwds))
+        words = [t.lstrip("(") for t in tokens]
+        words = [w for w in words if w]
+        if words and words[0] in _BLOCK_OPEN:
+            stack.append(("block", cwds))
+        yield segment, dict(env), cwds
+        _record_assignments(tokens, env)
+        if cwd is not None and prev_sep != "|" and sep not in ("|", "&"):
+            moved = _cd_destinations(words, env, cwds)
+            if moved:
+                cwds = moved if sep == "&&" else _union(cwds, moved)
+        net = (mask.count("(") - opens) - mask.count(")")
+        for _ in range(max(net, 0)):
+            stack.append(("(", cwds))
+        for _ in range(max(-net, 0)):
+            if stack:
+                kind, saved = stack.pop()
+                cwds = saved if kind == "(" else _union(saved, cwds)
+        if words and words[0] in _BLOCK_CLOSE and stack:
+            _kind, saved = stack.pop()
+            cwds = _union(saved, cwds)
+        prev_sep = sep
+
+
+_BLOCK_OPEN = {"if", "while", "until", "for", "case", "select", "{"}
+_BLOCK_CLOSE = {"fi", "done", "esac", "}"}
+
+
+def _union(first, second):
+    return tuple(dict.fromkeys(first + second))
+
+
+def _cd_destinations(words, env, cwds):
+    """Directories a `cd`/`pushd` segment moves to; () when not a known move."""
+    i = 0
+    while i < len(words) and words[i] in _CONTROL_WORDS:
+        i += 1
+    if i >= len(words) or words[i] not in ("cd", "pushd"):
+        return ()
+    args = words[i + 1:]
+    while args and args[0].startswith("-") and args[0] != "-":
+        done = args[0] == "--"
+        args = args[1:]
+        if done:
+            break
+    if not args:
+        home = _base_env().get("HOME")
+        return (home,) if home else ()
+    if args[0] == "-" or args[0].startswith("+"):
+        return ()
+    moved = []
+    for here in cwds:
+        named = _target(args[0], env, here)
+        if not named or named[0] != named[1]:
+            return ()
+        moved.append(named[0])
+    return tuple(dict.fromkeys(moved))
 
 
 def _target(word, env, cwd):
@@ -499,6 +569,16 @@ def _apply_patch_command_decision(command, cwd, stripped=None):
 
 def _shell_segments(text):
     """Split live shell commands without treating quoted separators as syntax."""
+    return [segment for segment, _sep in _shell_segments_sep(text)]
+
+
+def _shell_segments_sep(text):
+    """(segment, separator that follows it) for each live shell command.
+
+    The separator is `&&`, `||`, `|`, `&`, or `;` (a newline counts as `;`);
+    the last segment has None. Which one follows a `cd` decides whether the
+    next command certainly runs in the new directory.
+    """
     segments, buf = [], []
     quote = None
     i = 0
@@ -525,19 +605,21 @@ def _shell_segments(text):
             i += 1
             continue
         if char in ";|&\n":
+            sep = ";" if char == "\n" else char
+            if i + 1 < len(text) and text[i:i + 2] in ("&&", "||"):
+                sep = text[i:i + 2]
+                i += 1
             segment = "".join(buf).strip()
             if segment:
-                segments.append(segment)
+                segments.append((segment, sep))
             buf = []
-            if i + 1 < len(text) and text[i:i + 2] in ("&&", "||"):
-                i += 1
             i += 1
             continue
         buf.append(char)
         i += 1
     segment = "".join(buf).strip()
     if segment:
-        segments.append(segment)
+        segments.append((segment, None))
     return segments
 
 
@@ -727,38 +809,45 @@ def _git_invocations(text, cwd, env=None):
     # shlex preserves quoted arguments as single tokens. Thus `git -C
     # "<pin>" checkout REF` retains its target, while quoted prose such as
     # `printf 'git -C <pin> checkout REF'` never manufactures a `git` token.
-    for segment, seg_env in _segments_with_env(
-            text, _base_env() if env is None else env):
+    for segment, seg_env, seg_cwds in _segments_with_env(
+            text, _base_env() if env is None else env, cwd):
         tokens = _tokens(segment)
         command_index = _shell_command_index(tokens)
-        for i, tok in enumerate(tokens):
-            executable = os.path.basename(tok).lstrip("(")
-            if executable in {"sh", "bash", "zsh"} and i == command_index:
-                script = _shell_c_script(tokens, i)
-                if script:
-                    nested_cwd = _effective_cwd(script, cwd)
-                    found.extend(_git_invocations(script, nested_cwd, seg_env))
-            if executable != "git":
+        for here in seg_cwds:
+            found.extend(_git_calls(tokens, command_index, seg_env, here))
+            for body in _shell_substitutions(segment):
+                found.extend(_git_invocations(body, here, seg_env))
+    return found
+
+
+def _git_calls(tokens, command_index, env, cwd):
+    """(target, verb, args) for the git calls in one segment run from CWD."""
+    found = []
+    for i, tok in enumerate(tokens):
+        executable = os.path.basename(tok).lstrip("(")
+        if executable in {"sh", "bash", "zsh"} and i == command_index:
+            script = _shell_c_script(tokens, i)
+            if script:
+                found.extend(_git_invocations(script, cwd, env))
+        if executable != "git":
+            continue
+        rest = tokens[i + 1:]
+        target, verb, j = cwd, None, 0
+        while j < len(rest):
+            t = rest[j]
+            if t == "-C" and j + 1 < len(rest):
+                # Each -C is relative to the previous one, as git applies them.
+                named = _target(rest[j + 1], env, target) if target else None
+                target = named[0] if named else None
+                j += 2
                 continue
-            rest = tokens[i + 1:]
-            target, verb, j = cwd, None, 0
-            while j < len(rest):
-                t = rest[j]
-                if t == "-C" and j + 1 < len(rest):
-                    named = _target(rest[j + 1], seg_env, cwd)
-                    target = named[0] if named else None
-                    j += 2
-                    continue
-                if t.startswith("-"):
-                    j += 1
-                    continue
-                verb = t
-                break
-            if verb and target:
-                found.append((target, verb, rest[j + 1:]))
-        for body in _shell_substitutions(segment):
-            nested_cwd = _effective_cwd(body, cwd)
-            found.extend(_git_invocations(body, nested_cwd, seg_env))
+            if t.startswith("-"):
+                j += 1
+                continue
+            verb = t
+            break
+        if verb and target:
+            found.append((target, verb, rest[j + 1:]))
     return found
 
 
@@ -935,17 +1024,24 @@ def decide(payload):
         return verdict
 
     tokens = _tokens(scan)
-    invocations = _git_invocations(scan, eff)
-    segments = list(_segments_with_env(scan, _base_env()))
+    invocations = _git_invocations(scan, cwd)
+    segments = list(_segments_with_env(scan, _base_env(), cwd))
     # A substitution body is cut apart by the segment split, so bodies are
     # taken from the whole command and scanned with the variables known at
     # its end.
     final_env = dict(segments[-1][1]) if segments else _base_env()
     if segments:
         _record_assignments(_tokens(segments[-1][0]), final_env)
-    nested = [(segment, seg_env)
+    # The whole-command split cannot say which segment a body sat in, so a
+    # body may run in any directory the command visits.
+    visited = ()
+    for _segment, _env, seg_cwds in segments:
+        visited = _union(visited, seg_cwds)
+    nested = [(segment, seg_env, inner)
               for body in _shell_substitutions(scan)
-              for segment, seg_env in _segments_with_env(body, final_env)]
+              for here in visited or (cwd,)
+              for segment, seg_env, inner in _segments_with_env(
+                  body, final_env, here)]
 
     # Cargo output belongs to the exact lane that produced it. A literal
     # target path in a main or pin is already protected; a path in a fourth
@@ -1004,23 +1100,25 @@ def decide(payload):
             return deny(target, project, why, f"run `git {verb}`", kind)
 
     # 2. shell redirection into a protected path
-    for segment, seg_env in segments:
+    for segment, seg_env, seg_cwds in segments:
         for raw in _redirect_targets(segment):
-            named = _target(raw, seg_env, eff)
-            hit = protected_project(named[0]) if named else None
-            if hit:
-                project, why, kind = hit
-                return deny(named[0], project, why, "write", kind)
+            for here in seg_cwds:
+                named = _target(raw, seg_env, here)
+                hit = protected_project(named[0]) if named else None
+                if hit:
+                    project, why, kind = hit
+                    return deny(named[0], project, why, "write", kind)
 
     # 3. in-place / destination-taking commands, per SEGMENT.
     #    `cp`/`mv`/`ln` take their destination as the LAST argument — but only
     #    within their own command. Scanning to the end of a compound command
     #    made `ln -s a b; echo "(none = clean)"` treat the echo's text as ln's
     #    destination and deny it. Split on shell separators first.
-    for segment, seg_env in segments + nested:
-        found = _scan_write_commands(_tokens(segment), eff, deny, seg_env)
-        if found:
-            return found
+    for segment, seg_env, seg_cwds in segments + nested:
+        for here in seg_cwds:
+            found = _scan_write_commands(_tokens(segment), here, deny, seg_env)
+            if found:
+                return found
 
     # 4. an interpreter fed a heredoc, while cwd is a protected checkout. The
     #    written path lives inside the script and cannot be parsed out, so this
