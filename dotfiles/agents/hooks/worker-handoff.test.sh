@@ -87,7 +87,7 @@ expect_handoff a3 worker 400000 'plain worker at exactly 400k gets the handoff t
 expect_silent a4 Explore 900000 'Explore agent is silent'
 expect_silent a5 '' 900000 'main session (no agent_type) is silent'
 set_active false
-expect_silent a6 worker-xhigh 900000 'inactive hook is silent'
+expect_silent a6 worker-high 900000 'inactive hook is silent'
 set_active true
 
 out="$(printf '{not json "agent_type":"worker' | HOME="$SCRATCH/home" \

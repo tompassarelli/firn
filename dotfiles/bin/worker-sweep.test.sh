@@ -51,7 +51,7 @@ os.utime(old, (now - 3600, now - 3600))
 session("-home-tom", "new-session", [
     ("pending", "worker-high", [brief(30, "Item: smashcraft#7"), tool_use(1, 200000)]),
     ("result", "worker", [brief(30), tool_use(2, 150000), result(1), reminder(1)]),
-    ("handoff", "worker-xhigh", [brief(40), tool_use(2, 410000), result(2)]),
+    ("handoff", "worker-high", [brief(40), tool_use(2, 410000), result(2)]),
     ("stalled", "worker", [brief(60), tool_use(25, 90000)]),
     ("bgwait", "worker", [brief(30), tool_use(10, 80000, "bg1", True), result(10, "bg1"), text(9, 81000, "Waiting for the test run.")]),
     ("bgdone", "worker", [brief(30), tool_use(10, 80000, "bg2", True), result(10, "bg2"), text(9, 81000, "Waiting for the test run."), notice(1, "bg2")]),

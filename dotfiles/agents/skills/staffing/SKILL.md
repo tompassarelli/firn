@@ -36,19 +36,19 @@ tier (Tom, 8 Oct): Haiku 5.5 covers mechanical work and Opus 5.5 the rest.
 
 | Tier | Claude Code | Codex | Start here when |
 | --- | --- | --- | --- |
-| haiku | worker-haiku (Haiku 5.5 medium) | gpt-6.1-sol medium | Mechanical, fully specified, short: exact edits, ticking and closing issues, running a named check or prepared script and reporting its numbers; lookups and extraction from large logs or documents (the failing tests in a farm log); triaging an issue list; recurring summaries and status reports. |
+| haiku | worker-haiku (Haiku 5.5 high) | gpt-6.1-sol medium | Mechanical, fully specified, short: exact edits, ticking and closing issues, running a named check or prepared script and reporting its numbers; lookups and extraction from large logs or documents (the failing tests in a farm log); triaging an issue list; recurring summaries and status reports. |
 | medium | worker (Opus 5.5) | gpt-6.1-sol medium | Default: features, fixes with a known cause, tooling, docs and skills, setup. Codex floor. |
 | high | worker-high | gpt-6.1-sol high | Multi-step or ambiguous work: unknown-cause debugging, netcode, engine, performance, cross-module work, native checks, research. |
-| xhigh | worker-xhigh | gpt-6-astra xhigh | Escalation from a failed or unfinished high attempt. |
-| max | worker-max | gpt-6-astra max | Last resort for reasoning-heavy work (unknown cause, design, research) after xhigh failed. |
+| escalation | worker-high again | gpt-6-astra xhigh | A failed or unfinished high attempt. |
 
-The ladder is haiku, medium, high, xhigh, max. A failed or unfinished
-attempt starts one tier above the earlier worker, even after rewording the
-brief or reopening the issue, and its brief carries Follows and the failed
-report's evidence. The history rule outranks the default. A coding fix that
-failed at xhigh doesn't go to max: bring one recommendation instead. A running
-worker's effort cannot change. Never use Opus low; never use Fable unless Tom
-asks.
+Opus medium is the default (Tom, 8 Oct). The Claude ladder is haiku, medium,
+high; nothing above high, since xhigh and max add little on coding (below).
+A failed or unfinished attempt starts one tier above the earlier worker, even
+after rewording the brief or reopening the issue; a failed high attempt gets
+one more high attempt (Codex: Astra xhigh) whose brief carries the failure
+evidence. After that, bring Tom one recommendation. Every retry's brief
+carries Follows and the failed report's evidence. A running worker's effort
+cannot change. Never use low or max; never use Fable unless Tom asks.
 
 ## Priors, then our evidence
 
@@ -61,13 +61,15 @@ that tier:
 - Multi-step terminal work and ambiguous multi-file tasks gain from medium to
   high (Terminal-Bench 57 to 64%, CursorBench 52 to 56%) and little above:
   xhigh adds 2 points at twice the cost, and max is no better.
-- Knowledge work and long data collection keep gaining through xhigh and max
-  (GDPval 1690 to 1820 to 1846 Elo, WANDR 67 to 71 to 72%), so research and
-  design gain most from escalation.
-- Haiku 5.5 suits narrow work. Its max effort costs about what Opus medium
-  does and scores no higher (GDPval 1620 against 1575 at about $0.90 a task;
-  Terminal-Bench 39% against Opus low's 38%), so Haiku stays at medium and a
-  failed haiku attempt goes to Opus medium. Prompts over 100k tokens cost it
+- Only knowledge work and long data collection keep gaining above high
+  (GDPval 1690 to 1820 Elo at xhigh, WANDR 67 to 71%). Our 27 Opus xhigh runs
+  before 8 Oct averaged 76 minutes and 111k tokens, and 6 clearly finished.
+- Haiku 5.5 suits narrow work and runs at high: medium to high is its
+  cheapest large gain on multi-step tool use (OSWorld 53 to 61% for 1.4 times
+  the cost), at about a tenth of Opus medium's cost per task. Its max costs
+  what Opus medium does and scores no higher (GDPval 1620 against 1575 at
+  about $0.90 a task; Terminal-Bench 39% against Opus low's 38%), so a failed
+  haiku attempt goes to Opus medium, never to a higher Haiku effort. Prompts over 100k tokens cost it
   five times as much, still an eighth of Opus, so reading a large log for
   one answer stays a haiku task; multi-step changes don't.
 - Opus 5.5 medium matches GPT-6 Astra's best coding scores at 20 to 40% of

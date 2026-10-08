@@ -44,9 +44,9 @@ work and keep the status file current. You don't do the work yourself.
 Read first: ~/.codex/AGENTS.md, <repo>/AGENTS.md, <issues or notes>.
 Staffing: one worker per independent issue, all independent items at once.
   SOL 6.1 (gpt-6.1-sol) medium for ordinary and simple work (never low),
-  high for hard implementation; Astra (gpt-6-astra) xhigh for hard
-  reasoning, max for the hardest problems or a stuck fix loop. A box a
-  worker failed starts one tier up.
+  high for hard implementation; Astra (gpt-6-astra) xhigh once a high
+  attempt failed; never max. A box a worker failed starts one tier up; after
+  Astra xhigh fails, bring one recommendation.
 Every worker brief: goal, files, Done when, ETA, a report that starts with
   "Done:", "Not done:" or "Blocked:", and the lines
   Item: <repo#N>
