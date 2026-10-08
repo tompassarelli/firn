@@ -91,7 +91,12 @@ Needs you: nothing
   Workers write and land code, and the parent merges. Don't add reviewer,
   verifier, auditor or status workers unless Tom asks.
 - A worker brief has four parts: the goal, the files, the Done when list and
-  an ETA. At twice the ETA the worker reports.
+  an ETA. At twice the ETA the worker reports. Every brief also carries the
+  lines `Item: <id>`, `Category: <name>` and, when it continues earlier work,
+  `Follows: <agent id>`, so each run lands on its item.
+- `threads` tracks the work: `add`, `claim`, `release --to`, `need`, `close`,
+  `drop`, `show`, `ready` and `list`. Record each open item there, with what
+  it needs; `threads ready` lists what can start now.
 - Always set the worker's model and effort, choosing from SOL 6.1
   (`gpt-6.1-sol`) at `low` for simple edits, `medium` for ordinary work or
   `high` for hard implementation, Astra (`gpt-6-astra`) `xhigh` for hard

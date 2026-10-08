@@ -1,0 +1,448 @@
+#!/usr/bin/env python3
+"""threads: a small work tracker. Items, who owns them, what they need, and
+the worker runs spent on them, in one SQLite file."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sqlite3
+import sys
+from datetime import datetime, timezone
+
+DB = os.environ.get("THREADS_DB") or os.path.expanduser("~/.local/state/threads/threads.db")
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS events(
+  seq INTEGER PRIMARY KEY,
+  ts TEXT NOT NULL,
+  item TEXT,
+  kind TEXT NOT NULL CHECK(kind IN ('capture','claim','release','handoff','need','unneed','run','note','close','drop')),
+  actor TEXT NOT NULL DEFAULT '',
+  tier TEXT NOT NULL DEFAULT '',
+  data TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(data))
+) STRICT;
+CREATE TABLE IF NOT EXISTS items(
+  id TEXT PRIMARY KEY CHECK(length(id) > 0),
+  title TEXT NOT NULL,
+  done_when TEXT NOT NULL DEFAULT '',
+  part_of TEXT REFERENCES items(id),
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','done','dropped')),
+  outcome TEXT NOT NULL DEFAULT '',
+  owner TEXT NOT NULL DEFAULT '',
+  owned_since TEXT,
+  eta_min INTEGER CHECK(eta_min IS NULL OR eta_min > 0),
+  created TEXT NOT NULL,
+  closed TEXT
+) STRICT;
+CREATE TABLE IF NOT EXISTS deps(
+  item TEXT NOT NULL REFERENCES items(id),
+  needs TEXT NOT NULL REFERENCES items(id),
+  PRIMARY KEY(item, needs),
+  CHECK(item <> needs)
+) STRICT;
+CREATE TABLE IF NOT EXISTS runs(
+  agent TEXT PRIMARY KEY,
+  item TEXT,
+  follows TEXT,
+  session TEXT,
+  tier TEXT NOT NULL,
+  category TEXT NOT NULL,
+  started TEXT,
+  ended TEXT NOT NULL,
+  minutes INTEGER NOT NULL CHECK(minutes >= 0),
+  eta_min INTEGER,
+  tokens INTEGER,
+  peak_ctx INTEGER,
+  outcome TEXT NOT NULL CHECK(outcome IN ('done','not done','escalated','handoff','unclear')),
+  report TEXT NOT NULL DEFAULT ''
+) STRICT;
+CREATE INDEX IF NOT EXISTS events_item ON events(item, seq);
+CREATE INDEX IF NOT EXISTS runs_item ON runs(item, ended);
+"""
+
+
+class Refused(Exception):
+    pass
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_ts(ts: str) -> datetime:
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
+def default_actor() -> str:
+    return os.environ.get("THREADS_ACTOR") or os.environ.get("USER") or "unknown"
+
+
+def connect() -> sqlite3.Connection:
+    os.makedirs(os.path.dirname(DB), exist_ok=True)
+    db = sqlite3.connect(DB, timeout=10, isolation_level=None)
+    db.row_factory = sqlite3.Row
+    db.execute("PRAGMA busy_timeout = 10000")
+    db.execute("PRAGMA foreign_keys = ON")
+    if db.execute("PRAGMA journal_mode").fetchone()[0] != "wal":
+        db.execute("PRAGMA journal_mode = WAL")
+    if not table_exists(db, "runs"):
+        with Tx(db):
+            for stmt in SCHEMA.split(";"):
+                if stmt.strip():
+                    db.execute(stmt)
+    return db
+
+
+class Tx:
+    """One BEGIN IMMEDIATE transaction per command: every write lands whole or not at all."""
+
+    def __init__(self, db: sqlite3.Connection):
+        self.db = db
+
+    def __enter__(self):
+        self.db.execute("BEGIN IMMEDIATE")
+        return self.db
+
+    def __exit__(self, kind, *_):
+        self.db.execute("COMMIT" if kind is None else "ROLLBACK")
+        return False
+
+
+def event(db, item, kind, actor="", tier="", **data):
+    db.execute(
+        "INSERT INTO events(ts, item, kind, actor, tier, data) VALUES (?,?,?,?,?,?)",
+        (now(), item, kind, actor, tier, json.dumps(data)),
+    )
+
+
+def item_row(db, item_id):
+    row = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if row is None:
+        raise Refused(f"no item {item_id}")
+    return row
+
+
+def open_item(db, item_id):
+    row = item_row(db, item_id)
+    if row["status"] != "open":
+        raise Refused(f"{item_id} is already {row['status']}")
+    return row
+
+
+def add_need(db, item_id, other, actor):
+    item_row(db, other)
+    if item_id == other:
+        raise Refused(f"{item_id} cannot need itself")
+    if db.execute("SELECT 1 FROM deps WHERE item = ? AND needs = ?", (item_id, other)).fetchone():
+        return
+    db.execute("INSERT INTO deps(item, needs) VALUES (?,?)", (item_id, other))
+    event(db, item_id, "need", actor, needs=other)
+
+
+# Commands --------------------------------------------------------------------
+
+
+def cmd_add(db, a):
+    with Tx(db):
+        if db.execute("SELECT 1 FROM items WHERE id = ?", (a.id,)).fetchone():
+            raise Refused(f"{a.id} already exists")
+        if a.part_of:
+            item_row(db, a.part_of)
+        db.execute(
+            "INSERT INTO items(id, title, done_when, part_of, created) VALUES (?,?,?,?,?)",
+            (a.id, a.title, a.done_when or "", a.part_of, now()),
+        )
+        event(db, a.id, "capture", a.by, title=a.title, done_when=a.done_when or "", part_of=a.part_of)
+        for other in a.needs or []:
+            add_need(db, a.id, other, a.by)
+    print(f"added {a.id}")
+
+
+def cmd_claim(db, a):
+    with Tx(db):
+        row = open_item(db, a.id)
+        if row["owner"] and row["owner"] != a.by:
+            raise Refused(f"{a.id} is already owned by {row['owner']}")
+        db.execute(
+            "UPDATE items SET owner = ?, owned_since = COALESCE(?, owned_since), eta_min = COALESCE(?, eta_min) WHERE id = ?",
+            (a.by, None if row["owner"] else now(), a.eta, a.id),
+        )
+        event(db, a.id, "claim", a.by, eta_min=a.eta)
+    print(f"{a.by} owns {a.id}")
+
+
+def cmd_release(db, a):
+    with Tx(db):
+        row = open_item(db, a.id)
+        if not row["owner"]:
+            raise Refused(f"{a.id} has no owner")
+        if a.to:
+            db.execute("UPDATE items SET owner = ?, owned_since = ? WHERE id = ?", (a.to, now(), a.id))
+            event(db, a.id, "handoff", a.by, **{"from": row["owner"], "to": a.to})
+        else:
+            db.execute("UPDATE items SET owner = '', owned_since = NULL WHERE id = ?", (a.id,))
+            event(db, a.id, "release", a.by, owner=row["owner"])
+    print(f"{a.id} handed from {row['owner']} to {a.to}" if a.to else f"{a.id} released by {row['owner']}")
+
+
+def cmd_need(db, a):
+    with Tx(db):
+        item_row(db, a.id)
+        add_need(db, a.id, a.other, a.by)
+    print(f"{a.id} needs {a.other}")
+
+
+def cmd_unneed(db, a):
+    with Tx(db):
+        if db.execute("DELETE FROM deps WHERE item = ? AND needs = ?", (a.id, a.other)).rowcount == 0:
+            raise Refused(f"{a.id} does not need {a.other}")
+        event(db, a.id, "unneed", a.by, needs=a.other)
+    print(f"{a.id} no longer needs {a.other}")
+
+
+def finish(db, a, status, kind, text_key, text):
+    with Tx(db):
+        open_item(db, a.id)
+        db.execute(
+            "UPDATE items SET status = ?, outcome = ?, closed = ? WHERE id = ?", (status, text, now(), a.id)
+        )
+        event(db, a.id, kind, a.by, **{text_key: text})
+    print(f"{a.id} {status}")
+
+
+def cmd_close(db, a):
+    finish(db, a, "done", "close", "outcome", a.outcome)
+
+
+def cmd_drop(db, a):
+    finish(db, a, "dropped", "drop", "why", a.why)
+
+
+def minutes_since(ts):
+    return int((datetime.now(timezone.utc) - parse_ts(ts)).total_seconds() // 60) if ts else None
+
+
+def cmd_show(db, a):
+    row = item_row(db, a.id)
+    print(f"{row['id']}  {row['title']}")
+    print(f"  status: {row['status']}" + (f" ({row['closed']}): {row['outcome']}" if row["status"] != "open" else ""))
+    if row["done_when"]:
+        print(f"  done when: {row['done_when']}")
+    if row["part_of"]:
+        print(f"  part of: {row['part_of']}")
+    if row["owner"]:
+        clock = minutes_since(row["owned_since"])
+        print(f"  owner: {row['owner']} for {clock}m" + (f" of {row['eta_min']}m ETA" if row["eta_min"] else ""))
+    for label, sql in (
+        ("needs", "SELECT d.needs AS id, i.status FROM deps d JOIN items i ON i.id = d.needs WHERE d.item = ?"),
+        ("needed by", "SELECT d.item AS id, i.status FROM deps d JOIN items i ON i.id = d.item WHERE d.needs = ?"),
+    ):
+        rows = db.execute(sql, (a.id,)).fetchall()
+        if rows:
+            print(f"  {label}: " + ", ".join(f"{r['id']} ({r['status']})" for r in rows))
+    hands = db.execute(
+        "SELECT ts, kind, actor, data FROM events WHERE item = ? AND kind IN ('claim','release','handoff') ORDER BY seq",
+        (a.id,),
+    ).fetchall()
+    if hands:
+        print("  owners:")
+        for e in hands:
+            d = json.loads(e["data"])
+            what = f"{d['from']} -> {d['to']}" if e["kind"] == "handoff" else e["actor"]
+            print(f"    {e['ts']}  {e['kind']:<8} {what}")
+    runs = db.execute("SELECT * FROM runs WHERE item = ? ORDER BY ended", (a.id,)).fetchall()
+    if runs:
+        total = sum(r["minutes"] for r in runs)
+        print(f"  runs: {len(runs)}, {total}m in all")
+        for r in runs:
+            eta = f"/{r['eta_min']}m ETA" if r["eta_min"] else ""
+            follows = f" follows {r['follows']}" if r["follows"] else ""
+            print(f"    {r['ended'][:16]}  {r['agent']} {r['tier']}{follows}  {r['minutes']}m{eta}  {r['outcome']}: {r['report'][:80]}")
+
+
+def cmd_ready(db, a):
+    rows = db.execute(
+        """SELECT id, title FROM items i WHERE status = 'open' AND owner = ''
+           AND NOT EXISTS (SELECT 1 FROM deps d JOIN items n ON n.id = d.needs
+                           WHERE d.item = i.id AND n.status = 'open')
+           ORDER BY created, id"""
+    ).fetchall()
+    for r in rows:
+        print(f"{r['id']}\t{r['title']}")
+
+
+def cmd_list(db, a):
+    where = "" if a.all else "WHERE status = 'open'"
+    rows = db.execute(
+        f"""SELECT i.*, (SELECT group_concat(d.needs, ',') FROM deps d JOIN items n ON n.id = d.needs
+                         WHERE d.item = i.id AND n.status = 'open') AS blocked
+            FROM items i {where} ORDER BY created, id"""
+    ).fetchall()
+    out = [("id", "status", "owner", "clock", "eta", "flag", "title")]
+    for r in rows:
+        clock = minutes_since(r["owned_since"]) if r["owner"] and r["status"] == "open" else None
+        overdue = clock is not None and r["eta_min"] and clock > 2 * r["eta_min"]
+        flag = "OVERDUE" if overdue else (f"needs {r['blocked']}" if r["blocked"] else "")
+        out.append((r["id"], r["status"], r["owner"] or "-", f"{clock}m" if clock is not None else "-",
+                    f"{r['eta_min']}m" if r["eta_min"] else "-", flag or "-", r["title"]))
+    widths = [max(len(row[i]) for row in out) for i in range(6)]
+    for row in out:
+        print("  ".join(c.ljust(w) for c, w in zip(row, widths)) + "  " + row[6])
+
+
+# Runs (fed by worker-ledger) ---------------------------------------------------
+
+BRIEF_FIELD = {
+    name: re.compile(rf"\b{name}:[ \t]*([^\s`<>]+)") for name in ("Item", "Follows")
+}
+CATEGORY = re.compile(r"\bCategory:[ \t]*([^.;,\n`<>]+)")
+
+
+def brief_fields(brief: str) -> dict:
+    out = {}
+    for name, pattern in BRIEF_FIELD.items():
+        m = pattern.search(brief)
+        if m:
+            out[name.lower()] = m.group(1).rstrip(".,;:)")
+    m = CATEGORY.search(brief)
+    if m:
+        out["category"] = m.group(1).strip().lower()
+    return out
+
+
+def cmd_ingest(db, a):
+    """Read worker-ledger's JSON rows on stdin; rows already recorded are skipped."""
+    added = 0
+    with Tx(db):
+        for line in sys.stdin:
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            if db.execute("SELECT 1 FROM runs WHERE agent = ?", (r["id"],)).fetchone():
+                continue
+            f = brief_fields(r.get("brief") or "")
+            item = f.get("item") or r.get("item")
+            follows = f.get("follows") or r.get("follows")
+            category = f.get("category") or r.get("category") or "unknown"
+            prev = None
+            if item:
+                p = db.execute("SELECT agent FROM runs WHERE item = ? ORDER BY ended DESC LIMIT 1", (item,)).fetchone()
+                prev = follows or (p["agent"] if p else None)
+            db.execute(
+                """INSERT INTO runs(agent, item, follows, session, tier, category, started, ended, minutes,
+                                    eta_min, tokens, peak_ctx, outcome, report)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (r["id"], item, follows, r.get("session"), r["tier"], category, r.get("started"), r["ended"],
+                 r["actual_min"], None if r.get("eta_min") is None else round(r["eta_min"]), r.get("tokens"), r.get("peak_ctx"), r["outcome"],
+                 r.get("report") or ""),
+            )
+            if prev and prev != r["id"]:
+                event(db, item, "handoff", r["id"], r["tier"], **{"from": prev, "to": r["id"]})
+            event(db, item, "run", r["id"], r["tier"], category=category, minutes=r["actual_min"],
+                  eta_min=r.get("eta_min"), outcome=r["outcome"])
+            added += 1
+    print(f"threads: {added} runs recorded in {DB}", file=sys.stderr)
+
+
+def cmd_run_ids(db, a):
+    for (agent,) in db.execute("SELECT agent FROM runs"):
+        print(agent)
+
+
+def table_exists(db, name):
+    return db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)).fetchone()
+
+
+def median(xs):
+    xs = sorted(x for x in xs if x is not None)
+    return xs[(len(xs) - 1) // 2] if xs else None
+
+
+TIER_RANK = {"low": 0, "medium": 1, "high": 2, "xhigh": 3, "max": 4}
+
+
+def cmd_summary(db, a):
+    rows = db.execute("SELECT * FROM runs WHERE ended >= ?", (a.since or "",)).fetchall()
+    if not rows:
+        raise Refused(f"no runs in {DB}")
+    groups: dict = {}
+    for r in rows:
+        groups.setdefault((r["category"], r["tier"]), []).append(r)
+    out = [("category", "tier", "n", "done", "success", "eta_med", "actual_med", "x_eta_med", "over_2x_eta", "tokens_med")]
+    for (cat, tier), rs in sorted(groups.items(), key=lambda kv: (kv[0][0], TIER_RANK.get(kv[0][1], 5))):
+        done = sum(r["outcome"] == "done" for r in rs)
+        timed = [r for r in rs if r["eta_min"]]
+        ratio = median([r["minutes"] / r["eta_min"] for r in timed])
+        tok = median([r["tokens"] for r in rs])
+        out.append((cat, tier, str(len(rs)), str(done), f"{done * 100 // len(rs)}%",
+                    str(median([r["eta_min"] for r in rs]) or "-"), str(median([r["minutes"] for r in rs])),
+                    f"{ratio:.1f}" if ratio is not None else "-",
+                    f"{sum(r['minutes'] > 2 * r['eta_min'] for r in timed)}/{len(timed)}",
+                    f"{tok // 1000}k" if tok is not None else "-"))
+    widths = [max(len(row[i]) for row in out) for i in range(len(out[0]))]
+    for row in out:
+        print("  ".join(c.ljust(w) for c, w in zip(row, widths)).rstrip())
+
+
+def parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="threads", description=f"Work tracker. Database: {DB}")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    def cmd(name, fn, help_):
+        s = sub.add_parser(name, help=help_)
+        s.set_defaults(fn=fn)
+        s.add_argument("--by", default=default_actor(), help="who is acting (default $THREADS_ACTOR or $USER)")
+        return s
+
+    s = cmd("add", cmd_add, "record a new item")
+    s.add_argument("id")
+    s.add_argument("title")
+    s.add_argument("--done-when")
+    s.add_argument("--part-of")
+    s.add_argument("--needs", nargs="+")
+    s = cmd("claim", cmd_claim, "take ownership; refused when someone else owns it")
+    s.add_argument("id")
+    s.add_argument("--eta", type=int, help="minutes")
+    s = cmd("release", cmd_release, "give up ownership, or hand it --to someone")
+    s.add_argument("id")
+    s.add_argument("--to")
+    for name, fn, help_ in (("need", cmd_need, "ID can't finish before OTHER"), ("unneed", cmd_unneed, "remove a need")):
+        s = cmd(name, fn, help_)
+        s.add_argument("id")
+        s.add_argument("other")
+    s = cmd("close", cmd_close, "mark done")
+    s.add_argument("id")
+    s.add_argument("--outcome", required=True)
+    s = cmd("drop", cmd_drop, "abandon")
+    s.add_argument("id")
+    s.add_argument("--why", required=True)
+    s = cmd("show", cmd_show, "item, needs, owners, runs and time against ETA")
+    s.add_argument("id")
+    cmd("ready", cmd_ready, "open, unowned items whose needs are all closed")
+    s = cmd("list", cmd_list, "open items with owner, time on the clock and ETA")
+    s.add_argument("--all", action="store_true", help="include closed and dropped items")
+    cmd("ingest", cmd_ingest, "record worker runs from worker-ledger rows on stdin")
+    cmd("run-ids", cmd_run_ids, "agent ids already recorded (for worker-ledger)")
+    s = cmd("summary", cmd_summary, "runs by category and tier: success and minutes against ETA")
+    s.add_argument("--since", help="only runs that ended on or after DATE")
+    return p
+
+
+def main(argv=None) -> int:
+    a = parser().parse_args(argv)
+    db = connect()
+    try:
+        a.fn(db, a)
+    except Refused as e:
+        print(f"threads: {e}", file=sys.stderr)
+        return 1
+    finally:
+        db.close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

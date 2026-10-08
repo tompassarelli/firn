@@ -7,7 +7,7 @@ description: >-
 # Execution estimates
 
 Estimate agent execution, not human effort. Prefer recent same-task-class,
-same-model actuals from `~/code/todo/estimate-calibration.md`; label
+same-model actuals from `worker-ledger --summary`; label
 cross-model evidence or an uncalibrated prior explicitly.
 
 Give the estimate, its evidence, and the next observable checkpoint. Use a

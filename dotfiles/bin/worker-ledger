@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# worker-ledger: one JSONL row per finished Claude Code worker (category, tier,
-# ETA vs actual minutes, output tokens, peak context, outcome), and a
-# category x tier summary of those rows.
+# worker-ledger: records each finished Claude Code worker as a run in threads
+# (item, follows and category from its brief; tier, ETA vs actual minutes,
+# output tokens, peak context, outcome), and a category x tier summary of runs.
 set -uo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: worker-ledger [--session ID] [--since DATE]   append finished workers to the ledger
+usage: worker-ledger [--session ID] [--since DATE]   record finished workers as runs in threads
        worker-ledger --summary [--since DATE]        per category x tier: count, success, minutes, tokens
   --session ID  only that session's workers (default: every session)
   --since DATE  only workers that finished on or after DATE (e.g. 2026-10-08)
-Ledger: ${WORKER_LEDGER:-~/.local/state/agents/ledger.jsonl}
+Briefs carry `Item: <id>`, `Follows: <agent id>` and `Category: <name>` lines.
+Runs live in threads' database (${THREADS_DB:-~/.local/state/threads/threads.db}).
 EOF
   exit 2
 }
@@ -26,34 +27,16 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-ledger="${WORKER_LEDGER:-$HOME/.local/state/agents/ledger.jsonl}"
+threads="$(dirname "$(readlink -f "$0")")/threads"
 
 if [ "$summary" -eq 1 ]; then
-  [ -s "$ledger" ] || { printf 'worker-ledger: no rows in %s\n' "$ledger" >&2; exit 1; }
-  jq -rs --arg since "$since" '
-    def median: sort | if length == 0 then null else .[(length - 1) / 2 | floor] end;
-    def rank: {"low":0,"medium":1,"high":2,"xhigh":3,"max":4}[.] // 5;
-    [.[] | select(.ended >= $since)]
-    | group_by([.category, (.tier | rank)])
-    | (["category", "tier", "n", "done", "success", "eta_med", "actual_med", "tokens_med"] | @tsv),
-      (.[] | [
-        .[0].category, .[0].tier, length,
-        ([.[] | select(.outcome == "done")] | length),
-        "\(([.[] | select(.outcome == "done")] | length) * 100 / length | floor)%",
-        ([.[] | .eta_min | numbers] | median // "-"),
-        ([.[] | .actual_min] | median),
-        "\(([.[] | .tokens] | median) / 1000 | floor)k"
-      ] | @tsv)
-  ' "$ledger" | column -t -s $'\t'
-  exit 0
+  exec "$threads" summary ${since:+--since "$since"}
 fi
 
 projects="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
-mkdir -p "$(dirname "$ledger")"
-touch "$ledger"
-known=$(jq -r '.id' "$ledger" 2>/dev/null)
+known=$("$threads" run-ids) || exit 1
+rows=""
 
-added=0
 while IFS= read -r f; do
   id=$(basename "$f" .jsonl)
   id=${id#agent-}
@@ -83,7 +66,8 @@ while IFS= read -r f; do
         id: $id,
         session: ($lines[0].sessionId // null),
         ended: $ended,
-        category: (($brief | capture("^\\s*Category:\\s*(?<c>[^.;,\\n]+)").c | ascii_downcase | gsub("^\\s+|\\s+$"; "")) // "unknown"),
+        brief: ($brief | .[0:4000]),
+        started: $times[0],
         tier: (($agent | ltrimstr("worker") | ltrimstr("-")) | if . == "" then "medium" else . end),
         eta_min: ($brief | [scan("(?i)\\bETA\\b[^0-9\\n]{0,12}([0-9]+(?:\\.[0-9]+)?)\\s*(hours?|hrs?|h|minutes?|mins?|m)\\b")] | first
                   | if . == null then null else (.[0] | tonumber) * (if (.[1] | test("^h")) then 60 else 1 end) end),
@@ -99,8 +83,7 @@ while IFS= read -r f; do
       }
   ' <"$f" 2>/dev/null)
   [ -n "$row" ] || continue
-  printf '%s\n' "$row" >>"$ledger"
-  added=$((added + 1))
+  rows+=$row$'\n'
 done < <(
   if [ -n "$session" ]; then
     find "$projects" -mindepth 4 -maxdepth 4 -path "*/$session/subagents/agent-*.jsonl" 2>/dev/null
@@ -108,4 +91,4 @@ done < <(
     find "$projects" -mindepth 4 -maxdepth 4 -path '*/subagents/agent-*.jsonl' ${since:+-newermt "$since"} 2>/dev/null
   fi | sort
 )
-printf 'worker-ledger: %d rows added to %s\n' "$added" "$ledger" >&2
+printf '%s' "$rows" | "$threads" ingest

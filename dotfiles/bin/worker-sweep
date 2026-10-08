@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # worker-sweep: running Claude Code workers of one session with their tier,
 # context, minutes running and minutes idle. Flags STALLED (idle 20+ minutes
-# while running) and HANDOFF (context 400k+).
+# while running) and HANDOFF (context 400k+). Each pass first records the
+# session's finished workers as runs in threads (worker-ledger).
 set -uo pipefail
 
 usage() {
@@ -35,8 +36,12 @@ if [ -z "$dir" ] || [ ! -d "$dir" ]; then
   exit 1
 fi
 
+ledger="$(dirname "$(readlink -f "$0")")/worker-ledger"
+session_id=$(basename "$(dirname "$dir")")
+
 sweep() {
   local now f id tier
+  "$ledger" --session "$session_id" >/dev/null 2>&1
   now=$(date +%s)
   for f in "$dir"/agent-*.jsonl; do
     [ -e "$f" ] || continue

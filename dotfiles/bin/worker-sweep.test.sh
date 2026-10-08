@@ -77,6 +77,7 @@ check 'STALLED after 25 idle minutes' 'row stalled | grep -q "idle=25m.*STALLED"
 check 'fresh worker has no flag' '! row pending | grep -qE "STALLED|HANDOFF"'
 check 'tier, running minutes' 'row pending | grep -q "worker-high.*ctx=200k.*ran=30m.*idle=1m"'
 check 'waiting on its own background job' 'row bgwait | grep -q waiting-bg'
+check 'a pass records finished workers as runs in threads' '"$repo/dotfiles/bin/threads" run-ids | grep -qx finished'
 
 out=$("$sweep" --session old-session)
 check '--session picks that session' '[ "$(awk "{print \$1}" <<<"$out")" = oldtool ]'
