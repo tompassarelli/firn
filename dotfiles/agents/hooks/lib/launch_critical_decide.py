@@ -60,7 +60,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from launch_critical_paths import (  # noqa: E402
-    code_root, hit_advice, hit_noun, is_pin, pin_sidecar, protected_project,
+    MAIN_KIND, code_root, hit_advice, hit_noun, is_pin, pin_sidecar, protected_project,
     repository_container_spill, worktree_advice)
 
 # git subcommands that change the repository or working tree.
@@ -904,6 +904,25 @@ def _worktree_positionals(args):
     return subcommand, positionals
 
 
+def _stray_nested_worktree(target, args, path, hit):
+    """True for a non-forced remove of a registered linked worktree inside main/.
+
+    Agents sometimes create lanes with a relative path, landing them under
+    main/. Git itself refuses to remove a dirty worktree without --force.
+    """
+    if hit[2] != MAIN_KIND or any(a in ("-f", "--force") for a in args):
+        return False
+    try:
+        out = subprocess.run(
+            ["git", "-C", target, "worktree", "list", "--porcelain"],
+            capture_output=True, text=True, timeout=5).stdout
+    except Exception:
+        return False
+    listed = [os.path.realpath(line[len("worktree "):])
+              for line in out.splitlines() if line.startswith("worktree ")]
+    return bool(listed) and path != listed[0] and path in listed[1:]
+
+
 def _worktree_decision(target, args):
     """Affected protected path for a disallowed worktree mutation, else None."""
     subcommand, paths = _worktree_positionals(args)
@@ -916,7 +935,9 @@ def _worktree_decision(target, args):
         affected = paths[:1] if subcommand == "remove" else paths[:2]
         for raw in affected:
             path = _resolve(os.path.expanduser(raw), target)
-            if protected_project(path):
+            hit = protected_project(path)
+            if hit and not (subcommand == "remove"
+                            and _stray_nested_worktree(target, args, path, hit)):
                 return (path, "worktree " + subcommand)
         return None
     # list/prune/lock/unlock/repair do not change checkout bytes or HEAD.

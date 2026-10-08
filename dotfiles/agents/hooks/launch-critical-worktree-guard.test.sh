@@ -332,6 +332,26 @@ case "$(apply_decide "*** Begin Patch\n*** Nonsense\n*** End Patch" "$ROOT/proj/
   *) fail=$((fail + 1)); echo "FAIL  malformed apply_patch must fail closed" >&2 ;;
 esac
 
+# A lane created by mistake with a relative path lands inside main/; removing it
+# is the cleanup, while every other write into that main/ stays refused.
+git init -q -b main "$ROOT/real/main"
+git -C "$ROOT/real/main" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+git -C "$ROOT/real/main" worktree add -q worktrees/stray -b stray
+case "$(bash_decide "git -C $ROOT/real/main worktree remove $ROOT/real/main/worktrees/stray" "$HOME")" in
+  "") pass=$((pass + 1)) ;;
+  *) fail=$((fail + 1)); echo "FAIL  removing a registered worktree nested in main/ must pass" >&2 ;;
+esac
+for cmd in "git -C $ROOT/real/main worktree remove --force $ROOT/real/main/worktrees/stray" \
+           "git -C $ROOT/real/main worktree remove $ROOT/real/main" \
+           "git -C $ROOT/real/main worktree remove $ROOT/real/main/src" \
+           "echo x > $ROOT/real/main/worktrees/stray/../../file.txt"; do
+  case "$(bash_decide "$cmd" "$HOME")" in
+    *'"deny"'*) pass=$((pass + 1)) ;;
+    *) fail=$((fail + 1)); echo "FAIL  must still deny: $cmd" >&2 ;;
+  esac
+done
+check deny "$ROOT/real/main/file.txt" "a file write into main/ stays refused beside a nested worktree"
+
 rm -rf "${FIXTURE:?}"
 unset ROOT FIXTURE pin_out
 
