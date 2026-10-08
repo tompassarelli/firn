@@ -1,5 +1,6 @@
 ---
-name: codex-lead
+name: orchestrating-codex
+agents: [claude]
 description: >-
   Run work through a Codex lead session that Claude supervises: start it, give it a goal, message it, watch its worker tree and keep it on a tight leash. Use when Tom asks to drive work through Codex, or for a Codex lead or orchestrator.
 ---

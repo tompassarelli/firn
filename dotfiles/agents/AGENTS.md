@@ -93,7 +93,7 @@ Needs you: nothing
 - Use the `staffing` skill to pick ready work in `threads`, write the brief,
   choose a model and effort from `worker-ledger --summary`, and set the ETA.
 - To run work through a Codex lead session, use `codex-lead` (start, send,
-  goal, status, workers) and the `codex-lead` skill.
+  goal, status, workers) and the `orchestrating-codex` skill.
 - A message to a running agent must reach it at once, mid-turn: use
   `codex-lead send` or the agent message tool, never `codex queue`, which
   waits until the turn ends.

@@ -27,7 +27,7 @@
     "todo",
     "auto-wake",
     "cloud-workers",
-    "codex-lead",
+    "orchestrating-codex",
     "convo",
     "guard-authoring",
     "cloudflare-deploy",
@@ -478,12 +478,12 @@
         "path": "dotfiles/agents/hooks/worker-handoff.sh"
       }
     },
-    "codex-lead": {
+    "orchestrating-codex": {
       "kind": "skill",
       "category": "agents",
       "owner": {
         "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/codex-lead/SKILL.md"
+        "path": "dotfiles/agents/skills/orchestrating-codex/SKILL.md"
       }
     }
   },
@@ -1244,7 +1244,7 @@
         }
       ]
     },
-    "codex-lead": {
+    "orchestrating-codex": {
       "distributions": [
         {
           "type": "skill",
