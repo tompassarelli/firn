@@ -126,6 +126,7 @@ Needs you: nothing
 
 ## Tools
 
+- Read a PDF with the Read tool's `pages` parameter (renders through poppler's `pdftoppm`), or `pdftotext -layout FILE OUT.txt` for text only.
 - For JS/TS, use Bun. Use Node, npm, npx, pnpm or Yarn only when the repo
   requires Node.
 - A project's scripts, tests and tools use the project's language.

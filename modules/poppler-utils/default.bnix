@@ -1,0 +1,11 @@
+#lang beagle/nix
+
+(ns default)
+
+(nix/module [config lib pkgs ...]
+  {:options.myConfig.modules.poppler-utils.enable
+    (lib.mkEnableOption "Poppler PDF rendering and text extraction tools")
+   :tags [cli-tools]
+   :config
+    (lib.mkIf config.myConfig.modules.poppler-utils.enable
+      {:environment.systemPackages (nix/with pkgs [poppler-utils])})})
