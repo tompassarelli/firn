@@ -23,7 +23,8 @@ Scan outgoing content for secrets, then push the current branch or one tag.
 
 Options:
   --dry-run    run all safety checks without pushing
-  --to BRANCH  explicitly publish HEAD to another remote branch
+  --to BRANCH  explicitly publish HEAD to another remote branch; waits for
+               the per-origin landing lock, then rebases onto origin BRANCH
   --tag NAME   push an existing annotated tag after scanning new content
   -h, --help   print this help without inspecting a repository
 
@@ -367,6 +368,82 @@ if [ -n "$tag" ]; then
   exit 0
 fi
 
+# --- --to landings: serialize per origin, rebase onto the fresh destination -------
+# ~20 workers land on one busy main and the push-time gates take 15-40 s, so an
+# unserialized landing loses the race to non-fast-forward. Holders of the lock
+# fetch, rebase, scan and push; the lock is dropped right after the push.
+push_lock_fd=""
+acquire_push_lock() {
+  local url="$1" dir key file holder waited=0
+  dir="${XDG_STATE_HOME:-$HOME/.local/state}/safe-push"
+  mkdir -p "$dir"
+  key=$(printf '%s' "$url" | sha256sum | cut -c1-16)
+  file="$dir/$key.lock"
+  exec {push_lock_fd}>>"$file"
+  if ! flock -n "$push_lock_fd"; then
+    while :; do
+      holder=$(cat "$file" 2>/dev/null) || holder=""
+      printf 'safe-push: waiting for the landing lock on %s, held by %s (%ss/600s)\n' \
+        "$url" "${holder:-unknown}" "$waited" >&2
+      flock -w 30 "$push_lock_fd" && break
+      waited=$((waited + 30))
+      if [ "$waited" -ge 600 ]; then
+        printf 'safe-push: gave up after 600s waiting for the landing lock on %s, held by %s; NOT pushed.\n' \
+          "$url" "${holder:-unknown}" >&2
+        exit 1
+      fi
+    done
+  fi
+  printf 'pid %s in %s\n' "$$" "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" >"$file"
+}
+
+release_push_lock() {
+  [ -n "$push_lock_fd" ] || return 0
+  flock -u "$push_lock_fd" || true
+  exec {push_lock_fd}>&-
+  push_lock_fd=""
+}
+
+rebase_in_progress() {
+  local d
+  for d in rebase-merge rebase-apply; do
+    [ -d "$(git rev-parse --git-path "$d")" ] && return 0
+  done
+  return 1
+}
+
+sync_with_destination() {
+  local remote_ref="refs/remotes/origin/$to" upstream conflicts log
+  # An absent destination has nothing to rebase onto; a real fetch failure
+  # is caught by the destination snapshot below.
+  git fetch -q origin "+refs/heads/$to:$remote_ref" 2>/dev/null || return 0
+  upstream=$(git rev-parse -q --verify "${remote_ref}^{commit}" 2>/dev/null) || return 0
+  git merge-base --is-ancestor "$upstream" HEAD 2>/dev/null && return 0
+  # Unrelated history is left to the non-fast-forward refusal.
+  git merge-base HEAD "$upstream" >/dev/null 2>&1 || return 0
+  echo "safe-push: origin $to moved to $upstream — rebasing onto it"
+  if log=$(GIT_EDITOR=true git rebase --no-autostash "$upstream" 2>&1); then
+    return 0
+  fi
+  conflicts=$(git diff --name-only --diff-filter=U 2>/dev/null) || conflicts=""
+  if rebase_in_progress; then git rebase --abort >/dev/null 2>&1 || true; fi
+  if [ -n "$conflicts" ]; then
+    printf 'safe-push: ✗ rebase onto origin %s conflicts in:\n' "$to" >&2
+    sed 's/^/  /' <<<"$conflicts" >&2
+    printf 'safe-push: rebase aborted, worktree unchanged; resolve against origin/%s and retry. NOT pushed.\n' "$to" >&2
+  else
+    printf 'safe-push: ✗ rebase onto origin %s failed; NOT pushed.\n%s\n' "$to" "$log" >&2
+  fi
+  exit 1
+}
+
+if [ "$to_seen" -eq 1 ] && [ "$dry" = 0 ]; then
+  lock_url=$(git remote get-url --push origin 2>/dev/null) \
+    || { echo "safe-push: origin has no push URL"; exit 1; }
+  acquire_push_lock "$lock_url"
+  sync_with_destination
+fi
+
 # --- the load-bearing guard: secret scan of the commits about to be pushed -------
 capture_repository_state
 capture_destination_state
@@ -395,6 +472,7 @@ echo "safe-push: ✓ clean — pushing $branch -> origin as $publication"
 SAFE_PUSH_ACTIVE=1 git push \
   --force-with-lease="${destination_ref}:${destination_oid}" \
   "$origin_url" "$publication"
+release_push_lock
 if [ "$to_seen" -eq 0 ]; then
   tracking_ref="refs/remotes/origin/$destination_branch"
   if git fetch -q "$origin_url" "${destination_ref}:${tracking_ref}" \

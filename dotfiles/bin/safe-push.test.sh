@@ -38,6 +38,10 @@ shim_main() {
     printf 'raced\n' >"${SAFE_PUSH_TEST_STATE:?}"
   fi
 
+  if [[ "$tool" == gitleaks && -n "${SAFE_PUSH_TEST_GITLEAKS_SLEEP:-}" ]]; then
+    sleep "$SAFE_PUSH_TEST_GITLEAKS_SLEEP"
+  fi
+
   local raced=0
   [ -s "${SAFE_PUSH_TEST_STATE:?}" ] && raced=1
 
@@ -221,6 +225,7 @@ run_case() {
       SAFE_PUSH_TEST_RACE="$case_race" \
       SAFE_PUSH_TEST_DESTINATION_SHAPE="$case_destination_shape" \
       SAFE_PUSH_TEST_BRANCH="$case_branch" \
+      XDG_STATE_HOME="$scratch/xdg-state" \
       PATH="$scratch/bin:$PATH" \
       "$TARGET" "$@" 2>&1
   )"
@@ -468,6 +473,7 @@ run_real_case() {
       SAFE_PUSH_TEST_DESTINATION_OID="$real_destination_oid" \
       SAFE_PUSH_TEST_REAL_RACE="$race" \
       SAFE_PUSH_TEST_OTHER_GIT_DIR="$real_other/.git" \
+      XDG_STATE_HOME="$scratch/xdg-state" \
       PATH="$real_bin:$PATH" \
       "$TARGET" "$@" 2>&1
   )"
@@ -647,5 +653,99 @@ for race in branch commit destination worktree; do
       || fail "$race race mutated the remote despite fail-closed verdict"
   fi
 done
+
+make_landing_clone() {
+  local dir="$1" file="$2"
+  "$real_git" clone -q "$landing_remote" "$dir"
+  "$real_git" -C "$dir" config user.name safe-push-test
+  "$real_git" -C "$dir" config user.email safe-push-test@example.invalid
+  "$real_git" -C "$dir" switch -q -c "lane-${dir##*/}"
+  printf '%s\n' "${dir##*/}" >"$dir/$file"
+  "$real_git" -C "$dir" add "$file"
+  "$real_git" -C "$dir" commit -qm "change from ${dir##*/}"
+}
+
+run_landing() {
+  local dir="$1"
+  (
+    cd "$dir"
+    SAFE_PUSH_TEST_SHIM=1 \
+      SAFE_PUSH_TEST_TRACE="$dir.trace" \
+      SAFE_PUSH_TEST_STATE="$dir.state" \
+      SAFE_PUSH_TEST_GITLEAKS_SLEEP="${landing_sleep:-}" \
+      XDG_STATE_HOME="$scratch/xdg-state" \
+      PATH="$real_bin:$PATH" \
+      "$TARGET" --to main
+  ) >"$dir.out" 2>&1
+}
+
+new_landing_origin() {
+  landing_root="$scratch/landing-$1"
+  landing_remote="$landing_root/remote.git"
+  mkdir -p "$landing_root"
+  "$real_git" init --bare -q -b main "$landing_remote"
+  "$real_git" init -q -b main "$landing_root/seed"
+  "$real_git" -C "$landing_root/seed" config user.name safe-push-test
+  "$real_git" -C "$landing_root/seed" config user.email safe-push-test@example.invalid
+  printf 'base\n' >"$landing_root/seed/shared.txt"
+  "$real_git" -C "$landing_root/seed" add shared.txt
+  "$real_git" -C "$landing_root/seed" commit -qm base
+  "$real_git" -C "$landing_root/seed" push -q "$landing_remote" main
+}
+
+# Concurrent landings from lanes cut at the same base serialize on the
+# per-origin lock; the later one rebases onto the earlier, so both land in
+# order with no non-fast-forward rejection.
+new_landing_origin concurrent
+make_landing_clone "$landing_root/a" a.txt
+make_landing_clone "$landing_root/b" b.txt
+landing_sleep=2
+run_landing "$landing_root/a" & pid_a=$!
+run_landing "$landing_root/b" & pid_b=$!
+status_a=0; wait "$pid_a" || status_a=$?
+status_b=0; wait "$pid_b" || status_b=$?
+landing_sleep=''
+case_output="$(cat "$landing_root/a.out" "$landing_root/b.out")"
+case_status=$((status_a + status_b))
+[ "$case_status" -eq 0 ] || fail 'concurrent landing: a run failed'
+expect_output 'waiting for the landing lock'
+expect_output 'rebasing onto it'
+if grep -Eq 'non-fast-forward|rejected|state changed' <<<"$case_output"; then
+  fail 'concurrent landing hit a non-fast-forward or race refusal'
+fi
+[ "$("$real_git" --git-dir="$landing_remote" rev-list --count main)" -eq 3 ] \
+  || fail 'concurrent landing: origin main does not carry base plus both changes'
+[ "$("$real_git" --git-dir="$landing_remote" rev-list --merges --count main)" -eq 0 ] \
+  || fail 'concurrent landing: history is not linear'
+for f in a.txt b.txt shared.txt; do
+  "$real_git" --git-dir="$landing_remote" cat-file -e "main:$f" \
+    || fail "concurrent landing: origin main lacks $f"
+done
+
+# A lane whose change conflicts with what landed meanwhile is refused with
+# the file named, and the rebase is aborted so the worktree is left clean.
+new_landing_origin conflict
+make_landing_clone "$landing_root/lane" shared.txt
+lane_head="$("$real_git" -C "$landing_root/lane" rev-parse HEAD)"
+printf 'landed first\n' >"$landing_root/seed/shared.txt"
+"$real_git" -C "$landing_root/seed" commit -qam 'conflicting landing'
+"$real_git" -C "$landing_root/seed" push -q "$landing_remote" main
+remote_main_before="$("$real_git" --git-dir="$landing_remote" rev-parse main)"
+case_status=0
+run_landing "$landing_root/lane" || case_status=$?
+case_output="$(cat "$landing_root/lane.out")"
+expect_status nonzero
+expect_output 'conflicts in:'
+expect_output 'shared.txt'
+[ -z "$("$real_git" -C "$landing_root/lane" status --porcelain)" ] \
+  || fail 'conflict refusal left the worktree dirty'
+for d in rebase-merge rebase-apply; do
+  [ ! -e "$("$real_git" -C "$landing_root/lane" rev-parse --absolute-git-dir)/$d" ] \
+    || fail 'conflict refusal left a rebase in progress'
+done
+[ "$("$real_git" -C "$landing_root/lane" rev-parse HEAD)" = "$lane_head" ] \
+  || fail 'conflict refusal moved the lane HEAD'
+[ "$("$real_git" --git-dir="$landing_remote" rev-parse main)" = "$remote_main_before" ] \
+  || fail 'conflict refusal mutated origin main'
 
 printf 'safe-push tests: PASS\n'
