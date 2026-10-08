@@ -67,6 +67,10 @@ host or `all` where the edge defines that default. `firn rebuild [host]` is the
 canonical build-and-switch shortcut; run `firn` with no args for the full grid
 or `firn <node>` for one entity's edges.
 
+`lane-sweep` (daily timer, module `lane-sweep`) archives each worktree lane idle
+for a day under `refs/archive/<date>/<slug>`, then removes it; the restore
+command is in `~/.local/state/agents/lane-archive/README.md`.
+
 ## Secrets
 
 [sops-nix](https://github.com/Mic92/sops-nix): encrypted `secrets/*.yaml` are
