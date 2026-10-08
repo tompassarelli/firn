@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# worker-ledger: a running Claude Code worker holds its brief's issue in
+# worker-ledger: a running Claude Code or Codex worker holds its brief's issue in
 # threads; a finished one releases it and is recorded as a run
 # (issue ref, follows and category from its brief; tier, ETA vs actual
 # minutes, output tokens, peak context, outcome, handoff note path), and a
@@ -10,9 +10,10 @@ usage() {
   cat >&2 <<'EOF'
 usage: worker-ledger [--session ID] [--since DATE]   record finished workers as runs in threads
        worker-ledger --summary [--since DATE]        per category x tier: runs against ETA, and issues closed
-  --session ID  only that session's workers (default: every session's, active in the last day)
+  --session ID  only that session's workers (default: every provider, active in the last day)
   --since DATE  only workers active on or after DATE (e.g. 2026-10-08)
 A running worker whose brief names `Item:` holds that issue until it finishes.
+Codex workers repeat their brief fields in commentary when the runtime encrypts prompts.
 Briefs carry `Item: <repo#N>`, `Follows: <agent id>` and `Category: <name>` lines.
 Runs live in threads' database (${THREADS_DB:-~/.local/state/threads/threads.db}).
 EOF
@@ -103,3 +104,135 @@ done < <(
   fi | sort
 )
 printf '%s' "$rows" | "$threads" ingest
+
+# Join plaintext spawn briefs by parent thread and task path. Encrypted
+# prompts require the worker to repeat its brief fields in commentary.
+python3 - "$session" "$since" "$known" <<'PY' | "$threads" ingest
+import json, os, re, sqlite3, sys, time
+from datetime import datetime, timezone
+from pathlib import Path
+
+session, since, known = sys.argv[1:]
+known = set(known.splitlines())
+root = Path(os.environ.get("CODEX_CONFIG_DIR", os.path.expanduser("~/code/north-data/codex-pooled")))
+cutoff = datetime.fromisoformat(since.replace("Z", "+00:00")).replace(tzinfo=timezone.utc).timestamp() if since else time.time() - 86400
+
+def records(path):
+    try:
+        with open(path) as f:
+            for line in f:
+                try:
+                    yield json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+    except OSError:
+        return
+
+def stamp(s):
+    return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+
+def texts(p):
+    c = p.get("content", [])
+    return c if isinstance(c, str) else "\n".join(v.get("text", "") for v in c if isinstance(v, dict))
+
+paths = {}
+state = root / "sqlite/state_5.sqlite"
+if state.exists():
+    db = sqlite3.connect(f"file:{state}?mode=ro", uri=True)
+    paths = dict(db.execute("SELECT id, rollout_path FROM threads"))
+    candidates = [p for (p,) in db.execute("SELECT rollout_path FROM threads WHERE updated_at >= ?", (cutoff,))]
+    db.close()
+else:
+    candidates = [p for p in (root / "sessions").glob("*/*/*/rollout-*.jsonl") if p.stat().st_mtime >= cutoff]
+    for path in candidates:
+        for r in records(path):
+            if r.get("type") == "session_meta":
+                paths[r["payload"]["id"]] = str(path)
+                break
+
+parent_briefs = {}
+def briefs(parent):
+    if parent in parent_briefs:
+        return parent_briefs[parent]
+    calls, out = {}, {}
+    for r in records(paths.get(parent, "")):
+        p = r.get("payload", {})
+        if p.get("type") == "function_call" and p.get("name", "").endswith("spawn_agent"):
+            try:
+                calls[p["call_id"]] = json.loads(p["arguments"])
+            except (KeyError, json.JSONDecodeError):
+                continue
+        if p.get("type") == "function_call_output" and p.get("call_id") in calls:
+            try:
+                name = json.loads(p["output"])["task_name"]
+                out[name] = calls[p["call_id"]]
+            except (KeyError, TypeError, json.JSONDecodeError):
+                continue
+    parent_briefs[parent] = out
+    return out
+
+for path in candidates:
+    meta, model, effort, brief, report = None, None, None, "", ""
+    ended, final, tokens, peak = None, False, 0, 0
+    for r in records(path):
+        p, kind = r.get("payload", {}), r.get("type")
+        if kind == "session_meta" and meta is None:
+            meta = p
+            source = p.get("source", {})
+            spawn = source.get("subagent", {}).get("thread_spawn", {}) if isinstance(source, dict) else {}
+            parent = spawn.get("parent_thread_id") or p.get("parent_thread_id")
+            if not parent or p.get("id") in known or (session and parent != session and p.get("id") != session):
+                break
+            assignment = briefs(parent).get(spawn.get("agent_path") or p.get("agent_path"), {})
+            brief = assignment.get("message", "")
+            model, effort = assignment.get("model"), assignment.get("reasoning_effort")
+        if meta is None or not parent or r.get("timestamp", "") < meta["timestamp"]:
+            continue
+        ended = r.get("timestamp") or ended
+        if kind == "turn_context":
+            model, effort = p.get("model") or model, p.get("effort") or effort
+        elif kind == "response_item":
+            if p.get("type") == "message" and p.get("role") == "user":
+                t = texts(p)
+                if re.search(r"\bItem:\s*(?:[\w-]+/)?[\w-]+#\d+", t):
+                    brief = t
+                final = False
+            elif p.get("type") == "message" and p.get("role") == "assistant":
+                t = texts(p)
+                if re.search(r"\bItem:\s*(?:[\w-]+/)?[\w-]+#\d+", t):
+                    brief = t
+                final = p.get("phase") == "final"
+                if final:
+                    report = texts(p)
+            elif p.get("type") in ("function_call", "custom_tool_call"):
+                final = False
+        elif kind == "event_msg":
+            if p.get("type") in ("task_started", "user_message"):
+                final = False
+            elif p.get("type") == "task_complete":
+                final = True
+                report = p.get("last_agent_message") or report
+            elif p.get("type") == "token_count" and p.get("info"):
+                info = p["info"]
+                tokens = info.get("total_token_usage", {}).get("output_tokens", tokens)
+                peak = max(peak, info.get("last_token_usage", {}).get("input_tokens", 0))
+    if not meta or not parent or meta["id"] in known or not ended or stamp(ended) < cutoff or not model or not effort:
+        continue
+    if session and parent != session and meta["id"] != session:
+        continue
+    if not re.search(r"\bItem:\s*(?:[\w-]+/)?[\w-]+#\d+", brief):
+        continue
+    eta = re.search(r"(?i)\bETA\b[^0-9\n]{0,12}([0-9]+(?:\.[0-9]+)?)\s*(hours?|hrs?|h|minutes?|mins?|m)\b", brief)
+    eta = float(eta[1]) * (60 if eta[2].lower().startswith("h") else 1) if eta else None
+    fields = re.findall(r"\b(?:Item|Follows|Category):[^\n]+", brief)
+    head = report[:400]
+    outcome = "handoff" if "HANDOFF" in head else "not done" if re.match(r"\W*(not|partly|mostly|half) done", head, re.I) else "escalated" if re.match(r"\W*blocked", head, re.I) else "done" if re.match(r"\W*done\b", head, re.I) else "unclear"
+    note = re.search(r"(?:~|/home/[^/\s]+)/[^\s`]*handoffs?/[^\s`]+?\.md", report)
+    row = dict(id=meta["id"], session=parent, brief="\n".join(fields), started=meta["timestamp"],
+               ended=ended, tier=f"{model} {effort}", eta_min=eta,
+               status="finished" if final else "running" if time.time() - stamp(ended) < 7200 else "stale",
+               actual_min=max(0, int((stamp(ended) - stamp(meta["timestamp"])) / 60)),
+               tokens=tokens, peak_ctx=peak, outcome=outcome, note=note[0] if note else None,
+               report=re.sub(r"\s+", " ", head)[:160])
+    print(json.dumps(row))
+PY
