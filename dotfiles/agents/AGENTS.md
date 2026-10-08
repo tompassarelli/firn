@@ -156,6 +156,7 @@ Needs you: nothing
 - Before repeated screenshots, load `image-context-budget`.
 - Before sustained multi-core work or more than 1 GiB of memory, run it through the capacity helper → `machine-capacity`.
 - For a bug that isn't obvious, search the exact error, reproduce it, change one thing at a time and diff a good run against a bad one → `debugging`.
+- Before writing a GitHub Actions workflow or dispatching or waiting on runs, share the account's 20 jobs and 5,000 API calls an hour with every other agent → `github-actions`.
 
 ## Code
 

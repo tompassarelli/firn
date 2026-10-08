@@ -21,6 +21,7 @@
     "nix-development",
     "repo-safety",
     "github-issues",
+    "github-actions",
     "resource-safe-search",
     "machine-capacity",
     "todo",
@@ -391,6 +392,14 @@
         "path": "dotfiles/agents/skills/private-desktop-development/SKILL.md"
       }
     },
+    "github-actions": {
+      "kind": "skill",
+      "category": "development",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/github-actions/SKILL.md"
+      }
+    },
     "testing": {
       "kind": "skill",
       "category": "development",
@@ -472,6 +481,16 @@
       ]
     },
     "private-desktop-development": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "github-actions": {
       "distributions": [
         {
           "type": "skill",
