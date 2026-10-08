@@ -183,9 +183,12 @@ over lockstep WebRTC peer to peer, with no server.
   run here.
 - **Signed-in A and B** (accounts c and b): tests that need Battle.net (real
   netplay, `online host|join`, spectating), and every native check while the
-  offline pool can't start, as password-protected private games. Account a
-  joins them only when Tom isn't playing (one login per account). Passive
+  offline pool can't start, as password-protected private games. Passive
   reads only.
+- **Clone-a** (account a, Tom's): a third test client used only while Tom
+  isn't playing (one login per account). `launch.sh a RUN_DIR` refuses while
+  his Warcraft or Battle.net runs and stops clone-a within 10 s when either
+  starts (wisp:docs/lan.md). Start it only through that script.
 - **Tom's install** (account a, display `:0`): no agent tests or engine
   tools; `wisp play` there only when Tom asks.
 
