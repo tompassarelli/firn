@@ -45,6 +45,7 @@ claim = [
   { key = "hard-boundaries.proprietary-assets", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Hard limits", digest = "5e121192b0a75f253438e97eddcc57299eaf80ba6ef4ebe44549db05771bbafe" },
   { key = "firn.maintained-project-closure-default", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Hard limits", digest = "676c4074bc0a11e6435912ef5e8bc963d1d3256ca87be2324f79281ac2b58054" },
   { key = "github.actions-budget", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Tools", digest = "e56885d51c5810e14e4ef29a73b33432659f871d892cc1d8eeddb2230eb8ace1" },
+  { key = "tools.pdf-reading", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Tools", digest = "227c4e81ce682c8ea3ade749d3d57970aec2b8574418b0feec73511da664fc8e" },
   { key = "javascript.bun-tooling", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Tools", digest = "c1b3e7f959a56ecd75ae58351c0e5995184531e53a51b1f26706f9bb8fbbfb91" },
   { key = "search.modern-cli-tools", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Tools", digest = "f22ef051bb437bf277a3df94cbaf8ec71452e7141dc2f412d71caceee9a707a1" },
   { key = "language.one-per-project", owner = "bootstrap", role = "bootstrap", scope = "machine", surface = "bootstrap", section = "Tools", digest = "5d26e71c5ff6bce3243bb4847252a222b9c6b4ccb3ed37ca4e18d24fa70eade7" },
