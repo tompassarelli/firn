@@ -208,7 +208,8 @@ build, one session, many pad scripts and captures (`pad SCRIPT|DIR...`,
 or script and rows to capture, and moves on; it never starts clients itself.
 The lane's queue is the open issues with its label, in either repository:
 when a batch ends, it takes the next ones and removes the label when it ticks
-the box or comments a failure.
+the box or comments a failure. A lane adds `native:running` to an issue while
+its check runs and skips issues that already carry it.
 
 Engine tools (wisp:docs/engine.md, "Guardrails"): signed-in A/B allow only
 passive reads (`engine desync`, `engine poll`, `engine diff`, `engine locate`
