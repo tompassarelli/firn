@@ -288,8 +288,10 @@ per prefix; start Warcraft with Play in the signed-in Battle.net launcher,
 never a direct `Warcraft III.exe` launch; an empty Options/Exit Game shell
 after login is fixed by the launcher's Play, not another sign-in. A launch
 counts only once the real menu and one gameplay action work. Account a is
-Tom's: never sign in, out or switch accounts on it without his say-so for that
-session. Never print decrypted credentials.
+Tom's. When Tom's install shows the sign-in form, sign it in for him with
+account a from the encrypted store, the same way doctor signs in test clients
+(Tom, 8 Oct): a playtest is ready only when he can press Start. Never sign it
+out, switch it, or run it on a test client. Never print decrypted credentials.
 
 ## References
 
