@@ -1,6 +1,6 @@
 # Accounts and login
 
-Accounts: encrypted pairs live in nixos-config:secrets/bnet.yaml (a, b, c).
+Accounts: encrypted pairs live in nixos-config:secrets/bnet.yaml (a, b, c, d).
 Account a is Tom's personal account and install
 (~/.local/share/Steam/steamapps/compatdata/3516115571); the login helper
 refuses it, and it needs Tom's explicit per-session authorization. Never sign
