@@ -93,14 +93,19 @@ def is_local(event):
     return (tool_input.get("subagent_type") or "general-purpose") in LOCAL_CLAUDE_TYPES
 
 
-def brief_text(tool_input):
+def brief_texts(tool_input):
+    """Every string in the spawn input; Codex may send it as serialized JSON."""
     if isinstance(tool_input, str):
-        return tool_input
+        try:
+            parsed = json.loads(tool_input)
+        except ValueError:
+            return [tool_input]
+        return [tool_input] if isinstance(parsed, str) else brief_texts(parsed)
     if isinstance(tool_input, dict):
-        for key in ("prompt", "message"):
-            if isinstance(tool_input.get(key), str):
-                return tool_input[key]
-    return json.dumps(tool_input)
+        return [t for value in tool_input.values() for t in brief_texts(value)]
+    if isinstance(tool_input, list):
+        return [t for value in tool_input for t in brief_texts(value)]
+    return []
 
 
 def check(event):
@@ -110,7 +115,7 @@ def check(event):
     pressure = cpu_pressure()
     if pressure is None or pressure < PRESSURE_LIMIT:
         return None
-    urgent = URGENT.match(brief_text(event.get("tool_input") or {}))
+    urgent = next((m for m in map(URGENT.match, brief_texts(event.get("tool_input") or {})) if m), None)
     if urgent:
         fact = urgent.group(2) if urgent.group(2) is not None else urgent.group(3)
         if len(fact.strip()) >= 15:
