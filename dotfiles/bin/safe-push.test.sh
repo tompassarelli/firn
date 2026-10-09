@@ -905,7 +905,13 @@ make_landing_clone "$landing_root/a" a.txt
 make_landing_clone "$landing_root/b" shared.txt
 make_landing_clone "$landing_root/c" shared.txt
 make_landing_clone "$landing_root/d" fail.txt
-run_train_case a b c d
+make_landing_clone "$landing_root/e" e.txt
+"$real_git" -C "$landing_root/seed" pull -q --no-rebase "$landing_root/e" lane-e
+"$real_git" -C "$landing_root/seed" commit -q --amend -m 'e landed earlier'
+"$real_git" -C "$landing_root/seed" push -q "$landing_remote" main
+run_train_case a b c d e
+[ "${train_status[4]}" -eq 0 ] && [ "$("$real_git" --git-dir="$landing_remote" log --format=%s main -- e.txt | wc -l)" -eq 1 ] \
+  || fail "mixed train: a lane already on origin was not counted as landed: $(cat "$landing_root/e.out")"
 [ "${train_status[0]} ${train_status[1]}" = '0 0' ] || fail "mixed train: a good lane failed (${train_status[*]}): $case_output"
 [ "${train_status[2]}" -ne 0 ] && [ "${train_status[3]}" -ne 0 ] || fail "mixed train: a bad lane landed (${train_status[*]})"
 grep -q 'conflicts with the lanes ahead of it in the landing train in: shared.txt' "$landing_root/c.out" \
@@ -954,6 +960,82 @@ rm -f "$real_bin/bun"
 case_output="$(cat "$landing_root/a.out" "$landing_root/b.out")"
 [ $((status_a + status_b)) -eq 0 ] || fail "train with a lockfile change: a lane failed: $case_output"
 [ "$("$real_git" --git-dir="$landing_remote" show main:bun.lock)" = b ] || fail 'train with a lockfile change: main lacks the new lockfile'
+
+new_landing_origin red-fix
+printf '[landing]\n\texact = true\n' >"$landing_root/seed/.safe-push"
+printf 'failing\n' >"$landing_root/seed/red.txt"
+"$real_git" -C "$landing_root/seed" add .safe-push red.txt
+"$real_git" -C "$landing_root/seed" commit -qm 'exact landings; main is red'
+"$real_git" -C "$landing_root/seed" push -q "$landing_remote" main
+red_base="$("$real_git" --git-dir="$landing_remote" rev-parse main)"
+lock_key=$(printf '%s' "$landing_remote" | sha256sum | cut -c1-16)
+red_queue="$scratch/xdg-state/safe-push/$lock_key.queue"
+for lane in h w f; do
+  make_landing_clone "$landing_root/$lane" "$lane.txt"
+  mkdir -p "$landing_root/$lane/.hooks"
+  printf '#!/usr/bin/env bash\ncat >/dev/null\nif [ -e red.txt ]; then\n  : >>%q\n  for _ in $(seq 100); do grep -qs %q %q/* && break; sleep 0.1; done\n  echo red >>%q; exit 1\nfi\necho green >>%q\n' \
+    "$landing_root/red-check" "$landing_root/f" "$red_queue" "$landing_root/hook-runs" "$landing_root/hook-runs" >"$landing_root/$lane/.hooks/pre-push"
+  chmod +x "$landing_root/$lane/.hooks/pre-push"
+  "$real_git" -C "$landing_root/$lane" config core.hooksPath .hooks
+done
+"$real_git" -C "$landing_root/f" rm -q red.txt
+"$real_git" -C "$landing_root/f" commit -qm 'fix #399: main is red'
+cat >"$real_bin/gh" <<'GH'
+#!/usr/bin/env bash
+[ "$1 $2" = 'issue list' ] || exit 1
+while [ "$#" -gt 0 ] && [ "$1" != --jq ]; do shift; done
+jq -r "$2" <<<'[{"number":398,"title":"main is red-ish"},{"number":399,"title":"main is red"}]'
+GH
+chmod +x "$real_bin/gh"
+: >"$landing_root/hook-runs"
+mkdir -p "$scratch/xdg-state/safe-push"
+flock "$scratch/xdg-state/safe-push/$lock_key.lock" sleep 2 & blocker=$!
+sleep 0.5
+run_landing "$landing_root/h" & pid_h=$!
+sleep 0.5
+run_landing "$landing_root/w" & pid_w=$!
+wait "$blocker" || true
+for _ in $(seq 100); do [ -e "$landing_root/red-check" ] && break; sleep 0.1; done
+run_landing "$landing_root/f" & pid_f=$!
+red_status=()
+for pid in "$pid_h" "$pid_w" "$pid_f"; do
+  status=0; wait "$pid" || status=$?
+  red_status+=("$status")
+done
+rm -f "$real_bin/gh"
+case_output="$(cat "$landing_root/h.out" "$landing_root/w.out" "$landing_root/f.out")"
+red_order="$("$real_git" --git-dir="$landing_remote" log --reverse --format=%s "$red_base..main" | paste -sd, -)"
+red_runs="$(sort "$landing_root/hook-runs" | uniq -c | awk '{ printf "%s%s %s", sep, $1, $2; sep = ", " }')"
+printf 'red-fix scenario: exits h w f = %s; landed %s; checks %s\n' "${red_status[*]}" "${red_order:-nothing}" "$red_runs"
+[ "${red_status[*]}" = '0 0 0' ] || fail "red fix: a lane did not land (${red_status[*]}): $case_output"
+[ "$red_order" = 'change from f,fix #399: main is red,change from h,change from w' ] \
+  || fail "red fix: the fix did not land first with the held lanes behind it in arrival order ($red_order)"
+[ "$(grep -c red "$landing_root/hook-runs")" -eq 1 ] \
+  || fail "red fix: a check ran on red main after the fix queued ($red_runs): $case_output"
+grep -q 'this lane waits behind it' "$landing_root/h.out" || fail "red fix: the holder did not hand its train back: $(cat "$landing_root/h.out")"
+
+new_landing_origin killed-holder
+printf '[landing]\n\texact = true\n' >"$landing_root/seed/.safe-push"
+"$real_git" -C "$landing_root/seed" add .safe-push
+"$real_git" -C "$landing_root/seed" commit -qm 'exact landings'
+"$real_git" -C "$landing_root/seed" push -q "$landing_remote" main
+make_landing_clone "$landing_root/lane" lane.txt
+mkdir -p "$landing_root/lane/.hooks"
+printf '#!/usr/bin/env bash\ncat >/dev/null\necho "$$" >%q\nexec sleep 30\n' "$landing_root/hook-pid" >"$landing_root/lane/.hooks/pre-push"
+chmod +x "$landing_root/lane/.hooks/pre-push"
+"$real_git" -C "$landing_root/lane" config core.hooksPath .hooks
+lock_file="$scratch/xdg-state/safe-push/$(printf '%s' "$landing_remote" | sha256sum | cut -c1-16).lock"
+run_landing "$landing_root/lane" & pid_lane=$!
+for _ in $(seq 100); do [ -s "$landing_root/hook-pid" ] && break; sleep 0.1; done
+kill -TERM "$(sed -n 's/^pid \([0-9]*\) .*/\1/p' "$lock_file")"
+freed=''
+for i in $(seq 30); do
+  if flock -n "$lock_file" true; then freed="$i"; break; fi
+  sleep 0.1
+done
+kill "$(cat "$landing_root/hook-pid")" 2>/dev/null || true
+wait "$pid_lane" 2>/dev/null || true
+[ -n "$freed" ] || fail 'killed holder: its hook kept the landing lock held for 3 s'
 
 # A safe-push started by the checks of one that holds the landing lock (a
 # farm run's scratch push) proceeds instead of waiting on its parent.

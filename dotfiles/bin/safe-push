@@ -34,6 +34,10 @@ Options:
                the lock holder lands the lanes queued behind it as one train
                (origin BRANCH plus each lane cherry-picked in arrival order,
                one hook run, halves re-run on red) and tells each its verdict;
+               a lane already on origin BRANCH counts as landed; while the
+               open "BRANCH is red" issue is #N, a lane with #N in a commit
+               subject queues ahead of the others, and a holder hands its
+               undecided lanes back behind it before its next check run;
                when main's .safe-push also sets landing.queue = autoland,
                the lane is checked, pushed to claude/land-<lane>-<sha> and
                waits for the Autoland workflow's batched queue to land it;
@@ -490,10 +494,38 @@ push_lock_fd=""
 push_lock_taken=""
 push_ticket=""
 push_ticket_info=""
+red_fix=""
+requeued=0
 trap '[ -z "$push_ticket" ] || rm -f -- "$push_ticket" "$push_ticket.result"' EXIT
 
 live_safe_push() {
   kill -0 "$1" 2>/dev/null && tr '\0' ' ' <"/proc/$1/cmdline" 2>/dev/null | grep -q safe-push
+}
+
+drop_lock_fd() {
+  [ "$BASHPID" != "$$" ] && [ -n "$push_lock_fd" ] || return 0
+  exec {push_lock_fd}>&-
+}
+
+red_fix_issue() {
+  local named issue
+  [ -n "$1" ] || return 0
+  named=$(git log --format=%s "$1..HEAD" | grep -oE '#[0-9]+') || return 0
+  issue=$(timeout 10 gh issue list --state open --search "\"$to is red\" in:title" --json number,title \
+      --jq '.[] | "\(.number)\t\(.title)"' 2>/dev/null \
+    | awk -F'\t' -v title="$to is red" '$2 == title { print $1; exit }') || return 0
+  if [ -n "$issue" ] && grep -qxF "#$issue" <<<"$named"; then printf '%s\n' "$issue"; fi
+}
+
+red_fix_waiting() {
+  local t name
+  [ -z "$red_fix" ] || return 1
+  for t in "${push_ticket%/*}"/0*; do
+    name=${t##*/}
+    [[ "$name" =~ ^[0-9]+-([0-9]+)$ ]] && [ "$t" != "$push_ticket" ] && [ ! -e "$t.result" ] || continue
+    live_safe_push "${BASH_REMATCH[1]}" && return 0
+  done
+  return 1
 }
 
 # Prints the oldest ticket in queue $1 whose safe-push is still running.
@@ -522,7 +554,8 @@ acquire_push_lock() {
   queue="$dir/$key.queue"
   mkdir -p "$queue"
   if [ -z "$push_ticket" ]; then
-    push_ticket="$queue/${EPOCHREALTIME/./}-$$"
+    # A leading 0 sorts a red-fix lane's ticket first in every safe-push's glob, older versions included.
+    push_ticket="$queue/${red_fix:+0}${EPOCHREALTIME/./}-$$"
     printf '%s' "$push_ticket_info" >"$push_ticket"
   fi
   exec {push_lock_fd}>>"$file"
@@ -546,16 +579,26 @@ acquire_push_lock() {
   push_lock_taken=$EPOCHREALTIME
 }
 
-release_push_lock() {
-  [ -n "$push_lock_fd" ] || return 0
+unlock_push_lock() {
   flock -u "$push_lock_fd" || true
   exec {push_lock_fd}>&-
   push_lock_fd=""
+  unset SAFE_PUSH_LOCK_HELD
+}
+
+release_push_lock() {
+  [ -n "$push_lock_fd" ] || return 0
+  unlock_push_lock
   rm -f -- "$push_ticket"
   push_ticket=""
-  unset SAFE_PUSH_LOCK_HELD
   awk -v a="$push_lock_taken" -v b="$EPOCHREALTIME" \
     'BEGIN { printf "safe-push: held the landing lock for %.1f s\n", b - a }'
+}
+
+requeue_behind_red_fix() {
+  printf 'safe-push: a lane that fixes red %s is queued; this lane waits behind it\n' "$to"
+  unlock_push_lock
+  requeued=1
 }
 
 # --- landing train: the exact-landing lock holder lands the lanes queued behind it
@@ -606,13 +649,19 @@ without() {
 }
 
 collect_train() {
-  local t name
+  local t name branch_name
   train_tickets=()
+  if red_fix_waiting; then
+    requeue_behind_red_fix
+    return 0
+  fi
   for t in "${push_ticket%/*}"/*; do
     name=${t##*/}
     [[ "$name" =~ ^[0-9]+-([0-9]+)$ ]] || continue
     [ "$t" != "$push_ticket" ] && [ -s "$t" ] && [ ! -e "$t.result" ] || continue
     live_safe_push "${BASH_REMATCH[1]}" || continue
+    IFS=$'\t' read -r _ branch_name _ <"$t" || true
+    [[ "$branch_name" != safe-push-train-* ]] || continue
     train_tickets+=("$t")
   done
 }
@@ -631,7 +680,7 @@ sync_dependencies() {
     stamp="$dir/node_modules/.safe-push-deps"
     [ "$(cat "$stamp" 2>/dev/null)" != "$want" ] || continue
     echo "safe-push: $lock changed — bun install --frozen-lockfile in $dir"
-    (cd "$dir" && bun install --frozen-lockfile) || return 1
+    (drop_lock_fd; cd "$dir" && bun install --frozen-lockfile) || return 1
     printf '%s\n' "$want" >"$stamp"
   done < <(git ls-files -- 'bun.lock' '*/bun.lock')
 }
@@ -640,6 +689,7 @@ sync_dependencies() {
 # train branch's HEAD; returns nonzero on failure.
 check_candidate() {
   local hook="$1" base="$2" log="$3" head url
+  drop_lock_fd
   head=$(git rev-parse HEAD)
   : >"$log"
   if sync_dependencies >>"$log" 2>&1 \
@@ -655,7 +705,7 @@ check_candidate() {
 }
 
 run_train() {
-  local hook="$1" own_branch own_root own_oid base cand verdict detail i n half
+  local hook="$1" own_branch own_root own_oid base cand verdict detail i n half cherry
   local -a roots=() branches=() oids=() tickets=() pending=() group=() rest=()
   local -a results=()
   own_root=$(git rev-parse --show-toplevel)
@@ -671,13 +721,6 @@ run_train() {
   base=$(fetch_destination)
   [ -n "$base" ] || return 0
   printf 'safe-push: landing train of %s lanes onto origin %s@%s\n' "$n" "$to" "$base"
-  for ((i = 0; i < n; i++)); do
-    results+=("")
-    pending+=("$i")
-    if ! git cat-file -e "${oids[i]}^{commit}" 2>/dev/null; then
-      git fetch -q --no-tags "${roots[i]}" "refs/heads/${branches[i]}" 2>/dev/null || true
-    fi
-  done
   capture_repository_state
   destination_ref="refs/heads/$to"
   train_branch="safe-push-train-$$"
@@ -689,9 +732,24 @@ run_train() {
     [ -z "${tickets[$1]}" ] || printf '%s\n' "${results[$1]}" >"${tickets[$1]}.result"
   }
 
+  for ((i = 0; i < n; i++)); do
+    results+=("")
+    if ! git cat-file -e "${oids[i]}^{commit}" 2>/dev/null; then
+      git fetch -q --no-tags "${roots[i]}" "refs/heads/${branches[i]}" 2>/dev/null || true
+    fi
+    if git cat-file -e "${oids[i]}^{commit}" 2>/dev/null \
+        && cherry=$(git cherry "$base" "${oids[i]}" 2>/dev/null) && ! grep -q '^+' <<<"$cherry"; then
+      echo "safe-push: train lane ${branches[i]} is already on origin $to"
+      train_verdict "$i" landed "$base"
+    else
+      pending+=("$i")
+    fi
+  done
+
   while [ "${#pending[@]}" -gt 0 ]; do
     group=("${pending[@]}")
     while :; do
+      if red_fix_waiting; then break 2; fi
       base=$(fetch_destination)
       git switch -q -C "$train_branch" "$base"
       local built=1
@@ -738,7 +796,13 @@ run_train() {
   done
 
   git switch -q "$own_branch"
-  git branch -q -D "$train_branch" || true
+  git branch -q -D "$train_branch" 2>/dev/null || true
+  [ "${#pending[@]}" -eq 0 ] \
+    || printf 'safe-push: handing %s undecided lanes of this train back to the queue\n' "${#pending[@]}"
+  if [ -z "${results[0]}" ]; then
+    requeue_behind_red_fix
+    return 0
+  fi
   read -r verdict detail _ <<<"${results[0]}"
   release_push_lock
   if [ "$verdict" = landed ]; then
@@ -819,7 +883,7 @@ run_pre_push_checks() {
   else
     echo "safe-push: running the pre-push checks on $head before taking the landing lock"
   fi
-  if ! sync_dependencies || ! (cd "$top" && printf '%s %s refs/heads/%s %s\n' "$local_ref" "$head" "$to" "${base:-$zero}" \
+  if ! sync_dependencies || ! (drop_lock_fd; cd "$top" && printf '%s %s refs/heads/%s %s\n' "$local_ref" "$head" "$to" "${base:-$zero}" \
       | "$hook" origin "$lock_url"); then
     echo "safe-push: ✗ the pre-push checks failed; NOT pushed." >&2
     exit 1
@@ -896,6 +960,12 @@ land_through_autoland() {
 }
 
 if [ "$to_seen" -eq 1 ] && [ "$dry" = 0 ]; then
+  case "$(git symbolic-ref --quiet --short HEAD 2>/dev/null)" in
+    safe-push-train-*)
+      echo "safe-push: this worktree is on the branch of a landing train whose holder stopped, not on a lane; git switch back to the lane's own branch (git reflog shows it) and retry. NOT pushed." >&2
+      exit 1
+      ;;
+  esac
   lock_url=$(git remote get-url --push origin 2>/dev/null) \
     || { echo "safe-push: origin has no push URL"; exit 1; }
   hook=$(pre_push_hook)
@@ -910,13 +980,19 @@ if [ "$to_seen" -eq 1 ] && [ "$dry" = 0 ]; then
     first_base=$(fetch_destination)
     if exact_landing "${first_base:-HEAD}"; then
       ! autoland_queue "$first_base" || land_through_autoland "$first_base"
+      red_fix=$(red_fix_issue "$first_base")
+      [ -z "$red_fix" ] || echo "safe-push: $to is red (#$red_fix) and this lane names it — queueing it ahead of the other lanes"
       echo "safe-push: exact landing — queueing for the landing lock before the checks, so a lane ahead can't restart them"
       push_ticket_info=$(printf '%s\t%s\t%s\n' "$(git rev-parse --show-toplevel)" \
         "$(git symbolic-ref --quiet --short HEAD || true)" "$(git rev-parse HEAD)")
-      acquire_push_lock "$lock_url" 10800
       queued=1
-      collect_train
-      [ "${#train_tickets[@]}" -eq 0 ] || run_train "$hook"
+      requeued=1
+      while [ "$requeued" -eq 1 ]; do
+        requeued=0
+        acquire_push_lock "$lock_url" 10800
+        collect_train
+        [ "${#train_tickets[@]}" -eq 0 ] || run_train "$hook"
+      done
     fi
     attempt=1
     while :; do
@@ -980,9 +1056,9 @@ echo "safe-push: ✓ clean — pushing $branch -> origin as $publication"
 # non-fast-forward update: capture_destination_state proved ancestry first.
 push_flags=()
 [ "$hook_verified" -eq 0 ] || push_flags+=(--no-verify)
-SAFE_PUSH_ACTIVE=1 git push "${push_flags[@]}" \
+(drop_lock_fd; SAFE_PUSH_ACTIVE=1 git push "${push_flags[@]}" \
   --force-with-lease="${destination_ref}:${destination_oid}" \
-  "$origin_url" "$publication"
+  "$origin_url" "$publication")
 release_push_lock
 if [ "$to_seen" -eq 0 ]; then
   tracking_ref="refs/remotes/origin/$destination_branch"
