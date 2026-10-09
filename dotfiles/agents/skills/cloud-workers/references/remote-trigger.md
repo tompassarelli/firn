@@ -14,4 +14,4 @@
 ```
 
 
-Existing Wisp routine: `trig_01Rv4YsBNXztmR2bKGs4bsth`; Default environment: `env_01EkrXafT5PjQN9jUWzwMhLd`.
+Smashcraft routine: `trig_01RoHaKMjMDSpHAouCU3FkmU`; environment `env_01MLPz6krPVjM4pH3YGTpQz3` (named Smashcraft; an API-created routine needs one save in the web editor to bind it). Send each update and its run as separate sequential calls; a run sent in parallel with its update fires the previous prompt.
