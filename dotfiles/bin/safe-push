@@ -12,6 +12,8 @@
 #
 # Usage:  safe-push [--dry-run] [--to BRANCH] [--keep-lane]
 #         safe-push [--dry-run] --tag NAME
+# /proc is the host's even inside run-bounded's PID namespace, so peers are named by host PID.
+read -r self_pid _ </proc/self/stat
 set -euo pipefail
 
 usage() {
@@ -143,7 +145,7 @@ if [ "$to_seen" -eq 1 ]; then validate_destination_name "$to"; fi
 claim_output_log() {
   local fd target claimed=""
   for fd in 1 2; do
-    target=$(readlink "/proc/$$/fd/$fd" 2>/dev/null) || continue
+    target=$(readlink "/proc/$self_pid/fd/$fd" 2>/dev/null) || continue
     [ -f "$target" ] || continue
     case " $claimed ${SAFE_PUSH_OUTPUT_CLAIMED:-} " in *" $target "*) continue ;; esac
     exec {output_lock_fd}<"$target"
@@ -499,7 +501,7 @@ requeued=0
 trap '[ -z "$push_ticket" ] || rm -f -- "$push_ticket" "$push_ticket.result"' EXIT
 
 live_safe_push() {
-  kill -0 "$1" 2>/dev/null && tr '\0' ' ' <"/proc/$1/cmdline" 2>/dev/null | grep -q safe-push
+  { tr '\0' ' ' <"/proc/$1/cmdline"; } 2>/dev/null | grep -q safe-push
 }
 
 drop_lock_fd() {
@@ -555,7 +557,7 @@ acquire_push_lock() {
   mkdir -p "$queue"
   if [ -z "$push_ticket" ]; then
     # A leading 0 sorts a red-fix lane's ticket first in every safe-push's glob, older versions included.
-    push_ticket="$queue/${red_fix:+0}${EPOCHREALTIME/./}-$$"
+    push_ticket="$queue/${red_fix:+0}${EPOCHREALTIME/./}-$self_pid"
     printf '%s' "$push_ticket_info" >"$push_ticket"
   fi
   exec {push_lock_fd}>>"$file"
@@ -574,7 +576,7 @@ acquire_push_lock() {
     waited=$((waited + 1))
   done
   take_train_result
-  printf 'pid %s in %s\n' "$$" "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" >"$file"
+  printf 'pid %s in %s\n' "$self_pid" "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" >"$file"
   export SAFE_PUSH_LOCK_HELD="$key"
   push_lock_taken=$EPOCHREALTIME
 }
