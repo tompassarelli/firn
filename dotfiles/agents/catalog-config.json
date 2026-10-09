@@ -14,6 +14,7 @@
     "wurst-development",
     "smashcraft-character-creation",
     "smashcraft-animation",
+    "smashcraft-stage-design",
     "private-desktop-development",
     "image-context-budget",
     "greywrought-development",
@@ -474,6 +475,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/smashcraft-animation/SKILL.md"
+      }
+    },
+    "smashcraft-stage-design": {
+      "kind": "skill",
+      "category": "games",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/smashcraft-stage-design/SKILL.md"
       }
     },
     "github-issues": {
@@ -1232,6 +1241,16 @@
       ]
     },
     "smashcraft-animation": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "smashcraft-stage-design": {
       "distributions": [
         {
           "type": "skill",
