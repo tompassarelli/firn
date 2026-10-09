@@ -42,6 +42,7 @@ written: 2026-10-09
 - Hand off Claude workers at 350k context, before auto-compaction fires at 400k for workers and the parent.
 - Keep `worker-sweep --wait` active for the 10-minute idle/handoff signal while workers run.
 - As a lead with a goal, schedule a recurring CronCreate every 20 minutes that rebuilds the DAG from the goal's GitHub issues and main CI, staffs every unblocked node up to the spawn gate, recycles 30-minute workers and closes passed issues, so Tom never has to prompt a regrounding.
+- Each tick, name the critical path's longest wait and attack it: batch ready lanes into one landing, run unknown-cause bugs as 2–3 distinct hypotheses in parallel workers, have art or judged work render 2–4 variants per pass and judge once, and send code-only work to cloud workers before local capacity.
 - Stop the parent's monitors/background shells when their work ends.
 - Close finished Codex workers as soon as their report arrives.
 - Ask a worker idle 10 minutes without a report for one, then archive it; never park a worker to wait on a farm run, a client or another worker.
