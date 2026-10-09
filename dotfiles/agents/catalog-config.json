@@ -522,6 +522,16 @@
         "repo": "nixos-config",
         "path": "dotfiles/agents/hooks/native-launch-guard.sh"
       }
+    },
+    "lead-regrounding": {
+      "kind": "hook",
+      "title": "Lead regrounding tick",
+      "triggerDescription": "Tell a Claude Code lead on its first worker spawn to schedule the 20-minute DAG regrounding CronCreate.",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/lead-regrounding.sh"
+      }
     }
   },
   "activation": {
@@ -1319,18 +1329,6 @@
           ]
         }
       ]
-    }
-  },
-  "units": {
-    "lead-regrounding": {
-      "kind": "hook",
-      "title": "Lead regrounding tick",
-      "triggerDescription": "Tell a Claude Code lead on its first worker spawn to schedule the 20-minute DAG regrounding CronCreate.",
-      "category": "agents",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/lead-regrounding.sh"
-      }
     }
   }
 }
