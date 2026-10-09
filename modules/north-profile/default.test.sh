@@ -33,7 +33,7 @@ jq -e '
   [
     .hooks[] | .[] | .hooks[] | select(.type == "command") | .command
   ] as $commands
-  | ($commands | length == 15)
+  | ($commands | length == 16)
     and ($commands | all(
       contains("NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3")
       and contains("PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin")
@@ -55,6 +55,7 @@ for unit in \
   git-blind-stage-guard \
   git-stash-guard \
   launch-critical-worktree-guard \
+  lead-regrounding \
   native-launch-guard \
   modern-search-guard \
   session-kill-guard \
