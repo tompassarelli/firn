@@ -47,6 +47,7 @@ written: 2026-10-09
 - Stop the parent's monitors/background shells when their work ends.
 - Close finished Codex workers as soon as their report arrives.
 - Ask a worker idle 10 minutes without a report for one, then archive it; never park a worker to wait on a farm run, a client or another worker.
+- Have a worker report a lane ready to land with its path; the parent runs its `safe-push` as a background job, because a foreground push waiting in the landing queue outlives the worker's 10-minute tool call and loses its place.
 - Recycle a worker at 200k context or 45 minutes, whichever comes first (time measured with `date` against its recorded start time): it writes a complete handoff at a natural checkpoint and a fresh worker continues from it; check the fresh worker 5 minutes later for rediscovery.
 - Keep workers out of wait loops; messages reach a worker only between its commands.
 - Put the state checked at spawn time in every brief (main SHA and CI, lane SHAs, what landed) so workers never act on a stale report.
