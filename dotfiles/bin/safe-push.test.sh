@@ -847,6 +847,77 @@ case_output="$(cat "$landing_root/a.out" "$landing_root/b.out")"
 [ "$(tail -n1 "$landing_root/b.hook-runs")" = "$("$real_git" --git-dir="$landing_remote" rev-parse main)" ] \
   || fail 'queued exact landing: the hook did not check the commit that landed'
 
+# Lanes queued behind an exact-landing lock holder land as one train: the
+# holder cherry-picks each onto origin main in arrival order and checks the
+# candidate once; a conflicting lane and a failing lane are each told why.
+add_train_hook() {
+  local dir="$1"
+  mkdir -p "$dir/.hooks"
+  printf '#!/usr/bin/env bash\ncat >/dev/null\nprintf "%%s\\n" "$(git rev-parse HEAD)" >>"%s"\nsleep 1\nif [ -e fail.txt ]; then echo "farm red: https://github.com/o/r/actions/runs/4242"; exit 1; fi\n' \
+    "$landing_root/hook-runs" >"$dir/.hooks/pre-push"
+  chmod +x "$dir/.hooks/pre-push"
+  "$real_git" -C "$dir" config core.hooksPath .hooks
+}
+
+run_train_case() {
+  local lane
+  : >"$landing_root/hook-runs"
+  lock_key=$(printf '%s' "$landing_remote" | sha256sum | cut -c1-16)
+  mkdir -p "$scratch/xdg-state/safe-push"
+  flock "$scratch/xdg-state/safe-push/$lock_key.lock" sleep 4 & blocker=$!
+  sleep 0.5
+  train_pids=()
+  for lane in "$@"; do
+    add_train_hook "$landing_root/$lane"
+    run_landing "$landing_root/$lane" & train_pids+=($!)
+    sleep 0.5
+  done
+  wait "$blocker" || true
+  train_status=()
+  for pid in "${train_pids[@]}"; do
+    status=0; wait "$pid" || status=$?
+    train_status+=("$status")
+  done
+  case_output="$(for lane in "$@"; do cat "$landing_root/$lane.out"; done)"
+}
+
+new_landing_origin train
+printf '[landing]\n\texact = true\n' >"$landing_root/seed/.safe-push"
+"$real_git" -C "$landing_root/seed" add .safe-push
+"$real_git" -C "$landing_root/seed" commit -qm 'exact landings'
+"$real_git" -C "$landing_root/seed" push -q "$landing_remote" main
+for lane in a b c; do make_landing_clone "$landing_root/$lane" "$lane.txt"; done
+run_train_case a b c
+[ "${train_status[*]}" = '0 0 0' ] || fail "train: a lane failed (${train_status[*]}): $case_output"
+[ "$(wc -l <"$landing_root/hook-runs")" -eq 1 ] || fail "train: expected one check run: $case_output"
+[ "$("$real_git" --git-dir="$landing_remote" log --format=%s -3 main | tr '\n' ' ')" = 'change from c change from b change from a ' ] \
+  || fail 'train: lanes did not land in arrival order'
+[ "$(cat "$landing_root/hook-runs")" = "$("$real_git" --git-dir="$landing_remote" rev-parse main)" ] \
+  || fail 'train: main is not the commit the checks passed'
+expect_output 'landing train of 3 lanes'
+
+new_landing_origin train-mixed
+printf '[landing]\n\texact = true\n' >"$landing_root/seed/.safe-push"
+"$real_git" -C "$landing_root/seed" add .safe-push
+"$real_git" -C "$landing_root/seed" commit -qm 'exact landings'
+"$real_git" -C "$landing_root/seed" push -q "$landing_remote" main
+make_landing_clone "$landing_root/a" a.txt
+make_landing_clone "$landing_root/b" shared.txt
+make_landing_clone "$landing_root/c" shared.txt
+make_landing_clone "$landing_root/d" fail.txt
+run_train_case a b c d
+[ "${train_status[0]} ${train_status[1]}" = '0 0' ] || fail "mixed train: a good lane failed (${train_status[*]}): $case_output"
+[ "${train_status[2]}" -ne 0 ] && [ "${train_status[3]}" -ne 0 ] || fail "mixed train: a bad lane landed (${train_status[*]})"
+grep -q 'conflicts with the lanes ahead of it in the landing train in: shared.txt' "$landing_root/c.out" \
+  && grep -q 'rebase onto origin/main and retry' "$landing_root/c.out" || fail "mixed train: conflict not reported: $(cat "$landing_root/c.out")"
+grep -q 'failed on this lane in the landing train (https://github.com/o/r/actions/runs/4242)' "$landing_root/d.out" \
+  || fail "mixed train: failure not reported: $(cat "$landing_root/d.out")"
+[ "$("$real_git" --git-dir="$landing_remote" show main:shared.txt)" = b ] || fail 'mixed train: main lacks b'
+"$real_git" --git-dir="$landing_remote" cat-file -e main:a.txt || fail 'mixed train: main lacks a'
+! "$real_git" --git-dir="$landing_remote" cat-file -e main:fail.txt 2>/dev/null || fail 'mixed train: the failing lane landed'
+grep -qx "$("$real_git" --git-dir="$landing_remote" rev-parse main)" "$landing_root/hook-runs" \
+  || fail 'mixed train: main is not a commit the checks passed'
+
 # A safe-push started by the checks of one that holds the landing lock (a
 # farm run's scratch push) proceeds instead of waiting on its parent.
 new_landing_origin reentry
