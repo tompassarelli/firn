@@ -34,6 +34,9 @@ Options:
                the lock holder lands the lanes queued behind it as one train
                (origin BRANCH plus each lane cherry-picked in arrival order,
                one hook run, halves re-run on red) and tells each its verdict;
+               when main's .safe-push also sets landing.queue = autoland,
+               the lane is checked, pushed to claude/land-<lane>-<sha> and
+               waits for the Autoland workflow's batched queue to land it;
                a BRANCH other than origin's default (farm/*, scratch) skips
                the lock and the queue and runs the hook in its own push
   --keep-lane  after landing --to main from ~/code/<project>/worktrees/<slug>,
@@ -822,6 +825,56 @@ exact_landing() {
   done
   return 1
 }
+# A repository whose main's committed .safe-push sets landing.queue = autoland
+# lands every change through its Autoland workflow's one batched queue: the lane
+# is checked and pushed to claude/land-<lane>-<sha> and the `autoland` commit
+# status on that SHA is the verdict. Workflow changes can't land that way.
+autoland_queue() {
+  [ -n "$1" ] && [ "$(git config --blob "$1:.safe-push" --get landing.queue 2>/dev/null)" = autoland ] \
+    && ! git diff --name-only "$1...HEAD" -- .github/workflows | grep -q .
+}
+
+land_through_autoland() {
+  local lane sha queue_branch line state description url last="" delay=10 waited=0 landed
+  rebase_onto_destination "$1"
+  lane=$(git symbolic-ref --quiet --short HEAD)
+  sha=$(git rev-parse HEAD)
+  queue_branch="claude/land-$(printf '%s' "$lane" | tr -c 'A-Za-z0-9._-' '-')-${sha:0:12}"
+  echo "safe-push: $to lands through Autoland's one queue — checking and pushing $sha as $queue_branch"
+  NORTH_NO_AUTOREAP=1 "$(readlink -f "${BASH_SOURCE[0]}")" --to "$queue_branch" || exit 1
+  while :; do
+    line=$(gh api "repos/{owner}/{repo}/commits/$sha/status" \
+      --jq '([.statuses[] | select(.context == "autoland")][0] // {}) | [.state // "", .description // "", .target_url // ""] | @tsv' 2>/dev/null) || line=""
+    IFS=$'\t' read -r state description url <<<"$line"
+    case "$state" in success|failure|error) break ;; esac
+    if [ "$line" != "$last" ]; then
+      printf 'safe-push: Autoland: %s %s\n' "${description:-not queued yet}" "$url"
+      last="$line"
+      delay=10
+    fi
+    if [ "$waited" -ge 10800 ]; then
+      printf 'safe-push: gave up after %ss waiting for Autoland on %s; it stays queued.\n' "$waited" "$queue_branch" >&2
+      exit 1
+    fi
+    sleep "$delay"
+    waited=$((waited + delay))
+    delay=$(( delay * 3 / 2 > 60 ? 60 : delay * 3 / 2 ))
+  done
+  if [ "$state" != success ]; then
+    printf 'safe-push: ✗ Autoland did not land this lane: %s %s; NOT landed.\n' "$description" "$url" >&2
+    SAFE_PUSH_ACTIVE=1 git push -q --force-with-lease="refs/heads/$queue_branch:$sha" origin ":refs/heads/$queue_branch" 2>/dev/null || true
+    exit 1
+  fi
+  landed=${description##* }
+  printf 'safe-push: ✓ Autoland landed this lane: origin %s is at %s (%s)\n' "$to" "$landed" "$url"
+  fetch_destination >/dev/null
+  capture_repository_state
+  destination_ref="refs/heads/$to"
+  if git reset -q --keep "$landed"; then cleanup_landed_lane || true; fi
+  auto_reap || true
+  exit 0
+}
+
 if [ "$to_seen" -eq 1 ] && [ "$dry" = 0 ]; then
   lock_url=$(git remote get-url --push origin 2>/dev/null) \
     || { echo "safe-push: origin has no push URL"; exit 1; }
@@ -836,6 +889,7 @@ if [ "$to_seen" -eq 1 ] && [ "$dry" = 0 ]; then
     queued=0
     first_base=$(fetch_destination)
     if exact_landing "${first_base:-HEAD}"; then
+      ! autoland_queue "$first_base" || land_through_autoland "$first_base"
       echo "safe-push: exact landing — queueing for the landing lock before the checks, so a lane ahead can't restart them"
       push_ticket_info=$(printf '%s\t%s\t%s\n' "$(git rev-parse --show-toplevel)" \
         "$(git symbolic-ref --quiet --short HEAD || true)" "$(git rev-parse HEAD)")
