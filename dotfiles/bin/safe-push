@@ -725,8 +725,8 @@ run_train() {
   printf 'safe-push: landing train of %s lanes onto origin %s@%s\n' "$n" "$to" "$base"
   capture_repository_state
   destination_ref="refs/heads/$to"
-  train_branch="safe-push-train-$$"
-  local log="${XDG_STATE_HOME:-$HOME/.local/state}/safe-push/train-$$.log"
+  train_branch="safe-push-train-$self_pid"
+  local log="${XDG_STATE_HOME:-$HOME/.local/state}/safe-push/train-$self_pid.log"
 
   train_verdict() {
     results[$1]="$2 $3 ${oids[$1]}"
