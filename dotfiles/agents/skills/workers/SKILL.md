@@ -42,7 +42,8 @@ description: Assign independent work, choose provider tiers and ETAs, and run wo
 - Stop the parent's monitors/background shells when their work ends.
 - Close finished Codex workers as soon as their report arrives.
 - Ask a worker idle 10 minutes without a report for one, then archive it; never park a worker to wait on a farm run, a client or another worker.
-- Check every worker running over an hour: its last action, its context size and whether it is parked; take its report and resume or hand it off.
+- Recycle every worker at 30 minutes: it writes a complete handoff at a natural checkpoint and a fresh worker continues from it; check the fresh worker 5 minutes later for rediscovery.
+- Keep workers out of wait loops; messages reach a worker only between its commands.
 - Check `threads list` and open issues before filing or staffing; never duplicate an item someone holds.
 - While main is red, staff its fix first and land nothing else onto red.
 - After an hour with no closure, start nothing new until an open box closes.
