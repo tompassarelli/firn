@@ -512,6 +512,16 @@
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/workers/SKILL.md"
       }
+    },
+    "native-launch-guard": {
+      "kind": "hook",
+      "title": "Native client launch guard",
+      "triggerDescription": "Refuse a Wine, Proton, steam-run or Warcraft .exe launch outside a machine-capacity native session.",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/native-launch-guard.sh"
+      }
     }
   },
   "activation": {
@@ -1280,6 +1290,19 @@
           "type": "skill",
           "targets": [
             "shared"
+          ]
+        }
+      ]
+    },
+    "native-launch-guard": {
+      "supports": [
+        "machine-capacity"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "claude"
           ]
         }
       ]

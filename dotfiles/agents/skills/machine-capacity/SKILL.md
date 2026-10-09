@@ -11,6 +11,8 @@ description: >-
 - Choose the smallest sufficient class: moderate = 2 CPUs/2 GiB; heavy = 6 CPUs/8 GiB; exclusive = all allowed cores/no peer batch; native = 2 CPUs/4 GiB/no CPU quota.
 - Use `run --class CLASS --owner OWNER --timeout-seconds N -- COMMAND ARG...` for batch work, including legitimate setup/download time.
 - Use `session --class native --owner OWNER -- COMMAND ARG...` for Warcraft clients/private desktops, one scope per client and two per pair.
+- Expect native DEFER_GPU_BUSY while GPU busy averages at least 85% over 5 s, and attended DEFER_GPU_CLIENTS while two Warcraft clients run; `status`/`probe` show `gpuBusyPercent`/`gpuClients`.
+- Never start wine, proton, steam-run or a game .exe outside a native session; `native-launch-guard` refuses it.
 - Keep native sessions foreground until command exit, Ctrl-C or explicit stop; only native sessions have no default deadline.
 - Respect batch session's 30-minute default, batch's one-hour maximum and exclusive's 15-minute maximum.
 - Request native-only `--memory-gib 1.5` for measured smaller offline clients.

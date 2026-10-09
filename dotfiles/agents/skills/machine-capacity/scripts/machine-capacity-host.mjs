@@ -26,6 +26,8 @@ const aggregateSlice = 'agent-capacity.slice';
 // clients outrank terminals and batch work but never the compositor.
 const nativeSlice = 'native.slice';
 const nativeCpuWeight = 200;
+const gpuSampleMilliseconds = 500;
+const nativeGpuSamples = 10;
 const classNames = new Set(['agent', 'native', 'moderate', 'heavy', 'exclusive']);
 const modes = new Map([['present', 'attended'], ['away', 'unattended'], ['auto', null]]);
 const idleSecondsForUnattended = 600;
@@ -148,6 +150,33 @@ function readSignals() {
     protectedCpuSomeAvg10BasisPoints: Math.max(slicePressure('session.slice'), slicePressure(nativeSlice)),
     memoryFullAvg10BasisPoints: parsePsi('/proc/pressure/memory', 'full'),
   };
+}
+
+function gpuBusyPath() {
+  if (process.env.AGENT_CAPACITY_GPU_BUSY) return process.env.AGENT_CAPACITY_GPU_BUSY;
+  const card = readdirSync('/sys/class/drm').find(name => /^card[0-9]+$/.test(name)
+    && existsSync(`/sys/class/drm/${name}/device/gpu_busy_percent`));
+  return card === undefined ? null : `/sys/class/drm/${card}/device/gpu_busy_percent`;
+}
+
+function readGpu(samples) {
+  const path = gpuBusyPath();
+  let total = 0;
+  for (let index = 0; path !== null && index < samples; index += 1) {
+    if (index > 0) Bun.sleepSync(gpuSampleMilliseconds);
+    total += Number(readFileSync(path, 'utf8').trim()) || 0;
+  }
+  let clients = 0;
+  if (process.env.AGENT_CAPACITY_GPU_CLIENTS !== undefined) clients = Number(process.env.AGENT_CAPACITY_GPU_CLIENTS);
+  else for (const pid of readdirSync('/proc')) {
+    if (!/^[0-9]+$/.test(pid)) continue;
+    try {
+      if (readFileSync(`/proc/${pid}/comm`, 'utf8').startsWith('Warcraft III')) clients += 1;
+    } catch (error) {
+      if (error?.code !== 'ENOENT' && error?.code !== 'ESRCH') throw error;
+    }
+  }
+  return { gpuBusyPercent: path === null ? 0 : Math.round(total / samples), gpuClients: clients };
 }
 
 function runtimeRoot() {
@@ -418,6 +447,7 @@ function leaseSlice(className) {
 }
 
 function decision(root, requested, create, ticket = null) {
+  const gpu = readGpu(requested.name === 'native' && !process.env.AGENT_CAPACITY_GPU_BUSY ? nativeGpuSamples : 1);
   return withLock(root, () => {
     const now = Date.now();
     const { active, reclaimed } = readLeases(root, now);
@@ -448,6 +478,8 @@ function decision(root, requested, create, ticket = null) {
       runs.filter(lease => lease.aggregateSlice !== leaseSlice(lease.class)).length,
       queuedAhead,
       exclusiveWaiting,
+      gpu.gpuBusyPercent,
+      gpu.gpuClients,
     );
     const result = {
       decision: code === 'RUN' ? (create ? 'RESERVED' : 'RUN') : 'DEFER',
@@ -469,6 +501,7 @@ function decision(root, requested, create, ticket = null) {
       cpuSomeAvg10: signals.cpuSomeAvg10BasisPoints / 100,
       memoryFullAvg10: signals.memoryFullAvg10BasisPoints / 100,
       memoryAvailableMiB: signals.memoryAvailableMiB,
+      ...gpu,
       reclaimed,
     };
     if (code !== 'RUN' || !create) return result;
@@ -527,6 +560,7 @@ function changeLease(root, id, owner, timeoutSeconds, settledRun = false) {
 }
 
 function status(root) {
+  const gpu = readGpu(1);
   return withLock(root, () => {
     const now = Date.now();
     const { active, reclaimed } = readLeases(root, now);
@@ -535,6 +569,7 @@ function status(root) {
     return {
       profile,
       mode,
+      ...gpu,
       holding: active.sort((left, right) => left.createdAt - right.createdAt).map(lease => ({
         owner: lease.owner,
         class: lease.class,
@@ -650,6 +685,7 @@ async function main(argv) {
       '--leased-cpus', '--leased-native-cpus', '--leased-memory-mib',
       '--peer-batch-runs', '--peer-exclusive-runs', '--unbounded-runs',
       '--memory-gib', '--cpu-some-avg10-basis-points', '--queued-ahead', '--exclusive-waiting',
+      '--gpu-busy-percent', '--gpu-clients',
     ]));
     if (parsed.separator !== argv.length) fail('fixture accepts no command');
     const cores = parsePositiveInteger(required(parsed.values, '--cores'), '--cores');
@@ -680,6 +716,8 @@ async function main(argv) {
       parseNonnegativeInteger(parsed.values.get('--unbounded-runs') ?? '0', '--unbounded-runs'),
       parseNonnegativeInteger(parsed.values.get('--queued-ahead') ?? '0', '--queued-ahead'),
       parseNonnegativeInteger(parsed.values.get('--exclusive-waiting') ?? '0', '--exclusive-waiting'),
+      parseNonnegativeInteger(parsed.values.get('--gpu-busy-percent') ?? '0', '--gpu-busy-percent'),
+      parseNonnegativeInteger(parsed.values.get('--gpu-clients') ?? '0', '--gpu-clients'),
     );
     print({ decision: code, profile, class: requested.name, cpus: requested.cpus, memoryMiB: requested.memoryMiB, memoryFullAvg10,
       leasedCpuCeilings, aggregateCpuLimit: aggregateCpus(profile, cores) });

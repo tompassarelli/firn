@@ -53,17 +53,26 @@ export session-seconds(?kind: Text): F64
 # of heavy work: no heavy work starts after it is queued, and it starts once
 # running batch leases end, whatever the pressure. Moderate work (builds,
 # dependency updates) keeps running beside it. Native clients are admitted on
-# cores and memory.
+# cores and memory, and wait while the GPU is busy; present, at most two
+# Warcraft clients run at once, so the compositor keeps GPU time.
 export batch-pressure-limit-basis-points(): F64
   3000
 
-export admission-decision(?profile: Text, ?kind: Text, ?cores: F64, ?memory-total-mib: F64, ?memory-available-mib: F64, ?cpu-some-avg10-basis-points: F64, ?protected-cpu-some-avg10-basis-points: F64, ?leased-memory-mib: F64, ?leased-batch-cpus: F64, ?leased-native-cpus: F64, ?requested-cpus: F64, ?requested-memory-mib: F64, ?peer-batch-runs: F64, ?peer-exclusive-runs: F64, ?unbounded-runs: F64, ?queued-ahead: F64, ?exclusive-waiting: F64): Text
+export gpu-busy-limit-percent(): F64
+  85
+
+export native-gpu-decision(?profile: Text, ?gpu-busy-percent: F64, ?gpu-clients: F64): Text
+  if(?profile = "attended" and ?gpu-clients >= 2, "DEFER_GPU_CLIENTS",
+    if(?gpu-busy-percent >= gpu-busy-limit-percent(), "DEFER_GPU_BUSY", "RUN"))
+
+export admission-decision(?profile: Text, ?kind: Text, ?cores: F64, ?memory-total-mib: F64, ?memory-available-mib: F64, ?cpu-some-avg10-basis-points: F64, ?protected-cpu-some-avg10-basis-points: F64, ?leased-memory-mib: F64, ?leased-batch-cpus: F64, ?leased-native-cpus: F64, ?requested-cpus: F64, ?requested-memory-mib: F64, ?peer-batch-runs: F64, ?peer-exclusive-runs: F64, ?unbounded-runs: F64, ?queued-ahead: F64, ?exclusive-waiting: F64, ?gpu-busy-percent: F64, ?gpu-clients: F64): Text
   require(?profile = "attended" or ?profile = "unattended", if(?cores <= 0 or ?memory-total-mib <= 0 or ?memory-available-mib <= 0 or ?requested-cpus < 0 or ?requested-memory-mib <= 0, "INVALID",
     if(?memory-available-mib - ?requested-memory-mib < memory-floor-mib(?profile, ?memory-total-mib), "DEFER_MEMORY_HEADROOM",
       if((?leased-memory-mib + ?requested-memory-mib) * 4 > ?memory-total-mib * 3, "DEFER_MEMORY_CAPACITY",
         if(?kind = "agent", "RUN",
           if(?kind = "native",
-            if(?leased-native-cpus + ?requested-cpus > aggregate-cpus(?profile, ?cores), "DEFER_NATIVE_CPUS", "RUN"),
+            if(?leased-native-cpus + ?requested-cpus > aggregate-cpus(?profile, ?cores), "DEFER_NATIVE_CPUS",
+              native-gpu-decision(?profile, ?gpu-busy-percent, ?gpu-clients)),
             if(?unbounded-runs > 0, "DEFER_UNBOUNDED_PEER",
               if(?peer-exclusive-runs > 0, "DEFER_EXCLUSIVE",
                 if(?kind = "exclusive",
