@@ -23,7 +23,7 @@ from pathlib import Path
 
 PROTECTED_PRESSURE_LIMIT = 20.0
 HELPER_TIMEOUT = 2.0
-LOCAL_CLAUDE_TYPES = {"worker", "worker-high", "worker-haiku", "general-purpose", "Explore", "fork"}
+LOCAL_CLAUDE_TYPES = {"worker", "worker-high", "worker-xhigh", "worker-haiku", "general-purpose", "Explore", "fork"}
 ACTIVE_SECONDS = 300
 URGENT = re.compile(r"(?m)^\W*CASE=URGENT\s+FACT=(?:[\"“”]([^\"“”]*)[\"“”]|['‘’]([^'‘’]*)['‘’])", re.IGNORECASE)
 

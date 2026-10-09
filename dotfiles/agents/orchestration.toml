@@ -58,22 +58,32 @@ effort = "high"
 role = "middle, harder half"
 start = [55, 50, 40]
 
-# Senior-plus execution: unknown-cause debugging, netcode, determinism,
-# engine and cross-module changes. Performance hands it work from the 50th.
+# The default Opus worker for the whole top range: senior-plus execution,
+# unknown-cause debugging, netcode, determinism, engine, cross-module changes,
+# planning and architecture. Performance hands it work from the 50th.
 [tiers."claude:opus-medium"]
 model = "claude-opus-5-5"
 effort = "medium"
 agent = "worker"
-role = "top"
+role = "top, planning and architecture"
 start = [85, 75, 50]
 
-# Planning and architecture always go here, plus the hardest execution.
+# Escalation only (Tom, 9 Oct): no band starts here. It takes work an Opus
+# medium worker failed or left unfinished through an execution problem.
 [tiers."claude:opus-high"]
 model = "claude-opus-5-5"
 effort = "high"
 agent = "worker-high"
-role = "planning and architecture"
-start = [98, 95, 90]
+role = "escalation after an Opus medium execution failure"
+start = [100, 100, 100]
+
+# Escalation only, after an Opus high execution failure.
+[tiers."claude:opus-xhigh"]
+model = "claude-opus-5-5"
+effort = "xhigh"
+agent = "worker-xhigh"
+role = "escalation after an Opus high execution failure"
+start = [100, 100, 100]
 
 # Used only when Tom names the model; never in a band or the escalation.
 # 9 Oct: Astra drains Tom's usage and SOL is good enough.

@@ -28,10 +28,12 @@ description: Assign independent work, choose provider tiers and ETAs, and run wo
 | Codex | high | `spawn_agent`, model `gpt-6.1-sol`, reasoning_effort `high` |
 | Claude | haiku | `worker-haiku`, Haiku 5.5 high |
 | Claude | medium | `worker`, Opus 5.5 medium |
-| Claude | high | `worker-high`, Opus 5.5 high |
+| Claude | high | `worker-high`, Opus 5.5 high, escalation only |
+| Claude | xhigh | `worker-xhigh`, Opus 5.5 xhigh, escalation only |
 
 - Set model and effort explicitly on every Codex spawn.
-- Use no Codex low/max, Sonnet or Opus low/above high.
+- Start every Opus-range item at Opus medium; escalate to high, then xhigh, only after an execution failure.
+- Use no Codex low/max, Sonnet or Opus low.
 - Use Astra xhigh or Fable only when Tom asks by name.
 - Compare Haiku/Opus token cost at 1:40; price Haiku prompts above 100k tokens at 5 times its normal rate.
 - Run local file/client work here through capacity admission, farm sweeps through `github-actions`, and public code-only Smashcraft/Wisp work through `cloud-workers` (4 cores/run).

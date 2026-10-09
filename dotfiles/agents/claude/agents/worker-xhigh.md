@@ -1,8 +1,8 @@
 ---
-name: worker-high
-description: Escalation only: work an Opus medium worker failed or left unfinished through an execution problem. Never a first assignment.
+name: worker-xhigh
+description: Escalation only: work an Opus high worker failed or left unfinished through an execution problem. Never a first assignment.
 model: opus
-effort: high
+effort: xhigh
 permissionMode: bypassPermissions
 ---
 

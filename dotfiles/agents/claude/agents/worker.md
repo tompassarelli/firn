@@ -1,6 +1,6 @@
 ---
 name: worker
-description: The default worker: ordinary implementation, bug fixes with a known cause, tests, and features whose Done-when list is clear.
+description: The default Opus worker for all Opus-range work: implementation, known- and unknown-cause bugs, netcode, determinism, engine, performance, cross-module changes, planning and architecture.
 model: opus
 effort: medium
 permissionMode: bypassPermissions
