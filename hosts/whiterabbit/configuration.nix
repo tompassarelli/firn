@@ -29,7 +29,7 @@
     enable = true;
     configFile = ../../dotfiles/kanata/kanata.kbd;
     port = 7070;
-    extraArgs = [ "--debug" "--log-layer-changes" ];
+    extraArgs = [ "--log-layer-changes" ];
     devices = [
       "/dev/input/event0"
       "/dev/input/by-id/usb-Kingsis_Peripherals_ZOWIE_Gaming_mouse-event-mouse"

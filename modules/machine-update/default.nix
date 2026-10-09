@@ -8,6 +8,7 @@
         Unit = {
           Description = "Nightly machine software update";
           OnFailure = [ "update-notify@%n.service" ];
+          X-SwitchMethod = "keep-old";
         };
         Service = {
           Type = "oneshot";
