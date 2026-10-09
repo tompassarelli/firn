@@ -36,6 +36,7 @@
     "workers",
     "estimate",
     "testing",
+    "lua-performance",
     "agent-policy",
     "agent-runtime-incident",
     "project-structure",
@@ -541,6 +542,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/hooks/lead-regrounding.sh"
+      }
+    },
+    "lua-performance": {
+      "kind": "skill",
+      "category": "development",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/lua-performance/SKILL.md"
       }
     }
   },
@@ -1349,6 +1358,16 @@
           "type": "hook",
           "targets": [
             "claude"
+          ]
+        }
+      ]
+    },
+    "lua-performance": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
           ]
         }
       ]

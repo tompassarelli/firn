@@ -17,7 +17,7 @@ written: 2026-10-09
 - Resolve Wisp capabilities through wisp:docs/index.md at node_modules/wisp/docs/index.md.
 - Read smashcraft:AGENTS.md and smashcraft:docs/typescript.md before changing Smashcraft's pinned Wisp consumer in ts/.
 - Discover Smashcraft commands through help and the documentation index.
-- Use `wurst-development` for Wurst source, `smashcraft-animation` for fighter animation and `smashcraft-stage-design` for stage art.
+- Use `wurst-development` for Wurst source, `smashcraft-animation` for fighter animation, `smashcraft-stage-design` for stage art and `lua-performance` for frame cost or Lua instruction and allocation ceilings.
 - Use `effect-development` for Bun host tools that start processes, wait, retry, hold resources or parse outside data.
 - Keep Lua-compiled map code in plain TypeScript without Effect imports.
 - Follow wisp:docs/cli.md's noun-first command vocabulary and update all callers on renames without aliases.
