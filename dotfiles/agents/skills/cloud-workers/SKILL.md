@@ -16,6 +16,7 @@ written: 2026-10-09
 - Build Lua 5.3.6 with LUA_32BITS or use Wisp's pinned command when Lua is required.
 - Keep account extra usage off so plan limits pause work instead of billing.
 - Run RemoteTrigger only from the main session and reuse one routine/repo.
+- Set `session_context.model` on every routine update: `claude-opus-5-5` for meaningful or complex work, `claude-haiku-5-5` for very simple mechanical work; never leave it unset.
 - Update the routine brief with a fresh v4 UUID, run it and retain its returned session ID.
 - Read get_run_log or list_runs for its result.
 - Put goal/files/Done when/ETA in a self-contained brief with `Refs repo#N` commits and no push notifications.
