@@ -115,12 +115,13 @@ applied" names the reason.
 
 From the patch notes for 3.0.0 (build 24268, 12 Sep) and 3.0.1 (build 24342, 7 Oct):
 
-- **Online only.** LAN mode is removed, and the client must stay online (offline
-  only through the Classic Client, reported to be Legacy 1.29, which has no Lua
-  and can't run Wisp maps). Our offline pool ran on 3.0.0 but stops at a
-  war3_loader assertion on 3.0.1; 3.0.1's notes don't mention it. Native checks
-  run as password-protected online private games on Tom's three accounts unless
-  an isolated, internet-free pool copy starts (wisp:docs/lan.md).
+- **Live build is 3.0.0.24268 again** (Blizzard rolled 3.0.1 back, 9 Oct;
+  check `curl http://us.patch.battle.net:1119/w3/versions`). On 3.0.0.24268
+  the offline LAN pool plays two-client matches on Wisp's own host and private
+  LAN plugin, which only accepts that build. 3.0.1.24342 had no LAN provider,
+  so if the live build leaves 24268, pool pairs stop at solo games until the
+  plugin is checked on the new build. Patch notes still call 3.0 online only.
+  The 3.0.1 items below (Blz names, art, asset fixes) are absent from 24268.
 - **Natives.** 3.0 natives carry the `Blz` prefix as of 3.0.1, and the
   unprefixed names will be removed. New: cooldown resets and settings, an
   aura toggle, `BlzUnitHeal`, `BlzRemoveEffect`, `BlzResetUnitTalents`, and
@@ -186,21 +187,32 @@ session records automatically; keep the covered recordings in Smashcraft's
 their other pending sessions. A first divergent frame or field needs a fix
 before that subsystem's headless check can meet its native box.
 
-- **Offline LAN pool** (wisp:docs/lan.md): Warcraft 3.0.1 removed LAN (only
-  Battle.net and loopback networks remain), so pool clients start but can't
-  play a two-client game; two-client checks run on the signed-in clones.
-  Offline clients still allow engine tools in a single-client game. Throwaway clients,
-  each pair in a loopback-only network namespace. `wisp lan setup --from
-  INSTALL [--pairs N]` once; `wisp lan pool [--pairs N | --pair K...]
-  [--pool-profile parity|visual] [--fps N]` runs pairs through the
-  machine-capacity helper; `wisp lan fresh MAP [--pair K]`, `lan status`,
-  `lan end --pair K`. State and `clients.json` are in
-  `~/.local/state/wisp/lan/`. Pad parity, captures, `accept` and desync hunts
-  run here.
-- **Signed-in A and B** (accounts c and b): tests that need Battle.net (real
-  netplay, `online host|join`, spectating), and every native check while the
-  offline pool can't start, as password-protected private games. Passive
-  reads only.
+- **Offline LAN pool** (wisp:docs/lan.md), the default for every native
+  check on 3.0.0.24268: pad parity, captures, `accept`, desync hunts and
+  engine tools. One updated install feeds every pair, with no account and no
+  sign-in: `wisp lan setup --from "<clone>/pfx/drive_c/Program Files
+  (x86)/Warcraft III" --pairs N` (reflinked copies, under 1 s for 4 pairs),
+  then `wisp lan pool --pair K... --pool-profile parity` (sound off; each pair
+  in a loopback-only namespace, admitted by the capacity helper), then
+  `bun wisp pad SCRIPT... --helper H --out DIR --map MAP --pair K...` with an
+  integrity map (`map build --profile integrity`, or `map rebuild MAP
+  --profile integrity`; the default dev build never answers the chat setup).
+  Measured 9 Oct: a pair runs 70 s after `lan pool` starts and is in a match
+  36 s after `pad` asks; two pairs played pad scripts at once with every
+  native checksum, row and fighter line equal to headless. Add pairs one at a
+  time while `protectedCpuSomeAvg10` stays under 20: two pairs is the default
+  on this machine under normal agent load (with the online clones off, two
+  pairs read 11-20 and three read 22-31; with the three clones on, two read
+  44). `lan fresh MAP
+  [--pair K]`, `lan status`, `lan end --pair K`; state and `clients.json` are
+  in `~/.local/state/wisp/lan/`.
+- **Signed-in clones B, C and D** (accounts b, c and d): only for tests that
+  need Battle.net itself (real netplay, `online host|join`, spectating), as
+  password-protected private games, and as the updated install the pool is
+  copied from. Leave them stopped otherwise: each costs about 0.5 core plus
+  about 1 core of Battle.net browser and its sound. After a Blizzard build
+  change, close each clone's game (Battle.net updates it on exit, about 2
+  min) and bring it back with `client doctor`. Passive reads only.
 - **Clone-a** (account a, Tom's): a third test client used only while Tom
   isn't playing (one login per account). `launch.sh a RUN_DIR` refuses while
   his Warcraft or Battle.net runs and stops clone-a within 10 s when either
@@ -216,7 +228,7 @@ names the service behind each, `client stop` stops them
 (wisp:docs/doctor.md, "Clients as services"). Never start a client or desktop
 from a shell or background task: it dies when that task ends.
 
-Each client set (an offline pair, the signed-in A+B pair, clone-a) has one
+Each client set (an offline pair, a signed-in clone pair, clone-a) has one
 lane owner. It runs every pending native check in batches: one immutable
 build, one session, many pad scripts and captures (`pad SCRIPT|DIR...`,
 `accept --only ID...`). An issue's worker lands its fix, labels the issue
