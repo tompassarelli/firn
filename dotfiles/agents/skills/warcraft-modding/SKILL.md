@@ -64,6 +64,7 @@ description: >-
 - Meet a subsystem's native box through its headless check plus weekly native spot batch only when corpus divergence is zero.
 - Keep automatically recorded covered sessions in smashcraft:ts/test/corpus/ for `bun wisp parity corpus` on every push in Bun/32-bit Lua.
 - Fix the first divergent frame/field before substituting headless coverage for native checks.
+- Measure native truth with exact reads before pixels: on offline 3.0.0 pool clients, use the engine debugger's reads (frame number, Lua state, checksums, per-frame cost; see wisp:docs/builds.md capabilities) and stack-trace builds, align native and Wisp frames by the read frame number, and use screenshots only for appearance that only pixels show.
 - Use the offline LAN pool only for Classic on build 3.0.0.24268 and signed-in clones B/C/D for Definitive.
 - Check the live build with `curl http://us.patch.battle.net:1119/w3/versions` before relying on the build-specific LAN plugin.
 - Keep pool pairs in solo games when the live build leaves 24268 until the plugin is checked on that build.
