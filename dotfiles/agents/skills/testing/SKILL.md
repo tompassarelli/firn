@@ -67,8 +67,10 @@ Anything else is scaffolding.
   in seconds. Every push runs the suite plus sweeps, properties and mutation
   testing in CI or on the farm. Never rerun a passing check on unchanged
   code.
-- Keep CPU per test bounded by the repository's ceiling. Shrink inputs or
-  move work to CI instead of raising it. Print the seed and commit on
+- Bound each test's cost by the repository's ceiling in a deterministic
+  quantity (instructions, simulated frames, allocations), never CPU or wall
+  seconds; a wall-clock limit is only a generous hang timeout. Shrink inputs
+  or move work to CI instead of raising it. Print the seed and commit on
   failure.
 
 ## Flaky tests
