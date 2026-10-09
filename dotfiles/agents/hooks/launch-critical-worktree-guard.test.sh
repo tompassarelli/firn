@@ -352,6 +352,21 @@ for cmd in "git -C $ROOT/real/main worktree remove --force $ROOT/real/main/workt
 done
 check deny "$ROOT/real/main/file.txt" "a file write into main/ stays refused beside a nested worktree"
 
+# The stray lane above is how it happens: a relative add with cwd in main/.
+for cmd in "git worktree add worktrees/x -b x|$ROOT/real/main" \
+           "git -C $ROOT/real/main worktree add $ROOT/real/main/worktrees/x -b x|$HOME" \
+           "git -C $ROOT/real/main worktree add main/worktrees/x -b x|$ROOT/real"; do
+  out="$(bash_decide "${cmd%|*}" "${cmd##*|}")"
+  case "$out" in
+    *'"deny"'*"worktree add $ROOT/real/worktrees/SLUG -b SLUG"*) pass=$((pass + 1)) ;;
+    *) fail=$((fail + 1)); echo "FAIL  a lane added inside main/ must be denied with the lane form: $cmd" >&2 ;;
+  esac
+done
+case "$(bash_decide "git -C $ROOT/real/main worktree add ../worktrees/x -b x" "$HOME")" in
+  "") pass=$((pass + 1)) ;;
+  *) fail=$((fail + 1)); echo "FAIL  git -C main worktree add ../worktrees/x must pass" >&2 ;;
+esac
+
 rm -rf "${FIXTURE:?}"
 unset ROOT FIXTURE pin_out
 

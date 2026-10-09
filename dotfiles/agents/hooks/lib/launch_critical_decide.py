@@ -930,6 +930,14 @@ def _worktree_decision(target, args):
         hit = protected_project(target)
         if hit and is_pin(hit[2]):
             return (target, "worktree add from an immutable pin")
+        # A relative lane path run from inside main/ lands the lane in main/,
+        # where this guard then refuses every later write and removal.
+        if paths:
+            path = _resolve(os.path.expanduser(paths[0]), target)
+            hit = protected_project(path)
+            if hit and not (is_pin(hit[2]) and os.path.basename(
+                    os.path.dirname(os.path.realpath(path))) == "pins"):
+                return (path, "worktree add")
         return None
     if subcommand in {"remove", "move"}:
         affected = paths[:1] if subcommand == "remove" else paths[:2]
