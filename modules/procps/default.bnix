@@ -1,0 +1,6 @@
+#lang beagle/nix
+(ns default)
+(nix/module [config lib pkgs ...]
+  {:tags-opt-in [development]
+   :options.myConfig.modules.procps.enable (lib.mkEnableOption "procps")
+   :config (lib.mkIf config.myConfig.modules.procps.enable {:environment.systemPackages [pkgs.procps]})})

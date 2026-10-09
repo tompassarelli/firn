@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+state="${XDG_STATE_HOME:-$HOME/.local/state}/machine-updates"
+now="$(date +%s)"
+for name in machine-update agent-runtime-update; do
+  stamp=0
+  if [[ -f "$state/$name.success" ]]; then read -r stamp < "$state/$name.success"; fi
+  [[ "$stamp" =~ ^[0-9]+$ ]] || stamp=0
+  if (( now - stamp > 129600 )); then
+    printf 'STALE: %s last successful run over 36 h ago; journalctl --user -u %s.service\n' "$name" "$name"
+  fi
+done

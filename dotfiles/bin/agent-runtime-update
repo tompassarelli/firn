@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# -le 1 ]] || exit 64
+state="${XDG_STATE_HOME:-$HOME/.local/state}/machine-updates"
+mkdir -p "$state"
+exec 9>"$state/agent-runtime-update.lock"
+flock 9
+codex-runtime-update "${1:-latest}"
+claude-runtime-update "${1:-latest}"
+if [[ "$(date +%H)" == 02 ]]; then
+  source_dir="$(dirname "$(readlink -f "$0")")"
+  while IFS= read -r updater; do
+    case "$(basename "$updater")" in codex-runtime-update|claude-runtime-update|agent-runtime-update) continue ;; esac
+    "$updater"
+  done < <(find "$source_dir" -maxdepth 1 -type f -executable -name '*-runtime-update' | sort)
+fi
+codex-runtime-refresh
+date +%s > "$state/.agent-runtime-update.success.$$"
+mv -f -- "$state/.agent-runtime-update.success.$$" "$state/agent-runtime-update.success"

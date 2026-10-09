@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+runtime="$(readlink -f "$HOME/.local/lib/codex/current/bin/codex")"
+while read -r unit rest; do
+  [[ "$unit" == codex-shared-*.service ]] || continue
+  pid="$(systemctl --user show "$unit" --property=MainPID --value)"
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || continue
+  [[ "$(readlink -f "/proc/$pid/exe")" != "$runtime" ]] || continue
+  socket="$XDG_RUNTIME_DIR/${unit%.service}/app-server.sock"
+  if ! codex-shared-idle "$socket"; then
+    printf '%s keeps its running binary; retry at the next timer.\n' "$unit"
+    continue
+  fi
+  env NORTH_CODEX_CONVERSATION_HOME="${NORTH_CODEX_CONVERSATION_HOME:-$HOME/.local/state/north/codex-pooled}" codex-shared-server >/dev/null
+done < <(systemctl --user list-units 'codex-shared-*.service' --state=active --no-legend --no-pager)

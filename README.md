@@ -55,6 +55,14 @@ same way via `lib.mkDarwinSystem` and a `darwinConfigurations` entry —
 
 ```bash
 firn rebuild          # build + validate + switch (current host)
+machine-update        # nightly inputs, validation, exact build, landing and switch
+agent-runtime-update [version|latest] # Codex and Claude at 02:00 and 13:00
+claude-runtime-update [version|latest] # install verified official Claude binary
+claude                # launch the atomically selected Claude runtime
+update-status         # report successful automatic updates older than 36 hours
+update-notify SERVICE # desktop notification with the failed service's journal
+codex-shared-idle SOCKET # probe live loaded threads before runtime adoption
+codex-runtime-refresh # adopt the selected runtime only on idle shared servers
 firn repo validate    # static check the .bnix tree
 firn host impact      # preview what would build
 firn repo diff        # diff regenerated .nix vs committed

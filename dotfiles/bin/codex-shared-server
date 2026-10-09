@@ -44,7 +44,7 @@ if [[ "$state" = active ]]; then
   [[ "$main_pid" =~ ^[1-9][0-9]*$ ]] || fail "shared server has no main process; inspect $unit"
   running_runtime="$(readlink "/proc/$main_pid/exe")" ||
     fail "cannot determine shared server runtime; inspect $unit"
-  if [[ "$running_runtime" != "$runtime" ]]; then
+  if [[ "$running_runtime" != "$runtime" ]] && "$(dirname "$self")/codex-shared-idle" "$socket"; then
     # Recreate the transient unit: restart would reuse its pinned environment.
     # Wait for systemd's stop job, including its normal shutdown timeout.
     systemctl --user stop "$unit" || fail "shared server could not stop; inspect $unit"

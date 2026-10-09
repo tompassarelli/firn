@@ -1,0 +1,6 @@
+#lang beagle/nix
+(ns default)
+(nix/module [config lib pkgs ...]
+  {:tags-opt-in [development]
+   :options.myConfig.modules.socat.enable (lib.mkEnableOption "socat")
+   :config (lib.mkIf config.myConfig.modules.socat.enable {:environment.systemPackages [pkgs.socat]})})

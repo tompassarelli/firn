@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# -le 1 ]] || { printf 'usage: claude-runtime-update [version|latest]\n' >&2; exit 64; }
+version="${1:-latest}"
+base=https://downloads.claude.ai/claude-code-releases
+if [[ "$version" == latest ]]; then version="$(curl -fsSL "$base/latest")"; fi
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9.]+)?$ ]] || { printf 'claude-runtime-update: invalid version\n' >&2; exit 64; }
+[[ "$(uname -s):$(uname -m)" == Linux:x86_64 ]] || { printf 'claude-runtime-update: unsupported platform\n' >&2; exit 64; }
+root="$HOME/.local/lib/claude"
+mkdir -p "$root/versions"
+exec 9>"$root/update.lock"
+flock 9
+stage="$(mktemp -d "$root/.stage.XXXXXXXX")"
+next="$root/.current.$$"
+cleanup() {
+  [[ -z "$stage" ]] || { rm -f -- "$stage/manifest.json" "$stage/claude.zst" "$stage/bin/claude" "$stage/provenance"; rmdir -- "$stage/bin" "$stage" 2>/dev/null || true; }
+  rm -f -- "$next"
+}
+trap cleanup EXIT
+mkdir "$stage/bin"
+curl -fsSL "$base/$version/manifest.json" -o "$stage/manifest.json"
+expected="$(python3 - "$stage/manifest.json" "$version" <<'PY'
+import json,re,sys
+m=json.load(open(sys.argv[1])); p=m['platforms']['linux-x64']; checksum=p['checksum']
+assert m['version']==sys.argv[2] and isinstance(checksum,str) and re.fullmatch('[a-f0-9]{64}',checksum)
+print(checksum)
+PY
+)"
+curl -fsSL "$base/$version/linux-x64/claude.zst" -o "$stage/claude.zst"
+zstd -dq "$stage/claude.zst" -o "$stage/bin/claude"
+actual="$(sha256sum "$stage/bin/claude")"; actual="${actual%% *}"
+[[ "$actual" == "$expected" ]] || { printf 'claude-runtime-update: decompressed binary checksum mismatch\n' >&2; exit 1; }
+chmod 755 "$stage/bin/claude"
+observed="$(DISABLE_AUTOUPDATER=1 DISABLE_INSTALLATION_CHECKS=1 "$stage/bin/claude" --version)"
+[[ "$observed" == "$version (Claude Code)" ]] || { printf 'claude-runtime-update: binary version mismatch\n' >&2; exit 1; }
+printf 'source=%s/%s/linux-x64/claude.zst\nversion=%s\nbinary_sha256=%s\n' "$base" "$version" "$version" "$actual" > "$stage/provenance"
+rm -- "$stage/claude.zst"
+destination="$root/versions/$version"
+if [[ -e "$destination" ]]; then
+  installed="$(sha256sum "$destination/bin/claude")"; installed="${installed%% *}"
+  [[ "$installed" == "$actual" ]] || { printf 'claude-runtime-update: existing runtime identity differs\n' >&2; exit 1; }
+else
+  mv -- "$stage" "$destination"
+  stage=""
+fi
+ln -s "versions/$version" "$next"
+mv -Tf -- "$next" "$root/current"
+printf 'Claude runtime active: %s\nProvenance: %s/provenance\n' "$observed" "$destination"

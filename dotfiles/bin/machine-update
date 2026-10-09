@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source_dir="$(dirname "$(readlink -f "$0")")"
+if [[ "${MACHINE_UPDATE_ADMITTED:-0}" != 1 ]]; then
+  exec bun "$source_dir/../agents/skills/machine-capacity/scripts/machine-capacity.mjs" run \
+    --class heavy --owner automatic-machine-update --timeout-seconds 3600 -- \
+    env MACHINE_UPDATE_ADMITTED=1 "$0" "$@"
+fi
+repo="$(git -C "$source_dir" rev-parse --show-toplevel)"
+state="${XDG_STATE_HOME:-$HOME/.local/state}/machine-updates"
+mkdir -p "$state"
+exec 9>"$state/machine-update.lock"
+flock 9
+git -C "$repo" fetch origin main
+container="$(dirname "$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)")"
+container="$(dirname "$container")"
+sudo -n -v
+lane="$container/worktrees/nightly-$(date +%Y%m%d-%H%M%S)-$$"
+branch="nightly-$(date +%Y%m%d-%H%M%S)-$$"
+git -C "$repo" worktree add -b "$branch" "$lane" origin/main
+cd "$lane"
+nix flake update
+firn repo build
+firn repo validate
+if [[ -z "$(git status --porcelain)" ]]; then
+  printf 'No input changes. Running generation retained.\n'
+else
+  while IFS= read -r -d '' path; do
+    case "$path" in
+      flake.lock|*.bnix|*.nix) git add -- "$path" ;;
+      *) printf 'machine-update: unexpected generated change: %s\n' "$path" >&2; exit 1 ;;
+    esac
+  done < <(git ls-files --modified --others --exclude-standard -z)
+  git commit -m "Nightly inputs $(date +%F)"
+  firn host prepare whiterabbit
+  safe-push --to main --keep-lane
+  firn rebuild
+fi
+date +%s > "$state/.machine-update.success.$$"
+mv -f -- "$state/.machine-update.success.$$" "$state/machine-update.success"
+if [[ "$(readlink -f /run/booted-system/kernel)" != "$(readlink -f /run/current-system/kernel)" ]]; then
+  notify-send 'Machine updated' 'The new kernel waits for your next reboot. No reboot was scheduled.'
+fi

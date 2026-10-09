@@ -11,6 +11,9 @@ if [[ -z "$firn_repo" ]]; then
   fi
 fi
 beagle_path="${BEAGLE_PATH:-$HOME/code/beagle/main}" # hardcoded-repo-path:allow
+if [[ "${1:-}" == repo && "${2:-}" == doctor ]]; then
+  "$(dirname "$(readlink -f "$0")")/update-status"
+fi
 runtime_root="${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}"
 runtime_bin="$runtime_root/current/bin"
 firn_source="$(dirname "$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")")"

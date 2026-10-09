@@ -2,6 +2,8 @@
 
 {
   myConfig.modules.activity.enable = lib.mkDefault true;
+  myConfig.modules.agent-runtime-update.enable = lib.mkDefault true;
+  myConfig.modules.alsa-lib.enable = lib.mkDefault true;
   myConfig.modules.ast-grep.enable = lib.mkDefault true;
   myConfig.modules.atuin.enable = lib.mkDefault true;
   myConfig.modules.bash.enable = lib.mkDefault true;
@@ -60,6 +62,7 @@
   myConfig.modules.libsecret.enable = lib.mkDefault true;
   myConfig.modules.libtool.enable = lib.mkDefault true;
   myConfig.modules.lutris.enable = lib.mkDefault true;
+  myConfig.modules.machine-update.enable = lib.mkDefault true;
   myConfig.modules.mpv.enable = lib.mkDefault true;
   myConfig.modules.musl.enable = lib.mkDefault true;
   myConfig.modules.nautilus.enable = lib.mkDefault true;
@@ -72,6 +75,7 @@
   myConfig.modules.pkg-config.enable = lib.mkDefault true;
   myConfig.modules.polkit.enable = lib.mkDefault true;
   myConfig.modules.poppler-utils.enable = lib.mkDefault true;
+  myConfig.modules.procps.enable = lib.mkDefault true;
   myConfig.modules.procs.enable = lib.mkDefault true;
   myConfig.modules.protonup-qt.enable = lib.mkDefault true;
   myConfig.modules.protonvpn-gui.enable = lib.mkDefault true;
@@ -88,6 +92,7 @@
   myConfig.modules.slurp.enable = lib.mkDefault true;
   myConfig.modules.smashcraft-controller.enable = lib.mkDefault true;
   myConfig.modules.smashcraft-test-pads.enable = lib.mkDefault true;
+  myConfig.modules.socat.enable = lib.mkDefault true;
   myConfig.modules.sqlite.enable = lib.mkDefault true;
   myConfig.modules.starship.enable = lib.mkDefault true;
   myConfig.modules.steam.enable = lib.mkDefault true;
@@ -100,6 +105,7 @@
   myConfig.modules.tree.enable = lib.mkDefault true;
   myConfig.modules.unrar.enable = lib.mkDefault true;
   myConfig.modules.unzip.enable = lib.mkDefault true;
+  myConfig.modules.update-notify.enable = lib.mkDefault true;
   myConfig.modules.upower.enable = lib.mkDefault true;
   myConfig.modules.uv.enable = lib.mkDefault true;
   myConfig.modules.vim.enable = lib.mkDefault true;

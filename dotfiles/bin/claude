@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+runtime="$HOME/.local/lib/claude/current/bin/claude"
+[[ -x "$runtime" ]] || { printf 'claude: run claude-runtime-update latest\n' >&2; exit 127; }
+export DISABLE_AUTOUPDATER=1 DISABLE_INSTALLATION_CHECKS=1
+exec "$runtime" "$@"

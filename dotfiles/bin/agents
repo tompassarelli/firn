@@ -12,6 +12,7 @@ usage() {
 }
 
 plan() {
+  "$(dirname "$(readlink -f "$0")")/update-status"
   local mode="" posture=""
   while [ $# -gt 0 ]; do
     case "$1" in

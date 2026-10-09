@@ -9,7 +9,7 @@
    [desktop -mako +river]
    theming
    auth
-   [development -beagle +claude]
+   [development -beagle +claude +machine-update +agent-runtime-update +update-notify +socat +procps +alsa-lib]
    javascript
    python
    [database -postgresql]

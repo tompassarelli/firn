@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# -eq 1 ]] || exit 64
+exec notify-send --print-id --urgency=critical --expire-time=0 'Automatic update failed' "$1 failed. Inspect: journalctl --user -u $1 -b"

@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# -eq 1 ]] || exit 64
+exec bun - "$1" <<'JS'
+const socket = new WebSocket(`ws+unix://${Bun.argv[2]}:/`);
+let serial = 0;
+const pending = new Map();
+const rejectPending = () => {
+  for (const request of pending.values()) request.reject(new Error('closed'));
+};
+socket.onerror = rejectPending;
+socket.onclose = rejectPending;
+socket.onmessage = event => {
+  try {
+    const message = JSON.parse(event.data);
+    const request = pending.get(message.id);
+    if (!request) return;
+    pending.delete(message.id);
+    clearTimeout(request.timer);
+    if (message.error) request.reject(new Error('rejected'));
+    else request.resolve(message.result);
+  } catch { rejectPending(); }
+};
+const rpc = (method, params) => new Promise((resolve, reject) => {
+  const id = ++serial;
+  const timer = setTimeout(() => { pending.delete(id); reject(new Error('timeout')); }, 10000);
+  pending.set(id, { resolve, reject, timer });
+  socket.send(JSON.stringify({ id, method, params }));
+});
+try {
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), 10000);
+    socket.onopen = () => { clearTimeout(timer); resolve(); };
+    socket.onerror = () => { clearTimeout(timer); reject(new Error('unavailable')); };
+  });
+  await rpc('initialize', {clientInfo:{name:'runtime-update',version:'1'},capabilities:{experimentalApi:true}});
+  socket.send(JSON.stringify({method:'initialized'}));
+  let cursor = null;
+  do {
+    const result = await rpc('thread/loaded/list', {cursor,limit:100});
+    if (!Array.isArray(result.data)) throw new Error('invalid response');
+    for (const threadId of result.data) {
+      if (typeof threadId !== 'string') throw new Error('invalid thread');
+      const result = await rpc('thread/read', {threadId,includeTurns:false});
+      const status = result.thread.status.type;
+      if (status !== 'idle' && status !== 'notLoaded') {
+        console.error('codex-shared-idle: active thread; runtime adoption deferred');
+        process.exit(1);
+      }
+    }
+    cursor = result.nextCursor;
+  } while (cursor);
+  process.exit(0);
+} catch (error) {
+  console.error(`codex-shared-idle: ${error.message}; runtime adoption deferred`);
+  process.exit(1);
+} finally { socket.terminate(); }
+JS
