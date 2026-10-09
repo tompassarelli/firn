@@ -32,7 +32,7 @@ const nativeSlice = 'native.slice';
 const nativeCpuWeight = 200;
 const gpuSampleMilliseconds = 500;
 const nativeGpuSamples = 10;
-const classNames = new Set(['agent', 'native', 'moderate', 'heavy', 'exclusive', 'gpu']);
+const classNames = new Set(['agent', 'native', 'moderate', 'heavy', 'exclusive', 'gpu', 'critical']);
 const nativeWaitingMilliseconds = 60000;
 const modes = new Map([['present', 'attended'], ['away', 'unattended'], ['auto', null]]);
 const idleSecondsForUnattended = 600;
@@ -90,7 +90,7 @@ function required(values, option) {
 
 function parseClass(values, cores) {
   const name = required(values, '--class');
-  if (!classNames.has(name)) fail('--class must be agent, native, moderate, heavy, exclusive, or gpu');
+  if (!classNames.has(name)) fail('--class must be agent, native, moderate, heavy, exclusive, gpu, or critical');
   let resources = resourceClass(name, cores);
   if (values.has('--memory-gib')) {
     const memoryGiB = Number(required(values, '--memory-gib'));
@@ -724,10 +724,10 @@ function readQueue(root) {
   return waiting;
 }
 
-// Admission order: waiting exclusive requests first, each part in arrival order.
+// Admission order: critical, then exclusive, then the rest, each part in arrival order.
 function priorityOrder(queue) {
-  return [...queue.filter(ticket => ticket.class === 'exclusive'),
-    ...queue.filter(ticket => ticket.class !== 'exclusive')];
+  const rank = ticket => ticket.class === 'critical' ? 0 : ticket.class === 'exclusive' ? 1 : 2;
+  return [0, 1, 2].flatMap(level => queue.filter(ticket => rank(ticket) === level));
 }
 
 function leaseSlice(className) {
@@ -957,7 +957,7 @@ async function admit(root, requested, create) {
 }
 
 async function runScoped(root, requested, owner, timeoutSeconds, command) {
-  if (requested.name === 'agent') fail('run --class must be moderate, heavy, exclusive, gpu, or native');
+  if (requested.name === 'agent') fail('run --class must be moderate, heavy, exclusive, gpu, critical, or native');
   // The parent limit and weights must exist before any admitted command executes.
   if (!applyProfile(activeProfile(root).profile, readSignals().cores)) {
     fail('cannot establish aggregate CPU limit and native weight', 75);

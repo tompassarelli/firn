@@ -21,8 +21,9 @@ export resource-class(?kind: Text, ?cores: F64): Resources
       if(?kind = "moderate", {cpus: if(?cores > 1, 2, 1), memoryMiB: 2048},
         if(?kind = "heavy", {cpus: if(?cores > 8, 6, if(?cores > 4, 3, 1)), memoryMiB: 8192},
           if(?kind = "gpu", {cpus: 1, memoryMiB: 2048},
-            require(?kind = "exclusive", {cpus: ?cores, memoryMiB: 16384},
-              "Unknown resource class"))))))
+            if(?kind = "critical", {cpus: ?cores - reserved-cpus("attended", ?cores), memoryMiB: 16384},
+              require(?kind = "exclusive", {cpus: ?cores, memoryMiB: 16384},
+                "Unknown resource class")))))))
 
 export reserve-class(?kind: Text): Bool
   ?kind = "agent"
@@ -35,7 +36,7 @@ export native-memory-request(?kind: Text, ?cores: F64, ?memory-gib: F64): Resour
     "--memory-gib requires a positive native memory request")
 
 export batch-class(?kind: Text): Bool
-  ?kind = "moderate" or ?kind = "heavy" or ?kind = "exclusive" or ?kind = "gpu"
+  ?kind = "moderate" or ?kind = "heavy" or ?kind = "exclusive" or ?kind = "gpu" or ?kind = "critical"
 
 # Longest hold per class in seconds. Exclusive work is short so it cannot
 # starve the queue it drains; every batch lease ends by its deadline.
@@ -55,7 +56,11 @@ export session-seconds(?kind: Text): F64
 # running batch leases end, whatever the pressure. Moderate work (builds,
 # dependency updates) keeps running beside it. Native clients are admitted on
 # cores and memory, and wait while the GPU is busy; present, at most two
-# Warcraft clients run at once, so the compositor keeps GPU time.
+# Warcraft clients run at once, so the compositor keeps GPU time. Critical work
+# (a landing train's verification, a named release-blocker diagnostic) skips
+# the queue and the CPU capacity and pressure waits, holds every core the
+# attended desktop reserve leaves for up to an hour, and still keeps the memory
+# floors, a running exclusive lease and the attended interactive-pressure wait.
 export batch-pressure-limit-basis-points(): F64
   3000
 
@@ -82,6 +87,8 @@ export admission-decision(?profile: Text, ?kind: Text, ?cores: F64, ?memory-tota
               native-gpu-decision(?profile, ?gpu-busy-percent, ?gpu-clients, ?gpu-runs)),
             if(?unbounded-runs > 0, "DEFER_UNBOUNDED_PEER",
               if(?peer-exclusive-runs > 0, "DEFER_EXCLUSIVE",
+                if(?kind = "critical",
+                  if(?profile = "attended" and ?protected-cpu-some-avg10-basis-points >= 1000, "DEFER_INTERACTIVE_PRESSURE", "RUN"),
                 if(?kind = "gpu" and ?native-waiting > 0, "DEFER_NATIVE_WAITING",
                 if(?kind = "gpu" and ?gpu-runs >= gpu-slots(), "DEFER_GPU_SLOTS",
                 if(?kind = "exclusive",
@@ -91,7 +98,7 @@ export admission-decision(?profile: Text, ?kind: Text, ?cores: F64, ?memory-tota
                     if(?profile = "attended" and ?protected-cpu-some-avg10-basis-points >= 1000, "DEFER_INTERACTIVE_PRESSURE",
                       if(?queued-ahead > 0, "DEFER_QUEUED",
                         if(?leased-batch-cpus + ?requested-cpus > aggregate-cpus(?profile, ?cores), "DEFER_CPU_CAPACITY",
-                          if(?cpu-some-avg10-basis-points > batch-pressure-limit-basis-points(), "DEFER_CPU_PRESSURE", "RUN"))))))))))))))), "Unknown capacity profile")
+                          if(?cpu-some-avg10-basis-points > batch-pressure-limit-basis-points(), "DEFER_CPU_PRESSURE", "RUN")))))))))))))))), "Unknown capacity profile")
 
 # `run` without --class sizes the lease from this command shape's released runs:
 # the p90 of measured peak cores and memory plus a quarter headroom, rounded up

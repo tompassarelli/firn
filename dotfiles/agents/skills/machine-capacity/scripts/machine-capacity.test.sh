@@ -117,6 +117,16 @@ fi
 [[ $(decision unattended exclusive 80000 0 0 0 0 --exclusive-waiting 1) == DEFER_QUEUED ]]
 [[ $(decision attended exclusive 80000 5000 0 0 0 --cpu-some-avg10-basis-points 9000) == RUN ]]
 [[ $(decision attended exclusive 80000 5000 0 6 8192 --peer-batch-runs 1) == DEFER_EXCLUSIVE ]]
+# Critical work skips the queue, a waiting exclusive and the CPU waits, keeps
+# the attended desktop reserve, and still respects memory floors, a running
+# exclusive lease and the desktop's own CPU wait.
+[[ $(fixture unattended critical 70000 0 0 0 0 | jq -c '[.decision, .cpus]') == '["RUN",20]' ]]
+[[ $(decision attended critical 80000 0 0 20 16384 --peer-batch-runs 4 --queued-ahead 3 --exclusive-waiting 1 --cpu-some-avg10-basis-points 9000) == RUN ]]
+[[ $(decision unattended critical 20000 0 0 0 0) == DEFER_MEMORY_HEADROOM ]]
+[[ $(decision unattended critical 80000 0 0 24 16384 --peer-batch-runs 1 --peer-exclusive-runs 1) == DEFER_EXCLUSIVE ]]
+[[ $(decision attended critical 80000 1000 0 0 0) == DEFER_INTERACTIVE_PRESSURE ]]
+[[ $(decision unattended heavy 80000 0 0 20 16384 --peer-batch-runs 1) == DEFER_CPU_CAPACITY ]]
+[[ $(decision unattended exclusive 80000 0 0 20 16384 --peer-batch-runs 1) == DEFER_EXCLUSIVE ]]
 
 fixture_runtime="$scratch/runtime"
 mkdir -p "$fixture_runtime"

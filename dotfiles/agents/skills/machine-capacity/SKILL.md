@@ -11,6 +11,7 @@ written: 2026-10-09
 - Resolve the helper at `$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs` and invoke it with Bun.
 - Admit sustained multi-core or >1 GiB work through the shared helper, never worker slots or load average.
 - Choose the smallest sufficient class: moderate = 2 CPUs/2 GiB; heavy = 6 CPUs/8 GiB; exclusive = all allowed cores/no peer batch; gpu = 1 CPU/2 GiB for headless Chrome/wisp renders (not grim captures), two at a time; native = 2 CPUs/4 GiB/no CPU quota.
+- Use critical (all cores minus the attended desktop reserve, 16 GiB, one-hour batch limits, front of the queue, no CPU-capacity or pressure wait) only as the landing-train holder or for a run with an explicit `--critical` release-blocker diagnostic.
 - Use `run --class CLASS --owner OWNER --timeout-seconds N -- COMMAND ARG...` for batch work, including legitimate setup/download time.
 - Omit `--class` on `run` to size from the usage log: p90 peak cores and memory of the shape's last 20 runs plus 25%, gpu when GPU-busy over a fifth of the run, moderate until three runs exist; the admission line shows `sizing`.
 - Use `session --class native --owner OWNER -- COMMAND ARG...` for Warcraft clients/private desktops, one scope per client and two per pair.
