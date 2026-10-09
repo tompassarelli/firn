@@ -39,7 +39,7 @@ check() {
 
 out="$(call s1)"
 case "$out" in
-  *CronCreate*'*/20 * * * *'*'Rebuild the DAG'*'spawn gate'*'30 minutes'*'one status line'*) check ok 'main session first spawn gets the CronCreate prompt' ;;
+  *CronCreate*'*/20 * * * *'*'Rebuild the DAG'*'spawn gate'*'45 minutes'*'one status line'*) check ok 'main session first spawn gets the CronCreate prompt' ;;
   *) check bad 'main session first spawn gets the CronCreate prompt' "$out" ;;
 esac
 out="$(call s1)"

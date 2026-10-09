@@ -43,11 +43,11 @@ written: 2026-10-09
 - Run local file/client work here through capacity admission, farm sweeps through `github-actions`, and public code-only Smashcraft/Wisp work through `cloud-workers` (4 cores/run).
 - Hand off Claude workers at 350k context, before auto-compaction fires at 400k for workers and the parent.
 - Keep `worker-sweep --wait` active for the 10-minute idle/handoff signal while workers run; act on each `WAIT` line (landing queue, Actions queue, serial debugging, GPU) with its named move.
-- As a lead with a goal, schedule a recurring CronCreate every 20 minutes that rebuilds the DAG from the goal's GitHub issues and main CI, staffs every unblocked node up to the spawn gate, recycles 30-minute workers and closes passed issues, so Tom never has to prompt a regrounding.
+- As a lead with a goal, schedule a recurring CronCreate every 20 minutes that rebuilds the DAG from the goal's GitHub issues and main CI, staffs every unblocked node up to the spawn gate, recycles workers at 200k context or 45 minutes and closes passed issues, so Tom never has to prompt a regrounding.
 - Stop the parent's monitors/background shells when their work ends.
 - Close finished Codex workers as soon as their report arrives.
 - Ask a worker idle 10 minutes without a report for one, then archive it; never park a worker to wait on a farm run, a client or another worker.
-- Recycle every worker at 30 minutes, measured with `date` against its recorded start time: it writes a complete handoff at a natural checkpoint and a fresh worker continues from it; check the fresh worker 5 minutes later for rediscovery.
+- Recycle a worker at 200k context or 45 minutes, whichever comes first (time measured with `date` against its recorded start time): it writes a complete handoff at a natural checkpoint and a fresh worker continues from it; check the fresh worker 5 minutes later for rediscovery.
 - Keep workers out of wait loops; messages reach a worker only between its commands.
 - Put the state checked at spawn time in every brief (main SHA and CI, lane SHAs, what landed) so workers never act on a stale report.
 - Have workers finish by running `safe-push` in the foreground with a 10-minute timeout, never in the background, because the stop hook kills background jobs; when a landing outlasts that, the worker reports its exact lane and the parent lands it.
