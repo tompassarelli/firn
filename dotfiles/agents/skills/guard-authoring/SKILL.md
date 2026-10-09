@@ -2,6 +2,8 @@
 name: guard-authoring
 description: >-
   Implement or change a command/write guard and its shared identity, activity gate, provider wiring, and deny/pass fixtures.
+grounded: 2026-10-08
+written: 2026-10-08
 ---
 
 # Guard authoring

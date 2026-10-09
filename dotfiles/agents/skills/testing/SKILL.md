@@ -4,6 +4,8 @@ description: >-
   Write, change, delete, run or speed up automated tests in any project: what
   earns a test, scaffolding versus durable tests, property, replay and golden
   tests, CPU cost per test, flaky tests, and pruning a suite.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # Testing

@@ -1,6 +1,8 @@
 ---
 name: workers
 description: Assign independent work, choose provider tiers and ETAs, and run workers from Codex or Claude.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # Workers

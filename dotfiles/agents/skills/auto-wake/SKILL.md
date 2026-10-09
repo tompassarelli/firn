@@ -5,6 +5,8 @@ description: >-
   Auto-wake mode: when the operator asks for "auto-wake" (or to keep working
   through usage limits, overnight or while away), schedule a recurring
   session heartbeat that resumes the work after a pause and keeps it moving.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # Auto-wake

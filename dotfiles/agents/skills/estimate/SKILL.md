@@ -2,6 +2,8 @@
 name: estimate
 description: >-
   Estimate agent execution time from comparable observations and report material forecast changes.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # Execution estimates

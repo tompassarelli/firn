@@ -4,6 +4,8 @@ description: >-
   Author and improve Smashcraft fighter animation: readable silhouettes,
   drills, locomotion, rolls, get-up attacks, paired grabs and throws, and
   nine-way damage reactions. Use for animation quality and action coverage.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # Smashcraft animation

@@ -5,6 +5,8 @@ description: >-
   projects, compiler workflows, tests, compile-time object data, and WC3 UI.
   Use when the requested source or project toolchain is Wurst; it does not
   require migrating existing Lua or Jass projects.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # Wurst development

@@ -3,6 +3,8 @@ name: image-context-budget
 description: >-
   Inspect repeated screenshots or graphical sessions without accumulating image
   payloads in conversation history; recover from image-related request-size failures.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # Image context

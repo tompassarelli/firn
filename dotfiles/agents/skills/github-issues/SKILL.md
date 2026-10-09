@@ -2,6 +2,8 @@
 name: github-issues
 description: >-
   Create or edit GitHub issues, including issue labels, using the repository's existing ticket and tagging conventions.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # GitHub issues

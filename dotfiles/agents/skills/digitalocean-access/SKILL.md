@@ -2,6 +2,8 @@
 name: digitalocean-access
 description: >-
   Access Tom's existing DigitalOcean account or greywrought-dev server and run authorized remote development work.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # DigitalOcean

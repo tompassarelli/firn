@@ -5,6 +5,8 @@ description: >-
   move phases, hit regions and hurt capsules, damage, knockback, shield,
   recovery, rollback state, presentation and selection. Use for a new fighter
   or a move change, not for other Warcraft maps.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # Smashcraft character creation

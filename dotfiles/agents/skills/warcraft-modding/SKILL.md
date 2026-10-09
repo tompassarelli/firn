@@ -5,6 +5,8 @@ description: >-
   fast rebuilds, headless and 32-bit Lua tests) and the native game (offline
   LAN test clients, signed-in clients, startup recovery, desync debugging).
   Use for any Warcraft III map work, Smashcraft's ts/ included.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # Warcraft modding

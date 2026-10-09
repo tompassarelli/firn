@@ -2,6 +2,8 @@
 name: firn
 description: >-
   Change ~/code/nixos-config or install system-wide software; assess maintained-project system-closure ingress. Other project flakes use nix-development.
+grounded: 2026-10-06
+written: 2026-10-06
 ---
 
 # Firn

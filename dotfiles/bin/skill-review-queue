@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo="${SKILL_REVIEW_REPO:-tompassarelli/north}"
+title="Skill review queue"
+
+stale="$(agents stale --json)"
+items="$(jq -r '
+  [.[] | . as $s | ("grounded", "written") as $f | select($s.due[$f])
+    | {f: $f, line: "- [ ] `\($s.id)` \($f) (last \($s.due[$f].date), \($s.due[$f].ageDays) days)"}]
+  | (map(select(.f == "grounded")) + map(select(.f == "written"))) | .[].line' <<<"$stale")"
+count="$(jq '[.[].due | keys[]] | length' <<<"$stale")"
+existing="$(gh issue list -R "$repo" --state open --search "\"$title\" in:title" --json number,title \
+  --jq "map(select(.title == \"$title\")) | .[0].number // empty")"
+
+if [[ "$count" -eq 0 ]]; then
+  if [[ -n "$existing" ]]; then
+    gh issue close -R "$repo" "$existing" --comment "No skill review is due ($(date -I))." >/dev/null
+    printf 'skill-review-queue: none due; closed %s#%s\n' "$repo" "$existing"
+  else
+    printf 'skill-review-queue: none due\n'
+  fi
+  exit 0
+fi
+
+body="Skill reviews older than 30 days, from \`agents stale\` on $(date -I). Grounding comes first: it rechecks facts against the real tools, versions and paths; \`written\` compresses prose and moves knowledge to its one owner without changing facts. Each review bumps its own frontmatter date, and its commit names which review it was.
+
+$items"
+if [[ -n "$existing" ]]; then
+  gh issue edit -R "$repo" "$existing" --body "$body" >/dev/null
+  printf 'skill-review-queue: %s due; updated %s#%s\n' "$count" "$repo" "$existing"
+else
+  url="$(gh issue create -R "$repo" --title "$title" --body "$body")"
+  printf 'skill-review-queue: %s due; opened %s\n' "$count" "$url"
+fi

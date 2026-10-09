@@ -2,6 +2,8 @@
 name: repo-safety
 description: >-
   Edit and publish ~/code repositories through owned worktrees, enumerated staging, and safe-push; preserve main checkouts, pins, and peer work.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # Repository safety

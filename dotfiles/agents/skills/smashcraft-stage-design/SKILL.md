@@ -5,6 +5,8 @@ description: >-
   set pieces, the deck's underside, water, sky, light and fighter contrast, in
   Classic and Definitive. Use for any stage art, stage composition or stage
   look issue, a new stage, or a stage review.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # Smashcraft stage design

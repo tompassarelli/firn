@@ -2,6 +2,8 @@
 name: clause-authoring
 description: >-
   Author or debug Clause source using the consuming project's immutable compiler pin, authoring card, and source checker.
+grounded: 2026-10-06
+written: 2026-10-06
 ---
 
 # Clause authoring

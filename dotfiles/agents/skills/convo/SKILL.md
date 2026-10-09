@@ -2,6 +2,8 @@
 name: convo
 description: >-
   Find past agent conversations, decisions, or session IDs with the indexed convo CLI. Use it instead of recursive searches of transcript storage.
+grounded: 2026-10-06
+written: 2026-10-06
 ---
 
 # Search conversations

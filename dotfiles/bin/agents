@@ -8,7 +8,7 @@ set -uo pipefail
 north_bin="${AGENTS_NORTH_BIN:-north}"
 
 usage() {
-  printf 'usage: agents {status [--json]|inspect <id> [--json]|path <id>|on <id>|off <id>|sync|plan [--mode split|claude-only|codex-only] [--posture efficiency|balanced|performance]}\n' >&2
+  printf 'usage: agents {status [--json]|stale [--json]|inspect <id> [--json]|path <id>|on <id>|off <id>|sync|plan [--mode split|claude-only|codex-only] [--posture efficiency|balanced|performance]}\n' >&2
 }
 
 plan() {
@@ -142,7 +142,7 @@ print("escalation: " + ", ".join(label(r) for r in avail) + ", then recommend to
 }
 
 case "${1:-}" in
-  status|inspect|path|on|off|sync) ;;
+  status|stale|inspect|path|on|off|sync) ;;
   plan)
     shift
     plan "$@"

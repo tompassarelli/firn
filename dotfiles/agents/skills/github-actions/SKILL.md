@@ -5,6 +5,8 @@ description: >-
   many agents against GitHub: share the account's concurrent-job limit and
   hourly API budget, cap matrices, join runs, poll with backoff, and clean up
   scratch branches.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # GitHub Actions

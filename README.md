@@ -62,6 +62,7 @@ claude                # launch the atomically selected Claude runtime
 update-status         # report successful automatic updates older than 36 hours
 update-notify SERVICE # desktop notification with the failed service's journal
 proton-log-watchdog   # strip PROTON_LOG from Wisp launch.sh, truncate clone logs over 1 GiB
+skill-review-queue    # weekly: open or update the north issue of skill reviews older than 30 days
 codex-shared-idle SOCKET # probe live loaded threads before runtime adoption
 codex-runtime-refresh # adopt the selected runtime only on idle shared servers
 firn repo validate    # static check the .bnix tree

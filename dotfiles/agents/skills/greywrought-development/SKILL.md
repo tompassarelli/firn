@@ -2,6 +2,8 @@
 name: greywrought-development
 description: >-
   Build, run, or change the Greywrought Clause game using its pinned compiler, declared toolchain, and existing playability check.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # Greywrought

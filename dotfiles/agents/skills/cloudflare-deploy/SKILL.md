@@ -2,6 +2,8 @@
 name: cloudflare-deploy
 description: >-
   Authenticate, deploy, and verify Cloudflare Workers or Pages through this machine's approved credential launcher.
+grounded: 2026-10-06
+written: 2026-10-06
 ---
 
 # Cloudflare deployment

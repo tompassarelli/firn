@@ -2,6 +2,8 @@
 name: game-design-prototyping
 description: >-
   Design and build playable game prototypes and worlds using Tom's local Quaternius models, scenery, and animation library; make navigation and combat legible without placeholder actors.
+grounded: 2026-10-09
+written: 2026-10-09
 ---
 
 # Game design and prototyping
