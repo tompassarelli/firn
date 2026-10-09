@@ -57,25 +57,24 @@ description: >-
 - Measure existing compressed imports before re-encoding through wisp:docs/asset-ingestion.md.
 - Use wisp:docs/ci.md's reusable workflow and keep private-runner .w3x builds off public uploads.
 - Register `test()` in `*.tests.ts` for Bun and 32-bit Lua under the `testing` skill.
-- Keep tests for reference values, gameplay/netcode rules or reproduced defects without changing expectations merely to pass.
+- Keep tests only for external references or decided numbers with sources; add no bug regression unless existing behavior was genuinely missed.
 
 ## Native clients and checks
 
 - Meet a subsystem's native box through its headless check plus weekly native spot batch only when corpus divergence is zero.
 - Keep automatically recorded covered sessions in smashcraft:ts/test/corpus/ for `bun wisp parity corpus` on every push in Bun/32-bit Lua.
 - Fix the first divergent frame/field before substituting headless coverage for native checks.
-- Use the offline LAN pool as the default native route on build 3.0.0.24268.
+- Use the offline LAN pool only for Classic on build 3.0.0.24268 and signed-in clones B/C/D for Definitive.
 - Check the live build with `curl http://us.patch.battle.net:1119/w3/versions` before relying on the build-specific LAN plugin.
 - Keep pool pairs in solo games when the live build leaves 24268 until the plugin is checked on that build.
 - Use integrity maps for pad chat setup rather than default dev maps.
 - Read [lan-pair-batching.md](references/lan-pair-batching.md) for pool setup, capacity limits, pair ownership and issue queues.
-- Reserve signed-in clones B/C/D for Battle.net tests and the updated install feeding the pool.
+- Use signed-in clones B/C/D for Definitive, Battle.net tests and the updated install feeding the Classic pool.
 - Preserve signed-in clients at the menu for the next assigned Battle.net check.
-- Start clone-a only through `launch.sh a RUN_DIR` while Tom is not playing.
-- Use Tom's account-a display :0 install for `wisp play` only when requested, without agent tests or engine tools.
+- Never touch Tom's game install or account a.
 - Start signed-in clients through `bun wisp client start [CLIENT...] --clients-file FILE` user services rather than shell/background tasks.
 - Use `client status` and `client stop` for those services.
-- Give each offline pair, signed-in pair or clone-a set one worker responsible for its batched native checks.
+- Give each offline Classic pair or signed-in Definitive/Battle.net pair one worker for its batched native checks.
 - Run passive engine reads only on signed-in clients.
 - Restrict traps, trace, gdb, memory writes and injection to offline pool clients with loopback-only namespaces, no `-uid` and no Battle.net program in the prefix.
 - Restrict tools to the project's clients file and keep decrypted code dumps outside repositories.
@@ -97,12 +96,11 @@ description: >-
 - Host through the menu socket after the post-login ladder-map scan to avoid -loadfile losing imported assets.
 - Search Hive Workshop first for Warcraft bugs and change one variable per native experiment under `debugging`.
 - Use off-monitor private desktops through `private-desktop-development`.
-- Ask once per session for requested main-display use and give a one-line heads-up before each use.
+- Keep native tests on private desktops.
 - Keep one runtime per prefix and launch Warcraft through signed-in Battle.net Play instead of Warcraft III.exe.
 - Fix an empty Options/Exit Game shell through launcher Play rather than another sign-in.
 - Count launch success only after the real menu and one gameplay action work.
-- Sign Tom's account-a install in from the encrypted store when needed so he can press Start.
-- Preserve Tom's account without sign-out, switching or test-client reuse and never print decrypted credentials.
+- Never print decrypted credentials.
 
 ## Conditional references
 

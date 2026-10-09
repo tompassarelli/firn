@@ -9,17 +9,17 @@ description: >-
 # Testing
 
 - Read [sources](references/sources.md) only for an unresolved source or when revising this skill.
-- Name an oracle before writing a test: native capture, reference value, design rule, old-code reproduction, or independent invariant.
-- Tag each title `[native]`, `[reference]`, `[spec #N]`, `[repro #N]`, `[invariant]`, or `[provisional]`.
+- Keep a test only for an external reference or a decided number with its source.
+- Cite the external reference or decided number/source in the title or fixture.
 - Keep headless expected rows provisional until native capture confirms them.
 - Delete a test without an oracle.
 - Never derive expected values from the implementation's output.
-- Pin every untested rule, fixed bug, netcode rule and invariant through the product's real path.
+- Add no bug regression unless existing behavior was genuinely missed.
 - Name one rule or defect per title; print the case and `got X, want Y` on failure.
 - Extend an existing table before adding a harness.
 - Use one check function per layer.
 - Choose the cheapest level running real code: small = one process without files/network/sleep/clock; medium = one machine with files/subprocesses/localhost; large = real clients/network.
-- Add a smaller regression test when a larger test finds a bug.
+- Add a smaller test only when it pins a missing external reference or decided number/source.
 - Keep golden output compact and checked in; mask nondeterminism once, read update diffs, and commit their cause.
 - Fail on a golden without a test.
 - Never regenerate goldens wholesale to get green.
@@ -52,14 +52,14 @@ description: >-
 - Fix the flaky cause.
 - Never retry to green or add retries, sleeps or wider tolerances.
 - Assert known wrong behavior with its issue number instead of skipping it.
-- Delete implementation restatements, compiler/lint checks, tooling/framework/mock tests, cheaper-path duplicates and assertions that pin nothing; list deletions and reasons in the commit.
+- Delete tautologies, change detectors, implementation restatements, compiler/lint checks, tooling/framework/mock tests, cheaper-path duplicates and assertions without an external reference or decided number/source.
 - Retain cited outside reference values.
-- Shrink or move tests pinning rules, references and defects instead of deleting coverage.
+- Shrink or move tests pinning external references or decided numbers with sources instead of deleting coverage.
 - Break the rule once to check its test fails.
-- Fix or delete ineffective tests and add a missing rule test.
+- Fix or delete ineffective tests and add only a genuinely missed behavior with an external reference or decided number/source.
 - Use changed-line mutation testing on the farm.
 - Use coverage to locate unpinned code rather than targeting a percentage.
-- Write the title, choose the real path, supply the smallest threshold/input case, cite the oracle, and observe failure before fixing a defect.
+- Write the title, choose the real path, supply the smallest threshold/input case and cite the external reference or decided number/source.
 - Keep tests deterministic, independent and runnable in any order.
 - Never weaken expectations, tolerances or coverage to pass.
 - Report a suspected wrong test, or update a Tom-changed rule and its values in the same named commit.

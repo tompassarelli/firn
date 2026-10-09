@@ -18,6 +18,7 @@
 - Answer Tom's question in the first line, then continue.
 - Drop what Tom corrects without adding replacement process.
 - Write Done when with at most 5 measured command/observation checks and Not required before building.
+- Turn each guarantee into one measured check.
 - Build, launch and exercise the whole product before deeper checks.
 - Fix a failed step at its cause and retry within the task.
 - Stop after 2 failed fixes on one box with one recommendation.
@@ -26,6 +27,8 @@
 - Land each finished piece immediately.
 - Stop when the boxes pass, the change lands and the issue closes.
 - Report outcome, measured numbers and Needs you in plain words.
+- Give one line of remaining risk without "does not prove".
+- Report a problem blocking no box in one line and do not fix it now.
 - Report progress as the count and names of boxes left.
 - Write paths as `~/...` or `repo:path`.
 
@@ -34,7 +37,11 @@
 - Keep secrets out of output, logs and commits; use the repository's encrypted mechanism.
 - Add no API keys or API billing.
 - Transfer existing logins between Tom's machines only over encrypted transport.
-- Preserve home/system directories, project containers, checkouts, Git metadata, transcripts, pins and other agents' worktrees.
+- Never recursively delete home or system directories, `~/code/<project>` containers, checkouts, `.git`, transcripts, pins or another agent's worktree.
+- Never build a delete target from an unset variable or a glob.
+- Never force-push or rewrite history that is already pushed.
+- Never hand-edit generated `.nix` from `.bnix`, `~/.claude/CLAUDE.md` or `~/.codex`.
+- Never touch Tom's game install or account a.
 - Publish through `safe-push`; use `--keep-lane` only to retain a landed worktree.
 - Edit generated agent policy through `nixos-config:dotfiles/agents/` or `north:agent-machinery/`, then run `agents sync`.
 - Load `repo-safety` before handling disc images or extracted game files.
@@ -69,7 +76,7 @@
 - Remove every caller when removing a feature; use Git history as its backup.
 - Update all in-repo callers with a breaking change; support only main.
 - Reuse the existing pattern before adding one.
-- Comment only a constraint the code cannot show.
+- Don't add code comments; allow only one line naming a determinism, engine, Lua or external-format constraint a reader would otherwise break.
 - Add new commands to the command list or feature index.
 - Load `testing` before writing, changing, deleting or running tests.
 - Run affected tests locally and full suites/sweeps on the farm on every push.
@@ -77,7 +84,7 @@
 - Run a broader farm sweep once for a load-bearing rule.
 - Allow one confirming timing run under an exclusive lease.
 - Use `CASE=<letter> FACT="<new fact>"` only for the hook's one permitted extra run.
-- Report a PEER line instead of additional checks.
-- Preserve tests that pin a real rule, reference value or reproduced defect.
+- Keep tests only for an external reference or a decided number with its source.
+- Add no bug regression unless existing behavior was genuinely missed.
 - Delete tests that duplicate a cheaper check or restate tooling/implementation.
 - Never weaken tests or retry flakes to green.

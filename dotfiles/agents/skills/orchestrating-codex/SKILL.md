@@ -9,7 +9,6 @@ description: >-
 
 - Use `codex-lead --help` for start/id/send/goal/status/workers syntax.
 - Never type into its window or take Tom's focus.
-- Run `agents plan` before staffing.
 - Assign SOL-starting bands to the Codex lead and Claude-starting bands to Claude workers.
 - Read `workers`; choose tiers from the plan and `worker-ledger --summary`, never low/max or Astra without Tom naming it.
 - Write `~/.local/state/agents/handoffs/codex-lead-brief.md` with scope, first reads, ordered queue, checks, files, ETA and the lead's staffing/landing/status role.
@@ -45,4 +44,5 @@ description: >-
 - Send only to threads with live sessions; restart a finished exec session before expecting replies.
 - Ask the lead for encrypted worker briefs rather than reading them from its log.
 - Read [session diagnostics](references/session-diagnostics.md) only for socket, thread/log lookup or test-thread cleanup.
+- Report a PEER line instead of additional checks.
 - Report completion when the queue is empty.
