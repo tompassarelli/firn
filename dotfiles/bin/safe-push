@@ -617,13 +617,33 @@ collect_train() {
   done
 }
 
+# A candidate or rebase can move a Bun lockfile (a vendored pin bump) under a
+# worktree whose node_modules were installed for another commit; the checks
+# would then judge the new code against old dependencies. Reinstall each
+# installed Bun project whose package.json or bun.lock no longer matches.
+sync_dependencies() {
+  local lock dir want stamp top
+  top=$(git rev-parse --show-toplevel)
+  while IFS= read -r lock; do
+    dir="$top/$(dirname "$lock")"
+    [ -d "$dir/node_modules" ] || continue
+    want=$(cat "$dir/bun.lock" "$dir/package.json" 2>/dev/null | sha256sum | cut -c1-16)
+    stamp="$dir/node_modules/.safe-push-deps"
+    [ "$(cat "$stamp" 2>/dev/null)" != "$want" ] || continue
+    echo "safe-push: $lock changed — bun install --frozen-lockfile in $dir"
+    (cd "$dir" && bun install --frozen-lockfile) || return 1
+    printf '%s\n' "$want" >"$stamp"
+  done < <(git ls-files -- 'bun.lock' '*/bun.lock')
+}
+
 # Prints "ok" or the farm URL (else the log path) of the failed check on the
 # train branch's HEAD; returns nonzero on failure.
 check_candidate() {
   local hook="$1" base="$2" log="$3" head url
   head=$(git rev-parse HEAD)
   : >"$log"
-  if check_instruction_limits "$head" >>"$log" 2>&1 \
+  if sync_dependencies >>"$log" 2>&1 \
+      && check_instruction_limits "$head" >>"$log" 2>&1 \
       && gitleaks detect --no-banner --redact --log-opts="$base..$head" >>"$log" 2>&1 \
       && (cd "$repo_root" && printf 'refs/heads/%s %s refs/heads/%s %s\n' "$train_branch" "$head" "$to" "$base" \
         | "$hook" origin "$lock_url") 2>&1 | tee -a "$log" >&2; then
@@ -799,7 +819,7 @@ run_pre_push_checks() {
   else
     echo "safe-push: running the pre-push checks on $head before taking the landing lock"
   fi
-  if ! (cd "$top" && printf '%s %s refs/heads/%s %s\n' "$local_ref" "$head" "$to" "${base:-$zero}" \
+  if ! sync_dependencies || ! (cd "$top" && printf '%s %s refs/heads/%s %s\n' "$local_ref" "$head" "$to" "${base:-$zero}" \
       | "$hook" origin "$lock_url"); then
     echo "safe-push: ✗ the pre-push checks failed; NOT pushed." >&2
     exit 1

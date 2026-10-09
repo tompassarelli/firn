@@ -918,6 +918,43 @@ grep -q 'failed on this lane in the landing train (https://github.com/o/r/action
 grep -qx "$("$real_git" --git-dir="$landing_remote" rev-parse main)" "$landing_root/hook-runs" \
   || fail 'mixed train: main is not a commit the checks passed'
 
+# A lane that moves a Bun lockfile (a vendored pin bump) is checked against a
+# fresh install in the holder's worktree, not the holder's old node_modules.
+new_landing_origin train-deps
+printf '[landing]\n\texact = true\n' >"$landing_root/seed/.safe-push"
+printf '{}\n' >"$landing_root/seed/package.json"
+printf 'pin 1\n' >"$landing_root/seed/bun.lock"
+"$real_git" -C "$landing_root/seed" add .safe-push package.json bun.lock
+"$real_git" -C "$landing_root/seed" commit -qm 'exact landings, pin 1'
+"$real_git" -C "$landing_root/seed" push -q "$landing_remote" main
+printf '#!/usr/bin/env bash\n[ "$*" = "install --frozen-lockfile" ] && cp bun.lock node_modules/installed.lock\n' >"$real_bin/bun"
+chmod +x "$real_bin/bun"
+make_landing_clone "$landing_root/a" a.txt
+mkdir "$landing_root/a/node_modules" && cp "$landing_root/a/bun.lock" "$landing_root/a/node_modules/installed.lock"
+"$real_git" -C "$landing_root/a" config core.excludesFile /dev/null
+printf 'node_modules/\n' >"$landing_root/a/.git/info/exclude"
+make_landing_clone "$landing_root/b" bun.lock
+for lane in a b; do
+  printf '#!/usr/bin/env bash\ncat >/dev/null\ncmp -s bun.lock node_modules/installed.lock || { echo stale dependencies; exit 1; }\n' >"$landing_root/$lane/.git/hooks/pre-push"
+  chmod +x "$landing_root/$lane/.git/hooks/pre-push"
+done
+mkdir "$landing_root/b/node_modules" && cp "$landing_root/b/bun.lock" "$landing_root/b/node_modules/installed.lock"
+printf 'node_modules/\n' >"$landing_root/b/.git/info/exclude"
+lock_key=$(printf '%s' "$landing_remote" | sha256sum | cut -c1-16)
+mkdir -p "$scratch/xdg-state/safe-push"
+flock "$scratch/xdg-state/safe-push/$lock_key.lock" sleep 3 & blocker=$!
+sleep 0.5
+run_landing "$landing_root/a" & pid_a=$!
+sleep 0.5
+run_landing "$landing_root/b" & pid_b=$!
+wait "$blocker" || true
+status_a=0; wait "$pid_a" || status_a=$?
+status_b=0; wait "$pid_b" || status_b=$?
+rm -f "$real_bin/bun"
+case_output="$(cat "$landing_root/a.out" "$landing_root/b.out")"
+[ $((status_a + status_b)) -eq 0 ] || fail "train with a lockfile change: a lane failed: $case_output"
+[ "$("$real_git" --git-dir="$landing_remote" show main:bun.lock)" = b ] || fail 'train with a lockfile change: main lacks the new lockfile'
+
 # A safe-push started by the checks of one that holds the landing lock (a
 # farm run's scratch push) proceeds instead of waiting on its parent.
 new_landing_origin reentry
