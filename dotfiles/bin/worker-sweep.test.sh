@@ -2,7 +2,8 @@
 # Checks are eval strings, expanded when they run.
 # shellcheck disable=SC2016,SC2034
 # Fixture session for worker-sweep: which workers count as running, the
-# STALLED and HANDOFF flags, session selection and --wait's exit.
+# STALLED and HANDOFF flags, session selection and --wait's exit, plus one
+# fixture per WAIT flag: landing queue, Actions queue, serial debugging, GPU.
 set -uo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -10,6 +11,22 @@ sweep=$repo/dotfiles/bin/worker-sweep
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/worker-sweep-test.XXXXXX")
 trap 'rm -rf "${scratch:?}"' EXIT
 export CLAUDE_CONFIG_DIR=$scratch/claude THREADS_DB=$scratch/threads.db CODEX_CONFIG_DIR=$scratch/codex
+export XDG_STATE_HOME=$scratch/state AGENT_CAPACITY_GPU_BUSY=$scratch/gpu WORKER_SWEEP_PS=$scratch/ps PATH=$scratch/bin:$PATH
+mkdir -p "$scratch/bin"
+cat >"$scratch/bin/gh" <<'GH'
+#!/usr/bin/env bash
+case "$2" in
+  repos/tompassarelli/smashcraft/actions/*)
+    printf '{"total_count":5,"workflow_runs":[{"created_at":"%s"}]}\n' "$(date -u -d '-3 minutes' +%FT%TZ)" ;;
+  repos/tompassarelli/wisp/actions/*)
+    printf '{"total_count":1,"workflow_runs":[{"created_at":"%s"}]}\n' "$(date -u -d '-25 minutes' +%FT%TZ)" ;;
+  repos/tompassarelli/smashcraft/issues*) printf 'smashcraft#9\n' ;;
+  *) : ;;
+esac
+GH
+chmod +x "$scratch/bin/gh"
+echo 95 >"$scratch/gpu"
+: >"$scratch/ps"
 
 python3 - "$CLAUDE_CONFIG_DIR/projects" <<'PY'
 import json, os, sys, time
@@ -60,6 +77,27 @@ session("-home-tom", "new-session", [
     ("interrupted", "worker", [brief(30), tool_use(5, 300000), result(5), {"type": "user", "timestamp": ts(4), "message": {"role": "user", "content": [{"type": "text", "text": "[Request interrupted by user]"}]}}]),
     ("explore", "Explore", [brief(30), tool_use(1, 500000)]),
 ])
+
+def render(m, tid):
+    return {"type": "assistant", "timestamp": ts(m), "message": {"role": "assistant", "usage": usage(90000),
+            "content": [{"type": "tool_use", "id": tid, "name": "Bash", "input": {"command": "wisp-render shot.png"}}]}}
+def failed(m, tid):
+    return {"type": "user", "timestamp": ts(m), "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tid, "is_error": True, "content": "exit 1"}]}}
+dbg = "Item: smashcraft#5 desync. Category: debugging-unknown-cause."
+bug = "Item: smashcraft#9 crash. Category: implementation."
+waits = session("-home-tom", "wait-session", [
+    ("dbg1", "worker", [brief(90, dbg), tool_use(80, 90000), result(80), text(70, 91000, "Not done: first idea failed.")]),
+    ("dbg2", "worker", [brief(60, dbg), tool_use(50, 90000), result(50), text(40, 91000, "Not done: second idea failed.")]),
+    ("dbg3", "worker", [brief(30, dbg), tool_use(1, 90000)]),
+    ("bug1", "worker", [brief(90, bug), tool_use(80, 90000), result(80), text(70, 91000, "Not done: no repro.")]),
+    ("bug2", "worker", [brief(60, bug), tool_use(50, 90000), result(50), text(40, 91000, "Not done: still crashes.")]),
+    ("bug3", "worker", [brief(30, bug), tool_use(1, 90000)]),
+    ("perf1", "worker", [brief(90, "Item: smashcraft#6 fps. Category: performance."), tool_use(80, 90000), result(80), text(70, 91000, "Not done: a.")]),
+    ("perf2", "worker", [brief(60, "Item: smashcraft#6 fps. Category: performance."), tool_use(50, 90000), result(50), text(40, 91000, "Not done: b.")]),
+    ("perf3", "worker", [brief(30, "Item: smashcraft#6 fps. Category: performance."), tool_use(1, 90000)]),
+    ("rend", "worker", [brief(30), render(20, "r1"), failed(19, "r1"), render(2, "r2"), result(1, "r2"), tool_use(1, 90000, "t9")]),
+])
+os.utime(waits, (now - 1800, now - 1800))
 PY
 
 pass=0 fail=0
@@ -70,7 +108,7 @@ check() {
 row() { grep -E "^$1 " <<<"$out"; }
 
 out=$("$sweep")
-ids=$(awk '{print $1}' <<<"$out" | sort | tr '\n' ' ')
+ids=$(grep -v ^WAIT <<<"$out" | awk '{print $1}' | sort | tr '\n' ' ')
 check 'newest session: running workers only' '[ "$ids" = "bgdone bgwait handoff pending result stalled " ]'
 check 'HANDOFF at 410k' 'row handoff | grep -q "ctx=410k.*HANDOFF"'
 check 'STALLED after 12 idle minutes (10-minute limit)' 'row stalled | grep -q "idle=12m.*STALLED"'
@@ -81,11 +119,32 @@ check 'a pass records finished workers as runs in threads' '"$repo/dotfiles/bin/
 check 'a pass makes a running worker the holder of its Item' '"$repo/dotfiles/bin/threads" list | grep -qE "^smashcraft#7 +pending "'
 
 out=$("$sweep" --session old-session)
-check '--session picks that session' '[ "$(awk "{print \$1}" <<<"$out")" = oldtool ]'
+check '--session picks that session' '[ "$(grep -v ^WAIT <<<"$out" | awk "{print \$1}")" = oldtool ]'
 
 out=$(timeout 10 "$sweep" --wait)
 status=$?
 check '--wait exits at once with the flagged table' '[ "$status" -eq 0 ] && row handoff | grep -q HANDOFF'
+
+queue=$XDG_STATE_HOME/safe-push/k.queue
+mkdir -p "$queue"
+bash -c 'sleep 60; :' safe-push &
+waiter=$!
+printf 'pid 1 in /lane/holder\n' >"$XDG_STATE_HOME/safe-push/k.lock"
+printf '/lane/late\tlate\tabc\n' >"$queue/$(( ($(date +%s) - 900) * 1000000 ))-$waiter"
+printf '/lane/fresh\tfresh\tabc\n' >"$queue/$(( ($(date +%s) - 60) * 1000000 ))-$$"
+printf 'chrome --user-data-dir=/tmp/wisp-render-%s\n' 1 1 2 3 >"$scratch/ps"
+"$sweep" --session wait-session >/dev/null
+out=$("$sweep" --session wait-session)
+kill "$waiter" 2>/dev/null
+check 'landing: a lane queued 15 minutes is flagged' 'grep -q "^WAIT landing: safe-push $waiter for /lane/late has waited 15 minutes.*train" <<<"$out"'
+check 'landing: a fresh lane is not' '! grep -q /lane/fresh <<<"$out"'
+check 'actions: more than 4 queued runs' 'grep -q "^WAIT actions: tompassarelli/smashcraft has 5 queued runs, the oldest queued 3 minutes; cut duplicate" <<<"$out"'
+check 'actions: a run queued over 10 minutes' 'grep -q "^WAIT actions: tompassarelli/wisp has 1 queued runs, the oldest queued 25 minutes" <<<"$out"'
+check 'serial: debugging category with two Not done reports' 'grep -q "^WAIT serial: smashcraft#5 has one active worker (dbg3) after 2 Not done.*parallel hypothesis" <<<"$out"'
+check 'serial: open bug issue with two Not done reports' 'grep -q "^WAIT serial: smashcraft#9 has one active worker (bug3)" <<<"$out"'
+check 'serial: other categories are not flagged' '! grep -q "smashcraft#6" <<<"$out"'
+check 'gpu: busy on two sweeps while a worker fails and rerenders' 'grep -q "^WAIT gpu: GPU busy at 95% then 95% on two sweeps while 1 render worker(s) (rend)" <<<"$out"'
+check 'gpu: more than 2 headless renders' 'grep -q "^WAIT gpu: 3 headless wisp-render browsers.*cap renders at 2" <<<"$out"'
 
 out=$("$sweep" --session missing 2>&1)
 status=$?
