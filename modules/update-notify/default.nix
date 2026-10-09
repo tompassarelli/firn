@@ -4,15 +4,6 @@
   options.myConfig.modules.update-notify.enable = lib.mkEnableOption "Visible automatic-update failures";
   config = lib.mkIf config.myConfig.modules.update-notify.enable {
     home-manager.users.${username} = ({ config, ... }: {
-      home.file = {
-        ".local/bin/claude-runtime-update".source = config.lib.file.mkOutOfStoreSymlink "${homeDir}/code/nixos-config/main/dotfiles/bin/claude-runtime-update";
-        ".local/bin/update-status".source = config.lib.file.mkOutOfStoreSymlink "${homeDir}/code/nixos-config/main/dotfiles/bin/update-status";
-        ".local/bin/update-notify".source = config.lib.file.mkOutOfStoreSymlink "${homeDir}/code/nixos-config/main/dotfiles/bin/update-notify";
-        ".local/bin/machine-update".source = config.lib.file.mkOutOfStoreSymlink "${homeDir}/code/nixos-config/main/dotfiles/bin/machine-update";
-        ".local/bin/agent-runtime-update".source = config.lib.file.mkOutOfStoreSymlink "${homeDir}/code/nixos-config/main/dotfiles/bin/agent-runtime-update";
-        ".local/bin/codex-shared-idle".source = config.lib.file.mkOutOfStoreSymlink "${homeDir}/code/nixos-config/main/dotfiles/bin/codex-shared-idle";
-        ".local/bin/codex-runtime-refresh".source = config.lib.file.mkOutOfStoreSymlink "${homeDir}/code/nixos-config/main/dotfiles/bin/codex-runtime-refresh";
-      };
       systemd.user.services."update-notify@" = {
         Unit = {
           Description = "Report an automatic-update failure";

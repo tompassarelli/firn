@@ -15,9 +15,7 @@
           {username
            (nix/module [config ...]
              {:home.file
-              {".local/bin/claude"
-               {:source (config.lib.file.mkOutOfStoreSymlink (s config.home.homeDirectory "/code/nixos-config/main/dotfiles/bin/claude"))}
-               ".claude/CLAUDE.md"
+              {".claude/CLAUDE.md"
                {:source
                 (config.lib.file.mkOutOfStoreSymlink
                   (s config.home.homeDirectory
