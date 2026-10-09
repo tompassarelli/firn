@@ -37,7 +37,7 @@ description: Assign independent work, choose provider tiers and ETAs, and run wo
 - Use Astra xhigh or Fable only when Tom asks by name.
 - Compare Haiku/Opus token cost at 1:40; price Haiku prompts above 100k tokens at 5 times its normal rate.
 - Run local file/client work here through capacity admission, farm sweeps through `github-actions`, and public code-only Smashcraft/Wisp work through `cloud-workers` (4 cores/run).
-- Hand off Claude workers at 400k context; compact the parent at 600k.
+- Hand off Claude workers at 400k context; the parent auto-compacts at 400k.
 - Keep `worker-sweep --wait` active for the 10-minute idle/handoff signal while workers run.
 - Stop the parent's monitors/background shells when their work ends.
 - Close finished Codex workers as soon as their report arrives.

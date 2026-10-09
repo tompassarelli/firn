@@ -94,7 +94,8 @@ jq -e --slurpfile projection "$claude_projection" '
   .model == "preserved-model"
   and .permissions == {"allow": ["Read"]}
   and .hooks == $projection[0].hooks
-  and .autoCompactWindow == 600000
+  and .autoCompactWindow == 400000
+  and .subagentPromptCacheTtl == "1h"
 ' "$target" >/dev/null
 [[ $(stat -c '%a' "$target") == 600 ]]
 

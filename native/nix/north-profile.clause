@@ -66,7 +66,7 @@ north-configuration(?projection: Delayed<nix,Package>, ?projector: Delayed<nix,P
             ".agents/skills": {source: ?home.config.lib.file.mkOutOfStoreSymlink("{?home.config.home.homeDirectory}/.local/state/north/agents/current/skills/shared")},
             ".agents/hooks": {source: ?home.config.lib.file.mkOutOfStoreSymlink("{?home.config.home.homeDirectory}/.local/state/north/agents/current/provider-hooks")},
             "code/AGENTS.md": {source: ?home.config.lib.file.mkOutOfStoreSymlink("{?home.config.home.homeDirectory}/.local/state/north/agents/current/instructions/code/AGENTS.md")}},
-          # Only hooks and autoCompactWindow are managed; native provider preferences survive.
+          # Only hooks, autoCompactWindow and subagentPromptCacheTtl are managed; native provider preferences survive.
           activation: {projectNorthClaudeHooks: ?home.config.lib.dag.entryAfter(["writeBoundary"])("run {package-text(package(path(coreutils)))}/bin/env CHMOD_BIN={package-text(package(path(coreutils)))}/bin/chmod FLOCK_BIN={package-text(package(path(util-linux)))}/bin/flock JQ_BIN={package-text(package(path(jq)))}/bin/jq MKDIR_BIN={package-text(package(path(coreutils)))}/bin/mkdir MV_BIN={package-text(package(path(coreutils)))}/bin/mv REALPATH_BIN={package-text(package(path(coreutils)))}/bin/realpath RM_BIN={package-text(package(path(coreutils)))}/bin/rm {package-text(?projector)} {package-text(?projection)} $HOME/.claude/settings.json\n")}}})}})
 
 export north-profile-module()

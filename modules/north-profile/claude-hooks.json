@@ -1,5 +1,6 @@
 {
-  "autoCompactWindow": 600000,
+  "autoCompactWindow": 400000,
+  "subagentPromptCacheTtl": "1h",
   "hooks": {
     "PreToolUse": [
       {
