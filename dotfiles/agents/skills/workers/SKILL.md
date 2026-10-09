@@ -36,10 +36,10 @@ description: Assign independent work, choose provider tiers and ETAs, and run wo
 - Compare Haiku/Opus token cost at 1:40; price Haiku prompts above 100k tokens at 5 times its normal rate.
 - Run local file/client work here through capacity admission, farm sweeps through `github-actions`, and public code-only Smashcraft/Wisp work through `cloud-workers` (4 cores/run).
 - Hand off Claude workers at 400k context; compact the parent at 600k.
-- Keep `worker-sweep --wait` active for the 20-minute idle/handoff signal while workers run.
+- Keep `worker-sweep --wait` active for the 10-minute idle/handoff signal while workers run.
 - Stop the parent's monitors/background shells when their work ends.
 - Close finished Codex workers as soon as their report arrives.
-- Ask a worker idle 20 minutes without a report for one, then archive it; never park a worker to wait on a farm run, a client or another worker.
+- Ask a worker idle 10 minutes without a report for one, then archive it; never park a worker to wait on a farm run, a client or another worker.
 - Check `threads list` and open issues before filing or staffing; never duplicate an item someone holds.
 - While main is red, staff its fix first and land nothing else onto red.
 - After an hour with no closure, start nothing new until an open box closes.

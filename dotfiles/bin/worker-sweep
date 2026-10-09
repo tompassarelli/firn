@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # worker-sweep: running Claude Code workers of one session with their tier,
-# context, minutes running and minutes idle. Flags STALLED (idle 20+ minutes
+# context, minutes running and minutes idle. Flags STALLED (idle 10+ minutes
 # while running) and HANDOFF (context 400k+). Each pass first records the
 # session's finished workers as runs in threads (worker-ledger).
 set -uo pipefail
@@ -77,7 +77,7 @@ sweep() {
       | ([$lines[] | .timestamp // empty] | first | ts) as $t0
       | ([$lines[] | .timestamp // empty] | last | ts) as $t1
       | ([($now-$t1)/60, 0] | max | floor) as $idle
-      | [ (if $idle>=20 then "STALLED" else empty end), (if $c>=400000 then "HANDOFF" else empty end) ] as $flags
+      | [ (if $idle>=10 then "STALLED" else empty end), (if $c>=400000 then "HANDOFF" else empty end) ] as $flags
       | "\($id)\t\($t)\tctx=\($c/1000|floor)k\tran=\((($now-$t0)/60)|floor)m\tidle=\($idle)m\t\(if $waiting then "waiting-bg " else "" end)\($flags|join(","))"
     ' <"$f" 2>/dev/null
   done

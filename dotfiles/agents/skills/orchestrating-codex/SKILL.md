@@ -27,8 +27,8 @@ description: >-
 - Keep `codex-lead-status.md` in the same handoffs directory current after every landing, failure and staffing change, with Updated/Running/Closed/Blocked/Next/Needs Tom.
 - Include item, worker path, model/effort and ETA under Running; numbers under Closed; evidence and owner under Blocked.
 - Check `codex-lead status`, `codex-lead workers`, issue closures, `threads list` claims and capacity at most every 20 minutes until the queue empties.
-- Correct idle workers at 20+ minutes, overruns at 2× ETA, wrong tiers, missing claims/report fields and serialized independent work.
-- Map every open issue to a Codex worker idle under 20 minutes, a running Claude worker, or a named blocker; correct closed-issue workers and short staffing too.
+- Correct idle workers at 10+ minutes, overruns at 2× ETA, wrong tiers, missing claims/report fields and serialized independent work.
+- Map every open issue to a Codex worker idle under 10 minutes, a running Claude worker, or a named blocker; correct closed-issue workers and short staffing too.
 - Give slots to main-red issues, correctness/gameplay, release gates, then polish.
 - Ask owners to release blocking exclusive leases or over-pressure native pools at a safe phase.
 - Send one correction message per check, naming each gap/fix and requesting one owner/blocker line per issue.
