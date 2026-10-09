@@ -54,9 +54,11 @@ except OSError:
 
 prompt = (
     "Lead regrounding tick. 1. Reread the goal and the status file. "
-    "2. Rebuild the DAG from the goal's GitHub issues and main CI. "
-    "3. Staff every unblocked node up to the spawn gate. "
-    "4. Recycle every worker running 30 minutes: it writes a handoff and a fresh worker continues from it. "
+    "2. Rebuild the DAG from the goal's GitHub issues, main CI, cloud runs and queued landings. "
+    "3. Name the critical path's longest wait and attack it: batch ready lanes into one landing, "
+    "run unknown-cause bugs as 2-3 parallel hypotheses, have art or judged work render 2-4 variants per pass and judge once, "
+    "and send code-only work to cloud workers. "
+    "4. Staff every unblocked node up to the spawn gate and recycle every worker running 30 minutes from a handoff. "
     "5. Close issues whose boxes passed. "
     "6. Write one status line."
 )
