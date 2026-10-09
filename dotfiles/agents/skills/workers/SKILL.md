@@ -22,7 +22,8 @@ written: 2026-10-09
 - Trial the cheaper tier on every other mechanical/docs-policy/tooling/balance item until 5 closures or 2 failures.
 - Use provider benchmarks only before 5 closed category issues at that tier.
 - Set ETA to the chosen category/tier's actual median minutes; label missing evidence uncalibrated.
-- Report at twice ETA.
+- Expect a report at 30 minutes or twice ETA, whichever comes first.
+- Run a job longer than the 30-minute leash (renders, long captures) yourself under a capacity lease, then staff a short worker to use its output.
 - Escalate a failed or unfinished attempt to the next tier printed by `agents plan`.
 - Bring the supervisor one recommendation when the next tier cannot run here.
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Fixture transcripts for the worker handoff hook: workers at 400k+ get the
 # handoff text with their note path, repeated once per further 50k; workers
-# below 400k, other agent types and the main session get nothing.
+# whose first transcript entry is 30+ minutes old get the leash text; workers
+# below both, other agent types and the main session get nothing.
 set -uo pipefail
 export PATH="/etc/codex/hooks/runtime:$PATH"
 
@@ -19,11 +20,13 @@ set_active() {
 }
 set_active true
 
-# transcript FILE TOKENS: a worker transcript whose last assistant turn used TOKENS
-# of context, followed by a tool result larger than the hook's first read window.
+# transcript FILE TOKENS [MINUTES]: a worker transcript whose last assistant turn used
+# TOKENS of context, followed by a tool result larger than the hook's first read
+# window; with MINUTES its first entry is stamped that many minutes ago.
 transcript() {
-  python3 - "$1" "$2" <<'PY'
+  python3 - "$1" "$2" "${3:-}" <<'PY'
 import json, sys
+from datetime import datetime, timedelta, timezone
 path, tokens = sys.argv[1], int(sys.argv[2])
 lines = [
     {"type": "user", "message": {"role": "user", "content": "brief"}},
@@ -34,16 +37,18 @@ lines = [
     {"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "x" * 300000}]}},
     {"type": "attachment", "attachment": {"type": "total_tokens_reminder"}},
 ]
+if sys.argv[3]:
+    lines[0]["timestamp"] = (datetime.now(timezone.utc) - timedelta(minutes=int(sys.argv[3]))).isoformat().replace("+00:00", "Z")
 with open(path, "w") as f:
     for line in lines:
         f.write(json.dumps(line) + "\n")
 PY
 }
 
-# call AGENT_ID AGENT_TYPE TOKENS: print the hook's additionalContext ("" when silent).
+# call AGENT_ID AGENT_TYPE TOKENS [MINUTES]: print the hook's additionalContext ("" when silent).
 call() {
   local id="$1" type="$2" tokens="$3" file="$SCRATCH/agent-$1.jsonl" input
-  transcript "$file" "$tokens"
+  transcript "$file" "$tokens" "${4:-}"
   input="$(python3 -c '
 import json, sys
 d = {"session_id": "s", "transcript_path": "/dev/null", "hook_event_name": "PostToolUse",
@@ -74,8 +79,16 @@ expect_handoff() {
 }
 expect_silent() {
   local out
-  out="$(call "$1" "$2" "$3")"
+  out="$(call "$1" "$2" "$3" "${5:-}")"
   if [ -z "$out" ]; then check ok "$4"; else check bad "$4" "$out"; fi
+}
+expect_leash() {
+  local out
+  out="$(call "$1" "$2" 1000 "$3")"
+  case "$out" in
+    "You have run 30 minutes. Land anything that passes now"*"handoffs/<lane>.md"*"Not done:"*) check ok "$4" ;;
+    *) check bad "$4" "$out" ;;
+  esac
 }
 
 expect_handoff a1 worker-high 410000 'worker at 410k gets the handoff text with its path'
@@ -86,6 +99,11 @@ expect_silent a2 worker 390000 'worker at 390k is silent'
 expect_handoff a3 worker 400000 'plain worker at exactly 400k gets the handoff text'
 expect_silent a4 Explore 900000 'Explore agent is silent'
 expect_silent a5 '' 900000 'main session (no agent_type) is silent'
+expect_leash t1 worker 31 'worker whose first entry is 31 minutes old gets the leash text'
+expect_silent t1 worker 1000 'leash repeat at 35 minutes is silent' 35
+expect_leash t1 worker 41 'leash repeats at 41 minutes'
+expect_silent t2 worker-haiku 1000 'worker at 29 minutes is silent' 29
+expect_silent t3 Explore 1000 'Explore agent at 90 minutes is silent' 90
 set_active false
 expect_silent a6 worker-high 900000 'inactive hook is silent'
 set_active true

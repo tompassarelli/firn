@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # PostToolUse hook for Claude Code workers (agent_type worker*). When the
 # worker's context reaches 400k tokens it tells the worker to write a handoff
-# note and stop; it repeats at most once per further 50k. The main session and
-# other agent types get nothing. Runs after every tool call, so it reads only
-# the transcript tail.
+# note and stop; it repeats at most once per further 50k. After 30 minutes of
+# wall-clock time since the transcript's first entry it tells the worker to
+# report or hand off; it repeats at most once per further 10 minutes. The main
+# session and other agent types get nothing. Runs after every tool call, so it
+# reads only the transcript head and tail.
 #
 # Kill-switch: `north config agents off worker-handoff` or env
 # AGENT_NO_AUTHORING_HOOKS (shared impl: lib/authoring-killswitch.sh).
@@ -42,10 +44,13 @@ authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
 type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 read -r -d '' PY <<'PYEOF' || true
-import json, os, re, sys
+import json, os, re, sys, time
+from datetime import datetime
 
 THRESHOLD = 400_000
 STEP = 50_000
+LEASH_MIN = 30
+LEASH_STEP_MIN = 10
 
 try:
     data = json.loads(sys.stdin.read())
@@ -96,39 +101,71 @@ def context_tokens(path):
         pass
     return 0
 
-tokens = context_tokens(transcript)
-if tokens < THRESHOLD:
-    sys.exit(0)
+def started_at(path):
+    try:
+        with open(path, "rb") as f:
+            for _ in range(8):
+                raw = f.readline(1 << 20)
+                if not raw:
+                    break
+                try:
+                    stamp = json.loads(raw).get("timestamp")
+                except (ValueError, AttributeError):
+                    continue
+                if isinstance(stamp, str):
+                    return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+    except (OSError, ValueError):
+        pass
+    return None
 
 handoffs = os.path.join(os.path.expanduser("~"), ".local/state/agents/handoffs")
-note = os.path.join(handoffs, f"{agent_id}.md")
-marker = os.path.join(handoffs, f".{agent_id}.reminded")
-try:
-    with open(marker) as f:
-        last = int(f.read().strip() or 0)
-except (OSError, ValueError):
-    last = 0
-if last and tokens < last + STEP:
-    sys.exit(0)
-try:
-    os.makedirs(handoffs, exist_ok=True)
-    with open(marker, "w") as f:
-        f.write(f"{tokens}\n")
-except OSError:
-    sys.exit(0)
 
-text = (
-    f"Your context is {tokens // 1000}k tokens, past the 400k handoff point. "
-    "Finish the step you are on, then write a handoff note to "
-    f"{note} with: the brief's goal and Done when list with each box's status; "
-    "the worktree, branch and commits; running background jobs with their "
-    "output paths; the next step; evidence paths. Then end your turn with "
-    f"exactly `HANDOFF {note}` and nothing else."
-)
+def due(marker, value, step):
+    try:
+        with open(marker) as f:
+            last = int(f.read().strip() or 0)
+    except (OSError, ValueError):
+        last = 0
+    if last and value < last + step:
+        return False
+    try:
+        os.makedirs(handoffs, exist_ok=True)
+        with open(marker, "w") as f:
+            f.write(f"{value}\n")
+    except OSError:
+        return False
+    return True
+
+messages = []
+
+tokens = context_tokens(transcript)
+note = os.path.join(handoffs, f"{agent_id}.md")
+if tokens >= THRESHOLD and due(os.path.join(handoffs, f".{agent_id}.reminded"), tokens, STEP):
+    messages.append(
+        f"Your context is {tokens // 1000}k tokens, past the 400k handoff point. "
+        "Finish the step you are on, then write a handoff note to "
+        f"{note} with: the brief's goal and Done when list with each box's status; "
+        "the worktree, branch and commits; running background jobs with their "
+        "output paths; the next step; evidence paths. Then end your turn with "
+        f"exactly `HANDOFF {note}` and nothing else."
+    )
+
+start = started_at(transcript)
+minutes = int((time.time() - start) // 60) if start is not None else 0
+if minutes >= LEASH_MIN and due(os.path.join(handoffs, f".{agent_id}.leash"), minutes, LEASH_STEP_MIN):
+    messages.append(
+        f"You have run {LEASH_MIN} minutes. Land anything that passes now, then either "
+        "report (Done:/Not done:/Blocked:) or write a handoff to "
+        "~/.local/state/agents/handoffs/<lane>.md, commit your WIP and report "
+        "Not done: with its path."
+    )
+
+if not messages:
+    sys.exit(0)
 print(json.dumps({
     "hookSpecificOutput": {
         "hookEventName": "PostToolUse",
-        "additionalContext": text,
+        "additionalContext": " ".join(messages),
     }
 }))
 PYEOF
