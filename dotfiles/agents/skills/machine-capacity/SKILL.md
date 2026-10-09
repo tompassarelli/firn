@@ -45,7 +45,8 @@ written: 2026-10-09
 - Give worker local commands their own run scopes; persist reservations only for agent class.
 - Respect the spawn gate when leasedBatchCpus reaches aggregateCpuLimit or protectedCpuSomeAvg10 exceeds 20; queue, use the farm or use cloud workers.
 - Scale native pairs one at a time and stop adding above protectedCpuSomeAvg10 20 in either profile.
-- Use status for holders, remaining seconds and queue order.
+- Use status for holders, remaining seconds, queue order, each run lease's `measured` cores/memory/GPU beside its reservation, and `unleasedHeavy` (cgroups outside leases, session and native slices averaging over one core for two minutes, sampled by the presence watcher).
+- Read `~/.local/state/agents/machine-capacity-usage.jsonl` for each released run's measured CPU seconds, mean/peak cores, peak memory and GPU seconds by owner and command shape.
 - Treat memory PSI as diagnostic and system CPU PSI as admission pacing rather than desktop harm.
 - Leave signaling of peers to their owner/accountable parent.
 - Never lower correctness requirements because of pressure.

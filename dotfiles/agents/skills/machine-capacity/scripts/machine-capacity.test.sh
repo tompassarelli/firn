@@ -15,7 +15,7 @@ user_runtime_dir=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 export AGENT_CAPACITY_CPU_PRESSURE="$scratch/cpu.pressure"
 calm_pressure() { printf 'some avg10=%s avg60=0.00 avg300=0.00 total=0\n' "$1" >"$AGENT_CAPACITY_CPU_PRESSURE"; }
 calm_pressure 0.00
-export AGENT_CAPACITY_GPU_BUSY="$scratch/gpu-busy" AGENT_CAPACITY_GPU_CLIENTS=0
+export AGENT_CAPACITY_GPU_BUSY="$scratch/gpu-busy" AGENT_CAPACITY_GPU_CLIENTS=0 AGENT_CAPACITY_USAGE_LOG="$scratch/usage.jsonl"
 echo 0 >"$AGENT_CAPACITY_GPU_BUSY"
 
 "$here/build-machine-capacity" "$scratch/machine-capacity.mjs"
@@ -447,5 +447,27 @@ throttled_probe() {
 [[ $(throttled_probe) != DEFER_CPU_PRESSURE ]]
 psi "$user_manager/app.slice" 90.00
 [[ $(throttled_probe) == DEFER_CPU_PRESSURE ]]
+
+# Release records what the scope used: two busy loops under a 2-CPU quota.
+XDG_RUNTIME_DIR="$user_runtime_dir" bun "$scratch/machine-capacity.mjs" run --class moderate --owner fixture:/measure \
+  --timeout-seconds 30 -- bash -c 'cd / && timeout 3 sh -c "while :; do :; done" & timeout 3 sh -c "while :; do :; done"; wait' 2>/dev/null
+measured=$(jq -c 'select(.owner == "fixture:/measure")' "$AGENT_CAPACITY_USAGE_LOG")
+[[ $(jq -r '.shape' <<<"$measured") == sh ]]
+[[ $(jq '.meanCores > 1.5 and .meanCores <= 2.1 and .peakCores <= 2.2 and .cpuSeconds > 4' <<<"$measured") == true ]]
+
+# Unleased load: a cgroup outside lease scopes averaging over one core across two
+# minutes is reported; the desktop session and lease scopes are not.
+usage() { mkdir -p "$1"; printf 'usage_usec %s\nuser_usec 0\nsystem_usec 0\n' "$2" >"$1/cpu.stat"; }
+unleased_sample() {
+  env -u AGENT_CAPACITY_CPU_PRESSURE AGENT_CAPACITY_CGROUP_ROOT="$cgroups" AGENT_CAPACITY_NOW="$1" \
+    XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" "${2:-sample-unleased}"
+}
+heavy_scopes=("$user_manager/app.slice/app-build.scope" "$user_manager/session.slice/niri.scope"
+  "$user_manager/agent.slice/agent-capacity.slice/agent-capacity-0123abcd.scope")
+for scope in "${heavy_scopes[@]}"; do usage "$scope" 0; done
+[[ $(unleased_sample 1000000) == null ]]
+for scope in "${heavy_scopes[@]}"; do usage "$scope" 240000000; done
+[[ $(unleased_sample 1120000 | jq -c '[.heavy[] | {cgroup, cores}]') == '[{"cgroup":"app.slice/app-build.scope","cores":2}]' ]]
+[[ $(unleased_sample 1120000 status | jq -c '.unleasedHeavy | {cores, windowSeconds}') == '{"cores":2,"windowSeconds":120}' ]]
 
 printf 'machine-capacity policy, aggregate enforcement, and session lifetime: PASS\n'

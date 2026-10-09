@@ -1,4 +1,5 @@
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -286,6 +287,8 @@ async function watchPresence(root) {
   rescan();
   reconcile();
   setInterval(() => { rescan(); reconcile(); }, 5000);
+  sampleUnleased(root);
+  setInterval(() => sampleUnleased(root), unleasedSampleMilliseconds);
   await new Promise(() => {});
 }
 
@@ -361,6 +364,254 @@ function scopeLive(id) {
   return !['inactive', 'failed'].includes(state);
 }
 
+function stateRoot() {
+  return process.env.XDG_STATE_HOME ?? join(process.env.HOME ?? '/tmp', '.local', 'state');
+}
+
+function usageLogPath() {
+  return process.env.AGENT_CAPACITY_USAGE_LOG ?? join(stateRoot(), 'agents', 'machine-capacity-usage.jsonl');
+}
+
+function readText(path) {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch (error) {
+    if (['ENOENT', 'ESRCH', 'ENODEV', 'EACCES', 'ENOTDIR'].includes(error?.code)) return null;
+    throw error;
+  }
+}
+
+function cgroupUsageUsec(path) {
+  const match = readText(join(path, 'cpu.stat'))?.match(/^usage_usec ([0-9]+)$/m);
+  return match ? Number(match[1]) : null;
+}
+
+const shellCommands = new Set(['bash', 'sh', 'zsh', 'dash']);
+const shellBuiltins = new Set(['cd', 'wait', 'echo', 'printf', 'export', 'set', 'true', 'exit', 'source', '.']);
+const wrapperCommands = new Set(['exec', 'env', 'nice', 'ionice', 'timeout', 'time', 'nohup', 'stdbuf']);
+
+// A stable key for "the same kind of work": the program and its subcommand words.
+function commandShape(command) {
+  let words = [...command];
+  let unwrappedShell = false;
+  for (let guard = 0; guard < 8 && words.length > 0; guard += 1) {
+    const program = words[0].split('/').at(-1);
+    if (!unwrappedShell && shellCommands.has(program) && words[1] === '-c' && words[2] !== undefined) {
+      unwrappedShell = true;
+      words = words[2].split(/[;&|\n]+/).map(part => part.trim().split(/\s+/))
+        .find(part => part[0] !== '' && !shellBuiltins.has(part[0])) ?? [];
+    } else if (wrapperCommands.has(program) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) {
+      words = words.slice(1);
+      while (words.length > 0 && (words[0].startsWith('-') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]) || /^[0-9.]+[smhd]?$/.test(words[0]))) {
+        words = words.slice(1);
+      }
+    } else break;
+  }
+  if (words.length === 0) return 'unknown';
+  const shape = [words[0].split('/').at(-1)];
+  for (const word of words.slice(1)) {
+    if (shape.length >= 3 || !/^[a-z][a-z0-9:_-]*$/.test(word)) break;
+    shape.push(word);
+  }
+  return shape.join(' ');
+}
+
+// Per-process GPU engine time from amdgpu fdinfo, summed once per DRM client.
+function gpuEngineNanoseconds(pids, perClient) {
+  for (const pid of pids) {
+    let fds;
+    try {
+      fds = readdirSync(`/proc/${pid}/fdinfo`);
+    } catch {
+      continue;
+    }
+    for (const fd of fds) {
+      const text = readText(`/proc/${pid}/fdinfo/${fd}`);
+      if (text === null || !text.includes('drm-driver:\tamdgpu')) continue;
+      const client = text.match(/^drm-client-id:\s+([0-9]+)$/m)?.[1];
+      if (client === undefined) continue;
+      let total = 0;
+      for (const match of text.matchAll(/^drm-engine-[a-z_]+:\s+([0-9]+) ns$/gm)) total += Number(match[1]);
+      perClient.set(client, Math.max(perClient.get(client) ?? 0, total));
+    }
+  }
+}
+
+function scopeCgroup(className, unit) {
+  return className === 'native'
+    ? join(userManagerCgroup(), nativeSlice, unit)
+    : join(userManagerCgroup(), 'agent.slice', aggregateSlice, unit);
+}
+
+const usageSampleMilliseconds = 1000;
+const peakWindowMilliseconds = 5000;
+const gpuEverySamples = 5;
+
+// Samples the lease scope while it runs; the scope's cgroup disappears with its last process.
+function measureScope(root, lease, cgroup) {
+  const startedAt = Date.now();
+  const samples = [];
+  const perClient = new Map();
+  const usage = { cpuSeconds: 0, meanCores: 0, peakCores: 0, recentCores: 0, peakMemoryMiB: 0, memoryMiB: 0, gpuSeconds: 0 };
+  let count = 0;
+  const sample = () => {
+    const now = Date.now();
+    const usec = cgroupUsageUsec(cgroup);
+    if (usec === null) return;
+    samples.push([now, usec]);
+    while (samples.length > 2 && now - samples[1][0] >= peakWindowMilliseconds) samples.shift();
+    const [then, before] = samples[0];
+    if (now - then >= peakWindowMilliseconds / 2) {
+      usage.recentCores = (usec - before) / 1000 / (now - then);
+      usage.peakCores = Math.max(usage.peakCores, usage.recentCores);
+    }
+    usage.cpuSeconds = usec / 1e6;
+    usage.meanCores = usage.cpuSeconds / Math.max((now - startedAt) / 1000, 1);
+    const peak = Number(readText(join(cgroup, 'memory.peak'))?.trim());
+    const current = Number(readText(join(cgroup, 'memory.current'))?.trim());
+    if (Number.isFinite(peak)) usage.peakMemoryMiB = Math.max(usage.peakMemoryMiB, peak / 1048576);
+    if (Number.isFinite(current)) usage.memoryMiB = current / 1048576;
+    if (count % gpuEverySamples === 0) {
+      const pids = (readText(join(cgroup, 'cgroup.procs')) ?? '').split('\n').filter(Boolean);
+      gpuEngineNanoseconds(pids, perClient);
+      usage.gpuSeconds = [...perClient.values()].reduce((sum, value) => sum + value, 0) / 1e9;
+    }
+    count += 1;
+    try {
+      writeFileSync(join(root, 'leases', `${lease}.usage`), `${JSON.stringify({ ...usage, at: now })}\n`, { mode: 0o600 });
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  };
+  const timer = setInterval(sample, usageSampleMilliseconds);
+  return {
+    sample,
+    finish() {
+      clearInterval(timer);
+      sample();
+      return { ...usage, wallSeconds: (Date.now() - startedAt) / 1000 };
+    },
+  };
+}
+
+const round = (value, digits = 2) => Math.round(value * 10 ** digits) / 10 ** digits;
+
+function recordUsage(entry) {
+  const path = usageLogPath();
+  mkdirSync(join(path, '..'), { recursive: true, mode: 0o700 });
+  appendFileSync(path, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
+}
+
+function readUsage(root, id) {
+  try {
+    return JSON.parse(readFileSync(join(root, 'leases', `${id}.usage`), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+const unleasedWindowMilliseconds = 120000;
+const unleasedSampleMilliseconds = 30000;
+const unleasedCoreThreshold = 1;
+
+// Leaf cgroups outside lease scopes, the desktop session and native clients.
+function unleasedCgroups() {
+  const manager = userManagerCgroup();
+  const skip = new Set([
+    join(manager, 'session.slice'), join(manager, nativeSlice), join(manager, 'init.scope'),
+    join(manager, 'agent.slice', aggregateSlice),
+  ]);
+  const leaves = [];
+  const walk = (path, depth) => {
+    if (skip.has(path)) return;
+    let children = [];
+    try {
+      children = readdirSync(path, { withFileTypes: true }).filter(entry => entry.isDirectory());
+    } catch {
+      return;
+    }
+    if ((readText(join(path, 'cgroup.procs')) ?? '').trim() !== '' || children.length === 0) leaves.push(path);
+    if (depth < 6) for (const child of children) walk(join(path, child.name), depth + 1);
+  };
+  walk(manager, 0);
+  walk(join(cgroupRoot, 'system.slice'), 0);
+  return leaves;
+}
+
+function processTicks(pid) {
+  const stat = readText(`/proc/${pid}/stat`);
+  if (stat === null) return null;
+  const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+  return { ticks: Number(fields[11]) + Number(fields[12]), start: fields[19] };
+}
+
+function takeUnleasedSample(now) {
+  const cgroups = {};
+  const pids = {};
+  for (const path of unleasedCgroups()) {
+    const usec = cgroupUsageUsec(path);
+    if (usec === null) continue;
+    cgroups[path] = usec;
+    for (const pid of (readText(join(path, 'cgroup.procs')) ?? '').split('\n').filter(Boolean)) {
+      const ticks = processTicks(pid);
+      if (ticks !== null) pids[pid] = { ...ticks, cgroup: path };
+    }
+  }
+  return { at: now, cgroups, pids };
+}
+
+// Cgroups whose CPU use averaged more than one core across the window.
+function unleasedHeavy(older, newer) {
+  const seconds = (newer.at - older.at) / 1000;
+  const manager = userManagerCgroup();
+  const heavy = [];
+  for (const [path, usec] of Object.entries(newer.cgroups)) {
+    if (older.cgroups[path] === undefined) continue;
+    const cores = (usec - older.cgroups[path]) / 1e6 / seconds;
+    if (cores <= unleasedCoreThreshold) continue;
+    const top = Object.entries(newer.pids)
+      .filter(([pid, entry]) => entry.cgroup === path && older.pids[pid]?.start === entry.start)
+      .map(([pid, entry]) => ({ pid: Number(pid), cores: (entry.ticks - older.pids[pid].ticks) / 100 / seconds }))
+      .filter(entry => entry.cores >= 0.25)
+      .sort((left, right) => right.cores - left.cores).slice(0, 3)
+      .map(entry => ({
+        ...entry, cores: round(entry.cores),
+        command: (readText(`/proc/${entry.pid}/cmdline`) ?? '').replaceAll('\0', ' ').trim().slice(0, 120),
+      }));
+    heavy.push({ cgroup: path.startsWith(manager) ? path.slice(manager.length + 1) : path.slice(cgroupRoot.length + 1), cores: round(cores), top });
+  }
+  return heavy.sort((left, right) => right.cores - left.cores);
+}
+
+function sampleUnleased(root, now = Number(process.env.AGENT_CAPACITY_NOW ?? Date.now())) {
+  ensureState(root);
+  const path = join(root, 'unleased-samples.json');
+  let samples = [];
+  try {
+    samples = JSON.parse(readFileSync(path, 'utf8'));
+  } catch {}
+  samples = [...samples.filter(sample => now - sample.at <= unleasedWindowMilliseconds * 2), takeUnleasedSample(now)];
+  writeFileSync(path, JSON.stringify(samples), { mode: 0o600 });
+  const older = samples.filter(sample => now - sample.at >= unleasedWindowMilliseconds).at(-1);
+  const result = older === undefined ? null : {
+    at: now, windowSeconds: Math.round((now - older.at) / 1000), heavy: unleasedHeavy(older, samples.at(-1)),
+  };
+  if (result !== null) writeFileSync(join(root, 'unleased.json'), `${JSON.stringify(result)}\n`, { mode: 0o600 });
+  return result;
+}
+
+// Null when the presence watcher has not yet covered a full window.
+function readUnleased(root) {
+  try {
+    const result = JSON.parse(readFileSync(join(root, 'unleased.json'), 'utf8'));
+    const now = Number(process.env.AGENT_CAPACITY_NOW ?? Date.now());
+    if (now - result.at > unleasedSampleMilliseconds * 3) return null;
+    return { heavy: result.heavy, cores: round(result.heavy.reduce((sum, entry) => sum + entry.cores, 0)), windowSeconds: result.windowSeconds };
+  } catch {
+    return null;
+  }
+}
+
 function readLeases(root, now) {
   const directory = join(root, 'leases');
   let reclaimed = 0;
@@ -380,6 +631,7 @@ function readLeases(root, now) {
       : !Number.isSafeInteger(lease.expiresAt) || lease.expiresAt <= now;
     if (expired) {
       unlinkSync(path);
+      rmSync(path.replace(/\.json$/, '.usage'), { force: true });
       reclaimed += 1;
       continue;
     }
@@ -502,6 +754,7 @@ function decision(root, requested, create, ticket = null) {
       memoryFullAvg10: signals.memoryFullAvg10BasisPoints / 100,
       memoryAvailableMiB: signals.memoryAvailableMiB,
       ...gpu,
+      unleasedHeavyCores: readUnleased(root)?.cores ?? null,
       reclaimed,
     };
     if (code !== 'RUN' || !create) return result;
@@ -547,6 +800,7 @@ function changeLease(root, id, owner, timeoutSeconds, settledRun = false) {
     if (lease.kind === 'run' && !settledRun) fail('run leases belong to their foreground wrapper');
     if (timeoutSeconds === null) {
       unlinkSync(path);
+      rmSync(path.replace(/\.json$/, '.usage'), { force: true });
       return { decision: 'RELEASED', lease: id };
     }
     if (lease.expiresAt <= Date.now()) {
@@ -557,6 +811,14 @@ function changeLease(root, id, owner, timeoutSeconds, settledRun = false) {
     writeFileSync(path, `${JSON.stringify(lease)}\n`, { encoding: 'utf8', mode: 0o600 });
     return { decision: 'RENEWED', lease: id, expiresAt: lease.expiresAt };
   });
+}
+
+function measuredView(usage) {
+  if (usage === null) return null;
+  return {
+    cores: round(usage.recentCores), peakCores: round(usage.peakCores), meanCores: round(usage.meanCores),
+    memoryMiB: Math.round(usage.memoryMiB), peakMemoryMiB: Math.round(usage.peakMemoryMiB), gpuSeconds: round(usage.gpuSeconds),
+  };
 }
 
 function status(root) {
@@ -576,6 +838,7 @@ function status(root) {
         kind: lease.kind,
         cpus: lease.cpus,
         memoryMiB: lease.memoryMiB,
+        measured: lease.kind === 'run' ? measuredView(readUsage(root, lease.id)) : null,
         heldSeconds: seconds(now - lease.createdAt),
         remainingSeconds: lease.expiresAt === null ? null : seconds(lease.expiresAt - now),
       })),
@@ -585,6 +848,7 @@ function status(root) {
         class: ticket.class ?? null,
         waitingSeconds: seconds(now - ticket.queuedAt),
       })),
+      unleasedHeavy: readUnleased(root),
       reclaimed,
     };
   });
@@ -658,10 +922,28 @@ async function runScoped(root, requested, owner, timeoutSeconds, command) {
       '--property=KillMode=control-group',
       '--', ...command,
     ], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+    const measurement = measureScope(root, admitted.lease, scopeCgroup(requested.name, unit));
     process.once('SIGINT', stop);
     process.once('SIGTERM', stop);
     process.once('SIGHUP', stop);
-    return await child.exited;
+    const exitCode = await child.exited;
+    const usage = measurement.finish();
+    const rusage = child.resourceUsage();
+    const cpuSeconds = Math.max(usage.cpuSeconds, Number(rusage?.cpuTime?.total ?? 0n) / 1e6);
+    try {
+      recordUsage({
+        at: new Date().toISOString(), owner, shape: commandShape(command), class: requested.name,
+        reservedCpus: requested.cpus, reservedMemoryMiB: requested.memoryMiB, exitCode,
+        wallSeconds: round(usage.wallSeconds), cpuSeconds: round(cpuSeconds),
+        meanCores: round(cpuSeconds / Math.max(usage.wallSeconds, 0.001)),
+        peakCores: round(Math.max(usage.peakCores, cpuSeconds / Math.max(usage.wallSeconds, 0.001))),
+        peakMemoryMiB: Math.round(Math.max(usage.peakMemoryMiB, (rusage?.maxRSS ?? 0) / 1024)),
+        gpuSeconds: round(usage.gpuSeconds),
+      });
+    } catch (error) {
+      process.stderr.write(`machine-capacity: usage log failed: ${error?.message ?? String(error)}\n`);
+    }
+    return exitCode;
   } finally {
     stop();
     process.removeListener('SIGINT', stop);
@@ -743,6 +1025,10 @@ async function main(argv) {
     if (!applyProfile(active.profile, readSignals().cores)) fail('cannot apply capacity profile', 75);
     print({ ...active, idleSeconds: active.idleSeconds === null ? null : Math.round(active.idleSeconds),
       aggregateCpuLimit: aggregateCpus(active.profile, readSignals().cores) });
+    return 0;
+  }
+  if (operation === 'sample-unleased') {
+    print(sampleUnleased(root));
     return 0;
   }
   if (operation === 'status') {
