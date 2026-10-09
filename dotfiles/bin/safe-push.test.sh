@@ -798,6 +798,46 @@ expect_output 're-running them (1/3)'
 [ "$("$real_git" --git-dir="$landing_remote" show main:shared.txt)" = $'top from a\nmiddle\nbottom from b' ] \
   || fail 'overlapping hooked landing: origin main lacks either change'
 
+# A repository whose committed .safe-push sets landing.exact re-runs its
+# checks on the exact rebased commit even when origin's new commits touch
+# other files.
+new_landing_origin exact
+printf '[landing]\n\texact = true\n' >"$landing_root/seed/.safe-push"
+"$real_git" -C "$landing_root/seed" add .safe-push
+"$real_git" -C "$landing_root/seed" commit -qm 'exact landings'
+"$real_git" -C "$landing_root/seed" push -q "$landing_remote" main
+make_landing_clone "$landing_root/a" a.txt
+make_landing_clone "$landing_root/b" b.txt
+add_slow_hook "$landing_root/a"
+add_slow_hook "$landing_root/b"
+run_landing "$landing_root/a" & pid_a=$!
+sleep 1
+run_landing "$landing_root/b" & pid_b=$!
+status_a=0; wait "$pid_a" || status_a=$?
+status_b=0; wait "$pid_b" || status_b=$?
+case_output="$(cat "$landing_root/a.out" "$landing_root/b.out")"
+[ $((status_a + status_b)) -eq 0 ] || fail "exact landing: a run failed: $case_output"
+[[ "$case_output" != *'keeping the checks'* ]] || fail 'exact landing kept a verdict from another base'
+expect_output 're-running them (1/3)'
+[ "$(tail -n1 "$landing_root/b.hook-runs")" = "$("$real_git" --git-dir="$landing_remote" rev-parse main)" ] \
+  || fail 'exact landing: the hook did not check the commit that landed'
+
+# A safe-push started by the checks of one that holds the landing lock (a
+# farm run's scratch push) proceeds instead of waiting on its parent.
+new_landing_origin reentry
+make_landing_clone "$landing_root/lane" lane.txt
+lock_key=$(printf '%s' "$landing_remote" | sha256sum | cut -c1-16)
+mkdir -p "$scratch/xdg-state/safe-push"
+flock "$scratch/xdg-state/safe-push/$lock_key.lock" sleep 20 & holder=$!
+sleep 1
+case_status=0
+SAFE_PUSH_LOCK_HELD="$lock_key" timeout 15 bash -c "$(declare -f run_landing); real_bin='$real_bin' scratch='$scratch' TARGET='$TARGET' run_landing '$landing_root/lane'" || case_status=$?
+kill "$holder" 2>/dev/null || true
+wait "$holder" 2>/dev/null || true
+case_output="$(cat "$landing_root/lane.out")"
+expect_status zero
+expect_output 'held by the safe-push whose checks started this one'
+
 # A failing hook refuses the landing before the lock, and origin is unchanged.
 new_landing_origin hook-fails
 make_landing_clone "$landing_root/lane" lane.txt
