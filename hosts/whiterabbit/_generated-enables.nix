@@ -93,6 +93,7 @@
   myConfig.modules.smashcraft-controller.enable = lib.mkDefault true;
   myConfig.modules.smashcraft-test-pads.enable = lib.mkDefault true;
   myConfig.modules.socat.enable = lib.mkDefault true;
+  myConfig.modules.sox.enable = lib.mkDefault true;
   myConfig.modules.sqlite.enable = lib.mkDefault true;
   myConfig.modules.starship.enable = lib.mkDefault true;
   myConfig.modules.steam.enable = lib.mkDefault true;
