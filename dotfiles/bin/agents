@@ -158,4 +158,10 @@ if ! command -v -- "$north_bin" >/dev/null 2>&1; then
   exit 2
 fi
 
+if [ "${1:-}" = sync ]; then
+  "$north_bin" config agents "$@" || exit
+  "$(dirname "$(readlink -f "$0")")/effect-kit" scan
+  exit 0
+fi
+
 exec "$north_bin" config agents "$@"
