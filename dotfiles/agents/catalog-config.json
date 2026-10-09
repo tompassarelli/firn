@@ -523,6 +523,16 @@
         "path": "dotfiles/agents/hooks/native-launch-guard.sh"
       }
     },
+    "heavy-command-guard": {
+      "kind": "hook",
+      "title": "Heavy command guard",
+      "triggerDescription": "Refuse cargo build, a full bun test suite, wisp map build or a headless wisp render outside machine-capacity run.",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/heavy-command-guard.sh"
+      }
+    },
     "lead-regrounding": {
       "kind": "hook",
       "title": "Lead regrounding tick",
@@ -1305,6 +1315,19 @@
       ]
     },
     "native-launch-guard": {
+      "supports": [
+        "machine-capacity"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "claude"
+          ]
+        }
+      ]
+    },
+    "heavy-command-guard": {
       "supports": [
         "machine-capacity"
       ],
