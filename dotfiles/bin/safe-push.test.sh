@@ -800,13 +800,12 @@ expect_output 're-running them (1/3)'
 
 # A repository whose committed .safe-push sets landing.exact re-runs its
 # checks on the exact rebased commit even when origin's new commits touch
-# other files.
+# other files, including when the landing that moved origin introduced it.
 new_landing_origin exact
-printf '[landing]\n\texact = true\n' >"$landing_root/seed/.safe-push"
-"$real_git" -C "$landing_root/seed" add .safe-push
-"$real_git" -C "$landing_root/seed" commit -qm 'exact landings'
-"$real_git" -C "$landing_root/seed" push -q "$landing_remote" main
 make_landing_clone "$landing_root/a" a.txt
+printf '[landing]\n\texact = true\n' >"$landing_root/a/.safe-push"
+"$real_git" -C "$landing_root/a" add .safe-push
+"$real_git" -C "$landing_root/a" commit -qm 'exact landings'
 make_landing_clone "$landing_root/b" b.txt
 add_slow_hook "$landing_root/a"
 add_slow_hook "$landing_root/b"

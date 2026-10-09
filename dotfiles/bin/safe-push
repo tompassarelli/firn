@@ -576,10 +576,14 @@ touches_same_files() {
 # will land on (or one whose new commits touch none of its files, unless the
 # repository's committed .safe-push sets landing.exact), so the push skips it.
 hook_verified=0
-exact_landing=0
-if [ "$(git config -f "$(git rev-parse --show-toplevel)/.safe-push" --type=bool --get landing.exact 2>/dev/null)" = true ]; then
-  exact_landing=1
-fi
+# Read from the destination too: its new commits may be what introduce the setting.
+exact_landing() {
+  local ref
+  for ref in HEAD "$1"; do
+    [ "$(git config --blob "$ref:.safe-push" --type=bool --get landing.exact 2>/dev/null)" = true ] && return 0
+  done
+  return 1
+}
 if [ "$to_seen" -eq 1 ] && [ "$dry" = 0 ]; then
   lock_url=$(git remote get-url --push origin 2>/dev/null) \
     || { echo "safe-push: origin has no push URL"; exit 1; }
@@ -602,7 +606,7 @@ if [ "$to_seen" -eq 1 ] && [ "$dry" = 0 ]; then
         hook_verified=1
         break
       fi
-      if [ "$exact_landing" -eq 0 ] && [ -n "$checked_base" ] && [ -n "$upstream" ] \
+      if ! exact_landing "$upstream" && [ -n "$checked_base" ] && [ -n "$upstream" ] \
           && git merge-base --is-ancestor "$checked_base" "$upstream" 2>/dev/null \
           && ! touches_same_files "$checked_base" "$upstream" "$checked_head"; then
         echo "safe-push: origin $to's new commits touch none of this change's files — keeping the checks' verdict"
