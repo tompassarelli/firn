@@ -960,7 +960,7 @@ land_through_autoland() {
 }
 
 if [ "$to_seen" -eq 1 ] && [ "$dry" = 0 ]; then
-  case "$(git symbolic-ref --quiet --short HEAD 2>/dev/null)" in
+  [ -n "${SAFE_PUSH_LOCK_HELD:-}" ] || case "$(git symbolic-ref --quiet --short HEAD 2>/dev/null)" in
     safe-push-train-*)
       echo "safe-push: this worktree is on the branch of a landing train whose holder stopped, not on a lane; git switch back to the lane's own branch (git reflog shows it) and retry. NOT pushed." >&2
       exit 1
