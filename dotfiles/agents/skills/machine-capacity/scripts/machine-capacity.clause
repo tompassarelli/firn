@@ -20,8 +20,9 @@ export resource-class(?kind: Text, ?cores: F64): Resources
     if(?kind = "native", {cpus: if(?cores > 1, 2, 1), memoryMiB: 4096},
       if(?kind = "moderate", {cpus: if(?cores > 1, 2, 1), memoryMiB: 2048},
         if(?kind = "heavy", {cpus: if(?cores > 8, 6, if(?cores > 4, 3, 1)), memoryMiB: 8192},
-          require(?kind = "exclusive", {cpus: ?cores, memoryMiB: 16384},
-            "Unknown resource class")))))
+          if(?kind = "gpu", {cpus: 1, memoryMiB: 2048},
+            require(?kind = "exclusive", {cpus: ?cores, memoryMiB: 16384},
+              "Unknown resource class"))))))
 
 export reserve-class(?kind: Text): Bool
   ?kind = "agent"
@@ -34,7 +35,7 @@ export native-memory-request(?kind: Text, ?cores: F64, ?memory-gib: F64): Resour
     "--memory-gib requires a positive native memory request")
 
 export batch-class(?kind: Text): Bool
-  ?kind = "moderate" or ?kind = "heavy" or ?kind = "exclusive"
+  ?kind = "moderate" or ?kind = "heavy" or ?kind = "exclusive" or ?kind = "gpu"
 
 # Longest hold per class in seconds. Exclusive work is short so it cannot
 # starve the queue it drains; every batch lease ends by its deadline.
@@ -61,20 +62,28 @@ export batch-pressure-limit-basis-points(): F64
 export gpu-busy-limit-percent(): F64
   85
 
-export native-gpu-decision(?profile: Text, ?gpu-busy-percent: F64, ?gpu-clients: F64): Text
-  if(?profile = "attended" and ?gpu-clients >= 2, "DEFER_GPU_CLIENTS",
-    if(?gpu-busy-percent >= gpu-busy-limit-percent(), "DEFER_GPU_BUSY", "RUN"))
+# Headless renders (gpu class) share the GPU two at a time. Native clients
+# outrank them: GPU time leased renders hold does not defer a native client,
+# and a native client deferred in the last minute holds new gpu leases.
+export gpu-slots(): F64
+  2
 
-export admission-decision(?profile: Text, ?kind: Text, ?cores: F64, ?memory-total-mib: F64, ?memory-available-mib: F64, ?cpu-some-avg10-basis-points: F64, ?protected-cpu-some-avg10-basis-points: F64, ?leased-memory-mib: F64, ?leased-batch-cpus: F64, ?leased-native-cpus: F64, ?requested-cpus: F64, ?requested-memory-mib: F64, ?peer-batch-runs: F64, ?peer-exclusive-runs: F64, ?unbounded-runs: F64, ?queued-ahead: F64, ?exclusive-waiting: F64, ?gpu-busy-percent: F64, ?gpu-clients: F64): Text
+export native-gpu-decision(?profile: Text, ?gpu-busy-percent: F64, ?gpu-clients: F64, ?gpu-runs: F64): Text
+  if(?profile = "attended" and ?gpu-clients >= 2, "DEFER_GPU_CLIENTS",
+    if(?gpu-busy-percent >= gpu-busy-limit-percent() and ?gpu-runs = 0, "DEFER_GPU_BUSY", "RUN"))
+
+export admission-decision(?profile: Text, ?kind: Text, ?cores: F64, ?memory-total-mib: F64, ?memory-available-mib: F64, ?cpu-some-avg10-basis-points: F64, ?protected-cpu-some-avg10-basis-points: F64, ?leased-memory-mib: F64, ?leased-batch-cpus: F64, ?leased-native-cpus: F64, ?requested-cpus: F64, ?requested-memory-mib: F64, ?peer-batch-runs: F64, ?peer-exclusive-runs: F64, ?unbounded-runs: F64, ?queued-ahead: F64, ?exclusive-waiting: F64, ?gpu-busy-percent: F64, ?gpu-clients: F64, ?gpu-runs: F64, ?native-waiting: F64): Text
   require(?profile = "attended" or ?profile = "unattended", if(?cores <= 0 or ?memory-total-mib <= 0 or ?memory-available-mib <= 0 or ?requested-cpus < 0 or ?requested-memory-mib <= 0, "INVALID",
     if(?memory-available-mib - ?requested-memory-mib < memory-floor-mib(?profile, ?memory-total-mib), "DEFER_MEMORY_HEADROOM",
       if((?leased-memory-mib + ?requested-memory-mib) * 4 > ?memory-total-mib * 3, "DEFER_MEMORY_CAPACITY",
         if(?kind = "agent", "RUN",
           if(?kind = "native",
             if(?leased-native-cpus + ?requested-cpus > aggregate-cpus(?profile, ?cores), "DEFER_NATIVE_CPUS",
-              native-gpu-decision(?profile, ?gpu-busy-percent, ?gpu-clients)),
+              native-gpu-decision(?profile, ?gpu-busy-percent, ?gpu-clients, ?gpu-runs)),
             if(?unbounded-runs > 0, "DEFER_UNBOUNDED_PEER",
               if(?peer-exclusive-runs > 0, "DEFER_EXCLUSIVE",
+                if(?kind = "gpu" and ?native-waiting > 0, "DEFER_NATIVE_WAITING",
+                if(?kind = "gpu" and ?gpu-runs >= gpu-slots(), "DEFER_GPU_SLOTS",
                 if(?kind = "exclusive",
                   if(?exclusive-waiting > 0, "DEFER_QUEUED",
                     if(?peer-batch-runs > 0, "DEFER_EXCLUSIVE", "RUN")),
@@ -82,4 +91,4 @@ export admission-decision(?profile: Text, ?kind: Text, ?cores: F64, ?memory-tota
                     if(?profile = "attended" and ?protected-cpu-some-avg10-basis-points >= 1000, "DEFER_INTERACTIVE_PRESSURE",
                       if(?queued-ahead > 0, "DEFER_QUEUED",
                         if(?leased-batch-cpus + ?requested-cpus > aggregate-cpus(?profile, ?cores), "DEFER_CPU_CAPACITY",
-                          if(?cpu-some-avg10-basis-points > batch-pressure-limit-basis-points(), "DEFER_CPU_PRESSURE", "RUN"))))))))))))), "Unknown capacity profile")
+                          if(?cpu-some-avg10-basis-points > batch-pressure-limit-basis-points(), "DEFER_CPU_PRESSURE", "RUN"))))))))))))))), "Unknown capacity profile")

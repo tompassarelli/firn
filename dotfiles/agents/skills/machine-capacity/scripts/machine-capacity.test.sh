@@ -81,6 +81,15 @@ if fixture unattended heavy 40000 0 0 0 0 --memory-gib 1.5 >/dev/null 2>&1; then
   exit 1
 fi
 
+# Headless renders share the GPU two at a time and yield to native clients;
+# GPU time leased renders hold does not defer a native client.
+[[ $(decision unattended gpu 80000 0 0 1 2048 --gpu-runs 1) == RUN ]]
+[[ $(decision unattended gpu 80000 0 0 2 4096 --gpu-runs 2) == DEFER_GPU_SLOTS ]]
+[[ $(decision unattended gpu 80000 0 0 0 0 --native-waiting 1) == DEFER_NATIVE_WAITING ]]
+[[ $(decision unattended native 80000 0 0 0 0 --gpu-busy-percent 95) == DEFER_GPU_BUSY ]]
+[[ $(decision unattended native 80000 0 0 2 4096 --gpu-busy-percent 95 --gpu-runs 2) == RUN ]]
+[[ $(decision attended native 80000 0 0 0 0 --gpu-clients 2 --gpu-runs 1) == DEFER_GPU_CLIENTS ]]
+
 # Peer ceilings hold batch work at the aggregate limit: 20 cores present, 24 away.
 [[ $(decision attended heavy 80000 0 0 18 21504 --peer-batch-runs 3) == DEFER_CPU_CAPACITY ]]
 [[ $(decision attended heavy 80000 0 0 14 21504 --peer-batch-runs 3) == RUN ]]
@@ -447,6 +456,15 @@ throttled_probe() {
 [[ $(throttled_probe) != DEFER_CPU_PRESSURE ]]
 psi "$user_manager/app.slice" 90.00
 [[ $(throttled_probe) == DEFER_CPU_PRESSURE ]]
+
+# A deferred native client holds new gpu leases until it is admitted.
+gpu_probe() { XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" probe --class "$1" | jq -r '.reason' || true; }
+echo 95 >"$AGENT_CAPACITY_GPU_BUSY"
+[[ $(gpu_probe native) == DEFER_GPU_BUSY ]]
+[[ $(gpu_probe gpu) == DEFER_NATIVE_WAITING ]]
+echo 0 >"$AGENT_CAPACITY_GPU_BUSY"
+[[ $(gpu_probe native) == RUN ]]
+[[ $(gpu_probe gpu) == RUN ]]
 
 # Release records what the scope used: two busy loops under a 2-CPU quota.
 XDG_RUNTIME_DIR="$user_runtime_dir" bun "$scratch/machine-capacity.mjs" run --class moderate --owner fixture:/measure \

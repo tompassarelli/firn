@@ -10,10 +10,11 @@ written: 2026-10-09
 
 - Resolve the helper at `$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs` and invoke it with Bun.
 - Admit sustained multi-core or >1 GiB work through the shared helper, never worker slots or load average.
-- Choose the smallest sufficient class: moderate = 2 CPUs/2 GiB; heavy = 6 CPUs/8 GiB; exclusive = all allowed cores/no peer batch; native = 2 CPUs/4 GiB/no CPU quota.
+- Choose the smallest sufficient class: moderate = 2 CPUs/2 GiB; heavy = 6 CPUs/8 GiB; exclusive = all allowed cores/no peer batch; gpu = 1 CPU/2 GiB for headless Chrome/wisp renders (not grim captures), two at a time; native = 2 CPUs/4 GiB/no CPU quota.
 - Use `run --class CLASS --owner OWNER --timeout-seconds N -- COMMAND ARG...` for batch work, including legitimate setup/download time.
 - Use `session --class native --owner OWNER -- COMMAND ARG...` for Warcraft clients/private desktops, one scope per client and two per pair.
-- Expect native DEFER_GPU_BUSY while GPU busy averages at least 85% over 5 s, and attended DEFER_GPU_CLIENTS while two Warcraft clients run; `status`/`probe` show `gpuBusyPercent`/`gpuClients`.
+- Expect native DEFER_GPU_BUSY while GPU busy averages at least 85% over 5 s with no gpu lease running, and attended DEFER_GPU_CLIENTS while two Warcraft clients run; `status`/`probe` show `gpuBusyPercent`/`gpuClients`/`gpuLeases`.
+- Expect gpu DEFER_GPU_SLOTS at two gpu leases and DEFER_NATIVE_WAITING for a minute after a native client was deferred; native clients outrank renders.
 - Never start wine, proton, steam-run or a game .exe outside a native session; `native-launch-guard` refuses it.
 - Keep native sessions foreground until command exit, Ctrl-C or explicit stop; only native sessions have no default deadline.
 - Respect batch session's 30-minute default, batch's one-hour maximum and exclusive's 15-minute maximum.

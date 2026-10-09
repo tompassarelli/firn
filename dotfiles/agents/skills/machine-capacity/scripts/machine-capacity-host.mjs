@@ -29,7 +29,8 @@ const nativeSlice = 'native.slice';
 const nativeCpuWeight = 200;
 const gpuSampleMilliseconds = 500;
 const nativeGpuSamples = 10;
-const classNames = new Set(['agent', 'native', 'moderate', 'heavy', 'exclusive']);
+const classNames = new Set(['agent', 'native', 'moderate', 'heavy', 'exclusive', 'gpu']);
+const nativeWaitingMilliseconds = 60000;
 const modes = new Map([['present', 'attended'], ['away', 'unattended'], ['auto', null]]);
 const idleSecondsForUnattended = 600;
 const presenceUnit = 'agent-capacity-presence.service';
@@ -86,7 +87,7 @@ function required(values, option) {
 
 function parseClass(values, cores) {
   const name = required(values, '--class');
-  if (!classNames.has(name)) fail('--class must be agent, native, moderate, heavy, or exclusive');
+  if (!classNames.has(name)) fail('--class must be agent, native, moderate, heavy, exclusive, or gpu');
   let resources = resourceClass(name, cores);
   if (values.has('--memory-gib')) {
     const memoryGiB = Number(required(values, '--memory-gib'));
@@ -698,14 +699,30 @@ function leaseSlice(className) {
   return className === 'native' ? nativeSlice : aggregateSlice;
 }
 
+function nativeWaiting(root, now) {
+  try {
+    return now - statSync(join(root, 'native-waiting')).mtimeMs < nativeWaitingMilliseconds ? 1 : 0;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return 0;
+    throw error;
+  }
+}
+
+function markNativeWaiting(root, waiting) {
+  if (waiting) writeFileSync(join(root, 'native-waiting'), '', { mode: 0o600 });
+  else rmSync(join(root, 'native-waiting'), { force: true });
+}
+
 function decision(root, requested, create, ticket = null) {
   const gpu = readGpu(requested.name === 'native' && !process.env.AGENT_CAPACITY_GPU_BUSY ? nativeGpuSamples : 1);
   return withLock(root, () => {
     const now = Date.now();
     const { active, reclaimed } = readLeases(root, now);
     const queue = readQueue(root);
+    // Gpu tickets wait for render slots in their own line, so they hold no CPU work.
     const queuedAhead = queue.filter(entry => (ticket === null || entry.name < ticket)
-      && (requested.name !== 'moderate' || entry.class !== 'exclusive')).length;
+      && (entry.class === 'gpu') === (requested.name === 'gpu')
+      && (!['moderate', 'gpu'].includes(requested.name) || entry.class !== 'exclusive')).length;
     const exclusiveWaiting = queue.filter(entry => entry.class === 'exclusive'
       && (requested.name !== 'exclusive' || ticket === null || entry.name < ticket)).length;
     const leased = totals(active);
@@ -732,7 +749,10 @@ function decision(root, requested, create, ticket = null) {
       exclusiveWaiting,
       gpu.gpuBusyPercent,
       gpu.gpuClients,
+      runs.filter(lease => lease.class === 'gpu').length,
+      nativeWaiting(root, now),
     );
+    if (requested.name === 'native') markNativeWaiting(root, code !== 'RUN');
     const result = {
       decision: code === 'RUN' ? (create ? 'RESERVED' : 'RUN') : 'DEFER',
       reason: code,
@@ -754,6 +774,7 @@ function decision(root, requested, create, ticket = null) {
       memoryFullAvg10: signals.memoryFullAvg10BasisPoints / 100,
       memoryAvailableMiB: signals.memoryAvailableMiB,
       ...gpu,
+      gpuLeases: runs.filter(lease => lease.class === 'gpu').length,
       unleasedHeavyCores: readUnleased(root)?.cores ?? null,
       reclaimed,
     };
@@ -895,7 +916,7 @@ async function admit(root, requested, create) {
 }
 
 async function runScoped(root, requested, owner, timeoutSeconds, command) {
-  if (requested.name === 'agent') fail('run --class must be moderate, heavy, or exclusive');
+  if (requested.name === 'agent') fail('run --class must be moderate, heavy, exclusive, gpu, or native');
   // The parent limit and weights must exist before any admitted command executes.
   if (!applyProfile(activeProfile(root).profile, readSignals().cores)) {
     fail('cannot establish aggregate CPU limit and native weight', 75);
@@ -967,7 +988,7 @@ async function main(argv) {
       '--leased-cpus', '--leased-native-cpus', '--leased-memory-mib',
       '--peer-batch-runs', '--peer-exclusive-runs', '--unbounded-runs',
       '--memory-gib', '--cpu-some-avg10-basis-points', '--queued-ahead', '--exclusive-waiting',
-      '--gpu-busy-percent', '--gpu-clients',
+      '--gpu-busy-percent', '--gpu-clients', '--gpu-runs', '--native-waiting',
     ]));
     if (parsed.separator !== argv.length) fail('fixture accepts no command');
     const cores = parsePositiveInteger(required(parsed.values, '--cores'), '--cores');
@@ -1000,6 +1021,8 @@ async function main(argv) {
       parseNonnegativeInteger(parsed.values.get('--exclusive-waiting') ?? '0', '--exclusive-waiting'),
       parseNonnegativeInteger(parsed.values.get('--gpu-busy-percent') ?? '0', '--gpu-busy-percent'),
       parseNonnegativeInteger(parsed.values.get('--gpu-clients') ?? '0', '--gpu-clients'),
+      parseNonnegativeInteger(parsed.values.get('--gpu-runs') ?? '0', '--gpu-runs'),
+      parseNonnegativeInteger(parsed.values.get('--native-waiting') ?? '0', '--native-waiting'),
     );
     print({ decision: code, profile, class: requested.name, cpus: requested.cpus, memoryMiB: requested.memoryMiB, memoryFullAvg10,
       leasedCpuCeilings, aggregateCpuLimit: aggregateCpus(profile, cores) });
