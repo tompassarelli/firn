@@ -821,6 +821,32 @@ expect_output 're-running them (1/3)'
 [ "$(tail -n1 "$landing_root/b.hook-runs")" = "$("$real_git" --git-dir="$landing_remote" rev-parse main)" ] \
   || fail 'exact landing: the hook did not check the commit that landed'
 
+# When both lanes already carry landing.exact they queue in arrival order
+# before the checks, so the later one checks its rebased commit once and
+# never restarts behind the peer it queued after.
+new_landing_origin queued
+printf '[landing]\n\texact = true\n' >"$landing_root/seed/.safe-push"
+"$real_git" -C "$landing_root/seed" add .safe-push
+"$real_git" -C "$landing_root/seed" commit -qm 'exact landings'
+"$real_git" -C "$landing_root/seed" push -q "$landing_remote" main
+make_landing_clone "$landing_root/a" a.txt
+make_landing_clone "$landing_root/b" b.txt
+add_slow_hook "$landing_root/a"
+add_slow_hook "$landing_root/b"
+run_landing "$landing_root/a" & pid_a=$!
+sleep 1
+run_landing "$landing_root/b" & pid_b=$!
+status_a=0; wait "$pid_a" || status_a=$?
+status_b=0; wait "$pid_b" || status_b=$?
+case_output="$(cat "$landing_root/a.out" "$landing_root/b.out")"
+[ $((status_a + status_b)) -eq 0 ] || fail "queued exact landing: a run failed: $case_output"
+[[ "$case_output" != *'re-running them'* ]] || fail 'queued exact landing restarted its checks behind its peer'
+[ "$(wc -l <"$landing_root/b.hook-runs")" -eq 1 ] || fail 'queued exact landing: the later lane checked more than once'
+[ "$("$real_git" --git-dir="$landing_remote" log --format=%s -2 main | tr '\n' ' ')" = 'change from b change from a ' ] \
+  || fail 'queued exact landing: lanes did not land in arrival order'
+[ "$(tail -n1 "$landing_root/b.hook-runs")" = "$("$real_git" --git-dir="$landing_remote" rev-parse main)" ] \
+  || fail 'queued exact landing: the hook did not check the commit that landed'
+
 # A safe-push started by the checks of one that holds the landing lock (a
 # farm run's scratch push) proceeds instead of waiting on its parent.
 new_landing_origin reentry

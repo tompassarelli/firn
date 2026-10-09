@@ -29,7 +29,8 @@ Options:
                origin BRANCH and runs the repo's pre-push hook, then takes the
                per-origin landing lock only to fetch, rebase and push; a
                repository whose committed .safe-push sets landing.exact = true
-               re-runs the hook whenever origin BRANCH moved during it
+               instead queues for the lock in arrival order before the hook,
+               and re-runs the hook only when another push moved origin BRANCH
   --keep-lane  after landing --to main from ~/code/<project>/worktrees/<slug>,
                keep the lane instead of removing it and its branch
   --tag NAME   push an existing annotated tag after scanning new content
@@ -38,6 +39,9 @@ Options:
 On a non-default branch, plain "safe-push" (no --to/--tag) is refused —
 one-branch-main doctrine: origin carries the default branch only. Publish
 with --to main, or --to another branch as a deliberate escape hatch.
+
+Each running safe-push needs its own output log file; a second one writing to
+the same file is refused.
 
 A clean lane landed with --to main is removed afterwards (git worktree remove,
 then git branch -d), and its same-named origin branch is deleted when main
@@ -122,6 +126,25 @@ validate_destination_name() {
 }
 
 if [ "$to_seen" -eq 1 ]; then validate_destination_name "$to"; fi
+
+# A log file belongs to one safe-push tree: workers sharing a scratch push.log read each other's landings as their own.
+claim_output_log() {
+  local fd target claimed=""
+  for fd in 1 2; do
+    target=$(readlink "/proc/$$/fd/$fd" 2>/dev/null) || continue
+    [ -f "$target" ] || continue
+    case " $claimed ${SAFE_PUSH_OUTPUT_CLAIMED:-} " in *" $target "*) continue ;; esac
+    exec {output_lock_fd}<"$target"
+    if ! flock -n "$output_lock_fd"; then
+      printf 'safe-push: refusing in %s: %s is already the log of another running safe-push; give each landing its own log file. NOT pushed.\n' \
+        "$PWD" "$target" >&2
+      exit 1
+    fi
+    claimed="$claimed $target"
+  done
+  export SAFE_PUSH_OUTPUT_CLAIMED="${SAFE_PUSH_OUTPUT_CLAIMED:-}$claimed"
+}
+claim_output_log
 
 state_changed() {
   printf 'safe-push: repository state changed during secret scan (%s) — refusing; NOT pushed.\n' "$1" >&2
@@ -457,8 +480,28 @@ fi
 # the lock; holders of the lock only fetch, rebase, scan and push.
 push_lock_fd=""
 push_lock_taken=""
+push_ticket=""
+trap '[ -z "$push_ticket" ] || rm -f -- "$push_ticket"' EXIT
+
+live_safe_push() {
+  kill -0 "$1" 2>/dev/null && tr '\0' ' ' <"/proc/$1/cmdline" 2>/dev/null | grep -q safe-push
+}
+
+# Prints the oldest ticket in queue $1 whose safe-push is still running.
+first_ticket() {
+  local t name
+  for t in "$1"/*; do
+    name=${t##*/}
+    [[ "$name" =~ ^[0-9]+-([0-9]+)$ ]] || continue
+    if [ "$1/$name" = "$push_ticket" ] || live_safe_push "${BASH_REMATCH[1]}"; then
+      printf '%s\n' "$1/$name"
+      return 0
+    fi
+  done
+}
+
 acquire_push_lock() {
-  local url="$1" dir key file holder waited=0
+  local url="$1" limit="${2:-600}" dir key file holder waited=0 queue
   dir="${XDG_STATE_HOME:-$HOME/.local/state}/safe-push"
   mkdir -p "$dir"
   key=$(printf '%s' "$url" | sha256sum | cut -c1-16)
@@ -467,21 +510,27 @@ acquire_push_lock() {
     printf 'safe-push: the landing lock on %s is held by the safe-push whose checks started this one\n' "$url" >&2
     return 0
   fi
-  exec {push_lock_fd}>>"$file"
-  if ! flock -n "$push_lock_fd"; then
-    while :; do
-      holder=$(cat "$file" 2>/dev/null) || holder=""
-      printf 'safe-push: waiting for the landing lock on %s, held by %s (%ss/600s)\n' \
-        "$url" "${holder:-unknown}" "$waited" >&2
-      flock -w 30 "$push_lock_fd" && break
-      waited=$((waited + 30))
-      if [ "$waited" -ge 600 ]; then
-        printf 'safe-push: gave up after 600s waiting for the landing lock on %s, held by %s; NOT pushed.\n' \
-          "$url" "${holder:-unknown}" >&2
-        exit 1
-      fi
-    done
+  queue="$dir/$key.queue"
+  mkdir -p "$queue"
+  if [ -z "$push_ticket" ]; then
+    push_ticket="$queue/${EPOCHREALTIME/./}-$$"
+    : >"$push_ticket"
   fi
+  exec {push_lock_fd}>>"$file"
+  while [ "$(first_ticket "$queue")" != "$push_ticket" ] || ! flock -n "$push_lock_fd"; do
+    if [ $((waited % 30)) -eq 0 ]; then
+      holder=$(cat "$file" 2>/dev/null) || holder=""
+      printf 'safe-push: waiting for the landing lock on %s in arrival order, held by %s (%ss/%ss)\n' \
+        "$url" "${holder:-unknown}" "$waited" "$limit" >&2
+    fi
+    if [ "$waited" -ge "$limit" ]; then
+      printf 'safe-push: gave up after %ss waiting for the landing lock on %s, held by %s; NOT pushed.\n' \
+        "$limit" "$url" "${holder:-unknown}" >&2
+      exit 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
   printf 'pid %s in %s\n' "$$" "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" >"$file"
   export SAFE_PUSH_LOCK_HELD="$key"
   push_lock_taken=$EPOCHREALTIME
@@ -492,6 +541,8 @@ release_push_lock() {
   flock -u "$push_lock_fd" || true
   exec {push_lock_fd}>&-
   push_lock_fd=""
+  rm -f -- "$push_ticket"
+  push_ticket=""
   unset SAFE_PUSH_LOCK_HELD
   awk -v a="$push_lock_taken" -v b="$EPOCHREALTIME" \
     'BEGIN { printf "safe-push: held the landing lock for %.1f s\n", b - a }'
@@ -557,7 +608,11 @@ run_pre_push_checks() {
   local_ref=$(git symbolic-ref --quiet HEAD)
   top=$(git rev-parse --show-toplevel)
   zero=$(printf '%0*d' "${#head}" 0)
-  echo "safe-push: running the pre-push checks on $head before taking the landing lock"
+  if [ -n "$push_lock_fd" ]; then
+    echo "safe-push: running the pre-push checks on $head under the landing lock"
+  else
+    echo "safe-push: running the pre-push checks on $head before taking the landing lock"
+  fi
   if ! (cd "$top" && printf '%s %s refs/heads/%s %s\n' "$local_ref" "$head" "$to" "${base:-$zero}" \
       | "$hook" origin "$lock_url"); then
     echo "safe-push: ✗ the pre-push checks failed; NOT pushed." >&2
@@ -592,13 +647,20 @@ if [ "$to_seen" -eq 1 ] && [ "$dry" = 0 ]; then
     acquire_push_lock "$lock_url"
     sync_with_destination
   else
+    queued=0
+    first_base=$(fetch_destination)
+    if exact_landing "${first_base:-HEAD}"; then
+      echo "safe-push: exact landing — queueing for the landing lock before the checks, so a lane ahead can't restart them"
+      acquire_push_lock "$lock_url" 10800
+      queued=1
+    fi
     attempt=1
     while :; do
       checked_base=$(fetch_destination)
       rebase_onto_destination "$checked_base"
       checked_head=$(git rev-parse HEAD)
       run_pre_push_checks "$hook" "$checked_base"
-      acquire_push_lock "$lock_url"
+      [ "$queued" -eq 1 ] || acquire_push_lock "$lock_url"
       [ "$(git rev-parse HEAD)" = "$checked_head" ] \
         || { echo "safe-push: HEAD changed while the pre-push checks ran — refusing; NOT pushed." >&2; exit 1; }
       upstream=$(fetch_destination)
@@ -620,7 +682,7 @@ if [ "$to_seen" -eq 1 ] && [ "$dry" = 0 ]; then
         break
       fi
       echo "safe-push: origin $to changed this change's files during the checks — re-running them ($attempt/3)"
-      release_push_lock
+      [ "$queued" -eq 1 ] || release_push_lock
       attempt=$((attempt + 1))
     done
   fi
