@@ -33,7 +33,9 @@ Options:
                and re-runs the hook only when another push moved origin BRANCH;
                the lock holder lands the lanes queued behind it as one train
                (origin BRANCH plus each lane cherry-picked in arrival order,
-               one hook run, halves re-run on red) and tells each its verdict
+               one hook run, halves re-run on red) and tells each its verdict;
+               a BRANCH other than origin's default (farm/*, scratch) skips
+               the lock and the queue and runs the hook in its own push
   --keep-lane  after landing --to main from ~/code/<project>/worktrees/<slug>,
                keep the lane instead of removing it and its branch
   --tag NAME   push an existing annotated tag after scanning new content
@@ -824,7 +826,10 @@ if [ "$to_seen" -eq 1 ] && [ "$dry" = 0 ]; then
   lock_url=$(git remote get-url --push origin 2>/dev/null) \
     || { echo "safe-push: origin has no push URL"; exit 1; }
   hook=$(pre_push_hook)
-  if [ -z "$hook" ]; then
+  if [ "$to" != "$(default_branch)" ]; then
+    echo "safe-push: $to is not origin's default branch — pushing without the landing lock"
+    sync_with_destination
+  elif [ -z "$hook" ]; then
     acquire_push_lock "$lock_url"
     sync_with_destination
   else

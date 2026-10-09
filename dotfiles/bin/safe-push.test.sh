@@ -683,7 +683,7 @@ run_landing() {
       SAFE_PUSH_TEST_GITLEAKS_SLEEP="${landing_sleep:-}" \
       XDG_STATE_HOME="$scratch/xdg-state" \
       PATH="$real_bin:$PATH" \
-      "$TARGET" --to main
+      "$TARGET" --to "${landing_to:-main}"
   ) >"$dir.out" 2>&1
 }
 
@@ -933,6 +933,23 @@ wait "$holder" 2>/dev/null || true
 case_output="$(cat "$landing_root/lane.out")"
 expect_status zero
 expect_output 'held by the safe-push whose checks started this one'
+
+# While a main landing holds the lock, a scratch push to farm/* goes straight through.
+new_landing_origin farm-scratch
+make_landing_clone "$landing_root/lane" lane.txt
+lock_key=$(printf '%s' "$landing_remote" | sha256sum | cut -c1-16)
+mkdir -p "$scratch/xdg-state/safe-push"
+flock "$scratch/xdg-state/safe-push/$lock_key.lock" sleep 20 & holder=$!
+sleep 1
+case_status=0
+timeout 15 bash -c "$(declare -f run_landing); landing_to=farm/x real_bin='$real_bin' scratch='$scratch' TARGET='$TARGET' run_landing '$landing_root/lane'" || case_status=$?
+kill "$holder" 2>/dev/null || true
+wait "$holder" 2>/dev/null || true
+case_output="$(cat "$landing_root/lane.out")"
+expect_status zero
+[[ "$case_output" != *'waiting for the landing lock'* ]] || fail 'farm scratch push waited for the landing lock'
+[ "$("$real_git" --git-dir="$landing_remote" rev-parse refs/heads/farm/x)" = "$("$real_git" -C "$landing_root/lane" rev-parse HEAD)" ] \
+  || fail 'farm scratch push did not publish farm/x'
 
 # A failing hook refuses the landing before the lock, and origin is unchanged.
 new_landing_origin hook-fails
