@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+online="${WISP_ONLINE_DIR:-$HOME/.local/share/wisp/online}"
+limit=$((1024 * 1024 * 1024))
+actions=()
+launcher="$online/launch.sh"
+if [[ -f "$launcher" ]] && grep -Eq 'PROTON_LOG(_DIR)?=' "$launcher"; then
+  sed -E -i \
+    -e "s/(export[[:space:]]+)?PROTON_LOG(_DIR)?=(\"[^\"]*\"|'[^']*'|[^[:space:]]*)[[:space:]]*//g" \
+    -e '/^[[:space:]]*export[[:space:]]*$/d' "$launcher"
+  actions+=("stripped PROTON_LOG from $launcher")
+fi
+freed=0
+shopt -s nullglob
+for log in "$online"/clone-*/steam-*.log; do
+  size=$(stat -c %s "$log")
+  if (( size > limit )); then
+    truncate -s 0 "$log"
+    freed=$((freed + size))
+    actions+=("truncated $log ($((size / 1024 / 1024)) MiB)")
+  fi
+done
+if (( ${#actions[@]} == 0 )); then
+  printf 'proton-log-watchdog: launch.sh clean, no clone log over 1 GiB\n'
+  exit 0
+fi
+summary="$(printf '%s\n' "${actions[@]}")"
+printf '%s\nfreed %d bytes\n' "$summary" "$freed"
+notify-send --urgency=critical 'Proton debug logging turned off' "$summary
+Freed $((freed / 1024 / 1024 / 1024)) GiB. Never set PROTON_LOG on Wisp clones." || true

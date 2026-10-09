@@ -84,6 +84,7 @@
    :myConfig.modules.poppler-utils.enable (lib.mkDefault true)
    :myConfig.modules.procps.enable (lib.mkDefault true)
    :myConfig.modules.procs.enable (lib.mkDefault true)
+   :myConfig.modules.proton-log-watchdog.enable (lib.mkDefault true)
    :myConfig.modules.protonup-qt.enable (lib.mkDefault true)
    :myConfig.modules.protonvpn-gui.enable (lib.mkDefault true)
    :myConfig.modules.python.enable (lib.mkDefault true)

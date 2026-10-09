@@ -1,0 +1,19 @@
+#lang beagle/nix
+(ns default)
+(nix/module [config lib pkgs ...]
+  (let [homeDir config.myConfig.modules.users.homeDir
+        username config.myConfig.modules.users.username
+        description "Proton debug-log watchdog: PROTON_LOG on Wisp clones wrote ~280 GB per clone at 100+ MB/s and hung the desktop, so strip it from launch.sh and truncate clone steam-*.log over 1 GiB"]
+    {:tags-opt-in [development]
+     :options.myConfig.modules.proton-log-watchdog.enable (lib.mkEnableOption description)
+     :config (lib.mkIf config.myConfig.modules.proton-log-watchdog.enable
+       {:home-manager.users {username (nix/module [config ...]
+         {:systemd.user.services.proton-log-watchdog
+           {:Unit {:Description description}
+            :Service {:Type "oneshot"
+              :Environment [(s "PATH=" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.libnotify]))]
+              :ExecStart (s homeDir "/.local/bin/proton-log-watchdog")}}
+          :systemd.user.timers.proton-log-watchdog
+           {:Unit {:Description description}
+            :Timer {:OnStartupSec "1min" :OnUnitActiveSec "10min"}
+            :Install {:WantedBy ["timers.target"]}}})}})}))
