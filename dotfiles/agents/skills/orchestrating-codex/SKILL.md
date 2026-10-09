@@ -101,8 +101,23 @@ Check at most every 20 minutes. Each check:
   report starting "Done:", "Not done:" or "Blocked:". `threads list` should
   show each running item held. Ask the lead to fix any that don't.
 
-Send corrections in one message per check with `codex-lead send`. Refresh the
-goal hourly, or right away when the queue changes.
+- Coverage, with no prompt from Tom: map every open issue in each repo
+  (`gh issue list --state open`) to a live owner: a Codex worker idle under
+  20 minutes, a running Claude worker, or a named blocker in the status file.
+  Any issue with none of these is a gap. So is a worker whose issue is
+  closed, and a lead with fewer workers than its goal says.
+- Order: slots go to main-red issues first, then correctness and gameplay,
+  then the release gate, then polish. If polish holds slots while a
+  higher-order issue has no owner, tell the lead to move the slots.
+- Capacity: `machine-capacity.mjs status`. An exclusive lease, or a native
+  pool over its pressure limit, that blocks queued work gets its owner told
+  to release it at a safe phase.
+
+Send corrections in one message per check with `codex-lead send`: name each
+gap with its fix, and ask for one line per issue, giving its owner or its
+blocker. Refresh the goal hourly, or right away when the queue changes. Keep
+this check going on a ScheduleWakeup or cron for as long as the lead's goal
+runs; Tom shouldn't have to ask for it.
 
 ## Claude workers beside the lead
 
