@@ -53,6 +53,9 @@ written: 2026-10-09
 - Have workers finish by running `safe-push` in the foreground with a 10-minute timeout, never in the background, because the stop hook kills background jobs; when a landing outlasts that, the worker reports its exact lane and the parent lands it.
 - Check `threads list` and open issues before filing or staffing; never duplicate an item someone holds.
 - While main is red, staff its fix first and land nothing else onto red.
+- While main is red, cancel queued Autoland and CI runs that would test on red main, and queue every ready lane and cloud branch behind one background job that rebases and lands it the moment the fix is on main.
+- Before a playtest's last blocker lands, prebuild its map with the fix applied and run the frame-cost compare, so the build cannot fail at playtest time.
+- Promote a process idea to policy only after it produced a measured result; file unproven ideas as issues.
 - After an hour with no closure, start nothing new until an open box closes.
 - Write the status file in plain sentences, one line per item, with spaces between words.
 - Use `orchestrating-codex` for a Claude session's Codex work.
