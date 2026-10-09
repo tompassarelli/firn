@@ -10,7 +10,10 @@ description: >-
 
 A test is an executable rule that no single function can enforce on itself.
 Local contracts belong in types, schemas and assertions at the function.
-Default to no new test.
+Default to no new test. Test from outside, through the interface a user or
+caller sees; a test that knows the internals breaks on refactors and proves
+little. Review judges one change once; the suite re-checks every rule on every
+future change, so review never replaces it.
 
 ## The five kinds that earn a permanent place
 1. **Recorded scenarios.** Replay real or seeded input sequences through the
@@ -43,8 +46,11 @@ Anything else is scaffolding.
   behaviour. Then extend the property, scenario or reference that should
   have caught it.
 - No tautologies, no change detectors (snapshots or pins without a rule), no
-  expected values derived from the implementation, and no tests of tooling,
-  mocks or what the compiler or type system already checks.
+  expected values derived from the implementation, and no tests of tooling
+  or what the compiler or type system already checks.
+- No mocks, stubs or injected fakes of your own code. Fake only what you
+  don't control (clock, randomness, network, devices), and only by feeding it
+  to the core as input.
 
 ## Design for fewer tests
 - Put the logic in a pure, deterministic core (state + input → state;
