@@ -467,7 +467,7 @@ echo 0 >"$AGENT_CAPACITY_GPU_BUSY"
 [[ $(gpu_probe gpu) == RUN ]]
 
 # Release records what the scope used: two busy loops under a 2-CPU quota.
-XDG_RUNTIME_DIR="$user_runtime_dir" bun "$scratch/machine-capacity.mjs" run --class moderate --owner fixture:/measure \
+XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" run --class moderate --owner fixture:/measure \
   --timeout-seconds 30 -- bash -c 'cd / && timeout 3 sh -c "while :; do :; done" & timeout 3 sh -c "while :; do :; done"; wait' 2>/dev/null
 measured=$(jq -c 'select(.owner == "fixture:/measure")' "$AGENT_CAPACITY_USAGE_LOG")
 [[ $(jq -r '.shape' <<<"$measured") == sh ]]
@@ -493,14 +493,14 @@ sized() {
 usage() { mkdir -p "$1"; printf 'usage_usec %s\nuser_usec 0\nsystem_usec 0\n' "$2" >"$1/cpu.stat"; }
 unleased_sample() {
   env -u AGENT_CAPACITY_CPU_PRESSURE AGENT_CAPACITY_CGROUP_ROOT="$cgroups" AGENT_CAPACITY_NOW="$1" \
-    XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" "${2:-sample-unleased}"
+    XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" "${@:2}"
 }
 heavy_scopes=("$user_manager/app.slice/app-build.scope" "$user_manager/session.slice/niri.scope"
   "$user_manager/agent.slice/agent-capacity.slice/agent-capacity-0123abcd.scope")
 for scope in "${heavy_scopes[@]}"; do usage "$scope" 0; done
-[[ $(unleased_sample 1000000) == null ]]
+[[ $(unleased_sample 1000000 sample-unleased) == null ]]
 for scope in "${heavy_scopes[@]}"; do usage "$scope" 240000000; done
-[[ $(unleased_sample 1120000 | jq -c '[.heavy[] | {cgroup, cores}]') == '[{"cgroup":"app.slice/app-build.scope","cores":2}]' ]]
+[[ $(unleased_sample 1120000 sample-unleased | jq -c '[.heavy[] | {cgroup, cores}]') == '[{"cgroup":"app.slice/app-build.scope","cores":2}]' ]]
 [[ $(unleased_sample 1120000 status | jq -c '.unleasedHeavy | {cores, windowSeconds}') == '{"cores":2,"windowSeconds":120}' ]]
 # The spawn gate's committed CPUs add unleased heavy load to live batch leases.
 [[ $(unleased_sample 1120000 probe --class agent | jq -c '{leasedBatchCpus, committedBatchCpus}') == '{"leasedBatchCpus":0,"committedBatchCpus":2}' ]]
