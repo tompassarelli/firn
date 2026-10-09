@@ -105,9 +105,18 @@ frames before claiming a match. Do not infer tint timing from a single still.
 1. Author in private output with the existing generator for the family
    (`references/tools.md`). Materialize model-input symlinks before changing
    them and keep old sequence indices.
-2. Quick check: from smashcraft:ts/, `bun wisp view motion --assets
-   PRIVATE_ASSETS` (about 5 s) flags dead poses; then look at the action once
-   in the game at gameplay zoom, both facings.
+2. Before landing an authored attack, run `bun wisp anim score --fighter F
+   --assets PRIVATE_ASSETS` from smashcraft:ts/ for Classic and again with
+   `--graphics definitive`. Every changed move needs a passing row on all
+   five lines, including a fresh independent judge's five scores at least
+   4/5; the author cannot judge their own work. Prepare and record the judge
+   with `bun wisp anim judge prepare` and `anim judge record`, following
+   smashcraft:docs/animation-scorecard.md. Keep a change only if its score
+   rises and no other line falls (#355); an unjudged or missing row cannot
+   pass. Add missing move coverage to the sampler before using it to claim
+   that move passes. For movement/recovery, `bun wisp view motion --assets
+   PRIVATE_ASSETS` flags dead poses. Look at the changed action once in the
+   game at gameplay zoom, both facings.
 3. Publish art with `bun wisp inputs add FAMILY DIR`, regenerate asset
    metadata with the existing tool, and `safe-push --to main`. Never edit
    generated asset modules or a live input family in place.
