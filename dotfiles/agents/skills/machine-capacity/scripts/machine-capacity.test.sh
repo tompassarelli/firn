@@ -428,4 +428,22 @@ touch "$fixture_runtime/agent-capacity-v1/last-input"
 [[ $(XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" probe --class agent | jq -r '.profile') == attended ]]
 [[ $(XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" mode present | jq -r '.profile') == attended ]]
 
+# A lease scope throttled by its own CPUQuota stalls in /proc/pressure/cpu and
+# agent.slice; that wait must not hold the queue. Other slices' wait still does.
+cgroups="$scratch/cgroup"
+user_manager="$cgroups/user.slice/user-$(id -u).slice/user@$(id -u).service"
+lease_scope="$user_manager/agent.slice/agent-capacity-lease.scope"
+mkdir -p "$cgroups/system.slice" "$lease_scope" "$user_manager"/{app,background,session,native}.slice
+psi() { printf 'some avg10=%s avg60=0.00 avg300=0.00 total=0\n' "$2" >"$1/cpu.pressure"; }
+for slice in "$cgroups/system.slice" "$user_manager"/{app,background,session,native}.slice; do psi "$slice" 0.00; done
+psi "$user_manager/agent.slice" 90.00
+psi "$lease_scope" 90.00
+throttled_probe() {
+  env -u AGENT_CAPACITY_CPU_PRESSURE AGENT_CAPACITY_CGROUP_ROOT="$cgroups" XDG_RUNTIME_DIR="$fixture_runtime" \
+    bun "$scratch/machine-capacity.mjs" probe --class moderate | jq -r '.reason // .decision' || true
+}
+[[ $(throttled_probe) != DEFER_CPU_PRESSURE ]]
+psi "$user_manager/app.slice" 90.00
+[[ $(throttled_probe) == DEFER_CPU_PRESSURE ]]
+
 printf 'machine-capacity policy, aggregate enforcement, and session lifetime: PASS\n'

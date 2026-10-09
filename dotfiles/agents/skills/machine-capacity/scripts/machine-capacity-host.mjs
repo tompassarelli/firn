@@ -110,8 +110,11 @@ function parsePsi(path, kind) {
   return Math.round(Number(match[1]) * 100);
 }
 
+// Tests point this at fixture slices to check which slices count as pressure.
+const cgroupRoot = process.env.AGENT_CAPACITY_CGROUP_ROOT ?? '/sys/fs/cgroup';
+
 function userManagerCgroup() {
-  return `/sys/fs/cgroup/user.slice/user-${process.getuid()}.slice/user@${process.getuid()}.service`;
+  return `${cgroupRoot}/user.slice/user-${process.getuid()}.slice/user@${process.getuid()}.service`;
 }
 
 function slicePressure(slice) {
@@ -133,7 +136,15 @@ function readSignals() {
     memoryTotalMiB: fields.get('MemTotal'),
     memoryAvailableMiB: fields.get('MemAvailable'),
     // Tests record one pressure file for every reading so other load cannot hold them.
-    cpuSomeAvg10BasisPoints: parsePsi(process.env.AGENT_CAPACITY_CPU_PRESSURE ?? '/proc/pressure/cpu', 'some'),
+    // Oversubscription is read where non-lease work waits: /proc/pressure/cpu also
+    // counts a lease scope stalled by its own CPUQuota, which held the queue on an
+    // idle machine (9 Oct: one 2-CPU lease read as 37% system pressure).
+    cpuSomeAvg10BasisPoints: process.env.AGENT_CAPACITY_CPU_PRESSURE
+      ? parsePsi(process.env.AGENT_CAPACITY_CPU_PRESSURE, 'some')
+      : Math.max(
+        parsePsi(join(cgroupRoot, 'system.slice', 'cpu.pressure'), 'some'),
+        slicePressure('app.slice'), slicePressure('background.slice'),
+        slicePressure('session.slice'), slicePressure(nativeSlice)),
     protectedCpuSomeAvg10BasisPoints: Math.max(slicePressure('session.slice'), slicePressure(nativeSlice)),
     memoryFullAvg10BasisPoints: parsePsi('/proc/pressure/memory', 'full'),
   };
