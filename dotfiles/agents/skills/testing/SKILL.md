@@ -1,66 +1,76 @@
 ---
 name: testing
 description: >-
-  Write, change, delete, run or speed up automated tests: what earns a test,
-  its level and tier, CPU cost per test, flaky tests, golden, property and
-  deterministic match tests, and pruning slow or vanity tests.
+  Write, change, delete, run or speed up automated tests in any project: what
+  earns a test, scaffolding versus durable tests, property, replay and golden
+  tests, CPU cost per test, flaky tests, and pruning a suite.
 ---
 
 # Testing
 
-- Read [sources](references/sources.md) only for an unresolved source or when revising this skill.
-- Keep a test only for an external reference or a decided number with its source.
-- Cite the external reference or decided number/source in the title or fixture.
-- Keep headless expected rows provisional until native capture confirms them.
-- Delete a test without an oracle.
-- Never derive expected values from the implementation's output.
-- Add no bug regression unless existing behavior was genuinely missed.
-- Name one rule or defect per title; print the case and `got X, want Y` on failure.
-- Extend an existing table before adding a harness.
-- Use one check function per layer.
-- Choose the cheapest level running real code: small = one process without files/network/sleep/clock; medium = one machine with files/subprocesses/localhost; large = real clients/network.
-- Add a smaller test only when it pins a missing external reference or decided number/source.
-- Keep golden output compact and checked in; mask nondeterminism once, read update diffs, and commit their cause.
-- Fail on a golden without a test.
-- Never regenerate goldens wholesale to get green.
-- Use fixed seeds and case counts for properties; search widely on the farm and retain shrunk failures as named cases.
-- Run fewer property cases on 32-bit Lua rather than skipping them.
-- Require matching Bun and 32-bit Lua output from one harness for each applicable scenario.
-- Simulate time with frame counters and network with simulated clients.
-- Keep random state inside game state.
-- Print seed and commit for every simulation failure.
-- Compare checksums per frame for replaying a seed twice and rolling back one frame every frame.
-- Report the first differing frame and field.
-- Keep a desync-injection scenario that must trip the detector.
-- Keep one seeded match per invariant in the suite.
-- Send many matches, all pairs and random seeds to the farm.
-- Mark tiers in filenames/directories, and report skipped tiers explicitly.
-- Run type checks, affected tests and one headless journey on every save, within seconds total.
-- Run only affected tests locally with the watcher or file/`-t NAME`.
-- Run the suite and separate sweep/property/mutation jobs on the farm on every push.
-- Keep the smallest form of each sweep invariant in the suite.
-- Batch native-only checks per client.
-- Never rerun a passing check on unchanged code.
-- Measure user-plus-system CPU per test/file and print wall time and suite CPU per test separately.
-- Enforce the repository's CPU ceiling, non-rising file cost without new cases, and held/lowered CPU per test as coverage grows.
-- Shrink inputs, lower test size, share read-only file setup, trim fixtures, or move work to the farm instead of raising the ceiling.
-- Post a per-file CPU table before speeding up a suite; remove its largest avoidable costs first.
-- Quarantine a test that passes and fails on unchanged code at first sight, with seed/log and an issue-linked skip in the same commit.
-- Keep it running nonblocking on the farm.
-- Fix or delete quarantined tests within one week.
-- Cap quarantine at 8 and clear a full quarantine before new work.
-- Fix the flaky cause.
-- Never retry to green or add retries, sleeps or wider tolerances.
-- Assert known wrong behavior with its issue number instead of skipping it.
-- Delete tautologies, change detectors, implementation restatements, compiler/lint checks, tooling/framework/mock tests, cheaper-path duplicates and assertions without an external reference or decided number/source.
-- Retain cited outside reference values.
-- Shrink or move tests pinning external references or decided numbers with sources instead of deleting coverage.
-- Break the rule once to check its test fails.
-- Fix or delete ineffective tests and add only a genuinely missed behavior with an external reference or decided number/source.
-- Use changed-line mutation testing on the farm.
-- Use coverage to locate unpinned code rather than targeting a percentage.
-- Write the title, choose the real path, supply the smallest threshold/input case and cite the external reference or decided number/source.
-- Keep tests deterministic, independent and runnable in any order.
-- Never weaken expectations, tolerances or coverage to pass.
-- Report a suspected wrong test, or update a Tom-changed rule and its values in the same named commit.
-- Commit only tests the changed rules need, excluding throwaway probes.
+A test is an executable rule that no single function can enforce on itself.
+Local contracts belong in types, schemas and assertions at the function.
+Default to no new test.
+
+## The five kinds that earn a permanent place
+1. **Recorded scenarios.** Replay real or seeded input sequences through the
+   whole system and check invariants and agreement. Examples: a game match
+   whose per-frame checksums agree across runtimes and clients, a request log
+   replayed against a service, a document round-tripped through a format.
+   Report the first point of divergence. Keep one injected fault that must
+   trip the detector.
+2. **Properties over a pure core.** Generated inputs against rules that
+   always hold: bounds, conservation, symmetry, idempotence, round-trips,
+   agreement with a simple reference model. Use fixed seeds and counts
+   locally and wide search in CI. Keep a shrunk failure as a named case.
+3. **Product measurements.** Numbers the owner decided, with their source:
+   latency or frame budgets, balance bands, size limits, quality scores.
+   These are CI sweeps, with the smallest form of each in the suite.
+4. **External references.** Truth from outside the code: a spec, a reference
+   implementation, recorded real-system output. Cite it in the title or
+   fixture. An expectation not yet confirmed against the real system stays
+   provisional until it is.
+5. **One integration check per real boundary**: build, deploy, network
+   protocol, file format, external service or device. Each runs the real
+   path end to end.
+
+Anything else is scaffolding.
+
+## Scaffolding
+- Write throwaway tests freely while you're reaching a solution. Before
+  landing, promote each one into one of the five kinds or delete it.
+- No regression test for a bug fix unless the five kinds genuinely missed the
+  behaviour. Then extend the property, scenario or reference that should
+  have caught it.
+- No tautologies, no change detectors (snapshots or pins without a rule), no
+  expected values derived from the implementation, and no tests of tooling,
+  mocks or what the compiler or type system already checks.
+
+## Design for fewer tests
+- Put the logic in a pure, deterministic core (state + input → state;
+  value → value) and test it there with properties and scenarios.
+- Keep side effects in a thin shell, typed and scoped: Effect services in TS,
+  Result types and RAII in Rust. Test the shell only at its boundary check.
+- Make time, randomness and the network inputs to the core (counters, seeded
+  RNG in state, simulated peers), so scenarios replay exactly.
+
+## Running
+- On each save: the type check, affected tests and one fast end-to-end path,
+  in seconds. Every push runs the suite plus sweeps, properties and mutation
+  testing in CI or on the farm. Never rerun a passing check on unchanged
+  code.
+- Keep CPU per test bounded by the repository's ceiling. Shrink inputs or
+  move work to CI instead of raising it. Print the seed and commit on
+  failure.
+
+## Flaky tests
+- Quarantine at first sight with the seed, log and an issue, then fix or
+  delete within a week. Cap the quarantine at 8.
+- Never retry to green or add sleeps or wider tolerances. Never weaken an
+  expectation to pass.
+
+## Pruning
+- Audit each existing test against the five kinds. Keep it, fold it into a
+  property or scenario, or delete it. Report counts and CPU per test, before
+  and after.
+- Break the rule once to confirm a kept test fails.

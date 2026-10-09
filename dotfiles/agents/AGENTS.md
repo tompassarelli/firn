@@ -84,7 +84,7 @@
 - Run a broader farm sweep once for a load-bearing rule.
 - Allow one confirming timing run under an exclusive lease.
 - Use `CASE=<letter> FACT="<new fact>"` only for the hook's one permitted extra run.
-- Keep tests only for an external reference or a decided number with its source.
+- Keep a test only if it is one of the testing skill's five kinds; all other tests are scaffolding, deleted before landing.
 - Add no bug regression unless existing behavior was genuinely missed.
-- Delete tests that duplicate a cheaper check or restate tooling/implementation.
+- Put logic in a pure core and side effects in a thin typed shell, so properties and recorded scenarios replace most unit tests.
 - Never weaken tests or retry flakes to green.
