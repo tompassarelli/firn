@@ -7,19 +7,21 @@ HomeConfiguration:
 HomeArguments:
   config: HomeConfiguration
 
-// Tom's Xbox controller for any Smashcraft session on his desktop: the
-// always-on controller service (smashcraft:companion/README.md, "Always-on
-// controller service"). ExecStart is a direct out-of-store launcher that
-// `bun wisp controller` and `bun wisp play` point at the current helper, so
-// the project stays out of the system closure; without it the unit is skipped.
+// Tom's Xbox controller in Warcraft III: the always-on wc3-controller service
+// (github.com/tompassarelli/wc3-controller) with Smashcraft's map plug-in
+// (smashcraft:controller/README.md). ExecStart runs direct out-of-store
+// launchers that `bun wisp controller` and `bun wisp play` point at the pinned
+// service and the current plug-in, so the projects stay out of the system
+// closure; without the service the unit is skipped, and without the plug-in
+// the service plays every map with its Any map profile.
 export smashcraft-controller-module()
-  configuration-module(path(myConfig.modules.smashcraft-controller.enable), "Smashcraft controller service: Tom's Xbox controller in any Smashcraft session",
+  configuration-module(path(myConfig.modules.smashcraft-controller.enable), "wc3-controller service: Tom's Xbox controller in Warcraft III, with Smashcraft's plug-in",
     {home-manager: {users: dictionary(configured-text(path(myConfig.modules.users.username)),
        (?home: Delayed<nix,HomeArguments>) =>
-        {systemd: {user: {services: {smashcraft-controller: {
-           Unit: {Description: "Smashcraft controller service",
+        {systemd: {user: {services: {wc3-controller: {
+           Unit: {Description: "wc3-controller service",
              PartOf: ["graphical-session.target"], After: ["graphical-session.target"],
-             ConditionPathExists: "{?home.config.home.homeDirectory}/.local/share/smashcraft-build-inputs/controller/wc3-journal"},
-           Service: {ExecStart: "{?home.config.home.homeDirectory}/.local/share/smashcraft-build-inputs/controller/wc3-journal --service",
+             ConditionPathExists: "{?home.config.home.homeDirectory}/.local/share/wc3-controller/bin/wc3-controller"},
+           Service: {ExecStart: "{?home.config.home.homeDirectory}/.local/share/wc3-controller/bin/wc3-controller --service --plugin {?home.config.home.homeDirectory}/.local/share/smashcraft-build-inputs/controller/wc3-journal",
              Restart: "always", RestartSec: "5"},
            Install: {WantedBy: ["niri.service"]}}}}}})}})
