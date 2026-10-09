@@ -22,6 +22,9 @@ const aggregateCpus = policy['aggregate-cpus'];
 const batchClass = policy['batch-class'];
 const maximumSeconds = policy['maximum-seconds'];
 const sessionSeconds = policy['session-seconds'];
+const sizedClass = policy['sized-class'];
+const sizedResources = policy['sized-resources'];
+const sizingHeadroom = policy['sizing-headroom'];
 const aggregateSlice = 'agent-capacity.slice';
 // Sibling of session.slice (300), app.slice (100) and agent.slice (20): game
 // clients outrank terminals and batch work but never the compositor.
@@ -503,6 +506,38 @@ function recordUsage(entry) {
   appendFileSync(path, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
 }
 
+const sizingRuns = 20;
+const sizingMinimumRuns = 3;
+
+function percentile(values, share) {
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.min(sorted.length - 1, Math.ceil(share * sorted.length) - 1)];
+}
+
+// The class and size measured runs of this command shape need; moderate until three runs exist.
+function sizeFromUsage(command, cores) {
+  const shape = commandShape(command);
+  const runs = (readText(usageLogPath()) ?? '').split('\n').slice(-2000).flatMap(line => {
+    try {
+      const entry = JSON.parse(line);
+      return entry.shape === shape && entry.wallSeconds > 0 ? [entry] : [];
+    } catch {
+      return [];
+    }
+  }).slice(-sizingRuns);
+  if (runs.length < sizingMinimumRuns) {
+    return { name: 'moderate', ...resourceClass('moderate', cores), sizing: { shape, runs: runs.length, basis: 'default' } };
+  }
+  const cpus = Math.ceil(percentile(runs.map(entry => entry.peakCores), 0.9) * sizingHeadroom());
+  const memory = Math.ceil(percentile(runs.map(entry => entry.peakMemoryMiB), 0.9) * sizingHeadroom() / 256) * 256;
+  const gpuShare = percentile(runs.map(entry => (entry.gpuSeconds ?? 0) / entry.wallSeconds), 0.5);
+  const resources = sizedResources(cpus, memory, cores);
+  return {
+    name: sizedClass(gpuShare, resources.cpus, resources.memoryMiB), ...resources,
+    sizing: { shape, runs: runs.length, basis: 'p90', gpuShare: round(gpuShare) },
+  };
+}
+
 function readUsage(root, id) {
   try {
     return JSON.parse(readFileSync(join(root, 'leases', `${id}.usage`), 'utf8'));
@@ -727,6 +762,10 @@ function decision(root, requested, create, ticket = null) {
       && (requested.name !== 'exclusive' || ticket === null || entry.name < ticket)).length;
     const leased = totals(active);
     const runs = active.filter(lease => lease.kind === 'run');
+    const unleased = readUnleased(root);
+    const committedBatchCpus = round(runs.filter(lease => batchClass(lease.class))
+      .reduce((sum, lease) => sum + Math.max(lease.cpus, readUsage(root, lease.id)?.recentCores ?? 0), 0)
+      + (unleased?.cores ?? 0));
     const signals = readSignals();
     const { mode, profile, idleSeconds: idle } = activeProfile(root);
     const code = admissionDecision(
@@ -764,6 +803,7 @@ function decision(root, requested, create, ticket = null) {
       requestedMemoryMiB: requested.memoryMiB,
       leasedCpuCeilings: leased.cpus,
       leasedBatchCpus: leased.batchCpus,
+      ...(requested.sizing ? { sizing: requested.sizing } : {}),
       aggregateCpuLimit: aggregateCpus(profile, signals.cores),
       queuedAhead,
       exclusiveWaiting,
@@ -775,7 +815,8 @@ function decision(root, requested, create, ticket = null) {
       memoryAvailableMiB: signals.memoryAvailableMiB,
       ...gpu,
       gpuLeases: runs.filter(lease => lease.class === 'gpu').length,
-      unleasedHeavyCores: readUnleased(root)?.cores ?? null,
+      unleasedHeavyCores: unleased?.cores ?? null,
+      committedBatchCpus,
       reclaimed,
     };
     if (code !== 'RUN' || !create) return result;
@@ -1103,7 +1144,10 @@ async function main(argv) {
     const command = argv.slice(parsed.separator + 1);
     if (parsed.separator === argv.length || command.length === 0) fail(`${operation} requires -- COMMAND ARG...`);
     const signals = readSignals();
-    const requested = parseClass(parsed.values, signals.cores);
+    if (!parsed.values.has('--class') && operation === 'session') fail('session requires --class');
+    const requested = parsed.values.has('--class') || parsed.values.has('--memory-gib')
+      ? parseClass(parsed.values, signals.cores)
+      : sizeFromUsage(command, signals.cores);
     // A session without one takes its class's default deadline; native sessions have none.
     const timeoutSeconds = parsed.values.has('--timeout-seconds') || operation === 'run'
       ? parsePositiveInteger(required(parsed.values, '--timeout-seconds'), '--timeout-seconds',

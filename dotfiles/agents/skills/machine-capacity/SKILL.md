@@ -12,6 +12,7 @@ written: 2026-10-09
 - Admit sustained multi-core or >1 GiB work through the shared helper, never worker slots or load average.
 - Choose the smallest sufficient class: moderate = 2 CPUs/2 GiB; heavy = 6 CPUs/8 GiB; exclusive = all allowed cores/no peer batch; gpu = 1 CPU/2 GiB for headless Chrome/wisp renders (not grim captures), two at a time; native = 2 CPUs/4 GiB/no CPU quota.
 - Use `run --class CLASS --owner OWNER --timeout-seconds N -- COMMAND ARG...` for batch work, including legitimate setup/download time.
+- Omit `--class` on `run` to size from the usage log: p90 peak cores and memory of the shape's last 20 runs plus 25%, gpu when GPU-busy over a fifth of the run, moderate until three runs exist; the admission line shows `sizing`.
 - Use `session --class native --owner OWNER -- COMMAND ARG...` for Warcraft clients/private desktops, one scope per client and two per pair.
 - Expect native DEFER_GPU_BUSY while GPU busy averages at least 85% over 5 s with no gpu lease running, and attended DEFER_GPU_CLIENTS while two Warcraft clients run; `status`/`probe` show `gpuBusyPercent`/`gpuClients`/`gpuLeases`.
 - Expect gpu DEFER_GPU_SLOTS at two gpu leases and DEFER_NATIVE_WAITING for a minute after a native client was deferred; native clients outrank renders.
@@ -44,7 +45,7 @@ written: 2026-10-09
 - Reserve an agent lease before compute-using workers, renew before expiry and release at settlement.
 - Charge 768 MiB without reserving local CPU.
 - Give worker local commands their own run scopes; persist reservations only for agent class.
-- Respect the spawn gate when leasedBatchCpus reaches aggregateCpuLimit or protectedCpuSomeAvg10 exceeds 20; queue, use the farm or use cloud workers.
+- Respect the spawn gate when committedBatchCpus (each live batch lease at max(reserved, measured cores) plus unleased heavy load) reaches aggregateCpuLimit or protectedCpuSomeAvg10 exceeds 20; queue, use the farm or use cloud workers.
 - Scale native pairs one at a time and stop adding above protectedCpuSomeAvg10 20 in either profile.
 - Use status for holders, remaining seconds, queue order, each run lease's `measured` cores/memory/GPU beside its reservation, and `unleasedHeavy` (cgroups outside leases, session and native slices averaging over one core for two minutes, sampled by the presence watcher).
 - Read `~/.local/state/agents/machine-capacity-usage.jsonl` for each released run's measured CPU seconds, mean/peak cores, peak memory and GPU seconds by owner and command shape.

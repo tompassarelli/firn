@@ -44,7 +44,7 @@ expect_allow() { local out; out="$(call "$HOOK" "$1")"; [ -z "$out" ] && check o
 expect_deny() {
   local out; out="$(call "${3:-$HOOK}" "$1")"
   case "$out" in
-    "Capacity leases hold ${DENY_LEASED:-24} of the 20 CPUs the machine can hand out, protected desktop pressure is ${DENY_PROTECTED:-5}% (limit 20%), and 2 local workers are running. Queue this worker until a lease ends, send heavy checks to the farm, or use a cloud worker for code-only work (cloud-workers skill). Workers already running are unaffected."*) check ok "$2" ;;
+    "Capacity leases and unleased heavy load commit ${DENY_LEASED:-24} of the 20 CPUs the machine can hand out, protected desktop pressure is ${DENY_PROTECTED:-5}% (limit 20%), and 2 local workers are running. Queue this worker until a lease ends, send heavy checks to the farm, or use a cloud worker for code-only work (cloud-workers skill). Workers already running are unaffected."*) check ok "$2" ;;
     *) check bad "$2" "$out" ;;
   esac
 }
@@ -60,6 +60,10 @@ status 4 20.5
 DENY_LEASED=4 DENY_PROTECTED=20.5 expect_deny "$(agent "$worker")" 'protected pressure 20.5 denies with few provisioned CPUs'
 status 4 20
 expect_allow "$(agent "$worker")" 'protected pressure exactly 20 allows'
+printf '{"decision":"RUN","leasedBatchCpus":10,"committedBatchCpus":21,"aggregateCpuLimit":20,"protectedCpuSomeAvg10":5}\n' >"$STATUS"
+DENY_LEASED=21 expect_deny "$(agent "$worker")" 'measured lease use plus unleased heavy load past the limit denies'
+printf '{"decision":"RUN","leasedBatchCpus":24,"committedBatchCpus":19,"aggregateCpuLimit":20,"protectedCpuSomeAvg10":5}\n' >"$STATUS"
+expect_allow "$(agent "$worker")" 'committed CPUs, when reported, replace reserved ones'
 printf '{"decision":"RUN","profile":"unattended","leasedBatchCpus":4,"aggregateCpuLimit":20,"protectedCpuSomeAvg10":40}\n' >"$STATUS"
 expect_allow "$(agent "$worker")" 'unattended profile (Tom away) skips the protected-pressure refusal, as the helper does'
 printf '{"decision":"RUN","profile":"unattended","leasedBatchCpus":20,"aggregateCpuLimit":20,"protectedCpuSomeAvg10":40}\n' >"$STATUS"

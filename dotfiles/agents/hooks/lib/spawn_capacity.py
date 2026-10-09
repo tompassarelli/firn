@@ -4,7 +4,8 @@
 Shared by the Claude PreToolUse(Agent) hook (spawn-capacity-guard.sh) and the
 Codex behavior guard's PreToolUse(spawn_agent). A worker idles while its model
 thinks and its heavy commands run inside capacity leases, so admission counts
-the CPUs batch leases hold (machine-capacity `probe`: leasedBatchCpus against
+the CPUs batch work commits (machine-capacity `probe`: committedBatchCpus, each
+live batch lease at max(reserved, measured) plus unleased heavy load, against
 aggregateCpuLimit; native clients count only through the protected-pressure
 check, since their 2-CPU charge per desktop and client overstates them) rather than system CPU pressure. It also refuses while the
 protected desktop slice is under pressure (protectedCpuSomeAvg10 above 20; skipped in
@@ -69,7 +70,9 @@ def capacity():
     data = capacity_probe()
     if data is None:
         return None
-    provisioned = number(data.get("leasedBatchCpus"))
+    provisioned = number(data.get("committedBatchCpus"))
+    if provisioned is None:
+        provisioned = number(data.get("leasedBatchCpus"))
     limit = number(data.get("aggregateCpuLimit")) or float(os.cpu_count() or 1)
     protected = number(data.get("protectedCpuSomeAvg10"))
     if provisioned is None or protected is None:
@@ -203,7 +206,7 @@ def check(event):
             return None
     log_denial(event)
     return (
-        f"Capacity leases hold {provisioned:g} of the {limit:g} CPUs the machine can hand out, "
+        f"Capacity leases and unleased heavy load commit {provisioned:g} of the {limit:g} CPUs the machine can hand out, "
         f"protected desktop pressure is {protected:g}% (limit {PROTECTED_PRESSURE_LIMIT:g}%), and "
         f"{local_workers()} local workers are running. Queue this worker until a lease ends, "
         "send heavy checks to the farm, or use a cloud worker for code-only work "

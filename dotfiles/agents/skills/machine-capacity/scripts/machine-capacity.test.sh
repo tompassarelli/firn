@@ -473,6 +473,21 @@ measured=$(jq -c 'select(.owner == "fixture:/measure")' "$AGENT_CAPACITY_USAGE_L
 [[ $(jq -r '.shape' <<<"$measured") == sh ]]
 [[ $(jq '.meanCores > 1.5 and .meanCores <= 2.1 and .peakCores <= 2.2 and .cpuSeconds > 4' <<<"$measured") == true ]]
 
+# Without --class, run sizes the lease from the shape's p90 plus a quarter
+# headroom; GPU-bound renders take the gpu class; unknown shapes start moderate.
+for cores in 2.4 3.1 1.0; do
+  printf '{"shape":"fixturebuild","wallSeconds":10,"peakCores":%s,"peakMemoryMiB":3000,"gpuSeconds":0}\n' "$cores"
+  printf '{"shape":"fixturerender","wallSeconds":10,"peakCores":0.6,"peakMemoryMiB":700,"gpuSeconds":6}\n'
+done >>"$AGENT_CAPACITY_USAGE_LOG"
+for program in fixturebuild fixturerender fixturenew; do printf '#!/bin/sh\n' >"$scratch/$program"; chmod +x "$scratch/$program"; done
+sized() {
+  XDG_RUNTIME_DIR="$fixture_runtime" bun "$scratch/machine-capacity.mjs" run --owner fixture:/sized --timeout-seconds 30 \
+    -- "$scratch/$1" 2>&1 >/dev/null | head -1 | jq -c '{class, requestedCpus, requestedMemoryMiB}'
+}
+[[ $(sized fixturebuild) == '{"class":"heavy","requestedCpus":4,"requestedMemoryMiB":3840}' ]]
+[[ $(sized fixturerender) == '{"class":"gpu","requestedCpus":1,"requestedMemoryMiB":1024}' ]]
+[[ $(sized fixturenew) == '{"class":"moderate","requestedCpus":2,"requestedMemoryMiB":2048}' ]]
+
 # Unleased load: a cgroup outside lease scopes averaging over one core across two
 # minutes is reported; the desktop session and lease scopes are not.
 usage() { mkdir -p "$1"; printf 'usage_usec %s\nuser_usec 0\nsystem_usec 0\n' "$2" >"$1/cpu.stat"; }
@@ -487,5 +502,7 @@ for scope in "${heavy_scopes[@]}"; do usage "$scope" 0; done
 for scope in "${heavy_scopes[@]}"; do usage "$scope" 240000000; done
 [[ $(unleased_sample 1120000 | jq -c '[.heavy[] | {cgroup, cores}]') == '[{"cgroup":"app.slice/app-build.scope","cores":2}]' ]]
 [[ $(unleased_sample 1120000 status | jq -c '.unleasedHeavy | {cores, windowSeconds}') == '{"cores":2,"windowSeconds":120}' ]]
+# The spawn gate's committed CPUs add unleased heavy load to live batch leases.
+[[ $(unleased_sample 1120000 probe --class agent | jq -c '{leasedBatchCpus, committedBatchCpus}') == '{"leasedBatchCpus":0,"committedBatchCpus":2}' ]]
 
 printf 'machine-capacity policy, aggregate enforcement, and session lifetime: PASS\n'

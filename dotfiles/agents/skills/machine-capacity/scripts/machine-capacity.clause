@@ -92,3 +92,18 @@ export admission-decision(?profile: Text, ?kind: Text, ?cores: F64, ?memory-tota
                       if(?queued-ahead > 0, "DEFER_QUEUED",
                         if(?leased-batch-cpus + ?requested-cpus > aggregate-cpus(?profile, ?cores), "DEFER_CPU_CAPACITY",
                           if(?cpu-some-avg10-basis-points > batch-pressure-limit-basis-points(), "DEFER_CPU_PRESSURE", "RUN"))))))))))))))), "Unknown capacity profile")
+
+# `run` without --class sizes the lease from this command shape's released runs:
+# the p90 of measured peak cores and memory plus a quarter headroom, rounded up
+# by the host. Renders that kept the GPU busy a fifth of their run take the gpu
+# class.
+export sizing-headroom(): F64
+  1.25
+
+export sized-class(?gpu-share: F64, ?cpus: F64, ?memory-mib: F64): Text
+  if(?gpu-share >= 0.2, "gpu", if(?cpus <= 2 and ?memory-mib <= 2048, "moderate", "heavy"))
+
+export sized-resources(?cpus: F64, ?memory-mib: F64, ?cores: F64): Resources
+  ?ceiling: resource-class("heavy", ?cores).cpus
+  {cpus: if(?cpus < 1, 1, if(?cpus > ?ceiling, ?ceiling, ?cpus)),
+   memoryMiB: if(?memory-mib < 512, 512, ?memory-mib)}
