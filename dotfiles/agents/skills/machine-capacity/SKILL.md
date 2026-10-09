@@ -6,95 +6,42 @@ description: >-
 
 # Machine capacity
 
-Use the shared helper, not worker slots or load average, to admit heavy work:
-
-```bash
-capacity_skill=$(dirname "$(agents path machine-capacity)")
-capacity="$capacity_skill/scripts/machine-capacity.mjs"
-bun "$capacity" run --class heavy --owner "codex:/root/task" \
-  --timeout-seconds 900 -- COMMAND ARG...
-```
-
-Choose the smallest sufficient class. Builds, tests and other batch work use
-`moderate` (2 CPUs/2 GiB), `heavy` (6 CPUs/8 GiB), or `exclusive` (every
-allowed core, no peer batch lease); they run in the low-weight
-`agent-capacity.slice` and only take cycles the desktop and game clients leave
-idle. Latency-sensitive Warcraft clients, one scope per client (a pool pair is
-two), use `native` (2 CPUs/4 GiB): the high-weight `native.slice`, no CPU quota.
-Set an honest hard runtime bound including legitimate setup and downloads;
-the example is not a universal timeout.
-
-For offline Warcraft clients with a measured smaller footprint, pass
-`--memory-gib 1.5` to `run` or `session` (and `probe` to check admission).
-This native-only request charges 1536 MiB instead of the 4096 MiB default and
-sets that client's memory high watermark to the same amount; other leases are
-unchanged. Requests must be positive and represent whole MiB. The available
-memory floor, 75% leased-memory cap, and native CPU admission still apply.
-The capacity fixture with 70000 MiB already leased on a 96343 MiB host defers
-the default 4 GiB client but admits 1.5 GiB, saving 2.5 GiB per new client.
-
-Warcraft clients and the private desktops they draw on use
-`bun "$capacity" session --class native --owner "codex:/root/task" -- COMMAND ARG...`.
-Native sessions alone have no wall-clock deadline; command exit, Ctrl-C, or an
-explicit stop ends the scope. Every batch lease has one: `run` requires
-`--timeout-seconds`, and a batch `session` defaults to 30 minutes. Batch work
-is capped at an hour and `exclusive` at 15 minutes. Keep the wrapper supervised
-until its `RELEASED` result. Never detach a renewal process.
-
-CPU weights order contention: `session.slice` (compositor) 300 > `native.slice`
-200 > `app.slice` (terminals, browser) 100 > `agent.slice` batch 20. Two
-profiles set admission. **attended** (Tom present): batch shares cores minus a
-4-core reserve and is refused only while the session or native slice itself
-waits for CPU (PSI some avg10 at least 10%); it keeps 20% of RAM available.
-**unattended** (Tom away): every core, no protected-slice refusal, only an 8 GiB
-available-memory floor against swap and OOM. Both cap leased memory at 75% of
-RAM. In `auto` mode a presence watcher (`agent-capacity-presence.service`,
-started by any helper call) reads keyboard, pointer and pad input, excluding
-virtual automation pads; it selects unattended after 10 minutes without input
-and attended within a second of input. `bun "$capacity" mode away|present|auto`
-overrides it (no argument prints the active profile); the override lasts until
-reboot. `probe` reports `profile` and
-`mode`. The wrapper admits atomically and contains every descendant in one user
-cgroup. A queued
-exclusive request drains the machine of heavy work: no heavy work starts after
-it arrives (moderate builds and `update:wisp` still do), and it starts as soon as running batch leases end, whatever the
-pressure, so it waits at most the longest remaining batch deadline. It then
-blocks new batch jobs until release; native clients are never blocked.
-`bun "$capacity" status` lists who holds what (with remaining seconds) and who
-is queued, in admission order.
-**Every profile queues moderate and heavy runs in arrival order while declared
-batch CPUs would pass the core limit or system CPU some avg10 exceeds 30%.**
-Do not detach work outside the scope. One owner retains the terminal
-`RELEASED` result and cleans up the exact scope.
-
-`RUN`/`RESERVED` continues. A queued batch wrapper prints `QUEUED` and starts by
-itself when room frees; keep it supervised. `DEFER` from `probe`, `reserve` or a
-native client means retry after a known release or 30 seconds, never busy-poll.
-`RECLAIMED` concerns expired agent leases or finished helper-owned scopes, not
-permission to kill peers. Run allowances remain charged while their wrapper or
-scope is live, including throughout a native session without a deadline.
-Memory PSI is diagnostic only. System CPU PSI paces batch admission but does not
-measure desktop harm; the protected-slice reading does.
-
-Before a parallel worker expected to consume local compute, reserve its
-`agent` lease (768 MiB, no local CPU reservation); renew before expiry and
-release at settlement. Its local commands still require their own `run` scope.
-Only `agent` permits persistent reservation. Exact commands and headroom
-rules: [nixos-config:capacity leases and limits](references/leases-and-limits.md).
-The spawn gate (`spawn-capacity-guard`, shared with the Codex behavior guard) refuses a new local Claude or Codex worker once the CPUs held by batch leases (`probe`: `leasedBatchCpus`; native clients count only through protected pressure) reach `aggregateCpuLimit`, or while `protectedCpuSomeAvg10` is above 20; system CPU pressure alone never refuses, since a worker's heavy commands already run inside leases. Queue it, use the farm, or use a cloud worker.
-
-Never kill a peer process. Only its owner or accountable parent may stop the
-identified tree. Pressure changes admission, not correctness requirements.
-
-## Scale native clients by pressure, not by lease count
-
-On 7 Oct 2026 an orchestrator told to "use the idle machine" grew to 20
-Warcraft clients, every one inside an admitted native lease. Load reached 76
-on 24 cores and protected CPU pressure 75%, which makes native timing checks
-fail and the desktop lag. A native lease charges 2 CPUs with no CPU cap and is
-admitted on a single pressure reading at its start, while a pool client really
-costs about 0.9 of a core plus about 0.4 for its Battle.net browser and 0.3 for
-its Wine server; away mode, set while Tom chatted from another device, admits
-greedily. Add native pairs one at a time and stop adding while the helper's
-`protectedCpuSomeAvg10` is above 20, whether Tom is present or away. "Use the
-machine" means use idle cores, never go past them.
+- Resolve the helper at `$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs` and invoke it with Bun.
+- Admit sustained multi-core or >1 GiB work through the shared helper, never worker slots or load average.
+- Choose the smallest sufficient class: moderate = 2 CPUs/2 GiB; heavy = 6 CPUs/8 GiB; exclusive = all allowed cores/no peer batch; native = 2 CPUs/4 GiB/no CPU quota.
+- Use `run --class CLASS --owner OWNER --timeout-seconds N -- COMMAND ARG...` for batch work, including legitimate setup/download time.
+- Use `session --class native --owner OWNER -- COMMAND ARG...` for Warcraft clients/private desktops, one scope per client and two per pair.
+- Keep native sessions foreground until command exit, Ctrl-C or explicit stop; only native sessions have no default deadline.
+- Respect batch session's 30-minute default, batch's one-hour maximum and exclusive's 15-minute maximum.
+- Request native-only `--memory-gib 1.5` for measured smaller offline clients.
+- Require positive whole-MiB values and retain memory/CPU admission rules.
+- Charge that request at 1536 MiB instead of 4096 MiB and apply the same MemoryHigh to that client only.
+- Read [leases and limits](references/leases-and-limits.md) for reserve/renew/release commands, admission details and session recovery.
+- Respect CPU weights: compositor session 300, native 200, app 100, batch agent 20.
+- Keep attended batch within cores minus four and 20% RAM available; defer while protected-slice CPU some avg10 is at least 10%.
+- Keep unattended within all cores and an 8 GiB available-memory floor.
+- Cap leased memory at 75% RAM in both profiles.
+- Use `mode away|present|auto` only for intended presence overrides until reboot.
+- Query `mode`/`probe` for active mode/profile.
+- Let auto presence switch unattended after 10 minutes without physical keyboard/pointer/pad input and attended within one second of input.
+- Exclude automation pads.
+- Queue moderate/heavy work in arrival order while declared batch CPUs exceed the core limit or system CPU some avg10 exceeds 30%.
+- Let queued exclusive work drain heavy jobs while moderate/update:wisp continue.
+- Start after batch leases end and block new batch work until release without blocking native clients.
+- Keep every descendant inside its scope and supervise the wrapper through terminal `RELEASED`.
+- Never detach work or renewal processes.
+- Keep queued wrappers supervised until they start automatically.
+- Retry DEFER from probe/reserve/native after a known release or 30 seconds.
+- Never busy-poll.
+- Treat RUN/RESERVED as permission to continue and RECLAIMED as expired leases/finished helper scopes, never permission to kill peers.
+- Retain allowances while wrapper or scope is live, including native sessions.
+- Assign exact-scope cleanup to the owner/accountable parent.
+- Reserve an agent lease before compute-using workers, renew before expiry and release at settlement.
+- Charge 768 MiB without reserving local CPU.
+- Give worker local commands their own run scopes; persist reservations only for agent class.
+- Respect the spawn gate when leasedBatchCpus reaches aggregateCpuLimit or protectedCpuSomeAvg10 exceeds 20; queue, use the farm or use cloud workers.
+- Scale native pairs one at a time and stop adding above protectedCpuSomeAvg10 20 in either profile.
+- Use status for holders, remaining seconds and queue order.
+- Treat memory PSI as diagnostic and system CPU PSI as admission pacing rather than desktop harm.
+- Leave signaling of peers to their owner/accountable parent.
+- Never lower correctness requirements because of pressure.

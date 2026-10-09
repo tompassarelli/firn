@@ -6,7 +6,7 @@ description: >-
 
 # Execution estimates
 
-Use the `staffing` skill for worker ETAs and the category's median actual time
+Use the `workers` skill for worker ETAs and the category's median actual time
 from `worker-ledger --summary`.
 
 Give the estimate, its evidence, and the next observable checkpoint. Use a

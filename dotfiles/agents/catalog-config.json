@@ -33,9 +33,7 @@
     "guard-authoring",
     "cloudflare-deploy",
     "digitalocean-access",
-    "staffing",
-    "claude-workers",
-    "codex-workers",
+    "workers",
     "estimate",
     "testing",
     "agent-policy",
@@ -52,16 +50,6 @@
       },
       "targets": [
         "shared",
-        "codex"
-      ]
-    },
-    {
-      "id": "codex-overlay",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/codex/AGENTS.md"
-      },
-      "targets": [
         "codex"
       ]
     },
@@ -211,30 +199,6 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/hooks/corpus-scan-guard.sh"
-      }
-    },
-    "staffing": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/staffing/SKILL.md"
-      }
-    },
-    "claude-workers": {
-      "kind": "skill",
-      "category": "agents",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/claude-workers/SKILL.md"
-      }
-    },
-    "codex-workers": {
-      "kind": "skill",
-      "category": "agents",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/codex-workers/SKILL.md"
       }
     },
     "estimate": {
@@ -540,6 +504,14 @@
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/orchestrating-codex/SKILL.md"
       }
+    },
+    "workers": {
+      "kind": "skill",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/workers/SKILL.md"
+      }
     }
   },
   "activation": {
@@ -788,36 +760,6 @@
           "targets": [
             "codex",
             "claude"
-          ]
-        }
-      ]
-    },
-    "staffing": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "claude-workers": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "codex-workers": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
           ]
         }
       ]
@@ -1323,6 +1265,16 @@
       ]
     },
     "orchestrating-codex": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "workers": {
       "distributions": [
         {
           "type": "skill",

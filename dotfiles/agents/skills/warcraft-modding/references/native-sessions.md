@@ -73,3 +73,14 @@ confirm roster, stage thumbnails and gameplay before calling a build ready. For
 a keyboard mapper trial, enable mapping only while Warcraft is focused and
 verify movement, jump and attack; report digital mapping apart from analog
 input and hardware latency.
+
+## Desync diagnosis and in-map setup
+
+- Resolve autopsy behavior through wisp:docs/autopsy.md and interpret `CScriptFunc` as a code callback.
+- Run `wisp engine desync A B` on Documents folders for the first divergent turn/section, treating `ipse` as a handle created/freed on different turns.
+- Inspect host turn logs with `engine actions --client lan0a,lan0b`.
+- Identify divergent classes through `engine poll --client a,b` then `engine diff`.
+- Use offline `engine trace --lua` for Lua/TypeScript stacks and rerun `engine locate` after Warcraft updates.
+- Restrict signed-in passive tools to `engine desync`, `engine poll`, `engine diff`, `engine locate` without `--watch`, and packet capture under wisp:docs/engine.md's guardrails.
+- Run pad parity through smashcraft:ts/test/native/pads/ with `--compare`.
+- Set up matches through `-dev quick`, `-dev quick hero NAME`, `-dev quick cpu N` and `-dev slots`.

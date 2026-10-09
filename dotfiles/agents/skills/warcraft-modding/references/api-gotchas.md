@@ -184,3 +184,25 @@ map/source revision, Warcraft build, clients, workload, observed endpoints and
 uncertainty. Promote a historical observation to a current claim only after the
 smallest current-build reproduction decides it. For example, an ordinary asset
 edit needs no transport study; seconds of delay in a new input integration does.
+
+## Warcraft 3.0 build-specific behavior
+
+- Distinguish 3.0.0 build 24268 from 3.0.1 build 24342 before applying version-specific behavior.
+- Verify the live build rather than assuming online-only patch notes describe Wisp's own build-24268 host/private LAN plugin.
+- Declare/model newer natives before use through wisp#51, including 3.0.1's `Blz`-prefixed names replacing unprefixed names, cooldown resets/settings, aura toggle, `BlzUnitHeal`, `BlzRemoveEffect`, `BlzResetUnitTalents` and `BlzSetCameraAllowsHotkeyTargetLock`.
+- Account for old camera-lock functions disabling hotkey target lock.
+- Re-derive clips/reference captures for 3.0.1's reanimated Pandaren Brewmaster/Orc Grunt and roughly 35 retuned effects, including Blizzard, Divine Shield, Immolation, Starfall, Black Arrow, Breath of Fire, Banish, Life/Mana Drain, Roar, Forked Lightning and Death Coil.
+- Use OGG imports and the 10,000 floating-text cap where supported.
+- Scope custom-asset loading and period-containing model-path fixes to 3.0.1.
+- Name the sound-check graphics mode because Definitive Edition plays Classic sounds.
+- Remove workarounds for fixed close-target projectile visibility and lightning effects removing older effects on the applicable build.
+- Set graphics mode and Ambient Occlusion explicitly in test profiles: Classic, Definitive and Reforged; 3.0.0 removed Bloom, Portrait Bloom, Particles and Spells and added Point Light Shadows, Water and Supersampling; 3.0.1 restored Ambient Occlusion.
+- Treat Forsaken Paladin as a neutral tavern hero in all three graphics modes.
+
+## Warsmash investigation
+
+- Check [Warsmash](https://github.com/Retera/WarsmashModEngine) for animation blending/playback, pathing, collision, order queues and attack/damage timing.
+- Inspect simulation under `core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/`.
+- Check [ErikSom's HTML branch](https://github.com/ErikSom/WarsmashModEngine/tree/HTML) for browser-map behavior through wisp#48.
+- Treat [warsmash.pages.dev](https://warsmash.pages.dev) v0.2.0 as a browser-storage consumer of the player's own Warcraft files with serverless lockstep WebRTC multiplayer.
+- Account for Warsmash targeting older versions and skipping models newer than 1.33 before confirming behavior in Warcraft.

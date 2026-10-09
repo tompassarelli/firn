@@ -6,155 +6,48 @@ description: >-
 
 # Private desktop development
 
-Use this when an application must keep rendering or receiving input while the
-owner uses the normal desktop. It starts a separate headless Wayland compositor
-with hardware rendering and a loopback-only VNC control channel. Niri remains
-the everyday desktop; do not switch desktops or inject input globally.
-
-Before repeated captures, load `image-context-budget`. Capture to
-disk and inspect with bounded text/OCR by default; keep recordings and screenshot
-sequences out of conversation history. Follow its cumulative preview budget and
-text-only recovery rule after a payload-size failure.
-
-## Start the private desktop
-
-Use the canonical launcher at `scripts/private-desktop.sh` from this skill.
-It needs `agents`, `bun`, `nix`, and access to the configured GPU render node.
-Run it from any project; keep game-specific commands in that project's own
-launcher or shell.
-
-```bash
-skill_file=$(agents path private-desktop-development)
-skill_dir=$(dirname "$skill_file")
-"$skill_dir/scripts/private-desktop.sh" start --resolution 2560x1440 \
-  -- COMMAND ARG...
-```
-
-The command after `--` runs with only the private display environment. Its exit
-ends the session. Without a command, the launcher stays open until explicitly
-stopped or Ctrl-C. There is no default wall-clock deadline. Add `--seconds 3600`
-only when a finite deadline is wanted. Each run gets a private runtime directory, unique Wayland
-socket, and an available localhost VNC port. The launcher uses labwc with
-wlroots GLES rendering on the selected DRM render node and contains the session
-in the shared machine-capacity helper's foreground native `session` mode, keeping its
-resource allowance for the entire live session. VNC tools reuse one Python
-environment under `${XDG_CACHE_HOME:-~/.cache}/private-desktop`, keyed to the
-Python interpreter. Parallel starts wait for its installation; each runtime
-directory holds only a link to it, so stopping desktops does not retain a new
-53 MiB dependency copy in runtime tmpfs. Launch directly or inside a
-helper `session`; an enclosing finite `run` scope still imposes its deadline.
-Do not run two clients against one
-mutable Wine/Proton prefix.
-
-Read the printed run directory and port. Control it only through the launcher:
-
-```bash
-"$skill_dir/scripts/private-desktop.sh" capture RUN_DIR /absolute/path/frame.png
-"$skill_dir/scripts/private-desktop.sh" control RUN_DIR move 640 360 key enter
-"$skill_dir/scripts/private-desktop.sh" control RUN_DIR keydown shift pause 0.2 keyup shift
-"$skill_dir/scripts/private-desktop.sh" control RUN_DIR mousedown 1 pause 0.2 mouseup 1
-printf %s 'Ab@#1x.Z_-+' | "$skill_dir/scripts/private-desktop.sh" type RUN_DIR
-```
-
-Type text with `type`, never with `control ... type` or `xdotool type`. It
-reads the text only from stdin, so pipe secrets straight in. It types into the
-focused window at a steady pace and holds a real Shift key for capitals and
-US-layout symbols; the VNC server alone sets Shift only as modifier state,
-which Wine apps ignore (`@` arrives as `2`). It refuses a character outside the
-US layout before typing anything.
-Its key mapping test is `scripts/private-desktop-type.test.sh`.
-
-Capture reads the compositor framebuffer directly through `grim` using the exact
-run's saved Wayland display and private runtime directory. VNC remains the input
-channel. Capture needs an active run and a live private socket; it has an
-eight-second timeout with a one-second forced-termination grace, and atomically
-replaces the requested absolute PNG only after successful nonempty output.
-Check its exit status before OCR or pixel inspection: failure preserves an older
-destination, which is not fresh evidence. A fresh frame proves capture, not that
-the application advanced; interpret its visible state in the owning project.
-
-Startup resolves `grim` once and records its executable in the run. For a
-retained session started before that declaration, put `grim` on PATH once for
-the whole capture loop (for example, enter `nix shell nixpkgs#grim`). Do not
-realize a Nix shell for every frame. Capture never sends input or restarts a
-client. Keep original images on disk and report bounded text or measurements.
-
-`vncdo` actions are case-sensitive; use lowercase key names such as `f10`.
-Keep each control sequence shorter than the command's eight-second bound.
-`mousedown`/`mouseup` and `keydown`/`keyup` allow held inputs. Use VNC input
-when the application handles its key and pointer events correctly. For an X11
-app whose VNC input path fails, private-display XTEST through `xdotool` is
-supported for pointer and window queries after confirming its window is
-active on that private display; type text with `type`.
-
-The launcher writes its private X display and X authority value to files in the
-exact run directory. Set `run_dir` to the printed Run path and read both values
-from that run. Require the display to be nonempty and the private socket to be
-live. The authority value can be empty for this private Xwayland server; pass
-that empty value explicitly so the normal desktop's authority is not inherited.
-For example:
-
-```bash
-private_display=$(<"$run_dir/display")
-private_xauthority=$(<"$run_dir/xauthority")
-test -n "$private_display" && test -S "$run_dir/runtime/wayland-0"
-nix shell nixpkgs#xdotool --command env DISPLAY="$private_display" \
-  XAUTHORITY="$private_xauthority" xdotool mousemove 640 360 click 1
-```
-
-Never use `ydotool`, or run `xdotool` with the normal desktop's `DISPLAY` or
-X authority. Do not change normal-desktop focus or target windows on it.
-A user request that clearly calls for hands-on testing on the current display
-overrides this private-display default: confine control to the identified game
-window. Do not require another confirmation when that intent is clear. Do not
-substitute a streamed desktop for a requested native controller/latency trial.
-
-To stop, send Ctrl-C to the foreground launcher (or SIGTERM to its wrapper).
-An explicit `--seconds` deadline also ends the session. Use
-only its exact run directory and processes for cleanup; never kill the user's
-desktop or another session. On exit, the launcher removes the active marker and
-runtime files, and saves the remaining logs under
-`${XDG_STATE_HOME:-~/.local/state}/private-desktop/`. It prints that saved path.
-The next launch recovers folders left by a crash only when their session lock is
-free; live peers keep theirs. VNC binds to `127.0.0.1` with no password, so do not
-change that address to expose it to a network.
-
-## Session bus and concurrent startup
-
-The canonical launcher gives each client command its own live session bus with
-`dbus-run-session`. Do not inherit or manually recreate the normal desktop's
-D-Bus address. A stale inherited address can make Steam's container fail before
-launching the app, even while the private compositor and VNC are healthy. Keep
-this at the generic private-desktop boundary, separate from Warcraft login.
-
-Parallel starts serialize VNC port selection until the selected listener has
-bound its port. A free-port probe alone does not reserve a port. The launcher
-checks listener readiness and releases its startup lock before client work.
-Do not choose ports independently and rely on a startup sleep to avoid collision.
-
-Observed repair: two simultaneous Warcraft desktop starts obtained distinct
-ports and both passed the previous stale-D-Bus container failure. This establishes
-startup transport, not game authentication, input delivery or capture fidelity.
-
-## Add a graphical application
-
-Start applications only after the launcher has set the requested output mode.
-Use the normal project launcher and environment for the target application;
-put reusable project-specific flags or prefix selection in that project, not
-in this generic launcher. Existing account state and credentials stay in their
-application's supported stores. Do not expose secrets in process arguments or
-logs.
-
-## Verify the path
-
-Check the startup `glxinfo -B` log for the hardware renderer. Use the capture
-command to confirm the private framebuffer updates. Before declaring a game
-usable, verify that key and pointer events arrive in the private app, the app
-responds to an ordinary in-game action, and the normal desktop retains focus
-and input. Report what you observed; do not infer game support from compositor
-startup or a launcher screen.
-
-If capture disagrees with the native compositor or Wine ignores modifier chords,
-read [nixos-config:private input diagnostics](references/private-input-diagnostics.md).
-Verify the actual control changed before advancing; a successful command or
-pointer coordinate alone does not establish keyboard delivery.
+- Resolve the canonical launcher with `agents path private-desktop-development`.
+- Use its sibling `scripts/private-desktop.sh`.
+- Read `private-desktop.sh --help` for start/control/type/capture syntax, resolution (2560x1440), ports, render nodes, deadlines and paths.
+- Provide `agents`, `bun`, `nix` and GPU render-node access.
+- Keep game-specific launch commands in the game project.
+- Keep rendering and input on the separate hardware-rendered Wayland desktop.
+- Never switch Niri or inject input globally.
+- Load `image-context-budget` before repeated captures; save originals to disk and inspect bounded text/OCR under its preview and recovery rules.
+- Launch retained desktops directly or inside a native `session`.
+- Keep the foreground capacity allowance until the session ends.
+- Use `--seconds` only for a requested finite deadline.
+- Respect an enclosing finite `run` deadline.
+- Never run two clients against one mutable Wine/Proton prefix.
+- Read the printed run directory and localhost port; control only that run through the launcher.
+- Type with `type` from stdin, including secrets.
+- Never use `control ... type` or `xdotool type`.
+- Keep typing within the supported US layout.
+- Use `scripts/private-desktop-type.test.sh` when changing key mapping.
+- Check capture exit status before inspection.
+- Require an active run, live private socket and a fresh nonempty absolute PNG.
+- Respect capture's eight-second timeout and one-second termination grace.
+- Treat a preserved old destination as stale.
+- Interpret the application's visible state rather than treating a fresh capture as evidence of advancement.
+- Resolve `grim` once for retained older sessions.
+- Never realize a Nix shell per frame.
+- Use lowercase VNC key names and control sequences shorter than eight seconds.
+- Use keydown/keyup and mousedown/mouseup for holds.
+- Use private XTEST for X11 pointer/window queries only after VNC input fails and the private window is confirmed active.
+- Read [private input diagnostics](references/private-input-diagnostics.md) when capture or modifier input disagrees with the app.
+- Read [private XTEST](references/private-xtest.md) when setting up fallback X11 control.
+- Never use `ydotool`, the normal desktop's DISPLAY/X authority, or normal-desktop focus/window targets.
+- Honor explicit current-display testing within the identified game window.
+- Never substitute streaming for a requested native controller/latency trial.
+- Stop with Ctrl-C or SIGTERM to the foreground wrapper; clean only its exact run directory and processes.
+- Keep passwordless VNC bound to `127.0.0.1`.
+- Never expose it to a network.
+- Use the launcher's per-command `dbus-run-session`.
+- Never inherit or recreate the normal desktop's D-Bus address.
+- Keep VNC port selection serialized until listener readiness.
+- Never replace the launcher lock with independent probes or startup sleeps.
+- Start the application only after the requested output mode is set, using its project launcher and supported credential stores.
+- Keep secrets out of arguments and logs.
+- Check the startup `glxinfo -B` hardware renderer, updating private framebuffer, delivered keys/pointer, ordinary in-game action, and retained normal-desktop focus/input before reporting usability.
+- Observe the actual control change before advancing.
+- Never infer keyboard delivery from command success or pointer coordinates.

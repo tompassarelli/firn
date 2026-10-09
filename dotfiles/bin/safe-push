@@ -19,7 +19,9 @@ usage() {
 Usage: safe-push [--dry-run] [--to BRANCH] [--keep-lane]
        safe-push [--dry-run] --tag NAME
 
-Scan outgoing content for secrets, then push the current branch or one tag.
+Check instruction limits and scan secrets, then push the current branch or one tag.
+Repository AGENTS.md: 100 lines. Generated global policy: 200 lines.
+Move longer detail to CLI --help, help TOPIC, or indexed docs.
 
 Options:
   --dry-run    run all safety checks without pushing
@@ -139,6 +141,12 @@ capture_repository_state() {
   esac
   head_oid=$(git rev-parse --verify "${branch_ref}^{commit}" 2>/dev/null) \
     || { echo "safe-push: cannot resolve $branch_ref to a commit"; exit 1; }
+}
+
+check_instruction_limits() {
+  local helper
+  helper="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/agent-instruction-check"
+  "$helper" --repo "$repo_root" --ref "$1"
 }
 
 remote_destination_snapshot() {
@@ -385,6 +393,7 @@ if [ -n "$tag" ]; then
   [ "$(git cat-file -t "$tag_oid" 2>/dev/null)" = tag ] \
     || { echo "safe-push: tag '$tag' is not annotated — refusing"; exit 1; }
   target=$(git rev-list -n1 "$tag_oid")
+  check_instruction_limits "$target"
   command -v gitleaks >/dev/null 2>&1 || { echo "safe-push: gitleaks not on PATH — refusing to push without a secret scan"; exit 1; }
   tmpd=$(mktemp -d)
   origin_namespace="refs/safe-push-origin/$$-$RANDOM"
@@ -604,6 +613,7 @@ fi
 # --- the load-bearing guard: secret scan of the commits about to be pushed -------
 capture_repository_state
 capture_destination_state
+check_instruction_limits "$head_oid"
 command -v gitleaks >/dev/null 2>&1 || { echo "safe-push: gitleaks not on PATH — refusing to push without a secret scan"; exit 1; }
 if [ -n "$destination_oid" ] && [ "$destination_oid" = "$head_oid" ]; then
   echo "safe-push: nothing to push ($head_oid already at origin $destination_ref)"

@@ -101,3 +101,18 @@ versions, older/, and tests/. Experimental native procedures name their candidat
 through `fresh`, captures or `accept` and install into tests/. A script-only
 rebuild preserves old titles and imports, so it cannot deliver changed art or
 establish that new roster content is installed.
+
+## Wisp command flags and iteration costs
+
+- Follow `wisp NOUN [VERB] [OBJECT...]`: `map build|rebuild`, `client watch|wait|doctor`, `engine trace`, `parity numeric|tapes`, `integrity capture|result|headless`.
+- Use `--client NAME` for native clients, `--clients N` for simulated clients, `--pairs N` for pairs, `--profile NAME` for builds and `--map MAP.w3x` for built maps.
+- Use `--ref REF` for measured revisions, `--pool-profile` for pool graphics, `--functions` for perf reporting and `--clients-file` for client files.
+- Compare iteration against observed `wisp dev` costs: type errors 0.06 s, affected tests 0.6 s, two-client journey 2 s.
+- Use repeated `--data <client CustomMapData>` with dev to hot-reload clients.
+- Use `bun test test/game.test.ts -t NAME` for focused logic (0.07 s), `bun run check` (0.4 s) and `bun wisp headless` (1.6 s).
+- Run affected emitted-Lua modules through `LUA=<32-bit lua> GAME_TESTS=PATH bun scripts/lua-tests.ts` to catch integer wrap, binary32 rounding and TSTL differences.
+- Use `bun wisp hot --data <A> --data <B> --watch` for changed modules (about 0.4 s) and read per-client refusal/errors at TypeScript lines.
+- Use `bun wisp map rebuild MAP.w3x` after one full build for script swaps (2–4 s), then `bun wisp fresh MAP.w3x` for a new game (24 s).
+- Use `LUA=<32-bit lua> bun wisp parity tapes` to compare Wurst Lua, Bun and 32-bit Lua acceptance tapes (6 s cached) at the first divergent frame/field.
+- Use `bun wisp farm balance --wait` for level-9 fields (4.1 min versus 25 min locally) and `bun wisp farm pads --wait` for all 17 native scripts headlessly (4.2 min).
+- Resolve farm behavior through wisp:docs/farm.md: no `--ref` tests HEAD via scratch `farm/` branches on public GitHub runners with about 20 four-core jobs.

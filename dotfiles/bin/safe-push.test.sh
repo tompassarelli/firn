@@ -9,6 +9,8 @@ shim_main() {
     printf '\n'
   } >>"${SAFE_PUSH_TEST_TRACE:?}"
 
+  if [[ "$tool" == git && "${1:-}" == -C ]]; then shift 2; fi
+
   if [[ "$tool" == gitleaks && -n "${SAFE_PUSH_TEST_REAL_RACE:-}" \
         && ! -s "${SAFE_PUSH_TEST_STATE:?}" ]]; then
     case "$SAFE_PUSH_TEST_REAL_RACE" in
@@ -82,6 +84,7 @@ shim_main() {
             'refs/remotes/origin/main^{commit}'|'refs/remotes/origin/other^{commit}')
               printf '%s\n' feedface
               ;;
+            'deadbeef^{commit}') printf '%s\n' deadbeef ;;
             *) return 2 ;;
           esac
           ;;
@@ -183,7 +186,7 @@ shim_main() {
         *) return 2 ;;
       esac
       ;;
-    git:push|git:fetch|git:update-ref) ;;
+    git:push|git:fetch|git:update-ref|git:ls-tree) ;;
     gitleaks:detect|gitleaks:dir) ;;
     *) return 2 ;;
   esac

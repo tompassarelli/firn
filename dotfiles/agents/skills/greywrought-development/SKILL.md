@@ -4,30 +4,17 @@ description: >-
   Build, run, or change the Greywrought Clause game using its pinned compiler, declared toolchain, and existing playability check.
 ---
 
-# Greywrought development
+# Greywrought
 
-For a demo request, keep the live game usable and return its tested URL before
-optional cleanup.
+- Return the usable tested demo URL before optional cleanup.
+- Compare the worktree with origin/main, initialize declared submodules and use Bun.
+- Keep world rules in Clause and TypeScript for presentation/foreign integration.
+- Use `vendor/clause` and the project's pin checker, with compiler outputs in its worktree.
+- Resolve Bun, Rust and C-linker tools from manifests before building.
+- Use the full build for Clause changes and host-only build after materialization for presentation/audio.
+- Preserve one owned server at `http://127.0.0.1:4173/`, rebuild and hard-refresh.
+- Run `bun run test:browser-playability` and report its URL/result.
+- Require a user gesture for browser audio unlock and Tom's observation for perceived audio.
+- Land through `repo-safety`; deploy only when requested.
 
-Work in an owned lane. Fetch and compare its base with origin/main, initialize
-declared submodules, and use Bun. Read the project instructions: world rules
-belong in Clause; TypeScript is presentation and foreign-system integration.
-
-Use the Clause pin declared by `vendor/clause` and the project's pin checker.
-Keep compiler outputs in the compiler's lane. Resolve the required Bun, Rust,
-and C-linker tools from current manifests before running a build script;
-missing tools are environment failures, not game failures.
-
-Use the full build for Clause changes and the existing host-only build after
-successful materialization for presentation/audio changes. For the concrete
-environment commands and their assumptions, read
-[toolchain and build notes](references/toolchain-and-build.md).
-
-Preserve one scoped play server at `http://127.0.0.1:4173/`; never kill an
-unknown server. Rebuild and hard-refresh, then use
-`bun run test:browser-playability` for the page, resident session, and rig.
-Report the URL and observed check. Automated checks do not establish perceived
-audio; browser audio unlock requires a user gesture.
-
-Land through repository safety. A development build does not authorize a
-production deployment.
+Use [toolchain/build notes](references/toolchain-and-build.md) for environment commands.

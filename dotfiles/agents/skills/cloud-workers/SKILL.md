@@ -9,75 +9,18 @@ description: >-
 
 # Cloud workers
 
-## What fits
+- Use only public Wisp/Smashcraft code tasks without private/local inputs, Warcraft clients or Tom's install.
+- Budget 4 cores, 15 GB, Bun 1.4.2, gcc/clang and 100 runs/hour/account; use pinned Bun 1.3.13 for these repositories.
+- Build Lua 5.3.6 with LUA_32BITS or use Wisp's pinned command when Lua is required.
+- Keep account extra usage off so plan limits pause work instead of billing.
+- Run RemoteTrigger only from the main session and reuse one routine/repo.
+- Update the routine brief with a fresh v4 UUID, run it and retain its returned session ID.
+- Read get_run_log or list_runs for its result.
+- Put goal/files/Done when/ETA in a self-contained brief with `Refs repo#N` commits and no push notifications.
+- End each prompt with `push to claude/<name>; it lands itself if it passes`.
+- Let Autoland rebase/check/farm/compare and land sequentially; fix conflicts or new failures on the same branch.
+- Retry a branch through `gh workflow run autoland.yml -R tompassarelli/<repo> -f branch=claude/<name>`.
+- Land workflow changes locally through safe-push.
 
-- Code-only work in public GitHub repos (`tompassarelli/wisp`,
-  `tompassarelli/smashcraft`) that needs no local files, private build inputs,
-  Warcraft clients or Tom's install.
-- Sandbox: 4 cores, 15 GB, Bun 1.4.2, gcc and clang. No Lua: build Lua 5.3.6
-  with `LUA_32BITS`, or use Wisp's pinned Lua command once wisp#64 lands.
-- Cost: plan usage, like a local worker; no separate compute charge. Extra
-  usage is off on Tom's account, so hitting the limit pauses work instead of
-  billing. Up to 100 runs an hour per account.
-
-## Run a job
-
-Only the main session has RemoteTrigger; workers don't.
-
-Reuse one routine per repo. Routines can't be deleted by API, only at
-claude.ai/code/routines, so never make one per job. Existing routine:
-`wisp-cloud-worker`, id `trig_01Rv4YsBNXztmR2bKGs4bsth`, environment Default
-(`env_01EkrXafT5PjQN9jUWzwMhLd`).
-
-To create a routine for another repo, use this body:
-
-```json
-{"name": "<repo>-cloud-worker", "run_once_at": "<far future>", "enabled": true,
- "job_config": {"ccr": {
-   "environment_id": "env_01EkrXafT5PjQN9jUWzwMhLd",
-   "session_context": {"model": "claude-opus-5-5",
-     "sources": [{"git_repository": {"url": "https://github.com/tompassarelli/<repo>"}}],
-     "allowed_tools": ["..."]},
-   "events": [{"data": {"uuid": "<fresh v4>", "session_id": "", "type": "user",
-     "parent_tool_use_id": null,
-     "message": {"role": "user", "content": "<PROMPT>"}}}]}}}
-```
-
-For each job:
-
-1. `update` the routine: replace `events[0]`'s message content with the brief
-   and give it a fresh v4 uuid.
-2. `run` it. The response gives the session id.
-3. Read results with `get_run_log` (session id) or `list_runs`. A run took
-   about 30 s for install plus check.
-
-## Briefs
-
-Same four parts as a local worker: goal, files, Done when, ETA. Make it
-self-contained; the cloud worker has none of your local context. Its commits
-say `Refs <repo>#N` for the issue. Don't let it send push notifications. End
-every cloud prompt with: "push to claude/<name>; it lands itself if it
-passes".
-
-The sandbox's Bun 1.4.2 isn't the repos' pinned 1.3.13 (their toolchain-lock
-test fails on it), so start every cloud prompt with:
-
-```sh
-curl -fsSL https://bun.sh/install | bash -s bun-v1.3.13 && export PATH="$HOME/.bun/bin:$PATH"
-```
-
-## Landing
-
-Nobody relays it. In smashcraft and wisp, a push to `claude/**` starts the
-repo's Autoland workflow (`.github/workflows/autoland.yml`; each repo's
-docs/ci.md, "Autoland"): rebase onto main, the repo's checks, the full farm
-suite on GitHub's runners, then a comparison with main's own failures. No new
-failures: it lands on main, deletes the branch and starts main's CI. A
-conflict, failed check or new failing test leaves the branch and comments on
-the `Refs` issue with the files or tests; push a fix to the same branch.
-Branches land one at a time in push order.
-
-Retry a branch without a new commit:
-`gh workflow run autoland.yml -R tompassarelli/<repo> -f branch=claude/<name>`.
-A commit that changes `.github/workflows/` can't land this way (the workflow
-token can't push workflow files); land it locally with `safe-push`.
+Use [RemoteTrigger schema](references/remote-trigger.md) when creating a routine; delete routines only at claude.ai/code/routines.
+Use each repository's indexed docs/ci.md Autoland topic for landing details.

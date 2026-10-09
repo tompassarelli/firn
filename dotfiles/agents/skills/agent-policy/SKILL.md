@@ -36,17 +36,4 @@ changes.
 5. Verify the active ID, owner revision, and provider projection resolve to
    that published source. Unlanded or ambiguous authority blocks activation.
 
-## Worked contrasts
-
-- Bad: hand-editing `~/.agents/skills/<id>/SKILL.md` or a generated
-  `~/.claude/CLAUDE.md` because it is faster than the source repo. Good: edit
-  the owned source (e.g. `north:agent-machinery/skills/<id>/SKILL.md` or
-  `nixos-config:dotfiles/agents/`), then `agents sync` — a projection edit is
-  silently overwritten by the next sync and never reaches other consumers.
-- Bad: registering a new skill unit in `catalog.json` and assuming `agents
-  sync` succeeding means it is live. Good: verify with `agents inspect <id>`
-  — a unit can pass catalog/schema validation and still be `off · inactive`
-  because catalog registration and operator activation are two separate
-  steps; the fix is `agents on <id>`, not another sync attempt.
-
-For catalog and projection mechanics, use `references/notes.md`.
+Use `agents --help` and [catalog notes](references/notes.md) for catalog/projection detail.

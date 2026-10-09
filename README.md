@@ -60,6 +60,8 @@ firn host impact      # preview what would build
 firn repo diff        # diff regenerated .nix vs committed
 firn tag enable <t>   # enable a tag
 firn tag disable <t>  # disable a tag
+agent-instruction-check --repo DIR --ref HEAD # published AGENTS.md and global-policy limits
+agent-instruction-check --global FILE        # generated global policy (repeat --global)
 ```
 
 Commands use a `<node> <edge> [<leaf>]` triple. Leaves default to the current

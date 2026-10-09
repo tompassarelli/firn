@@ -139,7 +139,7 @@ CALIBRATION_MODEL_TABLE_HEADERS = {
     "account / model",
     "model",
     "model / actor",
-    "staffing",
+    "workers",
 }
 MARKDOWN_TABLE_SEPARATOR = re.compile(r"^:?-{3,}:?$")
 

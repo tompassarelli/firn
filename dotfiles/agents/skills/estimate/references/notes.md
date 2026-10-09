@@ -9,4 +9,4 @@ An ETA predicts completion, a checkpoint says when to inspect progress, and a
 hard limit sets a resource boundary. At an unexpected delay, inspect the
 existing run before deciding it has stalled.
 
-Use the `staffing` skill for the shared worker history and ETA rules.
+Use the `workers` skill for the shared worker history and ETA rules.

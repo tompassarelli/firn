@@ -282,6 +282,15 @@ if [ -s "$REPO/dotfiles/agents/AGENTS.md" ]; then
 else
   bad "global AGENTS.md owner source is missing or empty"
 fi
+instruction_args=(--repo "$REPO" --ref HEAD)
+if [ "$LOCAL" -eq 1 ]; then
+  instruction_args+=(--global "$HOME/.agents/AGENTS.md" --global "$HOME/.codex/AGENTS.md")
+fi
+if instruction_result=$("$REPO/dotfiles/bin/agent-instruction-check" "${instruction_args[@]}" 2>&1); then
+  ok_detail "$instruction_result"
+else
+  bad "$instruction_result"
+fi
 north_profile_module="$REPO/native/nix/north-profile.clause"
 if grep -Fq '/.local/state/north/agents/current/instructions/shared/AGENTS.md"' "$north_profile_module"; then
   ok_detail "~/.agents/AGENTS.md is wired to North-generation instructions"
