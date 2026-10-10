@@ -16,7 +16,7 @@ Measure before and after; never guess. Numbers below are per operation from
 TSTL 1.37.1 on Smashcraft's LUA_32BITS 5.3 with the Lua32 test counter
 (count hook, GC stopped), on 8-element arrays and 8-entry maps. Cases, emitted
 Lua and the harness: [measurements](references/measurements.md). Sources:
-[sources](references/sources.md).
+[sources](references/sources.md); PUC 5.3 semantics: [Lua 5.3 manual](https://www.lua.org/manual/5.3/manual.html).
 
 ## Measure
 - Use the repo's own counters: Lua32 test costs (smashcraft:ts/test/lua/cost-baseline.tsv)

@@ -13,6 +13,7 @@ metadata:
 # GitHub Actions
 
 - Read [sources](references/sources.md) only when revising a limit or resolving its source.
+- GitHub's published limits behind the numbers below: [Actions usage limits](https://docs.github.com/en/actions/reference/limits).
 - Share the account's 20 concurrent jobs (at most 5 macOS) across repositories; check the plan before assuming that limit.
 - Share Tom's 5,000 REST calls/hour across tokens/apps/agents.
 - Budget workflow `GITHUB_TOKEN` separately at 1,000/hour/repository.
