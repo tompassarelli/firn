@@ -3,9 +3,10 @@ import { mkdtempSync, rmSync, readFileSync, existsSync, statSync, mkdirSync } fr
 import { hostname, tmpdir } from "os";
 import { basename, join, resolve } from "path";
 
-const USAGE = `usage: vast-job --offer-query '<vastai search query>' --max-hours H [--upload <dir|git-ref>]... --run '<remote command>' --fetch <remote path> --to <local dir> [--disk GB] [--image IMAGE]
+const USAGE = `usage: vast-job --offer-query '<vastai search query>' --max-hours H [--upload <dir|git-ref>]... --run '<remote command>' --fetch <remote path> --to <local dir> [--disk GB] [--image IMAGE] [--max-threads N]
 
-Rents the offer with the most cpu_cores_effective per dollar, uploads to /root/<name>,
+Rents the offer with the most cpu_cores_effective per dollar among hosts with at most
+N host threads (cpu_cores; default 64), uploads to /root/<name>,
 runs the command under nohup, and stops at the earliest of: command exit, H hours,
 credit below $2, or SIGINT/SIGTERM/crash. It then fetches the result, destroys the
 instance and its volumes, removes the job's SSH key, and verifies none is left.
@@ -16,7 +17,7 @@ const POLL_MS = 60_000;
 const VASTAI = process.env.VAST_JOB_VASTAI ?? `${process.env.HOME}/.local/bin/vastai`;
 const SECRETS = `${process.env.HOME}/code/nixos-config/main/secrets/vastai.yaml`;
 
-type Args = { query: string; hours: number; uploads: string[]; run: string; fetch: string; to: string; disk: number; image: string };
+type Args = { query: string; hours: number; uploads: string[]; run: string; fetch: string; to: string; disk: number; image: string; maxThreads: number };
 
 function log(line: string) {
   process.stdout.write(`vast-job: ${line}\n`);
@@ -28,7 +29,7 @@ function die(line: string): never {
 }
 
 function parseArgs(argv: string[]): Args {
-  const a: Partial<Args> & { uploads: string[] } = { uploads: [], disk: 10, image: "ubuntu:22.04" };
+  const a: Partial<Args> & { uploads: string[] } = { uploads: [], disk: 10, image: "ubuntu:22.04", maxThreads: 64 };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === "-h" || flag === "--help") {
@@ -46,12 +47,14 @@ function parseArgs(argv: string[]): Args {
       case "--to": a.to = value; break;
       case "--disk": a.disk = Number(value); break;
       case "--image": a.image = value; break;
+      case "--max-threads": a.maxThreads = Number(value); break;
       default: die(`unknown option ${flag}\n${USAGE}`);
     }
   }
   for (const k of ["query", "hours", "run", "fetch", "to"] as const) if (a[k] === undefined) die(`missing --${k === "query" ? "offer-query" : k === "hours" ? "max-hours" : k}\n${USAGE}`);
   if (!(a.hours! > 0)) die("--max-hours must be positive");
   if (!(a.disk! > 0)) die("--disk must be positive");
+  if (!(a.maxThreads! > 0)) die("--max-threads must be positive");
   return a as Args;
 }
 
@@ -140,7 +143,7 @@ async function rent() {
   log(`credit $${startCredit.toFixed(4)}`);
   const offers: any[] = await vast("search", "offers", args.query, "--storage", String(args.disk), "--limit", "1000");
   if (!Array.isArray(offers) || offers.length === 0) throw new Error("no offers match the query");
-  const ranked = offers.filter((o) => o.dph_total > 0 && o.cpu_cores_effective > 0).sort((x, y) => y.cpu_cores_effective / y.dph_total - x.cpu_cores_effective / x.dph_total);
+  const ranked = offers.filter((o) => o.dph_total > 0 && o.cpu_cores_effective > 0 && o.cpu_cores <= args.maxThreads).sort((x, y) => y.cpu_cores_effective / y.dph_total - x.cpu_cores_effective / x.dph_total);
   const offer = ranked[0];
   price = offer.dph_total;
   const need = args.hours * price + FLOOR;
