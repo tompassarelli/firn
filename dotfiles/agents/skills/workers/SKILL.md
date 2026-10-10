@@ -11,7 +11,7 @@ written: 2026-10-10
 
 ## Staff
 
-- Tom's own session is his proxy: it relays his intent and reports, and staffs no boxes. Each domain (Smashcraft and Wisp, Muove) has a resident Opus high lead session that owns staffing, landing and its tick; start one with a brief rather than leading from a subagent.
+- The chain of command is `agents org show`: Tom's top-level session is his proxy (a SessionStart hook gives it the role), and each domain has a resident lead session started with `agents lead start` from [the lead brief template](references/lead-brief.md), which covers layering, escalation and finishing. Every brief you write begins with `Delegation: role=<worker|sub-lead> budget=<n>` below your own budget; the spawn gate refuses at budget 0.
 - Run `agents plan` for signed-in providers. `worker-ledger --recommend '<Category and facet lines>'` picks the tier; `worker-ledger --summary` shows category success.
 - Pick ready work with `threads ready`; read its Done when with `threads show repo#N`. Check `threads list` and open issues first, and never duplicate a held item.
 - Brief: Item, Category, goal, files, Done when, ETA (one box, 20 minutes or less), facet lines `Spec: exact|measured|judged`, `Scope: one-file|module|cross-module|cross-repo`, `Surface: ts|lua|nix|shell|workflow|docs|assets`, `Verify: none|local-test|farm|native|visual`, and the state checked at spawn (main SHA and CI, lane SHAs, what landed).

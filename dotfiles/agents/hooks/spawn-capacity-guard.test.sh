@@ -4,7 +4,9 @@
 # deny with the queue/farm/cloud message, high system PSI with few provisioned
 # CPUs allows, an unreadable probe allows, a remote worker allows, and an URGENT
 # brief passes and is logged. The Codex spawn_agent path through the behavior
-# decider denies the same way.
+# decider denies the same way. Delegation budget 0 (session env, or a subagent
+# brief without a Delegation line) denies with the do-it-yourself message and
+# budget 1 allows; a domain below the first in the org priority stops at 80%.
 set -uo pipefail
 export PATH="/etc/codex/hooks/runtime:$PATH"
 
@@ -25,7 +27,8 @@ status() { printf '{"decision":"RUN","leasedBatchCpus":%s,"leasedNativeCpus":12,
 
 # call HOOK JSON: print the deny reason ("" when allowed).
 call() {
-  printf '%s' "$2" | env -u AGENT_NO_AUTHORING_HOOKS HOME="$SCRATCH/home" SPAWN_CAPACITY_HOME="$SCRATCH/home" \
+  printf '%s' "$2" | env -u AGENT_NO_AUTHORING_HOOKS -u AGENT_ROLE -u AGENT_DELEGATION_BUDGET -u AGENT_ORG_NAME \
+    AGENTS_ORG_FILE="$SCRATCH/org.json" "${CALL_ENV[@]}" HOME="$SCRATCH/home" SPAWN_CAPACITY_HOME="$SCRATCH/home" \
     SPAWN_CAPACITY_STATUS="$STATUS" CODEX_BEHAVIOR_STATE="$SCRATCH/state" \
     CODEX_BEHAVIOR_CODE_ROOT="$SCRATCH/code" \
     NORTH_AGENT_ACTIVE="$ACTIVATION" NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 \
@@ -37,6 +40,7 @@ print(json.loads(raw)["hookSpecificOutput"].get("permissionDecisionReason", "") 
 agent() { printf '{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Agent","tool_input":%s}' "$1"; }
 
 pass=0 fail=0
+CALL_ENV=()
 check() {
   if [ "$1" = ok ]; then pass=$((pass + 1)); printf 'PASS  %s\n' "$2"
   else fail=$((fail + 1)); printf 'FAIL  %s\n      out=%s\n' "$2" "$3"; fi
@@ -106,10 +110,30 @@ status 10 5
 out="$(call "$HERE/codex-behavior-guard.sh" '{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"spawn_agent","tool_input":{"message":"fix the bug and land it"}}')"
 [ -z "$out" ] && check ok 'Codex spawn_agent under the limit allows' || check bad 'Codex spawn_agent under the limit allows' "$out"
 
+status 10 5
+dodeny() { local out; out="$(call "$HOOK" "$1")"; case "$out" in "Your delegation budget is 0 ("*"Do this work directly yourself"*) check ok "$2" ;; *) check bad "$2" "$out" ;; esac; }
+CALL_ENV=(AGENT_DELEGATION_BUDGET=0); dodeny "$(agent "$worker")" 'session budget 0 denies with the do-it-yourself message'
+CALL_ENV=(AGENT_DELEGATION_BUDGET=0); dodeny "$(agent '{"subagent_type":"claude-code-guide","isolation":"remote","prompt":"p"}')" 'budget 0 denies remote and non-worker spawns too'
+CALL_ENV=(AGENT_DELEGATION_BUDGET=1); expect_allow "$(agent "$worker")" 'session budget 1 allows'
+CALL_ENV=(AGENT_ROLE=worker); dodeny "$(agent "$worker")" 'role worker without a budget defaults to 0'
+CALL_ENV=()
+sub="$SCRATCH/home/.claude/projects/p/s/subagents"
+printf '{"type":"user","message":{"role":"user","content":"Item: x. Do it."}}\n' >"$sub/agent-w0.jsonl"
+printf '{"type":"user","message":{"role":"user","content":"Delegation: role=sub-lead depth=2 budget=1\\nItem: x."}}\n' >"$sub/agent-w1.jsonl"
+subagent() { printf '{"session_id":"s","transcript_path":"%s","agent_id":"%s","agent_type":"worker","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Agent","tool_input":%s}' "$SCRATCH/home/.claude/projects/p/s.jsonl" "$1" "$worker"; }
+dodeny "$(subagent w0)" 'a subagent whose brief has no Delegation line is a worker and is denied'
+expect_allow "$(subagent w1)" 'a subagent briefed with budget=1 may spawn'
+printf '{"version":1,"priority":["muove","smashcraft"],"nodes":[{"id":"sc","domain":"Smashcraft"},{"id":"mu","domain":"muove"}]}\n' >"$SCRATCH/org.json"
+status 17 5
+out="$(CALL_ENV=(AGENT_ORG_NAME=sc); call "$HOOK" "$(agent "$worker")")"
+case "$out" in "Domain smashcraft ranks below muove"*) check ok 'a lower-priority domain stops at 80% of the limit' ;; *) check bad 'a lower-priority domain stops at 80% of the limit' "$out" ;; esac
+CALL_ENV=(AGENT_ORG_NAME=mu); expect_allow "$(agent "$worker")" 'the first-priority domain keeps the headroom'
+CALL_ENV=()
+
 status 19 5
 input="$(agent "$worker")"
 start=$(date +%s%N)
-printf '%s' "$input" | env SPAWN_CAPACITY_STATUS="$STATUS" NORTH_AGENT_ACTIVE="$ACTIVATION" "$HOOK" >/dev/null
+printf '%s' "$input" | env -u AGENT_DELEGATION_BUDGET -u AGENT_ROLE SPAWN_CAPACITY_STATUS="$STATUS" NORTH_AGENT_ACTIVE="$ACTIVATION" "$HOOK" >/dev/null
 ms=$(( ($(date +%s%N) - start) / 1000000 ))
 [ "$ms" -lt 100 ] && check ok "allow decision takes ${ms} ms (under 100)" || check bad 'allow decision under 100 ms' "${ms} ms"
 

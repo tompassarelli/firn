@@ -14,6 +14,14 @@ missing, slow (2 s) or unreadable helper allows. An urgent fix passes with
 `CASE=URGENT FACT="..."` at the start of the brief, logged beside the Codex
 behavior overrides. The capacity watchdog (a brief carrying
 `[routine:watchdog]`) is never refused, since it reports the overload.
+
+Delegation: a Claude Agent spawn is refused when the spawner's delegation
+budget is 0. A subagent's budget is the `Delegation: ... budget=N` line of its
+own brief (none: worker, 0); a session's is AGENT_DELEGATION_BUDGET, else the
+default for AGENT_ROLE, and an unset role is Tom's proxy (3). Priority: a
+session whose org node (AGENT_ORG_NAME in ~/.local/state/agents/org.json)
+belongs to a domain below the first in the org's priority order stops at
+(1 - PRIORITY_HEADROOM) of the CPU limit.
 """
 
 import json
@@ -28,6 +36,9 @@ HELPER_TIMEOUT = 2.0
 LOCAL_CLAUDE_TYPES = {"worker", "worker-high", "worker-xhigh", "worker-haiku", "general-purpose", "Explore", "fork"}
 ACTIVE_SECONDS = 300
 EXEMPT_MARKER = "[routine:watchdog]"
+ROLE_BUDGETS = {"proxy": 3, "lead": 2, "sub-lead": 1, "worker": 0}
+PRIORITY_HEADROOM = 0.2
+DELEGATION = re.compile(r"(?mi)^\W*Delegation:.*?\bbudget\s*=\s*(\d+)")
 URGENT = re.compile(r"(?m)^\W*CASE=URGENT\s+FACT=(?:[\"“”]([^\"“”]*)[\"“”]|['‘’]([^'‘’]*)['‘’])", re.IGNORECASE)
 
 
@@ -185,19 +196,80 @@ def urgent_file_fact(texts):
     return None
 
 
+def subagent_brief(event):
+    """The first prompt of the subagent making this call, or None."""
+    transcript, agent = event.get("transcript_path"), event.get("agent_id")
+    if not (isinstance(transcript, str) and isinstance(agent, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", agent)):
+        return None
+    path = Path(transcript).with_suffix("") / "subagents" / f"agent-{agent}.jsonl"
+    try:
+        with path.open(encoding="utf-8") as f:
+            for raw in f:
+                entry = json.loads(raw)
+                if entry.get("type") == "user":
+                    content = (entry.get("message") or {}).get("content")
+                    if isinstance(content, list):
+                        content = "\n".join(c.get("text", "") for c in content if isinstance(c, dict))
+                    return content if isinstance(content, str) else None
+    except (OSError, ValueError):
+        return None
+    return None
+
+
+def delegation_budget(event):
+    """(budget, where it came from) for the agent making this spawn."""
+    if event.get("agent_id"):
+        match = DELEGATION.search(subagent_brief(event) or "")
+        if match:
+            return int(match.group(1)), "the Delegation line of your brief"
+        return 0, "your brief, which has no Delegation line, so you are a worker"
+    raw = os.environ.get("AGENT_DELEGATION_BUDGET", "")
+    if raw.isdigit():
+        return int(raw), "AGENT_DELEGATION_BUDGET"
+    role = os.environ.get("AGENT_ROLE") or "proxy"
+    return ROLE_BUDGETS.get(role, 0), f"the default for role {role}"
+
+
+def org_domain_rank():
+    """(domain, rank in the priority order, first domain) for this session's org node, or None."""
+    name = os.environ.get("AGENT_ORG_NAME")
+    if not name:
+        return None
+    path = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "agents/org.json"
+    try:
+        org = json.loads(Path(os.environ.get("AGENTS_ORG_FILE", path)).read_text())
+        domain = next(n["domain"] for n in org["nodes"] if n["id"] == name).lower()
+        order = [d.lower() for d in org.get("priority", [])]
+    except (OSError, ValueError, KeyError, TypeError, StopIteration, AttributeError):
+        return None
+    if domain not in order:
+        return None
+    return domain, order.index(domain), order[0]
+
+
 def check(event):
     """The refusal text for this spawn, or None to allow it."""
-    if not is_local(event):
+    texts = brief_texts(event.get("tool_input") or {})
+    if any(EXEMPT_MARKER in t for t in texts):
         return None
-    if any(EXEMPT_MARKER in t for t in brief_texts(event.get("tool_input") or {})):
+    if event.get("tool_name") == "Agent":
+        budget, source = delegation_budget(event)
+        if budget <= 0:
+            return (
+                f"Your delegation budget is 0 ({source}). Do this work directly yourself: don't spawn, "
+                "fork or delegate it. If it is more than you can finish, land what passes and report the rest "
+                "to whoever briefed you."
+            )
+    if not is_local(event):
         return None
     reading = capacity()
     if reading is None:
         return None
     provisioned, limit, protected = reading
-    if provisioned < limit and protected <= PROTECTED_PRESSURE_LIMIT:
+    rank = org_domain_rank()
+    ceiling = limit * (1 - PRIORITY_HEADROOM) if rank and rank[1] > 0 else limit
+    if provisioned < ceiling and protected <= PROTECTED_PRESSURE_LIMIT:
         return None
-    texts = brief_texts(event.get("tool_input") or {})
     fact = urgent_file_fact(texts)
     if fact:
         log_override(event, fact)
@@ -209,6 +281,13 @@ def check(event):
             log_override(event, fact.strip())
             return None
     log_denial(event)
+    if provisioned < limit and protected <= PROTECTED_PRESSURE_LIMIT:
+        return (
+            f"Domain {rank[0]} ranks below {rank[2]} in Tom's priority order (agents org show), so its local "
+            f"spawns stop at {ceiling:g} of the {limit:g} CPUs; {provisioned:g} are committed. Move code-only work "
+            "to a cloud worker (cloud-workers skill) or queue it until a lease ends. Take a real conflict to the "
+            "proxy, not Tom."
+        )
     return (
         f"Capacity leases and unleased heavy load commit {provisioned:g} of the {limit:g} CPUs the machine can hand out, "
         f"protected desktop pressure is {protected:g}% (limit {PROTECTED_PRESSURE_LIMIT:g}%), and "

@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Claude Code SessionStart hook: tells a session its place in the chain of
+# command. A top-level interactive session with AGENT_ROLE unset is Tom's
+# proxy and gets the proxy role; a session started with AGENT_ROLE (agents
+# lead start) gets one line naming its role and delegation budget. `-p` runs
+# (entrypoint other than cli), --agent sessions and subagent payloads get nothing.
+#
+# Kill-switch: `north config agents off org-role` or env
+# AGENT_NO_AUTHORING_HOOKS (shared impl: lib/authoring-killswitch.sh).
+set -uo pipefail
+
+payload="$(head -c 65536)"
+case "$payload" in
+  *'"agent_id"'*|*'"agent_type"'*) exit 0 ;;
+esac
+[ "${CLAUDE_CODE_ENTRYPOINT:-}" = cli ] || exit 0
+
+authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
+[ -r "$authoring_killswitch" ] \
+  || authoring_killswitch="$(dirname "$0")/../lib/authoring-killswitch.sh"
+# shellcheck disable=SC1090,SC1091
+. "$authoring_killswitch" 2>/dev/null || true
+type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
+
+if [ -n "${AGENT_ROLE:-}" ]; then
+  printf 'Your role is %s (org node %s, depth %s, delegation budget %s). `agents org show` lists the chain of command; a spawn carries `Delegation: role=<role> budget=<n>` as its first brief line, below your own budget.\n' \
+    "$AGENT_ROLE" "${AGENT_ORG_NAME:-unregistered}" "${AGENT_DEPTH:-?}" "${AGENT_DELEGATION_BUDGET:-default}"
+  exit 0
+fi
+
+cat <<'EOF'
+You are Tom's proxy: the root of the agent chain of command (depth 0, delegation budget 3).
+- Relay Tom's intent to the domain leads that `agents org show` lists; start one with `agents lead start --provider claude|codex --domain D --brief FILE` (template: workers skill, references/lead-brief.md).
+- Staff no boxes yourself: leads own staffing, landing and their ticks. Answer Tom's direct questions and small asks yourself.
+- Keep cross-project policy (nixos-config:dotfiles/agents/) and Tom's domain priority (`agents org priority`); the spawn gate enforces it. Settle conflicts between leads yourself.
+- Only money, accounts, irreversible deletion, choosing between products, and reversing a direction Tom stated reach Tom. Leads or an Opus max planner decide everything else; show it in reports.
+- When `agents org show` marks a lead DIED while active (its workstream is in Tom's current goal or agenda), run `agents lead restart NAME`; mark a workstream Tom has dropped with `agents org finish NAME`.
+- Report to Tom in plain words: outcome, measured numbers, and what needs him.
+EOF
+exit 0

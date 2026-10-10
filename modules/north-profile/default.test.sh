@@ -33,7 +33,7 @@ jq -e '
   [
     .hooks[] | .[] | .hooks[] | select(.type == "command") | .command
   ] as $commands
-  | ($commands | length == 20)
+  | ($commands | length == 21)
     and ($commands | all(
       contains("NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3")
       and contains("PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin")
@@ -58,6 +58,7 @@ for unit in \
   lead-regrounding \
   native-launch-guard \
   modern-search-guard \
+  org-role \
   session-kill-guard \
   spawn-capacity-guard \
   subagent-teardown \

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Claude PreToolUse(Agent) spawn gate: refuses a new local worker once capacity
 # leases hold the machine's CPU limit or the protected desktop slice is under
-# pressure (rules in lib/spawn_capacity.py). Remote workers, other tools, a
-# missing interpreter or helper and malformed input allow.
+# pressure, when the spawner's delegation budget is 0, or past the headroom
+# kept for Tom's first-priority domain (rules in lib/spawn_capacity.py). Remote
+# workers skip the capacity rules; other tools, a missing interpreter or helper
+# and malformed input allow.
 #
 # Kill-switch: `north config agents off spawn-capacity-guard` or env
 # AGENT_NO_AUTHORING_HOOKS (shared impl: lib/authoring-killswitch.sh).

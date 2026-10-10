@@ -569,6 +569,16 @@
         "path": "dotfiles/agents/skills/vast-ai/SKILL.md"
       }
     },
+    "org-role": {
+      "kind": "hook",
+      "title": "Org role notice",
+      "triggerDescription": "At session start, give Tom's top-level interactive session the proxy role and a launched lead its role and delegation budget.",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/org-role.sh"
+      }
+    },
     "unlanded-work": {
       "kind": "hook",
       "title": "Unlanded work notice",
@@ -1355,6 +1365,19 @@
           "type": "skill",
           "targets": [
             "shared"
+          ]
+        }
+      ]
+    },
+    "org-role": {
+      "supports": [
+        "agent-machinery"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "claude"
           ]
         }
       ]

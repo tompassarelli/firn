@@ -51,6 +51,8 @@
 ## Workers and tools
 
 - Load `workers` before staffing independent code areas or shared-resource checks.
+- A chain of command runs from Tom's proxy session through domain leads to workers; `agents org show` prints it.
+- Take your role and delegation budget from your brief's `Delegation:` line or AGENT_ROLE and AGENT_DELEGATION_BUDGET; with budget 0 do the work yourself.
 - Assign one task per worker and one worker per scarce client/device instance.
 - Send running workers only their own task's follow-up through the agent message tool.
 - Add no review, audit or status workers unless Tom asks.
