@@ -1,0 +1,171 @@
+{
+ "note": "\u00a74 example 1: Codex 52% used, week resets in 4 h, beta 3/h",
+ "now": "2026-10-17T05:20Z",
+ "usage": {
+  "burn_slack": 15,
+  "conserve_slack": -5,
+  "horizon_h": 36,
+  "money_ceiling": 95,
+  "fast_floor": 10,
+  "stale_min": 30,
+  "urgent": 1.2,
+  "shift": 15,
+  "late": 1.5
+ },
+ "tiers": [
+  {
+   "key": "claude:haiku",
+   "model": "claude-haiku-5-5",
+   "effort": "high",
+   "rank": 0,
+   "start": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "key": "codex:sol-medium",
+   "model": "gpt-6.1-sol",
+   "effort": "medium",
+   "rank": 1,
+   "start": [
+    30,
+    20,
+    20
+   ]
+  },
+  {
+   "key": "codex:sol-high",
+   "model": "gpt-6.1-sol",
+   "effort": "high",
+   "rank": 2,
+   "start": [
+    55,
+    50,
+    40
+   ]
+  },
+  {
+   "key": "claude:opus-medium",
+   "model": "claude-opus-5-5",
+   "effort": "medium",
+   "rank": 4,
+   "start": [
+    85,
+    75,
+    50
+   ]
+  },
+  {
+   "key": "claude:opus-high",
+   "model": "claude-opus-5-5",
+   "effort": "high",
+   "rank": 5,
+   "start": [
+    100,
+    100,
+    100
+   ]
+  },
+  {
+   "key": "claude:opus-xhigh",
+   "model": "claude-opus-5-5",
+   "effort": "xhigh",
+   "rank": 6,
+   "start": [
+    100,
+    100,
+    100
+   ]
+  }
+ ],
+ "billing": {
+  "claude": {
+   "standard": "plan",
+   "fast": "money",
+   "ultrafast": "blocked",
+   "overflow": "money"
+  },
+  "codex": {
+   "standard": "plan",
+   "fast": "plan",
+   "ultrafast": "money",
+   "overflow": "money"
+  }
+ },
+ "lease": true,
+ "accounts": {
+  "codex": {
+   "windows": {
+    "5h": {
+     "headroom": 80,
+     "reset_in": 2,
+     "beta": 3
+    },
+    "week": {
+     "headroom": 48,
+     "reset_in": 4,
+     "beta": 3
+    }
+   },
+   "grants": [],
+   "hasCredits": false,
+   "extra_usage": false,
+   "spend": false,
+   "age_min": 4,
+   "override": null
+  },
+  "claude": {
+   "windows": {
+    "5h": {
+     "headroom": 70,
+     "reset_in": 3,
+     "beta": 2
+    },
+    "week": {
+     "headroom": 25,
+     "reset_in": 6.7,
+     "beta": 2
+    }
+   },
+   "grants": [],
+   "hasCredits": false,
+   "extra_usage": false,
+   "spend": false,
+   "age_min": 4,
+   "override": null
+  }
+ },
+ "projects": {
+  "muove": {
+   "priority": 1,
+   "u": 1.0,
+   "bar": "solid",
+   "target": "14 Oct"
+  }
+ },
+ "boxes": [
+  {
+   "id": "b1",
+   "project": "muove",
+   "category": "feature",
+   "difficulty": 70,
+   "sensitivity": "private",
+   "local": false
+  }
+ ],
+ "expect": {
+  "states": {
+   "codex": "burn",
+   "claude": "even"
+  },
+  "tiers": {
+   "b1": "codex:sol-high"
+  },
+  "fast": {
+   "b1": true
+  },
+  "needs": []
+ }
+}
