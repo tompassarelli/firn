@@ -12,6 +12,12 @@
      uri String]))
 
 (js/export
+  (defrecord Target
+    [firn Snapshot
+     system Snapshot
+     overridden Bool]))
+
+(js/export
   (defrecord ArgvEffect
     [phase String
      argv (Vec String)
@@ -61,6 +67,37 @@
     (->Snapshot root revision branch (snapshot-uri-for root revision branch))))
 
 (js/export
+  (defn make-target [firn Snapshot] Target
+    (->Target firn firn false)))
+
+(js/export
+  (defn make-system-target
+  [firn Snapshot
+   system-root String
+   system-revision String] Target
+    (->Target firn (make-snapshot system-root system-revision "") true)))
+
+(defn flake-ref
+  [target Target
+   fragment String] String
+  (str (snapshot-uri (target-system target)) "#" fragment))
+
+(defn with-override
+  [argv (Vec String)
+   target Target] (Vec String)
+  (if (target-overridden target)
+    (conj (conj (conj argv "--override-input") "firn")
+      (snapshot-uri (target-firn target)))
+    argv))
+
+(js/export
+  (defn system-pin-effects [root String] (Vec ArgvEffect)
+    [(capture-effect "pin system flake revision"
+       ["git" "-C" root "rev-parse" "HEAD"])
+     (capture-effect "check system flake is clean"
+       ["git" "-C" root "status" "--porcelain" "--untracked-files=no"])]))
+
+(js/export
   (defn platform-from-name [name String] PlatformResult
     (cond
       (= name "Linux") (->PlatformSelected (->Platform "Linux"))
@@ -92,20 +129,21 @@
      (platform-effect)]))
 
 (defn system-attribute
-  [snapshot Snapshot
+  [target Target
    host String
    platform Platform] String
-  (str (snapshot-uri snapshot) "#"
+  (flake-ref target
     (if (linux? platform)
       (str "nixosConfigurations." host ".config.system.build.toplevel")
       (str "darwinConfigurations." host ".system"))))
 
 (js/export
   (defn preparation-effects
-  [snapshot Snapshot
+  [target Target
    host String
    platform Platform
    snapshot-directory String] (Vec ArgvEffect)
+  (let [snapshot Snapshot (target-firn target)]
   [(capture-effect "pin committed snapshot"
      ["git" "-C" (snapshot-root snapshot) "cat-file" "-e"
       (str (snapshot-revision snapshot) "^{commit}")])
@@ -119,8 +157,10 @@
      ["git" "-C" (snapshot-root snapshot) "worktree" "remove" "--force"
       snapshot-directory])
    (capture-effect "build committed snapshot"
-     ["nix" "build" "--no-link" "--print-out-paths"
-      (system-attribute snapshot host platform)])]))
+     (with-override
+       ["nix" "build" "--no-link" "--print-out-paths"
+        (system-attribute target host platform)]
+       target))])))
 
 (js/export
   (defn activate-verified-closure-effect [built-path String] ArgvEffect
@@ -129,7 +169,7 @@
 
 (js/export
   (defn activation-effects
-  [snapshot Snapshot
+  [target Target
    host String
    platform Platform
    built-path String] (Vec ArgvEffect)
@@ -141,8 +181,9 @@
      (activate-verified-closure-effect built-path)]
     [(inherit-effect "activation preflight" ["sudo" "-v"])
      (inherit-effect "activate verified closure"
-       ["sudo" "darwin-rebuild" "switch" "--flake"
-        (str (snapshot-uri snapshot) "#" host)])])))
+       (with-override
+         ["sudo" "darwin-rebuild" "switch" "--flake" (flake-ref target host)]
+         target))])))
 
 (js/export
   (defn exact-path-profile-effects [built-path String] (Vec ArgvEffect)
@@ -187,26 +228,40 @@
       "--switch-generation" generation])
    (activate-verified-closure-effect built-path)]))
 
-(js/export
-  (defn generation-tag-effect
-  [snapshot Snapshot
+(defn tag-effect
+  [phase String
+   snapshot Snapshot
    generation String] ArgvEffect
-  (capture-effect "tag active generation"
+  (capture-effect phase
     ["git" "-C" (snapshot-root snapshot) "tag" "-f"
-       (str "gen-" generation) (snapshot-revision snapshot)])))
+     (str "gen-" generation) (snapshot-revision snapshot)]))
+
+(js/export
+  (defn generation-tag-effects
+  [target Target
+   generation String] (Vec ArgvEffect)
+  (let [firn-tag ArgvEffect
+        (tag-effect "tag active generation" (target-firn target) generation)]
+    (if (target-overridden target)
+      [firn-tag
+       (tag-effect "tag active generation in system flake"
+         (target-system target) generation)]
+      [firn-tag]))))
 
 (defn environment-name [host String] String
   (str host "-environment"))
 
 (js/export
   (defn environment-query-effect
-  [snapshot Snapshot
+  [target Target
    host String] ArgvEffect
   (capture-effect "query user environment"
-    ["nix" "eval" "--json" (str (snapshot-uri snapshot) "#packages")
-     "--apply"
-     (str "packages: builtins.any (system: (builtins.getAttr system packages) ? \""
-       (environment-name host) "\") (builtins.attrNames packages)")])))
+    (with-override
+      ["nix" "eval" "--json" (flake-ref target "packages")
+       "--apply"
+       (str "packages: builtins.any (system: (builtins.getAttr system packages) ? \""
+         (environment-name host) "\") (builtins.attrNames packages)")]
+      target))))
 
 (js/export
   (defn environment-present? [text String] Bool
@@ -214,10 +269,12 @@
 
 (js/export
   (defn environment-switch-effect
-  [snapshot Snapshot
+  [target Target
    host String] ArgvEffect
   (inherit-effect "switch user environment"
-    ["firn-environment-switch" host (snapshot-uri snapshot)])))
+    (with-override
+      ["firn-environment-switch" host (snapshot-uri (target-system target))]
+      target))))
 
 (js/export
   (defn advisory-effect [snapshot Snapshot] ArgvEffect

@@ -12,6 +12,7 @@
 (declare-extern firn-host-capture (Fn [(Vec String) Int] Any))
 (declare-extern firn-host-inherit (Fn [(Vec String)] Int))
 (declare-extern firn-host-append (Fn [String String] Any))
+(declare-extern firn-host-git-checkout (Fn [String] Bool))
 
 (def max-command-output Int 16777216)
 
@@ -26,6 +27,10 @@
 (defunion SnapshotResult
   (SnapshotPinned [snapshot rebuild/Snapshot])
   (SnapshotPinFailed [status Int]))
+
+(defunion TargetResult
+  (TargetPinned [target rebuild/Target])
+  (TargetPinFailed [status Int]))
 
 (defunion TraceLineResult
   (TraceLine [text String])
@@ -211,21 +216,24 @@
     (stderr-line (str "firn rebuild: stopped at first failure (status " status ")"))
     status))
 
+(defn target-revision [target rebuild/Target] String
+  (rebuild/snapshot-revision (rebuild/target-firn target)))
+
 (defn run-advisory
-  [snapshot rebuild/Snapshot
+  [target rebuild/Target
    platform rebuild/Platform
    trace-path (U String Nil)
    trace-id String]
   Int
   (if (rebuild/linux? platform)
-    (match (execute-effect (rebuild/advisory-effect snapshot)
-             trace-path trace-id (rebuild/snapshot-revision snapshot))
+    (match (execute-effect (rebuild/advisory-effect (rebuild/target-firn target))
+             trace-path trace-id (target-revision target))
       [(EffectFailed status) (fail-phase status)]
       [(EffectSucceeded stdout) 0])
     0))
 
 (defn apply-environment
-  [snapshot rebuild/Snapshot
+  [target rebuild/Target
    host String
    platform rebuild/Platform
    trace-path (U String Nil)
@@ -234,38 +242,38 @@
   (do
     (firn-host-out
       (str "firn rebuild: switching user environment " host "-environment\n"))
-    (match (execute-effect (rebuild/environment-switch-effect snapshot host)
-             trace-path trace-id (rebuild/snapshot-revision snapshot))
+    (match (execute-effect (rebuild/environment-switch-effect target host)
+             trace-path trace-id (target-revision target))
       [(EffectFailed status) (fail-phase status)]
       [(EffectSucceeded stdout)
-       (run-advisory snapshot platform trace-path trace-id)])))
+       (run-advisory target platform trace-path trace-id)])))
 
 (defn switch-environment
-  [snapshot rebuild/Snapshot
+  [target rebuild/Target
    host String
    platform rebuild/Platform
    trace-path (U String Nil)
    trace-id String]
   Int
   (if (rebuild/linux? platform)
-    (match (execute-effect (rebuild/environment-query-effect snapshot host)
-             trace-path trace-id (rebuild/snapshot-revision snapshot))
+    (match (execute-effect (rebuild/environment-query-effect target host)
+             trace-path trace-id (target-revision target))
       [(EffectFailed status) (fail-phase status)]
       [(EffectSucceeded stdout)
        (if (rebuild/environment-present? stdout)
-         (apply-environment snapshot host platform trace-path trace-id)
-         (run-advisory snapshot platform trace-path trace-id))])
-    (run-advisory snapshot platform trace-path trace-id)))
+         (apply-environment target host platform trace-path trace-id)
+         (run-advisory target platform trace-path trace-id))])
+    (run-advisory target platform trace-path trace-id)))
 
 (defn tag-generation
-  [snapshot rebuild/Snapshot
+  [target rebuild/Target
    host String
    platform rebuild/Platform
    trace-path (U String Nil)
    trace-id String]
   Int
   (match (execute-effect (rebuild/generation-query-effect platform)
-           trace-path trace-id (rebuild/snapshot-revision snapshot))
+           trace-path trace-id (target-revision target))
     [(EffectFailed status) (fail-phase status)]
     [(EffectSucceeded stdout)
      (let [generation (U String Nil) (rebuild/current-generation stdout)]
@@ -273,15 +281,15 @@
          (do
            (stderr-line "firn rebuild: active generation was not reported")
            65)
-         (match (execute-effect
-                  (rebuild/generation-tag-effect snapshot generation)
-                  trace-path trace-id (rebuild/snapshot-revision snapshot))
-           [(EffectFailed status) (fail-phase status)]
-           [(EffectSucceeded stdout)
-            (switch-environment snapshot host platform trace-path trace-id)])))]))
+         (match (execute-effects
+                  (rebuild/generation-tag-effects target generation)
+                  trace-path trace-id (target-revision target))
+           [(SequenceFailed status) (fail-phase status)]
+           [(SequenceSucceeded stdout)
+            (switch-environment target host platform trace-path trace-id)])))]))
 
 (defn activate
-  [snapshot rebuild/Snapshot
+  [target rebuild/Target
    host String
    platform rebuild/Platform
    built-path String
@@ -289,11 +297,11 @@
    trace-id String]
   Int
   (match (execute-effects
-           (rebuild/activation-effects snapshot host platform built-path)
-           trace-path trace-id (rebuild/snapshot-revision snapshot))
+           (rebuild/activation-effects target host platform built-path)
+           trace-path trace-id (target-revision target))
     [(SequenceFailed status) (fail-phase status)]
     [(SequenceSucceeded stdout)
-     (tag-generation snapshot host platform trace-path trace-id)]))
+     (tag-generation target host platform trace-path trace-id)]))
 
 (defn switch-exact-path
   [built-path String
@@ -376,8 +384,38 @@
       [(EffectSucceeded stdout)
        (persist-exact-system-profile built-path trace-path trace-id)])))
 
-(defn prepare-pinned
+(defn pin-target
   [snapshot rebuild/Snapshot
+   system-root (U String Nil)
+   trace-path (U String Nil)
+   trace-id String] TargetResult
+  (if (nil? system-root)
+    (->TargetPinned (rebuild/make-target snapshot))
+    (let [effects (Vec rebuild/ArgvEffect) (rebuild/system-pin-effects system-root)
+          revision String (rebuild/snapshot-revision snapshot)]
+      (match (execute-effect (nth effects 0) trace-path trace-id revision)
+        [(EffectFailed status) (->TargetPinFailed status)]
+        [(EffectSucceeded revision-output)
+         (let [system-revision String (str/trim revision-output)]
+           (if (= system-revision "")
+             (do
+               (stderr-line
+                 (str "firn rebuild: git returned an empty revision for " system-root))
+               (->TargetPinFailed 65))
+             (match (execute-effect (nth effects 1) trace-path trace-id revision)
+               [(EffectFailed status) (->TargetPinFailed status)]
+               [(EffectSucceeded status-output)
+                (if (= (str/trim status-output) "")
+                  (->TargetPinned
+                    (rebuild/make-system-target snapshot system-root system-revision))
+                  (do
+                    (stderr-line
+                      (str "firn rebuild: system flake " system-root
+                        " has uncommitted tracked changes; commit or discard them first"))
+                    (->TargetPinFailed 65)))])))]))))
+
+(defn prepare-pinned
+  [target rebuild/Target
    host String
    platform rebuild/Platform
    snapshot-directory String
@@ -386,8 +424,8 @@
   Int
   (match (execute-effects
            (rebuild/preparation-effects
-             snapshot host platform snapshot-directory)
-           trace-path trace-id (rebuild/snapshot-revision snapshot))
+             target host platform snapshot-directory)
+           trace-path trace-id (target-revision target))
     [(SequenceFailed status) (fail-phase status)]
     [(SequenceSucceeded stdout)
      (let [built-path String (str/trim stdout)]
@@ -395,7 +433,7 @@
          (do
            (firn-host-out
              (str "firn prepare: prepared "
-               (rebuild/snapshot-revision snapshot) " " built-path "\n"))
+               (target-revision target) " " built-path "\n"))
            0)
          (do
            (stderr-line
@@ -403,7 +441,7 @@
            65)))]))
 
 (defn run-pinned
-  [snapshot rebuild/Snapshot
+  [target rebuild/Target
    host String
    platform rebuild/Platform
    snapshot-directory String
@@ -412,13 +450,13 @@
   Int
   (match (execute-effects
            (rebuild/preparation-effects
-             snapshot host platform snapshot-directory)
-           trace-path trace-id (rebuild/snapshot-revision snapshot))
+             target host platform snapshot-directory)
+           trace-path trace-id (target-revision target))
     [(SequenceFailed status) (fail-phase status)]
     [(SequenceSucceeded stdout)
      (let [built-path String (str/trim stdout)]
        (if (rebuild/exact-store-path? built-path)
-         (activate snapshot host platform built-path trace-path trace-id)
+         (activate target host platform built-path trace-path trace-id)
          (do
            (stderr-line
              "firn rebuild: build did not return one exact Nix store path")
@@ -426,6 +464,7 @@
 
 (defn prepare
   [root String
+   system-root (U String Nil)
    host String
    snapshot-directory String
    trace-path (U String Nil)
@@ -440,11 +479,15 @@
           (stderr-line (str "firn prepare: unsupported platform '" name "'"))
           69)]
        [(PlatformSelected platform)
-        (prepare-pinned snapshot host platform snapshot-directory
-          trace-path trace-id)])]))
+        (match (pin-target snapshot system-root trace-path trace-id)
+          [(TargetPinFailed status) (fail-phase status)]
+          [(TargetPinned target)
+           (prepare-pinned target host platform snapshot-directory
+             trace-path trace-id)])])]))
 
 (defn run
   [root String
+   system-root (U String Nil)
    host String
    snapshot-directory String
    trace-path (U String Nil)
@@ -459,8 +502,11 @@
           (stderr-line (str "firn rebuild: unsupported platform '" name "'"))
           69)]
        [(PlatformSelected platform)
-        (run-pinned snapshot host platform snapshot-directory
-          trace-path trace-id)])]))
+        (match (pin-target snapshot system-root trace-path trace-id)
+          [(TargetPinFailed status) (fail-phase status)]
+          [(TargetPinned target)
+           (run-pinned target host platform snapshot-directory
+             trace-path trace-id)])])]))
 
 (defn rollback-error
   [message String
@@ -604,6 +650,15 @@
           (str home "/code/nixos-config/main")
           nil)))))
 
+(defn system-flake-root [] (U String Nil)
+  (let [explicit (U String Nil) (required-env "FIRN_SYSTEM_FLAKE")
+        home (U String Nil) (required-env "HOME")
+        root (U String Nil)
+        (if (some? explicit)
+          explicit
+          (if (some? home) (str home "/code/south/main") nil))]
+    (if (and (some? root) (firn-host-git-checkout root)) root nil)))
+
 (defn snapshot-directory [] String
   (let [configured (U String Nil) (required-env "FIRN_SNAPSHOT_DIR")]
     (if (some? configured)
@@ -646,7 +701,8 @@
               (stderr-line
                 "firn prepare: FIRN_REPO and HOME are not set")
               64)
-            (prepare root (nth args 2) snapshot-path trace-path trace-id)))
+            (prepare root (system-flake-root) (nth args 2) snapshot-path
+              trace-path trace-id)))
 
         (= (nth args 1) "rebuild")
         (let [root (U String Nil) (repository-root)
@@ -656,7 +712,8 @@
               (stderr-line
                 "firn rebuild: FIRN_REPO and HOME are not set")
               64)
-            (run root (nth args 2) snapshot-path trace-path trace-id)))
+            (run root (system-flake-root) (nth args 2) snapshot-path
+              trace-path trace-id)))
 
         :else
         (usage-error))))))

@@ -12,6 +12,9 @@
 (defn snapshot [] rebuild/Snapshot
   (rebuild/make-snapshot "/repo" revision "native-rebuild-workflow"))
 
+(defn target [] rebuild/Target
+  (rebuild/make-target (snapshot)))
+
 (defn append-effects
   [left (Vec rebuild/ArgvEffect)
    right (Vec rebuild/ArgvEffect)]
@@ -34,7 +37,7 @@
         (append-effects
           (rebuild/pin-effects "/repo")
           (rebuild/preparation-effects
-            (snapshot) "whiterabbit" (rebuild/linux-platform) "/snapshot"))]
+            (target) "whiterabbit" (rebuild/linux-platform) "/snapshot"))]
     (= (rebuild/effect-phases effects)
        ["pin revision"
         "pin branch"
@@ -48,13 +51,13 @@
 (defn case-committed-snapshot-build [] Bool
   (let [(effects (Vec rebuild/ArgvEffect))
         (rebuild/preparation-effects
-          (snapshot) "whiterabbit" (rebuild/linux-platform) "/snapshot")
+          (target) "whiterabbit" (rebuild/linux-platform) "/snapshot")
         (build rebuild/ArgvEffect) (nth effects 4)]
     (and
       (= (rebuild/argveffect-argv (nth effects 0))
          ["git" "-C" "/repo" "cat-file" "-e"
           (str revision "^{commit}")])
-      (= (rebuild/argveffect-argv (nth effects 3))
+      (= (rebuild/argveffect-argv (nth effects 2))
          ["env" "FIRN_REPO=/snapshot" "firn" "repo" "validate"])
       (= (rebuild/argveffect-argv build)
          ["nix" "build" "--no-link" "--print-out-paths"
@@ -84,11 +87,11 @@
 (defn case-platform-activation [] Bool
   (let [(linux (Vec rebuild/ArgvEffect))
         (rebuild/activation-effects
-          (snapshot) "whiterabbit" (rebuild/linux-platform)
+          (target) "whiterabbit" (rebuild/linux-platform)
           "/nix/store/system")
         (darwin (Vec rebuild/ArgvEffect))
         (rebuild/activation-effects
-          (snapshot) "workstation" (rebuild/darwin-platform)
+          (target) "workstation" (rebuild/darwin-platform)
           "/nix/store/darwin-system")]
     (and
       (= (count linux) 3)
@@ -117,7 +120,7 @@
       (= linux-generation "42")
       (= darwin-generation "7")
       (= (rebuild/argveffect-argv
-           (rebuild/generation-tag-effect (snapshot) "42"))
+           (nth (rebuild/generation-tag-effects (target) "42") 0))
          ["git" "-C" "/repo" "tag" "-f" "gen-42" revision]))))
 
 (defn case-explicit-prior-generation [] Bool
@@ -178,15 +181,15 @@
 (defn workflow-effects [] (Vec rebuild/ArgvEffect)
   (let [(snapshot-value rebuild/Snapshot) (snapshot)
         (prebuild (Vec rebuild/ArgvEffect))
-        (rebuild/preparation-effects snapshot-value "whiterabbit"
+        (rebuild/preparation-effects (rebuild/make-target snapshot-value) "whiterabbit"
           (rebuild/linux-platform) "/snapshot")
         (activation (Vec rebuild/ArgvEffect))
-        (rebuild/activation-effects snapshot-value "whiterabbit"
+        (rebuild/activation-effects (rebuild/make-target snapshot-value) "whiterabbit"
           (rebuild/linux-platform) "/nix/store/system")]
     (append-effects
       (append-effects prebuild activation)
       [(rebuild/generation-query-effect (rebuild/linux-platform))
-       (rebuild/generation-tag-effect snapshot-value "42")
+       (nth (rebuild/generation-tag-effects (rebuild/make-target snapshot-value) "42") 0)
        (rebuild/advisory-effect snapshot-value)])))
 
 (defn case-first-failure-stops [] Bool

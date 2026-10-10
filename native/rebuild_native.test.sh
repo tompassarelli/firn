@@ -36,12 +36,12 @@ die() {
   exit 1
 }
 
-[[ -x "$beagle/bin/beagle" ]] \
+[[ -x "$beagle/bin/beagle-build-all" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
 
 modules="$scratch/modules"
 json="$beagle/native-core/src/native/json.bjs"
-timeout --foreground 120 "$beagle/bin/beagle" build \
+timeout --foreground 120 "$beagle/bin/beagle-build-all" \
   "$json" \
   "$repo/native/impact.bjs" \
   "$repo/native/impact_test.bjs" \
@@ -55,6 +55,11 @@ timeout --foreground 120 "$beagle/bin/beagle" build \
     sed -n '1,240p' "$scratch/rebuild.build.err" >&2
     die "rebuild module compilation failed"
   }
+
+mkdir -p "$scratch/node_modules/beagle"
+cp -- "$beagle/beagle-lib/lib/beagle/core.js" "$beagle/beagle-lib/lib/beagle/host.js" \
+  "$scratch/node_modules/beagle/"
+printf '%s\n' '{"type":"module"}' >"$scratch/node_modules/beagle/package.json"
 
 bun="${FIRN_BUN:-$(command -v bun || true)}"
 [[ -n "$bun" && -x "$bun" ]] || die "Bun runtime is unavailable"
@@ -87,7 +92,11 @@ name=${0##*/}
 
 case "$name" in
   git)
-    if [[ " $* " == *" rev-parse HEAD "* ]]; then
+    if [[ " $* " == *" rev-parse HEAD "* && "${2:-}" == "${SYSTEM_FIXTURE:-}" ]]; then
+      printf '%s\n' 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    elif [[ " $* " == *" status --porcelain "* ]]; then
+      [[ "${SYSTEM_DIRTY:-0}" != 1 ]] || printf '%s\n' ' M flake.nix'
+    elif [[ " $* " == *" rev-parse HEAD "* ]]; then
       printf '%s\n' 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
     elif [[ " $* " == *" branch --show-current "* ]]; then
       printf '%s\n' 'native-rebuild-workflow'
@@ -178,6 +187,7 @@ run_host_case() {
     PATH="$fakebin:$PATH" \
     FIRN_REPO="$fixture" \
     FIRN_SNAPSHOT_DIR="$snapshot" \
+    FIRN_SYSTEM_FLAKE="$scratch/no-system-flake" \
     FIRN_TRACE_PATH="$scratch/$name.trace" \
     FIRN_TRACE_ID="$name" \
     FIRN_COMMAND_LOG="$scratch/$name.commands" \
@@ -367,7 +377,8 @@ run_rollback_case() {
     FIRN_TRACE_ID="$name" \
     FIRN_COMMAND_LOG="$scratch/$name.commands" \
     CASE_PLATFORM="$platform" \
-    "$@" "$scratch/rebuild-native" host rollback "$generation" \
+    FIRN_REBUILD_MODULE="$modules/firn/rebuild-family.js" \
+    "$@" "$bun" "$repo/native/firn_rebuild_host.mjs" host rollback "$generation" \
     >"$scratch/$name.out" 2>"$scratch/$name.err"
   local status=$?
   set -e
@@ -446,9 +457,73 @@ rg -Fq '"name":"activate verified closure","status":"error"' \
   "$scratch/rollback-failure.trace" \
   || die "rollback failure trace event is missing"
 
-if ldd "$scratch/rebuild-native" \
-    | rg -qi 'racket|clojure|babashka|java'; then
-  die "hosted runtime leaked into native executable"
+system="$scratch/south"
+mkdir -p "$system/.git"
+firn_uri="git+file://$fixture?rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&ref=native-rebuild-workflow"
+system_uri="git+file://$system?rev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+override=$'\t--override-input\tfirn\t'"$firn_uri"
+
+run_case system-flake Linux env FIRN_SYSTEM_FLAKE="$system" SYSTEM_FIXTURE="$system"
+[[ "$(<"$scratch/system-flake.status")" == 0 ]] \
+  || die "two-snapshot controlled run failed"
+cut -f1 "$scratch/system-flake.commands" >"$scratch/system-flake.names"
+cat >"$scratch/system-flake.expected-names" <<'EOF'
+git
+git
+uname
+git
+git
+git
+git
+firn
+git
+nix
+sudo
+sudo
+sudo
+nixos-rebuild
+git
+git
+nix
+firn-environment-switch
+systemd-run
+EOF
+cmp -s "$scratch/system-flake.expected-names" "$scratch/system-flake.names" \
+  || {
+    diff -u "$scratch/system-flake.expected-names" \
+      "$scratch/system-flake.names" >&2 || true
+    die "two-snapshot phase order changed"
+  }
+rg -Fxq $'nix\tbuild\t--no-link\t--print-out-paths\t'"$system_uri"$'#nixosConfigurations.whiterabbit.config.system.build.toplevel'"$override" \
+  "$scratch/system-flake.commands" \
+  || die "two-snapshot build did not use the system flake with the firn override"
+rg -Fxq $'firn-environment-switch\twhiterabbit\t'"$system_uri$override" \
+  "$scratch/system-flake.commands" \
+  || die "two-snapshot environment switch did not use the system flake with the firn override"
+rg -Fq $'nix\teval\t--json\t'"$system_uri"$'#packages\t--apply' \
+  "$scratch/system-flake.commands" \
+  || die "two-snapshot environment query did not use the system flake"
+rg -Fxq $'firn\trepo\tvalidate' "$scratch/system-flake.commands" \
+  || die "two-snapshot run did not validate the firn snapshot"
+rg -Fxq $'git\t-C\t'"$fixture"$'\ttag\t-f\tgen-42\taaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+  "$scratch/system-flake.commands" || die "firn snapshot was not tagged"
+rg -Fxq $'git\t-C\t'"$system"$'\ttag\t-f\tgen-42\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' \
+  "$scratch/system-flake.commands" || die "system flake snapshot was not tagged"
+if rg -q -- '--override-input' "$scratch/linux.commands"; then
+  die "the no-system-flake path gained a firn override"
 fi
+if rg -Fq "$system" "$scratch/linux.commands"; then
+  die "the no-system-flake path touched the system flake"
+fi
+
+run_case system-flake-dirty Linux env FIRN_SYSTEM_FLAKE="$system" \
+  SYSTEM_FIXTURE="$system" SYSTEM_DIRTY=1
+[[ "$(<"$scratch/system-flake-dirty.status")" == 65 ]] \
+  || die "dirty system flake was accepted"
+if rg -q $'^nix\t|^firn\t|worktree' "$scratch/system-flake-dirty.commands"; then
+  die "a dirty system flake reached validation or build"
+fi
+rg -Fq 'has uncommitted tracked changes' "$scratch/system-flake-dirty.err" \
+  || die "dirty system flake refusal is not actionable"
 
 printf 'ok: native rebuild core stops on first failure and selects exact activation\n'

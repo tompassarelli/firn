@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync } from 'node:fs';
 
 const decoder = new TextDecoder();
 
@@ -44,6 +44,7 @@ globalThis.firn_host_inherit = argv => {
     return 126;
   }
 };
+globalThis.firn_host_git_checkout = path => existsSync(`${path}/.git`);
 globalThis.firn_host_append = (path, text) => {
   try {
     appendFileSync(path, text, { encoding: 'utf8' });

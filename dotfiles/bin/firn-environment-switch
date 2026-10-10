@@ -5,10 +5,11 @@ firn_repo="${FIRN_REPO:-$HOME/code/nixos-config/main}" # hardcoded-repo-path:all
 host="${1:-whiterabbit}"
 name="$host-environment"
 ref="${2:-git+file://$firn_repo}#$name"
+shift $(($# < 2 ? $# : 2))
 
-nix build --no-link "$ref"
+nix build --no-link "$ref" "$@"
 if nix profile list --json | jq -e --arg n "$name" '.elements | has($n)' >/dev/null; then
   nix profile remove "$name"
 fi
-nix profile add "$ref"
+nix profile add "$ref" "$@"
 nix profile list --json | jq -r --arg n "$name" '.elements[$n].storePaths[]'
