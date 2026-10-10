@@ -58,7 +58,7 @@ prompt = (
     "3. Name the critical path's longest wait and attack it: batch ready lanes into one landing, "
     "run unknown-cause bugs as 2-3 parallel hypotheses, have art or judged work render 2-4 variants per pass and judge once, "
     "and send code-only work to cloud workers. "
-    "4. Staff every unblocked node up to the spawn gate and recycle every worker past 200k context or 45 minutes from a handoff. "
+    "4. Staff every unblocked node up to the spawn gate and recycle workers per the workers skill (45 minutes; 200k target; 350k hard limit) from a handoff. "
     "5. Close issues whose boxes passed. "
     "6. Write one status line."
 )

@@ -15,4 +15,4 @@ flow, and report the outcome in one short block that starts with "Done:",
 If you're stuck after two attempts, stop and report the exact failure, so the
 orchestrator can escalate to a stronger worker. Before you end your turn,
 stop the background jobs you started unless you are waiting on one of them.
-Report or hand off within 45 minutes of starting, or at 200k context, whichever comes first.
+Report or hand off within 45 minutes of starting. Past 200k context, finish only if landing and reporting a passing change remain; otherwise hand off. Always hand off by 350k.

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # PostToolUse hook for Claude Code workers (agent_type worker*). When the
-# worker's context reaches 200k tokens it tells the worker to write a handoff
-# note and stop; it repeats at most once per further 50k. After 45 minutes of
+# worker's context reaches 200k tokens it tells the worker to finish if only
+# landing and reporting remain, else hand off; at 350k it must hand off. Each
+# repeats at most once per further 50k. After 45 minutes of
 # wall-clock time since the transcript's first entry it tells the worker to
 # report or hand off; it repeats at most once per further 10 minutes. The main
 # session and other agent types get nothing. Runs after every tool call, so it
@@ -48,6 +49,7 @@ import json, os, re, sys, time
 from datetime import datetime
 
 THRESHOLD = 200_000
+HARD = 350_000
 STEP = 50_000
 LEASH_MIN = 45
 LEASH_STEP_MIN = 10
@@ -140,9 +142,19 @@ messages = []
 
 tokens = context_tokens(transcript)
 note = os.path.join(handoffs, f"{agent_id}.md")
-if tokens >= THRESHOLD and due(os.path.join(handoffs, f".{agent_id}.reminded"), tokens, STEP):
+if tokens >= HARD and due(os.path.join(handoffs, f".{agent_id}.hard"), tokens, STEP):
     messages.append(
-        f"Your context is {tokens // 1000}k tokens, past the {THRESHOLD // 1000}k handoff point. "
+        f"Your context is {tokens // 1000}k tokens, past the {HARD // 1000}k hard limit. "
+        "Finish the step you are on, then write a handoff note to "
+        f"{note} with: the brief's goal and Done when list with each box's status; "
+        "the worktree, branch and commits; running background jobs with their "
+        "output paths; the next step; evidence paths. Then end your turn with "
+        f"exactly `HANDOFF {note}` and nothing else."
+    )
+elif tokens >= THRESHOLD and due(os.path.join(handoffs, f".{agent_id}.reminded"), tokens, STEP):
+    messages.append(
+        f"Your context is {tokens // 1000}k tokens, past the {THRESHOLD // 1000}k target. "
+        "If all that is left is landing and reporting a change that already passes, finish it now. Otherwise: "
         "Finish the step you are on, then write a handoff note to "
         f"{note} with: the brief's goal and Done when list with each box's status; "
         "the worktree, branch and commits; running background jobs with their "
