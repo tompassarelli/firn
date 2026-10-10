@@ -1,0 +1,4 @@
+import "../../native/module_metadata.clause"
+
+export metadata(): ModuleMetadata
+  module-metadata(["development"], [])

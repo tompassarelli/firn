@@ -36,6 +36,7 @@
     "passer-hetzner",
     "vast-ai",
     "workers",
+    "gemini-review",
     "estimate",
     "testing",
     "lua-performance",
@@ -598,6 +599,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/hooks/unlanded-work.sh"
+      }
+    },
+    "gemini-review": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/gemini-review/SKILL.md"
       }
     }
   },
@@ -1475,6 +1484,16 @@
           "type": "hook",
           "targets": [
             "claude"
+          ]
+        }
+      ]
+    },
+    "gemini-review": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
           ]
         }
       ]
