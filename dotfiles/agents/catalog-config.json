@@ -17,7 +17,6 @@
     "smashcraft-stage-design",
     "private-desktop-development",
     "image-context-budget",
-    "greywrought-development",
     "firn",
     "nix-development",
     "repo-safety",
@@ -37,13 +36,11 @@
     "vast-ai",
     "workers",
     "gemini-review",
-    "estimate",
     "testing",
     "lua-performance",
     "agent-policy",
     "agent-runtime-incident",
-    "project-structure",
-    "comment-bloat-guard"
+    "project-structure"
   ],
   "baselines": [
     {
@@ -159,24 +156,6 @@
         "path": "dotfiles/agents/skills/clause-authoring/SKILL.md"
       }
     },
-    "greywrought-development": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/greywrought-development/SKILL.md"
-      }
-    },
-    "comment-bloat-guard": {
-      "kind": "hook",
-      "title": "Comment guidance (advisory)",
-      "triggerDescription": "Flag narrative comments in added code; advise only, never deny.",
-      "category": "authoring",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/comment-bloat-guard.sh"
-      }
-    },
     "convo": {
       "kind": "skill",
       "category": "uncategorized",
@@ -203,14 +182,6 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/hooks/corpus-scan-guard.sh"
-      }
-    },
-    "estimate": {
-      "kind": "skill",
-      "category": "uncategorized",
-      "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/estimate/SKILL.md"
       }
     },
     "firn": {
@@ -803,26 +774,6 @@
         }
       ]
     },
-    "greywrought-development": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "comment-bloat-guard": {
-      "distributions": [
-        {
-          "type": "hook",
-          "targets": [
-            "codex"
-          ]
-        }
-      ]
-    },
     "convo": {
       "distributions": [
         {
@@ -856,16 +807,6 @@
           "targets": [
             "codex",
             "claude"
-          ]
-        }
-      ]
-    },
-    "estimate": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
           ]
         }
       ]
