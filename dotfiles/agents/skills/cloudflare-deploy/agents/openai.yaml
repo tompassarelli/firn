@@ -1,4 +1,0 @@
-interface:
-  display_name: "Cloudflare Deploy"
-  short_description: "Safe Cloudflare deploy workflow and boundaries"
-  default_prompt: "Use $cloudflare-deploy to deploy and verify this Cloudflare project."
