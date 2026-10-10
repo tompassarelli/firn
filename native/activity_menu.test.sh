@@ -98,7 +98,7 @@ chmod +x "$all_bin/rofi"
 export FAKE_ACTIVITY_LOG="$scratch/activity.log"
 export FAKE_ROFI_LOG="$scratch/rofi.log"
 export FAKE_ROFI_INPUT="$scratch/rofi.input"
-export FAKE_MENU_ITEMS=$'home\ngjoa\nmsa\n'
+export FAKE_MENU_ITEMS=$'home\ngjoa\nacme\n'
 export FAKE_LIST_STATUS=0
 export FAKE_ACTION_STATUS=0
 export FAKE_ROFI_CHOICE=$'gjoa\n'
@@ -162,12 +162,12 @@ assert_activity_log $'list --menu\ngoto gjoa\n'
 assert_rofi activity
 
 prepare_case
-export FAKE_ROFI_CHOICE=$' msa \n'
+export FAKE_ROFI_CHOICE=$' acme \n'
 run_menu move "$all_bin" --move
 assert_status 0 move
 assert_empty "$scratch/move.out"
 assert_empty "$scratch/move.err"
-assert_activity_log $'list --menu\nmove-to-activity msa\n'
+assert_activity_log $'list --menu\nmove-to-activity acme\n'
 assert_rofi 'move to activity'
 
 prepare_case

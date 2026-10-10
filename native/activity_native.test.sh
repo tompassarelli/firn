@@ -127,7 +127,7 @@ fake_bin="$scratch/fake-bin"
 mkdir -p "$home" "$runtime" "$state" "$config/activity" "$fake_bin"
 
 cat >"$config/activity/activities.json" <<'EOF'
-{"default":"home","activities":[{"id":"home","label":"home"},{"id":"gjoa","label":"gjoa","bind_names":["render"],"bind_prefixes":["gjoa"]},{"id":"msa","label":"msa","bind_names":["heist"],"bind_prefixes":["msa"]}]}
+{"default":"home","activities":[{"id":"home","label":"home"},{"id":"gjoa","label":"gjoa","bind_names":["render"],"bind_prefixes":["gjoa"]},{"id":"acme","label":"acme","bind_names":["heist"],"bind_prefixes":["acme"]}]}
 EOF
 
 cat >"$scratch/workspaces.json" <<'EOF'
@@ -235,7 +235,7 @@ kill -0 "$child_one" 2>/dev/null \
   || die "snapshot lacks its trailing newline"
 
 cat >"$scratch/snapshot.expected.json" <<'EOF'
-{"current":"home","previous":"gjoa","activities":[{"id":"home","label":"home","last_active":1,"workspaces":[{"id":1,"idx":1,"name":"notes","output":"DP-1","focused":true,"active":true,"urgent":false}]},{"id":"gjoa","label":"gjoa","last_active":2,"workspaces":[{"id":2,"idx":2,"name":"render","output":"DP-1","focused":false,"active":false,"urgent":true}]},{"id":"msa","label":"msa","last_active":null,"workspaces":[]}],"floating":[{"id":3,"idx":3,"name":null,"output":"DP-1","focused":false,"active":false,"urgent":false}]}
+{"current":"home","previous":"gjoa","activities":[{"id":"home","label":"home","last_active":1,"workspaces":[{"id":1,"idx":1,"name":"notes","output":"DP-1","focused":true,"active":true,"urgent":false}]},{"id":"gjoa","label":"gjoa","last_active":2,"workspaces":[{"id":2,"idx":2,"name":"render","output":"DP-1","focused":false,"active":false,"urgent":true}]},{"id":"acme","label":"acme","last_active":null,"workspaces":[]}],"floating":[{"id":3,"idx":3,"name":null,"output":"DP-1","focused":false,"active":false,"urgent":false}]}
 EOF
 jq -c 'del(.generated_at)' "$snapshot" >"$scratch/snapshot.actual"
 jq -c . "$scratch/snapshot.expected.json" >"$scratch/snapshot.expected"
@@ -253,18 +253,18 @@ printf 'activity-native: CLI protocol and persistence\n' >&2
 cmp -s "$scratch/current.out" <(printf 'home\n') \
   || die "current output changed"
 "$executable" list --menu >"$scratch/menu.out"
-cmp -s "$scratch/menu.out" <(printf 'home\ngjoa\nmsa\n') \
+cmp -s "$scratch/menu.out" <(printf 'home\ngjoa\nacme\n') \
   || die "menu output changed"
 "$executable" list >"$scratch/list.out"
 cmp -s "$scratch/list.out" \
-  <(printf '* home  (1)\n  gjoa  (1)\n  msa  (0)\n') \
+  <(printf '* home  (1)\n  gjoa  (1)\n  acme  (0)\n') \
   || die "list output changed"
 "$executable" list --json >"$scratch/list-json.out"
 cmp -s "$snapshot" "$scratch/list-json.out" \
   || die "list --json did not preserve exact snapshot bytes"
 
 "$executable" goto gjoa
-"$executable" move-to-activity msa
+"$executable" move-to-activity acme
 "$executable" assign gjoa
 
 assignments_ready() {
@@ -278,7 +278,7 @@ actions_ready() {
 }
 wait_for 'ordered niri actions' actions_ready
 cmp -s "$scratch/actions.log" \
-  <(printf 'focus-workspace render\nset-workspace-name msa --workspace 3\nmove-column-to-workspace msa\n') \
+  <(printf 'focus-workspace render\nset-workspace-name acme --workspace 3\nmove-column-to-workspace acme\n') \
   || die "command action order changed"
 
 printf 'activity-native: sole-writer takeover and restart persistence\n' >&2

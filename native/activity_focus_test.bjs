@@ -20,7 +20,7 @@
   (let [state a/ActivityState (a/->ActivityState
           [(a/->ActivityDef "home" "home" [] [])
            (a/->ActivityDef "gjoa" "gjoa" ["render"] ["gjoa"])
-           (a/->ActivityDef "msa" "msa" ["heist"] ["msa"])]
+           (a/->ActivityDef "acme" "acme" ["heist"] ["acme"])]
           "home" [] [] [] "home" "home" [])
         workspaces (Vec a/Workspace) [(workspace 1 1 "heist" 10)
          (workspace 2 2 nil nil)]
@@ -68,7 +68,7 @@
 (defn persistent-activity-sequence? [] Bool
   (let [defs (Vec a/ActivityDef) [(a/->ActivityDef "home" "home" [] [])
          (a/->ActivityDef "gjoa" "gjoa" [] [])
-         (a/->ActivityDef "msa" "msa" [] [])]
+         (a/->ActivityDef "acme" "acme" [] [])]
         base a/ActivityState (a/->ActivityState defs "home" [] [] [] "home" "home" [])
         start-workspaces (Vec a/Workspace) [(workspace 1 1 "notes" 10) (workspace 2 2 nil nil)]
         start a/ActivityState (a/apply-workspaces base start-workspaces)
@@ -78,13 +78,13 @@
          (focused-workspace 2 2 "gjoa")
          (workspace 3 3 nil nil)]
         gjoa-state a/ActivityState (a/apply-workspaces (d/commandplan-state gjoa-plan) gjoa-workspaces)
-        msa-plan d/CommandPlan (d/plan-command gjoa-state gjoa-workspaces (a/->Goto "msa"))
-        msa-steps (Vec d/PlannedStep) (d/commandplan-steps msa-plan)
+        acme-plan d/CommandPlan (d/plan-command gjoa-state gjoa-workspaces (a/->Goto "acme"))
+        acme-steps (Vec d/PlannedStep) (d/commandplan-steps acme-plan)
         all-workspaces (Vec a/Workspace) [(workspace 1 1 "notes" 10)
          (workspace 2 2 "gjoa" nil)
-         (focused-workspace 3 3 "msa")
+         (focused-workspace 3 3 "acme")
          (workspace 4 4 nil nil)]
-        all-state a/ActivityState (a/apply-workspaces (d/commandplan-state msa-plan) all-workspaces)
+        all-state a/ActivityState (a/apply-workspaces (d/commandplan-state acme-plan) all-workspaces)
         back-plan d/CommandPlan (d/plan-command all-state all-workspaces (a/->Goto "gjoa"))
         back-steps (Vec d/PlannedStep) (d/commandplan-steps back-plan)
         restarted a/ActivityState (a/apply-workspaces
@@ -105,11 +105,11 @@
         [(PersistStep assignments) false])
       (= (membership-activity gjoa-state 2) "gjoa")
       (nil? (membership-activity gjoa-state 3))
-      (d/commandplan-settled msa-plan)
-      (= (count msa-steps) 3)
-      (match (nth msa-steps 0)
+      (d/commandplan-settled acme-plan)
+      (= (count acme-steps) 3)
+      (match (nth acme-steps 0)
         [(NameWorkspaceStep reference name)
-         (and (= reference "3") (= name "msa"))]
+         (and (= reference "3") (= name "acme"))]
         [(FocusStep reference) false]
         [(MoveColumnStep reference) false]
         [(ReorderStep reference id target-index) false]
@@ -117,7 +117,7 @@
         [(PersistStep assignments) false])
       (= (membership-activity all-state 1) "home")
       (= (membership-activity all-state 2) "gjoa")
-      (= (membership-activity all-state 3) "msa")
+      (= (membership-activity all-state 3) "acme")
       (nil? (membership-activity all-state 4))
       (= (count back-steps) 1)
       (match (nth back-steps 0)
@@ -129,7 +129,7 @@
         [(PersistStep assignments) false])
       (= (membership-activity restarted 1) "home")
       (= (membership-activity restarted 2) "gjoa")
-      (= (membership-activity restarted 3) "msa")
+      (= (membership-activity restarted 3) "acme")
       (nil? (membership-activity restarted 4))
       (= (count restart-steps) 1)
       (match (nth restart-steps 0)

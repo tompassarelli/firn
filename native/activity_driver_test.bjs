@@ -8,7 +8,7 @@
 (defn activity-defs [] (Vec a/ActivityDef)
   [(a/->ActivityDef "home" "home" [] [])
    (a/->ActivityDef "gjoa" nil ["render"] ["gjoa"])
-   (a/->ActivityDef "msa" "msa" ["heist"] ["msa"])])
+   (a/->ActivityDef "acme" "acme" ["heist"] ["acme"])])
 
 (defn state-of
   [(assignments (Vec a/Assignment))
@@ -74,15 +74,15 @@
 
 (defn band-state [] a/ActivityState
   (state-of []
-    [(a/->Membership 10 "msa")
+    [(a/->Membership 10 "acme")
      (a/->Membership 11 "home")
      (a/->Membership 12 "gjoa")]
     "home"
     "home"))
 
-;; Bands run msa-last, so this output needs two moves to settle.
+;; Bands run acme-last, so this output needs two moves to settle.
 (defn scrambled-band [] (Vec a/Workspace)
-  [(workspace 10 1 "msa" "DP-1" false false 1)
+  [(workspace 10 1 "acme" "DP-1" false false 1)
    (workspace 11 2 "home" "DP-1" false false 2)
    (workspace 12 3 "gjoa" "DP-1" false false 3)
    (workspace 13 4 nil "DP-1" false false nil)])
@@ -109,7 +109,7 @@
         (workspaces (Vec a/Workspace))
         [(workspace 11 1 "home" "DP-1" false false 2)
          (workspace 12 2 "gjoa" "DP-1" false false 3)
-         (workspace 10 3 "msa" "DP-1" false false 1)
+         (workspace 10 3 "acme" "DP-1" false false 1)
          (workspace 13 4 nil "DP-1" false false nil)]
         (outcome d/BandOutcome)
         (d/reconcile-bands state workspaces
@@ -136,14 +136,14 @@
 (defn case-fixpoint-per-output [] Bool
   (let [(state a/ActivityState)
         (state-of []
-          [(a/->Membership 10 "msa")
+          [(a/->Membership 10 "acme")
            (a/->Membership 11 "home")
            (a/->Membership 20 "gjoa")
            (a/->Membership 21 "home")]
           "home"
           "home")
         (workspaces (Vec a/Workspace))
-        [(workspace 10 1 "msa" "DP-1" false false 1)
+        [(workspace 10 1 "acme" "DP-1" false false 1)
          (workspace 11 2 "home" "DP-1" false false 2)
          (workspace 20 1 "gjoa" "HDMI-1" false false 3)
          (workspace 21 2 "home" "HDMI-1" false false 4)]
@@ -196,7 +196,7 @@
 
 (defn case-plan-assign-persists-sorted [] Bool
   (let [(state a/ActivityState)
-        (state-of [(a/->Assignment "forced" "msa")] [] "home" "home")
+        (state-of [(a/->Assignment "forced" "acme")] [] "home" "home")
         (workspaces (Vec a/Workspace))
         [(workspace 1 1 "alpha" "DP-1" true false 10)]
         (plan d/CommandPlan)
@@ -206,7 +206,7 @@
     (and
       (= (d/plan-step-kinds steps) ["snapshot" "assignments"])
       (= (mapv a/assignment-workspace-name persisted) ["alpha" "forced"])
-      (= (mapv a/assignment-activity persisted) ["gjoa" "msa"]))))
+      (= (mapv a/assignment-activity persisted) ["gjoa" "acme"]))))
 
 (defn case-snapshot-content [] Bool
   (let [(state a/ActivityState)
@@ -226,7 +226,7 @@
         (d/activitysnapshot-entries snapshot)
         (home d/ActivitySnapshotEntry) (nth entries 0)
         (gjoa d/ActivitySnapshotEntry) (nth entries 1)
-        (msa d/ActivitySnapshotEntry) (nth entries 2)]
+        (acme d/ActivitySnapshotEntry) (nth entries 2)]
     (and
       (= (count entries) 3)
       (= (d/activitysnapshot-current snapshot) "gjoa")
@@ -241,9 +241,9 @@
       (= (d/activitysnapshotentry-workspace-ids gjoa) [2 3])
       (= (d/activitysnapshotentry-focused-workspace-id gjoa) 2)
       (d/activitysnapshotentry-urgent gjoa)
-      (= (d/activitysnapshotentry-label msa) "msa")
-      (= (count (d/activitysnapshotentry-workspace-ids msa)) 0)
-      (not (d/activitysnapshotentry-urgent msa)))))
+      (= (d/activitysnapshotentry-label acme) "acme")
+      (= (count (d/activitysnapshotentry-workspace-ids acme)) 0)
+      (not (d/activitysnapshotentry-urgent acme)))))
 
 (defn cases [] (Vec TestResult)
   [(->TestResult "fixpoint-converges" (case-fixpoint-converges))

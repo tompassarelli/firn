@@ -209,7 +209,7 @@ ROOT = os.path.join(FIX, "code")
 PIN_OID = "0123456789abcdef0123456789abcdef01234567"
 NEXT_PIN_OID = "89abcdef0123456789abcdef0123456789abcdef"
 for rel in ("proj/main/.git", "proj/worktrees/x/.git", "proj/worktrees/main",
-            f"proj/pins/{PIN_OID}", "client/msa/app/main/.git",
+            f"proj/pins/{PIN_OID}", "client/acme/app/main/.git",
             "resources/upstream/main/.git", "runtime-data/.git", "plain-dir"):
     os.makedirs(os.path.join(ROOT, rel), exist_ok=True)
 PIN = os.path.join(ROOT, "proj", "pins", PIN_OID)
@@ -218,7 +218,7 @@ open(PIN_SIDECAR, "w").write(
     "vendored upstream checkout. Consumers: the docs build.\n")
 
 PROJ = os.path.join(ROOT, "proj", "main")
-CLIENT = os.path.join(ROOT, "client", "msa", "app", "main")
+CLIENT = os.path.join(ROOT, "client", "acme", "app", "main")
 
 
 def fixture(command, cwd=None):
@@ -230,7 +230,7 @@ check("an unheard-of project's main is protected",
 check("a client project's nested main is protected",
       fixture("git add .", cwd=CLIENT))
 check("the deny names the nested container",
-      "client/msa/app" in (fixture("git add .", cwd=CLIENT) or ""))
+      "client/acme/app" in (fixture("git add .", cwd=CLIENT) or ""))
 check("its lane is not",
       fixture("git commit -m x",
               cwd=os.path.join(ROOT, "proj", "worktrees", "x")) is None)

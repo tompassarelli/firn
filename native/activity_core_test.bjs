@@ -26,9 +26,9 @@
   (a/->ActivityState
     [(definition "home" "home" [] [])
      (definition "gjoa" nil ["render"] ["gjoa"])
-     (definition "msa" "msa" ["heist"] ["msa"])]
+     (definition "acme" "acme" ["heist"] ["acme"])]
     "home"
-    [(a/->Assignment "forced" "msa")]
+    [(a/->Assignment "forced" "acme")]
     []
     []
     "home"
@@ -63,7 +63,7 @@
       (= (a/match-binding (a/activitystate-defs state) "render") "gjoa")
       (= (a/match-binding (a/activitystate-defs state) "gjoa release")
          "gjoa")
-      (= (a/match-binding (a/activitystate-defs state) "heist") "msa")
+      (= (a/match-binding (a/activitystate-defs state) "heist") "acme")
       (nil? (a/match-binding (a/activitystate-defs state) nil)))))
 
 (defn case-floating-per-output [] Bool
@@ -100,7 +100,7 @@
     (and
       (= (count members) 4)
       (= (a/membership-for members 1) "home")
-      (= (a/membership-for members 2) "msa")
+      (= (a/membership-for members 2) "acme")
       (= (a/membership-for members 3) "gjoa")
       (= (a/membership-for members 4) "home")
       (nil? (a/membership-for members 5))
@@ -114,9 +114,9 @@
          (workspace 3 3 nil "DP-1" false nil)]
         (next a/ActivityState) (a/apply-workspaces state workspaces)]
     (and
-      (= (a/activitystate-current next) "msa")
+      (= (a/activitystate-current next) "acme")
       (= (a/activitystate-previous next) "home")
-      (= (a/last-active-for (a/activitystate-last-active next) "msa") 2)
+      (= (a/last-active-for (a/activitystate-last-active next) "acme") 2)
       (= (count (a/activitystate-members next)) 2))))
 
 (defn case-band-order [] Bool
@@ -126,7 +126,7 @@
           (a/activitystate-defs base)
           "home"
           []
-          [(a/->Membership 10 "msa")
+          [(a/->Membership 10 "acme")
            (a/->Membership 11 "home")
            (a/->Membership 12 "gjoa")]
           []
@@ -134,7 +134,7 @@
           "home"
           [])
         (workspaces (Vec a/Workspace))
-        [(workspace 10 1 "msa" "DP-1" false 1)
+        [(workspace 10 1 "acme" "DP-1" false 1)
          (workspace 11 2 "home" "DP-1" false 2)
          (workspace 12 3 "gjoa" "DP-1" false 3)
          (workspace 13 4 nil "DP-1" false nil)]

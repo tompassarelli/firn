@@ -104,7 +104,7 @@ NEXT_PIN_OID=89abcdef0123456789abcdef0123456789abcdef
 PIN_SIDECAR="$ROOT/proj/pins/$PIN_OID.pin"
 mkdir -p "$ROOT/proj/main/.git" "$ROOT/proj/worktrees/x" "$ROOT/proj/worktrees/main" \
          "$ROOT/proj/pins/$PIN_OID" \
-         "$ROOT/client/msa/app/main/.git" "$ROOT/resources/upstream/main/.git" \
+         "$ROOT/client/acme/app/main/.git" "$ROOT/resources/upstream/main/.git" \
          "$ROOT/runtime-data/.git"
 printf 'The vendored upstream checkout. Consumers: gjoa:.envrc, the docs build.\n' \
   > "$PIN_SIDECAR"
@@ -115,7 +115,7 @@ printf 'build/\n' > "$ROOT/proj/pins/$PIN_OID/.gitignore"
 mkdir -p "$ROOT/proj/pins/$PIN_OID/build"
 
 check deny  "$ROOT/proj/main/src/x.py"                "an unheard-of project's main"
-check deny  "$ROOT/client/msa/app/main/src/x.py"      "a client project's nested main"
+check deny  "$ROOT/client/acme/app/main/src/x.py"      "a client project's nested main"
 check allow "$ROOT/proj/worktrees/x/src/x.py"         "a lane is the destination (T1)"
 check allow "$ROOT/proj/worktrees/main/x.py"          "a lane whose slug is literally 'main' is still a lane (T8)"
 check allow "$ROOT/proj/scratch.txt"                  "the container root is not a checkout"

@@ -8,5 +8,5 @@
 - Keep decrypted values out of arguments, clipboard, traces, screenshots, files and output.
 - Enable persistent login and verify launcher online state and W3 SSO before Play.
 - Bring Tom authenticator/CAPTCHA/account-lock blockers.
-- Account b (Tompas0x#3779) belongs to the vast.ai Warcraft VM: never sign it in elsewhere, clone-b included, while the VM holds it (vast-ai skill).
+- Account b belongs to the vast.ai Warcraft VM: never sign it in elsewhere, clone-b included, while the VM holds it (vast-ai skill).
 - Expect Battle.net Play or Update to force 3.0.1 once it is live (the launcher already announces it); check the live build first and keep auto-update off on pool sources.
