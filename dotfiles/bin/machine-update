@@ -22,6 +22,7 @@ cd "$lane"
 nix flake update
 firn repo build
 firn repo validate
+firn_changed=0
 if [[ -z "$(git status --porcelain)" ]]; then
   printf 'No input changes. Running generation retained.\n'
 else
@@ -34,6 +35,27 @@ else
   git commit -m "Nightly inputs $(date +%F)"
   firn host prepare whiterabbit
   safe-push --to main --keep-lane
+  firn_changed=1
+fi
+south="$HOME/code/south/main" # hardcoded-repo-path:allow
+if [[ -e "$south/.git" ]]; then
+  git -C "$south" fetch origin main
+  south_branch="nightly-firn-$(date +%Y%m%d-%H%M%S)-$$"
+  south_lane="$(dirname "$south")/worktrees/$south_branch"
+  git -C "$south" worktree add -b "$south_branch" "$south_lane" origin/main
+  (
+    cd "$south_lane"
+    nix flake update firn
+    if [[ -n "$(git status --porcelain)" ]]; then
+      git add -- flake.lock
+      git commit -m "Nightly firn input $(date +%F)"
+      safe-push --to main
+    fi
+  )
+else
+  printf 'machine-update: no south checkout; firn input bump skipped\n'
+fi
+if [[ "$firn_changed" == 1 ]]; then
   firn rebuild
 fi
 date +%s > "$state/.machine-update.success.$$"
