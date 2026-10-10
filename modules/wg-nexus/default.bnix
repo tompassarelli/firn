@@ -29,8 +29,8 @@
                (lib.optional (!= cfg.phonePublicKey nil)
                  {:publicKey cfg.phonePublicKey :allowedIPs ["10.77.0.3/32"]})])}})
        (lib.mkIf (== cfg.role "client")
-         {:sops.secrets.wireguard-nexus-laptop {:sopsFile (s flakeRoot "/secrets/wireguard.yaml")}
-          :sops.secrets.nexus-endpoint {:sopsFile (s flakeRoot "/secrets/wireguard.yaml")}
+         {:sops.secrets.wireguard-nexus-laptop {}
+          :sops.secrets.nexus-endpoint {}
           :sops.templates {"wg-nexus.conf"
             {:restartUnits ["wg-quick-wg-nexus.service"]
              :content (ms "[Interface]"

@@ -73,17 +73,10 @@
    :services.udev.extraHwdb "evdev:input:b0018v32ACp0006*\n KEYBOARD_KEY_100c6=f10\n"
    :myConfig.modules.airplane.enable true
    :myConfig.modules.stylix.chosenTheme "everforest-dark-hard"
-   ;; WireGuard client tunnel (wg0) to the Kea worker box. The wireguard module
-   ;; (watchdog + wg tools) rides the `vpn` tag; this is just the host's interface
-   ;; + its private-key secret. Key plaintext never lives in the repo — only the
-   ;; sops-encrypted secrets/wireguard.yaml.
    :sops.secrets
-    {"wireguard-laptop"
-      {:sopsFile (p "../../secrets/wireguard.yaml")}
-     "vastai-api-key"
-      {:sopsFile (p "../../secrets/vastai.yaml") :key "api_key" :owner "tom" :mode "0400"}
-     "bnet"
-      {:sopsFile (p "../../secrets/bnet.yaml") :key "" :owner "tom" :mode "0400"}}
+    {"wireguard-laptop" {}
+     "vastai-api-key" {:key "api_key" :owner "tom" :mode "0400"}
+     "bnet" {:key "" :owner "tom" :mode "0400"}}
    :myConfig.modules.wg-nexus {:enable true :role "client"}
    :myConfig.modules.nexus-pull.enable true
    :networking.wireguard.interfaces.wg0

@@ -66,17 +66,13 @@
   myConfig.modules.airplane.enable = true;
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
   sops.secrets = {
-    "wireguard-laptop" = {
-      sopsFile = ../../secrets/wireguard.yaml;
-    };
+    "wireguard-laptop" = { };
     "vastai-api-key" = {
-      sopsFile = ../../secrets/vastai.yaml;
       key = "api_key";
       owner = "tom";
       mode = "0400";
     };
     "bnet" = {
-      sopsFile = ../../secrets/bnet.yaml;
       key = "";
       owner = "tom";
       mode = "0400";

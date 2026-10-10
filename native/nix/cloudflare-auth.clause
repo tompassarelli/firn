@@ -9,6 +9,6 @@ foreign flake-root(): Text
 export cloudflare-auth-module()
   {options: {myConfig: {modules: {cloudflare-auth: {
     enable: enable-option("Cloudflare deployment credentials"),
-    sopsFile: option({type: string-type(), default: "{flake-root()}/secrets/cloudflare.yaml", description: "sops file holding Cloudflare deployment credentials"})}}}},
+    sopsFile: option({type: string-type(), description: "sops file holding Cloudflare deployment credentials"})}}}},
    config: when-enabled(configured(path(myConfig.modules.cloudflare-auth.enable)),
      {sops: {secrets: {"cloudflare-global-api-key": {sopsFile: configured-text(path(myConfig.modules.cloudflare-auth.sopsFile)), owner: configured-text(path(myConfig.modules.users.username))}}}})}

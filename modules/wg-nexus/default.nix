@@ -36,8 +36,8 @@
       };
     })
     (lib.mkIf (cfg.role == "client") {
-      sops.secrets.wireguard-nexus-laptop.sopsFile = "${flakeRoot}/secrets/wireguard.yaml";
-      sops.secrets.nexus-endpoint.sopsFile = "${flakeRoot}/secrets/wireguard.yaml";
+      sops.secrets.wireguard-nexus-laptop = { };
+      sops.secrets.nexus-endpoint = { };
       sops.templates."wg-nexus.conf" = {
         restartUnits = [ "wg-quick-wg-nexus.service" ];
         content = ''
