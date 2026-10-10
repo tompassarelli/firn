@@ -4,14 +4,16 @@
 # into one immutable generation. Its activation.active lists one `kind id` line
 # per active unit; a generation from before that list falls back to the JSON.
 north_agent_unit_active() {
-  local wanted="$1 $2" line
+  local wanted="$1 $2" line=''
   local list="${NORTH_AGENT_STATE_ROOT:-$HOME/.local/state/north/agents}/current/activation.active"
   [ -z "${NORTH_AGENT_ACTIVATION:-}" ] || list="${NORTH_AGENT_ACTIVATION%.json}.active"
   list="${NORTH_AGENT_ACTIVE:-$list}"
-  if [ -r "$list" ]; then
-    while IFS= read -r line || [ -n "$line" ]; do
-      [ "$line" != "$wanted" ] || return 0
-    done <"$list"
+  if [ -f "$list" ] && [ -r "$list" ]; then
+    {
+      while IFS= read -r line || [ -n "$line" ]; do
+        [ "$line" != "$wanted" ] || return 0
+      done <"$list"
+    } 2>/dev/null
     return 1
   fi
   north_agent_unit_active_json "$1" "$2"

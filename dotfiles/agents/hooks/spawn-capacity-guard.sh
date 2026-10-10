@@ -22,6 +22,7 @@ authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
   || authoring_killswitch="$(dirname "$0")/../lib/authoring-killswitch.sh"
 # shellcheck disable=SC1090,SC1091
 . "$authoring_killswitch" 2>/dev/null || true
+type hook_decide >/dev/null 2>&1 || exit 0
 decision="$(hook_decide "$python_bin" "$decider")"
 [ -n "$decision" ] || exit 0
 

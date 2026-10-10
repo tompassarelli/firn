@@ -50,6 +50,7 @@ fixtures() {
       agent_event Agent worker-haiku $'Item: rename a field.\nCategory: mechanical' ;;
     spawn-capacity-guard)
       agent_event Agent worker 'do it'; agent_event Agent worker 'do it' ;;
+    firn-system-policy) bash_event 'nixos-rebuild switch'; bash_event 'firn rebuild' ;;
     codex-behavior-guard)
       agent_event spawn_agent worker 'A measure-only run of the bench.'
       agent_event spawn_agent worker 'Fix the parser and land it.' ;;
@@ -58,23 +59,29 @@ fixtures() {
 }
 
 verdict() {
-  local hook="$1" event="$2" status_file="$3" out
+  local hook="$1" event="$2" status_file="$3" out status
   # Claude and Codex read exit 2 as a deny with the reason on stderr.
   out="$(printf '%s' "$event" | "$runtime/env" -u BASH_ENV -u ENV \
     PATH="$runtime:$HOME/.local/bin:/run/current-system/sw/bin" \
     NORTH_AGENT_PYTHON="$runtime/python3" TODO_ROOT="$scratch/todo" \
     TRIPWIRE_LOG_DIR="$scratch/tripwire" CODEX_BEHAVIOR_STATE="$scratch/state" \
     SPAWN_CAPACITY_STATUS="$status_file" SPAWN_CAPACITY_PRESSURE="$scratch/pressure" \
-    "$runtime/bash" "$hook" 2>/dev/null)"
-  [ $? -ne 2 ] || { echo deny; return; }
+    timeout 10 "$runtime/bash" "$hook" 2>/dev/null)"
+  status=$?
+  [ "$status" -ne 2 ] || { echo deny; return; }
+  [ "$status" -eq 0 ] || { echo "exit-$status"; return; }
   jq -r '.hookSpecificOutput.permissionDecision // .decision // "pass"' <<<"${out:-{\}}" 2>/dev/null || echo malformed
 }
 
 [ -x "$runtime/bash" ] || { echo "selftest: missing $runtime/bash" >&2; exit 1; }
 failed=0
 for dir in "${dirs[@]}"; do
-  for hook in "$dir"/*.sh; do
-    [ -e "$hook" ] || continue
+  for hook in "$dir"/*.sh "$dir"/firn-system-policy; do
+    case "$hook" in "$dir/*.sh"|*.test.sh) continue ;; esac
+    if [ ! -e "$hook" ]; then
+      [ -L "$hook" ] && printf '%s\t%s\tdangling\n' "$dir" "${hook##*/}" && continue
+      printf '%s\t%s\tmissing\tFAIL\n' "$dir" "${hook##*/}"; failed=1; continue
+    fi
     id="${hook##*/}"; id="${id%.sh}"
     mapfile -t events < <(fixtures "$id") || true
     if ((${#events[@]} != 2)); then
@@ -90,10 +97,12 @@ for dir in "${dirs[@]}"; do
     p="$(verdict "$hook" "${events[1]}" "$scratch/capacity")"
     if [ "$d" = deny ] && [ "$p" = pass ]; then
       result=ok
-    elif NORTH_HOOK_ID="$id" bash -c '. "$1" && ! authoring_guards_off' _ "${hook%/*}/lib/authoring-killswitch.sh" 2>/dev/null; then
-      result=FAIL failed=1
     else
-      result=inactive
+      NORTH_HOOK_ID="$id" bash -c '. "$1" || exit 3; ! authoring_guards_off' _ "${hook%/*}/lib/authoring-killswitch.sh" 2>/dev/null
+      case $? in
+        1) result=inactive ;;
+        *) result=FAIL failed=1 ;;
+      esac
     fi
     printf '%s\t%s\tdeny=%s pass=%s\t%s\n' "$dir" "$id" "$d" "$p" "$result"
   done

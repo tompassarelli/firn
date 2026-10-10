@@ -35,6 +35,7 @@ authoring_killswitch="$hook_dir/lib/authoring-killswitch.sh"
 if [ -r "$authoring_killswitch" ]; then
   # shellcheck disable=SC1090,SC1091
   . "$authoring_killswitch" 2>/dev/null || true
+  type hook_decide >/dev/null 2>&1 || exit 0
 fi
 type authoring_guards_off >/dev/null 2>&1 || exit 0
 authoring_guards_off && exit 0

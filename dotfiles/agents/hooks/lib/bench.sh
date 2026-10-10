@@ -3,13 +3,15 @@
 # and report wall and CPU (user+sys) p50/p95 per event, plus the activation
 # gate's own p50. Take a machine-capacity exclusive lease for comparable runs.
 set -euo pipefail
+export LC_ALL=C
 
 usage() {
   cat <<'EOF'
-usage: bench.sh [--settings FILE] [--matcher NAME] [--hooks-dir DIR]
+usage: bench.sh [--settings FILE] [--matcher NAME] [--tool NAME] [--hooks-dir DIR]
                 [--runs N] [--command CMD] [--gate-runs N]
   --settings   Claude settings JSON with .hooks.PreToolUse (default ~/.claude/settings.json)
-  --matcher    PreToolUse matcher to run (default Bash)
+  --matcher    PreToolUse matcher entry to run, verbatim (default Bash)
+  --tool       tool_name in the payload (default: the matcher)
   --hooks-dir  replace the installed ~/.agents/hooks/ with this directory (e.g. a worktree)
   --runs       events to time (default 30)
   --command    Bash command in the benign payload (default "ls -la")
@@ -19,6 +21,7 @@ EOF
 
 settings="$HOME/.claude/settings.json"
 matcher=Bash
+tool=''
 hooks_dir=''
 runs=30
 command='ls -la'
@@ -27,6 +30,7 @@ while (($#)); do
   case "$1" in
     --settings) settings="$2"; shift 2 ;;
     --matcher) matcher="$2"; shift 2 ;;
+    --tool) tool="$2"; shift 2 ;;
     --hooks-dir) hooks_dir="${2%/}"; shift 2 ;;
     --runs) runs="$2"; shift 2 ;;
     --command) command="$2"; shift 2 ;;
@@ -43,18 +47,24 @@ if [[ -n "$hooks_dir" ]]; then
   hooks=("${hooks[@]//"$HOME/.agents/hooks"/$hooks_dir}")
 fi
 
-payload="$(jq -cn --arg c "$command" --arg cwd "$PWD" --arg t "$matcher" \
+payload="$(jq -cn --arg c "$command" --arg cwd "$PWD" --arg t "${tool:-$matcher}" \
   '{session_id:"bench",hook_event_name:"PreToolUse",cwd:$cwd,tool_name:$t,tool_input:{command:$c}}')"
 
 scratch="$(mktemp -d)"
 trap 'rm -rf -- "${scratch:?}"' EXIT
 
 one_event() {
-  local h
+  local h pid status
+  local -a pids=()
   for h in "${hooks[@]}"; do
     bash -c "$h" <<<"$payload" >/dev/null 2>&1 &
+    pids+=("$!")
   done
-  wait
+  for pid in "${pids[@]}"; do
+    status=0
+    wait "$pid" || status=$?
+    ((status == 0 || status == 2)) || { echo "bench: a hook exited $status; sample rejected" >&2; exit 1; }
+  done
 }
 
 TIMEFORMAT='%R %U %S'

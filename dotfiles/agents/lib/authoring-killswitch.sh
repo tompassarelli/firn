@@ -21,7 +21,7 @@ hook_error() {
   hook_id="${hook_id%.sh}"
   file="${AGENT_HOOK_ERRORS:-$HOME/.local/state/agents/hooks/errors.tsv}"
   mkdir -p -- "${file%/*}" 2>/dev/null
-  TZ=UTC0 printf '%(%Y-%m-%dT%H:%M:%SZ)T\t%s\t%s\n' -1 "$hook_id" "$1" >>"$file" 2>/dev/null
+  { TZ=UTC0 printf '%(%Y-%m-%dT%H:%M:%SZ)T\t%s\t%s\n' -1 "$hook_id" "$1" >>"$file"; } 2>/dev/null
   return 0
 }
 

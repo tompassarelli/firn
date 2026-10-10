@@ -44,6 +44,7 @@ authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
   || authoring_killswitch="$(dirname "$0")/../lib/authoring-killswitch.sh"
 # shellcheck disable=SC1090,SC1091
 . "$authoring_killswitch" 2>/dev/null || true
+type hook_decide >/dev/null 2>&1 || exit 0
 type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 read -r -d '' PY <<'PYEOF' || true
