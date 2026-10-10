@@ -68,6 +68,70 @@ run_agent_policy_contract() {
   "$AGENT_CONFIG_PYTHON" "$repo/scripts/agent-policy-contract.py" "${args[@]}"
 }
 
+skill_budget() {
+  "$AGENT_CONFIG_PYTHON" - "$1" <<'PY'
+import json
+import pathlib
+import re
+import subprocess
+import sys
+
+PLAYBOOK_LINES, TOTAL_LINES, LISTING_CHARS = 60, 1400, 8000
+repo = pathlib.Path(sys.argv[1])
+
+
+def owner_path(unit):
+    owner = catalog["registrations"].get(unit, {}).get("owner")
+    if owner:
+        return repo / owner["path"]
+    try:
+        found = subprocess.run(["agents", "path", unit], capture_output=True, text=True)
+    except OSError:
+        return None
+    return pathlib.Path(found.stdout.strip()) if found.returncode == 0 else None
+
+
+catalog = json.loads((repo / "dotfiles/agents/catalog-config.json").read_text())
+errors, missing, total, listing = [], [], 0, 0
+for unit, entry in catalog["activation"].items():
+    if not any(
+        d.get("type") == "skill" and "shared" in d.get("targets", [])
+        for d in entry.get("distributions", [])
+    ):
+        continue
+    skill = owner_path(unit)
+    if not skill or not skill.is_file():
+        missing.append(unit)
+        continue
+    match = re.match(r"---\n(.*?)\n---\n", skill.read_text(), re.S)
+    if not match:
+        errors.append(f"{unit}: SKILL.md has no frontmatter")
+        continue
+    front = match.group(1) + "\n"
+    lines = len(skill.read_text()[match.end():].splitlines())
+    total += lines
+    if lines > PLAYBOOK_LINES and not re.search(r"^metadata:\n(?:[ \t]+.*\n)*?[ \t]+kind:[ \t]*domain[ \t]*$", front, re.M):
+        errors.append(
+            f"{unit}: playbook body is {lines} lines; policy keeps each playbook body at "
+            f"most {PLAYBOOK_LINES} (set metadata.kind: domain for a domain skill)"
+        )
+    agents = re.search(r"^agents:\s*\[(.*)\]", front, re.M)
+    if agents and "codex" not in agents.group(1):
+        continue
+    description = re.search(r"^description:[ \t]*(?:[>|]-?)?[ \t]*\n?((?:.*\n)*?)(?=^\S|\Z)", front, re.M)
+    listing += len(unit) + len(" ".join(description.group(1).split()) if description else "")
+if total > TOTAL_LINES:
+    errors.append(f"SKILL.md bodies total {total} lines; policy keeps all bodies at most {TOTAL_LINES} in total")
+if listing > LISTING_CHARS:
+    errors.append(f"skill names plus descriptions total {listing} characters; the Codex skill listing budget is {LISTING_CHARS}")
+summary = f"{total}/{TOTAL_LINES} body lines · {listing}/{LISTING_CHARS} listing characters"
+if missing:
+    summary += f" · {len(missing)} unreadable sources skipped"
+print("\n".join(errors) if errors else summary)
+sys.exit(1 if errors else 0)
+PY
+}
+
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
   return 0
 fi
@@ -405,6 +469,16 @@ else
   bad "$(printf '%s\n' "$routines_out" | grep -E '^(INVALID|EXPIRED|UNREGISTERED)' || printf '%s' "$routines_out")"
 fi
 group routines "every recurring job has a dotfiles/agents/routines entry$([ "$LOCAL" -eq 1 ] && printf ', live timers included' || true)" "$before"
+
+before=$fail
+if budget_out="$(skill_budget "$REPO" 2>&1)"; then
+  ok_detail "$budget_out"
+  budget_summary="$budget_out"
+else
+  bad "$budget_out"
+  budget_summary='over budget'
+fi
+group skills "$budget_summary" "$before"
 
 # --- worktree layout -------------------------------------------------------
 # A rule with no detector silently stops being true. On 2026-07-29 a sweep found
