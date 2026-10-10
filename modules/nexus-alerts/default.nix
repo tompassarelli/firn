@@ -96,12 +96,13 @@
     name = "nexus-alert";
     runtimeInputs = [ pkgs.curl pkgs.coreutils ];
     text = ''
-      usage() { echo 'usage: nexus-alert urgent|normal TEXT [TITLE]' >&2; exit 2; }
-      [ $# -eq 2 ] || [ $# -eq 3 ] || usage
-      case "$1" in urgent) prio=5 ;; normal) prio=3 ;; *) usage ;; esac
+      usage() { echo 'usage: nexus-alert urgent|normal|socrates-test TEXT [TITLE] [CLICK]' >&2; exit 2; }
+      [ $# -ge 2 ] && [ $# -le 4 ] || usage
+      case "$1" in urgent) prio=5 ;; normal|socrates-test) prio=3 ;; *) usage ;; esac
       title=''${3:-Nexus}
+      click=''${4:-}
       token=$(cat ${config.sops.secrets.ntfy-publisher-token.path})
-      curl -fsS -o /dev/null -H @<(printf 'Authorization: Bearer %s\nPriority: %s\nTitle: %s\n' "$token" "$prio" "$title") \
+      curl -fsS -o /dev/null -H @<(printf 'Authorization: Bearer %s\nPriority: %s\nTitle: %s\n' "$token" "$prio" "$title"; [ -z "$click" ] || printf 'Click: %s\n' "$click") \
         --data-binary "$2" "${baseUrl}/$1"
     '';
   }))) (builtins.getAttr "ntfy-auth.env" config.sops.templates))) config.sops.placeholder)) "${flakeRoot}/secrets/nexus/ntfy.yaml")) "http://${listen}")) "10.77.0.1:${builtins.toString port}")) 2586)) config.myConfig.modules.users.username)
