@@ -66,7 +66,12 @@ CREATE TABLE IF NOT EXISTS runs(
   verify TEXT,
   lens TEXT,
   flaws INTEGER,
-  expects_landing INTEGER
+  expects_landing INTEGER,
+  staffed TEXT,
+  first_commit TEXT,
+  review_requested TEXT,
+  landed_at TEXT,
+  turns INTEGER
 ) STRICT;
 CREATE TABLE IF NOT EXISTS tier_choice(
   cell TEXT PRIMARY KEY,
@@ -84,7 +89,14 @@ CREATE TABLE IF NOT EXISTS blocks(
   since TEXT NOT NULL,
   by TEXT NOT NULL
 ) STRICT;
+CREATE TABLE IF NOT EXISTS run_events(
+  agent TEXT NOT NULL,
+  ts TEXT,
+  kind TEXT NOT NULL CHECK(kind IN ('turn','tool_error','retry')),
+  detail TEXT NOT NULL DEFAULT ''
+) STRICT;
 CREATE INDEX IF NOT EXISTS events_item ON events(item, seq);
+CREATE INDEX IF NOT EXISTS run_events_agent ON run_events(agent, ts);
 CREATE INDEX IF NOT EXISTS runs_item ON runs(item, ended);
 """
 
@@ -143,11 +155,22 @@ def connect() -> sqlite3.Connection:
     for column in ("arm", "spec", "scope", "surface", "verify", "lens"):
         if column not in columns:
             db.execute(f"ALTER TABLE runs ADD COLUMN {column} TEXT")
-    for column in ("flaws", "expects_landing"):
+    for column in ("flaws", "expects_landing", "turns"):
         if column not in columns:
             db.execute(f"ALTER TABLE runs ADD COLUMN {column} INTEGER")
+    for column in STAGES:
+        if column not in columns:
+            db.execute(f"ALTER TABLE runs ADD COLUMN {column} TEXT")
     db.execute("CREATE TABLE IF NOT EXISTS tier_choice(cell TEXT PRIMARY KEY, tier TEXT NOT NULL, since TEXT NOT NULL) STRICT")
+    db.execute("CREATE TABLE IF NOT EXISTS run_events(agent TEXT NOT NULL, ts TEXT, kind TEXT NOT NULL"
+               " CHECK(kind IN ('turn','tool_error','retry')), detail TEXT NOT NULL DEFAULT '') STRICT")
+    db.execute("CREATE INDEX IF NOT EXISTS run_events_agent ON run_events(agent, ts)")
     return db
+
+
+# Stage times a run row carries, all derived from transcripts and git: spawned, first commit made,
+# first report back (review requested), and its commit's time on origin/main.
+STAGES = ("staffed", "first_commit", "review_requested", "landed_at")
 
 
 def event(db, item, kind, actor="", tier="", **data):
@@ -533,6 +556,11 @@ def issue_ref(item):
         return None
 
 
+def derived_item(f, r):
+    """The brief's Item, else the issue its commits and issue commands name most (encrypted Codex briefs)."""
+    return issue_ref(f.get("item") or r.get("item")) or next(filter(None, map(issue_ref, r.get("refs") or [])), None)
+
+
 def hold(db, item, r, claim, follows):
     """A running worker holds its brief's issue; taking it from someone else is a handoff."""
     prev = claim["owner"] if claim else follows
@@ -563,11 +591,15 @@ def cmd_ingest(db, a):
                     backfilled += db.execute(
                         "UPDATE runs SET spec = coalesce(spec, ?), scope = coalesce(scope, ?), surface = coalesce(surface, ?),"
                         " verify = coalesce(verify, ?), lens = coalesce(lens, ?), flaws = coalesce(flaws, ?),"
-                        " expects_landing = coalesce(?, expects_landing), landed = coalesce(?, landed) WHERE agent = ?",
+                        " expects_landing = coalesce(?, expects_landing), landed = coalesce(?, landed),"
+                        " staffed = coalesce(?, staffed), first_commit = coalesce(?, first_commit),"
+                        " review_requested = coalesce(?, review_requested), landed_at = coalesce(?, landed_at),"
+                        " turns = coalesce(?, turns), item = coalesce(item, ?) WHERE agent = ?",
                         (f.get("spec"), f.get("scope"), f.get("surface"), f.get("verify"), f.get("lens"),
-                         r.get("flaws"), r.get("expects_landing"), r.get("landed"), r["id"])).rowcount
+                         r.get("flaws"), r.get("expects_landing"), r.get("landed"),
+                         *(r.get(k) for k in STAGES), r.get("turns"), derived_item(f, r), r["id"])).rowcount
                 continue
-            item = issue_ref(f.get("item") or r.get("item"))
+            item = derived_item(f, r)
             follows = f.get("follows") or r.get("follows")
             claim = db.execute("SELECT owner FROM claims WHERE item = ?", (item,)).fetchone() if item else None
             mine = claim is not None and claim["owner"] == r["id"]
@@ -593,14 +625,18 @@ def cmd_ingest(db, a):
             db.execute(
                 """INSERT INTO runs(agent, item, follows, session, tier, category, started, ended, minutes,
                                     eta_min, tokens, peak_ctx, outcome, report, note, repeats, landed, arm,
-                                    spec, scope, surface, verify, lens, flaws, expects_landing)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                    spec, scope, surface, verify, lens, flaws, expects_landing,
+                                    staffed, first_commit, review_requested, landed_at, turns)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (r["id"], item, follows, r.get("session"), r["tier"], category, r.get("started"), r["ended"],
                  r["actual_min"], None if eta is None else round(eta), r.get("tokens"), r.get("peak_ctx"),
                  r["outcome"], r.get("report") or "", r.get("note"), r.get("repeats"), r.get("landed"),
                  (f.get("arm") or "").lower() or None, f.get("spec"), f.get("scope"), f.get("surface"),
-                 f.get("verify"), f.get("lens"), r.get("flaws"), r.get("expects_landing")),
+                 f.get("verify"), f.get("lens"), r.get("flaws"), r.get("expects_landing"),
+                 *(r.get(k) for k in STAGES), r.get("turns")),
             )
+            db.executemany("INSERT INTO run_events(agent, ts, kind, detail) VALUES (?,?,?,?)",
+                           [(r["id"], e["ts"], e["kind"], e["detail"]) for e in r.get("events") or []])
             if prev and prev != r["id"]:
                 event(db, item, "handoff", r["id"], r["tier"], **{"from": prev, "to": r["id"]})
             event(db, item, "run", r["id"], r["tier"], category=category, brief_category=raw,
@@ -610,9 +646,21 @@ def cmd_ingest(db, a):
           file=sys.stderr)
 
 
+LANDING_DAYS = 3
+
+
 def cmd_run_ids(db, a):
-    for (agent,) in db.execute("SELECT agent FROM runs"):
+    since = datetime.fromtimestamp(time.time() - LANDING_DAYS * 86400, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for (agent,) in db.execute("SELECT agent FROM runs" + (" WHERE NOT (expects_landing = 1 AND landed_at IS NULL AND"
+                                                           " ended >= ?)" if a.settled else ""), (since,) if a.settled else ()):
         print(agent)
+
+
+def span(start, end):
+    """Whole minutes from start to end, 0 when end came first (a worker that landed before reporting), None unless both are known."""
+    if not (start and end):
+        return None
+    return max(0, int((datetime.fromisoformat(end.replace("Z", "+00:00")) - datetime.fromisoformat(start.replace("Z", "+00:00"))).total_seconds() // 60))
 
 
 def median(xs):
@@ -649,8 +697,8 @@ def cmd_summary(db, a):
     for r in rows:
         groups.setdefault((*(cell_value(r, k) for k in keys), r["tier"], r["arm"] or "-"), []).append(r)
     ok = run_ok(db)
-    out = [(*keys, "tier", "arm", "n", "done", "success", "ok", "eta_med", "actual_med", "x_eta_med", "over_2x_eta", "tokens_med",
-            "repeat_runs", "no_landing")]
+    out = [(*keys, "tier", "arm", "n", "done", "success", "ok", "eta_med", "actual_med", "work_med", "wait_med", "x_eta_med",
+            "over_2x_eta", "tokens_med", "repeat_runs", "no_landing")]
     for key, rs in sorted(groups.items(), key=lambda kv: (kv[0][:-2], TIER_RANK.get(kv[0][-2], 5), kv[0][-1])):
         done = sum(r["outcome"] == "done" for r in rs)
         timed = [r for r in rs if r["eta_min"]]
@@ -658,6 +706,8 @@ def cmd_summary(db, a):
         tok = median([r["tokens"] for r in rs])
         out.append((*key, str(len(rs)), str(done), f"{done * 100 // len(rs)}%", f"{sum(map(ok, rs)) * 100 // len(rs)}%",
                     str(median([r["eta_min"] for r in rs]) or "-"), str(median([r["minutes"] for r in rs])),
+                    *(str(median([span(r[a], r[b]) for r in rs])).replace("None", "-")
+                      for a, b in (("staffed", "review_requested"), ("review_requested", "landed_at"))),
                     f"{ratio:.1f}" if ratio is not None else "-",
                     f"{sum(r['minutes'] > 2 * r['eta_min'] for r in timed)}/{len(timed)}",
                     f"{tok // 1000}k" if tok is not None else "-",
@@ -815,20 +865,23 @@ def parser() -> argparse.ArgumentParser:
     cmd("ready", cmd_ready, "open issues with no open blocker and no owner")
     cmd("list", cmd_list, "held issues with owner, time on the clock, ETA and overdue flag")
     cmd("ingest", cmd_ingest, "record worker runs from worker-ledger rows on stdin")
-    cmd("run-ids", cmd_run_ids, "agent ids already recorded (for worker-ledger)")
+    s = cmd("run-ids", cmd_run_ids, "agent ids already recorded (for worker-ledger)")
+    s.add_argument("--settled", action="store_true", help=f"leave out runs that committed in the last {LANDING_DAYS} days "
+                   "and whose commit is not yet on origin/main, so worker-ledger rereads them")
     s = cmd("unowned", cmd_unowned, "open smashcraft and wisp issues with an unchecked box: owner, block or UNOWNED, "
             "priority:now first")
     s = cmd("block", cmd_block, "record why an issue cannot be staffed now (shown by unowned); --clear removes it")
     s.add_argument("id")
     s.add_argument("reason", nargs="*")
     s.add_argument("--clear", action="store_true")
-    s = cmd("summary", cmd_summary, "runs by category (or --group facets) and tier: success and minutes against ETA, "
+    s = cmd("summary", cmd_summary, "runs by category (or --group facets) and tier: success, minutes against ETA, "
+            "working (staffed to first report) and waiting (first report to its commit on origin/main) medians, "
             "and accepted flaws per reviewer Lens")
     s.add_argument("--since", help="only runs that ended on or after DATE")
     s.add_argument("--group", default="category", help=f"comma list of {', '.join(GROUPS)} (default category)")
     s = cmd("recommend", cmd_recommend,
             f"cheapest tier whose first-assignment runs reported Done with no later Follows: run (and landed when it "
-            f"committed) at >= {BAR}% in the finest "
+            f"committed) at >= {BAR}%% in the finest "
             f"cell holding a tier with >= {MIN_RUNS} runs, backing off {', '.join(BACKOFF)}; a pricier tier replaces the "
             f"cell's last recommendation only when it beats it by {MARGIN} points on >= {MIN_RUNS} runs each")
     s.add_argument("facets", help="brief facet lines, e.g. 'Category: tooling, Spec: measured, Scope: one-file'")

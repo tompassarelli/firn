@@ -61,6 +61,7 @@
    :myConfig.modules.agent-slice.enable true
    :myConfig.modules.delivery-liveness.enable true
    :myConfig.modules.lane-gc.enable true
+   :myConfig.modules.worker-ledger.enable true
    :myConfig.modules.capacity-watchdog.enable true
    ;; Home Manager activates this user service during a system switch. Bound
    ;; that activation independently of a periodic worker which may be hung.

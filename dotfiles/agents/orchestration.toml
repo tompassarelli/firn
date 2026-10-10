@@ -21,6 +21,11 @@ posture = "efficiency"   # Tom, 9 Oct night: preserve Claude usage, lean on Code
 
 [codex]
 
+# Telemetry detail, per tier or on_request table: `detail = "routine"` (the
+# default) records one run row per worker; `detail = "profile"` also records
+# its per-turn events (each turn, tool error and retried command) in
+# threads' run_events, from that tier's next run on.
+
 # Worker tiers, weakest first, as `provider:name`. Difficulty is a percentile
 # of Tom's work. `start` is where the tier begins taking work under each
 # posture: [efficiency, balanced, performance]. A tier takes work from its

@@ -25,6 +25,11 @@ def worker(name,brief='',finished=False):
 worker('finished',finished=True)
 worker('running','Item: wisp#70\nCategory: native-check\nETA: 20 minutes',finished=True)
 worker('untracked',finished=True)
+rs=[json.loads(l) for l in (directory/'rollout-untracked.jsonl').read_text().splitlines()]
+commit='text(await tools.exec_command({cmd:"git commit -m \\"Derive spawn (firn#9)\\"",workdir:"/w"}))'
+rs[2:2]=[row('response_item',dict(type='custom_tool_call',name='exec',call_id='u1',input=commit),1),
+         row('response_item',dict(type='custom_tool_call_output',call_id='u1',output=[dict(type='input_text',text='{"exit_code":0,"output":"ok"}')]),2)]
+write('untracked',rs)
 farm='text(await tools.exec_command({cmd:"bun wisp farm balance \\"wren 120\\" --wait",workdir:"/w"}))'
 rs=[row('session_meta',dict(id='repeater',timestamp='2026-10-08T00:00:00Z',source=dict(subagent=dict(thread_spawn=dict(parent_thread_id='parent',agent_path='/root/repeater'))))),
     row('turn_context',dict(model='gpt-6.1-sol',effort='high')),
@@ -68,6 +73,7 @@ print('PASS a commit whose subject is on origin/main counts as landed though the
 r=c.execute("select agent,item,follows,tier,category,minutes,eta_min,tokens,peak_ctx,outcome from runs where agent not in ('haiku1','commit1','commit2')").fetchall()
 want=[('finished','firn#5','prior','gpt-6.1-sol medium','tooling',5,10,321,900,'done'),
       ('running','wisp#70',None,'gpt-6.1-sol medium','native-check',5,20,321,900,'done'),
+      ('untracked','firn#9',None,'gpt-6.1-sol medium','unknown',5,None,321,900,'done'),
       ('repeater','smashcraft#250',None,'gpt-6.1-sol high','balance-tuning',5,20,0,0,'done')]
 assert r==want,(r,want)
 h=c.execute("select tier,category,minutes from runs where agent='haiku1'").fetchone()
@@ -78,6 +84,26 @@ assert rep==(2,0),rep
 print('PASS a Codex worker that reran a passing farm check twice and pushed nothing counts 2 repeats, no landing')
 assert c.execute('select count(*) from claims').fetchone()[0]==0,'finished workers must release holds'
 print('PASS [spec #5] Codex plaintext spawn brief records fields, model/effort, timing and tokens exactly once')
+print('PASS [firn#11] a Codex worker with no readable brief is recorded, its Item taken from the issue its commit names')
+st=c.execute("select staffed,first_commit,review_requested,landed_at is not null,turns from runs where agent in ('commit1','untracked') order by agent").fetchall()
+assert st==[('2026-10-08T00:00:00Z','2026-10-08T00:02:00Z','2026-10-08T00:03:00Z',1,1),
+            ('2026-10-08T00:00:00Z','2026-10-08T00:02:00Z','2026-10-08T00:05:00Z',0,0)],st
+print('PASS [firn#11] stage times come from the transcript and origin/main: staffed, first commit, first report, landed')
+PY
+
+python3 - "$THREADS_DB" <<'PY'
+import sqlite3,sys
+assert sqlite3.connect(sys.argv[1]).execute('select count(*) from run_events').fetchone()[0]==0
+PY
+sed 's/^agent = "worker"$/&\ndetail = "profile"/' "$repo/dotfiles/agents/orchestration.toml" >"$scratch/profile.toml"
+THREADS_DB=$scratch/profile.db AGENTS_ORCHESTRATION=$scratch/profile.toml "$repo/dotfiles/bin/worker-ledger" --since 2026-10-08 2>/dev/null
+python3 - "$scratch/profile.db" <<'PY'
+import sqlite3,sys
+c=sqlite3.connect(sys.argv[1])
+assert c.execute("select count(*) from runs where agent='commit1'").fetchone()[0]==1
+ev=c.execute("select agent,ts,kind from run_events order by agent,ts").fetchall()
+assert ('commit1','2026-10-08T00:00:00Z','turn') in ev and not [e for e in ev if e[0] in ('finished','repeater')],ev
+print('PASS [firn#11] a tier set to profile gets per-turn events on its next run, still one run row; routine gets none')
 PY
 
 mkdir "$scratch/bin"
