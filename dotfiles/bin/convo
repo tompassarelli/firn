@@ -144,7 +144,8 @@ def transcript_roots():
             (os.path.join(HOME, ".local/state/north/codex-pooled"),
              "openai", "pooled", "codex", False, "default pooled transcript root"),
             (os.path.join(claude_dir, "projects") if claude_dir else None,
-             "anthropic", "local", "claude", False, "CLAUDE_CONFIG_DIR projects"),
+             "anthropic", "local", "claude", bool(claude_dir),
+             "CLAUDE_CONFIG_DIR projects"),
             (os.path.join(HOME, ".claude/projects"),
              "anthropic", "local", "claude", False, "Claude Code projects root"),
         ]
@@ -854,7 +855,7 @@ def index(con, quiet=False, verbose=False):
             # old one reports "changed" on every pass and re-reads forever.
             "UPDATE files SET size=?,dsize=?,zst=?,mtime=?,head=?,dev=?,ino=?,"
             "session_id=COALESCE(?,session_id),"
-            "title=COALESCE(?,title),cwd=COALESCE(?,cwd),"
+            "title=COALESCE(?,title,?),cwd=COALESCE(?,cwd),"
             "branch=COALESCE(?,branch),project=COALESCE(NULLIF(?,''),project),"
             "first_ts=COALESCE(first_ts,?),last_ts=COALESCE(?,last_ts),"
             "nmsg=nmsg+? WHERE id=?",
@@ -864,7 +865,7 @@ def index(con, quiet=False, verbose=False):
              st.st_mtime, src.head() if is_zst else head_hash(path),
              st.st_dev, st.st_ino,
              meta.get("session_id"),
-             meta.get("title") or meta.get("slug"), meta.get("cwd"),
+             meta.get("title"), meta.get("slug"), meta.get("cwd"),
              meta.get("branch"), project, first_ts, last_ts, added, fid))
         con.commit()
         nmsg_total += added

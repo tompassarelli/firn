@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CONVO="$ROOT/dotfiles/bin/convo"
-unset CODEX_HOME NORTH_CODEX_POOLED_HOME
+unset CODEX_HOME NORTH_CODEX_POOLED_HOME CLAUDE_CONFIG_DIR
 fixture="$(mktemp -d)"
 trap 'rm -rf "${fixture:?}"' EXIT
 fail() { printf 'convo.test.sh:%s: %s\n' "${BASH_LINENO[0]}" "$1" >&2; exit 1; }
