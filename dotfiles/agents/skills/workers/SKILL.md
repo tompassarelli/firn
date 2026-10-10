@@ -29,7 +29,7 @@ written: 2026-10-10
 | Claude | xhigh | `worker-xhigh`, Opus 5.5 xhigh, escalation only |
 
 - Start every Opus-range item at `worker`; escalate one tier only after `Stop: reasoning`. Restaff every other stop at the same tier.
-- Send mechanical work and lane mechanics (rebase, regenerate, conflicts, box ticks) to `worker-haiku`. Judged art, bisects, native checks and jobs waiting on a run longer than 2 minutes go to `worker` or the lead. Other tooling and bug-known-cause items go to Haiku with `Arm: haiku-trial`.
+- Send mechanical work and lane mechanics (rebase, regenerate, conflicts, box ticks) to `worker-haiku`. Judged art, bisects, native checks and jobs waiting on a run longer than 2 minutes go to `worker` or the lead. Other tooling and bug-known-cause items go to Haiku with `Arm: haiku-trial` until the finest facet cell with 5 runs has 5 Haiku closures or 2 Haiku failures (notes).
 - Use Fable only when Tom names it. Bring the supervisor one recommendation when the next tier cannot run here.
 
 ## Review
@@ -43,7 +43,7 @@ written: 2026-10-10
 
 ## Run and land
 
-- Keep `worker-sweep --wait` active while workers run. Act on each STALLED, OVERTIME, HANDOFF or PARKED row (nudge once, then replace with a Follows: brief) and on each `WAIT` line with its named move. Never judge a worker by recent activity alone.
+- Keep `worker-sweep --wait` active while workers run. Act on each STALLED, OVERTIME, HANDOFF or PARKED row by its named move: STALLED gets a report request, then archive; OVERTIME or HANDOFF gets one nudge, then a Follows: replacement; PARKED gets its wait moved to the parent. Act on each `WAIT` line with its named move. Never judge a worker by recent activity alone.
 - Expect a report at 45 minutes or twice ETA. Recycle at 45 minutes or 350k context: queue what passes, write a complete handoff at a checkpoint, and let a fresh worker continue from it.
 - Ask a worker idle 10 minutes without a report for one, then archive it. Never park a worker to wait on a farm run, a client or another worker.
 - Send every code-only Smashcraft or Wisp item to `cloud-workers` first; staff local workers only for real-game clients, private game assets, the LAN pool or unpushed local state.

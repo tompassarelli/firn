@@ -92,10 +92,10 @@ after every 10 new closures in a category and change a rule when the numbers mov
 
 - `tick` (see `agents routines show tick`) runs `threads unowned`, `worker-sweep
   --session` and `capacity-watchdog report --minutes 5 --minutes 30 | jq -c
-  '{minutes, flags}'`. It acts only on flagged rows, so a quiet tick spawns no
+  '{minutes, flags, incidents}'`. It acts only on flagged rows, so a quiet tick spawns no
   worker.
-- `worker-sweep` ignores STALLED rows idle more than 300 minutes; those are
-  pre-compaction transcripts.
+- The tick, not `worker-sweep`, ignores STALLED rows idle more than 300 minutes:
+  `worker-sweep` still lists them, and those rows are pre-compaction transcripts.
 - The DAG rebuild runs every 3rd tick or on a state change, and a lane whose push log
   ends in a rebase-and-retry message is requeued with `scratchpad/rebase-requeue.sh`.
 - Count issues with `--limit 500`. Re-arm the origin/main landing monitor when it has

@@ -11,7 +11,7 @@ written: 2026-10-10
 
 # Auto-wake
 
-- Run CronList first. If no session cron carries `[routine:tick]`, schedule the `tick` routine with CronCreate; never create a second one.
+- Run CronList first. If no session cron carries `[routine:tick]`, schedule the `tick` routine with CronCreate. If one exists without the current ` Context: <checkpoint path>` suffix, CronDelete it and recreate it with the suffix. Keep exactly one tick.
 - Create recurring jobs only from a `dotfiles/agents/routines/` entry with its pointer prompt (`agents routines pointer tick`), appending ` Context: <checkpoint path>`; keep the goal, tracker/handoff path, worktrees and resume steps in that checkpoint.
 - Each tick starts with `threads unowned` and acts only on flagged rows (`worker-sweep` and `capacity-watchdog report`), as the `tick` routine states.
 - Tell Tom the terminal must stay open, jobs expire after 7 days and work resumes at the first tick after usage returns.
