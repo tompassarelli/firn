@@ -33,6 +33,7 @@
     "guard-authoring",
     "cloudflare-deploy",
     "digitalocean-access",
+    "passer-hetzner",
     "workers",
     "estimate",
     "testing",
@@ -560,6 +561,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/lua-performance/SKILL.md"
+      }
+    },
+    "passer-hetzner": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/passer-hetzner/SKILL.md"
       }
     }
   },
@@ -1386,6 +1395,16 @@
       ]
     },
     "lua-performance": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "passer-hetzner": {
       "distributions": [
         {
           "type": "skill",
