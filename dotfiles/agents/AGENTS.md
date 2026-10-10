@@ -49,6 +49,7 @@
 - Load `repo-safety` before handling disc images or extracted game files.
 - Keep fast-changing Tom projects outside the NixOS system closure; use `firn` for the declared exception.
 - Keep signed-in game clients at their menu available for the next worker.
+- Never read, write or clear Tom's clipboard; capture screens only with `agent-capture`, never niri screenshot actions.
 
 ## Workers and tools
 

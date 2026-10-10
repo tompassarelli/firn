@@ -596,6 +596,16 @@
         "repo": "north",
         "path": "socrates/skills/gemini-review/SKILL.md"
       }
+    },
+    "clipboard-guard": {
+      "kind": "hook",
+      "title": "Clipboard guard",
+      "triggerDescription": "Reject agent wl-copy and niri screenshot actions; they replace the screenshot Tom is about to paste.",
+      "category": "authoring",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/clipboard-guard.sh"
+      }
     }
   },
   "activation": {
@@ -1401,6 +1411,20 @@
           "type": "skill",
           "targets": [
             "shared"
+          ]
+        }
+      ]
+    },
+    "clipboard-guard": {
+      "supports": [
+        "image-context-budget"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "codex",
+            "claude"
           ]
         }
       ]

@@ -45,6 +45,11 @@ timeout = 10
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/clipboard-guard.sh"
+timeout = 10
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
 command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/modern-search-guard.sh"
 timeout = 10
 

@@ -41,6 +41,7 @@
       (providerAdapter "tripwire-guard.sh")
       (providerAdapter "corpus-scan-guard.sh")
       (providerAdapter "git-stash-guard.sh")
+      (providerAdapter "clipboard-guard.sh")
       (providerAdapter "git-blind-stage-guard.sh")
       (providerAdapter "resource-safe-search-guard.sh")
       (providerAdapter "modern-search-guard.sh")

@@ -10,9 +10,10 @@ foreign package-text(?package: Delayed<nix,Package>): Text
   failure: throw
 
 # A Wayland selection dies with its source client; wl-clip-persist reowns it.
+# No xclip/xsel: xwayland-satellite's X clipboard goes stale without a focused X window, and Claude Code tries xclip before wl-paste.
 clipboard-configuration(?persist: Delayed<nix,Package>)
   configuration-module(path(myConfig.modules.clipboard-tools.enable), "Clipboard persistence daemon and X selection diagnostics",
-    {environment: {systemPackages: [?persist, package(path(xclip)), package(path(xsel)), package(path(xlsclients))]},
+    {environment: {systemPackages: [?persist, package(path(xlsclients))]},
      home-manager: {users: dictionary(configured-text(path(myConfig.modules.users.username)),
        (?home: Delayed<nix,HomeArguments>) =>
          {systemd: {user: {services: {wl-clip-persist: {

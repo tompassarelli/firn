@@ -54,6 +54,7 @@ for unit in \
   firn-system-policy \
   git-blind-stage-guard \
   git-stash-guard \
+  clipboard-guard \
   launch-critical-worktree-guard \
   lead-regrounding \
   native-launch-guard \

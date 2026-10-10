@@ -31,6 +31,7 @@ agent_event() { jq -cn --arg tool "$1" --arg s "$2" --arg p "$3" --arg cwd "$scr
 fixtures() {
   case "$1" in
     git-stash-guard) bash_event 'git stash'; bash_event 'git stash push -m selftest' ;;
+    clipboard-guard) bash_event 'wl-copy selftest'; bash_event 'wl-paste --list-types' ;;
     git-blind-stage-guard) bash_event 'git add -A'; bash_event 'git add README.md' ;;
     heavy-command-guard) bash_event 'cargo build'; bash_event 'cargo check' ;;
     worker-wait-guard) bash_event 'sleep 300' worker; bash_event 'sleep 1' worker ;;

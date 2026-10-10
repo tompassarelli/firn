@@ -3,7 +3,7 @@
 # Hands a commander message to a Codex root session. The behavior hook
 # delivers the relay file after the session's next tool call; a session that
 # runs no tools for a while never sees it, so after RELAY_WAIT seconds the
-# message is pasted into the session's terminal window instead and its goal
+# message is typed into the session's terminal window instead and its goal
 # resumed (Escape pauses a goal).
 set -euo pipefail
 session="${1:?usage: codex-relay SESSION_ID WINDOW_ID < message}"
@@ -31,10 +31,9 @@ if [ "$(focused)" != "$window" ]; then
   echo "codex-relay: window $window not focusable; message left for the hook" >&2
   exit 1
 fi
-printf '%s' "$pending" | wl-copy
 "$wtype" -k Escape
 sleep 3
-"$wtype" -M ctrl -M shift -k v -m shift -m ctrl
+"$wtype" -- "$(printf '%s' "$pending" | tr '\n' ' ')"
 sleep 1
 "$wtype" -k Return
 sleep 3
