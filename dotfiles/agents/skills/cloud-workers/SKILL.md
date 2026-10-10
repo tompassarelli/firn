@@ -22,6 +22,7 @@ written: 2026-10-09
 - Put goal/files/Done when/ETA in a self-contained brief with `Refs repo#N` commits and no push notifications.
 - End each prompt with `push to claude/<name>; it lands itself if it passes`.
 - Let Autoland rebase/check/farm/compare and land sequentially; fix conflicts or new failures on the same branch.
+- Tell each brief to fetch and rebase onto origin/main right before its push; most cloud refusals are conflicts from main moving during the run.
 - Retry a branch through `gh workflow run autoland.yml -R tompassarelli/<repo> -f branch=claude/<name>`.
 - Land workflow changes locally through safe-push.
 

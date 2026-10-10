@@ -18,6 +18,10 @@ written: 2026-10-10
 - Choose Category from mechanical, docs-policy, tooling, feature, bug-known-cause, debugging-unknown-cause, netcode-determinism, performance, balance-tuning, native-check or research.
 - Claim/release shared-resource work through `threads`; treat a running brief as its worker's claim.
 - Start at the cheapest tier with 4 of its last 5 issues closed without escalation.
+- Give the lead's own chores (ticking and closing issues, landing watches, conflict rebases, named checks) to Haiku; its mechanical record is 28/31 at a 1-minute median.
+- Split a feature that one Opus medium attempt left unfinished into smaller boxes rather than escalating it; Opus high closes 24% of features against medium's 43%.
+- Fix the client, capacity or host cause of a failed native-check instead of escalating it; Opus high is 0/8 there.
+- Treat these ledger-derived rules as experiments: recheck `worker-ledger --summary` after every 10 new closures in a category and change the rule when the numbers move.
 - Send mechanical work and lane mechanics (rebase, regenerate, conflicts, box ticks) to Haiku first; never judged art, bisects or native checks.
 - Use provider benchmarks only before 5 closed category issues at that tier.
 - Size each brief to one box with an ETA of 20 minutes or less, splitting larger work before staffing; set ETA to the category/tier's actual median and label missing evidence uncalibrated.
