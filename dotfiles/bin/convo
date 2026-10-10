@@ -176,6 +176,9 @@ CODEX = ("codex", True)
 CLAUDE = ("claude", False)
 
 
+SESSION_FILE = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.jsonl(?:\.zst)?")
+
+
 def claude_files(base, walk_error):
     """Yield (dirpath, filenames, project) for Claude Code's projects layout.
 
@@ -197,7 +200,7 @@ def claude_files(base, walk_error):
         except OSError as e:
             walk_error(e)
             continue
-        yield pdir, entries, project
+        yield pdir, [e for e in entries if SESSION_FILE.fullmatch(e)], project
         for name in entries:
             sub = os.path.join(pdir, name, "subagents")
             if os.path.isdir(sub):

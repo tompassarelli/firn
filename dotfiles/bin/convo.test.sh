@@ -115,6 +115,8 @@ with open(os.path.join(d, sid, "subagents", "agent-a1.jsonl"), "w") as f:
                 "2026-08-08T10:01:00Z", isSidechain=True))
 with open(os.path.join(d, sid, "scratchpad", "notes.jsonl"), "w") as f:
     f.write(rec("assistant", "SCRATCHTOKEN", "2026-08-08T10:02:00Z"))
+with open(os.path.join(d, "eval-results.jsonl"), "w") as f:
+    f.write(rec("assistant", "SCRATCHTOKEN", "2026-08-08T10:02:00Z"))
 PY
 
 "$CONVO" index >/dev/null
@@ -128,7 +130,7 @@ has "$("$CONVO" --color=never -r tool -x 'Skill skill=machine-capacity')" "tool 
 has "$("$CONVO" --color=never HERONLOOP)" "agent-a1.jsonl"
 has "$("$CONVO" --color=never session "$CSID")" "$CSID.jsonl"
 nomatch CLAUDETOOLRESULT "a Claude tool_result was indexed"
-nomatch SCRATCHTOKEN "a scratchpad file was indexed as a transcript"
+nomatch SCRATCHTOKEN "a non-session file was indexed as a transcript"
 
 # ---- search finds both rollouts ------------------------------------------
 out="$("$CONVO" --color=never QUARKFISH -n 5)"
