@@ -42,7 +42,7 @@
                            :ExecStart (s stateBackup "/bin/state-backup")}}
          :systemd.timers.state-backup
           {:wantedBy ["timers.target"]
-           :timerConfig {:OnCalendar "*-*-* 03:00:00" :Persistent true}}
+           :timerConfig {:OnCalendar "*-*-* 19:00:00" :Persistent true}}
          :security.polkit.extraConfig
           (ms "polkit.addRule(function(action, subject) {"
               (s "  if (action.id == 'org.freedesktop.systemd1.manage-units' && subject.user == '" username "' &&")

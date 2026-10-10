@@ -13,8 +13,6 @@
   ];
   myConfig.modules.users.passwordHashSopsFile = ../../secrets/nexus/console.yaml;
   myConfig.modules.nix-settings.enable = true;
-  myConfig.modules.timezone.enable = true;
-  myConfig.modules.timezone.zone = "Asia/Taipei";
   myConfig.modules.wg-nexus = {
     enable = true;
     role = "hub";

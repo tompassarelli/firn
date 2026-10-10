@@ -33,7 +33,7 @@
     systemd.timers.state-backup = {
       wantedBy = [ "timers.target" ];
       timerConfig = {
-        OnCalendar = "*-*-* 03:00:00";
+        OnCalendar = "*-*-* 19:00:00";
         Persistent = true;
       };
     };

@@ -38,7 +38,7 @@
     };
     systemd.timers = {
       "nexus-checks" = timer "*:0/15";
-      "nexus-lynis" = timer "Sun 05:30";
+      "nexus-lynis" = timer "Sat 21:30";
       "nexus-heartbeat" = timer "*:0/30";
     };
     security.polkit.extraConfig = ''

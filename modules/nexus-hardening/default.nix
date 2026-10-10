@@ -51,11 +51,11 @@
     system.autoUpgrade = {
       flake = lib.mkForce "github:tompassarelli/firn#nexus";
       flags = lib.mkForce [ "--refresh" "--flake github:tompassarelli/firn#nexus" ];
-      dates = lib.mkForce "03:30";
+      dates = lib.mkForce "19:30";
       allowReboot = lib.mkForce true;
       rebootWindow = {
-        lower = "04:00";
-        upper = "05:00";
+        lower = "20:00";
+        upper = "21:00";
       };
     };
     systemd.services.nexus-upgrade = {
