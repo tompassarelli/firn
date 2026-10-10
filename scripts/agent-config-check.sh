@@ -496,6 +496,16 @@ provider_group Codex "$before" \
   'Bootstrap   static config parsed' \
   'MCP         North absent · Linear independently declared'
 
+before=$fail
+routines_args=(--no-live)
+[ "$LOCAL" -eq 0 ] || routines_args=()
+if routines_out="$("$AGENT_CONFIG_PYTHON" -I "$REPO/dotfiles/agents/lib/routines.py" list "${routines_args[@]}" 2>&1)"; then
+  ok_detail "$(printf '%s\n' "$routines_out" | tail -n 1)"
+else
+  bad "$(printf '%s\n' "$routines_out" | grep -E '^(INVALID|EXPIRED|UNREGISTERED)' || printf '%s' "$routines_out")"
+fi
+group routines "every recurring job has a dotfiles/agents/routines entry$([ "$LOCAL" -eq 1 ] && printf ', live timers included' || true)" "$before"
+
 # --- worktree layout -------------------------------------------------------
 # A rule with no detector silently stops being true. On 2026-07-29 a sweep found
 # 63 worktrees across FOUR conventions at once, plus seven clones of north at

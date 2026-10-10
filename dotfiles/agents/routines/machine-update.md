@@ -1,0 +1,11 @@
+---
+name: machine-update
+kind: systemd-timer
+schedule: 02:00 daily
+owner: modules/machine-update/default.bnix
+purpose: Nightly machine software update.
+relates-to: [modules/machine-update/default.bnix]
+expires: never
+---
+
+~/.local/bin/machine-update

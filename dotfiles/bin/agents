@@ -3,12 +3,13 @@
 # transition, activation generation, and every projection it reports.
 # `plan` is local: it reads dotfiles/agents/orchestration.toml and the
 # providers signed in now, and prints the bands sessions staff from.
+# `routines` indexes every recurring job from dotfiles/agents/routines/.
 set -uo pipefail
 
 north_bin="${AGENTS_NORTH_BIN:-north}"
 
 usage() {
-  printf 'usage: agents {status [--json]|stale [--json]|inspect <id> [--json]|path <id>|on <id>|off <id>|sync|plan [--mode split|claude-only|codex-only] [--posture efficiency|balanced|performance]}\n' >&2
+  printf 'usage: agents {status [--json]|stale [--json]|inspect <id> [--json]|path <id>|on <id>|off <id>|sync|plan [--mode split|claude-only|codex-only] [--posture efficiency|balanced|performance]|routines [list|show NAME|pointer NAME] [--crons FILE|-]}\n' >&2
 }
 
 plan() {
@@ -146,6 +147,10 @@ case "${1:-}" in
   plan)
     shift
     plan "$@"
+    ;;
+  routines)
+    shift
+    exec python3 -I "$(dirname "$(readlink -f "$0")")/../agents/lib/routines.py" "$@"
     ;;
   *)
     usage

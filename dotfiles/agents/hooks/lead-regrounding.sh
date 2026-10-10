@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Claude Code PostToolUse(Agent) hook for the main session only: on the
-# session's first worker spawn it tells the lead to create the recurring
-# 20-minute DAG regrounding CronCreate. Subagent payloads (agent_id or
-# agent_type present) get nothing. Fires once per session_id, recorded under
+# session's first worker spawn it tells the lead to create the regrounding
+# CronCreate from dotfiles/agents/routines/regrounding.md with its pointer
+# prompt. Subagent payloads (agent_id or agent_type present) get nothing. Fires once per session_id, recorded under
 # ~/.local/state/agents/regrounding/.
 #
 # Kill-switch: `north config agents off lead-regrounding` or env
@@ -41,6 +41,16 @@ session = data.get("session_id")
 if not (isinstance(session, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", session)):
     sys.exit(0)
 
+path = os.environ.get("LEAD_REGROUNDING_ROUTINE", "")
+try:
+    text = open(path, encoding="utf-8").read()
+except OSError:
+    sys.exit(0)
+match = re.match(r"---\n(.*?)\n---\n(.*)\Z", text, re.S)
+if not match:
+    sys.exit(0)
+meta = dict(line.split(": ", 1) for line in match.group(1).splitlines() if ": " in line)
+
 state = os.path.join(os.path.expanduser("~"), ".local/state/agents/regrounding")
 marker = os.path.join(state, session)
 try:
@@ -52,22 +62,13 @@ except FileExistsError:
 except OSError:
     sys.exit(0)
 
-prompt = (
-    "Lead regrounding tick. 0. Run `threads unowned` first; before any other step give each priority:now UNOWNED row "
-    "a worker (cloud first when code-only) or `threads block <repo#N> <reason>`, capped only by the spawn gate. "
-    "1. Reread the goal and the status file. "
-    "2. Rebuild the DAG from the goal's GitHub issues, main CI, cloud runs and queued landings. "
-    "3. Name the critical path's longest wait and attack it: batch ready lanes into one landing, "
-    "run unknown-cause bugs as 2-3 parallel hypotheses, have art or judged work render 2-4 variants per pass and judge once, "
-    "and send code-only work to cloud workers. "
-    "4. Staff every unblocked node up to the spawn gate and recycle workers per the workers skill (45 minutes or 350k context) from a handoff. "
-    "5. Close issues whose boxes passed. "
-    "6. Write one status line ending with the `threads unowned` summary counts."
-)
+pointer = "[routine:regrounding] Run `agents routines show regrounding` and follow it."
 text = (
     "You spawned your first worker this session. As a lead with a goal, create the "
-    "recurring regrounding job now if you have not: CronCreate with cron \"*/20 * * * *\", "
-    "recurring true, and this exact prompt: " + json.dumps(prompt)
+    "recurring regrounding job now if you have not: CronCreate with cron "
+    + json.dumps(meta.get("schedule", "")) + ", recurring true, and this exact prompt: "
+    + json.dumps(pointer) + " Each tick reads the current text from " + path
+    + ", which now says: " + match.group(2).strip()
 )
 print(json.dumps({
     "hookSpecificOutput": {
@@ -77,5 +78,10 @@ print(json.dumps({
 }))
 PYEOF
 
-printf '%s' "$payload" | "${NORTH_AGENT_PYTHON:-python3}" -c "$PY"
+routine="$(dirname "$0")/../routines/regrounding.md"
+if [ ! -r "$routine" ] && agents_bin="$(command -v agents)"; then
+  routine="$(dirname "$(readlink -f "$agents_bin")")/../agents/routines/regrounding.md"
+fi
+printf '%s' "$payload" | LEAD_REGROUNDING_ROUTINE="$(readlink -f "$routine")" \
+  "${NORTH_AGENT_PYTHON:-python3}" -c "$PY"
 exit 0
