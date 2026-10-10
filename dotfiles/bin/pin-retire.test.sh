@@ -189,6 +189,23 @@ if HOME="$test_home" "$target" --unconsumed -- "$u_ref" >"$scratch/u-ok-out"; th
 else fail 'unconsumed reachable pin was refused'; fi
 [ ! -e "$u_ref" ] || fail 'unconsumed retirement left the pin'
 
+printf 'short\n' >>"$main/history.txt"
+git -C "$main" commit -qam short-named
+git -C "$main" push -q origin main
+u_short_oid="$(git -C "$main" rev-parse HEAD)"
+u_short="$container/pins/${u_short_oid:0:12}"
+git -C "$main" worktree add -q --detach "$u_short" "$u_short_oid"
+printf 'see ~/code/proj/pins/%s\n' "${u_short_oid:0:12}" >"$consumer/short.ref"
+if HOME="$test_home" "$target" --unconsumed -- "$u_short" >/dev/null 2>&1; then
+  fail 'short-named pin referenced by its pin path was retired'
+else ok; fi
+printf 'fixed in commit %s\n' "$u_short_oid" >"$consumer/short.ref"
+if HOME="$test_home" "$target" --unconsumed -- "$u_short" >/dev/null 2>"$scratch/u-short-error"; then
+  ok
+else fail "short-named pin whose full commit is cited was refused: $(cat "$scratch/u-short-error")"; fi
+[ ! -e "$u_short" ] || fail 'short-named retirement left the pin'
+rm -- "$consumer/short.ref"
+
 if command -v shellcheck >/dev/null 2>&1; then
   shellcheck "$target" && ok || fail 'shellcheck rejected pin-retire'
 else

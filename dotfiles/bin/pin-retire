@@ -82,13 +82,14 @@ retire_unconsumed() {
   for root in "$code_root"/*/main "$code_root"/*/worktrees/*; do
     [ -d "$root" ] && [ ! -L "$root" ] && roots+=("$root")
   done
-  hits="$(timeout 300 rg -l --hidden --fixed-strings --max-filesize 4M \
+  hits="$(timeout 300 rg -l --hidden --max-filesize 4M \
     --glob '!.git' --glob '!**/target/**' --glob '!**/node_modules/**' \
     --glob '!**/result' --glob '!**/dist/**' --glob '!**/build/**' \
-    -e "$leaf" -e "$pin" -- "${roots[@]}" 2>/dev/null)" || rg_status=$?
+    -e "(?:^|[^0-9A-Fa-f])$leaf(?:[^0-9A-Fa-f]|\$)" -- "${roots[@]}" 2>/dev/null)" \
+    || rg_status=$?
   if [ -n "$hits" ]; then
     printf '%s\n' "$hits" | head -20 >&2
-    die "mains or lanes under $code_root still reference $leaf or $pin"
+    die "mains or lanes under $code_root still reference pins/$leaf or the bare name $leaf"
   fi
   [ "$rg_status" -eq 1 ] \
     || die "reference search over $code_root failed (rg status $rg_status)"
