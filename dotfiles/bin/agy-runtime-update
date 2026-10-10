@@ -3,7 +3,7 @@ set -euo pipefail
 [[ $# -le 1 ]] || { printf 'usage: agy-runtime-update [version|latest]\n' >&2; exit 64; }
 version="${1:-latest}"
 base=https://storage.googleapis.com/antigravity-public/antigravity-cli
-if [[ "$version" == latest ]]; then version="$(curl -fsSL "$base/latest")"; fi
+if [[ "$version" == latest ]]; then version="$(curl -fsSL -H "Cache-Control: no-cache" "$base/latest?nocache=$(date +%s%N)")"; fi
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9.]+)?$ ]] || { printf 'agy-runtime-update: invalid version\n' >&2; exit 64; }
 [[ "$(uname -s):$(uname -m)" == Linux:x86_64 ]] || { printf 'agy-runtime-update: unsupported platform\n' >&2; exit 64; }
 root="$HOME/.local/lib/agy"
