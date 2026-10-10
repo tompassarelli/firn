@@ -56,8 +56,8 @@
     {
       "id": "code-bootstrap",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/code/AGENTS.md"
+        "repo": "north",
+        "path": "socrates/code/AGENTS.md"
       },
       "targets": [
         "code"
@@ -68,56 +68,56 @@
     {
       "id": "north-agent-activation",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/lib/north-agent-activation.sh"
+        "repo": "north",
+        "path": "socrates/lib/north-agent-activation.sh"
       },
       "path": "lib/north-agent-activation.sh"
     },
     {
       "id": "authoring-gate",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/lib/authoring-killswitch.sh"
+        "repo": "north",
+        "path": "socrates/lib/authoring-killswitch.sh"
       },
       "path": "lib/authoring-killswitch.sh"
     },
     {
       "id": "launch-critical-decider",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/lib/launch_critical_decide.py"
+        "repo": "north",
+        "path": "socrates/hooks/lib/launch_critical_decide.py"
       },
       "path": "lib/launch_critical_decide.py"
     },
     {
       "id": "launch-critical-paths",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/lib/launch_critical_paths.py"
+        "repo": "north",
+        "path": "socrates/hooks/lib/launch_critical_paths.py"
       },
       "path": "lib/launch_critical_paths.py"
     },
     {
       "id": "codex-behavior-decider",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/lib/codex_behavior.py"
+        "repo": "north",
+        "path": "socrates/hooks/lib/codex_behavior.py"
       },
       "path": "lib/codex_behavior.py"
     },
     {
       "id": "spawn-capacity-decider",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/lib/spawn_capacity.py"
+        "repo": "north",
+        "path": "socrates/hooks/lib/spawn_capacity.py"
       },
       "path": "lib/spawn_capacity.py"
     },
     {
       "id": "hook-shell-parser",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/lib/shellcmd.py"
+        "repo": "north",
+        "path": "socrates/hooks/lib/shellcmd.py"
       },
       "path": "lib/shellcmd.py"
     }
@@ -127,16 +127,16 @@
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/agent-policy/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/agent-policy/SKILL.md"
       }
     },
     "agent-runtime-incident": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/agent-runtime-incident/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/agent-runtime-incident/SKILL.md"
       }
     },
     "cloudflare-deploy": {
@@ -159,16 +159,16 @@
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/clause-authoring/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/clause-authoring/SKILL.md"
       }
     },
     "convo": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/convo/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/convo/SKILL.md"
       }
     },
     "concrete-model-identity-guard": {
@@ -177,8 +177,8 @@
       "triggerDescription": "Reject placeholder model identities in Todo attempts and calibration records.",
       "category": "authoring",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/concrete-model-identity-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/concrete-model-identity-guard.sh"
       }
     },
     "corpus-scan-guard": {
@@ -187,8 +187,8 @@
       "triggerDescription": "Block broad transcript archive scans; use convo or a bounded transcript target.",
       "category": "authoring",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/corpus-scan-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/corpus-scan-guard.sh"
       }
     },
     "firn": {
@@ -203,8 +203,8 @@
       "kind": "skill",
       "category": "nixos",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/nix-development/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/nix-development/SKILL.md"
       }
     },
     "firn-system-policy": {
@@ -223,8 +223,8 @@
       "triggerDescription": "Reject unnamed stash pushes and stash pop; the stash is shared by every worktree.",
       "category": "authoring",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/git-stash-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/git-stash-guard.sh"
       }
     },
     "git-blind-stage-guard": {
@@ -233,16 +233,16 @@
       "triggerDescription": "Reject bulk Git staging and automatic commit staging; enumerate paths.",
       "category": "authoring",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/git-blind-stage-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/git-blind-stage-guard.sh"
       }
     },
     "guard-authoring": {
       "kind": "skill",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/guard-authoring/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/guard-authoring/SKILL.md"
       }
     },
     "launch-critical-worktree-guard": {
@@ -251,40 +251,40 @@
       "triggerDescription": "Block protected checkout writes and project-container build output; use an owned worktree.",
       "category": "authoring",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/launch-critical-worktree-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/launch-critical-worktree-guard.sh"
       }
     },
     "project-structure": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/project-structure/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/project-structure/SKILL.md"
       }
     },
     "repo-safety": {
       "kind": "skill",
       "category": "git",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/repo-safety/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/repo-safety/SKILL.md"
       }
     },
     "resource-safe-search": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/resource-safe-search/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/resource-safe-search/SKILL.md"
       }
     },
     "machine-capacity": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/machine-capacity/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/machine-capacity/SKILL.md"
       }
     },
     "modern-search-guard": {
@@ -293,8 +293,8 @@
       "triggerDescription": "Refuse recursive grep and find tree searches; name the exact rg or fd replacement.",
       "category": "authoring",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/modern-search-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/modern-search-guard.sh"
       }
     },
     "resource-safe-search-guard": {
@@ -303,8 +303,8 @@
       "triggerDescription": "Block recursive searches of virtual filesystems and repository containers.",
       "category": "authoring",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/resource-safe-search-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/resource-safe-search-guard.sh"
       }
     },
     "session-kill-guard": {
@@ -313,32 +313,32 @@
       "triggerDescription": "Block session-wide kills and unmanaged background child launches.",
       "category": "authoring",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/session-kill-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/session-kill-guard.sh"
       }
     },
     "todo": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/todo/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/todo/SKILL.md"
       }
     },
     "auto-wake": {
       "kind": "skill",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/auto-wake/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/auto-wake/SKILL.md"
       }
     },
     "cloud-workers": {
       "kind": "skill",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/cloud-workers/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/cloud-workers/SKILL.md"
       }
     },
     "tripwire-guard": {
@@ -347,96 +347,96 @@
       "triggerDescription": "Check destructive commands, unsafe Git publishing, and sensitive outbound transfers.",
       "category": "authoring",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/tripwire-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/tripwire-guard.sh"
       }
     },
     "game-design-prototyping": {
       "kind": "skill",
       "category": "games",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/game-design-prototyping/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/game-design-prototyping/SKILL.md"
       }
     },
     "smashcraft-character-creation": {
       "kind": "skill",
       "category": "games",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/smashcraft-character-creation/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/smashcraft-character-creation/SKILL.md"
       }
     },
     "private-desktop-development": {
       "kind": "skill",
       "category": "games",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/private-desktop-development/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/private-desktop-development/SKILL.md"
       }
     },
     "github-actions": {
       "kind": "skill",
       "category": "development",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/github-actions/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/github-actions/SKILL.md"
       }
     },
     "testing": {
       "kind": "skill",
       "category": "development",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/testing/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/testing/SKILL.md"
       }
     },
     "image-context-budget": {
       "kind": "skill",
       "category": "development",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/image-context-budget/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/image-context-budget/SKILL.md"
       }
     },
     "warcraft-modding": {
       "kind": "skill",
       "category": "games",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/warcraft-modding/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/warcraft-modding/SKILL.md"
       }
     },
     "wurst-development": {
       "kind": "skill",
       "category": "games",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/wurst-development/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/wurst-development/SKILL.md"
       }
     },
     "smashcraft-animation": {
       "kind": "skill",
       "category": "games",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/smashcraft-animation/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/smashcraft-animation/SKILL.md"
       }
     },
     "smashcraft-stage-design": {
       "kind": "skill",
       "category": "games",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/smashcraft-stage-design/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/smashcraft-stage-design/SKILL.md"
       }
     },
     "github-issues": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/github-issues/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/github-issues/SKILL.md"
       }
     },
     "codex-behavior-guard": {
@@ -445,8 +445,8 @@
       "triggerDescription": "Check Codex prompts, plans and endings against the recorded delivery failures.",
       "category": "authoring",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/codex-behavior-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/codex-behavior-guard.sh"
       }
     },
     "worker-handoff": {
@@ -455,8 +455,8 @@
       "triggerDescription": "Tell a Claude Code worker at 350k tokens of context to land what passes and hand off the rest.",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/worker-handoff.sh"
+        "repo": "north",
+        "path": "socrates/hooks/worker-handoff.sh"
       }
     },
     "worker-wait-guard": {
@@ -465,8 +465,8 @@
       "triggerDescription": "Refuse a Claude Code worker's foreground command that can block past 60 seconds, so lead messages reach it at once.",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/worker-wait-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/worker-wait-guard.sh"
       }
     },
     "worker-tier-guard": {
@@ -475,8 +475,8 @@
       "triggerDescription": "Refuse a lead's worker spawn whose tier contradicts the brief: mechanical and docs-policy briefs go to worker-haiku, worker-high and worker-xhigh only take escalations marked with a Follows: line.",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/worker-tier-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/worker-tier-guard.sh"
       }
     },
     "subagent-teardown": {
@@ -485,8 +485,8 @@
       "triggerDescription": "Refuse to let a Claude subagent finish while background shells or Monitor watches it started are still running.",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/subagent-teardown.sh"
+        "repo": "north",
+        "path": "socrates/hooks/subagent-teardown.sh"
       }
     },
     "spawn-capacity-guard": {
@@ -495,24 +495,24 @@
       "triggerDescription": "Refuse a new local Claude worker once capacity leases hold the machine's CPU limit or protected desktop pressure is above 20%.",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/spawn-capacity-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/spawn-capacity-guard.sh"
       }
     },
     "orchestrating-codex": {
       "kind": "skill",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/orchestrating-codex/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/orchestrating-codex/SKILL.md"
       }
     },
     "workers": {
       "kind": "skill",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/workers/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/workers/SKILL.md"
       }
     },
     "native-launch-guard": {
@@ -521,8 +521,8 @@
       "triggerDescription": "Refuse a Wine, Proton, steam-run or Warcraft .exe launch outside a machine-capacity native session.",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/native-launch-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/native-launch-guard.sh"
       }
     },
     "heavy-command-guard": {
@@ -531,8 +531,8 @@
       "triggerDescription": "Refuse cargo build, a full bun test suite, wisp map build or a headless wisp render outside machine-capacity run.",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/heavy-command-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/heavy-command-guard.sh"
       }
     },
     "lead-regrounding": {
@@ -541,16 +541,16 @@
       "triggerDescription": "Tell a Claude Code lead on its first worker spawn to schedule the 10-minute tick CronCreate.",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/lead-regrounding.sh"
+        "repo": "north",
+        "path": "socrates/hooks/lead-regrounding.sh"
       }
     },
     "lua-performance": {
       "kind": "skill",
       "category": "development",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/lua-performance/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/lua-performance/SKILL.md"
       }
     },
     "passer-hetzner": {
@@ -575,8 +575,8 @@
       "triggerDescription": "At session start, give Tom's top-level interactive session the proxy role and a launched lead its role and delegation budget.",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/org-role.sh"
+        "repo": "north",
+        "path": "socrates/hooks/org-role.sh"
       }
     },
     "unlanded-work": {
@@ -585,16 +585,16 @@
       "triggerDescription": "At session start, print how many unlanded lanes older than 24 h the hourly lane-gc report lists.",
       "category": "agents",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/unlanded-work.sh"
+        "repo": "north",
+        "path": "socrates/hooks/unlanded-work.sh"
       }
     },
     "gemini-review": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/gemini-review/SKILL.md"
+        "repo": "north",
+        "path": "socrates/skills/gemini-review/SKILL.md"
       }
     }
   },
@@ -848,8 +848,8 @@
             "claude"
           ],
           "owner": {
-            "repo": "nixos-config",
-            "path": "dotfiles/agents/hooks/firn-system-policy"
+            "repo": "north",
+            "path": "socrates/hooks/firn-system-policy"
           }
         }
       ]
