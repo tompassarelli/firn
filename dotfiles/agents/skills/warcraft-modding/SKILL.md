@@ -74,7 +74,7 @@ written: 2026-10-09
 - Read [lan-pair-batching.md](references/lan-pair-batching.md) for pool setup, capacity limits, pair ownership and issue queues.
 - Use signed-in clones B/C/D for Definitive, Battle.net tests and the updated install feeding the Classic pool.
 - Preserve signed-in clients at the menu for the next assigned Battle.net check.
-- Never touch Tom's game install or account a.
+- Never touch Tom's game install; use account a only as clone-a through its launch.sh, which yields to Tom's game.
 - Start signed-in clients through `bun wisp client start [CLIENT...] --clients-file FILE` user services rather than shell/background tasks.
 - Use `client status` and `client stop` for those services.
 - Give each offline Classic pair or signed-in Definitive/Battle.net pair one worker for its batched native checks.

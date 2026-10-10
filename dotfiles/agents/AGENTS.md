@@ -41,7 +41,7 @@
 - Never build a delete target from an unset variable or a glob.
 - Never force-push or rewrite history that is already pushed.
 - Never hand-edit generated `.nix` from `.bnix`, `~/.claude/CLAUDE.md` or `~/.codex`.
-- Never touch Tom's game install or account a.
+- Never touch Tom's game install; use account a only as clone-a through its launch.sh, which yields to Tom's game.
 - Publish through `safe-push`; use `--keep-lane` only to retain a landed worktree.
 - Edit generated agent policy through `nixos-config:dotfiles/agents/` or `north:agent-machinery/`, then run `agents sync`.
 - Load `repo-safety` before handling disc images or extracted game files.

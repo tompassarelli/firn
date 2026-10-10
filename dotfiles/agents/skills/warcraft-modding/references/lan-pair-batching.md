@@ -57,7 +57,7 @@ or capacity constraint requires a scoped pause.
 - Use `lan fresh MAP [--pair K]`, `lan status` and `lan end --pair K` with state/clients.json under ~/.local/state/wisp/lan/.
 - Account for each signed-in clone's roughly 0.5 core plus roughly 1 core of Battle.net browser and sound.
 - Close clone games after Blizzard build changes for launcher updates (about 2 min), then recover through `client doctor`.
-- Use the offline pool only for Classic and signed-in clones B/C/D for Definitive; never touch Tom's game install or account a.
+- Use the offline pool only for Classic and the signed-in pairs clone-c+clone-b and clone-a+clone-d for Definitive; never touch Tom's game install, and run clone-a only through its launch.sh.
 - Resolve signed-in desktop and launcher services as `wisp-desktop-CLIENT` and `wisp-client-CLIENT` through wisp:docs/doctor.md.
 
 ## Pending native issues
