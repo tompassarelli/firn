@@ -256,12 +256,10 @@
   [target Target
    host String] ArgvEffect
   (capture-effect "query user environment"
-    (with-override
-      ["nix" "eval" "--json" (flake-ref target "packages")
-       "--apply"
-       (str "packages: builtins.any (system: (builtins.getAttr system packages) ? \""
-         (environment-name host) "\") (builtins.attrNames packages)")]
-      target))))
+    ["nix" "eval" "--json" (str (snapshot-uri (target-firn target)) "#packages")
+     "--apply"
+     (str "packages: builtins.any (system: (builtins.getAttr system packages) ? \""
+       (environment-name host) "\") (builtins.attrNames packages)")])))
 
 (js/export
   (defn environment-present? [text String] Bool
@@ -272,9 +270,7 @@
   [target Target
    host String] ArgvEffect
   (inherit-effect "switch user environment"
-    (with-override
-      ["firn-environment-switch" host (snapshot-uri (target-system target))]
-      target))))
+    ["firn-environment-switch" host (snapshot-uri (target-firn target))])))
 
 (js/export
   (defn advisory-effect [snapshot Snapshot] ArgvEffect

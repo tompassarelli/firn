@@ -52,6 +52,7 @@ if [[ -e "$south/.git" ]]; then
       safe-push --to main
     fi
   )
+  git -C "$south" merge --ff-only origin/main
 else
   printf 'machine-update: no south checkout; firn input bump skipped\n'
 fi

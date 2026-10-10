@@ -497,12 +497,15 @@ cmp -s "$scratch/system-flake.expected-names" "$scratch/system-flake.names" \
 rg -Fxq $'nix\tbuild\t--no-link\t--print-out-paths\t'"$system_uri"$'#nixosConfigurations.whiterabbit.config.system.build.toplevel'"$override" \
   "$scratch/system-flake.commands" \
   || die "two-snapshot build did not use the system flake with the firn override"
-rg -Fxq $'firn-environment-switch\twhiterabbit\t'"$system_uri$override" \
+rg -Fxq $'firn-environment-switch\twhiterabbit\t'"$firn_uri" \
   "$scratch/system-flake.commands" \
-  || die "two-snapshot environment switch did not use the system flake with the firn override"
-rg -Fq $'nix\teval\t--json\t'"$system_uri"$'#packages\t--apply' \
+  || die "two-snapshot environment switch did not resolve through the firn snapshot"
+rg -Fq $'nix\teval\t--json\t'"$firn_uri"$'#packages\t--apply' \
   "$scratch/system-flake.commands" \
-  || die "two-snapshot environment query did not use the system flake"
+  || die "two-snapshot environment query did not resolve through the firn snapshot"
+if rg -q $'^(firn-environment-switch|nix\teval)\t.*'"$system" "$scratch/system-flake.commands"; then
+  die "the environment step depends on the system flake exporting packages"
+fi
 rg -Fxq $'firn\trepo\tvalidate' "$scratch/system-flake.commands" \
   || die "two-snapshot run did not validate the firn snapshot"
 rg -Fxq $'git\t-C\t'"$fixture"$'\ttag\t-f\tgen-42\taaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
