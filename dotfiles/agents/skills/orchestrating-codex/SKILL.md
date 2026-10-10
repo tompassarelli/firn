@@ -23,6 +23,7 @@ metadata:
 - Mark a box `code-only` when it needs no local build or client, so its worker runs no builds and takes no leases; a named validator runs its checks.
 - Start all independent items together; open/claim Claude-held items and tell the lead before staffing them.
 - Share GitHub Pro's 40 concurrent Actions jobs and 5,000 API calls/hour through `github-actions`; confirm the exact revision before farm dispatch.
+- Codex workers run local affected checks and push no branch CI; the repository's landing queue is the farm.
 - Wait on farm/CI with one blocking repository command or `gh run watch RUN --exit-status`.
 - Never poll in a loop.
 - Monitor `~/.local/state/agents/handoffs/codex-lead-peer.md` for `PEER`/`HANDOFF`, with a 30-minute timeout rearmed on expiry.
