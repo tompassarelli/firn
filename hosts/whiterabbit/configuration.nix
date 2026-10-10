@@ -4,7 +4,7 @@
   myConfig.modules.system.stateVersion = "25.05";
   myConfig.modules.users.enable = true;
   myConfig.modules.users.username = "tom";
-  myConfig.modules.users.email = "tom.passarelli@protonmail.com";
+  myConfig.modules.users.email = "6378995+tompassarelli@users.noreply.github.com";
   myConfig.modules.users.fullName = "tompassarelli";
   myConfig.modules.nix-settings.enable = true;
   myConfig.modules.boot.enable = true;
