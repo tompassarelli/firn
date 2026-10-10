@@ -227,6 +227,16 @@
         "path": "socrates/hooks/git-stash-guard.sh"
       }
     },
+    "native-item-guard": {
+      "kind": "hook",
+      "title": "Native threads item guard",
+      "triggerDescription": "Refuse gh writes that name a native threads item or quote its text; native items never reach GitHub.",
+      "category": "authoring",
+      "owner": {
+        "repo": "north",
+        "path": "socrates/hooks/native-item-guard.sh"
+      }
+    },
     "git-blind-stage-guard": {
       "kind": "hook",
       "title": "Explicit Git staging guard",
@@ -879,6 +889,20 @@
       ]
     },
     "git-stash-guard": {
+      "supports": [
+        "repo-safety"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "codex",
+            "claude"
+          ]
+        }
+      ]
+    },
+    "native-item-guard": {
       "supports": [
         "repo-safety"
       ],
