@@ -4,8 +4,8 @@ default_permissions = ":danger-full-access"
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
 approvals_reviewer = "user"
-model = "gpt-6-astra"
-model_reasoning_effort = "xhigh"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "high"
 
 [agents]
 max_concurrent_threads_per_session = 64

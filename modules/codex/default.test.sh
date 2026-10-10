@@ -151,8 +151,8 @@ import tomllib
 with pathlib.Path(sys.argv[1]).open("rb") as handle:
     config = tomllib.load(handle)
 
-assert config["model"] == "gpt-6-astra"
-assert config["model_reasoning_effort"] == "xhigh"
+assert config["model"] == "gpt-6.1-sol"
+assert config["model_reasoning_effort"] == "high"
 assert config["agents"]["max_concurrent_threads_per_session"] == 64
 assert config["agents"]["default_subagent_model"] == "gpt-6.1-sol"
 assert "north" not in config.get("mcp_servers", {})
@@ -160,4 +160,4 @@ assert "linear-mcp-msa-new" in config.get("mcp_servers", {})
 PY
 
 printf 'ok: Codex config.toml is a generation-retained store copy with no checkout delivery dependency\n'
-printf 'ok: Codex keeps Astra/xhigh with Sol subagents and no North MCP declaration\n'
+printf 'ok: Codex keeps Sol/high with Sol subagents and no North MCP declaration\n'
