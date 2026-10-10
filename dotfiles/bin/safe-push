@@ -1066,6 +1066,10 @@ echo "safe-push: ✓ clean — pushing $branch -> origin as $publication"
 # non-fast-forward update: capture_destination_state proved ancestry first.
 push_flags=()
 [ "$hook_verified" -eq 0 ] || push_flags+=(--no-verify)
+if [ "$hook_verified" -eq 0 ] && ! sync_dependencies; then
+  echo "safe-push: ✗ bun install failed before the pre-push checks; NOT pushed." >&2
+  exit 1
+fi
 (drop_lock_fd; SAFE_PUSH_ACTIVE=1 git push "${push_flags[@]}" \
   --force-with-lease="${destination_ref}:${destination_oid}" \
   "$origin_url" "$publication")
