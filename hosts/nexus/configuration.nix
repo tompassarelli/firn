@@ -22,7 +22,7 @@
   myConfig.modules.nexus-backup = {
     enable = true;
     recipients = [
-      "age1m96f6qynnkfh0elww5frpw55rmefl8pn7v02cue6c9ehp85wd3kq52w9r0"
+      "age1evwgphns0ys2mu78mmtal32wghrswpddpk7ryv2kp5xwk8t5pujsglu3eq"
       "age17ttquzyuxeystegvartakw2x5h0jp54v4xh83vm6qyr7kd505seq94swwf"
     ];
   };

@@ -1,5 +1,5 @@
 keys:
-  - &admin age1m96f6qynnkfh0elww5frpw55rmefl8pn7v02cue6c9ehp85wd3kq52w9r0
+  - &admin age1evwgphns0ys2mu78mmtal32wghrswpddpk7ryv2kp5xwk8t5pujsglu3eq
   - &nexus age12h6h4q6mr9djnj3lmwkv5hthexghx0emj75xnt8hv76hmn7z9vysne9uyz
 creation_rules:
   - path_regex: (^|/)secrets/nexus/(hostkey|console-admin)\.yaml$
