@@ -55,14 +55,14 @@ t ready >/dev/null
 check '[spec] ready asks GitHub once per repo per minute' \
   '[ "$(grep -c "name=smashcraft" "$GH_TRACE")" -eq 1 ]'
 
-brief=$'Goal: x\nItem: tompassarelli/smashcraft#3. Follows: a111. Category: Tooling.\nETA 45 min.'
+brief=$'Goal: x\nItem: tompassarelli/smashcraft#3. Follows: a111. Category: Tooling. Arm: escalate.\nETA 45 min.'
 printf '%s\n' \
   "$(jq -cn '{id:"a111",ended:"2026-10-08T01:00:00Z",tier:"high",actual_min:30,eta_min:20,tokens:1000,outcome:"handoff",note:"~/h/a111.md",brief:"Item: smashcraft#3"}')" \
   "$(jq -cn --arg b "$brief" '{id:"a222",ended:"2026-10-08T02:00:00Z",tier:"xhigh",actual_min:50,eta_min:45,tokens:2000,outcome:"done",brief:$b}')" |
   "$threads" ingest 2>/dev/null
 out=$(t show smashcraft#3; t summary)
-check '[spec] runs take Item, Follows and Category from the brief; a new agent is a change of hands' \
-  'grep -q "a222 xhigh follows a111  50m/45m ETA  done" <<<"$out" && grep -q "handoff  a111 -> a222" <<<"$out" && grep -q "note ~/h/a111.md" <<<"$out" && grep -qE "^tooling +xhigh +1 +1 +100%" <<<"$out"'
+check '[spec] runs take Item, Follows, Category and Arm from the brief; a new agent is a change of hands' \
+  'grep -q "a222 xhigh follows a111  50m/45m ETA  done" <<<"$out" && grep -q "handoff  a111 -> a222" <<<"$out" && grep -q "note ~/h/a111.md" <<<"$out" && grep -qE "^tooling +xhigh +escalate +1 +1 +100%" <<<"$out"'
 
 row() { jq -cn "$@"; }
 row '{id:"a333",status:"running",tier:"medium",started:"2026-10-08T03:00:00Z",eta_min:30,brief:"Item: smashcraft#4"}' |

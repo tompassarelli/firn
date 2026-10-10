@@ -14,7 +14,7 @@ usage: worker-ledger [--session ID] [--since DATE]   record finished workers as 
   --since DATE  only workers active on or after DATE (e.g. 2026-10-08)
 A running worker whose brief names `Item:` holds that issue until it finishes.
 Codex workers repeat their brief fields in commentary when the runtime encrypts prompts.
-Briefs carry `Item: <repo#N>`, `Follows: <agent id>` and `Category: <name>` lines.
+Briefs carry `Item: <repo#N>`, `Follows: <agent id>`, `Category: <name>` and optional `Arm: escalate|cheap-fix` lines.
 Runs live in threads' database (${THREADS_DB:-~/.local/state/threads/threads.db}).
 EOF
   exit 2
@@ -290,7 +290,7 @@ for path in candidates:
         continue
     eta = re.search(r"(?i)\bETA\b[^0-9\n]{0,12}([0-9]+(?:\.[0-9]+)?)\s*(hours?|hrs?|h|minutes?|mins?|m)\b", brief)
     eta = float(eta[1]) * (60 if eta[2].lower().startswith("h") else 1) if eta else None
-    fields = re.findall(r"\b(?:Item|Follows|Category):[^\n]+", brief)
+    fields = re.findall(r"\b(?:Item|Follows|Category|Arm):[^\n]+", brief)
     head = report[:400]
     outcome = "handoff" if "HANDOFF" in head else "not done" if re.match(r"\W*(not|partly|mostly|half) done", head, re.I) else "escalated" if re.match(r"\W*blocked", head, re.I) else "done" if re.match(r"\W*done\b", head, re.I) else "unclear"
     note = re.search(r"(?:~|/home/[^/\s]+)/[^\s`]*handoffs?/[^\s`]+?\.md", report)

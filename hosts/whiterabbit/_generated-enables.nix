@@ -112,6 +112,7 @@
   myConfig.modules.update-notify.enable = lib.mkDefault true;
   myConfig.modules.upower.enable = lib.mkDefault true;
   myConfig.modules.uv.enable = lib.mkDefault true;
+  myConfig.modules.vast-reaper.enable = lib.mkDefault true;
   myConfig.modules.vim.enable = lib.mkDefault true;
   myConfig.modules.wf-recorder.enable = lib.mkDefault true;
   myConfig.modules.wget.enable = lib.mkDefault true;

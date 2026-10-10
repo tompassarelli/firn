@@ -671,13 +671,21 @@ collect_train() {
 # A candidate or rebase can move a Bun lockfile (a vendored pin bump) under a
 # worktree whose node_modules were installed for another commit; the checks
 # would then judge the new code against old dependencies. Reinstall each
-# installed Bun project whose package.json or bun.lock no longer matches.
+# installed Bun project whose package.json or bun.lock no longer matches. In
+# smashcraft and wisp a fresh worktree's top-level projects get their first
+# install too, since their pre-push checks import from node_modules.
 sync_dependencies() {
-  local lock dir want stamp top
+  local lock dir want stamp top first_install=0
   top=$(git rev-parse --show-toplevel)
+  case "$(basename "$(git remote get-url origin 2>/dev/null)" .git)" in
+    smashcraft|wisp) first_install=1 ;;
+  esac
   while IFS= read -r lock; do
     dir="$top/$(dirname "$lock")"
-    [ -d "$dir/node_modules" ] || continue
+    if [ ! -d "$dir/node_modules" ]; then
+      [ "$first_install" = 1 ] && [[ "$lock" != */*/* ]] || continue
+      echo "safe-push: no node_modules — bun install --frozen-lockfile in $dir"
+    fi
     want=$(cat "$dir/bun.lock" "$dir/package.json" 2>/dev/null | sha256sum | cut -c1-16)
     stamp="$dir/node_modules/.safe-push-deps"
     [ "$(cat "$stamp" 2>/dev/null)" != "$want" ] || continue

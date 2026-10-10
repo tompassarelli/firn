@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { mkdtempSync, rmSync, readFileSync, existsSync, statSync, mkdirSync } from "fs";
-import { tmpdir } from "os";
+import { hostname, tmpdir } from "os";
 import { basename, join, resolve } from "path";
 
 const USAGE = `usage: vast-job --offer-query '<vastai search query>' --max-hours H [--upload <dir|git-ref>]... --run '<remote command>' --fetch <remote path> --to <local dir> [--disk GB] [--image IMAGE]
@@ -112,7 +112,9 @@ function sleep(ms: number) {
   });
 }
 
-const label = `vast-job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const LABEL_GRACE_S = 900;
+const labelSuffix = Math.random().toString(36).slice(2, 8);
+let label = `vast-job-${hostname()}-${process.pid}-${Math.floor(Date.now() / 1000)}-${labelSuffix}`;
 const keyDir = mkdtempSync(join(tmpdir(), "vast-job-"));
 const keyPath = join(keyDir, "id_ed25519");
 let instanceId: number | null = null;
@@ -157,6 +159,7 @@ async function rent() {
   log(`job SSH key ${accountKeyId} added`);
   if (stopReason) return;
 
+  label = `vast-job-${hostname()}-${process.pid}-${Math.floor(Date.now() / 1000 + args.hours * 3600 + LABEL_GRACE_S)}-${labelSuffix}`;
   const created = await vast("create", "instance", String(offer.id), "--image", args.image, "--disk", String(args.disk), "--ssh", "--direct", "--label", label, "--cancel-unavail", "--onstart-cmd", "command -v rsync >/dev/null || (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq rsync >/dev/null)");
   rentedAt = Date.now();
   instanceId = Number(created?.new_contract);

@@ -490,6 +490,16 @@
         "path": "dotfiles/agents/hooks/worker-wait-guard.sh"
       }
     },
+    "worker-tier-guard": {
+      "kind": "hook",
+      "title": "Worker tier guard",
+      "triggerDescription": "Refuse a lead's worker spawn whose tier contradicts the brief: mechanical and docs-policy briefs go to worker-haiku, worker-high and worker-xhigh only take escalations marked with a Follows: line.",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/worker-tier-guard.sh"
+      }
+    },
     "subagent-teardown": {
       "kind": "hook",
       "title": "Subagent background-task teardown",
@@ -1306,6 +1316,19 @@
       ]
     },
     "worker-wait-guard": {
+      "supports": [
+        "agent-machinery"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "claude"
+          ]
+        }
+      ]
+    },
+    "worker-tier-guard": {
       "supports": [
         "agent-machinery"
       ],

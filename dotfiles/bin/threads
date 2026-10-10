@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS runs(
   report TEXT NOT NULL DEFAULT '',
   note TEXT,
   repeats INTEGER,
-  landed INTEGER
+  landed INTEGER,
+  arm TEXT
 ) STRICT;
 CREATE TABLE IF NOT EXISTS gh_cache(
   repo TEXT PRIMARY KEY,
@@ -121,6 +122,8 @@ def connect() -> sqlite3.Connection:
     for column in ("repeats", "landed"):
         if column not in columns:
             db.execute(f"ALTER TABLE runs ADD COLUMN {column} INTEGER")
+    if "arm" not in columns:
+        db.execute("ALTER TABLE runs ADD COLUMN arm TEXT")
     return db
 
 
@@ -357,7 +360,7 @@ def cmd_list(db, a):
 
 # Runs (fed by worker-ledger) ---------------------------------------------------
 
-BRIEF_FIELD = {name: re.compile(rf"\b{name}:[ \t]*([^\s`<>]+)") for name in ("Item", "Follows")}
+BRIEF_FIELD = {name: re.compile(rf"\b{name}:[ \t]*([^\s`<>]+)") for name in ("Item", "Follows", "Arm")}
 CATEGORY = re.compile(r"\bCategory:[ \t]*([^.;,\n`<>]+)")
 
 
@@ -439,11 +442,12 @@ def cmd_ingest(db, a):
             eta = r.get("eta_min")
             db.execute(
                 """INSERT INTO runs(agent, item, follows, session, tier, category, started, ended, minutes,
-                                    eta_min, tokens, peak_ctx, outcome, report, note, repeats, landed)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                    eta_min, tokens, peak_ctx, outcome, report, note, repeats, landed, arm)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (r["id"], item, follows, r.get("session"), r["tier"], category, r.get("started"), r["ended"],
                  r["actual_min"], None if eta is None else round(eta), r.get("tokens"), r.get("peak_ctx"),
-                 r["outcome"], r.get("report") or "", r.get("note"), r.get("repeats"), r.get("landed")),
+                 r["outcome"], r.get("report") or "", r.get("note"), r.get("repeats"), r.get("landed"),
+                 (f.get("arm") or "").lower() or None),
             )
             if prev and prev != r["id"]:
                 event(db, item, "handoff", r["id"], r["tier"], **{"from": prev, "to": r["id"]})
@@ -472,15 +476,15 @@ def cmd_summary(db, a):
         raise Refused(f"no runs in {DB}")
     groups: dict = {}
     for r in rows:
-        groups.setdefault((r["category"] if r["category"] in CATEGORIES else "unknown", r["tier"]), []).append(r)
-    out = [("category", "tier", "n", "done", "success", "eta_med", "actual_med", "x_eta_med", "over_2x_eta", "tokens_med",
+        groups.setdefault((r["category"] if r["category"] in CATEGORIES else "unknown", r["tier"], r["arm"] or "-"), []).append(r)
+    out = [("category", "tier", "arm", "n", "done", "success", "eta_med", "actual_med", "x_eta_med", "over_2x_eta", "tokens_med",
             "repeat_runs", "no_landing")]
-    for (cat, tier), rs in sorted(groups.items(), key=lambda kv: (kv[0][0], TIER_RANK.get(kv[0][1], 5))):
+    for (cat, tier, arm), rs in sorted(groups.items(), key=lambda kv: (kv[0][0], TIER_RANK.get(kv[0][1], 5), kv[0][2])):
         done = sum(r["outcome"] == "done" for r in rs)
         timed = [r for r in rs if r["eta_min"]]
         ratio = median([r["minutes"] / r["eta_min"] for r in timed])
         tok = median([r["tokens"] for r in rs])
-        out.append((cat, tier, str(len(rs)), str(done), f"{done * 100 // len(rs)}%",
+        out.append((cat, tier, arm, str(len(rs)), str(done), f"{done * 100 // len(rs)}%",
                     str(median([r["eta_min"] for r in rs]) or "-"), str(median([r["minutes"] for r in rs])),
                     f"{ratio:.1f}" if ratio is not None else "-",
                     f"{sum(r['minutes'] > 2 * r['eta_min'] for r in timed)}/{len(timed)}",

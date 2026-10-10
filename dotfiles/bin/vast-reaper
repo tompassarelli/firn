@@ -1,0 +1,117 @@
+#!/usr/bin/env bun
+import { existsSync, readFileSync } from "fs";
+import { hostname } from "os";
+
+const USAGE = `usage: vast-reaper [--dry-run]
+
+Destroys every vast.ai instance whose vast-job label deadline has passed, or whose
+vast-job supervisor on this host is no longer running, then verifies it is gone and
+removes that job's SSH key. Instances without a vast-job label are reported and left
+alone. Exit 3 when a destroy is not verified.`;
+
+const VASTAI = process.env.VAST_JOB_VASTAI ?? `${process.env.HOME}/.local/bin/vastai`;
+const SECRETS = `${process.env.HOME}/code/nixos-config/main/secrets/vastai.yaml`;
+const LABEL = /^vast-job-(.+)-(\d+)-(\d{10})-([a-z0-9]+)$/;
+const OLD_LABEL = /^vast-job-\d{13}-[a-z0-9]+$/;
+
+type Inst = { id: number; label?: string | null; actual_status?: string };
+type Verdict = { id: number; label: string; action: "destroy" | "keep" | "report"; why: string };
+
+export function decide(insts: Inst[], nowS: number, host: string, live: (pid: number) => boolean, anyLive: boolean): Verdict[] {
+  return insts.map((i) => {
+    const label = String(i.label ?? "");
+    const m = label.match(LABEL);
+    if (m) {
+      const [, h, pid, deadline] = m;
+      if (nowS >= Number(deadline)) return { id: i.id, label, action: "destroy", why: `deadline ${new Date(Number(deadline) * 1000).toISOString()} passed` };
+      if (h === host && !live(Number(pid))) return { id: i.id, label, action: "destroy", why: `supervisor pid ${pid} is not running` };
+      return { id: i.id, label, action: "keep", why: h === host ? `supervisor pid ${pid} running` : `job of host ${h}, deadline ahead` };
+    }
+    if (OLD_LABEL.test(label)) return anyLive ? { id: i.id, label, action: "keep", why: "old-format label while a vast-job runs" } : { id: i.id, label, action: "destroy", why: "old-format label and no vast-job running" };
+    return { id: i.id, label, action: "report", why: "no vast-job label; left alone" };
+  });
+}
+
+function cmdline(pid: number): string {
+  try {
+    return readFileSync(`/proc/${pid}/cmdline`, "utf8").replaceAll("\0", " ");
+  } catch {
+    return "";
+  }
+}
+function isVastJob(pid: number) {
+  return /(^|\/|\s)vast-job(\s|$)/.test(cmdline(pid));
+}
+function anyVastJob() {
+  for (const d of new Bun.Glob("[0-9]*").scanSync({ cwd: "/proc", onlyFiles: false })) if (isVastJob(Number(d))) return true;
+  return false;
+}
+
+function log(line: string) {
+  process.stdout.write(`vast-reaper: ${line}\n`);
+}
+
+if (import.meta.main) {
+  const argv = process.argv.slice(2);
+  if (argv.includes("-h") || argv.includes("--help")) {
+    console.log(USAGE);
+    process.exit(0);
+  }
+  const dry = argv.includes("--dry-run");
+  if (!existsSync(SECRETS)) {
+    log(`missing ${SECRETS}`);
+    process.exit(2);
+  }
+  const decrypt = Bun.spawnSync(["sudo", "-n", "env", "SOPS_AGE_KEY_FILE=/var/lib/sops-nix/key.txt", "sops", "-d", "--extract", '["api_key"]', SECRETS], { stdout: "pipe", stderr: "pipe" });
+  if (decrypt.exitCode !== 0) {
+    log("could not decrypt the vast.ai API key");
+    process.exit(2);
+  }
+  const env = { ...process.env, VAST_API_KEY: decrypt.stdout.toString().trim() };
+  const vast = (...cmd: string[]): any => {
+    const r = Bun.spawnSync(["timeout", "120", VASTAI, ...cmd, "--raw"], { stdout: "pipe", stderr: "pipe", env });
+    if (r.exitCode !== 0) throw new Error(`vastai ${cmd.slice(0, 2).join(" ")} failed: ${(r.stderr.toString() || r.stdout.toString()).trim().slice(0, 300)}`);
+    try {
+      return JSON.parse(r.stdout.toString());
+    } catch {
+      return r.stdout.toString().trim();
+    }
+  };
+
+  const insts: Inst[] = vast("show", "instances");
+  const verdicts = decide(insts, Date.now() / 1000, hostname(), isVastJob, anyVastJob());
+  let unverified = 0;
+  for (const v of verdicts) {
+    log(`instance ${v.id} (${v.label || "no label"}): ${v.action}, ${v.why}`);
+    if (v.action !== "destroy" || dry) continue;
+    try {
+      vast("destroy", "instance", String(v.id), "-y");
+    } catch (e: any) {
+      log(`destroy ${v.id} failed: ${e.message}`);
+    }
+    let gone = false;
+    for (let attempt = 0; attempt < 12 && !gone; attempt++) {
+      Bun.sleepSync(10_000);
+      const list = (() => { try { return vast("show", "instances"); } catch { return null; } })();
+      gone = Array.isArray(list) && !list.some((i: Inst) => i.id === v.id);
+    }
+    log(gone ? `instance ${v.id} destroyed and verified gone` : `INSTANCE ${v.id} STILL PRESENT after destroy`);
+    if (!gone) unverified++;
+    const m = v.label.match(LABEL);
+    if (!m) continue;
+    const prefix = `vast-job-${m[1]}-${m[2]}-`;
+    const keys = (() => { try { return vast("show", "ssh-keys"); } catch { return []; } })();
+    for (const k of Array.isArray(keys) ? keys : []) {
+      const comment = String(k.public_key ?? k.ssh_key ?? "").trim().split(/\s+/).at(-1) ?? "";
+      if (!comment.startsWith(prefix) || !comment.endsWith(`-${m[4]}`)) continue;
+      try {
+        vast("delete", "ssh-key", String(k.id));
+        log(`job SSH key ${k.id} removed`);
+      } catch (e: any) {
+        log(`delete ssh-key ${k.id} failed: ${e.message}`);
+      }
+    }
+  }
+  if (verdicts.length === 0) log("no instances");
+  process.exit(unverified ? 3 : 0);
+}
