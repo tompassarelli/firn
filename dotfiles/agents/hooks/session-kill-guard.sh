@@ -43,12 +43,6 @@ capture_hook_stdin() {
 }
 capture_hook_stdin
 
-authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
-[ -r "$authoring_killswitch" ] \
-  || authoring_killswitch="$(dirname "$0")/../lib/authoring-killswitch.sh"
-# shellcheck disable=SC1090,SC1091
-. "$authoring_killswitch" 2>/dev/null || true
-type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 [ "$payload_oversized" -eq 0 ] || exit 0
 
 # Fast-path: only Bash commands naming a process-lifecycle verb, temporary
@@ -58,6 +52,13 @@ case "$payload" in
   *bun*|*node*|*/tmp/*|*'&'*) ;;
   *) exit 0 ;;
 esac
+
+authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
+[ -r "$authoring_killswitch" ] \
+  || authoring_killswitch="$(dirname "$0")/../lib/authoring-killswitch.sh"
+# shellcheck disable=SC1090,SC1091
+. "$authoring_killswitch" 2>/dev/null || true
+type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 read -r -d '' PY <<'PYEOF' || true
 import sys, json, re, shlex

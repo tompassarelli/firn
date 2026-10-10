@@ -34,6 +34,13 @@ capture_hook_stdin() {
 }
 capture_hook_stdin
 
+[ "$payload_oversized" -eq 0 ] || exit 0
+
+case "$payload" in
+  *grep*|*find*) ;;
+  *) exit 0 ;;
+esac
+
 authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
 [ -r "$authoring_killswitch" ] \
   || authoring_killswitch="$(dirname "$0")/../lib/authoring-killswitch.sh"
@@ -41,12 +48,6 @@ authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
 . "$authoring_killswitch" 2>/dev/null || exit 0
 type authoring_guards_off >/dev/null 2>&1 || exit 0
 authoring_guards_off && exit 0
-[ "$payload_oversized" -eq 0 ] || exit 0
-
-case "$payload" in
-  *grep*|*find*) ;;
-  *) exit 0 ;;
-esac
 
 python_bin="${NORTH_AGENT_PYTHON:-python3}"
 

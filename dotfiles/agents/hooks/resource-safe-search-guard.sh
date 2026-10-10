@@ -29,6 +29,11 @@ capture_hook_stdin() {
 }
 capture_hook_stdin
 
+[ "$payload_oversized" -eq 0 ] || exit 0
+
+search_command_re='(^|[^[:alnum:]_.-])(rg|ripgrep|ag|ack|ack-grep|fd|fdfind|grep|egrep|fgrep|zgrep|zegrep|zfgrep|rgrep)([[:space:]]|$)'
+[[ "$payload" =~ $search_command_re ]] || exit 0
+
 # The activity gate and its runtime are optional inputs. Any missing or invalid
 # dependency disables this guard rather than turning an internal failure into a
 # provider-wide tool outage.
@@ -39,10 +44,6 @@ authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
 . "$authoring_killswitch" 2>/dev/null || exit 0
 type authoring_guards_off >/dev/null 2>&1 || exit 0
 authoring_guards_off && exit 0
-[ "$payload_oversized" -eq 0 ] || exit 0
-
-search_command_re='(^|[^[:alnum:]_.-])(rg|ripgrep|ag|ack|ack-grep|fd|fdfind|grep|egrep|fgrep|zgrep|zegrep|zfgrep|rgrep)([[:space:]]|$)'
-[[ "$payload" =~ $search_command_re ]] || exit 0
 
 python_bin="${NORTH_AGENT_PYTHON:-python3}"
 

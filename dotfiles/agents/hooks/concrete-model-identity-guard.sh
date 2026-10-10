@@ -22,6 +22,12 @@ capture_hook_stdin() {
 }
 capture_hook_stdin
 
+[ "$payload_oversized" -eq 0 ] || exit 0
+
+shopt -s nocasematch
+[[ "$payload" =~ model || "$payload" =~ estimate-calibration ]] || exit 0
+shopt -u nocasematch
+
 hook_dir="$(dirname "$0")"
 authoring_killswitch="$hook_dir/lib/authoring-killswitch.sh"
 [ -r "$authoring_killswitch" ] \
@@ -32,11 +38,6 @@ if [ -r "$authoring_killswitch" ]; then
 fi
 type authoring_guards_off >/dev/null 2>&1 || exit 0
 authoring_guards_off && exit 0
-[ "$payload_oversized" -eq 0 ] || exit 0
-
-shopt -s nocasematch
-[[ "$payload" =~ model || "$payload" =~ estimate-calibration ]] || exit 0
-shopt -u nocasematch
 
 read -r -d '' PY <<'PYEOF' || true
 import json

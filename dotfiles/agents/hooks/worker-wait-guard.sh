@@ -34,6 +34,11 @@ case "$payload" in
 esac
 [ "$payload_oversized" -eq 0 ] || exit 0
 
+case "$payload" in
+  *worker*) ;;
+  *) exit 0 ;;
+esac
+
 authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
 [ -r "$authoring_killswitch" ] \
   || authoring_killswitch="$(dirname "$0")/../lib/authoring-killswitch.sh"

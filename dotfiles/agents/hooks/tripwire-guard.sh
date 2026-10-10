@@ -138,15 +138,6 @@ capture_hook_stdin() {
 }
 capture_hook_stdin
 
-# Kill-switch: shared semantics in lib/authoring-killswitch.sh — persistent
-# `north config agents off tripwire-guard` (live) or env AGENT_NO_AUTHORING_HOOKS
-# (any value but 0/false kills this session; 0/false forces guards live).
-authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
-[ -r "$authoring_killswitch" ] \
-  || authoring_killswitch="$(dirname "$0")/../lib/authoring-killswitch.sh"
-# shellcheck disable=SC1090,SC1091
-. "$authoring_killswitch" 2>/dev/null || true
-type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 [ "$payload_oversized" -eq 0 ] || exit 0
 
 [ -n "$payload" ] || exit 0
@@ -160,6 +151,16 @@ case "$payload" in
   *mkfs*|*dd*|*shutdown*|*reboot*|*poweroff*|*halt*|*systemctl*|*chmod*|*chown*) ;;
   *) exit 0 ;;
 esac
+
+# Kill-switch: shared semantics in lib/authoring-killswitch.sh — persistent
+# `north config agents off tripwire-guard` (live) or env AGENT_NO_AUTHORING_HOOKS
+# (any value but 0/false kills this session; 0/false forces guards live).
+authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
+[ -r "$authoring_killswitch" ] \
+  || authoring_killswitch="$(dirname "$0")/../lib/authoring-killswitch.sh"
+# shellcheck disable=SC1090,SC1091
+. "$authoring_killswitch" 2>/dev/null || true
+type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 command -v jq >/dev/null 2>&1 || { hook_error missing-interpreter; exit 0; }
 cmd="$(jq -r '.tool_input.command // empty' <<<"$payload" 2>/dev/null)" || { hook_error unparsable-payload; exit 0; }
