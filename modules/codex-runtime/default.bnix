@@ -2,54 +2,22 @@
 
 (ns default)
 
-;; Owns the Nix store roots that keep out-of-store Codex runtimes executable,
-;; and the optional account load balancer. Codex talks to OpenAI directly with
-;; one account; the balancer only pays for itself across several.
+;; Owns the Nix store roots that keep out-of-store Codex runtimes executable.
 
 (nix/module [config lib pkgs ...]
   (let
     [username config.myConfig.modules.users.username
-     homeDir config.myConfig.modules.users.homeDir
-     loadBalancer config.myConfig.modules.codex-runtime.loadBalancer.enable]
+     homeDir config.myConfig.modules.users.homeDir]
     {:options.myConfig.modules.codex-runtime.enable
       (lib.mkEnableOption
-        "Codex provider runtime (runtime store roots, optional load balancer)")
-     :options.myConfig.modules.codex-runtime.loadBalancer.enable
-      (lib.mkEnableOption
-        "the local Codex account load balancer, for several ChatGPT accounts")
+        "Codex provider runtime (runtime store roots)")
      :config
       (lib.mkIf config.myConfig.modules.codex-runtime.enable
         {:home-manager.users
           {username
             (nix/module [config ...]
               {:systemd.user.services
-                {;; With several accounts, point the codex launcher's provider at
-                 ;; http://127.0.0.1:2455/backend-api/codex and enable this.
-                 :codex-lb
-                  (lib.mkIf loadBalancer
-                  {:Unit
-                    {:Description "Local Codex account load balancer"
-                     :After ["network.target"]
-                     ;; Fail visibly rather than spin: a persistent fault must
-                     ;; land in "failed", not an endless restart counter.
-                     :StartLimitIntervalSec 300
-                     :StartLimitBurst 5}
-                   :Service
-                    {:ExecStart
-                      (s homeDir
-                        "/.local/share/uv/tools/codex-lb/bin/codex-lb --host 127.0.0.1 --port 2455")
-                     :Environment
-                      ["SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt"
-                       "NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt"
-                       (s "CODEX_LB_COLLABORATION_CAPTURE_DIR=" homeDir
-                         "/.local/state/codex-collaboration-capture")
-                       "'CODEX_LB_COLLABORATION_CAPTURE_SESSIONS=[\"*\"]'"
-                       "'CODEX_LB_COLLABORATION_CAPTURE_THREADS=[\"01a07c3d-a495-78d0-a196-5921f7de2bda\"]'"]
-                     :Restart "on-failure"
-                     :RestartSec 2
-                     :UMask "0077"}
-                   :Install {:WantedBy ["default.target"]}})
-                 ;; Codex runtimes stay out of the store, but a locally built
+                {;; Codex runtimes stay out of the store, but a locally built
                  ;; one still resolves its ELF interpreter and RUNPATH from
                  ;; /nix/store. Nothing else roots those paths, so a garbage
                  ;; collection silently breaks every runtime.
