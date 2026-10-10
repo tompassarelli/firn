@@ -1,0 +1,82 @@
+name: Nexus Watch
+
+on:
+  schedule:
+    - cron: '17 3,6,9,12,15,18,21 * * *'
+    - cron: '17 0 * * *'
+  workflow_dispatch:
+    inputs:
+      scan:
+        description: Run the port scan
+        type: boolean
+        default: false
+      heartbeat:
+        description: Force the heartbeat check on
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  heartbeat:
+    if: vars.NEXUS_WATCH_HEARTBEAT == 'on' || inputs.heartbeat
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check heartbeat age
+        env:
+          HEARTBEAT: ${{ vars.NEXUS_HEARTBEAT }}
+        run: |
+          if [ -z "$HEARTBEAT" ]; then
+            echo "::error::NEXUS_HEARTBEAT is missing"
+            exit 1
+          fi
+          stamp=${HEARTBEAT%% *}
+          status=${HEARTBEAT#"$stamp"}
+          if ! then=$(date -u -d "$stamp" +%s 2>/dev/null); then
+            echo "::error::NEXUS_HEARTBEAT is not an ISO-8601 time"
+            exit 1
+          fi
+          age=$(( $(date -u +%s) - then ))
+          echo "heartbeat age: ${age}s status:${status:- none}"
+          if [ "$age" -gt 7200 ]; then
+            echo "::error::NEXUS_HEARTBEAT is older than 2 h (${age}s)"
+            exit 1
+          fi
+
+  scan:
+    if: github.event.schedule == '17 0 * * *' || inputs.scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Install nmap
+        run: sudo apt-get update -qq >/dev/null && sudo apt-get install -y -qq nmap >/dev/null
+      - name: Scan nexus
+        env:
+          TARGET: ${{ secrets.NEXUS_IP }}
+        run: |
+          if [ -z "$TARGET" ]; then
+            echo "::error::NEXUS_IP secret is missing"
+            exit 1
+          fi
+          echo "::add-mask::$TARGET"
+          dir=$(mktemp -d)
+          sudo nmap -Pn -p- -T4 --min-rate 1000 -oG "$dir/tcp" -oN /dev/null "$TARGET" >/dev/null 2>&1 || { echo "::error::tcp scan failed"; exit 1; }
+          sudo nmap -Pn -sU -p 51820 -oG "$dir/udp" -oN /dev/null "$TARGET" >/dev/null 2>&1 || { echo "::error::udp scan failed"; exit 1; }
+          if ! grep -q '^Host: .*Status: Up' "$dir/tcp"; then
+            echo "::error::tcp scan produced no host result"
+            exit 1
+          fi
+          open=$(grep -o '[0-9]*/open/tcp/' "$dir/tcp" | wc -l)
+          udp=$(grep -o '51820/[a-z|]*/udp' "$dir/udp" | cut -d/ -f2 | head -1)
+          echo "open tcp: $open"
+          echo "udp 51820: ${udp:-unknown}"
+          if [ "$open" -gt 0 ]; then
+            echo "::error::nexus has $open open tcp port(s)"
+            exit 1
+          fi
