@@ -5,8 +5,8 @@ description: >-
   fast rebuilds, headless and 32-bit Lua tests) and the native game (offline
   LAN test clients, signed-in clients, startup recovery, desync debugging).
   Use for any Warcraft III map work, Smashcraft's ts/ included.
-grounded: 2026-10-09
-written: 2026-10-09
+grounded: 2026-10-10
+written: 2026-10-10
 ---
 
 # Warcraft modding
@@ -77,7 +77,8 @@ written: 2026-10-09
 - Never touch Tom's game install; use account a only as clone-a through its launch.sh, which yields to Tom's game.
 - Start signed-in clients through `bun wisp client start [CLIENT...] --clients-file FILE` user services rather than shell/background tasks.
 - Use `client status` and `client stop` for those services.
-- Give each offline Classic pair or signed-in Definitive/Battle.net pair one worker for its batched native checks.
+- Give each signed-in client one worker for one-client captures, and a pair one worker only for sync, netplay and EX checks.
+- Run a build's native spot checks as one batch sharded across every free client, judge once and tick every box it covers; keep tooling reference captures off native lanes.
 - Run passive engine reads only on signed-in clients.
 - Restrict traps, trace, gdb, memory writes and injection to offline pool clients with loopback-only namespaces, no `-uid` and no Battle.net program in the prefix.
 - Restrict tools to the project's clients file and keep decrypted code dumps outside repositories.

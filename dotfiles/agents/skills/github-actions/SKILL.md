@@ -5,8 +5,8 @@ description: >-
   many agents against GitHub: share the account's concurrent-job limit and
   hourly API budget, cap matrices, join runs, poll with backoff, and clean up
   scratch branches.
-grounded: 2026-10-09
-written: 2026-10-09
+grounded: 2026-10-10
+written: 2026-10-10
 ---
 
 # GitHub Actions
@@ -22,12 +22,14 @@ written: 2026-10-09
 - Set CI concurrency to `${{ github.workflow }}-${{ github.ref }}` with `cancel-in-progress: true`.
 - Keep fixed non-cancelling concurrency groups for landings only.
 - Exclude farm/tests and account for replacement of older pending runs.
+- Dispatch Balance, Playtest and soak runs only on a commit already on main, in a per-workflow `cancel-in-progress` group, and cancel them when that commit is reverted.
+- Cap a batched landing queue at 2 lanes per batch until it tests each lane on its own first; batches of 3 or more went 0 of 15 green.
 - Count queued and running jobs before large dispatches with `gh api repos/OWNER/REPO/actions/runs/ID/jobs`.
 - Count missing `runner_name` as waiting.
 - Wait or shrink dispatches near the account limit.
 - Join an existing queued/running same-workflow run on the commit.
 - Never dispatch or push a scratch branch for a duplicate run.
-- Cancel superseded pushes, abandoned experiments and unnecessary fields with `gh run cancel ID`.
+- Cancel superseded pushes, abandoned experiments and unnecessary fields with `gh run cancel ID`; never cancel a landing-queue run.
 - Register scratch-branch deletion at creation through a trap, finally or workflow cleanup.
 - Wait through the repository's own waiting tool; implement a waiter only when none exists.
 - Poll after 10 seconds, multiply unchanged intervals by 1.5 up to 60 seconds, and reset to 10 seconds on job starts/finishes.
