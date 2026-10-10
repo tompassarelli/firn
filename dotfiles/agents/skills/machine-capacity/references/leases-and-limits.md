@@ -1,5 +1,12 @@
 # Capacity leases and limits
 
+Contents:
+- Why admission is shared
+- Worker leases
+- Headroom and pressure
+- Interactive session lifetime
+- Alternatives and limits
+
 ## Why admission is shared
 
 Idle agent slots do not measure local CPU or memory capacity. A shared atomic

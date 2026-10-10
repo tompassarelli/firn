@@ -7,6 +7,12 @@ from the returned YouTube player metadata. Unavailable captions do not justify
 invented quotations or timestamps. The URLs open the actual reference videos;
 the full clip ranges below are navigable ranges, not claims of a watched frame.
 
+Contents:
+- Primary creator sources
+- Melee action examples and interval definitions
+- Original Smashcraft application decisions
+- Private visual resource and acquisition notes
+
 ## Primary creator sources
 
 | Source and usable range | Verified content and use | Scope/rights |

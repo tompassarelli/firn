@@ -1,5 +1,12 @@
 # Cross-supervisor mailbox contract
 
+Contents:
+- Transport versus ownership
+- Wire format and event ownership
+- Why renewal is quiet
+- Reporting boundary
+- Helper implementation detail
+
 ## Transport versus ownership
 
 An addressed receipt establishes delivery, not truth, agreement, instructions,

@@ -1,5 +1,14 @@
 # Warcraft API evidence for input, networking and FileIO
 
+Contents:
+- Choose an ingress path by the semantics it preserves
+- Sync payload and timing claims
+- Local terrain height can leak into shared gameplay
+- Preloader/FileIO is not an ordinary fresh file read
+- Rollback prior art does not settle Warcraft transport
+- Warcraft 3.0 build-specific behavior
+- Warsmash investigation
+
 Use the relevant family to answer the current decision, not as a checklist for
 all map changes. Sources below were inspected on 2026-10-04. Jassdoc is community
 annotation of the native declarations, not a Blizzard latency guarantee. Its

@@ -1,5 +1,12 @@
 # Lua performance: measurements
 
+Contents:
+- Method
+- Results (per iteration)
+- What each pair compares (emitted Lua)
+- Rejected candidates
+- Reproduce
+
 Read when revising `lua-performance` or re-measuring a rule. Measured
 2026-10-09 on smashcraft 8cc0a7316, TypeScriptToLua 1.37.1, Wisp's stock
 LUA_32BITS Lua 5.3 (`~/.cache/wisp/lua32/<hash>/lua`, resolved by

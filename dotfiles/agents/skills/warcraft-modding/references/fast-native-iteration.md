@@ -1,5 +1,14 @@
 # Fast Warcraft native procedures
 
+Contents:
+- Record only useful chains
+- Execute without unnecessary round trips
+- Measure the claim
+- Detect readiness rather than estimate it
+- Verified warm exit and native menu observation
+- Owner play versus experimental candidates
+- Wisp command flags and iteration costs
+
 The repeated loop is a retained client entering a named map/test, running a
 known action sequence, and producing verified state or a fresh trace. Optimize
 this warm loop. Cold Battle.net startup, interactive authentication, downloads

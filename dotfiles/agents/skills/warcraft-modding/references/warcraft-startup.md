@@ -1,5 +1,9 @@
 # Warcraft startup evidence
 
+Contents:
+- Manual startup and recovery detail
+- Launcher authentication transport
+
 On 3 October 2026, the earlier two-client run recovered client A from an empty
 post-login screen by keeping its signed-in Battle.net launcher and prefix,
 closing the unusable game, and selecting Play in that launcher. It entered
