@@ -81,7 +81,11 @@
    ;; sops-encrypted secrets/wireguard.yaml.
    :sops.secrets
     {"wireguard-laptop"
-      {:sopsFile (p "../../secrets/wireguard.yaml")}}
+      {:sopsFile (p "../../secrets/wireguard.yaml")}
+     "vastai-api-key"
+      {:sopsFile (p "../../secrets/vastai.yaml") :key "api_key" :owner "tom" :mode "0400"}
+     "bnet"
+      {:sopsFile (p "../../secrets/bnet.yaml") :key "" :owner "tom" :mode "0400"}}
    :myConfig.modules.wg-nexus {:enable true :role "client"}
    :myConfig.modules.nexus-pull.enable true
    :networking.wireguard.interfaces.wg0

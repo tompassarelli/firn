@@ -66,7 +66,23 @@
   services.udev.extraHwdb = "evdev:input:b0018v32ACp0006*\n KEYBOARD_KEY_100c6=f10\n";
   myConfig.modules.airplane.enable = true;
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
-  sops.secrets."wireguard-laptop".sopsFile = ../../secrets/wireguard.yaml;
+  sops.secrets = {
+    "wireguard-laptop" = {
+      sopsFile = ../../secrets/wireguard.yaml;
+    };
+    "vastai-api-key" = {
+      sopsFile = ../../secrets/vastai.yaml;
+      key = "api_key";
+      owner = "tom";
+      mode = "0400";
+    };
+    "bnet" = {
+      sopsFile = ../../secrets/bnet.yaml;
+      key = "";
+      owner = "tom";
+      mode = "0400";
+    };
+  };
   myConfig.modules.wg-nexus = {
     enable = true;
     role = "client";
