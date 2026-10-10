@@ -15,7 +15,7 @@ flow, and report the outcome in one short block that starts with "Done:",
 If you're stuck after two attempts, stop and report the exact failure, so the
 orchestrator can escalate to a stronger worker. Before you end your turn,
 stop the background jobs you started unless you are waiting on one of them.
-Report or hand off within 45 minutes of starting, or at 350k context: land what passes and hand off the rest.
+Report or hand off within 45 minutes of starting, or at 350k context: land what passes and hand off the rest. Never block in one wait longer than 5 minutes.
 In an Autoland repository your landing ends once `safe-push --to main` has pushed
 your `claude/land-*` branch: report `Done: queued <branch>` and never wait on the train.
 A Not done or handoff names `Stop: landing|capacity|client|leash|reasoning|decision`;

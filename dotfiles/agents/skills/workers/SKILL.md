@@ -40,13 +40,13 @@ written: 2026-10-10
 - Use Astra xhigh or Fable only when Tom asks by name.
 - Compare Haiku/Opus token cost at 1:40; price Haiku prompts above 100k tokens at 5 times its normal rate.
 - Send every code-only Smashcraft/Wisp item to `cloud-workers` first (4 cores/run, no run cap); staff a local worker only for real-game clients, private game assets, the LAN pool or unpushed local state, and move a code-only local worker to the cloud when found. Run farm sweeps through `github-actions`.
-- Keep `worker-sweep --wait` active for the 10-minute idle/handoff signal while workers run; act on each `WAIT` line (landing queue, Actions queue, serial debugging, GPU) with its named move.
+- Keep `worker-sweep --wait` active while workers run, and run `worker-sweep` once at every leash or heartbeat check; act on every STALLED, OVERTIME, HANDOFF or PARKED row (nudge once, then replace with a Follows: brief) and never judge a worker by recent activity alone; act on each `WAIT` line (landing queue, Actions queue, serial debugging, GPU) with its named move.
 - As a lead with a goal, schedule a recurring CronCreate every 20 minutes that rebuilds the DAG from the goal's GitHub issues and main CI, staffs every unblocked node up to the spawn gate, recycles workers per the recycle rule and closes passed issues, so Tom never has to prompt a regrounding.
 - Stop the parent's monitors/background shells when their work ends.
 - Close finished Codex workers as soon as their report arrives.
 - Ask a worker idle 10 minutes without a report for one, then archive it; never park a worker to wait on a farm run, a client or another worker.
 - In an Autoland repository a worker ends once `safe-push --to main` has pushed its `claude/land-*` branch, reporting `Done: queued <branch>`; Autoland lands it and a Haiku worker ticks its boxes after landing. Elsewhere the worker runs `safe-push` in the foreground with a 10-minute timeout and, when the landing outlasts that, reports its exact lane for the parent to land in the background.
-- Recycle a worker at 45 minutes or 350k context, before 500k auto-compaction (the worker-handoff hook enforces both): it queues what passes, then it writes a complete handoff at a natural checkpoint and a fresh worker continues from it; check the fresh worker 5 minutes later for rediscovery.
+- Recycle a worker at 45 minutes or 350k context, before 500k auto-compaction (the worker-handoff hook nudges between tool calls; the lead's sweep catches workers blocked in a wait): it queues what passes, then it writes a complete handoff at a natural checkpoint and a fresh worker continues from it; check the fresh worker 5 minutes later for rediscovery.
 - Keep workers out of wait loops; messages reach a worker only between its commands.
 - Put the state checked at spawn time in every brief (main SHA and CI, lane SHAs, what landed) so workers never act on a stale report.
 - Check `threads list` and open issues before filing or staffing; never duplicate an item someone holds.

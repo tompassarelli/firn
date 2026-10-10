@@ -13,7 +13,7 @@ written: 2026-10-09
 
 - Schedule one session heartbeat every 30 minutes on off-minutes through CronCreate after checking CronList.
 - Put the goal, tracker/handoff path, worktrees and self-contained resume steps in the heartbeat.
-- Read pending messages, resume stopped workers, remove unneeded holds, route main CI failures, checkpoint and continue unowned work at each heartbeat.
+- Run `worker-sweep` and act on every flagged row, read pending messages, resume stopped workers, remove unneeded holds, route main CI failures, checkpoint and continue unowned work at each heartbeat.
 - Tell Tom the terminal must stay open, jobs expire after 7 days and work resumes at the first heartbeat after usage returns.
 - Keep the restart checkpoint current.
 - Return one line when no work exists and start no duplicate workers or assurance work.
