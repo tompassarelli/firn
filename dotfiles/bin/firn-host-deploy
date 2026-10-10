@@ -20,5 +20,13 @@ fi
 printf 'starting %s on %s for %s\n' "$unit" "$host" "$main"
 ssh "$host" systemctl start "$unit"
 revision="$(ssh "$host" nixos-version --json | jq -r '.configurationRevision // "unset"')"
-printf '%s configurationRevision: %s\norigin/main:                 %s\n' "$host" "$revision" "$main"
-[[ "$revision" == "$main" ]]
+printf '%s configurationRevision: %s\nstarted from:                %s\n' "$host" "$revision" "$main"
+[[ "$revision" == "$main" ]] && exit 0
+git -C "$repo" fetch --quiet origin main
+if git -C "$repo" cat-file -e "$revision^{commit}" 2>/dev/null \
+  && git -C "$repo" merge-base --is-ancestor "$main" "$revision"; then
+  printf '%s is on a newer main that contains %s\n' "$host" "$main"
+  exit 0
+fi
+printf 'firn host deploy: %s did not reach %s\n' "$host" "$main" >&2
+exit 1
