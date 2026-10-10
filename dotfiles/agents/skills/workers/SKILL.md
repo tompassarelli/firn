@@ -41,6 +41,8 @@ written: 2026-10-10
 - Start every Opus-range item at Opus medium; escalate to the next tier printed by `agents plan` only after `Stop: reasoning` (wrong cause or two failed fixes), and restaff every other stop at the same tier.
 - Use no Codex low/max, Sonnet or Opus low.
 - Use Astra xhigh or Fable only when Tom asks by name.
+- Staff `planner` (Opus xhigh) for a plan, not code, when an issue gets its second Not done, a category's last 10 runs fall below 40% closed, or the change is architectural (netcode, engine boundary, release shape); cheaper tiers execute its boxes.
+- Pass `effort: max` to `planner` for a decision that is expensive to reverse (Tom's standing approval, 2026-10-10).
 - Compare Haiku/Opus token cost at 1:40; price Haiku prompts above 100k tokens at 5 times its normal rate.
 - Send every code-only Smashcraft/Wisp item to `cloud-workers` first (4 cores/run, no run cap); staff a local worker only for real-game clients, private game assets, the LAN pool or unpushed local state, and move a code-only local worker to the cloud when found.
 - Route compute (agreed with Tom 2026-10-10): cloud runs cost only the same plan usage a local worker would, with the machine included; parallel batch work (balance/CPU fields, suites, soaks) goes to GitHub runners through `github-actions` first and to vast.ai through `vast-job` when the farm queue delays a result; always-on Warcraft clients, the offline LAN pool and GPU work go to the Hetzner box once it exists and to the vast.ai VM until then, with signed-in Definitive clients staying local unless moved deliberately; rent no other CPU provider (DigitalOcean and similar cost several times vast.ai for the same cores).
